@@ -208,6 +208,7 @@ function CM:CreateAddonConfiguration()
         order = 100,
         args = {
             welcome = CM:CreateWelcomePanel(),
+            general = CM:CreateGeneralConfiguration(),
             lootMonitor = CM:CreateLootMonitorConfiguration(),
             developer = CM:CreateDeveloperConfiguration()
         }

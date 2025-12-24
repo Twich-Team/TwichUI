@@ -4,5 +4,6 @@
     <Include file="Widgets\!load.xml" />
     <Include file="Developer\!load.xml" />
     <Include file="Welcome\!load.xml" />
+    <Include file="General\!load.xml" />
     <Include file="LootMonitor\!load.xml" />
 </Ui>

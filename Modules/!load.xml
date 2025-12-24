@@ -8,4 +8,5 @@
     <Include file="ExtraMedia\!load.xml" />
     <Include file="ThirdPartyAPI\!load.xml" />
     <Include file="LootMonitor\!load.xml" />
+    <Include file="SlashCommands\!load.xml" />
 </Ui>

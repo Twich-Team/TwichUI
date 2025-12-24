@@ -7,6 +7,9 @@ local _G = _G
 
 local GetBuildInfo = GetBuildInfo
 local GetAddOnMetadata = C_AddOns.GetAddOnMetadata
+local IsAddOnLoaded = C_AddOns.IsAddOnLoaded
+local LoadAddOn = C_AddOns.LoadAddOn
+
 
 local AceAddon, AceAddonMinor = _G.LibStub('AceAddon-3.0')
 local CallbackHandler = _G.LibStub("CallbackHandler-1.0")
@@ -47,6 +50,7 @@ T.LootMonitor = T:NewModule("LootMonitor")
 T.Media = T:NewModule("Media")
 T.Configuration = T:NewModule("Configuration")
 T.ThirdPartyAPI = T:NewModule("ThirdPartyAPI")
+T.SlashCommands = T:NewModule("SlashCommands", "AceConsole-3.0")
 
 --[[
     Register Libraries to Engine
@@ -104,6 +108,78 @@ end
 do
     local version = GetAddOnMetadata(AddOnName, 'Version')
     T.addonMetadata.version = version
+end
+
+--[[
+    Setup the addon compartment function
+]]
+do
+    function T:ToggleOptionsUI()
+        local E, L, V, P, G = unpack(ElvUI)
+
+        -- Ensure ElvUI options addon is loaded (try modern then legacy name)
+        if not IsAddOnLoaded("ElvUI_OptionsUI") and not IsAddOnLoaded("ElvUI_Options") then
+            local loaded = LoadAddOn("ElvUI_OptionsUI")
+            if not loaded then
+                loaded = LoadAddOn("ElvUI_Options")
+            end
+            if not loaded then
+                print("TwichUI: Could not load ElvUI options addon.")
+                return
+            end
+        end
+
+        local opened
+        if E and type(E.ToggleOptionsUI) == "function" then
+            E:ToggleOptionsUI()
+            opened = true
+        elseif E and type(E.ToggleOptions) == "function" then
+            E:ToggleOptions()
+            opened = true
+        end
+
+        if not opened then
+            print("TwichUI: Unable to open ElvUI options (missing toggle function).")
+            return
+        end
+
+        -- Prefer ElvUI-patched AceConfig variants if available
+        local ACD = (T.Libs and T.Libs.AceConfigDialog)
+            or _G.LibStub("AceConfigDialog-3.0-ElvUI", true)
+            or _G.LibStub("AceConfigDialog-3.0", true)
+        local ACR = (T.Libs and T.Libs.AceConfigRegistry)
+            or _G.LibStub("AceConfigRegistry-3.0-ElvUI", true)
+            or _G.LibStub("AceConfigRegistry-3.0", true)
+        if ACR and ACR.NotifyChange then
+            pcall(ACR.NotifyChange, ACR, "ElvUI")
+        end
+
+        if ACD and ACD.SelectGroup then
+            local tries, maxTries, delay = 0, 20, 0.1 -- up to ~2s total
+            local function trySelect()
+                tries = tries + 1
+                local ok = pcall(ACD.SelectGroup, ACD, "ElvUI", "TwichUI")
+                if not ok then
+                    ok = pcall(ACD.SelectGroup, ACD, "ElvUI", "plugins", "TwichUI")
+                end
+                if not ok and _G.C_Timer and _G.C_Timer.After and tries < maxTries then
+                    _G.C_Timer.After(delay, trySelect)
+                elseif not ok and tries >= maxTries then
+                    print("TwichUI: Could not focus TwichUI in ElvUI options.")
+                end
+            end
+
+            if _G.C_Timer and _G.C_Timer.After then
+                _G.C_Timer.After(delay, trySelect)
+            else
+                trySelect()
+            end
+        end
+    end
+
+    _G.TwichUI_AddonCompartmentFunc = function()
+        T:ToggleOptionsUI()
+    end
 end
 
 --- Called by AceAddon when the addon is initialized. Sets up the database baseline, configures addon configuration panel, and registers events.

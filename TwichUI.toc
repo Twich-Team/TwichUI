@@ -7,5 +7,5 @@
 ## Interface: 120000
 ## Group: Twich
 ## IconTexture: Interface\AddOns\TwichUI\Media\Textures\twich-logo.tga
-
+## AddonCompartmentFunc: TwichUI_AddonCompartmentFunc
 !load.xml
