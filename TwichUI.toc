@@ -1,0 +1,11 @@
+## Title: |cff9580ffTwichUI|r
+## Notes: Life Enhancement for ElvUI Users. Midnight Native!
+## Author: Twich
+## Version: 0.0.1-ALPHA
+## SavedVariables: TwichUIDB
+## RequiredDeps: ElvUI
+## Interface: 120000
+## Group: Twich
+## IconTexture: Interface\AddOns\TwichUI\Media\Textures\twich-logo.tga
+
+!load.xml

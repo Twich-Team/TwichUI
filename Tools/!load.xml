@@ -1,0 +1,7 @@
+<Ui xmlns='http://www.blizzard.com/wow/ui/'>
+    <Script file="Tools.lua" />
+
+    <Include file="Colors\!load.xml" />
+    <Include file="Text\!load.xml" />
+    <Include file="Callback\!load.xml" />
+</Ui>

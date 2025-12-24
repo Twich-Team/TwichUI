@@ -1,0 +1,11 @@
+<Ui xmlns='http://www.blizzard.com/wow/ui/'>
+    <Script file="core.lua" />
+
+    <Include file="..\Tools\!load.xml" />
+
+    <Include file="Configuration\!load.xml" />
+    <Include file="Logger\!load.xml" />
+    <Include file="ExtraMedia\!load.xml" />
+    <Include file="ThirdPartyAPI\!load.xml" />
+    <Include file="LootMonitor\!load.xml" />
+</Ui>

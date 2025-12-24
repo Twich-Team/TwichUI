@@ -1,0 +1,8 @@
+<Ui xmlns='http://www.blizzard.com/wow/ui/'>
+    <Script file="Configuration.lua" />
+
+    <Include file="Widgets\!load.xml" />
+    <Include file="Developer\!load.xml" />
+    <Include file="Welcome\!load.xml" />
+    <Include file="LootMonitor\!load.xml" />
+</Ui>
