@@ -5,6 +5,7 @@ local T, W, I, C    = unpack(Twich)
 ---@field ItemValuator ItemValuator
 ---@field NotableItemNotificationHandler NotableItemNotificationHandler
 ---@field NotableItemNotificationFrame NotableItemNotificationFrame
+---@field GoldPerHourTracker GoldPerHourTracker
 local LM            = T:GetModule("LootMonitor")
 
 LM.EVENTS           = {
@@ -254,12 +255,13 @@ function LM:Enable()
 
     LM.ItemValuator:Enable()
     LM.NotableItemNotificationHandler:Initialize()
+    LM.GoldPerHourTracker:Initialize()
 
     -- temporarily registering a callback handler here to debug
-    local callbackID = callbackHandler:Register(function(event, ...)
-        Logger.Debug("Loot Monitor callback invoked for event: " .. tostring(event))
-        for i = 1, select("#", ...) do
-            local v = select(i, ...)
+    local callbackID = LM.GoldPerHourTracker:RegisterCallback(function(event)
+        -- Logger.Debug("Loot Monitor callback invoked for event: " .. tostring(event))
+        for i = 1, select("#", event) do
+            local v = select(i, event)
             if type(v) == "table" then
                 Logger.Debug("Arg " .. i .. " (table): ")
                 Logger.DumpTable(v)

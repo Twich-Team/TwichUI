@@ -12,6 +12,7 @@ local TM = T:GetModule("Tools")
 --- @class LootMonitorConfigurationModule
 --- @field ItemValuation ItemValudationConfigurationModule
 --- @field NotableItems NotableItemConfigurationModule
+--- @field GoldPerHourTracker GoldPerHourTrackerConfigurationModule
 CM.LootMonitor = CM.LootMonitor or {}
 
 --- Creates the primary loot monitor configuration panels.
@@ -72,6 +73,19 @@ function CM:CreateLootMonitorConfiguration()
                         end
                     end,
                     CM.LootMonitor.NotableItems:Create()),
+
+                goldPerHourTrackerSubmodule = CM.Widgets:SubmoduleGroup(11, "Gold Per Hour",
+                    "This submodule tracks your gold per hour based on loot and raw gold received, providing near real-time gold per hour statistics.",
+                    "lootMonitor.enable", "lootMonitor.goldPerHourTracker.enabled", function(enabled)
+                        --- @type LootMonitorModule
+                        local LM = T:GetModule("LootMonitor")
+                        if enabled then
+                            LM.GoldPerHourTracker:Enable()
+                        else
+                            LM.GoldPerHourTracker:Disable()
+                        end
+                    end,
+                    CM.LootMonitor.GoldPerHourTracker:Create()),
 
             })
 end

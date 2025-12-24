@@ -40,7 +40,9 @@
     "COPPER_AMOUNT",
     "LOOT_ITEM_SELF",
     "IGNORE",
-    "UNKNOWN"
+    "UNKNOWN",
+    "ENABLE",
+    "WINDOW_SIZE"
   ],
   "Lua.type.weakUnionCheck": true,
   "Lua.diagnostics.disable": ["assign-type-mismatch"]

@@ -152,6 +152,24 @@ function CM:GetProfileSettingSafe(key, default)
     return GetByPath(db, parts, default)
 end
 
+---@class ConfigEntry
+---@field key string The dotpath key for the setting
+---@field default any The default value for the setting
+
+--- Safely retrieves a profile database setting via a ConfigEntry.
+--- @param configEntry ConfigEntry The configuration entry containing the key and default value
+--- @return any The value at the dotpath, or the default value if the setting does not exist
+function CM:GetProfileSettingByConfigEntry(configEntry)
+    return CM:GetProfileSettingSafe(configEntry.key, configEntry.default)
+end
+
+--- Safely sets a profile database setting via a ConfigEntry.
+--- @param configEntry ConfigEntry The configuration entry containing the key
+--- @param value any The value to set at the dotpath
+function CM:SetProfileSettingByConfigEntry(configEntry, value)
+    return CM:SetProfileSettingSafe(configEntry.key, value)
+end
+
 -----------------------------------------------------------------------
 -- Global database access
 -----------------------------------------------------------------------
@@ -223,7 +241,7 @@ local keywordColorMap = {
     { keyword = "modules",          color = TM.Colors.TWICH.SECONDARY_ACCENT },
     { keyword = "Loot Monitor",     color = TM.Colors.TWICH.SECONDARY_ACCENT },
     { keyword = "notable item",     color = TM.Colors.TWICH.TERTIARY_ACCENT },
-    { keyword = "notable items",     color = TM.Colors.TWICH.TERTIARY_ACCENT },
+    { keyword = "notable items",    color = TM.Colors.TWICH.TERTIARY_ACCENT },
     { keyword = "gold per hour",    color = TM.Colors.TWICH.TERTIARY_ACCENT },
     { keyword = "item valuation",   color = TM.Colors.TWICH.TERTIARY_ACCENT },
     { keyword = "performance",      color = TM.Colors.TWICH.TEXT_WARNING },
