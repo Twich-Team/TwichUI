@@ -250,8 +250,10 @@ local function HandleLootReceivedEvent(quantity, itemInfo)
     if itemInfo.quality == Enum.ItemQuality.Poor then
         local valuationMethod = CM:GetProfileSettingSafe("lootMonitor.itemValuation.junkItems.valuationMethod",
             Valuator.VALUATION_METHODS.VENDOR)
-        return RunValuationOnItem(itemInfo.link, quantity, copperValue, saleRate, valuationMethod, true,
-            itemInfo.sellPrice), saleRate
+        local copperPerItem, totalCopper, decision = RunValuationOnItem(itemInfo.link, quantity, copperValue, saleRate,
+            valuationMethod, true,
+            itemInfo.sellPrice)
+        return copperPerItem, totalCopper, decision, saleRate
     end
 
     -- armor/weapons
@@ -260,8 +262,10 @@ local function HandleLootReceivedEvent(quantity, itemInfo)
             Valuator.VALUATION_METHODS.TSM_PRICE_SOURCE)
         local minSaleRate = CM:GetProfileSettingSafe(
             "lootMonitor.itemValuation.armorAndWeaponItems.minimumSaleRate", 0.010)
-        return RunValuationOnItem(itemInfo.link, quantity, copperValue, saleRate, valuationMethod, false,
-            itemInfo.sellPrice, minSaleRate), saleRate
+        local copperPerItem, totalCopper, decision = RunValuationOnItem(itemInfo.link, quantity, copperValue, saleRate,
+            valuationMethod, false,
+            itemInfo.sellPrice, minSaleRate)
+        return copperPerItem, totalCopper, decision, saleRate
     end
 
     -- remaining items
@@ -269,8 +273,10 @@ local function HandleLootReceivedEvent(quantity, itemInfo)
         Valuator.VALUATION_METHODS.TSM_PRICE_SOURCE)
     local minSaleRate = CM:GetProfileSettingSafe(
         "lootMonitor.itemValuation.remainingItems.minimumSaleRate", 0.010)
-    return RunValuationOnItem(itemInfo.link, quantity, copperValue, saleRate, valuationMethod, false,
-        itemInfo.sellPrice, minSaleRate), saleRate
+    local copperPerItem, totalCopper, decision = RunValuationOnItem(itemInfo.link, quantity, copperValue, saleRate,
+        valuationMethod, false,
+        itemInfo.sellPrice, minSaleRate)
+    return copperPerItem, totalCopper, decision, saleRate
 end
 
 --- Handles events received from the callback
@@ -280,6 +286,8 @@ local function HandleEvents(event, ...)
         local receivedEventData = ...
         local copperPerItem, totalCopper, decision, saleRate = HandleLootReceivedEvent(receivedEventData.quantity,
             receivedEventData.itemInfo)
+
+        Logger.Warn(decision)
 
         ---@class LootValuatedEventData
         ---@field itemInfo LootMonitorItemInfo

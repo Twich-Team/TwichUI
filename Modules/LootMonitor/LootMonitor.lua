@@ -147,7 +147,7 @@ local function OnChatMsgMoney(message)
     local copperReceived = {
         copper = ParseMoneyChatMessage(message)
     }
-    if copperReceived > 0 then
+    if copperReceived.copper > 0 then
         callbackHandler:Invoke(LM.EVENTS.MONEY_RECEIVED, copperReceived)
     end
 end

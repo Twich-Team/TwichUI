@@ -63,6 +63,7 @@ GPH.CONFIGURATION     = {
 ---@field goldPerHour number Calculated gold per hour rate
 ---@field totalValue number Total copper value from tracked items
 ---@field totalGold number Total copper value (items + raw gold)
+---@field goldReceived number Raw gold received in copper
 ---@field itemCount number Number of unique item types tracked
 ---@field elapsedTime number Elapsed time in seconds since tracking started
 ---@field trackedItems table<string, TrackedItem> Reference to tracked items by itemLink
@@ -111,7 +112,8 @@ function GPH:TrimOldData()
     if next(self.trackedItems) == nil then
         self.startTime = nil
         self.goldReceived = 0
-    else
+    elseif self.startTime and self.startTime < windowStart then
+        -- Only update start time if it's older than the window
         self.startTime = windowStart
     end
 end
@@ -153,6 +155,7 @@ function GPH:GetCurrentStats()
         goldPerHour = goldPerHour,
         totalValue = totalValue,
         totalGold = totalGold,
+        goldReceived = self.goldReceived,
         itemCount = itemCount,
         elapsedTime = elapsedTime,
         trackedItems = self.trackedItems,
@@ -178,6 +181,8 @@ function GPH:OnLootValuated(eventData)
     local itemLink = eventData.itemInfo.link
     if not itemLink then return end
 
+    Logger.DumpTable(eventData)
+
     if not self.trackedItems[itemLink] then
         self.trackedItems[itemLink] = {
             itemLink = itemLink,
@@ -190,6 +195,10 @@ function GPH:OnLootValuated(eventData)
         self.trackedItems[itemLink].quantity = self.trackedItems[itemLink].quantity + eventData.quantity
         self.trackedItems[itemLink].totalValue = self.trackedItems[itemLink].totalValue + eventData.totalValueCopper
         self.trackedItems[itemLink].timestamp = now
+        -- Ensure decision is populated even for existing entries or older persisted data
+        if not self.trackedItems[itemLink].decision and eventData.decision then
+            self.trackedItems[itemLink].decision = eventData.decision
+        end
     end
 
     self:TriggerUpdate()
@@ -280,12 +289,12 @@ function GPH:SwitchMode(newAlwaysOn)
     if newAlwaysOn then
         -- Switching TO always-on mode: keep data, stop trimming
         Logger.Debug("Gold per hour tracker mode changed from " ..
-        oldMode .. " to " .. newMode .. " - data will be retained indefinitely")
+            oldMode .. " to " .. newMode .. " - data will be retained indefinitely")
         self:TriggerUpdate()
     else
         -- Switching TO window mode: establish a new window
         Logger.Debug("Gold per hour tracker mode changed from " ..
-        oldMode .. " to " .. newMode .. " - window tracking restarted")
+            oldMode .. " to " .. newMode .. " - window tracking restarted")
         self.startTime = GetTime()
         self:TriggerUpdate()
     end
@@ -370,6 +379,7 @@ function GPH:Reset()
     self.trackedItems = {}
     self.goldReceived = 0
     self.startTime = nil
+    self:TriggerUpdate()
 end
 
 --- Save the current tracking state to persistent storage
@@ -381,6 +391,10 @@ function GPH:SaveState()
         startTime = self.startTime,
     }
     CM:SetProfileSettingSafe(self.CONFIGURATION.PERSISTED_DATA.key, persistedData)
+end
+
+function GPH:RequestImmediateUpdate()
+    self:TriggerUpdate()
 end
 
 --- Load the persisted tracking state from storage
@@ -416,8 +430,13 @@ function GPH:Initialize()
 
     -- Initialize callback system
     self.gphCallbacks = TM.Callback.New()
-    self:Reset()
+
+    -- Do NOT clear persisted data here; load any saved state first
     self:LoadState()
+
+    -- Ensure tables are initialized if nothing was persisted
+    self.trackedItems = self.trackedItems or {}
+    self.goldReceived = self.goldReceived or 0
 
     -- Check if it should be enabled via configuration
     local shouldEnable = CM:GetProfileSettingByConfigEntry(self.CONFIGURATION.ENABLED)
@@ -425,4 +444,12 @@ function GPH:Initialize()
     if shouldEnable then
         self:Enable()
     end
+
+    -- Emit an immediate update so UIs can render restored state
+    self:TriggerUpdate()
+end
+
+--- Request an immediate stats update (used by UI modules)
+function GPH:RequestImmediateUpdate()
+    self:TriggerUpdate()
 end

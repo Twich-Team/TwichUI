@@ -4,4 +4,5 @@
     <Script file="LootMonitor.lua" />
     <Script file="NotableItems.lua" />
     <Script file="GoldPerHourTracker.lua" />
+    <Script file="GoldPerHourFrame.lua" />
 </Ui>

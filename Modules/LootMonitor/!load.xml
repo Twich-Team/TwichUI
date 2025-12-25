@@ -4,4 +4,5 @@
     <Script file="NotableItemNotificationHandler.lua" />
     <Script file="NotableItemNotificationFrame.lua" />
     <Script file="GoldPerHourTracker.lua" />
+    <Script file="GoldPerHourFrame.lua" />
 </Ui>
