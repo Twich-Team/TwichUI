@@ -287,8 +287,6 @@ local function HandleEvents(event, ...)
         local copperPerItem, totalCopper, decision, saleRate = HandleLootReceivedEvent(receivedEventData.quantity,
             receivedEventData.itemInfo)
 
-        Logger.Warn(decision)
-
         ---@class LootValuatedEventData
         ---@field itemInfo LootMonitorItemInfo
         ---@field quantity number
