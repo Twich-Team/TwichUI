@@ -3,6 +3,11 @@
 
     <Include file="Colors\!load.xml" />
     <Include file="Text\!load.xml" />
-    <Include file="Callback\!load.xml" />
+    <Include
+        file="Callback\!load.xml" />
     <Include file="Money\!load.xml" />
+    <Include
+        file="Generics\!load.xml" />
+    <Script file="Textures\ClassTextures.lua" />
+    <Include file="Game\!load.xml" />
 </Ui>

@@ -42,8 +42,32 @@
     "IGNORE",
     "UNKNOWN",
     "ENABLE",
-    "WINDOW_SIZE"
+    "WINDOW_SIZE",
+    "class",
+    "ToggleFrame",
+    "DISPLAY",
+    "DISPLAY_MODE",
+    "COLOR",
+    "CUSTOM",
+    "StaticPopupDialogs",
+    "StaticPopup_Show",
+    "ReloadUI",
+    "BANK"
   ],
   "Lua.type.weakUnionCheck": true,
-  "Lua.diagnostics.disable": ["assign-type-mismatch"]
+  "Lua.diagnostics.disable": ["assign-type-mismatch"],
+  // Editor + Lua formatter indentation settings
+  "editor.detectIndentation": false,
+  "files.eol": "\n",
+  "[lua]": {
+    "editor.insertSpaces": true,
+    "editor.tabSize": 4,
+    "editor.detectIndentation": false
+  },
+  "Lua.format.enable": true,
+  "Lua.format.defaultConfig": {
+    "indent_style": "space",
+    "indent_size": "4",
+    "continuation_indent": "4"
+  }
 }

@@ -1,5 +1,7 @@
 local T, W, I, C = unpack(Twich)
 
+local LSM = T.Libs.LSM
+
 ---@class LoggerModule : AceModule
 ---@field LEVELS LoggerLevels
 ---@field level LogLevel
@@ -45,6 +47,12 @@ LM.LEVELS = {
 
 LM.level = LM.LEVELS.DEBUG
 
+--- @type table<string, ConfigEntry>
+LM.CONFIGURATION = {
+    SOUND_ENABLE = { key = "developer.logger.sound.enable", default = false },
+    SOUND_EFFECT = { key = "developer.logger.sound.effect", default = "Game Error" },
+    SOUND_AT_LEVEL = { key = "developer.logger.sound.atLevel", default = LM.LEVELS.ERROR },
+}
 
 
 -- Safely obtain the logger prefix. Tools.Text may not be initialized at load time,
@@ -107,6 +115,25 @@ local function isBelowConfiguredLevel(level)
     return level.levelNumeric < LM.level.levelNumeric
 end
 
+--- Plays the configured sound effect if configured for the provided log level
+--- @param level LogLevel the level to check against the configured sound level
+local function PlaySound(level)
+    if not CM:GetProfileSettingByConfigEntry(LM.CONFIGURATION.SOUND_ENABLE) then
+        return
+    end
+
+    local soundKey = CM:GetProfileSettingByConfigEntry(LM.CONFIGURATION.SOUND_EFFECT)
+    if soundKey and soundKey ~= "None" then
+        local configuredSoundLevel = CM:GetProfileSettingByConfigEntry(LM.CONFIGURATION.SOUND_AT_LEVEL)
+        if level.levelNumeric >= configuredSoundLevel.levelNumeric then
+            local path = LSM and LSM:Fetch("sound", soundKey)
+            if path then
+                PlaySoundFile(path, "Master")
+            end
+        end
+    end
+end
+
 --- Write a log message at the DEBUG level
 --- @param message string The message to log.
 function LM.Debug(message)
@@ -116,6 +143,7 @@ function LM.Debug(message)
     end
 
     local formattedText = formatTextForLevel(message, LM.LEVELS.DEBUG)
+    PlaySound(LM.LEVELS.DEBUG)
     SafePrint(formattedText)
 end
 
@@ -128,6 +156,7 @@ function LM.Info(message)
     end
 
     local formattedText = formatTextForLevel(message, LM.LEVELS.INFO)
+    PlaySound(LM.LEVELS.INFO)
     SafePrint(formattedText)
 end
 
@@ -140,6 +169,7 @@ function LM.Warn(message)
     end
 
     local formattedText = formatTextForLevel(message, LM.LEVELS.WARN)
+    PlaySound(LM.LEVELS.WARN)
     SafePrint(formattedText)
 end
 
@@ -152,6 +182,7 @@ function LM.Error(message)
     end
 
     local formattedText = formatTextForLevel(message, LM.LEVELS.ERROR)
+    PlaySound(LM.LEVELS.ERROR)
     SafePrint(formattedText)
 end
 

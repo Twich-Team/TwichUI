@@ -84,7 +84,11 @@ local function RunValuationOnItem(
 
     -- Short helper for safe fallback to vendor value
     local function FallbackToVendor(reason)
-        Logger.Error(("Valuation fallback to vendor for %s: %s"):format(itemLink or "nil", reason or "unknown"))
+        Logger.Warn(("Valuation fallback to vendor for %s: %s (vendor=%dc)"):format(
+            itemLink or "nil",
+            reason or "unknown",
+            vendorCopperValue
+        ))
         return vendorCopperValue, vendorCopperValue * quantity, Valuator.DECISIONS.VENDOR
     end
 
@@ -188,15 +192,16 @@ local function RunValuationOnItem(
 
     -- TSM SOURCE: simply use the configured TSM price source.
     if valuationMethod.uid == Valuator.VALUATION_METHODS.TSM_PRICE_SOURCE.uid then
-        Logger.Debug(("Item valuation: %s valued at %dc each (TSM source)."):format(
-            itemLink or "nil", copperValue
-        ))
-        -- If copperValue is 0, this is effectively worthless; still call it "market" so you can see intent
-        local decision = (copperValue > 0) and Valuator.DECISIONS.MARKET or Valuator.DECISIONS.VENDOR
         if copperValue > 0 then
-            return copperValue, copperValue * quantity, decision
+            Logger.Debug(("Item valuation: %s valued at %dc each (TSM source)."):format(
+                itemLink or "nil", copperValue
+            ))
+            return copperValue, copperValue * quantity, Valuator.DECISIONS.MARKET
         else
-            return vendorCopperValue, vendorCopperValue * quantity, decision
+            Logger.Warn(("Item valuation: %s TSM price is 0/unknown; using vendor value %dc each."):format(
+                itemLink or "nil", vendorCopperValue
+            ))
+            return vendorCopperValue, vendorCopperValue * quantity, Valuator.DECISIONS.VENDOR
         end
     end
 

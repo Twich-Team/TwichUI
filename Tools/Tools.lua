@@ -21,7 +21,15 @@ local T, W, I, C = unpack(Twich)
 
 --- @class ToolsModule
 --- @field Money MoneyTool
---- @field Callback CallbackPrototype
+--- @field Callback CallbackPrototype\
+--- @field Textures TexturesTool
+--- @field Game GameTool
 local TM = T:GetModule("Tools")
+
+--- @class GenericsTool
+--- @field Module GenericModule
+--- @field Cache GenericCache
+local Generics = TM.Generics or {}
+TM.Generics = Generics
 
 local _G = _G

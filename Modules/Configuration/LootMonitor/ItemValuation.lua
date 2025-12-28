@@ -35,7 +35,7 @@ function IV:Create()
             fontSize = "medium",
             width = "full",
             hidden = function()
-                return TPA.TSM:Available()
+                return TPA.TSM:IsAvailable()
             end,
         },
         priceSourceGroup = {
@@ -44,7 +44,7 @@ function IV:Create()
             order = 2,
             inline = true,
             hidden = function()
-                return not TPA.TSM:Available()
+                return not TPA.TSM:IsAvailable()
             end,
             args = {
                 description = CM.Widgets:ComponentDescription(1,
@@ -103,7 +103,7 @@ function IV:Create()
             order = 5,
             inline = true,
             hidden = function()
-                return not TPA.TSM:Available()
+                return not TPA.TSM:IsAvailable()
             end,
             args = {
                 description = CM.Widgets:ComponentDescription(1,

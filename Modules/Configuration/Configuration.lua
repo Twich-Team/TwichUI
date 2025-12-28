@@ -13,6 +13,9 @@ local TM = T:GetModule("Tools")
 ---@type LoggerModule
 local LM = T:GetModule("Logger")
 
+local StaticPopupDialogs = StaticPopupDialogs
+local StaticPopup_Show = StaticPopup_Show
+local ReloadUI = ReloadUI
 -----------------------------------------------------------------------
 -- Internal helpers
 -----------------------------------------------------------------------
@@ -152,6 +155,27 @@ function CM:GetProfileSettingSafe(key, default)
     return GetByPath(db, parts, default)
 end
 
+local function GetImmediateCallerLine()
+    if type(debugstack) == "function" then
+        -- Skip frames: debugstack (1), helper (2), validator (3), utility (4) -> caller (5)
+        local s = debugstack(5, 1, 0)
+        local first = s and s:match("([^\n]*)")
+        return first or "unknown"
+    end
+    return "unknown"
+end
+
+--- Validates that the supplied config entry is well-formed.
+--- @param configEntry ConfigEntry
+--- @return boolean isValid
+local function ValidConfigEntry(configEntry)
+    if type(configEntry) ~= "table" or type(configEntry.key) ~= "string" then
+        LM.Error("Invalid ConfigEntry supplied. Caller: " .. GetImmediateCallerLine())
+        return false
+    end
+    return true
+end
+
 ---@class ConfigEntry
 ---@field key string The dotpath key for the setting
 ---@field default any The default value for the setting
@@ -160,6 +184,10 @@ end
 --- @param configEntry ConfigEntry The configuration entry containing the key and default value
 --- @return any The value at the dotpath, or the default value if the setting does not exist
 function CM:GetProfileSettingByConfigEntry(configEntry)
+    if not ValidConfigEntry(configEntry) then
+        return nil
+    end
+
     return CM:GetProfileSettingSafe(configEntry.key, configEntry.default)
 end
 
@@ -167,6 +195,9 @@ end
 --- @param configEntry ConfigEntry The configuration entry containing the key
 --- @param value any The value to set at the dotpath
 function CM:SetProfileSettingByConfigEntry(configEntry, value)
+    if not ValidConfigEntry(configEntry) then
+        return false
+    end
     return CM:SetProfileSettingSafe(configEntry.key, value)
 end
 
@@ -230,6 +261,7 @@ function CM:CreateAddonConfiguration()
             lootMonitor = CM:CreateLootMonitorConfiguration(),
             developer = CM:CreateDeveloperConfiguration(),
             goldGoblin = CM.GoldGoblin:Create(),
+            dataTexts = CM.DataTexts:Create(20)
         }
     }
 end
@@ -242,6 +274,7 @@ local keywordColorMap = {
     { keyword = "modules",          color = TM.Colors.TWICH.SECONDARY_ACCENT },
     { keyword = "Loot Monitor",     color = TM.Colors.TWICH.SECONDARY_ACCENT },
     { keyword = "gold goblin",      color = TM.Colors.TWICH.SECONDARY_ACCENT },
+    { keyword = "gold tracker",     color = TM.Colors.TWICH.TERTIARY_ACCENT },
     { keyword = "gold balancer",    color = TM.Colors.TWICH.TERTIARY_ACCENT },
     { keyword = "notable item",     color = TM.Colors.TWICH.TERTIARY_ACCENT },
     { keyword = "notable items",    color = TM.Colors.TWICH.TERTIARY_ACCENT },
@@ -249,7 +282,8 @@ local keywordColorMap = {
     { keyword = "item valuation",   color = TM.Colors.TWICH.TERTIARY_ACCENT },
     { keyword = "performance",      color = TM.Colors.TWICH.TEXT_WARNING },
     { keyword = "TradeSkillMaster", color = TM.Colors.TWICH.GOLD_ACCENT },
-    { keyword = "TSM",              color = TM.Colors.TWICH.GOLD_ACCENT }
+    { keyword = "TSM",              color = TM.Colors.TWICH.GOLD_ACCENT },
+    { keyword = "coming soon",      color = TM.Colors.TWICH.TEXT_SUCCESS }
 }
 
 --- Searches the supplied text for keywords and applies the appropriate color to them
@@ -297,4 +331,23 @@ function CM:ColorTextKeywords(text)
     end
 
     return coloredText
+end
+
+--- Prompts the user to reload the UI.
+function CM:PromptReloadUI()
+    if type(StaticPopupDialogs) == "table" and type(StaticPopup_Show) == "function" then
+        if not StaticPopupDialogs["TWICHUI_RELOAD_UI"] then
+            StaticPopupDialogs["TWICHUI_RELOAD_UI"] = {
+                text = "TwichUI: Some changes require a UI reload to fully apply. Reload now?",
+                button1 = OKAY,
+                button2 = CANCEL,
+                OnAccept = function() ReloadUI() end,
+                timeout = 0,
+                whileDead = 1,
+                hideOnEscape = 1,
+                preferredIndex = 3,
+            }
+        end
+        StaticPopup_Show("TWICHUI_RELOAD_UI")
+    end
 end

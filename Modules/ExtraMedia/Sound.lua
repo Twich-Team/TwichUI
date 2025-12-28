@@ -13,7 +13,8 @@ SM.SOUNDS = {
     { name = "Game-Ping",    extension = "mp3" },
     { name = "Game-Success", extension = "mp3" },
     { name = "Ping",         extension = "mp3" },
-    { name = "Notable-Loot", extension = "mp3" }
+    { name = "Notable-Loot", extension = "mp3" },
+    { name = "Game-Error",   extension = "mp3" },
 }
 
 local MEDIA_ROOT = "Interface\\AddOns\\TwichUI\\Media\\"

@@ -6,6 +6,7 @@ local T, W, I, C    = unpack(Twich)
 ---@field NotableItemNotificationHandler NotableItemNotificationHandler
 ---@field NotableItemNotificationFrame NotableItemNotificationFrame
 ---@field GoldPerHourTracker GoldPerHourTracker
+---@field GoldPerHourFrame GoldPerHourFrame
 local LM            = T:GetModule("LootMonitor")
 
 LM.EVENTS           = {

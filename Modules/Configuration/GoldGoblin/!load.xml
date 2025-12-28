@@ -1,4 +1,5 @@
 <Ui xmlns='http://www.blizzard.com/wow/ui/'>
     <Script file="GoldGoblin.lua" />
     <Script file="GoldBalancer.lua" />
+    <Script file="GoldTracker.lua" />
 </Ui>

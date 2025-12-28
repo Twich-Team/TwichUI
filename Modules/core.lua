@@ -52,6 +52,7 @@ T.Configuration = T:NewModule("Configuration")
 T.ThirdPartyAPI = T:NewModule("ThirdPartyAPI")
 T.SlashCommands = T:NewModule("SlashCommands", "AceConsole-3.0")
 T.GoldGoblin = T:NewModule("GoldGoblin")
+T.DataTexts = T:NewModule("DataTexts")
 
 --[[
     Register Libraries to Engine
@@ -269,8 +270,14 @@ function T:OnInitialize()
     -- setup configuration
     Configuration:CreateAddonConfiguration()
 
-    Logger.Info("AddOn initialized.")
+    if Configuration:GetProfileSettingSafe("general.showWelcomeMessageOnLogin", true) then
+        Logger.Info("Welcome! v" ..
+            T.Tools.Text.Color(T.Tools.Colors.TWICH.SECONDARY_ACCENT, T.addonMetadata.version) ..
+            " loaded. Use '/twich help' for a list of available commands.")
+    end
 
-    -- Start the auto-open handler (can be enabled/disabled via Start/Stop)
-    pcall(function() T:StartAutoOpenOptions() end)
+    if Configuration:GetProfileSettingSafe("developer.convenience.autoOpenConfig", false) then
+        -- Start the auto-open handler (can be enabled/disabled via Start/Stop)
+        pcall(function() T:StartAutoOpenOptions() end)
+    end
 end

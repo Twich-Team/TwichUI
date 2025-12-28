@@ -2,6 +2,7 @@ local T, W, I, C = unpack(Twich)
 
 ---@class GoldGoblinModule
 ---@field GoldBalancer GoldBalancerModule
+---@field GoldTracker GoldTrackerModule
 ---@field enabled boolean
 local GG         = T:GetModule("GoldGoblin")
 
@@ -28,4 +29,8 @@ function GG:OnInitialize()
     if CM:GetProfileSettingByConfigEntry(self.CONFIGURATION.ENABLE) then
         self:Enable()
     end
+end
+
+function GG:IsEnabled()
+    return self.enabled
 end

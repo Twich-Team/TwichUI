@@ -7,6 +7,7 @@ local TM         = T:GetModule("Tools")
 
 --- @class GoldGoblinConfigurationModule
 --- @field GoldBalancer GoldBalancerConfigurationModule
+--- @field GoldTracker GoldTrackerConfigurationModule
 local GG         = CM.GoldGoblin or {}
 CM.GoldGoblin    = GG
 
@@ -67,6 +68,17 @@ function GG:Create()
                         end
                     end,
                     GG.GoldBalancer:Create()),
+
+                goldTrackerSubmodule = CM.Widgets:SubmoduleGroup(10, "Gold Tracker",
+                    "The Gold Tracker submodule tracks your total gold across all characters on your account.",
+                    "goldGoblin.enable", "goldGoblin.goldTracker.enable", function(enabled)
+                        if enabled then
+                            GGM.GoldTracker:Enable()
+                        else
+                            GGM.GoldTracker:Disable()
+                        end
+                    end,
+                    GG.GoldTracker:Create()),
             }
         )
 end

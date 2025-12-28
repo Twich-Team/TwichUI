@@ -11,18 +11,22 @@ local Logger = T:GetModule("Logger")
 local TPA = T:GetModule("ThirdPartyAPI")
 
 --- @class TradeSkillMasterAPI
-local TSM = TPA.TSM or {}
-TPA.TSM = TSM
+local _TSM = TPA.TSM or {}
+TPA.TSM = _TSM
 
 local TSM_API = TSM_API -- thie primary TSM API
 -- Expose the raw API reference on the module for callers that need it
-TSM.API = TSM_API
+_TSM.API = TSM_API
+
+_TSM.addonName = "TradeSkillMaster"
+_TSM.command = "/tsm"
+
 
 --- Checks whether the TradeSkillMaster addon API is available.
 --- Logs an error if TSM is not loaded or its API is missing.
 --- @param endpoint any the endpoint to access
 --- @return boolean available True if the TSM API is available; false otherwise.
-function TSM:Available(endpoint)
+function _TSM:IsAvailable(endpoint)
     -- return true
     if not TSM_API then
         return false
@@ -35,13 +39,17 @@ function TSM:Available(endpoint)
     return true
 end
 
+function _TSM:Open()
+    TPA:OpenThroughSlashCommand(self.addonName, self.command)
+end
+
 --- Retrieves the list of available TSM price source keys.
 --- Wraps the TSM helper that fills a table with price source keys.
 ---@return string[] priceSources A list of price source keys (e.g. "dbmarket", "dbregionmarketavg").
-function TSM:GetPriceSources()
+function _TSM:GetPriceSources()
     local priceSources = {}
 
-    if self:Available(TSM_API.GetPriceSourceKeys) then
+    if self:IsAvailable(TSM_API.GetPriceSourceKeys) then
         TSM_API.GetPriceSourceKeys(priceSources)
     end
 
@@ -52,8 +60,8 @@ end
 --- @within Item
 --- @param item string Either an item link, TSM item string, or WoW item string
 --- @return string | nil tsmItemString TSM item string or nil if the specified item could not be converted
-function TSM:ToItemString(item)
-    if self:Available(TSM_API.ToItemString) then
+function _TSM:ToItemString(item)
+    if self:IsAvailable(TSM_API.ToItemString) then
         return TSM_API.ToItemString(item)
     end
 
@@ -64,8 +72,8 @@ end
 --- @within Item
 --- @param itemString string The TSM item string
 --- @return string | nil itemName name of the item or nil if it couldn't be determined
-function TSM:GetItemName(itemString)
-    if self:Available(TSM_API.GetItemName) then
+function _TSM:GetItemName(itemString)
+    if self:IsAvailable(TSM_API.GetItemName) then
         return TSM_API.GetItemName(itemString)
     end
 
@@ -76,8 +84,8 @@ end
 --- @within Item
 --- @param itemString string The TSM item string
 --- @return string | nil itemLink item link or an "[Unknown Item]" link
-function TSM:GetItemLink(itemString)
-    if self:Available(TSM_API.GetItemLink) then
+function _TSM:GetItemLink(itemString)
+    if self:IsAvailable(TSM_API.GetItemLink) then
         return TSM_API.GetItemLink(itemString)
     end
 
@@ -90,8 +98,8 @@ end
 --- @param itemStr string The TSM item string to get the value for
 --- @return number | nil copperValue value in copper or nil if the custom price string is not valid
 --- @return string | nil errorMsg (localized) error message if the custom price string is not valid or nil if it is valid
-function TSM:GetCustomPriceValue(customPriceStr, itemStr)
-    if self:Available(TSM_API.GetCustomPriceValue) then
+function _TSM:GetCustomPriceValue(customPriceStr, itemStr)
+    if self:IsAvailable(TSM_API.GetCustomPriceValue) then
         return TSM_API.GetCustomPriceValue(customPriceStr, itemStr)
     end
 
@@ -99,8 +107,8 @@ function TSM:GetCustomPriceValue(customPriceStr, itemStr)
 end
 
 --- @return number | nil copperValue value in copper or nil if the custom price string is not valid
-function TSM:GetSaleRate(itemStr)
-    if self:Available(TSM_API.GetCustomPriceValue) then
+function _TSM:GetSaleRate(itemStr)
+    if self:IsAvailable(TSM_API.GetCustomPriceValue) then
         local v, err = TSM_API.GetCustomPriceValue("1000 * DBRegionSaleRate(baseitem)", itemStr)
         if v then
             return v / 1000
@@ -115,10 +123,10 @@ end
 --- Obtains the human-readable description of a given TSM price source.
 ---@param priceSource string The price source key (e.g. "dbmarket").
 ---@return string description The description provided by TSM, or an empty string if unavailable.
-function TSM:GetPriceSourceDescription(priceSource)
+function _TSM:GetPriceSourceDescription(priceSource)
     local description = ""
 
-    if self:Available(TSM_API.GetPriceSourceDescription) then
+    if self:IsAvailable(TSM_API.GetPriceSourceDescription) then
         description = TSM_API.GetPriceSourceDescription(priceSource) or ""
     end
 

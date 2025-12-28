@@ -11,6 +11,8 @@ local TM = T:GetModule("Tools")
 
 --- @class DeveloperConfigurationModule
 --- @field Logger DeveloperLoggerConfigurationModule
+--- @field Databases DeveloperDatabasesConfiguration
+--- @field Convenience DeveloperConvenienceConfiguration
 CM.Developer = CM.Developer or {}
 
 --- Creates the primary developer configuration panels.
@@ -34,7 +36,9 @@ function CM:CreateDeveloperConfiguration()
                 order = 0,
                 fontSize = "large",
             },
-            loggerGroup = CM.Developer.Logger:Create(1)
+            databasesGroup = CM.Developer.Databases:Create(5),
+            convenienceGroup = CM.Developer.Convenience:Create(7),
+            loggerGroup = CM.Developer.Logger:Create(10),
         }
 
     }

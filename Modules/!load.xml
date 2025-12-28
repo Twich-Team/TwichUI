@@ -12,4 +12,5 @@
     <Include file="ThirdPartyAPI\!load.xml" />
     <Include file="LootMonitor\!load.xml" />
     <Include file="SlashCommands\!load.xml" />
+    <Include file="DataTexts\!load.xml" />
 </Ui>

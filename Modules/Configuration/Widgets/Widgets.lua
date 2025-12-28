@@ -8,6 +8,8 @@ local T, W, I, C = unpack(Twich)
 local CM = T:GetModule("Configuration")
 --- @type ToolsModule
 local TM = T:GetModule("Tools")
+---@type LoggerModule
+local LM = T:GetModule("Logger")
 
 --- @class Widgets
 local Widgets = CM.Widgets or {}
@@ -156,4 +158,82 @@ function Widgets:SubmoduleGroup(order, submoduleName, description, parentModuleE
     end
 
     return group
+end
+
+---@param order integer The order of the datatext color selector group in the configuration.
+---@param colorSelectConfigEntry ConfigEntry The config entry for the color mode selection.
+---@param customColorConfigEntry ConfigEntry The config entry for the custom color selection.
+---@param refreshFunc function A function to call when the color mode or custom color is changed.
+function Widgets:DatatextColorSelectorGroup(order, colorSelectConfigEntry, customColorConfigEntry, refreshFunc)
+    return {
+        type = "group",
+        inline = true,
+        name = "Color",
+        order = order,
+        args = {
+            colorMode = {
+                type   = "select",
+                name   = "Text Color",
+                order  = 1,
+                values = function()
+                    local DTM = T:GetModule("DataTexts")
+                    local options = {}
+
+                    for _, option in pairs(DTM.ColorMode) do
+                        options[option.id] = option.name
+                    end
+                    return options
+                end,
+                get    = function()
+                    local mode = CM:GetProfileSettingByConfigEntry(colorSelectConfigEntry)
+                    return mode and mode.id or nil
+                end,
+                set    = function(_, value)
+                    local option = nil
+                    local DTM = T:GetModule("DataTexts")
+                    for _, v in pairs(DTM.ColorMode) do
+                        if v.id == value then
+                            option = v
+                            break
+                        end
+                    end
+                    if not option then
+                        LM.Error("Failed to set datatext color mode - invalid option: " .. tostring(value))
+                        return
+                    end
+
+                    CM:SetProfileSettingByConfigEntry(colorSelectConfigEntry, option)
+                    if refreshFunc and type(refreshFunc) == "function" then
+                        refreshFunc()
+                    end
+                end,
+            },
+            customColor = {
+                type   = "color",
+                name   = "Custom Color",
+                order  = 2,
+                hidden = function()
+                    local mode = CM:GetProfileSettingByConfigEntry(colorSelectConfigEntry)
+                    return not (mode and mode.id == "custom")
+                end,
+                get    = function()
+                    local color = CM:GetProfileSettingByConfigEntry(customColorConfigEntry)
+
+                    if not color then
+                        LM.Warn("Custom color not found, using default color.")
+                        local DTM = T:GetModule("DataTexts")
+                        color = DTM.DefaultColor
+                    end
+
+                    return color.r, color.g, color.b
+                end,
+                set    = function(_, r, g, b)
+                    CM:SetProfileSettingByConfigEntry(customColorConfigEntry, { r = r, g = g, b = b })
+                    if refreshFunc and type(refreshFunc) == "function" then
+                        refreshFunc()
+                    end
+                end,
+            },
+        }
+    }
 end
