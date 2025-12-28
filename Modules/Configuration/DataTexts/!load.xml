@@ -2,4 +2,6 @@
     <Script file="Menu.lua" />
     <Script file="Goblin.lua" />
     <Script file="DataTexts.lua" />
+    <Script file="Portals.lua" />
+
 </Ui>

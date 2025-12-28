@@ -32,7 +32,7 @@ function GenericModule:IsEnabled()
     return self.enabled
 end
 
----@param eventHandler function the event handler function to call when events are triggered
+---@param eventHandler function|nil the event handler function to call when events are triggered
 function GenericModule:Enable(eventHandler)
     if self.enabled then return end
 

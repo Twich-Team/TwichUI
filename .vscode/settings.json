@@ -53,7 +53,8 @@
     "StaticPopup_Show",
     "ReloadUI",
     "BANK",
-    "Professions"
+    "Professions",
+    "NUM_BAG_SLOTS"
 ],
   "Lua.type.weakUnionCheck": true,
   "Lua.diagnostics.disable": ["assign-type-mismatch"],

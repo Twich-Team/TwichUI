@@ -7,6 +7,7 @@ local TM = T:GetModule("Tools")
 
 --- @class DataTextsConfigurationModule
 --- @field Goblin GoblinDataTextConfigurationModule
+--- @field Portals PortalsDataTextConfigurationModule
 local DT = CM.DataTexts or {}
 CM.DataTexts = DT
 
@@ -71,6 +72,17 @@ function DT:Create(order)
                     end
                 end,
                 CM.DataTexts.Goblin:Create()),
+
+            portalsSubmodule = CM.Widgets:SubmoduleGroup(20, "Portals",
+                "The Portals datatext provides quick access to your hearthstons and dungeon teleports.",
+                "datatexts.enabled", "datatexts.portals.enable", function(enabled)
+                    if enabled then
+                        GetDataTextsModule().Portals:Enable()
+                    else
+                        GetDataTextsModule().Portals:Disable()
+                    end
+                end,
+                CM.DataTexts.Portals:Create()),
 
         }
     )

@@ -5,6 +5,7 @@ local E = unpack(ElvUI)
 --- @field Goblin GoblinDataText
 --- @field datatexts table
 --- @field Menu Menu
+--- @field Portals PortalsDataText
 -- DropDown is legacy; prefer DataTextsModule.Menu
 local DataTextsModule = T:GetModule("DataTexts")
 
@@ -43,6 +44,7 @@ end
 function DataTextsModule:Enable()
     -- initialize any submodules that have been enabled previously
     self.Goblin:OnInitialize()
+    self.Portals:OnInitialize()
 end
 
 function DataTextsModule:Disable()
@@ -164,16 +166,5 @@ function DataTextsModule:RemoveDataText(name)
     -- Ask ElvUI to rebuild options if supported.
     if E and type(E.RefreshOptions) == "function" then
         pcall(E.RefreshOptions, E)
-    end
-
-    -- Force a re-render of the currently open group so dropdowns rebuild.
-    local ACD = (T.Libs and T.Libs.AceConfigDialog)
-        or _G.LibStub("AceConfigDialog-3.0-ElvUI", true)
-        or _G.LibStub("AceConfigDialog-3.0", true)
-    if ACD and ACD.SelectGroup then
-        local ok = pcall(ACD.SelectGroup, ACD, "ElvUI", "datatexts")
-        if not ok then
-            pcall(ACD.SelectGroup, ACD, "ElvUI", "TwichUI")
-        end
     end
 end

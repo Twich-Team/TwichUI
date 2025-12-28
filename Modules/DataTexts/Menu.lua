@@ -305,7 +305,14 @@ function Menu:_ClearButtons(instance)
         local btn = instance.buttons[i]
         if btn then
             btn:Hide()
-            btn:SetScript("OnClick", nil)
+            -- IMPORTANT: never clear the OnClick handler on protected buttons.
+            -- Clearing it taints/breaks SecureActionButtonTemplate execution.
+            local isProtected = (btn.IsProtected and btn:IsProtected()) or false
+            if not isProtected then
+                btn:SetScript("OnClick", nil)
+            end
+            btn:SetScript("PostClick", nil)
+            btn:SetScript("OnMouseDown", nil)
             btn:SetScript("OnEnter", nil)
             btn:SetScript("OnLeave", nil)
             btn.func = nil
@@ -439,6 +446,17 @@ function Menu:Show(instance, anchor, list, opts)
         local isDescription = item.isDescription
 
         local needsSecure = item and (item.macro or item.spell or item.item)
+        local btnIsProtected = btn and btn.IsProtected and btn:IsProtected()
+        local btnHasOnClick = btn and btn.GetScript and (btn:GetScript("OnClick") ~= nil)
+
+        -- If we need a secure button, ensure we have a *fresh* SecureActionButtonTemplate handler.
+        -- If an earlier build ever cleared OnClick, the button becomes tainted/broken.
+        if needsSecure and btn and (not btnIsProtected or not btnHasOnClick) then
+            btn:Hide()
+            instance.buttons[i] = nil
+            btn = nil
+        end
+
         if not btn or (needsSecure and (not btn.isSecure)) or ((not needsSecure) and btn.isSecure) then
             if btn then
                 btn:Hide()
@@ -447,8 +465,9 @@ function Menu:Show(instance, anchor, list, opts)
 
             if needsSecure then
                 ---@type TwichUI_MenuButton
-                btn = CreateFrame("Button", "TwichUI_MenuButton_" .. tostring(instance.id) .. "_" .. i, frame,
-                    "SecureActionButtonTemplate")
+                -- IMPORTANT: don't name secure buttons globally.
+                -- Global names can collide across rebuilds when a given index flips secure/insecure.
+                btn = CreateFrame("Button", nil, frame, "SecureActionButtonTemplate")
                 btn.isSecure = true
             else
                 ---@type TwichUI_MenuButton
@@ -494,9 +513,17 @@ function Menu:Show(instance, anchor, list, opts)
             btn:SetAttribute("type", nil)
             btn:SetAttribute("spell", nil)
             btn:SetAttribute("item", nil)
+            btn:SetAttribute("macrotext", nil)
+
+            -- Click-specific secure attributes (left click = 1)
+            btn:SetAttribute("type1", nil)
+            btn:SetAttribute("spell1", nil)
+            btn:SetAttribute("item1", nil)
             btn:SetAttribute("macrotext1", nil)
 
             if btn.isSecure then
+                btn:SetScript("OnMouseDown", nil)
+
                 if item.macro then
                     btn:SetAttribute("type", "macro")
                     btn:RegisterForClicks("LeftButtonUp", "LeftButtonDown")
@@ -504,15 +531,16 @@ function Menu:Show(instance, anchor, list, opts)
                 elseif item.spell then
                     btn:SetAttribute("type", "spell")
                     btn:RegisterForClicks("LeftButtonUp", "LeftButtonDown")
-                    btn:SetAttribute("spell", item.spell)
+                    btn:SetAttribute("spell1", item.spell)
                 elseif item.item then
                     btn:SetAttribute("type", "item")
                     btn:RegisterForClicks("LeftButtonUp", "LeftButtonDown")
-                    btn:SetAttribute("item", item.item)
+                    btn:SetAttribute("item1", item.item)
                 end
-                -- Avoid insecure OnClick for secure buttons; only hide menu out of combat via mouse-out timer.
-                btn:SetScript("OnClick", nil)
+                -- IMPORTANT: do not touch OnClick on secure buttons.
+                btn:SetScript("PostClick", nil)
             else
+                btn:SetScript("OnMouseDown", nil)
                 btn:RegisterForClicks("LeftButtonUp")
                 btn:SetScript("OnClick", function(button)
                     if button.func then button.func() end
@@ -557,6 +585,8 @@ function Menu:Show(instance, anchor, list, opts)
             end)
         else
             btn:SetScript("OnClick", nil)
+            btn:SetScript("PostClick", nil)
+            btn:SetScript("OnMouseDown", nil)
             btn:SetScript("OnEnter", nil)
             btn:SetScript("OnLeave", nil)
             if btn.hoverTex then btn.hoverTex:Hide() end

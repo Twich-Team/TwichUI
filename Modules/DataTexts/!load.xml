@@ -2,5 +2,6 @@
     <Script file='DataTexts.lua' />
 
     <Script file="Goblin/Goblin.lua" />
+    <Script file="Portals/Portals.lua" />
     <Script file='Menu.lua' />
 </Ui>
