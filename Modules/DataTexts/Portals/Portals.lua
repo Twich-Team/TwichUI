@@ -34,6 +34,7 @@ local Module = Tools.Generics.Module:New({
     SHOW_ICON = { key = "datatexts.portals.showIcon", default = false },
     ICON_TEXTURE = { key = "datatexts.portals.iconTexture", default = "Interface\\Icons\\Spell_Arcane_PortalOrgrimmar" },
     ICON_SIZE = { key = "datatexts.portals.iconSize", default = 14 },
+    ICON_PADDING = { key = "datatexts.portals.iconPadding", default = 2 },
 
     -- Default to the regular Hearthstone.
     FAVORITE_HEARTHSTONE_ID = { key = "datatexts.portals.favoriteHearthstoneId", default = 6948 },
@@ -180,10 +181,23 @@ function PortalsDataText:Refresh()
         self.displayCache:invalidate()
     end
     if self.panel and self.panel.text then
-        self.panel.text:SetText(self:GetDisplayText())
+        local displayText = self:GetDisplayText()
+        self.panel.text:SetText(displayText)
+        self:UpdatePanelIcon(displayText)
     end
 
     self:UpdateFavoriteClickButton()
+end
+
+function PortalsDataText:UpdatePanelIcon(displayText)
+    if not self.panel then return end
+    local showIcon = Configuration:GetProfileSettingByConfigEntry(Module.CONFIGURATION.SHOW_ICON)
+    local icon = Configuration:GetProfileSettingByConfigEntry(Module.CONFIGURATION.ICON_TEXTURE)
+        or "Interface\\Icons\\Spell_Arcane_PortalOrgrimmar"
+    local iconSize = Configuration:GetProfileSettingByConfigEntry(Module.CONFIGURATION.ICON_SIZE) or 14
+    local padding = Configuration:GetProfileSettingByConfigEntry(Module.CONFIGURATION.ICON_PADDING)
+
+    DataTexts:UpdateDatatextIcon(self.panel, showIcon, icon, iconSize, padding, displayText)
 end
 
 function PortalsDataText:UpdateFavoriteClickButton()
@@ -475,7 +489,9 @@ function PortalsDataText:OnEvent(panel, event, ...)
     end
 
     if self.panel then
-        self.panel.text:SetText(self:GetDisplayText())
+        local displayText = self:GetDisplayText()
+        self.panel.text:SetText(displayText)
+        self:UpdatePanelIcon(displayText)
     end
 
     self:UpdateFavoriteClickButton()
@@ -493,6 +509,10 @@ function PortalsDataText:OnEnter(panel)
     self:BuildMenu()
     local instance = DataTexts.Menu:Acquire("twichui_portals")
     DataTexts.Menu:Show(instance, self.panel, self.menuList)
+
+    if self.panel.text then
+        self:UpdatePanelIcon(self.panel.text:GetText())
+    end
 
     self:UpdateFavoriteClickButton()
 end
@@ -549,13 +569,6 @@ function PortalsDataText:GetDisplayText()
         )
 
         local label = Configuration:GetProfileSettingByConfigEntry(Module.CONFIGURATION.DISPLAY_TEXT) or "Portals"
-        local showIcon = Configuration:GetProfileSettingByConfigEntry(Module.CONFIGURATION.SHOW_ICON)
-        if showIcon then
-            local icon = Configuration:GetProfileSettingByConfigEntry(Module.CONFIGURATION.ICON_TEXTURE)
-                or "Interface\\Icons\\Spell_Arcane_PortalOrgrimmar"
-            local iconSize = Configuration:GetProfileSettingByConfigEntry(Module.CONFIGURATION.ICON_SIZE) or 14
-            label = ("|T%s:%d:%d|t %s"):format(icon, iconSize, iconSize, label)
-        end
 
         return DataTexts:ColorTextByElvUISetting(colorMode, label, Module.CONFIGURATION.CUSTOM_COLOR)
     end)

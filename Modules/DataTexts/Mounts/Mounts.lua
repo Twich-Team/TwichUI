@@ -51,6 +51,7 @@ local Module = Tools.Generics.Module:New({
     SHOW_ICON = { key = "datatexts.mounts.showIcon", default = false },
     ICON_TEXTURE = { key = "datatexts.mounts.iconTexture", default = "Interface\\Icons\\Ability_Mount_RidingHorse" },
     ICON_SIZE = { key = "datatexts.mounts.iconSize", default = 14 },
+    ICON_PADDING = { key = "datatexts.mounts.iconPadding", default = 2 },
 
     OPEN_MENU_ON_HOVER = { key = "datatexts.mounts.openMenuOnHover", default = true },
 
@@ -186,16 +187,20 @@ function MountsDataText:GetDisplayText()
         local colorMode = Configuration:GetProfileSettingByConfigEntry(Module.CONFIGURATION.COLOR_MODE)
         local label = Configuration:GetProfileSettingByConfigEntry(Module.CONFIGURATION.DISPLAY_TEXT) or "Mounts"
 
-        local showIcon = Configuration:GetProfileSettingByConfigEntry(Module.CONFIGURATION.SHOW_ICON)
-        if showIcon then
-            local icon = Configuration:GetProfileSettingByConfigEntry(Module.CONFIGURATION.ICON_TEXTURE)
-                or "Interface\\Icons\\Ability_Mount_RidingHorse"
-            local iconSize = Configuration:GetProfileSettingByConfigEntry(Module.CONFIGURATION.ICON_SIZE) or 14
-            label = ("|T%s:%d:%d|t %s"):format(icon, iconSize, iconSize, label)
-        end
-
         return DataTexts:ColorTextByElvUISetting(colorMode, label, Module.CONFIGURATION.CUSTOM_COLOR)
     end)
+end
+
+function MountsDataText:UpdatePanelIcon(displayText)
+    if not self.panel then return end
+    local showIcon = Configuration:GetProfileSettingByConfigEntry(Module.CONFIGURATION.SHOW_ICON)
+    local icon = Configuration:GetProfileSettingByConfigEntry(Module.CONFIGURATION.ICON_TEXTURE)
+        or "Interface\\Icons\\Ability_Mount_RidingHorse"
+    local iconSize = Configuration:GetProfileSettingByConfigEntry(Module.CONFIGURATION.ICON_SIZE) or 14
+
+    local padding = Configuration:GetProfileSettingByConfigEntry(Module.CONFIGURATION.ICON_PADDING)
+
+    DataTexts:UpdateDatatextIcon(self.panel, showIcon, icon, iconSize, padding, displayText)
 end
 
 function MountsDataText:Refresh()
@@ -209,7 +214,9 @@ function MountsDataText:Refresh()
         self.mountOptionsCache:invalidate()
     end
     if self.panel and self.panel.text then
-        self.panel.text:SetText(self:GetDisplayText())
+        local displayText = self:GetDisplayText()
+        self.panel.text:SetText(displayText)
+        self:UpdatePanelIcon(displayText)
     end
 end
 
@@ -459,7 +466,9 @@ function MountsDataText:OnEvent(panel, event, ...)
     end
 
     if self.panel and self.panel.text then
-        self.panel.text:SetText(self:GetDisplayText())
+        local displayText = self:GetDisplayText()
+        self.panel.text:SetText(displayText)
+        self:UpdatePanelIcon(displayText)
     end
 end
 
@@ -468,6 +477,10 @@ function MountsDataText:OnEnter(panel)
         self.panel = panel
     end
     if not self.panel then return end
+
+    if self.panel.text then
+        self:UpdatePanelIcon(self.panel.text:GetText())
+    end
 
     local openOnHover = Configuration:GetProfileSettingByConfigEntry(Module.CONFIGURATION.OPEN_MENU_ON_HOVER)
     if not openOnHover then

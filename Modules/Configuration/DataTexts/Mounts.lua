@@ -105,6 +105,26 @@ function MDT:Create()
                     end,
                 },
 
+                iconPadding = {
+                    type = "range",
+                    name = "Icon Padding",
+                    desc = "Spacing between the icon and the text (in pixels).",
+                    order = 5.1,
+                    min = 0,
+                    max = 16,
+                    step = 1,
+                    disabled = function()
+                        return not CM:GetProfileSettingByConfigEntry(GetModule():GetConfiguration().SHOW_ICON)
+                    end,
+                    get = function()
+                        return CM:GetProfileSettingByConfigEntry(GetModule():GetConfiguration().ICON_PADDING) or 2
+                    end,
+                    set = function(_, value)
+                        CM:SetProfileSettingByConfigEntry(GetModule():GetConfiguration().ICON_PADDING, value or 2)
+                        GetModule():Refresh()
+                    end,
+                },
+
                 openMenuOnHover = {
                     type = "toggle",
                     name = "Open Menu On Hover",

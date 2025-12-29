@@ -1,6 +1,9 @@
 local T = unpack(Twich)
 local E = unpack(ElvUI)
 
+-- WoW globals
+local _G = _G
+
 --- @class DataTextsModule
 --- @field Goblin GoblinDataText
 --- @field datatexts table
@@ -79,11 +82,11 @@ end
 --- @param name string Internal datatext name (unique).
 --- @param prettyName string|nil Display name shown in ElvUI config.
 --- @param events string[]|nil List of events to register for.
---- @param onEventFunc fun(panel: table)|nil Event handler (updates text).
---- @param onUpdateFunc fun(panel: table, elapsed: number)|nil OnUpdate handler.
---- @param onClickFunc fun(panel: table, button: string)|nil OnClick handler.
---- @param onEnterFunc fun(panel: table)|nil OnEnter handler (tooltip).
---- @param onLeaveFunc fun(panel: table)|nil OnLeave handler.
+--- @param onEventFunc fun(panel: ElvUI_DT_Panel, event: string, ...)|nil Event handler (updates text).
+--- @param onUpdateFunc fun(panel: ElvUI_DT_Panel, elapsed: number)|nil OnUpdate handler.
+--- @param onClickFunc fun(panel: ElvUI_DT_Panel, button: string)|nil OnClick handler.
+--- @param onEnterFunc fun(panel: ElvUI_DT_Panel)|nil OnEnter handler (tooltip).
+--- @param onLeaveFunc fun(panel: ElvUI_DT_Panel)|nil OnLeave handler.
 function DataTextsModule:NewDataText(name, prettyName, events, onEventFunc, onUpdateFunc, onClickFunc, onEnterFunc,
                                      onLeaveFunc)
     local DT = E:GetModule("DataTexts")
@@ -171,4 +174,150 @@ function DataTextsModule:RemoveDataText(name)
     if E and type(E.RefreshOptions) == "function" then
         pcall(E.RefreshOptions, E)
     end
+end
+
+-- -----------------------------------------------------------------------------
+-- Masque (optional) support for Datatext icons
+--
+-- NOTE:
+-- - Masque skins Buttons, not FontString texture markup (|T...|t).
+-- - We provide a single shared icon button per ElvUI datatext panel.
+-- - The icon button self-hides if the panel text changes (e.g. the panel is
+--   switched to a different datatext in ElvUI) to avoid “icon leakage”.
+-- -----------------------------------------------------------------------------
+
+local MASQUE_GROUP_NAME = "TwichUI"
+local MASQUE_SUBGROUP_NAME = "DataTexts"
+
+---@class TwichUI_DatatextIconButton : Button
+---@field Icon Texture
+---@field __twichuiElapsed number
+
+---@class ElvUI_DT_Panel_TwichUI : ElvUI_DT_Panel
+---@field __twichuiDatatextIconButton TwichUI_DatatextIconButton|nil
+---@field __twichuiDatatextIconExpectedText string|nil
+
+---@return any|nil masqueGroup
+function DataTextsModule:GetMasqueDatatextGroup()
+    if self.__twichuiMasqueDatatextGroup ~= nil then
+        return self.__twichuiMasqueDatatextGroup
+    end
+
+    local LibStub = _G.LibStub
+    if type(LibStub) ~= "function" then
+        self.__twichuiMasqueDatatextGroup = false
+        return nil
+    end
+
+    local MSQ = LibStub("Masque", true)
+    if not MSQ or type(MSQ.Group) ~= "function" then
+        self.__twichuiMasqueDatatextGroup = false
+        return nil
+    end
+
+    local ok, group = pcall(MSQ.Group, MSQ, MASQUE_GROUP_NAME, MASQUE_SUBGROUP_NAME)
+    if ok and group then
+        self.__twichuiMasqueDatatextGroup = group
+        return group
+    end
+
+    self.__twichuiMasqueDatatextGroup = false
+    return nil
+end
+
+---@param panel ElvUI_DT_Panel_TwichUI
+---@return TwichUI_DatatextIconButton|nil
+function DataTextsModule:EnsureDatatextIconButton(panel)
+    if not panel then return nil end
+
+    if panel.__twichuiDatatextIconButton then
+        return panel.__twichuiDatatextIconButton
+    end
+
+    local CreateFrame = _G.CreateFrame
+    if type(CreateFrame) ~= "function" then
+        return nil
+    end
+
+    ---@class TwichUI_DatatextIconButton
+    local btn = CreateFrame("Button", nil, panel)
+    btn:EnableMouse(false)
+    btn:SetFrameStrata(panel.GetFrameStrata and panel:GetFrameStrata() or "LOW")
+    btn:SetFrameLevel((panel.GetFrameLevel and panel:GetFrameLevel() or 1) + 8)
+
+    btn.Icon = btn:CreateTexture(nil, "OVERLAY")
+    btn.Icon:SetAllPoints(btn)
+    btn.Icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+
+    btn.__twichuiElapsed = 0
+    btn:SetScript("OnUpdate", function(self, elapsed)
+        self.__twichuiElapsed = (self.__twichuiElapsed or 0) + (elapsed or 0)
+        if self.__twichuiElapsed < 0.25 then return end
+        self.__twichuiElapsed = 0
+
+        local parent = self:GetParent()
+        local expected = parent and parent.__twichuiDatatextIconExpectedText
+        local textObj = parent and parent.text
+        local current = (textObj and textObj.GetText) and textObj:GetText() or nil
+
+        if not expected or not current or current ~= expected then
+            self:Hide()
+        end
+    end)
+
+    panel.__twichuiDatatextIconButton = btn
+
+    -- Register with Masque if available.
+    local group = self:GetMasqueDatatextGroup()
+    if group and type(group.AddButton) == "function" then
+        pcall(group.AddButton, group, btn, { Icon = btn.Icon })
+    end
+
+    return btn
+end
+
+---@param panel ElvUI_DT_Panel_TwichUI
+---@param show boolean
+---@param iconTexture string|nil
+---@param iconSize number|nil
+---@param padding number|nil
+---@param expectedText string|nil
+function DataTextsModule:UpdateDatatextIcon(panel, show, iconTexture, iconSize, padding, expectedText)
+    if not panel then return end
+
+    -- Store the expected panel text so the icon can self-hide when the panel swaps.
+    panel.__twichuiDatatextIconExpectedText = expectedText
+
+    if not show or not iconTexture then
+        if panel.__twichuiDatatextIconButton then
+            panel.__twichuiDatatextIconButton:Hide()
+        end
+        return
+    end
+
+    local btn = self:EnsureDatatextIconButton(panel)
+    if not btn or not btn.Icon then return end
+
+    iconSize = tonumber(iconSize) or 14
+    padding = tonumber(padding)
+    if padding == nil then padding = 2 end
+    btn:SetSize(iconSize, iconSize)
+    btn.Icon:SetTexture(iconTexture)
+
+    btn:ClearAllPoints()
+
+    -- Anchor relative to the *rendered string*, not the FontString's full width.
+    -- Many ElvUI datatext panels use a FontString that spans the whole panel.
+    if panel.text and panel.text.GetStringWidth then
+        local stringWidth = panel.text:GetStringWidth() or 0
+        if stringWidth > 0 then
+            btn:SetPoint("RIGHT", panel.text, "CENTER", -(stringWidth / 2) - padding, 0)
+        else
+            btn:SetPoint("RIGHT", panel.text, "LEFT", -padding, 0)
+        end
+    else
+        btn:SetPoint("LEFT", panel, "LEFT", 2, 0)
+    end
+
+    btn:Show()
 end

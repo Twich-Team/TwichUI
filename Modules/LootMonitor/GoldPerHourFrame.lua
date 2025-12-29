@@ -2,24 +2,24 @@
 --- Displays a live feed of looted items with sorting, grouping, and GPH statistics
 --- Integrates with the GoldPerHourTracker for real-time updates
 
-local T, W, I, C       = unpack(Twich)
+local T, W, I, C    = unpack(Twich)
 ---@type LootMonitorModule
-local LM               = T:GetModule("LootMonitor")
+local LM            = T:GetModule("LootMonitor")
 
 ---@type ConfigurationModule
-local CM               = T:GetModule("Configuration")
+local CM            = T:GetModule("Configuration")
 ---@type LoggerModule
-local Logger           = T:GetModule("Logger")
+local Logger        = T:GetModule("Logger")
 ---@type ToolsModule
-local TM               = T:GetModule("Tools")
-local TT               = TM.Text
+local TM            = T:GetModule("Tools")
+local TT            = TM.Text
 
 -- LSM is backed by ElvUI's media library when available
-local LSM              = T.Libs.LSM
+local LSM           = T.Libs.LSM
 
 -- Optional ElvUI integration for skinned buttons, etc.
-local E                = _G.ElvUI and _G.ElvUI[1]
-local Skins            = E and E.GetModule and E:GetModule("Skins", true)
+local E             = _G.ElvUI and _G.ElvUI[1]
+local Skins         = E and E.GetModule and E:GetModule("Skins", true)
 
 --- Gold Per Hour Frame module
 --- Manages the display frame for loot and statistics
@@ -29,12 +29,332 @@ local Skins            = E and E.GetModule and E:GetModule("Skins", true)
 ---@field scrollFrame ScrollFrame The scrollable content frame
 ---@field contentFrame Frame The frame containing all rows
 ---@field rows table<string, Frame> Indexed by itemLink, stores row frames
+---@field sessionIgnoredItems table<string, boolean>|nil Items ignored for this session (keyed by itemLink)
+---@field sessionRemovedTimestamps table<string, number>|nil Items temporarily removed from view until looted again (keyed by itemLink)
+---@field contextMenuFrame Frame|nil UIDropDownMenu backing frame
 ---@field statsFrame Frame The frame showing GPH statistics
 ---@field trackerCallbackID number ID of callback registered with tracker
 ---@field sortColumn string The currently sorted column ("name", "quantity", "method", "value")
 ---@field sortAscending boolean Whether sort is ascending (true) or descending (false)
-local GPHFrame         = LM.GoldPerHourFrame or {}
-LM.GoldPerHourFrame    = GPHFrame
+local GPHFrame      = LM.GoldPerHourFrame or {}
+LM.GoldPerHourFrame = GPHFrame
+
+local UIParent      = UIParent
+local CreateFrame   = CreateFrame
+local GetTime       = GetTime
+
+local function GetItemNameFromLink(itemLink)
+    if type(itemLink) ~= "string" then return tostring(itemLink) end
+    return itemLink:match("|h%[(.-)%]|h") or itemLink
+end
+
+local function EnsureEasyMenu()
+    local easyMenuFunc = rawget(_G, "EasyMenu")
+    if type(easyMenuFunc) == "function" then
+        return easyMenuFunc
+    end
+
+    -- Retail 11.x: UIDropDownMenu/EasyMenu are deprecated and may live in Blizzard_Deprecated.
+    if InCombatLockdown and InCombatLockdown() then
+        return nil
+    end
+    if C_AddOns and C_AddOns.LoadAddOn then
+        pcall(C_AddOns.LoadAddOn, "Blizzard_Deprecated")
+    elseif UIParentLoadAddOn then
+        pcall(UIParentLoadAddOn, "Blizzard_Deprecated")
+    end
+
+    easyMenuFunc = rawget(_G, "EasyMenu")
+    if type(easyMenuFunc) == "function" then
+        return easyMenuFunc
+    end
+
+    return nil
+end
+
+function GPHFrame:EnsureSessionTables()
+    if not self.sessionIgnoredItems then
+        self.sessionIgnoredItems = {}
+    end
+    if not self.sessionRemovedTimestamps then
+        self.sessionRemovedTimestamps = {}
+    end
+end
+
+function GPHFrame:IsItemIgnored(itemLink)
+    return self.sessionIgnoredItems and self.sessionIgnoredItems[itemLink] == true
+end
+
+function GPHFrame:IgnoreItemForSession(itemLink)
+    if not itemLink then return end
+    self:EnsureSessionTables()
+    self.sessionIgnoredItems[itemLink] = true
+
+    if self.rows and self.rows[itemLink] then
+        self.rows[itemLink]:Hide()
+        self.rows[itemLink] = nil
+    end
+
+    self:RefreshFromTrackerNow()
+end
+
+function GPHFrame:UnignoreItem(itemLink)
+    if not itemLink then return end
+    if not self.sessionIgnoredItems then return end
+    self.sessionIgnoredItems[itemLink] = nil
+
+    self:RefreshFromTrackerNow()
+end
+
+function GPHFrame:ResetIgnoredItems()
+    if not self.sessionIgnoredItems then return end
+    wipe(self.sessionIgnoredItems)
+
+    self:RefreshFromTrackerNow()
+end
+
+function GPHFrame:RemoveItemFromView(itemLink, lastLootTimestamp)
+    if not itemLink then return end
+    self:EnsureSessionTables()
+    self.sessionRemovedTimestamps[itemLink] = tonumber(lastLootTimestamp) or GetTime()
+
+    if self.rows and self.rows[itemLink] then
+        self.rows[itemLink]:Hide()
+        self.rows[itemLink] = nil
+    end
+    self:RefreshFromTrackerNow()
+end
+
+function GPHFrame:RefreshFromTrackerNow()
+    if not LM.GoldPerHourTracker or not LM.GoldPerHourTracker.GetCurrentStats then return end
+    local stats = LM.GoldPerHourTracker:GetCurrentStats()
+    if not stats or not stats.trackedItems then return end
+
+    self:UpdateItems(stats.trackedItems)
+    self:UpdateStats(self:ApplySessionIgnoresToStats(stats))
+end
+
+function GPHFrame:ApplySessionIgnoresToStats(stats)
+    if not stats then return stats end
+    if not stats.trackedItems then return stats end
+
+    local hasIgnored = self.sessionIgnoredItems and next(self.sessionIgnoredItems) ~= nil
+    local hasRemoved = self.sessionRemovedTimestamps and next(self.sessionRemovedTimestamps) ~= nil
+    if not hasIgnored and not hasRemoved then
+        return stats
+    end
+
+    local ignoredValue = 0
+    local ignoredPresentCount = 0
+    if hasIgnored then
+        for itemLink in pairs(self.sessionIgnoredItems) do
+            local item = stats.trackedItems[itemLink]
+            if item then
+                ignoredValue = ignoredValue + (item.totalValue or 0)
+                ignoredPresentCount = ignoredPresentCount + 1
+            end
+        end
+    end
+
+    local removedValue = 0
+    local removedPresentCount = 0
+    if hasRemoved then
+        for itemLink, removedAt in pairs(self.sessionRemovedTimestamps) do
+            local item = stats.trackedItems[itemLink]
+            if item and item.timestamp and removedAt and item.timestamp <= removedAt then
+                removedValue = removedValue + (item.totalValue or 0)
+                removedPresentCount = removedPresentCount + 1
+            end
+        end
+    end
+
+    local rawGold = stats.goldReceived or 0
+    local totalValue = stats.totalValue or 0
+    local elapsed = stats.elapsedTime or 0
+
+    local adjustedTotalValue = totalValue - ignoredValue - removedValue
+    if adjustedTotalValue < 0 then adjustedTotalValue = 0 end
+    local adjustedTotalGold = adjustedTotalValue + rawGold
+
+    local adjustedGPH = 0
+    if elapsed and elapsed > 0 then
+        adjustedGPH = (adjustedTotalGold / elapsed) * 3600
+    end
+
+    return {
+        goldPerHour = adjustedGPH,
+        totalValue = adjustedTotalValue,
+        totalGold = adjustedTotalGold,
+        goldReceived = rawGold,
+        itemCount = math.max(0, (stats.itemCount or 0) - ignoredPresentCount - removedPresentCount),
+        elapsedTime = elapsed,
+        trackedItems = stats.trackedItems,
+    }
+end
+
+function GPHFrame:ShowContextMenu(anchor, itemLink, item)
+    self:EnsureSessionTables()
+
+    local hasIgnored = next(self.sessionIgnoredItems) ~= nil
+    local tracker = LM and LM.GoldPerHourTracker
+    local fastTickerEnabled = tracker and tracker.IsSessionFastTickerEnabled and tracker:IsSessionFastTickerEnabled() or
+        false
+
+    local realtimeLabel = "Realtime Calculations (1s)"
+    if fastTickerEnabled and TT and TT.Color and TM and TM.Colors and TM.Colors.TWICH then
+        realtimeLabel = TT.Color(TM.Colors.TWICH.TEXT_SUCCESS, realtimeLabel)
+    end
+
+    -- Prefer the modern Retail menu system (Blizzard_Menu).
+    local menuUtil = rawget(_G, "MenuUtil")
+    if menuUtil and type(menuUtil.CreateContextMenu) == "function" then
+        local owner = anchor or UIParent
+        menuUtil.CreateContextMenu(owner, function(_, root)
+            if root.CreateTitle then
+                if itemLink then
+                    root:CreateTitle(GetItemNameFromLink(itemLink))
+                else
+                    root:CreateTitle("Gold Per Hour")
+                end
+            end
+
+            if itemLink then
+                root:CreateButton("Remove from list", function()
+                    self:RemoveItemFromView(itemLink, item and item.timestamp)
+                end)
+
+                if self:IsItemIgnored(itemLink) then
+                    root:CreateButton("Unignore item", function() self:UnignoreItem(itemLink) end)
+                else
+                    root:CreateButton("Ignore item (session)", function() self:IgnoreItemForSession(itemLink) end)
+                end
+
+                if root.CreateDivider then
+                    root:CreateDivider()
+                end
+            end
+
+            if tracker and tracker.SetSessionFastTickerEnabled then
+                root:CreateButton(realtimeLabel, function()
+                    tracker:SetSessionFastTickerEnabled(not fastTickerEnabled)
+                end)
+                if root.CreateDivider then
+                    root:CreateDivider()
+                end
+            end
+
+            local ignoredSub = root:CreateButton("Ignored items")
+            if ignoredSub and ignoredSub.CreateTitle then
+                ignoredSub:CreateTitle("Ignored items")
+            end
+
+            if hasIgnored then
+                local links = {}
+                for link in pairs(self.sessionIgnoredItems) do
+                    table.insert(links, link)
+                end
+                table.sort(links, function(a, b)
+                    return tostring(GetItemNameFromLink(a)) < tostring(GetItemNameFromLink(b))
+                end)
+                for _, link in ipairs(links) do
+                    ignoredSub:CreateButton(GetItemNameFromLink(link), function() self:UnignoreItem(link) end)
+                end
+            else
+                ignoredSub:CreateButton("None", function() end)
+            end
+
+            if hasIgnored then
+                root:CreateButton("Reset ignored items", function() self:ResetIgnoredItems() end)
+            end
+        end)
+        return
+    end
+
+    -- Fallback to legacy EasyMenu (Blizzard_Deprecated).
+    local easyMenuFunc = EnsureEasyMenu()
+    if type(easyMenuFunc) ~= "function" then
+        Logger.Warn("GoldPerHourFrame: Context menu is unavailable (MenuUtil/EasyMenu not loaded).")
+        return
+    end
+
+    if not self.contextMenuFrame then
+        self.contextMenuFrame = CreateFrame("Frame", "TwichGPHFrameContextMenu", UIParent, "UIDropDownMenuTemplate")
+    end
+
+    local ignoredMenu = {}
+    if hasIgnored then
+        for link in pairs(self.sessionIgnoredItems) do
+            table.insert(ignoredMenu, {
+                text = GetItemNameFromLink(link),
+                notCheckable = true,
+                func = function() self:UnignoreItem(link) end
+            })
+        end
+        table.sort(ignoredMenu, function(a, b)
+            return tostring(a.text) < tostring(b.text)
+        end)
+    end
+
+    local menu = {}
+
+    if tracker and tracker.SetSessionFastTickerEnabled then
+        table.insert(menu, {
+            text = realtimeLabel,
+            notCheckable = true,
+            func = function() tracker:SetSessionFastTickerEnabled(not fastTickerEnabled) end,
+        })
+        table.insert(menu, { text = " ", notCheckable = true, disabled = true })
+    end
+
+    if itemLink then
+        table.insert(menu, {
+            text = GetItemNameFromLink(itemLink),
+            isTitle = true,
+            notCheckable = true
+        })
+
+        table.insert(menu, {
+            text = "Remove from list",
+            notCheckable = true,
+            func = function()
+                self:RemoveItemFromView(itemLink, item and item.timestamp)
+            end
+        })
+
+        if self:IsItemIgnored(itemLink) then
+            table.insert(menu, {
+                text = "Unignore item",
+                notCheckable = true,
+                func = function() self:UnignoreItem(itemLink) end
+            })
+        else
+            table.insert(menu, {
+                text = "Ignore item (session)",
+                notCheckable = true,
+                func = function() self:IgnoreItemForSession(itemLink) end
+            })
+        end
+
+        table.insert(menu, { text = " ", notCheckable = true, disabled = true })
+    end
+
+    table.insert(menu, {
+        text = "Ignored items",
+        hasArrow = true,
+        notCheckable = true,
+        disabled = not hasIgnored,
+        menuList = ignoredMenu
+    })
+
+    table.insert(menu, {
+        text = "Reset ignored items",
+        notCheckable = true,
+        disabled = not hasIgnored,
+        func = function() self:ResetIgnoredItems() end
+    })
+
+    easyMenuFunc(menu, self.contextMenuFrame, "cursor", 0, 0, "MENU")
+end
 
 --- Configuration entries for the Gold Per Hour Frame
 ---@class GoldPerHourFrameConfiguration
@@ -57,6 +377,10 @@ GPHFrame.CONFIGURATION = {
     FRAME_HEIGHT = { key = "lootMonitor.goldPerHourFrame.frameHeight", default = 400 },
     FRAME_SCALE = { key = "lootMonitor.goldPerHourFrame.frameScale", default = 1.0 },
     FRAME_ALPHA = { key = "lootMonitor.goldPerHourFrame.frameAlpha", default = 1.0 },
+    FRAME_POINT = { key = "lootMonitor.goldPerHourFrame.framePoint", default = "CENTER" },
+    FRAME_RELATIVE_POINT = { key = "lootMonitor.goldPerHourFrame.frameRelativePoint", default = "CENTER" },
+    FRAME_X = { key = "lootMonitor.goldPerHourFrame.frameX", default = 0 },
+    FRAME_Y = { key = "lootMonitor.goldPerHourFrame.frameY", default = 0 },
     FRAME_TEXTURE = { key = "lootMonitor.goldPerHourFrame.frameTexture", default = "ElvUI Norm" },
     FRAME_BG_COLOR = { key = "lootMonitor.goldPerHourFrame.frameBgColor", default = { r = 0.04, g = 0.04, b = 0.04, a = 0.9 } },
     -- Default to a thin ElvUI-style border (avoid glow borders by default)
@@ -99,8 +423,33 @@ GPHFrame.CONFIGURATION = {
     STATS_VALUE_COLOR = { key = "lootMonitor.goldPerHourFrame.statsValueColor", default = { r = 1, g = 0.82, b = 0 } },
 }
 
+function GPHFrame:SaveFramePosition()
+    if not self.frame or not self.frame.GetPoint then return end
+
+    local point, _, relativePoint, xOfs, yOfs = self.frame:GetPoint(1)
+    if not point or not relativePoint then return end
+
+    CM:SetProfileSettingSafe(self.CONFIGURATION.FRAME_POINT.key, point)
+    CM:SetProfileSettingSafe(self.CONFIGURATION.FRAME_RELATIVE_POINT.key, relativePoint)
+    CM:SetProfileSettingSafe(self.CONFIGURATION.FRAME_X.key, tonumber(xOfs) or 0)
+    CM:SetProfileSettingSafe(self.CONFIGURATION.FRAME_Y.key, tonumber(yOfs) or 0)
+end
+
+function GPHFrame:RestoreFramePosition()
+    if not self.frame then return end
+
+    local point = CM:GetProfileSettingSafe(self.CONFIGURATION.FRAME_POINT.key, self.CONFIGURATION.FRAME_POINT.default)
+    local relativePoint = CM:GetProfileSettingSafe(self.CONFIGURATION.FRAME_RELATIVE_POINT.key,
+        self.CONFIGURATION.FRAME_RELATIVE_POINT.default)
+    local x = tonumber(CM:GetProfileSettingSafe(self.CONFIGURATION.FRAME_X.key, self.CONFIGURATION.FRAME_X.default)) or 0
+    local y = tonumber(CM:GetProfileSettingSafe(self.CONFIGURATION.FRAME_Y.key, self.CONFIGURATION.FRAME_Y.default)) or 0
+
+    self.frame:ClearAllPoints()
+    self.frame:SetPoint(point or "CENTER", UIParent, relativePoint or "CENTER", x, y)
+end
+
 --- Column definitions for the loot table
-local COLUMNS          = {
+local COLUMNS = {
     { key = "name",     label = "Item Name", width = 0.4 },
     { key = "quantity", label = "Qty",       width = 0.15, align = "CENTER" },
     { key = "method",   label = "Method",    width = 0.25 },
@@ -128,6 +477,8 @@ end
 function GPHFrame:Enable()
     if self:IsEnabled() then return end
     self.enabled = true
+
+    self:EnsureSessionTables()
 
     -- Initialize data structures
     self.rows = {}
@@ -187,12 +538,17 @@ function GPHFrame:CreateFrame(width, height, scale, alpha)
     if not self.frame then
         -- First-time creation of the main frame
         self.frame = CreateFrame("Frame", "TwichGPHFrame", UIParent, "BackdropTemplate")
-        self.frame:SetPoint("CENTER", UIParent, "CENTER")
         self.frame:SetMovable(true)
         self.frame:EnableMouse(true)
         self.frame:RegisterForDrag("LeftButton")
         self.frame:SetScript("OnDragStart", function(f) f:StartMoving() end)
-        self.frame:SetScript("OnDragStop", function(f) f:StopMovingOrSizing() end)
+        self.frame:SetScript("OnDragStop", function(f)
+            f:StopMovingOrSizing()
+            self:SaveFramePosition()
+        end)
+        if self.frame.SetClampedToScreen then
+            self.frame:SetClampedToScreen(true)
+        end
         isNew = true
     end
 
@@ -200,6 +556,8 @@ function GPHFrame:CreateFrame(width, height, scale, alpha)
     self.frame:SetSize(width, height)
     self.frame:SetScale(scale)
     self.frame:SetAlpha(alpha)
+
+    self:RestoreFramePosition()
 
     if isNew then
         -- Create child components once, now that the frame has a valid size
@@ -250,6 +608,25 @@ function GPHFrame:CreateTitleBar()
     titleBar:SetSize(self.frame:GetWidth(), 30)
     titleBar:SetPoint("TOPLEFT", self.frame, "TOPLEFT", 0, 0)
 
+    titleBar:EnableMouse(true)
+    titleBar:RegisterForDrag("LeftButton")
+    titleBar:SetScript("OnDragStart", function()
+        if self.frame and self.frame.StartMoving then
+            self.frame:StartMoving()
+        end
+    end)
+    titleBar:SetScript("OnDragStop", function()
+        if self.frame and self.frame.StopMovingOrSizing then
+            self.frame:StopMovingOrSizing()
+        end
+        self:SaveFramePosition()
+    end)
+    titleBar:SetScript("OnMouseUp", function(_, button)
+        if button == "RightButton" then
+            self:ShowContextMenu(titleBar, nil, nil)
+        end
+    end)
+
     self.titleBar = titleBar
 
     local baseFontName = CM:GetProfileSettingSafe(self.CONFIGURATION.BASE_FONT.key,
@@ -268,7 +645,7 @@ function GPHFrame:CreateTitleBar()
     local titleText = titleBar:CreateFontString(nil, "OVERLAY")
     titleText:SetFont(fontPath, titleFontSize, "OUTLINE")
     titleText:SetTextColor(titleColor.r, titleColor.g, titleColor.b)
-    titleText:SetText("Gold Per Hour - Loot Feed")
+    titleText:SetText("Loot Monitor Feed")
     titleText:SetPoint("LEFT", titleBar, "LEFT", 10, 0)
 
     self.titleText = titleText
@@ -278,20 +655,52 @@ function GPHFrame:CreateTitleBar()
     timeText:SetFont(fontPath, timeFontSize, "OUTLINE")
     timeText:SetTextColor(timeColor.r, timeColor.g, timeColor.b)
     timeText:SetText("")
-    timeText:SetPoint("RIGHT", titleBar, "RIGHT", -40, 0)
+    timeText:SetPoint("RIGHT", titleBar, "RIGHT", -86, 0)
 
     self.timeText = timeText
 
+    -- Menu button (discoverable way to open the right-click menu)
+    local menuButton = CreateFrame("Button", nil, titleBar)
+    menuButton:SetSize(14, 14)
+    menuButton:SetPoint("RIGHT", titleBar, "RIGHT", -36, 0)
+
+    local menuIcon = menuButton:CreateTexture(nil, "OVERLAY")
+    menuIcon:SetAllPoints(menuButton)
+    menuIcon:SetTexture("Interface\\AddOns\\TwichUI\\Media\\Textures\\cog-plain.tga")
+    menuIcon:SetVertexColor(timeColor.r, timeColor.g, timeColor.b)
+
+    menuButton:SetScript("OnEnter", function()
+        menuIcon:SetVertexColor(1, 1, 1)
+        if GameTooltip then
+            GameTooltip:SetOwner(menuButton, "ANCHOR_CURSOR")
+            -- GameTooltip:AddLine("Menu")
+            GameTooltip:AddLine("Open menu", 0.8, 0.8, 0.8, true)
+            GameTooltip:Show()
+        end
+    end)
+    menuButton:SetScript("OnLeave", function()
+        menuIcon:SetVertexColor(timeColor.r, timeColor.g, timeColor.b)
+        if GameTooltip then GameTooltip:Hide() end
+    end)
+    menuButton:SetScript("OnMouseUp", function(_, button)
+        if button == "LeftButton" or button == "RightButton" then
+            self:ShowContextMenu(menuButton, nil, nil)
+        end
+    end)
+
+    self.menuButton = menuButton
+
     -- Close button (skinned like ElvUI)
     local closeButton = CreateFrame("Button", nil, titleBar)
-    closeButton:SetSize(24, 24)
-    closeButton:SetPoint("TOPRIGHT", titleBar, "TOPRIGHT", -5, -5)
+    closeButton:SetSize(28, 28)
+    closeButton:SetPoint("RIGHT", titleBar, "RIGHT", -6, 0)
+    closeButton:SetHitRectInsets(-8, -8, -8, -8)
 
     local closeText = closeButton:CreateFontString(nil, "OVERLAY")
-    closeText:SetFont(fontPath, math.max(titleFontSize + 2, titleFontSize), "OUTLINE")
+    closeText:SetFont(fontPath, math.max(titleFontSize + 8, titleFontSize), "OUTLINE")
     closeText:SetTextColor(1, 1, 1)
     closeText:SetText("×")
-    closeText:SetPoint("CENTER", closeButton, "CENTER")
+    closeText:SetPoint("CENTER", closeButton, "CENTER", 0, 1)
 
     closeButton:SetScript("OnEnter", function()
         closeText:SetTextColor(1, 0, 0)
@@ -518,26 +927,49 @@ function GPHFrame:OnTrackerUpdate(stats)
     if not stats or not stats.trackedItems then return end
 
     self:UpdateItems(stats.trackedItems)
-    self:UpdateStats(stats)
+    self:UpdateStats(self:ApplySessionIgnoresToStats(stats))
 end
 
 --- Update the items display from tracked items
 ---@param trackedItems table<string, TrackedItem> Items indexed by itemLink
 function GPHFrame:UpdateItems(trackedItems)
+    self:EnsureSessionTables()
+
     -- Clear and rebuild rows
     for itemLink, row in pairs(self.rows) do
-        if not trackedItems[itemLink] then
+        local tracked = trackedItems[itemLink]
+        if (not tracked) or self:IsItemIgnored(itemLink) then
             row:Hide()
             self.rows[itemLink] = nil
+        else
+            local removedAt = self.sessionRemovedTimestamps and self.sessionRemovedTimestamps[itemLink]
+            if removedAt and tracked.timestamp and tracked.timestamp <= removedAt then
+                row:Hide()
+                self.rows[itemLink] = nil
+            end
         end
     end
 
     -- Add or update rows for existing items
     for itemLink, item in pairs(trackedItems) do
-        if not self.rows[itemLink] then
-            self:CreateItemRow(itemLink, item)
+        if self:IsItemIgnored(itemLink) then
+            -- ignored items do not show in the list
         else
-            self:UpdateItemRow(itemLink, item)
+            local removedAt = self.sessionRemovedTimestamps and self.sessionRemovedTimestamps[itemLink]
+            if removedAt and item.timestamp and item.timestamp <= removedAt then
+                -- temporarily removed until looted again
+            else
+                if removedAt then
+                    -- item was looted again after being removed; allow it to return
+                    self.sessionRemovedTimestamps[itemLink] = nil
+                end
+
+                if not self.rows[itemLink] then
+                    self:CreateItemRow(itemLink, item)
+                else
+                    self:UpdateItemRow(itemLink, item)
+                end
+            end
         end
     end
 
@@ -646,6 +1078,14 @@ function GPHFrame:CreateItemRow(itemLink, item)
             else
                 row.hoverTexture:SetAlpha(0)
             end
+        end
+    end)
+
+    -- Right-click context menu
+    row:EnableMouse(true)
+    row:SetScript("OnMouseUp", function(_, button)
+        if button == "RightButton" then
+            self:ShowContextMenu(row, row.itemLink, row.item)
         end
     end)
 

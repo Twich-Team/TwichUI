@@ -114,6 +114,26 @@ function PDT:Create()
                     end,
                 },
 
+                iconPadding = {
+                    type = "range",
+                    name = "Icon Padding",
+                    desc = "Spacing between the icon and the text (in pixels).",
+                    order = 1.9,
+                    min = 0,
+                    max = 16,
+                    step = 1,
+                    disabled = function()
+                        return not CM:GetProfileSettingByConfigEntry(GetModule():GetConfiguration().SHOW_ICON)
+                    end,
+                    get = function()
+                        return CM:GetProfileSettingByConfigEntry(GetModule():GetConfiguration().ICON_PADDING) or 2
+                    end,
+                    set = function(_, value)
+                        CM:SetProfileSettingByConfigEntry(GetModule():GetConfiguration().ICON_PADDING, value or 2)
+                        GetModule():Refresh()
+                    end,
+                },
+
                 favoriteHearthstone = {
                     type = "select",
                     name = "Favorite Hearthstone",

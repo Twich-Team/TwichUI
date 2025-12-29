@@ -29,8 +29,11 @@ local TM              = T:GetModule("Tools")
 ---@field callbackID number ID of the registered event handler callback
 ---@field windowSize number The time window in seconds for tracking data
 ---@field alwaysOn boolean Whether to ignore the window and track indefinitely
----@field useTicker boolean Whether to use a periodic ticker for recalculation
----@field tickRate number The interval in seconds for ticker callbacks
+---@field useTicker boolean Whether the ticker is currently active (effective, may be overridden for session)
+---@field tickRate number The current effective tick rate in seconds (may be overridden for session)
+---@field configUseTicker boolean Player-configured ticker setting
+---@field configTickRate number Player-configured tick rate in seconds
+---@field sessionFastTickerEnabled boolean|nil If true, force ticker to 1s for this session only
 ---@field tickerID? table The C_Timer ticker object if active
 ---@field configWatcherID? table The C_Timer config watcher object if active
 ---@field trackedItems table<string, TrackedItem> Items indexed by itemLink
@@ -232,6 +235,50 @@ function GPH:TriggerUpdate()
     self:SaveState()
 end
 
+function GPH:IsSessionFastTickerEnabled()
+    return self.sessionFastTickerEnabled == true
+end
+
+function GPH:GetEffectiveUseTicker()
+    return self:IsSessionFastTickerEnabled() or (self.configUseTicker == true)
+end
+
+function GPH:GetEffectiveTickRate()
+    if self:IsSessionFastTickerEnabled() then
+        return 1
+    end
+    return tonumber(self.configTickRate) or 15
+end
+
+function GPH:ApplyEffectiveTickerSettings()
+    local shouldUseTicker = self:GetEffectiveUseTicker()
+    local desiredRate = self:GetEffectiveTickRate()
+
+    local rateChanged = (tonumber(self.tickRate) or 0) ~= (tonumber(desiredRate) or 0)
+    self.useTicker = shouldUseTicker
+    self.tickRate = desiredRate
+
+    if not shouldUseTicker then
+        self:StopTicker()
+        return
+    end
+
+    if self.tickerID then
+        if rateChanged then
+            self:RestartTicker()
+        end
+    else
+        self:StartTicker()
+    end
+end
+
+function GPH:SetSessionFastTickerEnabled(enabled)
+    self.sessionFastTickerEnabled = enabled == true
+    if not self:IsEnabled() then return end
+    self:ApplyEffectiveTickerSettings()
+    self:TriggerUpdate()
+end
+
 --- Start the optional periodic ticker for continuous recalculation
 --- The ticker will call TriggerUpdate() at the configured tick_rate interval
 --- Has no effect if a ticker is already running
@@ -268,13 +315,8 @@ end
 --- Called when the tick rate configuration changes
 ---@param newTickRate number The new tick rate in seconds
 function GPH:UpdateTickRate(newTickRate)
-    local oldTickRate = self.tickRate
-    self.tickRate = newTickRate
-
-    if self.tickerID then
-        Logger.Debug("Gold per hour tracker tick rate changed from " .. oldTickRate .. "s to " .. newTickRate .. "s")
-        self:RestartTicker()
-    end
+    self.configTickRate = tonumber(newTickRate) or self.configTickRate
+    self:ApplyEffectiveTickerSettings()
 end
 
 --- Switch between always-on and window mode
@@ -309,17 +351,15 @@ function GPH:Enable()
 
     -- Load configuration
     self.windowSize = CM:GetProfileSettingByConfigEntry(self.CONFIGURATION.WINDOW_SIZE)
-    self.useTicker = CM:GetProfileSettingByConfigEntry(self.CONFIGURATION.USE_TICKER)
-    self.tickRate = CM:GetProfileSettingByConfigEntry(self.CONFIGURATION.TICK_RATE)
+    self.configUseTicker = CM:GetProfileSettingByConfigEntry(self.CONFIGURATION.USE_TICKER)
+    self.configTickRate = CM:GetProfileSettingByConfigEntry(self.CONFIGURATION.TICK_RATE)
     self.alwaysOn = CM:GetProfileSettingByConfigEntry(self.CONFIGURATION.ALWAYS_ON)
 
     -- Register event handler
     self.callbackID = LM:GetCallbackHandler():Register(LootMonitorEventHandler)
 
-    -- Start ticker if configured
-    if self.useTicker then
-        self:StartTicker()
-    end
+    -- Start/stop ticker based on effective config + session override
+    self:ApplyEffectiveTickerSettings()
 
     Logger.Debug("Gold per hour tracker enabled")
 end
@@ -328,15 +368,8 @@ end
 --- Called from configuration when user toggles periodic recalculation
 ---@param enabled boolean True to enable ticker, false to disable
 function GPH:SetUseTicker(enabled)
-    self.useTicker = enabled
-
-    if enabled then
-        Logger.Debug("Gold per hour tracker: periodic recalculation enabled")
-        self:StartTicker()
-    else
-        Logger.Debug("Gold per hour tracker: periodic recalculation disabled")
-        self:StopTicker()
-    end
+    self.configUseTicker = enabled == true
+    self:ApplyEffectiveTickerSettings()
 end
 
 --- Set the ticker rate
@@ -391,10 +424,6 @@ function GPH:SaveState()
         startTime = self.startTime,
     }
     CM:SetProfileSettingSafe(self.CONFIGURATION.PERSISTED_DATA.key, persistedData)
-end
-
-function GPH:RequestImmediateUpdate()
-    self:TriggerUpdate()
 end
 
 --- Load the persisted tracking state from storage
