@@ -53,6 +53,7 @@ T.ThirdPartyAPI = T:NewModule("ThirdPartyAPI")
 T.SlashCommands = T:NewModule("SlashCommands", "AceConsole-3.0")
 T.GoldGoblin = T:NewModule("GoldGoblin")
 T.DataTexts = T:NewModule("DataTexts")
+T.MythicPlus = T:NewModule("MythicPlus")
 
 --[[
     Register Libraries to Engine

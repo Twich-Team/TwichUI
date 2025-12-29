@@ -7,6 +7,7 @@ local E, L, V, P, G = unpack(ElvUI)
 
 --- @class ConfigurationModule
 --- @field Widgets Widgets
+--- @field MythicPlus MythicPlusConfigurationModule
 local CM = T:GetModule("Configuration")
 --- @type ToolsModule
 local TM = T:GetModule("Tools")
@@ -261,7 +262,8 @@ function CM:CreateAddonConfiguration()
             lootMonitor = CM:CreateLootMonitorConfiguration(),
             developer = CM:CreateDeveloperConfiguration(),
             goldGoblin = CM.GoldGoblin:Create(),
-            dataTexts = CM.DataTexts:Create(20)
+            dataTexts = CM.DataTexts:Create(20),
+            mythicplus = CM.MythicPlus:Create(60),
         }
     }
 end
@@ -274,6 +276,7 @@ local keywordColorMap = {
     { keyword = "modules",          color = TM.Colors.TWICH.SECONDARY_ACCENT },
     { keyword = "Loot Monitor",     color = TM.Colors.TWICH.SECONDARY_ACCENT },
     { keyword = "gold goblin",      color = TM.Colors.TWICH.SECONDARY_ACCENT },
+    { keyword = "Mythic+",          color = TM.Colors.TWICH.SECONDARY_ACCENT },
     { keyword = "gold tracker",     color = TM.Colors.TWICH.TERTIARY_ACCENT },
     { keyword = "gold balancer",    color = TM.Colors.TWICH.TERTIARY_ACCENT },
     { keyword = "notable item",     color = TM.Colors.TWICH.TERTIARY_ACCENT },

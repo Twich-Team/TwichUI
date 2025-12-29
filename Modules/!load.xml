@@ -13,4 +13,5 @@
     <Include file="LootMonitor\!load.xml" />
     <Include file="SlashCommands\!load.xml" />
     <Include file="DataTexts\!load.xml" />
+    <Include file="MythicPlus\!load.xml" />
 </Ui>
