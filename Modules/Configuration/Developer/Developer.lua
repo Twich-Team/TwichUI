@@ -2,6 +2,8 @@
         Developer Configuration
         This configuration section allows the manipulation of developer tools and settings.
 ]]
+---@diagnostic disable: need-check-nil
+---@diagnostic disable-next-line: undefined-global
 local T, W, I, C = unpack(Twich)
 
 --- @class ConfigurationModule
@@ -13,6 +15,7 @@ local TM = T:GetModule("Tools")
 --- @field Logger DeveloperLoggerConfigurationModule
 --- @field Databases DeveloperDatabasesConfiguration
 --- @field Convenience DeveloperConvenienceConfiguration
+--- @field Recording DeveloperRecordingConfiguration
 --- @field Testing DeveloperTestingConfiguration
 CM.Developer = CM.Developer or {}
 
@@ -39,7 +42,8 @@ function CM:CreateDeveloperConfiguration()
             },
             databasesGroup = CM.Developer.Databases:Create(5),
             convenienceGroup = CM.Developer.Convenience:Create(7),
-            testingGroup = CM.Developer.Testing:Create(8),
+            recordingGroup = CM.Developer.Recording:Create(8),
+            testingGroup = CM.Developer.Testing:Create(9),
             loggerGroup = CM.Developer.Logger:Create(10),
         }
 

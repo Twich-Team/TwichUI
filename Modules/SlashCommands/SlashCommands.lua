@@ -2,6 +2,8 @@
     SlashCommands Module for TwichUI
     Handles slash command registration and processing.
 ]]
+---@diagnostic disable: need-check-nil
+---@diagnostic disable-next-line: undefined-global
 local T, W, I, C = unpack(Twich)
 
 ---@class SlashCommandsModule: AceConsole-3.0
@@ -55,6 +57,33 @@ SC.COMMANDS = {
                         Frame:Enable()
                     else
                     end
+                end,
+            },
+        },
+    },
+    developer = {
+        description = "Developer commands",
+        subcommands = {
+            runlog = {
+                description = "Show the Mythic+ Run Logger export frame",
+                handler = function()
+                    local ok, mythicPlus = pcall(function() return T:GetModule("MythicPlus") end)
+                    if not ok or not mythicPlus then
+                        TT.PrintToChatFrame(PrefixWithAddonName(
+                            TT.Color(CT.TWICH.TEXT_ERROR, "MythicPlus module is not available")
+                        ))
+                        return
+                    end
+
+                    local rl = mythicPlus.RunLogger
+                    if rl and type(rl.ShowLastRunLog) == "function" then
+                        rl:ShowLastRunLog()
+                        return
+                    end
+
+                    TT.PrintToChatFrame(PrefixWithAddonName(
+                        TT.Color(CT.TWICH.TEXT_ERROR, "Run Logger is not available")
+                    ))
                 end,
             },
         },

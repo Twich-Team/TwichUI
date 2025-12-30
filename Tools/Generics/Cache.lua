@@ -1,8 +1,5 @@
 local T = unpack(Twich)
 
---- @type LoggerModule
-local LM = T:GetModule("Logger")
-
 --- @type ToolsModule
 local TM = T:GetModule("Tools")
 
@@ -24,9 +21,6 @@ Cache.__index = Cache
 --- @return any value The cached (or freshly computed) value.
 function Cache:get(computeFn)
     if self.dirty then
-        if LM and LM.Debug then
-            LM.Debug(("Rebuilding cache: %s"):format(self.name or "unnamed"))
-        end
         self.value = computeFn()
         self.dirty = false
     end
@@ -35,9 +29,6 @@ end
 
 --- Mark the cache as dirty so it will recompute on next get().
 function Cache:invalidate()
-    if LM and LM.Debug then
-        LM.Debug(("Invalidating cache: %s"):format(self.name or "unnamed"))
-    end
     self.dirty = true
 end
 

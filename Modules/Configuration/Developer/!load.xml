@@ -1,5 +1,6 @@
 <Ui xmlns='http://www.blizzard.com/wow/ui/'>
     <Script file="Developer.lua" />
+    <Script file="Recording.lua" />
     <Script file="Logger.lua" />
     <Script file="Databases.lua" />
     <Script file="Convenience.lua" />

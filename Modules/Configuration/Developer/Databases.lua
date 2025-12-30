@@ -42,7 +42,33 @@ function DatabasesConfig:Create(order)
                             _G.TwichUIGoldDB = {}
                             LM.Info("Cleared TwichUIGoldDB database.")
                         end
-                    }
+                    },
+                    clearMythicPlusDB = {
+                        type = "execute",
+                        name = "Clear Mythic+ Runs Database",
+                        desc = "Removes all Mythic+ runs from the database.",
+                        order = 2,
+                        func = function()
+                            local MythicPlus = T:GetModule("MythicPlus")
+                            if not MythicPlus or not MythicPlus.Database then return end
+
+                            MythicPlus.Database:ClearRuns()
+
+                            -- Refresh UI if open
+                            if MythicPlus.Runs and MythicPlus.Runs.Refresh and MythicPlus.MainWindow then
+                                local panel = MythicPlus.MainWindow:GetPanelFrame("runs")
+                                if panel and panel:IsShown() then
+                                    MythicPlus.Runs:Refresh(panel)
+                                end
+                            end
+                            if MythicPlus.Dungeons and MythicPlus.Dungeons.Refresh and MythicPlus.MainWindow then
+                                local panel = MythicPlus.MainWindow:GetPanelFrame("dungeons")
+                                if panel and panel:IsShown() then
+                                    MythicPlus.Dungeons:Refresh()
+                                end
+                            end
+                        end
+                    },
                 }
             }
         }

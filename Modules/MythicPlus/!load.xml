@@ -1,8 +1,19 @@
 <Ui xmlns='http://www.blizzard.com/wow/ui/'>
     <Script file="MythicPlus.lua" />
-    <Script file="MythicPlusFrame.lua" />
-    <Script file="Keystone.lua" />
-    <Script file="Dungeons.lua" />
     <Script file="Database.lua" />
+    <Script file="MythicPlusFrame.lua" />
+    <Script
+        file="Keystone.lua" />
+    <Script file="Dungeons.lua" />
+    <Script file="Runs.lua" />
+    <Script
+        file="Summary.lua" />
     <Script file="API.lua" />
+    <Script file="Simulator.lua" />
+    <Script
+        file="ScoreCalculator.lua" />
+    <Script file="Data.lua" />
+    <Script file="DungeonMonitor.lua" />
+    <Script file="DataCollector.lua" />
+    <Script file="RunLogger.lua" />
 </Ui>

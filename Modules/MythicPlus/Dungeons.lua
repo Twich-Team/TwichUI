@@ -25,6 +25,8 @@ local LSM = T.Libs and T.Libs.LSM
 local Dungeons = MythicPlusModule.Dungeons or {}
 MythicPlusModule.Dungeons = Dungeons
 
+local Database = MythicPlusModule.Database
+
 local PANEL_PADDING = 10
 local ROW_HEIGHT = 36
 
@@ -1109,7 +1111,241 @@ end
 
 ---@param panel Frame
 ---@param mapId number|nil
+local function FormatTime(seconds)
+    if not seconds then return "—" end
+    local m = math.floor(seconds / 60)
+    local s = math.floor(seconds % 60)
+    return string.format("%d:%02d", m, s)
+end
+
+local function FormatDate(timestamp)
+    if not timestamp then return "—" end
+    return date("%m/%d/%Y", timestamp)
+end
+
+local function EnsureEasyMenu()
+    local easyMenuFunc = rawget(_G, "EasyMenu")
+    if type(easyMenuFunc) == "function" then
+        return easyMenuFunc
+    end
+
+    if InCombatLockdown and InCombatLockdown() then return nil end
+    if C_AddOns and C_AddOns.LoadAddOn then
+        pcall(C_AddOns.LoadAddOn, "Blizzard_Deprecated")
+    elseif UIParentLoadAddOn then
+        pcall(UIParentLoadAddOn, "Blizzard_Deprecated")
+    end
+
+    return rawget(_G, "EasyMenu")
+end
+
+local function ShowContextMenu(runData, panel, mapId)
+    if not runData then return end
+
+    local details = string.format("%s (+%s)\nDate: %s\nScore: %s",
+        runData.mapId and GetMapUIInfo(runData.mapId) or "Unknown",
+        runData.level,
+        FormatDate(runData.timestamp),
+        runData.score or 0)
+
+    local callback = function()
+        UpdateDetailsRuns(panel, mapId)
+    end
+
+    if MenuUtil then
+        MenuUtil.CreateContextMenu(UIParent, function(owner, root)
+            root:CreateTitle("Run Options")
+            root:CreateButton("|cffff0000Delete Run|r", function()
+                StaticPopup_Show("TWICHUI_CONFIRM_DELETE_RUN", details, nil, { runId = runData.id, callback = callback })
+            end)
+            root:CreateButton("Cancel", function() end)
+        end)
+        return
+    end
+
+    local easyMenuFunc = EnsureEasyMenu()
+    if not easyMenuFunc then return end
+
+    local menu = {
+        { text = "Run Options", isTitle = true,      notCheckable = true },
+        {
+            text = "|cffff0000Delete Run|r",
+            notCheckable = true,
+            func = function()
+                StaticPopup_Show("TWICHUI_CONFIRM_DELETE_RUN", details, nil, { runId = runData.id, callback = callback })
+            end
+        },
+        { text = "Cancel",      notCheckable = true, func = function() end }
+    }
+
+    local menuFrame = CreateFrame("Frame", "TwichUIDungeonsContextMenu", UIParent, "UIDropDownMenuTemplate")
+    easyMenuFunc(menu, menuFrame, "cursor", 0, 0, "MENU")
+end
+
+local function UpdateDetailsRuns(panel, mapId)
+    if not panel.__twichuiDetailsRuns then return end
+
+    local content = panel.__twichuiDetailsRuns.content
+    local rows = panel.__twichuiDetailsRuns.rows or {}
+    panel.__twichuiDetailsRuns.rows = rows
+
+    -- Clear existing
+    for _, row in ipairs(rows) do row:Hide() end
+
+    if not mapId then return end
+
+    local Database = MythicPlusModule.Database
+    if not Database then return end
+
+    local allRuns = Database:GetRuns()
+    local runs = {}
+    for _, run in ipairs(allRuns) do
+        if run.mapId == mapId then
+            table.insert(runs, run)
+        end
+    end
+
+    -- Sort
+    local sortBy = panel.__twichuiDetailsRuns.sortBy or "score"
+    local sortAsc = panel.__twichuiDetailsRuns.sortAsc
+    if panel.__twichuiDetailsRuns.sortBy == nil then sortAsc = false end -- Default desc for score
+
+    table.sort(runs, function(a, b)
+        local vA, vB
+        if sortBy == "date" then
+            vA = a.timestamp
+            vB = b.timestamp
+        else
+            vA = a[sortBy]
+            vB = b[sortBy]
+        end
+
+        if vA == nil then vA = 0 end
+        if vB == nil then vB = 0 end
+
+        if vA == vB then
+            return a.timestamp > b.timestamp
+        end
+
+        if sortAsc then
+            return vA < vB
+        else
+            return vA > vB
+        end
+    end)
+
+    local ROW_HEIGHT = 20
+    local yOffset = 0
+
+    for i, run in ipairs(runs) do
+        local row = rows[i]
+        if not row then
+            row = CreateFrame("Frame", nil, content)
+            row:SetHeight(ROW_HEIGHT)
+            row:SetWidth(content:GetWidth())
+
+            row.cells = {}
+            -- Date
+            local date = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            date:SetPoint("LEFT", row, "LEFT", 0, 0)
+            date:SetWidth(80)
+            date:SetJustifyH("LEFT")
+            row.cells.date = date
+
+            -- Key
+            local key = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            key:SetPoint("LEFT", date, "RIGHT", 5, 0)
+            key:SetWidth(40)
+            key:SetJustifyH("CENTER")
+            row.cells.key = key
+
+            -- Time
+            local time = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            time:SetPoint("LEFT", key, "RIGHT", 5, 0)
+            time:SetWidth(60)
+            time:SetJustifyH("RIGHT")
+            row.cells.time = time
+
+            -- Score
+            local score = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            score:SetPoint("LEFT", time, "RIGHT", 5, 0)
+            score:SetWidth(50)
+            score:SetJustifyH("RIGHT")
+            row.cells.score = score
+
+            -- Up
+            local up = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            up:SetPoint("LEFT", score, "RIGHT", 5, 0)
+            up:SetWidth(30)
+            up:SetJustifyH("CENTER")
+            row.cells.up = up
+
+            -- BG
+            local bg = row:CreateTexture(nil, "BACKGROUND")
+            bg:SetAllPoints(row)
+            bg:SetColorTexture(1, 1, 1, 0.05)
+            row.bg = bg
+
+            -- Highlight
+            local highlight = row:CreateTexture(nil, "BACKGROUND", nil, 1)
+            highlight:SetAllPoints(row)
+            highlight:SetColorTexture(1, 1, 1, 0.1)
+            highlight:Hide()
+            row.highlight = highlight
+
+            row:SetScript("OnEnter", function(self)
+                self.highlight:Show()
+            end)
+            row:SetScript("OnLeave", function(self)
+                self.highlight:Hide()
+            end)
+
+            row:EnableMouse(true)
+            row:SetScript("OnMouseUp", function(self, button)
+                if button == "RightButton" and self.runData then
+                    ShowContextMenu(self.runData, panel, mapId)
+                end
+            end)
+
+            rows[i] = row
+        end
+
+        row:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -yOffset)
+        row:SetWidth(content:GetWidth())
+        row:Show()
+
+        row.runData = run
+
+        row.cells.date:SetText(FormatDate(run.timestamp))
+        row.cells.key:SetText("+" .. tostring(run.level))
+        row.cells.time:SetText(FormatTime(run.time))
+        row.cells.score:SetText(tostring(run.score or 0))
+
+        local upgrade = run.upgrade
+        row.cells.up:SetText(upgrade and ("+" .. upgrade) or "—")
+        if upgrade == 3 then
+            row.cells.up:SetTextColor(0.64, 0.21, 0.93)
+        elseif upgrade == 2 then
+            row.cells.up:SetTextColor(0, 0.44, 0.87)
+        elseif upgrade == 1 then
+            row.cells.up:SetTextColor(0, 1, 0)
+        else
+            row.cells.up:SetTextColor(0.5, 0.5, 0.5)
+        end
+
+        -- Alternating row colors
+        if i % 2 == 0 then
+            row.bg:SetColorTexture(1, 1, 1, 0.02)
+        else
+            row.bg:SetColorTexture(1, 1, 1, 0.05)
+        end
+
+        yOffset = yOffset + ROW_HEIGHT + 1
+    end
+end
+
 local function UpdateDetails(panel, mapId)
+    UpdateDetailsRuns(panel, mapId)
     ---@cast panel TwichUI_MythicPlus_DungeonsPanel
     mapId = tonumber(mapId)
 
@@ -1153,8 +1389,18 @@ local function RefreshPanel(panel)
     ---@cast panel TwichUI_MythicPlus_DungeonsPanel
     if not panel or not panel.__twichuiRowsParent then return end
 
+    local T = unpack(Twich)
+    local Logger = T:GetModule("Logger")
+
+    -- Ensure we have width before rendering
+    local width = panel.__twichuiRowsParent:GetWidth()
+
+    if width <= 1 then
+        C_Timer.After(0.1, function() RefreshPanel(panel) end)
+        return
+    end
+
     local mapIds = GetCurrentSeasonMapIds()
-    local history = GetRunHistoryTable()
 
     if panel.__twichuiEmptyText then
         panel.__twichuiEmptyText:Hide()
@@ -1172,6 +1418,7 @@ local function RefreshPanel(panel)
     local zoom = GetImageZoom()
 
     if #mapIds == 0 then
+        Logger.Debug("Dungeons:RefreshPanel - No maps found, entering retry loop")
         -- After /reload, the panel can be created after the relevant events already fired.
         -- If the season map list isn't ready yet, retry a few times.
         if not panel.__twichuiRetryPending then
@@ -1182,11 +1429,14 @@ local function RefreshPanel(panel)
                 local attempt = panel.__twichuiRetryCount
                 local delay = math.min(0.2 + (attempt * 0.15), 1.25)
 
+                Logger.Debug("Dungeons:RefreshPanel - Scheduling retry #" .. attempt .. " in " .. delay .. "s")
+
                 C_Timer.After(delay, function()
                     if not panel or not panel.IsShown or not panel:IsShown() then return end
                     panel.__twichuiRetryPending = false
                     -- Stop retrying after a handful of attempts to avoid any runaway loops.
                     if (tonumber(panel.__twichuiRetryCount) or 0) > 10 then
+                        Logger.Debug("Dungeons:RefreshPanel - Max retries reached")
                         return
                     end
                     RefreshPanel(panel)
@@ -1209,7 +1459,41 @@ local function RefreshPanel(panel)
     panel.__twichuiRetryCount = 0
     panel.__twichuiRetryPending = false
 
-    for i = 1, math.max(#mapIds, #rows) do
+    -- Gather and sort data
+    local data = {}
+    for _, mapId in ipairs(mapIds) do
+        local name, _, texture, backgroundTexture = GetMapUIInfo(mapId)
+        local bestScore, bestLevel, attempts = GetDungeonStats(mapId, history)
+        table.insert(data, {
+            id = mapId,
+            name = name or ("Dungeon " .. tostring(mapId)),
+            score = bestScore or 0,
+            level = bestLevel or 0,
+            runs = attempts or 0,
+            bg = backgroundTexture or texture
+        })
+    end
+
+    Logger.Debug("Dungeons:RefreshPanel - Processing " .. #data .. " rows")
+
+    local sortBy = panel.__twichuiSortBy or "score"
+    local sortAsc = panel.__twichuiSortAsc
+    if panel.__twichuiSortBy == nil then sortAsc = false end -- Default desc
+
+    table.sort(data, function(a, b)
+        local vA = a[sortBy]
+        local vB = b[sortBy]
+        if vA == vB then
+            return a.name < b.name
+        end
+        if sortAsc then
+            return vA < vB
+        else
+            return vA > vB
+        end
+    end)
+
+    for i = 1, math.max(#data, #rows) do
         local row = rows[i]
         if not row then
             row = CreateDungeonRow(panel.__twichuiRowsParent, fontPath)
@@ -1235,16 +1519,10 @@ local function RefreshPanel(panel)
             end)
         end
 
-        local mapId = mapIds[i]
-        if mapId then
-            local name, _, texture, backgroundTexture = GetMapUIInfo(mapId)
-            -- Prefer the full background art for rows. The small icon-style "texture" can look
-            -- noticeably pixelated when scaled or filtered by pixel-perfect UI settings.
-            local bg = backgroundTexture or texture
-            local bestScore, bestLevel, attempts = GetDungeonStats(mapId, history)
-
-            row.__twichuiMapId = mapId
-            row.Name:SetText(name or ("Dungeon " .. tostring(mapId)))
+        local info = data[i]
+        if info then
+            row.__twichuiMapId = info.id
+            row.Name:SetText(info.name)
 
             -- Keep row styling in sync with settings.
             if row.Bar then
@@ -1262,17 +1540,17 @@ local function RefreshPanel(panel)
                 end
             end
 
-            if bg then
-                SetClampedTexture(row.NameBG, bg)
+            if info.bg then
+                SetClampedTexture(row.NameBG, info.bg)
                 ApplyRowLayout(row.NameBG, zoom)
                 row.NameBG:Show()
             else
                 row.NameBG:Hide()
             end
 
-            row.Score:SetText(bestScore > 0 and string.format("%d", math.floor(bestScore + 0.5)) or "—")
-            row.Key:SetText(bestLevel > 0 and ("+" .. tostring(bestLevel)) or "—")
-            row.Runs:SetText(attempts > 0 and tostring(attempts) or "0")
+            row.Score:SetText(info.score > 0 and string.format("%d", math.floor(info.score + 0.5)) or "—")
+            row.Key:SetText(info.level > 0 and ("+" .. tostring(info.level)) or "—")
+            row.Runs:SetText(info.runs > 0 and tostring(info.runs) or "0")
 
             row:Show()
         else
@@ -1281,8 +1559,8 @@ local function RefreshPanel(panel)
         end
     end
 
-    if not panel.__twichuiSelectedMapId and mapIds[1] then
-        panel.__twichuiSelectedMapId = mapIds[1]
+    if not panel.__twichuiSelectedMapId and data[1] then
+        panel.__twichuiSelectedMapId = data[1].id
     end
 
     UpdateDetails(panel, panel.__twichuiSelectedMapId)
@@ -1293,6 +1571,7 @@ end
 local function CreateDungeonsPanel(parent)
     ---@class TwichUI_MythicPlus_DungeonsPanel
     local panel = CreateFrame("Frame", nil, parent)
+    panel:Hide()
 
     local fontPath = GetFontPath()
     panel.__twichuiFontPath = fontPath
@@ -1311,8 +1590,17 @@ local function CreateDungeonsPanel(parent)
     headerContainer:SetPoint("TOPLEFT", left, "TOPLEFT", 0, -2)
     headerContainer:SetPoint("TOPRIGHT", left, "TOPRIGHT", 0, -2)
 
-    local function CreateHeaderString(text, justify, width)
-        local fs = headerContainer:CreateFontString(nil, "OVERLAY")
+    local function CreateHeaderButton(text, key, justify, width)
+        local btn = CreateFrame("Button", nil, headerContainer)
+        btn:SetHeight(16)
+        if width then
+            btn:SetWidth(width)
+        else
+            -- Auto width if not specified (will be anchored)
+            btn:SetWidth(100)
+        end
+
+        local fs = btn:CreateFontString(nil, "OVERLAY")
         if fs.SetFontObject then
             fs:SetFontObject(_G.GameFontNormal)
         end
@@ -1321,22 +1609,50 @@ local function CreateDungeonsPanel(parent)
         end
         fs:SetText(text)
         fs:SetJustifyH(justify)
-        if width then
-            fs:SetWidth(width)
-        end
-        return fs
+        fs:SetAllPoints(btn)
+        btn.Text = fs
+
+        btn:SetScript("OnEnter", function(self)
+            if self.Text and self.Text.SetTextColor then
+                self.Text:SetTextColor(1, 1, 1)
+            end
+        end)
+        btn:SetScript("OnLeave", function(self)
+            if self.Text and self.Text.SetTextColor then
+                self.Text:SetTextColor(1, 0.82, 0)
+            end
+        end)
+        btn:SetScript("OnClick", function()
+            local currentSort = panel.__twichuiSortBy
+            local currentAsc = panel.__twichuiSortAsc
+
+            if currentSort == key then
+                panel.__twichuiSortAsc = not currentAsc
+            else
+                panel.__twichuiSortBy = key
+                -- Default to descending for numbers, ascending for name
+                if key == "name" then
+                    panel.__twichuiSortAsc = true
+                else
+                    panel.__twichuiSortAsc = false
+                end
+            end
+            RefreshPanel(panel)
+        end)
+
+        return btn
     end
 
-    local headerRuns = CreateHeaderString("Runs", "RIGHT", COL_RUNS_W)
+    local headerRuns = CreateHeaderButton("Runs", "runs", "RIGHT", COL_RUNS_W)
     headerRuns:SetPoint("RIGHT", headerContainer, "RIGHT", -6, 0)
 
-    local headerKey = CreateHeaderString("Key", "RIGHT", COL_KEY_W)
+    local headerKey = CreateHeaderButton("Key", "level", "RIGHT", COL_KEY_W)
     headerKey:SetPoint("RIGHT", headerRuns, "LEFT", -COL_GAP, 0)
 
-    local headerScore = CreateHeaderString("Score", "RIGHT", COL_SCORE_W)
+    local headerScore = CreateHeaderButton("Score", "score", "RIGHT", COL_SCORE_W)
     headerScore:SetPoint("RIGHT", headerKey, "LEFT", -COL_GAP, 0)
 
-    local headerDungeon = CreateHeaderString("Dungeon", "LEFT")
+    local headerDungeon = CreateHeaderButton("Dungeon", "name", "LEFT")
     headerDungeon:SetPoint("LEFT", headerContainer, "LEFT", 6, 0)
     headerDungeon:SetPoint("RIGHT", headerScore, "LEFT", -10, 0)
 
@@ -1444,6 +1760,76 @@ local function CreateDungeonsPanel(parent)
     time2:SetPoint("BOTTOM", detailsHeader, "BOTTOM", 0, 6)
     time3:SetPoint("BOTTOMRIGHT", detailsHeader, "BOTTOMRIGHT", -10, 6)
 
+    -- Runs Table Container
+    local runsContainer = CreateFrame("Frame", nil, right)
+    runsContainer:SetPoint("TOPLEFT", detailsHeader, "BOTTOMLEFT", 0, -10)
+    runsContainer:SetPoint("BOTTOMRIGHT", right, "BOTTOMRIGHT", 0, 0)
+
+    -- Headers
+    local function CreateSortHeader(text, key, width, justify, point, relativeTo, relativePoint, x, y)
+        local btn = CreateFrame("Button", nil, runsContainer)
+        btn:SetSize(width, 20)
+        btn:SetPoint(point, relativeTo, relativePoint, x, y)
+
+        local fs = btn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        fs:SetText(text)
+        fs:SetAllPoints(btn)
+        fs:SetJustifyH(justify)
+        btn.Text = fs
+
+        btn:SetScript("OnClick", function()
+            local currentSort = panel.__twichuiDetailsRuns.sortBy
+            local currentAsc = panel.__twichuiDetailsRuns.sortAsc
+
+            if currentSort == key then
+                panel.__twichuiDetailsRuns.sortAsc = not currentAsc
+            else
+                panel.__twichuiDetailsRuns.sortBy = key
+                -- Default sort direction
+                if key == "date" then
+                    panel.__twichuiDetailsRuns.sortAsc = false -- Newest first
+                else
+                    panel.__twichuiDetailsRuns.sortAsc = false -- Highest first
+                end
+            end
+            UpdateDetailsRuns(panel, panel.__twichuiSelectedMapId)
+        end)
+
+        btn:SetScript("OnEnter", function(self) self.Text:SetTextColor(1, 1, 1) end)
+        btn:SetScript("OnLeave", function(self) self.Text:SetTextColor(1, 0.82, 0) end)
+
+        return btn
+    end
+
+    local hDate = CreateSortHeader("Date", "date", 80, "LEFT", "TOPLEFT", runsContainer, "TOPLEFT", 10, 0)
+    local hKey = CreateSortHeader("Key", "level", 40, "CENTER", "LEFT", hDate, "RIGHT", 5, 0)
+    local hTime = CreateSortHeader("Time", "time", 60, "RIGHT", "LEFT", hKey, "RIGHT", 5, 0)
+    local hScore = CreateSortHeader("Score", "score", 50, "RIGHT", "LEFT", hTime, "RIGHT", 5, 0)
+    local hUp = CreateSortHeader("Up", "upgrade", 30, "CENTER", "LEFT", hScore, "RIGHT", 5, 0)
+
+    -- Scroll Frame
+    local scrollFrame = CreateFrame("ScrollFrame", nil, runsContainer, "UIPanelScrollFrameTemplate")
+    scrollFrame:SetPoint("TOPLEFT", runsContainer, "TOPLEFT", 10, -20)
+    scrollFrame:SetPoint("BOTTOMRIGHT", runsContainer, "BOTTOMRIGHT", -26, 10)
+
+    local content = CreateFrame("Frame", nil, scrollFrame)
+    content:SetSize(1, 1)
+    scrollFrame:SetScrollChild(content)
+
+    scrollFrame:SetScript("OnSizeChanged", function(self, w, h)
+        content:SetWidth(w)
+        if panel.__twichuiDetailsRuns and panel.__twichuiDetailsRuns.rows then
+            for _, row in ipairs(panel.__twichuiDetailsRuns.rows) do
+                row:SetWidth(w)
+            end
+        end
+    end)
+
+    panel.__twichuiDetailsRuns = {
+        frame = runsContainer,
+        content = content
+    }
+
     panel.__twichuiLeft = left
     panel.__twichuiRight = right
     panel.__twichuiRowsParent = rowsParent
@@ -1461,7 +1847,11 @@ local function CreateDungeonsPanel(parent)
 
         local now = (type(GetTime) == "function") and GetTime() or 0
         local last = panel.__twichuiLastUpdate or 0
-        if event ~= "PLAYER_ENTERING_WORLD" and (now - last) < 0.5 then
+
+        -- Allow critical events to bypass throttle
+        local bypassThrottle = (event == "PLAYER_ENTERING_WORLD" or event == "CHALLENGE_MODE_MAPS_UPDATE")
+
+        if not bypassThrottle and (now - last) < 0.5 then
             return
         end
         panel.__twichuiLastUpdate = now
@@ -1482,7 +1872,10 @@ local function CreateDungeonsPanel(parent)
     panel:SetScript("OnShow", function()
         panel.__twichuiRetryCount = 0
         panel.__twichuiRetryPending = false
-        RefreshPanel(panel)
+        -- Delay refresh slightly to allow layout to settle
+        C_Timer.After(0.05, function()
+            RefreshPanel(panel)
+        end)
     end)
 
     return panel

@@ -2,7 +2,7 @@
 ## Notes: Life Enhancement for ElvUI Users. Midnight Native!
 ## Author: Twich
 ## Version: 0.0.1-ALPHA
-## SavedVariables: TwichUIDB, TwichUIGoldDB, TwichUIDungeonDB
+## SavedVariables: TwichUIDB, TwichUIGoldDB, TwichUIDungeonDB, TwichUIRunLoggerDB
 ## RequiredDeps: ElvUI
 ## Interface: 120000
 ## Group: Twich

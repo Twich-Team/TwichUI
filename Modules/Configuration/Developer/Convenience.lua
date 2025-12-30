@@ -1,7 +1,11 @@
+---@diagnostic disable-next-line: undefined-global
 local T, W, I, C = unpack(Twich)
 
 --- @class ConfigurationModule
 local CM = T:GetModule("Configuration")
+
+---@type LoggerModule
+local Logger = T:GetModule("Logger")
 
 --- @type DeveloperConfigurationModule
 CM.Developer = CM.Developer or {}

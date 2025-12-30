@@ -20,6 +20,18 @@ local MythicPlus = C_MythicPlus
 --- @field level number
 --- @field affixes table<number, number> list of affix IDs
 
+local function ShouldSimulate(funcName)
+    if not MythicPlusModule.Simulator then
+        return false
+    end
+
+    if not MythicPlusModule.Simulator.enabled then
+        return false
+    end
+
+    return MythicPlusModule.Simulator:CanSimulate(funcName)
+end
+
 ---@return PlayerKeystoneInfo | nil
 function API:GetPlayerKeystone()
     local function SafeCall(fn, ...)

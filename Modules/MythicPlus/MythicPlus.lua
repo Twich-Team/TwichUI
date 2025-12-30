@@ -9,6 +9,12 @@ local CreateFrame = _G.CreateFrame
 --- @field API MythicPlusAPISubmodule
 --- @field Dungeons MythicPlusDungeonsSubmodule|nil
 --- @field MainWindow MythicPlusMainWindow|nil
+--- @field Simulator MythicPlusSimulatorSubmodule
+--- @field ScoreCalculator MythicPlusScoreCalculatorSubmodule
+--- @field Data MythicPlusDataSubmodule
+--- @field DungeonMonitor MythicPlusDungeonMonitorSubmodule
+--- @field DataCollector MythicPlusDataCollectorSubmodule
+--- @field RunLogger MythicPlusRunLoggerSubmodule
 local MythicPlusModule = T:GetModule("MythicPlus")
 
 --- @type ConfigurationModule
@@ -62,8 +68,29 @@ function MythicPlusModule:Enable()
         self.Dungeons:Initialize()
     end
 
+    if self.Runs and self.Runs.Initialize then
+        self.Runs:Initialize()
+    end
+
+    if self.Summary and self.Summary.Initialize then
+        self.Summary:Initialize()
+    end
+
     if self.MainWindow and self.MainWindow.Initialize then
         self.MainWindow:Initialize()
+    end
+
+    if self.DungeonMonitor and self.DungeonMonitor.Enable then
+        self.DungeonMonitor:Enable()
+    end
+
+    if self.DataCollector and self.DataCollector.Enable then
+        self.DataCollector:Enable()
+    end
+
+    -- Developer-only subfeature; initializes based on its own config toggle.
+    if self.RunLogger and self.RunLogger.Initialize then
+        self.RunLogger:Initialize()
     end
 
     Logger.Debug("Mythic+ module enabled")

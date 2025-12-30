@@ -496,6 +496,12 @@ function MainWindow:UpdateNavSelection()
                 btn.__twichuiActiveBG:Hide()
             end
         end
+
+        if btn and btn.NavIcon then
+            btn.NavIcon:SetAlpha(isActive and 1.0 or 0.5)
+        elseif btn and btn.DungeonArt then
+            btn.DungeonArt:SetAlpha(isActive and 1.0 or 0.5)
+        end
     end
 end
 
@@ -704,9 +710,13 @@ function MainWindow:RefreshNav()
         local panel = self._panels and self._panels[id]
         if panel then
             local btn = self.navButtons[id]
+            local height = NAV_BUTTON_HEIGHT
+            if id == "dungeons" or id == "runs" or id == "summary" then
+                height = 60
+            end
+
             if not btn then
                 btn = CreateFrame("Button", nil, self.nav)
-                btn:SetHeight(NAV_BUTTON_HEIGHT)
                 btn:SetPoint("TOPLEFT", self.nav, "TOPLEFT", NAV_PADDING, y)
                 btn:SetPoint("TOPRIGHT", self.nav, "TOPRIGHT", -NAV_PADDING, y)
 
@@ -744,13 +754,55 @@ function MainWindow:RefreshNav()
                 self.navButtons[id] = btn
             else
                 btn:ClearAllPoints()
-                btn:SetHeight(NAV_BUTTON_HEIGHT)
                 btn:SetPoint("TOPLEFT", self.nav, "TOPLEFT", NAV_PADDING, y)
                 btn:SetPoint("TOPRIGHT", self.nav, "TOPRIGHT", -NAV_PADDING, y)
             end
 
+            btn:SetHeight(height)
+
             if btn.__twichuiText then
                 btn.__twichuiText:SetText(panel.label or id)
+            end
+
+            if id == "dungeons" or id == "runs" or id == "summary" then
+                if not btn.NavIcon then
+                    btn.NavIcon = btn:CreateTexture(nil, "ARTWORK")
+                end
+
+                if id == "dungeons" then
+                    btn.NavIcon:SetSize(24, 28)
+                    btn.NavIcon:SetTexture("Interface\\AddOns\\TwichUI\\Media\\Textures\\dungeons.tga")
+                elseif id == "runs" then
+                    btn.NavIcon:SetSize(24, 28)
+                    btn.NavIcon:SetTexture("Interface\\AddOns\\TwichUI\\Media\\Textures\\runs.tga")
+                else
+                    -- Summary (64x92 original)
+                    btn.NavIcon:SetSize(22, 32)
+                    btn.NavIcon:SetTexture("Interface\\AddOns\\TwichUI\\Media\\Textures\\summary.tga")
+                end
+
+                btn.NavIcon:ClearAllPoints()
+                btn.NavIcon:SetPoint("TOP", btn, "TOP", 0, -10)
+                btn.NavIcon:Show()
+
+                -- Hide legacy texture if present
+                if btn.DungeonArt then btn.DungeonArt:Hide() end
+
+                if btn.__twichuiText then
+                    btn.__twichuiText:ClearAllPoints()
+                    btn.__twichuiText:SetPoint("TOP", btn.NavIcon, "BOTTOM", 0, -4)
+                    btn.__twichuiText:SetJustifyH("CENTER")
+                end
+            else
+                if btn.NavIcon then btn.NavIcon:Hide() end
+                if btn.DungeonArt then btn.DungeonArt:Hide() end
+
+                if btn.__twichuiText then
+                    btn.__twichuiText:ClearAllPoints()
+                    btn.__twichuiText:SetPoint("LEFT", btn, "LEFT", 6, 0)
+                    btn.__twichuiText:SetPoint("RIGHT", btn, "RIGHT", -6, 0)
+                    btn.__twichuiText:SetJustifyH("LEFT")
+                end
             end
 
             btn:SetScript("OnClick", function()
@@ -760,15 +812,21 @@ function MainWindow:RefreshNav()
                 if b.__twichuiHoverBG and id ~= self.activePanelId then
                     b.__twichuiHoverBG:Show()
                 end
+                if b.NavIcon then
+                    b.NavIcon:SetAlpha(1.0)
+                end
             end)
             btn:SetScript("OnLeave", function(b)
                 if b.__twichuiHoverBG then
                     b.__twichuiHoverBG:Hide()
                 end
+                if b.NavIcon and id ~= self.activePanelId then
+                    b.NavIcon:SetAlpha(0.5)
+                end
             end)
 
             btn:Show()
-            y = y - (NAV_BUTTON_HEIGHT + 2)
+            y = y - (height + 2)
         end
     end
 

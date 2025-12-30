@@ -1,0 +1,104 @@
+{
+  "events": [
+    {
+      "name": "GROUP_ROSTER_SNAPSHOT",
+      "payload": {
+        "group": [
+          {
+            "class": "ROGUE",
+            "guid": "Player-121-0AF13993",
+            "name": "Twich",
+            "role": "NONE",
+            "spec": "Assassination",
+            "specId": 259,
+            "unit": "player"
+          }
+        ],
+        "reason": "start"
+      },
+      "relSeconds": 0,
+      "timestamp": 1767113938
+    },
+    {
+      "name": "CHALLENGE_MODE_START",
+      "payload": { "mapId": 525 },
+      "relSeconds": 0,
+      "timestamp": 1767113938
+    },
+    {
+      "name": "CHAT_MSG_LOOT",
+      "payload": {
+        "guid": "Player-121-0AF13993",
+        "itemLinks": ["[Inert Dust]"],
+        "lineId": 78,
+        "message": "You receive loot: [Inert Dust]",
+        "player": "Twich-AzjolNerub"
+      },
+      "relSeconds": 10.661999999998,
+      "timestamp": 1767113948
+    },
+    {
+      "name": "CHALLENGE_MODE_COMPLETED_REWARDS",
+      "payload": {
+        "mapId": 525,
+        "medal": 3,
+        "money": 500000,
+        "rewards": [{ "isCurrency": false, "quantity": 1, "rewardID": 32837 }],
+        "timeMS": 1500000
+      },
+      "relSeconds": 15.929999999998,
+      "timestamp": 1767113954
+    }
+  ],
+  "format": "TwichUI_RunLog_v2",
+  "meta": {
+    "addonVersion": "0.0.1-ALPHA",
+    "format": "TwichUI_RunLog_v2",
+    "wowBuild": "64978",
+    "wowToc": 110207,
+    "wowVersion": "11.2.7"
+  },
+  "run": {
+    "completion": {
+      "mapId": 525,
+      "medal": 3,
+      "money": 500000,
+      "rewards": [{ "isCurrency": false, "quantity": 1, "rewardID": 32837 }],
+      "timeMS": 1500000
+    },
+    "endUnix": 1767113954,
+    "group": [
+      {
+        "class": "ROGUE",
+        "guid": "Player-121-0AF13993",
+        "name": "Twich",
+        "role": "NONE",
+        "spec": "Assassination",
+        "specId": 259,
+        "unit": "player"
+      }
+    ],
+    "groupStart": [
+      {
+        "class": "ROGUE",
+        "guid": "Player-121-0AF13993",
+        "name": "Twich",
+        "role": "NONE",
+        "spec": "Assassination",
+        "specId": 259,
+        "unit": "player"
+      }
+    ],
+    "id": "1767113938-525",
+    "mapId": 525,
+    "player": {
+      "class": "ROGUE",
+      "guid": "Player-121-0AF13993",
+      "name": "Twich",
+      "spec": "Assassination",
+      "specId": 259
+    },
+    "startUnix": 1767113938,
+    "status": "completed"
+  }
+}
