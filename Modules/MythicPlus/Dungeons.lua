@@ -736,7 +736,8 @@ local function ApplyRowLayout(tex, zoom)
 end
 
 ---@param tex Texture
-local function ApplyHeaderLayout(tex)
+---@param zoom number
+local function ApplyHeaderLayout(tex, zoom)
     ---@cast tex TwichUI_MythicPlus_CoverTexture
     if not tex then return end
 
@@ -751,7 +752,7 @@ local function ApplyHeaderLayout(tex)
             tex.__twichuiCoverDeferred = true
             _G.C_Timer.After(0, function()
                 tex.__twichuiCoverDeferred = false
-                ApplyHeaderLayout(tex)
+                ApplyHeaderLayout(tex, zoom)
             end)
         end
         return
@@ -760,8 +761,11 @@ local function ApplyHeaderLayout(tex)
     -- Default to 16:9 to mimic row behavior.
     local aspect = tonumber(tex.__twichuiSourceAspect) or 1.777
 
-    -- Fixed scale to mimic row base scale (1.15).
-    local scale = 1.15
+    local z = Clamp01(tonumber(zoom) or 0)
+
+    -- Scale factor: Increased base to 1.55 to help clip borders by default.
+    -- Range: 1.55 -> ~2.3
+    local scale = 1.55 + (z * 0.75)
 
     local drawW = w
     local drawH = (w / aspect) * scale
@@ -776,11 +780,13 @@ local function ApplyHeaderLayout(tex)
     local uRange = uMax - uMin
     local vRange = vMax - vMin
 
-    local CROP_LEFT = 0.06
-    local CROP_BOTTOM = 0.15
-    local CROP_TOP = 0.02
+    local CROP_LEFT = 0.15
+    local CROP_RIGHT = 0.15
+    local CROP_BOTTOM = 0.25
+    local CROP_TOP = 0.05
 
     uMin = uMin + (uRange * CROP_LEFT)
+    uMax = uMax - (uRange * CROP_RIGHT)
     vMax = vMax - (vRange * CROP_BOTTOM)
     vMin = vMin + (vRange * CROP_TOP)
 
@@ -806,7 +812,9 @@ local function ApplyHeaderLayout(tex)
     -- Apply fade-to-transparent gradient (mimic row).
     if tex.SetGradient and _G.CreateColor then
         local startAlpha = tex:GetAlpha() or 1
-        pcall(tex.SetGradient, tex, "HORIZONTAL", _G.CreateColor(1, 1, 1, startAlpha), _G.CreateColor(0, 0, 0, 0))
+        -- Fade from Opaque (Left) to Transparent (Right)
+        -- Using white (1,1,1) base to avoid darkening/blackening the image during fade.
+        pcall(tex.SetGradient, tex, "HORIZONTAL", _G.CreateColor(1, 1, 1, startAlpha), _G.CreateColor(1, 1, 1, 0))
     end
 
     if IsDebugEnabled() then
@@ -1509,7 +1517,7 @@ local function UpdateDetails(panel, mapId)
         if bg then
             SetClampedTexture(panel.__twichuiDetailsBG, bg)
             panel.__twichuiDetailsBG:SetAlpha(GetDetailsBGAlpha())
-            ApplyHeaderLayout(panel.__twichuiDetailsBG)
+            ApplyHeaderLayout(panel.__twichuiDetailsBG, GetImageZoom())
             panel.__twichuiDetailsBG:Show()
         else
             panel.__twichuiDetailsBG:Hide()
@@ -1844,12 +1852,9 @@ local function CreateDungeonsPanel(parent)
     end
     detailsBG:Hide()
 
-    -- Vignette Overlay removed to mimic row style (cleaner look).
-    -- If we want a shadow for text, we can add it behind the text specifically.
-
     local rightOnSize = function()
         if detailsBG and detailsBG.IsShown and detailsBG:IsShown() then
-            ApplyHeaderLayout(detailsBG)
+            ApplyHeaderLayout(detailsBG, GetImageZoom())
         end
     end
     if detailsHeader.HookScript then
@@ -1903,23 +1908,17 @@ local function CreateDungeonsPanel(parent)
     local time2 = CreateTimeFrame(2)
     local time3 = CreateTimeFrame(3)
 
-    time1:SetPoint("BOTTOMLEFT", detailsHeader, "BOTTOMLEFT", 10, 6)
-    time2:SetPoint("BOTTOM", detailsHeader, "BOTTOM", 0, 6)
-    time3:SetPoint("BOTTOMRIGHT", detailsHeader, "BOTTOMRIGHT", -10, 6)
+    -- Place times below the dungeon name/title, all visible
+    time1:SetPoint("TOPLEFT", detailsHeader, "TOPLEFT", 10, -22)
+    time2:SetPoint("TOP", detailsHeader, "TOP", 0, -22)
+    time3:SetPoint("TOPRIGHT", detailsHeader, "TOPRIGHT", -10, -22)
 
     -- Actions (below header, above runs table)
-    local actions = CreateFrame("Frame", nil, right)
-    actions:SetHeight(34)
-    actions:SetPoint("TOPLEFT", detailsHeader, "BOTTOMLEFT", 0, -6)
-    actions:SetPoint("TOPRIGHT", detailsHeader, "BOTTOMRIGHT", 0, -6)
-
-    local actionsBG = actions:CreateTexture(nil, "BACKGROUND")
-    actionsBG:SetAllPoints(actions)
-    actionsBG:SetColorTexture(0, 0, 0, 0.20)
-
-    local portalButton = CreateFrame("Button", nil, actions, "SecureActionButtonTemplate")
+    -- Portal button now in header area (detailsHeader)
+    local portalButton = CreateFrame("Button", nil, detailsHeader, "SecureActionButtonTemplate")
     portalButton:SetSize(26, 26)
-    portalButton:SetPoint("RIGHT", actions, "RIGHT", -10, 0)
+    -- Place portal button at the right, below the times, with some padding
+    portalButton:SetPoint("BOTTOMRIGHT", detailsHeader, "BOTTOMRIGHT", -6, 6)
     portalButton:RegisterForClicks("LeftButtonUp")
 
     local portalIcon = portalButton:CreateTexture(nil, "ARTWORK")
@@ -1956,7 +1955,7 @@ local function CreateDungeonsPanel(parent)
     end)
 
     -- Tooltip support for the disabled state: disabled Buttons do not receive OnEnter/OnLeave.
-    local portalHover = CreateFrame("Frame", nil, actions)
+    local portalHover = CreateFrame("Frame", nil, detailsHeader)
     portalHover:SetAllPoints(portalButton)
     portalHover:EnableMouse(true)
     portalHover:Hide()
@@ -1985,7 +1984,7 @@ local function CreateDungeonsPanel(parent)
 
     -- Runs Table Container
     local runsContainer = CreateFrame("Frame", nil, right)
-    runsContainer:SetPoint("TOPLEFT", actions, "BOTTOMLEFT", 0, -10)
+    runsContainer:SetPoint("TOPLEFT", detailsHeader, "BOTTOMLEFT", 0, -16)
     runsContainer:SetPoint("BOTTOMRIGHT", right, "BOTTOMRIGHT", 0, 0)
 
     -- Headers
@@ -2059,7 +2058,7 @@ local function CreateDungeonsPanel(parent)
     }
 
     panel.__twichuiActions = {
-        frame = actions,
+        frame = detailsHeader, -- actions bar removed, use header for reference
         portalButton = portalButton,
         portalIcon = portalIcon,
         portalHover = portalHover,
