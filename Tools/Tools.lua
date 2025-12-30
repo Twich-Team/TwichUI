@@ -24,6 +24,7 @@ local T, W, I, C = unpack(Twich)
 --- @field Callback CallbackPrototype\
 --- @field Textures TexturesTool
 --- @field Game GameTool
+--- @field UI ToolsUI
 local TM = T:GetModule("Tools")
 
 --- @class GenericsTool

@@ -32,11 +32,6 @@ local GetItemInfoInstant = C_Item and C_Item.GetItemInfoInstant
 local strmatch = _G.string and _G.string.match
 local strgmatch = _G.string and _G.string.gmatch
 
--- Optional ElvUI integration for skinned close button / scroll bars.
----@diagnostic disable-next-line: undefined-field
-local E = _G.ElvUI and _G.ElvUI[1]
-local Skins = E and E.GetModule and E:GetModule("Skins", true)
-
 ---@type MythicPlusModule
 local MythicPlusModule = T:GetModule("MythicPlus")
 ---@class MythicPlusRunLoggerSubmodule
@@ -53,6 +48,9 @@ local Logger = T:GetModule("Logger")
 local Tools = T:GetModule("Tools")
 ---@type ConfigurationModule
 local CM = T:GetModule("Configuration")
+
+---@type ToolsUI|nil
+local UI = Tools and Tools.UI
 
 ---@type MythicPlusDungeonMonitorSubmodule
 local DungeonMonitor = MythicPlusModule.DungeonMonitor
@@ -602,28 +600,10 @@ function MythicPlusRunLogger:_EnsureFrame()
     scroll:SetScrollChild(editBox)
 
     -- ElvUI skinning (best-effort)
-    if Skins then
-        if Skins.HandleCloseButton then
-            Skins:HandleCloseButton(close)
-        end
-
-        if Skins.HandleScrollBar then
-            local sb = scroll.ScrollBar
-            if not sb and scroll.GetName then
-                local name = scroll:GetName()
-                if name then
-                    sb = _G[name .. "ScrollBar"]
-                end
-            end
-            if sb then
-                Skins:HandleScrollBar(sb)
-            end
-        end
-
-        if Skins.HandleEditBox then
-            -- This template varies across ElvUI versions; ignore if it errors.
-            pcall(function() Skins:HandleEditBox(editBox) end)
-        end
+    if UI then
+        UI.SkinCloseButton(close)
+        UI.SkinScrollBar(scroll)
+        UI.SkinEditBox(editBox)
     end
 
     frame:SetScript("OnShow", function()

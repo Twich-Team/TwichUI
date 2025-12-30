@@ -41,6 +41,9 @@ local Tools = T:GetModule("Tools")
 ---@type ConfigurationModule
 local CM = T:GetModule("Configuration")
 
+---@type ToolsUI|nil
+local UI = Tools and Tools.UI
+
 ---@return MythicPlusDungeonMonitorSubmodule|nil
 local function GetDungeonMonitor()
     if MythicPlusModule and MythicPlusModule.DungeonMonitor then
@@ -619,20 +622,41 @@ function Sim:StartSimulationFromJSON(jsonText, opts)
     end
 
     local events = {}
+    local seq = 0
     for _, ev in ipairs(parsed.events) do
         if type(ev) == "table" then
+            seq = seq + 1
+            -- Preserve original ordering for events with identical timestamps.
+            -- NOTE: We do not rely on `table.sort` stability.
+            ev._simSeq = ev._simSeq or seq
             events[#events + 1] = ev
         end
     end
 
-    table.sort(events, function(a, b)
-        local ar = EventRel(a)
-        local br = EventRel(b)
-        if ar == br then
-            return EventName(a) < EventName(b)
+    -- RunLogger already records events in chronological order. Only sort if needed.
+    local needSort = false
+    do
+        local prev = -math.huge
+        for i = 1, #events do
+            local r = EventRel(events[i])
+            if r < prev then
+                needSort = true
+                break
+            end
+            prev = r
         end
-        return ar < br
-    end)
+    end
+
+    if needSort then
+        table.sort(events, function(a, b)
+            local ar = EventRel(a)
+            local br = EventRel(b)
+            if ar == br then
+                return (tonumber(a._simSeq) or 0) < (tonumber(b._simSeq) or 0)
+            end
+            return ar < br
+        end)
+    end
 
     local speed = opts and opts.speed or nil
     if speed == nil then
@@ -662,6 +686,8 @@ function Sim:StartSimulationFromJSON(jsonText, opts)
     local token = self._simToken
     self._simState = {
         token = token,
+        meta = parsed.meta,
+        run = parsed.run,
         events = events,
         total = #events,
         index = 0,
@@ -791,25 +817,13 @@ function Sim:_EnsureFrame()
     end)
 
     -- ElvUI skinning (best-effort)
-    if Skins then
-        if Skins.HandleButton then
-            Skins:HandleButton(startBtn)
-            Skins:HandleButton(stopBtn)
-        end
-        if Skins.HandleCloseButton then
-            Skins:HandleCloseButton(close)
-        end
-        if Skins.HandleScrollBar then
-            local sb = scroll and (scroll.ScrollBar or (scroll.GetName and _G[scroll:GetName() .. "ScrollBar"]))
-            if sb then
-                Skins:HandleScrollBar(sb)
-            end
-        end
-        if Skins.HandleEditBox then
-            Skins:HandleEditBox(speedBox)
-            -- This template varies across ElvUI versions; ignore if it errors.
-            pcall(function() Skins:HandleEditBox(editBox) end)
-        end
+    if UI then
+        UI.SkinButton(startBtn)
+        UI.SkinButton(stopBtn)
+        UI.SkinCloseButton(close)
+        UI.SkinScrollBar(scroll)
+        UI.SkinEditBox(speedBox)
+        UI.SkinEditBox(editBox)
     end
 
     self._frame = frame

@@ -12,17 +12,22 @@ local CM = T:GetModule("Configuration")
 --- @type LoggerModule
 local Logger = T:GetModule("Logger")
 
+---@type ToolsModule
+local Tools = T:GetModule("Tools")
+---@type ToolsUI|nil
+local UI = Tools and Tools.UI
+
 local CreateFrame = _G.CreateFrame
 local GetTime = _G.GetTime
 local unpackFn = _G.unpack or unpack
 
+-- Forward-declared so helpers above the definition can call it at runtime.
+---@type fun(mapId:number):string|nil, number|nil, number|string|nil, number|string|nil
+local GetMapUIInfo
+
 -- LSM is backed by ElvUI's media library when available
 local LSM = T.Libs and T.Libs.LSM
 
--- Optional ElvUI integration for scrollbars
-local ElvUI = rawget(_G, "ElvUI")
-local E = ElvUI and ElvUI[1]
-local Skins = E and E.GetModule and E:GetModule("Skins", true)
 
 ---@class MythicPlusDungeonsSubmodule
 ---@field initialized boolean|nil
@@ -42,6 +47,121 @@ local COL_GAP = 6
 
 local DEFAULT_ROW_TEXTURE = "Interface\\Buttons\\WHITE8X8"
 local ASSUMED_DUNGEON_BG_ASPECT = 2.0
+
+local PORTAL_TEXTURE = "Interface\\AddOns\\TwichUI\\Media\\Textures\\portal.tga"
+
+-- Best-effort: find the player's dungeon teleport spell for a map by scanning the spellbook
+-- for a spell whose name contains the dungeon's localized name.
+local _portalSpellCache = {}
+
+---@param mapId number|nil
+---@return number|nil spellId
+local function FindDungeonPortalSpellId(mapId)
+    mapId = tonumber(mapId)
+    if not mapId then return nil end
+
+    if _portalSpellCache[mapId] ~= nil then
+        return _portalSpellCache[mapId] or nil
+    end
+
+    local dungeonName = GetMapUIInfo and GetMapUIInfo(mapId) or nil
+    if type(dungeonName) ~= "string" or dungeonName == "" then
+        return nil
+    end
+
+    ---@diagnostic disable-next-line: undefined-field
+    local GetNumSpellTabs = _G.GetNumSpellTabs
+    ---@diagnostic disable-next-line: undefined-field
+    local GetSpellTabInfo = _G.GetSpellTabInfo
+    ---@diagnostic disable-next-line: undefined-field
+    local GetSpellBookItemInfo = _G.GetSpellBookItemInfo
+    ---@diagnostic disable-next-line: undefined-field
+    local GetSpellBookItemName = _G.GetSpellBookItemName
+    ---@diagnostic disable-next-line: undefined-field
+    local IsPassiveSpell = _G.IsPassiveSpell
+
+    if type(GetNumSpellTabs) ~= "function" or type(GetSpellTabInfo) ~= "function" or type(GetSpellBookItemInfo) ~= "function" then
+        return nil
+    end
+
+    ---@diagnostic disable-next-line: undefined-field
+    local BOOKTYPE_SPELL = _G.BOOKTYPE_SPELL or "spell"
+
+    for tab = 1, GetNumSpellTabs() do
+        local _, _, offset, numSpells = GetSpellTabInfo(tab)
+        offset = tonumber(offset) or 0
+        numSpells = tonumber(numSpells) or 0
+        for slot = offset + 1, offset + numSpells do
+            local itemType, spellId = GetSpellBookItemInfo(slot, BOOKTYPE_SPELL)
+            if itemType == "SPELL" and spellId then
+                local name = (type(GetSpellBookItemName) == "function") and GetSpellBookItemName(slot, BOOKTYPE_SPELL) or
+                    nil
+                if type(name) == "string" and name ~= "" then
+                    if name:find(dungeonName, 1, true) then
+                        spellId = tonumber(spellId)
+                        if spellId and (type(IsPassiveSpell) ~= "function" or not IsPassiveSpell(spellId)) then
+                            _portalSpellCache[mapId] = spellId
+                            return spellId
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    _portalSpellCache[mapId] = false
+    return nil
+end
+
+---@param panel Frame
+---@param mapId number|nil
+local function UpdateActions(panel, mapId)
+    ---@cast panel TwichUI_MythicPlus_DungeonsPanel
+    if not panel or not panel.__twichuiActions then return end
+
+    local btn = panel.__twichuiActions.portalButton
+    local icon = panel.__twichuiActions.portalIcon
+    local hover = panel.__twichuiActions.portalHover
+    if not btn or not icon then return end
+
+    local spellId = FindDungeonPortalSpellId(mapId)
+    local unlocked = (spellId ~= nil)
+
+    -- Secure attributes can't be changed in combat.
+    if _G.InCombatLockdown and _G.InCombatLockdown() then
+        btn:Disable()
+        icon:SetDesaturated(true)
+        icon:SetAlpha(0.35)
+        if hover then hover:Show() end
+        panel.__twichuiActions.portalSpellId = spellId
+        panel.__twichuiActions.portalUnlocked = unlocked
+        return
+    end
+
+    btn:SetAttribute("type", nil)
+    btn:SetAttribute("spell", nil)
+    btn:SetAttribute("type1", nil)
+    btn:SetAttribute("spell1", nil)
+
+    if unlocked then
+        btn:SetAttribute("type", "spell")
+        btn:SetAttribute("spell", spellId)
+        btn:SetAttribute("type1", "spell")
+        btn:SetAttribute("spell1", spellId)
+        btn:Enable()
+        icon:SetDesaturated(false)
+        icon:SetAlpha(1)
+        if hover then hover:Hide() end
+    else
+        btn:Disable()
+        icon:SetDesaturated(true)
+        icon:SetAlpha(0.35)
+        if hover then hover:Show() end
+    end
+
+    panel.__twichuiActions.portalSpellId = spellId
+    panel.__twichuiActions.portalUnlocked = unlocked
+end
 
 local function GetFontPath()
     local fontName = MythicPlusModule.CONFIGURATION
@@ -108,7 +228,9 @@ local function ConfigureSmoothTexture(tex)
     if tex.SetTexelSnappingBias then
         pcall(tex.SetTexelSnappingBias, tex, 0)
     end
+    ---@diagnostic disable-next-line: undefined-field
     if tex.SetFilterMode then
+        ---@diagnostic disable-next-line: undefined-field
         pcall(tex.SetFilterMode, tex, "LINEAR")
     end
 end
@@ -725,7 +847,7 @@ end
 ---@return number|nil timeLimitSeconds
 ---@return number|string|nil texture
 ---@return number|string|nil backgroundTexture
-local function GetMapUIInfo(mapId)
+GetMapUIInfo = function(mapId)
     mapId = tonumber(mapId)
     if not mapId then return nil, nil, nil, nil end
 
@@ -947,6 +1069,17 @@ end
 ---@field Runs FontString
 ---@field __twichuiMapId number|nil
 
+---@class TwichUI_MythicPlus_Dungeons_TimeFrame : Frame
+---@field Text FontString
+
+---@class TwichUI_MythicPlus_DungeonsActions
+---@field frame Frame
+---@field portalButton Button
+---@field portalIcon Texture
+---@field portalHover Frame
+---@field portalSpellId number|nil
+---@field portalUnlocked boolean
+
 ---@class TwichUI_MythicPlus_DungeonsPanel : Frame
 ---@field __twichuiFontPath string|nil
 ---@field __twichuiRowsParent Frame|nil
@@ -957,9 +1090,10 @@ end
 ---@field __twichuiRetryPending boolean|nil
 ---@field __twichuiDetailsBG TwichUI_MythicPlus_CoverTexture|nil
 ---@field __twichuiDetailsTitle FontString|nil
----@field __twichuiTime1 FontString|nil
----@field __twichuiTime2 FontString|nil
----@field __twichuiTime3 FontString|nil
+---@field __twichuiTime1 TwichUI_MythicPlus_Dungeons_TimeFrame|nil
+---@field __twichuiTime2 TwichUI_MythicPlus_Dungeons_TimeFrame|nil
+---@field __twichuiTime3 TwichUI_MythicPlus_Dungeons_TimeFrame|nil
+---@field __twichuiActions TwichUI_MythicPlus_DungeonsActions|nil
 ---@field __twichuiEvents Frame|nil
 ---@field __twichuiLastUpdate number|nil
 
@@ -1114,8 +1248,8 @@ local function CreateDungeonRow(parent, fontPath)
     return row
 end
 
----@param panel Frame
----@param mapId number|nil
+---@param seconds number|nil
+---@return string
 local function FormatTime(seconds)
     if not seconds then return "—" end
     local m = math.floor(seconds / 60)
@@ -1144,6 +1278,11 @@ local function EnsureEasyMenu()
     return rawget(_G, "EasyMenu")
 end
 
+-- Forward declaration: ShowContextMenu() creates closures that call this.
+-- If we only use `local function UpdateDetailsRuns()` below, earlier references
+-- resolve to a global (nil at runtime).
+local UpdateDetailsRuns
+
 local function ShowContextMenu(runData, panel, mapId)
     if not runData then return end
 
@@ -1154,7 +1293,9 @@ local function ShowContextMenu(runData, panel, mapId)
         runData.score or 0)
 
     local callback = function()
-        UpdateDetailsRuns(panel, mapId)
+        -- Don't trust the captured `mapId` from row creation time; rows are reused.
+        local selected = (panel and panel.__twichuiSelectedMapId) or mapId or (runData and runData.mapId)
+        UpdateDetailsRuns(panel, selected)
     end
 
     if MenuUtil then
@@ -1187,7 +1328,7 @@ local function ShowContextMenu(runData, panel, mapId)
     easyMenuFunc(menu, menuFrame, "cursor", 0, 0, "MENU")
 end
 
-local function UpdateDetailsRuns(panel, mapId)
+UpdateDetailsRuns = function(panel, mapId)
     if not panel.__twichuiDetailsRuns then return end
 
     local content = panel.__twichuiDetailsRuns.content
@@ -1308,7 +1449,8 @@ local function UpdateDetailsRuns(panel, mapId)
             row:EnableMouse(true)
             row:SetScript("OnMouseUp", function(self, button)
                 if button == "RightButton" and self.runData then
-                    ShowContextMenu(self.runData, panel, mapId)
+                    -- Rows are reused across dungeon selections; always consult current panel state.
+                    ShowContextMenu(self.runData, panel, panel.__twichuiSelectedMapId or mapId or self.runData.mapId)
                 end
             end)
 
@@ -1354,6 +1496,8 @@ local function UpdateDetails(panel, mapId)
     ---@cast panel TwichUI_MythicPlus_DungeonsPanel
     mapId = tonumber(mapId)
 
+    UpdateActions(panel, mapId)
+
     local name, timeLimit, texture, backgroundTexture = GetMapUIInfo(mapId)
     local bg = backgroundTexture or texture
 
@@ -1393,9 +1537,6 @@ end
 local function RefreshPanel(panel)
     ---@cast panel TwichUI_MythicPlus_DungeonsPanel
     if not panel or not panel.__twichuiRowsParent then return end
-
-    local T = unpack(Twich)
-    local Logger = T:GetModule("Logger")
 
     -- Ensure we have width before rendering
     local width = panel.__twichuiRowsParent:GetWidth()
@@ -1465,6 +1606,7 @@ local function RefreshPanel(panel)
     panel.__twichuiRetryPending = false
 
     -- Gather and sort data
+    local history = GetRunHistoryTable()
     local data = {}
     for _, mapId in ipairs(mapIds) do
         local name, _, texture, backgroundTexture = GetMapUIInfo(mapId)
@@ -1765,9 +1907,85 @@ local function CreateDungeonsPanel(parent)
     time2:SetPoint("BOTTOM", detailsHeader, "BOTTOM", 0, 6)
     time3:SetPoint("BOTTOMRIGHT", detailsHeader, "BOTTOMRIGHT", -10, 6)
 
+    -- Actions (below header, above runs table)
+    local actions = CreateFrame("Frame", nil, right)
+    actions:SetHeight(34)
+    actions:SetPoint("TOPLEFT", detailsHeader, "BOTTOMLEFT", 0, -6)
+    actions:SetPoint("TOPRIGHT", detailsHeader, "BOTTOMRIGHT", 0, -6)
+
+    local actionsBG = actions:CreateTexture(nil, "BACKGROUND")
+    actionsBG:SetAllPoints(actions)
+    actionsBG:SetColorTexture(0, 0, 0, 0.20)
+
+    local portalButton = CreateFrame("Button", nil, actions, "SecureActionButtonTemplate")
+    portalButton:SetSize(26, 26)
+    portalButton:SetPoint("RIGHT", actions, "RIGHT", -10, 0)
+    portalButton:RegisterForClicks("LeftButtonUp")
+
+    local portalIcon = portalButton:CreateTexture(nil, "ARTWORK")
+    portalIcon:SetAllPoints(portalButton)
+    portalIcon:SetTexture(PORTAL_TEXTURE)
+    portalIcon:SetAlpha(0.35)
+    portalIcon:SetDesaturated(true)
+
+    local portalHL = portalButton:CreateTexture(nil, "HIGHLIGHT")
+    portalHL:SetAllPoints(portalButton)
+    portalHL:SetColorTexture(1, 1, 1, 0.12)
+
+    portalButton:SetScript("OnEnter", function(btn)
+        if not _G.GameTooltip or not _G.GameTooltip.SetOwner then return end
+        _G.GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
+
+        local st = panel.__twichuiActions
+        if st and st.portalUnlocked and st.portalSpellId then
+            ---@diagnostic disable-next-line: undefined-field
+            local GetSpellInfo = _G.GetSpellInfo
+            local name = (type(GetSpellInfo) == "function" and GetSpellInfo(st.portalSpellId)) or "Portal"
+            _G.GameTooltip:AddLine(tostring(name))
+            _G.GameTooltip:AddLine("Click to teleport.", 1, 1, 1, true)
+        else
+            _G.GameTooltip:AddLine("Portal")
+            _G.GameTooltip:AddLine("You haven't unlocked this portal yet.", 1, 1, 1, true)
+        end
+        _G.GameTooltip:Show()
+    end)
+    portalButton:SetScript("OnLeave", function()
+        if _G.GameTooltip and _G.GameTooltip.Hide then
+            _G.GameTooltip:Hide()
+        end
+    end)
+
+    -- Tooltip support for the disabled state: disabled Buttons do not receive OnEnter/OnLeave.
+    local portalHover = CreateFrame("Frame", nil, actions)
+    portalHover:SetAllPoints(portalButton)
+    portalHover:EnableMouse(true)
+    portalHover:Hide()
+    if portalHover.SetFrameLevel and portalButton.GetFrameLevel then
+        portalHover:SetFrameLevel((portalButton:GetFrameLevel() or 1) + 5)
+    end
+
+    portalHover:SetScript("OnEnter", function(f)
+        if not _G.GameTooltip or not _G.GameTooltip.SetOwner then return end
+        _G.GameTooltip:SetOwner(f, "ANCHOR_RIGHT")
+
+        local st = panel.__twichuiActions
+        _G.GameTooltip:AddLine("Portal")
+        if st and st.portalUnlocked then
+            _G.GameTooltip:AddLine("Unavailable while in combat.", 1, 1, 1, true)
+        else
+            _G.GameTooltip:AddLine("You haven't unlocked this portal yet.", 1, 1, 1, true)
+        end
+        _G.GameTooltip:Show()
+    end)
+    portalHover:SetScript("OnLeave", function()
+        if _G.GameTooltip and _G.GameTooltip.Hide then
+            _G.GameTooltip:Hide()
+        end
+    end)
+
     -- Runs Table Container
     local runsContainer = CreateFrame("Frame", nil, right)
-    runsContainer:SetPoint("TOPLEFT", detailsHeader, "BOTTOMLEFT", 0, -10)
+    runsContainer:SetPoint("TOPLEFT", actions, "BOTTOMLEFT", 0, -10)
     runsContainer:SetPoint("BOTTOMRIGHT", right, "BOTTOMRIGHT", 0, 0)
 
     -- Headers
@@ -1818,17 +2036,8 @@ local function CreateDungeonsPanel(parent)
     scrollFrame:SetPoint("BOTTOMRIGHT", runsContainer, "BOTTOMRIGHT", -26, 10)
 
     -- ElvUI scrollbar skinning (best-effort)
-    if Skins and Skins.HandleScrollBar then
-        local sb = scrollFrame.ScrollBar
-        if not sb and scrollFrame.GetName then
-            local name = scrollFrame:GetName()
-            if name then
-                sb = _G[name .. "ScrollBar"]
-            end
-        end
-        if sb then
-            Skins:HandleScrollBar(sb)
-        end
+    if UI then
+        UI.SkinScrollBar(scrollFrame)
     end
 
     local content = CreateFrame("Frame", nil, scrollFrame)
@@ -1847,6 +2056,15 @@ local function CreateDungeonsPanel(parent)
     panel.__twichuiDetailsRuns = {
         frame = runsContainer,
         content = content
+    }
+
+    panel.__twichuiActions = {
+        frame = actions,
+        portalButton = portalButton,
+        portalIcon = portalIcon,
+        portalHover = portalHover,
+        portalSpellId = nil,
+        portalUnlocked = false,
     }
 
     panel.__twichuiLeft = left

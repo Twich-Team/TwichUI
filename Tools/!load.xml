@@ -8,6 +8,7 @@
     <Include file="Money\!load.xml" />
     <Include
         file="Generics\!load.xml" />
+    <Include file="UI\!load.xml" />
     <Script file="Textures\ClassTextures.lua" />
     <Include file="Game\!load.xml" />
 </Ui>

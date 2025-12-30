@@ -836,9 +836,12 @@ function GPHFrame:CreateStatsFooter()
     resetButton:SetSize(80, 20)
     resetButton:SetPoint("TOPRIGHT", self.statsFrame, "TOPRIGHT", -10, -15)
     -- Use ElvUI skinned button when available, fallback to simple backdrop otherwise
-    if Skins and Skins.HandleButton then
-        Skins:HandleButton(resetButton)
-    else
+    local didSkin = false
+    if TM and TM.UI and TM.UI.SkinButton then
+        TM.UI.SkinButton(resetButton)
+        didSkin = true
+    end
+    if not didSkin then
         resetButton:SetBackdropColor(0.5, 0.2, 0.2, 0.8)
         resetButton:SetBackdrop({
             bgFile = "Interface/Tooltips/UI-Tooltip-Background",

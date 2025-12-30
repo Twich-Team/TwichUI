@@ -5,7 +5,11 @@ local CM = T:GetModule("Configuration")
 local _G = _G
 local ElvUI = _G.ElvUI
 local E = ElvUI and ElvUI[1]
-local Skins = E and E.GetModule and E:GetModule("Skins", true)
+
+---@type ToolsModule
+local Tools = T:GetModule("Tools")
+---@type ToolsUI|nil
+local UI = Tools and Tools.UI
 
 --- @class MythicPlusRunsSubmodule
 local Runs = MythicPlusModule.Runs or {}
@@ -82,8 +86,8 @@ local function CreateRunsPanel(parent)
     filterBox:SetTextInsets(5, 5, 0, 0)
     filterBox:SetFontObject("GameFontHighlight")
 
-    if E and E.HandleEditBox then
-        E:HandleEditBox(filterBox)
+    if UI then
+        UI.SkinEditBox(filterBox)
     else
         -- Basic fallback
         local bg = filterBox:CreateTexture(nil, "BACKGROUND")
@@ -174,17 +178,8 @@ local function CreateRunsPanel(parent)
     scrollFrame:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -26, PANEL_PADDING)
 
     -- ElvUI scrollbar skinning (best-effort)
-    if Skins and Skins.HandleScrollBar then
-        local sb = scrollFrame.ScrollBar
-        if not sb and scrollFrame.GetName then
-            local name = scrollFrame:GetName()
-            if name then
-                sb = _G[name .. "ScrollBar"]
-            end
-        end
-        if sb then
-            Skins:HandleScrollBar(sb)
-        end
+    if UI then
+        UI.SkinScrollBar(scrollFrame)
     end
 
     local content = CreateFrame("Frame", nil, scrollFrame)
