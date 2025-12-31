@@ -69,15 +69,15 @@ local _, _, PLAYER_CLASS_ID = UnitClass("player")
 
 -- Armor Types: 1=Cloth, 2=Leather, 3=Mail, 4=Plate
 local CLASS_ARMOR_TYPE = {
-    [1] = 4, -- Warrior: Plate
-    [2] = 4, -- Paladin: Plate
-    [3] = 3, -- Hunter: Mail
-    [4] = 2, -- Rogue: Leather
-    [5] = 1, -- Priest: Cloth
-    [6] = 4, -- DK: Plate
-    [7] = 3, -- Shaman: Mail
-    [8] = 1, -- Mage: Cloth
-    [9] = 1, -- Warlock: Cloth
+    [1] = 4,  -- Warrior: Plate
+    [2] = 4,  -- Paladin: Plate
+    [3] = 3,  -- Hunter: Mail
+    [4] = 2,  -- Rogue: Leather
+    [5] = 1,  -- Priest: Cloth
+    [6] = 4,  -- DK: Plate
+    [7] = 3,  -- Shaman: Mail
+    [8] = 1,  -- Mage: Cloth
+    [9] = 1,  -- Warlock: Cloth
     [10] = 2, -- Monk: Leather
     [11] = 2, -- Druid: Leather
     [12] = 2, -- DH: Leather
@@ -85,24 +85,24 @@ local CLASS_ARMOR_TYPE = {
 }
 
 local CLASS_WEAPON_TYPES = {
-    [1] = { [0]=true, [1]=true, [2]=true, [3]=true, [4]=true, [5]=true, [6]=true, [7]=true, [8]=true, [10]=true, [13]=true, [15]=true, [18]=true }, -- Warrior
-    [2] = { [0]=true, [1]=true, [4]=true, [5]=true, [6]=true, [7]=true, [8]=true }, -- Paladin
-    [3] = { [0]=true, [1]=true, [2]=true, [3]=true, [6]=true, [7]=true, [8]=true, [10]=true, [13]=true, [15]=true, [18]=true }, -- Hunter
-    [4] = { [0]=true, [4]=true, [7]=true, [13]=true, [15]=true, [2]=true, [3]=true, [18]=true }, -- Rogue
-    [5] = { [4]=true, [10]=true, [15]=true, [19]=true }, -- Priest
-    [6] = { [0]=true, [1]=true, [4]=true, [5]=true, [6]=true, [7]=true, [8]=true }, -- DK
-    [7] = { [0]=true, [1]=true, [4]=true, [5]=true, [10]=true, [13]=true, [15]=true }, -- Shaman
-    [8] = { [7]=true, [10]=true, [15]=true, [19]=true }, -- Mage
-    [9] = { [7]=true, [10]=true, [15]=true, [19]=true }, -- Warlock
-    [10] = { [0]=true, [4]=true, [6]=true, [7]=true, [10]=true, [13]=true }, -- Monk
-    [11] = { [4]=true, [5]=true, [6]=true, [10]=true, [13]=true, [15]=true }, -- Druid
-    [12] = { [0]=true, [7]=true, [9]=true, [13]=true, [15]=true }, -- DH
-    [13] = { [0]=true, [1]=true, [4]=true, [5]=true, [7]=true, [8]=true, [10]=true, [13]=true, [15]=true }, -- Evoker
+    [1] = { [0] = true, [1] = true, [2] = true, [3] = true, [4] = true, [5] = true, [6] = true, [7] = true, [8] = true, [10] = true, [13] = true, [15] = true, [18] = true }, -- Warrior
+    [2] = { [0] = true, [1] = true, [4] = true, [5] = true, [6] = true, [7] = true, [8] = true },                                                   -- Paladin
+    [3] = { [0] = true, [1] = true, [2] = true, [3] = true, [6] = true, [7] = true, [8] = true, [10] = true, [13] = true, [15] = true, [18] = true }, -- Hunter
+    [4] = { [0] = true, [4] = true, [7] = true, [13] = true, [15] = true, [2] = true, [3] = true, [18] = true },                                    -- Rogue
+    [5] = { [4] = true, [10] = true, [15] = true, [19] = true },                                                                                    -- Priest
+    [6] = { [0] = true, [1] = true, [4] = true, [5] = true, [6] = true, [7] = true, [8] = true },                                                   -- DK
+    [7] = { [0] = true, [1] = true, [4] = true, [5] = true, [10] = true, [13] = true, [15] = true },                                                -- Shaman
+    [8] = { [7] = true, [10] = true, [15] = true, [19] = true },                                                                                    -- Mage
+    [9] = { [7] = true, [10] = true, [15] = true, [19] = true },                                                                                    -- Warlock
+    [10] = { [0] = true, [4] = true, [6] = true, [7] = true, [10] = true, [13] = true },                                                            -- Monk
+    [11] = { [4] = true, [5] = true, [6] = true, [10] = true, [13] = true, [15] = true },                                                           -- Druid
+    [12] = { [0] = true, [7] = true, [9] = true, [13] = true, [15] = true },                                                                        -- DH
+    [13] = { [0] = true, [1] = true, [4] = true, [5] = true, [7] = true, [8] = true, [10] = true, [13] = true, [15] = true },                       -- Evoker
 }
 
 local function IsItemUsableByPlayer(itemClassID, itemSubClassID, itemEquipLoc)
     if not itemClassID or not itemSubClassID then return true end
-    
+
     -- Weapons (ClassID 2)
     if itemClassID == 2 then
         local allowed = CLASS_WEAPON_TYPES[PLAYER_CLASS_ID]
@@ -117,15 +117,15 @@ local function IsItemUsableByPlayer(itemClassID, itemSubClassID, itemEquipLoc)
         -- Always allow Cloaks (15), Rings (11), Necks (2), Trinkets (13, 14), Shields (6)
         -- Note: Shields are SubClass 6. Not all classes can use shields.
         -- Cloak is SubClass 1 (Cloth) usually, but EquipLoc is INVTYPE_CLOAK.
-        
-        if itemEquipLoc == "INVTYPE_CLOAK" or 
-           itemEquipLoc == "INVTYPE_NECK" or 
-           itemEquipLoc == "INVTYPE_FINGER" or 
-           itemEquipLoc == "INVTYPE_TRINKET" or
-           itemEquipLoc == "INVTYPE_HOLDABLE" then -- Off-hand frill
+
+        if itemEquipLoc == "INVTYPE_CLOAK" or
+            itemEquipLoc == "INVTYPE_NECK" or
+            itemEquipLoc == "INVTYPE_FINGER" or
+            itemEquipLoc == "INVTYPE_TRINKET" or
+            itemEquipLoc == "INVTYPE_HOLDABLE" then -- Off-hand frill
             return true
         end
-        
+
         -- Shields (SubClass 6)
         if itemSubClassID == 6 then
             -- Warrior, Paladin, Shaman
@@ -141,13 +141,13 @@ local function IsItemUsableByPlayer(itemClassID, itemSubClassID, itemEquipLoc)
         if itemSubClassID == primaryType then
             return true
         end
-        
+
         -- Cosmetic / Generic?
         if itemSubClassID == 0 then return true end
-        
+
         return false
     end
-    
+
     return true
 end
 
@@ -197,7 +197,6 @@ local TierItemLinkCache = nil
 local function BuildTierCache(force)
     -- Check if we have in-memory cache
     if not force and TierLootCache and TierNameCache and TierInstanceLootCache then
-        print("TwichUI Debug: Using In-Memory Cache")
         return
     end
 
@@ -207,7 +206,6 @@ local function BuildTierCache(force)
 
     -- Check if we can load from DB
     if not force and storedCache and storedVersion == currentVersion then
-        -- print("TwichUI Debug: Loading Cache from Database")
         TierLootCache = storedCache.Loot
         TierNameCache = storedCache.Name
         TierInstanceLootCache = storedCache.InstanceLoot or {}
@@ -368,12 +366,6 @@ local function BuildTierCache(force)
                             end
                         end
                         encIndex = encIndex + 1
-                    end
-                    if lootCount > 0 then
-                        if instanceName:find("Tazavesh") then
-                            print("TwichUI Debug: Instance processed:", instanceName, "| Encounters:", encCount,
-                                "| Loot Found:", lootCount)
-                        end
                     end
                 end
             end
@@ -680,10 +672,6 @@ local function GetSources()
         {
             label = "Other",
             options = {
-                "Crafted",
-                "Delve",
-                "PvP",
-                "Other",
                 "Custom Item"
             }
         }
@@ -776,6 +764,32 @@ local function CreateChooserFrame(parent)
         CloseDropDownMenus()
     end
 
+    local function IsRaid(sourceName)
+        if not sourceName then return false end
+        local sources = GetSources()
+        for _, cat in ipairs(sources) do
+            if cat.label == "Raids" then
+                for _, raid in ipairs(cat.options) do
+                    if raid == sourceName then return true end
+                end
+            end
+        end
+        return false
+    end
+
+    local function IsDungeon(sourceName)
+        if not sourceName then return false end
+        local sources = GetSources()
+        for _, cat in ipairs(sources) do
+            if cat.label == "Dungeons" then
+                for _, dungeon in ipairs(cat.options) do
+                    if dungeon == sourceName then return true end
+                end
+            end
+        end
+        return false
+    end
+
     UIDropDownMenu_Initialize(diffSelector, function(self, level)
         local info = UIDropDownMenu_CreateInfo()
         info.func = OnDiffSelect
@@ -783,29 +797,49 @@ local function CreateChooserFrame(parent)
         -- Add padding to prevent checkbox overlap
         local padding = "   "
 
-        info.text = padding .. "Mythic"
-        info.value = 16
-        info.arg1 = 16
-        info.checked = (f.selectedDifficulty == 16)
-        UIDropDownMenu_AddButton(info)
+        if IsRaid(f.selectedSource) then
+            info.text = padding .. "Mythic"
+            info.value = 16
+            info.arg1 = 16
+            info.checked = (f.selectedDifficulty == 16)
+            UIDropDownMenu_AddButton(info)
 
-        info.text = padding .. "Heroic"
-        info.value = 15
-        info.arg1 = 15
-        info.checked = (f.selectedDifficulty == 15)
-        UIDropDownMenu_AddButton(info)
+            info.text = padding .. "Heroic"
+            info.value = 15
+            info.arg1 = 15
+            info.checked = (f.selectedDifficulty == 15)
+            UIDropDownMenu_AddButton(info)
 
-        info.text = padding .. "Normal"
-        info.value = 14
-        info.arg1 = 14
-        info.checked = (f.selectedDifficulty == 14)
-        UIDropDownMenu_AddButton(info)
+            info.text = padding .. "Normal"
+            info.value = 14
+            info.arg1 = 14
+            info.checked = (f.selectedDifficulty == 14)
+            UIDropDownMenu_AddButton(info)
 
-        info.text = padding .. "Raid Finder"
-        info.value = 17
-        info.arg1 = 17
-        info.checked = (f.selectedDifficulty == 17)
-        UIDropDownMenu_AddButton(info)
+            info.text = padding .. "Raid Finder"
+            info.value = 17
+            info.arg1 = 17
+            info.checked = (f.selectedDifficulty == 17)
+            UIDropDownMenu_AddButton(info)
+        elseif IsDungeon(f.selectedSource) then
+            info.text = padding .. "Mythic"
+            info.value = 23
+            info.arg1 = 23
+            info.checked = (f.selectedDifficulty == 23)
+            UIDropDownMenu_AddButton(info)
+
+            info.text = padding .. "Heroic"
+            info.value = 2
+            info.arg1 = 2
+            info.checked = (f.selectedDifficulty == 2)
+            UIDropDownMenu_AddButton(info)
+
+            info.text = padding .. "Normal"
+            info.value = 1
+            info.arg1 = 1
+            info.checked = (f.selectedDifficulty == 1)
+            UIDropDownMenu_AddButton(info)
+        end
     end)
     UIDropDownMenu_SetSelectedValue(diffSelector, 16) -- Default Mythic
     UIDropDownMenu_SetText(diffSelector, "Mythic")
@@ -816,11 +850,11 @@ local function CreateChooserFrame(parent)
     usableCheck.tooltip = "Show only items usable by your class"
     if E then E:GetModule("Skins"):HandleCheckBox(usableCheck) end
     f.UsableCheck = usableCheck
-    
+
     local usableLabel = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     usableLabel:SetPoint("LEFT", usableCheck, "RIGHT", 5, 0)
     usableLabel:SetText("Usable Only")
-    
+
     usableCheck:SetScript("OnClick", function(self)
         f.onlyUsable = self:GetChecked()
         UpdateItemsList()
@@ -918,9 +952,9 @@ local function CreateChooserFrame(parent)
         self:ClearFocus()
         local text = self:GetText()
         if not text or text == "" then return end
-        
+
         f.CustomItemResult:SetText("Searching...")
-        
+
         local function SetItem(link)
             f.selectedItemLink = link
             f.CustomItemResult:SetText(link)
@@ -937,21 +971,27 @@ local function CreateChooserFrame(parent)
             if not item:IsItemEmpty() then
                 item:ContinueOnItemLoad(function()
                     local _, l = GetItemInfo(item:GetItemID())
-                    if l then SetItem(l) else f.CustomItemResult:SetText("Item not found") f.AddBtn:Disable() end
+                    if l then SetItem(l) else
+                        f.CustomItemResult:SetText("Item not found")
+                        f.AddBtn:Disable()
+                    end
                 end)
             else
-                 -- Try ID
-                 local id = tonumber(text)
-                 if id then
-                     local item = Item:CreateFromItemID(id)
-                     item:ContinueOnItemLoad(function()
+                -- Try ID
+                local id = tonumber(text)
+                if id then
+                    local item = Item:CreateFromItemID(id)
+                    item:ContinueOnItemLoad(function()
                         local _, l = GetItemInfo(id)
-                        if l then SetItem(l) else f.CustomItemResult:SetText("Item not found") f.AddBtn:Disable() end
-                     end)
-                 else
-                     f.CustomItemResult:SetText("Item not found")
-                     f.AddBtn:Disable()
-                 end
+                        if l then SetItem(l) else
+                            f.CustomItemResult:SetText("Item not found")
+                            f.AddBtn:Disable()
+                        end
+                    end)
+                else
+                    f.CustomItemResult:SetText("Item not found")
+                    f.AddBtn:Disable()
+                end
             end
         end
     end)
@@ -968,38 +1008,38 @@ local function CreateChooserFrame(parent)
     UIDropDownMenu_JustifyText(customSourceDropdown, "LEFT")
     if E then E:GetModule("Skins"):HandleDropDownBox(customSourceDropdown) end
     f.CustomSourceDropdown = customSourceDropdown
-    
+
     -- Create a full-size invisible button to ensure the entire area is clickable
     local fullClick = CreateFrame("Button", nil, customSourceDropdown)
     fullClick:SetAllPoints(customSourceDropdown)
     fullClick:SetFrameLevel(customSourceDropdown:GetFrameLevel() + 10)
-    
-    fullClick:SetScript("OnEnter", function(self) 
-        local b = _G[customSourceDropdown:GetName().."Button"]
-        if b then 
+
+    fullClick:SetScript("OnEnter", function(self)
+        local b = _G[customSourceDropdown:GetName() .. "Button"]
+        if b then
             if b.LockHighlight then b:LockHighlight() end
             -- ElvUI support
-            if b.SetBackdropBorderColor and E then 
-                b:SetBackdropBorderColor(unpack(E.media.rgbvaluecolor)) 
+            if b.SetBackdropBorderColor and E then
+                b:SetBackdropBorderColor(unpack(E.media.rgbvaluecolor))
             end
         end
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         GameTooltip:SetText("Click to select source")
         GameTooltip:Show()
     end)
-    
-    fullClick:SetScript("OnLeave", function(self) 
-        local b = _G[customSourceDropdown:GetName().."Button"]
-        if b then 
+
+    fullClick:SetScript("OnLeave", function(self)
+        local b = _G[customSourceDropdown:GetName() .. "Button"]
+        if b then
             if b.UnlockHighlight then b:UnlockHighlight() end
             -- ElvUI support
-            if b.SetBackdropBorderColor and E then 
-                b:SetBackdropBorderColor(unpack(E.media.bordercolor)) 
+            if b.SetBackdropBorderColor and E then
+                b:SetBackdropBorderColor(unpack(E.media.bordercolor))
             end
         end
         GameTooltip:Hide()
     end)
-    
+
     fullClick:SetScript("OnClick", function()
         -- print("TwichUI Debug: FullClick Button Clicked")
         ToggleDropDownMenu(nil, nil, customSourceDropdown)
@@ -1016,14 +1056,14 @@ local function CreateChooserFrame(parent)
     UIDropDownMenu_Initialize(customSourceDropdown, function(self, level)
         level = level or 1
         local info
-        
+
         -- Dungeons
         info = UIDropDownMenu_CreateInfo()
         info.text = "Dungeons"
         info.isTitle = true
         info.notCheckable = true
         UIDropDownMenu_AddButton(info, level)
-        
+
         local sources = GetSources()
         if sources then
             -- Find Dungeons category
@@ -1047,7 +1087,7 @@ local function CreateChooserFrame(parent)
             info.isTitle = true
             info.notCheckable = true
             UIDropDownMenu_AddButton(info, level)
-            
+
             for _, cat in ipairs(sources) do
                 if cat.label == "Raids" then
                     for _, raid in ipairs(cat.options) do
@@ -1061,24 +1101,6 @@ local function CreateChooserFrame(parent)
                     end
                 end
             end
-        end
-        
-        -- Other
-        info = UIDropDownMenu_CreateInfo()
-        info.text = "Other"
-        info.isTitle = true
-        info.notCheckable = true
-        UIDropDownMenu_AddButton(info, level)
-        
-        local others = { "Crafted", "Delve", "PvP", "Other" }
-        for _, other in ipairs(others) do
-            info = UIDropDownMenu_CreateInfo()
-            info.func = OnCustomSourceSelect
-            info.text = "   " .. other
-            info.value = other
-            info.arg1 = other
-            info.checked = (f.customSourceValue == other)
-            UIDropDownMenu_AddButton(info, level)
         end
     end)
 
@@ -1130,11 +1152,27 @@ local function CreateChooserFrame(parent)
         return false
     end
 
+    local function IsDungeon(sourceName)
+        if not sourceName then return false end
+        local sources = GetSources()
+        for _, cat in ipairs(sources) do
+            if cat.label == "Dungeons" then
+                for _, dungeon in ipairs(cat.options) do
+                    if dungeon == sourceName then return true end
+                end
+            end
+        end
+        return false
+    end
+
     local DIFF_INFO = {
-        [16] = { label = "Mythic", color = {0.64, 0.21, 0.93} }, -- Purple
-        [15] = { label = "Heroic", color = {0, 0.7, 1} },   -- Blue
-        [14] = { label = "Normal", color = {0.2, 1, 0.2} }, -- Green
-        [17] = { label = "Raid Finder",    color = {0.7, 0.7, 0.7} }, -- Grey
+        [16] = { label = "Mythic", color = { 0.64, 0.21, 0.93 } },    -- Purple
+        [15] = { label = "Heroic", color = { 0, 0.7, 1 } },           -- Blue
+        [14] = { label = "Normal", color = { 0.2, 1, 0.2 } },         -- Green
+        [17] = { label = "Raid Finder", color = { 0.7, 0.7, 0.7 } },  -- Grey
+        [23] = { label = "Mythic", color = { 0.64, 0.21, 0.93 } },    -- Purple
+        [2]  = { label = "Heroic", color = { 0, 0.7, 1 } },           -- Blue
+        [1]  = { label = "Normal", color = { 0.2, 1, 0.2 } },         -- Green
     }
 
     UpdateItemsList = function()
@@ -1144,8 +1182,18 @@ local function CreateChooserFrame(parent)
         end
 
         -- Show/Hide Difficulty Selector
-        if IsRaid(f.selectedSource) then
+        if IsRaid(f.selectedSource) or IsDungeon(f.selectedSource) then
             f.DiffSelector:Show()
+            -- Reset difficulty if invalid for current type
+            if IsDungeon(f.selectedSource) and (f.selectedDifficulty == 16 or f.selectedDifficulty == 15 or f.selectedDifficulty == 14 or f.selectedDifficulty == 17) then
+                f.selectedDifficulty = 23 -- Default to Mythic Dungeon
+                UIDropDownMenu_SetSelectedValue(f.DiffSelector, 23)
+                UIDropDownMenu_SetText(f.DiffSelector, "Mythic")
+            elseif IsRaid(f.selectedSource) and (f.selectedDifficulty == 23 or f.selectedDifficulty == 2 or f.selectedDifficulty == 1) then
+                f.selectedDifficulty = 16 -- Default to Mythic Raid
+                UIDropDownMenu_SetSelectedValue(f.DiffSelector, 16)
+                UIDropDownMenu_SetText(f.DiffSelector, "Mythic")
+            end
         else
             f.DiffSelector:Hide()
         end
@@ -1167,7 +1215,7 @@ local function CreateChooserFrame(parent)
             customForm:Show()
             f.CustomSourceDropdown:Show()
             f.Input:Hide()
-            
+
             rightScroll:Hide() -- Hide scroll frame as requested
 
             preview:SetText("Enter item details above")
@@ -1218,19 +1266,30 @@ local function CreateChooserFrame(parent)
                     if TierItemLinkCache and TierItemLinkCache[itemID] and type(TierItemLinkCache[itemID]) == "table" then
                         -- Check for Raid Difficulties
                         local foundRaid = false
-                        for _, diffID in ipairs({16, 15, 14, 17}) do -- Mythic, Heroic, Normal, LFR
+                        for _, diffID in ipairs({ 16, 15, 14, 17 }) do -- Mythic, Heroic, Normal, LFR
                             if TierItemLinkCache[itemID][diffID] then
                                 table.insert(versions, { link = TierItemLinkCache[itemID][diffID], diffID = diffID })
                                 foundRaid = true
                             end
                         end
-                        
+
                         if not foundRaid then
-                             -- Fallback to whatever is there (e.g. Dungeon)
-                             for diffID, link in pairs(TierItemLinkCache[itemID]) do
-                                 table.insert(versions, { link = link, diffID = diffID })
-                                 break -- Just take one if not raid
-                             end
+                            -- Check for Dungeon Difficulties
+                            local foundDungeon = false
+                            for _, diffID in ipairs({ 23, 2, 1 }) do -- Mythic, Heroic, Normal
+                                if TierItemLinkCache[itemID][diffID] then
+                                    table.insert(versions, { link = TierItemLinkCache[itemID][diffID], diffID = diffID })
+                                    foundDungeon = true
+                                end
+                            end
+
+                            if not foundDungeon then
+                                -- Fallback to whatever is there
+                                for diffID, link in pairs(TierItemLinkCache[itemID]) do
+                                    table.insert(versions, { link = link, diffID = diffID })
+                                    break
+                                end
+                            end
                         end
                     else
                         local l = (TierItemLinkCache and TierItemLinkCache[itemID]) or itemID
@@ -1239,7 +1298,8 @@ local function CreateChooserFrame(parent)
 
                     for _, v in ipairs(versions) do
                         local linkToUse = v.link
-                        local name, link, _, _, _, _, _, _, itemEquipLoc, icon, _, itemClassID, itemSubClassID = GetItemInfo(linkToUse)
+                        local name, link, _, _, _, _, _, _, itemEquipLoc, icon, _, itemClassID, itemSubClassID =
+                        GetItemInfo(linkToUse)
                         if not name then
                             missingItems = true
                             if type(linkToUse) == "string" then
@@ -1257,7 +1317,9 @@ local function CreateChooserFrame(parent)
 
                                 if usable then
                                     if searchText == "" or name:lower():find(searchText, 1, true) then
-                                        table.insert(items, { id = itemID, name = name, link = link, icon = icon, diffID = v.diffID })
+                                        table.insert(items,
+                                            { id = itemID, name = name, link = link, icon = icon, diffID = v.diffID, source =
+                                            source })
                                     end
                                 end
                             end
@@ -1296,7 +1358,8 @@ local function CreateChooserFrame(parent)
                     end
                 end
 
-                local name, link, _, _, _, _, _, _, itemEquipLoc, icon, _, itemClassID, itemSubClassID = GetItemInfo(linkToUse)
+                local name, link, _, _, _, _, _, _, itemEquipLoc, icon, _, itemClassID, itemSubClassID = GetItemInfo(
+                linkToUse)
                 if not name then
                     -- Request info
                     local item = (type(linkToUse) == "string") and Item:CreateFromItemLink(linkToUse) or
@@ -1320,10 +1383,6 @@ local function CreateChooserFrame(parent)
                             if searchText == "" or name:lower():find(searchText, 1, true) then
                                 table.insert(items, { id = itemID, name = name, link = link, icon = icon })
                             end
-                        end
-                    else
-                        if f.selectedSource:find("Tazavesh") then
-                            print("Debug: Item", name, "invalid for slot", f.targetSlotID, "Loc:", itemEquipLoc)
                         end
                     end
                 end
@@ -1350,12 +1409,31 @@ local function CreateChooserFrame(parent)
             text:SetPoint("LEFT", icon, "RIGHT", 10, 0)
             text:SetText(item.link)
 
+            local diffLabel
             if item.diffID and DIFF_INFO[item.diffID] then
                 local dInfo = DIFF_INFO[item.diffID]
-                local diffLabel = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-                diffLabel:SetPoint("RIGHT", -10, 0)
+                diffLabel = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
                 diffLabel:SetText(dInfo.label)
                 diffLabel:SetTextColor(unpack(dInfo.color))
+            end
+
+            local sourceLabel
+            if item.source then
+                sourceLabel = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+                sourceLabel:SetTextColor(0.6, 0.6, 0.6)
+
+                -- Extract instance name only to save space
+                local instanceName = item.source:match("^(.-)%s*%(") or item.source
+                sourceLabel:SetText(instanceName)
+            end
+
+            if diffLabel and sourceLabel then
+                diffLabel:SetPoint("BOTTOMRIGHT", btn, "RIGHT", -10, 1)
+                sourceLabel:SetPoint("TOPRIGHT", btn, "RIGHT", -10, -1)
+            elseif diffLabel then
+                diffLabel:SetPoint("RIGHT", -10, 0)
+            elseif sourceLabel then
+                sourceLabel:SetPoint("RIGHT", -10, 0)
             end
 
             -- Background
@@ -1430,14 +1508,17 @@ local function CreateChooserFrame(parent)
         if f.selectedSource == "Custom Item" then
             local itemLink = f.selectedItemLink
             local sourceText = f.customSourceValue
-            
+
             if itemLink then
                 -- Save to DB
                 if TwichUIDB then
                     if not TwichUIDB.CustomItems then TwichUIDB.CustomItems = {} end
                     local found = false
                     for _, item in ipairs(TwichUIDB.CustomItems) do
-                        if item.link == itemLink then found = true break end
+                        if item.link == itemLink then
+                            found = true
+                            break
+                        end
                     end
                     if not found then
                         table.insert(TwichUIDB.CustomItems, { link = itemLink, source = sourceText or "Custom" })
@@ -1485,9 +1566,30 @@ local function CreateChooserFrame(parent)
             hl:Hide()
             btn.Highlight = hl
 
+            btn:SetScript("OnEnter", function()
+                if f.selectedSource ~= src then
+                    hl:Show()
+                    hl:SetColorTexture(1, 1, 1, 0.05) -- Faint hover
+                end
+            end)
+
+            btn:SetScript("OnLeave", function()
+                if f.selectedSource ~= src then
+                    hl:Hide()
+                else
+                    hl:Show()
+                    hl:SetColorTexture(1, 1, 1, 0.1) -- Selected state
+                end
+            end)
+
             btn:SetScript("OnClick", function()
-                for _, b in ipairs(f.sourceButtons) do b.Highlight:Hide() end
+                for _, b in ipairs(f.sourceButtons) do 
+                    b.Highlight:Hide() 
+                    -- Reset color for others just in case
+                    b.Highlight:SetColorTexture(1, 1, 1, 0.1)
+                end
                 hl:Show()
+                hl:SetColorTexture(1, 1, 1, 0.1)
                 f.selectedSource = src
                 UpdateItemsList()
             end)
@@ -1594,7 +1696,6 @@ local function UpdateSlot(btn, data)
     local name, _, quality, iLevel, _, _, _, _, _, icon = GetItemInfo(itemLink)
     if name then
         btn.Icon:SetTexture(icon)
-        btn.Icon:SetDesaturated(false)
         btn.Name:SetText(name)
 
         -- Check if owned
@@ -1609,10 +1710,14 @@ local function UpdateSlot(btn, data)
         btn.effectiveLink = itemLink
 
         -- Source Logic
-        local source = manualSource or GetItemSource(itemID)
-        local sourceText = source and (" - " .. source) or (manualSource == nil and " - ???" or "")
+        local source = manualSource
+        if source == "All Items" then
+            source = GetItemSource(itemID)
+        end
+        source = source or GetItemSource(itemID)
 
         if owned then
+            btn.Icon:SetDesaturated(false)
             btn.Check:Show()
             local displayILvl = realILvl or iLevel
             if equipped then
@@ -1623,10 +1728,25 @@ local function UpdateSlot(btn, data)
                 btn.Details:SetTextColor(0, 1, 0)
             end
         else
+            btn.Icon:SetDesaturated(true)
             btn.Check:Hide()
-            local details = source or manualSource or "Not Collected"
-            btn.Details:SetText(details)
-            btn.Details:SetTextColor(0.5, 0.5, 0.5)
+
+            if source then
+                btn.Details:SetText(source)
+                btn.Details:SetTextColor(1, 0.4, 0.4)
+            else
+                btn.Details:SetText("Not Collected")
+                btn.Details:SetTextColor(0.5, 0.5, 0.5)
+            end
+            btn.Check:Hide()
+
+            if source then
+                btn.Details:SetText(source)
+                btn.Details:SetTextColor(1, 0.4, 0.4)
+            else
+                btn.Details:SetText("Not Collected")
+                btn.Details:SetTextColor(0.5, 0.5, 0.5)
+            end
         end
     else
         -- Item info not ready, query it

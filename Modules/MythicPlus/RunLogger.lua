@@ -761,6 +761,7 @@ function MythicPlusRunLogger:_OnDungeonEvent(eventName, ...)
 
     if eventName == "CHALLENGE_MODE_COMPLETED" then
         self:_AppendEvent(eventName, {})
+        self:_FinalizeRun("completed")
         return
     end
 
@@ -771,6 +772,7 @@ function MythicPlusRunLogger:_OnDungeonEvent(eventName, ...)
             count = C_ChallengeMode.GetDeathCount()
         end
         self:_AppendEvent(eventName, { count = count })
+
         return
     end
 
