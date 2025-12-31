@@ -9,6 +9,9 @@ local MythicPlusModule = T:GetModule("MythicPlus")
 local BestInSlot = MythicPlusModule.BestInSlot or {}
 MythicPlusModule.BestInSlot = BestInSlot
 
+--- @type LoggerModule
+local Logger = T:GetModule("Logger")
+
 local CreateFrame = _G.CreateFrame
 local UIParent = _G.UIParent
 local GameTooltip = _G.GameTooltip
@@ -43,6 +46,36 @@ local SLOTS = {
 -- Fix Back texture
 SLOTS[4].texture = "Interface\\PaperDoll\\UI-PaperDoll-Slot-Chest" -- Placeholder, usually distinct
 
+local VALID_EQUIP_LOCS = {
+    [1] = { "INVTYPE_HEAD" },
+    [2] = { "INVTYPE_NECK" },
+    [3] = { "INVTYPE_SHOULDER" },
+    [15] = { "INVTYPE_CLOAK" },
+    [5] = { "INVTYPE_CHEST", "INVTYPE_ROBE" },
+    [9] = { "INVTYPE_WRIST" },
+    [10] = { "INVTYPE_HAND" },
+    [6] = { "INVTYPE_WAIST" },
+    [7] = { "INVTYPE_LEGS" },
+    [8] = { "INVTYPE_FEET" },
+    [11] = { "INVTYPE_FINGER" },
+    [12] = { "INVTYPE_FINGER" },
+    [13] = { "INVTYPE_TRINKET" },
+    [14] = { "INVTYPE_TRINKET" },
+    [16] = { "INVTYPE_WEAPON", "INVTYPE_WEAPONMAINHAND", "INVTYPE_2HWEAPON", "INVTYPE_RANGED", "INVTYPE_RANGEDRIGHT" },
+    [17] = { "INVTYPE_WEAPON", "INVTYPE_WEAPONOFFHAND", "INVTYPE_HOLDABLE", "INVTYPE_SHIELD" },
+}
+
+local function IsItemValidForSlot(itemEquipLoc, slotID)
+    if not itemEquipLoc or not slotID then return true end -- Allow if unknown
+    local validLocs = VALID_EQUIP_LOCS[slotID]
+    if not validLocs then return true end                  -- Allow if slot not mapped
+
+    for _, loc in ipairs(validLocs) do
+        if loc == itemEquipLoc then return true end
+    end
+    return false
+end
+
 local Chooser = nil
 
 local function GetCharacterDB()
@@ -59,10 +92,259 @@ local function CleanString(str)
     return string.lower(string.gsub(str, "[^%w]", ""))
 end
 
+local MEGA_DUNGEON_MAPPINGS = {
+    ["Tazavesh: So'leah's Gambit"] = "Tazavesh, the Veiled Market",
+    ["Tazavesh: Streets of Wonder"] = "Tazavesh, the Veiled Market",
+    ["Operation: Mechagon - Junkyard"] = "Operation: Mechagon",
+    ["Operation: Mechagon - Workshop"] = "Operation: Mechagon",
+    ["Return to Karazhan: Lower"] = "Return to Karazhan",
+    ["Return to Karazhan: Upper"] = "Return to Karazhan",
+    ["Dawn of the Infinite: Galakrond's Fall"] = "Dawn of the Infinite",
+    ["Dawn of the Infinite: Murozond's Rise"] = "Dawn of the Infinite",
+}
+
+local TierLootCache = nil
+local TierNameCache = nil
+local TierInstanceLootCache = nil
+local TierItemLinkCache = nil
+
+local function BuildTierCache(force)
+    -- Check if we have in-memory cache
+    if not force and TierLootCache and TierNameCache and TierInstanceLootCache then
+        print("TwichUI Debug: Using In-Memory Cache")
+        return
+    end
+
+    local currentVersion = select(1, GetBuildInfo())
+    local storedVersion = MythicPlusModule.Database:GetGameVersion()
+    local storedCache = MythicPlusModule.Database:GetItemCache()
+
+    -- Check if we can load from DB
+    if not force and storedCache and storedVersion == currentVersion then
+        -- print("TwichUI Debug: Loading Cache from Database")
+        TierLootCache = storedCache.Loot
+        TierNameCache = storedCache.Name
+        TierInstanceLootCache = storedCache.InstanceLoot or {}
+        TierItemLinkCache = storedCache.ItemLink or {}
+        return
+    end
+
+    Logger.Info("Updating Mythic+ Item Cache. The game may run slow for a few moments...")
+    -- print("TwichUI Debug: Building New Cache...")
+
+    if not C_AddOns.IsAddOnLoaded("Blizzard_EncounterJournal") then
+        C_AddOns.LoadAddOn("Blizzard_EncounterJournal")
+    end
+
+    local oldClassID, oldSpecID = EJ_GetLootFilter()
+    local oldTier = EJ_GetCurrentTier()
+    local oldDifficulty = EJ_GetDifficulty()
+
+    -- EJ_SetLootFilter(0, 0)             -- Clear filters to see all loot
+    -- Try setting to player class/spec to ensure we get SOMETHING
+    -- local _, _, playerClassID = UnitClass("player")
+    -- local playerSpecID = GetSpecializationInfo(GetSpecialization())
+    -- EJ_SetLootFilter(playerClassID, playerSpecID)
+    -- print("TwichUI Debug: Set Loot Filter to Class:", playerClassID, "Spec:", playerSpecID)
+
+    EJ_SetLootFilter(0, 0)
+    -- print("TwichUI Debug: Set Loot Filter to ALL (0, 0)")
+
+    local numTiers = EJ_GetNumTiers()
+
+    -- Identify Valid Instances (Current Season)
+    local validInstances = {}
+
+    -- 1. Current Raid (from Current Tier)
+    EJ_SelectTier(EJ_GetCurrentTier())
+    local index = 1
+    while true do
+        local instanceID, instanceName = EJ_GetInstanceByIndex(index, true) -- isRaid=true
+        if not instanceID then break end
+        validInstances[instanceName] = true
+        index = index + 1
+    end
+
+    -- 2. Current Expansion Dungeons (Always include these)
+    index = 1
+    while true do
+        local instanceID, instanceName = EJ_GetInstanceByIndex(index, false) -- isRaid=false
+        if not instanceID then break end
+        validInstances[instanceName] = true
+        if MEGA_DUNGEON_MAPPINGS[instanceName] then
+            validInstances[MEGA_DUNGEON_MAPPINGS[instanceName]] = true
+        end
+        index = index + 1
+    end
+
+    -- 3. Current M+ Dungeons (Includes old dungeons in rotation)
+    local dungeonsFound = false
+    if C_MythicPlus and C_MythicPlus.GetCurrentSeason and C_MythicPlus.GetSeasonMaps then
+        local seasonID = C_MythicPlus.GetCurrentSeason()
+        if seasonID then
+            local maps = C_MythicPlus.GetSeasonMaps(seasonID)
+            if maps and #maps > 0 then
+                for _, mapId in ipairs(maps) do
+                    local name = C_ChallengeMode.GetMapUIInfo(mapId)
+                    if name then
+                        validInstances[name] = true
+                        if MEGA_DUNGEON_MAPPINGS[name] then
+                            validInstances[MEGA_DUNGEON_MAPPINGS[name]] = true
+                        end
+                    end
+                end
+                dungeonsFound = true
+            end
+        end
+    end
+
+    -- 4. Fallback (If API fails)
+    -- If we found dungeons via EJ (Step 2), we don't strictly need a fallback list.
+    -- The EJ scan ensures we at least have the current expansion's dungeons.
+
+    local newLootCache = {}
+    local newNameCache = {}
+    local newInstanceLootCache = {}
+    local newItemLinkCache = {}
+    local processedInstances = {}
+
+    local function ProcessInstance(isRaid)
+        local index = 1
+        while true do
+            local instanceID, instanceName = EJ_GetInstanceByIndex(index, isRaid)
+            if not instanceID then break end
+
+            -- Filter: Only process valid instances
+            if validInstances[instanceName] then
+                -- Skip if already processed (prevents duplicates from multiple tiers)
+                if processedInstances[instanceName] then
+                    index = index + 1
+                    -- print("TwichUI Debug: Skipping duplicate instance:", instanceName)
+                else
+                    processedInstances[instanceName] = true
+                    -- print("TwichUI Debug: EJ Found Instance:", instanceName, "(ID: " .. instanceID .. ")")
+
+                    -- Normalize instance name for the cache key (Merge Mega Dungeons)
+                    local cacheKeyName = instanceName
+                    if MEGA_DUNGEON_MAPPINGS[instanceName] then
+                        cacheKeyName = MEGA_DUNGEON_MAPPINGS[instanceName]
+                    end
+
+                    if not newInstanceLootCache[cacheKeyName] then
+                        newInstanceLootCache[cacheKeyName] = {}
+                    end
+                    local instanceItems = newInstanceLootCache[cacheKeyName]
+                    local seenInInstance = {}
+
+                    EJ_SelectInstance(instanceID)
+                    local encIndex = 1
+                    local encCount = 0
+                    local lootCount = 0
+                    while true do
+                        local name, _, encounterID = EJ_GetEncounterInfoByIndex(encIndex, instanceID)
+                        if not name then break end
+                        encCount = encCount + 1
+
+                        local difficulties = isRaid and { 16, 15, 14, 17 } or { 23, 2, 1, 8 }
+                        for _, diff in ipairs(difficulties) do
+                            EJ_SetDifficulty(diff)
+                            EJ_SelectInstance(instanceID)   -- Ensure instance is selected
+                            EJ_SelectEncounter(encounterID) -- Select the encounter to populate loot list
+
+                            local numLoot = EJ_GetNumLoot()
+                            for i = 1, numLoot do
+                                local item = C_EncounterJournal.GetLootInfoByIndex(i)
+                                if item then
+                                    lootCount = lootCount + 1
+                                    if not newLootCache[item.itemID] then
+                                        newLootCache[item.itemID] = instanceName .. " (" .. name .. ")"
+                                    end
+
+                                    -- Cache the specific link (first one found is highest difficulty due to loop order)
+                                    if not newItemLinkCache[item.itemID] then
+                                        newItemLinkCache[item.itemID] = item.link
+                                    end
+
+                                    local iName = item.name
+                                    if not iName and item.link then
+                                        iName = item.link:match("%[(.-)%]")
+                                    end
+                                    if iName then
+                                        newNameCache[CleanString(iName)] = item.itemID
+                                    end
+
+                                    if not seenInInstance[item.itemID] then
+                                        seenInInstance[item.itemID] = true
+                                        table.insert(instanceItems, item.itemID)
+                                    end
+                                end
+                            end
+                        end
+                        encIndex = encIndex + 1
+                    end
+                    if lootCount > 0 then
+                        if instanceName:find("Tazavesh") then
+                             print("TwichUI Debug: Instance processed:", instanceName, "| Encounters:", encCount, "| Loot Found:", lootCount)
+                        end
+                    end
+                end
+            end
+            index = index + 1
+        end
+    end
+
+    -- Scan ALL tiers, starting from newest
+    for t = numTiers, 1, -1 do
+        EJ_SelectTier(t)
+        -- print("TwichUI Debug: Scanning Tier:", EJ_GetTierInfo(t))
+        ProcessInstance(false) -- Dungeons
+        ProcessInstance(true)  -- Raids
+    end
+
+    EJ_SetLootFilter(oldClassID, oldSpecID)
+    EJ_SelectTier(oldTier)
+    EJ_SetDifficulty(oldDifficulty)
+
+    -- Save to DB
+    MythicPlusModule.Database:SetItemCache({
+        Loot = newLootCache,
+        Name = newNameCache,
+        InstanceLoot = newInstanceLootCache,
+        ItemLink = newItemLinkCache
+    })
+    MythicPlusModule.Database:SetGameVersion(currentVersion)
+
+    -- Update local cache
+    TierLootCache = newLootCache
+    TierNameCache = newNameCache
+    TierInstanceLootCache = newInstanceLootCache
+    TierItemLinkCache = newItemLinkCache
+
+    local count = 0
+    for _ in pairs(newLootCache) do count = count + 1 end
+    -- print("TwichUI Debug: Cache Built. Total Items:", count)
+
+    Logger.Info("Mythic+ Item Cache updated.")
+end
+
+function BestInSlot:RefreshCache()
+    BuildTierCache(true)
+end
+
 local function ScanEJ(searchType, searchValue, limitTier)
     -- searchType: "ID" (find source of itemID) or "NAME" (find itemID of itemName)
     -- limitTier: if true, only scan the current tier (for performance)
     -- print("DEBUG: ScanEJ called with", searchType, searchValue)
+
+    if limitTier then
+        BuildTierCache(false)
+        if searchType == "ID" then
+            return TierLootCache[searchValue]
+        elseif searchType == "NAME" then
+            return TierNameCache[CleanString(searchValue)]
+        end
+        return nil
+    end
 
     if not C_AddOns.IsAddOnLoaded("Blizzard_EncounterJournal") then
         C_AddOns.LoadAddOn("Blizzard_EncounterJournal")
@@ -226,52 +508,86 @@ local function GetSources()
     end
 
     -- 2. Fallback to C_ChallengeMode.GetMapTable (All Challenge Mode Maps)
-    if #mapIds == 0 and C_ChallengeMode and C_ChallengeMode.GetMapTable then
-        local maps = C_ChallengeMode.GetMapTable()
-        if maps then
-            for _, mapId in ipairs(maps) do
-                if not seen[mapId] then
-                    seen[mapId] = true
-                    table.insert(mapIds, mapId)
-                end
-            end
-        end
-    end
+    -- DISABLED: This causes out-of-season dungeons (like Tazavesh) to appear when the API fails,
+    -- creating a mismatch with the cache which only scans current season.
+    -- if #mapIds == 0 and C_ChallengeMode and C_ChallengeMode.GetMapTable then
+    --     local maps = C_ChallengeMode.GetMapTable()
+    --     if maps then
+    --         for _, mapId in ipairs(maps) do
+    --             if not seen[mapId] then
+    --                 seen[mapId] = true
+    --                 table.insert(mapIds, mapId)
+    --             end
+    --         end
+    --     end
+    -- end
 
     -- Resolve Names
+    local seenDungeons = {}
     for _, mapId in ipairs(mapIds) do
         local name = C_ChallengeMode.GetMapUIInfo(mapId)
         if name then
-            table.insert(dungeons, name)
+            if MEGA_DUNGEON_MAPPINGS[name] then
+                name = MEGA_DUNGEON_MAPPINGS[name]
+            end
+
+            if not seenDungeons[name] then
+                seenDungeons[name] = true
+                -- print("TwichUI Debug: Source List Added:", name, "(MapID: " .. mapId .. ")")
+                table.insert(dungeons, name)
+            end
         end
     end
     table.sort(dungeons)
 
+    -- Get Raids from Current Tier
+    local raids = {}
+    local currentTier = EJ_GetCurrentTier()
+    EJ_SelectTier(currentTier)
+    local index = 1
+    while true do
+        local instanceID, instanceName = EJ_GetInstanceByIndex(index, true)
+        if not instanceID then break end
+        table.insert(raids, instanceName)
+        index = index + 1
+    end
+    table.sort(raids)
+
     -- 3. Hard Fallback
     if #dungeons == 0 then
-        dungeons = {
-            "Ara-Kara, City of Echoes",
-            "City of Threads",
-            "The Stonevault",
-            "The Dawnbreaker",
-            "Mists of Tirna Scithe",
-            "The Necrotic Wake",
-            "Siege of Boralus",
-            "Grim Batol"
-        }
+        -- Fallback to scanning current EJ tier for dungeons
+        local currentTier = EJ_GetCurrentTier()
+        EJ_SelectTier(currentTier)
+        local index = 1
+        while true do
+            local instanceID, instanceName = EJ_GetInstanceByIndex(index, false) -- isRaid=false
+            if not instanceID then break end
+            
+            if MEGA_DUNGEON_MAPPINGS[instanceName] then
+                instanceName = MEGA_DUNGEON_MAPPINGS[instanceName]
+            end
+            
+            if not seenDungeons[instanceName] then
+                seenDungeons[instanceName] = true
+                table.insert(dungeons, instanceName)
+            end
+            index = index + 1
+        end
+        table.sort(dungeons)
     end
 
     return {
+        {
+            label = "All",
+            options = { "All Items" }
+        },
         {
             label = "Dungeons",
             options = dungeons
         },
         {
             label = "Raids",
-            options = {
-                "Nerub-ar Palace",
-                "Liberation of Undermine"
-            }
+            options = raids
         },
         {
             label = "Other",
@@ -280,6 +596,7 @@ local function GetSources()
                 "Delve",
                 "World Boss",
                 "PvP",
+                "Custom Item",
                 "Other"
             }
         }
@@ -288,14 +605,14 @@ end
 
 local function CreateChooserFrame(parent)
     local f = CreateFrame("Frame", "TwichUI_BiS_Chooser", parent)
-    f:SetSize(320, 500)
+    f:SetSize(700, 500)
     f:SetPoint("CENTER")
     f:SetFrameStrata("FULLSCREEN_DIALOG")
     f:SetFrameLevel(100)
     f:EnableMouse(true)
 
     if E then
-        f:SetTemplate("Transparent")
+        f:SetTemplate("Default")
     else
         f:SetBackdrop({
             bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
@@ -305,7 +622,15 @@ local function CreateChooserFrame(parent)
             edgeSize = 32,
             insets = { left = 11, right = 12, top = 12, bottom = 11 }
         })
+        f:SetBackdropColor(0, 0, 0, 1)
     end
+
+    -- Hook for Shift+Click link insertion
+    hooksecurefunc("ChatEdit_InsertLink", function(text)
+        if f:IsVisible() and f.Input and f.Input:HasFocus() then
+            f.Input:Insert(text)
+        end
+    end)
 
     f.Title = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     f.Title:SetPoint("TOP", 0, -15)
@@ -315,59 +640,306 @@ local function CreateChooserFrame(parent)
     close:SetPoint("TOPRIGHT", -5, -5)
     if E then E:GetModule("Skins"):HandleCloseButton(close) end
 
-    -- 1. Item Input
+    -- 1. Search Input
     local input = CreateFrame("EditBox", nil, f, "InputBoxTemplate")
-    input:SetSize(280, 20)
+    input:SetSize(300, 20)
     input:SetPoint("TOP", f.Title, "BOTTOM", 0, -20)
     input:SetAutoFocus(false)
     input:SetTextInsets(5, 5, 0, 0)
     input:SetFontObject("ChatFontNormal")
-    input:SetText("Ara-Kara Sacbrood")
+    input:SetText("Search Item...")
     if E then E:GetModule("Skins"):HandleEditBox(input) end
     f.Input = input
 
-    local instr = f:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    instr:SetPoint("TOP", input, "BOTTOM", 0, -5)
-    instr:SetText("Enter Item ID, Link, or Name (Dungeon/Raid)")
-    instr:SetTextColor(0.7, 0.7, 0.7)
+    -- 2. Container for Columns
+    local container = CreateFrame("Frame", nil, f)
+    container:SetPoint("TOPLEFT", f, "TOPLEFT", 20, -80)
+    container:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -20, 60)
 
-    -- 2. Selected Item Preview
-    local preview = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    preview:SetPoint("TOP", instr, "BOTTOM", 0, -15)
+    -- Left Column (Sources)
+    local leftCol = CreateFrame("Frame", nil, container)
+    leftCol:SetPoint("TOPLEFT", container, "TOPLEFT", 0, 0)
+    leftCol:SetPoint("BOTTOMLEFT", container, "BOTTOMLEFT", 0, 0)
+    leftCol:SetWidth(200)
+
+    local leftScroll = CreateFrame("ScrollFrame", nil, leftCol, "UIPanelScrollFrameTemplate")
+    leftScroll:SetPoint("TOPLEFT", 0, 0)
+    leftScroll:SetPoint("BOTTOMRIGHT", -30, 0)
+    if E then E:GetModule("Skins"):HandleScrollBar(leftScroll.ScrollBar) end
+
+    local leftContent = CreateFrame("Frame", nil, leftScroll)
+    leftContent:SetSize(170, 1)
+    leftScroll:SetScrollChild(leftContent)
+    f.LeftContent = leftContent
+
+    -- Right Column (Items)
+    local rightCol = CreateFrame("Frame", nil, container)
+    rightCol:SetPoint("TOPRIGHT", container, "TOPRIGHT", 0, 0)
+    rightCol:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", 0, 0)
+    rightCol:SetPoint("LEFT", leftCol, "RIGHT", 20, 0)
+
+    local rightScroll = CreateFrame("ScrollFrame", nil, rightCol, "UIPanelScrollFrameTemplate")
+    rightScroll:SetPoint("TOPLEFT", 0, 0)
+    rightScroll:SetPoint("BOTTOMRIGHT", -30, 0)
+    if E then E:GetModule("Skins"):HandleScrollBar(rightScroll.ScrollBar) end
+
+    local rightContent = CreateFrame("Frame", nil, rightScroll)
+    rightContent:SetSize(400, 1)
+    rightScroll:SetScrollChild(rightContent)
+    f.RightContent = rightContent
+
+    -- Custom Item Form
+    local customForm = CreateFrame("Frame", nil, rightCol)
+    customForm:SetAllPoints()
+    customForm:Hide()
+    f.CustomForm = customForm
+
+    local customItemLabel = customForm:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    customItemLabel:SetPoint("TOPLEFT", 10, -10)
+    customItemLabel:SetText("Item Name, ID, or Link:")
+
+    local customItemInput = CreateFrame("EditBox", nil, customForm, "InputBoxTemplate")
+    customItemInput:SetSize(350, 20)
+    customItemInput:SetPoint("TOPLEFT", customItemLabel, "BOTTOMLEFT", 0, -10)
+    customItemInput:SetAutoFocus(false)
+    if E then E:GetModule("Skins"):HandleEditBox(customItemInput) end
+    f.CustomItemInput = customItemInput
+
+    local customSourceLabel = customForm:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    customSourceLabel:SetPoint("TOPLEFT", customItemInput, "BOTTOMLEFT", 0, -20)
+    customSourceLabel:SetText("Source (Optional):")
+
+    local customSourceInput = CreateFrame("EditBox", nil, customForm, "InputBoxTemplate")
+    customSourceInput:SetSize(350, 20)
+    customSourceInput:SetPoint("TOPLEFT", customSourceLabel, "BOTTOMLEFT", 0, -10)
+    customSourceInput:SetAutoFocus(false)
+    if E then E:GetModule("Skins"):HandleEditBox(customSourceInput) end
+    f.CustomSourceInput = customSourceInput
+
+    -- 3. Selected Item Info & Add Button
+    local bottomPanel = CreateFrame("Frame", nil, f)
+    bottomPanel:SetPoint("TOPLEFT", container, "BOTTOMLEFT", 0, -10)
+    bottomPanel:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -20, 10)
+
+    local preview = bottomPanel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    preview:SetPoint("LEFT", 0, 0)
     preview:SetText("No item selected")
     f.Preview = preview
 
-    -- 3. Source Selection
-    local sourceLabel = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    sourceLabel:SetPoint("TOP", preview, "BOTTOM", 0, -20)
-    sourceLabel:SetText("Select Source (Optional)")
+    local addBtn = CreateFrame("Button", nil, bottomPanel, "UIPanelButtonTemplate")
+    addBtn:SetSize(120, 25)
+    addBtn:SetPoint("RIGHT", 0, 0)
+    addBtn:SetText("Add Item")
+    if E then E:GetModule("Skins"):HandleButton(addBtn) end
+    addBtn:Disable()
 
-    local scroll = CreateFrame("ScrollFrame", nil, f, "UIPanelScrollFrameTemplate")
-    scroll:SetPoint("TOPLEFT", f, "TOPLEFT", 20, -150)
-    scroll:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -30, 50)
-    if E then E:GetModule("Skins"):HandleScrollBar(scroll.ScrollBar) end
-
-    local content = CreateFrame("Frame", nil, scroll)
-    content:SetSize(270, 1)
-    scroll:SetScrollChild(content)
-    f.Content = content
-
-    -- Populate Sources
-    local yOffset = 0
+    -- Logic
     f.selectedSource = nil
+    f.selectedItemLink = nil
     f.sourceButtons = {}
+    f.itemButtons = {}
 
+    local function UpdateItemsList()
+        if f.refreshTimer then
+            f.refreshTimer:Cancel()
+            f.refreshTimer = nil
+        end
+
+        -- Clear previous items
+        for _, btn in ipairs(f.itemButtons) do
+            btn:Hide()
+            btn:SetParent(nil)
+        end
+        f.itemButtons = {}
+
+        local items = {}
+        local searchText = input:GetText():lower()
+        if searchText == "search item..." then searchText = "" end
+
+        -- Handle Custom Item View
+        if f.selectedSource == "Custom Item" then
+            rightScroll:Hide()
+            customForm:Show()
+            f.Input:Hide()
+            preview:SetText("Enter item details above")
+            addBtn:Enable()
+            return
+        else
+            rightScroll:Show()
+            customForm:Hide()
+            f.Input:Show()
+        end
+
+        -- Debug Log
+        if f.selectedSource then
+            local count = (TierInstanceLootCache and TierInstanceLootCache[f.selectedSource]) and
+                #TierInstanceLootCache[f.selectedSource] or 0
+            -- print("TwichUI Debug: Updating List for Source:", f.selectedSource, "Items Found:", count)
+        end
+
+        -- If source selected, get items from cache
+        if f.selectedSource == "All Items" then
+            if TierLootCache then
+                local missingItems = false
+                for itemID, source in pairs(TierLootCache) do
+                    local linkToUse = TierItemLinkCache and TierItemLinkCache[itemID] or itemID
+                    local name, link, _, _, _, _, _, _, itemEquipLoc, icon = GetItemInfo(linkToUse)
+                    if not name then
+                        missingItems = true
+                        if type(linkToUse) == "string" then
+                            Item:CreateFromItemLink(linkToUse)
+                        else
+                            Item:CreateFromItemID(linkToUse)
+                        end
+                    else
+                        local valid = IsItemValidForSlot(itemEquipLoc, f.targetSlotID)
+                        if valid then
+                            if searchText == "" or name:lower():find(searchText, 1, true) then
+                                table.insert(items, { id = itemID, name = name, link = link, icon = icon })
+                            end
+                        end
+                    end
+                    -- Limit results to prevent lag
+                    if #items >= 200 then break end
+                end
+
+                if missingItems and not f.refreshTimer then
+                    f.refreshTimer = C_Timer.NewTimer(1.0, function()
+                        f.refreshTimer = nil
+                        if f.selectedSource == "All Items" and f:IsVisible() then
+                            UpdateItemsList()
+                        end
+                    end)
+                end
+            end
+        elseif f.selectedSource and TierInstanceLootCache and TierInstanceLootCache[f.selectedSource] then
+            local sourceItems = TierInstanceLootCache[f.selectedSource]
+            for _, itemID in ipairs(sourceItems) do
+                -- Filter by slot
+                local linkToUse = TierItemLinkCache and TierItemLinkCache[itemID] or itemID
+                local name, link, _, _, _, _, _, _, itemEquipLoc, icon = GetItemInfo(linkToUse)
+                if not name then
+                    -- Request info
+                    local item = (type(linkToUse) == "string") and Item:CreateFromItemLink(linkToUse) or Item:CreateFromItemID(linkToUse)
+                    item:ContinueOnItemLoad(function()
+                        -- Refresh if still on same source
+                        if f.selectedSource and TierInstanceLootCache[f.selectedSource] then
+                            UpdateItemsList()
+                        end
+                    end)
+                else
+                    local valid = IsItemValidForSlot(itemEquipLoc, f.targetSlotID)
+                    if valid then
+                        -- Filter by search
+                        if searchText == "" or name:lower():find(searchText, 1, true) then
+                            table.insert(items, { id = itemID, name = name, link = link, icon = icon })
+                        end
+                    else
+                        if f.selectedSource:find("Tazavesh") then
+                             print("Debug: Item", name, "invalid for slot", f.targetSlotID, "Loc:", itemEquipLoc)
+                        end
+                    end
+                end
+            end
+        end
+
+        -- Sort items by name
+        table.sort(items, function(a, b) return a.name < b.name end)
+        -- print("TwichUI Debug: Displaying", #items, "items after filtering.")
+
+        -- Render items
+        local yOffset = 0
+        for _, item in ipairs(items) do
+            local btn = CreateFrame("Button", nil, rightContent)
+            btn:SetSize(400, 30)
+            btn:SetPoint("TOPLEFT", 0, -yOffset)
+
+            local icon = btn:CreateTexture(nil, "ARTWORK")
+            icon:SetSize(24, 24)
+            icon:SetPoint("LEFT", 5, 0)
+            icon:SetTexture(item.icon)
+
+            local text = btn:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            text:SetPoint("LEFT", icon, "RIGHT", 10, 0)
+            text:SetText(item.link)
+
+            -- Highlight
+            local hl = btn:CreateTexture(nil, "BACKGROUND")
+            hl:SetAllPoints()
+            hl:SetColorTexture(1, 1, 1, 0.1)
+            hl:Hide()
+            btn.Highlight = hl
+
+            btn:SetScript("OnEnter", function(self)
+                hl:Show()
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                GameTooltip:SetHyperlink(item.link)
+                GameTooltip:Show()
+            end)
+            btn:SetScript("OnLeave", function(self)
+                if f.selectedItemLink ~= item.link then hl:Hide() end
+                GameTooltip:Hide()
+            end)
+            btn:SetScript("OnClick", function()
+                f.selectedItemLink = item.link
+                preview:SetText(item.link)
+                addBtn:Enable()
+                -- Update highlights
+                for _, b in ipairs(f.itemButtons) do b.Highlight:Hide() end
+                hl:Show()
+            end)
+            -- Double click to add
+            btn:SetScript("OnDoubleClick", function()
+                f.selectedItemLink = item.link
+                addBtn:Click()
+            end)
+
+            table.insert(f.itemButtons, btn)
+            yOffset = yOffset + 30
+        end
+        rightContent:SetHeight(yOffset)
+    end
+
+    input:SetScript("OnTextChanged", function(self)
+        UpdateItemsList()
+    end)
+    input:SetScript("OnEditFocusGained", function(self)
+        if self:GetText() == "Search Item..." then self:SetText("") end
+    end)
+    input:SetScript("OnEditFocusLost", function(self)
+        if self:GetText() == "" then self:SetText("Search Item...") end
+    end)
+    input:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
+
+    addBtn:SetScript("OnClick", function()
+        if f.selectedSource == "Custom Item" then
+            local itemText = customItemInput:GetText()
+            local sourceText = customSourceInput:GetText()
+            if itemText and itemText ~= "" then
+                if f.callback then
+                    f.callback({ link = itemText, source = (sourceText ~= "" and sourceText or "Custom") })
+                    f:Hide()
+                end
+            end
+        elseif f.selectedItemLink and f.callback then
+            f.callback({ link = f.selectedItemLink, source = f.selectedSource })
+            f:Hide()
+        end
+    end)
+
+    -- Populate Sources (Left Column)
+    local yOffset = 0
     local sources = GetSources()
 
     for _, category in ipairs(sources) do
-        local catHeader = content:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        local catHeader = leftContent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
         catHeader:SetPoint("TOPLEFT", 10, -yOffset)
         catHeader:SetText(category.label)
         yOffset = yOffset + 20
 
         for _, src in ipairs(category.options) do
-            local btn = CreateFrame("Button", nil, content)
-            btn:SetSize(250, 20)
+            local btn = CreateFrame("Button", nil, leftContent)
+            btn:SetSize(170, 20)
             btn:SetPoint("TOPLEFT", 10, -yOffset)
 
             local text = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -375,44 +947,17 @@ local function CreateChooserFrame(parent)
             text:SetText(src)
             btn.Text = text
 
-            local check = btn:CreateTexture(nil, "OVERLAY", nil, 7)
-            check:SetSize(20, 20)
-            check:SetPoint("RIGHT", -5, 0)
-            check:SetTexture("Interface\\RaidFrame\\ReadyCheck-Ready")
-            check:Hide()
-            btn.Check = check
-
-            -- Highlight texture
             local hl = btn:CreateTexture(nil, "BACKGROUND")
             hl:SetAllPoints()
             hl:SetColorTexture(1, 1, 1, 0.1)
             hl:Hide()
             btn.Highlight = hl
 
-            -- Hover texture
-            local hover = btn:CreateTexture(nil, "BACKGROUND")
-            hover:SetAllPoints()
-            hover:SetColorTexture(1, 1, 1, 0.05)
-            hover:Hide()
-            btn.Hover = hover
-
-            btn:SetScript("OnEnter", function()
-                btn.Hover:Show()
-            end)
-
-            btn:SetScript("OnLeave", function()
-                btn.Hover:Hide()
-            end)
-
             btn:SetScript("OnClick", function()
-                -- print("DEBUG: Source clicked:", src)
-                for _, b in ipairs(f.sourceButtons) do
-                    b.Check:Hide()
-                    b.Highlight:Hide()
-                end
-                btn.Check:Show()
-                btn.Highlight:Show()
+                for _, b in ipairs(f.sourceButtons) do b.Highlight:Hide() end
+                hl:Show()
                 f.selectedSource = src
+                UpdateItemsList()
             end)
 
             table.insert(f.sourceButtons, btn)
@@ -420,85 +965,33 @@ local function CreateChooserFrame(parent)
         end
         yOffset = yOffset + 10
     end
-    content:SetHeight(yOffset)
+    leftContent:SetHeight(yOffset)
 
-    -- 4. Add Button
-    local addBtn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
-    addBtn:SetSize(120, 25)
-    addBtn:SetPoint("BOTTOM", 0, 15)
-    addBtn:SetText("Add Item")
-    if E then E:GetModule("Skins"):HandleButton(addBtn) end
-
-    -- Logic
-    local currentLink = nil
-
-    input:SetScript("OnEnterPressed", function(self)
-        local text = self:GetText()
-        if text and text ~= "" then
-            local _, link = GetItemInfo(text)
-            if not link then
-                local id = tonumber(text) or GetItemInfoInstant(text)
-                if id then
-                    _, link = GetItemInfo(id)
-                    if not link then link = "item:" .. id end -- Fallback
-                else
-                    -- Try searching EJ for name (Current Tier Only)
-                    preview:SetText("Searching Dungeon Journal...")
-                    preview:SetTextColor(1, 1, 0)
-
-                    local ejItemID = ScanEJ("NAME", text, true)
-                    if ejItemID then
-                        _, link = GetItemInfo(ejItemID)
-                        if not link then link = "item:" .. ejItemID end
-                    end
-                end
-            end
-
-            if link then
-                currentLink = link
-                local name = GetItemInfo(link) or "Unknown Item"
-                preview:SetText(name)
-                preview:SetTextColor(0, 1, 0)
-            else
-                preview:SetText("Item not found. Try using Item ID (e.g. from Wowhead).")
-                preview:SetTextColor(1, 0, 0)
-                currentLink = nil
-            end
-        end
-        self:ClearFocus()
-    end)
-
-    addBtn:SetScript("OnClick", function()
-        if currentLink and f.callback then
-            -- print("DEBUG: Saving Item", currentLink, "Source:", f.selectedSource)
-            f.callback({ link = currentLink, source = f.selectedSource })
-            f:Hide()
-        end
-    end)
-
-    function f:SetInitialState(link, source)
-        self.Input:SetText(link or "")
+    function f:SetInitialState(link, source, iLevel, slotID)
+        self.Input:SetText("Search Item...")
         self.selectedSource = source
-        currentLink = link
+        self.targetSlotID = slotID
+        self.selectedItemLink = link
 
-        -- Update Preview
-        if link then
-            local name = GetItemInfo(link) or link
-            self.Preview:SetText(name)
-            self.Preview:SetTextColor(0, 1, 0)
-        else
-            self.Preview:SetText("No item selected")
-            self.Preview:SetTextColor(1, 1, 1)
-        end
-
-        -- Update Source Buttons
+        -- Select Source in UI
         for _, btn in ipairs(self.sourceButtons) do
-            btn.Check:Hide()
             btn.Highlight:Hide()
             if btn.Text:GetText() == source then
-                btn.Check:Show()
                 btn.Highlight:Show()
             end
+        end
+
+        -- Ensure cache is built
+        BuildTierCache(false)
+
+        UpdateItemsList()
+
+        if link then
+            preview:SetText(link)
+            addBtn:Enable()
+        else
+            preview:SetText("No item selected")
+            addBtn:Disable()
         end
     end
 
@@ -717,6 +1210,36 @@ local function CreateBestInSlotPanel(parent)
         f.Check:SetTexture("Interface\\RaidFrame\\ReadyCheck-Ready")
         f.Check:Hide()
 
+        -- Clear Button (Red X)
+        f.ClearButton = CreateFrame("Button", nil, f)
+        f.ClearButton:SetSize(16, 16)
+        f.ClearButton:SetPoint("TOPRIGHT", f, "TOPRIGHT", -2, -2)
+        f.ClearButton:SetNormalTexture("Interface\\Buttons\\UI-GroupLoot-Pass-Up")
+        f.ClearButton:SetHighlightTexture("Interface\\Buttons\\UI-GroupLoot-Pass-Highlight")
+        f.ClearButton:SetPushedTexture("Interface\\Buttons\\UI-GroupLoot-Pass-Down")
+        f.ClearButton:Hide()
+
+        f.ClearButton:SetScript("OnClick", function(self)
+            local btn = self:GetParent()
+            local db = GetCharacterDB()
+            if db then db[btn.slotID] = nil end
+            UpdateSlot(btn, nil)
+            self:Hide()
+            GameTooltip:Hide() -- Hide tooltip as item is gone
+        end)
+
+        f.ClearButton:SetScript("OnEnter", function(self)
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetText("Clear Slot")
+            GameTooltip:Show()
+        end)
+        f.ClearButton:SetScript("OnLeave", function(self)
+            GameTooltip:Hide()
+            if not self:GetParent():IsMouseOver() then
+                self:Hide()
+            end
+        end)
+
         -- Slot Name / Item Name
         f.Name = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
         f.Name:SetPoint("TOPLEFT", f.Icon, "TOPRIGHT", 8, -2)
@@ -758,6 +1281,8 @@ local function CreateBestInSlotPanel(parent)
             local db = GetCharacterDB()
             local data = db and db[self.slotID]
             if data then
+                self.ClearButton:Show()
+
                 local link = type(data) == "table" and data.link or data
                 local manualILvl = type(data) == "table" and data.iLevel
 
@@ -794,6 +1319,10 @@ local function CreateBestInSlotPanel(parent)
                 self:SetBackdropBorderColor(0.4, 0.4, 0.4)
             end
             GameTooltip:Hide()
+
+            if not self.ClearButton:IsMouseOver() then
+                self.ClearButton:Hide()
+            end
         end)
 
         f:SetScript("OnClick", function(self)
@@ -817,7 +1346,7 @@ local function CreateBestInSlotPanel(parent)
                 source = GetItemSource(itemID)
             end
 
-            Chooser:SetInitialState(link, source, iLevel)
+            Chooser:SetInitialState(link, source, iLevel, self.slotID)
 
             Chooser.callback = function(newData)
                 local db = GetCharacterDB()

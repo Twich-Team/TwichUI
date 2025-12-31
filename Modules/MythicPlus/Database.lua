@@ -46,6 +46,7 @@ MythicPlusModule.Database = Database
 ---@class MythicPlusDatabase
 ---@field Characters table<string, MythicPlusDatabase_CharacterEntry> key is UnitGUID
 ---@field DungeonSession DungeonSession|nil current active dungeon session
+---@field Global table Global data shared across characters
 
 --- local cached vars
 local UnitGUID = UnitGUID
@@ -59,7 +60,34 @@ local function GetDB()
     if not _G.TwichUIDungeonDB then
         _G.TwichUIDungeonDB = {}
     end
+    if not _G.TwichUIDungeonDB.Global then
+        _G.TwichUIDungeonDB.Global = {}
+    end
     return _G.TwichUIDungeonDB
+end
+
+---@return table|nil
+function Database:GetItemCache()
+    local db = GetDB()
+    return db.Global.ItemCache
+end
+
+---@param cache table
+function Database:SetItemCache(cache)
+    local db = GetDB()
+    db.Global.ItemCache = cache
+end
+
+---@return string|nil
+function Database:GetGameVersion()
+    local db = GetDB()
+    return db.Global.GameVersion
+end
+
+---@param version string
+function Database:SetGameVersion(version)
+    local db = GetDB()
+    db.Global.GameVersion = version
 end
 
 ---@return DungeonSession|nil
