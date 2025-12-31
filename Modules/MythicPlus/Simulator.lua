@@ -69,8 +69,10 @@ local Module = Tools.Generics.Module:New(CONFIGURATION)
 -- This list is used to populate a dropdown of "single event" simulations.
 Sim.SupportedEvents = Sim.SupportedEvents or {
     "CHALLENGE_MODE_START",
+    "CHALLENGE_MODE_COMPLETED",
     "CHALLENGE_MODE_COMPLETED_REWARDS",
     "CHALLENGE_MODE_RESET",
+    "CHALLENGE_MODE_DEATH_COUNT_UPDATED",
     "ENCOUNTER_START",
     "ENCOUNTER_END",
     "PLAYER_DEAD",
@@ -83,6 +85,14 @@ Sim.SupportedEvents = Sim.SupportedEvents or {
 local function BuildSampleEventArgs(eventName)
     if eventName == "CHALLENGE_MODE_START" then
         return 525
+    end
+
+    if eventName == "CHALLENGE_MODE_COMPLETED" then
+        return nil
+    end
+
+    if eventName == "CHALLENGE_MODE_DEATH_COUNT_UPDATED" then
+        return 5
     end
 
     if eventName == "CHALLENGE_MODE_COMPLETED_REWARDS" then
@@ -476,6 +486,12 @@ local function BuildDungeonArgs(name, payload)
 
     if name == "CHALLENGE_MODE_START" then
         return payload.mapId
+    end
+    if name == "CHALLENGE_MODE_COMPLETED" then
+        return nil
+    end
+    if name == "CHALLENGE_MODE_DEATH_COUNT_UPDATED" then
+        return payload.count
     end
     if name == "CHALLENGE_MODE_COMPLETED_REWARDS" then
         return payload.mapId, payload.medal, payload.timeMS, payload.money, payload.rewards

@@ -1,0 +1,3 @@
+- At start a reset event fired for some reason
+- He died at the begining
+- Live synced events from Brent's addon

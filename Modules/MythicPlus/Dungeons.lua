@@ -97,7 +97,24 @@ local function FindDungeonPortalSpellId(mapId)
                 local name = (type(GetSpellBookItemName) == "function") and GetSpellBookItemName(slot, BOOKTYPE_SPELL) or
                     nil
                 if type(name) == "string" and name ~= "" then
-                    if name:find(dungeonName, 1, true) then
+                    local match = name:find(dungeonName, 1, true)
+                    if not match then
+                        -- Try reverse match (Dungeon Name contains Spell Name suffix)
+                        -- e.g. Dungeon: "Ara-Kara, City of Echoes", Spell: "Teleport: Ara-Kara"
+                        local target = name:match("^Teleport: (.+)") or name:match("^Path of the (.+)")
+                        if target and dungeonName:find(target, 1, true) then
+                            match = true
+                        end
+                    end
+
+                    if not match and _G.GetSpellDescription then
+                        local desc = _G.GetSpellDescription(spellId)
+                        if type(desc) == "string" and desc:find(dungeonName, 1, true) then
+                            match = true
+                        end
+                    end
+
+                    if match then
                         spellId = tonumber(spellId)
                         if spellId and (type(IsPassiveSpell) ~= "function" or not IsPassiveSpell(spellId)) then
                             _portalSpellCache[mapId] = spellId

@@ -591,10 +591,10 @@ local function UpdateSlot(btn, data)
             btn.Check:Show()
             local displayILvl = realILvl or iLevel
             if equipped then
-                btn.Details:SetText("iLvl: " .. displayILvl .. " (Equipped)" .. sourceText)
+                btn.Details:SetText("iLvl: " .. displayILvl .. " (Equipped)")
                 btn.Details:SetTextColor(0, 1, 0)
             else
-                btn.Details:SetText("iLvl: " .. displayILvl .. " (In Bags)" .. sourceText)
+                btn.Details:SetText("iLvl: " .. displayILvl .. " (In Bags)")
                 btn.Details:SetTextColor(0, 1, 0)
             end
         else

@@ -759,6 +759,21 @@ function MythicPlusRunLogger:_OnDungeonEvent(eventName, ...)
         return
     end
 
+    if eventName == "CHALLENGE_MODE_COMPLETED" then
+        self:_AppendEvent(eventName, {})
+        return
+    end
+
+    if eventName == "CHALLENGE_MODE_DEATH_COUNT_UPDATED" then
+        local count = ...
+        -- If the event doesn't provide the count, fetch it.
+        if not count and C_ChallengeMode and C_ChallengeMode.GetDeathCount then
+            count = C_ChallengeMode.GetDeathCount()
+        end
+        self:_AppendEvent(eventName, { count = count })
+        return
+    end
+
     if eventName == "CHALLENGE_MODE_COMPLETED_REWARDS" then
         local mapId, medal, timeMS, money, rewards = ...
 

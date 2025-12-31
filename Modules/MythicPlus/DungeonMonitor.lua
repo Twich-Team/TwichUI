@@ -38,9 +38,11 @@ local Tools = T:GetModule("Tools")
 --[[ NOTE: Actively avoiding combat-related events for now, to prevent issues in Midnight. Will enhance later. ]]
 local EVENTS = {
     --- CHALLENGE MODE SPECIFIC
-    "CHALLENGE_MODE_START",             -- fires when key is activated
-    "CHALLENGE_MODE_COMPLETED_REWARDS", -- fires when last boss dies/completion condition reached
-    "CHALLENGE_MODE_RESET",             -- detect aborts or resets mid-key, can mark as abandoned or depleted
+    "CHALLENGE_MODE_START",               -- fires when key is activated
+    "CHALLENGE_MODE_COMPLETED",           -- fires when the run is completed (before rewards)
+    "CHALLENGE_MODE_COMPLETED_REWARDS",   -- fires when last boss dies/completion condition reached
+    "CHALLENGE_MODE_RESET",               -- detect aborts or resets mid-key, can mark as abandoned or depleted
+    "CHALLENGE_MODE_DEATH_COUNT_UPDATED", -- fires when death count changes
 
     --- DUNGEON SPECIFIC
     "ENCOUNTER_START", -- track boss encounters starting

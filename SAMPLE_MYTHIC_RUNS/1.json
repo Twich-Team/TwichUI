@@ -1,0 +1,762 @@
+{
+  "events": [
+    {
+      "name": "GROUP_ROSTER_SNAPSHOT",
+      "payload": {
+        "group": [
+          {
+            "class": "SHAMAN",
+            "guid": "Player-121-0A86A5D0",
+            "name": "Thornp",
+            "realm": "AzjolNerub",
+            "role": "DAMAGER",
+            "spec": "Enhancement",
+            "specId": 263,
+            "unit": "player"
+          },
+          {
+            "class": "WARRIOR",
+            "guid": "Player-60-0F670362",
+            "name": "Lostchipmunk",
+            "realm": "Stormrage",
+            "role": "TANK",
+            "unit": "party1"
+          },
+          {
+            "class": "DRUID",
+            "guid": "Player-60-0A36E125",
+            "name": "Kellidar",
+            "realm": "Stormrage",
+            "role": "DAMAGER",
+            "spec": "Feral",
+            "specId": 103,
+            "unit": "party2"
+          },
+          {
+            "class": "PRIEST",
+            "guid": "Player-5-0EA73553",
+            "name": "Neechan",
+            "realm": "Proudmoore",
+            "role": "DAMAGER",
+            "unit": "party3"
+          },
+          {
+            "class": "SHAMAN",
+            "guid": "Player-55-063A0512",
+            "name": "Nerfshammy",
+            "realm": "Whisperwind",
+            "role": "HEALER",
+            "unit": "party4"
+          }
+        ],
+        "reason": "start"
+      },
+      "relSeconds": 0,
+      "timestamp": 1767144812
+    },
+    {
+      "name": "CHALLENGE_MODE_START",
+      "payload": { "mapId": 2441 },
+      "relSeconds": 0,
+      "timestamp": 1767144812
+    },
+    {
+      "name": "GROUP_ROSTER_UPDATE",
+      "payload": {
+        "group": [
+          {
+            "class": "SHAMAN",
+            "guid": "Player-121-0A86A5D0",
+            "name": "Thornp",
+            "realm": "AzjolNerub",
+            "role": "DAMAGER",
+            "spec": "Enhancement",
+            "specId": 263,
+            "unit": "player"
+          },
+          {
+            "class": "WARRIOR",
+            "guid": "Player-60-0F670362",
+            "name": "Lostchipmunk",
+            "realm": "Stormrage",
+            "role": "TANK",
+            "unit": "party1"
+          },
+          {
+            "class": "DRUID",
+            "guid": "Player-60-0A36E125",
+            "name": "Kellidar",
+            "realm": "Stormrage",
+            "role": "DAMAGER",
+            "spec": "Feral",
+            "specId": 103,
+            "unit": "party2"
+          },
+          {
+            "class": "PRIEST",
+            "guid": "Player-5-0EA73553",
+            "name": "Neechan",
+            "realm": "Proudmoore",
+            "role": "DAMAGER",
+            "unit": "party3"
+          },
+          {
+            "class": "SHAMAN",
+            "guid": "Player-55-063A0512",
+            "name": "Nerfshammy",
+            "realm": "Whisperwind",
+            "role": "HEALER",
+            "unit": "party4"
+          }
+        ]
+      },
+      "relSeconds": 0,
+      "timestamp": 1767144812
+    },
+    {
+      "name": "PLAYER_DEAD",
+      "payload": { "unit": "player" },
+      "relSeconds": 31.168999999994,
+      "timestamp": 1767144843
+    },
+    {
+      "name": "GROUP_ROSTER_UPDATE",
+      "payload": {
+        "group": [
+          {
+            "class": "SHAMAN",
+            "guid": "Player-121-0A86A5D0",
+            "name": "Thornp",
+            "realm": "AzjolNerub",
+            "role": "DAMAGER",
+            "spec": "Enhancement",
+            "specId": 263,
+            "unit": "player"
+          },
+          {
+            "class": "WARRIOR",
+            "guid": "Player-60-0F670362",
+            "name": "Lostchipmunk",
+            "realm": "Stormrage",
+            "role": "TANK",
+            "unit": "party1"
+          },
+          {
+            "class": "DRUID",
+            "guid": "Player-60-0A36E125",
+            "name": "Kellidar",
+            "realm": "Stormrage",
+            "role": "DAMAGER",
+            "unit": "party2"
+          },
+          {
+            "class": "PRIEST",
+            "guid": "Player-5-0EA73553",
+            "name": "Neechan",
+            "realm": "Proudmoore",
+            "role": "DAMAGER",
+            "spec": "Shadow",
+            "specId": 258,
+            "unit": "party3"
+          },
+          {
+            "class": "SHAMAN",
+            "guid": "Player-55-063A0512",
+            "name": "Nerfshammy",
+            "realm": "Whisperwind",
+            "role": "HEALER",
+            "unit": "party4"
+          }
+        ]
+      },
+      "relSeconds": 117.766,
+      "timestamp": 1767144930
+    },
+    {
+      "name": "ENCOUNTER_START",
+      "payload": {
+        "difficultyID": 8,
+        "encounterID": 2426,
+        "encounterName": "Hylbrande",
+        "groupSize": 5
+      },
+      "relSeconds": 331.201,
+      "timestamp": 1767145143
+    },
+    {
+      "name": "ENCOUNTER_END",
+      "payload": {
+        "difficultyID": 8,
+        "encounterID": 2426,
+        "encounterName": "Hylbrande",
+        "groupSize": 5,
+        "success": 1
+      },
+      "relSeconds": 513.848,
+      "timestamp": 1767145326
+    },
+    {
+      "name": "ENCOUNTER_START",
+      "payload": {
+        "difficultyID": 8,
+        "encounterID": 2419,
+        "encounterName": "Timecap'n Hooktail",
+        "groupSize": 5
+      },
+      "relSeconds": 727.676,
+      "timestamp": 1767145540
+    },
+    {
+      "name": "PLAYER_DEAD",
+      "payload": { "unit": "player" },
+      "relSeconds": 746.77299999999,
+      "timestamp": 1767145559
+    },
+    {
+      "name": "ENCOUNTER_END",
+      "payload": {
+        "difficultyID": 8,
+        "encounterID": 2419,
+        "encounterName": "Timecap'n Hooktail",
+        "groupSize": 5,
+        "success": 1
+      },
+      "relSeconds": 894.59,
+      "timestamp": 1767145707
+    },
+    {
+      "name": "ENCOUNTER_START",
+      "payload": {
+        "difficultyID": 8,
+        "encounterID": 2442,
+        "encounterName": "So'leah",
+        "groupSize": 5
+      },
+      "relSeconds": 1144.789,
+      "timestamp": 1767145957
+    },
+    {
+      "name": "ENCOUNTER_END",
+      "payload": {
+        "difficultyID": 8,
+        "encounterID": 2442,
+        "encounterName": "So'leah",
+        "groupSize": 5,
+        "success": 1
+      },
+      "relSeconds": 1440.619,
+      "timestamp": 1767146253
+    },
+    {
+      "name": "GROUP_ROSTER_UPDATE",
+      "payload": {
+        "group": [
+          {
+            "class": "SHAMAN",
+            "guid": "Player-121-0A86A5D0",
+            "name": "Thornp",
+            "realm": "AzjolNerub",
+            "role": "DAMAGER",
+            "spec": "Enhancement",
+            "specId": 263,
+            "unit": "player"
+          },
+          {
+            "class": "WARRIOR",
+            "guid": "Player-60-0F670362",
+            "name": "Lostchipmunk",
+            "realm": "Stormrage",
+            "role": "TANK",
+            "unit": "party1"
+          },
+          {
+            "class": "DRUID",
+            "guid": "Player-60-0A36E125",
+            "name": "Kellidar",
+            "realm": "Stormrage",
+            "role": "DAMAGER",
+            "unit": "party2"
+          },
+          {
+            "class": "PRIEST",
+            "guid": "Player-5-0EA73553",
+            "name": "Neechan",
+            "realm": "Proudmoore",
+            "role": "DAMAGER",
+            "unit": "party3"
+          },
+          {
+            "class": "SHAMAN",
+            "guid": "Player-55-063A0512",
+            "name": "Nerfshammy",
+            "realm": "Whisperwind",
+            "role": "HEALER",
+            "unit": "party4"
+          }
+        ]
+      },
+      "relSeconds": 1440.818,
+      "timestamp": 1767146253
+    },
+    {
+      "name": "GROUP_ROSTER_UPDATE",
+      "payload": {
+        "group": [
+          {
+            "class": "SHAMAN",
+            "guid": "Player-121-0A86A5D0",
+            "name": "Thornp",
+            "realm": "AzjolNerub",
+            "role": "DAMAGER",
+            "spec": "Enhancement",
+            "specId": 263,
+            "unit": "player"
+          },
+          {
+            "class": "WARRIOR",
+            "guid": "Player-60-0F670362",
+            "name": "Lostchipmunk",
+            "realm": "Stormrage",
+            "role": "TANK",
+            "unit": "party1"
+          },
+          {
+            "class": "DRUID",
+            "guid": "Player-60-0A36E125",
+            "name": "Kellidar",
+            "realm": "Stormrage",
+            "role": "DAMAGER",
+            "unit": "party2"
+          },
+          {
+            "class": "PRIEST",
+            "guid": "Player-5-0EA73553",
+            "name": "Neechan",
+            "realm": "Proudmoore",
+            "role": "DAMAGER",
+            "unit": "party3"
+          },
+          {
+            "class": "SHAMAN",
+            "guid": "Player-55-063A0512",
+            "name": "Nerfshammy",
+            "realm": "Whisperwind",
+            "role": "HEALER",
+            "unit": "party4"
+          }
+        ]
+      },
+      "relSeconds": 1440.905,
+      "timestamp": 1767146253
+    },
+    {
+      "name": "CHAT_MSG_LOOT",
+      "payload": {
+        "guid": "Player-60-0A36E125",
+        "itemLinks": ["[Fractured Spark of Starlight]"],
+        "itemNameText": "Fractured Spark of Starlight",
+        "items": [
+          {
+            "info": {
+              "bindType": "1",
+              "classID": "7",
+              "equipLoc": "INVTYPE_NON_EQUIP_IGNORE",
+              "expansionID": "10",
+              "iLevel": "70",
+              "icon": "5929747",
+              "isCraftingReagent": "true",
+              "link": "[Fractured Spark of Starlight]",
+              "maxStack": "1000",
+              "minLevel": "0",
+              "name": "Fractured Spark of Starlight",
+              "quality": "4",
+              "sellPrice": "200",
+              "subClassID": "10",
+              "subType": "Elemental",
+              "type": "Tradeskill"
+            },
+            "itemId": 231757,
+            "link": "[Fractured Spark of Starlight]"
+          }
+        ],
+        "lineId": 360,
+        "message": "Kellidar-Stormrage receives loot: [Fractured Spark of Starlight].",
+        "player": "Kellidar-Stormrage"
+      },
+      "relSeconds": 1448.571,
+      "timestamp": 1767146261
+    },
+    {
+      "name": "CHAT_MSG_LOOT",
+      "payload": {
+        "guid": "Player-60-0F670362",
+        "itemLinks": ["[Fractured Spark of Starlight]"],
+        "itemNameText": "Fractured Spark of Starlight",
+        "items": [
+          {
+            "info": {
+              "bindType": "1",
+              "classID": "7",
+              "equipLoc": "INVTYPE_NON_EQUIP_IGNORE",
+              "expansionID": "10",
+              "iLevel": "70",
+              "icon": "5929747",
+              "isCraftingReagent": "true",
+              "link": "[Fractured Spark of Starlight]",
+              "maxStack": "1000",
+              "minLevel": "0",
+              "name": "Fractured Spark of Starlight",
+              "quality": "4",
+              "sellPrice": "200",
+              "subClassID": "10",
+              "subType": "Elemental",
+              "type": "Tradeskill"
+            },
+            "itemId": 231757,
+            "link": "[Fractured Spark of Starlight]"
+          }
+        ],
+        "lineId": 362,
+        "message": "Lostchipmunk-Stormrage receives loot: [Fractured Spark of Starlight].",
+        "player": "Lostchipmunk-Stormrage"
+      },
+      "relSeconds": 1448.967,
+      "timestamp": 1767146261
+    },
+    {
+      "name": "CHAT_MSG_LOOT",
+      "payload": {
+        "guid": "Player-60-0F670362",
+        "itemLinks": ["[Cabochon of the Infinite Flight]"],
+        "itemNameText": "Cabochon of the Infinite Flight",
+        "items": [
+          {
+            "info": {
+              "bindType": "1",
+              "classID": "4",
+              "equipLoc": "INVTYPE_NECK",
+              "expansionID": "8",
+              "iLevel": "701",
+              "icon": "1359997",
+              "isCraftingReagent": "false",
+              "link": "[Cabochon of the Infinite Flight]",
+              "maxStack": "1",
+              "minLevel": "80",
+              "name": "Cabochon of the Infinite Flight",
+              "quality": "4",
+              "sellPrice": "477318",
+              "subClassID": "0",
+              "subType": "Miscellaneous",
+              "type": "Armor"
+            },
+            "itemId": 185820,
+            "link": "[Cabochon of the Infinite Flight]"
+          }
+        ],
+        "lineId": 363,
+        "message": "Lostchipmunk-Stormrage receives loot: [Cabochon of the Infinite Flight].",
+        "player": "Lostchipmunk-Stormrage"
+      },
+      "relSeconds": 1449.082,
+      "timestamp": 1767146261
+    },
+    {
+      "name": "CHAT_MSG_LOOT",
+      "payload": {
+        "guid": "Player-5-0EA73553",
+        "itemLinks": ["[Codebreaker's Cunning Handwraps]"],
+        "itemNameText": "Codebreaker's Cunning Handwraps",
+        "items": [
+          {
+            "info": {
+              "bindType": "1",
+              "classID": "4",
+              "equipLoc": "INVTYPE_HAND",
+              "expansionID": "10",
+              "iLevel": "701",
+              "icon": "3527517",
+              "isCraftingReagent": "false",
+              "link": "[Codebreaker's Cunning Handwraps]",
+              "maxStack": "1",
+              "minLevel": "80",
+              "name": "Codebreaker's Cunning Handwraps",
+              "quality": "4",
+              "sellPrice": "518242",
+              "subClassID": "1",
+              "subType": "Cloth",
+              "type": "Armor"
+            },
+            "itemId": 246275,
+            "link": "[Codebreaker's Cunning Handwraps]"
+          }
+        ],
+        "lineId": 364,
+        "message": "Neechan-Proudmoore receives loot: [Codebreaker's Cunning Handwraps].",
+        "player": "Neechan-Proudmoore"
+      },
+      "relSeconds": 1452.075,
+      "timestamp": 1767146264
+    },
+    {
+      "name": "CHAT_MSG_LOOT",
+      "payload": {
+        "guid": "Player-121-0A86A5D0",
+        "itemLinks": ["[Fractured Spark of Starlight]"],
+        "itemNameText": "Fractured Spark of Starlight",
+        "items": [
+          {
+            "info": {
+              "bindType": "1",
+              "classID": "7",
+              "equipLoc": "INVTYPE_NON_EQUIP_IGNORE",
+              "expansionID": "10",
+              "iLevel": "70",
+              "icon": "5929747",
+              "isCraftingReagent": "true",
+              "link": "[Fractured Spark of Starlight]",
+              "maxStack": "1000",
+              "minLevel": "0",
+              "name": "Fractured Spark of Starlight",
+              "quality": "4",
+              "sellPrice": "200",
+              "subClassID": "10",
+              "subType": "Elemental",
+              "type": "Tradeskill"
+            },
+            "itemId": 231757,
+            "link": "[Fractured Spark of Starlight]"
+          }
+        ],
+        "lineId": 365,
+        "message": "You receive loot: [Fractured Spark of Starlight]",
+        "player": "Thornp-AzjolNerub"
+      },
+      "relSeconds": 1452.22,
+      "timestamp": 1767146264
+    },
+    {
+      "name": "CHAT_MSG_LOOT",
+      "payload": {
+        "guid": "Player-55-063A0512",
+        "itemLinks": ["[Forgotten Folio]"],
+        "itemNameText": "Forgotten Folio",
+        "items": [
+          {
+            "info": {
+              "bindType": "1",
+              "classID": "15",
+              "equipLoc": "INVTYPE_NON_EQUIP_IGNORE",
+              "expansionID": "10",
+              "iLevel": "70",
+              "icon": "5931417",
+              "isCraftingReagent": "false",
+              "link": "[Forgotten Folio]",
+              "maxStack": "1",
+              "minLevel": "1",
+              "name": "Forgotten Folio",
+              "quality": "3",
+              "sellPrice": "0",
+              "subClassID": "4",
+              "subType": "Other",
+              "type": "Miscellaneous"
+            },
+            "itemId": 234425,
+            "link": "[Forgotten Folio]"
+          }
+        ],
+        "lineId": 366,
+        "message": "Nerfshammy-Whisperwind receives loot: [Forgotten Folio].",
+        "player": "Nerfshammy-Whisperwind"
+      },
+      "relSeconds": 1452.497,
+      "timestamp": 1767146265
+    },
+    {
+      "name": "CHAT_MSG_LOOT",
+      "payload": {
+        "guid": "Player-121-0A86A5D0",
+        "itemLinks": ["[Dragonbane Diadem]"],
+        "itemNameText": "Dragonbane Diadem",
+        "items": [
+          {
+            "info": {
+              "bindType": "2",
+              "classID": "4",
+              "equipLoc": "INVTYPE_HEAD",
+              "expansionID": "8",
+              "iLevel": "688",
+              "icon": "3390740",
+              "isCraftingReagent": "false",
+              "link": "[Dragonbane Diadem]",
+              "maxStack": "1",
+              "minLevel": "80",
+              "name": "Dragonbane Diadem",
+              "quality": "4",
+              "sellPrice": "791781",
+              "subClassID": "3",
+              "subType": "Mail",
+              "type": "Armor"
+            },
+            "itemId": 185796,
+            "link": "[Dragonbane Diadem]"
+          }
+        ],
+        "lineId": 367,
+        "message": "You receive loot: [Dragonbane Diadem]",
+        "player": "Thornp-AzjolNerub"
+      },
+      "relSeconds": 1452.497,
+      "timestamp": 1767146265
+    },
+    {
+      "name": "GROUP_ROSTER_UPDATE",
+      "payload": {
+        "group": [
+          {
+            "class": "SHAMAN",
+            "guid": "Player-121-0A86A5D0",
+            "name": "Thornp",
+            "realm": "AzjolNerub",
+            "role": "DAMAGER",
+            "spec": "Enhancement",
+            "specId": 263,
+            "unit": "player"
+          },
+          {
+            "class": "WARRIOR",
+            "guid": "Player-60-0F670362",
+            "name": "Lostchipmunk",
+            "realm": "Stormrage",
+            "role": "TANK",
+            "unit": "party1"
+          },
+          {
+            "class": "DRUID",
+            "guid": "Player-60-0A36E125",
+            "name": "Kellidar",
+            "realm": "Stormrage",
+            "role": "DAMAGER",
+            "unit": "party2"
+          },
+          {
+            "class": "SHAMAN",
+            "guid": "Player-55-063A0512",
+            "name": "Nerfshammy",
+            "realm": "Whisperwind",
+            "role": "HEALER",
+            "unit": "party3"
+          }
+        ]
+      },
+      "relSeconds": 1466.579,
+      "timestamp": 1767146279
+    },
+    {
+      "name": "GROUP_ROSTER_UPDATE",
+      "payload": {
+        "group": [
+          {
+            "class": "SHAMAN",
+            "guid": "Player-121-0A86A5D0",
+            "name": "Thornp",
+            "realm": "AzjolNerub",
+            "role": "NONE",
+            "spec": "Enhancement",
+            "specId": 263,
+            "unit": "player"
+          }
+        ]
+      },
+      "relSeconds": 1467.648,
+      "timestamp": 1767146280
+    },
+    {
+      "name": "PLAYER_ENTERING_WORLD",
+      "payload": { "isInitialLogin": false, "isReloadingUi": false },
+      "relSeconds": 1481.922,
+      "timestamp": 1767146294
+    }
+  ],
+  "format": "TwichUI_RunLog_v2",
+  "meta": {
+    "addonVersion": "0.0.1-ALPHA",
+    "format": "TwichUI_RunLog_v2",
+    "wowBuild": "64978",
+    "wowToc": 110207,
+    "wowVersion": "11.2.7"
+  },
+  "run": {
+    "affixes": [162, 9, 10, 147],
+    "group": [
+      {
+        "class": "SHAMAN",
+        "guid": "Player-121-0A86A5D0",
+        "name": "Thornp",
+        "realm": "AzjolNerub",
+        "role": "NONE",
+        "spec": "Enhancement",
+        "specId": 263,
+        "unit": "player"
+      }
+    ],
+    "groupStart": [
+      {
+        "class": "SHAMAN",
+        "guid": "Player-121-0A86A5D0",
+        "name": "Thornp",
+        "realm": "AzjolNerub",
+        "role": "DAMAGER",
+        "spec": "Enhancement",
+        "specId": 263,
+        "unit": "player"
+      },
+      {
+        "class": "WARRIOR",
+        "guid": "Player-60-0F670362",
+        "name": "Lostchipmunk",
+        "realm": "Stormrage",
+        "role": "TANK",
+        "unit": "party1"
+      },
+      {
+        "class": "DRUID",
+        "guid": "Player-60-0A36E125",
+        "name": "Kellidar",
+        "realm": "Stormrage",
+        "role": "DAMAGER",
+        "spec": "Feral",
+        "specId": 103,
+        "unit": "party2"
+      },
+      {
+        "class": "PRIEST",
+        "guid": "Player-5-0EA73553",
+        "name": "Neechan",
+        "realm": "Proudmoore",
+        "role": "DAMAGER",
+        "unit": "party3"
+      },
+      {
+        "class": "SHAMAN",
+        "guid": "Player-55-063A0512",
+        "name": "Nerfshammy",
+        "realm": "Whisperwind",
+        "role": "HEALER",
+        "unit": "party4"
+      }
+    ],
+    "id": "1767144812-2441",
+    "level": 13,
+    "mapId": 2441,
+    "player": {
+      "class": "SHAMAN",
+      "guid": "Player-121-0A86A5D0",
+      "name": "Thornp",
+      "realm": "AzjolNerub",
+      "spec": "Enhancement",
+      "specId": 263
+    },
+    "startUnix": 1767144812,
+    "status": "in_progress"
+  }
+}
