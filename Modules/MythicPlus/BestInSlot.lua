@@ -65,6 +65,92 @@ local VALID_EQUIP_LOCS = {
     [17] = { "INVTYPE_WEAPON", "INVTYPE_WEAPONOFFHAND", "INVTYPE_HOLDABLE", "INVTYPE_SHIELD" },
 }
 
+local _, _, PLAYER_CLASS_ID = UnitClass("player")
+
+-- Armor Types: 1=Cloth, 2=Leather, 3=Mail, 4=Plate
+local CLASS_ARMOR_TYPE = {
+    [1] = 4, -- Warrior: Plate
+    [2] = 4, -- Paladin: Plate
+    [3] = 3, -- Hunter: Mail
+    [4] = 2, -- Rogue: Leather
+    [5] = 1, -- Priest: Cloth
+    [6] = 4, -- DK: Plate
+    [7] = 3, -- Shaman: Mail
+    [8] = 1, -- Mage: Cloth
+    [9] = 1, -- Warlock: Cloth
+    [10] = 2, -- Monk: Leather
+    [11] = 2, -- Druid: Leather
+    [12] = 2, -- DH: Leather
+    [13] = 3, -- Evoker: Mail
+}
+
+local CLASS_WEAPON_TYPES = {
+    [1] = { [0]=true, [1]=true, [2]=true, [3]=true, [4]=true, [5]=true, [6]=true, [7]=true, [8]=true, [10]=true, [13]=true, [15]=true, [18]=true }, -- Warrior
+    [2] = { [0]=true, [1]=true, [4]=true, [5]=true, [6]=true, [7]=true, [8]=true }, -- Paladin
+    [3] = { [0]=true, [1]=true, [2]=true, [3]=true, [6]=true, [7]=true, [8]=true, [10]=true, [13]=true, [15]=true, [18]=true }, -- Hunter
+    [4] = { [0]=true, [4]=true, [7]=true, [13]=true, [15]=true, [2]=true, [3]=true, [18]=true }, -- Rogue
+    [5] = { [4]=true, [10]=true, [15]=true, [19]=true }, -- Priest
+    [6] = { [0]=true, [1]=true, [4]=true, [5]=true, [6]=true, [7]=true, [8]=true }, -- DK
+    [7] = { [0]=true, [1]=true, [4]=true, [5]=true, [10]=true, [13]=true, [15]=true }, -- Shaman
+    [8] = { [7]=true, [10]=true, [15]=true, [19]=true }, -- Mage
+    [9] = { [7]=true, [10]=true, [15]=true, [19]=true }, -- Warlock
+    [10] = { [0]=true, [4]=true, [6]=true, [7]=true, [10]=true, [13]=true }, -- Monk
+    [11] = { [4]=true, [5]=true, [6]=true, [10]=true, [13]=true, [15]=true }, -- Druid
+    [12] = { [0]=true, [7]=true, [9]=true, [13]=true, [15]=true }, -- DH
+    [13] = { [0]=true, [1]=true, [4]=true, [5]=true, [7]=true, [8]=true, [10]=true, [13]=true, [15]=true }, -- Evoker
+}
+
+local function IsItemUsableByPlayer(itemClassID, itemSubClassID, itemEquipLoc)
+    if not itemClassID or not itemSubClassID then return true end
+    
+    -- Weapons (ClassID 2)
+    if itemClassID == 2 then
+        local allowed = CLASS_WEAPON_TYPES[PLAYER_CLASS_ID]
+        if allowed and allowed[itemSubClassID] then
+            return true
+        end
+        return false
+    end
+
+    -- Armor (ClassID 4)
+    if itemClassID == 4 then
+        -- Always allow Cloaks (15), Rings (11), Necks (2), Trinkets (13, 14), Shields (6)
+        -- Note: Shields are SubClass 6. Not all classes can use shields.
+        -- Cloak is SubClass 1 (Cloth) usually, but EquipLoc is INVTYPE_CLOAK.
+        
+        if itemEquipLoc == "INVTYPE_CLOAK" or 
+           itemEquipLoc == "INVTYPE_NECK" or 
+           itemEquipLoc == "INVTYPE_FINGER" or 
+           itemEquipLoc == "INVTYPE_TRINKET" or
+           itemEquipLoc == "INVTYPE_HOLDABLE" then -- Off-hand frill
+            return true
+        end
+        
+        -- Shields (SubClass 6)
+        if itemSubClassID == 6 then
+            -- Warrior, Paladin, Shaman
+            if PLAYER_CLASS_ID == 1 or PLAYER_CLASS_ID == 2 or PLAYER_CLASS_ID == 7 then
+                return true
+            end
+            return false
+        end
+
+        -- Main Armor Slots (Head, Chest, etc.)
+        -- Check against primary armor type
+        local primaryType = CLASS_ARMOR_TYPE[PLAYER_CLASS_ID]
+        if itemSubClassID == primaryType then
+            return true
+        end
+        
+        -- Cosmetic / Generic?
+        if itemSubClassID == 0 then return true end
+        
+        return false
+    end
+    
+    return true
+end
+
 local function IsItemValidForSlot(itemEquipLoc, slotID)
     if not itemEquipLoc or not slotID then return true end -- Allow if unknown
     local validLocs = VALID_EQUIP_LOCS[slotID]
@@ -260,10 +346,11 @@ local function BuildTierCache(force)
                                         newLootCache[item.itemID] = instanceName .. " (" .. name .. ")"
                                     end
 
-                                    -- Cache the specific link (first one found is highest difficulty due to loop order)
+                                    -- Cache the specific link for each difficulty
                                     if not newItemLinkCache[item.itemID] then
-                                        newItemLinkCache[item.itemID] = item.link
+                                        newItemLinkCache[item.itemID] = {}
                                     end
+                                    newItemLinkCache[item.itemID][diff] = item.link
 
                                     local iName = item.name
                                     if not iName and item.link then
@@ -284,7 +371,8 @@ local function BuildTierCache(force)
                     end
                     if lootCount > 0 then
                         if instanceName:find("Tazavesh") then
-                             print("TwichUI Debug: Instance processed:", instanceName, "| Encounters:", encCount, "| Loot Found:", lootCount)
+                            print("TwichUI Debug: Instance processed:", instanceName, "| Encounters:", encCount,
+                                "| Loot Found:", lootCount)
                         end
                     end
                 end
@@ -562,11 +650,11 @@ local function GetSources()
         while true do
             local instanceID, instanceName = EJ_GetInstanceByIndex(index, false) -- isRaid=false
             if not instanceID then break end
-            
+
             if MEGA_DUNGEON_MAPPINGS[instanceName] then
                 instanceName = MEGA_DUNGEON_MAPPINGS[instanceName]
             end
-            
+
             if not seenDungeons[instanceName] then
                 seenDungeons[instanceName] = true
                 table.insert(dungeons, instanceName)
@@ -594,17 +682,26 @@ local function GetSources()
             options = {
                 "Crafted",
                 "Delve",
-                "World Boss",
                 "PvP",
-                "Custom Item",
-                "Other"
+                "Other",
+                "Custom Item"
             }
         }
     }
 end
 
 local function CreateChooserFrame(parent)
+    local UpdateItemsList -- Forward declaration
     local f = CreateFrame("Frame", "TwichUI_BiS_Chooser", parent)
+
+    -- Logic Initialization
+    f.selectedSource = nil
+    f.selectedItemLink = nil
+    f.selectedDifficulty = 16 -- Default Mythic
+    f.customSourceValue = "Other"
+    f.sourceButtons = {}
+    f.itemButtons = {}
+
     f:SetSize(700, 500)
     f:SetPoint("CENTER")
     f:SetFrameStrata("FULLSCREEN_DIALOG")
@@ -642,7 +739,7 @@ local function CreateChooserFrame(parent)
 
     -- 1. Search Input
     local input = CreateFrame("EditBox", nil, f, "InputBoxTemplate")
-    input:SetSize(300, 20)
+    input:SetSize(300, 25)
     input:SetPoint("TOP", f.Title, "BOTTOM", 0, -20)
     input:SetAutoFocus(false)
     input:SetTextInsets(5, 5, 0, 0)
@@ -650,6 +747,86 @@ local function CreateChooserFrame(parent)
     input:SetText("Search Item...")
     if E then E:GetModule("Skins"):HandleEditBox(input) end
     f.Input = input
+
+    -- Raid Difficulty Selector
+    local diffSelector = CreateFrame("Frame", "TwichUI_BiS_DiffSelector", f, "UIDropDownMenuTemplate")
+    diffSelector:SetPoint("LEFT", input, "RIGHT", 20, 0)
+    diffSelector:Hide()
+    f.DiffSelector = diffSelector
+    UIDropDownMenu_SetWidth(diffSelector, 115)
+    UIDropDownMenu_SetText(diffSelector, "Mythic")
+    -- UIDropDownMenu_JustifyText(diffSelector, "LEFT") -- Removed to fix vertical alignment
+    if E then E:GetModule("Skins"):HandleDropDownBox(diffSelector) end
+
+    -- Fix vertical alignment of the main text
+    local diffText = _G[diffSelector:GetName() .. "Text"]
+    if diffText then
+        diffText:ClearAllPoints()
+        diffText:SetPoint("CENTER", diffSelector, "CENTER", 0, 2)
+    end
+
+    local function OnDiffSelect(self, arg1, arg2, checked)
+        f.selectedDifficulty = arg1
+        UIDropDownMenu_SetSelectedValue(diffSelector, arg1)
+        -- Strip padding for display text
+        local text = self:GetText() or ""
+        text = text:gsub("^%s+", "")
+        UIDropDownMenu_SetText(diffSelector, text)
+        UpdateItemsList()
+        CloseDropDownMenus()
+    end
+
+    UIDropDownMenu_Initialize(diffSelector, function(self, level)
+        local info = UIDropDownMenu_CreateInfo()
+        info.func = OnDiffSelect
+
+        -- Add padding to prevent checkbox overlap
+        local padding = "   "
+
+        info.text = padding .. "Mythic"
+        info.value = 16
+        info.arg1 = 16
+        info.checked = (f.selectedDifficulty == 16)
+        UIDropDownMenu_AddButton(info)
+
+        info.text = padding .. "Heroic"
+        info.value = 15
+        info.arg1 = 15
+        info.checked = (f.selectedDifficulty == 15)
+        UIDropDownMenu_AddButton(info)
+
+        info.text = padding .. "Normal"
+        info.value = 14
+        info.arg1 = 14
+        info.checked = (f.selectedDifficulty == 14)
+        UIDropDownMenu_AddButton(info)
+
+        info.text = padding .. "Raid Finder"
+        info.value = 17
+        info.arg1 = 17
+        info.checked = (f.selectedDifficulty == 17)
+        UIDropDownMenu_AddButton(info)
+    end)
+    UIDropDownMenu_SetSelectedValue(diffSelector, 16) -- Default Mythic
+    UIDropDownMenu_SetText(diffSelector, "Mythic")
+
+    -- Usable Only Checkbox
+    local usableCheck = CreateFrame("CheckButton", nil, f, "ChatConfigCheckButtonTemplate")
+    usableCheck:SetPoint("TOPLEFT", f, "TOPLEFT", 25, -45)
+    usableCheck.tooltip = "Show only items usable by your class"
+    if E then E:GetModule("Skins"):HandleCheckBox(usableCheck) end
+    f.UsableCheck = usableCheck
+    
+    local usableLabel = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    usableLabel:SetPoint("LEFT", usableCheck, "RIGHT", 5, 0)
+    usableLabel:SetText("Usable Only")
+    
+    usableCheck:SetScript("OnClick", function(self)
+        f.onlyUsable = self:GetChecked()
+        UpdateItemsList()
+    end)
+    f.onlyUsable = true
+    usableCheck:SetChecked(true)
 
     -- 2. Container for Columns
     local container = CreateFrame("Frame", nil, f)
@@ -690,7 +867,9 @@ local function CreateChooserFrame(parent)
 
     -- Custom Item Form
     local customForm = CreateFrame("Frame", nil, rightCol)
-    customForm:SetAllPoints()
+    customForm:SetPoint("TOPLEFT", 0, 0)
+    customForm:SetPoint("TOPRIGHT", 0, 0)
+    customForm:SetHeight(200)
     customForm:Hide()
     f.CustomForm = customForm
 
@@ -705,26 +884,230 @@ local function CreateChooserFrame(parent)
     if E then E:GetModule("Skins"):HandleEditBox(customItemInput) end
     f.CustomItemInput = customItemInput
 
-    local customSourceLabel = customForm:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    customSourceLabel:SetPoint("TOPLEFT", customItemInput, "BOTTOMLEFT", 0, -20)
-    customSourceLabel:SetText("Source (Optional):")
+    -- Tip
+    local customItemTip = customForm:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    customItemTip:SetPoint("TOPLEFT", customItemInput, "BOTTOMLEFT", 0, -5)
+    customItemTip:SetText("Press Enter to Search")
+    customItemTip:SetTextColor(0.5, 0.5, 0.5)
 
-    local customSourceInput = CreateFrame("EditBox", nil, customForm, "InputBoxTemplate")
-    customSourceInput:SetSize(350, 20)
-    customSourceInput:SetPoint("TOPLEFT", customSourceLabel, "BOTTOMLEFT", 0, -10)
-    customSourceInput:SetAutoFocus(false)
-    if E then E:GetModule("Skins"):HandleEditBox(customSourceInput) end
-    f.CustomSourceInput = customSourceInput
+    -- Result Preview
+    local customItemResultBtn = CreateFrame("Button", nil, customForm)
+    customItemResultBtn:SetPoint("TOPLEFT", customItemTip, "BOTTOMLEFT", 0, -5)
+    customItemResultBtn:SetSize(350, 20)
+
+    local customItemResult = customItemResultBtn:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    customItemResult:SetPoint("LEFT", 0, 0)
+    customItemResult:SetText("")
+    f.CustomItemResult = customItemResult
+
+    customItemResultBtn:SetScript("OnEnter", function(self)
+        if f.selectedItemLink then
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetHyperlink(f.selectedItemLink)
+            GameTooltip:Show()
+        end
+    end)
+    customItemResultBtn:SetScript("OnLeave", function(self) GameTooltip:Hide() end)
+    customItemResultBtn:SetScript("OnClick", function()
+        if f.selectedItemLink then
+            ChatEdit_InsertLink(f.selectedItemLink)
+        end
+    end)
+
+    customItemInput:SetScript("OnEnterPressed", function(self)
+        self:ClearFocus()
+        local text = self:GetText()
+        if not text or text == "" then return end
+        
+        f.CustomItemResult:SetText("Searching...")
+        
+        local function SetItem(link)
+            f.selectedItemLink = link
+            f.CustomItemResult:SetText(link)
+            f.Preview:SetText(link)
+            f.AddBtn:Enable()
+        end
+
+        local name, link = GetItemInfo(text)
+        if link then
+            SetItem(link)
+        else
+            -- Try to load it
+            local item = Item:CreateFromItemLink(text)
+            if not item:IsItemEmpty() then
+                item:ContinueOnItemLoad(function()
+                    local _, l = GetItemInfo(item:GetItemID())
+                    if l then SetItem(l) else f.CustomItemResult:SetText("Item not found") f.AddBtn:Disable() end
+                end)
+            else
+                 -- Try ID
+                 local id = tonumber(text)
+                 if id then
+                     local item = Item:CreateFromItemID(id)
+                     item:ContinueOnItemLoad(function()
+                        local _, l = GetItemInfo(id)
+                        if l then SetItem(l) else f.CustomItemResult:SetText("Item not found") f.AddBtn:Disable() end
+                     end)
+                 else
+                     f.CustomItemResult:SetText("Item not found")
+                     f.AddBtn:Disable()
+                 end
+            end
+        end
+    end)
+
+    local customSourceLabel = customForm:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    customSourceLabel:SetPoint("TOPLEFT", customItemResultBtn, "BOTTOMLEFT", 0, -20)
+    customSourceLabel:SetText("Source:")
+
+    local customSourceDropdown = CreateFrame("Frame", "TwichUI_BiS_CustomSourceDropdown", f, "UIDropDownMenuTemplate")
+    customSourceDropdown:SetPoint("TOPLEFT", customSourceLabel, "BOTTOMLEFT", -15, -10)
+    customSourceDropdown:SetFrameLevel(f:GetFrameLevel() + 100) -- Boost frame level significantly
+    UIDropDownMenu_SetWidth(customSourceDropdown, 200)
+    UIDropDownMenu_SetText(customSourceDropdown, "Select Source")
+    UIDropDownMenu_JustifyText(customSourceDropdown, "LEFT")
+    if E then E:GetModule("Skins"):HandleDropDownBox(customSourceDropdown) end
+    f.CustomSourceDropdown = customSourceDropdown
+    
+    -- Create a full-size invisible button to ensure the entire area is clickable
+    local fullClick = CreateFrame("Button", nil, customSourceDropdown)
+    fullClick:SetAllPoints(customSourceDropdown)
+    fullClick:SetFrameLevel(customSourceDropdown:GetFrameLevel() + 10)
+    
+    fullClick:SetScript("OnEnter", function(self) 
+        local b = _G[customSourceDropdown:GetName().."Button"]
+        if b then 
+            if b.LockHighlight then b:LockHighlight() end
+            -- ElvUI support
+            if b.SetBackdropBorderColor and E then 
+                b:SetBackdropBorderColor(unpack(E.media.rgbvaluecolor)) 
+            end
+        end
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText("Click to select source")
+        GameTooltip:Show()
+    end)
+    
+    fullClick:SetScript("OnLeave", function(self) 
+        local b = _G[customSourceDropdown:GetName().."Button"]
+        if b then 
+            if b.UnlockHighlight then b:UnlockHighlight() end
+            -- ElvUI support
+            if b.SetBackdropBorderColor and E then 
+                b:SetBackdropBorderColor(unpack(E.media.bordercolor)) 
+            end
+        end
+        GameTooltip:Hide()
+    end)
+    
+    fullClick:SetScript("OnClick", function()
+        -- print("TwichUI Debug: FullClick Button Clicked")
+        ToggleDropDownMenu(nil, nil, customSourceDropdown)
+        PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON)
+    end)
+
+    local function OnCustomSourceSelect(self, arg1)
+        -- print("TwichUI Debug: Selected Source:", arg1)
+        f.customSourceValue = arg1
+        UIDropDownMenu_SetSelectedValue(customSourceDropdown, arg1)
+        UIDropDownMenu_SetText(customSourceDropdown, arg1)
+    end
+
+    UIDropDownMenu_Initialize(customSourceDropdown, function(self, level)
+        level = level or 1
+        local info
+        
+        -- Dungeons
+        info = UIDropDownMenu_CreateInfo()
+        info.text = "Dungeons"
+        info.isTitle = true
+        info.notCheckable = true
+        UIDropDownMenu_AddButton(info, level)
+        
+        local sources = GetSources()
+        if sources then
+            -- Find Dungeons category
+            for _, cat in ipairs(sources) do
+                if cat.label == "Dungeons" then
+                    for _, dungeon in ipairs(cat.options) do
+                        info = UIDropDownMenu_CreateInfo()
+                        info.func = OnCustomSourceSelect
+                        info.text = "   " .. dungeon
+                        info.value = dungeon
+                        info.arg1 = dungeon
+                        info.checked = (f.customSourceValue == dungeon)
+                        UIDropDownMenu_AddButton(info, level)
+                    end
+                end
+            end
+
+            -- Raids
+            info = UIDropDownMenu_CreateInfo()
+            info.text = "Raids"
+            info.isTitle = true
+            info.notCheckable = true
+            UIDropDownMenu_AddButton(info, level)
+            
+            for _, cat in ipairs(sources) do
+                if cat.label == "Raids" then
+                    for _, raid in ipairs(cat.options) do
+                        info = UIDropDownMenu_CreateInfo()
+                        info.func = OnCustomSourceSelect
+                        info.text = "   " .. raid
+                        info.value = raid
+                        info.arg1 = raid
+                        info.checked = (f.customSourceValue == raid)
+                        UIDropDownMenu_AddButton(info, level)
+                    end
+                end
+            end
+        end
+        
+        -- Other
+        info = UIDropDownMenu_CreateInfo()
+        info.text = "Other"
+        info.isTitle = true
+        info.notCheckable = true
+        UIDropDownMenu_AddButton(info, level)
+        
+        local others = { "Crafted", "Delve", "PvP", "Other" }
+        for _, other in ipairs(others) do
+            info = UIDropDownMenu_CreateInfo()
+            info.func = OnCustomSourceSelect
+            info.text = "   " .. other
+            info.value = other
+            info.arg1 = other
+            info.checked = (f.customSourceValue == other)
+            UIDropDownMenu_AddButton(info, level)
+        end
+    end)
 
     -- 3. Selected Item Info & Add Button
     local bottomPanel = CreateFrame("Frame", nil, f)
     bottomPanel:SetPoint("TOPLEFT", container, "BOTTOMLEFT", 0, -10)
     bottomPanel:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -20, 10)
 
-    local preview = bottomPanel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    preview:SetPoint("LEFT", 0, 0)
+    local previewFrame = CreateFrame("Button", nil, bottomPanel)
+    previewFrame:SetPoint("TOPLEFT", 0, 0)
+    previewFrame:SetSize(300, 25)
+
+    local previewLabel = previewFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    previewLabel:SetPoint("TOPLEFT", 0, 0)
+    previewLabel:SetText("Selected Item:")
+
+    local preview = previewFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    preview:SetPoint("TOPLEFT", previewLabel, "BOTTOMLEFT", 0, -2)
     preview:SetText("No item selected")
     f.Preview = preview
+
+    previewFrame:SetScript("OnEnter", function(self)
+        if f.selectedItemLink then
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetHyperlink(f.selectedItemLink)
+            GameTooltip:Show()
+        end
+    end)
+    previewFrame:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
     local addBtn = CreateFrame("Button", nil, bottomPanel, "UIPanelButtonTemplate")
     addBtn:SetSize(120, 25)
@@ -732,17 +1115,39 @@ local function CreateChooserFrame(parent)
     addBtn:SetText("Add Item")
     if E then E:GetModule("Skins"):HandleButton(addBtn) end
     addBtn:Disable()
+    f.AddBtn = addBtn
 
-    -- Logic
-    f.selectedSource = nil
-    f.selectedItemLink = nil
-    f.sourceButtons = {}
-    f.itemButtons = {}
+    local function IsRaid(sourceName)
+        if not sourceName then return false end
+        local sources = GetSources()
+        for _, cat in ipairs(sources) do
+            if cat.label == "Raids" then
+                for _, raid in ipairs(cat.options) do
+                    if raid == sourceName then return true end
+                end
+            end
+        end
+        return false
+    end
 
-    local function UpdateItemsList()
+    local DIFF_INFO = {
+        [16] = { label = "Mythic", color = {0.64, 0.21, 0.93} }, -- Purple
+        [15] = { label = "Heroic", color = {0, 0.7, 1} },   -- Blue
+        [14] = { label = "Normal", color = {0.2, 1, 0.2} }, -- Green
+        [17] = { label = "Raid Finder",    color = {0.7, 0.7, 0.7} }, -- Grey
+    }
+
+    UpdateItemsList = function()
         if f.refreshTimer then
             f.refreshTimer:Cancel()
             f.refreshTimer = nil
+        end
+
+        -- Show/Hide Difficulty Selector
+        if IsRaid(f.selectedSource) then
+            f.DiffSelector:Show()
+        else
+            f.DiffSelector:Hide()
         end
 
         -- Clear previous items
@@ -758,15 +1163,42 @@ local function CreateChooserFrame(parent)
 
         -- Handle Custom Item View
         if f.selectedSource == "Custom Item" then
-            rightScroll:Hide()
+            -- print("TwichUI Debug: Showing Custom Form")
             customForm:Show()
+            f.CustomSourceDropdown:Show()
             f.Input:Hide()
+            
+            rightScroll:Hide() -- Hide scroll frame as requested
+
             preview:SetText("Enter item details above")
-            addBtn:Enable()
-            return
+            addBtn:Disable()
+
+            -- Populate saved items
+            if TwichUIDB and TwichUIDB.CustomItems then
+                for _, item in ipairs(TwichUIDB.CustomItems) do
+                    local name, link, _, _, _, _, _, _, itemEquipLoc, icon = GetItemInfo(item.link)
+                    if link then
+                        local valid = IsItemValidForSlot(itemEquipLoc, f.targetSlotID)
+                        if valid then
+                            table.insert(items, { id = 0, name = name, link = link, icon = icon })
+                        end
+                    else
+                        -- Try to load for next time
+                        local itemObj = Item:CreateFromItemLink(item.link)
+                        if not itemObj:IsItemEmpty() then
+                            itemObj:ContinueOnItemLoad(function() end)
+                        end
+                    end
+                end
+            end
         else
+            rightScroll:ClearAllPoints()
+            rightScroll:SetPoint("TOPLEFT", rightCol, "TOPLEFT", 0, 0)
+            rightScroll:SetPoint("BOTTOMRIGHT", rightCol, "BOTTOMRIGHT", -30, 0)
             rightScroll:Show()
+
             customForm:Hide()
+            f.CustomSourceDropdown:Hide()
             f.Input:Show()
         end
 
@@ -782,25 +1214,57 @@ local function CreateChooserFrame(parent)
             if TierLootCache then
                 local missingItems = false
                 for itemID, source in pairs(TierLootCache) do
-                    local linkToUse = TierItemLinkCache and TierItemLinkCache[itemID] or itemID
-                    local name, link, _, _, _, _, _, _, itemEquipLoc, icon = GetItemInfo(linkToUse)
-                    if not name then
-                        missingItems = true
-                        if type(linkToUse) == "string" then
-                            Item:CreateFromItemLink(linkToUse)
-                        else
-                            Item:CreateFromItemID(linkToUse)
+                    local versions = {}
+                    if TierItemLinkCache and TierItemLinkCache[itemID] and type(TierItemLinkCache[itemID]) == "table" then
+                        -- Check for Raid Difficulties
+                        local foundRaid = false
+                        for _, diffID in ipairs({16, 15, 14, 17}) do -- Mythic, Heroic, Normal, LFR
+                            if TierItemLinkCache[itemID][diffID] then
+                                table.insert(versions, { link = TierItemLinkCache[itemID][diffID], diffID = diffID })
+                                foundRaid = true
+                            end
+                        end
+                        
+                        if not foundRaid then
+                             -- Fallback to whatever is there (e.g. Dungeon)
+                             for diffID, link in pairs(TierItemLinkCache[itemID]) do
+                                 table.insert(versions, { link = link, diffID = diffID })
+                                 break -- Just take one if not raid
+                             end
                         end
                     else
-                        local valid = IsItemValidForSlot(itemEquipLoc, f.targetSlotID)
-                        if valid then
-                            if searchText == "" or name:lower():find(searchText, 1, true) then
-                                table.insert(items, { id = itemID, name = name, link = link, icon = icon })
+                        local l = (TierItemLinkCache and TierItemLinkCache[itemID]) or itemID
+                        table.insert(versions, { link = l, diffID = nil })
+                    end
+
+                    for _, v in ipairs(versions) do
+                        local linkToUse = v.link
+                        local name, link, _, _, _, _, _, _, itemEquipLoc, icon, _, itemClassID, itemSubClassID = GetItemInfo(linkToUse)
+                        if not name then
+                            missingItems = true
+                            if type(linkToUse) == "string" then
+                                Item:CreateFromItemLink(linkToUse)
+                            else
+                                Item:CreateFromItemID(linkToUse)
+                            end
+                        else
+                            local valid = IsItemValidForSlot(itemEquipLoc, f.targetSlotID)
+                            if valid then
+                                local usable = true
+                                if f.onlyUsable then
+                                    usable = IsItemUsableByPlayer(itemClassID, itemSubClassID, itemEquipLoc)
+                                end
+
+                                if usable then
+                                    if searchText == "" or name:lower():find(searchText, 1, true) then
+                                        table.insert(items, { id = itemID, name = name, link = link, icon = icon, diffID = v.diffID })
+                                    end
+                                end
                             end
                         end
                     end
                     -- Limit results to prevent lag
-                    if #items >= 200 then break end
+                    if #items >= 300 then break end
                 end
 
                 if missingItems and not f.refreshTimer then
@@ -816,11 +1280,27 @@ local function CreateChooserFrame(parent)
             local sourceItems = TierInstanceLootCache[f.selectedSource]
             for _, itemID in ipairs(sourceItems) do
                 -- Filter by slot
-                local linkToUse = TierItemLinkCache and TierItemLinkCache[itemID] or itemID
-                local name, link, _, _, _, _, _, _, itemEquipLoc, icon = GetItemInfo(linkToUse)
+                local linkToUse = itemID
+                if TierItemLinkCache and TierItemLinkCache[itemID] then
+                    if type(TierItemLinkCache[itemID]) == "table" then
+                        -- Use selected difficulty if available, otherwise fallback to any
+                        linkToUse = TierItemLinkCache[itemID][f.selectedDifficulty] or
+                            TierItemLinkCache[itemID][16] or -- Mythic
+                            TierItemLinkCache[itemID][15] or -- Heroic
+                            TierItemLinkCache[itemID][14] or -- Normal
+                            TierItemLinkCache[itemID][17] or -- LFR
+                            TierItemLinkCache[itemID][23] or -- Mythic Dungeon
+                            itemID
+                    else
+                        linkToUse = TierItemLinkCache[itemID]
+                    end
+                end
+
+                local name, link, _, _, _, _, _, _, itemEquipLoc, icon, _, itemClassID, itemSubClassID = GetItemInfo(linkToUse)
                 if not name then
                     -- Request info
-                    local item = (type(linkToUse) == "string") and Item:CreateFromItemLink(linkToUse) or Item:CreateFromItemID(linkToUse)
+                    local item = (type(linkToUse) == "string") and Item:CreateFromItemLink(linkToUse) or
+                        Item:CreateFromItemID(linkToUse)
                     item:ContinueOnItemLoad(function()
                         -- Refresh if still on same source
                         if f.selectedSource and TierInstanceLootCache[f.selectedSource] then
@@ -830,13 +1310,20 @@ local function CreateChooserFrame(parent)
                 else
                     local valid = IsItemValidForSlot(itemEquipLoc, f.targetSlotID)
                     if valid then
-                        -- Filter by search
-                        if searchText == "" or name:lower():find(searchText, 1, true) then
-                            table.insert(items, { id = itemID, name = name, link = link, icon = icon })
+                        local usable = true
+                        if f.onlyUsable then
+                            usable = IsItemUsableByPlayer(itemClassID, itemSubClassID, itemEquipLoc)
+                        end
+
+                        if usable then
+                            -- Filter by search
+                            if searchText == "" or name:lower():find(searchText, 1, true) then
+                                table.insert(items, { id = itemID, name = name, link = link, icon = icon })
+                            end
                         end
                     else
                         if f.selectedSource:find("Tazavesh") then
-                             print("Debug: Item", name, "invalid for slot", f.targetSlotID, "Loc:", itemEquipLoc)
+                            print("Debug: Item", name, "invalid for slot", f.targetSlotID, "Loc:", itemEquipLoc)
                         end
                     end
                 end
@@ -863,8 +1350,25 @@ local function CreateChooserFrame(parent)
             text:SetPoint("LEFT", icon, "RIGHT", 10, 0)
             text:SetText(item.link)
 
+            if item.diffID and DIFF_INFO[item.diffID] then
+                local dInfo = DIFF_INFO[item.diffID]
+                local diffLabel = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+                diffLabel:SetPoint("RIGHT", -10, 0)
+                diffLabel:SetText(dInfo.label)
+                diffLabel:SetTextColor(unpack(dInfo.color))
+            end
+
+            -- Background
+            local bg = btn:CreateTexture(nil, "BACKGROUND")
+            bg:SetAllPoints()
+            if yOffset % 60 == 0 then -- Alternating every 30px row
+                bg:SetColorTexture(0.1, 0.1, 0.1, 0.2)
+            else
+                bg:SetColorTexture(0.15, 0.15, 0.15, 0.2)
+            end
+
             -- Highlight
-            local hl = btn:CreateTexture(nil, "BACKGROUND")
+            local hl = btn:CreateTexture(nil, "BACKGROUND", nil, 1) -- Layer 1 to be above bg
             hl:SetAllPoints()
             hl:SetColorTexture(1, 1, 1, 0.1)
             hl:Hide()
@@ -901,6 +1405,17 @@ local function CreateChooserFrame(parent)
     end
 
     input:SetScript("OnTextChanged", function(self)
+        local text = self:GetText()
+        if text and text ~= "" and text ~= "Search Item..." and f.selectedSource ~= "All Items" and f.selectedSource ~= "Custom Item" then
+            f.selectedSource = "All Items"
+            -- Update source buttons highlighting
+            for _, btn in ipairs(f.sourceButtons) do
+                btn.Highlight:Hide()
+                if btn.Text:GetText() == "All Items" then
+                    btn.Highlight:Show()
+                end
+            end
+        end
         UpdateItemsList()
     end)
     input:SetScript("OnEditFocusGained", function(self)
@@ -913,11 +1428,24 @@ local function CreateChooserFrame(parent)
 
     addBtn:SetScript("OnClick", function()
         if f.selectedSource == "Custom Item" then
-            local itemText = customItemInput:GetText()
-            local sourceText = customSourceInput:GetText()
-            if itemText and itemText ~= "" then
+            local itemLink = f.selectedItemLink
+            local sourceText = f.customSourceValue
+            
+            if itemLink then
+                -- Save to DB
+                if TwichUIDB then
+                    if not TwichUIDB.CustomItems then TwichUIDB.CustomItems = {} end
+                    local found = false
+                    for _, item in ipairs(TwichUIDB.CustomItems) do
+                        if item.link == itemLink then found = true break end
+                    end
+                    if not found then
+                        table.insert(TwichUIDB.CustomItems, { link = itemLink, source = sourceText or "Custom" })
+                    end
+                end
+
                 if f.callback then
-                    f.callback({ link = itemText, source = (sourceText ~= "" and sourceText or "Custom") })
+                    f.callback({ link = itemLink, source = (sourceText or "Custom") })
                     f:Hide()
                 end
             end
@@ -947,6 +1475,10 @@ local function CreateChooserFrame(parent)
             text:SetText(src)
             btn.Text = text
 
+            if src == "Custom Item" then
+                text:SetTextColor(0, 1, 1) -- Cyan
+            end
+
             local hl = btn:CreateTexture(nil, "BACKGROUND")
             hl:SetAllPoints()
             hl:SetColorTexture(1, 1, 1, 0.1)
@@ -969,14 +1501,14 @@ local function CreateChooserFrame(parent)
 
     function f:SetInitialState(link, source, iLevel, slotID)
         self.Input:SetText("Search Item...")
-        self.selectedSource = source
+        self.selectedSource = source or "All Items"
         self.targetSlotID = slotID
         self.selectedItemLink = link
 
         -- Select Source in UI
         for _, btn in ipairs(self.sourceButtons) do
             btn.Highlight:Hide()
-            if btn.Text:GetText() == source then
+            if btn.Text:GetText() == self.selectedSource then
                 btn.Highlight:Show()
             end
         end
@@ -1327,7 +1859,7 @@ local function CreateBestInSlotPanel(parent)
 
         f:SetScript("OnClick", function(self)
             Chooser:Show()
-            Chooser.Title:SetText("Add " .. slotData.name)
+            Chooser.Title:SetText("Select " .. slotData.name)
 
             local db = GetCharacterDB()
             local data = db and db[self.slotID]
