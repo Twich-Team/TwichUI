@@ -446,24 +446,6 @@ function RunSharingFrame:CreateFrame()
     speedLabel:SetPoint("RIGHT", speedInput, "LEFT", -5, 0)
     speedLabel:SetText("Speed:")
 
-    -- Delete Button
-    local delBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-    delBtn:SetSize(btnWidth, btnHeight)
-    delBtn:SetPoint("RIGHT", speedLabel, "LEFT", -20, 0)
-    delBtn:SetText("Delete")
-    delBtn:SetScript("OnClick", function() self:OnDeleteClick() end)
-    if Skins then Skins:HandleButton(delBtn) end
-    self.delBtn = delBtn
-
-    -- Rename Button
-    local renameBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-    renameBtn:SetSize(btnWidth, btnHeight)
-    renameBtn:SetPoint("RIGHT", delBtn, "LEFT", -10, 0)
-    renameBtn:SetText("Rename")
-    renameBtn:SetScript("OnClick", function() self:OnRenameClick() end)
-    if Skins then Skins:HandleButton(renameBtn) end
-    self.renameBtn = renameBtn
-
     -- Clear All Button
     local clearBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
     clearBtn:SetSize(btnWidth, btnHeight)
@@ -572,12 +554,58 @@ function RunSharingFrame:UpdateList()
 
             local text = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
             text:SetPoint("LEFT", 5, 0)
+            text:SetPoint("RIGHT", -45, 0)
             text:SetJustifyH("LEFT")
             row.text = text
+
+            -- Delete Button (Red X)
+            local delBtn = CreateFrame("Button", nil, row)
+            delBtn:SetSize(16, 16)
+            delBtn:SetPoint("RIGHT", row, "RIGHT", -2, 0)
+            delBtn:SetNormalTexture("Interface\\Buttons\\UI-GroupLoot-Pass-Up")
+            delBtn:SetHighlightTexture("Interface\\Buttons\\UI-Common-MouseHilight", "ADD")
+            delBtn:Hide()
+            delBtn:SetScript("OnEnter", function(self)
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                GameTooltip:SetText("Delete Run")
+                GameTooltip:Show()
+            end)
+            delBtn:SetScript("OnLeave", function(self) GameTooltip:Hide() end)
+            row.delBtn = delBtn
+
+            -- Rename Button (Pencil/Edit)
+            local renameBtn = CreateFrame("Button", nil, row)
+            renameBtn:SetSize(16, 16)
+            renameBtn:SetPoint("RIGHT", delBtn, "LEFT", -2, 0)
+            renameBtn:SetNormalTexture("Interface\\Buttons\\UI-GuildButton-PublicNote-Up")
+            renameBtn:SetHighlightTexture("Interface\\Buttons\\UI-Common-MouseHilight", "ADD")
+            renameBtn:Hide()
+            renameBtn:SetScript("OnEnter", function(self)
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                GameTooltip:SetText("Rename Run")
+                GameTooltip:Show()
+            end)
+            renameBtn:SetScript("OnLeave", function(self) GameTooltip:Hide() end)
+            row.renameBtn = renameBtn
+
+            row:SetScript("OnEnter", function(self)
+                self.delBtn:Show()
+                self.renameBtn:Show()
+            end)
+            row:SetScript("OnLeave", function(self)
+                if not self:IsMouseOver() then
+                    self.delBtn:Hide()
+                    self.renameBtn:Hide()
+                end
+            end)
 
             row:SetScript("OnClick", function() self:SelectRun(i) end)
             self.rows[i] = row
         end
+
+        -- Update button scripts with current index
+        row.delBtn:SetScript("OnClick", function() self:OnDeleteClick(i) end)
+        row.renameBtn:SetScript("OnClick", function() self:OnRenameClick(i) end)
 
         row:SetPoint("TOPLEFT", 0, -yOffset)
         row:Show()
@@ -973,17 +1001,30 @@ function RunSharingFrame:OnStopClick()
     end
 end
 
-function RunSharingFrame:OnDeleteClick()
-    if not self.selectedIndex then return end
+function RunSharingFrame:OnDeleteClick(index)
+    self.runToDeleteIndex = index or self.selectedIndex
+    if not self.runToDeleteIndex then return end
     StaticPopup_Show("TWICHUI_CONFIRM_DELETE_RUN")
 end
 
 function RunSharingFrame:PerformDelete()
-    if not self.selectedIndex then return end
+    local index = self.runToDeleteIndex or self.selectedIndex
+    if not index then return end
+    
     local db = self:GetDB()
-    tremove(db.remoteRuns, self.selectedIndex)
-    self.selectedIndex = nil
-    self.detailsEditBox:SetText("")
+    tremove(db.remoteRuns, index)
+    
+    if self.selectedIndex == index then
+        self.selectedIndex = nil
+        self.detailsEditBox:SetText("")
+        self.detailsScroll:Hide()
+        self.detailsFrame:Hide()
+        self.headerText:SetText("")
+    elseif self.selectedIndex and self.selectedIndex > index then
+        self.selectedIndex = self.selectedIndex - 1
+    end
+    
+    self.runToDeleteIndex = nil
     self:UpdateList()
 end
 
@@ -992,6 +1033,9 @@ function RunSharingFrame:OnClearAllClick()
     db.remoteRuns = {}
     self.selectedIndex = nil
     self.detailsEditBox:SetText("")
+    self.detailsScroll:Hide()
+    self.detailsFrame:Hide()
+    self.headerText:SetText("")
     self:UpdateList()
 end
 
@@ -1089,8 +1133,9 @@ function RunSharingFrame:ShowImportDialog()
     self.importFrame = frame
 end
 
-function RunSharingFrame:OnRenameClick()
-    if not self.selectedIndex then return end
+function RunSharingFrame:OnRenameClick(index)
+    self.runToRenameIndex = index or self.selectedIndex
+    if not self.runToRenameIndex then return end
     self:ShowRenameDialog()
 end
 
@@ -1142,11 +1187,13 @@ function RunSharingFrame:ShowRenameDialog()
     saveBtn:SetScript("OnClick", function()
         local text = editBox:GetText()
         local db = self:GetDB()
-        if self.selectedIndex and db.remoteRuns[self.selectedIndex] then
-            db.remoteRuns[self.selectedIndex].customName = (text ~= "" and text) or nil
+        local index = self.runToRenameIndex or self.selectedIndex
+        if index and db.remoteRuns[index] then
+            db.remoteRuns[index].customName = (text ~= "" and text) or nil
             self:UpdateList()
         end
         frame:Hide()
+        self.runToRenameIndex = nil
     end)
     if Skins then Skins:HandleButton(saveBtn) end
 
@@ -1154,15 +1201,19 @@ function RunSharingFrame:ShowRenameDialog()
     cancelBtn:SetSize(80, 24)
     cancelBtn:SetPoint("RIGHT", saveBtn, "LEFT", -10, 0)
     cancelBtn:SetText("Cancel")
-    cancelBtn:SetScript("OnClick", function() frame:Hide() end)
+    cancelBtn:SetScript("OnClick", function() 
+        frame:Hide() 
+        self.runToRenameIndex = nil
+    end)
     if Skins then Skins:HandleButton(cancelBtn) end
 
     self.renameFrame = frame
 
     frame:SetScript("OnShow", function()
         local db = self:GetDB()
-        if self.selectedIndex and db.remoteRuns[self.selectedIndex] then
-            local run = db.remoteRuns[self.selectedIndex]
+        local index = self.runToRenameIndex or self.selectedIndex
+        if index and db.remoteRuns[index] then
+            local run = db.remoteRuns[index]
             if run.customName then
                 editBox:SetText(run.customName)
             else

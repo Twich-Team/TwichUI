@@ -17,6 +17,8 @@ MythicPlusModule.RunSharing = RunSharing
 
 ---@type LoggerModule
 local Logger = T:GetModule("Logger")
+---@type ConfigurationModule
+local CM = T:GetModule("Configuration")
 
 local time = _G.time
 local LibStub = _G.LibStub
@@ -136,6 +138,12 @@ end
 function RunSharing:ProcessReceivedRun(sender, runData)
     -- Basic validation
     if type(runData) ~= "table" or not runData.id then return end
+
+    -- Check if we should ignore incoming runs
+    if CM:GetProfileSettingSafe("developer.mythicplus.runSharing.ignoreIncoming", false) then
+        Logger.Info("Run Sharing: Ignored incoming run data from " .. sender .. " (setting enabled)")
+        return
+    end
 
     local db = GetDB()
 

@@ -115,6 +115,18 @@ function DR:Create(order)
                     },
                     runSharingDesc = CM.Widgets:ComponentDescription(3.2,
                         "Automatically send completed run logs to another player (e.g. for simulation). Both players must have the addon installed."),
+                    ignoreIncomingRuns = {
+                        type = "toggle",
+                        name = "Ignore Incoming Runs",
+                        desc = "If enabled, incoming Mythic+ run data from other players will be ignored.",
+                        order = 3.25,
+                        get = function()
+                            return CM:GetProfileSettingSafe("developer.mythicplus.runSharing.ignoreIncoming", false)
+                        end,
+                        set = function(_, value)
+                            CM:SetProfileSettingSafe("developer.mythicplus.runSharing.ignoreIncoming", value)
+                        end,
+                    },
                     linkedReceiver = {
                         type = "input",
                         name = "Linked Receiver",
