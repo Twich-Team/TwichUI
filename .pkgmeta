@@ -3,6 +3,7 @@ package-as: TwichUI
 ignore:
   - SAMPLE_DATA
   - "*.md"
+  - assets
 
 manual-changelog:
   filename: CHANGELOG.md
