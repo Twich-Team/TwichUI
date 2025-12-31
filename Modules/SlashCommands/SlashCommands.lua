@@ -61,6 +61,14 @@ SC.COMMANDS = {
             },
         },
     },
+    mythicplus = {
+        description = "Open the Mythic+ window",
+        handler = function()
+            ---@type MythicPlusModule
+            local module = T:GetModule("MythicPlus")
+            module.MainWindow:Enable(true)
+        end,
+    },
     developer = {
         description = "Developer commands",
         subcommands = {
