@@ -256,7 +256,7 @@ end
 
 local function AttachAnimations(frame)
     if frame.FadeInGroup then return end
-    
+
     frame.FadeInGroup = frame:CreateAnimationGroup()
     frame.FadeInAnim = frame.FadeInGroup:CreateAnimation("Alpha")
     frame.FadeInAnim:SetDuration(0.2)
@@ -269,9 +269,9 @@ local function AttachAnimations(frame)
     frame.FadeOutAnim:SetDuration(0.2)
     frame.FadeOutAnim:SetToAlpha(0)
     frame.FadeOutAnim:SetSmoothing("OUT")
-    frame.FadeOutGroup:SetScript("OnFinished", function() 
-        frame:Hide() 
-        frame:SetAlpha(1) 
+    frame.FadeOutGroup:SetScript("OnFinished", function()
+        frame:Hide()
+        frame:SetAlpha(1)
         if frame.onHideCallback then
             frame.onHideCallback()
             frame.onHideCallback = nil
@@ -303,14 +303,14 @@ function MainWindow:ShowPanel(id)
         local current = self._panels[self.activePanelId]
         if current and current.frame then
             AttachAnimations(current.frame)
-            
+
             -- Store onHide callback to be called after animation
             current.frame.onHideCallback = function()
                 if type(current.onHide) == "function" then
                     pcall(current.onHide, current.frame, self)
                 end
             end
-            
+
             current.frame.FadeInGroup:Stop()
             current.frame.FadeOutAnim:SetFromAlpha(current.frame:GetAlpha())
             current.frame.FadeOutGroup:Play()
@@ -340,7 +340,7 @@ function MainWindow:ShowPanel(id)
     AttachAnimations(nextPanel.frame)
 
     self.activePanelId = id
-    
+
     nextPanel.frame.FadeOutGroup:Stop()
     if not nextPanel.frame:IsShown() then
         nextPanel.frame:SetAlpha(0)

@@ -1178,7 +1178,7 @@ local function CreateChooserFrame(parent)
     local addBtn = CreateFrame("Button", nil, bottomPanel, "UIPanelButtonTemplate")
     addBtn:SetSize(120, 25)
     addBtn:SetPoint("RIGHT", 0, 0)
-    addBtn:SetText("Add Item")
+    addBtn:SetText("Select Item")
     if E then E:GetModule("Skins"):HandleButton(addBtn) end
     addBtn:Disable()
     f.AddBtn = addBtn
@@ -1219,7 +1219,65 @@ local function CreateChooserFrame(parent)
         [1]  = { label = "Normal", color = { 0.2, 1, 0.2 } },      -- Green
     }
 
+    local function UpdateSourceStates()
+        local searchText = input:GetText():lower()
+        if searchText == "search item..." then searchText = "" end
+
+        for _, btn in ipairs(f.sourceButtons) do
+            local sourceName = btn.Text:GetText()
+            local hasItems = false
+
+            if sourceName == "All Items" or sourceName == "Custom Item" then
+                hasItems = true
+            elseif TierInstanceLootCache and TierInstanceLootCache[sourceName] then
+                for _, itemID in ipairs(TierInstanceLootCache[sourceName]) do
+                    local _, _, _, itemEquipLoc, _, itemClassID, itemSubClassID = GetItemInfoInstant(itemID)
+
+                    -- If item info is missing, assume it might be valid to avoid false negatives
+                    if not itemEquipLoc then
+                        hasItems = true
+                        break
+                    end
+
+                    if itemEquipLoc then
+                        local valid = IsItemValidForSlot(itemEquipLoc, f.targetSlotID)
+                        if valid then
+                            local usable = true
+                            if f.onlyUsable then
+                                usable = IsItemUsableByPlayer(itemClassID, itemSubClassID, itemEquipLoc)
+                            end
+
+                            if usable then
+                                if searchText == "" then
+                                    hasItems = true
+                                    break
+                                else
+                                    local name = GetItemInfo(itemID)
+                                    if name and name:lower():find(searchText, 1, true) then
+                                        hasItems = true
+                                        break
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+
+            if hasItems then
+                btn:Enable()
+                btn.Text:SetTextColor(1, 1, 1)
+                if sourceName == "Custom Item" then btn.Text:SetTextColor(0, 1, 1) end
+            else
+                btn:Disable()
+                btn.Text:SetTextColor(0.5, 0.5, 0.5)
+            end
+        end
+    end
+
     UpdateItemsList = function()
+        UpdateSourceStates()
+
         if f.refreshTimer then
             f.refreshTimer:Cancel()
             f.refreshTimer = nil
