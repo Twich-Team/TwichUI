@@ -19,6 +19,7 @@ local GetAverageItemLevel = _G.GetAverageItemLevel
 local C_Timer = _G.C_Timer
 local IsStealthed = _G.IsStealthed
 local UnitIsVisible = _G.UnitIsVisible
+local RAID_CLASS_COLORS = _G.RAID_CLASS_COLORS
 
 ---@type LoggerModule
 local Logger = T:GetModule("Logger")
@@ -65,6 +66,86 @@ local function GetMythicPlusScore()
         return tonumber(score) or 0
     end
     return 0
+end
+
+local function GetCurrentWeeklyAffixes()
+    local C_MythicPlus = _G.C_MythicPlus
+    if C_MythicPlus and type(C_MythicPlus.GetCurrentAffixes) == "function" then
+        local ok, affixes = pcall(C_MythicPlus.GetCurrentAffixes)
+        if ok and type(affixes) == "table" then
+            local entries = {}
+            for _, entry in ipairs(affixes) do
+                ---@type any
+                local id = entry
+                local level
+                if type(entry) == "table" then
+                    ---@type any
+                    local entryAny = entry
+                    id = entryAny.id or entryAny.affixID or entryAny.affixId
+                    level = entryAny.startingLevel or entryAny.startingKeystoneLevel or entryAny.requiredLevel or
+                    entryAny.level
+                end
+                id = tonumber(id)
+                level = tonumber(level)
+                if id then
+                    entries[#entries + 1] = { id = id, level = level }
+                end
+            end
+            return entries
+        end
+    end
+    return {}
+end
+
+local function GetAffixInfo(affixID)
+    local C_ChallengeMode = _G.C_ChallengeMode
+    if C_ChallengeMode and type(C_ChallengeMode.GetAffixInfo) == "function" then
+        local ok, name, desc, icon = pcall(C_ChallengeMode.GetAffixInfo, affixID)
+        if ok then
+            return name, desc, icon
+        end
+    end
+    return nil, nil, nil
+end
+
+local function ColorizeDungeonScore(score, text)
+    local C_ChallengeMode = _G.C_ChallengeMode
+    if C_ChallengeMode and type(C_ChallengeMode.GetDungeonScoreRarityColor) == "function" then
+        local ok, a, b, c = pcall(C_ChallengeMode.GetDungeonScoreRarityColor, score)
+        if ok then
+            if type(a) == "table" then
+                local color = a
+                if type(color.WrapTextInColorCode) == "function" then
+                    return color:WrapTextInColorCode(text)
+                end
+                if type(color.GenerateHexColor) == "function" then
+                    return ("|c%s%s|r"):format(color:GenerateHexColor(), text)
+                end
+                if type(color.r) == "number" and type(color.g) == "number" and type(color.b) == "number" then
+                    local r = math.max(0, math.min(1, color.r))
+                    local g = math.max(0, math.min(1, color.g))
+                    local b2 = math.max(0, math.min(1, color.b))
+                    return ("|c%02x%02x%02x%02x%s|r"):format(255, r * 255, g * 255, b2 * 255, text)
+                end
+            elseif type(a) == "number" and type(b) == "number" and type(c) == "number" then
+                local r = math.max(0, math.min(1, a))
+                local g = math.max(0, math.min(1, b))
+                local b2 = math.max(0, math.min(1, c))
+                return ("|c%02x%02x%02x%02x%s|r"):format(255, r * 255, g * 255, b2 * 255, text)
+            end
+        end
+    end
+
+    -- Fallback if the API isn't available / returns an unexpected shape.
+    return TT.Color(CT.TWICH.SECONDARY_ACCENT, text)
+end
+
+local function GetClassRGB(classFile)
+    if RAID_CLASS_COLORS and classFile and RAID_CLASS_COLORS[classFile] then
+        local c = RAID_CLASS_COLORS[classFile]
+        return tonumber(c.r) or 1, tonumber(c.g) or 1, tonumber(c.b) or 1
+    end
+    return 1, 1, 1
 end
 
 local function ForceModelVisible(model)
@@ -415,6 +496,24 @@ function Summary:Refresh(panel)
     className = className or "Unknown"
     classFile = classFile or "PRIEST"
 
+    do
+        ---@type Texture|nil
+        local tex = panel.__twichuiHeaderClassAccent
+        if tex then
+            local r, g, b = GetClassRGB(classFile)
+            -- Prefer SetGradient with Color objects when available.
+            if type(tex.SetGradient) == "function" and type(CreateColor) == "function" then
+                -- Client appears to interpret this gradient opposite of expected; keep bottom=class, top=transparent.
+                tex:SetGradient("VERTICAL", CreateColor(r, g, b, 1), CreateColor(0, 0, 0, 0))
+            elseif type(tex.SetGradientAlpha) == "function" then
+                -- Fallback if SetGradient isn't available.
+                tex:SetGradientAlpha("VERTICAL", r, g, b, 1.0, r, g, b, 0.0)
+            elseif type(tex.SetColorTexture) == "function" then
+                tex:SetColorTexture(r, g, b, 1.0)
+            end
+        end
+    end
+
     if panel.__twichuiNameText then
         panel.__twichuiNameText:SetText(TT.ColorByClass(classFile, name))
     end
@@ -424,7 +523,67 @@ function Summary:Refresh(panel)
 
     local score = GetMythicPlusScore()
     if panel.__twichuiScoreValue then
-        panel.__twichuiScoreValue:SetText(TT.Color(CT.TWICH.SECONDARY_ACCENT, string.format("%d", score)))
+        panel.__twichuiScoreValue:SetText(ColorizeDungeonScore(score, string.format("%d", score)))
+    end
+
+    do
+        local buttons = panel.__twichuiAffixButtons
+        if type(buttons) == "table" then
+            local affixes = GetCurrentWeeklyAffixes()
+            local fallbackLevels = { 2, 4, 7, 10 }
+
+            -- Ensure we can sort by keystone level even if the API doesn't provide it.
+            for i, entry in ipairs(affixes) do
+                if type(entry) == "table" and type(entry.level) ~= "number" then
+                    entry.level = fallbackLevels[i]
+                end
+            end
+
+            table.sort(affixes, function(a, b)
+                local la = (type(a) == "table" and tonumber(a.level)) or 999
+                local lb = (type(b) == "table" and tonumber(b.level)) or 999
+                if la == lb then
+                    local ia = (type(a) == "table" and tonumber(a.id)) or 0
+                    local ib = (type(b) == "table" and tonumber(b.id)) or 0
+                    return ia < ib
+                end
+                return la < lb
+            end)
+
+            for i = 1, #buttons do
+                local btn = buttons[i]
+                local affixEntry = affixes[i]
+                local affixID = affixEntry and affixEntry.id
+                if btn and affixID then
+                    local name, desc, icon = GetAffixInfo(affixID)
+                    local level = (affixEntry and affixEntry.level) or fallbackLevels[i]
+
+                    btn.__twichuiAffixID = affixID
+                    btn.__twichuiAffixName = name
+                    btn.__twichuiAffixDesc = desc
+                    btn.__twichuiAffixLevel = level
+                    if btn.__twichuiIcon and type(btn.__twichuiIcon.SetTexture) == "function" then
+                        btn.__twichuiIcon:SetTexture(icon)
+                    end
+                    if btn.__twichuiLevelText and level then
+                        btn.__twichuiLevelText:SetText(string.format("+%d", level))
+                        btn.__twichuiLevelText:Show()
+                    elseif btn.__twichuiLevelText then
+                        btn.__twichuiLevelText:Hide()
+                    end
+                    btn:Show()
+                elseif btn then
+                    btn.__twichuiAffixID = nil
+                    btn.__twichuiAffixName = nil
+                    btn.__twichuiAffixDesc = nil
+                    btn.__twichuiAffixLevel = nil
+                    if btn.__twichuiLevelText then
+                        btn.__twichuiLevelText:Hide()
+                    end
+                    btn:Hide()
+                end
+            end
+        end
     end
 
     local _, equippedIlvl = 0, 0
@@ -547,12 +706,14 @@ end
 local function CreateSummaryPanel(parent)
     ---@class TwichUI_MythicPlus_SummaryPanel : Frame
     ---@field __twichuiHeader Frame
+    ---@field __twichuiHeaderClassAccent Texture|nil
     ---@field __twichuiModel any
     ---@field __twichuiModelAnchor Frame|nil
     ---@field __twichuiNameText FontString
     ---@field __twichuiClassText FontString
     ---@field __twichuiScoreValue FontString
     ---@field __twichuiIlvlValue FontString
+    ---@field __twichuiAffixButtons table|nil
     ---@field __twichuiEventsEnabled boolean
     ---@field __twichuiModelRefreshToken number|nil
     ---@field __twichuiDebugCount number|nil
@@ -566,9 +727,10 @@ local function CreateSummaryPanel(parent)
     local fontPath = GetFontPath()
 
     local header = CreateFrame("Frame", nil, panel)
-    header:SetPoint("TOPLEFT", panel, "TOPLEFT", 10, -10)
-    header:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -10, -10)
-    header:SetHeight(140)
+    -- Stretch across the full content width (from the nav/tabs edge to the window edge).
+    header:SetPoint("TOPLEFT", panel, "TOPLEFT", 0, -10)
+    header:SetPoint("TOPRIGHT", panel, "TOPRIGHT", 0, -10)
+    header:SetHeight(100)
     panel.__twichuiHeader = header
 
     local baseStrata = (type(header.GetFrameStrata) == "function" and header:GetFrameStrata()) or "DIALOG"
@@ -586,10 +748,21 @@ local function CreateSummaryPanel(parent)
     local br, bgc, bb = HexToRGB(CT.TWICH.PANEL_BG)
     bg:SetColorTexture(br, bgc, bb, 0.35)
 
+    -- Bottom accent: class-color bar that fades upward.
+    local classAccent = bgFrame:CreateTexture(nil, "BORDER")
+    classAccent:SetPoint("BOTTOMLEFT", header, "BOTTOMLEFT", 0, 0)
+    classAccent:SetPoint("BOTTOMRIGHT", header, "BOTTOMRIGHT", 0, 0)
+    classAccent:SetHeight(30)
+    -- Use a real texture so SetGradientAlpha works reliably across clients.
+    classAccent:SetTexture("Interface\\Buttons\\WHITE8x8")
+    classAccent:SetTexCoord(0, 1, 0, 1)
+    panel.__twichuiHeaderClassAccent = classAccent
+
     -- Model (upper-body) via PlayerModel (matches Key Master behavior; avoids DressUpModel ghosting)
     local modelFrame = CreateFrame("PlayerModel", nil, header)
-    modelFrame:SetPoint("TOPLEFT", header, "TOPLEFT", 8, -8)
-    modelFrame:SetSize(120, 124)
+    -- Align model bottom with the header bottom accent baseline.
+    modelFrame:SetPoint("TOPLEFT", header, "TOPLEFT", 8, -16)
+    modelFrame:SetSize(100, 84)
     -- Use the same strata as the header (often DIALOG) so it renders above header children.
     modelFrame:SetFrameStrata(baseStrata)
     modelFrame:SetFrameLevel(baseLevel + 10)
@@ -607,7 +780,7 @@ local function CreateSummaryPanel(parent)
 
     -- Text area
     local nameText = header:CreateFontString(nil, "OVERLAY")
-    nameText:SetPoint("TOPLEFT", modelFrame, "TOPRIGHT", 14, -4)
+    nameText:SetPoint("TOPLEFT", modelFrame, "TOPRIGHT", 14, -2)
     nameText:SetJustifyH("LEFT")
     nameText:SetFontObject(_G.GameFontNormalLarge)
     if fontPath and nameText.SetFont then
@@ -615,8 +788,33 @@ local function CreateSummaryPanel(parent)
     end
     panel.__twichuiNameText = nameText
 
+    local ilvlLabel = header:CreateFontString(nil, "OVERLAY")
+    ilvlLabel:SetPoint("TOPLEFT", nameText, "BOTTOMLEFT", 0, -4)
+    ilvlLabel:SetJustifyH("LEFT")
+    ilvlLabel:SetFontObject(_G.GameFontNormal)
+    if fontPath and ilvlLabel.SetFont then
+        ilvlLabel:SetFont(fontPath, 12, "OUTLINE")
+    end
+    do
+        local label = _G.ITEM_LEVEL_ABBR or "iLvl"
+        if _G.HIGHLIGHT_FONT_COLOR and type(_G.HIGHLIGHT_FONT_COLOR.WrapTextInColorCode) == "function" then
+            ilvlLabel:SetText(_G.HIGHLIGHT_FONT_COLOR:WrapTextInColorCode(label))
+        else
+            ilvlLabel:SetText(label)
+        end
+    end
+
+    local ilvlValue = header:CreateFontString(nil, "OVERLAY")
+    ilvlValue:SetPoint("LEFT", ilvlLabel, "RIGHT", 4, 0)
+    ilvlValue:SetJustifyH("LEFT")
+    ilvlValue:SetFontObject(_G.GameFontHighlight)
+    if fontPath and ilvlValue.SetFont then
+        ilvlValue:SetFont(fontPath, 12, "OUTLINE")
+    end
+    panel.__twichuiIlvlValue = ilvlValue
+
     local classText = header:CreateFontString(nil, "OVERLAY")
-    classText:SetPoint("TOPLEFT", nameText, "BOTTOMLEFT", 0, -4)
+    classText:SetPoint("TOPLEFT", ilvlLabel, "BOTTOMLEFT", 0, -3)
     classText:SetJustifyH("LEFT")
     classText:SetFontObject(_G.GameFontNormal)
     if fontPath and classText.SetFont then
@@ -624,42 +822,82 @@ local function CreateSummaryPanel(parent)
     end
     panel.__twichuiClassText = classText
 
-    local statsRow = CreateFrame("Frame", nil, header)
-    statsRow:SetPoint("BOTTOMLEFT", modelFrame, "BOTTOMRIGHT", 14, 10)
-    statsRow:SetPoint("BOTTOMRIGHT", header, "BOTTOMRIGHT", -12, 10)
-    statsRow:SetHeight(48)
+    local scoreWrap = CreateFrame("Frame", nil, header)
+    scoreWrap:SetPoint("CENTER", header, "CENTER", 0, -2)
+    scoreWrap:SetSize(220, 54)
 
-    local scoreLabel = statsRow:CreateFontString(nil, "OVERLAY")
-    scoreLabel:SetPoint("TOPLEFT", statsRow, "TOPLEFT", 0, 0)
-    scoreLabel:SetFontObject(_G.GameFontNormal)
-    if fontPath and scoreLabel.SetFont then
-        scoreLabel:SetFont(fontPath, 12, "OUTLINE")
-    end
-    scoreLabel:SetText(TT.Color(CT.TWICH.TEXT_MUTED, "Mythic+ Score"))
-
-    local scoreValue = statsRow:CreateFontString(nil, "OVERLAY")
-    scoreValue:SetPoint("TOPLEFT", scoreLabel, "BOTTOMLEFT", 0, -2)
-    scoreValue:SetFontObject(_G.GameFontHighlightLarge)
+    local scoreValue = scoreWrap:CreateFontString(nil, "OVERLAY")
+    scoreValue:SetPoint("TOP", scoreWrap, "TOP", 0, -2)
+    scoreValue:SetJustifyH("CENTER")
+    scoreValue:SetFontObject(_G.GameFontHighlightHuge or _G.GameFontHighlightLarge)
     if fontPath and scoreValue.SetFont then
-        scoreValue:SetFont(fontPath, 16, "OUTLINE")
+        scoreValue:SetFont(fontPath, 28, "OUTLINE")
     end
     panel.__twichuiScoreValue = scoreValue
 
-    local ilvlLabel = statsRow:CreateFontString(nil, "OVERLAY")
-    ilvlLabel:SetPoint("TOPLEFT", statsRow, "TOPLEFT", 180, 0)
-    ilvlLabel:SetFontObject(_G.GameFontNormal)
-    if fontPath and ilvlLabel.SetFont then
-        ilvlLabel:SetFont(fontPath, 12, "OUTLINE")
-    end
-    ilvlLabel:SetText(TT.Color(CT.TWICH.TEXT_MUTED, "Item Level"))
+    -- Weekly affixes (right side)
+    local affixWrap = CreateFrame("Frame", nil, header)
+    affixWrap:SetPoint("RIGHT", header, "RIGHT", -12, 0)
+    affixWrap:SetSize(130, 40)
 
-    local ilvlValue = statsRow:CreateFontString(nil, "OVERLAY")
-    ilvlValue:SetPoint("TOPLEFT", ilvlLabel, "BOTTOMLEFT", 0, -2)
-    ilvlValue:SetFontObject(_G.GameFontHighlightLarge)
-    if fontPath and ilvlValue.SetFont then
-        ilvlValue:SetFont(fontPath, 16, "OUTLINE")
+    local affixLabel = header:CreateFontString(nil, "OVERLAY")
+    affixLabel:SetPoint("BOTTOM", affixWrap, "TOP", 0, 2)
+    affixLabel:SetJustifyH("CENTER")
+    affixLabel:SetFontObject(_G.GameFontNormalSmall)
+    if fontPath and affixLabel.SetFont then
+        affixLabel:SetFont(fontPath, 11, "OUTLINE")
     end
-    panel.__twichuiIlvlValue = ilvlValue
+    affixLabel:SetText(TT.Color(CT.TWICH.TEXT_MUTED, "This week's affixes"))
+
+    panel.__twichuiAffixButtons = panel.__twichuiAffixButtons or {}
+    local iconSize = 28
+    local iconPad = 6
+    for i = 1, 4 do
+        local btn = CreateFrame("Button", nil, affixWrap)
+        btn:SetSize(iconSize, iconSize)
+        if i == 1 then
+            btn:SetPoint("LEFT", affixWrap, "LEFT", 0, 0)
+        else
+            btn:SetPoint("LEFT", panel.__twichuiAffixButtons[i - 1], "RIGHT", iconPad, 0)
+        end
+
+        local icon = btn:CreateTexture(nil, "ARTWORK")
+        icon:SetAllPoints()
+        icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+        btn.__twichuiIcon = icon
+
+        local levelText = btn:CreateFontString(nil, "OVERLAY")
+        levelText:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -2, 2)
+        levelText:SetJustifyH("RIGHT")
+        levelText:SetFontObject(_G.GameFontNormalSmall)
+        if fontPath and levelText.SetFont then
+            levelText:SetFont(fontPath, 12, "OUTLINE")
+        end
+        if type(levelText.SetTextColor) == "function" then
+            levelText:SetTextColor(1, 1, 1, 1)
+        end
+        btn.__twichuiLevelText = levelText
+        levelText:Hide()
+
+        btn:SetScript("OnEnter", function(self)
+            if not _G.GameTooltip or not self.__twichuiAffixName then return end
+            _G.GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            _G.GameTooltip:SetText(self.__twichuiAffixName, 1, 1, 1)
+            if self.__twichuiAffixLevel then
+                _G.GameTooltip:AddLine(string.format("Applies at +%d", self.__twichuiAffixLevel), 1, 1, 1)
+            end
+            if self.__twichuiAffixDesc and self.__twichuiAffixDesc ~= "" then
+                _G.GameTooltip:AddLine(self.__twichuiAffixDesc, nil, nil, nil, true)
+            end
+            _G.GameTooltip:Show()
+        end)
+        btn:SetScript("OnLeave", function()
+            if _G.GameTooltip then _G.GameTooltip:Hide() end
+        end)
+
+        btn:Hide()
+        panel.__twichuiAffixButtons[i] = btn
+    end
 
     panel:SetScript("OnShow", function()
         ForcePanelVisible(panel)

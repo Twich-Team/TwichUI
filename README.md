@@ -53,6 +53,9 @@ WowUp will automatically check for updates.
 - [Mythic+] Region/Server alerts (be notified when grouped with players from specific servers or regions)
 - [Mythic+] What-If analysis to estimate score gained for completing higher keys
 - [Mythic+] Calculate "easiest" path to a specific score
+- [BestInSlot] Notification if an item on your list is received, and/or if an item you already have is received but at a higher item level or with different stats
+- [BestInSlot] Notification and/or highlight when checking the Great Vault and an item on your list is available
+- [BestInSlot] Notification at start of dungeon when the dungeon you are running drops an item from your list
 
 ### Known Bugs
 
