@@ -2,7 +2,9 @@
         Developer Testing Tools
         Tools for simulating in-game events to exercise addon logic.
 ]]
+---@diagnostic disable-next-line: undefined-global
 local T, W, I, C = unpack(Twich)
+---@diagnostic disable: undefined-field
 
 --- @class ConfigurationModule
 local CM = T:GetModule("Configuration")
@@ -235,7 +237,7 @@ function DT:Create(order)
                                 width = "full",
                                 get = function()
                                     return CM:GetProfileSettingSafe(
-                                    "developer.testing.mythicPlus.summarySimulation.enabled", false)
+                                        "developer.testing.mythicPlus.summarySimulation.enabled", false)
                                 end,
                                 set = function(_, value)
                                     CM:SetProfileSettingSafe("developer.testing.mythicPlus.summarySimulation.enabled",
@@ -253,7 +255,7 @@ function DT:Create(order)
                                 step = 1,
                                 get = function()
                                     return CM:GetProfileSettingSafe(
-                                    "developer.testing.mythicPlus.summarySimulation.score", 0)
+                                        "developer.testing.mythicPlus.summarySimulation.score", 0)
                                 end,
                                 set = function(_, value)
                                     CM:SetProfileSettingSafe("developer.testing.mythicPlus.summarySimulation.score",
@@ -262,7 +264,7 @@ function DT:Create(order)
                                 end,
                                 disabled = function()
                                     return not CM:GetProfileSettingSafe(
-                                    "developer.testing.mythicPlus.summarySimulation.enabled", false)
+                                        "developer.testing.mythicPlus.summarySimulation.enabled", false)
                                 end,
                             },
                             obtained2000 = {
@@ -271,16 +273,16 @@ function DT:Create(order)
                                 order = 4,
                                 get = function()
                                     return CM:GetProfileSettingSafe(
-                                    "developer.testing.mythicPlus.summarySimulation.obtained2000", false)
+                                        "developer.testing.mythicPlus.summarySimulation.obtained2000", false)
                                 end,
                                 set = function(_, value)
                                     CM:SetProfileSettingSafe(
-                                    "developer.testing.mythicPlus.summarySimulation.obtained2000", value)
+                                        "developer.testing.mythicPlus.summarySimulation.obtained2000", value)
                                     RefreshSummaryIfOpen()
                                 end,
                                 disabled = function()
                                     return not CM:GetProfileSettingSafe(
-                                    "developer.testing.mythicPlus.summarySimulation.enabled", false)
+                                        "developer.testing.mythicPlus.summarySimulation.enabled", false)
                                 end,
                             },
                             obtained2500 = {
@@ -289,16 +291,16 @@ function DT:Create(order)
                                 order = 5,
                                 get = function()
                                     return CM:GetProfileSettingSafe(
-                                    "developer.testing.mythicPlus.summarySimulation.obtained2500", false)
+                                        "developer.testing.mythicPlus.summarySimulation.obtained2500", false)
                                 end,
                                 set = function(_, value)
                                     CM:SetProfileSettingSafe(
-                                    "developer.testing.mythicPlus.summarySimulation.obtained2500", value)
+                                        "developer.testing.mythicPlus.summarySimulation.obtained2500", value)
                                     RefreshSummaryIfOpen()
                                 end,
                                 disabled = function()
                                     return not CM:GetProfileSettingSafe(
-                                    "developer.testing.mythicPlus.summarySimulation.enabled", false)
+                                        "developer.testing.mythicPlus.summarySimulation.enabled", false)
                                 end,
                             },
                             obtained3000 = {
@@ -307,16 +309,130 @@ function DT:Create(order)
                                 order = 6,
                                 get = function()
                                     return CM:GetProfileSettingSafe(
-                                    "developer.testing.mythicPlus.summarySimulation.obtained3000", false)
+                                        "developer.testing.mythicPlus.summarySimulation.obtained3000", false)
                                 end,
                                 set = function(_, value)
                                     CM:SetProfileSettingSafe(
-                                    "developer.testing.mythicPlus.summarySimulation.obtained3000", value)
+                                        "developer.testing.mythicPlus.summarySimulation.obtained3000", value)
                                     RefreshSummaryIfOpen()
                                 end,
                                 disabled = function()
                                     return not CM:GetProfileSettingSafe(
-                                    "developer.testing.mythicPlus.summarySimulation.enabled", false)
+                                        "developer.testing.mythicPlus.summarySimulation.enabled", false)
+                                end,
+                            },
+                        },
+                    },
+                    greatVaultSimGroup = {
+                        type = "group",
+                        inline = true,
+                        name = "Great Vault Simulation",
+                        order = 3,
+                        args = {
+                            description = CM.Widgets:ComponentDescription(1,
+                                "Simulate Great Vault (Mythic+) progress and example iLvl values on the Summary panel."),
+                            enabled = {
+                                type = "toggle",
+                                name = "Enable Great Vault Simulation",
+                                desc = "When enabled, the Great Vault section uses the simulated values below.",
+                                order = 2,
+                                width = "full",
+                                get = function()
+                                    return CM:GetProfileSettingSafe(
+                                        "developer.testing.mythicPlus.greatVaultSimulation.enabled", false)
+                                end,
+                                set = function(_, value)
+                                    CM:SetProfileSettingSafe(
+                                        "developer.testing.mythicPlus.greatVaultSimulation.enabled", value)
+                                    RefreshSummaryIfOpen()
+                                end,
+                            },
+                            totalRuns = {
+                                type = "range",
+                                name = "Dungeons Completed (total)",
+                                desc = "Used for all slots (e.g., 3/4 and 3/8).",
+                                order = 3,
+                                min = 0,
+                                max = 8,
+                                step = 1,
+                                get = function()
+                                    return CM:GetProfileSettingSafe(
+                                        "developer.testing.mythicPlus.greatVaultSimulation.totalRuns", 0)
+                                end,
+                                set = function(_, value)
+                                    CM:SetProfileSettingSafe(
+                                        "developer.testing.mythicPlus.greatVaultSimulation.totalRuns", value)
+                                    RefreshSummaryIfOpen()
+                                end,
+                                disabled = function()
+                                    return not CM:GetProfileSettingSafe(
+                                        "developer.testing.mythicPlus.greatVaultSimulation.enabled", false)
+                                end,
+                            },
+                            ilvl1 = {
+                                type = "range",
+                                name = "Example iLvl (Slot 1)",
+                                desc = "Set to 0 to show —",
+                                order = 4,
+                                min = 0,
+                                max = 700,
+                                step = 1,
+                                get = function()
+                                    return CM:GetProfileSettingSafe(
+                                        "developer.testing.mythicPlus.greatVaultSimulation.ilvl1", 0)
+                                end,
+                                set = function(_, value)
+                                    CM:SetProfileSettingSafe(
+                                        "developer.testing.mythicPlus.greatVaultSimulation.ilvl1", value)
+                                    RefreshSummaryIfOpen()
+                                end,
+                                disabled = function()
+                                    return not CM:GetProfileSettingSafe(
+                                        "developer.testing.mythicPlus.greatVaultSimulation.enabled", false)
+                                end,
+                            },
+                            ilvl4 = {
+                                type = "range",
+                                name = "Example iLvl (Slot 2)",
+                                desc = "Set to 0 to show —",
+                                order = 5,
+                                min = 0,
+                                max = 700,
+                                step = 1,
+                                get = function()
+                                    return CM:GetProfileSettingSafe(
+                                        "developer.testing.mythicPlus.greatVaultSimulation.ilvl4", 0)
+                                end,
+                                set = function(_, value)
+                                    CM:SetProfileSettingSafe(
+                                        "developer.testing.mythicPlus.greatVaultSimulation.ilvl4", value)
+                                    RefreshSummaryIfOpen()
+                                end,
+                                disabled = function()
+                                    return not CM:GetProfileSettingSafe(
+                                        "developer.testing.mythicPlus.greatVaultSimulation.enabled", false)
+                                end,
+                            },
+                            ilvl8 = {
+                                type = "range",
+                                name = "Example iLvl (Slot 3)",
+                                desc = "Set to 0 to show —",
+                                order = 6,
+                                min = 0,
+                                max = 700,
+                                step = 1,
+                                get = function()
+                                    return CM:GetProfileSettingSafe(
+                                        "developer.testing.mythicPlus.greatVaultSimulation.ilvl8", 0)
+                                end,
+                                set = function(_, value)
+                                    CM:SetProfileSettingSafe(
+                                        "developer.testing.mythicPlus.greatVaultSimulation.ilvl8", value)
+                                    RefreshSummaryIfOpen()
+                                end,
+                                disabled = function()
+                                    return not CM:GetProfileSettingSafe(
+                                        "developer.testing.mythicPlus.greatVaultSimulation.enabled", false)
                                 end,
                             },
                         },
@@ -325,7 +441,7 @@ function DT:Create(order)
                         type = "group",
                         inline = true,
                         name = "Event Simulation",
-                        order = 3,
+                        order = 4,
                         args = {
                             description = CM.Widgets:ComponentDescription(1,
                                 "Simulate an incoming Event from the WoW API to test event handling."),
@@ -388,7 +504,7 @@ function DT:Create(order)
                         type = "group",
                         inline = true,
                         name = "Run Simulation",
-                        order = 4,
+                        order = 5,
                         args = {
                             description = CM.Widgets:ComponentDescription(1,
                                 "Simulate a recorded run."),

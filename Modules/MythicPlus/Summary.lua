@@ -158,6 +158,323 @@ local function GetSeasonProgressSimulation()
     return true, simScore, obtainedByScore
 end
 
+local function GetGreatVaultSimulation()
+    if not CM or type(CM.GetProfileSettingSafe) ~= "function" then
+        return false, nil
+    end
+
+    local enabled = CM:GetProfileSettingSafe("developer.testing.mythicPlus.greatVaultSimulation.enabled", false)
+    if not enabled then
+        return false, nil
+    end
+
+    local function Clamp(n, minv, maxv)
+        n = tonumber(n) or 0
+        if n < minv then return minv end
+        if n > maxv then return maxv end
+        return n
+    end
+
+    local sim = {
+        -- Prefer a single total runs value; fall back to legacy per-slot progress sliders.
+        totalRuns = CM:GetProfileSettingSafe("developer.testing.mythicPlus.greatVaultSimulation.totalRuns", nil),
+        progress1 = Clamp(CM:GetProfileSettingSafe("developer.testing.mythicPlus.greatVaultSimulation.progress1", 0), 0,
+            1),
+        progress4 = Clamp(CM:GetProfileSettingSafe("developer.testing.mythicPlus.greatVaultSimulation.progress4", 0), 0,
+            4),
+        progress8 = Clamp(CM:GetProfileSettingSafe("developer.testing.mythicPlus.greatVaultSimulation.progress8", 0), 0,
+            8),
+        ilvl1 = tonumber(CM:GetProfileSettingSafe("developer.testing.mythicPlus.greatVaultSimulation.ilvl1", 0)) or 0,
+        ilvl4 = tonumber(CM:GetProfileSettingSafe("developer.testing.mythicPlus.greatVaultSimulation.ilvl4", 0)) or 0,
+        ilvl8 = tonumber(CM:GetProfileSettingSafe("developer.testing.mythicPlus.greatVaultSimulation.ilvl8", 0)) or 0,
+    }
+
+    if sim.totalRuns ~= nil then
+        sim.totalRuns = Clamp(sim.totalRuns, 0, 8)
+    else
+        sim.totalRuns = Clamp(math.max(sim.progress1 or 0, sim.progress4 or 0, sim.progress8 or 0), 0, 8)
+    end
+
+    if sim.ilvl1 <= 0 then sim.ilvl1 = nil end
+    if sim.ilvl4 <= 0 then sim.ilvl4 = nil end
+    if sim.ilvl8 <= 0 then sim.ilvl8 = nil end
+
+    return true, sim
+end
+
+local function GetGreatVaultMythicPlusActivities()
+    local simEnabled, sim = GetGreatVaultSimulation()
+    if simEnabled and type(sim) == "table" then
+        local totalRuns = tonumber(sim.totalRuns) or 0
+        return {
+            { activityID = nil, threshold = 1, totalRuns = totalRuns, simulatedIlvl = sim.ilvl1 },
+            { activityID = nil, threshold = 4, totalRuns = totalRuns, simulatedIlvl = sim.ilvl4 },
+            { activityID = nil, threshold = 8, totalRuns = totalRuns, simulatedIlvl = sim.ilvl8 },
+        }
+    end
+
+    local C_WeeklyRewards = _G.C_WeeklyRewards
+    if not C_WeeklyRewards or type(C_WeeklyRewards.GetActivities) ~= "function" then
+        return nil
+    end
+
+    local ok, activities = pcall(C_WeeklyRewards.GetActivities)
+    if not ok or type(activities) ~= "table" then
+        return nil
+    end
+
+    local desiredThresholds = { 1, 4, 8 }
+    local desiredLookup = { [1] = true, [4] = true, [8] = true }
+
+    local mplusType
+    if _G.Enum and _G.Enum.WeeklyRewardChestThresholdType and _G.Enum.WeeklyRewardChestThresholdType.MythicPlus then
+        mplusType = tonumber(_G.Enum.WeeklyRewardChestThresholdType.MythicPlus)
+    end
+
+    ---@param entry any
+    local function GetActivityInfo(entry)
+        if type(entry) == "table" then
+            return entry, tonumber(entry.id or entry.activityID or entry.activityId)
+        end
+        local id = tonumber(entry)
+        if not id then return nil, nil end
+
+        if type(C_WeeklyRewards.GetActivityInfo) == "function" then
+            local ok2, info = pcall(C_WeeklyRewards.GetActivityInfo, id)
+            if ok2 and type(info) == "table" then
+                return info, id
+            end
+        end
+        return nil, id
+    end
+
+    local byThreshold = {}
+    local candidates = {}
+    local totalRuns = 0
+
+    for _, entry in ipairs(activities) do
+        local info, activityID = GetActivityInfo(entry)
+        if type(info) == "table" then
+            local threshold = tonumber(info.threshold)
+            local progress = tonumber(info.progress)
+            local t = tonumber(info.type or info.activityType or info.thresholdType)
+
+            if threshold and progress then
+                if progress > totalRuns then totalRuns = progress end
+                local normalized = {
+                    activityID = tonumber(activityID or info.id),
+                    threshold = threshold,
+                    totalRuns = totalRuns,
+                    activityType = t,
+                }
+
+                -- Prefer explicit MythicPlus type when available.
+                if mplusType and t == mplusType then
+                    local thr = normalized.threshold
+                    if desiredLookup[thr] then
+                        local prev = byThreshold[thr]
+                        if not prev or (normalized.progress or 0) > (prev.progress or 0) then
+                            byThreshold[thr] = normalized
+                        end
+                    end
+                end
+
+                -- Heuristic fallback: thresholds 1/4/8.
+                if desiredLookup[threshold] then
+                    candidates[#candidates + 1] = normalized
+                end
+            end
+        end
+    end
+
+    -- If we successfully identified M+ by type, return exactly 1/4/8 (with safe placeholders).
+    if next(byThreshold) ~= nil then
+        local out = {}
+        for _, thr in ipairs(desiredThresholds) do
+            local row = byThreshold[thr] or { activityID = nil, threshold = thr, activityType = mplusType }
+            row.totalRuns = totalRuns
+            out[#out + 1] = row
+        end
+        return out
+    end
+
+    -- Otherwise pick best matches for 1/4/8 by threshold, de-duping.
+    local best = {}
+    for _, entry in ipairs(candidates) do
+        local thr = tonumber(entry.threshold)
+        if thr and desiredLookup[thr] then
+            local prev = best[thr]
+            if not prev or (entry.progress or 0) > (prev.progress or 0) then
+                best[thr] = entry
+            end
+        end
+    end
+    if next(best) ~= nil then
+        local out = {}
+        for _, thr in ipairs(desiredThresholds) do
+            local row = best[thr] or { activityID = nil, threshold = thr, activityType = mplusType }
+            row.totalRuns = totalRuns
+            out[#out + 1] = row
+        end
+        return out
+    end
+
+    return nil
+end
+
+local function GetGreatVaultExampleItemLevel(activityID)
+    activityID = tonumber(activityID)
+    if not activityID then return nil end
+
+    local C_WeeklyRewards = _G.C_WeeklyRewards
+    if not C_WeeklyRewards or type(C_WeeklyRewards.GetExampleRewardItemHyperlinks) ~= "function" then
+        return nil
+    end
+
+    local ok, links = pcall(C_WeeklyRewards.GetExampleRewardItemHyperlinks, activityID)
+    if not ok or type(links) ~= "table" then
+        return nil
+    end
+
+    local link = links[1]
+    if not link or type(link) ~= "string" then
+        return nil
+    end
+
+    if _G.C_Item and type(_G.C_Item.GetDetailedItemLevelInfo) == "function" then
+        local ok2, ilvl = pcall(_G.C_Item.GetDetailedItemLevelInfo, link)
+        if ok2 and ilvl then
+            return tonumber(ilvl)
+        end
+    end
+
+    -- Legacy fallback (still works on some clients).
+    ---@diagnostic disable-next-line: deprecated
+    if type(_G.GetDetailedItemLevelInfo) == "function" then
+        ---@diagnostic disable-next-line: deprecated
+        local ok3, ilvl = pcall(_G.GetDetailedItemLevelInfo, link)
+        if ok3 and ilvl then
+            return tonumber(ilvl)
+        end
+    end
+
+    -- Final fallback: item info cache.
+    if _G.C_Item and type(_G.C_Item.GetItemInfo) == "function" then
+        local ok4, info = pcall(_G.C_Item.GetItemInfo, link)
+        if ok4 and type(info) == "table" and info.itemLevel then
+            return tonumber(info.itemLevel)
+        end
+    end
+
+    return nil
+end
+
+local function UpdateGreatVaultProgress(panel)
+    if not panel or not panel.__twichuiVaultWrap or not panel.__twichuiVaultSummary or type(panel.__twichuiVaultRows) ~= "table" then
+        return
+    end
+
+    local activities = GetGreatVaultMythicPlusActivities()
+    if not activities then
+        panel.__twichuiVaultWrap:Hide()
+        return
+    end
+
+    panel.__twichuiVaultWrap:Show()
+
+    local totalRuns = 0
+    for _, a in ipairs(activities) do
+        local tr = tonumber(a.totalRuns) or 0
+        if tr > totalRuns then totalRuns = tr end
+    end
+
+    local unlocked = 0
+    local nextRemaining
+    for _, a in ipairs(activities) do
+        local threshold = tonumber(a.threshold) or 0
+        if threshold > 0 then
+            if totalRuns >= threshold then
+                unlocked = unlocked + 1
+            elseif nextRemaining == nil then
+                nextRemaining = math.max(0, threshold - totalRuns)
+            end
+        end
+    end
+
+    do
+        local summary
+        if unlocked >= 3 then
+            summary = "Slots: 3/3"
+        else
+            local remainingText = (nextRemaining and nextRemaining > 0)
+                and string.format(" — Next in %d", nextRemaining)
+                or ""
+            summary = string.format("Slots: %d/3%s", unlocked, remainingText)
+        end
+        panel.__twichuiVaultSummary:SetText(TT.Color(CT.TWICH.TEXT_MUTED, summary))
+    end
+
+    for i = 1, 3 do
+        local row = panel.__twichuiVaultRows[i]
+        local a = activities[i]
+        if row and a then
+            local threshold = tonumber(a.threshold) or 0
+            local shown = (threshold > 0) and math.min(totalRuns, threshold) or totalRuns
+            local isUnlocked = threshold > 0 and (totalRuns >= threshold)
+            local remaining = (threshold > 0) and math.max(0, threshold - totalRuns) or 0
+
+            row.__twichuiThreshold = threshold
+            row.__twichuiProgress = shown
+            row.__twichuiUnlocked = isUnlocked
+            row.__twichuiRemaining = remaining
+
+            local ilvl = GetGreatVaultExampleItemLevel(a.activityID)
+            if a.simulatedIlvl then
+                ilvl = tonumber(a.simulatedIlvl)
+            end
+            row.__twichuiIlvl = ilvl
+            local ilvlText = ilvl and tostring(ilvl) or "—"
+
+            if row.ilvlText then
+                row.ilvlText:SetText(TT.Color(CT.TWICH.TEXT_PRIMARY, ilvlText))
+            end
+
+            if row.progressText then
+                row.progressText:SetText(TT.Color(CT.TWICH.TEXT_PRIMARY, string.format("%d/%d", shown, threshold)))
+            end
+
+            if row.icon then
+                if type(row.icon.SetDesaturation) == "function" then
+                    row.icon:SetDesaturation(isUnlocked and 0 or 1)
+                end
+                if type(row.icon.SetVertexColor) == "function" then
+                    if isUnlocked then
+                        row.icon:SetVertexColor(1, 1, 1, 1)
+                    else
+                        row.icon:SetVertexColor(0.8, 0.8, 0.8, 1)
+                    end
+                end
+            end
+
+            if row.ilvlBg and type(row.ilvlBg.SetColorTexture) == "function" then
+                local r, g, b = HexToRGB(CT.TWICH.PANEL_BG)
+                row.ilvlBg:SetColorTexture(r, g, b, 0.40)
+            end
+
+            if row.bg and type(row.bg.SetColorTexture) == "function" then
+                local r, g, b = HexToRGB(CT.TWICH.PANEL_BG)
+                row.bg:SetColorTexture(r, g, b, 0.18)
+            end
+
+            if row.frame and type(row.frame.Show) == "function" then
+                row.frame:Show()
+            end
+        elseif row and row.frame then
+            row.frame:Hide()
+        end
+    end
+end
+
 -- Season reward mapping is intentionally empty by default.
 -- If you want markers to show real reward icons/links, populate this per-season.
 -- Shape: SEASON_REWARDS_BY_SEASON[seasonID][scoreTarget] = { achievementID = number|nil, itemID = number|nil }
@@ -662,6 +979,8 @@ function Summary:Refresh(panel)
         panel.__twichuiScoreValue:SetText(ColorizeDungeonScore(score, string.format("%d", score)))
     end
 
+    UpdateGreatVaultProgress(panel)
+
     do
         local bar = panel.__twichuiSeasonBar
         if bar and type(bar.SetValue) == "function" then
@@ -1008,6 +1327,7 @@ function Summary:_EnableEvents(panel)
     panel:RegisterEvent("PLAYER_AVG_ITEM_LEVEL_UPDATE")
     panel:RegisterEvent("CHALLENGE_MODE_MAPS_UPDATE")
     panel:RegisterEvent("CHALLENGE_MODE_COMPLETED")
+    panel:RegisterEvent("WEEKLY_REWARDS_UPDATE")
     panel:RegisterEvent("UNIT_MODEL_CHANGED")
     panel:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
 end
@@ -1031,8 +1351,13 @@ local function CreateSummaryPanel(parent)
     ---@field __twichuiClassText FontString
     ---@field __twichuiScoreValue FontString
     ---@field __twichuiIlvlValue FontString
+    ---@field __twichuiVaultWrap Frame|nil
+    ---@field __twichuiVaultTitle FontString|nil
+    ---@field __twichuiVaultSummary FontString|nil
+    ---@field __twichuiVaultRows table|nil
     ---@field __twichuiAffixButtons table|nil
     ---@field __twichuiSeasonBar StatusBar|nil
+    ---@field __twichuiSeasonFrame Frame|nil
     ---@field __twichuiSeasonScoreText FontString|nil
     ---@field __twichuiSeasonMarkers table|nil
     ---@field __twichuiEventsEnabled boolean
@@ -1226,6 +1551,7 @@ local function CreateSummaryPanel(parent)
         season:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", 0, 10)
         season:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", 0, 10)
         season:SetHeight(84)
+        panel.__twichuiSeasonFrame = season
 
         local seasonBg = season:CreateTexture(nil, "BACKGROUND")
         seasonBg:SetAllPoints()
@@ -1649,6 +1975,227 @@ local function CreateSummaryPanel(parent)
                 m.__twichuiLabel:SetText(tostring(data.score))
             end
             m:Show()
+        end
+    end
+
+    -- Great Vault progress (between header and Season progress) - left aligned
+    do
+        local vaultArea = CreateFrame("Frame", nil, panel)
+        -- Small breathing room under the header.
+        vaultArea:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 0, -10)
+        vaultArea:SetPoint("TOPRIGHT", header, "BOTTOMRIGHT", 0, -10)
+        if panel.__twichuiSeasonFrame then
+            vaultArea:SetPoint("BOTTOMLEFT", panel.__twichuiSeasonFrame, "TOPLEFT", 0, 6)
+            vaultArea:SetPoint("BOTTOMRIGHT", panel.__twichuiSeasonFrame, "TOPRIGHT", 0, 6)
+        else
+            vaultArea:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", 0, 110)
+            vaultArea:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", 0, 110)
+        end
+
+        local vaultWrap = CreateFrame("Frame", nil, vaultArea)
+        vaultWrap:SetPoint("TOPLEFT", vaultArea, "TOPLEFT", 12, 0)
+        -- Size is set after we compute the table content width.
+        vaultWrap:SetSize(270, 124)
+        vaultWrap:Hide()
+        panel.__twichuiVaultWrap = vaultWrap
+
+        local pad = 8
+
+        local vaultBg = vaultWrap:CreateTexture(nil, "BACKGROUND")
+        vaultBg:SetAllPoints()
+        do
+            local r, g, b = HexToRGB(CT.TWICH.PANEL_BG)
+            vaultBg:SetColorTexture(r, g, b, 0.18)
+        end
+
+        -- Simple 1px border so it reads as its own section.
+        do
+            local br, bg, bb = HexToRGB(CT.TWICH.TEXT_MUTED)
+            local a = 0.35
+            local t = 1
+
+            local top = vaultWrap:CreateTexture(nil, "BORDER")
+            top:SetPoint("TOPLEFT", vaultWrap, "TOPLEFT", 0, 0)
+            top:SetPoint("TOPRIGHT", vaultWrap, "TOPRIGHT", 0, 0)
+            top:SetHeight(t)
+            top:SetColorTexture(br, bg, bb, a)
+
+            local bottom = vaultWrap:CreateTexture(nil, "BORDER")
+            bottom:SetPoint("BOTTOMLEFT", vaultWrap, "BOTTOMLEFT", 0, 0)
+            bottom:SetPoint("BOTTOMRIGHT", vaultWrap, "BOTTOMRIGHT", 0, 0)
+            bottom:SetHeight(t)
+            bottom:SetColorTexture(br, bg, bb, a)
+
+            local left = vaultWrap:CreateTexture(nil, "BORDER")
+            left:SetPoint("TOPLEFT", vaultWrap, "TOPLEFT", 0, 0)
+            left:SetPoint("BOTTOMLEFT", vaultWrap, "BOTTOMLEFT", 0, 0)
+            left:SetWidth(t)
+            left:SetColorTexture(br, bg, bb, a)
+
+            local right = vaultWrap:CreateTexture(nil, "BORDER")
+            right:SetPoint("TOPRIGHT", vaultWrap, "TOPRIGHT", 0, 0)
+            right:SetPoint("BOTTOMRIGHT", vaultWrap, "BOTTOMRIGHT", 0, 0)
+            right:SetWidth(t)
+            right:SetColorTexture(br, bg, bb, a)
+        end
+
+        local vaultTitle = vaultWrap:CreateFontString(nil, "OVERLAY")
+        vaultTitle:SetPoint("TOPLEFT", vaultWrap, "TOPLEFT", pad, -pad)
+        vaultTitle:SetJustifyH("LEFT")
+        vaultTitle:SetFontObject(_G.GameFontNormal)
+        if fontPath and vaultTitle.SetFont then
+            vaultTitle:SetFont(fontPath, 17, "OUTLINE")
+        end
+        vaultTitle:SetText(TT.Color(CT.TWICH.TEXT_PRIMARY, "Great Vault"))
+        panel.__twichuiVaultTitle = vaultTitle
+
+        local vaultSummary = vaultWrap:CreateFontString(nil, "OVERLAY")
+        vaultSummary:SetPoint("TOPLEFT", vaultTitle, "BOTTOMLEFT", 0, -2)
+        vaultSummary:SetJustifyH("LEFT")
+        vaultSummary:SetFontObject(_G.GameFontNormalSmall)
+        if fontPath and vaultSummary.SetFont then
+            vaultSummary:SetFont(fontPath, 13, "OUTLINE")
+        end
+        vaultSummary:SetText("")
+        panel.__twichuiVaultSummary = vaultSummary
+
+        panel.__twichuiVaultRows = panel.__twichuiVaultRows or {}
+        local rowH = 28
+        local rowGap = 1
+        local chipW = 74
+        local chipH = 20
+        local iconSize = 24
+        -- Keep this small so the fraction can sit near the icon without adding big whitespace.
+        local progressW = 34
+        local rowContentW = chipW + 8 + progressW + 4 + iconSize
+
+        -- Resize the card to match the table width (prevents the border from extending far past the rows).
+        if type(vaultWrap.SetWidth) == "function" then
+            vaultWrap:SetWidth((pad * 2) + rowContentW)
+        end
+        if type(vaultWrap.SetHeight) == "function" then
+            vaultWrap:SetHeight((pad * 2) + 18 + 14 + (rowH * 3) + (rowGap * 2) + 6)
+        end
+        for i = 1, 3 do
+            local row = panel.__twichuiVaultRows[i]
+            if not row then
+                row = {}
+                panel.__twichuiVaultRows[i] = row
+            end
+
+            if not row.frame then
+                row.frame = CreateFrame("Frame", nil, vaultWrap)
+            end
+            row.frame:SetHeight(rowH)
+            -- Constrain row width to content so the highlight doesn't extend beyond the icon.
+            row.frame:ClearAllPoints()
+            row.frame:SetPoint("LEFT", vaultWrap, "LEFT", pad, 0)
+            if type(row.frame.SetWidth) == "function" then
+                row.frame:SetWidth(rowContentW)
+            end
+            if i == 1 then
+                row.frame:SetPoint("TOP", vaultSummary, "BOTTOM", 0, -6)
+            else
+                row.frame:SetPoint("TOP", panel.__twichuiVaultRows[i - 1].frame, "BOTTOM", 0, -rowGap)
+            end
+
+            if not row.bg then
+                row.bg = row.frame:CreateTexture(nil, "BACKGROUND")
+                row.bg:SetAllPoints()
+                local r, g, b = HexToRGB(CT.TWICH.PANEL_BG)
+                row.bg:SetColorTexture(r, g, b, 0.18)
+            end
+
+            if not row.ilvlChip then
+                row.ilvlChip = CreateFrame("Frame", nil, row.frame)
+                row.ilvlChip:SetSize(chipW, chipH)
+                row.ilvlChip:SetPoint("LEFT", row.frame, "LEFT", 0, 0)
+                row.ilvlBg = row.ilvlChip:CreateTexture(nil, "BACKGROUND")
+                row.ilvlBg:SetAllPoints()
+                do
+                    local r, g, b = HexToRGB(CT.TWICH.PANEL_BG)
+                    row.ilvlBg:SetColorTexture(r, g, b, 0.40)
+                end
+                row.ilvlText = row.ilvlChip:CreateFontString(nil, "OVERLAY")
+                row.ilvlText:SetAllPoints()
+                row.ilvlText:SetJustifyH("CENTER")
+                if type(row.ilvlText.SetJustifyV) == "function" then
+                    row.ilvlText:SetJustifyV("MIDDLE")
+                end
+                row.ilvlText:SetFontObject(_G.GameFontNormalSmall)
+                if fontPath and row.ilvlText.SetFont then
+                    row.ilvlText:SetFont(fontPath, 13, "OUTLINE")
+                end
+            end
+
+            if not row.progressWrap then
+                row.progressWrap = CreateFrame("Frame", nil, row.frame)
+                row.progressWrap:SetSize(progressW, rowH)
+                row.progressWrap:SetPoint("LEFT", row.ilvlChip, "RIGHT", 8, 0)
+            end
+
+            if not row.progressText then
+                row.progressText = row.progressWrap:CreateFontString(nil, "OVERLAY")
+                row.progressText:SetAllPoints()
+                -- Right-justify so the numbers sit next to the icon.
+                row.progressText:SetJustifyH("RIGHT")
+                if type(row.progressText.SetJustifyV) == "function" then
+                    row.progressText:SetJustifyV("MIDDLE")
+                end
+                row.progressText:SetFontObject(_G.GameFontNormalSmall)
+                if fontPath and row.progressText.SetFont then
+                    row.progressText:SetFont(fontPath, 13, "OUTLINE")
+                end
+            end
+
+            if not row.icon then
+                row.icon = row.frame:CreateTexture(nil, "OVERLAY")
+                row.icon:SetSize(iconSize, iconSize)
+                row.icon:SetPoint("LEFT", row.progressWrap, "RIGHT", 4, 0)
+                row.icon:SetTexture("Interface\\AddOns\\TwichUI\\Media\\Textures\\vault.tga")
+                row.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+            end
+
+            -- Hover interactions + tooltip
+            if type(row.frame.EnableMouse) == "function" then
+                row.frame:EnableMouse(true)
+            end
+            row.frame:SetScript("OnEnter", function()
+                if row.bg and type(row.bg.SetColorTexture) == "function" then
+                    local rr, rg, rb = HexToRGB(CT.TWICH.SECONDARY_ACCENT)
+                    row.bg:SetColorTexture(rr, rg, rb, 0.14)
+                end
+                if not _G.GameTooltip then return end
+                _G.GameTooltip:SetOwner(row.frame, "ANCHOR_RIGHT")
+                _G.GameTooltip:SetText("Great Vault (Mythic+)", 1, 1, 1)
+                local thr = tonumber(row.__twichuiThreshold) or 0
+                local prog = tonumber(row.__twichuiProgress) or 0
+                local rem = tonumber(row.__twichuiRemaining) or 0
+                local ilvl = row.__twichuiIlvl
+                if thr > 0 then
+                    _G.GameTooltip:AddLine(string.format("Complete %d dungeons: %d/%d", thr, prog, thr), 1, 1, 1)
+                    if row.__twichuiUnlocked then
+                        _G.GameTooltip:AddLine("Unlocked", 0.2, 1, 0.2)
+                    else
+                        _G.GameTooltip:AddLine(string.format("Locked (%d more)", rem), 1, 0.25, 0.25)
+                    end
+                end
+                if ilvl then
+                    _G.GameTooltip:AddLine(string.format("Example reward iLvl: %d", ilvl), 1, 1, 1)
+                else
+                    _G.GameTooltip:AddLine("Example reward iLvl: —", 0.8, 0.8, 0.8)
+                end
+                _G.GameTooltip:Show()
+            end)
+            row.frame:SetScript("OnLeave", function()
+                if row.bg and type(row.bg.SetColorTexture) == "function" then
+                    local r, g, b = HexToRGB(CT.TWICH.PANEL_BG)
+                    row.bg:SetColorTexture(r, g, b, 0.18)
+                end
+                if _G.GameTooltip then _G.GameTooltip:Hide() end
+            end)
+
+            row.frame:Hide()
         end
     end
 
