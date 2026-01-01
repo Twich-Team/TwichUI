@@ -37,6 +37,22 @@ function DT:Create(order)
         return mp.Simulator.SupportedEvents
     end
 
+    local function RefreshSummaryIfOpen()
+        ---@type MythicPlusModule
+        local MythicPlus = GetModule()
+        if not MythicPlus or not MythicPlus.MainWindow or not MythicPlus.Summary then
+            return
+        end
+        if type(MythicPlus.MainWindow.GetPanelFrame) ~= "function" then
+            return
+        end
+
+        local panel = MythicPlus.MainWindow:GetPanelFrame("summary")
+        if panel and panel.IsShown and panel:IsShown() and type(MythicPlus.Summary.Refresh) == "function" then
+            MythicPlus.Summary:Refresh(panel)
+        end
+    end
+
     ---@type ConfigEntry
     local mythicPlusDefaultEvent = {
         key = "developer.testing.mythicPlus.simulateEvent.event",
@@ -202,6 +218,108 @@ function DT:Create(order)
                             },
 
                         }
+                    },
+                    summarySimGroup = {
+                        type = "group",
+                        inline = true,
+                        name = "Summary Simulation",
+                        order = 2,
+                        args = {
+                            description = CM.Widgets:ComponentDescription(1,
+                                "Simulate a Mythic+ score and reward obtained state for the Summary panel's Season progress bar."),
+                            enabled = {
+                                type = "toggle",
+                                name = "Enable Summary Simulation",
+                                desc = "When enabled, the Season progress bar uses the simulated values below.",
+                                order = 2,
+                                width = "full",
+                                get = function()
+                                    return CM:GetProfileSettingSafe(
+                                    "developer.testing.mythicPlus.summarySimulation.enabled", false)
+                                end,
+                                set = function(_, value)
+                                    CM:SetProfileSettingSafe("developer.testing.mythicPlus.summarySimulation.enabled",
+                                        value)
+                                    RefreshSummaryIfOpen()
+                                end,
+                            },
+                            score = {
+                                type = "range",
+                                name = "Simulated Score",
+                                desc = "Score used for the Season progress bar fill and remaining-to-next-reward text.",
+                                order = 3,
+                                min = 0,
+                                max = 3500,
+                                step = 1,
+                                get = function()
+                                    return CM:GetProfileSettingSafe(
+                                    "developer.testing.mythicPlus.summarySimulation.score", 0)
+                                end,
+                                set = function(_, value)
+                                    CM:SetProfileSettingSafe("developer.testing.mythicPlus.summarySimulation.score",
+                                        value)
+                                    RefreshSummaryIfOpen()
+                                end,
+                                disabled = function()
+                                    return not CM:GetProfileSettingSafe(
+                                    "developer.testing.mythicPlus.summarySimulation.enabled", false)
+                                end,
+                            },
+                            obtained2000 = {
+                                type = "toggle",
+                                name = "Treat 2,000 reward as obtained",
+                                order = 4,
+                                get = function()
+                                    return CM:GetProfileSettingSafe(
+                                    "developer.testing.mythicPlus.summarySimulation.obtained2000", false)
+                                end,
+                                set = function(_, value)
+                                    CM:SetProfileSettingSafe(
+                                    "developer.testing.mythicPlus.summarySimulation.obtained2000", value)
+                                    RefreshSummaryIfOpen()
+                                end,
+                                disabled = function()
+                                    return not CM:GetProfileSettingSafe(
+                                    "developer.testing.mythicPlus.summarySimulation.enabled", false)
+                                end,
+                            },
+                            obtained2500 = {
+                                type = "toggle",
+                                name = "Treat 2,500 reward as obtained",
+                                order = 5,
+                                get = function()
+                                    return CM:GetProfileSettingSafe(
+                                    "developer.testing.mythicPlus.summarySimulation.obtained2500", false)
+                                end,
+                                set = function(_, value)
+                                    CM:SetProfileSettingSafe(
+                                    "developer.testing.mythicPlus.summarySimulation.obtained2500", value)
+                                    RefreshSummaryIfOpen()
+                                end,
+                                disabled = function()
+                                    return not CM:GetProfileSettingSafe(
+                                    "developer.testing.mythicPlus.summarySimulation.enabled", false)
+                                end,
+                            },
+                            obtained3000 = {
+                                type = "toggle",
+                                name = "Treat 3,000 reward as obtained",
+                                order = 6,
+                                get = function()
+                                    return CM:GetProfileSettingSafe(
+                                    "developer.testing.mythicPlus.summarySimulation.obtained3000", false)
+                                end,
+                                set = function(_, value)
+                                    CM:SetProfileSettingSafe(
+                                    "developer.testing.mythicPlus.summarySimulation.obtained3000", value)
+                                    RefreshSummaryIfOpen()
+                                end,
+                                disabled = function()
+                                    return not CM:GetProfileSettingSafe(
+                                    "developer.testing.mythicPlus.summarySimulation.enabled", false)
+                                end,
+                            },
+                        },
                     },
                     mythicPlusEventSimulationGrp = {
                         type = "group",

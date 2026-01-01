@@ -109,6 +109,55 @@ local function GetAffixInfo(affixID)
     return nil, nil, nil
 end
 
+local function GetNextRewardTarget(currentScore, markers, obtainedByScore)
+    currentScore = tonumber(currentScore) or 0
+
+    local best
+    if type(markers) == "table" then
+        for _, m in ipairs(markers) do
+            local t = m and tonumber(m.__twichuiScoreTarget)
+            local obtained = (type(obtainedByScore) == "table") and (obtainedByScore[t] == true) or false
+            if t and not obtained and t > currentScore and (best == nil or t < best) then
+                best = t
+            end
+        end
+    end
+
+    -- Fallback to the default marker scores if markers aren't built yet.
+    if best == nil then
+        local defaults = { 2000, 2500, 3000 }
+        for _, t in ipairs(defaults) do
+            if t > currentScore and (best == nil or t < best) then
+                best = t
+            end
+        end
+    end
+
+    return best
+end
+
+local function GetSeasonProgressSimulation()
+    if not CM or type(CM.GetProfileSettingSafe) ~= "function" then
+        return false, nil, nil
+    end
+
+    local enabled = CM:GetProfileSettingSafe("developer.testing.mythicPlus.summarySimulation.enabled", false)
+    if not enabled then
+        return false, nil, nil
+    end
+
+    local simScore = tonumber(CM:GetProfileSettingSafe("developer.testing.mythicPlus.summarySimulation.score", 0)) or 0
+    if simScore < 0 then simScore = 0 end
+
+    local obtainedByScore = {
+        [2000] = CM:GetProfileSettingSafe("developer.testing.mythicPlus.summarySimulation.obtained2000", false) == true,
+        [2500] = CM:GetProfileSettingSafe("developer.testing.mythicPlus.summarySimulation.obtained2500", false) == true,
+        [3000] = CM:GetProfileSettingSafe("developer.testing.mythicPlus.summarySimulation.obtained3000", false) == true,
+    }
+
+    return true, simScore, obtainedByScore
+end
+
 -- Season reward mapping is intentionally empty by default.
 -- If you want markers to show real reward icons/links, populate this per-season.
 -- Shape: SEASON_REWARDS_BY_SEASON[seasonID][scoreTarget] = { achievementID = number|nil, itemID = number|nil }
@@ -616,12 +665,15 @@ function Summary:Refresh(panel)
     do
         local bar = panel.__twichuiSeasonBar
         if bar and type(bar.SetValue) == "function" then
+            local simEnabled, simScore, simObtained = GetSeasonProgressSimulation()
+            local seasonScore = simEnabled and simScore or score
+
             local maxScore = 3000
             if type(bar.SetMinMaxValues) == "function" then
                 bar:SetMinMaxValues(0, maxScore)
             end
 
-            local clamped = score
+            local clamped = seasonScore
             if clamped < 0 then clamped = 0 end
             if clamped > maxScore then clamped = maxScore end
             bar:SetValue(clamped)
@@ -632,7 +684,14 @@ function Summary:Refresh(panel)
             end
 
             if panel.__twichuiSeasonScoreText then
-                panel.__twichuiSeasonScoreText:SetText(string.format("%d / %d", score, maxScore))
+                local nextTarget = GetNextRewardTarget(seasonScore, panel.__twichuiSeasonMarkers, simObtained)
+                if nextTarget then
+                    local remaining = nextTarget - seasonScore
+                    if remaining < 0 then remaining = 0 end
+                    panel.__twichuiSeasonScoreText:SetText(string.format("%d to next reward", remaining))
+                else
+                    panel.__twichuiSeasonScoreText:SetText("All rewards earned")
+                end
             end
 
             local markers = panel.__twichuiSeasonMarkers
@@ -648,20 +707,36 @@ function Summary:Refresh(panel)
                         if m and m.__twichuiScoreTarget then
                             local pct = m.__twichuiScoreTarget / maxScore
                             local x = math.floor((w * pct) + 0.5)
+
+                            -- Keep the marker button (icon+label) within the bar bounds.
+                            -- The rightmost (3,000) marker otherwise centers on the bar edge and hangs off.
+                            local markerW = (type(m.GetWidth) == "function" and m:GetWidth()) or 44
+                            local halfMarkerW = math.max(1, math.floor((markerW / 2) + 0.5))
+                            local markerX = x
+                            if markerX < halfMarkerW then
+                                markerX = halfMarkerW
+                            elseif markerX > (w - halfMarkerW) then
+                                markerX = w - halfMarkerW
+                            end
+
+                            -- Keep the thin marker line on/inside the bar.
+                            local lineX = x
+                            if lineX < 1 then lineX = 1 end
+                            if lineX > (w - 1) then lineX = w - 1 end
                             m:ClearAllPoints()
-                            m:SetPoint("BOTTOM", bar, "TOPLEFT", x, 0)
+                            m:SetPoint("BOTTOM", bar, "TOPLEFT", markerX, 0)
 
                             if m.__twichuiMarkerLine then
                                 local line = m.__twichuiMarkerLine
                                 line:ClearAllPoints()
-                                line:SetPoint("CENTER", bar, "LEFT", x, 1)
+                                line:SetPoint("CENTER", bar, "LEFT", lineX, 1)
                                 local barH = (type(bar.GetHeight) == "function" and bar:GetHeight()) or 26
                                 line:SetSize(2, barH + 10)
                             end
 
                             if m.__twichuiLabel then
                                 m.__twichuiLabel:ClearAllPoints()
-                                m.__twichuiLabel:SetPoint("CENTER", bar, "LEFT", x, 1)
+                                m.__twichuiLabel:SetPoint("CENTER", bar, "LEFT", markerX, 1)
                             end
 
                             -- Optional: attach Blizzard achievement info for the current season.
@@ -722,6 +797,44 @@ function Summary:Refresh(panel)
                                     if m.__twichuiRewardIconFrameTex then
                                         m.__twichuiRewardIconFrameTex:Show()
                                     end
+                                end
+                            end
+
+                            -- Apply simulated obtained state (developer testing) with minimal UI impact.
+                            if simEnabled and type(simObtained) == "table" then
+                                m.__twichuiIsObtained = simObtained[m.__twichuiScoreTarget] == true
+                            else
+                                m.__twichuiIsObtained = (seasonScore >= (tonumber(m.__twichuiScoreTarget) or 0))
+                            end
+
+                            if m.__twichuiRewardIconTex then
+                                if type(m.__twichuiRewardIconTex.SetDesaturated) == "function" then
+                                    m.__twichuiRewardIconTex:SetDesaturated(not m.__twichuiIsObtained)
+                                end
+                                if type(m.__twichuiRewardIconTex.SetAlpha) == "function" then
+                                    m.__twichuiRewardIconTex:SetAlpha(m.__twichuiIsObtained and 1.0 or 0.6)
+                                end
+                            end
+                            if m.__twichuiRewardIconFrameTex and type(m.__twichuiRewardIconFrameTex.SetAlpha) == "function" then
+                                m.__twichuiRewardIconFrameTex:SetAlpha(m.__twichuiIsObtained and 1.0 or 0.6)
+                            end
+
+                            -- Make completed rewards pop a bit more: accent frame + brighter marker line.
+                            if m.__twichuiRewardIconFrameTex and type(m.__twichuiRewardIconFrameTex.SetVertexColor) == "function" then
+                                if m.__twichuiIsObtained then
+                                    local rr, rg, rb = HexToRGB(CT.TWICH.SECONDARY_ACCENT)
+                                    m.__twichuiRewardIconFrameTex:SetVertexColor(rr, rg, rb, 1.0)
+                                else
+                                    m.__twichuiRewardIconFrameTex:SetVertexColor(1, 1, 1, 1)
+                                end
+                            end
+                            if m.__twichuiMarkerLine and type(m.__twichuiMarkerLine.SetColorTexture) == "function" then
+                                if m.__twichuiIsObtained then
+                                    local rr, rg, rb = HexToRGB(CT.TWICH.SECONDARY_ACCENT)
+                                    m.__twichuiMarkerLine:SetColorTexture(rr, rg, rb, 0.95)
+                                else
+                                    local rr, rg, rb = HexToRGB(CT.TWICH.TEXT_MUTED)
+                                    m.__twichuiMarkerLine:SetColorTexture(rr, rg, rb, 0.75)
                                 end
                             end
                         end
@@ -1124,11 +1237,11 @@ local function CreateSummaryPanel(parent)
         local title = season:CreateFontString(nil, "OVERLAY")
         title:SetPoint("TOPLEFT", season, "TOPLEFT", 12, -8)
         title:SetJustifyH("LEFT")
-        title:SetFontObject(_G.GameFontNormalSmall)
+        title:SetFontObject(_G.GameFontNormal)
         if fontPath and title.SetFont then
-            title:SetFont(fontPath, 11, "OUTLINE")
+            title:SetFont(fontPath, 13, "OUTLINE")
         end
-        title:SetText(TT.Color(CT.TWICH.TEXT_MUTED, "Season progress"))
+        title:SetText(TT.Color(CT.TWICH.TEXT_PRIMARY, "Season progress"))
 
         local bar = CreateFrame("StatusBar", nil, season)
         bar:SetPoint("BOTTOMLEFT", season, "BOTTOMLEFT", 12, 14)
@@ -1154,7 +1267,14 @@ local function CreateSummaryPanel(parent)
         end
         barText:SetFontObject(_G.GameFontNormalSmall)
         if fontPath and barText.SetFont then
-            barText:SetFont(fontPath, 11, "OUTLINE")
+            barText:SetFont(fontPath, 13, "OUTLINE")
+        end
+
+        do
+            local r, g, b = HexToRGB(CT.TWICH.TEXT_PRIMARY)
+            if type(barText.SetTextColor) == "function" then
+                barText:SetTextColor(r, g, b, 1)
+            end
         end
         panel.__twichuiSeasonScoreText = barText
 
@@ -1495,15 +1615,25 @@ local function CreateSummaryPanel(parent)
                     do
                         local markerLine = self.__twichuiMarkerLine
                         if markerLine and type(markerLine.SetColorTexture) == "function" then
-                            local rr, rg, rb = HexToRGB(CT.TWICH.TEXT_MUTED)
-                            markerLine:SetColorTexture(rr, rg, rb, 0.75)
+                            if self.__twichuiIsObtained then
+                                local rr, rg, rb = HexToRGB(CT.TWICH.SECONDARY_ACCENT)
+                                markerLine:SetColorTexture(rr, rg, rb, 0.95)
+                            else
+                                local rr, rg, rb = HexToRGB(CT.TWICH.TEXT_MUTED)
+                                markerLine:SetColorTexture(rr, rg, rb, 0.75)
+                            end
                         end
                     end
 
                     do
                         local frameTex = self.__twichuiRewardIconFrameTex
                         if frameTex and frameTex:IsShown() and type(frameTex.SetVertexColor) == "function" then
-                            frameTex:SetVertexColor(1, 1, 1, 1)
+                            if self.__twichuiIsObtained then
+                                local rr, rg, rb = HexToRGB(CT.TWICH.SECONDARY_ACCENT)
+                                frameTex:SetVertexColor(rr, rg, rb, 1.0)
+                            else
+                                frameTex:SetVertexColor(1, 1, 1, 1)
+                            end
                         end
                     end
                     if _G.GameTooltip then _G.GameTooltip:Hide() end
