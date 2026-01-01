@@ -563,6 +563,18 @@ function MainWindow:_ShowFirstRegisteredPanelIfNeeded()
     self:ShowPanel(self._panelOrder[1])
 end
 
+function MainWindow:_ShowDefaultPanel()
+    self:_EnsurePanelTables()
+
+    -- Default to Summary when available.
+    if self._panels and self._panels["summary"] and type(self._panels["summary"].factory) == "function" then
+        self:ShowPanel("summary")
+        return
+    end
+
+    self:_ShowFirstRegisteredPanelIfNeeded()
+end
+
 function MainWindow:SaveFramePosition()
     if not self.frame or not self.frame.GetPoint then return end
 
@@ -1023,7 +1035,7 @@ function MainWindow:Enable(persist)
         if self.nav then
             self:RefreshNav()
         end
-        self:_ShowFirstRegisteredPanelIfNeeded()
+        self:_ShowDefaultPanel()
         return
     end
 
@@ -1051,7 +1063,7 @@ function MainWindow:Enable(persist)
         self:RefreshNav()
     end
 
-    self:_ShowFirstRegisteredPanelIfNeeded()
+    self:_ShowDefaultPanel()
 end
 
 ---@param persist boolean|nil When true (default), writes to the saved MAIN_WINDOW_ENABLED setting.

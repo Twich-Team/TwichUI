@@ -35,7 +35,29 @@ WowUp will automatically check for updates.
 
 ### Planned
 
+- [All] Notification frame
 - [Development] Live stream events from a Mythic+ from one player to another
 - [Development] In-depth simulation capabilities
 - [Mythic+] What-if analysis of dungeon runs
 - [Mythic+] Player season summary
+- [Mythic+] Sync subset of data with your dungeon friends
+- [Mythic+] Season Journey/Summary page
+- [Mythic+] Stat priorities
+- [Mythic+] Automatically socket keystone
+- [Mythic+] DialogueKey-esque NPC dialog shortcuts
+- [Mythic+] Charts to describe item track and upgrade crest drop levels
+- [Mythic+] Best water in bag
+- [Mythic+] Configurable food, flask, exlixir, potion shortcuts
+- [Mythic+] End of dungeon summary
+- [Mythic+] Good/Bad dungeoneer (be notified when grouped when players based on your rating of them)
+- [Mythic+] Region/Server alerts (be notified when grouped with players from specific servers or regions)
+- [Mythic+] What-If analysis to estimate score gained for completing higher keys
+- [Mythic+] Calculate "easiest" path to a specific score
+
+### Known Bugs
+
+### Unconfirmed Bug Fixes
+
+These bugs have been fixed, but confirmation of the fix effectiveness has not been received yet.
+
+- Dungeon portals remain disabled even when they are unlocked
