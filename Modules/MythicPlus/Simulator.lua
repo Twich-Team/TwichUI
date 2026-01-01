@@ -675,7 +675,7 @@ function Sim:SeekSimulation(targetTime)
     if not st then return end
 
     targetTime = math.max(0, math.min(targetTime, st.maxDuration))
-    
+
     -- Find the event index just before or at targetTime
     local newIndex = 0
     local prevRel = 0
@@ -687,25 +687,25 @@ function Sim:SeekSimulation(targetTime)
         newIndex = i
         prevRel = rel
     end
-    
+
     st.index = newIndex
     st.prevRel = prevRel
-    
+
     local now = GetTime()
     local speed = st.speed
-    
+
     -- Recalculate startedAt so that (now - startedAt) * speed == targetTime
     st.startedAt = now - (targetTime / speed)
-    
+
     if st.paused then
         st.pauseStart = now
     end
-    
+
     self._simToken = (self._simToken or 0) + 1
     local token = self._simToken
-    
+
     Logger.Info(("Simulator: seeked to %.1fs"):format(targetTime))
-    
+
     if st.paused then
         self:_FireCallback("SIMULATOR_SEEKED", targetTime, st.index, st.total)
     else
@@ -791,7 +791,7 @@ function Sim:StartSimulationFromData(parsed, opts)
         speed = GetConfiguredSpeed()
     end
     speed = ClampNumber(speed, 0.1, 50, 10)
-    
+
     local startPaused = opts and opts.startPaused or false
 
     -- Ensure Mythic+ + DungeonMonitor are enabled so callbacks fire normally.
@@ -839,7 +839,7 @@ function Sim:StartSimulationFromData(parsed, opts)
 
     Logger.Info(("Simulator: starting (%d events), speed x%.2f"):format(#events, speed))
     self:_FireCallback("SIMULATOR_STARTED", #events, maxDuration, events, startedAt, speed)
-    
+
     if startPaused then
         self:_FireCallback("SIMULATOR_PAUSED")
     else

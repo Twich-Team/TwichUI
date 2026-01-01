@@ -845,17 +845,28 @@ function MythicPlusRunLogger:_OnDungeonEvent(eventName, ...)
         }
 
         self:_AppendEvent(eventName, payload)
-        self:_FinalizeRun("completed", payload)
+
+        -- Mark as completed but DO NOT finalize yet.
+        -- We wait for the player to leave the instance (PLAYER_ENTERING_WORLD) to capture loot.
+        if run then
+            run.status = "completed"
+            run.completion = payload
+        end
 
         -- Best-effort retry: run history data (and thus runScore) may not be available immediately.
         if (not blizzardRunScore) and C_Timer and type(C_Timer.After) == "function" and runId then
             C_Timer.After(1.0, function()
                 local db2 = GetDB()
-                local last = db2 and db2.lastCompleted or nil
-                if not last or last.id ~= runId or type(last.completion) ~= "table" then
+                -- Check active run first, then lastCompleted (in case they zoned out fast)
+                local targetRun = db2 and db2.active
+                if not targetRun or targetRun.id ~= runId then
+                    targetRun = db2 and db2.lastCompleted
+                end
+
+                if not targetRun or targetRun.id ~= runId or type(targetRun.completion) ~= "table" then
                     return
                 end
-                if last.completion.blizzardRunScore ~= nil then
+                if targetRun.completion.blizzardRunScore ~= nil then
                     return
                 end
 
@@ -864,9 +875,9 @@ function MythicPlusRunLogger:_OnDungeonEvent(eventName, ...)
                     score2, match2 = ScoreCalculator.TryGetBlizzardRunScore(mapIdNum, level, timeSec)
                 end
                 if score2 ~= nil then
-                    last.completion.blizzardRunScore = score2
-                    last.completion.blizzardRunScoreMatch = match2
-                    last.completion.blizzardRunScoreSource = "delayed_run_history"
+                    targetRun.completion.blizzardRunScore = score2
+                    targetRun.completion.blizzardRunScoreMatch = match2
+                    targetRun.completion.blizzardRunScoreSource = "delayed_run_history"
                 end
             end)
         end
@@ -934,7 +945,11 @@ function MythicPlusRunLogger:_OnDungeonEvent(eventName, ...)
         if db.active then
             if not isCM then
                 self:_AppendEvent("FAILSAFE_FINISH", { reason = "not_in_challenge_mode" })
-                self:_FinalizeRun("completed")
+
+                -- If the run was already marked completed (by REWARDS event), finalize as completed.
+                -- Otherwise, if we left without completion, it's an abandon/reset.
+                local status = (db.active.status == "completed") and "completed" or "abandoned"
+                self:_FinalizeRun(status)
             end
         end
         return

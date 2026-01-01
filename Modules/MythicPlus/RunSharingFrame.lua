@@ -517,17 +517,17 @@ function RunSharingFrame:CreateFrame()
         x = x / s
         local left = self:GetLeft()
         local offset = x - left
-        
+
         local pct = offset / width
         pct = math.max(0, math.min(1, pct))
-        
+
         local min, max = self:GetMinMaxValues()
         local targetTime = min + (max - min) * pct
-        
+
         if not RunSharingFrame.isSimulating then
             RunSharingFrame:StartSimulation(true)
         end
-        
+
         if Simulator and Simulator.SeekSimulation then
             Simulator:SeekSimulation(targetTime)
         end
@@ -568,7 +568,7 @@ function RunSharingFrame:CreateFrame()
             elseif event == "SIMULATOR_SEEKED" then
                 local time, index, total = ...
                 self.progressBar:SetValue(time)
-                
+
                 local m = math.floor(time / 60)
                 local s = math.floor(time % 60)
                 local _, max = self.progressBar:GetMinMaxValues()
@@ -580,7 +580,7 @@ function RunSharingFrame:CreateFrame()
                 if self.eventText then
                     self.eventText:SetText(string.format("Event: %d / %d", index, total))
                 end
-                
+
                 self:HighlightPlayingRow(index)
             elseif event == "SIMULATOR_RESUMED" then
                 local maxDuration, startedAt, speed, events = ...

@@ -73,12 +73,17 @@ function DataCollector:Enable()
                 return
             end
 
-            -- TODO: process session
-
-            -- clear persisted session
-            DungeonSession = nil
-            Database:ResetDungeonSession()
-            Logger.Debug("Mythic+ dungeon completed, mapID: " .. tostring(mapID) .. ", timeMS: " .. tostring(timeMS))
+            -- We do NOT clear the session here anymore. We wait until the player leaves the instance.
+            -- This allows us to collect loot from the chest.
+            Logger.Debug("Mythic+ dungeon completed (rewards), mapID: " .. tostring(mapID))
+        elseif eventName == "PLAYER_ENTERING_WORLD" then
+            -- Check if we left the dungeon
+            local isCM = C_ChallengeMode and C_ChallengeMode.IsChallengeModeActive()
+            if DungeonSession and not isCM then
+                Logger.Debug("Left Mythic+ dungeon instance, ending session for map " .. tostring(DungeonSession.mapID))
+                DungeonSession = nil
+                Database:ResetDungeonSession()
+            end
         end
     end)
 
