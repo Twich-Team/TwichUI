@@ -1,0 +1,108 @@
+{
+  "format": "TwichUI_RunLog_v2",
+  "meta": {
+    "format": "TwichUI_RunLog_v2",
+    "addonVersion": "dev",
+    "wowVersion": "sim",
+    "wowBuild": "sim",
+    "wowToc": 0
+  },
+  "run": {
+    "id": "sim-datacollector-001",
+    "status": "completed",
+    "startUnix": 1735689600,
+    "endUnix": 1735691410,
+    "mapId": 525,
+    "level": 10,
+    "affixes": [9, 10],
+    "player": {
+      "name": "SimPlayer",
+      "realm": "SimRealm",
+      "guid": "Player-0-00000000"
+    }
+  },
+  "events": [
+    {
+      "timestamp": 1735689600,
+      "relSeconds": 0,
+      "name": "CHALLENGE_MODE_START",
+      "payload": { "mapId": 525 }
+    },
+    {
+      "timestamp": 1735689600,
+      "relSeconds": 0.1,
+      "name": "TWICH_DUNGEON_START",
+      "payload": { "args": [525, "Simulated Dungeon"] }
+    },
+    {
+      "timestamp": 1735689601,
+      "relSeconds": 1,
+      "name": "GROUP_ROSTER_UPDATE",
+      "payload": {}
+    },
+    {
+      "timestamp": 1735689720,
+      "relSeconds": 120,
+      "name": "CHALLENGE_MODE_DEATH_COUNT_UPDATED",
+      "payload": { "count": 3 }
+    },
+    {
+      "timestamp": 1735690200,
+      "relSeconds": 600,
+      "name": "CHAT_MSG_LOOT",
+      "payload": {
+        "message": "You receive loot: |cffff8000|Hitem:19019::::::::70:::::|h[Thunderfury, Blessed Blade of the Windseeker]|h|r",
+        "player": "SimPlayer-SimRealm"
+      }
+    },
+    {
+      "timestamp": 1735690201,
+      "relSeconds": 601,
+      "name": "CHAT_MSG_LOOT",
+      "payload": {
+        "message": "Somebodyelse receives loot: |cff0070dd|Hitem:17182::::::::70:::::|h[Sulfuras, Hand of Ragnaros]|h|r",
+        "player": "Somebodyelse-SimRealm"
+      }
+    },
+    {
+      "timestamp": 1735690202,
+      "relSeconds": 602,
+      "name": "CHAT_MSG_LOOT",
+      "payload": {
+        "message": "You receive loot: |cff1eff00|Hitem:17204::::::::70:::::|h[Eye of Sulfuras]|h|r x2",
+        "player": "SimPlayer-SimRealm"
+      }
+    },
+    {
+      "timestamp": 1735691400,
+      "relSeconds": 1800,
+      "name": "CHALLENGE_MODE_COMPLETED",
+      "payload": {}
+    },
+    {
+      "timestamp": 1735691401,
+      "relSeconds": 1801,
+      "name": "CHALLENGE_MODE_COMPLETED_REWARDS",
+      "payload": {
+        "mapId": 525,
+        "medal": 3,
+        "timeMS": 1500000,
+        "money": 500000,
+        "rewards": [
+          {
+            "rewardID": 32837,
+            "quantity": 1,
+            "displayInfoID": 0,
+            "isCurrency": false
+          }
+        ]
+      }
+    },
+    {
+      "timestamp": 1735691410,
+      "relSeconds": 1810,
+      "name": "PLAYER_ENTERING_WORLD",
+      "payload": { "isInitialLogin": false, "isReloadingUi": false }
+    }
+  ]
+}

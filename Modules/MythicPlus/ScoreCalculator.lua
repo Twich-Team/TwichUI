@@ -24,6 +24,12 @@ local Logger = T:GetModule("Logger")
 ---@type MythicPlusDataSubmodule
 local Data = MythicPlusModule.Data
 
+---@return MythicPlusDataSubmodule|nil
+local function GetData()
+    Data = Data or (MythicPlusModule and MythicPlusModule.Data) or nil
+    return Data
+end
+
 local _G = _G
 local C_ChallengeMode = _G.C_ChallengeMode
 local C_MythicPlus = _G.C_MythicPlus
@@ -161,6 +167,11 @@ end
 ---@param parTime number|nil
 ---@return number
 function ScoreCalculator.Calculate(keystoneLevel, completedInTime, parTime)
+    local data = GetData()
+    if not data or type(data.MythicPlusScoreConfig) ~= "table" or type(data.GetAffixCountForKeystoneLevel) ~= "function" then
+        return 0
+    end
+
     keystoneLevel = tonumber(keystoneLevel) or 0
     completedInTime = tonumber(completedInTime)
     parTime = tonumber(parTime)
@@ -170,13 +181,13 @@ function ScoreCalculator.Calculate(keystoneLevel, completedInTime, parTime)
     end
 
     -- determine score of keystone based on level alone
-    local baseScore = Data.MythicPlusScoreConfig.BASE_SCORE +
-        ((keystoneLevel - 2) * Data.MythicPlusScoreConfig.SCORE_PER_LEVEL)
+    local baseScore = data.MythicPlusScoreConfig.BASE_SCORE +
+        ((keystoneLevel - 2) * data.MythicPlusScoreConfig.SCORE_PER_LEVEL)
 
     -- add in bonuses for affixes
-    local affixCount = Data.GetAffixCountForKeystoneLevel(keystoneLevel)
+    local affixCount = data.GetAffixCountForKeystoneLevel(keystoneLevel)
     if affixCount then
-        baseScore = baseScore + (affixCount * Data.MythicPlusScoreConfig.AFFIX_BONUS_SCORE)
+        baseScore = baseScore + (affixCount * data.MythicPlusScoreConfig.AFFIX_BONUS_SCORE)
     end
 
     -- add in time bonus
@@ -184,11 +195,11 @@ function ScoreCalculator.Calculate(keystoneLevel, completedInTime, parTime)
     if completedInTime and parTime and parTime > 0 then
         local timeRatio = completedInTime / parTime
         if timeRatio < 0.6 then
-            timeBonus = Data.MythicPlusScoreConfig.TIME_BONUS_MAX
+            timeBonus = data.MythicPlusScoreConfig.TIME_BONUS_MAX
         elseif timeRatio < 1.0 then
             -- Linear from 0%..40% faster => 0..max (e.g. 20% faster = 7.5)
-            timeBonus = ((1.0 - timeRatio) / Data.MythicPlusScoreConfig.TIME_BONUS_THRESHOLD) *
-                Data.MythicPlusScoreConfig.TIME_BONUS_MAX
+            timeBonus = ((1.0 - timeRatio) / data.MythicPlusScoreConfig.TIME_BONUS_THRESHOLD) *
+                data.MythicPlusScoreConfig.TIME_BONUS_MAX
         end
     end
 
@@ -202,23 +213,28 @@ end
 ---@return number score
 ---@return table details
 function ScoreCalculator.CalculateForRun(mapId, keystoneLevel, completedInTime)
+    local data = GetData()
+    if not data or type(data.MythicPlusScoreConfig) ~= "table" or type(data.GetAffixCountForKeystoneLevel) ~= "function" then
+        return 0, {}
+    end
+
     local parTime = ScoreCalculator.GetParTimeSeconds(mapId)
     local score = ScoreCalculator.Calculate(keystoneLevel, completedInTime, parTime)
 
-    local baseScore = Data.MythicPlusScoreConfig.BASE_SCORE +
-        ((tonumber(keystoneLevel) - 2) * Data.MythicPlusScoreConfig.SCORE_PER_LEVEL)
-    local affixCount = Data.GetAffixCountForKeystoneLevel(keystoneLevel)
-    local affixBonus = (affixCount and (affixCount * Data.MythicPlusScoreConfig.AFFIX_BONUS_SCORE)) or 0
+    local baseScore = data.MythicPlusScoreConfig.BASE_SCORE +
+        ((tonumber(keystoneLevel) - 2) * data.MythicPlusScoreConfig.SCORE_PER_LEVEL)
+    local affixCount = data.GetAffixCountForKeystoneLevel(keystoneLevel)
+    local affixBonus = (affixCount and (affixCount * data.MythicPlusScoreConfig.AFFIX_BONUS_SCORE)) or 0
 
     local timeBonus = 0
     local timeRatio
     if completedInTime and parTime and parTime > 0 then
         timeRatio = completedInTime / parTime
         if timeRatio < 0.6 then
-            timeBonus = Data.MythicPlusScoreConfig.TIME_BONUS_MAX
+            timeBonus = data.MythicPlusScoreConfig.TIME_BONUS_MAX
         elseif timeRatio < 1.0 then
-            timeBonus = ((1.0 - timeRatio) / Data.MythicPlusScoreConfig.TIME_BONUS_THRESHOLD) *
-                Data.MythicPlusScoreConfig.TIME_BONUS_MAX
+            timeBonus = ((1.0 - timeRatio) / data.MythicPlusScoreConfig.TIME_BONUS_THRESHOLD) *
+                data.MythicPlusScoreConfig.TIME_BONUS_MAX
         end
     end
 

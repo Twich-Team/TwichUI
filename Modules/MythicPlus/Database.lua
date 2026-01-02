@@ -33,6 +33,7 @@ MythicPlusModule.Database = Database
 ---@field score number
 ---@field time number Seconds
 ---@field onTime boolean
+---@field deaths number
 ---@field upgrade number +1, +2, +3
 ---@field group table<string, string> Role -> Class/Spec string
 ---@field loot table<string, string>[] List of item links

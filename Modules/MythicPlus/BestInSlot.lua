@@ -214,7 +214,6 @@ local function BuildTierCache(force)
     end
 
     Logger.Info("Updating Mythic+ Item Cache. The game may run slow for a few moments...")
-    -- print("TwichUI Debug: Building New Cache...")
 
     if not C_AddOns.IsAddOnLoaded("Blizzard_EncounterJournal") then
         C_AddOns.LoadAddOn("Blizzard_EncounterJournal")
@@ -229,10 +228,7 @@ local function BuildTierCache(force)
     -- local _, _, playerClassID = UnitClass("player")
     -- local playerSpecID = GetSpecializationInfo(GetSpecialization())
     -- EJ_SetLootFilter(playerClassID, playerSpecID)
-    -- print("TwichUI Debug: Set Loot Filter to Class:", playerClassID, "Spec:", playerSpecID)
-
     EJ_SetLootFilter(0, 0)
-    -- print("TwichUI Debug: Set Loot Filter to ALL (0, 0)")
 
     local numTiers = EJ_GetNumTiers()
 
@@ -303,10 +299,8 @@ local function BuildTierCache(force)
                 -- Skip if already processed (prevents duplicates from multiple tiers)
                 if processedInstances[instanceName] then
                     index = index + 1
-                    -- print("TwichUI Debug: Skipping duplicate instance:", instanceName)
                 else
                     processedInstances[instanceName] = true
-                    -- print("TwichUI Debug: EJ Found Instance:", instanceName, "(ID: " .. instanceID .. ")")
 
                     -- Normalize instance name for the cache key (Merge Mega Dungeons)
                     local cacheKeyName = instanceName
@@ -376,7 +370,6 @@ local function BuildTierCache(force)
     -- Scan ALL tiers, starting from newest
     for t = numTiers, 1, -1 do
         EJ_SelectTier(t)
-        -- print("TwichUI Debug: Scanning Tier:", EJ_GetTierInfo(t))
         ProcessInstance(false) -- Dungeons
         ProcessInstance(true)  -- Raids
     end
@@ -447,7 +440,6 @@ local function BuildTierCache(force)
 
     local count = 0
     for _ in pairs(newLootCache) do count = count + 1 end
-    -- print("TwichUI Debug: Cache Built. Total Items:", count)
 
     Logger.Info("Mythic+ Item Cache updated.")
 end
@@ -459,7 +451,6 @@ end
 local function ScanEJ(searchType, searchValue, limitTier)
     -- searchType: "ID" (find source of itemID) or "NAME" (find itemID of itemName)
     -- limitTier: if true, only scan the current tier (for performance)
-    -- print("DEBUG: ScanEJ called with", searchType, searchValue)
 
     if limitTier then
         BuildTierCache(false)
@@ -486,18 +477,15 @@ local function ScanEJ(searchType, searchValue, limitTier)
     EJ_SetLootFilter(0, 0) -- Clear filters to see all loot
 
     local numTiers = EJ_GetNumTiers()
-    -- print("DEBUG: NumTiers:", numTiers)
 
     local function ScanTier(tierIndex)
         EJ_SelectTier(tierIndex)
-        -- print("DEBUG: Scanning Tier:", tierIndex)
 
         local function ScanInstances(isRaid)
             local index = 1
             while true do
                 local instanceID, instanceName = EJ_GetInstanceByIndex(index, isRaid)
                 if not instanceID then break end
-                -- print("DEBUG: Scanning Instance:", instanceName, "ID:", instanceID)
 
                 -- 1. Select Instance to get encounters
                 EJ_SelectInstance(instanceID)
@@ -658,7 +646,6 @@ local function GetSources()
 
             if not seenDungeons[name] then
                 seenDungeons[name] = true
-                -- print("TwichUI Debug: Source List Added:", name, "(MapID: " .. mapId .. ")")
                 table.insert(dungeons, name)
             end
         end
@@ -1006,7 +993,7 @@ local function CreateChooserFrame(parent)
     customDesc:SetPoint("TOPRIGHT", -10, -10)
     customDesc:SetJustifyH("LEFT")
     customDesc:SetText(
-    "The Best in Slot module tracks items from the current Mythic+ season.\n\nIf you want to track an item from a different source (e.g. World Boss, PvP, Crafting, or Legacy Content), you can add it manually here.")
+        "The Best in Slot module tracks items from the current Mythic+ season.\n\nIf you want to track an item from a different source (e.g. World Boss, PvP, Crafting, or Legacy Content), you can add it manually here.")
     customDesc:SetTextColor(0.7, 0.7, 0.7)
 
     -- Input Label
@@ -1169,13 +1156,11 @@ local function CreateChooserFrame(parent)
     end)
 
     fullClick:SetScript("OnClick", function()
-        -- print("TwichUI Debug: FullClick Button Clicked")
         ToggleDropDownMenu(nil, nil, customSourceDropdown)
         PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON)
     end)
 
     local function OnCustomSourceSelect(self, arg1)
-        -- print("TwichUI Debug: Selected Source:", arg1)
         f.customSourceValue = arg1
         UIDropDownMenu_SetSelectedValue(customSourceDropdown, arg1)
         UIDropDownMenu_SetText(customSourceDropdown, arg1)
@@ -1397,7 +1382,6 @@ local function CreateChooserFrame(parent)
 
         -- Handle Custom Item View
         if f.selectedSource == "Custom Item" then
-            -- print("TwichUI Debug: Showing Custom Form")
             customForm:Show()
             f.CustomSourceDropdown:Show()
             f.Input:Hide()
@@ -1440,7 +1424,6 @@ local function CreateChooserFrame(parent)
         if f.selectedSource then
             local count = (TierInstanceLootCache and TierInstanceLootCache[f.selectedSource]) and
                 #TierInstanceLootCache[f.selectedSource] or 0
-            -- print("TwichUI Debug: Updating List for Source:", f.selectedSource, "Items Found:", count)
         end
 
         -- If source selected, get items from cache
@@ -1584,7 +1567,6 @@ local function CreateChooserFrame(parent)
 
         -- Sort items by name
         table.sort(items, function(a, b) return a.name < b.name end)
-        -- print("TwichUI Debug: Displaying", #items, "items after filtering.")
 
         -- Render items
         local width = rightScroll:GetWidth()

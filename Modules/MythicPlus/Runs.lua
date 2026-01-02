@@ -74,6 +74,295 @@ local function GetDungeonName(mapId)
     return "Unknown (" .. tostring(mapId) .. ")"
 end
 
+local function FormatAffixes(affixes)
+    if type(affixes) ~= "table" or #affixes == 0 then
+        return "—"
+    end
+
+    local C_ChallengeMode = _G.C_ChallengeMode
+    local parts = {}
+    for _, id in ipairs(affixes) do
+        local affixName
+        if C_ChallengeMode and type(C_ChallengeMode.GetAffixInfo) == "function" then
+            local ok, name = pcall(C_ChallengeMode.GetAffixInfo, id)
+            if ok and type(name) == "string" and name ~= "" then
+                affixName = name
+            end
+        end
+        parts[#parts + 1] = affixName or tostring(id)
+    end
+
+    return table.concat(parts, ", ")
+end
+
+local function EnsureRunDetailsFrame(panel)
+    if panel and panel.__twichuiRunDetailsFrame then
+        return panel.__twichuiRunDetailsFrame
+    end
+
+    local parent = (MythicPlusModule and MythicPlusModule.MainWindow and MythicPlusModule.MainWindow.frame) or UIParent
+    local frame = CreateFrame("Frame", "TwichUI_RunDetailsFrame", parent, "BackdropTemplate")
+    frame:SetFrameStrata("DIALOG")
+    frame:SetClampedToScreen(true)
+    frame:SetSize(520, 460)
+    frame:SetPoint("CENTER")
+    frame:Hide()
+
+    if E and frame.SetTemplate then
+        frame:SetTemplate("Transparent")
+    else
+        frame:SetBackdrop({
+            bgFile = "Interface/Buttons/WHITE8X8",
+            edgeFile = "Interface/Tooltips/UI-Tooltip-Border",
+            tile = true,
+            tileSize = 16,
+            edgeSize = 16,
+            insets = { left = 4, right = 4, top = 4, bottom = 4 },
+        })
+        frame:SetBackdropColor(0, 0, 0, 0.85)
+        frame:SetBackdropBorderColor(0.4, 0.4, 0.4)
+    end
+
+    local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    title:SetPoint("TOPLEFT", frame, "TOPLEFT", 14, -12)
+    title:SetJustifyH("LEFT")
+    title:SetText("Run Details")
+    frame.Title = title
+
+    local subtitle = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -4)
+    subtitle:SetJustifyH("LEFT")
+    subtitle:SetText("")
+    frame.Subtitle = subtitle
+
+    local close = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
+    close:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -4, -4)
+    if UI and UI.SkinCloseButton then
+        UI.SkinCloseButton(close)
+    end
+    close:SetScript("OnClick", function() frame:Hide() end)
+
+    local divider = frame:CreateTexture(nil, "ARTWORK")
+    divider:SetHeight(1)
+    divider:SetPoint("TOPLEFT", frame, "TOPLEFT", 12, -54)
+    divider:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -12, -54)
+    divider:SetColorTexture(1, 1, 1, 0.08)
+
+    local scroll = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
+    scroll:SetPoint("TOPLEFT", frame, "TOPLEFT", 12, -62)
+    scroll:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -30, 12)
+    if UI and UI.SkinScrollBar then
+        UI.SkinScrollBar(scroll)
+    end
+
+    local content = CreateFrame("Frame", nil, scroll)
+    content:SetSize(1, 1)
+    scroll:SetScrollChild(content)
+    frame.Scroll = scroll
+    frame.Content = content
+
+    local function CreateKV(y, label)
+        local l = content:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        l:SetPoint("TOPLEFT", content, "TOPLEFT", 0, y)
+        l:SetJustifyH("LEFT")
+        l:SetText(label)
+
+        local v = content:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+        v:SetPoint("TOPLEFT", l, "TOPRIGHT", 8, 0)
+        v:SetPoint("RIGHT", content, "RIGHT", 0, 0)
+        v:SetJustifyH("LEFT")
+        v:SetText("")
+        return v
+    end
+
+    frame.Fields = {}
+    frame.Fields.date = CreateKV(0, "Date:")
+    frame.Fields.patch = CreateKV(-18, "Patch:")
+    frame.Fields.mapId = CreateKV(-36, "Map ID:")
+    frame.Fields.level = CreateKV(-54, "Key:")
+    frame.Fields.score = CreateKV(-72, "Score:")
+    frame.Fields.time = CreateKV(-90, "Time:")
+    frame.Fields.onTime = CreateKV(-108, "On Time:")
+    frame.Fields.upgrade = CreateKV(-126, "Upgrade:")
+    frame.Fields.deaths = CreateKV(-144, "Deaths:")
+    frame.Fields.affixes = CreateKV(-162, "Affixes:")
+
+    local groupHeader = content:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    groupHeader:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -190)
+    groupHeader:SetText("Group")
+    frame.GroupHeader = groupHeader
+
+    local groupText = content:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    groupText:SetPoint("TOPLEFT", groupHeader, "BOTTOMLEFT", 0, -6)
+    groupText:SetPoint("RIGHT", content, "RIGHT", 0, 0)
+    groupText:SetJustifyH("LEFT")
+    groupText:SetJustifyV("TOP")
+    groupText:SetText("")
+    frame.GroupText = groupText
+
+    local lootHeader = content:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    lootHeader:SetPoint("TOPLEFT", groupText, "BOTTOMLEFT", 0, -14)
+    lootHeader:SetText("Loot")
+    frame.LootHeader = lootHeader
+
+    frame.LootRows = {}
+
+    local function ClearLootRows()
+        for _, r in ipairs(frame.LootRows) do
+            r:Hide()
+        end
+    end
+
+    local function EnsureLootRow(i)
+        local r = frame.LootRows[i]
+        if r then
+            return r
+        end
+
+        r = CreateFrame("Button", nil, content)
+        r:SetHeight(18)
+        r:SetPoint("LEFT", content, "LEFT", 0, 0)
+        r:SetPoint("RIGHT", content, "RIGHT", 0, 0)
+        r:RegisterForClicks("LeftButtonUp")
+
+        local fs = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+        fs:SetPoint("LEFT", r, "LEFT", 0, 0)
+        fs:SetPoint("RIGHT", r, "RIGHT", 0, 0)
+        fs:SetJustifyH("LEFT")
+        r.Text = fs
+
+        r:SetScript("OnEnter", function(self)
+            if not self.link then return end
+            if GameTooltip and GameTooltip.SetOwner and GameTooltip.SetHyperlink then
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                GameTooltip:SetHyperlink(self.link)
+                GameTooltip:Show()
+            end
+        end)
+        r:SetScript("OnLeave", function()
+            if GameTooltip then GameTooltip:Hide() end
+        end)
+        r:SetScript("OnClick", function(self)
+            if not self.link then return end
+            if ChatEdit_InsertLink then
+                ChatEdit_InsertLink(self.link)
+            end
+        end)
+
+        frame.LootRows[i] = r
+        return r
+    end
+
+    function frame:SetRun(runData)
+        if type(runData) ~= "table" then
+            return
+        end
+
+        local dungeon = GetDungeonName(runData.mapId)
+        local level = runData.level and ("+" .. tostring(runData.level)) or "—"
+        self.Title:SetText(dungeon .. " " .. level)
+
+        local sub = {}
+        if runData.date then
+            sub[#sub + 1] = tostring(runData.date)
+        elseif runData.timestamp then
+            sub[#sub + 1] = FormatDate(runData.timestamp)
+        end
+        if runData.patch then
+            sub[#sub + 1] = "Patch " .. tostring(runData.patch)
+        end
+        if runData.id then
+            sub[#sub + 1] = "ID " .. tostring(runData.id)
+        end
+        self.Subtitle:SetText(table.concat(sub, "  •  "))
+
+        self.Fields.date:SetText(runData.date or FormatDate(runData.timestamp))
+        self.Fields.patch:SetText(runData.patch or "—")
+        self.Fields.mapId:SetText(tostring(runData.mapId or "—"))
+        self.Fields.level:SetText(level)
+        self.Fields.score:SetText(tostring(runData.score or 0))
+        self.Fields.time:SetText(FormatTime(runData.time))
+        self.Fields.onTime:SetText((runData.onTime == true and "Yes") or (runData.onTime == false and "No") or "—")
+        self.Fields.upgrade:SetText(runData.upgrade and ("+" .. tostring(runData.upgrade)) or "—")
+        self.Fields.deaths:SetText(tostring(runData.deaths or 0))
+        self.Fields.affixes:SetText(FormatAffixes(runData.affixes))
+
+        local groupLines = {}
+        local g = runData.group
+        if type(g) == "table" then
+            if g.tank then groupLines[#groupLines + 1] = "Tank: " .. tostring(g.tank) end
+            if g.healer then groupLines[#groupLines + 1] = "Healer: " .. tostring(g.healer) end
+            local i = 1
+            while g["dps" .. tostring(i)] do
+                groupLines[#groupLines + 1] = "DPS: " .. tostring(g["dps" .. tostring(i)])
+                i = i + 1
+                if i > 10 then break end
+            end
+        end
+        if #groupLines == 0 then
+            groupLines[1] = "—"
+        end
+        self.GroupText:SetText(table.concat(groupLines, "\n"))
+
+        ClearLootRows()
+        local loot = runData.loot
+        local y = -0
+        local anchor = self.LootHeader
+        local anyLoot = false
+
+        if type(loot) == "table" and #loot > 0 then
+            for i, item in ipairs(loot) do
+                local link = type(item) == "table" and item.link or nil
+                local qty = type(item) == "table" and tonumber(item.quantity) or nil
+                if type(link) == "string" and link ~= "" then
+                    anyLoot = true
+                    local row = EnsureLootRow(i)
+                    row.link = link
+                    local text = link
+                    if qty and qty > 1 then
+                        text = text .. " x" .. tostring(qty)
+                    end
+                    row.Text:SetText(text)
+                    row:ClearAllPoints()
+                    row:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -6 - y)
+                    row:SetPoint("RIGHT", content, "RIGHT", 0, 0)
+                    row:Show()
+                    y = y + 18
+                end
+            end
+        end
+
+        if not anyLoot then
+            local row = EnsureLootRow(1)
+            row.link = nil
+            row.Text:SetText("—")
+            row:ClearAllPoints()
+            row:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -6)
+            row:SetPoint("RIGHT", content, "RIGHT", 0, 0)
+            row:Show()
+            y = 18
+        end
+
+        local bottomY = -62
+        -- Rough height accounting: static fields (~220) + group text height + loot height
+        local gh = math.max(20, (self.GroupText:GetStringHeight() or 20))
+        local totalHeight = 62 + 190 + gh + 30 + y + 20
+        content:SetHeight(math.max(totalHeight, 1))
+        content:SetWidth(scroll:GetWidth() - 20)
+    end
+
+    frame:SetScript("OnShow", function()
+        if panel and panel.IsShown and not panel:IsShown() then
+            frame:Hide()
+        end
+    end)
+
+    if panel then
+        panel.__twichuiRunDetailsFrame = frame
+    end
+    return frame
+end
+
 local function CreateRunsPanel(parent)
     local panel = CreateFrame("Frame", nil, parent)
     panel:Hide() -- Ensure OnShow fires when the window manager shows it
@@ -383,6 +672,12 @@ function Runs:Refresh(panel)
             -- Context Menu
             row:EnableMouse(true)
             row:SetScript("OnMouseUp", function(self, button)
+                if button == "LeftButton" and self.runData then
+                    local details = EnsureRunDetailsFrame(panel)
+                    details:SetRun(self.runData)
+                    details:Show()
+                    return
+                end
                 if button == "RightButton" and self.runData then
                     ShowContextMenu(self.runData, panel)
                 end
