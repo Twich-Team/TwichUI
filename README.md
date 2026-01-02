@@ -62,8 +62,8 @@ WowUp will automatically check for updates.
 - Player completes run; run counter increments on dungeons panel; run does not show in dungeons run table for dungeon
 - - Player who unlocked portal cannot use portal (disabled)
 - Dungeon panel only displays information on runs collected by addon- should combine data from Blizzard
-- Default size of frame needs to be taller (BiS overflows)
-- Best in slot ALl items doesnt show for other player
+- - Default size of frame needs to be taller (BiS overflows)
+- - Best in slot ALl items doesnt show for other player
 - Best in slot item selector for returning dungeons doesnt show mythic level loot
 
 ### Unconfirmed Bug Fixes
@@ -71,3 +71,5 @@ WowUp will automatically check for updates.
 These bugs have been fixed, but confirmation of the fix effectiveness has not been received yet.
 
 - Dungeon portals remain disabled even when they are unlocked
+- Best In Slot item selector can show non-mythic item level items
+- Default frame size is too small to fix the Best in Slot Frame

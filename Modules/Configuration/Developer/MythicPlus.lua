@@ -27,6 +27,26 @@ function DMP:Create(order)
         args = {
             description = CM.Widgets:SubmoduleDescription(
                 "Developer tools and settings for the Mythic+ module."),
+
+            bestInSlotGroup = {
+                type = "group",
+                name = "Best in Slot",
+                inline = true,
+                order = 10,
+                args = {
+                    clearItemCache = {
+                        type = "execute",
+                        name = "Clear BiS Item Cache",
+                        desc = "Clears the stored item source cache so it will rebuild on demand.",
+                        order = 1,
+                        func = function()
+                            if MythicPlusModule.BestInSlot and MythicPlusModule.BestInSlot.ClearItemCache then
+                                MythicPlusModule.BestInSlot:ClearItemCache()
+                            end
+                        end,
+                    },
+                }
+            },
         }
     }
 end

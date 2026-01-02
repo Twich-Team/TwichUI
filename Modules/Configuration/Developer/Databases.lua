@@ -69,6 +69,23 @@ function DatabasesConfig:Create(order)
                             end
                         end
                     },
+
+                    clearBiSItemCache = {
+                        type = "execute",
+                        name = "Clear BiS Item Cache",
+                        desc = "Clears the stored Best in Slot item source cache so it will rebuild on demand.",
+                        order = 3,
+                        confirm = true,
+                        confirmText =
+                        "This clears the cached item source database (loot sources). It will rebuild automatically and may briefly slow the game. Continue?",
+                        func = function()
+                            local MythicPlus = T:GetModule("MythicPlus")
+                            if MythicPlus and MythicPlus.BestInSlot and MythicPlus.BestInSlot.ClearItemCache then
+                                MythicPlus.BestInSlot:ClearItemCache()
+                                LM.Info("Cleared Best in Slot item cache.")
+                            end
+                        end
+                    },
                 }
             }
         }

@@ -281,7 +281,7 @@ function DR:Create(order)
                                             local target = CM:GetProfileSettingSafe(
                                                 "developer.mythicplus.runSharing.registerWith", "")
                                             return (not mythicPlus.RunSharing.CheckRegistrationWithTarget) or
-                                            (not target) or (target == "")
+                                                (not target) or (target == "")
                                         end,
                                         func = function()
                                             local ok, mythicPlus = pcall(function() return T:GetModule("MythicPlus") end)
@@ -342,7 +342,7 @@ function DR:Create(order)
                                             local target = CM:GetProfileSettingSafe(
                                                 "developer.mythicplus.runSharing.registerWith", "")
                                             return (not mythicPlus.RunSharing.UnregisterToReceive) or (not target) or
-                                            (target == "")
+                                                (target == "")
                                         end,
                                         func = function()
                                             local ok, mythicPlus = pcall(function() return T:GetModule("MythicPlus") end)
@@ -438,6 +438,21 @@ function DR:Create(order)
                                             if rs.SendPing then
                                                 rs:SendPing()
                                             end
+                                        end,
+                                    },
+                                    hidePlayerNotFound = {
+                                        type = "toggle",
+                                        name = "Hide Player-Not-Found Spam",
+                                        desc =
+                                        "If enabled, hides the system message 'No player named ... is currently playing.' that can appear from the background (silent) connection ping.",
+                                        order = 3.1,
+                                        get = function()
+                                            return CM:GetProfileSettingSafe(
+                                                "developer.mythicplus.runSharing.hidePlayerNotFound", true)
+                                        end,
+                                        set = function(_, value)
+                                            CM:SetProfileSettingSafe(
+                                                "developer.mythicplus.runSharing.hidePlayerNotFound", value)
                                         end,
                                     },
                                     connectionStatus = {

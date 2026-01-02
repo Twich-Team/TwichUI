@@ -26,6 +26,10 @@ local time = _G.time
 local UnitName = _G.UnitName
 local LibStub = _G.LibStub
 local C_Timer = _G.C_Timer
+local strtrim = _G.strtrim
+local GetTime = _G.GetTime
+local ChatFrame_AddMessageEventFilter = _G.ChatFrame_AddMessageEventFilter
+local ERR_CHAT_PLAYER_NOT_FOUND_S = _G.ERR_CHAT_PLAYER_NOT_FOUND_S
 
 local PREFIX = "TWICH_RL"
 
@@ -35,6 +39,51 @@ local AceSerializer = LibStub("AceSerializer-3.0")
 
 AceComm:Embed(RunSharing)
 AceSerializer:Embed(RunSharing)
+
+local function Trim(s)
+    if type(s) ~= "string" then return nil end
+    if type(strtrim) == "function" then
+        return strtrim(s)
+    end
+    return (s:gsub("^%s+", ""):gsub("%s+$", ""))
+end
+
+---@param name any
+---@return string|nil
+local function NormalizePlayerName(name)
+    if type(name) ~= "string" then return nil end
+    name = Trim(name)
+    if not name or name == "" then return nil end
+    -- Some APIs can produce "Name - Realm"; normalize to "Name-Realm".
+    name = name:gsub("%s*%-%s*", "-")
+    -- Player/realm identifiers never contain spaces in whisper targets.
+    name = name:gsub("%s+", "")
+    if name == "" then return nil end
+    return name
+end
+
+local function GetBaseName(fullName)
+    if type(fullName) ~= "string" then return nil end
+    local dash = fullName:find("-", 1, true)
+    if dash then
+        return fullName:sub(1, dash - 1)
+    end
+    return fullName
+end
+
+local function MatchesPlayerNotFound(msg, name)
+    if type(msg) ~= "string" or type(name) ~= "string" then return false end
+    -- Prefer the global localized format string if available.
+    if type(ERR_CHAT_PLAYER_NOT_FOUND_S) == "string" and ERR_CHAT_PLAYER_NOT_FOUND_S:find("%%s", 1, true) then
+        local prefix, suffix = ERR_CHAT_PLAYER_NOT_FOUND_S:match("^(.-)%%s(.-)$")
+        if prefix and suffix then
+            return msg == (prefix .. name .. suffix)
+        end
+    end
+    -- Fallback (enUS-style) matcher.
+    local extracted = msg:match("^No player named '(.+)' is currently playing%.$")
+    return extracted == name
+end
 
 local function NotifyConfigChanged()
     local ACR = (T.Libs and T.Libs.AceConfigRegistry) or LibStub("AceConfigRegistry-3.0-ElvUI", true) or
@@ -73,10 +122,56 @@ function RunSharing:Initialize()
     self.OnReceiverRegistered = Tools.Callback:New()
 
     local db = GetDB()
-    self.receiver = db.linkedReceiver
+    self.receiver = NormalizePlayerName(db.linkedReceiver) or db.linkedReceiver
     -- Persist registrations across /reload.
     -- Key: character name (as seen by AceComm sender), Value: lastSeenUnix
     self.registeredReceivers = db.registeredReceivers
+
+    -- Install a narrow chat filter to optionally suppress the system "No player named ..." message
+    -- when our background (silent) ping targets someone who is offline or not found.
+    if not self._systemFilterInstalled and type(ChatFrame_AddMessageEventFilter) == "function" then
+        self._systemFilterInstalled = true
+        ChatFrame_AddMessageEventFilter("CHAT_MSG_SYSTEM", function(_, _, msg, ...)
+            if not CM:GetProfileSettingSafe("developer.mythicplus.runSharing.hidePlayerNotFound", true) then
+                return false
+            end
+
+            local suppress = self._suppressPlayerNotFoundUntil
+            if type(suppress) ~= "table" then
+                return false
+            end
+
+            local now = (type(GetTime) == "function" and GetTime()) or 0
+            for name, untilTime in pairs(suppress) do
+                if untilTime and now <= untilTime and MatchesPlayerNotFound(msg, name) then
+                    return true
+                end
+            end
+
+            -- Opportunistic cleanup of expired entries.
+            for name, untilTime in pairs(suppress) do
+                if not untilTime or now > untilTime then
+                    suppress[name] = nil
+                end
+            end
+
+            return false
+        end)
+    end
+
+    -- Migrate any previously stored keys that include whitespace.
+    if type(self.registeredReceivers) == "table" then
+        for name, lastSeen in pairs(self.registeredReceivers) do
+            local normalized = NormalizePlayerName(name)
+            if normalized and normalized ~= name then
+                -- Prefer an existing normalized entry if present.
+                if self.registeredReceivers[normalized] == nil then
+                    self.registeredReceivers[normalized] = lastSeen
+                end
+                self.registeredReceivers[name] = nil
+            end
+        end
+    end
     self.connectionStatus = "NONE"
 
     -- Status for registration operations against the configured "Register With" target.
@@ -88,6 +183,7 @@ function RunSharing:Initialize()
 end
 
 function RunSharing:SetReceiver(name)
+    name = NormalizePlayerName(name) or name
     local db = GetDB()
     db.linkedReceiver = name
     self.receiver = name
@@ -100,10 +196,11 @@ function RunSharing:GetRecipients()
     local seen = {}
 
     local function Add(name)
-        if type(name) ~= "string" or name == "" then return end
-        if not seen[name] then
-            seen[name] = true
-            recipients[#recipients + 1] = name
+        local n = NormalizePlayerName(name)
+        if not n then return end
+        if not seen[n] then
+            seen[n] = true
+            recipients[#recipients + 1] = n
         end
     end
 
@@ -129,8 +226,9 @@ function RunSharing:GetRegisteredReceiversList()
     end
 
     for name in pairs(self.registeredReceivers) do
-        if type(name) == "string" and name ~= "" then
-            out[#out + 1] = name
+        local n = NormalizePlayerName(name)
+        if n then
+            out[#out + 1] = n
         end
     end
     table.sort(out)
@@ -151,9 +249,9 @@ end
 
 ---@param targetName string|nil
 function RunSharing:RegisterToReceive(targetName)
-    local target = targetName
-        or CM:GetProfileSettingSafe("developer.mythicplus.runSharing.registerWith", nil)
-    if type(target) ~= "string" or target == "" then return end
+    local target = NormalizePlayerName(targetName)
+        or NormalizePlayerName(CM:GetProfileSettingSafe("developer.mythicplus.runSharing.registerWith", nil))
+    if not target then return end
 
     local payload = { type = "REGISTER", ts = time() }
     local serialized = self:Serialize(payload)
@@ -165,9 +263,9 @@ end
 ---@param targetName string|nil
 ---@param silent boolean|nil
 function RunSharing:RegisterWithTarget(targetName, silent)
-    local target = targetName
-        or CM:GetProfileSettingSafe("developer.mythicplus.runSharing.registerWith", nil)
-    if type(target) ~= "string" or target == "" then return end
+    local target = NormalizePlayerName(targetName)
+        or NormalizePlayerName(CM:GetProfileSettingSafe("developer.mythicplus.runSharing.registerWith", nil))
+    if not target then return end
 
     -- Send the registration request
     self:RegisterToReceive(target)
@@ -202,9 +300,9 @@ end
 ---@param targetName string|nil
 ---@param silent boolean|nil
 function RunSharing:CheckRegistrationWithTarget(targetName, silent)
-    local target = targetName
-        or CM:GetProfileSettingSafe("developer.mythicplus.runSharing.registerWith", nil)
-    if type(target) ~= "string" or target == "" then return end
+    local target = NormalizePlayerName(targetName)
+        or NormalizePlayerName(CM:GetProfileSettingSafe("developer.mythicplus.runSharing.registerWith", nil))
+    if not target then return end
 
     local payload = { type = "REG_QUERY", ts = time() }
     local serialized = self:Serialize(payload)
@@ -235,9 +333,9 @@ end
 
 ---@param targetName string|nil
 function RunSharing:UnregisterToReceive(targetName)
-    local target = targetName
-        or CM:GetProfileSettingSafe("developer.mythicplus.runSharing.registerWith", nil)
-    if type(target) ~= "string" or target == "" then return end
+    local target = NormalizePlayerName(targetName)
+        or NormalizePlayerName(CM:GetProfileSettingSafe("developer.mythicplus.runSharing.registerWith", nil))
+    if not target then return end
 
     local payload = { type = "UNREGISTER", ts = time() }
     local serialized = self:Serialize(payload)
@@ -249,8 +347,14 @@ end
 ---@param runData table
 ---@param overrideReceiver string|nil
 function RunSharing:SendRun(runData, overrideReceiver)
-    local target = overrideReceiver or self.receiver
+    local target = NormalizePlayerName(overrideReceiver) or NormalizePlayerName(self.receiver)
     if not target then return end
+
+    if not overrideReceiver and self.receiver ~= target then
+        self.receiver = target
+        local db = GetDB()
+        db.linkedReceiver = target
+    end
 
     local serialized = self:Serialize(runData)
     if not serialized then
@@ -263,16 +367,38 @@ function RunSharing:SendRun(runData, overrideReceiver)
 end
 
 function RunSharing:SendPing(silent)
-    if not self.receiver then return end
+    local target = NormalizePlayerName(self.receiver)
+    if not target then return end
+
+    if self.receiver ~= target then
+        self.receiver = target
+        local db = GetDB()
+        db.linkedReceiver = target
+    end
 
     local payload = { type = "PING", silent = silent }
     local serialized = self:Serialize(payload)
     if serialized then
         self.connectionStatus = "PENDING"
-        self:SendCommMessage(PREFIX, serialized, "WHISPER", self.receiver)
+        self._lastPingTarget = target
+
+        -- If this is the background (silent) ping, suppress the expected system error spam
+        -- for a short window.
+        if silent and CM:GetProfileSettingSafe("developer.mythicplus.runSharing.hidePlayerNotFound", true) then
+            self._suppressPlayerNotFoundUntil = self._suppressPlayerNotFoundUntil or {}
+            local now = (type(GetTime) == "function" and GetTime()) or 0
+            local untilTime = now + 2.0
+            self._suppressPlayerNotFoundUntil[target] = untilTime
+            local baseName = GetBaseName(target)
+            if baseName and baseName ~= target then
+                self._suppressPlayerNotFoundUntil[baseName] = untilTime
+            end
+        end
+
+        self:SendCommMessage(PREFIX, serialized, "WHISPER", target)
 
         if not silent then
-            print("|cff9580ffTwichUI:|r Sending connection test to " .. self.receiver .. "...")
+            print("|cff9580ffTwichUI:|r Sending connection test to " .. target .. "...")
         end
 
         local ACR = (T.Libs and T.Libs.AceConfigRegistry) or LibStub("AceConfigRegistry-3.0-ElvUI", true) or
@@ -294,9 +420,12 @@ end
 function RunSharing:OnCommReceived(prefix, message, distribution, sender)
     if prefix ~= PREFIX then return end
 
+    sender = NormalizePlayerName(sender)
+    if not sender then return end
+
     local success, data = self:Deserialize(message)
     if not success then
-        Logger.Error("Run Sharing: Failed to deserialize data from " .. sender)
+        Logger.Error("Run Sharing: Failed to deserialize data from " .. tostring(sender))
         return
     end
 
@@ -317,6 +446,12 @@ function RunSharing:OnCommReceived(prefix, message, distribution, sender)
                     print("|cff9580ffTwichUI:|r Registration target responded: " .. sender)
                 end
             else
+                -- Only treat PONG as a successful connection test if it came from our linked receiver
+                -- (or the last ping target if set).
+                local expected = self._lastPingTarget or NormalizePlayerName(self.receiver)
+                if expected and sender ~= expected then
+                    return
+                end
                 self.connectionStatus = "SUCCESS"
                 if not data.silent then
                     print("|cff9580ffTwichUI:|r Connection confirmed! Received response from " .. sender)

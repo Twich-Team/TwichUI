@@ -448,6 +448,30 @@ function BestInSlot:RefreshCache()
     BuildTierCache(true)
 end
 
+function BestInSlot:ClearItemCache()
+    local wipeFn = _G.wipe or (_G.table and _G.table.wipe)
+
+    if MythicPlusModule.Database and MythicPlusModule.Database.SetItemCache then
+        MythicPlusModule.Database:SetItemCache({ Loot = {}, Name = {}, InstanceLoot = {}, ItemLink = {} })
+    end
+    if MythicPlusModule.Database and MythicPlusModule.Database.SetGameVersion then
+        MythicPlusModule.Database:SetGameVersion("")
+    end
+
+    if type(wipeFn) == "function" then
+        wipeFn(ItemSourceCache)
+    else
+        for k in pairs(ItemSourceCache) do ItemSourceCache[k] = nil end
+    end
+
+    TierLootCache = nil
+    TierNameCache = nil
+    TierInstanceLootCache = nil
+    TierItemLinkCache = nil
+
+    Logger.Info("Best in Slot: Cleared item cache; it will rebuild on demand.")
+end
+
 local function ScanEJ(searchType, searchValue, limitTier)
     -- searchType: "ID" (find source of itemID) or "NAME" (find itemID of itemName)
     -- limitTier: if true, only scan the current tier (for performance)
@@ -870,6 +894,13 @@ local function CreateChooserFrame(parent)
         return false
     end
 
+    local function EnsureItemCacheLoaded()
+        if TierLootCache and TierNameCache and TierInstanceLootCache and TierItemLinkCache then
+            return
+        end
+        BuildTierCache(false)
+    end
+
     UIDropDownMenu_Initialize(diffSelector, function(self, level)
         local info = UIDropDownMenu_CreateInfo()
         info.func = OnDiffSelect
@@ -1289,6 +1320,7 @@ local function CreateChooserFrame(parent)
     }
 
     local function UpdateSourceStates()
+        EnsureItemCacheLoaded()
         local searchText = input:GetText():lower()
         if searchText == "search item..." then searchText = "" end
 
@@ -1345,6 +1377,7 @@ local function CreateChooserFrame(parent)
     end
 
     UpdateItemsList = function()
+        EnsureItemCacheLoaded()
         UpdateSourceStates()
 
         if f.refreshTimer then
@@ -1432,32 +1465,38 @@ local function CreateChooserFrame(parent)
                 local missingItems = false
                 for itemID, source in pairs(TierLootCache) do
                     local versions = {}
+
+                    -- Prefer difficulty versions based on whether the source is a dungeon or raid.
+                    local instanceName = (type(source) == "string" and source:match("^(.-) %(")) or nil
+                    local preferDungeon = instanceName and IsDungeon(instanceName)
+                    local preferRaid = instanceName and IsRaid(instanceName)
+
                     if TierItemLinkCache and TierItemLinkCache[itemID] and type(TierItemLinkCache[itemID]) == "table" then
-                        -- Check for Raid Difficulties
-                        local foundRaid = false
-                        for _, diffID in ipairs({ 16, 15, 14, 17 }) do -- Mythic, Heroic, Normal, LFR
-                            if TierItemLinkCache[itemID][diffID] then
-                                table.insert(versions, { link = TierItemLinkCache[itemID][diffID], diffID = diffID })
-                                foundRaid = true
+                        local function AddDiffs(diffIds)
+                            for _, diffID in ipairs(diffIds) do
+                                if TierItemLinkCache[itemID][diffID] then
+                                    table.insert(versions, { link = TierItemLinkCache[itemID][diffID], diffID = diffID })
+                                end
                             end
                         end
 
-                        if not foundRaid then
-                            -- Check for Dungeon Difficulties
-                            local foundDungeon = false
-                            for _, diffID in ipairs({ 23, 2, 1 }) do -- Mythic, Heroic, Normal
-                                if TierItemLinkCache[itemID][diffID] then
-                                    table.insert(versions, { link = TierItemLinkCache[itemID][diffID], diffID = diffID })
-                                    foundDungeon = true
-                                end
+                        if preferDungeon then
+                            AddDiffs({ 23, 2, 1 })
+                        elseif preferRaid then
+                            AddDiffs({ 16, 15, 14, 17 })
+                        else
+                            -- Unknown: try raid first, then dungeon.
+                            AddDiffs({ 16, 15, 14, 17 })
+                            if #versions == 0 then
+                                AddDiffs({ 23, 2, 1 })
                             end
+                        end
 
-                            if not foundDungeon then
-                                -- Fallback to whatever is there
-                                for diffID, link in pairs(TierItemLinkCache[itemID]) do
-                                    table.insert(versions, { link = link, diffID = diffID })
-                                    break
-                                end
+                        if #versions == 0 then
+                            -- Fallback to whatever is there
+                            for diffID, link in pairs(TierItemLinkCache[itemID]) do
+                                table.insert(versions, { link = link, diffID = diffID })
+                                break
                             end
                         end
                     else
@@ -1521,14 +1560,28 @@ local function CreateChooserFrame(parent)
                 local linkToUse = itemID
                 if TierItemLinkCache and TierItemLinkCache[itemID] then
                     if type(TierItemLinkCache[itemID]) == "table" then
-                        -- Use selected difficulty if available, otherwise fallback to any
-                        linkToUse = TierItemLinkCache[itemID][f.selectedDifficulty] or
-                            TierItemLinkCache[itemID][16] or -- Mythic
-                            TierItemLinkCache[itemID][15] or -- Heroic
-                            TierItemLinkCache[itemID][14] or -- Normal
-                            TierItemLinkCache[itemID][17] or -- LFR
-                            TierItemLinkCache[itemID][23] or -- Mythic Dungeon
-                            itemID
+                        -- Use selected difficulty if available, otherwise fallback to a sensible order.
+                        if IsDungeon(f.selectedSource) then
+                            linkToUse = TierItemLinkCache[itemID][f.selectedDifficulty] or
+                                TierItemLinkCache[itemID][23] or -- Mythic Dungeon
+                                TierItemLinkCache[itemID][2] or  -- Heroic Dungeon
+                                TierItemLinkCache[itemID][1] or  -- Normal Dungeon
+                                TierItemLinkCache[itemID][16] or -- Mythic Raid
+                                TierItemLinkCache[itemID][15] or -- Heroic Raid
+                                TierItemLinkCache[itemID][14] or -- Normal Raid
+                                TierItemLinkCache[itemID][17] or -- LFR
+                                itemID
+                        else
+                            linkToUse = TierItemLinkCache[itemID][f.selectedDifficulty] or
+                                TierItemLinkCache[itemID][16] or -- Mythic Raid
+                                TierItemLinkCache[itemID][15] or -- Heroic Raid
+                                TierItemLinkCache[itemID][14] or -- Normal Raid
+                                TierItemLinkCache[itemID][17] or -- LFR
+                                TierItemLinkCache[itemID][23] or -- Mythic Dungeon
+                                TierItemLinkCache[itemID][2] or  -- Heroic Dungeon
+                                TierItemLinkCache[itemID][1] or  -- Normal Dungeon
+                                itemID
+                        end
                     else
                         linkToUse = TierItemLinkCache[itemID]
                     end
