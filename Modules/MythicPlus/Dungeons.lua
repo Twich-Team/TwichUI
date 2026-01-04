@@ -1072,6 +1072,48 @@ local function GetRunScore(run)
 end
 
 ---@param mapId number
+---@return number|nil
+local function GetBlizzardMapScore(mapId)
+    mapId = tonumber(mapId)
+    if not mapId then return nil end
+
+    local C_MythicPlus = _G.C_MythicPlus
+    if not C_MythicPlus then return nil end
+
+    -- Preferred: affix score info (Fortified/Tyrannical). Sum them to get the map rating.
+    if type(C_MythicPlus.GetSeasonBestAffixScoreInfoForMap) == "function" then
+        local ok, a, b, c, d = pcall(C_MythicPlus.GetSeasonBestAffixScoreInfoForMap, mapId)
+        if ok then
+            local function ScoreOf(t)
+                if type(t) ~= "table" then return 0 end
+                return tonumber(t.score) or tonumber(t.mapScore) or tonumber(t.rating) or tonumber(t.mythicRating) or 0
+            end
+
+            -- Some clients return two tables (fort/tyr)
+            if type(a) == "table" and type(b) == "table" then
+                local s = ScoreOf(a) + ScoreOf(b)
+                if s > 0 then return s end
+            end
+
+            -- Some clients may return a list
+            local list = (type(a) == "table" and a[1] ~= nil) and a or
+                ((type(b) == "table" and b[1] ~= nil) and b) or
+                ((type(c) == "table" and c[1] ~= nil) and c) or
+                ((type(d) == "table" and d[1] ~= nil) and d) or nil
+            if type(list) == "table" then
+                local total = 0
+                for _, entry in ipairs(list) do
+                    total = total + ScoreOf(entry)
+                end
+                if total > 0 then return total end
+            end
+        end
+    end
+
+    return nil
+end
+
+---@param mapId number
 ---@param runHistory table|nil
 ---@return number bestScore
 ---@return number bestLevel
@@ -1107,6 +1149,12 @@ local function GetDungeonStats(mapId, runHistory)
                 if score and score > bestScore then bestScore = score end
             end
         end
+    end
+
+    -- Prefer Blizzard's current map rating when the API is available.
+    local blizzardScore = GetBlizzardMapScore(mapId)
+    if blizzardScore and blizzardScore > 0 then
+        bestScore = blizzardScore
     end
 
     return bestScore, bestLevel, attempts

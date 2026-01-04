@@ -922,7 +922,7 @@ function NIH:TestSimulateAvailabilityRoll(item, quantity, ensureSelected, ensure
     local function Fire(link)
         if not link then
             Logger.Error("BestInSlotNotificationHandler:TestSimulateAvailabilityRoll failed to resolve item: " ..
-            tostring(item))
+                tostring(item))
             return
         end
 
@@ -1014,7 +1014,7 @@ function NIH:TestSimulateAvailabilityVault(item, ensureSelected, ensureEnabled)
     local function Fire(link)
         if not link then
             Logger.Error("BestInSlotNotificationHandler:TestSimulateAvailabilityVault failed to resolve item: " ..
-            tostring(item))
+                tostring(item))
             return
         end
 
