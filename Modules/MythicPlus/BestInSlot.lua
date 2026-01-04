@@ -12,6 +12,9 @@ MythicPlusModule.BestInSlot = BestInSlot
 --- @type LoggerModule
 local Logger = T:GetModule("Logger")
 
+--- @type ConfigurationModule
+local CM = T:GetModule("Configuration")
+
 local CreateFrame = _G.CreateFrame
 local UIParent = _G.UIParent
 local GameTooltip = _G.GameTooltip
@@ -2016,6 +2019,150 @@ local function GetOwnedStatus(bisItemID, targetSlotID)
     return false, false, nil, nil
 end
 
+local function TryLoadTierCacheOnly()
+    if TierLootCache and TierNameCache and TierInstanceLootCache and TierItemLinkCache then
+        return true
+    end
+    if not MythicPlusModule.Database or not MythicPlusModule.Database.GetGameVersion or not MythicPlusModule.Database.GetItemCache then
+        return false
+    end
+
+    local currentVersion = select(1, GetBuildInfo())
+    local storedVersion = MythicPlusModule.Database:GetGameVersion()
+    local storedCache = MythicPlusModule.Database:GetItemCache()
+    if storedCache and storedVersion == currentVersion then
+        TierLootCache = storedCache.Loot or {}
+        TierNameCache = storedCache.Name or {}
+        TierInstanceLootCache = storedCache.InstanceLoot or {}
+        TierItemLinkCache = storedCache.ItemLink or {}
+        return true
+    end
+
+    return false
+end
+
+local function NormalizeInstanceName(name)
+    if type(name) ~= "string" or name == "" then return nil end
+    if MEGA_DUNGEON_MAPPINGS[name] then
+        return MEGA_DUNGEON_MAPPINGS[name]
+    end
+    return name
+end
+
+local function GetItemIDFromLink(link)
+    if not link then return nil end
+
+    if type(link) == "number" then
+        return link
+    end
+
+    if C_Item and C_Item.GetItemInfoInstant then
+        return select(1, C_Item.GetItemInfoInstant(link))
+    end
+
+    if GetItemInfoInstant then
+        return select(1, GetItemInfoInstant(link))
+    end
+
+    return nil
+end
+
+local function GetItemLinkForChat(itemID, fallbackLink)
+    if type(fallbackLink) == "string" and fallbackLink:find("|Hitem:") then
+        return fallbackLink
+    end
+
+    if itemID then
+        local link = select(2, GetItemInfo(itemID))
+        if link then return link end
+        return "|Hitem:" .. tostring(itemID) .. "|h[item:" .. tostring(itemID) .. "]|h"
+    end
+
+    return tostring(fallbackLink or "")
+end
+
+--- Prints missing BiS items for the current dungeon/raid (if it can be matched to cache data).
+function BestInSlot:PrintMissingBiSForCurrentInstance()
+    local inInstance, instanceType = IsInInstance()
+    if not inInstance then return end
+    if instanceType ~= "party" and instanceType ~= "raid" then return end
+
+    local instanceName = NormalizeInstanceName(select(1, GetInstanceInfo()))
+    if not instanceName then return end
+
+    -- Try to load the item-source cache without forcing a rebuild on zone-in.
+    if not TryLoadTierCacheOnly() then
+        Logger.Info("BiS: Item cache not ready (open BiS Gear once to build/refresh).")
+        return
+    end
+
+    if not TierInstanceLootCache or not TierInstanceLootCache[instanceName] then
+        return
+    end
+
+    local db = GetCharacterDB()
+    if not db then return end
+
+    local missing = {}
+
+    for _, slotData in ipairs(SLOTS) do
+        local slotID = slotData.slotID
+        local data = db[slotID]
+        if data then
+            local selectedLink = (type(data) == "table") and data.link or data
+            local manualSource = (type(data) == "table") and data.source or nil
+            local itemID = GetItemIDFromLink(selectedLink)
+            if itemID then
+                local owned = select(1, GetOwnedStatus(itemID, slotID))
+                if not owned then
+                    local sourceText = nil
+                    if type(manualSource) == "string" and manualSource ~= "All Items" and manualSource ~= "Custom Item" and manualSource ~= "Custom" then
+                        sourceText = manualSource
+                    end
+
+                    local ejSource = TierLootCache and TierLootCache[itemID] or nil
+                    if ejSource then
+                        sourceText = ejSource
+                    end
+
+                    local itemInstance = nil
+                    if type(sourceText) == "string" then
+                        itemInstance = sourceText:match("^(.-) %(") or sourceText
+                        itemInstance = NormalizeInstanceName(itemInstance)
+                    end
+
+                    if itemInstance == instanceName then
+                        local boss = nil
+                        if type(ejSource) == "string" then
+                            boss = ejSource:match("^.- %((.-)%)$")
+                        end
+                        table.insert(missing, {
+                            slotID = slotID,
+                            itemID = itemID,
+                            link = GetItemLinkForChat(itemID, selectedLink),
+                            boss = boss
+                        })
+                    end
+                end
+            end
+        end
+    end
+
+    if #missing == 0 then
+        Logger.Info(string.format("BiS: No missing BiS items for %s.", instanceName))
+        return
+    end
+
+    Logger.Info(string.format("BiS: Missing %d item(s) for %s:", #missing, instanceName))
+    for _, entry in ipairs(missing) do
+        if entry.boss then
+            Logger.Info(string.format("  - %s (%s)", entry.link, entry.boss))
+        else
+            Logger.Info(string.format("  - %s", entry.link))
+        end
+    end
+end
+
 local function PopulateChooser(f, slotID)
     -- Clear previous
     local content = f.Content
@@ -2188,6 +2335,32 @@ local function CreateBestInSlotPanel(parent)
             local link = db and db[f.slotID]
             UpdateSlot(f, link)
         end
+    end
+
+    -- Keep the UI accurate as the player equips/moves items.
+    -- Without this, the panel can keep showing "(In Bags)" until reopened.
+    do
+        local refreshPending = false
+        local function RequestRefresh()
+            if refreshPending then return end
+            refreshPending = true
+
+            if C_Timer and C_Timer.After then
+                C_Timer.After(0.05, function()
+                    refreshPending = false
+                    RefreshAllSlots()
+                end)
+            else
+                refreshPending = false
+                RefreshAllSlots()
+            end
+        end
+
+        panel:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
+        panel:RegisterEvent("BAG_UPDATE_DELAYED")
+        panel:SetScript("OnEvent", function()
+            RequestRefresh()
+        end)
     end
 
     local function CreateSlotFrame(parentCol, slotData, index)
@@ -2451,5 +2624,42 @@ function BestInSlot:Initialize()
             icon = "Interface\\AddOns\\TwichUI\\Media\\Textures\\armor.tga",
             iconCoords = { 0, 1, 0, 1 } -- Full texture
         })
+    end
+
+    -- Print missing BiS items on dungeon/raid entry (rate-limited per instance).
+    if not self.__entryFrame then
+        local f = CreateFrame("Frame")
+        self.__entryFrame = f
+        f:RegisterEvent("PLAYER_ENTERING_WORLD")
+        f:RegisterEvent("ZONE_CHANGED_NEW_AREA")
+        f:SetScript("OnEvent", function()
+            -- Config toggle
+            if CM and CM.GetProfileSettingSafe then
+                local enabled = CM:GetProfileSettingSafe(
+                    "mythicplus.bestInSlot.printMissingOnInstanceEntry", false)
+                if not enabled then
+                    return
+                end
+            end
+
+            local inInstance, instanceType = IsInInstance()
+            if not inInstance then
+                self.__lastPrintedInstance = nil
+                return
+            end
+            if instanceType ~= "party" and instanceType ~= "raid" then
+                return
+            end
+
+            local instanceName = NormalizeInstanceName(select(1, GetInstanceInfo()))
+            if not instanceName then return end
+
+            if self.__lastPrintedInstance == instanceName then
+                return
+            end
+
+            self.__lastPrintedInstance = instanceName
+            self:PrintMissingBiSForCurrentInstance()
+        end)
     end
 end

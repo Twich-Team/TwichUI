@@ -555,7 +555,7 @@ function NIF:ShowNotification(itemLink, kind, receivedILvl, previousILvl, quanti
 
     ApplyVisualsToFrame(f)
 
-    local total = tonumber(GetSetting("displayDuration", 8)) or 8
+    local total = tonumber(GetSetting("displayDuration", 15)) or 15
     local fadeInT = tonumber(GetSetting("fadeInTime", 0.25)) or 0.25
     local fadeOutT = tonumber(GetSetting("fadeOutTime", 0.3)) or 0.3
     local moveInT = tonumber(GetSetting("moveInTime", 0.18)) or 0.18

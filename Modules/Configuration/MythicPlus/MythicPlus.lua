@@ -485,6 +485,30 @@ function MP:Create(order)
                 order = 4,
                 hidden = function() return not CM:GetProfileSettingByConfigEntry(GetModule().CONFIGURATION.ENABLED) end,
                 args = {
+                    entryPrintGroup = {
+                        type = "group",
+                        name = "Chat Output",
+                        inline = true,
+                        order = 0,
+                        args = {
+                            printMissingOnEntry = {
+                                type = "toggle",
+                                name = "Print missing BiS on instance entry",
+                                desc = CM:ColorTextKeywords(
+                                    "When enabled, entering a dungeon or raid will print a list of your missing Best-in-Slot items for that instance (including boss when known)."),
+                                width = "full",
+                                order = 1,
+                                get = function()
+                                    return CM:GetProfileSettingSafe(
+                                        "mythicplus.bestInSlot.printMissingOnInstanceEntry", false)
+                                end,
+                                set = function(_, value)
+                                    CM:SetProfileSettingSafe(
+                                        "mythicplus.bestInSlot.printMissingOnInstanceEntry", value)
+                                end,
+                            },
+                        },
+                    },
                     databaseGroup = {
                         type = "group",
                         name = "Item Cache",
@@ -837,11 +861,11 @@ function MP:Create(order)
                                         desc = "Total time (seconds) the notification stays visible.",
                                         order = 1,
                                         min = 1,
-                                        max = 10,
+                                        max = 60,
                                         step = 0.5,
                                         get = function()
                                             return CM:GetProfileSettingSafe(
-                                                "mythicplus.bestInSlot.notifications.displayDuration", 8)
+                                                "mythicplus.bestInSlot.notifications.displayDuration", 15)
                                         end,
                                         set = function(_, value)
                                             CM:SetProfileSettingSafe(

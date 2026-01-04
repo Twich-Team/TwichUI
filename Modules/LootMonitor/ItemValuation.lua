@@ -32,6 +32,22 @@ local callbackID        = nil;
 local ARMOR_ITEM_CLASS  = Enum.ItemClass.Armor
 local WEAPON_ITEM_CLASS = Enum.ItemClass.Weapon
 
+local function ResolveItemClassID(itemLink)
+    if not itemLink then return nil end
+
+    if C_Item and C_Item.GetItemInfoInstant then
+        local _, _, _, _, _, classID = C_Item.GetItemInfoInstant(itemLink)
+        return classID
+    end
+
+    if GetItemInfoInstant then
+        local _, _, _, _, _, classID = GetItemInfoInstant(itemLink)
+        return classID
+    end
+
+    return nil
+end
+
 
 ---@type ValuationMethods
 Valuator.VALUATION_METHODS = {
@@ -84,11 +100,6 @@ local function RunValuationOnItem(
 
     -- Short helper for safe fallback to vendor value
     local function FallbackToVendor(reason)
-        Logger.Warn(("Valuation fallback to vendor for %s: %s (vendor=%dc)"):format(
-            itemLink or "nil",
-            reason or "unknown",
-            vendorCopperValue
-        ))
         return vendorCopperValue, vendorCopperValue * quantity, Valuator.DECISIONS.VENDOR
     end
 
@@ -197,12 +208,18 @@ local function RunValuationOnItem(
                 itemLink or "nil", copperValue
             ))
             return copperValue, copperValue * quantity, Valuator.DECISIONS.MARKET
-        else
-            Logger.Warn(("Item valuation: %s TSM price is 0/unknown; using vendor value %dc each."):format(
-                itemLink or "nil", vendorCopperValue
-            ))
-            return vendorCopperValue, vendorCopperValue * quantity, Valuator.DECISIONS.VENDOR
         end
+
+        -- If the configured source is unknown/0 for this item, prefer a disenchant (Destroy) valuation over vendor.
+        local destroyValue = nil
+        if not isJunk then
+            destroyValue = select(1, GetDestroyValue())
+        end
+
+        if destroyValue and destroyValue > vendorCopperValue then
+            return destroyValue, destroyValue * quantity, Valuator.DECISIONS.DISENCHANT
+        end
+        return vendorCopperValue, vendorCopperValue * quantity, Valuator.DECISIONS.VENDOR
     end
 
     -- Fallback: unsupported method, use raw TSM source
@@ -225,14 +242,20 @@ local function GetTSMValue(itemLink)
         return nil, nil
     end
 
-    local priceSource = CM:GetProfileSettingSafe("lootMonitor.itemValuation.priceSource", "DBRegionMarketAvg")
+    local priceSource = CM:GetProfileSettingSafe("lootMonitor.itemValuation.priceSource", "dbregionmarketavg")
 
     local tsmItemString = TSM:ToItemString(itemLink)
     if not tsmItemString then
         return nil, nil
     end
 
-    local value    = TSM:GetCustomPriceValue(priceSource, tsmItemString)
+    local value = TSM:GetCustomPriceValue(priceSource, tsmItemString)
+    if (not value or value <= 0) and type(priceSource) == "string" and priceSource:match("^[%w_]+$") then
+        local lowered = priceSource:lower()
+        if lowered ~= priceSource then
+            value = TSM:GetCustomPriceValue(lowered, tsmItemString) or value
+        end
+    end
     local saleRate = TSM:GetSaleRate(tsmItemString)
 
     return value, saleRate
@@ -262,9 +285,10 @@ local function HandleLootReceivedEvent(quantity, itemInfo)
     end
 
     -- armor/weapons
-    if (itemInfo.classID == ARMOR_ITEM_CLASS or itemInfo.classID == WEAPON_ITEM_CLASS) then
+    local classID = itemInfo.classID or ResolveItemClassID(itemInfo.link)
+    if (classID == ARMOR_ITEM_CLASS or classID == WEAPON_ITEM_CLASS) then
         local valuationMethod = CM:GetProfileSettingSafe("lootMonitor.itemValuation.armorAndWeaponItems.valuationMethod",
-            Valuator.VALUATION_METHODS.TSM_PRICE_SOURCE)
+            Valuator.VALUATION_METHODS.DISENCHANT_OR_VENDOR)
         local minSaleRate = CM:GetProfileSettingSafe(
             "lootMonitor.itemValuation.armorAndWeaponItems.minimumSaleRate", 0.010)
         local copperPerItem, totalCopper, decision = RunValuationOnItem(itemInfo.link, quantity, copperValue, saleRate,
@@ -275,7 +299,7 @@ local function HandleLootReceivedEvent(quantity, itemInfo)
 
     -- remaining items
     local valuationMethod = CM:GetProfileSettingSafe("lootMonitor.itemValuation.remainingItems.valuationMethod",
-        Valuator.VALUATION_METHODS.TSM_PRICE_SOURCE)
+        Valuator.VALUATION_METHODS.TSM_PRICE_SOURCE_WITH_GATE)
     local minSaleRate = CM:GetProfileSettingSafe(
         "lootMonitor.itemValuation.remainingItems.minimumSaleRate", 0.010)
     local copperPerItem, totalCopper, decision = RunValuationOnItem(itemInfo.link, quantity, copperValue, saleRate,

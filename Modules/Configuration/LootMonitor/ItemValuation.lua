@@ -77,7 +77,7 @@ function IV:Create()
                         return values
                     end,
                     get = function()
-                        return CM:GetProfileSettingSafe("lootMonitor.itemValuation.priceSource", "DBRegionMarketAvg")
+                        return CM:GetProfileSettingSafe("lootMonitor.itemValuation.priceSource", "dbregionmarketavg")
                     end,
                     set = function(_, value)
                         CM:SetProfileSettingSafe("lootMonitor.itemValuation.priceSource", value)
@@ -90,7 +90,7 @@ function IV:Create()
                     width = "full",
                     name = function()
                         local priceSource = CM:GetProfileSettingSafe("lootMonitor.itemValuation.priceSource",
-                            "DBRegionMarketAvg")
+                            "dbregionmarketavg")
                         local description = TPA.TSM:GetPriceSourceDescription(priceSource)
                         return TT.Color(CT.TWICH.TEXT_SECONDARY, description)
                     end
