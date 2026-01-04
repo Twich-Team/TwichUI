@@ -1075,7 +1075,7 @@ local function UpdateGreatVaultProgress(panel)
                 preview[#preview + 1] = tostring(weeklyLevels[i])
             end
             lines[#lines + 1] = "ThisWeek levels count=" ..
-            tostring(#weeklyLevels) .. " top=" .. table.concat(preview, ", ")
+                tostring(#weeklyLevels) .. " top=" .. table.concat(preview, ", ")
         else
             lines[#lines + 1] = "ThisWeek levels: <nil>"
         end

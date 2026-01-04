@@ -212,6 +212,71 @@ local function CleanString(str)
     return string.lower(string.gsub(str, "[^%w]", ""))
 end
 
+local function TryPopulateTierSets(instanceLootCache, lootCache, nameCache)
+    if type(instanceLootCache) ~= "table" then return false end
+    if type(lootCache) ~= "table" then return false end
+    if type(nameCache) ~= "table" then return false end
+
+    if C_AddOns and C_AddOns.LoadAddOn and C_AddOns.IsAddOnLoaded then
+        if not C_AddOns.IsAddOnLoaded("Blizzard_LootJournal") then
+            C_AddOns.LoadAddOn("Blizzard_LootJournal")
+        end
+    end
+
+    if not C_LootJournal or not C_LootJournal.GetItemSets or not C_LootJournal.GetItemSetItems then
+        return false
+    end
+
+    local _, _, classID = UnitClass("player")
+    local specID = GetSpecializationInfo(GetSpecialization())
+    if not classID or not specID then return false end
+
+    local itemSets = C_LootJournal.GetItemSets(classID, specID)
+    if type(itemSets) ~= "table" or #itemSets == 0 then
+        return false
+    end
+
+    if not instanceLootCache["Tier Sets"] then
+        instanceLootCache["Tier Sets"] = {}
+    end
+
+    local seen = {}
+    for _, id in ipairs(instanceLootCache["Tier Sets"]) do
+        seen[id] = true
+    end
+
+    local addedAny = false
+
+    for _, set in ipairs(itemSets) do
+        if set and set.setID then
+            local setItems = C_LootJournal.GetItemSetItems(set.setID)
+            if type(setItems) == "table" then
+                for _, item in ipairs(setItems) do
+                    local itemID = item and item.itemID
+                    if itemID then
+                        if not seen[itemID] then
+                            seen[itemID] = true
+                            table.insert(instanceLootCache["Tier Sets"], itemID)
+                            addedAny = true
+                        end
+
+                        if not lootCache[itemID] then
+                            lootCache[itemID] = (set.name or "Tier Set") .. " (Tier Set)"
+
+                            local itemName = GetItemInfo(itemID)
+                            if itemName then
+                                nameCache[CleanString(itemName)] = itemID
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    return addedAny
+end
+
 local MEGA_DUNGEON_MAPPINGS = {
     ["Tazavesh: So'leah's Gambit"] = "Tazavesh, the Veiled Market",
     ["Tazavesh: Streets of Wonder"] = "Tazavesh, the Veiled Market",
@@ -240,10 +305,24 @@ local function BuildTierCache(force)
 
     -- Check if we can load from DB
     if not force and storedCache and storedVersion == currentVersion then
-        TierLootCache = storedCache.Loot
-        TierNameCache = storedCache.Name
+        TierLootCache = storedCache.Loot or {}
+        TierNameCache = storedCache.Name or {}
         TierInstanceLootCache = storedCache.InstanceLoot or {}
         TierItemLinkCache = storedCache.ItemLink or {}
+
+        -- Backfill Tier Sets for older caches that predate this feature
+        if not TierInstanceLootCache["Tier Sets"] or #TierInstanceLootCache["Tier Sets"] == 0 then
+            local added = TryPopulateTierSets(TierInstanceLootCache, TierLootCache, TierNameCache)
+            if added then
+                MythicPlusModule.Database:SetItemCache({
+                    Loot = TierLootCache,
+                    Name = TierNameCache,
+                    InstanceLoot = TierInstanceLootCache,
+                    ItemLink = TierItemLinkCache
+                })
+            end
+        end
+
         return
     end
 
@@ -409,6 +488,11 @@ local function BuildTierCache(force)
     end
 
     -- Scan Item Sets (Tier Sets) from Adventure Guide
+    if C_AddOns and C_AddOns.LoadAddOn and C_AddOns.IsAddOnLoaded then
+        if not C_AddOns.IsAddOnLoaded("Blizzard_LootJournal") then
+            C_AddOns.LoadAddOn("Blizzard_LootJournal")
+        end
+    end
     if C_LootJournal and C_LootJournal.GetItemSets then
         local _, _, classID = UnitClass("player")
         local specID = GetSpecializationInfo(GetSpecialization())
@@ -513,9 +597,9 @@ local function ScanEJ(searchType, searchValue, limitTier)
     if limitTier then
         BuildTierCache(false)
         if searchType == "ID" then
-            return TierLootCache[searchValue]
+            return TierLootCache and TierLootCache[searchValue] or nil
         elseif searchType == "NAME" then
-            return TierNameCache[CleanString(searchValue)]
+            return TierNameCache and TierNameCache[CleanString(searchValue)] or nil
         end
         return nil
     end
@@ -1806,6 +1890,9 @@ local function CreateChooserFrame(parent)
 
     -- Populate Sources (Left Column)
     local yOffset = 0
+
+    -- Ensure caches are loaded before building the source list so "Tier Sets" can appear.
+    BuildTierCache(false)
     local sources = GetSources()
 
     for _, category in ipairs(sources) do
