@@ -1730,7 +1730,6 @@ local function RefreshPanel(panel)
     local zoom = GetImageZoom()
 
     if #mapIds == 0 then
-        Logger.Debug("Dungeons:RefreshPanel - No maps found, entering retry loop")
         -- After /reload, the panel can be created after the relevant events already fired.
         -- If the season map list isn't ready yet, retry a few times.
         if not panel.__twichuiRetryPending then
@@ -1741,14 +1740,12 @@ local function RefreshPanel(panel)
                 local attempt = panel.__twichuiRetryCount
                 local delay = math.min(0.2 + (attempt * 0.15), 1.25)
 
-                Logger.Debug("Dungeons:RefreshPanel - Scheduling retry #" .. attempt .. " in " .. delay .. "s")
 
                 C_Timer.After(delay, function()
                     if not panel or not panel.IsShown or not panel:IsShown() then return end
                     panel.__twichuiRetryPending = false
                     -- Stop retrying after a handful of attempts to avoid any runaway loops.
                     if (tonumber(panel.__twichuiRetryCount) or 0) > 10 then
-                        Logger.Debug("Dungeons:RefreshPanel - Max retries reached")
                         return
                     end
                     RefreshPanel(panel)
@@ -1787,7 +1784,6 @@ local function RefreshPanel(panel)
         })
     end
 
-    Logger.Debug("Dungeons:RefreshPanel - Processing " .. #data .. " rows")
 
     local sortBy = panel.__twichuiSortBy or "score"
     local sortAsc = panel.__twichuiSortAsc

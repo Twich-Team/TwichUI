@@ -4,6 +4,7 @@
 
 - [Breaking] Addressed an issue where addon configuration and saved data may persist across profiles/characters when it should not
   - Updating to this version of the addon will likley cause loss of some configuration. If you are encountering errors, please use the new function to clear addon data in: `Developer Tools` -> `Databases` -> `Danger Zone` -> `Clear ALL Addon Data`
+- Updated the default Logger level from DEBUG to INFO
 
 #### Improvements/New Features
 
