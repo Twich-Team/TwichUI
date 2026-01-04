@@ -48,6 +48,8 @@ local MAX_PENDING_PER_PEER = 5
 local AUTO_SYNC_INTERVAL_SEC = 120
 local CHECK_TIMEOUT_SEC = 5
 
+local RUN_LOGGER_DB_KEY = "TwichUIRunLoggerDB"
+
 local function Trim(s)
     if type(s) ~= "string" then return nil end
     if type(strtrim) == "function" then
@@ -127,11 +129,10 @@ end
 
 ---@return TwichUIRunLoggerDB
 local function GetDB()
-    local key = "TwichUIRunLoggerDB"
-    local db = _G[key]
+    local db = _G[RUN_LOGGER_DB_KEY]
     if type(db) ~= "table" then
         db = { version = 1 }
-        _G[key] = db
+        _G[RUN_LOGGER_DB_KEY] = db
     end
 
     db.sync = db.sync or {}
@@ -143,6 +144,35 @@ local function GetDB()
     db.remoteRuns = db.remoteRuns or {}
 
     return db
+end
+
+function RunLoggerSync:ClearDatabase()
+    local existing = _G[RUN_LOGGER_DB_KEY]
+    if type(existing) ~= "table" then
+        _G[RUN_LOGGER_DB_KEY] = { version = 1, sync = { peers = {}, pending = {}, pendingRequests = {} }, remoteRuns = {} }
+    else
+        for k in pairs(existing) do
+            existing[k] = nil
+        end
+        existing.version = 1
+        existing.active = nil
+        existing.lastCompleted = nil
+        existing.sync = { peers = {}, pending = {}, pendingRequests = {} }
+        existing.remoteRuns = {}
+    end
+
+    -- Reset in-memory sync state so UI reflects the cleared DB immediately.
+    self._pendingPings = nil
+    self._awaitingAddRecipientAck = nil
+    self._awaitingRegisterMeAck = nil
+    self._checkRequests = nil
+    self._checkResults = nil
+
+    self.checkTarget = nil
+    self.checkStatus = nil
+    self.checkResult = nil
+
+    Logger.Info("Run Logger database cleared.")
 end
 
 ---@param fullName string

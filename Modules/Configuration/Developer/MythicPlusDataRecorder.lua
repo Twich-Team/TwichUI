@@ -503,6 +503,36 @@ function DMDR:Create(order)
                             return ""
                         end,
                     },
+
+                    databaseHeader = {
+                        type = "header",
+                        name = "Database",
+                        order = 90,
+                    },
+
+                    clearDatabase = {
+                        type = "execute",
+                        name = "Clear Run Logger Database",
+                        desc = "Deletes ALL stored run logs, received runs, and sync peers/requests/pending queues.",
+                        order = 91,
+                        confirm = true,
+                        confirmText =
+                        "This will permanently delete all Run Logger data (local runs, received runs, and sync peers/queues). Continue?",
+                        func = function()
+                            local sync = GetSyncModule()
+                            if not sync or not sync.ClearDatabase then return end
+
+                            if sync.Initialize then
+                                sync:Initialize()
+                            end
+
+                            sync:ClearDatabase()
+
+                            -- Clear UI selections to avoid stale dropdown selection.
+                            CM:SetProfileSettingSafe("developer.mythicplus.runLoggerSync.selectedPeer", "")
+                            CM:SetProfileSettingSafe("developer.mythicplus.runLoggerSync.selectedRequest", "")
+                        end,
+                    },
                 },
             },
         },
