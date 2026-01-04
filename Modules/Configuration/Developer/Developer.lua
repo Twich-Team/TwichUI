@@ -41,7 +41,7 @@ function CM:CreateDeveloperConfiguration()
             },
             databasesGroup = CM.Developer.Databases:Create(5),
             convenienceGroup = CM.Developer.Convenience:Create(7),
-            mythicPlusDataRecorderGroup = CM.Developer.MythicPlusDataRecorder:Create(8.5),
+            mythicPlusGroup = CM.Developer.MythicPlus:Create(8),
             testingGroup = CM.Developer.Testing:Create(9),
             loggerGroup = CM.Developer.Logger:Create(10),
         }

@@ -47,30 +47,6 @@ function DC:Create(order)
                     }
                 }
             },
-            mythicPlusGroup = {
-                type = "group",
-                inline = true,
-                name = "Mythic+",
-                order = 2,
-                args = {
-                    description = CM.Widgets:ComponentDescription(1,
-                        "Convenience settings related to Mythic+ development."),
-                    autoShowMythicPlus = {
-                        type = "toggle",
-                        name = "Auto-show Mythic+ Window on Reload",
-                        desc =
-                        "If enabled, the Mythic+ main window will be shown automatically after /reload (when the Mythic+ module is enabled).",
-                        order = 2,
-                        width = "full",
-                        get = function()
-                            return CM:GetProfileSettingSafe("developer.convenience.autoShowMythicPlusWindow", false)
-                        end,
-                        set = function(_, value)
-                            CM:SetProfileSettingSafe("developer.convenience.autoShowMythicPlusWindow", value)
-                        end,
-                    },
-                },
-            },
         }
     }
 end

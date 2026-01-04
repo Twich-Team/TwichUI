@@ -4,12 +4,8 @@ local T, W, I, C = unpack(Twich)
 
 --- @class ConfigurationModule
 local CM = T:GetModule("Configuration")
---- @type MythicPlusModule
-local MythicPlusModule = T:GetModule("MythicPlus")
---- @type ToolsModule
-local TM = T:GetModule("Tools")
-
-local LSM = T.Libs and T.Libs.LSM
+--- @type LoggerModule
+local Logger = T:GetModule("Logger")
 
 --- @type DeveloperConfigurationModule
 CM.Developer = CM.Developer or {}
@@ -21,118 +17,630 @@ CM.Developer.MythicPlus = DMP
 --- Create the Mythic+ developer configuration panels
 --- @param order number The order of the panel
 function DMP:Create(order)
+    ---@return MythicPlusModule|nil
+    local function GetModule()
+        local ok, mp = pcall(function() return T:GetModule("MythicPlus") end)
+        if not ok then return nil end
+        return mp
+    end
+
+    local function GetSimulatorSupportedEvents()
+        local mp = GetModule()
+        if not mp or not mp.Simulator or type(mp.Simulator.SupportedEvents) ~= "table" then
+            return { "CHALLENGE_MODE_START" }
+        end
+        if #mp.Simulator.SupportedEvents == 0 then
+            return { "CHALLENGE_MODE_START" }
+        end
+        return mp.Simulator.SupportedEvents
+    end
+
+    local function RefreshSummaryIfOpen()
+        ---@type MythicPlusModule|nil
+        local mp = GetModule()
+        if not mp or not mp.MainWindow or not mp.Summary then
+            return
+        end
+        if type(mp.MainWindow.GetPanelFrame) ~= "function" then
+            return
+        end
+
+        local panel = mp.MainWindow:GetPanelFrame("summary")
+        if panel and panel.IsShown and panel:IsShown() and type(mp.Summary.Refresh) == "function" then
+            mp.Summary:Refresh(panel)
+        end
+    end
+
+    ---@type ConfigEntry
+    local mythicPlusDefaultEvent = {
+        key = "developer.testing.mythicPlus.simulateEvent.event",
+        default = (GetSimulatorSupportedEvents()[1] or "CHALLENGE_MODE_START")
+    }
+
+    local function GetRecordDataArgs()
+        if CM.Developer.MythicPlusDataRecorder and type(CM.Developer.MythicPlusDataRecorder.Create) == "function" then
+            local group = CM.Developer.MythicPlusDataRecorder:Create(0)
+            if group and type(group.args) == "table" then
+                return group.args
+            end
+        end
+
+        return {
+            description = {
+                type = "description",
+                order = 0,
+                name = "Mythic+ Data Recorder configuration module is not available.",
+            }
+        }
+    end
+
     return {
         type = "group",
         name = "Mythic+",
         order = order,
+        childGroups = "tab",
         args = {
-            description = CM.Widgets:SubmoduleDescription(
-                "Developer tools and settings for the Mythic+ module."),
-
-            portalMockGroup = {
+            simulationTab = {
                 type = "group",
-                name = "Portal Spell Mock",
-                inline = true,
-                order = 5,
+                name = "Simulation",
+                order = 2,
                 args = {
-                    description = CM.Widgets:ComponentDescription(1,
-                        "Simulates a dungeon portal spell being present in your spellbook so you can test the Dungeons UI without actually unlocking the portal. This does not modify the real spellbook."),
-                    enabled = {
-                        type = "toggle",
-                        name = "Enable Mock",
+                    description = CM.Widgets:SubmoduleDescription(
+                        "Tools for simulating Mythic+ data/events to exercise addon logic."),
+
+                    addRunGrp = {
+                        type = "group",
+                        inline = true,
+                        name = "Fake Run",
                         order = 1,
-                        width = "full",
-                        get = function()
-                            return CM:GetProfileSettingSafe("developer.testing.mythicPlus.portalMock.enabled", false)
-                        end,
-                        set = function(_, value)
-                            CM:SetProfileSettingSafe("developer.testing.mythicPlus.portalMock.enabled", value)
-                            if MythicPlusModule and MythicPlusModule.Dungeons and MythicPlusModule.Dungeons.ClearPortalSpellCache then
-                                MythicPlusModule.Dungeons:ClearPortalSpellCache()
-                            elseif MythicPlusModule and MythicPlusModule.Dungeons and MythicPlusModule.Dungeons.Refresh then
-                                MythicPlusModule.Dungeons:Refresh()
-                            end
-                        end,
+                        args = {
+                            addRunDesc = CM.Widgets:ComponentDescription(1,
+                                "Add a fake Mythic+ run to the database for testing the Runs panel."),
+                            addRun = {
+                                type = "execute",
+                                name = "Add Dummy Run",
+                                desc = "Adds a fake Mythic+ run to the database for testing Run tables.",
+                                order = 2,
+                                func = function()
+                                    local mp = GetModule()
+                                    if not mp or not mp.Database then
+                                        Logger.Error("MythicPlus module or database not found.")
+                                        return
+                                    end
+
+                                    local mapIds = {}
+                                    local C_MythicPlus = _G.C_MythicPlus
+                                    local C_ChallengeMode = _G.C_ChallengeMode
+
+                                    if C_MythicPlus and C_MythicPlus.GetCurrentSeason and C_MythicPlus.GetSeasonMaps then
+                                        local seasonId = C_MythicPlus.GetCurrentSeason()
+                                        local maps = seasonId and C_MythicPlus.GetSeasonMaps(seasonId)
+                                        if maps then
+                                            for _, id in ipairs(maps) do
+                                                table.insert(mapIds, id)
+                                            end
+                                        end
+                                    end
+
+                                    if #mapIds == 0 and C_ChallengeMode and C_ChallengeMode.GetMapTable then
+                                        local maps = C_ChallengeMode.GetMapTable()
+                                        if maps then
+                                            for _, id in ipairs(maps) do
+                                                table.insert(mapIds, id)
+                                            end
+                                        end
+                                    end
+
+                                    if #mapIds == 0 then
+                                        mapIds = { 375, 376, 377, 378, 379, 380, 381, 382 } -- Fallback
+                                    end
+
+                                    local mapId = mapIds[math.random(#mapIds)]
+                                    local level = math.random(2, 25)
+                                    local duration = math.random(1200, 2400)
+                                    local score = math.random(100, 300)
+                                    local upgrade = math.random(0, 3)
+
+                                    local run = {
+                                        timestamp = _G.time(),
+                                        date = date("%Y-%m-%d %H:%M:%S"),
+                                        mapId = mapId,
+                                        level = level,
+                                        time = duration,
+                                        score = score,
+                                        upgrade = upgrade > 0 and upgrade or nil,
+                                        onTime = upgrade > 0,
+                                        affixes = { 9, 10 }, -- Tyrannical, etc.
+                                        group = {
+                                            tank = "Protection Paladin",
+                                            healer = "Restoration Druid",
+                                            dps1 = "Frost Mage",
+                                            dps2 = "Havoc Demon Hunter",
+                                            dps3 = "Augmentation Evoker",
+                                        },
+                                        loot = {}
+                                    }
+
+                                    mp.Database:AddRun(run)
+                                    Logger.Info("Added dummy run for map " .. mapId)
+
+                                    -- Refresh UI if open
+                                    if mp.Runs and mp.Runs.Refresh and mp.MainWindow then
+                                        local panel = mp.MainWindow:GetPanelFrame("runs")
+                                        if panel and panel:IsShown() then
+                                            mp.Runs:Refresh(panel)
+                                        end
+                                    end
+                                end
+                            },
+                        }
                     },
-                    mapId = {
-                        type = "input",
-                        name = "Map ID (0 = all)",
-                        desc =
-                        "Set to a specific Challenge Mode mapID to mock only that dungeon, or 0 to apply to all dungeons.",
+
+                    summarySimGroup = {
+                        type = "group",
+                        inline = true,
+                        name = "Summary Simulation",
                         order = 2,
-                        width = "full",
-                        get = function()
-                            return tostring(CM:GetProfileSettingSafe("developer.testing.mythicPlus.portalMock.mapId", 0) or
-                            0)
-                        end,
-                        set = function(_, value)
-                            local v = tonumber(value) or 0
-                            if v < 0 then v = 0 end
-                            CM:SetProfileSettingSafe("developer.testing.mythicPlus.portalMock.mapId", v)
-                            if MythicPlusModule and MythicPlusModule.Dungeons and MythicPlusModule.Dungeons.ClearPortalSpellCache then
-                                MythicPlusModule.Dungeons:ClearPortalSpellCache()
-                            elseif MythicPlusModule and MythicPlusModule.Dungeons and MythicPlusModule.Dungeons.Refresh then
-                                MythicPlusModule.Dungeons:Refresh()
-                            end
-                        end,
+                        args = {
+                            description = CM.Widgets:ComponentDescription(1,
+                                "Simulate a Mythic+ score and reward obtained state for the Summary panel's Season progress bar."),
+                            enabled = {
+                                type = "toggle",
+                                name = "Enable Summary Simulation",
+                                desc = "When enabled, the Season progress bar uses the simulated values below.",
+                                order = 2,
+                                width = "full",
+                                get = function()
+                                    return CM:GetProfileSettingSafe(
+                                        "developer.testing.mythicPlus.summarySimulation.enabled", false)
+                                end,
+                                set = function(_, value)
+                                    CM:SetProfileSettingSafe("developer.testing.mythicPlus.summarySimulation.enabled",
+                                        value)
+                                    RefreshSummaryIfOpen()
+                                end,
+                            },
+                            score = {
+                                type = "range",
+                                name = "Simulated Score",
+                                desc = "Score used for the Season progress bar fill and remaining-to-next-reward text.",
+                                order = 3,
+                                min = 0,
+                                max = 3500,
+                                step = 1,
+                                get = function()
+                                    return CM:GetProfileSettingSafe(
+                                        "developer.testing.mythicPlus.summarySimulation.score", 0)
+                                end,
+                                set = function(_, value)
+                                    CM:SetProfileSettingSafe("developer.testing.mythicPlus.summarySimulation.score",
+                                        value)
+                                    RefreshSummaryIfOpen()
+                                end,
+                                disabled = function()
+                                    return not CM:GetProfileSettingSafe(
+                                        "developer.testing.mythicPlus.summarySimulation.enabled", false)
+                                end,
+                            },
+                            obtained2000 = {
+                                type = "toggle",
+                                name = "Treat 2,000 reward as obtained",
+                                order = 4,
+                                get = function()
+                                    return CM:GetProfileSettingSafe(
+                                        "developer.testing.mythicPlus.summarySimulation.obtained2000", false)
+                                end,
+                                set = function(_, value)
+                                    CM:SetProfileSettingSafe(
+                                        "developer.testing.mythicPlus.summarySimulation.obtained2000", value)
+                                    RefreshSummaryIfOpen()
+                                end,
+                                disabled = function()
+                                    return not CM:GetProfileSettingSafe(
+                                        "developer.testing.mythicPlus.summarySimulation.enabled", false)
+                                end,
+                            },
+                            obtained2500 = {
+                                type = "toggle",
+                                name = "Treat 2,500 reward as obtained",
+                                order = 5,
+                                get = function()
+                                    return CM:GetProfileSettingSafe(
+                                        "developer.testing.mythicPlus.summarySimulation.obtained2500", false)
+                                end,
+                                set = function(_, value)
+                                    CM:SetProfileSettingSafe(
+                                        "developer.testing.mythicPlus.summarySimulation.obtained2500", value)
+                                    RefreshSummaryIfOpen()
+                                end,
+                                disabled = function()
+                                    return not CM:GetProfileSettingSafe(
+                                        "developer.testing.mythicPlus.summarySimulation.enabled", false)
+                                end,
+                            },
+                            obtained3000 = {
+                                type = "toggle",
+                                name = "Treat 3,000 reward as obtained",
+                                order = 6,
+                                get = function()
+                                    return CM:GetProfileSettingSafe(
+                                        "developer.testing.mythicPlus.summarySimulation.obtained3000", false)
+                                end,
+                                set = function(_, value)
+                                    CM:SetProfileSettingSafe(
+                                        "developer.testing.mythicPlus.summarySimulation.obtained3000", value)
+                                    RefreshSummaryIfOpen()
+                                end,
+                                disabled = function()
+                                    return not CM:GetProfileSettingSafe(
+                                        "developer.testing.mythicPlus.summarySimulation.enabled", false)
+                                end,
+                            },
+                        },
                     },
-                    spellId = {
-                        type = "input",
-                        name = "Spell ID",
-                        desc =
-                        "SpellID to use as the mocked portal spell. For click-testing, pick a spell you actually know; otherwise it may not cast.",
+
+                    greatVaultSimGroup = {
+                        type = "group",
+                        inline = true,
+                        name = "Great Vault Simulation",
                         order = 3,
-                        width = "full",
-                        get = function()
-                            return tostring(CM:GetProfileSettingSafe("developer.testing.mythicPlus.portalMock.spellId", 0) or
-                            0)
-                        end,
-                        set = function(_, value)
-                            local v = tonumber(value) or 0
-                            if v < 0 then v = 0 end
-                            CM:SetProfileSettingSafe("developer.testing.mythicPlus.portalMock.spellId", v)
-                            if MythicPlusModule and MythicPlusModule.Dungeons and MythicPlusModule.Dungeons.ClearPortalSpellCache then
-                                MythicPlusModule.Dungeons:ClearPortalSpellCache()
-                            elseif MythicPlusModule and MythicPlusModule.Dungeons and MythicPlusModule.Dungeons.Refresh then
-                                MythicPlusModule.Dungeons:Refresh()
-                            end
-                        end,
+                        args = {
+                            description = CM.Widgets:ComponentDescription(1,
+                                "Simulate Great Vault (Mythic+) progress and example iLvl values on the Summary panel."),
+                            enabled = {
+                                type = "toggle",
+                                name = "Enable Great Vault Simulation",
+                                desc = "When enabled, the Great Vault section uses the simulated values below.",
+                                order = 2,
+                                width = "full",
+                                get = function()
+                                    return CM:GetProfileSettingSafe(
+                                        "developer.testing.mythicPlus.greatVaultSimulation.enabled", false)
+                                end,
+                                set = function(_, value)
+                                    CM:SetProfileSettingSafe(
+                                        "developer.testing.mythicPlus.greatVaultSimulation.enabled", value)
+                                    RefreshSummaryIfOpen()
+                                end,
+                            },
+                            totalRuns = {
+                                type = "range",
+                                name = "Dungeons Completed (total)",
+                                desc = "Used for all slots (e.g., 3/4 and 3/8).",
+                                order = 3,
+                                min = 0,
+                                max = 8,
+                                step = 1,
+                                get = function()
+                                    return CM:GetProfileSettingSafe(
+                                        "developer.testing.mythicPlus.greatVaultSimulation.totalRuns", 0)
+                                end,
+                                set = function(_, value)
+                                    CM:SetProfileSettingSafe(
+                                        "developer.testing.mythicPlus.greatVaultSimulation.totalRuns", value)
+                                    RefreshSummaryIfOpen()
+                                end,
+                                disabled = function()
+                                    return not CM:GetProfileSettingSafe(
+                                        "developer.testing.mythicPlus.greatVaultSimulation.enabled", false)
+                                end,
+                            },
+                            ilvl1 = {
+                                type = "range",
+                                name = "Example iLvl (Slot 1)",
+                                desc = "Set to 0 to show —",
+                                order = 4,
+                                min = 0,
+                                max = 700,
+                                step = 1,
+                                get = function()
+                                    return CM:GetProfileSettingSafe(
+                                        "developer.testing.mythicPlus.greatVaultSimulation.ilvl1", 0)
+                                end,
+                                set = function(_, value)
+                                    CM:SetProfileSettingSafe(
+                                        "developer.testing.mythicPlus.greatVaultSimulation.ilvl1", value)
+                                    RefreshSummaryIfOpen()
+                                end,
+                                disabled = function()
+                                    return not CM:GetProfileSettingSafe(
+                                        "developer.testing.mythicPlus.greatVaultSimulation.enabled", false)
+                                end,
+                            },
+                            ilvl4 = {
+                                type = "range",
+                                name = "Example iLvl (Slot 2)",
+                                desc = "Set to 0 to show —",
+                                order = 5,
+                                min = 0,
+                                max = 700,
+                                step = 1,
+                                get = function()
+                                    return CM:GetProfileSettingSafe(
+                                        "developer.testing.mythicPlus.greatVaultSimulation.ilvl4", 0)
+                                end,
+                                set = function(_, value)
+                                    CM:SetProfileSettingSafe(
+                                        "developer.testing.mythicPlus.greatVaultSimulation.ilvl4", value)
+                                    RefreshSummaryIfOpen()
+                                end,
+                                disabled = function()
+                                    return not CM:GetProfileSettingSafe(
+                                        "developer.testing.mythicPlus.greatVaultSimulation.enabled", false)
+                                end,
+                            },
+                            ilvl8 = {
+                                type = "range",
+                                name = "Example iLvl (Slot 3)",
+                                desc = "Set to 0 to show —",
+                                order = 6,
+                                min = 0,
+                                max = 700,
+                                step = 1,
+                                get = function()
+                                    return CM:GetProfileSettingSafe(
+                                        "developer.testing.mythicPlus.greatVaultSimulation.ilvl8", 0)
+                                end,
+                                set = function(_, value)
+                                    CM:SetProfileSettingSafe(
+                                        "developer.testing.mythicPlus.greatVaultSimulation.ilvl8", value)
+                                    RefreshSummaryIfOpen()
+                                end,
+                                disabled = function()
+                                    return not CM:GetProfileSettingSafe(
+                                        "developer.testing.mythicPlus.greatVaultSimulation.enabled", false)
+                                end,
+                            },
+                        },
                     },
-                    clearCache = {
-                        type = "execute",
-                        name = "Clear Portal Cache",
-                        desc = "Clears the cached portal-spell lookup results so the UI re-checks immediately.",
+
+                    mythicPlusEventSimulationGrp = {
+                        type = "group",
+                        inline = true,
+                        name = "Event Simulation",
                         order = 4,
-                        func = function()
-                            if MythicPlusModule and MythicPlusModule.Dungeons and MythicPlusModule.Dungeons.ClearPortalSpellCache then
-                                MythicPlusModule.Dungeons:ClearPortalSpellCache()
-                            elseif MythicPlusModule and MythicPlusModule.Dungeons and MythicPlusModule.Dungeons.Refresh then
-                                MythicPlusModule.Dungeons:Refresh()
-                            end
-                        end,
+                        args = {
+                            description = CM.Widgets:ComponentDescription(1,
+                                "Simulate an incoming Event from the WoW API to test event handling."),
+                            eventSelectionBox = {
+                                type = "select",
+                                order = 2,
+                                name = "Event",
+                                desc = "Select the event to simulate.",
+                                width = 2,
+                                values = function()
+                                    ---@type MythicPlusModule|nil
+                                    local mp = GetModule()
+                                    local events = {}
+                                    local list = (mp and mp.Simulator and mp.Simulator.SupportedEvents)
+                                    if type(list) ~= "table" then
+                                        list = { "CHALLENGE_MODE_START" }
+                                    end
+                                    for _, eventName in ipairs(list) do
+                                        events[eventName] = eventName
+                                    end
+                                    return events
+                                end,
+                                get = function()
+                                    return CM:GetProfileSettingByConfigEntry(mythicPlusDefaultEvent)
+                                end,
+                                set = function(_, value)
+                                    CM:SetProfileSettingByConfigEntry(mythicPlusDefaultEvent, value)
+                                end,
+                            },
+                            simulateEvent = {
+                                type = "execute",
+                                name = "Simulate Event",
+                                desc = "Simulates the selected event.",
+                                order = 3,
+                                func = function()
+                                    local eventName = CM:GetProfileSettingByConfigEntry(mythicPlusDefaultEvent)
+
+                                    if not eventName or eventName == "" then
+                                        Logger.Warn("Please select an event to simulate.")
+                                        return
+                                    end
+
+                                    local mp = GetModule()
+                                    if not mp or not mp.Simulator then
+                                        Logger.Error("MythicPlus module or simulator not found.")
+                                        return
+                                    end
+
+                                    if type(mp.Simulator.SimEvent) ~= "function" then
+                                        Logger.Error("MythicPlus simulator does not support SimEvent().")
+                                        return
+                                    end
+
+                                    mp.Simulator:SimEvent(eventName)
+                                end
+                            }
+                        }
                     },
-                }
+
+                    runSimulation = {
+                        type = "group",
+                        inline = true,
+                        name = "Run Simulation",
+                        order = 5,
+                        args = {
+                            description = CM.Widgets:ComponentDescription(1,
+                                "Simulate a recorded run."),
+                            viewReceivedRuns = {
+                                type = "execute",
+                                name = "Open Simulator",
+                                desc = "Open the frame to view and simulate received run logs.",
+                                order = 2,
+                                func = function()
+                                    local mp = GetModule()
+                                    if not mp then return end
+
+                                    local frame = mp.RunSharingFrame
+                                    if frame and type(frame.Toggle) == "function" then
+                                        frame:Toggle()
+                                    end
+                                end,
+                            },
+                        }
+                    },
+                },
             },
 
-            bestInSlotGroup = {
+            recordDataTab = {
                 type = "group",
-                name = "Best in Slot",
-                inline = true,
-                order = 10,
+                name = "Record Data",
+                order = 1,
+                args = GetRecordDataArgs(),
+            },
+
+            convenienceTab = {
+                type = "group",
+                name = "Convenience",
+                order = 3,
                 args = {
-                    clearItemCache = {
-                        type = "execute",
-                        name = "Clear BiS Item Cache",
-                        desc = "Clears the stored item source cache so it will rebuild on demand.",
+                    description = CM.Widgets:SubmoduleDescription(
+                        "Convenience settings related to Mythic+ development."),
+
+                    autoShowMythicPlusGroup = {
+                        type = "group",
+                        inline = true,
+                        name = "Mythic+ Window",
                         order = 1,
-                        func = function()
-                            if MythicPlusModule.BestInSlot and MythicPlusModule.BestInSlot.ClearItemCache then
-                                MythicPlusModule.BestInSlot:ClearItemCache()
-                            end
-                        end,
+                        args = {
+                            description = CM.Widgets:ComponentDescription(1,
+                                "Automatically open the Mythic+ main window after /reload."),
+                            autoShowMythicPlus = {
+                                type = "toggle",
+                                name = "Auto-show Mythic+ Window on Reload",
+                                desc =
+                                "If enabled, the Mythic+ main window will be shown automatically after /reload (when the Mythic+ module is enabled).",
+                                order = 2,
+                                width = "full",
+                                get = function()
+                                    return CM:GetProfileSettingSafe("developer.convenience.autoShowMythicPlusWindow",
+                                        false)
+                                end,
+                                set = function(_, value)
+                                    CM:SetProfileSettingSafe("developer.convenience.autoShowMythicPlusWindow", value)
+                                end,
+                            },
+                        }
+                    },
+
+                    portalMockGroup = {
+                        type = "group",
+                        name = "Portal Spell Mock",
+                        inline = true,
+                        order = 5,
+                        args = {
+                            description = CM.Widgets:ComponentDescription(1,
+                                "Simulates a dungeon portal spell being present in your spellbook so you can test the Dungeons UI without actually unlocking the portal. This does not modify the real spellbook."),
+                            enabled = {
+                                type = "toggle",
+                                name = "Enable Mock",
+                                order = 1,
+                                width = "full",
+                                get = function()
+                                    return CM:GetProfileSettingSafe("developer.testing.mythicPlus.portalMock.enabled",
+                                        false)
+                                end,
+                                set = function(_, value)
+                                    CM:SetProfileSettingSafe("developer.testing.mythicPlus.portalMock.enabled", value)
+                                    local mp = GetModule()
+                                    if mp and mp.Dungeons and mp.Dungeons.ClearPortalSpellCache then
+                                        mp.Dungeons:ClearPortalSpellCache()
+                                    elseif mp and mp.Dungeons and mp.Dungeons.Refresh then
+                                        mp.Dungeons:Refresh()
+                                    end
+                                end,
+                            },
+                            mapId = {
+                                type = "input",
+                                name = "Map ID (0 = all)",
+                                desc =
+                                "Set to a specific Challenge Mode mapID to mock only that dungeon, or 0 to apply to all dungeons.",
+                                order = 2,
+                                width = "full",
+                                get = function()
+                                    return tostring(CM:GetProfileSettingSafe(
+                                        "developer.testing.mythicPlus.portalMock.mapId",
+                                        0) or 0)
+                                end,
+                                set = function(_, value)
+                                    local v = tonumber(value) or 0
+                                    if v < 0 then v = 0 end
+                                    CM:SetProfileSettingSafe("developer.testing.mythicPlus.portalMock.mapId", v)
+                                    local mp = GetModule()
+                                    if mp and mp.Dungeons and mp.Dungeons.ClearPortalSpellCache then
+                                        mp.Dungeons:ClearPortalSpellCache()
+                                    elseif mp and mp.Dungeons and mp.Dungeons.Refresh then
+                                        mp.Dungeons:Refresh()
+                                    end
+                                end,
+                            },
+                            spellId = {
+                                type = "input",
+                                name = "Spell ID",
+                                desc =
+                                "SpellID to use as the mocked portal spell. For click-testing, pick a spell you actually know; otherwise it may not cast.",
+                                order = 3,
+                                width = "full",
+                                get = function()
+                                    return tostring(CM:GetProfileSettingSafe(
+                                        "developer.testing.mythicPlus.portalMock.spellId",
+                                        0) or 0)
+                                end,
+                                set = function(_, value)
+                                    local v = tonumber(value) or 0
+                                    if v < 0 then v = 0 end
+                                    CM:SetProfileSettingSafe("developer.testing.mythicPlus.portalMock.spellId", v)
+                                    local mp = GetModule()
+                                    if mp and mp.Dungeons and mp.Dungeons.ClearPortalSpellCache then
+                                        mp.Dungeons:ClearPortalSpellCache()
+                                    elseif mp and mp.Dungeons and mp.Dungeons.Refresh then
+                                        mp.Dungeons:Refresh()
+                                    end
+                                end,
+                            },
+                            clearCache = {
+                                type = "execute",
+                                name = "Clear Portal Cache",
+                                desc = "Clears the cached portal-spell lookup results so the UI re-checks immediately.",
+                                order = 4,
+                                func = function()
+                                    local mp = GetModule()
+                                    if mp and mp.Dungeons and mp.Dungeons.ClearPortalSpellCache then
+                                        mp.Dungeons:ClearPortalSpellCache()
+                                    elseif mp and mp.Dungeons and mp.Dungeons.Refresh then
+                                        mp.Dungeons:Refresh()
+                                    end
+                                end,
+                            },
+                        }
+                    },
+
+                    bestInSlotGroup = {
+                        type = "group",
+                        name = "Best in Slot",
+                        inline = true,
+                        order = 10,
+                        args = {
+                            clearItemCache = {
+                                type = "execute",
+                                name = "Clear BiS Item Cache",
+                                desc = "Clears the stored item source cache so it will rebuild on demand.",
+                                order = 1,
+                                func = function()
+                                    local mp = GetModule()
+                                    if mp and mp.BestInSlot and mp.BestInSlot.ClearItemCache then
+                                        mp.BestInSlot:ClearItemCache()
+                                    end
+                                end,
+                            },
+                        }
                     },
                 }
-            },
+            }
         }
     }
 end
