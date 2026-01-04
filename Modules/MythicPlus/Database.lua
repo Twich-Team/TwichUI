@@ -57,14 +57,19 @@ local UnitClass = UnitClass
 local UnitFactionGroup = UnitFactionGroup
 local GetBuildInfo = GetBuildInfo
 
+local FALLBACK_DB = { Global = {} }
+
 local function GetDB()
-    if not _G.TwichUIDungeonDB then
-        _G.TwichUIDungeonDB = {}
+    -- Prefer profile-scoped storage so data can differ by character/profile.
+    local profile = (T.db and T.db.profile)
+    if type(profile) == "table" then
+        profile.mythicPlus = profile.mythicPlus or {}
+        profile.mythicPlus.dungeonDB = profile.mythicPlus.dungeonDB or {}
+        local db = profile.mythicPlus.dungeonDB
+        db.Global = db.Global or {}
+        return db
     end
-    if not _G.TwichUIDungeonDB.Global then
-        _G.TwichUIDungeonDB.Global = {}
-    end
-    return _G.TwichUIDungeonDB
+    return FALLBACK_DB
 end
 
 ---@return table|nil

@@ -24,6 +24,40 @@ local SLOT_WIDTH = 270
 local SLOT_HEIGHT = 44
 local ICON_SIZE = 36
 
+local FALLBACK_CUSTOM_ITEMS = {}
+
+local function GetCustomItemsDB()
+    -- Prefer profile-scoped custom items so they differ by profile/character.
+    local profile = (T.db and T.db.profile)
+    if type(profile) == "table" then
+        profile.mythicPlus = profile.mythicPlus or {}
+        profile.mythicPlus.bestInSlot = profile.mythicPlus.bestInSlot or {}
+        local bis = profile.mythicPlus.bestInSlot
+        bis.customItems = bis.customItems or {}
+
+        -- One-time migration from legacy storage (account-wide).
+        -- We intentionally do not delete legacy data here.
+        local legacyRoot = rawget(_G, "TwichUIDB")
+        if not bis.__migratedCustomItems and type(legacyRoot) == "table" and type(legacyRoot.CustomItems) == "table" then
+            if #bis.customItems == 0 then
+                for _, item in ipairs(legacyRoot.CustomItems) do
+                    table.insert(bis.customItems, item)
+                end
+            end
+            bis.__migratedCustomItems = true
+        end
+
+        return bis.customItems
+    end
+
+    -- Fallback (should be rare): legacy global storage.
+    local legacy = rawget(_G, "TwichUIDB")
+    if type(legacy) == "table" and type(legacy.CustomItems) == "table" then
+        return legacy.CustomItems
+    end
+    return FALLBACK_CUSTOM_ITEMS
+end
+
 local SLOTS = {
     { name = "Head",           slotID = 1,  texture = "Interface\\PaperDoll\\UI-PaperDoll-Slot-Head" },
     { name = "Neck",           slotID = 2,  texture = "Interface\\PaperDoll\\UI-PaperDoll-Slot-Neck" },
@@ -1425,8 +1459,9 @@ local function CreateChooserFrame(parent)
             addBtn:Disable()
 
             -- Populate saved items
-            if TwichUIDB and TwichUIDB.CustomItems then
-                for _, item in ipairs(TwichUIDB.CustomItems) do
+            local customItems = GetCustomItemsDB()
+            if type(customItems) == "table" then
+                for _, item in ipairs(customItems) do
                     local name, link, _, _, _, _, _, _, itemEquipLoc, icon = GetItemInfo(item.link)
                     if link then
                         local valid = IsItemValidForSlot(itemEquipLoc, f.targetSlotID)
@@ -1743,18 +1778,18 @@ local function CreateChooserFrame(parent)
             local sourceText = f.customSourceValue
 
             if itemLink then
-                -- Save to DB
-                if TwichUIDB then
-                    if not TwichUIDB.CustomItems then TwichUIDB.CustomItems = {} end
+                -- Save to profile-scoped DB
+                local customItems = GetCustomItemsDB()
+                if type(customItems) == "table" then
                     local found = false
-                    for _, item in ipairs(TwichUIDB.CustomItems) do
+                    for _, item in ipairs(customItems) do
                         if item.link == itemLink then
                             found = true
                             break
                         end
                     end
                     if not found then
-                        table.insert(TwichUIDB.CustomItems, { link = itemLink, source = sourceText or "Custom" })
+                        table.insert(customItems, { link = itemLink, source = sourceText or "Custom" })
                     end
                 end
 

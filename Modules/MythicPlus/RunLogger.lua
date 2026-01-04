@@ -253,24 +253,31 @@ end
 ---@field version number
 ---@field active TwichUIRunLogger_Run|nil
 ---@field lastCompleted TwichUIRunLogger_Run|nil
--- NOTE: Historical field `runHistory` has been removed; sync uses `TwichUIRunLoggerDB.sync.pending`.
+-- NOTE: Historical field `runHistory` has been removed; sync uses `db.sync.pending`.
 ---@field linkedReceiver string|nil
 ---@field remoteRuns TwichUIRunLogger_RemoteRun[]|nil
 ---@field registeredReceivers table<string, number>|nil
 ---@field sync table|nil
+local FALLBACK_DB = { version = DB_VERSION }
 
 ---@return TwichUIRunLoggerDB
 local function GetDB()
-    local key = "TwichUIRunLoggerDB"
-    local db = _G[key]
-    if type(db) ~= "table" then
-        db = { version = DB_VERSION }
-        _G[key] = db
+    -- Prefer profile-scoped DB so run logs differ by profile/character.
+    local profile = (T.db and T.db.profile)
+    if type(profile) == "table" then
+        profile.mythicPlus = profile.mythicPlus or {}
+        profile.mythicPlus.runLoggerDB = profile.mythicPlus.runLoggerDB or {}
+        local db = profile.mythicPlus.runLoggerDB
+
+        if type(db.version) ~= "number" then
+            db.version = DB_VERSION
+        end
+
+        return db
     end
-    if type(db.version) ~= "number" then
-        db.version = DB_VERSION
-    end
-    return db
+
+    -- Fallback: in-memory only (should be rare).
+    return FALLBACK_DB
 end
 
 ---@param val any

@@ -119,22 +119,29 @@ local function NotifyConfigChanged()
     end
 end
 
+local FALLBACK_DB = { version = 1, remoteRuns = {}, registeredReceivers = {} }
+
 ---@return TwichUIRunLoggerDB
 local function GetDB()
-    local key = "TwichUIRunLoggerDB"
-    local db = _G[key]
-    if type(db) ~= "table" then
-        db = { version = 1 }
-        _G[key] = db
-    end
-    if not db.remoteRuns then
-        db.remoteRuns = {}
+    local profile = (T.db and T.db.profile)
+    if type(profile) == "table" then
+        profile.mythicPlus = profile.mythicPlus or {}
+        profile.mythicPlus.runLoggerDB = profile.mythicPlus.runLoggerDB or {}
+        local db = profile.mythicPlus.runLoggerDB
+
+        if type(db.version) ~= "number" then
+            db.version = 1
+        end
+
+        db.remoteRuns = db.remoteRuns or {}
+        if type(db.registeredReceivers) ~= "table" then
+            db.registeredReceivers = {}
+        end
+        return db
     end
 
-    if type(db.registeredReceivers) ~= "table" then
-        db.registeredReceivers = {}
-    end
-    return db
+    -- Fallback: in-memory only (should be rare).
+    return FALLBACK_DB
 end
 
 function RunSharing:Initialize()

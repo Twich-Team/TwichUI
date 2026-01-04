@@ -48,7 +48,7 @@ local MAX_PENDING_PER_PEER = 5
 local AUTO_SYNC_INTERVAL_SEC = 120
 local CHECK_TIMEOUT_SEC = 5
 
-local RUN_LOGGER_DB_KEY = "TwichUIRunLoggerDB"
+local FALLBACK_DB = { version = 1, sync = { peers = {}, pending = {}, pendingRequests = {} }, remoteRuns = {} }
 
 local function Trim(s)
     if type(s) ~= "string" then return nil end
@@ -129,37 +129,39 @@ end
 
 ---@return TwichUIRunLoggerDB
 local function GetDB()
-    local db = _G[RUN_LOGGER_DB_KEY]
-    if type(db) ~= "table" then
-        db = { version = 1 }
-        _G[RUN_LOGGER_DB_KEY] = db
+    local profile = (T.db and T.db.profile)
+    if type(profile) == "table" then
+        profile.mythicPlus = profile.mythicPlus or {}
+        profile.mythicPlus.runLoggerDB = profile.mythicPlus.runLoggerDB or {}
+        local db = profile.mythicPlus.runLoggerDB
+
+        if type(db.version) ~= "number" then
+            db.version = 1
+        end
+
+        db.sync = db.sync or {}
+        db.sync.peers = db.sync.peers or {}
+        db.sync.pending = db.sync.pending or {}
+        db.sync.pendingRequests = db.sync.pendingRequests or {}
+        db.remoteRuns = db.remoteRuns or {}
+
+        return db
     end
 
-    db.sync = db.sync or {}
-    db.sync.peers = db.sync.peers or {}
-    db.sync.pending = db.sync.pending or {}
-    db.sync.pendingRequests = db.sync.pendingRequests or {}
-
-    -- Remote runs is owned by RunLogger/RunSharing historically; keep compatible.
-    db.remoteRuns = db.remoteRuns or {}
-
-    return db
+    -- Fallback: in-memory only (should be rare).
+    return FALLBACK_DB
 end
 
 function RunLoggerSync:ClearDatabase()
-    local existing = _G[RUN_LOGGER_DB_KEY]
-    if type(existing) ~= "table" then
-        _G[RUN_LOGGER_DB_KEY] = { version = 1, sync = { peers = {}, pending = {}, pendingRequests = {} }, remoteRuns = {} }
-    else
-        for k in pairs(existing) do
-            existing[k] = nil
-        end
-        existing.version = 1
-        existing.active = nil
-        existing.lastCompleted = nil
-        existing.sync = { peers = {}, pending = {}, pendingRequests = {} }
-        existing.remoteRuns = {}
+    local db = GetDB()
+    for k in pairs(db) do
+        db[k] = nil
     end
+    db.version = 1
+    db.active = nil
+    db.lastCompleted = nil
+    db.sync = { peers = {}, pending = {}, pendingRequests = {} }
+    db.remoteRuns = {}
 
     -- Reset in-memory sync state so UI reflects the cleared DB immediately.
     self._pendingPings = nil

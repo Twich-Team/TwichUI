@@ -235,6 +235,8 @@ local function DecodeJSON(s)
     return v, nil
 end
 
+local FALLBACK_DB = { version = 1, remoteRuns = {} }
+
 function RunSharingFrame:Initialize()
     if self.initialized then return end
     self.initialized = true
@@ -255,14 +257,22 @@ function RunSharingFrame:Toggle()
 end
 
 function RunSharingFrame:GetDB()
-    local key = "TwichUIRunLoggerDB"
-    local db = _G[key]
-    if type(db) ~= "table" then
-        db = { version = 1, remoteRuns = {} }
-        _G[key] = db
+    local profile = (T.db and T.db.profile)
+    if type(profile) == "table" then
+        profile.mythicPlus = profile.mythicPlus or {}
+        profile.mythicPlus.runLoggerDB = profile.mythicPlus.runLoggerDB or {}
+        local db = profile.mythicPlus.runLoggerDB
+
+        if type(db.version) ~= "number" then
+            db.version = 1
+        end
+
+        db.remoteRuns = db.remoteRuns or {}
+        return db
     end
-    if not db.remoteRuns then db.remoteRuns = {} end
-    return db
+
+    -- Fallback: in-memory only (should be rare).
+    return FALLBACK_DB
 end
 
 function RunSharingFrame:CreateFrame()

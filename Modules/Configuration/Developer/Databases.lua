@@ -1,4 +1,9 @@
+---@diagnostic disable-next-line: undefined-global
 local T, W, I, C = unpack(Twich)
+
+local _G = _G
+---@diagnostic disable-next-line: undefined-field
+local ReloadUI = _G.ReloadUI
 
 --- @class ConfigurationModule
 local CM = T:GetModule("Configuration")
@@ -39,7 +44,7 @@ function DatabasesConfig:Create(order)
                         confirm = true,
                         confirmText = "This will permanently clear all stored gold data for all characters. Continue?",
                         func = function()
-                            _G.TwichUIGoldDB = {}
+                            rawset(_G, "TwichUIGoldDB", {})
                             LM.Info("Cleared TwichUIGoldDB database.")
                         end
                     },
@@ -87,7 +92,50 @@ function DatabasesConfig:Create(order)
                         end
                     },
                 }
-            }
+            },
+
+            dangerZoneGroup = {
+                type = "group",
+                name = "Danger Zone",
+                inline = true,
+                order = 3,
+                args = {
+                    description = CM.Widgets:ComponentDescription(1,
+                        "This will wipe all TwichUI saved data (settings, profiles, and databases) and reload the UI."),
+                    enableFullReset = {
+                        type = "toggle",
+                        name = "Enable 'Clear ALL' button",
+                        desc = "Must be enabled before the full reset button can be used.",
+                        order = 2,
+                        get = function()
+                            return CM:GetProfileSettingSafe("developer.databases.enableFullReset", false)
+                        end,
+                        set = function(_, value)
+                            CM:SetProfileSettingSafe("developer.databases.enableFullReset", value)
+                        end,
+                    },
+                    clearAllAddonData = {
+                        type = "execute",
+                        name = "|cffff0000Clear ALL Addon Data|r",
+                        desc = "Wipes ALL TwichUI data (TwichUIDB + TwichUIGoldDB) and reloads the UI.",
+                        order = 3,
+                        confirm = true,
+                        confirmText =
+                        "This will permanently delete ALL TwichUI data (settings/profiles/databases/gold) and reload the UI. Continue?",
+                        disabled = function()
+                            return not CM:GetProfileSettingSafe("developer.databases.enableFullReset", false)
+                        end,
+                        func = function()
+                            rawset(_G, "TwichUIDB", nil)
+                            rawset(_G, "TwichUIGoldDB", nil)
+                            LM.Info("Cleared ALL TwichUI SavedVariables. Reloading UI...")
+                            if type(ReloadUI) == "function" then
+                                ReloadUI()
+                            end
+                        end
+                    },
+                }
+            },
         }
     }
 end
