@@ -22,7 +22,7 @@ function MP:Create(order)
         return T:GetModule("MythicPlus")
     end
 
-    return CM.Widgets:ModuleGroup(order, "Mythic+", "This module provides numerous tools for Mythic+ players.",
+    return CM.Widgets:ModuleGroup(order, "Mythic+ (ALPHA)", "This module provides numerous tools for Mythic+ players.",
         {
             -- General Settings
             generalGroup = {
@@ -45,6 +45,9 @@ function MP:Create(order)
                             if value then module:Enable() else module:Disable() end
                         end
                     },
+                    dataDescription = CM.Widgets:ComponentDescription(2,
+                        "The Mythic+ module needs to be updated for each season to obtain some data unique to it. If the addon has not been updated, it will still funciton, but will be missing some information."
+                    ),
                 }
             },
 

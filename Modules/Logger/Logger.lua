@@ -45,7 +45,7 @@ LM.LEVELS = {
     }
 }
 
-LM.level = LM.LEVELS.DEBUG
+LM.level = LM.LEVELS.INFO
 
 --- @type table<string, ConfigEntry>
 LM.CONFIGURATION = {
