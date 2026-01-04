@@ -19,6 +19,13 @@ SM.SOUNDS = {
     { name = "TwichUI-Notification-1",       extension = "mp3" },
     { name = "TwichUI-Notification-2",       extension = "mp3" },
     { name = "TwichUI-Notification-3",       extension = "mp3" },
+    { name = "TwichUI-Notification-4",       extension = "mp3" },
+    { name = "TwichUI-Notification-5",       extension = "mp3" },
+    { name = "TwichUI-Notification-6",       extension = "mp3" },
+    { name = "TwichUI-Notification-7",       extension = "mp3" },
+    { name = "TwichUI-Notification-8",       extension = "mp3" },
+    { name = "TwichUI-Notification-9",       extension = "mp3" },
+
 }
 
 local MEDIA_ROOT = "Interface\\AddOns\\TwichUI\\Media\\"

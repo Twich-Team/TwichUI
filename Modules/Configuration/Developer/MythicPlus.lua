@@ -391,6 +391,23 @@ function DMP:Create(order)
                                         "developer.testing.mythicPlus.greatVaultSimulation.enabled", false)
                                 end,
                             },
+                            debugEnabled = {
+                                type = "toggle",
+                                name = "Enable Great Vault API Debug",
+                                desc =
+                                "Logs the raw C_WeeklyRewards activity fields used to determine Great Vault iLvl (once per activity per session).",
+                                order = 7,
+                                width = "full",
+                                get = function()
+                                    return CM:GetProfileSettingSafe(
+                                        "developer.testing.mythicPlus.greatVaultDebug.enabled", false)
+                                end,
+                                set = function(_, value)
+                                    CM:SetProfileSettingSafe(
+                                        "developer.testing.mythicPlus.greatVaultDebug.enabled", value)
+                                    RefreshSummaryIfOpen()
+                                end,
+                            },
                         },
                     },
 

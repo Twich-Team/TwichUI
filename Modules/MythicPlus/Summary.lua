@@ -202,6 +202,279 @@ local function GetGreatVaultSimulation()
     return true, sim
 end
 
+local GREAT_VAULT_DEBUG_SEEN = {}
+
+local function IsGreatVaultDebugEnabled()
+    if not CM or type(CM.GetProfileSettingSafe) ~= "function" then
+        return false
+    end
+    return CM:GetProfileSettingSafe("developer.testing.mythicPlus.greatVaultDebug.enabled", false) == true
+end
+
+local function GreatVaultDebugOnce(activityID, tag, lines)
+    if not IsGreatVaultDebugEnabled() then
+        return
+    end
+    activityID = tonumber(activityID)
+    if not activityID then
+        return
+    end
+    tag = tostring(tag or "default")
+    GREAT_VAULT_DEBUG_SEEN[activityID] = GREAT_VAULT_DEBUG_SEEN[activityID] or {}
+    if GREAT_VAULT_DEBUG_SEEN[activityID][tag] then
+        return
+    end
+    GREAT_VAULT_DEBUG_SEEN[activityID][tag] = true
+
+    if type(lines) ~= "table" then
+        lines = { tostring(lines) }
+    end
+
+    Logger.Info("VaultDebug: activityID=" .. tostring(activityID) .. " tag=" .. tostring(tag))
+    for _, line in ipairs(lines) do
+        Logger.Info("VaultDebug: " .. tostring(line))
+    end
+end
+
+local function IsPlausibleItemLevel(value)
+    value = tonumber(value)
+    if not value then return false end
+    -- Avoid mistaking keystone levels / thresholds (e.g. 17) as item level.
+    return value >= 100 and value <= 2000
+end
+
+local function GetVaultItemLevelFromKeystoneLevel(keystoneLevel)
+    keystoneLevel = tonumber(keystoneLevel)
+    if not keystoneLevel or keystoneLevel <= 0 then
+        return nil
+    end
+
+    local C_MythicPlus = _G.C_MythicPlus
+    if not C_MythicPlus then
+        return nil
+    end
+
+    local function DebugConvert(tag, ...)
+        if not IsGreatVaultDebugEnabled() then
+            return
+        end
+        local parts = {}
+        for i = 1, select("#", ...) do
+            parts[#parts + 1] = tostring(select(i, ...))
+        end
+        GreatVaultDebugOnce(0, "convert-" .. tostring(tag), {
+            "keystoneLevel=" .. tostring(keystoneLevel) .. " returns: " .. table.concat(parts, ", "),
+        })
+    end
+
+    local function LowestPlausibleReturn(...)
+        local best
+        for i = 1, select("#", ...) do
+            local raw = select(i, ...)
+            local v = tonumber(raw)
+            if IsPlausibleItemLevel(v) then
+                if not best or v < best then
+                    best = v
+                end
+            end
+        end
+        return best
+    end
+
+    -- Modern clients often expose this and it may return multiple reward levels.
+    if type(C_MythicPlus.GetRewardLevelForDifficultyLevel) == "function" then
+        local ok, a, b, c, d = pcall(C_MythicPlus.GetRewardLevelForDifficultyLevel, keystoneLevel)
+        if ok then
+            DebugConvert("GetRewardLevelForDifficultyLevel", a, b, c, d)
+            local best = LowestPlausibleReturn(a, b, c, d)
+            if best then
+                return best
+            end
+        end
+    end
+
+    -- Older clients may expose a direct weekly chest mapping.
+    if type(C_MythicPlus.GetWeeklyChestRewardLevel) == "function" then
+        local ok, a, b, c, d = pcall(C_MythicPlus.GetWeeklyChestRewardLevel, keystoneLevel)
+        if ok then
+            DebugConvert("GetWeeklyChestRewardLevel", a, b, c, d)
+            local best = LowestPlausibleReturn(a, b, c, d)
+            if best then
+                return best
+            end
+        end
+    end
+
+    if type(C_MythicPlus.GetRewardLevelFromKeystoneLevel) == "function" then
+        local ok, a, b, c, d = pcall(C_MythicPlus.GetRewardLevelFromKeystoneLevel, keystoneLevel)
+        if ok then
+            DebugConvert("GetRewardLevelFromKeystoneLevel", a, b, c, d)
+            local best = LowestPlausibleReturn(a, b, c, d)
+            if best then
+                return best
+            end
+        end
+    end
+
+    return nil
+end
+
+-- Forward declarations so other helpers (like rewards scanning) can use them as upvalues.
+local RequestItemData
+local GetItemLevelFromLink
+
+local function SafePairs(v)
+    if type(v) == "table" then
+        return pairs(v)
+    end
+    local ok, iter, state, var = pcall(pairs, v)
+    if ok and type(iter) == "function" then
+        return iter, state, var
+    end
+    return nil
+end
+
+local function FindPlausibleItemLevelsInTable(value, maxDepth, prefix, out, seen)
+    if maxDepth <= 0 then return end
+
+    local iter, state, var = SafePairs(value)
+    if not iter then return end
+
+    seen = seen or {}
+    if seen[value] then
+        return out
+    end
+    seen[value] = true
+
+    out = out or {}
+    prefix = prefix or ""
+
+    for k, v in iter, state, var do
+        local key = tostring(k)
+        local path = (prefix == "") and key or (prefix .. "." .. key)
+        local n = tonumber(v)
+        if IsPlausibleItemLevel(n) then
+            out[#out + 1] = { path = path, value = n }
+        elseif type(v) == "string" then
+            -- If Blizzard embeds item links or formatted strings, pull iLvl from there.
+            if v:find("|Hitem:") then
+                local ilvl = GetItemLevelFromLink(v)
+                if IsPlausibleItemLevel(ilvl) then
+                    out[#out + 1] = { path = path .. "(link)", value = ilvl }
+                else
+                    -- Ensure cache gets warmed for a later refresh.
+                    RequestItemData(v)
+                end
+            end
+
+            -- Look for iLvl-like numbers in text (e.g. "Item Level 691").
+            for digits in v:gmatch("(%d%d%d%d?)") do
+                local maybe = tonumber(digits)
+                if IsPlausibleItemLevel(maybe) then
+                    out[#out + 1] = { path = path .. "(text)", value = maybe }
+                end
+            end
+        elseif type(v) == "table" or type(v) == "userdata" then
+            FindPlausibleItemLevelsInTable(v, maxDepth - 1, path, out, seen)
+        end
+    end
+
+    return out
+end
+
+local function ExtractRewardItemLevelFromWeeklyRewardsEntry(info)
+    if type(info) ~= "table" then return nil end
+
+    -- Some clients embed reward info under `rewards` (often nested).
+    local candidates = FindPlausibleItemLevelsInTable(info.rewards, 4, "rewards", {})
+    if type(candidates) == "table" and #candidates > 0 then
+        local best
+        for _, c in ipairs(candidates) do
+            if c and IsPlausibleItemLevel(c.value) then
+                if not best or c.value < best then
+                    best = c.value
+                end
+            end
+        end
+        return best
+    end
+
+    return nil
+end
+
+local function GetThisWeekKeystoneLevelsSorted()
+    local C_MythicPlus = _G.C_MythicPlus
+    if not C_MythicPlus or type(C_MythicPlus.GetRunHistory) ~= "function" then
+        return nil, { "C_MythicPlus.GetRunHistory not available" }
+    end
+
+    local debugLines = {}
+
+    local function Try(desc, ...)
+        local ok, res = pcall(C_MythicPlus.GetRunHistory, ...)
+        local summary
+        if ok and type(res) == "table" then
+            summary = "table(len=" .. tostring(#res) .. ")"
+        else
+            summary = tostring(res)
+        end
+        debugLines[#debugLines + 1] = "GetRunHistory(" .. desc .. ") ok=" .. tostring(ok) .. " -> " .. summary
+        if ok and type(res) == "table" and #res > 0 then
+            return res
+        end
+        return nil
+    end
+
+    local history =
+        Try("noargs")
+        or Try("false,true", false, true)
+        or Try("false,false", false, false)
+        or Try("true,true", true, true)
+        or Try("true,false", true, false)
+        or Try("false", false)
+        or Try("true", true)
+
+    if type(history) ~= "table" then
+        return nil, debugLines
+    end
+
+    local levels = {}
+    for _, run in ipairs(history) do
+        if type(run) == "table" then
+            local level = tonumber(run.level)
+                or tonumber(run.keystoneLevel)
+                or tonumber(run.mythicLevel)
+                or tonumber(run.challengeModeLevel)
+            if level and level > 0 then
+                levels[#levels + 1] = level
+            end
+        end
+    end
+
+    if #levels == 0 then
+        local first = history[1]
+        if type(first) == "table" then
+            local keys = {}
+            for k in pairs(first) do
+                keys[#keys + 1] = tostring(k)
+            end
+            table.sort(keys)
+            debugLines[#debugLines + 1] = "First run keys: " .. table.concat(keys, ", ")
+            debugLines[#debugLines + 1] = "First run sample level=" .. tostring(first.level)
+                .. " keystoneLevel=" .. tostring(first.keystoneLevel)
+                .. " mythicLevel=" .. tostring(first.mythicLevel)
+                .. " challengeModeLevel=" .. tostring(first.challengeModeLevel)
+        else
+            debugLines[#debugLines + 1] = "First run is " .. tostring(first)
+        end
+        return nil, debugLines
+    end
+
+    table.sort(levels, function(a, b) return a > b end)
+    debugLines[#debugLines + 1] = "ExtractedLevels count=" .. tostring(#levels)
+    return levels, debugLines
+end
+
 local function GetGreatVaultMythicPlusActivities()
     local simEnabled, sim = GetGreatVaultSimulation()
     if simEnabled and type(sim) == "table" then
@@ -218,18 +491,43 @@ local function GetGreatVaultMythicPlusActivities()
         return nil
     end
 
-    local ok, activities = pcall(C_WeeklyRewards.GetActivities)
-    if not ok or type(activities) ~= "table" then
+    local mplusType
+    if _G.Enum and _G.Enum.WeeklyRewardChestThresholdType and _G.Enum.WeeklyRewardChestThresholdType.MythicPlus then
+        mplusType = tonumber(_G.Enum.WeeklyRewardChestThresholdType.MythicPlus)
+    end
+
+    local function TryActivities(desc, ...)
+        local ok, res = pcall(C_WeeklyRewards.GetActivities, ...)
+        if ok and type(res) == "table" then
+            return res
+        end
+        return nil
+    end
+
+    local bestActivities
+    local function Consider(res)
+        if type(res) ~= "table" then return end
+        if not bestActivities or #res > #bestActivities then
+            bestActivities = res
+        end
+    end
+
+    -- Some clients require an eventTypeId (KeyMaster uses 1 for Mythic+).
+    Consider(TryActivities("eventTypeId=1", 1))
+    if mplusType then
+        Consider(TryActivities("enumType", mplusType))
+    end
+    Consider(TryActivities("noargs"))
+
+    local activities = bestActivities
+    if type(activities) ~= "table" then
         return nil
     end
 
     local desiredThresholds = { 1, 4, 8 }
     local desiredLookup = { [1] = true, [4] = true, [8] = true }
 
-    local mplusType
-    if _G.Enum and _G.Enum.WeeklyRewardChestThresholdType and _G.Enum.WeeklyRewardChestThresholdType.MythicPlus then
-        mplusType = tonumber(_G.Enum.WeeklyRewardChestThresholdType.MythicPlus)
-    end
+    -- mplusType computed above
 
     ---@param entry any
     local function GetActivityInfo(entry)
@@ -260,12 +558,71 @@ local function GetGreatVaultMythicPlusActivities()
             local t = tonumber(info.type or info.activityType or info.thresholdType)
 
             if threshold and progress then
-                if progress > totalRuns then totalRuns = progress end
+                -- The Great Vault uses separate "activities" for Raid/PvP/M+, and their
+                -- progress values are not comparable. Only use Mythic+ progress as totalRuns.
+                if mplusType and t == mplusType then
+                    if progress > totalRuns then totalRuns = progress end
+                elseif not mplusType then
+                    -- Heuristic fallback when we can't identify types: only use known M+ thresholds.
+                    if desiredLookup[threshold] and progress > totalRuns then
+                        totalRuns = progress
+                    end
+                end
+
+                local keystoneLevel = tonumber(
+                    info.keystoneLevel
+                    or info.mythicLevel
+                    or info.difficultyLevel
+                    or info.challengeModeLevel
+                    or info.level
+                )
+
+                local rewardItemLevel
+                do
+                    -- Prefer reading the same reward iLvl that Blizzard's WeeklyRewards UI uses.
+                    rewardItemLevel = ExtractRewardItemLevelFromWeeklyRewardsEntry(info)
+
+                    if IsGreatVaultDebugEnabled() then
+                        local nested = FindPlausibleItemLevelsInTable(info.rewards, 4, "rewards", {})
+                        table.sort(nested, function(x, y)
+                            return (tonumber(x.value) or 0) < (tonumber(y.value) or 0)
+                        end)
+                        local preview = {}
+                        local shown = 0
+                        for _, c in ipairs(nested) do
+                            shown = shown + 1
+                            if shown > 6 then break end
+                            preview[#preview + 1] = tostring(c.path) .. "=" .. tostring(c.value)
+                        end
+                        GreatVaultDebugOnce(activityID or info.id, "rewards-scan", {
+                            "threshold=" .. tostring(threshold)
+                            .. " progress=" .. tostring(progress)
+                            .. " type=" .. tostring(t)
+                            .. " rewardsType=" .. tostring(type(info.rewards))
+                            .. " candidates=" .. tostring(#nested),
+                            "preview=" .. (#preview > 0 and table.concat(preview, ", ") or "<none>"),
+                            "selected=" .. tostring(rewardItemLevel),
+                        })
+                    end
+
+                    local direct = tonumber(info.rewardItemLevel or info.itemLevel or info.rewardLevel or info.ilvl)
+                    if not rewardItemLevel and IsPlausibleItemLevel(direct) then
+                        rewardItemLevel = direct
+                    elseif keystoneLevel and keystoneLevel > 0 then
+                        -- Fallback conversion (may differ by client/season).
+                        rewardItemLevel = rewardItemLevel or GetVaultItemLevelFromKeystoneLevel(keystoneLevel)
+                    end
+                end
+
                 local normalized = {
                     activityID = tonumber(activityID or info.id),
                     threshold = threshold,
                     totalRuns = totalRuns,
                     activityType = t,
+                    progress = progress,
+                    keystoneLevel = keystoneLevel,
+                    rewardItemLevel = rewardItemLevel,
+                    raw = info,
                 }
 
                 -- Prefer explicit MythicPlus type when available.
@@ -322,22 +679,25 @@ local function GetGreatVaultMythicPlusActivities()
     return nil
 end
 
-local function GetGreatVaultExampleItemLevel(activityID)
-    activityID = tonumber(activityID)
-    if not activityID then return nil end
+RequestItemData = function(itemLink)
+    if type(itemLink) ~= "string" then return end
+    local C_Item = _G.C_Item
+    if not C_Item then return end
 
-    local C_WeeklyRewards = _G.C_WeeklyRewards
-    if not C_WeeklyRewards or type(C_WeeklyRewards.GetExampleRewardItemHyperlinks) ~= "function" then
-        return nil
+    local itemId = itemLink:match("item:(%d+):")
+    itemId = itemId and tonumber(itemId) or nil
+    if itemId and type(C_Item.RequestLoadItemDataByID) == "function" then
+        pcall(C_Item.RequestLoadItemDataByID, itemId)
+        return
     end
 
-    local ok, links = pcall(C_WeeklyRewards.GetExampleRewardItemHyperlinks, activityID)
-    if not ok or type(links) ~= "table" then
-        return nil
+    if type(C_Item.RequestLoadItemData) == "function" then
+        pcall(C_Item.RequestLoadItemData, itemLink)
     end
+end
 
-    local link = links[1]
-    if not link or type(link) ~= "string" then
+GetItemLevelFromLink = function(link)
+    if type(link) ~= "string" or link == "" then
         return nil
     end
 
@@ -348,7 +708,6 @@ local function GetGreatVaultExampleItemLevel(activityID)
         end
     end
 
-    -- Legacy fallback (still works on some clients).
     ---@diagnostic disable-next-line: deprecated
     if type(_G.GetDetailedItemLevelInfo) == "function" then
         ---@diagnostic disable-next-line: deprecated
@@ -358,12 +717,318 @@ local function GetGreatVaultExampleItemLevel(activityID)
         end
     end
 
-    -- Final fallback: item info cache.
     if _G.C_Item and type(_G.C_Item.GetItemInfo) == "function" then
-        local ok4, info = pcall(_G.C_Item.GetItemInfo, link)
-        if ok4 and type(info) == "table" and info.itemLevel then
-            return tonumber(info.itemLevel)
+        local ok4, _, _, _, iLevel = pcall(_G.C_Item.GetItemInfo, link)
+        if ok4 and iLevel then
+            return tonumber(iLevel)
         end
+    else
+        ---@diagnostic disable-next-line: deprecated
+        local GetItemInfo = _G.GetItemInfo
+        if type(GetItemInfo) == "function" then
+            local ok5, _, _, _, iLevel = pcall(GetItemInfo, link)
+            if ok5 and iLevel then
+                return tonumber(iLevel)
+            end
+        end
+    end
+
+    -- Not cached yet; request data so a later refresh can resolve the iLvl.
+    RequestItemData(link)
+    return nil
+end
+
+local function GetGreatVaultExampleItemLevel(activityID)
+    activityID = tonumber(activityID)
+    if not activityID then return nil end
+
+    local C_WeeklyRewards = _G.C_WeeklyRewards
+    if not C_WeeklyRewards or type(C_WeeklyRewards.GetExampleRewardItemHyperlinks) ~= "function" then
+        return nil
+    end
+
+    local function RequestItemData(itemLink)
+        if type(itemLink) ~= "string" then return end
+        local C_Item = _G.C_Item
+        if not C_Item then return end
+
+        local itemId = itemLink:match("item:(%d+):")
+        itemId = itemId and tonumber(itemId) or nil
+        if itemId and type(C_Item.RequestLoadItemDataByID) == "function" then
+            pcall(C_Item.RequestLoadItemDataByID, itemId)
+            return
+        end
+
+        if type(C_Item.RequestLoadItemData) == "function" then
+            pcall(C_Item.RequestLoadItemData, itemLink)
+        end
+    end
+
+    local function GetItemLevelFromLink(link)
+        if type(link) ~= "string" or link == "" then
+            return nil
+        end
+
+        if _G.C_Item and type(_G.C_Item.GetDetailedItemLevelInfo) == "function" then
+            local ok2, ilvl = pcall(_G.C_Item.GetDetailedItemLevelInfo, link)
+            if ok2 and ilvl then
+                return tonumber(ilvl)
+            end
+        end
+
+        ---@diagnostic disable-next-line: deprecated
+        if type(_G.GetDetailedItemLevelInfo) == "function" then
+            ---@diagnostic disable-next-line: deprecated
+            local ok3, ilvl = pcall(_G.GetDetailedItemLevelInfo, link)
+            if ok3 and ilvl then
+                return tonumber(ilvl)
+            end
+        end
+
+        if _G.C_Item and type(_G.C_Item.GetItemInfo) == "function" then
+            local ok4, _, _, _, iLevel = pcall(_G.C_Item.GetItemInfo, link)
+            if ok4 and iLevel then
+                return tonumber(iLevel)
+            end
+        else
+            ---@diagnostic disable-next-line: deprecated
+            local GetItemInfo = _G.GetItemInfo
+            if type(GetItemInfo) == "function" then
+                local ok5, _, _, _, iLevel = pcall(GetItemInfo, link)
+                if ok5 and iLevel then
+                    return tonumber(iLevel)
+                end
+            end
+        end
+
+        -- Not cached yet; request data so a later refresh can resolve the iLvl.
+        RequestItemData(link)
+        return nil
+    end
+
+    ---@type table|nil
+    local links
+    do
+        local ok, res = pcall(C_WeeklyRewards.GetExampleRewardItemHyperlinks, activityID)
+        if ok and type(res) == "table" then
+            links = res
+        else
+            -- Some clients may have a different signature.
+            local ok2, res2 = pcall(C_WeeklyRewards.GetExampleRewardItemHyperlinks, activityID, 1)
+            if ok2 and type(res2) == "table" then
+                links = res2
+            end
+        end
+    end
+
+    if type(links) ~= "table" then
+        return nil
+    end
+
+    local link = links[1]
+    if not link or type(link) ~= "string" then
+        return nil
+    end
+    return GetItemLevelFromLink(link)
+end
+
+local function GetGreatVaultRewardItemLevel(activityID, rawActivity)
+    activityID = tonumber(activityID)
+    if not activityID then return nil end
+
+    local C_WeeklyRewards = _G.C_WeeklyRewards
+    local info
+    local direct
+    local MYTHIC_PLUS_EVENT_TYPE_ID = 1
+    if C_WeeklyRewards and type(C_WeeklyRewards.GetActivityInfo) == "function" then
+        local function TryInfo(tag, ...)
+            local ok, res = pcall(C_WeeklyRewards.GetActivityInfo, ...)
+            if ok and type(res) == "table" then
+                local ilvl = tonumber(res.rewardItemLevel or res.itemLevel or res.rewardLevel or res.ilvl)
+                if IsPlausibleItemLevel(ilvl) then
+                    GreatVaultDebugOnce(activityID, "activityInfo-direct", {
+                        "GetActivityInfo(" .. tostring(tag) .. ") ok=true",
+                        "type=" .. tostring(res.type or res.activityType or res.thresholdType)
+                        .. " threshold=" .. tostring(res.threshold) .. " progress=" .. tostring(res.progress),
+                        "Direct iLvl field found: " .. tostring(ilvl),
+                    })
+                    return res, ilvl
+                end
+                return res, nil
+            end
+            return nil, nil
+        end
+
+        info, direct = TryInfo("activityID", activityID)
+        if direct then
+            return direct
+        end
+
+        -- Some clients use GetActivityInfo(eventTypeId, index) rather than by activityID.
+        if not info and type(rawActivity) == "table" then
+            local idx = tonumber(rawActivity.index)
+            local tier = tonumber(rawActivity.activityTierID)
+
+            GreatVaultDebugOnce(activityID, "activityInfo-raw", {
+                "raw.type=" .. tostring(rawActivity.type)
+                .. " raw.index=" .. tostring(rawActivity.index)
+                .. " raw.activityTierID=" .. tostring(rawActivity.activityTierID),
+            })
+
+            if idx then
+                info, direct = TryInfo("eventTypeId,index", MYTHIC_PLUS_EVENT_TYPE_ID, idx)
+                if direct then
+                    return direct
+                end
+
+                info, direct = TryInfo("index,eventTypeId", idx, MYTHIC_PLUS_EVENT_TYPE_ID)
+                if direct then
+                    return direct
+                end
+            end
+
+            if tier then
+                info, direct = TryInfo("eventTypeId,tier", MYTHIC_PLUS_EVENT_TYPE_ID, tier)
+                if direct then
+                    return direct
+                end
+            end
+        end
+    end
+
+    -- Some clients expose concrete reward items for an activity even when the vault isn't claimable.
+    local rewardsCount
+    if C_WeeklyRewards and type(C_WeeklyRewards.GetActivityItemRewards) == "function" then
+        local ok2, rewards = pcall(C_WeeklyRewards.GetActivityItemRewards, activityID)
+        if ok2 and type(rewards) == "table" then
+            rewardsCount = #rewards
+            for _, r in ipairs(rewards) do
+                local link = nil
+                if type(r) == "string" then
+                    link = r
+                elseif type(r) == "table" then
+                    link = r.itemLink or r.hyperlink or r.link
+                end
+
+                if type(link) == "string" and link ~= "" then
+                    -- Reuse the example resolver (it contains robust item-cache handling).
+                    local ilvl = nil
+                    do
+                        -- Inline minimal iLvl extraction to avoid cross-scope access.
+                        if _G.C_Item and type(_G.C_Item.GetDetailedItemLevelInfo) == "function" then
+                            local ok3, i = pcall(_G.C_Item.GetDetailedItemLevelInfo, link)
+                            if ok3 and i then ilvl = tonumber(i) end
+                        end
+                        if not ilvl then
+                            ---@diagnostic disable-next-line: deprecated
+                            if type(_G.GetDetailedItemLevelInfo) == "function" then
+                                ---@diagnostic disable-next-line: deprecated
+                                local ok4, i = pcall(_G.GetDetailedItemLevelInfo, link)
+                                if ok4 and i then ilvl = tonumber(i) end
+                            end
+                        end
+                        if not ilvl then
+                            if _G.C_Item and type(_G.C_Item.GetItemInfo) == "function" then
+                                local ok5, _, _, _, iLevel = pcall(_G.C_Item.GetItemInfo, link)
+                                if ok5 and iLevel then ilvl = tonumber(iLevel) end
+                            else
+                                ---@diagnostic disable-next-line: deprecated
+                                local GetItemInfo = _G.GetItemInfo
+                                if type(GetItemInfo) == "function" then
+                                    local ok6, _, _, _, iLevel = pcall(GetItemInfo, link)
+                                    if ok6 and iLevel then ilvl = tonumber(iLevel) end
+                                end
+                            end
+                        end
+                    end
+
+                    if ilvl and ilvl > 0 then
+                        GreatVaultDebugOnce(activityID, "activityItemRewards", {
+                            "GetActivityItemRewards count=" .. tostring(rewardsCount),
+                            "Resolved iLvl from reward item link: " .. tostring(ilvl),
+                        })
+                        return ilvl
+                    end
+                end
+            end
+        end
+    end
+
+    local exampleIlvl = GetGreatVaultExampleItemLevel(activityID)
+    if exampleIlvl and exampleIlvl > 0 then
+        GreatVaultDebugOnce(activityID, "exampleLinks", {
+            "Resolved iLvl from GetExampleRewardItemHyperlinks: " .. tostring(exampleIlvl),
+        })
+        return exampleIlvl
+    end
+
+    -- Some clients require different signatures for example links too.
+    if C_WeeklyRewards and type(C_WeeklyRewards.GetExampleRewardItemHyperlinks) == "function" and type(rawActivity) == "table" then
+        local function TryExample(desc, ...)
+            local ok, res = pcall(C_WeeklyRewards.GetExampleRewardItemHyperlinks, ...)
+            local n = (ok and type(res) == "table") and #res or 0
+            GreatVaultDebugOnce(activityID, "exampleLinks-try", {
+                "GetExampleRewardItemHyperlinks(" .. desc .. ") ok=" .. tostring(ok) .. " count=" .. tostring(n),
+            })
+            if ok and type(res) == "table" and res[1] then
+                local ilvl = GetItemLevelFromLink(res[1])
+                if IsPlausibleItemLevel(ilvl) then
+                    return ilvl
+                end
+            end
+            return nil
+        end
+
+        local idx = tonumber(rawActivity.index)
+        local tier = tonumber(rawActivity.activityTierID)
+        if idx then
+            local ilvl = TryExample("eventTypeId,index", MYTHIC_PLUS_EVENT_TYPE_ID, idx)
+            if ilvl then return ilvl end
+
+            ilvl = TryExample("index,eventTypeId", idx, MYTHIC_PLUS_EVENT_TYPE_ID)
+            if ilvl then return ilvl end
+        end
+        if tier then
+            local ilvl = TryExample("tier", tier)
+            if ilvl then return ilvl end
+        end
+    end
+
+    -- Debug the raw shapes we have (helps identify the right field name on this client).
+    if IsGreatVaultDebugEnabled() then
+        local lines = {}
+        if type(info) == "table" then
+            lines[#lines + 1] = "GetActivityInfo keys: "
+                .. table.concat((function()
+                    local keys = {}
+                    for k in pairs(info) do
+                        keys[#keys + 1] = tostring(k)
+                    end
+                    table.sort(keys)
+                    return keys
+                end)(), ", ")
+            lines[#lines + 1] = "GetActivityInfo sample: type=" ..
+                tostring(info.type or info.activityType or info.thresholdType)
+                .. " threshold=" .. tostring(info.threshold) .. " progress=" .. tostring(info.progress)
+        else
+            lines[#lines + 1] = "GetActivityInfo returned " .. tostring(info)
+        end
+
+        if C_WeeklyRewards and type(C_WeeklyRewards.GetActivityItemRewards) == "function" then
+            lines[#lines + 1] = "GetActivityItemRewards supported; count=" .. tostring(rewardsCount)
+        else
+            lines[#lines + 1] = "GetActivityItemRewards not available"
+        end
+
+        if C_WeeklyRewards and type(C_WeeklyRewards.GetExampleRewardItemHyperlinks) == "function" then
+            local ok3, links = pcall(C_WeeklyRewards.GetExampleRewardItemHyperlinks, activityID)
+            local n = (ok3 and type(links) == "table") and #links or 0
+            lines[#lines + 1] = "GetExampleRewardItemHyperlinks count=" .. tostring(n)
+        else
+            lines[#lines + 1] = "GetExampleRewardItemHyperlinks not available"
+        end
+
+        GreatVaultDebugOnce(activityID, "missing", lines)
     end
 
     return nil
@@ -372,6 +1037,19 @@ end
 local function UpdateGreatVaultProgress(panel)
     if not panel or not panel.__twichuiVaultWrap or not panel.__twichuiVaultSummary or type(panel.__twichuiVaultRows) ~= "table" then
         return
+    end
+
+    -- Ensure Blizzard has been asked to populate weekly reward data.
+    do
+        local C_WeeklyRewards = _G.C_WeeklyRewards
+        if C_WeeklyRewards then
+            if type(C_WeeklyRewards.RequestRewards) == "function" then
+                pcall(C_WeeklyRewards.RequestRewards)
+            end
+            if type(C_WeeklyRewards.RequestActivities) == "function" then
+                pcall(C_WeeklyRewards.RequestActivities)
+            end
+        end
     end
 
     local activities = GetGreatVaultMythicPlusActivities()
@@ -386,6 +1064,27 @@ local function UpdateGreatVaultProgress(panel)
     for _, a in ipairs(activities) do
         local tr = tonumber(a.totalRuns) or 0
         if tr > totalRuns then totalRuns = tr end
+    end
+
+    local weeklyLevels, historyDbg = GetThisWeekKeystoneLevelsSorted()
+    if IsGreatVaultDebugEnabled() then
+        local lines = {}
+        if weeklyLevels then
+            local preview = {}
+            for i = 1, math.min(10, #weeklyLevels) do
+                preview[#preview + 1] = tostring(weeklyLevels[i])
+            end
+            lines[#lines + 1] = "ThisWeek levels count=" ..
+            tostring(#weeklyLevels) .. " top=" .. table.concat(preview, ", ")
+        else
+            lines[#lines + 1] = "ThisWeek levels: <nil>"
+        end
+        if type(historyDbg) == "table" then
+            for i = 1, math.min(6, #historyDbg) do
+                lines[#lines + 1] = historyDbg[i]
+            end
+        end
+        GreatVaultDebugOnce(0, "runHistory", lines)
     end
 
     local unlocked = 0
@@ -428,15 +1127,67 @@ local function UpdateGreatVaultProgress(panel)
             row.__twichuiUnlocked = isUnlocked
             row.__twichuiRemaining = remaining
 
-            local ilvl = GetGreatVaultExampleItemLevel(a.activityID)
-            if a.simulatedIlvl then
-                ilvl = tonumber(a.simulatedIlvl)
-            end
-            row.__twichuiIlvl = ilvl
-            local ilvlText = ilvl and tostring(ilvl) or "—"
-
+            -- Only show unlock status + progress; do not display reward item level.
+            row.__twichuiIlvl = nil
             if row.ilvlText then
-                row.ilvlText:SetText(TT.Color(CT.TWICH.TEXT_PRIMARY, ilvlText))
+                local statusText = isUnlocked and "Unlocked" or "Locked"
+                row.ilvlText:SetText(TT.Color(CT.TWICH.TEXT_PRIMARY, statusText))
+            end
+
+            if IsGreatVaultDebugEnabled() then
+                GreatVaultDebugOnce(a.activityID, "slot", {
+                    "slotIndex=" .. tostring(i)
+                    .. " threshold=" .. tostring(threshold)
+                    .. " totalRuns=" .. tostring(totalRuns)
+                    .. " progress=" .. tostring(a.progress)
+                    .. " unlocked=" .. tostring(isUnlocked)
+                    .. " remaining=" .. tostring(remaining),
+                })
+
+                if type(a.raw) == "table" then
+                    local rawKeys = {}
+                    local rawCandidates = {}
+                    for k, v in pairs(a.raw) do
+                        rawKeys[#rawKeys + 1] = tostring(k)
+                        local n = tonumber(v)
+                        if IsPlausibleItemLevel(n) then
+                            rawCandidates[#rawCandidates + 1] = tostring(k) .. "=" .. tostring(n)
+                        end
+                    end
+                    table.sort(rawKeys)
+                    table.sort(rawCandidates)
+
+                    local nestedCandidates = {}
+                    local nestedPreview = {}
+                    if type(a.raw.rewards) == "table" then
+                        nestedCandidates = FindPlausibleItemLevelsInTable(a.raw.rewards, 4, "rewards", {})
+                        table.sort(nestedCandidates, function(x, y)
+                            return (tonumber(x.value) or 0) < (tonumber(y.value) or 0)
+                        end)
+                        local shown = 0
+                        for _, c in ipairs(nestedCandidates) do
+                            shown = shown + 1
+                            if shown > 6 then break end
+                            nestedPreview[#nestedPreview + 1] = tostring(c.path) .. "=" .. tostring(c.value)
+                        end
+                    end
+                    GreatVaultDebugOnce(a.activityID, "raw", {
+                        "Raw keys: " .. table.concat(rawKeys, ", "),
+                        "Raw iLvl-like fields: " ..
+                        (#rawCandidates > 0 and table.concat(rawCandidates, ", ") or "<none>"),
+                        "Nested rewards iLvl-like: " ..
+                        (#nestedPreview > 0 and table.concat(nestedPreview, ", ") or "<none>"),
+                        "Raw sample: level=" .. tostring(a.raw.level)
+                        .. " rewardItemLevel=" .. tostring(a.raw.rewardItemLevel)
+                        .. " itemLevel=" .. tostring(a.raw.itemLevel)
+                        .. " rewardLevel=" .. tostring(a.raw.rewardLevel)
+                        .. " ilvl=" .. tostring(a.raw.ilvl),
+                    })
+                else
+                    GreatVaultDebugOnce(a.activityID, "raw", {
+                        "No raw activity table captured",
+                    })
+                end
             end
 
             if row.progressText then
@@ -2049,6 +2800,51 @@ local function CreateSummaryPanel(parent)
         vaultTitle:SetText(TT.Color(CT.TWICH.TEXT_PRIMARY, "Great Vault"))
         panel.__twichuiVaultTitle = vaultTitle
 
+        local function OpenGreatVaultUI()
+            -- Try to load Blizzard's Weekly Rewards UI and show it.
+            if _G.C_AddOns and type(_G.C_AddOns.LoadAddOn) == "function" then
+                pcall(_G.C_AddOns.LoadAddOn, "Blizzard_WeeklyRewards")
+            elseif type(_G.LoadAddOn) == "function" then
+                pcall(_G.LoadAddOn, "Blizzard_WeeklyRewards")
+            end
+
+            if _G.WeeklyRewardsFrame and type(_G.WeeklyRewardsFrame.Show) == "function" then
+                pcall(_G.WeeklyRewardsFrame.Show, _G.WeeklyRewardsFrame)
+                return
+            end
+
+            if type(_G.WeeklyRewards_ShowUI) == "function" then
+                pcall(_G.WeeklyRewards_ShowUI)
+                return
+            end
+
+            if type(_G.ToggleWeeklyRewardsPanel) == "function" then
+                pcall(_G.ToggleWeeklyRewardsPanel)
+                return
+            end
+        end
+
+        -- Click target over the title text.
+        do
+            local btn = _G.CreateFrame("Button", nil, vaultWrap)
+            btn:SetPoint("TOPLEFT", vaultTitle, "TOPLEFT", -2, 2)
+            btn:SetPoint("BOTTOMRIGHT", vaultTitle, "BOTTOMRIGHT", 2, -2)
+            btn:RegisterForClicks("LeftButtonUp")
+            btn:SetScript("OnClick", OpenGreatVaultUI)
+            btn:SetScript("OnEnter", function()
+                if _G.GameTooltip then
+                    _G.GameTooltip:SetOwner(btn, "ANCHOR_CURSOR")
+                    _G.GameTooltip:SetText("Open Great Vault", 1, 1, 1)
+                    _G.GameTooltip:Show()
+                end
+            end)
+            btn:SetScript("OnLeave", function()
+                if _G.GameTooltip then
+                    _G.GameTooltip:Hide()
+                end
+            end)
+        end
+
         local vaultSummary = vaultWrap:CreateFontString(nil, "OVERLAY")
         vaultSummary:SetPoint("TOPLEFT", vaultTitle, "BOTTOMLEFT", 0, -2)
         vaultSummary:SetJustifyH("LEFT")
@@ -2183,7 +2979,7 @@ local function CreateSummaryPanel(parent)
                 if ilvl then
                     _G.GameTooltip:AddLine(string.format("Example reward iLvl: %d", ilvl), 1, 1, 1)
                 else
-                    _G.GameTooltip:AddLine("Example reward iLvl: —", 0.8, 0.8, 0.8)
+                    _G.GameTooltip:AddLine("Example reward iLvl: -", 0.8, 0.8, 0.8)
                 end
                 _G.GameTooltip:Show()
             end)
