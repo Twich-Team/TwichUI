@@ -61,6 +61,13 @@ local ScoreCalculator = MythicPlusModule.ScoreCalculator
 ---@type MythicPlusRunLoggerSyncSubmodule
 local RunLoggerSync = MythicPlusModule.RunLoggerSync
 
+local function PrintRunLoggerInfo(message)
+    if type(_G.print) ~= "function" then
+        return
+    end
+    _G.print("|cff9580ffTwichUI:|r " .. tostring(message))
+end
+
 ---@type table<string, ConfigEntry>
 local CONFIGURATION = {
     -- NOTE: This is a developer tool; keep under the developer namespace.
@@ -225,6 +232,9 @@ end
 ---@field unix number unix timestamp (seconds)
 ---@field name string
 ---@field payload any
+---@field rawArgs any[]|nil Original callback args from DungeonMonitor
+---@field args any[]|nil Args used for simulation (defaults to rawArgs)
+---@field meta table|nil RunLogger-only metadata (never used by DungeonMonitor)
 
 ---@class TwichUIRunLogger_Run
 ---@field id string
@@ -242,18 +252,19 @@ end
 ---@field groupStart table[]|nil
 ---@field group table[]|nil
 ---@field completion table|nil
+---@field completionMeta table|nil
 ---@field events TwichUIRunLogger_RunEvent[]
 
 ---@class TwichUIRunLogger_RemoteRun
 ---@field sender string
 ---@field receivedAt number
----@field data TwichUIRunLogger_Run
+---@field data table TwichUIRunLogger_Run or a TwichUI_RunLog_v2 export object
 
 ---@class TwichUIRunLoggerDB
 ---@field version number
 ---@field active TwichUIRunLogger_Run|nil
 ---@field lastCompleted TwichUIRunLogger_Run|nil
--- NOTE: Historical field `runHistory` has been removed; sync uses `db.sync.pending`.
+---@field runHistory TwichUIRunLogger_Run[]|nil
 ---@field linkedReceiver string|nil
 ---@field remoteRuns TwichUIRunLogger_RemoteRun[]|nil
 ---@field registeredReceivers table<string, number>|nil
@@ -278,6 +289,37 @@ local function GetDB()
 
     -- Fallback: in-memory only (should be rare).
     return FALLBACK_DB
+end
+
+---@param run TwichUIRunLogger_Run
+local function AddToRunHistory(run)
+    if type(run) ~= "table" or not run.id then return end
+
+    local db = GetDB()
+    db.runHistory = db.runHistory or {}
+    local history = db.runHistory
+    if type(history) ~= "table" then
+        return
+    end
+
+    -- Remove any existing entry with the same id (keep newest).
+    for i = #history, 1, -1 do
+        local r = history[i]
+        if r and type(r) == "table" and r.id == run.id then
+            table.remove(history, i)
+            break
+        end
+    end
+
+    history[#history + 1] = run
+
+    local max = tonumber(CM:GetProfileSettingSafe("developer.mythicplus.runLogger.runHistorySize", 20)) or 20
+    if max < 1 then
+        max = 1
+    end
+    while #history > max do
+        table.remove(history, 1)
+    end
 end
 
 ---@param val any
@@ -542,13 +584,13 @@ local function TryGetKeystoneInfo(mapId)
 end
 
 ---@param run TwichUIRunLogger_Run
----@return string
-local function BuildExportText(run)
+---@return table
+local function BuildExportObject(run)
     if not run then
-        return EncodeJSON({
+        return {
             format = "TwichUI_RunLog_v2",
             error = "no_run",
-        }) .. "\n"
+        }
     end
 
     local version, build, buildDate, toc = GetBuildInfo()
@@ -574,11 +616,14 @@ local function BuildExportText(run)
                 relSeconds = tonumber(ev.rel) or 0,
                 name = tostring(ev.name),
                 payload = ev.payload,
+                rawArgs = ev.rawArgs,
+                args = ev.args,
+                meta = ev.meta,
             }
         end
     end
 
-    local out = {
+    return {
         format = "TwichUI_RunLog_v2",
         meta = meta,
         run = {
@@ -596,8 +641,46 @@ local function BuildExportText(run)
         },
         events = events,
     }
+end
 
-    return EncodeJSON(out) .. "\n"
+---@param run TwichUIRunLogger_Run
+---@return string
+local function BuildExportText(run)
+    return EncodeJSON(BuildExportObject(run)) .. "\n"
+end
+
+---@param run TwichUIRunLogger_Run
+local function AddRunToSimulatorList(run)
+    if type(run) ~= "table" or not run.id then
+        return
+    end
+
+    local db = GetDB()
+    db.remoteRuns = db.remoteRuns or {}
+
+    -- Avoid duplicates by run id (supports both v2 export object and flat run records).
+    for _, rr in ipairs(db.remoteRuns) do
+        if type(rr) == "table" and type(rr.data) == "table" then
+            local data = rr.data
+            local id = data.id
+                or (type(data.run) == "table" and data.run.id)
+            if id == run.id then
+                return
+            end
+        end
+    end
+
+    local exported = BuildExportObject(run)
+    db.remoteRuns[#db.remoteRuns + 1] = {
+        sender = "Local",
+        receivedAt = time(),
+        data = exported,
+    }
+
+    local frame = MythicPlusModule and MythicPlusModule.RunSharingFrame
+    if frame and type(frame.UpdateList) == "function" then
+        frame:UpdateList()
+    end
 end
 
 function MythicPlusRunLogger:_EnsureFrame()
@@ -748,6 +831,14 @@ function MythicPlusRunLogger:_StartNewRun(mapId, dungeonName)
     -- Capture roster immediately so we have it even if GROUP_ROSTER_UPDATE never fires.
     self:_AppendEvent("GROUP_ROSTER_SNAPSHOT", { group = groupSnapshot, reason = "start" })
 
+    do
+        local label = dungeonName
+        if type(label) ~= "string" or label == "" then
+            label = "Mythic+"
+        end
+        PrintRunLoggerInfo("Run Logger: Recording started (" .. label .. ")")
+    end
+
     Logger.Debug("This Mythic+ run will be recorded.")
 end
 
@@ -769,10 +860,24 @@ function MythicPlusRunLogger:_FinalizeRun(status, completionPayload)
     db.lastCompleted = run
     db.active = nil
 
+    do
+        local label = run.dungeonName
+        if type(label) ~= "string" or label == "" then
+            label = "Mythic+"
+        end
+        PrintRunLoggerInfo("Run Logger: Recording finished (" .. label .. ")")
+    end
+
     if run.status == "completed" then
+        AddToRunHistory(run)
         local text = BuildExportText(run)
 
-        local autoShow = CM:GetProfileSettingSafe("developer.mythicplus.runLogger.autoShow", true)
+        local addToSim = CM:GetProfileSettingSafe("developer.mythicplus.runLogger.addToSimulatorOnComplete", false)
+        if addToSim then
+            AddRunToSimulatorList(run)
+        end
+
+        local autoShow = CM:GetProfileSettingSafe("developer.mythicplus.runLogger.autoShow", false)
         if autoShow then
             self:_ShowExport(text)
         end
@@ -791,7 +896,10 @@ end
 
 ---@param eventName string
 ---@param payload any
-function MythicPlusRunLogger:_AppendEvent(eventName, payload)
+---@param rawArgs any[]|nil Original callback args from DungeonMonitor
+---@param args any[]|nil Args that should be used for simulation (defaults to rawArgs)
+---@param meta table|nil Extra RunLogger-only metadata (never used by DungeonMonitor)
+function MythicPlusRunLogger:_AppendEvent(eventName, payload, rawArgs, args, meta)
     local db = GetDB()
     local run = db.active
     if not run or type(run.events) ~= "table" then
@@ -808,12 +916,28 @@ function MythicPlusRunLogger:_AppendEvent(eventName, payload)
         if rel < 0 then rel = 0 end
     end
 
-    run.events[#run.events + 1] = {
+    local entry = {
         rel = rel,
         unix = time(),
         name = tostring(eventName),
-        payload = Sanitize(payload, 4),
+        payload = Sanitize(payload, 6),
     }
+
+    if type(rawArgs) == "table" then
+        entry.rawArgs = Sanitize(rawArgs, 6)
+    end
+
+    if type(args) == "table" then
+        entry.args = Sanitize(args, 6)
+    elseif type(rawArgs) == "table" then
+        entry.args = entry.rawArgs
+    end
+
+    if type(meta) == "table" then
+        entry.meta = Sanitize(meta, 8)
+    end
+
+    run.events[#run.events + 1] = entry
 end
 
 ---@param eventName string
@@ -833,8 +957,10 @@ function MythicPlusRunLogger:_OnDungeonEvent(eventName, ...)
         else
             -- Otherwise start a new run with this info
             self:_StartNewRun(mapId, dungeonName)
-            self:_AppendEvent("CHALLENGE_MODE_START", { mapId = tonumber(mapId) or mapId })
         end
+
+        -- Record exactly what DungeonMonitor emitted.
+        self:_AppendEvent(eventName, { mapId = tonumber(mapId) or mapId, dungeonName = dungeonName }, { ... })
         return
     end
 
@@ -844,7 +970,7 @@ function MythicPlusRunLogger:_OnDungeonEvent(eventName, ...)
         local db = GetDB()
         if not db.active or db.active.status ~= "in_progress" then
             self:_StartNewRun(mapId)
-            self:_AppendEvent(eventName, { mapId = tonumber(mapId) or mapId })
+            self:_AppendEvent(eventName, { mapId = tonumber(mapId) or mapId }, { ... })
         end
         return
     end
@@ -883,7 +1009,9 @@ function MythicPlusRunLogger:_OnDungeonEvent(eventName, ...)
             blizzardRunScore, blizzardMatch = ScoreCalculator.TryGetBlizzardRunScore(mapIdNum, level, timeSec)
         end
 
-        local payload = {
+        -- Keep the *recorded event payload* as close as possible to what DungeonMonitor emitted.
+        -- We'll still compute a normalized summary for `run.completion` below.
+        local normalized = {
             mapId = mapIdNum,
             mapID = mapIdNum, -- keep old casing too
             level = level,
@@ -893,6 +1021,9 @@ function MythicPlusRunLogger:_OnDungeonEvent(eventName, ...)
             upgradeLevels = completion.upgradeLevels,
             practiceRun = completion.practiceRun,
             source = completion.source,
+        }
+
+        local meta = {
             calculatedRunScore = calculatedScore,
             calculatedScoreDetails = calcDetails,
             blizzardRunScore = blizzardRunScore,
@@ -900,13 +1031,14 @@ function MythicPlusRunLogger:_OnDungeonEvent(eventName, ...)
             blizzardRunScoreSource = blizzardRunScore and "immediate_run_history" or nil,
         }
 
-        self:_AppendEvent(eventName, payload)
+        self:_AppendEvent(eventName, completion, { ... }, { completion }, meta)
 
         -- Mark as completed but DO NOT finalize yet.
         -- We wait for PLAYER_ENTERING_WORLD (leaving the instance) to capture loot.
         if run then
             run.status = "completed"
-            run.completion = payload
+            run.completion = normalized
+            run.completionMeta = meta
         end
 
         -- Best-effort retry: run history data (and thus runScore) may not be available immediately.
@@ -932,6 +1064,11 @@ function MythicPlusRunLogger:_OnDungeonEvent(eventName, ...)
                     targetRun.completion.blizzardRunScore = score2
                     targetRun.completion.blizzardRunScoreMatch = match2
                     targetRun.completion.blizzardRunScoreSource = "delayed_run_history"
+                    if type(targetRun.completionMeta) == "table" then
+                        targetRun.completionMeta.blizzardRunScore = score2
+                        targetRun.completionMeta.blizzardRunScoreMatch = match2
+                        targetRun.completionMeta.blizzardRunScoreSource = "delayed_run_history"
+                    end
                 end
             end)
         end
@@ -942,7 +1079,7 @@ function MythicPlusRunLogger:_OnDungeonEvent(eventName, ...)
     if eventName == "CHALLENGE_MODE_COMPLETED" then
         -- Modern WoW doesn't reliably fire CHALLENGE_MODE_COMPLETED_REWARDS.
         -- Treat this as a marker only; completion details come via TWICH_DUNGEON_COMPLETION.
-        self:_AppendEvent(eventName, {})
+        self:_AppendEvent(eventName, {}, { ... })
 
         local db = GetDB()
         if db.active and db.active.status ~= "completed" then
@@ -958,14 +1095,15 @@ function MythicPlusRunLogger:_OnDungeonEvent(eventName, ...)
         if not count and C_ChallengeMode and C_ChallengeMode.GetDeathCount then
             count = C_ChallengeMode.GetDeathCount()
         end
-        self:_AppendEvent(eventName, { count = count })
+        -- Keep original args for transparency, but also record the resolved count for simulation.
+        self:_AppendEvent(eventName, { count = count }, { ... }, { count })
 
         return
     end
 
     if eventName == "CHALLENGE_MODE_RESET" then
         local mapId = ...
-        self:_AppendEvent(eventName, { mapId = tonumber(mapId) or mapId })
+        self:_AppendEvent(eventName, { mapId = tonumber(mapId) or mapId }, { ... })
         self:_FinalizeRun("reset", { mapId = tonumber(mapId) or mapId })
         return
     end
@@ -977,7 +1115,7 @@ function MythicPlusRunLogger:_OnDungeonEvent(eventName, ...)
             encounterName = encounterName,
             difficultyID = difficultyID,
             groupSize = groupSize,
-        })
+        }, { ... })
         return
     end
 
@@ -989,12 +1127,12 @@ function MythicPlusRunLogger:_OnDungeonEvent(eventName, ...)
             difficultyID = difficultyID,
             groupSize = groupSize,
             success = success,
-        })
+        }, { ... })
         return
     end
 
     if eventName == "PLAYER_DEAD" then
-        self:_AppendEvent(eventName, { unit = "player" })
+        self:_AppendEvent(eventName, { unit = "player" }, { ... })
         return
     end
 
@@ -1004,7 +1142,7 @@ function MythicPlusRunLogger:_OnDungeonEvent(eventName, ...)
         if db.active then
             db.active.group = groupSnapshot
         end
-        self:_AppendEvent(eventName, { group = groupSnapshot })
+        self:_AppendEvent(eventName, { group = groupSnapshot }, { ... })
         return
     end
 
@@ -1017,7 +1155,7 @@ function MythicPlusRunLogger:_OnDungeonEvent(eventName, ...)
             isInitialLogin = isInitialLogin,
             isReloadingUi = isReloadingUi,
             isChallengeModeActive = isCM, -- Log for debugging
-        })
+        }, { ... })
 
         -- Failsafe: Ensure run is finalized if we are no longer in a challenge mode
         local db = GetDB()
@@ -1072,12 +1210,12 @@ function MythicPlusRunLogger:_OnDungeonEvent(eventName, ...)
             itemNameText = bracketName,
             items = items,
             quantity = qty,
-        })
+        }, { ... })
         return
     end
 
     -- Fallback: store raw args
-    self:_AppendEvent(eventName, { args = { ... } })
+    self:_AppendEvent(eventName, { args = { ... } }, { ... })
 end
 
 local function MigrateLegacyEnableKey()

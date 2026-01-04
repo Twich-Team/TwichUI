@@ -81,21 +81,39 @@ local Module = Tools.Generics.Module:New(CONFIGURATION)
 -- Back-compat for the Developer -> Testing panel.
 -- This list is used to populate a dropdown of "single event" simulations.
 Sim.SupportedEvents = Sim.SupportedEvents or {
+    -- Core Mythic+ lifecycle
     "CHALLENGE_MODE_START",
     "CHALLENGE_MODE_COMPLETED",
     "TWICH_DUNGEON_COMPLETION",
+    "CHALLENGE_MODE_COMPLETED_REWARDS", -- legacy exports / older client flows
     "CHALLENGE_MODE_RESET",
     "CHALLENGE_MODE_DEATH_COUNT_UPDATED",
+
+    -- TwichUI events
+    "TWICH_DUNGEON_START",
+
+    -- Boss + player events
     "ENCOUNTER_START",
     "ENCOUNTER_END",
     "PLAYER_DEAD",
+
+    -- Group + misc
     "GROUP_ROSTER_UPDATE",
+    "GROUP_ROSTER_SNAPSHOT",
     "CHAT_MSG_LOOT",
+    "PLAYER_ENTERING_WORLD",
 }
 
 ---@param eventName string
 ---@return any ...
 local function BuildSampleEventArgs(eventName)
+    if eventName == "TWICH_DUNGEON_START" then
+        local mapID = 525
+        local name = (C_ChallengeMode and C_ChallengeMode.GetMapUIInfo and C_ChallengeMode.GetMapUIInfo(mapID))
+            or "Simulated Dungeon"
+        return mapID, name
+    end
+
     if eventName == "CHALLENGE_MODE_START" then
         local mapID = 525
         -- Simulate the resolution event first
@@ -132,6 +150,12 @@ local function BuildSampleEventArgs(eventName)
         return payload
     end
 
+    if eventName == "CHALLENGE_MODE_COMPLETED_REWARDS" then
+        -- Treat legacy rewards as a completion trigger for our pipeline.
+        -- The dispatcher translates this during full-run playback; mirror that behavior here.
+        return BuildSampleEventArgs("TWICH_DUNGEON_COMPLETION")
+    end
+
     if eventName == "CHALLENGE_MODE_RESET" then
         return 525
     end
@@ -152,8 +176,20 @@ local function BuildSampleEventArgs(eventName)
         return nil
     end
 
+    if eventName == "GROUP_ROSTER_SNAPSHOT" then
+        return {
+            group = {},
+            reason = "simulator",
+        }
+    end
+
     if eventName == "CHAT_MSG_LOOT" then
         return "You receive loot: [Example Item]", "Player-Realm"
+    end
+
+    if eventName == "PLAYER_ENTERING_WORLD" then
+        -- PLAYER_ENTERING_WORLD(isInitialLogin, isReloadingUi)
+        return false, true
     end
 
     return nil
@@ -183,6 +219,11 @@ function Sim:SimEvent(eventName)
         or (type(dungeonMonitor.SimulateEvent) ~= "function" and type(dungeonMonitor.EventHandler) ~= "function") then
         Logger.Error("Simulator: DungeonMonitor not available")
         return
+    end
+
+    -- Normalize legacy selection to the modern internal completion event.
+    if eventName == "CHALLENGE_MODE_COMPLETED_REWARDS" then
+        eventName = "TWICH_DUNGEON_COMPLETION"
     end
 
     Logger.Debug("Simulator: simulating event: " .. eventName)
@@ -569,6 +610,17 @@ function Sim:_DispatchEvent(ev)
     local name = EventName(ev)
     local payload = EventPayload(ev)
 
+    -- Prefer replaying the original DungeonMonitor callback arguments when available.
+    -- Newer RunLogger exports may include `args` (simulation args) and/or `rawArgs`.
+    local replayArgs
+    if type(ev) == "table" then
+        if type(ev.args) == "table" then
+            replayArgs = ev.args
+        elseif type(ev.rawArgs) == "table" then
+            replayArgs = ev.rawArgs
+        end
+    end
+
     -- Backward compatibility: older exported logs used CHALLENGE_MODE_COMPLETED_REWARDS.
     -- Translate it into the modern TWICH_DUNGEON_COMPLETION payload so RunLogger/DataCollector can consume it.
     if name == "CHALLENGE_MODE_COMPLETED_REWARDS" then
@@ -587,8 +639,14 @@ function Sim:_DispatchEvent(ev)
         end
     end
 
-    local arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13, arg14, arg15, arg16 =
-        BuildDungeonArgs(name, payload)
+    local arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13, arg14, arg15, arg16
+    if replayArgs and #replayArgs > 0 then
+        arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13, arg14, arg15, arg16 =
+            unpack(replayArgs)
+    else
+        arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13, arg14, arg15, arg16 =
+            BuildDungeonArgs(name, payload)
+    end
 
     if type(dungeonMonitor.SimulateEvent) == "function" then
         dungeonMonitor:SimulateEvent(name, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12,

@@ -17,6 +17,8 @@ CM.Developer = CM.Developer or {}
 local DMDR = CM.Developer.MythicPlusDataRecorder or {}
 CM.Developer.MythicPlusDataRecorder = DMDR
 
+local LSM = T.Libs and T.Libs.LSM
+
 local function GetSyncModule()
     local ok, mythicPlus = pcall(function() return T:GetModule("MythicPlus") end)
     if not ok or not mythicPlus then return nil end
@@ -96,10 +98,44 @@ function DMDR:Create(order)
                         desc = "Automatically show the run log export frame when a Mythic+ run is completed.",
                         order = 2,
                         get = function()
-                            return CM:GetProfileSettingSafe("developer.mythicplus.runLogger.autoShow", true)
+                            return CM:GetProfileSettingSafe("developer.mythicplus.runLogger.autoShow", false)
                         end,
                         set = function(_, value)
                             CM:SetProfileSettingSafe("developer.mythicplus.runLogger.autoShow", value)
+                        end,
+                    },
+
+                    addToSimulatorOnComplete = {
+                        type = "toggle",
+                        name = "Add to Simulator on Completion",
+                        desc =
+                        "When enabled, completed local run logs are automatically added to the Simulator list (so you can replay them without copy/paste or sync).",
+                        order = 3,
+                        get = function()
+                            return CM:GetProfileSettingSafe("developer.mythicplus.runLogger.addToSimulatorOnComplete",
+                                false)
+                        end,
+                        set = function(_, value)
+                            CM:SetProfileSettingSafe("developer.mythicplus.runLogger.addToSimulatorOnComplete", value)
+                        end,
+                        disabled = function()
+                            return not CM:GetProfileSettingSafe("developer.mythicplus.runLogger.enable", false)
+                        end,
+                    },
+
+                    runHistorySize = {
+                        type = "range",
+                        name = "Run History Size",
+                        desc = "How many recently completed runs to keep locally (used for peer requests).",
+                        order = 3.5,
+                        min = 1,
+                        max = 50,
+                        step = 1,
+                        get = function()
+                            return CM:GetProfileSettingSafe("developer.mythicplus.runLogger.runHistorySize", 20)
+                        end,
+                        set = function(_, value)
+                            CM:SetProfileSettingSafe("developer.mythicplus.runLogger.runHistorySize", value)
                         end,
                     },
 
@@ -107,7 +143,7 @@ function DMDR:Create(order)
                         type = "execute",
                         name = "Show Run Log",
                         desc = "Shows/hides the export frame for the most recent run log.",
-                        order = 3,
+                        order = 4,
                         disabled = function()
                             local ok, mythicPlus = pcall(function() return T:GetModule("MythicPlus") end)
                             if not ok or not mythicPlus or not mythicPlus.RunLogger then
@@ -200,6 +236,22 @@ function DMDR:Create(order)
                         end,
                     },
 
+                    maxPendingPerPeer = {
+                        type = "range",
+                        name = "Max Pending Runs Per Peer",
+                        desc = "How many runs to queue for each receiver while they are offline.",
+                        order = 4.5,
+                        min = 1,
+                        max = 50,
+                        step = 1,
+                        get = function()
+                            return CM:GetProfileSettingSafe("developer.mythicplus.runLoggerSync.maxPendingPerPeer", 5)
+                        end,
+                        set = function(_, value)
+                            CM:SetProfileSettingSafe("developer.mythicplus.runLoggerSync.maxPendingPerPeer", value)
+                        end,
+                    },
+
                     ignoreRegistrations = {
                         type = "toggle",
                         name = "Ignore Incoming Registrations",
@@ -228,6 +280,46 @@ function DMDR:Create(order)
                         end,
                         set = function(_, value)
                             CM:SetProfileSettingSafe("developer.mythicplus.runLoggerSync.hidePlayerNotFound", value)
+                        end,
+                    },
+
+                    incomingSoundEnable = {
+                        type = "toggle",
+                        name = "Play Sound on Incoming Runs",
+                        desc = "Plays a sound when you receive a run log from a synced player.",
+                        order = 7,
+                        width = "full",
+                        get = function()
+                            return CM:GetProfileSettingSafe("developer.mythicplus.runLoggerSync.incomingSoundEnable",
+                                false)
+                        end,
+                        set = function(_, value)
+                            CM:SetProfileSettingSafe("developer.mythicplus.runLoggerSync.incomingSoundEnable", value)
+                        end,
+                    },
+
+                    incomingSoundSelect = {
+                        type = "select",
+                        dialogControl = "LSM30_Sound",
+                        name = "Incoming Run Sound",
+                        desc = "Sound to play when a synced run log is received.",
+                        order = 8,
+                        values = function()
+                            if LSM and LSM.HashTable then
+                                return LSM:HashTable("sound")
+                            end
+                            return {}
+                        end,
+                        get = function()
+                            return CM:GetProfileSettingSafe("developer.mythicplus.runLoggerSync.incomingSound",
+                                "Game Error")
+                        end,
+                        set = function(_, value)
+                            CM:SetProfileSettingSafe("developer.mythicplus.runLoggerSync.incomingSound", value)
+                        end,
+                        disabled = function()
+                            return not CM:GetProfileSettingSafe("developer.mythicplus.runLoggerSync.incomingSoundEnable",
+                                false)
                         end,
                     },
 
@@ -269,6 +361,45 @@ function DMDR:Create(order)
                             local v = CM:GetProfileSettingSafe("developer.mythicplus.runLoggerSync.selectedPeer", "")
                             sync:RemovePeer(v)
                             CM:SetProfileSettingSafe("developer.mythicplus.runLoggerSync.selectedPeer", "")
+                        end,
+                    },
+
+                    requestRecentCount = {
+                        type = "range",
+                        name = "Request Recent Runs (count)",
+                        desc = "How many recent runs to request from the selected player.",
+                        order = 13,
+                        min = 1,
+                        max = 25,
+                        step = 1,
+                        get = function()
+                            return CM:GetProfileSettingSafe("developer.mythicplus.runLoggerSync.requestRecentCount", 5)
+                        end,
+                        set = function(_, value)
+                            CM:SetProfileSettingSafe("developer.mythicplus.runLoggerSync.requestRecentCount", value)
+                        end,
+                        disabled = function()
+                            local v = CM:GetProfileSettingSafe("developer.mythicplus.runLoggerSync.selectedPeer", "")
+                            return (not v) or v == ""
+                        end,
+                    },
+
+                    requestRecentRuns = {
+                        type = "execute",
+                        name = "Request Recent Runs",
+                        desc = "Ask the selected player to send you their recent runs.",
+                        order = 14,
+                        disabled = function()
+                            local v = CM:GetProfileSettingSafe("developer.mythicplus.runLoggerSync.selectedPeer", "")
+                            return (not v) or v == ""
+                        end,
+                        func = function()
+                            local sync = GetSyncModule()
+                            if not sync or not sync.RequestRecentRuns then return end
+                            local peer = CM:GetProfileSettingSafe("developer.mythicplus.runLoggerSync.selectedPeer", "")
+                            local count = CM:GetProfileSettingSafe(
+                            "developer.mythicplus.runLoggerSync.requestRecentCount", 5)
+                            sync:RequestRecentRuns(peer, count)
                         end,
                     },
 

@@ -5,7 +5,7 @@
     - Cross-realm safe: always canonicalize to Name-Realm when possible.
     - Explicit consent: registration/add requests require an acknowledgement.
     - No chat spam: suppress "player not found" system messages for our background whispers.
-    - Persistent pending queue: up to 5 runs per peer are cached until next successful sync.
+    - Persistent pending queue: a configurable number of runs per peer are cached (default 5) until next successful sync.
 ]]
 
 ---@diagnostic disable-next-line: undefined-global
@@ -47,6 +47,29 @@ local PREFIX = "TWICH_RL_SYNC" -- <= 16 chars
 local MAX_PENDING_PER_PEER = 5
 local AUTO_SYNC_INTERVAL_SEC = 120
 local CHECK_TIMEOUT_SEC = 5
+
+local function GetMaxPendingPerPeer()
+    local v = tonumber(CM:GetProfileSettingSafe("developer.mythicplus.runLoggerSync.maxPendingPerPeer",
+        MAX_PENDING_PER_PEER))
+    if not v then
+        v = MAX_PENDING_PER_PEER
+    end
+    v = math.floor(v)
+    if v < 1 then v = 1 end
+    if v > 50 then v = 50 end
+    return v
+end
+
+local function ExtractRunId(data)
+    if type(data) ~= "table" then return nil end
+    if type(data.id) == "string" then
+        return data.id
+    end
+    if type(data.run) == "table" and type(data.run.id) == "string" then
+        return data.run.id
+    end
+    return nil
+end
 
 local FALLBACK_DB = { version = 1, sync = { peers = {}, pending = {}, pendingRequests = {} }, remoteRuns = {} }
 
@@ -452,6 +475,7 @@ end
 
 ---@param targetName string
 function RunLoggerSync:RequestAddRecipient(targetName)
+    self:Initialize()
     local target = self:_NormalizeTarget(targetName)
     if not target then return end
 
@@ -469,6 +493,7 @@ end
 
 ---@param targetName string
 function RunLoggerSync:RequestRegisterWithSender(targetName)
+    self:Initialize()
     local target = self:_NormalizeTarget(targetName)
     if not target then return end
 
@@ -649,9 +674,39 @@ function RunLoggerSync:_QueueRun(target, run)
         queuedAt = time(),
     }
 
-    while #q > MAX_PENDING_PER_PEER do
+    local max = GetMaxPendingPerPeer()
+    while #q > max do
         table.remove(q, 1)
     end
+end
+
+---@param targetName string
+---@param count number|nil
+function RunLoggerSync:RequestRecentRuns(targetName, count)
+    self:Initialize()
+    local target = self:_NormalizeTarget(targetName)
+    if not target then return end
+
+    self._recentReqToken = (self._recentReqToken or 0) + 1
+    local token = self._recentReqToken
+
+    local n = tonumber(count)
+    if not n then
+        n = tonumber(CM:GetProfileSettingSafe("developer.mythicplus.runLoggerSync.requestRecentCount", 5)) or 5
+    end
+    n = math.floor(n)
+    if n < 1 then n = 1 end
+    if n > 25 then n = 25 end
+
+    local payload = { type = "RECENT_RUNS_REQ", token = token, count = n }
+    local serialized = self:Serialize(payload)
+    if not serialized then
+        return
+    end
+
+    self:_SuppressNotFoundFor(target, 2.0)
+    self:SendCommMessage(PREFIX, serialized, "WHISPER", target)
+    Logger.Info("Requested recent runs from " .. target .. " (count=" .. tostring(n) .. ")")
 end
 
 ---@param target string
@@ -772,12 +827,45 @@ function RunLoggerSync:_ProcessReceivedRun(sender, runData)
         end
     end
 
-    -- Store
-    table.insert(db.remoteRuns, {
-        sender = sender,
-        receivedAt = time(),
-        data = run,
-    })
+    local runId = run.id
+    local inserted = false
+    do
+        local alreadyHave = false
+        for _, entry in ipairs(db.remoteRuns) do
+            if type(entry) == "table" then
+                local existingId = ExtractRunId(entry.data)
+                if existingId and existingId == runId then
+                    alreadyHave = true
+                    break
+                end
+            end
+        end
+
+        if not alreadyHave then
+            table.insert(db.remoteRuns, {
+                sender = sender,
+                receivedAt = time(),
+                data = run,
+            })
+            inserted = true
+        end
+    end
+
+    if inserted then
+        local enabled = CM:GetProfileSettingSafe("developer.mythicplus.runLoggerSync.incomingSoundEnable", false)
+        if enabled then
+            local sound = CM:GetProfileSettingSafe("developer.mythicplus.runLoggerSync.incomingSound", "Game Error")
+            if sound and sound ~= "None" then
+                local LSM = T.Libs and T.Libs.LSM
+                if LSM then
+                    local soundFile = LSM:Fetch("sound", sound)
+                    if soundFile then
+                        _G.PlaySoundFile(soundFile, "Master")
+                    end
+                end
+            end
+        end
+    end
 
     -- ACK
     local ack = { type = "RUN_ACK", runId = run.id }
@@ -788,7 +876,7 @@ function RunLoggerSync:_ProcessReceivedRun(sender, runData)
     end
 
     -- Notify UI if available (RunSharingFrame is legacy; keep compatibility)
-    if MythicPlusModule.RunSharingFrame and MythicPlusModule.RunSharingFrame.UpdateList then
+    if inserted and MythicPlusModule.RunSharingFrame and MythicPlusModule.RunSharingFrame.UpdateList then
         MythicPlusModule.RunSharingFrame:UpdateList()
     end
 end
@@ -943,6 +1031,47 @@ function RunLoggerSync:OnCommReceived(prefix, message, distribution, sender)
 
     if data.type == "RUN_ACK" then
         self:_HandleRunAck(sender, data.runId)
+        return
+    end
+
+    if data.type == "RECENT_RUNS_REQ" then
+        local db = GetDB()
+        local peer = db.sync.peers and db.sync.peers[sender] or nil
+
+        -- Only send runs to peers we've explicitly allowed outgoing.
+        if not (peer and peer.allowOutgoing) then
+            return
+        end
+
+        local count = math.floor(tonumber(data.count) or 5)
+        if count < 1 then count = 1 end
+        if count > 25 then count = 25 end
+
+        local history = db.runHistory
+        local runsToSend = {}
+        if type(history) == "table" and #history > 0 then
+            local startIndex = #history - count + 1
+            if startIndex < 1 then startIndex = 1 end
+            for i = startIndex, #history do
+                local r = history[i]
+                if type(r) == "table" and r.id then
+                    runsToSend[#runsToSend + 1] = r
+                end
+            end
+        elseif type(db.lastCompleted) == "table" and db.lastCompleted.id then
+            runsToSend[1] = db.lastCompleted
+        end
+
+        for _, r in ipairs(runsToSend) do
+            local payload = { type = "RUN", run = r, runId = r.id }
+            local serialized = self:Serialize(payload)
+            if serialized then
+                self:_SuppressNotFoundFor(sender, 2.0)
+                self:SendCommMessage(PREFIX, serialized, "WHISPER", sender)
+            end
+        end
+
+        Logger.Info("Sent recent runs to " .. sender .. " (count=" .. tostring(#runsToSend) .. ")")
         return
     end
 

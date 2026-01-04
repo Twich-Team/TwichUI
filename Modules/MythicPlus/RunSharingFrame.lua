@@ -100,6 +100,59 @@ local function EncodeJSON(v)
     return "{" .. table.concat(parts, ",") .. "}"
 end
 
+local function BuildEventDetails(ev)
+    if not ev then return {} end
+
+    local details = {
+        payload = ev.payload,
+    }
+
+    if ev.rawArgs ~= nil then details.rawArgs = ev.rawArgs end
+    if ev.args ~= nil then details.args = ev.args end
+    if ev.meta ~= nil then details.meta = ev.meta end
+
+    return details
+end
+
+function RunSharingFrame:ShowStatus(message, durationSec, r, g, b)
+    if not self.statusText then
+        if type(message) ~= "string" then
+            message = tostring(message)
+        end
+        if type(_G.print) == "function" then
+            _G.print("|cff9580ffTwichUI:|r " .. message)
+        end
+        return
+    end
+
+    if type(message) ~= "string" then
+        message = tostring(message)
+    end
+
+    self.statusText:SetText(message)
+    if self.statusText.SetTextColor then
+        if r ~= nil and g ~= nil and b ~= nil then
+            self.statusText:SetTextColor(r, g, b)
+        else
+            self.statusText:SetTextColor(1, 0.82, 0)
+        end
+    end
+
+    if self._statusClearTimer and self._statusClearTimer.Cancel then
+        self._statusClearTimer:Cancel()
+        self._statusClearTimer = nil
+    end
+
+    local secs = tonumber(durationSec) or 2
+    if secs > 0 and _G.C_Timer and type(_G.C_Timer.NewTimer) == "function" then
+        self._statusClearTimer = _G.C_Timer.NewTimer(secs, function()
+            if self and self.statusText then
+                self.statusText:SetText("")
+            end
+        end)
+    end
+end
+
 -- JSON Decoder (Minimal implementation)
 local ParseValue
 
@@ -469,7 +522,7 @@ function RunSharingFrame:CreateFrame()
         if val then
             if val > 50 then
                 val = 50
-                print("TwichUI: Simulator speed capped at 50x.")
+                RunSharingFrame:ShowStatus("Speed capped at 50x.", 2)
             end
             if val < 0.1 then val = 0.1 end
 
@@ -478,6 +531,7 @@ function RunSharingFrame:CreateFrame()
             self:ClearFocus()
         else
             self:SetText(CM:GetProfileSettingSafe("developer.mythicplus.simulator.playbackSpeed", 10))
+            RunSharingFrame:ShowStatus("Invalid speed value.", 2, 1, 0.2, 0.2)
         end
     end)
     speedInput:SetScript("OnEscapePressed", function(self)
@@ -490,6 +544,12 @@ function RunSharingFrame:CreateFrame()
     local speedLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     speedLabel:SetPoint("RIGHT", speedInput, "LEFT", -5, 0)
     speedLabel:SetText("Speed:")
+
+    local statusText = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    statusText:SetPoint("BOTTOM", speedInput, "TOP", 0, 2)
+    statusText:SetJustifyH("CENTER")
+    statusText:SetText("")
+    self.statusText = statusText
 
     -- Clear All Button
     local clearBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
@@ -753,8 +813,8 @@ function RunSharingFrame:SetupProgressBar(events)
                         local s = math.floor(r % 60)
                         GameTooltip:SetText(string.format("%s (%02d:%02d)", name, m, s))
 
-                        if self.eventData.payload then
-                            local json = EncodeJSON(self.eventData.payload)
+                        if self.eventData.payload or self.eventData.rawArgs or self.eventData.args or self.eventData.meta then
+                            local json = EncodeJSON(BuildEventDetails(self.eventData))
                             if #json > 100 then json = json:sub(1, 97) .. "..." end
                             GameTooltip:AddLine(json, 0.8, 0.8, 0.8, true)
                         end
@@ -935,14 +995,25 @@ function RunSharingFrame:ResolveDungeonName(run)
 
     if not mapId and data.events then
         for _, ev in ipairs(data.events) do
-            if ev.name == "CHALLENGE_MODE_START" and ev.payload and ev.payload.mapId then
-                mapId = ev.payload.mapId
-                -- print("TwichUI Debug: Found mapId in events:", mapId)
-                break
-            end
-            if ev.name == "CHALLENGE_MODE_START" and ev.payload and ev.payload.mapID then
-                mapId = ev.payload.mapID
-                break
+            if ev and (ev.name == "CHALLENGE_MODE_START" or ev.name == "TWICH_DUNGEON_START") then
+                if ev.payload and ev.payload.mapId then
+                    mapId = ev.payload.mapId
+                    break
+                end
+                if ev.payload and ev.payload.mapID then
+                    mapId = ev.payload.mapID
+                    break
+                end
+
+                local args = ev.args or ev.rawArgs
+                if type(args) == "table" then
+                    local candidate = args.mapId or args.mapID or args[1]
+                    local num = tonumber(candidate)
+                    if num then
+                        mapId = num
+                        break
+                    end
+                end
             end
         end
     end
@@ -975,7 +1046,6 @@ function RunSharingFrame:ResolveDungeonName(run)
             else
                 data.mapId = data.mapId or mapId
             end
-            print(string.format("TwichUI: Resolved dungeon name for run to '%s' (MapID: %s)", name, tostring(mapId)))
         else
             -- print("TwichUI Debug: All API lookups (GetMapUIInfo, GetMapInfo, C_Map) returned nil for mapId:", mapId)
         end
@@ -1142,6 +1212,9 @@ function RunSharingFrame:UpdateDetailsView()
     self.allExpanded = false
     if self.expandAllBtn then self.expandAllBtn:SetText("Expand All") end
 
+    -- Best-effort: resolve dungeon name/mapId for header + list
+    self:ResolveDungeonName(run)
+
     -- Setup Progress Bar for this run
     self:SetupProgressBar(run.data.events)
 
@@ -1158,7 +1231,7 @@ function RunSharingFrame:UpdateDetailsView()
         local d = run.data.run or run.data or {}
         local dungeon = run.data.dungeonName or d.dungeonName -- Check both locations
         if not dungeon or dungeon == "Unknown" then
-            local mapId = d.mapId or d.mapID
+            local mapId = tonumber(d.mapId or d.mapID)
             dungeon = mapId and C_ChallengeMode.GetMapUIInfo(mapId) or "Unknown Dungeon"
         end
 
@@ -1291,8 +1364,8 @@ function RunSharingFrame:UpdateEventsList(events)
                 GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
                 if btn.eventData then
                     GameTooltip:AddLine(btn.eventData.name or "Event", 1, 1, 1)
-                    if btn.eventData.payload then
-                        local json = EncodeJSON(btn.eventData.payload)
+                    if btn.eventData.payload or btn.eventData.rawArgs or btn.eventData.args or btn.eventData.meta then
+                        local json = EncodeJSON(BuildEventDetails(btn.eventData))
                         if #json > 300 then json = json:sub(1, 297) .. "..." end
                         GameTooltip:AddLine(json, 0.8, 0.8, 0.8, true)
                     end
@@ -1386,7 +1459,7 @@ function RunSharingFrame:UpdateEventsList(events)
                 row.details:SetScript("OnMouseDown", function() end)
             end
             row.details:Show()
-            local detailsHeight = self:PopulateEventDetails(row.details, ev.payload)
+            local detailsHeight = self:PopulateEventDetails(row.details, BuildEventDetails(ev))
             row.details:SetHeight(detailsHeight)
             rowHeight = rowHeight + detailsHeight
         else
@@ -1564,7 +1637,7 @@ function RunSharingFrame:StartSimulation(startPaused)
         if Simulator and Simulator.StartSimulationFromData then
             Simulator:StartSimulationFromData(run.data, { speed = speed, startPaused = startPaused })
         elseif Simulator and Simulator.StartSimulationFromJSON then
-            print("Simulator: StartSimulationFromData not found.")
+            self:ShowStatus("Simulator missing StartSimulationFromData.", 3, 1, 0.2, 0.2)
         end
     end
 end
@@ -1694,13 +1767,13 @@ function RunSharingFrame:ShowImportDialog()
         local text = editBox:GetText()
         local data, err = DecodeJSON(text)
         if not data then
-            print("TwichUI: Import failed - " .. (err or "Unknown error"))
+            self:ShowStatus("Import failed - " .. (err or "Unknown error"), 4, 1, 0.2, 0.2)
             return
         end
 
         -- Basic validation
         if type(data) ~= "table" or not data.events then
-            print("TwichUI: Invalid run data format")
+            self:ShowStatus("Invalid run data format.", 4, 1, 0.2, 0.2)
             return
         end
 
@@ -1713,7 +1786,7 @@ function RunSharingFrame:ShowImportDialog()
         self:UpdateList()
         frame:Hide()
         editBox:SetText("")
-        print("TwichUI: Run imported successfully")
+        self:ShowStatus("Run imported successfully.", 3, 0.2, 1, 0.2)
     end)
     if Skins then Skins:HandleButton(importBtn) end
 
