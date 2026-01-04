@@ -243,42 +243,155 @@ local function UpdateActions(panel, mapId)
     if not btn or not icon then return end
 
     local spellId = FindDungeonPortalSpellId(mapId)
+    local mockSpellId = GetMockPortalSpellId(mapId)
+    local isMock = (mockSpellId ~= nil and tonumber(mockSpellId) == tonumber(spellId))
+
+    -- Cache developer mock config state for tooltips/debug.
+    if CM and type(CM.GetProfileSettingSafe) == "function" then
+        panel.__twichuiActions.portalMockEnabled = CM:GetProfileSettingSafe(
+            "developer.testing.mythicPlus.portalMock.enabled", false) and true or false
+        panel.__twichuiActions.portalMockMapId = tonumber(CM:GetProfileSettingSafe(
+            "developer.testing.mythicPlus.portalMock.mapId", 0)) or 0
+        panel.__twichuiActions.portalMockSpellId = tonumber(CM:GetProfileSettingSafe(
+            "developer.testing.mythicPlus.portalMock.spellId", 0)) or 0
+    else
+        panel.__twichuiActions.portalMockEnabled = false
+        panel.__twichuiActions.portalMockMapId = 0
+        panel.__twichuiActions.portalMockSpellId = 0
+    end
+
     local unlocked = (spellId ~= nil)
+    local knows = true
+    if isMock and spellId then
+        local C_Spell = _G.C_Spell
+        if C_Spell and type(C_Spell.IsSpellKnown) == "function" then
+            knows = C_Spell.IsSpellKnown(spellId) and true or false
+        else
+            ---@diagnostic disable-next-line: undefined-field
+            local IsSpellKnown = _G.IsSpellKnown
+            if type(IsSpellKnown) == "function" then
+                knows = IsSpellKnown(spellId, false) and true or false
+            end
+        end
+    end
+
+    -- In mock mode, keep the button enabled even if the spell isn't known,
+    -- but provide explicit feedback (tooltip + click message).
+    local mockUnknown = (isMock and spellId and not knows) and true or false
+    if mockUnknown then
+        unlocked = true
+    elseif isMock and spellId then
+        unlocked = knows
+    end
+
+    -- Prefer spell name for secure casting/macro; resolve via modern APIs first.
+    ---@type string|number|nil
+    local spellToken = spellId
+    ---@type string|nil
+    local spellName = nil
+    if spellId then
+        local C_Spell = _G.C_Spell
+        if C_Spell and type(C_Spell.GetSpellName) == "function" then
+            spellName = C_Spell.GetSpellName(spellId)
+        end
+
+        if (not spellName or spellName == "") and C_Spell and type(C_Spell.GetSpellInfo) == "function" then
+            local info = C_Spell.GetSpellInfo(spellId)
+            if type(info) == "table" and type(info.name) == "string" then
+                spellName = info.name
+            end
+        end
+
+        if not spellName or spellName == "" then
+            ---@diagnostic disable-next-line: undefined-field
+            local GetSpellInfo = _G.GetSpellInfo
+            if type(GetSpellInfo) == "function" then
+                spellName = GetSpellInfo(spellId)
+            end
+        end
+
+        if (not spellName or spellName == "") and C_Spell and type(C_Spell.RequestLoadSpellData) == "function" then
+            -- Best-effort: may populate name on next refresh.
+            C_Spell.RequestLoadSpellData(spellId)
+        end
+
+        if type(spellName) == "string" and spellName ~= "" then
+            spellToken = spellName
+        else
+            if Logger and type(Logger.Debug) == "function" then
+                Logger.Debug("Portal mock spellId has no spell name yet: " .. tostring(spellId))
+            end
+        end
+    end
 
     -- Secure attributes can't be changed in combat.
     if _G.InCombatLockdown and _G.InCombatLockdown() then
         btn:Disable()
         icon:SetDesaturated(true)
         icon:SetAlpha(0.35)
-        if hover then hover:Show() end
+        if hover then
+            hover:Show()
+            hover:EnableMouse(true)
+        end
         panel.__twichuiActions.portalSpellId = spellId
         panel.__twichuiActions.portalUnlocked = unlocked
+        panel.__twichuiActions.portalIsMock = isMock
+        panel.__twichuiActions.portalMockUnknown = mockUnknown
         return
     end
 
     btn:SetAttribute("type", nil)
     btn:SetAttribute("spell", nil)
+    btn:SetAttribute("macrotext", nil)
     btn:SetAttribute("type1", nil)
     btn:SetAttribute("spell1", nil)
+    btn:SetAttribute("macrotext1", nil)
 
     if unlocked then
-        btn:SetAttribute("type", "spell")
-        btn:SetAttribute("spell", spellId)
-        btn:SetAttribute("type1", "spell")
-        btn:SetAttribute("spell1", spellId)
+        if isMock then
+            -- Mock mode: always use a macro so we can provide visible feedback when it can't cast.
+            local macro
+            if mockUnknown then
+                macro = "/run print('TwichUI: Mock spell is not known by this character.')"
+            elseif type(spellName) == "string" and spellName ~= "" then
+                macro = "/run if print then print('TwichUI: portal mock macro executed') end\n" ..
+                    "/stopcasting\n" ..
+                    "/cast [@player] " .. spellName
+            else
+                macro = "/run print('TwichUI: Mock spell name unavailable for spellId " .. tostring(spellId) .. "')"
+            end
+
+            btn:SetAttribute("type", "macro")
+            btn:SetAttribute("macrotext", macro)
+            btn:SetAttribute("type1", "macro")
+            btn:SetAttribute("macrotext1", macro)
+        else
+            btn:SetAttribute("type", "spell")
+            btn:SetAttribute("spell", spellToken)
+            btn:SetAttribute("type1", "spell")
+            btn:SetAttribute("spell1", spellToken)
+        end
         btn:Enable()
         icon:SetDesaturated(false)
         icon:SetAlpha(1)
-        if hover then hover:Hide() end
+        if hover then
+            hover:Hide()
+            hover:EnableMouse(false)
+        end
     else
         btn:Disable()
         icon:SetDesaturated(true)
         icon:SetAlpha(0.35)
-        if hover then hover:Show() end
+        if hover then
+            hover:Show()
+            hover:EnableMouse(true)
+        end
     end
 
     panel.__twichuiActions.portalSpellId = spellId
     panel.__twichuiActions.portalUnlocked = unlocked
+    panel.__twichuiActions.portalIsMock = isMock
+    panel.__twichuiActions.portalMockUnknown = mockUnknown
 
     -- Update MDT Button visibility
     if panel.__twichuiActions.mdtButton then
@@ -1262,6 +1375,11 @@ end
 ---@field portalHover Frame
 ---@field portalSpellId number|nil
 ---@field portalUnlocked boolean
+---@field portalIsMock boolean|nil
+---@field portalMockUnknown boolean|nil
+---@field portalMockEnabled boolean|nil
+---@field portalMockMapId number|nil
+---@field portalMockSpellId number|nil
 
 ---@class TwichUI_MythicPlus_DungeonsPanel : Frame
 ---@field __twichuiFontPath string|nil
@@ -2136,7 +2254,24 @@ local function CreateDungeonsPanel(parent)
 
     local portalHL = portalButton:CreateTexture(nil, "HIGHLIGHT")
     portalHL:SetAllPoints(portalButton)
-    portalHL:SetColorTexture(1, 1, 1, 0.12)
+    -- Circle highlight: mask the square highlight so it matches the circular portal icon.
+    if portalButton.CreateMaskTexture and portalHL.AddMaskTexture then
+        portalHL:SetColorTexture(1, 1, 1, 0.12)
+
+        local hlMask = portalButton:CreateMaskTexture(nil, "ARTWORK")
+        hlMask:SetTexture("Interface\\CharacterFrame\\TempPortraitAlphaMask", "CLAMPTOBLACKADDITIVE",
+            "CLAMPTOBLACKADDITIVE")
+        hlMask:SetAllPoints(portalButton)
+        portalHL:AddMaskTexture(hlMask)
+
+        -- Keep a reference to avoid GC; also useful for future tweaks.
+        portalButton.__twichuiPortalHLMask = hlMask
+    else
+        -- Fallback: built-in circular highlight ring.
+        portalHL:SetTexture("Interface\\Minimap\\UI-Minimap-ZoomButton-Highlight")
+        portalHL:SetBlendMode("ADD")
+        portalHL:SetVertexColor(1, 1, 1, 0.35)
+    end
 
     portalButton:SetScript("OnEnter", function(btn)
         if not _G.GameTooltip or not _G.GameTooltip.SetOwner then return end
@@ -2148,12 +2283,77 @@ local function CreateDungeonsPanel(parent)
             local GetSpellInfo = _G.GetSpellInfo
             local name = (type(GetSpellInfo) == "function" and GetSpellInfo(st.portalSpellId)) or "Portal"
             _G.GameTooltip:AddLine(tostring(name))
-            _G.GameTooltip:AddLine("Click to teleport.", 1, 1, 1, true)
+            if st.portalMockUnknown then
+                _G.GameTooltip:AddLine("Mock spell is not known by this character.", 1, 0.3, 0.3, true)
+            else
+                _G.GameTooltip:AddLine("Click to teleport.", 1, 1, 1, true)
+            end
         else
             _G.GameTooltip:AddLine("Portal")
             _G.GameTooltip:AddLine("You haven't unlocked this portal yet.", 1, 1, 1, true)
         end
+
+        -- Developer-only: show what the secure action is set to when mocking.
+        if st and st.portalMockEnabled then
+            local actionType = btn.GetAttribute and btn:GetAttribute("type") or nil
+            local spellAttr = btn.GetAttribute and btn:GetAttribute("spell") or nil
+            local macroAttr = btn.GetAttribute and btn:GetAttribute("macrotext") or nil
+            local actionType1 = btn.GetAttribute and btn:GetAttribute("type1") or nil
+            local spellAttr1 = btn.GetAttribute and btn:GetAttribute("spell1") or nil
+            local macroAttr1 = btn.GetAttribute and btn:GetAttribute("macrotext1") or nil
+            _G.GameTooltip:AddLine(" ")
+            _G.GameTooltip:AddLine("Mock Debug:", 0.7, 0.7, 0.7)
+            _G.GameTooltip:AddLine("cfg.mapId=" .. tostring(st.portalMockMapId) .. " cfg.spellId=" ..
+                tostring(st.portalMockSpellId), 0.7, 0.7, 0.7)
+            _G.GameTooltip:AddLine("selected.mapId=" .. tostring(panel.__twichuiSelectedMapId), 0.7, 0.7, 0.7)
+            _G.GameTooltip:AddLine("applied=" .. tostring(st.portalIsMock), 0.7, 0.7, 0.7)
+            _G.GameTooltip:AddLine("type=" .. tostring(actionType), 0.7, 0.7, 0.7)
+            _G.GameTooltip:AddLine("type1=" .. tostring(actionType1), 0.7, 0.7, 0.7)
+            if spellAttr ~= nil then
+                _G.GameTooltip:AddLine("spell=" .. tostring(spellAttr), 0.7, 0.7, 0.7)
+            end
+            if spellAttr1 ~= nil then
+                _G.GameTooltip:AddLine("spell1=" .. tostring(spellAttr1), 0.7, 0.7, 0.7)
+            end
+            if macroAttr ~= nil then
+                _G.GameTooltip:AddLine("macro=" .. tostring(macroAttr), 0.7, 0.7, 0.7, true)
+            end
+            if macroAttr1 ~= nil then
+                _G.GameTooltip:AddLine("macro1=" .. tostring(macroAttr1), 0.7, 0.7, 0.7, true)
+            end
+            if _G.InCombatLockdown and _G.InCombatLockdown() then
+                _G.GameTooltip:AddLine("(InCombatLockdown: cannot update secure action)", 1, 0.5, 0.2, true)
+            end
+        end
         _G.GameTooltip:Show()
+    end)
+
+    -- Mock-only click debug: helps confirm clicks reach the secure button.
+    portalButton:HookScript("OnClick", function(btn)
+        local st = panel.__twichuiActions
+        if not st or not st.portalMockEnabled then return end
+        if type(_G.print) ~= "function" then return end
+
+        local inCombat = (_G.InCombatLockdown and _G.InCombatLockdown()) and true or false
+        local actionType = btn.GetAttribute and btn:GetAttribute("type") or nil
+        local actionType1 = btn.GetAttribute and btn:GetAttribute("type1") or nil
+        local spellAttr = btn.GetAttribute and btn:GetAttribute("spell") or nil
+        local spellAttr1 = btn.GetAttribute and btn:GetAttribute("spell1") or nil
+        local macroAttr = btn.GetAttribute and btn:GetAttribute("macrotext") or nil
+        local macroAttr1 = btn.GetAttribute and btn:GetAttribute("macrotext1") or nil
+
+        _G.print("TwichUI Portal Mock Debug:")
+        _G.print("  cfg.mapId=" .. tostring(st.portalMockMapId) .. " cfg.spellId=" .. tostring(st.portalMockSpellId))
+        _G.print("  selected.mapId=" ..
+        tostring(panel.__twichuiSelectedMapId) .. " applied=" .. tostring(st.portalIsMock))
+        _G.print("  inCombat=" .. tostring(inCombat) .. " unlocked=" .. tostring(st.portalUnlocked) ..
+            " unknown=" .. tostring(st.portalMockUnknown))
+        _G.print("  type=" .. tostring(actionType) .. " type1=" .. tostring(actionType1))
+        _G.print("  spell=" .. tostring(spellAttr) .. " spell1=" .. tostring(spellAttr1))
+        if macroAttr ~= nil or macroAttr1 ~= nil then
+            _G.print("  macro=" .. tostring(macroAttr))
+            _G.print("  macro1=" .. tostring(macroAttr1))
+        end
     end)
     portalButton:SetScript("OnLeave", function()
         if _G.GameTooltip and _G.GameTooltip.Hide then
@@ -2164,7 +2364,7 @@ local function CreateDungeonsPanel(parent)
     -- Tooltip support for the disabled state: disabled Buttons do not receive OnEnter/OnLeave.
     local portalHover = CreateFrame("Frame", nil, detailsHeader)
     portalHover:SetAllPoints(portalButton)
-    portalHover:EnableMouse(true)
+    portalHover:EnableMouse(false)
     portalHover:Hide()
     if portalHover.SetFrameLevel and portalButton.GetFrameLevel then
         portalHover:SetFrameLevel((portalButton:GetFrameLevel() or 1) + 5)
