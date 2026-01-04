@@ -555,13 +555,23 @@ function MP:Create(order)
                                 type = "group",
                                 inline = true,
                                 name = "Sound",
+                                desc = CM:ColorTextKeywords(
+                                    "Plays when a BiS notification is shown (NEW/UPGRADE/FOUND)."),
                                 order = 2,
                                 args = {
+                                    soundHelp = {
+                                        type = "description",
+                                        name = CM:ColorTextKeywords(
+                                            "This sound is for BiS notifications that happen when you actually loot an item (or when you use the testing buttons)."),
+                                        order = 0,
+                                        width = "full",
+                                    },
                                     soundSelect = {
                                         type = "select",
                                         dialogControl = "LSM30_Sound",
                                         name = "Notification Sound",
-                                        desc = CM:ColorTextKeywords("Sound to play when a BiS notification appears."),
+                                        desc = CM:ColorTextKeywords(
+                                            "Triggers when you actually loot a selected BiS item (or when using the test/force buttons)."),
                                         order = 1,
                                         width = 1.5,
                                         values = function() return LSM and LSM:HashTable("sound") or {} end,
@@ -573,6 +583,108 @@ function MP:Create(order)
                                         set = function(_, value)
                                             CM:SetProfileSettingSafe(
                                                 "mythicplus.bestInSlot.notifications.notificationSound", value)
+                                        end,
+                                    },
+                                }
+                            },
+
+                            availabilityGroup = {
+                                type = "group",
+                                inline = true,
+                                name = "Availability",
+                                desc = CM:ColorTextKeywords(
+                                    "Notifies when a selected BiS item becomes available to you (before you actually loot it)."),
+                                order = 2.5,
+                                args = {
+                                    availabilityHelp = {
+                                        type = "description",
+                                        name = CM:ColorTextKeywords(
+                                            "These notifications only trigger for items you have selected in your Best-in-Slot list."),
+                                        order = 0,
+                                        width = "full",
+                                    },
+                                    rollHelp = {
+                                        type = "description",
+                                        name = CM:ColorTextKeywords(
+                                            "Roll: Shows a notification when a group loot roll starts for a selected BiS item. This does not mean you won the item — it only means the item is being rolled on."),
+                                        order = 0.5,
+                                        width = "full",
+                                    },
+                                    availabilityRollEnabled = {
+                                        type = "toggle",
+                                        name = "Notify on Roll",
+                                        desc = CM:ColorTextKeywords(
+                                            "Triggers when a group loot roll starts for a selected BiS item (START_LOOT_ROLL)."),
+                                        order = 1,
+                                        width = "full",
+                                        get = function()
+                                            return CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.notifications.availabilityRollEnabled", true)
+                                        end,
+                                        set = function(_, value)
+                                            CM:SetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.notifications.availabilityRollEnabled", value)
+                                        end,
+                                    },
+                                    availabilityRollSound = {
+                                        type = "select",
+                                        dialogControl = "LSM30_Sound",
+                                        name = "Roll Sound",
+                                        desc = CM:ColorTextKeywords(
+                                            "Sound for the BiS Available - Roll notification."),
+                                        order = 2,
+                                        width = 1.5,
+                                        values = function() return LSM and LSM:HashTable("sound") or {} end,
+                                        get = function()
+                                            return CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.notifications.availabilityRollSound",
+                                                "TwichUI Notification 8")
+                                        end,
+                                        set = function(_, value)
+                                            CM:SetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.notifications.availabilityRollSound", value)
+                                        end,
+                                    },
+                                    vaultHelp = {
+                                        type = "description",
+                                        name = CM:ColorTextKeywords(
+                                            "Great Vault: Shows a notification when the Great Vault has selectable rewards and one of them matches a selected BiS item."),
+                                        order = 2.5,
+                                        width = "full",
+                                    },
+                                    availabilityVaultEnabled = {
+                                        type = "toggle",
+                                        name = "Notify on Great Vault",
+                                        desc = CM:ColorTextKeywords(
+                                            "Triggers when the Great Vault updates and you have available rewards; scans the reward items for selected BiS matches."),
+                                        order = 3,
+                                        width = "full",
+                                        get = function()
+                                            return CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.notifications.availabilityVaultEnabled", true)
+                                        end,
+                                        set = function(_, value)
+                                            CM:SetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.notifications.availabilityVaultEnabled", value)
+                                        end,
+                                    },
+                                    availabilityVaultSound = {
+                                        type = "select",
+                                        dialogControl = "LSM30_Sound",
+                                        name = "Great Vault Sound",
+                                        desc = CM:ColorTextKeywords(
+                                            "Sound for the BiS Available - Great Vault notification."),
+                                        order = 4,
+                                        width = 1.5,
+                                        values = function() return LSM and LSM:HashTable("sound") or {} end,
+                                        get = function()
+                                            return CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.notifications.availabilityVaultSound",
+                                                "TwichUI Notification 8")
+                                        end,
+                                        set = function(_, value)
+                                            CM:SetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.notifications.availabilityVaultSound", value)
                                         end,
                                     },
                                 }
@@ -854,6 +966,7 @@ function MP:Create(order)
                                     borderColor = {
                                         type = "color",
                                         name = "Border Color",
+                                        desc = "Border color used for acquired BiS notifications (NEW/UPGRADE/FOUND).",
                                         order = 3,
                                         hasAlpha = true,
                                         get = function()
@@ -866,6 +979,30 @@ function MP:Create(order)
                                         set = function(_, r, g, b, a)
                                             CM:SetProfileSettingSafe(
                                                 "mythicplus.bestInSlot.notifications.frameBorderColor",
+                                                { r = r, g = g, b = b, a = a })
+                                            local module = GetModule()
+                                            if module and module.BestInSlotNotificationFrame then
+                                                module.BestInSlotNotificationFrame:UpdateFrame()
+                                            end
+                                        end,
+                                    },
+                                    availabilityBorderColor = {
+                                        type = "color",
+                                        name = "Availability Border Color",
+                                        desc =
+                                        "Border color used when a BiS item is available via Roll or Great Vault (does not mean you already acquired the item).",
+                                        order = 3.1,
+                                        hasAlpha = true,
+                                        get = function()
+                                            local c = CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.notifications.frameBorderColorAvailable",
+                                                { r = 0.23, g = 0.62, b = 1.00, a = 1 })
+                                            return tonumber(c.r) or 1, tonumber(c.g) or 1, tonumber(c.b) or 1,
+                                                tonumber(c.a) or 1
+                                        end,
+                                        set = function(_, r, g, b, a)
+                                            CM:SetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.notifications.frameBorderColorAvailable",
                                                 { r = r, g = g, b = b, a = a })
                                             local module = GetModule()
                                             if module and module.BestInSlotNotificationFrame then

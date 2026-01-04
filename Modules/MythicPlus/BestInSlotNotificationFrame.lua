@@ -37,6 +37,7 @@ local KEY_PREFIX = "mythicplus.bestInSlot.notifications."
 
 -- Store per-frame state without injecting custom fields into Frame/Button objects.
 local TooltipItemLinkByOwner = setmetatable({}, { __mode = "k" })
+local KindByFrame = setmetatable({}, { __mode = "k" })
 
 local function GetSetting(suffix, default)
     return CM:GetProfileSettingSafe(KEY_PREFIX .. suffix, default)
@@ -97,7 +98,16 @@ local function ApplyVisualsToFrame(f)
             tonumber(frameColor.a) or 0.6)
     end
 
-    local bc = GetSetting("frameBorderColor", { r = 0.90, g = 0.72, b = 0.20, a = 1 })
+    local kind = KindByFrame[f]
+    local isAvailability = (kind == "ROLL" or kind == "VAULT")
+    local bc
+    if isAvailability then
+        -- Distinguish "available" (roll/vault) from "acquired".
+        bc = GetSetting("frameBorderColorAvailable", { r = 0.23, g = 0.62, b = 1.00, a = 1 })
+    else
+        -- Default acquired border remains the current gold.
+        bc = GetSetting("frameBorderColor", { r = 0.90, g = 0.72, b = 0.20, a = 1 })
+    end
     local bs = tonumber(GetSetting("frameBorderSize", 1)) or 1
 
     -- Use ElvUI 1px/blank texture for borders when available.
@@ -449,6 +459,7 @@ function NIF:RecycleFrame(f)
     f.detailText:SetText("")
     TooltipItemLinkByOwner[f] = nil
     if f.button then TooltipItemLinkByOwner[f.button] = nil end
+    KindByFrame[f] = nil
 
     table.insert(self.framePool, f)
 
@@ -491,6 +502,7 @@ function NIF:ShowNotification(itemLink, kind, receivedILvl, previousILvl, quanti
     local f = self:AcquireMessageFrame()
     TooltipItemLinkByOwner[f] = itemLink
     if f.button then TooltipItemLinkByOwner[f.button] = itemLink end
+    KindByFrame[f] = kind
 
     local itemID, _, _, equipLoc, iconTex = C_Item.GetItemInfoInstant(itemLink)
     local rarityHex = GetItemRarityHex(itemLink, itemID)
@@ -512,6 +524,10 @@ function NIF:ShowNotification(itemLink, kind, receivedILvl, previousILvl, quanti
         label = "BiS Upgrade"
     elseif kind == "NEW" then
         label = "BiS Acquired"
+    elseif kind == "ROLL" then
+        label = "BiS Available - Roll"
+    elseif kind == "VAULT" then
+        label = "BiS Available - Great Vault"
     else
         label = tostring(kind or "BiS")
     end

@@ -184,6 +184,12 @@ function DMP:Create(order)
                         args = {
                             desc = CM.Widgets:ComponentDescription(1,
                                 "Simulate receiving loot to test Best-in-Slot notifications."),
+                            availabilityDesc = {
+                                type = "description",
+                                order = 1.5,
+                                name =
+                                "Availability tests simulate the same events Blizzard fires (Roll and Great Vault) for the best end-to-end testing.",
+                            },
                             item = {
                                 type = "input",
                                 name = "Item",
@@ -267,6 +273,38 @@ function DMP:Create(order)
                                         value)
                                 end,
                             },
+                            ensureSelected = {
+                                type = "toggle",
+                                name = "Temporarily add to BiS selection",
+                                desc =
+                                "When enabled, the test will temporarily add the item to your selected BiS list so the availability checks behave like real usage.",
+                                order = 4.7,
+                                width = "full",
+                                get = function()
+                                    return CM:GetProfileSettingSafe(
+                                        "developer.testing.mythicPlus.bisNotifications.ensureSelected", true)
+                                end,
+                                set = function(_, value)
+                                    CM:SetProfileSettingSafe(
+                                        "developer.testing.mythicPlus.bisNotifications.ensureSelected", value)
+                                end,
+                            },
+                            ensureEnabled = {
+                                type = "toggle",
+                                name = "Temporarily enable availability setting",
+                                desc =
+                                "When enabled, the test will temporarily turn on the Roll/Vault availability setting so you can validate the UI and sounds without changing your normal configuration.",
+                                order = 4.8,
+                                width = "full",
+                                get = function()
+                                    return CM:GetProfileSettingSafe(
+                                        "developer.testing.mythicPlus.bisNotifications.ensureEnabled", true)
+                                end,
+                                set = function(_, value)
+                                    CM:SetProfileSettingSafe(
+                                        "developer.testing.mythicPlus.bisNotifications.ensureEnabled", value)
+                                end,
+                            },
                             simulate = {
                                 type = "execute",
                                 name = "Simulate Loot",
@@ -288,6 +326,64 @@ function DMP:Create(order)
                                         "developer.testing.mythicPlus.bisNotifications.overrideIlvl", 0)
 
                                     mp.BestInSlotNotificationHandler:TestSimulateLoot(item, qty, ilvl)
+                                end
+                            },
+                            simulateRoll = {
+                                type = "execute",
+                                name = "Simulate Roll Availability",
+                                desc = "Simulates Blizzard's START_LOOT_ROLL event for this item.",
+                                order = 5.1,
+                                func = function()
+                                    local mp = GetModule()
+                                    if not mp or not mp.BestInSlotNotificationHandler then
+                                        Logger.Error("MythicPlus BiS notification handler not found.")
+                                        return
+                                    end
+
+                                    local item = CM:GetProfileSettingSafe(
+                                        "developer.testing.mythicPlus.bisNotifications.item",
+                                        "19019")
+                                    local qty = CM:GetProfileSettingSafe(
+                                        "developer.testing.mythicPlus.bisNotifications.quantity", 1)
+                                    local ensureSelected = CM:GetProfileSettingSafe(
+                                        "developer.testing.mythicPlus.bisNotifications.ensureSelected", true)
+                                    local ensureEnabled = CM:GetProfileSettingSafe(
+                                        "developer.testing.mythicPlus.bisNotifications.ensureEnabled", true)
+
+                                    mp.BestInSlotNotificationHandler:TestSimulateAvailabilityRoll(
+                                        item,
+                                        qty,
+                                        ensureSelected,
+                                        ensureEnabled
+                                    )
+                                end
+                            },
+                            simulateVault = {
+                                type = "execute",
+                                name = "Simulate Great Vault Availability",
+                                desc =
+                                "Simulates a Great Vault update where this item is available as a selectable reward.",
+                                order = 5.2,
+                                func = function()
+                                    local mp = GetModule()
+                                    if not mp or not mp.BestInSlotNotificationHandler then
+                                        Logger.Error("MythicPlus BiS notification handler not found.")
+                                        return
+                                    end
+
+                                    local item = CM:GetProfileSettingSafe(
+                                        "developer.testing.mythicPlus.bisNotifications.item",
+                                        "19019")
+                                    local ensureSelected = CM:GetProfileSettingSafe(
+                                        "developer.testing.mythicPlus.bisNotifications.ensureSelected", true)
+                                    local ensureEnabled = CM:GetProfileSettingSafe(
+                                        "developer.testing.mythicPlus.bisNotifications.ensureEnabled", true)
+
+                                    mp.BestInSlotNotificationHandler:TestSimulateAvailabilityVault(
+                                        item,
+                                        ensureSelected,
+                                        ensureEnabled
+                                    )
                                 end
                             },
                             forceShow = {

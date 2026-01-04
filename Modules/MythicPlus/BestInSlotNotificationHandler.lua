@@ -69,6 +69,10 @@ local function FormatBiSChatMessage(kind, itemLink, receivedILvl, previousILvl, 
         label = "BiS Upgrade"
     elseif kind == "NEW" then
         label = "BiS Acquired"
+    elseif kind == "ROLL" then
+        label = "BiS Available (Roll)"
+    elseif kind == "VAULT" then
+        label = "BiS Available (Great Vault)"
     else
         label = "BiS Found"
     end
@@ -201,6 +205,76 @@ local function GetEffectiveItemLevel(itemLink, fallback)
     return tonumber(fallback)
 end
 
+local function WithTemporaryProfileSetting(key, tempValue, fn)
+    if type(fn) ~= "function" then return end
+    local previous = CM:GetProfileSettingSafe(key, nil)
+    CM:SetProfileSettingSafe(key, tempValue)
+    local ok, err = pcall(fn)
+    CM:SetProfileSettingSafe(key, previous)
+    if not ok then
+        Logger.Error(tostring(err))
+    end
+end
+
+local function WithTemporaryBiSSelection(itemLink, fn)
+    if type(fn) ~= "function" then return end
+
+    local db = GetCharacterDB()
+    if type(db) ~= "table" then
+        fn()
+        return
+    end
+
+    local itemID = GetItemInfoInstant(itemLink)
+    if not itemID then
+        fn()
+        return
+    end
+
+    local key = tonumber(itemID)
+    if not key then
+        fn()
+        return
+    end
+    local previous = db[key]
+    db[key] = { link = itemLink }
+
+    local ok, err = pcall(fn)
+
+    if previous == nil then
+        db[key] = nil
+    else
+        db[key] = previous
+    end
+
+    if not ok then
+        Logger.Error(tostring(err))
+    end
+end
+
+local function PlayNotificationSound(settingSuffix, defaultSoundKey)
+    local soundKey = CM:GetProfileSettingSafe(KEY_PREFIX .. settingSuffix, defaultSoundKey)
+    if soundKey and soundKey ~= "None" then
+        local LSM = T.Libs and T.Libs.LSM
+        local path = LSM and LSM:Fetch("sound", soundKey)
+        if path then
+            PlaySoundFile(path, "Master")
+        end
+    end
+end
+
+local function ShowAndLog(kind, itemLink, receivedILvl, previousILvl, quantity)
+    if MP.BestInSlotNotificationFrame and MP.BestInSlotNotificationFrame.Initialize then
+        MP.BestInSlotNotificationFrame:Initialize()
+    end
+
+    if MP.BestInSlotNotificationFrame and MP.BestInSlotNotificationFrame.ShowNotification then
+        MP.BestInSlotNotificationFrame:ShowNotification(itemLink, kind, receivedILvl, previousILvl, quantity)
+    end
+
+    Logger.Info(RestoreLoggerInfoColor(FormatBiSChatMessage(kind, itemLink, receivedILvl, previousILvl, quantity)))
+end
+
 local function ProcessLootItem(itemLink, quantity, overrideILvl)
     if not itemLink then return end
 
@@ -244,24 +318,145 @@ local function ProcessLootItem(itemLink, quantity, overrideILvl)
         return
     end
 
-    if MP.BestInSlotNotificationFrame and MP.BestInSlotNotificationFrame.Initialize then
-        MP.BestInSlotNotificationFrame:Initialize()
+    PlayNotificationSound("notificationSound", "TwichUI Green Dude Gets Loot")
+    ShowAndLog(kind, itemLink, currentILvl, tonumber(prevILvl), quantity)
+end
+
+local function OnStartLootRoll(rollID)
+    if not rollID then return end
+    if not CM:GetProfileSettingSafe(KEY_PREFIX .. "availabilityRollEnabled", true) then
+        return
     end
 
-    local soundKey = CM:GetProfileSettingSafe(KEY_PREFIX .. "notificationSound", "TwichUI Green Dude Gets Loot")
-    if soundKey and soundKey ~= "None" then
-        local LSM = T.Libs and T.Libs.LSM
-        local path = LSM and LSM:Fetch("sound", soundKey)
-        if path then
-            PlaySoundFile(path, "Master")
+    NIH.__rollNotified = NIH.__rollNotified or {}
+    if NIH.__rollNotified[tonumber(rollID)] then
+        return
+    end
+
+    local link = _G.GetLootRollItemLink and _G.GetLootRollItemLink(rollID)
+    if type(link) ~= "string" or link == "" then
+        return
+    end
+
+    local itemID = GetItemInfoInstant(link)
+    if not itemID then return end
+    local selected = GetSelectedBiSItemIDs()
+    if not selected[tonumber(itemID)] then
+        return
+    end
+
+    NIH.__rollNotified[tonumber(rollID)] = true
+
+    local count = 1
+    if _G.GetLootRollItemInfo then
+        local _, _, c = _G.GetLootRollItemInfo(rollID)
+        count = tonumber(c) or 1
+        if count < 1 then count = 1 end
+    end
+
+    local ilvl = GetEffectiveItemLevel(link, nil)
+
+    PlayNotificationSound("availabilityRollSound", "TwichUI Notification 8")
+    ShowAndLog("ROLL", link, ilvl, nil, count)
+end
+
+local __lastVaultCheckAt = 0
+local function CheckGreatVaultForBiS()
+    if not CM:GetProfileSettingSafe(KEY_PREFIX .. "availabilityVaultEnabled", true) then
+        return
+    end
+
+    local now = (_G.GetTime and _G.GetTime()) or 0
+    if now > 0 and (now - __lastVaultCheckAt) < 5 then
+        return
+    end
+    __lastVaultCheckAt = now
+
+    local C_WeeklyRewards = _G.C_WeeklyRewards
+    if not C_WeeklyRewards or type(C_WeeklyRewards.GetActivities) ~= "function" then
+        return
+    end
+
+    -- Only alert when the vault is actually available for selection, when possible.
+    if type(C_WeeklyRewards.HasAvailableRewards) == "function" then
+        local ok, has = pcall(C_WeeklyRewards.HasAvailableRewards)
+        if ok and not has then
+            return
         end
     end
 
-    if MP.BestInSlotNotificationFrame and MP.BestInSlotNotificationFrame.ShowNotification then
-        MP.BestInSlotNotificationFrame:ShowNotification(itemLink, kind, currentILvl, tonumber(prevILvl), quantity)
+    if type(C_WeeklyRewards.RequestRewards) == "function" then
+        pcall(C_WeeklyRewards.RequestRewards)
+    end
+    if type(C_WeeklyRewards.RequestActivities) == "function" then
+        pcall(C_WeeklyRewards.RequestActivities)
     end
 
-    Logger.Info(RestoreLoggerInfoColor(FormatBiSChatMessage(kind, itemLink, currentILvl, tonumber(prevILvl), quantity)))
+    local function TryActivities(...)
+        local ok, res = pcall(C_WeeklyRewards.GetActivities, ...)
+        if ok and type(res) == "table" then
+            return res
+        end
+        return nil
+    end
+
+    local best
+    local function Consider(t)
+        if type(t) ~= "table" then return end
+        if not best or #t > #best then
+            best = t
+        end
+    end
+
+    Consider(TryActivities())
+    -- Some clients require an eventTypeId; try the most common one too.
+    Consider(TryActivities(1))
+
+    local activities = best
+    if type(activities) ~= "table" then
+        return
+    end
+
+    if type(C_WeeklyRewards.GetActivityItemRewards) ~= "function" then
+        return
+    end
+
+    NIH.__vaultNotified = NIH.__vaultNotified or {}
+
+    local selected = GetSelectedBiSItemIDs()
+
+    local function GetActivityId(entry)
+        if type(entry) == "table" then
+            return tonumber(entry.id or entry.activityID or entry.activityId)
+        end
+        return tonumber(entry)
+    end
+
+    for _, entry in ipairs(activities) do
+        local activityID = GetActivityId(entry)
+        if activityID then
+            local ok2, rewards = pcall(C_WeeklyRewards.GetActivityItemRewards, activityID)
+            if ok2 and type(rewards) == "table" then
+                for _, r in ipairs(rewards) do
+                    local link
+                    if type(r) == "string" then
+                        link = r
+                    elseif type(r) == "table" then
+                        link = r.itemLink or r.hyperlink or r.link
+                    end
+                    if type(link) == "string" and link ~= "" then
+                        local itemID = GetItemInfoInstant(link)
+                        if itemID and selected[tonumber(itemID)] and not NIH.__vaultNotified[tonumber(itemID)] then
+                            NIH.__vaultNotified[tonumber(itemID)] = true
+                            local ilvl = GetEffectiveItemLevel(link, nil)
+                            PlayNotificationSound("availabilityVaultSound", "TwichUI Notification 8")
+                            ShowAndLog("VAULT", link, ilvl, nil, 1)
+                        end
+                    end
+                end
+            end
+        end
+    end
 end
 
 local function OnChatMsgLoot(message)
@@ -300,6 +495,11 @@ local function HandleEvent(_, event, ...)
     if event == "CHAT_MSG_LOOT" then
         local msg = ...
         OnChatMsgLoot(msg)
+    elseif event == "START_LOOT_ROLL" then
+        local rollID = ...
+        OnStartLootRoll(rollID)
+    elseif event == "WEEKLY_REWARDS_UPDATE" or event == "PLAYER_ENTERING_WORLD" then
+        CheckGreatVaultForBiS()
     end
 end
 
@@ -320,6 +520,13 @@ function NIH:Enable()
     self.frame = CreateFrame("Frame", "TwichUIMythicPlusBiSNotificationListener")
     self.frame:SetScript("OnEvent", HandleEvent)
     self.frame:RegisterEvent("CHAT_MSG_LOOT")
+    self.frame:RegisterEvent("START_LOOT_ROLL")
+    self.frame:RegisterEvent("WEEKLY_REWARDS_UPDATE")
+    self.frame:RegisterEvent("PLAYER_ENTERING_WORLD")
+
+    -- reset per-session availability caches
+    self.__rollNotified = {}
+    self.__vaultNotified = {}
 
     if MP.BestInSlotNotificationFrame and MP.BestInSlotNotificationFrame.Initialize then
         MP.BestInSlotNotificationFrame:Initialize()
@@ -416,37 +623,192 @@ function NIH:TestForceNotification(item, kind, receivedILvl, previousILvl, quant
             return
         end
 
-        if MP.BestInSlotNotificationFrame and MP.BestInSlotNotificationFrame.Initialize then
-            MP.BestInSlotNotificationFrame:Initialize()
-        end
-
-        local soundKey = CM:GetProfileSettingSafe(KEY_PREFIX .. "notificationSound", "TwichUI Green Dude Gets Loot")
-        if soundKey and soundKey ~= "None" then
-            local LSM = T.Libs and T.Libs.LSM
-            local path = LSM and LSM:Fetch("sound", soundKey)
-            if path then
-                PlaySoundFile(path, "Master")
-            end
-        end
-
-        if MP.BestInSlotNotificationFrame and MP.BestInSlotNotificationFrame.ShowNotification then
-            MP.BestInSlotNotificationFrame:ShowNotification(
-                link,
-                kind or "FOUND",
-                tonumber(receivedILvl) or nil,
-                tonumber(previousILvl) or nil,
-                quantity
-            )
-        end
-
-        Logger.Info(RestoreLoggerInfoColor(FormatBiSChatMessage(kind or "FOUND", link, receivedILvl, previousILvl,
-            quantity)))
+        PlayNotificationSound("notificationSound", "TwichUI Green Dude Gets Loot")
+        ShowAndLog(kind or "FOUND", link, tonumber(receivedILvl) or nil, tonumber(previousILvl) or nil, quantity)
     end
 
     local info = GetItemInfoTable(normalized, function(filled)
         Fire(filled and filled.link)
     end)
 
+    if info and info.link then
+        Fire(info.link)
+    end
+end
+
+--- Developer/testing helper: simulate a START_LOOT_ROLL event for an item.
+--- This uses the same internal path as the real event handler, including GetLootRollItemLink/GetLootRollItemInfo.
+--- @param item string|number itemID or itemLink
+--- @param quantity number|nil
+--- @param ensureSelected boolean|nil Temporarily add the item to the BiS selection list for the test.
+--- @param ensureEnabled boolean|nil Temporarily enable the Roll availability setting for the test.
+function NIH:TestSimulateAvailabilityRoll(item, quantity, ensureSelected, ensureEnabled)
+    quantity = tonumber(quantity) or 1
+    if quantity < 1 then quantity = 1 end
+
+    if ensureSelected == nil then ensureSelected = true end
+    if ensureEnabled == nil then ensureEnabled = true end
+
+    local normalized = item
+    if type(item) == "string" then
+        local trimmed = item:match("^%s*(.-)%s*$")
+        local asNumber = tonumber(trimmed)
+        if asNumber then
+            normalized = asNumber
+        else
+            normalized = trimmed
+        end
+    end
+
+    local function Fire(link)
+        if not link then
+            Logger.Error("BestInSlotNotificationHandler:TestSimulateAvailabilityRoll failed to resolve item: " ..
+            tostring(item))
+            return
+        end
+
+        local function DoSim()
+            self.__rollNotified = self.__rollNotified or {}
+            self.__testRollCounter = (tonumber(self.__testRollCounter) or 90000) + 1
+            local rollID = self.__testRollCounter
+            self.__rollNotified[rollID] = nil
+
+            local oldLinkFn = GetLootRollItemLink
+            local oldInfoFn = GetLootRollItemInfo
+
+            GetLootRollItemLink = function(id)
+                if tonumber(id) == tonumber(rollID) then
+                    return link
+                end
+                if type(oldLinkFn) == "function" then
+                    return oldLinkFn(id)
+                end
+                return nil
+            end
+
+            GetLootRollItemInfo = function(id)
+                if tonumber(id) == tonumber(rollID) then
+                    -- texture, name, count, ...; only count is used by our handler.
+                    return nil, nil, quantity
+                end
+                if type(oldInfoFn) == "function" then
+                    return oldInfoFn(id)
+                end
+                return nil
+            end
+
+            local ok, err = pcall(function()
+                OnStartLootRoll(rollID)
+            end)
+
+            GetLootRollItemLink = oldLinkFn
+            GetLootRollItemInfo = oldInfoFn
+
+            if not ok then
+                Logger.Error("TestSimulateAvailabilityRoll error: " .. tostring(err))
+            end
+        end
+
+        local function Run()
+            if ensureSelected then
+                WithTemporaryBiSSelection(link, DoSim)
+            else
+                DoSim()
+            end
+        end
+
+        if ensureEnabled then
+            WithTemporaryProfileSetting(KEY_PREFIX .. "availabilityRollEnabled", true, Run)
+        else
+            Run()
+        end
+    end
+
+    local info = GetItemInfoTable(normalized, function(filled)
+        Fire(filled and filled.link)
+    end)
+    if info and info.link then
+        Fire(info.link)
+    end
+end
+
+--- Developer/testing helper: simulate Great Vault availability containing a BiS item.
+--- This uses the same internal scanning path as the real WEEKLY_REWARDS_UPDATE handler.
+--- @param item string|number itemID or itemLink
+--- @param ensureSelected boolean|nil Temporarily add the item to the BiS selection list for the test.
+--- @param ensureEnabled boolean|nil Temporarily enable the Vault availability setting for the test.
+function NIH:TestSimulateAvailabilityVault(item, ensureSelected, ensureEnabled)
+    if ensureSelected == nil then ensureSelected = true end
+    if ensureEnabled == nil then ensureEnabled = true end
+
+    local normalized = item
+    if type(item) == "string" then
+        local trimmed = item:match("^%s*(.-)%s*$")
+        local asNumber = tonumber(trimmed)
+        if asNumber then
+            normalized = asNumber
+        else
+            normalized = trimmed
+        end
+    end
+
+    local function Fire(link)
+        if not link then
+            Logger.Error("BestInSlotNotificationHandler:TestSimulateAvailabilityVault failed to resolve item: " ..
+            tostring(item))
+            return
+        end
+
+        local function DoSim()
+            self.__vaultNotified = self.__vaultNotified or {}
+            local itemID = GetItemInfoInstant(link)
+            if itemID then
+                self.__vaultNotified[tonumber(itemID)] = nil
+            end
+            __lastVaultCheckAt = 0
+
+            local oldWeekly = C_WeeklyRewards
+            C_WeeklyRewards = {
+                HasAvailableRewards = function() return true end,
+                RequestRewards = function() end,
+                RequestActivities = function() end,
+                GetActivities = function()
+                    return { { id = 424242 } }
+                end,
+                GetActivityItemRewards = function(_, _)
+                    return { link }
+                end,
+            }
+
+            local ok, err = pcall(function()
+                CheckGreatVaultForBiS()
+            end)
+
+            C_WeeklyRewards = oldWeekly
+
+            if not ok then
+                Logger.Error("TestSimulateAvailabilityVault error: " .. tostring(err))
+            end
+        end
+
+        local function Run()
+            if ensureSelected then
+                WithTemporaryBiSSelection(link, DoSim)
+            else
+                DoSim()
+            end
+        end
+
+        if ensureEnabled then
+            WithTemporaryProfileSetting(KEY_PREFIX .. "availabilityVaultEnabled", true, Run)
+        else
+            Run()
+        end
+    end
+
+    local info = GetItemInfoTable(normalized, function(filled)
+        Fire(filled and filled.link)
+    end)
     if info and info.link then
         Fire(info.link)
     end
