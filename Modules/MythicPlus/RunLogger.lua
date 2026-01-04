@@ -58,8 +58,8 @@ local DungeonMonitor = MythicPlusModule.DungeonMonitor
 local API = MythicPlusModule.API
 ---@type MythicPlusScoreCalculatorSubmodule
 local ScoreCalculator = MythicPlusModule.ScoreCalculator
----@type MythicPlusRunSharingSubmodule
-local RunSharing = MythicPlusModule.RunSharing
+---@type MythicPlusRunLoggerSyncSubmodule
+local RunLoggerSync = MythicPlusModule.RunLoggerSync
 
 ---@type table<string, ConfigEntry>
 local CONFIGURATION = {
@@ -139,6 +139,42 @@ local function TryExtractBracketItemName(msg)
     return nil
 end
 
+---@param playerName any
+---@param guid any
+---@return boolean
+local function IsPlayerLootEvent(playerName, guid)
+    local myGuid = (type(UnitGUID) == "function") and UnitGUID("player") or nil
+    if myGuid and guid and guid == myGuid then
+        return true
+    end
+
+    if type(playerName) ~= "string" or playerName == "" then
+        return false
+    end
+
+    local myName, myRealm
+    if type(UnitName) == "function" then
+        myName, myRealm = UnitName("player")
+    end
+
+    if type(myName) ~= "string" or myName == "" then
+        return false
+    end
+
+    if playerName == myName then
+        return true
+    end
+
+    if type(myRealm) == "string" and myRealm ~= "" then
+        local full = myName .. "-" .. myRealm
+        if playerName == full or playerName == (myName .. " - " .. myRealm) then
+            return true
+        end
+    end
+
+    return false
+end
+
 ---@param item any
 ---@return table|nil
 local function GetItemInfoTable(item)
@@ -208,10 +244,6 @@ end
 ---@field completion table|nil
 ---@field events TwichUIRunLogger_RunEvent[]
 
----@class TwichUIRunLogger_RunHistoryEntry
----@field run TwichUIRunLogger_Run
----@field ackedBy table<string, boolean>
-
 ---@class TwichUIRunLogger_RemoteRun
 ---@field sender string
 ---@field receivedAt number
@@ -221,10 +253,11 @@ end
 ---@field version number
 ---@field active TwichUIRunLogger_Run|nil
 ---@field lastCompleted TwichUIRunLogger_Run|nil
----@field runHistory (TwichUIRunLogger_RunHistoryEntry|TwichUIRunLogger_Run)[]|nil
+-- NOTE: Historical field `runHistory` has been removed; sync uses `TwichUIRunLoggerDB.sync.pending`.
 ---@field linkedReceiver string|nil
 ---@field remoteRuns TwichUIRunLogger_RemoteRun[]|nil
 ---@field registeredReceivers table<string, number>|nil
+---@field sync table|nil
 
 ---@return TwichUIRunLoggerDB
 local function GetDB()
@@ -708,8 +741,7 @@ function MythicPlusRunLogger:_StartNewRun(mapId, dungeonName)
     -- Capture roster immediately so we have it even if GROUP_ROSTER_UPDATE never fires.
     self:_AppendEvent("GROUP_ROSTER_SNAPSHOT", { group = groupSnapshot, reason = "start" })
 
-    Logger.Info(
-        "This Mythic+ run will be recorded.")
+    Logger.Debug("This Mythic+ run will be recorded.")
 end
 
 ---@param status string
@@ -731,9 +763,6 @@ function MythicPlusRunLogger:_FinalizeRun(status, completionPayload)
     db.active = nil
 
     if run.status == "completed" then
-        self:_AddToHistory(run)
-        self:_SyncHistory()
-
         local text = BuildExportText(run)
 
         local autoShow = CM:GetProfileSettingSafe("developer.mythicplus.runLogger.autoShow", true)
@@ -742,7 +771,15 @@ function MythicPlusRunLogger:_FinalizeRun(status, completionPayload)
         end
     end
 
-    Logger.Info("Mythic+ run recording finalized.")
+    -- Sync finalized data to any configured peers.
+    if RunLoggerSync and RunLoggerSync.Initialize then
+        RunLoggerSync:Initialize()
+        if RunLoggerSync.OnRunFinalized then
+            RunLoggerSync:OnRunFinalized(run)
+        end
+    end
+
+    Logger.Debug("Mythic+ run recording finalized.")
 end
 
 ---@param eventName string
@@ -805,77 +842,74 @@ function MythicPlusRunLogger:_OnDungeonEvent(eventName, ...)
         return
     end
 
-    if eventName == "CHALLENGE_MODE_COMPLETED" then
-        self:_AppendEvent(eventName, {})
-        self:_FinalizeRun("completed")
-        return
-    end
-
-    if eventName == "CHALLENGE_MODE_DEATH_COUNT_UPDATED" then
-        local count = ...
-        -- If the event doesn't provide the count, fetch it.
-        if not count and C_ChallengeMode and C_ChallengeMode.GetDeathCount then
-            count = C_ChallengeMode.GetDeathCount()
+    if eventName == "TWICH_DUNGEON_COMPLETION" then
+        local completion = ...
+        if type(completion) ~= "table" then
+            completion = {}
         end
-        self:_AppendEvent(eventName, { count = count })
 
-        return
-    end
-
-    if eventName == "CHALLENGE_MODE_COMPLETED_REWARDS" then
-        local mapId, medal, timeMS, money, rewards = ...
-
-        local mapIdNum = tonumber(mapId) or mapId
-        local timeSec = (tonumber(timeMS) or 0) / 1000
+        local mapIdNum = tonumber(completion.mapID) or completion.mapID
+        local level = tonumber(completion.level)
+        local timeSec = tonumber(completion.timeSec)
+        local timeMS = tonumber(completion.timeMS)
+        if timeSec == nil and timeMS ~= nil then
+            timeSec = timeMS / 1000
+        elseif timeMS == nil and timeSec ~= nil then
+            timeMS = timeSec * 1000
+        end
 
         local db = GetDB()
         local run = db and db.active or nil
         local runId = run and run.id or nil
-        local level = run and tonumber(run.level) or nil
+        local activeLevel = run and tonumber(run.level) or nil
+        if not level then
+            level = activeLevel
+        end
 
         local calculatedScore, calcDetails
-        if ScoreCalculator and type(ScoreCalculator.CalculateForRun) == "function" and level then
+        if ScoreCalculator and type(ScoreCalculator.CalculateForRun) == "function" and level and timeSec then
             calculatedScore, calcDetails = ScoreCalculator.CalculateForRun(mapIdNum, level, timeSec)
         end
 
         local blizzardRunScore, blizzardMatch
-        if ScoreCalculator and type(ScoreCalculator.TryGetBlizzardRunScore) == "function" then
+        if ScoreCalculator and type(ScoreCalculator.TryGetBlizzardRunScore) == "function" and level and timeSec then
             blizzardRunScore, blizzardMatch = ScoreCalculator.TryGetBlizzardRunScore(mapIdNum, level, timeSec)
         end
 
         local payload = {
             mapId = mapIdNum,
-            medal = medal,
-            timeMS = timeMS,
+            mapID = mapIdNum, -- keep old casing too
+            level = level,
             timeSec = timeSec,
-            money = money,
-            rewards = rewards,
-            keystoneLevel = level,
+            timeMS = timeMS,
+            onTime = completion.onTime,
+            upgradeLevels = completion.upgradeLevels,
+            practiceRun = completion.practiceRun,
+            source = completion.source,
             calculatedRunScore = calculatedScore,
             calculatedScoreDetails = calcDetails,
             blizzardRunScore = blizzardRunScore,
             blizzardRunScoreMatch = blizzardMatch,
+            blizzardRunScoreSource = blizzardRunScore and "immediate_run_history" or nil,
         }
 
         self:_AppendEvent(eventName, payload)
 
         -- Mark as completed but DO NOT finalize yet.
-        -- We wait for the player to leave the instance (PLAYER_ENTERING_WORLD) to capture loot.
+        -- We wait for PLAYER_ENTERING_WORLD (leaving the instance) to capture loot.
         if run then
             run.status = "completed"
             run.completion = payload
         end
 
         -- Best-effort retry: run history data (and thus runScore) may not be available immediately.
-        if (not blizzardRunScore) and C_Timer and type(C_Timer.After) == "function" and runId then
+        if (not blizzardRunScore) and C_Timer and type(C_Timer.After) == "function" and runId and mapIdNum and level and timeSec then
             C_Timer.After(1.0, function()
                 local db2 = GetDB()
-                -- Check active run first, then lastCompleted (in case they zoned out fast)
                 local targetRun = db2 and db2.active
                 if not targetRun or targetRun.id ~= runId then
                     targetRun = db2 and db2.lastCompleted
                 end
-
                 if not targetRun or targetRun.id ~= runId or type(targetRun.completion) ~= "table" then
                     return
                 end
@@ -894,6 +928,31 @@ function MythicPlusRunLogger:_OnDungeonEvent(eventName, ...)
                 end
             end)
         end
+
+        return
+    end
+
+    if eventName == "CHALLENGE_MODE_COMPLETED" then
+        -- Modern WoW doesn't reliably fire CHALLENGE_MODE_COMPLETED_REWARDS.
+        -- Treat this as a marker only; completion details come via TWICH_DUNGEON_COMPLETION.
+        self:_AppendEvent(eventName, {})
+
+        local db = GetDB()
+        if db.active and db.active.status ~= "completed" then
+            db.active.status = "completed"
+        end
+
+        return
+    end
+
+    if eventName == "CHALLENGE_MODE_DEATH_COUNT_UPDATED" then
+        local count = ...
+        -- If the event doesn't provide the count, fetch it.
+        if not count and C_ChallengeMode and C_ChallengeMode.GetDeathCount then
+            count = C_ChallengeMode.GetDeathCount()
+        end
+        self:_AppendEvent(eventName, { count = count })
+
         return
     end
 
@@ -959,7 +1018,7 @@ function MythicPlusRunLogger:_OnDungeonEvent(eventName, ...)
             if not isCM then
                 self:_AppendEvent("FAILSAFE_FINISH", { reason = "not_in_challenge_mode" })
 
-                -- If the run was already marked completed (by REWARDS event), finalize as completed.
+                -- If the run was already marked completed (by completion event), finalize as completed.
                 -- Otherwise, if we left without completion, it's an abandon/reset.
                 local status = (db.active.status == "completed") and "completed" or "abandoned"
                 self:_FinalizeRun(status)
@@ -975,6 +1034,9 @@ function MythicPlusRunLogger:_OnDungeonEvent(eventName, ...)
         end
 
         local msg, playerName, _, _, _, _, _, _, _, _, lineId, guid = ...
+        if not IsPlayerLootEvent(playerName, guid) then
+            return
+        end
         local links = ExtractItemLinks(msg)
         local qty = TryExtractQuantity(msg)
         local bracketName = TryExtractBracketItemName(msg)
@@ -1040,17 +1102,6 @@ function MythicPlusRunLogger:Enable()
         self:_OnDungeonEvent(eventName, ...)
     end)
 
-    -- Start periodic sync check
-    if self.syncTimer then self.syncTimer:Cancel() end
-    self.syncTimer = C_Timer.NewTicker(60, function()
-        local db = GetDB()
-        if db.runHistory and #db.runHistory > 0 then
-            if RunSharing and RunSharing.SendPing then
-                RunSharing:SendPing(true) -- Silent ping
-            end
-        end
-    end)
-
     Logger.Debug("Mythic plus run logger enabled")
 end
 
@@ -1064,11 +1115,6 @@ function MythicPlusRunLogger:Disable()
         self._callbackHandle = nil
     end
 
-    if self.syncTimer then
-        self.syncTimer:Cancel()
-        self.syncTimer = nil
-    end
-
     if self._frame then
         self._frame:Hide()
     end
@@ -1076,133 +1122,11 @@ function MythicPlusRunLogger:Disable()
     Logger.Debug("Mythic plus run logger disabled")
 end
 
-function MythicPlusRunLogger:_AddToHistory(run)
-    local db = GetDB()
-    if not db.runHistory then db.runHistory = {} end
-
-    -- Add to end. Store as a wrapper so we can track per-recipient ACK state.
-    table.insert(db.runHistory, {
-        run = run,
-        ackedBy = {},
-    })
-
-    -- Check limit
-    local limit = CM:GetProfileSettingSafe("developer.mythicplus.runLogger.historySize", 5)
-    while #db.runHistory > limit do
-        table.remove(db.runHistory, 1) -- Remove oldest
-    end
-end
-
-function MythicPlusRunLogger:_SyncHistory()
-    local db = GetDB()
-    if not db.runHistory or #db.runHistory == 0 then return end
-
-    if not RunSharing or not RunSharing.SendRun then return end
-
-    -- Determine recipients: explicit linked receiver + any registered receivers.
-    local recipients = {}
-    if RunSharing.GetRecipients then
-        recipients = RunSharing:GetRecipients()
-    elseif RunSharing.receiver then
-        recipients = { RunSharing.receiver }
-    end
-
-    if not recipients or #recipients == 0 then return end
-
-    -- Upgrade any old entries in-place.
-    for i = 1, #db.runHistory do
-        local e = db.runHistory[i]
-        if type(e) == "table" and e.id then
-            db.runHistory[i] = { run = e, ackedBy = {} }
-        elseif type(e) == "table" and e.run and type(e.ackedBy) ~= "table" then
-            e.ackedBy = {}
-        end
-    end
-
-    -- Send all runs in history
-    for _, entry in ipairs(db.runHistory) do
-        if type(entry) == "table" and type(entry.run) == "table" then
-            entry.ackedBy = entry.ackedBy or {}
-            for _, receiver in ipairs(recipients) do
-                if type(receiver) == "string" and receiver ~= "" and not entry.ackedBy[receiver] then
-                    RunSharing:SendRun(entry.run, receiver)
-                end
-            end
-        end
-    end
-end
-
-function MythicPlusRunLogger:_OnRunAcknowledged(runId, sender)
-    local db = GetDB()
-    if not db.runHistory then return end
-
-    -- Ensure wrapper format.
-    for i = 1, #db.runHistory do
-        local e = db.runHistory[i]
-        if type(e) == "table" and e.id then
-            db.runHistory[i] = { run = e, ackedBy = {} }
-        elseif type(e) == "table" and e.run and type(e.ackedBy) ~= "table" then
-            e.ackedBy = {}
-        end
-    end
-
-    local recipients = {}
-    if RunSharing and RunSharing.GetRecipients then
-        recipients = RunSharing:GetRecipients()
-    elseif RunSharing and RunSharing.receiver then
-        recipients = { RunSharing.receiver }
-    end
-
-    for i = #db.runHistory, 1, -1 do
-        local entry = db.runHistory[i]
-        local run = (type(entry) == "table" and entry.run) or nil
-        if run and run.id == runId then
-            entry.ackedBy = entry.ackedBy or {}
-            entry.ackedBy[sender] = true
-
-            -- Remove if all current recipients have ACKed.
-            local allAcked = true
-            for _, r in ipairs(recipients) do
-                if r and r ~= "" and not entry.ackedBy[r] then
-                    allAcked = false
-                    break
-                end
-            end
-
-            if allAcked then
-                table.remove(db.runHistory, i)
-                Logger.Info("Run " .. runId .. " acknowledged by all recipients. Removed from history.")
-            else
-                Logger.Info("Run " .. runId .. " acknowledged by " .. sender .. ".")
-            end
-            break
-        end
-    end
-end
-
 function MythicPlusRunLogger:Initialize()
     if self.enabled then return end
 
-    if RunSharing and RunSharing.Initialize then
-        RunSharing:Initialize()
-
-        if RunSharing.OnRunAcknowledged then
-            RunSharing.OnRunAcknowledged:Register(function(runId, sender)
-                self:_OnRunAcknowledged(runId, sender)
-            end)
-        end
-
-        if RunSharing.OnConnectionEstablished then
-            RunSharing.OnConnectionEstablished:Register(function(sender)
-                self:_SyncHistory()
-            end)
-        end
-
-        if RunSharing.OnReceiverRegistered then
-            RunSharing.OnReceiverRegistered:Register(function(sender)
-                self:_SyncHistory()
-            end)
-        end
+    if RunLoggerSync and RunLoggerSync.Initialize then
+        RunLoggerSync:Initialize()
     end
 
     MigrateLegacyEnableKey()

@@ -55,6 +55,31 @@ local PORTAL_TEXTURE = "Interface\\AddOns\\TwichUI\\Media\\Textures\\portal.tga"
 local _portalSpellCache = {}
 local _portalSpellPendingUntil = {}
 
+---@param mapId number
+---@return number|nil
+local function GetMockPortalSpellId(mapId)
+    if not CM or type(CM.GetProfileSettingSafe) ~= "function" then
+        return nil
+    end
+
+    local enabled = CM:GetProfileSettingSafe("developer.testing.mythicPlus.portalMock.enabled", false)
+    if not enabled then
+        return nil
+    end
+
+    local mockMapId = tonumber(CM:GetProfileSettingSafe("developer.testing.mythicPlus.portalMock.mapId", 0)) or 0
+    local mockSpellId = tonumber(CM:GetProfileSettingSafe("developer.testing.mythicPlus.portalMock.spellId", 0)) or 0
+    if mockSpellId <= 0 then
+        return nil
+    end
+
+    if mockMapId == 0 or mockMapId == tonumber(mapId) then
+        return mockSpellId
+    end
+
+    return nil
+end
+
 ---@param s any
 ---@return string
 local function NormalizeText(s)
@@ -80,6 +105,12 @@ end
 local function FindDungeonPortalSpellId(mapId)
     mapId = tonumber(mapId)
     if not mapId then return nil end
+
+    -- Developer/testing override: pretend a portal spell exists (for UI testing).
+    local mock = GetMockPortalSpellId(mapId)
+    if mock then
+        return mock
+    end
 
     local now = (type(GetTime) == "function" and GetTime()) or 0
     local pendingUntil = _portalSpellPendingUntil[mapId]
@@ -190,6 +221,13 @@ local function ClearPortalSpellCache()
     else
         for k in pairs(_portalSpellCache) do _portalSpellCache[k] = nil end
         for k in pairs(_portalSpellPendingUntil) do _portalSpellPendingUntil[k] = nil end
+    end
+end
+
+function Dungeons:ClearPortalSpellCache()
+    ClearPortalSpellCache()
+    if self.Refresh then
+        self:Refresh()
     end
 end
 

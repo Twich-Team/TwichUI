@@ -15,6 +15,8 @@ local CreateFrame = _G.CreateFrame
 --- @field DungeonMonitor MythicPlusDungeonMonitorSubmodule
 --- @field DataCollector MythicPlusDataCollectorSubmodule
 --- @field RunLogger MythicPlusRunLoggerSubmodule
+--- @field RunLoggerSync MythicPlusRunLoggerSyncSubmodule
+--- @field RunSharingFrame MythicPlusRunSharingFrameSubmodule|nil
 local MythicPlusModule = T:GetModule("MythicPlus")
 
 --- @type ConfigurationModule
@@ -95,10 +97,6 @@ function MythicPlusModule:Enable()
     -- Developer-only subfeature; initializes based on its own config toggle.
     if self.RunLogger and self.RunLogger.Initialize then
         self.RunLogger:Initialize()
-    end
-
-    if self.RunSharingFrame and self.RunSharingFrame.Initialize then
-        self.RunSharingFrame:Initialize()
     end
 
     Logger.Debug("Mythic+ module enabled")

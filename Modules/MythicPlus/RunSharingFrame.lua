@@ -918,13 +918,20 @@ function RunSharingFrame:ResolveDungeonName(run)
 
     if not needsResolution then return end
 
-    local mapId = run.data.run and run.data.run.mapId
+    local data = run.data
+    local runObj = data.run or data
 
-    if not mapId and run.data.events then
-        for _, ev in ipairs(run.data.events) do
+    local mapId = runObj and (runObj.mapId or runObj.mapID)
+
+    if not mapId and data.events then
+        for _, ev in ipairs(data.events) do
             if ev.name == "CHALLENGE_MODE_START" and ev.payload and ev.payload.mapId then
                 mapId = ev.payload.mapId
                 -- print("TwichUI Debug: Found mapId in events:", mapId)
+                break
+            end
+            if ev.name == "CHALLENGE_MODE_START" and ev.payload and ev.payload.mapID then
+                mapId = ev.payload.mapID
                 break
             end
         end
@@ -950,10 +957,13 @@ function RunSharingFrame:ResolveDungeonName(run)
         end
 
         if name then
-            run.data.dungeonName = name
-            -- Also update the run object mapId if missing, for consistency
-            if run.data.run then
-                run.data.run.mapId = mapId
+            data.dungeonName = name
+            -- Also update the run object mapId/name if missing, for consistency
+            if data.run then
+                data.run.mapId = data.run.mapId or mapId
+                data.run.dungeonName = data.run.dungeonName or name
+            else
+                data.mapId = data.mapId or mapId
             end
             print(string.format("TwichUI: Resolved dungeon name for run to '%s' (MapID: %s)", name, tostring(mapId)))
         else
@@ -1135,10 +1145,11 @@ function RunSharingFrame:UpdateDetailsView()
         self.detailsFrame:Show()
 
         -- Header
-        local d = run.data.run or {}
-        local dungeon = run.data.dungeonName or (d.dungeonName) -- Check both locations
+        local d = run.data.run or run.data or {}
+        local dungeon = run.data.dungeonName or d.dungeonName -- Check both locations
         if not dungeon or dungeon == "Unknown" then
-            dungeon = d.mapId and C_ChallengeMode.GetMapUIInfo(d.mapId) or "Unknown Dungeon"
+            local mapId = d.mapId or d.mapID
+            dungeon = mapId and C_ChallengeMode.GetMapUIInfo(mapId) or "Unknown Dungeon"
         end
 
         local level = d.level or "?"
@@ -1166,7 +1177,8 @@ function RunSharingFrame:UpdateEventsList(events)
     local FRIENDLY_NAMES = {
         CHALLENGE_MODE_START = "Key Start",
         CHALLENGE_MODE_COMPLETED = "Key Completed",
-        CHALLENGE_MODE_COMPLETED_REWARDS = "Key Rewards",
+        TWICH_DUNGEON_COMPLETION = "Key Completion",
+        CHALLENGE_MODE_COMPLETED_REWARDS = "Key Rewards", -- legacy
         CHALLENGE_MODE_RESET = "Key Reset",
         CHALLENGE_MODE_DEATH_COUNT_UPDATED = "Death Count",
         TWICH_DUNGEON_START = "Dungeon Start",
@@ -1182,7 +1194,8 @@ function RunSharingFrame:UpdateEventsList(events)
     local EVENT_COLORS = {
         CHALLENGE_MODE_START = "|cff4caf50",               -- Green
         CHALLENGE_MODE_COMPLETED = "|cff4caf50",           -- Green
-        CHALLENGE_MODE_COMPLETED_REWARDS = "|cffffd700",   -- Gold
+        TWICH_DUNGEON_COMPLETION = "|cffffd700",           -- Gold
+        CHALLENGE_MODE_COMPLETED_REWARDS = "|cffffd700",   -- Gold (legacy)
         CHALLENGE_MODE_RESET = "|cfff44336",               -- Red
         CHALLENGE_MODE_DEATH_COUNT_UPDATED = "|cfff44336", -- Red
         TWICH_DUNGEON_START = "|cff4caf50",                -- Green
@@ -1321,7 +1334,7 @@ function RunSharingFrame:UpdateEventsList(events)
             row.bg:Hide()
         end
 
-        local rel = ev.relSeconds or 0
+        local rel = ev.relSeconds or ev.rel or 0
         local m = math.floor(rel / 60)
         local s = math.floor(rel % 60)
         row.timeText:SetText(string.format("%02d:%02d", m, s))

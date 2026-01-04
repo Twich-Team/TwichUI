@@ -83,7 +83,7 @@ local Module = Tools.Generics.Module:New(CONFIGURATION)
 Sim.SupportedEvents = Sim.SupportedEvents or {
     "CHALLENGE_MODE_START",
     "CHALLENGE_MODE_COMPLETED",
-    "CHALLENGE_MODE_COMPLETED_REWARDS",
+    "TWICH_DUNGEON_COMPLETION",
     "CHALLENGE_MODE_RESET",
     "CHALLENGE_MODE_DEATH_COUNT_UPDATED",
     "ENCOUNTER_START",
@@ -117,20 +117,19 @@ local function BuildSampleEventArgs(eventName)
         return 5
     end
 
-    if eventName == "CHALLENGE_MODE_COMPLETED_REWARDS" then
-        local mapID = 525
-        local medal = 3
-        local timeMS = 1500000
-        local money = 500000
-        local rewards = {
-            {
-                rewardID = 32837,
-                quantity = 1,
-                displayInfoID = nil,
-                isCurrency = false,
-            },
+    if eventName == "TWICH_DUNGEON_COMPLETION" then
+        ---@type table
+        local payload = {
+            mapID = 525,
+            level = 10,
+            timeSec = 1500,
+            timeMS = 1500000,
+            onTime = true,
+            upgradeLevels = 2,
+            practiceRun = false,
+            source = "simulator",
         }
-        return mapID, medal, timeMS, money, rewards
+        return payload
     end
 
     if eventName == "CHALLENGE_MODE_RESET" then
@@ -516,8 +515,8 @@ local function BuildDungeonArgs(name, payload)
     if name == "CHALLENGE_MODE_DEATH_COUNT_UPDATED" then
         return payload.count
     end
-    if name == "CHALLENGE_MODE_COMPLETED_REWARDS" then
-        return payload.mapId, payload.medal, payload.timeMS, payload.money, payload.rewards
+    if name == "TWICH_DUNGEON_COMPLETION" then
+        return payload
     end
     if name == "CHALLENGE_MODE_RESET" then
         return payload.mapId
@@ -550,7 +549,7 @@ end
 ---@param total number
 function Sim:_LogStage(ev, index, total)
     local name = EventName(ev)
-    if name == "CHALLENGE_MODE_START" or name == "CHALLENGE_MODE_COMPLETED_REWARDS" or name == "CHALLENGE_MODE_RESET" then
+    if name == "CHALLENGE_MODE_START" or name == "TWICH_DUNGEON_COMPLETION" or name == "CHALLENGE_MODE_RESET" then
         Logger.Info(("Simulator: %s (%d/%d)"):format(name, index, total))
         return
     end
@@ -569,6 +568,24 @@ function Sim:_DispatchEvent(ev)
 
     local name = EventName(ev)
     local payload = EventPayload(ev)
+
+    -- Backward compatibility: older exported logs used CHALLENGE_MODE_COMPLETED_REWARDS.
+    -- Translate it into the modern TWICH_DUNGEON_COMPLETION payload so RunLogger/DataCollector can consume it.
+    if name == "CHALLENGE_MODE_COMPLETED_REWARDS" then
+        name = "TWICH_DUNGEON_COMPLETION"
+        payload = {
+            mapID = payload.mapID or payload.mapId,
+            level = payload.level or payload.keystoneLevel,
+            timeSec = payload.timeSec,
+            timeMS = payload.timeMS,
+            upgradeLevels = payload.upgradeLevels or payload.medal,
+            onTime = payload.onTime,
+            source = "legacy_CHALLENGE_MODE_COMPLETED_REWARDS",
+        }
+        if payload.onTime == nil and tonumber(payload.upgradeLevels) ~= nil then
+            payload.onTime = tonumber(payload.upgradeLevels) > 0
+        end
+    end
 
     local arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13, arg14, arg15, arg16 =
         BuildDungeonArgs(name, payload)

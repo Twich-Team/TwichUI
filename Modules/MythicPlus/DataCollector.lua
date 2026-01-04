@@ -104,6 +104,20 @@ local function TryExtractQuantity(msg)
     return nil
 end
 
+---@param link string
+---@return number|nil
+local function TryGetItemIdFromLink(link)
+    if type(link) ~= "string" or link == "" then
+        return nil
+    end
+    local itemId = link:match("item:(%d+):")
+    itemId = itemId and tonumber(itemId) or nil
+    if itemId and itemId > 0 then
+        return itemId
+    end
+    return nil
+end
+
 ---@return table
 local function BuildGroupMap()
     local group = {}
@@ -226,33 +240,40 @@ local function TryGetActiveKeystoneInfo(mapId)
     return info.level, info.affixes
 end
 
----@param msg string
+---@param playerName string|nil
 ---@param guid string|nil
 ---@param playerGuid string|nil
 ---@return boolean
-local function IsPlayerLoot(msg, guid, playerGuid)
+local function IsPlayerLoot(playerName, guid, playerGuid)
     if playerGuid and guid and guid == playerGuid then
         return true
     end
 
-    if type(msg) == "string" then
-        if msg:find("You receive", 1, true) then
+    if type(playerName) ~= "string" or playerName == "" then
+        return false
+    end
+
+    local myName, myRealm
+    if type(UnitName) == "function" then
+        myName, myRealm = UnitName("player")
+    end
+
+    if type(myName) ~= "string" or myName == "" then
+        return false
+    end
+
+    if playerName == myName then
+        return true
+    end
+
+    if type(myRealm) == "string" and myRealm ~= "" then
+        local full = myName .. "-" .. myRealm
+        if playerName == full then
             return true
         end
-
-        local name, realm
-        if type(UnitName) == "function" then
-            name, realm = UnitName("player")
-        end
-        if type(name) == "string" and name ~= "" then
-            local full = name
-            if type(realm) == "string" and realm ~= "" then
-                full = full .. "-" .. realm
-            end
-
-            if msg:find(full .. " receives", 1, true) or msg:find(name .. " receives", 1, true) then
-                return true
-            end
+        -- Sometimes chat formats as "Name - Realm".
+        if playerName == (myName .. " - " .. myRealm) then
+            return true
         end
     end
 
@@ -265,35 +286,64 @@ end
 
 ---@return table|nil completion
 local function TryGetCompletionInfoFallback()
-    ---@diagnostic disable-next-line: deprecated
-    if not C_ChallengeMode or type(C_ChallengeMode.GetCompletionInfo) ~= "function" then
+    if not C_ChallengeMode then
         return nil
     end
 
-    ---@diagnostic disable-next-line: deprecated
-    local ok, mapId, level, timeVal, onTime, upgradeLevels = pcall(C_ChallengeMode.GetCompletionInfo)
-    if not ok then
-        return nil
-    end
+    if type(C_ChallengeMode.GetChallengeCompletionInfo) == "function" then
+        local ok, mapId, level, timeVal, onTime, upgradeLevels, practiceRun = pcall(C_ChallengeMode
+            .GetChallengeCompletionInfo)
+        if ok then
+            local timeSec
+            if type(timeVal) == "number" then
+                -- Some APIs return ms, some seconds.
+                if timeVal > 10000 then
+                    timeSec = timeVal / 1000
+                else
+                    timeSec = timeVal
+                end
+            end
 
-    local timeSec
-    if type(timeVal) == "number" then
-        -- Some APIs return ms, some seconds.
-        if timeVal > 10000 then
-            timeSec = timeVal / 1000
-        else
-            timeSec = timeVal
+            return {
+                mapID = mapId,
+                level = level,
+                timeSec = timeSec,
+                onTime = onTime,
+                upgradeLevels = upgradeLevels,
+                practiceRun = practiceRun,
+                source = "C_ChallengeMode.GetChallengeCompletionInfo",
+            }
         end
     end
 
-    return {
-        mapID = mapId,
-        level = level,
-        timeSec = timeSec,
-        onTime = onTime,
-        upgradeLevels = upgradeLevels,
-        source = "C_ChallengeMode.GetCompletionInfo",
-    }
+    ---@diagnostic disable-next-line: deprecated
+    if type(C_ChallengeMode.GetCompletionInfo) == "function" then
+        ---@diagnostic disable-next-line: deprecated
+        local ok, mapId, level, timeVal, onTime, upgradeLevels = pcall(C_ChallengeMode.GetCompletionInfo)
+        if not ok then
+            return nil
+        end
+
+        local timeSec
+        if type(timeVal) == "number" then
+            if timeVal > 10000 then
+                timeSec = timeVal / 1000
+            else
+                timeSec = timeVal
+            end
+        end
+
+        return {
+            mapID = mapId,
+            level = level,
+            timeSec = timeSec,
+            onTime = onTime,
+            upgradeLevels = upgradeLevels,
+            source = "C_ChallengeMode.GetCompletionInfo",
+        }
+    end
+
+    return nil
 end
 
 ---@param reason string
@@ -451,40 +501,51 @@ function DataCollector:Enable()
             return
         end
 
-        if eventName == "CHALLENGE_MODE_COMPLETED_REWARDS" then
-            local mapID, medal, timeMS, money, rewards = ...
+        if eventName == "TWICH_DUNGEON_COMPLETION" then
+            local payload = ...
+            if type(payload) ~= "table" then
+                payload = {}
+            end
 
             if not DungeonSession then
                 Logger.Warn("A Mythic+ dungeon completion detected without an active session")
                 return
             end
 
+            local mapID = tonumber(payload.mapID) or payload.mapID
             local level, affixes = TryGetActiveKeystoneInfo(mapID)
             if level then DungeonSession.level = level end
             if affixes and #affixes > 0 then DungeonSession.affixes = affixes end
 
-            local timeSec = (tonumber(timeMS) or 0) / 1000
+            local timeSec = tonumber(payload.timeSec)
+            if timeSec == nil and tonumber(payload.timeMS) ~= nil then
+                timeSec = tonumber(payload.timeMS) / 1000
+            end
+
             DungeonSession.completion = {
                 mapID = mapID,
-                medal = medal,
-                timeMS = timeMS,
+                level = tonumber(payload.level) or DungeonSession.level,
                 timeSec = timeSec,
-                money = money,
-                rewards = rewards,
+                timeMS = tonumber(payload.timeMS) or (timeSec and timeSec * 1000) or nil,
+                onTime = payload.onTime,
+                upgradeLevels = tonumber(payload.upgradeLevels) or nil,
+                practiceRun = payload.practiceRun,
+                source = payload.source,
             }
             DungeonSession.completed = true
+            DungeonSession.completedAt = time()
             PersistSession()
 
-            Logger.Debug("Mythic+ dungeon completed (rewards), mapID: " .. tostring(mapID))
+            Logger.Debug("Mythic+ dungeon completed (challenge completion info), mapID: " .. tostring(mapID))
             return
         end
 
         if eventName == "CHAT_MSG_LOOT" then
             if not DungeonSession then return end
 
-            local msg, _, _, _, _, _, _, _, _, _, _, guid = ...
+            local msg, playerName, _, _, _, _, _, _, _, _, _, guid = ...
             local playerGuid = UnitGUID and UnitGUID("player")
-            if not IsPlayerLoot(msg, guid, playerGuid) then
+            if not IsPlayerLoot(playerName, guid, playerGuid) then
                 return
             end
 
@@ -499,7 +560,11 @@ function DataCollector:Enable()
             end
 
             for _, link in ipairs(links) do
-                DungeonSession.loot[#DungeonSession.loot + 1] = { link = link, quantity = qty }
+                DungeonSession.loot[#DungeonSession.loot + 1] = {
+                    link = link,
+                    itemId = TryGetItemIdFromLink(link),
+                    quantity = qty,
+                }
             end
 
             PersistSession()

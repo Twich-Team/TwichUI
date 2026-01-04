@@ -14,4 +14,5 @@
     <Include file="SlashCommands\!load.xml" />
     <Include file="DataTexts\!load.xml" />
     <Include file="MythicPlus\!load.xml" />
+    <Script file="CustomTags\WhiteHP.lua" />
 </Ui>

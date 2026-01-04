@@ -18,5 +18,6 @@
     <Script file="DataCollector.lua" />
     <Script file="RunSharing.lua" />
     <Script file="RunSharingFrame.lua" />
+    <Script file="RunLoggerSync.lua" />
     <Script file="RunLogger.lua" />
 </Ui>

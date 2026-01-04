@@ -17,6 +17,8 @@ MythicPlusModule.DungeonMonitor = DungeonMonitor
 
 --- Supported dungeon event names
 ---@alias DungeonEvent
+---| "TWICH_DUNGEON_START"
+---| "TWICH_DUNGEON_COMPLETION"
 ---| "CHALLENGE_MODE_START"
 ---| "CHALLENGE_MODE_COMPLETED"
 ---| "CHALLENGE_MODE_RESET"
@@ -27,7 +29,16 @@ MythicPlusModule.DungeonMonitor = DungeonMonitor
 ---| "GROUP_ROSTER_UPDATE"
 ---| "CHAT_MSG_LOOT"
 
----@alias ChallengeModeRewardInfo { rewardID: number, displayInfoID: number, quantity: number, isCurrency: boolean }
+---@class TwichDungeonCompletionPayload
+---@field mapID number|nil
+---@field level number|nil
+---@field timeSec number|nil
+---@field timeMS number|nil
+---@field onTime boolean|nil
+---@field upgradeLevels number|nil
+---@field practiceRun boolean|nil
+---@field source string|nil
+---@field raw any[]|nil
 
 
 ---@type LoggerModule
@@ -39,8 +50,7 @@ local Tools = T:GetModule("Tools")
 local EVENTS = {
     --- CHALLENGE MODE SPECIFIC
     "CHALLENGE_MODE_START",               -- fires when key is activated
-    "CHALLENGE_MODE_COMPLETED",           -- fires when the run is completed (before rewards)
-    "CHALLENGE_MODE_COMPLETED_REWARDS",   -- fires when last boss dies/completion condition reached
+    "CHALLENGE_MODE_COMPLETED",           -- fires when the run is completed
     "CHALLENGE_MODE_RESET",               -- detect aborts or resets mid-key, can mark as abandoned or depleted
     "CHALLENGE_MODE_DEATH_COUNT_UPDATED", -- fires when death count changes
 
@@ -114,6 +124,54 @@ function DungeonMonitor:EventHandler(event, ...)
         end
     end
 
+    -- Intercept completion to emit a stable TwichUI completion payload.
+    if event == "CHALLENGE_MODE_COMPLETED" then
+        local mapID = ...
+        if not mapID and C_ChallengeMode and type(C_ChallengeMode.GetActiveChallengeMapID) == "function" then
+            mapID = C_ChallengeMode.GetActiveChallengeMapID()
+        end
+
+        ---@type TwichDungeonCompletionPayload
+        local payload = {
+            mapID = tonumber(mapID) or mapID,
+            source = "CHALLENGE_MODE_COMPLETED",
+        }
+
+        if C_ChallengeMode and type(C_ChallengeMode.GetChallengeCompletionInfo) == "function" then
+            local ok, a, b, c, d, e, f = pcall(C_ChallengeMode.GetChallengeCompletionInfo)
+            if ok then
+                -- Observed return shape (varies by patch): mapID, level, time, onTime, upgradeLevels, practiceRun
+                payload.raw = { a, b, c, d, e, f }
+                payload.mapID = tonumber(a) or payload.mapID
+                payload.level = tonumber(b) or nil
+
+                local timeVal = tonumber(c)
+                if timeVal then
+                    -- Some APIs return ms, some seconds. Assume seconds if small.
+                    if timeVal > 10000 then
+                        payload.timeMS = timeVal
+                        payload.timeSec = timeVal / 1000
+                    else
+                        payload.timeSec = timeVal
+                        payload.timeMS = timeVal * 1000
+                    end
+                end
+
+                if type(d) == "boolean" then
+                    payload.onTime = d
+                end
+                payload.upgradeLevels = tonumber(e) or nil
+                if type(f) == "boolean" then
+                    payload.practiceRun = f
+                end
+
+                payload.source = "C_ChallengeMode.GetChallengeCompletionInfo"
+            end
+        end
+
+        InvokeCallbacks("TWICH_DUNGEON_COMPLETION", payload)
+    end
+
     Logger.Debug("Dungeon monitor delegating received event: " .. tostring(event))
     InvokeCallbacks(event, ...)
 end
@@ -150,7 +208,7 @@ end
 --- Example signatures:
 ---  - function(event: "CHALLENGE_MODE_START", mapID: number) end
 ---  - function(event: DungeonEvent, ...) end
----@param callback fun(event: "CHALLENGE_MODE_START", mapID: number)|fun(event: "CHALLENGE_MODE_COMPLETED_REWARDS", mapID: number, medal: number, timeMS: number, money: number, rewards: ChallengeModeReward[])|fun(event: DungeonEvent, ...)
+---@param callback fun(event: "CHALLENGE_MODE_START", mapID: number)|fun(event: "TWICH_DUNGEON_COMPLETION", payload: TwichDungeonCompletionPayload)|fun(event: DungeonEvent, ...)
 ---@return any handle
 function DungeonMonitor:RegisterCallback(callback)
     return CallbackHandler:Register(callback)

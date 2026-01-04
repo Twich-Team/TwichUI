@@ -20,6 +20,17 @@ FM.FONTS = {
     { name = "Roboto-Italic",           extension = "ttf" },
     { name = "Roboto-Light",            extension = "ttf" },
     { name = "Roboto-Regular",          extension = "ttf" },
+    { name = "Inter",                   extension = "ttf" },
+    { name = "Inter-Italic",            extension = "ttf" },
+    { name = "Exo2-Bold",               extension = "ttf" },
+    { name = "Exo2-BoldItalic",         extension = "ttf" },
+    { name = "Exo2-ExtraBold",          extension = "ttf" },
+    { name = "Exo2-Italic",             extension = "ttf" },
+    { name = "Exo2-Light",              extension = "ttf" },
+    { name = "Exo2-Regular",            extension = "ttf" },
+    { name = "Exo2-SemiBold",           extension = "ttf" },
+    { name = "Exo2-Thin",               extension = "ttf" },
+
 }
 
 local MEDIA_ROOT = "Interface\\AddOns\\TwichUI\\Media\\"

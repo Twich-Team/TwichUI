@@ -15,7 +15,6 @@ local TM = T:GetModule("Tools")
 --- @field Logger DeveloperLoggerConfigurationModule
 --- @field Databases DeveloperDatabasesConfiguration
 --- @field Convenience DeveloperConvenienceConfiguration
---- @field Recording DeveloperRecordingConfiguration
 --- @field Testing DeveloperTestingConfiguration
 CM.Developer = CM.Developer or {}
 
@@ -42,7 +41,7 @@ function CM:CreateDeveloperConfiguration()
             },
             databasesGroup = CM.Developer.Databases:Create(5),
             convenienceGroup = CM.Developer.Convenience:Create(7),
-            recordingGroup = CM.Developer.Recording:Create(8),
+            mythicPlusDataRecorderGroup = CM.Developer.MythicPlusDataRecorder:Create(8.5),
             testingGroup = CM.Developer.Testing:Create(9),
             loggerGroup = CM.Developer.Logger:Create(10),
         }

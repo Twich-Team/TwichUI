@@ -73,7 +73,8 @@ SC.COMMANDS = {
         description = "Developer commands",
         subcommands = {
             runLink = {
-                description = "Link Run Logger to another player (Usage: /twich developer runLink <PlayerName>)",
+                description =
+                "Send a sync request to another player (Usage: /twich developer runLink <PlayerName-Realm>)",
                 handler = function(args)
                     local target = args and args:match("%S+")
                     if not target then
@@ -86,23 +87,36 @@ SC.COMMANDS = {
                     local ok, mythicPlus = pcall(function() return T:GetModule("MythicPlus") end)
                     if not ok or not mythicPlus then return end
 
-                    local rs = mythicPlus.RunSharing
-                    if rs and type(rs.SetReceiver) == "function" then
-                        rs:SetReceiver(target)
-                        TT.PrintToChatFrame(PrefixWithAddonName(
-                            "Run Logger linked to " .. TT.Color(CT.TWICH.PRIMARY_ACCENT, target)
-                        ))
+                    local sync = mythicPlus.RunLoggerSync
+                    if sync and type(sync.Initialize) == "function" then
+                        sync:Initialize()
                     end
+
+                    if sync and type(sync.RequestAddRecipient) == "function" then
+                        sync:RequestAddRecipient(target)
+                        TT.PrintToChatFrame(PrefixWithAddonName(
+                            "Sync request sent to " .. TT.Color(CT.TWICH.PRIMARY_ACCENT, target)
+                        ))
+                        return
+                    end
+
+                    TT.PrintToChatFrame(PrefixWithAddonName(
+                        TT.Color(CT.TWICH.TEXT_ERROR, "Run Logger Sync module not available.")
+                    ))
                 end
             },
             testRunSharing = {
-                description = "Send a dummy run to the linked receiver (for testing)",
+                description = "Queue/send a dummy run to all configured receivers (for testing)",
                 handler = function()
                     local ok, mythicPlus = pcall(function() return T:GetModule("MythicPlus") end)
                     if not ok or not mythicPlus then return end
 
-                    local rs = mythicPlus.RunSharing
-                    if rs and type(rs.SendRun) == "function" then
+                    local sync = mythicPlus.RunLoggerSync
+                    if sync and type(sync.Initialize) == "function" then
+                        sync:Initialize()
+                    end
+
+                    if sync and type(sync.OnRunFinalized) == "function" then
                         local dummyRun = {
                             id = "TEST-RUN-" .. time(),
                             status = "completed",
@@ -113,11 +127,11 @@ SC.COMMANDS = {
                                 { name = "TEST_EVENT", unix = time(), payload = { message = "Hello World" } }
                             }
                         }
-                        rs:SendRun(dummyRun)
-                        TT.PrintToChatFrame(PrefixWithAddonName("Sent dummy run data."))
+                        sync:OnRunFinalized(dummyRun)
+                        TT.PrintToChatFrame(PrefixWithAddonName("Queued dummy run data for sync."))
                     else
                         TT.PrintToChatFrame(PrefixWithAddonName(
-                            TT.Color(CT.TWICH.TEXT_ERROR, "Run Sharing module not available.")
+                            TT.Color(CT.TWICH.TEXT_ERROR, "Run Logger Sync module not available.")
                         ))
                     end
                 end

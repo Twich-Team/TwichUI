@@ -62,6 +62,32 @@ local function NormalizePlayerName(name)
     return name
 end
 
+local function GetPlayerRealm()
+    if type(UnitName) ~= "function" then return nil end
+    local _, realm = UnitName("player")
+    realm = realm or (_G.GetNormalizedRealmName and _G.GetNormalizedRealmName())
+        or (_G.GetRealmName and _G.GetRealmName())
+    realm = NormalizePlayerName(realm)
+    return realm
+end
+
+---@param sender any
+---@return string|nil
+local function CanonicalizeSender(sender)
+    local s = NormalizePlayerName(sender)
+    if not s then return nil end
+    if s:find("-", 1, true) then
+        return s
+    end
+    -- For same-realm senders, Blizzard often omits the realm.
+    -- Store registrations as Name-Realm so we can safely track realm changes.
+    local realm = GetPlayerRealm()
+    if realm and realm ~= "" then
+        return NormalizePlayerName(s .. "-" .. realm)
+    end
+    return s
+end
+
 local function GetBaseName(fullName)
     if type(fullName) ~= "string" then return nil end
     local dash = fullName:find("-", 1, true)
@@ -161,14 +187,36 @@ function RunSharing:Initialize()
 
     -- Migrate any previously stored keys that include whitespace.
     if type(self.registeredReceivers) == "table" then
+        local realm = GetPlayerRealm()
         for name, lastSeen in pairs(self.registeredReceivers) do
-            local normalized = NormalizePlayerName(name)
+            local normalized = NormalizePlayerName(name) or name
+            if normalized and realm and not tostring(normalized):find("-", 1, true) then
+                normalized = NormalizePlayerName(tostring(normalized) .. "-" .. realm) or normalized
+            end
+
             if normalized and normalized ~= name then
                 -- Prefer an existing normalized entry if present.
                 if self.registeredReceivers[normalized] == nil then
                     self.registeredReceivers[normalized] = lastSeen
                 end
                 self.registeredReceivers[name] = nil
+            end
+        end
+
+        -- De-dupe by base character name (keep newest timestamp).
+        local bestByBase = {}
+        for fullName, lastSeen in pairs(self.registeredReceivers) do
+            local base = GetBaseName(fullName) or fullName
+            local existing = bestByBase[base]
+            if not existing or (tonumber(lastSeen) or 0) > (tonumber(existing.lastSeen) or 0) then
+                bestByBase[base] = { fullName = fullName, lastSeen = lastSeen }
+            end
+        end
+        for fullName in pairs(self.registeredReceivers) do
+            local base = GetBaseName(fullName) or fullName
+            local keep = bestByBase[base] and bestByBase[base].fullName
+            if keep and keep ~= fullName then
+                self.registeredReceivers[fullName] = nil
             end
         end
     end
@@ -207,9 +255,15 @@ function RunSharing:GetRecipients()
     Add(self.receiver)
 
     if type(self.registeredReceivers) == "table" then
-        local myName = type(UnitName) == "function" and UnitName("player") or nil
+        local myKey
+        if type(UnitName) == "function" then
+            local n, r = UnitName("player")
+            if n then
+                myKey = CanonicalizeSender((r and (n .. "-" .. r)) or n)
+            end
+        end
         for name, _ in pairs(self.registeredReceivers) do
-            if not myName or name ~= myName then
+            if not myKey or name ~= myKey then
                 Add(name)
             end
         end
@@ -420,7 +474,7 @@ end
 function RunSharing:OnCommReceived(prefix, message, distribution, sender)
     if prefix ~= PREFIX then return end
 
-    sender = NormalizePlayerName(sender)
+    sender = CanonicalizeSender(sender)
     if not sender then return end
 
     local success, data = self:Deserialize(message)
@@ -478,6 +532,17 @@ function RunSharing:OnCommReceived(prefix, message, distribution, sender)
             local isRegistered = false
             if type(self.registeredReceivers) == "table" then
                 isRegistered = not not self.registeredReceivers[sender]
+                if not isRegistered then
+                    local base = GetBaseName(sender)
+                    if base then
+                        for k in pairs(self.registeredReceivers) do
+                            if GetBaseName(k) == base then
+                                isRegistered = true
+                                break
+                            end
+                        end
+                    end
+                end
             end
 
             local resp = { type = "REG_STATUS", registered = isRegistered }
@@ -505,13 +570,28 @@ function RunSharing:OnCommReceived(prefix, message, distribution, sender)
                 self.registeredReceivers = {}
             end
 
-            -- Receiver registers directly with you (typically via WHISPER).
+            -- One registration per base character name.
+            -- If a character changes realms, replace the old realm entry.
+            local base = GetBaseName(sender) or sender
+            local existingKey
+            for k in pairs(self.registeredReceivers) do
+                if GetBaseName(k) == base then
+                    existingKey = k
+                    break
+                end
+            end
+
+            local isNewOrMoved = (existingKey == nil) or (existingKey ~= sender)
+            if existingKey and existingKey ~= sender then
+                self.registeredReceivers[existingKey] = nil
+            end
+
             self.registeredReceivers[sender] = time()
             Logger.Info("Run Sharing: " .. sender .. " registered to receive run logs")
 
             NotifyConfigChanged()
 
-            if self.OnReceiverRegistered then
+            if isNewOrMoved and self.OnReceiverRegistered then
                 self.OnReceiverRegistered:Invoke(sender)
             end
             return
@@ -521,7 +601,13 @@ function RunSharing:OnCommReceived(prefix, message, distribution, sender)
             end
 
             if type(self.registeredReceivers) == "table" then
-                self.registeredReceivers[sender] = nil
+                -- Remove any entry matching this base name.
+                local base = GetBaseName(sender) or sender
+                for k in pairs(self.registeredReceivers) do
+                    if GetBaseName(k) == base then
+                        self.registeredReceivers[k] = nil
+                    end
+                end
             end
 
             NotifyConfigChanged()
@@ -535,6 +621,23 @@ end
 function RunSharing:ProcessReceivedRun(sender, runData)
     -- Basic validation
     if type(runData) ~= "table" or not runData.id then return end
+
+    -- Best-effort: resolve dungeon name for flat run payloads (RunLogger sends TwichUIRunLogger_Run).
+    local mapId = tonumber(runData.mapId or runData.mapID)
+    if not mapId and type(runData.run) == "table" then
+        mapId = tonumber(runData.run.mapId or runData.run.mapID)
+    end
+    if mapId and (not runData.dungeonName or runData.dungeonName == "Unknown" or runData.dungeonName == "Unknown Dungeon") then
+        if _G.C_ChallengeMode and type(_G.C_ChallengeMode.GetMapUIInfo) == "function" then
+            local name = _G.C_ChallengeMode.GetMapUIInfo(mapId)
+            if name then
+                runData.dungeonName = name
+                if type(runData.run) == "table" and not runData.run.dungeonName then
+                    runData.run.dungeonName = name
+                end
+            end
+        end
+    end
 
     -- Send ACK
     local ack = { type = "ACK", runId = runData.id }
