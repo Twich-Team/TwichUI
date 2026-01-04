@@ -459,6 +459,236 @@ local function CheckGreatVaultForBiS()
     end
 end
 
+-- Great Vault UI highlight: animated pixel glow around BiS rewards when the vault window is open.
+local function CreatePixelGlow(parent)
+    if not parent or not parent.CreateTexture then return nil end
+
+    local ElvUI = rawget(_G, "ElvUI")
+    local E = ElvUI and ElvUI[1]
+    local borderTexture = (E and E.media and (E.media.blankTex or E.media.normTex)) or "Interface\\Buttons\\WHITE8X8"
+
+    local f = CreateFrame("Frame", nil, parent)
+    f:SetAllPoints(parent)
+    f:SetFrameLevel((parent.GetFrameLevel and parent:GetFrameLevel() or 0) + 20)
+
+    local thickness = 2
+    local offset = 2
+
+    local function NewEdge()
+        local t = f:CreateTexture(nil, "OVERLAY")
+        t:SetTexture(borderTexture)
+        t:SetBlendMode("ADD")
+        return t
+    end
+
+    f.top = NewEdge()
+    f.bottom = NewEdge()
+    f.left = NewEdge()
+    f.right = NewEdge()
+
+    f.top:SetPoint("TOPLEFT", parent, "TOPLEFT", -offset, offset)
+    f.top:SetPoint("TOPRIGHT", parent, "TOPRIGHT", offset, offset)
+    f.top:SetHeight(thickness)
+
+    f.bottom:SetPoint("BOTTOMLEFT", parent, "BOTTOMLEFT", -offset, -offset)
+    f.bottom:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", offset, -offset)
+    f.bottom:SetHeight(thickness)
+
+    f.left:SetPoint("TOPLEFT", parent, "TOPLEFT", -offset, offset)
+    f.left:SetPoint("BOTTOMLEFT", parent, "BOTTOMLEFT", -offset, -offset)
+    f.left:SetWidth(thickness)
+
+    f.right:SetPoint("TOPRIGHT", parent, "TOPRIGHT", offset, offset)
+    f.right:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", offset, -offset)
+    f.right:SetWidth(thickness)
+
+    f.anim = f:CreateAnimationGroup()
+    f.anim:SetLooping("BOUNCE")
+    local a = f.anim:CreateAnimation("Alpha")
+    a:SetFromAlpha(0.15)
+    a:SetToAlpha(1.0)
+    a:SetDuration(0.85)
+    a:SetSmoothing("IN_OUT")
+
+    return f
+end
+
+local VaultHighlight = {
+    hooked = false,
+    glowByTarget = setmetatable({}, { __mode = "k" }),
+    active = setmetatable({}, { __mode = "k" }),
+    listener = nil,
+}
+
+local function SetGlowColor(glow, r, g, b, a)
+    if not glow then return end
+    if glow.top then glow.top:SetVertexColor(r, g, b, a) end
+    if glow.bottom then glow.bottom:SetVertexColor(r, g, b, a) end
+    if glow.left then glow.left:SetVertexColor(r, g, b, a) end
+    if glow.right then glow.right:SetVertexColor(r, g, b, a) end
+end
+
+local function GetAvailabilityColor()
+    local c = CM:GetProfileSettingSafe(KEY_PREFIX .. "frameBorderColorAvailable", { r = 0.23, g = 0.62, b = 1.00, a = 1 })
+    return tonumber(c.r) or 1, tonumber(c.g) or 1, tonumber(c.b) or 1, tonumber(c.a) or 1
+end
+
+local function GetCandidateItemID(frame)
+    if not frame then return nil end
+    if frame.itemID and tonumber(frame.itemID) then
+        return tonumber(frame.itemID)
+    end
+
+    local link = frame.itemLink or frame.hyperlink or frame.link
+    if type(link) == "string" and link ~= "" then
+        return tonumber(GetItemInfoInstant(link))
+    end
+
+    if type(frame.GetHyperlink) == "function" then
+        local ok, h = pcall(frame.GetHyperlink, frame)
+        if ok and type(h) == "string" and h ~= "" then
+            return tonumber(GetItemInfoInstant(h))
+        end
+    end
+
+    if type(frame.GetItemLocation) == "function" and _G.C_Item and type(_G.C_Item.GetItemLink) == "function" then
+        local ok, loc = pcall(frame.GetItemLocation, frame)
+        if ok and loc then
+            local ok2, l = pcall(_G.C_Item.GetItemLink, loc)
+            if ok2 and type(l) == "string" and l ~= "" then
+                return tonumber(GetItemInfoInstant(l))
+            end
+        end
+    end
+
+    return nil
+end
+
+local function IsVaultAvailableNow()
+    local C_WeeklyRewards = _G.C_WeeklyRewards
+    if not C_WeeklyRewards then return true end
+    if type(C_WeeklyRewards.HasAvailableRewards) ~= "function" then return true end
+    local ok, has = pcall(C_WeeklyRewards.HasAvailableRewards)
+    if ok then return has and true or false end
+    return true
+end
+
+local function ClearVaultHighlights()
+    for target in pairs(VaultHighlight.active) do
+        local glow = VaultHighlight.glowByTarget[target]
+        if glow then
+            if glow.anim then glow.anim:Stop() end
+            glow:Hide()
+        end
+        VaultHighlight.active[target] = nil
+    end
+end
+
+local function EnsureVaultHooks()
+    if VaultHighlight.hooked then return end
+    local frame = rawget(_G, "WeeklyRewardsFrame")
+    if not frame or type(frame.HookScript) ~= "function" then
+        return
+    end
+
+    VaultHighlight.hooked = true
+    frame:HookScript("OnShow", function()
+        -- Delay one frame so the reward buttons are populated.
+        if _G.C_Timer and type(_G.C_Timer.After) == "function" then
+            _G.C_Timer.After(0, function()
+                -- Refresh when the window is shown.
+                if MP and MP.BestInSlotNotificationHandler and MP.BestInSlotNotificationHandler.__UpdateVaultHighlights then
+                    MP.BestInSlotNotificationHandler:__UpdateVaultHighlights()
+                end
+            end)
+        end
+    end)
+    frame:HookScript("OnHide", function()
+        ClearVaultHighlights()
+    end)
+
+    if type(frame.Update) == "function" then
+        hooksecurefunc(frame, "Update", function()
+            if MP and MP.BestInSlotNotificationHandler and MP.BestInSlotNotificationHandler.__UpdateVaultHighlights then
+                MP.BestInSlotNotificationHandler:__UpdateVaultHighlights()
+            end
+        end)
+    end
+end
+
+function NIH:__UpdateVaultHighlights()
+    local frame = rawget(_G, "WeeklyRewardsFrame")
+    if not frame or not frame.IsShown or not frame:IsShown() then
+        ClearVaultHighlights()
+        return
+    end
+
+    EnsureVaultHooks()
+
+    if not IsVaultAvailableNow() then
+        ClearVaultHighlights()
+        return
+    end
+
+    local selected = GetSelectedBiSItemIDs()
+    if type(selected) ~= "table" then
+        ClearVaultHighlights()
+        return
+    end
+
+    local r, g, b, a = GetAvailabilityColor()
+
+    local newActive = {}
+    local seen = {}
+
+    local function Visit(node)
+        if not node or seen[node] then return end
+        seen[node] = true
+
+        local isButton = (type(node.GetObjectType) == "function" and node:GetObjectType() == "Button")
+        local hasIcon = node.Icon or node.icon or node.IconTexture
+        if isButton and hasIcon then
+            local itemID = GetCandidateItemID(node)
+            if itemID and selected[itemID] then
+                local glow = VaultHighlight.glowByTarget[node]
+                if not glow then
+                    glow = CreatePixelGlow(node)
+                    VaultHighlight.glowByTarget[node] = glow
+                end
+                if glow then
+                    SetGlowColor(glow, r, g, b, a)
+                    glow:Show()
+                    if glow.anim and not glow.anim:IsPlaying() then
+                        glow.anim:Play()
+                    end
+                    newActive[node] = true
+                end
+            end
+        end
+
+        if type(node.GetChildren) == "function" then
+            for child in node:GetChildren() do
+                Visit(child)
+            end
+        end
+    end
+
+    Visit(frame)
+
+    -- Remove glows that are no longer active.
+    for target in pairs(VaultHighlight.glowByTarget) do
+        if VaultHighlight.glowByTarget[target] and not newActive[target] then
+            local glow = VaultHighlight.glowByTarget[target]
+            if glow then
+                if glow.anim then glow.anim:Stop() end
+                glow:Hide()
+            end
+        end
+    end
+
+    VaultHighlight.active = setmetatable(newActive, { __mode = "k" })
+end
+
 local function OnChatMsgLoot(message)
     local raw = type(message) == "string" and message:match(LOOT_SELF_PATTERN)
     if not raw then return end
@@ -500,6 +730,9 @@ local function HandleEvent(_, event, ...)
         OnStartLootRoll(rollID)
     elseif event == "WEEKLY_REWARDS_UPDATE" or event == "PLAYER_ENTERING_WORLD" then
         CheckGreatVaultForBiS()
+        if NIH and NIH.__UpdateVaultHighlights then
+            NIH:__UpdateVaultHighlights()
+        end
     end
 end
 
@@ -524,6 +757,25 @@ function NIH:Enable()
     self.frame:RegisterEvent("WEEKLY_REWARDS_UPDATE")
     self.frame:RegisterEvent("PLAYER_ENTERING_WORLD")
 
+    -- Hook Great Vault UI when Blizzard_WeeklyRewards loads.
+    if not self.__vaultHighlightListener then
+        self.__vaultHighlightListener = CreateFrame("Frame")
+        self.__vaultHighlightListener:RegisterEvent("ADDON_LOADED")
+        self.__vaultHighlightListener:SetScript("OnEvent", function(_, _, addonName)
+            if addonName == "Blizzard_WeeklyRewards" then
+                EnsureVaultHooks()
+                if self.__UpdateVaultHighlights then
+                    self:__UpdateVaultHighlights()
+                end
+            end
+        end)
+    end
+
+    -- If it's already loaded, hook immediately.
+    if rawget(_G, "WeeklyRewardsFrame") then
+        EnsureVaultHooks()
+    end
+
     -- reset per-session availability caches
     self.__rollNotified = {}
     self.__vaultNotified = {}
@@ -544,6 +796,13 @@ function NIH:Disable()
         self.frame:SetScript("OnEvent", nil)
         self.frame = nil
     end
+
+    if self.__vaultHighlightListener then
+        self.__vaultHighlightListener:UnregisterAllEvents()
+        self.__vaultHighlightListener:SetScript("OnEvent", nil)
+        self.__vaultHighlightListener = nil
+    end
+    ClearVaultHighlights()
 
     Logger.Debug("BestInSlot notifications disabled")
 end
