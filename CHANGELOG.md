@@ -18,3 +18,5 @@
 - Added ability to reset all addon data to start "clean"
 - Completed a review of the developer data collector for Mythic+ runs and made a few adjustments to assist transparency between dungeon monitor, logger, and simulator
 - Added ability to migrate runs from collected logger cache to simulator without export/import
+- Re-added recorder run caching
+- Added a mechanism to request cached/recent runs from a synchronized player

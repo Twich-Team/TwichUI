@@ -619,11 +619,22 @@ function DMP:Create(order)
                         }
                     },
 
-                    bestInSlotGroup = {
+                }
+            },
+
+            bestInSlotTab = {
+                type = "group",
+                name = "Best in Slot",
+                order = 4,
+                args = {
+                    description = CM.Widgets:SubmoduleDescription(
+                        "Developer tools for Best in Slot data."),
+
+                    cacheGroup = {
                         type = "group",
-                        name = "Best in Slot",
+                        name = "Cache",
                         inline = true,
-                        order = 10,
+                        order = 1,
                         args = {
                             clearItemCache = {
                                 type = "execute",
@@ -637,10 +648,10 @@ function DMP:Create(order)
                                     end
                                 end,
                             },
-                        }
+                        },
                     },
-                }
-            }
+                },
+            },
         }
     }
 end
