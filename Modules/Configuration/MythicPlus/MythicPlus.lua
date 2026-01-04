@@ -17,9 +17,11 @@ local MP = CM.MythicPlus or {}
 CM.MythicPlus = MP
 
 function MP:Create(order)
-    ---@return MythicPlusModule module
+    ---@return MythicPlusModule
     local function GetModule()
-        return T:GetModule("MythicPlus")
+        ---@type MythicPlusModule
+        local module = T:GetModule("MythicPlus")
+        return module
     end
 
     return CM.Widgets:ModuleGroup(order, "Mythic+ (ALPHA)", "This module provides numerous tools for Mythic+ players.",
@@ -60,7 +62,6 @@ function MP:Create(order)
                 args = {
                     description = CM.Widgets:ComponentDescription(0,
                         "Configure the appearance and behavior of the main Mythic+ window."),
-
                     behaviorGroup = {
                         type = "group",
                         name = "Behavior",
@@ -508,7 +509,535 @@ function MP:Create(order)
                                 end,
                             },
                         }
-                    }
+                    },
+
+                    notificationsGroup = {
+                        type = "group",
+                        name = "Notifications",
+                        order = 2,
+                        args = {
+                            description = CM.Widgets:ComponentDescription(0,
+                                "Show a notification when you loot an item that matches your selected Best-in-Slot list."),
+
+                            enableGroup = {
+                                type = "group",
+                                inline = true,
+                                name = "Enable",
+                                order = 1,
+                                args = {
+                                    enabled = {
+                                        type = "toggle",
+                                        name = "Enable BiS Notifications",
+                                        desc = CM:ColorTextKeywords(
+                                            "When enabled, looted BiS items will trigger a notification."),
+                                        width = "full",
+                                        order = 1,
+                                        get = function()
+                                            return CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.notifications.enabled", true)
+                                        end,
+                                        set = function(_, value)
+                                            CM:SetProfileSettingSafe("mythicplus.bestInSlot.notifications.enabled", value)
+                                            local module = GetModule()
+                                            if module and module.BestInSlotNotificationHandler then
+                                                if value then
+                                                    module.BestInSlotNotificationHandler:Enable()
+                                                else
+                                                    module.BestInSlotNotificationHandler:Disable()
+                                                end
+                                            end
+                                        end,
+                                    },
+                                }
+                            },
+
+                            soundGroup = {
+                                type = "group",
+                                inline = true,
+                                name = "Sound",
+                                order = 2,
+                                args = {
+                                    soundSelect = {
+                                        type = "select",
+                                        dialogControl = "LSM30_Sound",
+                                        name = "Notification Sound",
+                                        desc = CM:ColorTextKeywords("Sound to play when a BiS notification appears."),
+                                        order = 1,
+                                        width = 1.5,
+                                        values = function() return LSM and LSM:HashTable("sound") or {} end,
+                                        get = function()
+                                            return CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.notifications.notificationSound",
+                                                "TwichUI Green Dude Gets Loot")
+                                        end,
+                                        set = function(_, value)
+                                            CM:SetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.notifications.notificationSound", value)
+                                        end,
+                                    },
+                                }
+                            },
+
+                            testingGroup = {
+                                type = "group",
+                                inline = true,
+                                name = "Testing",
+                                order = 3,
+                                args = {
+                                    testNotification = {
+                                        type = "execute",
+                                        name = TT.Color(CT.TWICH.GOLD_ACCENT, "Show Test Notification"),
+                                        desc = CM:ColorTextKeywords("Shows a sample BiS notification."),
+                                        order = 1,
+                                        func = function()
+                                            local module = GetModule()
+                                            if not module or not module.BestInSlotNotificationFrame then return end
+
+                                            if module.BestInSlotNotificationFrame.Initialize then
+                                                module.BestInSlotNotificationFrame:Initialize()
+                                            end
+
+                                            if module.BestInSlotNotificationFrame.ShowNotification then
+                                                module.BestInSlotNotificationFrame:ShowNotification(
+                                                    "|cffa335ee|Hitem:19019::::::::80:::::|h[Preview BiS Item]|h|r",
+                                                    "NEW",
+                                                    999,
+                                                    nil,
+                                                    1
+                                                )
+                                            end
+                                        end,
+                                    },
+                                    pinPreview = {
+                                        type = "toggle",
+                                        name = TT.Color(CT.TWICH.GOLD_ACCENT, "Toggle Preview Frame"),
+                                        desc = CM:ColorTextKeywords(
+                                            "Toggles a preview of the BiS notification frame that won't disappear."),
+                                        order = 2,
+                                        get = function()
+                                            local module = GetModule()
+                                            return module and module.BestInSlotNotificationFrame and
+                                                module.BestInSlotNotificationFrame.previewShown
+                                        end,
+                                        set = function(_, value)
+                                            local module = GetModule()
+                                            if not module or not module.BestInSlotNotificationFrame then return end
+                                            if value then
+                                                module.BestInSlotNotificationFrame:ShowPreview()
+                                            else
+                                                module.BestInSlotNotificationFrame:HidePreview()
+                                            end
+                                        end,
+                                    },
+                                }
+                            },
+
+                            frameLayoutGroup = {
+                                type = "group",
+                                name = "Frame Layout",
+                                inline = true,
+                                order = 4,
+                                args = {
+                                    frameWidth = {
+                                        type = "range",
+                                        name = "Frame Width",
+                                        order = 1,
+                                        min = 200,
+                                        max = 800,
+                                        step = 10,
+                                        get = function()
+                                            return CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.notifications.frameWidth", 360)
+                                        end,
+                                        set = function(_, value)
+                                            CM:SetProfileSettingSafe("mythicplus.bestInSlot.notifications.frameWidth",
+                                                value)
+                                            local module = GetModule()
+                                            if module and module.BestInSlotNotificationFrame then
+                                                module.BestInSlotNotificationFrame:UpdateFrame()
+                                            end
+                                        end,
+                                    },
+                                    frameHeight = {
+                                        type = "range",
+                                        name = "Frame Height",
+                                        order = 2,
+                                        min = 20,
+                                        max = 200,
+                                        step = 5,
+                                        get = function()
+                                            return CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.notifications.frameHeight", 60)
+                                        end,
+                                        set = function(_, value)
+                                            CM:SetProfileSettingSafe("mythicplus.bestInSlot.notifications.frameHeight",
+                                                value)
+                                            local module = GetModule()
+                                            if module and module.BestInSlotNotificationFrame then
+                                                module.BestInSlotNotificationFrame:UpdateFrame()
+                                            end
+                                        end,
+                                    },
+                                    maxMessages = {
+                                        type = "range",
+                                        name = "Max Messages",
+                                        order = 3,
+                                        min = 1,
+                                        max = 10,
+                                        step = 1,
+                                        get = function()
+                                            return CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.notifications.maxMessages", 5)
+                                        end,
+                                        set = function(_, value)
+                                            CM:SetProfileSettingSafe("mythicplus.bestInSlot.notifications.maxMessages",
+                                                value)
+                                        end,
+                                    },
+                                    frameSpacing = {
+                                        type = "range",
+                                        name = "Message Spacing",
+                                        order = 4,
+                                        min = 0,
+                                        max = 32,
+                                        step = 1,
+                                        get = function()
+                                            return CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.notifications.frameSpacing", 8)
+                                        end,
+                                        set = function(_, value)
+                                            CM:SetProfileSettingSafe("mythicplus.bestInSlot.notifications.frameSpacing",
+                                                value)
+                                        end,
+                                    },
+                                }
+                            },
+
+                            animationGroup = {
+                                type = "group",
+                                name = "Animation & Duration",
+                                inline = true,
+                                order = 5,
+                                args = {
+                                    displayDuration = {
+                                        type = "range",
+                                        name = "Display Duration",
+                                        desc = "Total time (seconds) the notification stays visible.",
+                                        order = 1,
+                                        min = 1,
+                                        max = 10,
+                                        step = 0.5,
+                                        get = function()
+                                            return CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.notifications.displayDuration", 8)
+                                        end,
+                                        set = function(_, value)
+                                            CM:SetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.notifications.displayDuration", value)
+                                        end,
+                                    },
+                                    fadeInTime = {
+                                        type = "range",
+                                        name = "Fade In Time",
+                                        order = 2,
+                                        min = 0,
+                                        max = 3,
+                                        step = 0.05,
+                                        get = function()
+                                            return CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.notifications.fadeInTime", 0.25)
+                                        end,
+                                        set = function(_, value)
+                                            CM:SetProfileSettingSafe("mythicplus.bestInSlot.notifications.fadeInTime",
+                                                value)
+                                        end,
+                                    },
+                                    fadeOutTime = {
+                                        type = "range",
+                                        name = "Fade Out Time",
+                                        order = 3,
+                                        min = 0,
+                                        max = 3,
+                                        step = 0.05,
+                                        get = function()
+                                            return CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.notifications.fadeOutTime", 0.3)
+                                        end,
+                                        set = function(_, value)
+                                            CM:SetProfileSettingSafe("mythicplus.bestInSlot.notifications.fadeOutTime",
+                                                value)
+                                        end,
+                                    },
+                                    moveInTime = {
+                                        type = "range",
+                                        name = "Entrance Move Time",
+                                        order = 4,
+                                        min = 0,
+                                        max = 1,
+                                        step = 0.02,
+                                        get = function()
+                                            return CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.notifications.moveInTime", 0.18)
+                                        end,
+                                        set = function(_, value)
+                                            CM:SetProfileSettingSafe("mythicplus.bestInSlot.notifications.moveInTime",
+                                                value)
+                                        end,
+                                    },
+                                    moveOutTime = {
+                                        type = "range",
+                                        name = "Exit Move Time",
+                                        order = 5,
+                                        min = 0,
+                                        max = 1,
+                                        step = 0.02,
+                                        get = function()
+                                            return CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.notifications.moveOutTime", 0.18)
+                                        end,
+                                        set = function(_, value)
+                                            CM:SetProfileSettingSafe("mythicplus.bestInSlot.notifications.moveOutTime",
+                                                value)
+                                        end,
+                                    },
+                                }
+                            },
+
+                            appearanceGroup = {
+                                type = "group",
+                                name = "Appearance",
+                                inline = true,
+                                order = 6,
+                                args = {
+                                    frameTexture = {
+                                        type = "select",
+                                        name = "Frame Texture",
+                                        order = 1,
+                                        width = 1.5,
+                                        dialogControl = "LSM30_Statusbar",
+                                        values = function() return LSM and LSM:HashTable("statusbar") or {} end,
+                                        get = function()
+                                            return CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.notifications.frameTexture",
+                                                "ElvUI Norm")
+                                        end,
+                                        set = function(_, value)
+                                            CM:SetProfileSettingSafe("mythicplus.bestInSlot.notifications.frameTexture",
+                                                value)
+                                            local module = GetModule()
+                                            if module and module.BestInSlotNotificationFrame then
+                                                module.BestInSlotNotificationFrame:UpdateFrame()
+                                            end
+                                        end,
+                                    },
+                                    frameColor = {
+                                        type = "color",
+                                        name = "Background Color",
+                                        order = 2,
+                                        hasAlpha = true,
+                                        get = function()
+                                            local c = CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.notifications.frameColor",
+                                                { r = 0, g = 0, b = 0, a = 0.6 })
+                                            return tonumber(c.r) or 0, tonumber(c.g) or 0, tonumber(c.b) or 0,
+                                                tonumber(c.a) or 0.6
+                                        end,
+                                        set = function(_, r, g, b, a)
+                                            CM:SetProfileSettingSafe("mythicplus.bestInSlot.notifications.frameColor",
+                                                { r = r, g = g, b = b, a = a })
+                                            local module = GetModule()
+                                            if module and module.BestInSlotNotificationFrame then
+                                                module.BestInSlotNotificationFrame:UpdateFrame()
+                                            end
+                                        end,
+                                    },
+                                    borderColor = {
+                                        type = "color",
+                                        name = "Border Color",
+                                        order = 3,
+                                        hasAlpha = true,
+                                        get = function()
+                                            local c = CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.notifications.frameBorderColor",
+                                                { r = 0.90, g = 0.72, b = 0.20, a = 1 })
+                                            return tonumber(c.r) or 1, tonumber(c.g) or 1, tonumber(c.b) or 1,
+                                                tonumber(c.a) or 1
+                                        end,
+                                        set = function(_, r, g, b, a)
+                                            CM:SetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.notifications.frameBorderColor",
+                                                { r = r, g = g, b = b, a = a })
+                                            local module = GetModule()
+                                            if module and module.BestInSlotNotificationFrame then
+                                                module.BestInSlotNotificationFrame:UpdateFrame()
+                                            end
+                                        end,
+                                    },
+                                    borderSize = {
+                                        type = "range",
+                                        name = "Border Size",
+                                        order = 4,
+                                        min = 0,
+                                        max = 8,
+                                        step = 1,
+                                        get = function()
+                                            return CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.notifications.frameBorderSize", 1)
+                                        end,
+                                        set = function(_, value)
+                                            CM:SetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.notifications.frameBorderSize", value)
+                                            local module = GetModule()
+                                            if module and module.BestInSlotNotificationFrame then
+                                                module.BestInSlotNotificationFrame:UpdateFrame()
+                                            end
+                                        end,
+                                    },
+                                }
+                            },
+
+                            iconGroup = {
+                                type = "group",
+                                name = "Icon",
+                                inline = true,
+                                order = 7,
+                                args = {
+                                    iconSize = {
+                                        type = "range",
+                                        name = "Icon Size",
+                                        order = 1,
+                                        min = 8,
+                                        max = 64,
+                                        step = 1,
+                                        get = function()
+                                            return CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.notifications.iconSize", 32)
+                                        end,
+                                        set = function(_, value)
+                                            CM:SetProfileSettingSafe("mythicplus.bestInSlot.notifications.iconSize",
+                                                value)
+                                            local module = GetModule()
+                                            if module and module.BestInSlotNotificationFrame then
+                                                module.BestInSlotNotificationFrame:UpdateFrame()
+                                            end
+                                        end,
+                                    },
+                                }
+                            },
+
+                            fontsGroup = {
+                                type = "group",
+                                name = "Fonts",
+                                inline = true,
+                                order = 8,
+                                args = {
+                                    itemFont = {
+                                        type = "select",
+                                        name = "Item Font",
+                                        order = 1,
+                                        width = 1.5,
+                                        dialogControl = "LSM30_Font",
+                                        values = function() return LSM and LSM:HashTable("font") or {} end,
+                                        get = function()
+                                            return CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.notifications.itemFont", "Expressway")
+                                        end,
+                                        set = function(_, value)
+                                            CM:SetProfileSettingSafe("mythicplus.bestInSlot.notifications.itemFont",
+                                                value)
+                                            local module = GetModule()
+                                            if module and module.BestInSlotNotificationFrame then
+                                                module.BestInSlotNotificationFrame:UpdateFrame()
+                                            end
+                                        end,
+                                    },
+                                    itemFontSize = {
+                                        type = "range",
+                                        name = "Item Font Size",
+                                        order = 2,
+                                        min = 8,
+                                        max = 32,
+                                        step = 1,
+                                        get = function()
+                                            return CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.notifications.itemFontSize", 14)
+                                        end,
+                                        set = function(_, value)
+                                            CM:SetProfileSettingSafe("mythicplus.bestInSlot.notifications.itemFontSize",
+                                                value)
+                                            local module = GetModule()
+                                            if module and module.BestInSlotNotificationFrame then
+                                                module.BestInSlotNotificationFrame:UpdateFrame()
+                                            end
+                                        end,
+                                    },
+                                    detailFont = {
+                                        type = "select",
+                                        name = "Detail Font",
+                                        order = 3,
+                                        width = 1.5,
+                                        dialogControl = "LSM30_Font",
+                                        values = function() return LSM and LSM:HashTable("font") or {} end,
+                                        get = function()
+                                            return CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.notifications.detailFont", "Expressway")
+                                        end,
+                                        set = function(_, value)
+                                            CM:SetProfileSettingSafe("mythicplus.bestInSlot.notifications.detailFont",
+                                                value)
+                                            local module = GetModule()
+                                            if module and module.BestInSlotNotificationFrame then
+                                                module.BestInSlotNotificationFrame:UpdateFrame()
+                                            end
+                                        end,
+                                    },
+                                    detailFontSize = {
+                                        type = "range",
+                                        name = "Detail Font Size",
+                                        order = 4,
+                                        min = 8,
+                                        max = 32,
+                                        step = 1,
+                                        get = function()
+                                            return CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.notifications.detailFontSize", 12)
+                                        end,
+                                        set = function(_, value)
+                                            CM:SetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.notifications.detailFontSize", value)
+                                            local module = GetModule()
+                                            if module and module.BestInSlotNotificationFrame then
+                                                module.BestInSlotNotificationFrame:UpdateFrame()
+                                            end
+                                        end,
+                                    },
+                                }
+                            },
+
+                            growthGroup = {
+                                type = "group",
+                                name = "Growth",
+                                inline = true,
+                                order = 10,
+                                args = {
+                                    growDirection = {
+                                        type = "select",
+                                        name = "Growth Direction",
+                                        order = 1,
+                                        values = { UP = "Up", DOWN = "Down" },
+                                        get = function()
+                                            return CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.notifications.growDirection", "UP")
+                                        end,
+                                        set = function(_, value)
+                                            CM:SetProfileSettingSafe("mythicplus.bestInSlot.notifications.growDirection",
+                                                value)
+                                        end,
+                                    },
+                                }
+                            },
+                        }
+                    },
                 }
             },
 

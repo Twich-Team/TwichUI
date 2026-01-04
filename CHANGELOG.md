@@ -20,3 +20,4 @@
 - Added ability to migrate runs from collected logger cache to simulator without export/import
 - Re-added recorder run caching
 - Added a mechanism to request cached/recent runs from a synchronized player
+- Initial implementation of Best in Slot item received notifications

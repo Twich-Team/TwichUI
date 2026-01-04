@@ -176,11 +176,161 @@ function DMP:Create(order)
                         }
                     },
 
+                    bisNotificationGrp = {
+                        type = "group",
+                        inline = true,
+                        name = "BiS Notifications",
+                        order = 2,
+                        args = {
+                            desc = CM.Widgets:ComponentDescription(1,
+                                "Simulate receiving loot to test Best-in-Slot notifications."),
+                            item = {
+                                type = "input",
+                                name = "Item",
+                                desc = "ItemID or itemLink to simulate looting.",
+                                order = 2,
+                                width = 1.5,
+                                get = function()
+                                    return CM:GetProfileSettingSafe("developer.testing.mythicPlus.bisNotifications.item",
+                                        "19019")
+                                end,
+                                set = function(_, value)
+                                    CM:SetProfileSettingSafe("developer.testing.mythicPlus.bisNotifications.item", value)
+                                end,
+                            },
+                            quantity = {
+                                type = "range",
+                                name = "Quantity",
+                                order = 3,
+                                min = 1,
+                                max = 20,
+                                step = 1,
+                                get = function()
+                                    return CM:GetProfileSettingSafe(
+                                        "developer.testing.mythicPlus.bisNotifications.quantity", 1)
+                                end,
+                                set = function(_, value)
+                                    CM:SetProfileSettingSafe("developer.testing.mythicPlus.bisNotifications.quantity",
+                                        value)
+                                end,
+                            },
+                            overrideIlvl = {
+                                type = "range",
+                                name = "Override iLvl (0 = use item)",
+                                order = 4,
+                                min = 0,
+                                max = 1000,
+                                step = 1,
+                                get = function()
+                                    return CM:GetProfileSettingSafe(
+                                        "developer.testing.mythicPlus.bisNotifications.overrideIlvl", 0)
+                                end,
+                                set = function(_, value)
+                                    CM:SetProfileSettingSafe(
+                                        "developer.testing.mythicPlus.bisNotifications.overrideIlvl", value)
+                                end,
+                            },
+                            kind = {
+                                type = "select",
+                                name = "Force Kind",
+                                desc = "Used only by Force Notification.",
+                                order = 4.5,
+                                values = {
+                                    NEW = "NEW",
+                                    UPGRADE = "UPGRADE",
+                                    FOUND = "FOUND",
+                                },
+                                get = function()
+                                    return CM:GetProfileSettingSafe(
+                                        "developer.testing.mythicPlus.bisNotifications.kind",
+                                        "NEW")
+                                end,
+                                set = function(_, value)
+                                    CM:SetProfileSettingSafe("developer.testing.mythicPlus.bisNotifications.kind", value)
+                                end,
+                            },
+                            previousIlvl = {
+                                type = "range",
+                                name = "Previous iLvl (Force only)",
+                                order = 4.6,
+                                min = 0,
+                                max = 1000,
+                                step = 1,
+                                get = function()
+                                    return CM:GetProfileSettingSafe(
+                                        "developer.testing.mythicPlus.bisNotifications.previousIlvl",
+                                        0)
+                                end,
+                                set = function(_, value)
+                                    CM:SetProfileSettingSafe(
+                                        "developer.testing.mythicPlus.bisNotifications.previousIlvl",
+                                        value)
+                                end,
+                            },
+                            simulate = {
+                                type = "execute",
+                                name = "Simulate Loot",
+                                desc = "Runs the BiS notification check as if the player looted the item.",
+                                order = 5,
+                                func = function()
+                                    local mp = GetModule()
+                                    if not mp or not mp.BestInSlotNotificationHandler then
+                                        Logger.Error("MythicPlus BiS notification handler not found.")
+                                        return
+                                    end
+
+                                    local item = CM:GetProfileSettingSafe(
+                                        "developer.testing.mythicPlus.bisNotifications.item",
+                                        "19019")
+                                    local qty = CM:GetProfileSettingSafe(
+                                        "developer.testing.mythicPlus.bisNotifications.quantity", 1)
+                                    local ilvl = CM:GetProfileSettingSafe(
+                                        "developer.testing.mythicPlus.bisNotifications.overrideIlvl", 0)
+
+                                    mp.BestInSlotNotificationHandler:TestSimulateLoot(item, qty, ilvl)
+                                end
+                            },
+                            forceShow = {
+                                type = "execute",
+                                name = "Force Notification",
+                                desc = "Always shows the notification (bypasses BiS selection/upgrade logic).",
+                                order = 6,
+                                func = function()
+                                    local mp = GetModule()
+                                    if not mp or not mp.BestInSlotNotificationHandler then
+                                        Logger.Error("MythicPlus BiS notification handler not found.")
+                                        return
+                                    end
+
+                                    local item = CM:GetProfileSettingSafe(
+                                        "developer.testing.mythicPlus.bisNotifications.item",
+                                        "19019")
+                                    local qty = CM:GetProfileSettingSafe(
+                                        "developer.testing.mythicPlus.bisNotifications.quantity", 1)
+                                    local ilvl = CM:GetProfileSettingSafe(
+                                        "developer.testing.mythicPlus.bisNotifications.overrideIlvl", 0)
+                                    local kind = CM:GetProfileSettingSafe(
+                                        "developer.testing.mythicPlus.bisNotifications.kind", "NEW")
+                                    local prev = CM:GetProfileSettingSafe(
+                                        "developer.testing.mythicPlus.bisNotifications.previousIlvl", 0)
+
+                                    mp.BestInSlotNotificationHandler:TestForceNotification(
+                                        item,
+                                        kind,
+                                        (tonumber(ilvl) and tonumber(ilvl) > 0) and tonumber(ilvl) or nil,
+                                        (tonumber(prev) and tonumber(prev) > 0) and tonumber(prev) or nil,
+                                        qty
+                                    )
+                                end
+                            },
+                        }
+                    },
+
                     summarySimGroup = {
                         type = "group",
                         inline = true,
                         name = "Summary Simulation",
-                        order = 2,
+                        order = 3,
                         args = {
                             description = CM.Widgets:ComponentDescription(1,
                                 "Simulate a Mythic+ score and reward obtained state for the Summary panel's Season progress bar."),

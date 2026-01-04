@@ -17,6 +17,10 @@ local CreateFrame = _G.CreateFrame
 --- @field RunLogger MythicPlusRunLoggerSubmodule
 --- @field RunLoggerSync MythicPlusRunLoggerSyncSubmodule
 --- @field RunSharingFrame MythicPlusRunSharingFrameSubmodule|nil
+--- @field Runs MythicPlusRunsSubmodule|nil
+--- @field Summary MythicPlusSummarySubmodule|nil
+--- @field BestInSlotNotificationFrame BestInSlotNotificationFrame|nil
+--- @field BestInSlotNotificationHandler BestInSlotNotificationHandler|nil
 local MythicPlusModule = T:GetModule("MythicPlus")
 
 --- @type ConfigurationModule
@@ -82,6 +86,14 @@ function MythicPlusModule:Enable()
         self.BestInSlot:Initialize()
     end
 
+    if self.BestInSlotNotificationFrame and self.BestInSlotNotificationFrame.Initialize then
+        self.BestInSlotNotificationFrame:Initialize()
+    end
+
+    if self.BestInSlotNotificationHandler and self.BestInSlotNotificationHandler.Initialize then
+        self.BestInSlotNotificationHandler:Initialize()
+    end
+
     if self.Summary and self.Summary.Initialize then
         self.Summary:Initialize()
     end
@@ -108,6 +120,10 @@ function MythicPlusModule:Disable()
 
     if self.MainWindow and self.MainWindow.Disable and self.MainWindow:IsEnabled() then
         self.MainWindow:Disable()
+    end
+
+    if self.BestInSlotNotificationHandler and self.BestInSlotNotificationHandler.Disable then
+        self.BestInSlotNotificationHandler:Disable()
     end
 
     Logger.Debug("Mythic+ module disabled")

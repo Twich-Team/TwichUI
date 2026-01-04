@@ -6,6 +6,8 @@
         file="Keystone.lua" />
     <Script file="Dungeons.lua" />
     <Script file="BestInSlot.lua" />
+    <Script file="BestInSlotNotificationFrame.lua" />
+    <Script file="BestInSlotNotificationHandler.lua" />
     <Script file="Runs.lua" />
     <Script
         file="Summary.lua" />
