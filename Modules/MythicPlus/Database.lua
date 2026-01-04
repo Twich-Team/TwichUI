@@ -37,6 +37,11 @@ MythicPlusModule.Database = Database
 ---@field upgrade number +1, +2, +3
 ---@field group table<string, string> Role -> Class/Spec string
 ---@field loot table<string, string>[] List of item links
+---@field importedFromBlizzard boolean|nil True if the run was created via Blizzard run history import.
+---@field blizzardSync boolean|nil True if Blizzard data has been applied to this run.
+---@field blizzardKey string|nil Stable-ish key for matching Blizzard run history entries.
+---@field blizzardSyncedAt number|nil unix timestamp when last synced.
+---@field blizzard table|nil Minimal snapshot of Blizzard fields used for sync.
 
 ---@class MythicPlusDatabase_CharacterEntry
 ---@field Metadata MythicPlusDatabase_CharacterEntry_Metadata
@@ -59,6 +64,54 @@ local GetBuildInfo = GetBuildInfo
 
 local FALLBACK_DB = { Global = {} }
 
+local function MigrateLegacyDB(db)
+    if type(db) ~= "table" then return end
+    db.Global = db.Global or {}
+    if db.Global.__twichuiMythicPlusDBMigrated then
+        return
+    end
+
+    local legacyCharacters = db.Characters
+    if type(legacyCharacters) ~= "table" then
+        legacyCharacters = db.characters
+    end
+
+    local migratedAny = false
+    if type(legacyCharacters) == "table" then
+        for guid, entry in pairs(legacyCharacters) do
+            if type(guid) == "string" and type(entry) == "table" then
+                if type(db[guid]) ~= "table" then
+                    db[guid] = entry
+                    migratedAny = true
+                else
+                    -- Merge legacy Runs into existing entry if needed.
+                    local dst = db[guid]
+                    dst.Runs = dst.Runs or {}
+                    if type(entry.Runs) == "table" and #dst.Runs == 0 and #entry.Runs > 0 then
+                        dst.Runs = entry.Runs
+                        migratedAny = true
+                    end
+                    if type(dst.Metadata) ~= "table" and type(entry.Metadata) == "table" then
+                        dst.Metadata = entry.Metadata
+                        migratedAny = true
+                    end
+                    if type(dst.KeystoneData) ~= "table" and type(entry.KeystoneData) == "table" then
+                        dst.KeystoneData = entry.KeystoneData
+                        migratedAny = true
+                    end
+                end
+            end
+        end
+    end
+
+    if migratedAny then
+        Logger.Info("Migrated legacy Mythic+ DB character entries.")
+    end
+
+    -- Mark as migrated to avoid doing work repeatedly.
+    db.Global.__twichuiMythicPlusDBMigrated = true
+end
+
 local function GetDB()
     -- Prefer profile-scoped storage so data can differ by character/profile.
     local profile = (T.db and T.db.profile)
@@ -67,6 +120,7 @@ local function GetDB()
         profile.mythicPlus.dungeonDB = profile.mythicPlus.dungeonDB or {}
         local db = profile.mythicPlus.dungeonDB
         db.Global = db.Global or {}
+        MigrateLegacyDB(db)
         return db
     end
     return FALLBACK_DB
@@ -153,6 +207,13 @@ function Database:AddRun(runData)
     local charDB = self:GetForCurrentCharacter()
     if not charDB.Runs then charDB.Runs = {} end
 
+    -- Normalize core types so comparisons/sorts behave.
+    runData.timestamp = tonumber(runData.timestamp) or runData.timestamp
+    runData.mapId = tonumber(runData.mapId) or runData.mapId
+    runData.level = tonumber(runData.level) or runData.level
+    runData.score = tonumber(runData.score) or runData.score
+    runData.time = tonumber(runData.time) or runData.time
+
     -- Ensure ID
     if not runData.id then
         runData.id = tostring(runData.timestamp) .. "-" .. tostring(runData.mapId)
@@ -192,4 +253,399 @@ function Database:ClearRuns()
     local charDB = self:GetForCurrentCharacter()
     charDB.Runs = {}
     Logger.Info("Cleared all Mythic+ runs from database.")
+end
+
+local function SafeCall(fn, ...)
+    if type(fn) ~= "function" then
+        return nil
+    end
+    local ok, a, b, c, d, e = pcall(fn, ...)
+    if not ok then
+        return nil
+    end
+    return a, b, c, d, e
+end
+
+local function GetBlizzardRunHistory()
+    local C_MythicPlus = _G.C_MythicPlus
+    if not C_MythicPlus or type(C_MythicPlus.GetRunHistory) ~= "function" then
+        return nil
+    end
+
+    local history = SafeCall(C_MythicPlus.GetRunHistory)
+    if type(history) == "table" then
+        return history
+    end
+
+    local unpackFn = _G.unpack or unpack
+    local tries = {
+        { true,  true },
+        { true,  false },
+        { false, false },
+    }
+    for _, args in ipairs(tries) do
+        history = SafeCall(C_MythicPlus.GetRunHistory, unpackFn(args))
+        if type(history) == "table" then
+            return history
+        end
+    end
+
+    return nil
+end
+
+local function GetSeasonMapIds()
+    local C_MythicPlus = _G.C_MythicPlus
+    if not C_MythicPlus or type(C_MythicPlus.GetSeasonMaps) ~= "function" then
+        return {}
+    end
+
+    local maps = SafeCall(C_MythicPlus.GetSeasonMaps)
+    if type(maps) ~= "table" then
+        return {}
+    end
+
+    local ids = {}
+    for _, entry in ipairs(maps) do
+        local mapId
+        if type(entry) == "table" then
+            mapId = tonumber(entry.mapChallengeModeID) or tonumber(entry.mapChallengeModeId)
+                or tonumber(entry.challengeModeID) or tonumber(entry.challengeModeId)
+                or tonumber(entry.mapID) or tonumber(entry.mapId)
+                or tonumber(entry.id)
+        else
+            mapId = tonumber(entry)
+        end
+        if mapId and mapId > 0 then
+            table.insert(ids, mapId)
+        end
+    end
+
+    return ids
+end
+
+---@return table[] normalizedRuns
+local function GetSeasonBestRunsFallback()
+    local C_MythicPlus = _G.C_MythicPlus
+    if not C_MythicPlus or type(C_MythicPlus.GetSeasonBestForMap) ~= "function" then
+        return {}
+    end
+
+    local ids = GetSeasonMapIds()
+    if #ids == 0 then
+        return {}
+    end
+
+    local ScoreCalculator = MythicPlusModule and MythicPlusModule.ScoreCalculator
+    local normalized = {}
+
+    for _, mapId in ipairs(ids) do
+        local seasonBest = SafeCall(C_MythicPlus.GetSeasonBestForMap, mapId)
+        if type(seasonBest) == "table" then
+            for _, run in ipairs(seasonBest) do
+                if type(run) == "table" then
+                    local level = tonumber(run.level) or tonumber(run.keystoneLevel) or tonumber(run.mythicLevel)
+                    local durationSec = tonumber(run.durationSec) or tonumber(run.duration) or tonumber(run.time)
+                    local score = tonumber(run.mapScore) or tonumber(run.runScore) or tonumber(run.score)
+                        or tonumber(run.mythicRating)
+
+                    if level and durationSec then
+                        if not score and ScoreCalculator and type(ScoreCalculator.CalculateForRun) == "function" then
+                            local approx = ScoreCalculator.CalculateForRun(mapId, level, durationSec)
+                            score = tonumber(approx) or score
+                        end
+
+                        table.insert(normalized, {
+                            mapId = mapId,
+                            level = level,
+                            durationSec = durationSec,
+                            score = score,
+                            completedAt = tonumber(run.completedTimestamp) or tonumber(run.completionTimestamp)
+                                or tonumber(run.timestamp),
+                            source = "seasonBest",
+                        })
+                    end
+                end
+            end
+        end
+    end
+
+    return normalized
+end
+
+local function ExtractRunMapId(run)
+    if type(run) ~= "table" then return nil end
+    return tonumber(run.mapChallengeModeID)
+        or tonumber(run.mapChallengeModeId)
+        or tonumber(run.challengeModeID)
+        or tonumber(run.challengeModeId)
+        or tonumber(run.mapID)
+        or tonumber(run.mapId)
+end
+
+local function ExtractRunLevel(run)
+    if type(run) ~= "table" then return nil end
+    return tonumber(run.level)
+        or tonumber(run.keystoneLevel)
+        or tonumber(run.mythicLevel)
+end
+
+local function ExtractRunDurationSec(run)
+    if type(run) ~= "table" then return nil end
+    local sec = tonumber(run.durationSec)
+        or tonumber(run.duration)
+        or tonumber(run.time)
+        or tonumber(run.timeSec)
+    if sec and sec > 0 then
+        return sec
+    end
+
+    local ms = tonumber(run.durationMS)
+        or tonumber(run.durationMs)
+        or tonumber(run.timeMS)
+        or tonumber(run.timeMs)
+    if ms and ms > 0 then
+        return ms / 1000
+    end
+
+    return nil
+end
+
+local function ExtractRunScore(run)
+    if type(run) ~= "table" then return nil end
+    return tonumber(run.mapScore)
+        or tonumber(run.runScore)
+        or tonumber(run.score)
+        or tonumber(run.mythicRating)
+end
+
+local function ExtractRunCompletedAt(run)
+    if type(run) ~= "table" then return nil end
+    return tonumber(run.completedTimestamp)
+        or tonumber(run.completionTimestamp)
+        or tonumber(run.completedTime)
+        or tonumber(run.completionTime)
+        or tonumber(run.timestamp)
+end
+
+local function MakeBlizzardKey(mapId, level, durationSec, score, completedAt)
+    mapId = tonumber(mapId)
+    level = tonumber(level)
+    durationSec = tonumber(durationSec)
+    score = tonumber(score)
+    completedAt = tonumber(completedAt)
+
+    if not mapId or not level or not durationSec then
+        return nil
+    end
+
+    local dur10 = math.floor((durationSec * 10) + 0.5)
+    local score10 = score and math.floor((score * 10) + 0.5) or 0
+    if completedAt and completedAt > 0 then
+        return string.format("%d:%d:%d:%d:%d", completedAt, mapId, level, dur10, score10)
+    end
+    return string.format("%d:%d:%d:%d", mapId, level, dur10, score10)
+end
+
+local function FindMatchingRun(existingByMap, blz)
+    local list = existingByMap[blz.mapId]
+    if type(list) ~= "table" then return nil end
+
+    local best
+    local bestScore
+
+    for _, run in ipairs(list) do
+        if type(run) == "table" and tonumber(run.level) == tonumber(blz.level) then
+            local t = tonumber(run.time)
+            local dt = (t and blz.durationSec) and math.abs(t - blz.durationSec) or nil
+            if dt and dt <= 2.0 then
+                local s = 0
+                if blz.completedAt and tonumber(run.timestamp) then
+                    s = s + math.min(math.abs(tonumber(run.timestamp) - blz.completedAt) / 3600, 2)
+                end
+                s = s + dt
+                if (not bestScore) or s < bestScore then
+                    bestScore = s
+                    best = run
+                end
+            end
+        end
+    end
+
+    return best
+end
+
+---@class BlizzardRunSyncResult
+---@field imported number
+---@field updated number
+---@field matched number
+---@field scanned number
+
+--- Import/sync Blizzard run history into the internal Runs database.
+---
+--- Behavior:
+--- - Adds missing runs (marked `importedFromBlizzard=true`).
+--- - Updates existing runs when they match (fills `score`/`time` from Blizzard; keeps your extra fields intact).
+--- - Does not delete any runs.
+---
+--- @param opts table|nil
+--- @return BlizzardRunSyncResult
+function Database:SyncRunsFromBlizzard(opts)
+    opts = type(opts) == "table" and opts or {}
+    local throttleSeconds = tonumber(opts.throttleSeconds) or 30
+
+    local charDB = self:GetForCurrentCharacter()
+    charDB.Runs = charDB.Runs or {}
+
+    local now = (type(_G.time) == "function" and _G.time()) or 0
+    charDB.__blizzardSyncMeta = charDB.__blizzardSyncMeta or {}
+    local meta = charDB.__blizzardSyncMeta
+    if now > 0 and throttleSeconds > 0 and tonumber(meta.lastAt) and (now - tonumber(meta.lastAt)) < throttleSeconds then
+        return { imported = 0, updated = 0, matched = 0, scanned = 0 }
+    end
+    meta.lastAt = now
+
+    local history = GetBlizzardRunHistory()
+    local historyIsNormalized = false
+    if type(history) ~= "table" then
+        history = nil
+    end
+    if type(history) == "table" and #history == 0 then
+        -- Some clients/regions return an empty run history table even when the character
+        -- has Season Bests. Fall back to importing from Season Best per-map data.
+        local fallback = GetSeasonBestRunsFallback()
+        if type(fallback) == "table" and #fallback > 0 then
+            history = fallback
+            historyIsNormalized = true
+        end
+    end
+    if type(history) ~= "table" then
+        return { imported = 0, updated = 0, matched = 0, scanned = 0 }
+    end
+
+    local existingByKey = {}
+    local existingByMap = {}
+    for _, run in ipairs(charDB.Runs) do
+        if type(run) == "table" then
+            local mid = tonumber(run.mapId)
+            if mid then
+                existingByMap[mid] = existingByMap[mid] or {}
+                table.insert(existingByMap[mid], run)
+            end
+            if type(run.blizzardKey) == "string" and run.blizzardKey ~= "" then
+                existingByKey[run.blizzardKey] = run
+            end
+        end
+    end
+
+    local imported, updated, matched = 0, 0, 0
+
+    for _, raw in ipairs(history) do
+        if type(raw) == "table" then
+            local mapId, level, durationSec, score, completedAt
+            local source
+
+            if historyIsNormalized then
+                mapId = tonumber(raw.mapId)
+                level = tonumber(raw.level)
+                durationSec = tonumber(raw.durationSec)
+                score = tonumber(raw.score)
+                completedAt = tonumber(raw.completedAt)
+                source = raw.source
+            else
+                mapId = ExtractRunMapId(raw)
+                level = ExtractRunLevel(raw)
+                durationSec = ExtractRunDurationSec(raw)
+                score = ExtractRunScore(raw)
+                completedAt = ExtractRunCompletedAt(raw)
+            end
+
+            if mapId and level and durationSec then
+                local blz = {
+                    mapId = mapId,
+                    level = level,
+                    durationSec = durationSec,
+                    score = score,
+                    completedAt = completedAt,
+                }
+                local key = MakeBlizzardKey(mapId, level, durationSec, score, completedAt)
+
+                local target = (key and existingByKey[key]) or FindMatchingRun(existingByMap, blz)
+                if target then
+                    matched = matched + 1
+                    if key and (not target.blizzardKey or target.blizzardKey == "") then
+                        target.blizzardKey = key
+                        existingByKey[key] = target
+                    end
+
+                    local changed = false
+                    if score and (not tonumber(target.score) or math.abs((tonumber(target.score) or 0) - score) > 0.01) then
+                        target.score = score
+                        changed = true
+                    end
+                    if durationSec and (not tonumber(target.time) or tonumber(target.time) <= 0) then
+                        target.time = durationSec
+                        changed = true
+                    end
+
+                    target.blizzardSync = true
+                    target.blizzardSyncedAt = now
+                    target.blizzard = {
+                        mapScore = score,
+                        durationSec = durationSec,
+                        completedAt = completedAt,
+                        source = source,
+                    }
+
+                    if changed then
+                        updated = updated + 1
+                    end
+                else
+                    local ts = (completedAt and completedAt > 0) and completedAt or now
+                    local patch
+                    if type(GetBuildInfo) == "function" then
+                        patch = select(1, GetBuildInfo())
+                    end
+
+                    ---@type MythicPlusDatabase_RunEntry
+                    local run = {
+                        id = string.format("blz-%s-%s-%s", tostring(ts), tostring(mapId), tostring(level)),
+                        timestamp = ts,
+                        date = (type(_G.date) == "function") and _G.date("%Y-%m-%d %H:%M:%S", ts) or "",
+                        patch = patch,
+                        mapId = mapId,
+                        level = level,
+                        affixes = {},
+                        score = tonumber(score) or 0,
+                        time = durationSec,
+                        onTime = nil,
+                        deaths = 0,
+                        upgrade = nil,
+                        group = {},
+                        loot = {},
+                        importedFromBlizzard = true,
+                        blizzardSync = true,
+                        blizzardKey = key,
+                        blizzardSyncedAt = now,
+                        blizzard = {
+                            mapScore = score,
+                            durationSec = durationSec,
+                            completedAt = completedAt,
+                            source = source,
+                        }
+                    }
+
+                    self:AddRun(run)
+                    imported = imported + 1
+
+                    if key then
+                        existingByKey[key] = run
+                    end
+                    existingByMap[mapId] = existingByMap[mapId] or {}
+                    table.insert(existingByMap[mapId], run)
+                end
+            end
+        end
+    end
+
+    return { imported = imported, updated = updated, matched = matched, scanned = #history }
 end

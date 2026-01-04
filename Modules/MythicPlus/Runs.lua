@@ -557,6 +557,10 @@ end
 function Runs:Refresh(panel)
     if not panel or not panel.content then return end
 
+    if Database and type(Database.SyncRunsFromBlizzard) == "function" then
+        Database:SyncRunsFromBlizzard({ throttleSeconds = 30 })
+    end
+
     local allRuns = Database:GetRuns()
     local runs = {}
 

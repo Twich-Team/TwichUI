@@ -1529,7 +1529,7 @@ UpdateDetailsRuns = function(panel, mapId)
     local allRuns = Database:GetRuns()
     local runs = {}
     for _, run in ipairs(allRuns) do
-        if run.mapId == mapId then
+        if tonumber(run.mapId) == tonumber(mapId) then
             table.insert(runs, run)
         end
     end
@@ -1758,6 +1758,10 @@ local function RefreshPanel(panel)
     if width <= 1 then
         C_Timer.After(0.1, function() RefreshPanel(panel) end)
         return
+    end
+
+    if Database and type(Database.SyncRunsFromBlizzard) == "function" then
+        Database:SyncRunsFromBlizzard({ throttleSeconds = 30 })
     end
 
     local mapIds = GetCurrentSeasonMapIds()
