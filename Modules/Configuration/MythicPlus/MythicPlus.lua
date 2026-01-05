@@ -483,59 +483,67 @@ function MP:Create(order)
                 type = "group",
                 name = TT.Color(CT.TWICH.TERTIARY_ACCENT, "Best in Slot"),
                 order = 4,
+                childGroups = "tab",
                 hidden = function() return not CM:GetProfileSettingByConfigEntry(GetModule().CONFIGURATION.ENABLED) end,
                 args = {
-                    entryPrintGroup = {
+                    generalTab = {
                         type = "group",
-                        name = "Chat Output",
-                        inline = true,
-                        order = 0,
-                        args = {
-                            printMissingOnEntry = {
-                                type = "toggle",
-                                name = "Print missing BiS on instance entry",
-                                desc = CM:ColorTextKeywords(
-                                    "When enabled, entering a dungeon or raid will print a list of your missing Best-in-Slot items for that instance (including boss when known)."),
-                                width = "full",
-                                order = 1,
-                                get = function()
-                                    return CM:GetProfileSettingSafe(
-                                        "mythicplus.bestInSlot.printMissingOnInstanceEntry", false)
-                                end,
-                                set = function(_, value)
-                                    CM:SetProfileSettingSafe(
-                                        "mythicplus.bestInSlot.printMissingOnInstanceEntry", value)
-                                end,
-                            },
-                        },
-                    },
-                    databaseGroup = {
-                        type = "group",
-                        name = "Item Cache",
-                        inline = true,
+                        name = "General",
                         order = 1,
                         args = {
-                            description = CM.Widgets:ComponentDescription(0,
-                                "The addon stores data on item sources from the current season. This data is managed automatically and refreshed any time there is a game update. If for some reason you're having trouble with items, you can try to force a refresh now."),
-                            refreshCache = {
-                                type = "execute",
-                                name = "Refresh Item Cache",
-                                desc = CM:ColorTextKeywords(
-                                    "Force a rebuild of the item source database from the Encounter Journal."),
-                                descStyle = "inline",
+                            chatOutputGroup = {
+                                type = "group",
+                                name = "Chat Output",
+                                inline = true,
                                 order = 1,
-                                func = function()
-                                    local module = GetModule()
-                                    if module.BestInSlot and module.BestInSlot.RefreshCache then
-                                        module.BestInSlot
-                                            :RefreshCache()
-                                    end
-                                end,
+                                args = {
+                                    printMissingOnEntry = {
+                                        type = "toggle",
+                                        name = "Display BiS Dropped from Instance in Chat When Entering",
+                                        desc = CM:ColorTextKeywords(
+                                            "When enabled, entering a dungeon or raid will print a list of your missing Best-in-Slot items for that instance (including boss when known)."),
+                                        width = "full",
+                                        order = 1,
+                                        get = function()
+                                            return CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.printMissingOnInstanceEntry", true)
+                                        end,
+                                        set = function(_, value)
+                                            CM:SetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.printMissingOnInstanceEntry", value)
+                                        end,
+                                    },
+                                },
+                            },
+
+                            databaseGroup = {
+                                type = "group",
+                                name = "Item Cache",
+                                inline = true,
+                                order = 2,
+                                args = {
+                                    description = CM.Widgets:ComponentDescription(0,
+                                        "The addon stores data on item sources from the current season. This data is managed automatically and refreshed any time there is a game update. If for some reason you're having trouble with items, you can try to force a refresh now."),
+                                    refreshCache = {
+                                        type = "execute",
+                                        name = "Refresh Item Cache",
+                                        desc = CM:ColorTextKeywords(
+                                            "Force a rebuild of the item source database from the Encounter Journal."),
+                                        descStyle = "inline",
+                                        order = 1,
+                                        func = function()
+                                            local module = GetModule()
+                                            if module.BestInSlot and module.BestInSlot.RefreshCache then
+                                                module.BestInSlot:RefreshCache()
+                                            end
+                                        end,
+                                    },
+                                }
                             },
                         }
                     },
 
-                    notificationsGroup = {
+                    notificationsTab = {
                         type = "group",
                         name = "Notifications",
                         order = 2,

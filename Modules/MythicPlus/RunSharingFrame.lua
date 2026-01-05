@@ -1055,6 +1055,12 @@ function RunSharingFrame:ResolveDungeonName(run)
 end
 
 function RunSharingFrame:UpdateList()
+    -- This can be invoked from RunLoggerSync even when the legacy frame was never opened/initialized.
+    if not self.frame or not self.listContent then
+        return
+    end
+
+    self.rows = self.rows or {}
     local db = self:GetDB()
     local runs = db.remoteRuns or {}
 

@@ -2636,7 +2636,7 @@ function BestInSlot:Initialize()
             -- Config toggle
             if CM and CM.GetProfileSettingSafe then
                 local enabled = CM:GetProfileSettingSafe(
-                    "mythicplus.bestInSlot.printMissingOnInstanceEntry", false)
+                    "mythicplus.bestInSlot.printMissingOnInstanceEntry", true)
                 if not enabled then
                     return
                 end

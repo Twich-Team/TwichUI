@@ -36,6 +36,8 @@ local C_Timer = _G.C_Timer
 local strtrim = _G.strtrim
 local ChatFrame_AddMessageEventFilter = _G.ChatFrame_AddMessageEventFilter
 local ERR_CHAT_PLAYER_NOT_FOUND_S = _G.ERR_CHAT_PLAYER_NOT_FOUND_S
+local StaticPopupDialogs = _G.StaticPopupDialogs
+local StaticPopup_Show = _G.StaticPopup_Show
 
 local AceComm = LibStub("AceComm-3.0")
 local AceSerializer = LibStub("AceSerializer-3.0")
@@ -47,6 +49,107 @@ local PREFIX = "TWICH_RL_SYNC" -- <= 16 chars
 local MAX_PENDING_PER_PEER = 5
 local AUTO_SYNC_INTERVAL_SEC = 120
 local CHECK_TIMEOUT_SEC = 5
+
+local GetDB
+
+local function NotifyConfigChanged()
+    local ACR = (T.Libs and T.Libs.AceConfigRegistry) or LibStub("AceConfigRegistry-3.0-ElvUI", true) or
+        LibStub("AceConfigRegistry-3.0", true)
+    if ACR then
+        ACR:NotifyChange("ElvUI")
+    end
+end
+
+local REQUEST_POPUP_ID = "TWICHUI_RL_SYNC_INCOMING_REQUEST"
+
+local function DescribeRequest(kind)
+    if kind == "ADD_RECIPIENT" then
+        return "They want to SEND you runs."
+    end
+    if kind == "REGISTER_ME" then
+        return "They want you to SEND them runs."
+    end
+    return "Request: " .. tostring(kind)
+end
+
+local function EnsureRequestPopupDialog()
+    if type(StaticPopupDialogs) ~= "table" then return end
+    if StaticPopupDialogs[REQUEST_POPUP_ID] then return end
+
+    StaticPopupDialogs[REQUEST_POPUP_ID] = {
+        text = "Run Logger Sync request from %s:\n\n%s",
+        button1 = "Accept",
+        button2 = "Decline",
+        OnAccept = function(_, payload)
+            local sync = MythicPlusModule and MythicPlusModule.RunLoggerSync
+            if sync and payload and payload.key and sync.AcceptRequest then
+                sync:AcceptRequest(payload.key)
+            end
+            if sync and sync._OnRequestPopupResolved then
+                sync:_OnRequestPopupResolved(payload and payload.key)
+            end
+        end,
+        OnCancel = function(_, payload)
+            local sync = MythicPlusModule and MythicPlusModule.RunLoggerSync
+            if sync and payload and payload.key and sync.DenyRequest then
+                sync:DenyRequest(payload.key)
+            end
+            if sync and sync._OnRequestPopupResolved then
+                sync:_OnRequestPopupResolved(payload and payload.key)
+            end
+        end,
+        timeout = 0,
+        whileDead = true,
+        hideOnEscape = true,
+        preferredIndex = 3,
+    }
+end
+
+function RunLoggerSync:_OnRequestPopupResolved(key)
+    -- Clear the currently active popup marker and show the next queued request.
+    if self._activeRequestPopupKey and (not key or key == self._activeRequestPopupKey) then
+        self._activeRequestPopupKey = nil
+    end
+    self:_ShowNextRequestPopup()
+end
+
+function RunLoggerSync:_EnqueueRequestPopup(key)
+    if type(key) ~= "string" or key == "" then return end
+    self._requestPopupQueue = self._requestPopupQueue or {}
+
+    -- Avoid duplicate enqueues.
+    for _, existing in ipairs(self._requestPopupQueue) do
+        if existing == key then
+            return
+        end
+    end
+
+    self._requestPopupQueue[#self._requestPopupQueue + 1] = key
+    self:_ShowNextRequestPopup()
+end
+
+function RunLoggerSync:_ShowNextRequestPopup()
+    if self._activeRequestPopupKey then return end
+
+    EnsureRequestPopupDialog()
+    if type(StaticPopup_Show) ~= "function" then return end
+
+    local q = self._requestPopupQueue
+    if type(q) ~= "table" or #q == 0 then return end
+
+    local db = GetDB()
+
+    while #q > 0 do
+        local key = table.remove(q, 1)
+        local req = db and db.sync and db.sync.pendingRequests and db.sync.pendingRequests[key] or nil
+        if type(req) == "table" and type(req.from) == "string" and type(req.kind) == "string" then
+            self._activeRequestPopupKey = key
+            local payload = { key = key }
+            StaticPopup_Show(REQUEST_POPUP_ID, req.from, DescribeRequest(req.kind), payload)
+            return
+        end
+    end
+end
 
 local function GetMaxPendingPerPeer()
     local v = tonumber(CM:GetProfileSettingSafe("developer.mythicplus.runLoggerSync.maxPendingPerPeer",
@@ -151,7 +254,7 @@ local function MatchesPlayerNotFound(msg, name)
 end
 
 ---@return TwichUIRunLoggerDB
-local function GetDB()
+GetDB = function()
     local profile = (T.db and T.db.profile)
     if type(profile) == "table" then
         profile.mythicPlus = profile.mythicPlus or {}
@@ -442,6 +545,7 @@ function RunLoggerSync:_RespondToRequest(key, accepted)
             self:_SuppressNotFoundFor(from, 2.0)
             self:SendCommMessage(PREFIX, serialized, "WHISPER", from)
         end
+        NotifyConfigChanged()
         return
     end
 
@@ -459,6 +563,7 @@ function RunLoggerSync:_RespondToRequest(key, accepted)
             self:_SuppressNotFoundFor(from, 2.0)
             self:SendCommMessage(PREFIX, serialized, "WHISPER", from)
         end
+        NotifyConfigChanged()
         return
     end
 end
@@ -547,6 +652,8 @@ function RunLoggerSync:_StartCheck(target, focus)
         self.checkResult = nil
     end
 
+    NotifyConfigChanged()
+
     local payload = { type = "CHECK_REQ", ts = time(), token = token }
     local serialized = self:Serialize(payload)
     if not serialized then
@@ -558,6 +665,7 @@ function RunLoggerSync:_StartCheck(target, focus)
         if focus then
             self.checkStatus = "FAILED"
         end
+        NotifyConfigChanged()
         return
     end
 
@@ -581,6 +689,8 @@ function RunLoggerSync:_StartCheck(target, focus)
             if req.focus then
                 self.checkStatus = "FAILED"
             end
+
+            NotifyConfigChanged()
         end)
     end
 end
@@ -927,7 +1037,11 @@ function RunLoggerSync:OnCommReceived(prefix, message, distribution, sender)
         end
 
         local key = RequestKey(sender, "ADD_RECIPIENT")
-        db.sync.pendingRequests[key] = { from = sender, kind = "ADD_RECIPIENT", ts = time() }
+        if not db.sync.pendingRequests[key] then
+            db.sync.pendingRequests[key] = { from = sender, kind = "ADD_RECIPIENT", ts = time() }
+            self:_EnqueueRequestPopup(key)
+            NotifyConfigChanged()
+        end
         return
     end
 
@@ -937,7 +1051,11 @@ function RunLoggerSync:OnCommReceived(prefix, message, distribution, sender)
         end
 
         local key = RequestKey(sender, "REGISTER_ME")
-        db.sync.pendingRequests[key] = { from = sender, kind = "REGISTER_ME", ts = time() }
+        if not db.sync.pendingRequests[key] then
+            db.sync.pendingRequests[key] = { from = sender, kind = "REGISTER_ME", ts = time() }
+            self:_EnqueueRequestPopup(key)
+            NotifyConfigChanged()
+        end
         return
     end
 
@@ -1011,6 +1129,8 @@ function RunLoggerSync:OnCommReceived(prefix, message, distribution, sender)
                 self.checkResult = not not data.isRecipient
                 self.checkStatus = "SUCCESS"
             end
+
+            NotifyConfigChanged()
             return
         end
 
@@ -1026,6 +1146,8 @@ function RunLoggerSync:OnCommReceived(prefix, message, distribution, sender)
             self.checkResult = not not data.isRecipient
             self.checkStatus = "SUCCESS"
         end
+
+        NotifyConfigChanged()
         return
     end
 
