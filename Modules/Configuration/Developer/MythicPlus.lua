@@ -912,6 +912,98 @@ function DMP:Create(order)
                         }
                     },
 
+                    portalDataGroup = {
+                        type = "group",
+                        name = "Dungeon Portals",
+                        inline = true,
+                        order = 6,
+                        args = {
+                            description = CM.Widgets:ComponentDescription(1,
+                                "Print the current Mythic+ dungeon mapIDs so you can update portal data."),
+                            printSeasonMaps = {
+                                type = "execute",
+                                name = "Print Current Season Map IDs",
+                                desc = "Prints lines like: [mapID] = \"Dungeon Name\"",
+                                order = 2,
+                                func = function()
+                                    local ids = {}
+
+                                    local C_MythicPlus = _G.C_MythicPlus
+                                    if C_MythicPlus and type(C_MythicPlus.GetCurrentSeason) == "function" and type(C_MythicPlus.GetSeasonMaps) == "function" then
+                                        local okS, seasonID = pcall(C_MythicPlus.GetCurrentSeason)
+                                        seasonID = okS and tonumber(seasonID) or nil
+                                        if seasonID then
+                                            local okM, maps = pcall(C_MythicPlus.GetSeasonMaps, seasonID)
+                                            if okM and type(maps) == "table" then
+                                                for _, id in ipairs(maps) do
+                                                    id = tonumber(id)
+                                                    if id then ids[#ids + 1] = id end
+                                                end
+                                            end
+                                        end
+                                    end
+
+                                    local C_ChallengeMode = _G.C_ChallengeMode
+                                    if #ids == 0 and C_ChallengeMode and type(C_ChallengeMode.GetMapTable) == "function" then
+                                        local okT, maps = pcall(C_ChallengeMode.GetMapTable)
+                                        if okT and type(maps) == "table" then
+                                            for _, id in ipairs(maps) do
+                                                id = tonumber(id)
+                                                if id then ids[#ids + 1] = id end
+                                            end
+                                        end
+                                    end
+
+                                    if #ids == 0 then
+                                        Logger.Error(
+                                        "No Mythic+ mapIDs found (C_ChallengeMode/C_MythicPlus APIs unavailable).")
+                                        return
+                                    end
+
+                                    table.sort(ids)
+
+                                    local seasonLabel = "<unknown>"
+                                    local C_MythicPlus = _G.C_MythicPlus
+                                    if C_MythicPlus and type(C_MythicPlus.GetCurrentSeason) == "function" then
+                                        local okS, seasonID = pcall(C_MythicPlus.GetCurrentSeason)
+                                        if okS and seasonID ~= nil then
+                                            seasonLabel = tostring(seasonID)
+                                        end
+                                    end
+
+                                    print("TwichUI: Current Mythic+ MapIDs (season=" .. seasonLabel .. ")")
+                                    local mp = GetModule()
+                                    local data = mp and mp.Data
+                                    local C_ChallengeMode = _G.C_ChallengeMode
+                                    for _, id in ipairs(ids) do
+                                        local name = nil
+                                        if data and type(data.GetMapUIInfoCached) == "function" then
+                                            local okI, n = pcall(data.GetMapUIInfoCached, id, true)
+                                            if okI then name = n end
+                                        end
+                                        if not name and C_ChallengeMode and type(C_ChallengeMode.GetMapUIInfo) == "function" then
+                                            local okUI, n = pcall(C_ChallengeMode.GetMapUIInfo, id)
+                                            if okUI then name = n end
+                                        end
+                                        if not name and C_ChallengeMode and type(C_ChallengeMode.GetMapInfo) == "function" then
+                                            local okInfo, a, b = pcall(C_ChallengeMode.GetMapInfo, id)
+                                            if okInfo then
+                                                -- Some clients return a table; others return multiple values with name first.
+                                                if type(a) == "table" then
+                                                    name = a.name
+                                                else
+                                                    name = a
+                                                end
+                                            end
+                                        end
+                                        name = tostring(name or "Unknown")
+                                        print(string.format("[%d] = %q,", id, name))
+                                    end
+                                end,
+                            },
+                        },
+                    },
+
                 }
             },
 

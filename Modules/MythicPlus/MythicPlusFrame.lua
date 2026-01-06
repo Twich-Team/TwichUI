@@ -27,8 +27,7 @@ local E = ElvUI and ElvUI[1]
 ---@field enabled boolean
 ---@field frame Frame|nil
 ---@field titleBar Frame|nil
----@field titleLogo Texture|nil
----@field settingsButton Button|nil
+---@field titleLogo Frame|nil
 ---@field nav Frame|nil
 ---@field navButtons table<string, Button>|nil
 ---@field content Frame|nil
@@ -484,7 +483,7 @@ function MainWindow:_CreateHeaderIfNeeded()
     if (not self.titleLogo and not self.titleText) or not self.closeButton then return end
 
     local leftAnchor = self.titleLogo or self.titleText
-    local rightAnchor = self.settingsButton or self.closeButton
+    local rightAnchor = self.closeButton
 
     local header = CreateFrame("Frame", nil, self.titleBar)
     header:SetPoint("LEFT", leftAnchor, "RIGHT", 12, 0)
@@ -840,48 +839,41 @@ function MainWindow:CreateTitleBar()
     titleText:SetText("")
     titleText:Hide()
 
-    local logo = titleBar:CreateTexture(nil, "OVERLAY")
-    logo:SetPoint("LEFT", titleBar, "LEFT", 5, 0)
-    logo:SetSize(22, 22)
+    local logoButton = CreateFrame("Button", nil, titleBar)
+    logoButton:SetPoint("LEFT", titleBar, "LEFT", 5, 0)
+    logoButton:SetSize(22, 22)
+    logoButton:SetHitRectInsets(-8, -8, -8, -8)
+
+    local logo = logoButton:CreateTexture(nil, "OVERLAY")
+    logo:SetAllPoints(logoButton)
     logo:SetTexture("Interface\\AddOns\\TwichUI\\Media\\Textures\\twich-logo.tga")
-    self.titleLogo = logo
+    logo:SetVertexColor(1, 1, 1, 0.85)
+
+    logoButton:SetScript("OnEnter", function()
+        logo:SetVertexColor(1, 1, 1, 1)
+        if not GameTooltip then return end
+        GameTooltip:SetOwner(logoButton, "ANCHOR_RIGHT")
+        GameTooltip:SetText("Open TwichUI Settings", 1, 1, 1)
+        GameTooltip:AddLine("Opens the TwichUI settings", 0.9, 0.9, 0.9, true)
+        GameTooltip:Show()
+    end)
+    logoButton:SetScript("OnLeave", function()
+        logo:SetVertexColor(1, 1, 1, 0.85)
+        if GameTooltip then GameTooltip:Hide() end
+    end)
+    logoButton:SetScript("OnClick", function()
+        if T and type(T.ToggleOptionsUI) == "function" then
+            T:ToggleOptionsUI()
+        end
+    end)
+
+    self.titleLogo = logoButton
 
     -- Close button
     local closeButton = CreateFrame("Button", nil, titleBar)
     closeButton:SetSize(28, 28)
     closeButton:SetPoint("RIGHT", titleBar, "RIGHT", -6, 0)
     closeButton:SetHitRectInsets(-8, -8, -8, -8)
-
-    -- Settings button (opens TwichUI config; same as /tc)
-    local settingsButton = CreateFrame("Button", nil, titleBar)
-    settingsButton:SetSize(28, 28)
-    settingsButton:SetPoint("RIGHT", closeButton, "LEFT", -2, 0)
-    settingsButton:SetHitRectInsets(-8, -8, -8, -8)
-
-    local settingsIcon = settingsButton:CreateTexture(nil, "OVERLAY")
-    settingsIcon:SetTexture("Interface\\AddOns\\TwichUI\\Media\\Textures\\cog-plain.tga")
-    settingsIcon:SetSize(14, 14)
-    settingsIcon:SetPoint("CENTER", settingsButton, "CENTER", 0, 0)
-    settingsIcon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-    settingsIcon:SetVertexColor(1, 1, 1, 0.85)
-
-    settingsButton:SetScript("OnEnter", function()
-        settingsIcon:SetVertexColor(1, 1, 1, 1)
-        if not GameTooltip then return end
-        GameTooltip:SetOwner(settingsButton, "ANCHOR_RIGHT")
-        GameTooltip:SetText("Open TwichUI Settings", 1, 1, 1)
-        GameTooltip:AddLine("Opens the TwichUI settings", 0.9, 0.9, 0.9, true)
-        GameTooltip:Show()
-    end)
-    settingsButton:SetScript("OnLeave", function()
-        settingsIcon:SetVertexColor(1, 1, 1, 0.85)
-        if GameTooltip then GameTooltip:Hide() end
-    end)
-    settingsButton:SetScript("OnClick", function()
-        if T and type(T.ToggleOptionsUI) == "function" then
-            T:ToggleOptionsUI()
-        end
-    end)
 
     local closeText = closeButton:CreateFontString(nil, "OVERLAY")
     local fontPath = GetFontPath()
@@ -906,7 +898,6 @@ function MainWindow:CreateTitleBar()
         self:Disable()
     end)
 
-    self.settingsButton = settingsButton
     self.closeButton = closeButton
 
     -- Keystone header in title bar (compact)

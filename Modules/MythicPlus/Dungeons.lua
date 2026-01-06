@@ -52,6 +52,102 @@ local ASSUMED_DUNGEON_BG_ASPECT = 2.0
 
 local PORTAL_TEXTURE = "Interface\\AddOns\\TwichUI\\Media\\Textures\\portal.tga"
 
+---@param panel TwichUI_MythicPlus_DungeonsPanel
+local function EnsureSecurePortalButton(panel)
+    if not panel or not panel.__twichuiActions then return end
+    local st = panel.__twichuiActions
+    local btn = st.portalButton
+    if not btn or not rawget(btn, "__twichuiNeedsSecure") then return end
+
+    if type(_G.InCombatLockdown) == "function" and _G.InCombatLockdown() then
+        return
+    end
+
+    if btn.IsProtected and btn:IsProtected() then
+        rawset(btn, "__twichuiNeedsSecure", false)
+        return
+    end
+
+    local parent = (btn.GetParent and btn:GetParent()) or st.frame or panel
+    local newBtn = CreateFrame("Button", nil, parent, "SecureActionButtonTemplate")
+    newBtn:SetAllPoints(btn)
+    newBtn:RegisterForClicks("AnyDown", "AnyUp")
+    newBtn:EnableMouse(true)
+
+    if newBtn.SetFrameLevel and btn.GetFrameLevel then
+        newBtn:SetFrameLevel(btn:GetFrameLevel() or 1)
+    end
+    if newBtn.SetFrameStrata and btn.GetFrameStrata then
+        newBtn:SetFrameStrata(btn:GetFrameStrata() or "MEDIUM")
+    end
+
+    local portalIcon = newBtn:CreateTexture(nil, "ARTWORK")
+    portalIcon:SetAllPoints(newBtn)
+    portalIcon:SetTexture(PORTAL_TEXTURE)
+    portalIcon:SetAlpha(0.35)
+    portalIcon:SetDesaturated(true)
+
+    local portalHL = newBtn:CreateTexture(nil, "HIGHLIGHT")
+    portalHL:SetAllPoints(newBtn)
+    if newBtn.CreateMaskTexture and portalHL.AddMaskTexture then
+        portalHL:SetColorTexture(1, 1, 1, 0.12)
+
+        local hlMask = newBtn:CreateMaskTexture(nil, "ARTWORK")
+        hlMask:SetTexture("Interface\\CharacterFrame\\TempPortraitAlphaMask", "CLAMPTOBLACKADDITIVE",
+            "CLAMPTOBLACKADDITIVE")
+        hlMask:SetAllPoints(newBtn)
+        portalHL:AddMaskTexture(hlMask)
+        newBtn.__twichuiPortalHLMask = hlMask
+    else
+        portalHL:SetTexture("Interface\\Minimap\\UI-Minimap-ZoomButton-Highlight")
+        portalHL:SetBlendMode("ADD")
+        portalHL:SetVertexColor(1, 1, 1, 0.35)
+    end
+
+    newBtn:SetScript("OnEnter", function(b)
+        if not _G.GameTooltip or not _G.GameTooltip.SetOwner then return end
+        _G.GameTooltip:SetOwner(b, "ANCHOR_RIGHT")
+
+        local s = panel.__twichuiActions
+        if s and s.portalSpellId then
+            ---@diagnostic disable-next-line: undefined-field
+            local GetSpellInfo = _G.GetSpellInfo
+            local name = (type(GetSpellInfo) == "function" and GetSpellInfo(s.portalSpellId)) or "Portal"
+            _G.GameTooltip:SetText(tostring(name), 1, 1, 1)
+
+            if s.portalUnlocked then
+                _G.GameTooltip:AddLine("Click to teleport.", 1, 1, 1, true)
+            else
+                _G.GameTooltip:AddLine("You haven't unlocked this portal yet.", 1, 1, 1, true)
+            end
+        else
+            _G.GameTooltip:SetText("Portal", 1, 1, 1)
+            _G.GameTooltip:AddLine("No portal data for this dungeon.", 1, 1, 1, true)
+        end
+        _G.GameTooltip:Show()
+    end)
+    newBtn:SetScript("OnLeave", function()
+        if _G.GameTooltip and _G.GameTooltip.Hide then
+            _G.GameTooltip:Hide()
+        end
+    end)
+
+    btn:Hide()
+    btn:EnableMouse(false)
+
+    st.portalButton = newBtn
+    st.portalIcon = portalIcon
+    if st.portalHover and st.portalHover.SetAllPoints then
+        st.portalHover:SetAllPoints(newBtn)
+    end
+    if st.mdtButton and st.mdtButton.ClearAllPoints and st.mdtButton.SetPoint then
+        st.mdtButton:ClearAllPoints()
+        st.mdtButton:SetPoint("RIGHT", newBtn, "LEFT", -8, 0)
+    end
+
+    rawset(newBtn, "__twichuiNeedsSecure", false)
+end
+
 ---@param spellId number|nil
 ---@return boolean
 local function IsSpellKnownByPlayer(spellId)
@@ -59,8 +155,23 @@ local function IsSpellKnownByPlayer(spellId)
     if not spellId or spellId <= 0 then return false end
 
     local C_Spell = _G.C_Spell
-    if C_Spell and type(C_Spell.IsSpellKnown) == "function" then
-        return C_Spell.IsSpellKnown(spellId) and true or false
+    if C_Spell then
+        if type(C_Spell.IsSpellKnownOrOverridesKnown) == "function" then
+            return C_Spell.IsSpellKnownOrOverridesKnown(spellId) and true or false
+        end
+        if type(C_Spell.IsSpellKnown) == "function" then
+            return C_Spell.IsSpellKnown(spellId) and true or false
+        end
+    end
+
+    local IsSpellKnownOrOverridesKnown = _G.IsSpellKnownOrOverridesKnown
+    if type(IsSpellKnownOrOverridesKnown) == "function" then
+        return IsSpellKnownOrOverridesKnown(spellId, false) and true or false
+    end
+
+    local IsSpellKnown = _G.IsSpellKnown
+    if type(IsSpellKnown) == "function" then
+        return IsSpellKnown(spellId, false) and true or false
     end
 
     return false
@@ -79,16 +190,28 @@ local function UpdateActions(panel, mapId)
     ---@cast panel TwichUI_MythicPlus_DungeonsPanel
     if not panel or not panel.__twichuiActions then return end
 
+    EnsureSecurePortalButton(panel)
+
     local btn = panel.__twichuiActions.portalButton
     local icon = panel.__twichuiActions.portalIcon
     local hover = panel.__twichuiActions.portalHover
     if not btn or not icon then return end
 
+    -- If the panel (or this button) was created in combat, it may have become unprotected.
+    -- Rebuild it out of combat so secure click-casting works.
+    if (type(_G.InCombatLockdown) ~= "function" or not _G.InCombatLockdown()) and btn.IsProtected and not btn:IsProtected() then
+        rawset(btn, "__twichuiNeedsSecure", true)
+        EnsureSecurePortalButton(panel)
+        btn = panel.__twichuiActions.portalButton
+        icon = panel.__twichuiActions.portalIcon
+        hover = panel.__twichuiActions.portalHover
+        if not btn or not icon then return end
+    end
+
     local dungeonPortals = Data and rawget(Data, "DungeonPortals") or nil
     local portalData = dungeonPortals and dungeonPortals.GetByMapId and dungeonPortals:GetByMapId(mapId) or nil
 
     local spellId = portalData and tonumber(portalData.spellId) or nil
-    local achievementId = portalData and tonumber(portalData.achievementId) or nil
     local hasData = (spellId ~= nil and spellId > 0) and true or false
     local unlocked = hasData and IsSpellKnownByPlayer(spellId) or false
 
@@ -102,7 +225,6 @@ local function UpdateActions(panel, mapId)
             hover:EnableMouse(true)
         end
         panel.__twichuiActions.portalSpellId = spellId
-        panel.__twichuiActions.portalAchievementId = achievementId
         panel.__twichuiActions.portalHasData = hasData
         panel.__twichuiActions.portalUnlocked = unlocked
         return
@@ -116,10 +238,29 @@ local function UpdateActions(panel, mapId)
     btn:SetAttribute("macrotext1", nil)
 
     if unlocked and spellId then
-        btn:SetAttribute("type", "spell")
-        btn:SetAttribute("spell", spellId)
-        btn:SetAttribute("type1", "spell")
-        btn:SetAttribute("spell1", spellId)
+        ---@diagnostic disable-next-line: undefined-field
+        local GetSpellInfo = _G.GetSpellInfo
+        local spellToken = spellId
+        local spellNameForMacro = nil
+        if type(GetSpellInfo) == "function" then
+            local spellName = GetSpellInfo(spellId)
+            if type(spellName) == "string" and spellName ~= "" then
+                spellToken = spellName
+                spellNameForMacro = spellName
+            end
+        end
+
+        if spellNameForMacro then
+            btn:SetAttribute("type", "macro")
+            btn:SetAttribute("macrotext", "/cast " .. spellNameForMacro)
+            btn:SetAttribute("type1", "macro")
+            btn:SetAttribute("macrotext1", "/cast " .. spellNameForMacro)
+        else
+            btn:SetAttribute("type", "spell")
+            btn:SetAttribute("spell", spellToken)
+            btn:SetAttribute("type1", "spell")
+            btn:SetAttribute("spell1", spellToken)
+        end
         btn:Enable()
         icon:SetDesaturated(false)
         icon:SetAlpha(1)
@@ -138,7 +279,6 @@ local function UpdateActions(panel, mapId)
     end
 
     panel.__twichuiActions.portalSpellId = spellId
-    panel.__twichuiActions.portalAchievementId = achievementId
     panel.__twichuiActions.portalHasData = hasData
     panel.__twichuiActions.portalUnlocked = unlocked
 
@@ -1143,7 +1283,6 @@ end
 ---@field portalIcon Texture
 ---@field portalHover Frame
 ---@field portalSpellId number|nil
----@field portalAchievementId number|nil
 ---@field portalHasData boolean|nil
 ---@field portalUnlocked boolean
 ---@field mdtButton Button|nil
@@ -1854,6 +1993,16 @@ local function RefreshPanel(panel)
     UpdateSelectedDungeonRowHighlight(panel)
 
     UpdateDetails(panel, panel.__twichuiSelectedMapId)
+
+    -- On first open, the panel can be mid-layout and the portal button/icon can be rebuilt.
+    -- Run one extra pass next frame so the visual state (alpha/desaturation) matches enabled state.
+    local C_Timer = _G.C_Timer
+    if C_Timer and type(C_Timer.After) == "function" then
+        C_Timer.After(0, function()
+            if not panel or not panel.IsShown or not panel:IsShown() then return end
+            UpdateActions(panel, panel.__twichuiSelectedMapId)
+        end)
+    end
 end
 
 ---@param parent Frame
@@ -2051,11 +2200,29 @@ local function CreateDungeonsPanel(parent)
 
     -- Actions (below header, above runs table)
     -- Portal button now in header area (detailsHeader)
-    local portalButton = CreateFrame("Button", nil, detailsHeader, "SecureActionButtonTemplate")
+    ---@type string|nil
+    local portalTemplate = "SecureActionButtonTemplate"
+    if type(_G.InCombatLockdown) == "function" and _G.InCombatLockdown() then
+        -- Creating secure action buttons in combat can result in an unprotected frame.
+        -- We'll rebuild it out of combat via EnsureSecurePortalButton().
+        portalTemplate = nil
+    end
+    local portalButton = CreateFrame("Button", nil, detailsHeader, portalTemplate)
     portalButton:SetSize(26, 26)
+    portalButton:EnableMouse(true)
+    if portalButton.SetFrameLevel and detailsHeader.GetFrameLevel then
+        portalButton:SetFrameLevel((detailsHeader:GetFrameLevel() or 1) + 25)
+    end
+    if portalButton.SetFrameStrata and detailsHeader.GetFrameStrata then
+        portalButton:SetFrameStrata(detailsHeader:GetFrameStrata() or "MEDIUM")
+    end
     -- Place portal button at the right, below the times, with some padding
     portalButton:SetPoint("BOTTOMRIGHT", detailsHeader, "BOTTOMRIGHT", -6, 6)
-    portalButton:RegisterForClicks("LeftButtonUp")
+    portalButton:RegisterForClicks("AnyDown", "AnyUp")
+
+    if portalButton.IsProtected and not portalButton:IsProtected() then
+        rawset(portalButton, "__twichuiNeedsSecure", true)
+    end
 
     local portalIcon = portalButton:CreateTexture(nil, "ARTWORK")
     portalIcon:SetAllPoints(portalButton)
@@ -2088,6 +2255,14 @@ local function CreateDungeonsPanel(parent)
         if not _G.GameTooltip or not _G.GameTooltip.SetOwner then return end
         _G.GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
 
+        if btn.IsProtected and not btn:IsProtected() then
+            _G.GameTooltip:SetText("Portal", 1, 1, 1)
+            _G.GameTooltip:AddLine("This button was created in combat and can't cast spells yet.", 1, 0.2, 0.2, true)
+            _G.GameTooltip:AddLine("Leave combat and reopen this tab (or /reload).", 1, 1, 1, true)
+            _G.GameTooltip:Show()
+            return
+        end
+
         local st = panel.__twichuiActions
         if st and st.portalSpellId then
             ---@diagnostic disable-next-line: undefined-field
@@ -2099,24 +2274,6 @@ local function CreateDungeonsPanel(parent)
                 _G.GameTooltip:AddLine("Click to teleport.", 1, 1, 1, true)
             else
                 _G.GameTooltip:AddLine("You haven't unlocked this portal yet.", 1, 1, 1, true)
-            end
-
-            if st.portalAchievementId then
-                ---@diagnostic disable-next-line: undefined-field
-                local GetAchievementInfo = _G.GetAchievementInfo
-                if type(GetAchievementInfo) == "function" then
-                    local achName, _, completed = GetAchievementInfo(st.portalAchievementId)
-                    if type(achName) == "string" and achName ~= "" then
-                        _G.GameTooltip:AddLine("Achievement: " .. achName .. (completed and " (Completed)" or ""),
-                            0.8, 0.8, 0.8, true)
-                    else
-                        _G.GameTooltip:AddLine("Achievement ID: " .. tostring(st.portalAchievementId),
-                            0.8, 0.8, 0.8, true)
-                    end
-                else
-                    _G.GameTooltip:AddLine("Achievement ID: " .. tostring(st.portalAchievementId),
-                        0.8, 0.8, 0.8, true)
-                end
             end
         else
             _G.GameTooltip:SetText("Portal", 1, 1, 1)
@@ -2406,6 +2563,21 @@ local function CreateDungeonsPanel(parent)
         -- Delay refresh slightly to allow layout to settle
         C_Timer.After(0.05, function()
             RefreshPanel(panel)
+        end)
+
+        -- On first tab-open, some UI state (secure button rebuild, initial selection) can land a frame later.
+        -- Do a follow-up sync so the portal icon doesn't stay in its default dim state.
+        C_Timer.After(0.25, function()
+            if not panel or not panel.IsShown or not panel:IsShown() then return end
+            UpdateActions(panel, panel.__twichuiSelectedMapId)
+
+            local st = panel.__twichuiActions
+            local btn = st and st.portalButton
+            local icon = st and st.portalIcon
+            if btn and icon and btn.IsEnabled and btn:IsEnabled() then
+                icon:SetDesaturated(false)
+                icon:SetAlpha(1)
+            end
         end)
     end)
 

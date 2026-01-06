@@ -3028,7 +3028,6 @@ local function CreateSummaryPanel(parent)
                 local thr = tonumber(row.__twichuiThreshold) or 0
                 local prog = tonumber(row.__twichuiProgress) or 0
                 local rem = tonumber(row.__twichuiRemaining) or 0
-                local ilvl = row.__twichuiIlvl
                 if thr > 0 then
                     _G.GameTooltip:AddLine(string.format("Complete %d dungeons: %d/%d", thr, prog, thr), 1, 1, 1)
                     if row.__twichuiUnlocked then
@@ -3036,11 +3035,6 @@ local function CreateSummaryPanel(parent)
                     else
                         _G.GameTooltip:AddLine(string.format("Locked (%d more)", rem), 1, 0.25, 0.25)
                     end
-                end
-                if ilvl then
-                    _G.GameTooltip:AddLine(string.format("Example reward iLvl: %d", ilvl), 1, 1, 1)
-                else
-                    _G.GameTooltip:AddLine("Example reward iLvl: -", 0.8, 0.8, 0.8)
                 end
                 _G.GameTooltip:Show()
             end)
