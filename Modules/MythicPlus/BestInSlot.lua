@@ -1293,7 +1293,7 @@ local function CreateChooserFrame(parent)
             end
         end
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:SetText("Click to select source")
+        GameTooltip:SetText("Click to select source", 1, 1, 1)
         GameTooltip:Show()
     end)
 
@@ -1368,6 +1368,24 @@ local function CreateChooserFrame(parent)
                     end
                 end
             end
+        end
+
+        -- Additional sources for custom items
+        info = UIDropDownMenu_CreateInfo()
+        info.text = "Other"
+        info.isTitle = true
+        info.notCheckable = true
+        UIDropDownMenu_AddButton(info, level)
+
+        local extra = { "Crafted", "World Boss", "Other" }
+        for _, opt in ipairs(extra) do
+            info = UIDropDownMenu_CreateInfo()
+            info.func = OnCustomSourceSelect
+            info.text = "   " .. opt
+            info.value = opt
+            info.arg1 = opt
+            info.checked = (f.customSourceValue == opt)
+            UIDropDownMenu_AddButton(info, level)
         end
     end)
 
@@ -1541,6 +1559,14 @@ local function CreateChooserFrame(parent)
             customForm:Show()
             f.CustomSourceDropdown:Show()
             f.Input:Hide()
+
+            local sourceText = f.customSourceValue or "Other"
+            if type(UIDropDownMenu_SetSelectedValue) == "function" then
+                UIDropDownMenu_SetSelectedValue(f.CustomSourceDropdown, sourceText)
+            end
+            if type(UIDropDownMenu_SetText) == "function" then
+                UIDropDownMenu_SetText(f.CustomSourceDropdown, sourceText)
+            end
 
             rightScroll:Hide() -- Hide scroll frame as requested
 
@@ -3127,7 +3153,7 @@ local function CreateBestInSlotPanel(parent)
 
         f.ClearButton:SetScript("OnEnter", function(self)
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            GameTooltip:SetText("Clear Slot")
+            GameTooltip:SetText("Clear Slot", 1, 1, 1)
             GameTooltip:Show()
         end)
         f.ClearButton:SetScript("OnLeave", function(self)
@@ -3302,8 +3328,8 @@ local function CreateBestInSlotPanel(parent)
     end)
     resetBtn:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:SetText("Reset BiS List")
-        GameTooltip:AddLine("Clears all selected Best in Slot items.", 1, 1, 1)
+        GameTooltip:SetText("Reset BiS List", 1, 1, 1)
+        GameTooltip:AddLine("Clears all selected Best in Slot items.", 0.9, 0.9, 0.9, true)
         GameTooltip:Show()
     end)
     resetBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -3319,8 +3345,8 @@ local function CreateBestInSlotPanel(parent)
     end)
     copyBtn:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:SetText("Copy Equipped Gear")
-        GameTooltip:AddLine("Overwrites your BiS list with the gear you are currently wearing.", 1, 1, 1)
+        GameTooltip:SetText("Copy Equipped Gear", 1, 1, 1)
+        GameTooltip:AddLine("Overwrites your BiS list with the gear you are currently wearing.", 0.9, 0.9, 0.9, true)
         GameTooltip:Show()
     end)
     copyBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)

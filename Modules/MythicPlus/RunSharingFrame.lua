@@ -306,6 +306,9 @@ function RunSharingFrame:Toggle()
         self:UpdateList()
         self:UpdateSpeedInput()
         self.frame:Show()
+        if self.frame.Raise then
+            self.frame:Raise()
+        end
     end
 end
 
@@ -333,6 +336,8 @@ function RunSharingFrame:CreateFrame()
     frame:SetSize(800, 550)
     frame:SetPoint("CENTER")
     frame:SetFrameStrata("DIALOG")
+    frame:SetToplevel(true)
+    frame:SetClampedToScreen(true)
     frame:Hide()
     frame:EnableMouse(true)
     frame:SetMovable(true)
@@ -343,8 +348,21 @@ function RunSharingFrame:CreateFrame()
         frame:SetMinResize(600, 400)
     end
     frame:RegisterForDrag("LeftButton")
-    frame:SetScript("OnDragStart", frame.StartMoving)
+    frame:SetScript("OnDragStart", function(f)
+        if f and f.Raise then
+            f:Raise()
+        end
+        if f and f.StartMoving then
+            f:StartMoving()
+        end
+    end)
     frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
+
+    frame:SetScript("OnMouseDown", function(f)
+        if f and f.Raise then
+            f:Raise()
+        end
+    end)
 
     -- Skinning
     if Skins then
@@ -498,7 +516,7 @@ function RunSharingFrame:CreateFrame()
     simBtn:SetScript("OnClick", function() self:OnSimulateClick() end)
     simBtn:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:SetText("Start Simulation")
+        GameTooltip:SetText("Start Simulation", 1, 1, 1)
         GameTooltip:Show()
     end)
     simBtn:SetScript("OnLeave", function(self) GameTooltip:Hide() end)
@@ -513,7 +531,7 @@ function RunSharingFrame:CreateFrame()
     stopBtn:SetScript("OnClick", function() self:OnStopClick() end)
     stopBtn:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:SetText("Stop Simulation")
+        GameTooltip:SetText("Stop Simulation", 1, 1, 1)
         GameTooltip:Show()
     end)
     stopBtn:SetScript("OnLeave", function(self) GameTooltip:Hide() end)
@@ -820,12 +838,12 @@ function RunSharingFrame:SetupProgressBar(events)
                         local r = self.eventData.relSeconds or self.eventData.rel or 0
                         local m = math.floor(r / 60)
                         local s = math.floor(r % 60)
-                        GameTooltip:SetText(string.format("%s (%02d:%02d)", name, m, s))
+                        GameTooltip:SetText(string.format("%s (%02d:%02d)", name, m, s), 1, 1, 1)
 
                         if self.eventData.payload or self.eventData.rawArgs or self.eventData.args or self.eventData.meta then
                             local json = EncodeJSON(BuildEventDetails(self.eventData))
                             if #json > 100 then json = json:sub(1, 97) .. "..." end
-                            GameTooltip:AddLine(json, 0.8, 0.8, 0.8, true)
+                            GameTooltip:AddLine(json, 0.9, 0.9, 0.9, true)
                         end
                         GameTooltip:Show()
                         self.tex:SetColorTexture(1, 1, 1, 1) -- Highlight marker
@@ -1114,7 +1132,7 @@ function RunSharingFrame:UpdateList()
             delBtn:Hide()
             delBtn:SetScript("OnEnter", function(self)
                 GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-                GameTooltip:SetText("Delete Run")
+                GameTooltip:SetText("Delete Run", 1, 1, 1)
                 GameTooltip:Show()
             end)
             delBtn:SetScript("OnLeave", function(self) GameTooltip:Hide() end)
@@ -1129,7 +1147,7 @@ function RunSharingFrame:UpdateList()
             renameBtn:Hide()
             renameBtn:SetScript("OnEnter", function(self)
                 GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-                GameTooltip:SetText("Rename Run")
+                GameTooltip:SetText("Rename Run", 1, 1, 1)
                 GameTooltip:Show()
             end)
             renameBtn:SetScript("OnLeave", function(self) GameTooltip:Hide() end)

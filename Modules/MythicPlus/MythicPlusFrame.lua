@@ -730,7 +730,12 @@ function MainWindow:UpdateLockState()
 
     self.frame:SetMovable(true)
     self.frame:RegisterForDrag("LeftButton")
-    self.frame:SetScript("OnDragStart", function(f) f:StartMoving() end)
+    self.frame:SetScript("OnDragStart", function(f)
+        if f and f.Raise then
+            f:Raise()
+        end
+        f:StartMoving()
+    end)
     self.frame:SetScript("OnDragStop", function(f)
         f:StopMovingOrSizing()
         self:SaveFramePosition()
@@ -739,6 +744,9 @@ function MainWindow:UpdateLockState()
     self.titleBar:RegisterForDrag("LeftButton")
     self.titleBar:SetScript("OnDragStart", function()
         if self.frame and self.frame.StartMoving then
+            if self.frame.Raise then
+                self.frame:Raise()
+            end
             self.frame:StartMoving()
         end
     end)
@@ -1118,7 +1126,14 @@ function MainWindow:CreateFrame()
     self.frame = frame
 
     frame:SetFrameStrata("DIALOG")
+    frame:SetToplevel(true)
     frame:SetClampedToScreen(true)
+
+    frame:SetScript("OnMouseDown", function(f)
+        if f and f.Raise then
+            f:Raise()
+        end
+    end)
 
     ApplyElvUITemplate(frame)
 
@@ -1185,6 +1200,10 @@ end
 function MainWindow:ShowAnimated()
     if not self.frame then return end
     local f = self.frame
+
+    if f.Raise then
+        f:Raise()
+    end
 
     f.FadeOutGroup:Stop()
     if not f:IsShown() then

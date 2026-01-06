@@ -49,6 +49,7 @@ T.LootMonitor = T:NewModule("LootMonitor")
 ---@field Sound SoundModule?
 T.Media = T:NewModule("Media")
 T.Configuration = T:NewModule("Configuration")
+T.Data = T:NewModule("Data")
 T.ThirdPartyAPI = T:NewModule("ThirdPartyAPI")
 T.SlashCommands = T:NewModule("SlashCommands", "AceConsole-3.0")
 T.GoldGoblin = T:NewModule("GoldGoblin")

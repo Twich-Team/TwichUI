@@ -2,12 +2,14 @@ local _G = _G
 ---@diagnostic disable: need-check-nil
 ---@diagnostic disable-next-line: undefined-global
 local T = unpack(Twich)
-
 --- @type MythicPlusModule
 local MythicPlusModule = T:GetModule("MythicPlus")
 
 --- @type ConfigurationModule
 local CM = T:GetModule("Configuration")
+
+--- @type AceModule
+local Data = T:GetModule("Data")
 
 --- @type LoggerModule
 local Logger = T:GetModule("Logger")
@@ -50,182 +52,22 @@ local ASSUMED_DUNGEON_BG_ASPECT = 2.0
 
 local PORTAL_TEXTURE = "Interface\\AddOns\\TwichUI\\Media\\Textures\\portal.tga"
 
--- Best-effort: find the player's dungeon teleport spell for a map by scanning the spellbook
--- for a spell whose name contains the dungeon's localized name.
-local _portalSpellCache = {}
-local _portalSpellPendingUntil = {}
-
----@param mapId number
----@return number|nil
-local function GetMockPortalSpellId(mapId)
-    if not CM or type(CM.GetProfileSettingSafe) ~= "function" then
-        return nil
-    end
-
-    local enabled = CM:GetProfileSettingSafe("developer.testing.mythicPlus.portalMock.enabled", false)
-    if not enabled then
-        return nil
-    end
-
-    local mockMapId = tonumber(CM:GetProfileSettingSafe("developer.testing.mythicPlus.portalMock.mapId", 0)) or 0
-    local mockSpellId = tonumber(CM:GetProfileSettingSafe("developer.testing.mythicPlus.portalMock.spellId", 0)) or 0
-    if mockSpellId <= 0 then
-        return nil
-    end
-
-    if mockMapId == 0 or mockMapId == tonumber(mapId) then
-        return mockSpellId
-    end
-
-    return nil
-end
-
----@param s any
----@return string
-local function NormalizeText(s)
-    if type(s) ~= "string" then return "" end
-    s = s:lower()
-    -- Collapse punctuation/whitespace. Keeps letters/digits (including locale chars).
-    s = s:gsub("[%p%c]", " ")
-    s = s:gsub("%s+", " ")
-    s = s:gsub("^%s+", ""):gsub("%s+$", "")
-    return s
-end
-
----@param haystack string
----@param needle string
+---@param spellId number|nil
 ---@return boolean
-local function TextContains(haystack, needle)
-    if haystack == "" or needle == "" then return false end
-    return haystack:find(needle, 1, true) ~= nil
-end
+local function IsSpellKnownByPlayer(spellId)
+    spellId = tonumber(spellId)
+    if not spellId or spellId <= 0 then return false end
 
----@param mapId number|nil
----@return number|nil spellId
-local function FindDungeonPortalSpellId(mapId)
-    mapId = tonumber(mapId)
-    if not mapId then return nil end
-
-    -- Developer/testing override: pretend a portal spell exists (for UI testing).
-    local mock = GetMockPortalSpellId(mapId)
-    if mock then
-        return mock
-    end
-
-    local now = (type(GetTime) == "function" and GetTime()) or 0
-    local pendingUntil = _portalSpellPendingUntil[mapId]
-    if pendingUntil and pendingUntil > now then
-        return nil
-    end
-
-    if _portalSpellCache[mapId] ~= nil then
-        return _portalSpellCache[mapId] or nil
-    end
-
-    local dungeonName = GetMapUIInfo and GetMapUIInfo(mapId) or nil
-    if type(dungeonName) ~= "string" or dungeonName == "" then
-        return nil
-    end
-
-    local dungeonKey = NormalizeText(dungeonName)
-    if dungeonKey == "" then return nil end
-
-    ---@diagnostic disable-next-line: undefined-field
-    local GetNumSpellTabs = _G.GetNumSpellTabs
-    ---@diagnostic disable-next-line: undefined-field
-    local GetSpellTabInfo = _G.GetSpellTabInfo
-    ---@diagnostic disable-next-line: undefined-field
-    local GetSpellBookItemInfo = _G.GetSpellBookItemInfo
-    ---@diagnostic disable-next-line: undefined-field
-    local GetSpellBookItemName = _G.GetSpellBookItemName
-    ---@diagnostic disable-next-line: undefined-field
-    local IsPassiveSpell = _G.IsPassiveSpell
-
-    if type(GetNumSpellTabs) ~= "function" or type(GetSpellTabInfo) ~= "function" or type(GetSpellBookItemInfo) ~= "function" then
-        return nil
-    end
-
-    ---@diagnostic disable-next-line: undefined-field
-    local BOOKTYPE_SPELL = _G.BOOKTYPE_SPELL or "spell"
-
-    local requestedSpellData = false
     local C_Spell = _G.C_Spell
-
-    for tab = 1, GetNumSpellTabs() do
-        local _, _, offset, numSpells = GetSpellTabInfo(tab)
-        offset = tonumber(offset) or 0
-        numSpells = tonumber(numSpells) or 0
-        for slot = offset + 1, offset + numSpells do
-            local itemType, spellId = GetSpellBookItemInfo(slot, BOOKTYPE_SPELL)
-            if itemType == "SPELL" and spellId then
-                local name = (type(GetSpellBookItemName) == "function") and GetSpellBookItemName(slot, BOOKTYPE_SPELL) or
-                    nil
-                if type(name) == "string" and name ~= "" then
-                    local nameKey = NormalizeText(name)
-                    local match = TextContains(nameKey, dungeonKey)
-                    if not match then
-                        -- Try reverse match (Dungeon Name contains Spell Name suffix)
-                        -- e.g. Dungeon: "Ara-Kara, City of Echoes", Spell: "Teleport: Ara-Kara"
-                        local target = name:match("^Teleport: (.+)") or name:match("^Path of the (.+)")
-                        if target then
-                            local targetKey = NormalizeText(target)
-                            if targetKey ~= "" and TextContains(dungeonKey, targetKey) then
-                                match = true
-                            end
-                        end
-                    end
-
-                    if not match and C_Spell and type(C_Spell.GetSpellDescription) == "function" then
-                        local desc = C_Spell.GetSpellDescription(spellId)
-                        if type(desc) == "string" and desc ~= "" then
-                            local descKey = NormalizeText(desc)
-                            if TextContains(descKey, dungeonKey) then
-                                match = true
-                            end
-                        else
-                            -- Spell description may be empty until spell data is loaded.
-                            if type(C_Spell.RequestLoadSpellData) == "function" then
-                                C_Spell.RequestLoadSpellData(spellId)
-                                requestedSpellData = true
-                            end
-                        end
-                    end
-
-                    if match then
-                        spellId = tonumber(spellId)
-                        if spellId and (type(IsPassiveSpell) ~= "function" or not IsPassiveSpell(spellId)) then
-                            _portalSpellCache[mapId] = spellId
-                            return spellId
-                        end
-                    end
-                end
-            end
-        end
+    if C_Spell and type(C_Spell.IsSpellKnown) == "function" then
+        return C_Spell.IsSpellKnown(spellId) and true or false
     end
 
-    if requestedSpellData then
-        -- Avoid caching a negative result while spell text is still loading.
-        _portalSpellPendingUntil[mapId] = now + 1.0
-        return nil
-    end
-
-    _portalSpellCache[mapId] = false
-    return nil
-end
-
-local function ClearPortalSpellCache()
-    local wipeFn = _G.wipe or (_G.table and _G.table.wipe)
-    if type(wipeFn) == "function" then
-        wipeFn(_portalSpellCache)
-        wipeFn(_portalSpellPendingUntil)
-    else
-        for k in pairs(_portalSpellCache) do _portalSpellCache[k] = nil end
-        for k in pairs(_portalSpellPendingUntil) do _portalSpellPendingUntil[k] = nil end
-    end
+    return false
 end
 
 function Dungeons:ClearPortalSpellCache()
-    ClearPortalSpellCache()
+    -- Backwards-compatible name (used by Developer config). We no longer cache spellbook scanning.
     if self.Refresh then
         self:Refresh()
     end
@@ -242,87 +84,13 @@ local function UpdateActions(panel, mapId)
     local hover = panel.__twichuiActions.portalHover
     if not btn or not icon then return end
 
-    local spellId = FindDungeonPortalSpellId(mapId)
-    local mockSpellId = GetMockPortalSpellId(mapId)
-    local isMock = (mockSpellId ~= nil and tonumber(mockSpellId) == tonumber(spellId))
+    local dungeonPortals = Data and rawget(Data, "DungeonPortals") or nil
+    local portalData = dungeonPortals and dungeonPortals.GetByMapId and dungeonPortals:GetByMapId(mapId) or nil
 
-    -- Cache developer mock config state for tooltips/debug.
-    if CM and type(CM.GetProfileSettingSafe) == "function" then
-        panel.__twichuiActions.portalMockEnabled = CM:GetProfileSettingSafe(
-            "developer.testing.mythicPlus.portalMock.enabled", false) and true or false
-        panel.__twichuiActions.portalMockMapId = tonumber(CM:GetProfileSettingSafe(
-            "developer.testing.mythicPlus.portalMock.mapId", 0)) or 0
-        panel.__twichuiActions.portalMockSpellId = tonumber(CM:GetProfileSettingSafe(
-            "developer.testing.mythicPlus.portalMock.spellId", 0)) or 0
-    else
-        panel.__twichuiActions.portalMockEnabled = false
-        panel.__twichuiActions.portalMockMapId = 0
-        panel.__twichuiActions.portalMockSpellId = 0
-    end
-
-    local unlocked = (spellId ~= nil)
-    local knows = true
-    if isMock and spellId then
-        local C_Spell = _G.C_Spell
-        if C_Spell and type(C_Spell.IsSpellKnown) == "function" then
-            knows = C_Spell.IsSpellKnown(spellId) and true or false
-        else
-            ---@diagnostic disable-next-line: undefined-field
-            local IsSpellKnown = _G.IsSpellKnown
-            if type(IsSpellKnown) == "function" then
-                knows = IsSpellKnown(spellId, false) and true or false
-            end
-        end
-    end
-
-    -- In mock mode, keep the button enabled even if the spell isn't known,
-    -- but provide explicit feedback (tooltip + click message).
-    local mockUnknown = (isMock and spellId and not knows) and true or false
-    if mockUnknown then
-        unlocked = true
-    elseif isMock and spellId then
-        unlocked = knows
-    end
-
-    -- Prefer spell name for secure casting/macro; resolve via modern APIs first.
-    ---@type string|number|nil
-    local spellToken = spellId
-    ---@type string|nil
-    local spellName = nil
-    if spellId then
-        local C_Spell = _G.C_Spell
-        if C_Spell and type(C_Spell.GetSpellName) == "function" then
-            spellName = C_Spell.GetSpellName(spellId)
-        end
-
-        if (not spellName or spellName == "") and C_Spell and type(C_Spell.GetSpellInfo) == "function" then
-            local info = C_Spell.GetSpellInfo(spellId)
-            if type(info) == "table" and type(info.name) == "string" then
-                spellName = info.name
-            end
-        end
-
-        if not spellName or spellName == "" then
-            ---@diagnostic disable-next-line: undefined-field
-            local GetSpellInfo = _G.GetSpellInfo
-            if type(GetSpellInfo) == "function" then
-                spellName = GetSpellInfo(spellId)
-            end
-        end
-
-        if (not spellName or spellName == "") and C_Spell and type(C_Spell.RequestLoadSpellData) == "function" then
-            -- Best-effort: may populate name on next refresh.
-            C_Spell.RequestLoadSpellData(spellId)
-        end
-
-        if type(spellName) == "string" and spellName ~= "" then
-            spellToken = spellName
-        else
-            if Logger and type(Logger.Debug) == "function" then
-                Logger.Debug("Portal mock spellId has no spell name yet: " .. tostring(spellId))
-            end
-        end
-    end
+    local spellId = portalData and tonumber(portalData.spellId) or nil
+    local achievementId = portalData and tonumber(portalData.achievementId) or nil
+    local hasData = (spellId ~= nil and spellId > 0) and true or false
+    local unlocked = hasData and IsSpellKnownByPlayer(spellId) or false
 
     -- Secure attributes can't be changed in combat.
     if _G.InCombatLockdown and _G.InCombatLockdown() then
@@ -334,9 +102,9 @@ local function UpdateActions(panel, mapId)
             hover:EnableMouse(true)
         end
         panel.__twichuiActions.portalSpellId = spellId
+        panel.__twichuiActions.portalAchievementId = achievementId
+        panel.__twichuiActions.portalHasData = hasData
         panel.__twichuiActions.portalUnlocked = unlocked
-        panel.__twichuiActions.portalIsMock = isMock
-        panel.__twichuiActions.portalMockUnknown = mockUnknown
         return
     end
 
@@ -347,30 +115,11 @@ local function UpdateActions(panel, mapId)
     btn:SetAttribute("spell1", nil)
     btn:SetAttribute("macrotext1", nil)
 
-    if unlocked then
-        if isMock then
-            -- Mock mode: always use a macro so we can provide visible feedback when it can't cast.
-            local macro
-            if mockUnknown then
-                macro = "/run print('TwichUI: Mock spell is not known by this character.')"
-            elseif type(spellName) == "string" and spellName ~= "" then
-                macro = "/run if print then print('TwichUI: portal mock macro executed') end\n" ..
-                    "/stopcasting\n" ..
-                    "/cast [@player] " .. spellName
-            else
-                macro = "/run print('TwichUI: Mock spell name unavailable for spellId " .. tostring(spellId) .. "')"
-            end
-
-            btn:SetAttribute("type", "macro")
-            btn:SetAttribute("macrotext", macro)
-            btn:SetAttribute("type1", "macro")
-            btn:SetAttribute("macrotext1", macro)
-        else
-            btn:SetAttribute("type", "spell")
-            btn:SetAttribute("spell", spellToken)
-            btn:SetAttribute("type1", "spell")
-            btn:SetAttribute("spell1", spellToken)
-        end
+    if unlocked and spellId then
+        btn:SetAttribute("type", "spell")
+        btn:SetAttribute("spell", spellId)
+        btn:SetAttribute("type1", "spell")
+        btn:SetAttribute("spell1", spellId)
         btn:Enable()
         icon:SetDesaturated(false)
         icon:SetAlpha(1)
@@ -389,13 +138,13 @@ local function UpdateActions(panel, mapId)
     end
 
     panel.__twichuiActions.portalSpellId = spellId
+    panel.__twichuiActions.portalAchievementId = achievementId
+    panel.__twichuiActions.portalHasData = hasData
     panel.__twichuiActions.portalUnlocked = unlocked
-    panel.__twichuiActions.portalIsMock = isMock
-    panel.__twichuiActions.portalMockUnknown = mockUnknown
 
     -- Update MDT Button visibility
     if panel.__twichuiActions.mdtButton then
-        if _G.MDungeonTools or _G.MDT then
+        if rawget(_G, "MDungeonTools") or rawget(_G, "MDT") then
             panel.__twichuiActions.mdtButton:Show()
         else
             panel.__twichuiActions.mdtButton:Hide()
@@ -1374,12 +1123,10 @@ end
 ---@field portalIcon Texture
 ---@field portalHover Frame
 ---@field portalSpellId number|nil
+---@field portalAchievementId number|nil
+---@field portalHasData boolean|nil
 ---@field portalUnlocked boolean
----@field portalIsMock boolean|nil
----@field portalMockUnknown boolean|nil
----@field portalMockEnabled boolean|nil
----@field portalMockMapId number|nil
----@field portalMockSpellId number|nil
+---@field mdtButton Button|nil
 
 ---@class TwichUI_MythicPlus_DungeonsPanel : Frame
 ---@field __twichuiFontPath string|nil
@@ -2218,7 +1965,7 @@ local function CreateDungeonsPanel(parent)
         f:SetScript("OnEnter", function(self)
             if not _G.GameTooltip then return end
             _G.GameTooltip:SetOwner(self, "ANCHOR_TOP")
-            _G.GameTooltip:AddLine("+" .. id .. " Chest Timer")
+            _G.GameTooltip:SetText("+" .. id .. " Chest Timer", 1, 1, 1)
             _G.GameTooltip:AddLine("Complete the dungeon within this time to upgrade your key by " .. id .. " level(s).",
                 1, 1, 1, true)
             _G.GameTooltip:Show()
@@ -2278,82 +2025,40 @@ local function CreateDungeonsPanel(parent)
         _G.GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
 
         local st = panel.__twichuiActions
-        if st and st.portalUnlocked and st.portalSpellId then
+        if st and st.portalSpellId then
             ---@diagnostic disable-next-line: undefined-field
             local GetSpellInfo = _G.GetSpellInfo
             local name = (type(GetSpellInfo) == "function" and GetSpellInfo(st.portalSpellId)) or "Portal"
-            _G.GameTooltip:AddLine(tostring(name))
-            if st.portalMockUnknown then
-                _G.GameTooltip:AddLine("Mock spell is not known by this character.", 1, 0.3, 0.3, true)
-            else
+            _G.GameTooltip:SetText(tostring(name), 1, 1, 1)
+
+            if st.portalUnlocked then
                 _G.GameTooltip:AddLine("Click to teleport.", 1, 1, 1, true)
+            else
+                _G.GameTooltip:AddLine("You haven't unlocked this portal yet.", 1, 1, 1, true)
+            end
+
+            if st.portalAchievementId then
+                ---@diagnostic disable-next-line: undefined-field
+                local GetAchievementInfo = _G.GetAchievementInfo
+                if type(GetAchievementInfo) == "function" then
+                    local achName, _, completed = GetAchievementInfo(st.portalAchievementId)
+                    if type(achName) == "string" and achName ~= "" then
+                        _G.GameTooltip:AddLine("Achievement: " .. achName .. (completed and " (Completed)" or ""),
+                            0.8, 0.8, 0.8, true)
+                    else
+                        _G.GameTooltip:AddLine("Achievement ID: " .. tostring(st.portalAchievementId),
+                            0.8, 0.8, 0.8, true)
+                    end
+                else
+                    _G.GameTooltip:AddLine("Achievement ID: " .. tostring(st.portalAchievementId),
+                        0.8, 0.8, 0.8, true)
+                end
             end
         else
-            _G.GameTooltip:AddLine("Portal")
-            _G.GameTooltip:AddLine("You haven't unlocked this portal yet.", 1, 1, 1, true)
-        end
-
-        -- Developer-only: show what the secure action is set to when mocking.
-        if st and st.portalMockEnabled then
-            local actionType = btn.GetAttribute and btn:GetAttribute("type") or nil
-            local spellAttr = btn.GetAttribute and btn:GetAttribute("spell") or nil
-            local macroAttr = btn.GetAttribute and btn:GetAttribute("macrotext") or nil
-            local actionType1 = btn.GetAttribute and btn:GetAttribute("type1") or nil
-            local spellAttr1 = btn.GetAttribute and btn:GetAttribute("spell1") or nil
-            local macroAttr1 = btn.GetAttribute and btn:GetAttribute("macrotext1") or nil
-            _G.GameTooltip:AddLine(" ")
-            _G.GameTooltip:AddLine("Mock Debug:", 0.7, 0.7, 0.7)
-            _G.GameTooltip:AddLine("cfg.mapId=" .. tostring(st.portalMockMapId) .. " cfg.spellId=" ..
-                tostring(st.portalMockSpellId), 0.7, 0.7, 0.7)
-            _G.GameTooltip:AddLine("selected.mapId=" .. tostring(panel.__twichuiSelectedMapId), 0.7, 0.7, 0.7)
-            _G.GameTooltip:AddLine("applied=" .. tostring(st.portalIsMock), 0.7, 0.7, 0.7)
-            _G.GameTooltip:AddLine("type=" .. tostring(actionType), 0.7, 0.7, 0.7)
-            _G.GameTooltip:AddLine("type1=" .. tostring(actionType1), 0.7, 0.7, 0.7)
-            if spellAttr ~= nil then
-                _G.GameTooltip:AddLine("spell=" .. tostring(spellAttr), 0.7, 0.7, 0.7)
-            end
-            if spellAttr1 ~= nil then
-                _G.GameTooltip:AddLine("spell1=" .. tostring(spellAttr1), 0.7, 0.7, 0.7)
-            end
-            if macroAttr ~= nil then
-                _G.GameTooltip:AddLine("macro=" .. tostring(macroAttr), 0.7, 0.7, 0.7, true)
-            end
-            if macroAttr1 ~= nil then
-                _G.GameTooltip:AddLine("macro1=" .. tostring(macroAttr1), 0.7, 0.7, 0.7, true)
-            end
-            if _G.InCombatLockdown and _G.InCombatLockdown() then
-                _G.GameTooltip:AddLine("(InCombatLockdown: cannot update secure action)", 1, 0.5, 0.2, true)
-            end
+            _G.GameTooltip:SetText("Portal", 1, 1, 1)
+            _G.GameTooltip:AddLine("No portal data for this dungeon.", 1, 1, 1, true)
         end
         _G.GameTooltip:Show()
-    end)
-
-    -- Mock-only click debug: helps confirm clicks reach the secure button.
-    portalButton:HookScript("OnClick", function(btn)
-        local st = panel.__twichuiActions
-        if not st or not st.portalMockEnabled then return end
-        if type(_G.print) ~= "function" then return end
-
-        local inCombat = (_G.InCombatLockdown and _G.InCombatLockdown()) and true or false
-        local actionType = btn.GetAttribute and btn:GetAttribute("type") or nil
-        local actionType1 = btn.GetAttribute and btn:GetAttribute("type1") or nil
-        local spellAttr = btn.GetAttribute and btn:GetAttribute("spell") or nil
-        local spellAttr1 = btn.GetAttribute and btn:GetAttribute("spell1") or nil
-        local macroAttr = btn.GetAttribute and btn:GetAttribute("macrotext") or nil
-        local macroAttr1 = btn.GetAttribute and btn:GetAttribute("macrotext1") or nil
-
-        _G.print("TwichUI Portal Mock Debug:")
-        _G.print("  cfg.mapId=" .. tostring(st.portalMockMapId) .. " cfg.spellId=" .. tostring(st.portalMockSpellId))
-        _G.print("  selected.mapId=" ..
-            tostring(panel.__twichuiSelectedMapId) .. " applied=" .. tostring(st.portalIsMock))
-        _G.print("  inCombat=" .. tostring(inCombat) .. " unlocked=" .. tostring(st.portalUnlocked) ..
-            " unknown=" .. tostring(st.portalMockUnknown))
-        _G.print("  type=" .. tostring(actionType) .. " type1=" .. tostring(actionType1))
-        _G.print("  spell=" .. tostring(spellAttr) .. " spell1=" .. tostring(spellAttr1))
-        if macroAttr ~= nil or macroAttr1 ~= nil then
-            _G.print("  macro=" .. tostring(macroAttr))
-            _G.print("  macro1=" .. tostring(macroAttr1))
-        end
     end)
     portalButton:SetScript("OnLeave", function()
         if _G.GameTooltip and _G.GameTooltip.Hide then
@@ -2375,11 +2080,13 @@ local function CreateDungeonsPanel(parent)
         _G.GameTooltip:SetOwner(f, "ANCHOR_RIGHT")
 
         local st = panel.__twichuiActions
-        _G.GameTooltip:AddLine("Portal")
+        _G.GameTooltip:SetText("Portal", 1, 1, 1)
         if st and st.portalUnlocked then
             _G.GameTooltip:AddLine("Unavailable while in combat.", 1, 1, 1, true)
-        else
+        elseif st and st.portalSpellId then
             _G.GameTooltip:AddLine("You haven't unlocked this portal yet.", 1, 1, 1, true)
+        else
+            _G.GameTooltip:AddLine("No portal data for this dungeon.", 1, 1, 1, true)
         end
         _G.GameTooltip:Show()
     end)
@@ -2403,7 +2110,7 @@ local function CreateDungeonsPanel(parent)
         mdtIcon:SetVertexColor(1, 1, 1) -- Brighten on hover
         if not _G.GameTooltip then return end
         _G.GameTooltip:SetOwner(self, "ANCHOR_TOP")
-        _G.GameTooltip:AddLine("Mythic Dungeon Tools")
+        _G.GameTooltip:SetText("Mythic Dungeon Tools", 1, 1, 1)
         _G.GameTooltip:AddLine("Click to open map.", 1, 1, 1, true)
         _G.GameTooltip:Show()
     end)
@@ -2413,7 +2120,7 @@ local function CreateDungeonsPanel(parent)
     end)
 
     mdtButton:SetScript("OnClick", function()
-        local MDT = _G.MDungeonTools or _G.MDT
+        local MDT = rawget(_G, "MDungeonTools") or rawget(_G, "MDT")
         if not MDT then return end
 
         local isShown = MDT.main_frame and MDT.main_frame:IsShown()
@@ -2499,7 +2206,7 @@ local function CreateDungeonsPanel(parent)
         end
     end)
 
-    if _G.MDungeonTools or _G.MDT then
+    if rawget(_G, "MDungeonTools") or rawget(_G, "MDT") then
         mdtButton:Show()
     else
         mdtButton:Hide()
@@ -2687,31 +2394,14 @@ function Dungeons:Initialize()
     if self.initialized then return end
     self.initialized = true
 
-    -- Spell names/descriptions can be empty until data is loaded; clear/retry cache when spell text updates.
+    -- If the player learns/unlearns spells, update portal enable/disable state.
     if not self.__twichuiPortalSpellEventFrame then
         local f = CreateFrame("Frame")
         self.__twichuiPortalSpellEventFrame = f
-        f:RegisterEvent("SPELL_TEXT_UPDATE")
         f:RegisterEvent("SPELLS_CHANGED")
         f:SetScript("OnEvent", function()
-            ClearPortalSpellCache()
-
-            -- Throttle refresh to avoid spamming when multiple spell records load.
-            if self.__twichuiPortalSpellRefreshPending then return end
-            self.__twichuiPortalSpellRefreshPending = true
-            local C_Timer = _G.C_Timer
-            if C_Timer and type(C_Timer.After) == "function" then
-                C_Timer.After(0.2, function()
-                    self.__twichuiPortalSpellRefreshPending = false
-                    if self.Refresh then
-                        self:Refresh()
-                    end
-                end)
-            else
-                self.__twichuiPortalSpellRefreshPending = false
-                if self.Refresh then
-                    self:Refresh()
-                end
+            if self.Refresh then
+                self:Refresh()
             end
         end)
     end

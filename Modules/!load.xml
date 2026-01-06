@@ -3,6 +3,8 @@
 
     <Include file="..\Tools\!load.xml" />
 
+    <Include file="Data\!load.xml" />
+
     <!-- Ensure GoldGoblin module is loaded so its CONFIGURATION exists -->
     <Include file="GoldGoblin\!load.xml" />
 
