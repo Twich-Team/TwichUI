@@ -1686,7 +1686,18 @@ UpdateDetailsRuns = function(panel, mapId)
 
             row:EnableMouse(true)
             row:SetScript("OnMouseUp", function(self, button)
-                if button == "RightButton" and self.runData then
+                if button == "LeftButton" and self.runData then
+                    if MythicPlusModule and MythicPlusModule.Runs and MythicPlusModule.Runs.ShowDetails then
+                         MythicPlusModule.Runs:ShowDetails(self.runData)
+                    else
+                         -- Fallback if exported function is missing
+                         local runsPanel = MythicPlusModule.MainWindow and MythicPlusModule.MainWindow:GetPanelFrame("runs")
+                         if runsPanel then
+                             -- Try to find the local OpenDetails equivalent
+                             -- This requires Runs module to expose it, or we access it via the panel if attached
+                         end
+                    end
+                elseif button == "RightButton" and self.runData then
                     -- Rows are reused across dungeon selections; always consult current panel state.
                     ShowContextMenu(self.runData, panel, panel.__twichuiSelectedMapId or mapId or self.runData.mapId)
                 end
@@ -1729,43 +1740,292 @@ UpdateDetailsRuns = function(panel, mapId)
     end
 end
 
+-- Forward declaration
+local ShowDetailsPopup 
+
 local function UpdateDetailsStats(panel, mapId)
-    local statsFrame = panel.__twichuiDetailsStats
-    if not statsFrame then return end
+    local s = panel.__twichuiDetailsStats
+    if not s or not s.frame then return end
+
+    s.mapId = mapId
+
+    -- Update Score (Independent of local stats)
+    if s.scoreLabel then
+        local bestScore = 0
+        if GetDungeonStats then
+            if GetRunHistoryTable then
+                local history = GetRunHistoryTable()
+                bestScore = GetDungeonStats(mapId, history)
+            else
+                bestScore = GetDungeonStats(mapId)
+            end
+        end
+
+        if bestScore and bestScore > 0 then
+            local color = nil
+            if C_ChallengeMode and C_ChallengeMode.GetDungeonScoreRarityColor then
+               color = C_ChallengeMode.GetDungeonScoreRarityColor(bestScore)
+            end
+            if not color then color = {r=1, g=1, b=1} end
+
+            s.scoreLabel:SetText(bestScore)
+            s.scoreLabel:SetTextColor(color.r, color.g, color.b)
+        else
+             s.scoreLabel:SetText("")
+        end
+    end
 
     local db = Database:GetForCurrentCharacter()
     local stats = db.DungeonStats and db.DungeonStats[mapId]
 
-    local row1 = statsFrame.row1
-    local row2 = statsFrame.row2
-    local row3 = statsFrame.row3
-    local compT = statsFrame.compText
-    local lootT = statsFrame.lootText
+    if not stats or (stats.runs or 0) == 0 then
+        -- Empty State
+        s.pie:SetCooldown(0, 0)
+        s.pieText:SetText("N/A")
+        s.totalRunsVal:SetText("0")
+        s.timeVal:SetText("0h")
 
-    if not stats then
-        row1:SetText("|cFF808080No collected stats for this dungeon yet.|r")
-        row2:SetText("")
-        row3:SetText("")
-        compT:SetText("")
-        lootT:SetText("")
+        s.detailVal:SetText("0")
+        
+        -- "Disable" Button visuals and click
+        s.detailsBtn:SetScript("OnLeave", nil) -- Clear first
+        s.detailsBtn:SetScript("OnEnter", nil) -- Clear first
+
+        if s.detailsIcon then
+             s.detailsIcon:SetDesaturated(true)
+             s.detailsIcon:SetVertexColor(1, 1, 1, 1) -- Opaque white, let Desaturated handle the grey look
+        end
+        s.detailsBtn:SetScript("OnEnter", function(self)
+             if _G.GameTooltip then
+                  _G.GameTooltip:SetOwner(self, "ANCHOR_TOP")
+                  _G.GameTooltip:SetText("Detailed Statistics", 1, 1, 1)
+                  _G.GameTooltip:AddLine("Complete a run to view detailed statistics.", 1, 1, 1, true)
+                  _G.GameTooltip:Show()
+             end
+        end)
+        s.detailsBtn:SetScript("OnLeave", function(self)
+             if _G.GameTooltip then _G.GameTooltip:Hide() end
+        end)
+        s.detailsBtn:SetScript("OnClick", nil)
+
         return
     end
 
-    -- Row 1: Time, Runs
-    local avgTime = (stats.completes > 0 and (stats.totalTime / stats.completes)) or 0
-    row1:SetText(string.format("Runs: |cFFFFFFFF%d|r  |  Completed: |cFF00FF00%d|r  |  Abandoned: |cFFFF0000%d|r",
-        stats.runs, stats.completes, stats.abandons))
+    -- Enable Button
+    s.detailsBtn:SetScript("OnLeave", nil) -- Clear first
+    s.detailsBtn:SetScript("OnEnter", nil) -- Clear first
+    if s.detailsIcon then
+         s.detailsIcon:SetDesaturated(false)
+         s.detailsIcon:SetVertexColor(0.7, 0.7, 0.7, 1.0) -- Restore full alpha
+    end
+    s.detailsBtn:SetScript("OnEnter", function(self)
+        if s.detailsIcon then s.detailsIcon:SetVertexColor(1, 1, 1) end
+        if _G.GameTooltip then
+            _G.GameTooltip:SetOwner(self, "ANCHOR_TOP")
+            _G.GameTooltip:SetText("View Detailed Statistics", 1, 1, 1)
+            _G.GameTooltip:Show()
+        end
+    end)
+    s.detailsBtn:SetScript("OnLeave", function(self)
+        if s.detailsIcon then s.detailsIcon:SetVertexColor(0.7, 0.7, 0.7) end -- Maintain default "Off" color
+        if _G.GameTooltip then _G.GameTooltip:Hide() end
+    end)
+    s.detailsBtn:SetScript("OnClick", function()
+        if panel.__twichuiDetailsStats and panel.__twichuiDetailsStats.mapId then
+            ShowDetailsPopup(panel.__twichuiDetailsStats.mapId)
+        end
+    end)
 
-    -- Row 2: Counts
-    local successRate = (stats.runs > 0 and (stats.completes / stats.runs * 100)) or 0
-    row2:SetText(string.format("Total Time: |cFFFFFFFF%s|r  |  Avg Time: |cFFFFFFFF%s|r  | Success: |cFFFFFFFF%.1f%%|r",
-        FormatTime(stats.totalTime), FormatTime(avgTime), successRate))
+    -- 1. Success Rate Pie
+    local rate = 0
+    if stats.runs > 0 then
+        rate = (stats.completes / stats.runs)
+    end
 
-    -- Row 3: Deaths
-    row3:SetText(string.format("Total Deaths: |cFFFFFFFF%d|r (Group) / |cFFFFFFFF%d|r (You)", stats.totalGroupDeaths,
-        stats.totalPlayerDeaths))
+    -- Update Cooldown Value
+    -- Logic: Standard Cooldown (Reverse=false): Swipe covers REMAINING time.
+    -- We want Swipe to cover FAILURE %.
+    -- Remaining time should equal Failure %.
+    -- Failure = (1 - rate).
+    -- Remaining = Duration * (1 - rate).
+    -- Elapsed = Duration - Remaining = Duration - (Duration - Duration*rate) = Duration * rate.
+    -- Start = Now - Elapsed = Now - (Duration * rate).
 
-    -- Composition
+    local now = GetTime()
+    local duration = 100
+    s.pie:SetCooldown(now - (duration * rate), duration)
+
+    if s.pie.Pause then s.pie:Pause() end
+    s.pieText:SetText(string.format("%.0f%%", rate * 100))
+
+    -- Ensure bg color is always set (in case user changed config)
+    if s.pieBg then
+        local r, g, b = 0, 0.44, 0.87 -- Default Blue
+        if MythicPlusModule and MythicPlusModule.CONFIGURATION and MythicPlusModule.CONFIGURATION.DUNGEONS_PIE_CHART_COLOR then
+            local c = CM:GetProfileSettingByConfigEntry(MythicPlusModule.CONFIGURATION.DUNGEONS_PIE_CHART_COLOR)
+            if c and c.r then r, g, b = c.r, c.g, c.b end
+        elseif _G.ElvUI then
+            local E = unpack(_G.ElvUI)
+            if E.db and E.db.general and E.db.general.valuecolor then
+                local c = E.db.general.valuecolor
+                r, g, b = c.r, c.g, c.b
+            elseif E.media and E.media.rgb and E.media.rgb.value then
+                r, g, b = E.media.rgb.value.r, E.media.rgb.value.g, E.media.rgb.value.b
+            end
+        end
+        s.pieBg:SetVertexColor(r, g, b, 1)
+    end
+    if s.pie.Pause then s.pie:Pause() end
+    s.pieText:SetText(string.format("%.0f%%", rate * 100))
+
+    -- 2. Total Runs
+    s.totalRunsVal:SetText(stats.runs)
+
+    -- 3. Time (Hours)
+    local hours = stats.totalTime / 3600
+    if hours < 0.1 and stats.totalTime > 0 then
+        s.timeVal:SetText(FormatTime(stats.totalTime))
+    else
+        s.timeVal:SetText(string.format("%.1fh", hours))
+    end
+
+    -- 4. Details Text (Deaths)
+    local deadCount = stats.totalGroupDeaths or 0
+    s.detailVal:SetText(tostring(deadCount))
+    if deadCount > 0 then
+        s.detailVal:SetTextColor(1, 0, 0, 1) -- Red
+    else
+        s.detailVal:SetTextColor(1, 1, 1, 1) -- White
+    end
+    if s.detailVal.SetFont and panel.__twichuiFontPath then
+        s.detailVal:SetFont(panel.__twichuiFontPath, 20, "OUTLINE")
+    end
+end
+
+local popupFrame
+ShowDetailsPopup = function(mapId)
+    if not popupFrame then
+        local f = CreateFrame("Frame", "TwichUIDungeonsDetailsPopup", UIParent, "BackdropTemplate")
+        f:SetSize(600, 500)
+        f:SetPoint("CENTER", UIParent, "CENTER")
+        f:SetFrameStrata("FULLSCREEN_DIALOG") -- Ensure it is above everything
+        f:EnableMouse(true)
+        f:SetMovable(true)
+        f:RegisterForDrag("LeftButton")
+        f:SetScript("OnDragStart", f.StartMoving)
+        f:SetScript("OnDragStop", f.StopMovingOrSizing)
+
+        -- Default Styling (Dark / Flat)
+        f:SetBackdrop({
+            bgFile = "Interface\\Buttons\\WHITE8x8",
+            edgeFile = "Interface\\Buttons\\WHITE8x8",
+            edgeSize = 1,
+            insets = { left = 0, right = 0, top = 0, bottom = 0 }
+        })
+        f:SetBackdropColor(0.1, 0.1, 0.1, 1) -- Fully opaque
+        f:SetBackdropBorderColor(0, 0, 0, 1)
+
+        -- Animation
+        local ag = f:CreateAnimationGroup()
+        local a1 = ag:CreateAnimation("Alpha")
+        a1:SetFromAlpha(0)
+        a1:SetToAlpha(1)
+        a1:SetDuration(0.2)
+        -- In World of Warcraft API for Animation, SetSmoothing is valid.
+        -- Standard values: "IN", "OUT", "IN_OUT"
+        if a1.SetSmoothing then a1:SetSmoothing("OUT") end
+        f.FadeIn = ag
+        f:SetScript("OnShow", function(self) self.FadeIn:Play() end)
+
+        -- Helper for inner borders
+        local function SkinSection(frame)
+            if not frame.SetBackdrop then Mixin(frame, BackdropTemplateMixin) end
+            frame:SetBackdrop({
+                bgFile = "Interface\\Buttons\\WHITE8x8",
+                edgeFile = "Interface\\Buttons\\WHITE8x8",
+                edgeSize = 1,
+                insets = { left = 0, right = 0, top = 0, bottom = 0 }
+            })
+            frame:SetBackdropColor(0.15, 0.15, 0.15, 0.4) -- Dark semi-transparent background for contrast
+            frame:SetBackdropBorderColor(0.3, 0.3, 0.3, 1) -- Subtle grey border
+        end
+
+        -- ElvUI Skinning Support
+        if _G.ElvUI then
+            local E = unpack(_G.ElvUI)
+            if E and E.GetModule then
+                local S = E:GetModule('Skins')
+                if S then S:HandleFrame(f) end
+            end
+        end
+
+        -- Header
+        local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+        title:SetPoint("TOP", 0, -15)
+        title:SetTextColor(1, 1, 1, 1) -- White
+        f.title = title
+
+        local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
+        close:SetPoint("TOPRIGHT", -5, -5)
+        close:SetFrameLevel(f:GetFrameLevel() + 5)
+        if _G.ElvUI then
+            local E = unpack(_G.ElvUI)
+            if E and E.GetModule then E:GetModule('Skins'):HandleCloseButton(close) end
+        end
+
+        -- Content Containers
+        -- Left Column (Composition)
+        local compContainer = CreateFrame("Frame", nil, f)
+        compContainer:SetPoint("TOPLEFT", 20, -50)
+        compContainer:SetPoint("BOTTOMRIGHT", f, "BOTTOM", -5, 20)
+        SkinSection(compContainer)
+        f.compContainer = compContainer
+
+        local compTitle = compContainer:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
+        compTitle:SetPoint("TOPLEFT", 10, -10)
+        compTitle:SetText("Class Composition")
+
+        -- Right Column (Loot)
+        local lootContainer = CreateFrame("Frame", nil, f)
+        lootContainer:SetPoint("TOPLEFT", f, "TOP", 5, -50)
+        lootContainer:SetPoint("BOTTOMRIGHT", -20, 20)
+        SkinSection(lootContainer)
+        f.lootContainer = lootContainer
+
+        local lootTitle = lootContainer:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
+        lootTitle:SetPoint("TOPLEFT", 10, -10)
+        lootTitle:SetText("Loot History")
+
+        f.pool = { bars = {}, buttons = {}, headers = {} }
+        popupFrame = f
+    end
+
+    -- Ensure popup is brought to front if reused
+    popupFrame:SetFrameStrata("FULLSCREEN_DIALOG")
+    popupFrame:SetFrameLevel(9000)
+
+    local mapName = GetMapUIInfo(mapId)
+    popupFrame.title:SetText((mapName or "Dungeon") .. " Statistics")
+
+    local db = Database:GetForCurrentCharacter()
+    local stats = db.DungeonStats and db.DungeonStats[mapId]
+
+    popupFrame:Show()
+
+    -- Cleanup
+    for _, obj in ipairs(popupFrame.pool.bars) do obj:Hide() end
+    for _, obj in ipairs(popupFrame.pool.buttons) do obj:Hide() end
+    if popupFrame.pool.headers then
+        for _, obj in ipairs(popupFrame.pool.headers) do obj:Hide() end
+    end
+
+
+    -- If no stats, perhaps show a message
+    if not stats then
+        return
+    end
+
+    -- Helper
     local function GetTop(t)
         local sorted = {}
         for k, v in pairs(t) do table.insert(sorted, { k = k, v = v }) end
@@ -1773,63 +2033,166 @@ local function UpdateDetailsStats(panel, mapId)
         return sorted
     end
 
-    local cText = "|cFFFFD700Composition:|r\n"
-    local function AddRole(label, data, color)
-        local top = GetTop(data)
+    -- 1. Class Composition (Bar Chart)
+    local barY = -45
+    local allRoles = {
+        { label = "Tank",   data = stats.composition.tank or {},   roleKey = "TANK" },
+        { label = "Healer", data = stats.composition.healer or {}, roleKey = "HEALER" },
+        { label = "DPS",    data = stats.composition.dps or {},    roleKey = "DAMAGER" }
+    }
+
+    -- Flatten for simple ranking or grouped? Let's group by role as before but visualize as bars.
+    for _, roleGroup in ipairs(allRoles) do
+        local top = GetTop(roleGroup.data)
         if #top > 0 then
-            cText = cText .. color .. label .. "|r: "
-            for i = 1, math.min(3, #top) do
-                local clsWithColor = top[i].k
-                -- Try to color class names if strictly standard casing
-                if RAID_CLASS_COLORS and RAID_CLASS_COLORS[clsWithColor:upper()] then
-                    local c = RAID_CLASS_COLORS[clsWithColor:upper()]
-                    clsWithColor = string.format("|c%s%s|r", c.colorStr, clsWithColor)
+            -- Role Header
+            local header
+            if popupFrame.pool.headers then
+                for _, h in ipairs(popupFrame.pool.headers) do
+                    if not h:IsShown() then
+                        header = h; break
+                    end
                 end
-                cText = cText .. clsWithColor .. "(" .. top[i].v .. ") "
             end
-            cText = cText .. "\n"
+            if not header then
+                header = popupFrame.compContainer:CreateFontString(nil, "OVERLAY", "GameFontHighlightMedium")
+                header:SetJustifyH("LEFT")
+                if not popupFrame.pool.headers then popupFrame.pool.headers = {} end
+                table.insert(popupFrame.pool.headers, header)
+            end
+
+            header:SetPoint("TOPLEFT", popupFrame.compContainer, "TOPLEFT", 10, barY)
+            header:SetText(roleGroup.label)
+            header:Show()
+            barY = barY - 20
+
+            -- Let's just color the bars by role roughly or class color if possible.
+            for i = 1, math.min(5, #top) do
+                local cls = top[i].k
+                local count = top[i].v
+
+                local bar
+                for _, b in ipairs(popupFrame.pool.bars) do
+                    if not b:IsShown() then
+                        bar = b; break
+                    end
+                end
+                if not bar then
+                    bar = CreateFrame("StatusBar", nil, popupFrame.compContainer)
+                    bar:SetSize(250, 18) -- Reduced width to fit with padding? 600 total. Half is 300. -20-10 spacing. 250 is fine.
+                    bar:SetStatusBarTexture("Interface\\Buttons\\WHITE8x8")
+                    bar.bg = bar:CreateTexture(nil, "BACKGROUND")
+                    bar.bg:SetAllPoints()
+                    bar.bg:SetTexture("Interface\\Buttons\\WHITE8x8")
+                    bar.bg:SetVertexColor(0.15, 0.15, 0.15, 1)
+
+                    bar.text = bar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+                    bar.text:SetPoint("LEFT", 5, 0)
+
+                    bar.count = bar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+                    bar.count:SetPoint("RIGHT", -5, 0)
+                    table.insert(popupFrame.pool.bars, bar)
+                end
+
+                bar:ClearAllPoints()
+                bar:SetPoint("TOPLEFT", popupFrame.compContainer, "TOPLEFT", 10, barY)
+                bar:Show()
+                barY = barY - 20
+
+                local normalizedCls = cls:upper():gsub(" ", "")
+                local foundColor = nil
+
+                if RAID_CLASS_COLORS then
+                    -- 1. Direct match (e.g. "DEMONHUNTER")
+                    if RAID_CLASS_COLORS[normalizedCls] then
+                        foundColor = RAID_CLASS_COLORS[normalizedCls]
+                    else
+                        -- 2. Suffix match (e.g. "HAVOCDEMONHUNTER" ends with "DEMONHUNTER")
+                        for classKey, color in pairs(RAID_CLASS_COLORS) do
+                            local len = #classKey
+                            if normalizedCls:sub(-len) == classKey then
+                                foundColor = color
+                                break
+                            end
+                        end
+                    end
+                end
+
+                local c = foundColor or { r = 0.5, g = 0.5, b = 0.5 }
+                bar:SetStatusBarColor(c.r, c.g, c.b, 1)
+                bar.bg:SetVertexColor(c.r * 0.25, c.g * 0.25, c.b * 0.25, 0.8)
+                bar:SetMinMaxValues(0, stats.runs) -- Vs Total Runs
+                bar:SetValue(count)
+
+                bar.text:SetText(cls)
+                bar.count:SetText(count)
+            end
+            barY = barY - 10 -- Spacer
         end
     end
 
-    if stats.composition then
-        AddRole("Tank", stats.composition.tank or {}, "|cFFC79C6E")
-        AddRole("Healer", stats.composition.healer or {}, "|cFFF58CBA")
-        AddRole("DPS", stats.composition.dps or {}, "|cFFFF3F40")
-    end
-    compT:SetText(cText)
-
-    -- Loot
-    local lText = "|cFFFFD700Loot:|r\n"
+    -- 2. Loot (Buttons)
+    local btnY = -45
     if stats.loot then
         local sortedLoot = GetTop(stats.loot)
-        local count = 0
-        for i = 1, #sortedLoot do
-            if count >= 4 then break end
+        for i = 1, math.min(10, #sortedLoot) do
             local itemKey = sortedLoot[i].k
-            local num = sortedLoot[i].v
+            local count = sortedLoot[i].v
             local name, link, quality, _, _, _, _, _, _, icon = GetItemInfo(itemKey)
+            local itemLink = link or name or ("Item " .. itemKey)
 
-            -- If we have a link, use it (it has color). If not, queue a request (implicit in GetItemInfo) and show ID.
-            if link then
-                lText = lText .. link .. " x" .. num .. "\n"
-                count = count + 1
-            elseif name then
-                local color = ITEM_QUALITY_COLORS[quality] and ITEM_QUALITY_COLORS[quality].hex or "|cFFFFFFFF"
-                lText = lText .. color .. name .. "|r x" .. num .. "\n"
-                count = count + 1
-            else
-                -- Item info not ready? Skip or show ID?
-                -- Better to show nothing than ugly ID for "Fun Stats" usually, but user wants data.
-                -- We'll skip unknown items to keep it clean, assuming cache eventually fills.
+            local btn
+            for _, b in ipairs(popupFrame.pool.buttons) do
+                if not b:IsShown() then
+                    btn = b; break
+                end
             end
-        end
-        if count == 0 and #sortedLoot > 0 then
-            lText = lText .. "(Loading items...)"
-        elseif #sortedLoot == 0 then
-            lText = lText .. "None"
+            if not btn then
+                btn = CreateFrame("Button", nil, popupFrame.lootContainer)
+                btn:SetSize(260, 32)
+
+                btn.icon = btn:CreateTexture(nil, "ARTWORK")
+                btn.icon:SetSize(32, 32)
+                btn.icon:SetPoint("LEFT", 0, 0)
+
+                btn.text = btn:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+                btn.text:SetPoint("LEFT", btn.icon, "RIGHT", 8, 0)
+                btn.text:SetPoint("RIGHT", -40, 0)
+                btn.text:SetJustifyH("LEFT")
+
+                btn.count = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+                btn.count:SetPoint("RIGHT", 0, 0)
+
+                btn:SetScript("OnEnter", function(self)
+                    if self.link then
+                        if GameTooltip then
+                            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                            GameTooltip:SetHyperlink(self.link)
+                            GameTooltip:Show()
+                        end
+                    end
+                end)
+                btn:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+                btn:SetScript("OnClick", function(self)
+                    if self.link then
+                        ChatEdit_InsertLink(self.link)
+                    end
+                end)
+
+                table.insert(popupFrame.pool.buttons, btn)
+            end
+
+            btn:ClearAllPoints()
+            btn:SetPoint("TOPLEFT", popupFrame.lootContainer, "TOPLEFT", 10, btnY)
+            btnY = btnY - 34
+            btn:Show()
+
+            btn.icon:SetTexture(icon or "Interface\\Icons\\INV_Misc_QuestionMark")
+            btn.text:SetText(itemLink)
+            btn.count:SetText(count)
+            btn.link = itemLink
         end
     end
-    lootT:SetText(lText)
 end
 
 local function UpdateDetailsContent(panel, mapId)
@@ -2541,49 +2904,268 @@ local function CreateDungeonsPanel(parent)
         mdtButton:Hide()
     end
 
+    -- Details Button (Moved to Header, aligned left)
+    local detailsBtn = CreateFrame("Button", nil, detailsHeader)
+    detailsBtn:SetSize(26, 26)
+    detailsBtn:SetPoint("BOTTOMLEFT", detailsHeader, "BOTTOMLEFT", 6, 6)
+
+    local detailsIcon = detailsBtn:CreateTexture(nil, "ARTWORK")
+    detailsIcon:SetAllPoints()
+    detailsIcon:SetTexture("Interface\\AddOns\\TwichUI\\Media\\Textures\\dungeon-info.tga")
+    detailsIcon:SetTexCoord(0, 1, 0, 1)
+    
+    -- Initialize to a state that doesn't look like enabled or disabled, it will be updated by UpdateDetailsStats instantly
+    detailsIcon:SetVertexColor(1, 1, 1)
+    detailsIcon:SetAlpha(1)
+
+    detailsBtn:SetScript("OnEnter", function(self)
+        if _G.GameTooltip then
+            _G.GameTooltip:SetOwner(self, "ANCHOR_TOP")
+            _G.GameTooltip:SetText("Detailed Statistics")
+            _G.GameTooltip:Show()
+        end
+    end)
+    detailsBtn:SetScript("OnLeave", function(self)
+        if _G.GameTooltip then _G.GameTooltip:Hide() end
+    end)
+    detailsBtn:SetScript("OnClick", nil)
+
+    -- Score Label (Center of Header)
+    local scoreLabel = detailsHeader:CreateFontString(nil, "OVERLAY")
+    if fontPath and scoreLabel.SetFont then
+        scoreLabel:SetFont(fontPath, 36, "OUTLINE")
+    else
+        scoreLabel:SetFontObject("GameFontNormalHuge")
+    end
+    scoreLabel:SetPoint("BOTTOM", detailsHeader, "BOTTOM", 0, 4)
+    scoreLabel:SetTextColor(1, 1, 1)
+    scoreLabel:SetText("")
+
+    -- Helper to add consistent borders
+    local function AddBorder(frame)
+        if not frame then return end
+        if not frame.SetBackdrop then
+            Mixin(frame, BackdropTemplateMixin)
+        end
+        frame:SetBackdrop({
+            edgeFile = "Interface\\Buttons\\WHITE8x8",
+            edgeSize = 1,
+            bgFile = nil,
+        })
+        frame:SetBackdropBorderColor(0.2, 0.2, 0.2, 1)
+    end
+
+    AddBorder(detailsHeader)
+
     -- Stats Container (Fun Data)
     local statsContainer = CreateFrame("Frame", nil, right)
-    statsContainer:SetHeight(130)
+    statsContainer:SetHeight(80)
     statsContainer:SetPoint("TOPLEFT", detailsHeader, "BOTTOMLEFT", 0, -6)
     statsContainer:SetPoint("TOPRIGHT", right, "TOPRIGHT", 0, -6)
+    -- Manual backdrop for background color
+    if not statsContainer.SetBackdrop then Mixin(statsContainer, BackdropTemplateMixin) end
+    statsContainer:SetBackdrop({
+        bgFile = "Interface\\Buttons\\WHITE8x8",
+        edgeFile = "Interface\\Buttons\\WHITE8x8",
+        edgeSize = 1,
+        insets = { left = 0, right = 0, top = 0, bottom = 0 }
+    })
+    statsContainer:SetBackdropColor(0, 0, 0, 0.4) -- Semi-transparent black background
+    statsContainer:SetBackdropBorderColor(0.2, 0.2, 0.2, 1)
 
-    local function CreateStatLine(parent, y)
-        local fs = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        fs:SetPoint("TOPLEFT", parent, "TOPLEFT", 10, y)
-        fs:SetPoint("RIGHT", parent, "RIGHT", -10, 0)
-        fs:SetJustifyH("LEFT")
-        return fs
+    -- Animation for Stats Container Entry
+    local scAg = statsContainer:CreateAnimationGroup()
+    local scA1 = scAg:CreateAnimation("Alpha")
+    scA1:SetFromAlpha(0)
+    scA1:SetToAlpha(1)
+    scA1:SetDuration(0.3)
+    if scA1.SetSmoothing then scA1:SetSmoothing("OUT") end
+    statsContainer.FadeIn = scAg
+    statsContainer:SetScript("OnShow", function(self) self.FadeIn:Play() end)
+
+    -- "Pie Chart" (Success Rate) - Left Side
+    local pieFrame = CreateFrame("Frame", nil, statsContainer)
+    pieFrame:SetSize(60, 60)
+    pieFrame:SetPoint("LEFT", statsContainer, "LEFT", 10, 0)
+
+    pieFrame:SetScript("OnEnter", function(self)
+        if _G.GameTooltip then
+            _G.GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            _G.GameTooltip:SetText("Success Rate", 1, 1, 1)
+
+            local db = Database:GetForCurrentCharacter()
+            local s = panel.__twichuiDetailsStats
+            local stats = s and s.mapId and db.DungeonStats and db.DungeonStats[s.mapId]
+
+            if stats then
+                _G.GameTooltip:AddLine(" ")
+                _G.GameTooltip:AddDoubleLine("Completed:", stats.completes, 0.2, 0.8, 0.2, 1, 1, 1)
+                _G.GameTooltip:AddDoubleLine("Abandoned:", stats.abandons, 0.8, 0.2, 0.2, 1, 1, 1)
+            else
+                _G.GameTooltip:AddLine("No data recorded.", 0.6, 0.6, 0.6)
+            end
+            _G.GameTooltip:Show()
+        end
+    end)
+    pieFrame:SetScript("OnLeave", function() if _G.GameTooltip then _G.GameTooltip:Hide() end end)
+
+    -- Visualization Strategy:
+    -- 1. Background: Pure Blue Circle (Masked White8x8).
+    -- 2. Overlay: Dark Swipe (Masked White8x8).
+    -- 3. Text: "91%" on top.
+
+    -- 1. Background (Blue)
+    local pieBg = pieFrame:CreateTexture(nil, "BACKGROUND")
+    pieBg:SetAllPoints()
+    pieBg:SetTexture("Interface\\Buttons\\WHITE8x8")
+
+    -- Color Logic
+    local r, g, b = 0, 0.44, 0.87 -- Default Blue
+    if MythicPlusModule and MythicPlusModule.CONFIGURATION and MythicPlusModule.CONFIGURATION.DUNGEONS_PIE_CHART_COLOR then
+        local c = CM:GetProfileSettingByConfigEntry(MythicPlusModule.CONFIGURATION.DUNGEONS_PIE_CHART_COLOR)
+        if c and c.r then r, g, b = c.r, c.g, c.b end
+    elseif _G.ElvUI then
+        local E = unpack(_G.ElvUI)
+        if E.db and E.db.general and E.db.general.valuecolor then
+            local c = E.db.general.valuecolor
+            r, g, b = c.r, c.g, c.b
+        elseif E.media and E.media.rgb and E.media.rgb.value then
+            r, g, b = E.media.rgb.value.r, E.media.rgb.value.g, E.media.rgb.value.b
+        end
     end
+    pieBg:SetVertexColor(r, g, b, 1)
+
+    -- Mask
+    local pieMask = pieFrame:CreateMaskTexture()
+    pieMask:SetTexture("Interface\\CHARACTERFRAME\\TempPortraitAlphaMask")
+    pieMask:SetAllPoints(pieFrame)
+    pieBg:AddMaskTexture(pieMask)
+
+    -- 2. Cooldown (Dark Overlay)
+    local pieCooldown = CreateFrame("Cooldown", nil, pieFrame, "CooldownFrameTemplate")
+    pieCooldown:SetAllPoints()
+    pieCooldown:SetDrawEdge(false)
+    pieCooldown:SetDrawBling(false)
+    pieCooldown:SetSwipeColor(0, 0, 0, 0.8) -- Dark overlay (80% opacity)
+    pieCooldown:SetHideCountdownNumbers(true)
+
+    -- Force the swipe texture to be maskable white texture
+    if pieCooldown.SetSwipeTexture then
+        pieCooldown:SetSwipeTexture("Interface\\Buttons\\WHITE8x8")
+    end
+    if pieCooldown.GetSwipeTexture then
+        local swipe = pieCooldown:GetSwipeTexture()
+        if swipe then swipe:AddMaskTexture(pieMask) end
+    end
+
+    -- Logic: Reverse=false (Standard) means the swipe covers the "Remaining" duration.
+    -- We want swipe to cover "Failure".
+    -- So we will set Remaining time = Failure %.
+    pieCooldown:SetReverse(false)
+
+
+    -- 3. Text
+    local textFrame = CreateFrame("Frame", nil, pieFrame)
+    textFrame:SetAllPoints()
+    textFrame:SetFrameLevel(pieCooldown:GetFrameLevel() + 10)
+
+    local pieText = textFrame:CreateFontString(nil, "OVERLAY")
+    if pieText.SetFontObject then pieText:SetFontObject("GameFontNormalLarge") end
+    if fontPath and pieText.SetFont then pieText:SetFont(fontPath, 16, "OUTLINE") end
+    pieText:SetPoint("CENTER", textFrame, "CENTER", 0, 0)
+    pieText:SetText("0%")
+    pieText:SetTextColor(1, 1, 1, 1)
+
+    -- Data Block - Fills Remaining Space
+    local dataBlock = CreateFrame("Frame", nil, statsContainer)
+    dataBlock:SetPoint("LEFT", pieFrame, "RIGHT", 10, 0)
+    dataBlock:SetPoint("RIGHT", statsContainer, "RIGHT", -10, 0)
+    dataBlock:SetHeight(80) -- Match container height for easy centering
+
+    -- Helper to create value/label pair
+    local function CreateStatPair(name, labelText)
+        local f = CreateFrame("Frame", nil, dataBlock)
+        f:SetSize(80, 60)
+        
+        local val = f:CreateFontString(nil, "OVERLAY")
+        if fontPath and val.SetFont then
+             val:SetFont(fontPath, 20, "OUTLINE")
+        else
+             val:SetFontObject("GameFontNormalHuge")
+        end
+        -- Center value just above vertical center
+        val:SetPoint("BOTTOM", f, "CENTER", 0, 0)
+        val:SetJustifyH("CENTER")
+        val:SetText("0")
+        f.Value = val
+
+        local lbl = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        -- Center label just below vertical center
+        lbl:SetPoint("TOP", f, "CENTER", 0, -2)
+        lbl:SetJustifyH("CENTER")
+        lbl:SetText(labelText)
+        f.Label = lbl
+
+        return f, val, lbl
+    end
+
+    -- Distribute horizontally: Left, Center, Right
+    -- 1. Runs (Left side of block)
+    local runsFrame, totalRunsVal, totalRunsLabel = CreateStatPair("runs", "Runs")
+    runsFrame:SetPoint("LEFT", dataBlock, "LEFT", 10, 0)
+
+    -- 2. Time (Center of block)
+    local timeFrame, timeVal, timeLabel = CreateStatPair("time", "Total Time")
+    timeFrame:SetPoint("CENTER", dataBlock, "CENTER", 0, 0)
+
+    -- 3. Deaths (Right side of block)
+    local deathsFrame, detailVal, detailLabel = CreateStatPair("deaths", "Deaths")
+    deathsFrame:SetPoint("RIGHT", dataBlock, "RIGHT", -10, 0)
+    -- Justify CENTER strictly on the value object
+    if detailVal.SetJustifyH then detailVal:SetJustifyH("CENTER") end
+    
+    -- Force clear and re-anchor to ensure it stays centered horizontally in its frame
+    detailVal:ClearAllPoints()
+    detailVal:SetPoint("BOTTOM", deathsFrame, "CENTER", 0, 0)
+
+    -- Store label so we can access it
+    deathsFrame.LabelObject = detailLabel
+
+    -- Details Button moved to header
 
     panel.__twichuiDetailsStats = {
         frame = statsContainer,
-        row1 = CreateStatLine(statsContainer, -10),
-        row2 = CreateStatLine(statsContainer, -26),
-        row3 = CreateStatLine(statsContainer, -42),
-        compText = statsContainer:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall"),
-        lootText = statsContainer:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall"),
+        pie = pieCooldown,
+        pieText = pieText,
+        totalRunsVal = totalRunsVal,
+        timeVal = timeVal,
+        detailVal = detailVal,
+        detailLabel = detailLabel,
+        detailsBtn = detailsBtn,
+        detailsIcon = detailsIcon,
+        scoreLabel = scoreLabel,
+        mapId = nil,
+        pieBg = pieBg,
     }
-
-    panel.__twichuiDetailsStats.compText:SetPoint("TOPLEFT", statsContainer, "TOPLEFT", 10, -60)
-    panel.__twichuiDetailsStats.compText:SetWidth(200)
-    panel.__twichuiDetailsStats.compText:SetJustifyH("LEFT")
-    panel.__twichuiDetailsStats.compText:SetJustifyV("TOP")
-    panel.__twichuiDetailsStats.compText:SetHeight(60)
-
-    panel.__twichuiDetailsStats.lootText:SetPoint("TOPLEFT", panel.__twichuiDetailsStats.compText, "TOPRIGHT", 10, 0)
-    panel.__twichuiDetailsStats.lootText:SetPoint("TOPRIGHT", statsContainer, "TOPRIGHT", -10, -60)
-    panel.__twichuiDetailsStats.lootText:SetJustifyH("LEFT")
-    panel.__twichuiDetailsStats.lootText:SetJustifyV("TOP")
-    panel.__twichuiDetailsStats.lootText:SetHeight(60)
-
-    -- Runs Table Container
     local runsContainer = CreateFrame("Frame", nil, right)
-    runsContainer:SetPoint("TOPLEFT", statsContainer, "BOTTOMLEFT", 0, -10)
+    -- Align gaps: StatsContainer is anchored BOTTOM of Header with -6. 
+    -- We want RunsContainer anchored BOTTOM of Stats with -6.
+    runsContainer:SetPoint("TOPLEFT", statsContainer, "BOTTOMLEFT", 0, -6)
     runsContainer:SetPoint("BOTTOMRIGHT", right, "BOTTOMRIGHT", 0, 0)
+    AddBorder(runsContainer)
 
     -- Headers
+    local headerContainer = CreateFrame("Frame", nil, runsContainer)
+    headerContainer:SetPoint("TOPLEFT", runsContainer, "TOPLEFT", 1, -1)
+    headerContainer:SetPoint("TOPRIGHT", runsContainer, "TOPRIGHT", -1, -1)
+    headerContainer:SetHeight(20)
+    
+    local headerBG = headerContainer:CreateTexture(nil, "BACKGROUND")
+    headerBG:SetAllPoints()
+    headerBG:SetColorTexture(1, 1, 1, 0.1)
+
     local function CreateSortHeader(text, key, width, justify, point, relativeTo, relativePoint, x, y)
-        local btn = CreateFrame("Button", nil, runsContainer)
+        local btn = CreateFrame("Button", nil, headerContainer)
         btn:SetSize(width, 20)
         btn:SetPoint(point, relativeTo, relativePoint, x, y)
 
@@ -2617,7 +3199,7 @@ local function CreateDungeonsPanel(parent)
         return btn
     end
 
-    local hDate = CreateSortHeader("Date", "date", 80, "LEFT", "TOPLEFT", runsContainer, "TOPLEFT", 10, 0)
+    local hDate = CreateSortHeader("Date", "date", 80, "LEFT", "TOPLEFT", headerContainer, "TOPLEFT", 10, 0)
     local hKey = CreateSortHeader("Key", "level", 40, "CENTER", "LEFT", hDate, "RIGHT", 5, 0)
     local hTime = CreateSortHeader("Time", "time", 60, "RIGHT", "LEFT", hKey, "RIGHT", 5, 0)
     local hScore = CreateSortHeader("Score", "score", 50, "RIGHT", "LEFT", hTime, "RIGHT", 5, 0)
@@ -2625,8 +3207,8 @@ local function CreateDungeonsPanel(parent)
 
     -- Scroll Frame
     local scrollFrame = CreateFrame("ScrollFrame", nil, runsContainer, "UIPanelScrollFrameTemplate")
-    scrollFrame:SetPoint("TOPLEFT", runsContainer, "TOPLEFT", 10, -20)
-    scrollFrame:SetPoint("BOTTOMRIGHT", runsContainer, "BOTTOMRIGHT", -26, 10)
+    scrollFrame:SetPoint("TOPLEFT", runsContainer, "TOPLEFT", 0, -21) -- Below Header
+    scrollFrame:SetPoint("BOTTOMRIGHT", runsContainer, "BOTTOMRIGHT", -26, 4) -- Adjusted for scrollbar
 
     -- ElvUI scrollbar skinning (best-effort)
     if UI then

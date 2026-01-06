@@ -59,6 +59,7 @@ MythicPlusModule.CONFIGURATION = {
     DUNGEONS_ROW_HOVER_COLOR = { key = "mythicplus.dungeons.rowHoverColor", default = { r = 0.12, g = 0.12, b = 0.12 }, },
     DUNGEONS_IMAGE_ZOOM = { key = "mythicplus.dungeons.imageZoom", default = 0.12, },
     DUNGEONS_DETAILS_BG_ALPHA = { key = "mythicplus.dungeons.detailsBgAlpha", default = 0.45, },
+    DUNGEONS_PIE_CHART_COLOR = { key = "mythicplus.dungeons.pieChartColor", default = { r = 0, g = 0.44, b = 0.87 }, },
 
     -- Runs
     RUN_DETAILS_LABEL_COLOR = {

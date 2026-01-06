@@ -855,6 +855,10 @@ local function CreateRunsPanel(parent)
     header:SetPoint("TOPLEFT", panel, "TOPLEFT", PANEL_PADDING, -PANEL_PADDING - 25) -- Moved down for filter
     header:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -PANEL_PADDING, -PANEL_PADDING - 25)
 
+    local headerBG = header:CreateTexture(nil, "BACKGROUND")
+    headerBG:SetAllPoints()
+    headerBG:SetColorTexture(1, 1, 1, 0.1)
+
     local xOffset = 0
     for _, col in ipairs(COLUMNS) do
         local btn = CreateFrame("Button", nil, header)
@@ -862,7 +866,7 @@ local function CreateRunsPanel(parent)
         btn:SetWidth(col.width)
         btn:SetPoint("LEFT", header, "LEFT", xOffset, 0)
 
-        local text = btn:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        local text = btn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         text:SetText(col.label)
         text:SetJustifyH(col.justify)
         text:SetAllPoints(btn)
@@ -934,6 +938,17 @@ local function CreateRunsPanel(parent)
     end)
 
     return panel
+end
+
+function Runs:ShowDetails(runData)
+    local panel = nil
+    if MythicPlusModule.MainWindow then
+         panel = MythicPlusModule.MainWindow:GetPanelFrame("runs")
+    end
+    
+    local details = EnsureRunDetailsFrame(panel)
+    details:SetRun(runData)
+    details:Show()
 end
 
 local function EnsureEasyMenu()

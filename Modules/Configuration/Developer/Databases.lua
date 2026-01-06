@@ -105,6 +105,7 @@ function DatabasesConfig:Create(order)
                     enableFullReset = {
                         type = "toggle",
                         name = "Enable 'Clear ALL' button",
+                        width = 2,
                         desc = "Must be enabled before the full reset button can be used.",
                         order = 2,
                         get = function()

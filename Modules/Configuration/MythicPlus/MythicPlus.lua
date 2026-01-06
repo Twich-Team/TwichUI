@@ -447,6 +447,22 @@ function MP:Create(order)
                                     if module.Dungeons and module.Dungeons.Refresh then module.Dungeons:Refresh() end
                                 end,
                             },
+                            pieChartColor = {
+                                type = "color",
+                                name = "Pie Chart Color",
+                                order = 2,
+                                get = function()
+                                    local c = CM:GetProfileSettingByConfigEntry(GetModule().CONFIGURATION
+                                    .DUNGEONS_PIE_CHART_COLOR) or { r = 0, g = 0.44, b = 0.87 }
+                                    return c.r, c.g, c.b
+                                end,
+                                set = function(_, r, g, b)
+                                    local module = GetModule()
+                                    CM:SetProfileSettingByConfigEntry(module.CONFIGURATION.DUNGEONS_PIE_CHART_COLOR,
+                                        { r = r, g = g, b = b })
+                                    if module.Dungeons and module.Dungeons.Refresh then module.Dungeons:Refresh() end
+                                end,
+                            },
                         }
                     },
 
