@@ -180,7 +180,7 @@ function MP:Create(order)
                             },
                             frameAlpha = {
                                 type = "range",
-                                name = "Transparency",
+                                name = "Opacity",
                                 order = 4,
                                 min = 0.1,
                                 max = 1.0,

@@ -28,6 +28,7 @@ local E = ElvUI and ElvUI[1]
 ---@field frame Frame|nil
 ---@field titleBar Frame|nil
 ---@field titleLogo Texture|nil
+---@field settingsButton Button|nil
 ---@field nav Frame|nil
 ---@field navButtons table<string, Button>|nil
 ---@field content Frame|nil
@@ -66,7 +67,7 @@ local SIM_BUTTON_TEXTURE = "Interface\\AddOns\\TwichUI\\Media\\Textures\\simulat
 
 function MainWindow:_ShouldShowSimulatorHeaderButton()
     return CM and type(CM.GetProfileSettingSafe) == "function" and
-    CM:GetProfileSettingSafe(DEV_CONFIG_SHOW_SIM_BUTTON, false)
+        CM:GetProfileSettingSafe(DEV_CONFIG_SHOW_SIM_BUTTON, false)
 end
 
 function MainWindow:_EnsureSimulatorHeaderButton()
@@ -230,6 +231,14 @@ local function ApplyElvUITemplate(frame)
 
     if frame.SetTemplate then
         frame:SetTemplate("Transparent")
+        if E and E.media and E.media.backdropcolor and frame.SetBackdropColor then
+            local r, g, b = unpack(E.media.backdropcolor)
+            frame:SetBackdropColor(r or 0, g or 0, b or 0, 1)
+        end
+        if E and E.media and E.media.bordercolor and frame.SetBackdropBorderColor then
+            local r, g, b = unpack(E.media.bordercolor)
+            frame:SetBackdropBorderColor(r or 1, g or 1, b or 1, 1)
+        end
         return
     end
 
@@ -245,8 +254,14 @@ local function ApplyElvUITemplate(frame)
         edgeSize = E.Border,
         insets = { left = E.Spacing, right = E.Spacing, top = E.Spacing, bottom = E.Spacing },
     })
-    frame:SetBackdropColor(unpack(E.media.backdropcolor))
-    frame:SetBackdropBorderColor(unpack(E.media.bordercolor))
+    do
+        local r, g, b = unpack(E.media.backdropcolor)
+        frame:SetBackdropColor(r or 0, g or 0, b or 0, 1)
+    end
+    do
+        local r, g, b = unpack(E.media.bordercolor)
+        frame:SetBackdropBorderColor(r or 1, g or 1, b or 1, 1)
+    end
 end
 
 local function GetFontPath()
@@ -464,10 +479,11 @@ function MainWindow:_CreateHeaderIfNeeded()
     if (not self.titleLogo and not self.titleText) or not self.closeButton then return end
 
     local leftAnchor = self.titleLogo or self.titleText
+    local rightAnchor = self.settingsButton or self.closeButton
 
     local header = CreateFrame("Frame", nil, self.titleBar)
     header:SetPoint("LEFT", leftAnchor, "RIGHT", 12, 0)
-    header:SetPoint("RIGHT", self.closeButton, "LEFT", -10, 0)
+    header:SetPoint("RIGHT", rightAnchor, "LEFT", -10, 0)
     header:SetHeight(HEADER_HEIGHT)
 
     local text = header:CreateFontString(nil, "OVERLAY")
@@ -477,16 +493,13 @@ function MainWindow:_CreateHeaderIfNeeded()
     if text.SetFontObject then
         text:SetFontObject(_G.GameFontHighlight)
     end
-
-    local fontPath = GetFontPath()
-    if fontPath and text.SetFont then
-        text:SetFont(fontPath, 13, "OUTLINE")
-    end
     text:SetText("Keystone: …")
 
     self.header = header
     self.headerText = text
     self.headerAffixButtons = {}
+
+    self:UpdateTypography()
 
     -- Optional simulator shortcut button (developer toggle).
     self:_EnsureSimulatorHeaderButton()
@@ -756,6 +769,40 @@ function MainWindow:UpdateTitleStyling()
     end
 end
 
+function MainWindow:UpdateTypography()
+    local fontPath = GetFontPath()
+    local fontSize = CM:GetProfileSettingByConfigEntry(MythicPlusModule.CONFIGURATION.MAIN_WINDOW_TITLE_FONT_SIZE)
+    local color = CM:GetProfileSettingByConfigEntry(MythicPlusModule.CONFIGURATION.MAIN_WINDOW_TITLE_TEXT_COLOR)
+
+    local function ApplyToFontString(fontString, fallbackFontObject)
+        if not fontString then return end
+
+        if fontPath and fontSize and fontString.SetFont then
+            fontString:SetFont(fontPath, fontSize, "OUTLINE")
+        elseif fallbackFontObject and fontString.SetFontObject then
+            fontString:SetFontObject(fallbackFontObject)
+        end
+
+        if color and fontString.SetTextColor then
+            fontString:SetTextColor(color.r or 1, color.g or 1, color.b or 1)
+        end
+    end
+
+    ApplyToFontString(self.titleText, _G.GameFontNormal)
+    ApplyToFontString(self.headerText, _G.GameFontHighlight)
+
+    if self.navButtons then
+        for _, btn in pairs(self.navButtons) do
+            if btn then
+                local text = rawget(btn, "__twichuiText")
+                if text then
+                    ApplyToFontString(text, _G.GameFontNormal)
+                end
+            end
+        end
+    end
+end
+
 function MainWindow:CreateTitleBar()
     if not self.frame or self.titleBar then return end
 
@@ -769,7 +816,7 @@ function MainWindow:CreateTitleBar()
     self.titleBar = titleBar
 
     local titleText = titleBar:CreateFontString(nil, "OVERLAY")
-    titleText:SetPoint("LEFT", titleBar, "LEFT", 10, 0)
+    titleText:SetPoint("LEFT", titleBar, "LEFT", 5, 0)
     if titleText.SetFontObject then
         titleText:SetFontObject(_G.GameFontNormal)
     end
@@ -781,9 +828,9 @@ function MainWindow:CreateTitleBar()
     titleText:Hide()
 
     local logo = titleBar:CreateTexture(nil, "OVERLAY")
-    logo:SetPoint("LEFT", titleBar, "LEFT", 10, 0)
-    logo:SetSize(24, 22)
-    logo:SetTexture("Interface\\AddOns\\TwichUI\\Media\\Textures\\mythic-plus.tga")
+    logo:SetPoint("LEFT", titleBar, "LEFT", 5, 0)
+    logo:SetSize(22, 22)
+    logo:SetTexture("Interface\\AddOns\\TwichUI\\Media\\Textures\\twich-logo.tga")
     self.titleLogo = logo
 
     -- Close button
@@ -791,6 +838,37 @@ function MainWindow:CreateTitleBar()
     closeButton:SetSize(28, 28)
     closeButton:SetPoint("RIGHT", titleBar, "RIGHT", -6, 0)
     closeButton:SetHitRectInsets(-8, -8, -8, -8)
+
+    -- Settings button (opens TwichUI config; same as /tc)
+    local settingsButton = CreateFrame("Button", nil, titleBar)
+    settingsButton:SetSize(28, 28)
+    settingsButton:SetPoint("RIGHT", closeButton, "LEFT", -2, 0)
+    settingsButton:SetHitRectInsets(-8, -8, -8, -8)
+
+    local settingsIcon = settingsButton:CreateTexture(nil, "OVERLAY")
+    settingsIcon:SetTexture("Interface\\AddOns\\TwichUI\\Media\\Textures\\cog-plain.tga")
+    settingsIcon:SetSize(14, 14)
+    settingsIcon:SetPoint("CENTER", settingsButton, "CENTER", 0, 0)
+    settingsIcon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    settingsIcon:SetVertexColor(1, 1, 1, 0.85)
+
+    settingsButton:SetScript("OnEnter", function()
+        settingsIcon:SetVertexColor(1, 1, 1, 1)
+        if not GameTooltip then return end
+        GameTooltip:SetOwner(settingsButton, "ANCHOR_RIGHT")
+        GameTooltip:SetText("Open TwichUI Settings", 1, 1, 1)
+        GameTooltip:AddLine("Opens the TwichUI settings", 0.9, 0.9, 0.9, true)
+        GameTooltip:Show()
+    end)
+    settingsButton:SetScript("OnLeave", function()
+        settingsIcon:SetVertexColor(1, 1, 1, 0.85)
+        if GameTooltip then GameTooltip:Hide() end
+    end)
+    settingsButton:SetScript("OnClick", function()
+        if T and type(T.ToggleOptionsUI) == "function" then
+            T:ToggleOptionsUI()
+        end
+    end)
 
     local closeText = closeButton:CreateFontString(nil, "OVERLAY")
     local fontPath = GetFontPath()
@@ -815,6 +893,7 @@ function MainWindow:CreateTitleBar()
         self:Disable()
     end)
 
+    self.settingsButton = settingsButton
     self.closeButton = closeButton
 
     -- Keystone header in title bar (compact)
@@ -837,7 +916,7 @@ function MainWindow:CreateNav()
         local bg = nav:CreateTexture(nil, "BACKGROUND")
         bg:SetAllPoints(nav)
         local r, g, b, a = unpack(E.media.backdropcolor)
-        bg:SetColorTexture(r or 0, g or 0, b or 0, math.min((a or 1) * 0.4, 0.4))
+        bg:SetColorTexture(r or 0, g or 0, b or 0, 1)
         nav.__twichuiBG = bg
     end
 
@@ -1005,6 +1084,7 @@ function MainWindow:RefreshNav()
         end
     end
 
+    self:UpdateTypography()
     self:UpdateNavSelection()
 end
 
@@ -1098,6 +1178,7 @@ function MainWindow:RefreshLayout()
     self.frame:SetAlpha(alpha)
 
     self:UpdateTitleStyling()
+    self:UpdateTypography()
     self:UpdateLockState()
 end
 
