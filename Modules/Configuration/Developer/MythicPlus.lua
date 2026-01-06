@@ -88,6 +88,36 @@ function DMP:Create(order)
                     description = CM.Widgets:SubmoduleDescription(
                         "Tools for simulating Mythic+ data/events to exercise addon logic."),
 
+                    headerSimButtonGrp = {
+                        type = "group",
+                        inline = true,
+                        name = "Mythic+ Window",
+                        order = 0.5,
+                        args = {
+                            desc = CM.Widgets:ComponentDescription(1,
+                                "Show a simulator shortcut button in the Mythic+ window header."),
+                            showHeaderButton = {
+                                type = "toggle",
+                                name = "Show Simulator Header Button",
+                                desc = "Adds a play icon to the Mythic+ header that opens the Mythic+ Simulator window.",
+                                order = 2,
+                                get = function()
+                                    return CM:GetProfileSettingSafe("developer.mythicplus.showSimulatorHeaderButton",
+                                        false)
+                                end,
+                                set = function(_, value)
+                                    CM:SetProfileSettingSafe("developer.mythicplus.showSimulatorHeaderButton",
+                                        value and true or false)
+
+                                    local mp = GetModule()
+                                    if mp and mp.MainWindow and type(mp.MainWindow.UpdateSimulatorHeaderButton) == "function" then
+                                        mp.MainWindow:UpdateSimulatorHeaderButton()
+                                    end
+                                end,
+                            },
+                        },
+                    },
+
                     addRunGrp = {
                         type = "group",
                         inline = true,

@@ -486,10 +486,10 @@ function MP:Create(order)
                 childGroups = "tab",
                 hidden = function() return not CM:GetProfileSettingByConfigEntry(GetModule().CONFIGURATION.ENABLED) end,
                 args = {
-                    generalTab = {
+                    missingItemsTab = {
                         type = "group",
-                        name = "General",
-                        order = 1,
+                        name = "Missing Items",
+                        order = 2,
                         args = {
                             chatOutputGroup = {
                                 type = "group",
@@ -516,11 +516,757 @@ function MP:Create(order)
                                 },
                             },
 
+                            entryDisplayGroup = {
+                                type = "group",
+                                name = "On-Screen Display",
+                                inline = true,
+                                order = 2,
+                                args = {
+                                    help = {
+                                        type = "description",
+                                        order = 0,
+                                        width = "full",
+                                        name = CM:ColorTextKeywords(
+                                            "These settings control the on-screen list shown when entering a dungeon or raid. Use the ElvUI mover named 'TwichUI BiS Entry Display' to reposition it."),
+                                    },
+                                    enabled = {
+                                        type = "toggle",
+                                        name = "Show Missing BiS on Screen When Entering",
+                                        desc = CM:ColorTextKeywords(
+                                            "When enabled, entering a dungeon or raid will show an on-screen list of your missing Best-in-Slot items for that instance (including boss when known)."),
+                                        width = "full",
+                                        order = 1,
+                                        get = function()
+                                            return CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.enabled", true)
+                                        end,
+                                        set = function(_, value)
+                                            CM:SetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.enabled", value)
+
+                                            local module = GetModule()
+                                            if module and module.BestInSlot and module.BestInSlot.UpdateEntryDisplayVisuals then
+                                                module.BestInSlot:UpdateEntryDisplayVisuals()
+                                            end
+                                        end,
+                                    },
+                                    test = {
+                                        type = "execute",
+                                        name = "Test Display",
+                                        desc = CM:ColorTextKeywords(
+                                            "Shows a test on-screen list immediately (also creates the ElvUI mover after the first run)."),
+                                        order = 1.1,
+                                        func = function()
+                                            local module = GetModule()
+                                            if module and module.BestInSlot and module.BestInSlot.TestEntryDisplay then
+                                                module.BestInSlot:TestEntryDisplay()
+                                            end
+                                        end,
+                                    },
+                                    durationSec = {
+                                        type = "range",
+                                        name = "Display Duration (seconds)",
+                                        desc = CM:ColorTextKeywords(
+                                            "How long the on-screen list stays visible after entering an instance."),
+                                        order = 2,
+                                        min = 5,
+                                        max = 120,
+                                        step = 5,
+                                        bigStep = 15,
+                                        width = "full",
+                                        get = function()
+                                            return CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.durationSec", 45)
+                                        end,
+                                        set = function(_, value)
+                                            CM:SetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.durationSec", value)
+
+                                            local module = GetModule()
+                                            if module and module.BestInSlot and module.BestInSlot.UpdateEntryDisplayVisuals then
+                                                module.BestInSlot:UpdateEntryDisplayVisuals()
+                                            end
+                                        end,
+                                        disabled = function()
+                                            return not CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.enabled", true)
+                                        end,
+                                    },
+
+                                    growDirection = {
+                                        type = "select",
+                                        name = "Grow Direction",
+                                        desc = CM:ColorTextKeywords(
+                                            "Whether the list grows up or down from the anchor."),
+                                        order = 3,
+                                        width = "full",
+                                        values = { UP = "Up", DOWN = "Down" },
+                                        get = function()
+                                            return CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.growDirection", "UP")
+                                        end,
+                                        set = function(_, value)
+                                            CM:SetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.growDirection", value)
+
+                                            local module = GetModule()
+                                            if module and module.BestInSlot and module.BestInSlot.UpdateEntryDisplayVisuals then
+                                                module.BestInSlot:UpdateEntryDisplayVisuals()
+                                            end
+                                        end,
+                                        disabled = function()
+                                            return not CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.enabled", true)
+                                        end,
+                                    },
+
+                                    frameSpacing = {
+                                        type = "range",
+                                        name = "Row Spacing",
+                                        desc = CM:ColorTextKeywords("Spacing between item rows."),
+                                        order = 4,
+                                        min = 0,
+                                        max = 20,
+                                        step = 1,
+                                        width = "full",
+                                        get = function()
+                                            return CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.frameSpacing", 6)
+                                        end,
+                                        set = function(_, value)
+                                            CM:SetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.frameSpacing", value)
+
+                                            local module = GetModule()
+                                            if module and module.BestInSlot and module.BestInSlot.UpdateEntryDisplayVisuals then
+                                                module.BestInSlot:UpdateEntryDisplayVisuals()
+                                            end
+                                        end,
+                                        disabled = function()
+                                            return not CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.enabled", true)
+                                        end,
+                                    },
+
+                                    appearanceHeader = {
+                                        type = "header",
+                                        name = "Appearance",
+                                        order = 6,
+                                    },
+
+                                    backgroundTexture = {
+                                        type = "select",
+                                        dialogControl = "LSM30_Statusbar",
+                                        name = "Row Texture",
+                                        desc = CM:ColorTextKeywords("Background texture used for each row."),
+                                        order = 6.1,
+                                        width = "full",
+                                        values = function() return LSM and LSM:HashTable("statusbar") or {} end,
+                                        get = function()
+                                            return CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.backgroundTexture", "ElvUI Norm")
+                                        end,
+                                        set = function(_, value)
+                                            CM:SetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.backgroundTexture", value)
+
+                                            local module = GetModule()
+                                            if module and module.BestInSlot and module.BestInSlot.UpdateEntryDisplayVisuals then
+                                                module.BestInSlot:UpdateEntryDisplayVisuals()
+                                            end
+                                        end,
+                                        disabled = function()
+                                            return not CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.enabled", true)
+                                        end,
+                                    },
+                                    backgroundColor = {
+                                        type = "color",
+                                        name = "Row Color",
+                                        desc = CM:ColorTextKeywords("Row background color (includes alpha)."),
+                                        hasAlpha = true,
+                                        order = 6.2,
+                                        width = "full",
+                                        get = function()
+                                            local c = CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.backgroundColor",
+                                                { r = 0.07, g = 0.07, b = 0.07, a = 0.80 })
+                                            return c.r, c.g, c.b, c.a
+                                        end,
+                                        set = function(_, r, g, b, a)
+                                            CM:SetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.backgroundColor",
+                                                { r = r, g = g, b = b, a = a })
+
+                                            local module = GetModule()
+                                            if module and module.BestInSlot and module.BestInSlot.UpdateEntryDisplayVisuals then
+                                                module.BestInSlot:UpdateEntryDisplayVisuals()
+                                            end
+                                        end,
+                                        disabled = function()
+                                            return not CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.enabled", true)
+                                        end,
+                                    },
+
+                                    borderHeader = {
+                                        type = "header",
+                                        name = "Border",
+                                        order = 7,
+                                    },
+                                    borderTexture = {
+                                        type = "select",
+                                        dialogControl = "LSM30_Border",
+                                        name = "Border Texture",
+                                        desc = CM:ColorTextKeywords("Texture used for the border lines."),
+                                        order = 7.1,
+                                        width = "full",
+                                        values = function()
+                                            local out = {}
+                                            if LSM and LSM.HashTable then
+                                                local ht = LSM:HashTable("border") or {}
+                                                for k, v in pairs(ht) do
+                                                    out[k] = v
+                                                end
+                                            end
+
+                                            -- Guarantee a solid option that always renders well for 1px borders.
+                                            out["Interface\\Buttons\\WHITE8X8"] = "Solid (Recommended)"
+                                            return out
+                                        end,
+                                        get = function()
+                                            return CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.borderTexture",
+                                                "Interface\\Buttons\\WHITE8X8")
+                                        end,
+                                        set = function(_, value)
+                                            CM:SetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.borderTexture", value)
+
+                                            local module = GetModule()
+                                            if module and module.BestInSlot and module.BestInSlot.UpdateEntryDisplayVisuals then
+                                                module.BestInSlot:UpdateEntryDisplayVisuals()
+                                            end
+                                        end,
+                                        disabled = function()
+                                            return not CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.enabled", true)
+                                        end,
+                                    },
+                                    borderSize = {
+                                        type = "range",
+                                        name = "Border Size",
+                                        desc = CM:ColorTextKeywords("0 disables the border."),
+                                        order = 7.2,
+                                        min = 0,
+                                        max = 10,
+                                        step = 1,
+                                        width = "full",
+                                        get = function()
+                                            return CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.borderSize", 1)
+                                        end,
+                                        set = function(_, value)
+                                            CM:SetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.borderSize", value)
+
+                                            local module = GetModule()
+                                            if module and module.BestInSlot and module.BestInSlot.UpdateEntryDisplayVisuals then
+                                                module.BestInSlot:UpdateEntryDisplayVisuals()
+                                            end
+                                        end,
+                                        disabled = function()
+                                            return not CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.enabled", true)
+                                        end,
+                                    },
+                                    borderColor = {
+                                        type = "color",
+                                        name = "Border Color",
+                                        desc = CM:ColorTextKeywords("Border line color (includes alpha)."),
+                                        hasAlpha = true,
+                                        order = 7.3,
+                                        width = "full",
+                                        get = function()
+                                            local c = CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.borderColor",
+                                                { r = 0, g = 0, b = 0, a = 0.9 })
+                                            return c.r, c.g, c.b, c.a
+                                        end,
+                                        set = function(_, r, g, b, a)
+                                            CM:SetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.borderColor",
+                                                { r = r, g = g, b = b, a = a })
+
+                                            local module = GetModule()
+                                            if module and module.BestInSlot and module.BestInSlot.UpdateEntryDisplayVisuals then
+                                                module.BestInSlot:UpdateEntryDisplayVisuals()
+                                            end
+                                        end,
+                                        disabled = function()
+                                            return not CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.enabled", true)
+                                        end,
+                                    },
+
+                                    fontsHeader = {
+                                        type = "header",
+                                        name = "Fonts",
+                                        order = 8,
+                                    },
+                                    itemFont = {
+                                        type = "select",
+                                        dialogControl = "LSM30_Font",
+                                        name = "Item Font",
+                                        desc = CM:ColorTextKeywords("Font used for the item line."),
+                                        order = 8.1,
+                                        width = "full",
+                                        values = function() return LSM and LSM:HashTable("font") or {} end,
+                                        get = function()
+                                            return CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.itemFont", "Expressway")
+                                        end,
+                                        set = function(_, value)
+                                            CM:SetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.itemFont", value)
+
+                                            local module = GetModule()
+                                            if module and module.BestInSlot and module.BestInSlot.UpdateEntryDisplayVisuals then
+                                                module.BestInSlot:UpdateEntryDisplayVisuals()
+                                            end
+                                        end,
+                                        disabled = function()
+                                            return not CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.enabled", true)
+                                        end,
+                                    },
+                                    itemFontSize = {
+                                        type = "range",
+                                        name = "Item Font Size",
+                                        order = 8.2,
+                                        min = 6,
+                                        max = 32,
+                                        step = 1,
+                                        width = "full",
+                                        get = function()
+                                            return CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.itemFontSize", 12)
+                                        end,
+                                        set = function(_, value)
+                                            CM:SetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.itemFontSize", value)
+
+                                            local module = GetModule()
+                                            if module and module.BestInSlot and module.BestInSlot.UpdateEntryDisplayVisuals then
+                                                module.BestInSlot:UpdateEntryDisplayVisuals()
+                                            end
+                                        end,
+                                        disabled = function()
+                                            return not CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.enabled", true)
+                                        end,
+                                    },
+                                    itemFontOutline = {
+                                        type = "select",
+                                        name = "Item Font Outline",
+                                        order = 8.3,
+                                        width = "full",
+                                        values = {
+                                            NONE = "None",
+                                            OUTLINE = "Outline",
+                                            THICKOUTLINE = "Thick Outline",
+                                            MONOCHROMEOUTLINE = "Monochrome Outline",
+                                        },
+                                        get = function()
+                                            return CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.itemFontOutline", "NONE")
+                                        end,
+                                        set = function(_, value)
+                                            CM:SetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.itemFontOutline", value)
+
+                                            local module = GetModule()
+                                            if module and module.BestInSlot and module.BestInSlot.UpdateEntryDisplayVisuals then
+                                                module.BestInSlot:UpdateEntryDisplayVisuals()
+                                            end
+                                        end,
+                                        disabled = function()
+                                            return not CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.enabled", true)
+                                        end,
+                                    },
+                                    itemFontColor = {
+                                        type = "color",
+                                        name = "Item Font Color",
+                                        hasAlpha = true,
+                                        order = 8.4,
+                                        width = "full",
+                                        get = function()
+                                            local c = CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.itemFontColor",
+                                                { r = 1, g = 1, b = 1, a = 1 })
+                                            return c.r, c.g, c.b, c.a
+                                        end,
+                                        set = function(_, r, g, b, a)
+                                            CM:SetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.itemFontColor",
+                                                { r = r, g = g, b = b, a = a })
+
+                                            local module = GetModule()
+                                            if module and module.BestInSlot and module.BestInSlot.UpdateEntryDisplayVisuals then
+                                                module.BestInSlot:UpdateEntryDisplayVisuals()
+                                            end
+                                        end,
+                                        disabled = function()
+                                            return not CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.enabled", true)
+                                        end,
+                                    },
+
+                                    detailFont = {
+                                        type = "select",
+                                        dialogControl = "LSM30_Font",
+                                        name = "Detail Font",
+                                        desc = CM:ColorTextKeywords("Font used for the details line."),
+                                        order = 8.5,
+                                        width = "full",
+                                        values = function() return LSM and LSM:HashTable("font") or {} end,
+                                        get = function()
+                                            return CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.detailFont", "Expressway")
+                                        end,
+                                        set = function(_, value)
+                                            CM:SetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.detailFont", value)
+
+                                            local module = GetModule()
+                                            if module and module.BestInSlot and module.BestInSlot.UpdateEntryDisplayVisuals then
+                                                module.BestInSlot:UpdateEntryDisplayVisuals()
+                                            end
+                                        end,
+                                        disabled = function()
+                                            return not CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.enabled", true)
+                                        end,
+                                    },
+                                    detailFontSize = {
+                                        type = "range",
+                                        name = "Detail Font Size",
+                                        order = 8.6,
+                                        min = 6,
+                                        max = 28,
+                                        step = 1,
+                                        width = "full",
+                                        get = function()
+                                            return CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.detailFontSize", 11)
+                                        end,
+                                        set = function(_, value)
+                                            CM:SetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.detailFontSize", value)
+
+                                            local module = GetModule()
+                                            if module and module.BestInSlot and module.BestInSlot.UpdateEntryDisplayVisuals then
+                                                module.BestInSlot:UpdateEntryDisplayVisuals()
+                                            end
+                                        end,
+                                        disabled = function()
+                                            return not CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.enabled", true)
+                                        end,
+                                    },
+                                    detailFontOutline = {
+                                        type = "select",
+                                        name = "Detail Font Outline",
+                                        order = 8.7,
+                                        width = "full",
+                                        values = {
+                                            NONE = "None",
+                                            OUTLINE = "Outline",
+                                            THICKOUTLINE = "Thick Outline",
+                                            MONOCHROMEOUTLINE = "Monochrome Outline",
+                                        },
+                                        get = function()
+                                            return CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.detailFontOutline", "NONE")
+                                        end,
+                                        set = function(_, value)
+                                            CM:SetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.detailFontOutline", value)
+
+                                            local module = GetModule()
+                                            if module and module.BestInSlot and module.BestInSlot.UpdateEntryDisplayVisuals then
+                                                module.BestInSlot:UpdateEntryDisplayVisuals()
+                                            end
+                                        end,
+                                        disabled = function()
+                                            return not CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.enabled", true)
+                                        end,
+                                    },
+                                    detailFontColor = {
+                                        type = "color",
+                                        name = "Detail Font Color",
+                                        hasAlpha = true,
+                                        order = 8.8,
+                                        width = "full",
+                                        get = function()
+                                            local c = CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.detailFontColor",
+                                                { r = 0.8, g = 0.8, b = 0.8, a = 1 })
+                                            return c.r, c.g, c.b, c.a
+                                        end,
+                                        set = function(_, r, g, b, a)
+                                            CM:SetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.detailFontColor",
+                                                { r = r, g = g, b = b, a = a })
+
+                                            local module = GetModule()
+                                            if module and module.BestInSlot and module.BestInSlot.UpdateEntryDisplayVisuals then
+                                                module.BestInSlot:UpdateEntryDisplayVisuals()
+                                            end
+                                        end,
+                                        disabled = function()
+                                            return not CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.enabled", true)
+                                        end,
+                                    },
+
+                                    layoutHeader = {
+                                        type = "header",
+                                        name = "Layout",
+                                        order = 9,
+                                    },
+                                    frameWidth = {
+                                        type = "range",
+                                        name = "Row Width",
+                                        order = 9.1,
+                                        min = 200,
+                                        max = 900,
+                                        step = 10,
+                                        width = "full",
+                                        get = function()
+                                            return CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.frameWidth", 420)
+                                        end,
+                                        set = function(_, value)
+                                            CM:SetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.frameWidth", value)
+
+                                            local module = GetModule()
+                                            if module and module.BestInSlot and module.BestInSlot.UpdateEntryDisplayVisuals then
+                                                module.BestInSlot:UpdateEntryDisplayVisuals()
+                                            end
+                                        end,
+                                        disabled = function()
+                                            return not CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.enabled", true)
+                                        end,
+                                    },
+                                    frameHeight = {
+                                        type = "range",
+                                        name = "Row Height",
+                                        order = 9.2,
+                                        min = 30,
+                                        max = 120,
+                                        step = 1,
+                                        width = "full",
+                                        get = function()
+                                            return CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.frameHeight", 50)
+                                        end,
+                                        set = function(_, value)
+                                            CM:SetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.frameHeight", value)
+
+                                            local module = GetModule()
+                                            if module and module.BestInSlot and module.BestInSlot.UpdateEntryDisplayVisuals then
+                                                module.BestInSlot:UpdateEntryDisplayVisuals()
+                                            end
+                                        end,
+                                        disabled = function()
+                                            return not CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.enabled", true)
+                                        end,
+                                    },
+                                    padLeft = {
+                                        type = "range",
+                                        name = "Left Padding",
+                                        order = 9.3,
+                                        min = 0,
+                                        max = 50,
+                                        step = 1,
+                                        width = "full",
+                                        get = function()
+                                            return CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.padLeft", 10)
+                                        end,
+                                        set = function(_, value)
+                                            CM:SetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.padLeft", value)
+
+                                            local module = GetModule()
+                                            if module and module.BestInSlot and module.BestInSlot.UpdateEntryDisplayVisuals then
+                                                module.BestInSlot:UpdateEntryDisplayVisuals()
+                                            end
+                                        end,
+                                        disabled = function()
+                                            return not CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.enabled", true)
+                                        end,
+                                    },
+                                    padRight = {
+                                        type = "range",
+                                        name = "Right Padding",
+                                        order = 9.4,
+                                        min = 0,
+                                        max = 50,
+                                        step = 1,
+                                        width = "full",
+                                        get = function()
+                                            return CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.padRight", 10)
+                                        end,
+                                        set = function(_, value)
+                                            CM:SetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.padRight", value)
+
+                                            local module = GetModule()
+                                            if module and module.BestInSlot and module.BestInSlot.UpdateEntryDisplayVisuals then
+                                                module.BestInSlot:UpdateEntryDisplayVisuals()
+                                            end
+                                        end,
+                                        disabled = function()
+                                            return not CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.enabled", true)
+                                        end,
+                                    },
+                                    iconSize = {
+                                        type = "range",
+                                        name = "Icon Size",
+                                        desc = CM:ColorTextKeywords("Set to 0 to hide icons."),
+                                        order = 9.5,
+                                        min = 0,
+                                        max = 64,
+                                        step = 1,
+                                        width = "full",
+                                        get = function()
+                                            return CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.iconSize", 30)
+                                        end,
+                                        set = function(_, value)
+                                            CM:SetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.iconSize", value)
+
+                                            local module = GetModule()
+                                            if module and module.BestInSlot and module.BestInSlot.UpdateEntryDisplayVisuals then
+                                                module.BestInSlot:UpdateEntryDisplayVisuals()
+                                            end
+                                        end,
+                                        disabled = function()
+                                            return not CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.enabled", true)
+                                        end,
+                                    },
+                                    iconGap = {
+                                        type = "range",
+                                        name = "Icon Gap",
+                                        order = 9.6,
+                                        min = 0,
+                                        max = 50,
+                                        step = 1,
+                                        width = "full",
+                                        get = function()
+                                            return CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.iconGap", 10)
+                                        end,
+                                        set = function(_, value)
+                                            CM:SetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.iconGap", value)
+
+                                            local module = GetModule()
+                                            if module and module.BestInSlot and module.BestInSlot.UpdateEntryDisplayVisuals then
+                                                module.BestInSlot:UpdateEntryDisplayVisuals()
+                                            end
+                                        end,
+                                        disabled = function()
+                                            return not CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.enabled", true)
+                                        end,
+                                    },
+
+                                    itemTextYOffset = {
+                                        type = "range",
+                                        name = "Item Text Y Offset",
+                                        desc = CM:ColorTextKeywords(
+                                            "Vertical offset for the item line (can be negative)."),
+                                        order = 9.7,
+                                        min = -50,
+                                        max = 50,
+                                        step = 1,
+                                        width = "full",
+                                        get = function()
+                                            return CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.itemTextYOffset", 6)
+                                        end,
+                                        set = function(_, value)
+                                            CM:SetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.itemTextYOffset", value)
+
+                                            local module = GetModule()
+                                            if module and module.BestInSlot and module.BestInSlot.UpdateEntryDisplayVisuals then
+                                                module.BestInSlot:UpdateEntryDisplayVisuals()
+                                            end
+                                        end,
+                                        disabled = function()
+                                            return not CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.enabled", true)
+                                        end,
+                                    },
+                                    detailTextYOffset = {
+                                        type = "range",
+                                        name = "Detail Text Y Offset",
+                                        desc = CM:ColorTextKeywords(
+                                            "Vertical spacing between item and detail lines (can be negative)."),
+                                        order = 9.8,
+                                        min = -50,
+                                        max = 50,
+                                        step = 1,
+                                        width = "full",
+                                        get = function()
+                                            return CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.detailTextYOffset", -6)
+                                        end,
+                                        set = function(_, value)
+                                            CM:SetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.detailTextYOffset", value)
+
+                                            local module = GetModule()
+                                            if module and module.BestInSlot and module.BestInSlot.UpdateEntryDisplayVisuals then
+                                                module.BestInSlot:UpdateEntryDisplayVisuals()
+                                            end
+                                        end,
+                                        disabled = function()
+                                            return not CM:GetProfileSettingSafe(
+                                                "mythicplus.bestInSlot.entryDisplay.enabled", true)
+                                        end,
+                                    },
+
+                                },
+                            },
+                        }
+                    },
+
+                    generalTab = {
+                        type = "group",
+                        name = "General",
+                        order = 1,
+                        args = {
                             databaseGroup = {
                                 type = "group",
                                 name = "Item Cache",
                                 inline = true,
-                                order = 2,
+                                order = 1,
                                 args = {
                                     description = CM.Widgets:ComponentDescription(0,
                                         "The addon stores data on item sources from the current season. This data is managed automatically and refreshed any time there is a game update. If for some reason you're having trouble with items, you can try to force a refresh now."),
@@ -546,7 +1292,7 @@ function MP:Create(order)
                     notificationsTab = {
                         type = "group",
                         name = "Notifications",
-                        order = 2,
+                        order = 3,
                         args = {
                             description = CM.Widgets:ComponentDescription(0,
                                 "Show a notification when you loot an item that matches your selected Best-in-Slot list."),
@@ -577,6 +1323,60 @@ function MP:Create(order)
                                                 else
                                                     module.BestInSlotNotificationHandler:Disable()
                                                 end
+                                            end
+                                        end,
+                                    },
+                                }
+                            },
+
+                            testingGroup = {
+                                type = "group",
+                                inline = true,
+                                name = "Testing",
+                                order = 1.1,
+                                args = {
+                                    testNotification = {
+                                        type = "execute",
+                                        name = TT.Color(CT.TWICH.GOLD_ACCENT, "Show Test Notification"),
+                                        desc = CM:ColorTextKeywords("Shows a sample BiS notification."),
+                                        order = 1,
+                                        func = function()
+                                            local module = GetModule()
+                                            if not module or not module.BestInSlotNotificationFrame then return end
+
+                                            if module.BestInSlotNotificationFrame.Initialize then
+                                                module.BestInSlotNotificationFrame:Initialize()
+                                            end
+
+                                            if module.BestInSlotNotificationFrame.ShowNotification then
+                                                module.BestInSlotNotificationFrame:ShowNotification(
+                                                    "|cffa335ee|Hitem:19019::::::::80:::::|h[Preview BiS Item]|h|r",
+                                                    "NEW",
+                                                    999,
+                                                    nil,
+                                                    1
+                                                )
+                                            end
+                                        end,
+                                    },
+                                    pinPreview = {
+                                        type = "toggle",
+                                        name = TT.Color(CT.TWICH.GOLD_ACCENT, "Toggle Preview Frame"),
+                                        desc = CM:ColorTextKeywords(
+                                            "Toggles a preview of the BiS notification frame that won't disappear."),
+                                        order = 2,
+                                        get = function()
+                                            local module = GetModule()
+                                            return module and module.BestInSlotNotificationFrame and
+                                                module.BestInSlotNotificationFrame.previewShown
+                                        end,
+                                        set = function(_, value)
+                                            local module = GetModule()
+                                            if not module or not module.BestInSlotNotificationFrame then return end
+                                            if value then
+                                                module.BestInSlotNotificationFrame:ShowPreview()
+                                            else
+                                                module.BestInSlotNotificationFrame:HidePreview()
                                             end
                                         end,
                                     },
@@ -717,60 +1517,6 @@ function MP:Create(order)
                                         set = function(_, value)
                                             CM:SetProfileSettingSafe(
                                                 "mythicplus.bestInSlot.notifications.availabilityVaultSound", value)
-                                        end,
-                                    },
-                                }
-                            },
-
-                            testingGroup = {
-                                type = "group",
-                                inline = true,
-                                name = "Testing",
-                                order = 3,
-                                args = {
-                                    testNotification = {
-                                        type = "execute",
-                                        name = TT.Color(CT.TWICH.GOLD_ACCENT, "Show Test Notification"),
-                                        desc = CM:ColorTextKeywords("Shows a sample BiS notification."),
-                                        order = 1,
-                                        func = function()
-                                            local module = GetModule()
-                                            if not module or not module.BestInSlotNotificationFrame then return end
-
-                                            if module.BestInSlotNotificationFrame.Initialize then
-                                                module.BestInSlotNotificationFrame:Initialize()
-                                            end
-
-                                            if module.BestInSlotNotificationFrame.ShowNotification then
-                                                module.BestInSlotNotificationFrame:ShowNotification(
-                                                    "|cffa335ee|Hitem:19019::::::::80:::::|h[Preview BiS Item]|h|r",
-                                                    "NEW",
-                                                    999,
-                                                    nil,
-                                                    1
-                                                )
-                                            end
-                                        end,
-                                    },
-                                    pinPreview = {
-                                        type = "toggle",
-                                        name = TT.Color(CT.TWICH.GOLD_ACCENT, "Toggle Preview Frame"),
-                                        desc = CM:ColorTextKeywords(
-                                            "Toggles a preview of the BiS notification frame that won't disappear."),
-                                        order = 2,
-                                        get = function()
-                                            local module = GetModule()
-                                            return module and module.BestInSlotNotificationFrame and
-                                                module.BestInSlotNotificationFrame.previewShown
-                                        end,
-                                        set = function(_, value)
-                                            local module = GetModule()
-                                            if not module or not module.BestInSlotNotificationFrame then return end
-                                            if value then
-                                                module.BestInSlotNotificationFrame:ShowPreview()
-                                            else
-                                                module.BestInSlotNotificationFrame:HidePreview()
-                                            end
                                         end,
                                     },
                                 }

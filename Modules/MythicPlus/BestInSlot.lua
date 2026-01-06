@@ -15,6 +15,8 @@ local Logger = T:GetModule("Logger")
 --- @type ConfigurationModule
 local CM = T:GetModule("Configuration")
 
+local LSM = T.Libs and T.Libs.LSM
+
 local CreateFrame = _G.CreateFrame
 local UIParent = _G.UIParent
 local GameTooltip = _G.GameTooltip
@@ -2090,18 +2092,49 @@ function BestInSlot:PrintMissingBiSForCurrentInstance()
     local instanceName = NormalizeInstanceName(select(1, GetInstanceInfo()))
     if not instanceName then return end
 
+    local missing = self:GetMissingBiSForInstance(instanceName)
+    if not missing then
+        -- Cache not ready; message already logged by collector.
+        return
+    end
+
+    if #missing == 0 then
+        return
+    end
+
+    Logger.Info(string.format("BiS: Missing %d item(s) for %s:", #missing, instanceName))
+    for _, entry in ipairs(missing) do
+        if entry.boss then
+            Logger.Info(string.format("  - %s (%s)", entry.link, entry.boss))
+        else
+            Logger.Info(string.format("  - %s", entry.link))
+        end
+    end
+end
+
+--- Returns a list of missing BiS items for a specific instance name.
+--- Uses cache-only loading to stay fast on zone-in.
+---@param instanceName string
+---@return table|nil missing Returns nil if cache not ready or DB not available.
+function BestInSlot:GetMissingBiSForInstance(instanceName)
+    instanceName = NormalizeInstanceName(instanceName)
+    if not instanceName then return nil end
+
     -- Try to load the item-source cache without forcing a rebuild on zone-in.
     if not TryLoadTierCacheOnly() then
         Logger.Info("BiS: Item cache not ready (open BiS Gear once to build/refresh).")
-        return
+        return nil
     end
 
-    if not TierInstanceLootCache or not TierInstanceLootCache[instanceName] then
-        return
+    -- If the instance has no loot table in our cache, don't show entry notifications.
+    -- (This is distinct from "no missing BiS" for a dungeon that DOES have loot.)
+    local instanceLoot = TierInstanceLootCache and TierInstanceLootCache[instanceName]
+    if type(instanceLoot) ~= "table" or next(instanceLoot) == nil then
+        return nil
     end
 
     local db = GetCharacterDB()
-    if not db then return end
+    if not db then return nil end
 
     local missing = {}
 
@@ -2148,18 +2181,702 @@ function BestInSlot:PrintMissingBiSForCurrentInstance()
         end
     end
 
-    if #missing == 0 then
-        Logger.Info(string.format("BiS: No missing BiS items for %s.", instanceName))
+    return missing
+end
+
+local function GetEntryDisplaySetting(key, default)
+    if CM and CM.GetProfileSettingSafe then
+        return CM:GetProfileSettingSafe("mythicplus.bestInSlot.entryDisplay." .. tostring(key), default)
+    end
+    return default
+end
+
+local function GetEntryDisplayColor(key, default)
+    local c = GetEntryDisplaySetting(key, default)
+    if type(c) ~= "table" then
+        return default
+    end
+    return {
+        r = tonumber(c.r) or tonumber(default.r) or 1,
+        g = tonumber(c.g) or tonumber(default.g) or 1,
+        b = tonumber(c.b) or tonumber(default.b) or 1,
+        a = tonumber(c.a) or tonumber(default.a) or 1,
+    }
+end
+
+local function FetchStatusbarTexture(key, default)
+    local textureKey = GetEntryDisplaySetting(key, default)
+    if LSM and type(LSM.Fetch) == "function" then
+        local path = LSM:Fetch("statusbar", textureKey)
+        if path and path ~= "" then
+            return path
+        end
+    end
+    return textureKey
+end
+
+local function FetchBorderTexture(key, default)
+    local textureKey = GetEntryDisplaySetting(key, default)
+    if LSM and type(LSM.Fetch) == "function" then
+        local path = LSM:Fetch("border", textureKey)
+        if path and path ~= "" then
+            return path
+        end
+    end
+    return textureKey
+end
+
+local function ApplyFont(fs, fontKeySetting, sizeSetting, outlineSetting, defaultFont, defaultSize)
+    if not fs or type(fs.SetFont) ~= "function" then return end
+
+    local fontKey = GetEntryDisplaySetting(fontKeySetting, defaultFont)
+    local fontPath = fontKey
+    if LSM and type(LSM.Fetch) == "function" then
+        fontPath = LSM:Fetch("font", fontKey) or fontKey
+    end
+
+    local size = tonumber(GetEntryDisplaySetting(sizeSetting, defaultSize)) or defaultSize
+    local outline = tostring(GetEntryDisplaySetting(outlineSetting, "NONE") or "NONE")
+    if outline == "NONE" then outline = "" end
+    fs:SetFont(fontPath, size, outline)
+end
+
+local function ApplyEntryDisplayRowLayout(row)
+    if not row then return end
+
+    local width = tonumber(GetEntryDisplaySetting("frameWidth", 420)) or 420
+    local height = tonumber(GetEntryDisplaySetting("frameHeight", 50)) or 50
+    row:SetSize(width, height)
+
+    local padLeft = tonumber(GetEntryDisplaySetting("padLeft", 10)) or 10
+    local padRight = tonumber(GetEntryDisplaySetting("padRight", 10)) or 10
+    local iconSize = tonumber(GetEntryDisplaySetting("iconSize", 30)) or 30
+    local iconGap = tonumber(GetEntryDisplaySetting("iconGap", 10)) or 10
+    -- Center the two-line text block within the row by default.
+    local itemFontSize = tonumber(GetEntryDisplaySetting("itemFontSize", 12)) or 12
+    local detailFontSize = tonumber(GetEntryDisplaySetting("detailFontSize", 11)) or 11
+    local defaultItemTextYOffset = math.floor(detailFontSize / 2) + 1
+    local defaultDetailTextYOffset = -(math.floor(itemFontSize / 2) + 1)
+
+    local itemTextYOffset = tonumber(GetEntryDisplaySetting("itemTextYOffset", defaultItemTextYOffset))
+        or defaultItemTextYOffset
+    local detailTextYOffset = tonumber(GetEntryDisplaySetting("detailTextYOffset", defaultDetailTextYOffset))
+        or defaultDetailTextYOffset
+
+    local showIcon = iconSize > 0
+
+    if row.icon then
+        row.icon:ClearAllPoints()
+        row.icon:SetSize(iconSize, iconSize)
+        row.icon:SetPoint("LEFT", row, "LEFT", padLeft, 0)
+        if showIcon then
+            -- Actual icon visibility is driven by whether we set a texture later.
+            row.icon:Show()
+        else
+            row.icon:Hide()
+        end
+    end
+
+    local textLeftAnchor = row
+    local textLeftPoint = "LEFT"
+    local textLeftX = padLeft
+    if showIcon and row.icon then
+        textLeftAnchor = row.icon
+        textLeftPoint = "RIGHT"
+        textLeftX = iconGap
+    end
+
+    if row.itemText then
+        row.itemText:SetJustifyH("LEFT")
+        row.itemText:ClearAllPoints()
+        row.itemText:SetPoint("LEFT", textLeftAnchor, textLeftPoint, textLeftX, itemTextYOffset)
+        row.itemText:SetPoint("RIGHT", row, "RIGHT", -padRight, 0)
+    end
+
+    if row.detailText then
+        row.detailText:SetJustifyH("LEFT")
+        row.detailText:ClearAllPoints()
+        row.detailText:SetPoint("LEFT", textLeftAnchor, textLeftPoint, textLeftX, detailTextYOffset)
+        row.detailText:SetPoint("RIGHT", row, "RIGHT", -padRight, 0)
+    end
+end
+
+local function EnsureEntryDisplayRowTextures(row)
+    if not row then return end
+
+    if not row.bg then
+        row.bg = row:CreateTexture(nil, "BACKGROUND")
+        row.bg:SetAllPoints()
+    end
+
+    if not row.borderTop then
+        row.borderTop = row:CreateTexture(nil, "BORDER")
+        row.borderBottom = row:CreateTexture(nil, "BORDER")
+        row.borderLeft = row:CreateTexture(nil, "BORDER")
+        row.borderRight = row:CreateTexture(nil, "BORDER")
+    end
+end
+
+local function ApplyEntryDisplayRowAppearance(row)
+    if not row then return end
+    EnsureEntryDisplayRowTextures(row)
+
+    local texture = FetchStatusbarTexture("backgroundTexture", "ElvUI Norm")
+    if row.bg and type(row.bg.SetTexture) == "function" then
+        row.bg:SetTexture(texture)
+    end
+
+    -- Darker, more ElvUI-like default.
+    local bg = GetEntryDisplayColor("backgroundColor", { r = 0.07, g = 0.07, b = 0.07, a = 0.80 })
+    if row.bg and type(row.bg.SetVertexColor) == "function" then
+        row.bg:SetVertexColor(bg.r, bg.g, bg.b, bg.a)
+    end
+
+    local borderSize = tonumber(GetEntryDisplaySetting("borderSize", 1)) or 1
+    if borderSize < 0 then borderSize = 0 end
+
+    -- ElvUI-like border default (near-black).
+    local bc = GetEntryDisplayColor("borderColor", { r = 0, g = 0, b = 0, a = 0.9 })
+
+    local defaultBorderTexture = "Interface\\Buttons\\WHITE8X8"
+    local borderTexture = FetchBorderTexture("borderTexture", defaultBorderTexture)
+
+    local function applyBorder(tex)
+        if not tex then return end
+        tex:SetTexture(borderTexture)
+        tex:SetVertexColor(bc.r, bc.g, bc.b, bc.a)
+        tex:Show()
+    end
+
+    if borderSize == 0 then
+        if row.borderTop then row.borderTop:Hide() end
+        if row.borderBottom then row.borderBottom:Hide() end
+        if row.borderLeft then row.borderLeft:Hide() end
+        if row.borderRight then row.borderRight:Hide() end
         return
     end
 
-    Logger.Info(string.format("BiS: Missing %d item(s) for %s:", #missing, instanceName))
-    for _, entry in ipairs(missing) do
-        if entry.boss then
-            Logger.Info(string.format("  - %s (%s)", entry.link, entry.boss))
-        else
-            Logger.Info(string.format("  - %s", entry.link))
+    applyBorder(row.borderTop)
+    applyBorder(row.borderBottom)
+    applyBorder(row.borderLeft)
+    applyBorder(row.borderRight)
+
+    row.borderTop:ClearAllPoints()
+    row.borderTop:SetPoint("TOPLEFT", row, "TOPLEFT", 0, 0)
+    row.borderTop:SetPoint("TOPRIGHT", row, "TOPRIGHT", 0, 0)
+    row.borderTop:SetHeight(borderSize)
+
+    row.borderBottom:ClearAllPoints()
+    row.borderBottom:SetPoint("BOTTOMLEFT", row, "BOTTOMLEFT", 0, 0)
+    row.borderBottom:SetPoint("BOTTOMRIGHT", row, "BOTTOMRIGHT", 0, 0)
+    row.borderBottom:SetHeight(borderSize)
+
+    row.borderLeft:ClearAllPoints()
+    row.borderLeft:SetPoint("TOPLEFT", row, "TOPLEFT", 0, 0)
+    row.borderLeft:SetPoint("BOTTOMLEFT", row, "BOTTOMLEFT", 0, 0)
+    row.borderLeft:SetWidth(borderSize)
+
+    row.borderRight:ClearAllPoints()
+    row.borderRight:SetPoint("TOPRIGHT", row, "TOPRIGHT", 0, 0)
+    row.borderRight:SetPoint("BOTTOMRIGHT", row, "BOTTOMRIGHT", 0, 0)
+    row.borderRight:SetWidth(borderSize)
+end
+
+local function ApplyEntryDisplayRowFonts(row)
+    if not row then return end
+
+    ApplyFont(row.itemText, "itemFont", "itemFontSize", "itemFontOutline", "Expressway", 12)
+    ApplyFont(row.detailText, "detailFont", "detailFontSize", "detailFontOutline", "Expressway", 11)
+
+    local ic = GetEntryDisplayColor("itemFontColor", { r = 1, g = 1, b = 1, a = 1 })
+    if row.itemText and type(row.itemText.SetTextColor) == "function" then
+        row.itemText:SetTextColor(ic.r, ic.g, ic.b, ic.a)
+    end
+
+    local dc = GetEntryDisplayColor("detailFontColor", { r = 0.8, g = 0.8, b = 0.8, a = 1 })
+    if row.detailText and type(row.detailText.SetTextColor) == "function" then
+        row.detailText:SetTextColor(dc.r, dc.g, dc.b, dc.a)
+    end
+end
+
+local function ApplyEntryDisplayRowVisuals(row)
+    ApplyEntryDisplayRowLayout(row)
+    ApplyEntryDisplayRowAppearance(row)
+    ApplyEntryDisplayRowFonts(row)
+end
+
+function BestInSlot:UpdateEntryDisplayVisuals()
+    if not self.__entryDisplay or not self.__entryDisplay.frame then
+        return
+    end
+
+    local display = self.__entryDisplay
+    local anchor = display.anchor
+    local f = display.frame
+
+    local width = tonumber(GetEntryDisplaySetting("frameWidth", 420)) or 420
+    local height = tonumber(GetEntryDisplaySetting("frameHeight", 50)) or 50
+    -- Keep the mover anchor smaller than the rows for easier positioning.
+    local anchorWidth = math.min(width, 180)
+    local anchorHeight = math.min(height, 30)
+    if anchor then
+        anchor:SetSize(anchorWidth, anchorHeight)
+    end
+    if f then
+        f:SetSize(width, height)
+    end
+
+    -- Update all rows (active + pooled)
+    if f and f.activeRows then
+        for idx, row in ipairs(f.activeRows) do
+            ApplyEntryDisplayRowVisuals(row)
+            if f.__PositionRow then
+                f.__PositionRow(row, idx)
+            end
         end
+    end
+    if f and f.rowPool then
+        for _, row in ipairs(f.rowPool) do
+            ApplyEntryDisplayRowVisuals(row)
+        end
+    end
+end
+
+local function GetSlotName(slotID)
+    if not slotID then return "" end
+    for _, slotData in ipairs(SLOTS) do
+        if slotData.slotID == slotID then
+            return slotData.name or ""
+        end
+    end
+    return tostring(slotID)
+end
+
+function BestInSlot:_EnsureEntryDisplay()
+    if self.__entryDisplay and self.__entryDisplay.frame then
+        return self.__entryDisplay
+    end
+
+    local parent = (E and E.UIParent) or UIParent
+    local anchor = CreateFrame("Frame", "TwichUIMythicPlusBiSEntryDisplayAnchorFrame", parent)
+    anchor:SetClampedToScreen(true)
+    anchor:ClearAllPoints()
+    anchor:SetPoint("CENTER", parent, "CENTER", 0, 200)
+    do
+        local width = tonumber(GetEntryDisplaySetting("frameWidth", 420)) or 420
+        local height = tonumber(GetEntryDisplaySetting("frameHeight", 50)) or 50
+        local anchorWidth = math.min(width, 180)
+        local anchorHeight = math.min(height, 30)
+        anchor:SetSize(anchorWidth, anchorHeight)
+    end
+    anchor:Show()
+
+    if E and E.CreateMover then
+        E:CreateMover(anchor, "TwichUIMythicPlusBiSEntryDisplayMover", "TwichUI BiS Entry Display", nil, nil, nil,
+            "ALL", nil, "TwichUI,Modules,MythicPlus,BiSEntryDisplay")
+    end
+
+    local f = CreateFrame("Frame", nil, parent)
+    f:SetClampedToScreen(true)
+    f:ClearAllPoints()
+    f:SetPoint("TOP", anchor, "TOP", 0, 0)
+    do
+        local width = tonumber(GetEntryDisplaySetting("frameWidth", 420)) or 420
+        local height = tonumber(GetEntryDisplaySetting("frameHeight", 50)) or 50
+        f:SetSize(width, height)
+    end
+    f:EnableMouse(false)
+    f:Hide()
+
+    f.activeRows = {}
+    f.rowPool = {}
+    f._hoveredCount = 0
+    f._pendingDismiss = false
+    f._dismissTimer = nil
+    f._hoverGraceTimer = nil
+
+    local function PositionRow(row, index)
+        local gap = tonumber(GetEntryDisplaySetting("frameSpacing", 6)) or 6
+        local grow = tostring(GetEntryDisplaySetting("growDirection", "UP") or "UP")
+
+        row:ClearAllPoints()
+        if grow == "DOWN" then
+            row:SetPoint("TOP", anchor, "BOTTOM", 0, -((index - 1) * (row:GetHeight() + gap)))
+        else
+            row:SetPoint("BOTTOM", anchor, "TOP", 0, ((index - 1) * (row:GetHeight() + gap)))
+        end
+    end
+
+    local function ApplyRowVisuals(row)
+        ApplyEntryDisplayRowVisuals(row)
+        if row and row.icon and E and E.TexCoords then
+            row.icon:SetTexCoord(unpack(E.TexCoords))
+        elseif row and row.icon then
+            row.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+        end
+    end
+
+    local function RecycleRow(row)
+        if not row then return end
+
+        for i, active in ipairs(f.activeRows) do
+            if active == row then
+                table.remove(f.activeRows, i)
+                break
+            end
+        end
+
+        if row.fadeGroup then row.fadeGroup:Stop() end
+        if row.dismissGroup then row.dismissGroup:Stop() end
+        row:Hide()
+        row.itemText:SetText("")
+        row.detailText:SetText("")
+        row.icon:SetTexture(nil)
+        row.__itemLink = nil
+        row.__instanceName = nil
+        row.__slotName = nil
+        row.__boss = nil
+        table.insert(f.rowPool, row)
+
+        -- Reposition remaining rows to keep the stack tidy.
+        for idx, r in ipairs(f.activeRows) do
+            PositionRow(r, idx)
+        end
+
+        if #f.activeRows == 0 then
+            f:Hide()
+        end
+    end
+
+    local function AcquireRow()
+        local row = table.remove(f.rowPool)
+        if not row then
+            row = CreateFrame("Frame", nil, parent)
+            row:SetClampedToScreen(true)
+            row:EnableMouse(true)
+
+            row.icon = row:CreateTexture(nil, "ARTWORK")
+            row.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+
+            row.itemText = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+
+            row.detailText = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+
+            row.fadeGroup = row:CreateAnimationGroup()
+            row.fadeGroup:SetLooping("NONE")
+
+            row.fadeIn = row.fadeGroup:CreateAnimation("Alpha")
+            row.fadeIn:SetOrder(1)
+            row.fadeIn:SetFromAlpha(0)
+            row.fadeIn:SetToAlpha(1)
+            row.fadeIn:SetDuration(0.25)
+
+            row.moveIn = row.fadeGroup:CreateAnimation("Translation")
+            row.moveIn:SetOrder(1)
+            row.moveIn:SetOffset(0, -10)
+            row.moveIn:SetDuration(0.25)
+
+            row.fadeGroup:SetScript("OnFinished", function(anim)
+                -- Fade-in only; auto-hide is handled by timers so hover can pause it.
+                local r = anim:GetParent()
+                if r then
+                    r:SetAlpha(1)
+                end
+            end)
+
+            row.dismissGroup = row:CreateAnimationGroup()
+            row.dismissGroup:SetLooping("NONE")
+
+            row.dismissFade = row.dismissGroup:CreateAnimation("Alpha")
+            row.dismissFade:SetOrder(1)
+            row.dismissFade:SetFromAlpha(1)
+            row.dismissFade:SetToAlpha(0)
+            row.dismissFade:SetDuration(0.2)
+
+            row.dismissMove = row.dismissGroup:CreateAnimation("Translation")
+            row.dismissMove:SetOrder(1)
+            row.dismissMove:SetOffset(0, 10)
+            row.dismissMove:SetDuration(0.2)
+
+            row.dismissGroup:SetScript("OnFinished", function(anim)
+                local r = anim:GetParent()
+                RecycleRow(r)
+            end)
+
+            row:SetScript("OnEnter", function(self)
+                if f then
+                    f._hoveredCount = (f._hoveredCount or 0) + 1
+                    if f._hoverGraceTimer and f._hoverGraceTimer.Cancel then
+                        f._hoverGraceTimer:Cancel()
+                    end
+                    f._hoverGraceTimer = nil
+                end
+
+                if GameTooltip and GameTooltip.SetOwner then
+                    GameTooltip:SetOwner(self, "ANCHOR_CURSOR")
+                    local link = rawget(self, "__itemLink")
+                    if link and GameTooltip.SetHyperlink then
+                        GameTooltip:SetHyperlink(link)
+                    else
+                        local title = rawget(self, "__instanceName") or ""
+                        local slotName = rawget(self, "__slotName") or ""
+                        local boss = rawget(self, "__boss")
+                        if title ~= "" then GameTooltip:AddLine(title, 1, 1, 1) end
+                        if slotName ~= "" then GameTooltip:AddLine("Slot: " .. slotName, 0.8, 0.8, 0.8) end
+                        if boss then GameTooltip:AddLine("Boss: " .. tostring(boss), 0.8, 0.8, 0.8) end
+                    end
+                    GameTooltip:Show()
+                end
+            end)
+            row:SetScript("OnLeave", function()
+                if GameTooltip and GameTooltip.Hide then
+                    GameTooltip:Hide()
+                end
+
+                if f then
+                    f._hoveredCount = math.max(0, (f._hoveredCount or 0) - 1)
+
+                    if f._pendingDismiss and f._hoveredCount == 0 then
+                        if f._hoverGraceTimer and f._hoverGraceTimer.Cancel then
+                            f._hoverGraceTimer:Cancel()
+                        end
+                        if C_Timer and C_Timer.NewTimer then
+                            f._hoverGraceTimer = C_Timer.NewTimer(3, function()
+                                if f and f._pendingDismiss and (f._hoveredCount or 0) == 0 then
+                                    BestInSlot:_DismissEntryDisplayAnimated()
+                                end
+                            end)
+                        else
+                            BestInSlot:_DismissEntryDisplayAnimated()
+                        end
+                    end
+                end
+            end)
+
+            row:SetScript("OnMouseDown", function()
+                if GameTooltip and GameTooltip.Hide then
+                    GameTooltip:Hide()
+                end
+                -- Dismiss the entire list early (animated).
+                BestInSlot:_DismissEntryDisplayAnimated()
+            end)
+        end
+
+        ApplyRowVisuals(row)
+        row:Show()
+        row:EnableMouse(true)
+        return row
+    end
+
+    f.__AcquireRow = AcquireRow
+    f.__RecycleRow = RecycleRow
+    f.__PositionRow = PositionRow
+    f.__ApplyRowVisuals = ApplyRowVisuals
+
+    self.__entryDisplay = { anchor = anchor, frame = f }
+
+    -- Apply settings-driven sizing to anchor/container right away.
+    self:UpdateEntryDisplayVisuals()
+    return self.__entryDisplay
+end
+
+function BestInSlot:TestEntryDisplay()
+    local display = self:_EnsureEntryDisplay()
+    if not display or not display.frame then return end
+
+    local sample = {
+        { link = GetItemLinkForChat(19019, nil), boss = "Test Boss",    slotID = 16 },
+        { link = GetItemLinkForChat(18832, nil), boss = "Another Boss", slotID = 13 },
+        { link = GetItemLinkForChat(17182, nil), boss = nil,            slotID = 5 },
+    }
+    self:ShowMissingBiSOnInstanceEntry("Test Instance", sample)
+end
+
+function BestInSlot:_DismissEntryDisplayAnimated()
+    if not self.__entryDisplay or not self.__entryDisplay.frame then return end
+    local f = self.__entryDisplay.frame
+    if not f.activeRows or #f.activeRows == 0 then
+        f:Hide()
+        return
+    end
+
+    f._pendingDismiss = false
+    if f._dismissTimer and f._dismissTimer.Cancel then
+        f._dismissTimer:Cancel()
+    end
+    f._dismissTimer = nil
+    if f._hoverGraceTimer and f._hoverGraceTimer.Cancel then
+        f._hoverGraceTimer:Cancel()
+    end
+    f._hoverGraceTimer = nil
+
+    for _, row in ipairs(f.activeRows) do
+        if row.EnableMouse then row:EnableMouse(false) end
+        if row.fadeGroup then row.fadeGroup:Stop() end
+        if row.dismissGroup then
+            row.dismissGroup:Stop()
+            row:SetAlpha(1)
+            row.dismissGroup:Play()
+        else
+            if f.__RecycleRow then
+                f.__RecycleRow(row)
+            else
+                row:Hide()
+            end
+        end
+    end
+end
+
+function BestInSlot:_HideEntryDisplay(animated)
+    if not self.__entryDisplay or not self.__entryDisplay.frame then return end
+    local f = self.__entryDisplay.frame
+
+    f._pendingDismiss = false
+    if f._dismissTimer and f._dismissTimer.Cancel then
+        f._dismissTimer:Cancel()
+    end
+    f._dismissTimer = nil
+    if f._hoverGraceTimer and f._hoverGraceTimer.Cancel then
+        f._hoverGraceTimer:Cancel()
+    end
+    f._hoverGraceTimer = nil
+
+    if f.activeRows then
+        while #f.activeRows > 0 do
+            local row = f.activeRows[#f.activeRows]
+            if row and row.fadeGroup then row.fadeGroup:Stop() end
+            if row and row.dismissGroup then row.dismissGroup:Stop() end
+            if row and f.__RecycleRow then
+                f.__RecycleRow(row)
+            elseif row then
+                row:Hide()
+                table.remove(f.activeRows, #f.activeRows)
+            else
+                table.remove(f.activeRows, #f.activeRows)
+            end
+        end
+    end
+
+    f:Hide()
+end
+
+---@param instanceName string
+---@param missing table
+function BestInSlot:ShowMissingBiSOnInstanceEntry(instanceName, missing)
+    if not GetEntryDisplaySetting("enabled", true) then return end
+
+    if not missing or #missing == 0 then
+        -- User preference: don't show the entry display if there are no missing items.
+        self:_HideEntryDisplay(false)
+        return
+    end
+
+    local display = self:_EnsureEntryDisplay()
+    local f = display.frame
+    if not f then return end
+
+    instanceName = NormalizeInstanceName(instanceName) or instanceName or ""
+
+    self:_HideEntryDisplay(false)
+
+    local duration = tonumber(GetEntryDisplaySetting("durationSec", 45)) or 45
+    if duration < 5 then duration = 5 end
+    if duration > 120 then duration = 120 end
+
+    f._hoveredCount = 0
+    f._pendingDismiss = false
+    if f._dismissTimer and f._dismissTimer.Cancel then
+        f._dismissTimer:Cancel()
+    end
+    f._dismissTimer = nil
+    if f._hoverGraceTimer and f._hoverGraceTimer.Cancel then
+        f._hoverGraceTimer:Cancel()
+    end
+    f._hoverGraceTimer = nil
+
+    local maxRows = 12
+    local toShow = (missing and #missing or 0)
+
+    local shown = 0
+    for _, entry in ipairs(missing) do
+        if shown >= maxRows then break end
+        shown = shown + 1
+
+        local row = f.__AcquireRow and f.__AcquireRow()
+        if not row then break end
+        table.insert(f.activeRows, row)
+        f.__PositionRow(row, shown)
+
+        local slotName = GetSlotName(entry.slotID)
+        local boss = entry.boss
+        local link = entry.link
+
+        row.__itemLink = link
+        row.__instanceName = instanceName
+        row.__slotName = slotName
+        row.__boss = boss
+
+        local iconTex = nil
+        if C_Item and C_Item.GetItemInfoInstant then
+            iconTex = select(5, C_Item.GetItemInfoInstant(link))
+        end
+        if iconTex then
+            row.icon:SetTexture(iconTex)
+            row.icon:Show()
+        else
+            row.icon:SetTexture(nil)
+            row.icon:Hide()
+        end
+
+        row.itemText:SetText(string.format("%s |cffaaaaaa[%s]|r", tostring(link or ""), tostring(slotName)))
+        if boss then
+            row.detailText:SetText(string.format("%s  |cffaaaaaa- %s|r", tostring(instanceName), tostring(boss)))
+        else
+            row.detailText:SetText(tostring(instanceName))
+        end
+
+        if row.fadeGroup then
+            row.fadeGroup:Stop()
+            row:SetAlpha(0)
+            row.fadeGroup:Play()
+        end
+    end
+
+    if toShow > maxRows then
+        local row = f.__AcquireRow and f.__AcquireRow()
+        if row then
+            shown = shown + 1
+            table.insert(f.activeRows, row)
+            f.__PositionRow(row, shown)
+
+            row.__itemLink = nil
+            row.__instanceName = instanceName
+            row.__slotName = ""
+            row.__boss = nil
+
+            row.icon:Hide()
+            row.itemText:SetText(string.format("BiS: %s", instanceName))
+            row.detailText:SetText(string.format("...and %d more", toShow - maxRows))
+
+            if row.fadeGroup then
+                row.fadeGroup:Stop()
+                row:SetAlpha(0)
+                row.fadeGroup:Play()
+            end
+        end
+    end
+
+    f:Show()
+
+    if C_Timer and C_Timer.NewTimer then
+        f._dismissTimer = C_Timer.NewTimer(duration, function()
+            if not f then return end
+            if (f._hoveredCount or 0) > 0 then
+                f._pendingDismiss = true
+                return
+            end
+            BestInSlot:_DismissEntryDisplayAnimated()
+        end)
     end
 end
 
@@ -2626,25 +3343,29 @@ function BestInSlot:Initialize()
         })
     end
 
-    -- Print missing BiS items on dungeon/raid entry (rate-limited per instance).
+    -- Print/show missing BiS items on dungeon/raid entry (rate-limited per instance).
     if not self.__entryFrame then
         local f = CreateFrame("Frame")
         self.__entryFrame = f
         f:RegisterEvent("PLAYER_ENTERING_WORLD")
         f:RegisterEvent("ZONE_CHANGED_NEW_AREA")
         f:SetScript("OnEvent", function()
-            -- Config toggle
+            local chatEnabled = true
             if CM and CM.GetProfileSettingSafe then
-                local enabled = CM:GetProfileSettingSafe(
+                chatEnabled = CM:GetProfileSettingSafe(
                     "mythicplus.bestInSlot.printMissingOnInstanceEntry", true)
-                if not enabled then
-                    return
-                end
+            end
+
+            local frameEnabled = GetEntryDisplaySetting("enabled", true)
+
+            if not chatEnabled and not frameEnabled then
+                return
             end
 
             local inInstance, instanceType = IsInInstance()
             if not inInstance then
                 self.__lastPrintedInstance = nil
+                self:_HideEntryDisplay(false)
                 return
             end
             if instanceType ~= "party" and instanceType ~= "raid" then
@@ -2659,7 +3380,28 @@ function BestInSlot:Initialize()
             end
 
             self.__lastPrintedInstance = instanceName
-            self:PrintMissingBiSForCurrentInstance()
+
+            local missing = nil
+            if chatEnabled or frameEnabled then
+                missing = self:GetMissingBiSForInstance(instanceName)
+            end
+
+            if chatEnabled then
+                if missing and #missing > 0 then
+                    Logger.Info(string.format("BiS: Missing %d item(s) for %s:", #missing, instanceName))
+                    for _, entry in ipairs(missing) do
+                        if entry.boss then
+                            Logger.Info(string.format("  - %s (%s)", entry.link, entry.boss))
+                        else
+                            Logger.Info(string.format("  - %s", entry.link))
+                        end
+                    end
+                end
+            end
+
+            if frameEnabled and missing and #missing > 0 then
+                self:ShowMissingBiSOnInstanceEntry(instanceName, missing)
+            end
         end)
     end
 end

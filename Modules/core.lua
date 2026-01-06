@@ -263,11 +263,6 @@ do
             return true
         end
 
-        -- Only auto-show when the Mythic+ module is enabled in config.
-        if not Configuration:GetProfileSettingSafe("mythicplus.enabled", false) then
-            return true
-        end
-
         if _G.InCombatLockdown and _G.InCombatLockdown() then
             return false
         end
@@ -276,6 +271,20 @@ do
         local MythicPlus = T:GetModule("MythicPlus")
         if not MythicPlus then
             return false
+        end
+
+        -- Only auto-show when the Mythic+ module is enabled in config.
+        -- Use the config entry default (true) when the saved key is missing (common after key migrations).
+        local mythicPlusEnabled = nil
+        if Configuration.GetProfileSettingByConfigEntry
+            and MythicPlus.CONFIGURATION
+            and MythicPlus.CONFIGURATION.ENABLED then
+            mythicPlusEnabled = Configuration:GetProfileSettingByConfigEntry(MythicPlus.CONFIGURATION.ENABLED)
+        else
+            mythicPlusEnabled = Configuration:GetProfileSettingSafe("mythicplus.enabled", true)
+        end
+        if not mythicPlusEnabled then
+            return true
         end
 
         if MythicPlus.Enable then

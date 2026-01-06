@@ -34,6 +34,7 @@ local E = ElvUI and ElvUI[1]
 ---@field header Frame|nil
 ---@field headerText FontString|nil
 ---@field headerAffixButtons Button[]|nil
+---@field headerSimulatorButton Button|nil
 ---@field headerEvents Frame|nil
 ---@field panelContainer Frame|nil
 ---@field titleText FontString|nil
@@ -59,6 +60,106 @@ local NAV_PADDING = 6
 local HEADER_HEIGHT = 30
 local HEADER_ICON_SIZE = 18
 local HEADER_ICON_SPACING = 6
+
+local DEV_CONFIG_SHOW_SIM_BUTTON = "developer.mythicplus.showSimulatorHeaderButton"
+local SIM_BUTTON_TEXTURE = "Interface\\AddOns\\TwichUI\\Media\\Textures\\simulator.tga"
+
+function MainWindow:_ShouldShowSimulatorHeaderButton()
+    return CM and type(CM.GetProfileSettingSafe) == "function" and
+    CM:GetProfileSettingSafe(DEV_CONFIG_SHOW_SIM_BUTTON, false)
+end
+
+function MainWindow:_EnsureSimulatorHeaderButton()
+    if not self.header or self.headerSimulatorButton then
+        return
+    end
+
+    local btn = CreateFrame("Button", nil, self.header)
+    btn:SetSize(HEADER_ICON_SIZE, HEADER_ICON_SIZE)
+    btn:SetNormalTexture(SIM_BUTTON_TEXTURE)
+    btn:SetHighlightTexture("Interface\\Buttons\\UI-Common-MouseHilight", "ADD")
+    if btn.GetNormalTexture and btn:GetNormalTexture() then
+        btn:GetNormalTexture():SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    end
+
+    btn:SetScript("OnEnter", function(b)
+        if not GameTooltip then return end
+        GameTooltip:SetOwner(b, "ANCHOR_RIGHT")
+        GameTooltip:SetText("Open Mythic+ Simulator", 1, 1, 1)
+        GameTooltip:Show()
+    end)
+    btn:SetScript("OnLeave", function()
+        if GameTooltip then GameTooltip:Hide() end
+    end)
+    btn:SetScript("OnClick", function()
+        local rsf = MythicPlusModule and MythicPlusModule.RunSharingFrame
+        if rsf and type(rsf.Toggle) == "function" then
+            rsf:Toggle()
+        end
+    end)
+
+    self.headerSimulatorButton = btn
+end
+
+function MainWindow:_LayoutHeaderIcons()
+    if not self.header or not self.headerText or type(self.headerAffixButtons) ~= "table" then
+        return
+    end
+
+    local simBtn = self.headerSimulatorButton
+    local simShown = simBtn and simBtn.IsShown and simBtn:IsShown()
+    local rightAnchor = simShown and simBtn or self.header
+
+    if simBtn then
+        simBtn:ClearAllPoints()
+        simBtn:SetPoint("RIGHT", self.header, "RIGHT", 0, 0)
+    end
+
+    local prev = nil
+    for _, btn in ipairs(self.headerAffixButtons) do
+        if btn and btn.IsShown and btn:IsShown() then
+            btn:ClearAllPoints()
+            if not prev then
+                if rightAnchor == self.header then
+                    btn:SetPoint("RIGHT", self.header, "RIGHT", 0, 0)
+                else
+                    btn:SetPoint("RIGHT", rightAnchor, "LEFT", -HEADER_ICON_SPACING, 0)
+                end
+            else
+                btn:SetPoint("RIGHT", prev, "LEFT", -HEADER_ICON_SPACING, 0)
+            end
+            prev = btn
+        end
+    end
+
+    local leftmostIcon = prev or (simShown and simBtn) or nil
+
+    if leftmostIcon then
+        self.headerText:ClearAllPoints()
+        self.headerText:SetPoint("LEFT", self.header, "LEFT", 0, 0)
+        self.headerText:SetPoint("RIGHT", leftmostIcon, "LEFT", -10, 0)
+        self.headerText:SetJustifyH("CENTER")
+    else
+        self.headerText:ClearAllPoints()
+        self.headerText:SetAllPoints(self.header)
+        self.headerText:SetJustifyH("CENTER")
+    end
+end
+
+function MainWindow:UpdateSimulatorHeaderButton()
+    if not self.header then return end
+    self:_EnsureSimulatorHeaderButton()
+    local btn = self.headerSimulatorButton
+    if not btn then return end
+
+    if self:_ShouldShowSimulatorHeaderButton() then
+        btn:Show()
+    else
+        btn:Hide()
+    end
+
+    self:_LayoutHeaderIcons()
+end
 
 ---@class TwichUI_MythicPlus_HeaderAffixButton : Button
 ---@field Icon Texture
@@ -387,6 +488,9 @@ function MainWindow:_CreateHeaderIfNeeded()
     self.headerText = text
     self.headerAffixButtons = {}
 
+    -- Optional simulator shortcut button (developer toggle).
+    self:_EnsureSimulatorHeaderButton()
+
     local masqueGroup = EnsureHeaderMasqueGroup()
 
     for i = 1, 4 do
@@ -415,6 +519,7 @@ function MainWindow:_CreateHeaderIfNeeded()
             if GameTooltip then GameTooltip:Hide() end
         end)
 
+        -- Points are finalized by _LayoutHeaderIcons(). Seed a non-overlapping default.
         if i == 1 then
             btn:SetPoint("RIGHT", header, "RIGHT", 0, 0)
         else
@@ -428,17 +533,8 @@ function MainWindow:_CreateHeaderIfNeeded()
         end
     end
 
-    -- Anchor text between left edge and icons.
-    if self.headerAffixButtons[1] then
-        text:ClearAllPoints()
-        text:SetPoint("LEFT", header, "LEFT", 0, 0)
-        text:SetPoint("RIGHT", self.headerAffixButtons[1], "LEFT", -10, 0)
-        text:SetJustifyH("CENTER")
-    else
-        text:ClearAllPoints()
-        text:SetAllPoints(header)
-        text:SetJustifyH("CENTER")
-    end
+    -- Apply developer toggle + correct layout now that buttons exist.
+    self:UpdateSimulatorHeaderButton()
 end
 
 function MainWindow:UpdateKeystoneHeader()
@@ -485,6 +581,8 @@ function MainWindow:UpdateKeystoneHeader()
             btn:Hide()
         end
     end
+
+    self:_LayoutHeaderIcons()
 
     -- If the key exists but has no affixes (low level), show a short note.
     if ownedMapID and level and (not keyHasAffixes) then

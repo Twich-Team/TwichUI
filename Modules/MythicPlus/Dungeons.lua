@@ -2345,7 +2345,7 @@ local function CreateDungeonsPanel(parent)
         _G.print("TwichUI Portal Mock Debug:")
         _G.print("  cfg.mapId=" .. tostring(st.portalMockMapId) .. " cfg.spellId=" .. tostring(st.portalMockSpellId))
         _G.print("  selected.mapId=" ..
-        tostring(panel.__twichuiSelectedMapId) .. " applied=" .. tostring(st.portalIsMock))
+            tostring(panel.__twichuiSelectedMapId) .. " applied=" .. tostring(st.portalIsMock))
         _G.print("  inCombat=" .. tostring(inCombat) .. " unlocked=" .. tostring(st.portalUnlocked) ..
             " unknown=" .. tostring(st.portalMockUnknown))
         _G.print("  type=" .. tostring(actionType) .. " type1=" .. tostring(actionType1))
@@ -2642,6 +2642,27 @@ local function CreateDungeonsPanel(parent)
 end
 
 function Dungeons:Refresh()
+    -- Avoid protected frame operations during combat lockdown.
+    -- Some UI elements can become protected/tainted, and size changes will trigger ADDON_ACTION_BLOCKED.
+    if type(_G.InCombatLockdown) == "function" and _G.InCombatLockdown() then
+        self.__twichuiRefreshAfterCombat = true
+
+        if not self.__twichuiCombatRefreshEventFrame then
+            local f = CreateFrame("Frame")
+            self.__twichuiCombatRefreshEventFrame = f
+            f:RegisterEvent("PLAYER_REGEN_ENABLED")
+            f:SetScript("OnEvent", function()
+                if not self.__twichuiRefreshAfterCombat then return end
+                self.__twichuiRefreshAfterCombat = false
+                if self.Refresh then
+                    self:Refresh()
+                end
+            end)
+        end
+
+        return
+    end
+
     if not MythicPlusModule.MainWindow or not MythicPlusModule.MainWindow.GetPanelFrame then
         return
     end

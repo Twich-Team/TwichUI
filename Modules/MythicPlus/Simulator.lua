@@ -12,6 +12,10 @@ local T = unpack(Twich)
 local _G = _G
 local GetTime = _G.GetTime
 local C_Timer = _G.C_Timer
+local UnitName = _G.UnitName
+local UnitGUID = _G.UnitGUID
+local GetNormalizedRealmName = _G.GetNormalizedRealmName
+local GetRealmName = _G.GetRealmName
 
 ---@type MythicPlusModule
 local MythicPlusModule = T:GetModule("MythicPlus")
@@ -19,6 +23,7 @@ local MythicPlusModule = T:GetModule("MythicPlus")
 ---@field enabled boolean
 ---@field SupportedEvents string[]
 ---@field SimEvent fun(self:MythicPlusSimulatorSubmodule, eventName:string)
+---@field GetActiveRun fun(self:MythicPlusSimulatorSubmodule):table|nil
 ---@field _frame Frame|nil
 ---@field _editBox EditBox|nil
 ---@field _simToken number|nil
@@ -27,6 +32,13 @@ local MythicPlusModule = T:GetModule("MythicPlus")
 ---@field _callbacks table<string, fun(event:string, ...)>|nil
 local Sim = MythicPlusModule.Simulator or {}
 MythicPlusModule.Simulator = Sim
+
+---@return table|nil run
+function Sim:GetActiveRun()
+    local st = self._simState
+    local run = st and st.run
+    return (type(run) == "table") and run or nil
+end
 
 ---@type LoggerModule
 local Logger = T:GetModule("Logger")
@@ -244,6 +256,50 @@ local function ClampNumber(v, min, max, fallback)
     if v < min then return min end
     if v > max then return max end
     return v
+end
+
+-- Playback tuning
+-- NOTE: keep RunSharingFrame speed input validation in sync.
+local MIN_PLAYBACK_SPEED = 0.1
+local MAX_PLAYBACK_SPEED = 200
+
+-- Safety: when speed is high, many events can become "due" in a single frame.
+-- Process them in bounded batches so we yield back to the UI thread.
+local MAX_EVENTS_PER_TICK = 200
+
+local function NormalizePlayerKey(name)
+    if type(name) ~= "string" then
+        name = tostring(name or "")
+    end
+    name = name:gsub("%s+", "")
+    name = name:lower()
+    return name
+end
+
+local function GetLocalPlayerFullName()
+    if type(UnitName) ~= "function" then
+        return nil
+    end
+
+    local name, realm = UnitName("player")
+    if type(name) ~= "string" or name == "" then
+        return nil
+    end
+
+    if type(realm) ~= "string" or realm == "" then
+        if type(GetNormalizedRealmName) == "function" then
+            realm = GetNormalizedRealmName()
+        end
+        if (type(realm) ~= "string" or realm == "") and type(GetRealmName) == "function" then
+            realm = GetRealmName()
+        end
+    end
+
+    if type(realm) == "string" and realm ~= "" then
+        return name .. "-" .. realm
+    end
+
+    return name
 end
 
 -- ----------------------------
@@ -494,7 +550,7 @@ local function GetConfiguredSpeed()
     if type(speed) ~= "number" then
         speed = CM:GetProfileSettingByConfigEntry(CONFIGURATION.PLAYBACK_SPEED)
     end
-    return ClampNumber(speed, 0.1, 50, 10)
+    return ClampNumber(speed, MIN_PLAYBACK_SPEED, MAX_PLAYBACK_SPEED, 10)
 end
 
 function Sim:IsSimulating()
@@ -548,19 +604,22 @@ local function BuildDungeonArgs(name, payload)
     end
 
     if name == "CHALLENGE_MODE_START" then
-        return payload.mapId
+        return payload.mapID or payload.mapId
     end
     if name == "CHALLENGE_MODE_COMPLETED" then
-        return nil
+        return payload.mapID or payload.mapId
     end
     if name == "CHALLENGE_MODE_DEATH_COUNT_UPDATED" then
         return payload.count
     end
     if name == "TWICH_DUNGEON_COMPLETION" then
+        if payload.mapID == nil and payload.mapId ~= nil then
+            payload.mapID = payload.mapId
+        end
         return payload
     end
     if name == "CHALLENGE_MODE_RESET" then
-        return payload.mapId
+        return payload.mapID or payload.mapId
     end
     if name == "ENCOUNTER_START" then
         return payload.encounterID, payload.encounterName, payload.difficultyID, payload.groupSize
@@ -572,10 +631,15 @@ local function BuildDungeonArgs(name, payload)
         return payload.isInitialLogin, payload.isReloadingUi
     end
     if name == "CHAT_MSG_LOOT" then
-        return payload.message, payload.player
+        -- Simulate the full CHAT_MSG_LOOT signature so downstream consumers (e.g. DataCollector)
+        -- can extract both playerName and guid from their usual vararg positions.
+        -- WoW signature is long; we only care about arg1=msg, arg2=playerName, arg12=guid.
+        return payload.message, payload.player, nil, nil, nil, nil, nil, nil, nil, nil, nil, payload.guid
     end
-    if name == "GROUP_ROSTER_SNAPSHOT" then
-        return payload.group, payload.reason
+    -- These are TwichUI-only synthetic events during simulation. Preserve the full payload table
+    -- so consumers can read payload.group and other metadata.
+    if name == "GROUP_ROSTER_SNAPSHOT" or name == "GROUP_ROSTER_UPDATE" then
+        return payload
     end
 
     if payload.args and type(payload.args) == "table" then
@@ -583,6 +647,125 @@ local function BuildDungeonArgs(name, payload)
     end
 
     return nil
+end
+
+---@return string|nil ownerNameFull
+---@return string|nil ownerGuid
+function Sim:_GetRunOwnerIdentity()
+    local st = self._simState
+    local run = st and st.run
+    if type(run) ~= "table" then
+        return nil, nil
+    end
+
+    local p = run.player
+    if type(p) ~= "table" then
+        return nil, nil
+    end
+
+    local name = p.name
+    local realm = p.realm
+    local guid = p.guid
+
+    local full
+    if type(name) == "string" and name ~= "" then
+        if type(realm) == "string" and realm ~= "" then
+            full = name .. "-" .. realm
+        else
+            full = name
+        end
+    end
+
+    if type(full) ~= "string" or full == "" then
+        full = nil
+    end
+
+    if type(guid) ~= "string" or guid == "" then
+        guid = nil
+    end
+
+    return full, guid
+end
+
+---@param name string
+---@param payload table
+---@param replayArgs any[]|nil
+---@return any[]|nil
+local function NormalizeReplayArgsForEvent(sim, name, payload, replayArgs)
+    -- Ensure mapID is always present for key lifecycle events so DataCollector can create a session.
+    if name == "CHALLENGE_MODE_START" or name == "CHALLENGE_MODE_RESET" or name == "CHALLENGE_MODE_COMPLETED" then
+        local mapID = nil
+        if type(payload) == "table" then
+            mapID = payload.mapID or payload.mapId
+        end
+        if mapID == nil then
+            local st = sim._simState
+            local run = st and st.run
+            if type(run) == "table" then
+                mapID = run.mapID or run.mapId
+            end
+        end
+
+        if mapID ~= nil and type(replayArgs) == "table" then
+            if replayArgs[1] == nil then
+                local out = {}
+                for i = 1, #replayArgs do
+                    out[i] = replayArgs[i]
+                end
+                out[1] = mapID
+                return out
+            end
+        end
+        return replayArgs
+    end
+
+    if name ~= "CHAT_MSG_LOOT" then
+        return replayArgs
+    end
+
+    if type(payload) ~= "table" then
+        payload = {}
+    end
+
+    local localFull = GetLocalPlayerFullName()
+    local localGuid = (type(UnitGUID) == "function") and UnitGUID("player") or nil
+
+    -- Nothing to normalize without a local identity.
+    if not localFull and not localGuid then
+        return replayArgs
+    end
+
+    -- In simulation, treat loot as belonging to the local player so collectors/UI (Runs tab)
+    -- record it even when the original log was from a different character.
+    local argPlayer = (type(replayArgs) == "table") and replayArgs[2] or nil
+    local argGuid = (type(replayArgs) == "table") and replayArgs[12] or nil
+    if argPlayer == nil then
+        argPlayer = payload.player
+    end
+    if argGuid == nil then
+        argGuid = payload.guid
+    end
+
+    local mappedPlayer = localFull or argPlayer
+    local mappedGuid = localGuid or argGuid
+
+    payload.player = mappedPlayer
+    payload.guid = mappedGuid
+
+    if type(replayArgs) == "table" then
+        local out = {}
+        for i = 1, #replayArgs do
+            out[i] = replayArgs[i]
+        end
+        out[2] = mappedPlayer
+        out[12] = mappedGuid
+        return out
+    end
+
+    -- Build a minimal-but-compatible CHAT_MSG_LOOT arg list (arg1=msg, arg2=player, arg12=guid).
+    local out = { payload.message, mappedPlayer }
+    out[12] = mappedGuid
+    return out
 end
 
 ---@param ev table
@@ -610,6 +793,21 @@ function Sim:_DispatchEvent(ev)
     local name = EventName(ev)
     local payload = EventPayload(ev)
 
+    -- Ensure mapID is present on CHALLENGE_MODE_* events so DungeonMonitor can resolve dungeon name,
+    -- even when the exported payload used different casing or omitted the field.
+    if type(payload) == "table" and (name == "CHALLENGE_MODE_START" or name == "CHALLENGE_MODE_RESET" or name == "CHALLENGE_MODE_COMPLETED") then
+        if payload.mapID == nil and payload.mapId ~= nil then
+            payload.mapID = payload.mapId
+        end
+        if payload.mapID == nil then
+            local st = self._simState
+            local run = st and st.run
+            if type(run) == "table" then
+                payload.mapID = run.mapID or run.mapId
+            end
+        end
+    end
+
     -- Prefer replaying the original DungeonMonitor callback arguments when available.
     -- Newer RunLogger exports may include `args` (simulation args) and/or `rawArgs`.
     local replayArgs
@@ -620,6 +818,8 @@ function Sim:_DispatchEvent(ev)
             replayArgs = ev.rawArgs
         end
     end
+
+    replayArgs = NormalizeReplayArgsForEvent(self, name, payload, replayArgs)
 
     -- Backward compatibility: older exported logs used CHALLENGE_MODE_COMPLETED_REWARDS.
     -- Translate it into the modern TWICH_DUNGEON_COMPLETION payload so RunLogger/DataCollector can consume it.
@@ -648,6 +848,15 @@ function Sim:_DispatchEvent(ev)
             BuildDungeonArgs(name, payload)
     end
 
+    -- Extra safety: some exports omit mapID for completion marker; provide it from run metadata.
+    if name == "CHALLENGE_MODE_COMPLETED" and arg1 == nil then
+        local st = self._simState
+        local run = st and st.run
+        if type(run) == "table" then
+            arg1 = run.mapID or run.mapId
+        end
+    end
+
     if type(dungeonMonitor.SimulateEvent) == "function" then
         dungeonMonitor:SimulateEvent(name, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12,
             arg13, arg14, arg15, arg16)
@@ -664,9 +873,7 @@ function Sim:_ScheduleNext(token)
         return
     end
 
-    local nextIdx = (tonumber(st.index) or 0) + 1
-    local ev = st.events[nextIdx]
-    if not ev then
+    local function Complete()
         Logger.Info("Simulator: complete")
         self._simState = nil
         self:_FireCallback("SIMULATOR_STOPPED")
@@ -678,38 +885,79 @@ function Sim:_ScheduleNext(token)
                 rl:Enable()
             end
         end
-
-        return
     end
-
-    local nextRel = EventRel(ev)
-    local speed = tonumber(st.speed) or 1
-    if speed <= 0 then speed = 1 end
-
-    -- Use absolute time reference to avoid drift and handle resume correctly
-    local now = GetTime()
-    local currentVirtualTime = (now - st.startedAt) * speed
-    local delay = (nextRel - currentVirtualTime) / speed
-    if delay < 0 then delay = 0 end
 
     local function fire()
         st = self._simState
-        if not st or st.token ~= token then
+        if not st or st.token ~= token or type(st.events) ~= "table" then
             return
         end
 
-        st.index = nextIdx
-        st.prevRel = nextRel
+        local speed = tonumber(st.speed) or 1
+        if speed <= 0 then speed = 1 end
 
-        self:_LogStage(ev, st.index or 0, st.total or 0)
-        self:_DispatchEvent(ev)
-        self:_FireCallback("SIMULATOR_PROGRESS", st.index, st.total)
+        -- Use absolute time reference to avoid drift and handle resume correctly
+        local now = GetTime()
+        local currentVirtualTime = (now - st.startedAt) * speed
 
-        self:_ScheduleNext(token)
+        local processed = 0
+        while processed < MAX_EVENTS_PER_TICK do
+            local nextIdx = (tonumber(st.index) or 0) + 1
+            local ev = st.events[nextIdx]
+            if not ev then
+                Complete()
+                return
+            end
+
+            local nextRel = EventRel(ev)
+            if nextRel > currentVirtualTime then
+                break
+            end
+
+            st.index = nextIdx
+            st.prevRel = nextRel
+
+            self:_LogStage(ev, st.index or 0, st.total or 0)
+            self:_DispatchEvent(ev)
+            self:_FireCallback("SIMULATOR_PROGRESS", st.index, st.total)
+
+            processed = processed + 1
+        end
+
+        -- If we hit the batch cap, yield and continue next frame.
+        if processed >= MAX_EVENTS_PER_TICK then
+            if C_Timer and type(C_Timer.After) == "function" then
+                C_Timer.After(0, function() self:_ScheduleNext(token) end)
+            else
+                self:_ScheduleNext(token)
+            end
+            return
+        end
+
+        -- Schedule the next not-yet-due event.
+        local nextIdx = (tonumber(st.index) or 0) + 1
+        local ev = st.events[nextIdx]
+        if not ev then
+            Complete()
+            return
+        end
+
+        local nextRel = EventRel(ev)
+        now = GetTime()
+        currentVirtualTime = (now - st.startedAt) * speed
+        local delay = (nextRel - currentVirtualTime) / speed
+        if delay < 0 then delay = 0 end
+
+        if C_Timer and type(C_Timer.After) == "function" then
+            C_Timer.After(delay, function() self:_ScheduleNext(token) end)
+        else
+            self:_ScheduleNext(token)
+        end
     end
 
+    -- Kick a processing pass; it will schedule itself.
     if C_Timer and type(C_Timer.After) == "function" then
-        C_Timer.After(delay, fire)
+        C_Timer.After(0, fire)
     else
         fire()
     end
@@ -831,6 +1079,40 @@ function Sim:StartSimulationFromData(parsed, opts)
         return
     end
 
+    -- Determine run metadata. New exports wrap it under `run`, but dev tooling may paste a raw
+    -- run JSON directly (root has mapId/level/affixes/etc). Keep it accessible for consumers.
+    local runData = (type(parsed.run) == "table") and parsed.run or nil
+    if runData == nil and type(parsed) == "table" then
+        if parsed.mapId ~= nil or parsed.mapID ~= nil or parsed.level ~= nil or parsed.affixes ~= nil or parsed.completion ~= nil then
+            runData = parsed
+        end
+    end
+
+    -- Some older/partial exports may omit an explicit start event; inject one so DungeonMonitor
+    -- can resolve dungeon info reliably during simulation.
+    do
+        local hasStart = false
+        for _, ev in ipairs(parsed.events) do
+            if type(ev) == "table" then
+                local n = tostring(ev.name or ev.event or ev.type or "")
+                if n == "CHALLENGE_MODE_START" then
+                    hasStart = true
+                    break
+                end
+            end
+        end
+
+        local mapID = (type(runData) == "table") and (runData.mapID or runData.mapId) or nil
+        if not hasStart and mapID ~= nil then
+            table.insert(parsed.events, 1, {
+                timestamp = (type(runData) == "table" and tonumber(runData.startUnix)) or nil,
+                relSeconds = 0,
+                name = "CHALLENGE_MODE_START",
+                payload = { mapID = mapID, mapId = mapID },
+            })
+        end
+    end
+
     local events = {}
     local seq = 0
     for _, ev in ipairs(parsed.events) do
@@ -872,7 +1154,7 @@ function Sim:StartSimulationFromData(parsed, opts)
     if speed == nil then
         speed = GetConfiguredSpeed()
     end
-    speed = ClampNumber(speed, 0.1, 50, 10)
+    speed = ClampNumber(speed, MIN_PLAYBACK_SPEED, MAX_PLAYBACK_SPEED, 10)
 
     local startPaused = opts and opts.startPaused or false
 
@@ -907,7 +1189,7 @@ function Sim:StartSimulationFromData(parsed, opts)
     self._simState = {
         token = token,
         meta = parsed.meta,
-        run = parsed.run,
+        run = runData,
         events = events,
         total = #events,
         index = 0,

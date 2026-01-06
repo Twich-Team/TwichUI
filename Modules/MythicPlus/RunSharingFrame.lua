@@ -351,7 +351,7 @@ function RunSharingFrame:CreateFrame()
         Skins:HandleFrame(frame, true, nil, -5, 0, -5, 0)
     else
         if frame.SetTemplate then
-            frame:SetTemplate("Transparent")
+            frame:SetTemplate("Default")
         else
             frame:SetBackdrop({
                 bgFile = "Interface/Tooltips/UI-Tooltip-Background",
@@ -361,8 +361,16 @@ function RunSharingFrame:CreateFrame()
                 edgeSize = 16,
                 insets = { left = 4, right = 4, top = 4, bottom = 4 },
             })
-            frame:SetBackdropColor(0, 0, 0, 0.9)
+            frame:SetBackdropColor(0, 0, 0, 1)
         end
+    end
+
+    -- Ensure the simulator frame is non-transparent.
+    if frame.SetTemplate then
+        frame:SetTemplate("Default")
+    end
+    if frame.SetBackdropColor then
+        frame:SetBackdropColor(0, 0, 0, 1)
     end
 
     self.frame = frame
@@ -520,9 +528,10 @@ function RunSharingFrame:CreateFrame()
     speedInput:SetScript("OnEnterPressed", function(self)
         local val = tonumber(self:GetText())
         if val then
-            if val > 50 then
-                val = 50
-                RunSharingFrame:ShowStatus("Speed capped at 50x.", 2)
+            -- Keep in sync with Simulator.lua MAX_PLAYBACK_SPEED.
+            if val > 200 then
+                val = 200
+                RunSharingFrame:ShowStatus("Speed capped at 200x.", 2)
             end
             if val < 0.1 then val = 0.1 end
 

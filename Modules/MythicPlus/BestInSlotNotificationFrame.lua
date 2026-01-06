@@ -38,6 +38,10 @@ local KEY_PREFIX = "mythicplus.bestInSlot.notifications."
 -- Store per-frame state without injecting custom fields into Frame/Button objects.
 local TooltipItemLinkByOwner = setmetatable({}, { __mode = "k" })
 local KindByFrame = setmetatable({}, { __mode = "k" })
+local IsDismissingByFrame = setmetatable({}, { __mode = "k" })
+local IsInPoolByFrame = setmetatable({}, { __mode = "k" })
+local IsDismissAnimatingByFrame = setmetatable({}, { __mode = "k" })
+local IsHoverPausedByFrame = setmetatable({}, { __mode = "k" })
 
 local function GetSetting(suffix, default)
     return CM:GetProfileSettingSafe(KEY_PREFIX .. suffix, default)
@@ -366,24 +370,76 @@ function NIF:AcquireMessageFrame()
 
             -- Preview is controlled by a config toggle; keep its state consistent.
             if NIF.previewFrame and frame == NIF.previewFrame then
-                NIF:HidePreview()
-                return
+                -- Animate out; the dismiss animation OnFinished will hide it.
             end
 
+            if IsDismissingByFrame[frame] then
+                return
+            end
+            IsDismissingByFrame[frame] = true
+
+            -- Stop any running timed animation, but avoid the stop triggering a recycle
+            -- via the fadeGroup OnFinished handler.
             if frame.fadeGroup then
                 frame.fadeGroup:Stop()
             end
-            NIF:RecycleFrame(frame)
+
+            -- If the user clicks during fade-in, alpha can still be ~0 which makes an
+            -- out-animation look like an instant disappearance. Force the frame visible
+            -- before animating it out.
+            if frame.StopAnimating then
+                frame:StopAnimating()
+            end
+            frame:SetAlpha(1)
+            frame:Show()
+
+            local fadeOutT = tonumber(GetSetting("fadeOutTime", 0.3)) or 0.3
+            local moveOutT = tonumber(GetSetting("moveOutTime", 0.18)) or 0.18
+            if fadeOutT < 0 then fadeOutT = 0 end
+            if moveOutT < 0 then moveOutT = 0 end
+
+            if (fadeOutT <= 0 and moveOutT <= 0) then
+                -- Force a small animation on click-dismiss so it never feels like a pop.
+                fadeOutT = 0.18
+                moveOutT = 0.12
+            end
+
+            if not frame.dismissGroup then
+                if NIF.previewFrame and frame == NIF.previewFrame then
+                    NIF:HidePreview()
+                else
+                    NIF:RecycleFrame(frame)
+                end
+                return
+            end
+
+            frame.dismissFade:SetDuration(fadeOutT)
+            frame.dismissFade:SetFromAlpha(1)
+            frame.dismissFade:SetToAlpha(0)
+            frame.dismissMove:SetDuration(moveOutT)
+
+            if frame.dismissGroup.IsPlaying and frame.dismissGroup:IsPlaying() then
+                frame.dismissGroup:Stop()
+            end
+            IsDismissAnimatingByFrame[frame] = true
+            frame.dismissGroup:Play()
         end
 
         f:SetScript("OnEnter", function(self)
             self:SetAlpha(1)
+            if not IsDismissingByFrame[self] and self.fadeGroup and self.fadeGroup.IsPlaying and self.fadeGroup:IsPlaying() and self.fadeGroup.Pause then
+                self.fadeGroup:Pause()
+                IsHoverPausedByFrame[self] = true
+            end
             ShowItemTooltip(self)
         end)
 
         f:SetScript("OnLeave", function(self)
-            -- no hover-pause; keep behavior simple
             HideItemTooltip()
+            if IsHoverPausedByFrame[self] and self.fadeGroup and self.fadeGroup.Play then
+                IsHoverPausedByFrame[self] = nil
+                self.fadeGroup:Play()
+            end
         end)
 
         f:SetScript("OnMouseDown", function(self)
@@ -431,17 +487,67 @@ function NIF:AcquireMessageFrame()
 
         f.fadeGroup:SetScript("OnFinished", function(self)
             local frame = self:GetParent()
+            if IsInPoolByFrame[frame] or IsDismissingByFrame[frame] then
+                return
+            end
+            NIF:RecycleFrame(frame)
+        end)
+
+        -- Separate click-dismiss animation group so we can animate out without
+        -- relying on the timed fadeGroup state.
+        f.dismissGroup = f:CreateAnimationGroup()
+        f.dismissGroup:SetLooping("NONE")
+
+        f.dismissFade = f.dismissGroup:CreateAnimation("Alpha")
+        f.dismissFade:SetOrder(1)
+        f.dismissFade:SetFromAlpha(1)
+        f.dismissFade:SetToAlpha(0)
+
+        f.dismissMove = f.dismissGroup:CreateAnimation("Translation")
+        f.dismissMove:SetOrder(1)
+        f.dismissMove:SetOffset(0, 10)
+
+        f.dismissGroup:SetScript("OnFinished", function(self)
+            local frame = self:GetParent()
+            if IsInPoolByFrame[frame] then
+                return
+            end
+
+            if not IsDismissAnimatingByFrame[frame] then
+                return
+            end
+            IsDismissAnimatingByFrame[frame] = nil
+
+            if NIF.previewFrame and frame == NIF.previewFrame then
+                NIF:HidePreview()
+                return
+            end
+
             NIF:RecycleFrame(frame)
         end)
     end
 
     ApplyVisualsToFrame(f)
+    IsInPoolByFrame[f] = nil
+    IsDismissingByFrame[f] = nil
+
+    -- Defensive reset in case the frame was recycled mid-animation.
+    if f.StopAnimating then
+        f:StopAnimating()
+    end
+    f:SetAlpha(1)
     f:Show()
     return f
 end
 
 function NIF:RecycleFrame(f)
     if not f then return end
+
+    if IsInPoolByFrame[f] then
+        -- Avoid double-recycling (can happen if an animation finishes after a manual dismiss).
+        f:Hide()
+        return
+    end
 
     for idx, active in ipairs(self.activeMessages) do
         if active == f then
@@ -454,12 +560,24 @@ function NIF:RecycleFrame(f)
         f.fadeGroup:Stop()
     end
 
+    if f.dismissGroup then
+        f.dismissGroup:Stop()
+    end
+
+    if f.StopAnimating then
+        f:StopAnimating()
+    end
+
     f:Hide()
+    f:SetAlpha(1)
     f.itemText:SetText("")
     f.detailText:SetText("")
     TooltipItemLinkByOwner[f] = nil
     if f.button then TooltipItemLinkByOwner[f.button] = nil end
     KindByFrame[f] = nil
+    IsDismissingByFrame[f] = nil
+    IsInPoolByFrame[f] = true
+    IsHoverPausedByFrame[f] = nil
 
     table.insert(self.framePool, f)
 

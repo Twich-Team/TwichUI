@@ -246,6 +246,7 @@ end
 ---@field endRel number|nil
 ---@field mapId number|nil
 ---@field dungeonName string|nil
+---@field __twichuiPendingCMCheck boolean|nil Internal: delayed CM-active recheck to avoid premature finalize during loads
 ---@field level number|nil
 ---@field affixes number[]|nil
 ---@field player table|nil
@@ -1151,6 +1152,16 @@ function MythicPlusRunLogger:_OnDungeonEvent(eventName, ...)
         local isInitialLogin, isReloadingUi = ...
         local isCM = C_ChallengeMode and C_ChallengeMode.IsChallengeModeActive()
 
+        local activeMapID
+        if C_ChallengeMode and type(C_ChallengeMode.GetActiveChallengeMapID) == "function" then
+            activeMapID = C_ChallengeMode.GetActiveChallengeMapID()
+            if tonumber(activeMapID) and tonumber(activeMapID) > 0 then
+                -- Some loads/transitions report IsChallengeModeActive() = false briefly even while a key is active.
+                -- Prefer the presence of an active challenge map to avoid prematurely finalizing the run.
+                isCM = true
+            end
+        end
+
         self:_AppendEvent(eventName, {
             isInitialLogin = isInitialLogin,
             isReloadingUi = isReloadingUi,
@@ -1161,12 +1172,41 @@ function MythicPlusRunLogger:_OnDungeonEvent(eventName, ...)
         local db = GetDB()
         if db.active then
             if not isCM then
-                self:_AppendEvent("FAILSAFE_FINISH", { reason = "not_in_challenge_mode" })
+                -- Delay the failsafe a bit: PLAYER_ENTERING_WORLD can fire during load screens
+                -- while CM APIs still return false/nil for a moment.
+                if not db.active.__twichuiPendingCMCheck then
+                    db.active.__twichuiPendingCMCheck = true
+                    if C_Timer and type(C_Timer.After) == "function" then
+                        C_Timer.After(1.0, function()
+                            local db2 = GetDB()
+                            if not db2.active then return end
+                            if db2.active.__twichuiPendingCMCheck ~= true then return end
+                            db2.active.__twichuiPendingCMCheck = nil
 
-                -- If the run was already marked completed (by completion event), finalize as completed.
-                -- Otherwise, if we left without completion, it's an abandon/reset.
-                local status = (db.active.status == "completed") and "completed" or "abandoned"
-                self:_FinalizeRun(status)
+                            local stillCM = C_ChallengeMode and C_ChallengeMode.IsChallengeModeActive()
+                            local stillActiveMap
+                            if C_ChallengeMode and type(C_ChallengeMode.GetActiveChallengeMapID) == "function" then
+                                stillActiveMap = C_ChallengeMode.GetActiveChallengeMapID()
+                            end
+                            if stillCM or (tonumber(stillActiveMap) and tonumber(stillActiveMap) > 0) then
+                                return
+                            end
+
+                            self:_AppendEvent("FAILSAFE_FINISH", { reason = "not_in_challenge_mode" })
+
+                            -- If the run was already marked completed (by completion event), finalize as completed.
+                            -- Otherwise, if we left without completion, it's an abandon/reset.
+                            local status = (db2.active.status == "completed") and "completed" or "abandoned"
+                            self:_FinalizeRun(status)
+                        end)
+                    else
+                        self:_AppendEvent("FAILSAFE_FINISH", { reason = "not_in_challenge_mode" })
+                        local status = (db.active.status == "completed") and "completed" or "abandoned"
+                        self:_FinalizeRun(status)
+                    end
+                end
+            else
+                db.active.__twichuiPendingCMCheck = nil
             end
         end
         return

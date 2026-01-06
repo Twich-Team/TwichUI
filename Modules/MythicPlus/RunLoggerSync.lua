@@ -962,6 +962,13 @@ function RunLoggerSync:_ProcessReceivedRun(sender, runData)
     end
 
     if inserted then
+        do
+            local dungeon = tostring(run.dungeonName or "Mythic+")
+            local level = tonumber(run.level) or (type(run.completion) == "table" and tonumber(run.completion.level))
+            local levelStr = level and (" +" .. tostring(level)) or ""
+            print("|cff9580ffTwichUI:|r Received run from " .. tostring(sender) .. " (" .. dungeon .. levelStr .. ")")
+        end
+
         local enabled = CM:GetProfileSettingSafe("developer.mythicplus.runLoggerSync.incomingSoundEnable", false)
         if enabled then
             local sound = CM:GetProfileSettingSafe("developer.mythicplus.runLoggerSync.incomingSound", "Game Error")

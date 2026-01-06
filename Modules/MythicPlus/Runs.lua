@@ -10,6 +10,9 @@ local E = ElvUI and ElvUI[1]
 local Tools = T:GetModule("Tools")
 ---@type ToolsUI|nil
 local UI = Tools and Tools.UI
+local CT = Tools and Tools.Colors
+local TT = Tools and Tools.Text
+local Textures = Tools and Tools.Textures
 
 --- @class MythicPlusRunsSubmodule
 local Runs = MythicPlusModule.Runs or {}
@@ -60,18 +63,91 @@ local function FormatTime(seconds)
     return string.format("%d:%02d", m, s)
 end
 
+local function FormatSignedTimeDelta(seconds)
+    if seconds == nil then return "—" end
+    seconds = tonumber(seconds)
+    if not seconds then return "—" end
+
+    local sign = seconds < 0 and "-" or "+"
+    local abs = math.abs(seconds)
+    local m = math.floor(abs / 60)
+    local s = math.floor(abs % 60)
+    return string.format("%s%d:%02d", sign, m, s)
+end
+
+local function Color(hex, text)
+    if TT and TT.Color and CT and CT.TWICH and type(hex) == "string" then
+        return TT.Color(hex, tostring(text))
+    end
+    return tostring(text)
+end
+
+local function Accent(text)
+    return (CT and CT.TWICH and CT.TWICH.SECONDARY_ACCENT) and Color(CT.TWICH.SECONDARY_ACCENT, text) or tostring(text)
+end
+
 local function FormatDate(timestamp)
     if not timestamp then return "—" end
     return date("%m/%d/%Y", timestamp)
 end
 
-local function GetDungeonName(mapId)
+local function GetDungeonName(runData)
+    if type(runData) == "table" and type(runData.dungeonName) == "string" and runData.dungeonName ~= "" then
+        return runData.dungeonName
+    end
+
+    local mapId = type(runData) == "table" and runData.mapId or runData
     local C_ChallengeMode = _G.C_ChallengeMode
     if C_ChallengeMode and C_ChallengeMode.GetMapUIInfo then
         local name = C_ChallengeMode.GetMapUIInfo(mapId)
         if name then return name end
     end
     return "Unknown (" .. tostring(mapId) .. ")"
+end
+
+local function FormatFullName(name, realm)
+    name = tostring(name or "")
+    realm = tostring(realm or "")
+    if name == "" then return "Unknown" end
+    if realm ~= "" and not name:find("-", 1, true) then
+        return name .. "-" .. realm
+    end
+    return name
+end
+
+---@param item table
+---@return string|nil coloredLink
+local function GetColoredItemLink(item)
+    if type(item) ~= "table" then return nil end
+    local link = item.link
+    if type(link) == "string" and link:find("|c", 1, true) and link:find("|Hitem:", 1, true) then
+        return link
+    end
+
+    local itemId = tonumber(item.itemId)
+    if not itemId and type(link) == "string" then
+        itemId = tonumber(link:match("item:(%d+):")) or tonumber(link:match("Hitem:(%d+):"))
+    end
+
+    if itemId and itemId > 0 then
+        local C_Item = _G.C_Item
+        if C_Item and type(C_Item.GetItemInfo) == "function" then
+            local info = C_Item.GetItemInfo(itemId)
+            if type(info) == "table" and type(info.itemLink) == "string" and info.itemLink ~= "" then
+                return info.itemLink
+            end
+        end
+
+        local _, full = GetItemInfo(itemId)
+        if type(full) == "string" and full ~= "" then
+            return full
+        end
+    end
+
+    if type(link) == "string" and link ~= "" then
+        return link
+    end
+    return nil
 end
 
 local function FormatAffixes(affixes)
@@ -100,16 +176,18 @@ local function EnsureRunDetailsFrame(panel)
         return panel.__twichuiRunDetailsFrame
     end
 
-    local parent = (MythicPlusModule and MythicPlusModule.MainWindow and MythicPlusModule.MainWindow.frame) or UIParent
-    local frame = CreateFrame("Frame", "TwichUI_RunDetailsFrame", parent, "BackdropTemplate")
-    frame:SetFrameStrata("DIALOG")
+    local frame = CreateFrame("Frame", "TwichUI_RunDetailsFrame", UIParent, "BackdropTemplate")
+    frame:SetFrameStrata("FULLSCREEN_DIALOG")
+    frame:SetToplevel(true)
+    frame:SetFrameLevel(500)
     frame:SetClampedToScreen(true)
     frame:SetSize(520, 460)
     frame:SetPoint("CENTER")
     frame:Hide()
 
     if E and frame.SetTemplate then
-        frame:SetTemplate("Transparent")
+        -- Use an opaque template for readability.
+        frame:SetTemplate("Default")
     else
         frame:SetBackdrop({
             bgFile = "Interface/Buttons/WHITE8X8",
@@ -119,24 +197,47 @@ local function EnsureRunDetailsFrame(panel)
             edgeSize = 16,
             insets = { left = 4, right = 4, top = 4, bottom = 4 },
         })
-        frame:SetBackdropColor(0, 0, 0, 0.85)
+        frame:SetBackdropColor(0, 0, 0, 1)
         frame:SetBackdropBorderColor(0.4, 0.4, 0.4)
     end
 
-    local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    title:SetPoint("TOPLEFT", frame, "TOPLEFT", 14, -12)
+    frame:SetMovable(true)
+    frame:EnableMouse(true)
+
+    local header = CreateFrame("Button", nil, frame)
+    header:SetPoint("TOPLEFT", frame, "TOPLEFT", 4, -4)
+    header:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -4, -4)
+    header:SetHeight(50)
+    header:EnableMouse(true)
+    header:RegisterForDrag("LeftButton")
+    header:SetScript("OnDragStart", function()
+        if frame:IsMovable() then
+            frame:StartMoving()
+        end
+    end)
+    header:SetScript("OnDragStop", function()
+        frame:StopMovingOrSizing()
+    end)
+
+    local headerBG = header:CreateTexture(nil, "BACKGROUND")
+    headerBG:SetAllPoints()
+    headerBG:SetColorTexture(1, 1, 1, 0.04)
+    frame.Header = header
+
+    local title = header:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    title:SetPoint("TOPLEFT", header, "TOPLEFT", 10, -8)
     title:SetJustifyH("LEFT")
-    title:SetText("Run Details")
+    title:SetText(Accent("Run Details"))
     frame.Title = title
 
-    local subtitle = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -4)
+    local subtitle = header:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -2)
     subtitle:SetJustifyH("LEFT")
     subtitle:SetText("")
     frame.Subtitle = subtitle
 
     local close = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
-    close:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -4, -4)
+    close:SetPoint("TOPRIGHT", header, "TOPRIGHT", 2, 2)
     if UI and UI.SkinCloseButton then
         UI.SkinCloseButton(close)
     end
@@ -144,12 +245,12 @@ local function EnsureRunDetailsFrame(panel)
 
     local divider = frame:CreateTexture(nil, "ARTWORK")
     divider:SetHeight(1)
-    divider:SetPoint("TOPLEFT", frame, "TOPLEFT", 12, -54)
-    divider:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -12, -54)
+    divider:SetPoint("TOPLEFT", frame, "TOPLEFT", 12, -58)
+    divider:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -12, -58)
     divider:SetColorTexture(1, 1, 1, 0.08)
 
     local scroll = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
-    scroll:SetPoint("TOPLEFT", frame, "TOPLEFT", 12, -62)
+    scroll:SetPoint("TOPLEFT", frame, "TOPLEFT", 12, -66)
     scroll:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -30, 12)
     if UI and UI.SkinScrollBar then
         UI.SkinScrollBar(scroll)
@@ -165,7 +266,7 @@ local function EnsureRunDetailsFrame(panel)
         local l = content:CreateFontString(nil, "OVERLAY", "GameFontNormal")
         l:SetPoint("TOPLEFT", content, "TOPLEFT", 0, y)
         l:SetJustifyH("LEFT")
-        l:SetText(label)
+        l:SetText(Accent(label))
 
         local v = content:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
         v:SetPoint("TOPLEFT", l, "TOPRIGHT", 8, 0)
@@ -177,33 +278,220 @@ local function EnsureRunDetailsFrame(panel)
 
     frame.Fields = {}
     frame.Fields.date = CreateKV(0, "Date:")
-    frame.Fields.patch = CreateKV(-18, "Patch:")
-    frame.Fields.mapId = CreateKV(-36, "Map ID:")
-    frame.Fields.level = CreateKV(-54, "Key:")
-    frame.Fields.score = CreateKV(-72, "Score:")
-    frame.Fields.time = CreateKV(-90, "Time:")
-    frame.Fields.onTime = CreateKV(-108, "On Time:")
-    frame.Fields.upgrade = CreateKV(-126, "Upgrade:")
-    frame.Fields.deaths = CreateKV(-144, "Deaths:")
-    frame.Fields.affixes = CreateKV(-162, "Affixes:")
-
-    local groupHeader = content:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    groupHeader:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -190)
-    groupHeader:SetText("Group")
-    frame.GroupHeader = groupHeader
-
-    local groupText = content:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    groupText:SetPoint("TOPLEFT", groupHeader, "BOTTOMLEFT", 0, -6)
-    groupText:SetPoint("RIGHT", content, "RIGHT", 0, 0)
-    groupText:SetJustifyH("LEFT")
-    groupText:SetJustifyV("TOP")
-    groupText:SetText("")
-    frame.GroupText = groupText
+    frame.Fields.time = CreateKV(-18, "Time:")
+    frame.Fields.onTime = CreateKV(-36, "Timed:")
+    frame.Fields.upgrade = CreateKV(-54, "Chest:")
+    frame.Fields.deaths = CreateKV(-72, "Deaths:")
+    frame.Fields.score = CreateKV(-90, "Score:")
+    frame.Fields.affixes = CreateKV(-108, "Affixes:")
 
     local lootHeader = content:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    lootHeader:SetPoint("TOPLEFT", groupText, "BOTTOMLEFT", 0, -14)
-    lootHeader:SetText("Loot")
+    lootHeader:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -134)
+    lootHeader:SetText(Accent("Loot"))
     frame.LootHeader = lootHeader
+
+    local lootList = CreateFrame("Frame", nil, content)
+    lootList:SetPoint("TOPLEFT", lootHeader, "BOTTOMLEFT", 0, -6)
+    lootList:SetPoint("RIGHT", content, "RIGHT", 0, 0)
+    lootList:SetHeight(1)
+    frame.LootList = lootList
+
+    local groupHeader = content:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    groupHeader:SetPoint("TOPLEFT", lootList, "BOTTOMLEFT", 0, -14)
+    groupHeader:SetText(Accent("Group"))
+    frame.GroupHeader = groupHeader
+
+    local groupList = CreateFrame("Frame", nil, content)
+    groupList:SetPoint("TOPLEFT", groupHeader, "BOTTOMLEFT", 0, -6)
+    groupList:SetPoint("RIGHT", content, "RIGHT", 0, 0)
+    groupList:SetHeight(1)
+    frame.GroupList = groupList
+
+    local groupFallbackText = groupList:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    groupFallbackText:SetPoint("TOPLEFT", groupList, "TOPLEFT", 0, 0)
+    groupFallbackText:SetPoint("RIGHT", groupList, "RIGHT", 0, 0)
+    groupFallbackText:SetJustifyH("LEFT")
+    groupFallbackText:SetJustifyV("TOP")
+    groupFallbackText:SetText("")
+    frame.GroupFallbackText = groupFallbackText
+
+    frame.GroupRows = {}
+
+    local GROUP_ROW_HEIGHT = 44
+    local GROUP_ICON_SIZE = 28
+
+    local function EnsureGroupRow(i)
+        local row = frame.GroupRows[i]
+        if row then
+            return row
+        end
+
+        row = CreateFrame("Frame", nil, groupList)
+        row:SetHeight(GROUP_ROW_HEIGHT)
+        row:SetPoint("LEFT", groupList, "LEFT", 0, 0)
+        row:SetPoint("RIGHT", groupList, "RIGHT", 0, 0)
+
+        local iconFs = row:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+        iconFs:SetPoint("LEFT", row, "LEFT", 0, 0)
+        iconFs:SetWidth(GROUP_ICON_SIZE + 6)
+        iconFs:SetJustifyH("LEFT")
+        row.Icon = iconFs
+
+        local roleFs = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        roleFs:SetPoint("TOPRIGHT", row, "TOPRIGHT", 0, -2)
+        roleFs:SetJustifyH("RIGHT")
+        row.Role = roleFs
+
+        local nameFs = row:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+        nameFs:SetPoint("TOPLEFT", iconFs, "TOPRIGHT", 6, -2)
+        nameFs:SetPoint("RIGHT", roleFs, "LEFT", -8, 0)
+        nameFs:SetJustifyH("LEFT")
+        row.Name = nameFs
+
+        local specFs = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        specFs:SetPoint("TOPLEFT", nameFs, "BOTTOMLEFT", 0, -2)
+        specFs:SetPoint("RIGHT", row, "RIGHT", 0, 0)
+        specFs:SetJustifyH("LEFT")
+        specFs:SetTextColor(0.8, 0.8, 0.8)
+        row.Spec = specFs
+
+        frame.GroupRows[i] = row
+        return row
+    end
+
+    local function HideGroupRows(from)
+        for i = from or 1, #frame.GroupRows do
+            frame.GroupRows[i]:Hide()
+        end
+    end
+
+    local function NormalizeClassFileToken(v)
+        if type(v) ~= "string" or v == "" then
+            return nil
+        end
+        local RAID_CLASS_COLORS = _G.RAID_CLASS_COLORS
+        if not RAID_CLASS_COLORS then
+            return nil
+        end
+
+        if RAID_CLASS_COLORS[v] then
+            return v
+        end
+        local up = v:upper()
+        if RAID_CLASS_COLORS[up] then
+            return up
+        end
+
+        local male = _G.LOCALIZED_CLASS_NAMES_MALE
+        if type(male) == "table" then
+            for token, localized in pairs(male) do
+                if localized == v then
+                    return token
+                end
+            end
+        end
+        local female = _G.LOCALIZED_CLASS_NAMES_FEMALE
+        if type(female) == "table" then
+            for token, localized in pairs(female) do
+                if localized == v then
+                    return token
+                end
+            end
+        end
+
+        return nil
+    end
+
+    local GetSpecializationInfoByID = _G.GetSpecializationInfoByID
+
+    ---@param specId any
+    ---@return string|nil
+    local function TryGetSpecNameFromId(specId)
+        if type(specId) ~= "number" or specId <= 0 then
+            return nil
+        end
+        if type(GetSpecializationInfoByID) ~= "function" then
+            return nil
+        end
+        local ok, _, specName = pcall(GetSpecializationInfoByID, specId)
+        if ok and type(specName) == "string" and specName ~= "" then
+            return specName
+        end
+        return nil
+    end
+
+    ---@param specStr any
+    ---@param classFile any
+    ---@return string|nil
+    local function NormalizeSpecString(specStr, classFile)
+        if type(specStr) ~= "string" then
+            return nil
+        end
+        local s = specStr:gsub("^%s+", ""):gsub("%s+$", "")
+        if s == "" then
+            return nil
+        end
+
+        local classToken = NormalizeClassFileToken(classFile)
+        if classToken then
+            local lastWord = s:match("([^%s]+)$")
+            local lastToken = NormalizeClassFileToken(lastWord)
+            if lastToken and lastToken == classToken then
+                local trimmed = s:sub(1, #s - #lastWord):gsub("%s+$", "")
+                if trimmed ~= "" then
+                    return trimmed
+                end
+            end
+        end
+
+        return s
+    end
+
+    ---@param member table
+    ---@param classFile any
+    ---@return string
+    local function GetMemberSpecDisplay(member, classFile)
+        local spec = NormalizeSpecString(member.spec, classFile)
+        if spec then
+            return spec
+        end
+
+        spec = NormalizeSpecString(member.specName, classFile)
+        if spec then
+            return spec
+        end
+
+        local specId = nil
+        if type(member.spec) == "number" then
+            specId = member.spec
+        elseif type(member.specId) == "number" then
+            specId = member.specId
+        elseif type(member.specID) == "number" then
+            specId = member.specID
+        elseif type(member.specializationID) == "number" then
+            specId = member.specializationID
+        elseif type(member.specializationId) == "number" then
+            specId = member.specializationId
+        end
+
+        local fromId = TryGetSpecNameFromId(specId)
+        if fromId then
+            return fromId
+        end
+
+        return "—"
+    end
+
+    local function GetClassIconString(classFile, size)
+        classFile = NormalizeClassFileToken(classFile)
+        if not classFile then
+            return nil
+        end
+        if Textures and type(Textures.GetClassTextureString) == "function" then
+            return Textures:GetClassTextureString(classFile, size or GROUP_ICON_SIZE)
+        end
+        return nil
+    end
 
     frame.LootRows = {}
 
@@ -219,10 +507,10 @@ local function EnsureRunDetailsFrame(panel)
             return r
         end
 
-        r = CreateFrame("Button", nil, content)
+        r = CreateFrame("Button", nil, lootList)
         r:SetHeight(18)
-        r:SetPoint("LEFT", content, "LEFT", 0, 0)
-        r:SetPoint("RIGHT", content, "RIGHT", 0, 0)
+        r:SetPoint("LEFT", lootList, "LEFT", 0, 0)
+        r:SetPoint("RIGHT", lootList, "RIGHT", 0, 0)
         r:RegisterForClicks("LeftButtonUp")
 
         local fs = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
@@ -258,9 +546,9 @@ local function EnsureRunDetailsFrame(panel)
             return
         end
 
-        local dungeon = GetDungeonName(runData.mapId)
+        local dungeon = GetDungeonName(runData)
         local level = runData.level and ("+" .. tostring(runData.level)) or "—"
-        self.Title:SetText(dungeon .. " " .. level)
+        self.Title:SetText(Accent(dungeon) .. " " .. level)
 
         local sub = {}
         if runData.date then
@@ -268,41 +556,149 @@ local function EnsureRunDetailsFrame(panel)
         elseif runData.timestamp then
             sub[#sub + 1] = FormatDate(runData.timestamp)
         end
-        if runData.patch then
-            sub[#sub + 1] = "Patch " .. tostring(runData.patch)
-        end
-        if runData.id then
-            sub[#sub + 1] = "ID " .. tostring(runData.id)
-        end
         self.Subtitle:SetText(table.concat(sub, "  •  "))
 
         self.Fields.date:SetText(runData.date or FormatDate(runData.timestamp))
-        self.Fields.patch:SetText(runData.patch or "—")
-        self.Fields.mapId:SetText(tostring(runData.mapId or "—"))
-        self.Fields.level:SetText(level)
         self.Fields.score:SetText(tostring(runData.score or 0))
-        self.Fields.time:SetText(FormatTime(runData.time))
-        self.Fields.onTime:SetText((runData.onTime == true and "Yes") or (runData.onTime == false and "No") or "—")
+
+        local timeText = FormatTime(runData.time)
+        do
+            local ScoreCalculator = MythicPlusModule and MythicPlusModule.ScoreCalculator
+            local getPar = ScoreCalculator and ScoreCalculator.GetParTimeSeconds
+            local parMapId = runData.mapChallengeModeID or runData.mapChallengeModeId or runData.challengeModeID or
+                runData.challengeModeId or runData.mapId
+            local parTime = (type(getPar) == "function" and parMapId) and getPar(parMapId) or nil
+            if parTime and parTime > 0 then
+                if runData.time then
+                    local delta = (tonumber(runData.time) or 0) - parTime
+                    local deltaTxt = FormatSignedTimeDelta(delta)
+                    if CT and CT.TWICH then
+                        deltaTxt = delta <= 0 and Color(CT.TWICH.TEXT_SUCCESS, deltaTxt) or
+                            Color(CT.TWICH.TEXT_ERROR, deltaTxt)
+                    end
+                    timeText = timeText .. " / " .. FormatTime(parTime) .. " (" .. deltaTxt .. ")"
+                else
+                    timeText = timeText .. " / " .. FormatTime(parTime)
+                end
+            end
+        end
+        self.Fields.time:SetText(timeText)
+
+        if runData.onTime == true and CT and CT.TWICH then
+            self.Fields.onTime:SetText(Color(CT.TWICH.TEXT_SUCCESS, "Yes"))
+        elseif runData.onTime == false and CT and CT.TWICH then
+            self.Fields.onTime:SetText(Color(CT.TWICH.TEXT_ERROR, "No"))
+        else
+            self.Fields.onTime:SetText((runData.onTime == true and "Yes") or (runData.onTime == false and "No") or "—")
+        end
         self.Fields.upgrade:SetText(runData.upgrade and ("+" .. tostring(runData.upgrade)) or "—")
         self.Fields.deaths:SetText(tostring(runData.deaths or 0))
         self.Fields.affixes:SetText(FormatAffixes(runData.affixes))
 
-        local groupLines = {}
-        local g = runData.group
-        if type(g) == "table" then
-            if g.tank then groupLines[#groupLines + 1] = "Tank: " .. tostring(g.tank) end
-            if g.healer then groupLines[#groupLines + 1] = "Healer: " .. tostring(g.healer) end
-            local i = 1
-            while g["dps" .. tostring(i)] do
-                groupLines[#groupLines + 1] = "DPS: " .. tostring(g["dps" .. tostring(i)])
-                i = i + 1
-                if i > 10 then break end
+        local roster = nil
+        if type(runData.groupStartRoster) == "table" and #runData.groupStartRoster > 0 then
+            roster = runData.groupStartRoster
+        elseif type(runData.groupRoster) == "table" and #runData.groupRoster > 0 then
+            roster = runData.groupRoster
+        elseif type(runData.groupStart) == "table" and #runData.groupStart > 0 then
+            roster = runData.groupStart
+        elseif type(runData.group) == "table" and #runData.group > 0 then
+            roster = runData.group
+        end
+
+        local shownRows = 0
+        if type(roster) == "table" and #roster > 0 then
+            local tank, healer, dps, other = {}, {}, {}, {}
+            for _, member in ipairs(roster) do
+                if type(member) == "table" then
+                    local role = tostring(member.role or "")
+                    if role == "TANK" then
+                        tank[#tank + 1] = member
+                    elseif role == "HEALER" then
+                        healer[#healer + 1] = member
+                    elseif role == "DAMAGER" or role == "DPS" then
+                        dps[#dps + 1] = member
+                    else
+                        other[#other + 1] = member
+                    end
+                end
             end
+
+            local ordered = {}
+            for _, m in ipairs(tank) do ordered[#ordered + 1] = m end
+            for _, m in ipairs(healer) do ordered[#ordered + 1] = m end
+            for _, m in ipairs(dps) do ordered[#ordered + 1] = m end
+            for _, m in ipairs(other) do ordered[#ordered + 1] = m end
+
+            for i, member in ipairs(ordered) do
+                local row = EnsureGroupRow(i)
+                row:ClearAllPoints()
+                row:SetPoint("TOPLEFT", self.GroupList, "TOPLEFT", 0, -((i - 1) * GROUP_ROW_HEIGHT))
+                row:SetPoint("RIGHT", self.GroupList, "RIGHT", 0, 0)
+
+                local role = tostring(member.role or "")
+                local roleLabel = (role == "TANK" and "Tank") or (role == "HEALER" and "Healer") or
+                    ((role == "DAMAGER" or role == "DPS") and "DPS") or ""
+                row.Role:SetText(roleLabel ~= "" and Accent(roleLabel) or "")
+
+                local classFile = member.classFile or member.class
+                if type(classFile) ~= "string" or classFile == "" then
+                    classFile = nil
+                end
+                if not classFile and type(member.spec) == "string" and member.spec ~= "" then
+                    classFile = member.spec:match("([^%s]+)$")
+                end
+
+                local fullName = FormatFullName(member.name, member.realm)
+                row.Name:SetText(fullName)
+
+                local iconStr = GetClassIconString(classFile, GROUP_ICON_SIZE)
+                row.Icon:SetText((type(iconStr) == "string" and iconStr) or "")
+
+                row.Spec:SetText(GetMemberSpecDisplay(member, classFile))
+
+                local ctoken = NormalizeClassFileToken(classFile)
+                local colors = _G.RAID_CLASS_COLORS
+                local c = colors and ctoken and colors[ctoken] or nil
+                if c and type(c.r) == "number" then
+                    row.Name:SetTextColor(c.r, c.g, c.b)
+                else
+                    row.Name:SetTextColor(1, 1, 1)
+                end
+
+                row:Show()
+                shownRows = i
+            end
+            HideGroupRows(shownRows + 1)
+        else
+            HideGroupRows(1)
         end
-        if #groupLines == 0 then
-            groupLines[1] = "—"
+
+        if shownRows > 0 then
+            self.GroupFallbackText:SetText("")
+            self.GroupFallbackText:Hide()
+            self.GroupList:SetHeight(shownRows * GROUP_ROW_HEIGHT)
+        else
+            local groupLines = {}
+            local g = (type(runData.groupStart) == "table" and runData.groupStart) or runData.group
+            if type(g) == "table" then
+                if g.tank then groupLines[#groupLines + 1] = "Tank: " .. tostring(g.tank) end
+                if g.healer then groupLines[#groupLines + 1] = "Healer: " .. tostring(g.healer) end
+                local i = 1
+                while g["dps" .. tostring(i)] do
+                    groupLines[#groupLines + 1] = "DPS: " .. tostring(g["dps" .. tostring(i)])
+                    i = i + 1
+                    if i > 10 then break end
+                end
+            end
+            if #groupLines == 0 then
+                groupLines[1] = "—"
+            end
+            self.GroupFallbackText:SetText(table.concat(groupLines, "\n"))
+            self.GroupFallbackText:Show()
+            self.GroupList:SetHeight(math.max(GROUP_ROW_HEIGHT,
+                (self.GroupFallbackText:GetStringHeight() or GROUP_ROW_HEIGHT)))
         end
-        self.GroupText:SetText(table.concat(groupLines, "\n"))
 
         ClearLootRows()
         local loot = runData.loot
@@ -312,7 +708,7 @@ local function EnsureRunDetailsFrame(panel)
 
         if type(loot) == "table" and #loot > 0 then
             for i, item in ipairs(loot) do
-                local link = type(item) == "table" and item.link or nil
+                local link = type(item) == "table" and GetColoredItemLink(item) or nil
                 local qty = type(item) == "table" and tonumber(item.quantity) or nil
                 if type(link) == "string" and link ~= "" then
                     anyLoot = true
@@ -324,8 +720,8 @@ local function EnsureRunDetailsFrame(panel)
                     end
                     row.Text:SetText(text)
                     row:ClearAllPoints()
-                    row:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -6 - y)
-                    row:SetPoint("RIGHT", content, "RIGHT", 0, 0)
+                    row:SetPoint("TOPLEFT", anchor, "TOPLEFT", 0, -y)
+                    row:SetPoint("RIGHT", anchor, "RIGHT", 0, 0)
                     row:Show()
                     y = y + 18
                 end
@@ -337,16 +733,18 @@ local function EnsureRunDetailsFrame(panel)
             row.link = nil
             row.Text:SetText("—")
             row:ClearAllPoints()
-            row:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -6)
-            row:SetPoint("RIGHT", content, "RIGHT", 0, 0)
+            row:SetPoint("TOPLEFT", anchor, "TOPLEFT", 0, 0)
+            row:SetPoint("RIGHT", anchor, "RIGHT", 0, 0)
             row:Show()
             y = 18
         end
 
+        self.LootList:SetHeight(math.max(y, 1))
+
         local bottomY = -62
         -- Rough height accounting: static fields (~220) + group text height + loot height
-        local gh = math.max(20, (self.GroupText:GetStringHeight() or 20))
-        local totalHeight = 62 + 190 + gh + 30 + y + 20
+        local gh = math.max(20, (self.GroupList:GetHeight() or 20))
+        local totalHeight = 62 + 190 + y + 30 + gh + 20
         content:SetHeight(math.max(totalHeight, 1))
         content:SetWidth(scroll:GetWidth() - 20)
     end

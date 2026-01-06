@@ -28,6 +28,7 @@ MythicPlusModule.DungeonMonitor = DungeonMonitor
 ---| "PLAYER_ENTERING_WORLD"
 ---| "GROUP_ROSTER_UPDATE"
 ---| "CHAT_MSG_LOOT"
+---| "INSPECT_READY"
 
 ---@class TwichDungeonCompletionPayload
 ---@field mapID number|nil
@@ -45,6 +46,11 @@ MythicPlusModule.DungeonMonitor = DungeonMonitor
 local Logger = T:GetModule("Logger")
 ---@type ToolsModule
 local Tools = T:GetModule("Tools")
+
+local _G = _G
+local C_Timer = _G.C_Timer
+local C_ChallengeMode = _G.C_ChallengeMode
+local C_Map = _G.C_Map
 
 --[[ NOTE: Actively avoiding combat-related events for now, to prevent issues in Midnight. Will enhance later. ]]
 local EVENTS = {
@@ -67,6 +73,9 @@ local EVENTS = {
     --- GROUP CHANGES
     "GROUP_ROSTER_UPDATE", -- track group changes during dungeon runs
 
+    --- INSPECTION
+    "INSPECT_READY", -- used to enrich party roster with spec info
+
     --- CHAT
     "CHAT_MSG_LOOT", -- track loot messages during dungeon runs (forwarded; consumers decide whether to record)
 }
@@ -83,6 +92,131 @@ local function InvokeCallbacks(event, ...)
     CallbackHandler:Invoke(event, ...)
 end
 
+-- Some patches/clients fire CHALLENGE_MODE_START before mapID/name can be resolved.
+-- Retry briefly so we reliably emit TWICH_DUNGEON_START for RunLogger/DataCollector.
+local startResolve = {
+    token = 0,
+    emitted = false,
+    mapID = nil,
+    tries = 0,
+    maxTries = 40,
+    delay = 0.15,
+}
+
+---@param mapID any
+---@return number|nil
+local function NormalizeMapID(mapID)
+    mapID = tonumber(mapID) or mapID
+    if type(mapID) == "number" and mapID > 0 then
+        return mapID
+    end
+    return nil
+end
+
+---@param mapID number
+---@return string|nil
+local function ResolveDungeonName(mapID)
+    if not mapID then
+        return nil
+    end
+
+    if C_ChallengeMode and type(C_ChallengeMode.GetMapUIInfo) == "function" then
+        local name = C_ChallengeMode.GetMapUIInfo(mapID)
+        if type(name) == "string" and name ~= "" then
+            return name
+        end
+    end
+
+    if C_ChallengeMode and type(C_ChallengeMode.GetMapInfo) == "function" then
+        local info = C_ChallengeMode.GetMapInfo(mapID)
+        if type(info) == "table" and type(info.name) == "string" and info.name ~= "" then
+            return info.name
+        end
+    end
+
+    if C_Map and type(C_Map.GetMapInfo) == "function" then
+        local mapInfo = C_Map.GetMapInfo(mapID)
+        if type(mapInfo) == "table" and type(mapInfo.name) == "string" and mapInfo.name ~= "" then
+            return mapInfo.name
+        end
+    end
+
+    return nil
+end
+
+---@return number|nil
+local function GetBestActiveChallengeMapID()
+    if C_ChallengeMode and type(C_ChallengeMode.GetActiveChallengeMapID) == "function" then
+        local active = NormalizeMapID(C_ChallengeMode.GetActiveChallengeMapID())
+        if active then
+            return active
+        end
+    end
+
+    -- Some clients expose keystone info with a mapID as the first return.
+    if C_ChallengeMode and type(C_ChallengeMode.GetActiveKeystoneInfo) == "function" then
+        local ok, a = pcall(C_ChallengeMode.GetActiveKeystoneInfo)
+        if ok then
+            local active = NormalizeMapID(a)
+            if active then
+                return active
+            end
+        end
+    end
+
+    return nil
+end
+
+local function TryEmitDungeonStart(token)
+    if startResolve.token ~= token or startResolve.emitted then
+        return
+    end
+
+    local mapID = startResolve.mapID
+
+    -- Always prefer the active challenge mapID when available. Some builds pass a different ID
+    -- through CHALLENGE_MODE_START, which won't resolve via challenge mode lookup APIs.
+    local activeMapID = GetBestActiveChallengeMapID()
+    if activeMapID and activeMapID ~= mapID then
+        mapID = activeMapID
+        startResolve.mapID = activeMapID
+    elseif not mapID then
+        startResolve.mapID = activeMapID
+        mapID = activeMapID
+    end
+
+    local name = ResolveDungeonName(mapID)
+    if mapID and name then
+        startResolve.emitted = true
+        Logger.Debug(string.format("DungeonMonitor: Resolved dungeon '%s' (ID: %s)", name, tostring(mapID)))
+        InvokeCallbacks("TWICH_DUNGEON_START", mapID, name)
+        return
+    end
+
+    startResolve.tries = (startResolve.tries or 0) + 1
+    if startResolve.tries >= (startResolve.maxTries or 40) then
+        -- Fallback: always emit TWICH_DUNGEON_START once we have a mapID, even if the name isn't resolvable yet.
+        if mapID then
+            startResolve.emitted = true
+            local fallbackName = name or ("Unknown (" .. tostring(mapID) .. ")")
+            Logger.Warn(string.format(
+                "DungeonMonitor: Failed to resolve dungeon name after %d tries; emitting TWICH_DUNGEON_START with fallback '%s' (ID: %s)",
+                tonumber(startResolve.tries) or 0,
+                tostring(fallbackName),
+                tostring(mapID)
+            ))
+            InvokeCallbacks("TWICH_DUNGEON_START", mapID, fallbackName)
+        end
+        return
+    end
+
+    if C_Timer and type(C_Timer.After) == "function" then
+        C_Timer.After(startResolve.delay or 0.15, function()
+            TryEmitDungeonStart(token)
+        end)
+    end
+end
+
 --- Handle incoming module events and forward them to registered callbacks.
 -- Intended to be called via colon syntax: `DungeonMonitor:EventHandler(event, ...)`.
 ---@param event string
@@ -92,40 +226,19 @@ function DungeonMonitor:EventHandler(event, ...)
 
     -- Intercept CHALLENGE_MODE_START to resolve dungeon info immediately
     if event == "CHALLENGE_MODE_START" then
-        local mapID = ...
-        -- If mapID is not provided in the event (it usually is), try to get it
-        if not mapID then
-            mapID = C_ChallengeMode.GetActiveChallengeMapID()
-        end
+        startResolve.token = (startResolve.token or 0) + 1
+        startResolve.emitted = false
+        startResolve.tries = 0
+        startResolve.mapID = NormalizeMapID(...)
 
-        if mapID then
-            local name = C_ChallengeMode.GetMapUIInfo(mapID)
-
-            -- Fallback to C_ChallengeMode.GetMapInfo
-            if not name and C_ChallengeMode.GetMapInfo then
-                local info = C_ChallengeMode.GetMapInfo(mapID)
-                if info and info.name then
-                    name = info.name
-                end
-            end
-
-            -- Fallback to C_Map
-            if not name then
-                local mapInfo = C_Map.GetMapInfo(mapID)
-                if mapInfo then
-                    name = mapInfo.name
-                end
-            end
-
-            if name then
-                Logger.Debug(string.format("DungeonMonitor: Resolved dungeon '%s' (ID: %s)", name, tostring(mapID)))
-                InvokeCallbacks("TWICH_DUNGEON_START", mapID, name)
-            end
-        end
+        -- Try immediately, then retry briefly if needed.
+        TryEmitDungeonStart(startResolve.token)
     end
 
     -- Intercept completion to emit a stable TwichUI completion payload.
     if event == "CHALLENGE_MODE_COMPLETED" then
+        -- Stop any pending start-resolution attempts.
+        startResolve.token = (startResolve.token or 0) + 1
         local mapID = ...
         if not mapID and C_ChallengeMode and type(C_ChallengeMode.GetActiveChallengeMapID) == "function" then
             mapID = C_ChallengeMode.GetActiveChallengeMapID()
