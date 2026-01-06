@@ -333,7 +333,7 @@ end
 
 function RunSharingFrame:CreateFrame()
     local frame = CreateFrame("Frame", "TwichUI_RunSharingFrame", UIParent, "BackdropTemplate")
-    frame:SetSize(800, 550)
+    frame:SetSize(1000, 600)
     frame:SetPoint("CENTER")
     frame:SetFrameStrata("DIALOG")
     frame:SetToplevel(true)
@@ -699,6 +699,22 @@ function RunSharingFrame:CreateFrame()
         end
     end)
 
+    -- The frame size is set before we register OnSizeChanged, so the initial SetSize won't trigger it.
+    -- Force one pass (and a 0-delay pass) so the events content width matches the scrollframe immediately.
+    do
+        local onSizeChanged = frame.GetScript and frame:GetScript("OnSizeChanged")
+        if type(onSizeChanged) == "function" then
+            onSizeChanged(frame)
+            if C_Timer and type(C_Timer.After) == "function" then
+                C_Timer.After(0, function()
+                    if self and self.frame and self.frame.IsShown and self.frame:IsShown() then
+                        onSizeChanged(frame)
+                    end
+                end)
+            end
+        end
+    end
+
     -- Register Simulator Callbacks
     if Simulator and Simulator.RegisterCallback then
         Simulator:RegisterCallback("RunSharingFrame_Progress", function(event, ...)
@@ -1018,6 +1034,45 @@ function RunSharingFrame:ResolveDungeonName(run)
     local data = run.data
     local runObj = data.run or data
 
+    --- Try to extract the dungeon name directly from the recorded event stream.
+    --- This is more reliable than API lookups when the sender used an older addon version
+    --- or when the local client can't resolve the challenge mapID.
+    ---@param events any
+    ---@return string|nil
+    local function ExtractNameFromEvents(events)
+        if type(events) ~= "table" then
+            return nil
+        end
+        for _, ev in ipairs(events) do
+            if type(ev) == "table" and (ev.name == "TWICH_DUNGEON_START" or ev.name == "CHALLENGE_MODE_START") then
+                if type(ev.payload) == "table" then
+                    local p = ev.payload
+                    local candidate = p.dungeonName or p.name
+                    if type(candidate) == "string" and candidate ~= "" then
+                        return candidate
+                    end
+                end
+                local args = ev.args or ev.rawArgs
+                if type(args) == "table" then
+                    local candidate = args.dungeonName or args.name or args[2]
+                    if type(candidate) == "string" and candidate ~= "" then
+                        return candidate
+                    end
+                end
+            end
+        end
+        return nil
+    end
+
+    local extractedName = ExtractNameFromEvents(data.events or (type(runObj) == "table" and runObj.events) or nil)
+    if extractedName and extractedName ~= "Unknown" and extractedName ~= "Unknown Dungeon" then
+        data.dungeonName = extractedName
+        if type(data.run) == "table" and (not data.run.dungeonName or data.run.dungeonName == "Unknown" or data.run.dungeonName == "Unknown Dungeon") then
+            data.run.dungeonName = extractedName
+        end
+        return
+    end
+
     local mapId = runObj and (runObj.mapId or runObj.mapID)
 
     if not mapId and data.events then
@@ -1284,6 +1339,22 @@ function RunSharingFrame:UpdateDetailsView()
 
         -- Events List
         self:UpdateEventsList(run.data.events)
+    end
+
+    -- Ensure the right-hand event list content expands on first selection (not only after a manual resize).
+    do
+        local f = self.frame
+        local onSizeChanged = f and f.GetScript and f:GetScript("OnSizeChanged")
+        if type(onSizeChanged) == "function" then
+            onSizeChanged(f)
+            if C_Timer and type(C_Timer.After) == "function" then
+                C_Timer.After(0, function()
+                    if self and self.frame and self.frame.IsShown and self.frame:IsShown() then
+                        onSizeChanged(self.frame)
+                    end
+                end)
+            end
+        end
     end
 end
 
@@ -1629,10 +1700,32 @@ function RunSharingFrame:PopulateEventDetails(container, payload)
             row.value.originalText = valStr
             row.value:SetText(valStr)
 
+            -- For loot hyperlinks, show the value on the next line so it doesn't sit behind the header.
+            local keyStr = (type(key) == "string") and key or tostring(key)
+            local isLootKey = type(keyStr) == "string" and keyStr:lower() == "loot"
+            local isHyperlink = type(value) == "string" and value:find("|H", 1, true) ~= nil
+
+            row.value:ClearAllPoints()
+            if isLootKey and isHyperlink then
+                row.value:SetPoint("TOPLEFT", row.key, "BOTTOMLEFT", 0, -2)
+                row.value:SetPoint("RIGHT", row, "RIGHT", 0, 0)
+            else
+                row.value:SetPoint("TOPLEFT", row.key, "TOPRIGHT", 5, 0)
+                row.value:SetPoint("RIGHT", 0, 0)
+            end
+
             -- Calculate dimensions
             local keyWidth = row.key:GetStringWidth()
-            local totalWidth = 450 - 20                         -- Approx container width
-            local availableWidth = totalWidth - indent - keyWidth - 5
+            local totalWidth = (container and container.GetWidth and container:GetWidth()) or 0
+            if not totalWidth or totalWidth <= 0 then totalWidth = 450 end
+            totalWidth = totalWidth - 20
+
+            local availableWidth
+            if isLootKey and isHyperlink then
+                availableWidth = totalWidth - indent
+            else
+                availableWidth = totalWidth - indent - keyWidth - 5
+            end
             if availableWidth < 50 then availableWidth = 50 end -- Min width
 
             row.measure:SetWidth(availableWidth)
@@ -1640,11 +1733,20 @@ function RunSharingFrame:PopulateEventDetails(container, payload)
             local valHeight = row.measure:GetStringHeight()
             local keyHeight = row.key:GetStringHeight()
 
-            local rowHeight = math.max(keyHeight, valHeight)
+            local rowHeight
+            if isLootKey and isHyperlink then
+                rowHeight = keyHeight + 2 + valHeight
+            else
+                rowHeight = math.max(keyHeight, valHeight)
+            end
             row:SetHeight(rowHeight)
-            row.value:SetHeight(rowHeight + 10) -- Extra height to prevent scrolling
+            if isLootKey and isHyperlink then
+                row.value:SetHeight(valHeight + 10) -- Extra height to prevent scrolling
+            else
+                row.value:SetHeight(rowHeight + 10) -- Extra height to prevent scrolling
+            end
 
-            y = y + rowHeight + 4               -- Increased spacing
+            y = y + rowHeight + 4 -- Increased spacing
         end
     end
 

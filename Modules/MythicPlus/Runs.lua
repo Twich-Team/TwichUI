@@ -86,6 +86,17 @@ local function Accent(text)
     return (CT and CT.TWICH and CT.TWICH.SECONDARY_ACCENT) and Color(CT.TWICH.SECONDARY_ACCENT, text) or tostring(text)
 end
 
+local function GetRunDetailsLabelColor()
+    local entry = MythicPlusModule and MythicPlusModule.CONFIGURATION and
+    MythicPlusModule.CONFIGURATION.RUN_DETAILS_LABEL_COLOR
+    local c = entry and CM and CM.GetProfileSettingByConfigEntry and CM:GetProfileSettingByConfigEntry(entry) or nil
+    if type(c) == "table" and type(c.r) == "number" and type(c.g) == "number" and type(c.b) == "number" then
+        return c.r, c.g, c.b
+    end
+    -- Fallback (matches Tools.Colors.TWICH.SECONDARY_ACCENT #4CC9F0)
+    return 76 / 255, 201 / 255, 240 / 255
+end
+
 local function FormatDate(timestamp)
     if not timestamp then return "—" end
     return date("%m/%d/%Y", timestamp)
@@ -271,11 +282,22 @@ local function EnsureRunDetailsFrame(panel)
     frame.Scroll = scroll
     frame.Content = content
 
+    frame.LabelFontStrings = {}
+    function frame:ApplyLabelColors()
+        local r, g, b = GetRunDetailsLabelColor()
+        for _, fs in ipairs(self.LabelFontStrings or {}) do
+            if fs and fs.SetTextColor then
+                fs:SetTextColor(r, g, b)
+            end
+        end
+    end
+
     local function CreateKV(y, label)
         local l = content:CreateFontString(nil, "OVERLAY", "GameFontNormal")
         l:SetPoint("TOPLEFT", content, "TOPLEFT", 0, y)
         l:SetJustifyH("LEFT")
-        l:SetText(Accent(label))
+        l:SetText(tostring(label))
+        table.insert(frame.LabelFontStrings, l)
 
         local v = content:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
         v:SetPoint("TOPLEFT", l, "TOPRIGHT", 8, 0)
@@ -296,8 +318,9 @@ local function EnsureRunDetailsFrame(panel)
 
     local lootHeader = content:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     lootHeader:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -134)
-    lootHeader:SetText(Accent("Loot"))
+    lootHeader:SetText("Loot")
     frame.LootHeader = lootHeader
+    table.insert(frame.LabelFontStrings, lootHeader)
 
     local lootList = CreateFrame("Frame", nil, content)
     lootList:SetPoint("TOPLEFT", lootHeader, "BOTTOMLEFT", 0, -6)
@@ -307,8 +330,9 @@ local function EnsureRunDetailsFrame(panel)
 
     local groupHeader = content:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     groupHeader:SetPoint("TOPLEFT", lootList, "BOTTOMLEFT", 0, -14)
-    groupHeader:SetText(Accent("Group"))
+    groupHeader:SetText("Group")
     frame.GroupHeader = groupHeader
+    table.insert(frame.LabelFontStrings, groupHeader)
 
     local groupList = CreateFrame("Frame", nil, content)
     groupList:SetPoint("TOPLEFT", groupHeader, "BOTTOMLEFT", 0, -6)
@@ -555,6 +579,10 @@ local function EnsureRunDetailsFrame(panel)
             return
         end
 
+        if self.ApplyLabelColors then
+            self:ApplyLabelColors()
+        end
+
         local dungeon = GetDungeonName(runData)
         local level = runData.level and ("+" .. tostring(runData.level)) or "—"
         self.Title:SetText(Accent(dungeon) .. " " .. level)
@@ -712,7 +740,7 @@ local function EnsureRunDetailsFrame(panel)
         ClearLootRows()
         local loot = runData.loot
         local y = -0
-        local anchor = self.LootHeader
+        local anchor = self.LootList
         local anyLoot = false
 
         if type(loot) == "table" and #loot > 0 then
@@ -757,6 +785,8 @@ local function EnsureRunDetailsFrame(panel)
         content:SetHeight(math.max(totalHeight, 1))
         content:SetWidth(scroll:GetWidth() - 20)
     end
+
+    frame:ApplyLabelColors()
 
     frame:SetScript("OnShow", function()
         if panel and panel.IsShown and not panel:IsShown() then

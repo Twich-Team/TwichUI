@@ -60,6 +60,13 @@ MythicPlusModule.CONFIGURATION = {
     DUNGEONS_IMAGE_ZOOM = { key = "mythicplus.dungeons.imageZoom", default = 0.12, },
     DUNGEONS_DETAILS_BG_ALPHA = { key = "mythicplus.dungeons.detailsBgAlpha", default = 0.45, },
 
+    -- Runs
+    RUN_DETAILS_LABEL_COLOR = {
+        key = "mythicplus.runs.runDetails.labelColor",
+        -- Default matches Tools.Colors.TWICH.SECONDARY_ACCENT (#4CC9F0)
+        default = { r = 76 / 255, g = 201 / 255, b = 240 / 255 },
+    },
+
     -- Diagnostics
     DUNGEONS_DEBUG = { key = "mythicplus.dungeons.debug", default = false, },
 }

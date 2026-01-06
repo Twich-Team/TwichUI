@@ -926,8 +926,43 @@ function RunLoggerSync:_ProcessReceivedRun(sender, runData)
         return
     end
 
+    ---@param events any
+    ---@return string|nil
+    local function ExtractDungeonNameFromEvents(events)
+        if type(events) ~= "table" then
+            return nil
+        end
+        for _, ev in ipairs(events) do
+            if type(ev) == "table" and (ev.name == "TWICH_DUNGEON_START" or ev.name == "CHALLENGE_MODE_START") then
+                if type(ev.payload) == "table" then
+                    local p = ev.payload
+                    local candidate = p.dungeonName or p.name
+                    if type(candidate) == "string" and candidate ~= "" then
+                        return candidate
+                    end
+                end
+                local args = ev.args or ev.rawArgs
+                if type(args) == "table" then
+                    local candidate = args.dungeonName or args.name or args[2]
+                    if type(candidate) == "string" and candidate ~= "" then
+                        return candidate
+                    end
+                end
+            end
+        end
+        return nil
+    end
+
     -- Best-effort: resolve dungeon name (compat with older payloads).
     local mapId = tonumber(run.mapId or run.mapID)
+
+    if (not run.dungeonName or run.dungeonName == "Unknown" or run.dungeonName == "Unknown Dungeon") then
+        local extracted = ExtractDungeonNameFromEvents(run.events)
+        if extracted and extracted ~= "Unknown" and extracted ~= "Unknown Dungeon" then
+            run.dungeonName = extracted
+        end
+    end
+
     if mapId and (not run.dungeonName or run.dungeonName == "Unknown" or run.dungeonName == "Unknown Dungeon") then
         local name
         local mpData = MythicPlusModule and MythicPlusModule.Data
@@ -936,6 +971,12 @@ function RunLoggerSync:_ProcessReceivedRun(sender, runData)
         end
         if not name and _G.C_ChallengeMode and type(_G.C_ChallengeMode.GetMapUIInfo) == "function" then
             name = _G.C_ChallengeMode.GetMapUIInfo(mapId)
+        end
+        if not name and _G.C_ChallengeMode and type(_G.C_ChallengeMode.GetMapInfo) == "function" then
+            local info = _G.C_ChallengeMode.GetMapInfo(mapId)
+            if type(info) == "table" and type(info.name) == "string" and info.name ~= "" then
+                name = info.name
+            end
         end
         if name then
             run.dungeonName = name

@@ -108,11 +108,11 @@ function MainWindow:_LayoutHeaderIcons()
 
     local simBtn = self.headerSimulatorButton
     local simShown = simBtn and simBtn.IsShown and simBtn:IsShown()
-    local rightAnchor = simShown and simBtn or self.header
 
+    -- Simulator button sits on the left side of the header (near the main logo).
     if simBtn then
         simBtn:ClearAllPoints()
-        simBtn:SetPoint("RIGHT", self.header, "RIGHT", 0, 0)
+        simBtn:SetPoint("LEFT", self.header, "LEFT", 0, 0)
     end
 
     local prev = nil
@@ -120,11 +120,7 @@ function MainWindow:_LayoutHeaderIcons()
         if btn and btn.IsShown and btn:IsShown() then
             btn:ClearAllPoints()
             if not prev then
-                if rightAnchor == self.header then
-                    btn:SetPoint("RIGHT", self.header, "RIGHT", 0, 0)
-                else
-                    btn:SetPoint("RIGHT", rightAnchor, "LEFT", -HEADER_ICON_SPACING, 0)
-                end
+                btn:SetPoint("RIGHT", self.header, "RIGHT", 0, 0)
             else
                 btn:SetPoint("RIGHT", prev, "LEFT", -HEADER_ICON_SPACING, 0)
             end
@@ -132,18 +128,20 @@ function MainWindow:_LayoutHeaderIcons()
         end
     end
 
-    local leftmostIcon = prev or (simShown and simBtn) or nil
-
-    if leftmostIcon then
-        self.headerText:ClearAllPoints()
-        self.headerText:SetPoint("LEFT", self.header, "LEFT", 0, 0)
-        self.headerText:SetPoint("RIGHT", leftmostIcon, "LEFT", -10, 0)
-        self.headerText:SetJustifyH("CENTER")
+    -- Text occupies the space between the left simulator button and the right-aligned affix icons.
+    self.headerText:ClearAllPoints()
+    if simShown then
+        self.headerText:SetPoint("LEFT", simBtn, "RIGHT", 10, 0)
     else
-        self.headerText:ClearAllPoints()
-        self.headerText:SetAllPoints(self.header)
-        self.headerText:SetJustifyH("CENTER")
+        self.headerText:SetPoint("LEFT", self.header, "LEFT", 0, 0)
     end
+
+    if prev then
+        self.headerText:SetPoint("RIGHT", prev, "LEFT", -10, 0)
+    else
+        self.headerText:SetPoint("RIGHT", self.header, "RIGHT", 0, 0)
+    end
+    self.headerText:SetJustifyH("CENTER")
 end
 
 function MainWindow:UpdateSimulatorHeaderButton()

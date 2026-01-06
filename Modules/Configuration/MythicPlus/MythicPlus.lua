@@ -478,6 +478,52 @@ function MP:Create(order)
                 }
             },
 
+            -- Runs Panel Settings
+            runsGroup = {
+                type = "group",
+                name = TT.Color(CT.TWICH.TERTIARY_ACCENT, "Runs"),
+                order = 3.5,
+                hidden = function() return not CM:GetProfileSettingByConfigEntry(GetModule().CONFIGURATION.ENABLED) end,
+                args = {
+                    description = CM.Widgets:ComponentDescription(0,
+                        "Customize the Runs panel and the Run Details popup."),
+
+                    runDetailsGroup = {
+                        type = "group",
+                        name = "Run Details",
+                        inline = true,
+                        order = 1,
+                        args = {
+                            labelColor = {
+                                type = "color",
+                                name = "Label Color",
+                                desc = "Controls the color of labels like Date/Time/Loot/Group in the Run Details popup.",
+                                order = 1,
+                                get = function()
+                                    local c = CM:GetProfileSettingByConfigEntry(GetModule().CONFIGURATION
+                                        .RUN_DETAILS_LABEL_COLOR) or { r = 1, g = 1, b = 1 }
+                                    return c.r, c.g, c.b
+                                end,
+                                set = function(_, r, g, b)
+                                    local module = GetModule()
+                                    CM:SetProfileSettingByConfigEntry(module.CONFIGURATION.RUN_DETAILS_LABEL_COLOR,
+                                        { r = r, g = g, b = b })
+
+                                    -- Best-effort live update if the Runs panel and/or details frame exists.
+                                    if module and module.MainWindow and module.MainWindow.GetPanelFrame then
+                                        local panel = module.MainWindow:GetPanelFrame("runs")
+                                        local details = panel and rawget(panel, "__twichuiRunDetailsFrame")
+                                        if details and details.ApplyLabelColors then
+                                            details:ApplyLabelColors()
+                                        end
+                                    end
+                                end,
+                            },
+                        },
+                    },
+                },
+            },
+
             -- Best in Slot Settings
             bestInSlotGroup = {
                 type = "group",
