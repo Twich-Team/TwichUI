@@ -1113,6 +1113,7 @@ end
 ---@field Key FontString
 ---@field Runs FontString
 ---@field __twichuiMapId number|nil
+---@field __twichuiSelected boolean|nil
 
 ---@class TwichUI_MythicPlus_Dungeons_TimeFrame : Frame
 ---@field Text FontString
@@ -1195,7 +1196,9 @@ local function CreateDungeonRow(parent, fontPath)
         self.Hover:Show()
     end)
     row:SetScript("OnLeave", function(self)
-        if self.Hover then self.Hover:Hide() end
+        if self.Hover and not self.__twichuiSelected then
+            self.Hover:Hide()
+        end
     end)
 
     row.NameBGContainer = CreateFrame("Frame", nil, row)
@@ -1294,6 +1297,35 @@ local function CreateDungeonRow(parent, fontPath)
     row.Name:SetPoint("RIGHT", row.Score, "LEFT", -10, 0)
 
     return row
+end
+
+---@param panel TwichUI_MythicPlus_DungeonsPanel
+local function UpdateSelectedDungeonRowHighlight(panel)
+    if not panel or not panel.__twichuiRows then return end
+
+    local rowTexture = GetRowTexturePath()
+    local hoverAlpha = GetRowHoverAlpha()
+    local hoverColor = GetRowHoverColor()
+    local selectedMapId = tonumber(panel.__twichuiSelectedMapId)
+
+    for _, row in ipairs(panel.__twichuiRows) do
+        if row and row.Hover then
+            local isSelected = (selectedMapId ~= nil) and (tonumber(row.__twichuiMapId) == selectedMapId)
+            row.__twichuiSelected = isSelected and true or false
+
+            row.Hover:SetTexture(rowTexture)
+            row.Hover:SetAlpha(hoverAlpha)
+            if row.Hover.SetVertexColor then
+                row.Hover:SetVertexColor(hoverColor.r, hoverColor.g, hoverColor.b, 1)
+            end
+
+            if isSelected then
+                row.Hover:Show()
+            elseif not (row.IsMouseOver and row:IsMouseOver()) then
+                row.Hover:Hide()
+            end
+        end
+    end
 end
 
 ---@param seconds number|nil
@@ -1741,6 +1773,7 @@ local function RefreshPanel(panel)
             row:SetScript("OnClick", function(self)
                 local id = self.__twichuiMapId
                 panel.__twichuiSelectedMapId = id
+                UpdateSelectedDungeonRowHighlight(panel)
                 UpdateDetails(panel, id)
             end)
         end
@@ -1766,6 +1799,16 @@ local function RefreshPanel(panel)
                 end
             end
 
+            row.__twichuiSelected = (panel.__twichuiSelectedMapId ~= nil) and
+                (tonumber(panel.__twichuiSelectedMapId) == tonumber(info.id)) or false
+            if row.Hover then
+                if row.__twichuiSelected then
+                    row.Hover:Show()
+                elseif not (row.IsMouseOver and row:IsMouseOver()) then
+                    row.Hover:Hide()
+                end
+            end
+
             if info.bg then
                 SetClampedTexture(row.NameBG, info.bg)
                 ApplyRowLayout(row.NameBG, zoom)
@@ -1788,6 +1831,8 @@ local function RefreshPanel(panel)
     if not panel.__twichuiSelectedMapId and data[1] then
         panel.__twichuiSelectedMapId = data[1].id
     end
+
+    UpdateSelectedDungeonRowHighlight(panel)
 
     UpdateDetails(panel, panel.__twichuiSelectedMapId)
 end
