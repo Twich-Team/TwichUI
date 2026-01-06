@@ -848,6 +848,11 @@ GetMapUIInfo = function(mapId)
     mapId = tonumber(mapId)
     if not mapId then return nil, nil, nil, nil end
 
+    local mpData = MythicPlusModule and MythicPlusModule.Data
+    if mpData and type(mpData.GetMapUIInfoCached) == "function" then
+        return mpData.GetMapUIInfoCached(mapId)
+    end
+
     local C_ChallengeMode = _G.C_ChallengeMode
     if not C_ChallengeMode then return nil, nil, nil, nil end
 
@@ -1027,8 +1032,22 @@ local function GetCurrentSeasonMapIds()
     local mapIds = {}
     local seen = {}
 
+    local mpData = MythicPlusModule and MythicPlusModule.Data
+    if mpData and type(mpData.GetCurrentSeasonMapsCached) == "function" then
+        local seasonMaps = mpData.GetCurrentSeasonMapsCached()
+        if type(seasonMaps) == "table" then
+            for _, id in ipairs(seasonMaps) do
+                id = tonumber(id)
+                if id and id > 0 and not seen[id] then
+                    seen[id] = true
+                    mapIds[#mapIds + 1] = id
+                end
+            end
+        end
+    end
+
     local C_MythicPlus = _G.C_MythicPlus
-    if C_MythicPlus and type(C_MythicPlus.GetCurrentSeason) == "function" and type(C_MythicPlus.GetSeasonMaps) == "function" then
+    if #mapIds == 0 and C_MythicPlus and type(C_MythicPlus.GetCurrentSeason) == "function" and type(C_MythicPlus.GetSeasonMaps) == "function" then
         local seasonId = SafeCall(C_MythicPlus.GetCurrentSeason)
         local seasonMaps = seasonId and SafeCall(C_MythicPlus.GetSeasonMaps, seasonId) or nil
         if type(seasonMaps) == "table" then

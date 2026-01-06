@@ -76,6 +76,14 @@ local function GetMapNameAndTexture(mapId)
     mapId = tonumber(mapId)
     if not mapId then return nil, nil end
 
+    local mpData = MythicPlusModule and MythicPlusModule.Data
+    if mpData and type(mpData.GetMapUIInfoCached) == "function" then
+        local name, _, texture, backgroundTexture = mpData.GetMapUIInfoCached(mapId)
+        if name or backgroundTexture or texture then
+            return name, backgroundTexture or texture
+        end
+    end
+
     local C_ChallengeMode = _G.C_ChallengeMode
     if not C_ChallengeMode then return nil, nil end
 

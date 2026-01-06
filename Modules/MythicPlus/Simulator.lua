@@ -121,7 +121,9 @@ Sim.SupportedEvents = Sim.SupportedEvents or {
 local function BuildSampleEventArgs(eventName)
     if eventName == "TWICH_DUNGEON_START" then
         local mapID = 525
-        local name = (C_ChallengeMode and C_ChallengeMode.GetMapUIInfo and C_ChallengeMode.GetMapUIInfo(mapID))
+        local mpData = MythicPlusModule and MythicPlusModule.Data
+        local name = (mpData and type(mpData.GetMapNameCached) == "function" and mpData.GetMapNameCached(mapID))
+            or (C_ChallengeMode and C_ChallengeMode.GetMapUIInfo and C_ChallengeMode.GetMapUIInfo(mapID))
             or "Simulated Dungeon"
         return mapID, name
     end
@@ -129,7 +131,10 @@ local function BuildSampleEventArgs(eventName)
     if eventName == "CHALLENGE_MODE_START" then
         local mapID = 525
         -- Simulate the resolution event first
-        local name = C_ChallengeMode.GetMapUIInfo(mapID) or "Simulated Dungeon"
+        local mpData = MythicPlusModule and MythicPlusModule.Data
+        local name = (mpData and type(mpData.GetMapNameCached) == "function" and mpData.GetMapNameCached(mapID))
+            or (C_ChallengeMode.GetMapUIInfo and C_ChallengeMode.GetMapUIInfo(mapID))
+            or "Simulated Dungeon"
 
         local dm = GetDungeonMonitor()
         if dm and type(dm.EventHandler) == "function" then

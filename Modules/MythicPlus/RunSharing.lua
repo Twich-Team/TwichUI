@@ -635,13 +635,19 @@ function RunSharing:ProcessReceivedRun(sender, runData)
         mapId = tonumber(runData.run.mapId or runData.run.mapID)
     end
     if mapId and (not runData.dungeonName or runData.dungeonName == "Unknown" or runData.dungeonName == "Unknown Dungeon") then
-        if _G.C_ChallengeMode and type(_G.C_ChallengeMode.GetMapUIInfo) == "function" then
-            local name = _G.C_ChallengeMode.GetMapUIInfo(mapId)
-            if name then
-                runData.dungeonName = name
-                if type(runData.run) == "table" and not runData.run.dungeonName then
-                    runData.run.dungeonName = name
-                end
+        local name
+        local mpData = MythicPlusModule and MythicPlusModule.Data
+        if mpData and type(mpData.GetMapNameCached) == "function" then
+            name = mpData.GetMapNameCached(mapId)
+        end
+        if not name and _G.C_ChallengeMode and type(_G.C_ChallengeMode.GetMapUIInfo) == "function" then
+            name = _G.C_ChallengeMode.GetMapUIInfo(mapId)
+        end
+
+        if name then
+            runData.dungeonName = name
+            if type(runData.run) == "table" and not runData.run.dungeonName then
+                runData.run.dungeonName = name
             end
         end
     end

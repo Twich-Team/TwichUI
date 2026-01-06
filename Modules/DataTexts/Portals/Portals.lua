@@ -9,6 +9,12 @@ local Configuration = T:GetModule("Configuration")
 --- @type LoggerModule
 local Logger = T:GetModule("Logger")
 
+local function DTDebug(msg)
+    if Configuration:GetProfileSettingSafe("developer.datatexts.debugLoggingEnabled", false) then
+        Logger.Debug(tostring(msg))
+    end
+end
+
 -- WoW globals
 local _G = _G
 local CreateFrame = CreateFrame
@@ -474,7 +480,7 @@ function PortalsDataText:OnEvent(panel, event, ...)
         self.panel = panel
     end
 
-    Logger.Debug("PortalsDataText: OnEvent triggered: " .. tostring(event))
+    DTDebug("PortalsDataText: OnEvent triggered: " .. tostring(event))
 
     if event == "ELVUI_FORCE_UPDATE" then
         if self.displayCache then
@@ -520,7 +526,7 @@ end
 function PortalsDataText:Enable()
     if Module:IsEnabled() then return end
     if DataTexts:IsDataTextRegistered(DATATEXT_NAME) then
-        Logger.Debug("Portals datatext is already registered with ElvUI; skipping enable")
+        DTDebug("Portals datatext is already registered with ElvUI; skipping enable")
         return
     end
 
@@ -539,7 +545,7 @@ function PortalsDataText:Enable()
         nil                                                                --onLeave
     )
 
-    Logger.Debug("Portals datatext enabled")
+    DTDebug("Portals datatext enabled")
 end
 
 function PortalsDataText:Disable()
@@ -548,7 +554,7 @@ function PortalsDataText:Disable()
         DataTexts:RemoveDataText(DATATEXT_NAME)
     end
 
-    Logger.Debug("Portals datatext disabled")
+    DTDebug("Portals datatext disabled")
 end
 
 function PortalsDataText:OnInitialize()

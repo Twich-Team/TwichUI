@@ -11,6 +11,12 @@ local Logger = T:GetModule("Logger")
 --- @type ThirdPartyAPIModule
 local ThirdPartyAPI = T:GetModule("ThirdPartyAPI")
 
+local function DTDebug(msg)
+    if Configuration:GetProfileSettingSafe("developer.datatexts.debugLoggingEnabled", false) then
+        Logger.Debug(tostring(msg))
+    end
+end
+
 --- registering the submobule with the parent datatext module
 --- @class GoblinDataText
 --- @field displayCache GenericCache cache for the display text
@@ -312,7 +318,7 @@ function GoblinDataText:OnEvent(panel, event, ...)
         self.panel = panel
     end
 
-    Logger.Debug("GoblinDataText: OnEvent triggered: " .. tostring(event))
+    DTDebug("GoblinDataText: OnEvent triggered: " .. tostring(event))
 
     if event == "TWICH_GOLD_UPDATE" or event == "PLAYER_ENTERING_WORLD" or event == "ELVUI_FORCE_UPDATE" then
         self.accountMoney = Tools.Money:GetAccountGoldStats()
@@ -617,13 +623,13 @@ end
 function GoblinDataText:Enable()
     if Module:IsEnabled() then return end
     if DataTexts:IsDataTextRegistered(DATATEXT_NAME) then
-        Logger.Debug("Goblin datatext is already registered with ElvUI; skipping enable")
+        DTDebug("Goblin datatext is already registered with ElvUI; skipping enable")
         return
     end
     -- Enable the module (no frame events used here) then perform registration
     Module:Enable(nil)
     self:OnEnable()
-    Logger.Debug("Goblin datatext enabled")
+    DTDebug("Goblin datatext enabled")
 end
 
 function GoblinDataText:Disable()
@@ -657,7 +663,7 @@ function GoblinDataText:Disable()
     end
 
 
-    Logger.Debug("Goblin datatext disabled")
+    DTDebug("Goblin datatext disabled")
 
     -- Prompt user to reload UI to fully apply removal.
     Configuration:PromptReloadUI()

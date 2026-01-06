@@ -1,5 +1,6 @@
 <Ui xmlns='http://www.blizzard.com/wow/ui/'>
     <Script file="MythicPlus.lua" />
+    <Script file="Data.lua" />
     <Script file="Database.lua" />
     <Script file="MythicPlusFrame.lua" />
     <Script
@@ -15,7 +16,6 @@
     <Script file="Simulator.lua" />
     <Script
         file="ScoreCalculator.lua" />
-    <Script file="Data.lua" />
     <Script file="DungeonMonitor.lua" />
     <Script file="DataCollector.lua" />
     <Script file="RunSharing.lua" />

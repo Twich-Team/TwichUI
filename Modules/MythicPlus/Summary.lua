@@ -352,30 +352,40 @@ local function FindPlausibleItemLevelsInTable(value, maxDepth, prefix, out, seen
     for k, v in iter, state, var do
         local key = tostring(k)
         local path = (prefix == "") and key or (prefix .. "." .. key)
-        local n = tonumber(v)
-        if IsPlausibleItemLevel(n) then
-            out[#out + 1] = { path = path, value = n }
-        elseif type(v) == "string" then
-            -- If Blizzard embeds item links or formatted strings, pull iLvl from there.
-            if v:find("|Hitem:") then
-                local ilvl = GetItemLevelFromLink(v)
-                if IsPlausibleItemLevel(ilvl) then
-                    out[#out + 1] = { path = path .. "(link)", value = ilvl }
-                else
-                    -- Ensure cache gets warmed for a later refresh.
-                    RequestItemData(v)
-                end
-            end
 
-            -- Look for iLvl-like numbers in text (e.g. "Item Level 691").
-            for digits in v:gmatch("(%d%d%d%d?)") do
-                local maybe = tonumber(digits)
-                if IsPlausibleItemLevel(maybe) then
-                    out[#out + 1] = { path = path .. "(text)", value = maybe }
-                end
+        -- Avoid misclassifying WeeklyRewards itemDBID values (database IDs) as item levels.
+        local lowerKey = key:lower()
+        local isItemDBIDField = lowerKey:find("itemdbid", 1, true) ~= nil
+        if isItemDBIDField then
+            if type(v) == "table" or type(v) == "userdata" then
+                FindPlausibleItemLevelsInTable(v, maxDepth - 1, path, out, seen)
             end
-        elseif type(v) == "table" or type(v) == "userdata" then
-            FindPlausibleItemLevelsInTable(v, maxDepth - 1, path, out, seen)
+        else
+            local n = tonumber(v)
+            if IsPlausibleItemLevel(n) then
+                out[#out + 1] = { path = path, value = n }
+            elseif type(v) == "string" then
+                -- If Blizzard embeds item links or formatted strings, pull iLvl from there.
+                if v:find("|Hitem:") then
+                    local ilvl = GetItemLevelFromLink(v)
+                    if IsPlausibleItemLevel(ilvl) then
+                        out[#out + 1] = { path = path .. "(link)", value = ilvl }
+                    else
+                        -- Ensure cache gets warmed for a later refresh.
+                        RequestItemData(v)
+                    end
+                end
+
+                -- Look for iLvl-like numbers in text (e.g. "Item Level 691").
+                for digits in v:gmatch("(%d%d%d%d?)") do
+                    local maybe = tonumber(digits)
+                    if IsPlausibleItemLevel(maybe) then
+                        out[#out + 1] = { path = path .. "(text)", value = maybe }
+                    end
+                end
+            elseif type(v) == "table" or type(v) == "userdata" then
+                FindPlausibleItemLevelsInTable(v, maxDepth - 1, path, out, seen)
+            end
         end
     end
 
@@ -1039,6 +1049,40 @@ local function UpdateGreatVaultProgress(panel)
         return
     end
 
+    local function HasAvailableGreatVaultRewards()
+        local C_WeeklyRewards = _G.C_WeeklyRewards
+        if C_WeeklyRewards then
+            if type(C_WeeklyRewards.HasAvailableRewards) == "function" then
+                local ok, available = pcall(C_WeeklyRewards.HasAvailableRewards)
+                if ok and type(available) == "boolean" then
+                    return available
+                end
+            end
+
+            -- Some clients/builds use a singular naming.
+            if type(C_WeeklyRewards.HasAvailableReward) == "function" then
+                local ok, available = pcall(C_WeeklyRewards.HasAvailableReward)
+                if ok and type(available) == "boolean" then
+                    return available
+                end
+            end
+        end
+
+        -- Fallback: if the Blizzard UI has been loaded/opened, it often exposes this state.
+        local frame = rawget(_G, "WeeklyRewardsFrame")
+        if frame and type(frame.hasAvailableRewards) == "boolean" then
+            return frame.hasAvailableRewards
+        end
+        if frame and type(frame.HasAvailableRewards) == "function" then
+            local ok, available = pcall(frame.HasAvailableRewards, frame)
+            if ok and type(available) == "boolean" then
+                return available
+            end
+        end
+
+        return false
+    end
+
     -- Ensure Blizzard has been asked to populate weekly reward data.
     do
         local C_WeeklyRewards = _G.C_WeeklyRewards
@@ -1101,16 +1145,20 @@ local function UpdateGreatVaultProgress(panel)
     end
 
     do
-        local summary
-        if unlocked >= 3 then
-            summary = "Slots: 3/3"
-        else
-            local remainingText = (nextRemaining and nextRemaining > 0)
-                and string.format(" — Next in %d", nextRemaining)
-                or ""
-            summary = string.format("Slots: %d/3%s", unlocked, remainingText)
+        -- Remove the slot summary line ("Slots: X/3 — Next in ..."); keep only the optional reward-availability line.
+        panel.__twichuiVaultSummary:SetText("")
+        panel.__twichuiVaultSummary:Hide()
+
+        local statusText = panel.__twichuiVaultStatus
+        if statusText then
+            if HasAvailableGreatVaultRewards() then
+                statusText:SetText(TT.Color(CT.TWICH.SECONDARY_ACCENT, "Rewards Available"))
+                statusText:Show()
+            else
+                statusText:SetText("")
+                statusText:Hide()
+            end
         end
-        panel.__twichuiVaultSummary:SetText(TT.Color(CT.TWICH.TEXT_MUTED, summary))
     end
 
     for i = 1, 3 do
@@ -2104,6 +2152,7 @@ local function CreateSummaryPanel(parent)
     ---@field __twichuiIlvlValue FontString
     ---@field __twichuiVaultWrap Frame|nil
     ---@field __twichuiVaultTitle FontString|nil
+    ---@field __twichuiVaultStatus FontString|nil
     ---@field __twichuiVaultSummary FontString|nil
     ---@field __twichuiVaultRows table|nil
     ---@field __twichuiAffixButtons table|nil
@@ -2845,8 +2894,19 @@ local function CreateSummaryPanel(parent)
             end)
         end
 
+        local vaultStatus = vaultWrap:CreateFontString(nil, "OVERLAY")
+        vaultStatus:SetPoint("TOPLEFT", vaultTitle, "BOTTOMLEFT", 0, -2)
+        vaultStatus:SetJustifyH("LEFT")
+        vaultStatus:SetFontObject(_G.GameFontNormalSmall)
+        if fontPath and vaultStatus.SetFont then
+            vaultStatus:SetFont(fontPath, 13, "OUTLINE")
+        end
+        vaultStatus:SetText("")
+        vaultStatus:Hide()
+        panel.__twichuiVaultStatus = vaultStatus
+
         local vaultSummary = vaultWrap:CreateFontString(nil, "OVERLAY")
-        vaultSummary:SetPoint("TOPLEFT", vaultTitle, "BOTTOMLEFT", 0, -2)
+        vaultSummary:SetPoint("TOPLEFT", vaultStatus, "BOTTOMLEFT", 0, -2)
         vaultSummary:SetJustifyH("LEFT")
         vaultSummary:SetFontObject(_G.GameFontNormalSmall)
         if fontPath and vaultSummary.SetFont then
@@ -2870,7 +2930,8 @@ local function CreateSummaryPanel(parent)
             vaultWrap:SetWidth((pad * 2) + rowContentW)
         end
         if type(vaultWrap.SetHeight) == "function" then
-            vaultWrap:SetHeight((pad * 2) + 18 + 14 + (rowH * 3) + (rowGap * 2) + 6)
+            -- 18px title + 14px status (optional); rows sit under the status with a 6px gap.
+            vaultWrap:SetHeight((pad * 2) + 18 + 14 + 2 + (rowH * 3) + (rowGap * 2) + 6)
         end
         for i = 1, 3 do
             local row = panel.__twichuiVaultRows[i]
@@ -2890,7 +2951,7 @@ local function CreateSummaryPanel(parent)
                 row.frame:SetWidth(rowContentW)
             end
             if i == 1 then
-                row.frame:SetPoint("TOP", vaultSummary, "BOTTOM", 0, -6)
+                row.frame:SetPoint("TOP", vaultStatus, "BOTTOM", 0, -6)
             else
                 row.frame:SetPoint("TOP", panel.__twichuiVaultRows[i - 1].frame, "BOTTOM", 0, -rowGap)
             end

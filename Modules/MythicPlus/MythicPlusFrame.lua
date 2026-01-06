@@ -200,6 +200,11 @@ local function GetChallengeMapName(mapId)
     mapId = tonumber(mapId)
     if not mapId then return nil end
 
+    local mpData = MythicPlusModule and MythicPlusModule.Data
+    if mpData and type(mpData.GetMapNameCached) == "function" then
+        return mpData.GetMapNameCached(mapId)
+    end
+
     local C_ChallengeMode = _G.C_ChallengeMode
     if not C_ChallengeMode then return nil end
 

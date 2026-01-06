@@ -120,6 +120,14 @@ local function ResolveDungeonName(mapID)
         return nil
     end
 
+    local mpData = MythicPlusModule and MythicPlusModule.Data
+    if mpData and type(mpData.GetMapNameCached) == "function" then
+        local name = mpData.GetMapNameCached(mapID)
+        if type(name) == "string" and name ~= "" then
+            return name
+        end
+    end
+
     if C_ChallengeMode and type(C_ChallengeMode.GetMapUIInfo) == "function" then
         local name = C_ChallengeMode.GetMapUIInfo(mapID)
         if type(name) == "string" and name ~= "" then

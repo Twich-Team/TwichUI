@@ -40,6 +40,7 @@ function CM:CreateDeveloperConfiguration()
                 fontSize = "large",
             },
             databasesGroup = CM.Developer.Databases:Create(5),
+            datatextsGroup = CM.Developer.DataTexts:Create(6),
             convenienceGroup = CM.Developer.Convenience:Create(7),
             mythicPlusGroup = CM.Developer.MythicPlus:Create(8),
             testingGroup = CM.Developer.Testing:Create(9),

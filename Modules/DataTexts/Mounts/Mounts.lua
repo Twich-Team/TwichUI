@@ -8,6 +8,11 @@ local Tools = T:GetModule("Tools")
 local Configuration = T:GetModule("Configuration")
 --- @type LoggerModule
 local Logger = T:GetModule("Logger")
+local function DTDebug(msg)
+    if Configuration:GetProfileSettingSafe("developer.datatexts.debugLoggingEnabled", false) then
+        Logger.Debug(tostring(msg))
+    end
+end
 
 -- WoW globals
 local _G = _G
@@ -442,7 +447,7 @@ function MountsDataText:OnEvent(panel, event, ...)
         self.panel = panel
     end
 
-    Logger.Debug("MountsDataText: OnEvent triggered: " .. tostring(event))
+    DTDebug("MountsDataText: OnEvent triggered: " .. tostring(event))
 
     if event == "ELVUI_FORCE_UPDATE" then
         if self.displayCache then
@@ -510,7 +515,7 @@ end
 function MountsDataText:Enable()
     if Module:IsEnabled() then return end
     if DataTexts:IsDataTextRegistered(DATATEXT_NAME) then
-        Logger.Debug("Mounts datatext is already registered with ElvUI; skipping enable")
+        DTDebug("Mounts datatext is already registered with ElvUI; skipping enable")
         return
     end
 
@@ -530,7 +535,7 @@ function MountsDataText:Enable()
         nil
     )
 
-    Logger.Debug("Mounts datatext enabled")
+    DTDebug("Mounts datatext enabled")
 end
 
 function MountsDataText:Disable()
@@ -539,7 +544,7 @@ function MountsDataText:Disable()
         DataTexts:RemoveDataText(DATATEXT_NAME)
     end
 
-    Logger.Debug("Mounts datatext disabled")
+    DTDebug("Mounts datatext disabled")
     Configuration:PromptReloadUI()
 end
 

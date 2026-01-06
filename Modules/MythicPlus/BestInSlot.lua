@@ -377,22 +377,26 @@ local function BuildTierCache(force)
 
     -- 3. Current M+ Dungeons (Includes old dungeons in rotation)
     local dungeonsFound = false
-    if C_MythicPlus and C_MythicPlus.GetCurrentSeason and C_MythicPlus.GetSeasonMaps then
-        local seasonID = C_MythicPlus.GetCurrentSeason()
-        if seasonID then
-            local maps = C_MythicPlus.GetSeasonMaps(seasonID)
-            if maps and #maps > 0 then
-                for _, mapId in ipairs(maps) do
-                    local name = C_ChallengeMode.GetMapUIInfo(mapId)
-                    if name then
-                        validInstances[name] = true
-                        if MEGA_DUNGEON_MAPPINGS[name] then
-                            validInstances[MEGA_DUNGEON_MAPPINGS[name]] = true
-                        end
+    do
+        local mpData = MythicPlusModule and MythicPlusModule.Data
+        local maps = (mpData and type(mpData.GetCurrentSeasonMapsCached) == "function" and mpData.GetCurrentSeasonMapsCached())
+        if not maps and C_MythicPlus and C_MythicPlus.GetCurrentSeason and C_MythicPlus.GetSeasonMaps then
+            local seasonID = C_MythicPlus.GetCurrentSeason()
+            maps = seasonID and C_MythicPlus.GetSeasonMaps(seasonID) or nil
+        end
+
+        if maps and #maps > 0 then
+            for _, mapId in ipairs(maps) do
+                local name = (mpData and type(mpData.GetMapNameCached) == "function" and mpData.GetMapNameCached(mapId))
+                    or (C_ChallengeMode and C_ChallengeMode.GetMapUIInfo and C_ChallengeMode.GetMapUIInfo(mapId))
+                if name then
+                    validInstances[name] = true
+                    if MEGA_DUNGEON_MAPPINGS[name] then
+                        validInstances[MEGA_DUNGEON_MAPPINGS[name]] = true
                     end
                 end
-                dungeonsFound = true
             end
+            dungeonsFound = true
         end
     end
 
@@ -752,16 +756,19 @@ local function GetSources()
     local seen = {}
 
     -- 1. Try C_MythicPlus.GetSeasonMaps (Current Season)
-    if C_MythicPlus and C_MythicPlus.GetCurrentSeason and C_MythicPlus.GetSeasonMaps then
-        local seasonID = C_MythicPlus.GetCurrentSeason()
-        if seasonID then
-            local maps = C_MythicPlus.GetSeasonMaps(seasonID)
-            if maps then
-                for _, mapId in ipairs(maps) do
-                    if not seen[mapId] then
-                        seen[mapId] = true
-                        table.insert(mapIds, mapId)
-                    end
+    do
+        local mpData = MythicPlusModule and MythicPlusModule.Data
+        local maps = (mpData and type(mpData.GetCurrentSeasonMapsCached) == "function" and mpData.GetCurrentSeasonMapsCached())
+        if not maps and C_MythicPlus and C_MythicPlus.GetCurrentSeason and C_MythicPlus.GetSeasonMaps then
+            local seasonID = C_MythicPlus.GetCurrentSeason()
+            maps = seasonID and C_MythicPlus.GetSeasonMaps(seasonID) or nil
+        end
+
+        if maps then
+            for _, mapId in ipairs(maps) do
+                if not seen[mapId] then
+                    seen[mapId] = true
+                    table.insert(mapIds, mapId)
                 end
             end
         end
@@ -785,7 +792,9 @@ local function GetSources()
     -- Resolve Names
     local seenDungeons = {}
     for _, mapId in ipairs(mapIds) do
-        local name = C_ChallengeMode.GetMapUIInfo(mapId)
+        local mpData = MythicPlusModule and MythicPlusModule.Data
+        local name = (mpData and type(mpData.GetMapNameCached) == "function" and mpData.GetMapNameCached(mapId))
+            or (C_ChallengeMode and C_ChallengeMode.GetMapUIInfo and C_ChallengeMode.GetMapUIInfo(mapId))
         if name then
             if MEGA_DUNGEON_MAPPINGS[name] then
                 name = MEGA_DUNGEON_MAPPINGS[name]

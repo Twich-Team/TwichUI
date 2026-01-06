@@ -929,11 +929,16 @@ function RunLoggerSync:_ProcessReceivedRun(sender, runData)
     -- Best-effort: resolve dungeon name (compat with older payloads).
     local mapId = tonumber(run.mapId or run.mapID)
     if mapId and (not run.dungeonName or run.dungeonName == "Unknown" or run.dungeonName == "Unknown Dungeon") then
-        if _G.C_ChallengeMode and type(_G.C_ChallengeMode.GetMapUIInfo) == "function" then
-            local name = _G.C_ChallengeMode.GetMapUIInfo(mapId)
-            if name then
-                run.dungeonName = name
-            end
+        local name
+        local mpData = MythicPlusModule and MythicPlusModule.Data
+        if mpData and type(mpData.GetMapNameCached) == "function" then
+            name = mpData.GetMapNameCached(mapId)
+        end
+        if not name and _G.C_ChallengeMode and type(_G.C_ChallengeMode.GetMapUIInfo) == "function" then
+            name = _G.C_ChallengeMode.GetMapUIInfo(mapId)
+        end
+        if name then
+            run.dungeonName = name
         end
     end
 

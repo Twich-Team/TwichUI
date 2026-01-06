@@ -97,6 +97,15 @@ local function GetDungeonName(runData)
     end
 
     local mapId = type(runData) == "table" and runData.mapId or runData
+
+    local mpData = MythicPlusModule and MythicPlusModule.Data
+    if mpData and type(mpData.GetMapNameCached) == "function" then
+        local name = mpData.GetMapNameCached(mapId)
+        if name then
+            return name
+        end
+    end
+
     local C_ChallengeMode = _G.C_ChallengeMode
     if C_ChallengeMode and C_ChallengeMode.GetMapUIInfo then
         local name = C_ChallengeMode.GetMapUIInfo(mapId)

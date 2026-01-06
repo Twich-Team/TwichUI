@@ -1046,7 +1046,9 @@ function RunSharingFrame:ResolveDungeonName(run)
     end
 
     if mapId then
-        local name = C_ChallengeMode.GetMapUIInfo(mapId)
+        local mpData = MythicPlusModule and MythicPlusModule.Data
+        local name = (mpData and type(mpData.GetMapNameCached) == "function" and mpData.GetMapNameCached(mapId))
+            or C_ChallengeMode.GetMapUIInfo(mapId)
 
         -- Fallback to C_ChallengeMode.GetMapInfo (returns table)
         if not name and C_ChallengeMode.GetMapInfo then
@@ -1265,7 +1267,11 @@ function RunSharingFrame:UpdateDetailsView()
         local dungeon = run.data.dungeonName or d.dungeonName -- Check both locations
         if not dungeon or dungeon == "Unknown" then
             local mapId = tonumber(d.mapId or d.mapID)
-            dungeon = mapId and C_ChallengeMode.GetMapUIInfo(mapId) or "Unknown Dungeon"
+            local mpData = MythicPlusModule and MythicPlusModule.Data
+            dungeon = mapId
+                and ((mpData and type(mpData.GetMapNameCached) == "function" and mpData.GetMapNameCached(mapId))
+                    or C_ChallengeMode.GetMapUIInfo(mapId))
+                or "Unknown Dungeon"
         end
 
         local level = d.level or "?"
