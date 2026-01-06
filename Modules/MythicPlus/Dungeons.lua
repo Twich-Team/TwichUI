@@ -1729,8 +1729,113 @@ UpdateDetailsRuns = function(panel, mapId)
     end
 end
 
+local function UpdateDetailsStats(panel, mapId)
+    local statsFrame = panel.__twichuiDetailsStats
+    if not statsFrame then return end
+
+    local db = Database:GetForCurrentCharacter()
+    local stats = db.DungeonStats and db.DungeonStats[mapId]
+
+    local row1 = statsFrame.row1
+    local row2 = statsFrame.row2
+    local row3 = statsFrame.row3
+    local compT = statsFrame.compText
+    local lootT = statsFrame.lootText
+
+    if not stats then
+        row1:SetText("|cFF808080No collected stats for this dungeon yet.|r")
+        row2:SetText("")
+        row3:SetText("")
+        compT:SetText("")
+        lootT:SetText("")
+        return
+    end
+
+    -- Row 1: Time, Runs
+    local avgTime = (stats.completes > 0 and (stats.totalTime / stats.completes)) or 0
+    row1:SetText(string.format("Runs: |cFFFFFFFF%d|r  |  Completed: |cFF00FF00%d|r  |  Abandoned: |cFFFF0000%d|r",
+        stats.runs, stats.completes, stats.abandons))
+
+    -- Row 2: Counts
+    local successRate = (stats.runs > 0 and (stats.completes / stats.runs * 100)) or 0
+    row2:SetText(string.format("Total Time: |cFFFFFFFF%s|r  |  Avg Time: |cFFFFFFFF%s|r  | Success: |cFFFFFFFF%.1f%%|r",
+        FormatTime(stats.totalTime), FormatTime(avgTime), successRate))
+
+    -- Row 3: Deaths
+    row3:SetText(string.format("Total Deaths: |cFFFFFFFF%d|r (Group) / |cFFFFFFFF%d|r (You)", stats.totalGroupDeaths,
+        stats.totalPlayerDeaths))
+
+    -- Composition
+    local function GetTop(t)
+        local sorted = {}
+        for k, v in pairs(t) do table.insert(sorted, { k = k, v = v }) end
+        table.sort(sorted, function(a, b) return a.v > b.v end)
+        return sorted
+    end
+
+    local cText = "|cFFFFD700Composition:|r\n"
+    local function AddRole(label, data, color)
+        local top = GetTop(data)
+        if #top > 0 then
+            cText = cText .. color .. label .. "|r: "
+            for i = 1, math.min(3, #top) do
+                local clsWithColor = top[i].k
+                -- Try to color class names if strictly standard casing
+                if RAID_CLASS_COLORS and RAID_CLASS_COLORS[clsWithColor:upper()] then
+                    local c = RAID_CLASS_COLORS[clsWithColor:upper()]
+                    clsWithColor = string.format("|c%s%s|r", c.colorStr, clsWithColor)
+                end
+                cText = cText .. clsWithColor .. "(" .. top[i].v .. ") "
+            end
+            cText = cText .. "\n"
+        end
+    end
+
+    if stats.composition then
+        AddRole("Tank", stats.composition.tank or {}, "|cFFC79C6E")
+        AddRole("Healer", stats.composition.healer or {}, "|cFFF58CBA")
+        AddRole("DPS", stats.composition.dps or {}, "|cFFFF3F40")
+    end
+    compT:SetText(cText)
+
+    -- Loot
+    local lText = "|cFFFFD700Loot:|r\n"
+    if stats.loot then
+        local sortedLoot = GetTop(stats.loot)
+        local count = 0
+        for i = 1, #sortedLoot do
+            if count >= 4 then break end
+            local itemKey = sortedLoot[i].k
+            local num = sortedLoot[i].v
+            local name, link, quality, _, _, _, _, _, _, icon = GetItemInfo(itemKey)
+
+            -- If we have a link, use it (it has color). If not, queue a request (implicit in GetItemInfo) and show ID.
+            if link then
+                lText = lText .. link .. " x" .. num .. "\n"
+                count = count + 1
+            elseif name then
+                local color = ITEM_QUALITY_COLORS[quality] and ITEM_QUALITY_COLORS[quality].hex or "|cFFFFFFFF"
+                lText = lText .. color .. name .. "|r x" .. num .. "\n"
+                count = count + 1
+            else
+                -- Item info not ready? Skip or show ID?
+                -- Better to show nothing than ugly ID for "Fun Stats" usually, but user wants data.
+                -- We'll skip unknown items to keep it clean, assuming cache eventually fills.
+            end
+        end
+        if count == 0 and #sortedLoot > 0 then
+            lText = lText .. "(Loading items...)"
+        elseif #sortedLoot == 0 then
+            lText = lText .. "None"
+        end
+    end
+    lootT:SetText(lText)
+end
+
 local function UpdateDetailsContent(panel, mapId)
     UpdateDetailsRuns(panel, mapId)
+    UpdateDetailsStats(panel, mapId)
+
     ---@cast panel TwichUI_MythicPlus_DungeonsPanel
     mapId = tonumber(mapId)
 
@@ -1775,6 +1880,7 @@ local function UpdateDetails(panel, mapId)
     mapId = tonumber(mapId)
     local header = panel.__twichuiDetailsHeader
     local runs = panel.__twichuiDetailsRuns and panel.__twichuiDetailsRuns.frame
+    local stats = panel.__twichuiDetailsStats and panel.__twichuiDetailsStats.frame
 
     -- If missing frames or UIFrameFadeOut, or first load, just update
     if not header or not runs or not UIFrameFadeOut or not panel.__twichuiLastDisplayedMapId then
@@ -1793,12 +1899,14 @@ local function UpdateDetails(panel, mapId)
     -- Fade out
     UIFrameFadeOut(header, 0.15, header:GetAlpha(), 0)
     UIFrameFadeOut(runs, 0.15, runs:GetAlpha(), 0)
+    if stats then UIFrameFadeOut(stats, 0.15, stats:GetAlpha(), 0) end
 
     C_Timer.After(0.15, function()
         if panel.__twichuiSelectedMapId ~= mapId then return end
         UpdateDetailsContent(panel, mapId)
         UIFrameFadeIn(header, 0.15, 0, 1)
         UIFrameFadeIn(runs, 0.15, 0, 1)
+        if stats then UIFrameFadeIn(stats, 0.15, 0, 1) end
     end)
 end
 
@@ -2433,9 +2541,44 @@ local function CreateDungeonsPanel(parent)
         mdtButton:Hide()
     end
 
+    -- Stats Container (Fun Data)
+    local statsContainer = CreateFrame("Frame", nil, right)
+    statsContainer:SetHeight(130)
+    statsContainer:SetPoint("TOPLEFT", detailsHeader, "BOTTOMLEFT", 0, -6)
+    statsContainer:SetPoint("TOPRIGHT", right, "TOPRIGHT", 0, -6)
+
+    local function CreateStatLine(parent, y)
+        local fs = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        fs:SetPoint("TOPLEFT", parent, "TOPLEFT", 10, y)
+        fs:SetPoint("RIGHT", parent, "RIGHT", -10, 0)
+        fs:SetJustifyH("LEFT")
+        return fs
+    end
+
+    panel.__twichuiDetailsStats = {
+        frame = statsContainer,
+        row1 = CreateStatLine(statsContainer, -10),
+        row2 = CreateStatLine(statsContainer, -26),
+        row3 = CreateStatLine(statsContainer, -42),
+        compText = statsContainer:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall"),
+        lootText = statsContainer:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall"),
+    }
+
+    panel.__twichuiDetailsStats.compText:SetPoint("TOPLEFT", statsContainer, "TOPLEFT", 10, -60)
+    panel.__twichuiDetailsStats.compText:SetWidth(200)
+    panel.__twichuiDetailsStats.compText:SetJustifyH("LEFT")
+    panel.__twichuiDetailsStats.compText:SetJustifyV("TOP")
+    panel.__twichuiDetailsStats.compText:SetHeight(60)
+
+    panel.__twichuiDetailsStats.lootText:SetPoint("TOPLEFT", panel.__twichuiDetailsStats.compText, "TOPRIGHT", 10, 0)
+    panel.__twichuiDetailsStats.lootText:SetPoint("TOPRIGHT", statsContainer, "TOPRIGHT", -10, -60)
+    panel.__twichuiDetailsStats.lootText:SetJustifyH("LEFT")
+    panel.__twichuiDetailsStats.lootText:SetJustifyV("TOP")
+    panel.__twichuiDetailsStats.lootText:SetHeight(60)
+
     -- Runs Table Container
     local runsContainer = CreateFrame("Frame", nil, right)
-    runsContainer:SetPoint("TOPLEFT", detailsHeader, "BOTTOMLEFT", 0, -16)
+    runsContainer:SetPoint("TOPLEFT", statsContainer, "BOTTOMLEFT", 0, -10)
     runsContainer:SetPoint("BOTTOMRIGHT", right, "BOTTOMRIGHT", 0, 0)
 
     -- Headers

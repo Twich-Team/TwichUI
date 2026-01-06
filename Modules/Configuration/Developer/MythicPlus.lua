@@ -139,30 +139,38 @@ function DMP:Create(order)
                                     end
 
                                     local mapIds = {}
-                                    local C_MythicPlus = _G.C_MythicPlus
-                                    local C_ChallengeMode = _G.C_ChallengeMode
 
-                                    if C_MythicPlus and C_MythicPlus.GetCurrentSeason and C_MythicPlus.GetSeasonMaps then
-                                        local seasonId = C_MythicPlus.GetCurrentSeason()
-                                        local maps = seasonId and C_MythicPlus.GetSeasonMaps(seasonId)
-                                        if maps then
-                                            for _, id in ipairs(maps) do
-                                                table.insert(mapIds, id)
+                                    if C_MythicPlus and type(C_MythicPlus.GetCurrentSeason) == "function" and type(C_MythicPlus.GetSeasonMaps) == "function" then
+                                        local okS, seasonID = pcall(C_MythicPlus.GetCurrentSeason)
+                                        seasonID = okS and tonumber(seasonID) or nil
+                                        if seasonID then
+                                            local okM, maps = pcall(C_MythicPlus.GetSeasonMaps, seasonID)
+                                            if okM and type(maps) == "table" then
+                                                for _, id in ipairs(maps) do
+                                                    id = tonumber(id)
+                                                    if id then table.insert(mapIds, id) end
+                                                end
                                             end
                                         end
                                     end
 
-                                    if #mapIds == 0 and C_ChallengeMode and C_ChallengeMode.GetMapTable then
-                                        local maps = C_ChallengeMode.GetMapTable()
-                                        if maps then
+                                    local C_ChallengeMode = _G.C_ChallengeMode
+
+                                    -- Fallback: Use Challenge Mode map list if season API fails (matches what Print Current Season Map IDs does)
+                                    if #mapIds == 0 and C_ChallengeMode and type(C_ChallengeMode.GetMapTable) == "function" then
+                                        local okT, maps = pcall(C_ChallengeMode.GetMapTable)
+                                        if okT and type(maps) == "table" then
                                             for _, id in ipairs(maps) do
-                                                table.insert(mapIds, id)
+                                                id = tonumber(id)
+                                                if id then table.insert(mapIds, id) end
                                             end
                                         end
                                     end
 
                                     if #mapIds == 0 then
-                                        mapIds = { 375, 376, 377, 378, 379, 380, 381, 382 } -- Fallback
+                                        Logger.Warn(
+                                        "Could not determine current season maps via API. Using fallback list for testing.")
+                                        mapIds = { 375, 376, 377, 378, 379, 380, 381, 382 } -- Fallback (Shadowlands IDs, some active in TWW)
                                     end
 
                                     local mapId = mapIds[math.random(#mapIds)]
@@ -170,6 +178,12 @@ function DMP:Create(order)
                                     local duration = math.random(1200, 2400)
                                     local score = math.random(100, 300)
                                     local upgrade = math.random(0, 3)
+
+                                    local classes = {
+                                        tank = { "Protection Paladin", "Blood Death Knight", "Vengeance Demon Hunter", "Guardian Druid", "Brewmaster Monk", "Protection Warrior" },
+                                        healer = { "Restoration Druid", "Holy Paladin", "Preservation Evoker", "Mistweaver Monk", "Holy Priest", "Discipline Priest", "Restoration Shaman" },
+                                        dps = { "Frost Mage", "Havoc Demon Hunter", "Augmentation Evoker", "Retribution Paladin", "Shadow Priest", "Enhancement Shaman", "Balance Druid", "Fury Warrior" }
+                                    }
 
                                     local run = {
                                         timestamp = _G.time(),
@@ -182,13 +196,18 @@ function DMP:Create(order)
                                         onTime = upgrade > 0,
                                         affixes = { 9, 10 }, -- Tyrannical, etc.
                                         group = {
-                                            tank = "Protection Paladin",
-                                            healer = "Restoration Druid",
-                                            dps1 = "Frost Mage",
-                                            dps2 = "Havoc Demon Hunter",
-                                            dps3 = "Augmentation Evoker",
+                                            { role = "tank",   class = classes.tank[math.random(#classes.tank)],     name = "Tank" },
+                                            { role = "healer", class = classes.healer[math.random(#classes.healer)], name = "Healer" },
+                                            { role = "dps",    class = classes.dps[math.random(#classes.dps)],       name = "DPS1" },
+                                            { role = "dps",    class = classes.dps[math.random(#classes.dps)],       name = "DPS2" },
+                                            { role = "dps",    class = classes.dps[math.random(#classes.dps)],       name = "DPS3" },
                                         },
-                                        loot = {}
+                                        loot = {
+                                            -- Simulate some loot
+                                            { itemId = 19019, quantity = 1, link = "|cffa335ee|Hitem:19019::::::::80:::::|h[Thunderfury, Blessed Blade of the Windseeker]|h|r" }
+                                        },
+                                        playerDeaths = math.random(0, 5),
+                                        deaths = math.random(0, 20),
                                     }
 
                                     mp.Database:AddRun(run)
@@ -203,6 +222,98 @@ function DMP:Create(order)
                                     end
                                 end
                             },
+                        }
+                    },
+
+                    generateStatsGrp = {
+                        type = "group",
+                        inline = true,
+                        name = "Fun Data Generation",
+                        order = 1.6,
+                        args = {
+                            descStats = CM.Widgets:ComponentDescription(1,
+                                "Rapidly populate the 'Fun Data' aggregates with random stats without creating individual run entries."),
+                            genStats = {
+                                type = "execute",
+                                name = "Generate Random Stats",
+                                desc = "Adds 50 random runs worth of aggregate data to a random map's stats.",
+                                order = 2,
+                                func = function()
+                                    local mp = GetModule()
+                                    if not mp or not mp.Database then return end
+
+                                    local mapIds = {}
+
+                                    if C_MythicPlus and type(C_MythicPlus.GetCurrentSeason) == "function" and type(C_MythicPlus.GetSeasonMaps) == "function" then
+                                        local okS, seasonID = pcall(C_MythicPlus.GetCurrentSeason)
+                                        seasonID = okS and tonumber(seasonID) or nil
+                                        if seasonID then
+                                            local okM, maps = pcall(C_MythicPlus.GetSeasonMaps, seasonID)
+                                            if okM and type(maps) == "table" then
+                                                for _, id in ipairs(maps) do
+                                                    id = tonumber(id)
+                                                    if id then table.insert(mapIds, id) end
+                                                end
+                                            end
+                                        end
+                                    end
+
+                                    local C_ChallengeMode = _G.C_ChallengeMode
+
+                                    if #mapIds == 0 and C_ChallengeMode and type(C_ChallengeMode.GetMapTable) == "function" then
+                                        local okT, maps = pcall(C_ChallengeMode.GetMapTable)
+                                        if okT and type(maps) == "table" then
+                                            for _, id in ipairs(maps) do
+                                                id = tonumber(id)
+                                                if id then table.insert(mapIds, id) end
+                                            end
+                                        end
+                                    end
+
+                                    if #mapIds == 0 then
+                                        Logger.Warn(
+                                        "Could not determine current season maps. Using fallback list for test stats.")
+                                        mapIds = { 375, 376, 377, 378, 379, 380, 381, 382 }
+                                    end
+
+                                    local mapId = mapIds[math.random(#mapIds)]
+                                    local classes = {
+                                        tank = { "Protection Paladin", "Blood Death Knight", "Vengeance Demon Hunter", "Guardian Druid", "Brewmaster Monk", "Protection Warrior" },
+                                        healer = { "Restoration Druid", "Holy Paladin", "Preservation Evoker", "Mistweaver Monk", "Holy Priest", "Discipline Priest", "Restoration Shaman" },
+                                        dps = { "Frost Mage", "Havoc Demon Hunter", "Augmentation Evoker", "Retribution Paladin", "Shadow Priest", "Enhancement Shaman", "Balance Druid", "Fury Warrior" }
+                                    }
+
+                                    for i = 1, 50 do
+                                        local isComplete = math.random() > 0.1
+                                        local runTime = math.random(1000, 3000)
+                                        local lootTable = {}
+                                        if isComplete and math.random() > 0.3 then
+                                            local itemId = 19019
+                                            lootTable["item:" .. itemId] = 1
+                                        end
+
+                                        local comp = { tank = {}, healer = {}, dps = {} }
+                                        comp.tank[classes.tank[math.random(#classes.tank)]] = 1
+                                        comp.healer[classes.healer[math.random(#classes.healer)]] = 1
+                                        comp.dps[classes.dps[math.random(#classes.dps)]] = 1
+                                        comp.dps[classes.dps[math.random(#classes.dps)]] = 1
+                                        comp.dps[classes.dps[math.random(#classes.dps)]] = 1
+
+                                        local update = {
+                                            isRun = true,
+                                            completed = isComplete,
+                                            abandoned = not isComplete,
+                                            time = isComplete and runTime or nil,
+                                            groupDeaths = math.random(0, 10),
+                                            playerDeaths = math.random(0, 2),
+                                            loot = lootTable,
+                                            composition = comp
+                                        }
+                                        mp.Database:UpdateDungeonStats(mapId, update)
+                                    end
+                                    Logger.Info("Generated 50 random stats for map " .. mapId)
+                                end
+                            }
                         }
                     },
 
@@ -956,7 +1067,7 @@ function DMP:Create(order)
 
                                     if #ids == 0 then
                                         Logger.Error(
-                                        "No Mythic+ mapIDs found (C_ChallengeMode/C_MythicPlus APIs unavailable).")
+                                            "No Mythic+ mapIDs found (C_ChallengeMode/C_MythicPlus APIs unavailable).")
                                         return
                                     end
 

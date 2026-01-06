@@ -47,6 +47,18 @@ MythicPlusModule.Database = Database
 ---@field Metadata MythicPlusDatabase_CharacterEntry_Metadata
 ---@field KeystoneData MythicPlusDatabase_CharacterEntry_Keystone
 ---@field Runs MythicPlusDatabase_RunEntry[]
+---@field DungeonStats table<number, MythicPlusDatabase_DungeonStats>
+
+---@class MythicPlusDatabase_DungeonStats
+---@field mapId number
+---@field totalTime number
+---@field runs number
+---@field completes number
+---@field abandons number
+---@field totalPlayerDeaths number
+---@field totalGroupDeaths number
+---@field loot table<string, number> itemId or link -> count
+---@field composition table<string, table<string, number>> role -> class -> count
 
 
 ---@class MythicPlusDatabase
@@ -189,6 +201,7 @@ local function InitCurrentCharacter(guid)
             -- to be filled later
         },
         Runs = {},
+        DungeonStats = {},
     }
 end
 
@@ -198,6 +211,10 @@ function Database:GetForCurrentCharacter()
 
     if not db[playerGUID] then
         InitCurrentCharacter(playerGUID)
+    end
+    -- Ensure stats table exists for existing chars
+    if not db[playerGUID].DungeonStats then
+        db[playerGUID].DungeonStats = {}
     end
     return db[playerGUID]
 end
@@ -228,6 +245,10 @@ function Database:AddRun(runData)
     table.insert(charDB.Runs, 1, runData) -- Insert at top
     Logger.Info("Added new Mythic+ run to database: " ..
         tostring(runData.mapId) .. " (+" .. tostring(runData.level) .. ")")
+
+    if not runData.importedFromBlizzard then
+        self:UpdateDungeonStatsFromRun(runData)
+    end
 end
 
 function Database:DeleteRun(runId)
@@ -648,4 +669,109 @@ function Database:SyncRunsFromBlizzard(opts)
     end
 
     return { imported = imported, updated = updated, matched = matched, scanned = #history }
+end
+
+function Database:RecordAbandon(mapId, time, deaths, playerDeaths)
+    self:UpdateDungeonStats(mapId, {
+        isRun = true,
+        abandoned = true,
+        time = time,
+        groupDeaths = deaths,
+        playerDeaths = playerDeaths
+    })
+end
+
+function Database:UpdateDungeonStatsFromRun(run)
+    if not run or not run.mapId then return end
+
+    local comp = { tank = {}, healer = {}, dps = {} }
+    if run.group then
+        for _, member in pairs(run.group) do
+            local role = member.role and member.role:lower()
+            local cls = member.class
+            if role and cls and (role == "tank" or role == "healer" or role == "dps" or role == "damager") then
+                if role == "damager" then role = "dps" end
+                local t = comp[role]
+                t[cls] = (t[cls] or 0) + 1
+            end
+        end
+    end
+
+    local lootCounts = {}
+    if run.loot then
+        for _, item in ipairs(run.loot) do
+            if item.itemId then
+                local k = "item:" .. item.itemId
+                lootCounts[k] = (lootCounts[k] or 0) + (item.quantity or 1)
+            end
+        end
+    end
+
+    local update = {
+        isRun = true,
+        -- If it's being added via AddRun, it's typically a completion.
+        completed = true,
+        time = run.time,
+        groupDeaths = run.deaths,
+        playerDeaths = run.playerDeaths,
+        loot = lootCounts,
+        composition = comp
+    }
+
+    self:UpdateDungeonStats(run.mapId, update)
+end
+
+function Database:UpdateDungeonStats(mapId, data)
+    mapId = tonumber(mapId)
+    if not mapId then return end
+    local charDB = self:GetForCurrentCharacter()
+    if not charDB.DungeonStats then charDB.DungeonStats = {} end
+
+    local stats = charDB.DungeonStats[mapId]
+    if not stats then
+        stats = {
+            mapId = mapId,
+            totalTime = 0,
+            runs = 0,
+            completes = 0,
+            abandons = 0,
+            totalPlayerDeaths = 0,
+            totalGroupDeaths = 0,
+            loot = {},
+            composition = {
+                tank = {},
+                healer = {},
+                dps = {},
+            }
+        }
+        charDB.DungeonStats[mapId] = stats
+    end
+
+    if data.isRun then stats.runs = (stats.runs or 0) + 1 end
+    if data.completed then stats.completes = (stats.completes or 0) + 1 end
+    if data.abandoned then stats.abandons = (stats.abandons or 0) + 1 end
+    if data.time then stats.totalTime = (stats.totalTime or 0) + data.time end
+    if data.playerDeaths then stats.totalPlayerDeaths = (stats.totalPlayerDeaths or 0) + data.playerDeaths end
+    if data.groupDeaths then stats.totalGroupDeaths = (stats.totalGroupDeaths or 0) + data.groupDeaths end
+
+    if data.loot then
+        stats.loot = stats.loot or {}
+        for item, count in pairs(data.loot) do
+            stats.loot[item] = (stats.loot[item] or 0) + count
+        end
+    end
+
+    if data.composition then
+        stats.composition = stats.composition or {}
+        for role, classes in pairs(data.composition) do
+            local roleT = stats.composition[role]
+            if not roleT then
+                roleT = {}
+                stats.composition[role] = roleT
+            end
+            for cls, count in pairs(classes) do
+                roleT[cls] = (roleT[cls] or 0) + count
+            end
+        end
+    end
 end

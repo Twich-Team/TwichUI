@@ -481,7 +481,7 @@ end
 ---@return boolean
 local function IsInspectAvailable()
     return type(NotifyInspect) == "function" and type(GetInspectSpecialization) == "function" and
-    type(UnitGUID) == "function"
+        type(UnitGUID) == "function"
 end
 
 ---@return boolean
@@ -777,6 +777,16 @@ local function FinalizeSession(reason)
 
     if not DungeonSession.completed or type(DungeonSession.completion) ~= "table" then
         Logger.Debug("DataCollector: Ending session without completion (" .. tostring(reason) .. ")")
+
+        if DungeonSession.startUnix then
+            local now = time()
+            local elapsed = now - DungeonSession.startUnix
+            -- Only count as legit abandon if it lasted at least 1 minute
+            if elapsed > 60 then
+                Database:RecordAbandon(DungeonSession.mapID, elapsed, DungeonSession.deaths, DungeonSession.playerDeaths)
+            end
+        end
+
         DungeonSession = nil
         Database:ResetDungeonSession()
         return
@@ -832,6 +842,7 @@ local function FinalizeSession(reason)
         time = timeSec,
         onTime = onTime,
         deaths = deaths,
+        playerDeaths = DungeonSession.playerDeaths or 0,
         upgrade = upgrade,
         groupStart = DungeonSession.groupStart,
         groupStartRoster = DungeonSession.groupStartRoster,
@@ -913,6 +924,7 @@ function DataCollector:Enable()
                 level = level,
                 affixes = affixes,
                 deaths = 0,
+                playerDeaths = 0,
                 group = BuildGroupMap(),
                 groupStart = nil,
                 groupRoster = BuildGroupRosterFromLive(),
@@ -1068,6 +1080,15 @@ function DataCollector:Enable()
             end
 
             DungeonSession.deaths = tonumber(count) or DungeonSession.deaths or 0
+            PersistSession()
+            return
+        end
+
+        if eventName == "PLAYER_DEAD" then
+            if not DungeonSession then return end
+            -- Only track if it's the local player reporting "PLAYER_DEAD" (which fires for self only usually, unless using COMBAT_LOG_EVENT)
+            -- Standard API PLAYER_DEAD fires when the player dies.
+            DungeonSession.playerDeaths = (DungeonSession.playerDeaths or 0) + 1
             PersistSession()
             return
         end
@@ -1269,6 +1290,14 @@ function DataCollector:Enable()
         if eventName == "CHALLENGE_MODE_RESET" then
             if not DungeonSession then return end
             Logger.Debug("Mythic+ dungeon reset/aborted, ending session")
+
+            local now = time()
+            local elapsed = now - (DungeonSession.startUnix or now)
+            if elapsed < 0 then elapsed = 0 end
+            if elapsed > 60 then
+                Database:RecordAbandon(DungeonSession.mapID, elapsed, DungeonSession.deaths, DungeonSession.playerDeaths)
+            end
+
             DungeonSession = nil
             PendingGroupSnapshot = nil
             Database:ResetDungeonSession()

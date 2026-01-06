@@ -67,7 +67,8 @@
     "UIDropDownMenu_JustifyText",
     "ToggleDropDownMenu",
     "SOUNDKIT",
-    "STANDARD_TEXT_FONT"
+    "STANDARD_TEXT_FONT",
+    "ITEM_QUALITY_COLORS"
 ],
   "Lua.type.weakUnionCheck": true,
   "Lua.diagnostics.disable": ["assign-type-mismatch"],
