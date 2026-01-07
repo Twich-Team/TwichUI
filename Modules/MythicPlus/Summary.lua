@@ -73,6 +73,9 @@ end
 
 local function GetCurrentWeeklyAffixes()
     local C_MythicPlus = _G.C_MythicPlus
+    if C_MythicPlus and type(C_MythicPlus.RequestCurrentAffixes) == "function" then
+        pcall(C_MythicPlus.RequestCurrentAffixes)
+    end
     if C_MythicPlus and type(C_MythicPlus.GetCurrentAffixes) == "function" then
         local ok, affixes = pcall(C_MythicPlus.GetCurrentAffixes)
         if ok and type(affixes) == "table" then
@@ -1417,11 +1420,9 @@ local function ForceModelVisible(model)
 end
 
 local function ApplyModelLighting(model)
-    if not model or type(model.SetLight) ~= "function" then return end
-
-    -- Prefer Blizzard default lighting; custom SetLight has been causing "washed out"/"too dark"
-    -- results depending on zone/UI scale. Best-effort reset.
-    pcall(function() model:SetLight(false) end)
+    -- On some client builds, calling SetLight with the wrong signature can hard-crash the game
+    -- (assertion failure inside the Lua C API). We prefer Blizzard default lighting anyway.
+    return
 end
 
 local function ApplyKeyMasterCamera(model)
@@ -2182,6 +2183,8 @@ function Summary:_EnableEvents(panel)
     panel:RegisterEvent("CHALLENGE_MODE_MAPS_UPDATE")
     panel:RegisterEvent("CHALLENGE_MODE_COMPLETED")
     panel:RegisterEvent("WEEKLY_REWARDS_UPDATE")
+    -- Fires when C_MythicPlus.GetCurrentAffixes() is updated.
+    panel:RegisterEvent("MYTHIC_PLUS_CURRENT_AFFIX_UPDATE")
     panel:RegisterEvent("UNIT_MODEL_CHANGED")
     panel:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
 end

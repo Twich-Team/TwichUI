@@ -971,9 +971,8 @@ function ScoreSimulator:CreateSimulatorFrame(parent, window)
         end
 
         local overall = GetOverallScore()
-        if not overall or overall <= 0 then
-            return nil, "Overall score not available"
-        end
+        -- Treat missing score as 0 so new characters (or unavailable APIs) don't show an error.
+        overall = tonumber(overall) or 0
 
         local needed = Round0(desiredTotal - overall)
         if needed <= 0 then
