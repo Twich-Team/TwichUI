@@ -48,6 +48,9 @@ MythicPlusModule.MainWindow = MainWindow
 ---@field id string
 ---@field label string|nil
 ---@field order number|nil
+---@field icon string|nil
+---@field iconCoords number[]|nil
+---@field iconSize number[]|nil
 ---@field factory fun(parent:Frame, window:MythicPlusMainWindow):Frame
 ---@field frame Frame|nil
 ---@field onShow fun(panelFrame:Frame, window:MythicPlusMainWindow)|nil
@@ -308,7 +311,7 @@ end
 ---@param factory fun(parent:Frame, window:MythicPlusMainWindow):Frame
 ---@param onShow fun(panelFrame:Frame, window:MythicPlusMainWindow)|nil
 ---@param onHide fun(panelFrame:Frame, window:MythicPlusMainWindow)|nil
----@param opts table|nil { label?:string, order?:number }
+---@param opts table|nil { label?:string, order?:number, icon?:string, iconCoords?:table, iconSize?:table }
 function MainWindow:RegisterPanel(id, factory, onShow, onHide, opts)
     if type(id) ~= "string" or id == "" then
         return false
@@ -336,6 +339,9 @@ function MainWindow:RegisterPanel(id, factory, onShow, onHide, opts)
         end
         if type(opts.iconCoords) == "table" then
             panel.iconCoords = opts.iconCoords
+        end
+        if type(opts.iconSize) == "table" and type(opts.iconSize[1]) == "number" and type(opts.iconSize[2]) == "number" then
+            panel.iconSize = { opts.iconSize[1], opts.iconSize[2] }
         end
     end
     panel.factory = factory
@@ -1015,7 +1021,11 @@ function MainWindow:RefreshNav()
                 end
 
                 if panel.icon then
-                    btn.NavIcon:SetSize(24, 24)
+                    if panel.iconSize and type(panel.iconSize[1]) == "number" and type(panel.iconSize[2]) == "number" then
+                        btn.NavIcon:SetSize(panel.iconSize[1], panel.iconSize[2])
+                    else
+                        btn.NavIcon:SetSize(24, 24)
+                    end
                     btn.NavIcon:SetTexture(panel.icon)
                     if panel.iconCoords then
                         btn.NavIcon:SetTexCoord(unpack(panel.iconCoords))
