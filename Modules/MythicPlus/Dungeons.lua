@@ -2115,11 +2115,15 @@ ShowDetailsPopup = function(mapId)
                         foundColor = RAID_CLASS_COLORS[normalizedCls]
                     else
                         -- 2. Suffix match (e.g. "HAVOCDEMONHUNTER" ends with "DEMONHUNTER")
+                        -- Prioritize longest match (e.g. preventing "DEMONHUNTER" from being caught by "HUNTER")
+                        local bestLen = 0
                         for classKey, color in pairs(RAID_CLASS_COLORS) do
                             local len = #classKey
                             if normalizedCls:sub(-len) == classKey then
-                                foundColor = color
-                                break
+                                if len > bestLen then
+                                    foundColor = color
+                                    bestLen = len
+                                end
                             end
                         end
                     end

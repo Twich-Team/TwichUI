@@ -19,6 +19,7 @@ local CreateFrame = _G.CreateFrame
 --- @field RunSharingFrame MythicPlusRunSharingFrameSubmodule|nil
 --- @field Runs MythicPlusRunsSubmodule|nil
 --- @field Summary MythicPlusSummarySubmodule|nil
+--- @field ScoreSimulator MythicPlusScoreSimulatorSubmodule|nil
 --- @field BestInSlotNotificationFrame BestInSlotNotificationFrame|nil
 --- @field BestInSlotNotificationHandler BestInSlotNotificationHandler|nil
 local MythicPlusModule = T:GetModule("MythicPlus")
@@ -104,6 +105,10 @@ function MythicPlusModule:Enable()
 
     if self.Summary and self.Summary.Initialize then
         self.Summary:Initialize()
+    end
+
+    if self.ScoreSimulator and self.ScoreSimulator.Initialize then
+        self.ScoreSimulator:Initialize()
     end
 
     if self.DungeonMonitor and self.DungeonMonitor.Enable then

@@ -99,4 +99,13 @@ function UI.SkinButton(btn)
     end
 end
 
+---@param frame Frame|nil
+---@param width number|nil
+function UI.SkinDropDown(frame, width)
+    local skins = UI.GetElvUISkins()
+    if skins and skins.HandleDropDownBox and frame then
+        pcall(skins.HandleDropDownBox, skins, frame, width)
+    end
+end
+
 return UI
