@@ -8,6 +8,8 @@ local MythicPlusModule = T:GetModule("MythicPlus")
 local CM = T:GetModule("Configuration")
 ---@type ToolsModule
 local TM = T:GetModule("Tools")
+---@type DataModule
+local Data = T:GetModule("Data")
 
 local CreateFrame = _G.CreateFrame
 local CreateVector3D = _G.CreateVector3D
@@ -1734,6 +1736,58 @@ local function ForcePanelVisible(panel)
     end
 end
 
+local function UpdateSeasonPortals(panel)
+    if not panel or not panel.__twichuiPortalsWrap then return end
+
+    local mapIDs = _G.C_ChallengeMode.GetMapTable() or {}
+    local total = 0
+    local unlocked = 0
+    local missing = {}
+
+    local dungeonPortals = Data.DungeonPortals
+    local debugState
+    if MythicPlusModule and MythicPlusModule.Summary then
+        debugState = MythicPlusModule.Summary.DebugPortals
+    end
+
+    for _, mapId in ipairs(mapIDs) do
+        local data = dungeonPortals and dungeonPortals:GetByMapId(mapId)
+        if data and data.spellId then
+            total = total + 1
+            local known = _G.IsSpellKnown(data.spellId)
+
+            if debugState then
+                if debugState.unlockAll then
+                    known = true
+                elseif debugState.lockAll then
+                    known = false
+                elseif debugState[data.spellId] ~= nil then
+                    known = debugState[data.spellId]
+                end
+            end
+
+            if known then
+                unlocked = unlocked + 1
+            else
+                local mapName = _G.C_ChallengeMode.GetMapUIInfo(mapId)
+                table.insert(missing, mapName or ("Map " .. mapId))
+            end
+        end
+    end
+
+    panel.__twichuiPortalsWrap:Show()
+    if panel.__twichuiPortalsBar then
+        panel.__twichuiPortalsBar:SetMinMaxValues(0, total > 0 and total or 1)
+        panel.__twichuiPortalsBar:SetValue(unlocked)
+    end
+    if panel.__twichuiPortalsText then
+        panel.__twichuiPortalsText:SetText(string.format("%d / %d Unlocked", unlocked, total))
+    end
+
+    panel.__twichuiMissingPortals = missing
+end
+
+
 --- @class MythicPlusSummarySubmodule
 local Summary = MythicPlusModule.Summary or {}
 MythicPlusModule.Summary = Summary
@@ -1779,6 +1833,7 @@ function Summary:Refresh(panel)
     end
 
     UpdateGreatVaultProgress(panel)
+    UpdateSeasonPortals(panel)
 
     do
         local bar = panel.__twichuiSeasonBar
@@ -3048,6 +3103,90 @@ local function CreateSummaryPanel(parent)
 
             row.frame:Hide()
         end
+    end
+
+    -- Portals Section
+    do
+        local portalsWrap = CreateFrame("Frame", nil, panel.__twichuiVaultWrap:GetParent())
+        portalsWrap:SetPoint("TOPLEFT", panel.__twichuiVaultWrap, "TOPRIGHT", 12, 0)
+        -- Compact height for portal bar
+        portalsWrap:SetSize(270, 70)
+        portalsWrap:Hide()
+        panel.__twichuiPortalsWrap = portalsWrap
+
+        local pad = 8
+
+        -- Background
+        local bg = portalsWrap:CreateTexture(nil, "BACKGROUND")
+        bg:SetAllPoints()
+        local r, g, b = HexToRGB(CT.TWICH.PANEL_BG)
+        bg:SetColorTexture(r, g, b, 0.18)
+
+        -- Border
+        do
+            local br, bg, bb = HexToRGB(CT.TWICH.TEXT_MUTED)
+            local a = 0.35
+            local t = 1
+            local top = portalsWrap:CreateTexture(nil, "BORDER"); top:SetPoint("TOPLEFT"); top:SetPoint("TOPRIGHT"); top
+                :SetHeight(t); top:SetColorTexture(br, bg, bb, a)
+            local bottom = portalsWrap:CreateTexture(nil, "BORDER"); bottom:SetPoint("BOTTOMLEFT"); bottom:SetPoint(
+                "BOTTOMRIGHT"); bottom:SetHeight(t); bottom:SetColorTexture(br, bg, bb, a)
+            local left = portalsWrap:CreateTexture(nil, "BORDER"); left:SetPoint("TOPLEFT"); left:SetPoint("BOTTOMLEFT"); left
+                :SetWidth(t); left:SetColorTexture(br, bg, bb, a)
+            local right = portalsWrap:CreateTexture(nil, "BORDER"); right:SetPoint("TOPRIGHT"); right:SetPoint(
+                "BOTTOMRIGHT"); right:SetWidth(t); right:SetColorTexture(br, bg, bb, a)
+        end
+
+        local title = portalsWrap:CreateFontString(nil, "OVERLAY")
+        title:SetPoint("TOPLEFT", portalsWrap, "TOPLEFT", pad, -pad)
+        title:SetJustifyH("LEFT")
+        title:SetFontObject(_G.GameFontNormal)
+        if fontPath and title.SetFont then title:SetFont(fontPath, 17, "OUTLINE") end
+        title:SetText(TT.Color(CT.TWICH.TEXT_PRIMARY, "Dungeon Portals"))
+
+        -- Bar
+        local bar = CreateFrame("StatusBar", nil, portalsWrap)
+        bar:SetHeight(16)
+        -- Anchor TOPLEFT to the title's BOTTOMLEFT to guarantee spacing
+        bar:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -10)
+        -- Stretch to the right edge of the container
+        bar:SetPoint("RIGHT", portalsWrap, "RIGHT", -pad, 0)
+
+        bar:SetStatusBarTexture("Interface\\Buttons\\WHITE8x8")
+        local br, bg, bb = HexToRGB(CT.TWICH.SECONDARY_ACCENT)
+        bar:SetStatusBarColor(br, bg, bb, 1)
+
+        local barBg = bar:CreateTexture(nil, "BACKGROUND")
+        barBg:SetAllPoints()
+        barBg:SetColorTexture(0.2, 0.2, 0.2, 0.5)
+
+        local barText = bar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        barText:SetPoint("CENTER", 0, 0)
+        if fontPath and barText.SetFont then barText:SetFont(fontPath, 13, "OUTLINE") end
+
+        panel.__twichuiPortalsBar = bar
+        panel.__twichuiPortalsText = barText
+
+        portalsWrap:EnableMouse(true)
+        portalsWrap:SetScript("OnEnter", function(self)
+            if not _G.GameTooltip then return end
+            _G.GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            _G.GameTooltip:SetText("Dungeon Portals", 1, 1, 1)
+
+            local missing = panel.__twichuiMissingPortals
+            if missing and #missing > 0 then
+                _G.GameTooltip:AddLine(" ", 1, 1, 1)
+                _G.GameTooltip:AddLine("Locked:", 1, 0.2, 0.2)
+                for _, name in ipairs(missing) do
+                    _G.GameTooltip:AddLine(name, 1, 1, 1)
+                end
+            else
+                _G.GameTooltip:AddLine(" ", 1, 1, 1)
+                _G.GameTooltip:AddLine("All portals unlocked!", 0.2, 1, 0.2)
+            end
+            _G.GameTooltip:Show()
+        end)
+        portalsWrap:SetScript("OnLeave", function() if _G.GameTooltip then _G.GameTooltip:Hide() end end)
     end
 
     panel:SetScript("OnShow", function()

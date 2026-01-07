@@ -169,7 +169,7 @@ function DMP:Create(order)
 
                                     if #mapIds == 0 then
                                         Logger.Warn(
-                                        "Could not determine current season maps via API. Using fallback list for testing.")
+                                            "Could not determine current season maps via API. Using fallback list for testing.")
                                         mapIds = { 375, 376, 377, 378, 379, 380, 381, 382 } -- Fallback (Shadowlands IDs, some active in TWW)
                                     end
 
@@ -272,7 +272,7 @@ function DMP:Create(order)
 
                                     if #mapIds == 0 then
                                         Logger.Warn(
-                                        "Could not determine current season maps. Using fallback list for test stats.")
+                                            "Could not determine current season maps. Using fallback list for test stats.")
                                         mapIds = { 375, 376, 377, 378, 379, 380, 381, 382 }
                                     end
 
@@ -888,6 +888,67 @@ function DMP:Create(order)
                         }
                     },
                 },
+            },
+
+            summaryTab = {
+                type = "group",
+                name = "Summary",
+                order = 4,
+                args = {
+                    portalsGrp = {
+                        type = "group",
+                        name = "Season Portals",
+                        inline = true,
+                        order = 1,
+                        args = {
+                            desc = {
+                                type = "description",
+                                name = "Override portal unlock states to test the Summary progress bar.",
+                                order = 1,
+                            },
+                            unlockAll = {
+                                type = "execute",
+                                name = "Unlock All",
+                                order = 2,
+                                func = function()
+                                    local mp = GetModule()
+                                    if mp and mp.Summary then
+                                        mp.Summary.DebugPortals = {
+                                            unlockAll = true
+                                        }
+                                        RefreshSummaryIfOpen()
+                                    end
+                                end
+                            },
+                            lockAll = {
+                                type = "execute",
+                                name = "Lock All",
+                                order = 3,
+                                func = function()
+                                    local mp = GetModule()
+                                    if mp and mp.Summary then
+                                        mp.Summary.DebugPortals = {
+                                            lockAll = true
+                                        }
+                                        RefreshSummaryIfOpen()
+                                    end
+                                end
+                            },
+                            reset = {
+                                type = "execute",
+                                name = "Reset",
+                                order = 4,
+                                func = function()
+                                    local mp = GetModule()
+                                    if mp and mp.Summary then
+                                        mp.Summary.DebugPortals = nil
+                                        RefreshSummaryIfOpen()
+                                    end
+                                end
+                            }
+                        }
+                    }
+                }
             },
 
             recordDataTab = {

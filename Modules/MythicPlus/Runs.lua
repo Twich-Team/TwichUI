@@ -88,7 +88,7 @@ end
 
 local function GetRunDetailsLabelColor()
     local entry = MythicPlusModule and MythicPlusModule.CONFIGURATION and
-    MythicPlusModule.CONFIGURATION.RUN_DETAILS_LABEL_COLOR
+        MythicPlusModule.CONFIGURATION.RUN_DETAILS_LABEL_COLOR
     local c = entry and CM and CM.GetProfileSettingByConfigEntry and CM:GetProfileSettingByConfigEntry(entry) or nil
     if type(c) == "table" and type(c.r) == "number" and type(c.g) == "number" and type(c.b) == "number" then
         return c.r, c.g, c.b
@@ -192,6 +192,9 @@ local function FormatAffixes(affixes)
 end
 
 local function EnsureRunDetailsFrame(panel)
+    if Runs.DetailsFrame then
+        return Runs.DetailsFrame
+    end
     if panel and panel.__twichuiRunDetailsFrame then
         return panel.__twichuiRunDetailsFrame
     end
@@ -789,14 +792,18 @@ local function EnsureRunDetailsFrame(panel)
     frame:ApplyLabelColors()
 
     frame:SetScript("OnShow", function()
-        if panel and panel.IsShown and not panel:IsShown() then
-            frame:Hide()
+        -- Close if main window is hidden
+        if MythicPlusModule and MythicPlusModule.MainWindow and type(MythicPlusModule.MainWindow.IsShown) == "function" then
+            if not MythicPlusModule.MainWindow:IsShown() then
+                frame:Hide()
+            end
         end
     end)
 
     if panel then
         panel.__twichuiRunDetailsFrame = frame
     end
+    Runs.DetailsFrame = frame
     return frame
 end
 
@@ -869,7 +876,9 @@ local function CreateRunsPanel(parent)
         local text = btn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         text:SetText(col.label)
         text:SetJustifyH(col.justify)
-        text:SetAllPoints(btn)
+        -- Add padding to align with row data
+        text:SetPoint("LEFT", btn, "LEFT", 4, 0)
+        text:SetPoint("RIGHT", btn, "RIGHT", -4, 0)
         btn.Text = text
 
         -- Sorting Logic
@@ -943,9 +952,9 @@ end
 function Runs:ShowDetails(runData)
     local panel = nil
     if MythicPlusModule.MainWindow then
-         panel = MythicPlusModule.MainWindow:GetPanelFrame("runs")
+        panel = MythicPlusModule.MainWindow:GetPanelFrame("runs")
     end
-    
+
     local details = EnsureRunDetailsFrame(panel)
     details:SetRun(runData)
     details:Show()
@@ -1098,8 +1107,9 @@ function Runs:Refresh(panel)
             local xOffset = 0
             for _, col in ipairs(COLUMNS) do
                 local fs = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-                fs:SetPoint("LEFT", row, "LEFT", xOffset, 0)
-                fs:SetWidth(col.width)
+                -- Add padding to align with header
+                fs:SetPoint("LEFT", row, "LEFT", xOffset + 4, 0)
+                fs:SetWidth(col.width - 8)
                 fs:SetJustifyH(col.justify)
                 row.cells[col.key] = fs
                 xOffset = xOffset + col.width + 2

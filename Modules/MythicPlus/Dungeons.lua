@@ -1631,7 +1631,8 @@ UpdateDetailsRuns = function(panel, mapId)
             row.cells = {}
             -- Date
             local date = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-            date:SetPoint("LEFT", row, "LEFT", 0, 0)
+            -- Align with header (Header starts at x=10)
+            date:SetPoint("LEFT", row, "LEFT", 10, 0)
             date:SetWidth(80)
             date:SetJustifyH("LEFT")
             row.cells.date = date
@@ -1688,14 +1689,15 @@ UpdateDetailsRuns = function(panel, mapId)
             row:SetScript("OnMouseUp", function(self, button)
                 if button == "LeftButton" and self.runData then
                     if MythicPlusModule and MythicPlusModule.Runs and MythicPlusModule.Runs.ShowDetails then
-                         MythicPlusModule.Runs:ShowDetails(self.runData)
+                        MythicPlusModule.Runs:ShowDetails(self.runData)
                     else
-                         -- Fallback if exported function is missing
-                         local runsPanel = MythicPlusModule.MainWindow and MythicPlusModule.MainWindow:GetPanelFrame("runs")
-                         if runsPanel then
-                             -- Try to find the local OpenDetails equivalent
-                             -- This requires Runs module to expose it, or we access it via the panel if attached
-                         end
+                        -- Fallback if exported function is missing
+                        local runsPanel = MythicPlusModule.MainWindow and
+                            MythicPlusModule.MainWindow:GetPanelFrame("runs")
+                        if runsPanel then
+                            -- Try to find the local OpenDetails equivalent
+                            -- This requires Runs module to expose it, or we access it via the panel if attached
+                        end
                     end
                 elseif button == "RightButton" and self.runData then
                     -- Rows are reused across dungeon selections; always consult current panel state.
@@ -1741,7 +1743,7 @@ UpdateDetailsRuns = function(panel, mapId)
 end
 
 -- Forward declaration
-local ShowDetailsPopup 
+local ShowDetailsPopup
 
 local function UpdateDetailsStats(panel, mapId)
     local s = panel.__twichuiDetailsStats
@@ -1764,14 +1766,14 @@ local function UpdateDetailsStats(panel, mapId)
         if bestScore and bestScore > 0 then
             local color = nil
             if C_ChallengeMode and C_ChallengeMode.GetDungeonScoreRarityColor then
-               color = C_ChallengeMode.GetDungeonScoreRarityColor(bestScore)
+                color = C_ChallengeMode.GetDungeonScoreRarityColor(bestScore)
             end
-            if not color then color = {r=1, g=1, b=1} end
+            if not color then color = { r = 1, g = 1, b = 1 } end
 
             s.scoreLabel:SetText(bestScore)
             s.scoreLabel:SetTextColor(color.r, color.g, color.b)
         else
-             s.scoreLabel:SetText("")
+            s.scoreLabel:SetText("")
         end
     end
 
@@ -1786,25 +1788,25 @@ local function UpdateDetailsStats(panel, mapId)
         s.timeVal:SetText("0h")
 
         s.detailVal:SetText("0")
-        
+
         -- "Disable" Button visuals and click
         s.detailsBtn:SetScript("OnLeave", nil) -- Clear first
         s.detailsBtn:SetScript("OnEnter", nil) -- Clear first
 
         if s.detailsIcon then
-             s.detailsIcon:SetDesaturated(true)
-             s.detailsIcon:SetVertexColor(1, 1, 1, 1) -- Opaque white, let Desaturated handle the grey look
+            s.detailsIcon:SetDesaturated(true)
+            s.detailsIcon:SetVertexColor(1, 1, 1, 1) -- Opaque white, let Desaturated handle the grey look
         end
         s.detailsBtn:SetScript("OnEnter", function(self)
-             if _G.GameTooltip then
-                  _G.GameTooltip:SetOwner(self, "ANCHOR_TOP")
-                  _G.GameTooltip:SetText("Detailed Statistics", 1, 1, 1)
-                  _G.GameTooltip:AddLine("Complete a run to view detailed statistics.", 1, 1, 1, true)
-                  _G.GameTooltip:Show()
-             end
+            if _G.GameTooltip then
+                _G.GameTooltip:SetOwner(self, "ANCHOR_TOP")
+                _G.GameTooltip:SetText("Detailed Statistics", 1, 1, 1)
+                _G.GameTooltip:AddLine("Complete a run to view detailed statistics.", 1, 1, 1, true)
+                _G.GameTooltip:Show()
+            end
         end)
         s.detailsBtn:SetScript("OnLeave", function(self)
-             if _G.GameTooltip then _G.GameTooltip:Hide() end
+            if _G.GameTooltip then _G.GameTooltip:Hide() end
         end)
         s.detailsBtn:SetScript("OnClick", nil)
 
@@ -1815,8 +1817,8 @@ local function UpdateDetailsStats(panel, mapId)
     s.detailsBtn:SetScript("OnLeave", nil) -- Clear first
     s.detailsBtn:SetScript("OnEnter", nil) -- Clear first
     if s.detailsIcon then
-         s.detailsIcon:SetDesaturated(false)
-         s.detailsIcon:SetVertexColor(0.7, 0.7, 0.7, 1.0) -- Restore full alpha
+        s.detailsIcon:SetDesaturated(false)
+        s.detailsIcon:SetVertexColor(0.7, 0.7, 0.7, 1.0) -- Restore full alpha
     end
     s.detailsBtn:SetScript("OnEnter", function(self)
         if s.detailsIcon then s.detailsIcon:SetVertexColor(1, 1, 1) end
@@ -1851,9 +1853,14 @@ local function UpdateDetailsStats(panel, mapId)
     -- Elapsed = Duration - Remaining = Duration - (Duration - Duration*rate) = Duration * rate.
     -- Start = Now - Elapsed = Now - (Duration * rate).
 
-    local now = GetTime()
-    local duration = 100
-    s.pie:SetCooldown(now - (duration * rate), duration)
+    if rate >= 1 then
+        -- Full success: Clear swipe entirely so the background shines through 100%.
+        s.pie:SetCooldown(0, 0)
+    else
+        local now = GetTime()
+        local duration = 100
+        s.pie:SetCooldown(now - (duration * rate), duration)
+    end
 
     if s.pie.Pause then s.pie:Pause() end
     s.pieText:SetText(string.format("%.0f%%", rate * 100))
@@ -1946,7 +1953,7 @@ ShowDetailsPopup = function(mapId)
                 edgeSize = 1,
                 insets = { left = 0, right = 0, top = 0, bottom = 0 }
             })
-            frame:SetBackdropColor(0.15, 0.15, 0.15, 0.4) -- Dark semi-transparent background for contrast
+            frame:SetBackdropColor(0.15, 0.15, 0.15, 0.4)  -- Dark semi-transparent background for contrast
             frame:SetBackdropBorderColor(0.3, 0.3, 0.3, 1) -- Subtle grey border
         end
 
@@ -2913,7 +2920,7 @@ local function CreateDungeonsPanel(parent)
     detailsIcon:SetAllPoints()
     detailsIcon:SetTexture("Interface\\AddOns\\TwichUI\\Media\\Textures\\dungeon-info.tga")
     detailsIcon:SetTexCoord(0, 1, 0, 1)
-    
+
     -- Initialize to a state that doesn't look like enabled or disabled, it will be updated by UpdateDetailsStats instantly
     detailsIcon:SetVertexColor(1, 1, 1)
     detailsIcon:SetAlpha(1)
@@ -3086,12 +3093,12 @@ local function CreateDungeonsPanel(parent)
     local function CreateStatPair(name, labelText)
         local f = CreateFrame("Frame", nil, dataBlock)
         f:SetSize(80, 60)
-        
+
         local val = f:CreateFontString(nil, "OVERLAY")
         if fontPath and val.SetFont then
-             val:SetFont(fontPath, 20, "OUTLINE")
+            val:SetFont(fontPath, 20, "OUTLINE")
         else
-             val:SetFontObject("GameFontNormalHuge")
+            val:SetFontObject("GameFontNormalHuge")
         end
         -- Center value just above vertical center
         val:SetPoint("BOTTOM", f, "CENTER", 0, 0)
@@ -3123,7 +3130,7 @@ local function CreateDungeonsPanel(parent)
     deathsFrame:SetPoint("RIGHT", dataBlock, "RIGHT", -10, 0)
     -- Justify CENTER strictly on the value object
     if detailVal.SetJustifyH then detailVal:SetJustifyH("CENTER") end
-    
+
     -- Force clear and re-anchor to ensure it stays centered horizontally in its frame
     detailVal:ClearAllPoints()
     detailVal:SetPoint("BOTTOM", deathsFrame, "CENTER", 0, 0)
@@ -3148,7 +3155,7 @@ local function CreateDungeonsPanel(parent)
         pieBg = pieBg,
     }
     local runsContainer = CreateFrame("Frame", nil, right)
-    -- Align gaps: StatsContainer is anchored BOTTOM of Header with -6. 
+    -- Align gaps: StatsContainer is anchored BOTTOM of Header with -6.
     -- We want RunsContainer anchored BOTTOM of Stats with -6.
     runsContainer:SetPoint("TOPLEFT", statsContainer, "BOTTOMLEFT", 0, -6)
     runsContainer:SetPoint("BOTTOMRIGHT", right, "BOTTOMRIGHT", 0, 0)
@@ -3159,7 +3166,7 @@ local function CreateDungeonsPanel(parent)
     headerContainer:SetPoint("TOPLEFT", runsContainer, "TOPLEFT", 1, -1)
     headerContainer:SetPoint("TOPRIGHT", runsContainer, "TOPRIGHT", -1, -1)
     headerContainer:SetHeight(20)
-    
+
     local headerBG = headerContainer:CreateTexture(nil, "BACKGROUND")
     headerBG:SetAllPoints()
     headerBG:SetColorTexture(1, 1, 1, 0.1)
@@ -3207,7 +3214,7 @@ local function CreateDungeonsPanel(parent)
 
     -- Scroll Frame
     local scrollFrame = CreateFrame("ScrollFrame", nil, runsContainer, "UIPanelScrollFrameTemplate")
-    scrollFrame:SetPoint("TOPLEFT", runsContainer, "TOPLEFT", 0, -21) -- Below Header
+    scrollFrame:SetPoint("TOPLEFT", runsContainer, "TOPLEFT", 0, -21)         -- Below Header
     scrollFrame:SetPoint("BOTTOMRIGHT", runsContainer, "BOTTOMRIGHT", -26, 4) -- Adjusted for scrollbar
 
     -- ElvUI scrollbar skinning (best-effort)
