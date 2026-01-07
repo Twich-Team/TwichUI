@@ -355,6 +355,16 @@ function GoblinDataText:LazyLoadGPHCallback()
         ---@type LootMonitorModule
         local LootMonitor = T:GetModule("LootMonitor")
 
+        -- LootMonitor (and therefore GPH tracking) may be disabled while the Goblin datatext is enabled.
+        -- In that case, GPH should safely remain unavailable and show 0 without attempting to register callbacks.
+        if not LootMonitor or not LootMonitor.IsEnabled or not LootMonitor:IsEnabled() then
+            return
+        end
+
+        if not LootMonitor.GoldPerHourTracker or not LootMonitor.GoldPerHourTracker.RegisterCallback then
+            return
+        end
+
         local function CancelPulseTimer()
             if self.gphPulseTimer then
                 self.gphPulseTimer:Cancel()

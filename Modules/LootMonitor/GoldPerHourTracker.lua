@@ -95,10 +95,23 @@ function GPH:IsEnabled()
     return self.enabled
 end
 
+function GPH:EnsureInternals()
+    if not self.trackedItems then
+        self.trackedItems = {}
+    end
+    if self.goldReceived == nil then
+        self.goldReceived = 0
+    end
+    if not self.gphCallbacks then
+        self.gphCallbacks = TM.Callback.New()
+    end
+end
+
 --- Remove tracked items and gold outside the configured time window
 --- If always-on mode is enabled, this function does nothing
 --- Resets the start time if no items remain after trimming
 function GPH:TrimOldData()
+    self:EnsureInternals()
     if self.alwaysOn then return end
 
     local now = GetTime()
@@ -125,6 +138,7 @@ end
 --- Calculates gold per hour based on total value and elapsed time
 ---@return GoldPerHourData statistics Current tracking stats including GPH, totals, and item list
 function GPH:GetCurrentStats()
+    self:EnsureInternals()
     local now = GetTime()
     local elapsedTime = 0
     local totalValue = 0
@@ -230,6 +244,7 @@ end
 --- Calculate and invoke all registered callbacks with current statistics
 --- Called whenever loot or gold is received, or periodically by the ticker
 function GPH:TriggerUpdate()
+    self:EnsureInternals()
     local stats = self:GetCurrentStats()
     self.gphCallbacks:Invoke(stats)
     self:SaveState()
@@ -442,12 +457,14 @@ end
 ---@param callback fun(stats:GoldPerHourData) Function to be called on updates
 ---@return number id Callback ID for later unregistration
 function GPH:RegisterCallback(callback)
+    self:EnsureInternals()
     return self.gphCallbacks:Register(callback)
 end
 
 --- Unregister a previously registered callback
 ---@param id number The callback ID returned by RegisterCallback()
 function GPH:UnregisterCallback(id)
+    self:EnsureInternals()
     self.gphCallbacks:Unregister(id)
 end
 
