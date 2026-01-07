@@ -37,7 +37,9 @@ local C_ChallengeMode = _G.C_ChallengeMode
 -- Constants
 local ICON_PATH = "Interface\\AddOns\\TwichUI\\Media\\Textures\\score-simulator.tga"
 local PANEL_ID = "score_simulator"
-local LABEL_TEXT = "Score Simulator"
+local LABEL_TEXT = "Score\nSimulator"
+
+local MAP_DROPDOWN_WIDTH = 260
 
 ---@class ScoreSimulatorFrame : Frame
 ---@field dungeonDropdown Frame
@@ -164,6 +166,15 @@ local CHEST_OPTIONS = {
 function ScoreSimulator:UpdateSimulation(frame)
     if not frame then return end
 
+    local function Round0(x)
+        x = tonumber(x)
+        if not x then return 0 end
+        if x >= 0 then
+            return math.floor(x + 0.5)
+        end
+        return math.ceil(x - 0.5)
+    end
+
     local level = tonumber(frame.levelEditBox:GetText()) or 2
 
     if not selectedMapId then
@@ -173,6 +184,9 @@ function ScoreSimulator:UpdateSimulation(frame)
         frame.timeBonusText:SetText("")
         frame.currentScoreText:SetText("")
         frame.currentRunText:SetText("")
+        if frame.projectedTotalText then
+            frame.projectedTotalText:SetText("")
+        end
         frame.diffText:SetText("")
         frame.timerText:SetText("")
         return
@@ -204,20 +218,39 @@ function ScoreSimulator:UpdateSimulation(frame)
     local score, details = ScoreCalculator.CalculateForRun(selectedMapId, level, timeSec)
 
     -- Update UI
-    frame.resultText:SetText(score)
+    frame.resultText:SetText(Round0(score))
     frame.resultText:SetTextColor(COLOR_ACCENT[1], COLOR_ACCENT[2], COLOR_ACCENT[3])
 
     if details then
-        frame.baseScoreText:SetText(string.format("Base: %.1f", details.baseScore or 0))
-        frame.affixBonusText:SetText(string.format("Affixes: %.1f", details.affixBonus or 0))
-        frame.timeBonusText:SetText(string.format("Time: %.1f", details.timeBonus or 0))
+        frame.baseScoreText:SetText(string.format("Base: %d", Round0(details.baseScore or 0)))
+        frame.affixBonusText:SetText(string.format("Affixes: %d", Round0(details.affixBonus or 0)))
+        frame.timeBonusText:SetText(string.format("Time: %d", Round0(details.timeBonus or 0)))
     end
 
     -- Compare with current best
     local currentScore, currentRun = ScoreCalculator.TryGetBlizzardRunScore(selectedMapId, nil, nil)
 
+    -- Overall / projected total score
+    do
+        local totalText = frame.projectedTotalText
+        if totalText then
+            local C_ChallengeMode = _G.C_ChallengeMode
+            local overall = (C_ChallengeMode and type(C_ChallengeMode.GetOverallDungeonScore) == "function")
+                and tonumber(C_ChallengeMode.GetOverallDungeonScore())
+                or nil
+
+            if overall and overall > 0 then
+                local baseMapScore = (currentScore and currentScore > 0) and currentScore or 0
+                local projected = overall - baseMapScore + (tonumber(score) or 0)
+                totalText:SetText(string.format("Projected Total: %d", Round0(projected)))
+            else
+                totalText:SetText("Projected Total: N/A")
+            end
+        end
+    end
+
     if currentScore and currentScore > 0 then
-        frame.currentScoreText:SetText(string.format("Current Best: %.1f", currentScore))
+        frame.currentScoreText:SetText(string.format("Current Best: %d", Round0(currentScore)))
         if currentRun then
             local runLevel = currentRun.level or currentRun.keystoneLevel
             frame.currentRunText:SetText(string.format("(Level %d)", runLevel))
@@ -226,12 +259,12 @@ function ScoreSimulator:UpdateSimulation(frame)
         end
 
         -- Delta
-        local diff = score - currentScore
+        local diff = Round0(score) - Round0(currentScore)
         if diff > 0 then
-            frame.diffText:SetText(string.format("+%.1f", diff))
+            frame.diffText:SetText(string.format("+%d", diff))
             frame.diffText:SetTextColor(0, 1, 0)
         elseif diff < 0 then
-            frame.diffText:SetText(string.format("%.1f", diff))
+            frame.diffText:SetText(string.format("%d", diff))
             frame.diffText:SetTextColor(1, 0, 0)
         else
             frame.diffText:SetText("=")
@@ -288,6 +321,11 @@ function ScoreSimulator:CreateSimulatorFrame(parent, window)
 
             local button = _G[ddName .. "Button"]
             if button then
+                -- Some skins/clients anchor the button to the "Right" texture; if we hide it,
+                -- the button (and any text anchored to it) can collapse into the left side.
+                button:ClearAllPoints()
+                button:SetPoint("RIGHT", dropdown, "RIGHT", -8, 0)
+
                 -- Keep the button clickable, but strip ALL visuals (arrow, highlights, etc).
                 local nt = button.GetNormalTexture and button:GetNormalTexture() or nil
                 local pt = button.GetPushedTexture and button:GetPushedTexture() or nil
@@ -317,11 +355,9 @@ function ScoreSimulator:CreateSimulatorFrame(parent, window)
             if text then
                 text:ClearAllPoints()
                 text:SetPoint("LEFT", dropdown, "LEFT", 8, 0)
-                if button then
-                    text:SetPoint("RIGHT", button, "LEFT", -2, 0)
-                else
-                    text:SetPoint("RIGHT", dropdown, "RIGHT", -8, 0)
-                end
+                -- Anchor to the dropdown itself (not the arrow button) so the label doesn't
+                -- collapse down to a single visible character after skinning.
+                text:SetPoint("RIGHT", dropdown, "RIGHT", -8, 0)
             end
         end
     end
@@ -395,7 +431,12 @@ function ScoreSimulator:CreateSimulatorFrame(parent, window)
     mapDropdown:SetPoint("TOPLEFT", configPanel, "TOPLEFT", 10, -25)
     mapDropdown:SetFrameLevel(frame:GetFrameLevel() + 100)
     SafeCall("Setup map dropdown", function()
-        if type(UIDropDownMenu_SetWidth) == "function" then UIDropDownMenu_SetWidth(mapDropdown, 160) end
+        if mapDropdown.SetWidth then mapDropdown:SetWidth(MAP_DROPDOWN_WIDTH) end
+        if type(_G.UIDropDownMenu_SetWidth) == "function" then _G.UIDropDownMenu_SetWidth(mapDropdown, MAP_DROPDOWN_WIDTH) end
+        if type(_G.UIDropDownMenu_SetButtonWidth) == "function" then
+            _G.UIDropDownMenu_SetButtonWidth(mapDropdown,
+                MAP_DROPDOWN_WIDTH)
+        end
         if type(UIDropDownMenu_SetText) == "function" then UIDropDownMenu_SetText(mapDropdown, "Select Dungeon") end
         if type(UIDropDownMenu_JustifyText) == "function" then UIDropDownMenu_JustifyText(mapDropdown, "LEFT") end
     end)
@@ -407,6 +448,14 @@ function ScoreSimulator:CreateSimulatorFrame(parent, window)
             if S and S.HandleDropDownBox then
                 S:HandleDropDownBox(mapDropdown)
             end
+        end
+
+        -- Some skins reset width; enforce after skinning.
+        if mapDropdown.SetWidth then mapDropdown:SetWidth(MAP_DROPDOWN_WIDTH) end
+        if type(_G.UIDropDownMenu_SetWidth) == "function" then _G.UIDropDownMenu_SetWidth(mapDropdown, MAP_DROPDOWN_WIDTH) end
+        if type(_G.UIDropDownMenu_SetButtonWidth) == "function" then
+            _G.UIDropDownMenu_SetButtonWidth(mapDropdown,
+                MAP_DROPDOWN_WIDTH)
         end
     end)
     if okSkinMap then Dbg("Map dropdown skinned") end
@@ -453,10 +502,11 @@ function ScoreSimulator:CreateSimulatorFrame(parent, window)
                 local info = ddCreateInfo()
                 info.text = mapName
                 info.arg1 = mapId
-                info.func = function(_, arg1)
+                info.arg2 = mapName
+                info.func = function(_, arg1, arg2)
                     selectedMapId = arg1
                     if type(ddSetSelectedValue) == "function" then ddSetSelectedValue(mapDropdown, arg1) end
-                    if type(ddSetText) == "function" then ddSetText(mapDropdown, mapName) end
+                    if type(ddSetText) == "function" then ddSetText(mapDropdown, arg2) end
                     ScoreSimulator:UpdateSimulation(frame)
                 end
                 ddAddButton(info, level)
@@ -548,10 +598,11 @@ function ScoreSimulator:CreateSimulatorFrame(parent, window)
                     local info = ddCreateInfo()
                     info.text = optText
                     info.arg1 = optValue
-                    info.func = function(_, arg1)
+                    info.arg2 = optText
+                    info.func = function(_, arg1, arg2)
                         selectedChest = arg1
                         if type(ddSetSelectedValue) == "function" then ddSetSelectedValue(chestDropdown, arg1) end
-                        if type(ddSetText) == "function" then ddSetText(chestDropdown, optText) end
+                        if type(ddSetText) == "function" then ddSetText(chestDropdown, arg2) end
                         ScoreSimulator:UpdateSimulation(frame)
                     end
                     ddAddButton(info, level)
@@ -653,6 +704,11 @@ function ScoreSimulator:CreateSimulatorFrame(parent, window)
     SetFont(frame.currentRunText)
     frame.currentRunText:SetPoint("LEFT", frame.currentScoreText, "RIGHT", 5, 0)
     frame.currentRunText:SetTextColor(0.5, 0.5, 0.5)
+
+    frame.projectedTotalText = resultsPanel:CreateFontString(nil, "OVERLAY")
+    SetFont(frame.projectedTotalText)
+    frame.projectedTotalText:SetPoint("TOPLEFT", frame.currentScoreText, "BOTTOMLEFT", 0, -6)
+    frame.projectedTotalText:SetTextColor(0.7, 0.7, 0.7)
 
     -- Initial update
     ScoreSimulator:UpdateSimulation(frame)

@@ -1087,32 +1087,57 @@ local function GetBlizzardMapScore(mapId)
     local C_MythicPlus = _G.C_MythicPlus
     if not C_MythicPlus then return nil end
 
+    if type(C_MythicPlus.RequestMapInfo) == "function" then
+        pcall(C_MythicPlus.RequestMapInfo, mapId)
+    end
+
+    local seasonId = nil
+    if type(C_MythicPlus.GetCurrentSeason) == "function" then
+        local ok, sid = pcall(C_MythicPlus.GetCurrentSeason)
+        if ok then
+            sid = tonumber(sid)
+            if sid and sid > 0 then
+                seasonId = sid
+            end
+        end
+    end
+
     -- Preferred: affix score info (Fortified/Tyrannical). Sum them to get the map rating.
     if type(C_MythicPlus.GetSeasonBestAffixScoreInfoForMap) == "function" then
-        local ok, a, b, c, d = pcall(C_MythicPlus.GetSeasonBestAffixScoreInfoForMap, mapId)
-        if ok then
-            local function ScoreOf(t)
-                if type(t) ~= "table" then return 0 end
-                return tonumber(t.score) or tonumber(t.mapScore) or tonumber(t.rating) or tonumber(t.mythicRating) or 0
-            end
+        local function ScoreOf(t)
+            if type(t) ~= "table" then return 0 end
+            return tonumber(t.score) or tonumber(t.mapScore) or tonumber(t.rating) or tonumber(t.mythicRating) or 0
+        end
 
-            -- Some clients return two tables (fort/tyr)
-            if type(a) == "table" and type(b) == "table" then
-                local s = ScoreOf(a) + ScoreOf(b)
-                if s > 0 then return s end
-            end
+        local candidates = {
+            { mapId },
+        }
+        if seasonId then
+            candidates[#candidates + 1] = { mapId, seasonId }
+            candidates[#candidates + 1] = { seasonId, mapId }
+        end
 
-            -- Some clients may return a list
-            local list = (type(a) == "table" and a[1] ~= nil) and a or
-                ((type(b) == "table" and b[1] ~= nil) and b) or
-                ((type(c) == "table" and c[1] ~= nil) and c) or
-                ((type(d) == "table" and d[1] ~= nil) and d) or nil
-            if type(list) == "table" then
-                local total = 0
-                for _, entry in ipairs(list) do
-                    total = total + ScoreOf(entry)
+        for _, args in ipairs(candidates) do
+            local ok, a, b, c, d = pcall(C_MythicPlus.GetSeasonBestAffixScoreInfoForMap, unpackFn(args))
+            if ok then
+                -- Some clients return two tables (fort/tyr)
+                if type(a) == "table" and type(b) == "table" then
+                    local s = ScoreOf(a) + ScoreOf(b)
+                    if s > 0 then return s end
                 end
-                if total > 0 then return total end
+
+                -- Some clients may return a list
+                local list = (type(a) == "table" and a[1] ~= nil) and a or
+                    ((type(b) == "table" and b[1] ~= nil) and b) or
+                    ((type(c) == "table" and c[1] ~= nil) and c) or
+                    ((type(d) == "table" and d[1] ~= nil) and d) or nil
+                if type(list) == "table" then
+                    local total = 0
+                    for _, entry in ipairs(list) do
+                        total = total + ScoreOf(entry)
+                    end
+                    if total > 0 then return total end
+                end
             end
         end
     end
@@ -1134,14 +1159,35 @@ local function GetDungeonStats(mapId, runHistory)
     local attempts = 0
 
     local C_MythicPlus = _G.C_MythicPlus
+    local seasonId = nil
+    if C_MythicPlus and type(C_MythicPlus.GetCurrentSeason) == "function" then
+        local ok, sid = pcall(C_MythicPlus.GetCurrentSeason)
+        if ok then
+            sid = tonumber(sid)
+            if sid and sid > 0 then
+                seasonId = sid
+            end
+        end
+    end
     if C_MythicPlus and type(C_MythicPlus.GetSeasonBestForMap) == "function" then
-        local seasonBest = SafeCall(C_MythicPlus.GetSeasonBestForMap, mapId)
-        if type(seasonBest) == "table" then
-            for _, run in ipairs(seasonBest) do
-                local lvl = GetRunLevel(run)
-                local score = GetRunScore(run)
-                if lvl and lvl > bestLevel then bestLevel = lvl end
-                if score and score > bestScore then bestScore = score end
+        local candidates = {
+            { mapId },
+        }
+        if seasonId then
+            candidates[#candidates + 1] = { seasonId, mapId }
+            candidates[#candidates + 1] = { mapId, seasonId }
+        end
+
+        for _, args in ipairs(candidates) do
+            local seasonBest = SafeCall(C_MythicPlus.GetSeasonBestForMap, unpackFn(args))
+            if type(seasonBest) == "table" then
+                for _, run in ipairs(seasonBest) do
+                    local lvl = GetRunLevel(run)
+                    local score = GetRunScore(run)
+                    if lvl and lvl > bestLevel then bestLevel = lvl end
+                    if score and score > bestScore then bestScore = score end
+                end
+                break
             end
         end
     end

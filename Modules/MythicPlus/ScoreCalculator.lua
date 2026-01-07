@@ -31,9 +31,28 @@ local function GetData()
 end
 
 local _G = _G
-local C_ChallengeMode = _G.C_ChallengeMode
-local C_MythicPlus = _G.C_MythicPlus
 local unpackFn = _G.unpack or unpack
+
+local function GetChallengeModeAPI()
+    return _G.C_ChallengeMode
+end
+
+local function GetMythicPlusAPI()
+    return _G.C_MythicPlus
+end
+
+local function TryGetCurrentSeasonId(C_MythicPlus)
+    if C_MythicPlus and type(C_MythicPlus.GetCurrentSeason) == "function" then
+        local ok, seasonId = pcall(C_MythicPlus.GetCurrentSeason)
+        if ok then
+            seasonId = tonumber(seasonId)
+            if seasonId and seasonId > 0 then
+                return seasonId
+            end
+        end
+    end
+    return nil
+end
 
 local function RoundTo(x, decimals)
     x = tonumber(x)
@@ -47,6 +66,7 @@ end
 ---@return number|nil parTimeSeconds
 function ScoreCalculator.GetParTimeSeconds(mapId)
     mapId = tonumber(mapId)
+    local C_ChallengeMode = GetChallengeModeAPI()
     if not mapId or mapId <= 0 or not C_ChallengeMode then
         return nil
     end
@@ -74,6 +94,117 @@ function ScoreCalculator.GetParTimeSeconds(mapId)
     return nil
 end
 
+local function ScoreOfRunTable(run)
+    if type(run) ~= "table" then return nil end
+    return tonumber(run.mapScore)
+        or tonumber(run.runScore)
+        or tonumber(run.score)
+        or tonumber(run.rating)
+        or tonumber(run.mythicRating)
+end
+
+local function LevelOfRunTable(run)
+    if type(run) ~= "table" then return nil end
+    return tonumber(run.level)
+        or tonumber(run.keystoneLevel)
+        or tonumber(run.mythicLevel)
+end
+
+local function TryGetSeasonBestScoreForMap(C_MythicPlus, mapId)
+    if not C_MythicPlus or type(C_MythicPlus.GetSeasonBestForMap) ~= "function" then
+        return nil, nil
+    end
+
+    if type(C_MythicPlus.RequestMapInfo) == "function" then
+        pcall(C_MythicPlus.RequestMapInfo, mapId)
+    end
+
+    local seasonId = TryGetCurrentSeasonId(C_MythicPlus)
+
+    local candidates = {
+        { mapId },
+    }
+    if seasonId then
+        -- Some client versions use (seasonId, mapId) or (mapId, seasonId)
+        candidates[#candidates + 1] = { seasonId, mapId }
+        candidates[#candidates + 1] = { mapId, seasonId }
+    end
+
+    for _, args in ipairs(candidates) do
+        local ok, seasonBest = pcall(C_MythicPlus.GetSeasonBestForMap, unpackFn(args))
+        if ok and type(seasonBest) == "table" then
+            local bestScore
+            local bestRun
+            for _, run in ipairs(seasonBest) do
+                local s = ScoreOfRunTable(run)
+                if s and (not bestScore or s > bestScore) then
+                    bestScore = s
+                    bestRun = run
+                end
+            end
+            if bestScore then
+                return bestScore, bestRun
+            end
+        end
+    end
+
+    return nil, nil
+end
+
+local function TryGetAffixCombinedMapScore(C_MythicPlus, mapId)
+    if not C_MythicPlus or type(C_MythicPlus.GetSeasonBestAffixScoreInfoForMap) ~= "function" then
+        return nil
+    end
+
+    if type(C_MythicPlus.RequestMapInfo) == "function" then
+        pcall(C_MythicPlus.RequestMapInfo, mapId)
+    end
+
+    local seasonId = TryGetCurrentSeasonId(C_MythicPlus)
+    local candidates = {
+        { mapId },
+    }
+    if seasonId then
+        candidates[#candidates + 1] = { mapId, seasonId }
+        candidates[#candidates + 1] = { seasonId, mapId }
+    end
+
+    local function ScoreOf(t)
+        if type(t) ~= "table" then return 0 end
+        return tonumber(t.score)
+            or tonumber(t.mapScore)
+            or tonumber(t.rating)
+            or tonumber(t.mythicRating)
+            or 0
+    end
+
+    for _, args in ipairs(candidates) do
+        local ok, a, b, c, d = pcall(C_MythicPlus.GetSeasonBestAffixScoreInfoForMap, unpackFn(args))
+        if ok then
+            -- Common: two tables (fort/tyr)
+            if type(a) == "table" and type(b) == "table" then
+                local s = ScoreOf(a) + ScoreOf(b)
+                if s > 0 then return s end
+            end
+
+            -- Some clients return a list
+            local list = (type(a) == "table" and a[1] ~= nil) and a or
+                ((type(b) == "table" and b[1] ~= nil) and b) or
+                ((type(c) == "table" and c[1] ~= nil) and c) or
+                ((type(d) == "table" and d[1] ~= nil) and d) or nil
+            if type(list) == "table" then
+                local total = 0
+                for _, entry in ipairs(list) do
+                    total = total + ScoreOf(entry)
+                end
+                if total > 0 then return total end
+            end
+        end
+    end
+
+    return nil
+end
+
 ---@param mapId number|nil
 ---@param level number|nil
 ---@param durationSec number|nil
@@ -84,7 +215,26 @@ function ScoreCalculator.TryGetBlizzardRunScore(mapId, level, durationSec)
     level = tonumber(level)
     durationSec = tonumber(durationSec)
 
-    if not mapId or mapId <= 0 or not C_MythicPlus or type(C_MythicPlus.GetRunHistory) ~= "function" then
+    local C_MythicPlus = GetMythicPlusAPI()
+    if not mapId or mapId <= 0 or not C_MythicPlus then
+        return nil, nil
+    end
+
+    -- If caller is asking for "current best" for the map (no level/duration constraint),
+    -- prefer Blizzard's season-best APIs when available.
+    if not level and not durationSec then
+        local affixScore = TryGetAffixCombinedMapScore(C_MythicPlus, mapId)
+        if affixScore and affixScore > 0 then
+            return affixScore, nil
+        end
+
+        local seasonBestScore, seasonBestRun = TryGetSeasonBestScoreForMap(C_MythicPlus, mapId)
+        if seasonBestScore and seasonBestScore > 0 then
+            return seasonBestScore, seasonBestRun
+        end
+    end
+
+    if type(C_MythicPlus.GetRunHistory) ~= "function" then
         return nil, nil
     end
 
@@ -125,8 +275,7 @@ function ScoreCalculator.TryGetBlizzardRunScore(mapId, level, durationSec)
             local runLevel = tonumber(run.level) or tonumber(run.keystoneLevel) or tonumber(run.mythicLevel)
 
             if runMapId == mapId and (not level or not runLevel or runLevel == level) then
-                local score = tonumber(run.mapScore) or tonumber(run.runScore) or tonumber(run.score)
-                    or tonumber(run.mythicRating)
+                local score = ScoreOfRunTable(run)
                 if score then
                     local diff = 0
                     if durationSec then
