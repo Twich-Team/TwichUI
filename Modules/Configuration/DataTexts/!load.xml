@@ -3,6 +3,7 @@
     <Script file="Goblin.lua" />
     <Script file="DataTexts.lua" />
     <Script file="Portals.lua" />
+    <Script file="MythicPlus.lua" />
     <Script file="Mounts.lua" />
 
 </Ui>

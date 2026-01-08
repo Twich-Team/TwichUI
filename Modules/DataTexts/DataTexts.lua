@@ -7,6 +7,7 @@ local _G = _G
 --- @class DataTextsModule
 --- @field Goblin GoblinDataText
 --- @field datatexts table
+--- @field MythicPlus MythicPlusDataText
 --- @field Menu Menu
 --- @field Mounts MountsDataText
 --- @field Portals PortalsDataText
@@ -49,6 +50,9 @@ function DataTextsModule:Enable()
     -- initialize any submodules that have been enabled previously
     self.Goblin:OnInitialize()
     self.Portals:OnInitialize()
+    if self.MythicPlus and self.MythicPlus.OnInitialize then
+        self.MythicPlus:OnInitialize()
+    end
     if self.Mounts and self.Mounts.OnInitialize then
         self.Mounts:OnInitialize()
     end

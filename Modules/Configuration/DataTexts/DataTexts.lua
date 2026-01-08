@@ -7,6 +7,7 @@ local TM = T:GetModule("Tools")
 
 --- @class DataTextsConfigurationModule
 --- @field Goblin GoblinDataTextConfigurationModule
+--- @field MythicPlus MythicPlusDataTextConfigurationModule
 --- @field Mounts MountsDataTextConfigurationModule
 --- @field Portals PortalsDataTextConfigurationModule
 local DT = CM.DataTexts or {}
@@ -84,6 +85,17 @@ function DT:Create(order)
                     end
                 end,
                 CM.DataTexts.Portals:Create()),
+
+            mythicPlusSubmodule = CM.Widgets:SubmoduleGroup(25, "Mythic+",
+                "The Mythic+ datatext shows your current keystone and Mythic+ score, with a tooltip for keystone/affixes, Great Vault progress, and season progress.",
+                "datatexts.enabled", "datatexts.mythicplus.enable", function(enabled)
+                    if enabled then
+                        GetDataTextsModule().MythicPlus:Enable()
+                    else
+                        GetDataTextsModule().MythicPlus:Disable()
+                    end
+                end,
+                CM.DataTexts.MythicPlus:Create()),
 
             mountsSubmodule = CM.Widgets:SubmoduleGroup(30, "Mounts",
                 "The Mounts datatext provides a fast menu for summoning favorite and utility mounts.",
