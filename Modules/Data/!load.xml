@@ -1,3 +1,4 @@
 <Ui xmlns='http://www.blizzard.com/wow/ui/'>
     <Script file="DungeonPortals.lua" />
+    <Script file="Handbook.lua" />
 </Ui>

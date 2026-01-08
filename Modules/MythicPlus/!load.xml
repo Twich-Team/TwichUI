@@ -17,6 +17,7 @@
     <Script
         file="ScoreCalculator.lua" />
     <Script file="ScoreSimulator.lua" />
+    <Script file="Handbook.lua" />
     <Script file="DungeonMonitor.lua" />
     <Script file="DataCollector.lua" />
     <Script file="RunSharing.lua" />
