@@ -21,6 +21,9 @@ local ElvUI = _G.ElvUI
 local E = ElvUI and ElvUI[1]
 
 local ICON_PATH = "Interface\\AddOns\\TwichUI\\Media\\Textures\\handbook.tga"
+local ARROW_UP_PATH = "Interface\\AddOns\\TwichUI\\Media\\Textures\\arrow-up.tga"
+local ARROW_DOWN_PATH = "Interface\\AddOns\\TwichUI\\Media\\Textures\\arrow-down.tga"
+local X_ICON_PATH = "Interface\\AddOns\\TwichUI\\Media\\Textures\\x.tga"
 local PANEL_ID = "handbook"
 local LABEL_TEXT = "Handbook"
 
@@ -75,6 +78,140 @@ local function SetFont(fontString, style)
     else
         fontString:SetFontObject("GameFontNormal")
     end
+end
+
+---@class TwichUI_HandbookArrowButton : Button
+---@field __twichuiArrowIcon Texture|nil
+---@field __twichuiArrowHL Texture|nil
+
+---@param btn Button
+---@param direction "up"|"down"
+local function SkinArrowButton(btn, direction)
+    if not btn or not btn.CreateTexture then return end
+
+    ---@cast btn TwichUI_HandbookArrowButton
+
+    -- Clear any text label so the button reads as an icon.
+    if btn.SetText then
+        btn:SetText("")
+    end
+
+    -- Hide UIPanelButtonTemplate pieces if they exist.
+    local templateRegions = {
+        "Left", "Middle", "Right",
+        "LeftDisabled", "MiddleDisabled", "RightDisabled",
+    }
+    for _, key in ipairs(templateRegions) do
+        local r = btn[key]
+        if r and r.Hide then r:Hide() end
+    end
+
+    local texPath = (direction == "down") and ARROW_DOWN_PATH or ARROW_UP_PATH
+
+    -- Buttons are typically 18px tall in these rows.
+    local iconW, iconH = 16, 18 -- Keeps 32x36 aspect ratio.
+
+    local icon = btn.__twichuiArrowIcon
+    if not icon then
+        icon = btn:CreateTexture(nil, "ARTWORK")
+        btn.__twichuiArrowIcon = icon
+    end
+    icon:ClearAllPoints()
+    icon:SetPoint("CENTER", btn, "CENTER", 0, 0)
+    icon:SetSize(iconW, iconH)
+    icon:SetTexture(texPath)
+    icon:SetTexCoord(0, 1, 0, 1)
+
+    local hl = btn.__twichuiArrowHL
+    if not hl then
+        hl = btn:CreateTexture(nil, "HIGHLIGHT")
+        btn.__twichuiArrowHL = hl
+    end
+    hl:ClearAllPoints()
+    hl:SetPoint("CENTER", btn, "CENTER", 0, 0)
+    hl:SetSize(iconW, iconH)
+    hl:SetTexture(texPath)
+    if hl.SetBlendMode then hl:SetBlendMode("ADD") end
+    hl:SetAlpha(0.25)
+
+    local function UpdateState()
+        local enabled = (btn.IsEnabled and btn:IsEnabled()) or false
+        if icon.SetDesaturated then
+            icon:SetDesaturated(not enabled)
+        end
+        icon:SetAlpha(enabled and 1 or 0.35)
+    end
+
+    if btn.HookScript then
+        btn:HookScript("OnEnable", UpdateState)
+        btn:HookScript("OnDisable", UpdateState)
+    end
+    UpdateState()
+end
+
+---@class TwichUI_HandbookXButton : Button
+---@field __twichuiXIcon Texture|nil
+---@field __twichuiXHL Texture|nil
+
+---@param btn Button
+local function SkinXButton(btn)
+    if not btn or not btn.CreateTexture then return end
+
+    ---@cast btn TwichUI_HandbookXButton
+
+    if btn.SetText then
+        btn:SetText("")
+    end
+
+    local templateRegions = {
+        "Left", "Middle", "Right",
+        "LeftDisabled", "MiddleDisabled", "RightDisabled",
+    }
+    for _, key in ipairs(templateRegions) do
+        local r = btn[key]
+        if r and r.Hide then r:Hide() end
+    end
+
+    -- 32x31 original. Fit nicely into 18px-tall rows without looking cramped.
+    local iconH = 16
+    local iconW = (iconH * 32) / 31
+
+    local icon = btn.__twichuiXIcon
+    if not icon then
+        icon = btn:CreateTexture(nil, "ARTWORK")
+        btn.__twichuiXIcon = icon
+    end
+    icon:ClearAllPoints()
+    icon:SetPoint("CENTER", btn, "CENTER", 0, 0)
+    icon:SetSize(iconW, iconH)
+    icon:SetTexture(X_ICON_PATH)
+    icon:SetTexCoord(0, 1, 0, 1)
+
+    local hl = btn.__twichuiXHL
+    if not hl then
+        hl = btn:CreateTexture(nil, "HIGHLIGHT")
+        btn.__twichuiXHL = hl
+    end
+    hl:ClearAllPoints()
+    hl:SetPoint("CENTER", btn, "CENTER", 0, 0)
+    hl:SetSize(iconW, iconH)
+    hl:SetTexture(X_ICON_PATH)
+    if hl.SetBlendMode then hl:SetBlendMode("ADD") end
+    hl:SetAlpha(0.22)
+
+    local function UpdateState()
+        local enabled = (btn.IsEnabled and btn:IsEnabled()) or false
+        if icon.SetDesaturated then
+            icon:SetDesaturated(not enabled)
+        end
+        icon:SetAlpha(enabled and 1 or 0.35)
+    end
+
+    if btn.HookScript then
+        btn:HookScript("OnEnable", UpdateState)
+        btn:HookScript("OnDisable", UpdateState)
+    end
+    UpdateState()
 end
 
 local FALLBACK_PROFILE_DB = {
@@ -713,19 +850,17 @@ local function CreateHandbookFrame(parent)
         row.stat:SetJustifyH("LEFT")
 
         row.btnUp = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
-        row.btnUp:SetSize(34, 18)
-        row.btnUp:SetText("Up")
-        row.btnUp:SetPoint("RIGHT", row, "RIGHT", -86, 0)
+        row.btnUp:SetSize(18, 18)
 
         row.btnDown = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
-        row.btnDown:SetSize(44, 18)
-        row.btnDown:SetText("Down")
-        row.btnDown:SetPoint("LEFT", row.btnUp, "RIGHT", 4, 0)
+        row.btnDown:SetSize(18, 18)
 
         row.btnRemove = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
         row.btnRemove:SetSize(22, 18)
         row.btnRemove:SetText("X")
-        row.btnRemove:SetPoint("LEFT", row.btnDown, "RIGHT", 4, 0)
+        row.btnRemove:SetPoint("RIGHT", row, "RIGHT", 0, 0)
+        row.btnDown:SetPoint("RIGHT", row.btnRemove, "LEFT", -4, 0)
+        row.btnUp:SetPoint("RIGHT", row.btnDown, "LEFT", -4, 0)
 
         if E then
             local S = E:GetModule("Skins")
@@ -735,6 +870,10 @@ local function CreateHandbookFrame(parent)
                 S:HandleButton(row.btnRemove)
             end
         end
+
+        SkinArrowButton(row.btnUp, "up")
+        SkinArrowButton(row.btnDown, "down")
+        SkinXButton(row.btnRemove)
 
         row:Hide()
         statRows[i] = row
@@ -2517,19 +2656,17 @@ local function CreateHandbookFrame(parent)
         end
 
         row.btnUp = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
-        row.btnUp:SetSize(34, 18)
-        row.btnUp:SetText("Up")
-        row.btnUp:SetPoint("RIGHT", row, "RIGHT", -86, 0)
+        row.btnUp:SetSize(18, 18)
 
         row.btnDown = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
-        row.btnDown:SetSize(44, 18)
-        row.btnDown:SetText("Down")
-        row.btnDown:SetPoint("LEFT", row.btnUp, "RIGHT", 4, 0)
+        row.btnDown:SetSize(18, 18)
 
         row.btnRemove = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
         row.btnRemove:SetSize(22, 18)
         row.btnRemove:SetText("X")
-        row.btnRemove:SetPoint("LEFT", row.btnDown, "RIGHT", 4, 0)
+        row.btnRemove:SetPoint("RIGHT", row, "RIGHT", 0, 0)
+        row.btnDown:SetPoint("RIGHT", row.btnRemove, "LEFT", -4, 0)
+        row.btnUp:SetPoint("RIGHT", row.btnDown, "LEFT", -4, 0)
 
         if E then
             local S = E:GetModule("Skins")
@@ -2539,6 +2676,10 @@ local function CreateHandbookFrame(parent)
                 S:HandleButton(row.btnRemove)
             end
         end
+
+        SkinArrowButton(row.btnUp, "up")
+        SkinArrowButton(row.btnDown, "down")
+        SkinXButton(row.btnRemove)
 
         row:Hide()
         gemRows[i] = row
@@ -3151,7 +3292,7 @@ local function CreateHandbookFrame(parent)
             end
         else
             analyzeEnhLine:SetText(ColorWrap("Enhancement: None selected", COLOR_MUTED[1], COLOR_MUTED[2], COLOR_MUTED
-            [3]))
+                [3]))
         end
 
         local sockets = GetSocketCountForItem(analyzeItemLink, iid)
@@ -3162,7 +3303,7 @@ local function CreateHandbookFrame(parent)
         sockets = tonumber(sockets) or 0
         if sockets <= 0 then
             analyzeGemLine1:SetText(ColorWrap("Gems: No sockets detected", COLOR_MUTED[1], COLOR_MUTED[2], COLOR_MUTED
-            [3]))
+                [3]))
             return
         end
 
@@ -3225,7 +3366,7 @@ local function CreateHandbookFrame(parent)
                     btns[s].__twichuiItemID = nil
                 end
                 lines[s]:SetText(ColorWrap("Gem " .. tostring(s) .. ": No recommendation", COLOR_MUTED[1], COLOR_MUTED
-                [2], COLOR_MUTED[3]))
+                    [2], COLOR_MUTED[3]))
             end
         end
 

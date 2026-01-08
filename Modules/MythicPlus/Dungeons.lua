@@ -1342,10 +1342,7 @@ end
 ---@field __twichuiRetryCount number|nil
 ---@field __twichuiRetryPending boolean|nil
 ---@field __twichuiDetailsBG TwichUI_MythicPlus_CoverTexture|nil
----@field __twichuiDetailsTitle FontString|nil
----@field __twichuiTime1 TwichUI_MythicPlus_Dungeons_TimeFrame|nil
----@field __twichuiTime2 TwichUI_MythicPlus_Dungeons_TimeFrame|nil
----@field __twichuiTime3 TwichUI_MythicPlus_Dungeons_TimeFrame|nil
+---@field SelectDungeonMap fun(self: TwichUI_MythicPlus_DungeonsPanel, mapId: number)
 ---@field __twichuiActions TwichUI_MythicPlus_DungeonsActions|nil
 ---@field __twichuiEvents Frame|nil
 ---@field __twichuiLastUpdate number|nil
@@ -3362,6 +3359,19 @@ local function CreateDungeonsPanel(parent)
             end
         end)
     end)
+
+    -- Allow other UI elements (like the keystone header) to jump directly to a specific dungeon.
+    function panel:SelectDungeonMap(mapId)
+        mapId = tonumber(mapId)
+        if not mapId then return end
+
+        self.__twichuiSelectedMapId = mapId
+
+        -- If we're currently visible, force a refresh pass so the list highlights and details update.
+        if self.IsShown and self:IsShown() then
+            RefreshPanel(self)
+        end
+    end
 
     return panel
 end

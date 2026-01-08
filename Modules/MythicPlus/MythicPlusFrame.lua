@@ -19,6 +19,9 @@ local GetTime = _G.GetTime
 local LSM = T.Libs and T.Libs.LSM
 local Masque = T.Libs and T.Libs.Masque
 
+-- Optional logger (used for debug diagnostics)
+local Logger = T.GetModule and T:GetModule("Logger")
+
 -- Optional ElvUI integration
 local ElvUI = rawget(_G, "ElvUI")
 local E = ElvUI and ElvUI[1]
@@ -170,11 +173,339 @@ end
 ---@field __twichuiHoverBG Texture|nil
 ---@field __twichuiActiveBG Texture|nil
 ---@field __twichuiText FontString|nil
+---@field NavIcon Texture|nil
+---@field DungeonArt Texture|nil
+
+---@class TwichUI_FadeFrame : Frame
+---@field FadeInGroup AnimationGroup
+---@field FadeOutGroup AnimationGroup
+---@field FadeInAnim Alpha
+---@field FadeOutAnim Alpha
+---@field onHideCallback function|nil
 
 local function NormalizeAffixId(affixEntry)
     if type(affixEntry) == "number" then return affixEntry end
     if type(affixEntry) ~= "table" then return nil end
     return tonumber(affixEntry.id) or tonumber(affixEntry.affixID) or tonumber(affixEntry[1])
+end
+
+---@param outIds number[]
+---@param outNames table<number, string>
+---@param affixes any
+local function AppendAffixes(outIds, outNames, affixes)
+    if type(affixes) ~= "table" then return end
+    for _, entry in ipairs(affixes) do
+        local id = NormalizeAffixId(entry)
+        if id then
+            table.insert(outIds, id)
+            if type(entry) == "table" and type(entry.name) == "string" and entry.name ~= "" then
+                outNames[id] = entry.name
+            end
+        end
+    end
+end
+
+---@param level number|nil
+---@return number
+local function GetExpectedAffixCountForLevel(level)
+    level = tonumber(level)
+    if not level or level < 2 then return 0 end
+    -- Conservative/default scheme (varies by expansion): +2 has 2, mid keys add 1, high keys add 1.
+    if level < 5 then return 2 end
+    if level < 10 then return 3 end
+    return 4
+end
+
+---@return number[] ids
+---@return table<number, string> namesById
+local function GetWeeklyAffixIds()
+    local ids = {}
+    local namesById = {}
+
+    local C_MythicPlus = _G.C_MythicPlus
+    if not (C_MythicPlus and type(C_MythicPlus.GetCurrentAffixes) == "function") then
+        return ids, namesById
+    end
+
+    local ok, affixes = pcall(C_MythicPlus.GetCurrentAffixes)
+    if ok then
+        AppendAffixes(ids, namesById, affixes)
+    end
+
+    return ids, namesById
+end
+
+local keystoneHeaderScanTip
+
+---@return GameTooltip
+local function EnsureKeystoneHeaderScanTooltip()
+    if keystoneHeaderScanTip then return keystoneHeaderScanTip end
+    keystoneHeaderScanTip = CreateFrame("GameTooltip", "TwichUIKeystoneHeaderScanTooltip", _G.UIParent,
+        "GameTooltipTemplate")
+    keystoneHeaderScanTip:SetOwner(_G.UIParent, "ANCHOR_NONE")
+    keystoneHeaderScanTip:Hide()
+    return keystoneHeaderScanTip
+end
+
+---@return string|nil
+local function GetOwnedKeystoneLink()
+    local mp = _G.C_MythicPlus
+    if not mp then return nil end
+
+    local function SafeCall(fn, ...)
+        if type(fn) ~= "function" then
+            return nil
+        end
+        local ok, a, b, c, d, e = pcall(fn, ...)
+        if not ok then
+            return nil
+        end
+        return a, b, c, d, e
+    end
+
+    local function ExtractLinkFromReturns(...)
+        for i = 1, select("#", ...) do
+            local v = select(i, ...)
+            if type(v) == "string" and v ~= "" then
+                if v:find("|Hkeystone:", 1, true) then
+                    return v
+                end
+            end
+        end
+        return nil
+    end
+
+    local link = ExtractLinkFromReturns(SafeCall(mp.GetOwnedKeystoneHyperlink))
+    if link then return link end
+
+    link = ExtractLinkFromReturns(SafeCall(mp.GetOwnedKeystoneLink))
+    if link then return link end
+
+    link = ExtractLinkFromReturns(SafeCall(mp.GetOwnedKeystoneInfo))
+    if link then return link end
+
+    -- Fallback: scan player bags for a keystone hyperlink.
+    local C_Container = _G.C_Container
+    local getNumSlots = C_Container and C_Container.GetContainerNumSlots
+    local getItemLink = C_Container and C_Container.GetContainerItemLink
+    if type(getNumSlots) == "function" and type(getItemLink) == "function" then
+        for bag = 0, 4 do
+            local slots = tonumber(getNumSlots(bag)) or 0
+            for slot = 1, slots do
+                local lnk = getItemLink(bag, slot)
+                if type(lnk) == "string" and lnk ~= "" and lnk:find("|Hkeystone:", 1, true) then
+                    return lnk
+                end
+            end
+        end
+    end
+
+    return nil
+end
+
+---@param link string
+---@return string[]|nil
+local function GetKeystoneAffixNamesFromLinkTooltip(link)
+    if type(link) ~= "string" or link == "" then return nil end
+
+    local out = {}
+
+    if _G.C_TooltipInfo and type(_G.C_TooltipInfo.GetHyperlink) == "function" then
+        local ok, info = pcall(_G.C_TooltipInfo.GetHyperlink, link)
+        if ok and type(info) == "table" and type(info.lines) == "table" then
+            for _, line in ipairs(info.lines) do
+                local t = type(line) == "table" and line.leftText or nil
+                if type(t) == "string" and t ~= "" then
+                    local c = type(line) == "table" and line.leftColor or nil
+                    local r = type(c) == "table" and (c.r or c[1]) or nil
+                    local g = type(c) == "table" and (c.g or c[2]) or nil
+                    local b = type(c) == "table" and (c.b or c[3]) or nil
+
+                    if type(r) == "number" and type(g) == "number" and type(b) == "number" then
+                        if r < 0.35 and g > 0.75 and b < 0.35 then
+                            out[#out + 1] = t
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    if #out > 0 then
+        return out
+    end
+
+    local tip = EnsureKeystoneHeaderScanTooltip()
+    tip:ClearLines()
+    if type(tip.SetHyperlink) == "function" then
+        pcall(tip.SetHyperlink, tip, link)
+    end
+
+    local n = tip:NumLines() or 0
+    for i = 1, n do
+        local fs = _G["TwichUIKeystoneHeaderScanTooltipTextLeft" .. tostring(i)]
+        if fs and fs.GetText and fs.GetTextColor then
+            local t = fs:GetText()
+            if type(t) == "string" and t ~= "" then
+                local r, g, b = fs:GetTextColor()
+                if type(r) == "number" and type(g) == "number" and type(b) == "number" then
+                    if r < 0.35 and g > 0.75 and b < 0.35 then
+                        out[#out + 1] = t
+                    end
+                end
+            end
+        end
+    end
+
+    if #out > 0 then
+        return out
+    end
+
+    return nil
+end
+
+---@return number[] affixIds
+---@return table<number, string> namesById
+---@return string source
+---@return string[]|nil affixNames
+local function GetHeaderKeystoneAffixIds(level)
+    local ids = {}
+    local namesById = {}
+
+    local source = "none"
+
+    -- Prefer parsing the owned keystone tooltip when possible.
+    -- This matches the in-game keystone tooltip even if keystone affix APIs return a superset.
+    do
+        local link = GetOwnedKeystoneLink()
+        if link then
+            local names = GetKeystoneAffixNamesFromLinkTooltip(link)
+            if type(names) == "table" and #names > 0 then
+                source = "keystone.tooltip"
+                return ids, namesById, source, names
+            end
+        end
+    end
+
+    local weeklyIds, weeklyNames = GetWeeklyAffixIds()
+    local weeklySet = {}
+    if type(weeklyIds) == "table" then
+        for _, wid in ipairs(weeklyIds) do
+            weeklySet[wid] = true
+            if weeklyNames and weeklyNames[wid] then
+                namesById[wid] = weeklyNames[wid]
+            end
+        end
+    end
+
+    local function IntersectWithWeekly(rawIds)
+        if type(rawIds) ~= "table" or #rawIds == 0 then return rawIds end
+        if type(weeklyIds) ~= "table" or #weeklyIds == 0 then return rawIds end
+
+        local rawSet = {}
+        for _, id in ipairs(rawIds) do
+            rawSet[id] = true
+        end
+
+        -- Preserve the official order from the weekly API.
+        local filtered = {}
+        for _, wid in ipairs(weeklyIds) do
+            if rawSet[wid] then
+                filtered[#filtered + 1] = wid
+            end
+        end
+
+        -- If intersection was empty (some seasons/patches report seasonal differently), keep raw.
+        if #filtered == 0 then
+            return rawIds
+        end
+        return filtered
+    end
+
+    -- Best source: the addon API module which prefers per-keystone affix IDs when available.
+    do
+        local api = MythicPlusModule and MythicPlusModule.API
+        if api and type(api.GetPlayerKeystone) == "function" then
+            local info = api:GetPlayerKeystone()
+            if info and type(info.affixes) == "table" and #info.affixes > 0 then
+                local raw = {}
+                for _, id in ipairs(info.affixes) do
+                    if type(id) == "number" and id > 0 then
+                        raw[#raw + 1] = id
+                    end
+                end
+                if #raw > 0 then
+                    ids = IntersectWithWeekly(raw)
+                    source = "api.keystoneAffixIDs"
+                    if #weeklyIds > 0 and #ids < #raw then
+                        source = source .. "∩weekly"
+                    end
+                    return ids, namesById, source, nil
+                end
+            end
+        end
+    end
+
+    local C_MythicPlus = _G.C_MythicPlus
+
+    -- Preferred client API variant: per-keystone affix IDs by index.
+    if C_MythicPlus and type(C_MythicPlus.GetOwnedKeystoneAffixID) == "function" then
+        local raw = {}
+        for i = 1, 10 do
+            local ok, affixID = pcall(C_MythicPlus.GetOwnedKeystoneAffixID, i)
+            affixID = ok and tonumber(affixID) or nil
+            if not affixID or affixID == 0 then
+                break
+            end
+            raw[#raw + 1] = affixID
+        end
+        if #raw > 0 then
+            ids = IntersectWithWeekly(raw)
+            source = "C_MythicPlus.GetOwnedKeystoneAffixID"
+            if #weeklyIds > 0 and #ids < #raw then
+                source = source .. "∩weekly"
+            end
+            return ids, namesById, source, nil
+        end
+    end
+
+    if C_MythicPlus and type(C_MythicPlus.GetOwnedKeystoneAffixes) == "function" then
+        local ok, affixes = pcall(C_MythicPlus.GetOwnedKeystoneAffixes)
+        if ok then
+            AppendAffixes(ids, namesById, affixes)
+        end
+        if #ids > 0 then
+            ids = IntersectWithWeekly(ids)
+            source = "C_MythicPlus.GetOwnedKeystoneAffixes"
+            if #weeklyIds > 0 then
+                source = source .. "∩weekly"
+            end
+            return ids, namesById, source, nil
+        end
+    end
+
+    -- Last resort: weekly affixes. If we have a keystone level, try to only show the relevant count.
+    if C_MythicPlus and type(C_MythicPlus.GetCurrentAffixes) == "function" then
+        local ok, affixes = pcall(C_MythicPlus.GetCurrentAffixes)
+        if ok then
+            AppendAffixes(ids, namesById, affixes)
+        end
+
+        local expected = GetExpectedAffixCountForLevel(level)
+        if expected > 0 and #ids > expected then
+            -- Assume the API returns affixes in the same order as the official tooltip.
+            local sliced = {}
+            for i = 1, expected do
+                sliced[i] = ids[i]
+            end
+            ids = sliced
+            source = "weekly-sliced"
+        else
+            source = "weekly"
+        end
+    end
+
+    return ids, namesById, source, nil
 end
 
 ---@param affixId number
@@ -378,7 +709,9 @@ function MainWindow:GetActivePanelId()
     return self.activePanelId
 end
 
+---@param frame Frame
 local function AttachAnimations(frame)
+    ---@cast frame TwichUI_FadeFrame
     if frame.FadeInGroup then return end
 
     frame.FadeInGroup = frame:CreateAnimationGroup()
@@ -426,18 +759,20 @@ function MainWindow:ShowPanel(id)
     if self.activePanelId and self.activePanelId ~= id then
         local current = self._panels[self.activePanelId]
         if current and current.frame then
-            AttachAnimations(current.frame)
+            local currentFrame = current.frame
+            ---@cast currentFrame TwichUI_FadeFrame
+            AttachAnimations(currentFrame)
 
             -- Store onHide callback to be called after animation
-            current.frame.onHideCallback = function()
+            currentFrame.onHideCallback = function()
                 if type(current.onHide) == "function" then
-                    pcall(current.onHide, current.frame, self)
+                    pcall(current.onHide, currentFrame, self)
                 end
             end
 
-            current.frame.FadeInGroup:Stop()
-            current.frame.FadeOutAnim:SetFromAlpha(current.frame:GetAlpha())
-            current.frame.FadeOutGroup:Play()
+            currentFrame.FadeInGroup:Stop()
+            currentFrame.FadeOutAnim:SetFromAlpha(currentFrame:GetAlpha())
+            currentFrame.FadeOutGroup:Play()
         end
     end
 
@@ -461,17 +796,19 @@ function MainWindow:ShowPanel(id)
         end
     end
 
-    AttachAnimations(nextPanel.frame)
+    local nextFrame = nextPanel.frame
+    ---@cast nextFrame TwichUI_FadeFrame
+    AttachAnimations(nextFrame)
 
     self.activePanelId = id
 
-    nextPanel.frame.FadeOutGroup:Stop()
-    if not nextPanel.frame:IsShown() then
-        nextPanel.frame:SetAlpha(0)
+    nextFrame.FadeOutGroup:Stop()
+    if not nextFrame:IsShown() then
+        nextFrame:SetAlpha(0)
     end
-    nextPanel.frame:Show()
-    nextPanel.frame.FadeInAnim:SetFromAlpha(nextPanel.frame:GetAlpha())
-    nextPanel.frame.FadeInGroup:Play()
+    nextFrame:Show()
+    nextFrame.FadeInAnim:SetFromAlpha(nextFrame:GetAlpha())
+    nextFrame.FadeInGroup:Play()
 
     if type(nextPanel.onShow) == "function" then
         pcall(nextPanel.onShow, nextPanel.frame, self)
@@ -503,8 +840,132 @@ function MainWindow:_CreateHeaderIfNeeded()
     end
     text:SetText("Keystone: …")
 
+    -- Make the keystone header text interactive: hover shows a keystone-like affix list, click jumps to dungeon page.
+    local headerTextButton = CreateFrame("Button", nil, header)
+    headerTextButton:SetAllPoints(text)
+    headerTextButton:EnableMouse(true)
+    headerTextButton:RegisterForClicks("LeftButtonUp")
+    headerTextButton:RegisterForDrag("LeftButton")
+    headerTextButton:SetScript("OnEnter", function(b)
+        if not GameTooltip then return end
+
+        local mapId = self.__twichuiHeaderKeystoneMapId
+        local level = self.__twichuiHeaderKeystoneLevel
+        local affixIds, namesById, source, affixNames = GetHeaderKeystoneAffixIds(level)
+        self.__twichuiHeaderKeystoneAffixIds = affixIds
+
+        if not mapId or not level then
+            return
+        end
+
+        GameTooltip:SetOwner(b, "ANCHOR_RIGHT")
+        GameTooltip:AddLine("Dungeon Modifiers:", 1, 1, 1)
+
+        local any = false
+        if type(affixNames) == "table" and #affixNames > 0 then
+            for _, name in ipairs(affixNames) do
+                if type(name) == "string" and name ~= "" then
+                    GameTooltip:AddLine("  " .. name, 0, 1, 0)
+                    any = true
+                end
+            end
+        elseif type(affixIds) == "table" then
+            for _, affixId in ipairs(affixIds) do
+                local name = GetAffixInfo(affixId)
+                if (not name or name == "") and namesById and namesById[affixId] then
+                    name = namesById[affixId]
+                end
+                if name and name ~= "" then
+                    GameTooltip:AddLine("  " .. name, 0, 1, 0)
+                    any = true
+                end
+            end
+        end
+
+        if not any then
+            GameTooltip:AddLine("  No affixes", 0.7, 0.7, 0.7)
+        end
+
+        GameTooltip:AddLine(" ")
+        GameTooltip:AddLine("Click to open dungeon page", 0.7, 0.7, 0.7)
+
+        -- Optional debugging: hold Shift while hovering to show affix source + IDs.
+        if type(_G.IsShiftKeyDown) == "function" and _G.IsShiftKeyDown() then
+            local idsText = (type(affixIds) == "table" and table.concat(affixIds, ",")) or ""
+            local namesText = (type(affixNames) == "table" and table.concat(affixNames, " | ")) or ""
+            local weeklyText = (type(GetWeeklyAffixIds) == "function") and (function()
+                local w = GetWeeklyAffixIds()
+                return (type(w) == "table" and table.concat(w, ",")) or ""
+            end)() or ""
+            GameTooltip:AddLine(" ")
+            GameTooltip:AddLine(
+            "Debug: source=" ..
+            tostring(source) .. " ids=[" .. tostring(idsText) .. "] weekly=[" .. tostring(weeklyText) .. "]", 0.6, 0.6,
+                0.6, true)
+            if namesText ~= "" then
+                GameTooltip:AddLine("Debug: names=[" .. tostring(namesText) .. "]", 0.6, 0.6, 0.6, true)
+            end
+            if Logger and Logger.Debug then
+                local msg = "Keystone header affixes: source=" ..
+                tostring(source) ..
+                " level=" ..
+                tostring(level) .. " ids=[" .. tostring(idsText) .. "] weekly=[" .. tostring(weeklyText) .. "]"
+                if namesText ~= "" then
+                    msg = msg .. " names=[" .. tostring(namesText) .. "]"
+                end
+                Logger.Debug(msg)
+            end
+        end
+
+        GameTooltip:Show()
+    end)
+    headerTextButton:SetScript("OnLeave", function()
+        if GameTooltip then GameTooltip:Hide() end
+    end)
+
+    -- Support dragging the whole frame from the header text region (so it doesn't block titleBar dragging).
+    headerTextButton:SetScript("OnDragStart", function()
+        if self.frame and self.frame.StartMoving then
+            if self.frame.Raise then
+                self.frame:Raise()
+            end
+            self.frame:StartMoving()
+        end
+    end)
+    headerTextButton:SetScript("OnDragStop", function()
+        if self.frame and self.frame.StopMovingOrSizing then
+            self.frame:StopMovingOrSizing()
+        end
+        self:SaveFramePosition()
+    end)
+
+    headerTextButton:SetScript("OnClick", function()
+        local mapId = self.__twichuiHeaderKeystoneMapId
+        if not mapId then return end
+
+        if self.ShowPanel then
+            self:ShowPanel("dungeons")
+        end
+
+        local function selectDungeon()
+            local panel = (self.GetPanelFrame and self:GetPanelFrame("dungeons")) or nil
+            ---@cast panel TwichUI_MythicPlus_DungeonsPanel|nil
+            if panel and panel.SelectDungeonMap then
+                panel:SelectDungeonMap(mapId)
+            end
+        end
+
+        local C_Timer = _G.C_Timer
+        if C_Timer and type(C_Timer.After) == "function" then
+            C_Timer.After(0, selectDungeon)
+        else
+            selectDungeon()
+        end
+    end)
+
     self.header = header
     self.headerText = text
+    self.headerTextButton = headerTextButton
     self.headerAffixButtons = {}
 
     self:UpdateTypography()
@@ -570,6 +1031,9 @@ function MainWindow:UpdateKeystoneHeader()
     local name = GetChallengeMapName(ownedMapID) or "No Keystone"
     local level = tonumber(ownedLevel)
 
+    self.__twichuiHeaderKeystoneMapId = ownedMapID
+    self.__twichuiHeaderKeystoneLevel = level
+
     if ownedMapID and level then
         self.headerText:SetText(string.format("%s  |cff00ff00+%d|r", name, level))
     else
@@ -577,15 +1041,19 @@ function MainWindow:UpdateKeystoneHeader()
     end
 
     local affixIds = {}
-    if C_MythicPlus and type(C_MythicPlus.GetOwnedKeystoneAffixes) == "function" then
-        local affixes = C_MythicPlus.GetOwnedKeystoneAffixes()
-        if type(affixes) == "table" then
-            for _, entry in ipairs(affixes) do
-                local id = NormalizeAffixId(entry)
-                if id then table.insert(affixIds, id) end
-            end
+    local affixNames = nil
+    if ownedMapID and level and level >= 2 then
+        local ids, _, _, names = GetHeaderKeystoneAffixIds(level)
+        if type(ids) == "table" then
+            affixIds = ids
+        end
+        if type(names) == "table" and #names > 0 then
+            affixNames = names
         end
     end
+
+    self.__twichuiHeaderKeystoneAffixIds = affixIds
+    self.__twichuiHeaderKeystoneAffixNames = affixNames
 
     local keyHasAffixes = (ownedMapID ~= nil) and (level ~= nil) and (level >= 2)
 
@@ -725,6 +1193,9 @@ function MainWindow:UpdateLockState()
 
     self.frame:EnableMouse(not locked)
     self.titleBar:EnableMouse(not locked)
+    if self.headerTextButton and self.headerTextButton.EnableMouse then
+        self.headerTextButton:EnableMouse(not locked)
+    end
 
     if locked then
         self.frame:RegisterForDrag()
@@ -858,7 +1329,6 @@ function MainWindow:CreateTitleBar()
         if not GameTooltip then return end
         GameTooltip:SetOwner(logoButton, "ANCHOR_RIGHT")
         GameTooltip:SetText("Open TwichUI Settings", 1, 1, 1)
-        GameTooltip:AddLine("Opens the TwichUI settings", 0.9, 0.9, 0.9, true)
         GameTooltip:Show()
     end)
     logoButton:SetScript("OnLeave", function()
@@ -1205,6 +1675,9 @@ function MainWindow:ShowAnimated()
     if not self.frame then return end
     local f = self.frame
 
+    ---@cast f TwichUI_FadeFrame
+    AttachAnimations(f)
+
     if f.Raise then
         f:Raise()
     end
@@ -1221,6 +1694,9 @@ end
 function MainWindow:HideAnimated()
     if not self.frame then return end
     local f = self.frame
+
+    ---@cast f TwichUI_FadeFrame
+    AttachAnimations(f)
 
     f.FadeInGroup:Stop()
     f.FadeOutAnim:SetFromAlpha(f:GetAlpha())
