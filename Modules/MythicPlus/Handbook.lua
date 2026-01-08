@@ -201,6 +201,10 @@ local function CreateHandbookFrame(parent)
     gemPriorityPage:SetAllPoints(content)
     gemPriorityPage:Hide()
 
+    local analyzeEnhancementsPage = CreateFrame("Frame", nil, content)
+    analyzeEnhancementsPage:SetAllPoints(content)
+    analyzeEnhancementsPage:Hide()
+
     local tab1 = CreateFrame("Button", nil, tabsBar, "UIPanelButtonTemplate")
     tab1:SetSize(130, 22)
     tab1:SetText("Gear Tracks")
@@ -231,6 +235,11 @@ local function CreateHandbookFrame(parent)
     tab6:SetText("Gem Priority")
     tab6:SetPoint("LEFT", tab5, "RIGHT", 8, 0)
 
+    local tab7 = CreateFrame("Button", nil, tabsBar, "UIPanelButtonTemplate")
+    tab7:SetSize(210, 22)
+    tab7:SetText("Analyze Slot Enhancements")
+    tab7:SetPoint("LEFT", tab6, "RIGHT", 8, 0)
+
     if E then
         local S = E:GetModule("Skins")
         if S and S.HandleButton then
@@ -240,6 +249,7 @@ local function CreateHandbookFrame(parent)
             S:HandleButton(tab4)
             S:HandleButton(tab5)
             S:HandleButton(tab6)
+            S:HandleButton(tab7)
         end
     end
 
@@ -281,7 +291,7 @@ local function CreateHandbookFrame(parent)
     end
 
     do
-        local tabs = { tab1, tab2, tab3, tab4, tab5, tab6 }
+        local tabs = { tab1, tab2, tab3, tab4, tab5, tab6, tab7 }
         local function LayoutTabs()
             local w = tabsBar:GetWidth() or 0
             if w <= 1 then return end
@@ -1190,10 +1200,13 @@ local function CreateHandbookFrame(parent)
     local enhItemLoadHooked = {}
 
     local gearEnhancementsRefreshToken = 0
+    local RenderAnalyzeSlotEnhancements = nil
     local function ScheduleGearEnhancementsRefresh()
         if not _G.C_Timer or type(_G.C_Timer.After) ~= "function" then
             if type(RenderSlotEnhancements) == "function" and gearEnhancementsPage and gearEnhancementsPage.IsShown and gearEnhancementsPage:IsShown() then
                 RenderSlotEnhancements()
+            elseif type(RenderAnalyzeSlotEnhancements) == "function" and analyzeEnhancementsPage and analyzeEnhancementsPage.IsShown and analyzeEnhancementsPage:IsShown() then
+                RenderAnalyzeSlotEnhancements()
             end
             return
         end
@@ -1202,9 +1215,14 @@ local function CreateHandbookFrame(parent)
         local myToken = gearEnhancementsRefreshToken
         _G.C_Timer.After(0.05, function()
             if myToken ~= gearEnhancementsRefreshToken then return end
-            if type(RenderSlotEnhancements) ~= "function" then return end
-            if not gearEnhancementsPage or not gearEnhancementsPage.IsShown or not gearEnhancementsPage:IsShown() then return end
-            RenderSlotEnhancements()
+            if type(RenderSlotEnhancements) == "function" and gearEnhancementsPage and gearEnhancementsPage.IsShown and gearEnhancementsPage:IsShown() then
+                RenderSlotEnhancements()
+                return
+            end
+            if type(RenderAnalyzeSlotEnhancements) == "function" and analyzeEnhancementsPage and analyzeEnhancementsPage.IsShown and analyzeEnhancementsPage:IsShown() then
+                RenderAnalyzeSlotEnhancements()
+                return
+            end
         end)
     end
 
@@ -2653,6 +2671,654 @@ local function CreateHandbookFrame(parent)
         RenderGemPriority()
     end)
 
+    -- Analyze Slot Enhancements
+    local analyzePanel = CreateFrame("Frame", nil, analyzeEnhancementsPage, "BackdropTemplate")
+    analyzePanel:SetPoint("TOPLEFT", analyzeEnhancementsPage, "TOPLEFT", 0, 0)
+    analyzePanel:SetPoint("BOTTOMRIGHT", analyzeEnhancementsPage, "BOTTOMRIGHT", 0, 0)
+    analyzePanel:SetBackdrop({
+        bgFile = "Interface\\Buttons\\WHITE8X8",
+        edgeFile = "Interface\\Buttons\\WHITE8X8",
+        tile = false,
+        tileSize = 0,
+        edgeSize = 1,
+        insets = { left = 1, right = 1, top = 1, bottom = 1 },
+    })
+    analyzePanel:SetBackdropColor(0.1, 0.1, 0.1, 0.5)
+    analyzePanel:SetBackdropBorderColor(0, 0, 0, 1)
+
+    local analyzeHeader = analyzePanel:CreateFontString(nil, "OVERLAY")
+    SetFont(analyzeHeader, "normal")
+    analyzeHeader:SetPoint("TOPLEFT", analyzePanel, "TOPLEFT", 12, -12)
+    analyzeHeader:SetText("Analyze Slot Enhancements")
+    analyzeHeader:SetTextColor(COLOR_PRIMARY[1], COLOR_PRIMARY[2], COLOR_PRIMARY[3])
+
+    local analyzeHint = analyzePanel:CreateFontString(nil, "OVERLAY")
+    SetFont(analyzeHint, "small")
+    analyzeHint:SetPoint("TOPLEFT", analyzeHeader, "BOTTOMLEFT", 0, -8)
+    analyzeHint:SetTextColor(COLOR_MUTED[1], COLOR_MUTED[2], COLOR_MUTED[3])
+    analyzeHint:SetText("Drag a piece of gear here to get recommended enhancements.")
+
+    local analyzeItemButton = CreateFrame("Button", nil, analyzePanel, "BackdropTemplate")
+    analyzeItemButton:SetSize(44, 44)
+    analyzeItemButton:SetPoint("TOPLEFT", analyzeHint, "BOTTOMLEFT", 0, -12)
+    analyzeItemButton:SetBackdrop({
+        bgFile = "Interface\\Buttons\\WHITE8X8",
+        edgeFile = "Interface\\Buttons\\WHITE8X8",
+        tile = false,
+        tileSize = 0,
+        edgeSize = 1,
+        insets = { left = 1, right = 1, top = 1, bottom = 1 },
+    })
+    analyzeItemButton:SetBackdropColor(0.08, 0.08, 0.08, 0.8)
+    analyzeItemButton:SetBackdropBorderColor(0, 0, 0, 1)
+    analyzeItemButton:EnableMouse(true)
+
+    local analyzeItemIcon = analyzeItemButton:CreateTexture(nil, "ARTWORK")
+    analyzeItemIcon:SetAllPoints(analyzeItemButton)
+    analyzeItemIcon:SetTexture(nil)
+
+    local analyzeItemText = analyzePanel:CreateFontString(nil, "OVERLAY")
+    SetFont(analyzeItemText, "normal")
+    analyzeItemText:SetPoint("LEFT", analyzeItemButton, "RIGHT", 10, 0)
+    analyzeItemText:SetTextColor(COLOR_PRIMARY[1], COLOR_PRIMARY[2], COLOR_PRIMARY[3])
+    analyzeItemText:SetText(ColorWrap("Drop Item", COLOR_MUTED[1], COLOR_MUTED[2], COLOR_MUTED[3]))
+
+    local analyzeItemTextBtn = CreateFrame("Button", nil, analyzePanel)
+    analyzeItemTextBtn:SetPoint("TOPLEFT", analyzeItemText, "TOPLEFT", -2, 2)
+    analyzeItemTextBtn:SetPoint("BOTTOMRIGHT", analyzeItemText, "BOTTOMRIGHT", 2, -2)
+    analyzeItemTextBtn:EnableMouse(true)
+    ApplySelectedItemTooltip(analyzeItemTextBtn)
+
+    local analyzeClearButton = CreateFrame("Button", nil, analyzePanel, "UIPanelButtonTemplate")
+    analyzeClearButton:SetSize(60, 22)
+    analyzeClearButton:SetText("Clear")
+    analyzeClearButton:SetPoint("TOPRIGHT", analyzePanel, "TOPRIGHT", -12, -40)
+    if E then
+        local S = E:GetModule("Skins")
+        if S and S.HandleButton then
+            S:HandleButton(analyzeClearButton)
+        end
+    end
+
+    local analyzeRecPanel = CreateFrame("Frame", nil, analyzePanel, "BackdropTemplate")
+    analyzeRecPanel:SetPoint("TOPLEFT", analyzeItemButton, "BOTTOMLEFT", 0, -14)
+    analyzeRecPanel:SetPoint("TOPRIGHT", analyzePanel, "TOPRIGHT", -12, 0)
+    analyzeRecPanel:SetHeight(190)
+    analyzeRecPanel:SetBackdrop({
+        bgFile = "Interface\\Buttons\\WHITE8X8",
+        edgeFile = "Interface\\Buttons\\WHITE8X8",
+        tile = false,
+        tileSize = 0,
+        edgeSize = 1,
+        insets = { left = 1, right = 1, top = 1, bottom = 1 },
+    })
+    analyzeRecPanel:SetBackdropColor(0.08, 0.08, 0.08, 0.65)
+    analyzeRecPanel:SetBackdropBorderColor(0, 0, 0, 1)
+
+    local analyzeSectionTitle = analyzeRecPanel:CreateFontString(nil, "OVERLAY")
+    SetFont(analyzeSectionTitle, "normal")
+    analyzeSectionTitle:SetPoint("TOPLEFT", analyzeRecPanel, "TOPLEFT", 10, -10)
+    analyzeSectionTitle:SetTextColor(COLOR_ACCENT[1], COLOR_ACCENT[2], COLOR_ACCENT[3])
+    analyzeSectionTitle:SetText("Recommendations")
+
+    local analyzeSlotLine = analyzeRecPanel:CreateFontString(nil, "OVERLAY")
+    SetFont(analyzeSlotLine, "normal")
+    analyzeSlotLine:SetPoint("TOPLEFT", analyzeSectionTitle, "BOTTOMLEFT", 0, -8)
+    analyzeSlotLine:SetTextColor(COLOR_PRIMARY[1], COLOR_PRIMARY[2], COLOR_PRIMARY[3])
+    analyzeSlotLine:SetText("")
+
+    local analyzeEnhLine = analyzeRecPanel:CreateFontString(nil, "OVERLAY")
+    SetFont(analyzeEnhLine, "normal")
+    analyzeEnhLine:SetPoint("TOPLEFT", analyzeSlotLine, "BOTTOMLEFT", 0, -8)
+    analyzeEnhLine:SetTextColor(COLOR_PRIMARY[1], COLOR_PRIMARY[2], COLOR_PRIMARY[3])
+    analyzeEnhLine:SetText("")
+
+    local analyzeEnhBtn = CreateFrame("Button", nil, analyzePanel)
+    analyzeEnhBtn:SetPoint("TOPLEFT", analyzeEnhLine, "TOPLEFT", -2, 2)
+    analyzeEnhBtn:SetPoint("BOTTOMRIGHT", analyzeEnhLine, "BOTTOMRIGHT", 2, -2)
+    analyzeEnhBtn:EnableMouse(true)
+    ApplySelectedItemTooltip(analyzeEnhBtn)
+
+    local analyzeGemLine1 = analyzeRecPanel:CreateFontString(nil, "OVERLAY")
+    SetFont(analyzeGemLine1, "normal")
+    analyzeGemLine1:SetPoint("TOPLEFT", analyzeEnhLine, "BOTTOMLEFT", 0, -6)
+    analyzeGemLine1:SetTextColor(COLOR_PRIMARY[1], COLOR_PRIMARY[2], COLOR_PRIMARY[3])
+    analyzeGemLine1:SetText("")
+
+    local analyzeGemBtn1 = CreateFrame("Button", nil, analyzePanel)
+    analyzeGemBtn1:SetPoint("TOPLEFT", analyzeGemLine1, "TOPLEFT", -2, 2)
+    analyzeGemBtn1:SetPoint("BOTTOMRIGHT", analyzeGemLine1, "BOTTOMRIGHT", 2, -2)
+    analyzeGemBtn1:EnableMouse(true)
+    ApplySelectedItemTooltip(analyzeGemBtn1)
+
+    local analyzeGemLine2 = analyzeRecPanel:CreateFontString(nil, "OVERLAY")
+    SetFont(analyzeGemLine2, "normal")
+    analyzeGemLine2:SetPoint("TOPLEFT", analyzeGemLine1, "BOTTOMLEFT", 0, -6)
+    analyzeGemLine2:SetTextColor(COLOR_PRIMARY[1], COLOR_PRIMARY[2], COLOR_PRIMARY[3])
+    analyzeGemLine2:SetText("")
+
+    local analyzeGemBtn2 = CreateFrame("Button", nil, analyzePanel)
+    analyzeGemBtn2:SetPoint("TOPLEFT", analyzeGemLine2, "TOPLEFT", -2, 2)
+    analyzeGemBtn2:SetPoint("BOTTOMRIGHT", analyzeGemLine2, "BOTTOMRIGHT", 2, -2)
+    analyzeGemBtn2:EnableMouse(true)
+    ApplySelectedItemTooltip(analyzeGemBtn2)
+
+    local analyzeGemLine3 = analyzeRecPanel:CreateFontString(nil, "OVERLAY")
+    SetFont(analyzeGemLine3, "normal")
+    analyzeGemLine3:SetPoint("TOPLEFT", analyzeGemLine2, "BOTTOMLEFT", 0, -6)
+    analyzeGemLine3:SetTextColor(COLOR_PRIMARY[1], COLOR_PRIMARY[2], COLOR_PRIMARY[3])
+    analyzeGemLine3:SetText("")
+
+    local analyzeGemBtn3 = CreateFrame("Button", nil, analyzePanel)
+    analyzeGemBtn3:SetPoint("TOPLEFT", analyzeGemLine3, "TOPLEFT", -2, 2)
+    analyzeGemBtn3:SetPoint("BOTTOMRIGHT", analyzeGemLine3, "BOTTOMRIGHT", 2, -2)
+    analyzeGemBtn3:EnableMouse(true)
+    ApplySelectedItemTooltip(analyzeGemBtn3)
+
+    local analyzeGemLine4 = analyzeRecPanel:CreateFontString(nil, "OVERLAY")
+    SetFont(analyzeGemLine4, "normal")
+    analyzeGemLine4:SetPoint("TOPLEFT", analyzeGemLine3, "BOTTOMLEFT", 0, -6)
+    analyzeGemLine4:SetTextColor(COLOR_PRIMARY[1], COLOR_PRIMARY[2], COLOR_PRIMARY[3])
+    analyzeGemLine4:SetText("")
+
+    local analyzeGemBtn4 = CreateFrame("Button", nil, analyzePanel)
+    analyzeGemBtn4:SetPoint("TOPLEFT", analyzeGemLine4, "TOPLEFT", -2, 2)
+    analyzeGemBtn4:SetPoint("BOTTOMRIGHT", analyzeGemLine4, "BOTTOMRIGHT", 2, -2)
+    analyzeGemBtn4:EnableMouse(true)
+    ApplySelectedItemTooltip(analyzeGemBtn4)
+
+    local function HandleAnalyzeLinkClick(self)
+        local id = tonumber(self and self.__twichuiItemID)
+        if not id or id <= 0 then return end
+        local link = select(2, _G.GetItemInfo(id))
+        if type(link) ~= "string" or link == "" then
+            if _G.C_Item and _G.C_Item.RequestLoadItemDataByID then
+                pcall(_G.C_Item.RequestLoadItemDataByID, id)
+            end
+            return
+        end
+        if type(_G.HandleModifiedItemClick) == "function" then
+            _G.HandleModifiedItemClick(link)
+        elseif type(_G.ChatEdit_InsertLink) == "function" then
+            _G.ChatEdit_InsertLink(link)
+        end
+    end
+
+    analyzeItemTextBtn:SetScript("OnClick", HandleAnalyzeLinkClick)
+    analyzeEnhBtn:SetScript("OnClick", HandleAnalyzeLinkClick)
+    analyzeGemBtn1:SetScript("OnClick", HandleAnalyzeLinkClick)
+    analyzeGemBtn2:SetScript("OnClick", HandleAnalyzeLinkClick)
+    analyzeGemBtn3:SetScript("OnClick", HandleAnalyzeLinkClick)
+    analyzeGemBtn4:SetScript("OnClick", HandleAnalyzeLinkClick)
+
+    local analyzeItemId = nil
+    local analyzeItemLink = nil
+
+    local analyzeScanTip = nil
+    local function EnsureAnalyzeScanTooltip()
+        if analyzeScanTip then return analyzeScanTip end
+        analyzeScanTip = CreateFrame("GameTooltip", "TwichUIAnalyzeEnhancementsScanTooltip", _G.UIParent,
+            "GameTooltipTemplate")
+        analyzeScanTip:SetOwner(_G.UIParent, "ANCHOR_NONE")
+        analyzeScanTip:Hide()
+        return analyzeScanTip
+    end
+
+    local function GetSocketCountForItem(itemLink, itemId)
+        local link = itemLink
+        local id = tonumber(itemId)
+
+        if not link and id and id > 0 then
+            link = select(2, _G.GetItemInfo(id))
+        end
+
+        -- If we still can't resolve a link, treat as loading.
+        if (type(link) ~= "string" or link == "") and (not id or id <= 0) then
+            return nil
+        end
+
+        local sockets = 0
+
+        -- 1) Prefer GetItemStats() for empty sockets.
+        if type(_G.GetItemStats) == "function" and type(link) == "string" and link ~= "" then
+            local ok, stats = pcall(_G.GetItemStats, link)
+            if ok and type(stats) == "table" then
+                for k, v in pairs(stats) do
+                    if type(k) == "string" and k:find("^EMPTY_SOCKET_") then
+                        sockets = sockets + (tonumber(v) or 0)
+                    end
+                end
+            end
+        end
+
+        -- 2) Count already-inserted gems (helps if sockets aren't reported as EMPTY_SOCKET_*).
+        local inserted = 0
+        if _G.C_Item and type(_G.C_Item.GetItemGem) == "function" and type(link) == "string" and link ~= "" then
+            for gemIndex = 1, 4 do
+                local _, gemLink = _G.C_Item.GetItemGem(link, gemIndex)
+                if type(gemLink) == "string" and gemLink ~= "" then
+                    inserted = inserted + 1
+                end
+            end
+        end
+        if inserted > sockets then
+            sockets = inserted
+        end
+
+        -- 3) Tooltip-scan fallback (prismatic sockets often show up as a line like "Prismatic Socket").
+        if sockets == 0 then
+            local lines = nil
+            if _G.C_TooltipInfo then
+                if type(link) == "string" and link ~= "" and type(_G.C_TooltipInfo.GetHyperlink) == "function" then
+                    local ok, info = pcall(_G.C_TooltipInfo.GetHyperlink, link)
+                    if ok and type(info) == "table" and type(info.lines) == "table" then
+                        lines = info.lines
+                    end
+                elseif id and id > 0 and type(_G.C_TooltipInfo.GetItemByID) == "function" then
+                    local ok, info = pcall(_G.C_TooltipInfo.GetItemByID, id)
+                    if ok and type(info) == "table" and type(info.lines) == "table" then
+                        lines = info.lines
+                    end
+                end
+            end
+
+            if type(lines) == "table" then
+                local count = 0
+                for i = 1, #lines do
+                    local line = lines[i]
+                    local t = (type(line) == "table" and line.leftText) or nil
+                    if type(t) == "string" and t ~= "" then
+                        local low = t:lower()
+                        if low:find("socket", 1, true) and not low:find("bonus", 1, true) then
+                            -- Counts lines like "Prismatic Socket", "Meta Socket", etc.
+                            count = count + 1
+                        end
+                    end
+                end
+                if count > sockets then
+                    sockets = count
+                end
+            else
+                -- Older fallback: scan a hidden GameTooltip.
+                local tip = EnsureAnalyzeScanTooltip()
+                tip:ClearLines()
+                if type(link) == "string" and link ~= "" and type(tip.SetHyperlink) == "function" then
+                    pcall(tip.SetHyperlink, tip, link)
+                elseif id and id > 0 and type(tip.SetItemByID) == "function" then
+                    pcall(tip.SetItemByID, tip, id)
+                end
+
+                local count = 0
+                local n = tip:NumLines() or 0
+                for i = 1, n do
+                    local fs = _G["TwichUIAnalyzeEnhancementsScanTooltipTextLeft" .. tostring(i)]
+                    local t = fs and fs.GetText and fs:GetText() or nil
+                    if type(t) == "string" and t ~= "" then
+                        local low = t:lower()
+                        if low:find("socket", 1, true) and not low:find("bonus", 1, true) then
+                            count = count + 1
+                        end
+                    end
+                end
+                if count > sockets then
+                    sockets = count
+                end
+            end
+        end
+
+        return sockets
+    end
+
+    local EQUIPLOC_TO_INV_SLOTS = {
+        INVTYPE_HEAD = { 1 },
+        INVTYPE_NECK = { 2 },
+        INVTYPE_SHOULDER = { 3 },
+        INVTYPE_CLOAK = { 15 },
+        INVTYPE_CHEST = { 5 },
+        INVTYPE_ROBE = { 5 },
+        INVTYPE_WRIST = { 9 },
+        INVTYPE_HAND = { 10 },
+        INVTYPE_WAIST = { 6 },
+        INVTYPE_LEGS = { 7 },
+        INVTYPE_FEET = { 8 },
+        INVTYPE_FINGER = { 11, 12 },
+        INVTYPE_TRINKET = { 13, 14 },
+        INVTYPE_WEAPON = { 16 },
+        INVTYPE_WEAPONMAINHAND = { 16 },
+        INVTYPE_2HWEAPON = { 16 },
+        INVTYPE_WEAPONOFFHAND = { 17 },
+        INVTYPE_SHIELD = { 17 },
+        INVTYPE_HOLDABLE = { 17 },
+    }
+
+    local EQUIPLOC_TO_SLOTKEY_CANDIDATES = {
+        INVTYPE_HEAD = { "HEAD" },
+        INVTYPE_NECK = { "NECK" },
+        INVTYPE_SHOULDER = { "SHOULDERS", "SHOULDER" },
+        INVTYPE_CLOAK = { "BACK" },
+        INVTYPE_CHEST = { "CHEST" },
+        INVTYPE_ROBE = { "CHEST" },
+        INVTYPE_WRIST = { "WRISTS", "WRIST" },
+        INVTYPE_HAND = { "HANDS", "HAND" },
+        INVTYPE_WAIST = { "WAIST" },
+        INVTYPE_LEGS = { "LEGS" },
+        INVTYPE_FEET = { "FEET" },
+        INVTYPE_FINGER = { "RING", "FINGER1", "FINGER2" },
+        INVTYPE_TRINKET = { "TRINKET", "TRINKET1", "TRINKET2" },
+        INVTYPE_WEAPON = { "MAINHAND" },
+        INVTYPE_WEAPONMAINHAND = { "MAINHAND" },
+        INVTYPE_2HWEAPON = { "MAINHAND" },
+        INVTYPE_WEAPONOFFHAND = { "OFFHAND" },
+        INVTYPE_SHIELD = { "OFFHAND" },
+        INVTYPE_HOLDABLE = { "OFFHAND" },
+    }
+
+    local function ResolveSlotKeyForEquipLoc(equipLoc)
+        local data = DataModule and DataModule.Handbook and DataModule.Handbook.GearEnhancements or nil
+        local slots = data and data.Slots or nil
+        if type(slots) ~= "table" then return nil end
+
+        local candidates = EQUIPLOC_TO_SLOTKEY_CANDIDATES[equipLoc]
+        if type(candidates) ~= "table" then return nil end
+        for _, k in ipairs(candidates) do
+            if slots[k] then
+                return k
+            end
+        end
+        return candidates[1]
+    end
+
+    local function CountEquippedGems(excludeInvSlots)
+        local exclude = {}
+        if type(excludeInvSlots) == "table" then
+            for _, s in ipairs(excludeInvSlots) do
+                exclude[tonumber(s) or -1] = true
+            end
+        end
+
+        local out = {}
+        if not _G.GetInventoryItemLink or not _G.C_Item or type(_G.C_Item.GetItemGem) ~= "function" then
+            return out
+        end
+
+        for slotId = 1, 19 do
+            if not exclude[slotId] then
+                local link = _G.GetInventoryItemLink("player", slotId)
+                if type(link) == "string" and link ~= "" then
+                    for gemIndex = 1, 4 do
+                        local _, gemLink = _G.C_Item.GetItemGem(link, gemIndex)
+                        if type(gemLink) == "string" and gemLink ~= "" then
+                            local gid = _G.GetItemInfoInstant and select(1, _G.GetItemInfoInstant(gemLink)) or nil
+                            gid = tonumber(gid)
+                            if gid and gid > 0 then
+                                out[gid] = (out[gid] or 0) + 1
+                            end
+                        end
+                    end
+                end
+            end
+        end
+
+        return out
+    end
+
+    RenderAnalyzeSlotEnhancements = function()
+        analyzeGemLine1:SetText("")
+        analyzeGemLine2:SetText("")
+        analyzeGemLine3:SetText("")
+        analyzeGemLine4:SetText("")
+
+        if analyzeItemTextBtn then analyzeItemTextBtn.__twichuiItemID = nil end
+        if analyzeEnhBtn then analyzeEnhBtn.__twichuiItemID = nil end
+        if analyzeGemBtn1 then analyzeGemBtn1.__twichuiItemID = nil end
+        if analyzeGemBtn2 then analyzeGemBtn2.__twichuiItemID = nil end
+        if analyzeGemBtn3 then analyzeGemBtn3.__twichuiItemID = nil end
+        if analyzeGemBtn4 then analyzeGemBtn4.__twichuiItemID = nil end
+
+        if not analyzeItemId and not analyzeItemLink then
+            analyzeItemIcon:SetTexture(nil)
+            analyzeItemText:SetText(ColorWrap("Drop Item", COLOR_MUTED[1], COLOR_MUTED[2], COLOR_MUTED[3]))
+            analyzeSlotLine:SetText(ColorWrap("Slot: —", COLOR_MUTED[1], COLOR_MUTED[2], COLOR_MUTED[3]))
+            analyzeEnhLine:SetText(ColorWrap("Enhancement: —", COLOR_MUTED[1], COLOR_MUTED[2], COLOR_MUTED[3]))
+            analyzeGemLine1:SetText(ColorWrap("Gems: —", COLOR_MUTED[1], COLOR_MUTED[2], COLOR_MUTED[3]))
+            return
+        end
+
+        local iid, _, _, equipLoc, iconTex
+        if _G.C_Item and type(_G.C_Item.GetItemInfoInstant) == "function" then
+            iid, _, _, equipLoc, iconTex = _G.C_Item.GetItemInfoInstant(analyzeItemLink or analyzeItemId)
+        else
+            iid, _, _, equipLoc, iconTex = _G.GetItemInfoInstant(analyzeItemLink or analyzeItemId)
+        end
+
+        iid = tonumber(iid) or tonumber(analyzeItemId)
+        analyzeItemId = iid
+
+        if analyzeItemTextBtn then
+            analyzeItemTextBtn.__twichuiItemID = iid
+        end
+
+        if iconTex then
+            analyzeItemIcon:SetTexture(iconTex)
+        else
+            analyzeItemIcon:SetTexture(nil)
+        end
+
+        if iid and iid > 0 then
+            if _G.C_Item and _G.C_Item.RequestLoadItemDataByID then
+                pcall(_G.C_Item.RequestLoadItemDataByID, iid)
+            end
+            if type(EnsureEnhItemLoadHook) == "function" then
+                EnsureEnhItemLoadHook(iid)
+            end
+        end
+
+        do
+            local disp = GetItemDisplayFromId(iid)
+            if disp == "Loading..." then
+                analyzeItemText:SetText(ColorWrap("Loading...", COLOR_MUTED[1], COLOR_MUTED[2], COLOR_MUTED[3]))
+            else
+                analyzeItemText:SetText(disp)
+            end
+        end
+
+        local slotKey = equipLoc and ResolveSlotKeyForEquipLoc(equipLoc) or nil
+        local slotLabel = slotKey or (equipLoc or "")
+        local data = DataModule and DataModule.Handbook and DataModule.Handbook.GearEnhancements or nil
+        local slots = data and data.Slots or nil
+        if type(slots) == "table" and slotKey and slots[slotKey] and slots[slotKey].label then
+            slotLabel = tostring(slots[slotKey].label)
+        end
+        if slotLabel == "" then slotLabel = "—" end
+        analyzeSlotLine:SetText(ColorWrap("Slot: " .. slotLabel, COLOR_PRIMARY[1], COLOR_PRIMARY[2], COLOR_PRIMARY[3]))
+
+        local db = GetGearEnhancementsDB()
+        local selectedBySlot = db and db.selectedBySlot or {}
+        local enhItemId = (slotKey and selectedBySlot and selectedBySlot[slotKey]) or nil
+        if enhItemId then
+            if type(EnsureEnhItemLoadHook) == "function" then
+                EnsureEnhItemLoadHook(enhItemId)
+            end
+            if analyzeEnhBtn then
+                analyzeEnhBtn.__twichuiItemID = enhItemId
+            end
+            local disp = GetItemDisplayFromId(enhItemId)
+            if disp == "Loading..." then
+                analyzeEnhLine:SetText(ColorWrap("Enhancement: Loading...", COLOR_MUTED[1], COLOR_MUTED[2],
+                    COLOR_MUTED[3]))
+            else
+                analyzeEnhLine:SetText("Enhancement: " .. disp)
+            end
+        else
+            analyzeEnhLine:SetText(ColorWrap("Enhancement: None selected", COLOR_MUTED[1], COLOR_MUTED[2], COLOR_MUTED
+            [3]))
+        end
+
+        local sockets = GetSocketCountForItem(analyzeItemLink, iid)
+        if sockets == nil then
+            analyzeGemLine1:SetText(ColorWrap("Gems: Loading...", COLOR_MUTED[1], COLOR_MUTED[2], COLOR_MUTED[3]))
+            return
+        end
+        sockets = tonumber(sockets) or 0
+        if sockets <= 0 then
+            analyzeGemLine1:SetText(ColorWrap("Gems: No sockets detected", COLOR_MUTED[1], COLOR_MUTED[2], COLOR_MUTED
+            [3]))
+            return
+        end
+
+        local excludeSlots = (equipLoc and EQUIPLOC_TO_INV_SLOTS[equipLoc]) or {}
+        local equippedCounts = CountEquippedGems(excludeSlots)
+        local usedCounts = {}
+        for gid, c in pairs(equippedCounts) do
+            usedCounts[gid] = c
+        end
+
+        local plist = (db and db.gemPriority and db.gemPriority.list) or {}
+        if type(plist) ~= "table" or #plist == 0 then
+            analyzeGemLine1:SetText(ColorWrap("Gems: Configure Gem Priority first", COLOR_MUTED[1], COLOR_MUTED[2],
+                COLOR_MUTED[3]))
+            return
+        end
+
+        local lines = { analyzeGemLine1, analyzeGemLine2, analyzeGemLine3, analyzeGemLine4 }
+        local btns = { analyzeGemBtn1, analyzeGemBtn2, analyzeGemBtn3, analyzeGemBtn4 }
+        for s = 1, math.min(4, sockets) do
+            local chosen = nil
+            for _, entry in ipairs(plist) do
+                local gid = tonumber(entry and entry.itemId)
+                if gid and gid > 0 then
+                    if _G.C_Item and _G.C_Item.RequestLoadItemDataByID then
+                        pcall(_G.C_Item.RequestLoadItemDataByID, gid)
+                    end
+                    if type(EnsureEnhItemLoadHook) == "function" then
+                        EnsureEnhItemLoadHook(gid)
+                    end
+                    local maxCount = entry.maxCount
+                    if maxCount ~= nil then
+                        maxCount = tonumber(maxCount)
+                    end
+                    if not maxCount or maxCount <= 0 then
+                        maxCount = 999
+                    end
+                    local used = tonumber(usedCounts[gid]) or 0
+                    if used < maxCount then
+                        chosen = gid
+                        usedCounts[gid] = used + 1
+                        break
+                    end
+                end
+            end
+
+            if chosen then
+                if btns[s] then
+                    btns[s].__twichuiItemID = chosen
+                end
+                local disp = GetItemDisplayFromId(chosen)
+                if disp == "Loading..." then
+                    lines[s]:SetText(ColorWrap("Gem " .. tostring(s) .. ": Loading...", COLOR_MUTED[1], COLOR_MUTED[2],
+                        COLOR_MUTED[3]))
+                else
+                    lines[s]:SetText("Gem " .. tostring(s) .. ": " .. disp)
+                end
+            else
+                if btns[s] then
+                    btns[s].__twichuiItemID = nil
+                end
+                lines[s]:SetText(ColorWrap("Gem " .. tostring(s) .. ": No recommendation", COLOR_MUTED[1], COLOR_MUTED
+                [2], COLOR_MUTED[3]))
+            end
+        end
+
+        for s = sockets + 1, 4 do
+            if btns[s] then btns[s].__twichuiItemID = nil end
+            if lines[s] then lines[s]:SetText("") end
+        end
+    end
+
+    local function SetAnalyzeItem(item)
+        if type(item) == "string" and item ~= "" then
+            analyzeItemLink = item
+            analyzeItemId = nil
+        else
+            analyzeItemLink = nil
+            analyzeItemId = tonumber(item)
+        end
+        RenderAnalyzeSlotEnhancements()
+    end
+
+    analyzeClearButton:SetScript("OnClick", function()
+        analyzeItemId = nil
+        analyzeItemLink = nil
+        RenderAnalyzeSlotEnhancements()
+    end)
+
+    analyzeItemButton:SetScript("OnMouseUp", function(self, button)
+        if button ~= "LeftButton" then return end
+        if not _G.CursorHasItem or not _G.CursorHasItem() then return end
+        local kind, itemIdOrLink = _G.GetCursorInfo()
+        if kind ~= "item" then return end
+        local link = itemIdOrLink
+        if type(link) == "string" and link ~= "" then
+            _G.ClearCursor()
+            SetAnalyzeItem(link)
+            return
+        end
+        local id = tonumber(itemIdOrLink)
+        if id and id > 0 then
+            _G.ClearCursor()
+            SetAnalyzeItem(id)
+            return
+        end
+    end)
+
+    analyzeItemButton:SetScript("OnReceiveDrag", function()
+        if not _G.CursorHasItem or not _G.CursorHasItem() then return end
+        local kind, itemIdOrLink = _G.GetCursorInfo()
+        if kind ~= "item" then return end
+        local link = itemIdOrLink
+        if type(link) == "string" and link ~= "" then
+            _G.ClearCursor()
+            SetAnalyzeItem(link)
+            return
+        end
+        local id = tonumber(itemIdOrLink)
+        if id and id > 0 then
+            _G.ClearCursor()
+            SetAnalyzeItem(id)
+            return
+        end
+    end)
+
+    analyzeItemButton:HookScript("OnEnter", function()
+        if not _G.GameTooltip then return end
+        if not analyzeItemLink and not analyzeItemId then return end
+
+        _G.GameTooltip:SetOwner(analyzeItemButton, "ANCHOR_RIGHT")
+        if analyzeItemLink and type(_G.GameTooltip.SetHyperlink) == "function" then
+            _G.GameTooltip:SetHyperlink(analyzeItemLink)
+            _G.GameTooltip:Show()
+            return
+        end
+
+        local id = tonumber(analyzeItemId)
+        if id and id > 0 then
+            if type(_G.GameTooltip.SetItemByID) == "function" then
+                pcall(_G.GameTooltip.SetItemByID, _G.GameTooltip, id)
+                _G.GameTooltip:Show()
+                return
+            end
+            local link = select(2, _G.GetItemInfo(id))
+            if type(link) == "string" and link ~= "" and type(_G.GameTooltip.SetHyperlink) == "function" then
+                _G.GameTooltip:SetHyperlink(link)
+                _G.GameTooltip:Show()
+                return
+            end
+        end
+    end)
+    analyzeItemButton:HookScript("OnLeave", function()
+        if _G.GameTooltip then _G.GameTooltip:Hide() end
+    end)
+
     local function RenderGearTracks()
         gearTable.ClearRows()
 
@@ -2775,6 +3441,25 @@ local function CreateHandbookFrame(parent)
     end
 
     local function SelectTab(index)
+        if index == 7 then
+            gearPage:Hide()
+            crestsPage:Hide()
+            itemUpgradePage:Hide()
+            statPriorityPage:Hide()
+            gearEnhancementsPage:Hide()
+            gemPriorityPage:Hide()
+            analyzeEnhancementsPage:Show()
+            SetTabSelected(tab1, false)
+            SetTabSelected(tab2, false)
+            SetTabSelected(tab3, false)
+            SetTabSelected(tab4, false)
+            SetTabSelected(tab5, false)
+            SetTabSelected(tab6, false)
+            SetTabSelected(tab7, true)
+            RenderAnalyzeSlotEnhancements()
+            return
+        end
+
         if index == 6 then
             gearPage:Hide()
             crestsPage:Hide()
@@ -2782,12 +3467,14 @@ local function CreateHandbookFrame(parent)
             statPriorityPage:Hide()
             gearEnhancementsPage:Hide()
             gemPriorityPage:Show()
+            analyzeEnhancementsPage:Hide()
             SetTabSelected(tab1, false)
             SetTabSelected(tab2, false)
             SetTabSelected(tab3, false)
             SetTabSelected(tab4, false)
             SetTabSelected(tab5, false)
             SetTabSelected(tab6, true)
+            SetTabSelected(tab7, false)
             RenderGemPriority()
             return
         end
@@ -2799,12 +3486,14 @@ local function CreateHandbookFrame(parent)
             statPriorityPage:Hide()
             gearEnhancementsPage:Show()
             gemPriorityPage:Hide()
+            analyzeEnhancementsPage:Hide()
             SetTabSelected(tab1, false)
             SetTabSelected(tab2, false)
             SetTabSelected(tab3, false)
             SetTabSelected(tab4, false)
             SetTabSelected(tab5, true)
             SetTabSelected(tab6, false)
+            SetTabSelected(tab7, false)
             RenderSlotEnhancements()
             return
         end
@@ -2816,12 +3505,14 @@ local function CreateHandbookFrame(parent)
             statPriorityPage:Show()
             gearEnhancementsPage:Hide()
             gemPriorityPage:Hide()
+            analyzeEnhancementsPage:Hide()
             SetTabSelected(tab1, false)
             SetTabSelected(tab2, false)
             SetTabSelected(tab3, false)
             SetTabSelected(tab4, true)
             SetTabSelected(tab5, false)
             SetTabSelected(tab6, false)
+            SetTabSelected(tab7, false)
             RenderStatPriority()
             return
         end
@@ -2833,12 +3524,14 @@ local function CreateHandbookFrame(parent)
             statPriorityPage:Hide()
             gearEnhancementsPage:Hide()
             gemPriorityPage:Hide()
+            analyzeEnhancementsPage:Hide()
             SetTabSelected(tab1, false)
             SetTabSelected(tab2, false)
             SetTabSelected(tab3, true)
             SetTabSelected(tab4, false)
             SetTabSelected(tab5, false)
             SetTabSelected(tab6, false)
+            SetTabSelected(tab7, false)
             RenderItemUpgrades()
             return
         end
@@ -2850,12 +3543,14 @@ local function CreateHandbookFrame(parent)
             statPriorityPage:Hide()
             gearEnhancementsPage:Hide()
             gemPriorityPage:Hide()
+            analyzeEnhancementsPage:Hide()
             SetTabSelected(tab1, false)
             SetTabSelected(tab3, false)
             SetTabSelected(tab2, true)
             SetTabSelected(tab4, false)
             SetTabSelected(tab5, false)
             SetTabSelected(tab6, false)
+            SetTabSelected(tab7, false)
             RenderCrests()
             return
         end
@@ -2865,12 +3560,14 @@ local function CreateHandbookFrame(parent)
         statPriorityPage:Hide()
         gearEnhancementsPage:Hide()
         gemPriorityPage:Hide()
+        analyzeEnhancementsPage:Hide()
         gearPage:Show()
         SetTabSelected(tab2, false)
         SetTabSelected(tab3, false)
         SetTabSelected(tab4, false)
         SetTabSelected(tab5, false)
         SetTabSelected(tab6, false)
+        SetTabSelected(tab7, false)
         SetTabSelected(tab1, true)
         RenderGearTracks()
     end
@@ -2881,6 +3578,7 @@ local function CreateHandbookFrame(parent)
     tab4:SetScript("OnClick", function() SelectTab(4) end)
     tab5:SetScript("OnClick", function() SelectTab(5) end)
     tab6:SetScript("OnClick", function() SelectTab(6) end)
+    tab7:SetScript("OnClick", function() SelectTab(7) end)
     SelectTab(1)
 
     frame:SetScript("OnShow", function()
@@ -2888,6 +3586,8 @@ local function CreateHandbookFrame(parent)
             RenderSlotEnhancements()
         elseif gemPriorityPage:IsShown() then
             RenderGemPriority()
+        elseif analyzeEnhancementsPage:IsShown() then
+            RenderAnalyzeSlotEnhancements()
         elseif statPriorityPage:IsShown() then
             RenderStatPriority()
         elseif itemUpgradePage:IsShown() then
