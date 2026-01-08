@@ -894,6 +894,7 @@ local function CreateHandbookFrame(parent)
     end)
 
     -- Gear Enhancements (profile-backed)
+    local EnsureEnhItemLoadHook = nil
     local function GetItemDisplayFromEntry(entry)
         if not entry then return "" end
         local explicitLink = entry.itemLink
@@ -917,7 +918,10 @@ local function CreateHandbookFrame(parent)
         if type(name) == "string" and name ~= "" then
             return name
         end
-        return tostring(entry.label or ("ItemID: " .. tostring(itemId)))
+        if type(EnsureEnhItemLoadHook) == "function" then
+            EnsureEnhItemLoadHook(itemId)
+        end
+        return tostring(entry.label or "Loading...")
     end
 
     local function GetItemDisplayFromId(itemId)
@@ -933,7 +937,10 @@ local function CreateHandbookFrame(parent)
         if type(name) == "string" and name ~= "" then
             return name
         end
-        return "ItemID: " .. tostring(id)
+        if type(EnsureEnhItemLoadHook) == "function" then
+            EnsureEnhItemLoadHook(id)
+        end
+        return "Loading..."
     end
 
     local enhPanel = CreateFrame("Frame", nil, gearEnhancementsPage, "BackdropTemplate")
@@ -1172,6 +1179,8 @@ local function CreateHandbookFrame(parent)
     local enhFiltered = {}
     local enhActiveSlotKey = nil
 
+    local RenderSlotEnhancements = nil
+
     local EnhRender = nil
     local EnhScheduleRender = nil
 
@@ -1179,6 +1188,25 @@ local function CreateHandbookFrame(parent)
     local enhDescCache = {}
     local enhScanTip = nil
     local enhItemLoadHooked = {}
+
+    local gearEnhancementsRefreshToken = 0
+    local function ScheduleGearEnhancementsRefresh()
+        if not _G.C_Timer or type(_G.C_Timer.After) ~= "function" then
+            if type(RenderSlotEnhancements) == "function" and gearEnhancementsPage and gearEnhancementsPage.IsShown and gearEnhancementsPage:IsShown() then
+                RenderSlotEnhancements()
+            end
+            return
+        end
+
+        gearEnhancementsRefreshToken = gearEnhancementsRefreshToken + 1
+        local myToken = gearEnhancementsRefreshToken
+        _G.C_Timer.After(0.05, function()
+            if myToken ~= gearEnhancementsRefreshToken then return end
+            if type(RenderSlotEnhancements) ~= "function" then return end
+            if not gearEnhancementsPage or not gearEnhancementsPage.IsShown or not gearEnhancementsPage:IsShown() then return end
+            RenderSlotEnhancements()
+        end)
+    end
 
     local function EnsureEnhScanTooltip()
         if enhScanTip then return enhScanTip end
@@ -1268,7 +1296,7 @@ local function CreateHandbookFrame(parent)
         return (type(enhDescCache[id]) == "string" and enhDescCache[id]) or ""
     end
 
-    local function EnsureEnhItemLoadHook(itemId)
+    EnsureEnhItemLoadHook = function(itemId)
         local id = tonumber(itemId)
         if not id or id <= 0 then return end
         if enhItemLoadHooked[id] then return end
@@ -1278,6 +1306,7 @@ local function CreateHandbookFrame(parent)
             local ok, item = pcall(_G.Item.CreateFromItemID, _G.Item, id)
             if ok and item and type(item.ContinueOnItemLoad) == "function" then
                 pcall(item.ContinueOnItemLoad, item, function()
+                    ScheduleGearEnhancementsRefresh()
                     if enhSelector and enhSelector.__twichuiOpen and type(EnhScheduleRender) == "function" then
                         EnhScheduleRender(enhSelector.__twichuiRenderOwner)
                     end
@@ -1601,7 +1630,7 @@ local function CreateHandbookFrame(parent)
         EnhScheduleRender(enhSelector.__twichuiRenderOwner)
     end)
 
-    local function RenderSlotEnhancements()
+    RenderSlotEnhancements = function()
         ClearSlotRows()
 
         local data = DataModule and DataModule.Handbook and DataModule.Handbook.GearEnhancements or nil
@@ -1671,6 +1700,7 @@ local function CreateHandbookFrame(parent)
             if row.selectButton and row.selectButton.SetText then
                 if selectedItemId then
                     row.selectButton:SetText(GetItemDisplayFromId(selectedItemId))
+                    EnsureEnhItemLoadHook(selectedItemId)
                 else
                     row.selectButton:SetText("Select")
                 end
