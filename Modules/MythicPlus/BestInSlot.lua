@@ -298,6 +298,31 @@ local TierNameCache = nil
 local TierInstanceLootCache = nil
 local TierItemLinkCache = nil
 
+local function IsLootCacheLikelyArray(t)
+    if type(t) ~= "table" then return false end
+    if rawget(t, 1) ~= nil then return true end
+    if #t > 0 then return true end
+    return false
+end
+
+local function BackfillLootCacheFromInstanceLoot(lootCache, instanceLootCache)
+    if type(lootCache) ~= "table" then lootCache = {} end
+    if type(instanceLootCache) ~= "table" then return lootCache end
+
+    for instanceName, itemList in pairs(instanceLootCache) do
+        if type(itemList) == "table" and instanceName ~= "All Items" then
+            for _, itemID in ipairs(itemList) do
+                local id = tonumber(itemID)
+                if id and id > 0 and lootCache[id] == nil then
+                    lootCache[id] = tostring(instanceName) .. " (Instance)"
+                end
+            end
+        end
+    end
+
+    return lootCache
+end
+
 local function BuildTierCache(force)
     -- Check if we have in-memory cache
     if not force and TierLootCache and TierNameCache and TierInstanceLootCache then
@@ -314,6 +339,18 @@ local function BuildTierCache(force)
         TierNameCache = storedCache.Name or {}
         TierInstanceLootCache = storedCache.InstanceLoot or {}
         TierItemLinkCache = storedCache.ItemLink or {}
+
+        -- Backfill older caches that stored InstanceLoot but not a usable Loot map.
+        -- "All Items" relies on TierLootCache (itemID -> source), so rebuild it if missing/invalid.
+        if type(TierLootCache) ~= "table" or next(TierLootCache) == nil or IsLootCacheLikelyArray(TierLootCache) then
+            TierLootCache = BackfillLootCacheFromInstanceLoot({}, TierInstanceLootCache)
+            MythicPlusModule.Database:SetItemCache({
+                Loot = TierLootCache,
+                Name = TierNameCache,
+                InstanceLoot = TierInstanceLootCache,
+                ItemLink = TierItemLinkCache
+            })
+        end
 
         -- Backfill Tier Sets for older caches that predate this feature
         if not TierInstanceLootCache["Tier Sets"] or #TierInstanceLootCache["Tier Sets"] == 0 then
