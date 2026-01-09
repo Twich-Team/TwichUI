@@ -314,13 +314,14 @@ local function EnsureRunDetailsFrame(panel)
     frame.Fields.date = CreateKV(0, "Date:")
     frame.Fields.time = CreateKV(-18, "Time:")
     frame.Fields.onTime = CreateKV(-36, "Timed:")
-    frame.Fields.upgrade = CreateKV(-54, "Chest:")
-    frame.Fields.deaths = CreateKV(-72, "Deaths:")
-    frame.Fields.score = CreateKV(-90, "Score:")
-    frame.Fields.affixes = CreateKV(-108, "Affixes:")
+    frame.Fields.abandoned = CreateKV(-54, "Abandoned:")
+    frame.Fields.upgrade = CreateKV(-72, "Chest:")
+    frame.Fields.deaths = CreateKV(-90, "Deaths:")
+    frame.Fields.score = CreateKV(-108, "Score:")
+    frame.Fields.affixes = CreateKV(-126, "Affixes:")
 
     local lootHeader = content:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    lootHeader:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -134)
+    lootHeader:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -152)
     lootHeader:SetText("Loot")
     frame.LootHeader = lootHeader
     table.insert(frame.LabelFontStrings, lootHeader)
@@ -624,14 +625,29 @@ local function EnsureRunDetailsFrame(panel)
         end
         self.Fields.time:SetText(timeText)
 
-        if runData.onTime == true and CT and CT.TWICH then
+        local isAbandoned = (runData.abandoned == true)
+
+        if isAbandoned then
+            self.Fields.onTime:SetText("—")
+        elseif runData.onTime == true and CT and CT.TWICH then
             self.Fields.onTime:SetText(Color(CT.TWICH.TEXT_SUCCESS, "Yes"))
         elseif runData.onTime == false and CT and CT.TWICH then
             self.Fields.onTime:SetText(Color(CT.TWICH.TEXT_ERROR, "No"))
         else
             self.Fields.onTime:SetText((runData.onTime == true and "Yes") or (runData.onTime == false and "No") or "—")
         end
-        self.Fields.upgrade:SetText(runData.upgrade and ("+" .. tostring(runData.upgrade)) or "—")
+
+        if self.Fields.abandoned then
+            if isAbandoned and CT and CT.TWICH then
+                self.Fields.abandoned:SetText(Color(CT.TWICH.TEXT_ERROR, "Yes"))
+            elseif (not isAbandoned) and CT and CT.TWICH then
+                self.Fields.abandoned:SetText(Color(CT.TWICH.TEXT_SUCCESS, "No"))
+            else
+                self.Fields.abandoned:SetText(isAbandoned and "Yes" or "No")
+            end
+        end
+
+        self.Fields.upgrade:SetText((not isAbandoned and runData.upgrade) and ("+" .. tostring(runData.upgrade)) or "—")
         self.Fields.deaths:SetText(tostring(runData.deaths or 0))
         self.Fields.affixes:SetText(FormatAffixes(runData.affixes))
 
@@ -1017,10 +1033,6 @@ end
 
 function Runs:Refresh(panel)
     if not panel or not panel.content then return end
-
-    if Database and type(Database.SyncRunsFromBlizzard) == "function" then
-        Database:SyncRunsFromBlizzard({ throttleSeconds = 30 })
-    end
 
     local allRuns = Database:GetRuns()
     local runs = {}

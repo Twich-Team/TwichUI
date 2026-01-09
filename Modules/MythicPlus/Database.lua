@@ -42,6 +42,7 @@ MythicPlusModule.Database = Database
 ---@field blizzardKey string|nil Stable-ish key for matching Blizzard run history entries.
 ---@field blizzardSyncedAt number|nil unix timestamp when last synced.
 ---@field blizzard table|nil Minimal snapshot of Blizzard fields used for sync.
+---@field abandoned boolean|nil True if the run ended without completion (reset/left instance).
 
 ---@class MythicPlusDatabase_CharacterEntry
 ---@field Metadata MythicPlusDatabase_CharacterEntry_Metadata
@@ -495,6 +496,43 @@ local function FindMatchingRun(existingByMap, blz)
     return best
 end
 
+-- When the locally-recorded run is missing `time` (common if completion payload was incomplete),
+-- fall back to matching by timestamp proximity + key level within the same dungeon.
+local function FindMatchingRunLoose(existingByMap, blz)
+    if type(blz) ~= "table" then return nil end
+    local list = existingByMap[blz.mapId]
+    if type(list) ~= "table" then return nil end
+
+    local best
+    local bestScore
+
+    local completedAt = tonumber(blz.completedAt)
+    if not completedAt or completedAt <= 0 then
+        return nil
+    end
+
+    for _, run in ipairs(list) do
+        if type(run) == "table" and tonumber(run.level) == tonumber(blz.level) then
+            local rt = tonumber(run.timestamp)
+            if rt then
+                local dtSec = math.abs(rt - completedAt)
+                -- Only consider runs reasonably close in time to avoid merging wrong entries.
+                if dtSec <= (30 * 60) then
+                    -- Prefer runs with missing/zero duration; those are the ones we want to enrich.
+                    local hasTime = tonumber(run.time) and tonumber(run.time) > 0
+                    local score = dtSec + (hasTime and 999999 or 0)
+                    if (not bestScore) or score < bestScore then
+                        bestScore = score
+                        best = run
+                    end
+                end
+            end
+        end
+    end
+
+    return best
+end
+
 ---@class BlizzardRunSyncResult
 ---@field imported number
 ---@field updated number
@@ -547,10 +585,20 @@ function Database:SyncRunsFromBlizzard(opts)
     local existingByMap = {}
     for _, run in ipairs(charDB.Runs) do
         if type(run) == "table" then
-            local mid = tonumber(run.mapId)
-            if mid then
-                existingByMap[mid] = existingByMap[mid] or {}
-                table.insert(existingByMap[mid], run)
+            -- Index by both UI mapId and challenge-mode map ids so Blizzard history can match either.
+            local keys = {
+                tonumber(run.mapId),
+                tonumber(run.mapChallengeModeID) or tonumber(run.mapChallengeModeId),
+                tonumber(run.challengeModeID) or tonumber(run.challengeModeId),
+                tonumber(run.mapID) or tonumber(run.mapId),
+            }
+            local seen = {}
+            for _, mid in ipairs(keys) do
+                if mid and not seen[mid] then
+                    seen[mid] = true
+                    existingByMap[mid] = existingByMap[mid] or {}
+                    table.insert(existingByMap[mid], run)
+                end
             end
             if type(run.blizzardKey) == "string" and run.blizzardKey ~= "" then
                 existingByKey[run.blizzardKey] = run
@@ -590,7 +638,8 @@ function Database:SyncRunsFromBlizzard(opts)
                 }
                 local key = MakeBlizzardKey(mapId, level, durationSec, score, completedAt)
 
-                local target = (key and existingByKey[key]) or FindMatchingRun(existingByMap, blz)
+                local target = (key and existingByKey[key]) or FindMatchingRun(existingByMap, blz) or
+                    FindMatchingRunLoose(existingByMap, blz)
                 if target then
                     matched = matched + 1
                     if key and (not target.blizzardKey or target.blizzardKey == "") then
@@ -605,6 +654,18 @@ function Database:SyncRunsFromBlizzard(opts)
                     end
                     if durationSec and (not tonumber(target.time) or tonumber(target.time) <= 0) then
                         target.time = durationSec
+                        changed = true
+                    end
+
+                    -- Backfill missing level if needed.
+                    if level and (not tonumber(target.level) or tonumber(target.level) <= 0) then
+                        target.level = level
+                        changed = true
+                    end
+
+                    -- Preserve the Blizzard map id as a challenge-mode id hint if we don't have one.
+                    if mapId and (not tonumber(target.mapChallengeModeID) or tonumber(target.mapChallengeModeID) <= 0) then
+                        target.mapChallengeModeID = mapId
                         changed = true
                     end
 
@@ -634,6 +695,7 @@ function Database:SyncRunsFromBlizzard(opts)
                         date = (type(_G.date) == "function") and _G.date("%Y-%m-%d %H:%M:%S", ts) or "",
                         patch = patch,
                         mapId = mapId,
+                        mapChallengeModeID = mapId,
                         level = level,
                         affixes = {},
                         score = tonumber(score) or 0,
@@ -684,6 +746,8 @@ end
 function Database:UpdateDungeonStatsFromRun(run)
     if not run or not run.mapId then return end
 
+    local isAbandoned = (run.abandoned == true)
+
     local comp = { tank = {}, healer = {}, dps = {} }
     if run.group then
         for _, member in pairs(run.group) do
@@ -709,8 +773,8 @@ function Database:UpdateDungeonStatsFromRun(run)
 
     local update = {
         isRun = true,
-        -- If it's being added via AddRun, it's typically a completion.
-        completed = true,
+        completed = not isAbandoned,
+        abandoned = isAbandoned,
         time = run.time,
         groupDeaths = run.deaths,
         playerDeaths = run.playerDeaths,

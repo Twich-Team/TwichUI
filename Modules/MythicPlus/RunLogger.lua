@@ -951,6 +951,11 @@ function MythicPlusRunLogger:_OnDungeonEvent(eventName, ...)
         -- If we already started a run via CHALLENGE_MODE_START (race condition), update it
         local db = GetDB()
         if db.active and db.active.status == "in_progress" then
+            -- Some clients/patches fire CHALLENGE_MODE_START with nil/invalid mapId.
+            -- Backfill from the resolved TWICH_DUNGEON_START payload.
+            if (db.active.mapId == nil) or (tonumber(db.active.mapId) == nil) or (tonumber(db.active.mapId) <= 0) then
+                db.active.mapId = tonumber(mapId) or mapId
+            end
             if not db.active.dungeonName then
                 db.active.dungeonName = dungeonName
                 Logger.Debug("RunLogger: Updated active run with resolved dungeon name: " .. tostring(dungeonName))
@@ -967,6 +972,26 @@ function MythicPlusRunLogger:_OnDungeonEvent(eventName, ...)
 
     if eventName == "CHALLENGE_MODE_START" then
         local mapId = ...
+
+        -- Some clients/patches provide nil/invalid mapId here; recover from live APIs.
+        if (tonumber(mapId) == nil) or (tonumber(mapId) <= 0) then
+            if C_ChallengeMode and type(C_ChallengeMode.GetActiveChallengeMapID) == "function" then
+                local ok, active = pcall(C_ChallengeMode.GetActiveChallengeMapID)
+                if ok and tonumber(active) and tonumber(active) > 0 then
+                    mapId = active
+                end
+            end
+
+            if (tonumber(mapId) == nil) or (tonumber(mapId) <= 0) then
+                if C_ChallengeMode and type(C_ChallengeMode.GetActiveKeystoneInfo) == "function" then
+                    local ok, a = pcall(C_ChallengeMode.GetActiveKeystoneInfo)
+                    if ok and tonumber(a) and tonumber(a) > 0 then
+                        mapId = a
+                    end
+                end
+            end
+        end
+
         -- Only start if we haven't already (via TWICH_DUNGEON_START)
         local db = GetDB()
         if not db.active or db.active.status ~= "in_progress" then
@@ -1085,6 +1110,53 @@ function MythicPlusRunLogger:_OnDungeonEvent(eventName, ...)
         local db = GetDB()
         if db.active and db.active.status ~= "completed" then
             db.active.status = "completed"
+        end
+
+        -- If TWICH_DUNGEON_COMPLETION didn't fire, try to snapshot completion info right now.
+        if db.active and type(db.active.completion) ~= "table" and C_ChallengeMode then
+            local mapID, level, timeVal, onTime, upgradeLevels, practiceRun
+
+            if type(C_ChallengeMode.GetChallengeCompletionInfo) == "function" then
+                local ok, a, b, c, d, e, f = pcall(C_ChallengeMode.GetChallengeCompletionInfo)
+                if ok then
+                    mapID, level, timeVal, onTime, upgradeLevels, practiceRun = a, b, c, d, e, f
+                end
+            end
+
+            if (timeVal == nil) and type(C_ChallengeMode.GetCompletionInfo) == "function" then
+                local ok, a, b, c, d, e = pcall(C_ChallengeMode.GetCompletionInfo)
+                if ok then
+                    mapID, level, timeVal, onTime, upgradeLevels = a, b, c, d, e
+                end
+            end
+
+            local timeSec, timeMS
+            local tv = tonumber(timeVal)
+            if tv then
+                if tv > 10000 then
+                    timeMS = tv
+                    timeSec = tv / 1000
+                else
+                    timeSec = tv
+                    timeMS = tv * 1000
+                end
+            end
+
+            if timeSec or level or mapID then
+                local mapIdNum = tonumber(mapID) or tonumber(db.active.mapId) or mapID or db.active.mapId
+                local lvlNum = tonumber(level) or tonumber(db.active.level)
+                db.active.completion = {
+                    mapId = mapIdNum,
+                    mapID = mapIdNum,
+                    level = lvlNum,
+                    timeSec = timeSec,
+                    timeMS = timeMS,
+                    onTime = (type(onTime) == "boolean") and onTime or nil,
+                    upgradeLevels = tonumber(upgradeLevels) or nil,
+                    practiceRun = (type(practiceRun) == "boolean") and practiceRun or nil,
+                    source = "CHALLENGE_MODE_COMPLETED_fallback",
+                }
+            end
         end
 
         return

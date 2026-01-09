@@ -18,6 +18,7 @@ local Logger = T:GetModule("Logger")
 local Tools = T:GetModule("Tools")
 ---@type ToolsUI|nil
 local UI = Tools and Tools.UI
+local CT = Tools and Tools.Colors
 
 local CreateFrame = _G.CreateFrame
 local GetTime = _G.GetTime
@@ -87,6 +88,22 @@ local function EnsureSecurePortalButton(panel)
     portalIcon:SetAlpha(0.35)
     portalIcon:SetDesaturated(true)
 
+    -- Cooldown overlay (light red) for when the portal spell is not ready.
+    local cdOverlay = newBtn:CreateTexture(nil, "OVERLAY")
+    cdOverlay:SetAllPoints(newBtn)
+    cdOverlay:Hide()
+    if cdOverlay.SetColorTexture then
+        cdOverlay:SetColorTexture(1, 0.25, 0.25, 0.22)
+    end
+    if newBtn.CreateMaskTexture and cdOverlay.AddMaskTexture then
+        local cdMask = newBtn:CreateMaskTexture(nil, "ARTWORK")
+        cdMask:SetTexture("Interface\\CharacterFrame\\TempPortraitAlphaMask", "CLAMPTOBLACKADDITIVE",
+            "CLAMPTOBLACKADDITIVE")
+        cdMask:SetAllPoints(newBtn)
+        cdOverlay:AddMaskTexture(cdMask)
+        newBtn.__twichuiPortalCDMask = cdMask
+    end
+
     local portalHL = newBtn:CreateTexture(nil, "HIGHLIGHT")
     portalHL:SetAllPoints(newBtn)
     if newBtn.CreateMaskTexture and portalHL.AddMaskTexture then
@@ -117,6 +134,15 @@ local function EnsureSecurePortalButton(panel)
 
             if s.portalUnlocked then
                 _G.GameTooltip:AddLine("Click to teleport.", 1, 1, 1, true)
+
+                -- Cooldown info (best-effort)
+                local rem = nil
+                if type(s.portalCooldownRemaining) == "number" then
+                    rem = s.portalCooldownRemaining
+                end
+                if type(rem) == "number" and rem > 0 then
+                    _G.GameTooltip:AddLine("Cooldown: " .. s.portalCooldownText, 1, 0.45, 0.45, true)
+                end
             else
                 _G.GameTooltip:AddLine("You haven't unlocked this portal yet.", 1, 1, 1, true)
             end
@@ -137,6 +163,7 @@ local function EnsureSecurePortalButton(panel)
 
     st.portalButton = newBtn
     st.portalIcon = portalIcon
+    st.portalCooldownOverlay = cdOverlay
     if st.portalHover and st.portalHover.SetAllPoints then
         st.portalHover:SetAllPoints(newBtn)
     end
@@ -175,6 +202,91 @@ local function IsSpellKnownByPlayer(spellId)
     end
 
     return false
+end
+
+---@param seconds number|nil
+---@return string
+local function FormatCooldownTime(seconds)
+    local s = tonumber(seconds) or 0
+    if s <= 0 then
+        return "0:00"
+    end
+    s = math.floor(s + 0.5)
+    local h = math.floor(s / 3600)
+    local m = math.floor((s % 3600) / 60)
+    local r = s % 60
+    if h > 0 then
+        return string.format("%dh %02dm", h, m)
+    end
+    return string.format("%d:%02d", m, r)
+end
+
+---@param spellId number|nil
+---@return number remainingSeconds
+local function GetSpellCooldownRemaining(spellId)
+    spellId = tonumber(spellId)
+    if not spellId or spellId <= 0 then
+        return 0
+    end
+
+    local now = (type(GetTime) == "function") and GetTime() or 0
+
+    local C_Spell = _G.C_Spell
+    if C_Spell and type(C_Spell.GetSpellCooldown) == "function" then
+        local ok, info = pcall(C_Spell.GetSpellCooldown, spellId)
+        if ok and type(info) == "table" then
+            local startTime = tonumber(info.startTime or 0) or 0
+            local duration = tonumber(info.duration or 0) or 0
+            local enabled = (info.isEnabled == nil) and true or (info.isEnabled and true or false)
+            if enabled and duration > 0 and startTime > 0 then
+                local rem = (startTime + duration) - now
+                return rem > 0 and rem or 0
+            end
+            return 0
+        end
+    end
+
+    ---@diagnostic disable-next-line: undefined-field
+    local GetSpellCooldown = _G.GetSpellCooldown
+    if type(GetSpellCooldown) == "function" then
+        local ok, startTime, duration, enabled = pcall(GetSpellCooldown, spellId)
+        if ok then
+            startTime = tonumber(startTime or 0) or 0
+            duration = tonumber(duration or 0) or 0
+            enabled = (enabled == nil) and 1 or enabled
+            if enabled == 1 and duration > 0 and startTime > 0 then
+                local rem = (startTime + duration) - now
+                return rem > 0 and rem or 0
+            end
+        end
+    end
+
+    return 0
+end
+
+---@param panel TwichUI_MythicPlus_DungeonsPanel
+local function UpdatePortalCooldownVisual(panel)
+    if not panel or not panel.__twichuiActions then return end
+    local st = panel.__twichuiActions
+    local overlay = st.portalCooldownOverlay
+    if not overlay or not overlay.Show then return end
+
+    st.portalCooldownRemaining = 0
+    st.portalCooldownText = nil
+
+    if not st.portalUnlocked or not st.portalSpellId then
+        overlay:Hide()
+        return
+    end
+
+    local rem = GetSpellCooldownRemaining(st.portalSpellId)
+    if rem and rem > 0.2 then
+        st.portalCooldownRemaining = rem
+        st.portalCooldownText = FormatCooldownTime(rem)
+        overlay:Show()
+    else
+        overlay:Hide()
+    end
 end
 
 function Dungeons:ClearPortalSpellCache()
@@ -227,6 +339,7 @@ local function UpdateActions(panel, mapId)
         panel.__twichuiActions.portalSpellId = spellId
         panel.__twichuiActions.portalHasData = hasData
         panel.__twichuiActions.portalUnlocked = unlocked
+        UpdatePortalCooldownVisual(panel)
         return
     end
 
@@ -281,6 +394,8 @@ local function UpdateActions(panel, mapId)
     panel.__twichuiActions.portalSpellId = spellId
     panel.__twichuiActions.portalHasData = hasData
     panel.__twichuiActions.portalUnlocked = unlocked
+
+    UpdatePortalCooldownVisual(panel)
 
     -- Update MDT Button visibility
     if panel.__twichuiActions.mdtButton then
@@ -1328,6 +1443,9 @@ end
 ---@field portalButton Button
 ---@field portalIcon Texture
 ---@field portalHover Frame
+---@field portalCooldownOverlay Texture|nil
+---@field portalCooldownRemaining number|nil
+---@field portalCooldownText string|nil
 ---@field portalSpellId number|nil
 ---@field portalHasData boolean|nil
 ---@field portalUnlocked boolean
@@ -2340,10 +2458,6 @@ local function RefreshPanel(panel)
         return
     end
 
-    if Database and type(Database.SyncRunsFromBlizzard) == "function" then
-        Database:SyncRunsFromBlizzard({ throttleSeconds = 30 })
-    end
-
     local mapIds = GetCurrentSeasonMapIds()
 
     if panel.__twichuiEmptyText then
@@ -2755,6 +2869,22 @@ local function CreateDungeonsPanel(parent)
     portalIcon:SetAlpha(0.35)
     portalIcon:SetDesaturated(true)
 
+    -- Cooldown overlay (light red)
+    local portalCDOverlay = portalButton:CreateTexture(nil, "OVERLAY")
+    portalCDOverlay:SetAllPoints(portalButton)
+    portalCDOverlay:Hide()
+    if portalCDOverlay.SetColorTexture then
+        portalCDOverlay:SetColorTexture(1, 0.25, 0.25, 0.22)
+    end
+    if portalButton.CreateMaskTexture and portalCDOverlay.AddMaskTexture then
+        local cdMask = portalButton:CreateMaskTexture(nil, "ARTWORK")
+        cdMask:SetTexture("Interface\\CharacterFrame\\TempPortraitAlphaMask", "CLAMPTOBLACKADDITIVE",
+            "CLAMPTOBLACKADDITIVE")
+        cdMask:SetAllPoints(portalButton)
+        portalCDOverlay:AddMaskTexture(cdMask)
+        portalButton.__twichuiPortalCDMask = cdMask
+    end
+
     local portalHL = portalButton:CreateTexture(nil, "HIGHLIGHT")
     portalHL:SetAllPoints(portalButton)
     -- Circle highlight: mask the square highlight so it matches the circular portal icon.
@@ -2797,6 +2927,12 @@ local function CreateDungeonsPanel(parent)
 
             if st.portalUnlocked then
                 _G.GameTooltip:AddLine("Click to teleport.", 1, 1, 1, true)
+
+                -- Cooldown info (best-effort)
+                local rem = GetSpellCooldownRemaining(st.portalSpellId)
+                if rem and rem > 0.2 then
+                    _G.GameTooltip:AddLine("Cooldown: " .. FormatCooldownTime(rem), 1, 0.45, 0.45, true)
+                end
             else
                 _G.GameTooltip:AddLine("You haven't unlocked this portal yet.", 1, 1, 1, true)
             end
@@ -2829,6 +2965,10 @@ local function CreateDungeonsPanel(parent)
         _G.GameTooltip:SetText("Portal", 1, 1, 1)
         if st and st.portalUnlocked then
             _G.GameTooltip:AddLine("Unavailable while in combat.", 1, 1, 1, true)
+            local rem = GetSpellCooldownRemaining(st.portalSpellId)
+            if rem and rem > 0.2 then
+                _G.GameTooltip:AddLine("Cooldown: " .. FormatCooldownTime(rem), 1, 0.45, 0.45, true)
+            end
         elseif st and st.portalSpellId then
             _G.GameTooltip:AddLine("You haven't unlocked this portal yet.", 1, 1, 1, true)
         else
@@ -3292,6 +3432,7 @@ local function CreateDungeonsPanel(parent)
         portalButton = portalButton,
         portalIcon = portalIcon,
         portalHover = portalHover,
+        portalCooldownOverlay = portalCDOverlay,
         portalSpellId = nil,
         portalUnlocked = false,
         mdtButton = mdtButton,
@@ -3312,6 +3453,12 @@ local function CreateDungeonsPanel(parent)
     events:SetScript("OnEvent", function(_, event)
         if not panel:IsShown() then return end
 
+        -- Cooldown changes can be frequent; only update the portal visual state.
+        if event == "SPELL_UPDATE_COOLDOWN" or event == "SPELL_UPDATE_CHARGES" then
+            UpdatePortalCooldownVisual(panel)
+            return
+        end
+
         local now = (type(GetTime) == "function") and GetTime() or 0
         local last = panel.__twichuiLastUpdate or 0
 
@@ -3331,6 +3478,8 @@ local function CreateDungeonsPanel(parent)
         "CHALLENGE_MODE_MAPS_UPDATE",
         "CHALLENGE_MODE_COMPLETED",
         "BAG_UPDATE_DELAYED",
+        "SPELL_UPDATE_COOLDOWN",
+        "SPELL_UPDATE_CHARGES",
     }
     for _, ev in ipairs(evs) do
         pcall(events.RegisterEvent, events, ev)

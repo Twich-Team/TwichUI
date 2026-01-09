@@ -781,13 +781,51 @@ local function FinalizeSession(reason)
         if DungeonSession.startUnix then
             local now = time()
             local elapsed = now - DungeonSession.startUnix
-            -- Only count as legit abandon if it lasted at least 1 minute
-            if elapsed > 60 then
-                Database:RecordAbandon(DungeonSession.mapID, elapsed, DungeonSession.deaths, DungeonSession.playerDeaths)
+            if elapsed < 0 then elapsed = 0 end
+
+            local mapId = tonumber(DungeonSession.mapID)
+            local mapChallengeModeID = tonumber(DungeonSession.mapChallengeModeID)
+            local level = tonumber(DungeonSession.level)
+            if level and level <= 0 then
+                level = nil
             end
+
+            local ts = time()
+            local patch
+            if type(GetBuildInfo) == "function" then
+                patch = select(1, GetBuildInfo())
+            end
+
+            ---@type MythicPlusDatabase_RunEntry
+            local run = {
+                id = tostring(ts) .. "-" .. tostring(mapId or DungeonSession.mapID or "unknown") .. "-abandoned",
+                timestamp = ts,
+                date = date("%Y-%m-%d %H:%M:%S", ts),
+                patch = patch,
+                mapId = mapId or DungeonSession.mapID,
+                mapChallengeModeID = mapChallengeModeID,
+                dungeonName = DungeonSession.dungeonName,
+                level = level,
+                affixes = DungeonSession.affixes or {},
+                score = 0,
+                time = elapsed,
+                onTime = nil,
+                deaths = tonumber(DungeonSession.deaths) or 0,
+                playerDeaths = tonumber(DungeonSession.playerDeaths) or 0,
+                upgrade = nil,
+                groupStart = DungeonSession.groupStart,
+                groupStartRoster = DungeonSession.groupStartRoster,
+                group = DungeonSession.groupStart or DungeonSession.group or {},
+                groupRoster = DungeonSession.groupRoster,
+                loot = DungeonSession.loot or {},
+                abandoned = true,
+            }
+
+            Database:AddRun(run)
         end
 
         DungeonSession = nil
+        PendingGroupSnapshot = nil
         Database:ResetDungeonSession()
         return
     end
@@ -849,6 +887,7 @@ local function FinalizeSession(reason)
         group = DungeonSession.groupStart or DungeonSession.group or {},
         groupRoster = DungeonSession.groupRoster,
         loot = DungeonSession.loot or {},
+        abandoned = false,
     }
 
     Database:AddRun(run)
@@ -879,17 +918,43 @@ function DataCollector:Enable()
     callbackID = DungeonMonitor:RegisterCallback(function(eventName, ...)
         if eventName == "TWICH_DUNGEON_START" then
             local mapID, dungeonName = ...
-            if DungeonSession and tonumber(DungeonSession.mapID) == tonumber(mapID) then
+            if DungeonSession then
+                -- Some clients fire CHALLENGE_MODE_START with nil/invalid mapID.
+                -- Backfill session mapID from the resolved TWICH_DUNGEON_START payload.
+                if (DungeonSession.mapID == nil) or (tonumber(DungeonSession.mapID) == nil) or (tonumber(DungeonSession.mapID) <= 0) then
+                    DungeonSession.mapID = tonumber(mapID) or mapID
+                end
+
                 if not DungeonSession.dungeonName and type(dungeonName) == "string" and dungeonName ~= "" then
                     DungeonSession.dungeonName = dungeonName
-                    PersistSession()
                 end
+
+                PersistSession()
             end
             return
         end
 
         if eventName == "CHALLENGE_MODE_START" then
             local mapID = ...
+
+            -- Some clients/patches can provide nil/invalid mapID here. Recover from live APIs.
+            if (tonumber(mapID) == nil) or (tonumber(mapID) <= 0) then
+                if C_ChallengeMode and type(C_ChallengeMode.GetActiveChallengeMapID) == "function" then
+                    local ok, active = pcall(C_ChallengeMode.GetActiveChallengeMapID)
+                    if ok and tonumber(active) and tonumber(active) > 0 then
+                        mapID = active
+                    end
+                end
+
+                if (tonumber(mapID) == nil) or (tonumber(mapID) <= 0) then
+                    if C_ChallengeMode and type(C_ChallengeMode.GetActiveKeystoneInfo) == "function" then
+                        local ok, a = pcall(C_ChallengeMode.GetActiveKeystoneInfo)
+                        if ok and tonumber(a) and tonumber(a) > 0 then
+                            mapID = a
+                        end
+                    end
+                end
+            end
 
             if DungeonSession then
                 Logger.Warn("A lingering Mythic+ dungeon session is active. Overwriting with new session")
@@ -1097,6 +1162,22 @@ function DataCollector:Enable()
             if not DungeonSession then return end
             DungeonSession.completed = true
             DungeonSession.completedAt = time()
+
+            -- If we didn't receive a TWICH_DUNGEON_COMPLETION payload (or it arrived late),
+            -- capture completion info immediately while Challenge Mode APIs are still valid.
+            if type(DungeonSession.completion) ~= "table" then
+                local fallback = TryGetCompletionInfoFallback()
+                if type(fallback) == "table" then
+                    DungeonSession.completion = fallback
+                    if fallback.level then
+                        DungeonSession.level = tonumber(fallback.level) or DungeonSession.level
+                    end
+                    if fallback.mapID and ((DungeonSession.mapID == nil) or (tonumber(DungeonSession.mapID) == nil) or (tonumber(DungeonSession.mapID) <= 0)) then
+                        DungeonSession.mapID = tonumber(fallback.mapID) or fallback.mapID
+                    end
+                end
+            end
+
             PersistSession()
             return
         end
@@ -1291,16 +1372,8 @@ function DataCollector:Enable()
             if not DungeonSession then return end
             Logger.Debug("Mythic+ dungeon reset/aborted, ending session")
 
-            local now = time()
-            local elapsed = now - (DungeonSession.startUnix or now)
-            if elapsed < 0 then elapsed = 0 end
-            if elapsed > 60 then
-                Database:RecordAbandon(DungeonSession.mapID, elapsed, DungeonSession.deaths, DungeonSession.playerDeaths)
-            end
-
-            DungeonSession = nil
+            FinalizeSession("reset")
             PendingGroupSnapshot = nil
-            Database:ResetDungeonSession()
             return
         end
 
