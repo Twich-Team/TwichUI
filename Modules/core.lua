@@ -426,6 +426,35 @@ function T:OnInitialize()
     -- setup database baseline (this assigns module.db = T.db[...] when available)
     T:SetupDB()
 
+    -- Rebind module DB references when the active profile changes.
+    -- This keeps Configuration:GetProfileDB() and all module.db pointers aligned.
+    if T.db and type(T.db.RegisterCallback) == "function" then
+        local function OnAnyProfileEvent()
+            T:SetupDB()
+            if T.db and type(T.db) == "table" then
+                Engine[3] = T.db.profile or T.DF.profile
+                Engine[4] = T.db.global or T.DF.global
+                _G.Twich = Engine
+            end
+
+            -- Refresh the config UI so dynamic labels reflect the new profile.
+            local ACR = (T.Libs and T.Libs.AceConfigRegistry)
+                or (_G.LibStub and (_G.LibStub("AceConfigRegistry-3.0-ElvUI", true) or _G.LibStub("AceConfigRegistry-3.0", true)))
+            if ACR and ACR.NotifyChange then
+                pcall(ACR.NotifyChange, ACR, "ElvUI")
+            end
+
+            -- Broadcast for any modules that want to react without a reload.
+            if type(T.SendMessage) == "function" then
+                pcall(T.SendMessage, T, "TWICHUI_PROFILE_CHANGED")
+            end
+        end
+
+        pcall(T.db.RegisterCallback, T.db, T, "OnProfileChanged", OnAnyProfileEvent)
+        pcall(T.db.RegisterCallback, T.db, T, "OnProfileCopied", OnAnyProfileEvent)
+        pcall(T.db.RegisterCallback, T.db, T, "OnProfileReset", OnAnyProfileEvent)
+    end
+
     -- If we have a runtime DB, expose its profile/global tables on the Engine
     if T.db and type(T.db) == "table" then
         Engine[3] = T.db.profile or T.DF.profile

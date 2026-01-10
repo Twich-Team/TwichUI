@@ -247,6 +247,35 @@ function CM:GetAddonNameFormatted()
     return TM.Text.Color(TM.Colors.TWICH.PRIMARY_ACCENT, T.addonMetadata.addonName)
 end
 
+--- Creates an AceDBOptions-powered Profiles configuration group.
+--- This provides standard profile management (new/copy/delete/select/reset).
+--- @param order number|nil
+--- @return table
+function CM:CreateProfilesConfiguration(order)
+    local AceDBOptions = (T and T.Libs and T.Libs.AceDBOptions)
+        or (_G.LibStub and _G.LibStub("AceDBOptions-3.0", true))
+
+    if not (T and T.db and type(T.db) == "table") or not AceDBOptions or type(AceDBOptions.GetOptionsTable) ~= "function" then
+        return {
+            type = "group",
+            name = "Profiles",
+            order = order or 200,
+            args = {
+                info = {
+                    type = "description",
+                    order = 0,
+                    name = "Profile management is not available (AceDBOptions missing or database not initialized).",
+                },
+            },
+        }
+    end
+
+    local opts = AceDBOptions:GetOptionsTable(T.db)
+    opts.name = "Profiles"
+    opts.order = order or 200
+    return opts
+end
+
 --- Creates the addon's configuration options within the ElvUI configuration panel.
 function CM:CreateAddonConfiguration()
     local TT = TM.Text
@@ -264,6 +293,7 @@ function CM:CreateAddonConfiguration()
             goldGoblin = CM.GoldGoblin:Create(),
             dataTexts = CM.DataTexts:Create(20),
             mythicplus = CM.MythicPlus:Create(60),
+            profiles = CM:CreateProfilesConfiguration(200),
         }
     }
 end
