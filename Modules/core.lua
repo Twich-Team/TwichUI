@@ -384,7 +384,42 @@ function T:OnInitialize()
         local AceDB = _G.LibStub and _G.LibStub("AceDB-3.0", true)
         if AceDB then
             -- use AddOnName.."DB" as the SavedVariables table name
-            T.db = AceDB:New(AddOnName .. "DB", T.DF, true)
+            -- IMPORTANT: do NOT force the shared "Default" profile; we want per-character profiles by default.
+            T.db = AceDB:New(AddOnName .. "DB", T.DF)
+
+            -- Migration: older versions forced all characters onto the shared "Default" profile.
+            -- If the current character is still using "Default", move it to a character-specific profile
+            -- and copy the existing settings so users don't lose their configuration.
+            if T.db and type(T.db.GetCurrentProfile) == "function" and type(T.db.SetProfile) == "function" then
+                local function GetCharacterProfileName()
+                    local name, realm
+                    if _G.UnitFullName then
+                        name, realm = _G.UnitFullName("player")
+                    end
+                    if not name and _G.UnitName then
+                        name = _G.UnitName("player")
+                    end
+                    if (not realm or realm == "") and _G.GetRealmName then
+                        realm = _G.GetRealmName()
+                    end
+                    if name and realm and realm ~= "" then
+                        return name .. " - " .. realm
+                    end
+                    return name
+                end
+
+                local currentProfile = T.db:GetCurrentProfile()
+                if currentProfile == "Default" then
+                    local characterProfile = GetCharacterProfileName()
+                    if characterProfile and characterProfile ~= "" and characterProfile ~= "Default" then
+                        local ok = pcall(T.db.SetProfile, T.db, characterProfile)
+                        if ok and type(T.db.CopyProfile) == "function" and T.db.sv
+                            and type(T.db.sv.profiles) == "table" and type(T.db.sv.profiles.Default) == "table" then
+                            pcall(T.db.CopyProfile, T.db, "Default")
+                        end
+                    end
+                end
+            end
         end
     end
 
