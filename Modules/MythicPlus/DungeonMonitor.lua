@@ -120,6 +120,14 @@ local function ResolveDungeonName(mapID)
         return nil
     end
 
+    local api = MythicPlusModule and MythicPlusModule.API
+    if api and type(api.GetMapUIInfo) == "function" then
+        local name = api:GetMapUIInfo(mapID)
+        if type(name) == "string" and name ~= "" then
+            return name
+        end
+    end
+
     local mpData = MythicPlusModule and MythicPlusModule.Data
     if mpData and type(mpData.GetMapNameCached) == "function" then
         local name = mpData.GetMapNameCached(mapID)
@@ -154,6 +162,14 @@ end
 
 ---@return number|nil
 local function GetBestActiveChallengeMapID()
+    local api = MythicPlusModule and MythicPlusModule.API
+    if api and type(api.GetActiveChallengeMapID) == "function" then
+        local active = NormalizeMapID(api:GetActiveChallengeMapID())
+        if active then
+            return active
+        end
+    end
+
     if C_ChallengeMode and type(C_ChallengeMode.GetActiveChallengeMapID) == "function" then
         local active = NormalizeMapID(C_ChallengeMode.GetActiveChallengeMapID())
         if active then
@@ -162,7 +178,13 @@ local function GetBestActiveChallengeMapID()
     end
 
     -- Some clients expose keystone info with a mapID as the first return.
-    if C_ChallengeMode and type(C_ChallengeMode.GetActiveKeystoneInfo) == "function" then
+    if api and type(api.GetActiveKeystoneInfo) == "function" then
+        local a = api:GetActiveKeystoneInfo()
+        local active = NormalizeMapID(a)
+        if active then
+            return active
+        end
+    elseif C_ChallengeMode and type(C_ChallengeMode.GetActiveKeystoneInfo) == "function" then
         local ok, a = pcall(C_ChallengeMode.GetActiveKeystoneInfo)
         if ok then
             local active = NormalizeMapID(a)
@@ -247,9 +269,29 @@ function DungeonMonitor:EventHandler(event, ...)
     if event == "CHALLENGE_MODE_COMPLETED" then
         -- Stop any pending start-resolution attempts.
         startResolve.token = (startResolve.token or 0) + 1
+
+        local sim = MythicPlusModule and MythicPlusModule.Simulator
+        local isSimulating = sim and type(sim.IsSimulating) == "function" and sim:IsSimulating() or false
+        if isSimulating and type(sim.GetAPIState) == "function" then
+            local st = sim:GetAPIState()
+            -- If the replay already emitted TWICH_DUNGEON_COMPLETION (modern exports),
+            -- don't synthesize a second completion payload from live APIs.
+            if st and type(st.completion) == "table" then
+                Logger.Debug("DungeonMonitor: Simulation already has completion payload; skipping completion synthesis")
+                Logger.Debug("Dungeon monitor delegating received event: " .. tostring(event))
+                InvokeCallbacks(event, ...)
+                return
+            end
+        end
+
         local mapID = ...
-        if not mapID and C_ChallengeMode and type(C_ChallengeMode.GetActiveChallengeMapID) == "function" then
-            mapID = C_ChallengeMode.GetActiveChallengeMapID()
+        if not mapID then
+            local api = MythicPlusModule and MythicPlusModule.API
+            if api and type(api.GetActiveChallengeMapID) == "function" then
+                mapID = api:GetActiveChallengeMapID()
+            elseif C_ChallengeMode and type(C_ChallengeMode.GetActiveChallengeMapID) == "function" then
+                mapID = C_ChallengeMode.GetActiveChallengeMapID()
+            end
         end
 
         ---@type TwichDungeonCompletionPayload
@@ -258,35 +300,68 @@ function DungeonMonitor:EventHandler(event, ...)
             source = "CHALLENGE_MODE_COMPLETED",
         }
 
-        if C_ChallengeMode and type(C_ChallengeMode.GetChallengeCompletionInfo) == "function" then
-            local ok, a, b, c, d, e, f = pcall(C_ChallengeMode.GetChallengeCompletionInfo)
-            if ok then
-                -- Observed return shape (varies by patch): mapID, level, time, onTime, upgradeLevels, practiceRun
-                payload.raw = { a, b, c, d, e, f }
-                payload.mapID = tonumber(a) or payload.mapID
-                payload.level = tonumber(b) or nil
+        do
+            local api = MythicPlusModule and MythicPlusModule.API
+            if api and type(api.GetChallengeCompletionInfo) == "function" then
+                local a, b, c, d, e, f = api:GetChallengeCompletionInfo()
+                if a ~= nil then
+                    -- Observed return shape (varies by patch): mapID, level, time, onTime, upgradeLevels, practiceRun
+                    payload.raw = { a, b, c, d, e, f }
+                    payload.mapID = tonumber(a) or payload.mapID
+                    payload.level = tonumber(b) or nil
 
-                local timeVal = tonumber(c)
-                if timeVal then
-                    -- Some APIs return ms, some seconds. Assume seconds if small.
-                    if timeVal > 10000 then
-                        payload.timeMS = timeVal
-                        payload.timeSec = timeVal / 1000
-                    else
-                        payload.timeSec = timeVal
-                        payload.timeMS = timeVal * 1000
+                    local timeVal = tonumber(c)
+                    if timeVal then
+                        -- Some APIs return ms, some seconds. Assume seconds if small.
+                        if timeVal > 10000 then
+                            payload.timeMS = timeVal
+                            payload.timeSec = timeVal / 1000
+                        else
+                            payload.timeSec = timeVal
+                            payload.timeMS = timeVal * 1000
+                        end
                     end
-                end
 
-                if type(d) == "boolean" then
-                    payload.onTime = d
-                end
-                payload.upgradeLevels = tonumber(e) or nil
-                if type(f) == "boolean" then
-                    payload.practiceRun = f
-                end
+                    if type(d) == "boolean" then
+                        payload.onTime = d
+                    end
+                    payload.upgradeLevels = tonumber(e) or nil
+                    if type(f) == "boolean" then
+                        payload.practiceRun = f
+                    end
 
-                payload.source = "C_ChallengeMode.GetChallengeCompletionInfo"
+                    payload.source = "API:GetChallengeCompletionInfo"
+                end
+            elseif C_ChallengeMode and type(C_ChallengeMode.GetChallengeCompletionInfo) == "function" then
+                local ok, a, b, c, d, e, f = pcall(C_ChallengeMode.GetChallengeCompletionInfo)
+                if ok then
+                    -- Observed return shape (varies by patch): mapID, level, time, onTime, upgradeLevels, practiceRun
+                    payload.raw = { a, b, c, d, e, f }
+                    payload.mapID = tonumber(a) or payload.mapID
+                    payload.level = tonumber(b) or nil
+
+                    local timeVal = tonumber(c)
+                    if timeVal then
+                        -- Some APIs return ms, some seconds. Assume seconds if small.
+                        if timeVal > 10000 then
+                            payload.timeMS = timeVal
+                            payload.timeSec = timeVal / 1000
+                        else
+                            payload.timeSec = timeVal
+                            payload.timeMS = timeVal * 1000
+                        end
+                    end
+
+                    if type(d) == "boolean" then
+                        payload.onTime = d
+                    end
+                    payload.upgradeLevels = tonumber(e) or nil
+                    if type(f) == "boolean" then
+                        payload.practiceRun = f
+                    end
+
+                    payload.source = "C_ChallengeMode.GetChallengeCompletionInfo"
+                end
             end
         end
 

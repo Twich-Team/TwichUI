@@ -222,14 +222,19 @@ local function GetWeeklyAffixIds()
     local ids = {}
     local namesById = {}
 
-    local C_MythicPlus = _G.C_MythicPlus
-    if not (C_MythicPlus and type(C_MythicPlus.GetCurrentAffixes) == "function") then
+    local api = MythicPlusModule and MythicPlusModule.API
+    if api and type(api.GetCurrentAffixes) == "function" then
+        local affixes = api:GetCurrentAffixes()
+        AppendAffixes(ids, namesById, affixes)
         return ids, namesById
     end
 
-    local ok, affixes = pcall(C_MythicPlus.GetCurrentAffixes)
-    if ok then
-        AppendAffixes(ids, namesById, affixes)
+    local C_MythicPlus = _G.C_MythicPlus
+    if C_MythicPlus and type(C_MythicPlus.GetCurrentAffixes) == "function" then
+        local ok, affixes = pcall(C_MythicPlus.GetCurrentAffixes)
+        if ok then
+            AppendAffixes(ids, namesById, affixes)
+        end
     end
 
     return ids, namesById
@@ -516,6 +521,11 @@ local function GetAffixInfo(affixId)
     affixId = tonumber(affixId)
     if not affixId then return nil, nil, nil end
 
+    local api = MythicPlusModule and MythicPlusModule.API
+    if api and type(api.GetAffixInfo) == "function" then
+        return api:GetAffixInfo(affixId)
+    end
+
     local C_ChallengeMode = _G.C_ChallengeMode
     if C_ChallengeMode and type(C_ChallengeMode.GetAffixInfo) == "function" then
         local name, description, fileDataId = C_ChallengeMode.GetAffixInfo(affixId)
@@ -530,6 +540,14 @@ end
 local function GetChallengeMapName(mapId)
     mapId = tonumber(mapId)
     if not mapId then return nil end
+
+    local api = MythicPlusModule and MythicPlusModule.API
+    if api and type(api.GetMapUIInfo) == "function" then
+        local name = api:GetMapUIInfo(mapId)
+        if name then
+            return name
+        end
+    end
 
     local mpData = MythicPlusModule and MythicPlusModule.Data
     if mpData and type(mpData.GetMapNameCached) == "function" then
@@ -899,17 +917,18 @@ function MainWindow:_CreateHeaderIfNeeded()
             end)() or ""
             GameTooltip:AddLine(" ")
             GameTooltip:AddLine(
-            "Debug: source=" ..
-            tostring(source) .. " ids=[" .. tostring(idsText) .. "] weekly=[" .. tostring(weeklyText) .. "]", 0.6, 0.6,
+                "Debug: source=" ..
+                tostring(source) .. " ids=[" .. tostring(idsText) .. "] weekly=[" .. tostring(weeklyText) .. "]", 0.6,
+                0.6,
                 0.6, true)
             if namesText ~= "" then
                 GameTooltip:AddLine("Debug: names=[" .. tostring(namesText) .. "]", 0.6, 0.6, 0.6, true)
             end
             if Logger and Logger.Debug then
                 local msg = "Keystone header affixes: source=" ..
-                tostring(source) ..
-                " level=" ..
-                tostring(level) .. " ids=[" .. tostring(idsText) .. "] weekly=[" .. tostring(weeklyText) .. "]"
+                    tostring(source) ..
+                    " level=" ..
+                    tostring(level) .. " ids=[" .. tostring(idsText) .. "] weekly=[" .. tostring(weeklyText) .. "]"
                 if namesText ~= "" then
                     msg = msg .. " names=[" .. tostring(namesText) .. "]"
                 end
@@ -1101,7 +1120,10 @@ function MainWindow:_EnableHeaderEvents()
         -- Request affixes only on non-affix-update events to avoid loops.
         if event == "PLAYER_ENTERING_WORLD" or event == "CHALLENGE_MODE_MAPS_UPDATE" then
             local C_MythicPlus = _G.C_MythicPlus
-            if C_MythicPlus and type(C_MythicPlus.RequestCurrentAffixes) == "function" then
+            local api = MythicPlusModule and MythicPlusModule.API
+            if api and type(api.RequestCurrentAffixes) == "function" then
+                api:RequestCurrentAffixes()
+            elseif C_MythicPlus and type(C_MythicPlus.RequestCurrentAffixes) == "function" then
                 pcall(C_MythicPlus.RequestCurrentAffixes)
             end
         end

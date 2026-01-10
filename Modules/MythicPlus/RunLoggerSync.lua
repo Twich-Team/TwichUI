@@ -969,6 +969,14 @@ function RunLoggerSync:_ProcessReceivedRun(sender, runData)
         if mpData and type(mpData.GetMapNameCached) == "function" then
             name = mpData.GetMapNameCached(mapId)
         end
+
+        if not name then
+            local api = MythicPlusModule and MythicPlusModule.API
+            if api and type(api.GetMapUIInfo) == "function" then
+                name = api:GetMapUIInfo(mapId)
+            end
+        end
+
         if not name and _G.C_ChallengeMode and type(_G.C_ChallengeMode.GetMapUIInfo) == "function" then
             name = _G.C_ChallengeMode.GetMapUIInfo(mapId)
         end

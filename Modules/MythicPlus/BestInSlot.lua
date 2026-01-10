@@ -422,9 +422,12 @@ local function BuildTierCache(force)
             maps = seasonID and C_MythicPlus.GetSeasonMaps(seasonID) or nil
         end
 
+        local api = MythicPlusModule and MythicPlusModule.API
+
         if maps and #maps > 0 then
             for _, mapId in ipairs(maps) do
                 local name = (mpData and type(mpData.GetMapNameCached) == "function" and mpData.GetMapNameCached(mapId))
+                    or (api and type(api.GetMapUIInfo) == "function" and api:GetMapUIInfo(mapId))
                     or (C_ChallengeMode and C_ChallengeMode.GetMapUIInfo and C_ChallengeMode.GetMapUIInfo(mapId))
                 if name then
                     validInstances[name] = true

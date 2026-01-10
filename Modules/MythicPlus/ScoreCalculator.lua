@@ -66,8 +66,24 @@ end
 ---@return number|nil parTimeSeconds
 function ScoreCalculator.GetParTimeSeconds(mapId)
     mapId = tonumber(mapId)
+    if not mapId or mapId <= 0 then
+        return nil
+    end
+
+    -- Prefer TwichUI's cached map info (it already wraps ChallengeMode variants and caches timeLimitSeconds).
+    do
+        local data = GetData()
+        if data and type(data.GetMapUIInfoCached) == "function" then
+            local _, timeLimitSeconds = data.GetMapUIInfoCached(mapId)
+            local tl = tonumber(timeLimitSeconds)
+            if tl and tl > 0 then
+                return tl
+            end
+        end
+    end
+
     local C_ChallengeMode = GetChallengeModeAPI()
-    if not mapId or mapId <= 0 or not C_ChallengeMode then
+    if not C_ChallengeMode then
         return nil
     end
 

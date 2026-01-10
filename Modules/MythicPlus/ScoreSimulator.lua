@@ -189,6 +189,7 @@ local function GetMapList()
 
     local list = {}
     if maps then
+        local api = MythicPlusModule and MythicPlusModule.API
         for _, entry in ipairs(maps) do
             local id
             local name
@@ -203,7 +204,12 @@ local function GetMapList()
             if type(id) ~= "number" then
                 -- Skip unexpected entries instead of hard erroring.
             else
-                if C_ChallengeMode and type(C_ChallengeMode.GetMapUIInfo) == "function" then
+                if api and type(api.GetMapUIInfo) == "function" then
+                    local n = api:GetMapUIInfo(id)
+                    if type(n) == "string" and n ~= "" then
+                        name = n
+                    end
+                elseif C_ChallengeMode and type(C_ChallengeMode.GetMapUIInfo) == "function" then
                     local ok, n = pcall(C_ChallengeMode.GetMapUIInfo, id)
                     if ok then
                         name = n
@@ -292,10 +298,11 @@ function ScoreSimulator:UpdateSimulation(frame)
     do
         local totalText = frame.projectedTotalText
         if totalText then
-            local C_ChallengeMode = _G.C_ChallengeMode
-            local overall = (C_ChallengeMode and type(C_ChallengeMode.GetOverallDungeonScore) == "function")
-                and tonumber(C_ChallengeMode.GetOverallDungeonScore())
-                or nil
+            local api = MythicPlusModule and MythicPlusModule.API
+            local overall = (api and type(api.GetOverallDungeonScore) == "function") and api:GetOverallDungeonScore()
+                or ((C_ChallengeMode and type(C_ChallengeMode.GetOverallDungeonScore) == "function")
+                    and tonumber(C_ChallengeMode.GetOverallDungeonScore())
+                    or nil)
 
             if overall and overall > 0 then
                 local baseMapScore = (currentScore and currentScore > 0) and currentScore or 0

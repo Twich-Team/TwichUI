@@ -975,15 +975,29 @@ function MythicPlusRunLogger:_OnDungeonEvent(eventName, ...)
 
         -- Some clients/patches provide nil/invalid mapId here; recover from live APIs.
         if (tonumber(mapId) == nil) or (tonumber(mapId) <= 0) then
-            if C_ChallengeMode and type(C_ChallengeMode.GetActiveChallengeMapID) == "function" then
-                local ok, active = pcall(C_ChallengeMode.GetActiveChallengeMapID)
-                if ok and tonumber(active) and tonumber(active) > 0 then
-                    mapId = active
+            do
+                local api = MythicPlusModule and MythicPlusModule.API
+                if api and type(api.GetActiveChallengeMapID) == "function" then
+                    local active = api:GetActiveChallengeMapID()
+                    if tonumber(active) and tonumber(active) > 0 then
+                        mapId = active
+                    end
+                elseif C_ChallengeMode and type(C_ChallengeMode.GetActiveChallengeMapID) == "function" then
+                    local ok, active = pcall(C_ChallengeMode.GetActiveChallengeMapID)
+                    if ok and tonumber(active) and tonumber(active) > 0 then
+                        mapId = active
+                    end
                 end
             end
 
             if (tonumber(mapId) == nil) or (tonumber(mapId) <= 0) then
-                if C_ChallengeMode and type(C_ChallengeMode.GetActiveKeystoneInfo) == "function" then
+                local api = MythicPlusModule and MythicPlusModule.API
+                if api and type(api.GetActiveKeystoneInfo) == "function" then
+                    local a = api:GetActiveKeystoneInfo()
+                    if tonumber(a) and tonumber(a) > 0 then
+                        mapId = a
+                    end
+                elseif C_ChallengeMode and type(C_ChallengeMode.GetActiveKeystoneInfo) == "function" then
                     local ok, a = pcall(C_ChallengeMode.GetActiveKeystoneInfo)
                     if ok and tonumber(a) and tonumber(a) > 0 then
                         mapId = a
@@ -1116,10 +1130,18 @@ function MythicPlusRunLogger:_OnDungeonEvent(eventName, ...)
         if db.active and type(db.active.completion) ~= "table" and C_ChallengeMode then
             local mapID, level, timeVal, onTime, upgradeLevels, practiceRun
 
-            if type(C_ChallengeMode.GetChallengeCompletionInfo) == "function" then
-                local ok, a, b, c, d, e, f = pcall(C_ChallengeMode.GetChallengeCompletionInfo)
-                if ok then
-                    mapID, level, timeVal, onTime, upgradeLevels, practiceRun = a, b, c, d, e, f
+            do
+                local api = MythicPlusModule and MythicPlusModule.API
+                if api and type(api.GetChallengeCompletionInfo) == "function" then
+                    local a, b, c, d, e, f = api:GetChallengeCompletionInfo()
+                    if a ~= nil then
+                        mapID, level, timeVal, onTime, upgradeLevels, practiceRun = a, b, c, d, e, f
+                    end
+                elseif type(C_ChallengeMode.GetChallengeCompletionInfo) == "function" then
+                    local ok, a, b, c, d, e, f = pcall(C_ChallengeMode.GetChallengeCompletionInfo)
+                    if ok then
+                        mapID, level, timeVal, onTime, upgradeLevels, practiceRun = a, b, c, d, e, f
+                    end
                 end
             end
 
@@ -1165,8 +1187,13 @@ function MythicPlusRunLogger:_OnDungeonEvent(eventName, ...)
     if eventName == "CHALLENGE_MODE_DEATH_COUNT_UPDATED" then
         local count = ...
         -- If the event doesn't provide the count, fetch it.
-        if not count and C_ChallengeMode and C_ChallengeMode.GetDeathCount then
-            count = C_ChallengeMode.GetDeathCount()
+        if not count then
+            local api = MythicPlusModule and MythicPlusModule.API
+            if api and type(api.GetDeathCount) == "function" then
+                count = api:GetDeathCount()
+            elseif C_ChallengeMode and C_ChallengeMode.GetDeathCount then
+                count = C_ChallengeMode.GetDeathCount()
+            end
         end
         -- Keep original args for transparency, but also record the resolved count for simulation.
         self:_AppendEvent(eventName, { count = count }, { ... }, { count })
@@ -1222,10 +1249,14 @@ function MythicPlusRunLogger:_OnDungeonEvent(eventName, ...)
     if eventName == "PLAYER_ENTERING_WORLD" then
         -- Keep payload minimal; this fires often and can include instance transitions.
         local isInitialLogin, isReloadingUi = ...
-        local isCM = C_ChallengeMode and C_ChallengeMode.IsChallengeModeActive()
+        local api = MythicPlusModule and MythicPlusModule.API
+        local isCM = (api and type(api.IsChallengeModeActive) == "function") and api:IsChallengeModeActive()
+            or (C_ChallengeMode and C_ChallengeMode.IsChallengeModeActive and C_ChallengeMode.IsChallengeModeActive())
 
         local activeMapID
-        if C_ChallengeMode and type(C_ChallengeMode.GetActiveChallengeMapID) == "function" then
+        if api and type(api.GetActiveChallengeMapID) == "function" then
+            activeMapID = api:GetActiveChallengeMapID()
+        elseif C_ChallengeMode and type(C_ChallengeMode.GetActiveChallengeMapID) == "function" then
             activeMapID = C_ChallengeMode.GetActiveChallengeMapID()
             if tonumber(activeMapID) and tonumber(activeMapID) > 0 then
                 -- Some loads/transitions report IsChallengeModeActive() = false briefly even while a key is active.
@@ -1255,9 +1286,13 @@ function MythicPlusRunLogger:_OnDungeonEvent(eventName, ...)
                             if db2.active.__twichuiPendingCMCheck ~= true then return end
                             db2.active.__twichuiPendingCMCheck = nil
 
-                            local stillCM = C_ChallengeMode and C_ChallengeMode.IsChallengeModeActive()
+                            local stillCM = (api and type(api.IsChallengeModeActive) == "function")
+                                and api:IsChallengeModeActive()
+                                or (C_ChallengeMode and C_ChallengeMode.IsChallengeModeActive and C_ChallengeMode.IsChallengeModeActive())
                             local stillActiveMap
-                            if C_ChallengeMode and type(C_ChallengeMode.GetActiveChallengeMapID) == "function" then
+                            if api and type(api.GetActiveChallengeMapID) == "function" then
+                                stillActiveMap = api:GetActiveChallengeMapID()
+                            elseif C_ChallengeMode and type(C_ChallengeMode.GetActiveChallengeMapID) == "function" then
                                 stillActiveMap = C_ChallengeMode.GetActiveChallengeMapID()
                             end
                             if stillCM or (tonumber(stillActiveMap) and tonumber(stillActiveMap) > 0) then

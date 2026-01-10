@@ -21,6 +21,117 @@ function MDT:Create()
         return T:GetModule("DataTexts").Mounts
     end
 
+    local function TooltipHide()
+        if _G.GameTooltip and _G.GameTooltip.Hide then
+            _G.GameTooltip:Hide()
+        end
+    end
+
+    local function TooltipForMountSpell(spellID)
+        return function(row)
+            if not _G.GameTooltip or not _G.GameTooltip.SetOwner then return end
+            _G.GameTooltip:SetOwner(row, "ANCHOR_RIGHT")
+            if _G.GameTooltip.SetMountBySpellID then
+                _G.GameTooltip:SetMountBySpellID(spellID)
+            elseif _G.GameTooltip.SetSpellByID then
+                _G.GameTooltip:SetSpellByID(spellID)
+            end
+            _G.GameTooltip:Show()
+        end
+    end
+
+    local function BuildMountCandidates()
+        local list = {}
+        table.insert(list, {
+            value = 0,
+            name = "None",
+            icon = nil,
+            search = "none",
+        })
+
+        local entries = GetModule():GetCollectedMountEntries() or {}
+        for _, m in ipairs(entries) do
+            local id = tonumber(m.mountID) or 0
+            if id > 0 then
+                table.insert(list, {
+                    value = id,
+                    name = tostring(m.name or ""),
+                    icon = m.icon,
+                    search = tostring(m.name or ""),
+                    onEnter = TooltipForMountSpell(m.spellID),
+                    onLeave = TooltipHide,
+                })
+            end
+        end
+
+        return list
+    end
+
+    local function NotifyOptionsRefresh()
+        local ACR = (T.Libs and T.Libs.AceConfigRegistry)
+            or _G.LibStub("AceConfigRegistry-3.0-ElvUI", true)
+            or _G.LibStub("AceConfigRegistry-3.0", true)
+        if ACR and ACR.NotifyChange then
+            pcall(ACR.NotifyChange, ACR, "ElvUI")
+        end
+
+        ---@diagnostic disable-next-line: undefined-field
+        local E = _G.ElvUI and _G.ElvUI[1]
+        if E and type(E.RefreshOptions) == "function" then
+            pcall(E.RefreshOptions, E)
+        end
+    end
+
+    local groundSelector = nil
+    local flyingSelector = nil
+
+    local function OpenMountSelector(kind)
+        local selector = nil
+        local configEntry = nil
+        local title = nil
+        local current = 0
+
+        if kind == "ground" then
+            if not groundSelector then
+                groundSelector = TM.UI and TM.UI.CreateSearchSelector and
+                    TM.UI.CreateSearchSelector("TwichUIMountsGroundSelector", { hint = "Search mounts" }) or nil
+            end
+            selector = groundSelector
+            configEntry = GetModule():GetConfiguration().FAVORITE_GROUND_MOUNT_ID
+            title = "Select Ground Mount"
+        else
+            if not flyingSelector then
+                flyingSelector = TM.UI and TM.UI.CreateSearchSelector and
+                    TM.UI.CreateSearchSelector("TwichUIMountsFlyingSelector", { hint = "Search mounts" }) or nil
+            end
+            selector = flyingSelector
+            configEntry = GetModule():GetConfiguration().FAVORITE_FLYING_MOUNT_ID
+            title = "Select Flying Mount"
+        end
+
+        if not selector or type(selector.Open) ~= "function" then
+            LM.Warn("Search selector UI is not available; falling back to dropdown")
+            return
+        end
+
+        current = CM:GetProfileSettingByConfigEntry(configEntry) or 0
+
+        ---@diagnostic disable-next-line: undefined-field
+        local E = _G.ElvUI and _G.ElvUI[1]
+        local optionsFrame = (E and (E.OptionsUI or E.OptionsFrame)) or _G.UIParent
+        selector:Open({
+            title = title,
+            candidates = BuildMountCandidates(),
+            selectedValue = current,
+            relativeTo = optionsFrame,
+            onSelect = function(value)
+                CM:SetProfileSettingByConfigEntry(configEntry, tonumber(value) or 0)
+                GetModule():Refresh()
+                NotifyOptionsRefresh()
+            end,
+        })
+    end
+
     local options = {
         displayGroup = {
             type = "group",
@@ -157,46 +268,38 @@ function MDT:Create()
                 },
 
                 favoriteGroundMount = {
-                    type = "select",
-                    name = "Favorite Ground Mount",
+                    type = "execute",
+                    name = function()
+                        local id = CM:GetProfileSettingByConfigEntry(GetModule():GetConfiguration()
+                            .FAVORITE_GROUND_MOUNT_ID) or 0
+                        return "Favorite Ground Mount: " .. tostring(GetModule():GetMountLabelByID(id))
+                    end,
                     desc = "Summoned when flying is not allowed.",
                     order = 8,
                     width = "full",
                     disabled = function()
                         return not CM:GetProfileSettingByConfigEntry(GetModule():GetConfiguration().CLICK_SUMMON_ENABLED)
                     end,
-                    values = function()
-                        return GetModule():GetCollectedMountOptions() or { [0] = "None" }
-                    end,
-                    get = function()
-                        return CM:GetProfileSettingByConfigEntry(GetModule():GetConfiguration().FAVORITE_GROUND_MOUNT_ID)
-                            or 0
-                    end,
-                    set = function(_, value)
-                        CM:SetProfileSettingByConfigEntry(GetModule():GetConfiguration().FAVORITE_GROUND_MOUNT_ID,
-                            tonumber(value) or 0)
+                    func = function()
+                        OpenMountSelector("ground")
                     end,
                 },
 
                 favoriteFlyingMount = {
-                    type = "select",
-                    name = "Favorite Flying Mount",
+                    type = "execute",
+                    name = function()
+                        local id = CM:GetProfileSettingByConfigEntry(GetModule():GetConfiguration()
+                            .FAVORITE_FLYING_MOUNT_ID) or 0
+                        return "Favorite Flying Mount: " .. tostring(GetModule():GetMountLabelByID(id))
+                    end,
                     desc = "Summoned when flying is allowed.",
                     order = 9,
                     width = "full",
                     disabled = function()
                         return not CM:GetProfileSettingByConfigEntry(GetModule():GetConfiguration().CLICK_SUMMON_ENABLED)
                     end,
-                    values = function()
-                        return GetModule():GetCollectedMountOptions() or { [0] = "None" }
-                    end,
-                    get = function()
-                        return CM:GetProfileSettingByConfigEntry(GetModule():GetConfiguration().FAVORITE_FLYING_MOUNT_ID)
-                            or 0
-                    end,
-                    set = function(_, value)
-                        CM:SetProfileSettingByConfigEntry(GetModule():GetConfiguration().FAVORITE_FLYING_MOUNT_ID,
-                            tonumber(value) or 0)
+                    func = function()
+                        OpenMountSelector("flying")
                     end,
                 },
 

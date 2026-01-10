@@ -1102,8 +1102,10 @@ function RunSharingFrame:ResolveDungeonName(run)
 
     if mapId then
         local mpData = MythicPlusModule and MythicPlusModule.Data
+        local api = MythicPlusModule and MythicPlusModule.API
         local name = (mpData and type(mpData.GetMapNameCached) == "function" and mpData.GetMapNameCached(mapId))
-            or C_ChallengeMode.GetMapUIInfo(mapId)
+            or (api and type(api.GetMapUIInfo) == "function" and api:GetMapUIInfo(mapId))
+            or (C_ChallengeMode and C_ChallengeMode.GetMapUIInfo and C_ChallengeMode.GetMapUIInfo(mapId))
 
         -- Fallback to C_ChallengeMode.GetMapInfo (returns table)
         if not name and C_ChallengeMode.GetMapInfo then

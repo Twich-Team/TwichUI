@@ -33,11 +33,29 @@ local MythicPlusModule = T:GetModule("MythicPlus")
 local Sim = MythicPlusModule.Simulator or {}
 MythicPlusModule.Simulator = Sim
 
+---@return table|nil apiState
+function Sim:GetAPIState()
+    local st = self._simState
+    if not st then return nil end
+    local apiState = st.apiState
+    return (type(apiState) == "table") and apiState or nil
+end
+
 ---@return table|nil run
 function Sim:GetActiveRun()
     local st = self._simState
     local run = st and st.run
     return (type(run) == "table") and run or nil
+end
+
+-- Compatibility: MythicPlus.API may query whether a given function name can be simulated.
+-- We currently keep this permissive; individual API wrappers decide whether they have enough
+-- recorded state to return a simulated value.
+---@param funcName string
+---@return boolean
+function Sim:CanSimulate(funcName)
+    funcName = tostring(funcName or "")
+    return funcName ~= ""
 end
 
 ---@type LoggerModule
@@ -862,6 +880,49 @@ function Sim:_DispatchEvent(ev)
         end
     end
 
+    -- Maintain a minimal simulated API state so other modules can query consistent values
+    -- (e.g. when they fall back to ChallengeMode/MythicPlus APIs during simulation).
+    do
+        local st = self._simState
+        if st then
+            st.apiState = st.apiState or {}
+            local apiState = st.apiState
+
+            if name == "CHALLENGE_MODE_START" then
+                apiState.active = true
+                apiState.mapId = tonumber(arg1) or tonumber(payload and (payload.mapID or payload.mapId))
+                    or (type(st.run) == "table" and tonumber(st.run.mapID or st.run.mapId))
+                apiState.level = (type(st.run) == "table" and tonumber(st.run.level)) or apiState.level
+                if type(st.run) == "table" and type(st.run.affixes) == "table" and #st.run.affixes > 0 then
+                    apiState.affixes = st.run.affixes
+                end
+                apiState.deathCount = tonumber(apiState.deathCount) or 0
+                apiState.completed = false
+                apiState.completion = nil
+            elseif name == "CHALLENGE_MODE_DEATH_COUNT_UPDATED" then
+                apiState.deathCount = tonumber(arg1) or tonumber(payload and payload.count) or apiState.deathCount or 0
+            elseif name == "TWICH_DUNGEON_COMPLETION" then
+                apiState.completed = true
+                if type(arg1) == "table" then
+                    apiState.completion = arg1
+                    if apiState.mapId == nil then
+                        apiState.mapId = tonumber(arg1.mapID or arg1.mapId)
+                    end
+                    if apiState.level == nil then
+                        apiState.level = tonumber(arg1.level)
+                    end
+                end
+            elseif name == "CHALLENGE_MODE_COMPLETED" then
+                apiState.completed = true
+            elseif name == "CHALLENGE_MODE_RESET" then
+                apiState.active = false
+                apiState.completed = false
+                apiState.completion = nil
+                apiState.deathCount = 0
+            end
+        end
+    end
+
     if type(dungeonMonitor.SimulateEvent) == "function" then
         dungeonMonitor:SimulateEvent(name, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12,
             arg13, arg14, arg15, arg16)
@@ -1204,6 +1265,15 @@ function Sim:StartSimulationFromData(parsed, opts)
         maxDuration = maxDuration,
         paused = startPaused,
         pauseStart = startPaused and startedAt or nil,
+        apiState = {
+            active = false,
+            completed = false,
+            mapId = (type(runData) == "table" and tonumber(runData.mapID or runData.mapId)) or nil,
+            level = (type(runData) == "table" and tonumber(runData.level)) or nil,
+            affixes = (type(runData) == "table" and type(runData.affixes) == "table" and runData.affixes) or nil,
+            deathCount = 0,
+            completion = nil,
+        },
     }
 
     Logger.Info(("Simulator: starting (%d events), speed x%.2f"):format(#events, speed))

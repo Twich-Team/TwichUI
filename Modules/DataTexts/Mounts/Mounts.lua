@@ -26,6 +26,7 @@ local tostring = tostring
 ---@field utilityMountIdCache GenericCache|nil
 ---@field mountsCache GenericCache|nil
 ---@field mountOptionsCache GenericCache|nil
+---@field mountEntriesCache GenericCache|nil
 ---@field menuList TwichUI_MenuItem[]|nil
 ---@field panel any|nil
 local MountsDataText = DataTexts.Mounts or {}
@@ -218,6 +219,9 @@ function MountsDataText:Refresh()
     if self.mountOptionsCache then
         self.mountOptionsCache:invalidate()
     end
+    if self.mountEntriesCache then
+        self.mountEntriesCache:invalidate()
+    end
     if self.panel and self.panel.text then
         local displayText = self:GetDisplayText()
         self.panel.text:SetText(displayText)
@@ -264,6 +268,65 @@ function MountsDataText:GetCollectedMountOptions()
 
         return values
     end)
+end
+
+---@return MountEntry[]
+function MountsDataText:GetCollectedMountEntries()
+    if not self.mountEntriesCache then
+        self.mountEntriesCache = Tools.Generics.Cache.New("TwichUIMountsCollectedMountEntriesCache")
+    end
+
+    return self.mountEntriesCache:get(function()
+        local entries = {}
+
+        if not _G.C_MountJournal
+            or not _G.C_MountJournal.GetNumMounts
+            or not _G.C_MountJournal.GetDisplayedMountInfo then
+            return entries
+        end
+
+        local numMounts = _G.C_MountJournal.GetNumMounts() or 0
+        for displayIndex = 1, numMounts do
+            local creatureName, spellID, icon, _, _, _, _, _, _, _, isCollected, mountID =
+                _G.C_MountJournal.GetDisplayedMountInfo(displayIndex)
+
+            if isCollected and mountID and creatureName and spellID then
+                tinsert(entries, {
+                    name = creatureName,
+                    spellID = spellID,
+                    icon = icon,
+                    mountID = mountID,
+                })
+            end
+        end
+
+        table.sort(entries, function(a, b)
+            return tostring(a.name or "") < tostring(b.name or "")
+        end)
+
+        return entries
+    end)
+end
+
+---@param mountID number|nil
+---@return string
+function MountsDataText:GetMountLabelByID(mountID)
+    local id = tonumber(mountID) or 0
+    if id <= 0 then
+        return "None"
+    end
+
+    if _G.C_MountJournal and _G.C_MountJournal.GetMountInfoByID then
+        local name, _, icon = _G.C_MountJournal.GetMountInfoByID(id)
+        if name and icon then
+            return ("|T%s:14:14|t %s"):format(icon, name)
+        end
+        if name then
+            return name
+        end
+    end
+
+    return tostring(id)
 end
 
 local function IsFlyableHere()
@@ -467,6 +530,9 @@ function MountsDataText:OnEvent(panel, event, ...)
         end
         if self.mountOptionsCache then
             self.mountOptionsCache:invalidate()
+        end
+        if self.mountEntriesCache then
+            self.mountEntriesCache:invalidate()
         end
     end
 

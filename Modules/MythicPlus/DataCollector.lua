@@ -695,6 +695,33 @@ end
 
 ---@return table|nil completion
 local function TryGetCompletionInfoFallback()
+    do
+        if API and type(API.GetChallengeCompletionInfo) == "function" then
+            local mapId, level, timeVal, onTime, upgradeLevels, practiceRun = API:GetChallengeCompletionInfo()
+            if mapId ~= nil then
+                local timeSec
+                if type(timeVal) == "number" then
+                    -- Some APIs return ms, some seconds.
+                    if timeVal > 10000 then
+                        timeSec = timeVal / 1000
+                    else
+                        timeSec = timeVal
+                    end
+                end
+
+                return {
+                    mapID = mapId,
+                    level = level,
+                    timeSec = timeSec,
+                    onTime = onTime,
+                    upgradeLevels = upgradeLevels,
+                    practiceRun = practiceRun,
+                    source = "API:GetChallengeCompletionInfo",
+                }
+            end
+        end
+    end
+
     if not C_ChallengeMode then
         return nil
     end
@@ -939,18 +966,19 @@ function DataCollector:Enable()
 
             -- Some clients/patches can provide nil/invalid mapID here. Recover from live APIs.
             if (tonumber(mapID) == nil) or (tonumber(mapID) <= 0) then
-                if C_ChallengeMode and type(C_ChallengeMode.GetActiveChallengeMapID) == "function" then
-                    local ok, active = pcall(C_ChallengeMode.GetActiveChallengeMapID)
-                    if ok and tonumber(active) and tonumber(active) > 0 then
+                if API and type(API.GetActiveChallengeMapID) == "function" then
+                    local active = API:GetActiveChallengeMapID()
+                    if tonumber(active) and tonumber(active) > 0 then
                         mapID = active
                     end
                 end
 
                 if (tonumber(mapID) == nil) or (tonumber(mapID) <= 0) then
-                    if C_ChallengeMode and type(C_ChallengeMode.GetActiveKeystoneInfo) == "function" then
-                        local ok, a = pcall(C_ChallengeMode.GetActiveKeystoneInfo)
-                        if ok and tonumber(a) and tonumber(a) > 0 then
-                            mapID = a
+                    -- Prefer our API wrapper, which is simulation-aware.
+                    if API and type(API.GetPlayerKeystone) == "function" then
+                        local info = API:GetPlayerKeystone()
+                        if info and tonumber(info.dungeonID) and tonumber(info.dungeonID) > 0 then
+                            mapID = info.dungeonID
                         end
                     end
                 end
@@ -1140,8 +1168,8 @@ function DataCollector:Enable()
             if not DungeonSession then return end
 
             local count = ...
-            if not count and C_ChallengeMode and type(C_ChallengeMode.GetDeathCount) == "function" then
-                count = C_ChallengeMode.GetDeathCount()
+            if not count and API and type(API.GetDeathCount) == "function" then
+                count = API:GetDeathCount()
             end
 
             DungeonSession.deaths = tonumber(count) or DungeonSession.deaths or 0
@@ -1378,7 +1406,12 @@ function DataCollector:Enable()
         end
 
         if eventName == "PLAYER_ENTERING_WORLD" then
-            local isCM = C_ChallengeMode and C_ChallengeMode.IsChallengeModeActive()
+            local isCM
+            if API and type(API.IsChallengeModeActive) == "function" then
+                isCM = API:IsChallengeModeActive()
+            else
+                isCM = C_ChallengeMode and C_ChallengeMode.IsChallengeModeActive()
+            end
             if DungeonSession and not isCM then
                 Logger.Debug("Left Mythic+ dungeon instance, ending session for map " .. tostring(DungeonSession.mapID))
                 FinalizeSession("left_instance")

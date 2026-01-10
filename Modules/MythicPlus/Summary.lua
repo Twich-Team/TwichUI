@@ -63,6 +63,20 @@ local function GetFontPath()
 end
 
 local function GetMythicPlusScore()
+    -- During simulation/replay, avoid querying the local player's live score.
+    local sim = MythicPlusModule and MythicPlusModule.Simulator
+    if sim and type(sim.IsSimulating) == "function" and sim:IsSimulating() then
+        return 0
+    end
+
+    local api = MythicPlusModule and MythicPlusModule.API
+    if api and type(api.GetOverallDungeonScore) == "function" then
+        local v = api:GetOverallDungeonScore()
+        if v ~= nil then
+            return tonumber(v) or 0
+        end
+    end
+
     local C_ChallengeMode = _G.C_ChallengeMode
     if C_ChallengeMode and type(C_ChallengeMode.GetOverallDungeonScore) == "function" then
         local score = C_ChallengeMode.GetOverallDungeonScore()
@@ -72,38 +86,62 @@ local function GetMythicPlusScore()
 end
 
 local function GetCurrentWeeklyAffixes()
-    local C_MythicPlus = _G.C_MythicPlus
-    if C_MythicPlus and type(C_MythicPlus.RequestCurrentAffixes) == "function" then
-        pcall(C_MythicPlus.RequestCurrentAffixes)
-    end
-    if C_MythicPlus and type(C_MythicPlus.GetCurrentAffixes) == "function" then
-        local ok, affixes = pcall(C_MythicPlus.GetCurrentAffixes)
-        if ok and type(affixes) == "table" then
-            local entries = {}
-            for _, entry in ipairs(affixes) do
-                ---@type any
-                local id = entry
-                local level
-                if type(entry) == "table" then
-                    ---@type any
-                    local entryAny = entry
-                    id = entryAny.id or entryAny.affixID or entryAny.affixId
-                    level = entryAny.startingLevel or entryAny.startingKeystoneLevel or entryAny.requiredLevel or
-                        entryAny.level
-                end
-                id = tonumber(id)
-                level = tonumber(level)
-                if id then
-                    entries[#entries + 1] = { id = id, level = level }
-                end
-            end
-            return entries
+    local api = MythicPlusModule and MythicPlusModule.API
+    if api and type(api.RequestCurrentAffixes) == "function" then
+        api:RequestCurrentAffixes()
+    else
+        local C_MythicPlus = _G.C_MythicPlus
+        if C_MythicPlus and type(C_MythicPlus.RequestCurrentAffixes) == "function" then
+            pcall(C_MythicPlus.RequestCurrentAffixes)
         end
+    end
+    local affixes
+    if api and type(api.GetCurrentAffixes) == "function" then
+        affixes = api:GetCurrentAffixes()
+    else
+        local C_MythicPlus = _G.C_MythicPlus
+        if C_MythicPlus and type(C_MythicPlus.GetCurrentAffixes) == "function" then
+            local ok
+            ok, affixes = pcall(C_MythicPlus.GetCurrentAffixes)
+            if not ok then
+                affixes = nil
+            end
+        end
+    end
+
+    if type(affixes) == "table" then
+        local entries = {}
+        for _, entry in ipairs(affixes) do
+            ---@type any
+            local id = entry
+            local level
+            if type(entry) == "table" then
+                ---@type any
+                local entryAny = entry
+                id = entryAny.id or entryAny.affixID or entryAny.affixId
+                level = entryAny.startingLevel or entryAny.startingKeystoneLevel or entryAny.requiredLevel or
+                    entryAny.level
+            end
+            id = tonumber(id)
+            level = tonumber(level)
+            if id then
+                entries[#entries + 1] = { id = id, level = level }
+            end
+        end
+        return entries
     end
     return {}
 end
 
 local function GetAffixInfo(affixID)
+    local api = MythicPlusModule and MythicPlusModule.API
+    if api and type(api.GetAffixInfo) == "function" then
+        local name, desc, icon = api:GetAffixInfo(affixID)
+        if name ~= nil then
+            return name, desc, icon
+        end
+    end
+
     local C_ChallengeMode = _G.C_ChallengeMode
     if C_ChallengeMode and type(C_ChallengeMode.GetAffixInfo) == "function" then
         local ok, name, desc, icon = pcall(C_ChallengeMode.GetAffixInfo, affixID)
@@ -1794,9 +1832,42 @@ local Summary = MythicPlusModule.Summary or {}
 MythicPlusModule.Summary = Summary
 
 ---@param panel Frame
-function Summary:Refresh(panel)
+function Summary:Refresh(panel, event, ...)
     ---@cast panel TwichUI_MythicPlus_SummaryPanel
     if not panel or not panel.__twichuiHeader then return end
+
+    -- The Summary panel refreshes often (many events + a few deferred refreshes on show).
+    -- Rebuilding the PlayerModel (ClearModel/SetUnit/camera) too frequently causes visible jitter.
+    -- Only refresh the model for a small subset of events, and debounce it.
+    local shouldRefreshModel = false
+    if event == nil then
+        -- Backwards-compatible default: legacy callers refresh the model.
+        shouldRefreshModel = true
+    elseif event == "SHOW" or event == "MODEL_DEBOUNCED" then
+        shouldRefreshModel = true
+    elseif event == "PLAYER_ENTERING_WORLD" or event == "PLAYER_EQUIPMENT_CHANGED" or event == "PLAYER_SPECIALIZATION_CHANGED" then
+        shouldRefreshModel = true
+    end
+
+    if shouldRefreshModel then
+        local now = (type(_G.GetTime) == "function" and _G.GetTime()) or 0
+        local last = tonumber(panel.__twichuiLastModelRefreshAt) or 0
+        -- Allow at most ~4 rebuilds/sec; schedule one last rebuild if spammed.
+        if now > 0 and (now - last) < 0.25 then
+            shouldRefreshModel = false
+            if C_Timer and type(C_Timer.After) == "function" then
+                panel.__twichuiModelDebounceToken = (panel.__twichuiModelDebounceToken or 0) + 1
+                local token = panel.__twichuiModelDebounceToken
+                C_Timer.After(0.26, function()
+                    if panel and panel.IsShown and panel:IsShown() and panel.__twichuiModelDebounceToken == token then
+                        Summary:Refresh(panel, "MODEL_DEBOUNCED")
+                    end
+                end)
+            end
+        else
+            panel.__twichuiLastModelRefreshAt = now
+        end
+    end
 
     local name = UnitName("player") or "Player"
     local className, classFile = UnitClass("player")
@@ -2089,7 +2160,7 @@ function Summary:Refresh(panel)
         panel.__twichuiIlvlValue:SetText(TT.Color(CT.TWICH.SECONDARY_ACCENT, string.format("%.1f", equippedIlvl)))
     end
 
-    if panel.__twichuiModel then
+    if shouldRefreshModel and panel.__twichuiModel then
         local model = panel.__twichuiModel
 
         -- Unit/model data can be unavailable on the very first show; clear+set is more reliable.
@@ -2172,8 +2243,8 @@ function Summary:_EnableEvents(panel)
     if not panel or panel.__twichuiEventsEnabled then return end
     panel.__twichuiEventsEnabled = true
 
-    panel:SetScript("OnEvent", function()
-        self:Refresh(panel)
+    panel:SetScript("OnEvent", function(_, evt, ...)
+        self:Refresh(panel, evt, ...)
     end)
 
     panel:RegisterEvent("PLAYER_ENTERING_WORLD")
@@ -2220,8 +2291,14 @@ local function CreateSummaryPanel(parent)
     ---@field __twichuiSeasonMarkers table|nil
     ---@field __twichuiEventsEnabled boolean
     ---@field __twichuiModelRefreshToken number|nil
+    ---@field __twichuiModelDebounceToken number|nil
+    ---@field __twichuiLastModelRefreshAt number|nil
     ---@field __twichuiDebugCount number|nil
     ---@field __twichuiOverlayDebugCount number|nil
+    ---@field __twichuiPortalsWrap Frame|nil
+    ---@field __twichuiPortalsBar StatusBar|nil
+    ---@field __twichuiPortalsText FontString|nil
+    ---@field __twichuiMissingPortals table|nil
 
     ---@type TwichUI_MythicPlus_SummaryPanel
     local panel = CreateFrame("Frame", nil, parent)
@@ -3197,13 +3274,15 @@ local function CreateSummaryPanel(parent)
         panel.__twichuiDebugCount = 0
         panel.__twichuiOverlayDebugCount = 0
         Summary:_EnableEvents(panel)
-        Summary:Refresh(panel)
+        Summary:Refresh(panel, "SHOW")
 
         -- One extra refresh shortly after first show improves reliability for score/ilvl and model visibility.
         if C_Timer and type(C_Timer.After) == "function" then
-            C_Timer.After(0, function() if panel and panel:IsShown() then Summary:Refresh(panel) end end)
-            C_Timer.After(0.2, function() if panel and panel:IsShown() then Summary:Refresh(panel) end end)
-            C_Timer.After(1.0, function() if panel and panel:IsShown() then Summary:Refresh(panel) end end)
+            C_Timer.After(0, function() if panel and panel:IsShown() then Summary:Refresh(panel, "SHOW_DEFERRED") end end)
+            C_Timer.After(0.2,
+                function() if panel and panel:IsShown() then Summary:Refresh(panel, "SHOW_DEFERRED") end end)
+            C_Timer.After(1.0,
+                function() if panel and panel:IsShown() then Summary:Refresh(panel, "SHOW_DEFERRED") end end)
 
             -- Re-assert visibility after the window manager's fade logic would normally complete.
             C_Timer.After(0.25, function() if panel and panel:IsShown() then ForcePanelVisible(panel) end end)

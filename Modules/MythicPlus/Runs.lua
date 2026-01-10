@@ -117,6 +117,14 @@ local function GetDungeonName(runData)
         end
     end
 
+    local api = MythicPlusModule and MythicPlusModule.API
+    if api and type(api.GetMapUIInfo) == "function" then
+        local name = api:GetMapUIInfo(mapId)
+        if name then
+            return name
+        end
+    end
+
     local C_ChallengeMode = _G.C_ChallengeMode
     if C_ChallengeMode and C_ChallengeMode.GetMapUIInfo then
         local name = C_ChallengeMode.GetMapUIInfo(mapId)
@@ -175,11 +183,17 @@ local function FormatAffixes(affixes)
         return "—"
     end
 
+    local api = MythicPlusModule and MythicPlusModule.API
     local C_ChallengeMode = _G.C_ChallengeMode
     local parts = {}
     for _, id in ipairs(affixes) do
         local affixName
-        if C_ChallengeMode and type(C_ChallengeMode.GetAffixInfo) == "function" then
+        if api and type(api.GetAffixInfo) == "function" then
+            local name = api:GetAffixInfo(id)
+            if type(name) == "string" and name ~= "" then
+                affixName = name
+            end
+        elseif C_ChallengeMode and type(C_ChallengeMode.GetAffixInfo) == "function" then
             local ok, name = pcall(C_ChallengeMode.GetAffixInfo, id)
             if ok and type(name) == "string" and name ~= "" then
                 affixName = name

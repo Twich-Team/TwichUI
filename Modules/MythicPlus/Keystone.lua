@@ -60,6 +60,11 @@ local function GetAffixInfo(affixId)
     affixId = tonumber(affixId)
     if not affixId then return nil, nil, nil end
 
+    local api = MythicPlusModule and MythicPlusModule.API
+    if api and type(api.GetAffixInfo) == "function" then
+        return api:GetAffixInfo(affixId)
+    end
+
     local C_ChallengeMode = _G.C_ChallengeMode
     if C_ChallengeMode and type(C_ChallengeMode.GetAffixInfo) == "function" then
         local name, description, fileDataId = C_ChallengeMode.GetAffixInfo(affixId)
@@ -402,8 +407,13 @@ function Keystone:Refresh()
     if ownedMapID and C_MythicPlus and type(C_MythicPlus.RequestMapInfo) == "function" then
         pcall(C_MythicPlus.RequestMapInfo, ownedMapID)
     end
-    if C_MythicPlus and type(C_MythicPlus.RequestCurrentAffixes) == "function" then
-        pcall(C_MythicPlus.RequestCurrentAffixes)
+    do
+        local api = MythicPlusModule and MythicPlusModule.API
+        if api and type(api.RequestCurrentAffixes) == "function" then
+            api:RequestCurrentAffixes()
+        elseif C_MythicPlus and type(C_MythicPlus.RequestCurrentAffixes) == "function" then
+            pcall(C_MythicPlus.RequestCurrentAffixes)
+        end
     end
 
     local mapName, mapTexture = GetMapNameAndTexture(ownedMapID)
@@ -439,8 +449,15 @@ function Keystone:Refresh()
     local keyHasAffixes = (ownedMapID ~= nil) and (keyLevel ~= nil) and (keyLevel >= 2)
 
     local weeklyAffixIds = {}
-    if C_MythicPlus and type(C_MythicPlus.GetCurrentAffixes) == "function" then
-        local affixes = C_MythicPlus.GetCurrentAffixes()
+    do
+        local api = MythicPlusModule and MythicPlusModule.API
+        local affixes
+        if api and type(api.GetCurrentAffixes) == "function" then
+            affixes = api:GetCurrentAffixes()
+        elseif C_MythicPlus and type(C_MythicPlus.GetCurrentAffixes) == "function" then
+            affixes = C_MythicPlus.GetCurrentAffixes()
+        end
+
         if type(affixes) == "table" then
             for _, entry in ipairs(affixes) do
                 local id = NormalizeAffixId(entry)
