@@ -5,6 +5,7 @@
     <Include file="Developer\!load.xml" />
     <Include file="Welcome\!load.xml" />
     <Include file="General\!load.xml" />
+    <Include file="Reference\!load.xml" />
     <Include file="LootMonitor\!load.xml" />
     <Include file="GoldGoblin\!load.xml" />
     <Include file="DataTexts\!load.xml" />

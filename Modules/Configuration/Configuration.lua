@@ -288,6 +288,7 @@ function CM:CreateAddonConfiguration()
         args = {
             welcome = CM:CreateWelcomePanel(),
             general = CM:CreateGeneralConfiguration(),
+            reference = CM:CreateReferenceConfiguration(),
             lootMonitor = CM:CreateLootMonitorConfiguration(),
             developer = CM:CreateDeveloperConfiguration(),
             goldGoblin = CM.GoldGoblin:Create(),
