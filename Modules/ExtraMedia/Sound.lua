@@ -25,6 +25,9 @@ SM.SOUNDS = {
     { name = "TwichUI-Notification-7",       extension = "mp3" },
     { name = "TwichUI-Notification-8",       extension = "mp3" },
     { name = "TwichUI-Notification-9",       extension = "mp3" },
+    { name = "TwichUI-Notification-10",      extension = "mp3" },
+    { name = "TwichUI-Notification-11",      extension = "mp3" },
+    { name = "TwichUI-Notification-12",      extension = "mp3" },
 
 }
 
