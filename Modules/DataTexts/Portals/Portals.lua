@@ -20,6 +20,10 @@ local _G = _G
 local CreateFrame = CreateFrame
 local InCombatLockdown = InCombatLockdown
 
+local function IsInCombat()
+    return InCombatLockdown and InCombatLockdown()
+end
+
 --- @class PortalsDataText
 --- @field displayCache GenericCache caching the display text
 --- @field hearthstoneCache GenericCache caching available hearthstones
@@ -206,9 +210,40 @@ function PortalsDataText:UpdatePanelIcon(displayText)
     DataTexts:UpdateDatatextIcon(self.panel, showIcon, icon, iconSize, padding, displayText)
 end
 
+function PortalsDataText:RequestUpdateFavoriteClickButton()
+    self._pendingFavoriteClickButtonUpdate = true
+
+    if not self._favoriteClickButtonEventFrame and CreateFrame then
+        local f = CreateFrame("Frame")
+        f:Hide()
+        f:SetScript("OnEvent", function(frame, event)
+            if event ~= "PLAYER_REGEN_ENABLED" then
+                return
+            end
+
+            if frame and frame.UnregisterEvent then
+                frame:UnregisterEvent("PLAYER_REGEN_ENABLED")
+            end
+
+            if self._pendingFavoriteClickButtonUpdate then
+                self._pendingFavoriteClickButtonUpdate = nil
+                self:UpdateFavoriteClickButton()
+            end
+        end)
+        self._favoriteClickButtonEventFrame = f
+    end
+
+    if self._favoriteClickButtonEventFrame and self._favoriteClickButtonEventFrame.RegisterEvent then
+        self._favoriteClickButtonEventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+    end
+end
+
 function PortalsDataText:UpdateFavoriteClickButton()
     if not self.panel or not CreateFrame then return end
-    if InCombatLockdown and InCombatLockdown() then return end
+    if IsInCombat() then
+        self:RequestUpdateFavoriteClickButton()
+        return
+    end
 
     local function IsActiveOnPanel()
         local panelText = (self.panel and self.panel.text and self.panel.text.GetText) and self.panel.text:GetText() or
@@ -218,17 +253,6 @@ function PortalsDataText:UpdateFavoriteClickButton()
         return panelText and (panelText == self:GetDisplayText())
     end
 
-    local function DeactivateOverlay(btn)
-        if not btn then return end
-        btn:EnableMouse(false)
-        btn:SetAttribute("type", nil)
-        btn:SetAttribute("type1", nil)
-        btn:SetAttribute("macrotext", nil)
-        btn:SetAttribute("macrotext1", nil)
-        btn:SetAttribute("ctrl-type1", nil)
-        btn:SetAttribute("ctrl-macrotext1", nil)
-    end
-
     if not self.clickButton then
         -- Secure overlay to allow click-to-cast favorite hearthstone.
         -- NOTE: must be secure to execute protected item/macro actions.
@@ -236,16 +260,14 @@ function PortalsDataText:UpdateFavoriteClickButton()
         btn:SetAllPoints(self.panel)
         btn:RegisterForClicks("LeftButtonUp", "LeftButtonDown")
         btn:SetFrameLevel((self.panel.GetFrameLevel and self.panel:GetFrameLevel() or 1) + 5)
-        btn:EnableMouse(true)
+        btn:EnableMouse(false)
 
         -- Preserve hover UX by forwarding hover events.
         btn:SetScript("OnEnter", function(button)
             -- If the user swapped this panel away from Portals, immediately disable the overlay so it stops hijacking
             -- hover and (especially) secure clicks for other datatexts.
             if not IsActiveOnPanel() then
-                DeactivateOverlay(button)
-            else
-                button:EnableMouse(true)
+                self:UpdateFavoriteClickButton()
             end
 
             local parent = button and button.GetParent and button:GetParent() or nil
@@ -269,7 +291,7 @@ function PortalsDataText:UpdateFavoriteClickButton()
         -- PreClick runs for secure buttons. Use it to prevent leftover secure actions when the panel isn't Portals.
         btn:SetScript("PreClick", function(button)
             if not IsActiveOnPanel() then
-                DeactivateOverlay(button)
+                self:UpdateFavoriteClickButton()
             end
         end)
 
