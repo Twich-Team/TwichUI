@@ -2,3 +2,5 @@
 *.zip
 .DS_Store
 luac.out
+
+*:Zone.Identifier
