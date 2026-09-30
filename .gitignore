@@ -4,3 +4,5 @@
 luac.out
 
 *:Zone.Identifier
+
+tools/deploy.sh
