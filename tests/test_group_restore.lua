@@ -21,7 +21,9 @@ for _, c in pairs(CLIENTS) do c.TwichUIDB.modules.groupCheck = true end
 rich.TwichUIDB.modules.groupCheck = true; pal.TwichUIDB.modules.groupCheck = true
 -- version hello
 rich.TwichUI.Group:SayHello(); settle()
+RunLongTimers(3); settle()                  -- pal answers a newcomer after 1-3 seconds
 print("rich knows pal:", rich.TwichUI.Group.peers["Pal Stonebrook"] and rich.TwichUI.Group.peers["Pal Stonebrook"].v)
+assert(rich.TwichUI.Group.peers["Pal Stonebrook"].v == "3.1.0", "hello answered")
 -- group check
 rich.TwichUI.Setups:SaveMine(false)
 pal.Bar = nil
@@ -29,6 +31,8 @@ assert(rich.TwichUI.Group:RunCheck(true)); settle()
 rich.TwichUI.Group.check.done = true
 for _, r in ipairs(rich.TwichUI.Group:CheckRows()) do print("row", r.short, r.state, r.version, r.missing and #r.missing) end
 -- probe (whispers dropped): marks not working after timeout
+RunLongTimers(20)
+assert(rich.TwichUIDB.whisperProbe and rich.TwichUIDB.whisperProbe.ok == false, "probe timed out")
 print("whisper works?", rich.TwichUI.Share.WhisperWorks(), rich.TwichUI.Group.WhisperStatus())
 -- simulate fixed whispers on new build
 BUILD = "70100"; DROP_SPACED_WHISPERS = false

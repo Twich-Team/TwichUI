@@ -309,7 +309,7 @@ local function RefreshMine()
                 local c = ListRow(mine.list, lines)
                 c.check:Show()
                 c.check:SetChecked(t.selected)
-                c.check:SetEnabled(ST.capture ~= nil)
+                c.check:SetEnabled(ST.capture ~= nil and not t.huge)   -- too big to share
                 c.check:SetScript("OnClick", function(cb) ST:SetTableSelected(t.name, cb:GetChecked()); W:Refresh() end)
                 c.arrow:SetText("")
                 c.label:SetText("    " .. t.name)
@@ -780,7 +780,14 @@ local function RefreshGet()
             r.label:SetTextColor(usable and 1 or 0.5, usable and 1 or 0.5, usable and 1 or 0.5)
             r.right:SetText(STATE_TEXT[g.state] or "")
             r:SetScript("OnClick", nil)
-            r:SetScript("OnEnter", nil)
+            -- Show exactly which settings tables applying would replace.
+            r:SetScript("OnEnter", function(self)
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                GameTooltip:SetText(g.title, 1, 1, 1)
+                GameTooltip:AddLine("Applying replaces:", 0.7, 0.7, 0.7)
+                for _, name in ipairs(g.tables) do GameTooltip:AddLine(name, 1, 1, 1) end
+                GameTooltip:Show()
+            end)
             r:Show()
         end
     else
@@ -1106,8 +1113,16 @@ local function Build()
     if R.S then for _, fs in ipairs(fontStrings) do Skin("Font", fs) end end
 
     f:SetScript("OnShow", function() W:Refresh() end)
-    SH:OnChange(function() W:Refresh() end)
-    R.Group:OnChange(function() W:Refresh() end)
+    -- Transfers report progress per chunk; redraw at most a few times a second,
+    -- and not at all on pages that show nothing about transfers or the group.
+    local refreshQueued = false
+    local function QueueRefresh()
+        if refreshQueued or not f:IsShown() or page == "addons" or page == "restore" then return end
+        refreshQueued = true
+        C_Timer.After(0.25, function() refreshQueued = false; W:Refresh() end)
+    end
+    SH:OnChange(QueueRefresh)
+    R.Group:OnChange(QueueRefresh)
 end
 
 function W:Refresh()
@@ -1142,6 +1157,11 @@ end
 ---------------------------------------------------------------------------
 function W:AskAccept(sender, offer)
     local who = SH.Short(sender)
+    -- There's one prompt. If someone else's offer is still waiting on it,
+    -- answer that one "not now" so they aren't left hanging when it's replaced.
+    for other, inc in pairs(SH.incoming) do
+        if other ~= sender and inc.stage == "asking" then SH:Respond(other, false) end
+    end
     StaticPopupDialogs.TWICHUI_OFFER = {
         text = "%s",
         button1 = "Accept", button2 = "Not now", button3 = ("Always accept from %s"):format(who),

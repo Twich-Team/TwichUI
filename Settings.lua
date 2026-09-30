@@ -24,7 +24,7 @@ local function Build()
     end
 
     local function Toggle(key, label, tooltip, needsReload)
-        local setting = Settings.RegisterAddOnSetting(category, "TWICHUI_" .. key, key, TwichUIDB.modules, BOOL, label, true)
+        local setting = Settings.RegisterAddOnSetting(category, "TWICHUI_" .. key, key, TwichUIDB.modules, BOOL, label, R.DEFAULT_MODULES[key])
         Settings.CreateCheckbox(category, setting, tooltip)
         if setting.SetValueChangedCallback then
             setting:SetValueChangedCallback(function()

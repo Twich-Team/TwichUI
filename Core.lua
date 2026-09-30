@@ -25,6 +25,7 @@ local DEFAULT_MODULES = {
     shareGuild = false,      -- ... over the guild channel (opt-in)
     groupCheck = false,      -- version hello / group check / DM probe (group channel, opt-in)
 }
+R.DEFAULT_MODULES = DEFAULT_MODULES   -- Settings.lua uses these for the panel's Defaults button
 
 function R.Print(fmt, ...)
     print((R.GOLD .. "TwichUI:|r " .. fmt):format(...))
@@ -141,6 +142,7 @@ SlashCmdList.TWICHUI = function(msg)
         print("  /twichui restore - restore points")
         print("  /twichui hidden - welcome messages hidden at login")
         print("  /twichui version - your TwichUI version")
+        print("  /aeskin - Auctionator skin status (/aeskin apply to re-run it)")
     else
         R:OpenSettings()
     end

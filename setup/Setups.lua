@@ -111,7 +111,7 @@ function ST.AddonState(owner)
     if C_AddOns.IsAddOnLoaded(owner) then return "ready" end
     local exists = C_AddOns.DoesAddOnExist and C_AddOns.DoesAddOnExist(owner)
     if exists == false then return "missing" end
-    local ok, _, _, loadable, reason = pcall(C_AddOns.GetAddOnInfo, owner)
+    local ok, _, _, _, loadable, reason = pcall(C_AddOns.GetAddOnInfo, owner)
     if ok and reason == "MISSING" then return "missing" end
     if ok and not loadable then return "disabled" end
     return "ready"
@@ -160,9 +160,12 @@ local function ScanNewGlobals(owner)
                 and not k:find("^TwichUI") then
                 local pure, bytes, huge = Inspect(v)
                 if pure and next(v) ~= nil then
-                    ST.capture[k] = { owner = owner, data = DeepCopy(v) }
+                    -- Tables past the size cap are listed but not copied: far too
+                    -- big to send, and the copy would sit in memory all session.
+                    if not huge then ST.capture[k] = { owner = owner, data = DeepCopy(v) } end
                     db.detected[k] = { owner = owner, bytes = bytes, huge = huge or nil }
-                    if db.selection[k] == nil then db.selection[k] = ST.Suggest(k, bytes) end
+                    if huge then db.selection[k] = false
+                    elseif db.selection[k] == nil then db.selection[k] = ST.Suggest(k, bytes) end
                 end
             end
         end
@@ -214,7 +217,10 @@ function ST:SetAddonSelected(owner, on)
     end
 end
 
-function ST:SetTableSelected(name, on) db.selection[name] = on and true or false end
+function ST:SetTableSelected(name, on)
+    local e = db.detected[name]
+    db.selection[name] = (on and not (e and e.huge)) and true or false
+end
 
 function ST:SelectSuggested()
     for name, e in pairs(db.detected) do db.selection[name] = ST.Suggest(name, e.bytes) end
@@ -285,7 +291,7 @@ local function FolderExists(folder)
 end
 
 local function FolderEnabled(folder)
-    local ok, state = pcall(C_AddOns.GetAddOnEnableState, folder, UnitName("player"))
+    local ok, state = pcall(C_AddOns.GetAddOnEnableState, folder, UnitGUID("player"))
     if ok and type(state) == "number" then return state > 0 end
     return true
 end
@@ -499,6 +505,20 @@ local function OwnerOf(name)
     return b and b.owners and b.owners[name]
 end
 
+-- A setup only ever replaces addon settings tables. Names come from whoever
+-- made the setup, so never touch TwichUI's own data or a global that isn't
+-- a table (a function, say).
+function ST.SafeName(name)
+    if type(name) ~= "string" or name:find("^TwichUI") then return false end
+    local cur = rawget(_G, name)
+    return cur == nil or type(cur) == "table"
+end
+
+local function Skip(name)
+    results.skipped[#results.skipped + 1] = name
+    pending.tables[name] = nil
+end
+
 local function ApplyOne(name)
     local mode = pending.mode
     if mode == "undo" then
@@ -509,6 +529,7 @@ local function ApplyOne(name)
         local pack = PendingPack()
         local entry = pack and pack.tables[name]
         if not entry then pending.tables[name] = nil return end
+        if not ST.SafeName(name) then Skip(name) return end
         if mode == "apply" then
             Backup(name, pending.stamp)
             Replace(name, entry.data)
@@ -523,6 +544,11 @@ local function ProcessOwner(owner)
     if not pending then return end
     for name in pairs(pending.tables) do
         if OwnerOf(name) == owner then ApplyOne(name) end
+    end
+    -- Load-on-demand addons get here after login; finish up once they're all in.
+    if pending.announced and next(pending.tables) == nil then
+        db.pending = nil
+        pending = nil
     end
 end
 
@@ -679,6 +705,10 @@ R:OnInit(function()
             if owner and ST.loadedBefore[owner] then
                 ApplyOne(name)
                 results.late[#results.late + 1] = name
+            elseif p.mode ~= "undo" and rawget(_G, name) ~= nil then
+                -- Its addon hasn't loaded yet, so a global that already exists
+                -- isn't that addon's saved settings. Leave it alone.
+                Skip(name)
             end
         end
     end
@@ -709,22 +739,28 @@ R:On("PLAYER_LOGIN", function()
                 pending.tables[name] = nil
             end
         end
-        if next(pending.tables) == nil then db.pending = nil end
+        local finished = next(pending.tables) == nil
+        if finished then db.pending = nil end
         ST.report = results
-        local n = #results.done
-        if results.mode == "undo" then
-            R.Print("restored your previous settings (%d).", n)
-        elseif results.mode == "alt" then
-            R.Print("this character now uses the shared addon configuration (%d).", n)
-        else
-            R.Print("addon configuration applied (%d settings). Undo is in /pack if you change your mind.", n)
+        -- Say it once. What's left waits for a load-on-demand addon and is
+        -- applied when it loads (this session or a later one).
+        if not pending.announced then
+            pending.announced = true
+            local n = #results.done
+            if results.mode == "undo" then
+                R.Print("restored your previous settings (%d).", n)
+            elseif results.mode == "alt" then
+                R.Print("this character now uses the shared addon configuration (%d).", n)
+            else
+                R.Print("addon configuration applied (%d settings). Undo is in /pack if you change your mind.", n)
+            end
+            if #results.skipped > 0 then
+                R.Print("skipped %d: the addon isn't installed or enabled, or it isn't a settings table.", #results.skipped)
+            end
+            if #results.late > 0 then
+                R.Print("some addons load before TwichUI; /reload once more to be sure they picked it up.")
+            end
         end
-        if #results.skipped > 0 then
-            R.Print("skipped %d because the addon isn't installed or enabled.", #results.skipped)
-        end
-        if #results.late > 0 then
-            R.Print("some addons load before TwichUI; /reload once more to be sure they picked it up.")
-        end
-        pending = nil
+        if finished then pending = nil end
     end
 end)

@@ -1,7 +1,7 @@
 ## Interface: 16001, 120100
 ## Title: |cffC9A24ATwich|rUI
 ## Notes: Extra fonts and sounds, quiet login, an EllesmereUI skin for Auctionator, and addon configuration sharing, restore points and group checks. /twichui
-## Author: rldiamond
+## Author: twichie
 ## Version: 3.0.1
 ## SavedVariables: TwichUIDB, TwichUIBackupDB, TwichUIShareDB, TwichUIRestoreDB
 ## IconTexture: Interface\AddOns\!!!TwichUI\media\icon
@@ -9,7 +9,8 @@
 ## AddonCompartmentFuncOnEnter: TwichUI_OnCompartmentEnter
 ## AddonCompartmentFuncOnLeave: TwichUI_OnCompartmentLeave
 ## X-License: MIT (code); SIL OFL 1.1 (fonts); see LICENSE and licenses/
-## X-Category: Interface Enhancements
+## Category: Interface Enhancements
+## X-Curse-Project-ID: 1719280
 
 # Libraries
 libs\LibStub\LibStub.lua

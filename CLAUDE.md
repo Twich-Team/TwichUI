@@ -46,6 +46,17 @@ Treat this project’s files and the target client as the source of truth. Do no
 - Keep generated or downloaded API references outside the addon source unless they are intentionally part of the project.
 - Never put secrets, access tokens, or personal information in source files or Git.
 
+## Performance and lifecycle
+
+- Prefer clear, correct code. Do not add complex caching, pooling, or micro-optimizations without a demonstrated need.
+- Avoid creating temporary tables, closures, or strings on high-frequency paths such as `OnUpdate`, rapid event handlers, or frequently repeated callbacks. If such a path needs optimization, explain the tradeoff and keep the code readable.
+- Avoid per-frame `OnUpdate` work when an event, timer, or less frequent update can accomplish the same thing. If `OnUpdate` is necessary, keep its work small and throttle it where appropriate.
+- Keep recurring work bounded. Do not create duplicate frames, timers, event registrations, or callbacks when an existing one can be reused.
+- When adding timers, event handlers, frame scripts, or callbacks, consider their lifetime. Cancel or unregister them when the associated feature or UI object is disabled or no longer needed, if the API supports that.
+- Avoid retaining frames, units, large tables, or other objects in long-lived tables or closures after they are no longer needed. Clear references when removing entries.
+- Do not force garbage collection as a routine optimization. Do not claim there is a memory leak based only on total memory usage increasing; identify what is retained or repeatedly allocated.
+- For performance-sensitive changes, state the expected hot path and validate the change with an available profiler or a reproducible in-game test. Do not add profiling overhead to normal operation unless requested.
+
 ## Testing and validation
 
 - First inspect the repository for its actual test, lint, build, packaging, or deployment commands. Do not invent commands or claim they passed without running them.

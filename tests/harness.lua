@@ -1,4 +1,5 @@
 TIMERS = {}
+LONG_TIMERS = {}
 UPDATERS = {}
 function FlushTimers() for fr, fn in pairs(UPDATERS) do for _ = 1, 50 do if UPDATERS[fr] then UPDATERS[fr](fr, 0.016) end end end local t = TIMERS; TIMERS = {}; for _, f in ipairs(t) do f() end end
 require("bit")
@@ -48,7 +49,9 @@ function MakeClient(charName, addons)
   env.wipe = function(t) for k in pairs(t) do t[k] = nil end return t end
   env.print = function(s) print("["..charName.."] "..tostring(s)) end
   env.geterrorhandler = function() return function(e) print("["..charName.."] ERROR: "..tostring(e)) end end
-  env.C_Timer = {After = function(d, fn) if d <= 1 then table.insert(TIMERS, fn) end end, NewTicker = function() return {} end}
+  -- Short timers run on the next FlushTimers(); longer ones (timeouts, delayed hellos) wait for RunLongTimers(seconds).
+  env.C_Timer = {After = function(d, fn) if d <= 1 then table.insert(TIMERS, fn) else table.insert(LONG_TIMERS, {d = d, fn = fn}) end end, NewTicker = function() return {Cancel = function() end} end}
+  env.UnitGUID = function() return "Player-1-" .. charName end
   env.IsInGroup = function() return GROUP ~= nil and GROUP[charName] ~= nil end
   env.IsInRaid = function() return false end
   env.GetNumGroupMembers = function() local n = 0 for _ in pairs(GROUP or {}) do n = n + 1 end return n end
@@ -65,7 +68,7 @@ function MakeClient(charName, addons)
   env.LOADED = {}
   env.C_AddOns = {
     GetNumAddOns = function() return #addons end,
-    GetAddOnInfo = function(i) local n = type(i)=="number" and addons[i] or i; return n, n.." Title", "", true, nil end,
+    GetAddOnInfo = function(i) local n = type(i)=="number" and addons[i] or i; local off = (OFF or {})[n]; return n, n.." Title", "", not off, off and "DISABLED" or "", "INSECURE" end,
     IsAddOnLoaded = function(i) local n = type(i)=="number" and addons[i] or i; return env.LOADED[n] or false end,
     IsAddOnLoadOnDemand = function(i) local n = type(i)=="number" and addons[i] or i; return (LOD or {})[n] or false end,
     DoesAddOnExist = function(n) for _,a in ipairs(addons) do if a==n then return true end end return false end,
@@ -127,4 +130,10 @@ function Pump()
   end
   return n
 end
-function RunTimers() end
+-- Fires pending timers that were scheduled with a delay of up to maxDelay seconds.
+function RunLongTimers(maxDelay)
+  local t = LONG_TIMERS; LONG_TIMERS = {}
+  for _, e in ipairs(t) do
+    if e.d <= maxDelay then e.fn() else table.insert(LONG_TIMERS, e) end
+  end
+end

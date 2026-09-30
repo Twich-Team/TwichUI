@@ -61,7 +61,8 @@ local function Wrap()
     local cf = DEFAULT_CHAT_FRAME
     if not cf or wrapped then return end
     local orig = cf.AddMessage
-    wrapped = { frame = cf, fn = function(self, msg, ...)
+    -- own: an AddMessage someone already set on the frame itself (nil = the frame's own method)
+    wrapped = { frame = cf, own = rawget(cf, "AddMessage"), fn = function(self, msg, ...)
         if ShouldHide(msg) then Hold(msg) return end
         return orig(self, msg, ...)
     end }
@@ -70,7 +71,7 @@ end
 
 local function Unwrap()
     if wrapped and wrapped.frame.AddMessage == wrapped.fn then
-        wrapped.frame.AddMessage = nil     -- back to the frame's own method
+        wrapped.frame.AddMessage = wrapped.own   -- back to what was there before
     end
     wrapped = nil
 end
@@ -78,6 +79,8 @@ end
 function Q:Stop()
     Q.active = false
     Unwrap()
+    -- Same for print, unless another addon has chained its own handler onto ours.
+    if origPrint and getprinthandler() == PrintHandler then setprinthandler(origPrint) end
 end
 
 function Q:ShowHidden()

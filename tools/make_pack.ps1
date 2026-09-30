@@ -47,7 +47,7 @@ if ($text -notmatch '\["pack"\]') {
 $stage = Join-Path ([IO.Path]::GetTempPath()) ("TwichUI_" + [guid]::NewGuid().ToString('N'))
 $dest  = Join-Path $stage $addonName
 New-Item -ItemType Directory -Path $dest | Out-Null
-$devOnly = @('tests', '.github', '.git', '.pkgmeta', '.gitignore', 'RELEASING.md')
+$devOnly = @('tests', '.github', '.git', '.pkgmeta', '.gitignore', 'RELEASING.md', 'CLAUDE.md', 'assets')
 Get-ChildItem -LiteralPath $addonDir -Force | Where-Object { $devOnly -notcontains $_.Name } |
     ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $dest -Recurse -Force }
 $header = "-- TwichUI addon configuration file, built $(Get-Date -Format 'yyyy-MM-dd HH:mm'). Replace this file to update it."

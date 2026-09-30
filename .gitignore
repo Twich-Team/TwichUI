@@ -4,5 +4,6 @@
 luac.out
 
 *:Zone.Identifier
+*:com.apple.*
 
 tools/deploy.sh

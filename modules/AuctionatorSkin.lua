@@ -362,10 +362,14 @@ end
 
 -- Auctionator builds its frames when the auction house first opens, which
 -- is after EllesmereUI hands us the facade at login. Sweep on every AH open.
+local scheduled = false
 local function Schedule(trigger)
+    -- The frame's OnShow and the interaction event both land here on one open.
+    if scheduled then return end
+    scheduled = true
     -- Let Auctionator's own handlers finish building frames first.
     C_Timer.After(0, function() SkinAll(trigger) end)
-    C_Timer.After(0.5, function() SkinAll(trigger) end)
+    C_Timer.After(0.5, function() scheduled = false; SkinAll(trigger) end)
 end
 
 local ahHooked = false
@@ -375,22 +379,22 @@ local function HookAHFrame()
     AuctionHouseFrame:HookScript("OnShow", function() Schedule("AuctionHouseFrame:OnShow") end)
 end
 
-local watcher = CreateFrame("Frame")
 ModuleOn = function() return R:Enabled("auctionatorSkin") end
-watcher:RegisterEvent("PLAYER_INTERACTION_MANAGER_FRAME_SHOW")
-watcher:RegisterEvent("ADDON_LOADED")
-watcher:SetScript("OnEvent", function(_, event, arg)
+
+-- The option needs a reload to change, so only listen when the module is on.
+R:OnInit(function()
     if not ModuleOn() then return end
-    if event == "ADDON_LOADED" then
-        if arg == "Blizzard_AuctionHouseUI" then HookAHFrame() end
+    R:On("ADDON_LOADED", function(name)
+        if name == "Blizzard_AuctionHouseUI" then HookAHFrame() end
         -- Hook Auctionator's item/group templates before any are created.
-        if arg == "Auctionator" then HookAuctionatorMixins() end
-        return
-    end
-    if Enum and Enum.PlayerInteractionType
-        and arg ~= Enum.PlayerInteractionType.Auctioneer then return end
-    HookAHFrame()
-    Schedule("interaction event")
+        if name == "Auctionator" then HookAuctionatorMixins() end
+    end)
+    R:On("PLAYER_INTERACTION_MANAGER_FRAME_SHOW", function(kind)
+        if Enum and Enum.PlayerInteractionType
+            and kind ~= Enum.PlayerInteractionType.Auctioneer then return end
+        HookAHFrame()
+        Schedule("interaction event")
+    end)
 end)
 
 

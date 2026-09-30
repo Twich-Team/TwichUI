@@ -225,7 +225,7 @@ local function InMyGroup(name)
 end
 
 local function InMyGuild(name)
-    if not IsInGuild() then return false end
+    if not IsInGuild() or not GetGuildRosterInfo then return false end
     for i = 1, (GetNumGuildMembers() or 0) do
         local n, _, _, _, _, _, _, _, online = GetGuildRosterInfo(i)
         if SH.SameName(n, name) then return true, online end
@@ -331,6 +331,24 @@ SH.GroupDist = GroupDist
 ---------------------------------------------------------------------------
 -- Sending (you)
 ---------------------------------------------------------------------------
+-- Sender watchdog: if nothing has moved for a while, call it failed. Runs
+-- only while a send is in progress.
+local watchdog
+local function StartWatchdog()
+    if watchdog then return end
+    watchdog = C_Timer.NewTicker(5, function()
+        local o = SH.outgoing
+        if o and o.stage == "sending" and o.last and GetTime() - o.last > DATA_TIMEOUT then
+            o.stage = "failed"; o.reason = "The transfer stalled. Try again; only the missing parts will be sent."
+            Changed()
+        end
+        if not o or (o.stage ~= "offered" and o.stage ~= "packing" and o.stage ~= "sending") then
+            watchdog:Cancel()
+            watchdog = nil
+        end
+    end)
+end
+
 -- Returns false, reason if it can't start.
 -- selfTest: send to your own character. It goes through the real addon
 -- message path, so you can try the whole flow without a friend.
@@ -357,6 +375,7 @@ function SH:SendTo(name, selfTest)
     for tname, e in pairs(mine.tables) do list[tname] = { owner = e.owner, hash = e.hash } end
     local id = NewId()
     SH.outgoing = { target = target, id = id, stage = "offered", sent = 0, total = 0, started = GetTime(), route = route }
+    StartWatchdog()
     Send(target, {
         t = "offer", p = PROTOCOL, id = id,
         from = SH.SelfName(), created = mine.created, version = mine.version,
@@ -533,6 +552,7 @@ local function Validate(t)
     if type(t) ~= "table" then return false end
     for tname, e in pairs(t) do
         if type(tname) ~= "string" or type(e) ~= "table" or type(e.owner) ~= "string" then return false end
+        if not ST.SafeName(tname) then return false end
     end
     return true
 end
@@ -750,8 +770,10 @@ local notFoundPattern
 if type(ERR_CHAT_PLAYER_NOT_FOUND_S) == "string" then
     notFoundPattern = "^" .. ERR_CHAT_PLAYER_NOT_FOUND_S:gsub("([%(%)%.%%%+%-%*%?%[%]%^%$])", "%%%1"):gsub("%%%%s", "(.+)") .. "$"
 end
-if notFoundPattern and ChatFrame_AddMessageEventFilter then
-    ChatFrame_AddMessageEventFilter("CHAT_MSG_SYSTEM", function(_, _, msg)
+-- ChatFrame_AddMessageEventFilter is only a deprecation fallback on current clients.
+local AddMessageEventFilter = (ChatFrameUtil and ChatFrameUtil.AddMessageEventFilter) or ChatFrame_AddMessageEventFilter
+if notFoundPattern and AddMessageEventFilter then
+    AddMessageEventFilter("CHAT_MSG_SYSTEM", function(_, _, msg)
         if type(msg) ~= "string" or (issecretvalue and issecretvalue(msg)) then return false end
         local who = msg:match(notFoundPattern)
         if not who then return false end
@@ -773,11 +795,3 @@ if notFoundPattern and ChatFrame_AddMessageEventFilter then
     end)
 end
 
--- Sender watchdog: if nothing has moved for a while, call it failed.
-C_Timer.NewTicker(5, function()
-    local o = SH.outgoing
-    if o and o.stage == "sending" and o.last and GetTime() - o.last > DATA_TIMEOUT then
-        o.stage = "failed"; o.reason = "The transfer stalled. Try again; only the missing parts will be sent."
-        Changed()
-    end
-end)

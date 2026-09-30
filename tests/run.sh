@@ -8,7 +8,8 @@ cd "$(dirname "$0")"
 pass=0; fail=0
 for t in test_*.lua; do
   out=$(lua5.1 -e 'require("bit"); ROOT="../"; TESTS="./"' "$t" 2>&1) && ok=$? || ok=$?
-  if [ $ok -eq 0 ] && echo "$out" | grep -q "PASSED\|OK"; then pass=$((pass+1)); echo "ok   $t"
+  # "ERROR:" is what the harness prints for errors the addon catches and hands to the error handler.
+  if [ $ok -eq 0 ] && echo "$out" | grep -q "PASSED\|OK" && ! echo "$out" | grep -q "ERROR:"; then pass=$((pass+1)); echo "ok   $t"
   else fail=$((fail+1)); echo "FAIL $t"; echo "$out" | tail -5; fi
 done
 echo "$pass passed, $fail failed"

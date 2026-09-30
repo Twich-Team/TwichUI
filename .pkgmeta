@@ -10,4 +10,6 @@ ignore:
   - tests
   - .github
   - RELEASING.md
+  - CLAUDE.md
+  - assets
   - .gitignore
