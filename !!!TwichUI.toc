@@ -28,6 +28,7 @@ modules\Media.lua
 modules\AuctionatorSkin.lua
 modules\WhatsTrainingSkin.lua
 modules\ForeverDungeonJournalSkin.lua
+modules\AttuneSkin.lua
 
 # Configuration sharing, group check, restore points
 setup\PackFile.lua

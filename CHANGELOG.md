@@ -1,6 +1,8 @@
 # TwichUI changelog
 
 ## Unreleased
+- New **Attune skin**: the Attune window (`/attune`) and its quest panels get the EllesmereUI look.
+  Toggle: "Skin Attune" in `/twichui`.
 - New **Dungeon Journal skin**: the Forever Dungeon Journal window (`/fj`) gets the EllesmereUI look.
   Toggle: "Skin Dungeon Journal" in `/twichui`.
 - New **WhatsTraining skin**: the floating window (`/wt`) gets the EllesmereUI look.

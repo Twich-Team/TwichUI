@@ -61,6 +61,9 @@ local function Build()
     Toggle("foreverDungeonJournalSkin", "Skin Dungeon Journal",
         "Gives the Forever Dungeon Journal window (/fj) the EllesmereUI look. Needs EllesmereUI with third-party skins turned on.",
         true)
+    Toggle("attuneSkin", "Skin Attune",
+        "Gives the Attune window (/attune) and its quest panels the EllesmereUI look. Needs EllesmereUI with third-party skins turned on.",
+        true)
 
     Header("Configuration Sharing")
     Toggle("setupSharing", "Configuration Sharing",
