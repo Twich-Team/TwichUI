@@ -1,5 +1,9 @@
 # TwichUI changelog
 
+## Unreleased
+- New **WhatsTraining skin**: the floating window (`/wt`) gets the EllesmereUI look.
+  Toggle: "Skin WhatsTraining" in `/twichui`.
+
 ## 3.0.1
 - Version and group check is now **off by default** (opt-in). Turn it on in
   `/twichui` or with the button on the Group tab; everyone who wants to show up

@@ -26,6 +26,7 @@ Core.lua
 modules\QuietLogin.lua
 modules\Media.lua
 modules\AuctionatorSkin.lua
+modules\WhatsTrainingSkin.lua
 
 # Configuration sharing, group check, restore points
 setup\PackFile.lua

@@ -55,6 +55,9 @@ local function Build()
     Toggle("auctionatorSkin", "Skin Auctionator",
         "Gives Auctionator's tabs, buttons, lists and boxes the EllesmereUI look. Needs EllesmereUI with its Auction House window skin turned on.",
         true)
+    Toggle("whatsTrainingSkin", "Skin WhatsTraining",
+        "Gives WhatsTraining's floating window (/wt) the EllesmereUI look. Needs EllesmereUI with third-party skins turned on.",
+        true)
 
     Header("Configuration Sharing")
     Toggle("setupSharing", "Configuration Sharing",

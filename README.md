@@ -18,6 +18,9 @@ and reload. Errors and warnings still show. `/twichui hidden` lists what was hid
 **Auctionator skin.** Gives Auctionator's tabs, lists, buttons, item icons and
 bag headers the EllesmereUI look (needs EllesmereUI's Auction House skin on).
 
+**WhatsTraining skin.** Gives WhatsTraining's floating window (`/wt`) the
+EllesmereUI look (needs EllesmereUI's third-party skins on).
+
 **Configuration sharing** (`/pack`)
 
 * Pick the addons whose settings you want to share and save them as your addon configuration.
