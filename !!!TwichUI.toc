@@ -2,7 +2,7 @@
 ## Title: |cffC9A24ATwich|rUI
 ## Notes: Extra fonts and sounds, quiet login, an EllesmereUI skin for Auctionator, and addon configuration sharing, restore points and group checks. /twichui
 ## Author: twichie
-## Version: 3.0.1
+## Version: 3.0.2
 ## SavedVariables: TwichUIDB, TwichUIBackupDB, TwichUIShareDB, TwichUIRestoreDB
 ## IconTexture: Interface\AddOns\!!!TwichUI\media\icon
 ## AddonCompartmentFunc: TwichUI_OnCompartmentClick
