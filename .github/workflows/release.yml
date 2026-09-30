@@ -1,0 +1,30 @@
+name: Package and release
+
+# Push a tag like v3.0.0 to build the addon zip and upload it to CurseForge
+# (and Wago / GitHub releases if configured). See RELEASING.md.
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      CF_API_KEY: ${{ secrets.CF_API_KEY }}
+      WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
+      GITHUB_OAUTH: ${{ secrets.GITHUB_TOKEN }}
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Offline tests
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq lua5.1 lua-bitop
+          ./tests/run.sh
+
+      - uses: BigWigsMods/packager@v2

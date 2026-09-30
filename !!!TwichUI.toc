@@ -1,0 +1,37 @@
+## Interface: 16001, 120100
+## Title: |cffC9A24ATwich|rUI
+## Notes: Extra fonts and sounds, quiet login, an EllesmereUI skin for Auctionator, and addon configuration sharing, restore points and group checks. /twichui
+## Author: rldiamond
+## Version: 3.0.1
+## SavedVariables: TwichUIDB, TwichUIBackupDB, TwichUIShareDB, TwichUIRestoreDB
+## IconTexture: Interface\AddOns\!!!TwichUI\media\icon
+## AddonCompartmentFunc: TwichUI_OnCompartmentClick
+## AddonCompartmentFuncOnEnter: TwichUI_OnCompartmentEnter
+## AddonCompartmentFuncOnLeave: TwichUI_OnCompartmentLeave
+## X-License: MIT (code); SIL OFL 1.1 (fonts); see LICENSE and licenses/
+## X-Category: Interface Enhancements
+
+# Libraries
+libs\LibStub\LibStub.lua
+libs\CallbackHandler-1.0\CallbackHandler-1.0.lua
+libs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua
+libs\AceComm-3.0\ChatThrottleLib.lua
+libs\AceComm-3.0\AceComm-3.0.lua
+libs\LibSerialize\LibSerialize.lua
+libs\LibDeflate\LibDeflate.lua
+
+# Core
+Core.lua
+modules\QuietLogin.lua
+modules\Media.lua
+modules\AuctionatorSkin.lua
+
+# Configuration sharing, group check, restore points
+setup\PackFile.lua
+setup\Setups.lua
+setup\Share.lua
+setup\Group.lua
+setup\Restore.lua
+setup\Window.lua
+
+Settings.lua

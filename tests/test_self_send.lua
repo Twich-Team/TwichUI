@@ -1,0 +1,15 @@
+dofile(TESTS .. "harness.lua")
+local me = MakeClient("Twich", {"!!!TwichUI","Foo"})
+CLIENTS.Twich = me
+me.TwichUIDB = {setup = {scanNext = true}}
+me.LOADED["!!!TwichUI"]=true; me.FireEvent("ADDON_LOADED","!!!TwichUI")
+me.FooDB = {a=1}; me.LOADED.Foo=true; me.FireEvent("ADDON_LOADED","Foo")
+me.FireEvent("PLAYER_LOGIN")
+me.TwichUI.Setups:SaveMine(false)
+local ok, why = me.TwichUI.Share:SendTo("Twich"); assert(not ok); print(why)
+assert(me.TwichUI.Share:SendToSelf()); (function() for _=1,10 do FlushTimers(); Pump() end end)()
+assert(me.TwichUI.Share.incoming["Twich-Forever"].stage == "asking")
+me.TwichUI.Share:Respond("Twich-Forever", true); (function() for _=1,10 do FlushTimers(); Pump() end end)(); (function() for _=1,10 do FlushTimers(); Pump() end end)()
+assert(me.TwichUI.Share.outgoing.stage == "done")
+assert(me.TwichUIDB.setup.received["Twich-Forever"].tables.FooDB.data.a == 1)
+print("SELF TEST PASSED")
