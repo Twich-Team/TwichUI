@@ -18,6 +18,7 @@ local DEFAULT_MODULES = {
     media = true,            -- fonts and sounds for LibSharedMedia
     auctionatorSkin = true,  -- EllesmereUI look for Auctionator
     whatsTrainingSkin = true, -- EllesmereUI look for WhatsTraining's window
+    foreverDungeonJournalSkin = true, -- EllesmereUI look for Forever Dungeon Journal
     setupSharing = true,     -- capture / send / receive / apply setups
     acceptSetups = true,     -- let friends offer setups (always asks first)
     quietLogin = true,       -- hide addon welcome messages at login/reload

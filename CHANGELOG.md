@@ -1,6 +1,8 @@
 # TwichUI changelog
 
 ## Unreleased
+- New **Dungeon Journal skin**: the Forever Dungeon Journal window (`/fj`) gets the EllesmereUI look.
+  Toggle: "Skin Dungeon Journal" in `/twichui`.
 - New **WhatsTraining skin**: the floating window (`/wt`) gets the EllesmereUI look.
   Toggle: "Skin WhatsTraining" in `/twichui`.
 

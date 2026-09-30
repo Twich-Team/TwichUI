@@ -58,6 +58,9 @@ local function Build()
     Toggle("whatsTrainingSkin", "Skin WhatsTraining",
         "Gives WhatsTraining's floating window (/wt) the EllesmereUI look. Needs EllesmereUI with third-party skins turned on.",
         true)
+    Toggle("foreverDungeonJournalSkin", "Skin Dungeon Journal",
+        "Gives the Forever Dungeon Journal window (/fj) the EllesmereUI look. Needs EllesmereUI with third-party skins turned on.",
+        true)
 
     Header("Configuration Sharing")
     Toggle("setupSharing", "Configuration Sharing",

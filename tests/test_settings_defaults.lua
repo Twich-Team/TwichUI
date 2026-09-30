@@ -20,7 +20,7 @@ for key, default in pairs(defaults) do
   n = n + 1
   assert(default == c.TwichUI.DEFAULT_MODULES[key], key .. " default matches a new install")
 end
-assert(n == 10, "every module has a toggle: " .. n)
+assert(n == 11, "every module has a toggle: " .. n)
 assert(defaults.shareGroup == false and defaults.shareGuild == false and defaults.groupCheck == false, "opt-in stays off")
 assert(defaults.media == true and defaults.shareWhisper == true)
 print("SETTINGS DEFAULTS TESTS PASSED")
