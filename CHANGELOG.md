@@ -1,6 +1,6 @@
 # TwichUI changelog
 
-## Unreleased
+## 3.0.3
 - New **upgrade hints**: when something you could wear looks better for your class and main
   talent tree, its tooltip gets a quiet "Likely upgrade" line. Hold Shift to see why. Gear
   held back only by your level is compared too ("Likely upgrade at level 32").

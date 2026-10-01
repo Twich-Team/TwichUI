@@ -266,11 +266,6 @@ local function BuildMine(p)
     mine.status = Text(p, "GameFontHighlightSmall")
     mine.status:SetPoint("TOPLEFT", mine.bar, "BOTTOMLEFT", 0, -6)
     mine.status:SetWidth(WIDTH - 32)
-
-    mine.fileTip = Text(p, "GameFontDisableSmall")
-    mine.fileTip:SetPoint("BOTTOMLEFT", 16, 8)
-    mine.fileTip:SetWidth(WIDTH - 32)
-    mine.fileTip:SetText("Friend on another realm? Save, log out, and run tools\\make_pack.bat in the TwichUI folder to make a file instead.")
 end
 
 local function RefreshMine()

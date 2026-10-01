@@ -43,7 +43,6 @@ EllesmereUI look (needs EllesmereUI's third-party skins on).
 bar, and they choose what to apply. Their own settings are backed up first; Undo puts them back.
 * Later sends only include addons you changed.
 * Your recommended addon list travels with it, with a download link for each addon they're missing.
-* Friends on other realms: build a file version with `tools\make_pack.bat`.
 
 **Group check** (`/twichui check`, Group tab). Everyone's TwichUI version and
 the recommended addons they're missing, and a heads-up when someone in your
