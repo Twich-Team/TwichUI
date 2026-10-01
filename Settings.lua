@@ -23,12 +23,13 @@ local function Build()
         end
     end
 
-    local function Toggle(key, label, tooltip, needsReload)
+    local function Toggle(key, label, tooltip, needsReload, onChange)
         local setting = Settings.RegisterAddOnSetting(category, "TWICHUI_" .. key, key, TwichUIDB.modules, BOOL, label, R.DEFAULT_MODULES[key])
         Settings.CreateCheckbox(category, setting, tooltip)
         if setting.SetValueChangedCallback then
             setting:SetValueChangedCallback(function()
                 if needsReload then AskReload() end
+                if onChange then onChange() end
                 if R.Window then R.Window:Refresh() end
             end)
         end
@@ -50,6 +51,18 @@ local function Build()
     Toggle("quietLogin", "Hide addon welcome messages",
         "Hides the \"loaded\" and \"type /command for options\" lines addons print when you log in or reload. Errors and warnings still show. Type /twichui hidden to see what was hidden this session.",
         true)
+
+    Header("Gear")
+    Toggle("gearHints", "Upgrade hints in item tooltips",
+        "Adds a short line to an item's tooltip when it looks like an upgrade for your class and main talent tree. Hold Shift (your compare-items key) to see why.\n\nIt's a rough estimate from the item's stats, not a simulation. \"Use:\" and \"Chance on hit:\" effects aren't weighed. Talent tree, stat weights and more: /twichui gear.",
+        false)
+    Toggle("gearBagIcons", "Mark upgrades in my bags",
+        "A small mark in the corner of bag slots holding gear the tooltip would call an upgrade. Works with Blizzard's bags. Pick the mark's style in /twichui gear.",
+        false, function() if R.GearBags then R.GearBags.Refresh() end end)
+    Button("Upgrade hint options", "Open", function()
+        if SettingsPanel and SettingsPanel:IsShown() then HideUIPanel(SettingsPanel) end
+        R.GearWindow:Show()
+    end, "Choose the talent tree your gear is weighed for, change stat weights, and set how hints behave (same as typing /twichui gear).")
 
     Header("Skins")
     Toggle("auctionatorSkin", "Skin Auctionator",

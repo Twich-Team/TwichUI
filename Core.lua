@@ -23,6 +23,8 @@ local DEFAULT_MODULES = {
     setupSharing = true,     -- capture / send / receive / apply setups
     acceptSetups = true,     -- let friends offer setups (always asks first)
     quietLogin = true,       -- hide addon welcome messages at login/reload
+    gearHints = true,        -- "Likely upgrade" line in item tooltips (options: /twichui gear)
+    gearBagIcons = false,    -- ... and a mark on upgrades in your bags (opt-in)
     shareWhisper = true,     -- configuration sharing over direct addon messages
     shareGroup = false,      -- ... over the group channel (opt-in)
     shareGuild = false,      -- ... over the guild channel (opt-in)
@@ -135,6 +137,7 @@ SlashCmdList.TWICHUI = function(msg)
     elseif msg == "check" and R.Group then R.Group:RunCheck()
     elseif msg == "version" and R.Group then R.Print("version %s.", R.Group.Version())
     elseif msg == "restore" and R.Window then R.Window:Show("restore")
+    elseif msg == "gear" and R.GearWindow then R.GearWindow:Toggle()
     elseif msg == "help" or msg == "?" then
         R.Print("commands:")
         print("  /twichui - options")
@@ -143,6 +146,7 @@ SlashCmdList.TWICHUI = function(msg)
         print("  /pack status - what sharing is doing (for bug reports)")
         print("  /twichui check - check your group's TwichUI versions and missing addons")
         print("  /twichui restore - restore points")
+        print("  /twichui gear - upgrade hint options: talent tree, stat weights, bag icons")
         print("  /twichui hidden - welcome messages hidden at login")
         print("  /twichui version - your TwichUI version")
         print("  /aeskin - Auctionator skin status (/aeskin apply to re-run it)")

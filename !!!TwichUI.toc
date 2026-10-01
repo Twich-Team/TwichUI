@@ -38,4 +38,14 @@ setup\Group.lua
 setup\Restore.lua
 setup\Window.lua
 
+# Upgrade hints in item tooltips and bags
+gear\Weights.lua
+gear\Evaluate.lua
+gear\Prefs.lua
+gear\Data.lua
+gear\Hints.lua
+gear\Tooltip.lua
+gear\Bags.lua
+gear\Window.lua
+
 Settings.lua
