@@ -250,9 +250,18 @@ local function OnSkillLines()
 end
 
 -- The first look, a moment after login so the game has had time to fill in the profession list.
-local function ProfessionSettled()
+local function ProfessionSettled(retried)
     if not On("chronicleProfessions") then return end
-    CheckProfessions(not Journey().professions.baselined)
+    local first = not Journey().professions.baselined
+    if first and not retried then
+        -- An empty list this soon may only mean the game hasn't filled it in; look once more before trusting it.
+        local profs = ReadProfessions()
+        if profs and #profs == 0 then
+            C_Timer.After(PROFESSION_SETTLE, function() ProfessionSettled(true) end)
+            return
+        end
+    end
+    CheckProfessions(first)
 end
 
 ---------------------------------------------------------------------------
@@ -356,7 +365,7 @@ local function OnEnteringWorld(isLogin, isReload)
         if R:Enabled("chronicle") then
             if R:Enabled("chronicleGold") then RebaseGold() end
             if R:Enabled("chronicleRiding") then NoteKnownRiding() end
-            if R:Enabled("chronicleProfessions") then C_Timer.After(PROFESSION_SETTLE, ProfessionSettled) end
+            if R:Enabled("chronicleProfessions") then C_Timer.After(PROFESSION_SETTLE, function() ProfessionSettled() end) end
         end
     end
     EnsureBaseline()

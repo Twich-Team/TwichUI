@@ -37,12 +37,49 @@ local function Changed()
 end
 C.Changed = Changed
 
+-- Characters, not bytes: a UTF-8 character is one lead byte plus continuation bytes (128-191).
+function C.Length(text)
+    return select(2, text:gsub("[^\128-\191]", ""))
+end
+
+-- The first `limit` characters; never cuts a character in half.
+local function Truncate(text, limit)
+    local count = 0
+    for i = 1, #text do
+        local b = text:byte(i)
+        if b < 128 or b >= 192 then
+            count = count + 1
+            if count > limit then return text:sub(1, i - 1) end
+        end
+    end
+    return text
+end
+
 local function Trim(text, limit)
     if type(text) ~= "string" then return nil end
     text = text:gsub("[%c]", " "):gsub("^%s+", ""):gsub("%s+$", "")
     if text == "" then return nil end
-    if #text > limit then text = text:sub(1, limit) end
-    return text
+    return Truncate(text, limit)
+end
+
+-- Removes one entry to make room. Zone arrivals go first, then other automatic entries, oldest
+-- first. The player's notes and the first line saying when tracking began stay; later
+-- "Tracking resumed" lines can go. Returns false when nothing may be removed.
+local function Evict(entries)
+    local other, resumed, firstStart
+    for i = 1, #entries do
+        local kind = entries[i].kind
+        if kind == "zone" then table.remove(entries, i) return true end
+        if kind == "start" then
+            if firstStart then resumed = resumed or i else firstStart = i end
+        elseif kind ~= "note" then
+            other = other or i
+        end
+    end
+    local index = other or resumed
+    if not index then return false end
+    table.remove(entries, index)
+    return true
 end
 
 function C.CharKey()
@@ -83,10 +120,11 @@ local function CleanRecord(rec)
     local clean, maxId, seen = {}, 0, {}
     for _, e in ipairs(rec.entries) do
         if type(e) == "table" and C.KINDS[e.kind] and type(e.id) == "number" and not seen[e.id]
-            and type(e.t) == "number" and type(e.title) == "string" then
+            and type(e.t) == "number" and Trim(e.title, C.MAX_TITLE) then
             seen[e.id] = true
-            if type(e.note) ~= "string" then e.note = nil end
-            if type(e.zone) ~= "string" then e.zone = nil end
+            e.title = Trim(e.title, C.MAX_TITLE)
+            e.note = Trim(e.note, C.MAX_NOTE)
+            e.zone = Trim(e.zone, C.MAX_TITLE)
             if type(e.level) ~= "number" then e.level = nil end
             if type(e.secsAtLevel) ~= "number" then e.secsAtLevel = nil end
             if type(e.secsTotal) ~= "number" then e.secsTotal = nil end
@@ -96,6 +134,7 @@ local function CleanRecord(rec)
         end
     end
     table.sort(clean, function(a, b) if a.t ~= b.t then return a.t < b.t end return a.id < b.id end)
+    while #clean > C.MAX_ENTRIES and Evict(clean) do end
     rec.entries = clean
     if type(rec.nextId) ~= "number" or rec.nextId <= maxId then rec.nextId = maxId + 1 end
     rec.tracking = rec.tracking == true
@@ -148,18 +187,8 @@ function C.CurrentZone()
     return Trim(zone, C.MAX_TITLE)
 end
 
--- Makes room for one more. Automatic entries go first, oldest first; the
--- player's own notes (and the line that says when tracking began) stay.
 local function MakeRoom(entries)
-    if #entries < C.MAX_ENTRIES then return true end
-    for i = 1, #entries do
-        local kind = entries[i].kind
-        if kind ~= "note" and kind ~= "start" then
-            table.remove(entries, i)
-            return true
-        end
-    end
-    return false
+    return #entries < C.MAX_ENTRIES or Evict(entries)
 end
 
 -- fields: title (required), note, zone, level, secsAtLevel, secsTotal, icon. Returns the entry, or nil and a reason.

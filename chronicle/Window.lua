@@ -76,7 +76,7 @@ local function SaveNote()
     else
         local entry, why = C.Add("note", { title = "Note", note = text, zone = keep and ed.zone or nil })
         if not entry and why == "full" then
-            R.Print("your Chronicle holds %d notes, its limit. Delete one to write another.", C.MAX_ENTRIES)
+            R.Print("your Chronicle holds %d entries, its limit. Delete one to write another.", C.MAX_ENTRIES)
             return
         end
     end
@@ -95,7 +95,7 @@ local function BuildEditor()
     ed.box:SetScript("OnEnterPressed", SaveNote)
     ed.box:SetScript("OnEscapePressed", function() ed:Hide() end)
     ed.box:SetScript("OnTextChanged", function(self)
-        ed.count:SetText(("%d / %d"):format(#(self:GetText() or ""), C.MAX_NOTE))
+        ed.count:SetText(("%d / %d"):format(C.Length(self:GetText() or ""), C.MAX_NOTE))
     end)
     ed.count = Text(ed, "GameFontDisableSmall")
     ed.count:SetPoint("TOPRIGHT", -20, -78)
@@ -485,7 +485,7 @@ local function Build()
     f.empty:SetWidth(LIST_W - 80)
     f.empty:SetJustifyH("CENTER")
     f.empty:SetTextColor(K.stone[1], K.stone[2], K.stone[3])
-    f.empty:SetText("Your Chronicle is empty.\n\nIt fills as you write notes, or as you turn on automatic tracking in the options. Nothing from before is added.")
+    f.empty:SetText("Your Chronicle is empty.\n\nIt fills as you write notes and as the moments you chose to keep happen. Nothing from before is added.")
 
     f.noMatch = CreateFrame("Frame", nil, box)
     f.noMatch:SetSize(LIST_W - 80, 60)
