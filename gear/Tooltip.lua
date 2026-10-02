@@ -1,7 +1,7 @@
 -- TwichUI: upgrade hints, tooltip
 -- Adds one quiet line to an item's tooltip when it looks like an upgrade for
 -- you. Holding the reveal key (Shift, your compare-items key, unless you pick
--- another in /twichui gear) shows why: what it's compared with, the stat
+-- another in /twichui) shows why: what it's compared with, the stat
 -- changes that mattered most, which weights were used and what wasn't
 -- counted. Items that aren't upgrades, or that you can't use, get nothing
 -- unless you ask.

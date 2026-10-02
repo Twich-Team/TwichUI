@@ -40,4 +40,14 @@ W:Show("get"); W:ShowEditMode()
 W:AskAccept("Pal-Forever", {addons=3, bytes=50000})
 W:Received("Pal-Forever")
 W:Show("addons"); c.TwichUIDB.setup.received["Pal-Forever"].addons = {["cf:1"]={title="Foo", folders={"Foo"}}, ["x"]={title="Bar", folders={"Bar"}}}; W:Show("get"); W:ShowAddonList("recv:Pal-Forever"); W:ShowStorage(); W:ShowChannels(); W:Show("group"); W:Show("restore"); W:Show("mine"); W:Toggle(); W:Toggle()
+-- Import preview: what applying each addon would do.
+local ST = c.TwichUI.Setups
+local g = ST.PackByAddon(c.TwichUIDB.setup.received["Pal-Forever"])[1]
+assert(ST.ApplyEffect(g) == "replace", "an addon that hasn't loaded counts as replacing")
+c.LOADED.Foo = true
+assert(ST.ApplyEffect(g) == "new", "loaded with no settings: new")
+c.FooDB = {scale = 1}
+assert(ST.ApplyEffect(g) == "replace", "loaded with settings: replaces")
+assert(ST.ApplyEffect({state = "missing", tables = {}}) == "missing")
+W:Show("get")
 print("UI SMOKE OK")

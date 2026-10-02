@@ -1,7 +1,8 @@
 -- TwichUI: upgrade hints, preferences
--- What you've chosen in the upgrade hints window (/twichui gear): which
--- talent tree to weigh for, how each tree values stats (your stat weights,
--- or your ranked stat priority), and how hints behave.
+-- What you've chosen for upgrade hints in TwichUI's options: which talent
+-- tree to weigh for and how hints behave (the TwichUI page), and how each
+-- tree values stats (your stat weights or ranked stat priority, on the Stat
+-- weights page, /twichui gear).
 -- Kept account-wide in TwichUIDB.gear; the talent tree choice is per
 -- character. The on/off switches live with TwichUI's other toggles
 -- (TwichUIDB.modules.gearHints and gearBagIcons).

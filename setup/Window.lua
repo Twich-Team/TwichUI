@@ -624,6 +624,7 @@ end
 local get = {}
 
 local STATE_TEXT = { ready = GREEN .. "Ready|r", missing = RED .. "Not installed|r", disabled = GOLD .. "Turned off|r", unknown = GREY .. "?|r" }
+local EFFECT_TEXT = { replace = "Replaces yours", new = GREEN .. "New|r" }
 
 local function CurrentSource()
     local sources = ST.Sources()
@@ -641,6 +642,32 @@ local function SelectedNames(src)
         end
     end
     return names
+end
+
+-- What applying the ticked addons would change, in a sentence or two (used on
+-- the page and in the confirmation). Returns nil when nothing is ticked.
+local function Preview(src)
+    local sel = getSel[src.key] or {}
+    local titles, replace, new = {}, 0, 0
+    for _, g in ipairs(ST.PackByAddon(src.pack)) do
+        if sel[g.owner] ~= false and g.state ~= "missing" then
+            titles[#titles + 1] = g.title
+            if ST.ApplyEffect(g) == "new" then new = new + 1 else replace = replace + 1 end
+        end
+    end
+    if #titles == 0 then return nil end
+    local function Addons(n) return n == 1 and "1 addon" or (n .. " addons") end
+    local what
+    if replace > 0 and new > 0 then
+        what = ("Replaces your settings for %s and adds settings for %s"):format(Addons(replace), Addons(new))
+    elseif new > 0 then
+        what = "Adds settings for " .. Addons(new)
+    else
+        what = "Replaces your settings for " .. Addons(replace)
+    end
+    local list = table.concat(titles, ", ", 1, math.min(#titles, 4))
+    if #titles > 4 then list = list .. (" and %d more"):format(#titles - 4) end
+    return ("%s: %s. TwichUI changes nothing else: not its own options, your game settings or any other addon. What you have now is backed up first, so Undo can put it back."):format(what, list)
 end
 
 local function BuildGet(p)
@@ -681,14 +708,20 @@ local function BuildGet(p)
     end, "The addons your friend uses, with download links for the ones you don't have yet.")
     get.addonsBtn:SetPoint("TOPRIGHT", get.list, "BOTTOMRIGHT", 0, -4)
 
+    get.preview = Text(p, "GameFontHighlightSmall")
+    get.preview:SetPoint("TOPLEFT", 16, -358)
+    get.preview:SetWidth(WIDTH - 32)
+
     get.apply = Btn(p, "Apply to this character", 170, function()
         local src = CurrentSource(); if not src or not NoCombat() then return end
         local names = SelectedNames(src)
-        if #names == 0 then R.Print("nothing ticked.") return end
-        Confirm("TWICHUI_APPLY", ("Use %s's settings for the ticked addons? What you have now is backed up, so you can undo. Your UI reloads."):format(src.from),
-            function() ST:Queue("apply", names, src.key) end)
-    end, "Replaces your settings for the ticked addons with this configuration. Your current settings are backed up first.")
-    get.apply:SetPoint("TOPLEFT", 16, -372)
+        local preview = Preview(src)
+        if #names == 0 or not preview then R.Print("nothing ticked.") return end
+        -- StaticPopup formats its text, so keep any % in names literal.
+        local text = ("Apply %s's addon configuration?\n\n%s\n\nYour UI reloads."):format(src.from, preview):gsub("%%", "%%%%")
+        Confirm("TWICHUI_APPLY", text, function() ST:Queue("apply", names, src.key) end)
+    end, "Replaces your settings for the ticked addons with this configuration. You see what changes and confirm first; your current settings are backed up.")
+    get.apply:SetPoint("TOPLEFT", 16, -392)
     get.alt = Btn(p, "Use on this alt", 130, function()
         local src = CurrentSource(); if not src or not NoCombat() then return end
         Confirm("TWICHUI_ALT", "Switch this character to the shared configuration's profiles? Nothing is copied again. Your UI reloads.",
@@ -706,7 +739,7 @@ local function BuildGet(p)
     get.em:SetPoint("LEFT", get.undo, "RIGHT", 8, 0)
 
     get.report = Text(p, "GameFontHighlightSmall")
-    get.report:SetPoint("TOPLEFT", 16, -406)
+    get.report:SetPoint("TOPLEFT", 16, -426)
     get.report:SetWidth(WIDTH - 32)
 
     get.trusted = Text(p, "GameFontDisableSmall")
@@ -769,17 +802,18 @@ local function RefreshGet()
             r.check:Show()
             r.check:SetChecked(usable and sel[g.owner] ~= false)
             r.check:SetEnabled(usable)
-            r.check:SetScript("OnClick", function(c) sel[g.owner] = c:GetChecked() and true or false end)
+            r.check:SetScript("OnClick", function(c) sel[g.owner] = c:GetChecked() and true or false; W:Refresh() end)
             r.arrow:SetText("")
             r.label:SetText(g.title)
             r.label:SetTextColor(usable and 1 or 0.5, usable and 1 or 0.5, usable and 1 or 0.5)
-            r.right:SetText(STATE_TEXT[g.state] or "")
+            local effect = ST.ApplyEffect(g)
+            r.right:SetText(EFFECT_TEXT[effect] or STATE_TEXT[g.state] or "")
             r:SetScript("OnClick", nil)
-            -- Show exactly which settings tables applying would replace.
+            -- Show exactly which settings tables applying would change.
             r:SetScript("OnEnter", function(self)
                 GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
                 GameTooltip:SetText(g.title, 1, 1, 1)
-                GameTooltip:AddLine("Applying replaces:", 0.7, 0.7, 0.7)
+                GameTooltip:AddLine(effect == "new" and "Applying adds:" or "Applying replaces your:", 0.7, 0.7, 0.7)
                 for _, name in ipairs(g.tables) do GameTooltip:AddLine(name, 1, 1, 1) end
                 GameTooltip:Show()
             end)
@@ -801,7 +835,9 @@ local function RefreshGet()
     get.addonsBtn:SetShown(recCount > 0)
     get.addonsBtn:SetText(recMissing > 0 and ("Recommended addons (%d missing)"):format(recMissing) or "Recommended addons")
 
-    get.apply:SetEnabled(src ~= nil)
+    local preview = src and Preview(src)
+    get.preview:SetText(src and (preview or (GREY .. "Nothing ticked. Tick the addons whose settings you want to use.|r")) or "")
+    get.apply:SetEnabled(preview ~= nil)
     get.alt:SetEnabled(src ~= nil)
     get.undo:SetEnabled(ST:HasBackup() and true or false)
     get.em:SetShown(src ~= nil and src.pack.editMode ~= nil)

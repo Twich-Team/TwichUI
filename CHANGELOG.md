@@ -1,5 +1,18 @@
 # TwichUI changelog
 
+## Unreleased
+- **Options**: TwichUI's settings now all live in Esc > Options > AddOns > TwichUI, grouped
+  by feature (General, Gear comparison, Addon skins, Chat, Configuration sharing). Rarely
+  changed options show when you tick "Show advanced options"; they keep working while hidden.
+- **gear**: the separate upgrade hints window is gone. Talent tree, possible upgrades, higher
+  levels, strictness, reveal key and bag mark style are ordinary options; stat weights and
+  stat priority moved to a "Stat weights" page under TwichUI (`/twichui gear` opens it).
+  Your existing choices carry over unchanged.
+- **Addon skins**: each skin says whether its addon is installed, and its tooltip shows
+  whether the skin is active, waiting for EllesmereUI or needs a reload.
+- **Configuration sharing**: before applying, each addon shows whether your settings will be
+  replaced or added, and a summary (repeated in the confirmation) says exactly what changes.
+
 ## 3.0.5
 - Updated toc to reference only Forever build and match version of addon appropriately.
 

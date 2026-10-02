@@ -31,11 +31,21 @@ upgrades, or that you can't use, get nothing unless you ask. See
 
 * Pick the addons whose settings you want to share and save them as your addon configuration.
 * Send it to a friend in game. They get a prompt, it downloads with a progress
-bar, and they choose what to apply. Their own settings are backed up first; Undo puts them back.
+bar, and they choose what to apply. Before anything changes they see which
+addons' settings will be replaced or added, and confirm. Only those addons
+change. Their own settings are backed up first; Undo puts them back.
 * Later sends only include addons you changed.
 * Your recommended addon list travels with it, with a download link for each addon they're missing.
 
 **Restore points.** Save your own settings before you tinker, go back any time.
+
+## Options
+
+Everything lives in Esc > Options > AddOns > TwichUI (`/twichui`), grouped by
+feature. Rarely changed options (how upgrade hints are judged and revealed, the
+bag mark style, how configurations are sent) appear when you tick "Show
+advanced options". Stat weights and stat priority have their own page under
+TwichUI (`/twichui gear`).
 
 ## Sending on Forever
 
@@ -50,7 +60,7 @@ messages work again and switches back automatically.
 ## How upgrade hints work
 
 * **Your spec** is the talent tree you've put the most points into, in your
-active talent group, unless you pick one in `/twichui gear`. Forever uses
+active talent group, unless you pick one under "Weigh gear for" in `/twichui`. Forever uses
 classic-style talent trees, not retail specializations. Before your first talent
 point, or when your points are split evenly, the class's usual levelling tree is
 used, and the tooltip says so.

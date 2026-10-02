@@ -8,7 +8,7 @@
 -- Works with Blizzard's bags, separate or combined; other bag addons draw
 -- their own slots and aren't marked.
 --
--- Toggle: /twichui > "Mark upgrades in my bags"; style in /twichui gear.
+-- Toggle: /twichui > "Mark upgrades in my bags"; style under advanced options.
 
 local R = TwichUI
 local P, H = R.GearPrefs, R.GearHints

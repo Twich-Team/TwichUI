@@ -597,6 +597,20 @@ function ST.PackByAddon(pack)
     return list
 end
 
+-- What applying one addon's settings (a PackByAddon group) would do here:
+-- "replace" the settings you have, add "new" ones (the addon is loaded and
+-- has none yet), or nothing yet because it's "missing" or "disabled".
+-- An addon that hasn't loaded can't be checked, so it counts as "replace".
+function ST.ApplyEffect(g)
+    if g.state == "missing" or g.state == "disabled" then return g.state end
+    if not (g.owner and C_AddOns.IsAddOnLoaded(g.owner)) then return "replace" end
+    for _, name in ipairs(g.tables) do
+        local cur = rawget(_G, name)
+        if type(cur) == "table" and next(cur) ~= nil then return "replace" end
+    end
+    return "new"
+end
+
 function ST:RemoveReceived(sender)
     if db.received then db.received[sender] = nil end
 end
