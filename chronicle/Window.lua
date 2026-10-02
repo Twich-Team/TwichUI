@@ -242,6 +242,8 @@ local function Status()
     local parts = {}
     if R:Enabled("chronicleLevels") then parts[#parts + 1] = "levels" end
     if R:Enabled("chronicleZones") then parts[#parts + 1] = "new zones" end
+    if R:Enabled("chronicleGold") then parts[#parts + 1] = "gold earned" end
+    if R:Enabled("chronicleRiding") then parts[#parts + 1] = "riding" end
     if R:Enabled("chronicleBosses") then parts[#parts + 1] = "defeated encounters" end
     local what = #parts > 0 and table.concat(parts, ", ") or "nothing yet (pick what to keep in the options)"
     return "Recording your chosen moments from this day forward.",

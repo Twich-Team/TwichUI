@@ -62,7 +62,7 @@ for key, default in pairs(defaults) do
   n = n + 1
   assert(default == R.DEFAULT_MODULES[key], key .. " default matches a new install")
 end
-assert(n == 20, "every module has a toggle: " .. n)
+assert(n == 22, "every module has a toggle: " .. n)
 assert(defaults.shareGroup == false and defaults.shareGuild == false and defaults.groupCheck == true, "group sharing opt-in stays off; group check is on")
 assert(defaults.media == true and defaults.shareWhisper == true)
 assert(defaults.chronicle == true and defaults.chronicleChat == true, "Chronicle and its chat line are on by default")

@@ -34,6 +34,8 @@ local DEFAULT_MODULES = {
     chronicleZones = true,   -- ... arriving in a new zone
     chronicleBosses = true,  -- ... defeating an encounter
     chronicleDeaths = false, -- ... dying (off until chosen, even with the rest on)
+    chronicleGold = true,    -- ... gold earned milestones (10, 50, 100 ... 10,000)
+    chronicleRiding = true,  -- ... learning a new Riding rank
     chronicleChat = true,    -- ... and say so in your own chat frame when an automatic entry is added
 }
 R.DEFAULT_MODULES = DEFAULT_MODULES   -- Settings.lua uses these for the panel's Defaults button

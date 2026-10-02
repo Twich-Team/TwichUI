@@ -230,6 +230,7 @@ S.icons = {
     death = ICON .. "INV_Misc_Bone_Skull_02",
     note  = ICON .. "INV_Scroll_04",
     start = ICON .. "inv_misc_scrollunrolled01",
+    gold  = ICON .. "inv_misc_coin_01",
 }
 
 -- A small framed icon in the row's left gutter. Your own notes get a gold frame,

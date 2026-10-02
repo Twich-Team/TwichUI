@@ -6,8 +6,12 @@
 -- read, send or restore it.
 --
 -- TwichUIChronicleDB = { version = 1, chars = { ["Name - Realm"] = {
---     entries = { { id, t, kind, title, note, zone, level }, ... }  -- oldest first
---     nextId = n, tracking = bool } } }
+--     entries = { { id, t, kind, title, note, zone, level, secsAtLevel, secsTotal }, ... }  -- oldest first
+--     nextId = n, tracking = bool,
+--     journey = { baseLevel, baseTotal,   -- played seconds when the current level began
+--                 lastLevel,              -- highest level-up already written
+--                 gold = { last, earned, done = { [gold] = true } },  -- copper; thresholds already written
+--                 riding = { [spellID] = true } } } } }
 
 local R = TwichUI
 local C = {}
@@ -19,7 +23,7 @@ C.MAX_TITLE = 120
 C.DUPLICATE_SECONDS = 60  -- the same automatic entry twice in this long is ignored
 
 -- "note" is written by the player. The rest are written by TwichUI.
-C.KINDS = { note = true, level = true, zone = true, boss = true, death = true, start = true }
+C.KINDS = { note = true, level = true, zone = true, boss = true, death = true, start = true, gold = true, riding = true }
 
 -- Anything that shows entries (the window, the data bar) can ask to hear about changes.
 local watchers = {}
@@ -44,6 +48,24 @@ function C.CharKey()
     return (UnitName("player") or "?") .. " - " .. (GetRealmName() or "?")
 end
 
+local function Num(v) return type(v) == "number" and v >= 0 and v or nil end
+
+-- Keeps only well-formed tracking state; missing parts are simply absent until measured.
+local function CleanJourney(rec)
+    local old = type(rec.journey) == "table" and rec.journey or {}
+    local j = { baseLevel = Num(old.baseLevel), baseTotal = Num(old.baseTotal), lastLevel = Num(old.lastLevel), riding = {} }
+    if type(old.riding) == "table" then
+        for id, v in pairs(old.riding) do if type(id) == "number" and v == true then j.riding[id] = true end end
+    end
+    if type(old.gold) == "table" and Num(old.gold.last) then
+        j.gold = { last = old.gold.last, earned = Num(old.gold.earned) or 0, done = {} }
+        if type(old.gold.done) == "table" then
+            for g, v in pairs(old.gold.done) do if type(g) == "number" and v == true then j.gold.done[g] = true end end
+        end
+    end
+    rec.journey = j
+end
+
 -- Cleans anything that looks wrong (older, partial or hand-edited data).
 local function CleanRecord(rec)
     if type(rec.entries) ~= "table" then rec.entries = {} end
@@ -55,6 +77,8 @@ local function CleanRecord(rec)
             if type(e.note) ~= "string" then e.note = nil end
             if type(e.zone) ~= "string" then e.zone = nil end
             if type(e.level) ~= "number" then e.level = nil end
+            if type(e.secsAtLevel) ~= "number" then e.secsAtLevel = nil end
+            if type(e.secsTotal) ~= "number" then e.secsTotal = nil end
             clean[#clean + 1] = e
             if e.id > maxId then maxId = e.id end
         end
@@ -63,6 +87,7 @@ local function CleanRecord(rec)
     rec.entries = clean
     if type(rec.nextId) ~= "number" or rec.nextId <= maxId then rec.nextId = maxId + 1 end
     rec.tracking = rec.tracking == true
+    CleanJourney(rec)
 end
 
 function C.Init()
@@ -82,6 +107,7 @@ function C.Record()
     local rec = TwichUIChronicleDB.chars[key]
     if not rec then
         rec = { entries = {}, nextId = 1, tracking = false }
+        CleanJourney(rec)
         TwichUIChronicleDB.chars[key] = rec
     end
     return rec
@@ -90,6 +116,17 @@ end
 -- Entries oldest first. Don't change the table; use Add, Update and Delete.
 function C.Entries() return C.Record().entries end
 function C.Count() return #C.Record().entries end
+
+-- "2h 34m", "1d 3h 12m", "45m", "under a minute". Whole minutes, rounded down.
+function C.FormatDuration(seconds)
+    if type(seconds) ~= "number" or seconds < 0 then return nil end
+    local minutes = math.floor(seconds / 60)
+    if minutes < 1 then return "under a minute" end
+    local d, h, m = math.floor(minutes / 1440), math.floor(minutes % 1440 / 60), minutes % 60
+    if d > 0 then return ("%dd %dh %dm"):format(d, h, m) end
+    if h > 0 then return ("%dh %dm"):format(h, m) end
+    return ("%dm"):format(m)
+end
 
 -- The zone name, or nil when the game doesn't give one.
 function C.CurrentZone()
@@ -113,7 +150,7 @@ local function MakeRoom(entries)
     return false
 end
 
--- fields: title (required), note, zone, level. Returns the entry, or nil and a reason.
+-- fields: title (required), note, zone, level, secsAtLevel, secsTotal. Returns the entry, or nil and a reason.
 function C.Add(kind, fields)
     if not C.KINDS[kind] then return nil, "unknown kind" end
     fields = fields or {}
@@ -136,6 +173,7 @@ function C.Add(kind, fields)
         id = rec.nextId, t = now, kind = kind, title = title, note = note,
         zone = Trim(fields.zone, C.MAX_TITLE),
         level = type(fields.level) == "number" and fields.level or nil,
+        secsAtLevel = Num(fields.secsAtLevel), secsTotal = Num(fields.secsTotal),
     }
     rec.nextId = rec.nextId + 1
     entries[#entries + 1] = entry
@@ -150,6 +188,17 @@ local function Find(id)
     end
 end
 C.Find = Find
+
+-- Adds measurements to an automatic entry after the fact (the note and played times).
+function C.SetDetails(id, fields)
+    local entry = Find(id)
+    if not entry or entry.kind == "note" then return nil, "not found" end
+    entry.note = Trim(fields.note, C.MAX_NOTE) or entry.note
+    entry.secsAtLevel = Num(fields.secsAtLevel) or entry.secsAtLevel
+    entry.secsTotal = Num(fields.secsTotal) or entry.secsTotal
+    Changed()
+    return entry
+end
 
 -- Only the player's own notes can be edited. keepZone = false removes the place.
 function C.Update(id, text, keepZone)

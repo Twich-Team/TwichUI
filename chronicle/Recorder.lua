@@ -12,6 +12,18 @@ R.ChronicleRecorder = Rec
 
 local lastZone               -- the zone we last saw, so arriving isn't recorded at login
 local active = {}            -- [event] = handler, while registered
+local inWorld = false        -- true once the first PLAYER_ENTERING_WORLD has run
+local controlLost = false    -- between PLAYER_CONTROL_LOST and PLAYER_CONTROL_GAINED (flight takeoff to landing)
+
+local COPPER_PER_GOLD = 10000
+Rec.GOLD_STEPS = { 10, 50, 100, 500, 1000, 5000, 10000 }
+
+-- Riding ranks, by the spell that teaches them. These two IDs came from the player and haven't
+-- been confirmed against the Forever client; the name from the game is used when it gives one.
+-- Higher ranks are not listed because their IDs are not known yet.
+Rec.RIDING = { [33388] = "Apprentice Riding", [33391] = "Journeyman Riding" }
+
+local PLAYED_TIMEOUT = 10    -- seconds to wait for the played-time answer before leaving an entry as is
 
 local function On(key) return R:Enabled("chronicle") and R:Enabled(key) end
 
@@ -38,23 +50,216 @@ local function Plain(text)
     return text
 end
 
-local function OnLevelUp(level)
-    if not On("chronicleLevels") or type(level) ~= "number" then return end
-    Commit("level", { title = ("Reached level %d"):format(level), level = level, zone = C.CurrentZone() })
+---------------------------------------------------------------------------
+-- Played time. RequestTimePlayed() answers later with TIME_PLAYED_MSG(total, thisLevel). Right
+-- after a level-up we don't rely on "thisLevel" (it may already be the new level). Instead
+-- we keep the total played time at which the current level began and subtract.
+---------------------------------------------------------------------------
+local waitBaseline = false   -- a baseline for the current level was asked for
+local waitLevels = {}        -- { {id, level}, ... } level-up entries waiting for the answer
+local playedToken            -- identifies the request the timeout belongs to
+local muted                  -- chat frames we took TIME_PLAYED_MSG from, to give back
+
+local function Journey() return C.Record().journey end
+
+-- Blizzard's chat prints "Total time played" for any answer; keep our own request quiet.
+local function MuteChat()
+    if muted or not NUM_CHAT_WINDOWS then return end
+    muted = {}
+    for i = 1, NUM_CHAT_WINDOWS do
+        local frame = _G["ChatFrame" .. i]
+        if frame and frame.IsEventRegistered and frame:IsEventRegistered("TIME_PLAYED_MSG") then
+            frame:UnregisterEvent("TIME_PLAYED_MSG")
+            muted[#muted + 1] = frame
+        end
+    end
 end
 
-local function OnZone()
-    if not On("chronicleZones") then return end
+local function UnmuteChat()
+    if not muted then return end
+    for i = 1, #muted do muted[i]:RegisterEvent("TIME_PLAYED_MSG") end
+    muted = nil
+end
+
+local function PlayedDone()
+    playedToken = nil
+    waitBaseline = false
+    waitLevels = {}
+    UnmuteChat()
+    if active.TIME_PLAYED_MSG then R:Off("TIME_PLAYED_MSG", active.TIME_PLAYED_MSG) active.TIME_PLAYED_MSG = nil end
+end
+
+-- Pure: the two measurements for a level-up, from the stored baseline and the answer.
+-- Returns secsAtLevel (nil when it can't be known honestly) and secsTotal.
+function Rec.LevelTimes(journey, level, total, onlyOne)
+    if type(total) ~= "number" or total < 0 then return nil, nil end
+    local atLevel
+    if onlyOne and journey.baseLevel == level - 1 and journey.baseTotal and total >= journey.baseTotal then
+        atLevel = total - journey.baseTotal
+    end
+    return atLevel, total
+end
+
+local function OnPlayed(total, thisLevel)
+    if not playedToken then return end
+    local j = Journey()
+    local count = #waitLevels
+    for _, w in ipairs(waitLevels) do
+        local entry = C.Find(w.id)
+        if entry then
+            local atLevel, whole = Rec.LevelTimes(j, w.level, total, count == 1)
+            local lines = {}
+            if atLevel then lines[#lines + 1] = ("Level %d to %d: %s"):format(w.level - 1, w.level, C.FormatDuration(atLevel)) end
+            if whole then lines[#lines + 1] = "Total journey: " .. C.FormatDuration(whole) end
+            if #lines > 0 then
+                C.SetDetails(w.id, { note = table.concat(lines, "  ·  "), secsAtLevel = atLevel, secsTotal = whole })
+                Changed()
+            end
+        end
+    end
+    if count > 0 and type(total) == "number" then
+        j.baseLevel, j.baseTotal = waitLevels[count].level, total
+    elseif waitBaseline and type(total) == "number" and type(thisLevel) == "number" and total >= thisLevel then
+        j.baseLevel, j.baseTotal = UnitLevel("player"), total - thisLevel
+    end
+    PlayedDone()
+end
+
+local function RequestPlayed()
+    if not RequestTimePlayed or playedToken then return end
+    playedToken = {}
+    local token = playedToken
+    MuteChat()
+    active.TIME_PLAYED_MSG = OnPlayed
+    R:On("TIME_PLAYED_MSG", OnPlayed)
+    C_Timer.After(PLAYED_TIMEOUT, function() if playedToken == token then PlayedDone() end end)
+    RequestTimePlayed()
+end
+
+-- Takes the baseline for the level the character is on, unless one is already stored for it.
+local function EnsureBaseline()
+    if not inWorld or not R:Enabled("chronicle") or not R:Enabled("chronicleLevels") then return end
+    local level = UnitLevel and UnitLevel("player")
+    if type(level) ~= "number" or Journey().baseLevel == level then return end
+    waitBaseline = true
+    RequestPlayed()
+end
+
+local function OnLevelUp(level)
+    if not On("chronicleLevels") or type(level) ~= "number" then return end
+    local j = Journey()
+    if j.lastLevel and level <= j.lastLevel then return end
+    local entry = Commit("level", { title = ("Reached level %d"):format(level), level = level, zone = C.CurrentZone() })
+    if not entry then return end
+    j.lastLevel = level
+    waitLevels[#waitLevels + 1] = { id = entry.id, level = level }
+    RequestPlayed()
+end
+
+---------------------------------------------------------------------------
+-- Gold earned. Counts only increases in the wallet that TwichUI sees, once tracking has begun.
+-- Spending never lowers it; what was carried at the start and offline changes are not counted.
+---------------------------------------------------------------------------
+local function GoldTitle(g)
+    local digits = tostring(g):reverse():gsub("(%d%d%d)", "%1,"):reverse():gsub("^,", "")
+    return "Earned " .. digits .. " gold"
+end
+
+-- Pure: adds a wallet change; returns the thresholds (in gold) newly crossed, lowest first.
+function Rec.AddEarned(gold, delta)
+    local crossed = {}
+    if type(delta) ~= "number" or delta <= 0 then return crossed end
+    gold.earned = gold.earned + delta
+    for _, step in ipairs(Rec.GOLD_STEPS) do
+        if not gold.done[step] and gold.earned >= step * COPPER_PER_GOLD then
+            gold.done[step] = true
+            crossed[#crossed + 1] = step
+        end
+    end
+    return crossed
+end
+
+-- Starts counting from what the character holds now. Keeps the earned total and recorded steps.
+local function RebaseGold()
+    if not GetMoney then return end
+    local j = Journey()
+    local money = GetMoney()
+    if type(money) ~= "number" then return end
+    if j.gold then j.gold.last = money else j.gold = { last = money, earned = 0, done = {} } end
+end
+
+local function OnMoney()
+    if not On("chronicleGold") or not GetMoney then return end
+    local money = GetMoney()
+    if type(money) ~= "number" then return end
+    local g = Journey().gold
+    if not g then RebaseGold() return end
+    local delta = money - g.last
+    g.last = money
+    for _, step in ipairs(Rec.AddEarned(g, delta)) do
+        Commit("gold", { title = GoldTitle(step), zone = C.CurrentZone() })
+    end
+end
+
+---------------------------------------------------------------------------
+-- Riding ranks. Recorded once per learning spell; known ranks are noted silently at login.
+---------------------------------------------------------------------------
+local function KnowsSpell(id)
+    local known = (C_SpellBook and C_SpellBook.IsSpellKnown) or IsSpellKnown
+    return known and known(id) or false
+end
+
+local function NoteKnownRiding()
+    local riding = Journey().riding
+    for id in pairs(Rec.RIDING) do
+        if not riding[id] and KnowsSpell(id) then riding[id] = true end
+    end
+end
+
+local function OnLearnedSpell(spellID)
+    local fallback = Rec.RIDING[spellID]
+    if not fallback or not On("chronicleRiding") then return end
+    local riding = Journey().riding
+    if riding[spellID] then return end
+    riding[spellID] = true
+    local name = C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(spellID)
+    if type(name) ~= "string" or name == "" or (issecretvalue and issecretvalue(name)) then name = fallback end
+    Commit("riding", { title = "Learned " .. name, zone = C.CurrentZone() })
+end
+
+-- On a flight path nothing is recorded; the place the flight ends is looked at once, on landing.
+local function OnTaxi()
+    return controlLost or (UnitOnTaxi and UnitOnTaxi("player")) or false
+end
+
+local function CheckZone()
+    if not On("chronicleZones") or OnTaxi() then return end
     local zone = C.CurrentZone()
     if not zone or zone == lastZone then return end
     lastZone = zone
     Commit("zone", { title = "Arrived in " .. zone, zone = zone })
 end
 
+local function OnControlLost() controlLost = true end
+
+local function OnControlGained()
+    controlLost = false
+    CheckZone()
+end
+
 -- Logging in or reloading isn't arriving anywhere. Other loading screens are
 -- left to the zone event, so walking into a dungeon is still recorded.
 local function OnEnteringWorld(isLogin, isReload)
-    if isLogin or isReload then lastZone = C.CurrentZone() end
+    inWorld = true
+    if isLogin or isReload then
+        controlLost = false
+        lastZone = C.CurrentZone()
+        if R:Enabled("chronicle") then
+            if R:Enabled("chronicleGold") then RebaseGold() end
+            if R:Enabled("chronicleRiding") then NoteKnownRiding() end
+        end
+    end
+    EnsureBaseline()
 end
 
 local function OnEncounterEnd(_, name, _, _, success)
@@ -85,9 +290,22 @@ function Rec.Refresh()
     local master = R:Enabled("chronicle")
     local zones = master and R:Enabled("chronicleZones")
     if zones and not active.ZONE_CHANGED_NEW_AREA then lastZone = C.CurrentZone() end
-    Want("PLAYER_LEVEL_UP", OnLevelUp, master and R:Enabled("chronicleLevels"))
-    Want("ZONE_CHANGED_NEW_AREA", OnZone, zones)
-    Want("PLAYER_ENTERING_WORLD", OnEnteringWorld, zones)
+    local levels = master and R:Enabled("chronicleLevels")
+    local gold = master and R:Enabled("chronicleGold")
+    local riding = master and R:Enabled("chronicleRiding")
+    -- Turned on in this session: start counting gold from now, and don't treat known ranks as new.
+    if gold and not active.PLAYER_MONEY and inWorld then RebaseGold() end
+    if riding and not active.LEARNED_SPELL_IN_SKILL_LINE and inWorld then NoteKnownRiding() end
+    if not levels then PlayedDone() end
+    Want("PLAYER_LEVEL_UP", OnLevelUp, levels)
+    Want("ZONE_CHANGED_NEW_AREA", CheckZone, zones)
+    Want("PLAYER_CONTROL_LOST", OnControlLost, zones)
+    Want("PLAYER_CONTROL_GAINED", OnControlGained, zones)
+    Want("PLAYER_MONEY", OnMoney, gold)
+    Want("LEARNED_SPELL_IN_SKILL_LINE", OnLearnedSpell, riding)
+    Want("PLAYER_ENTERING_WORLD", OnEnteringWorld, levels or zones or gold or riding)
+    if not zones then controlLost = false end
+    EnsureBaseline()
     Want("ENCOUNTER_END", OnEncounterEnd, master and R:Enabled("chronicleBosses"))
     Want("PLAYER_DEAD", OnDeath, master and R:Enabled("chronicleDeaths"))
 
