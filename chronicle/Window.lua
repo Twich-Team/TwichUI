@@ -206,7 +206,7 @@ local function Layout()
         local r = Row(i)
         r.entry = e
         local isNote = e.kind == "note"
-        S.SetMarker(r.marker, e.kind)
+        S.SetMarker(r.marker, e.kind, e.icon)
         local where = e.zone and ("  " .. GREY .. "·|r  " .. Escape(e.zone)) or ""
         r.when:SetText((isNote and "Note  " .. GREY .. "·|r  " or "") .. When(e.t) .. where)
         r.title:SetText(Escape(isNote and (e.note or e.title) or e.title))
@@ -244,10 +244,27 @@ local function Status()
     if R:Enabled("chronicleZones") then parts[#parts + 1] = "new zones" end
     if R:Enabled("chronicleGold") then parts[#parts + 1] = "gold earned" end
     if R:Enabled("chronicleRiding") then parts[#parts + 1] = "riding" end
+    if R:Enabled("chronicleProfessions") then parts[#parts + 1] = "professions" end
     if R:Enabled("chronicleBosses") then parts[#parts + 1] = "defeated encounters" end
     local what = #parts > 0 and table.concat(parts, ", ") or "nothing yet (pick what to keep in the options)"
     return "Recording your chosen moments from this day forward.",
         "Keeping automatically: " .. what .. ". Only things from when tracking began are added."
+end
+
+-- "Journey time: 3d 7h 24m", or a dash until the game has answered.
+local function ShowPlayed(total)
+    if not f or not f:IsShown() then return end
+    f.played:SetText("Journey time: " .. (C.FormatDuration(total) or "\226\128\148"))
+end
+
+W.ShowPlayed = ShowPlayed
+
+-- Asks for the total played time; only when the window opens (and, through the recorder, after a level-up).
+local function RequestPlayed()
+    f.played:SetText("Journey time: \226\128\148")
+    if R.ChronicleRecorder and R.ChronicleRecorder.RequestPlayed then
+        R.ChronicleRecorder.RequestPlayed(ShowPlayed)
+    end
 end
 
 function W:Refresh()
@@ -263,6 +280,11 @@ local function Build()
     f.sub = Text(f, "GameFontHighlightSmall")
     f.sub:SetPoint("TOPLEFT", 18, -36)
     f.sub:SetTextColor(K.stone[1], K.stone[2], K.stone[3])
+    f.played = Text(f, "GameFontDisableSmall")
+    f.played:SetPoint("TOPRIGHT", -40, -39)
+    f.played:SetJustifyH("RIGHT")
+    f.played:SetTextColor(K.stone[1], K.stone[2], K.stone[3])
+    f.played:SetText("Journey time: \226\128\148")
     f.status = Text(f, "GameFontDisableSmall")
     f.status:SetPoint("TOPLEFT", 18, -66)
     f.status:SetWidth(LIST_W)
@@ -309,7 +331,14 @@ local function Build()
     f.foot:SetWidth(LIST_W - 4)
     f.foot:SetTextColor(K.stone[1] * 0.85, K.stone[2] * 0.85, K.stone[3] * 0.85)
     f.foot:SetText(("Kept on this character only. Up to %d entries: when full, the oldest automatic entries go first; your notes are never removed for you."):format(C.MAX_ENTRIES))
-    f:SetScript("OnShow", function() W:Refresh() end)
+    -- OnShow runs once per opening, not on refreshes: the sound and the played-time request belong here.
+    f:SetScript("OnShow", function()
+        if R:Enabled("chronicleSound") and PlaySound and SOUNDKIT and SOUNDKIT.IG_ABILITY_PAGE_TURN then
+            PlaySound(SOUNDKIT.IG_ABILITY_PAGE_TURN)
+        end
+        RequestPlayed()
+        W:Refresh()
+    end)
     f:Hide()
 end
 

@@ -311,7 +311,9 @@ local function Build()
     ChronicleToggle("chronicleDeaths", "Falling in battle", "Adds an entry when your character dies, with the zone you were in. Off until you choose it.")
     ChronicleToggle("chronicleGold", "Gold earned milestones", "Adds an entry when the gold you've earned since tracking began reaches 10, 50, 100, 500, 1,000, 5,000 and 10,000. Spending doesn't lower it, and what you already carry isn't counted.")
     ChronicleToggle("chronicleRiding", "Learning to ride", "Adds an entry when you learn a new Riding rank.")
+    ChronicleToggle("chronicleProfessions", "Professions", "Adds an entry when you learn a profession, and when a profession skill first reaches 75, 150, 225, 300, 375 and 450. Professions and skill you already have aren't counted.")
     ChronicleToggle("chronicleChat", "Show Chronicle entries in chat", "Prints a quiet line in your own chat window when an entry is added automatically. Only you see it; it is never sent to anyone. Entries are still recorded when this is off.")
+    Toggle("chronicleSound", "Play Chronicle opening sound", "Plays a soft page-turn sound each time you open the Chronicle. It follows your game sound settings and volume.")
     Choice("chronicleClock", "Time format",
         "How times are shown in your Chronicle.",
         STRING, "12",

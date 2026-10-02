@@ -11,7 +11,8 @@
 --     journey = { baseLevel, baseTotal,   -- played seconds when the current level began
 --                 lastLevel,              -- highest level-up already written
 --                 gold = { last, earned, done = { [gold] = true } },  -- copper; thresholds already written
---                 riding = { [spellID] = true } } } } }
+--                 riding = { [spellID] = true },
+--                 professions = { baselined = bool, [skillLineID] = { [0] = true (learned), [rank] = true (milestone written) } } } } }
 
 local R = TwichUI
 local C = {}
@@ -23,7 +24,7 @@ C.MAX_TITLE = 120
 C.DUPLICATE_SECONDS = 60  -- the same automatic entry twice in this long is ignored
 
 -- "note" is written by the player. The rest are written by TwichUI.
-C.KINDS = { note = true, level = true, zone = true, boss = true, death = true, start = true, gold = true, riding = true }
+C.KINDS = { note = true, level = true, zone = true, boss = true, death = true, start = true, gold = true, riding = true, profession = true }
 
 -- Anything that shows entries (the window, the data bar) can ask to hear about changes.
 local watchers = {}
@@ -57,6 +58,16 @@ local function CleanJourney(rec)
     if type(old.riding) == "table" then
         for id, v in pairs(old.riding) do if type(id) == "number" and v == true then j.riding[id] = true end end
     end
+    j.professions = { baselined = type(old.professions) == "table" and old.professions.baselined == true }
+    if type(old.professions) == "table" then
+        for id, p in pairs(old.professions) do
+            if type(id) == "number" and type(p) == "table" then
+                local clean = {}
+                for k, v in pairs(p) do if type(k) == "number" and v == true then clean[k] = true end end
+                j.professions[id] = clean
+            end
+        end
+    end
     if type(old.gold) == "table" and Num(old.gold.last) then
         j.gold = { last = old.gold.last, earned = Num(old.gold.earned) or 0, done = {} }
         if type(old.gold.done) == "table" then
@@ -79,6 +90,7 @@ local function CleanRecord(rec)
             if type(e.level) ~= "number" then e.level = nil end
             if type(e.secsAtLevel) ~= "number" then e.secsAtLevel = nil end
             if type(e.secsTotal) ~= "number" then e.secsTotal = nil end
+            if type(e.icon) ~= "string" and type(e.icon) ~= "number" then e.icon = nil end
             clean[#clean + 1] = e
             if e.id > maxId then maxId = e.id end
         end
@@ -150,7 +162,7 @@ local function MakeRoom(entries)
     return false
 end
 
--- fields: title (required), note, zone, level, secsAtLevel, secsTotal. Returns the entry, or nil and a reason.
+-- fields: title (required), note, zone, level, secsAtLevel, secsTotal, icon. Returns the entry, or nil and a reason.
 function C.Add(kind, fields)
     if not C.KINDS[kind] then return nil, "unknown kind" end
     fields = fields or {}
@@ -174,6 +186,7 @@ function C.Add(kind, fields)
         zone = Trim(fields.zone, C.MAX_TITLE),
         level = type(fields.level) == "number" and fields.level or nil,
         secsAtLevel = Num(fields.secsAtLevel), secsTotal = Num(fields.secsTotal),
+        icon = (type(fields.icon) == "string" or type(fields.icon) == "number") and fields.icon or nil,
     }
     rec.nextId = rec.nextId + 1
     entries[#entries + 1] = entry

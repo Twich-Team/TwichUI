@@ -39,7 +39,7 @@ local function Commit(kind, fields)
     Changed()
     if R:Enabled("chronicleChat") then
         local icon = R.ChronicleStyle and R.ChronicleStyle.icons
-        icon = icon and (icon[kind] or icon.start)
+        icon = fields.icon or (icon and (icon[kind] or icon.start))
         print(("%s%sChronicle:|r %s"):format(icon and ("|T" .. icon .. ":14:14|t ") or "", R.GREY, entry.title))
     end
     return entry
@@ -59,6 +59,7 @@ local waitBaseline = false   -- a baseline for the current level was asked for
 local waitLevels = {}        -- { {id, level}, ... } level-up entries waiting for the answer
 local playedToken            -- identifies the request the timeout belongs to
 local muted                  -- chat frames we took TIME_PLAYED_MSG from, to give back
+local playedWaiters = {}     -- callbacks (the Chronicle header) waiting for the total played time
 
 local function Journey() return C.Record().journey end
 
@@ -85,6 +86,7 @@ local function PlayedDone()
     playedToken = nil
     waitBaseline = false
     waitLevels = {}
+    playedWaiters = {}
     UnmuteChat()
     if active.TIME_PLAYED_MSG then R:Off("TIME_PLAYED_MSG", active.TIME_PLAYED_MSG) active.TIME_PLAYED_MSG = nil end
 end
@@ -122,10 +124,18 @@ local function OnPlayed(total, thisLevel)
     elseif waitBaseline and type(total) == "number" and type(thisLevel) == "number" and total >= thisLevel then
         j.baseLevel, j.baseTotal = UnitLevel("player"), total - thisLevel
     end
+    local waiters = playedWaiters
     PlayedDone()
+    for i = 1, #waiters do
+        local ok, err = pcall(waiters[i], total)
+        if not ok then geterrorhandler()(err) end
+    end
 end
 
-local function RequestPlayed()
+-- callback(total) is called with the total played seconds once the game answers. It is dropped
+-- (never called) if no answer comes in time or the API is missing.
+local function RequestPlayed(callback)
+    if callback then playedWaiters[#playedWaiters + 1] = callback end
     if not RequestTimePlayed or playedToken then return end
     playedToken = {}
     local token = playedToken
@@ -145,6 +155,13 @@ local function EnsureBaseline()
     RequestPlayed()
 end
 
+-- Brings an open Chronicle header up to date after a level-up's answer.
+local function HeaderPlayed(total)
+    if R.ChronicleWindow and R.ChronicleWindow.ShowPlayed then R.ChronicleWindow.ShowPlayed(total) end
+end
+
+function Rec.RequestPlayed(callback) RequestPlayed(callback) end
+
 local function OnLevelUp(level)
     if not On("chronicleLevels") or type(level) ~= "number" then return end
     local j = Journey()
@@ -153,7 +170,89 @@ local function OnLevelUp(level)
     if not entry then return end
     j.lastLevel = level
     waitLevels[#waitLevels + 1] = { id = entry.id, level = level }
-    RequestPlayed()
+    RequestPlayed(HeaderPlayed)
+end
+
+---------------------------------------------------------------------------
+-- Professions. There is no "profession learned" event, so the profession list is compared with what
+-- was seen before whenever SKILL_LINES_CHANGED settles (debounced). Each profession is kept by its
+-- skill line ID: [0] = learning written, [rank] = that milestone written. What exists when tracking
+-- begins is noted silently, so nothing from before is added.
+---------------------------------------------------------------------------
+Rec.PROFESSION_STEPS = { 75, 150, 225, 300, 375, 450 }   -- Forever's PROFESSION_RANKS tiers
+local PROFESSION_DEBOUNCE = 0.5
+local PROFESSION_SETTLE = 5      -- seconds after login before the first look at the professions
+local professionPending = false
+
+-- The professions the character has now: { { id, name, rank, icon }, ... }, or nil when the API is missing.
+local function ReadProfessions()
+    if not GetProfessions or not GetProfessionInfo then return nil end
+    local list = {}
+    for _, index in pairs({ GetProfessions() }) do
+        local name, texture, rank, _, _, _, skillLine = GetProfessionInfo(index)
+        name = Plain(name)
+        if name and name ~= "" and type(rank) == "number" and type(skillLine) == "number" and skillLine > 0 then
+            local icon = (type(texture) == "number" or type(texture) == "string") and texture or nil
+            list[#list + 1] = { id = skillLine, name = name, rank = rank, icon = icon }
+        end
+    end
+    return list
+end
+
+-- Pure: updates the stored state for what is seen now and returns what is new, as
+-- { { learned = true, prof = p }, { step = n, prof = p }, ... }. With silent, only the state changes.
+function Rec.ApplyProfessions(state, profs, silent)
+    local events = {}
+    for _, p in ipairs(profs) do
+        local seen = state[p.id]
+        if not seen then
+            seen = { [0] = true }
+            state[p.id] = seen
+            for _, step in ipairs(Rec.PROFESSION_STEPS) do
+                if p.rank >= step then seen[step] = true end
+            end
+            if not silent then events[#events + 1] = { learned = true, prof = p } end
+        else
+            for _, step in ipairs(Rec.PROFESSION_STEPS) do
+                if not seen[step] and p.rank >= step then
+                    seen[step] = true
+                    if not silent then events[#events + 1] = { step = step, prof = p } end
+                end
+            end
+        end
+    end
+    return events
+end
+
+local function CheckProfessions(silent)
+    local profs = ReadProfessions()
+    if not profs then return end
+    local state = Journey().professions
+    for _, ev in ipairs(Rec.ApplyProfessions(state, profs, silent)) do
+        local p = ev.prof
+        Commit("profession", {
+            title = ev.learned and ("Learned " .. p.name) or ("%s reached %d"):format(p.name, ev.step),
+            icon = p.icon, zone = C.CurrentZone(),
+        })
+    end
+    state.baselined = true
+end
+
+local function RunProfessionCheck()
+    professionPending = false
+    if On("chronicleProfessions") and Journey().professions.baselined then CheckProfessions() end
+end
+
+local function OnSkillLines()
+    if professionPending or not inWorld or not Journey().professions.baselined then return end
+    professionPending = true
+    C_Timer.After(PROFESSION_DEBOUNCE, RunProfessionCheck)
+end
+
+-- The first look, a moment after login so the game has had time to fill in the profession list.
+local function ProfessionSettled()
+    if not On("chronicleProfessions") then return end
+    CheckProfessions(not Journey().professions.baselined)
 end
 
 ---------------------------------------------------------------------------
@@ -257,6 +356,7 @@ local function OnEnteringWorld(isLogin, isReload)
         if R:Enabled("chronicle") then
             if R:Enabled("chronicleGold") then RebaseGold() end
             if R:Enabled("chronicleRiding") then NoteKnownRiding() end
+            if R:Enabled("chronicleProfessions") then C_Timer.After(PROFESSION_SETTLE, ProfessionSettled) end
         end
     end
     EnsureBaseline()
@@ -293,9 +393,14 @@ function Rec.Refresh()
     local levels = master and R:Enabled("chronicleLevels")
     local gold = master and R:Enabled("chronicleGold")
     local riding = master and R:Enabled("chronicleRiding")
+    local professions = master and R:Enabled("chronicleProfessions")
+    -- While off nothing is watched, so the next time it is on it starts from what the character has then.
+    if not professions then Journey().professions.baselined = false end
     -- Turned on in this session: start counting gold from now, and don't treat known ranks as new.
     if gold and not active.PLAYER_MONEY and inWorld then RebaseGold() end
     if riding and not active.LEARNED_SPELL_IN_SKILL_LINE and inWorld then NoteKnownRiding() end
+    -- Turned on in this session: what the character has now is not new.
+    if professions and not active.SKILL_LINES_CHANGED and inWorld then CheckProfessions(true) end
     if not levels then PlayedDone() end
     Want("PLAYER_LEVEL_UP", OnLevelUp, levels)
     Want("ZONE_CHANGED_NEW_AREA", CheckZone, zones)
@@ -303,7 +408,8 @@ function Rec.Refresh()
     Want("PLAYER_CONTROL_GAINED", OnControlGained, zones)
     Want("PLAYER_MONEY", OnMoney, gold)
     Want("LEARNED_SPELL_IN_SKILL_LINE", OnLearnedSpell, riding)
-    Want("PLAYER_ENTERING_WORLD", OnEnteringWorld, levels or zones or gold or riding)
+    Want("SKILL_LINES_CHANGED", OnSkillLines, professions)
+    Want("PLAYER_ENTERING_WORLD", OnEnteringWorld, levels or zones or gold or riding or professions)
     if not zones then controlLost = false end
     EnsureBaseline()
     Want("ENCOUNTER_END", OnEncounterEnd, master and R:Enabled("chronicleBosses"))

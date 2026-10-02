@@ -12,9 +12,9 @@ local WHITE = "Interface\\Buttons\\WHITE8x8"
 
 -- Warm umber and aged bronze. Text stays parchment; metadata stays stone.
 S.color = {
-    bg       = { 0.095, 0.072, 0.054 },
-    well     = { 0.066, 0.049, 0.036 },
-    band     = { 0.135, 0.100, 0.070 },
+    bg       = { 0.150, 0.115, 0.082 },
+    well     = { 0.112, 0.084, 0.060 },
+    band     = { 0.200, 0.150, 0.100 },
     bronze   = { 0.55, 0.43, 0.22 },
     bronzeLo = { 0.30, 0.23, 0.13 },
     gold     = { 0.79, 0.64, 0.29 },
@@ -77,14 +77,17 @@ function S.Frame(f, w, h)
     Border(f, 1, K.bronze, 0.9)
     Border(f, 2, { 0, 0, 0 }, 0.6)
     Border(f, 3, K.bronzeLo, 0.6)
-    Edge(f, "TOP", 4, K.gold, 0.10)            -- faint lit edge under the rim
+    Edge(f, "TOP", 4, K.gold, 0.16)            -- faint lit edge under the rim
+    Edge(f, "LEFT", 4, K.gold, 0.06)
+    Edge(f, "RIGHT", 4, { 0, 0, 0 }, 0.18)
+    Edge(f, "BOTTOM", 4, K.gold, 0.08)
     for _, p in ipairs({ { "TOPLEFT", 1, -1 }, { "TOPRIGHT", -1, -1 }, { "BOTTOMLEFT", 1, 1 }, { "BOTTOMRIGHT", -1, 1 } }) do
         local t = Solid(f, "ARTWORK", K.gold, 0.9)
         t:SetSize(5, 5)
         t:SetPoint(p[1], p[2], p[3])
     end
     S.Speckle(f, w, h, math.floor(w * h / 2500))
-    for _, band in ipairs({ { 120, 0.05 }, { 70, 0.07 }, { 30, 0.09 } }) do
+    for _, band in ipairs({ { 120, 0.03 }, { 70, 0.04 }, { 30, 0.05 } }) do
         local t = Solid(f, "BACKGROUND", { 0, 0, 0 }, band[2])
         t:SetHeight(band[1])
         t:SetPoint("BOTTOMLEFT", 4, 4)
@@ -102,6 +105,10 @@ function S.Header(f, height)
     line:SetHeight(1)
     line:SetPoint("TOPLEFT", band, "BOTTOMLEFT", 0, 0)
     line:SetPoint("TOPRIGHT", band, "BOTTOMRIGHT", 0, 0)
+    local lit = Solid(f, "BORDER", K.gold, 0.07)    -- a warm sheen along the band's top
+    lit:SetHeight(1)
+    lit:SetPoint("TOPLEFT", band, "TOPLEFT", 0, 0)
+    lit:SetPoint("TOPRIGHT", band, "TOPRIGHT", 0, 0)
     local shadow = Solid(f, "BORDER", { 0, 0, 0 }, 0.35)
     shadow:SetHeight(1)
     shadow:SetPoint("TOPLEFT", line, "BOTTOMLEFT", 0, 0)
@@ -113,9 +120,10 @@ function S.Well(box, w, h)
     box:SetBackdrop({ bgFile = WHITE, edgeFile = WHITE, edgeSize = 1 })
     box:SetBackdropColor(K.well[1], K.well[2], K.well[3], 0.92)
     box:SetBackdropBorderColor(K.bronze[1], K.bronze[2], K.bronze[3], 0.7)
-    Edge(box, "TOP", 1, { 0, 0, 0 }, 0.45)
-    Edge(box, "LEFT", 1, { 0, 0, 0 }, 0.3)
-    S.Speckle(box, w, h, math.floor(w * h / 3000))
+    Edge(box, "TOP", 1, { 0, 0, 0 }, 0.4)
+    Edge(box, "LEFT", 1, { 0, 0, 0 }, 0.25)
+    Edge(box, "BOTTOM", 1, K.gold, 0.10)           -- warm lip along the bottom of the inset
+    S.Speckle(box, w, h, math.floor(w * h / 4000))
 end
 
 -- Restyle a UIPanelScrollFrameTemplate's bar: flat bronze thumb, small flat
@@ -231,6 +239,7 @@ S.icons = {
     note  = ICON .. "INV_Scroll_04",
     start = ICON .. "inv_misc_scrollunrolled01",
     gold  = ICON .. "inv_misc_coin_01",
+    profession = ICON .. "inv_misc_scrollunrolled01",   -- fallback; entries carry the profession's own icon
 }
 
 -- A small framed icon in the row's left gutter. Your own notes get a gold frame,
@@ -246,8 +255,8 @@ function S.Marker(row)
     return m
 end
 
-function S.SetMarker(m, kind)
-    m:SetTexture(S.icons[kind] or S.icons.start)
+function S.SetMarker(m, kind, icon)
+    m:SetTexture(icon or S.icons[kind] or S.icons.start)
     m:SetTexCoord(0.08, 0.92, 0.08, 0.92)
     local c = kind == "note" and K.gold or K.bronzeLo
     m.frame:SetColorTexture(c[1], c[2], c[3], 1)

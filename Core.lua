@@ -36,6 +36,8 @@ local DEFAULT_MODULES = {
     chronicleDeaths = false, -- ... dying (off until chosen, even with the rest on)
     chronicleGold = true,    -- ... gold earned milestones (10, 50, 100 ... 10,000)
     chronicleRiding = true,  -- ... learning a new Riding rank
+    chronicleProfessions = true, -- ... learning a profession and reaching its skill milestones
+    chronicleSound = true,   -- a soft page-turn sound when the Chronicle opens
     chronicleChat = true,    -- ... and say so in your own chat frame when an automatic entry is added
 }
 R.DEFAULT_MODULES = DEFAULT_MODULES   -- Settings.lua uses these for the panel's Defaults button
