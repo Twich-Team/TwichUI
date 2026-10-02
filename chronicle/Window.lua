@@ -27,6 +27,7 @@ end
 
 -- "12" (default) or "24", chosen in the options.
 local function When(t)
+    if not C.DayKey(t) then return "Date unknown" end   -- never an invented date
     local ui = TwichUIDB and TwichUIDB.ui
     if ui and ui.chronicleClock == "24" then return date("%b %d, %Y  %H:%M", t) end
     return (date("%b %d, %Y  %I:%M %p", t):gsub(" 0(%d:)", " %1"))
@@ -198,12 +199,20 @@ local function Row(i)
     return r
 end
 
+-- Draws the entries that match the date filter, newest first.
+-- Returns how many are shown, how many exist, and how many were left out for having no usable date.
 local function Layout()
     local entries = C.Entries()
-    local y, n = 0, #entries
-    for i = 1, n do
-        local e = entries[n - i + 1]          -- newest first
-        local r = Row(i)
+    local total = #entries
+    local active = C.FilterActive()
+    local y, shown, undated = 0, 0, 0
+    for k = total, 1, -1 do
+      local e = entries[k]                    -- newest first
+      if not C.Matches(e) then
+        if active and not C.DayKey(e.t) then undated = undated + 1 end
+      else
+        shown = shown + 1
+        local r = Row(shown)
         r.entry = e
         local isNote = e.kind == "note"
         S.SetMarker(r.marker, e.kind, e.icon)
@@ -227,10 +236,181 @@ local function Layout()
         r:SetHeight(h)
         r:Show()
         y = y + h
+      end
     end
-    for i = n + 1, #rows do rows[i].entry = nil; rows[i]:Hide() end
+    for i = shown + 1, #rows do rows[i].entry = nil; rows[i]:Hide() end
     f.content:SetHeight(math.max(y, 1))
-    return n
+    return shown, total, undated
+end
+
+---------------------------------------------------------------------------
+-- Date filter: a small calendar that opens from the control above the list.
+-- Days come from the stored entries (chronicle/Filter.lua); nothing is saved.
+---------------------------------------------------------------------------
+local CELL_W, CELL_H = 30, 24
+local POP_W = 8 + 7 * CELL_W + 8
+local pop, catcher                   -- the calendar and the click-away layer behind it
+local viewY, viewM                   -- month being shown
+local pickMode = "day"               -- what choosing a day does: "day" or "since"
+
+local function SetFilter(mode, day)
+    C.SetFilter(mode, day)
+    if mode == "day" or mode == "since" then pickMode = mode end
+    W:Refresh()
+end
+
+local function ClosePicker() if pop then pop:Hide() end end
+
+local function PaintCalendar()
+    local counts = C.DayCounts()
+    local mode, sel = C.GetFilter()
+    local today = C.Today()
+    pop.title:SetText(C.MONTHS[viewM] .. " " .. viewY)
+    local first = C.Weekday(viewY, viewM, 1)
+    local days = C.DaysInMonth(viewY, viewM)
+    for i = 1, 42 do
+        local cell = pop.cells[i]
+        local d = i - first
+        if d >= 1 and d <= days then
+            local day = C.MakeDay(viewY, viewM, d)
+            cell.day = day
+            cell.num:SetText(d)
+            local tone = day == today and K.gold or K.text
+            cell.num:SetTextColor(tone[1], tone[2], tone[3])
+            cell.today:SetShown(day == today)
+            cell.dot:SetShown(counts[day] ~= nil)
+            cell.sel:SetShown(mode ~= "all" and day == sel)
+            cell.range:SetShown(mode == "since" and day > sel)
+            cell:Show()
+        else
+            cell.day = nil
+            cell:Hide()
+        end
+    end
+    pop.dayBtn:SetOn(pickMode == "day")
+    pop.sinceBtn:SetOn(pickMode == "since")
+end
+
+local function ShiftMonth(months)
+    local total = viewY * 12 + (viewM - 1) + months
+    viewY, viewM = math.min(math.max(math.floor(total / 12), 1970), 2999), total % 12 + 1
+    PaintCalendar()
+end
+
+local function BuildPicker()
+    catcher = CreateFrame("Button", nil, f)
+    catcher:SetAllPoints(f)
+    catcher:SetFrameLevel(f:GetFrameLevel() + 30)
+    catcher:SetScript("OnClick", ClosePicker)
+    catcher:Hide()
+    pop = CreateFrame("Frame", "TwichUIChronicleDate", f, "BackdropTemplate")
+    pop:SetSize(POP_W, 286)
+    pop:SetFrameLevel(f:GetFrameLevel() + 40)
+    pop:EnableMouse(true)
+    pop:SetPoint("TOPLEFT", f.filter, "BOTTOMLEFT", 0, -2)
+    S.Popover(pop)
+    pop:SetScript("OnShow", function() catcher:Show() end)
+    pop:SetScript("OnHide", function() catcher:Hide() end)
+
+    local function Nav(label, w, x, months)
+        local b = Btn(pop, label, w, "secondary", function() ShiftMonth(months) end)
+        b:SetHeight(22)
+        b:SetPoint("TOPLEFT", x, -8)
+        return b
+    end
+    Nav("<<", 28, 8, -12)
+    Nav("<", 24, 40, -1)
+    Nav(">", 24, POP_W - 64, 1)
+    Nav(">>", 28, POP_W - 36, 12)
+    pop.title = Text(pop, "GameFontNormal")
+    pop.title:SetPoint("TOP", 0, -12)
+    pop.title:SetTextColor(K.text[1], K.text[2], K.text[3])
+
+    local names = { "S", "M", "T", "W", "T", "F", "S" }
+    for i = 1, 7 do
+        local h = Text(pop, "GameFontDisableSmall")
+        h:SetWidth(CELL_W)
+        h:SetJustifyH("CENTER")
+        h:SetPoint("TOPLEFT", 8 + (i - 1) * CELL_W, -38)
+        h:SetTextColor(K.stone[1], K.stone[2], K.stone[3])
+        h:SetText(names[i])
+    end
+    pop.cells = {}
+    for i = 1, 42 do
+        local cell = CreateFrame("Button", nil, pop)
+        cell:SetSize(CELL_W, CELL_H)
+        cell:SetPoint("TOPLEFT", 8 + ((i - 1) % 7) * CELL_W, -52 - math.floor((i - 1) / 7) * CELL_H)
+        cell.range = cell:CreateTexture(nil, "BACKGROUND")
+        cell.range:SetAllPoints()
+        cell.range:SetColorTexture(K.gold[1], K.gold[2], K.gold[3], 0.10)
+        cell.sel = cell:CreateTexture(nil, "BACKGROUND", nil, 1)
+        cell.sel:SetPoint("TOPLEFT", 1, -1)
+        cell.sel:SetPoint("BOTTOMRIGHT", -1, 1)
+        cell.sel:SetColorTexture(0.79, 0.64, 0.29, 0.55)
+        cell.hl = cell:CreateTexture(nil, "BACKGROUND", nil, 2)
+        cell.hl:SetAllPoints()
+        cell.hl:SetColorTexture(K.gold[1], K.gold[2], K.gold[3], 0.16)
+        cell.hl:Hide()
+        cell.num = Text(cell, "GameFontHighlightSmall")
+        cell.num:SetPoint("CENTER", 0, 1)
+        cell.num:SetJustifyH("CENTER")
+        cell.today = cell:CreateTexture(nil, "ARTWORK")
+        cell.today:SetColorTexture(K.gold[1], K.gold[2], K.gold[3], 0.8)
+        cell.today:SetSize(10, 1)
+        cell.today:SetPoint("BOTTOM", 0, 5)
+        cell.dot = cell:CreateTexture(nil, "ARTWORK")
+        cell.dot:SetColorTexture(K.bronze[1], K.bronze[2], K.bronze[3], 0.9)
+        cell.dot:SetSize(3, 3)
+        cell.dot:SetPoint("TOP", cell.num, "BOTTOM", 0, -2)
+        cell:SetScript("OnClick", function(self) if self.day then SetFilter(pickMode, self.day) end end)
+        cell:SetScript("OnEnter", function(self)
+            self.hl:Show()
+            if not self.day then return end
+            local n = C.DayCounts()[self.day]
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetText(C.FormatDay(self.day), 1, 1, 1)
+            GameTooltip:AddLine(n and (n == 1 and "1 entry" or n .. " entries") or "No entries", 0.8, 0.75, 0.6)
+            GameTooltip:Show()
+        end)
+        cell:SetScript("OnLeave", function(self) self.hl:Hide(); GameTooltip:Hide() end)
+        pop.cells[i] = cell
+    end
+
+    -- Choosing a day applies with this mode; picking it with a day already chosen re-applies that day.
+    local function Mode(mode)
+        pickMode = mode
+        local _, day = C.GetFilter()
+        if day then SetFilter(mode, day) else PaintCalendar() end
+    end
+    pop.dayBtn = S.Toggle(pop, "That day", 105, function() Mode("day") end)
+    pop.dayBtn:SetPoint("TOPLEFT", 8, -204)
+    pop.sinceBtn = S.Toggle(pop, "Since this day", 105, function() Mode("since") end)
+    pop.sinceBtn:SetPoint("TOPLEFT", 8 + 109, -204)
+
+    local function Shortcut(label, w, x, onClick)
+        local l = S.Link(pop, label, function() onClick(); ClosePicker() end, K.gold, K.text)
+        l:SetSize(w, 14)
+        l.text:SetJustifyH("LEFT")
+        l:SetPoint("TOPLEFT", x, -236)
+    end
+    Shortcut("Today", 38, 10, function() SetFilter("day", C.Today()) end)
+    Shortcut("Last 7 days", 66, 58, function() SetFilter("since", C.AddDays(C.Today(), -6)) end)
+    Shortcut("Last 30 days", 72, 134, function() SetFilter("since", C.AddDays(C.Today(), -29)) end)
+    local clear = Btn(pop, "Clear filter", POP_W - 16, "secondary", function() SetFilter("all"); ClosePicker() end)
+    clear:SetPoint("TOPLEFT", 8, -256)
+    pop:Hide()
+end
+
+local function TogglePicker()
+    if not pop then BuildPicker() end
+    if pop:IsShown() then pop:Hide() return end
+    local _, day = C.GetFilter()
+    day = day or C.Today()
+    if day then viewY, viewM = C.DayParts(day) else viewY, viewM = 1970, 1 end
+    local mode = C.GetFilter()
+    if mode ~= "all" then pickMode = mode end
+    PaintCalendar()
+    pop:Show()
 end
 
 -- One quiet line under the title; the details are in its tooltip.
@@ -269,10 +449,24 @@ end
 
 function W:Refresh()
     if not f or not f:IsShown() then return end
-    local n = Layout()
-    f.sub:SetText(("%s  %s·  %d %s|r"):format(Escape(C.CharKey()), GREY, n, n == 1 and "entry" or "entries"))
+    local n, total, undated = Layout()
+    local active = C.FilterActive()
+    -- All time: the number stored. Filtered: how many of them are shown.
+    local count = active and ("%d of %d entries"):format(n, total) or ("%d %s"):format(total, total == 1 and "entry" or "entries")
+    f.sub:SetText(("%s  %s·  %s|r"):format(Escape(C.CharKey()), GREY, count))
     f.status:SetText((Status()))
-    f.empty:SetShown(n == 0)
+    f.filter.text:SetText(C.FilterLabel())
+    f.undated:SetText(active and undated > 0
+        and (undated == 1 and "1 entry without a date is only in All time" or undated .. " entries without a date are only in All time") or "")
+    f.empty:SetShown(total == 0)
+    if active and total > 0 and n == 0 then
+        local mode, day = C.GetFilter()
+        f.noMatchText:SetText("No entries " .. (mode == "day" and "on " or "since ") .. C.FormatDay(day) .. ".")
+        f.noMatch:Show()
+    else
+        f.noMatch:Hide()
+    end
+    if pop and pop:IsShown() then PaintCalendar() end
 end
 
 local function Build()
@@ -301,10 +495,18 @@ local function Build()
     end)
     f.statusHit:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
+    f.filter = S.DropButton(f, 170, TogglePicker)
+    f.filter:SetPoint("TOPLEFT", 16, -88)
+    f.undated = Text(f, "GameFontDisableSmall")
+    f.undated:SetPoint("LEFT", f.filter, "RIGHT", 10, 0)
+    f.undated:SetPoint("RIGHT", f, "RIGHT", -18, 0)
+    f.undated:SetJustifyH("RIGHT")
+    f.undated:SetTextColor(K.stone[1], K.stone[2], K.stone[3])
+
     local box = CreateFrame("Frame", nil, f, "BackdropTemplate")
-    box:SetPoint("TOPLEFT", 16, -90)
+    box:SetPoint("TOPLEFT", 16, -116)
     box:SetPoint("BOTTOMRIGHT", -16, 76)
-    S.Well(box, LIST_W, HEIGHT - 90 - 76)
+    S.Well(box, LIST_W, HEIGHT - 116 - 76)
     local scroll = CreateFrame("ScrollFrame", nil, box, "UIPanelScrollFrameTemplate")
     scroll:SetPoint("TOPLEFT", 6, -6)
     scroll:SetPoint("BOTTOMRIGHT", -26, 6)
@@ -319,6 +521,18 @@ local function Build()
     f.empty:SetJustifyH("CENTER")
     f.empty:SetTextColor(K.stone[1], K.stone[2], K.stone[3])
     f.empty:SetText("Your Chronicle is empty.\n\nIt fills as you write notes, or as you turn on automatic tracking in the options. Nothing from before is added.")
+
+    f.noMatch = CreateFrame("Frame", nil, box)
+    f.noMatch:SetSize(LIST_W - 80, 60)
+    f.noMatch:SetPoint("CENTER")
+    f.noMatchText = Text(f.noMatch, "GameFontDisable")
+    f.noMatchText:SetPoint("TOP", 0, 0)
+    f.noMatchText:SetWidth(LIST_W - 80)
+    f.noMatchText:SetJustifyH("CENTER")
+    f.noMatchText:SetTextColor(K.stone[1], K.stone[2], K.stone[3])
+    local clearBtn = Btn(f.noMatch, "Clear filter", 110, "secondary", function() SetFilter("all") end)
+    clearBtn:SetPoint("TOP", 0, -30)
+    f.noMatch:Hide()
 
     f.new = Btn(f, "Write a note", 120, "primary", function() OpenEditor(nil) end)
     f.new:SetPoint("BOTTOMLEFT", 16, 40)
@@ -338,6 +552,12 @@ local function Build()
         end
         RequestPlayed()
         W:Refresh()
+    end)
+    -- The date filter is only for this viewing; the next time the Chronicle opens it starts at All time.
+    f:SetScript("OnHide", function()
+        C.ClearFilter()
+        pickMode = "day"
+        if pop then pop:Hide() end
     end)
     f:Hide()
 end

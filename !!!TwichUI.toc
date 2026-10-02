@@ -51,6 +51,7 @@ gear\Window.lua
 
 # Journey Chronicle: optional personal journal
 chronicle\Data.lua
+chronicle\Filter.lua
 chronicle\Recorder.lua
 chronicle\Style.lua
 chronicle\Window.lua

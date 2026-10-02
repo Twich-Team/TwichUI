@@ -7,7 +7,7 @@ local ROOT = ROOT
 local FILES = {
  "libs/LibStub/LibStub.lua","libs/CallbackHandler-1.0/CallbackHandler-1.0.lua","libs/LibSharedMedia-3.0/LibSharedMedia-3.0.lua",
  "libs/AceComm-3.0/ChatThrottleLib.lua","libs/AceComm-3.0/AceComm-3.0.lua","libs/LibSerialize/LibSerialize.lua","libs/LibDeflate/LibDeflate.lua",
- "Core.lua","modules/QuietLogin.lua","modules/Media.lua","modules/AuctionatorSkin.lua","setup/PackFile.lua","setup/Setups.lua","setup/Share.lua","setup/Group.lua","setup/CommTest.lua","setup/Restore.lua","chronicle/Data.lua","chronicle/Recorder.lua","chronicle/Broker.lua",
+ "Core.lua","modules/QuietLogin.lua","modules/Media.lua","modules/AuctionatorSkin.lua","setup/PackFile.lua","setup/Setups.lua","setup/Share.lua","setup/Group.lua","setup/CommTest.lua","setup/Restore.lua","chronicle/Data.lua","chronicle/Filter.lua","chronicle/Recorder.lua","chronicle/Broker.lua",
 }
 NET = {}   -- queued deliveries {toEnv, prefix, text, sender}
 function MakeClient(charName, addons)

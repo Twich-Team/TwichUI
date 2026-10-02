@@ -272,3 +272,50 @@ function S.RowArt(row)
     row.line:SetPoint("TOPLEFT", 4, 0)
     row.line:SetPoint("TOPRIGHT", -4, 0)
 end
+
+-- Small floating panel (the date picker): a lit umber surface with a bronze edge.
+function S.Popover(p)
+    p:SetBackdrop({ bgFile = WHITE, edgeFile = WHITE, edgeSize = 1 })
+    p:SetBackdropColor(K.bg[1] * 1.12, K.bg[2] * 1.12, K.bg[3] * 1.12, 1)
+    p:SetBackdropBorderColor(K.bronze[1], K.bronze[2], K.bronze[3], 0.95)
+    Edge(p, "TOP", 1, K.gold, 0.14)
+    Edge(p, "BOTTOM", 1, { 0, 0, 0 }, 0.45)
+end
+
+-- Control that opens a popover: the current label and a small down arrow.
+function S.DropButton(parent, w, onClick)
+    local b = S.Button(parent, "", w, "secondary", onClick)
+    b:SetHeight(22)
+    b.text:ClearAllPoints()
+    b.text:SetPoint("LEFT", 8, 0)
+    b.text:SetPoint("RIGHT", -22, 0)
+    b.text:SetJustifyH("LEFT")
+    for row = 1, 3 do                              -- stepped arrowhead pointing down
+        local px = Solid(b, "OVERLAY", K.gold, 0.95)
+        px:SetSize((4 - row) * 2 - 1, 1)
+        px:SetPoint("CENTER", b, "RIGHT", -12, 2 - row)
+    end
+    return b
+end
+
+-- Two-state button for a choice between modes; SetOn(true) gives it the bronze fill.
+function S.Toggle(parent, label, w, onClick)
+    local b = CreateFrame("Button", nil, parent, "BackdropTemplate")
+    b:SetSize(w, 22)
+    b:SetBackdrop({ bgFile = WHITE, edgeFile = WHITE, edgeSize = 1 })
+    b.text = b:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    b.text:SetPoint("CENTER", 0, 0)
+    b.text:SetText(label)
+    local on, over = false, false
+    local function Paint()
+        if on then Tint(b, { 0.79, 0.64, 0.29 }, { 0.30, 0.205, 0.085 }, { 1, 0.91, 0.70 })
+        elseif over then Tint(b, K.bronze, { 0.15, 0.115, 0.085 }, K.text)
+        else Tint(b, K.bronzeLo, { 0.115, 0.088, 0.066 }, K.textDim) end
+    end
+    function b:SetOn(v) on = v and true or false; Paint() end
+    b:SetScript("OnEnter", function() over = true; Paint() end)
+    b:SetScript("OnLeave", function() over = false; Paint() end)
+    b:SetScript("OnClick", onClick)
+    Paint()
+    return b
+end
