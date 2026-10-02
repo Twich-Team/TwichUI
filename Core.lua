@@ -28,7 +28,7 @@ local DEFAULT_MODULES = {
     shareWhisper = true,     -- configuration sharing over direct addon messages
     shareGroup = false,      -- ... over the group channel (opt-in)
     shareGuild = false,      -- ... over the guild channel (opt-in)
-    groupCheck = false,      -- version hello / group check / DM probe (group channel, opt-in)
+    groupCheck = true,       -- version hello / group check / DM probe (group channel)
 }
 R.DEFAULT_MODULES = DEFAULT_MODULES   -- Settings.lua uses these for the panel's Defaults button
 
@@ -71,12 +71,6 @@ R.frame:HookScript("OnEvent", function(_, event, name)
     TwichUIBackupDB = TwichUIBackupDB or {}
     TwichUIShareDB = TwichUIShareDB or {}   -- only your saved setup (what make_pack ships)
     TwichUIDB.modules = TwichUIDB.modules or {}
-    -- 3.0.0 turned group check on by default; it's opt-in from 3.0.1, so
-    -- switch it off once for anyone who got the old default.
-    if (TwichUIDB.migrated or 0) < 301 then
-        TwichUIDB.modules.groupCheck = nil
-        TwichUIDB.migrated = 301
-    end
     for k, v in pairs(DEFAULT_MODULES) do
         if TwichUIDB.modules[k] == nil then TwichUIDB.modules[k] = v end
     end
@@ -130,30 +124,83 @@ function TwichUI_OnCompartmentClick(_, button)
     elseif R.Window then R.Window:Toggle() end
 end
 
-SLASH_TWICHUI1 = "/twichui"
-SlashCmdList.TWICHUI = function(msg)
-    msg = (msg or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
-    if msg == "hidden" and R.Quiet then R.Quiet:ShowHidden()
-    elseif msg == "check" and R.Group then R.Group:RunCheck()
-    elseif msg == "version" and R.Group then R.Print("version %s.", R.Group.Version())
-    elseif msg == "restore" and R.Window then R.Window:Show("backups")
-    elseif msg == "gear" and R.GearWindow then R.GearWindow:Show()
-    elseif msg == "help" or msg == "?" then
-        R.Print("commands:")
-        print("  /twichui - options")
-        print("  /pack - share setup, received setups and backups window")
-        print("  /pack test - send your setup to yourself")
-        print("  /pack status - what sharing is doing (for bug reports)")
-        print("  /twichui check - check your group's TwichUI versions and missing addons")
-        print("  /twichui restore - backups")
-        print("  /twichui gear - stat weights and stat priority for upgrade hints")
-        print("  /twichui hidden - welcome messages hidden at login")
-        print("  /twichui version - your TwichUI version")
-        print("  /aeskin - Auctionator skin status (/aeskin apply to re-run it)")
-    else
-        R:OpenSettings()
+---------------------------------------------------------------------------
+-- Slash commands: /twichui and /tui share one parser.
+-- /pack and /aeskin are gone; use /tui share and /tui skin.
+---------------------------------------------------------------------------
+local COMMANDS   -- ordered: { name, usage, description, fn(arg) }
+
+local function Unavailable(what) R.Print("%s isn't available right now.", what) end
+
+local function ShowHelp()
+    R.Print("/tui (or /twichui) commands:")
+    for _, c in ipairs(COMMANDS) do
+        if not c.hidden then print(("  %s/tui %s|r %s- %s|r"):format(R.GOLD, c.usage, R.GREY, c.desc)) end
     end
 end
+
+COMMANDS = {
+    { name = "help", usage = "help", desc = "this list", fn = ShowHelp },
+    { name = "options", usage = "options", desc = "open TwichUI options", fn = function() R:OpenSettings() end },
+    { name = "share", usage = "share [test|status]", desc = "share setup window; test sends to yourself", fn = function(arg)
+        R.ShareCommand(arg)
+    end },
+    { name = "check", usage = "check", desc = "group's TwichUI versions and missing addons", fn = function()
+        if R.Group then R.Group:RunCheck() else Unavailable("Group check") end
+    end },
+    { name = "version", usage = "version", desc = "your TwichUI version", fn = function()
+        if R.Group then R.Print("version %s.", R.Group.Version()) else Unavailable("Version") end
+    end },
+    { name = "restore", usage = "restore", desc = "backups window", fn = function()
+        if R.Window then R.Window:Show("backups") else Unavailable("Backups") end
+    end },
+    { name = "gear", usage = "gear", desc = "stat weights for upgrade hints", fn = function()
+        if R.GearWindow then R.GearWindow:Show() else Unavailable("Gear window") end
+    end },
+    { name = "hidden", usage = "hidden", desc = "welcome messages hidden at login", fn = function()
+        if R.Quiet then R.Quiet:ShowHidden() else Unavailable("Quiet login") end
+    end },
+    { name = "skin", usage = "skin [apply]", desc = "Auctionator skin status; apply re-runs it", fn = function(arg)
+        if R.SkinCommand then R.SkinCommand(arg) else Unavailable("Auctionator skin") end
+    end },
+    -- TEMPORARY: remove with setup/CommTest.lua
+    { name = "commtest", usage = "commtest party|guild|whisper <name>", desc = "test addon messages with another TwichUI user (temporary)", fn = function(arg)
+        if R.CommTest then R.CommTest.Run(arg) else Unavailable("Comm test") end
+    end },
+    { name = "settings", alias = "options", hidden = true },
+    { name = "config", alias = "options", hidden = true },
+    { name = "?", alias = "help", hidden = true },
+}
+
+local function FindCommand(word)
+    for _, c in ipairs(COMMANDS) do
+        if c.name == word then return c.alias and FindCommand(c.alias) or c end
+    end
+    -- unique prefix of a command name, e.g. "res" for "restore"
+    local hit, n = nil, 0
+    for _, c in ipairs(COMMANDS) do
+        if not c.alias and c.name:sub(1, #word) == word then hit, n = c, n + 1 end
+    end
+    if n == 1 then return hit end
+    return nil, n
+end
+
+function R.RunCommand(msg)
+    local word, arg = (msg or ""):match("^%s*(%S*)%s*(.-)%s*$")
+    word = word:lower()
+    if word == "" then ShowHelp() return end
+    local cmd, ambiguous = FindCommand(word)
+    if cmd then cmd.fn(arg) return end
+    if ambiguous and ambiguous > 1 then
+        R.Print("'%s' could mean more than one command. Type /tui help.", word)
+    else
+        R.Print("unknown command '%s'. Type /tui help.", word)
+    end
+end
+
+SLASH_TWICHUI1 = "/twichui"
+SLASH_TWICHUI2 = "/tui"
+SlashCmdList.TWICHUI = R.RunCommand
 
 function TwichUI_OnCompartmentEnter(_, button)
     GameTooltip:SetOwner(button or UIParent, "ANCHOR_LEFT")
@@ -164,10 +211,9 @@ function TwichUI_OnCompartmentEnter(_, button)
 end
 function TwichUI_OnCompartmentLeave() GameTooltip:Hide() end
 
-SLASH_TWICHUIPACK1 = "/pack"
-SlashCmdList.TWICHUIPACK = function(msg)
+function R.ShareCommand(msg)
     if not R:Enabled("setupSharing") then
-        R.Print("Configuration Sharing is turned off. Turn it on in /twichui.")
+        R.Print("Configuration Sharing is turned off. Turn it on in /tui options.")
         return
     end
     if (msg or ""):lower():find("status") and R.Share then

@@ -1,4 +1,4 @@
--- TwichUI: setup sharing window (/pack)
+-- TwichUI: setup sharing window (/tui share)
 -- Three pages: "Share setup" (choose, save, send; recommendations and the party
 -- check open from it), "Received setups" (review, apply, undo) and "Backups".
 -- Styled by EllesmereUI's skin toolkit when it's available.
@@ -1455,7 +1455,7 @@ end
 
 function W:Received(sender)
     local who = SH.Short(sender)
-    R.Print("%s's setup arrived. Type /pack to review it before applying.", who)
+    R.Print("%s's setup arrived. Type /tui share to review it before applying.", who)
     for i, s in ipairs(ST.Sources()) do if s.key == "recv:" .. sender then sourceIndex = i end end
     reviewing = false
     if f and f:IsShown() then SetPage("received") return end
@@ -1780,6 +1780,6 @@ end
 R:On("PLAYER_LOGIN", function()
     if not R:Enabled("setupSharing") then return end
     if #ST.Sources() > 0 and not ST:HasBackup() and not ST.report and not ST.Mine() then
-        C_Timer.After(4, function() R.Print("a shared addon setup is waiting. Type /pack to review it.") end)
+        C_Timer.After(4, function() R.Print("a shared addon setup is waiting. Type /tui share to review it.") end)
     end
 end)

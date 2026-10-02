@@ -766,7 +766,7 @@ R:On("PLAYER_LOGIN", function()
             elseif results.mode == "alt" then
                 R.Print("this character now uses the shared addon configuration (%d).", n)
             else
-                R.Print("addon configuration applied (%d settings). Undo is in /pack if you change your mind.", n)
+                R.Print("addon configuration applied (%d settings). Undo is in /tui share if you change your mind.", n)
             end
             if #results.skipped > 0 then
                 R.Print("skipped %d: the addon isn't installed or enabled, or it isn't a settings table.", #results.skipped)

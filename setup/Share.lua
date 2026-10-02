@@ -37,7 +37,7 @@ local function Changed() for _, fn in ipairs(listeners) do pcall(fn) end end
 
 local function Fail(where, err)
     SH.lastError = ("%s: %s"):format(where, tostring(err))
-    R.Print("%sSomething went wrong (%s).|r Type /pack status and send me the output.", R.RED, where)
+    R.Print("%sSomething went wrong (%s).|r Type /tui share status and send me the output.", R.RED, where)
     geterrorhandler()(err)
 end
 SH.Fail = Fail
@@ -245,6 +245,7 @@ end
 
 -- Tiny group-check messages (version hello, group check, direct-message
 -- probe) have their own switch and only ever use the group channel.
+SH.DIAG_TYPES = { commtest = true, commtestack = true }   -- TEMPORARY, see setup/CommTest.lua
 SH.GROUP_TYPES = { hello = true, checkreq = true, checkrep = true, probeack = true }
 local function AllowedFor(msgType, dist)
     if SH.GROUP_TYPES[msgType] and (dist == "PARTY" or dist == "RAID" or dist == "INSTANCE_CHAT") then
@@ -397,7 +398,7 @@ function SH:SendToSelf()
     return SH:SendTo(SH.SelfName(), true)
 end
 
--- /pack status: what the transfer code thinks is happening (for bug reports).
+-- /tui share status: what the transfer code thinks is happening (for bug reports).
 function SH:Status()
     local P = R.Print
     P("you are %s; route test: %s", tostring(SH.SelfName()), (SH.Route(SH.SelfName()) or { "none" })[1])
@@ -697,9 +698,11 @@ OnControl = function(_, text, dist, sender)
         SH.lastDropped = ("undecodable message from %s (%d bytes)"):format(tostring(sender), #text)
         return
     end
-    local isGroupType = SH.GROUP_TYPES[msg.t] or msg.t == "probe"
+    -- TEMPORARY (commtest): diagnostic types ignore the sharing switches; they carry no private data.
+    local isDiag = SH.DIAG_TYPES[msg.t]
+    local isGroupType = SH.GROUP_TYPES[msg.t] or msg.t == "probe" or isDiag
     if not isGroupType and not R:Enabled("setupSharing") then return end
-    if not AllowedFor(msg.t, dist) then return end
+    if not isDiag and not AllowedFor(msg.t, dist) then return end
     SH.lastSeen = ("%s from %s via %s"):format(msg.t, tostring(sender), tostring(dist))
     -- Broadcasts (group check) are for everyone except their sender.
     if msg.to == "*" and isGroupType then

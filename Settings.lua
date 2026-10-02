@@ -210,13 +210,49 @@ local function Build()
                 { "always", "Always", "The reasoning shows under every item you could wear." },
             }))
         if B then
+            local stylePreview
             local styles = {}
             for i, style in ipairs(B.STYLES) do styles[i] = { style.key, style.label } end
-            Under(Advanced(Choice("gearBagStyle", "Bag mark style",
-                "The mark on upgrades in your bags. All use the game's own art.",
+            local styleRow = Choice("gearBagStyle", "Bag mark style",
+                "The mark on upgrades in your bags. All use the game's own art. The square beside the list shows how it looks on a bag slot.",
                 STRING, "gilded",
-                function() return P.Get("bagStyle") end, function(value) P.Set("bagStyle", value) end,
-                styles)), bags, function() return R:Enabled("gearBagIcons") end)
+                function() return P.Get("bagStyle") end,
+                function(value)
+                    P.Set("bagStyle", value)
+                    if stylePreview then B.ApplyStyle(stylePreview.mark, value) end
+                end,
+                styles)
+            -- A preview slot beside the dropdown. Setting rows are recycled, so
+            -- the slot is made once per row frame and tracked only while shown.
+            if styleRow and styleRow.InitFrame then
+                local initFrame, resetter = styleRow.InitFrame, styleRow.Resetter
+                styleRow.InitFrame = function(self, frame)
+                    initFrame(self, frame)
+                    local slot = frame.TwichUIStylePreview
+                    if not slot then
+                        slot = CreateFrame("Frame", nil, frame)
+                        slot:SetSize(26, 26)
+                        slot.back = slot:CreateTexture(nil, "BACKGROUND")
+                        slot.back:SetAllPoints()
+                        slot.back:SetColorTexture(0.05, 0.05, 0.05, 0.9)
+                        slot.mark = slot:CreateTexture(nil, "OVERLAY")
+                        slot.mark:SetPoint("TOPLEFT", 1, -1)
+                        frame.TwichUIStylePreview = slot
+                    end
+                    slot:ClearAllPoints()
+                    slot:SetPoint("RIGHT", frame, "CENTER", -90, 0)
+                    slot:SetFrameLevel(frame:GetFrameLevel() + 5)
+                    B.ApplyStyle(slot.mark, P.Get("bagStyle"))
+                    slot:Show()
+                    stylePreview = slot
+                end
+                styleRow.Resetter = function(self, frame)
+                    if resetter then resetter(self, frame) end
+                    if frame.TwichUIStylePreview then frame.TwichUIStylePreview:Hide() end
+                    if stylePreview == frame.TwichUIStylePreview then stylePreview = nil end
+                end
+            end
+            Under(Advanced(styleRow), bags, function() return R:Enabled("gearBagIcons") end)
         end
     end
 
@@ -262,15 +298,15 @@ local function Build()
     -----------------------------------------------------------------------
     Header("Configuration sharing", "Share the settings of the addons you choose with friends, and apply theirs. You always choose what to apply, and Undo puts your own settings back.")
     local sharing = Toggle("setupSharing", "Configuration sharing",
-        "Save the settings of the addons you choose as an addon configuration, send it to friends in game, and apply configurations friends send you. Type /pack.",
+        "Save the settings of the addons you choose as an addon configuration, send it to friends in game, and apply configurations friends send you. Type /tui share.",
         true)
     local function SharingOn() return R:Enabled("setupSharing") end
     Under(Toggle("acceptSetups", "Let friends send me addon configurations",
         "When on, friends can offer you their addon configuration. You're always asked first, unless you chose \"Always accept\" for that friend. Nothing is applied until you click Apply.",
         false), sharing, SharingOn)
     Toggle("groupCheck", "Version and group check",
-        "Off until you turn it on. Both players need it on to see each other.\n\nWhen you're in a group, TwichUI trades version numbers with other TwichUI users (a few bytes, group channel only) and tells you when someone's version is newer or too old to share with. Also powers /twichui check and Party compatibility check in /pack, and a once-per-game-build test that switches sharing back to direct messages when Forever fixes them.",
-        false)
+        "On by default. Both players need it on to see each other. Other players never see these messages, even without TwichUI.\n\nWhen you're in a group, TwichUI trades version numbers with other TwichUI users (a few bytes, group channel only) and tells you when someone's version is newer or too old to share with. Also powers /tui check and Party compatibility check in /tui share, and a once-per-game-build test that switches sharing back to direct messages when Forever fixes them.",
+        true)
     Button("Configuration sharing", "Open", function()
         if not R:Enabled("setupSharing") then
             R.Print("turn on Configuration sharing first.")
@@ -278,7 +314,7 @@ local function Build()
         end
         if SettingsPanel and SettingsPanel:IsShown() then HideUIPanel(SettingsPanel) end
         R.Window:Show()
-    end, "Opens the sharing window: send your setup, review ones friends sent, create backups and run the party compatibility check (same as typing /pack).")
+    end, "Opens the sharing window: send your setup, review ones friends sent, create backups and run the party compatibility check (same as typing /tui share).")
     Advanced(Toggle("shareWhisper", "Send by direct message",
         "Send and receive configurations with hidden addon messages straight to one player. Only they receive it.\n\n" .. R.Share.WHY_FOREVER,
         false))

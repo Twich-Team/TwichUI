@@ -426,8 +426,8 @@ R:OnSkin(function(facade)
 end)
 
 ---------------------------------------------------------------------------
--- /aeskin        status report (paste this when something looks wrong)
--- /aeskin apply  run a skinning pass right now (with the AH open)
+-- /tui skin        status report (paste this when something looks wrong)
+-- /tui skin apply  run a skinning pass right now (with the AH open)
 ---------------------------------------------------------------------------
 local function P(fmt, ...) print(("|cffC9A24ATwichUI (Auctionator skin):|r " .. fmt):format(...)) end
 local function Ver(a)
@@ -435,10 +435,9 @@ local function Ver(a)
     return get and get(a, "Version") or "?"
 end
 
-SLASH_TWICHUIAUCTION1 = "/aeskin"
-SlashCmdList.TWICHUIAUCTION = function(msg)
+R.SkinCommand = function(msg)
     if msg and msg:lower():match("apply") then
-        if not S then P("EllesmereUI has not activated this skin (see /aeskin)."); return end
+        if not S then P("EllesmereUI has not activated this skin (see /tui skin)."); return end
         if not AuctionHouseFrame or not AuctionHouseFrame:IsShown() then
             P("Open the auction house first."); return
         end

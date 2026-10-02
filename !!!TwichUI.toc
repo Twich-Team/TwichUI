@@ -35,6 +35,7 @@ setup\PackFile.lua
 setup\Setups.lua
 setup\Share.lua
 setup\Group.lua
+setup\CommTest.lua
 setup\Restore.lua
 setup\Window.lua
 

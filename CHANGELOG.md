@@ -1,6 +1,13 @@
 # TwichUI changelog
 
 ## Unreleased
+- **Version and group check** is on by default for new installs (hidden addon messages; players
+  without TwichUI see nothing). Anyone who already has the option saved keeps their choice.
+- **Commands**: `/tui` is a short form of `/twichui`. `/tui` alone (or `/tui help`) now lists
+  the commands instead of opening options; use `/tui options`. Unknown commands say so and point to
+  `/tui help`. New `/tui share` (was `/pack`) and `/tui skin` (was `/aeskin`). The old `/pack` and `/aeskin` commands are removed.
+- **Temporary**: `/tui commtest party|guild|whisper <name>` checks whether addon messages are
+  delivered, by asking another TwichUI user to answer a tiny probe. Remove with setup/CommTest.lua.
 - **Sharing window**: now three pages: **Share setup**, **Received setups** and **Backups**
   (Restore points are now called Backups). Share setup shows a short summary of what's
   included with Choose addons (searchable) and Scan installed addons; recommendations

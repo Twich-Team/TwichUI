@@ -63,7 +63,7 @@ for key, default in pairs(defaults) do
   assert(default == R.DEFAULT_MODULES[key], key .. " default matches a new install")
 end
 assert(n == 14, "every module has a toggle: " .. n)
-assert(defaults.shareGroup == false and defaults.shareGuild == false and defaults.groupCheck == false, "opt-in stays off")
+assert(defaults.shareGroup == false and defaults.shareGuild == false and defaults.groupCheck == true, "group sharing opt-in stays off; group check is on")
 assert(defaults.media == true and defaults.shareWhisper == true)
 
 -- Advanced options: hidden until the switch is on, then shown; essentials never hidden.
