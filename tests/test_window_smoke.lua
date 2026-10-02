@@ -34,12 +34,12 @@ c.LOADED["!!!TwichUI"] = true; c.FireEvent("ADDON_LOADED", "!!!TwichUI")
 c.TwichUIDB.setup.detected.FooDB = {owner="Foo", bytes=2000}
 c.FireEvent("PLAYER_LOGIN")
 local W = c.TwichUI.Window
-W:Show("mine"); W:Show("get")
+W:Show("share"); W:Show("received")
 c.TwichUIDB.setup.received["Pal-Forever"] = {created=1, version=2, sourceName="Pal", tables={FooDB={owner="Foo", data={}, hash="1"}}, editMode="abc"}
-W:Show("get"); W:ShowEditMode()
+W:Show("received"); W:ShowEditMode()
 W:AskAccept("Pal-Forever", {addons=3, bytes=50000})
 W:Received("Pal-Forever")
-W:Show("addons"); c.TwichUIDB.setup.received["Pal-Forever"].addons = {["cf:1"]={title="Foo", folders={"Foo"}}, ["x"]={title="Bar", folders={"Bar"}}}; W:Show("get"); W:ShowAddonList("recv:Pal-Forever"); W:ShowStorage(); W:ShowChannels(); W:Show("group"); W:Show("restore"); W:Show("mine"); W:Toggle(); W:Toggle()
+W:Show("addons"); W:ShowChoose(); W:ShowRecommend(); W:ShowParty(); c.TwichUIDB.setup.received["Pal-Forever"].addons = {["cf:1"]={title="Foo", folders={"Foo"}}, ["x"]={title="Bar", folders={"Bar"}}}; W:Show("received"); W:ShowAddonList("recv:Pal-Forever"); W:ShowStorage(); W:ShowChannels(); W:Show("group"); W:Show("backups"); W:Show("mine"); W:Toggle(); W:Toggle()
 -- Import preview: what applying each addon would do.
 local ST = c.TwichUI.Setups
 local g = ST.PackByAddon(c.TwichUIDB.setup.received["Pal-Forever"])[1]
@@ -49,5 +49,5 @@ assert(ST.ApplyEffect(g) == "new", "loaded with no settings: new")
 c.FooDB = {scale = 1}
 assert(ST.ApplyEffect(g) == "replace", "loaded with settings: replaces")
 assert(ST.ApplyEffect({state = "missing", tables = {}}) == "missing")
-W:Show("get")
+W:Show("received")
 print("UI SMOKE OK")

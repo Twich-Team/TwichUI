@@ -269,7 +269,7 @@ local function Build()
         "When on, friends can offer you their addon configuration. You're always asked first, unless you chose \"Always accept\" for that friend. Nothing is applied until you click Apply.",
         false), sharing, SharingOn)
     Toggle("groupCheck", "Version and group check",
-        "Off until you turn it on. Both players need it on to see each other.\n\nWhen you're in a group, TwichUI trades version numbers with other TwichUI users (a few bytes, group channel only) and tells you when someone's version is newer or too old to share with. Also powers /twichui check and the Group tab, and a once-per-game-build test that switches sharing back to direct messages when Forever fixes them.",
+        "Off until you turn it on. Both players need it on to see each other.\n\nWhen you're in a group, TwichUI trades version numbers with other TwichUI users (a few bytes, group channel only) and tells you when someone's version is newer or too old to share with. Also powers /twichui check and Party compatibility check in /pack, and a once-per-game-build test that switches sharing back to direct messages when Forever fixes them.",
         false)
     Button("Configuration sharing", "Open", function()
         if not R:Enabled("setupSharing") then
@@ -278,7 +278,7 @@ local function Build()
         end
         if SettingsPanel and SettingsPanel:IsShown() then HideUIPanel(SettingsPanel) end
         R.Window:Show()
-    end, "Opens the Configuration sharing window: send your configuration, apply ones friends sent, restore points and group check (same as typing /pack).")
+    end, "Opens the sharing window: send your setup, review ones friends sent, create backups and run the party compatibility check (same as typing /pack).")
     Advanced(Toggle("shareWhisper", "Send by direct message",
         "Send and receive configurations with hidden addon messages straight to one player. Only they receive it.\n\n" .. R.Share.WHY_FOREVER,
         false))

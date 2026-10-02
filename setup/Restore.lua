@@ -1,6 +1,6 @@
 -- TwichUI: restore points
--- Named snapshots of your own addon settings (the addons ticked on "My
--- configuration"), taken exactly as saved on disk. Restoring one works like
+-- Named snapshots of your own addon settings (the addons chosen in "Share
+-- setup"), taken exactly as saved on disk. Called "backups" in the window. Restoring one works like
 -- applying a shared configuration: your current settings are backed up first,
 -- so Undo still works, and the UI reloads.
 
@@ -64,7 +64,7 @@ function RS:Create(name)
     if InCombatLockdown() then return nil, "Not in combat, please." end
     if ST.capture then
         local p = CreateFromCapture(name)
-        if not p then return nil, "Nothing is ticked on My configuration, so there's nothing to save." end
+        if not p then return nil, "Nothing is chosen in Share setup, so there's nothing to back up." end
         return "created", p
     end
     -- Need a fresh look at what's on disk: reload once and finish at login.
@@ -89,17 +89,17 @@ end
 
 function RS.Size(p) return ST.SizeOf(p and p.tables or {}) end
 
--- Show restore points in the Saved data window too.
+-- Show backups in the Saved data window too.
 local baseItems = ST.StorageItems
 function ST.StorageItems()
     local items = baseItems()
     for _, p in ipairs(RS.List()) do
         items[#items + 1] = {
-            key = "restore:" .. p.id, kind = "Restore point",
-            label = ("Restore point \"%s\""):format(p.name),
+            key = "restore:" .. p.id, kind = "Backup",
+            label = ("Backup \"%s\""):format(p.name),
             detail = ("%s, %d addons, %s"):format(date("%b %d", p.created or 0), ST.CountAddons(p), p.sourceName or "?"),
             bytes = RS.Size(p), remove = function() RS:Delete(p.id) end,
-            warn = "You won't be able to go back to this point.",
+            warn = "You won't be able to go back to this backup.",
         }
     end
     table.sort(items, function(a, b) return a.bytes > b.bytes end)
@@ -113,9 +113,9 @@ R:On("PLAYER_LOGIN", function()
     ST.db.restoreNext = nil
     local p = ST.capture and CreateFromCapture(name)
     if p then
-        R.Print("restore point \"%s\" saved (%d addons).", p.name, ST.CountAddons(p))
+        R.Print("backup \"%s\" saved (%d addons).", p.name, ST.CountAddons(p))
     else
-        R.Print("couldn't save the restore point: nothing is ticked on My configuration.")
+        R.Print("couldn't save the backup: nothing is chosen in Share setup.")
     end
-    C_Timer.After(1, function() if R.Window then R.Window:Show("restore") end end)
+    C_Timer.After(1, function() if R.Window then R.Window:Show("backups") end end)
 end)

@@ -1,6 +1,13 @@
 # TwichUI changelog
 
 ## Unreleased
+- **Sharing window**: now three pages: **Share setup**, **Received setups** and **Backups**
+  (Restore points are now called Backups). Share setup shows a short summary of what's
+  included with Choose addons (searchable) and Scan installed addons; recommendations
+  ("Recommend addons to friends") and the party compatibility check open from there. Received
+  setups start with a summary and a Review step before anything can be applied, and
+  "Use on this alt" is now "Use profiles already applied on another character". Saved data,
+  the setup format and every option are unchanged.
 - **Options**: TwichUI's settings now all live in Esc > Options > AddOns > TwichUI, grouped
   by feature (General, Gear comparison, Addon skins, Chat, Configuration sharing). Rarely
   changed options show when you tick "Show advanced options"; they keep working while hidden.

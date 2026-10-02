@@ -2,7 +2,7 @@
 --   * Version check: when you're grouped, TwichUI says hello with its version
 --     number (a few bytes, group channel only) and tells you when someone has
 --     a newer version, or one too old to share configurations with you.
---   * Group check: /twichui check (or the Group tab) asks everyone in your
+--   * Group check: /twichui check (or Party compatibility check in /pack) asks everyone in your
 --     group which TwichUI they run and which of your recommended addons
 --     they're missing.
 --   * Direct-message probe: on Forever, addon whispers to first-and-last names
@@ -113,7 +113,7 @@ local CHECK_WAIT = 6
 
 function G:RunCheck(quiet)
     if not Enabled() then
-        R.Print("group check is off. Turn it on in /twichui (Group) or on the Group tab of /pack; your friends need it on too.")
+        R.Print("group check is off. Turn it on in /twichui or under Party compatibility check in /pack; your friends need it on too.")
         return false
     end
     if not IsInGroup() then

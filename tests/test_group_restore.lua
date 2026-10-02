@@ -57,5 +57,5 @@ r2.FireEvent("PLAYER_LOGIN")
 assert(r2.FooDB.a == 1, "restored")
 assert(r2.TwichUIBackupDB["Ranulf - Forever"].tables.FooDB.data.a == 999, "backup of pre-restore state")
 local kinds = {} for _, i in ipairs(r2.TwichUI.Setups.StorageItems()) do kinds[i.kind] = true end
-assert(kinds["Restore point"])
+assert(kinds["Backup"])
 print("GROUP/RESTORE TESTS PASSED")

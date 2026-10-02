@@ -741,7 +741,7 @@ R:On("PLAYER_LOGIN", function()
         local groups = ST:DetectedByAddon()
         R.Print("found settings for %d addons. Pick what to share in the window.", #groups)
         if not db.restoreNext then
-            C_Timer.After(1, function() if R.Window then R.Window:Show("mine") end end)
+            C_Timer.After(1, function() if R.Window then R.Window:Show("share") end end)
         end
     end
     if pending then
