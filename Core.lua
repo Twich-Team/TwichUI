@@ -29,11 +29,12 @@ local DEFAULT_MODULES = {
     shareGroup = false,      -- ... over the group channel (opt-in)
     shareGuild = false,      -- ... over the guild channel (opt-in)
     groupCheck = true,       -- version hello / group check / DM probe (group channel)
-    chronicle = false,       -- Journey Chronicle: write automatic entries (opt-in; your own notes always work)
+    chronicle = true,        -- Journey Chronicle: write automatic entries (your own notes always work)
     chronicleLevels = true,  -- ... level milestones
     chronicleZones = true,   -- ... arriving in a new zone
     chronicleBosses = true,  -- ... defeating an encounter
     chronicleDeaths = false, -- ... dying (off until chosen, even with the rest on)
+    chronicleChat = true,    -- ... and say so in your own chat frame when an automatic entry is added
 }
 R.DEFAULT_MODULES = DEFAULT_MODULES   -- Settings.lua uses these for the panel's Defaults button
 

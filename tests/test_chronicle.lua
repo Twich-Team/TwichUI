@@ -15,15 +15,33 @@ end
 local function events(c) local n = 0 for _ in pairs(c.TwichUI.frame.events) do n = n + 1 end return n end
 local function has(c, e) return c.TwichUI.frame.events[e] == true end
 
--- off by default: nothing registered, nothing written, notes still work
+-- on by default: events registered; notes still work
 local a = boot("Alpha")
 local C, Rec = a.TwichUI.Chronicle, a.TwichUI.ChronicleRecorder
-assert(not has(a, "PLAYER_LEVEL_UP") and not has(a, "ZONE_CHANGED_NEW_AREA") and not has(a, "ENCOUNTER_END"))
-a.FireEvent("PLAYER_LEVEL_UP", 12)
-assert(C.Count() == 0, "tracking is off")
+assert(a.TwichUIDB.modules.chronicle == true and a.TwichUIDB.modules.chronicleChat == true)
+assert(has(a, "PLAYER_LEVEL_UP") and has(a, "ZONE_CHANGED_NEW_AREA") and has(a, "ENCOUNTER_END"))
+-- explicit saved choices survive
+local off = boot("Off", { db = { modules = { chronicle = false, chronicleChat = false } } })
+assert(off.TwichUIDB.modules.chronicle == false and off.TwichUIDB.modules.chronicleChat == false)
+assert(not has(off, "PLAYER_LEVEL_UP"))
+-- chat: one local line per recorded automatic entry; none for notes, duplicates, or when switched off
+out = {}
+a.FireEvent("PLAYER_LEVEL_UP", 5)
+a.FireEvent("PLAYER_LEVEL_UP", 5)    -- duplicate
+local lines = 0
+for _, l in ipairs(out) do if l:find("Reached level 5", 1, true) then lines = lines + 1 end end
+assert(lines == 1, "one message for one recorded entry: " .. lines)
+local nmsgs = #out
+C.Add("note", { title = "Note", note = "quiet" })
+assert(#out == nmsgs, "notes print nothing")
+a.TwichUIDB.modules.chronicleChat = false
+local cnt = C.Count(); a.FireEvent("PLAYER_LEVEL_UP", 6)
+assert(C.Count() == cnt + 1 and #out == nmsgs, "chat off still records, silently")
+a.TwichUIDB.modules.chronicleChat = true
 local n1 = C.Add("note", { title = "Note", note = "  First night at the lake  ", zone = "Elwynn Forest" })
 local n2 = C.Add("note", { title = "Note", note = "Second" })
-assert(n1 and n2 and n1.note == "First night at the lake" and n1.id ~= n2.id)
+assert(n1 and n2 and n1.id ~= n2.id and n1.note == "First night at the lake")
+local base = C.Count()
 assert(not C.Add("note", { title = "Note", note = "   " }), "empty notes aren't saved")
 assert(a.TwichUI.Chronicle.CurrentZone() == "Elwynn Forest")
 a.ZONE = ""; assert(C.CurrentZone() == nil, "missing zone is nil, not wrong"); a.ZONE = "Elwynn Forest"
@@ -31,7 +49,7 @@ a.ZONE = ""; assert(C.CurrentZone() == nil, "missing zone is nil, not wrong"); a
 -- editing and deleting touch only the chosen entry
 assert(C.Update(n2.id, "Second, edited", false))
 assert(C.Find(n2.id).note == "Second, edited" and C.Find(n1.id).note == "First night at the lake" and C.Find(n1.id).zone == "Elwynn Forest")
-assert(C.Delete(n1.id) and not C.Find(n1.id) and C.Find(n2.id) and C.Count() == 1)
+assert(C.Delete(n1.id) and not C.Find(n1.id) and C.Find(n2.id) and C.Count() == base - 1)
 assert(not C.Delete(9999))
 
 -- turning tracking on: registers events, writes "Chronicle begun" once
@@ -96,7 +114,7 @@ assert(d.TwichUI.Chronicle.Count() == 1, "only Beta's own 'begun' line")   -- ma
 for _, e in ipairs(d.TwichUI.Chronicle.Entries()) do assert(e.kind == "start") end
 
 -- retention: automatic entries go first, notes stay, a full note shelf refuses
-local e = boot("Gamma")
+local e = boot("Gamma", { db = { modules = { chronicle = false } } })
 local G = e.TwichUI.Chronicle
 G.MAX_ENTRIES = 5
 for i = 1, 3 do G.Add("note", { title = "Note", note = "n" .. i }) end
@@ -111,7 +129,7 @@ assert(not full and why == "full")
 for _, en in ipairs(G.Entries()) do assert(en.kind == "note") end
 
 -- bad or older saved data is cleaned up
-local h = boot("Delta", { db = {}, chron = { chars = { ["Delta - Forever"] = { entries = { 5, { id = 1 }, { id = 2, t = 10, kind = "note", title = "ok", note = 7 }, { id = 2, t = 11, kind = "note", title = "dup" } } }, ["Bad"] = 3 } } })
+local h = boot("Delta", { db = { modules = { chronicle = false } }, chron = { chars = { ["Delta - Forever"] = { entries = { 5, { id = 1 }, { id = 2, t = 10, kind = "note", title = "ok", note = 7 }, { id = 2, t = 11, kind = "note", title = "dup" } } }, ["Bad"] = 3 } } })
 assert(h.TwichUI.Chronicle.Count() == 1 and h.TwichUIChronicleDB.chars.Bad == nil)
 assert(h.TwichUI.Chronicle.Add("note", { title = "Note", note = "x" }).id > 2)
 
@@ -121,4 +139,24 @@ for _, f in ipairs({ "setup/Setups.lua", "setup/Share.lua", "setup/Restore.lua",
   assert(not src:find("Chronicle"), f .. " must not touch the Chronicle")
 end
 assert(a.TwichUI.Setups.SafeName("TwichUIChronicleDB") == false, "a setup can never replace the Chronicle")
+-- data bar object: made only when LibDataBroker exists; follows changes; click opens the window
+local k = boot("Kappa")
+assert(k.TwichUI.ChronicleBroker, "loads fine without LibDataBroker")
+local made, store = nil, {}
+local LDB = { NewDataObject = function(_, name, o) made = name; store = o; return o end }
+k.LibStub = setmetatable({ GetLibrary = function(_, n) return n == "LibDataBroker-1.1" and LDB or nil end }, { __call = function() end })
+k.FireEvent("PLAYER_LOGIN"); k.FireEvent("PLAYER_LOGIN")
+assert(made == "TwichUI Chronicle" and store.type == "data source", "object registered once")
+local K = k.TwichUI.Chronicle
+assert(store.text == "Journey Chronicle", "text is the name, not a count")
+local K = k.TwichUI.Chronicle
+K.Add("note", { title = "Note", note = "hi" })
+assert(store.text == "Journey Chronicle")
+local tip = {}
+store.OnTooltipShow({ AddLine = function(_, l) tip[#tip + 1] = l end })
+assert(#tip >= 3)
+local opened = 0
+k.TwichUI.ChronicleWindow = k.TwichUI.ChronicleWindow or {}
+k.TwichUI.ChronicleWindow.Toggle = function() opened = opened + 1 end
+store.OnClick(nil, "LeftButton"); assert(opened == 1)
 print("CHRONICLE TEST PASSED")

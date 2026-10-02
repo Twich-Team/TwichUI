@@ -1,6 +1,8 @@
 # TwichUI changelog
 
 ## Unreleased
+- **Journey Chronicle** is now on by default for new installs (automatic entries; your own notes always work, and you can turn it off in the options). New option **Show Chronicle entries in chat** (on by default): when an entry is added automatically, a quiet line with its icon appears in your own chat window. It's never sent to anyone, and entries are still recorded when it's off.
+- **Journey Chronicle** data bar source: a LibDataBroker object named "TwichUI Chronicle" shows "Journey Chronicle" with its icon, a tooltip (character, count, latest entry) and opens the Chronicle on click. In EllesmereUI add a Broker Plugin block to a data bar and pick "TwichUI Chronicle". Needs a broker display; nothing changes without one.
 - **Journey Chronicle** icons: each entry shows a small icon for what happened (level, new zone, defeated encounter, fall, your own note). New optional entry, **Falling in battle** (off by default): records when your character dies and where.
 - **Journey Chronicle** look: warm umber and bronze frame with a title band, quieter byline and status line (details in a tooltip), ledger-style entries with a small marker for automatic entries versus your own notes, a bronze "Write a note" button, a quieter Options button, and Edit / Delete that appear when you point at an entry.
 - **Journey Chronicle** (new, optional): a quiet, private journal for each character. Open it with

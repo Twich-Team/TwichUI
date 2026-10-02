@@ -298,7 +298,7 @@ local function Build()
     -----------------------------------------------------------------------
     Header("Journey Chronicle", "A quiet, private journal for this character. It isn't shared, sent or backed up with your configuration, and it never tells you what to do next.")
     local chronicle = Toggle("chronicle", "Keep moments for me automatically",
-        "Off by default. When on, TwichUI adds a short entry to this character's Chronicle for the moments you pick below. It starts the moment you turn it on and never looks back. Nothing is announced in chat. You can always write your own notes, whatever this is set to.",
+        "On by default. TwichUI adds a short entry to this character's Chronicle for the moments you pick below. It starts the moment it is on and never looks back. You can always write your own notes, whatever this is set to.",
         false, function() if R.ChronicleRecorder then R.ChronicleRecorder.Refresh() end end)
     local function ChronicleOn() return R:Enabled("chronicle") end
     local function ChronicleToggle(key, label, tooltip)
@@ -309,6 +309,7 @@ local function Build()
     ChronicleToggle("chronicleZones", "Arriving somewhere new", "Adds an entry when you travel into a new zone, including entering a dungeon. Not when you log in.")
     ChronicleToggle("chronicleBosses", "Defeating an encounter", "Adds an entry when a dungeon or raid encounter you fought ends in victory. Only the encounter's name is kept.")
     ChronicleToggle("chronicleDeaths", "Falling in battle", "Adds an entry when your character dies, with the zone you were in. Off until you choose it.")
+    ChronicleToggle("chronicleChat", "Show Chronicle entries in chat", "Prints a quiet line in your own chat window when an entry is added automatically. Only you see it; it is never sent to anyone. Entries are still recorded when this is off.")
     Choice("chronicleClock", "Time format",
         "How times are shown in your Chronicle.",
         STRING, "12",

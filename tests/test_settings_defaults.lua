@@ -62,10 +62,10 @@ for key, default in pairs(defaults) do
   n = n + 1
   assert(default == R.DEFAULT_MODULES[key], key .. " default matches a new install")
 end
-assert(n == 19, "every module has a toggle: " .. n)
+assert(n == 20, "every module has a toggle: " .. n)
 assert(defaults.shareGroup == false and defaults.shareGuild == false and defaults.groupCheck == true, "group sharing opt-in stays off; group check is on")
 assert(defaults.media == true and defaults.shareWhisper == true)
-assert(defaults.chronicle == false, "automatic Chronicle entries are opt-in")
+assert(defaults.chronicle == true and defaults.chronicleChat == true, "Chronicle and its chat line are on by default")
 assert(defaults.chronicleDeaths == false, "death entries are opt-in")
 
 -- Advanced options: hidden until the switch is on, then shown; essentials never hidden.

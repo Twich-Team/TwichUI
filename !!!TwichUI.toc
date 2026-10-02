@@ -54,5 +54,6 @@ chronicle\Data.lua
 chronicle\Recorder.lua
 chronicle\Style.lua
 chronicle\Window.lua
+chronicle\Broker.lua
 
 Settings.lua

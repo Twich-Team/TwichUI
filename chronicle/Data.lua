@@ -21,6 +21,17 @@ C.DUPLICATE_SECONDS = 60  -- the same automatic entry twice in this long is igno
 -- "note" is written by the player. The rest are written by TwichUI.
 C.KINDS = { note = true, level = true, zone = true, boss = true, death = true, start = true }
 
+-- Anything that shows entries (the window, the data bar) can ask to hear about changes.
+local watchers = {}
+function C.OnChange(fn) watchers[#watchers + 1] = fn end
+local function Changed()
+    for i = 1, #watchers do
+        local ok, err = pcall(watchers[i])
+        if not ok then geterrorhandler()(err) end
+    end
+end
+C.Changed = Changed
+
 local function Trim(text, limit)
     if type(text) ~= "string" then return nil end
     text = text:gsub("[%c]", " "):gsub("^%s+", ""):gsub("%s+$", "")
@@ -128,6 +139,7 @@ function C.Add(kind, fields)
     }
     rec.nextId = rec.nextId + 1
     entries[#entries + 1] = entry
+    Changed()
     return entry
 end
 
@@ -147,6 +159,7 @@ function C.Update(id, text, keepZone)
     if not note then return nil, "empty" end
     entry.note = note
     if keepZone == false then entry.zone = nil end
+    Changed()
     return entry
 end
 
@@ -154,6 +167,7 @@ function C.Delete(id)
     local _, index = Find(id)
     if not index then return false end
     table.remove(C.Record().entries, index)
+    Changed()
     return true
 end
 
