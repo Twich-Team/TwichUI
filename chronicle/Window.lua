@@ -413,24 +413,6 @@ local function TogglePicker()
     pop:Show()
 end
 
--- One quiet line under the title; the details are in its tooltip.
-local function Status()
-    if not R:Enabled("chronicle") then
-        return "Only the notes you write are kept.",
-            "Automatic tracking is off. Only the notes you write are added. Turn it on in the options if you'd like TwichUI to keep a few moments for you."
-    end
-    local parts = {}
-    if R:Enabled("chronicleLevels") then parts[#parts + 1] = "levels" end
-    if R:Enabled("chronicleZones") then parts[#parts + 1] = "new zones" end
-    if R:Enabled("chronicleGold") then parts[#parts + 1] = "gold earned" end
-    if R:Enabled("chronicleRiding") then parts[#parts + 1] = "riding" end
-    if R:Enabled("chronicleProfessions") then parts[#parts + 1] = "professions" end
-    if R:Enabled("chronicleBosses") then parts[#parts + 1] = "defeated encounters" end
-    local what = #parts > 0 and table.concat(parts, ", ") or "nothing yet (pick what to keep in the options)"
-    return "Recording your chosen moments from this day forward.",
-        "Keeping automatically: " .. what .. ". Only things from when tracking began are added."
-end
-
 -- "Journey time: 3d 7h 24m", or a dash until the game has answered.
 local function ShowPlayed(total)
     if not f or not f:IsShown() then return end
@@ -454,7 +436,6 @@ function W:Refresh()
     -- All time: the number stored. Filtered: how many of them are shown.
     local count = active and ("%d of %d entries"):format(n, total) or ("%d %s"):format(total, total == 1 and "entry" or "entries")
     f.sub:SetText(("%s  %s·  %s|r"):format(Escape(C.CharKey()), GREY, count))
-    f.status:SetText((Status()))
     f.filter.text:SetText(C.FilterLabel())
     f.undated:SetText(active and undated > 0
         and (undated == 1 and "1 entry without a date is only in All time" or undated .. " entries without a date are only in All time") or "")
@@ -479,24 +460,8 @@ local function Build()
     f.played:SetJustifyH("RIGHT")
     f.played:SetTextColor(K.stone[1], K.stone[2], K.stone[3])
     f.played:SetText("Journey time: \226\128\148")
-    f.status = Text(f, "GameFontDisableSmall")
-    f.status:SetPoint("TOPLEFT", 18, -66)
-    f.status:SetWidth(LIST_W)
-    f.status:SetTextColor(K.stone[1], K.stone[2], K.stone[3])
-    f.statusHit = CreateFrame("Frame", nil, f)
-    f.statusHit:SetPoint("TOPLEFT", f.status, "TOPLEFT", 0, 2)
-    f.statusHit:SetPoint("BOTTOMRIGHT", f.status, "BOTTOMRIGHT", 0, -2)
-    f.statusHit:EnableMouse(true)
-    f.statusHit:SetScript("OnEnter", function(self)
-        local _, detail = Status()
-        GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
-        GameTooltip:SetText(detail, 1, 1, 1, 1, true)
-        GameTooltip:Show()
-    end)
-    f.statusHit:SetScript("OnLeave", function() GameTooltip:Hide() end)
-
     f.filter = S.DropButton(f, 170, TogglePicker)
-    f.filter:SetPoint("TOPLEFT", 16, -88)
+    f.filter:SetPoint("TOPLEFT", 16, -66)
     f.undated = Text(f, "GameFontDisableSmall")
     f.undated:SetPoint("LEFT", f.filter, "RIGHT", 10, 0)
     f.undated:SetPoint("RIGHT", f, "RIGHT", -18, 0)
@@ -504,9 +469,9 @@ local function Build()
     f.undated:SetTextColor(K.stone[1], K.stone[2], K.stone[3])
 
     local box = CreateFrame("Frame", nil, f, "BackdropTemplate")
-    box:SetPoint("TOPLEFT", 16, -116)
-    box:SetPoint("BOTTOMRIGHT", -16, 76)
-    S.Well(box, LIST_W, HEIGHT - 116 - 76)
+    box:SetPoint("TOPLEFT", 16, -94)
+    box:SetPoint("BOTTOMRIGHT", -16, 52)
+    S.Well(box, LIST_W, HEIGHT - 94 - 52)
     local scroll = CreateFrame("ScrollFrame", nil, box, "UIPanelScrollFrameTemplate")
     scroll:SetPoint("TOPLEFT", 6, -6)
     scroll:SetPoint("BOTTOMRIGHT", -26, 6)
@@ -535,16 +500,11 @@ local function Build()
     f.noMatch:Hide()
 
     f.new = Btn(f, "Write a note", 120, "primary", function() OpenEditor(nil) end)
-    f.new:SetPoint("BOTTOMLEFT", 16, 40)
+    f.new:SetPoint("BOTTOMLEFT", 16, 16)
     f.options = Btn(f, "Options", 90, "secondary", function()
         if SettingsPanel and R.OpenSettings then f:Hide(); R:OpenSettings() end
     end)
-    f.options:SetPoint("BOTTOMRIGHT", -16, 40)
-    f.foot = Text(f, "GameFontDisableSmall")
-    f.foot:SetPoint("BOTTOMLEFT", 18, 14)
-    f.foot:SetWidth(LIST_W - 4)
-    f.foot:SetTextColor(K.stone[1] * 0.85, K.stone[2] * 0.85, K.stone[3] * 0.85)
-    f.foot:SetText(("Kept on this character only. Up to %d entries: when full, the oldest automatic entries go first; your notes are never removed for you."):format(C.MAX_ENTRIES))
+    f.options:SetPoint("BOTTOMRIGHT", -16, 16)
     -- OnShow runs once per opening, not on refreshes: the sound and the played-time request belong here.
     f:SetScript("OnShow", function()
         if R:Enabled("chronicleSound") and PlaySound and SOUNDKIT and SOUNDKIT.IG_ABILITY_PAGE_TURN then
