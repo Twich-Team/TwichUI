@@ -29,6 +29,10 @@ local DEFAULT_MODULES = {
     shareGroup = false,      -- ... over the group channel (opt-in)
     shareGuild = false,      -- ... over the guild channel (opt-in)
     groupCheck = true,       -- version hello / group check / DM probe (group channel)
+    chronicle = false,       -- Journey Chronicle: write automatic entries (opt-in; your own notes always work)
+    chronicleLevels = true,  -- ... level milestones
+    chronicleZones = true,   -- ... arriving in a new zone
+    chronicleBosses = true,  -- ... defeating an encounter
 }
 R.DEFAULT_MODULES = DEFAULT_MODULES   -- Settings.lua uses these for the panel's Defaults button
 
@@ -48,6 +52,19 @@ function R:On(event, fn)
     listeners[event] = listeners[event] or {}
     table.insert(listeners[event], fn)
     R.frame:RegisterEvent(event)
+end
+
+-- Stops calling fn for event; the event itself is unregistered once nobody listens.
+function R:Off(event, fn)
+    local list = listeners[event]
+    if not list then return end
+    for i = #list, 1, -1 do
+        if list[i] == fn then table.remove(list, i) end
+    end
+    if #list == 0 then
+        listeners[event] = nil
+        R.frame:UnregisterEvent(event)
+    end
 end
 
 R.frame = CreateFrame("Frame")
@@ -157,6 +174,9 @@ COMMANDS = {
     { name = "gear", usage = "gear", desc = "stat weights for upgrade hints", fn = function()
         if R.GearWindow then R.GearWindow:Show() else Unavailable("Gear window") end
     end },
+    { name = "chronicle", usage = "chronicle", desc = "your journey chronicle", fn = function()
+        if R.ChronicleWindow then R.ChronicleWindow:Toggle() else Unavailable("Journey Chronicle") end
+    end },
     { name = "hidden", usage = "hidden", desc = "welcome messages hidden at login", fn = function()
         if R.Quiet then R.Quiet:ShowHidden() else Unavailable("Quiet login") end
     end },
@@ -169,6 +189,8 @@ COMMANDS = {
     end },
     { name = "settings", alias = "options", hidden = true },
     { name = "config", alias = "options", hidden = true },
+    { name = "journal", alias = "chronicle", hidden = true },
+    { name = "notes", alias = "chronicle", hidden = true },
     { name = "?", alias = "help", hidden = true },
 }
 

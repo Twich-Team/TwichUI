@@ -13,6 +13,8 @@ This addon is intended to work alongside EllesmereUI.
 
 **Addon skins:** Provides EllemereUI skinning to various addons to create a cohesive look and feel. Currently supprts: Attune, Auctionator, DungeonJournal, and WhatsTraining.
 
+**Journey Chronicle:** An optional, private journal for each character (`/tui chronicle`). Write your own short notes, and if you like let it keep a few moments for you: levels, new zones and defeated encounters. Off by default, never announced in chat, and never shared or backed up with your configuration.
+
 **Configuration sharing** Provides an ecosystem to share your addon configurations with friends.
 
   * Pick the addons whose settings you want to share and save them as your addon configuration.

@@ -1,6 +1,14 @@
 # TwichUI changelog
 
 ## Unreleased
+- **Journey Chronicle** (new, optional): a quiet, private journal for each character. Open it with
+  `/tui chronicle` or Options > AddOns > TwichUI > Journey Chronicle. Write short notes of your own
+  (with the zone you're in, if you like) and edit or delete them any time. Automatic entries are off by
+  default; turn them on to keep level milestones, new zones and defeated encounters, each switchable on its
+  own. Nothing from before you turn it on is added, and nothing is announced in chat. Entries stay on that
+  character (up to 500; the oldest automatic ones go first, your notes are never removed for you) and are
+  never part of configuration sharing, setups or backups. Times show in 12-hour format by default;
+  switch to 24-hour in the same options section.
 - **Gear comparison**: the bag upgrade mark now also shows in EllesmereUI Bags (bags, reagent bag and bank), using its item overlay API.
 - **Version and group check** is on by default for new installs (hidden addon messages; players
   without TwichUI see nothing). Anyone who already has the option saved keeps their choice.

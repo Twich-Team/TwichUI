@@ -296,6 +296,33 @@ local function Build()
         true)
 
     -----------------------------------------------------------------------
+    Header("Journey Chronicle", "A quiet, private journal for this character. It isn't shared, sent or backed up with your configuration, and it never tells you what to do next.")
+    local chronicle = Toggle("chronicle", "Keep moments for me automatically",
+        "Off by default. When on, TwichUI adds a short entry to this character's Chronicle for the moments you pick below. It starts the moment you turn it on and never looks back. Nothing is announced in chat. You can always write your own notes, whatever this is set to.",
+        false, function() if R.ChronicleRecorder then R.ChronicleRecorder.Refresh() end end)
+    local function ChronicleOn() return R:Enabled("chronicle") end
+    local function ChronicleToggle(key, label, tooltip)
+        Under(Toggle(key, label, tooltip, false, function() if R.ChronicleRecorder then R.ChronicleRecorder.Refresh() end end),
+            chronicle, ChronicleOn)
+    end
+    ChronicleToggle("chronicleLevels", "Reaching a new level", "Adds an entry when you gain a level.")
+    ChronicleToggle("chronicleZones", "Arriving somewhere new", "Adds an entry when you travel into a new zone, including entering a dungeon. Not when you log in.")
+    ChronicleToggle("chronicleBosses", "Defeating an encounter", "Adds an entry when a dungeon or raid encounter you fought ends in victory. Only the encounter's name is kept.")
+    Choice("chronicleClock", "Time format",
+        "How times are shown in your Chronicle.",
+        STRING, "12",
+        function() return TwichUIDB.ui.chronicleClock == "24" and "24" or "12" end,
+        function(value)
+            TwichUIDB.ui.chronicleClock = value
+            if R.ChronicleWindow then R.ChronicleWindow:Refresh() end
+        end,
+        { { "12", "12-hour (3:45 PM)" }, { "24", "24-hour (15:45)" } })
+    Button("Journey Chronicle", "Open", function()
+        if SettingsPanel and SettingsPanel:IsShown() then HideUIPanel(SettingsPanel) end
+        if R.ChronicleWindow then R.ChronicleWindow:Show() end
+    end, "Opens your Chronicle (same as typing /tui chronicle).")
+
+    -----------------------------------------------------------------------
     Header("Configuration sharing", "Share the settings of the addons you choose with friends, and apply theirs. You always choose what to apply, and Undo puts your own settings back.")
     local sharing = Toggle("setupSharing", "Configuration sharing",
         "Save the settings of the addons you choose as an addon configuration, send it to friends in game, and apply configurations friends send you. Type /tui share.",
