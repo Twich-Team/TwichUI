@@ -308,6 +308,7 @@ local function Build()
     ChronicleToggle("chronicleLevels", "Reaching a new level", "Adds an entry when you gain a level.")
     ChronicleToggle("chronicleZones", "Arriving somewhere new", "Adds an entry when you travel into a new zone, including entering a dungeon. Not when you log in.")
     ChronicleToggle("chronicleBosses", "Defeating an encounter", "Adds an entry when a dungeon or raid encounter you fought ends in victory. Only the encounter's name is kept.")
+    ChronicleToggle("chronicleDeaths", "Falling in battle", "Adds an entry when your character dies, with the zone you were in. Off until you choose it.")
     Choice("chronicleClock", "Time format",
         "How times are shown in your Chronicle.",
         STRING, "12",

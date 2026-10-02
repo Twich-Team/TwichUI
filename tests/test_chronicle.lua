@@ -59,6 +59,15 @@ assert(C.Entries()[C.Count()].kind ~= "boss")
 a.FireEvent("ENCOUNTER_END", 1, "Edwin VanCleef", 1, 5, 1, {})
 local last = C.Entries()[C.Count()]
 assert(last.title == "Defeated Edwin VanCleef" and last.zone == "Deadmines" and not last.note)
+-- deaths: off until chosen, then recorded with the zone
+local before = C.Count()
+a.FireEvent("PLAYER_DEAD"); assert(C.Count() == before, "deaths are off by default")
+a.TwichUIDB.modules.chronicleDeaths = true; Rec.Refresh()
+a.ZONE = "Deadmines"; a.FireEvent("PLAYER_DEAD")
+local died = C.Entries()[C.Count()]
+assert(died.kind == "death" and died.title == "Fell in Deadmines" and died.zone == "Deadmines")
+a.TwichUIDB.modules.chronicleDeaths = false; Rec.Refresh()
+a.FireEvent("PLAYER_DEAD"); assert(C.Entries()[C.Count()] == died, "switching it off stops it")
 -- login isn't arriving
 a.ZONE = "Stormwind City"; a.FireEvent("PLAYER_ENTERING_WORLD", true, false)
 local c0 = C.Count(); a.FireEvent("ZONE_CHANGED_NEW_AREA"); assert(C.Count() == c0)

@@ -19,7 +19,7 @@ C.MAX_TITLE = 120
 C.DUPLICATE_SECONDS = 60  -- the same automatic entry twice in this long is ignored
 
 -- "note" is written by the player. The rest are written by TwichUI.
-C.KINDS = { note = true, level = true, zone = true, boss = true, start = true }
+C.KINDS = { note = true, level = true, zone = true, boss = true, death = true, start = true }
 
 local function Trim(text, limit)
     if type(text) ~= "string" then return nil end

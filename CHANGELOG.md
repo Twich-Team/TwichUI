@@ -1,6 +1,8 @@
 # TwichUI changelog
 
 ## Unreleased
+- **Journey Chronicle** icons: each entry shows a small icon for what happened (level, new zone, defeated encounter, fall, your own note). New optional entry, **Falling in battle** (off by default): records when your character dies and where.
+- **Journey Chronicle** look: warm umber and bronze frame with a title band, quieter byline and status line (details in a tooltip), ledger-style entries with a small marker for automatic entries versus your own notes, a bronze "Write a note" button, a quieter Options button, and Edit / Delete that appear when you point at an entry.
 - **Journey Chronicle** (new, optional): a quiet, private journal for each character. Open it with
   `/tui chronicle` or Options > AddOns > TwichUI > Journey Chronicle. Write short notes of your own
   (with the zone you're in, if you like) and edit or delete them any time. Automatic entries are off by

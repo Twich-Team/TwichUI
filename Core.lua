@@ -33,6 +33,7 @@ local DEFAULT_MODULES = {
     chronicleLevels = true,  -- ... level milestones
     chronicleZones = true,   -- ... arriving in a new zone
     chronicleBosses = true,  -- ... defeating an encounter
+    chronicleDeaths = false, -- ... dying (off until chosen, even with the rest on)
 }
 R.DEFAULT_MODULES = DEFAULT_MODULES   -- Settings.lua uses these for the panel's Defaults button
 

@@ -49,6 +49,12 @@ local function OnEncounterEnd(_, name, _, _, success)
     if C.Add("boss", { title = "Defeated " .. name, zone = C.CurrentZone() }) then Changed() end
 end
 
+local function OnDeath()
+    if not On("chronicleDeaths") then return end
+    local zone = C.CurrentZone()
+    if C.Add("death", { title = zone and ("Fell in " .. zone) or "Fell in battle", zone = zone }) then Changed() end
+end
+
 local function Want(event, handler, wanted)
     if wanted and not active[event] then
         active[event] = handler
@@ -68,6 +74,7 @@ function Rec.Refresh()
     Want("ZONE_CHANGED_NEW_AREA", OnZone, zones)
     Want("PLAYER_ENTERING_WORLD", OnEnteringWorld, zones)
     Want("ENCOUNTER_END", OnEncounterEnd, master and R:Enabled("chronicleBosses"))
+    Want("PLAYER_DEAD", OnDeath, master and R:Enabled("chronicleDeaths"))
 
     -- Say in the journal when tracking started (and when it started again).
     local rec = C.Record()

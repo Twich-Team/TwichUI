@@ -21,7 +21,9 @@ c.StaticPopupDialogs = {}; c.StaticPopup_Show = function(k) c.popup = k end
 c.CANCEL = "Cancel"; c.Settings = nil
 c.GetRealZoneText = function() return "Elwynn Forest" end
 c.TwichUIDB = {}
-local chunk = assert(loadfile(ROOT .. "chronicle/Window.lua")); setfenv(chunk, c); chunk("!!!TwichUI", {})
+for _, file in ipairs({"chronicle/Style.lua", "chronicle/Window.lua"}) do
+local chunk = assert(loadfile(ROOT .. file)); setfenv(chunk, c); chunk("!!!TwichUI", {})
+end
 c.LOADED["!!!TwichUI"] = true; c.FireEvent("ADDON_LOADED", "!!!TwichUI")
 local W, C = c.TwichUI.ChronicleWindow, c.TwichUI.Chronicle
 W:Toggle()                         -- empty state
