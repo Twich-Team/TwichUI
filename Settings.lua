@@ -156,7 +156,7 @@ local function Build()
         "Adds a short line to an item's tooltip when it looks like an upgrade for your class and main talent tree, such as \"Likely upgrade for Fury\". Hold Shift (your compare-items key) to see why.\n\n\"Use:\" and \"Chance on hit:\" effects aren't weighed.",
         false)
     local bags = Toggle("gearBagIcons", "Mark upgrades in my bags",
-        "A small mark in the corner of bag slots holding gear the tooltip would call an upgrade, fainter for possible upgrades. Works with Blizzard's bags; bag addons draw their own slots.",
+        "A small mark in the corner of bag slots holding gear the tooltip would call an upgrade, fainter for possible upgrades. Works with Blizzard's bags and EllesmereUI Bags.",
         false, function() if R.GearBags then R.GearBags.Refresh() end end)
 
     local P, D, B = R.GearPrefs, R.GearData, R.GearBags

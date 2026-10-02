@@ -100,6 +100,14 @@ function bagFrame:UpdateItems() end
 c.ContainerFrameContainer = { ContainerFrames = { bagFrame } }
 c.hooksecurefunc = function(t, key, fn) local orig = t[key]; t[key] = function(...) orig(...); return fn(...) end end
 
+-- EllesmereUI Bags: only its overlay registration API, as a stand-in.
+local ellePainters, elleRefreshes = {}, 0
+c.EUI_Bags = {
+  RegisterItemOverlayIcon = function(name, fn) ellePainters[name] = fn end,
+  IsVisible = function() return true end,
+  RefreshInventory = function() elleRefreshes = elleRefreshes + 1 end,
+}
+
 for _, f in ipairs({ "gear/Weights.lua", "gear/Evaluate.lua", "gear/Prefs.lua", "gear/Data.lua",
   "gear/Hints.lua", "gear/Tooltip.lua", "gear/Bags.lua" }) do
   local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
@@ -284,6 +292,36 @@ Changed("PLAYER_EQUIPMENT_CHANGED")
 c.TwichUIDB.modules.gearBagIcons = false
 R.GearBags.Refresh(); FlushTimers()
 assert(not buttons[1].TwichUIUpgradeIcon.shown, "turning bag icons off clears them")
+
+-- EllesmereUI Bags: the same marks through its overlay painter, kept off the button.
+local paint = assert(ellePainters.TwichUI, "painter registered with EllesmereUI Bags")
+local elleButton = { CreateTexture = function() return Texture() end }
+local function Mark(data) paint(elleButton, data) end
+Mark({ bag = 0, slot = 1, itemLink = "chest:better" })
+assert(not elleButton.TwichUIUpgradeIcon, "no state written to the Ellesmere button")
+c.TwichUIDB.modules.gearBagIcons = true
+local before = elleRefreshes
+R.GearBags.Refresh(); FlushTimers()
+assert(elleRefreshes == before + 1, "Ellesmere bags asked to repaint")
+local created
+local shown = 0
+local counting = { CreateTexture = function() local t = Texture(); shown = shown + 1; created = t; return t end }
+paint(counting, { bag = 0, slot = 1, itemLink = "chest:better" })
+assert(created.shown and created.alpha == 1, "upgrade marked on Ellesmere slot")
+paint(counting, { bag = 0, slot = 1, itemLink = "chest:better" })
+assert(shown == 1, "one icon per button")
+paint(counting, { bag = 0, slot = 4, itemLink = "chest:slight" })
+assert(created.shown and created.alpha == 0.6, "possible upgrade is faint")
+paint(counting, { bag = 0, slot = 2, itemLink = "chest:caster" })
+assert(not created.shown, "reused button for a non-upgrade clears the mark")
+paint(counting, { bag = 0, slot = 1, itemLink = "chest:better" })
+paint(counting, { bag = 0, slot = 0 })
+assert(not created.shown, "empty slot clears the mark")
+paint(counting, { bag = 0, slot = 1, itemLink = "chest:better" })
+c.TwichUIDB.modules.gearBagIcons = false
+paint(counting, { bag = 0, slot = 1, itemLink = "chest:better" })
+assert(not created.shown, "feature off clears the mark")
+c.TwichUIDB.modules.gearBagIcons = false
 
 -- Equipment changes are picked up.
 modifier = true

@@ -1,6 +1,7 @@
 # TwichUI changelog
 
 ## Unreleased
+- **Gear comparison**: the bag upgrade mark now also shows in EllesmereUI Bags (bags, reagent bag and bank), using its item overlay API.
 - **Version and group check** is on by default for new installs (hidden addon messages; players
   without TwichUI see nothing). Anyone who already has the option saved keeps their choice.
 - **Commands**: `/tui` is a short form of `/twichui`. `/tui` alone (or `/tui help`) now lists
