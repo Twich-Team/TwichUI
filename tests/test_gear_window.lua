@@ -40,6 +40,12 @@ P.SetTreeChoice(8)                        -- Fire
 P.SetWeight("MAGE", 8, "SPI", 0.5)
 GW:Show("weights")
 P.ResetWeights("MAGE", 8)
+P.SetUsesPriority("MAGE", 8, true)        -- stat priority page
+P.SetPriority("MAGE", 8, { "SP", "SPELLHIT", "INT" })
+GW:Show("weights")
+P.SetPriority("MAGE", 8, nil)             -- empty list
+GW:Show("weights")
+P.SetUsesPriority("MAGE", 8, false)
 GW:Show("behaviour")
 for _, key in ipairs({ "cautious", "eager", "balanced" }) do P.Set("strictness", key) end
 for _, key in ipairs({ "alt", "ctrl", "always", "compare" }) do P.Set("reveal", key) end

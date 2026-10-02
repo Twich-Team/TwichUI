@@ -1,53 +1,39 @@
 # TwichUI
 
-A small companion addon for **WoW Forever** (and retail) that fills the gaps
-around an EllesmereUI setup, and makes it easy to share your addon setup with
-friends.
+A carefully crafted UI enhancement addon for **WoW Forever** that makes the game
+interface feel a little cleaner, more cohesive, and more considered, without 
+making it feel modernized beyond recognition.
+
+Its purpose is to refine the experience, not replace it. Small, thoughtful touches
+should help players read the game and make their own decisions while preserving
+the atmosphere, discovery, and sense of place that make Forever compelling.
+
+This addon is intended to work alongside EllesmereUI.
 
 ## Features
 
-**Fonts and sounds.** Alegreya, Alegreya Sans (and Small Caps), Barlow Semi
-Condensed and Cinzel, plus a set of bell-themed alert sounds (group death
-tolls, GTFO alerts). They appear in the font and sound lists of EllesmereUI,
-BigWigs and any other addon that uses LibSharedMedia. Nothing changes until you
-pick them.
+**Fonts and sounds.** Adds various thematic fonts to the game, allowing them to be
+utilized for interface customization.
 
-**Quiet login.** Hides the "v1.2 loaded, type /foo" lines addons print at login
-and reload. Errors and warnings still show. `/twichui hidden` lists what was hidden.
+**Quiet login.** Attempts to hide all addon welcome messages when logging in to 
+prevent being brought out of immersion by being inundated with unnecessary information.
 
 **Upgrade hints.** When something you could wear looks better than what you
 have, its tooltip gets one quiet line such as "Likely upgrade for Fury". Hold
 Shift (your compare-items key) to see why: what it's compared with, the stat
 changes that mattered most and which weights were used. Items that aren't
-upgrades, or that you can't use, get nothing unless you ask. Optionally, upgrades
-in your bags get a small mark. `/twichui gear` picks the talent tree, edits stat
-weights and sets how hints behave. See
+upgrades, or that you can't use, get nothing unless you ask. See
 [how upgrade hints work](#how-upgrade-hints-work).
 
-**Auctionator skin.** Gives Auctionator's tabs, lists, buttons, item icons and
-bag headers the EllesmereUI look (needs EllesmereUI's Auction House skin on).
+**Addon skins.** Provides EllemereUI skinning to various addons to create a cohesive look and feel. Currently supprts: Attune, Auctionator, DungeonJournal, and WhatsTraining.
 
-**WhatsTraining skin.** Gives WhatsTraining's floating window (`/wt`) the
-EllesmereUI look (needs EllesmereUI's third-party skins on).
-
-**Dungeon Journal skin.** Gives the Forever Dungeon Journal window (`/fj`) the
-EllesmereUI look (needs EllesmereUI's third-party skins on).
-
-**Attune skin.** Gives the Attune window (`/attune`) and its quest panels the
-EllesmereUI look (needs EllesmereUI's third-party skins on).
-
-**Configuration sharing** (`/pack`)
+**Configuration sharing.** Provides an ecosystem to share your addon configurations with friends.
 
 * Pick the addons whose settings you want to share and save them as your addon configuration.
 * Send it to a friend in game. They get a prompt, it downloads with a progress
 bar, and they choose what to apply. Their own settings are backed up first; Undo puts them back.
 * Later sends only include addons you changed.
 * Your recommended addon list travels with it, with a download link for each addon they're missing.
-
-**Group check** (`/twichui check`, Group tab). Everyone's TwichUI version and
-the recommended addons they're missing, and a heads-up when someone in your
-group has a newer version. Off by default; everyone who wants to take part
-turns it on.
 
 **Restore points.** Save your own settings before you tinker, go back any time.
 
@@ -68,34 +54,22 @@ active talent group, unless you pick one in `/twichui gear`. Forever uses
 classic-style talent trees, not retail specializations. Before your first talent
 point, or when your points are split evenly, the class's usual levelling tree is
 used, and the tooltip says so.
-* **Each stat is weighed** for that tree. You can change the weights in
-`/twichui gear`; the defaults are in `gear/Weights.lua`. Rating stats (hit, crit,
-haste, defense...) are converted to percentages at your level with the game's own
-conversion.
+* **Each stat is weighed** for that tree, one of two ways, chosen per tree in
+`/twichui gear`:
+  * **Stat weights** (the default): a number per stat. You can change them; Rating stats (hit, crit, haste, defense...)
+  are converted to percentages at your level with the game's own conversion.
+  * **Stat priority:** you rank the stats your guide lists, most important first.
+  Each counts 80% as much as the one above it, and stats you leave out count
+  nothing. A point of each stat is scaled by roughly what it costs on an item, so
+  "Strength > Attack Power" compares a point of strength with the two attack power
+  an item would carry instead. Ratings count per point as printed. Weapon damage
+  and armor keep the tree's weights.
 * **What it's compared with** is what it would replace: the weaker of your two
 rings or trinkets, both hands for a two-hander, or your off hand for a one-hander
 if you dual wield. Off-hand items aren't compared while you wield a two-hander.
 * **Items you can't use get no hint.** That covers any item whose tooltip shows
 red requirement text (class, armor or weapon skill). An item held back only by
 your level is still compared and says so: "Likely upgrade at level 32".
-
-In `/twichui` > Gear you can turn **Upgrade hints in item tooltips** (on by
-default) and **Mark upgrades in my bags** (off by default) on or off.
-`/twichui gear`, or the **Upgrade hint options** button there, opens the options
-window:
-
-* **Weights**
-  * **Weigh gear for:** Automatic, which follows your talent points, or a tree
-  you pick. The choice is kept per character.
-  * **Stat weights:** each tree's weights, which you can change. Your changes
-  show in gold; **Reset these weights** puts the defaults back.
-* **Behaviour**
-  * Show possible upgrades at a glance, or only likely ones.
-  * Hint at gear for higher levels.
-  * **How big a gain counts:** Cautious, Balanced or Eager.
-  * **Show the reasoning:** hold Shift, Alt or Ctrl, or always.
-  * **Bag icons:** gilded arrow, green arrow or badge. The icons use the game's
-  own art and show in Blizzard's bags, separate or combined.
 
 Limitations: it's a rough estimate from item stats. It doesn't simulate
 damage, healing or survival, and it doesn't produce a best-in-slot list.
@@ -106,20 +80,3 @@ is at most a "possible" upgrade.
 * Resistances, weapon speed, set bonuses, enchants, sockets and hit caps aren't
 considered.
 * The weights are hand-set starting points, not simulation results.
-
-## Commands
-
-`/twichui` options · `/twichui help` all commands · `/pack` sharing window ·
-`/pack test` send to yourself · `/pack status` sharing diagnostics ·
-`/twichui check` group check · `/twichui restore` restore points ·
-`/twichui gear` upgrade hint options ·
-`/twichui hidden` hidden login messages · `/twichui version` your version ·
-`/aeskin` Auctionator skin status
-
-## Good to know
-
-* The folder is named `!!!TwichUI` on purpose: it must load before other addons.
-* Sending needs both players online and outside boss fights, Mythic+ and PvP matches
-(the game blocks addon messages there).
-* Keybinds and game options aren't addon settings and aren't shared.
-

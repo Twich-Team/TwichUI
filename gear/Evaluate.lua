@@ -149,6 +149,7 @@ end
 
 -- Weighted value of a set of stats: the total, each family's share, the
 -- values used, and rating stats that couldn't be converted (not counted).
+-- Rating weights are per 1% unless weights.perRatingPoint (stat priority).
 function E.Score(stats, weights, ratingScale)
     local total, parts, values, uncounted = 0, {}, {}, nil
     for family, value in pairs(stats) do values[family] = value end
@@ -159,7 +160,7 @@ function E.Score(stats, weights, ratingScale)
     end
     for family, value in pairs(values) do
         local weight = weights[family] or 0
-        if weight ~= 0 and W.RATINGS[family] then
+        if weight ~= 0 and W.RATINGS[family] and not weights.perRatingPoint then
             local perPoint = ratingScale and ratingScale[family]
             if perPoint then
                 weight = weight * perPoint

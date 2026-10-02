@@ -33,13 +33,20 @@ local VERDICT = {
     twoHander = { text = "Not compared while you wield a two-handed weapon", color = QUIET },
 }
 
-local BASIS = {
-    auto       = "Rough estimate, weighed for %s",
-    chosen     = "Rough estimate, weighed for %s (your choice)",
-    noPoints   = "Rough estimate, weighed for %s until you spend talent points",
-    split      = "Rough estimate, weighed for %s while your talents are split evenly",
-    unreadable = "Rough estimate, weighed for %s (your talents couldn't be read)",
+-- "Rough estimate, weighed for Fury" or "Rough estimate from your Fury stat
+-- priority", then why that tree.
+local BASIS_REASON = {
+    auto       = "",
+    chosen     = " (your choice)",
+    noPoints   = " until you spend talent points",
+    split      = " while your talents are split evenly",
+    unreadable = " (your talents couldn't be read)",
 }
+
+local function BasisText(basis)
+    local text = basis.priority and "Rough estimate from your %s stat priority" or "Rough estimate, weighed for %s"
+    return text:format(basis.label) .. (BASIS_REASON[basis.reason] or "")
+end
 
 local comparisonTooltips = {}
 
@@ -89,7 +96,7 @@ local function Present(judged)
         if more > 0 then
             detail[#detail + 1] = Line(more == 1 and "and 1 smaller change" or ("and %d smaller changes"):format(more), QUIET, false, INDENT)
         end
-        detail[#detail + 1] = Line(BASIS[basis.reason]:format(basis.label), QUIET, true)
+        detail[#detail + 1] = Line(BasisText(basis), QUIET, true)
         if judged.level then
             detail[#detail + 1] = Line(("You can wear it from level %d"):format(judged.level), QUIET, true)
         end

@@ -116,13 +116,22 @@ local function Leading(trees)
 end
 
 -- A tree's default weights with your changes from the upgrade hints window.
-local function Weights(classFile, def)
+function D.BaseWeights(classFile, def)
     local custom = P.CustomWeights(classFile, def.skillLine)
     if not custom then return def.weights end
     local merged = {}
     for stat, weight in pairs(def.weights) do merged[stat] = weight end
     for stat, weight in pairs(custom) do merged[stat] = weight end
     return merged
+end
+
+-- The weights a tree is valued by: from your stat priority if the tree uses
+-- one (and it lists any stats), else its weights. Second result: priority?
+local function Weights(classFile, def)
+    local base = D.BaseWeights(classFile, def)
+    local list = P.UsesPriority(classFile, def.skillLine) and P.Priority(classFile, def.skillLine)
+    if list then return W.FromPriority(list, base), true end
+    return base, false
 end
 
 -- Which weights to use, and why, for the tooltip to explain: the tree you
@@ -143,8 +152,10 @@ local function Basis(classFile, classInfo)
             reason = not readable and "unreadable" or split and "split" or "noPoints"
         end
     end
+    local weights, priority = Weights(classFile, tree.def)
     return {
-        weights = Weights(classFile, tree.def),
+        weights = weights,
+        priority = priority,
         skillLine = tree.skillLine,
         label = tree.name,
         reason = reason,

@@ -36,6 +36,75 @@ W.EDITOR = {
     { "Weapon damage", { "MAINHAND_DPS", "OFFHAND_DPS", "RANGED_DPS" } },
 }
 
+---------------------------------------------------------------------------
+-- Stat priority: the other way to value stats, chosen per tree in
+-- /twichui gear. You rank the stats a guide lists, most important first.
+-- Each counts PRIORITY_STEP as much as the one above it, and stats you leave
+-- out count nothing. Weapon damage, armor, health and mana can't be ranked
+-- and keep the tree's weights.
+---------------------------------------------------------------------------
+W.PRIORITY_STEP = 0.8
+
+-- Roughly what one point of each rankable stat costs on an item, next to a
+-- point of a main stat (classic and TBC era itemization, approximate). It
+-- lets a ranking compare stats as items carry them: "Strength > Attack
+-- Power" means a point of strength beats the two attack power an item would
+-- have in its place. Ratings count per point as printed on the item.
+W.ITEM_POINT = {
+    STR = 1, AGI = 1, STA = 1, INT = 1, SPI = 1,
+    AP = 0.5, RAP = 0.4, FERALAP = 0.5,
+    HIT = 1, CRIT = 1, HASTE = 1, EXPERTISE = 1, ARMORPEN = 1,
+    SP = 0.85, HEAL = 0.45, SPELLHIT = 1, SPELLCRIT = 1, SPELLPEN = 0.8, MP5 = 2.5,
+    DEFENSE = 1, DODGE = 1, PARRY = 1, BLOCK = 1, BLOCKVALUE = 0.65,
+}
+
+-- Weights from a ranked list of stats. `base` (the tree's weights) supplies
+-- the stats that can't be ranked.
+function W.FromPriority(list, base)
+    local weights = { perRatingPoint = true }
+    for stat, weight in pairs(base) do
+        if not W.ITEM_POINT[stat] and stat ~= "perRatingPoint" then weights[stat] = weight end
+    end
+    local value = 1
+    for _, stat in ipairs(list) do
+        local cost = W.ITEM_POINT[stat]
+        if cost and not weights[stat] then
+            weights[stat] = value * cost
+            value = value * W.PRIORITY_STEP
+        end
+    end
+    return weights
+end
+
+-- A starting ranking from a tree's weights: the stats worth most for what
+-- they cost on an item, down to a seventh of the best, at most eight.
+-- ratingScale converts rating weights (per 1%) to per rating point; ratings
+-- it can't convert are left out.
+function W.PriorityFromWeights(weights, ratingScale)
+    local ranked = {}
+    for g, group in ipairs(W.EDITOR) do
+        for s, stat in ipairs(group[2]) do
+            local cost, weight = W.ITEM_POINT[stat], weights[stat] or 0
+            if cost and weight > 0 and W.RATINGS[stat] then
+                weight = weight * (ratingScale and ratingScale[stat] or 0)
+            end
+            if cost and weight > 0 then
+                ranked[#ranked + 1] = { stat = stat, value = weight / cost, order = g * 100 + s }
+            end
+        end
+    end
+    table.sort(ranked, function(a, b)
+        if a.value ~= b.value then return a.value > b.value end
+        return a.order < b.order
+    end)
+    local list = {}
+    for _, entry in ipairs(ranked) do
+        if #list == 8 or entry.value < ranked[1].value / 7 then break end
+        list[#list + 1] = entry.stat
+    end
+    return list
+end
+
 local function With(base, changes)
     local t = {}
     for k, v in pairs(base) do t[k] = v end

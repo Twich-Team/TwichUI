@@ -1,12 +1,18 @@
 # TwichUI changelog
 
+## 3.0.4
+- **gear**: now supports either stat weights or stat priority gear analysis methods.
+- **gear**: options panel is not fully skinned.
+- **Auctionator skin**: fixed an issue that caused Auctionator's tabs on the Auction House interface to overlap.
+
 ## 3.0.3
 - New **upgrade hints**: when something you could wear looks better for your class and main
   talent tree, its tooltip gets a quiet "Likely upgrade" line. Hold Shift to see why. Gear
   held back only by your level is compared too ("Likely upgrade at level 32").
   Toggles: "Upgrade hints in item tooltips" and "Mark upgrades in my bags" (off by default)
-  in `/twichui`. `/twichui gear` picks the talent tree, edits stat weights and sets how
-  hints behave (glance, strictness, reveal key, bag icon style).
+  in `/twichui`. `/twichui gear` picks the talent tree, values stats by a ranked stat
+  priority (as guides list them) or by editable stat weights, and sets how hints behave
+  (glance, strictness, reveal key, bag icon style).
 - New **Attune skin**: the Attune window (`/attune`) and its quest panels get the EllesmereUI look.
   Toggle: "Skin Attune" in `/twichui`.
 - New **Dungeon Journal skin**: the Forever Dungeon Journal window (`/fj`) gets the EllesmereUI look.

@@ -301,10 +301,30 @@ local function LibTabs()
     return lib, lib and lib.internalState and lib.internalState.Tabs
 end
 
+-- LibAHTab chains its tabs with a negative x offset (-14 outside Retail) to
+-- tuck Blizzard's slanted tab art under its neighbour. The flat skinned plates
+-- would overlap, so re-chain them edge to edge once they are skinned.
+local TAB_GAP = 1
+local tabsSpaced = setmetatable({}, { __mode = "k" })
+local function SpaceLibTabs(tabs)
+    for _, tab in ipairs(tabs) do
+        if not tabsSpaced[tab] then
+            local point, rel, relPoint = tab:GetPoint(1)
+            if point and rel then
+                tabsSpaced[tab] = true
+                tab:ClearAllPoints()
+                tab:SetPoint(point, rel, relPoint, TAB_GAP, 0)
+                tab:SetHitRectInsets(0, 0, 0, 0)
+            end
+        end
+    end
+end
+
 local function SyncLibTabSelection()
     if not S then return end
     local _, tabs = LibTabs()
     if not tabs then return end
+    SpaceLibTabs(tabs)
     for _, tab in ipairs(tabs) do
         Call("Tab", tab)
         local shown = tab.frameRef and tab.frameRef:IsShown() or false

@@ -231,6 +231,41 @@ assert(c.TwichUIDB.gear.weights.WARRIOR == nil, "reset leaves nothing behind")
 assert(Has(Hover("chest:caster"), "Probably not an upgrade"), "defaults back")
 modifier = false
 
+-- Stat priority instead of weights: ranked stats, each 80% of the one above,
+-- scaled by what a point costs on an item; unranked stats count nothing.
+local W = R.GearWeights
+local fromList = W.FromPriority({ "STR", "AP", "HIT", "STR" }, W.CLASSES.WARRIOR.trees[2].weights)
+assert(fromList.STR == 1 and math.abs(fromList.AP - 0.4) < 1e-9 and math.abs(fromList.HIT - 0.64) < 1e-9, "ranks to weights")
+assert(fromList.AGI == nil and fromList.STA == nil, "unranked stats count nothing")
+assert(fromList.MAINHAND_DPS == 7 and fromList.ARMOR == 0.005 and fromList.perRatingPoint, "weapon damage and armor keep the tree's weights")
+modifier = true
+P.SetPriority("WARRIOR", 256, { "INT", "STR" })
+assert(Has(Hover("chest:caster"), "Probably not an upgrade"), "a priority list does nothing until the tree uses it")
+P.SetUsesPriority("WARRIOR", 256, true)
+out = Hover("chest:caster")
+assert(Has(out, "Likely upgrade for Fury") and Has(out, "Rough estimate from your Fury stat priority"), "priority used: " .. tostring(out[2]))
+assert(Has(out, "Not weighed for Fury: Stamina"), "stats left off the list are named")
+P.SetPriority("WARRIOR", 256, { "HIT", "STR" })
+c.GetCombatRatingBonusForCombatRatingValue = nil
+Changed("PLAYER_LEVEL_UP")
+out = Hover("chest:hit")
+assert(Has(out, "+20 Hit Rating") and not Has(out, "Not counted"), "ratings count per point in a priority, no conversion needed")
+c.GetCombatRatingBonusForCombatRatingValue = function(_, value) return value / 10 end
+Changed("PLAYER_LEVEL_UP")
+P.SetUsesPriority("WARRIOR", 256, false)
+assert(Has(Hover("chest:hit"), "weighed for Fury"), "back to weights")
+assert(c.TwichUIDB.gear.priority.WARRIOR[256][1] == "HIT", "the list is kept for next time")
+P.SetPriority("WARRIOR", 256, nil)
+assert(c.TwichUIDB.gear.priority.WARRIOR == nil and c.TwichUIDB.gear.usePriority.WARRIOR == nil, "nothing left behind")
+local scale = {}
+for stat in pairs(W.RATINGS) do scale[stat] = 0.1 end
+local start = W.PriorityFromWeights(W.CLASSES.WARRIOR.trees[2].weights, scale)
+assert(start[1] == "HIT" and start[2] == "CRIT" and start[3] == "STR" and start[4] == "AP" and #start == 8, "starting list: " .. table.concat(start, ","))
+start = W.PriorityFromWeights(W.CLASSES.WARRIOR.trees[2].weights, nil)
+assert(table.concat(start, ",") == "STR,AP,AGI,STA", "without rating conversion, ratings are left out: " .. table.concat(start, ","))
+for stat in pairs(W.ITEM_POINT) do assert(W.RATINGS[stat] or not stat:find("RATING"), stat) end
+modifier = false
+
 -- Bag icons: off by default; on, upgrades are marked (fainter for possible).
 bagFrame:UpdateItems()
 assert(not buttons[1].TwichUIUpgradeIcon, "bag icons off: nothing drawn")
@@ -291,7 +326,7 @@ Changed("PLAYER_LEVEL_UP")
 assert(#Hover("chest:better") == 0, "unknown class: nothing")
 
 -- Evaluation details.
-local E, W = R.GearEval, R.GearWeights
+local E = R.GearEval
 local stats = E.Normalize({ RESISTANCE0_NAME = 300, Armor = 300, ITEM_MOD_STRENGTH = 4 }, 5)
 assert(stats.ARMOR == 300 and stats.STR == 4, "a stat reported twice counts once; keys without _SHORT work")
 local healer = W.CLASSES.PRIEST.trees[2].weights

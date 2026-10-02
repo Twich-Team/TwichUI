@@ -1,6 +1,7 @@
 -- TwichUI: upgrade hints, preferences
 -- What you've chosen in the upgrade hints window (/twichui gear): which
--- talent tree to weigh for, your own stat weights, and how hints behave.
+-- talent tree to weigh for, how each tree values stats (your stat weights,
+-- or your ranked stat priority), and how hints behave.
 -- Kept account-wide in TwichUIDB.gear; the talent tree choice is per
 -- character. The on/off switches live with TwichUI's other toggles
 -- (TwichUIDB.modules.gearHints and gearBagIcons).
@@ -33,6 +34,8 @@ local function DB()
         if db[k] == nil then db[k] = v end
     end
     db.weights = db.weights or {}   -- [classFile][skillLine][stat] = weight
+    db.priority = db.priority or {} -- [classFile][skillLine] = { stat, ... } most important first
+    db.usePriority = db.usePriority or {} -- [classFile][skillLine] = true: value by priority
     db.trees = db.trees or {}       -- [character] = skillLine of the chosen tree
     return db
 end
@@ -94,5 +97,35 @@ function P.ResetWeights(classFile, skillLine)
         byClass[skillLine] = nil
         if not next(byClass) then DB().weights[classFile] = nil end
     end
+    P.Changed()
+end
+
+-- [classFile][skillLine] in one of the tables above; nil removes the entry
+-- (and the class's table once it's empty).
+local function SetTreeValue(all, classFile, skillLine, value)
+    local byClass = all[classFile] or {}
+    byClass[skillLine] = value
+    all[classFile] = next(byClass) and byClass or nil
+end
+
+-- Your ranked stats for a class's tree, most important first, or nil.
+function P.Priority(classFile, skillLine)
+    local byClass = DB().priority[classFile]
+    return byClass and byClass[skillLine]
+end
+
+function P.SetPriority(classFile, skillLine, list)
+    SetTreeValue(DB().priority, classFile, skillLine, list and #list > 0 and list or nil)
+    P.Changed()
+end
+
+-- Whether a tree values stats by your priority (true) or by its weights.
+function P.UsesPriority(classFile, skillLine)
+    local byClass = DB().usePriority[classFile]
+    return byClass and byClass[skillLine] or false
+end
+
+function P.SetUsesPriority(classFile, skillLine, on)
+    SetTreeValue(DB().usePriority, classFile, skillLine, on or nil)
     P.Changed()
 end
