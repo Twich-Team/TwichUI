@@ -1,5 +1,8 @@
 # TwichUI changelog
 
+## 3.0.5
+- Updated toc to reference only Forever build and match version of addon appropriately.
+
 ## 3.0.4
 - **gear**: now supports either stat weights or stat priority gear analysis methods.
 - **gear**: options panel is not fully skinned.
