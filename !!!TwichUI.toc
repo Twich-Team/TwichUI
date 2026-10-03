@@ -2,7 +2,7 @@
 ## Title: |cffC9A24ATwich|rUI
 ## Notes: A carefully crafted UI enhancement addon for WoW Forever that makes the game interface feel a little cleaner, more cohesive, and more considered, without making it feel modernized beyond recognition.
 ## Author: twichie
-## Version: 3.0.6
+## Version: 3.0.7
 ## SavedVariables: TwichUIDB, TwichUIBackupDB, TwichUIShareDB, TwichUIRestoreDB, TwichUIChronicleDB
 ## IconTexture: Interface\AddOns\!!!TwichUI\media\icon
 ## AddonCompartmentFunc: TwichUI_OnCompartmentClick
