@@ -1,6 +1,7 @@
 # TwichUI changelog
 
 ## Unreleased
+- **Zone arrival** (new, on by default): arriving in a new zone shows its name as a short title card near the top of the screen, a thin bronze rule with the zone in parchment and the smaller place you're in beneath it. It settles in, stays a moment and fades away, in place of the game's own zone text. Nothing shows when you log in or reload, or while on a flight path (only where you land), and quick crossings show only the last place. Options in the new **Zone arrival** section: **Also for smaller places** (on by default; a quieter card when you walk into a town or other subzone) and **Reduced motion** (fade only); with **Show advanced options** on, **How long the card stays** (Brief, Standard, Long or Longer). No sound, and nothing is sent to anyone. If another addon also replaces the zone text, you may see both.
 - **Backups**: export and import. **Export** on a backup shows it as a text string you can copy (Ctrl+A, Ctrl+C) and paste into a text file to keep or move to another computer; WoW can't save files itself. **Import backup** takes such a string, checks all of it, and shows a preview (name, date, addons, size, addons not installed here) before **Import as backup** adds it to your Backups list. Importing never changes your current settings; only Restore does, with Undo as usual. Strings that are cut off, damaged, from another export format, over 8 MB, or already imported are refused and nothing is saved. Imports are limited to 20 backups and 32 MB in total. Nothing is sent to anyone.
 
 ## 3.0.7

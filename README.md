@@ -13,6 +13,8 @@ This addon is intended to work alongside EllesmereUI.
 
 **Addon skins:** Provides EllemereUI skinning to various addons to create a cohesive look and feel. Currently supprts: Attune, Auctionator, DungeonJournal, and WhatsTraining.
 
+**Zone arrival:** Arriving somewhere new shows the zone's name as a brief, quiet title card in place of the game's zone text: not at login, not while on a flight path, and only for the last place when crossing zones quickly. Smaller places within a zone and Reduced motion are optional.
+
 **Journey Chronicle:** An optional, private journal for each character (`/tui chronicle`). Write your own short notes, and if you like let it keep a few moments for you: levels, new zones and defeated encounters. Off by default, never announced in chat, and never shared or backed up with your configuration.
 
 **Configuration sharing** Provides an ecosystem to share your addon configurations with friends.
@@ -23,3 +25,5 @@ This addon is intended to work alongside EllesmereUI.
   * Your recommended addon list travels with it, with a download link for each addon they're missing.
 
 **Backups:** Save your own settings before you tinker, go back any time.
+
+**Export & import configuration:** Your configuration backups can easily be exported to a string. The addon also allows imports of your own saved exports or your friends.

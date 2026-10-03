@@ -58,4 +58,7 @@ chronicle\Style.lua
 chronicle\Window.lua
 chronicle\Broker.lua
 
+# Zone arrival card (uses the Chronicle palette)
+modules\Arrival.lua
+
 Settings.lua

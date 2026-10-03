@@ -50,7 +50,7 @@ end
 c.CreateFrame = function() return Obj() end
 c.StaticPopupDialogs = {}; c.StaticPopup_Show = function() end
 for _, f in ipairs({ "gear/Weights.lua", "gear/Evaluate.lua", "gear/Prefs.lua", "gear/Data.lua",
-  "gear/Hints.lua", "gear/Tooltip.lua", "gear/Bags.lua", "gear/Window.lua", "Settings.lua" }) do
+  "gear/Hints.lua", "gear/Tooltip.lua", "gear/Bags.lua", "gear/Window.lua", "modules/Arrival.lua", "Settings.lua" }) do
   local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
 end
 c.LOADED["!!!TwichUI"] = true; c.FireEvent("ADDON_LOADED", "!!!TwichUI")
@@ -62,7 +62,9 @@ for key, default in pairs(defaults) do
   n = n + 1
   assert(default == R.DEFAULT_MODULES[key], key .. " default matches a new install")
 end
-assert(n == 24, "every module has a toggle: " .. n)
+assert(n == 27, "every module has a toggle: " .. n)
+assert(defaults.arrival == true and defaults.arrivalSubzones == true and defaults.arrivalReducedMotion == false,
+  "arrival card and subzone cards on; reduced motion opt-in")
 assert(defaults.shareGroup == false and defaults.shareGuild == false and defaults.groupCheck == true, "group sharing opt-in stays off; group check is on")
 assert(defaults.media == true and defaults.shareWhisper == true)
 assert(defaults.chronicle == true and defaults.chronicleChat == true, "Chronicle and its chat line are on by default")
@@ -81,7 +83,7 @@ for _, name in ipairs({"Upgrade hints in item tooltips", "Mark upgrades in my ba
   "Configuration sharing", "Let friends send me addon configurations", "Hide addon welcome messages", "Show advanced options"}) do
   assert(visible[name], name .. " is visible by default")
 end
-for _, name in ipairs({"How big a gain counts", "Show the reasoning", "Bag mark style", "Send over the group channel"}) do
+for _, name in ipairs({"How big a gain counts", "Show the reasoning", "Bag mark style", "How long the card stays", "Send over the group channel"}) do
   assert(advanced[name], name .. " is advanced")
 end
 
@@ -104,6 +106,12 @@ end
 local trees = dropdowns.TWICHUI_gearTree()
 assert(trees[1].value == 0 and #trees == 4, "automatic and the mage's three trees: " .. #trees)
 assert(#dropdowns.TWICHUI_gearStrictness() == 3 and #dropdowns.TWICHUI_gearReveal() == 4 and #dropdowns.TWICHUI_gearBagStyle() == 3)
+
+-- Zone arrival card: how long it stays, saved with the UI options.
+local hold = proxies.TWICHUI_arrivalHold
+assert(hold.default == "standard" and hold.get() == "standard", "standard by default")
+hold.set("longer"); assert(c.TwichUIDB.ui.arrivalHold == "longer" and hold.get() == "longer")
+assert(#dropdowns.TWICHUI_arrivalHold() == 4 and dropdowns.TWICHUI_arrivalHold()[3].tooltip == "Stays 4 seconds before fading away.")
 
 -- Skins: missing addons say so and can't be ticked; installed ones report status.
 local attune, auctionator

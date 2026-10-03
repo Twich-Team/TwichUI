@@ -145,7 +145,7 @@ local function Build()
     local advancedSetting = Settings.RegisterAddOnSetting(category, "TWICHUI_showAdvanced", "showAdvanced", TwichUIDB.ui, BOOL,
         "Show advanced options", false)
     Settings.CreateCheckbox(category, advancedSetting,
-        "Shows rarely changed options in each section below: how upgrade hints are judged and revealed, the bag mark style, and how configurations are sent. Hidden options keep their values.")
+        "Shows rarely changed options in each section below: how upgrade hints are judged and revealed, the bag mark style, how long the zone arrival card stays, and how configurations are sent. Hidden options keep their values.")
     Toggle("media", "Custom fonts and sounds",
         "Adds Alegreya, Alegreya Sans, Barlow and Cinzel fonts, plus the bell alert sounds, to the font and sound lists of EllesmereUI and other addons. Nothing changes until you pick them there.",
         true)
@@ -294,6 +294,32 @@ local function Build()
     Toggle("quietLogin", "Hide addon welcome messages",
         "Hides the \"loaded\" and \"type /command for options\" lines addons print when you log in or reload. Errors and warnings still show. Type /twichui hidden to see what was hidden this session.",
         true)
+
+    -----------------------------------------------------------------------
+    Header("Zone arrival", "A short, quiet title card when you arrive somewhere new, in place of the game's own zone text.")
+    local function RefreshArrival() if R.Arrival then R.Arrival.Refresh() end end
+    local arrival = Toggle("arrival", "Show a title card when I arrive in a new zone",
+        "The zone's name appears near the top of the screen under a thin bronze rule, with the smaller place you're in beneath it, then fades away. It replaces the game's own zone text while on. Not shown when you log in or reload, or while on a flight path: only where you land.\n\nIf another addon also replaces the zone text, you may see both.",
+        false, RefreshArrival)
+    local function ArrivalOn() return R:Enabled("arrival") end
+    Under(Toggle("arrivalSubzones", "Also for smaller places",
+        "A quieter card when you walk into a smaller place within the zone, such as a town. Off: moving within a zone shows nothing.",
+        false, RefreshArrival), arrival, ArrivalOn)
+    Under(Toggle("arrivalReducedMotion", "Reduced motion",
+        "The card only fades in and out, without moving."), arrival, ArrivalOn)
+    local Arrival = R.Arrival
+    if Arrival then
+        local holds = {}
+        for i, hold in ipairs(Arrival.HOLDS) do
+            holds[i] = { hold.key, hold.label, ("Stays %g seconds before fading away."):format(hold.seconds) }
+        end
+        Under(Advanced(Choice("arrivalHold", "How long the card stays",
+            "How long the zone's name stays before it fades away. Cards for smaller places stay a little shorter.",
+            STRING, Arrival.HOLD_DEFAULT,
+            function() return (Arrival.HoldChoice()) end,
+            function(value) TwichUIDB.ui.arrivalHold = value end,
+            holds)), arrival, ArrivalOn)
+    end
 
     -----------------------------------------------------------------------
     Header("Journey Chronicle", "A quiet, private journal for this character. It isn't shared, sent or backed up with your configuration, and it never tells you what to do next.")
