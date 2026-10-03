@@ -1164,6 +1164,210 @@ local function RefreshGet()
 end
 
 ---------------------------------------------------------------------------
+-- Popup: export a backup as text / import one from text
+---------------------------------------------------------------------------
+local tp
+
+local EXPORT_HELP = "Press Ctrl+C to copy the whole string, then paste it into a text file (Notepad, for instance) to keep it or move it to another computer. WoW can't save files itself, so the text file is yours to make. Nothing is sent to anyone."
+local IMPORT_HELP = "Paste a backup string you exported earlier (Ctrl+V), then press Check backup. You'll see what's in it before anything is added."
+local DETAILS = "Format: TUIBK1:<length>:<check>:<size>:<data>. The data is compressed settings (LibSerialize + LibDeflate), read only as data and never run as code. The check number only catches accidental damage, like a cut-off paste; it doesn't prove who made the string. A backup holds the settings of the addons you chose, plus its name, date and character. It never holds TwichUI's own settings or your Chronicle. Imports up to 8 MB, 20 backups and 32 MB in total."
+
+local function CloseTransfer() if tp then tp:Hide() end end
+
+local function SetTransferStatus(text) tp.status:SetText(text or "") end
+
+local function PreviewText(r)
+    local p = r.point
+    local lines = {
+        ("%s%s|r"):format(GOLD, p.name),
+        ("Saved %s%s  ·  %d addons (%d settings tables)  ·  about %s"):format(When(p.created),
+            p.sourceName and (" by " .. p.sourceName) or "", r.addons, r.count, ST.FormatSize(r.bytes)),
+    }
+    if r.addonVersion and r.addonVersion ~= "?" then lines[#lines + 1] = "Made with TwichUI " .. r.addonVersion end
+    if #r.missing > 0 then
+        lines[#lines + 1] = ("%sNot installed or turned off on this client:|r %s. Their settings stay in the backup and apply if you install them."):format(GOLD, table.concat(r.missing, ", "))
+    end
+    if r.skipped > 0 then
+        lines[#lines + 1] = ("%s%d settings table(s) can't be applied on this client|r and would be skipped when you restore."):format(GOLD, r.skipped)
+    end
+    if r.blocked then
+        lines[#lines + 1] = RED .. r.blocked .. "|r"
+    else
+        lines[#lines + 1] = GREEN .. "Ready.|r Import as backup only adds it to your Backups list. It does not change your current settings; only Restore does."
+    end
+    return table.concat(lines, "\n")
+end
+
+local function BuildTransfer()
+    tp = CreateFrame("Frame", "TwichUIBackupTransfer", UIParent, "BackdropTemplate")
+    tp:SetSize(560, 470)
+    tp:SetPoint("CENTER", 40, -20)
+    tp:SetFrameStrata("DIALOG")
+    tp:SetToplevel(true)
+    tp:SetMovable(true)
+    tp:EnableMouse(true)
+    tp:RegisterForDrag("LeftButton")
+    tp:SetScript("OnDragStart", tp.StartMoving)
+    tp:SetScript("OnDragStop", tp.StopMovingOrSizing)
+    tp:SetClampedToScreen(true)
+    tinsert(UISpecialFrames, "TwichUIBackupTransfer")
+    if R.S then Skin("Shell", tp) else
+        tp:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
+        tp:SetBackdropColor(0.07, 0.065, 0.06, 0.98)
+        tp:SetBackdropBorderColor(0.25, 0.23, 0.2, 1)
+    end
+    tp.title = Text(tp, "GameFontNormalLarge")
+    tp.title:SetPoint("TOPLEFT", 16, -12)
+    tp.title:SetTextColor(1, 1, 1)
+    local close = CreateFrame("Button", nil, tp, "UIPanelCloseButton")
+    close:SetPoint("TOPRIGHT", -4, -4)
+    Skin("CloseButton", close)
+    tp.sub = Text(tp, "GameFontHighlightSmall")
+    tp.sub:SetPoint("TOPLEFT", 16, -38)
+    tp.sub:SetWidth(528)
+
+    local box = CreateFrame("Frame", nil, tp, "BackdropTemplate")
+    box:SetPoint("TOPLEFT", 16, -88)
+    box:SetSize(528, 150)
+    if R.S then Skin("Panel", box, { inset = true }) else
+        box:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
+        box:SetBackdropColor(0, 0, 0, 0.5)
+        box:SetBackdropBorderColor(1, 1, 1, 0.08)
+    end
+    local sf = CreateFrame("ScrollFrame", nil, box, "UIPanelScrollFrameTemplate")
+    sf:SetPoint("TOPLEFT", 6, -6)
+    sf:SetPoint("BOTTOMRIGHT", -26, 6)
+    Skin("ScrollBar", sf.ScrollBar)
+    tp.edit = CreateFrame("EditBox", nil, sf)
+    tp.edit:SetMultiLine(true)
+    tp.edit:SetAutoFocus(false)
+    tp.edit:SetFontObject("ChatFontNormal")
+    tp.edit:SetWidth(490)
+    tp.edit:SetScript("OnEscapePressed", tp.edit.ClearFocus)
+    tp.edit:SetScript("OnEditFocusGained", function(e) if tp.mode == "export" then e:HighlightText() end end)
+    tp.edit:SetScript("OnTextChanged", function(e, user)
+        if tp.mode == "export" then
+            -- Read-only: put the string back if someone types in it.
+            if user and tp.exported and e:GetText() ~= tp.exported then
+                e:SetText(tp.exported)
+                e:HighlightText()
+            end
+        elseif user ~= false then
+            tp.result = nil
+            tp.importBtn:Disable()
+            if not R.Portable.Busy() then SetTransferStatus("") end
+        end
+    end)
+    sf:SetScrollChild(tp.edit)
+
+    tp.status = Text(tp, "GameFontHighlightSmall")
+    tp.status:SetPoint("TOPLEFT", box, "BOTTOMLEFT", 2, -10)
+    tp.status:SetWidth(524)
+    tp.status:SetHeight(110)
+    tp.status:SetJustifyV("TOP")
+
+    tp.detailsText = Text(tp, "GameFontDisableSmall")
+    tp.detailsText:SetPoint("TOPLEFT", tp.status, "BOTTOMLEFT", 0, -6)
+    tp.detailsText:SetWidth(524)
+    tp.detailsText:SetJustifyV("TOP")
+    tp.detailsText:SetText(DETAILS)
+    tp.detailsText:Hide()
+    tp.details = Btn(tp, "Details", 80, function()
+        tp.detailsText:SetShown(not tp.detailsText:IsShown())
+    end)
+    tp.details:SetPoint("BOTTOMLEFT", 16, 12)
+
+    tp.copy = Btn(tp, "Copy export string", 160, function()
+        tp.edit:SetFocus()
+        tp.edit:HighlightText()
+        SetTransferStatus(EXPORT_HELP)
+    end, "Selects the whole string. Then press Ctrl+C.")
+    tp.copy:SetPoint("BOTTOMRIGHT", -16, 12)
+
+    tp.check = Btn(tp, "Check backup", 120, function()
+        local text = tp.edit:GetText()
+        tp.result = nil
+        tp.importBtn:Disable()
+        tp.check:Disable()
+        SetTransferStatus("Checking...")
+        R.Portable.Check(text, function(result)
+            text = nil
+            if not tp:IsShown() then return end
+            tp.result = result
+            tp.check:Enable()
+            SetTransferStatus(PreviewText(result))
+            if result.blocked then tp.importBtn:Disable() else tp.importBtn:Enable() end
+        end, function(msg)
+            text = nil
+            if not tp:IsShown() then return end
+            tp.check:Enable()
+            SetTransferStatus(RED .. msg .. "|r Nothing was changed.")
+        end)
+    end, "Reads the pasted string and shows what's in it. Nothing is saved yet.")
+    tp.check:SetPoint("BOTTOMRIGHT", -16, 12)
+    tp.importBtn = Btn(tp, "Import as backup", 150, function()
+        local point, why = R.Portable.Commit(tp.result)
+        if not point then SetTransferStatus(RED .. (why or "That couldn't be imported.") .. "|r") return end
+        R.Print("backup \"%s\" imported (%d addons). It hasn't been applied; use Restore on the Backups page when you want it.", point.name, ST.CountAddons(point))
+        CloseTransfer()
+        W:Refresh()
+    end, "Adds the backup to your Backups list. It does not restore it or change your current settings.")
+    tp.importBtn:SetPoint("RIGHT", tp.check, "LEFT", -8, 0)
+    tp.cancel = Btn(tp, "Cancel", 80, CloseTransfer)
+    tp.cancel:SetPoint("RIGHT", tp.importBtn, "LEFT", -8, 0)
+
+    tp:SetScript("OnHide", function()
+        R.Portable.Cancel()
+        tp.exported, tp.result = nil, nil
+        tp.edit:SetText("")
+        tp.edit:ClearFocus()
+        SetTransferStatus("")
+    end)
+end
+
+local function OpenTransfer(mode)
+    if not tp then BuildTransfer() end
+    R.Portable.Cancel()
+    tp.mode, tp.exported, tp.result = mode, nil, nil
+    tp.edit:SetText("")
+    tp.detailsText:Hide()
+    local exporting = mode == "export"
+    tp.copy:SetShown(exporting)
+    tp.check:SetShown(not exporting)
+    tp.importBtn:SetShown(not exporting)
+    tp.cancel:SetShown(not exporting)
+    tp.check:Enable()
+    tp.importBtn:Disable()
+    tp.title:SetText(exporting and "Export backup" or "Import backup")
+    tp.sub:SetText(exporting and EXPORT_HELP or IMPORT_HELP)
+    SetTransferStatus("")
+    tp:Show()
+    tp:Raise()
+end
+
+function W:ExportBackup(point)
+    OpenTransfer("export")
+    SetTransferStatus("Preparing...")
+    tp.copy:Disable()
+    R.Portable.Export(point, function(text)
+        if not tp:IsShown() or tp.mode ~= "export" then return end
+        tp.exported = text
+        tp.edit:SetText(text)
+        tp.copy:Enable()
+        SetTransferStatus(("%s  ·  %s of text. Click Copy export string, then press Ctrl+C."):format(point.name, ST.FormatSize(#text)))
+        tp.edit:SetFocus()
+        tp.edit:HighlightText()
+    end, function(msg)
+        if tp:IsShown() then SetTransferStatus(RED .. msg .. "|r") end
+    end)
+end
+
+function W:ImportBackup()
+    OpenTransfer("import")
+    tp.edit:SetFocus()
+end
+
+---------------------------------------------------------------------------
 -- Page: Backups
 ---------------------------------------------------------------------------
 local rp = {}
@@ -1197,6 +1401,9 @@ local function BuildBackups(p)
             or "Reloads your UI once to read your settings exactly as they're saved, then saves the backup."
     end)
     rp.create:SetPoint("LEFT", rp.name, "RIGHT", 10, 0)
+    rp.import = Btn(p, "Import backup", 130, function() W:ImportBackup() end,
+        "Paste a backup string you exported earlier. You'll see what's in it first; importing only adds it to this list.")
+    rp.import:SetPoint("LEFT", rp.create, "RIGHT", 8, 0)
 
     rp.list = ListBox(p, 300)
     rp.list:SetPoint("TOPLEFT", 16, -92)
@@ -1241,6 +1448,9 @@ local function RestoreRow(i)
             function() R.Restore:Restore(point.id) end)
     end)
     r.go:SetPoint("RIGHT", r.del, "LEFT", -6, 0)
+    r.export = Btn(r, "Export", 70, function(b) W:ExportBackup(b.point) end,
+        "Turns this backup into text you can copy and keep, or paste into TwichUI on another computer.")
+    r.export:SetPoint("RIGHT", r.go, "LEFT", -6, 0)
     rp.list.rows[i] = r
     return r
 end
@@ -1252,7 +1462,7 @@ local function RefreshBackups()
         r.label:SetText(point.name)
         r.detail:SetText(("%s  ·  %s  ·  %d addons  ·  %s"):format(When(point.created), point.sourceName or "?",
             ST.CountAddons(point), ST.FormatSize(R.Restore.Size(point))))
-        r.go.point, r.del.point = point, point
+        r.go.point, r.del.point, r.export.point = point, point, point
         r:Show()
     end
     for i = #points + 1, #rp.list.rows do rp.list.rows[i]:Hide() end

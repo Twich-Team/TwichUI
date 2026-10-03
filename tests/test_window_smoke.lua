@@ -19,7 +19,7 @@ local function Obj()
   end})
 end
 local realCreate = c.CreateFrame
-c.tinsert = table.insert; c.CreateFrame = function(kind, ...) local o = Obj(); local base = realCreate(); for k,v in pairs(base) do rawset(o,k,v) end return o end
+c.tinsert = table.insert; c.CreateFrame = function(kind, name, ...) local o = Obj(); local base = realCreate(); for k,v in pairs(base) do rawset(o,k,v) end if name then c[name] = o; rawset(o, "IsShown", function() return true end) end return o end
 c.UISpecialFrames = {}
 c.GameTooltip = Obj(); c.GameTooltip_Hide = function() end
 c.StaticPopupDialogs = {}; c.StaticPopup_Show = function(k, a) print("popup", k, a) end
@@ -50,4 +50,21 @@ c.FooDB = {scale = 1}
 assert(ST.ApplyEffect(g) == "replace", "loaded with settings: replaces")
 assert(ST.ApplyEffect({state = "missing", tables = {}}) == "missing")
 W:Show("received")
+-- Backup export / import panel
+local pt = c.TwichUI.Restore.AddImported({name = "Smoke", created = 1, tables = {FooDB = {owner = "Foo", data = {a = 1}}}})
+W:Show("backups"); W:ExportBackup(pt)
+for _ = 1, 50 do FlushTimers() end
+local tp = c.TwichUIBackupTransfer
+assert(tp.edit:GetText():find("^TUIBK1:"), "export string shown")
+local str = tp.edit:GetText()
+W:ImportBackup(); assert(tp.edit:GetText() == "", "buffer cleared between uses")
+tp.edit:SetText(str); tp.check.scripts.OnClick(tp.check)
+for _ = 1, 50 do FlushTimers() end
+assert(tp.result and tp.result.blocked, "repeat is blocked in the preview")
+c.TwichUI.Restore:Delete(pt.id)
+tp.check.scripts.OnClick(tp.check)
+for _ = 1, 50 do FlushTimers() end
+assert(tp.result and not tp.result.blocked)
+tp.importBtn.scripts.OnClick(tp.importBtn)
+assert(#c.TwichUI.Restore.List() == 1 and not c.reloaded, "imported, not applied")
 print("UI SMOKE OK")

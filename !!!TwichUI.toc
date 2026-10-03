@@ -37,6 +37,7 @@ setup\Share.lua
 setup\Group.lua
 setup\CommTest.lua
 setup\Restore.lua
+setup\Portable.lua
 setup\Window.lua
 
 # Upgrade hints in item tooltips and bags

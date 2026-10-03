@@ -74,6 +74,27 @@ function RS:Create(name)
     return "reloading"
 end
 
+-- Adds a backup that came from an export string, as a new point with its own
+-- id and an unused name. Nothing is applied. The caller has already checked it.
+function RS.AddImported(point)
+    local points = DB().points
+    local ids, names = {}, {}
+    for _, p in ipairs(points) do ids[p.id] = true; names[p.name] = true end
+    local id = R.Share.NewId()
+    while ids[id] do id = R.Share.NewId() end
+    local name, n = point.name, 1
+    if names[name] then
+        name = point.name .. " (imported)"
+        while names[name] do n = n + 1; name = ("%s (imported %d)"):format(point.name, n) end
+    end
+    local new = {
+        id = id, name = name, created = point.created, imported = time(),
+        source = point.source or "imported", sourceName = point.sourceName, tables = point.tables,
+    }
+    table.insert(points, new)
+    return new
+end
+
 function RS:Restore(id)
     local p = RS.Get(id)
     if not p then return end
