@@ -260,6 +260,9 @@ function A.Clear()
     card:Hide()
 end
 
+-- True while a card is on screen (the Welcome Back bookmark waits for it).
+function A.IsShowing() return card ~= nil and card:IsShown() end
+
 -- kind: "zone" (title, smaller subzone line, PvP line) or "subzone" (one quieter line, PvP line if it changed).
 function A.Show(kind, title, sub, pvpText, pvpType)
     if not card then Build() end

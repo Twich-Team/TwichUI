@@ -373,6 +373,9 @@ local function Build()
     ChronicleToggle("chronicleProfessions", "Professions", "Adds an entry when you learn a profession, and when a profession skill first reaches 75, 150, 225, 300, 375 and 450. Professions and skill you already have aren't counted.")
     ChronicleToggle("chronicleChat", "Show Chronicle entries in chat", "Prints a quiet line in your own chat window when an entry is added automatically. Only you see it; it is never sent to anyone. Entries are still recorded when this is off.")
     Toggle("chronicleSound", "Play Chronicle opening sound", "Plays a soft page-turn sound each time you open the Chronicle. It follows your game sound settings and volume.")
+    Toggle("welcomeBack", "Show a Welcome Back bookmark",
+        "When you log in to a character that has Chronicle entries, a small bookmark shows the last place the Chronicle noted and how long ago, with a link to open it. It fades by itself, doesn't appear after a reload or in combat, and makes no sound or chat line. It only reads your entries; it adds none.",
+        false, function() if R.WelcomeBack then R.WelcomeBack.Refresh() end end)
     Choice("chronicleClock", "Time format",
         "How times are shown in your Chronicle.",
         STRING, "12",

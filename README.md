@@ -15,7 +15,7 @@ This addon is intended to work alongside EllesmereUI.
 
 **Zone arrival:** Arriving somewhere new shows the zone's name as a brief, quiet title card in place of the game's zone text: not at login, not while on a flight path, and only for the last place when crossing zones quickly. Walking into a dungeon or raid shows its name with "Dungeon" or "Raid" beneath it. Smaller places within a zone, dungeon and raid cards, and Reduced motion are optional.
 
-**Journey Chronicle:** An optional, private journal for each character (`/tui chronicle`). Write your own short notes, and if you like let it keep a few moments for you: levels, new zones and defeated encounters. Off by default, never announced in chat, and never shared or backed up with your configuration.
+**Journey Chronicle:** An optional, private journal for each character (`/tui chronicle`). Write your own short notes, and if you like let it keep a few moments for you: levels, new zones and defeated encounters. Off by default, never announced in chat, and never shared or backed up with your configuration. At login, an optional small "Welcome Back" bookmark can remind you of the last place the Chronicle noted.
 
 **Configuration sharing** Provides an ecosystem to share your addon configurations with friends.
 

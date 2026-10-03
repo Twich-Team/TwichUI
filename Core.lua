@@ -39,6 +39,7 @@ local DEFAULT_MODULES = {
     chronicleProfessions = true, -- ... learning a profession and reaching its skill milestones
     chronicleSound = true,   -- a soft page-turn sound when the Chronicle opens
     chronicleChat = true,    -- ... and say so in your own chat frame when an automatic entry is added
+    welcomeBack = true,      -- a small bookmark at login: the Chronicle's last noted place and when
     arrival = true,          -- title card when arriving in a new zone (in place of the game's zone text)
     arrivalSubzones = true,  -- ... and a quieter one for smaller places within a zone
     arrivalDungeons = true,  -- ... a card with the name when walking into a dungeon or raid
@@ -188,6 +189,11 @@ COMMANDS = {
     end },
     { name = "chronicle", usage = "chronicle", desc = "your journey chronicle", fn = function()
         if R.ChronicleWindow then R.ChronicleWindow:Toggle() else Unavailable("Journey Chronicle") end
+    end },
+    { name = "welcome", usage = "welcome", desc = "preview the Welcome Back bookmark now", fn = function()
+        if not R.WelcomeBack then Unavailable("Welcome Back") return end
+        local ok, why = R.WelcomeBack.Preview()
+        if not ok then R.Print(why) end
     end },
     { name = "hidden", usage = "hidden", desc = "welcome messages hidden at login", fn = function()
         if R.Quiet then R.Quiet:ShowHidden() else Unavailable("Quiet login") end

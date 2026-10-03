@@ -61,4 +61,7 @@ chronicle\Broker.lua
 # Zone arrival card (uses the Chronicle palette)
 modules\Arrival.lua
 
+# Welcome Back bookmark (reads the Chronicle, shows once at login)
+modules\WelcomeBack.lua
+
 Settings.lua
