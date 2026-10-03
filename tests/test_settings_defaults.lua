@@ -74,9 +74,10 @@ for key, default in pairs(defaults) do
   n = n + 1
   assert(default == R.DEFAULT_MODULES[key], key .. " default matches a new install")
 end
-assert(n == 27, "every module has a toggle: " .. n)
+assert(n == 28, "every module has a toggle: " .. n)
 assert(defaults.arrival == true and defaults.arrivalSubzones == true and defaults.arrivalReducedMotion == false,
   "arrival card and subzone cards on; reduced motion opt-in")
+assert(defaults.arrivalDungeons == true, "dungeon and raid arrival cards on by default")
 assert(defaults.shareGroup == false and defaults.shareGuild == false and defaults.groupCheck == true, "group sharing opt-in stays off; group check is on")
 assert(defaults.media == true and defaults.shareWhisper == true)
 assert(defaults.chronicle == true and defaults.chronicleChat == true, "Chronicle and its chat line are on by default")

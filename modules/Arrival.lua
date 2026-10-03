@@ -5,7 +5,9 @@
 -- SubZoneTextFrame, plain unprotected frames), which is hidden as it appears.
 -- Nothing shows at login or reload, nothing while on a flight path (where you
 -- land is looked at once), and only the latest place is shown when zones are
--- crossed quickly. Only names the game gives are shown. No sound, no chat.
+-- crossed quickly. Walking into a dungeon or raid shows its name with "Dungeon" or
+-- "Raid" beneath it instead of the zone text. Only names the game gives are shown.
+-- No sound, no chat.
 
 local R = TwichUI
 local A = {}
@@ -14,6 +16,10 @@ R.Arrival = A
 local SETTLE = 0.6          -- seconds a zone change waits, so quick crossings show only the last place
 local LOGIN_QUIET = 5       -- seconds after login or reload when zone changes only note where you are
 local RISE = 8              -- pixels the card settles upward (0 with Reduced motion)
+local NAME_RETRIES = 2        -- extra looks for an instance's name when the game hasn't given it yet
+
+-- Instance types that get an entry card, and the game's own word for each.
+local INSTANCE_LABEL = { party = "LFG_TYPE_DUNGEON", raid = "LFG_TYPE_RAID" }
 
 local TIMING = {
     zone    = { fadeIn = 0.8, fadeOut = 1.4 },
@@ -54,12 +60,17 @@ local FONT_LINE = R.PATH .. [[media\fonts\Alegreya-Regular.ttf]]
 local NON_WESTERN = { koKR = true, zhCN = true, zhTW = true, ruRU = true }
 
 local lastZone, lastSubZone, lastPvP   -- the place last shown or noted, so repeats and login are quiet
+local lastInstance            -- "party" or "raid" while inside one (as last noted), so only walking in counts
+local nameTries = 0           -- looks already spent waiting for the instance's name
+local entryName               -- the name on the entry card just shown, until the game's zone text catches up to it
 local quietUntil = 0
 local controlLost = false   -- between PLAYER_CONTROL_LOST and PLAYER_CONTROL_GAINED (flight takeoff to landing)
 local pending = 0           -- counts zone changes; a waiting check only runs if no newer change came
 local active = {}           -- [event] = handler, while registered
 local hooked = false
 local card
+
+local Schedule   -- defined below; an instance whose name is not known yet looks again
 
 local function Plain(text)
     if type(text) ~= "string" or (issecretvalue and issecretvalue(text)) or text == "" then return nil end
@@ -73,6 +84,19 @@ local function SubZone(zone)
     local sub = Plain(GetSubZoneText and GetSubZoneText())
     if sub == zone then return nil end
     return sub
+end
+
+-- "party" (dungeon) or "raid" while inside one that gets an entry card, otherwise nil.
+local function Instance()
+    if not IsInInstance then return nil end
+    local inside, kind = IsInInstance()
+    if not inside then return nil end
+    kind = Plain(kind)
+    return INSTANCE_LABEL[kind or ""] and kind or nil
+end
+
+local function InstanceName()
+    return Plain(GetInstanceInfo and (GetInstanceInfo()))
 end
 
 local function OnTaxi()
@@ -279,6 +303,34 @@ local function Note()
     lastZone = Zone()
     lastSubZone = SubZone(lastZone)
     lastPvP = PvP()
+    lastInstance = Instance()
+    nameTries = 0
+    entryName = nil
+end
+
+-- Walking into a dungeon or raid from outside: one card with its name. Returns true when
+-- the check is finished (a card was shown, or the name is still being waited for). Otherwise
+-- the ordinary zone path goes on, as it does when this card is off or the name never comes.
+local function CheckInstance(kind)
+    if not kind then
+        lastInstance, nameTries, entryName = nil, 0, nil
+        return false
+    end
+    if lastInstance then return false end   -- already inside: an internal change, not an entry
+    local name = InstanceName()
+    if not name and nameTries < NAME_RETRIES then
+        nameTries = nameTries + 1
+        Schedule()
+        return true
+    end
+    lastInstance, nameTries = kind, 0
+    if not name or not R:Enabled("arrivalDungeons") then return false end
+    -- This place is the arrival, so the zone path must not show it a second time.
+    lastZone, lastSubZone, lastPvP = Zone(), SubZone(Zone()), PvP()
+    local label = Global(INSTANCE_LABEL[kind])
+    entryName = name
+    if not Toasting() then A.Show("zone", name, label) end
+    return true
 end
 
 -- Looks at where the player is once things have settled, and shows at most one card.
@@ -287,9 +339,14 @@ local function Check()
     local zone = Zone()
     if not zone then return end
     if GetTime() < quietUntil then Note() return end
+    if CheckInstance(Instance()) then return end
     local sub = SubZone(zone)
     local pvpType, pvpText = PvP()
-    if zone ~= lastZone then
+    if entryName and zone ~= lastZone and zone == entryName then
+        -- The game's zone text only now says where the entry card already put you: the same arrival.
+        entryName = nil
+        lastZone, lastSubZone, lastPvP = zone, sub, pvpType
+    elseif zone ~= lastZone then
         lastZone, lastSubZone, lastPvP = zone, sub, pvpType
         if not Toasting() then A.Show("zone", zone, sub, pvpText, pvpType) end
     elseif sub ~= lastSubZone then
@@ -303,7 +360,7 @@ local function Check()
 end
 
 -- Waits a moment before looking; a newer zone change replaces the waiting one.
-local function Schedule()
+function Schedule()
     pending = pending + 1
     local mine = pending
     C_Timer.After(SETTLE, function() if pending == mine then Check() end end)

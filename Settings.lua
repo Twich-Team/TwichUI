@@ -333,6 +333,9 @@ local function Build()
     Under(Toggle("arrivalSubzones", "Also for smaller places",
         "A quieter card when you walk into a smaller place within the zone, such as a town. Off: moving within a zone shows nothing.",
         false, RefreshArrival), arrival, ArrivalOn)
+    Under(Toggle("arrivalDungeons", "Show dungeon and raid arrival cards",
+        "Walking into a dungeon or raid shows its name with \"Dungeon\" or \"Raid\" beneath it. Off: you get the ordinary zone card there, as before. Not shown when you log in or reload inside one.",
+        false, RefreshArrival), arrival, ArrivalOn)
     Under(Toggle("arrivalReducedMotion", "Reduced motion",
         "The card only fades in and out, without moving."), arrival, ArrivalOn)
     local Arrival = R.Arrival

@@ -41,6 +41,7 @@ local DEFAULT_MODULES = {
     chronicleChat = true,    -- ... and say so in your own chat frame when an automatic entry is added
     arrival = true,          -- title card when arriving in a new zone (in place of the game's zone text)
     arrivalSubzones = true,  -- ... and a quieter one for smaller places within a zone
+    arrivalDungeons = true,  -- ... a card with the name when walking into a dungeon or raid
     arrivalReducedMotion = false, -- ... fade only, no upward settle
 }
 R.DEFAULT_MODULES = DEFAULT_MODULES   -- Settings.lua uses these for the panel's Defaults button

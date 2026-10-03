@@ -54,6 +54,15 @@ c.ZoneTextFrame, c.SubZoneTextFrame = Fake(), Fake()
 c.EventToastManagerFrame = Fake()
 c.EventToastManagerFrame.IsCurrentlyToasting = function() return c.TOAST end
 c.ZoneText_Clear = function() end
+-- Instances: INST is nil outside, or {type, name} inside. NAME_AFTER makes the name appear only after that many looks.
+c.INST, c.NAME_AFTER, c.LOOKS = nil, 0, 0
+c.IsInInstance = function() if c.INST then return true, c.INST.type end return false, "none" end
+c.GetInstanceInfo = function()
+  c.LOOKS = c.LOOKS + 1
+  if not c.INST then return "Elwynn Forest", "none" end
+  return c.LOOKS > c.NAME_AFTER and c.INST.name or "", c.INST.type
+end
+c.LFG_TYPE_DUNGEON, c.LFG_TYPE_RAID = "Dungeon", "Raid"
 local secureHooks = {}
 c.hooksecurefunc = function(name, fn) secureHooks[name] = fn end
 
@@ -197,5 +206,121 @@ Arrive("Duskwood"); FlushTimers()
 assert(#shows == 0, "turning on doesn't announce where you are")
 Arrive("Westfall"); FlushTimers()
 assert(#shows == 1, "and works again")
+
+-- dungeon and raid entry cards ------------------------------------------------
+assert(M.arrivalDungeons == true, "dungeon cards on by default")
+shows = {}
+local function Enter(kind, name, zone, afterLooks)
+  c.INST = {type = kind, name = name}; c.NAME_AFTER = afterLooks or 0; c.LOOKS = 0
+  c.ZONE, c.SUB = zone or name, ""
+  c.FireEvent("PLAYER_LEAVING_WORLD")
+  c.FireEvent("PLAYER_ENTERING_WORLD", false, false)
+  c.FireEvent("ZONE_CHANGED_NEW_AREA")
+  for _ = 1, 4 do FlushTimers() end   -- a look that finds no name schedules the next one
+end
+local function Leave(zone)
+  c.INST = nil; c.ZONE, c.SUB = zone, ""
+  c.FireEvent("PLAYER_LEAVING_WORLD")
+  c.FireEvent("PLAYER_ENTERING_WORLD", false, false)
+  c.FireEvent("ZONE_CHANGED_NEW_AREA")
+  FlushTimers()
+end
+
+-- walking into a dungeon: one card, its name, the game's word for it, no PvP line
+Enter("party", "The Deadmines")
+assert(#shows == 1 and Last().kind == "zone" and Last().title == "The Deadmines" and Last().sub == "Dungeon" and Last().pvp == nil,
+  "dungeon entry: one card with the name and \"Dungeon\"")
+-- internal changes, repeated loading screens and group changes inside: nothing more
+c.FireEvent("PLAYER_ENTERING_WORLD", false, false); c.FireEvent("ZONE_CHANGED_NEW_AREA"); FlushTimers()
+c.FireEvent("ZONE_CHANGED_NEW_AREA"); c.FireEvent("GROUP_ROSTER_UPDATE"); FlushTimers()
+assert(#shows == 1, "no second card inside")
+-- leaving: the ordinary zone card, unchanged
+Leave("Westfall")
+assert(#shows == 2 and Last().title == "Westfall" and Last().sub == nil, "leaving shows the zone as before")
+-- a raid
+Enter("raid", "Molten Core")
+assert(#shows == 3 and Last().title == "Molten Core" and Last().sub == "Raid", "raid entry")
+Leave("Burning Steppe")
+assert(#shows == 4, "leaving the raid: the zone")
+-- battlegrounds, arenas and scenarios aren't dungeons: the ordinary zone card
+Enter("pvp", "Warsong Gulch")
+assert(#shows == 5 and Last().title == "Warsong Gulch" and Last().sub == nil, "other instances keep the zone card")
+Leave("Ashenvale")
+shows = {}
+
+-- the game's zone text catches up after the card: the same arrival, not a second card replacing it
+c.INST = {type = "party", name = "Ruins of Lordaeron"}; c.NAME_AFTER = 0; c.LOOKS = 0
+c.ZONE, c.SUB = "Tirisfal Glades", ""     -- still the outside zone when the check runs
+c.FireEvent("PLAYER_LEAVING_WORLD"); c.FireEvent("PLAYER_ENTERING_WORLD", false, false); FlushTimers()
+assert(#shows == 1 and Last().title == "Ruins of Lordaeron" and Last().sub == "Dungeon", "card at entry")
+c.ZONE, c.SUB = "Ruins of Lordaeron", "The Ruined Hall"
+c.FireEvent("ZONE_CHANGED_NEW_AREA"); c.FireEvent("ZONE_CHANGED"); FlushTimers()
+assert(#shows == 1, "zone text catching up doesn't replace the dungeon card")
+-- a real move within it afterwards is the ordinary subzone card, as before
+M.arrivalSubzones = true; A.Refresh()
+c.SUB = "The Crypt"; c.FireEvent("ZONE_CHANGED"); FlushTimers()
+assert(#shows == 2 and Last().kind == "subzone", "later moves inside are unchanged")
+M.arrivalSubzones = false; A.Refresh()
+Leave("Tirisfal Glades"); shows = {}
+
+-- the name arrives a little late: looked for again, still one card
+Enter("party", "Shadowfang Keep", nil, 1)
+assert(#shows == 1 and Last().title == "Shadowfang Keep" and Last().sub == "Dungeon", "late name waited for")
+Leave("Silverpine Forest"); shows = {}
+-- the name never comes: the ordinary zone card, never an empty title
+Enter("party", "Wailing Caverns", nil, 99)
+assert(#shows == 1 and Last().title == "Wailing Caverns" and Last().sub == nil, "unresolved name falls back to the zone card")
+Leave("The Barrens"); shows = {}
+-- nothing usable at all: nothing, and no empty title
+c.INST = {type = "party", name = ""}; c.NAME_AFTER = 0; c.ZONE = ""
+c.FireEvent("PLAYER_ENTERING_WORLD", false, false); FlushTimers()
+assert(#shows == 0, "no card without any name")
+Leave("The Barrens"); shows = {}
+
+-- reload inside a dungeon: no arrival, and it stays quiet afterwards
+c.NOW = c.NOW + 100
+c.INST = {type = "party", name = "Gnomeregan"}; c.NAME_AFTER = 0; c.ZONE = "Gnomeregan"
+c.FireEvent("PLAYER_ENTERING_WORLD", false, true)
+c.FireEvent("ZONE_CHANGED_NEW_AREA"); FlushTimers()
+c.NOW = c.NOW + 10
+c.FireEvent("PLAYER_ENTERING_WORLD", false, false); c.FireEvent("ZONE_CHANGED_NEW_AREA"); FlushTimers()
+assert(#shows == 0, "nothing at reload inside a dungeon, nor on later internal loading screens")
+c.FireEvent("PLAYER_ENTERING_WORLD", true, false); FlushTimers()
+assert(#shows == 0, "nor at login inside one")
+c.NOW = c.NOW + 10   -- past the login quiet time
+Leave("Dun Morogh"); shows = {}
+
+-- dungeon cards off: the ordinary zone card, and the zone's own place is still tracked
+M.arrivalDungeons = false; A.Refresh()
+Enter("party", "Blackfathom Deeps")
+assert(#shows == 1 and Last().title == "Blackfathom Deeps" and Last().sub == nil, "off: the ordinary zone card")
+-- switched on while inside: where you are isn't an entry
+M.arrivalDungeons = true; A.Refresh()
+c.FireEvent("PLAYER_ENTERING_WORLD", false, false); c.FireEvent("ZONE_CHANGED_NEW_AREA"); FlushTimers()
+assert(#shows == 1, "turning dungeon cards on inside one shows nothing")
+Leave("Ashenvale"); shows = {}
+
+-- the whole feature off: no dungeon card either
+M.arrival = false; A.Refresh()
+Enter("party", "The Stockade")
+assert(#shows == 0, "nothing while Zone arrival is off")
+M.arrival = true; A.Refresh(); FlushTimers()
+assert(#shows == 0, "and turning it on inside doesn't announce")
+Leave("Stormwind City"); shows = {}
+
+-- reduced motion and the chosen hold apply to the dungeon card
+M.arrivalReducedMotion = true
+Enter("party", "Razorfen Kraul")
+assert(#shows == 1 and translations[1].y == 0 and translations[2].y == 0, "reduced motion")
+Leave("The Barrens")
+M.arrivalReducedMotion = false; c.TwichUIDB.ui = {arrivalHold = "long"}
+Enter("raid", "Onyxia's Lair")
+assert(alphas[2].delay == 4 and translations[2].y == 8, "chosen hold; settles upward")
+-- a toast in progress: no card, and it isn't shown late
+Leave("Dustwallow Marsh"); shows = {}
+c.TOAST = true; Enter("party", "Ragefire Chasm"); c.TOAST = false
+assert(#shows == 0, "no dungeon card over a toast")
+c.FireEvent("ZONE_CHANGED_NEW_AREA"); FlushTimers()
+assert(#shows == 0, "not shown late")
 
 print("ARRIVAL TESTS PASSED")
