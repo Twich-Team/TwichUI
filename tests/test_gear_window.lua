@@ -38,11 +38,12 @@ c.C_SpecializationInfo = { GetActiveSpecGroup = function() return 1 end, GetComb
 local canvas, opened
 c.Settings = {
   RegisterVerticalLayoutCategory = function() return {GetID = function() return 1 end}, {AddInitializer = function() end} end,
+  RegisterVerticalLayoutSubcategory = function(parent, name) return {GetID = function() return 1 end, name = name}, {AddInitializer = function() end} end,
   RegisterAddOnSetting = function() return {} end,
   CreateCheckbox = function() end,
   RegisterAddOnCategory = function() end,
   RegisterCanvasLayoutSubcategory = function(parent, frame, name)
-    assert(parent and name == "Stat weights")
+    assert(parent and parent.name == "Gear comparison" and name == "Stat weights", "Stat weights sits under Gear comparison")
     canvas = frame
     return {GetID = function() return 2 end}
   end,

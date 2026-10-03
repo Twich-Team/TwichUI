@@ -5,6 +5,7 @@ dofile(TESTS .. "harness.lua")
 -- read and write the gear preferences, and skins report their status.
 local c = MakeClient("Rich", {"!!!TwichUI", "Attune"})
 local defaults, initializers, proxies, dropdowns = {}, {}, {}, {}
+local pageOrder, variables = {}, {}   -- variables[name] = the page it was registered on
 local function Initializer(name, tooltip)
   local i = {data = {name = name, tooltip = tooltip}, shown = {}, modify = {}}
   function i:AddShownPredicate(fn) table.insert(self.shown, fn) end
@@ -18,13 +19,23 @@ c.CreateSettingsListSectionHeaderInitializer = function(name, tooltip) return In
 c.CreateSettingsButtonInitializer = function(name, _, click, tooltip) local i = Initializer(name, tooltip); i.click = click; return i end
 c.Settings = {
   VarType = {Boolean = "boolean", String = "string", Number = "number"},
-  RegisterVerticalLayoutCategory = function() return {GetID = function() return 1 end}, {AddInitializer = function() end} end,
-  RegisterAddOnSetting = function(_, variable, key, tbl, _, name, default)
+  RegisterVerticalLayoutCategory = function(name) return {GetID = function() return 1 end, name = name}, {AddInitializer = function() end} end,
+  RegisterVerticalLayoutSubcategory = function(parent, name)
+    assert(parent.name == "TwichUI", "pages sit directly under TwichUI")
+    table.insert(pageOrder, name)
+    local id = #pageOrder + 10
+    return {GetID = function() return id end, name = name}, {AddInitializer = function() end}
+  end,
+  RegisterAddOnSetting = function(category, variable, key, tbl, _, name, default)
+    assert(not variables[variable], variable .. " is registered once")
+    variables[variable] = category.name
     if tbl == c.TwichUIDB.modules then defaults[key] = default
     else assert(variable == "TWICHUI_showAdvanced" and tbl == c.TwichUIDB.ui and default == false, "only the advanced switch lives elsewhere") end
     return {name = name, SetValueChangedCallback = function(self, fn) self.changed = fn end}
   end,
-  RegisterProxySetting = function(_, variable, varType, name, default, get, set)
+  RegisterProxySetting = function(category, variable, varType, name, default, get, set)
+    assert(not variables[variable], variable .. " is registered once")
+    variables[variable] = category.name
     local s = {variable = variable, varType = varType, name = name, default = default, get = get, set = set}
     proxies[variable] = s
     return s
@@ -35,7 +46,8 @@ c.Settings = {
     local data = {}
     return {Add = function(_, value, label, tip) table.insert(data, {value = value, label = label, tooltip = tip}) end, GetData = function() return data end}
   end,
-  RegisterCanvasLayoutSubcategory = function() return {GetID = function() return 2 end} end,
+  RegisterCanvasLayoutSubcategory = function(parent, _, name) assert(parent.name == "Gear comparison" and name == "Stat weights") return {GetID = function() return 2 end} end,
+  OpenToCategory = function(id) c.opened = id end,
   RegisterAddOnCategory = function() end,
 }
 c.UnitClass = function() return "Mage", "MAGE" end
@@ -127,5 +139,34 @@ assert(type(attune.data.tooltip) == "string" and attune.data.tooltip:find("Statu
 c.TwichUIDB.modules.attuneSkin = false
 attune.setting.changed()
 assert(attune.data.tooltip:find("after reload"), "toggle change shows it needs a reload")
+
+-- The overview links to one page per feature, in this order; every setting
+-- is on exactly one page (registration above refuses a repeat).
+assert(table.concat(pageOrder, ",") == "Gear comparison,Zone arrival,Journey Chronicle,Addon skins,Configuration sharing", table.concat(pageOrder, ","))
+for variable, page in pairs({
+  TWICHUI_media = "TwichUI", TWICHUI_quietLogin = "TwichUI", TWICHUI_showAdvanced = "TwichUI",
+  TWICHUI_gearHints = "Gear comparison", TWICHUI_gearTree = "Gear comparison", TWICHUI_gearBagStyle = "Gear comparison",
+  TWICHUI_arrival = "Zone arrival", TWICHUI_arrivalHold = "Zone arrival",
+  TWICHUI_chronicle = "Journey Chronicle", TWICHUI_chronicleClock = "Journey Chronicle", TWICHUI_chronicleSound = "Journey Chronicle",
+  TWICHUI_attuneSkin = "Addon skins", TWICHUI_whatsTrainingSkin = "Addon skins",
+  TWICHUI_setupSharing = "Configuration sharing", TWICHUI_shareGuild = "Configuration sharing",
+}) do assert(variables[variable] == page, variable .. " is on " .. page .. ", not " .. tostring(variables[variable])) end
+assert(R.settingsCategories.chronicle and R.settingsCategories.sharing and R.settingsCategories.overview == R.settingsCategory)
+R:OpenSettings("chronicle"); assert(c.opened == R.settingsCategories.chronicle:GetID(), "opens a named page")
+R:OpenSettings(); assert(c.opened == R.settingsCategory:GetID(), "opens the overview by default")
+
+-- Overview rows: status text follows the toggles, and each opens its page.
+local rows = {}
+for _, i in ipairs(initializers) do if i.click and i.data.name:find("%s%s%s") then rows[i.data.name:match("^(.-)%s%s%s")] = i end end
+local zone = assert(rows["Zone arrival"], "overview has a Zone arrival row")
+assert(zone.data.name:find("On"), zone.data.name)
+c.TwichUIDB.modules.arrival = false
+c.TwichUIDB.modules.attuneSkin = true
+-- a toggle change refreshes the status
+local arrivalToggle; for _, i in ipairs(initializers) do if i.setting and i.setting.name == "Show a title card when I arrive in a new zone" then arrivalToggle = i end end
+arrivalToggle.setting.changed()
+assert(zone.data.name:find("Off"), zone.data.name)
+zone.click(); assert(c.opened == R.settingsCategories.arrival:GetID(), "row opens its page")
+assert(rows["Addon skins"].data.name:find("of") or rows["Addon skins"].data.name:find("None installed"), rows["Addon skins"].data.name)
 
 print("SETTINGS DEFAULTS TESTS PASSED")

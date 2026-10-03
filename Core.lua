@@ -139,9 +139,11 @@ R:On("PLAYER_LOGIN", RegisterWithEllesmere)   -- in case EllesmereUI loaded oddl
 ---------------------------------------------------------------------------
 -- Entry points
 ---------------------------------------------------------------------------
-function R:OpenSettings()
-    if R.settingsCategory and Settings and Settings.OpenToCategory then
-        Settings.OpenToCategory(R.settingsCategory:GetID())
+-- key: a page under TwichUI (see Settings.lua); the overview when omitted.
+function R:OpenSettings(key)
+    local category = R.settingsCategories and R.settingsCategories[key or "overview"] or R.settingsCategory
+    if category and Settings and Settings.OpenToCategory then
+        Settings.OpenToCategory(category:GetID())
     end
 end
 

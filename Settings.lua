@@ -1,9 +1,11 @@
 -- TwichUI: options in Esc > Options > AddOns > TwichUI (/twichui)
 -- The one home for TwichUI's settings, built from Blizzard's own controls.
--- Rarely changed options only show with "Show advanced options" on; they keep
--- their values (and keep working) while hidden. Stat weights get their own
--- page under TwichUI (gear/Window.lua), since a ranked list and a table of
--- numbers don't fit the standard controls.
+-- A short overview page links to one page per feature (subcategories of
+-- TwichUI). Rarely changed options sit under an "Advanced" header that only
+-- shows with "Show advanced options" (on the overview) on; they keep their
+-- values (and keep working) while hidden. Stat weights are a page under Gear
+-- comparison (gear/Window.lua), since a ranked list and a table of numbers
+-- don't fit the standard controls.
 
 local R = TwichUI
 
@@ -61,9 +63,30 @@ local function SkinStatus(skin, onAtLoad)
 end
 
 local function Build()
-    if not (Settings and Settings.RegisterVerticalLayoutCategory) then return end
-    local category, layout = Settings.RegisterVerticalLayoutCategory("TwichUI")
-    R.settingsCategory = category
+    if not (Settings and Settings.RegisterVerticalLayoutCategory and Settings.RegisterVerticalLayoutSubcategory) then return end
+    local root, rootLayout = Settings.RegisterVerticalLayoutCategory("TwichUI")
+    R.settingsCategory = root
+    R.settingsCategories = { overview = root }   -- R:OpenSettings(key)
+
+    -- Pages are made up front so the category list keeps this order. The
+    -- helpers below add to whichever page Use() last selected; the page is
+    -- built in one go, so nothing is added after the next Use().
+    local pages = { overview = { category = root, layout = rootLayout } }
+    local function NewPage(key, name)
+        local category, layout = Settings.RegisterVerticalLayoutSubcategory(root, name)
+        pages[key] = { category = category, layout = layout }
+        R.settingsCategories[key] = category
+    end
+    NewPage("gear", "Gear comparison")
+    NewPage("arrival", "Zone arrival")
+    NewPage("chronicle", "Journey Chronicle")
+    NewPage("skins", "Addon skins")
+    NewPage("sharing", "Configuration sharing")
+
+    local category, layout
+    local function Use(key) category, layout = pages[key].category, pages[key].layout end
+    Use("overview")
+
     local VarType = Settings.VarType or {}
     local BOOL = VarType.Boolean or "boolean"
     local STRING = VarType.String or "string"
@@ -87,6 +110,17 @@ local function Build()
         return initializer
     end
 
+    -- The overview's feature rows: a name, a short status, and a button to that
+    -- page. The status is rewritten whenever a toggle changes (no polling).
+    local overviewRows = {}
+    local function RefreshOverview()
+        for _, row in ipairs(overviewRows) do
+            if row.initializer.data then
+                row.initializer.data.name = row.label .. "   " .. row.status()
+            end
+        end
+    end
+
     local function Header(text, tooltip)
         if CreateSettingsListSectionHeaderInitializer then
             local initializer = CreateSettingsListSectionHeaderInitializer(text, tooltip)
@@ -102,6 +136,7 @@ local function Build()
             setting:SetValueChangedCallback(function()
                 if needsReload then AskReload() end
                 if onChange then onChange() end
+                RefreshOverview()
                 if R.Window then R.Window:Refresh() end
             end)
         end
@@ -141,17 +176,10 @@ local function Build()
     end
 
     -----------------------------------------------------------------------
-    Header("General")
-    local advancedSetting = Settings.RegisterAddOnSetting(category, "TWICHUI_showAdvanced", "showAdvanced", TwichUIDB.ui, BOOL,
-        "Show advanced options", false)
-    Settings.CreateCheckbox(category, advancedSetting,
-        "Shows rarely changed options in each section below: how upgrade hints are judged and revealed, the bag mark style, how long the zone arrival card stays, and how configurations are sent. Hidden options keep their values.")
-    Toggle("media", "Custom fonts and sounds",
-        "Adds Alegreya, Alegreya Sans, Barlow and Cinzel fonts, plus the bell alert sounds, to the font and sound lists of EllesmereUI and other addons. Nothing changes until you pick them there.",
-        true)
-
-    -----------------------------------------------------------------------
-    Header("Gear comparison", "Quiet upgrade hints for your class and main talent tree. A rough estimate from item stats, not a simulation.")
+    -- Feature pages first; the overview is filled in at the end, once each
+    -- page's status is known.
+    Use("gear")
+    Header("Upgrade hints", "Quiet upgrade hints for your class and main talent tree. A rough estimate from item stats, not a simulation.")
     Toggle("gearHints", "Upgrade hints in item tooltips",
         "Adds a short line to an item's tooltip when it looks like an upgrade for your class and main talent tree, such as \"Likely upgrade for Fury\". Hold Shift (your compare-items key) to see why.\n\n\"Use:\" and \"Chance on hit:\" effects aren't weighed.",
         false)
@@ -178,6 +206,7 @@ local function Build()
             "How each of your talent trees values stats: a stat priority you rank, as guides list them, or stat weights you can change.")
     end
     if P then
+        Advanced(Header("Advanced"))
         Advanced(ProxyToggle("gearPossible", "Show possible upgrades too",
             "Also mark gear that looks a little better, or better apart from effects the estimate can't weigh. Off: only likely upgrades and empty slots.",
             true, function() return P.Get("glancePossible") and true or false end, function(value) P.Set("glancePossible", value) end))
@@ -256,8 +285,11 @@ local function Build()
         end
     end
 
+    if R.GearWindow and R.GearWindow.Register then R.GearWindow:Register(pages.gear.category) end
+
     -----------------------------------------------------------------------
-    Header("Addon skins", "Gives these addons the EllesmereUI look. Needs EllesmereUI with its third-party addon skins on. TwichUI only skins the addons listed here.")
+    Use("skins")
+    Header("EllesmereUI look", "Gives these addons the EllesmereUI look. Needs EllesmereUI with its third-party addon skins on. TwichUI only skins the addons listed here.")
     -- Each skin's tooltip ends with its status, kept current by the events
     -- that can change it (no polling).
     local skinRows = {}
@@ -268,6 +300,7 @@ local function Build()
                 row.initializer.data.tooltip = row.skin.what .. "\n\nStatus: " .. status .. (detail and ("\n" .. detail) or "")
             end
         end
+        RefreshOverview()
     end
     for _, skin in ipairs(SKINS) do
         local installed = AddonState(skin.addon) ~= "missing"
@@ -290,13 +323,8 @@ local function Build()
     end)
 
     -----------------------------------------------------------------------
-    Header("Chat")
-    Toggle("quietLogin", "Hide addon welcome messages",
-        "Hides the \"loaded\" and \"type /command for options\" lines addons print when you log in or reload. Errors and warnings still show. Type /twichui hidden to see what was hidden this session.",
-        true)
-
-    -----------------------------------------------------------------------
-    Header("Zone arrival", "A short, quiet title card when you arrive somewhere new, in place of the game's own zone text.")
+    Use("arrival")
+    Header("Title card", "A short, quiet title card when you arrive somewhere new, in place of the game's own zone text.")
     local function RefreshArrival() if R.Arrival then R.Arrival.Refresh() end end
     local arrival = Toggle("arrival", "Show a title card when I arrive in a new zone",
         "The zone's name appears near the top of the screen under a thin bronze rule, with the smaller place you're in beneath it, then fades away. It replaces the game's own zone text while on. Not shown when you log in or reload, or while on a flight path: only where you land.\n\nIf another addon also replaces the zone text, you may see both.",
@@ -313,6 +341,7 @@ local function Build()
         for i, hold in ipairs(Arrival.HOLDS) do
             holds[i] = { hold.key, hold.label, ("Stays %g seconds before fading away."):format(hold.seconds) }
         end
+        Advanced(Header("Advanced"))
         Under(Advanced(Choice("arrivalHold", "How long the card stays",
             "How long the zone's name stays before it fades away. Cards for smaller places stay a little shorter.",
             STRING, Arrival.HOLD_DEFAULT,
@@ -322,7 +351,8 @@ local function Build()
     end
 
     -----------------------------------------------------------------------
-    Header("Journey Chronicle", "A quiet, private journal for this character. It isn't shared, sent or backed up with your configuration, and it never tells you what to do next.")
+    Use("chronicle")
+    Header("Automatic entries", "A quiet, private journal for this character. It isn't shared, sent or backed up with your configuration, and it never tells you what to do next.")
     local chronicle = Toggle("chronicle", "Keep moments for me automatically",
         "On by default. TwichUI adds a short entry to this character's Chronicle for the moments you pick below. It starts the moment it is on and never looks back. You can always write your own notes, whatever this is set to.",
         false, function() if R.ChronicleRecorder then R.ChronicleRecorder.Refresh() end end)
@@ -355,7 +385,8 @@ local function Build()
     end, "Opens your Chronicle (same as typing /tui chronicle).")
 
     -----------------------------------------------------------------------
-    Header("Configuration sharing", "Share the settings of the addons you choose with friends, and apply theirs. You always choose what to apply, and Undo puts your own settings back.")
+    Use("sharing")
+    Header("Addon configurations", "Share the settings of the addons you choose with friends, and apply theirs. You always choose what to apply, and Undo puts your own settings back.")
     local sharing = Toggle("setupSharing", "Configuration sharing",
         "Save the settings of the addons you choose as an addon configuration, send it to friends in game, and apply configurations friends send you. Type /tui share.",
         true)
@@ -374,6 +405,7 @@ local function Build()
         if SettingsPanel and SettingsPanel:IsShown() then HideUIPanel(SettingsPanel) end
         R.Window:Show()
     end, "Opens the sharing window: send your setup, review ones friends sent, create backups and run the party compatibility check (same as typing /tui share).")
+    Advanced(Header("Advanced"))
     Advanced(Toggle("shareWhisper", "Send by direct message",
         "Send and receive configurations with hidden addon messages straight to one player. Only they receive it.\n\n" .. R.Share.WHY_FOREVER,
         false))
@@ -384,8 +416,63 @@ local function Build()
         "Send and receive over your guild's hidden addon channel. Every online guild member receives the data; only the named recipient's TwichUI reads it. No chat text appears, but it uses guild-wide bandwidth, so prefer the group channel when you can.",
         false))
 
-    if R.GearWindow and R.GearWindow.Register then R.GearWindow:Register(category) end
-    Settings.RegisterAddOnCategory(category)
+    -----------------------------------------------------------------------
+    Use("overview")
+    Header("A quiet interface companion for WoW: Forever.",
+        "TwichUI makes the game's interface a little clearer and more cohesive, without taking over. Each feature has its own page below, and every one can be turned off.")
+
+    local function OnOff(on, onText, offText)
+        if on then return R.GREEN .. (onText or "On") .. "|r" end
+        return R.GREY .. (offText or "Off") .. "|r"
+    end
+    -- key: page to open; status: a word or two for the row.
+    local function FeatureRow(key, label, tooltip, status)
+        if not CreateSettingsButtonInitializer then return end
+        local initializer = CreateSettingsButtonInitializer(label, "Open", function()
+            if Settings.OpenToCategory and R.settingsCategories[key] then
+                Settings.OpenToCategory(R.settingsCategories[key]:GetID())
+            end
+        end, tooltip, false)
+        layout:AddInitializer(initializer)
+        overviewRows[#overviewRows + 1] = { initializer = initializer, label = label, status = status }
+    end
+    if R.GearPrefs then
+        FeatureRow("gear", "Gear comparison", "Quiet upgrade hints in item tooltips and bags, and the stat weights behind them.",
+            function() return OnOff(R:Enabled("gearHints") or R:Enabled("gearBagIcons")) end)
+    end
+    FeatureRow("arrival", "Zone arrival", "A brief title card when you arrive somewhere new.",
+        function() return OnOff(R:Enabled("arrival")) end)
+    FeatureRow("chronicle", "Journey Chronicle", "Your private journal for this character.",
+        function() return OnOff(R:Enabled("chronicle"), "Recording", "Notes only") end)
+    FeatureRow("skins", "Addon skins", "The EllesmereUI look for supported addons.", function()
+        local installed, on = 0, 0
+        for _, skin in ipairs(SKINS) do
+            if AddonState(skin.addon) ~= "missing" then
+                installed = installed + 1
+                if R:Enabled(skin.key) then on = on + 1 end
+            end
+        end
+        if installed == 0 then return R.GREY .. "None installed|r" end
+        return OnOff(on > 0, ("%d of %d on"):format(on, installed), "Off")
+    end)
+    FeatureRow("sharing", "Configuration sharing", "Share your addon settings with friends, and keep backups.",
+        function() return OnOff(R:Enabled("setupSharing")) end)
+    RefreshOverview()
+
+    -----------------------------------------------------------------------
+    Header("General")
+    local advancedSetting = Settings.RegisterAddOnSetting(category, "TWICHUI_showAdvanced", "showAdvanced", TwichUIDB.ui, BOOL,
+        "Show advanced options", false)
+    Settings.CreateCheckbox(category, advancedSetting,
+        "Shows an Advanced section on the pages that have one: how upgrade hints are judged and revealed and the bag mark style (Gear comparison), how long the title card stays (Zone arrival), and how configurations are sent (Configuration sharing). Hidden options keep their values.")
+    Toggle("media", "Custom fonts and sounds",
+        "Adds Alegreya, Alegreya Sans, Barlow and Cinzel fonts, plus the bell alert sounds, to the font and sound lists of EllesmereUI and other addons. Nothing changes until you pick them there.",
+        true)
+    Toggle("quietLogin", "Hide addon welcome messages",
+        "Hides the \"loaded\" and \"type /command for options\" lines addons print when you log in or reload. Errors and warnings still show. Type /twichui hidden to see what was hidden this session.",
+        true)
+
+    Settings.RegisterAddOnCategory(root)
 end
 
 R:OnInit(function()
