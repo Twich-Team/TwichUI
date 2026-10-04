@@ -17,6 +17,8 @@ local function Fake(o)
     if k == "SetScript" then return function(s, n, fn) s.scripts[n] = fn end end
     if k == "HookScript" then return function(s, n, fn) s.hooks[n] = fn end end
     if k == "SetText" then return function(s, v) s.text = v end end
+    if k == "SetPoint" then return function(s, ...) s.point = {...} end end
+    if k == "SetSize" then return function(s, w, h) s.w, s.h = w, h end end
     if k == "CreateFontString" or k == "CreateTexture" then return function() return Fake() end end
     if k == "CreateAnimationGroup" then return function(s)
       local g = Fake({owner = s, plays = 0})
@@ -35,6 +37,13 @@ local function Fake(o)
 end
 c.CreateFrame = function() return Fake() end
 c.UIParent = Fake()
+c.UIParent.GetWidth = function() return 1024 end
+c.UIParent.GetHeight = function() return 768 end
+-- The game's Edit Mode: EventRegistry callbacks (owner required, one per event and owner), and whether it is open.
+c.EventRegistry = { callbacks = {} }
+function c.EventRegistry:RegisterCallback(event, fn, owner) assert(owner, "registered with an owner"); self.callbacks[event] = fn end
+function c.EventRegistry:UnregisterCallback(event, owner) assert(owner, "unregistered with an owner"); self.callbacks[event] = nil end
+c.EditModeManagerFrame = { IsEditModeActive = function() return c.EDITING end }
 
 c.NOW = 1700000000
 c.time = function() return c.NOW end
@@ -44,7 +53,7 @@ c.UnitOnTaxi = function() return c.TAXI end
 c.EventToastManagerFrame = Fake()
 c.EventToastManagerFrame.IsCurrentlyToasting = function() return c.TOAST end
 
-for _, f in ipairs({"chronicle/Style.lua", "modules/WelcomeBack.lua"}) do
+for _, f in ipairs({"chronicle/Style.lua", "modules/Arrival.lua", "modules/WelcomeBack.lua"}) do
   local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
 end
 c.LOADED["!!!TwichUI"] = true; c.FireEvent("ADDON_LOADED", "!!!TwichUI")
@@ -155,7 +164,7 @@ assert(not card.shown, "hides when leaving the world")
 Login(true, false); Settle()
 card.open.scripts.OnClick()
 assert(opened == 1 and not card.shown, "opens the Chronicle")
-card.close.scripts.OnClick()   -- closing a hidden card is harmless
+B.Dismiss()   -- dismissing a hidden card is harmless
 
 -- /tui welcome previews it at any time (even in combat), with the same text, and says so when there is nothing to show.
 c.COMBAT = true
@@ -171,6 +180,69 @@ do
   local ok, why = B.Preview()
   assert(ok == false and why:find("nothing to show", 1, true) and not card.shown, "no history: a reason, no card")
   for i, e in ipairs(saved) do C.Entries()[i] = e end
+end
+
+-- The card's look: the zone card's, with no frame, its heading over a rule.
+assert(card.title.text == "Welcome Back" and card.rule, "a heading over the bronze rule")
+-- Where it goes: upper centre by default.
+do
+  local x, y = B.Position()
+  assert(x == 0 and y == -260, "default: top centre, below the zone card")
+  assert(card.point[1] == "TOP" and card.point[4] == 0 and card.point[5] == -260, "the card is built at the default")
+end
+-- Edit Mode: an outline to drag while it is open, even though the card is hidden; the place is kept and used.
+do
+  local enter, exit = c.EventRegistry.callbacks["EditMode.Enter"], c.EventRegistry.callbacks["EditMode.Exit"]
+  assert(enter and exit, "listens for Edit Mode")
+  local fakes = {}
+  local make = c.CreateFrame
+  assert(not card.shown, "the card is hidden")
+  assert(not c.TwichUIDB.ui or not c.TwichUIDB.ui.welcomeBackPlace, "no saved place to begin with")
+  c.CreateFrame = function() local f = make(); fakes[#fakes + 1] = f; return f end
+  local function Mover() for _, f in ipairs(fakes) do if f.scripts.OnDragStart then return f end end end
+  c.EDITING = true; enter()
+  local mover = Mover()
+  assert(mover and mover.shown, "outline shown while the card is hidden")
+  assert(mover.w == 520 and mover.h == 96, "outline is the card's size")
+  assert(mover.point[1] == "TOP" and mover.point[4] == 0 and mover.point[5] == -260, "outline at the default place")
+  -- dragged so its top centre is 88 right of centre and 168 below the top of a 1024x768 screen
+  mover.GetLeft = function() return 340 end
+  mover.GetWidth = function() return 520 end
+  mover.GetTop = function() return 600 end
+  mover.scripts.OnDragStart(mover); mover.scripts.OnDragStop(mover)
+  local saved = c.TwichUIDB.ui.welcomeBackPlace
+  assert(saved.x == 88 and saved.y == -168, "kept as an offset from the top centre")
+  assert(mover.point[4] == 88 and mover.point[5] == -168, "the outline is re-anchored by its top")
+  assert(card.point[4] == 88 and card.point[5] == -168, "the card moves with it")
+  mover.scripts.OnLeave()
+  exit()
+  assert(not mover.shown, "no outline once Edit Mode closes")
+  c.EDITING = false
+  -- the card appears where it was put
+  Login(true, false); Settle()
+  assert(card.shown and card.point[4] == 88 and card.point[5] == -168, "the card appears where it was put")
+  B.Dismiss()
+  -- right-click puts it back
+  c.EDITING = true; enter()
+  mover.scripts.OnMouseUp(mover, "LeftButton")
+  assert(c.TwichUIDB.ui.welcomeBackPlace, "a left click changes nothing")
+  mover.scripts.OnMouseUp(mover, "RightButton")
+  assert(c.TwichUIDB.ui.welcomeBackPlace == nil and mover.point[4] == 0 and mover.point[5] == -260 and card.point[5] == -260, "right-click: back to the default")
+  -- switched off while Edit Mode is open: the outline goes and the hooks are released; on again: both return
+  M.welcomeBack = false; B.Refresh()
+  assert(not mover.shown and not c.EventRegistry.callbacks["EditMode.Enter"] and not c.EventRegistry.callbacks["EditMode.Exit"], "off: no outline, no hooks")
+  M.welcomeBack = true; B.Refresh(); B.Refresh()
+  assert(mover.shown and c.EventRegistry.callbacks["EditMode.Enter"], "on again during Edit Mode")
+  exit(); c.EDITING = false
+  assert(not mover.shown)
+  -- a saved place that can't be right is ignored
+  for _, bad in ipairs({ "x", { x = "1", y = 2 }, { x = 0 / 0, y = 0 }, { x = 1e9, y = 0 }, { y = -100 } }) do
+    c.TwichUIDB.ui.welcomeBackPlace = bad
+    local px, py = B.Position()
+    assert(px == 0 and py == -260, "bad saved place ignored")
+  end
+  c.TwichUIDB.ui.welcomeBackPlace = nil
+  c.CreateFrame = make
 end
 
 -- Reduced motion: it only fades.

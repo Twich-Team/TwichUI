@@ -1,9 +1,10 @@
 -- TwichUI: Welcome Back bookmark
--- Logging in to a character with Chronicle history shows one small card, like a
--- ribbon left in a travel journal: "Last noted: The Barrens · 2 hours ago", with
--- Open Chronicle and a close button. It fades away by itself.
--- It only reads the newest Chronicle entry that has a place and a date; it stores
--- nothing and adds no entry. "Last noted" is the Chronicle's own last record, not
+-- Logging in to a character with Chronicle history shows one short title card in the
+-- zone card's manner, with no frame: "Welcome Back" over its bronze rule, then
+-- "Last noted: The Barrens · 2 hours ago" and an Open Chronicle link. It sits near the
+-- top of the screen, can be moved in Edit Mode, and fades away by itself.
+-- It only reads the newest Chronicle entry that has a place and a date; it adds no
+-- entry and stores only the card's own screen position, if the player moves it in Edit Mode. "Last noted" is the Chronicle's own last record, not
 -- where the character logged out. It shows only on a real login (never after a
 -- reload or a loading screen), waits until the arrival card's quiet time is over,
 -- stays away from combat, flight and other banners, and gives up rather than queue.
@@ -17,9 +18,11 @@ R.WelcomeBack = B
 local DELAY = 7             -- seconds after login; the zone arrival card is quiet for its first 5
 local RETRY = 2             -- seconds between looks when something is in the way
 local RETRIES = 3           -- looks before giving up
-local FADE_IN, HOLD, FADE_OUT = 0.6, 8, 1.2
-local RISE = 6              -- pixels the card settles upward (0 with Reduced motion)
-local WIDTH, HEIGHT = 420, 56
+local FADE_IN, HOLD, FADE_OUT = 0.8, 8, 1.4   -- fades are the zone card's
+local RISE = 8              -- pixels the card settles upward, as the zone card does (0 with Reduced motion)
+local WIDTH, HEIGHT = 520, 96
+local TOP_OFFSET = -260     -- default place: upper centre, below the error text, raid warnings and the zone card
+local MOVER_ATLAS = "editmode-actionbar-highlight-NineSlice-Center"   -- Edit Mode's own highlight, when the client has it
 
 local pending = 0           -- bumped to drop a waiting timer; a timer only runs if it is still current
 local card
@@ -59,6 +62,24 @@ local function Escape(text) return (text:gsub("|", "||")) end
 local function Hex(c) return ("|cff%02x%02x%02x"):format(c[1] * 255, c[2] * 255, c[3] * 255) end
 
 ---------------------------------------------------------------------------
+-- Where it goes: the top edge's offset from the top centre of the screen, as moved in Edit
+-- Mode (TwichUIDB.ui.welcomeBackPlace), or the default. The card grows downward from there.
+---------------------------------------------------------------------------
+local function Offset(n) return type(n) == "number" and n == n and n > -10000 and n < 10000 end
+
+function B.Position()
+    local saved = TwichUIDB and TwichUIDB.ui and TwichUIDB.ui.welcomeBackPlace
+    if type(saved) == "table" and Offset(saved.x) and Offset(saved.y) then return saved.x, saved.y end
+    return 0, TOP_OFFSET
+end
+
+local function Place(frame)
+    local x, y = B.Position()
+    frame:ClearAllPoints()
+    frame:SetPoint("TOP", UIParent, "TOP", x, y)
+end
+
+---------------------------------------------------------------------------
 -- The card. Made the first time it is needed.
 ---------------------------------------------------------------------------
 local function Hide()
@@ -80,58 +101,50 @@ local function Open()
     Hide()
 end
 
+-- A line of text with the zone card's shadow, which keeps it readable without a backdrop.
+local function Text(parent, path, size, fallback, color)
+    local fs = parent:CreateFontString(nil, "OVERLAY")
+    R.Arrival.SetFont(fs, path, size, fallback)
+    fs:SetShadowColor(0, 0, 0, 0.85)
+    fs:SetShadowOffset(1, -1)
+    fs:SetTextColor(color[1], color[2], color[3])
+    fs:SetJustifyH("CENTER")
+    fs:SetWordWrap(false)
+    fs:SetWidth(WIDTH)
+    return fs
+end
+
+-- No frame or backdrop, like the zone card. Only the Open Chronicle link takes clicks, so the
+-- world beneath the card stays clickable.
 local function Build()
-    local S = R.ChronicleStyle
-    if not S then return false end
+    local S, A = R.ChronicleStyle, R.Arrival
+    if not (S and A and A.Rule and A.SetFont) then return false end
     local K = S.color
-    card = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
+    card = CreateFrame("Frame", nil, UIParent)
     card:SetSize(WIDTH, HEIGHT)
-    card:SetPoint("BOTTOM", UIParent, "BOTTOM", 0, 230)   -- the zone card is at the top
-    card:SetFrameStrata("MEDIUM")
-    card:EnableMouse(true)
+    Place(card)
+    card:SetClampedToScreen(true)
+    card:SetFrameStrata("LOW")
+    card:EnableMouse(false)
     card:Hide()
     card.K = K
-    S.Frame(card, WIDTH, HEIGHT)
 
-    -- A ribbon hanging from the top edge, its foot notched.
-    local ribbon = card:CreateTexture(nil, "ARTWORK")
-    ribbon:SetColorTexture(K.ember[1], K.ember[2], K.ember[3], 0.9)
-    ribbon:SetSize(8, 34)
-    ribbon:SetPoint("TOPLEFT", 14, 5)
-    for i, w in ipairs({ 4, 2 }) do
-        local notch = card:CreateTexture(nil, "OVERLAY")
-        notch:SetColorTexture(K.bg[1], K.bg[2], K.bg[3], 1)
-        notch:SetSize(w, 1)
-        notch:SetPoint("BOTTOM", ribbon, "BOTTOM", 0, i - 1)
-    end
+    card.title = Text(card, A.FONT_TITLE, 18, "SubZoneTextFont", K.text)
+    card.title:SetPoint("TOP", 0, 0)
+    card.title:SetText("Welcome Back")
+    card.rule = A.Rule(card, K)
+    card.rule:SetWidth(110)
+    card.rule:SetPoint("TOP", card.title, "BOTTOM", 0, -6)
+    card.line = Text(card, A.FONT_LINE, 15, "GameFontHighlight", K.text)
+    card.line:SetPoint("TOP", card.rule, "BOTTOM", 0, -10)
+    card.more = Text(card, A.FONT_LINE, 13, "GameFontHighlightSmall", K.stone)
+    card.more:SetPoint("TOP", card.line, "BOTTOM", 0, -4)
 
-    local frame = card:CreateTexture(nil, "ARTWORK")
-    frame:SetColorTexture(K.bronzeLo[1], K.bronzeLo[2], K.bronzeLo[3], 1)
-    frame:SetSize(30, 30)
-    frame:SetPoint("LEFT", 34, 0)
-    local icon = card:CreateTexture(nil, "OVERLAY")
-    icon:SetTexture(S.icons.zone)
-    icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-    icon:SetSize(26, 26)
-    icon:SetPoint("CENTER", frame, "CENTER", 0, 0)
-
-    card.line = card:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    card.line:SetJustifyH("LEFT")
-    card.line:SetWordWrap(false)
-    card.line:SetSize(WIDTH - 72 - 36, 16)
-    card.line:SetPoint("TOPLEFT", 74, -10)
-    card.more = card:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    card.more:SetJustifyH("LEFT")
-    card.more:SetWordWrap(false)
-    card.more:SetSize(WIDTH - 72 - 120, 14)
-    card.more:SetPoint("TOPLEFT", card.line, "BOTTOMLEFT", 0, -4)
-    card.more:SetTextColor(K.stone[1], K.stone[2], K.stone[3])
-
-    card.open = S.Link(card, "Open Chronicle", Open, K.gold, K.text)
-    card.open:SetSize(100, 14)
-    card.open:SetPoint("BOTTOMRIGHT", -10, 8)
-    card.close = S.Close(card, B.Dismiss)
-    card.close:SetPoint("TOPRIGHT", -8, -8)
+    card.open = S.Link(card, "Open Chronicle", Open, K.stone, K.gold)
+    card.open:SetSize(120, 16)
+    A.SetFont(card.open.text, A.FONT_LINE, 13, "GameFontNormalSmall")
+    card.open.text:SetJustifyH("CENTER")
+    card.open:SetPoint("TOP", card.more, "BOTTOM", 0, -6)
 
     local anim = card:CreateAnimationGroup()
     anim:SetToFinalAlpha(true)
@@ -163,6 +176,7 @@ end
 local function Show(entry, ago)
     if not card and not Build() then return end
     Hide()   -- a card already up starts over, with its listeners set once
+    Place(card)
     local K = card.K
     card.line:SetText(("%sLast noted:|r %s%s|r %s·  %s|r"):format(
         Hex(K.stone), Hex(K.text), Escape(entry.zone), Hex(K.stone), ago))
@@ -170,6 +184,8 @@ local function Show(entry, ago)
     local more = entry.kind ~= "note" and entry.title ~= "Arrived in " .. entry.zone and entry.title or nil
     card.more:SetText(more and Escape(more) or "")
     card.more:SetShown(more ~= nil)
+    card.open:ClearAllPoints()
+    card.open:SetPoint("TOP", more and card.more or card.line, "BOTTOM", 0, -6)
 
     local rise = R:Enabled("arrivalReducedMotion") and 0 or RISE
     card.drop:SetOffset(0, -rise)
@@ -239,6 +255,100 @@ local function OnLeavingWorld()
     Hide()
 end
 
+---------------------------------------------------------------------------
+-- Moving it in Edit Mode. The game's Edit Mode has no place for addon frames, so while it is
+-- open a TwichUI outline stands where the card appears, even when the card isn't showing: drag
+-- it to move the card, right-click it to put it back. The place is kept at once, whatever Edit
+-- Mode's own Save or Revert does with its layouts, and is the same for every character.
+---------------------------------------------------------------------------
+local mover
+local editHooked = false
+
+local function SavePosition(x, y)
+    TwichUIDB.ui = TwichUIDB.ui or {}
+    TwichUIDB.ui.welcomeBackPlace = x and { x = x, y = y } or nil
+    Place(mover)
+    if card then Place(card) end
+end
+
+local function BuildMover()
+    mover = CreateFrame("Frame", nil, UIParent)
+    mover:SetSize(WIDTH, HEIGHT)
+    mover:SetFrameStrata("MEDIUM")
+    mover:SetFrameLevel(1000)
+    mover:SetClampedToScreen(true)
+    mover:SetMovable(true)
+    mover:EnableMouse(true)
+    mover:RegisterForDrag("LeftButton")
+    if mover.SetDontSavePosition then mover:SetDontSavePosition(true) end   -- TwichUI keeps the place, not the game's layout cache
+    mover:Hide()
+    local fill = mover:CreateTexture(nil, "BACKGROUND")
+    fill:SetAllPoints()
+    if C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo(MOVER_ATLAS) then
+        fill:SetAtlas(MOVER_ATLAS)
+    else
+        local S = R.ChronicleStyle
+        local c = S and S.color and S.color.bronze or { 0.55, 0.43, 0.22 }
+        fill:SetColorTexture(c[1], c[2], c[3], 0.35)
+    end
+    local label = mover:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    label:SetPoint("CENTER")
+    label:SetText("Chronicle Welcome Back")
+    mover:SetScript("OnDragStart", function(self) self:StartMoving() end)
+    mover:SetScript("OnDragStop", function(self)
+        self:StopMovingOrSizing()
+        local left, top, width = self:GetLeft(), self:GetTop(), self:GetWidth()
+        local parentWidth, parentHeight = UIParent:GetWidth(), UIParent:GetHeight()
+        if not (left and top and width and parentWidth and parentHeight) then Place(self) return end
+        SavePosition(math.floor(left + width / 2 - parentWidth / 2 + 0.5), math.floor(top - parentHeight + 0.5))
+    end)
+    mover:SetScript("OnMouseUp", function(_, button)
+        if button == "RightButton" then SavePosition(nil) end
+    end)
+    mover:SetScript("OnEnter", function(self)
+        if not GameTooltip then return end
+        GameTooltip:SetOwner(self, "ANCHOR_CURSOR")
+        GameTooltip:SetText("TwichUI: Chronicle Welcome Back", 1, 1, 1)
+        GameTooltip:AddLine("Where the Welcome Back card appears at login. Drag to move it; right-click to put it back.", nil, nil, nil, true)
+        GameTooltip:Show()
+    end)
+    mover:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+end
+
+local function EditModeActive()
+    local manager = EditModeManagerFrame
+    return manager and manager.IsEditModeActive and manager:IsEditModeActive() and true or false
+end
+
+-- Shows the outline while Edit Mode is open and the bookmark is on.
+local function ShowMover(shown)
+    if shown and R:Enabled("welcomeBack") then
+        if not mover then BuildMover() end
+        Place(mover)
+        mover:Show()
+    elseif mover then
+        mover:StopMovingOrSizing()
+        mover:Hide()
+    end
+end
+
+local function OnEditModeEnter() ShowMover(true) end
+local function OnEditModeExit() ShowMover(false) end
+
+-- Listens to Edit Mode opening and closing only while the bookmark is on. Registered at most once.
+local function HookEditMode(wanted)
+    if not (EventRegistry and EventRegistry.RegisterCallback) then return end
+    if wanted and not editHooked then
+        editHooked = true
+        EventRegistry:RegisterCallback("EditMode.Enter", OnEditModeEnter, B)
+        EventRegistry:RegisterCallback("EditMode.Exit", OnEditModeExit, B)
+    elseif not wanted and editHooked then
+        editHooked = false
+        EventRegistry:UnregisterCallback("EditMode.Enter", B)
+        EventRegistry:UnregisterCallback("EditMode.Exit", B)
+    end
+end
+
 local function Want(event, handler, wanted)
     if wanted and not active[event] then
         active[event] = handler
@@ -258,6 +368,8 @@ function B.Refresh()
         pending = pending + 1
         Hide()
     end
+    HookEditMode(on)
+    ShowMover(on and EditModeActive())
 end
 
 R:OnInit(B.Refresh)
