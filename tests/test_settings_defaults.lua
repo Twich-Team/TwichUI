@@ -37,9 +37,13 @@ c.Settings = {
     assert(not variables[variable], variable .. " is registered once")
     variables[variable] = category.name
     local s = {variable = variable, varType = varType, name = name, default = default, get = get, set = set}
+    s.SetValue = function(self, value) self.set(value) end
     proxies[variable] = s
     return s
   end,
+  CreateSliderOptions = function(min, max, step) return { min = min, max = max, step = step } end,
+  CreateSlider = function(_, setting, options, tooltip) local i = Initializer(setting.name, tooltip); i.setting = setting; i.options = options; return i end,
+  CreateColorSwatch = function(_, setting, tooltip) local i = Initializer(setting.name, tooltip); i.setting = setting; i.swatch = true; return i end,
   CreateCheckbox = function(_, setting, tooltip) local i = Initializer(setting.name, tooltip); i.setting = setting; return i end,
   CreateDropdown = function(_, setting, options, tooltip) local i = Initializer(setting.name, tooltip); i.setting = setting; dropdowns[setting.variable] = options; return i end,
   CreateControlTextContainer = function()
@@ -62,7 +66,7 @@ end
 c.CreateFrame = function() return Obj() end
 c.StaticPopupDialogs = {}; c.StaticPopup_Show = function() end
 for _, f in ipairs({ "gear/Weights.lua", "gear/Evaluate.lua", "gear/Prefs.lua", "gear/Data.lua",
-  "gear/Hints.lua", "gear/Tooltip.lua", "gear/Bags.lua", "gear/Window.lua", "modules/Arrival.lua", "modules/Media.lua", "modules/FriendLogin.lua", "Settings.lua" }) do
+  "gear/Hints.lua", "gear/Tooltip.lua", "gear/Bags.lua", "gear/Window.lua", "modules/Arrival.lua", "modules/Media.lua", "modules/FriendLogin.lua", "modules/FoodDrink.lua", "Settings.lua" }) do
   local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
 end
 c.LOADED["!!!TwichUI"] = true; c.FireEvent("ADDON_LOADED", "!!!TwichUI")
@@ -74,7 +78,7 @@ for key, default in pairs(defaults) do
   n = n + 1
   assert(default == R.DEFAULT_MODULES[key], key .. " default matches a new install")
 end
-assert(n == 33, "every module has a toggle: " .. n)
+assert(n == 36, "every module has a toggle: " .. n)
 assert(defaults.arrival == true and defaults.arrivalSubzones == true and defaults.arrivalReducedMotion == false,
   "arrival card and subzone cards on; reduced motion opt-in")
 assert(defaults.arrivalDungeons == true, "dungeon and raid arrival cards on by default")
@@ -83,6 +87,7 @@ assert(defaults.media == true and defaults.shareWhisper == true)
 assert(defaults.chronicle == true and defaults.chronicleChat == true, "Chronicle and its chat line are on by default")
 assert(defaults.chronicleDeaths == false, "death entries are opt-in")
 assert(defaults.welcomeBack == true, "Welcome Back bookmark is on by default")
+assert(defaults.foodDrink == false and defaults.foodDrinkFood == true and defaults.foodDrinkDrink == true, "Food and Drink buttons are opt-in")
 assert(defaults.auctionPosting == true, "Sell from Bags tab is on by default (it only searches when you pick an item)")
 assert(defaults.trainingNotice == true, "new training card is on by default")
 assert(defaults.friendLogin == true, "Battle.net friend login card is on by default")
@@ -171,7 +176,7 @@ assert(attune.data.tooltip:find("after reload"), "toggle change shows it needs a
 
 -- The overview links to one page per feature, in this order; every setting
 -- is on exactly one page (registration above refuses a repeat).
-assert(table.concat(pageOrder, ",") == "Gear comparison,Notifications,Journey Chronicle,Auction House,Addon skins,Configuration sharing", table.concat(pageOrder, ","))
+assert(table.concat(pageOrder, ",") == "Gear comparison,Notifications,Food and drink,Journey Chronicle,Auction House,Addon skins,Configuration sharing", table.concat(pageOrder, ","))
 for variable, page in pairs({
   TWICHUI_media = "TwichUI", TWICHUI_quietLogin = "TwichUI", TWICHUI_showAdvanced = "TwichUI", 
   TWICHUI_gearHints = "Gear comparison", TWICHUI_gearTree = "Gear comparison", TWICHUI_gearBagStyle = "Gear comparison",
@@ -179,9 +184,51 @@ for variable, page in pairs({
   TWICHUI_trainingNotice = "Notifications", TWICHUI_friendLogin = "Notifications", TWICHUI_friendLoginSound = "Notifications", TWICHUI_friendLoginChannel = "Notifications",
   TWICHUI_chronicle = "Journey Chronicle", TWICHUI_chronicleClock = "Journey Chronicle", TWICHUI_chronicleSound = "Journey Chronicle", TWICHUI_welcomeBack = "Journey Chronicle",
   TWICHUI_auctionPosting = "Auction House",
+  TWICHUI_foodDrink = "Food and drink", TWICHUI_foodDrinkFood = "Food and drink", TWICHUI_foodDrinkDrink = "Food and drink",
   TWICHUI_attuneSkin = "Addon skins", TWICHUI_whatsTrainingSkin = "Addon skins",
   TWICHUI_setupSharing = "Configuration sharing", TWICHUI_shareGuild = "Configuration sharing",
 }) do assert(variables[variable] == page, variable .. " is on " .. page .. ", not " .. tostring(variables[variable])) end
+-- Food and Drink appearance: each control reads and writes the module's own setting; Reset restores them.
+do
+  local FD = R.FoodDrink
+  for variable, key in pairs({ TWICHUI_foodDrinkSize = "size", TWICHUI_foodDrinkSpacing = "spacing", TWICHUI_foodDrinkLayout = "layout",
+      TWICHUI_foodDrinkBorderSize = "borderSize", TWICHUI_foodDrinkBorderClass = "borderClass", TWICHUI_foodDrinkBorderColor = "borderColor",
+      TWICHUI_foodDrinkZoom = "zoom", TWICHUI_foodDrinkShowCount = "showCount",
+      TWICHUI_foodDrinkBorderTexture = "borderTexture", TWICHUI_foodDrinkBorderOpacity = "borderOpacity",
+      TWICHUI_foodDrinkButtonOpacity = "buttonOpacity", TWICHUI_foodDrinkMouseover = "mouseover", TWICHUI_foodDrinkIdleOpacity = "idleOpacity" }) do
+    local proxy = assert(proxies[variable], variable .. " is on the page")
+    assert(variables[variable] == "Food and drink", variable)
+    assert(proxy.default == FD.DEFAULTS[key] and proxy.get() == FD.DEFAULTS[key], key .. " starts at its default")
+  end
+  local size = proxies.TWICHUI_foodDrinkSize
+  size.set(41.4); assert(FD.Get("size") == 41 and size.get() == 41, "a slider value is kept as a whole number")
+  size.set(500); assert(FD.Get("size") == 41, "out of range is refused")
+  proxies.TWICHUI_foodDrinkBorderColor.set("ff102030"); assert(FD.Get("borderColor") == "ff102030")
+  proxies.TWICHUI_foodDrinkLayout.set("vertical"); assert(FD.Get("layout") == "vertical")
+  local sliders = 0
+  for _, i in ipairs(initializers) do if i.options and i.setting.variable:find("^TWICHUI_foodDrink") then sliders = sliders + 1 end end
+  assert(sliders == 7, "size, spacing, border thickness, border opacity, zoom, button opacity and idle opacity are sliders: " .. sliders)
+  local textures = {}
+  for _, o in ipairs(dropdowns.TWICHUI_foodDrinkBorderTexture()) do textures[o.value] = o.label end
+  assert(textures.solid == "Solid" and textures["Blizzard Tooltip"], "Solid, then LibSharedMedia's borders")
+  assert(textures.None == nil, "not LibSharedMedia's \"None\"")
+  local labels = {}
+  for _, o in ipairs(dropdowns.TWICHUI_foodDrinkLayout()) do labels[o.value] = true end
+  assert(labels.horizontal and labels.vertical)
+  local reset
+  for _, i in ipairs(initializers) do if i.click and i.data.name == "Appearance" then reset = i end end
+  assert(reset, "a Reset button")
+  -- the idle opacity is only live while the mouseover fade is on
+  local idle
+  for _, i in ipairs(initializers) do if i.setting and i.setting.variable == "TWICHUI_foodDrinkIdleOpacity" then idle = i end end
+  assert(idle and #idle.modify == 1, "the idle opacity depends on the fade")
+  c.TwichUIDB.modules.foodDrink = true
+  FD.Set("mouseover", false); assert(not idle.modify[1](), "greyed while the fade is off")
+  FD.Set("mouseover", true); assert(idle.modify[1](), "live while it is on")
+  c.TwichUIDB.modules.foodDrink = false
+  reset.click()
+  assert(FD.Get("size") == 36 and FD.Get("layout") == "horizontal" and FD.Get("borderColor") == FD.DEFAULTS.borderColor, "Reset puts the look back")
+end
 assert(R.settingsCategories.chronicle and R.settingsCategories.sharing and R.settingsCategories.overview == R.settingsCategory)
 R:OpenSettings("chronicle"); assert(c.opened == R.settingsCategories.chronicle:GetID(), "opens a named page")
 R:OpenSettings(); assert(c.opened == R.settingsCategory:GetID(), "opens the overview by default")

@@ -15,6 +15,8 @@ This addon is intended to work alongside EllesmereUI.
 
 **Addon skins:** Provides EllemereUI skinning to various addons to create a cohesive look and feel. Currently supprts: Attune, Auctionator, DungeonJournal, and WhatsTraining.
 
+**Food and Drink buttons:** Optional (off by default). Two small buttons that hold the food and drink in your bags that restore the most, and eat or drink it when you click them. TwichUI never uses anything itself, skips buff food and feasts, and changes the choice out of combat only. Each button can be switched off, and their size, spacing, layout, border (texture, thickness, color or class color, opacity) icon zoom and opacity (with an option to fade them until the mouse is over them) are yours to set.
+
 **New training:** After a level-up, a short title card in the zone card's style lists the class spells you could train and don't know yet, including any from earlier levels you haven't trained, showing only the highest rank of each. It never trains anything for you, shows nothing when there is nothing new, and fades by itself.
 
 **Friend login:** When a Battle.net friend comes online, a small card in the zone card's style shows their name, a Horde or Alliance mark if the game says which faction they play, and the character they're on, in place of the game's own friend-online pop-up. Other pop-ups (going offline, broadcasts, requests) and the chat line are unchanged, the game's own Social options still apply, and it stays quiet at login and in combat. It plays a soft chime (you choose which game volume it follows) that can be switched off. Switch the card off to get the game's pop-up back. Nothing is sent.

@@ -47,6 +47,9 @@ local DEFAULT_MODULES = {
     trainingNotice = true,   -- a small card after a level-up when new class spells or ranks are available to train
     friendLogin = true,      -- a small card when a Battle.net friend comes online, in place of the game's own pop-up
     friendLoginSound = true, -- ... with a soft chime (TwichUI Notification)
+    foodDrink = false,       -- Food and Drink buttons: you click, they eat or drink the best food or drink in your bags (opt-in)
+    foodDrinkFood = true,    -- ... the Food button
+    foodDrinkDrink = true,   -- ... the Drink button
     auctionPosting = true,   -- "Sell from Bags" tab in the Auction House (searches only when you pick an item)
 }
 R.DEFAULT_MODULES = DEFAULT_MODULES   -- Settings.lua uses these for the panel's Defaults button
@@ -220,6 +223,10 @@ COMMANDS = {
     -- TEMPORARY: remove with setup/CommTest.lua
     { name = "commtest", usage = "commtest party|guild|whisper <name>", desc = "test addon messages with another TwichUI user (temporary)", fn = function(arg)
         if R.CommTest then R.CommTest.Run(arg) else Unavailable("Comm test") end
+    end },
+    -- TEMPORARY: remove with modules/FoodDrinkProbe.lua
+    { name = "probe", usage = "probe", desc = "list what the game says about consumables in your bags (temporary)", fn = function()
+        if R.FoodDrinkProbe then R.FoodDrinkProbe.Run() else Unavailable("Probe") end
     end },
     { name = "settings", alias = "options", hidden = true },
     { name = "config", alias = "options", hidden = true },
