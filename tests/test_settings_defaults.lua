@@ -101,7 +101,7 @@ for _, name in ipairs({"Upgrade hints in item tooltips", "Mark upgrades in my ba
   "Configuration sharing", "Let friends send me addon configurations", "Hide addon welcome messages", "Show advanced options"}) do
   assert(visible[name], name .. " is visible by default")
 end
-for _, name in ipairs({"How big a gain counts", "Show the reasoning", "Bag mark style", "How long the card stays", "Send over the group channel"}) do
+for _, name in ipairs({"How big a gain counts", "Show the reasoning", "Bag mark style", "How long the zone card stays", "Send over the group channel"}) do
   assert(advanced[name], name .. " is advanced")
 end
 
@@ -171,11 +171,12 @@ assert(attune.data.tooltip:find("after reload"), "toggle change shows it needs a
 
 -- The overview links to one page per feature, in this order; every setting
 -- is on exactly one page (registration above refuses a repeat).
-assert(table.concat(pageOrder, ",") == "Gear comparison,Zone arrival,Journey Chronicle,Auction House,Addon skins,Configuration sharing", table.concat(pageOrder, ","))
+assert(table.concat(pageOrder, ",") == "Gear comparison,Notifications,Journey Chronicle,Auction House,Addon skins,Configuration sharing", table.concat(pageOrder, ","))
 for variable, page in pairs({
-  TWICHUI_media = "TwichUI", TWICHUI_quietLogin = "TwichUI", TWICHUI_showAdvanced = "TwichUI", TWICHUI_trainingNotice = "TwichUI", TWICHUI_friendLogin = "TwichUI", TWICHUI_friendLoginSound = "TwichUI", TWICHUI_friendLoginChannel = "TwichUI",
+  TWICHUI_media = "TwichUI", TWICHUI_quietLogin = "TwichUI", TWICHUI_showAdvanced = "TwichUI", 
   TWICHUI_gearHints = "Gear comparison", TWICHUI_gearTree = "Gear comparison", TWICHUI_gearBagStyle = "Gear comparison",
-  TWICHUI_arrival = "Zone arrival", TWICHUI_arrivalHold = "Zone arrival",
+  TWICHUI_arrival = "Notifications", TWICHUI_arrivalHold = "Notifications", TWICHUI_arrivalReducedMotion = "Notifications",
+  TWICHUI_trainingNotice = "Notifications", TWICHUI_friendLogin = "Notifications", TWICHUI_friendLoginSound = "Notifications", TWICHUI_friendLoginChannel = "Notifications",
   TWICHUI_chronicle = "Journey Chronicle", TWICHUI_chronicleClock = "Journey Chronicle", TWICHUI_chronicleSound = "Journey Chronicle", TWICHUI_welcomeBack = "Journey Chronicle",
   TWICHUI_auctionPosting = "Auction House",
   TWICHUI_attuneSkin = "Addon skins", TWICHUI_whatsTrainingSkin = "Addon skins",
@@ -188,15 +189,20 @@ R:OpenSettings(); assert(c.opened == R.settingsCategory:GetID(), "opens the over
 -- Overview rows: status text follows the toggles, and each opens its page.
 local rows = {}
 for _, i in ipairs(initializers) do if i.click and i.data.name:find("%s%s%s") then rows[i.data.name:match("^(.-)%s%s%s")] = i end end
-local zone = assert(rows["Zone arrival"], "overview has a Zone arrival row")
-assert(zone.data.name:find("On"), zone.data.name)
+assert(not rows["Zone arrival"], "the zone card no longer has a row of its own")
+local zone = assert(rows["Notifications"], "overview has one Notifications row")
+assert(zone.data.name:find("3 of 3 on"), zone.data.name)
 c.TwichUIDB.modules.arrival = false
 c.TwichUIDB.modules.attuneSkin = true
 -- a toggle change refreshes the status
 local arrivalToggle; for _, i in ipairs(initializers) do if i.setting and i.setting.name == "Show a title card when I arrive in a new zone" then arrivalToggle = i end end
 arrivalToggle.setting.changed()
-assert(zone.data.name:find("Off"), zone.data.name)
-zone.click(); assert(c.opened == R.settingsCategories.arrival:GetID(), "row opens its page")
+assert(zone.data.name:find("2 of 3 on"), zone.data.name)
+c.TwichUIDB.modules.trainingNotice, c.TwichUIDB.modules.friendLogin = false, false
+arrivalToggle.setting.changed()
+assert(zone.data.name:find("Off"), "all three off: " .. zone.data.name)
+zone.click(); assert(c.opened == R.settingsCategories.notifications:GetID(), "row opens the Notifications page")
+assert(not R.settingsCategories.arrival, "no separate zone arrival page")
 assert(rows["Addon skins"].data.name:find("of") or rows["Addon skins"].data.name:find("None installed"), rows["Addon skins"].data.name)
 
 print("SETTINGS DEFAULTS TESTS PASSED")

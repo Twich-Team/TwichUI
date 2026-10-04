@@ -78,7 +78,7 @@ local function Build()
         R.settingsCategories[key] = category
     end
     NewPage("gear", "Gear comparison")
-    NewPage("arrival", "Zone arrival")
+    NewPage("notifications", "Notifications")
     NewPage("chronicle", "Journey Chronicle")
     NewPage("auction", "Auction House")
     NewPage("skins", "Addon skins")
@@ -324,8 +324,12 @@ local function Build()
     end)
 
     -----------------------------------------------------------------------
-    Use("arrival")
-    Header("Title card", "A short, quiet title card when you arrive somewhere new, in place of the game's own zone text.")
+    Use("notifications")
+    Header("Notifications", "Small, quiet cards near the edges of the screen for moments worth a glance. None of them makes you do anything, and each can be turned off on its own.")
+    Toggle("arrivalReducedMotion", "Reduced motion",
+        "The notification cards only fade in and out, without moving. Applies to the zone, training and friend cards.")
+
+    Header("Zone arrival", "A short, quiet title card when you arrive somewhere new, in place of the game's own zone text.")
     local function RefreshArrival() if R.Arrival then R.Arrival.Refresh() end end
     local arrival = Toggle("arrival", "Show a title card when I arrive in a new zone",
         "The zone's name appears near the top of the screen under a thin bronze rule, with the smaller place you're in beneath it, then fades away. It replaces the game's own zone text while on. Not shown when you log in or reload, or while on a flight path: only where you land.\n\nIf another addon also replaces the zone text, you may see both.",
@@ -337,8 +341,33 @@ local function Build()
     Under(Toggle("arrivalDungeons", "Show dungeon and raid arrival cards",
         "Walking into a dungeon or raid shows its name with \"Dungeon\" or \"Raid\" beneath it. Off: you get the ordinary zone card there, as before. Not shown when you log in or reload inside one.",
         false, RefreshArrival), arrival, ArrivalOn)
-    Under(Toggle("arrivalReducedMotion", "Reduced motion",
-        "The card only fades in and out, without moving."), arrival, ArrivalOn)
+
+    Header("New training", "A short card when you level up and there is class training you haven't taken yet.")
+    Toggle("trainingNotice", "Show new training when I level up",
+        "When you level up and there are class spells or ranks you could train and don't know yet, including ones from earlier levels you haven't trained, a short title card near the top of the screen, below the zone's name, lists them (only the highest rank of each spell), in the zone card's style with no frame. Move it in Edit Mode. They are available to train at your class trainer; nothing is learned for you. Nothing shows when there is nothing to train. It waits until you're out of combat, fades by itself, and makes no sound or chat line. Reduced motion (above) applies.\n\nType /tui training to see the card for your current level. Spell data comes from What's Training?.",
+        false, function() if R.Training then R.Training.Refresh() end end)
+
+    Header("Friend login", "A short card when a Battle.net friend comes online, in place of the game's own pop-up.")
+    local friendLogin = Toggle("friendLogin", "Show Battle.net friend logins as a TwichUI card",
+        "When a Battle.net friend comes online, a short card with their name, a Horde or Alliance mark if the game says which faction they play, and the character they are on, in the zone card's style with no frame. It replaces the game's own friend-online pop-up while on; the pop-ups for friends going offline, broadcasts, friend requests and invitations, and the line in chat, are unchanged. Turn it off to get the game's pop-up back. The game's own Social options still apply: with Show Toast Window or Online Friends off, nothing shows. Nothing shows at login or reload, or in combat; several friends arriving together give one card. Move it in Edit Mode. It plays a soft chime, which you can change below. Reduced motion (above) applies.\n\nType /tui friend to see the card.",
+        false, function() if R.FriendLogin then R.FriendLogin.Refresh() end end)
+    local function FriendLoginOn() return R:Enabled("friendLogin") end
+    Under(Toggle("friendLoginSound", "Play a soft chime with it",
+        "A short chime (TwichUI Notification) when the card appears. Off: the card is silent."), friendLogin, FriendLoginOn)
+    local FriendLogin = R.FriendLogin
+    if FriendLogin then
+        local channels = {}
+        for i, channel in ipairs(FriendLogin.CHANNELS) do channels[i] = { channel.key, channel.label, channel.tooltip } end
+        Under(Choice("friendLoginChannel", "Chime volume follows",
+            "A sound file can't have a volume of its own, so the chime is as loud as the game volume you choose here. Set that volume in the game's Audio options: lower it to make the chime quieter, or pick the one you keep lowest.",
+            STRING, FriendLogin.CHANNEL_DEFAULT,
+            function() return (FriendLogin.SoundChannel()) end,
+            function(value) TwichUIDB.ui.friendLoginChannel = value end,
+            channels), friendLogin, FriendLoginOn)
+        Under(Button("Hear the chime", "Play", function() FriendLogin.PlaySound() end,
+            "Plays the chime now, at the volume you have chosen."), friendLogin, FriendLoginOn)
+    end
+
     local Arrival = R.Arrival
     if Arrival then
         local holds = {}
@@ -346,7 +375,7 @@ local function Build()
             holds[i] = { hold.key, hold.label, ("Stays %g seconds before fading away."):format(hold.seconds) }
         end
         Advanced(Header("Advanced"))
-        Under(Advanced(Choice("arrivalHold", "How long the card stays",
+        Under(Advanced(Choice("arrivalHold", "How long the zone card stays",
             "How long the zone's name stays before it fades away. Cards for smaller places stay a little shorter.",
             STRING, Arrival.HOLD_DEFAULT,
             function() return (Arrival.HoldChoice()) end,
@@ -454,8 +483,11 @@ local function Build()
         FeatureRow("gear", "Gear comparison", "Quiet upgrade hints in item tooltips and bags, and the stat weights behind them.",
             function() return OnOff(R:Enabled("gearHints") or R:Enabled("gearBagIcons")) end)
     end
-    FeatureRow("arrival", "Zone arrival", "A brief title card when you arrive somewhere new.",
-        function() return OnOff(R:Enabled("arrival")) end)
+    FeatureRow("notifications", "Notifications", "Quiet cards for arriving somewhere new, new training at a level-up, and friends logging in.",
+        function()
+            local on = (R:Enabled("arrival") and 1 or 0) + (R:Enabled("trainingNotice") and 1 or 0) + (R:Enabled("friendLogin") and 1 or 0)
+            return OnOff(on > 0, ("%d of 3 on"):format(on), "Off")
+        end)
     FeatureRow("chronicle", "Journey Chronicle", "Your private journal for this character.",
         function() return OnOff(R:Enabled("chronicle"), "Recording", "Notes only") end)
     FeatureRow("auction", "Auction House", "A Sell from Bags tab for listing items one at a time.",
@@ -480,35 +512,13 @@ local function Build()
     local advancedSetting = Settings.RegisterAddOnSetting(category, "TWICHUI_showAdvanced", "showAdvanced", TwichUIDB.ui, BOOL,
         "Show advanced options", false)
     Settings.CreateCheckbox(category, advancedSetting,
-        "Shows an Advanced section on the pages that have one: how upgrade hints are judged and revealed and the bag mark style (Gear comparison), how long the title card stays (Zone arrival), and how configurations are sent (Configuration sharing). Hidden options keep their values.")
+        "Shows an Advanced section on the pages that have one: how upgrade hints are judged and revealed and the bag mark style (Gear comparison), how long the zone card stays (Notifications), and how configurations are sent (Configuration sharing). Hidden options keep their values.")
     Toggle("media", "Custom fonts and sounds",
         "Adds Alegreya, Alegreya Sans, Barlow, Cinzel and Spectral fonts, plus the bell alert sounds, to the font and sound lists of EllesmereUI and other addons. Nothing changes until you pick them there.",
         true)
     Toggle("quietLogin", "Hide addon welcome messages",
         "Hides the \"loaded\" and \"type /command for options\" lines addons print when you log in or reload. Errors and warnings still show. Type /twichui hidden to see what was hidden this session.",
         true)
-    Toggle("trainingNotice", "Show new training when I level up",
-        "When you level up and there are class spells or ranks you could train and don't know yet, including ones from earlier levels you haven't trained, a short title card near the top of the screen, below the zone's name, lists them (only the highest rank of each spell), in the zone card's style with no frame. Move it in Edit Mode. They are available to train at your class trainer; nothing is learned for you. Nothing shows when there is nothing to train. It waits until you're out of combat, fades by itself, and makes no sound or chat line. Reduced motion (Zone arrival page) applies.\n\nType /tui training to see the card for your current level. Spell data comes from What's Training?.",
-        false, function() if R.Training then R.Training.Refresh() end end)
-    local friendLogin = Toggle("friendLogin", "Show Battle.net friend logins as a TwichUI card",
-        "When a Battle.net friend comes online, a short card with their name, a Horde or Alliance mark if the game says which faction they play, and the character they are on, in the zone card's style with no frame. It replaces the game's own friend-online pop-up while on; the pop-ups for friends going offline, broadcasts, friend requests and invitations, and the line in chat, are unchanged. Turn it off to get the game's pop-up back. The game's own Social options still apply: with Show Toast Window or Online Friends off, nothing shows. Nothing shows at login or reload, or in combat; several friends arriving together give one card. Move it in Edit Mode. It plays a soft chime, which you can change below. Reduced motion (Zone arrival page) applies.\n\nType /tui friend to see the card.",
-        false, function() if R.FriendLogin then R.FriendLogin.Refresh() end end)
-    local function FriendLoginOn() return R:Enabled("friendLogin") end
-    Under(Toggle("friendLoginSound", "Play a soft chime with it",
-        "A short chime (TwichUI Notification) when the card appears. Off: the card is silent."), friendLogin, FriendLoginOn)
-    local FriendLogin = R.FriendLogin
-    if FriendLogin then
-        local channels = {}
-        for i, channel in ipairs(FriendLogin.CHANNELS) do channels[i] = { channel.key, channel.label, channel.tooltip } end
-        Under(Choice("friendLoginChannel", "Chime volume follows",
-            "A sound file can't have a volume of its own, so the chime is as loud as the game volume you choose here. Set that volume in the game's Audio options: lower it to make the chime quieter, or pick the one you keep lowest.",
-            STRING, FriendLogin.CHANNEL_DEFAULT,
-            function() return (FriendLogin.SoundChannel()) end,
-            function(value) TwichUIDB.ui.friendLoginChannel = value end,
-            channels), friendLogin, FriendLoginOn)
-        Under(Button("Hear the chime", "Play", function() FriendLogin.PlaySound() end,
-            "Plays the chime now, at the volume you have chosen."), friendLogin, FriendLoginOn)
-    end
 
     Settings.RegisterAddOnCategory(root)
 end
