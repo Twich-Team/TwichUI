@@ -62,7 +62,7 @@ end
 c.CreateFrame = function() return Obj() end
 c.StaticPopupDialogs = {}; c.StaticPopup_Show = function() end
 for _, f in ipairs({ "gear/Weights.lua", "gear/Evaluate.lua", "gear/Prefs.lua", "gear/Data.lua",
-  "gear/Hints.lua", "gear/Tooltip.lua", "gear/Bags.lua", "gear/Window.lua", "modules/Arrival.lua", "Settings.lua" }) do
+  "gear/Hints.lua", "gear/Tooltip.lua", "gear/Bags.lua", "gear/Window.lua", "modules/Arrival.lua", "modules/Media.lua", "modules/FriendLogin.lua", "Settings.lua" }) do
   local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
 end
 c.LOADED["!!!TwichUI"] = true; c.FireEvent("ADDON_LOADED", "!!!TwichUI")
@@ -74,7 +74,7 @@ for key, default in pairs(defaults) do
   n = n + 1
   assert(default == R.DEFAULT_MODULES[key], key .. " default matches a new install")
 end
-assert(n == 31, "every module has a toggle: " .. n)
+assert(n == 33, "every module has a toggle: " .. n)
 assert(defaults.arrival == true and defaults.arrivalSubzones == true and defaults.arrivalReducedMotion == false,
   "arrival card and subzone cards on; reduced motion opt-in")
 assert(defaults.arrivalDungeons == true, "dungeon and raid arrival cards on by default")
@@ -85,6 +85,8 @@ assert(defaults.chronicleDeaths == false, "death entries are opt-in")
 assert(defaults.welcomeBack == true, "Welcome Back bookmark is on by default")
 assert(defaults.auctionPosting == true, "Sell from Bags tab is on by default (it only searches when you pick an item)")
 assert(defaults.trainingNotice == true, "new training card is on by default")
+assert(defaults.friendLogin == true, "Battle.net friend login card is on by default")
+assert(defaults.friendLoginSound == true, "the friend login chime is on by default")
 
 -- Advanced options: hidden until the switch is on, then shown; essentials never hidden.
 local advanced, visible = {}, {}
@@ -129,6 +131,29 @@ assert(hold.default == "standard" and hold.get() == "standard", "standard by def
 hold.set("longer"); assert(c.TwichUIDB.ui.arrivalHold == "longer" and hold.get() == "longer")
 assert(#dropdowns.TWICHUI_arrivalHold() == 4 and dropdowns.TWICHUI_arrivalHold()[3].tooltip == "Stays 4 seconds before fading away.")
 
+-- Friend login chime: which game volume it follows, saved with the UI options; a button to hear it.
+local channel = proxies.TWICHUI_friendLoginChannel
+assert(channel and channel.default == "SFX" and channel.get() == "SFX", "Sound Effects by default")
+channel.set("Master"); assert(c.TwichUIDB.ui.friendLoginChannel == "Master" and channel.get() == "Master")
+local channels = dropdowns.TWICHUI_friendLoginChannel()
+assert(#channels == 4 and channels[1].value == "SFX" and channels[4].value == "Master" and channels[2].tooltip:find("Dialog"), "four channels, each explained")
+local heard = {}
+c.PlaySoundFile = function(path, ch) heard[#heard + 1] = { path = path, channel = ch }; return true end
+local hear, chime
+for _, i in ipairs(initializers) do
+  if i.data.name == "Hear the chime" then hear = i end
+  if i.data.name == "Play a soft chime with it" then chime = i end
+end
+assert(hear and hear.click and chime, "a button to hear the chime, and a switch for it")
+hear.click()
+assert(#heard == 1 and heard[1].channel == "Master" and heard[1].path:find("TwichUI_Notification.mp3", 1, true), "plays the chime on the chosen channel")
+assert(c.TwichUIDB.modules.friendLoginSound == true)
+c.TwichUIDB.modules.friendLogin = false
+assert(hear.parent and hear.modify[1]() == false and chime.modify[1]() == false, "greyed out while the friend card is off")
+c.TwichUIDB.modules.friendLogin = true
+assert(hear.modify[1]() == true)
+assert(c.TwichUI.MediaSounds["TwichUI Notification"] == "TwichUI_Notification.mp3", "offered to other addons' sound lists too")
+
 -- Skins: missing addons say so and can't be ticked; installed ones report status.
 local attune, auctionator
 for _, i in ipairs(initializers) do
@@ -148,7 +173,7 @@ assert(attune.data.tooltip:find("after reload"), "toggle change shows it needs a
 -- is on exactly one page (registration above refuses a repeat).
 assert(table.concat(pageOrder, ",") == "Gear comparison,Zone arrival,Journey Chronicle,Auction House,Addon skins,Configuration sharing", table.concat(pageOrder, ","))
 for variable, page in pairs({
-  TWICHUI_media = "TwichUI", TWICHUI_quietLogin = "TwichUI", TWICHUI_showAdvanced = "TwichUI", TWICHUI_trainingNotice = "TwichUI",
+  TWICHUI_media = "TwichUI", TWICHUI_quietLogin = "TwichUI", TWICHUI_showAdvanced = "TwichUI", TWICHUI_trainingNotice = "TwichUI", TWICHUI_friendLogin = "TwichUI", TWICHUI_friendLoginSound = "TwichUI", TWICHUI_friendLoginChannel = "TwichUI",
   TWICHUI_gearHints = "Gear comparison", TWICHUI_gearTree = "Gear comparison", TWICHUI_gearBagStyle = "Gear comparison",
   TWICHUI_arrival = "Zone arrival", TWICHUI_arrivalHold = "Zone arrival",
   TWICHUI_chronicle = "Journey Chronicle", TWICHUI_chronicleClock = "Journey Chronicle", TWICHUI_chronicleSound = "Journey Chronicle", TWICHUI_welcomeBack = "Journey Chronicle",

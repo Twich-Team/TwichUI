@@ -45,6 +45,8 @@ local DEFAULT_MODULES = {
     arrivalDungeons = true,  -- ... a card with the name when walking into a dungeon or raid
     arrivalReducedMotion = false, -- ... fade only, no upward settle
     trainingNotice = true,   -- a small card after a level-up when new class spells or ranks are available to train
+    friendLogin = true,      -- a small card when a Battle.net friend comes online, in place of the game's own pop-up
+    friendLoginSound = true, -- ... with a soft chime (TwichUI Notification)
     auctionPosting = true,   -- "Sell from Bags" tab in the Auction House (searches only when you pick an item)
 }
 R.DEFAULT_MODULES = DEFAULT_MODULES   -- Settings.lua uses these for the panel's Defaults button
@@ -205,6 +207,9 @@ COMMANDS = {
         elseif (arg or "") == "" then ok, why = R.Training.Preview()
         else ok, why = false, "Type /tui training, or /tui training 20 for another level." end
         if not ok then R.Print(why) end
+    end },
+    { name = "friend", usage = "friend", desc = "preview the Battle.net friend login card now", fn = function()
+        if R.FriendLogin then R.FriendLogin.Preview() else Unavailable("Friend login") end
     end },
     { name = "hidden", usage = "hidden", desc = "welcome messages hidden at login", fn = function()
         if R.Quiet then R.Quiet:ShowHidden() else Unavailable("Quiet login") end

@@ -68,6 +68,9 @@ modules\WelcomeBack.lua
 modules\TrainingData.lua
 modules\Training.lua
 
+# Battle.net friend login card (replaces the game's friend-online pop-up; uses the arrival card's look)
+modules\FriendLogin.lua
+
 # Sell from Bags: Auction House posting tab (uses the Chronicle palette)
 auction\Price.lua
 auction\Scan.lua

@@ -490,6 +490,25 @@ local function Build()
     Toggle("trainingNotice", "Show new training when I level up",
         "When you level up and there are class spells or ranks you could train and don't know yet, including ones from earlier levels you haven't trained, a short title card near the top of the screen, below the zone's name, lists them (only the highest rank of each spell), in the zone card's style with no frame. Move it in Edit Mode. They are available to train at your class trainer; nothing is learned for you. Nothing shows when there is nothing to train. It waits until you're out of combat, fades by itself, and makes no sound or chat line. Reduced motion (Zone arrival page) applies.\n\nType /tui training to see the card for your current level. Spell data comes from What's Training?.",
         false, function() if R.Training then R.Training.Refresh() end end)
+    local friendLogin = Toggle("friendLogin", "Show Battle.net friend logins as a TwichUI card",
+        "When a Battle.net friend comes online, a short card with their name, a Horde or Alliance mark if the game says which faction they play, and the character they are on, in the zone card's style with no frame. It replaces the game's own friend-online pop-up while on; the pop-ups for friends going offline, broadcasts, friend requests and invitations, and the line in chat, are unchanged. Turn it off to get the game's pop-up back. The game's own Social options still apply: with Show Toast Window or Online Friends off, nothing shows. Nothing shows at login or reload, or in combat; several friends arriving together give one card. Move it in Edit Mode. It plays a soft chime, which you can change below. Reduced motion (Zone arrival page) applies.\n\nType /tui friend to see the card.",
+        false, function() if R.FriendLogin then R.FriendLogin.Refresh() end end)
+    local function FriendLoginOn() return R:Enabled("friendLogin") end
+    Under(Toggle("friendLoginSound", "Play a soft chime with it",
+        "A short chime (TwichUI Notification) when the card appears. Off: the card is silent."), friendLogin, FriendLoginOn)
+    local FriendLogin = R.FriendLogin
+    if FriendLogin then
+        local channels = {}
+        for i, channel in ipairs(FriendLogin.CHANNELS) do channels[i] = { channel.key, channel.label, channel.tooltip } end
+        Under(Choice("friendLoginChannel", "Chime volume follows",
+            "A sound file can't have a volume of its own, so the chime is as loud as the game volume you choose here. Set that volume in the game's Audio options: lower it to make the chime quieter, or pick the one you keep lowest.",
+            STRING, FriendLogin.CHANNEL_DEFAULT,
+            function() return (FriendLogin.SoundChannel()) end,
+            function(value) TwichUIDB.ui.friendLoginChannel = value end,
+            channels), friendLogin, FriendLoginOn)
+        Under(Button("Hear the chime", "Play", function() FriendLogin.PlaySound() end,
+            "Plays the chime now, at the volume you have chosen."), friendLogin, FriendLoginOn)
+    end
 
     Settings.RegisterAddOnCategory(root)
 end
