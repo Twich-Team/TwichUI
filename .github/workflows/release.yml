@@ -1,7 +1,8 @@
 name: Package and release
 
 # Push a tag like v3.0.0 to build the addon zip and upload it to CurseForge
-# (and Wago / GitHub releases if configured). See RELEASING.md.
+# (and Wago / GitHub releases if configured). The training data is refreshed from What's Training?
+# first. See RELEASING.md.
 on:
   push:
     tags:
@@ -21,10 +22,29 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Offline tests
+      - name: Install Lua
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq lua5.1 lua-bitop
-          ./tests/run.sh
+
+      # Rebuilds modules/TrainingData.lua from the newest What's Training? commit. Any failure here
+      # (fetch, generation, validation) fails the release before anything is packaged or uploaded.
+      # The packager zips this working tree, so the downloadable zip carries the refreshed data; the
+      # tagged commit itself, and GitHub's automatic source archives, keep the data committed at the tag.
+      - name: Refresh training data
+        run: |
+          set -o pipefail
+          log="$RUNNER_TEMP/training-data.log"
+          ./tools/update_training_data.sh | tee "$log"
+          {
+            echo "### Training data"
+            sed -n 's/^Upstream commit: /- What'"'"'s Training? commit: /p' "$log"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if ! git diff --quiet -- modules/TrainingData.lua; then
+            echo "::warning::The packaged training data differs from the data committed at this tag. Run tools/update_training_data.sh and commit before tagging if the tagged source should match."
+          fi
+
+      - name: Offline tests
+        run: ./tests/run.sh
 
       - uses: BigWigsMods/packager@v2

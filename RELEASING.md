@@ -11,13 +11,21 @@
 
 ## Each release
 1. Update `## Version:` in the TOC and add an entry to `CHANGELOG.md`.
-2. Run `./tests/run.sh` (needs `lua5.1` and `lua-bitop`).
-3. Commit, then tag and push: `git tag v3.0.1 && git push --tags`.
-4. The GitHub Action tests, packages (folder `!!!TwichUI`, without tests/ and
+2. Run `./tools/update_training_data.sh` (needs `git` and `lua5.1`) to refresh the
+   class training data from the newest What's Training? commit, then
+   `./tests/run.sh` (needs `lua5.1` and `lua-bitop`).
+3. Commit (including `modules/TrainingData.lua` if it changed), then tag and push:
+   `git tag v3.0.1 && git push --tags`.
+4. The GitHub Action refreshes the training data again, tests, packages (folder `!!!TwichUI`, without tests/ and
    .github/) and uploads the release. Friends using the CurseForge app or WowUp
    get it as a normal update.
 
 ## Notes
+- The release job refreshes `modules/TrainingData.lua` before packaging and fails the
+  release if fetching, generating or validating it fails. The uploaded zip contains the
+  refreshed data. A tag is never rewritten, so GitHub's automatic "Source code" archives
+  hold whatever was committed at the tag: step 2 keeps them the same as the zip. The job
+  logs the upstream commit and warns when the zip's data differs from the tagged commit.
 - Mark the release for the right game version on CurseForge. Forever reports
   interface 16001; if CurseForge doesn't list it, upload for the closest version
   CurseForge offers and say "WoW Forever" in the release notes.

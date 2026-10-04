@@ -1,6 +1,7 @@
 -- TwichUI: builds modules/TrainingData.lua from What's Training?'s WoW: Forever data.
 -- Usage (from the repository root, with What's Training? checked out beside it):
 --   lua5.1 tools/training_data.lua ../WhatsTraining > modules/TrainingData.lua
+-- tools/update_training_data.sh does this from the newest upstream commit, then validates the result.
 -- Reads only Classes/Camelot (the data What's Training? loads on Forever) and keeps what the
 -- level-up training notice needs: spell IDs, the level each becomes trainable, prerequisite
 -- spells, a required talent, faction and race limits, and the rank groups whose later ranks
@@ -12,7 +13,11 @@ local CLASSES = { "DRUID", "HUNTER", "MAGE", "PALADIN", "PRIEST", "ROGUE", "SHAM
 
 local function Title(class) return class:sub(1, 1) .. class:sub(2):lower() end
 
+-- WT_SOURCE_VERSION (set by tools/update_training_data.sh) names the upstream commit; a git checkout's
+-- .toc only carries the packager's "@project-version@" placeholder.
 local function Version()
+    local named = os.getenv("WT_SOURCE_VERSION")
+    if named and named ~= "" then return named end
     local toc = assert(io.open(source .. "/WhatsTraining.toc"), "no WhatsTraining.toc in " .. source)
     local text = toc:read("*a")
     toc:close()
