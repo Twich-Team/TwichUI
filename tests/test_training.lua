@@ -1,0 +1,462 @@
+dofile(TESTS .. "harness.lua")
+-- New training at level-up: which spells are listed (class, faction, race, talent, known
+-- spells and later ranks, prerequisites), one card for several levels, nothing when nothing
+-- applies, nothing at login, waiting for combat and banners, names the game can't give left
+-- out, the list opening, cleanup, off when switched off, and the bundled data's shape.
+local c = MakeClient("Rich", {"!!!TwichUI"})
+
+local fakes = {}
+local function Fake(o)
+  o = o or {}
+  o.shown, o.scripts, o.hooks, o.events = false, {}, {}, {}
+  table.insert(fakes, o)
+  return setmetatable(o, {__index = function(t, k)
+    if k == "Show" then return function(s) s.shown = true end end
+    if k == "Hide" then return function(s) s.shown = false end end
+    if k == "IsShown" then return function(s) return s.shown end end
+    if k == "SetShown" then return function(s, v) s.shown = v and true or false end end
+    if k == "SetScript" then return function(s, n, fn) s.scripts[n] = fn end end
+    if k == "HookScript" then return function(s, n, fn) s.hooks[n] = s.hooks[n] or {}; table.insert(s.hooks[n], fn) end end
+    if k == "RegisterEvent" then return function(s, e) s.events[e] = true end end
+    if k == "UnregisterEvent" then return function(s, e) s.events[e] = nil end end
+    if k == "SetText" then return function(s, v) s.text = v end end
+    if k == "SetHeight" then return function(s, v) s.height = v end end
+    if k == "SetPoint" then return function(s, ...) s.point = {...} end end
+    if k == "ClearAllPoints" then return function(s) s.point = nil end end
+    if k == "SetColorTexture" then return function(s, ...) s.color = {...} end end
+    if k == "SetAlpha" then return function(s, v) s.alpha = v end end
+    if k == "IsMouseOver" then return function() return c.MOUSE end end
+    if k == "CreateFontString" or k == "CreateTexture" then return function() return Fake() end end
+    if k == "CreateAnimationGroup" then return function(s)
+      local g = Fake({owner = s, plays = 0})
+      g.Play = function(self) self.playing = true; self.plays = self.plays + 1 end
+      g.Stop = function(self) self.playing = false end
+      g.IsPlaying = function(self) return self.playing end
+      g.CreateAnimation = function()
+        local a = Fake()
+        a.SetOffset = function(self, x, y) self.y = y end
+        a.SetStartDelay = function(self, d) self.delay = d end
+        return a
+      end
+      return g
+    end end
+    return function() end
+  end})
+end
+c.CreateFrame = function() return Fake() end
+c.UIParent = Fake()
+c.UIParent.GetWidth = function() return 1024 end
+c.UIParent.GetHeight = function() return 768 end
+-- The game's Edit Mode: its EventRegistry callbacks, and whether it is open.
+c.EDITING = false
+c.EventRegistry = { callbacks = {} }
+function c.EventRegistry:RegisterCallback(event, fn, owner) assert(owner, "registered with an owner"); self.callbacks[event] = fn end
+c.EditModeManagerFrame = { IsEditModeActive = function() return c.EDITING end }
+c.GameTooltip = Fake()
+c.GameTooltip.SetSpellByID = function(self, id) self.spell = id end
+
+-- Fires an event on the shared bus and on the card's own frame.
+local function Fire(event, ...)
+  c.FireEvent(event, ...)
+  for _, f in ipairs(fakes) do
+    if f.events[event] and f.scripts.OnEvent then f.scripts.OnEvent(f, event, ...) end
+  end
+end
+
+c.LEVEL, c.CLASS, c.FACTION, c.RACE = 9, "MAGE", "Alliance", 1
+c.COMBAT, c.TOAST, c.MOUSE = false, false, false
+c.KNOWN, c.NAMES, c.RANKS, c.UNCACHED, c.REQUESTED = {}, {}, {}, {}, {}
+c.UnitLevel = function() return c.LEVEL end
+c.UnitClass = function() return "Class", c.CLASS end
+c.UnitFactionGroup = function() return c.FACTION, c.FACTION end
+c.UnitRace = function() return "Race", "Race", c.RACE end
+c.InCombatLockdown = function() return c.COMBAT end
+c.EventToastManagerFrame = Fake()
+c.ARRIVAL = false
+c.EventToastManagerFrame.IsCurrentlyToasting = function() return c.TOAST end
+c.Enum = { SpellBookSpellBank = { Player = 0, Pet = 1 } }
+c.C_SpellBook = {
+  IsSpellKnown = function(id, bank) assert(bank == nil or bank == 0, "player spells"); return c.KNOWN[id] == true end,
+  IsSpellInSpellBook = function(id, bank, overrides) assert(bank == 0 and overrides == false); return false end,
+}
+c.C_Spell = {
+  GetSpellName = function(id) return c.NAMES[id] end,
+  GetSpellSubtext = function(id) return c.RANKS[id] or "" end,
+  GetSpellTexture = function(id) return 1000 + id end,
+  IsSpellDataCached = function(id) return not c.UNCACHED[id] end,
+  RequestLoadSpellData = function(id) c.REQUESTED[id] = true end,
+}
+
+for _, f in ipairs({"chronicle/Style.lua", "modules/Arrival.lua", "modules/WelcomeBack.lua",
+    "modules/TrainingData.lua", "modules/Training.lua"}) do
+  local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
+end
+c.LOADED["!!!TwichUI"] = true; c.FireEvent("ADDON_LOADED", "!!!TwichUI")
+local R = c.TwichUI
+local T = R.Training
+local M = c.TwichUIDB.modules
+assert(M.trainingNotice == true, "on by default")
+local events = R.frame.events
+assert(events.PLAYER_LEVEL_UP, "listens for level-ups while on")
+
+---------------------------------------------------------------------------
+-- The bundled data: What's Training?'s Forever set, in the shape the notice reads.
+---------------------------------------------------------------------------
+local REAL = R.TrainingData
+local CLASSES = { "DRUID", "HUNTER", "MAGE", "PALADIN", "PRIEST", "ROGUE", "SHAMAN", "WARLOCK", "WARRIOR" }
+for _, class in ipairs(CLASSES) do
+  local levels, ranks = REAL[class]()
+  local seen = {}
+  for level, list in pairs(levels) do
+    assert(type(level) == "number" and level >= 1 and level <= 60, class .. " level " .. tostring(level))
+    for _, e in ipairs(list) do
+      assert(type(e[1]) == "number", class .. " spell id")
+      assert(not seen[e[1]], class .. " lists " .. e[1] .. " once")
+      seen[e[1]] = level
+      assert(e.faction == nil or e.faction == "Alliance" or e.faction == "Horde")
+      for _, key in ipairs({ "req", "race" }) do
+        for _, v in ipairs(e[key] or {}) do assert(type(v) == "number", class .. " " .. key) end
+      end
+      assert(e.talent == nil or type(e.talent) == "number")
+    end
+  end
+  for _, group in ipairs(ranks) do for _, id in ipairs(group) do assert(type(id) == "number") end end
+end
+do
+  local mage = REAL.MAGE()
+  local forever = false
+  for _, e in ipairs(mage[6]) do if e[1] == 1296017 then forever = true end end
+  assert(forever, "the Forever data set (it has Forever's own spells), not Classic Era's")
+  local hunter = REAL.HUNTER()
+  for _, list in pairs(hunter) do for _, e in ipairs(list) do assert(e[1] ~= 4187, "pet abilities are left out") end end
+end
+-- A fresh Mage reaching level 4 from 3 knows neither of its new spells.
+do
+  local list = T.Select((REAL.MAGE()), select(2, REAL.MAGE()), 3, 4, { faction = "Alliance", race = 1 }, function() return false end)
+  assert(#list == 2 and list[1].id == 5504 and list[2].id == 116, "Conjure Water and Frostbolt")
+end
+
+---------------------------------------------------------------------------
+-- Selection, on a small made-up data set.
+---------------------------------------------------------------------------
+local LEVELS = {
+  [10] = { {101}, {102, req = {100}} },            -- a new spell; rank 2 of a known spell
+  [11] = {},
+  [12] = { {103, faction = "Horde"}, {104, faction = "Alliance"}, {105, race = {2}}, {106, race = {1, 3}},
+           {107, talent = 900}, {108, talent = 901} },
+  [13] = { {109, req = {101}} },                   -- needs 101, itself new at 10
+  [14] = { {110} },                                -- already known
+  [15] = { {112} },
+  [16] = { {111, req = {999}} },                   -- needs a spell the character doesn't have
+  [18] = { {201, req = {200}} },                   -- a replaced rank: 202 is known, so 201 is too
+  [20] = { {301}, {302}, {303}, {304}, {305}, {306}, {307}, {308}, {309}, {310} },
+  [22] = { {401, req = {501}}, {501, req = {500}} }, -- a prerequisite listed after the spell needing it
+}
+local RANKS = { {200, 201, 202} }
+local function Ids(list) local out = {} for i, e in ipairs(list) do out[i] = e.id end return table.concat(out, ",") end
+local function Known(set) return function(id) return set[id] == true end end
+local who = { faction = "Alliance", race = 1 }
+local base = { [100] = true, [110] = true, [901] = true, [202] = true, [500] = true }
+
+assert(Ids(T.Select(LEVELS, RANKS, 9, 10, who, Known(base))) == "101,102", "new spell and next rank")
+assert(Ids(T.Select(LEVELS, RANKS, 10, 11, who, Known(base))) == "", "nothing at an empty level")
+assert(Ids(T.Select(LEVELS, RANKS, 11, 12, who, Known(base))) == "104,106,108", "faction, race and talent")
+assert(Ids(T.Select(LEVELS, RANKS, 11, 12, {}, Known(base))) == "108", "faction or race not known: limited spells left out")
+assert(Ids(T.Select(LEVELS, RANKS, 12, 13, who, Known(base))) == "", "a prerequisite not known and not on the card")
+assert(Ids(T.Select(LEVELS, RANKS, 9, 13, who, Known(base))) == "101,102,104,106,108,109", "every level crossed, prerequisites on the card")
+assert(Ids(T.Select(LEVELS, RANKS, 13, 14, who, Known(base))) == "", "known spells are not new")
+assert(Ids(T.Select(LEVELS, RANKS, 15, 16, who, Known(base))) == "", "unmet prerequisite")
+assert(Ids(T.Select(LEVELS, RANKS, 17, 18, who, Known(base))) == "", "a later rank known means this one is")
+assert(Ids(T.Select(LEVELS, RANKS, 17, 18, who, Known({ [200] = true }))) == "201", "the next rank after the known one")
+assert(Ids(T.Select(LEVELS, RANKS, 21, 22, who, Known(base))) == "401,501", "prerequisite order inside a level doesn't matter")
+assert(Ids(T.Select(LEVELS, RANKS, 21, 22, who, Known({}))) == "", "a chain falls when its first link can't be trained")
+do -- each spell once, even when the data repeats it
+  local twice = { [5] = { {7} }, [6] = { {7} } }
+  assert(Ids(T.Select(twice, {}, 4, 6, who, Known({}))) == "7")
+end
+
+---------------------------------------------------------------------------
+-- In game: the card.
+---------------------------------------------------------------------------
+R.TrainingData = { MAGE = function() return LEVELS, RANKS end }
+c.KNOWN = base
+c.NAMES = { [101] = "Arcane Bolt", [102] = "Frost Lance", [104] = "Portal: Stormwind", [106] = "Holy Light",
+  [108] = "Ice Barrier", [109] = "Arcane Barrage", [112] = "Blink", [201] = "Shred" }
+c.RANKS = { [102] = "Rank 2", [109] = "Rank 1" }
+for id = 301, 310 do c.NAMES[id] = "Spell " .. id; c.RANKS[id] = "Rank " .. (id - 300) end
+
+local wbDismissed = 0
+R.WelcomeBack.Dismiss = function() wbDismissed = wbDismissed + 1 end
+R.Arrival.IsShowing = function() return c.ARRIVAL end
+local function Card()
+  for _, f in ipairs(fakes) do if rawget(f, "summary") and rawget(f, "rowFrames") then return f end end
+end
+-- Whether the card's own event frame is listening for an event.
+local function Listening(event)
+  for _, f in ipairs(fakes) do if f.events[event] then return true end end
+  return false
+end
+local function Settle() RunLongTimers(2); FlushTimers(); FlushTimers() end
+-- Ends an animation group as the game would: no longer playing, then OnFinished.
+local function Finish(group) group.playing = false; group.scripts.OnFinished(group) end
+local function LevelUp(level) c.LEVEL = level; Fire("PLAYER_LEVEL_UP", level, 10, 10, 0, 0, 1, 1, 1, 1) end
+
+Fire("PLAYER_ENTERING_WORLD", true, false)
+
+-- Nothing new: no card.
+c.LEVEL = 10; Fire("PLAYER_ENTERING_WORLD", false, true)
+LevelUp(11); Settle()
+assert(not Card(), "no card when nothing new applies")
+
+-- One spell: a compact card naming it, no list to open.
+c.LEVEL = 14; Fire("PLAYER_ENTERING_WORLD", false, false)
+LevelUp(15)
+assert(not Card(), "not at once: the level-up settles first")
+Settle()
+local card = Card()
+assert(card and card.shown and card.enter.plays == 1, "card shown and settling in")
+assert(card.title.text == "New Training Available")
+assert(card.summary.text:find("Blink", 1, true) and card.summary.text:find("Visit a class trainer", 1, true), card.summary.text)
+assert(not card.toggle.shown and card.height == 72, "one spell: nothing to open")
+assert(wbDismissed == 0, "the Welcome Back bookmark is elsewhere on screen and left alone")
+local p = card.point
+assert(p[1] == "TOP" and p[2] == c.UIParent and p[3] == "TOP" and p[4] == 0 and p[5] == -260, "upper centre by default, below the zone card")
+assert(Listening("PLAYER_REGEN_DISABLED"), "listens for combat while up")
+-- it settles in, stays, then fades and cleans up
+Finish(card.enter)
+assert(card.exit.playing and card.fadeOut.delay == 12, "stays twelve seconds")
+Finish(card.exit)
+assert(not card.shown and not Listening("PLAYER_REGEN_DISABLED"), "gone after it fades")
+
+-- Several levels at once: one card for all of them, each spell once.
+c.LEVEL = 9; Fire("PLAYER_ENTERING_WORLD", false, false)
+LevelUp(10); LevelUp(11); LevelUp(12); LevelUp(13)
+LevelUp(13)   -- a repeated event
+Settle()
+assert(card.shown and card.enter.plays == 2, "one card for four levels")
+assert(#card.rows == 6 and Ids(card.rows) == "101,102,104,106,108,109", Ids(card.rows))
+assert(card.summary.text:find("6 spells", 1, true), card.summary.text)
+assert(card.toggle.shown and card.toggle.text.text == "Show list" and card.height == 86, "closed, with a list to open")
+-- open the list: rows with names and ranks, a level beside each since several levels were crossed
+card.toggle.scripts.OnClick()
+assert(card.listOpen and card.toggle.text.text == "Hide list" and card.list.shown)
+local shownRows = 0
+for _, row in ipairs(card.rowFrames) do if row.shown then shownRows = shownRows + 1 end end
+assert(shownRows == 6, "six rows")
+assert(card.rowFrames[2].text.text:find("Frost Lance", 1, true) and card.rowFrames[2].text.text:find("Rank 2", 1, true))
+assert(card.rowFrames[6].level.text == "Level 13" and card.rowFrames[1].level.text == "Level 10")
+assert(card.height == 100 + 6 * 18, "grows to fit one column")
+-- the pointer holds it; leaving with the list open gives time to read
+Finish(card.enter)
+c.MOUSE = true; card.scripts.OnEnter()
+assert(not card.exit.playing and card.alpha == 1, "held while pointed at")
+c.MOUSE = false; card.rowFrames[1].scripts.OnEnter(card.rowFrames[1])
+assert(c.GameTooltip.spell == 101, "a row shows the spell's tooltip")
+card.rowFrames[1].scripts.OnLeave()
+assert(card.exit.playing and card.fadeOut.delay == 20, "list open: twenty seconds after the pointer leaves")
+card.close.scripts.OnClick()
+assert(not card.shown, "closed")
+-- no further card for levels already covered
+LevelUp(13); Settle()
+assert(not card.shown, "a repeated level-up shows nothing")
+
+-- Long lists: two columns, the rest counted.
+c.LEVEL = 19; Fire("PLAYER_ENTERING_WORLD", false, false)
+LevelUp(20); Settle()
+assert(#card.rows == 10)
+card.toggle.scripts.OnClick()
+assert(card.height == 100 + 5 * 18 and not card.more.shown, "ten spells: two columns of five")
+card.close.scripts.OnClick()
+local many = {}
+for i = 1, 20 do many[i] = { 600 + i }; c.NAMES[600 + i] = "Spell " .. (600 + i) end
+LEVELS[21] = many
+LevelUp(21); Settle()
+card.toggle.scripts.OnClick()
+assert(#card.rows == 20 and card.more.shown and card.more.text:find("4 more", 1, true), "sixteen shown, the rest counted")
+card.close.scripts.OnClick()
+LEVELS[21] = nil
+
+-- Login, reload and loading screens are never level-ups, and nothing is stored.
+local stored = {}
+for k in pairs(c.TwichUIDB) do stored[#stored + 1] = k end
+c.LEVEL = 15
+Fire("PLAYER_ENTERING_WORLD", true, false); Settle()
+Fire("PLAYER_ENTERING_WORLD", false, true); Settle()
+assert(not card.shown, "nothing at login or reload")
+local after = 0
+for _ in pairs(c.TwichUIDB) do after = after + 1 end
+assert(after == #stored, "nothing saved")
+
+-- Combat: it waits, then shows; combat starting takes it away.
+c.LEVEL = 14; Fire("PLAYER_ENTERING_WORLD", false, false)
+c.COMBAT = true
+LevelUp(15); Settle(); Settle()
+assert(not card.shown, "not in combat")
+c.COMBAT = false
+Fire("PLAYER_REGEN_ENABLED"); FlushTimers(); FlushTimers()
+assert(card.shown and card.rows[1].id == 112, "shown once combat ends")
+Fire("PLAYER_REGEN_DISABLED")
+assert(not card.shown and not Listening("PLAYER_REGEN_DISABLED"), "makes way for combat")
+
+-- A banner at the top: it waits a little, then shows anyway.
+c.LEVEL = 14; Fire("PLAYER_ENTERING_WORLD", false, false)
+c.TOAST = true
+LevelUp(15); Settle()
+assert(not card.shown, "waits for the banner")
+for _ = 1, 4 do RunLongTimers(2); FlushTimers() end
+assert(not card.shown)
+RunLongTimers(2); FlushTimers(); FlushTimers()
+assert(card.shown, "shown after a few looks")
+card.close.scripts.OnClick()
+c.TOAST = false
+
+-- Names the game hasn't loaded are asked for; a name that never comes is left out.
+c.LEVEL = 9; Fire("PLAYER_ENTERING_WORLD", false, false)
+c.UNCACHED = { [101] = true, [102] = true }
+c.NAMES[101] = nil
+LevelUp(10); Settle()
+assert(c.REQUESTED[101] and c.REQUESTED[102], "asks for unloaded spell data")
+assert(not card.shown, "waits for the names")
+Fire("SPELL_DATA_LOAD_RESULT", 102, true); FlushTimers()
+assert(not card.shown, "still waiting for one")
+RunLongTimers(3); FlushTimers()
+assert(card.shown and #card.rows == 1 and card.rows[1].id == 102, "the unnamed spell is left out")
+card.close.scripts.OnClick()
+c.UNCACHED = {}
+c.NAMES[102] = nil
+c.LEVEL = 9; Fire("PLAYER_ENTERING_WORLD", false, false)
+LevelUp(10); Settle()
+assert(not card.shown, "no names at all: no card")
+c.NAMES[101], c.NAMES[102] = "Arcane Bolt", "Frost Lance"
+
+-- Known spells are never listed.
+c.KNOWN = { [100] = true, [110] = true, [901] = true, [202] = true, [101] = true, [102] = true }
+c.LEVEL = 9; Fire("PLAYER_ENTERING_WORLD", false, false)
+LevelUp(10); Settle()
+assert(not card.shown, "both already known")
+c.KNOWN = base
+
+-- A level-up while the card is up folds into it.
+c.LEVEL = 9; Fire("PLAYER_ENTERING_WORLD", false, false)
+LevelUp(10); Settle()
+assert(card.shown and #card.rows == 2)
+LevelUp(11); LevelUp(12); Settle()
+assert(card.shown and Ids(card.rows) == "101,102,104,106,108", "the open card is replaced by one covering both")
+card.close.scripts.OnClick()
+
+-- Missing data: another class, or no data file at all, shows nothing and raises nothing.
+c.CLASS = "DEATHKNIGHT"
+c.LEVEL = 9; Fire("PLAYER_ENTERING_WORLD", false, false)
+LevelUp(10); Settle()
+assert(not card.shown, "a class without data")
+c.CLASS = "MAGE"
+local data = R.TrainingData
+R.TrainingData = nil
+c.LEVEL = 9; Fire("PLAYER_ENTERING_WORLD", false, false)
+LevelUp(10); Settle()
+assert(not card.shown, "no data")
+R.TrainingData = data
+
+-- The zone card is up: it waits for it, then shows anyway after a few looks.
+c.LEVEL = 14; Fire("PLAYER_ENTERING_WORLD", false, false)
+c.ARRIVAL = true
+LevelUp(15); Settle()
+assert(not card.shown, "waits for the zone card")
+c.ARRIVAL = false
+RunLongTimers(2); FlushTimers(); FlushTimers()
+assert(card.shown, "shown once the zone card has gone")
+card.close.scripts.OnClick()
+
+-- Edit Mode: an outline to drag while it is open; the place is kept and used.
+local enter, exit = c.EventRegistry.callbacks["EditMode.Enter"], c.EventRegistry.callbacks["EditMode.Exit"]
+assert(enter and exit, "listens for Edit Mode")
+local function Mover() for _, f in ipairs(fakes) do if f.scripts.OnDragStart then return f end end end
+assert(not Mover(), "nothing made until Edit Mode opens")
+c.EDITING = true; enter()
+local mover = Mover()
+assert(mover and mover.shown and mover.point[5] == -260, "outline at the card's place")
+-- dragged so its top centre is 88 right of centre and 168 below the top of a 1024x768 screen
+mover.GetLeft = function() return 400 end
+mover.GetWidth = function() return 400 end
+mover.GetTop = function() return 600 end
+mover.scripts.OnDragStart(mover); mover.scripts.OnDragStop(mover)
+local saved = c.TwichUIDB.ui.trainingPosition
+assert(saved.x == 88 and saved.y == -168, "kept as an offset from the top centre")
+assert(mover.point[1] == "TOP" and mover.point[4] == 88 and mover.point[5] == -168, "the outline is re-anchored by its top")
+assert(card.point[4] == 88 and card.point[5] == -168, "the card moves with it")
+mover.scripts.OnLeave()
+exit()
+assert(not mover.shown, "outline gone when Edit Mode closes")
+c.EDITING = false
+c.LEVEL = 14; Fire("PLAYER_ENTERING_WORLD", false, false)
+LevelUp(15); Settle()
+assert(card.shown and card.point[4] == 88 and card.point[5] == -168, "the card appears where it was put")
+card.close.scripts.OnClick()
+-- right-click puts it back
+c.EDITING = true; enter()
+mover.scripts.OnMouseUp(mover, "LeftButton")
+assert(c.TwichUIDB.ui.trainingPosition, "a left click changes nothing")
+mover.scripts.OnMouseUp(mover, "RightButton")
+assert(c.TwichUIDB.ui.trainingPosition == nil and mover.point[4] == 0 and mover.point[5] == -260, "right-click: back to the default")
+-- switched off while Edit Mode is open: the outline goes; on again: it returns
+M.trainingNotice = false; T.Refresh()
+assert(not mover.shown)
+M.trainingNotice = true; T.Refresh()
+assert(mover.shown, "on again during Edit Mode")
+exit(); c.EDITING = false
+-- a saved place that can't be right is ignored
+for _, bad in ipairs({ "x", { x = "1", y = 2 }, { x = 0 / 0, y = 0 }, { x = 1e9, y = 0 }, { y = -100 } }) do
+  c.TwichUIDB.ui.trainingPosition = bad
+  local x, y = T.Position()
+  assert(x == 0 and y == -260, "bad saved place ignored")
+end
+c.TwichUIDB.ui.trainingPosition = nil
+
+-- Reduced motion: it only fades.
+M.arrivalReducedMotion = true
+c.LEVEL = 14; Fire("PLAYER_ENTERING_WORLD", false, false)
+LevelUp(15); Settle()
+assert(card.shown and card.drop.y == 0 and card.rise.y == 0, "no movement")
+M.arrivalReducedMotion = false
+-- Leaving the world takes it down and drops anything waiting.
+Fire("PLAYER_LEAVING_WORLD")
+assert(not card.shown)
+c.LEVEL = 9; Fire("PLAYER_ENTERING_WORLD", false, false)
+LevelUp(10); Fire("PLAYER_LEAVING_WORLD"); Settle()
+assert(not card.shown, "a loading screen drops a waiting look")
+
+-- /tui training previews a level, a range, or the current level, and says why when there is nothing.
+local printed = {}
+c.print = function(s) table.insert(printed, tostring(s)) end
+c.SlashCmdList.TWICHUI("training 15"); FlushTimers()
+assert(card.shown and card.rows[1].id == 112, "preview one level")
+c.SlashCmdList.TWICHUI("training 10-13"); FlushTimers()
+assert(#card.rows == 6, "preview a range")
+c.SlashCmdList.TWICHUI("training 14")
+assert(printed[#printed]:find("Nothing new to train for level 14", 1, true), printed[#printed])
+c.SlashCmdList.TWICHUI("training soon")
+assert(printed[#printed]:find("/tui training 20", 1, true))
+card.close.scripts.OnClick()
+
+-- Welcome Back waits while the card is up.
+assert(T.IsShowing() == false)
+
+-- Off: nothing listened for, nothing shown; on again starts from the current level.
+M.trainingNotice = false; T.Refresh()
+c.LEVEL = 9; LevelUp(10); Settle()
+assert(not card.shown, "off means off")
+c.LEVEL = 14
+M.trainingNotice = true; T.Refresh()
+LevelUp(15); Settle()
+assert(card.shown and card.rows[1].id == 112, "on again")
+-- Turning it off while the card is up takes it down.
+M.trainingNotice = false; T.Refresh()
+assert(not card.shown)
+
+-- An existing explicit opt-out survives; a new install gets it on.
+local d = MakeClient("Pat", {"!!!TwichUI"})
+d.TwichUIDB = { modules = { trainingNotice = false } }
+d.LOADED["!!!TwichUI"] = true; d.FireEvent("ADDON_LOADED", "!!!TwichUI")
+assert(d.TwichUIDB.modules.trainingNotice == false, "saved false is kept")
+
+print("TRAINING TEST PASSED")

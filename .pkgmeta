@@ -8,6 +8,7 @@ manual-changelog:
 
 ignore:
   - tests
+  - tools
   - .github
   - RELEASING.md
   - CLAUDE.md

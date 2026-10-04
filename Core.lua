@@ -44,6 +44,8 @@ local DEFAULT_MODULES = {
     arrivalSubzones = true,  -- ... and a quieter one for smaller places within a zone
     arrivalDungeons = true,  -- ... a card with the name when walking into a dungeon or raid
     arrivalReducedMotion = false, -- ... fade only, no upward settle
+    trainingNotice = true,   -- a small card after a level-up when new class spells or ranks are available to train
+    auctionPosting = true,   -- "Sell from Bags" tab in the Auction House (searches only when you pick an item)
 }
 R.DEFAULT_MODULES = DEFAULT_MODULES   -- Settings.lua uses these for the panel's Defaults button
 
@@ -193,6 +195,17 @@ COMMANDS = {
     { name = "welcome", usage = "welcome", desc = "preview the Welcome Back bookmark now", fn = function()
         if not R.WelcomeBack then Unavailable("Welcome Back") return end
         local ok, why = R.WelcomeBack.Preview()
+        if not ok then R.Print(why) end
+    end },
+    { name = "training", usage = "training [level|from-to]", desc = "preview the new training card for a level", fn = function(arg)
+        if not R.Training then Unavailable("New training") return end
+        local first, last = (arg or ""):match("^(%d+)%s*%-%s*(%d+)$")
+        local only = (arg or ""):match("^(%d+)$")
+        local ok, why
+        if first then ok, why = R.Training.Preview(tonumber(first) - 1, tonumber(last))
+        elseif only then ok, why = R.Training.Preview(tonumber(only) - 1, tonumber(only))
+        elseif (arg or "") == "" then ok, why = R.Training.Preview()
+        else ok, why = false, "Type /tui training, /tui training 20 or /tui training 19-20." end
         if not ok then R.Print(why) end
     end },
     { name = "hidden", usage = "hidden", desc = "welcome messages hidden at login", fn = function()

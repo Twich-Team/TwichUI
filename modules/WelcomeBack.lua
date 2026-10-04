@@ -199,6 +199,7 @@ local function InTheWay()
     if InCombatLockdown and InCombatLockdown() then return true end
     if UnitOnTaxi and UnitOnTaxi("player") then return true end
     if R.Arrival and R.Arrival.IsShowing and R.Arrival.IsShowing() then return true end
+    if R.Training and R.Training.IsShowing and R.Training.IsShowing() then return true end   -- one TwichUI card at a time
     return Toasting()
 end
 

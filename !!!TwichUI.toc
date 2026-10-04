@@ -64,4 +64,13 @@ modules\Arrival.lua
 # Welcome Back bookmark (reads the Chronicle, shows once at login)
 modules\WelcomeBack.lua
 
+# New training at level-up (uses the arrival card's look; data from What's Training?, MIT)
+modules\TrainingData.lua
+modules\Training.lua
+
+# Sell from Bags: Auction House posting tab (uses the Chronicle palette)
+auction\Price.lua
+auction\Scan.lua
+auction\Window.lua
+
 Settings.lua

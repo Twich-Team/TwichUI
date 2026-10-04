@@ -211,6 +211,11 @@ local function Rule(parent, K)
     return rule
 end
 
+-- Shared with the level-up training card (modules/Training.lua), so the two cards share one look.
+A.FONT_TITLE, A.FONT_LINE = FONT_TITLE, FONT_LINE
+A.SetFont = SetFont
+A.Rule = Rule
+
 local function Build()
     local K = Palette()
     card = CreateFrame("Frame", nil, UIParent)

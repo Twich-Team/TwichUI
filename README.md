@@ -11,7 +11,11 @@ This addon is intended to work alongside EllesmereUI.
 
 **Upgrade hints:** When something you could wear looks better than what you have, its tooltip gets one quiet line such as "Likely upgrade for Fury". Hold Shift (your compare-items key) to see why: what it's compared with, the stat changes that mattered most and which weights were used. Items that aren't upgrades, or that you can't use, get nothing unless you ask.
 
+**Sell from Bags:** A tab at the bottom of the Auction House that lists what in your bags can be listed. Pick an item and it searches that item's current listings (only that item, only when you pick it) and suggests a price that matches the lowest comparable listing, saying what that's based on: how many listings it found, and which it left out (your own, bid-only, or other versions of a piece of equipment). You choose the quantity, price and duration; nothing is posted until you press Post. Nothing is saved or sent.
+
 **Addon skins:** Provides EllemereUI skinning to various addons to create a cohesive look and feel. Currently supprts: Attune, Auctionator, DungeonJournal, and WhatsTraining.
+
+**New training:** After a level-up that opens up class spells or ranks you don't know yet, a small card says what's available to train, with a list you can open. It never trains anything for you, shows nothing when there is nothing new, and fades by itself.
 
 **Zone arrival:** Arriving somewhere new shows the zone's name as a brief, quiet title card in place of the game's zone text: not at login, not while on a flight path, and only for the last place when crossing zones quickly. Walking into a dungeon or raid shows its name with "Dungeon" or "Raid" beneath it. Smaller places within a zone, dungeon and raid cards, and Reduced motion are optional.
 

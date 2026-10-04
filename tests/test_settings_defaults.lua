@@ -74,7 +74,7 @@ for key, default in pairs(defaults) do
   n = n + 1
   assert(default == R.DEFAULT_MODULES[key], key .. " default matches a new install")
 end
-assert(n == 29, "every module has a toggle: " .. n)
+assert(n == 31, "every module has a toggle: " .. n)
 assert(defaults.arrival == true and defaults.arrivalSubzones == true and defaults.arrivalReducedMotion == false,
   "arrival card and subzone cards on; reduced motion opt-in")
 assert(defaults.arrivalDungeons == true, "dungeon and raid arrival cards on by default")
@@ -83,6 +83,8 @@ assert(defaults.media == true and defaults.shareWhisper == true)
 assert(defaults.chronicle == true and defaults.chronicleChat == true, "Chronicle and its chat line are on by default")
 assert(defaults.chronicleDeaths == false, "death entries are opt-in")
 assert(defaults.welcomeBack == true, "Welcome Back bookmark is on by default")
+assert(defaults.auctionPosting == true, "Sell from Bags tab is on by default (it only searches when you pick an item)")
+assert(defaults.trainingNotice == true, "new training card is on by default")
 
 -- Advanced options: hidden until the switch is on, then shown; essentials never hidden.
 local advanced, visible = {}, {}
@@ -144,12 +146,13 @@ assert(attune.data.tooltip:find("after reload"), "toggle change shows it needs a
 
 -- The overview links to one page per feature, in this order; every setting
 -- is on exactly one page (registration above refuses a repeat).
-assert(table.concat(pageOrder, ",") == "Gear comparison,Zone arrival,Journey Chronicle,Addon skins,Configuration sharing", table.concat(pageOrder, ","))
+assert(table.concat(pageOrder, ",") == "Gear comparison,Zone arrival,Journey Chronicle,Auction House,Addon skins,Configuration sharing", table.concat(pageOrder, ","))
 for variable, page in pairs({
-  TWICHUI_media = "TwichUI", TWICHUI_quietLogin = "TwichUI", TWICHUI_showAdvanced = "TwichUI",
+  TWICHUI_media = "TwichUI", TWICHUI_quietLogin = "TwichUI", TWICHUI_showAdvanced = "TwichUI", TWICHUI_trainingNotice = "TwichUI",
   TWICHUI_gearHints = "Gear comparison", TWICHUI_gearTree = "Gear comparison", TWICHUI_gearBagStyle = "Gear comparison",
   TWICHUI_arrival = "Zone arrival", TWICHUI_arrivalHold = "Zone arrival",
   TWICHUI_chronicle = "Journey Chronicle", TWICHUI_chronicleClock = "Journey Chronicle", TWICHUI_chronicleSound = "Journey Chronicle", TWICHUI_welcomeBack = "Journey Chronicle",
+  TWICHUI_auctionPosting = "Auction House",
   TWICHUI_attuneSkin = "Addon skins", TWICHUI_whatsTrainingSkin = "Addon skins",
   TWICHUI_setupSharing = "Configuration sharing", TWICHUI_shareGuild = "Configuration sharing",
 }) do assert(variables[variable] == page, variable .. " is on " .. page .. ", not " .. tostring(variables[variable])) end

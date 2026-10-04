@@ -80,6 +80,7 @@ local function Build()
     NewPage("gear", "Gear comparison")
     NewPage("arrival", "Zone arrival")
     NewPage("chronicle", "Journey Chronicle")
+    NewPage("auction", "Auction House")
     NewPage("skins", "Addon skins")
     NewPage("sharing", "Configuration sharing")
 
@@ -423,6 +424,13 @@ local function Build()
         false))
 
     -----------------------------------------------------------------------
+    Use("auction")
+    Header("Sell from Bags", "A tab in the Auction House for listing items from your bags, one at a time.")
+    Toggle("auctionPosting", "Add a Sell from Bags tab to the Auction House",
+        "Lists the items in your bags that the auction house will take. Picking one searches its current listings (that item only, never the whole auction house) and suggests a price that matches the lowest comparable listing, with what it's based on. You set the quantity, price and duration; nothing is posted until you press Post. Results aren't saved.",
+        false, function() if R.AuctionWindow then R.AuctionWindow.Refresh() end end)
+
+    -----------------------------------------------------------------------
     Use("overview")
     Header("A quiet interface companion for WoW: Forever.",
         "TwichUI makes the game's interface a little clearer and more cohesive, without taking over. Each feature has its own page below, and every one can be turned off.")
@@ -450,6 +458,8 @@ local function Build()
         function() return OnOff(R:Enabled("arrival")) end)
     FeatureRow("chronicle", "Journey Chronicle", "Your private journal for this character.",
         function() return OnOff(R:Enabled("chronicle"), "Recording", "Notes only") end)
+    FeatureRow("auction", "Auction House", "A Sell from Bags tab for listing items one at a time.",
+        function() return OnOff(R:Enabled("auctionPosting")) end)
     FeatureRow("skins", "Addon skins", "The EllesmereUI look for supported addons.", function()
         local installed, on = 0, 0
         for _, skin in ipairs(SKINS) do
@@ -477,6 +487,9 @@ local function Build()
     Toggle("quietLogin", "Hide addon welcome messages",
         "Hides the \"loaded\" and \"type /command for options\" lines addons print when you log in or reload. Errors and warnings still show. Type /twichui hidden to see what was hidden this session.",
         true)
+    Toggle("trainingNotice", "Show new training when I level up",
+        "When a new level opens up class spells or ranks you don't know yet, a small card near the top of the screen, below the zone's name, says so, with a list you can open. Move it in Edit Mode. They are available to train at your class trainer; nothing is learned for you. Nothing shows when there is nothing new. It waits until you're out of combat, fades by itself, and makes no sound or chat line. Reduced motion (Zone arrival page) applies.\n\nType /tui training to see the card for your current level. Spell data comes from What's Training?.",
+        false, function() if R.Training then R.Training.Refresh() end end)
 
     Settings.RegisterAddOnCategory(root)
 end
