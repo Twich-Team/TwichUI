@@ -15,7 +15,7 @@ This addon is intended to work alongside EllesmereUI.
 
 **Addon skins:** Provides EllemereUI skinning to various addons to create a cohesive look and feel. Currently supprts: Attune, Auctionator, DungeonJournal, and WhatsTraining.
 
-**New training:** After a level-up that opens up class spells or ranks you don't know yet, a small card says what's available to train, with a list you can open. It never trains anything for you, shows nothing when there is nothing new, and fades by itself.
+**New training:** After a level-up, a short title card in the zone card's style lists the class spells you could train and don't know yet, including any from earlier levels you haven't trained, showing only the highest rank of each. It never trains anything for you, shows nothing when there is nothing new, and fades by itself.
 
 **Zone arrival:** Arriving somewhere new shows the zone's name as a brief, quiet title card in place of the game's zone text: not at login, not while on a flight path, and only for the last place when crossing zones quickly. Walking into a dungeon or raid shows its name with "Dungeon" or "Raid" beneath it. Smaller places within a zone, dungeon and raid cards, and Reduced motion are optional.
 

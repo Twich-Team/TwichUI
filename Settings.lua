@@ -488,7 +488,7 @@ local function Build()
         "Hides the \"loaded\" and \"type /command for options\" lines addons print when you log in or reload. Errors and warnings still show. Type /twichui hidden to see what was hidden this session.",
         true)
     Toggle("trainingNotice", "Show new training when I level up",
-        "When a new level opens up class spells or ranks you don't know yet, a small card near the top of the screen, below the zone's name, says so, with a list you can open. Move it in Edit Mode. They are available to train at your class trainer; nothing is learned for you. Nothing shows when there is nothing new. It waits until you're out of combat, fades by itself, and makes no sound or chat line. Reduced motion (Zone arrival page) applies.\n\nType /tui training to see the card for your current level. Spell data comes from What's Training?.",
+        "When you level up and there are class spells or ranks you could train and don't know yet, including ones from earlier levels you haven't trained, a short title card near the top of the screen, below the zone's name, lists them (only the highest rank of each spell), in the zone card's style with no frame. Move it in Edit Mode. They are available to train at your class trainer; nothing is learned for you. Nothing shows when there is nothing to train. It waits until you're out of combat, fades by itself, and makes no sound or chat line. Reduced motion (Zone arrival page) applies.\n\nType /tui training to see the card for your current level. Spell data comes from What's Training?.",
         false, function() if R.Training then R.Training.Refresh() end end)
 
     Settings.RegisterAddOnCategory(root)

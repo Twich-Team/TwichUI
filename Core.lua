@@ -197,15 +197,13 @@ COMMANDS = {
         local ok, why = R.WelcomeBack.Preview()
         if not ok then R.Print(why) end
     end },
-    { name = "training", usage = "training [level|from-to]", desc = "preview the new training card for a level", fn = function(arg)
+    { name = "training", usage = "training [level]", desc = "preview the new training card for a level", fn = function(arg)
         if not R.Training then Unavailable("New training") return end
-        local first, last = (arg or ""):match("^(%d+)%s*%-%s*(%d+)$")
-        local only = (arg or ""):match("^(%d+)$")
+        local level = (arg or ""):match("^(%d+)$")
         local ok, why
-        if first then ok, why = R.Training.Preview(tonumber(first) - 1, tonumber(last))
-        elseif only then ok, why = R.Training.Preview(tonumber(only) - 1, tonumber(only))
+        if level then ok, why = R.Training.Preview(tonumber(level))
         elseif (arg or "") == "" then ok, why = R.Training.Preview()
-        else ok, why = false, "Type /tui training, /tui training 20 or /tui training 19-20." end
+        else ok, why = false, "Type /tui training, or /tui training 20 for another level." end
         if not ok then R.Print(why) end
     end },
     { name = "hidden", usage = "hidden", desc = "welcome messages hidden at login", fn = function()

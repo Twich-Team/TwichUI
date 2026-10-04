@@ -1,14 +1,15 @@
 -- TwichUI: new training at level-up
--- Reaching a level that opens up class spells or ranks you don't know yet shows one
--- small card: "New Training Available" over the arrival card's bronze rule, then
--- "Fireball  Rank 4  ·  Visit a class trainer" (or "4 spells  ·  ..." with a list to
--- open). It says what a trainer will offer; it never trains anything.
--- The spells come from modules/TrainingData.lua (What's Training?'s Forever data). Only
--- spells for your class, faction and race are listed, and only when you have their
--- required talent and earlier ranks (or those are on the same card) and don't already
--- know them. Gaining several levels at once gives one card covering every level crossed.
--- Nothing shows when no new training applies, nothing at login or reload, and nothing
--- is stored. It waits for combat, banners and the zone card to pass and fades by itself.
+-- Reaching a level that opens up class spells or ranks you don't know yet shows a short
+-- title card in the zone card's manner, with no frame: "New Training Available" over its
+-- bronze rule, the spells and ranks beneath, and "Visit a class trainer". It says what a
+-- trainer will offer; it never trains anything.
+-- The spells come from modules/TrainingData.lua (What's Training?'s Forever data). Every
+-- spell up to your new level that you could train and don't know is listed, including ones
+-- from earlier levels you haven't been to a trainer for; when several ranks of one spell are
+-- waiting, only the highest is shown. Only spells for your class, faction and race are
+-- listed, and only when you have their required talent and earlier ranks (or those are
+-- waiting too). Quick level-ups give one card. Nothing shows when there is nothing to train,
+-- nothing at login or reload, and only the card's place (if moved) is stored. It waits for combat, banners and the zone card to pass and fades by itself.
 -- It sits near the top of the screen, below the game's messages and the zone card, and
 -- can be moved in Edit Mode. No sound, no chat.
 
@@ -19,22 +20,20 @@ R.Training = T
 local SETTLE = 2            -- seconds after a level-up before looking: quick level-ups become one card, and the spellbook catches up
 local RETRY, RETRIES = 2, 5 -- while a banner or the zone card is up; then the card shows anyway (it sits below them)
 local LOAD_WAIT = 3         -- seconds to wait for spell names the game hasn't loaded yet
-local FADE_IN, FADE_OUT = 0.6, 1.2
-local HOLD = 12             -- seconds the card stays
-local READ_HOLD = 20        -- ... with its list open
-local LEAVE_HOLD = 4        -- ... after the pointer leaves it, list closed
-local RISE = 6              -- pixels the card settles upward (0 with Reduced motion)
-local WIDTH = 400
-local ROW_HEIGHT = 18
-local COLUMNS_FROM = 9      -- this many spells or more: two columns
-local MAX_SHOWN = 16        -- more than this: "and N more"
+local FADE_IN, FADE_OUT = 0.8, 1.4   -- the zone card's
+local HOLD_BASE, HOLD_PER_ROW = 4, 0.6   -- seconds it stays: longer for a longer list (at most about 11)
+local RISE = 8              -- pixels the card settles upward, as the zone card does (0 with Reduced motion)
+local WIDTH = 520
+local ROW_HEIGHT = 20
+local COLUMNS_FROM = 7      -- this many spells or more: two columns
+local COLUMN_WIDTH = 230
+local MAX_SHOWN = 12        -- more than this: "and N more"
 local TOP_OFFSET = -260     -- default place: upper centre, below the error text, raid warnings and the zone card
 local MOVER_ATLAS = "editmode-actionbar-highlight-NineSlice-Center"   -- Edit Mode's own highlight, when the client has it
 
 local pending = 0           -- bumped to drop a waiting look; a look only runs if it is still current
-local rangeFrom, rangeTo    -- levels waiting to be looked at: above rangeFrom, up to rangeTo
+local pendingLevel          -- the level a waiting look is for
 local lastLevel             -- the level last seen, so a repeated event adds nothing
-local shownFrom             -- while a level-up card is up: the level it starts above
 local card
 local active = {}           -- [event] = handler, while registered
 local ev = CreateFrame("Frame")   -- the card's own short-lived events, apart from the shared bus
@@ -52,17 +51,19 @@ local function Hex(c) return ("|cff%02x%02x%02x"):format(c[1] * 255, c[2] * 255,
 -- What's new. Pure, so it can be checked on its own.
 ---------------------------------------------------------------------------
 
--- Spells that become trainable on reaching `to` from `from` (every level above `from`, up to `to`).
+-- Spells the character could train at level `to` and doesn't know: those of every level up to
+-- `to`, so ones from earlier levels that were never trained are included.
 -- levels, ranks: as modules/TrainingData.lua builds them. who: { faction = "Alliance"|"Horde"|nil,
 -- race = raceID|nil }; a spell limited to a faction or race is left out when that isn't known.
--- known(spellID): true when the character has it.
--- Returns { { id = spellID, level = level }, ... } by level, each spell once.
-function T.Select(levels, ranks, from, to, who, known)
+-- known(spellID): true when the game says the character has it.
+-- Returns { { id = spellID, level = level }, ... } by level, each spell once. Every rank waiting
+-- is returned; Rows() keeps only the highest of each spell for the card.
+function T.Select(levels, ranks, to, who, known)
     local later = {}   -- [spellID] = { group, index }: a later rank in the group means this one is known
     for _, group in ipairs(ranks or {}) do
         for i, id in ipairs(group) do later[id] = { group, i } end
     end
-    local function Has(id)
+    local function Direct(id)
         if known(id) then return true end
         local place = later[id]
         if not place then return false end
@@ -71,6 +72,27 @@ function T.Select(levels, ranks, from, to, who, known)
         end
         return false
     end
+    -- A spell is known too when one that needs it is: a rank can't be learned without the one before it,
+    -- even if the spellbook stops listing the earlier rank.
+    local implied, needs, stack = {}, {}, {}
+    for _, list in pairs(levels) do
+        for _, e in ipairs(list) do
+            if e.req then
+                needs[e[1]] = e.req
+                if Direct(e[1]) then
+                    for _, req in ipairs(e.req) do stack[#stack + 1] = req end
+                end
+            end
+        end
+    end
+    while #stack > 0 do
+        local id = table.remove(stack)
+        if not implied[id] then
+            implied[id] = true
+            for _, req in ipairs(needs[id] or {}) do stack[#stack + 1] = req end
+        end
+    end
+    local function Has(id) return implied[id] or Direct(id) end
     local function Fits(e)
         if e.faction and e.faction ~= who.faction then return false end
         if e.race then
@@ -85,7 +107,7 @@ function T.Select(levels, ranks, from, to, who, known)
     end
 
     local picked, listed = {}, {}
-    for level = from + 1, to do
+    for level = 1, to do
         for _, e in ipairs(levels[level] or {}) do
             if not listed[e[1]] and Fits(e) then
                 listed[e[1]] = true
@@ -93,7 +115,7 @@ function T.Select(levels, ranks, from, to, who, known)
             end
         end
     end
-    -- Each earlier rank or prerequisite must be known, or on this card too (trained first, same visit).
+    -- Each earlier rank or prerequisite must be known, or waiting too (trained first, same visit).
     local changed = true
     while changed do
         changed = false
@@ -139,15 +161,15 @@ local function CurrentLevel()
     if type(level) == "number" and level > 0 then return level end
 end
 
--- What the bundled data says is new for this character between the two levels, or {}.
+-- What the bundled data says this character could train at the level, or {}.
 -- The class's table is built for this look only and let go afterwards.
-function T.ForRange(from, to)
+function T.ForLevel(level)
     local data = R.TrainingData
     local class = UnitClass and Plain((select(2, UnitClass("player"))))
     local build = data and class and data[class]
-    if type(build) ~= "function" or type(from) ~= "number" or type(to) ~= "number" or to <= from then return {} end
+    if type(build) ~= "function" or type(level) ~= "number" or level < 1 then return {} end
     local levels, ranks = build()
-    return T.Select(levels, ranks, from, to, Who(), Known)
+    return T.Select(levels, ranks, level, Who(), Known)
 end
 
 -- Name, rank ("Rank 4", or nil) and icon, or nil when the game doesn't give a name.
@@ -161,18 +183,29 @@ local function Describe(id)
     return name, rank, icon
 end
 
--- Rows for the card: only spells the game can name, and no two that read the same.
+-- Ranks of one spell share its name; a few (poisons) add a numeral, "Instant Poison II".
+local function SpellKey(name)
+    return name:match("^(.-)%s+[IVX]+$") or name
+end
+
+-- Rows for the card: only spells the game can name, and one row per spell, its highest rank
+-- waiting (entries come by level, so a later one is a higher rank). Listed by level.
 local function Rows(entries)
-    local rows, seen = {}, {}
+    local rows, at = {}, {}
     for _, e in ipairs(entries) do
         local name, rank, icon = Describe(e.id)
-        local key = name and (name .. "\n" .. (rank or ""))
-        if key and not seen[key] then
-            seen[key] = true
+        if name then
+            local key = SpellKey(name)
+            if at[key] then rows[at[key]] = false end
             rows[#rows + 1] = { id = e.id, level = e.level, name = name, rank = rank, icon = icon }
+            at[key] = #rows
         end
     end
-    return rows
+    local out = {}
+    for _, row in ipairs(rows) do
+        if row then out[#out + 1] = row end
+    end
+    return out
 end
 
 -- Asks for the names the game hasn't loaded, then calls done() once: when all have arrived
@@ -232,244 +265,169 @@ local function Place(frame)
 end
 
 ---------------------------------------------------------------------------
--- The card. Made the first time it is needed.
+-- The card. No frame or backdrop, like the zone card: the heading, the bronze rule, the
+-- spells, and a quiet line saying where to learn them. It takes no clicks, so the world
+-- beneath it stays clickable. Made the first time it is needed.
 ---------------------------------------------------------------------------
-local Hover   -- defined below; every part of the card that takes the pointer calls it
-
-local function Linger(seconds)
-    card.exit:Stop()
-    card:SetAlpha(1)
-    card.fadeOut:SetStartDelay(seconds)
-    card.exit:Play()
-end
-
--- The pointer on the card (or anything on it) holds it; leaving starts the countdown again.
-function Hover()
-    if not (card and card:IsShown()) or card.enter:IsPlaying() then return end
-    if card:IsMouseOver() then
-        card.exit:Stop()
-        card:SetAlpha(1)
-    elseif not card.exit:IsPlaying() then
-        Linger(card.listOpen and READ_HOLD or LEAVE_HOLD)
-    end
-end
-
 local function Hide()
     if not card then return end
-    card.enter:Stop()
-    card.exit:Stop()
+    card.anim:Stop()
     card:Hide()
     card.rows = nil
-    shownFrom = nil
     ev:UnregisterEvent("PLAYER_REGEN_DISABLED")
 end
-
-function T.Dismiss() Hide() end
 
 -- True while the card is on screen (the Welcome Back bookmark waits for it).
 function T.IsShowing() return card ~= nil and card:IsShown() end
 
-local function Label(row)
+-- How long it stays: a little longer for each spell, so a long list can be read.
+local function Hold(rows) return HOLD_BASE + HOLD_PER_ROW * rows end
+
+-- "Frostbolt  Rank 3", the rank in stone; with the level after it when several levels were crossed.
+local function Label(row, multiLevel)
+    local stone = Hex(card.K.stone)
     local text = Escape(row.name)
-    if row.rank then text = text .. "  " .. Hex(card.K.stone) .. Escape(row.rank) .. "|r" end
+    if row.rank then text = text .. "  " .. stone .. Escape(row.rank) .. "|r" end
+    if multiLevel then text = text .. stone .. ("  ·  level %d"):format(row.level) .. "|r" end
     return text
+end
+
+-- A line of text with the zone card's shadow, which keeps it readable without a backdrop.
+local function Text(parent, path, size, fallback, color)
+    local fs = parent:CreateFontString(nil, "OVERLAY")
+    R.Arrival.SetFont(fs, path, size, fallback)
+    fs:SetShadowColor(0, 0, 0, 0.85)
+    fs:SetShadowOffset(1, -1)
+    fs:SetTextColor(color[1], color[2], color[3])
+    return fs
+end
+
+local function Width(fs)
+    local width = fs.GetUnboundedStringWidth and fs:GetUnboundedStringWidth() or fs:GetStringWidth()
+    return type(width) == "number" and width or 0
 end
 
 local function Row(i)
     local row = card.rowFrames[i]
     if row then return row end
-    local A, K = R.Arrival, card.K
-    row = CreateFrame("Button", nil, card.list)
+    row = CreateFrame("Frame", nil, card.list)
     row:SetHeight(ROW_HEIGHT)
-    local frame = row:CreateTexture(nil, "ARTWORK")
-    frame:SetColorTexture(K.bronzeLo[1], K.bronzeLo[2], K.bronzeLo[3], 1)
-    frame:SetSize(16, 16)
-    frame:SetPoint("LEFT", 0, 0)
+    local edge = row:CreateTexture(nil, "ARTWORK")
+    edge:SetColorTexture(0, 0, 0, 0.6)   -- a dark edge keeps the icon clear over bright ground
+    edge:SetSize(18, 18)
+    edge:SetPoint("LEFT", 0, 0)
     row.icon = row:CreateTexture(nil, "OVERLAY")
     row.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-    row.icon:SetSize(14, 14)
-    row.icon:SetPoint("CENTER", frame, "CENTER", 0, 0)
-    row.level = row:CreateFontString(nil, "OVERLAY")
-    A.SetFont(row.level, A.FONT_LINE, 12, "GameFontHighlightSmall")
-    row.level:SetJustifyH("RIGHT")
-    row.level:SetPoint("RIGHT", -2, 0)
-    row.level:SetTextColor(K.stone[1], K.stone[2], K.stone[3])
-    row.text = row:CreateFontString(nil, "OVERLAY")
-    A.SetFont(row.text, A.FONT_LINE, 13, "GameFontHighlightSmall")
+    row.icon:SetSize(16, 16)
+    row.icon:SetPoint("CENTER", edge, "CENTER", 0, 0)
+    row.text = Text(row, R.Arrival.FONT_LINE, 15, "GameFontHighlight", card.K.text)
     row.text:SetJustifyH("LEFT")
     row.text:SetWordWrap(false)
-    row.text:SetPoint("LEFT", frame, "RIGHT", 6, 0)
-    row.text:SetPoint("RIGHT", row.level, "LEFT", -6, 0)
-    row.text:SetTextColor(K.text[1], K.text[2], K.text[3])
-    row:SetScript("OnEnter", function(self)
-        if GameTooltip and self.id then
-            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            GameTooltip:SetSpellByID(self.id)
-            GameTooltip:Show()
-        end
-        Hover()
-    end)
-    row:SetScript("OnLeave", function()
-        if GameTooltip then GameTooltip:Hide() end
-        Hover()
-    end)
+    row.text:SetPoint("LEFT", edge, "RIGHT", 6, 0)
     card.rowFrames[i] = row
     return row
 end
 
--- Closed: the heading and one line. Open: the list beneath it as well, in two columns when long.
-local function Layout(open)
-    local rows = card.rows
-    local many = #rows > 1
-    card.listOpen = open and many
-    card.toggle:SetShown(many)
-    card.toggle.text:SetText(card.listOpen and "Hide list" or "Show list")
-    for _, row in ipairs(card.rowFrames) do row:Hide() end
-    if not card.listOpen then
-        card.list:Hide()
-        card:SetHeight(many and 86 or 72)
-        return
-    end
+-- Lays out the spells: one centred column, or two when there are many. Returns how many are shown.
+local function Layout(rows)
     local shown = math.min(#rows, MAX_SHOWN)
     local columns = #rows >= COLUMNS_FROM and 2 or 1
     local perColumn = math.ceil(shown / columns)
-    local listWidth = WIDTH - 48
-    local columnWidth = math.floor(listWidth / columns)
     local multiLevel = rows[1].level ~= rows[#rows].level
+    for _, row in ipairs(card.rowFrames) do row:Hide() end
     for i = 1, shown do
         local data, row = rows[i], Row(i)
         local column, line = math.floor((i - 1) / perColumn), (i - 1) % perColumn
-        row:ClearAllPoints()
-        row:SetPoint("TOPLEFT", card.list, "TOPLEFT", column * columnWidth, -line * ROW_HEIGHT)
-        row:SetWidth(columnWidth - 8)
-        row.id = data.id
         row.icon:SetTexture(data.icon)
-        row.text:SetText(Label(data))
-        row.level:SetText(multiLevel and ("Level %d"):format(data.level) or "")
+        row.text:SetWidth(0)
+        row.text:SetText(Label(data, multiLevel))
+        row:ClearAllPoints()
+        if columns == 1 then
+            local width = math.min(Width(row.text), WIDTH - 60)
+            row.text:SetWidth(width)
+            row:SetWidth(24 + width)
+            row:SetPoint("TOP", card.list, "TOP", 0, -line * ROW_HEIGHT)
+        else
+            row.text:SetWidth(COLUMN_WIDTH - 24)
+            row:SetWidth(COLUMN_WIDTH)
+            row:SetPoint("TOPLEFT", card.list, "TOP", column == 0 and -COLUMN_WIDTH - 6 or 6, -line * ROW_HEIGHT)
+        end
         row:Show()
     end
-    local more = #rows - shown
-    card.more:SetText(more > 0 and ("and %d more at your trainer"):format(more) or "")
-    card.more:SetShown(more > 0)
-    card.list:SetHeight(perColumn * ROW_HEIGHT + (more > 0 and 16 or 0))
-    card.list:Show()
-    card:SetHeight(100 + perColumn * ROW_HEIGHT + (more > 0 and 16 or 0))
-end
-
-local function ToggleList()
-    if not card.rows then return end
-    Layout(not card.listOpen)
-    Hover()
+    card.list:SetHeight(perColumn * ROW_HEIGHT)
+    card:SetHeight(64 + perColumn * ROW_HEIGHT)
+    return shown
 end
 
 local function Build()
     local S, A = R.ChronicleStyle, R.Arrival
     if not (S and A and A.Rule and A.SetFont) then return false end
     local K = S.color
-    card = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
-    card:SetSize(WIDTH, 86)
+    card = CreateFrame("Frame", nil, UIParent)
+    card:SetSize(WIDTH, 120)
     Place(card)
     card:SetClampedToScreen(true)
-    card:SetFrameStrata("MEDIUM")
-    card:EnableMouse(true)
+    card:SetFrameStrata("LOW")
+    card:EnableMouse(false)
     card:Hide()
     card.K = K
     card.rowFrames = {}
-    S.Frame(card, WIDTH, 72)   -- the collapsed size; the frame grows downward from its top
 
-    card.title = card:CreateFontString(nil, "OVERLAY")
-    A.SetFont(card.title, A.FONT_TITLE, 15, "GameFontNormal")
-    card.title:SetPoint("TOP", 0, -14)
-    card.title:SetTextColor(K.text[1], K.text[2], K.text[3])
-    card.title:SetShadowColor(0, 0, 0, 0.85)
-    card.title:SetShadowOffset(1, -1)
+    card.title = Text(card, A.FONT_TITLE, 18, "SubZoneTextFont", K.text)
+    card.title:SetPoint("TOP", 0, 0)
     card.title:SetText("New Training Available")
     card.rule = A.Rule(card, K)
     card.rule:SetWidth(110)
     card.rule:SetPoint("TOP", card.title, "BOTTOM", 0, -6)
-    card.summary = card:CreateFontString(nil, "OVERLAY")
-    A.SetFont(card.summary, A.FONT_LINE, 14, "GameFontHighlight")
-    card.summary:SetWidth(WIDTH - 60)
-    card.summary:SetWordWrap(false)
-    card.summary:SetJustifyH("CENTER")
-    card.summary:SetPoint("TOP", card.rule, "BOTTOM", 0, -6)
-    card.summary:SetTextColor(K.stone[1], K.stone[2], K.stone[3])
-
     card.list = CreateFrame("Frame", nil, card)
-    card.list:SetWidth(WIDTH - 48)
-    card.list:SetPoint("TOP", card.summary, "BOTTOM", 0, -10)
-    card.more = card.list:CreateFontString(nil, "OVERLAY")
-    A.SetFont(card.more, A.FONT_LINE, 12, "GameFontHighlightSmall")
-    card.more:SetPoint("BOTTOMLEFT", 22, 0)
-    card.more:SetTextColor(K.stone[1], K.stone[2], K.stone[3])
+    card.list:SetSize(WIDTH, ROW_HEIGHT)
+    card.list:SetPoint("TOP", card.rule, "BOTTOM", 0, -10)
+    card.foot = Text(card, A.FONT_LINE, 13, "GameFontHighlightSmall", K.stone)
+    card.foot:SetPoint("TOP", card.list, "BOTTOM", 0, -8)
 
-    card.toggle = S.Link(card, "Show list", ToggleList, K.gold, K.text)
-    card.toggle:SetSize(80, 14)
-    card.toggle:SetPoint("BOTTOMRIGHT", -12, 9)
-    card.close = S.Close(card, T.Dismiss)
-    card.close:SetPoint("TOPRIGHT", -8, -8)
-    card:SetScript("OnEnter", Hover)
-    card:SetScript("OnLeave", Hover)
-    for _, button in ipairs({ card.toggle, card.close }) do
-        button:HookScript("OnEnter", Hover)
-        button:HookScript("OnLeave", Hover)
-    end
-
-    -- Settles in as the other TwichUI cards do: lowered at once, then rising into place as it fades in.
-    local enter = card:CreateAnimationGroup()
-    enter:SetToFinalAlpha(true)
-    card.drop = enter:CreateAnimation("Translation")
+    -- The zone card's motion: lowered at once, rising into place as it fades in, then fading away.
+    local anim = card:CreateAnimationGroup()
+    anim:SetToFinalAlpha(true)
+    card.drop = anim:CreateAnimation("Translation")
     card.drop:SetDuration(0)
     card.drop:SetOrder(1)
-    card.rise = enter:CreateAnimation("Translation")
+    card.rise = anim:CreateAnimation("Translation")
     card.rise:SetSmoothing("OUT")
     card.rise:SetDuration(FADE_IN)
     card.rise:SetOrder(1)
-    local fadeIn = enter:CreateAnimation("Alpha")
+    local fadeIn = anim:CreateAnimation("Alpha")
     fadeIn:SetFromAlpha(0)
     fadeIn:SetToAlpha(1)
     fadeIn:SetSmoothing("OUT")
     fadeIn:SetDuration(FADE_IN)
     fadeIn:SetOrder(1)
-    enter:SetScript("OnFinished", function()
-        card:SetAlpha(1)
-        if not card:IsMouseOver() then Linger(HOLD) end
-    end)
-    card.enter = enter
-    -- Stays a while, then fades; kept apart from the entrance so the pointer can hold it.
-    local exit = card:CreateAnimationGroup()
-    exit:SetToFinalAlpha(true)
-    card.fadeOut = exit:CreateAnimation("Alpha")
+    card.fadeOut = anim:CreateAnimation("Alpha")
     card.fadeOut:SetFromAlpha(1)
     card.fadeOut:SetToAlpha(0)
     card.fadeOut:SetSmoothing("IN")
     card.fadeOut:SetDuration(FADE_OUT)
-    exit:SetScript("OnFinished", Hide)
-    card.exit = exit
+    card.fadeOut:SetOrder(2)
+    anim:SetScript("OnFinished", Hide)
+    card.anim = anim
     return true
 end
 
--- fold: the level the card starts above, for a real level-up; a newer level-up while it is up adds to it.
-local function Show(rows, fold)
+local function Show(rows)
     if not card and not Build() then return end
     Hide()
     Place(card)
     card.rows = rows
-    local K = card.K
-    if #rows == 1 then
-        card.summary:SetText(Hex(K.text) .. Label(rows[1]) .. "|r  ·  Visit a class trainer")
-    else
-        card.summary:SetText(("%d spells  ·  Visit a class trainer"):format(#rows))
-    end
-    Layout(false)
+    local shown = Layout(rows)
+    local more = #rows - shown
+    card.foot:SetText(more > 0 and ("and %d more  ·  Visit a class trainer"):format(more) or "Visit a class trainer")
 
     local rise = R:Enabled("arrivalReducedMotion") and 0 or RISE
     card.drop:SetOffset(0, -rise)
     card.rise:SetOffset(0, rise)
+    card.fadeOut:SetStartDelay(Hold(shown))
     card:SetAlpha(0)
     card:Show()
-    card.enter:Play()
-    shownFrom = fold
+    card.anim:Play()
     ev:RegisterEvent("PLAYER_REGEN_DISABLED")   -- makes way for combat
 end
 
@@ -490,7 +448,7 @@ end
 local Schedule
 
 local function Try(tries, mine)
-    if pending ~= mine or not R:Enabled("trainingNotice") or not rangeTo then return end
+    if pending ~= mine or not R:Enabled("trainingNotice") or not pendingLevel then return end
     if InCombatLockdown and InCombatLockdown() then
         ev:RegisterEvent("PLAYER_REGEN_ENABLED")
         return
@@ -499,17 +457,16 @@ local function Try(tries, mine)
         C_Timer.After(RETRY, function() Try(tries + 1, mine) end)
         return
     end
-    local from, to = rangeFrom, rangeTo
-    local entries = T.ForRange(from, to)
+    local entries = T.ForLevel(pendingLevel)
     if #entries == 0 then
-        rangeFrom, rangeTo = nil, nil
+        pendingLevel = nil
         return
     end
     LoadNames(entries, function()
         if pending ~= mine then return end
-        rangeFrom, rangeTo = nil, nil
+        pendingLevel = nil
         local rows = Rows(entries)
-        if #rows > 0 then Show(rows, from) end
+        if #rows > 0 then Show(rows) end
     end)
 end
 
@@ -532,12 +489,9 @@ end)
 
 local function OnLevelUp(level)
     if type(level) ~= "number" then return end
-    local from = lastLevel or level - 1
-    if level <= from then return end   -- already seen
+    if lastLevel and level <= lastLevel then return end   -- already seen
     lastLevel = level
-    if shownFrom then from = math.min(from, shownFrom) end   -- a card still up is folded into the new one
-    rangeFrom = math.min(rangeFrom or from, from)
-    rangeTo = math.max(rangeTo or level, level)
+    pendingLevel = level   -- a card still up is replaced by the new one, which lists everything waiting
     Schedule(SETTLE)
 end
 
@@ -545,7 +499,7 @@ end
 local function Drop()
     pending = pending + 1
     loadToken = loadToken + 1
-    rangeFrom, rangeTo = nil, nil
+    pendingLevel = nil
     ev:UnregisterEvent("PLAYER_REGEN_ENABLED")
     ev:UnregisterEvent("SPELL_DATA_LOAD_RESULT")
     Hide()
@@ -556,21 +510,19 @@ local function OnEnteringWorld()
     lastLevel = CurrentLevel() or lastLevel
 end
 
--- /tui training [level | from-to]: shows the card for reaching a level now (your own by default),
+-- /tui training [level]: shows the card as it would be on reaching a level now (your own by default),
 -- from the same data and checks, so it can be looked at without levelling. Skips the combat and
 -- banner checks (the player asked) but still lists only what applies. Returns true, or false and a reason.
-function T.Preview(from, to)
-    to = to or CurrentLevel()
-    from = from or (to and to - 1)
-    if not to or not from or from < 0 or to <= from then return false, "That isn't a level range TwichUI can look at." end
-    local entries = T.ForRange(from, to)
-    local span = to - from == 1 and ("level %d"):format(to) or ("levels %d to %d"):format(from + 1, to)
+function T.Preview(level)
+    level = level or CurrentLevel()
+    if not level or level < 1 then return false, "That isn't a level TwichUI can look at." end
+    local entries = T.ForLevel(level)
     if #entries == 0 then
-        return false, ("Nothing new to train for %s, or you already know it."):format(span)
+        return false, ("Nothing to train up to level %d that you don't already know."):format(level)
     end
     LoadNames(entries, function()
         local rows = Rows(entries)
-        if #rows > 0 then Show(rows) else R.Print("The game didn't give names for the training at %s, so there is nothing to show.", span) end
+        if #rows > 0 then Show(rows) else R.Print("The game didn't give names for the training up to level %d, so there is nothing to show.", level) end
     end)
     return true
 end
@@ -593,7 +545,7 @@ end
 
 local function BuildMover()
     mover = CreateFrame("Frame", nil, UIParent)
-    mover:SetSize(WIDTH, 86)
+    mover:SetSize(WIDTH, 120)   -- about the size of a card with a few spells
     mover:SetFrameStrata("MEDIUM")
     mover:SetFrameLevel(1000)
     mover:SetClampedToScreen(true)
