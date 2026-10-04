@@ -482,7 +482,7 @@ local function Build()
     Settings.CreateCheckbox(category, advancedSetting,
         "Shows an Advanced section on the pages that have one: how upgrade hints are judged and revealed and the bag mark style (Gear comparison), how long the title card stays (Zone arrival), and how configurations are sent (Configuration sharing). Hidden options keep their values.")
     Toggle("media", "Custom fonts and sounds",
-        "Adds Alegreya, Alegreya Sans, Barlow and Cinzel fonts, plus the bell alert sounds, to the font and sound lists of EllesmereUI and other addons. Nothing changes until you pick them there.",
+        "Adds Alegreya, Alegreya Sans, Barlow, Cinzel and Spectral fonts, plus the bell alert sounds, to the font and sound lists of EllesmereUI and other addons. Nothing changes until you pick them there.",
         true)
     Toggle("quietLogin", "Hide addon welcome messages",
         "Hides the \"loaded\" and \"type /command for options\" lines addons print when you log in or reload. Errors and warnings still show. Type /twichui hidden to see what was hidden this session.",

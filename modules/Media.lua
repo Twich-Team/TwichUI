@@ -7,11 +7,16 @@ local R = TwichUI
 local FONTS = {
     ["Alegreya Sans"]            = "AlegreyaSans-Regular.ttf",
     ["Alegreya Sans Medium"]     = "AlegreyaSans-Medium.ttf",
+    ["Alegreya Sans Bold"]       = "AlegreyaSans-Bold.ttf",
     ["Alegreya Sans SC Bold"]    = "AlegreyaSansSC-Bold.ttf",
     ["Alegreya"]                 = "Alegreya-Regular.ttf",
     ["Barlow SemiCond Medium"]   = "BarlowSemiCondensed-Medium.ttf",
     ["Barlow SemiCond SemiBold"] = "BarlowSemiCondensed-SemiBold.ttf",
     ["Cinzel"]                   = "Cinzel-SemiBold.ttf",
+    ["Spectral"]                 = "Spectral-Regular.ttf",
+    ["Spectral Medium"]          = "Spectral-Medium.ttf",
+    ["Spectral SemiBold"]        = "Spectral-SemiBold.ttf",
+    ["Spectral Bold"]            = "Spectral-Bold.ttf",
 }
 
 local SOUNDS = {

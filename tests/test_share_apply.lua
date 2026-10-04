@@ -80,4 +80,10 @@ assert(pal2.TwichUIBackupDB["Pal - Forever"].tables.BarSettings.data.enabled == 
 -- media registered
 local LSM = pal2.LibStub("LibSharedMedia-3.0")
 assert(LSM:IsValid("font", "Cinzel") and LSM:IsValid("sound", "GTFO Fail"))
+for name, file in pairs({ ["Spectral"] = "Spectral-Regular.ttf", ["Spectral Medium"] = "Spectral-Medium.ttf",
+    ["Spectral SemiBold"] = "Spectral-SemiBold.ttf", ["Spectral Bold"] = "Spectral-Bold.ttf" }) do
+    assert(LSM:IsValid("font", name), name)
+    assert(LSM:Fetch("font", name):find(file, 1, true), name .. " -> " .. file)
+    assert(io.open(ROOT .. "media/fonts/" .. file, "rb"), file .. " missing from media/fonts"):close()
+end
 print("ALL TESTS PASSED")
