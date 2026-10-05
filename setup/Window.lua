@@ -28,6 +28,32 @@ local function Skin(kind, obj, ...)
     pcall(S[kind], obj, ...)
 end
 
+-- UIPanelScrollFrameTemplate's bar is the old arrow-button slider, which
+-- S.ScrollBar doesn't handle (it only knows MinimalScrollBar). Apply the same
+-- treatment EllesmereUI gives old-style bars: arrows faded, thumb -> slim strip.
+local function SkinScrollFrame(scroll)
+    local sb = scroll and scroll.ScrollBar
+    if not (R.S and sb) then return end
+    Skin("ScrollBar", sb)
+    local name = sb:GetName() or ""
+    for _, suffix in ipairs({ "ScrollUpButton", "ScrollDownButton" }) do
+        local b = sb[suffix] or _G[name .. suffix]
+        if b then
+            for _, getter in ipairs({ "GetNormalTexture", "GetPushedTexture", "GetDisabledTexture", "GetHighlightTexture" }) do
+                local t = b[getter] and b[getter](b)
+                if t then t:SetAlpha(0) end
+            end
+        end
+    end
+    local thumb = sb.GetThumbTexture and sb:GetThumbTexture()
+    if thumb then
+        thumb:SetTexture("Interface\\Buttons\\WHITE8X8")
+        thumb:SetTexCoord(0, 1, 0, 1)
+        thumb:SetVertexColor(1, 1, 1, 0.3)
+        thumb:SetWidth(4)
+    end
+end
+
 local function Accent()
     local S = R.S
     if S and S.GetAccentColor then
@@ -1198,6 +1224,16 @@ local function PreviewText(r)
     return table.concat(lines, "\n")
 end
 
+-- The status line sits above the buttons, or above the Details text when shown.
+local function PlaceTransferStatus()
+    tp.status:ClearAllPoints()
+    if tp.detailsText:IsShown() then
+        tp.status:SetPoint("BOTTOMLEFT", tp.detailsText, "TOPLEFT", 0, 6)
+    else
+        tp.status:SetPoint("BOTTOMLEFT", 18, 44)
+    end
+end
+
 local function BuildTransfer()
     tp = CreateFrame("Frame", "TwichUIBackupTransfer", UIParent, "BackdropTemplate")
     tp:SetSize(560, 470)
@@ -1226,9 +1262,23 @@ local function BuildTransfer()
     tp.sub:SetPoint("TOPLEFT", 16, -38)
     tp.sub:SetWidth(528)
 
+    -- Stacked from the bottom so the string box takes whatever height is left:
+    -- buttons, then the Details text (when shown), then the status line, then the box.
+    tp.status = Text(tp, "GameFontHighlightSmall")
+    tp.status:SetPoint("BOTTOMLEFT", 18, 44)
+    tp.status:SetWidth(524)
+    tp.status:SetHeight(110)
+    tp.status:SetJustifyV("TOP")
+    tp.detailsText = Text(tp, "GameFontDisableSmall")
+    tp.detailsText:SetPoint("BOTTOMLEFT", 18, 44)
+    tp.detailsText:SetWidth(524)
+    tp.detailsText:SetJustifyV("TOP")
+    tp.detailsText:SetText(DETAILS)
+    tp.detailsText:Hide()
+
     local box = CreateFrame("Frame", nil, tp, "BackdropTemplate")
     box:SetPoint("TOPLEFT", 16, -88)
-    box:SetSize(528, 150)
+    box:SetPoint("BOTTOMRIGHT", tp.status, "TOPRIGHT", 2, 10)
     if R.S then Skin("Panel", box, { inset = true }) else
         box:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
         box:SetBackdropColor(0, 0, 0, 0.5)
@@ -1237,12 +1287,13 @@ local function BuildTransfer()
     local sf = CreateFrame("ScrollFrame", nil, box, "UIPanelScrollFrameTemplate")
     sf:SetPoint("TOPLEFT", 6, -6)
     sf:SetPoint("BOTTOMRIGHT", -26, 6)
-    Skin("ScrollBar", sf.ScrollBar)
+    SkinScrollFrame(sf)
     tp.edit = CreateFrame("EditBox", nil, sf)
     tp.edit:SetMultiLine(true)
     tp.edit:SetAutoFocus(false)
     tp.edit:SetFontObject("ChatFontNormal")
     tp.edit:SetWidth(490)
+    sf:SetScript("OnSizeChanged", function(_, w) tp.edit:SetWidth(w) end)
     tp.edit:SetScript("OnEscapePressed", tp.edit.ClearFocus)
     tp.edit:SetScript("OnEditFocusGained", function(e) if tp.mode == "export" then e:HighlightText() end end)
     tp.edit:SetScript("OnTextChanged", function(e, user)
@@ -1260,20 +1311,9 @@ local function BuildTransfer()
     end)
     sf:SetScrollChild(tp.edit)
 
-    tp.status = Text(tp, "GameFontHighlightSmall")
-    tp.status:SetPoint("TOPLEFT", box, "BOTTOMLEFT", 2, -10)
-    tp.status:SetWidth(524)
-    tp.status:SetHeight(110)
-    tp.status:SetJustifyV("TOP")
-
-    tp.detailsText = Text(tp, "GameFontDisableSmall")
-    tp.detailsText:SetPoint("TOPLEFT", tp.status, "BOTTOMLEFT", 0, -6)
-    tp.detailsText:SetWidth(524)
-    tp.detailsText:SetJustifyV("TOP")
-    tp.detailsText:SetText(DETAILS)
-    tp.detailsText:Hide()
     tp.details = Btn(tp, "Details", 80, function()
         tp.detailsText:SetShown(not tp.detailsText:IsShown())
+        PlaceTransferStatus()
     end)
     tp.details:SetPoint("BOTTOMLEFT", 16, 12)
 
@@ -1332,6 +1372,8 @@ local function OpenTransfer(mode)
     tp.edit:SetText("")
     tp.detailsText:Hide()
     local exporting = mode == "export"
+    tp.status:SetHeight(exporting and 30 or 110)   -- import shows a longer preview
+    PlaceTransferStatus()
     tp.copy:SetShown(exporting)
     tp.check:SetShown(not exporting)
     tp.importBtn:SetShown(not exporting)

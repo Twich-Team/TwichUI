@@ -50,6 +50,8 @@ local DEFAULT_MODULES = {
     foodDrink = false,       -- Food and Drink buttons: you click, they eat or drink the best food or drink in your bags (opt-in)
     foodDrinkFood = true,    -- ... the Food button
     foodDrinkDrink = true,   -- ... the Drink button
+    comboPoints = false,     -- Rogue combo points on the target, in a place of your choosing (opt-in)
+    comboPointsHideGame = true, -- ... and the game's own beside the target portrait hidden meanwhile
     auctionPosting = true,   -- "Sell from Bags" tab in the Auction House (searches only when you pick an item)
 }
 R.DEFAULT_MODULES = DEFAULT_MODULES   -- Settings.lua uses these for the panel's Defaults button
@@ -213,6 +215,11 @@ COMMANDS = {
     end },
     { name = "friend", usage = "friend", desc = "preview the Battle.net friend login card now", fn = function()
         if R.FriendLogin then R.FriendLogin.Preview() else Unavailable("Friend login") end
+    end },
+    { name = "combo", usage = "combo", desc = "preview the combo point display (Rogues)", fn = function()
+        if not R.ComboPoints then Unavailable("Combo points") return end
+        local ok, why = R.ComboPoints.Preview()
+        if not ok then R.Print(why) end
     end },
     { name = "hidden", usage = "hidden", desc = "welcome messages hidden at login", fn = function()
         if R.Quiet then R.Quiet:ShowHidden() else Unavailable("Quiet login") end

@@ -75,6 +75,9 @@ modules\FriendLogin.lua
 modules\FoodDrink.lua
 modules\FoodDrinkProbe.lua
 
+# Combo points for Rogues (uses the Chronicle palette for its edges)
+modules\ComboPoints.lua
+
 # Sell from Bags: Auction House posting tab (uses the Chronicle palette)
 auction\Price.lua
 auction\Scan.lua
