@@ -71,6 +71,9 @@ modules\Training.lua
 # Battle.net friend login card (replaces the game's friend-online pop-up; uses the arrival card's look)
 modules\FriendLogin.lua
 
+# Border textures for TwichUI's own frames (plain, LibSharedMedia, EllesmereUI's)
+modules\Borders.lua
+
 # Food and Drink buttons (click to eat or drink the best food or drink in your bags)
 modules\FoodDrink.lua
 modules\FoodDrinkProbe.lua

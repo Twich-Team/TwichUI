@@ -15,7 +15,8 @@
 -- (texture, thickness, colour or class colour, opacity), icon zoom and the stack count, and how
 -- solid the buttons are, with an option to fade them until the mouse is over them. Border
 -- textures: a plain line, any LibSharedMedia border, and (only while EllesmereUI is installed)
--- EllesmereUI's own, drawn by its ApplyBorderStyle on a frame of ours so they match its bars. Saved in TwichUIDB.ui.foodDrink.
+-- EllesmereUI's own, drawn by its ApplyBorderStyle on a frame of ours so they match its bars; the
+-- list and drawing are shared with the combo points (modules/Borders.lua). Saved in TwichUIDB.ui.foodDrink.
 
 local R = TwichUI
 local F = {}
@@ -33,11 +34,9 @@ local KINDS = {
 }
 
 local container, mover
-local EllesmereSeed, SeedColor   -- below
 local ShowMover, EditModeActive   -- below
 local buttons = {}
-local textured = {}           -- [button] = the backdrop frame that draws a LibSharedMedia border texture
-local ellesmereFrames = {}    -- [button] = the frame EllesmereUI's ApplyBorderStyle draws a border on
+local borderFrames = {}       -- [button] = the frames a border texture is drawn on (Borders.Draw)
 local dirty = false           -- something changed in combat; look again when it ends
 local scheduled = false
 local loading = false         -- the last look found an item or spell text the game hadn't loaded yet
@@ -162,48 +161,11 @@ F.DEFAULTS = {
 }
 F.LIMITS = { size = { 24, 64 }, spacing = { 0, 24 }, borderSize = { 0, 64 }, borderOpacity = { 0, 100 }, zoom = { 0, 20 },
     buttonOpacity = { 0, 100 }, idleOpacity = { 0, 100 } }
-local TEXTURED_SIZE_MIN, TEXTURED_SIZE_SEED, SOLID_SIZE_MAX = 8, 12, 4   -- a texture needs room to draw
+local BORDER_RULES = { defaultSize = F.DEFAULTS.borderSize, defaultColor = F.DEFAULTS.borderColor,
+    solidMax = 4, texturedMin = 8, texturedSeed = 12, maxSize = F.LIMITS.borderSize[2] }   -- a texture needs room to draw
 F.LAYOUTS = { horizontal = true, vertical = true }
 
-local EUI_PREFIX = "eui:"
-
--- EllesmereUI's border API when it is installed and has what is used here, else nil. Optional:
--- everything works without it.
-local function Ellesmere()
-    local e = EllesmereUI
-    if type(e) == "table" and e.PP and e.ApplyBorderStyle and e.GetBorderTextureList and e.ResolveBorderTexture
-        and e.BorderPxStep and e.BorderLegacyPx then
-        return e
-    end
-end
-
--- The EllesmereUI key in a saved texture name ("eui:pixels-textured" -> "pixels-textured").
-local function EllesmereKey(name)
-    if type(name) == "string" and name:sub(1, #EUI_PREFIX) == EUI_PREFIX then return name:sub(#EUI_PREFIX + 1) end
-end
-
--- What choosing an EllesmereUI texture seeds: { size = px, color = "ffRRGGBB" }, or nil for any
--- other choice (or if EllesmereUI is absent).
-EllesmereSeed = function(name)
-    local key, e = EllesmereKey(name), Ellesmere()
-    if not (key and e) then return nil end
-    local step = e.GetBorderDefaultSize and e.GetBorderDefaultSize(nil, key) or 2
-    local ok, px = pcall(e.BorderLegacyPx, step, key)
-    local seed = { size = ok and type(px) == "number" and math.min(math.max(px, 1), F.LIMITS.borderSize[2]) or nil }
-    if e.GetBorderStyleSelectDefaults then
-        local good, c = pcall(e.GetBorderStyleSelectDefaults, key)
-        if good and type(c) == "table" and type(c.r) == "number" then
-            seed.color = ("ff%02x%02x%02x"):format(c.r * 255 + 0.5, c.g * 255 + 0.5, c.b * 255 + 0.5)
-        end
-    end
-    return seed
-end
-
--- The colour a texture choice starts with: EllesmereUI's for its own, ours otherwise.
-SeedColor = function(name)
-    local seed = EllesmereSeed(name)
-    return seed and seed.color or F.DEFAULTS.borderColor
-end
+local Borders = R.Borders   -- the border textures, shared with the combo points (modules/Borders.lua)
 
 local function Valid(key, value)
     local limit = F.LIMITS[key]
@@ -211,8 +173,7 @@ local function Valid(key, value)
         return type(value) == "number" and value == value and value >= limit[1] and value <= limit[2]
             and math.floor(value) == value
     elseif key == "layout" then return F.LAYOUTS[value] == true
-    elseif key == "borderTexture" then
-        return type(value) == "string" and #value > 0 and #value <= 100 and not value:find("[%c|]")
+    elseif key == "borderTexture" then return Borders.ValidName(value)
     elseif key == "borderColor" then return type(value) == "string" and value:match("^%x%x%x%x%x%x%x%x$") ~= nil
     elseif key == "borderClass" or key == "showCount" or key == "mouseover" then return type(value) == "boolean" end
     return false
@@ -232,21 +193,12 @@ function F.Set(key, value)
     TwichUIDB.ui = TwichUIDB.ui or {}
     TwichUIDB.ui.foodDrink = TwichUIDB.ui.foodDrink or {}
     local saved = TwichUIDB.ui.foodDrink
-    -- Choosing a texture gives it a thickness and colour that suit it, unless the player has
-    -- set their own: a texture is drawn at a size of its own and unreadable at 1 px, a plain
-    -- line is wrong at 12; EllesmereUI says what colour its textures are meant to be tinted.
+    -- a new texture gets a thickness and colour that suit it, unless the player set their own
     if key == "borderTexture" then
-        local old = F.Get("borderTexture")
-        if value ~= old then
-            local size = F.Get("borderSize")
-            local seed = EllesmereSeed(value)
-            if value == "solid" then
-                if size > SOLID_SIZE_MAX then saved.borderSize = F.DEFAULTS.borderSize end
-            elseif size < TEXTURED_SIZE_MIN then
-                saved.borderSize = seed and seed.size or TEXTURED_SIZE_SEED
-            end
-            if F.Get("borderColor") == SeedColor(old) then saved.borderColor = SeedColor(value) end
-        end
+        local size, color = F.Get("borderSize"), F.Get("borderColor")
+        local newSize, newColor = Borders.Reseed(F.Get("borderTexture"), value, size, color, BORDER_RULES)
+        if newSize ~= size then saved.borderSize = newSize end
+        if newColor ~= color then saved.borderColor = newColor end
     end
     saved[key] = value
     F.Refresh()
@@ -273,50 +225,8 @@ local function BorderColor()
     return r, g, b, opacity
 end
 
-local function SharedMedia() return LibStub and LibStub("LibSharedMedia-3.0", true) end
-
--- The edge file of the chosen border texture, or nil for the plain line: "solid", and a name
--- that LibSharedMedia no longer has (an addon that registered it is gone), both draw the line.
-local function TexturePath()
-    local name = F.Get("borderTexture")
-    if name == "solid" then return nil end
-    local LSM = SharedMedia()
-    local path = LSM and LSM:Fetch("border", name, true)
-    if type(path) == "string" and path ~= "" then return path end
-end
-
--- { { value, label }, ... } for the texture choice: Solid, EllesmereUI's own textures (when it
--- is installed), then every LibSharedMedia border (any addon's, sorted by name, leaving out a
--- name EllesmereUI already lists). The current choice stays listed if it has gone.
-function F.TextureChoices()
-    local list, labelled = { { "solid", "Solid" } }, { solid = true }
-    local e = Ellesmere()
-    if e then
-        local ok, entries = pcall(e.GetBorderTextureList)
-        for _, entry in ipairs(ok and type(entries) == "table" and entries or {}) do
-            local key, name = entry.key, entry.name
-            -- "sm:" ones are LibSharedMedia's, listed below; shadow is drawn behind its host
-            -- by EllesmereUI itself, which a plain border can't do
-            if type(key) == "string" and type(name) == "string" and key ~= "solid" and key ~= "shadow"
-                and key:sub(1, 3) ~= "sm:" and e.ResolveBorderTexture(key) then
-                list[#list + 1] = { EUI_PREFIX .. key, name }
-                labelled[name] = true
-            end
-        end
-    end
-    local LSM = SharedMedia()
-    local names = LSM and LSM:HashTable("border")
-    local sorted = {}
-    for name in pairs(names or {}) do
-        if name ~= "None" and not labelled[name] and Valid("borderTexture", name) then sorted[#sorted + 1] = name end
-    end
-    table.sort(sorted)
-    for _, name in ipairs(sorted) do list[#list + 1] = { name, name } end
-    local current, found = F.Get("borderTexture"), false
-    for _, choice in ipairs(list) do if choice[1] == current then found = true end end
-    if not found then list[#list + 1] = { current, (EllesmereKey(current) or current) .. " (not available)" } end
-    return list
-end
+-- { { value, label }, ... } for the texture choice (see modules/Borders.lua).
+function F.TextureChoices() return Borders.Choices(F.Get("borderTexture")) end
 
 ---------------------------------------------------------------------------
 -- Where they go: the centre's offset from the centre of the screen, as moved in Edit Mode
@@ -450,51 +360,17 @@ local function Style(button, choice)
     button:SetSize(size, size)
     local rim = button.rim
 
-    -- Which way the border is drawn: EllesmereUI's own texture, a LibSharedMedia texture, or the line
-    local mode, path = "line", nil
-    local key, e = EllesmereKey(F.Get("borderTexture")), Ellesmere()
-    if key and e and edge > 0 and e.ResolveBorderTexture(key) then
-        mode = "ellesmere"
-    else
-        path = TexturePath()
-        if path then mode = "texture" end
-    end
-
-    local euiFrame = ellesmereFrames[button]
-    if mode == "ellesmere" then
-        if not euiFrame then
-            euiFrame = CreateFrame("Frame", nil, button)
-            euiFrame:SetAllPoints(button)
-            ellesmereFrames[button] = euiFrame
-        end
-        euiFrame:SetFrameLevel((button:GetFrameLevel() or 1) + 2)
-        euiFrame:Show()
-        -- ApplyBorderStyle(frame, step, r, g, b, a, texture, then its offset/shift/addon overrides, unused here, and the exact edge in pixels)
-        local ok = pcall(e.ApplyBorderStyle, euiFrame, e.BorderPxStep(edge, key), r, g, b, alpha, key,
-            nil, nil, nil, nil, nil, nil, nil, edge)
-        if not ok then mode = "line"; euiFrame:Hide() end
-    elseif euiFrame then
-        euiFrame:Hide()
-    end
-    if mode ~= "texture" and textured[button] then textured[button]:Hide() end
+    -- EllesmereUI's own texture or a LibSharedMedia one, drawn on a frame over the button (never
+    -- on the secure button itself); otherwise the plain line, drawn here
+    borderFrames[button] = borderFrames[button] or {}
+    local mode = Borders.Draw(borderFrames[button], button, F.Get("borderTexture"), edge, r, g, b, alpha)
 
     local inset = edge
     if mode == "ellesmere" then
         for _, t in pairs(rim) do t:Hide() end
         inset = math.max(1, math.floor(edge / 4))   -- the border straddles the edge, so the icon goes only a little in
     elseif mode == "texture" then
-        -- one backdrop frame over the icon, tinted by the colour
         for _, t in pairs(rim) do t:Hide() end
-        local frame = textured[button]
-        if not frame then
-            frame = CreateFrame("Frame", nil, button, "BackdropTemplate")
-            frame:SetAllPoints(button)
-            textured[button] = frame
-        end
-        frame:SetFrameLevel((button:GetFrameLevel() or 1) + 2)
-        frame:SetBackdrop({ edgeFile = path, edgeSize = math.max(edge, 1) })
-        frame:SetBackdropBorderColor(r, g, b, alpha)
-        frame:SetShown(edge > 0)
         inset = edge > 0 and math.max(1, math.floor(edge / 4)) or 0   -- the texture overlaps the icon's edge a little
     else
         for _, t in pairs(rim) do

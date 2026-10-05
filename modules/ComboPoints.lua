@@ -11,6 +11,12 @@
 -- the gain and full-points touches are skipped.
 -- Updated by events only: the target changing, the player's combo points and their cap, the
 -- target dying, combat and death. No OnUpdate.
+-- Touches, all optional (Animation; Reduced motion keeps them subtle and drops the mist, which
+-- moves): a light on a point gained, spent points fading out, a rule under the points when they're
+-- full, a short fade when the display hides, and a poison mist (media\textures\mist, TwichUI's own
+-- art, from tools/make_mist_texture.py): a puff when the points are full, or a faint drift behind
+-- them while you have any. Animation groups only, so the game runs them; the drift loops only
+-- while it is wanted.
 -- Moved in Edit Mode, with an outline as for the Food and Drink buttons. EllesmereUI's Unlock
 -- Mode has no documented API for other addons' frames (its Plugin API covers options pages only),
 -- so it isn't used. Optionally hides the game's own combo points beside the target portrait by
@@ -32,7 +38,13 @@ local PAD = 4                -- room round the points for the backing and the fu
 local PREVIEW_STEP, PREVIEW_HOLD = 0.35, 2.5   -- seconds
 local FLASH = 0.25           -- seconds: the light on a point gained
 local FULL_IN, FULL_OUT = 0.1, 0.45   -- seconds: the rule under the points when they're full
+local SPEND = 0.35           -- seconds: a spent point fading
+local FADE_OUT = 0.3         -- seconds: the display going away
 local SAMPLE = 3             -- points shown in Edit Mode
+local MIST = R.PATH .. [[media\textures\mist]]
+local WISPS = 5              -- wisps of mist
+local MIST_TIME = { 2.8, 3.4, 3.0, 3.7, 3.2 }   -- seconds each wisp takes; unequal, so they drift apart
+local MIST_DELAY = { 0, 0.9, 0.4, 1.4, 0.7 }    -- and start apart
 
 -- Each look is a set of colours ("AARRGGBB"). background is a backing behind the points; a look
 -- with a clear one has none. accent is the full-points rule. sheen: the etched top edge's strength.
@@ -54,23 +66,32 @@ C.DEFAULTS = {
     orientation = "horizontal", direction = "forward", shape = "square",
     pipSize = 14, barLength = 150, barHeight = 6, numberSize = 28, spacing = 3,
     scale = 100, opacity = 100, animation = "full",
+    -- border textures: "solid", a LibSharedMedia border or "eui:<key>" (see modules/Borders.lua)
+    pointBorder = true, pointBorderSize = 1, pointBorderTexture = "solid",
+    frameBorder = false, frameBorderSize = 1, frameBorderColor = "ff8c6e38", frameBorderTexture = "solid",   -- the Chronicle's bronze
+    mist = "off", mistColor = "ff7fa857",
     customColors = false,
     font = "Cinzel", outline = "OUTLINE", shadow = true,
 }
 C.LIMITS = { pipSize = { 6, 40 }, barLength = { 40, 400 }, barHeight = { 2, 24 }, numberSize = { 10, 64 },
-    spacing = { 0, 20 }, scale = { 50, 200 }, opacity = { 10, 100 } }
+    spacing = { 0, 20 }, scale = { 50, 200 }, opacity = { 10, 100 }, pointBorderSize = { 1, 32 }, frameBorderSize = { 1, 32 } }
 C.CHOICES = {
     style = { pips = true, bar = true, number = true },
-    visibility = { points = true, target = true, combat = true },
+    visibility = { points = true, target = true, combat = true, always = true },
+    mist = { off = true, full = true, points = true },
     orientation = { horizontal = true, vertical = true },
     direction = { forward = true, reverse = true },
     shape = { square = true, round = true },
     animation = { full = true, subtle = true, off = true },
     outline = { NONE = true, OUTLINE = true, THICKOUTLINE = true },
 }
--- The colour settings, and the part of a look each one replaces.
+-- The colour settings that start as the look's, and the part of the look each one replaces. The
+-- point border's is used whenever it is set; the rest only with Use my own colors.
 C.COLORS = { activeColor = "active", inactiveColor = "inactive", borderColor = "border", backgroundColor = "background" }
-local BOOLEANS = { customColors = true, shadow = true }
+local HEX = { frameBorderColor = true, mistColor = true }   -- colours with a fixed default
+local BOOLEANS = { customColors = true, shadow = true, pointBorder = true, frameBorder = true }
+local TEXTURES = { pointBorderTexture = true, frameBorderTexture = true }
+local Borders = R.Borders   -- the border textures, shared with the Food and Drink buttons
 
 local function Plain(v)
     if v == nil or (issecretvalue and issecretvalue(v)) then return nil end
@@ -92,8 +113,9 @@ local function Valid(key, value)
             and math.floor(value) == value
     elseif C.CHOICES[key] then return type(value) == "string" and C.CHOICES[key][value] == true
     elseif key == "theme" then return type(value) == "string" and THEME[value] ~= nil
-    elseif C.COLORS[key] then return type(value) == "string" and value:match("^%x%x%x%x%x%x%x%x$") ~= nil
+    elseif C.COLORS[key] or HEX[key] then return type(value) == "string" and value:match("^%x%x%x%x%x%x%x%x$") ~= nil
     elseif BOOLEANS[key] then return type(value) == "boolean"
+    elseif TEXTURES[key] then return Borders.ValidName(value)
     elseif key == "font" then return type(value) == "string" and #value > 0 and #value <= 100 and not value:find("[%c|]") end
     return false
 end
@@ -113,15 +135,38 @@ end
 
 local Redraw   -- below
 
+-- How a new border texture is given a thickness and colour that suit it (Borders.Reseed), for
+-- each border: its size and colour settings, and what a texture needs on a point or round it all.
+local RESEED = {
+    pointBorderTexture = { size = "pointBorderSize", color = "borderColor",
+        rules = { defaultSize = 1, solidMax = 6, texturedMin = 6, texturedSeed = 8, maxSize = 32 } },
+    frameBorderTexture = { size = "frameBorderSize", color = "frameBorderColor",
+        rules = { defaultSize = 1, solidMax = 6, texturedMin = 8, texturedSeed = 12, maxSize = 32 } },
+}
+
 -- Saves one setting (an invalid value is refused) and redraws.
 function C.Set(key, value)
     if not Valid(key, value) then return false end
     TwichUIDB.ui = TwichUIDB.ui or {}
     TwichUIDB.ui.comboPoints = TwichUIDB.ui.comboPoints or {}
-    TwichUIDB.ui.comboPoints[key] = value
+    local saved = TwichUIDB.ui.comboPoints
+    local reseed = RESEED[key]
+    if reseed then
+        -- the colour a plain line starts with: the look's for the points, bronze round it all
+        local default = key == "pointBorderTexture" and THEME[C.Get("theme")].border or C.DEFAULTS.frameBorderColor
+        reseed.rules.defaultColor = default
+        local size, color = C.Get(reseed.size), C.Get(reseed.color)
+        local newSize, newColor = Borders.Reseed(C.Get(key), value, size, color, reseed.rules)
+        if newSize ~= size then saved[reseed.size] = newSize end
+        if newColor ~= color then saved[reseed.color] = newColor ~= default and newColor or nil end
+    end
+    saved[key] = value
     Redraw()
     return true
 end
+
+-- { { value, label }, ... } for a border texture choice (key: pointBorderTexture or frameBorderTexture).
+function C.TextureChoices(key) return Borders.Choices(C.Get(key)) end
 
 -- Forgets the colours chosen, so they follow the look again.
 function C.ClearColors()
@@ -143,12 +188,12 @@ local function Colors()
     local theme = THEME[C.Get("theme")]
     local custom = C.Get("customColors")
     local out = { sheen = theme.sheen }
-    for key, part in pairs(C.COLORS) do
-        local r, g, b, a = C.ParseColor(custom and C.Get(key) or theme[part])
-        out[part] = { r, g, b, a }
-    end
-    local r, g, b, a = C.ParseColor(theme.accent)
-    out.accent = { r, g, b, a }
+    local function Put(part, hex) local r, g, b, a = C.ParseColor(hex); out[part] = { r, g, b, a } end
+    for key, part in pairs(C.COLORS) do Put(part, custom and C.Get(key) or theme[part]) end
+    Put("border", C.Get("borderColor"))   -- the look's, or the one chosen for it
+    Put("accent", theme.accent)
+    Put("frame", C.Get("frameBorderColor"))
+    Put("mist", C.Get("mistColor"))
     return out
 end
 
@@ -208,7 +253,13 @@ end
 -- shown, hidden and redrawn in combat.
 ---------------------------------------------------------------------------
 local container, number, numberPulse, numberFade, full, fullIn, fullOut
-local backing, backingRim, ruleA, ruleB
+local backing, ruleA, ruleB
+local edges = {}               -- the border round the whole display as a plain line: top, bottom, left, right
+local frameBorders = {}        -- ... or as a texture (Borders.Draw's frames)
+local wisps = {}               -- the poison mist
+local mistLooping = false
+local outro, outroFade         -- the display fading away
+local fadingOut = false
 local segments = {}
 local mover
 local events
@@ -233,9 +284,9 @@ function C.ForPlayer() return IsRogue() end
 
 local function NewSegment()
     local seg = CreateFrame("Frame", nil, container)
-    seg.rim = seg:CreateTexture(nil, "BACKGROUND", nil, 2)
-    seg.rim:SetPoint("TOPLEFT", -1, 1)
-    seg.rim:SetPoint("BOTTOMRIGHT", 1, -1)
+    -- The point's border: a plate behind it, drawn by the display itself so a thick one can
+    -- never cover a neighbouring point (a frame's own textures sit under its children).
+    seg.rim = container:CreateTexture(nil, "BACKGROUND", nil, 2)
     seg.well = seg:CreateTexture(nil, "BACKGROUND", nil, 3)
     seg.well:SetAllPoints()
     seg.bar = CreateFrame("StatusBar", nil, seg)
@@ -252,7 +303,16 @@ local function NewSegment()
     seg.flashFade:SetToAlpha(0)
     seg.flashFade:SetDuration(FLASH)
     seg.flashFade:SetSmoothing("OUT")
-    seg.inner = { seg.well, seg.fill, seg.sheen, seg.flash }
+    -- a spent point: its colour lingers over the empty well and fades
+    seg.ghost = seg.bar:CreateTexture(nil, "ARTWORK", nil, 1)
+    seg.ghost:SetAllPoints(seg)
+    seg.ghost:SetAlpha(0)
+    seg.ghostGroup = seg.ghost:CreateAnimationGroup()
+    seg.ghostFade = seg.ghostGroup:CreateAnimation("Alpha")
+    seg.ghostFade:SetToAlpha(0)
+    seg.ghostFade:SetDuration(SPEND)
+    seg.ghostFade:SetSmoothing("IN")
+    seg.inner = { seg.well, seg.fill, seg.sheen, seg.flash, seg.ghost }
     return seg
 end
 
@@ -264,7 +324,7 @@ local function Round(seg, on)
         seg.mask = seg.bar:CreateMaskTexture()
         seg.mask:SetTexture(ROUND_MASK, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
         seg.mask:SetAllPoints(seg)
-        seg.rimMask = seg.bar:CreateMaskTexture()
+        seg.rimMask = container:CreateMaskTexture()   -- with the rim, on the display
         seg.rimMask:SetTexture(ROUND_MASK, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
         seg.rimMask:SetAllPoints(seg.rim)
     end
@@ -275,9 +335,15 @@ local function Round(seg, on)
     seg.round = on
 end
 
-local function Paint(seg, vertical, round)
+-- edge: the point border's thickness, 0 for none.
+local function Paint(seg, vertical, round, edge)
     local k = paint
     seg.rim:SetColorTexture(k.border[1], k.border[2], k.border[3], k.border[4])
+    seg.rim:ClearAllPoints()
+    seg.rim:SetPoint("TOPLEFT", seg, "TOPLEFT", -edge, edge)
+    seg.rim:SetPoint("BOTTOMRIGHT", seg, "BOTTOMRIGHT", edge, -edge)
+    seg.rim:SetShown(edge > 0)
+    seg.ghost:SetColorTexture(k.active[1], k.active[2], k.active[3], 1)
     seg.well:SetColorTexture(k.inactive[1], k.inactive[2], k.inactive[3], k.inactive[4])
     seg.bar:SetStatusBarColor(k.active[1], k.active[2], k.active[3], k.active[4])
     -- the etched edge rides the fill, so an empty point has none
@@ -314,11 +380,46 @@ local function Build()
     container:SetFrameStrata("MEDIUM")
     container:SetClampedToScreen(true)
     container:Hide()
-    backingRim = container:CreateTexture(nil, "BACKGROUND", nil, 0)
-    backingRim:SetAllPoints()
-    backing = container:CreateTexture(nil, "BACKGROUND", nil, 1)
-    backing:SetPoint("TOPLEFT", 1, -1)
-    backing:SetPoint("BOTTOMRIGHT", -1, 1)
+    backing = container:CreateTexture(nil, "BACKGROUND", nil, -2)
+    for _, side in ipairs({ "top", "bottom", "left", "right" }) do
+        edges[side] = container:CreateTexture(nil, "BACKGROUND", nil, -1)
+    end
+    edges.top:SetPoint("TOPLEFT"); edges.top:SetPoint("TOPRIGHT")
+    edges.bottom:SetPoint("BOTTOMLEFT"); edges.bottom:SetPoint("BOTTOMRIGHT")
+    edges.left:SetPoint("TOPLEFT"); edges.left:SetPoint("BOTTOMLEFT")
+    edges.right:SetPoint("TOPRIGHT"); edges.right:SetPoint("BOTTOMRIGHT")
+    -- Poison mist: soft wisps behind the points (over the backing, under the point borders) that
+    -- swell, rise a little and thin away. Invisible unless playing.
+    for i = 1, WISPS do
+        local wisp = container:CreateTexture(nil, "BACKGROUND", nil, 0)
+        wisp:SetTexture(MIST)
+        if i % 2 == 0 then wisp:SetTexCoord(1, 0, 0, 1) end   -- mirrored, so neighbours differ
+        wisp:SetAlpha(0)
+        local group = wisp:CreateAnimationGroup()
+        local time, delay = MIST_TIME[i], MIST_DELAY[i]
+        wisp.drift = group:CreateAnimation("Translation")
+        wisp.drift:SetDuration(time); wisp.drift:SetStartDelay(delay); wisp.drift:SetSmoothing("OUT")
+        wisp.swell = group:CreateAnimation("Scale")
+        wisp.swell:SetScaleFrom(0.8, 0.8); wisp.swell:SetScaleTo(1.3, 1.3)
+        wisp.swell:SetDuration(time); wisp.swell:SetStartDelay(delay)
+        wisp.rise = group:CreateAnimation("Alpha")
+        wisp.rise:SetFromAlpha(0); wisp.rise:SetDuration(time * 0.35); wisp.rise:SetStartDelay(delay)
+        wisp.rise:SetSmoothing("OUT")
+        wisp.thin = group:CreateAnimation("Alpha")
+        wisp.thin:SetToAlpha(0); wisp.thin:SetDuration(time * 0.65); wisp.thin:SetStartDelay(delay + time * 0.35)
+        wisp.thin:SetSmoothing("IN")
+        wisp.group = group
+        wisps[i] = wisp
+    end
+    outro = container:CreateAnimationGroup()
+    outroFade = outro:CreateAnimation("Alpha")
+    outroFade:SetToAlpha(0)
+    outroFade:SetDuration(FADE_OUT)
+    outroFade:SetSmoothing("IN")
+    outro:SetScript("OnFinished", function()
+        fadingOut = false
+        container:Hide()
+    end)
     number = container:CreateFontString(nil, "OVERLAY")
     number:SetPoint("CENTER")
     numberPulse = number:CreateAnimationGroup()
@@ -345,10 +446,29 @@ local function Build()
     full.group = group
 end
 
+local function StopMist()
+    for _, wisp in ipairs(wisps) do wisp.group:Stop() end
+    mistLooping = false
+end
+
+-- loop: the steady drift (left running until stopped), else one puff.
+local function PlayMist(loop, peak)
+    for _, wisp in ipairs(wisps) do
+        wisp:SetVertexColor(paint.mist[1], paint.mist[2], paint.mist[3])
+        wisp.rise:SetToAlpha(peak)
+        wisp.thin:SetFromAlpha(peak)
+        wisp.group:SetLooping(loop and "REPEAT" or "NONE")
+        wisp.group:Stop()
+        wisp.group:Play()
+    end
+    mistLooping = loop
+end
+
 local function StopTouches()
-    for _, seg in ipairs(segments) do seg.flashGroup:Stop() end
+    for _, seg in ipairs(segments) do seg.flashGroup:Stop(); seg.ghostGroup:Stop() end
     if numberPulse then numberPulse:Stop() end
     if full then full.group:Stop() end
+    StopMist()
 end
 
 -- Size, colours, shape and place, from the settings and the cap. Not on every point change.
@@ -365,26 +485,56 @@ local function Layout()
         along = math.max(2, (C.Get("barLength") - spacing * (max - 1)) / max)
     end
     local round = style == "pips" and C.Get("shape") == "round"
+    -- Borders: one on each point, and one round the whole display. Without the latter, a look
+    -- with a backing still edges it with a 1 px bronze line. Thicker ones get room of their own.
+    local bg = paint.background
+    local pointEdge = C.Get("pointBorder") and C.Get("pointBorderSize") or 0
+    local frameEdge, frameColor = 0, nil
+    if C.Get("frameBorder") then
+        frameEdge, frameColor = C.Get("frameBorderSize"), paint.frame
+    elseif bg[4] > 0 then
+        local bronze = R.ChronicleStyle and R.ChronicleStyle.color and R.ChronicleStyle.color.bronze or { 0.55, 0.43, 0.22 }
+        frameEdge, frameColor = 1, { bronze[1], bronze[2], bronze[3], 0.9 }
+    end
+    -- A point border texture straddles the point's edge, so only half of it reaches out.
+    local pointTexture = C.Get("pointBorderTexture")
+    local pointReach = pointEdge
+    if pointEdge > 0 and pointTexture ~= "solid" and (Borders.TexturePath(pointTexture)
+        or (Borders.EllesmereKey(pointTexture) and Borders.Ellesmere())) then
+        pointReach = math.ceil(pointEdge / 2)
+    end
+    local pad = PAD + math.max(0, frameEdge - 1) + math.max(0, pointReach - 1)
     StopTouches()
     for i = 1, MAX_POINTS do
         local seg = segments[i]
         if style ~= "number" and i <= max then
             if not seg then seg = NewSegment(); segments[i] = seg end
-            local offset = PAD + (reverse and (max - i) or (i - 1)) * (along + spacing)
+            local offset = pad + (reverse and (max - i) or (i - 1)) * (along + spacing)
             seg:ClearAllPoints()
             if vertical then
                 seg:SetSize(across, along)
-                seg:SetPoint("BOTTOMLEFT", container, "BOTTOMLEFT", PAD, offset)
+                seg:SetPoint("BOTTOMLEFT", container, "BOTTOMLEFT", pad, offset)
             else
                 seg:SetSize(along, across)
-                seg:SetPoint("BOTTOMLEFT", container, "BOTTOMLEFT", offset, PAD)
+                seg:SetPoint("BOTTOMLEFT", container, "BOTTOMLEFT", offset, pad)
             end
             seg.bar:SetOrientation(vertical and "VERTICAL" or "HORIZONTAL")
             seg.bar:SetMinMaxValues(i - 1, i)
-            Paint(seg, vertical, round)
+            Paint(seg, vertical, round, pointEdge)
+            -- a texture, drawn over the point's edge on frames of its own; else the plain line
+            seg.borders = seg.borders or {}
+            local mode = "line"
+            if pointEdge > 0 then
+                local c = paint.border
+                mode = Borders.Draw(seg.borders, seg, pointTexture, pointEdge, c[1], c[2], c[3], c[4], math.floor(pointEdge / 2))
+            else
+                Borders.Hide(seg.borders)
+            end
+            seg.rim:SetShown(pointEdge > 0 and mode == "line")
             seg:Show()
         elseif seg then
             seg:Hide()
+            seg.rim:Hide()   -- the display's own texture, so hidden by hand
         end
     end
 
@@ -408,29 +558,56 @@ local function Layout()
         length, thick = max * along + (max - 1) * spacing, across
         number:Hide()
     end
-    if vertical then container:SetSize(thick + PAD * 2, length + PAD * 2)
-    else container:SetSize(length + PAD * 2, thick + PAD * 2) end
+    if vertical then container:SetSize(thick + pad * 2, length + pad * 2)
+    else container:SetSize(length + pad * 2, thick + pad * 2) end
 
-    -- the backing, when the colours have one
-    local bg = paint.background
+    -- the border round the whole display: a texture, or the plain line
+    local frameMode = "line"
+    if C.Get("frameBorder") then
+        frameMode = Borders.Draw(frameBorders, container, C.Get("frameBorderTexture"), frameEdge,
+            frameColor[1], frameColor[2], frameColor[3], frameColor[4], 0)
+    else
+        Borders.Hide(frameBorders)
+    end
+    local line = frameEdge > 0 and frameMode == "line"
+    for side, t in pairs(edges) do
+        if line then
+            t:SetColorTexture(frameColor[1], frameColor[2], frameColor[3], frameColor[4])
+            if side == "top" or side == "bottom" then t:SetHeight(frameEdge) else t:SetWidth(frameEdge) end
+        end
+        t:SetShown(line)
+    end
+    -- the backing, when the colours have one, inside that border (a texture overlaps it a little)
+    local inset = line and frameEdge or (frameEdge > 0 and math.max(1, math.floor(frameEdge / 4)) or 0)
     backing:SetColorTexture(bg[1], bg[2], bg[3], bg[4])
-    local rim = R.ChronicleStyle and R.ChronicleStyle.color and R.ChronicleStyle.color.bronze or { 0.55, 0.43, 0.22 }
-    backingRim:SetColorTexture(rim[1], rim[2], rim[3], 0.9)
+    backing:ClearAllPoints()
+    backing:SetPoint("TOPLEFT", inset, -inset)
+    backing:SetPoint("BOTTOMRIGHT", -inset, inset)
     backing:SetShown(bg[4] > 0)
-    backingRim:SetShown(bg[4] > 0)
+
+    -- the mist: wisps spread along the points, about twice their height, drifting up and apart
+    local size = math.min(72, math.max(20, thick * 2.4))
+    for i, wisp in ipairs(wisps) do
+        local at = pad + (i - 0.5) / WISPS * length
+        wisp:SetSize(size, size)
+        wisp:ClearAllPoints()
+        if vertical then wisp:SetPoint("CENTER", container, "BOTTOMLEFT", pad + thick / 2, at)
+        else wisp:SetPoint("CENTER", container, "BOTTOMLEFT", at, pad + thick / 2) end
+        wisp.drift:SetOffset((i % 2 == 0 and 1 or -1) * size * 0.15, size * 0.3)
+    end
 
     -- the full-points rule, split in two so each half can taper outward
     full:ClearAllPoints()
     ruleA:ClearAllPoints(); ruleB:ClearAllPoints()
     if vertical then
-        full:SetSize(1, length + PAD * 2)
-        full:SetPoint("RIGHT", container, "RIGHT", -1, 0)
+        full:SetSize(1, length + pad * 2)
+        full:SetPoint("RIGHT", container, "RIGHT", -(frameEdge + 1), 0)
         ruleA:SetPoint("BOTTOMLEFT"); ruleA:SetPoint("BOTTOMRIGHT"); ruleA:SetPoint("TOP", full, "CENTER")
         ruleB:SetPoint("TOPLEFT"); ruleB:SetPoint("TOPRIGHT"); ruleB:SetPoint("BOTTOM", full, "CENTER")
         Taper(ruleA, "VERTICAL", true); Taper(ruleB, "VERTICAL", false)
     else
-        full:SetSize(length + PAD * 2, 1)
-        full:SetPoint("BOTTOM", container, "BOTTOM", 0, 1)
+        full:SetSize(length + pad * 2, 1)
+        full:SetPoint("BOTTOM", container, "BOTTOM", 0, frameEdge + 1)
         ruleA:SetPoint("TOPLEFT"); ruleA:SetPoint("BOTTOMLEFT"); ruleA:SetPoint("RIGHT", full, "CENTER")
         ruleB:SetPoint("TOPRIGHT"); ruleB:SetPoint("BOTTOMRIGHT"); ruleB:SetPoint("LEFT", full, "CENTER")
         Taper(ruleA, "HORIZONTAL", true); Taper(ruleB, "HORIZONTAL", false)
@@ -447,13 +624,18 @@ local function Layout()
     end
 end
 
--- How strong the touches are: nil for none. Reduced motion (Notifications page) keeps them subtle.
-local PEAKS = { full = { flash = 0.6, rule = 0.9, dip = 0.45 }, subtle = { flash = 0.3, rule = 0.5, dip = 0.75 } }
+-- How strong the touches are: nil for none. Reduced motion (Notifications page) keeps them subtle
+-- and drops the mist (it drifts); mist is nil then.
+local PEAKS = {
+    full = { flash = 0.6, rule = 0.9, dip = 0.45, spend = 0.7, puff = 0.55, drift = 0.3 },
+    subtle = { flash = 0.3, rule = 0.5, dip = 0.75, spend = 0.4, puff = 0.35, drift = 0.18 },
+}
 local function Peaks()
     local choice = C.Get("animation")
     if choice == "off" then return nil end
-    if choice == "full" and R:Enabled("arrivalReducedMotion") then choice = "subtle" end
-    return PEAKS[choice]
+    local reduced = R:Enabled("arrivalReducedMotion")
+    if choice == "full" and reduced then choice = "subtle" end
+    return PEAKS[choice], not reduced and C.Get("mist") or "off"
 end
 
 -- Draws a count (plain or secret). quiet: a new target or a fresh start, so no gain touches.
@@ -476,9 +658,21 @@ local function Render(n, secret, quiet)
     end
     local before = last
     last = n
-    if quiet or before == nil or n <= before then return end
-    local peaks = Peaks()
+    if quiet or before == nil or n == before then return end
+    local peaks, mist = Peaks()
     if not peaks then return end
+    if n < before then
+        -- spent: the points that went fade out where they were
+        if C.Get("style") ~= "number" then
+            for i = n + 1, math.min(before, max) do
+                local seg = segments[i]
+                seg.flashGroup:Stop()
+                seg.ghostFade:SetFromAlpha(peaks.spend)
+                seg.ghostGroup:Stop(); seg.ghostGroup:Play()
+            end
+        end
+        return
+    end
     if C.Get("style") == "number" then
         numberFade:SetFromAlpha(peaks.dip)
         numberPulse:Stop(); numberPulse:Play()
@@ -493,7 +687,16 @@ local function Render(n, secret, quiet)
         fullIn:SetToAlpha(peaks.rule)
         fullOut:SetFromAlpha(peaks.rule)
         full.group:Stop(); full.group:Play()
+        if mist == "full" then PlayMist(false, peaks.puff) end
     end
+end
+
+-- The steady mist: on while it's chosen, the display is up and there are points (or samples).
+local function SteadyMist(shown, n, secret)
+    local peaks, mist = Peaks()
+    local want = shown and peaks ~= nil and mist == "points" and not secret and n > 0
+    if want and not mistLooping then PlayMist(true, peaks.drift)
+    elseif not want and mistLooping then StopMist() end
 end
 
 local function ReadMax()
@@ -517,6 +720,7 @@ local function ShouldShow(n, secret)
     if previewCount or editing then return true end
     if Plain(UnitIsDeadOrGhost("player")) == true then return false end
     local rule = C.Get("visibility")
+    if rule == "always" then return true end
     if rule == "combat" then return Plain(UnitAffectingCombat("player")) == true end
     local target = HostileTarget()
     if rule == "target" or secret then return target end
@@ -542,7 +746,21 @@ local function Update()
     local quiet = quietNext or (editing and not previewCount)
     quietNext = false
     Render(n, secret, quiet)
-    container:SetShown(ShouldShow(n, secret))
+    local show = ShouldShow(n, secret)
+    if show then
+        if fadingOut then outro:Stop(); fadingOut = false end
+        container:Show()
+    elseif container:IsShown() and not fadingOut then
+        if Peaks() then
+            -- a short fade rather than a blink, so a finisher's spent points can be seen to go
+            outroFade:SetFromAlpha(C.Get("opacity") / 100)
+            fadingOut = true
+            outro:Play()
+        else
+            container:Hide()
+        end
+    end
+    SteadyMist(show, n, secret)
 end
 
 Redraw = function()
@@ -773,6 +991,7 @@ function C.Refresh()
         last = nil
         if container then
             StopTouches()
+            outro:Stop(); fadingOut = false
             container:Hide()
         end
         if mover then ShowMover(false) end

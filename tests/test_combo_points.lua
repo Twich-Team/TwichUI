@@ -50,11 +50,21 @@ Methods = {
   SetText = function(s, v) s.text = v end,
   SetTextColor = function(s, ...) s.textColor = {...} end,
   SetFont = function(s, path, size, flags) s.font = { path, size, flags }; return true end,
+  SetBackdrop = function(s, v) s.backdrop = v end,
+  SetBackdropBorderColor = function(s, ...) s.bcolor = {...} end,
   SetParent = function(s, p) s.parent = p end,
   GetParent = function(s) return s.parent end,
   GetCenter = function(s) return s.cx, s.cy end,
   CreateAnimationGroup = function(s) local g = Fake("group"); g.plays = 0; s.group = g; return g end,
-  Play = function(s) s.plays = (s.plays or 0) + 1 end,
+  -- a group set to finish at once calls its OnFinished as it starts (the game would, later)
+  Play = function(s)
+    s.plays = (s.plays or 0) + 1; s.playing = true
+    if s.instant and s.scripts.OnFinished then s.playing = false; s.scripts.OnFinished(s) end
+  end,
+  Stop = function(s) s.playing = false end,
+  SetLooping = function(s, v) s.looping = v end,
+  SetTexture = function(s, v) s.texture = v end,
+  SetVertexColor = function(s, ...) s.vertex = {...} end,
   CreateAnimation = function(s) local a = Fake("anim"); s.anims = s.anims or {}; table.insert(s.anims, a); return a end,
   SetFromAlpha = function(s, v) s.from = v end,
   SetToAlpha = function(s, v) s.to = v end,
@@ -85,7 +95,7 @@ c.UnitIsDeadOrGhost = function(unit) return unit == "player" and c.DEAD or false
 c.UnitAffectingCombat = function() return c.COMBAT end
 c.InCombatLockdown = function() return c.COMBAT end
 
-for _, f in ipairs({ "chronicle/Style.lua", "modules/ComboPoints.lua" }) do
+for _, f in ipairs({ "chronicle/Style.lua", "modules/Borders.lua", "modules/ComboPoints.lua" }) do
   local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
 end
 c.TwichUIDB = { modules = { comboPoints = true } }
@@ -121,6 +131,19 @@ end
 local function Flashes() local out = {} for i, s in ipairs(Segments()) do out[i] = s.flashGroup.plays end return out end
 local fullGroup = Find(function(f) return f.kind == "group" and f.anims and #f.anims == 2 end)
 assert(fullGroup, "the full-points rule's animation")
+local outro = container.group
+assert(outro and outro.scripts.OnFinished, "the display's fade-out")
+outro.instant = true   -- fades finish at once, until the fade itself is tested
+local function Wisps()
+  local list = {}
+  for _, f in ipairs(frames) do if f.kind == "texture" and f.texture and tostring(f.texture):find("mist") then list[#list + 1] = f end end
+  return list
+end
+local function MistPlaying()
+  local n, looping = 0, nil
+  for _, w in ipairs(Wisps()) do if w.group.playing then n = n + 1; looping = w.group.looping end end
+  return n, looping
+end
 
 -- Listening and the cap.
 assert(events.events.PLAYER_TARGET_CHANGED and events.events.UNIT_POWER_FREQUENT == "player" and events.events.UNIT_MAXPOWER == "player"
@@ -374,6 +397,208 @@ do
   assert(not container.shown, "back to the game's count (no target, nothing shown)")
 end
 
+-- "Always": up with no target and out of combat; still not while dead.
+do
+  c.TARGET, c.POINTS, c.COMBAT = nil, 0, false; Fire("PLAYER_TARGET_CHANGED")
+  assert(not container.shown)
+  assert(CP.Set("visibility", "always"))
+  assert(container.shown and Values()[1] == 0, "always: shown, empty")
+  c.DEAD = true; Fire("PLAYER_DEAD")
+  assert(not container.shown, "not while dead")
+  c.DEAD = false; Fire("PLAYER_ALIVE")
+  assert(container.shown)
+  assert(CP.Set("visibility", "points"))
+  assert(not container.shown)
+end
+
+-- Borders: on each point (drawn by the display, under every point) and round the whole display.
+do
+  local s = Segments()
+  assert(s[1].rim.shown and s[1].rim.point[1] == "BOTTOMRIGHT" and s[1].rim.point[4] == 1, "a 1 px border on each point by default")
+  assert(CP.Set("pointBorderSize", 3))
+  local tl
+  for _, f in ipairs(frames) do if f == s[1].rim then tl = f end end
+  assert(tl.shown and tl.point[4] == 3 and s[1].point[4] == 6, "3 px: the points move in to make room")
+  assert(container.w == 5 * 14 + 4 * 3 + 12, "and the display grows")
+  assert(CP.Set("pointBorder", false))
+  assert(not s[1].rim.shown and s[1].point[4] == 4, "off: no border, back in place")
+  assert(CP.Set("pointBorder", true) and CP.Set("pointBorderSize", 1))
+  assert(CP.Set("borderColor", "ff102030") and Close(s[1].rim.color[1], 16 / 255), "a point border colour is used without Use my own colors")
+  CP.ClearColors()
+
+  local edges = {}
+  for _, f in ipairs(frames) do if f.kind == "texture" and f.h == 2 and f.color and Close(f.color[1], 0x8c / 255) then edges[#edges + 1] = f end end
+  assert(#edges == 0, "no border round the display by default")
+  assert(CP.Set("frameBorder", true) and CP.Set("frameBorderSize", 2))
+  for _, f in ipairs(frames) do if f.kind == "texture" and f.shown and f.color and Close(f.color[1], 0x8c / 255) and (f.h == 2 or f.w == 2) then edges[#edges + 1] = f end end
+  assert(#edges == 4, "four bronze edges, 2 px: " .. #edges)
+  assert(s[1].point[4] == 5, "the points make room for it")
+  assert(CP.Set("frameBorderColor", "ff102030"))
+  assert(Close(edges[1].color[1], 16 / 255), "its own colour")
+  assert(CP.Set("frameBorder", false))
+  for _, e in ipairs(edges) do assert(not e.shown, "off again") end
+  assert(CP.Set("frameBorderSize", 1) and CP.Set("frameBorderColor", "ff8c6e38"))
+
+  -- fewer points: the borders of the points that went go too
+  c.MAXP = 4; Fire("UNIT_MAXPOWER", "player", "COMBO_POINTS")
+  assert(not s[5].shown and not s[5].rim.shown, "a hidden point's border is hidden")
+  c.MAXP = 5; Fire("UNIT_MAXPOWER", "player", "COMBO_POINTS")
+  assert(s[5].rim.shown)
+end
+
+-- Border textures: the same list as the Food and Drink buttons, drawn on frames of our own.
+do
+  local LSM = c.LibStub("LibSharedMedia-3.0")
+  LSM:Register("border", "Test Edge", "Interface\\Test\\Edge")
+  local s = Segments()
+  local function Backdrops(path)
+    local list = {}
+    for _, f in ipairs(frames) do
+      if type(f.backdrop) == "table" and f.backdrop.edgeFile == path and f.shown then list[#list + 1] = f end
+    end
+    return list
+  end
+  local names = {}
+  for _, choice in ipairs(CP.TextureChoices("pointBorderTexture")) do names[choice[1]] = choice[2] end
+  assert(names.solid == "Solid" and names["Test Edge"] and names["Blizzard Tooltip"], "Solid and LibSharedMedia's borders")
+  assert(CP.Set("pointBorderTexture", "bad|name") == false, "a bad name is refused")
+
+  -- a point texture: a size it can be seen at, drawn over each point's edge, no plain line
+  assert(CP.Get("pointBorderSize") == 1)
+  assert(CP.Set("pointBorderTexture", "Test Edge"))
+  assert(CP.Get("pointBorderSize") == 8, "given room to draw: " .. CP.Get("pointBorderSize"))
+  local drawn = Backdrops("Interface\\Test\\Edge")
+  assert(#drawn == 5 and drawn[1].backdrop.edgeSize == 8, "one on each point, at that size")
+  assert(drawn[1].point[1] == "BOTTOMRIGHT" and drawn[1].point[4] == 4, "reaching half its size past the point")
+  assert(not s[1].rim.shown, "the plain line is hidden")
+  assert(s[1].point[4] == 4 + 3, "the points make room for the half that reaches out")
+  assert(CP.Set("pointBorderSize", 6))
+  assert(CP.Set("pointBorderTexture", "solid"))
+  assert(CP.Get("pointBorderSize") == 6 and s[1].rim.shown and #Backdrops("Interface\\Test\\Edge") == 0, "6 suits a line too: kept")
+  assert(CP.Set("pointBorderTexture", "Test Edge") and CP.Set("pointBorderSize", 12) and CP.Set("pointBorderTexture", "solid"))
+  assert(CP.Get("pointBorderSize") == 1, "back to a line from 12: its own thickness again")
+  -- gone from LibSharedMedia: the plain line, still listed
+  assert(CP.Set("pointBorderTexture", "Gone Edge"))
+  assert(s[1].rim.shown, "falls back to the plain line")
+  local listed
+  for _, choice in ipairs(CP.TextureChoices("pointBorderTexture")) do if choice[1] == "Gone Edge" then listed = choice[2] end end
+  assert(listed and listed:find("not available"), "still listed, marked")
+  assert(CP.Set("pointBorderTexture", "solid"))
+
+  -- round the whole display: a texture inside its edge, the backing just within it
+  assert(CP.Set("frameBorder", true) and CP.Set("frameBorderTexture", "Test Edge"))
+  assert(CP.Get("frameBorderSize") == 12, "given room to draw")
+  drawn = Backdrops("Interface\\Test\\Edge")
+  assert(#drawn == 1 and drawn[1].point[4] == 0 and Close(drawn[1].bcolor[1], 0x8c / 255), "one, over the display's own edge, in bronze")
+  for _, f in ipairs(frames) do
+    if f.kind == "texture" and f.shown and (f.h == 12 or f.w == 12) and f.color and Close(f.color[1], 0x8c / 255) then error("the plain edges are hidden") end
+  end
+  assert(CP.Set("frameBorderTexture", "solid") and CP.Set("frameBorder", false))
+  assert(#Backdrops("Interface\\Test\\Edge") == 0, "off: nothing drawn")
+  assert(CP.Get("frameBorderSize") == 1)
+
+  -- EllesmereUI's own, through its API only while it is installed
+  local calls = {}
+  c.EllesmereUI = {
+    PP = {},
+    GetBorderTextureList = function() return { { key = "pixels-textured", name = "Pixels Textured" }, { key = "shadow", name = "Shadow" } } end,
+    ResolveBorderTexture = function(k) return k == "pixels-textured" and "p" or nil end,
+    BorderPxStep = function() return 2 end,
+    BorderLegacyPx = function() return 6 end,
+    GetBorderDefaultSize = function() return 2 end,
+    GetBorderStyleSelectDefaults = function() return { r = 1, g = 1, b = 1 } end,
+    ApplyBorderStyle = function(frame, step, r, g, b, a, key, ...) calls[#calls + 1] = { frame = frame, key = key, edge = select(8, ...), r = r } end,
+  }
+  names = {}
+  for _, choice in ipairs(CP.TextureChoices("pointBorderTexture")) do names[choice[1]] = choice[2] end
+  assert(names["eui:pixels-textured"] == "Pixels Textured" and not names["eui:shadow"], "EllesmereUI's listed, not its shadow")
+  assert(CP.Set("pointBorderTexture", "eui:pixels-textured"))
+  assert(CP.Get("pointBorderSize") == 6 and CP.Get("borderColor") == "ffffffff", "its own size and white tint")
+  assert(#calls == 5 and calls[1].key == "pixels-textured" and calls[1].edge == 6 and calls[1].r == 1, "one call per point, at the exact edge")
+  assert(calls[1].frame ~= s[1] and calls[1].frame.shown and not s[1].rim.shown, "on a frame of ours over the point")
+  assert(CP.Set("pointBorderTexture", "solid"))
+  assert(not calls[1].frame.shown and s[1].rim.shown, "back to the line")
+  assert(CP.Get("borderColor") == "ff15100a" and c.TwichUIDB.ui.comboPoints.borderColor == nil, "the look's colour again, following the look")
+  assert(CP.Set("pointBorderTexture", "eui:pixels-textured"))
+  c.EllesmereUI = nil
+  assert(CP.Set("pointBorderSize", 7))
+  assert(s[1].rim.shown, "EllesmereUI gone: the plain line")
+  assert(CP.Set("pointBorderTexture", "solid") and CP.Set("pointBorderSize", 1))
+  CP.ClearColors()
+end
+
+-- Spending: the spent points fade out where they were, and the display fades away.
+do
+  c.TARGET, c.POINTS = "enemy", 4; Fire("PLAYER_TARGET_CHANGED")
+  assert(container.shown)
+  outro.instant = false
+  local ghosts = {}
+  for i, s in ipairs(Segments()) do ghosts[i] = s.ghostGroup.plays or 0 end
+  c.POINTS = 0; Fire("UNIT_POWER_FREQUENT", "player", "COMBO_POINTS")
+  local s = Segments()
+  assert(s[1].ghostGroup.plays == ghosts[1] + 1 and s[4].ghostGroup.plays == ghosts[4] + 1 and (s[5].ghostGroup.plays or 0) == ghosts[5],
+    "points 1-4 fade out, not 5")
+  assert(Close(s[1].ghostFade.from, 0.7))
+  assert(container.shown and outro.playing and Close(outro.anims[1].from, 1), "fading away, from the display's opacity")
+  c.POINTS = 1; Fire("UNIT_POWER_FREQUENT", "player", "COMBO_POINTS")
+  assert(container.shown and not outro.playing, "a point back mid-fade: shown again at once")
+  c.POINTS = 0; Fire("UNIT_POWER_FREQUENT", "player", "COMBO_POINTS")
+  outro.scripts.OnFinished(outro)
+  assert(not container.shown, "gone once the fade ends")
+  assert(CP.Set("animation", "off"))
+  c.POINTS = 2; Fire("UNIT_POWER_FREQUENT", "player", "COMBO_POINTS")
+  c.POINTS = 0; Fire("UNIT_POWER_FREQUENT", "player", "COMBO_POINTS")
+  assert(not container.shown, "animation off: hidden at once")
+  assert(CP.Set("animation", "full"))
+  outro.instant = true
+end
+
+-- Poison mist: off by default; a puff at full; a drift while there are points.
+do
+  assert(#Wisps() == 5, "five wisps of TwichUI's own mist")
+  c.TARGET, c.POINTS = "enemy", 0; Fire("PLAYER_TARGET_CHANGED")
+  c.POINTS = 5; Fire("UNIT_POWER_FREQUENT", "player", "COMBO_POINTS")
+  assert(MistPlaying() == 0, "no mist by default")
+  c.POINTS = 0; Fire("UNIT_POWER_FREQUENT", "player", "COMBO_POINTS")
+
+  assert(CP.Set("mist", "full"))
+  c.POINTS = 4; Fire("UNIT_POWER_FREQUENT", "player", "COMBO_POINTS")
+  assert(MistPlaying() == 0, "not before full")
+  c.POINTS = 5; Fire("UNIT_POWER_FREQUENT", "player", "COMBO_POINTS")
+  local n, looping = MistPlaying()
+  assert(n == 5 and looping == "NONE", "one puff at full")
+  local w = Wisps()[1]
+  assert(Close(w.rise.to, 0.55) and Close(w.vertex[1], 0x7f / 255) and Close(w.vertex[2], 0xa8 / 255), "green, at full strength")
+  for _, wisp in ipairs(Wisps()) do wisp.group.playing = false end   -- the puff ends
+  c.POINTS = 0; Fire("UNIT_POWER_FREQUENT", "player", "COMBO_POINTS")
+
+  assert(CP.Set("mist", "points"))
+  assert(MistPlaying() == 0, "no points: no mist")
+  c.POINTS = 1; Fire("UNIT_POWER_FREQUENT", "player", "COMBO_POINTS")
+  n, looping = MistPlaying()
+  assert(n == 5 and looping == "REPEAT" and Close(Wisps()[1].rise.to, 0.3), "a faint drift while there are points")
+  local plays = Wisps()[1].group.plays
+  c.POINTS = 2; Fire("UNIT_POWER_FREQUENT", "player", "COMBO_POINTS")
+  assert(Wisps()[1].group.plays == plays, "left running, not restarted")
+  c.POINTS = SecretOf(2); Fire("UNIT_POWER_FREQUENT", "player", "COMBO_POINTS")
+  assert(MistPlaying() == 0, "a secret count: no mist")
+  c.POINTS = 2; Fire("PLAYER_TARGET_CHANGED")
+  assert(MistPlaying() == 5)
+  M.arrivalReducedMotion = true; Fire("UNIT_POWER_FREQUENT", "player", "COMBO_POINTS")
+  assert(MistPlaying() == 0, "Reduced motion: no mist")
+  M.arrivalReducedMotion = false; Fire("UNIT_POWER_FREQUENT", "player", "COMBO_POINTS")
+  assert(MistPlaying() == 5)
+  assert(CP.Set("animation", "off"))
+  assert(MistPlaying() == 0, "Animation off: no mist")
+  assert(CP.Set("animation", "full"))
+  assert(MistPlaying() == 5)
+  c.POINTS = 0; Fire("UNIT_POWER_FREQUENT", "player", "COMBO_POINTS")
+  assert(MistPlaying() == 0, "spent: the mist stops")
+  assert(CP.Set("mist", "bogus") == false and CP.Set("mistColor", "green") == false)
+  assert(CP.Set("mist", "off"))
+  c.TARGET = nil; Fire("PLAYER_TARGET_CHANGED")
+end
+
 -- Off: nothing listened for, nothing shown, the preview says why.
 M.comboPoints = false; CP.Refresh()
 assert(next(events.events) == nil and not container.shown, "off: no listeners")
@@ -441,6 +666,24 @@ do
   assert(named["Show TwichUI combo points"] and named["Style"] and named["Look"] and named["Show it"], "the essentials are visible")
   assert(#named["Style"].shown == 0 and #named["Show it"].shown == 0)
   assert(#named["Use my own colors"].shown == 1 and #named["Filled point"].shown == 1 and #named["Number font"].shown == 1, "colours and font are advanced")
+  assert(not named["Point edge"], "the point border's colour lives with the borders now")
+  for _, name in ipairs({ "Border on each point", "Point border thickness", "Point border color", "Border round the whole display",
+      "Display border thickness", "Display border color", "Animation", "Poison mist", "Mist color" }) do
+    assert(named[name] and #named[name].shown == 0, name .. " is on the page, not advanced")
+  end
+  assert(named["Point border texture"].parent == named["Border on each point"] and named["Display border texture"].parent == named["Border round the whole display"])
+  assert(dropdowns.TWICHUI_comboPointBorderTexture()[1].value == "solid" and dropdowns.TWICHUI_comboFrameBorderTexture()[1].value == "solid", "texture lists start with Solid")
+  assert(proxies.TWICHUI_comboPointBorderTexture.default == "solid")
+  assert(named["Point border thickness"].parent == named["Border on each point"] and named["Display border color"].parent == named["Border round the whole display"])
+  assert(named["Poison mist"].parent == named["Animation"] and named["Mist color"].parent == named["Poison mist"])
+  assert(named["Mist color"].modify[1]() == false, "no mist chosen: its colour greyed out")
+  proxies.TWICHUI_comboMist.set("points"); assert(named["Mist color"].modify[1]() == true)
+  proxies.TWICHUI_comboAnimation.set("off"); assert(named["Poison mist"].modify[1]() == false, "animation off: no mist to choose")
+  proxies.TWICHUI_comboAnimation.set("full"); proxies.TWICHUI_comboMist.set("off")
+  local rules = {}
+  for _, o in ipairs(dropdowns.TWICHUI_comboVisibility()) do rules[#rules + 1] = o.value end
+  assert(table.concat(rules, ",") == "points,target,combat,always", table.concat(rules, ","))
+  assert(proxies.TWICHUI_comboFrameBorderColor.default == "ff8c6e38" and proxies.TWICHUI_comboMistColor.default == "ff7fa857")
   local hide = named["Hide the game's combo points by the target portrait"]
   assert(hide and hide.data.tooltip:find("Enable Class Resource", 1, true) and not hide.data.tooltip:find("Resource Bars", 1, true),
     "names the EllesmereUI display that is installed, and only that")

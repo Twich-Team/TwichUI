@@ -537,6 +537,7 @@ local function Build()
             { "points", "When I have points", "Only while your target carries at least one of your combo points." },
             { "target", "Whenever I have a target", "While you have a living enemy targeted, with empty points when you have none on it." },
             { "combat", "In combat", "Whenever you're in combat, with or without a target. Hidden out of combat." },
+            { "always", "Always", "All the time, with or without a target or a fight, empty when you have no points." },
         })
 
         local others = {}
@@ -570,12 +571,51 @@ local function Build()
             function() return ComboOn() and CP.Get("style") ~= "number" end)
         Slider("comboScale", "scale", "Scale", "The size of the whole display, in percent.")
         Slider("comboOpacity", "opacity", "Opacity", "How solid the display is, in percent.")
-        Pick("comboAnimation", "animation", "Animation",
-            "Short touches that never move anything. With Reduced motion on (Notifications), Full is shown as Subtle.", {
-            { "full", "Full", "A brief light on each point you gain, and a thin gold rule that brightens once when your points are full." },
+
+        local function Swatch(variable, key, label, tooltip, parent, isOn)
+            local setting = Remember(variable, STRING, label, key)
+            if setting and Settings.CreateColorSwatch then
+                return Under(Settings.CreateColorSwatch(category, setting, tooltip), parent or combo, isOn or ComboOn)
+            end
+        end
+        Header("Borders")
+        local TEXTURE_TIP = "Solid is a plain line. With EllesmereUI installed, its own border textures (such as Pixels Textured) are listed too, drawn the way its bars draw them. The rest are border textures from LibSharedMedia, so any addon that adds borders to it adds them here. Picking one sets a thickness and color that suit it unless you have set your own. The same list as the Food and Drink buttons."
+        local pointBorder = Check("comboPointBorder", "pointBorder", "Border on each point",
+            "An edge round every point, so each reads on its own against any ground. For the Points and Thin bar styles.")
+        local function PointBorderOn() return ComboOn() and CP.Get("pointBorder") end
+        Pick("comboPointBorderTexture", "pointBorderTexture", "Point border texture",
+            TEXTURE_TIP .. " A texture sits over the point's edge and is square even round round points.",
+            function() return CP.TextureChoices("pointBorderTexture") end, pointBorder, PointBorderOn)
+        Slider("comboPointBorderSize", "pointBorderSize", "Point border thickness",
+            "In pixels. A texture needs about 6 or more to read well; a thick border needs more space between points.", pointBorder, PointBorderOn)
+        Swatch("comboBorderColor", "borderColor", "Point border color",
+            "The color of each point's border. It starts as the look's.", pointBorder, PointBorderOn)
+        local frameBorder = Check("comboFrameBorder", "frameBorder", "Border round the whole display",
+            "One border round all the points (or the number) together. Off: only the Leather and bronze look, or a backing of your own, gets its thin bronze edge.")
+        local function FrameBorderOn() return ComboOn() and CP.Get("frameBorder") end
+        Pick("comboFrameBorderTexture", "frameBorderTexture", "Display border texture", TEXTURE_TIP,
+            function() return CP.TextureChoices("frameBorderTexture") end, frameBorder, FrameBorderOn)
+        Slider("comboFrameBorderSize", "frameBorderSize", "Display border thickness",
+            "In pixels. A texture needs about 8 or more to read well.", frameBorder, FrameBorderOn)
+        Swatch("comboFrameBorderColor", "frameBorderColor", "Display border color",
+            "The color of the border round the whole display. Bronze by default.", frameBorder, FrameBorderOn)
+
+        Header("Animation")
+        local animation = Pick("comboAnimation", "animation", "Animation",
+            "Short touches that never get in the way of the count. With Reduced motion on (Notifications), Full is shown as Subtle and there is no mist.", {
+            { "full", "Full", "A brief light on each point you gain, spent points fading out, a thin gold rule that brightens once when your points are full, and a short fade when the display hides." },
             { "subtle", "Subtle", "The same, fainter." },
-            { "off", "Off", "No animation." },
+            { "off", "Off", "No animation, and no mist." },
         })
+        local function MistOn() return ComboOn() and CP.Get("animation") ~= "off" end
+        local mist = Pick("comboMist", "mist", "Poison mist",
+            "A soft green mist behind the points, drawn from TwichUI's own art. It drifts, so Reduced motion turns it off.", {
+            { "off", "Off", "No mist." },
+            { "full", "When my points are full", "A single soft puff that rises and thins away as your points fill up." },
+            { "points", "While I have points", "A faint mist that keeps drifting behind the points while you have any on your target." },
+        }, animation, MistOn)
+        Swatch("comboMistColor", "mistColor", "Mist color", "The color of the mist. A muted poison green by default.",
+            mist, function() return MistOn() and CP.Get("mist") ~= "off" end)
         Under(Button("Combo points", "Preview", function()
             if SettingsPanel and SettingsPanel:IsShown() then HideUIPanel(SettingsPanel) end
             local ok, why = CP.Preview()
@@ -586,7 +626,7 @@ local function Build()
                 if entry.setting.SetValue then pcall(entry.setting.SetValue, entry.setting, entry.default) end
             end
             CP.ClearColors()
-        end, "Puts the style, look, visibility, size, layout, animation, colors and font back to their defaults. The place is kept.")
+        end, "Puts the style, look, visibility, size, layout, borders, animation, mist, colors and font back to their defaults. The place is kept.")
 
         Advanced(Header("Advanced"))
         local custom = Check("comboCustomColors", "customColors", "Use my own colors",
@@ -596,7 +636,6 @@ local function Build()
         for _, swatch in ipairs({
             { "comboActiveColor", "activeColor", "Filled point", "A point you have." },
             { "comboInactiveColor", "inactiveColor", "Empty point", "A point you don't have yet." },
-            { "comboBorderColor", "borderColor", "Point edge", "The thin edge round each point." },
             { "comboBackgroundColor", "backgroundColor", "Backing", "A backing behind the points, edged in bronze. Fully clear for none, as most looks have." },
         }) do
             local setting = Remember(swatch[1], STRING, swatch[3], swatch[2])

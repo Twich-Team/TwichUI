@@ -103,7 +103,7 @@ local function Drink(id, name, minLevel, count, amount, extra)
 end
 local function Bags(list) c.BAGS = { [0] = {} }; for i, id in ipairs(list) do c.BAGS[0][i] = id end end
 
-for _, f in ipairs({"chronicle/Style.lua", "modules/FoodDrink.lua", "modules/FoodDrinkProbe.lua"}) do
+for _, f in ipairs({"chronicle/Style.lua", "modules/Borders.lua", "modules/FoodDrink.lua", "modules/FoodDrinkProbe.lua"}) do
   local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
 end
 c.TwichUIDB = { modules = { foodDrink = true } }
