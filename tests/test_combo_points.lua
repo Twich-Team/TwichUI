@@ -599,6 +599,89 @@ do
   c.TARGET = nil; Fire("PLAYER_TARGET_CHANGED")
 end
 
+-- EllesmereUI's Unlock Mode: a mover there in place of the Edit Mode outline, through the
+-- functions EllesmereUI's own modules use; the place stays TwichUI's.
+do
+  local mover = Find(function(f) return f.scripts.OnDragStop ~= nil end)
+  local elems, registrations, listener, owner = {}, 0, nil, nil
+  local function Make(o)   -- EllesmereUI's MakeUnlockElement: its whitelist, long names
+    return { key = o.key, label = o.label, group = o.group, order = o.order, getFrame = o.getFrame, getSize = o.getSize,
+      savePosition = o.savePos, loadPosition = o.loadPos, clearPosition = o.clearPos, applyPosition = o.applyPos,
+      isHidden = o.isHidden, noResize = o.noResize, noAnchorTo = o.noAnchorTo, noAnchorTarget = o.noAnchorTarget,
+      noSizeMatchTarget = o.noSizeMatchTarget, noInitHook = o.noInitHook }
+  end
+
+  -- registration failing: reported, and Edit Mode still moves it
+  local reported
+  local handler = c.geterrorhandler
+  c.geterrorhandler = function() return function(e) reported = e end end
+  c.EllesmereUI = { MakeUnlockElement = Make }
+  function c.EllesmereUI:RegisterUnlockElements() error("changed") end
+  CP.Refresh()
+  c.geterrorhandler = handler
+  assert(not CP.InUnlockMode() and reported and reported:find("Edit Mode still moves them"), tostring(reported))
+  c.EDITING = true; c.EventRegistry.callbacks["EditMode.Enter"]()
+  assert(mover.shown, "the Edit Mode outline is still there")
+  c.EDITING = false; c.EventRegistry.callbacks["EditMode.Exit"]()
+
+  -- registration working
+  function c.EllesmereUI:RegisterUnlockElements(list, folder)
+    registrations = registrations + 1
+    for _, el in ipairs(list) do elems[el.key] = el end
+    self.folder = folder
+  end
+  function c.EllesmereUI:RegisterUnlockModeListener(o, fn) owner, listener = o, fn end
+  CP.Refresh()
+  local el = elems.TwichUI_ComboPoints
+  assert(el and el.label == "Combo Points" and el.group == "TwichUI" and c.EllesmereUI.folder == "!!!TwichUI", "a Combo Points mover in a TwichUI group")
+  assert(el.noResize and el.noAnchorTo and el.noAnchorTarget and el.noInitHook, "drag only; TwichUI places it")
+  assert(CP.InUnlockMode() and owner == CP and listener, "listens for Unlock Mode opening and closing")
+  assert(el.getFrame() == container and el.isHidden() == false)
+  CP.Refresh(); assert(registrations == 1, "registered once")
+
+  -- its size on screen
+  assert(CP.Set("scale", 150))
+  local w, h = el.getSize()
+  assert(Close(w, container.w * 1.5) and Close(h, container.h * 1.5), "the size on screen, scale included")
+  assert(CP.Set("scale", 100))
+
+  -- the place: TwichUI's own, in Unlock Mode's units
+  local pos = el.loadPosition("TwichUI_ComboPoints")
+  assert(pos.point == "CENTER" and pos.relPoint == "CENTER" and pos.x == 0 and pos.y == -170, "the default place")
+  el.savePosition("TwichUI_ComboPoints", "CENTER", "CENTER", 120.5, -60)
+  assert(c.TwichUIDB.ui.comboPointsPosition.x == 120.5 and c.TwichUIDB.ui.comboPointsPosition.y == -60, "kept as given")
+  assert(container.point[4] == 120.5 and container.point[5] == -60, "and put there")
+  el.savePosition("TwichUI_ComboPoints", "TOPLEFT", "TOPLEFT", 5, 5)
+  el.savePosition("TwichUI_ComboPoints", "CENTER", "CENTER", 1e9, 0)
+  assert(c.TwichUIDB.ui.comboPointsPosition.x == 120.5, "anything else is ignored")
+  assert(CP.Set("scale", 200) and Close(container.point[4], 60.25), "the same place at another scale")
+  assert(CP.Set("scale", 100))
+  el.clearPosition("TwichUI_ComboPoints")
+  assert(c.TwichUIDB.ui.comboPointsPosition == nil)
+  el.applyPosition("TwichUI_ComboPoints")
+  assert(container.point[5] == -170, "back to the default")
+
+  -- open: sample points with no target; closed: the game's count
+  c.TARGET, c.POINTS = nil, 0; Fire("PLAYER_TARGET_CHANGED")
+  assert(not container.shown)
+  local before = Flashes()[3]
+  listener(true)
+  assert(container.shown and Values()[1] == 3 and Flashes()[3] == before, "three sample points, not a gain")
+  listener(false, "save")
+  assert(not container.shown, "closed: hidden again")
+
+  -- one mover: the Edit Mode outline steps aside
+  c.EDITING = true; c.EventRegistry.callbacks["EditMode.Enter"]()
+  assert(not mover.shown and not container.shown, "no outline in Edit Mode")
+  c.EDITING = false; c.EventRegistry.callbacks["EditMode.Exit"]()
+
+  -- off: its mover is hidden in Unlock Mode
+  M.comboPoints = false; CP.Refresh()
+  assert(el.isHidden() == true)
+  M.comboPoints = true; CP.Refresh()
+  c.EllesmereUI = nil
+end
+
 -- Off: nothing listened for, nothing shown, the preview says why.
 M.comboPoints = false; CP.Refresh()
 assert(next(events.events) == nil and not container.shown, "off: no listeners")

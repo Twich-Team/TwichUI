@@ -17,9 +17,8 @@
 -- art, from tools/make_mist_texture.py): a puff when the points are full, or a faint drift behind
 -- them while you have any. Animation groups only, so the game runs them; the drift loops only
 -- while it is wanted.
--- Moved in Edit Mode, with an outline as for the Food and Drink buttons. EllesmereUI's Unlock
--- Mode has no documented API for other addons' frames (its Plugin API covers options pages only),
--- so it isn't used. Optionally hides the game's own combo points beside the target portrait by
+-- Moved in EllesmereUI's Unlock Mode when EllesmereUI is installed (see "Unlock Mode" below),
+-- else in Edit Mode, with an outline as for the Food and Drink buttons; one or the other, never both. Optionally hides the game's own combo points beside the target portrait by
 -- parking ComboFrame under a hidden frame of ours, out of combat, and gives it back when turned off.
 -- Saved in TwichUIDB.ui.comboPoints and TwichUIDB.ui.comboPointsPosition (for all characters).
 
@@ -269,7 +268,8 @@ local last                     -- the count last drawn, when it was plain; nil a
 local quietNext = false        -- the next draw is a new target or a fresh start: no gain touches
 local maxDirty = true          -- read the cap again on the next draw
 local targetDead = false
-local editing = false
+local editing = false          -- Edit Mode (our outline) is open: sample points
+local unlocking = false        -- EllesmereUI's Unlock Mode is open: sample points
 local previewCount, previewToken = nil, 0
 local paint                    -- Colors(), as of the last layout
 local editHooked = false
@@ -717,7 +717,7 @@ local function HostileTarget()
 end
 
 local function ShouldShow(n, secret)
-    if previewCount or editing then return true end
+    if previewCount or editing or unlocking then return true end
     if Plain(UnitIsDeadOrGhost("player")) == true then return false end
     local rule = C.Get("visibility")
     if rule == "always" then return true end
@@ -741,9 +741,9 @@ local function Update()
     targetDead = Plain(UnitIsDead("target")) == true
     local n, secret
     if previewCount then n, secret = math.min(previewCount, maxPoints), false
-    elseif editing then n, secret = math.min(SAMPLE, maxPoints), false
+    elseif editing or unlocking then n, secret = math.min(SAMPLE, maxPoints), false
     else n, secret = ReadCount() end
-    local quiet = quietNext or (editing and not previewCount)
+    local quiet = quietNext or ((editing or unlocking) and not previewCount)
     quietNext = false
     Render(n, secret, quiet)
     local show = ShouldShow(n, secret)
@@ -883,12 +883,82 @@ local function ShowMover(shown)
     Update()
 end
 
+local unlockRegistered = false   -- below: EllesmereUI's Unlock Mode has the mover instead
+
 local function HookEditMode()
     if editHooked or not (EventRegistry and EventRegistry.RegisterCallback) then return end
     editHooked = true
-    EventRegistry:RegisterCallback("EditMode.Enter", function() ShowMover(true) end, C)
+    EventRegistry:RegisterCallback("EditMode.Enter", function() if not unlockRegistered then ShowMover(true) end end, C)
     EventRegistry:RegisterCallback("EditMode.Exit", function() ShowMover(false) end, C)
 end
+
+---------------------------------------------------------------------------
+-- EllesmereUI's Unlock Mode: a "Combo Points" mover (in a TwichUI group) there in place of the
+-- Edit Mode outline, while EllesmereUI is installed. Unlock Mode has no published API for other
+-- addons, so this uses only the functions EllesmereUI's own modules call from outside its core
+-- (MakeUnlockElement, RegisterUnlockElements, RegisterUnlockModeListener), checks each before
+-- use and calls them protected; if any is missing or fails, the Edit Mode outline stays in charge.
+-- No EllesmereUI file is touched and none of its settings change. The place stays TwichUI's own
+-- (TwichUIDB.ui.comboPointsPosition): Unlock Mode reads and writes it through loadPos/savePos in
+-- the units TwichUI already uses (the centre's offset from the screen's centre, in screen units).
+-- Drag only: the size comes from the options, so no resizing, and nothing anchors to or from it.
+-- While Unlock Mode is open the display shows sample points, as in Edit Mode.
+---------------------------------------------------------------------------
+local UNLOCK_KEY = "TwichUI_ComboPoints"
+
+-- The display's size on screen (the mover's), in screen units.
+local function ScreenSize()
+    local w, h = 0, 0
+    if container then w, h = container:GetSize() end
+    if not (w and w > 0 and h and h > 0) then return 100, 30 end   -- not laid out yet (off)
+    local scale = C.Get("scale") / 100
+    return w * scale, h * scale
+end
+
+local function Sample(on)
+    unlocking = on and true or false
+    quietNext = true
+    Update()
+end
+
+local function RegisterUnlock()
+    if unlockRegistered or not IsRogue() then return end
+    local e = EllesmereUI
+    if type(e) ~= "table" or type(e.RegisterUnlockElements) ~= "function" or type(e.MakeUnlockElement) ~= "function" then return end
+    local ok, err = pcall(function()
+        e:RegisterUnlockElements({ e.MakeUnlockElement({
+            key = UNLOCK_KEY, label = "Combo Points", group = "TwichUI", order = 900,
+            noResize = true, noAnchorTo = true, noAnchorTarget = true, noSizeMatchTarget = true,
+            noInitHook = true,   -- TwichUI places it itself (Place, at its scale)
+            isHidden = function() return not active end,
+            getFrame = function() Build(); return container end,
+            getSize = ScreenSize,
+            savePos = function(_, point, relPoint, x, y)
+                if point == "CENTER" and (relPoint == nil or relPoint == "CENTER") and Offset(x) and Offset(y) then
+                    SavePosition(x, y)
+                end
+            end,
+            loadPos = function()
+                local x, y = C.Position()
+                return { point = "CENTER", relPoint = "CENTER", x = x, y = y }
+            end,
+            clearPos = function() SavePosition(nil) end,
+            applyPos = function() if container then Place(container, C.Get("scale") / 100) end end,
+        }) }, R.ADDON)
+    end)
+    if not ok then
+        geterrorhandler()(("TwichUI: couldn't add the combo points to EllesmereUI's Unlock Mode (%s); Edit Mode still moves them."):format(tostring(err)))
+        return
+    end
+    unlockRegistered = true
+    if type(e.RegisterUnlockModeListener) == "function" then
+        pcall(e.RegisterUnlockModeListener, e, C, Sample)
+    end
+    ShowMover(false)   -- one mover: the Edit Mode outline steps aside
+end
+
+-- Whether the combo points are moved in EllesmereUI's Unlock Mode (rather than Edit Mode).
+function C.InUnlockMode() return unlockRegistered end
 
 ---------------------------------------------------------------------------
 -- Preview (/tui combo): the points fill one by one to full, hold, and the display goes back to
@@ -984,7 +1054,8 @@ function C.Refresh()
         HookEditMode()
         maxDirty, quietNext = true, true
         if maxPoints then Layout() end
-        editing = EditModeActive()
+        RegisterUnlock()
+        editing = not unlockRegistered and EditModeActive()
         if editing then ShowMover(true) else Update() end
     else
         previewCount, previewToken = nil, previewToken + 1

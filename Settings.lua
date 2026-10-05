@@ -483,7 +483,7 @@ local function Build()
         Header("Combo points", "The combo points on your target, where you want them. It shows only what the game reports and never uses an ability for you.")
         local function RefreshCombo() CP.Refresh() end
         local combo = Toggle("comboPoints", "Show TwichUI combo points",
-            "Shows the combo points on your current target as small points, a thin bar or a number. It reads them from the game whenever they change, when you change target, and when combat starts or ends; it never guesses them. Move it in Edit Mode, where it shows with sample points, or type /tui combo to watch it fill.",
+            "Shows the combo points on your current target as small points, a thin bar or a number. It reads them from the game whenever they change, when you change target, and when combat starts or ends; it never guesses them. Move it in EllesmereUI's Unlock Mode (TwichUI group) when EllesmereUI is installed, or in Edit Mode otherwise; either shows it with sample points. Type /tui combo to watch it fill.",
             false, RefreshCombo)
         local function ComboOn() return R:Enabled("comboPoints") end
 
