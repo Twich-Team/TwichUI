@@ -159,4 +159,47 @@ local opened = 0
 k.TwichUI.ChronicleWindow = k.TwichUI.ChronicleWindow or {}
 k.TwichUI.ChronicleWindow.Toggle = function() opened = opened + 1 end
 store.OnClick(nil, "LeftButton"); assert(opened == 1)
+
+-- zone baseline at login: where the player already is never counts as an arrival
+local function zones(c)
+  local n = 0
+  for _, e in ipairs(c.TwichUI.Chronicle.Entries()) do if e.kind == "zone" then n = n + 1 end end
+  return n
+end
+do
+  -- login with the zone known, then a stray zone event: nothing
+  local z = boot("ZoneKnown")
+  z.ZONE = "Stormwind City"; z.FireEvent("PLAYER_ENTERING_WORLD", true, false)
+  z.FireEvent("ZONE_CHANGED_NEW_AREA"); z.FireEvent("ZONE_CHANGED_NEW_AREA")
+  assert(zones(z) == 0, "login zone is not an arrival")
+  -- reload in the same zone
+  z.FireEvent("PLAYER_ENTERING_WORLD", false, true); z.FireEvent("ZONE_CHANGED_NEW_AREA")
+  assert(zones(z) == 0, "reload zone is not an arrival")
+  -- genuine change: exactly one, repeats are quiet
+  z.ZONE = "Duskwood"; z.FireEvent("ZONE_CHANGED_NEW_AREA"); z.FireEvent("ZONE_CHANGED_NEW_AREA")
+  assert(zones(z) == 1)
+  -- a loading screen that is not login does not itself record, the zone event does
+  z.FireEvent("PLAYER_ENTERING_WORLD", false, false); assert(zones(z) == 1)
+  z.ZONE = "Deadmines"; z.FireEvent("ZONE_CHANGED_NEW_AREA"); assert(zones(z) == 2)
+
+  -- login with the zone not yet given: the first real zone becomes the baseline silently
+  local d = boot("ZoneLate")
+  d.ZONE = ""; d.FireEvent("PLAYER_ENTERING_WORLD", true, false)
+  d.ZONE = "Westfall"; d.FireEvent("ZONE_CHANGED_NEW_AREA")
+  assert(zones(d) == 0, "late map data is not an arrival")
+  d.ZONE = "Duskwood"; d.FireEvent("ZONE_CHANGED_NEW_AREA"); assert(zones(d) == 1)
+
+  -- zone becomes known with no event, via the retry; later travel still records
+  local r = boot("ZoneRetry")
+  r.ZONE = ""; r.FireEvent("PLAYER_ENTERING_WORLD", true, false)
+  r.ZONE = "Westfall"; FlushTimers()
+  r.ZONE = "Duskwood"; r.FireEvent("ZONE_CHANGED_NEW_AREA"); assert(zones(r) == 1)
+
+  -- a saved last-known zone (different from the login zone) fabricates nothing
+  local saved = boot("ZoneSaved")
+  saved.TwichUI.Chronicle.Record().lastZone = "Orgrimmar"
+  saved.ZONE = "Teldrassil"; saved.FireEvent("PLAYER_ENTERING_WORLD", true, false)
+  saved.FireEvent("ZONE_CHANGED_NEW_AREA"); assert(zones(saved) == 0)
+end
 print("CHRONICLE TEST PASSED")
+

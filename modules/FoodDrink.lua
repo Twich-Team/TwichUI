@@ -8,7 +8,8 @@
 -- read as two numbers, or three for one that restores health and mana). Anything with more to
 -- say (buff food, feasts) or that can't be read is skipped. "Best" is the amount restored, as
 -- the description states it; ties go to the smaller stack, so a part stack is finished first.
--- An empty button says so.
+-- An empty button says so. Whether an item can be used at this moment (dead, a ghost) is not
+-- part of choosing: the game decides that when the button is clicked.
 -- Optionally (Prefer Mage-conjured food and water, off by default) a Mage-conjured item beats an
 -- ordinary one even when the ordinary one restores more; see F.CONJURED. It is a preference
 -- among items already eligible: it never lets in an item the rules above leave out.
@@ -116,7 +117,7 @@ function F.Classify(spellName, text, names, words)
 end
 
 -- One item in the bags as a candidate, or nil when it can't be offered: not food and drink as
--- the game classifies it, not plain, above the character's level, not usable, or none left.
+-- the game classifies it, not plain, above the character's level, or none left.
 -- The second result is true when the game hasn't loaded the item or its text yet (a look is
 -- asked for).
 local function Candidate(id, names, words)
@@ -139,7 +140,9 @@ local function Candidate(id, names, words)
     end
     local kinds, amount = F.Classify(spellName, text, names, words)
     if not kinds then return nil end
-    if C_Item.IsUsableItem and not C_Item.IsUsableItem(id) then return nil end
+    -- Not C_Item.IsUsableItem: it is false while dead or a ghost, which would drop every item from
+    -- the choice and leave it empty after resurrection (no bag event follows). Whether the item
+    -- can be used right now is the game's to enforce when the player clicks.
     local count = C_Item.GetItemCount(id) or 0
     if count < 1 then return nil end
     return { id = id, name = name, icon = icon, kinds = kinds, amount = amount, count = count, conjured = F.CONJURED[id] ~= nil }
@@ -426,6 +429,7 @@ local function Fill(button, choice)
     button:SetAttribute("type", filled and "item" or nil)
     button:SetAttribute("item", filled and choice.name or nil)
     button.itemID = filled and choice.id or nil
+    button.choice = choice
     button.preferred = filled and choice.preferred or nil
     if filled then button.icon:SetTexture(choice.icon) end
     button.icon:SetShown(filled)
@@ -451,6 +455,18 @@ local function Update()
     Build()
     local best, waiting = Scan()
     loading = waiting
+    if waiting then
+        -- An item or spell text the game has unloaded is not evidence the item is gone: keep the
+        -- current choice for a kind while it is still in the bags, and look again when data arrives.
+        for _, kind in ipairs(KINDS) do
+            local old = rawget(buttons[kind.key], "choice")
+            local count = old and C_Item.GetItemCount(old.id) or 0
+            if not best[kind.key] and count > 0 then
+                best[kind.key] = { id = old.id, name = old.name, icon = old.icon, kinds = old.kinds,
+                    amount = old.amount, count = count, conjured = old.conjured, preferred = old.preferred }
+            end
+        end
+    end
     local shown = 0
     local size, step, vertical = F.Get("size"), F.Get("size") + F.Get("spacing"), F.Get("layout") == "vertical"
     for _, kind in ipairs(KINDS) do

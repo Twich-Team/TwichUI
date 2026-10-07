@@ -162,7 +162,7 @@ Drink(1179, "Ice Cold Milk", 5, 15, 420)
 Drink(1205, "Melon Juice", 15, 5, 700)                                  -- more, but level 15 is fine at 30
 Item(15, "Buff Food", 5, 5, { text = EAT:format(300) .. " Well Fed: gain 8 Stamina for 15 min." })
 Drink(4601, "Too High", 35, 5, 9000)                                     -- above level 30
-Item(4542, "Not Usable", 5, 5, { usable = false, text = EAT:format(900) })
+Item(4542, "Unusable Now", 5, 5, { usable = false, text = EAT:format(100) })   -- as while dead: still eligible
 Item(211780, "Scroll", 1, 1, { sub = 4, spell = nil })                  -- class 0 but not Food & Drink
 Item(3448, "Senggin Root", 1, 3, { spellName = "Food", spell = 2639, text = "Restores 100 health and 100 mana over 21 sec. Must remain seated while eating." })
 Bags({ 2287, 4605, 1179, 1205, 15, 4601, 4542, 211780, 3448 })
@@ -205,10 +205,28 @@ assert(food.attrs.item == "Haunch of Meat", "chosen once loaded")
 -- Spell text that isn't loaded: asked for, then picked when SPELL_TEXT_UPDATE arrives.
 c.SPELL_UNLOADED[12287] = true
 c.FireEvent("BAG_UPDATE_DELAYED"); Look()
-assert(c.SPELL_REQUESTED[12287] and food.attrs.item == nil, "nothing chosen from text it can't read")
+assert(c.SPELL_REQUESTED[12287] and food.attrs.item == "Haunch of Meat", "text it can't read: the current choice is kept")
 c.SPELL_UNLOADED[12287] = nil
 c.FireEvent("SPELL_TEXT_UPDATE", 12287); Look()
 assert(food.attrs.item == "Haunch of Meat", "chosen once the text arrives")
+
+-- Dead or a ghost: the game says nothing is usable, but the choice and its count stay.
+c.ITEMS[2287].usable = false; c.ITEMS[4605].usable = false
+c.ITEMS[2287].count = 7
+c.FireEvent("BAG_UPDATE_DELAYED"); Look()
+assert(food.attrs.item == "Haunch of Meat" and food.icon.shown and food.count.text == 7, "kept while unusable")
+c.ITEMS[2287].usable, c.ITEMS[4605].usable = nil, nil
+
+-- Unloaded data keeps a valid choice (with a current count) only while the item is in the bags.
+c.UNCACHED[2287] = true
+c.FireEvent("BAG_UPDATE_DELAYED"); Look()
+assert(food.attrs.item == "Haunch of Meat" and food.count.text == 7, "kept while its data is unloaded")
+c.ITEMS[2287].count = 0; Bags({})
+c.FireEvent("BAG_UPDATE_DELAYED"); Look()
+assert(food.attrs.item == nil and food.name.shown, "an item that is gone is not kept")
+c.UNCACHED[2287] = nil; c.ITEMS[2287].count = 20
+Bags({ 2287 })
+c.FireEvent("BAG_UPDATE_DELAYED"); Look()
 
 -- Combat: nothing is changed; the look is made when combat ends.
 Bags({ 2287, 4605 })
@@ -284,14 +302,13 @@ do
   assert(f == "Red-speckled Mushroom" and dr == "Melon Juice" and rawget(food, "preferred") == nil, "none: normal choice")
 
   -- 6. conjured items the rules leave out stay out
-  c.ITEMS[MUFFIN].usable = false
   c.ITEMS[SPARKLING].minLevel = 35
   c.ITEMS[SWEET_ROLL].text = EAT:format(100) .. " Well Fed: gain 8 Stamina for 15 min."
   BagsWith(MUFFIN, SWEET_ROLL, SPARKLING, CONJ_WATER)
   f, dr = Chosen()
-  assert(f == "Red-speckled Mushroom", "unusable and buff conjured food skipped: " .. tostring(f))
+  assert(f == "Conjured Muffin", "buff conjured roll skipped, the plain muffin kept: " .. tostring(f))
   assert(dr == "Conjured Water", "a too-high conjured water skipped, the usable one kept: " .. tostring(dr))
-  c.ITEMS[MUFFIN].usable, c.ITEMS[SPARKLING].minLevel = nil, 1
+  c.ITEMS[SPARKLING].minLevel = 1
   c.ITEMS[SWEET_ROLL].text = EAT:format(100)
 
   -- conjured item restoring both: counts for both buttons, as any such item does

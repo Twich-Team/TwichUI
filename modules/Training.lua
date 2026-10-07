@@ -24,6 +24,7 @@ local FADE_IN, FADE_OUT = 0.8, 1.4   -- the zone card's
 local HOLD_BASE, HOLD_PER_ROW = 4, 0.6   -- seconds it stays: longer for a longer list (at most about 11)
 local RISE = 8              -- pixels the card settles upward, as the zone card does (0 with Reduced motion)
 local WIDTH = 520
+local FONT_ROW = R.PATH .. [[media\fonts\AlegreyaSans-Bold.ttf]]   -- the spell lines; Alegreya itself has no bold cut
 local ROW_HEIGHT = 20
 local COLUMNS_FROM = 7      -- this many spells or more: two columns
 local COLUMN_WIDTH = 230
@@ -320,7 +321,7 @@ local function Row(i)
     row.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
     row.icon:SetSize(16, 16)
     row.icon:SetPoint("CENTER", edge, "CENTER", 0, 0)
-    row.text = Text(row, R.Arrival.FONT_LINE, 15, "GameFontHighlight", card.K.text)
+    row.text = Text(row, FONT_ROW, 15, "GameFontHighlight", card.K.text)
     row.text:SetJustifyH("LEFT")
     row.text:SetWordWrap(false)
     row.text:SetPoint("LEFT", edge, "RIGHT", 6, 0)

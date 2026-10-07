@@ -11,6 +11,8 @@ local Rec = {}
 R.ChronicleRecorder = Rec
 
 local lastZone               -- the zone we last saw, so arriving isn't recorded at login
+local zoneBaselined = false  -- true once lastZone is a real zone seen this session; until then nothing is an arrival
+local baselineTries = 0      -- looks already spent waiting for the zone to be known after login
 local active = {}            -- [event] = handler, while registered
 local inWorld = false        -- true once the first PLAYER_ENTERING_WORLD has run
 local controlLost = false    -- between PLAYER_CONTROL_LOST and PLAYER_CONTROL_GAINED (flight takeoff to landing)
@@ -340,8 +342,36 @@ local function OnTaxi()
     return controlLost or (UnitOnTaxi and UnitOnTaxi("player")) or false
 end
 
+local BASELINE_RETRIES = 5   -- extra looks (a second apart) for the zone when the game hasn't given it at login
+
+-- Takes the zone the player is in now as the starting point, without recording it.
+-- Returns true once there is one; a missing zone leaves the baseline unset.
+local function EstablishZoneBaseline()
+    local zone = C.CurrentZone()
+    if not zone then return false end
+    lastZone, zoneBaselined = zone, true
+    return true
+end
+
+local function RetryZoneBaseline()
+    if zoneBaselined or baselineTries >= BASELINE_RETRIES then return end
+    baselineTries = baselineTries + 1
+    C_Timer.After(1, function()
+        if zoneBaselined or not On("chronicleZones") then return end
+        if not EstablishZoneBaseline() then RetryZoneBaseline() end
+    end)
+end
+
+local function StartZoneBaseline()
+    zoneBaselined, lastZone, baselineTries = false, nil, 0
+    if not EstablishZoneBaseline() then RetryZoneBaseline() end
+end
+
 local function CheckZone()
-    if not On("chronicleZones") or OnTaxi() then return end
+    if not On("chronicleZones") then return end
+    -- The first known zone of a session is where the player already was, not somewhere they arrived.
+    if not zoneBaselined then EstablishZoneBaseline() return end
+    if OnTaxi() then return end
     local zone = C.CurrentZone()
     if not zone or zone == lastZone then return end
     lastZone = zone
@@ -361,7 +391,7 @@ local function OnEnteringWorld(isLogin, isReload)
     inWorld = true
     if isLogin or isReload then
         controlLost = false
-        lastZone = C.CurrentZone()
+        StartZoneBaseline()
         if R:Enabled("chronicle") then
             if R:Enabled("chronicleGold") then RebaseGold() end
             if R:Enabled("chronicleRiding") then NoteKnownRiding() end
@@ -398,7 +428,9 @@ end
 function Rec.Refresh()
     local master = R:Enabled("chronicle")
     local zones = master and R:Enabled("chronicleZones")
-    if zones and not active.ZONE_CHANGED_NEW_AREA then lastZone = C.CurrentZone() end
+    if zones and not active.ZONE_CHANGED_NEW_AREA then
+        if inWorld then StartZoneBaseline() else zoneBaselined, lastZone = false, nil end
+    end
     local levels = master and R:Enabled("chronicleLevels")
     local gold = master and R:Enabled("chronicleGold")
     local riding = master and R:Enabled("chronicleRiding")
