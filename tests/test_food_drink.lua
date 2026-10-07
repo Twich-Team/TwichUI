@@ -226,6 +226,136 @@ assert(drink.shown == false and food.shown == true)
 M.foodDrinkDrink = true; F.Refresh(); Look()
 assert(drink.shown == true)
 
+-- Prefer Mage-conjured food and water: a preference among eligible items, food and drink apart.
+do
+  local MUFFIN, SWEET_ROLL, CONJ_WATER, SPARKLING = 5349, 8076, 5350, 8078   -- IDs in F.CONJURED
+  for _, id in ipairs({ MUFFIN, SWEET_ROLL, CONJ_WATER, SPARKLING }) do assert(F.CONJURED[id], id .. " is listed") end
+  assert(not F.CONJURED[2287] and not F.CONJURED[4605] and not F.CONJURED[3448], "ordinary items are not")
+  assert(F.Get("preferConjured") == false and F.DEFAULTS.preferConjured == false, "off by default")
+  assert(F.Set("preferConjured", "yes") == false and F.Set("preferConjured", 1) == false, "only a boolean")
+
+  -- Pick on its own
+  local plain, conj = { id = 1, amount = 900, count = 5 }, { id = 2, amount = 10, count = 5, conjured = true }
+  assert(F.Pick({ plain, conj }).id == 1 and F.Pick({ plain, conj }, false).id == 1, "off: the conjured flag is ignored")
+  assert(F.Pick({ plain, conj }, true).id == 2, "on: conjured beats stronger ordinary")
+  assert(F.Pick({ plain }, true).id == 1 and F.Pick({}, true) == nil, "on, none conjured: as before")
+  local better = { id = 3, amount = 50, count = 20, conjured = true }
+  assert(F.Pick({ plain, conj, better }, true).id == 3, "among conjured, the usual ranking")
+
+  Item(MUFFIN, "Conjured Muffin", 1, 20, { text = EAT:format(61) })
+  Item(SWEET_ROLL, "Conjured Sweet Roll", 1, 20, { text = EAT:format(100) })
+  Drink(CONJ_WATER, "Conjured Water", 1, 20, 151)
+  Drink(SPARKLING, "Conjured Sparkling Water", 1, 20, 700)
+  local function Chosen() return food.attrs.item, drink.attrs.item end
+  local function Pref(on) assert(F.Set("preferConjured", on) == true); Look() end
+  local ordinary = { 2287, 4605, 1179, 1205 }   -- best ordinary: Red-speckled Mushroom (300), Melon Juice (700)
+  local function BagsWith(...)
+    local list = { unpack(ordinary) }
+    for _, id in ipairs({ ... }) do table.insert(list, id) end
+    Bags(list)
+    c.FireEvent("BAG_UPDATE_DELAYED"); Look()
+  end
+
+  -- 1. disabled: unchanged
+  BagsWith(MUFFIN, CONJ_WATER)
+  local f, dr = Chosen()
+  assert(f == "Red-speckled Mushroom" and dr == "Melon Juice", "off: " .. tostring(f) .. ", " .. tostring(dr))
+
+  -- 2 and 3. enabled with both kinds: a weaker conjured item beats a stronger ordinary one
+  Pref(true)
+  f, dr = Chosen()
+  assert(f == "Conjured Muffin" and dr == "Conjured Water", "on: " .. tostring(f) .. ", " .. tostring(dr))
+  assert(food.itemID == MUFFIN and food.preferred == true and drink.preferred == true, "the tooltip can say why")
+  BagsWith(MUFFIN, SWEET_ROLL, CONJ_WATER, SPARKLING)
+  f, dr = Chosen()
+  assert(f == "Conjured Sweet Roll" and dr == "Conjured Sparkling Water", "best conjured by the usual ranking")
+
+  -- 4. only conjured food, or only conjured water: the other kind falls back on its own
+  BagsWith(MUFFIN)
+  f, dr = Chosen()
+  assert(f == "Conjured Muffin" and dr == "Melon Juice" and rawget(drink, "preferred") == nil, "only food: " .. tostring(f) .. ", " .. tostring(dr))
+  BagsWith(CONJ_WATER)
+  f, dr = Chosen()
+  assert(f == "Red-speckled Mushroom" and dr == "Conjured Water" and rawget(food, "preferred") == nil, "only water: " .. tostring(f) .. ", " .. tostring(dr))
+
+  -- 5. none: the normal choice
+  BagsWith()
+  f, dr = Chosen()
+  assert(f == "Red-speckled Mushroom" and dr == "Melon Juice" and rawget(food, "preferred") == nil, "none: normal choice")
+
+  -- 6. conjured items the rules leave out stay out
+  c.ITEMS[MUFFIN].usable = false
+  c.ITEMS[SPARKLING].minLevel = 35
+  c.ITEMS[SWEET_ROLL].text = EAT:format(100) .. " Well Fed: gain 8 Stamina for 15 min."
+  BagsWith(MUFFIN, SWEET_ROLL, SPARKLING, CONJ_WATER)
+  f, dr = Chosen()
+  assert(f == "Red-speckled Mushroom", "unusable and buff conjured food skipped: " .. tostring(f))
+  assert(dr == "Conjured Water", "a too-high conjured water skipped, the usable one kept: " .. tostring(dr))
+  c.ITEMS[MUFFIN].usable, c.ITEMS[SPARKLING].minLevel = nil, 1
+  c.ITEMS[SWEET_ROLL].text = EAT:format(100)
+
+  -- conjured item restoring both: counts for both buttons, as any such item does
+  Item(SWEET_ROLL, "Conjured Sweet Roll", 1, 20, { text = "Restores 100 health and 100 mana over 21 sec. Must remain seated while eating." })
+  BagsWith(SWEET_ROLL)
+  f, dr = Chosen()
+  assert(f == "Conjured Sweet Roll" and dr == "Conjured Sweet Roll", "both: " .. tostring(f) .. ", " .. tostring(dr))
+  Item(SWEET_ROLL, "Conjured Sweet Roll", 1, 20, { text = EAT:format(100) })
+
+  -- 8. consumed (the stack is gone), then removed from the bags
+  BagsWith(MUFFIN, CONJ_WATER)
+  c.ITEMS[MUFFIN].count = 0
+  c.FireEvent("BAG_UPDATE_DELAYED"); Look()
+  f, dr = Chosen()
+  assert(f == "Red-speckled Mushroom" and dr == "Conjured Water", "a used-up stack falls back: " .. tostring(f))
+  c.ITEMS[MUFFIN].count = 20
+  BagsWith(MUFFIN, CONJ_WATER)
+  assert(food.attrs.item == "Conjured Muffin")
+  BagsWith()
+  f, dr = Chosen()
+  assert(f == "Red-speckled Mushroom" and dr == "Melon Juice" and rawget(food, "preferred") == nil, "removed: the normal choice")
+
+  -- an item the game hasn't loaded is asked for and not chosen until it arrives
+  c.UNCACHED[MUFFIN] = true
+  BagsWith(MUFFIN)
+  assert(c.REQUESTED[MUFFIN] and food.attrs.item == "Red-speckled Mushroom", "ordinary meanwhile")
+  c.UNCACHED[MUFFIN] = nil
+  c.FireEvent("GET_ITEM_INFO_RECEIVED", MUFFIN, true); Look()
+  assert(food.attrs.item == "Conjured Muffin", "chosen once loaded")
+
+  -- 9. changed in combat: nothing is touched until combat ends
+  Pref(false)
+  assert(food.attrs.item == "Red-speckled Mushroom")
+  c.COMBAT = true
+  assert(F.Set("preferConjured", true)); Look()
+  assert(food.attrs.item == "Red-speckled Mushroom" and food.itemID == 4605 and food.count.text == 20, "attributes, icon data and count untouched in combat")
+  c.COMBAT = false
+  c.FireEvent("PLAYER_REGEN_ENABLED"); Look()
+  assert(food.attrs.item == "Conjured Muffin" and food.itemID == MUFFIN and food.preferred, "applied when combat ends")
+  c.COMBAT = true
+  assert(F.Set("preferConjured", false)); Look()
+  assert(food.attrs.item == "Conjured Muffin", "turned off in combat: still untouched")
+  c.COMBAT = false
+  c.FireEvent("PLAYER_REGEN_ENABLED"); Look()
+  assert(food.attrs.item == "Red-speckled Mushroom" and rawget(food, "preferred") == nil, "and applied after")
+
+  -- 10. saved settings: stored with the look, other values kept, a bad saved value reads as off
+  assert(F.Set("size", 40) and F.Set("preferConjured", true))
+  assert(c.TwichUIDB.ui.foodDrink.preferConjured == true and c.TwichUIDB.ui.foodDrink.size == 40)
+  c.TwichUIDB.ui.foodDrink.preferConjured = "yes"
+  assert(F.Get("preferConjured") == false, "an invalid saved value is off")
+  c.TwichUIDB.ui.foodDrink = { size = 40 }   -- as saved before this setting existed (or another profile's)
+  assert(F.Get("preferConjured") == false and F.Get("size") == 40, "older saved data reads as off")
+  c.TwichUIDB.ui.foodDrink = { preferConjured = true }   -- switched to a profile that has it on
+  F.Refresh(); Look()
+  assert(food.attrs.item == "Conjured Muffin", "a switched-in profile's value is used")
+  c.TwichUIDB.ui.foodDrink = nil
+  F.Refresh(); Look()
+  BagsWith()
+  assert(F.Get("size") == F.DEFAULTS.size and F.Get("preferConjured") == false)
+  f, dr = Chosen()
+  assert(f == "Red-speckled Mushroom" and dr == "Melon Juice", "back to the normal choice")
+end
+
 -- Appearance: ranges, refusing bad values, and each setting reaching the buttons.
 do
   local D = F.DEFAULTS

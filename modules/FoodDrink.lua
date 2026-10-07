@@ -9,6 +9,9 @@
 -- say (buff food, feasts) or that can't be read is skipped. "Best" is the amount restored, as
 -- the description states it; ties go to the smaller stack, so a part stack is finished first.
 -- An empty button says so.
+-- Optionally (Prefer Mage-conjured food and water, off by default) a Mage-conjured item beats an
+-- ordinary one even when the ordinary one restores more; see F.CONJURED. It is a preference
+-- among items already eligible: it never lets in an item the rules above leave out.
 -- The choice is refreshed when bags change. A secure button can't be changed in combat, so a
 -- change during a fight waits until it ends. Move them in Edit Mode.
 -- Their look is the player's to set (Food and drink options page): size, spacing, layout, border
@@ -26,6 +29,18 @@ local DEFAULT_X, DEFAULT_Y = 0, -220   -- from the centre of the screen
 local SETTLE = 0.2                     -- seconds: a burst of bag events becomes one look
 local CONSUMABLE, FOOD_AND_DRINK = 0, 5   -- item class and subclass the game must report
 local FOOD_SPELL, DRINK_SPELL = 434, 431     -- the use-spells of plain food and drink (seen in the game with /tui probe); their names are the game's own, in any language
+-- The items the Mage's Conjure Food and Conjure Water make: the six ranks of each that WoW:
+-- Forever has (modules/MageConjure.lua's spells 587 ... 10145 and 5504 ... 10139), lowest rank
+-- first. An item ID, so it holds in any language. The game exposes no "conjured" flag to read
+-- instead (nothing in the Forever UI source or API documentation), and the use-spell is the
+-- same plain Food or Drink spell as for ordinary items, so the ID is what tells them apart.
+-- The IDs are those of the Classic-era game's conjured items; they were not read from the Forever
+-- client, which this repository doesn't carry. /tui probe prints an item's ID, to check them
+-- against conjured items in the bags (the list is a plain table, so a correction is one line).
+F.CONJURED = {
+    [5349] = true, [1113] = true, [1114] = true, [1487] = true, [8075] = true, [8076] = true,   -- Conjured Muffin ... Sweet Roll
+    [5350] = true, [2288] = true, [2136] = true, [3772] = true, [8077] = true, [8078] = true,   -- Conjured Water ... Sparkling Water
+}
 local MOVER_ATLAS = "editmode-actionbar-highlight-NineSlice-Center"   -- Edit Mode's own highlight, when the client has it
 
 local KINDS = {
@@ -54,13 +69,21 @@ local function InCombat() return InCombatLockdown and InCombatLockdown() end
 -- Choosing. Pure, so it can be checked on its own.
 ---------------------------------------------------------------------------
 
--- candidates: { { id, amount, count }, ... }. The most restored wins; then the smaller stack;
--- then the lower item ID, so the answer doesn't depend on bag order.
-function F.Pick(candidates)
+-- candidates: { { id, amount, count, conjured }, ... }. The most restored wins; then the smaller
+-- stack; then the lower item ID, so the answer doesn't depend on bag order. With preferConjured,
+-- only the conjured candidates compete when there are any; with none, all of them do. Without
+-- it, `conjured` is not looked at.
+function F.Pick(candidates, preferConjured)
+    local only = false
+    if preferConjured then
+        for _, c in ipairs(candidates) do
+            if c.conjured then only = true break end
+        end
+    end
     local best
     for _, c in ipairs(candidates) do
-        if not best or c.amount > best.amount
-            or (c.amount == best.amount and (c.count < best.count or (c.count == best.count and c.id < best.id))) then
+        if (c.conjured or not only) and (not best or c.amount > best.amount
+            or (c.amount == best.amount and (c.count < best.count or (c.count == best.count and c.id < best.id)))) then
             best = c
         end
     end
@@ -119,7 +142,7 @@ local function Candidate(id, names, words)
     if C_Item.IsUsableItem and not C_Item.IsUsableItem(id) then return nil end
     local count = C_Item.GetItemCount(id) or 0
     if count < 1 then return nil end
-    return { id = id, name = name, icon = icon, kinds = kinds, amount = amount, count = count }
+    return { id = id, name = name, icon = icon, kinds = kinds, amount = amount, count = count, conjured = F.CONJURED[id] ~= nil }
 end
 
 -- The best food and the best drink in the bags: { food = candidate|nil, drink = candidate|nil }.
@@ -143,7 +166,10 @@ local function Scan()
             end
         end
     end
-    return { food = F.Pick(byKind.food), drink = F.Pick(byKind.drink) }, waiting
+    local prefer = F.Get("preferConjured")
+    local chosen = { food = F.Pick(byKind.food, prefer), drink = F.Pick(byKind.drink, prefer) }
+    for _, c in pairs(chosen) do c.preferred = prefer and c.conjured end   -- so the tooltip can say why
+    return chosen, waiting
 end
 
 ---------------------------------------------------------------------------
@@ -158,6 +184,7 @@ F.DEFAULTS = {
     zoom = 7, showCount = true,
     buttonOpacity = 100,
     mouseover = false, idleOpacity = 30,   -- fade to idleOpacity while the mouse is away
+    preferConjured = false,   -- not a look: which item is chosen
 }
 F.LIMITS = { size = { 24, 64 }, spacing = { 0, 24 }, borderSize = { 0, 64 }, borderOpacity = { 0, 100 }, zoom = { 0, 20 },
     buttonOpacity = { 0, 100 }, idleOpacity = { 0, 100 } }
@@ -175,7 +202,7 @@ local function Valid(key, value)
     elseif key == "layout" then return F.LAYOUTS[value] == true
     elseif key == "borderTexture" then return Borders.ValidName(value)
     elseif key == "borderColor" then return type(value) == "string" and value:match("^%x%x%x%x%x%x%x%x$") ~= nil
-    elseif key == "borderClass" or key == "showCount" or key == "mouseover" then return type(value) == "boolean" end
+    elseif key == "borderClass" or key == "showCount" or key == "mouseover" or key == "preferConjured" then return type(value) == "boolean" end
     return false
 end
 
@@ -263,6 +290,9 @@ local function ShowTooltip(button)
         else GameTooltip:SetHyperlink("item:" .. button.itemID) end
         GameTooltip:AddLine(" ")
         GameTooltip:AddLine(button.rule, 0.69, 0.66, 0.6, true)
+        if button.preferred then
+            GameTooltip:AddLine("Mage-conjured, which your options prefer over ordinary " .. button.label:lower() .. ".", 0.69, 0.66, 0.6, true)
+        end
     else
         GameTooltip:SetText(button.label, 1, 1, 1)
         GameTooltip:AddLine("Nothing in your bags that TwichUI can tell is plain " .. button.label:lower() .. " you can use.", nil, nil, nil, true)
@@ -396,6 +426,7 @@ local function Fill(button, choice)
     button:SetAttribute("type", filled and "item" or nil)
     button:SetAttribute("item", filled and choice.name or nil)
     button.itemID = filled and choice.id or nil
+    button.preferred = filled and choice.preferred or nil
     if filled then button.icon:SetTexture(choice.icon) end
     button.icon:SetShown(filled)
     button.name:SetShown(not filled)

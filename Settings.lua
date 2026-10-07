@@ -401,6 +401,10 @@ local function Build()
 
     local FD = R.FoodDrink
     if FD then
+        Under(ProxyToggle("foodDrinkPreferConjured", "Prefer Mage-conjured food and water",
+            "When you carry Mage-conjured food or water you can use, the buttons choose it over ordinary food or drink, even when an ordinary item restores more health or mana. Food and water are chosen separately: with conjured food but no conjured water, the Food button holds the conjured food and the Drink button holds the best ordinary drink. With none of a kind, that button chooses as it always does. Among conjured items, the one that restores the most is chosen. It works for any character carrying conjured items, not only Mages, and never lets in an item the buttons would otherwise skip. Off, the choice is the one that restores the most.",
+            FD.DEFAULTS.preferConjured, function() return FD.Get("preferConjured") end,
+            function(value) FD.Set("preferConjured", value and true or false) end), foodDrink, FoodDrinkOn)
         Header("Appearance", "Make the buttons match the rest of your interface.")
         local resettable = {}   -- { setting, default }, for Reset
         local function Remember(variable, varType, label, key, set)

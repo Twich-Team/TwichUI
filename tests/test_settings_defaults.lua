@@ -212,6 +212,14 @@ do
     assert(variables[variable] == "Food and drink", variable)
     assert(proxy.default == FD.DEFAULTS[key] and proxy.get() == FD.DEFAULTS[key], key .. " starts at its default")
   end
+  -- Prefer Mage-conjured food and water: a choice of items, so not part of the look Reset puts back
+  local prefer = assert(proxies.TWICHUI_foodDrinkPreferConjured, "the preference is on the page")
+  assert(variables.TWICHUI_foodDrinkPreferConjured == "Food and drink" and prefer.default == false and prefer.get() == false, "off by default")
+  prefer.set(true); assert(FD.Get("preferConjured") == true and prefer.get() == true, "saves")
+  local preferInit
+  for _, i in ipairs(initializers) do if i.setting and i.setting.variable == "TWICHUI_foodDrinkPreferConjured" then preferInit = i end end
+  assert(preferInit and #preferInit.modify == 1, "live only while the buttons are on")
+  assert(preferInit.data.tooltip and preferInit.data.tooltip:find("even when an ordinary item restores more", 1, true), "the tooltip says what prefer means")
   local size = proxies.TWICHUI_foodDrinkSize
   size.set(41.4); assert(FD.Get("size") == 41 and size.get() == 41, "a slider value is kept as a whole number")
   size.set(500); assert(FD.Get("size") == 41, "out of range is refused")
@@ -240,6 +248,8 @@ do
   c.TwichUIDB.modules.foodDrink = false
   reset.click()
   assert(FD.Get("size") == 36 and FD.Get("layout") == "horizontal" and FD.Get("borderColor") == FD.DEFAULTS.borderColor, "Reset puts the look back")
+  assert(FD.Get("preferConjured") == true, "Reset leaves the preference alone")
+  prefer.set(false)
 end
 -- Broker menu appearance: one shared section on the Mage page; each control reads and writes the
 -- shared look; Reset puts back only that.
