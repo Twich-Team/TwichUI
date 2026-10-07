@@ -386,6 +386,20 @@ end
 c.TwichUIDB.ui.friendLoginPlace = nil
 
 ---------------------------------------------------------------------------
+-- Why a friend could not be described (used by the temporary diagnostics).
+---------------------------------------------------------------------------
+local _, why = F.Describe("x")
+assert(why == "bad-id", why)
+_, why = F.Describe(12345)
+assert(why == "no-info", why)
+c.FRIENDS[6] = { accountName = "", battleTag = "", gameAccountInfo = {} }
+_, why = F.Describe(6)
+assert(why == "no-name", why)
+c.FRIENDS[6] = nil
+local state = F.State()
+assert(state.enabled and state.capable and state.takenFromGame and state.gamePopup == "event-removed" and state.waiting == 0, "state for the diagnostics")
+
+---------------------------------------------------------------------------
 -- /tui friend: a made-up sample, with your own faction.
 ---------------------------------------------------------------------------
 c.COMBAT = true

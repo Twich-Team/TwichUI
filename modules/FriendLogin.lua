@@ -14,6 +14,9 @@
 -- nothing sent, and it takes no clicks. It plays one soft chime (media/sounds/TwichUI_Notification.mp3)
 -- unless that is switched off. A sound file can't be given its own volume, so the chime follows one of
 -- the game's own volume channels, chosen in the options (Sound Effects by default).
+-- Scope, as it stands: Battle.net account-level logins only (BN_FRIEND_ACCOUNT_ONLINE). It does not announce
+-- logoffs, character (in-game list) friends, or a Battle.net friend who was already online starting WoW.
+-- modules/FriendLoginDiag.lua (temporary, off by default) can show which of these a real session had.
 
 local R = TwichUI
 local F = {}
@@ -55,6 +58,19 @@ end
 
 local function Escape(text) return (text:gsub("|", "||")) end
 
+-- Decision trace for the temporary diagnostics (modules/FriendLoginDiag.lua); F.Note is nil unless that is tracing.
+local function Note(stage, id, detail)
+    local note = F.Note
+    if note then note(stage, id, detail) end
+end
+
+-- The card needs the Chronicle's look and the arrival card's fonts and rule. Without them there is
+-- nothing to show, and the game's own pop-up must be left alone.
+local function Capable()
+    local S, A = R.ChronicleStyle, R.Arrival
+    return S and A and A.Rule and A.SetFont and S.color and true or false
+end
+
 ---------------------------------------------------------------------------
 -- What to say. Pure apart from the one call that asks the game about the friend.
 ---------------------------------------------------------------------------
@@ -67,15 +83,16 @@ local function ShortTag(tag)
     return Plain(short or tag)
 end
 
--- { name, character, faction } for a Battle.net account id, or nil when the game doesn't (yet) give a name.
+-- { name, character, faction } for a Battle.net account id, or nil when the game doesn't (yet) give a name;
+-- then a second value says why ("bad-id", "no-api", "no-info", "no-name").
 -- faction is "Horde" or "Alliance" only; anything else (no game, or Neutral) is left out.
 function F.Describe(id)
-    if type(id) ~= "number" or (issecretvalue and issecretvalue(id)) then return nil end
-    if not (C_BattleNet and C_BattleNet.GetAccountInfoByID) then return nil end
+    if type(id) ~= "number" or (issecretvalue and issecretvalue(id)) then return nil, "bad-id" end
+    if not (C_BattleNet and C_BattleNet.GetAccountInfoByID) then return nil, "no-api" end
     local info = C_BattleNet.GetAccountInfoByID(id)
-    if type(info) ~= "table" then return nil end
+    if type(info) ~= "table" then return nil, "no-info" end
     local name = Plain(info.accountName) or ShortTag(info.battleTag)
-    if not name then return nil end
+    if not name then return nil, "no-name" end
     local game = type(info.gameAccountInfo) == "table" and info.gameAccountInfo or {}
     local faction = Plain(game.factionName)
     return {
@@ -153,8 +170,8 @@ end
 function F.IsShowing() return card ~= nil and card:IsShown() end
 
 local function Build()
+    if not Capable() then return false end
     local S, A = R.ChronicleStyle, R.Arrival
-    if not (S and A and A.Rule and A.SetFont) then return false end
     local K = S.color
     card = CreateFrame("Frame", nil, UIParent)
     card:SetSize(WIDTH, HEIGHT)
@@ -230,7 +247,7 @@ end
 
 -- entries: { { name, character, faction }, ... }, the first one's name leads.
 local function Show(entries)
-    if not card and not Build() then return end
+    if not card and not Build() then Note("card:build-failed") return false end
     Hide()
     Place(card)
     local first = entries[1]
@@ -255,14 +272,24 @@ local function Show(entries)
     card:SetAlpha(0)
     card:Show()
     card.anim:Play()
-    if R:Enabled("friendLoginSound") then F.PlaySound() end
+    Note("card:shown", nil, #entries)
+    if R:Enabled("friendLoginSound") then
+        Note("sound:requested", nil, F.PlaySound() and "accepted" or "refused")
+    else
+        Note("sound:off")
+    end
+    return true
 end
 
 ---------------------------------------------------------------------------
 -- When to show it.
 ---------------------------------------------------------------------------
-local function Wanted()
-    return R:Enabled("friendLogin") and GetCVarBool("showToastWindow") and GetCVarBool("showToastOnline")
+-- Why a login would not be shown: TwichUI's switch or the game's own Social options. nil when it would.
+local function WhyNot()
+    if not R:Enabled("friendLogin") then return "module-off" end
+    if not GetCVarBool("showToastWindow") then return "game-toast-window-off" end
+    if not GetCVarBool("showToastOnline") then return "game-online-friends-off" end
+    return nil
 end
 
 local function Toasting()
@@ -270,24 +297,28 @@ local function Toasting()
     return toast and toast.IsCurrentlyToasting and toast:IsCurrentlyToasting() and true or false
 end
 
--- Something that should have the player's attention instead, or a card of ours still up.
+-- Something that should have the player's attention instead, or a card of ours still up: the reason, or nil.
 local function InTheWay()
-    if InCombatLockdown and InCombatLockdown() then return true end
-    if F.IsShowing() then return true end
-    if R.Arrival and R.Arrival.IsShowing and R.Arrival.IsShowing() then return true end
-    if R.Training and R.Training.IsShowing and R.Training.IsShowing() then return true end   -- one TwichUI card at a time
-    return Toasting()
+    if InCombatLockdown and InCombatLockdown() then return "combat" end
+    if F.IsShowing() then return "own-card" end
+    if R.Arrival and R.Arrival.IsShowing and R.Arrival.IsShowing() then return "zone-card" end
+    if R.Training and R.Training.IsShowing and R.Training.IsShowing() then return "training-card" end   -- one TwichUI card at a time
+    if Toasting() then return "game-banner" end
+    return nil
 end
 
 local Schedule
 
 local function Try(tries, mine)
-    if pending ~= mine or #waiting == 0 or not Wanted() then return end
-    local entries = {}
-    if not InTheWay() then
+    if pending ~= mine or #waiting == 0 then Note("look:stale") return end
+    local why = WhyNot()
+    if why then Note("look:skipped", nil, why) return end
+    local entries, missing = {}, nil
+    local blocked = InTheWay()
+    if not blocked then
         for _, id in ipairs(waiting) do
-            local entry = F.Describe(id)
-            if entry then entries[#entries + 1] = entry end
+            local entry, reason = F.Describe(id)
+            if entry then entries[#entries + 1] = entry else missing = reason end
         end
         if #entries > 0 then
             wipe(waiting)
@@ -297,8 +328,10 @@ local function Try(tries, mine)
     end
     -- Busy, or the game hasn't given a name yet: look again a few times, then let it go.
     if tries < RETRIES then
+        Note("look:retry", nil, (blocked or missing or "no-entries") .. " #" .. (tries + 1))
         C_Timer.After(RETRY, function() Try(tries + 1, mine) end)
     else
+        Note("look:gave-up", nil, blocked or missing or "no-entries")
         wipe(waiting)
     end
 end
@@ -318,9 +351,11 @@ end
 local function Takeover()
     local toast = _G.BNToastFrame
     if not (toast and toast.IsEventRegistered and toast.UnregisterEvent) then return end
+    if not Capable() then return end   -- no card to put in its place: leave the game's pop-up as it is
     if toast:IsEventRegistered(EVENT) then
         toast:UnregisterEvent(EVENT)
         taken = true
+        Note("takeover:taken")
     end
 end
 
@@ -332,23 +367,31 @@ local function Giveback()
     if not (toast and toast.IsEventRegistered and toast.RegisterEvent) then return end
     if GetCVarBool("showToastWindow") and GetCVarBool("showToastOnline") and not toast:IsEventRegistered(EVENT) then
         toast:RegisterEvent(EVENT)
+        Note("takeover:given-back")
     end
 end
 
 local function OnOnline(friendId, isCompanionApp)
+    local toast = _G.BNToastFrame
+    local stillTheirs = F.Note and toast and toast.IsEventRegistered and toast:IsEventRegistered(EVENT) or false
     Takeover()   -- if the game's pop-up has the event back, it may already have shown once; this stops the next
-    if isCompanionApp then return end   -- the game gives no pop-up for the mobile app either
-    if type(friendId) ~= "number" or (issecretvalue and issecretvalue(friendId)) then return end
-    if GetTime() < quietUntil or not Wanted() then return end
+    Note("event", friendId, isCompanionApp and "companion-app" or (stillTheirs and "game-popup-had-event" or nil))
+    if isCompanionApp then Note("skip", friendId, "companion-app") return end   -- the game gives no pop-up for the mobile app either
+    if type(friendId) ~= "number" or (issecretvalue and issecretvalue(friendId)) then Note("skip", nil, "bad-id") return end
+    if GetTime() < quietUntil then Note("skip", friendId, "login-quiet") return end
+    local why = WhyNot()
+    if why then Note("skip", friendId, why) return end
     for _, id in ipairs(waiting) do
-        if id == friendId then return end
+        if id == friendId then Note("skip", friendId, "duplicate") return end
     end
-    if #waiting >= MAX_WAITING then return end
+    if #waiting >= MAX_WAITING then Note("skip", friendId, "queue-full") return end
     waiting[#waiting + 1] = friendId
+    Note("queued", friendId)
     Schedule(SETTLE)
 end
 
 local function Drop()
+    if #waiting > 0 then Note("drop", nil, "loading-screen, " .. #waiting .. " waiting") end
     pending = pending + 1
     wipe(waiting)
     Hide()
@@ -365,6 +408,28 @@ local function OnCvarUpdate(name)
     -- The game may re-register the event just after this; look again once it has.
     Takeover()
     C_Timer.After(0, Takeover)
+end
+
+-- What the module is doing right now, for the temporary diagnostics. Reads only; nothing is changed.
+function F.State()
+    local toast = _G.BNToastFrame
+    local events = {}
+    for event in pairs(active) do events[#events + 1] = event end
+    table.sort(events)
+    return {
+        enabled = R:Enabled("friendLogin"),
+        notWanted = WhyNot(),
+        events = events,
+        capable = Capable(),
+        takenFromGame = taken,
+        gamePopup = toast and toast.IsEventRegistered and (toast:IsEventRegistered(EVENT) and "has-event" or "event-removed") or "absent",
+        waiting = #waiting,
+        cardShowing = F.IsShowing(),
+        quietLeft = math.max(0, quietUntil - GetTime()),
+        inTheWay = InTheWay(),
+        soundOn = R:Enabled("friendLoginSound"),
+        channel = F.SoundChannel(),
+    }
 end
 
 -- /tui friend: shows the card now with made-up sample details (your own faction), so it can be looked at

@@ -220,6 +220,10 @@ COMMANDS = {
     { name = "friend", usage = "friend", desc = "preview the Battle.net friend login card now", fn = function()
         if R.FriendLogin then R.FriendLogin.Preview() else Unavailable("Friend login") end
     end },
+    -- TEMPORARY: remove with modules/FriendLoginDiag.lua
+    { name = "frienddiag", usage = "frienddiag [status|test|sound|trace|report|reset]", desc = "check the friend login card and trace real friend events (temporary)", fn = function(arg)
+        if R.FriendLoginDiag then R.FriendLoginDiag.Command(arg) else Unavailable("Friend login diagnostics") end
+    end },
     { name = "hidden", usage = "hidden", desc = "welcome messages hidden at login", fn = function()
         if R.Quiet then R.Quiet:ShowHidden() else Unavailable("Quiet login") end
     end },
