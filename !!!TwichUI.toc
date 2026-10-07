@@ -33,6 +33,7 @@ modules\AttuneSkin.lua
 # Configuration sharing, group check, restore points
 setup\PackFile.lua
 setup\Setups.lua
+setup\Ellesmere.lua
 setup\Share.lua
 setup\Group.lua
 setup\CommTest.lua
@@ -97,5 +98,12 @@ modules\MageConjure.lua
 auction\Price.lua
 auction\Scan.lua
 auction\Window.lua
+
+# Quality of Life: small opt-in conveniences (summons, resurrection, release in battlegrounds, duels)
+qol\QoL.lua
+qol\Summons.lua
+qol\Resurrect.lua
+qol\ReleasePvP.lua
+qol\Duels.lua
 
 Settings.lua

@@ -21,6 +21,8 @@ This addon is intended to work alongside EllesmereUI.
 
 **Addon skins:** Provides EllemereUI skinning to various addons to create a cohesive look and feel. Currently supprts: Attune, Auctionator, DungeonJournal, and WhatsTraining.
 
+**Quality of life:** Four small conveniences, all off by default and each on its own page switch: accept summons (from friends, guild and group members, or whoever you choose, after a short wait), accept resurrection (keeping the game's own waiting time, and combat resurrections only if you ask), release in battlegrounds (battlegrounds only, never when a resurrection or self-resurrection is on offer, hold Shift to keep your body), and decline duel requests (except from the people you allow). Nothing is sent to chat. Where Leatrix Plus does the same, each tooltip says so.
+
 **Food and Drink buttons:** Optional (off by default). Two small buttons that hold the food and drink in your bags that restore the most, and eat or drink it when you click them. TwichUI never uses anything itself, skips buff food and feasts, and changes the choice out of combat only. Optionally it prefers Mage-conjured food and water over ordinary ones, food and water chosen separately. Each button can be switched off, and their size, spacing, layout, border (texture, thickness, color or class color, opacity) icon zoom and opacity (with an option to fade them until the mouse is over them) are yours to set.
 
 **Mage Travel:** For Mages, on by default, and shown through a data bar addon that lists LibDataBroker launchers (such as EllesmereUI's Broker Plugin block). It shows its icon with "Travel" or "Portals" (or just the icon), as you choose. A small menu of the teleports and portals your faction can learn on WoW: Forever. Click a learned one to cast it through the game's own secure button; ones you haven't learned stay readable, and their tooltip gives the level they are trained at. It can't be opened in combat and closes when combat starts.
@@ -43,6 +45,7 @@ This addon is intended to work alongside EllesmereUI.
   * Send it to a friend in game. They get a prompt, it downloads with a progress bar, and they choose what to apply. Their own settings are backed up first; Undo puts them back.
   * Later sends only include addons you changed.
   * Your recommended addon list travels with it, with a download link for each addon they're missing.
+  * **EllesmereUI** is shared one profile at a time (**EllesmereUI profile** on the Share setup page), never as a whole saved-data table. Your friend reviews it and it is added as a **new profile** with an unused name; none of their profiles, spec assignments or global settings are replaced. EllesmereUI has no import that doesn't switch to the new profile, so the review says that it becomes the profile in use, and their previous one stays saved. The profile's look (fonts, custom colours, dark mode, accent) comes with it; UI scale, window skins, click-cast and per-character data are left out.
 
 **Backups:** Save your own settings before you tinker, go back any time.
 

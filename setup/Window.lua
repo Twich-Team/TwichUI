@@ -4,7 +4,7 @@
 -- Styled by EllesmereUI's skin toolkit when it's available.
 
 local R = TwichUI
-local ST, SH = R.Setups, R.Share
+local ST, SH, ES = R.Setups, R.Share, R.Ellesmere
 local W = {}
 R.Window = W
 
@@ -247,10 +247,14 @@ end
 local function Chosen()
     local groups = ST:DetectedByAddon()
     local n, bytes = 0, 0
+    local total = 0
     for _, g in ipairs(groups) do
-        if g.selected > 0 then n = n + 1; bytes = bytes + g.bytes end
+        if not g.backupOnly then
+            total = total + 1
+            if g.selected > 0 then n = n + 1; bytes = bytes + g.bytes end
+        end
     end
-    return n, bytes, #groups
+    return n, bytes, total
 end
 
 ---------------------------------------------------------------------------
@@ -313,11 +317,14 @@ local function RefreshChoose()
             r.arrow:SetText(expanded[g.owner] and "-" or "+")
             r.label:SetText(g.title)
             r.label:SetTextColor(1, 1, 1)
-            r.right:SetText(GREY .. (g.selected > 0 and ST.FormatSize(g.bytes) or "") .. "|r")
+            r.right:SetText(GREY .. (g.backupOnly and "Backups only" or (g.selected > 0 and ST.FormatSize(g.bytes) or "")) .. "|r")
             r:SetScript("OnClick", function() expanded[g.owner] = not expanded[g.owner]; W:Refresh() end)
             r:SetScript("OnEnter", function(self)
                 GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
                 GameTooltip:SetText(g.title, 1, 1, 1)
+                if g.backupOnly then
+                    GameTooltip:AddLine("Kept in your backups, never sent to friends. Share one EllesmereUI profile with the EllesmereUI profile button on the Share setup page.", 0.9, 0.8, 0.5, true)
+                end
                 GameTooltip:AddLine("Click the name to see each part.", 0.7, 0.7, 0.7)
                 for _, t in ipairs(g.tables) do
                     GameTooltip:AddDoubleLine((t.selected and "|cff8FB35A+|r " or "|cff8a857c-|r ") .. t.name,
@@ -569,9 +576,15 @@ local function BuildShare(p)
     mine.em = Check(p, "Include my Edit Mode layout")
     mine.em:SetPoint("TOPLEFT", 14, -152)
     mine.em:SetChecked(true)
+    mine.eui = Btn(p, "EllesmereUI profile: none", 270, function() W:ShowEuiShare() end, function()
+        local _, why = ES.Api()
+        return why or "Choose one EllesmereUI profile to send with your setup. It reaches your friend as a new profile; nothing of theirs is replaced."
+    end)
+    mine.eui:SetPoint("TOPLEFT", 214, -148)
     mine.save = Btn(p, "Save setup", 150, function()
         ST:SaveMine(mine.em:GetChecked())
-        R.Print("saved your setup: %d addons.", ST.CountAddons(ST.Mine()))
+        R.Print("saved your setup: %d addons%s.", ST.CountAddons(ST.Mine()), ST.Mine().eui and " and an EllesmereUI profile" or "")
+        if ST.euiError then R.Print("couldn't include the EllesmereUI profile: %s", ST.euiError) end
         W:Refresh()
     end, function()
         return ST:CanSave() and "Saves the ticked settings as your setup. You can send it straight away."
@@ -660,11 +673,17 @@ end
 
 local function RefreshShare()
     local n, bytes, total = Chosen()
-    if total == 0 then
+    local profile = ES.ChosenProfile()
+    local what = {}
+    if n > 0 then what[#what + 1] = ("%d %s · %s"):format(n, n == 1 and "addon" or "addons", ST.FormatSize(bytes)) end
+    if profile then what[#what + 1] = "EllesmereUI profile" end
+    if #what == 0 then
         mine.summary:SetText(GREY .. "Included settings: nothing chosen yet|r")
     else
-        mine.summary:SetText(("Included settings: %d %s · %s"):format(n, n == 1 and "addon" or "addons", ST.FormatSize(bytes)))
+        mine.summary:SetText("Included settings: " .. table.concat(what, " · "))
     end
+    mine.eui:SetText(profile and ("EllesmereUI profile: " .. profile:sub(1, 20)) or "EllesmereUI profile: none")
+    mine.eui:SetEnabled(ES.Api() ~= nil)
     if ST.capture then
         mine.help:SetText("Scanned this session, so you can choose addons and save.")
     elseif total > 0 then
@@ -672,12 +691,12 @@ local function RefreshShare()
     else
         mine.help:SetText("Start with Scan installed addons to find which of them have settings you can share. It reloads your UI once and never saves on its own.")
     end
-    mine.save:SetEnabled(ST.capture ~= nil and n > 0)
+    mine.save:SetEnabled(ST.capture ~= nil and (n > 0 or profile ~= nil))
 
     local m = ST.Mine()
     if m then
-        mine.saved:SetText(("%sSaved|r %s  ·  version %d  ·  %d addons%s"):format(GREEN, When(m.created), m.version or 1,
-            ST.CountAddons(m), m.editMode and "  ·  Edit Mode layout" or ""))
+        mine.saved:SetText(("%sSaved|r %s  ·  version %d  ·  %d addons%s%s"):format(GREEN, When(m.created), m.version or 1,
+            ST.CountAddons(m), m.eui and "  ·  EllesmereUI profile" or "", m.editMode and "  ·  Edit Mode layout" or ""))
     else
         mine.saved:SetText(GREY .. "Not saved yet.|r")
     end
@@ -885,6 +904,152 @@ function W:ShowAddonList(sourceKey)
 end
 
 ---------------------------------------------------------------------------
+-- Popup: which EllesmereUI profile to share (one at a time, never the whole database)
+---------------------------------------------------------------------------
+local ep
+
+local function BuildEuiShare()
+    ep = MakePopup("TwichUIEuiShare", POPUP_W, 440, "Share an EllesmereUI profile", 20, 0)
+    ep.help = Text(ep, "GameFontHighlightSmall")
+    ep.help:SetPoint("TOPLEFT", 16, -40)
+    ep.help:SetWidth(POPUP_LIST_W)
+    ep.help:SetSpacing(2)
+    ep.help:SetText("Pick one of your EllesmereUI profiles to include when you press Save setup. TwichUI asks EllesmereUI to export it, so your friend's EllesmereUI reads it like any of its own exports. It reaches them as a new profile; nothing of theirs is replaced.\n\n"
+        .. GOLD .. "Included|r  The profile's module settings, look (fonts, custom colours, dark mode, accent), layout links, Cooldown Manager spells and overrides.\n"
+        .. GOLD .. "Left out|r  UI scale, window and tooltip skins, which specs use a profile, click-cast, your other profiles, and your characters' names and gold.")
+    ep.list = ListBox(ep, 190, POPUP_LIST_W)
+    ep.list:SetPoint("TOPLEFT", 16, -176)
+    ep.note = Text(ep, "GameFontDisableSmall")
+    ep.note:SetPoint("TOPLEFT", ep.list, "BOTTOMLEFT", 2, -8)
+    ep.note:SetWidth(POPUP_LIST_W - 100)
+    ep.done = Btn(ep, "Done", 80, function() ep:Hide() end)
+    ep.done:SetPoint("BOTTOMRIGHT", -16, 12)
+end
+
+local function RefreshEuiShare()
+    local E, why = ES.Api()
+    local names = ES.ProfileNames()
+    local chosen = ES.ChosenProfile()
+    local active = E and E.GetActiveProfileName()
+    local lines = 0
+    local function Row(label, value, right)
+        lines = lines + 1
+        local r = ListRow(ep.list, lines)
+        local function pick() ES.Choose(value); W:Refresh() end
+        r.check:Show()
+        r.check:SetChecked(chosen == value)
+        r.check:SetScript("OnClick", pick)
+        r:SetScript("OnClick", pick)
+        r:SetScript("OnEnter", nil)
+        r.arrow:SetText("")
+        r.label:SetText(label)
+        r.label:SetTextColor(1, 1, 1)
+        r.right:SetText(right or "")
+        r:Show()
+    end
+    if E and #names > 0 then
+        Row("Don't share a profile", nil, nil)
+        for _, n in ipairs(names) do Row(n, n, n == active and (GREY .. "in use|r") or nil) end
+    end
+    FinishList(ep.list, lines, why or "EllesmereUI has no profiles to share.")
+    ep.note:SetText(chosen and ("Included the next time you press Save setup: \"" .. chosen .. "\".")
+        or "No profile chosen. Your setup is saved without one.")
+end
+
+function W:ShowEuiShare()
+    if not ep then BuildEuiShare() end
+    ep:Show()
+    W:Refresh()
+end
+
+---------------------------------------------------------------------------
+-- Popup: import a friend's EllesmereUI profile (always as a new profile)
+---------------------------------------------------------------------------
+local ip
+
+local function EuiModules(plan)
+    local names = {}
+    for _, m in ipairs(plan.modules or {}) do
+        names[#names + 1] = m.display .. (m.missing and (GREY .. " (not installed here)|r") or "")
+    end
+    local more = {}
+    if plan.look then more[#more + 1] = "look (fonts, colours, dark mode, accent)" end
+    if plan.layout then more[#more + 1] = "layout links" end
+    if plan.cdm then more[#more + 1] = "Cooldown Manager spells" end
+    if plan.overrides then more[#more + 1] = "overrides" end
+    local out = table.concat(names, ", ")
+    if #more > 0 then out = out .. "  ·  " .. table.concat(more, ", ") end
+    return out
+end
+
+local function EuiBody(plan)
+    if not plan.ok then return RED .. (plan.why or "Nothing to import.") .. "|r" end
+    local lines = {
+        ("%sFrom|r  %s's profile \"%s\""):format(GOLD, plan.from, plan.sourceName),
+        ("%sCreates|r  a new profile named \"%s\". Your existing profiles are not changed, replaced or renamed."):format(GOLD, plan.dest),
+        ("%sIncluded|r  %s"):format(GOLD, EuiModules(plan)),
+        ("%sLeft out|r  %s"):format(GOLD, plan.excluded),
+        ("%sIn use afterwards|r  EllesmereUI has no import that doesn't switch to the new profile, so it becomes the one in use. \"%s\" stays saved exactly as it is; switch back any time in EllesmereUI > Profiles. If this spec has its own assigned profile, the new one is saved but not switched to. Spec assignments are never changed."):format(GOLD, plan.active or "?"),
+    }
+    if plan.previous and #plan.previous > 0 then
+        lines[#lines + 1] = ("%sImported before|r  TwichUI recorded an earlier import of this profile as \"%s\". It isn't touched; this makes a separate copy. Delete the one you don't want in EllesmereUI > Profiles."):format(GOLD, plan.previous[1].dest)
+    end
+    for _, n in ipairs(plan.notes) do lines[#lines + 1] = GREY .. n .. "|r" end
+    lines[#lines + 1] = GREY .. ("Your UI reloads when it's done. EllesmereUI %s here%s."):format(plan.version or "?",
+        plan.euiVersion and (", " .. plan.euiVersion .. " when it was shared") or "") .. "|r"
+    return table.concat(lines, "\n\n")
+end
+
+local function BuildEuiImport()
+    ip = MakePopup("TwichUIEuiImport", POPUP_W, 540, "Import an EllesmereUI profile", -20, 0)
+    ip.body = Text(ip, "GameFontHighlightSmall")
+    ip.body:SetPoint("TOPLEFT", 16, -40)
+    ip.body:SetWidth(POPUP_LIST_W)
+    ip.body:SetJustifyV("TOP")
+    ip.body:SetSpacing(2)
+    ip.result = Text(ip, "GameFontHighlightSmall")
+    ip.result:SetPoint("BOTTOMLEFT", 16, 50)
+    ip.result:SetWidth(POPUP_LIST_W)
+    ip.go = Btn(ip, "Import as a new profile", 200, function()
+        local plan, pack = ip.plan, ST.SourcePack(ip.sourceKey)
+        if not (plan and plan.ok and pack) or not NoCombat() then return end
+        -- StaticPopup formats its text, so keep any % in names literal.
+        local text = ("Import %s's profile \"%s\" as a new EllesmereUI profile named \"%s\" and switch to it?\n\n\"%s\" and your other profiles stay as they are. Your UI reloads."):format(
+            plan.from, plan.sourceName, plan.dest, plan.active or "?"):gsub("%%", "%%%%")
+        Confirm("TWICHUI_EUI_IMPORT", text, function()
+            local ok, report = ES.Apply(pack, plan.from, plan.dest)
+            if not ok then
+                ip.failed = report
+                R.Print("%s", report)
+                W:Refresh()
+                return
+            end
+            ReloadUI()
+        end)
+    end, "Adds the profile to EllesmereUI under the name shown, then reloads. Nothing you have is replaced.")
+    ip.go:SetPoint("BOTTOMLEFT", 16, 12)
+    ip.close = Btn(ip, "Close", 80, function() ip:Hide() end)
+    ip.close:SetPoint("BOTTOMRIGHT", -16, 12)
+    ip:SetScript("OnHide", function() ip.failed = false; ES.ReleaseCache() end)
+end
+
+local function RefreshEuiImport()
+    local pack = ST.SourcePack(ip.sourceKey)
+    local plan = pack and ES.Plan(pack, ip.from) or { why = "That setup is no longer here.", notes = {} }
+    ip.plan = plan
+    ip.body:SetText(EuiBody(plan))
+    ip.result:SetText(ip.failed and (RED .. ip.failed .. "|r") or "")
+    ip.go:SetEnabled(plan.ok and true or false)
+end
+
+function W:ShowEuiImport(src)
+    if not ip then BuildEuiImport() end
+    ip.sourceKey, ip.from, ip.failed = src.key, src.from, false
+    ip:Show()
+    W:Refresh()
+end
+
+---------------------------------------------------------------------------
 -- Page: Received setups
 ---------------------------------------------------------------------------
 local get = {}
@@ -1014,6 +1179,13 @@ local function BuildGet(p)
         "Restores what you had on this character before you last applied a setup or restored a backup.")
     get.undo:SetPoint("LEFT", get.addonsBtn, "RIGHT", 8, 0)
     get.sumW = { get.includes, get.lead, get.review, get.addonsBtn, get.undo }
+    local function OpenEuiImport()
+        local src = CurrentSource()
+        if src then W:ShowEuiImport(src) end
+    end
+    get.eui = Btn(p, "EllesmereUI profile...", 190, OpenEuiImport,
+        "See the EllesmereUI profile in this setup. It is only ever added as a new profile; nothing you have is replaced.")
+    get.eui:SetPoint("TOPLEFT", 16, -248)
 
     -- Review state
     get.list = ListBox(p, 200)
@@ -1052,6 +1224,9 @@ local function BuildGet(p)
     get.undoR:SetPoint("LEFT", get.alt, "RIGHT", 8, 0)
     get.revW = { get.list, get.missing, get.preview, get.apply, get.addonsBtnR, get.em, get.alt, get.undoR, get.back }
 
+    get.euiR = Btn(p, "EllesmereUI profile...", 190, OpenEuiImport,
+        "See the EllesmereUI profile in this setup. It is only ever added as a new profile; nothing you have is replaced.")
+    get.euiR:SetPoint("TOPLEFT", 16, -490)
     get.report = Text(p, "GameFontHighlightSmall")
     get.report:SetPoint("TOPLEFT", 16, -458)
     get.report:SetWidth(WIDTH - 32)
@@ -1113,6 +1288,7 @@ local function RefreshGet()
 
     local lines = 0
     local missing = {}
+    local offersEui = false
     if src then
         local pack = src.pack
         get.title:SetText(("%s's setup"):format(src.from))
@@ -1123,13 +1299,16 @@ local function RefreshGet()
                 if e.state ~= "installed" then recMissing = recMissing + 1 end
             end
         end
+        local euiSrc, euiWhy = ES.Source(pack)
+        offersEui = euiSrc ~= nil or euiWhy ~= nil
         local bits = {
             ("%d addon %s"):format(ST.CountAddons(pack), ST.CountAddons(pack) == 1 and "setting" or "settings"),
+            euiSrc and "EllesmereUI profile" or nil,
             pack.editMode and "Edit Mode layout" or nil,
             recCount > 0 and ("%d recommended addons"):format(recCount) or nil,
         }
         local sub = {}
-        for i = 1, 3 do if bits[i] then sub[#sub + 1] = bits[i] end end
+        for i = 1, 4 do if bits[i] then sub[#sub + 1] = bits[i] end end
         get.sub:SetText(("Updated %s  ·  version %d  ·  %s%s"):format(When(pack.created), pack.version or 1,
             table.concat(sub, "  ·  "), #sources > 1 and ("  ·  %d of %d"):format(sourceIndex, #sources) or ""))
 
@@ -1176,10 +1355,13 @@ local function RefreshGet()
         get.em:SetShown(reviewing and pack.editMode ~= nil)
     end
     FinishList(get.list, lines, "")
+    get.eui:SetShown(offersEui and not reviewing)
+    get.euiR:SetShown(offersEui and reviewing)
     get.missing:SetText(#missing > 0 and (RED .. "Install first to get these settings: " .. table.concat(missing, ", ") .. "|r") or "")
 
     local preview = src and Preview(src)
-    get.preview:SetText(src and (preview or (GREY .. "Nothing ticked. Tick the addons whose settings you want to use.|r")) or "")
+    get.preview:SetText(src and (preview or (GREY .. (offersEui and "No addon settings ticked. The EllesmereUI profile is imported with its own button below.|r"
+        or "Nothing ticked. Tick the addons whose settings you want to use.|r"))) or "")
     get.apply:SetEnabled(preview ~= nil)
     get.alt:SetEnabled(src ~= nil)
 
@@ -1491,7 +1673,14 @@ local function RestoreRow(i)
     r.go = Btn(r, "Restore", 80, function(b)
         local point = b.point
         if InCombatLockdown() then R.Print("not in combat, please.") return end
-        Confirm("TWICHUI_RP_RESTORE", ("Go back to \"%s\"?\n\nYour current settings for these addons are saved first, so you can Undo from Backups or Received setups. Your UI reloads."):format(point.name:gsub("%%", "%%%%")),
+        local eui = ""
+        for name in pairs(point.tables or {}) do
+            if ES.IsTable(name) then
+                eui = "\n\nThis backup holds EllesmereUI's whole saved data: every profile and setting. Restoring it replaces all of yours."
+                break
+            end
+        end
+        Confirm("TWICHUI_RP_RESTORE", ("Go back to \"%s\"?%s\n\nYour current settings for these addons are saved first, so you can Undo from Backups or Received setups. Your UI reloads."):format(point.name:gsub("%%", "%%%%"), eui),
             function() R.Restore:Restore(point.id) end)
     end)
     r.go:SetPoint("RIGHT", r.del, "LEFT", -6, 0)
@@ -1665,6 +1854,8 @@ function W:Refresh()
     if cp and cp:IsShown() then RefreshChoose() end
     if rc and rc:IsShown() then RefreshRecommend() end
     if gp and gp:IsShown() then RefreshParty() end
+    if ep and ep:IsShown() then RefreshEuiShare() end
+    if ip and ip:IsShown() then RefreshEuiImport() end
 end
 
 function W:Show(which)

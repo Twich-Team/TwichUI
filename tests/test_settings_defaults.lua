@@ -68,7 +68,8 @@ c.CreateFrame = function() return Obj() end
 c.StaticPopupDialogs = {}; c.StaticPopup_Show = function() end
 for _, f in ipairs({ "gear/Weights.lua", "gear/Evaluate.lua", "gear/Prefs.lua", "gear/Data.lua",
   "gear/Hints.lua", "gear/Tooltip.lua", "gear/Bags.lua", "gear/Window.lua", "modules/Arrival.lua", "modules/Media.lua", "modules/FriendLogin.lua", "modules/Borders.lua", "modules/FoodDrink.lua",
-  "modules/TrainingData.lua", "modules/Borders.lua", "modules/MenuStyle.lua", "modules/SpellMenu.lua", "modules/MageTravel.lua", "modules/MageConjure.lua", "Settings.lua" }) do
+  "modules/TrainingData.lua", "modules/Borders.lua", "modules/MenuStyle.lua", "modules/SpellMenu.lua", "modules/MageTravel.lua", "modules/MageConjure.lua",
+  "qol/QoL.lua", "qol/Summons.lua", "qol/Resurrect.lua", "qol/ReleasePvP.lua", "qol/Duels.lua", "Settings.lua" }) do
   local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
 end
 c.LOADED["!!!TwichUI"] = true; c.FireEvent("ADDON_LOADED", "!!!TwichUI")
@@ -80,7 +81,7 @@ for key, default in pairs(defaults) do
   n = n + 1
   assert(default == R.DEFAULT_MODULES[key], key .. " default matches a new install")
 end
-assert(n == 35, "every module has a toggle: " .. n)
+assert(n == 41, "every module has a toggle: " .. n)
 assert(defaults.arrival == true and defaults.arrivalSubzones == true and defaults.arrivalReducedMotion == false,
   "arrival card and subzone cards on; reduced motion opt-in")
 assert(defaults.arrivalDungeons == true, "dungeon and raid arrival cards on by default")
@@ -179,7 +180,7 @@ assert(attune.data.tooltip:find("after reload"), "toggle change shows it needs a
 
 -- The overview links to one page per feature, in this order; every setting
 -- is on exactly one page (registration above refuses a repeat).
-assert(table.concat(pageOrder, ",") == "Gear comparison,Notifications,Food and drink,Mage,Journey Chronicle,Auction House,Addon skins,Configuration sharing", table.concat(pageOrder, ","))
+assert(table.concat(pageOrder, ",") == "Gear comparison,Notifications,Quality of life,Food and drink,Mage,Journey Chronicle,Auction House,Addon skins,Configuration sharing", table.concat(pageOrder, ","))
 for variable, page in pairs({
   TWICHUI_media = "TwichUI", TWICHUI_quietLogin = "TwichUI", TWICHUI_showAdvanced = "TwichUI", 
   TWICHUI_gearHints = "Gear comparison", TWICHUI_gearTree = "Gear comparison", TWICHUI_gearBagStyle = "Gear comparison",
@@ -187,6 +188,10 @@ for variable, page in pairs({
   TWICHUI_trainingNotice = "Notifications", TWICHUI_friendLogin = "Notifications", TWICHUI_friendLoginSound = "Notifications", TWICHUI_friendLoginChannel = "Notifications",
   TWICHUI_chronicle = "Journey Chronicle", TWICHUI_chronicleClock = "Journey Chronicle", TWICHUI_chronicleSound = "Journey Chronicle", TWICHUI_welcomeBack = "Journey Chronicle",
   TWICHUI_auctionPosting = "Auction House",
+  TWICHUI_qolSummons = "Quality of life", TWICHUI_qolSummonsFrom = "Quality of life", TWICHUI_qolSummonsWait = "Quality of life",
+  TWICHUI_qolResurrect = "Quality of life", TWICHUI_qolResurrectCombat = "Quality of life", TWICHUI_qolReleasePvP = "Quality of life",
+  TWICHUI_qolReleaseWait = "Quality of life", TWICHUI_qolDuels = "Quality of life", TWICHUI_qolDuelsFrom = "Quality of life",
+  TWICHUI_qolDuelsToDeath = "Quality of life",
   TWICHUI_foodDrink = "Food and drink", TWICHUI_foodDrinkFood = "Food and drink", TWICHUI_foodDrinkDrink = "Food and drink",
   TWICHUI_mageTravel = "Mage", TWICHUI_mageTravelText = "Mage", TWICHUI_mageConjure = "Mage", TWICHUI_mageConjureText = "Mage",
   TWICHUI_attuneSkin = "Addon skins", TWICHUI_whatsTrainingSkin = "Addon skins",
@@ -331,5 +336,45 @@ assert(zone.data.name:find("Off"), "all three off: " .. zone.data.name)
 zone.click(); assert(c.opened == R.settingsCategories.notifications:GetID(), "row opens the Notifications page")
 assert(not R.settingsCategories.arrival, "no separate zone arrival page")
 assert(rows["Addon skins"].data.name:find("of") or rows["Addon skins"].data.name:find("None installed"), rows["Addon skins"].data.name)
+
+
+-- Quality of life: everything is opt-in, there is no "requested invites" row (the game's interface
+-- for it isn't in Forever), choices read and write the saved options, and the waits are advanced.
+for _, key in ipairs({ "qolSummons", "qolResurrect", "qolResurrectCombat", "qolReleasePvP", "qolDuels", "qolDuelsToDeath" }) do
+  assert(defaults[key] == false, key .. " is off by default")
+end
+for variable in pairs(variables) do assert(not variable:lower():find("invite"), variable .. ": no invite setting") end
+local Q = R.QoL
+assert(proxies.TWICHUI_qolSummonsFrom.get() == "known" and proxies.TWICHUI_qolDuelsFrom.get() == "known")
+proxies.TWICHUI_qolSummonsFrom.set("group"); assert(Q.Get("summonsFrom") == "group" and proxies.TWICHUI_qolSummonsFrom.get() == "group")
+proxies.TWICHUI_qolSummonsFrom.set("bogus"); assert(Q.Get("summonsFrom") == "group", "an unlisted choice is refused")
+proxies.TWICHUI_qolDuelsFrom.set("nobody"); assert(Q.Get("duelsFrom") == "nobody")
+proxies.TWICHUI_qolSummonsWait.set(5); assert(Q.Get("summonsWait") == 5)
+proxies.TWICHUI_qolReleaseWait.set(0); assert(Q.Get("releaseWait") == 0)
+assert(#dropdowns.TWICHUI_qolSummonsFrom() == 3 and #dropdowns.TWICHUI_qolDuelsFrom() == 4)
+assert(dropdowns.TWICHUI_qolSummonsWait()[1].label == "Don't wait" and dropdowns.TWICHUI_qolSummonsWait()[2].label == "1 second")
+assert(proxies.TWICHUI_qolSummonsFrom.default == "known" and proxies.TWICHUI_qolSummonsWait.default == 3 and proxies.TWICHUI_qolReleaseWait.default == 2)
+c.TwichUIDB.ui.showAdvanced = false
+for _, name in ipairs({ "Wait before accepting a summon", "Wait before releasing" }) do assert(advanced[name], name .. " is advanced") end
+for _, name in ipairs({ "Accept summons", "Accept resurrection", "Release in battlegrounds", "Decline duel requests" }) do
+  assert(visible[name], name .. " is visible by default")
+end
+-- Turning a switch on or off starts and stops its listening, with no reload.
+local summonToggle; for _, i in ipairs(initializers) do if i.setting and i.setting.name == "Accept summons" then summonToggle = i end end
+c.TwichUIDB.modules.qolSummons = true; summonToggle.setting.changed(); assert(R.frame.events.CONFIRM_SUMMON, "listening once on")
+c.TwichUIDB.modules.qolSummons = false; summonToggle.setting.changed(); assert(not R.frame.events.CONFIRM_SUMMON, "and not once off")
+-- The overview row follows the switches.
+local qolRow = assert(rows["Quality of life"], "overview has a Quality of life row")
+assert(qolRow.data.name:find("Off"), qolRow.data.name)
+c.TwichUIDB.modules.qolDuels, c.TwichUIDB.modules.qolReleasePvP = true, true; summonToggle.setting.changed()
+assert(qolRow.data.name:find("2 of 4 on"), qolRow.data.name)
+qolRow.click(); assert(c.opened == R.settingsCategories.qol:GetID(), "row opens the Quality of life page")
+-- Leatrix Plus overlap shows in the tooltip, and leaves its settings alone.
+c.C_AddOns.IsAddOnLoaded = function(n) return n == "Leatrix_Plus" end
+c.LeaPlusDB = { AutoAcceptSummon = "On" }
+summonToggle.setting.changed()
+assert(summonToggle.data.tooltip:find("Leatrix Plus also has this turned on"), "overlap note")
+c.LeaPlusDB.AutoAcceptSummon = "Off"; summonToggle.setting.changed()
+assert(not summonToggle.data.tooltip:find("Leatrix"), "no note when Leatrix has it off")
 
 print("SETTINGS DEFAULTS TESTS PASSED")

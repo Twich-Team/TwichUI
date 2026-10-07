@@ -416,7 +416,7 @@ end
 -- message path, so you can try the whole flow without a friend.
 function SH:SendTo(name, selfTest)
     local mine = ST.Mine()
-    if not mine or not next(mine.tables or {}) then return false, "Save your configuration first." end
+    if not mine or not (next(mine.tables or {}) or mine.eui) then return false, "Save your configuration first." end
     local target = SH.FullName(name)
     if not target then return false, "Type your friend's name, or target them." end
     if target:find("#", 1, true) then
@@ -511,6 +511,7 @@ local function SendData(o, want, wantEM)
     if wantEM and mine.editMode then payload.em, payload.emName = mine.editMode, mine.editModeName end
     payload.emHash = mine.editModeHash
     payload.addons = mine.addons
+    payload.eui = mine.eui   -- one EllesmereUI profile, as EllesmereUI exported it
 
     o.stage = "packing"
     o.last = GetTime()
@@ -652,6 +653,7 @@ local function StoreReceived(sender, msg)
             pack.tables[tname] = old.tables[tname]
         end
     end
+    pack.eui = R.Ellesmere.CleanEntry(msg.eui)   -- nil unless it is a well-formed EllesmereUI profile
     if msg.em then
         pack.editMode, pack.editModeName, pack.editModeHash = msg.em, msg.emName, msg.emHash
     elseif old and old.editModeHash and old.editModeHash == msg.emHash then

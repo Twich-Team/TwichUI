@@ -199,6 +199,10 @@ function ST:DetectedByAddon()
     local list = {}
     for _, g in pairs(groups) do
         table.sort(g.tables, function(a, b) return a.name:lower() < b.name:lower() end)
+        -- EllesmereUI's saved tables are kept in backups but never shared as tables:
+        -- its profiles are shared one at a time (see setup\Ellesmere.lua).
+        g.backupOnly = true
+        for _, t in ipairs(g.tables) do if not R.Ellesmere.IsTable(t.name) then g.backupOnly = false end end
         list[#list + 1] = g
     end
     table.sort(list, function(a, b) return a.title:lower() < b.title:lower() end)
@@ -250,11 +254,13 @@ function ST:SaveMine(includeEditMode)
     local tables, count = {}, 0
     for name, sel in pairs(db.selection) do
         local cap = ST.capture[name]
-        if sel and cap then
+        if sel and cap and not R.Ellesmere.IsTable(name) then
             tables[name] = { owner = cap.owner, data = cap.data, hash = ST.Hash(cap.data) }
             count = count + 1
         end
     end
+    local eui, euiWhy = R.Ellesmere.Build()
+    ST.euiError = euiWhy
     local old = ST.Mine()
     local mine = {
         format = 2,
@@ -263,6 +269,7 @@ function ST:SaveMine(includeEditMode)
         source = CharKey(),
         sourceName = (GetUnitName and GetUnitName("player", true)) or UnitName("player"),
         tables = tables,
+        eui = eui,
         addons = ST:BuildAddonList(),
     }
     if includeEditMode then
@@ -270,7 +277,7 @@ function ST:SaveMine(includeEditMode)
         mine.editModeHash = mine.editMode and LibDeflate:Adler32(mine.editMode) or nil
     end
     TwichUIShareDB.pack = mine
-    return count
+    return count + (eui and 1 or 0)
 end
 
 ---------------------------------------------------------------------------
@@ -443,16 +450,23 @@ function ST.SortedRecommended(pack)
     return list
 end
 
+-- Backups (restore points, which carry an id) keep EllesmereUI's tables and put
+-- them back as a whole. A setup from someone else never applies them: it offers
+-- an EllesmereUI profile instead (see setup\Ellesmere.lua).
+local function SharedTable(pack, name)
+    return not (pack and pack.id) and R.Ellesmere.IsTable(name)
+end
+
 function ST.CountAddons(pack)
     local owners, n = {}, 0
-    for _, e in pairs(pack and pack.tables or {}) do
-        if e.owner and not owners[e.owner] then owners[e.owner] = true; n = n + 1 end
+    for name, e in pairs(pack and pack.tables or {}) do
+        if e.owner and not owners[e.owner] and not SharedTable(pack, name) then owners[e.owner] = true; n = n + 1 end
     end
     return n
 end
 
 function ST.PackBytes(pack)
-    local total = 0
+    local total = pack and pack.eui and type(pack.eui.str) == "string" and #pack.eui.str or 0
     for _, e in pairs(pack and pack.tables or {}) do
         local _, b = Inspect(e.data or {})
         total = total + b
@@ -536,6 +550,8 @@ local function ApplyOne(name)
         local entry = pack and pack.tables[name]
         if not entry then pending.tables[name] = nil return end
         if not ST.SafeName(name) then Skip(name) return end
+        -- Never replace EllesmereUI's whole saved table with someone else's.
+        if R.Ellesmere.Blocked(pending.source, name) then Skip(name) return end
         if mode == "apply" then
             Backup(name, pending.stamp)
             Replace(name, entry.data)
@@ -590,12 +606,14 @@ end
 function ST.PackByAddon(pack)
     local groups = {}
     for name, e in pairs(pack and pack.tables or {}) do
-        local g = groups[e.owner or "?"]
-        if not g then
-            g = { owner = e.owner, title = ST.AddonTitle(e.owner), state = ST.AddonState(e.owner), tables = {} }
-            groups[e.owner or "?"] = g
+        if not SharedTable(pack, name) then
+            local g = groups[e.owner or "?"]
+            if not g then
+                g = { owner = e.owner, title = ST.AddonTitle(e.owner), state = ST.AddonState(e.owner), tables = {} }
+                groups[e.owner or "?"] = g
+            end
+            g.tables[#g.tables + 1] = name
         end
-        g.tables[#g.tables + 1] = name
     end
     local list = {}
     for _, g in pairs(groups) do table.sort(g.tables); list[#list + 1] = g end

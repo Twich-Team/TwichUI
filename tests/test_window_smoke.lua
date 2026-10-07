@@ -67,4 +67,30 @@ for _ = 1, 50 do FlushTimers() end
 assert(tp.result and not tp.result.blocked)
 tp.importBtn.scripts.OnClick(tp.importBtn)
 assert(#c.TwichUI.Restore.List() == 1 and not c.reloaded, "imported, not applied")
+-- EllesmereUI profile sharing: the profile picker and the import review open and work without and with EllesmereUI.
+local ES = c.TwichUI.Ellesmere
+W:Show("share"); W:ShowEuiShare()
+assert(c.TwichUIEuiShare.list.empty:GetText():find("isn't installed"), "picker explains a missing EllesmereUI")
+local euiDB = { activeProfile = "Mine", profileOrder = { "Mine", "Raid" }, specProfiles = {}, profiles = { Mine = { addons = {} }, Raid = { addons = {} } } }
+local imports = 0
+c.EllesmereUI = { IS_FOREVER = true,
+  GetProfileList = function() return euiDB.profileOrder, euiDB.profiles end, GetActiveProfileName = function() return euiDB.activeProfile end,
+  ExportProfile = function() return "!EUI_smoke0000" end,
+  DecodeImportString = function() return { version = 3, type = "full", data = { addons = { EllesmereUIActionBars = { a = 1 } } } } end,
+  ImportProfile = function(_, name) imports = imports + 1; euiDB.profiles[name] = { addons = {} }; table.insert(euiDB.profileOrder, 1, name); euiDB.activeProfile = name; return true end,
+}
+W:Show("share"); W:ShowEuiShare()
+assert(#c.TwichUIEuiShare.list.rows >= 3, "picker lists the profiles")
+ES.Choose("Raid"); W:Refresh()
+c.TwichUIDB.setup.received["Pal-Forever"].eui = { id = "7", name = "Raid", str = "!EUI_smoke0000" }
+W:Show("received")
+local src = c.TwichUI.Setups.Sources()[1]
+W:ShowEuiImport(src)
+local ip = c.TwichUIEuiImport
+assert(ip.body:GetText():find("Raid %(Pal%)"), "review names the destination profile")
+assert(ip.body:GetText():find("Mine"), "review names the profile that stays")
+ip.go.scripts.OnClick(ip.go)
+c.StaticPopupDialogs.TWICHUI_EUI_IMPORT.OnAccept()
+assert(imports == 1 and c.reloaded, "confirmed import runs once and reloads")
+assert(euiDB.profiles.Mine and euiDB.profiles.Raid and euiDB.profiles["Raid (Pal)"], "added next to the existing profiles")
 print("UI SMOKE OK")

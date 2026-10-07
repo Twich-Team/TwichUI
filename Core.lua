@@ -50,6 +50,12 @@ local DEFAULT_MODULES = {
     mageTravel = true,       -- Mage Travel launcher on a data bar: teleports and portals, cast by your click (Mages only)
     mageConjure = true,      -- Mage Conjuring launcher on a data bar: food and water ranks, cast by your click (Mages only)
     auctionPosting = true,   -- "Sell from Bags" tab in the Auction House (searches only when you pick an item)
+    qolSummons = false,      -- Quality of Life (all opt-in, see qol/QoL.lua): accept summons
+    qolResurrect = false,    -- ... accept a resurrection offered to you
+    qolResurrectCombat = false, -- ... including a combat resurrection (needs the one above)
+    qolReleasePvP = false,   -- ... release your spirit after dying in a battleground
+    qolDuels = false,        -- ... decline duel requests (except from the people you choose)
+    qolDuelsToDeath = false, -- ... and duels to the death (needs the one above)
 }
 R.DEFAULT_MODULES = DEFAULT_MODULES   -- Settings.lua uses these for the panel's Defaults button
 
