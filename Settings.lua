@@ -670,9 +670,9 @@ local function Build()
             mage, function() return R:Enabled("mageTravel") end)
 
         local MC = R.MageConjure
-        Header("Mage Conjuring", "A launcher for your data bar that lists your Conjure Food and Conjure Water ranks. It casts only the one you click.")
+        Header("Mage Conjuring", "A launcher for your data bar with your best Conjure Food and Conjure Water. It casts only the one you click.")
         local conjure = Toggle("mageConjure", "Mage Conjuring launcher on my data bar",
-            "Adds \"TwichUI Mage Conjuring\" to the list of your data bar addon (any that shows LibDataBroker launchers, such as EllesmereUI's Broker Plugin block). Click it for a small menu of the Conjure Food and Conjure Water ranks, highest first, so you can also conjure a lower rank for a lower-level friend: click a learned one to cast it; hover one you haven't learned for the level it is trained at. Shift-left-click the launcher to conjure water and shift-right-click to conjure food, each at your highest rank. It can't be opened in combat, and closes when combat starts; the shift-clicks don't work in combat either.\n\nWithout a data bar addon there is nowhere for it to show. Turning it off takes it off your data bar after a reload.",
+            "Adds \"TwichUI Mage Conjuring\" to the list of your data bar addon (any that shows LibDataBroker launchers, such as EllesmereUI's Broker Plugin block). Click it for a small menu with one entry each for Conjure Food and Conjure Water, the highest rank you have learned of each: click one to cast it. With none learned, the first rank is shown muted; hover it for the level it is trained at. Shift-left-click the launcher to conjure water and shift-right-click to conjure food, each at your highest rank. It can't be opened in combat, and closes when combat starts; the shift-clicks don't work in combat either.\n\nWithout a data bar addon there is nowhere for it to show. Turning it off takes it off your data bar after a reload.",
             false, function()
                 MC.Refresh()
                 if not R:Enabled("mageConjure") and MC.Available() then AskReload() end
@@ -681,6 +681,62 @@ local function Build()
             "The word shown beside the launcher's icon on your data bar. None leaves just the icon. If your data bar shows plugin names too, it may read \"Mage Conjuring: Conjure\"; that is the data bar's own label option.",
             STRING, MC.DEFAULT_TEXT, MC.TextChoice, MC.SetTextChoice, MC.TEXTS),
             conjure, function() return R:Enabled("mageConjure") end)
+
+        local MS = R.MenuStyle
+        Header("Broker menu appearance", "How the menus of your data bar launchers look. One background and border for all of them. Only the look changes; what the menus do doesn't.")
+        local resettable = {}   -- { setting, default }, for Reset
+        local function Remember(variable, varType, label, key)
+            local setting = Proxy(variable, varType, label, MS.DEFAULTS[key],
+                function() return MS.Get(key) end, function(value) MS.Set(key, value) end)
+            if setting then resettable[#resettable + 1] = { setting = setting, default = MS.DEFAULTS[key] } end
+            return setting
+        end
+        local function Textures(variable, key, label, tooltip, choices)
+            local setting = Remember(variable, STRING, label, key)
+            if setting and Settings.CreateDropdown and Settings.CreateControlTextContainer then
+                Settings.CreateDropdown(category, setting, function()
+                    local container = Settings.CreateControlTextContainer()
+                    for _, choice in ipairs(choices()) do container:Add(choice[1], choice[2]) end
+                    return container:GetData()
+                end, tooltip)
+            end
+        end
+        local function Swatch(variable, key, label, tooltip)
+            local setting = Remember(variable, STRING, label, key)
+            if setting and Settings.CreateColorSwatch then Settings.CreateColorSwatch(category, setting, tooltip) end
+        end
+        local function Slider(variable, key, label, tooltip)
+            local limit = MS.LIMITS[key]
+            local setting = Remember(variable, NUMBER, label, key)
+            if not (setting and Settings.CreateSlider and Settings.CreateSliderOptions) then return end
+            local options = Settings.CreateSliderOptions(limit[1], limit[2], 1)
+            if MinimalSliderWithSteppersMixin and options.SetLabelFormatter then
+                options:SetLabelFormatter(MinimalSliderWithSteppersMixin.Label.Right)
+            end
+            Settings.CreateSlider(category, setting, options, tooltip)
+        end
+        Textures("brokerMenuBgTexture", "bgTexture", "Background texture",
+            "None leaves the menu see-through apart from its border. Solid color is a flat fill. The rest are the game's own backgrounds and any LibSharedMedia background, so an addon that adds backgrounds to it adds them here. A texture is tinted by the color below; choose white to see it as it is.",
+            MS.BackgroundChoices)
+        Swatch("brokerMenuBgColor", "bgColor", "Background color", "The color of the background, or the tint of a textured one.")
+        Slider("brokerMenuBgOpacity", "bgOpacity", "Background opacity",
+            "How solid the background is, in percent. Only the background fades; the menu's text, icons and border stay as they are.")
+        Textures("brokerMenuBorderTexture", "borderTexture", "Border texture",
+            "None draws no border. Solid line is a plain line. The rest are the game's own borders and any LibSharedMedia border. Picking one sets a thickness that suits it unless you have set your own; change it below.",
+            MS.BorderChoices)
+        Slider("brokerMenuBorderSize", "borderSize", "Border thickness",
+            "The border's width in screen pixels, so it looks the same at any UI scale. 0 for none. A textured border needs about 8 or more to read well. It never covers the menu's text.")
+        Swatch("brokerMenuBorderColor", "borderColor", "Border color", "The color of the border, or the tint of a textured one.")
+        Slider("brokerMenuBorderOpacity", "borderOpacity", "Border opacity",
+            "How solid the border is, in percent. Only the border fades.")
+        Button("Preview", "Show or hide", function() R.SpellMenu.TogglePreview() end,
+            "A sample menu beside this window that shows these settings as you change them. It does nothing when clicked. Esc closes it.")
+        Button("Menu appearance", "Reset", function()
+            for _, entry in ipairs(resettable) do
+                if entry.setting.SetValue then pcall(entry.setting.SetValue, entry.setting, entry.default) end
+            end
+            MS.Reset()   -- and forget the saved values altogether, so the defaults are used as they come
+        end, "Puts the background and border of the menus back to their defaults. Nothing else is changed.")
     end
 
     -----------------------------------------------------------------------

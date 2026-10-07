@@ -12,8 +12,8 @@ do
   local levels = env.TwichUI.TrainingData.MAGE()
   local data = {}
   for level, list in pairs(levels) do for _, e in ipairs(list) do data[e[1]] = { level = level, req = e.req, faction = e.faction } end end
-  local menv = setmetatable({ TwichUI = { PATH = "", On = function() end, TrainingData = env.TwichUI.TrainingData } }, { __index = _G })
-  for _, f in ipairs({ "modules/SpellMenu.lua", "modules/MageConjure.lua" }) do
+  local menv = setmetatable({ TwichUI = { PATH = "", On = function() end, OnInit = function() end, TrainingData = env.TwichUI.TrainingData } }, { __index = _G })
+  for _, f in ipairs({ "modules/Borders.lua", "modules/MenuStyle.lua", "modules/SpellMenu.lua", "modules/MageConjure.lua" }) do
     local mchunk = assert(loadfile(ROOT .. f)); setfenv(mchunk, menv); mchunk("!!!TwichUI", {})
   end
   local M = menv.TwichUI.MageConjure
@@ -106,7 +106,7 @@ c.C_SpellBook = { IsSpellKnown = function(id) return c.KNOWN[id] == true end }
 local made = {}
 local LDB = c.LibStub:NewLibrary("LibDataBroker-1.1", 1)
 function LDB:NewDataObject(name, o) made[name] = o; return o end
-for _, f in ipairs({ "chronicle/Style.lua", "modules/TrainingData.lua", "modules/SpellMenu.lua", "modules/MageTravel.lua", "modules/MageConjure.lua" }) do
+for _, f in ipairs({ "chronicle/Style.lua", "modules/TrainingData.lua", "modules/Borders.lua", "modules/MenuStyle.lua", "modules/SpellMenu.lua", "modules/MageTravel.lua", "modules/MageConjure.lua" }) do
   local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
 end
 c.TwichUIDB = { modules = {} }
@@ -198,36 +198,104 @@ c.SHIFT = false
 c.COMBAT = false
 obj.OnLeave(bar)
 
--- The menu: highest rank first, castable only where learned.
+-- The menu: one row per category, the highest rank learned, castable by its exact spell ID.
 obj.OnClick({}, "LeftButton")
 assert(M.IsOpen() and not T.IsOpen(), "its own menu")
 local menu
 for _, f in ipairs(frames) do if f.name == "TwichUIMageConjureMenu" then menu = f end end
 assert(menu, "its own named menu frame")
-local rows = {}
-for _, f in ipairs(frames) do
-  if f.template == "SecureActionButtonTemplate" and f.shown and f.parent == menu then rows[#rows + 1] = f end
+local function Rows()
+  local rows = {}
+  for _, f in ipairs(frames) do
+    if f.template == "SecureActionButtonTemplate" and f.shown and f.parent == menu then rows[#rows + 1] = f end
+  end
+  table.sort(rows, function(a, b) return a.entry.kind.key == "food" and b.entry.kind.key == "water" end)
+  return rows
 end
-assert(#rows == 12, "six food and six water ranks: " .. #rows)
-assert(rows[1].entry.id == 10145 and rows[6].entry.id == 587 and rows[7].entry.id == 10139 and rows[12].entry.id == 5504,
-  "food then water, highest rank first")
-assert(rows[1].name.text == "Rank 6" and rows[1].note.text == "Level 52", "the rank, and the level when unlearned")
+local rows = Rows()
+assert(#rows == 2, "exactly one food and one water row: " .. #rows)
+assert(rows[1].entry.id == 990 and rows[2].entry.id == 5506, "food rank 3, water rank 3")
+assert(rows[1].name.text == "Rank 3" and rows[1].note.text == "", "the rank, and no note when learned")
+local food, water = rows[1], rows[2]
+assert(food.attrs.type == "spell" and food.attrs.spell == 990, "casts that exact food rank by ID")
+assert(water.attrs.type == "spell" and water.attrs.spell == 5506, "casts that exact water rank by ID")
+food.scripts.OnEnter(food)
+local t = table.concat(tip.lines, "\n")
+assert(tip.spell == 990 and t:find("Click to cast", 1, true) and not t:find("Trained at", 1, true), t)
+
+-- Food and water have their own highest ranks; a gap in the ranks doesn't matter, nor does ID order.
+c.KNOWN = { [587] = true, [990] = true, [10144] = true, [5504] = true, [5505] = true, [6127] = true, [10138] = true }
+M.Close(); obj.OnClick({}, "LeftButton")
+rows = Rows()
+assert(#rows == 2 and rows[1].entry.id == 10144 and rows[2].entry.id == 10138, "food rank 5, water rank 5 despite a gap")
+assert(rows[1].attrs.spell == 10144 and rows[2].attrs.spell == 10138)
+c.KNOWN = { [10145] = true, [5504] = true }
+M.Close(); obj.OnClick({}, "LeftButton")
+rows = Rows()
+assert(rows[1].entry.id == 10145 and rows[2].entry.id == 5504, "different ranks for each")
+assert(rows[1].name.text == "Rank 6" and rows[2].name.text == "Rank 1")
+
+-- Learning a rank while the menu is open: the spellbook event redraws it, still one row each.
+c.KNOWN = { [587] = true, [5504] = true }
+M.Close(); obj.OnClick({}, "LeftButton")
+c.KNOWN[597] = true; c.KNOWN[5505] = true
+c.FireEvent("SPELLS_CHANGED"); c.FireEvent("LEARNED_SPELL_IN_SKILL_LINE", 5505, 1, false); FlushTimers()
+rows = Rows()
+assert(#rows == 2 and rows[1].attrs.spell == 597 and rows[2].attrs.spell == 5505, "newly learned ranks replace the old")
+assert(rows[1].entry.id == 597 and rows[2].entry.id == 5505)
+
+-- Missing spell data: no lower rank stands in; the row arrives with its name.
+NAMES[597] = nil
+c.FireEvent("SPELLS_CHANGED"); FlushTimers()
+rows = Rows()
+assert(#rows == 1 and rows[1].entry.id == 5505, "the food row waits for its name; the water row is unaffected")
+NAMES[597] = "Conjure Food"
+c.FireEvent("SPELL_DATA_LOAD_RESULT", 597, true); FlushTimers()
+rows = Rows()
+assert(#rows == 2 and rows[1].attrs.spell == 597, "the row appears when the name loads")
+
+-- Combat: nothing is rebuilt; the open menu has closed, and the secure rows keep what they had.
+c.FireEvent("PLAYER_REGEN_DISABLED")
+assert(not M.IsOpen())
+c.COMBAT = true
+c.KNOWN[990] = true
+c.FireEvent("SPELLS_CHANGED"); FlushTimers()
+assert(rows[1].attrs.spell == 597, "no attribute changes in combat")
+c.COMBAT = false
+obj.OnClick({}, "LeftButton")
+rows = Rows()
+assert(rows[1].attrs.spell == 990, "the new rank is used when the menu next opens")
+M.Close()
+
+-- A category with no learned rank: one muted row, rank 1, with what to learn.
+c.KNOWN = { [587] = true, [597] = true, [990] = true }
+obj.OnClick({}, "LeftButton")
+rows = Rows()
+assert(#rows == 2 and rows[1].entry.id == 990 and rows[2].entry.id == 5504, "water shows rank 1 only")
+water = rows[2]
+assert(water.attrs.type == nil and water.attrs.spell == nil and water.icon.desaturated, "no action for an unlearned one")
+assert(water.note.text == "Level 4" and water.name.text == "Rank 1")
+water.scripts.OnEnter(water)
+t = table.concat(tip.lines, "\n")
+assert(tip.spell == 5504 and t:find("Not yet learned", 1, true) and t:find("Trained at level 4", 1, true)
+  and t:find("Taught by Mage trainers", 1, true) and not t:find("Requires", 1, true), t)
+-- and none of either
+c.KNOWN = {}
+M.Close(); obj.OnClick({}, "LeftButton")
+rows = Rows()
+assert(#rows == 2 and rows[1].entry.id == 587 and rows[2].entry.id == 5504 and not rows[1].entry.known)
+-- the launcher's tooltip still counts every rank
+c.KNOWN = { [587] = true, [597] = true, [990] = true }
+obj.OnEnter(bar)
+t = table.concat(tip.lines, "\n")
+assert(t:find("Food: 3 of 6 learned", 1, true) and t:find("Water: 0 of 6 learned", 1, true), t)
+cover.scripts.OnLeave(cover)
+M.Close()
+c.KNOWN = { [587] = true, [597] = true, [990] = true, [5504] = true, [5505] = true, [5506] = true }
+obj.OnClick({}, "LeftButton")
+rows = Rows()
 local byID = {}
 for _, r in ipairs(rows) do byID[r.entry.id] = r end
-assert(byID[990].attrs.type == "spell" and byID[990].attrs.spell == 990 and byID[990].note.text == "", "a learned rank casts by ID")
-assert(byID[6129].attrs.type == nil and byID[6129].attrs.spell == nil and byID[6129].icon.desaturated, "an unlearned one has no action")
-
--- Tooltips: the next rank needs nothing more; a later one names the rank needed first.
-byID[6129].scripts.OnEnter(byID[6129])
-local t = table.concat(tip.lines, "\n")
-assert(tip.spell == 6129 and t:find("Not yet learned", 1, true) and t:find("Trained at level 32", 1, true)
-  and t:find("Taught by Mage trainers", 1, true) and not t:find("Requires", 1, true), t)
-byID[10144].scripts.OnEnter(byID[10144])
-t = table.concat(tip.lines, "\n")
-assert(t:find("Requires Conjure Food (Rank 4) first", 1, true), t)
-byID[990].scripts.OnEnter(byID[990])
-t = table.concat(tip.lines, "\n")
-assert(t:find("Click to cast", 1, true) and not t:find("Trained at", 1, true), t)
 
 -- The other launcher: clicking it closes this menu and opens its own.
 local bar = { IsMouseOver = function() return false end }
@@ -255,7 +323,7 @@ w.UnitClass = function() return "Class", "PRIEST" end
 local wmade = {}
 local wLDB = w.LibStub:NewLibrary("LibDataBroker-1.1", 1)
 function wLDB:NewDataObject(name, o) wmade[name] = o; return o end
-for _, f in ipairs({ "modules/TrainingData.lua", "modules/SpellMenu.lua", "modules/MageTravel.lua", "modules/MageConjure.lua" }) do
+for _, f in ipairs({ "modules/TrainingData.lua", "modules/Borders.lua", "modules/MenuStyle.lua", "modules/SpellMenu.lua", "modules/MageTravel.lua", "modules/MageConjure.lua" }) do
   local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, w); chunk("!!!TwichUI", {})
 end
 w.TwichUIDB = { modules = {} }

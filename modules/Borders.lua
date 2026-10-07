@@ -84,24 +84,32 @@ function B.TexturePath(name)
     if type(path) == "string" and path ~= "" then return path end
 end
 
+-- EllesmereUI's own border textures as { { "eui:<key>", name }, ... } (empty without it). Leaves
+-- out "solid" (its own line), "sm:" ones (LibSharedMedia's, listed by the caller) and shadow,
+-- which EllesmereUI draws behind its host and a plain border can't.
+function B.EllesmereChoices()
+    local list = {}
+    local e = B.Ellesmere()
+    if not e then return list end
+    local ok, entries = pcall(e.GetBorderTextureList)
+    for _, entry in ipairs(ok and type(entries) == "table" and entries or {}) do
+        local key, name = entry.key, entry.name
+        if type(key) == "string" and type(name) == "string" and key ~= "solid" and key ~= "shadow"
+            and key:sub(1, 3) ~= "sm:" and e.ResolveBorderTexture(key) then
+            list[#list + 1] = { B.EUI_PREFIX .. key, name }
+        end
+    end
+    return list
+end
+
 -- { { value, label }, ... } for a texture choice: Solid, EllesmereUI's own textures (when it is
 -- installed), then every LibSharedMedia border (any addon's, sorted by name, leaving out a name
 -- EllesmereUI already lists). current stays listed, marked, if it has gone.
 function B.Choices(current)
     local list, labelled = { { "solid", "Solid" } }, { solid = true }
-    local e = B.Ellesmere()
-    if e then
-        local ok, entries = pcall(e.GetBorderTextureList)
-        for _, entry in ipairs(ok and type(entries) == "table" and entries or {}) do
-            local key, name = entry.key, entry.name
-            -- "sm:" ones are LibSharedMedia's, listed below; shadow is drawn behind its host
-            -- by EllesmereUI itself, which a plain border can't do
-            if type(key) == "string" and type(name) == "string" and key ~= "solid" and key ~= "shadow"
-                and key:sub(1, 3) ~= "sm:" and e.ResolveBorderTexture(key) then
-                list[#list + 1] = { B.EUI_PREFIX .. key, name }
-                labelled[name] = true
-            end
-        end
+    for _, choice in ipairs(B.EllesmereChoices()) do
+        list[#list + 1] = choice
+        labelled[choice[2]] = true
     end
     local LSM = SharedMedia()
     local names = LSM and LSM:HashTable("border")

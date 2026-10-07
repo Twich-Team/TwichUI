@@ -13,8 +13,8 @@ do
   local levels = env.TwichUI.TrainingData.MAGE()
   local data = {}
   for level, list in pairs(levels) do for _, e in ipairs(list) do data[e[1]] = { level = level, faction = e.faction } end end
-  local menv = setmetatable({ TwichUI = { PATH = "", On = function() end, TrainingData = env.TwichUI.TrainingData } }, { __index = _G })
-  for _, f in ipairs({ "modules/SpellMenu.lua", "modules/MageTravel.lua" }) do
+  local menv = setmetatable({ TwichUI = { PATH = "", On = function() end, OnInit = function() end, TrainingData = env.TwichUI.TrainingData } }, { __index = _G })
+  for _, f in ipairs({ "modules/Borders.lua", "modules/MenuStyle.lua", "modules/SpellMenu.lua", "modules/MageTravel.lua" }) do
     local mchunk = assert(loadfile(ROOT .. f)); setfenv(mchunk, menv); mchunk("!!!TwichUI", {})
   end
   local M = menv.TwichUI.MageTravel
@@ -109,7 +109,7 @@ local function Boot(class, faction, withLDB)
       table.insert(c.made, name); c.obj = o; return o
     end
   end
-  for _, f in ipairs({ "chronicle/Style.lua", "modules/TrainingData.lua", "modules/SpellMenu.lua", "modules/MageTravel.lua" }) do
+  for _, f in ipairs({ "chronicle/Style.lua", "modules/TrainingData.lua", "modules/Borders.lua", "modules/MenuStyle.lua", "modules/SpellMenu.lua", "modules/MageTravel.lua" }) do
     local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
   end
   c.TwichUIDB = { modules = {} }

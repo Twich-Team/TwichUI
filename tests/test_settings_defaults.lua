@@ -59,6 +59,7 @@ c.UnitLevel = function() return 30 end
 c.C_SpecializationInfo = { GetActiveSpecGroup = function() return 1 end, GetCombatConfigIDForSpecGroup = function() return nil end }
 local function Obj()
   return setmetatable({}, {__index = function(t, k)
+    if k == "twichBevel" or k == "twichBorders" then return nil end   -- a field TwichUI sets itself, not a method
     if k == "CreateFontString" or k == "CreateTexture" then return function() return Obj() end end
     return function() end
   end})
@@ -67,7 +68,7 @@ c.CreateFrame = function() return Obj() end
 c.StaticPopupDialogs = {}; c.StaticPopup_Show = function() end
 for _, f in ipairs({ "gear/Weights.lua", "gear/Evaluate.lua", "gear/Prefs.lua", "gear/Data.lua",
   "gear/Hints.lua", "gear/Tooltip.lua", "gear/Bags.lua", "gear/Window.lua", "modules/Arrival.lua", "modules/Media.lua", "modules/FriendLogin.lua", "modules/Borders.lua", "modules/FoodDrink.lua",
-  "modules/TrainingData.lua", "modules/SpellMenu.lua", "modules/MageTravel.lua", "modules/MageConjure.lua", "Settings.lua" }) do
+  "modules/TrainingData.lua", "modules/Borders.lua", "modules/MenuStyle.lua", "modules/SpellMenu.lua", "modules/MageTravel.lua", "modules/MageConjure.lua", "Settings.lua" }) do
   local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
 end
 c.LOADED["!!!TwichUI"] = true; c.FireEvent("ADDON_LOADED", "!!!TwichUI")
@@ -239,6 +240,64 @@ do
   c.TwichUIDB.modules.foodDrink = false
   reset.click()
   assert(FD.Get("size") == 36 and FD.Get("layout") == "horizontal" and FD.Get("borderColor") == FD.DEFAULTS.borderColor, "Reset puts the look back")
+end
+-- Broker menu appearance: one shared section on the Mage page; each control reads and writes the
+-- shared look; Reset puts back only that.
+do
+  local MS = R.MenuStyle
+  local keys = { TWICHUI_brokerMenuBgTexture = "bgTexture", TWICHUI_brokerMenuBgColor = "bgColor", TWICHUI_brokerMenuBgOpacity = "bgOpacity",
+    TWICHUI_brokerMenuBorderTexture = "borderTexture", TWICHUI_brokerMenuBorderSize = "borderSize",
+    TWICHUI_brokerMenuBorderColor = "borderColor", TWICHUI_brokerMenuBorderOpacity = "borderOpacity" }
+  local n = 0
+  for variable, key in pairs(keys) do
+    n = n + 1
+    local proxy = assert(proxies[variable], variable .. " is on the page")
+    assert(variables[variable] == "Mage", variable .. " is with the menus it styles")
+    assert(proxy.default == MS.DEFAULTS[key] and proxy.get() == MS.DEFAULTS[key], key .. " starts at its default")
+  end
+  assert(n == 7)
+  local headers = {}
+  for _, i in ipairs(initializers) do if not i.setting and not i.click then headers[i.data.name] = true end end
+  assert(headers["Broker menu appearance"], "a clearly named section")
+  local sliders = {}
+  for _, i in ipairs(initializers) do
+    if i.options and keys[i.setting.variable] then sliders[keys[i.setting.variable]] = i.options end
+  end
+  assert(sliders.bgOpacity.min == 0 and sliders.bgOpacity.max == 100 and sliders.borderOpacity.max == 100
+    and sliders.borderSize.min == 0 and sliders.borderSize.max == 16, "sensible ranges")
+  local swatches = 0
+  for _, i in ipairs(initializers) do if i.swatch and keys[i.setting.variable] then swatches = swatches + 1 end end
+  assert(swatches == 2, "a color for each piece, and no alpha in either: opacity is its own control")
+
+  proxies.TWICHUI_brokerMenuBgOpacity.set(35); assert(MS.Get("bgOpacity") == 35 and proxies.TWICHUI_brokerMenuBgOpacity.get() == 35)
+  proxies.TWICHUI_brokerMenuBorderOpacity.set(60); assert(MS.Get("borderOpacity") == 60 and MS.Get("bgOpacity") == 35)
+  proxies.TWICHUI_brokerMenuBorderSize.set(500); assert(MS.Get("borderSize") == 1, "out of range is refused")
+  proxies.TWICHUI_brokerMenuBgColor.set("ff102030"); assert(MS.Get("bgColor") == "ff102030")
+  proxies.TWICHUI_brokerMenuBorderTexture.set("Blizzard Dialog"); assert(MS.Get("borderTexture") == "Blizzard Dialog")
+  proxies.TWICHUI_brokerMenuBgTexture.set("none"); assert(MS.Get("bgTexture") == "none")
+  assert(c.TwichUIDB.ui.brokerMenu.bgTexture == "none", "saved by id")
+  local function Options(variable)
+    local ids = {}
+    for i, o in ipairs(dropdowns[variable]()) do ids[i] = o.value end
+    return ids
+  end
+  local bg, border = Options("TWICHUI_brokerMenuBgTexture"), Options("TWICHUI_brokerMenuBorderTexture")
+  assert(bg[1] == "none" and bg[2] == "solid" and bg[3] == "Blizzard Tooltip", "None, Solid, then the game's own: " .. table.concat(bg, ","))
+  assert(border[1] == "none" and border[2] == "solid" and border[3] == "Blizzard Tooltip")
+
+  c.TwichUIDB.ui.mageTravelText = "none"
+  c.TwichUIDB.ui.foodDrink = { size = 50 }
+  local preview, reset
+  for _, i in ipairs(initializers) do
+    if i.click and i.data.name == "Preview" then preview = i end
+    if i.click and i.data.name == "Menu appearance" then reset = i end
+  end
+  assert(preview and reset, "a preview and a reset")
+  preview.click(); preview.click()   -- shows and puts away without error
+  reset.click()
+  assert(c.TwichUIDB.ui.brokerMenu == nil, "Reset forgets the saved appearance")
+  for _, key in pairs(keys) do assert(MS.Get(key) == MS.DEFAULTS[key], key .. " is back to its default") end
+  assert(c.TwichUIDB.ui.mageTravelText == "none" and c.TwichUIDB.ui.foodDrink.size == 50, "Reset leaves everything else alone")
 end
 assert(R.settingsCategories.chronicle and R.settingsCategories.sharing and R.settingsCategories.overview == R.settingsCategory)
 R:OpenSettings("chronicle"); assert(c.opened == R.settingsCategories.chronicle:GetID(), "opens a named page")

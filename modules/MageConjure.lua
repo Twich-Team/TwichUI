@@ -1,10 +1,9 @@
 -- TwichUI: Mage Conjuring
 -- A data bar launcher, "TwichUI Mage Conjuring", for Mages: its icon and, by the player's choice,
--- the word "Conjure" or "Food & Water" (or no text). Clicking it opens a small menu of the
--- Conjure Food and Conjure Water ranks WoW: Forever teaches, highest rank first, so a lower rank
--- can be conjured for a lower-level friend. Learned ranks are cast by clicking them; ones not yet
--- learned are muted, and their tooltip says the level they are trained at and the rank before
--- them, when that isn't known yet. Shift-left-click on the launcher conjures water and
+-- the word "Conjure" or "Food & Water" (or no text). Clicking it opens a small menu with one row
+-- each for Conjure Food and Conjure Water: the highest rank this character has learned, cast by
+-- clicking it. With none learned, the row is rank 1, muted, and its tooltip says the level it is
+-- trained at. Shift-left-click on the launcher conjures water and
 -- shift-right-click food, each at the highest rank known. The menu, its secure rows, the
 -- shortcuts, combat rules and the data object are shared with Mage Travel
 -- (modules/SpellMenu.lua); this file says which spells.
@@ -53,28 +52,34 @@ function M.TrainedAt(id)
     return t and t.level
 end
 
--- This character's sections: { { label, kind, rows = { entry, ... } }, ... }, highest rank first,
--- and whether a name was still loading (its row is left out until it arrives). An entry is
+-- This character's sections: { { label, kind, rows = { entry }, learned, total }, ... }, and
+-- whether a name was still loading (its row is left out until it arrives). Each section has one
+-- row: the highest rank this character has learned, found by walking the ranks in order and
+-- asking the spellbook about each exact spell ID (never "the largest ID"). With no rank learned
+-- the row is rank 1, the one to learn first, with its learning information. If the highest
+-- learned rank's name hasn't loaded, the row waits for it; no other rank stands in. An entry is
 -- { id, name, text (the rank), icon, known, level, note, kind, previous } where previous is the
--- rank before it, or nil for rank 1.
+-- rank before it, or nil for rank 1. learned and total count the ranks, for the launcher tooltip.
 function M.Entries()
     local sections, loading = {}, false
     for _, kind in ipairs(M.KINDS) do
         local list = {}
         local ranks = M.SPELLS[kind.key]
-        for rank = #ranks, 1, -1 do
-            local id = ranks[rank]
-            local name, icon = SM.Spell(id)
-            if name then
-                local level = M.TrainedAt(id)
-                list[#list + 1] = { id = id, name = name, text = SM.RankText(id, rank), icon = icon,
-                    known = SM.Known(id), level = level, note = level and ("Level " .. level), kind = kind,
-                    previous = ranks[rank - 1] }
-            else
-                loading = true
-            end
+        local best, learned = 1, 0
+        for rank = 1, #ranks do
+            if SM.Known(ranks[rank]) then best, learned = rank, learned + 1 end
         end
-        sections[#sections + 1] = { label = kind.label, kind = kind, rows = list }
+        local id = ranks[best]
+        local name, icon = SM.Spell(id)
+        if name then
+            local level = M.TrainedAt(id)
+            list[1] = { id = id, name = name, text = SM.RankText(id, best), icon = icon,
+                known = learned > 0, level = level, note = level and ("Level " .. level), kind = kind,
+                previous = ranks[best - 1] }
+        else
+            loading = true
+        end
+        sections[#sections + 1] = { label = kind.label, kind = kind, rows = list, learned = learned, total = #ranks }
     end
     return sections, loading
 end

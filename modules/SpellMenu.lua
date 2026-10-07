@@ -15,8 +15,12 @@
 -- of combat, and put away as combat starts.
 -- TwichUI doesn't bundle LibDataBroker: a launcher is made once a data bar addon provides it, and
 -- nothing happens when none does. The data bar text is the player's choice, saved in TwichUIDB.ui.
+-- The menu's background and border are the player's too (modules/MenuStyle.lua, shared by every
+-- menu). They are drawn when the menu opens, and again while it is open when they change, never in
+-- combat (the rows are anchored to the menu, so its size and padding change only out of combat).
 
 local R = TwichUI
+local MenuStyle = R.MenuStyle
 local SM = {}
 R.SpellMenu = SM
 
@@ -154,6 +158,90 @@ local function Notice(text)
 end
 
 ---------------------------------------------------------------------------
+-- A sample menu for the options page, to judge the appearance settings by: the same look on a
+-- frame that does nothing. It has no secure rows, takes no mouse and casts nothing, and is shown
+-- only when asked for, until it is asked away or Esc closes it.
+---------------------------------------------------------------------------
+local preview
+local SAMPLE = { { "Stormwind", true }, { "Ironforge", true }, { "Darnassus", false, "Level 20" } }
+
+local function BuildPreview()
+    local K = Palette()
+    preview = CreateFrame("Frame", "TwichUIMenuPreview", UIParent, "BackdropTemplate")
+    preview:SetWidth(WIDTH)
+    preview:SetFrameStrata("DIALOG")
+    preview:SetClampedToScreen(true)
+    preview:Hide()
+    preview.title = Text(preview, FONT_TITLE, 13, "GameFontNormal")
+    preview.title:SetText("Menu preview")
+    preview.title:SetTextColor(K.text[1], K.text[2], K.text[3])
+    preview.header = Text(preview, FONT_HEADER, 12, "GameFontNormalSmall")
+    preview.header:SetText("Teleports")
+    preview.header:SetTextColor(K.gold[1], K.gold[2], K.gold[3])
+    preview.rows = {}
+    for i, sample in ipairs(SAMPLE) do
+        local row = CreateFrame("Frame", nil, preview)
+        row:SetHeight(ROW_HEIGHT)
+        local rim = Solid(row, "ARTWORK", sample[2] and ARCANE or K.bronzeLo, sample[2] and 0.75 or 1)
+        rim:SetSize(ICON_SIZE + 2, ICON_SIZE + 2)
+        rim:SetPoint("LEFT", 4, 0)
+        local well = Solid(row, "ARTWORK", K.well)
+        well:SetDrawLayer("ARTWORK", 1)
+        well:SetSize(ICON_SIZE, ICON_SIZE)
+        well:SetPoint("CENTER", rim, "CENTER")
+        local note = Text(row, FONT_NOTE, 12, "GameFontNormalSmall")
+        note:SetPoint("RIGHT", -6, 0)
+        note:SetJustifyH("RIGHT")
+        note:SetText(sample[3] or "")
+        note:SetTextColor(K.stone[1], K.stone[2], K.stone[3])
+        local name = Text(row, FONT_ROW, 14, "GameFontNormal")
+        name:SetPoint("LEFT", rim, "RIGHT", 8, 0)
+        name:SetPoint("RIGHT", note, "LEFT", -6, 0)
+        name:SetText(sample[1])
+        local c = sample[2] and K.text or K.stone
+        name:SetTextColor(c[1], c[2], c[3])
+        preview.rows[i] = row
+    end
+    if UISpecialFrames then tinsert(UISpecialFrames, "TwichUIMenuPreview") end
+end
+
+-- The look and layout of the real menu (the border can widen the margin).
+local function DrawPreview()
+    local pad = math.max(PAD, math.ceil(MenuStyle.Apply(preview)))
+    preview.title:ClearAllPoints()
+    preview.title:SetPoint("TOPLEFT", pad + 4, -pad - 2)
+    local y = -(pad + TITLE_HEIGHT)
+    preview.header:ClearAllPoints()
+    preview.header:SetPoint("TOPLEFT", preview, "TOPLEFT", pad + 4, y - 4)
+    y = y - HEADER_HEIGHT - 2
+    for _, row in ipairs(preview.rows) do
+        row:ClearAllPoints()
+        row:SetPoint("TOPLEFT", preview, "TOPLEFT", pad, y)
+        row:SetPoint("RIGHT", preview, "RIGHT", -pad, 0)
+        y = y - ROW_HEIGHT
+    end
+    preview:SetHeight(-(y - SECTION_GAP) + pad)
+end
+
+function SM.PreviewShown() return preview ~= nil and preview:IsShown() end
+
+-- Shows the sample beside the options window, or puts it away.
+function SM.TogglePreview()
+    if SM.PreviewShown() then preview:Hide() return end
+    if not preview then BuildPreview() end
+    DrawPreview()
+    preview:ClearAllPoints()
+    if SettingsPanel and SettingsPanel:IsShown() then
+        preview:SetPoint("TOPLEFT", SettingsPanel, "TOPRIGHT", 8, -48)
+    else
+        preview:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+    end
+    preview:Show()
+end
+
+MenuStyle.Subscribe(function() if SM.PreviewShown() then DrawPreview() end end)
+
+---------------------------------------------------------------------------
 -- One launcher and its menu.
 -- spec:
 --   key          the module switch in TwichUIDB.modules ("mageTravel")
@@ -170,18 +258,20 @@ end
 --   forPlayer()  true when this character's class has the spells
 --   entries()    sections, loading: { { label, rows = { entry, ... } }, ... } (nil for none) and
 --                whether a name was still loading. entry: { id, text, icon, known, note }; note
---                is shown at the right of an unlearned row.
+--                is shown at the right of an unlearned row. A section may give learned and
+--                total for the launcher tooltip's count, when its rows aren't every spell.
 --   learnLines(tip, entry)  adds the lines under an unlearned spell's tooltip
 --   shortcuts    optional: { { button = "LeftButton"|"RightButton", label, ranks = { spellIDs,
 --                lowest first } }, ... }; shift and that button casts the highest rank known
 -- Returns the launcher's functions: Open(frame), Close(), Toggle(frame), IsOpen(), Available(),
--- Refresh(), TextChoice(), SetTextChoice(value).
+-- Refresh(), ApplyAppearance(), TextChoice(), SetTextChoice(value).
 ---------------------------------------------------------------------------
 function SM.New(spec)
     local L = {}
     local obj
     local loggedIn = false
-    local menu, empty
+    local menu, title, empty
+    local pad = PAD                   -- the menu's inner margin: PAD, or more to clear a thick border
     local headers, rows = {}, {}
     local owner                       -- the data bar frame the menu was opened from
     local waiting = false             -- the last look found a spell the game hadn't loaded yet
@@ -305,19 +395,10 @@ function SM.New(spec)
         menu:SetClampedToScreen(true)
         menu:EnableMouse(true)
         menu:Hide()
-        if R.ChronicleStyle and R.ChronicleStyle.Popover then
-            R.ChronicleStyle.Popover(menu)
-        else
-            menu:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
-            menu:SetBackdropColor(K.bg[1], K.bg[2], K.bg[3], 0.97)
-            menu:SetBackdropBorderColor(K.bronze[1], K.bronze[2], K.bronze[3], 0.95)
-        end
-        local title = Text(menu, FONT_TITLE, 13, "GameFontNormal")
-        title:SetPoint("TOPLEFT", PAD + 4, -PAD - 2)
+        title = Text(menu, FONT_TITLE, 13, "GameFontNormal")
         title:SetText(spec.label)
         title:SetTextColor(K.text[1], K.text[2], K.text[3])
         empty = Text(menu, FONT_NOTE, 13, "GameFontNormalSmall")
-        empty:SetPoint("TOPLEFT", PAD + 4, -(PAD + TITLE_HEIGHT))
         empty:SetTextColor(K.stone[1], K.stone[2], K.stone[3])
         empty:Hide()
         menu:SetScript("OnHide", function()
@@ -329,11 +410,21 @@ function SM.New(spec)
         if UISpecialFrames then tinsert(UISpecialFrames, spec.menuName) end
     end
 
+    -- Draws the player's background and border (modules/MenuStyle.lua) and moves the margin out
+    -- if the border is thicker than it. Out of combat only: the rows are anchored to the menu.
+    local function Restyle()
+        pad = math.max(PAD, math.ceil(MenuStyle.Apply(menu)))
+        title:ClearAllPoints()
+        title:SetPoint("TOPLEFT", pad + 4, -pad - 2)
+        empty:ClearAllPoints()
+        empty:SetPoint("TOPLEFT", pad + 4, -(pad + TITLE_HEIGHT))
+    end
+
     -- Out of combat only.
     local function Render()
         local sections, loading = spec.entries()
         waiting = loading
-        local y = -(PAD + TITLE_HEIGHT)
+        local y = -(pad + TITLE_HEIGHT)
         local used = 0
         for _, h in ipairs(headers) do h:Hide() end
         empty:SetShown(not sections)
@@ -346,8 +437,8 @@ function SM.New(spec)
             headers[i] = h
             h.text:SetText(section.label)
             h:ClearAllPoints()
-            h:SetPoint("TOPLEFT", menu, "TOPLEFT", PAD, y)
-            h:SetPoint("RIGHT", menu, "RIGHT", -PAD, 0)
+            h:SetPoint("TOPLEFT", menu, "TOPLEFT", pad, y)
+            h:SetPoint("RIGHT", menu, "RIGHT", -pad, 0)
             h:Show()
             y = y - HEADER_HEIGHT - 2
             for _, e in ipairs(section.rows) do
@@ -355,8 +446,8 @@ function SM.New(spec)
                 local row = rows[used] or NewRow()
                 rows[used] = row
                 row:ClearAllPoints()
-                row:SetPoint("TOPLEFT", menu, "TOPLEFT", PAD, y)
-                row:SetPoint("RIGHT", menu, "RIGHT", -PAD, 0)
+                row:SetPoint("TOPLEFT", menu, "TOPLEFT", pad, y)
+                row:SetPoint("RIGHT", menu, "RIGHT", -pad, 0)
                 Fill(row, e)
                 row:Show()
                 y = y - ROW_HEIGHT
@@ -364,7 +455,7 @@ function SM.New(spec)
             y = y - SECTION_GAP
         end
         for i = used + 1, #rows do Clear(rows[i]) end
-        menu:SetHeight(-y + PAD)
+        menu:SetHeight(-y + pad)
     end
 
     -- Next to the data bar frame, on the side with room. Positioned against UIParent at the
@@ -392,6 +483,7 @@ function SM.New(spec)
         if InCombat() then Notice(COMBAT_TEXT) return false end
         BuildMenu()
         owner = frame
+        Restyle()
         Render()
         Place(frame)
         menu:Show()
@@ -409,6 +501,14 @@ function SM.New(spec)
 
     function L.Toggle(frame)
         if L.IsOpen() then L.Close() else L.Open(frame) end
+    end
+
+    -- After an appearance setting changes, or the UI scale does: an open menu is redrawn at once.
+    -- In combat nothing changes (the menu is closing); it is drawn afresh when next opened.
+    function L.ApplyAppearance()
+        if not menu or InCombat() then return end
+        Restyle()
+        if menu:IsShown() then Render() end
     end
 
     -----------------------------------------------------------------------
@@ -450,6 +550,8 @@ function SM.New(spec)
         PLAYER_REGEN_DISABLED = OnCombatStart,
         PLAYER_REGEN_ENABLED = OnCombatEnd,
         GLOBAL_MOUSE_DOWN = OnMouseDown,
+        UI_SCALE_CHANGED = L.ApplyAppearance,   -- a border is a whole number of screen pixels
+        DISPLAY_SIZE_CHANGED = L.ApplyAppearance,
     }
 
     function Listen(on)
@@ -509,9 +611,12 @@ function SM.New(spec)
         end
         local sections = spec.entries()
         for _, section in ipairs(sections or {}) do
-            local known = 0
-            for _, e in ipairs(section.rows) do if e.known then known = known + 1 end end
-            tip:AddDoubleLine(section.label, ("%d of %d learned"):format(known, #section.rows),
+            local known, total = section.learned, section.total
+            if not known then
+                known, total = 0, #section.rows
+                for _, e in ipairs(section.rows) do if e.known then known = known + 1 end end
+            end
+            tip:AddDoubleLine(section.label, ("%d of %d learned"):format(known, total),
                 K.textDim[1], K.textDim[2], K.textDim[3], K.textDim[1], K.textDim[2], K.textDim[3])
         end
         if InCombat() then
@@ -672,6 +777,8 @@ function SM.New(spec)
     function L.Refresh()
         if R:Enabled(spec.key) then Create() else L.Close() end
     end
+
+    MenuStyle.Subscribe(L.ApplyAppearance)
 
     R:On("PLAYER_LOGIN", function()
         loggedIn = true
