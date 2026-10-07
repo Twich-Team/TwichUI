@@ -79,12 +79,12 @@ for key, default in pairs(defaults) do
   n = n + 1
   assert(default == R.DEFAULT_MODULES[key], key .. " default matches a new install")
 end
-assert(n == 38, "every module has a toggle: " .. n)
+assert(n == 35, "every module has a toggle: " .. n)
 assert(defaults.arrival == true and defaults.arrivalSubzones == true and defaults.arrivalReducedMotion == false,
   "arrival card and subzone cards on; reduced motion opt-in")
 assert(defaults.arrivalDungeons == true, "dungeon and raid arrival cards on by default")
-assert(defaults.shareGroup == false and defaults.shareGuild == false and defaults.groupCheck == true, "group sharing opt-in stays off; group check is on")
-assert(defaults.media == true and defaults.shareWhisper == true)
+assert(defaults.shareGroup == nil and defaults.shareGuild == nil and defaults.shareWhisper == nil, "the old per-channel switches are gone")
+assert(defaults.groupCheck == true and defaults.media == true)
 assert(defaults.chronicle == true and defaults.chronicleChat == true, "Chronicle and its chat line are on by default")
 assert(defaults.chronicleDeaths == false, "death entries are opt-in")
 assert(defaults.welcomeBack == true, "Welcome Back bookmark is on by default")
@@ -108,7 +108,7 @@ for _, name in ipairs({"Upgrade hints in item tooltips", "Mark upgrades in my ba
   "Configuration sharing", "Let friends send me addon configurations", "Hide addon welcome messages", "Show advanced options"}) do
   assert(visible[name], name .. " is visible by default")
 end
-for _, name in ipairs({"How big a gain counts", "Show the reasoning", "Bag mark style", "How long the zone card stays", "Send over the group channel"}) do
+for _, name in ipairs({"How big a gain counts", "Show the reasoning", "Bag mark style", "How long the zone card stays", "Send configurations by"}) do
   assert(advanced[name], name .. " is advanced")
 end
 
@@ -189,7 +189,7 @@ for variable, page in pairs({
   TWICHUI_foodDrink = "Food and drink", TWICHUI_foodDrinkFood = "Food and drink", TWICHUI_foodDrinkDrink = "Food and drink",
   TWICHUI_mageTravel = "Mage", TWICHUI_mageTravelText = "Mage", TWICHUI_mageConjure = "Mage", TWICHUI_mageConjureText = "Mage",
   TWICHUI_attuneSkin = "Addon skins", TWICHUI_whatsTrainingSkin = "Addon skins",
-  TWICHUI_setupSharing = "Configuration sharing", TWICHUI_shareGuild = "Configuration sharing",
+  TWICHUI_setupSharing = "Configuration sharing", TWICHUI_shareTransport = "Configuration sharing",
 }) do assert(variables[variable] == page, variable .. " is on " .. page .. ", not " .. tostring(variables[variable])) end
 -- The Mage launchers' text choices read and write each launcher's own setting.
 for variable, module in pairs({ TWICHUI_mageTravelText = R.MageTravel, TWICHUI_mageConjureText = R.MageConjure }) do

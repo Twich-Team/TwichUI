@@ -9,7 +9,7 @@ local function boot(name, scan)
   c.LOADED["!!!TwichUI"]=true; c.FireEvent("ADDON_LOADED","!!!TwichUI")
   c.FooDB = {a = rnd(12000)}; c.LOADED.Foo=true; c.FireEvent("ADDON_LOADED","Foo")
   c.FireEvent("PLAYER_LOGIN")
-  if ALLOW_GROUP ~= false then c.TwichUIDB.modules.shareGroup = true end
+  if ALLOW_GROUP ~= false then c.TwichUI.Share.SetTransport("PARTY") end
   return c
 end
 local rich = boot("Ranulf Ashenvow", true)
@@ -23,3 +23,17 @@ pal.TwichUI.Share:Respond("Ranulf Ashenvow", true); for _=1,10 do FlushTimers();
 assert(SH.outgoing.stage == "done")
 assert(pal.TwichUIDB.setup.received["Ranulf Ashenvow"].tables.FooDB.data.a == big, "multi-lane data intact")
 print("MULTI-LANE OK, bytes", SH.outgoing.total)
+-- the same large transfer by Direct (whispers), and by Guild
+for _, mode in ipairs({"DIRECT", "GUILD"}) do
+  SH.outgoing = nil; pal.TwichUI.Share.incoming = {}; pal.TwichUIDB.setup.received = {}
+  SH.SetTransport(mode)
+  GUILD = {["Ranulf Ashenvow"] = true, ["Pal Stonebrook"] = true}
+  SENT_LOG = {}
+  assert(SH:SendTo("Pal Stonebrook")); for _=1,10 do FlushTimers(); Pump() end
+  pal.TwichUI.Share:Respond("Ranulf Ashenvow", true); for _=1,10 do FlushTimers(); Pump() end
+  assert(SH.outgoing.stage == "done", mode .. " " .. tostring(SH.outgoing.stage))
+  assert(pal.TwichUIDB.setup.received["Ranulf Ashenvow"].tables.FooDB.data.a == big, mode .. " intact")
+  local lanes = 0 for _, m in ipairs(SENT_LOG) do if m.prefix:find("^TwichUIData") then lanes = lanes + 1 end end
+  assert(lanes >= 2, "more than one data lane used")
+end
+print("MULTI-LANE DIRECT/GUILD OK")

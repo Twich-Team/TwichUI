@@ -6,9 +6,11 @@
 --     group which TwichUI they run and which of your recommended addons
 --     they're missing.
 --   * Direct-message probe: on Forever, addon whispers to first-and-last names
---     are currently dropped. Once per game build, TwichUI whispers one tiny
---     test message to a grouped TwichUI user; if it arrives, sharing switches
---     back to direct messages automatically.
+--     were dropped in the beta. Once per game build, TwichUI whispers one tiny
+--     test message to a grouped TwichUI user, who answers over the group
+--     channel. The result is only shown as a status; it doesn't choose how
+--     configurations are sent (the player does, see setup/Share.lua), and it
+--     doesn't test large transfers.
 -- All of it is off until the player turns on "Version and group check".
 
 local R = TwichUI
@@ -215,24 +217,19 @@ end
 ---------------------------------------------------------------------------
 local function Build() return select(2, GetBuildInfo()) or "?" end
 
-function SH.WhisperWorks()
-    local p = TwichUIDB and TwichUIDB.whisperProbe
-    return p and p.ok and p.build == Build() or false
-end
-
 function G.WhisperStatus()
     if not SH.Realmless() then return "Direct messages work normally here." end
     local p = TwichUIDB and TwichUIDB.whisperProbe
     if p and p.build == Build() then
-        return p.ok and "Direct messages work again on this game build; TwichUI uses them first."
-            or ("Still not working on this game build (checked %s)."):format(date("%b %d", p.at or 0))
+        return p.ok and ("A small direct test message reached another TwichUI user on this game build (%s). Larger transfers haven't been tested by this check."):format(date("%b %d", p.at or 0))
+            or ("A small direct test message got no answer on this game build (checked %s). Direct may not work yet; Party or Guild are there if you need them."):format(date("%b %d", p.at or 0))
     end
     return "Not checked on this game build yet. TwichUI tests once when you're grouped with another TwichUI user."
 end
 
 local probing
 function G:MaybeProbe()
-    if probing or not Enabled() or not SH.Realmless() or not R:Enabled("shareWhisper") then return end
+    if probing or not Enabled() or not SH.Realmless() then return end
     local p = TwichUIDB.whisperProbe
     if p and p.build == Build() then return end
     -- pick a grouped TwichUI user
@@ -266,11 +263,7 @@ end
 SH.handlers.probeack = function(sender, msg)
     if not probing or probing.n ~= msg.n then return end
     probing = nil
-    local was = SH.WhisperWorks()
     TwichUIDB.whisperProbe = { build = Build(), ok = true, at = time() }
-    if not was then
-        R.Print("direct addon messages work again on Forever. Configuration sharing now uses them first; group and guild channels are only a fallback.")
-    end
     Changed()
 end
 

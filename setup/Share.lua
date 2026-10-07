@@ -1,6 +1,7 @@
 -- TwichUI: Setup Sharing, sending and receiving in game
 --
--- Conversation (addressed messages; see "Routing" for which channel):
+-- Conversation (addressed messages; see "Routing" for which channel; the
+-- player picks Direct, Party or Guild and TwichUI never switches by itself):
 --   you    -> friend : offer    what's in your setup, with a fingerprint per addon
 --   friend -> you    : reply    accepted? and which parts they don't have yet
 --   you    -> friend : incoming how big the transfer is (for their progress bar)
@@ -200,10 +201,16 @@ function SH.Blocked()
 end
 
 ---------------------------------------------------------------------------
--- Routing. On Forever the game silently drops addon whispers to two-part
--- names, so messages go over your group (or guild) channel instead, with
--- the recipient's name inside; everyone else ignores them. Elsewhere,
--- whispers still work for friends who aren't grouped with you.
+-- Routing. The player picks how configurations are sent; TwichUI uses that
+-- and nothing else, so a failed Direct send is never quietly repeated over
+-- your party or guild.
+--   Direct: an addon whisper (distribution "WHISPER") to the named character.
+--   Party:  your party, raid or instance group's addon channel.
+--   Guild:  your guild's addon channel.
+-- Party and Guild messages reach everyone in that group; the recipient's name
+-- is inside the message and every other TwichUI ignores it. That filters, it
+-- doesn't make the data private.
+-- Receiving works on all of them whatever you send with.
 ---------------------------------------------------------------------------
 local function GroupDist()
     if LE_PARTY_CATEGORY_INSTANCE and IsInGroup(LE_PARTY_CATEGORY_INSTANCE) then return "INSTANCE_CHAT" end
@@ -233,73 +240,110 @@ local function InMyGuild(name)
     return false
 end
 
--- Which channels the player allows. Group and guild are opt-in: those
--- messages reach everyone there (only the named recipient's TwichUI reads them).
-function SH.Allowed(dist)
-    if dist == "LOOP" then return true end
-    if dist == "WHISPER" then return R:Enabled("shareWhisper") end
-    if dist == "GUILD" then return R:Enabled("shareGuild") end
-    if dist == "PARTY" or dist == "RAID" or dist == "INSTANCE_CHAT" then return R:Enabled("shareGroup") end
-    return false
+-- The three ways to send. DIRECT is the default; the choice is saved in
+-- TwichUIDB.shareTransport.
+SH.TRANSPORTS = { "DIRECT", "PARTY", "GUILD" }
+SH.TRANSPORT_LABEL = { DIRECT = "Direct", PARTY = "Party", GUILD = "Guild" }
+SH.TRANSPORT_HELP = {
+    DIRECT = "Sends straight to the character you name; only they receive it.",
+    PARTY = "Sends over your party or raid's hidden addon channel. Everyone in the group receives the data; only the named friend's TwichUI reads it.",
+    GUILD = "Sends over your guild's hidden addon channel. Every online guild member receives the data; only the named friend's TwichUI reads it.",
+}
+SH.TRANSPORT_EXPLAIN = "Direct sends to the character you name. Party and Guild send over those groups' hidden addon channels instead: no chat text appears, but everyone there receives the data, and it is addressed to one person so other TwichUI users ignore it. That is a filter, not privacy; your settings can include character names. TwichUI only uses the one you pick, and never switches on its own if it fails."
+
+local VALID_TRANSPORT = {}
+for _, t in ipairs(SH.TRANSPORTS) do VALID_TRANSPORT[t] = true end
+
+function SH.Transport()
+    local t = TwichUIDB and TwichUIDB.shareTransport
+    return VALID_TRANSPORT[t] and t or "DIRECT"
 end
+
+function SH.SetTransport(t)
+    if not VALID_TRANSPORT[t] or not TwichUIDB then return false end
+    TwichUIDB.shareTransport = t
+    Changed()
+    return true
+end
+
+-- First load with this setting. A new install has nothing saved and gets
+-- Direct. Before this, sending went over a group or guild channel only if
+-- the player switched "group channel" or "guild channel" on (both start off),
+-- so a saved "on" is something they chose and is kept. The old settings can't
+-- tell a deliberate choice of Party/Guild from a workaround for the broken
+-- direct messages, so nothing is guessed: those players keep what they had
+-- and can pick Direct in Sending options. If both were on, Party is kept
+-- (the old router tried the group first). Everyone else, including anyone
+-- who left the defaults or turned direct messages off with no other
+-- channel, gets Direct. The old keys are left as they were.
+function SH.MigrateTransport()
+    if not TwichUIDB or VALID_TRANSPORT[TwichUIDB.shareTransport] then return end
+    local m = TwichUIDB.modules or {}
+    TwichUIDB.shareTransport = (m.shareGroup == true and "PARTY") or (m.shareGuild == true and "GUILD") or "DIRECT"
+end
+R:OnInit(SH.MigrateTransport)
+
+-- Which arrival channels we read. All of them, whatever we send with: a
+-- transfer still has to be addressed to us, and nothing is applied before the
+-- player has accepted it and clicked Apply.
+local RECEIVABLE = { WHISPER = true, PARTY = true, RAID = true, INSTANCE_CHAT = true, GUILD = true, LOOP = true }
+function SH.Receivable(dist) return RECEIVABLE[dist] == true end
 
 -- Tiny group-check messages (version hello, group check, direct-message
 -- probe) have their own switch and only ever use the group channel.
-SH.DIAG_TYPES = { commtest = true, commtestack = true }   -- TEMPORARY, see setup/CommTest.lua
+SH.DIAG_TYPES = { commtest = true, commtestack = true }   -- see setup/CommTest.lua
 SH.GROUP_TYPES = { hello = true, checkreq = true, checkrep = true, probeack = true }
 local function AllowedFor(msgType, dist)
     if SH.GROUP_TYPES[msgType] and (dist == "PARTY" or dist == "RAID" or dist == "INSTANCE_CHAT") then
         return R:Enabled("groupCheck")
     end
     if msgType == "probe" and dist == "WHISPER" then return R:Enabled("groupCheck") end
-    return SH.Allowed(dist)
+    return SH.Receivable(dist)
 end
 
--- Short explanation reused in errors, the options panel and the window.
-SH.WHY_FOREVER = "On the Forever beta, the game silently drops the hidden direct messages addons use when the name has a first and last name, so nothing arrives and no error appears. Until Blizzard fixes that, TwichUI can send through your group or guild channel instead, but only if you allow it."
-
-local function GroupOff(who)
-    return ("%s is in your group, but sharing over your group channel is turned off. Turn on \"Allow group channel\" in Sending options (or /twichui)."):format(who)
-end
-local function GuildOff(who)
-    return ("%s is in your guild, but sharing over the guild channel is turned off. Turn on \"Allow guild channel\" in Sending options (or /twichui)."):format(who)
-end
-
--- Returns { dist, whisperTarget } or nil, reason.
+-- Returns { dist, whisperTarget } or nil, reason. Never falls back to
+-- another transport.
 function SH.Route(target)
     local who = SH.Short(target)
+    local transport = SH.Transport()
     if SH.SameName(target, SH.SelfName()) then
-        -- Test on yourself: use a real channel you've allowed, else stay local.
-        if IsInGroup() and SH.Allowed(GroupDist()) then return { GroupDist() } end
-        if IsInGuild() and SH.Allowed("GUILD") then return { "GUILD" } end
+        -- Test on yourself: use the chosen channel when it exists, else stay
+        -- on this computer. (You can't whisper yourself.)
+        if transport == "PARTY" and IsInGroup() then return { GroupDist() } end
+        if transport == "GUILD" and IsInGuild() then return { "GUILD" } end
         return { "LOOP" }
     end
-    -- Forever: once a probe has shown direct messages work again on this
-    -- game build, use them first (see setup/Group.lua).
-    if SH.Realmless() and SH.WhisperWorks and SH.WhisperWorks() and SH.Allowed("WHISPER") then
-        return { "WHISPER", target }
-    end
-    local reason
-    if InMyGroup(target) then
-        if SH.Allowed(GroupDist()) then return { GroupDist() } end
-        reason = GroupOff(who)
-    end
-    local inGuild, online = InMyGuild(target)
-    if inGuild then
+    if transport == "PARTY" then
+        if not IsInGroup() then
+            return nil, "You chose Party, but you're not in a party or raid. Join a group, or choose Direct or Guild in Sending options."
+        end
+        if not InMyGroup(target) then
+            return nil, ("You chose Party, but %s isn't in your group. Group up with them, or choose Direct or Guild in Sending options."):format(who)
+        end
+        return { GroupDist() }
+    elseif transport == "GUILD" then
+        if not IsInGuild() then
+            return nil, "You chose Guild, but you're not in a guild. Choose Direct or Party in Sending options."
+        end
+        local inGuild, online = InMyGuild(target)
+        if not inGuild then
+            return nil, ("You chose Guild, but %s isn't in your guild. Choose Direct or Party in Sending options."):format(who)
+        end
         if online == false then return nil, ("%s isn't online."):format(who) end
-        if SH.Allowed("GUILD") then return { "GUILD" } end
-        reason = reason or GuildOff(who)
+        return { "GUILD" }
     end
-    if not SH.Realmless() then
-        if SH.Allowed("WHISPER") then return { "WHISPER", target } end
-        return nil, reason or "Direct messages are turned off in Sending options, so TwichUI has no way to reach them."
+    return { "WHISPER", target }
+end
+
+-- What to tell the player when the game itself refused a send.
+local function RefusedReason(route, who)
+    local dist = route and route[1]
+    if dist == "WHISPER" then
+        return ("The game wouldn't send a direct message to %s. Check their name and that they're online. TwichUI hasn't tried anything else; you can choose Party or Guild in Sending options."):format(who)
+    elseif dist == "GUILD" then
+        return "The game wouldn't send over the guild channel. Check you're still in the guild, then try again."
     end
-    if reason then return nil, reason end
-    if not R:Enabled("shareGroup") and not R:Enabled("shareGuild") then
-        return nil, ("Forever can't deliver direct addon messages yet, and sharing over your group and guild is turned off. Open Sending options to allow one, group up with %s, and press Send again."):format(who)
-    end
-    return nil, ("Forever can't deliver direct addon messages yet, so TwichUI needs %s in your group%s. Invite them, then press Send again."):format(
-        who, R:Enabled("shareGuild") and " or guild" or "")
+    return "The game wouldn't send over the group channel. Check you're still in the group, then try again."
 end
 
 local function RouteFromArrival(dist, sender)
@@ -309,8 +353,11 @@ end
 
 local OnControl, OnLane   -- set below
 
--- Control messages (small): addressed with "to".
-local function Send(target, msg, prio, route)
+-- Control messages (small): addressed with "to". onRefused, if given, is
+-- called once if the game refuses to send a piece. (AceComm hands the callback
+-- a true/false "the game accepted it" as its 4th argument; that only says the
+-- game took the message, not that anyone received it.)
+local function Send(target, msg, prio, route, onRefused)
     msg.to = (target == "*") and "*" or SH.FullName(target)
     local text = Encode(msg)
     if route[1] == "LOOP" then
@@ -318,7 +365,16 @@ local function Send(target, msg, prio, route)
         C_Timer.After(0.1, function() OnControl(PREFIX, text, "LOOP", me) end)
         return
     end
-    AceComm:SendCommMessage(PREFIX, text, route[1], route[2], prio or "NORMAL")
+    local callback, refused
+    if onRefused then
+        callback = function(_, _, _, accepted)
+            if accepted == false and not refused then
+                refused = true
+                onRefused()
+            end
+        end
+    end
+    AceComm:SendCommMessage(PREFIX, text, route[1], route[2], prio or "NORMAL", callback)
 end
 
 local function NewId() return ("%d%04d"):format(time(), math.random(0, 9999)) end
@@ -342,8 +398,13 @@ local function StartWatchdog()
         if o and o.stage == "sending" and o.last and GetTime() - o.last > DATA_TIMEOUT then
             o.stage = "failed"; o.reason = "The transfer stalled. Try again; only the missing parts will be sent."
             Changed()
+        elseif o and o.stage == "delivered" and o.last and GetTime() - o.last > DATA_TIMEOUT then
+            -- Everything was handed to the game, but no "done" came back.
+            o.stage = "failed"
+            o.reason = ("Everything was sent, but %s never confirmed it arrived. They may not have received it. Ask them, or try again; you can also choose another way to send in Sending options."):format(SH.Short(o.target))
+            Changed()
         end
-        if not o or (o.stage ~= "offered" and o.stage ~= "packing" and o.stage ~= "sending") then
+        if not o or (o.stage ~= "offered" and o.stage ~= "packing" and o.stage ~= "sending" and o.stage ~= "delivered") then
             watchdog:Cancel()
             watchdog = nil
         end
@@ -358,6 +419,9 @@ function SH:SendTo(name, selfTest)
     if not mine or not next(mine.tables or {}) then return false, "Save your configuration first." end
     local target = SH.FullName(name)
     if not target then return false, "Type your friend's name, or target them." end
+    if target:find("#", 1, true) then
+        return false, "That looks like a Battle.net name. Type the character's name instead."
+    end
     if SH.Realmless() and not target:find(" ", 1, true) then
         return false, ("Forever needs the full name, first and last (like %s)."):format(SH.SelfName())
     end
@@ -375,19 +439,25 @@ function SH:SendTo(name, selfTest)
     local list = {}
     for tname, e in pairs(mine.tables) do list[tname] = { owner = e.owner, hash = e.hash } end
     local id = NewId()
-    SH.outgoing = { target = target, id = id, stage = "offered", sent = 0, total = 0, started = GetTime(), route = route }
+    local o = { target = target, id = id, stage = "offered", sent = 0, total = 0, started = GetTime(), route = route }
+    SH.outgoing = o
     StartWatchdog()
     Send(target, {
         t = "offer", p = PROTOCOL, id = id,
         from = SH.SelfName(), created = mine.created, version = mine.version,
         tables = list, em = mine.editModeHash, addons = ST.CountAddons(mine),
         bytes = ST.PackBytes(mine),
-    }, "ALERT", route)
+    }, "ALERT", route, function()
+        if SH.outgoing == o and o.stage == "offered" then
+            o.stage = "failed"; o.reason = RefusedReason(route, SH.Short(target))
+            Changed()
+        end
+    end)
     Changed()
     C_Timer.After(OFFER_TIMEOUT, function()
-        local o = SH.outgoing
-        if o and o.id == id and o.stage == "offered" then
-            o.stage = "failed"; o.reason = "No answer. Check they're online, running TwichUI 2.6 or newer, and allow the same channel in their Sending options."
+        if SH.outgoing == o and o.stage == "offered" then
+            local how = route[1] == "WHISPER" and "directly" or (route[1] == "GUILD" and "over the guild channel" or "over the group channel")
+            o.stage = "failed"; o.reason = ("No answer. The game accepted the offer, but nothing came back. Check %s is online and running a recent TwichUI with configuration sharing on, then try again. TwichUI sent it %s only; you can choose another way in Sending options. (TwichUI versions before this change may only listen on the group or guild channel if their owner switched that on.)"):format(SH.Short(target), how)
             Changed()
         end
     end)
@@ -401,7 +471,7 @@ end
 -- /tui share status: what the transfer code thinks is happening (for bug reports).
 function SH:Status()
     local P = R.Print
-    P("you are %s; route test: %s", tostring(SH.SelfName()), (SH.Route(SH.SelfName()) or { "none" })[1])
+    P("you are %s; sending by %s; self-test route: %s", tostring(SH.SelfName()), SH.TRANSPORT_LABEL[SH.Transport()], (SH.Route(SH.SelfName()) or { "none" })[1])
     local o = SH.outgoing
     if o then
         P("sending to %s: %s via %s (%s/%s bytes)%s", tostring(o.target), tostring(o.stage), tostring(o.route and o.route[1]),
@@ -486,13 +556,18 @@ function SH.SendLanes(o, encoded)
                 Changed()
             end)
         else
-            AceComm:SendCommMessage(LANES[i], text, o.route[1], o.route[2], "BULK", function(lane, sent)
+            AceComm:SendCommMessage(LANES[i], text, o.route[1], o.route[2], "BULK", function(lane, sent, _, accepted)
                 if SH.outgoing ~= o or o.stage ~= "sending" then return end
+                if accepted == false then
+                    o.stage = "failed"; o.reason = RefusedReason(o.route, SH.Short(o.target))
+                    Changed()
+                    return
+                end
                 laneSent[lane] = sent
                 local s2 = 0
                 for _, v in pairs(laneSent) do s2 = s2 + v end
                 o.sent, o.last = s2, GetTime()
-                if s2 >= total then o.stage = "delivered" end
+                if s2 >= total then o.stage = "delivered" end   -- handed to the game; the friend's "done" is the confirmation
                 Changed()
             end, i)
         end
@@ -723,7 +798,7 @@ end
 -- transfer we accepted from that sender; everything else is ignored.
 OnLane = function(_, text, dist, sender)
     if not R:Enabled("setupSharing") then return end
-    if not SH.Allowed(dist) then return end
+    if not SH.Receivable(dist) then return end
     sender = SH.FullName(sender)
     local inc = SH.incoming[sender]
     if not inc or (inc.stage ~= "receiving" and inc.stage ~= "waiting") then return end

@@ -1,13 +1,16 @@
 -- TwichUI: addon-message communication test.
--- TEMPORARY. Remove once Blizzard's addon messages are confirmed working on
--- WoW: Forever. To remove: delete this file, its line in the .toc, the
--- "commtest" row in Core.lua's command table, SH.DIAG_TYPES in Share.lua and
--- the isDiag lines in OnControl.
+-- A diagnostic for configuration sharing. To remove it: delete this file, its
+-- line in the .toc, the "commtest" row in Core.lua's command table,
+-- SH.DIAG_TYPES in Share.lua and the isDiag lines in OnControl.
 --
--- /tui commtest party | guild | whisper <Name-Realm>
+-- /tui commtest party | guild | whisper <name>   ("direct" works too)
 -- Sends one tiny message (a random id, nothing else) over TwichUI's real
--- addon prefix and waits for another TwichUI client to answer. Never uses
--- ordinary chat, never retries, never touches saved variables.
+-- addon prefix and waits for another TwichUI client to answer over the same
+-- route. A SUCCESS therefore means a small round trip with that one player
+-- worked just now. It doesn't test multi-part messages, the bulk transfer
+-- prefixes, throttling, offline players or other name forms, and it doesn't
+-- change how configurations are sent. Never uses ordinary chat, never
+-- retries, never touches saved variables.
 
 local R = TwichUI
 local SH = R.Share
@@ -42,8 +45,9 @@ end
 function CT.Run(arg)
     local kind, who = (arg or ""):match("^(%S*)%s*(.-)%s*$")
     kind = kind:lower()
+    if kind == "direct" then kind = "whisper" end
     if kind ~= "party" and kind ~= "guild" and kind ~= "whisper" then
-        Say("usage: /tui commtest party | guild | whisper <Name-Realm>")
+        Say("usage: /tui commtest party | guild | direct <name>")
         return
     end
     if pending then Say("a test is already running; wait for it to finish.") return end
@@ -58,7 +62,7 @@ function CT.Run(arg)
         if not IsInGuild() then Say("not attempted: you're not in a guild.") return end
         route, target, need, label = { "GUILD" }, "*", "and in your guild", "GUILD"
     else
-        if who == "" then Say("not attempted: whisper needs a name, e.g. /tui commtest whisper Name-Realm") return end
+        if who == "" then Say("not attempted: direct needs a name, e.g. /tui commtest direct First Last") return end
         route, target, need, label = { "WHISPER", who }, who, "(the named player)", "WHISPER"
     end
 
@@ -88,7 +92,7 @@ SH.handlers.commtestack = function(sender, msg, dist)
     local first = next(p.acks) == nil
     p.acks[sender] = math.floor((GetTime() - p.sentAt) * 1000)
     if first then
-        Say("%sSUCCESS|r. %s answered over %s in about %d ms. Addon messages work on this path.",
+        Say("%sSUCCESS|r. %s answered over %s in about %d ms. A small message made the round trip on this path (larger transfers aren't tested).",
             R.GREEN, SH.Short(sender), tostring(dist), p.acks[sender])
         -- state is cleared by the timeout; later acks from other peers are just recorded
     end

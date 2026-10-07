@@ -731,7 +731,7 @@ local function Build()
         "When on, friends can offer you their addon configuration. You're always asked first, unless you chose \"Always accept\" for that friend. Nothing is applied until you click Apply.",
         false), sharing, SharingOn)
     Toggle("groupCheck", "Version and group check",
-        "On by default. Both players need it on to see each other. Other players never see these messages, even without TwichUI.\n\nWhen you're in a group, TwichUI trades version numbers with other TwichUI users (a few bytes, group channel only) and tells you when someone's version is newer or too old to share with. Also powers /tui check and Party compatibility check in /tui share, and a once-per-game-build test that switches sharing back to direct messages when Forever fixes them.",
+        "On by default. Both players need it on to see each other. Other players never see these messages, even without TwichUI.\n\nWhen you're in a group, TwichUI trades version numbers with other TwichUI users (a few bytes, group channel only) and tells you when someone's version is newer or too old to share with. Also powers /tui check and Party compatibility check in /tui share, and a once-per-game-build test message that shows in Sending options whether direct messages reached another TwichUI user.",
         true)
     Button("Configuration sharing", "Open", function()
         if not R:Enabled("setupSharing") then
@@ -742,15 +742,18 @@ local function Build()
         R.Window:Show()
     end, "Opens the sharing window: send your setup, review ones friends sent, create backups and run the party compatibility check (same as typing /tui share).")
     Advanced(Header("Advanced"))
-    Advanced(Toggle("shareWhisper", "Send by direct message",
-        "Send and receive configurations with hidden addon messages straight to one player. Only they receive it.\n\n" .. R.Share.WHY_FOREVER,
-        false))
-    Advanced(Toggle("shareGroup", "Send over the group channel",
-        "Send and receive over your party or raid's hidden addon channel. Everyone in the group receives the data; only the named recipient's TwichUI reads it, the rest ignore it. No chat text appears.\n\nUse this on Forever, where direct messages don't work yet.",
-        false))
-    Advanced(Toggle("shareGuild", "Send over the guild channel",
-        "Send and receive over your guild's hidden addon channel. Every online guild member receives the data; only the named recipient's TwichUI reads it. No chat text appears, but it uses guild-wide bandwidth, so prefer the group channel when you can.",
-        false))
+    Advanced(Choice("shareTransport", "Send configurations by",
+        "How your configuration travels when you press Send. TwichUI uses only the one you pick and never switches by itself if it fails. Receiving works on all three, whatever you pick here.\n\n" .. R.Share.TRANSPORT_EXPLAIN,
+        STRING, "DIRECT",
+        function() return R.Share.Transport() end,
+        function(value) R.Share.SetTransport(value) end,
+        function()
+            local list = {}
+            for _, key in ipairs(R.Share.TRANSPORTS) do
+                list[#list + 1] = { key, R.Share.TRANSPORT_LABEL[key], R.Share.TRANSPORT_HELP[key] }
+            end
+            return list
+        end))
 
     -----------------------------------------------------------------------
     Use("auction")

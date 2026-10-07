@@ -33,13 +33,16 @@ for _, r in ipairs(rich.TwichUI.Group:CheckRows()) do print("row", r.short, r.st
 -- probe (whispers dropped): marks not working after timeout
 RunLongTimers(20)
 assert(rich.TwichUIDB.whisperProbe and rich.TwichUIDB.whisperProbe.ok == false, "probe timed out")
-print("whisper works?", rich.TwichUI.Share.WhisperWorks(), rich.TwichUI.Group.WhisperStatus())
+print("probe status:", rich.TwichUI.Group.WhisperStatus())
+assert(rich.TwichUI.Group.WhisperStatus():find("no answer"), "status says the test message got no answer")
+-- the probe never decides the route: Direct is still what gets used
+assert(rich.TwichUI.Share.Route("Pal Stonebrook")[1] == "WHISPER")
 -- simulate fixed whispers on new build
 BUILD = "70100"; DROP_SPACED_WHISPERS = false
 rich.TwichUIDB.whisperProbe = nil
 rich.TwichUI.Group:MaybeProbe(); settle()
-print("after fix:", rich.TwichUI.Share.WhisperWorks())
-assert(rich.TwichUI.Share.WhisperWorks())
+assert(rich.TwichUIDB.whisperProbe and rich.TwichUIDB.whisperProbe.ok == true, "probe answered")
+assert(rich.TwichUI.Group.WhisperStatus():find("reached"), rich.TwichUI.Group.WhisperStatus())
 local route = rich.TwichUI.Share.Route("Pal Stonebrook")
 print("route now:", route[1])
 assert(route[1] == "WHISPER")

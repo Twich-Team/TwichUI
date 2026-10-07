@@ -1,4 +1,6 @@
 TIMERS = {}
+TICKERS = {}
+function RunTickers() for _, t in ipairs(TICKERS) do if not t.cancelled then t.fn() end end end
 LONG_TIMERS = {}
 UPDATERS = {}
 function FlushTimers() for fr, fn in pairs(UPDATERS) do for _ = 1, 50 do if UPDATERS[fr] then UPDATERS[fr](fr, 0.016) end end end local t = TIMERS; TIMERS = {}; for _, f in ipairs(t) do f() end end
@@ -50,14 +52,21 @@ function MakeClient(charName, addons)
   env.print = function(s) print("["..charName.."] "..tostring(s)) end
   env.geterrorhandler = function() return function(e) print("["..charName.."] ERROR: "..tostring(e)) end end
   -- Short timers run on the next FlushTimers(); longer ones (timeouts, delayed hellos) wait for RunLongTimers(seconds).
-  env.C_Timer = {After = function(d, fn) if d <= 1 then table.insert(TIMERS, fn) else table.insert(LONG_TIMERS, {d = d, fn = fn}) end end, NewTicker = function() return {Cancel = function() end} end}
+  env.C_Timer = {After = function(d, fn) if d <= 1 then table.insert(TIMERS, fn) else table.insert(LONG_TIMERS, {d = d, fn = fn}) end end, NewTicker = function(_, fn) local t = {fn = fn}; function t:Cancel() self.cancelled = true end; TICKERS = TICKERS or {}; table.insert(TICKERS, t); return t end}
   env.UnitGUID = function() return "Player-1-" .. charName end
   env.IsInGroup = function() return GROUP ~= nil and GROUP[charName] ~= nil end
   env.IsInRaid = function() return false end
   env.GetNumGroupMembers = function() local n = 0 for _ in pairs(GROUP or {}) do n = n + 1 end return n end
   env.InCombatLockdown = function() return false end
   env.GetBuildInfo = function() return "1.60.1", BUILD or "70009", "Sep", 16001 end
-  env.IsInGuild = function() return false end
+  -- GUILD = { [name] = online? } when a test wants a guild.
+  env.IsInGuild = function() return GUILD ~= nil and GUILD[charName] ~= nil end
+  env.GetNumGuildMembers = function() local n = 0 for _ in pairs(GUILD or {}) do n = n + 1 end return n end
+  env.GetGuildRosterInfo = function(i)
+    local list = {} for k in pairs(GUILD or {}) do table.insert(list, k) end table.sort(list)
+    local k = list[i]
+    if k then return k, "", 0, 1, "", "", "", "", GUILD[k] end
+  end
   env.GetUnitName = function(u, full)
     if u == "player" then return charName end
     local i = tonumber((u or ""):match("^party(%d)$"))
@@ -97,8 +106,14 @@ function MakeClient(charName, addons)
       env._comm = {}
       AceComm.RegisterComm = function(self, prefix, fn) env._comm[prefix] = fn end
       AceComm.SendCommMessage = function(self, prefix, text, dist, target, prio, cb, arg)
-        table.insert(NET, {dist = dist, to = target, prefix = prefix, text = text, sender = SENDER_FMT and SENDER_FMT(charName) or charName.."-Forever", from = env})
-        if cb then cb(arg, #text, #text) end
+        -- FAIL_SEND(dist, target) = true: the game refuses the message (nothing is delivered).
+        local refused = FAIL_SEND and FAIL_SEND(dist, target)
+        SENT_LOG = SENT_LOG or {}
+        table.insert(SENT_LOG, {from = charName, dist = dist, to = target, prefix = prefix, refused = refused and true or false})
+        if not refused then
+          table.insert(NET, {dist = dist, to = target, prefix = prefix, text = text, sender = SENDER_FMT and SENDER_FMT(charName) or charName.."-Forever", from = env})
+        end
+        if cb then cb(arg, #text, #text, not refused) end
       end
     end
     local chunk = assert(loadfile(ROOT..f))
@@ -119,6 +134,8 @@ function Pump()
         for k, v in pairs(CLIENTS) do if k:lower() == toName:lower() then targets = {v} end end
         if #targets == 0 then print("NO PLAYER: "..m.to) end
       end
+    elseif m.dist == "GUILD" then
+      for k, v in pairs(CLIENTS) do if (GUILD or {})[k] or v == m.from then table.insert(targets, v) end end
     else
       for k, v in pairs(CLIENTS) do if (GROUP or {})[k] or v == m.from then table.insert(targets, v) end end
     end

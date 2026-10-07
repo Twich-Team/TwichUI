@@ -647,7 +647,7 @@ local function BuildShare(p)
     end, "A rehearsal, not a send to someone else: sends your setup to your own character through the real in-game channel, so you get the accept prompt, the progress bars and the received copy under Received setups, exactly like a friend would.")
     mine.selfTest:SetPoint("TOPLEFT", 16, -428)
     mine.channels = Btn(p, "Sending options", 130, function() W:ShowChannels() end,
-        "Choose how setups travel: direct messages, your group, or your guild. Explains why Forever needs the group or guild for now.")
+        "Choose how setups are sent: Direct to one character, over your Party, or over your Guild.")
     mine.channels:SetPoint("LEFT", mine.selfTest, "RIGHT", 8, 0)
     mine.party = Btn(p, "Party compatibility check", 200, function() W:ShowParty() end,
         "See which TwichUI version your party runs and which of your recommended addons they're missing. Only runs when you press Check this party.")
@@ -694,12 +694,17 @@ local function RefreshShare()
         local tip
         if not m then
             tip = "Save your setup first, then type your friend's name and press Send."
-        elseif SH.Realmless() and not R:Enabled("shareGroup") and not R:Enabled("shareGuild") then
-            tip = GOLD .. "Forever can't deliver direct addon messages yet. Open Sending options to allow your group channel.|r"
-        elseif SH.Realmless() then
-            tip = "Group up with your friend" .. (R:Enabled("shareGuild") and " (or be in the same guild)" or "") .. ", type their full name, and press Send."
         else
-            tip = "Type a name and press Send. You both need to be online."
+            local t = SH.Transport()
+            local name = SH.Realmless() and "their full name (first and last)" or "their name"
+            if t == "PARTY" then
+                tip = ("Sending by Party: they need to be in your group. Type %s and press Send."):format(name)
+            elseif t == "GUILD" then
+                tip = ("Sending by Guild: they need to be in your guild and online. Type %s and press Send."):format(name)
+            else
+                tip = ("Sending Direct: type %s and press Send. You both need to be online."):format(name)
+            end
+            tip = tip .. " Change this in Sending options."
         end
         mine.status:SetText(GREY .. tip .. "|r")
     else
@@ -1912,7 +1917,7 @@ function W:ShowStorage()
 end
 
 ---------------------------------------------------------------------------
--- Popup: sending options (which channels setups may use)
+-- Popup: sending options (how setups are sent)
 ---------------------------------------------------------------------------
 local sop
 
@@ -1946,47 +1951,44 @@ local function BuildChannels()
     why:SetPoint("TOPLEFT", 16, -42)
     why:SetWidth(508)
     why:SetSpacing(2)
-    why:SetText(GOLD .. "Why Forever needs this|r\n" .. SH.WHY_FOREVER
-        .. "\n\nGroup and guild messages are hidden addon traffic: no chat text appears. Everyone in that group or guild with TwichUI does receive the data, but it's addressed to one person and everyone else's TwichUI ignores it. The data is your addon settings, which can include character names. Direct messages will work again once Blizzard fixes them, and TwichUI will use them first.")
+    why:SetText(GOLD .. "How to send|r\n" .. SH.TRANSPORT_EXPLAIN)
 
-    local y = -180
-    local function Option(key, label, desc)
-        local c = Check(sop, label)
+    local y = -150
+    sop.opts = {}
+    local function Refresh()
+        for _, c in ipairs(sop.opts) do c:SetChecked(SH.Transport() == c.key) end
+    end
+    for _, key in ipairs(SH.TRANSPORTS) do
+        local c = Check(sop, SH.TRANSPORT_LABEL[key])
         c:SetPoint("TOPLEFT", 14, y)
         c.label:SetFontObject("GameFontHighlight")
-        c:SetScript("OnClick", function(self)
-            TwichUIDB.modules[key] = self:GetChecked() and true or false
+        c.key = key
+        c:SetScript("OnClick", function()
+            SH.SetTransport(key)
+            Refresh()
             W:Refresh()
         end)
         local d = Text(sop, "GameFontDisableSmall")
         d:SetPoint("TOPLEFT", c, "BOTTOMLEFT", 26, 0)
         d:SetWidth(470)
-        d:SetText(desc)
-        c.key = key
+        d:SetText(SH.TRANSPORT_HELP[key])
         y = y - 58
-        return c
+        sop.opts[#sop.opts + 1] = c
     end
-    sop.opts = {
-        Option("shareWhisper", "Allow direct messages",
-            "Straight to one player; only they receive it. Doesn't work on Forever yet."),
-        Option("shareGroup", "Allow group channel",
-            "Everyone in your party or raid receives it; only the named friend's TwichUI reads it. Best choice on Forever."),
-        Option("shareGuild", "Allow guild channel",
-            "Every online guild member receives it; only the named friend's TwichUI reads it. Uses guild-wide bandwidth."),
-    }
+    sop.refreshChecks = Refresh
     sop.status = Text(sop, "GameFontHighlightSmall")
     sop.status:SetPoint("BOTTOMLEFT", 16, 44)
     sop.status:SetWidth(508)
     local note = Text(sop, "GameFontDisableSmall")
     note:SetPoint("BOTTOMLEFT", 16, 12)
     note:SetWidth(508)
-    note:SetText("These apply to receiving too: a friend's setup only reaches you over channels you allow here. Test on myself stays on your computer when no allowed channel is available.")
+    note:SetText("This only controls how you send. A friend's configuration reaches you over any of the three, and you're always asked before anything is accepted or applied. If a send fails, nothing else is tried.")
 end
 
 function W:ShowChannels()
     if not sop then BuildChannels() end
-    for _, c in ipairs(sop.opts) do c:SetChecked(R:Enabled(c.key)) end
-    sop.status:SetText(GOLD .. "Status:|r " .. R.Group.WhisperStatus())
+    sop.refreshChecks()
+    sop.status:SetText(GOLD .. "Direct test:|r " .. R.Group.WhisperStatus())
     sop:Show()
 end
 

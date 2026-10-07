@@ -8,7 +8,7 @@ local function boot(name, addons, scan)
   c.LOADED["!!!TwichUI"]=true; c.FireEvent("ADDON_LOADED","!!!TwichUI")
   c.FooDB = {a=string.rep("abcdefghij", 800)}; c.LOADED.Foo=true; c.FireEvent("ADDON_LOADED","Foo")
   c.FireEvent("PLAYER_LOGIN")
-  if ALLOW_GROUP ~= false then c.TwichUIDB.modules.shareGroup = true end
+  if ALLOW_GROUP ~= false then c.TwichUI.Share.SetTransport("PARTY") end
   return c
 end
 local function settle() for _ = 1, 20 do FlushTimers(); Pump() end end

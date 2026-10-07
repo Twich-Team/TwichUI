@@ -25,9 +25,6 @@ local DEFAULT_MODULES = {
     quietLogin = true,       -- hide addon welcome messages at login/reload
     gearHints = true,        -- "Likely upgrade" line in item tooltips (stat weights: /twichui gear)
     gearBagIcons = false,    -- ... and a mark on upgrades in your bags (opt-in)
-    shareWhisper = true,     -- configuration sharing over direct addon messages
-    shareGroup = false,      -- ... over the group channel (opt-in)
-    shareGuild = false,      -- ... over the guild channel (opt-in)
     groupCheck = true,       -- version hello / group check / DM probe (group channel)
     chronicle = true,        -- Journey Chronicle: write automatic entries (your own notes always work)
     chronicleLevels = true,  -- ... level milestones
@@ -229,8 +226,7 @@ COMMANDS = {
     { name = "skin", usage = "skin [apply]", desc = "Auctionator skin status; apply re-runs it", fn = function(arg)
         if R.SkinCommand then R.SkinCommand(arg) else Unavailable("Auctionator skin") end
     end },
-    -- TEMPORARY: remove with setup/CommTest.lua
-    { name = "commtest", usage = "commtest party|guild|whisper <name>", desc = "test addon messages with another TwichUI user (temporary)", fn = function(arg)
+    { name = "commtest", usage = "commtest party|guild|direct <name>", desc = "test addon messages with another TwichUI user", fn = function(arg)
         if R.CommTest then R.CommTest.Run(arg) else Unavailable("Comm test") end
     end },
     -- TEMPORARY: remove with modules/FoodDrinkProbe.lua
