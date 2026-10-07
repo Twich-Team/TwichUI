@@ -80,7 +80,6 @@ local function Build()
     NewPage("gear", "Gear comparison")
     NewPage("notifications", "Notifications")
     NewPage("food", "Food and drink")
-    if R.ComboPoints and R.ComboPoints.ForPlayer() then NewPage("combo", "Combo points") end   -- Rogues only
     if R.MageTravel and R.MageTravel.ForPlayer() then NewPage("mage", "Mage") end   -- Mages only
     NewPage("chronicle", "Journey Chronicle")
     NewPage("auction", "Auction House")
@@ -478,182 +477,6 @@ local function Build()
     end
 
     -----------------------------------------------------------------------
-    local CP = R.ComboPoints
-    if pages.combo then
-        Use("combo")
-        Header("Combo points", "The combo points on your target, where you want them. It shows only what the game reports and never uses an ability for you.")
-        local function RefreshCombo() CP.Refresh() end
-        local combo = Toggle("comboPoints", "Show TwichUI combo points",
-            "Shows the combo points on your current target as small points, a thin bar or a number. It reads them from the game whenever they change, when you change target, and when combat starts or ends; it never guesses them. Move it in Edit Mode, where it shows with sample points, or type /tui combo to watch it fill.",
-            false, RefreshCombo)
-        local function ComboOn() return R:Enabled("comboPoints") end
-
-        local resettable = {}   -- { setting, default }, for Reset
-        local function Remember(variable, varType, label, key, set)
-            local default = CP.DEFAULTS[key]
-            if default == nil and CP.COLORS[key] then default = CP.THEMES[1][CP.COLORS[key]] end   -- a colour: the default look's
-            local setting = Proxy(variable, varType, label, default, function() return CP.Get(key) end,
-                set or function(value) CP.Set(key, value) end)
-            if setting then resettable[#resettable + 1] = { setting = setting, default = default } end
-            return setting
-        end
-        -- options: { { value, label, tooltip }, ... } or a function returning that.
-        local function Pick(variable, key, label, tooltip, options, parent, isOn)
-            local setting = Remember(variable, STRING, label, key)
-            if not (setting and Settings.CreateDropdown and Settings.CreateControlTextContainer) then return end
-            return Under(Settings.CreateDropdown(category, setting, function()
-                local container = Settings.CreateControlTextContainer()
-                for _, option in ipairs(type(options) == "function" and options() or options) do
-                    container:Add(option[1], option[2], option[3])
-                end
-                return container:GetData()
-            end, tooltip), parent or combo, isOn or ComboOn)
-        end
-        local function Slider(variable, key, label, tooltip, parent, isOn)
-            local limit = CP.LIMITS[key]
-            local setting = Remember(variable, NUMBER, label, key, function(value) CP.Set(key, math.floor(value + 0.5)) end)
-            if not (setting and Settings.CreateSlider and Settings.CreateSliderOptions) then return end
-            local options = Settings.CreateSliderOptions(limit[1], limit[2], 1)
-            if MinimalSliderWithSteppersMixin and options.SetLabelFormatter then
-                options:SetLabelFormatter(MinimalSliderWithSteppersMixin.Label.Right)
-            end
-            return Under(Settings.CreateSlider(category, setting, options, tooltip), parent or combo, isOn or ComboOn)
-        end
-        local function Check(variable, key, label, tooltip, parent, isOn)
-            local setting = Remember(variable, BOOL, label, key, function(value) CP.Set(key, value and true or false) end)
-            return setting and Under(Settings.CreateCheckbox(category, setting, tooltip), parent or combo, isOn or ComboOn)
-        end
-
-        local style = Pick("comboStyle", "style", "Style", "How the points are drawn.", {
-            { "pips", "Points", "A small marker for each point." },
-            { "bar", "Thin bar", "A slim bar, one segment for each point." },
-            { "number", "Number", "Just the count, in gold." },
-        })
-        local function StyleIs(value) return function() return ComboOn() and CP.Get("style") == value end end
-        local looks = {}
-        for i, theme in ipairs(CP.THEMES) do looks[i] = { theme.key, theme.label, theme.tooltip } end
-        Pick("comboTheme", "theme", "Look", "The colors of the points. Use my own colors (Advanced) sets your own.", looks)
-        Pick("comboVisibility", "visibility", "Show it",
-            "When the display is on screen. It always hides while you're dead.", {
-            { "points", "When I have points", "Only while your target carries at least one of your combo points." },
-            { "target", "Whenever I have a target", "While you have a living enemy targeted, with empty points when you have none on it." },
-            { "combat", "In combat", "Whenever you're in combat, with or without a target. Hidden out of combat." },
-            { "always", "Always", "All the time, with or without a target or a fight, empty when you have no points." },
-        })
-
-        local others = {}
-        if C_AddOns and C_AddOns.IsAddOnLoaded then
-            if C_AddOns.IsAddOnLoaded("EllesmereUIUnitFrames") then others[#others + 1] = "Enable Class Resource (EllesmereUI Unit Frames)" end
-            if C_AddOns.IsAddOnLoaded("EllesmereUIResourceBars") then others[#others + 1] = "Show Class Resource (EllesmereUI Resource Bars)" end
-        end
-        local othersText = #others > 0
-            and ("\n\nEllesmereUI can show combo points too. If you see them twice, turn off " .. table.concat(others, " or ") .. " in EllesmereUI's options. TwichUI doesn't change EllesmereUI's settings.")
-            or ""
-        Header("Other combo point displays", "So you don't see your combo points twice." .. othersText)
-        Under(Toggle("comboPointsHideGame", "Hide the game's combo points by the target portrait",
-            "While TwichUI's combo points are on, the game's own beside the target's portrait are hidden. Turn this off to keep both. Turning TwichUI's off gives the game's back. A change made in combat applies when it ends." .. othersText,
-            false, RefreshCombo), combo, ComboOn)
-
-        Header("Size and layout")
-        Pick("comboOrientation", "orientation", "Layout", "Whether the points run across or up.", {
-            { "horizontal", "Side by side" }, { "vertical", "Stacked" },
-        })
-        Pick("comboDirection", "direction", "First point", "Which end the first point sits at.", {
-            { "forward", "Left (bottom when stacked)" }, { "reverse", "Right (top when stacked)" },
-        })
-        Pick("comboShape", "shape", "Point shape", "The shape of each point. For the Points style.", {
-            { "square", "Square" }, { "round", "Round" },
-        }, style, StyleIs("pips"))
-        Slider("comboPipSize", "pipSize", "Point size", "The width and height of each point, in pixels. For the Points style.", style, StyleIs("pips"))
-        Slider("comboBarLength", "barLength", "Bar length", "The length of the whole bar, in pixels. For the Thin bar style.", style, StyleIs("bar"))
-        Slider("comboBarHeight", "barHeight", "Bar thickness", "How thick the bar is, in pixels. For the Thin bar style.", style, StyleIs("bar"))
-        Slider("comboNumberSize", "numberSize", "Number size", "The size of the count. For the Number style.", style, StyleIs("number"))
-        Slider("comboSpacing", "spacing", "Space between points", "The gap between points, in pixels.", style,
-            function() return ComboOn() and CP.Get("style") ~= "number" end)
-        Slider("comboScale", "scale", "Scale", "The size of the whole display, in percent.")
-        Slider("comboOpacity", "opacity", "Opacity", "How solid the display is, in percent.")
-
-        local function Swatch(variable, key, label, tooltip, parent, isOn)
-            local setting = Remember(variable, STRING, label, key)
-            if setting and Settings.CreateColorSwatch then
-                return Under(Settings.CreateColorSwatch(category, setting, tooltip), parent or combo, isOn or ComboOn)
-            end
-        end
-        Header("Borders")
-        local TEXTURE_TIP = "Solid is a plain line. With EllesmereUI installed, its own border textures (such as Pixels Textured) are listed too, drawn the way its bars draw them. The rest are border textures from LibSharedMedia, so any addon that adds borders to it adds them here. Picking one sets a thickness and color that suit it unless you have set your own. The same list as the Food and Drink buttons."
-        local pointBorder = Check("comboPointBorder", "pointBorder", "Border on each point",
-            "An edge round every point, so each reads on its own against any ground. For the Points and Thin bar styles.")
-        local function PointBorderOn() return ComboOn() and CP.Get("pointBorder") end
-        Pick("comboPointBorderTexture", "pointBorderTexture", "Point border texture",
-            TEXTURE_TIP .. " A texture sits over the point's edge and is square even round round points.",
-            function() return CP.TextureChoices("pointBorderTexture") end, pointBorder, PointBorderOn)
-        Slider("comboPointBorderSize", "pointBorderSize", "Point border thickness",
-            "In pixels. A texture needs about 6 or more to read well; a thick border needs more space between points.", pointBorder, PointBorderOn)
-        Swatch("comboBorderColor", "borderColor", "Point border color",
-            "The color of each point's border. It starts as the look's.", pointBorder, PointBorderOn)
-        local frameBorder = Check("comboFrameBorder", "frameBorder", "Border round the whole display",
-            "One border round all the points (or the number) together. Off: only the Leather and bronze look, or a backing of your own, gets its thin bronze edge.")
-        local function FrameBorderOn() return ComboOn() and CP.Get("frameBorder") end
-        Pick("comboFrameBorderTexture", "frameBorderTexture", "Display border texture", TEXTURE_TIP,
-            function() return CP.TextureChoices("frameBorderTexture") end, frameBorder, FrameBorderOn)
-        Slider("comboFrameBorderSize", "frameBorderSize", "Display border thickness",
-            "In pixels. A texture needs about 8 or more to read well.", frameBorder, FrameBorderOn)
-        Swatch("comboFrameBorderColor", "frameBorderColor", "Display border color",
-            "The color of the border round the whole display. Bronze by default.", frameBorder, FrameBorderOn)
-
-        Header("Animation")
-        local animation = Pick("comboAnimation", "animation", "Animation",
-            "Short touches that never get in the way of the count. With Reduced motion on (Notifications), Full is shown as Subtle and there is no mist.", {
-            { "full", "Full", "A brief light on each point you gain, spent points fading out, a thin gold rule that brightens once when your points are full, and a short fade when the display hides." },
-            { "subtle", "Subtle", "The same, fainter." },
-            { "off", "Off", "No animation, and no mist." },
-        })
-        local function MistOn() return ComboOn() and CP.Get("animation") ~= "off" end
-        local mist = Pick("comboMist", "mist", "Poison mist",
-            "A soft green mist behind the points, drawn from TwichUI's own art. It drifts, so Reduced motion turns it off.", {
-            { "off", "Off", "No mist." },
-            { "full", "When my points are full", "A single soft puff that rises and thins away as your points fill up." },
-            { "points", "While I have points", "A faint mist that keeps drifting behind the points while you have any on your target." },
-        }, animation, MistOn)
-        Swatch("comboMistColor", "mistColor", "Mist color", "The color of the mist. A muted poison green by default.",
-            mist, function() return MistOn() and CP.Get("mist") ~= "off" end)
-        Under(Button("Combo points", "Preview", function()
-            if SettingsPanel and SettingsPanel:IsShown() then HideUIPanel(SettingsPanel) end
-            local ok, why = CP.Preview()
-            if not ok then R.Print(why) end
-        end, "Closes the options and fills the points one by one, so you can see the look (same as typing /tui combo)."), combo, ComboOn)
-        Button("Appearance", "Reset", function()
-            for _, entry in ipairs(resettable) do
-                if entry.setting.SetValue then pcall(entry.setting.SetValue, entry.setting, entry.default) end
-            end
-            CP.ClearColors()
-        end, "Puts the style, look, visibility, size, layout, borders, animation, mist, colors and font back to their defaults. The place is kept.")
-
-        Advanced(Header("Advanced"))
-        local custom = Check("comboCustomColors", "customColors", "Use my own colors",
-            "Use the colors below instead of the look's. They start as the look's own.")
-        Advanced(custom)
-        local function CustomOn() return ComboOn() and CP.Get("customColors") end
-        for _, swatch in ipairs({
-            { "comboActiveColor", "activeColor", "Filled point", "A point you have." },
-            { "comboInactiveColor", "inactiveColor", "Empty point", "A point you don't have yet." },
-            { "comboBackgroundColor", "backgroundColor", "Backing", "A backing behind the points, edged in bronze. Fully clear for none, as most looks have." },
-        }) do
-            local setting = Remember(swatch[1], STRING, swatch[3], swatch[2])
-            if setting and Settings.CreateColorSwatch then
-                Under(Advanced(Settings.CreateColorSwatch(category, setting, swatch[4])), custom or combo, CustomOn)
-            end
-        end
-        Advanced(Pick("comboFont", "font", "Number font",
-            "The font of the count. Fonts from LibSharedMedia are listed, so other addons' fonts appear too. For the Number style.",
-            function() return CP.FontChoices() end, style, StyleIs("number")))
-        Advanced(Pick("comboOutline", "outline", "Number outline", "An outline keeps the count readable over bright ground. For the Number style.", {
-            { "NONE", "None" }, { "OUTLINE", "Thin" }, { "THICKOUTLINE", "Thick" },
-        }, style, StyleIs("number")))
-        Advanced(Check("comboShadow", "shadow", "Number shadow", "A soft shadow under the count. For the Number style.", style, StyleIs("number")))
-    end
-
-    -----------------------------------------------------------------------
     local MT = R.MageTravel
     if pages.mage then
         Use("mage")
@@ -849,10 +672,6 @@ local function Build()
         end)
     FeatureRow("food", "Food and drink", "Two buttons you click to eat or drink the best food or drink in your bags.",
         function() return OnOff(R:Enabled("foodDrink")) end)
-    if pages.combo then
-        FeatureRow("combo", "Combo points", "Your combo points on the target, where you want them, in your choice of style.",
-            function() return OnOff(R:Enabled("comboPoints")) end)
-    end
     if pages.mage then
         FeatureRow("mage", "Mage", "Data bar launchers for your teleports and portals, and for conjuring food and water.",
             function()
@@ -884,7 +703,7 @@ local function Build()
     local advancedSetting = Settings.RegisterAddOnSetting(category, "TWICHUI_showAdvanced", "showAdvanced", TwichUIDB.ui, BOOL,
         "Show advanced options", false)
     Settings.CreateCheckbox(category, advancedSetting,
-        "Shows an Advanced section on the pages that have one: how upgrade hints are judged and revealed and the bag mark style (Gear comparison), how long the zone card stays (Notifications), your own colors and the number's font (Combo points, for Rogues), and how configurations are sent (Configuration sharing). Hidden options keep their values.")
+        "Shows an Advanced section on the pages that have one: how upgrade hints are judged and revealed and the bag mark style (Gear comparison), how long the zone card stays (Notifications), and how configurations are sent (Configuration sharing). Hidden options keep their values.")
     Toggle("media", "Custom fonts and sounds",
         "Adds Alegreya, Alegreya Sans, Barlow, Cinzel and Spectral fonts, plus the bell alert sounds, to the font and sound lists of EllesmereUI and other addons. Nothing changes until you pick them there.",
         true)

@@ -1,3 +1,9 @@
+## Notice
+
+Preperation is underway for the initial launch of WoW: Forever. This addon is under heavy development and the features and stability it provides will fluctuate until the launch of the game.
+
+## Addon
+
 Its purpose is to refine the experience, not replace it. Small, thoughtful touches should help players read the game and make their own decisions while preserving the atmosphere, discovery, and sense of place that make Forever compelling.
 
 This addon is intended to work alongside EllesmereUI.
@@ -16,8 +22,6 @@ This addon is intended to work alongside EllesmereUI.
 **Addon skins:** Provides EllemereUI skinning to various addons to create a cohesive look and feel. Currently supprts: Attune, Auctionator, DungeonJournal, and WhatsTraining.
 
 **Food and Drink buttons:** Optional (off by default). Two small buttons that hold the food and drink in your bags that restore the most, and eat or drink it when you click them. TwichUI never uses anything itself, skips buff food and feasts, and changes the choice out of combat only. Each button can be switched off, and their size, spacing, layout, border (texture, thickness, color or class color, opacity) icon zoom and opacity (with an option to fade them until the mouse is over them) are yours to set.
-
-**Combo points:** For Rogues, optional (off by default). The combo points on your target as small points, a thin bar or a number, wherever you put it in Edit Mode, in warm gold and bronze or an etched brass, leather or poison look. Show it only when you have points, whenever you have an enemy targeted, only in combat, or always. Borders on each point and round the whole display are yours to set, in a plain line, any LibSharedMedia border or EllesmereUI's own textures. It reads only what the game reports and never acts for you; a brief light marks a point gained, spent points fade away, a thin gold rule marks your points reaching full, and an optional poison mist puffs up at full or drifts softly behind your points (or no animation at all). It can hide the game's own combo points by the target portrait so you don't see them twice.
 
 **Mage Travel:** For Mages, on by default, and shown through a data bar addon that lists LibDataBroker launchers (such as EllesmereUI's Broker Plugin block). It shows its icon with "Travel" or "Portals" (or just the icon), as you choose. A small menu of the teleports and portals your faction can learn on WoW: Forever. Click a learned one to cast it through the game's own secure button; ones you haven't learned stay readable, and their tooltip gives the level they are trained at. It can't be opened in combat and closes when combat starts.
 

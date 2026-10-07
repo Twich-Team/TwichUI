@@ -1,6 +1,6 @@
 -- TwichUI: border textures
 -- The border textures TwichUI's own frames can be drawn with, shared by the Food and Drink
--- buttons and the combo points so both offer the same list and draw it the same way:
+-- buttons and the Mage menus so they offer the same list and draw it the same way:
 --   "solid"     a plain line, drawn by the caller with its own textures;
 --   "<name>"    any border LibSharedMedia has (any addon's), as a backdrop edge file;
 --   "eui:<key>" one of EllesmereUI's own, drawn by its ApplyBorderStyle on a frame of ours so it

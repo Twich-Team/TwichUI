@@ -16,7 +16,7 @@
 -- solid the buttons are, with an option to fade them until the mouse is over them. Border
 -- textures: a plain line, any LibSharedMedia border, and (only while EllesmereUI is installed)
 -- EllesmereUI's own, drawn by its ApplyBorderStyle on a frame of ours so they match its bars; the
--- list and drawing are shared with the combo points (modules/Borders.lua). Saved in TwichUIDB.ui.foodDrink.
+-- list and drawing are shared with the Mage menus (modules/Borders.lua). Saved in TwichUIDB.ui.foodDrink.
 
 local R = TwichUI
 local F = {}
@@ -165,7 +165,7 @@ local BORDER_RULES = { defaultSize = F.DEFAULTS.borderSize, defaultColor = F.DEF
     solidMax = 4, texturedMin = 8, texturedSeed = 12, maxSize = F.LIMITS.borderSize[2] }   -- a texture needs room to draw
 F.LAYOUTS = { horizontal = true, vertical = true }
 
-local Borders = R.Borders   -- the border textures, shared with the combo points (modules/Borders.lua)
+local Borders = R.Borders   -- the border textures, shared with the Mage menus (modules/Borders.lua)
 
 local function Valid(key, value)
     local limit = F.LIMITS[key]
