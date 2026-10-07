@@ -624,12 +624,14 @@ function SM.New(spec)
         else
             tip:AddLine(spec.hint, K.gold[1], K.gold[2], K.gold[3])
         end
-        for _, s in ipairs(spec.shortcuts or {}) do
-            local id, rank = Best(s)
-            tip:AddLine(("Shift-%s-click: %s, %s"):format(s.button == "LeftButton" and "left" or "right", s.label,
-                id and SM.RankText(id, rank) or "not learned yet"), K.textDim[1], K.textDim[2], K.textDim[3])
+        if spec.shortcuts and #spec.shortcuts > 0 then
+            tip:AddLine(" ")
+            for _, s in ipairs(spec.shortcuts) do
+                local id, rank = Best(s)
+                tip:AddLine(("Shift-%s-click: %s, %s"):format(s.button == "LeftButton" and "left" or "right", s.label,
+                    id and SM.RankText(id, rank) or "not learned yet"), K.stone[1], K.stone[2], K.stone[3])
+            end
         end
-        tip:AddLine("Right-click for options", K.stone[1], K.stone[2], K.stone[3])
     end
 
     local function OnClick(frame, button)
