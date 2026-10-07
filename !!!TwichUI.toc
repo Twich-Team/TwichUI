@@ -81,6 +81,12 @@ modules\FoodDrinkProbe.lua
 # Combo points for Rogues (uses the Chronicle palette for its edges)
 modules\ComboPoints.lua
 
+# Mage spells on a data bar: Mage Travel (teleports and portals) and Mage Conjuring (food and
+# water), sharing one menu (uses the Chronicle palette, the arrival card's fonts and the training data)
+modules\SpellMenu.lua
+modules\MageTravel.lua
+modules\MageConjure.lua
+
 # Sell from Bags: Auction House posting tab (uses the Chronicle palette)
 auction\Price.lua
 auction\Scan.lua

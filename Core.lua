@@ -52,6 +52,8 @@ local DEFAULT_MODULES = {
     foodDrinkDrink = true,   -- ... the Drink button
     comboPoints = false,     -- Rogue combo points on the target, in a place of your choosing (opt-in)
     comboPointsHideGame = true, -- ... and the game's own beside the target portrait hidden meanwhile
+    mageTravel = true,       -- Mage Travel launcher on a data bar: teleports and portals, cast by your click (Mages only)
+    mageConjure = true,      -- Mage Conjuring launcher on a data bar: food and water ranks, cast by your click (Mages only)
     auctionPosting = true,   -- "Sell from Bags" tab in the Auction House (searches only when you pick an item)
 }
 R.DEFAULT_MODULES = DEFAULT_MODULES   -- Settings.lua uses these for the panel's Defaults button

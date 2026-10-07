@@ -81,6 +81,7 @@ local function Build()
     NewPage("notifications", "Notifications")
     NewPage("food", "Food and drink")
     if R.ComboPoints and R.ComboPoints.ForPlayer() then NewPage("combo", "Combo points") end   -- Rogues only
+    if R.MageTravel and R.MageTravel.ForPlayer() then NewPage("mage", "Mage") end   -- Mages only
     NewPage("chronicle", "Journey Chronicle")
     NewPage("auction", "Auction House")
     NewPage("skins", "Addon skins")
@@ -653,6 +654,36 @@ local function Build()
     end
 
     -----------------------------------------------------------------------
+    local MT = R.MageTravel
+    if pages.mage then
+        Use("mage")
+        Header("Mage Travel", "A launcher for your data bar that lists your teleports and portals. It casts only the one you click, and never chooses a destination for you.")
+        local mage = Toggle("mageTravel", "Mage Travel launcher on my data bar",
+            "Adds \"TwichUI Mage Travel\" to the list of your data bar addon (any that shows LibDataBroker launchers, such as EllesmereUI's Broker Plugin block). Click it for a small menu of the teleports and portals your faction can learn: click a learned one to cast it; hover one you haven't learned for the level it is trained at. It can't be opened in combat, and closes when combat starts.\n\nWithout a data bar addon there is nowhere for it to show. Turning it off takes it off your data bar after a reload.",
+            false, function()
+                MT.Refresh()
+                if not R:Enabled("mageTravel") and MT.Available() then AskReload() end
+            end)
+        Under(Choice("mageTravelText", "Text on the data bar",
+            "The word shown beside the launcher's icon on your data bar. None leaves just the icon. If your data bar shows plugin names too, it may read \"Mage Travel: Travel\"; that is the data bar's own label option.",
+            STRING, MT.DEFAULT_TEXT, MT.TextChoice, MT.SetTextChoice, MT.TEXTS),
+            mage, function() return R:Enabled("mageTravel") end)
+
+        local MC = R.MageConjure
+        Header("Mage Conjuring", "A launcher for your data bar that lists your Conjure Food and Conjure Water ranks. It casts only the one you click.")
+        local conjure = Toggle("mageConjure", "Mage Conjuring launcher on my data bar",
+            "Adds \"TwichUI Mage Conjuring\" to the list of your data bar addon (any that shows LibDataBroker launchers, such as EllesmereUI's Broker Plugin block). Click it for a small menu of the Conjure Food and Conjure Water ranks, highest first, so you can also conjure a lower rank for a lower-level friend: click a learned one to cast it; hover one you haven't learned for the level it is trained at. Shift-left-click the launcher to conjure water and shift-right-click to conjure food, each at your highest rank. It can't be opened in combat, and closes when combat starts; the shift-clicks don't work in combat either.\n\nWithout a data bar addon there is nowhere for it to show. Turning it off takes it off your data bar after a reload.",
+            false, function()
+                MC.Refresh()
+                if not R:Enabled("mageConjure") and MC.Available() then AskReload() end
+            end)
+        Under(Choice("mageConjureText", "Text on the data bar",
+            "The word shown beside the launcher's icon on your data bar. None leaves just the icon. If your data bar shows plugin names too, it may read \"Mage Conjuring: Conjure\"; that is the data bar's own label option.",
+            STRING, MC.DEFAULT_TEXT, MC.TextChoice, MC.SetTextChoice, MC.TEXTS),
+            conjure, function() return R:Enabled("mageConjure") end)
+    end
+
+    -----------------------------------------------------------------------
     Use("chronicle")
     Header("Automatic entries", "A quiet, private journal for this character. It isn't shared, sent or backed up with your configuration, and it never tells you what to do next.")
     local chronicle = Toggle("chronicle", "Keep moments for me automatically",
@@ -762,6 +793,13 @@ local function Build()
     if pages.combo then
         FeatureRow("combo", "Combo points", "Your combo points on the target, where you want them, in your choice of style.",
             function() return OnOff(R:Enabled("comboPoints")) end)
+    end
+    if pages.mage then
+        FeatureRow("mage", "Mage", "Data bar launchers for your teleports and portals, and for conjuring food and water.",
+            function()
+                local on = (R:Enabled("mageTravel") and 1 or 0) + (R:Enabled("mageConjure") and 1 or 0)
+                return OnOff(on > 0, ("%d of 2 on"):format(on), "Off")
+            end)
     end
     FeatureRow("chronicle", "Journey Chronicle", "Your private journal for this character.",
         function() return OnOff(R:Enabled("chronicle"), "Recording", "Notes only") end)
