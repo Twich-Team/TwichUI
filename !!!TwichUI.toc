@@ -40,6 +40,10 @@ setup\Restore.lua
 setup\Portable.lua
 setup\Window.lua
 
+# Addon data: a read-only look at what addons keep between sessions
+setup\StoredData.lua
+setup\StoredDataWindow.lua
+
 # Upgrade hints in item tooltips and bags
 gear\Weights.lua
 gear\Evaluate.lua

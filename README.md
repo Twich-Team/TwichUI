@@ -47,3 +47,5 @@ This addon is intended to work alongside EllesmereUI.
 **Backups:** Save your own settings before you tinker, go back any time.
 
 **Export & import configuration:** Your configuration backups can easily be exported to a string. The addon also allows imports of your own saved exports or your friends.
+
+**Addon data:** A read-only look at what your addons keep between sessions (`/tui data`): which data belongs to which addon, about how big it is, and what's in it, opened a level at a time. Only addons loaded right now can be shown, since the game doesn't load data for addons that are off or removed and addons can't read files on disk. Sizes are estimates. Nothing can be changed or deleted there, except TwichUI's own data through its Saved data list.

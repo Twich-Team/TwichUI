@@ -194,6 +194,9 @@ COMMANDS = {
     { name = "restore", usage = "restore", desc = "backups window", fn = function()
         if R.Window then R.Window:Show("backups") else Unavailable("Backups") end
     end },
+    { name = "data", usage = "data", desc = "what your addons keep between sessions (read-only)", fn = function()
+        if R.StoredDataWindow then R.StoredDataWindow:Show() else Unavailable("Addon data") end
+    end },
     { name = "gear", usage = "gear", desc = "stat weights for upgrade hints", fn = function()
         if R.GearWindow then R.GearWindow:Show() else Unavailable("Gear window") end
     end },

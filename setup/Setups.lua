@@ -113,7 +113,13 @@ function ST.AddonState(owner)
     if exists == false then return "missing" end
     local ok, _, _, _, loadable, reason = pcall(C_AddOns.GetAddOnInfo, owner)
     if ok and reason == "MISSING" then return "missing" end
-    if ok and not loadable then return "disabled" end
+    -- GetAddOnInfo answers for all characters: an addon turned off for this
+    -- character alone still reads as loadable there, so ask about this one.
+    local okState, state = pcall(C_AddOns.GetAddOnEnableState, owner, UnitGUID("player"))
+    if okState and state == 0 then return "disabled" end
+    -- A load-on-demand addon that hasn't loaded yet reads as not loadable
+    -- ("DEMAND_LOADED"); it isn't off, its settings apply when it loads.
+    if ok and not loadable and reason ~= "DEMAND_LOADED" and reason ~= "DEP_DEMAND_LOADED" then return "disabled" end
     return "ready"
 end
 

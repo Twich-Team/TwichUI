@@ -624,6 +624,10 @@ local function Build()
         if SettingsPanel and SettingsPanel:IsShown() then HideUIPanel(SettingsPanel) end
         R.Window:Show()
     end, "Opens the sharing window: send your setup, review ones friends sent, create backups and run the party compatibility check (same as typing /tui share).")
+    Button("Addon data", "Open", function()
+        if SettingsPanel and SettingsPanel:IsShown() then HideUIPanel(SettingsPanel) end
+        if R.StoredDataWindow then R.StoredDataWindow:Show() end
+    end, "See which addons keep data between sessions, about how big it is, and look through it. Read-only: nothing can be changed there (same as typing /tui data).")
     Advanced(Header("Advanced"))
     Advanced(Choice("shareTransport", "Send configurations by",
         "How your configuration travels when you press Send. TwichUI uses only the one you pick and never switches by itself if it fails. Receiving works on all three, whatever you pick here.\n\n" .. R.Share.TRANSPORT_EXPLAIN,
