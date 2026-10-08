@@ -8,16 +8,18 @@
 -- where the character logged out. It shows only on a real login (never after a
 -- reload or a loading screen), waits until the arrival card's quiet time is over,
 -- stays away from combat, flight and other banners, and gives up rather than queue.
+-- It is a bookmark, not an alert: modules/Notify.lua gives it the lowest real priority and has it
+-- give way to any other TwichUI card that needs its place, so it never holds one up.
 -- No sound, no chat, nothing sent.
 
 local R = TwichUI
+local N = R.Notify
 local C = R.Chronicle
 local B = {}
 R.WelcomeBack = B
 
 local DELAY = 7             -- seconds after login; the zone arrival card is quiet for its first 5
-local RETRY = 2             -- seconds between looks when something is in the way
-local RETRIES = 3           -- looks before giving up
+local TTL = 8               -- seconds it may wait for combat, flight, a banner or another card before giving up
 local FADE_IN, HOLD, FADE_OUT = 0.8, 8, 1.4   -- fades are the zone card's
 local RISE = 8              -- pixels the card settles upward, as the zone card does (0 with Reduced motion)
 local WIDTH, HEIGHT = 520, 96
@@ -82,8 +84,7 @@ end
 ---------------------------------------------------------------------------
 -- The card. Made the first time it is needed.
 ---------------------------------------------------------------------------
-local function Hide()
-    if not card then return end
+local function Stop()
     card.anim:Stop()
     card:Hide()
     for event, handler in pairs(active) do
@@ -94,9 +95,17 @@ local function Hide()
     end
 end
 
+-- Takes the card down and tells the coordinator its place is free.
+local function Hide()
+    if not card then return end
+    Stop()
+    N.Finished("welcome")
+end
+
 function B.Dismiss() Hide() end
 
 local function Open()
+    if card and card.preview then return end   -- a settings preview does nothing when clicked
     if R.ChronicleWindow then R.ChronicleWindow:Show() end
     Hide()
 end
@@ -173,15 +182,28 @@ local function Build()
     return true
 end
 
-local function Show(entry, ago)
-    if not card and not Build() then return end
-    Hide()   -- a card already up starts over, with its listeners set once
+-- Where the card is, for the coordinator: left, bottom, right, top in screen units.
+function B.Bounds()
+    local width, height = UIParent:GetWidth(), UIParent:GetHeight()
+    if type(width) ~= "number" or type(height) ~= "number" then return nil end
+    local x, y = B.Position()
+    local top = height + y
+    return width / 2 + x - WIDTH / 2, top - HEIGHT, width / 2 + x + WIDTH / 2, top
+end
+
+-- Draws the card; the coordinator calls this when its turn comes.
+-- p: { zone, ago, more } as Present worked them out. preview: a settings preview, drawn above the
+-- Settings panel, whose Open Chronicle link does nothing and which does not listen for combat or a new zone.
+local function Show(p, preview)
+    if not card and not Build() then return false end
+    Stop()   -- a card already up starts over, with its listeners set once
     Place(card)
     local K = card.K
+    card.preview = preview and true or false
+    card.open:EnableMouse(not preview)
     card.line:SetText(("%sLast noted:|r %s%s|r %s·  %s|r"):format(
-        Hex(K.stone), Hex(K.text), Escape(entry.zone), Hex(K.stone), ago))
-    -- A second line for what was noted, unless it only repeats the place. Notes stay private on screen.
-    local more = entry.kind ~= "note" and entry.title ~= "Arrived in " .. entry.zone and entry.title or nil
+        Hex(K.stone), Hex(K.text), Escape(p.zone), Hex(K.stone), p.ago))
+    local more = p.more
     card.more:SetText(more and Escape(more) or "")
     card.more:SetShown(more ~= nil)
     card.open:ClearAllPoints()
@@ -190,16 +212,38 @@ local function Show(entry, ago)
     local rise = R:Enabled("arrivalReducedMotion") and 0 or RISE
     card.drop:SetOffset(0, -rise)
     card.rise:SetOffset(0, rise)
+    card:SetFrameStrata(preview and N.PREVIEW_STRATA or "LOW")
     card:SetAlpha(0)
     card:Show()
     card.anim:Play()
     -- Make way for combat and a new scene; these are listened for only while the card is up.
-    for _, event in ipairs({ "PLAYER_REGEN_DISABLED", "ZONE_CHANGED_NEW_AREA" }) do
-        if not active[event] then
-            active[event] = Hide
-            R:On(event, Hide)
+    -- (A preview makes way for combat through the coordinator, and a new zone isn't a reason for it to go.)
+    if not preview then
+        for _, event in ipairs({ "PLAYER_REGEN_DISABLED", "ZONE_CHANGED_NEW_AREA" }) do
+            if not active[event] then
+                active[event] = Hide
+                R:On(event, Hide)
+            end
         end
     end
+    return true
+end
+
+-- What the card says for a Chronicle entry and how long ago it was: the place and time, and a second
+-- line for what was noted unless it only repeats the place. Notes stay private on screen.
+local function Lines(entry, ago)
+    local more = entry.kind ~= "note" and entry.title ~= "Arrived in " .. entry.zone and entry.title or nil
+    return { zone = entry.zone, ago = ago, more = more }
+end
+
+-- Asks the coordinator to show the card. Only copies of what it says are kept, not the entry itself.
+local function Present(entry, ago, preview)
+    return N.Submit({
+        kind = "welcome", id = preview and "preview-latest" or "login", ttl = preview and nil or TTL,
+        priority = N.PRIORITY.low, preview = preview,
+        valid = not preview and function() return R:Enabled("welcomeBack") end or nil,
+        payload = Lines(entry, ago),
+    })
 end
 
 ---------------------------------------------------------------------------
@@ -210,49 +254,57 @@ local function Toasting()
     return toast and toast.IsCurrentlyToasting and toast:IsCurrentlyToasting() and true or false
 end
 
--- Anything that should have the player's attention instead.
+-- Anything that should have the player's attention instead. Another TwichUI card in the way is not this:
+-- the coordinator makes the bookmark give way to one.
 local function InTheWay()
     if InCombatLockdown and InCombatLockdown() then return true end
     if UnitOnTaxi and UnitOnTaxi("player") then return true end
-    if R.Arrival and R.Arrival.IsShowing and R.Arrival.IsShowing() then return true end
-    if R.Training and R.Training.IsShowing and R.Training.IsShowing() then return true end   -- one TwichUI card at a time
     return Toasting()
 end
 
-local function Try(tries, mine)
+local function Try(mine)
     if pending ~= mine or not R:Enabled("welcomeBack") then return end
-    if InTheWay() then
-        if tries < RETRIES then C_Timer.After(RETRY, function() Try(tries + 1, mine) end) end
-        return
-    end
     local entry = B.Latest()
     local ago = entry and B.Ago(entry.t, time())
-    if ago then Show(entry, ago) end
+    if ago then Present(entry, ago) end
 end
 
 -- /tui welcome: shows the bookmark now, from the same data, so it can be looked at without logging in
 -- again. Skips the login and in-the-way checks (the player asked) but still says nothing false.
--- Returns true, or false and a reason.
+-- Shown as a preview: its link does nothing. Returns true, or false and a reason.
 function B.Preview()
     local entry = B.Latest()
     if not entry then return false, "No Chronicle entry with a place and a date yet, so there is nothing to show." end
     local ago = B.Ago(entry.t, time())
     if not ago then return false, "The latest entry's time can't be read, so there is nothing to show." end
-    Show(entry, ago)
+    N.DropPreviews("welcome")
+    Present(entry, ago, true)
     return true
 end
+
+N.Register("welcome", {
+    label = "Chronicle welcome back",
+    show = function(p, ctx) return Show(p, ctx.preview) end,
+    dismiss = Hide,
+    bounds = function() return B.Bounds() end,
+    hold = function() return FADE_IN + HOLD + FADE_OUT end,
+    ready = function() return not InTheWay() end,
+    yields = true,
+    -- Made up: no Chronicle entry is read.
+    sample = function() return { zone = "Sample Vale", ago = "2 hours ago", more = "A made-up entry for previews" } end,
+})
 
 -- Only a real login arms it. A reload or any other loading screen does not.
 local function OnEnteringWorld(isLogin)
     if not isLogin then return end
     pending = pending + 1
     local mine = pending
-    C_Timer.After(DELAY, function() Try(0, mine) end)
+    C_Timer.After(DELAY, function() Try(mine) end)
 end
 
 local function OnLeavingWorld()
     pending = pending + 1
-    Hide()
+    N.Cancel("welcome")
 end
 
 ---------------------------------------------------------------------------
@@ -269,6 +321,7 @@ local function SavePosition(x, y)
     TwichUIDB.ui.welcomeBackPlace = x and { x = x, y = y } or nil
     Place(mover)
     if card then Place(card) end
+    N.Poke()   -- the card is somewhere else now: waiting notices are looked at again
 end
 
 local function BuildMover()
@@ -366,7 +419,7 @@ function B.Refresh()
     Want("PLAYER_LEAVING_WORLD", OnLeavingWorld, on)
     if not on then
         pending = pending + 1
-        Hide()
+        N.Cancel("welcome")   -- one waiting or showing; a settings preview is the player's own and stays
     end
     HookEditMode(on)
     ShowMover(on and EditModeActive())

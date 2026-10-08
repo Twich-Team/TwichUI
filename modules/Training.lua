@@ -9,16 +9,18 @@
 -- waiting, only the highest is shown. Only spells for your class, faction and race are
 -- listed, and only when you have their required talent and earlier ranks (or those are
 -- waiting too). Quick level-ups give one card. Nothing shows when there is nothing to train,
--- nothing at login or reload, and only the card's place (if moved) is stored. It waits for combat, banners and the zone card to pass and fades by itself.
+-- nothing at login or reload, and only the card's place (if moved) is stored. It waits for combat and banners,
+-- and for any other TwichUI card in its way (modules/Notify.lua decides that), and fades by itself.
 -- It sits near the top of the screen, below the game's messages and the zone card, and
 -- can be moved in Edit Mode. No sound, no chat.
 
 local R = TwichUI
+local N = R.Notify
 local T = {}
 R.Training = T
 
 local SETTLE = 2            -- seconds after a level-up before looking: quick level-ups become one card, and the spellbook catches up
-local RETRY, RETRIES = 2, 5 -- while a banner or the zone card is up; then the card shows anyway (it sits below them)
+local TTL = 45              -- seconds a card may wait for a TwichUI card in its way before it is let go
 local LOAD_WAIT = 3         -- seconds to wait for spell names the game hasn't loaded yet
 local FADE_IN, FADE_OUT = 0.8, 1.4   -- the zone card's
 local HOLD_BASE, HOLD_PER_ROW = 4, 0.6   -- seconds it stays: longer for a longer list (at most about 11)
@@ -270,15 +272,21 @@ end
 -- spells, and a quiet line saying where to learn them. It takes no clicks, so the world
 -- beneath it stays clickable. Made the first time it is needed.
 ---------------------------------------------------------------------------
-local function Hide()
-    if not card then return end
+local function Stop()
     card.anim:Stop()
     card:Hide()
     card.rows = nil
     ev:UnregisterEvent("PLAYER_REGEN_DISABLED")
 end
 
--- True while the card is on screen (the Welcome Back bookmark waits for it).
+-- Takes the card down and tells the coordinator its place is free.
+local function Hide()
+    if not card then return end
+    Stop()
+    N.Finished("training")
+end
+
+-- True while the card is on screen.
 function T.IsShowing() return card ~= nil and card:IsShown() end
 
 -- How long it stays: a little longer for each spell, so a long list can be read.
@@ -329,11 +337,21 @@ local function Row(i)
     return row
 end
 
+-- How many of `count` spells are shown, in how many columns, and how many rows deep.
+local function Shape(count)
+    local shown = math.min(count, MAX_SHOWN)
+    local columns = count >= COLUMNS_FROM and 2 or 1
+    return shown, columns, math.ceil(shown / columns)
+end
+
+local function CardHeight(count)
+    local _, _, perColumn = Shape(count)
+    return 64 + perColumn * ROW_HEIGHT
+end
+
 -- Lays out the spells: one centred column, or two when there are many. Returns how many are shown.
 local function Layout(rows)
-    local shown = math.min(#rows, MAX_SHOWN)
-    local columns = #rows >= COLUMNS_FROM and 2 or 1
-    local perColumn = math.ceil(shown / columns)
+    local shown, columns, perColumn = Shape(#rows)
     local multiLevel = rows[1].level ~= rows[#rows].level
     for _, row in ipairs(card.rowFrames) do row:Hide() end
     for i = 1, shown do
@@ -356,7 +374,7 @@ local function Layout(rows)
         row:Show()
     end
     card.list:SetHeight(perColumn * ROW_HEIGHT)
-    card:SetHeight(64 + perColumn * ROW_HEIGHT)
+    card:SetHeight(CardHeight(#rows))
     return shown
 end
 
@@ -413,9 +431,11 @@ local function Build()
     return true
 end
 
-local function Show(rows)
-    if not card and not Build() then return end
-    Hide()
+-- Draws the card; the coordinator calls this when its turn comes. preview: a settings preview, drawn above
+-- the Settings panel and not listening for combat (the coordinator clears previews then).
+local function Show(rows, preview)
+    if not card and not Build() then return false end
+    Stop()
     Place(card)
     card.rows = rows
     local shown = Layout(rows)
@@ -426,10 +446,32 @@ local function Show(rows)
     card.drop:SetOffset(0, -rise)
     card.rise:SetOffset(0, rise)
     card.fadeOut:SetStartDelay(Hold(shown))
+    card:SetFrameStrata(preview and N.PREVIEW_STRATA or "LOW")
     card:SetAlpha(0)
     card:Show()
     card.anim:Play()
-    ev:RegisterEvent("PLAYER_REGEN_DISABLED")   -- makes way for combat
+    if not preview then ev:RegisterEvent("PLAYER_REGEN_DISABLED") end   -- makes way for combat
+    return true
+end
+
+-- Where the card is for a list of `count` spells, for the coordinator: left, bottom, right, top in screen units.
+function T.Bounds(count)
+    local width, height = UIParent:GetWidth(), UIParent:GetHeight()
+    if type(width) ~= "number" or type(height) ~= "number" then return nil end
+    local x, y = T.Position()
+    local top = height + y
+    return width / 2 + x - WIDTH / 2, top - CardHeight(count), width / 2 + x + WIDTH / 2, top
+end
+
+-- Asks the coordinator to show the card for these rows. level: the level reached, which is what tells
+-- two requests apart. A newer card lists everything still waiting, so it replaces an older one.
+local function Present(rows, level, preview)
+    return N.Submit({
+        kind = "training", id = preview and "preview-level" or ("level:" .. tostring(level)), ttl = preview and nil or TTL,
+        replace = true, preview = preview,
+        valid = not preview and function() return R:Enabled("trainingNotice") end or nil,
+        payload = { rows = rows },
+    })
 end
 
 ---------------------------------------------------------------------------
@@ -440,25 +482,22 @@ local function Toasting()
     return toast and toast.IsCurrentlyToasting and toast:IsCurrentlyToasting() and true or false
 end
 
--- A banner or the zone card is up: let it finish first.
-local function Busy()
-    if R.Arrival and R.Arrival.IsShowing and R.Arrival.IsShowing() then return true end
-    return Toasting()
+-- Combat or a game banner: the card waits for them. Another TwichUI card in its way is the coordinator's business.
+local function Ready()
+    if InCombatLockdown and InCombatLockdown() then return false end
+    return not Toasting()
 end
 
 local Schedule
 
-local function Try(tries, mine)
+local function Try(mine)
     if pending ~= mine or not R:Enabled("trainingNotice") or not pendingLevel then return end
     if InCombatLockdown and InCombatLockdown() then
         ev:RegisterEvent("PLAYER_REGEN_ENABLED")
         return
     end
-    if Busy() and tries < RETRIES then
-        C_Timer.After(RETRY, function() Try(tries + 1, mine) end)
-        return
-    end
-    local entries = T.ForLevel(pendingLevel)
+    local level = pendingLevel
+    local entries = T.ForLevel(level)
     if #entries == 0 then
         pendingLevel = nil
         return
@@ -467,7 +506,7 @@ local function Try(tries, mine)
         if pending ~= mine then return end
         pendingLevel = nil
         local rows = Rows(entries)
-        if #rows > 0 then Show(rows) end
+        if #rows > 0 then Present(rows, level) end
     end)
 end
 
@@ -475,7 +514,7 @@ function Schedule(delay)
     pending = pending + 1
     local mine = pending
     ev:UnregisterEvent("PLAYER_REGEN_ENABLED")
-    C_Timer.After(delay, function() Try(0, mine) end)
+    C_Timer.After(delay, function() Try(mine) end)
 end
 
 ev:SetScript("OnEvent", function(_, event, id)
@@ -503,7 +542,7 @@ local function Drop()
     pendingLevel = nil
     ev:UnregisterEvent("PLAYER_REGEN_ENABLED")
     ev:UnregisterEvent("SPELL_DATA_LOAD_RESULT")
-    Hide()
+    N.Cancel("training")   -- one waiting or showing; a settings preview is the player's own and stays
 end
 
 -- A login, reload or loading screen is never a level-up; it only says where the level now stands.
@@ -513,7 +552,8 @@ end
 
 -- /tui training [level]: shows the card as it would be on reaching a level now (your own by default),
 -- from the same data and checks, so it can be looked at without levelling. Skips the combat and
--- banner checks (the player asked) but still lists only what applies. Returns true, or false and a reason.
+-- banner checks (the player asked) but still lists only what applies. Shown as a preview: nothing is
+-- remembered as seen. Returns true, or false and a reason.
 function T.Preview(level)
     level = level or CurrentLevel()
     if not level or level < 1 then return false, "That isn't a level TwichUI can look at." end
@@ -523,7 +563,10 @@ function T.Preview(level)
     end
     LoadNames(entries, function()
         local rows = Rows(entries)
-        if #rows > 0 then Show(rows) else R.Print("The game didn't give names for the training up to level %d, so there is nothing to show.", level) end
+        if #rows > 0 then
+            N.DropPreviews("training")   -- a preview already up starts over
+            Present(rows, level, true)
+        else R.Print("The game didn't give names for the training up to level %d, so there is nothing to show.", level) end
     end)
     return true
 end
@@ -542,6 +585,7 @@ local function SavePosition(x, y)
     TwichUIDB.ui.trainingPosition = x and { x = x, y = y } or nil
     Place(mover)
     if card then Place(card) end
+    N.Poke()   -- the card is somewhere else now: waiting notices are looked at again
 end
 
 local function BuildMover()
@@ -633,5 +677,25 @@ function T.Refresh()
     HookEditMode()
     ShowMover(on and EditModeActive())
 end
+
+-- Samples for the settings previews: made up, with no spell data looked up.
+local SAMPLE_ICON = [[Interface\Icons\INV_Misc_QuestionMark]]
+local function Sample()
+    return { rows = {
+        { id = 0, level = 10, name = "Sample Strike", rank = "Rank 2", icon = SAMPLE_ICON },
+        { id = 0, level = 10, name = "Sample Ward", icon = SAMPLE_ICON },
+        { id = 0, level = 10, name = "Sample Cry", rank = "Rank 3", icon = SAMPLE_ICON },
+    } }
+end
+
+N.Register("training", {
+    label = "Training available",
+    show = function(p, ctx) return Show(p.rows, ctx.preview) end,
+    dismiss = Hide,
+    bounds = function(p) return T.Bounds(#p.rows) end,
+    hold = function(p) return FADE_IN + Hold(math.min(#p.rows, MAX_SHOWN)) + FADE_OUT end,
+    ready = Ready,
+    sample = Sample,
+})
 
 R:OnInit(T.Refresh)

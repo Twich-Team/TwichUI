@@ -71,7 +71,8 @@ c.UnitFactionGroup = function() return c.FACTION, c.FACTION end
 c.UnitRace = function() return "Race", "Race", c.RACE end
 c.InCombatLockdown = function() return c.COMBAT end
 c.EventToastManagerFrame = Fake()
-c.ARRIVAL = false
+c.NOW = 1000
+c.GetTime = function() return c.NOW end   -- the coordinator's expiry runs on this clock
 c.EventToastManagerFrame.IsCurrentlyToasting = function() return c.TOAST end
 c.Enum = { SpellBookSpellBank = { Player = 0, Pet = 1 } }
 c.C_SpellBook = {
@@ -86,7 +87,7 @@ c.C_Spell = {
   RequestLoadSpellData = function(id) c.REQUESTED[id] = true end,
 }
 
-for _, f in ipairs({"chronicle/Style.lua", "modules/Arrival.lua", "modules/WelcomeBack.lua",
+for _, f in ipairs({"chronicle/Style.lua", "modules/Notify.lua", "modules/Arrival.lua", "modules/WelcomeBack.lua",
     "modules/TrainingData.lua", "modules/Training.lua"}) do
   local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
 end
@@ -211,7 +212,6 @@ for id = 301, 310 do c.NAMES[id] = "Spell " .. id; c.RANKS[id] = "Rank " .. (id 
 
 local wbDismissed = 0
 R.WelcomeBack.Dismiss = function() wbDismissed = wbDismissed + 1 end
-R.Arrival.IsShowing = function() return c.ARRIVAL end
 local function Card()
   for _, f in ipairs(fakes) do if rawget(f, "foot") and rawget(f, "rowFrames") then return f end end
 end
@@ -354,17 +354,25 @@ assert(card.shown and card.rows[1].id == 112, "shown once combat ends")
 Fire("PLAYER_REGEN_DISABLED")
 assert(not card.shown and not Listening("PLAYER_REGEN_DISABLED"), "makes way for combat")
 
--- A banner at the top: it waits a little, then shows anyway.
+-- A banner at the top: it waits for it to go, within a minute or so.
 c.LEVEL = 14; Fire("PLAYER_ENTERING_WORLD", false, false)
 c.TOAST = true
 LevelUp(15); Settle()
 assert(not card.shown, "waits for the banner")
 for _ = 1, 4 do RunLongTimers(2); FlushTimers() end
-assert(not card.shown)
-RunLongTimers(2); FlushTimers(); FlushTimers()
-assert(card.shown, "shown after a few looks")
-Finish(card.anim)
+assert(not card.shown, "and keeps waiting")
 c.TOAST = false
+RunLongTimers(2); FlushTimers(); FlushTimers()
+assert(card.shown, "shown once the banner has gone")
+Finish(card.anim)
+-- ...but not for ever: a banner that outlasts its time to wait costs the card.
+c.LEVEL = 14; Fire("PLAYER_ENTERING_WORLD", false, false)
+c.TOAST = true
+LevelUp(15); Settle()
+c.NOW = c.NOW + 50
+c.TOAST = false
+RunLongTimers(2); FlushTimers(); FlushTimers()
+assert(not card.shown, "a level-up long past is not announced")
 
 -- Names the game hasn't loaded are asked for; a name that never comes is left out.
 c.KNOWN = base
@@ -414,15 +422,15 @@ LevelUp(10); Settle()
 assert(not card.shown, "no data")
 R.TrainingData = data
 
--- The zone card is up: it waits for it, then shows anyway after a few looks.
+-- The zone card is up in the same part of the screen: it waits for it, and is shown the moment it goes.
 c.KNOWN = trained
 c.LEVEL = 14; Fire("PLAYER_ENTERING_WORLD", false, false)
-c.ARRIVAL = true
+R.Notify.Submit({ kind = "arrival", id = "zone:Westfall", payload = { kind = "zone", title = "Westfall" } })
+assert(R.Arrival.IsShowing())
 LevelUp(15); Settle()
 assert(not card.shown, "waits for the zone card")
-c.ARRIVAL = false
-RunLongTimers(2); FlushTimers(); FlushTimers()
-assert(card.shown, "shown once the zone card has gone")
+R.Arrival.Clear()
+assert(card.shown, "shown at once when the zone card has gone")
 Finish(card.anim)
 
 -- Edit Mode: an outline to drag while it is open; the place is kept and used.
@@ -482,6 +490,7 @@ assert(not card.shown)
 c.LEVEL = 9; Fire("PLAYER_ENTERING_WORLD", false, false)
 LevelUp(10); Fire("PLAYER_LEAVING_WORLD"); Settle()
 assert(not card.shown, "a loading screen drops a waiting look")
+Fire("PLAYER_ENTERING_WORLD", false, false)   -- the loading screen ends
 
 -- /tui training previews a level or the current level, and says why when there is nothing.
 local printed = {}

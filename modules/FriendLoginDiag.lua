@@ -442,7 +442,7 @@ function D.TestCard()
     local F = R.FriendLogin
     if not F then Say("friend login isn't available.") return end
     Add("synthetic", "SYNTHETIC login card shown with made-up details (not a real friend event)")
-    F.Preview()
+    F.Preview(true)   -- with the chime, as a real card would
     Say("shown a made-up login card (and its chime). This proves the card can be drawn; it says nothing about whether real friend events arrive.")
 end
 

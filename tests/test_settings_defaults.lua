@@ -60,14 +60,14 @@ c.C_SpecializationInfo = { GetActiveSpecGroup = function() return 1 end, GetComb
 local function Obj()
   return setmetatable({}, {__index = function(t, k)
     if k == "twichBevel" or k == "twichBorders" then return nil end   -- a field TwichUI sets itself, not a method
-    if k == "CreateFontString" or k == "CreateTexture" then return function() return Obj() end end
+    if k == "CreateFontString" or k == "CreateTexture" or k == "CreateAnimationGroup" or k == "CreateAnimation" then return function() return Obj() end end
     return function() end
   end})
 end
 c.CreateFrame = function() return Obj() end
 c.StaticPopupDialogs = {}; c.StaticPopup_Show = function() end
 for _, f in ipairs({ "gear/Weights.lua", "gear/Evaluate.lua", "gear/Prefs.lua", "gear/Data.lua",
-  "gear/Hints.lua", "gear/Tooltip.lua", "gear/Bags.lua", "gear/Window.lua", "modules/Arrival.lua", "modules/Media.lua", "modules/FriendLogin.lua", "modules/Borders.lua", "modules/FoodDrink.lua",
+  "gear/Hints.lua", "gear/Tooltip.lua", "gear/Bags.lua", "gear/Window.lua", "modules/Notify.lua", "modules/Arrival.lua", "modules/Media.lua", "modules/FriendLogin.lua", "modules/Borders.lua", "modules/FoodDrink.lua",
   "modules/TrainingData.lua", "modules/Borders.lua", "modules/MenuStyle.lua", "modules/SpellMenu.lua", "modules/MageTravel.lua", "modules/MageConjure.lua",
   "qol/QoL.lua", "qol/Summons.lua", "qol/Resurrect.lua", "qol/ReleasePvP.lua", "qol/Duels.lua", "qol/QuickKeybind.lua", "Settings.lua" }) do
   local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
@@ -163,6 +163,33 @@ c.TwichUIDB.modules.friendLogin = true
 assert(hear.modify[1]() == true)
 assert(c.TwichUI.MediaSounds["TwichUI Notification"] == "TwichUI_Notification.mp3", "offered to other addons' sound lists too")
 
+-- Notification previews: a visible section on the Notifications page. A sounds switch that is off unless chosen
+-- and saved with the UI options, a button per display (only for the displays that exist), a sequence test and Clear.
+local byName = {}
+for _, i in ipairs(initializers) do if i.data.name then byName[i.data.name] = i end end
+assert(byName["Notification previews"] and #byName["Notification previews"].shown == 0, "a visible section header")
+local previewSounds = proxies.TWICHUI_previewSounds
+assert(previewSounds and variables.TWICHUI_previewSounds == "Notifications", "on the Notifications page")
+assert(previewSounds.default == false and previewSounds.get() == false, "silent unless chosen")
+previewSounds.set(true); assert(c.TwichUIDB.ui.previewSounds == true and previewSounds.get() == true and R.Notify.PreviewSounds())
+previewSounds.set(false); assert(c.TwichUIDB.ui.previewSounds == false and not R.Notify.PreviewSounds())
+for _, name in ipairs({ "Zone arrival", "Friend login", "Test coordinated sequence", "Clear previews" }) do
+  assert(byName[name] and byName[name].click and #byName[name].shown == 0, name .. " has a visible button")
+end
+assert(not byName["Training available"] and not byName["Chronicle welcome back"], "no button for a display that isn't there")
+assert(byName["Zone arrival"].data.tooltip:find("made-up", 1, true) and byName["Friend login"].data.tooltip:find("No friend state", 1, true))
+local ui = c.TwichUIDB.ui
+local savedBefore = ui.arrivalHold .. tostring(ui.friendLoginChannel)
+byName["Zone arrival"].click()
+assert(R.Notify.State().active[1] == "arrival:preview", "the button shows the zone card as a preview")
+byName["Clear previews"].click()
+assert(#R.Notify.State().active == 0, "Clear previews takes it down")
+byName["Test coordinated sequence"].click()
+assert(R.Notify.State().active[1] == "arrival:sequence-arrival", "the sequence starts with the zone card")
+byName["Clear previews"].click()
+assert(#R.Notify.State().active == 0 and #R.Notify.State().waiting == 0)
+assert(ui.arrivalHold .. tostring(ui.friendLoginChannel) == savedBefore and c.TwichUIDB.modules.arrival == true, "previews change no setting")
+
 -- Skins: missing addons say so and can't be ticked; installed ones report status.
 local attune, auctionator
 for _, i in ipairs(initializers) do
@@ -185,7 +212,7 @@ for variable, page in pairs({
   TWICHUI_media = "TwichUI", TWICHUI_quietLogin = "TwichUI", TWICHUI_showAdvanced = "TwichUI", 
   TWICHUI_gearHints = "Gear comparison", TWICHUI_gearTree = "Gear comparison", TWICHUI_gearBagStyle = "Gear comparison",
   TWICHUI_arrival = "Notifications", TWICHUI_arrivalHold = "Notifications", TWICHUI_arrivalReducedMotion = "Notifications",
-  TWICHUI_trainingNotice = "Notifications", TWICHUI_friendLogin = "Notifications", TWICHUI_friendLoginSound = "Notifications", TWICHUI_friendLoginChannel = "Notifications",
+  TWICHUI_previewSounds = "Notifications", TWICHUI_trainingNotice = "Notifications", TWICHUI_friendLogin = "Notifications", TWICHUI_friendLoginSound = "Notifications", TWICHUI_friendLoginChannel = "Notifications",
   TWICHUI_chronicle = "Journey Chronicle", TWICHUI_chronicleClock = "Journey Chronicle", TWICHUI_chronicleSound = "Journey Chronicle", TWICHUI_welcomeBack = "Journey Chronicle",
   TWICHUI_auctionPosting = "Auction House",
   TWICHUI_qolSummons = "Quality of life", TWICHUI_qolSummonsFrom = "Quality of life", TWICHUI_qolSummonsWait = "Quality of life",

@@ -8,8 +8,11 @@
 -- crossed quickly. Walking into a dungeon or raid shows its name with "Dungeon" or
 -- "Raid" beneath it instead of the zone text. Only names the game gives are shown.
 -- No sound, no chat.
+-- Whether and when a card may start is left to modules/Notify.lua, which keeps it from sharing the
+-- top of the screen with the training or Welcome Back card; this file decides only what is an arrival.
 
 local R = TwichUI
+local N = R.Notify
 local A = {}
 R.Arrival = A
 
@@ -17,6 +20,9 @@ local SETTLE = 0.6          -- seconds a zone change waits, so quick crossings s
 local LOGIN_QUIET = 5       -- seconds after login or reload when zone changes only note where you are
 local RISE = 8              -- pixels the card settles upward (0 with Reduced motion)
 local NAME_RETRIES = 2        -- extra looks for an instance's name when the game hasn't given it yet
+local WIDTH, HEIGHT = 600, 120
+local TOP_OFFSET = -150       -- the card's top edge, from the top of the screen
+local TTL = 15                -- seconds a card may wait for the top of the screen (a training card there stays up to about 13); it is dropped sooner if you have moved on
 
 -- Instance types that get an entry card, and the game's own word for each.
 local INSTANCE_LABEL = { party = "LFG_TYPE_DUNGEON", raid = "LFG_TYPE_RAID" }
@@ -219,8 +225,8 @@ A.Rule = Rule
 local function Build()
     local K = Palette()
     card = CreateFrame("Frame", nil, UIParent)
-    card:SetSize(600, 120)
-    card:SetPoint("TOP", UIParent, "TOP", 0, -150)
+    card:SetSize(WIDTH, HEIGHT)
+    card:SetPoint("TOP", UIParent, "TOP", 0, TOP_OFFSET)
     card:SetFrameStrata("LOW")
     card:EnableMouse(false)
     card:Hide()
@@ -254,25 +260,41 @@ local function Build()
     card.fadeOut:SetToAlpha(0)
     card.fadeOut:SetSmoothing("IN")
     card.fadeOut:SetOrder(2)
-    anim:SetScript("OnFinished", function() card:Hide() end)
+    anim:SetScript("OnFinished", function() A.Clear() end)
     card.anim = anim
 end
 
--- Stops and hides the card at once.
-function A.Clear()
-    if not card then return end
+local function Stop()
     card.anim:Stop()
     card:Hide()
 end
 
--- True while a card is on screen (the Welcome Back bookmark waits for it).
+-- Stops and hides the card at once, and tells the coordinator its place is free.
+function A.Clear()
+    if not card then return end
+    Stop()
+    N.Finished("arrival")
+end
+
+-- True while a card is on screen.
 function A.IsShowing() return card ~= nil and card:IsShown() end
 
+-- Where the card is, for the coordinator: left, bottom, right, top in screen units. Nil until the
+-- screen's size is known.
+function A.Bounds()
+    local width, height = UIParent:GetWidth(), UIParent:GetHeight()
+    if type(width) ~= "number" or type(height) ~= "number" then return nil end
+    local top = height + TOP_OFFSET
+    return width / 2 - WIDTH / 2, top - HEIGHT, width / 2 + WIDTH / 2, top
+end
+
+-- Draws the card; the coordinator calls this when its turn comes.
 -- kind: "zone" (title, smaller subzone line, PvP line) or "subzone" (one quieter line, PvP line if it changed).
-function A.Show(kind, title, sub, pvpText, pvpType)
+-- preview: a settings preview, drawn above the Settings panel; nothing is noted or recorded either way.
+function A.Show(kind, title, sub, pvpText, pvpType, preview)
     if not card then Build() end
     local K, t = card.K, TIMING[kind]
-    A.Clear()
+    Stop()
 
     local subzone = kind == "subzone"
     local c = subzone and K.textDim or K.text
@@ -299,10 +321,35 @@ function A.Show(kind, title, sub, pvpText, pvpType)
     card.fadeOut:SetStartDelay(Hold(kind))
     card.fadeOut:SetDuration(t.fadeOut)
 
+    card:SetFrameStrata(preview and N.PREVIEW_STRATA or "LOW")
     card:SetAlpha(0)
     card:Show()
     card.anim:Play()
+    return true
 end
+
+-- Asks the coordinator to show a card. Only the latest place matters, so a newer zone change (which
+-- bumps `pending`) makes a card still waiting its turn stale, and a newer card replaces an older one.
+local function Present(kind, title, sub, pvpText, pvpType)
+    local mine = pending
+    N.Submit({
+        kind = "arrival", id = kind .. ":" .. title, ttl = TTL, replace = true,
+        valid = function() return pending == mine and R:Enabled("arrival") end,
+        payload = { kind = kind, title = title, sub = sub, pvpText = pvpText, pvpType = pvpType },
+    })
+end
+
+N.Register("arrival", {
+    label = "Zone arrival",
+    show = function(p, ctx) return A.Show(p.kind, p.title, p.sub, p.pvpText, p.pvpType, ctx.preview) end,
+    dismiss = function() A.Clear() end,
+    bounds = function() return A.Bounds() end,
+    hold = function(p)
+        local t = TIMING[p.kind]
+        return t.fadeIn + Hold(p.kind) + t.fadeOut
+    end,
+    sample = function() return { kind = "zone", title = "Sample Vale", sub = "A made-up place for previews" } end,
+})
 
 ---------------------------------------------------------------------------
 -- Deciding what is an arrival.
@@ -337,7 +384,7 @@ local function CheckInstance(kind)
     lastZone, lastSubZone, lastPvP = Zone(), SubZone(Zone()), PvP()
     local label = Global(INSTANCE_LABEL[kind])
     entryName = name
-    if not Toasting() then A.Show("zone", name, label) end
+    if not Toasting() then Present("zone", name, label) end
     return true
 end
 
@@ -356,13 +403,13 @@ local function Check()
         lastZone, lastSubZone, lastPvP = zone, sub, pvpType
     elseif zone ~= lastZone then
         lastZone, lastSubZone, lastPvP = zone, sub, pvpType
-        if not Toasting() then A.Show("zone", zone, sub, pvpText, pvpType) end
+        if not Toasting() then Present("zone", zone, sub, pvpText, pvpType) end
     elseif sub ~= lastSubZone then
         lastSubZone = sub
         local pvpChanged = pvpType ~= lastPvP
         lastPvP = pvpType
         if sub and R:Enabled("arrivalSubzones") and not Toasting() then
-            A.Show("subzone", sub, nil, pvpChanged and pvpText or nil, pvpType)
+            Present("subzone", sub, nil, pvpChanged and pvpText or nil, pvpType)
         end
     end
 end
@@ -452,7 +499,7 @@ function A.Refresh()
     if not on then
         controlLost = false
         pending = pending + 1
-        A.Clear()
+        N.Cancel("arrival")   -- a card waiting or showing goes; a settings preview is the player's own and stays
     end
 end
 

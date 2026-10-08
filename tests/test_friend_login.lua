@@ -47,6 +47,8 @@ local function Fake(o)
 end
 c.CreateFrame = function() return Fake() end
 c.UIParent = Fake()
+c.UIParent.GetWidth = function() return 1024 end
+c.UIParent.GetHeight = function() return 768 end
 c.GameTooltip = Fake()
 c.EDITING = false
 c.EventRegistry = { callbacks = {} }
@@ -84,14 +86,13 @@ local function Friend(id, name, character, faction)
   c.FRIENDS[id] = { accountName = name, battleTag = name .. "#1234", gameAccountInfo = { characterName = character, factionName = faction, clientProgram = "WoW" } }
 end
 
-for _, f in ipairs({"chronicle/Style.lua", "modules/Arrival.lua", "modules/FriendLogin.lua"}) do
+for _, f in ipairs({"chronicle/Style.lua", "modules/Notify.lua", "modules/Arrival.lua", "modules/FriendLogin.lua"}) do
   local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
 end
 c.LOADED["!!!TwichUI"] = true; c.FireEvent("ADDON_LOADED", "!!!TwichUI")
 local R = c.TwichUI
 local F = R.FriendLogin
 local M = c.TwichUIDB.modules
-R.Arrival.IsShowing = function() return c.ARRIVAL end
 
 local function Fire(event, ...)
   c.FireEvent(event, ...)
@@ -280,13 +281,14 @@ assert(card.shown, "shown once combat ends, within a few looks")
 Fire("PLAYER_REGEN_DISABLED")
 assert(not card.shown, "makes way for combat")
 
-c.ARRIVAL = true
+-- The zone card is at the top of the screen and this one at the lower left: neither waits for the other.
+R.Notify.Submit({ kind = "arrival", id = "zone:Westfall", payload = { kind = "zone", title = "Westfall" } })
+assert(R.Arrival.IsShowing(), "the zone card is up")
 Online(1); Settle()
-assert(not card.shown, "waits for the zone card")
-c.ARRIVAL = false
-RunLongTimers(2); FlushTimers(); FlushTimers()
-assert(card.shown, "shown once the zone card has gone")
+assert(card.shown, "shows beside the zone card")
 Finish(card.anim)
+assert(R.Arrival.IsShowing(), "and the zone card is left alone")
+R.Arrival.Clear()
 
 c.TOAST = true
 Online(2); Settle()
@@ -306,6 +308,7 @@ Finish(card.anim)
 c.COMBAT = true
 Online(1); Settle()
 for _ = 1, 8 do RunLongTimers(2); FlushTimers() end
+c.NOW = c.NOW + 11   -- past the time a login is worth waiting for
 c.COMBAT = false
 for _ = 1, 3 do RunLongTimers(2); FlushTimers() end
 assert(not card.shown, "a login long past is not announced")
@@ -313,10 +316,12 @@ assert(not card.shown, "a login long past is not announced")
 -- Leaving the world drops what was waiting and takes the card down.
 Online(1); Fire("PLAYER_LEAVING_WORLD"); Settle()
 assert(not card.shown, "a loading screen drops a waiting card")
+Fire("PLAYER_ENTERING_WORLD", false, false)   -- the loading screen ends
 Online(2); Settle()
 assert(card.shown)
 Fire("PLAYER_LEAVING_WORLD")
 assert(not card.shown)
+Fire("PLAYER_ENTERING_WORLD", false, false)
 
 -- Reduced motion: it only fades.
 M.arrivalReducedMotion = true

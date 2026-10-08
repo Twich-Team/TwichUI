@@ -8,7 +8,8 @@
 -- off gives the event back.
 -- The game's own Social options still rule: with "Show Toast Window" or "Online Friends"
 -- off, nothing shows. Nothing shows for the Battle.net mobile app, at login or reload, or in
--- combat, and it waits for the zone card, the training card and banners. Several friends
+-- combat, and it waits for combat and banners to pass. It shows beside the zone, training and Welcome Back cards,
+-- which sit at the top, and waits only for another card in its own place (modules/Notify.lua decides that). Several friends
 -- arriving together give one card. Only the name, character and faction the game gives are
 -- shown; nothing is stored but the card's place (if moved in Edit Mode) and the chime's channel. No chat,
 -- nothing sent, and it takes no clicks. It plays one soft chime (media/sounds/TwichUI_Notification.mp3)
@@ -19,13 +20,15 @@
 -- modules/FriendLoginDiag.lua (temporary, off by default) can show which of these a real session had.
 
 local R = TwichUI
+local N = R.Notify
 local F = {}
 R.FriendLogin = F
 
 local EVENT = "BN_FRIEND_ACCOUNT_ONLINE"
 local SETTLE = 1            -- seconds after the event before looking: the friend's game details arrive just after it, and a burst becomes one card
 local LOGIN_QUIET = 5       -- seconds after login or reload when logins are not announced
-local RETRY, RETRIES = 2, 4 -- while something else is up or you are in combat; then it is let go, a login is not worth waiting minutes for
+local RETRY, RETRIES = 2, 4 -- looks for a friend's name the game hasn't given yet; then the login is let go
+local TTL = 10              -- seconds a card may wait for combat, a banner or another card in its place; a login is not worth waiting minutes for
 local MAX_WAITING = 20
 local FADE_IN, FADE_OUT = 0.8, 1.4   -- the zone card's
 local HOLD = 3.2
@@ -160,10 +163,16 @@ end
 ---------------------------------------------------------------------------
 -- The card. No frame or backdrop, like the zone card. Made the first time it is needed.
 ---------------------------------------------------------------------------
-local function Hide()
-    if not card then return end
+local function Stop()
     card.anim:Stop()
     card:Hide()
+end
+
+-- Takes the card down and tells the coordinator its place is free.
+local function Hide()
+    if not card then return end
+    Stop()
+    N.Finished("friend")
 end
 
 -- True while the card is on screen.
@@ -245,10 +254,20 @@ local function SetFactionMark(texture, faction)
     return true
 end
 
+-- Where the card is, for the coordinator: left, bottom, right, top in screen units. It flows in from
+-- SLIDE pixels to the left, so that is counted too.
+function F.Bounds()
+    local x, y = F.Position()
+    return x - SLIDE, y, x + WIDTH, y + HEIGHT
+end
+
+-- Draws the card; the coordinator calls this when its turn comes.
 -- entries: { { name, character, faction }, ... }, the first one's name leads.
-local function Show(entries)
+-- preview: a settings preview, drawn above the Settings panel. It touches no friend state and is not traced,
+-- and plays the chime only when previews are allowed sound (or asked for it: forceSound, the diagnostics).
+local function Show(entries, preview, forceSound)
     if not card and not Build() then Note("card:build-failed") return false end
-    Hide()
+    Stop()
     Place(card)
     local first = entries[1]
     local marked = SetFactionMark(card.icon, first.faction)
@@ -269,13 +288,17 @@ local function Show(entries)
     card.setBack:SetOffset(-slide, 0)
     card.flow:SetOffset(slide, 0)
     card.fadeOut:SetStartDelay(HOLD)
+    card:SetFrameStrata(preview and N.PREVIEW_STRATA or "LOW")
     card:SetAlpha(0)
     card:Show()
     card.anim:Play()
-    Note("card:shown", nil, #entries)
-    if R:Enabled("friendLoginSound") then
-        Note("sound:requested", nil, F.PlaySound() and "accepted" or "refused")
-    else
+    -- The chime goes with the card appearing, once: never for a request that was dropped, expired or repeated.
+    local chime = R:Enabled("friendLoginSound")
+    if not preview then Note("card:shown", nil, #entries) end
+    if N.SoundWanted(preview and not forceSound, chime) then
+        local accepted = F.PlaySound()
+        if not preview then Note("sound:requested", nil, accepted and "accepted" or "refused") end
+    elseif not preview then
         Note("sound:off")
     end
     return true
@@ -297,41 +320,58 @@ local function Toasting()
     return toast and toast.IsCurrentlyToasting and toast:IsCurrentlyToasting() and true or false
 end
 
--- Something that should have the player's attention instead, or a card of ours still up: the reason, or nil.
-local function InTheWay()
+-- Something that should have the player's attention instead: the reason, or nil. Another TwichUI card
+-- in the way is not this: the coordinator holds the card back for that.
+local function External()
     if InCombatLockdown and InCombatLockdown() then return "combat" end
-    if F.IsShowing() then return "own-card" end
-    if R.Arrival and R.Arrival.IsShowing and R.Arrival.IsShowing() then return "zone-card" end
-    if R.Training and R.Training.IsShowing and R.Training.IsShowing() then return "training-card" end   -- one TwichUI card at a time
     if Toasting() then return "game-banner" end
     return nil
 end
 
+-- External() and the card's own earlier showing, for the diagnostics.
+local function InTheWay()
+    return External() or (F.IsShowing() and "own-card") or nil
+end
+
 local Schedule
+
+-- Asks the coordinator to show a card for these friends. Who they are tells two requests apart.
+local function Present(entries, ids)
+    table.sort(ids)
+    return N.Submit({
+        kind = "friend", id = table.concat(ids, ","), ttl = TTL,
+        valid = function() return R:Enabled("friendLogin") end,
+        onDrop = function(reason) Note("dropped", nil, reason) end,
+        payload = { entries = entries },
+    })
+end
 
 local function Try(tries, mine)
     if pending ~= mine or #waiting == 0 then Note("look:stale") return end
     local why = WhyNot()
     if why then Note("look:skipped", nil, why) return end
-    local entries, missing = {}, nil
-    local blocked = InTheWay()
-    if not blocked then
-        for _, id in ipairs(waiting) do
-            local entry, reason = F.Describe(id)
-            if entry then entries[#entries + 1] = entry else missing = reason end
-        end
-        if #entries > 0 then
-            wipe(waiting)
-            Show(entries)
-            return
+    local entries, ids, missing = {}, {}, nil
+    for _, id in ipairs(waiting) do
+        local entry, reason = F.Describe(id)
+        if entry then
+            entries[#entries + 1] = entry
+            ids[#ids + 1] = id
+        else
+            missing = reason
         end
     end
-    -- Busy, or the game hasn't given a name yet: look again a few times, then let it go.
+    if #entries > 0 then
+        wipe(waiting)
+        local ok, reason = Present(entries, ids)
+        Note(ok and "submitted" or "submit:refused", nil, ok and #entries or reason)
+        return
+    end
+    -- The game hasn't given a name yet: look again a few times, then let it go.
     if tries < RETRIES then
-        Note("look:retry", nil, (blocked or missing or "no-entries") .. " #" .. (tries + 1))
+        Note("look:retry", nil, (missing or "no-entries") .. " #" .. (tries + 1))
         C_Timer.After(RETRY, function() Try(tries + 1, mine) end)
     else
-        Note("look:gave-up", nil, blocked or missing or "no-entries")
+        Note("look:gave-up", nil, missing or "no-entries")
         wipe(waiting)
     end
 end
@@ -394,7 +434,7 @@ local function Drop()
     if #waiting > 0 then Note("drop", nil, "loading-screen, " .. #waiting .. " waiting") end
     pending = pending + 1
     wipe(waiting)
-    Hide()
+    N.Cancel("friend")   -- one waiting or showing; a settings preview is the player's own and stays
 end
 
 -- Logging in or reloading isn't anyone arriving; loading screens only clear what was waiting.
@@ -432,13 +472,28 @@ function F.State()
     }
 end
 
--- /tui friend: shows the card now with made-up sample details (your own faction), so it can be looked at
--- without a friend logging in. Skips the combat and options checks (the player asked).
-function F.Preview()
+-- Made-up details, your own faction's mark, for the settings previews and /tui friend.
+local function Sample()
     local faction = UnitFactionGroup and UnitFactionGroup("player")
-    Show({ { name = "A Friend", character = "Sample", faction = FACTIONS[faction or ""] and faction or nil } })
-    return true
+    return { entries = { { name = "A Friend", character = "Sample", faction = FACTIONS[faction or ""] and faction or nil } } }
 end
+
+-- /tui friend: shows the card now with made-up sample details, so it can be looked at without a friend
+-- logging in. Skips the combat and options checks (the player asked). No friend state is touched.
+-- withSound: play the chime as a real card would, whatever the previews' sound choice (the diagnostics).
+function F.Preview(withSound)
+    return N.Preview("friend", nil, withSound and { sound = true } or nil)
+end
+
+N.Register("friend", {
+    label = "Friend login",
+    show = function(p, ctx) return Show(p.entries, ctx.preview, p.sound) end,
+    dismiss = Hide,
+    bounds = F.Bounds,
+    hold = function() return FADE_IN + HOLD + FADE_OUT end,
+    ready = function() return External() == nil end,
+    sample = Sample,
+})
 
 ---------------------------------------------------------------------------
 -- Moving it in Edit Mode. The game's Edit Mode has no place for addon frames, so while it is
@@ -454,6 +509,7 @@ local function SavePosition(x, y)
     TwichUIDB.ui.friendLoginPlace = x and { x = x, y = y } or nil
     Place(mover)
     if card then Place(card) end
+    N.Poke()   -- the card is somewhere else now: waiting notices are looked at again
 end
 
 local function BuildMover()

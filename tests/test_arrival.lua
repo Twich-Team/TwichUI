@@ -66,7 +66,9 @@ c.LFG_TYPE_DUNGEON, c.LFG_TYPE_RAID = "Dungeon", "Raid"
 local secureHooks = {}
 c.hooksecurefunc = function(name, fn) secureHooks[name] = fn end
 
-local chunk = assert(loadfile(ROOT .. "modules/Arrival.lua")); setfenv(chunk, c); chunk("!!!TwichUI", {})
+for _, f in ipairs({"modules/Notify.lua", "modules/Arrival.lua"}) do
+  local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
+end
 c.LOADED["!!!TwichUI"] = true; c.FireEvent("ADDON_LOADED", "!!!TwichUI")
 local R, A = c.TwichUI, c.TwichUI.Arrival
 local M = c.TwichUIDB.modules

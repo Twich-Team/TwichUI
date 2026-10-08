@@ -371,6 +371,36 @@ local function Build()
             "Plays the chime now, at the volume you have chosen."), friendLogin, FriendLoginOn)
     end
 
+    local Notify = R.Notify
+    if Notify then
+        Header("Notification previews", "Try the cards without waiting for the real thing. A preview tests how a card looks and sounds, not whether the game event is noticed: it uses made-up details, records and changes nothing, and works even when that card is turned off.")
+        ProxyToggle("previewSounds", "Play notification sounds in previews",
+            "Previews are silent unless this is on. The friend login chime then plays with its preview, on the volume you chose above, but only while \"Play a soft chime with it\" is on, as it is for a real login. The other cards have no sound.",
+            false,
+            function() return TwichUIDB.ui.previewSounds == true end,
+            function(value) TwichUIDB.ui.previewSounds = value and true or false end)
+        local previewTips = {
+            arrival = "Shows the zone card with a made-up place, where and how it would really appear.",
+            training = "Shows the new training card with made-up spells. Nothing is trained or marked, and it can't be clicked.",
+            friend = "Shows the friend login card with a made-up friend. No friend state is read or changed.",
+            welcome = "Shows the Welcome Back card with a made-up entry. Your Chronicle isn't read, and its link does nothing.",
+        }
+        local labels = {}
+        for _, info in ipairs(Notify.Kinds()) do labels[info.kind] = info.label end
+        for _, kind in ipairs({ "arrival", "training", "friend", "welcome" }) do
+            if labels[kind] then
+                Button(labels[kind], "Preview", function() Notify.Preview(kind) end,
+                    previewTips[kind] .. " It appears above this window and fades by itself. Real notices always come first.")
+            end
+        end
+        Button("Test coordinated sequence", "Run", function()
+            local sent, dropped = Notify.PreviewSequence()
+            R.Print("Test sequence: %d sample notices sent, %d repeat dropped. Cards in different places show together; the rest take turns.", sent, dropped)
+        end, "Sends a fixed set of sample notices at once: a zone card, a friend card, a training card, a repeat of the zone card (which is dropped) and a Welcome Back card. The friend card shows beside the zone card; the training and Welcome Back cards wait their turn at the top.")
+        Button("Clear previews", "Clear", function() Notify.ClearPreviews() end,
+            "Stops every preview, showing or waiting. Real notices aren't touched.")
+    end
+
     local Arrival = R.Arrival
     if Arrival then
         local holds = {}

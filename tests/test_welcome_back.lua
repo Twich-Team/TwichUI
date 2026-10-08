@@ -6,6 +6,8 @@ dofile(TESTS .. "harness.lua")
 local c = MakeClient("Rich", {"!!!TwichUI"})
 
 local groups = {}
+-- The Welcome Back card's animation group (the zone card also builds one, so it isn't simply the first).
+local function G() for _, g in ipairs(groups) do if rawget(g.owner, "open") then return g end end end
 local function Fake(o)
   o = o or {}
   o.shown, o.scripts, o.hooks = false, {}, {}
@@ -47,13 +49,14 @@ c.EditModeManagerFrame = { IsEditModeActive = function() return c.EDITING end }
 
 c.NOW = 1700000000
 c.time = function() return c.NOW end
+c.GetTime = function() return c.NOW end   -- the coordinator's expiry runs on this clock too
 c.COMBAT, c.TAXI, c.TOAST, c.ARRIVAL = false, false, false, false
 c.InCombatLockdown = function() return c.COMBAT end
 c.UnitOnTaxi = function() return c.TAXI end
 c.EventToastManagerFrame = Fake()
 c.EventToastManagerFrame.IsCurrentlyToasting = function() return c.TOAST end
 
-for _, f in ipairs({"chronicle/Style.lua", "modules/Arrival.lua", "modules/WelcomeBack.lua"}) do
+for _, f in ipairs({"chronicle/Style.lua", "modules/Notify.lua", "modules/Arrival.lua", "modules/WelcomeBack.lua"}) do
   local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
 end
 c.LOADED["!!!TwichUI"] = true; c.FireEvent("ADDON_LOADED", "!!!TwichUI")
@@ -61,8 +64,6 @@ local R = c.TwichUI
 local C, B = R.Chronicle, R.WelcomeBack
 local M = c.TwichUIDB.modules
 assert(M.welcomeBack == true, "on by default")
-R.Arrival = R.Arrival or {}
-R.Arrival.IsShowing = function() return c.ARRIVAL end
 local opened = 0
 R.ChronicleWindow = { Show = function() opened = opened + 1 end }
 local events = R.frame.events
@@ -89,7 +90,7 @@ local function Login(isLogin, isReload)
   c.FireEvent("PLAYER_ENTERING_WORLD", isLogin, isReload)
 end
 local function Settle() RunLongTimers(10) end
-local function Card() return groups[1] and groups[1].owner end
+local function Card() return G() and G().owner end
 Login(true, false); Settle()
 assert(not Card(), "no card without history")
 C.Add("level", { title = "Reached level 5", level = 5 })   -- no place
@@ -104,13 +105,13 @@ Login(true, false)
 assert(not Card(), "not at once: the login transition and the zone card come first")
 Settle()
 local card = Card()
-assert(card and card.shown and groups[1].playing and groups[1].plays == 1, "card shown and animating")
+assert(card and card.shown and G().playing and G().plays == 1, "card shown and animating")
 assert(card.line.text:find("Last noted:", 1, true) and card.line.text:find("Westfall", 1, true) and card.line.text:find("2 hours ago", 1, true), card.line.text)
 assert(not card.more.shown, "a note's text isn't repeated on screen")
 assert(C.Count() == count, "showing it adds no Chronicle entry")
 assert(events.PLAYER_REGEN_DISABLED and events.ZONE_CHANGED_NEW_AREA, "listens for combat and a new scene only while shown")
 -- timeout: the animation finishing hides it and stops the listening
-groups[1].scripts.OnFinished(groups[1])
+G().scripts.OnFinished(G())
 assert(not card.shown and not events.PLAYER_REGEN_DISABLED, "gone after it fades")
 
 -- A boss entry gives a second line; the zone entry doesn't repeat itself.
@@ -118,7 +119,7 @@ C.Add("boss", { title = "Defeated Deathmaw", zone = "Burning Steppes" })
 Login(true, false); Settle()
 assert(card.shown and card.more.shown and card.more.text == "Defeated Deathmaw" and card.line.text:find("Burning Steppes", 1, true), "boss line")
 B.Dismiss()
-assert(not card.shown and not groups[1].playing and not events.PLAYER_REGEN_DISABLED, "dismiss hides and cleans up")
+assert(not card.shown and not G().playing and not events.PLAYER_REGEN_DISABLED, "dismiss hides and cleans up")
 C.Add("zone", { title = "Arrived in Duskwood", zone = "Duskwood" })
 c.NOW = c.NOW + 5; C.Add("zone", { title = "Arrived in Elwynn Forest", zone = "Elwynn Forest" })
 Login(true, false); Settle()
@@ -135,20 +136,24 @@ Login(true, false)
 c.FireEvent("PLAYER_LEAVING_WORLD"); Login(false, true); Settle()
 assert(not card.shown, "a reload while waiting shows nothing")
 
--- In the way: combat, flight, the zone card, a banner. It waits briefly, then gives up; nothing is queued.
+-- In the way: combat, flight, a banner, a zone card in its place. It waits briefly, then gives up; nothing is queued.
+local function ArrivalCard() R.Notify.Submit({ kind = "arrival", id = "zone:Westfall", payload = { kind = "zone", title = "Westfall" } }) end
 for _, blocker in ipairs({"COMBAT", "TAXI", "ARRIVAL", "TOAST"}) do
-  c[blocker] = true
-  Login(true, false); Settle()
+  if blocker == "ARRIVAL" then ArrivalCard() else c[blocker] = true end
+  Login(true, false); RunLongTimers(7)   -- the wait after login and the looks after it, but not the zone card's own safety timer
   assert(not card.shown, blocker .. " keeps it away")
-  Settle(); Settle(); Settle()
+  RunLongTimers(7); RunLongTimers(7); RunLongTimers(7)
+  assert(not card.shown, blocker .. " is not shown while it lasts")
+  c.NOW = c.NOW + 9   -- past the time it is willing to wait
+  if blocker == "ARRIVAL" then R.Arrival.Clear() else c[blocker] = false end
+  Settle()
   assert(not card.shown, blocker .. " is not queued for later")
-  c[blocker] = false
 end
 -- ...but a short wait is fine.
 c.COMBAT = true
 Login(true, false); RunLongTimers(10)       -- delay
 assert(not card.shown)
-c.COMBAT = false; RunLongTimers(10)         -- first retry
+c.COMBAT = false; RunLongTimers(10)         -- the next look
 assert(card.shown, "shown once combat has ended")
 -- combat starting, or a new scene, takes it away
 c.FireEvent("PLAYER_REGEN_DISABLED")
@@ -171,7 +176,7 @@ c.COMBAT = true
 c.SlashCmdList.TWICHUI("welcome")
 assert(card.shown and card.line.text:find("Last noted:", 1, true), "preview shows the card")
 c.SlashCmdList.TWICHUI("welcome")
-assert(card.shown and groups[1].plays > 0, "a second preview just starts over")
+assert(card.shown and G().plays > 0, "a second preview just starts over")
 B.Dismiss(); c.COMBAT = false
 do
   local saved = {}
@@ -248,7 +253,7 @@ end
 -- Reduced motion: it only fades.
 M.arrivalReducedMotion = true
 Login(true, false); Settle()
-assert(groups[1].plays > 0 and card.shown)
+assert(G().plays > 0 and card.shown)
 B.Dismiss()
 M.arrivalReducedMotion = false
 

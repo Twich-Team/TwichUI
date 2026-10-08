@@ -54,6 +54,8 @@ c.CreateFrame = function(_, name) local f = Fake(); f.name = name; f.refuse = fa
 c.UISpecialFrames = {}
 c.BackdropTemplate = nil
 c.UIParent = Fake()
+c.UIParent.GetWidth = function() return 1024 end
+c.UIParent.GetHeight = function() return 768 end
 c.GameTooltip = Fake()
 c.EDITING = false
 c.EventRegistry = { callbacks = {} }
@@ -91,14 +93,13 @@ local function Friend(id, name, character, faction)
   c.FRIENDS[id] = { accountName = name, battleTag = name .. "#1234", gameAccountInfo = { characterName = character, factionName = faction, clientProgram = "WoW" } }
 end
 
-for _, f in ipairs({"chronicle/Style.lua", "modules/Arrival.lua", "modules/FriendLogin.lua", "modules/FriendLoginDiag.lua"}) do
+for _, f in ipairs({"chronicle/Style.lua", "modules/Notify.lua", "modules/Arrival.lua", "modules/FriendLogin.lua", "modules/FriendLoginDiag.lua"}) do
   local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
 end
 c.LOADED["!!!TwichUI"] = true; c.FireEvent("ADDON_LOADED", "!!!TwichUI")
 local R = c.TwichUI
 local F = R.FriendLogin
 local M = c.TwichUIDB.modules
-R.Arrival.IsShowing = function() return c.ARRIVAL end
 
 local function Fire(event, ...)
   c.FireEvent(event, ...)
@@ -238,8 +239,10 @@ assert(Has(Report(), "module  skip F1 (companion-app)"), "mobile app skipped, wi
 c.COMBAT = true
 Real("BN_FRIEND_ACCOUNT_ONLINE", 1, false); Settle()
 for _ = 1, 6 do RunLongTimers(2); FlushTimers() end
+c.NOW = c.NOW + 11   -- past the time a login is worth waiting for
+RunLongTimers(2); FlushTimers()
 r = Report()
-assert(Has(r, "module  look:retry (combat #1)") and Has(r, "module  look:gave-up (combat)"), r)
+assert(Has(r, "module  submitted (1)") and Has(r, "module  dropped (expired)"), r)
 assert(Has(r, "[combat, none, login+"), "every line carries the combat state")
 c.COMBAT = false
 c.CV.showToastOnline = false
@@ -344,7 +347,7 @@ Cmd("trace on")
 Real("BN_FRIEND_ACCOUNT_ONLINE", 2, false)
 assert(Has(Report(), "account-online  F2  ") and not Has(Report(), "F3"), "labels start over after a reset (the unlisted friend seen earlier is forgotten)")
 Cmd("reset")
-Fire("PLAYER_LEAVING_WORLD")
+Fire("PLAYER_LEAVING_WORLD"); Fire("PLAYER_ENTERING_WORLD", false, false)
 BN(1, true, "WoW", "Thrall")
 Online(1); Settle()
 assert(Card().shown, "the card works the same with the diagnostics reset")
