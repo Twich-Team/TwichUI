@@ -532,8 +532,16 @@ end
 local function Look()
     scheduled = false
     if not R:Enabled("foodDrink") then return end
+    if not R.Life.InWorld() then
+        -- Bags and item data are not there before the first loading screen ends (or during a later one);
+        -- PLAYER_ENTERING_WORLD asks for another look.
+        R.Life.Note("waiting-for-world")
+        Trace("waiting", "not in the world yet; looking again when it is entered")
+        return
+    end
     if InCombat() then
         dirty = true
+        R.Life.Note("deferred-combat")
         Trace("deferred", "in combat; buttons keep their last choice until it ends")
         for _, button in pairs(buttons) do RefreshTooltip(button) end   -- now says it is waiting
     else
@@ -628,7 +636,10 @@ end
 local function SavePosition(x, y)
     TwichUIDB.ui = TwichUIDB.ui or {}
     TwichUIDB.ui.foodDrinkPosition = x and { x = x, y = y } or nil
-    if container and not InCombat() then Place(container) end
+    if container then
+        -- The container is what the secure buttons hang from: it moves out of combat only.
+        if InCombat() then dirty = true else Place(container) end
+    end
     if mover then Place(mover) end
 end
 

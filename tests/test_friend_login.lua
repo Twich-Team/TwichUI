@@ -452,4 +452,24 @@ d.TwichUIDB = { modules = { friendLogin = false } }
 d.LOADED["!!!TwichUI"] = true; d.FireEvent("ADDON_LOADED", "!!!TwichUI")
 assert(d.TwichUIDB.modules.friendLogin == false, "saved false is kept")
 
+-- Battle.net reconnecting.
+M.friendLogin = true; R.FriendLogin.Refresh(); R.Notify.ClearPreviews()
+Friend(1, "Aria", "Thrall", "Horde")
+local function Showing() local f = Card(); return f and f.shown end
+LoggedIn()
+-- Battle.net reconnecting is a baseline too: the game may announce everyone already online again.
+Fire("BN_DISCONNECTED", true, false)
+Fire("BN_CONNECTED", false)
+Online(1); Settle()
+assert(not Showing(), "a friend announced right after Battle.net came back is not a new login")
+assert(R.Life.Snapshot().notes["friend-bnet-baseline"] >= 1, "counted under a stable code")
+c.NOW = c.NOW + 6; Online(1); Settle()
+assert(Showing(), "a genuine login after the quiet time is announced")
+Finish(Card().anim)
+-- A disconnect lets go of what was waiting, instead of announcing it after the connection is back.
+Online(1)
+Fire("BN_DISCONNECTED", true, false)
+c.NOW = c.NOW + 6; Settle()
+assert(not Showing() and R.Notify.State().waiting[1] == nil, "waiting logins are dropped on disconnect")
+
 print("FRIEND LOGIN TEST PASSED")

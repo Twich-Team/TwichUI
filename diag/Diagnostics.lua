@@ -37,6 +37,7 @@ local MAX_LINES, MAX_LINE = 60, 200   -- a provider's section is bounded too
 local KNOWN = {
     { "environment", "Environment" },
     { "saved", "Saved data" },
+    { "lifecycle", "Start-up and lifecycle" },
     { "notify", "Notification coordination" },
     { "friend", "Friend notifications" },
     { "food", "Food and water buttons" },

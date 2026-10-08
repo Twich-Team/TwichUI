@@ -13,6 +13,7 @@ R.ChronicleRecorder = Rec
 local lastZone               -- the zone we last saw, so arriving isn't recorded at login
 local zoneBaselined = false  -- true once lastZone is a real zone seen this session; until then nothing is an arrival
 local baselineTries = 0      -- looks already spent waiting for the zone to be known after login
+local baselineGen = 0        -- bumped whenever a baseline is started afresh; a retry from an earlier one does nothing
 local active = {}            -- [event] = handler, while registered
 local inWorld = false        -- true once the first PLAYER_ENTERING_WORLD has run
 local controlLost = false    -- between PLAYER_CONTROL_LOST and PLAYER_CONTROL_GAINED (flight takeoff to landing)
@@ -365,13 +366,16 @@ local function RetryZoneBaseline()
     if baselineTries >= BASELINE_RETRIES then Trace("baseline-gave-up", "zone never became known") return end
     baselineTries = baselineTries + 1
     Trace("baseline-retry", baselineTries)
+    local mine = baselineGen
     C_Timer.After(1, function()
+        if mine ~= baselineGen then R.Life.Note("cancelled-stale-baseline") return end
         if zoneBaselined or not On("chronicleZones") then return end
         if not EstablishZoneBaseline() then RetryZoneBaseline() end
     end)
 end
 
 local function StartZoneBaseline()
+    baselineGen = baselineGen + 1
     zoneBaselined, lastZone, baselineTries = false, nil, 0
     if not EstablishZoneBaseline() then RetryZoneBaseline() end
 end
@@ -484,7 +488,10 @@ function Rec.Refresh()
     Want("LEARNED_SPELL_IN_SKILL_LINE", OnLearnedSpell, riding)
     Want("SKILL_LINES_CHANGED", OnSkillLines, professions)
     Want("PLAYER_ENTERING_WORLD", OnEnteringWorld, levels or zones or gold or riding or professions)
-    if not zones then controlLost = false end
+    if not zones then
+        controlLost = false
+        baselineGen = baselineGen + 1
+    end
     EnsureBaseline()
     Want("ENCOUNTER_END", OnEncounterEnd, master and R:Enabled("chronicleBosses"))
     Want("PLAYER_DEAD", OnDeath, master and R:Enabled("chronicleDeaths"))

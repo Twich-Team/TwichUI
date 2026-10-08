@@ -174,7 +174,7 @@ assert(Has(Report(), "never started this session"), "the report says why there i
 local friend = Section(Report(), "Friend notifications")
 assert(Has(friend, "Friend notifications: configured on, initialized yes, ready"), friend)
 assert(Has(friend, "friend login card: on; chime: on (follows the SFX volume)"), friend)
-assert(Has(friend, "required events: 6 of 6 registered"), friend)
+assert(Has(friend, "required events: 8 of 8 registered"), friend)
 assert(Has(friend, "would show a login now: yes"), friend)
 assert(Has(friend, "game's own pop-up: event-removed; TwichUI has taken the event from it: yes"), friend)
 assert(Has(friend, "initial presence snapshot: not used by this module"), "the report does not invent a snapshot")
@@ -193,7 +193,7 @@ M.friendLogin = true; F.Refresh()
 -- Enabled but not actually listening: not called healthy.
 R.frame:UnregisterEvent("CVAR_UPDATE")
 friend = Section(Report(), "Friend notifications")
-assert(Has(friend, "required events: 5 of 6 registered; missing: CVAR_UPDATE") and Has(friend, "unavailable (event-not-registered)"), friend)
+assert(Has(friend, "required events: 7 of 8 registered; missing: CVAR_UPDATE") and Has(friend, "unavailable (event-not-registered)"), friend)
 R.frame:RegisterEvent("CVAR_UPDATE")
 assert(Has(Section(Report(), "Friend notifications"), ", ready"), "and ready again once it is")
 -- The card cannot be built.

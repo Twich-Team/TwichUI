@@ -503,6 +503,36 @@ function SH:Status()
     if SH.lastError then P("%slast error: %s|r", R.RED, SH.lastError) end
 end
 
+-- Brings every transfer still in progress to an end, as when sharing is switched off (incomingOnly: just the
+-- ones coming in, as when receiving is switched off). Nothing is applied
+-- and nothing already received is touched. A waiting offer is answered "not now" so the sender is not
+-- left hanging, and its prompt is taken down. Late answers and late results for these transfers are
+-- ignored afterwards (each checks that its transfer is still the current one).
+local TERMINAL = { done = true, failed = true, declined = true }
+function SH:Settle(reason, incomingOnly)
+    local o = SH.outgoing
+    if o and not incomingOnly and not TERMINAL[o.stage] then
+        o.stage = "failed"; o.reason = "Sharing was turned off."
+        Code(o, reason or "settled", o.target)
+        R.Life.Note("transfer-settled")
+    end
+    for sender, inc in pairs(SH.incoming) do
+        if not TERMINAL[inc.stage] then
+            if inc.stage == "asking" then
+                pcall(SH.Respond, SH, sender, false)
+            end
+            if not TERMINAL[inc.stage] then
+                inc.stage = "failed"; inc.reason = "Receiving was turned off."
+                Code(inc, reason or "settled", sender)
+            end
+            inc.lanes = nil
+            R.Life.Note("transfer-settled")
+        end
+    end
+    if StaticPopup_Hide then StaticPopup_Hide("TWICHUI_OFFER") end
+    Changed()
+end
+
 function SH:CancelSend()
     if SH.outgoing then
         SH.outgoing.stage = "failed"; SH.outgoing.reason = "Cancelled."
@@ -860,13 +890,18 @@ OnLane = function(_, text, dist, sender)
     inc.stage = "unpacking"
     inc.last = GetTime()
     Changed()
+    -- The unpacking finishes a few frames later. If the transfer was settled meanwhile (stalled, cancelled,
+    -- sharing turned off, a newer offer from the same player), its late result is ignored, not stored.
+    local function Current() return SH.incoming[sender] == inc and inc.stage == "unpacking" end
     DecodeBig(joined, function(msg)
+        if not Current() then R.Life.Note("cancelled-stale-transfer") Trace("ignored", "late-result-after-settle", sender) return end
         inc.last = GetTime()
         if msg.t ~= "data" then error("damaged data block") end
         inc.stage = "receiving"   -- handlers.data expects an active transfer
         local ok, err = pcall(handlers.data, sender, msg)
         if not ok then Fail("storing the configuration", err) end
     end, function(err)
+        if not Current() then R.Life.Note("cancelled-stale-transfer") return end
         inc.stage = "failed"; inc.reason = "The configuration arrived damaged. Ask them to send again."
         Code(inc, "unpack-failed", sender)
         Changed()

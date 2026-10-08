@@ -112,6 +112,7 @@ qol\QuickKeybind.lua
 # Troubleshooting: one report to copy and optional temporary tracing (/tui diagnostics). Local only; off until asked for.
 diag\Diagnostics.lua
 diag\Environment.lua
+diag\Lifecycle.lua
 diag\Notifications.lua
 diag\Friends.lua
 diag\Food.lua

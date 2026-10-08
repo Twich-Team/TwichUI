@@ -202,6 +202,23 @@ do
   saved.TwichUI.Chronicle.Record().lastZone = "Orgrimmar"
   saved.ZONE = "Teldrassil"; saved.FireEvent("PLAYER_ENTERING_WORLD", true, false)
   saved.FireEvent("ZONE_CHANGED_NEW_AREA"); assert(zones(saved) == 0)
+  -- death, ghost and resurrection in the same place are not arrivals; related events never record twice
+  local g = boot("ZoneGhost")
+  g.ZONE = "Duskwood"; g.FireEvent("PLAYER_ENTERING_WORLD", true, false)
+  g.FireEvent("PLAYER_DEAD"); g.FireEvent("PLAYER_ALIVE"); g.FireEvent("PLAYER_UNGHOST")
+  g.FireEvent("PLAYER_ENTERING_WORLD", false, false); g.FireEvent("ZONE_CHANGED_NEW_AREA")
+  assert(zones(g) == 0, "dying and getting up where you were is not an arrival")
+  g.ZONE = "Westfall"; g.FireEvent("ZONE_CHANGED_NEW_AREA"); g.FireEvent("PLAYER_CONTROL_GAINED"); g.FireEvent("ZONE_CHANGED_NEW_AREA")
+  assert(zones(g) == 1, "a real move is one entry however many related events follow")
+
+  -- switching zone tracking off and on while a baseline retry is waiting: the old retry does nothing
+  local t = boot("ZoneToggle")
+  t.ZONE = ""; t.FireEvent("PLAYER_ENTERING_WORLD", true, false)         -- retry waiting
+  t.TwichUIDB.modules.chronicleZones = false; t.TwichUI.ChronicleRecorder.Refresh()
+  t.TwichUIDB.modules.chronicleZones = true; t.TwichUI.ChronicleRecorder.Refresh()   -- a fresh baseline starts
+  t.ZONE = "Westfall"; FlushTimers()                                      -- both retries come due
+  t.ZONE = "Duskwood"; t.FireEvent("ZONE_CHANGED_NEW_AREA")
+  assert(zones(t) == 1, "one arrival, and the baseline was taken from Westfall, not Duskwood")
+  assert(t.TwichUI.Life.Snapshot().notes["cancelled-stale-baseline"] >= 1, "the old retry was set aside and counted")
 end
 print("CHRONICLE TEST PASSED")
-

@@ -3,7 +3,7 @@ dofile(TESTS .. "harness.lua")
 -- modules: environment, Chronicle zone arrival, configuration sharing, notification coordination, and
 -- error capture in Core. The friend and food/water sections are tested with their modules.
 local out = {}
-local DIAG_FILES = { "diag/Diagnostics.lua", "diag/Environment.lua", "diag/Notifications.lua", "diag/Zones.lua", "diag/Sharing.lua", "diag/Window.lua" }
+local DIAG_FILES = { "diag/Diagnostics.lua", "diag/Environment.lua", "diag/Lifecycle.lua", "diag/Notifications.lua", "diag/Zones.lua", "diag/Sharing.lua", "diag/Window.lua" }
 
 local function Has(text, needle) return text:find(needle, 1, true) ~= nil end
 local function Section(report, title)
@@ -27,6 +27,7 @@ local function boot(name, addons, extra)
   c.LOADED["!!!TwichUI"] = true
   c.FireEvent("ADDON_LOADED", "!!!TwichUI")
   c.FireEvent("PLAYER_LOGIN")
+  c.FireEvent("PLAYER_ENTERING_WORLD", true, false)   -- notices wait for the world
   return c
 end
 local function settle() for _ = 1, 10 do FlushTimers(); Pump() end end
@@ -126,7 +127,7 @@ assert(#D.Records() <= 41 and st.limited >= 250, "a flood is rate limited and co
 assert(Has(D.Build(), "dropped by the rate limit"))
 -- not persisted
 for k in pairs(a.TwichUIDB) do assert(saved[k], "tracing wrote nothing to saved variables: " .. k) end
-for _, f in ipairs({ "diag/Diagnostics.lua", "diag/Window.lua", "diag/Friends.lua", "diag/Food.lua", "diag/Zones.lua", "diag/Sharing.lua", "diag/Notifications.lua", "diag/Environment.lua" }) do
+for _, f in ipairs({ "diag/Diagnostics.lua", "diag/Lifecycle.lua", "diag/Window.lua", "diag/Friends.lua", "diag/Food.lua", "diag/Zones.lua", "diag/Sharing.lua", "diag/Notifications.lua", "diag/Environment.lua" }) do
   local fh = assert(io.open(ROOT .. f)); local text = fh:read("*a"); fh:close()
   assert(not text:find("TwichUIDB", 1, true) and not text:find("SavedVariables", 1, true), f .. " does not touch saved variables")
   assert(not text:find("loadstring", 1, true) and not text:find("SendChatMessage", 1, true) and not text:find("SendAddonMessage", 1, true),
@@ -340,6 +341,22 @@ assert(Has(tr, "share failed P1 (offer-no-answer)") and Has(tr, "ended with offe
 assert(not Has(tr, "SYNTHETIC  share"), "a real offer to another player is not marked synthetic")
 assert(not Has(tr, "Nobody") and not Has(tr, "Check Nobody"), "recipient never appears")
 MD.Stop("manual"); MD.Clear()
+
+---------------------------------------------------------------------------
+-- Start-up and lifecycle: readiness states and reason codes, nothing else.
+---------------------------------------------------------------------------
+do
+  local life = Section(a.TwichUI.Diag.Build(), "Start-up and lifecycle")
+  assert(Has(life, "saved variables: ready; configuration ready: yes"), life)
+  assert(Has(life, "logged in: yes; in the world now: yes"), life)
+  a.TwichUI.Life.Note("deferred-combat")
+  life = Section(a.TwichUI.Diag.Build(), "Start-up and lifecycle")
+  assert(Has(life, "deferred-combat x1"), life)
+  a.FireEvent("PLAYER_LEAVING_WORLD")
+  life = Section(a.TwichUI.Diag.Build(), "Start-up and lifecycle")
+  assert(Has(life, "waiting") and Has(life, "world-not-entered"), "a loading screen is reported as waiting, not as a fault: " .. life)
+  a.FireEvent("PLAYER_ENTERING_WORLD", false, false)
+end
 
 ---------------------------------------------------------------------------
 -- Notification coordination: kinds and reasons, never ids or text.

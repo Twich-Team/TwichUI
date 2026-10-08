@@ -444,11 +444,29 @@ local function OnOnline(friendId, isCompanionApp)
     Schedule(SETTLE)
 end
 
-local function Drop()
-    if #waiting > 0 then Note("drop", nil, "loading-screen, " .. #waiting .. " waiting") end
+-- Lets go of every login still waiting, and of the card if one is up. Nothing is kept for later.
+local function Clear(why)
+    if #waiting > 0 then Note("drop", nil, why .. ", " .. #waiting .. " waiting") end
     pending = pending + 1
     wipe(waiting)
     N.Cancel("friend")   -- one waiting or showing; a settings preview is the player's own and stays
+end
+
+local function Drop() Clear("loading-screen") end
+
+-- The Battle.net connection going away says nothing true about who is online, and when it comes back the
+-- game may announce the friends who were online all along, as it does at login. So the logins waiting are
+-- let go, and the coming back gets the same quiet time a login does (anyone who really signs in after that
+-- is announced as usual).
+local function OnBnDisconnected()
+    R.Life.Note("friend-bnet-disconnected")
+    Clear("bnet-disconnected")
+end
+
+local function OnBnConnected()
+    quietUntil = GetTime() + LOGIN_QUIET
+    R.Life.Note("friend-bnet-baseline")
+    Note("baseline", nil, "bnet-connected")
 end
 
 -- Logging in or reloading isn't anyone arriving; loading screens only clear what was waiting.
@@ -465,7 +483,8 @@ local function OnCvarUpdate(name)
 end
 
 -- The events the card needs, as F.Refresh registers them while it is on.
-local WANTED_EVENTS = { EVENT, "PLAYER_ENTERING_WORLD", "PLAYER_LEAVING_WORLD", "PLAYER_REGEN_DISABLED", "PLAYER_LOGIN", "CVAR_UPDATE" }
+local WANTED_EVENTS = { EVENT, "PLAYER_ENTERING_WORLD", "PLAYER_LEAVING_WORLD", "PLAYER_REGEN_DISABLED", "PLAYER_LOGIN", "CVAR_UPDATE",
+    "BN_CONNECTED", "BN_DISCONNECTED" }
 
 -- What the module is doing right now, for /tui diagnostics. Reads only; nothing is changed.
 function F.State()
@@ -629,7 +648,9 @@ function F.Refresh()
     Want("PLAYER_REGEN_DISABLED", Hide, on)   -- makes way for combat
     Want("PLAYER_LOGIN", Takeover, on)
     Want("CVAR_UPDATE", OnCvarUpdate, on)
-    if on then Takeover() else Drop() Giveback() end
+    Want("BN_CONNECTED", OnBnConnected, on)
+    Want("BN_DISCONNECTED", OnBnDisconnected, on)
+    if on then Takeover() else Clear("module-off") Giveback() end
     HookEditMode()
     ShowMover(on and EditModeActive())
 end

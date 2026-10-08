@@ -76,6 +76,7 @@ for _, f in ipairs({ "gear/Weights.lua", "gear/Evaluate.lua", "gear/Prefs.lua", 
   local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
 end
 c.LOADED["!!!TwichUI"] = true; c.FireEvent("ADDON_LOADED", "!!!TwichUI")
+c.FireEvent("PLAYER_ENTERING_WORLD", true, false)   -- previews need the world, as they do in the game
 local R = c.TwichUI
 
 -- Every module toggle defaults to what a new install gets.

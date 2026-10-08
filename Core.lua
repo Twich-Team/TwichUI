@@ -78,11 +78,34 @@ R.Fault = Fault
 
 ---------------------------------------------------------------------------
 -- Tiny event bus so modules can share one frame and run in a known order.
+-- A listener may add or remove listeners (itself included) while its event is being delivered: the
+-- delivery in progress still reaches every listener that is still registered, once, in order. A listener
+-- removed during delivery is only marked (false) and the list is tidied when the delivery ends.
+-- Registering the same function for the same event twice is one registration.
 ---------------------------------------------------------------------------
 local listeners = {}
+
+local function Tidy(event, list)
+    for i = #list, 1, -1 do
+        if not list[i] then table.remove(list, i) end
+    end
+    list.dirty = false
+    if #list == 0 then
+        listeners[event] = nil
+        R.frame:UnregisterEvent(event)
+    end
+end
+
 function R:On(event, fn)
-    listeners[event] = listeners[event] or {}
-    table.insert(listeners[event], fn)
+    local list = listeners[event]
+    if not list then
+        list = { busy = 0 }
+        listeners[event] = list
+    end
+    for i = 1, #list do
+        if list[i] == fn then return end
+    end
+    table.insert(list, fn)
     R.frame:RegisterEvent(event)
 end
 
@@ -91,23 +114,76 @@ function R:Off(event, fn)
     local list = listeners[event]
     if not list then return end
     for i = #list, 1, -1 do
-        if list[i] == fn then table.remove(list, i) end
+        if list[i] == fn then
+            if list.busy > 0 then
+                list[i] = false
+                list.dirty = true
+            else
+                table.remove(list, i)
+            end
+        end
     end
-    if #list == 0 then
-        listeners[event] = nil
-        R.frame:UnregisterEvent(event)
-    end
+    if list.busy == 0 then Tidy(event, list) end
 end
 
 R.frame = CreateFrame("Frame")
 R.frame:SetScript("OnEvent", function(_, event, ...)
     local list = listeners[event]
     if not list then return end
-    for i = 1, #list do
-        local ok, err = pcall(list[i], ...)
-        if not ok then Fault("event " .. event, err) end
+    list.busy = list.busy + 1
+    for i = 1, #list do    -- the count as delivery began: listeners added meanwhile wait for the next one
+        local fn = list[i]
+        if fn then
+            local ok, err = pcall(fn, ...)
+            if not ok then Fault("event " .. event, err) end
+        end
     end
+    list.busy = list.busy - 1
+    if list.busy == 0 and list.dirty then Tidy(event, list) end
 end)
+
+---------------------------------------------------------------------------
+-- Where the addon is in its start-up, and the game's world state.
+-- Distinct on purpose: code loaded, saved variables validated, configuration ready, startup hooks run,
+-- logged in, and in the world. A feature being switched on is none of these. Features that need the
+-- world (bags, location, friend lists) ask InWorld() and listen for PLAYER_ENTERING_WORLD to try again.
+-- Reason codes are counted for /tui diagnostics: a short fixed vocabulary, never names or text.
+---------------------------------------------------------------------------
+local Life = {
+    savedVariables = "pending",   -- "pending" | "ready" | "failed"
+    configReady = false, hooksRun = 0, hookFailures = 0, loggedIn = false, worldEntries = 0,
+    notes = {}, noteKinds = 0, notesDropped = 0,
+}
+R.Life = Life
+local MAX_NOTE_KINDS = 32
+local inWorld = false
+
+function Life.InWorld() return inWorld end
+
+-- Counts one occurrence of a reason code ("deferred-combat", "cancelled-stale", ...). Bounded.
+function Life.Note(code)
+    if type(code) ~= "string" then return end
+    local n = Life.notes[code]
+    if n then Life.notes[code] = n + 1
+    elseif Life.noteKinds < MAX_NOTE_KINDS then Life.notes[code], Life.noteKinds = 1, Life.noteKinds + 1
+    else Life.notesDropped = Life.notesDropped + 1 end
+end
+
+-- Read only, for /tui diagnostics.
+function Life.Snapshot()
+    local copy = {}
+    for k, v in pairs(Life.notes) do copy[k] = v end
+    return {
+        savedVariables = Life.savedVariables, configReady = Life.configReady, hooksRun = Life.hooksRun,
+        hookFailures = Life.hookFailures, loggedIn = Life.loggedIn, inWorld = inWorld, worldEntries = Life.worldEntries,
+        notes = copy, notesDropped = Life.notesDropped,
+    }
+end
+
+-- Registered here, before any module's listener, so the state is already right when theirs run.
+R:On("PLAYER_LOGIN", function() Life.loggedIn = true end)
+R:On("PLAYER_ENTERING_WORLD", function() inWorld = true; Life.worldEntries = Life.worldEntries + 1 end)
+R:On("PLAYER_LEAVING_WORLD", function() inWorld = false end)
 
 -- Hooks run once, right after our saved variables load (before other addons).
 R.initHooks = {}
@@ -118,6 +194,7 @@ R.frame:HookScript("OnEvent", function(_, event, name)
     if event ~= "ADDON_LOADED" or name ~= ADDON then return end
     -- Schema, upgrade, defaults and damaged-data repair live in Persist.lua (see docs/persistence.md).
     local loaded, loadErr = pcall(R.Persist.LoadMain)
+    Life.savedVariables = loaded and "ready" or "failed"
     if not loaded then Fault("saved data", loadErr) end
     -- Only matters if Persist failed part way: the rest of the addon needs these to be tables.
     if type(TwichUIDB) ~= "table" then TwichUIDB = {} end
@@ -127,9 +204,15 @@ R.frame:HookScript("OnEvent", function(_, event, name)
     for k, v in pairs(DEFAULT_MODULES) do
         if TwichUIDB.modules[k] == nil then TwichUIDB.modules[k] = v end
     end
+    Life.configReady = true
     for i, fn in ipairs(R.initHooks) do
         local ok, err = pcall(fn)
-        if not ok then Fault("startup hook " .. i, err) end
+        Life.hooksRun = Life.hooksRun + 1
+        if not ok then
+            Life.hookFailures = Life.hookFailures + 1
+            Life.Note("init-failed")
+            Fault("startup hook " .. i, err)
+        end
     end
 end)
 

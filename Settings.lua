@@ -765,11 +765,11 @@ local function Build()
     Header("Addon configurations", "Share the settings of the addons you choose with friends, and apply theirs. You always choose what to apply, and Undo puts your own settings back.")
     local sharing = Toggle("setupSharing", "Configuration sharing",
         "Save the settings of the addons you choose as an addon configuration, send it to friends in game, and apply configurations friends send you. Type /tui share.",
-        true)
+        true, function() if not R:Enabled("setupSharing") and R.Share then R.Share:Settle("module-off") end end)
     local function SharingOn() return R:Enabled("setupSharing") end
     Under(Toggle("acceptSetups", "Let friends send me addon configurations",
         "When on, friends can offer you their addon configuration. You're always asked first, unless you chose \"Always accept\" for that friend. Nothing is applied until you click Apply.",
-        false), sharing, SharingOn)
+        false, function() if not R:Enabled("acceptSetups") and R.Share then R.Share:Settle("module-off", true) end end), sharing, SharingOn)
     Toggle("groupCheck", "Version and group check",
         "On by default. Both players need it on to see each other. Other players never see these messages, even without TwichUI.\n\nWhen you're in a group, TwichUI trades version numbers with other TwichUI users (a few bytes, group channel only) and tells you when someone's version is newer or too old to share with. Also powers /tui check and Party compatibility check in /tui share, and a once-per-game-build test message that shows in Sending options whether direct messages reached another TwichUI user.",
         true)

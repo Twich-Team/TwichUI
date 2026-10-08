@@ -57,7 +57,7 @@ local order = {}            -- kinds, in registration order
 local queue = {}            -- waiting notices, in the order they were sent
 local active = {}           -- [kind] = the notice being shown
 local seq = 0
-local inWorld = true
+local inWorld = false         -- true from the first PLAYER_ENTERING_WORLD until a loading screen starts (see R.Life)
 local retryScheduled = false
 local pumping, again = false, false
 local listening = false       -- the world listeners are registered (set by the init hook at the end)
@@ -499,6 +499,7 @@ end
 
 R:OnInit(function()
     listening = true
+    inWorld = R.Life.InWorld()   -- false at start-up: a notice sent before the first loading screen ends waits for it
     R:On("PLAYER_LEAVING_WORLD", OnLeavingWorld)
     R:On("PLAYER_ENTERING_WORLD", OnEnteringWorld)
 end)

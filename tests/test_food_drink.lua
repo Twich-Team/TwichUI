@@ -167,7 +167,12 @@ Item(4542, "Unusable Now", 5, 5, { usable = false, text = EAT:format(100) })   -
 Item(211780, "Scroll", 1, 1, { sub = 4, spell = nil })                  -- class 0 but not Food & Drink
 Item(3448, "Senggin Root", 1, 3, { spellName = "Food", spell = 2639, text = "Restores 100 health and 100 mana over 21 sec. Must remain seated while eating." })
 Bags({ 2287, 4605, 1179, 1205, 15, 4601, 4542, 211780, 3448 })
-c.FireEvent("BAG_UPDATE_DELAYED"); Look()
+-- Before the first loading screen ends there is no world to look at: the start-up look and a bag event
+-- build nothing, and say why. Entering the world asks again.
+Look(); c.FireEvent("BAG_UPDATE_DELAYED"); Look()
+assert(select(1, Buttons()) == nil, "nothing is built before the world is entered")
+assert(R.Life.Snapshot().notes["waiting-for-world"] >= 1, "the wait is counted under a stable code")
+c.FireEvent("PLAYER_ENTERING_WORLD", true, false); Look()
 local food, drink = Buttons()
 assert(food and drink, "both buttons are made")
 assert(food.attrs.type == "item" and food.attrs.item == "Red-speckled Mushroom", "most food restored: " .. tostring(food.attrs.item))
@@ -785,6 +790,38 @@ do
   assert(not mover.shown, "outline gone when Edit Mode closes")
   c.TwichUIDB.ui.foodDrinkPosition = { x = 1e9, y = 0 }
   x, y = F.Position(); assert(x == 0 and y == -220, "a bad saved place is ignored")
+end
+
+-- A loading screen is not a world: no look runs during it, and the one that follows the loading screen is fresh.
+do
+  Bags({ 2287 }); Look()
+  c.FireEvent("PLAYER_LEAVING_WORLD")
+  Bags({ 4605 }); c.FireEvent("BAG_UPDATE_DELAYED"); Look()
+  assert(food.itemID == 2287, "no look during a loading screen: " .. tostring(food.itemID))
+  c.FireEvent("PLAYER_ENTERING_WORLD", false, false); Look()
+  assert(food.itemID == 4605, "looked again as soon as the world was entered")
+  Bags({ 2287, 1179 }); c.FireEvent("BAG_UPDATE_DELAYED"); Look()
+end
+
+-- A place saved while combat holds the buttons still is put into effect when combat ends, not left for the next bag event.
+do
+  c.EDITING = true; c.EventRegistry.callbacks["EditMode.Enter"]()
+  local mover, container
+  for _, f in ipairs(frames) do
+    if f.scripts.OnDragStop then mover = f
+    elseif type(rawget(f, "point")) == "table" and f.point[1] == "CENTER" and f.point[5] ~= nil and not rawget(f, "label") then container = f end
+  end
+  assert(mover and container, "found the outline and the buttons' parent")
+  local before = container.point[5]
+  c.COMBAT = true
+  mover.cx, mover.cy = 700, 400
+  mover.scripts.OnDragStop(mover)
+  assert(container.point[5] == before, "the buttons' parent is not moved in combat")
+  assert(c.TwichUIDB.ui.foodDrinkPosition, "but the place is saved")
+  c.COMBAT = false; c.FireEvent("PLAYER_REGEN_ENABLED"); Look()
+  assert(container.point[5] ~= before and container.point[5] == c.TwichUIDB.ui.foodDrinkPosition.y, "moved once combat ended: " .. tostring(before) .. " -> " .. tostring(container.point[5]) .. " saved " .. tostring(c.TwichUIDB.ui.foodDrinkPosition and c.TwichUIDB.ui.foodDrinkPosition.y))
+  mover.scripts.OnMouseUp(mover, "RightButton")
+  c.EDITING = false; c.EventRegistry.callbacks["EditMode.Exit"]()
 end
 
 -- Off: nothing listened for, nothing shown.
