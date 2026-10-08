@@ -32,12 +32,33 @@ local DATA_TIMEOUT = 60        -- seconds of silence before a transfer is called
 
 SH.outgoing = nil   -- { target, id, stage, sent, total, started, want }
 SH.incoming = {}    -- [sender] = { id, offer, stage, expected, got }
+local receivers = 0   -- prefixes whose receiver was registered with AceComm (for /tui diagnostics)
+
+-- For /tui diagnostics while it is tracing: codes only; the other player appears as an anonymous label
+-- (`who` is turned into one at once) and nothing of a configuration is ever passed.
+-- Anything to or from this character itself is the self-test: it goes through the real code but proves
+-- nothing about another player, so it is marked synthetic.
+local function Trace(code, detail, who, synthetic)
+    local D = R.Diag
+    if D and D.Tracing() then
+        D.Trace("share", code, detail, who, synthetic or (who ~= nil and SH.SameName(who, SH.SelfName())))
+    end
+end
+
+-- Records why a transfer ended badly as a code (the reason text names people, so it is not reported).
+local function Code(t, code, who)
+    t.code = code
+    Trace("failed", code, who)
+end
+
 local listeners = {}
 function SH:OnChange(fn) listeners[#listeners + 1] = fn end
 local function Changed() for _, fn in ipairs(listeners) do pcall(fn) end end
 
 local function Fail(where, err)
     SH.lastError = ("%s: %s"):format(where, tostring(err))
+    SH.errorWhere = where   -- one of a fixed set of phrases, so it can be reported
+    if R.Diag then R.Diag.Error("sharing: " .. where, err) end
     R.Print("%sSomething went wrong (%s).|r Type /tui share status and send me the output.", R.RED, where)
     geterrorhandler()(err)
 end
@@ -397,11 +418,13 @@ local function StartWatchdog()
         local o = SH.outgoing
         if o and o.stage == "sending" and o.last and GetTime() - o.last > DATA_TIMEOUT then
             o.stage = "failed"; o.reason = "The transfer stalled. Try again; only the missing parts will be sent."
+            Code(o, "stalled", o.target)
             Changed()
         elseif o and o.stage == "delivered" and o.last and GetTime() - o.last > DATA_TIMEOUT then
             -- Everything was handed to the game, but no "done" came back.
             o.stage = "failed"
             o.reason = ("Everything was sent, but %s never confirmed it arrived. They may not have received it. Ask them, or try again; you can also choose another way to send in Sending options."):format(SH.Short(o.target))
+            Code(o, "no-confirmation", o.target)
             Changed()
         end
         if not o or (o.stage ~= "offered" and o.stage ~= "packing" and o.stage ~= "sending" and o.stage ~= "delivered") then
@@ -450,14 +473,17 @@ function SH:SendTo(name, selfTest)
     }, "ALERT", route, function()
         if SH.outgoing == o and o.stage == "offered" then
             o.stage = "failed"; o.reason = RefusedReason(route, SH.Short(target))
+            Code(o, "offer-refused-by-game", target)
             Changed()
         end
     end)
+    Trace("offer-sent", "route=" .. tostring(route[1]), target, selfTest)
     Changed()
     C_Timer.After(OFFER_TIMEOUT, function()
         if SH.outgoing == o and o.stage == "offered" then
             local how = route[1] == "WHISPER" and "directly" or (route[1] == "GUILD" and "over the guild channel" or "over the group channel")
             o.stage = "failed"; o.reason = ("No answer. The game accepted the offer, but nothing came back. Check %s is online and running a recent TwichUI with configuration sharing on, then try again. TwichUI sent it %s only; you can choose another way in Sending options. (TwichUI versions before this change may only listen on the group or guild channel if their owner switched that on.)"):format(SH.Short(target), how)
+            Code(o, "offer-no-answer", target)
             Changed()
         end
     end)
@@ -492,7 +518,11 @@ function SH:Status()
 end
 
 function SH:CancelSend()
-    if SH.outgoing then SH.outgoing.stage = "failed"; SH.outgoing.reason = "Cancelled." ; Changed() end
+    if SH.outgoing then
+        SH.outgoing.stage = "failed"; SH.outgoing.reason = "Cancelled."
+        Code(SH.outgoing, "cancelled", SH.outgoing.target)
+        Changed()
+    end
 end
 
 local function SendData(o, want, wantEM)
@@ -523,6 +553,7 @@ local function SendData(o, want, wantEM)
     end, function(err)
         o.stage = "failed"
         o.reason = "Couldn't package your configuration: " .. tostring(err)
+        Code(o, "packaging-failed", o.target)
         Changed()
         Fail("packaging your configuration", err)
     end)
@@ -540,6 +571,7 @@ function SH.SendLanes(o, encoded)
     o.stage = "sending"
     o.last = GetTime()
     o.sent, o.total = 0, total
+    Trace("data-handed-to-game", nLanes .. " lanes", o.target)
     local laneSent = {}
     Changed()
     Send(o.target, { t = "incoming", id = o.id, size = total }, "ALERT", o.route)
@@ -561,6 +593,7 @@ function SH.SendLanes(o, encoded)
                 if SH.outgoing ~= o or o.stage ~= "sending" then return end
                 if accepted == false then
                     o.stage = "failed"; o.reason = RefusedReason(o.route, SH.Short(o.target))
+                    Code(o, "data-refused-by-game", o.target)
                     Changed()
                     return
                 end
@@ -616,6 +649,7 @@ function SH:Respond(sender, accept, always)
         if not cur or cur.id ~= id or cur.stage == "done" or cur.stage == "failed" then return end
         if GetTime() - (cur.last or 0) > DATA_TIMEOUT then
             cur.stage = "failed"; cur.reason = "The transfer stopped. Ask them to send again; only the missing parts will be sent."
+            Code(cur, "receive-stalled", sender)
             Changed()
         else
             C_Timer.After(5, watchdog)
@@ -695,7 +729,8 @@ handlers.offer = function(sender, msg, dist)
         return
     end
     if type(msg.tables) ~= "table" then return end
-    SH.incoming[sender] = { id = msg.id, offer = msg, stage = "asking", got = 0, expected = 0, route = route, parts = {} }
+    SH.incoming[sender] = { id = msg.id, offer = msg, stage = "asking", got = 0, expected = 0, route = route, parts = {}, started = GetTime() }
+    Trace("offer-received", "via " .. tostring(dist), sender)
     Changed()
     if ST.db.trusted[sender] then
         SH:Respond(sender, true)
@@ -709,6 +744,8 @@ handlers.reply = function(sender, msg)
     if not o or o.id ~= msg.id or not SH.SameName(o.target, sender) then
         SH.lastDropped = ("reply ignored (sending=%s, id %s vs %s, from %s vs %s)"):format(
             tostring(o and o.stage), tostring(o and o.id), tostring(msg.id), tostring(sender), tostring(o and o.target))
+        SH.droppedCode = "reply-not-for-current-transfer"
+        Trace("ignored", SH.droppedCode, sender)
         return
     end
     if not msg.accept then
@@ -716,16 +753,24 @@ handlers.reply = function(sender, msg)
         o.reason = (msg.reason == "off" and "They've turned off receiving configurations.")
             or (msg.reason == "version" and "They need to update TwichUI.")
             or "They declined."
+        Code(o, (msg.reason == "off" and "declined-receiving-off") or (msg.reason == "version" and "declined-version") or "declined", sender)
         Changed()
         return
     end
-    if type(msg.want) ~= "table" then SH.lastDropped = "reply without a want list" return end
+    if type(msg.want) ~= "table" then
+        SH.lastDropped = "reply without a want list"
+        SH.droppedCode = "reply-without-want-list"
+        Trace("ignored", SH.droppedCode, sender)
+        return
+    end
+    Trace("offer-accepted", nil, sender)
     -- Even when nothing is new we still send the (small) list, so addons you
     -- removed from your setup disappear on their side too.
     local ok, err = pcall(SendData, o, msg.want, msg.wantEM)
     if not ok then
         o.stage = "failed"
         o.reason = "Couldn't package your configuration: " .. tostring(err)
+        Code(o, "packaging-failed", sender)
         Changed()
         Fail("packaging your configuration", err)
     end
@@ -747,10 +792,12 @@ handlers.data = function(sender, msg)
     if not inc or inc.id ~= msg.id or (inc.stage ~= "receiving" and inc.stage ~= "waiting") then return end
     if type(msg.meta) ~= "table" or not Validate(msg.keep) or not Validate(msg.tables) then
         inc.stage = "failed"; inc.reason = "The configuration arrived damaged. Ask them to send again."
+        Code(inc, "data-invalid", sender)
         Changed()
         return
     end
     StoreReceived(sender, msg)
+    Trace("received-and-stored", nil, sender)
     inc.stage = "done"
     inc.got = inc.expected
     Send(sender, { t = "done", id = msg.id }, "ALERT", inc.route)
@@ -762,6 +809,7 @@ handlers.done = function(sender, msg)
     local o = SH.outgoing
     if o and o.id == msg.id and SH.SameName(o.target, sender) then
         o.stage = "done"
+        Trace("delivery-confirmed", "the other side answered done", sender)
         Changed()
         R.Print("%s has your addon configuration now.", SH.Short(sender))
     end
@@ -773,6 +821,8 @@ OnControl = function(_, text, dist, sender)
     if not okDecode then Fail("reading a message", msg) return end
     if not msg or type(msg.t) ~= "string" then
         SH.lastDropped = ("undecodable message from %s (%d bytes)"):format(tostring(sender), #text)
+        SH.droppedCode = "undecodable-message"
+        Trace("ignored", SH.droppedCode, sender)
         return
     end
     -- TEMPORARY (commtest): diagnostic types ignore the sharing switches; they carry no private data.
@@ -781,12 +831,14 @@ OnControl = function(_, text, dist, sender)
     if not isGroupType and not R:Enabled("setupSharing") then return end
     if not isDiag and not AllowedFor(msg.t, dist) then return end
     SH.lastSeen = ("%s from %s via %s"):format(msg.t, tostring(sender), tostring(dist))
+    SH.seenType, SH.seenDist, SH.seenAt = msg.t, dist, GetTime()
     -- Broadcasts (group check) are for everyone except their sender.
     if msg.to == "*" and isGroupType then
         if dist ~= "LOOP" and SH.SameName(sender, SH.SelfName()) then return end
     -- Group and guild messages reach everyone; only handle ones meant for us.
     elseif not SH.SameName(msg.to, SH.SelfName()) then
         SH.lastDropped = ("%s addressed to %s, not you"):format(msg.t, tostring(msg.to))
+        SH.droppedCode = "addressed-to-someone-else"
         return
     end
     local h = handlers[msg.t]
@@ -825,13 +877,56 @@ OnLane = function(_, text, dist, sender)
         if not ok then Fail("storing the configuration", err) end
     end, function(err)
         inc.stage = "failed"; inc.reason = "The configuration arrived damaged. Ask them to send again."
+        Code(inc, "unpack-failed", sender)
         Changed()
         Fail("unpacking the configuration", err)
     end)
 end
 
 AceComm:RegisterComm(PREFIX, OnControl)
-for _, lane in ipairs(LANES) do AceComm:RegisterComm(lane, OnLane) end
+receivers = receivers + 1
+for _, lane in ipairs(LANES) do
+    AceComm:RegisterComm(lane, OnLane)
+    receivers = receivers + 1
+end
+
+-- For /tui diagnostics: the transfer code's state with no names, messages or payloads. Reads only.
+-- Other players appear as P1, P2 ... within this snapshot only.
+function SH.Snapshot()
+    local label = R.Diag and R.Diag.NewLabeler("P") or function() return "P?" end
+    local now = GetTime()
+    local function Age(t) return t and math.floor(now - t) or nil end
+    local snap = {
+        transport = SH.Transport(), receivers = receivers, receiversExpected = 1 + #LANES,
+        prefixes = {}, blocked = SH.Blocked(), realmless = SH.Realmless(),
+        offerTimeout = OFFER_TIMEOUT, dataTimeout = DATA_TIMEOUT, watchdog = watchdog ~= nil,
+        incoming = {}, seenType = SH.seenType, seenDist = SH.seenDist, seenAge = Age(SH.seenAt),
+        droppedCode = SH.droppedCode, errorWhere = SH.errorWhere,
+    }
+    local registered = C_ChatInfo and C_ChatInfo.IsAddonMessagePrefixRegistered
+    for _, prefix in ipairs({ PREFIX, unpack(LANES) }) do
+        local state = "unknown"
+        if registered then
+            local ok, result = pcall(registered, prefix)
+            state = ok and (result and "registered" or "not registered") or "unknown"
+        end
+        snap.prefixes[#snap.prefixes + 1] = { prefix = prefix, state = state }
+    end
+    local o = SH.outgoing
+    if o then
+        snap.outgoing = { peer = label(o.target), stage = o.stage, route = o.route and o.route[1], sent = o.sent, total = o.total,
+            age = Age(o.started), idle = Age(o.last), code = o.code, selfTest = SH.SameName(o.target, SH.SelfName()) }
+    end
+    local peers = {}
+    for sender in pairs(SH.incoming) do peers[#peers + 1] = sender end
+    table.sort(peers)
+    for _, sender in ipairs(peers) do
+        local inc = SH.incoming[sender]
+        snap.incoming[#snap.incoming + 1] = { peer = label(sender), stage = inc.stage, route = inc.route and inc.route[1],
+            got = inc.got, expected = inc.expected, age = Age(inc.started), idle = Age(inc.last), code = inc.code }
+    end
+    return snap
+end
 
 -- Receive progress: count raw chunks on the data lanes as they arrive.
 R:On("CHAT_MSG_ADDON", function(prefix, text, _, sender)
@@ -864,6 +959,7 @@ if notFoundPattern and AddMessageEventFilter then
                 o.reason = SH.Realmless()
                     and ("Couldn't find %s. Check the full name (first and last) and that they're online."):format(SH.Short(o.target))
                     or ("Couldn't find %s. Check the name and that they're online."):format(SH.Short(o.target))
+                Code(o, "player-not-found", o.target)
                 Changed()
             end
             return true

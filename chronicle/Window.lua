@@ -66,7 +66,19 @@ end
 ---------------------------------------------------------------------------
 -- Note editor
 ---------------------------------------------------------------------------
+local HINT = "Press Enter to save, Esc to cancel."
+
+-- Something to save: the editor won't close on an empty note or throw away what was typed.
+local function HasText() return (ed.box:GetText() or ""):match("%S") ~= nil end
+
 local function SaveNote()
+    if not ed:IsShown() then return end     -- already saved or cancelled: a second Enter or click does nothing
+    if not HasText() then
+        ed.hint:SetText(editingId and "A note can't be left empty. Esc cancels; to remove it, use Delete on its entry."
+            or "Write something to save, or press Esc to cancel.")
+        ed.hint:SetTextColor(K.ember[1], K.ember[2], K.ember[3])
+        return
+    end
     local text = ed.box:GetText()
     local keep = ed.place:IsShown() and ed.place:GetChecked() and true or false
     if editingId then
@@ -96,6 +108,11 @@ local function BuildEditor()
     ed.box:SetScript("OnEscapePressed", function() ed:Hide() end)
     ed.box:SetScript("OnTextChanged", function(self)
         ed.count:SetText(("%d / %d"):format(C.Length(self:GetText() or ""), C.MAX_NOTE))
+        if ed.save then ed.save:SetEnabled(HasText()) end
+        if ed.hint then
+            ed.hint:SetText(HINT)
+            ed.hint:SetTextColor(K.stone[1], K.stone[2], K.stone[3])
+        end
     end)
     ed.count = Text(ed, "GameFontDisableSmall")
     ed.count:SetPoint("TOPRIGHT", -20, -78)
@@ -106,7 +123,7 @@ local function BuildEditor()
     ed.placeText:SetPoint("LEFT", ed.place, "RIGHT", 4, 0)
     ed.hint = Text(ed, "GameFontDisableSmall")
     ed.hint:SetPoint("TOPLEFT", 20, -128)
-    ed.hint:SetText("Press Enter to save, Esc to cancel.")
+    ed.hint:SetText(HINT)
     ed.save = Btn(ed, "Save", 90, "primary", SaveNote)
     ed.save:SetPoint("BOTTOMRIGHT", -16, 14)
     ed.cancel = Btn(ed, "Cancel", 90, "secondary", function() ed:Hide() end)
@@ -120,6 +137,9 @@ local function OpenEditor(entry)
     editingId = entry and entry.id or nil
     ed.title:SetText(entry and "Edit note" or "Write a note")
     ed.box:SetText(entry and entry.note or "")
+    ed.save:SetEnabled(HasText())          -- SetText doesn't announce a change when the box was already empty
+    ed.hint:SetText(HINT)
+    ed.hint:SetTextColor(K.stone[1], K.stone[2], K.stone[3])
     if entry then
         ed.zone = entry.zone
         ed.place:SetShown(entry.zone ~= nil)
@@ -144,15 +164,29 @@ end
 ---------------------------------------------------------------------------
 -- Timeline
 ---------------------------------------------------------------------------
+-- A short, safe-to-show piece of an entry's own words (cut at a whole character).
+local function Snippet(entry)
+    local text = (entry.kind == "note" and (entry.note or entry.title) or entry.title) or ""
+    if #text > 60 then
+        local cut = 57
+        while cut > 0 and text:byte(cut + 1) and text:byte(cut + 1) >= 0x80 and text:byte(cut + 1) < 0xC0 do cut = cut - 1 end
+        text = text:sub(1, cut) .. "..."
+    end
+    return Escape(text)
+end
+
 local function AskDelete(entry)
-    local what = entry.kind == "note" and "this note" or "this entry"
-    StaticPopupDialogs.TWICHUI_CHRONICLE_DELETE = {
-        text = "Delete " .. what .. " from your Chronicle? This can't be undone.",
-        button1 = DELETE or "Delete", button2 = CANCEL,
-        OnAccept = function() C.Delete(entry.id); W:Refresh() end,
-        timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3,
-    }
-    StaticPopup_Show("TWICHUI_CHRONICLE_DELETE")
+    local id = entry.id
+    local what = entry.kind == "note" and "note" or "entry"
+    R.Interact.Confirm("TWICHUI_CHRONICLE_DELETE",
+        ("Delete this %s from this character's Chronicle?\n\n%s  \"%s\"\n\nThis can't be undone."):format(what, When(entry.t), Snippet(entry)),
+        function() C.Delete(id); W:Refresh() end, {
+            accept = DELETE or "Delete",
+            valid = function()
+                for _, e in ipairs(C.Entries()) do if e.id == id then return true end end
+                return false, "That entry is already gone, so nothing was changed."
+            end,
+        })
 end
 
 -- Edit and Delete show only while the pointer is on the row (or on one of them).
@@ -310,7 +344,10 @@ local function BuildPicker()
     pop:SetPoint("TOPLEFT", f.filter, "BOTTOMLEFT", 0, -2)
     S.Popover(pop)
     pop:SetScript("OnShow", function() catcher:Show() end)
-    pop:SetScript("OnHide", function() catcher:Hide() end)
+    pop:SetScript("OnHide", function()
+        catcher:Hide()
+        for _, cell in ipairs(pop.cells) do R.Interact.HideTip(cell) end   -- a day's tooltip doesn't outlive its calendar
+    end)
 
     local function Nav(label, w, x, months)
         local b = Btn(pop, label, w, "secondary", function() ShiftMonth(months) end)

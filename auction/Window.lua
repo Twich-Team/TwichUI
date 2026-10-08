@@ -123,17 +123,8 @@ local function Surface(frame, kind, w, h)
     end
 end
 
-local function Tip(frame, title, text)
-    frame:SetScript("OnEnter", function(self)
-        local body = type(text) == "function" and text() or text
-        if not body then return end
-        GameTooltip:SetOwner(self, "ANCHOR_TOP")
-        GameTooltip:SetText(title, 1, 1, 1)
-        GameTooltip:AddLine(body, nil, nil, nil, true)
-        GameTooltip:Show()
-    end)
-    frame:SetScript("OnLeave", GameTooltip_Hide)
-end
+-- See modules/Interact.lua: also answers while the button is disabled, and goes when the button hides.
+local function Tip(frame, title, text) R.Interact.Tip(frame, title, text) end
 
 local function Btn(parent, label, w, onClick)
     local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")

@@ -291,8 +291,18 @@ local function NewButton()
   function b:SetEnabled(v) self.enabled = v end
   function b:SetMotionScriptsWhileDisabled() end
   function b:Show() self.shown = true end
+  function b:IsMouseOver() return self.over == true end
   return b
 end
+-- The game's tooltip, enough to see who owns it and whether it is up.
+local tip = { shown = false }
+function tip:SetOwner(o) self.owner = o end
+function tip:GetOwner() return self.owner end
+function tip:SetText(t) self.text = t end
+function tip:AddLine() end
+function tip:Show() self.shown = true end
+function tip:Hide() self.shown = false; self.owner = nil end
+c.GameTooltip = tip
 local menu = { shown = false, dirty = 0, nextLayoutIndex = 1, active = {} }
 menu.buttonPool = {
   Acquire = function() local b = NewButton(); menu.active[b] = true; return b end,
@@ -344,6 +354,18 @@ OpenMenu(); combat = true; c.FireEvent("PLAYER_REGEN_DISABLED")
 assert(not Ours().enabled and Ours().scripts.OnEnter, "disabled in combat"); Ours().scripts.OnClick(); assert(shown == 1, "no entry in combat")
 combat = false; c.FireEvent("PLAYER_REGEN_ENABLED"); assert(Ours().enabled and not Ours().scripts.OnEnter, "back after combat")
 combat = true; OpenMenu(); assert(not Ours().enabled, "opened in combat: disabled"); combat = false
+-- The pointer is already on the button when combat starts or ends: no enter or leave comes, so the
+-- tooltip must follow the truth by itself, and never touch somebody else's.
+OpenMenu(); Ours().over = true
+combat = true; c.FireEvent("PLAYER_REGEN_DISABLED")
+assert(tip.shown and tip.owner == Ours() and tip.text == K.LABEL, "combat starts under the pointer: the reason shows at once")
+combat = false; c.FireEvent("PLAYER_REGEN_ENABLED")
+assert(not tip.shown, "combat ends under the pointer: 'not available' is taken down")
+OpenMenu(); Ours().over = false
+tip.owner, tip.shown = {}, true
+combat = true; c.FireEvent("PLAYER_REGEN_DISABLED"); combat = false; c.FireEvent("PLAYER_REGEN_ENABLED")
+assert(tip.shown, "another tooltip is left alone")
+tip.owner, tip.shown = nil, false
 -- The mode is missing: no button that cannot work.
 c.QuickKeybindFrame = nil; OpenMenu(); assert(not Ours(), "no Quick Keybind frame: no button")
 c.QuickKeybindFrame = { Show = function() shown = shown + 1 end }

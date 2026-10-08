@@ -86,6 +86,7 @@ local function Build()
     NewPage("auction", "Auction House")
     NewPage("skins", "Addon skins")
     NewPage("sharing", "Configuration sharing")
+    if R.Diag and R.DiagWindow then NewPage("troubleshooting", "Troubleshooting") end
 
     local category, layout
     local function Use(key) category, layout = pages[key].category, pages[key].layout end
@@ -106,10 +107,22 @@ local function Build()
         return initializer
     end
 
-    -- Greyed out while the parent checkbox is off.
-    local function Under(initializer, parent, isOn)
+    -- Greyed out while the parent checkbox is off. The row's saved value is left alone; its tooltip
+    -- says why it is greyed out, for as long as it is. why: a sentence, or a function returning one
+    -- (or nil for the usual "needs <parent> turned on").
+    local function Under(initializer, parent, isOn, why)
         if initializer and parent and initializer.SetParentInitializer then
             initializer:SetParentInitializer(parent, isOn)
+            local base = initializer.GetTooltip
+            initializer.GetTooltip = function(self)
+                local tip = base and base(self) or self.data.tooltip
+                if isOn and not isOn() then
+                    local reason = type(why) == "function" and why() or (type(why) == "string" and why or nil)
+                    reason = reason or ("Greyed out: needs \"" .. tostring(parent:GetName()) .. "\" turned on.")
+                    return (tip and (tip .. "\n\n") or "") .. reason
+                end
+                return tip
+            end
         end
         return initializer
     end
@@ -134,6 +147,7 @@ local function Build()
     end
 
     local function Toggle(key, label, tooltip, needsReload, onChange)
+        if needsReload then tooltip = tooltip .. "\n\nTakes effect after you reload your UI." end
         local setting = Settings.RegisterAddOnSetting(category, "TWICHUI_" .. key, key, TwichUIDB.modules, BOOL, label, R.DEFAULT_MODULES[key])
         local initializer = Settings.CreateCheckbox(category, setting, tooltip)
         if setting.SetValueChangedCallback then
@@ -301,7 +315,7 @@ local function Build()
         for _, row in ipairs(skinRows) do
             local status, detail = SkinStatus(row.skin, row.onAtLoad)
             if row.initializer.data then
-                row.initializer.data.tooltip = row.skin.what .. "\n\nStatus: " .. status .. (detail and ("\n" .. detail) or "")
+                row.initializer.data.tooltip = row.skin.what .. "\n\nTakes effect after you reload your UI.\n\nStatus: " .. status .. (detail and ("\n" .. detail) or "")
             end
         end
         RefreshOverview()
@@ -387,13 +401,21 @@ local function Build()
         }
         local labels = {}
         for _, info in ipairs(Notify.Kinds()) do labels[info.kind] = info.label end
+        -- A preview waits for the fight to end, like the cards themselves, and says when it couldn't show.
+        local previewWhy = { full = "too many cards are waiting. Try Clear previews.", unknown = "that card isn't available." }
+        local function Preview(kind)
+            if InCombatLockdown() then R.Print("previews wait until you're out of combat.") return end
+            local ok, why = Notify.Preview(kind)
+            if ok == false then R.Print("couldn't show that preview: %s", previewWhy[why] or "it's already showing.") end
+        end
         for _, kind in ipairs({ "arrival", "training", "friend", "welcome" }) do
             if labels[kind] then
-                Button(labels[kind], "Preview", function() Notify.Preview(kind) end,
+                Button(labels[kind], "Preview", function() Preview(kind) end,
                     previewTips[kind] .. " It appears above this window and fades by itself. Real notices always come first.")
             end
         end
         Button("Test coordinated sequence", "Run", function()
+            if InCombatLockdown() then R.Print("previews wait until you're out of combat.") return end
             local sent, dropped = Notify.PreviewSequence()
             R.Print("Test sequence: %d sample notices sent, %d repeat dropped. Cards in different places show together; the rest take turns.", sent, dropped)
         end, "Sends a fixed set of sample notices at once: a zone card, a friend card, a training card, a repeat of the zone card (which is dropped) and a Welcome Back card. The friend card shows beside the zone card; the training and Welcome Back cards wait their turn at the top.")
@@ -539,7 +561,7 @@ local function Build()
             if setting then resettable[#resettable + 1] = { setting = setting, default = FD.DEFAULTS[key] } end
             return setting
         end
-        local function Slider(variable, key, label, tooltip, parent, isOn)
+        local function Slider(variable, key, label, tooltip, parent, isOn, why)
             local limit = FD.LIMITS[key]
             local setting = Remember(variable, NUMBER, label, key, function(value) FD.Set(key, math.floor(value + 0.5)) end)
             if not (setting and Settings.CreateSlider and Settings.CreateSliderOptions) then return end
@@ -547,7 +569,7 @@ local function Build()
             if MinimalSliderWithSteppersMixin and options.SetLabelFormatter then
                 options:SetLabelFormatter(MinimalSliderWithSteppersMixin.Label.Right)
             end
-            return Under(Settings.CreateSlider(category, setting, options, tooltip), parent or foodDrink, isOn or FoodDrinkOn)
+            return Under(Settings.CreateSlider(category, setting, options, tooltip), parent or foodDrink, isOn or FoodDrinkOn, why)
         end
         Slider("foodDrinkSize", "size", "Button size", "The width and height of each button, in pixels.")
         Slider("foodDrinkSpacing", "spacing", "Space between buttons", "The gap between the two buttons, in pixels.")
@@ -580,7 +602,11 @@ local function Build()
         if colorSetting and Settings.CreateColorSwatch then
             Under(Settings.CreateColorSwatch(category, colorSetting,
                 "The color of the border. Greyed out while the class color is used."),
-                classToggle or foodDrink, function() return FoodDrinkOn() and not FD.Get("borderClass") end)
+                classToggle or foodDrink, function() return FoodDrinkOn() and not FD.Get("borderClass") end,
+                function()
+                    if not FoodDrinkOn() then return "Greyed out: needs \"Show Food and Drink buttons\" turned on." end
+                    return "Greyed out: the border uses your class color. Turn that off to choose another."
+                end)
         end
         Slider("foodDrinkBorderOpacity", "borderOpacity", "Border opacity", "How solid the border is, in percent. 100 is fully opaque. Applies to the class color too.")
         Slider("foodDrinkZoom", "zoom", "Icon zoom", "How much of the icon's edge is cropped, in percent. More looks tighter inside the border.")
@@ -598,7 +624,11 @@ local function Build()
                 "The buttons fade to the opacity below until the mouse is over one, then return to the button opacity. Even at 0 a button still takes a click, so move the mouse to where it is."), foodDrink, FoodDrinkOn)
             Slider("foodDrinkIdleOpacity", "idleOpacity", "Opacity when the mouse is away",
                 "How solid the buttons are, in percent, while the mouse is not over them.",
-                mouseover or foodDrink, function() return FoodDrinkOn() and FD.Get("mouseover") end)
+                mouseover or foodDrink, function() return FoodDrinkOn() and FD.Get("mouseover") end,
+                function()
+                    if not FoodDrinkOn() then return "Greyed out: needs \"Show Food and Drink buttons\" turned on." end
+                    return "Greyed out: needs \"Fade when the mouse is away\" turned on."
+                end)
         end
         Button("Appearance", "Reset", function()
             for _, entry in ipairs(resettable) do
@@ -743,14 +773,14 @@ local function Build()
     Toggle("groupCheck", "Version and group check",
         "On by default. Both players need it on to see each other. Other players never see these messages, even without TwichUI.\n\nWhen you're in a group, TwichUI trades version numbers with other TwichUI users (a few bytes, group channel only) and tells you when someone's version is newer or too old to share with. Also powers /tui check and Party compatibility check in /tui share, and a once-per-game-build test message that shows in Sending options whether direct messages reached another TwichUI user.",
         true)
-    Button("Configuration sharing", "Open", function()
+    Under(Button("Configuration sharing", "Open", function()
         if not R:Enabled("setupSharing") then
             R.Print("turn on Configuration sharing first.")
             return
         end
         if SettingsPanel and SettingsPanel:IsShown() then HideUIPanel(SettingsPanel) end
         R.Window:Show()
-    end, "Opens the sharing window: send your setup, review ones friends sent, create backups and run the party compatibility check (same as typing /tui share).")
+    end, "Opens the sharing window: send your setup, review ones friends sent, create backups and run the party compatibility check (same as typing /tui share)."), sharing, SharingOn)
     Button("Addon data", "Open", function()
         if SettingsPanel and SettingsPanel:IsShown() then HideUIPanel(SettingsPanel) end
         if R.StoredDataWindow then R.StoredDataWindow:Show() end
@@ -768,6 +798,32 @@ local function Build()
             end
             return list
         end))
+
+    -----------------------------------------------------------------------
+    if pages.troubleshooting then
+        Use("troubleshooting")
+        local Diag, Window = R.Diag, R.DiagWindow
+        Header("Troubleshooting", "A report of how TwichUI is set up and what each part says about itself, to copy and share when something does not work. It is built on your computer when you ask for it. Nothing is sent anywhere.")
+        Button("Troubleshooting report", "Open", function()
+            if SettingsPanel and SettingsPanel:IsShown() then HideUIPanel(SettingsPanel) end
+            Window.Show()
+        end, "Opens the report in a window you can read and copy from (click in the text, Ctrl+A, Ctrl+C). It lists settings, module states, counts and reason codes. It leaves out character, realm, guild, friend and BattleTag names, chat, Chronicle entries and your configuration. Same as typing /tui diagnostics.")
+        Header("Temporary tracing", "Off until you start it. While on, TwichUI records short notes about its own decisions (why a friend card was skipped, what the food buttons chose) in memory, to include in the report. It stops by itself after 15 minutes, is never saved, and is gone after a reload.")
+        local tracing
+        local function TracingName() return "Tracing   " .. (Diag.Tracing() and (R.GREEN .. "On|r") or (R.GREY .. "Off|r")) end
+        tracing = Button(TracingName(), "Start", function()
+            if Diag.Tracing() then Diag.Stop("manual") else Diag.Start() end
+        end, "Starts or stops tracing. Start it, reproduce the problem, then open the report. Same as /tui diagnostics start and /tui diagnostics stop.")
+        if tracing and tracing.data then
+            tracing.data.buttonText = function() return Diag.Tracing() and "Stop" or "Start" end
+            Diag.OnChange(function()
+                tracing.data.name = TracingName()
+                if SettingsPanel and SettingsPanel:IsShown() and SettingsPanel.RepairDisplay then SettingsPanel:RepairDisplay() end
+            end)
+        end
+        Button("Collected records", "Clear", function() Window.Command("clear") end,
+            "Forgets the trace records and recent errors kept so far, on this computer only. Tracing, if on, carries on. Same as /tui diagnostics clear.")
+    end
 
     -----------------------------------------------------------------------
     Use("auction")
@@ -840,6 +896,10 @@ local function Build()
     end)
     FeatureRow("sharing", "Configuration sharing", "Share your addon settings with friends, and keep backups.",
         function() return OnOff(R:Enabled("setupSharing")) end)
+    if pages.troubleshooting then
+        FeatureRow("troubleshooting", "Troubleshooting", "A report to copy when something does not work, and optional temporary tracing.",
+            function() return R.Diag.Tracing() and (R.GREEN .. "Tracing on|r") or (R.GREY .. "Tracing off|r") end)
+    end
     RefreshOverview()
 
     -----------------------------------------------------------------------

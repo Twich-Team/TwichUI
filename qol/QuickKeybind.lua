@@ -44,30 +44,37 @@ local function Click()
     QuickKeybindFrame:Show()
 end
 
+local function Tooltip() return GetAppropriateTooltip and GetAppropriateTooltip() or GameTooltip end
+
 local function ShowCombatReason(self)
-    local tooltip = GetAppropriateTooltip and GetAppropriateTooltip() or GameTooltip
+    local tooltip = Tooltip()
     tooltip:SetOwner(self, "ANCHOR_RIGHT")
     tooltip:SetText(K.LABEL)
     tooltip:AddLine("Not available in combat.", 1, 0.2, 0.2)
     tooltip:Show()
 end
 
-local function HideTooltip()
-    local tooltip = GetAppropriateTooltip and GetAppropriateTooltip() or GameTooltip
-    tooltip:Hide()
+-- Hides the tooltip only if this button is the one showing it.
+local function HideTooltip(self)
+    local tooltip = Tooltip()
+    if not self or (tooltip.GetOwner and tooltip:GetOwner() == self) then tooltip:Hide() end
 end
 
--- Enabled out of combat; in combat it looks off and says why.
+-- Enabled out of combat; in combat it looks off and says why. The pointer may already be on the
+-- button when combat starts or ends, and then no enter or leave is coming, so the tooltip is shown or
+-- taken down here rather than left saying the opposite of what is true.
 function K.Refresh()
     if not button then return end
     if InCombatLockdown() then
         button:SetEnabled(false)
         button:SetScript("OnEnter", ShowCombatReason)
         button:SetScript("OnLeave", HideTooltip)
+        if button:IsMouseOver() then ShowCombatReason(button) end
     else
         button:SetEnabled(true)
         button:SetScript("OnEnter", nil)
         button:SetScript("OnLeave", nil)
+        HideTooltip(button)
     end
 end
 

@@ -325,4 +325,56 @@ assert(#shows == 0, "no dungeon card over a toast")
 c.FireEvent("ZONE_CHANGED_NEW_AREA"); FlushTimers()
 assert(#shows == 0, "not shown late")
 
+
+-- Troubleshooting report (diag/Zones.lua): readiness and decisions, with codes and no place names.
+do
+  for _, f in ipairs({"diag/Diagnostics.lua", "diag/Zones.lua"}) do
+    local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
+  end
+  local D = R.Diag
+  local function Has(text, needle) return text:find(needle, 1, true) ~= nil end
+  local function Section()
+    local r = D.Build(); local from = r:find("== Zone arrival card ==", 1, true)
+    return r:sub(from, r:find("\n== ", from + 5, true) or #r)
+  end
+  M.arrival, M.arrivalSubzones, M.arrivalDungeons = true, true, true; A.Refresh()
+  c.INST, c.TAXI, c.TOAST = nil, false, false
+  c.ZONE, c.SUB = "Westfall", "Sentinel Hill"
+  c.NOW = c.NOW + 1000
+  c.FireEvent("PLAYER_ENTERING_WORLD", false, false); FlushTimers()
+  local sec = Section()
+  assert(Has(sec, "Zone arrival card: configured on, initialized yes, ready"), sec)
+  assert(Has(sec, "required events: 7 of 7 registered"), sec)
+  assert(Has(sec, "zone text available now=yes; session baseline zone known=yes") and Has(sec, "flight: control lost=no; on a flight path=no"), sec)
+  assert(not Has(sec, "Westfall") and not Has(sec, "Sentinel"), "no place names")
+
+  D.Start()
+  c.FireEvent("PLAYER_CONTROL_LOST")
+  assert(Has(Section(), "control lost=yes"), "flight state is readable")
+  Arrive("Duskwood"); FlushTimers()
+  c.FireEvent("PLAYER_CONTROL_GAINED"); FlushTimers()
+  Arrive("Redridge Mountains"); FlushTimers()
+  Arrive("Redridge Mountains"); FlushTimers()
+  local r = D.Build()
+  assert(Has(r, "arrival control-lost (any waiting check dropped)") and Has(r, "arrival zone-event-skipped (on a flight path)"), r)
+  assert(Has(r, "arrival control-gained (looking where you landed)") and Has(r, "arrival zone-changed (card requested)"), r)
+  assert(Has(r, "arrival unchanged"), "a repeat is recorded as no change")
+  assert(not Has(r, "Duskwood") and not Has(r, "Redridge"), "decisions are codes, not places")
+  c.TOAST = true; Arrive("Westfall"); FlushTimers(); c.TOAST = false
+  assert(Has(D.Build(), "arrival zone-changed (no card: a game banner is showing)"), "a suppressed card says why")
+  c.FireEvent("PLAYER_ENTERING_WORLD", true, false)
+  assert(Has(D.Build(), "arrival login-baseline (where you are now is not an arrival)") and Has(Section(), "login quiet time left="), "login is a baseline")
+  Arrive("Duskwood"); FlushTimers()
+  assert(Has(D.Build(), "arrival noted (login quiet time)") or Has(D.Build(), "arrival skip"), "inside the quiet time nothing is shown")
+  D.Stop("manual"); D.Clear()
+
+  c.ZONE = ""
+  assert(Has(Section(), "zone text available now=no"), "an unreadable location is said, not guessed")
+  c.ZONE = "Westfall"
+  M.arrival = false; A.Refresh()
+  sec = Section()
+  assert(Has(sec, "configured off") and not Has(sec, ", ready") and not Has(sec, "required events"), sec)
+  M.arrival = true; A.Refresh()
+end
+
 print("ARRIVAL TESTS PASSED")

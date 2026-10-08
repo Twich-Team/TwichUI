@@ -354,6 +354,12 @@ N.Register("arrival", {
 ---------------------------------------------------------------------------
 -- Deciding what is an arrival.
 ---------------------------------------------------------------------------
+-- Decisions, for /tui diagnostics while it is tracing. Codes only: place names are not recorded.
+local function Trace(code, detail)
+    local D = R.Diag
+    if D then D.Trace("arrival", code, detail) end
+end
+
 local function Note()
     lastZone = Zone()
     lastSubZone = SubZone(lastZone)
@@ -375,11 +381,16 @@ local function CheckInstance(kind)
     local name = InstanceName()
     if not name and nameTries < NAME_RETRIES then
         nameTries = nameTries + 1
+        Trace("instance-name-wait", nameTries)
         Schedule()
         return true
     end
     lastInstance, nameTries = kind, 0
-    if not name or not R:Enabled("arrivalDungeons") then return false end
+    if not name or not R:Enabled("arrivalDungeons") then
+        Trace("instance-entered", name and "dungeon cards off" or "name never came; ordinary zone path")
+        return false
+    end
+    Trace("instance-entry", kind)
     -- This place is the arrival, so the zone path must not show it a second time.
     lastZone, lastSubZone, lastPvP = Zone(), SubZone(Zone()), PvP()
     local label = Global(INSTANCE_LABEL[kind])
@@ -390,10 +401,11 @@ end
 
 -- Looks at where the player is once things have settled, and shows at most one card.
 local function Check()
-    if not R:Enabled("arrival") or OnTaxi() then return end
+    if not R:Enabled("arrival") then return end
+    if OnTaxi() then Trace("skip", "on a flight path") return end
     local zone = Zone()
-    if not zone then return end
-    if GetTime() < quietUntil then Note() return end
+    if not zone then Trace("skip", "zone text not available yet") return end
+    if GetTime() < quietUntil then Trace("noted", "login quiet time") Note() return end
     if CheckInstance(Instance()) then return end
     local sub = SubZone(zone)
     local pvpType, pvpText = PvP()
@@ -401,16 +413,27 @@ local function Check()
         -- The game's zone text only now says where the entry card already put you: the same arrival.
         entryName = nil
         lastZone, lastSubZone, lastPvP = zone, sub, pvpType
+        Trace("same-as-entry-card", "no second card")
     elseif zone ~= lastZone then
         lastZone, lastSubZone, lastPvP = zone, sub, pvpType
-        if not Toasting() then Present("zone", zone, sub, pvpText, pvpType) end
+        if not Toasting() then
+            Trace("zone-changed", "card requested")
+            Present("zone", zone, sub, pvpText, pvpType)
+        else
+            Trace("zone-changed", "no card: a game banner is showing")
+        end
     elseif sub ~= lastSubZone then
         lastSubZone = sub
         local pvpChanged = pvpType ~= lastPvP
         lastPvP = pvpType
         if sub and R:Enabled("arrivalSubzones") and not Toasting() then
+            Trace("subzone-changed", "card requested")
             Present("subzone", sub, nil, pvpChanged and pvpText or nil, pvpType)
+        else
+            Trace("subzone-changed", "no card")
         end
+    else
+        Trace("unchanged")
     end
 end
 
@@ -422,17 +445,19 @@ function Schedule()
 end
 
 local function OnZoneChanged()
-    if OnTaxi() then return end
+    if OnTaxi() then Trace("zone-event-skipped", "on a flight path") return end
     Schedule()
 end
 
 local function OnControlLost()
     controlLost = true
     pending = pending + 1   -- drop a check that was waiting
+    Trace("control-lost", "any waiting check dropped")
 end
 
 local function OnControlGained()
     controlLost = false
+    Trace("control-gained", "looking where you landed")
     Schedule()
 end
 
@@ -442,10 +467,28 @@ local function OnEnteringWorld(isLogin, isReload)
     if isLogin or isReload then
         controlLost = false
         quietUntil = GetTime() + LOGIN_QUIET
+        Trace("login-baseline", "where you are now is not an arrival")
         Note()
     else
+        Trace("world-entered", "looking at the zone")
         Schedule()
     end
+end
+
+-- For /tui diagnostics: what the card has to go on right now. Place names are left out; only whether
+-- they are known. Reads only.
+function A.Snapshot()
+    local events = {}
+    for event in pairs(active) do events[#events + 1] = event end
+    table.sort(events)
+    return {
+        enabled = R:Enabled("arrival"), subzones = R:Enabled("arrivalSubzones"), dungeons = R:Enabled("arrivalDungeons"),
+        events = events, zoneKnown = Zone() ~= nil, baselineZone = lastZone ~= nil, baselineSubzone = lastSubZone ~= nil,
+        instanceKind = lastInstance or "none", waitingForInstanceName = nameTries > 0,
+        controlLost = controlLost, onFlight = OnTaxi() and true or false,
+        quietLeft = math.max(0, quietUntil - GetTime()), cardShowing = A.IsShowing(),
+        nativeHooked = hooked, reducedMotion = R:Enabled("arrivalReducedMotion"),
+    }
 end
 
 local function OnLeavingWorld()

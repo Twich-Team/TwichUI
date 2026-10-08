@@ -19,10 +19,11 @@ local function Obj()
   end})
 end
 local realCreate = c.CreateFrame
-c.tinsert = table.insert; c.CreateFrame = function(kind, name, ...) local o = Obj(); local base = realCreate(); for k,v in pairs(base) do rawset(o,k,v) end if name then c[name] = o; rawset(o, "IsShown", function() return true end) end return o end
+local made = {}
+c.tinsert = table.insert; c.CreateFrame = function(kind, name, ...) local o = Obj(); made[#made + 1] = o; local base = realCreate(); for k,v in pairs(base) do rawset(o,k,v) end if name then c[name] = o; rawset(o, "IsShown", function() return true end) end return o end
 c.UISpecialFrames = {}
 c.GameTooltip = Obj(); c.GameTooltip_Hide = function() end
-c.StaticPopupDialogs = {}; c.StaticPopup_Show = function(k, a) print("popup", k, a) end
+c.StaticPopupDialogs = {}; c.StaticPopup_Show = function(k, a) c.lastPopup = a; print("popup", k, a) return {} end
 c.UnitIsPlayer = function() return false end
 c.InCombatLockdown = function() return false end
 c.ACCEPT, c.CANCEL = "Accept", "Cancel"
@@ -67,6 +68,37 @@ for _ = 1, 50 do FlushTimers() end
 assert(tp.result and not tp.result.blocked)
 tp.importBtn.scripts.OnClick(tp.importBtn)
 assert(#c.TwichUI.Restore.List() == 1 and not c.reloaded, "imported, not applied")
+-- Applying a received setup: the question is about the setup that was on screen. If a different copy
+-- arrives (or the setup is deleted) while it is open, accepting applies nothing; the same setup applies once.
+do
+  local function Button(label)
+    for _, o in ipairs(made) do if rawget(o, "text") == label and o.scripts and o.scripts.OnClick then return o end end
+    error("no button " .. label)
+  end
+  W:Show("received")
+  local pack = c.TwichUIDB.setup.received["Pal-Forever"]
+  local apply = Button("Apply to this character")
+  apply.scripts.OnClick(apply)
+  assert(c.StaticPopupDialogs.TWICHUI_APPLY and c.lastPopup:find("Pal", 1, true) and c.lastPopup:find("Your UI reloads", 1, true), "it names whose setup: " .. tostring(c.lastPopup))
+  local dialog = c.StaticPopupDialogs.TWICHUI_APPLY
+  dialog.OnCancel(nil, nil, "clicked"); dialog.OnAccept()
+  assert(not c.TwichUIDB.setup.pending and not c.reloaded, "cancelled: nothing queued, no reload")
+  apply.scripts.OnClick(apply)
+  pack.created = pack.created + 100                      -- a newer copy arrived meanwhile
+  c.StaticPopupDialogs.TWICHUI_APPLY.OnAccept()
+  assert(not c.TwichUIDB.setup.pending and not c.reloaded, "a different setup than the one reviewed is not applied")
+  apply.scripts.OnClick(apply)
+  c.TwichUIDB.setup.received["Pal-Forever"] = nil         -- or it was deleted
+  c.StaticPopupDialogs.TWICHUI_APPLY.OnAccept()
+  assert(not c.TwichUIDB.setup.pending and not c.reloaded, "a deleted setup is not applied")
+  c.TwichUIDB.setup.received["Pal-Forever"] = pack
+  W:Show("received")
+  apply.scripts.OnClick(apply)
+  local accept = c.StaticPopupDialogs.TWICHUI_APPLY.OnAccept
+  accept(); accept()
+  assert(c.TwichUIDB.setup.pending and c.TwichUIDB.setup.pending.mode == "apply" and c.reloaded, "the same setup applies")
+  c.TwichUIDB.setup.pending, c.reloaded = nil, false
+end
 -- EllesmereUI profile sharing: the profile picker and the import review open and work without and with EllesmereUI.
 local ES = c.TwichUI.Ellesmere
 W:Show("share"); W:ShowEuiShare()

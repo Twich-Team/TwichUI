@@ -11,6 +11,9 @@ local function Initializer(name, tooltip)
   function i:AddShownPredicate(fn) table.insert(self.shown, fn) end
   function i:AddModifyPredicate(fn) table.insert(self.modify, fn) end
   function i:SetParentInitializer(parent, fn) self.parent = parent; if fn then table.insert(self.modify, fn) end end
+  function i:GetTooltip() return self.data.tooltip end     -- as Blizzard's initializers do
+  function i:GetName() return self.data.name end
+  function i:Enabled() for _, fn in ipairs(self.modify) do if not fn() then return false end end return true end
   function i:Shown() for _, fn in ipairs(self.shown) do if not fn() then return false end end return true end
   table.insert(initializers, i)
   return i
@@ -403,5 +406,69 @@ summonToggle.setting.changed()
 assert(summonToggle.data.tooltip:find("Leatrix Plus also has this turned on"), "overlap note")
 c.LeaPlusDB.AutoAcceptSummon = "Off"; summonToggle.setting.changed()
 assert(not summonToggle.data.tooltip:find("Leatrix"), "no note when Leatrix has it off")
+
+-- Interaction details: a greyed-out row says why in its tooltip (and keeps its saved value); a setting
+-- that needs a reload says so; previews wait for combat and say so; nothing is hidden silently.
+do
+  local function Row(name, button)
+    for _, i in ipairs(initializers) do
+      if i.data.name == name and (not button or i.click) then return i end
+    end
+    error("no row " .. name)
+  end
+  local M = c.TwichUIDB.modules
+  local arrivalRow, subzones = Row("Show a title card when I arrive in a new zone"), Row("Also for smaller places")
+  M.arrival = true
+  local base = subzones.data.tooltip
+  assert(subzones:GetTooltip() == base and subzones:Enabled(), "on: the usual tooltip, nothing greyed")
+  M.arrival = false
+  assert(not subzones:Enabled(), "the parent is off: greyed out")
+  assert(subzones:GetTooltip():find(base, 1, true) and subzones:GetTooltip():find('needs "Show a title card when I arrive in a new zone" turned on', 1, true),
+    "and the tooltip says why: " .. subzones:GetTooltip())
+  assert(M.arrivalSubzones == true, "its own saved choice is left as it was")
+  M.arrival = true
+
+  -- a reason particular to the row
+  local border = Row("Border color")
+  M.foodDrink = true
+  assert(R.FoodDrink.Set("borderClass", true))
+  assert(not border:Enabled() and border:GetTooltip():find("class color", 1, true), "greyed while the class color is used, and says so: " .. border:GetTooltip())
+  M.foodDrink = false
+  assert(border:GetTooltip():find('needs "Show Food and Drink buttons" turned on', 1, true), "or because the feature is off: " .. border:GetTooltip())
+
+  -- reload-only changes say so before the player changes them
+  for _, name in ipairs({ "Hide addon welcome messages", "Custom fonts and sounds", "Configuration sharing", "Attune" }) do
+    assert(Row(name).data.tooltip:find("Takes effect after you reload your UI.", 1, true), name .. " mentions the reload")
+  end
+  assert(not Row("Show Food and Drink buttons").data.tooltip:find("reload your UI", 1, true), "an immediate setting doesn't")
+
+  -- the sharing window button is greyed while sharing is off, and says what to do if pressed anyway
+  local sharingOpen
+  for _, i in ipairs(initializers) do if i.data.name == "Configuration sharing" and i.click then sharingOpen = i end end
+  M.setupSharing = false
+  assert(sharingOpen and not sharingOpen:Enabled() and sharingOpen:GetTooltip():find("turned on", 1, true), "greyed with a reason")
+  M.setupSharing = true
+  assert(sharingOpen:Enabled())
+
+  -- previews: not in combat, and a refusal is explained
+  local printed = {}
+  c.print = function(line) printed[#printed + 1] = line end
+  local label
+  for _, info in ipairs(R.Notify.Kinds()) do if info.kind == "arrival" then label = info.label end end
+  local preview = Row(label, true)
+  c.InCombatLockdown = function() return true end
+  preview.click()
+  assert(printed[#printed] and printed[#printed]:find("out of combat", 1, true), "preview in combat says to wait")
+  c.InCombatLockdown = function() return false end
+  Row("Test coordinated sequence", true)   -- exists
+  Row("Clear previews", true).click()      -- nothing showing: harmless
+
+  -- Clearing the troubleshooting records says what it did
+  if R.DiagWindow then
+    printed = {}
+    Row("Collected records", true).click()
+    assert(printed[#printed] and printed[#printed]:find("cleared", 1, true), "clear answers: " .. tostring(printed[#printed]))
+  end
+end
 
 print("SETTINGS DEFAULTS TESTS PASSED")

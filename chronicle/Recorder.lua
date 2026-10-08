@@ -344,18 +344,27 @@ end
 
 local BASELINE_RETRIES = 5   -- extra looks (a second apart) for the zone when the game hasn't given it at login
 
+-- Decisions, for /tui diagnostics while it is tracing. Codes only: no place names, entries or notes.
+local function Trace(code, detail)
+    local D = R.Diag
+    if D then D.Trace("chronicle", code, detail) end
+end
+
 -- Takes the zone the player is in now as the starting point, without recording it.
 -- Returns true once there is one; a missing zone leaves the baseline unset.
 local function EstablishZoneBaseline()
     local zone = C.CurrentZone()
     if not zone then return false end
     lastZone, zoneBaselined = zone, true
+    Trace("baseline-set", "where you are now is not an arrival")
     return true
 end
 
 local function RetryZoneBaseline()
-    if zoneBaselined or baselineTries >= BASELINE_RETRIES then return end
+    if zoneBaselined then return end
+    if baselineTries >= BASELINE_RETRIES then Trace("baseline-gave-up", "zone never became known") return end
     baselineTries = baselineTries + 1
+    Trace("baseline-retry", baselineTries)
     C_Timer.After(1, function()
         if zoneBaselined or not On("chronicleZones") then return end
         if not EstablishZoneBaseline() then RetryZoneBaseline() end
@@ -370,18 +379,28 @@ end
 local function CheckZone()
     if not On("chronicleZones") then return end
     -- The first known zone of a session is where the player already was, not somewhere they arrived.
-    if not zoneBaselined then EstablishZoneBaseline() return end
-    if OnTaxi() then return end
+    if not zoneBaselined then
+        Trace("no-baseline-yet", "taking the current zone as the starting point")
+        EstablishZoneBaseline()
+        return
+    end
+    if OnTaxi() then Trace("skip", "on a flight path") return end
     local zone = C.CurrentZone()
-    if not zone or zone == lastZone then return end
+    if not zone then Trace("skip", "zone not available") return end
+    if zone == lastZone then Trace("unchanged") return end
     lastZone = zone
+    Trace("arrival-recorded", "an automatic entry was written")
     Commit("zone", { title = "Arrived in " .. zone, zone = zone })
 end
 
-local function OnControlLost() controlLost = true end
+local function OnControlLost()
+    controlLost = true
+    Trace("control-lost", "no arrivals until it returns")
+end
 
 local function OnControlGained()
     controlLost = false
+    Trace("control-gained", "checking where you landed")
     CheckZone()
 end
 
@@ -391,6 +410,7 @@ local function OnEnteringWorld(isLogin, isReload)
     inWorld = true
     if isLogin or isReload then
         controlLost = false
+        Trace("login", "starting a new location baseline")
         StartZoneBaseline()
         if R:Enabled("chronicle") then
             if R:Enabled("chronicleGold") then RebaseGold() end
@@ -422,6 +442,19 @@ local function Want(event, handler, wanted)
         R:Off(event, active[event])
         active[event] = nil
     end
+end
+
+-- For /tui diagnostics: how ready zone-arrival recording is. Place names, entries and notes are not
+-- included. Reads only.
+function Rec.Snapshot()
+    local events = {}
+    for event in pairs(active) do events[#events + 1] = event end
+    table.sort(events)
+    return {
+        chronicle = R:Enabled("chronicle"), zones = R:Enabled("chronicleZones"), events = events,
+        inWorld = inWorld, baselined = zoneBaselined, baselineTries = baselineTries, baselineRetries = BASELINE_RETRIES,
+        zoneReadable = C.CurrentZone() ~= nil, controlLost = controlLost, onFlight = OnTaxi() and true or false,
+    }
 end
 
 -- Registers exactly the events that are switched on. Safe to call any time.

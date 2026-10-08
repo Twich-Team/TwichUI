@@ -17,7 +17,7 @@
 -- the game's own volume channels, chosen in the options (Sound Effects by default).
 -- Scope, as it stands: Battle.net account-level logins only (BN_FRIEND_ACCOUNT_ONLINE). It does not announce
 -- logoffs, character (in-game list) friends, or a Battle.net friend who was already online starting WoW.
--- modules/FriendLoginDiag.lua (temporary, off by default) can show which of these a real session had.
+-- /tui diagnostics (diag/Friends.lua) can show which of these a real session had.
 
 local R = TwichUI
 local N = R.Notify
@@ -61,10 +61,24 @@ end
 
 local function Escape(text) return (text:gsub("|", "||")) end
 
--- Decision trace for the temporary diagnostics (modules/FriendLoginDiag.lua); F.Note is nil unless that is tracing.
+-- Decisions, for /tui diagnostics. Why a login was skipped or let go is counted always (a handful of
+-- integers, no friend is named); every decision is also traced while tracing is on, with the friend
+-- shown only as an anonymous label.
+local COUNTED = { skip = true, dropped = true, ["look:skipped"] = true, ["look:gave-up"] = true, ["submit:refused"] = true }
+local MAX_REASONS = 24
+local reasons, reasonKinds = {}, 0
+
 local function Note(stage, id, detail)
-    local note = F.Note
-    if note then note(stage, id, detail) end
+    if COUNTED[stage] and type(detail) == "string" then
+        local key = stage .. ":" .. detail
+        if reasons[key] then
+            reasons[key] = reasons[key] + 1
+        elseif reasonKinds < MAX_REASONS then
+            reasons[key], reasonKinds = 1, reasonKinds + 1
+        end
+    end
+    local D = R.Diag
+    if D then D.Trace("friend", stage, detail, id) end
 end
 
 -- The card needs the Chronicle's look and the arrival card's fonts and rule. Without them there is
@@ -413,7 +427,7 @@ end
 
 local function OnOnline(friendId, isCompanionApp)
     local toast = _G.BNToastFrame
-    local stillTheirs = F.Note and toast and toast.IsEventRegistered and toast:IsEventRegistered(EVENT) or false
+    local stillTheirs = R.Diag and R.Diag.Tracing() and toast and toast.IsEventRegistered and toast:IsEventRegistered(EVENT) or false
     Takeover()   -- if the game's pop-up has the event back, it may already have shown once; this stops the next
     Note("event", friendId, isCompanionApp and "companion-app" or (stillTheirs and "game-popup-had-event" or nil))
     if isCompanionApp then Note("skip", friendId, "companion-app") return end   -- the game gives no pop-up for the mobile app either
@@ -450,16 +464,24 @@ local function OnCvarUpdate(name)
     C_Timer.After(0, Takeover)
 end
 
--- What the module is doing right now, for the temporary diagnostics. Reads only; nothing is changed.
+-- The events the card needs, as F.Refresh registers them while it is on.
+local WANTED_EVENTS = { EVENT, "PLAYER_ENTERING_WORLD", "PLAYER_LEAVING_WORLD", "PLAYER_REGEN_DISABLED", "PLAYER_LOGIN", "CVAR_UPDATE" }
+
+-- What the module is doing right now, for /tui diagnostics. Reads only; nothing is changed.
 function F.State()
     local toast = _G.BNToastFrame
-    local events = {}
+    local events, onBus = {}, {}
     for event in pairs(active) do events[#events + 1] = event end
     table.sort(events)
+    for _, event in ipairs(WANTED_EVENTS) do
+        onBus[event] = active[event] ~= nil and R.frame.IsEventRegistered ~= nil and R.frame:IsEventRegistered(event) and true or false
+    end
     return {
         enabled = R:Enabled("friendLogin"),
         notWanted = WhyNot(),
         events = events,
+        wantedEvents = WANTED_EVENTS,
+        registered = onBus,   -- [event] = the module asked for it and the game has it registered for TwichUI
         capable = Capable(),
         takenFromGame = taken,
         gamePopup = toast and toast.IsEventRegistered and (toast:IsEventRegistered(EVENT) and "has-event" or "event-removed") or "absent",
@@ -470,6 +492,13 @@ function F.State()
         soundOn = R:Enabled("friendLoginSound"),
         channel = F.SoundChannel(),
     }
+end
+
+-- How many logins were skipped or let go, by reason, since the game started: { ["skip:login-quiet"] = 2, ... }.
+function F.Counts()
+    local copy = {}
+    for key, n in pairs(reasons) do copy[key] = n end
+    return copy
 end
 
 -- Made-up details, your own faction's mark, for the settings previews and /tui friend.
@@ -553,6 +582,7 @@ local function BuildMover()
         GameTooltip:Show()
     end)
     mover:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+    mover:HookScript("OnHide", function(self) R.Interact.HideTip(self) end)   -- Edit Mode closing under the pointer
 end
 
 local function EditModeActive()

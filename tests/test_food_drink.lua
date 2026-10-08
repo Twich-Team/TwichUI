@@ -15,6 +15,7 @@ local function Fake(o)
     if k == "IsShown" then return function(s) return s.shown end end
     if k == "SetShown" then return function(s, v) s.shown = v and true or false end end
     if k == "SetScript" then return function(s, n, fn) s.scripts[n] = fn end end
+    if k == "HookScript" then return function(s, n, fn) s.hooks[n] = s.hooks[n] or {}; table.insert(s.hooks[n], fn) end end
     if k == "SetAttribute" then return function(s, n, v) s.attrs[n] = v end end
     if k == "GetAttribute" then return function(s, n) return s.attrs[n] end end
     if k == "SetText" then return function(s, v) s.text = v end end
@@ -243,6 +244,93 @@ M.foodDrinkDrink = false; F.Refresh(); Look()
 assert(drink.shown == false and food.shown == true)
 M.foodDrinkDrink = true; F.Refresh(); Look()
 assert(drink.shown == true)
+
+-- Troubleshooting report (diag/Food.lua): a read-only look at the buttons and the bags, and a trace of
+-- the events that matter (death, resurrection, combat) with the buttons' state beside each.
+do
+  for _, f in ipairs({"diag/Diagnostics.lua", "diag/Food.lua"}) do
+    local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
+  end
+  local D = R.Diag
+  local function Has(text, needle) return text:find(needle, 1, true) ~= nil end
+  local function Section() local r = D.Build(); local from = r:find("== Food and water buttons ==", 1, true); return r:sub(from, r:find("\n== ", from + 5, true) or #r) end
+  local function Count(t) local n = 0 for _ in pairs(t) do n = n + 1 end return n end
+
+  Item(15, "Elixir", 10, 1, { sub = 1, spell = nil })
+  Bags({ 2287, 4605, 15 })
+  c.FireEvent("BAG_UPDATE_DELAYED"); Look()
+  local requested, spellRequested = Count(c.REQUESTED), Count(c.SPELL_REQUESTED)
+  local sec = Section()
+  assert(Has(sec, "Food and water buttons: configured on, initialized yes, ready"), sec)
+  assert(Has(sec, "buttons: on; built=yes, on screen=yes") and Has(sec, "listening for: BAG_UPDATE_DELAYED"), sec)
+  assert(Has(sec, "left out: not-food-and-drink x1"), sec)
+  assert(Has(sec, "food: showing item 4605") and Has(sec, "a fresh look would choose item 4605; secure action matches what is shown: yes"), sec)
+  assert(Has(sec, "candidate item 4605") and Has(sec, "candidate item 2287"), "candidates are summarized by ID and amount")
+  assert(Has(sec, "prefer Mage-conjured: off") and Has(sec, "Classic-era game; not read from the Forever client"), sec)
+  assert(not Has(sec, "Haunch") and not Has(sec, "Mushroom") and not Has(sec, "Elixir"), "item IDs and counts only, no names")
+
+  -- Item data still loading: reported, and the report itself asks the game for nothing.
+  c.UNCACHED[2287] = true
+  sec = Section()
+  assert(Has(sec, "item-data-pending x1"), sec)
+  assert(Count(c.REQUESTED) == requested and Count(c.SPELL_REQUESTED) == spellRequested, "building a report requests no item or spell data")
+  c.UNCACHED[2287] = nil
+
+  -- A change made in combat waits; the report says so, and that the display and a fresh look differ.
+  Bags({ 2287 })
+  c.COMBAT = true
+  c.FireEvent("BAG_UPDATE_DELAYED"); Look()
+  sec = Section()
+  assert(Has(sec, "deferred update waiting for combat to end: yes") and Has(sec, "in combat now: yes"), sec)
+  assert(Has(sec, "waiting (deferred-until-combat-ends)") and Has(sec, "food: showing item 4605 (count 20); a fresh look would choose item 2287"), sec)
+  c.COMBAT = false
+  c.FireEvent("PLAYER_REGEN_ENABLED"); Look()
+  sec = Section()
+  assert(Has(sec, "deferred update waiting for combat to end: no") and Has(sec, ", ready"), sec)
+
+  -- A display that does not match the secure action is a fault, not a wait.
+  local foodButton = food
+  local actual = foodButton.attrs.item
+  foodButton.attrs.item = "Something Else"
+  sec = Section()
+  assert(Has(sec, "secure action matches what is shown: no") and Has(sec, "unavailable (secure-action-differs-from-display)"), sec)
+  foodButton.attrs.item = actual
+
+  -- Death and resurrection, followed with the trace: the choice is kept through both, and the trace shows it.
+  Bags({ 2287, 4605 }); c.FireEvent("BAG_UPDATE_DELAYED"); Look()
+  local tracer
+  D.Start()
+  for _, f in ipairs(frames) do if f.scripts.OnEvent and f ~= R.frame then tracer = f end end
+  assert(tracer, "the service listens on its own frame, only while tracing")
+  local function Real(event, ...) tracer.scripts.OnEvent(tracer, event, ...) end
+  Real("PLAYER_DEAD"); Real("PLAYER_ALIVE"); Real("PLAYER_UNGHOST")
+  c.FireEvent("BAG_UPDATE_DELAYED"); Look()
+  Real("GET_ITEM_INFO_RECEIVED", 2287)         -- nothing is loading: not interesting
+  local r = D.Build()
+  assert(Has(r, "food PLAYER_DEAD (food=4605 drink=") and Has(r, "food PLAYER_ALIVE (") and Has(r, "food PLAYER_UNGHOST ("), r)
+  assert(Has(r, "deferred=false loading=false combat=false"), r)
+  assert(Has(r, "food updated (food=4605 drink="), "each choice made is traced")
+  assert(not Has(r, "food GET_ITEM_INFO_RECEIVED"), "item data events are traced only while the buttons wait for them")
+  c.UNCACHED[2287] = true; Bags({ 2287, 4605 }); c.FireEvent("BAG_UPDATE_DELAYED"); Look()
+  Real("GET_ITEM_INFO_RECEIVED", 2287)
+  assert(Has(D.Build(), "food GET_ITEM_INFO_RECEIVED (") and Has(D.Build(), "loading=true"), "and then they are")
+  c.UNCACHED[2287] = nil
+  c.COMBAT = true; c.FireEvent("BAG_UPDATE_DELAYED"); Look()
+  assert(Has(D.Build(), "food deferred (in combat; buttons keep their last choice until it ends)"), "a deferral is traced")
+  c.COMBAT = false; c.FireEvent("PLAYER_REGEN_ENABLED"); Look()
+  assert(Has(D.Build(), "food combat-ended (running the deferred look)"))
+  D.Stop("manual"); D.Clear()
+
+  -- Disabled, and without the item APIs.
+  local oldItem = c.C_Item
+  c.C_Item = nil
+  assert(Has(Section(), "unavailable (item-api-missing)"), "a missing API is reported, not assumed")
+  c.C_Item = oldItem
+  M.foodDrink = false; F.Refresh()
+  sec = Section()
+  assert(Has(sec, "configured off") and not Has(sec, ", ready") and not Has(sec, "candidate"), sec)
+  M.foodDrink = true; F.Refresh(); Look()
+end
 
 -- Prefer Mage-conjured food and water: a preference among eligible items, food and drink apart.
 do
@@ -631,6 +719,48 @@ do
   Look()
 end
 
+-- The tooltip under the pointer follows the choice: it says how to use the item, is redrawn when the
+-- choice changes, says when a change is waiting for combat, and goes when its button hides.
+do
+  local tip = { lines = {} }
+  function tip:SetOwner(o) self.owner, self.lines, self.item = o, {}, nil end
+  function tip:GetOwner() return self.owner end
+  function tip:SetItemByID(id) self.item = id end
+  function tip:SetText(t) self.lines[#self.lines + 1] = t end
+  function tip:AddLine(t) self.lines[#self.lines + 1] = t end
+  function tip:Show() self.shown = true end
+  function tip:Hide() self.shown = false; self.owner = nil end
+  function tip:Has(text) for _, l in ipairs(self.lines) do if l:find(text, 1, true) then return true end end end
+  c.GameTooltip = tip
+  local function Mouse(over)
+    for _, f in ipairs(frames) do rawset(f, "IsMouseOver", function(self) return self == over end) end
+  end
+  Mouse(food)
+  Bags({ 2287 }); Look()
+  food.scripts.OnEnter(food)
+  assert(tip.shown and tip.owner == food and tip.item == 2287 and tip:Has("Click to eat it."), "the item, and what a click does")
+  assert(not tip:Has("updates when combat ends"), "nothing waiting")
+  -- the choice changes under the pointer (bags changed out of combat): redrawn for the new item
+  Bags({ 2287, 4605 }); c.FireEvent("BAG_UPDATE_DELAYED"); Look()
+  assert(tip.shown and tip.owner == food and tip.item == 4605, "tooltip follows the new choice")
+  -- bags change in combat: the button keeps its choice, and the tooltip says an update is waiting
+  c.COMBAT = true
+  Bags({ 2287 }); c.FireEvent("BAG_UPDATE_DELAYED"); Look()
+  assert(food.itemID == 4605 and tip.shown and tip:Has("updates when combat ends"), "the wait is explained")
+  c.COMBAT = false; c.FireEvent("PLAYER_REGEN_ENABLED"); Look()
+  assert(food.itemID == 2287 and tip.item == 2287 and not tip:Has("updates when combat ends"), "caught up after combat")
+  -- a button turned off under the pointer takes its tooltip with it; someone else's tooltip stays
+  food.scripts.OnLeave(food); FlushTimers()
+  tip.owner, tip.shown = {}, true
+  food.hooks.OnHide[1](food)
+  assert(tip.shown, "another frame's tooltip is not touched")
+  tip.owner = food
+  food.hooks.OnHide[1](food)
+  assert(not tip.shown, "hiding the button hides its tooltip")
+  Mouse(nil)
+  Bags({ 2287, 1179 }); Look()
+end
+
 -- Edit Mode: an outline over the buttons; dragging saves the place, right-click clears it.
 do
   assert(c.EventRegistry.callbacks["EditMode.Enter"], "hooks Edit Mode")
@@ -662,7 +792,7 @@ M.foodDrink = false; F.Refresh()
 assert(not events.BAG_UPDATE_DELAYED and not events.PLAYER_REGEN_ENABLED and not events.GET_ITEM_INFO_RECEIVED and not events.SPELL_TEXT_UPDATE, "no listeners when off")
 c.FireEvent("BAG_UPDATE_DELAYED"); Look()   -- nothing happens, nothing errors
 
--- The temporary probe: prints consumables only, changes nothing, says so when text isn't loaded.
+-- The probe (/tui probe, /tui diagnostics probe): prints consumables only, changes nothing, says so when text isn't loaded.
 do
   local out = {}
   c.print = function(s) table.insert(out, s) end

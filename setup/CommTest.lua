@@ -22,6 +22,12 @@ local pending   -- { id, dist, target, sentAt, acks = { [name] = ms } }
 
 local function Say(fmt, ...) R.Print("commtest: " .. fmt, ...) end
 
+-- For /tui diagnostics while it traces: the kind of test and its outcome, never the other player.
+local function Trace(code, detail, who)
+    local D = R.Diag
+    if D then D.Trace("share", code, detail, who) end
+end
+
 local function PrefixRegistered()
     local ci = C_ChatInfo
     if ci and ci.IsAddonMessagePrefixRegistered then
@@ -38,8 +44,15 @@ local function Finish(id)
     local names = {}
     for n in pairs(p.acks) do names[#names + 1] = SH.Short(n) end
     if #names > 0 then return end   -- already reported on first ack
+    Trace("commtest-no-answer", p.label)
     Say("%sINCONCLUSIVE|r. The client accepted the %s message, but no TwichUI peer answered within %ds. Another TwichUI user must be online %s to get a conclusive result.",
         R.GOLD, p.label, TIMEOUT, p.need)
+end
+
+-- For /tui diagnostics. Reads only.
+function CT.Snapshot()
+    return { running = pending ~= nil, kind = pending and pending.label or nil,
+        age = pending and math.floor(GetTime() - pending.sentAt) or nil, timeout = TIMEOUT }
 end
 
 function CT.Run(arg)
@@ -74,6 +87,7 @@ function CT.Run(arg)
         Say("not attempted: the send failed (%s).", tostring(err))
         return
     end
+    Trace("commtest-sent", label, who ~= "" and who or nil)
     Say("sent a %s probe (%s). Waiting up to %ds for a TwichUI peer to answer...", label, id, TIMEOUT)
     C_Timer.After(TIMEOUT, function() Finish(id) end)
 end
@@ -92,6 +106,7 @@ SH.handlers.commtestack = function(sender, msg, dist)
     local first = next(p.acks) == nil
     p.acks[sender] = math.floor((GetTime() - p.sentAt) * 1000)
     if first then
+        Trace("commtest-answered", tostring(dist) .. " " .. p.acks[sender] .. "ms", sender)
         Say("%sSUCCESS|r. %s answered over %s in about %d ms. A small message made the round trip on this path (larger transfers aren't tested).",
             R.GREEN, SH.Short(sender), tostring(dist), p.acks[sender])
         -- state is cleared by the timeout; later acks from other peers are just recorded

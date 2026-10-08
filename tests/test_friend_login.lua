@@ -391,7 +391,7 @@ end
 c.TwichUIDB.ui.friendLoginPlace = nil
 
 ---------------------------------------------------------------------------
--- Why a friend could not be described (used by the temporary diagnostics).
+-- Why a friend could not be described (shown in /tui diagnostics).
 ---------------------------------------------------------------------------
 local _, why = F.Describe("x")
 assert(why == "bad-id", why)

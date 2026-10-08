@@ -11,14 +11,17 @@ local function Obj()
     if k == "Show" then return function(s) s.shown = true end end
     if k == "Hide" then return function(s) s.shown = false end end
     if k == "SetShown" then return function(s, v) s.shown = v end end
+    if k == "SetEnabled" then return function(s, v) s.enabled = v and true or false end end
+    if k == "IsEnabled" then return function(s) return s.enabled ~= false end end
     if k == "SetScript" then return function(s, n, fn) local t = rawget(s, "scripts"); if not t then t = {}; rawset(s, "scripts", t) end; t[n] = fn end end
     if k == "CreateFontString" or k == "CreateTexture" then return function() return Obj() end end
     return function() end
   end})
 end
-c.tinsert = table.insert; c.CreateFrame = function(_, name) local o = Obj(); if name then c[name] = o end return o end
+local all = {}
+c.tinsert = table.insert; c.CreateFrame = function(_, name) local o = Obj(); all[#all + 1] = o; if name then c[name] = o end return o end
 c.UISpecialFrames = {}; c.UIParent = Obj(); c.GameTooltip_Hide = function() end
-c.StaticPopupDialogs = {}; c.StaticPopup_Show = function(k) c.popup = k end
+c.StaticPopupDialogs = {}; c.StaticPopup_Show = function(k, text) c.popup = k; c.popupText = text; return {} end
 c.CANCEL = "Cancel"; c.Settings = nil
 c.GetRealZoneText = function() return "Elwynn Forest" end
 c.TwichUIDB = {}
@@ -59,4 +62,70 @@ W.ShowPlayed(3 * 86400 + 7 * 3600 + 24 * 60)
 assert(f.played.text == "Journey time: 3d 7h 24m", f.played.text)
 W.ShowPlayed(47 * 60); assert(f.played.text == "Journey time: 47m")
 f.shown = false; W.ShowPlayed(60); assert(f.played.text == "Journey time: 47m", "closed frame isn't updated")
+
+-- The note editor: Save is off and Enter explains itself while there is nothing to save; the window
+-- stays open rather than throwing the note away.
+do
+  local printed = {}
+  c.print = function(s) printed[#printed + 1] = s end
+  local function Find(match) for _, o in ipairs(all) do if match(o) then return o end end end
+  local write = Find(function(o) return type(o.text) == "table" and o.text.text == "Write a note" end)
+  assert(write, "the Write a note button")
+  local before = #C.Entries()
+  write.scripts.OnClick()
+  local ed = c.TwichUIChronicleNote
+  assert(ed and ed.shown, "the editor opens")
+  assert(ed.save.enabled == false, "Save is off while the box is empty")
+  ed.box.scripts.OnEnterPressed()
+  assert(ed.shown and #C.Entries() == before, "Enter on an empty note neither closes nor saves")
+  assert(ed.hint.text:find("Write something", 1, true), "and says why: " .. ed.hint.text)
+  ed.box:SetText("   "); ed.box.scripts.OnTextChanged(ed.box)
+  assert(ed.save.enabled == false, "spaces alone are nothing")
+  ed.box.scripts.OnEnterPressed()
+  assert(ed.shown and #C.Entries() == before)
+  ed.box:SetText("A quiet evening"); ed.box.scripts.OnTextChanged(ed.box)
+  assert(ed.save.enabled == true and ed.hint.text == "Press Enter to save, Esc to cancel.", "typing clears the message and enables Save")
+  ed.box.scripts.OnEnterPressed()
+  assert(not ed.shown and #C.Entries() == before + 1, "saved once, editor closed")
+  ed.box.scripts.OnEnterPressed()
+  assert(#C.Entries() == before + 1, "a repeated Enter on the closed editor does not add a second copy")
+end
+
+-- Deleting names what goes, can be cancelled, and checks the entry is still there when confirmed.
+do
+  local printed = {}
+  c.print = function(s) printed[#printed + 1] = s end
+  W:Show()
+  local function Row(text)
+    for _, o in ipairs(all) do
+      if type(rawget(o, "entry")) == "table" and rawget(o, "delete") and (o.entry.note or o.entry.title) == text then return o end
+    end
+  end
+  local row = Row("A quiet evening")
+  assert(row, "the new note has a row")
+  local id = row.entry.id
+  local n = #C.Entries()
+  row.delete.scripts.OnClick()
+  assert(c.popup == "TWICHUI_CHRONICLE_DELETE" and c.popupText:find("A quiet evening", 1, true)
+    and c.popupText:find("note", 1, true) and c.popupText:find("can't be undone", 1, true), "the question says what: " .. tostring(c.popupText))
+  local dlg = c.StaticPopupDialogs.TWICHUI_CHRONICLE_DELETE
+  dlg.OnCancel(nil, nil, "clicked")
+  dlg.OnAccept()
+  assert(#C.Entries() == n, "cancelling leaves the Chronicle as it was, even if the old button is pressed after")
+  -- gone while the question was open
+  row.delete.scripts.OnClick()
+  C.Delete(id)
+  c.StaticPopupDialogs.TWICHUI_CHRONICLE_DELETE.OnAccept()
+  assert(#C.Entries() == n - 1, "nothing else was deleted in its place")
+  assert(printed[#printed]:find("already gone", 1, true), "and it says so: " .. tostring(printed[#printed]))
+  -- an ordinary delete
+  C.Add("note", { title = "Note", note = "Second thoughts" })
+  W:Refresh()
+  row = Row("Second thoughts")
+  local m = #C.Entries()
+  row.delete.scripts.OnClick()
+  local d2 = c.StaticPopupDialogs.TWICHUI_CHRONICLE_DELETE
+  d2.OnAccept(); d2.OnAccept()
+  assert(#C.Entries() == m - 1, "confirmed once, applied once")
+end
 print("CHRONICLE WINDOW OK")

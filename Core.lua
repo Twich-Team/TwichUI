@@ -68,6 +68,14 @@ function R:Enabled(key)
     return TwichUIDB and TwichUIDB.modules and TwichUIDB.modules[key] ~= false
 end
 
+-- An error caught in one of our own handlers: noted for the troubleshooting report (if loaded), then
+-- handed to the game's error handler exactly as before. Nothing is hidden or replaced.
+local function Fault(source, err)
+    if R.Diag then R.Diag.Error(source, err) end
+    geterrorhandler()(err)
+end
+R.Fault = Fault
+
 ---------------------------------------------------------------------------
 -- Tiny event bus so modules can share one frame and run in a known order.
 ---------------------------------------------------------------------------
@@ -97,7 +105,7 @@ R.frame:SetScript("OnEvent", function(_, event, ...)
     if not list then return end
     for i = 1, #list do
         local ok, err = pcall(list[i], ...)
-        if not ok then geterrorhandler()(err) end
+        if not ok then Fault("event " .. event, err) end
     end
 end)
 
@@ -119,9 +127,9 @@ R.frame:HookScript("OnEvent", function(_, event, name)
     for k, v in pairs(DEFAULT_MODULES) do
         if TwichUIDB.modules[k] == nil then TwichUIDB.modules[k] = v end
     end
-    for _, fn in ipairs(R.initHooks) do
+    for i, fn in ipairs(R.initHooks) do
         local ok, err = pcall(fn)
-        if not ok then geterrorhandler()(err) end
+        if not ok then Fault("startup hook " .. i, err) end
     end
 end)
 
@@ -144,7 +152,7 @@ local function RegisterWithEllesmere()
         R.S = S
         for _, fn in ipairs(R.skinCallbacks) do
             local ok, err = pcall(fn, S)
-            if not ok then geterrorhandler()(err) end
+            if not ok then Fault("EllesmereUI skin", err) end
         end
         wipe(R.skinCallbacks)
     end)
@@ -227,9 +235,8 @@ COMMANDS = {
     { name = "friend", usage = "friend", desc = "preview the Battle.net friend login card now", fn = function()
         if R.FriendLogin then R.FriendLogin.Preview() else Unavailable("Friend login") end
     end },
-    -- TEMPORARY: remove with modules/FriendLoginDiag.lua
-    { name = "frienddiag", usage = "frienddiag [status|test|sound|trace|report|reset]", desc = "check the friend login card and trace real friend events (temporary)", fn = function(arg)
-        if R.FriendLoginDiag then R.FriendLoginDiag.Command(arg) else Unavailable("Friend login diagnostics") end
+    { name = "diagnostics", usage = "diagnostics [start|stop|clear|status]", desc = "troubleshooting report to copy; start or stop tracing", fn = function(arg)
+        if R.DiagWindow then R.DiagWindow.Command(arg) else Unavailable("Troubleshooting") end
     end },
     { name = "hidden", usage = "hidden", desc = "welcome messages hidden at login", fn = function()
         if R.Quiet then R.Quiet:ShowHidden() else Unavailable("Quiet login") end
@@ -240,10 +247,15 @@ COMMANDS = {
     { name = "commtest", usage = "commtest party|guild|direct <name>", desc = "test addon messages with another TwichUI user", fn = function(arg)
         if R.CommTest then R.CommTest.Run(arg) else Unavailable("Comm test") end
     end },
-    -- TEMPORARY: remove with modules/FoodDrinkProbe.lua
-    { name = "probe", usage = "probe", desc = "list what the game says about consumables in your bags (temporary)", fn = function()
+    -- Kept for checking the Food and Drink buttons' item rules against the game; also /tui diagnostics probe.
+    { name = "probe", usage = "probe", desc = "list what the game says about consumables in your bags", hidden = true, fn = function()
         if R.FoodDrinkProbe then R.FoodDrinkProbe.Run() else Unavailable("Probe") end
     end },
+    -- The old temporary friend diagnostics now live in /tui diagnostics.
+    { name = "frienddiag", usage = "frienddiag", desc = "now /tui diagnostics", hidden = true, fn = function(arg)
+        if R.DiagWindow then R.DiagWindow.LegacyFriendDiag(arg) else Unavailable("Troubleshooting") end
+    end },
+    { name = "troubleshoot", alias = "diagnostics", hidden = true },
     { name = "settings", alias = "options", hidden = true },
     { name = "config", alias = "options", hidden = true },
     { name = "journal", alias = "chronicle", hidden = true },

@@ -23,8 +23,10 @@ end
 local realCreate = c.CreateFrame
 local menus = {}
 c.tinsert = table.insert
+local made = {}
 c.CreateFrame = function(kind)
   local o = Obj()
+  made[#made + 1] = o
   for k, v in pairs(realCreate()) do rawset(o, k, v) end
   o.Show, o.Hide, o.IsShown = nil, nil, nil   -- use the Obj versions, which remember
   if kind == "DropdownButton" then o.SetupMenu = function(self, fn) table.insert(menus, fn) end end
@@ -85,6 +87,56 @@ local trees = R.GearData.Trees()
 local edited
 for _, tree in ipairs(trees) do if P.UsesPriority("MAGE", tree.skillLine) then edited = tree.skillLine end end
 assert(edited and P.Priority("MAGE", edited), "switching to priority starts the list from the weights")
+
+-- A question about resetting a tree is about the tree that was showing when it was asked, even if
+-- another is chosen while it is open; cancelling changes nothing; a spoiled entry is refused by name.
+do
+  local pending
+  c.StaticPopup_Show = function(key, text) pending = { dlg = c.StaticPopupDialogs[key], text = text } return {} end
+  local printed = {}
+  c.print = function(line) printed[#printed + 1] = line end
+  local list = R.GearData.Trees()
+  local a, b = list[1], list[2]
+  local function Choose(tree)
+    radios = {}
+    for _, build in ipairs(menus) do build(nil, root) end
+    for _, r in ipairs(radios) do
+      if r.label:sub(1, #tree.name) == tree.name then r.setSelected() return end
+    end
+    error("no radio for " .. tree.name)
+  end
+  local function Button(label)
+    for _, o in ipairs(made) do if rawget(o, "text") == label and o.scripts and o.scripts.OnClick then return o end end
+    error("no button " .. label)
+  end
+  P.SetUsesPriority("MAGE", a.skillLine, false); P.SetUsesPriority("MAGE", b.skillLine, false)
+  Choose(a)
+  P.SetWeight("MAGE", a.skillLine, "SPI", 0.5); P.SetWeight("MAGE", b.skillLine, "SPI", 0.7)
+  Button("Reset weights").scripts.OnClick()
+  assert(pending and pending.text:find(a.name, 1, true) and pending.text:find("can't be undone", 1, true), "it names the tree: " .. tostring(pending and pending.text))
+  Choose(b)
+  pending.dlg.OnAccept()
+  assert(not (P.CustomWeights("MAGE", a.skillLine) or {}).SPI, "the tree that was asked about is reset")
+  assert((P.CustomWeights("MAGE", b.skillLine) or {}).SPI == 0.7, "the tree chosen meanwhile is left alone")
+  -- cancelled: nothing changes, and a stale press of the old button does nothing
+  P.SetWeight("MAGE", b.skillLine, "SPI", 0.9)
+  Button("Reset weights").scripts.OnClick()
+  pending.dlg.OnCancel(nil, nil, "clicked")
+  pending.dlg.OnAccept()
+  assert((P.CustomWeights("MAGE", b.skillLine) or {}).SPI == 0.9, "cancelling leaves the weights as they were")
+  -- a bad number is refused with the stat and the entry named, and the old value stays
+  local row
+  for _, o in ipairs(made) do
+    if rawget(o, "stat") == "SPI" then row = o end
+  end
+  P.SetWeight("MAGE", b.skillLine, "SPI", nil)
+  row.edit.text = "lots"
+  rawset(row.edit, "revert", false)       -- the stand-in answers every unknown name with a function
+  row.edit.scripts.OnEditFocusLost()
+  assert(printed[#printed] and printed[#printed]:find("lots", 1, true) and printed[#printed]:find("0 to 1000", 1, true), "the entry is named: " .. tostring(printed[#printed]))
+  assert(not (P.CustomWeights("MAGE", b.skillLine) or {}).SPI, "nothing was saved")
+  c.StaticPopup_Show = function(key) c.StaticPopupDialogs[key].OnAccept() end
+end
 
 -- /twichui gear opens the page in the options.
 c.SlashCmdList.TWICHUI("gear")

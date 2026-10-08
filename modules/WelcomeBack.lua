@@ -366,6 +366,7 @@ local function BuildMover()
         GameTooltip:Show()
     end)
     mover:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+    mover:HookScript("OnHide", function(self) R.Interact.HideTip(self) end)   -- Edit Mode closing under the pointer
 end
 
 local function EditModeActive()

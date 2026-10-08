@@ -60,6 +60,19 @@ local seq = 0
 local inWorld = true
 local retryScheduled = false
 local pumping, again = false, false
+local listening = false       -- the world listeners are registered (set by the init hook at the end)
+
+-- Counts since the game started, for /tui diagnostics: integers keyed by a fixed reason or kind, never
+-- by an id. Notices are traced (kind and reason only) while tracing is on.
+local stats = { shown = {}, dropped = {}, refused = {} }
+local function Count(group, key) group[key] = (group[key] or 0) + 1 end
+
+local function Trace(code, notice, detail)
+    local D = R.Diag
+    if D and D.Tracing() then
+        D.Trace("notify", code, notice.kind .. (detail and (" " .. detail) or ""), nil, notice.preview)
+    end
+end
 
 ---------------------------------------------------------------------------
 -- Registration
@@ -127,6 +140,8 @@ end
 -- reasons: "expired", "stale", "full", "replaced", "real-event", "cancelled", "cleared", "loading"
 local function Discard(notice, reason)
     Remove(queue, notice)
+    Count(stats.dropped, notice.preview and ("preview " .. reason) or reason)
+    Trace("dropped", notice, reason)
     if notice.onDrop then pcall(notice.onDrop, reason) end
 end
 
@@ -184,6 +199,8 @@ local function Start(notice)
     if not ok then geterrorhandler()(started) end
     if not (ok and started) then return false end
     active[notice.kind] = notice
+    Count(stats.shown, notice.preview and (notice.kind .. " preview") or notice.kind)
+    Trace("shown", notice)
     -- If the card never reports back, its place is freed once it has certainly run its course.
     C_Timer.After(Expected(notice) + GRACE, function()
         if active[notice.kind] == notice then
@@ -298,7 +315,7 @@ N.Poke = Pump   -- a card's place or size changed: waiting notices are looked at
 -- Returns true when it was accepted (it may start at once), or false and why: "unknown", "duplicate" or "full".
 function N.Submit(request)
     local spec = specs[request.kind]
-    if not spec then return false, "unknown" end
+    if not spec then Count(stats.refused, "unknown") return false, "unknown" end
     local preview = request.preview and true or false
     local now = GetTime()
     -- Whatever has run out of time makes no claim on the queue.
@@ -309,10 +326,15 @@ function N.Submit(request)
     local function Same(notice)
         return notice.kind == request.kind and notice.id == id and notice.preview == preview
     end
-    for _, notice in ipairs(queue) do
-        if Same(notice) then return false, "duplicate" end
+    local function Duplicate()
+        Count(stats.refused, preview and "preview duplicate" or "duplicate")
+        Trace("refused", request, "duplicate")
+        return false, "duplicate"
     end
-    if active[request.kind] and Same(active[request.kind]) then return false, "duplicate" end
+    for _, notice in ipairs(queue) do
+        if Same(notice) then return Duplicate() end
+    end
+    if active[request.kind] and Same(active[request.kind]) then return Duplicate() end
 
     if request.replace then
         for i = #queue, 1, -1 do
@@ -339,10 +361,15 @@ function N.Submit(request)
         for _, queued in ipairs(queue) do
             if queued.priority < worst.priority or (queued.priority == worst.priority and queued.seq < worst.seq) then worst = queued end
         end
-        if notice.priority < worst.priority then return false, "full" end
+        if notice.priority < worst.priority then
+            Count(stats.refused, preview and "preview full" or "full")
+            Trace("refused", notice, "full")
+            return false, "full"
+        end
         Discard(worst, "full")
     end
     queue[#queue + 1] = notice
+    Trace("queued", notice)
     Pump()
     return true
 end
@@ -404,7 +431,7 @@ function N.DropPreviews(kind)
 end
 
 -- Shows one kind's sample card. Without an id, a preview already up for the kind starts over.
--- extra: fields added to the sample payload (the temporary friend diagnostics ask for the chime this way).
+-- extra: fields added to the sample payload (the friend card test in /tui diagnostics asks for the chime this way).
 function N.Preview(kind, id, extra)
     local spec = specs[kind]
     if not (spec and spec.sample) then return false, "unknown" end
@@ -442,7 +469,8 @@ local function OnEnteringWorld()
     Pump()
 end
 
--- Waiting and showing notices, for tests and diagnostics. Reads only.
+-- Waiting and showing notices, for tests. Reads only. The ids may identify friends, so reports use
+-- N.Snapshot instead.
 function N.State()
     local waiting, shown = {}, {}
     for i, notice in ipairs(queue) do waiting[i] = notice.kind .. ":" .. notice.id end
@@ -451,7 +479,26 @@ function N.State()
     return { waiting = waiting, active = shown, inWorld = inWorld }
 end
 
+-- For /tui diagnostics: the coordinator's state with no ids, and counts since the game started. Reads only.
+function N.Snapshot()
+    local waiting, shown = {}, {}
+    for _, notice in ipairs(queue) do
+        local key = notice.kind .. (notice.preview and " (preview)" or "")
+        waiting[key] = (waiting[key] or 0) + 1
+    end
+    for kind, notice in pairs(active) do shown[kind] = notice.preview and "preview" or "real" end
+    local function Copy(t) local c = {} for k, v in pairs(t) do c[k] = v end return c end
+    return {
+        listening = listening, inWorld = inWorld, capacity = MAX_QUEUE, queued = #queue,
+        waiting = waiting, active = shown, kinds = N.Kinds(),
+        watchingCombat = watchingCombat, retryScheduled = retryScheduled,
+        previewSounds = N.PreviewSounds(),
+        shown = Copy(stats.shown), dropped = Copy(stats.dropped), refused = Copy(stats.refused),
+    }
+end
+
 R:OnInit(function()
+    listening = true
     R:On("PLAYER_LEAVING_WORLD", OnLeavingWorld)
     R:On("PLAYER_ENTERING_WORLD", OnEnteringWorld)
 end)

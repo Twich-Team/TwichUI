@@ -45,8 +45,8 @@ F.CONJURED = {
 local MOVER_ATLAS = "editmode-actionbar-highlight-NineSlice-Center"   -- Edit Mode's own highlight, when the client has it
 
 local KINDS = {
-    { key = "food", label = "Food", setting = "foodDrinkFood", rule = "The food in your bags that restores the most health." },
-    { key = "drink", label = "Drink", setting = "foodDrinkDrink", rule = "The drink in your bags that restores the most mana." },
+    { key = "food", label = "Food", use = "Click to eat it.", setting = "foodDrinkFood", rule = "The food in your bags that restores the most health." },
+    { key = "drink", label = "Drink", use = "Click to drink it.", setting = "foodDrinkDrink", rule = "The drink in your bags that restores the most mana." },
 }
 
 local container, mover
@@ -119,40 +119,47 @@ end
 -- One item in the bags as a candidate, or nil when it can't be offered: not food and drink as
 -- the game classifies it, not plain, above the character's level, or none left.
 -- The second result is true when the game hasn't loaded the item or its text yet (a look is
--- asked for).
-local function Candidate(id, names, words)
+-- asked for). The third says why there is no candidate, as a code, for /tui diagnostics.
+-- readOnly: ask the game for nothing (a report must not change what the game loads).
+local function Candidate(id, names, words, readOnly)
     local _, _, _, _, icon, classID, subClassID = C_Item.GetItemInfoInstant(id)
-    if classID ~= CONSUMABLE or subClassID ~= FOOD_AND_DRINK then return nil end
+    if classID ~= CONSUMABLE or subClassID ~= FOOD_AND_DRINK then return nil, false, "not-food-and-drink" end
     local name, _, _, _, minLevel = C_Item.GetItemInfo(id)
     name = Plain(name)
     if not name then
-        if C_Item.RequestLoadItemDataByID then C_Item.RequestLoadItemDataByID(id) end
-        return nil, true
+        if not readOnly and C_Item.RequestLoadItemDataByID then C_Item.RequestLoadItemDataByID(id) end
+        return nil, true, "item-data-pending"
     end
-    if (minLevel or 0) > (UnitLevel("player") or 0) then return nil end
+    if (minLevel or 0) > (UnitLevel("player") or 0) then return nil, false, "level-too-high" end
     local spellName, spellID = C_Item.GetItemSpell(id)
     spellName, spellID = Plain(spellName), Plain(spellID)
-    if not (spellName and spellID) then return nil end
+    if not (spellName and spellID) then return nil, false, "no-use-spell" end
     local text = Plain(C_Spell.GetSpellDescription(spellID))
     if not text or text == "" then
-        if C_Spell.RequestLoadSpellData then C_Spell.RequestLoadSpellData(spellID) end
-        return nil, true
+        if not readOnly and C_Spell.RequestLoadSpellData then C_Spell.RequestLoadSpellData(spellID) end
+        return nil, true, "spell-text-pending"
     end
     local kinds, amount = F.Classify(spellName, text, names, words)
-    if not kinds then return nil end
+    if not kinds then return nil, false, "not-plain-food-or-drink" end
     -- Not C_Item.IsUsableItem: it is false while dead or a ghost, which would drop every item from
     -- the choice and leave it empty after resurrection (no bag event follows). Whether the item
     -- can be used right now is the game's to enforce when the player clicks.
     local count = C_Item.GetItemCount(id) or 0
-    if count < 1 then return nil end
+    if count < 1 then return nil, false, "none-left" end
     return { id = id, name = name, icon = icon, kinds = kinds, amount = amount, count = count, conjured = F.CONJURED[id] ~= nil }
 end
 
 -- The best food and the best drink in the bags: { food = candidate|nil, drink = candidate|nil }.
 -- Also whether anything was still loading.
-local function Scan()
+-- summary: when given, this is a read-only look for /tui diagnostics; it is filled with the candidates
+-- by kind, how many items were left out and why, and whether the game's names for the plain spells were read.
+local function Scan(summary)
     local names = { food = Plain(C_Spell.GetSpellName(FOOD_SPELL)), drink = Plain(C_Spell.GetSpellName(DRINK_SPELL)) }
     local words = { health = Plain(HEALTH), mana = Plain(MANA) }
+    if summary then
+        summary.spellNamesRead = names.food ~= nil and names.drink ~= nil
+        summary.wordsRead = words.health ~= nil and words.mana ~= nil
+    end
     local found, byKind, waiting = {}, { food = {}, drink = {} }, false
     local last = NUM_TOTAL_EQUIPPED_BAG_SLOTS or NUM_BAG_SLOTS or 4
     for bag = 0, last do
@@ -161,17 +168,24 @@ local function Scan()
             local id = info and Plain(info.itemID)
             if id and not found[id] then
                 found[id] = true
-                local candidate, still = Candidate(id, names, words)
+                local candidate, still, why = Candidate(id, names, words, summary ~= nil)
                 if candidate then
                     for kind in pairs(candidate.kinds) do table.insert(byKind[kind], candidate) end
                 end
                 if still then waiting = true end
+                if summary then
+                    summary.items = summary.items + 1
+                    if why then summary.excluded[why] = (summary.excluded[why] or 0) + 1 end
+                end
             end
         end
     end
     local prefer = F.Get("preferConjured")
     local chosen = { food = F.Pick(byKind.food, prefer), drink = F.Pick(byKind.drink, prefer) }
     for _, c in pairs(chosen) do c.preferred = prefer and c.conjured end   -- so the tooltip can say why
+    if summary then
+        summary.candidates, summary.chosen = byKind, chosen
+    end
     return chosen, waiting
 end
 
@@ -296,11 +310,23 @@ local function ShowTooltip(button)
         if button.preferred then
             GameTooltip:AddLine("Mage-conjured, which your options prefer over ordinary " .. button.label:lower() .. ".", 0.69, 0.66, 0.6, true)
         end
+        GameTooltip:AddLine(button.use, 0.79, 0.64, 0.29)
     else
         GameTooltip:SetText(button.label, 1, 1, 1)
         GameTooltip:AddLine("Nothing in your bags that TwichUI can tell is plain " .. button.label:lower() .. " you can use.", nil, nil, nil, true)
     end
+    -- The choice only changes out of combat; say so while a change is waiting.
+    if dirty then
+        GameTooltip:AddLine("Your bags changed in combat. This updates when combat ends.", 0.9, 0.45, 0.38, true)
+    end
     GameTooltip:Show()
+end
+
+-- The choice under the pointer can change (an item used up, combat ending): the tooltip is redrawn
+-- for the new choice, or taken down if the button is gone, instead of describing something old.
+local function RefreshTooltip(button)
+    if not (GameTooltip and GameTooltip.GetOwner and GameTooltip:GetOwner() == button) then return end
+    if button:IsShown() and button:IsMouseOver() then ShowTooltip(button) else GameTooltip:Hide() end
 end
 
 ---------------------------------------------------------------------------
@@ -363,7 +389,7 @@ end
 local function BuildButton(kind)
     local b = CreateFrame("Button", nil, container, "SecureActionButtonTemplate")
     b:RegisterForClicks("LeftButtonUp", "LeftButtonDown")   -- the game's setting for use on key down decides which fires
-    b.label, b.rule = kind.label, kind.rule
+    b.label, b.rule, b.use = kind.label, kind.rule, kind.use
 
     local well = b:CreateTexture(nil, "BACKGROUND")
     well:SetAllPoints()
@@ -381,6 +407,7 @@ local function BuildButton(kind)
     hot:SetColorTexture(1, 0.9, 0.6, 0.12)
     b:SetScript("OnEnter", OnButtonEnter)
     b:SetScript("OnLeave", OnButtonLeave)
+    b:HookScript("OnHide", function(self) R.Interact.HideTip(self) end)   -- turned off or hidden under the pointer
     return b
 end
 
@@ -450,6 +477,11 @@ local function Build()
     for _, kind in ipairs(KINDS) do buttons[kind.key] = BuildButton(kind) end
 end
 
+local function Trace(code, detail)
+    local D = R.Diag
+    if D then D.Trace("food", code, detail) end
+end
+
 local function Update()
     dirty = false
     Build()
@@ -476,6 +508,7 @@ local function Update()
             button:SetPoint("TOPLEFT", container, "TOPLEFT", vertical and 0 or shown * step, vertical and -shown * step or 0)
             button:Show()
             Fill(button, best[kind.key])
+            RefreshTooltip(button)
             shown = shown + 1
         else
             button:Hide()
@@ -489,13 +522,23 @@ local function Update()
     if not (mover and mover:IsShown()) and EditModeActive() then ShowMover(true) end
     hovering = AnyButtonHovered()
     ApplyAlpha()
+    if R.Diag and R.Diag.Tracing() then
+        Trace("updated", ("food=%s drink=%s waiting-for-data=%s"):format(
+            best.food and best.food.id or "none", best.drink and best.drink.id or "none", tostring(waiting and true or false)))
+    end
 end
 
 -- A look soon, once for a burst of events; deferred to the end of combat when in combat.
 local function Look()
     scheduled = false
     if not R:Enabled("foodDrink") then return end
-    if InCombat() then dirty = true else Update() end
+    if InCombat() then
+        dirty = true
+        Trace("deferred", "in combat; buttons keep their last choice until it ends")
+        for _, button in pairs(buttons) do RefreshTooltip(button) end   -- now says it is waiting
+    else
+        Update()
+    end
 end
 
 local function Schedule()
@@ -505,7 +548,78 @@ local function Schedule()
 end
 
 local function OnDataLoaded() if loading then Schedule() end end
-local function OnRegenEnabled() if dirty then Schedule() end end
+local function OnRegenEnabled()
+    if dirty then
+        Trace("combat-ended", "running the deferred look")
+        Schedule()
+    end
+end
+
+---------------------------------------------------------------------------
+-- For /tui diagnostics (diag/Food.lua). Read only: nothing is requested from the game or changed.
+---------------------------------------------------------------------------
+
+-- Whether a button's secure attributes are those of the choice it shows. A secure button can't be
+-- changed in combat, so after a deferred look the two can differ until combat ends.
+local function SecureMatches(button)
+    local choice = rawget(button, "choice")
+    local kind, item = button:GetAttribute("type"), button:GetAttribute("item")
+    if choice then return kind == "item" and item == choice.name end
+    return kind == nil and item == nil
+end
+
+-- A short state line and whether data is still loading, for the trace of events that matter here
+-- (dying, resurrecting, bags, combat). No bag scan.
+function F.Brief()
+    local parts = {}
+    for _, kind in ipairs(KINDS) do
+        local button = buttons[kind.key]
+        local choice = button and rawget(button, "choice")
+        parts[#parts + 1] = ("%s=%s%s"):format(kind.key, choice and choice.id or "none",
+            (button and not SecureMatches(button)) and "(secure action differs)" or "")
+    end
+    parts[#parts + 1] = ("deferred=%s"):format(tostring(dirty))
+    parts[#parts + 1] = ("loading=%s"):format(tostring(loading))
+    parts[#parts + 1] = ("combat=%s"):format(tostring(InCombat() and true or false))
+    return table.concat(parts, " "), loading
+end
+
+-- The state of the buttons, and what a fresh look at the bags would choose, for the report.
+function F.Snapshot()
+    local out = {
+        enabled = R:Enabled("foodDrink"), built = container ~= nil, shown = container ~= nil and container:IsShown() or false,
+        deferred = dirty, scheduled = scheduled, loading = loading, inCombat = InCombat() and true or false,
+        preferConjured = F.Get("preferConjured"), conjuredKnown = 0, buttons = {}, apiMissing = nil,
+    }
+    for _ in pairs(F.CONJURED) do out.conjuredKnown = out.conjuredKnown + 1 end
+    local events = {}
+    for event in pairs(active) do events[#events + 1] = event end
+    table.sort(events)
+    out.events = events
+    for _, kind in ipairs(KINDS) do
+        local button = buttons[kind.key]
+        local choice = button and rawget(button, "choice")
+        local matches   -- nil until the button exists; false is a real answer
+        if button then matches = SecureMatches(button) end
+        out.buttons[#out.buttons + 1] = {
+            key = kind.key, switchOn = R:Enabled(kind.setting), built = button ~= nil,
+            shown = button ~= nil and button:IsShown() or false,
+            id = choice and choice.id, count = choice and choice.count, amount = choice and choice.amount,
+            conjured = choice and choice.conjured or false,
+            secureMatches = matches,
+        }
+    end
+    if out.enabled then
+        if not (C_Item and C_Container and C_Spell) then
+            out.apiMissing = true
+        else
+            local summary = { candidates = { food = {}, drink = {} }, excluded = {}, items = 0 }
+            local ok = pcall(Scan, summary)
+            if ok then out.scan = summary else out.scanFailed = true end
+        end
+    end
+    return out
+end
 
 ---------------------------------------------------------------------------
 -- Edit Mode: an outline stands over the buttons; drag it to move them, right-click to put
@@ -561,6 +675,7 @@ local function BuildMover()
         GameTooltip:Show()
     end)
     mover:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+    mover:HookScript("OnHide", function(self) R.Interact.HideTip(self) end)   -- Edit Mode closing under the pointer
 end
 
 function EditModeActive()

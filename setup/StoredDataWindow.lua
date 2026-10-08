@@ -55,15 +55,7 @@ local function Btn(parent, label, w, onClick, tooltip)
     b:SetSize(w, 24)
     b:SetText(label)
     b:SetScript("OnClick", onClick)
-    if tooltip then
-        b:SetScript("OnEnter", function(self)
-            GameTooltip:SetOwner(self, "ANCHOR_TOP")
-            GameTooltip:SetText(label, 1, 1, 1)
-            GameTooltip:AddLine(tooltip, nil, nil, nil, true)
-            GameTooltip:Show()
-        end)
-        b:SetScript("OnLeave", GameTooltip_Hide)
-    end
+    if tooltip then R.Interact.Tip(b, label, tooltip) end
     Skin("Button", b)
     Skin("StateButtonLabel", b)
     return b
@@ -461,12 +453,9 @@ end
 ---------------------------------------------------------------------------
 local function AskScan()
     if InCombatLockdown() then R.Print("that has to wait until you're out of combat.") return end
-    StaticPopupDialogs.TWICHUI_DATA_SCAN = {
-        text = "Find which data each addon keeps? Your UI reloads once and this window opens again. Nothing is changed, copied or sent.",
-        button1 = ACCEPT, button2 = CANCEL, OnAccept = function() SD.Scan() end,
-        timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3,
-    }
-    StaticPopup_Show("TWICHUI_DATA_SCAN")
+    R.Interact.Confirm("TWICHUI_DATA_SCAN",
+        "Find which data each addon keeps? Your UI reloads once and this window opens again. Nothing is changed, copied or sent.",
+        function() SD.Scan() end, { combat = true })
 end
 
 local function Build()

@@ -23,6 +23,7 @@ libs\LibDeflate\LibDeflate.lua
 
 # Core
 Core.lua
+modules\Interact.lua
 modules\QuietLogin.lua
 modules\Media.lua
 modules\AuctionatorSkin.lua
@@ -79,9 +80,6 @@ modules\Training.lua
 # Battle.net friend login card (replaces the game's friend-online pop-up; uses the arrival card's look)
 modules\FriendLogin.lua
 
-# TEMPORARY friend login diagnostics (off until /tui frienddiag; remove once the card is confirmed in the game)
-modules\FriendLoginDiag.lua
-
 # Border textures for TwichUI's own frames (plain, LibSharedMedia, EllesmereUI's)
 modules\Borders.lua
 
@@ -109,5 +107,15 @@ qol\Resurrect.lua
 qol\ReleasePvP.lua
 qol\Duels.lua
 qol\QuickKeybind.lua
+
+# Troubleshooting: one report to copy and optional temporary tracing (/tui diagnostics). Local only; off until asked for.
+diag\Diagnostics.lua
+diag\Environment.lua
+diag\Notifications.lua
+diag\Friends.lua
+diag\Food.lua
+diag\Zones.lua
+diag\Sharing.lua
+diag\Window.lua
 
 Settings.lua

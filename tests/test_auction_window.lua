@@ -165,7 +165,7 @@ env.TwichUI = {
   Enabled = function(_, key) return not (env.DISABLED or {})[key] end,
 }
 local function Emit(e, ...) for _, fn in ipairs(listeners[e] or {}) do fn(...) end end
-for _, file in ipairs({ "chronicle/Style.lua", "auction/Price.lua", "auction/Scan.lua", "auction/Window.lua" }) do
+for _, file in ipairs({ "modules/Interact.lua", "chronicle/Style.lua", "auction/Price.lua", "auction/Scan.lua", "auction/Window.lua" }) do
   local chunk = assert(loadfile(ROOT .. file)); setfenv(chunk, env); chunk("!!!TwichUI", {})
 end
 local A, SC = env.TwichUI.AuctionWindow, env.TwichUI.AuctionScan

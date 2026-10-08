@@ -9,7 +9,7 @@ local ROOT = ROOT
 local FILES = {
  "libs/LibStub/LibStub.lua","libs/CallbackHandler-1.0/CallbackHandler-1.0.lua","libs/LibSharedMedia-3.0/LibSharedMedia-3.0.lua",
  "libs/AceComm-3.0/ChatThrottleLib.lua","libs/AceComm-3.0/AceComm-3.0.lua","libs/LibSerialize/LibSerialize.lua","libs/LibDeflate/LibDeflate.lua",
- "Core.lua","modules/QuietLogin.lua","modules/Media.lua","modules/AuctionatorSkin.lua","setup/PackFile.lua","setup/Setups.lua","setup/Ellesmere.lua","setup/Share.lua","setup/Group.lua","setup/CommTest.lua","setup/Restore.lua","setup/Portable.lua","chronicle/Data.lua","chronicle/Filter.lua","chronicle/Recorder.lua","chronicle/Broker.lua",
+ "Core.lua","modules/Interact.lua","modules/QuietLogin.lua","modules/Media.lua","modules/AuctionatorSkin.lua","setup/PackFile.lua","setup/Setups.lua","setup/Ellesmere.lua","setup/Share.lua","setup/Group.lua","setup/CommTest.lua","setup/Restore.lua","setup/Portable.lua","chronicle/Data.lua","chronicle/Filter.lua","chronicle/Recorder.lua","chronicle/Broker.lua",
 }
 NET = {}   -- queued deliveries {toEnv, prefix, text, sender}
 function MakeClient(charName, addons)
@@ -21,6 +21,7 @@ function MakeClient(charName, addons)
     local fr = {events = {}, scripts = {}, hooks = {}}
     function fr:RegisterEvent(e) self.events[e] = true end
     function fr:UnregisterEvent(e) self.events[e] = nil end
+    function fr:IsEventRegistered(e) return self.events[e] == true end
     function fr:UnregisterAllEvents() self.events = {} end
     function fr:SetScript(n, fn) self.scripts[n] = fn; if n == "OnUpdate" then UPDATERS[self] = fn end end
     function fr:GetScript(n) return self.scripts[n] end

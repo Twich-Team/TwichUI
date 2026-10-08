@@ -191,10 +191,29 @@ function S.Button(parent, label, w, kind, onClick)
         idle = { K.bronzeLo, { 0.115, 0.088, 0.066 }, K.textDim }
         hot  = { K.bronze, { 0.15, 0.115, 0.085 }, K.text }
     end
-    Tint(b, idle[1], idle[2], idle[3])
-    b:SetScript("OnEnter", function(self) Tint(self, hot[1], hot[2], hot[3]) end)
-    b:SetScript("OnLeave", function(self) Tint(self, idle[1], idle[2], idle[3]) end)
+    -- Resting, under the pointer, pressed (a little darker, the label a pixel lower) and disabled
+    -- (muted, and the pointer does nothing to it).
+    local over, down = false, false
+    local function Paint()
+        if not b:IsEnabled() then
+            Tint(b, K.bronzeLo, K.well, K.stone)
+            b.text:SetPoint("CENTER", 0, 0)
+            return
+        end
+        local look = over and hot or idle
+        Tint(b, look[1], look[2], look[3])
+        if down then b:SetBackdropColor(look[2][1] * 0.7, look[2][2] * 0.7, look[2][3] * 0.7, 1) end
+        b.text:SetPoint("CENTER", 0, down and -1 or 0)
+    end
+    b:SetScript("OnEnter", function() over = true; Paint() end)
+    b:SetScript("OnLeave", function() over, down = false, false; Paint() end)
+    b:SetScript("OnMouseDown", function() down = true; Paint() end)
+    b:SetScript("OnMouseUp", function() down = false; Paint() end)
+    b:SetScript("OnEnable", Paint)
+    b:SetScript("OnDisable", Paint)
+    b:SetScript("OnHide", function() over, down = false, false end)
     b:SetScript("OnClick", onClick)
+    Paint()
     return b
 end
 

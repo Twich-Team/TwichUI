@@ -228,6 +228,20 @@ function G.WhisperStatus()
 end
 
 local probing
+
+-- For /tui diagnostics: the direct-message check's state, with no names. Reads only.
+function G.Snapshot()
+    local p = TwichUIDB and TwichUIDB.whisperProbe
+    local peers = 0
+    for _ in pairs(G.peers) do peers = peers + 1 end
+    return {
+        realmless = SH.Realmless(), groupCheck = Enabled(), peers = peers, probing = probing ~= nil,
+        recorded = type(p) == "table", sameBuild = type(p) == "table" and p.build == Build() or false,
+        ok = type(p) == "table" and p.ok == true or false,
+        ageDays = type(p) == "table" and type(p.at) == "number" and math.floor((time() - p.at) / 86400) or nil,
+    }
+end
+
 function G:MaybeProbe()
     if probing or not Enabled() or not SH.Realmless() then return end
     local p = TwichUIDB.whisperProbe

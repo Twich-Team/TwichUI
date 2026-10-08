@@ -36,25 +36,16 @@ local function Help(parent, text, y)
     return fs
 end
 
-local function Tip(frame, title, text)
-    frame:SetScript("OnEnter", function(self)
-        GameTooltip:SetOwner(self, "ANCHOR_TOP")
-        GameTooltip:SetText(title, 1, 1, 1)
-        GameTooltip:AddLine(type(text) == "function" and text() or text, nil, nil, nil, true)
-        GameTooltip:Show()
-    end)
-    frame:SetScript("OnLeave", GameTooltip_Hide)
-end
+-- Tooltips come from modules/Interact.lua; text may be a function giving the text and a reason the
+-- control is unavailable.
+local function Tip(frame, title, text) R.Interact.Tip(frame, title, text) end
 
 local function Btn(parent, label, w, onClick, tooltip)
     local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
     b:SetSize(w, 22)
     b:SetText(label)
     b:SetScript("OnClick", onClick)
-    if tooltip then
-        b:SetMotionScriptsWhileDisabled(true)
-        Tip(b, label, tooltip)
-    end
+    if tooltip then Tip(b, label, tooltip) end
     return b
 end
 
@@ -111,8 +102,17 @@ local function CommitWeight(row)
     elseif value and value >= 0 and value <= 1000 then
         P.SetWeight(classFile, editTree, row.stat, value ~= default and value or nil)
     else
-        R.Print("stat weights are numbers from 0 to 1000.")
+        R.Print("%s needs a number from 0 to 1000; \"%s\" wasn't used.", EDITOR_LABEL[row.stat] or E.Label(row.stat), text:sub(1, 20))
         GW:Refresh()
+    end
+end
+
+-- A box still being typed in belongs to the tree it was typed for: let go of it (which keeps what
+-- was typed, as leaving a box always does) before the tree, the way of valuing stats, or a reset
+-- can change under it.
+local function FinishEditing()
+    for _, row in ipairs(weights.rows or {}) do
+        if row.edit:HasFocus() then row.edit:ClearFocus() end
     end
 end
 
@@ -157,12 +157,8 @@ local WEIGHTS_HELP = "What one point of each stat is worth, next to the tree's m
 local PRIORITY_HELP = "Rank the stats your guide lists, most important first. Each counts %d%% as much as the one above it, and stats you leave out count nothing. Weapon damage and armor keep this tree's weights."
 local PRIORITY_SIDE = 166      -- room for the buttons beside the ranked list
 
-local function Confirm(key, text, onAccept)
-    StaticPopupDialogs[key] = {
-        text = text, button1 = ACCEPT, button2 = CANCEL, OnAccept = onAccept,
-        timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3,
-    }
-    StaticPopup_Show(key)
+local function Confirm(key, text, onAccept, opts)
+    return R.Interact.Confirm(key, text, onAccept, opts)
 end
 
 local function Panel(p, y)
@@ -216,12 +212,13 @@ local function AddStat(stat)
 end
 
 -- Replaces the list with the stats this tree's weights value most.
-local function StartFromWeights()
-    local tree = TreeDef(editTree)
+local function StartFromWeights(skillLine)
+    skillLine = skillLine or editTree
+    local tree = TreeDef(skillLine)
     local who = D.Character()
     local _, classFile = UnitClass("player")
     if not tree then return end
-    P.SetPriority(classFile, editTree, W.PriorityFromWeights(D.BaseWeights(classFile, tree.def), who and who.ratingScale))
+    P.SetPriority(classFile, skillLine, W.PriorityFromWeights(D.BaseWeights(classFile, tree.def), who and who.ratingScale))
 end
 
 -- A menu of the stats not ranked yet, grouped like the weights editor.
@@ -287,6 +284,7 @@ end
 local function SetMode(mode)
     local _, classFile = UnitClass("player")
     -- The first time, start the list from the tree's weights.
+    FinishEditing()
     if mode == "priority" and not P.Priority(classFile, editTree) then StartFromWeights() end
     P.SetUsesPriority(classFile, editTree, mode == "priority")
 end
@@ -305,6 +303,7 @@ local function Build(p)
         for _, tree in ipairs(trees or {}) do
             local label = tree.skillLine == using and (tree.name .. " (in use)") or tree.name
             root:CreateRadio(label, function() return editTree == tree.skillLine end, function()
+                FinishEditing()
                 editTree = tree.skillLine
                 GW:Refresh()
             end)
@@ -327,13 +326,33 @@ local function Build(p)
     end)
     weights.mode:SetPoint("LEFT", modeLabel, "RIGHT", 10, 0)
 
+    -- The tree is fixed when the question is asked: picking another tree while it is open must not
+    -- change what is reset.
+    local function TreeNote(skillLine)
+        local tree = TreeDef(skillLine)
+        local className = UnitClass("player")
+        return tree and ("%s (%s)"):format(tree.name, className or "your class") or "this tree"
+    end
+    local function StillThere(skillLine)
+        return function()
+            if not TreeDef(skillLine) then return false, "That talent tree isn't available any more, so nothing was changed." end
+            return true
+        end
+    end
     weights.reset = Btn(p, "Reset weights", 120, function()
         local _, classFile = UnitClass("player")
-        if not editTree then return end
-        Confirm("TWICHUI_GEAR_RESET", "Put every stat weight of this tree back to TwichUI's defaults?", function()
-            P.ResetWeights(classFile, editTree)
-        end)
-    end, "Puts every stat weight of this tree back to TwichUI's defaults.")
+        local tree = editTree
+        if not tree then return end
+        FinishEditing()
+        Confirm("TWICHUI_GEAR_RESET", ("Put every stat weight for %s back to TwichUI's defaults?\n\nThe numbers you entered for this tree are lost. Other trees aren't changed. This can't be undone."):format(TreeNote(tree)),
+            function()
+                FinishEditing()
+                P.ResetWeights(classFile, tree)
+            end, { valid = StillThere(tree) })
+    end, function()
+        local custom = editTree and P.CustomWeights(select(2, UnitClass("player")), editTree)
+        return "Puts every stat weight of this tree back to TwichUI's defaults.", not (custom and next(custom)) and "No weight has been changed for this tree." or nil
+    end)
     weights.reset:SetPoint("TOPRIGHT", -16, TOP - 72)
     weights.help = Help(p, "", TOP - 72)
     weights.help:SetWidth(WIDTH - 32 - 130)
@@ -364,20 +383,27 @@ local function Build(p)
     priority.empty:SetPoint("TOPLEFT", 14, -14)
     priority.empty:SetWidth(WIDTH - 70 - PRIORITY_SIDE - 16)
     priority.empty:SetText("No stats ranked yet. Add the stats your guide lists, most important first, or start from this tree's weights. Until then, this tree is valued by its weights.")
-    priority.add = Btn(priority.box, "Add a stat", 150, function(self) AddMenu(self) end,
-        "Pick a stat to add at the bottom of the list.")
+    priority.add = Btn(priority.box, "Add a stat", 150, function(self) AddMenu(self) end, function()
+        return "Pick a stat to add at the bottom of the list.", #RankedCopy() >= #priority.rows and "Every stat is already on the list." or nil
+    end)
     priority.add:SetPoint("TOPRIGHT", -8, -8)
     priority.fill = Btn(priority.box, "Start from weights", 150, function()
         if #RankedCopy() == 0 then StartFromWeights() return end
-        Confirm("TWICHUI_GEAR_FILL", "Replace your stat priority for this tree with the stats its weights value most?", StartFromWeights)
+        local tree = editTree
+        Confirm("TWICHUI_GEAR_FILL", ("Replace your stat priority for %s with the stats its weights value most?\n\nThe list you ranked is lost. This can't be undone."):format(TreeNote(tree)),
+            function() StartFromWeights(tree) end, { valid = StillThere(tree) })
     end, "Replaces the list with the stats this tree's weights value most, as a starting point.")
     priority.fill:SetPoint("TOP", priority.add, "BOTTOM", 0, -6)
     priority.clear = Btn(priority.box, "Clear list", 150, function()
-        Confirm("TWICHUI_GEAR_CLEAR", "Clear your stat priority for this tree?", function()
-            local _, classFile = UnitClass("player")
-            P.SetPriority(classFile, editTree, nil)
-        end)
-    end, "Removes every stat, to build the list from your guide.")
+        local tree = editTree
+        Confirm("TWICHUI_GEAR_CLEAR", ("Clear your stat priority for %s?\n\nUntil you rank stats again, this tree is valued by its weights. This can't be undone."):format(TreeNote(tree)),
+            function()
+                local _, classFile = UnitClass("player")
+                P.SetPriority(classFile, tree, nil)
+            end, { valid = StillThere(tree) })
+    end, function()
+        return "Removes every stat, to build the list from your guide.", #RankedCopy() == 0 and "The list is already empty." or nil
+    end)
     priority.clear:SetPoint("TOP", priority.fill, "BOTTOM", 0, -6)
 
     -- Shown instead of everything above for a class without weights.

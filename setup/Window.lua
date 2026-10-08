@@ -75,16 +75,8 @@ local function Btn(parent, label, w, onClick, tooltip)
     b:SetSize(w, 24)
     b:SetText(label)
     b:SetScript("OnClick", onClick)
-    if tooltip then
-        b:SetMotionScriptsWhileDisabled(true)
-        b:SetScript("OnEnter", function(self)
-            GameTooltip:SetOwner(self, "ANCHOR_TOP")
-            GameTooltip:SetText(label, 1, 1, 1)
-            GameTooltip:AddLine(type(tooltip) == "function" and tooltip() or tooltip, nil, nil, nil, true)
-            GameTooltip:Show()
-        end)
-        b:SetScript("OnLeave", GameTooltip_Hide)
-    end
+    -- tooltip: text, or a function giving the text and, when the button can't be used now, the reason
+    if tooltip then R.Interact.Tip(b, label, tooltip) end
     Skin("Button", b)
     Skin("StateButtonLabel", b)
     return b
@@ -188,12 +180,9 @@ local function FinishList(box, count, emptyText)
     box.empty:SetText(count == 0 and emptyText or "")
 end
 
-local function Confirm(key, text, onAccept)
-    StaticPopupDialogs[key] = {
-        text = text, button1 = ACCEPT, button2 = CANCEL, OnAccept = onAccept,
-        timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3,
-    }
-    StaticPopup_Show(key)
+-- See modules/Interact.lua: names what changes, accepts once, and can recheck the target on accepting.
+local function Confirm(key, text, onAccept, opts)
+    return R.Interact.Confirm(key, text, onAccept, opts)
 end
 
 local function NoCombat()
@@ -240,7 +229,7 @@ local POPUP_LIST_W = POPUP_W - 32
 
 local function AskScan()
     if not NoCombat() then return end
-    Confirm("TWICHUI_FIND", "Scan your installed addons for their settings? Your UI reloads once. Nothing is saved or sent by scanning.", function() ST:FindSettings() end)
+    Confirm("TWICHUI_FIND", "Scan your installed addons for their settings? Your UI reloads once. Nothing is saved or sent by scanning.", function() ST:FindSettings() end, { combat = true })
 end
 
 -- Addons ticked, their size, and how many were found.
@@ -487,7 +476,12 @@ local function BuildParty()
     gp.help:SetText(GOLD .. "What it does|r\nShows which TwichUI version each person in your party or raid runs, and which of the addons you recommend they're missing. It only runs when you press Check this party.\n\n"
         .. GOLD .. "What it sends|r\nYour TwichUI version and the names and folders of your recommended addons, over the hidden party or raid addon channel (no chat text). Each reply carries only that person's TwichUI version and which of those addons they lack.\n\n"
         .. GOLD .. "What it needs|r\nEveryone must run TwichUI with \"Version and group check\" turned on. Once it's on, TwichUI also says hello with its version when you join a group, and may test once per game build whether direct messages work again.")
-    gp.run = Btn(gp, "Check this party", 150, function() R.Group:RunCheck(true); W:Refresh() end)
+    gp.run = Btn(gp, "Check this party", 150, function() R.Group:RunCheck(true); W:Refresh() end, function()
+        local why
+        if not R:Enabled("groupCheck") then why = "Version and group check is turned off in the options."
+        elseif not IsInGroup() then why = "Join a group first." end
+        return "Asks the other TwichUI users in your group for their version, over the group channel only. Nobody else sees it.", why
+    end)
     gp.run:SetPoint("TOPLEFT", 16, -222)
     gp.enable = Btn(gp, "Turn on group check", 170, function()
         TwichUIDB.modules.groupCheck = true
@@ -595,9 +589,9 @@ local function BuildShare(p)
     mine.saved:SetPoint("TOPLEFT", 16, -182)
     mine.saved:SetWidth(WIDTH - 120)
     mine.delete = Btn(p, "Delete", 70, function()
-        Confirm("TWICHUI_DELETE_MINE", "Delete your saved setup?\n\nFriends keep the copy they already have. You can save a new one any time.", function()
+        Confirm("TWICHUI_DELETE_MINE", "Delete your saved setup?\n\nFriends keep the copy they already have. This can't be undone, but you can save a new one any time.", function()
             ST:DeleteMine(); W:Refresh()
-        end)
+        end, { accept = DELETE })
     end)
     mine.delete:SetPoint("TOPRIGHT", -16, -177)
     mine.recommend = Btn(p, "Recommend addons to friends", 220, function() W:ShowRecommend() end,
@@ -633,7 +627,9 @@ local function BuildShare(p)
         if not ok then R.Print(why) end
         mine.name:ClearFocus()
         W:Refresh()
-    end, "They get a prompt to accept. After the first time, only the addons you changed are sent again.")
+    end, function()
+        return "They get a prompt to accept. After the first time, only the addons you changed are sent again.", mine.sendWhy
+    end)
     mine.send:SetPoint("LEFT", mine.target, "RIGHT", 8, 0)
     mine.cancel = Btn(p, "Stop", 70, function() SH:CancelSend() end)
     mine.cancel:SetPoint("LEFT", mine.send, "RIGHT", 8, 0)
@@ -657,7 +653,9 @@ local function BuildShare(p)
         local ok, why = SH:SendToSelf()
         if not ok then R.Print(why) end
         W:Refresh()
-    end, "A rehearsal, not a send to someone else: sends your setup to your own character through the real in-game channel, so you get the accept prompt, the progress bars and the received copy under Received setups, exactly like a friend would.")
+    end, function()
+        return "A rehearsal, not a send to someone else: sends your setup to your own character through the real in-game channel, so you get the accept prompt, the progress bars and the received copy under Received setups, exactly like a friend would.", mine.testWhy
+    end)
     mine.selfTest:SetPoint("TOPLEFT", 16, -428)
     mine.channels = Btn(p, "Sending options", 130, function() W:ShowChannels() end,
         "Choose how setups are sent: Direct to one character, over your Party, or over your Guild.")
@@ -707,6 +705,11 @@ local function RefreshShare()
     local busy = o and (o.stage == "offered" or o.stage == "packing" or o.stage == "sending" or o.stage == "delivered")
     mine.send:SetEnabled(m ~= nil and not busy and mine.name:GetText() ~= "")
     mine.selfTest:SetEnabled(m ~= nil and not busy)
+    -- Why a button is dimmed, for its tooltip.
+    mine.testWhy = (not m and "Save your setup first.") or (busy and ("Already sending to " .. SH.Short(o.target) .. ". Stop that first.")) or nil
+    mine.sendWhy = mine.testWhy or (mine.name:GetText() == "" and "Type your friend's name first.") or nil
+    R.Interact.RefreshTip(mine.send)
+    R.Interact.RefreshTip(mine.selfTest)
     mine.cancel:SetShown(busy and true or false)
     mine.bar:SetShown(o ~= nil)
     if not o then
@@ -1013,9 +1016,8 @@ local function BuildEuiImport()
     ip.go = Btn(ip, "Import as a new profile", 200, function()
         local plan, pack = ip.plan, ST.SourcePack(ip.sourceKey)
         if not (plan and plan.ok and pack) or not NoCombat() then return end
-        -- StaticPopup formats its text, so keep any % in names literal.
         local text = ("Import %s's profile \"%s\" as a new EllesmereUI profile named \"%s\" and switch to it?\n\n\"%s\" and your other profiles stay as they are. Your UI reloads."):format(
-            plan.from, plan.sourceName, plan.dest, plan.active or "?"):gsub("%%", "%%%%")
+            plan.from, plan.sourceName, plan.dest, plan.active or "?")
         Confirm("TWICHUI_EUI_IMPORT", text, function()
             local ok, report = ES.Apply(pack, plan.from, plan.dest)
             if not ok then
@@ -1025,7 +1027,13 @@ local function BuildEuiImport()
                 return
             end
             ReloadUI()
-        end)
+        end, {
+            combat = true,
+            valid = function()
+                if ST.SourcePack(ip.sourceKey) ~= pack then return false, "That setup is no longer here, so nothing was imported." end
+                return true
+            end,
+        })
     end, "Adds the profile to EllesmereUI under the name shown, then reloads. Nothing you have is replaced.")
     ip.go:SetPoint("BOTTOMLEFT", 16, 12)
     ip.close = Btn(ip, "Close", 80, function() ip:Hide() end)
@@ -1063,6 +1071,18 @@ local function CurrentSource()
     if #sources == 0 then return nil, sources end
     if sourceIndex > #sources then sourceIndex = 1 end
     return sources[sourceIndex], sources
+end
+
+-- For a confirmation: still the same setup that was on screen when the question was asked?
+-- A friend's newer copy may have arrived, or it may have been deleted, while the question was open.
+local function SameSetup(src)
+    local stamp = src.pack and src.pack.created
+    return function()
+        local pack = ST.SourcePack(src.key)
+        if not pack then return false, "That setup is no longer here, so nothing was applied." end
+        if pack.created ~= stamp then return false, "That setup was replaced by a newer one while you were deciding, so nothing was applied. Review it again." end
+        return true
+    end
 end
 
 local function SelectedNames(src)
@@ -1104,8 +1124,16 @@ end
 
 local function AskUndo()
     if not NoCombat() then return end
-    Confirm("TWICHUI_UNDO", "Put back the settings you had on this character before the last apply or restore? Your UI reloads.",
-        function() ST:Queue("undo", ST:BackupNames(), nil) end)
+    local count = #ST:BackupNames()
+    Confirm("TWICHUI_UNDO", ("Put back the settings you had on this character before the last apply or restore (%d %s)? What you have now for them is replaced and not kept. Your UI reloads."):format(
+        count, count == 1 and "addon" or "addons"),
+        function() ST:Queue("undo", ST:BackupNames(), nil) end, {
+            combat = true,
+            valid = function()
+                if not ST:HasBackup() then return false, "There is nothing left to put back, so nothing was changed." end
+                return true
+            end,
+        })
 end
 
 local function OpenRecommended()
@@ -1150,9 +1178,9 @@ local function BuildGet(p)
     get.remove = Btn(p, "Delete", 80, function()
         local src = CurrentSource()
         if src and src.key ~= "file" then
-            Confirm("TWICHUI_REMOVE", ("Delete the setup from %s?\n\nSettings you already applied stay. They can send it again if you want it back."):format(src.from), function()
+            Confirm("TWICHUI_REMOVE", ("Delete the setup from %s?\n\nSettings you already applied stay. This can't be undone, but they can send it again if you want it back."):format(src.from), function()
                 ST:RemoveReceived(src.key:match("^recv:(.+)$")); sourceIndex = 1; reviewing = false; W:Refresh()
-            end)
+            end, { accept = DELETE })
         end
     end, "Removes this received setup from your saved data. Settings you already applied stay.")
     get.remove:SetPoint("TOPRIGHT", -16, -52)
@@ -1202,9 +1230,8 @@ local function BuildGet(p)
         local names = SelectedNames(src)
         local preview = Preview(src)
         if #names == 0 or not preview then R.Print("nothing ticked.") return end
-        -- StaticPopup formats its text, so keep any % in names literal.
-        local text = ("Apply %s's setup?\n\n%s\n\nYour UI reloads."):format(src.from, preview):gsub("%%", "%%%%")
-        Confirm("TWICHUI_APPLY", text, function() ST:Queue("apply", names, src.key) end)
+        local text = ("Apply %s's setup to this character?\n\n%s\n\nYour UI reloads."):format(src.from, preview)
+        Confirm("TWICHUI_APPLY", text, function() ST:Queue("apply", names, src.key) end, { combat = true, valid = SameSetup(src) })
     end, "Replaces your settings for the ticked addons with this setup. You see what changes and confirm first; your current settings are backed up.")
     get.apply:SetPoint("TOPLEFT", 16, -392)
     get.addonsBtnR = Btn(p, "Recommended addons", 210, OpenRecommended,
@@ -1215,8 +1242,8 @@ local function BuildGet(p)
     get.em:SetPoint("LEFT", get.addonsBtnR, "RIGHT", 8, 0)
     get.alt = Btn(p, "Use profiles already applied on another character", 340, function()
         local src = CurrentSource(); if not src or not NoCombat() then return end
-        Confirm("TWICHUI_ALT", "Switch this character to the shared setup's profiles? Nothing is copied again. Your UI reloads.",
-            function() ST:Queue("alt", SelectedNames(src), src.key) end)
+        Confirm("TWICHUI_ALT", ("Switch this character to the profiles from %s's setup? Nothing is copied again; this character just uses the same profiles. This isn't backed up, so Undo can't reverse it. Your UI reloads."):format(src.from),
+            function() ST:Queue("alt", SelectedNames(src), src.key) end, { combat = true, valid = SameSetup(src) })
     end, "Already applied this setup on another of your characters? This points this character at the same profiles without copying anything.")
     get.alt:SetPoint("TOPLEFT", 16, -424)
     get.undoR = Btn(p, "Undo last change", 150, AskUndo,
@@ -1538,7 +1565,12 @@ local function BuildTransfer()
         R.Print("backup \"%s\" imported (%d addons). It hasn't been applied; use Restore on the Backups page when you want it.", point.name, ST.CountAddons(point))
         CloseTransfer()
         W:Refresh()
-    end, "Adds the backup to your Backups list. It does not restore it or change your current settings.")
+    end, function()
+        local why
+        if not tp.result then why = "Check the backup first."
+        elseif tp.result.blocked then why = tp.result.blocked end
+        return "Adds the backup to your Backups list. It does not restore it or change your current settings.", why
+    end)
     tp.importBtn:SetPoint("RIGHT", tp.check, "LEFT", -8, 0)
     tp.cancel = Btn(tp, "Cancel", 80, CloseTransfer)
     tp.cancel:SetPoint("RIGHT", tp.importBtn, "LEFT", -8, 0)
@@ -1616,7 +1648,7 @@ local function BuildBackups(p)
     rp.hint = Text(rp.name, "GameFontDisableSmall")
     rp.hint:SetPoint("LEFT", 6, 0)
     rp.hint:SetText("Name (optional), e.g. before EllesmereUI rework")
-    rp.create = Btn(p, "Create backup", 150, function()
+    local function CreateBackup()
         local status, why = R.Restore:Create(rp.name:GetText())
         if status == "created" then
             R.Print("backup \"%s\" saved (%d addons).", why.name, ST.CountAddons(why))
@@ -1625,6 +1657,12 @@ local function BuildBackups(p)
             R.Print(why)
         end
         W:Refresh()
+    end
+    rp.create = Btn(p, "Create backup", 150, function()
+        if ST.capture then CreateBackup() return end
+        -- Without this session's scan the backup is finished after a reload; say so before reloading.
+        Confirm("TWICHUI_RP_CREATE", "Save a backup of the addons chosen in Share setup?\n\nYour UI reloads once so TwichUI can read your settings exactly as they're saved. Nothing is changed, sent or applied.",
+            CreateBackup, { combat = true })
     end, function()
         return ST.capture and "Saves the ticked addons' settings from this session's scan."
             or "Reloads your UI once to read your settings exactly as they're saved, then saves the backup."
@@ -1665,9 +1703,9 @@ local function RestoreRow(i)
     r.detail:SetWidth(380)
     r.del = Btn(r, "Delete", 70, function(b)
         local point = b.point
-        Confirm("TWICHUI_RP_DELETE", ("Delete backup \"%s\"?\n\nYou won't be able to go back to it."):format(point.name:gsub("%%", "%%%%")), function()
+        Confirm("TWICHUI_RP_DELETE", ("Delete backup \"%s\" (%d addons)?\n\nThis can't be undone: you won't be able to go back to it."):format(point.name, ST.CountAddons(point)), function()
             R.Restore:Delete(point.id); W:Refresh()
-        end)
+        end, { accept = DELETE })
     end)
     r.del:SetPoint("RIGHT", -6, 0)
     r.go = Btn(r, "Restore", 80, function(b)
@@ -1680,8 +1718,14 @@ local function RestoreRow(i)
                 break
             end
         end
-        Confirm("TWICHUI_RP_RESTORE", ("Go back to \"%s\"?%s\n\nYour current settings for these addons are saved first, so you can Undo from Backups or Received setups. Your UI reloads."):format(point.name:gsub("%%", "%%%%"), eui),
-            function() R.Restore:Restore(point.id) end)
+        Confirm("TWICHUI_RP_RESTORE", ("Go back to \"%s\" (%d addons)?%s\n\nYour current settings for these addons are saved first, so you can Undo from Backups or Received setups. Your UI reloads."):format(point.name, ST.CountAddons(point), eui),
+            function() R.Restore:Restore(point.id) end, {
+                combat = true,
+                valid = function()
+                    if not R.Restore.Get(point.id) then return false, "That backup is no longer there, so nothing was restored." end
+                    return true
+                end,
+            })
     end)
     r.go:SetPoint("RIGHT", r.del, "LEFT", -6, 0)
     r.export = Btn(r, "Export", 70, function(b) W:ExportBackup(b.point) end,
@@ -2076,11 +2120,11 @@ local function StorageRow(i)
     r.size:SetJustifyH("RIGHT")
     r.del = Btn(r, "Delete", 70, function(b)
         local item = b.item
-        Confirm("TWICHUI_DELETE", ("Delete %s?\n\n%s"):format(item.label, item.warn or ""), function()
+        Confirm("TWICHUI_DELETE", ("Delete %s?\n\n%s"):format(item.label, item.warn or "This can't be undone."), function()
             item.remove()
             W:ShowStorage()
             W:Refresh()
-        end)
+        end, { accept = DELETE })
     end)
     r.del:SetPoint("RIGHT", -6, 0)
     sp.rows[i] = r
