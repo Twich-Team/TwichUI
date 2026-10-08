@@ -56,6 +56,7 @@ local DEFAULT_MODULES = {
     qolReleasePvP = false,   -- ... release your spirit after dying in a battleground
     qolDuels = false,        -- ... decline duel requests (except from the people you choose)
     qolDuelsToDeath = false, -- ... and duels to the death (needs the one above)
+    qolQuickKeybind = false, -- ... a Quick Keybind button in the Game Menu
 }
 R.DEFAULT_MODULES = DEFAULT_MODULES   -- Settings.lua uses these for the panel's Defaults button
 

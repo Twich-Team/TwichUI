@@ -69,7 +69,7 @@ c.StaticPopupDialogs = {}; c.StaticPopup_Show = function() end
 for _, f in ipairs({ "gear/Weights.lua", "gear/Evaluate.lua", "gear/Prefs.lua", "gear/Data.lua",
   "gear/Hints.lua", "gear/Tooltip.lua", "gear/Bags.lua", "gear/Window.lua", "modules/Arrival.lua", "modules/Media.lua", "modules/FriendLogin.lua", "modules/Borders.lua", "modules/FoodDrink.lua",
   "modules/TrainingData.lua", "modules/Borders.lua", "modules/MenuStyle.lua", "modules/SpellMenu.lua", "modules/MageTravel.lua", "modules/MageConjure.lua",
-  "qol/QoL.lua", "qol/Summons.lua", "qol/Resurrect.lua", "qol/ReleasePvP.lua", "qol/Duels.lua", "Settings.lua" }) do
+  "qol/QoL.lua", "qol/Summons.lua", "qol/Resurrect.lua", "qol/ReleasePvP.lua", "qol/Duels.lua", "qol/QuickKeybind.lua", "Settings.lua" }) do
   local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
 end
 c.LOADED["!!!TwichUI"] = true; c.FireEvent("ADDON_LOADED", "!!!TwichUI")
@@ -81,7 +81,7 @@ for key, default in pairs(defaults) do
   n = n + 1
   assert(default == R.DEFAULT_MODULES[key], key .. " default matches a new install")
 end
-assert(n == 41, "every module has a toggle: " .. n)
+assert(n == 42, "every module has a toggle: " .. n)
 assert(defaults.arrival == true and defaults.arrivalSubzones == true and defaults.arrivalReducedMotion == false,
   "arrival card and subzone cards on; reduced motion opt-in")
 assert(defaults.arrivalDungeons == true, "dungeon and raid arrival cards on by default")
@@ -191,7 +191,7 @@ for variable, page in pairs({
   TWICHUI_qolSummons = "Quality of life", TWICHUI_qolSummonsFrom = "Quality of life", TWICHUI_qolSummonsWait = "Quality of life",
   TWICHUI_qolResurrect = "Quality of life", TWICHUI_qolResurrectCombat = "Quality of life", TWICHUI_qolReleasePvP = "Quality of life",
   TWICHUI_qolReleaseWait = "Quality of life", TWICHUI_qolDuels = "Quality of life", TWICHUI_qolDuelsFrom = "Quality of life",
-  TWICHUI_qolDuelsToDeath = "Quality of life",
+  TWICHUI_qolDuelsToDeath = "Quality of life", TWICHUI_qolQuickKeybind = "Quality of life",
   TWICHUI_foodDrink = "Food and drink", TWICHUI_foodDrinkFood = "Food and drink", TWICHUI_foodDrinkDrink = "Food and drink",
   TWICHUI_mageTravel = "Mage", TWICHUI_mageTravelText = "Mage", TWICHUI_mageConjure = "Mage", TWICHUI_mageConjureText = "Mage",
   TWICHUI_attuneSkin = "Addon skins", TWICHUI_whatsTrainingSkin = "Addon skins",
@@ -340,7 +340,7 @@ assert(rows["Addon skins"].data.name:find("of") or rows["Addon skins"].data.name
 
 -- Quality of life: everything is opt-in, there is no "requested invites" row (the game's interface
 -- for it isn't in Forever), choices read and write the saved options, and the waits are advanced.
-for _, key in ipairs({ "qolSummons", "qolResurrect", "qolResurrectCombat", "qolReleasePvP", "qolDuels", "qolDuelsToDeath" }) do
+for _, key in ipairs({ "qolSummons", "qolResurrect", "qolResurrectCombat", "qolReleasePvP", "qolDuels", "qolDuelsToDeath", "qolQuickKeybind" }) do
   assert(defaults[key] == false, key .. " is off by default")
 end
 for variable in pairs(variables) do assert(not variable:lower():find("invite"), variable .. ": no invite setting") end
@@ -367,7 +367,7 @@ c.TwichUIDB.modules.qolSummons = false; summonToggle.setting.changed(); assert(n
 local qolRow = assert(rows["Quality of life"], "overview has a Quality of life row")
 assert(qolRow.data.name:find("Off"), qolRow.data.name)
 c.TwichUIDB.modules.qolDuels, c.TwichUIDB.modules.qolReleasePvP = true, true; summonToggle.setting.changed()
-assert(qolRow.data.name:find("2 of 4 on"), qolRow.data.name)
+assert(qolRow.data.name:find("2 of 5 on"), qolRow.data.name)
 qolRow.click(); assert(c.opened == R.settingsCategories.qol:GetID(), "row opens the Quality of life page")
 -- Leatrix Plus overlap shows in the tooltip, and leaves its settings alone.
 c.C_AddOns.IsAddOnLoaded = function(n) return n == "Leatrix_Plus" end

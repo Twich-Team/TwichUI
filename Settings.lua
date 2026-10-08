@@ -465,6 +465,11 @@ local function Build()
             "Also declines a duel to the death, which Forever treats as a separate, lethal kind of duel (accepting one asks you to type a confirmation). The same exceptions apply. Off: duels to the death still reach you.",
             R.QoLDuels.feature), duels, DuelsOn)
 
+        Header("Game Menu", "A shortcut in the Escape menu.")
+        QolToggle("qolQuickKeybind", "Quick Keybind button",
+            "Adds a Quick Keybind button to the Game Menu, below Macros. It opens the game's own Quick Keybind Mode, the one in Settings > Keybindings, with its usual instructions and Okay and Cancel buttons; entering it changes no bindings. Like the game's own, it can't be opened in combat, and the button is dimmed until combat ends.",
+            R.QoLQuickKeybind.feature)
+
         Advanced(Header("Advanced"))
         Under(Advanced(QolChoice("qolSummonsWait", "summonsWait", "Wait before accepting a summon",
             "How long the summon's pop-up stays up before it is accepted, so you can decline it.", Waits("summonsWait"))), summons, SummonsOn)
@@ -771,11 +776,12 @@ local function Build()
             return OnOff(on > 0, ("%d of 3 on"):format(on), "Off")
         end)
     if pages.qol then
-        FeatureRow("qol", "Quality of life", "Small opt-in conveniences: accepting summons and resurrection, releasing in battlegrounds, and declining duels.",
+        FeatureRow("qol", "Quality of life", "Small opt-in conveniences: accepting summons and resurrection, releasing in battlegrounds, declining duels, and a Quick Keybind button in the Game Menu.",
             function()
                 local on = (R:Enabled("qolSummons") and 1 or 0) + (R:Enabled("qolResurrect") and 1 or 0)
                     + (R:Enabled("qolReleasePvP") and 1 or 0) + (R:Enabled("qolDuels") and 1 or 0)
-                return OnOff(on > 0, ("%d of 4 on"):format(on), "Off")
+                    + (R:Enabled("qolQuickKeybind") and 1 or 0)
+                return OnOff(on > 0, ("%d of 5 on"):format(on), "Off")
             end)
     end
     FeatureRow("food", "Food and drink", "Two buttons you click to eat or drink the best food or drink in your bags.",

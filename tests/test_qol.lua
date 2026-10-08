@@ -3,7 +3,7 @@ dofile(TESTS .. "harness.lua")
 -- The game is simulated: this checks the decisions and the event handling, not the game's own
 -- behaviour, which has to be checked in the game.
 local c = MakeClient("Rich", {"!!!TwichUI"})
-for _, f in ipairs({ "qol/QoL.lua", "qol/Summons.lua", "qol/Resurrect.lua", "qol/ReleasePvP.lua", "qol/Duels.lua" }) do
+for _, f in ipairs({ "qol/QoL.lua", "qol/Summons.lua", "qol/Resurrect.lua", "qol/ReleasePvP.lua", "qol/Duels.lua", "qol/QuickKeybind.lua" }) do
   local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
 end
 c.LOADED["!!!TwichUI"] = true; c.FireEvent("ADDON_LOADED", "!!!TwichUI")
@@ -76,7 +76,7 @@ local function Apply(feature) Q.Apply(feature) end
 local S, Rez, Rel, D = R.QoLSummons, R.QoLResurrect, R.QoLRelease, R.QoLDuels
 
 -- Off by default: nothing listens and nothing happens.
-for _, key in ipairs({ "qolSummons", "qolResurrect", "qolResurrectCombat", "qolReleasePvP", "qolDuels", "qolDuelsToDeath" }) do
+for _, key in ipairs({ "qolSummons", "qolResurrect", "qolResurrectCombat", "qolReleasePvP", "qolDuels", "qolDuelsToDeath", "qolQuickKeybind" }) do
   assert(DB.modules[key] == false, key .. " is off for a new install")
 end
 for _, event in ipairs({ "CONFIRM_SUMMON", "CANCEL_SUMMON", "RESURRECT_REQUEST", "PLAYER_DEAD", "PLAYER_ALIVE", "PLAYER_UNGHOST",
@@ -278,8 +278,85 @@ On("qolDuels", false); Apply(D.feature); assert(not Listening("DUEL_REQUESTED"),
 Reset(); c.FireEvent("DUEL_REQUESTED", "Eve"); assert(calls.cancelDuel == 0)
 On("qolDuelsToDeath", true); Apply(D.feature); assert(not Listening("DUEL_TO_THE_DEATH_REQUESTED"), "the sub-option does nothing without the main one")
 
+
+---------------------------------------------------------------------------
+-- Quick Keybind button: a stand-in Game Menu with the game's pool, layout indices and callback.
+---------------------------------------------------------------------------
+local K = R.QoLQuickKeybind
+local function NewButton()
+  local b = { shown = false, enabled = true, scripts = {} }
+  function b:SetText(t) self.text = t end
+  function b:GetText() return self.text end
+  function b:SetScript(k, f) self.scripts[k] = f end
+  function b:SetEnabled(v) self.enabled = v end
+  function b:SetMotionScriptsWhileDisabled() end
+  function b:Show() self.shown = true end
+  return b
+end
+local menu = { shown = false, dirty = 0, nextLayoutIndex = 1, active = {} }
+menu.buttonPool = {
+  Acquire = function() local b = NewButton(); menu.active[b] = true; return b end,
+  Release = function(_, b) menu.active[b] = nil; b.shown = false; b.layoutIndex = nil end,
+  IsActive = function(_, b) return menu.active[b] == true end,
+  EnumerateActive = function() return pairs(menu.active) end,
+}
+function menu:IsShown() return self.shown end
+function menu:MarkDirty() self.dirty = self.dirty + 1 end
+local hooks = {}
+c.hooksecurefunc = function(obj, name, fn)
+  local orig = obj[name]
+  obj[name] = function(...) local r = orig(...); fn(...); return r end
+  hooks[#hooks + 1] = fn
+end
+c.GameMenuFrame = menu
+c.GAMEMENU_OPTIONS = "Options"; c.ADDONS = "AddOns"; c.HUD_EDIT_MODE_MENU = "Edit Mode"; c.GAMEMENU_SUPPORT = "Support"; c.MACROS = "Macros"; local shown = 0; c.QuickKeybindFrame = { Show = function() shown = shown + 1 end }
+c.HideUIPanel = function(f) f.shown = false; calls.hideMenu = (calls.hideMenu or 0) + 1 end
+local combat = false
+c.InCombatLockdown = function() return combat end
+-- The game's rebuild (InitButtons): release everything and add its buttons; hooks run after it.
+function menu:InitButtons(withOthers)
+  for b in pairs(menu.active) do menu.buttonPool:Release(b) end
+  menu.nextLayoutIndex = 1
+  local names = { "Options", "Store", "AddOns", "Macros", "Log Out", "Return" }
+  if withOthers then table.insert(names, 5, "Other addon") end
+  for _, text in ipairs(names) do
+    local b = menu.buttonPool:Acquire(); b.layoutIndex = menu.nextLayoutIndex; menu.nextLayoutIndex = menu.nextLayoutIndex + 1; b:SetText(text)
+  end
+end
+local function OpenMenu(withOthers) menu.shown = true; menu:InitButtons(withOthers) end
+local function Ours() local found; for b in pairs(menu.active) do if b.text == K.LABEL then assert(not found, "exactly one"); found = b end end return found end
+local function Order() local list = {}; for b in pairs(menu.active) do list[#list + 1] = b end
+  table.sort(list, function(a, b) return a.layoutIndex < b.layoutIndex end)
+  for i, b in ipairs(list) do list[i] = b.text; if i > 1 then assert(b.layoutIndex ~= nil) end end return table.concat(list, ",") end
+
+OpenMenu(); assert(not Ours() and #hooks == 0, "off: the menu is the game's")
+On("qolQuickKeybind", true); Apply(K.feature)
+assert(#hooks == 1 and Listening("PLAYER_REGEN_DISABLED") and Listening("PLAYER_REGEN_ENABLED"))
+Apply(K.feature); OpenMenu(true)
+assert(Order() == "Options,Store,AddOns,Macros,Quick Keybind,Other addon,Log Out,Return", "got " .. Order())
+local indices = {}; for b in pairs(menu.active) do assert(not indices[b.layoutIndex], "unique layout index"); indices[b.layoutIndex] = true end
+assert(menu.nextLayoutIndex == 9 and Ours().enabled)
+for _ = 1, 3 do OpenMenu() end; Ours(); assert(Order() == "Options,Store,AddOns,Macros,Quick Keybind,Log Out,Return", "reopening: " .. Order())
+-- Click: closes the menu, shows the game's own frame.
+Ours().scripts.OnClick(); assert(shown == 1 and not menu.shown and calls.hideMenu == 1, "closes the menu and enters the mode")
+-- Combat: dimmed with a reason, and a click does nothing; back when combat ends.
+OpenMenu(); combat = true; c.FireEvent("PLAYER_REGEN_DISABLED")
+assert(not Ours().enabled and Ours().scripts.OnEnter, "disabled in combat"); Ours().scripts.OnClick(); assert(shown == 1, "no entry in combat")
+combat = false; c.FireEvent("PLAYER_REGEN_ENABLED"); assert(Ours().enabled and not Ours().scripts.OnEnter, "back after combat")
+combat = true; OpenMenu(); assert(not Ours().enabled, "opened in combat: disabled"); combat = false
+-- The mode is missing: no button that cannot work.
+c.QuickKeybindFrame = nil; OpenMenu(); assert(not Ours(), "no Quick Keybind frame: no button")
+c.QuickKeybindFrame = { Show = function() shown = shown + 1 end }
+-- Turning it off while the menu is open removes it and closes the gap; nothing is left registered.
+OpenMenu(true); On("qolQuickKeybind", false); Apply(K.feature)
+assert(not Ours() and Order() == "Options,Store,AddOns,Macros,Other addon,Log Out,Return" and menu.nextLayoutIndex == 8, "removed cleanly: " .. Order())
+assert(#hooks == 1 and not Listening("PLAYER_REGEN_DISABLED"), "off: nothing listens; the one hook idles")
+OpenMenu(); assert(not Ours())
+On("qolQuickKeybind", true); Apply(K.feature); OpenMenu(); assert(Ours(), "and on again without a reload")
+On("qolQuickKeybind", false); Apply(K.feature)
+
 -- Nothing is left listening, and toggling is idempotent.
-for _, f in ipairs({ S.feature, Rez.feature, Rel.feature, D.feature }) do Apply(f); Apply(f) end
+for _, f in ipairs({ S.feature, Rez.feature, Rel.feature, D.feature, K.feature }) do Apply(f); Apply(f) end
 for _, event in ipairs({ "CONFIRM_SUMMON", "RESURRECT_REQUEST", "PLAYER_DEAD", "DUEL_REQUESTED", "DUEL_TO_THE_DEATH_REQUESTED" }) do
   assert(not Listening(event), event .. " not registered with everything off")
 end

@@ -105,5 +105,6 @@ qol\Summons.lua
 qol\Resurrect.lua
 qol\ReleasePvP.lua
 qol\Duels.lua
+qol\QuickKeybind.lua
 
 Settings.lua
