@@ -23,6 +23,7 @@ libs\LibDeflate\LibDeflate.lua
 
 # Core
 Core.lua
+Persist.lua
 modules\Interact.lua
 modules\QuietLogin.lua
 modules\Media.lua
@@ -116,6 +117,7 @@ diag\Friends.lua
 diag\Food.lua
 diag\Zones.lua
 diag\Sharing.lua
+diag\Saved.lua
 diag\Window.lua
 
 Settings.lua

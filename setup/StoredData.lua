@@ -460,11 +460,17 @@ function SD.FormatSize(bytes) return ST.FormatSize(bytes) end
 -- Load-time work
 ---------------------------------------------------------------------------
 R:OnInit(function()
-    TwichUIDB.storedData = TwichUIDB.storedData or {}
+    -- (scanMode and svTest, left by earlier builds, are removed by the schema 0 -> 1 step in Persist.lua.)
+    if type(TwichUIDB.storedData) ~= "table" then TwichUIDB.storedData = {} end
     db = TwichUIDB.storedData
-    db.found = db.found or {}
-    db.scanMode = nil            -- set by an earlier build; the window always opens after a scan now
-    TwichUIDB.svTest = nil       -- the last report of the temporary /tui svtest check (removed)
+    if type(db.found) ~= "table" then db.found = {} end
+    -- What an earlier scan noted: { [name] = { owner, ... } }. A scan rebuilds it; an entry nothing can read goes.
+    local dropped = 0
+    for name, e in pairs(db.found) do
+        if type(name) ~= "string" or type(e) ~= "table" or type(e.owner) ~= "string" then db.found[name] = nil; dropped = dropped + 1 end
+    end
+    if dropped > 0 then R.Persist.Repair("list-entry-dropped", dropped) end
+    if db.scanNext ~= nil and db.scanNext ~= true then db.scanNext = nil end
     SD.db = db
     if not db.scanNext then return end
     db.scanNext = nil

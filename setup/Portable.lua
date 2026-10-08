@@ -182,10 +182,10 @@ local function CheckShape(env)
     for name, e in pairs(p.tables) do
         n = n + 1
         if n > L.tables then return nil, "That backup holds more settings tables than a backup can." end
-        if type(name) ~= "string" or #name > L.ident or not name:find("^[%a_][%w_]*$") then return nil, "That backup is damaged." end
-        if name:find("^TwichUI") then
+        if type(name) == "string" and name:find("^TwichUI") then
             return nil, "That backup contains TwichUI's own data, which a backup never includes. It isn't a backup TwichUI made."
         end
+        if not ST.ValidName(name) then return nil, "That backup is damaged." end
         if type(e) ~= "table" or not OnlyKeys(e, ENTRY_KEYS) or type(e.data) ~= "table"
             or type(e.owner) ~= "string" or #e.owner > L.ident then
             return nil, "That backup is damaged."
@@ -352,6 +352,7 @@ function P.Check(text, done, fail)
                 if state == "missing" or state == "disabled" then result.missing[#result.missing + 1] = ST.AddonTitle(e.owner) end
             end
             if not ST.SafeName(name) then result.skipped = result.skipped + 1 end
+            yield()   -- SafeName reads the live table of that name, which can be large
         end
         table.sort(result.missing)
         result.addons = nOwners
@@ -381,13 +382,26 @@ end
 
 -- Stores a checked import as a new backup. Returns the point, or nil, reason.
 -- This is the only place an import changes saved data, and it never applies it.
+-- The checked tables become the stored backup's own (no second copy of up to 24 MB), so the result
+-- gives them up: committing the same result again, or a click on a stale preview, imports nothing.
 function P.Commit(result)
     if type(result) ~= "table" or not result.point then return nil, "Nothing to import." end
     if result.blocked then return nil, result.blocked end
     local p = result.point
+    -- The preview may be older than this click: the limits are checked against what is stored now.
+    local points = RS.List()
+    if #points >= P.MAX_POINTS then
+        return nil, ("You already have %d backups, the most an import can add to. Delete one first."):format(#points)
+    end
+    local total = 0
+    for _, existing in ipairs(points) do total = total + RS.Size(existing) end
+    if total + (result.bytes or 0) > P.MAX_TOTAL then
+        return nil, ("Your backups would take more than %s of saved data. Delete a backup first."):format(ST.FormatSize(P.MAX_TOTAL))
+    end
     local point = RS.AddImported({
         name = p.name, created = p.created, source = p.source, sourceName = p.sourceName, tables = p.tables,
     })
     if not point then return nil, "That backup couldn't be added." end
+    result.point = nil
     return point
 end

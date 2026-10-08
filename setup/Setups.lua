@@ -255,7 +255,7 @@ function ST:SaveMine(includeEditMode)
     for name, sel in pairs(db.selection) do
         local cap = ST.capture[name]
         if sel and cap and not R.Ellesmere.IsTable(name) then
-            tables[name] = { owner = cap.owner, data = cap.data, hash = ST.Hash(cap.data) }
+            tables[name] = { owner = cap.owner, data = DeepCopy(cap.data), hash = ST.Hash(cap.data) }
             count = count + 1
         end
     end
@@ -519,19 +519,76 @@ local function PendingPack() return pending and ST.SourcePack(pending.source) en
 
 local function OwnerOf(name)
     local pack = PendingPack()
-    local o = pack and pack.tables[name] and pack.tables[name].owner
+    local entry = pack and type(pack.tables) == "table" and pack.tables[name]
+    local o = type(entry) == "table" and entry.owner
     if o then return o end
     local b = TwichUIBackupDB[CharKey()]
     return b and b.owners and b.owners[name]
 end
 
 -- A setup only ever replaces addon settings tables. Names come from whoever
--- made the setup, so never touch TwichUI's own data or a global that isn't
--- a table (a function, say).
+-- made the setup (a friend, a pasted backup, a file), so they are checked the
+-- same way wherever they arrive: ValidName is about the name alone; SafeName
+-- also looks at what that name is in the game right now.
+local NEVER = { _G = true, _ENV = true }
+function ST.ValidName(name)
+    return type(name) == "string" and #name <= 128 and name:find("^[%a_][%w_]*$") ~= nil
+        and not name:find("^TwichUI") and not NEVER[name]
+end
+
+-- Never touch TwichUI's own data, the global table, or anything in the game that
+-- holds code: saved settings are plain data, so a name that is already taken by a
+-- table with functions in it (string, SlashCmdList, ...) is not a settings table.
 function ST.SafeName(name)
-    if type(name) ~= "string" or name:find("^TwichUI") then return false end
+    if not ST.ValidName(name) then return false end
     local cur = rawget(_G, name)
-    return cur == nil or type(cur) == "table"
+    if cur == nil then return true end
+    if type(cur) ~= "table" then return false end
+    return (Inspect(cur))
+end
+
+-- One entry of a setup or backup: { owner = addon folder, data = table }.
+function ST.ValidEntry(name, e)
+    return ST.ValidName(name) and type(e) == "table" and type(e.owner) == "string"
+        and #e.owner > 0 and #e.owner <= 128 and type(e.data) == "table"
+end
+
+-- Settings from outside are plain data of bounded depth and size before they go anywhere.
+-- Returns true, or false and a short reason code.
+ST.LIMITS = { depth = 64, nodes = 3000000, string = 2 * 1048576, key = 4096 }
+function ST.CheckData(root)
+    if type(root) ~= "table" then return false, "not-a-table" end
+    local L = ST.LIMITS
+    local nodes, onPath, seen = 0, {}, {}
+    local function walk(t, depth)
+        if depth > L.depth then return "too-deep" end
+        onPath[t], seen[t] = true, true
+        for k, v in next, t do
+            nodes = nodes + 1
+            if nodes > L.nodes then return "too-large" end
+            local kt, vt = type(k), type(v)
+            if kt == "string" then
+                if #k > L.key then return "key-too-long" end
+            elseif kt ~= "number" and kt ~= "boolean" then
+                return "bad-key"
+            end
+            if vt == "string" then
+                if #v > L.string then return "string-too-long" end
+            elseif vt == "table" then
+                if onPath[v] then return "cycle" end
+                if not seen[v] then
+                    local why = walk(v, depth + 1)
+                    if why then return why end
+                end
+            elseif vt ~= "number" and vt ~= "boolean" then
+                return "bad-value"
+            end
+        end
+        onPath[t] = nil
+    end
+    local why = walk(root, 1)
+    if why then return false, why end
+    return true
 end
 
 local function Skip(name)
@@ -543,13 +600,21 @@ local function ApplyOne(name)
     local mode = pending.mode
     if mode == "undo" then
         local b = TwichUIBackupDB[CharKey()]
-        local e = b and b.tables and b.tables[name]
-        if e then Replace(name, e.present and e.data or nil) end
+        local e = b and type(b.tables) == "table" and b.tables[name]
+        if type(e) == "table" and ST.ValidName(name) and (not e.present or ST.CheckData(e.data)) then
+            Replace(name, e.present and e.data or nil)
+        end
     else
         local pack = PendingPack()
-        local entry = pack and pack.tables[name]
+        local entry = pack and type(pack.tables) == "table" and pack.tables[name]
         if not entry then pending.tables[name] = nil return end
         if not ST.SafeName(name) then Skip(name) return end
+        -- The same rules whether the setup came from a friend, a pasted backup, a restore point or a file.
+        if not ST.ValidEntry(name, entry) or not ST.CheckData(entry.data) then
+            R.Persist.Repair("apply-entry-rejected")
+            Skip(name)
+            return
+        end
         -- Never replace EllesmereUI's whole saved table with someone else's.
         if R.Ellesmere.Blocked(pending.source, name) then Skip(name) return end
         if mode == "apply" then
@@ -707,16 +772,144 @@ function ST.StorageItems()
 end
 
 ---------------------------------------------------------------------------
+-- Checking what was saved (structure only; contents are the sender's or the addon's)
+-- Run once at load. A repair removes only what cannot be used, and says so by code (R.Persist.Repair).
+-- Received setups, your own setup and undo backups can all be had again, so a damaged one is dropped
+-- rather than guessed at; restore points are looked after by setup/Restore.lua.
+---------------------------------------------------------------------------
+local function Repair(code, n) R.Persist.Repair(code, n) end
+
+-- Drops entries of t that fail ok(key, value); returns how many.
+local function DropIf(t, bad, code)
+    local n = 0
+    for k, v in pairs(t) do
+        if bad(k, v) then t[k] = nil; n = n + 1 end
+    end
+    if n > 0 then Repair(code, n) end
+    return n
+end
+
+-- What the windows and the apply code need of an entry before they can look at it. Whether the name
+-- may be applied is ST.ValidEntry's question, asked when applying (a refused name is reported as skipped).
+function ST.EntryShape(name, e)
+    return type(name) == "string" and type(e) == "table" and type(e.owner) == "string" and type(e.data) == "table"
+end
+
+-- Tables of a setup or backup: an entry that cannot be read goes.
+local function CleanTables(tables, code)
+    return DropIf(tables, function(name, e) return not ST.EntryShape(name, e) end, code)
+end
+
+local function Text(v) return type(v) == "string" and v or nil end
+local function Num(v) return type(v) == "number" and v == v and v or nil end
+
+-- A setup (yours, or one received): the labels and numbers around its tables.
+local function CleanPackFields(pack)
+    local reset = 0
+    local function Field(key, clean)
+        if pack[key] ~= nil and clean(pack[key]) == nil then pack[key] = nil; reset = reset + 1 end
+    end
+    for _, key in ipairs({ "created", "version", "received" }) do Field(key, Num) end
+    for _, key in ipairs({ "source", "sourceName", "sender", "editMode", "editModeName" }) do Field(key, Text) end
+    if pack.eui ~= nil and type(pack.eui) ~= "table" then pack.eui = nil; reset = reset + 1 end
+    if pack.addons ~= nil then
+        if type(pack.addons) ~= "table" then
+            pack.addons = nil; reset = reset + 1
+        else
+            reset = reset + DropIf(pack.addons, function(k, e) return type(k) ~= "string" or type(e) ~= "table" end, "pack-field-reset")
+        end
+    end
+    if reset > 0 then Repair("pack-field-reset", reset) end
+end
+
+ST.CleanPackFields = CleanPackFields
+
+function ST.NormalizeStores()
+    -- Your own shareable setup.
+    local pack = TwichUIShareDB.pack
+    if pack ~= nil then
+        if type(pack) ~= "table" or type(pack.tables) ~= "table" then
+            TwichUIShareDB.pack = nil
+            Repair("share-pack-dropped")
+        else
+            CleanTables(pack.tables, "setup-table-dropped")
+            CleanPackFields(pack)
+        end
+    end
+    -- Undo backups, one per character: { stamp, created, tables = { [name] = { present, data } }, owners }.
+    for charKey, b in pairs(TwichUIBackupDB) do
+        if type(charKey) ~= "string" or type(b) ~= "table" or type(b.tables) ~= "table" then
+            TwichUIBackupDB[charKey] = nil
+            Repair("backup-dropped")
+        else
+            DropIf(b.tables, function(name, e)
+                return type(name) ~= "string" or type(e) ~= "table" or (e.present and type(e.data) ~= "table")
+            end, "setup-table-dropped")
+            if b.owners ~= nil then
+                if type(b.owners) ~= "table" then b.owners = nil
+                else DropIf(b.owners, function(name, owner) return type(name) ~= "string" or type(owner) ~= "string" end, "pack-field-reset") end
+            end
+            if b.created ~= nil and not Num(b.created) then b.created = nil end
+        end
+    end
+end
+
+local SETUP_TABLES = { "detected", "selection", "received", "trusted", "recommend" }
+local PENDING_MODES = { apply = true, alt = true, undo = true }
+
+function ST.NormalizeDb(d)
+    for _, key in ipairs(SETUP_TABLES) do
+        if d[key] ~= nil and type(d[key]) ~= "table" then Repair("container-not-table") end
+        if type(d[key]) ~= "table" then d[key] = {} end
+    end
+    -- The last "find my addon settings" result: names, owners and sizes. Searching again rebuilds it.
+    DropIf(d.detected, function(name, e) return type(name) ~= "string" or type(e) ~= "table" or type(e.owner) ~= "string" end, "list-entry-dropped")
+    DropIf(d.selection, function(name, v) return type(name) ~= "string" or type(v) ~= "boolean" end, "list-entry-dropped")
+    DropIf(d.recommend, function(key, v) return type(key) ~= "string" or type(v) ~= "boolean" end, "list-entry-dropped")
+    DropIf(d.trusted, function(sender, v) return type(sender) ~= "string" or v ~= true end, "list-entry-dropped")
+    -- Setups received from friends.
+    DropIf(d.received, function(sender, pack)
+        return type(sender) ~= "string" or type(pack) ~= "table" or type(pack.tables) ~= "table"
+    end, "received-pack-dropped")
+    for _, pack in pairs(d.received) do
+        CleanTables(pack.tables, "setup-table-dropped")
+        CleanPackFields(pack)
+    end
+    -- One-shot flags and jobs handed from one load to the next.
+    if d.scanNext ~= nil and d.scanNext ~= true then d.scanNext = nil end
+    if d.restoreNext ~= nil and type(d.restoreNext) ~= "string" then d.restoreNext = nil end
+    if d.lastScan ~= nil and not Num(d.lastScan) then d.lastScan = nil end
+    local p = d.pending
+    if p ~= nil then
+        if type(p) ~= "table" or not PENDING_MODES[p.mode] or type(p.tables) ~= "table"
+            or type(p.source) ~= "string" or type(p.char) ~= "string" then
+            d.pending = nil
+            Repair("pending-dropped")
+        else
+            DropIf(p.tables, function(name, v) return type(name) ~= "string" or v ~= true end, "pending-dropped")
+            if Num(p.stamp) == nil then p.stamp = 0 end
+        end
+    end
+    -- EllesmereUI profile bookkeeping (setup/Ellesmere.lua).
+    local eui = d.eui
+    if eui ~= nil then
+        if type(eui) ~= "table" then d.eui = nil
+        else
+            for _, key in ipairs({ "imports", "ids", "last" }) do
+                if eui[key] ~= nil and type(eui[key]) ~= "table" then eui[key] = nil end
+            end
+        end
+    end
+end
+
+---------------------------------------------------------------------------
 -- Load-time work
 ---------------------------------------------------------------------------
 R:OnInit(function()
-    TwichUIDB.setup = TwichUIDB.setup or {}
+    if type(TwichUIDB.setup) ~= "table" then TwichUIDB.setup = {} end
     db = TwichUIDB.setup
-    db.detected = db.detected or {}
-    db.selection = db.selection or {}
-    db.received = db.received or {}
-    db.trusted = db.trusted or {}
-    db.recommend = db.recommend or {}
+    ST.NormalizeDb(db)
+    ST.NormalizeStores()
     ST.db = db
 
     for i = 1, C_AddOns.GetNumAddOns() do

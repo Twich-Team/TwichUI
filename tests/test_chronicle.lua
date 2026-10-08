@@ -130,7 +130,9 @@ for _, en in ipairs(G.Entries()) do assert(en.kind == "note") end
 
 -- bad or older saved data is cleaned up
 local h = boot("Delta", { db = { modules = { chronicle = false } }, chron = { chars = { ["Delta - Forever"] = { entries = { 5, { id = 1 }, { id = 2, t = 10, kind = "note", title = "ok", note = 7 }, { id = 2, t = 11, kind = "note", title = "dup" } } }, ["Bad"] = 3 } } })
-assert(h.TwichUI.Chronicle.Count() == 1 and h.TwichUIChronicleDB.chars.Bad == nil)
+-- (the row with nothing readable and the character record that isn't a table go; a note that only repeats
+-- an id is kept and given a fresh one, since it is the player's own text)
+assert(h.TwichUI.Chronicle.Count() == 2 and h.TwichUIChronicleDB.chars.Bad == nil)
 assert(h.TwichUI.Chronicle.Add("note", { title = "Note", note = "x" }).id > 2)
 
 -- never part of sharing, setups or backups

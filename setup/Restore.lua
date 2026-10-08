@@ -10,10 +10,54 @@ local RS = {}
 R.Restore = RS
 
 local function DB()
-    TwichUIRestoreDB = TwichUIRestoreDB or {}
-    TwichUIRestoreDB.points = TwichUIRestoreDB.points or {}
+    if type(TwichUIRestoreDB) ~= "table" then TwichUIRestoreDB = {} end
+    if type(TwichUIRestoreDB.points) ~= "table" then TwichUIRestoreDB.points = {} end
     return TwichUIRestoreDB
 end
+
+-- Checks what was saved, once at load. A backup is the player's own, so it is kept whenever anything
+-- of it can be used: a missing id, name or date is made good; an addon's settings that are not
+-- readable are dropped from it (there is nothing in them to restore); something that is not a backup
+-- at all is dropped. Unknown fields are left alone.
+function RS.Normalize()
+    local P = R.Persist
+    P.EnsureRoot("TwichUIRestoreDB")
+    local db = DB()
+    local ids, list, repaired = {}, {}, 0
+    for _, p in ipairs(P.Sequence(db.points)) do
+        if type(p) ~= "table" then
+            P.Repair("restore-point-dropped")
+        else
+            local fixed = false
+            if type(p.tables) ~= "table" then p.tables = {}; fixed = true end
+            local dropped = 0
+            for name, e in pairs(p.tables) do
+                if not ST.EntryShape(name, e) then p.tables[name] = nil; dropped = dropped + 1 end
+            end
+            if dropped > 0 then P.Repair("setup-table-dropped", dropped) end
+            if type(p.id) ~= "string" or p.id == "" or ids[p.id] then
+                local id = R.Share.NewId()
+                while ids[id] do id = R.Share.NewId() end
+                p.id = id
+                fixed = true
+            end
+            ids[p.id] = true
+            if type(p.created) ~= "number" or p.created ~= p.created then p.created = nil end
+            if type(p.name) ~= "string" or p.name:gsub("%s", "") == "" then
+                p.name = p.created and date("%b %d %H:%M", p.created) or "Backup"
+                fixed = true
+            end
+            if p.source ~= nil and type(p.source) ~= "string" then p.source = nil end
+            if p.sourceName ~= nil and type(p.sourceName) ~= "string" then p.sourceName = nil end
+            if p.imported ~= nil and type(p.imported) ~= "number" then p.imported = nil end
+            if fixed then repaired = repaired + 1 end
+            list[#list + 1] = p
+        end
+    end
+    if repaired > 0 then P.Repair("restore-point-repaired", repaired) end
+    db.points = list
+end
+R:OnInit(RS.Normalize)
 
 function RS.List()
     local list = {}
@@ -42,7 +86,8 @@ local function CreateFromCapture(name)
     for tname, sel in pairs(ST.db.selection) do
         local cap = ST.capture and ST.capture[tname]
         if sel and cap then
-            tables[tname] = { owner = cap.owner, data = cap.data }
+            -- Its own copy: the search's data stays as it was, whatever happens to either later.
+            tables[tname] = { owner = cap.owner, data = ST.DeepCopy(cap.data) }
             count = count + 1
         end
     end
@@ -95,12 +140,18 @@ function RS.AddImported(point)
     return new
 end
 
+-- Queues the restore (the game reloads). Returns nil, reason when there is nothing it can restore.
 function RS:Restore(id)
     local p = RS.Get(id)
-    if not p then return end
+    if not p then return nil, "That backup isn't there any more." end
     local names = {}
-    for tname in pairs(p.tables or {}) do names[#names + 1] = tname end
+    for tname, e in pairs(type(p.tables) == "table" and p.tables or {}) do
+        if ST.ValidEntry(tname, e) then names[#names + 1] = tname end
+    end
+    if #names == 0 then return nil, "That backup has nothing TwichUI can restore." end
+    table.sort(names)
     ST:Queue("apply", names, "restore:" .. id)
+    return true
 end
 
 function RS:Delete(id)

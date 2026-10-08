@@ -36,6 +36,7 @@ local MAX_LINES, MAX_LINE = 60, 200   -- a provider's section is bounded too
 -- Modules the report knows by name, so one that did not load shows as absent instead of vanishing.
 local KNOWN = {
     { "environment", "Environment" },
+    { "saved", "Saved data" },
     { "notify", "Notification coordination" },
     { "friend", "Friend notifications" },
     { "food", "Food and water buttons" },

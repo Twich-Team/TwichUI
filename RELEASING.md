@@ -14,6 +14,9 @@
 2. Run `./tools/update_training_data.sh` (needs `git` and `lua5.1`) to refresh the
    class training data from the newest What's Training? commit, then
    `./tests/run.sh` (needs `lua5.1` and `lua-bitop`).
+   If the release changes what is saved (a new or changed layout in any saved variable), follow
+   `docs/persistence.md` ("Adding a schema 2") first: a numbered, repeatable upgrade step and a test with the
+   previous layout.
 3. Commit (including `modules/TrainingData.lua` if it changed), then tag and push:
    `git tag v3.0.1 && git push --tags`.
 4. The GitHub Action refreshes the training data again, tests, packages (folder `!!!TwichUI`, without tests/ and

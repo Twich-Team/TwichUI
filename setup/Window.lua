@@ -1719,7 +1719,10 @@ local function RestoreRow(i)
             end
         end
         Confirm("TWICHUI_RP_RESTORE", ("Go back to \"%s\" (%d addons)?%s\n\nYour current settings for these addons are saved first, so you can Undo from Backups or Received setups. Your UI reloads."):format(point.name, ST.CountAddons(point), eui),
-            function() R.Restore:Restore(point.id) end, {
+            function()
+                local ok, why = R.Restore:Restore(point.id)
+                if not ok then R.Print("%s Nothing was restored.", why or "That couldn't be restored.") end
+            end, {
                 combat = true,
                 valid = function()
                     if not R.Restore.Get(point.id) then return false, "That backup is no longer there, so nothing was restored." end

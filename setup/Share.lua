@@ -287,22 +287,8 @@ function SH.SetTransport(t)
     return true
 end
 
--- First load with this setting. A new install has nothing saved and gets
--- Direct. Before this, sending went over a group or guild channel only if
--- the player switched "group channel" or "guild channel" on (both start off),
--- so a saved "on" is something they chose and is kept. The old settings can't
--- tell a deliberate choice of Party/Guild from a workaround for the broken
--- direct messages, so nothing is guessed: those players keep what they had
--- and can pick Direct in Sending options. If both were on, Party is kept
--- (the old router tried the group first). Everyone else, including anyone
--- who left the defaults or turned direct messages off with no other
--- channel, gets Direct. The old keys are left as they were.
-function SH.MigrateTransport()
-    if not TwichUIDB or VALID_TRANSPORT[TwichUIDB.shareTransport] then return end
-    local m = TwichUIDB.modules or {}
-    TwichUIDB.shareTransport = (m.shareGroup == true and "PARTY") or (m.shareGuild == true and "GUILD") or "DIRECT"
-end
-R:OnInit(SH.MigrateTransport)
+-- Where an existing install's transport comes from (the old group and guild switches) is decided once,
+-- by the schema 0 -> 1 step in Persist.lua; a new install gets Direct there too.
 
 -- Which arrival channels we read. All of them, whatever we send with: a
 -- transfer still has to be addressed to us, and nothing is applied before the
@@ -658,12 +644,16 @@ function SH:Respond(sender, accept, always)
     C_Timer.After(5, watchdog)
 end
 
-local function Validate(t)
-    -- Settings only: names are strings, data is plain tables (DeepCopy strips anything else).
+-- Settings only, and only what a settings table could be: a valid name (never TwichUI's own data or
+-- the global table), an owner, and plain data of bounded depth and size. Whether the name is a settings
+-- table here is decided when it is applied, not by what happens to be loaded when it arrives.
+local function Validate(t, withData)
     if type(t) ~= "table" then return false end
     for tname, e in pairs(t) do
-        if type(tname) ~= "string" or type(e) ~= "table" or type(e.owner) ~= "string" then return false end
-        if not ST.SafeName(tname) then return false end
+        if not ST.ValidName(tname) or type(e) ~= "table" or type(e.owner) ~= "string" or #e.owner == 0 or #e.owner > 128 then
+            return false
+        end
+        if withData and e.data ~= nil and not ST.CheckData(e.data) then return false end
     end
     return true
 end
@@ -708,6 +698,7 @@ local function StoreReceived(sender, msg)
             end
         end
     end
+    ST.CleanPackFields(pack)   -- the same check a saved setup gets at load
     ST.db.received[sender] = pack
     return pack
 end
@@ -790,7 +781,7 @@ end
 handlers.data = function(sender, msg)
     local inc = SH.incoming[sender]
     if not inc or inc.id ~= msg.id or (inc.stage ~= "receiving" and inc.stage ~= "waiting") then return end
-    if type(msg.meta) ~= "table" or not Validate(msg.keep) or not Validate(msg.tables) then
+    if type(msg.meta) ~= "table" or not Validate(msg.keep) or not Validate(msg.tables, true) then
         inc.stage = "failed"; inc.reason = "The configuration arrived damaged. Ask them to send again."
         Code(inc, "data-invalid", sender)
         Changed()

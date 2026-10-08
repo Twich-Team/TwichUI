@@ -29,15 +29,23 @@ P.STRICTNESS = {
 local db
 local function DB()
     if db then return db end
-    TwichUIDB.gear = TwichUIDB.gear or {}
+    if type(TwichUIDB.gear) ~= "table" then TwichUIDB.gear = {} end
     db = TwichUIDB.gear
     for k, v in pairs(DEFAULTS) do
         if db[k] == nil then db[k] = v end
     end
-    db.weights = db.weights or {}   -- [classFile][skillLine][stat] = weight
-    db.priority = db.priority or {} -- [classFile][skillLine] = { stat, ... } most important first
-    db.usePriority = db.usePriority or {} -- [classFile][skillLine] = true: value by priority
-    db.trees = db.trees or {}       -- [character] = skillLine of the chosen tree
+    -- weights [classFile][skillLine][stat] = weight; priority [classFile][skillLine] = { stat, ... } most
+    -- important first; usePriority [classFile][skillLine] = true (value by priority); trees [character] =
+    -- skillLine of the chosen tree. A group that isn't a table is replaced; a class entry that isn't is dropped.
+    for _, k in ipairs({ "weights", "priority", "usePriority", "trees" }) do
+        if db[k] ~= nil and type(db[k]) ~= "table" then R.Persist.Repair("container-not-table") end
+        if type(db[k]) ~= "table" then db[k] = {} end
+    end
+    for _, k in ipairs({ "weights", "priority", "usePriority" }) do
+        for classFile, byClass in pairs(db[k]) do
+            if type(byClass) ~= "table" then db[k][classFile] = nil; R.Persist.Repair("list-entry-dropped") end
+        end
+    end
     return db
 end
 

@@ -7,6 +7,7 @@
 --
 -- TwichUIChronicleDB = { version = 1, chars = { ["Name - Realm"] = {
 --     entries = { { id, t, kind, title, note, zone, level, secsAtLevel, secsTotal }, ... }  -- oldest first
+--     unreadable = { entry, ... }   -- entries this version cannot read (an unknown kind), kept as they were
 --     nextId = n, tracking = bool,
 --     journey = { baseLevel, baseTotal,   -- played seconds when the current level began
 --                 lastLevel,              -- highest level-up already written
@@ -89,9 +90,14 @@ end
 local function Num(v) return type(v) == "number" and v >= 0 and v or nil end
 
 -- Keeps only well-formed tracking state; missing parts are simply absent until measured.
+-- Fields this version doesn't know are carried over untouched.
+local JOURNEY_KEYS = { baseLevel = true, baseTotal = true, lastLevel = true, riding = true, professions = true, gold = true }
 local function CleanJourney(rec)
     local old = type(rec.journey) == "table" and rec.journey or {}
     local j = { baseLevel = Num(old.baseLevel), baseTotal = Num(old.baseTotal), lastLevel = Num(old.lastLevel), riding = {} }
+    for k, v in pairs(old) do
+        if not JOURNEY_KEYS[k] then j[k] = v end
+    end
     if type(old.riding) == "table" then
         for id, v in pairs(old.riding) do if type(id) == "number" and v == true then j.riding[id] = true end end
     end
@@ -114,40 +120,106 @@ local function CleanJourney(rec)
     rec.journey = j
 end
 
--- Cleans anything that looks wrong (older, partial or hand-edited data).
+-- Sort key: undated entries (no usable time) come first, in id order; nothing is given an invented date.
+local function When(e) return (type(e.t) == "number" and e.t == e.t) and e.t or -math.huge end
+local function ByTime(a, b)
+    local ta, tb = When(a), When(b)
+    if ta ~= tb then return ta < tb end
+    return a.id < b.id
+end
+
+-- Cleans anything that looks wrong (older, partial or hand-edited data) without throwing away what the
+-- player wrote: a note is kept whenever it has any text, and gets a fresh id or title if it lacks one;
+-- it keeps no date rather than an invented one. An entry of a kind this version doesn't know (a newer
+-- TwichUI wrote it) is set aside untouched in rec.unreadable. Only a row with nothing readable in it,
+-- or an automatic entry missing its title, kind or time, is dropped.
 local function CleanRecord(rec)
+    local P = R.Persist
     if type(rec.entries) ~= "table" then rec.entries = {} end
-    local clean, maxId, seen = {}, 0, {}
-    for _, e in ipairs(rec.entries) do
-        if type(e) == "table" and C.KINDS[e.kind] and type(e.id) == "number" and not seen[e.id]
-            and type(e.t) == "number" and Trim(e.title, C.MAX_TITLE) then
-            seen[e.id] = true
-            e.title = Trim(e.title, C.MAX_TITLE)
-            e.note = Trim(e.note, C.MAX_NOTE)
-            e.zone = Trim(e.zone, C.MAX_TITLE)
-            if type(e.level) ~= "number" then e.level = nil end
-            if type(e.secsAtLevel) ~= "number" then e.secsAtLevel = nil end
-            if type(e.secsTotal) ~= "number" then e.secsTotal = nil end
-            if type(e.icon) ~= "string" and type(e.icon) ~= "number" then e.icon = nil end
-            clean[#clean + 1] = e
-            if e.id > maxId then maxId = e.id end
+    if type(rec.unreadable) ~= "table" then rec.unreadable = nil end
+    local clean, repaired, maxId = {}, 0, 0
+    local usedIds = {}
+    for _, e in ipairs(P.Sequence(rec.entries)) do
+        if type(e) ~= "table" then
+            P.Repair("chronicle-entry-dropped")
+        elseif type(e.kind) == "string" and not C.KINDS[e.kind] then
+            rec.unreadable = rec.unreadable or {}
+            rec.unreadable[#rec.unreadable + 1] = e
+            P.Repair("chronicle-entry-set-aside")
+        else
+            local isNote = e.kind == "note"
+            local title, note = Trim(e.title, C.MAX_TITLE), Trim(e.note, C.MAX_NOTE)
+            local keep
+            if isNote then
+                title = title or (note and "Note")
+                keep = title ~= nil
+            else
+                keep = C.KINDS[e.kind] and type(e.t) == "number" and title ~= nil
+            end
+            if not keep then
+                P.Repair("chronicle-entry-dropped")
+            else
+                local fixed = isNote and Trim(e.title, C.MAX_TITLE) == nil   -- a note that had no title
+                e.title, e.note = title, note
+                e.zone = Trim(e.zone, C.MAX_TITLE)
+                if type(e.level) ~= "number" then e.level = nil end
+                if type(e.secsAtLevel) ~= "number" then e.secsAtLevel = nil end
+                if type(e.secsTotal) ~= "number" then e.secsTotal = nil end
+                if type(e.icon) ~= "string" and type(e.icon) ~= "number" then e.icon = nil end
+                if type(e.t) ~= "number" then e.t = nil; fixed = true end
+                if type(e.id) == "number" and e.id == e.id and e.id >= 0 and not usedIds[e.id] then
+                    usedIds[e.id] = true
+                    if e.id > maxId then maxId = e.id end
+                else
+                    e.id = false   -- given one below, after every id in use is known
+                    fixed = true
+                end
+                if fixed then repaired = repaired + 1 end
+                clean[#clean + 1] = e
+            end
         end
     end
-    table.sort(clean, function(a, b) if a.t ~= b.t then return a.t < b.t end return a.id < b.id end)
+    for _, e in ipairs(clean) do
+        if e.id == false then maxId = maxId + 1; e.id = maxId end
+    end
+    if repaired > 0 then P.Repair("chronicle-entry-repaired", repaired) end
+    table.sort(clean, ByTime)
+    local before = #clean
     while #clean > C.MAX_ENTRIES and Evict(clean) do end
+    if #clean < before then P.Repair("chronicle-trimmed", before - #clean) end
     rec.entries = clean
     if type(rec.nextId) ~= "number" or rec.nextId <= maxId then rec.nextId = maxId + 1 end
     rec.tracking = rec.tracking == true
     CleanJourney(rec)
 end
 
+-- Set up at load. A Chronicle saved by a newer TwichUI (a higher version) is not read or changed: it is set
+-- aside for the session and handed back at logout (see Persist.lua), and this session's Chronicle
+-- starts empty and isn't saved.
 function C.Init()
-    if type(TwichUIChronicleDB) ~= "table" then TwichUIChronicleDB = {} end
+    local P = R.Persist
+    P.EnsureRoot("TwichUIChronicleDB")
     local db = TwichUIChronicleDB
-    db.version = 1
+    if not P.IsHeld("TwichUIChronicleDB") then
+        local stored = db.version
+        if stored ~= nil and not P.IsCount(stored) then stored = nil end
+        P.SetChronicle(stored, next(db) == nil and "fresh" or "current")
+        if stored and stored > P.CHRONICLE_VERSION then
+            db = { version = P.CHRONICLE_VERSION, chars = {} }
+            P.Hold("TwichUIChronicleDB", TwichUIChronicleDB, db)
+            P.SetChronicle(stored, "future")
+            P.Repair("future-schema")
+        end
+    end
+    db.version = P.CHRONICLE_VERSION
     if type(db.chars) ~= "table" then db.chars = {} end
     for key, rec in pairs(db.chars) do
-        if type(rec) ~= "table" then db.chars[key] = nil else CleanRecord(rec) end
+        if type(key) ~= "string" or type(rec) ~= "table" then
+            db.chars[key] = nil
+            P.Repair("chronicle-record-dropped")
+        else
+            CleanRecord(rec)
+        end
     end
 end
 
@@ -205,7 +277,7 @@ function C.Add(kind, fields)
     if kind ~= "note" then
         for i = #entries, 1, -1 do
             local e = entries[i]
-            if now - e.t > C.DUPLICATE_SECONDS then break end
+            if type(e.t) == "number" and now - e.t > C.DUPLICATE_SECONDS then break end
             if e.kind == kind and e.title == title then return nil, "duplicate" end
         end
     end

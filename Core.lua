@@ -116,14 +116,14 @@ function R:OnInit(fn) table.insert(R.initHooks, fn) end
 R.frame:RegisterEvent("ADDON_LOADED")
 R.frame:HookScript("OnEvent", function(_, event, name)
     if event ~= "ADDON_LOADED" or name ~= ADDON then return end
-    TwichUIDB = TwichUIDB or {}
-    TwichUIBackupDB = TwichUIBackupDB or {}
-    TwichUIShareDB = TwichUIShareDB or {}   -- only your saved setup (what make_pack ships)
-    TwichUIDB.modules = TwichUIDB.modules or {}
-    -- The unfinished combo points display was removed before release; drop only its saved keys
-    -- (a development build may have written them). Nothing else is touched.
-    TwichUIDB.modules.comboPoints, TwichUIDB.modules.comboPointsHideGame = nil, nil
-    if type(TwichUIDB.ui) == "table" then TwichUIDB.ui.comboPoints, TwichUIDB.ui.comboPointsPosition = nil, nil end
+    -- Schema, upgrade, defaults and damaged-data repair live in Persist.lua (see docs/persistence.md).
+    local loaded, loadErr = pcall(R.Persist.LoadMain)
+    if not loaded then Fault("saved data", loadErr) end
+    -- Only matters if Persist failed part way: the rest of the addon needs these to be tables.
+    if type(TwichUIDB) ~= "table" then TwichUIDB = {} end
+    TwichUIBackupDB = type(TwichUIBackupDB) == "table" and TwichUIBackupDB or {}
+    TwichUIShareDB = type(TwichUIShareDB) == "table" and TwichUIShareDB or {}   -- only your saved setup (what make_pack ships)
+    if type(TwichUIDB.modules) ~= "table" then TwichUIDB.modules = {} end
     for k, v in pairs(DEFAULT_MODULES) do
         if TwichUIDB.modules[k] == nil then TwichUIDB.modules[k] = v end
     end
