@@ -288,7 +288,7 @@ local rosterSize = 0
 local pending
 R:On("GROUP_ROSTER_UPDATE", function()
     local n = GetNumGroupMembers() or 0
-    if n > rosterSize and n > 1 and not pending then
+    if n > rosterSize and n > 1 and not pending and Enabled() then
         pending = true
         C_Timer.After(3, function() pending = nil; G:SayHello() end)
     end

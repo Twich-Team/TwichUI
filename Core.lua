@@ -77,6 +77,31 @@ end
 R.Fault = Fault
 
 ---------------------------------------------------------------------------
+-- Fitting a window to the screen. TwichUI's windows are a fixed size in screen units, so a small game
+-- window (or a high UI scale) can leave less room than a window needs, and its edge, close box or buttons
+-- end up off screen. FitToScreen only ever makes a window smaller, and only as much as it takes; it sets
+-- the scale from the window's own size each time (never multiplying an earlier result), so the window is
+-- back at full size as soon as there is room. Text is never resized on its own. Cards and movers keep
+-- their saved places and are not touched by this.
+---------------------------------------------------------------------------
+local FIT_MARGIN, FIT_MIN_SCALE = 24, 0.6
+
+-- The scale (FIT_MIN_SCALE to 1) at which a width by height window fits a screen of those units, leaving a margin.
+function R.FitScale(width, height, screenWidth, screenHeight)
+    local function Usable(n) return type(n) == "number" and n == n and n > 0 and n < math.huge end
+    if not (Usable(width) and Usable(height) and Usable(screenWidth) and Usable(screenHeight)) then return 1 end
+    local scale = math.min(1, (screenWidth - FIT_MARGIN * 2) / width, (screenHeight - FIT_MARGIN * 2) / height)
+    return math.max(FIT_MIN_SCALE, scale)
+end
+
+-- For a window parented to UIParent. Usable directly as an OnShow handler.
+function R.FitToScreen(frame)
+    if not (frame and UIParent) then return end
+    local scale = R.FitScale(frame:GetWidth(), frame:GetHeight(), UIParent:GetWidth(), UIParent:GetHeight())
+    if math.abs((frame:GetScale() or 1) - scale) > 0.001 then frame:SetScale(scale) end
+end
+
+---------------------------------------------------------------------------
 -- Tiny event bus so modules can share one frame and run in a known order.
 -- A listener may add or remove listeners (itself included) while its event is being delivered: the
 -- delivery in progress still reaches every listener that is still registered, once, in order. A listener

@@ -53,6 +53,17 @@ function I.Tip(frame, title, body, anchor)
     end
 end
 
+-- For a row whose label is cut short with "...": hovering the row shows the whole text, and only when the label really is cut.
+-- text: a string, or a function(frame) returning one (read when the tooltip opens, so it is never out of date).
+function I.TipTruncated(frame, label, text)
+    frame:EnableMouse(true)
+    I.Tip(frame, nil, function(f)
+        if label.IsTruncated and label:IsTruncated() then
+            return type(text) == "function" and text(f) or text
+        end
+    end)
+end
+
 -- Call after a change that alters what a control's tooltip says (it became enabled, its setting
 -- changed): redraws it only if it is the one being shown, and drops it if there is now nothing to say.
 function I.RefreshTip(frame)

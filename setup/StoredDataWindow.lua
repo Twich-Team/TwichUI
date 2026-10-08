@@ -471,6 +471,7 @@ local function Build()
     f:SetScript("OnDragStart", f.StartMoving)
     f:SetScript("OnDragStop", f.StopMovingOrSizing)
     f:SetClampedToScreen(true)
+    f:HookScript("OnShow", R.FitToScreen)
     tinsert(UISpecialFrames, "TwichUIAddonData")
     if R.S then Skin("Shell", f) else
         f:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })

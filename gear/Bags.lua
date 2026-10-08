@@ -71,8 +71,17 @@ local function Mark(button)
     Paint(button, nil, button, bag, slot, link)
 end
 
+-- Hooked on every bag redraw. With bag marks off (the default) it only hides marks left from when they were on,
+-- without asking the game about each slot's item.
 local function MarkFrame(frame)
-    for _, button in frame:EnumerateValidItems() do Mark(button) end
+    if R:Enabled("gearBagIcons") then
+        for _, button in frame:EnumerateValidItems() do Mark(button) end
+    else
+        for _, button in frame:EnumerateValidItems() do
+            local icon = button.TwichUIUpgradeIcon
+            if icon then icon:Hide() end
+        end
+    end
 end
 
 -- EllesmereUI Bags draws its own slots and calls the painters registered with

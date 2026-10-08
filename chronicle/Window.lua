@@ -51,6 +51,7 @@ local function Window(name, w, h, title, bandH)
     p:SetScript("OnDragStart", p.StartMoving)
     p:SetScript("OnDragStop", p.StopMovingOrSizing)
     p:SetClampedToScreen(true)
+    p:HookScript("OnShow", R.FitToScreen)
     tinsert(UISpecialFrames, name)   -- Esc closes it
     S.Frame(p, w, h)
     S.Header(p, bandH)

@@ -14,6 +14,7 @@
 2. Run `./tools/update_training_data.sh` (needs `git` and `lua5.1`) to refresh the
    class training data from the newest What's Training? commit, then
    `./tests/run.sh` (needs `lua5.1` and `lua-bitop`).
+   `docs/release-hardening.md` has the support scope, the profiling steps and the in-game checklist to go through first.
    If the release changes what is saved (a new or changed layout in any saved variable), follow
    `docs/persistence.md` ("Adding a schema 2") first: a numbered, repeatable upgrade step and a test with the
    previous layout.

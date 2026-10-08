@@ -237,6 +237,7 @@ function W.Show(auto)
         return false, "unavailable"
     end
     Layout()
+    R.FitToScreen(frame)   -- its height follows its text, so it is fitted after Layout, not on OnShow
     frame:Show()
     if not frame:IsVisible() then return false, "hidden" end   -- e.g. the interface is hidden: nothing was seen
     shownCount = shownCount + 1

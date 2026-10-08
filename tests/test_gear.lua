@@ -292,6 +292,14 @@ Changed("PLAYER_EQUIPMENT_CHANGED")
 c.TwichUIDB.modules.gearBagIcons = false
 R.GearBags.Refresh(); FlushTimers()
 assert(not buttons[1].TwichUIUpgradeIcon.shown, "turning bag icons off clears them")
+-- Off, a bag redraw (which happens on every bag update) does not ask the game about each slot's item.
+do
+  local asked, real = 0, c.C_Container.GetContainerItemLink
+  c.C_Container.GetContainerItemLink = function(...) asked = asked + 1; return real(...) end
+  bagFrame:UpdateItems()
+  c.C_Container.GetContainerItemLink = real
+  assert(asked == 0, "bag icons off: no per-slot item lookups on a redraw (" .. asked .. ")")
+end
 
 -- EllesmereUI Bags: the same marks through its overlay painter, kept off the button.
 local paint = assert(ellePainters.TwichUI, "painter registered with EllesmereUI Bags")
