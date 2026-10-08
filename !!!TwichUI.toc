@@ -74,6 +74,9 @@ modules\Arrival.lua
 # Welcome Back bookmark (reads the Chronicle, shows once at login)
 modules\WelcomeBack.lua
 
+# Welcome dialog: one short page for a new installation, and /tui about (uses the Chronicle palette and the arrival card's fonts)
+modules\Welcome.lua
+
 # New training at level-up (uses the arrival card's look; data from What's Training?, MIT)
 modules\TrainingData.lua
 modules\Training.lua

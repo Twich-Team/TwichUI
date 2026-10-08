@@ -10,6 +10,8 @@ This addon is intended to work alongside EllesmereUI.
 
 ## Features
 
+**Welcome:** A new installation opens one short "Welcome to TwichUI" page the first time you log in, once for the whole account, and never for an upgrade. It points to the settings, the notification previews and the troubleshooting report, and changes nothing. `/tui about` shows it again.
+
 **Fonts and sounds:** Adds various thematic fonts to the game, allowing them to be utilized for interface customization.
 
   
@@ -37,7 +39,7 @@ This addon is intended to work alongside EllesmereUI.
 
 **Zone arrival:** Arriving somewhere new shows the zone's name as a brief, quiet title card in place of the game's zone text: not at login, not while on a flight path, and only for the last place when crossing zones quickly. Walking into a dungeon or raid shows its name with "Dungeon" or "Raid" beneath it. Smaller places within a zone, dungeon and raid cards, and Reduced motion are optional.
 
-**Journey Chronicle:** An optional, private journal for each character (`/tui chronicle`). Write your own short notes, and if you like let it keep a few moments for you: levels, new zones and defeated encounters. Off by default, never announced in chat, and never shared or backed up with your configuration. At login, an optional small "Welcome Back" bookmark can remind you of the last place the Chronicle noted.
+**Journey Chronicle:** A private journal for each character (`/tui chronicle`). Write your own short notes, and let it keep a few moments for you: levels, new zones and defeated encounters, with deaths off until you choose them. Automatic entries are on by default for a new installation and each kind can be switched off; a quiet line in your own chat window (never sent to anyone) says when one is added, and that can be switched off too. Never shared or backed up with your configuration. At login, an optional small "Welcome Back" bookmark can remind you of the last place the Chronicle noted.
 
 **Configuration sharing** Provides an ecosystem to share your addon configurations with friends.
 

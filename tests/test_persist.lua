@@ -528,7 +528,7 @@ local ST4 = tr.TwichUI.Setups
 for _, name in ipairs(SV) do
   assert(ST4.CheckData(sv[name]), name .. " holds only plain data (no functions, frames, timers or cycles)")
 end
-local TOP = { schema = true, modules = true, ui = true, gear = true, setup = true, storedData = true, shareTransport = true, whisperProbe = true }
+local TOP = { schema = true, modules = true, ui = true, gear = true, setup = true, storedData = true, shareTransport = true, whisperProbe = true, welcome = true }
 for k in pairs(sv.TwichUIDB) do assert(TOP[k], "undeclared top-level field in TwichUIDB: " .. tostring(k)) end
 local SETUP = { detected = true, selection = true, received = true, trusted = true, recommend = true, scanNext = true, restoreNext = true,
   lastScan = true, pending = true, eui = true }
@@ -635,5 +635,39 @@ for _, leak in ipairs({ "Zorblax", "PRIVATE NOTE TEXT", "hunter2", "SecretAddonD
 end
 local futureReport = boot("Zorblax", { TwichUIDB = { schema = 7 } }, { files = { "diag/Diagnostics.lua", "diag/Saved.lua" } }).TwichUI.Diag.Build()
 assert(Has(futureReport, "newer-saved-data") and Has(futureReport, "saved by a newer TwichUI"))
+
+---------------------------------------------------------------------------
+-- First run: only a load that found no saved settings at all is a new installation (welcome "pending").
+-- An upgrade, a current save, a damaged one and a newer one never are, whatever the marker says or lacks.
+---------------------------------------------------------------------------
+do
+  local function state(c) return c.TwichUIDB.welcome and c.TwichUIDB.welcome.state end
+  assert(state(fresh) == "pending", "a new installation is owed the welcome")
+  assert(state(boot("OldSave", { TwichUIDB = legacy() })) == "seen", "an unversioned (older release) save is not new")
+  assert(state(boot("CurrentSave", { TwichUIDB = { schema = 1, modules = {} } })) == "seen", "a current save without the marker is not new")
+  assert(state(boot("NoSchema", { TwichUIDB = { modules = { chronicle = false } } })) == "seen", "any non-empty save is not new")
+  assert(state(boot("BadSchemaOld", { TwichUIDB = { schema = "two", modules = {} } })) == "seen", "an unreadable schema is not new")
+  local pending = boot("StillPending", { TwichUIDB = { schema = 1, modules = {}, welcome = { state = "pending" } } })
+  assert(state(pending) == "pending", "a new installation that reloaded before the welcome appeared still owes it")
+  assert(state(boot("Seen", { TwichUIDB = { schema = 1, modules = {}, welcome = { state = "seen" } } })) == "seen")
+  for _, junk in ipairs({ "yes", 1, true, {}, { state = 7 }, { state = "bogus" } }) do
+    local c = boot("Junk", { TwichUIDB = { schema = 1, modules = {}, welcome = junk } })
+    assert(state(c) == "seen", "an unreadable marker never starts onboarding: " .. tostring(junk))
+    assert(c.TwichUI.Persist.Report().lost == 0, "and is not counted as something lost")
+  end
+  assert(state(boot("Newer", { TwichUIDB = { schema = 99, modules = {} } })) == "seen", "a newer save's stand-in is not new")
+  -- A failed upgrade changes nothing about being new or not.
+  local failedUp = boot("FailingUpgrade", { TwichUIDB = legacy() }, { before = function(c)
+    c.TwichUI.Persist.STEPS[1] = function() error("synthetic failure") end
+  end })
+  assert(failedUp.TwichUI.Persist.Report().main.outcome == "failed" and state(failedUp) == "seen", "an upgrade that failed is still not a new installation")
+  -- It is repeatable and never touches the other settings.
+  local before = copy(fresh.TwichUIDB)
+  fresh.TwichUI.Persist.Normalize(fresh.TwichUIDB, true); fresh.TwichUI.Persist.Normalize(fresh.TwichUIDB)
+  assert(same(before, fresh.TwichUIDB), "normalizing again changes nothing, and a later normalize never 'refreshes' a pending marker")
+  local upgraded = boot("OldSave2", { TwichUIDB = legacy() })
+  upgraded.TwichUI.Persist.Normalize(upgraded.TwichUIDB, true)
+  assert(state(upgraded) == "seen", "a marker that exists is never replaced by a later 'fresh' call")
+end
 
 print("PERSIST TESTS PASSED")

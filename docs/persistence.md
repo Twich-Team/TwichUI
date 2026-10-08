@@ -97,6 +97,23 @@ from 1, repeat, injected failure). Document the step here. Never reuse or reorde
   hand edit does not lose a newer version's data.
 - One bad value never resets a whole table or profile.
 
+## First run: the welcome marker
+
+`TwichUIDB.welcome = { state = "pending" | "seen" }`, written by `Persist.Normalize`.
+
+- A load that finds **no saved settings at all** (`next(TwichUIDB) == nil`, the same test that says `outcome = "fresh"`)
+  writes `pending`. Nothing else ever does: not a missing marker, not a schema upgrade, not a failed upgrade, not a
+  damaged marker, not a newer save's stand-in. Those write or leave `seen`, so an upgrade can never start onboarding.
+- `modules/Welcome.lua` changes `pending` to `seen` once the dialog is really on screen. A `/reload` before that keeps
+  `pending`; the dialog is tried again. Showing it by hand (`/tui about`) while `pending` also counts as seen.
+- The marker is account-wide, like the rest of `TwichUIDB`: other characters, other addons' profiles, the options'
+  **Defaults** button and the feature-level **Reset** buttons never touch it (it is not one of `modules`).
+- **Full reset:** TwichUI has no "reset everything" command. Deleting `!!!TwichUI.lua` from `SavedVariables` (see the
+  manual test) is a new installation again and shows the dialog once more. Restoring an older copy of that file brings
+  its marker back with it.
+- An unreadable marker is quietly `seen`, and is not counted as a loss (`Report().lost` stays 0): nothing the player
+  stored is gone.
+
 ## Newer data is never touched
 
 If `TwichUIDB.schema` or `TwichUIChronicleDB.version` is higher than this build understands, TwichUI does not read,
@@ -246,7 +263,7 @@ lists what is in it without running it (read-only; add `--redact` to share a rep
    each character's `SavedVariables`). Keep that copy until the end.
 2. **Fresh install, isolated.** With the game closed, *move* (do not delete) `!!!TwichUI.lua` and its `.bak` out of
    `SavedVariables`. Other addons' files stay. Start the game with the candidate package installed. Expect: no
-   TwichUI notice in chat; `/tui options` shows the defaults; `/tui diagnostics` → **Saved data** says "new, nothing
+   TwichUI notice in chat, and the **Welcome to TwichUI** dialog appears once a few seconds after the world loads; `/tui options` shows the defaults; `/tui diagnostics` → **Saved data** says "new, nothing
    saved before" and "stored values reset or set aside: 0". Log out normally.
 3. **Configure.** Back in: switch several features on and off (include some you turn *off* that default on, such as
    Welcome Back), set a Food and Drink size and border, move the New Training, Friend Login and Welcome Back cards in

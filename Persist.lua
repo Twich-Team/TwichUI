@@ -18,6 +18,11 @@
 --     handed back unchanged at logout (see Hold), and the session runs on fresh defaults.
 --   * A failed upgrade leaves the saved data exactly as it was and is tried again next load.
 --   * Nothing here plays a sound, shows a card, registers a game event for a feature or touches the game.
+--
+-- First run: TwichUIDB.welcome.state is "pending" only when this very load found no saved settings at all
+-- (the one reliable sign of a new installation). Every other load, whatever its schema, leaves a missing or
+-- unreadable marker as "seen", so an upgrade can never start onboarding. modules/Welcome.lua owns what the
+-- marker means and moves it from "pending" to "seen" once the dialog has actually been shown.
 
 local R = TwichUI
 local P = {}
@@ -261,8 +266,20 @@ end
 ---------------------------------------------------------------------------
 -- Making TwichUIDB usable: containers, on/off settings, defaults
 ---------------------------------------------------------------------------
+-- The first-run marker. Only a new installation is ever "pending"; a missing or unreadable marker on
+-- anything else is "seen" (not counted as a repair: nothing the player stored was lost).
+local function NormalizeWelcome(db, fresh)
+    local w = db.welcome
+    if type(w) ~= "table" then
+        db.welcome = { state = fresh and "pending" or "seen" }
+    elseif w.state ~= "pending" and w.state ~= "seen" then
+        w.state = "seen"
+    end
+end
+
 -- Fills what is missing and fixes what cannot be used, one value at a time. Repeatable.
-function P.Normalize(db)
+-- fresh: this load found no saved settings (see "First run" above).
+function P.Normalize(db, fresh)
     for _, key in ipairs(CONTAINERS) do
         if db[key] ~= nil and type(db[key]) ~= "table" then
             db[key] = nil
@@ -293,6 +310,7 @@ function P.Normalize(db)
         end
     end
     if not VALID_TRANSPORT[db.shareTransport] then db.shareTransport = DeriveTransport(db.modules) end
+    NormalizeWelcome(db, fresh)
 end
 
 local function ValidSchemaNumber(n) return P.IsCount(n) end
@@ -306,7 +324,7 @@ function P.LoadMain()
 
     if next(db) == nil then
         main.outcome = "fresh"
-        P.Normalize(db)
+        P.Normalize(db, true)
         db.schema = P.SCHEMA
         return
     end

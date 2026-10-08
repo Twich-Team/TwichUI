@@ -194,6 +194,34 @@ byName["Clear previews"].click()
 assert(#R.Notify.State().active == 0 and #R.Notify.State().waiting == 0)
 assert(ui.arrivalHold .. tostring(ui.friendLoginChannel) == savedBefore and c.TwichUIDB.modules.arrival == true, "previews change no setting")
 
+-- Help: where to find the welcome and the commands. Both are visible buttons that change no setting.
+do
+  local welcomeRow, commandsRow = byName["Welcome"], byName["Chat commands"]
+  assert(welcomeRow and welcomeRow.click and #welcomeRow.shown == 0 and commandsRow and commandsRow.click, "Help buttons on the overview")
+  assert(welcomeRow.data.tooltip:find("/tui about", 1, true) and welcomeRow.data.tooltip:find("changes nothing", 1, true))
+  local modulesBefore = {}
+  for k, v in pairs(c.TwichUIDB.modules) do modulesBefore[k] = v end
+  commandsRow.click()   -- runs /tui help through the one parser
+  local shown = 0
+  R.Welcome = { Show = function() shown = shown + 1 end }
+  welcomeRow.click()
+  assert(shown == 1, "Show welcome reaches the dialog")
+  R.Welcome = nil
+  welcomeRow.click()   -- no dialog loaded: nothing to do, and no error
+  for k, v in pairs(modulesBefore) do assert(c.TwichUIDB.modules[k] == v, "opening Help changes no setting: " .. k) end
+end
+
+-- Gear: nothing has to be entered, and the automatic tree is explained with where to override it.
+do
+  local gearHints, tree
+  for _, i in ipairs(initializers) do
+    if i.data.name == "Upgrade hints in item tooltips" then gearHints = i end
+    if i.data.name == "Weigh gear for" then tree = i end
+  end
+  assert(gearHints and gearHints.data.tooltip:find("don't have to enter anything", 1, true), "says no setup is needed")
+  assert(tree and tree.data.tooltip:find("override", 1, true) and tree.data.tooltip:find("tied", 1, true), "explains automatic detection and the override")
+end
+
 -- Skins: missing addons say so and can't be ticked; installed ones report status.
 local attune, auctionator
 for _, i in ipairs(initializers) do

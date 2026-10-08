@@ -197,9 +197,9 @@ local function Build()
     -- Feature pages first; the overview is filled in at the end, once each
     -- page's status is known.
     Use("gear")
-    Header("Upgrade hints", "Quiet upgrade hints for your class and main talent tree. A rough estimate from item stats, not a simulation.")
+    Header("Upgrade hints", "Quiet upgrade hints for your class and main talent tree. A rough estimate from item stats, not a simulation. Nothing to set up first: TwichUI starts from its own rough stat weights for each class and tree, which you can change under Stat weights if you follow a guide.")
     Toggle("gearHints", "Upgrade hints in item tooltips",
-        "Adds a short line to an item's tooltip when it looks like an upgrade for your class and main talent tree, such as \"Likely upgrade for Fury\". Hold Shift (your compare-items key) to see why.\n\n\"Use:\" and \"Chance on hit:\" effects aren't weighed.",
+        "Adds a short line to an item's tooltip when it looks like an upgrade for your class and main talent tree, such as \"Likely upgrade for Fury\". Hold Shift (your compare-items key) to see why.\n\nWorks as soon as it is on, using TwichUI's built-in rough stat weights for your class and tree; you don't have to enter anything. No hint is shown for a class TwichUI has no weights for.\n\n\"Use:\" and \"Chance on hit:\" effects aren't weighed.",
         false)
     local bags = Toggle("gearBagIcons", "Mark upgrades in my bags",
         "A small mark in the corner of bag slots holding gear the tooltip would call an upgrade, fainter for possible upgrades. Works with Blizzard's bags and EllesmereUI Bags.",
@@ -208,7 +208,7 @@ local function Build()
     local P, D, B = R.GearPrefs, R.GearData, R.GearBags
     if P and D then
         Choice("gearTree", "Weigh gear for",
-            "The talent tree this character's gear is weighed for. Automatic follows the tree you've put the most points into, or your class's usual levelling tree before then.",
+            "The talent tree this character's gear is weighed for. Automatic uses the tree with the most talent points when one clearly leads. Until you have spent points, while two trees are tied, or if your talents can't be read, it uses your class's usual levelling tree, and the reasoning (hold Shift over an item) says so. Choose a tree here to override it; the choice is kept for this character only.",
             NUMBER, 0,
             function() return P.TreeChoice() or 0 end,
             function(value) P.SetTreeChoice(value ~= 0 and value or nil) end,
@@ -221,7 +221,7 @@ local function Build()
     end
     if R.GearWindow then
         Button("Stat weights", "Edit", function() R.GearWindow:Show() end,
-            "How each of your talent trees values stats: a stat priority you rank, as guides list them, or stat weights you can change.")
+            "Optional. How each of your talent trees values stats. Each starts from TwichUI's rough weights; change them only if you want hints to follow a guide: rank the stats it lists (a stat priority), or edit the numbers (stat weights). A priority with nothing ranked yet falls back to the tree's weights.")
     end
     if P then
         Advanced(Header("Advanced"))
@@ -856,7 +856,7 @@ local function Build()
         FeatureRow("gear", "Gear comparison", "Quiet upgrade hints in item tooltips and bags, and the stat weights behind them.",
             function() return OnOff(R:Enabled("gearHints") or R:Enabled("gearBagIcons")) end)
     end
-    FeatureRow("notifications", "Notifications", "Quiet cards for arriving somewhere new, new training at a level-up, and friends logging in.",
+    FeatureRow("notifications", "Notifications", "Quiet cards for arriving somewhere new, new training at a level-up, and friends logging in. Previews of each card are on this page.",
         function()
             local on = (R:Enabled("arrival") and 1 or 0) + (R:Enabled("trainingNotice") and 1 or 0) + (R:Enabled("friendLogin") and 1 or 0)
             return OnOff(on > 0, ("%d of 3 on"):format(on), "Off")
@@ -883,7 +883,7 @@ local function Build()
         function() return OnOff(R:Enabled("chronicle"), "Recording", "Notes only") end)
     FeatureRow("auction", "Auction House", "A Sell from Bags tab for listing items one at a time.",
         function() return OnOff(R:Enabled("auctionPosting")) end)
-    FeatureRow("skins", "Addon skins", "The EllesmereUI look for supported addons.", function()
+    FeatureRow("skins", "Addon skins", "The EllesmereUI look for supported addons. Needs EllesmereUI; the rest of TwichUI works without it.", function()
         local installed, on = 0, 0
         for _, skin in ipairs(SKINS) do
             if AddonState(skin.addon) ~= "missing" then
@@ -901,6 +901,15 @@ local function Build()
             function() return R.Diag.Tracing() and (R.GREEN .. "Tracing on|r") or (R.GREY .. "Tracing off|r") end)
     end
     RefreshOverview()
+
+    -----------------------------------------------------------------------
+    Header("Help", "Where to find things. Neither button here changes a setting.")
+    Button("Welcome", "Show", function()
+        if SettingsPanel and SettingsPanel:IsShown() then HideUIPanel(SettingsPanel) end
+        if R.Welcome then R.Welcome.Show() end
+    end, "Shows the short introduction again (same as typing /tui about). It changes nothing.")
+    Button("Chat commands", "List", function() R.RunCommand("help") end,
+        "Prints the /tui commands in your chat window: this window, the Chronicle, the sharing window, the troubleshooting report and card previews.")
 
     -----------------------------------------------------------------------
     Header("General")

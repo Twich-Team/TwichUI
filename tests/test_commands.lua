@@ -25,6 +25,14 @@ local noarg = table.concat(out, "\n")
 out = {}; SL.TWICHUI("help"); assert(table.concat(out, "\n") == noarg)
 out = {}; SL.TWICHUI("?"); assert(table.concat(out, "\n") == noarg)
 
+-- about: the welcome dialog, through the same parser; "welcome" stays the Chronicle's Welcome Back preview
+out = {}; SL.TWICHUI("about"); assert(last():find("welcome isn't available", 1, true), "neutral when the dialog isn't loaded")
+local shownWelcome = 0
+a.TwichUI.Welcome = { Show = function() shownWelcome = shownWelcome + 1 end }
+out = {}; SL.TWICHUI("about"); SL.TWICHUI("abo"); assert(shownWelcome == 2, "/tui about and its unique prefix")
+assert(noarg:find("/tui about", 1, true) and noarg:find("Welcome Back", 1, true))
+a.TwichUI.Welcome = nil
+
 -- unknown / ambiguous
 out = {}; SL.TWICHUI("bogus"); assert(last():find("unknown command 'bogus'") and last():find("/tui help"))
 out = {}; SL.TWICHUI("c"); assert(last():find("more than one"))

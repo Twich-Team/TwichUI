@@ -291,7 +291,7 @@ end
 
 local function Build(p)
     built = true
-    Help(p, "How each of your talent trees values stats when TwichUI compares gear. Pick which tree your gear is weighed for, and how hints behave, on the TwichUI page.", TOP)
+    Help(p, "Each tree starts from TwichUI's rough weights, so nothing here has to be filled in; change them only to follow a guide. Which tree is used is chosen on the Gear comparison page.", TOP)
 
     local treeLabel = Text(p, "GameFontNormal")
     treeLabel:SetPoint("TOPLEFT", 16, TOP - 36)
@@ -407,7 +407,7 @@ local function Build(p)
     priority.clear:SetPoint("TOP", priority.fill, "BOTTOM", 0, -6)
 
     -- Shown instead of everything above for a class without weights.
-    f.noClass = Help(p, "Upgrade hints have no stat weights for your class.", TOP - 36)
+    f.noClass = Help(p, "TwichUI has no stat weights for your class, so upgrade hints are not shown.", TOP - 36)
     f.noClass:Hide()
 end
 

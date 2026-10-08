@@ -250,11 +250,14 @@ R:On("PLAYER_LOGIN", RegisterWithEllesmere)   -- in case EllesmereUI loaded oddl
 -- Entry points
 ---------------------------------------------------------------------------
 -- key: a page under TwichUI (see Settings.lua); the overview when omitted.
+-- Returns true when the game was asked to open it, false when TwichUI's options aren't there (yet).
 function R:OpenSettings(key)
     local category = R.settingsCategories and R.settingsCategories[key or "overview"] or R.settingsCategory
     if category and Settings and Settings.OpenToCategory then
         Settings.OpenToCategory(category:GetID())
+        return true
     end
+    return false
 end
 
 function TwichUI_OnCompartmentClick(_, button)
@@ -301,7 +304,10 @@ COMMANDS = {
     { name = "chronicle", usage = "chronicle", desc = "your journey chronicle", fn = function()
         if R.ChronicleWindow then R.ChronicleWindow:Toggle() else Unavailable("Journey Chronicle") end
     end },
-    { name = "welcome", usage = "welcome", desc = "preview the Welcome Back bookmark now", fn = function()
+    { name = "about", usage = "about", desc = "show the TwichUI welcome again", fn = function()
+        if R.Welcome then R.Welcome.Show() else Unavailable("The welcome") end
+    end },
+    { name = "welcome", usage = "welcome", desc = "preview the Chronicle's Welcome Back bookmark now", fn = function()
         if not R.WelcomeBack then Unavailable("Welcome Back") return end
         local ok, why = R.WelcomeBack.Preview()
         if not ok then R.Print(why) end

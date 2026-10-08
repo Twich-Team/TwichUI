@@ -55,7 +55,7 @@ Mocked tests cannot show combat lockdown, protected-frame errors or taint. Those
 ## Reason codes (`/tui diagnostics` → "Start-up and lifecycle")
 
 `waiting-for-world`, `deferred-combat`, `cancelled-stale-baseline`, `cancelled-stale-transfer`, `transfer-settled`,
-`friend-bnet-baseline`, `friend-bnet-disconnected`, `init-failed`. Counts only; no names, places or items.
+`friend-bnet-baseline`, `friend-bnet-disconnected`, `init-failed`, `welcome-deferred`. Counts only; no names, places or items.
 
 ## Manual acceptance test
 
@@ -95,3 +95,38 @@ Test TwichUI alone first, then with EllesmereUI. After each step, check `/tui di
     "failed", receiver's prompt closes; nothing stored. Repeat with "Let friends send me…" off during a receive.
 15. **Errors and taint.** Play 10 minutes including combat; check `/tui diagnostics` (no "init-failed") and the game's
     error display. Taint can only be judged in the game.
+
+## Welcome dialog (`modules/Welcome.lua`): manual acceptance test
+
+Nothing here has been verified in the game yet. Test TwichUI alone first, then with EllesmereUI. A new installation
+means moving `!!!TwichUI.lua` (and `.bak`) out of `SavedVariables` with the game closed; put it back afterwards.
+
+1. **Fresh install.** *Expect:* a few seconds after the world loads, once, **Welcome to TwichUI**, centred a little above
+   the middle, over the world (no zone card, no Welcome Back card, no sound). `/tui diagnostics` → "welcome dialog:
+   seen".
+2. **Existing installation.** Install this build over a save from the previous one. *Expect:* no dialog, ever, on this
+   or any character; "welcome dialog: seen".
+3. **Closing.** Close button, the **x** in the title area, and Escape each close it. None brings it back (reload, relog,
+   change characters, enter and leave instances).
+4. **Open Settings.** *Expect:* the dialog closes and Esc > Options > AddOns > TwichUI (the overview) opens. With the
+   Settings panel unable to open, the dialog stays and chat says why.
+5. **Manual reopening.** `/tui about`, and Help > Welcome > Show in the options overview (which closes the options
+   first). It opens any number of times as one frame and changes no setting.
+6. **Reload, relog, characters.** `/reload` before it appears (move fast): it still appears next time. After it was shown:
+   never again, on any character.
+7. **Profiles and resets.** Switch an EllesmereUI profile; press the options' Defaults button; use Appearance > Reset on
+   Food and Drink. The dialog does not return.
+8. **Combat and loading.** Log in already in combat (or pull right after the world loads), on a flight path, at a
+   cinematic, with the interface hidden (Alt+Z): it waits, then appears once, after the fight / flight / cinematic, or
+   when the interface returns. `/tui diagnostics` shows "welcome-deferred" with a count.
+9. **Chronicle Welcome Back.** On a character with Chronicle history use a new installation (or `/tui welcome` to
+   show the bookmark while the dialog is owed). *Expect:* the bookmark and zone cards are neither dropped nor
+   shortened; the dialog waits until no card is showing or waiting.
+10. **TwichUI alone, and with EllesmereUI.** The dialog looks the same either way: warm umber, bronze rim, no
+    EllesmereUI window style.
+11. **UI scale, window size, long text.** At the smallest and largest UI scale, a small window, and a font with taller
+    lines (or a longer translation) the frame grows to fit its text, nothing is clipped, and the buttons stay inside it.
+12. **Skinning.** No default-template leftovers; every text is readable against the frame; hovering and pressing the
+    buttons changes their look.
+13. **No side effects.** Compare `/tui diagnostics` and the options pages before and after: no feature was switched on or
+    off and no value changed by opening or closing it.
