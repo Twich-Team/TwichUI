@@ -82,6 +82,7 @@ local function Build()
     if R.QoL then NewPage("qol", "Quality of life") end
     NewPage("food", "Food and drink")
     if R.MageTravel and R.MageTravel.ForPlayer() then NewPage("mage", "Mage") end   -- Mages only
+    if R.Nav then NewPage("navigation", "Navigation") end
     NewPage("chronicle", "Journey Chronicle")
     NewPage("auction", "Auction House")
     NewPage("skins", "Addon skins")
@@ -724,6 +725,26 @@ local function Build()
     end
 
     -----------------------------------------------------------------------
+    if pages.navigation then
+        Use("navigation")
+        Header("Routes to your map pin", "An estimated route to the map pin you place (Ctrl-click the world map), by walking and the flight paths you know. TwichUI suggests the way; it never moves you, casts a spell or takes a flight for you.")
+        local function RefreshNav() if R.Nav then R.Nav.Refresh() end end
+        local nav = Toggle("navigation", "Plan routes to my map pin",
+            "Adds Route to your map pin to the world map's filter menu (the magnifying glass at its top). Choosing it plans the fastest estimated route using supported, known travel options: walking, and flights between the flight points this character has. A flight point counts once a flight master's map has listed it as yours, so open any flight master's map once on each continent before flights can be planned there. The route is drawn on the world map and its next step is shown near the top of the screen, with Recalculate and Stop. It is planned again as you go, and when you land somewhere else.\n\nWhat it can't know: the game gives no walking paths, so walking is measured in a straight line and its time is a minimum; hills, walls and water can make it longer. Boats, zeppelins, portals, the tram and the Hearthstone aren't used yet, so a pin on another continent can't be routed. Nothing is planned inside dungeons or raids.\n\nWhile this is on, TwichUI also notes which flight points a flight master's map lists as yours, the routes it shows you and how long your flights take, so later routes are better. That stays on this computer and is never shared. Move the next step and the arrow in Edit Mode.",
+            false, RefreshNav)
+        local function NavOn() return R:Enabled("navigation") end
+        Under(Toggle("navigationArrow", "Show a direction arrow",
+            "A small arrow under the next step points to where the current step leads, with the distance in yards. It turns as you turn, and hides while you fly or when the game gives no position.",
+            false, RefreshNav), nav, NavOn)
+        if R.NavData then
+            Button("Learned flight data", "Forget", function()
+                R.NavData.Forget()
+                R.Print("navigation has forgotten the flight points, routes and times it learned. It learns them again as you open flight masters' maps and fly.")
+            end, "Forgets the flight points, flight routes and flight times navigation has learned on this computer, for every character. Nothing else changes. They are learned again as you open flight masters' maps and fly. Until then, no flights are planned.")
+        end
+    end
+
+    -----------------------------------------------------------------------
     Use("chronicle")
     Header("Automatic entries", "A quiet, private journal for this character. It isn't shared, sent or backed up with your configuration, and it never tells you what to do next.")
     local chronicle = Toggle("chronicle", "Keep moments for me automatically",
@@ -878,6 +899,10 @@ local function Build()
                 local on = (R:Enabled("mageTravel") and 1 or 0) + (R:Enabled("mageConjure") and 1 or 0)
                 return OnOff(on > 0, ("%d of 2 on"):format(on), "Off")
             end)
+    end
+    if pages.navigation then
+        FeatureRow("navigation", "Navigation", "Estimated routes to your map pin by walking and the flight paths you know, with the next step on screen.",
+            function() return OnOff(R:Enabled("navigation")) end)
     end
     FeatureRow("chronicle", "Journey Chronicle", "Your private journal for this character.",
         function() return OnOff(R:Enabled("chronicle"), "Recording", "Notes only") end)

@@ -3,7 +3,7 @@
 ## Notes: A carefully crafted UI enhancement addon for WoW Forever that makes the game interface feel a little cleaner, more cohesive, and more considered, without making it feel modernized beyond recognition.
 ## Author: twichie
 ## Version: 3.0.9
-## SavedVariables: TwichUIDB, TwichUIBackupDB, TwichUIShareDB, TwichUIRestoreDB, TwichUIChronicleDB
+## SavedVariables: TwichUIDB, TwichUIBackupDB, TwichUIShareDB, TwichUIRestoreDB, TwichUIChronicleDB, TwichUINavigationDB
 ## IconTexture: Interface\AddOns\!!!TwichUI\media\icon
 ## AddonCompartmentFunc: TwichUI_OnCompartmentClick
 ## AddonCompartmentFuncOnEnter: TwichUI_OnCompartmentEnter
@@ -99,6 +99,17 @@ modules\SpellMenu.lua
 modules\MageTravel.lua
 modules\MageConjure.lua
 
+# Navigation (opt-in): estimated routes to your map pin by walking and the flight paths you know, with a
+# world-map trail, the next step and an optional arrow (uses the Chronicle palette). No route data is shipped:
+# flight routes and times are learned in play (TwichUINavigationDB). Never moves you or travels for you.
+nav\World.lua
+nav\Data.lua
+nav\Flights.lua
+nav\Planner.lua
+nav\Journey.lua
+nav\MapTrail.lua
+nav\Guide.lua
+
 # Sell from Bags: Auction House posting tab (uses the Chronicle palette)
 auction\Price.lua
 auction\Scan.lua
@@ -120,6 +131,7 @@ diag\Notifications.lua
 diag\Friends.lua
 diag\Food.lua
 diag\Zones.lua
+diag\Navigation.lua
 diag\Sharing.lua
 diag\Saved.lua
 diag\Window.lua

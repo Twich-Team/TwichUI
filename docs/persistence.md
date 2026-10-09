@@ -6,7 +6,7 @@ done there.
 
 ## What is stored, and who owns it
 
-All five variables are account-wide (declared in the `.toc`; there is no per-character variable). Per-character data
+All six variables are account-wide (declared in the `.toc`; there is no per-character variable). Per-character data
 is keyed by `"Name - Realm"` inside an account-wide variable.
 
 | Variable | Kind | Owner | Version | Holds |
@@ -17,6 +17,7 @@ is keyed by `"Name - Realm"` inside an account-wide variable.
 | `TwichUIBackupDB` | undo snapshots | `setup/Setups.lua` | none | one `[character]` snapshot per character that applied a setup |
 | `TwichUIRestoreDB` | restore points ("Backups") | `setup/Restore.lua` | none | `points[]` |
 | `TwichUIChronicleDB` | feature data (the Journey Chronicle) | `chronicle/Data.lua` | `version` (integer) | `chars["Name - Realm"]` records: entries, notes, tracking state |
+| `TwichUINavigationDB` | learned data (navigation) | `nav/Data.lua` | `version` (integer, `NavData.VERSION` = 1) | `routes["from:to"]` (a flight's stops, from a flight master's map) and `times["a-b-c"]` (measured flight times), shared by every character; `chars["Name - Realm"].known` (the flight points a flight master's map has listed as that character's). Kept within 3000 routes, 1000 times, 400 flight points per character and 60 characters, oldest first. Unreadable entries are dropped one at a time (`nav-entry-dropped`, not a loss: it is learned again); a copy from a newer TwichUI is set aside like the Chronicle's (`nav-future`). Never shared, exported or backed up (its name starts with `TwichUI`) |
 
 Kept apart on purpose: configuration (`TwichUIDB`) is small and safe to reset; sharing records and restore points are
 other addons' tables kept verbatim; the Chronicle is the player's own writing. The Chronicle is never part of
@@ -256,7 +257,7 @@ closed whenever files are copied. **Never replace a file while the client is run
 
 SavedVariables for TwichUI are in
 `<game folder>/WTF/Account/<ACCOUNT>/SavedVariables/!!!TwichUI.lua` (the file is named for the addon folder, and
-holds all five variables; the client also keeps `!!!TwichUI.lua.bak`). `python3 tools/sv_inspect.py show '!!!TwichUI'`
+holds all six variables; the client also keeps `!!!TwichUI.lua.bak`). `python3 tools/sv_inspect.py show '!!!TwichUI'`
 lists what is in it without running it (read-only; add `--redact` to share a report).
 
 1. **Back up.** Close the game. Copy the whole `WTF` folder somewhere safe (or at least the `SavedVariables` folder and

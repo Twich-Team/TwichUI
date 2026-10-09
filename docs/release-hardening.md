@@ -20,6 +20,7 @@ is what that build and the test harness report.
 | EllesmereUI Bags (upgrade mark painter) | **Intended**; registers once when `EUI_Bags` exists |
 | A data bar that lists LibDataBroker launchers (Mage Travel/Conjuring, Chronicle launcher) | **Intended**; no launcher appears without one |
 | Leatrix Plus | Only read, to say in a tooltip that it does the same job |
+| Navigation (opt-in, off by default) | **Intended**, on one continent: walking (a straight line, shown as a minimum) and flights between the flight points a flight master's map has listed as the character's (none until one has been opened on that continent). Boats, zeppelins, portals, the tram, lifts and the Hearthstone are **not planned**; dungeons and raids are not covered. Needs Blizzard's world map and its filter menu |
 | Other addons, other skins, other bag addons | **Not claimed**. No integration, no promise |
 
 Three states are kept apart, in the settings and in `/tui diagnostics` ("Environment"): *installed*
@@ -36,6 +37,7 @@ the skin switches) are kept whatever is installed.
 | New training card | class, level, bundled data | Shows nothing when there is nothing new |
 | Food and Drink | bags, level, (Mage) conjured items | Secure buttons: changes wait for combat to end |
 | Chronicle | per character | Never shared or backed up with configuration |
+| Navigation | faction, flight points found, run speed | Flight routes and times it learns are account-wide (`TwichUINavigationDB`), never shared or backed up |
 
 ### Known external limitations (not TwichUI defects)
 - EllesmereUI's target-debuff tracked-bar refresh was reported during testing. Nothing in TwichUI touches those bars,
@@ -99,6 +101,10 @@ and note the output with each screenshot.
 | Auctionator/Attune/WhatsTraining/Dungeon Journal skins | one hook each, installed once | module switch needs a reload | skinned frames remembered once |
 | Diagnostics | off until asked | no | 200 records, 10 errors, rate limit, stops by itself after 15 minutes; Clear empties them |
 | Notification coordinator | no `OnUpdate`; timers per notice | idle when empty | queue of 6; dropped notices are released |
+| Navigation route | 0.5-second ticker while a route is active; planning every 10 s while walking (a few dozen flight points, costs cached) | **no**: no ticker, events or map drawing when off or with no route | the ticker is cancelled when the route ends |
+| Navigation arrow | `OnUpdate` at 20 updates a second while it is shown | no | handler removed when hidden; no tables made per update |
+| Navigation map drawing | world map open, on zoom/map change, and every ≥ 1 s while you move ≥ 15 yards | no: data provider removed when off | 500 dots, 300 dashes, 24 marks |
+| Navigation flight learning | flight master map opened, take-off and landing events, a watch on `TakeTaxiNode` (installed once; checks the setting) | no events when off | see Collections |
 
 No permanent `OnUpdate`, no recurring ticker and no polling loop for an optional integration was found.
 `ADDON_LOADED` listeners that remain (EllesmereUI, skin status, Settings) compare a name and return.
@@ -109,6 +115,8 @@ No permanent `OnUpdate`, no recurring ticker and no polling loop for an optional
 | Notification queue | 6 | oldest of the lowest priority is released |
 | Diagnostic trace | 200 records, 10 errors, 64 labels per kind | `Clear` wipes records, errors and labels |
 | Lifecycle reason codes | 32 kinds | counts only |
+| Navigation learned flight data | 3000 routes, 1000 flight times, 24 stops per route, 400 flight points per character, 60 characters | oldest first; Forget (Navigation options) empties it |
+| Navigation result counts | 32 kinds | counts only, this session |
 | Gear judgement cache | 300 | cleared when full |
 | Chronicle | 500 entries per character | when full, the oldest automatic zone entry goes first, then other automatic ones; your notes and the first "begun" line are kept |
 | Imported backups | 20 points, 32 MiB total | |

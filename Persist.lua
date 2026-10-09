@@ -6,6 +6,7 @@
 --   TwichUIDB.schema           settings and sharing records, SCHEMA below. Missing = 0 = every release
 --                              before schemas existed. Ordered, repeatable steps in STEPS bring it up to date.
 --   TwichUIChronicleDB.version the Journey Chronicle, owned by chronicle/Data.lua (CHRONICLE_VERSION).
+--   TwichUINavigationDB.version flight data navigation has learned, owned by nav/Data.lua (its VERSION).
 --   The other roots (restore points, undo backups, your shareable setup) carry no number: they hold
 --   other addons' tables as they were saved and are checked for shape on load by the module that owns them.
 --
@@ -50,6 +51,9 @@ P.CODES = {
     ["chronicle-entry-repaired"] = false,  -- a Chronicle entry kept after fixing its id, title or date
     ["chronicle-trimmed"] = false,       -- automatic Chronicle entries removed to keep within the limit
     ["restore-point-repaired"] = false,  -- a backup kept after fixing its id, name or date
+    ["nav-entry-dropped"] = false,       -- a learned flight route or time that could not be read (learned again by flying)
+    ["nav-trimmed"] = false,             -- the oldest learned flight data removed to keep within the limit
+    ["nav-future"] = false,              -- learned flight data from a newer TwichUI, set aside unchanged for the session
     ["root-not-table"] = true,           -- a whole saved variable was not a table
     ["container-not-table"] = true,      -- a settings group was not a table
     ["module-not-boolean"] = true,       -- an on/off setting held something else; back to its default
