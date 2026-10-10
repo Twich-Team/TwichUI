@@ -49,6 +49,7 @@ local DEFAULT_MODULES = {
     foodDrinkDrink = true,   -- ... the Drink button
     mageTravel = true,       -- Mage Travel launcher on a data bar: teleports and portals, cast by your click (Mages only)
     mageConjure = true,      -- Mage Conjuring launcher on a data bar: food and water ranks, cast by your click (Mages only)
+    mageRefreshments = false, -- Mage refreshments panel: plan food and water for your group, conjure by click or key, a checklist (Mages only, opt-in)
     auctionPosting = true,   -- "Sell from Bags" tab in the Auction House (searches only when you pick an item)
     qolSummons = false,      -- Quality of Life (all opt-in, see qol/QoL.lua): accept summons
     qolResurrect = false,    -- ... accept a resurrection offered to you
@@ -328,6 +329,9 @@ COMMANDS = {
     end },
     { name = "chronicle", usage = "chronicle", desc = "your journey chronicle", fn = function()
         if R.ChronicleWindow then R.ChronicleWindow:Toggle() else Unavailable("Journey Chronicle") end
+    end },
+    { name = "refreshments", usage = "refreshments", desc = "Mage refreshments panel (Mages)", fn = function()
+        if R.RefreshmentsPanel then R.RefreshmentsPanel.Toggle() else Unavailable("Mage refreshments") end
     end },
     { name = "about", usage = "about", desc = "show the TwichUI welcome again", fn = function()
         if R.Welcome then R.Welcome.Show() else Unavailable("The welcome") end

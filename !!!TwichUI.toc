@@ -99,6 +99,12 @@ modules\SpellMenu.lua
 modules\MageTravel.lua
 modules\MageConjure.lua
 
+# Mage refreshments: plan conjured food and water for the group, conjure by click or key, and a checklist
+# of who has been supplied (Mages, off until turned on; key bindings in Bindings.xml)
+modules\Refreshments.lua
+modules\RefreshmentsPanel.lua
+modules\RefreshmentsShares.lua
+
 # Sell from Bags: Auction House posting tab (uses the Chronicle palette)
 auction\Price.lua
 auction\Scan.lua
@@ -119,6 +125,7 @@ diag\Lifecycle.lua
 diag\Notifications.lua
 diag\Friends.lua
 diag\Food.lua
+diag\Refreshments.lua
 diag\Zones.lua
 diag\Sharing.lua
 diag\Saved.lua

@@ -45,6 +45,7 @@ function twice is one registration. Modules still guard with their own `Want(eve
 |---|---|---|
 | Food/Drink button attributes, size, position of the buttons' parent | yes (secure buttons) | **Defer**, coalesced to the latest state; run on `PLAYER_REGEN_ENABLED` after revalidating the setting. The tooltip says a change is waiting. |
 | Mage menu rows, shift-click cover | yes | **Reject** opening in combat; close at combat start (or when it ends); cover is put away out of combat only |
+| Mage refreshments panel and its conjure buttons | yes (secure buttons) | **Reject** opening in combat; close at combat start (or when it ends). The buttons' spell **defers** to `PLAYER_REGEN_ENABLED`; turned on in combat, they are made when it ends (docs/refreshments.md) |
 | Quick Keybind (`QuickKeybindFrame:Show()`) | yes | **Disable** the button in combat with the reason; never deferred (it must be the player's click) |
 | Cards, movers, tooltips, the notification coordinator | no (plain frames) | act at once; previews clear at combat start |
 | `BNToastFrame` event list | no | act at once |
@@ -55,7 +56,8 @@ Mocked tests cannot show combat lockdown, protected-frame errors or taint. Those
 ## Reason codes (`/tui diagnostics` → "Start-up and lifecycle")
 
 `waiting-for-world`, `deferred-combat`, `cancelled-stale-baseline`, `cancelled-stale-transfer`, `transfer-settled`,
-`friend-bnet-baseline`, `friend-bnet-disconnected`, `init-failed`, `welcome-deferred`. Counts only; no names, places or items.
+`friend-bnet-baseline`, `friend-bnet-disconnected`, `init-failed`, `welcome-deferred`, `cancelled-stale-refreshments`,
+`refreshments-reset-manual`, `refreshments-reset-left-group`. Counts only; no names, places or items.
 
 ## Manual acceptance test
 

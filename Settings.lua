@@ -666,6 +666,23 @@ local function Build()
             STRING, MC.DEFAULT_TEXT, MC.TextChoice, MC.SetTextChoice, MC.TEXTS),
             conjure, function() return R:Enabled("mageConjure") end)
 
+        local RF = R.Refreshments
+        if RF then
+            Header("Mage refreshments", "Plan the conjured food and water you hand to your party or raid, conjure it by click or key, and tick off who you've supplied. TwichUI never casts, trades or whispers for you.")
+            local refresh = Toggle("mageRefreshments", "Refreshments panel",
+                "A small panel (/tui refreshments, or its key in Key Bindings > TwichUI) for getting your group fed and watered. It works out how much water and food your party or raid needs from each class's share and what you keep, at the best rank each person can use, against what is in your bags. Its Water and Food buttons conjure once per click or key press; drag one to an action bar to hold a key with the game's Press and Hold Casting instead. A checklist shows who you've supplied; you mark it yourself, and it starts again when you leave the group or reload.\n\nIt can't be opened in combat and closes when combat starts. Off by default.",
+                false, function() RF.Refresh() end)
+            local function RefreshOn() return R:Enabled("mageRefreshments") end
+            Under(Button("Refreshments panel", "Open", function()
+                if SettingsPanel and SettingsPanel:IsShown() then HideUIPanel(SettingsPanel) end
+                if R.RefreshmentsPanel then R.RefreshmentsPanel.Open() end
+            end, "Opens the panel (same as typing /tui refreshments)."), refresh, RefreshOn)
+            if R.RefreshmentShares then
+                Button("Refreshment shares", "Edit", function() R.RefreshmentShares.Show() end,
+                    "How many water and food each class gets in a party and in a raid, and how many you keep. Single items, not stacks.")
+            end
+        end
+
         local MS = R.MenuStyle
         Header("Broker menu appearance", "How the menus of your data bar launchers look. One background and border for all of them. Only the look changes; what the menus do doesn't.")
         local resettable = {}   -- { setting, default }, for Reset
@@ -721,6 +738,7 @@ local function Build()
             end
             MS.Reset()   -- and forget the saved values altogether, so the defaults are used as they come
         end, "Puts the background and border of the menus back to their defaults. Nothing else is changed.")
+        if R.RefreshmentShares and R.RefreshmentShares.Register then R.RefreshmentShares.Register(pages.mage.category) end
     end
 
     -----------------------------------------------------------------------
@@ -873,10 +891,12 @@ local function Build()
     FeatureRow("food", "Food and drink", "Two buttons you click to eat or drink the best food or drink in your bags.",
         function() return OnOff(R:Enabled("foodDrink")) end)
     if pages.mage then
-        FeatureRow("mage", "Mage", "Data bar launchers for your teleports and portals, and for conjuring food and water.",
+        local mageParts = R.Refreshments and 3 or 2
+        FeatureRow("mage", "Mage", "Data bar launchers for your teleports and portals and for conjuring food and water, and a refreshments panel for your group.",
             function()
                 local on = (R:Enabled("mageTravel") and 1 or 0) + (R:Enabled("mageConjure") and 1 or 0)
-                return OnOff(on > 0, ("%d of 2 on"):format(on), "Off")
+                    + ((R.Refreshments and R:Enabled("mageRefreshments")) and 1 or 0)
+                return OnOff(on > 0, ("%d of %d on"):format(on, mageParts), "Off")
             end)
     end
     FeatureRow("chronicle", "Journey Chronicle", "Your private journal for this character.",

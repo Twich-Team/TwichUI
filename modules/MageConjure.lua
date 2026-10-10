@@ -127,6 +127,13 @@ local launcher = SM.New({
         { button = "LeftButton", label = "Conjure Water", ranks = M.SPELLS.water },
         { button = "RightButton", label = "Conjure Food", ranks = M.SPELLS.food },
     },
+    -- Only while Mage refreshments (modules/Refreshments.lua, loaded after this file) is on.
+    footer = {
+        label = "Refreshments for your group...",
+        hint = "Opens the refreshments panel: how much your party or raid needs, and who you've supplied.",
+        shown = function() return R.Refreshments ~= nil and R.Refreshments.Enabled() end,
+        onClick = function() if R.RefreshmentsPanel then R.RefreshmentsPanel.Open() end end,
+    },
 })
 M.Open, M.Close, M.Toggle, M.IsOpen = launcher.Open, launcher.Close, launcher.Toggle, launcher.IsOpen
 M.Available, M.Refresh = launcher.Available, launcher.Refresh

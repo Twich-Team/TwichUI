@@ -302,7 +302,7 @@ function P.Normalize(db, fresh)
     if added > 0 then P.Repair("defaults-added", added) end
     -- Groups the features write into without checking first.
     if type(db.ui) == "table" then
-        for _, k in ipairs({ "qol", "foodDrink", "brokerMenu" }) do
+        for _, k in ipairs({ "qol", "foodDrink", "brokerMenu", "refreshments" }) do
             if db.ui[k] ~= nil and type(db.ui[k]) ~= "table" then
                 db.ui[k] = nil
                 P.Repair("container-not-table")

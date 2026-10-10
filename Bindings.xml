@@ -1,0 +1,10 @@
+<Bindings>
+	<!-- TwichUI's key bindings (Options > Key Bindings > TwichUI). Their names are set in
+	     modules/RefreshmentsPanel.lua. The conjure keys click the refreshments panel's own secure buttons,
+	     once per press; with Mage refreshments off, or on another class, they do nothing. -->
+	<Binding name="TWICHUI_REFRESHMENTS" category="BINDING_HEADER_TWICHUI">
+		TwichUI.Refreshments.TogglePanel()
+	</Binding>
+	<Binding name="CLICK TwichUIRefreshmentsWater:LeftButton" category="BINDING_HEADER_TWICHUI"/>
+	<Binding name="CLICK TwichUIRefreshmentsFood:LeftButton" category="BINDING_HEADER_TWICHUI"/>
+</Bindings>

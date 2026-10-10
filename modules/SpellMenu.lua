@@ -263,6 +263,8 @@ MenuStyle.Subscribe(function() if SM.PreviewShown() then DrawPreview() end end)
 --   learnLines(tip, entry)  adds the lines under an unlearned spell's tooltip
 --   shortcuts    optional: { { button = "LeftButton"|"RightButton", label, ranks = { spellIDs,
 --                lowest first } }, ... }; shift and that button casts the highest rank known
+--   footer       optional: { label, hint, shown(), onClick() }: a plain (not secure) entry under the
+--                spells, while shown() is true; clicking it closes the menu and calls onClick
 -- Returns the launcher's functions: Open(frame), Close(), Toggle(frame), IsOpen(), Available(),
 -- Refresh(), ApplyAppearance(), TextChoice(), SetTextChoice(value).
 ---------------------------------------------------------------------------
@@ -368,6 +370,28 @@ function SM.New(spec)
         row:Hide()
     end
 
+    local footerRow   -- spec.footer's entry, made the first time it is shown
+
+    local function NewFooter()
+        local K = Palette()
+        local b = CreateFrame("Button", nil, menu)
+        b:SetHeight(ROW_HEIGHT)
+        local hover = Solid(b, "HIGHLIGHT", K.gold, 0.08)
+        hover:SetAllPoints()
+        b.text = Text(b, FONT_NOTE, 13, "GameFontNormalSmall")
+        b.text:SetPoint("LEFT", 6, 0)
+        b.text:SetPoint("RIGHT", -6, 0)
+        b.text:SetText(spec.footer.label)
+        b.text:SetTextColor(K.gold[1], K.gold[2], K.gold[3])
+        b:SetScript("OnClick", function()
+            if InCombat() then return end
+            menu:Hide()
+            spec.footer.onClick()
+        end)
+        if spec.footer.hint then R.Interact.Tip(b, spec.footer.label, spec.footer.hint) end
+        return b
+    end
+
     local function NewHeader()
         local K = Palette()
         local h = CreateFrame("Frame", nil, menu)
@@ -453,6 +477,16 @@ function SM.New(spec)
                 y = y - ROW_HEIGHT
             end
             y = y - SECTION_GAP
+        end
+        if spec.footer and spec.footer.shown() then
+            footerRow = footerRow or NewFooter()
+            footerRow:ClearAllPoints()
+            footerRow:SetPoint("TOPLEFT", menu, "TOPLEFT", pad, y)
+            footerRow:SetPoint("RIGHT", menu, "RIGHT", -pad, 0)
+            footerRow:Show()
+            y = y - ROW_HEIGHT
+        elseif footerRow then
+            footerRow:Hide()
         end
         for i = used + 1, #rows do Clear(rows[i]) end
         menu:SetHeight(-y + pad)

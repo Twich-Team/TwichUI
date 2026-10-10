@@ -53,7 +53,11 @@ c.Settings = {
     local data = {}
     return {Add = function(_, value, label, tip) table.insert(data, {value = value, label = label, tooltip = tip}) end, GetData = function() return data end}
   end,
-  RegisterCanvasLayoutSubcategory = function(parent, _, name) assert(parent.name == "Gear comparison" and name == "Stat weights") return {GetID = function() return 2 end} end,
+  RegisterCanvasLayoutSubcategory = function(parent, _, name)
+    assert((parent.name == "Gear comparison" and name == "Stat weights") or (parent.name == "Mage" and name == "Refreshment shares"), name)
+    c.canvases = c.canvases or {}; c.canvases[name] = parent.name
+    return {GetID = function() return 2 end}
+  end,
   OpenToCategory = function(id) c.opened = id end,
   RegisterAddOnCategory = function() end,
 }
@@ -72,6 +76,7 @@ c.StaticPopupDialogs = {}; c.StaticPopup_Show = function() end
 for _, f in ipairs({ "gear/Weights.lua", "gear/Evaluate.lua", "gear/Prefs.lua", "gear/Data.lua",
   "gear/Hints.lua", "gear/Tooltip.lua", "gear/Bags.lua", "gear/Window.lua", "modules/Notify.lua", "modules/Arrival.lua", "modules/Media.lua", "modules/FriendLogin.lua", "modules/Borders.lua", "modules/FoodDrink.lua",
   "modules/TrainingData.lua", "modules/Borders.lua", "modules/MenuStyle.lua", "modules/SpellMenu.lua", "modules/MageTravel.lua", "modules/MageConjure.lua",
+  "chronicle/Style.lua", "modules/Refreshments.lua", "modules/RefreshmentsPanel.lua", "modules/RefreshmentsShares.lua",
   "qol/QoL.lua", "qol/Summons.lua", "qol/Resurrect.lua", "qol/ReleasePvP.lua", "qol/Duels.lua", "qol/QuickKeybind.lua", "Settings.lua" }) do
   local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
 end
@@ -85,7 +90,7 @@ for key, default in pairs(defaults) do
   n = n + 1
   assert(default == R.DEFAULT_MODULES[key], key .. " default matches a new install")
 end
-assert(n == 42, "every module has a toggle: " .. n)
+assert(n == 43, "every module has a toggle: " .. n)
 assert(defaults.arrival == true and defaults.arrivalSubzones == true and defaults.arrivalReducedMotion == false,
   "arrival card and subzone cards on; reduced motion opt-in")
 assert(defaults.arrivalDungeons == true, "dungeon and raid arrival cards on by default")
@@ -96,6 +101,8 @@ assert(defaults.chronicleDeaths == false, "death entries are opt-in")
 assert(defaults.welcomeBack == true, "Welcome Back bookmark is on by default")
 assert(defaults.foodDrink == false and defaults.foodDrinkFood == true and defaults.foodDrinkDrink == true, "Food and Drink buttons are opt-in")
 assert(defaults.mageTravel == true and defaults.mageConjure == true, "the Mage launchers are on (they show only on a data bar)")
+assert(defaults.mageRefreshments == false, "Mage refreshments are opt-in")
+assert(c.canvases["Stat weights"] == "Gear comparison" and c.canvases["Refreshment shares"] == "Mage", "the shares page sits under Mage")
 assert(defaults.auctionPosting == true, "Sell from Bags tab is on by default (it only searches when you pick an item)")
 assert(defaults.trainingNotice == true, "new training card is on by default")
 assert(defaults.friendLogin == true, "Battle.net friend login card is on by default")
@@ -252,7 +259,7 @@ for variable, page in pairs({
   TWICHUI_qolReleaseWait = "Quality of life", TWICHUI_qolDuels = "Quality of life", TWICHUI_qolDuelsFrom = "Quality of life",
   TWICHUI_qolDuelsToDeath = "Quality of life", TWICHUI_qolQuickKeybind = "Quality of life",
   TWICHUI_foodDrink = "Food and drink", TWICHUI_foodDrinkFood = "Food and drink", TWICHUI_foodDrinkDrink = "Food and drink",
-  TWICHUI_mageTravel = "Mage", TWICHUI_mageTravelText = "Mage", TWICHUI_mageConjure = "Mage", TWICHUI_mageConjureText = "Mage",
+  TWICHUI_mageTravel = "Mage", TWICHUI_mageTravelText = "Mage", TWICHUI_mageConjure = "Mage", TWICHUI_mageConjureText = "Mage", TWICHUI_mageRefreshments = "Mage",
   TWICHUI_attuneSkin = "Addon skins", TWICHUI_whatsTrainingSkin = "Addon skins",
   TWICHUI_setupSharing = "Configuration sharing", TWICHUI_shareTransport = "Configuration sharing",
 }) do assert(variables[variable] == page, variable .. " is on " .. page .. ", not " .. tostring(variables[variable])) end
