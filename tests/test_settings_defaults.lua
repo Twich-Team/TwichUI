@@ -77,7 +77,7 @@ for _, f in ipairs({ "gear/Weights.lua", "gear/Evaluate.lua", "gear/Prefs.lua", 
   "gear/Hints.lua", "gear/Tooltip.lua", "gear/Bags.lua", "gear/Window.lua", "modules/Notify.lua", "modules/Arrival.lua", "modules/Media.lua", "modules/FriendLogin.lua", "modules/Borders.lua", "modules/FoodDrink.lua",
   "modules/TrainingData.lua", "modules/Borders.lua", "modules/MenuStyle.lua", "modules/SpellMenu.lua", "modules/MageTravel.lua", "modules/MageConjure.lua",
   "chronicle/Style.lua", "modules/Refreshments.lua", "modules/RefreshmentsPanel.lua", "modules/RefreshmentsShares.lua", "modules/RefreshmentsTrade.lua", "modules/RefreshmentsBroker.lua",
-  "qol/QoL.lua", "qol/Summons.lua", "qol/Resurrect.lua", "qol/ReleasePvP.lua", "qol/Duels.lua", "qol/QuickKeybind.lua", "Settings.lua" }) do
+  "modules/RestedXPSkin.lua", "qol/QoL.lua", "qol/Summons.lua", "qol/Resurrect.lua", "qol/ReleasePvP.lua", "qol/Duels.lua", "qol/QuickKeybind.lua", "Settings.lua" }) do
   local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
 end
 c.LOADED["!!!TwichUI"] = true; c.FireEvent("ADDON_LOADED", "!!!TwichUI")
@@ -90,7 +90,8 @@ for key, default in pairs(defaults) do
   n = n + 1
   assert(default == R.DEFAULT_MODULES[key], key .. " default matches a new install")
 end
-assert(n == 45, "every module has a toggle: " .. n)
+assert(n == 46, "every module has a toggle: " .. n)
+assert(defaults.restedxpSkin == false, "the RestedXP skin is opt-in")
 assert(defaults.arrival == true and defaults.arrivalSubzones == true and defaults.arrivalReducedMotion == false,
   "arrival card and subzone cards on; reduced motion opt-in")
 assert(defaults.arrivalDungeons == true, "dungeon and raid arrival cards on by default")
@@ -541,6 +542,58 @@ do
     Row("Collected records", true).click()
     assert(printed[#printed] and printed[#printed]:find("cleared", 1, true), "clear answers: " .. tostring(printed[#printed]))
   end
+end
+
+-- RestedXP skin: opt-in; its rows grey out with the switch; the detailed rows are Advanced; each writes
+-- through to the look; Reset touches only the look (not the switch).
+do
+  local RS = R.RestedXPSkin
+  assert(RS, "the module is loaded")
+  local function RowFor(variable)
+    for _, i in ipairs(initializers) do if i.setting == proxies[variable] then return i end end
+  end
+  local function Find(name) for _, i in ipairs(initializers) do if i.data.name == name then return i end end end
+  local toggle = Find("Skin the RestedXP guide window")
+  assert(toggle and toggle.GetTooltip and toggle:GetTooltip():find("Status: ", 1, true), "its tooltip says where it stands")
+  assert(toggle:GetTooltip():find("Off", 1, true), "off by default")
+  for _, v in ipairs({ "TWICHUI_restedxpLookBgColor", "TWICHUI_restedxpLookBorderColor", "TWICHUI_restedxpTitleColor",
+    "TWICHUI_restedxpBodyColor" }) do
+    local row = RowFor(v)
+    assert(row and #row.shown == 0, v .. " is a common setting")
+    assert(not row:Enabled(), v .. " is greyed out while the skin is off")
+  end
+  for _, v in ipairs({ "TWICHUI_restedxpLookBgTexture", "TWICHUI_restedxpLookBgOpacity", "TWICHUI_restedxpLookBorderTexture",
+    "TWICHUI_restedxpLookBorderSize", "TWICHUI_restedxpLookBorderOpacity", "TWICHUI_restedxpTitleFont", "TWICHUI_restedxpTitleOutline",
+    "TWICHUI_restedxpBodyFont", "TWICHUI_restedxpBodyOutline", "TWICHUI_restedxpTintScrollbar" }) do
+    local row = RowFor(v)
+    assert(row and #row.shown > 0, v .. " is under Advanced")
+  end
+  c.TwichUIDB.modules.restedxpSkin = true
+  assert(RowFor("TWICHUI_restedxpLookBgColor"):Enabled(), "enabled with the skin on")
+  c.TwichUIDB.modules.restedxpSkin = false
+
+  proxies.TWICHUI_restedxpLookBgOpacity.set(40)
+  proxies.TWICHUI_restedxpLookBorderColor.set("ff102030")
+  proxies.TWICHUI_restedxpTitleOutline.set("thick")
+  proxies.TWICHUI_restedxpBodyFont.set("Some Font")
+  assert(RS.Look.Get("bgOpacity") == 40 and RS.Look.Get("borderColor") == "ff102030")
+  assert(RS.Text.Get("titleOutline") == "thick" and RS.Text.Get("bodyFont") == "Some Font")
+  assert(proxies.TWICHUI_restedxpLookBgOpacity.get() == 40, "reads back the saved value")
+  proxies.TWICHUI_restedxpLookBgOpacity.set(500)   -- refused, not saved
+  assert(RS.Look.Get("bgOpacity") == 40)
+  -- a font that is not available is listed, marked, and stays chosen
+  local container = dropdowns.TWICHUI_restedxpBodyFont()
+  local marked
+  for _, entry in ipairs(container) do if entry.value == "Some Font" then marked = entry.label end end
+  assert(marked and marked:find("not available", 1, true), "a missing font stays listed, marked")
+  assert(container[1].value == "default", "RestedXP's own font is first")
+
+  c.TwichUIDB.modules.restedxpSkin = true
+  Find("Reset appearance").click()
+  assert(RS.Look.Get("bgOpacity") == RS.Look.DEFAULTS.bgOpacity and RS.Look.Get("borderColor") == RS.Look.DEFAULTS.borderColor)
+  assert(RS.Text.Get("titleOutline") == "none" and RS.Text.Get("bodyFont") == "default", "text back to its defaults")
+  assert(c.TwichUIDB.modules.restedxpSkin == true, "the switch is not part of the look")
+  c.TwichUIDB.modules.restedxpSkin = false
 end
 
 print("SETTINGS DEFAULTS TESTS PASSED")

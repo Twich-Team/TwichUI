@@ -107,6 +107,10 @@ modules\RefreshmentsShares.lua
 modules\RefreshmentsTrade.lua
 modules\RefreshmentsBroker.lua
 
+# RestedXP skin: a TwichUI theme and finish for the RestedXP guide window (off until turned on; uses
+# modules\MenuStyle.lua; needs RestedXP, and works without EllesmereUI)
+modules\RestedXPSkin.lua
+
 # Sell from Bags: Auction House posting tab (uses the Chronicle palette)
 auction\Price.lua
 auction\Scan.lua
@@ -128,6 +132,7 @@ diag\Notifications.lua
 diag\Friends.lua
 diag\Food.lua
 diag\Refreshments.lua
+diag\RestedXPSkin.lua
 diag\Zones.lua
 diag\Sharing.lua
 diag\Saved.lua

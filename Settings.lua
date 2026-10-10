@@ -193,6 +193,104 @@ local function Build()
         end, tooltip)
     end
 
+    -- One look's controls (modules/MenuStyle.lua): background and border texture, color and opacity,
+    -- border thickness, a preview and a reset. style: the look; prefix: its settings' names; noun: what
+    -- it is the look of ("menu", "panel"); parent, isOn: the switch it is greyed out under, if any.
+    -- preview: nil for no Preview button. resetLabel: nil for no Reset button (the caller resets the
+    -- returned { setting, default } list itself). options, all optional: order: the rows' suffixes in the
+    -- order to list them; advanced: { [suffix] = true } for rows under an Advanced header (shown with
+    -- "Show advanced options"; labels: { [suffix] = a label of its own } where a page lists these rows beside
+    -- another look's and they must be told apart.
+    local function Appearance(style, prefix, noun, previewTip, preview, resetLabel, resetTip, parent, isOn, options)
+        local resettable = {}   -- { setting, default }, for Reset
+        local advanced = options and options.advanced
+        local function Add(initializer, suffix)
+            if advanced and advanced[suffix] then Advanced(initializer) end
+            if parent and initializer then Under(initializer, parent, isOn) end
+            return initializer
+        end
+        local function Remember(suffix, varType, label, key)
+            if options and options.labels and options.labels[suffix] then label = options.labels[suffix] end
+            local setting = Proxy(prefix .. suffix, varType, label, style.DEFAULTS[key],
+                function() return style.Get(key) end, function(value) style.Set(key, value) end)
+            if setting then resettable[#resettable + 1] = { setting = setting, default = style.DEFAULTS[key] } end
+            return setting
+        end
+        local function Textures(suffix, key, label, tooltip, choices)
+            local setting = Remember(suffix, STRING, label, key)
+            if setting and Settings.CreateDropdown and Settings.CreateControlTextContainer then
+                Add(Settings.CreateDropdown(category, setting, function()
+                    local container = Settings.CreateControlTextContainer()
+                    for _, choice in ipairs(choices()) do container:Add(choice[1], choice[2]) end
+                    return container:GetData()
+                end, tooltip), suffix)
+            end
+        end
+        local function Swatch(suffix, key, label, tooltip)
+            local setting = Remember(suffix, STRING, label, key)
+            if setting and Settings.CreateColorSwatch then Add(Settings.CreateColorSwatch(category, setting, tooltip), suffix) end
+        end
+        local function Slider(suffix, key, label, tooltip)
+            local limit = style.LIMITS[key]
+            local setting = Remember(suffix, NUMBER, label, key)
+            if not (setting and Settings.CreateSlider and Settings.CreateSliderOptions) then return end
+            local sliderOptions = Settings.CreateSliderOptions(limit[1], limit[2], 1)
+            if MinimalSliderWithSteppersMixin and sliderOptions.SetLabelFormatter then
+                sliderOptions:SetLabelFormatter(MinimalSliderWithSteppersMixin.Label.Right)
+            end
+            Add(Settings.CreateSlider(category, setting, sliderOptions, tooltip), suffix)
+        end
+        local rows = {
+            BgTexture = function()
+                Textures("BgTexture", "bgTexture", "Background texture",
+                    "None leaves the " .. noun .. " see-through apart from its border. Solid color is a flat fill. The rest are the game's own backgrounds, the textures EllesmereUI offers for its own backgrounds (while it is installed), and any LibSharedMedia background or status bar texture, so an addon that adds textures there adds them here. A texture is tinted by the color below; choose white to see it as it is.",
+                    style.BackgroundChoices)
+            end,
+            BgColor = function()
+                Swatch("BgColor", "bgColor", "Background color", "The color of the background, or the tint of a textured one.")
+            end,
+            BgOpacity = function()
+                Slider("BgOpacity", "bgOpacity", "Background opacity",
+                    "How solid the background is, in percent. Only the background fades; the " .. noun .. "'s text, icons and border stay as they are.")
+            end,
+            BorderTexture = function()
+                Textures("BorderTexture", "borderTexture", "Border texture",
+                    "None draws no border. Solid line is a plain line. The rest are the game's own borders, EllesmereUI's own border textures while it is installed, and any LibSharedMedia border. Picking one sets a thickness that suits it unless you have set your own; change it below.",
+                    style.BorderChoices)
+            end,
+            BorderSize = function()
+                Slider("BorderSize", "borderSize", "Border thickness",
+                    "The border's width in screen pixels, so it looks the same at any UI scale. 0 for none. A textured border needs about 8 or more to read well. It never covers the " .. noun .. "'s text.")
+            end,
+            BorderColor = function()
+                Swatch("BorderColor", "borderColor", "Border color", "The color of the border, or the tint of a textured one.")
+            end,
+            BorderOpacity = function()
+                Slider("BorderOpacity", "borderOpacity", "Border opacity",
+                    "How solid the border is, in percent. Only the border fades.")
+            end,
+        }
+        local headed = false
+        for _, suffix in ipairs(options and options.order or
+            { "BgTexture", "BgColor", "BgOpacity", "BorderTexture", "BorderSize", "BorderColor", "BorderOpacity" }) do
+            if advanced and advanced[suffix] and not headed then
+                headed = true
+                Advanced(Header("Advanced look", "Textures, thickness and opacity."))
+            end
+            rows[suffix]()
+        end
+        if preview then Add(Button("Preview", "Show or hide", preview, previewTip), "Preview") end
+        if resetLabel then
+            Add(Button(resetLabel, "Reset", function()
+                for _, entry in ipairs(resettable) do
+                    if entry.setting.SetValue then pcall(entry.setting.SetValue, entry.setting, entry.default) end
+                end
+                style.Reset()   -- and forget the saved values altogether, so the defaults are used as they come
+            end, resetTip), "Reset")
+        end
+        return resettable
+    end
+
     -----------------------------------------------------------------------
     -- Feature pages first; the overview is filled in at the end, once each
     -- page's status is known.
@@ -339,6 +437,120 @@ local function Build()
             if name == skin.addon then RefreshSkinStatus() return end
         end
     end)
+
+    -----------------------------------------------------------------------
+    -- RestedXP: its own look, set here. Not through EllesmereUI, which it doesn't need.
+    local RS = R.RestedXPSkin
+    if RS then
+        Header("RestedXP guide window", "Gives the RestedXP Guides window a TwichUI look: a background and border, text colors and fonts, and a matching scroll bar. It never changes guide content, progress, step completion, positions or sizes. Works with or without EllesmereUI.")
+        local STATUS = {
+            off = { "Off", nil },
+            ["restedxp-missing"] = { "RestedXP not installed", "Install RestedXP Guides to use this. Your settings here are kept." },
+            ["restedxp-disabled"] = { "RestedXP turned off", "RestedXP Guides is turned off in your AddOns list. Your settings here are kept." },
+            waiting = { "Waiting for RestedXP", "RestedXP hasn't finished loading yet." },
+            unsupported = { "This RestedXP isn't supported", "This version of RestedXP doesn't have what the skin needs (RenderFrame, RegisterTheme and its guide window). Nothing was changed." },
+            conflict = { "Another RestedXP skin is drawing", "EUI-RestedXP or LiteTweaks is replacing RestedXP's window. Layering two skins would fight, so this one waits. Turn the other's RestedXP skin off, then press Use the TwichUI look." },
+            ["theme-not-selected"] = { "Another RestedXP theme is chosen", "RestedXP is using a different theme, so the skin is stepped aside. Press Use the TwichUI look, or choose TwichUI under RestedXP's Look and Feel." },
+            ["v2-window"] = { "Colors and font only", "RestedXP's v2 guide window (beta) is on. Only the theme's colors and font reach it; its frames are drawn by RestedXP." },
+            active = { "Active", nil },
+        }
+        local function RestedXPStatus()
+            local state = RS.Status()
+            local text = STATUS[state.code] or { state.code }
+            local color = (state.code == "active" and R.GREEN) or (state.code == "off" and R.GREY) or R.GOLD
+            return color .. text[1] .. "|r", text[2]
+        end
+        local rxpBase = "Gives the RestedXP guide window the TwichUI look. Turning it on makes TwichUI the theme RestedXP uses (it remembers the one you had); turning it off puts that one back. Everything below is TwichUI's look; RestedXP's own settings are unchanged."
+        local rxpToggle, rxpSwitch = Toggle("restedxpSkin", "Skin the RestedXP guide window", rxpBase, false, function()
+            RS.OnSwitch()
+            RefreshOverview()
+        end)
+        if rxpToggle and rxpToggle.GetTooltip ~= nil then
+            -- the status is read when the tooltip is shown, so it is never stale
+            rxpToggle.GetTooltip = function(self)
+                local status, detail = RestedXPStatus()
+                return rxpBase .. "\n\nStatus: " .. status .. (detail and ("\n" .. detail) or "")
+            end
+        end
+        local function RxpOn() return R:Enabled("restedxpSkin") end
+        local use = Button("TwichUI look in RestedXP", "Use it", function()
+            local ok, why = RS.UseTheme()
+            if not ok then
+                local reason = why == "conflict" and "another RestedXP skin is drawing."
+                    or why == "combat" and "it will be applied when combat ends."
+                    or "RestedXP isn't ready."
+                R.Print("RestedXP skin: %s", reason)
+            end
+        end, "Makes TwichUI's theme the one RestedXP uses, if you chose another in RestedXP's own options. The theme you had is remembered and put back if you turn the skin off.")
+        Under(use, rxpToggle, RxpOn)
+
+        local resettable = Appearance(RS.Look, "restedxpLook", "window", nil, nil, nil, nil, rxpToggle, RxpOn, {
+            order = { "BgColor", "BorderColor", "BgTexture", "BgOpacity", "BorderTexture", "BorderSize", "BorderOpacity" },
+            advanced = { BgTexture = true, BgOpacity = true, BorderTexture = true, BorderSize = true, BorderOpacity = true },
+            labels = {
+                BgTexture = "Window background texture", BgColor = "Window background color",
+                BgOpacity = "Window background opacity", BorderTexture = "Window border texture",
+                BorderSize = "Window border thickness", BorderColor = "Window border color",
+                BorderOpacity = "Window border opacity",
+            },
+        })
+
+        local function TextSetting(variable, varType, label, key)
+            local setting = Proxy("restedxp" .. variable, varType, label, RS.Text.DEFAULTS[key],
+                function() return RS.Text.Get(key) end, function(value) RS.Text.Set(key, value) end)
+            if setting then resettable[#resettable + 1] = { setting = setting, default = RS.Text.DEFAULTS[key] } end
+            return setting
+        end
+        local function TextSwatch(variable, key, label, tooltip, isAdvanced)
+            local setting = TextSetting(variable, STRING, label, key)
+            if setting and Settings.CreateColorSwatch then
+                local row = Settings.CreateColorSwatch(category, setting, tooltip)
+                if isAdvanced then Advanced(row) end
+                Under(row, rxpToggle, RxpOn)
+            end
+        end
+        local function TextChoice(variable, key, label, tooltip, choices)
+            local setting = TextSetting(variable, STRING, label, key)
+            if setting and Settings.CreateDropdown and Settings.CreateControlTextContainer then
+                local row = Settings.CreateDropdown(category, setting, function()
+                    local container = Settings.CreateControlTextContainer()
+                    for _, choice in ipairs(choices(RS.Text.Get(key))) do container:Add(choice[1], choice[2]) end
+                    return container:GetData()
+                end, tooltip)
+                Advanced(row)
+                Under(row, rxpToggle, RxpOn)
+            end
+        end
+        TextSwatch("TitleColor", "titleColor", "Title text color",
+            "The color of the guide's title, the footer and each step's number tab. Colors RestedXP gives meaning to in a step's own text (warnings, objectives, links) are not changed.")
+        TextSwatch("BodyColor", "bodyColor", "Step text color",
+            "The base color of the step and objective text. Colors RestedXP gives meaning to (warnings, objectives, links) are not changed.")
+        Advanced(Header("Advanced text", "Fonts and outlines. Text size follows RestedXP's own Guide Font Size option."))
+        TextChoice("TitleFont", "titleFont", "Title font",
+            "The font of the guide's title, the footer and step number tabs. The list comes from LibSharedMedia, so fonts other addons add appear here. RestedXP's own is the default. A font that has gone is drawn as the default and stays chosen. The text size follows RestedXP's Guide Font Size.",
+            RS.FontChoices)
+        TextChoice("TitleOutline", "titleOutline", "Title outline", "An outline round the title text.",
+            function() return RS.OUTLINE_CHOICES end)
+        TextChoice("BodyFont", "bodyFont", "Step text font",
+            "The font of step and objective text. A font that has gone is drawn as RestedXP's own and stays chosen. The text size follows RestedXP's Guide Font Size.",
+            RS.FontChoices)
+        TextChoice("BodyOutline", "bodyOutline", "Step text outline", "An outline round the step and objective text.",
+            function() return RS.OUTLINE_CHOICES end)
+        local tint = ProxyToggle("restedxpTintScrollbar", "Tint the scroll bar",
+            "Colors RestedXP's scroll bar to the border color so it sits with the rest of the look. Off leaves RestedXP's own gray.", RS.Text.DEFAULTS.tintScrollbar,
+            function() return RS.Text.Get("tintScrollbar") end, function(value) RS.Text.Set("tintScrollbar", value) end)
+        Advanced(tint)
+        Under(tint, rxpToggle, RxpOn)
+        local reset = Button("Reset appearance", "Reset", function()
+            for _, entry in ipairs(resettable) do
+                if entry.setting.SetValue then pcall(entry.setting.SetValue, entry.setting, entry.default) end
+            end
+            RS.Reset()
+        end, "Puts this look's background, border, fonts and colors back to the defaults. Nothing else changes: not the switch, RestedXP's settings, guide progress or positions, or the rest of TwichUI.")
+        Under(reset, rxpToggle, RxpOn)
+
+        R:On("PLAYER_LOGIN", RefreshOverview)
+    end
 
     -----------------------------------------------------------------------
     Use("notifications")
@@ -702,68 +914,6 @@ local function Build()
                 Button("Refreshment shares", "Edit", function() R.RefreshmentShares.Show() end,
                     "How many water and food each class gets in a party and in a raid, and how many you keep. Single items, not stacks.")
             end
-        end
-
-        -- One look's controls (modules/MenuStyle.lua): background and border texture, color and opacity,
-        -- border thickness, a preview and a reset. style: the look; prefix: its settings' names; noun: what
-        -- it is the look of ("menu", "panel"); parent, isOn: the switch it is greyed out under, if any.
-        local function Appearance(style, prefix, noun, previewTip, preview, resetLabel, resetTip, parent, isOn)
-            local resettable = {}   -- { setting, default }, for Reset
-            local function Add(initializer)
-                if parent and initializer then Under(initializer, parent, isOn) end
-                return initializer
-            end
-            local function Remember(suffix, varType, label, key)
-                local setting = Proxy(prefix .. suffix, varType, label, style.DEFAULTS[key],
-                    function() return style.Get(key) end, function(value) style.Set(key, value) end)
-                if setting then resettable[#resettable + 1] = { setting = setting, default = style.DEFAULTS[key] } end
-                return setting
-            end
-            local function Textures(suffix, key, label, tooltip, choices)
-                local setting = Remember(suffix, STRING, label, key)
-                if setting and Settings.CreateDropdown and Settings.CreateControlTextContainer then
-                    Add(Settings.CreateDropdown(category, setting, function()
-                        local container = Settings.CreateControlTextContainer()
-                        for _, choice in ipairs(choices()) do container:Add(choice[1], choice[2]) end
-                        return container:GetData()
-                    end, tooltip))
-                end
-            end
-            local function Swatch(suffix, key, label, tooltip)
-                local setting = Remember(suffix, STRING, label, key)
-                if setting and Settings.CreateColorSwatch then Add(Settings.CreateColorSwatch(category, setting, tooltip)) end
-            end
-            local function Slider(suffix, key, label, tooltip)
-                local limit = style.LIMITS[key]
-                local setting = Remember(suffix, NUMBER, label, key)
-                if not (setting and Settings.CreateSlider and Settings.CreateSliderOptions) then return end
-                local options = Settings.CreateSliderOptions(limit[1], limit[2], 1)
-                if MinimalSliderWithSteppersMixin and options.SetLabelFormatter then
-                    options:SetLabelFormatter(MinimalSliderWithSteppersMixin.Label.Right)
-                end
-                Add(Settings.CreateSlider(category, setting, options, tooltip))
-            end
-            Textures("BgTexture", "bgTexture", "Background texture",
-                "None leaves the " .. noun .. " see-through apart from its border. Solid color is a flat fill. The rest are the game's own backgrounds, the textures EllesmereUI offers for its own backgrounds (while it is installed), and any LibSharedMedia background or status bar texture, so an addon that adds textures there adds them here. A texture is tinted by the color below; choose white to see it as it is.",
-                style.BackgroundChoices)
-            Swatch("BgColor", "bgColor", "Background color", "The color of the background, or the tint of a textured one.")
-            Slider("BgOpacity", "bgOpacity", "Background opacity",
-                "How solid the background is, in percent. Only the background fades; the " .. noun .. "'s text, icons and border stay as they are.")
-            Textures("BorderTexture", "borderTexture", "Border texture",
-                "None draws no border. Solid line is a plain line. The rest are the game's own borders, EllesmereUI's own border textures while it is installed, and any LibSharedMedia border. Picking one sets a thickness that suits it unless you have set your own; change it below.",
-                style.BorderChoices)
-            Slider("BorderSize", "borderSize", "Border thickness",
-                "The border's width in screen pixels, so it looks the same at any UI scale. 0 for none. A textured border needs about 8 or more to read well. It never covers the " .. noun .. "'s text.")
-            Swatch("BorderColor", "borderColor", "Border color", "The color of the border, or the tint of a textured one.")
-            Slider("BorderOpacity", "borderOpacity", "Border opacity",
-                "How solid the border is, in percent. Only the border fades.")
-            Add(Button("Preview", "Show or hide", preview, previewTip))
-            Add(Button(resetLabel, "Reset", function()
-                for _, entry in ipairs(resettable) do
-                    if entry.setting.SetValue then pcall(entry.setting.SetValue, entry.setting, entry.default) end
-                end
-                style.Reset()   -- and forget the saved values altogether, so the defaults are used as they come
-            end, resetTip))
         end
 
         Header("Broker menu appearance", "How the menus of your data bar launchers look. One background and border for all of them. Only the look changes; what the menus do doesn't.")
