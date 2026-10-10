@@ -57,7 +57,8 @@ Mocked tests cannot show combat lockdown, protected-frame errors or taint. Those
 
 `waiting-for-world`, `deferred-combat`, `cancelled-stale-baseline`, `cancelled-stale-transfer`, `transfer-settled`,
 `friend-bnet-baseline`, `friend-bnet-disconnected`, `init-failed`, `welcome-deferred`, `cancelled-stale-refreshments`,
-`refreshments-reset-manual`, `refreshments-reset-left-group`. Counts only; no names, places or items.
+`refreshments-reset-manual`, `refreshments-reset-left-group`, `trade-place-not-shown`, `trade-split-not-seen`,
+`trade-not-completed`, `trade-move-blocked`. Counts only; no names, places or items.
 
 ## Manual acceptance test
 

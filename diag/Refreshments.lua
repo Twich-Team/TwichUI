@@ -24,7 +24,8 @@ local function Refreshments()
     Line("listening for: %s", #s.events > 0 and table.concat(s.events, ", ") or "nothing")
     Line("group: %s, %d members read, %d not read; look scheduled: %s; roster waiting for combat to end: %s",
         s.context, s.members, s.unreadable, D.Flag(s.scheduled), D.Flag(s.rosterAfterCombat))
-    Line("session: %d in the group, %d who left kept; resets this session: %d", s.sessionInGroup, s.sessionDeparted, s.resets)
+    Line("session: %d in the group, %d who left kept, %d with an unconfirmed trade; resets this session: %d",
+        s.sessionInGroup, s.sessionDeparted, s.sessionOffered, s.resets)
     local mismatch, deferred = false, panel.deferred
     local plan = s.plan
     if plan then
@@ -47,6 +48,21 @@ local function Refreshments()
         end
     end
     Line("button change waiting for combat to end: %s; panel closing when combat ends: %s", D.Flag(deferred), D.Flag(panel.closeAfterCombat))
+    local T = R.RefreshmentsTrade
+    if T and T.Snapshot then
+        local t = T.Snapshot()
+        local st = t.stats
+        Line("trade assistance: switch %s; listening: %s; trade open: %s (partner read: %s, in the group: %s); blocked this trade: %s",
+            t.switchOn and "on" or "off", D.Flag(t.enabled), D.Flag(t.open), D.Flag(t.partnerRead), D.Flag(t.partnerInGroup), D.Flag(t.blocked))
+        Line("trade moves waiting: %d placed not shown yet, split waiting: %s; closed trade waiting for its message: %s",
+            t.pending, D.Flag(t.splitPending), D.Flag(t.closing))
+        Line("trades %d, fill clicks %d, stacks placed %d, splits %d, refused %d, blocked %d",
+            st.trades, st.fills, st.placed, st.splits, st.refused, st.blocked)
+        Line("deliveries: confirmed %d, unconfirmed %d, not completed %d; a completion message recognised this session: %s; last outcome: %s",
+            st.confirmed, st.unconfirmed, st.notCompleted, D.Flag(st.completionSeen), tostring(t.lastOutcome or "none"))
+        Line("this client defines the trade-complete text: %s, its message code: %s; message codes seen during trades: %s",
+            D.Flag(t.completionString), D.Flag(t.completionCode), #t.codes > 0 and table.concat(t.codes, ", ") or "none")
+    end
     if #s.yields > 0 then
         for _, y in ipairs(s.yields) do Line("seen: spell %d made %d per cast at level %s", y.spell, y.n, tostring(y.level)) end
     else
@@ -64,6 +80,7 @@ local function Refreshments()
             "A secure button can't be changed in combat; its spell follows the plan when combat ends.",
             "Handed-out counts are marked by hand. TwichUI can't see what anyone else carries.",
             "The game repeats a held cast only from its own action bars, not from these buttons.",
+            "A trade is counted only when the game says it was completed; otherwise it waits as offered for you to confirm.",
         },
     }
 end

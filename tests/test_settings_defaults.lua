@@ -76,7 +76,7 @@ c.StaticPopupDialogs = {}; c.StaticPopup_Show = function() end
 for _, f in ipairs({ "gear/Weights.lua", "gear/Evaluate.lua", "gear/Prefs.lua", "gear/Data.lua",
   "gear/Hints.lua", "gear/Tooltip.lua", "gear/Bags.lua", "gear/Window.lua", "modules/Notify.lua", "modules/Arrival.lua", "modules/Media.lua", "modules/FriendLogin.lua", "modules/Borders.lua", "modules/FoodDrink.lua",
   "modules/TrainingData.lua", "modules/Borders.lua", "modules/MenuStyle.lua", "modules/SpellMenu.lua", "modules/MageTravel.lua", "modules/MageConjure.lua",
-  "chronicle/Style.lua", "modules/Refreshments.lua", "modules/RefreshmentsPanel.lua", "modules/RefreshmentsShares.lua",
+  "chronicle/Style.lua", "modules/Refreshments.lua", "modules/RefreshmentsPanel.lua", "modules/RefreshmentsShares.lua", "modules/RefreshmentsTrade.lua", "modules/RefreshmentsBroker.lua",
   "qol/QoL.lua", "qol/Summons.lua", "qol/Resurrect.lua", "qol/ReleasePvP.lua", "qol/Duels.lua", "qol/QuickKeybind.lua", "Settings.lua" }) do
   local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
 end
@@ -90,7 +90,7 @@ for key, default in pairs(defaults) do
   n = n + 1
   assert(default == R.DEFAULT_MODULES[key], key .. " default matches a new install")
 end
-assert(n == 43, "every module has a toggle: " .. n)
+assert(n == 44, "every module has a toggle: " .. n)
 assert(defaults.arrival == true and defaults.arrivalSubzones == true and defaults.arrivalReducedMotion == false,
   "arrival card and subzone cards on; reduced motion opt-in")
 assert(defaults.arrivalDungeons == true, "dungeon and raid arrival cards on by default")
@@ -102,6 +102,7 @@ assert(defaults.welcomeBack == true, "Welcome Back bookmark is on by default")
 assert(defaults.foodDrink == false and defaults.foodDrinkFood == true and defaults.foodDrinkDrink == true, "Food and Drink buttons are opt-in")
 assert(defaults.mageTravel == true and defaults.mageConjure == true, "the Mage launchers are on (they show only on a data bar)")
 assert(defaults.mageRefreshments == false, "Mage refreshments are opt-in")
+assert(defaults.mageRefreshmentsTrade == true, "its trade strip comes with it when it is turned on")
 assert(c.canvases["Stat weights"] == "Gear comparison" and c.canvases["Refreshment shares"] == "Mage", "the shares page sits under Mage")
 assert(defaults.auctionPosting == true, "Sell from Bags tab is on by default (it only searches when you pick an item)")
 assert(defaults.trainingNotice == true, "new training card is on by default")
@@ -259,7 +260,7 @@ for variable, page in pairs({
   TWICHUI_qolReleaseWait = "Quality of life", TWICHUI_qolDuels = "Quality of life", TWICHUI_qolDuelsFrom = "Quality of life",
   TWICHUI_qolDuelsToDeath = "Quality of life", TWICHUI_qolQuickKeybind = "Quality of life",
   TWICHUI_foodDrink = "Food and drink", TWICHUI_foodDrinkFood = "Food and drink", TWICHUI_foodDrinkDrink = "Food and drink",
-  TWICHUI_mageTravel = "Mage", TWICHUI_mageTravelText = "Mage", TWICHUI_mageConjure = "Mage", TWICHUI_mageConjureText = "Mage", TWICHUI_mageRefreshments = "Mage",
+  TWICHUI_mageTravel = "Mage", TWICHUI_mageTravelText = "Mage", TWICHUI_mageConjure = "Mage", TWICHUI_mageConjureText = "Mage", TWICHUI_mageRefreshments = "Mage", TWICHUI_mageRefreshmentsTrade = "Mage", TWICHUI_refreshmentsText = "Mage",
   TWICHUI_attuneSkin = "Addon skins", TWICHUI_whatsTrainingSkin = "Addon skins",
   TWICHUI_setupSharing = "Configuration sharing", TWICHUI_shareTransport = "Configuration sharing",
 }) do assert(variables[variable] == page, variable .. " is on " .. page .. ", not " .. tostring(variables[variable])) end
@@ -370,7 +371,7 @@ do
   c.TwichUIDB.ui.foodDrink = { size = 50 }
   local preview, reset
   for _, i in ipairs(initializers) do
-    if i.click and i.data.name == "Preview" then preview = i end
+    if i.click and i.data.name == "Preview" and not preview then preview = i end   -- the menus' (the panel's comes later)
     if i.click and i.data.name == "Menu appearance" then reset = i end
   end
   assert(preview and reset, "a preview and a reset")
@@ -379,6 +380,40 @@ do
   assert(c.TwichUIDB.ui.brokerMenu == nil, "Reset forgets the saved appearance")
   for _, key in pairs(keys) do assert(MS.Get(key) == MS.DEFAULTS[key], key .. " is back to its default") end
   assert(c.TwichUIDB.ui.mageTravelText == "none" and c.TwichUIDB.ui.foodDrink.size == 50, "Reset leaves everything else alone")
+end
+-- Refreshments panel appearance: the same controls for the panel's own look, under its own names, greyed
+-- out while refreshments are off; its Reset leaves the menus' look alone.
+do
+  local PS, MS = R.RefreshmentsPanel.Style, R.MenuStyle
+  local n = 0
+  for _, suffix in ipairs({ "BgTexture", "BgColor", "BgOpacity", "BorderTexture", "BorderSize", "BorderColor", "BorderOpacity" }) do
+    local variable = "TWICHUI_refreshmentsPanel" .. suffix
+    assert(proxies[variable] and variables[variable] == "Mage", variable .. " is on the Mage page")
+    n = n + 1
+  end
+  assert(n == 7)
+  local headers, controls, reset, preview = {}, {}, nil, nil
+  for _, i in ipairs(initializers) do
+    if not i.setting and not i.click then headers[i.data.name] = true end
+    if i.setting and i.setting.variable and i.setting.variable:find("^TWICHUI_refreshmentsPanel") then controls[#controls + 1] = i end
+    if i.click and i.data.name == "Panel appearance" then reset = i end
+    if i.click and i.data.name == "Preview" then preview = i end
+  end
+  assert(headers["Refreshments panel appearance"] and reset and preview and #controls == 7)
+  c.TwichUIDB.modules.mageRefreshments = false
+  for _, i in ipairs(controls) do assert(not i:Enabled(), i.data.name .. " is greyed out while refreshments are off") end
+  assert(not reset:Enabled() and not preview:Enabled())
+  c.TwichUIDB.modules.mageRefreshments = true
+  for _, i in ipairs(controls) do assert(i:Enabled(), i.data.name .. " can be changed") end
+  proxies.TWICHUI_refreshmentsPanelBgOpacity.set(55)
+  proxies.TWICHUI_refreshmentsPanelBorderTexture.set("Blizzard Tooltip")
+  assert(PS.Get("bgOpacity") == 55 and PS.Get("borderTexture") == "Blizzard Tooltip" and c.TwichUIDB.ui.refreshmentsStyle.bgOpacity == 55)
+  MS.Set("bgOpacity", 20)
+  reset.click()
+  assert(c.TwichUIDB.ui.refreshmentsStyle == nil and PS.Get("bgOpacity") == PS.DEFAULTS.bgOpacity, "the panel's look is reset")
+  assert(MS.Get("bgOpacity") == 20, "the menus' look is not")
+  MS.Reset()
+  c.TwichUIDB.modules.mageRefreshments = false
 end
 assert(R.settingsCategories.chronicle and R.settingsCategories.sharing and R.settingsCategories.overview == R.settingsCategory)
 R:OpenSettings("chronicle"); assert(c.opened == R.settingsCategories.chronicle:GetID(), "opens a named page")

@@ -50,6 +50,7 @@ local DEFAULT_MODULES = {
     mageTravel = true,       -- Mage Travel launcher on a data bar: teleports and portals, cast by your click (Mages only)
     mageConjure = true,      -- Mage Conjuring launcher on a data bar: food and water ranks, cast by your click (Mages only)
     mageRefreshments = false, -- Mage refreshments panel: plan food and water for your group, conjure by click or key, a checklist (Mages only, opt-in)
+    mageRefreshmentsTrade = true, -- ... and a Fill trade button under the trade window, and counting completed trades (needs the one above)
     auctionPosting = true,   -- "Sell from Bags" tab in the Auction House (searches only when you pick an item)
     qolSummons = false,      -- Quality of Life (all opt-in, see qol/QoL.lua): accept summons
     qolResurrect = false,    -- ... accept a resurrection offered to you

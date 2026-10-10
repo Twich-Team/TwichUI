@@ -191,9 +191,22 @@ do
   assert(MS.Set("bgTexture", "Pack Slate") and MS.Set("borderTexture", "Pack Edge"))
   local f = Styled()
   assert(f.backdrop.bgFile == [[Interface\AddOns\Pack\slate]] and f.backdrop.edgeFile == [[Interface\AddOns\Pack\edge]])
-  -- a status bar texture is not a background
+  -- a status bar texture is offered as a background (as EllesmereUI offers them), stretched; never as a border
   assert(LSM:Register("statusbar", "Pack Bar", [[Interface\AddOns\Pack\bar]]))
-  assert(not Has("background", "Pack Bar") and not Has("border", "Pack Bar"))
+  assert(Has("background", "bar:Pack Bar") and not Has("border", "bar:Pack Bar") and not Has("border", "Pack Bar"))
+  assert(MS.Set("bgTexture", "bar:Pack Bar"))
+  f = Styled()
+  assert(f.backdrop.bgFile == [[Interface\AddOns\Pack\bar]] and not f.backdrop.tile, "stretched, not repeated")
+  assert(LSM:Register("statusbar", "play_icon", [[Interface\AddOns\Pack\play]]))
+  assert(not Has("background", "bar:play_icon"), "an icon a pack calls a status bar isn't offered")
+  assert(MS.Set("bgTexture", "bar:Gone Bar"))
+  f = Styled()
+  assert(f.backdrop.bgFile == WHITE and MS.BackgroundChoices()[#MS.BackgroundChoices()][2] == "Gone Bar (not available)")
+  changed = 0
+  assert(LSM:Register("statusbar", "Gone Bar", [[Interface\AddOns\Gone\bar]]))
+  assert(changed == 1, "a status bar the look was waiting for redraws it")
+  f = Styled()
+  assert(f.backdrop.bgFile == [[Interface\AddOns\Gone\bar]])
   -- a saved choice whose pack arrives later
   changed = 0
   assert(MS.Set("bgTexture", "Late Pack Wood"))
@@ -282,6 +295,38 @@ do
   assert(MS.Get("borderTexture") == "eui:glow", "the choice is kept for when it comes back")
   local listed
   for _, ch in ipairs(MS.BorderChoices()) do if ch[1] == "eui:glow" then listed = ch[2] end end
+
+-- The textures EllesmereUI offers for its own backgrounds (its chat, its bars): offered as backgrounds,
+-- read through its own BuildBarTextureTables while it is installed, stretched as it draws them.
+do
+  local EUI_TEX = [[Interface\AddOns\EllesmereUI\media\textures\]]
+  c.EllesmereUI = {
+    BuildBarTextureTables = function()
+      return { melli = EUI_TEX .. "melli.tga", glass = EUI_TEX .. "glass.tga", ["pixels-bg"] = EUI_TEX .. "pixels-bg.tga" },
+        { none = "None", melli = "Melli (ElvUI)", glass = "Glass", ["pixels-bg"] = "Pixels Background" },
+        { "none", "melli", "glass", "pixels-bg" }
+    end,
+  }
+  assert(LSM:Register("statusbar", "Melli Copy", EUI_TEX .. "melli.tga"))   -- a pack registering the same file
+  local ids, labels = {}, {}
+  for i, ch in ipairs(MS.Choices("background", "solid")) do ids[i] = ch[1]; labels[ch[1]] = ch[2] end
+  assert(ids[8] == "eui:melli" and ids[9] == "eui:glass" and ids[10] == "eui:pixels-bg", "after the game's own, in EllesmereUI's order: " .. tostring(ids[8]))
+  assert(labels["eui:melli"] == "Melli (ElvUI)" and labels["eui:pixels-bg"] == "Pixels Background", "by EllesmereUI's names")
+  assert(not labels["eui:none"], "its None is ours already")
+  assert(not labels["bar:Melli Copy"], "the same file isn't offered twice")
+  for _, ch in ipairs(MS.Choices("border", "solid")) do assert(not ch[1]:find("^eui:melli"), "a background isn't offered as a border") end
+  assert(MS.Set("bgTexture", "eui:pixels-bg") and MS.Set("bgColor", "ffffffff"))
+  local f = Styled()
+  assert(f.backdrop.bgFile == EUI_TEX .. "pixels-bg.tga" and not f.backdrop.tile, "drawn stretched, as EllesmereUI draws it")
+  assert(near(f.bgColor[1], 1) and near(f.bgColor[4], 1), "tinted by the color")
+  c.EllesmereUI = nil
+  f = Styled()
+  assert(f.backdrop.bgFile == WHITE, "without EllesmereUI: the flat color")
+  local listed = MS.BackgroundChoices()
+  assert(listed[#listed][1] == "eui:pixels-bg" and listed[#listed][2] == "pixels-bg (not available)", "and the choice stays listed, marked")
+  assert(c.TwichUIDB.ui.brokerMenu.bgTexture == "eui:pixels-bg", "and saved")
+  MS.Reset()
+end
   assert(listed == "glow (not available)", "and stays listed, marked: " .. tostring(listed))
   MS.Reset()
 end

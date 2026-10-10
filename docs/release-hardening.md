@@ -18,7 +18,7 @@ is what that build and the test harness report.
 | With EllesmereUI | **Intended**; skins reach TwichUI's own windows and the four third-party skins only when EllesmereUI's third-party skin option is on. Without it, or before it hands over its toolkit, TwichUI uses its plain warm look |
 | Auctionator, WhatsTraining, Forever Dungeon Journal, Attune (skins) | **Intended** when installed and EllesmereUI is present. Each is optional |
 | EllesmereUI Bags (upgrade mark painter) | **Intended**; registers once when `EUI_Bags` exists |
-| A data bar that lists LibDataBroker launchers (Mage Travel/Conjuring, Chronicle launcher) | **Intended**; no launcher appears without one |
+| A data bar that lists LibDataBroker launchers (Mage Travel/Conjuring, Mage Refreshments, Chronicle launcher) | **Intended**; no launcher appears without one |
 | Leatrix Plus | Only read, to say in a tooltip that it does the same job |
 | Other addons, other skins, other bag addons | **Not claimed**. No integration, no promise |
 

@@ -104,6 +104,8 @@ modules\MageConjure.lua
 modules\Refreshments.lua
 modules\RefreshmentsPanel.lua
 modules\RefreshmentsShares.lua
+modules\RefreshmentsTrade.lua
+modules\RefreshmentsBroker.lua
 
 # Sell from Bags: Auction House posting tab (uses the Chronicle palette)
 auction\Price.lua

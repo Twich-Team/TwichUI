@@ -22,6 +22,13 @@ local Tip = function(...) return R.Interact.Tip(...) end
 local P = {}
 R.RefreshmentsPanel = P
 
+-- The panel's look, the player's to set on the Mage options page (the trade strip shares it). Its own
+-- saved settings, TwichUIDB.ui.refreshmentsStyle; the defaults are the Chronicle's umber with a bronze line.
+P.Style = R.MenuStyle.New("refreshmentsStyle", {
+    bgTexture = "solid", bgColor = "ff261d15", bgOpacity = 98,
+    borderTexture = "solid", borderColor = "ff8c6e38", borderOpacity = 90, borderSize = 1,
+})
+
 local NAME = "TwichUIRefreshments"
 local BUTTON_NAME = { water = "TwichUIRefreshmentsWater", food = "TwichUIRefreshmentsFood" }
 local WIDTH, HEIGHT = 380, 548
@@ -89,6 +96,7 @@ local panel, blocks, list, rows, strip, footer
 local conjure = {}           -- [kind] = the secure button
 local selected               -- the GUID of the selected row
 local dirty = false          -- a change came in combat: the buttons' spell waits for it to end
+local restyle = false        -- the look changed in combat: the panel is redrawn when it ends
 local closeAfterCombat = false
 local wasShort = {}          -- [kind] = the plan was still short at the last look
 local active = {}            -- [event] = handler, while registered
@@ -123,7 +131,7 @@ local function Wanted(kind)
     return (RF.ConjureChoice(kind, RF.Plan()))
 end
 
-local Ensure   -- below
+local Ensure, Restyle   -- below
 
 local function OnRegenEnabled()
     if closeAfterCombat and panel and panel:IsShown() then panel:Hide() end
@@ -132,6 +140,7 @@ local function OnRegenEnabled()
     if dirty then
         if panel then P.UpdateButtons() else Ensure() end
     end
+    if restyle then Restyle() end
 end
 
 function P.UpdateButtons()
@@ -287,6 +296,7 @@ local STATUS = {
     supplied = { "Supplied", GREEN }, partial = { "Partial", K.gold },
     pending = { "Not yet", K.textDim }, nothing = { "No share", K.stone },
 }
+local OFFERED = { "Offered?", K.emberHi }   -- a trade TwichUI couldn't confirm, waiting for the player
 
 local function Counts(row)
     local parts = {}
@@ -311,6 +321,10 @@ local function RowTip(r)
             lines[#lines + 1] = ("%s: %d of %d handed over%s"):format(RF.KIND_LABEL[kind], row.given[kind], row.want[kind],
                 (row.remaining[kind] > 0 and what ~= "") and (" (" .. what .. ")") or "")
         end
+    end
+    local offered = RF.Unconfirmed(row.guid)
+    if offered then
+        lines[#lines + 1] = ("Offered %d water and %d food in a trade TwichUI couldn't confirm. Select them to confirm or dismiss it."):format(offered.water, offered.food)
     end
     lines[#lines + 1] = "\nClick to select, then mark or correct it below."
     return table.concat(lines, "\n")
@@ -351,16 +365,25 @@ local function BuildStrip(parent)
     strip.name = Text(strip, FONT_ROW, 13, "GameFontNormal")
     strip.name:SetPoint("TOPLEFT", 2, -4)
     strip.name:SetPoint("RIGHT", -140, 0)
+    -- With a trade TwichUI couldn't confirm waiting for them, these two confirm or dismiss it instead.
     strip.supplied = S.Button(strip, "Supplied", 70, "primary", function()
-        if selected then RF.MarkSupplied(selected) end
+        if not selected then return end
+        if RF.Unconfirmed(selected) then RF.ConfirmOffered(selected) else RF.MarkSupplied(selected) end
     end)
     strip.supplied:SetPoint("TOPRIGHT", -62, 0)
-    Tip(strip.supplied, "Supplied", "Marks everything their share asks for as handed over.")
+    Tip(strip.supplied, nil, function()
+        if selected and RF.Unconfirmed(selected) then return "Confirm: the trade went through, so what was offered counts as handed over." end
+        return "Supplied: marks everything their share asks for as handed over."
+    end)
     strip.clear = S.Button(strip, "Clear", 56, "secondary", function()
-        if selected then RF.ClearGiven(selected) end
+        if not selected then return end
+        if RF.Unconfirmed(selected) then RF.DismissOffered(selected) else RF.ClearGiven(selected) end
     end)
     strip.clear:SetPoint("TOPRIGHT", 0, 0)
-    Tip(strip.clear, "Clear", "Marks nothing handed over to them this session.")
+    Tip(strip.clear, nil, function()
+        if selected and RF.Unconfirmed(selected) then return "Dismiss: the trade didn't go through; what was offered isn't counted." end
+        return "Clear: marks nothing handed over to them this session."
+    end)
     strip.kinds = {}
     for i, kind in ipairs(RF.KINDS) do
         local k = CreateFrame("Frame", nil, strip)
@@ -410,20 +433,25 @@ local function Build()
     panel:Hide()
     panel:HookScript("OnShow", R.FitToScreen)
     if UISpecialFrames then tinsert(UISpecialFrames, NAME) end   -- Esc closes it
-    S.Frame(panel, WIDTH, HEIGHT)
-    S.Header(panel, 34)
-    local title = Text(panel, FONT_TITLE, 14, "GameFontNormalLarge")
+    -- The look (background and border) is the player's, drawn on the outer frame; everything else sits in
+    -- a frame of fixed size inside it, which the outer frame grows round as the border thickens.
+    local body = CreateFrame("Frame", nil, panel)
+    body:SetSize(WIDTH, HEIGHT)
+    body:SetPoint("CENTER")
+    panel.body = body
+    S.Header(body, 34)
+    local title = Text(body, FONT_TITLE, 14, "GameFontNormalLarge")
     title:SetPoint("TOPLEFT", 18, -13)
     title:SetText("Refreshments")
     Color(title, K.text)
-    local close = S.Close(panel, function() P.Close() end)
+    local close = S.Close(body, function() P.Close() end)
     close:SetPoint("TOPRIGHT", -9, -9)
 
-    panel.context = Text(panel, FONT_NOTE, 12, "GameFontNormalSmall")
+    panel.context = Text(body, FONT_NOTE, 12, "GameFontNormalSmall")
     panel.context:SetPoint("TOPLEFT", PAD + 2, -48)
     panel.context:SetPoint("RIGHT", -80, 0)
     Color(panel.context, K.textDim)
-    local shares = S.Link(panel, "Shares", function()
+    local shares = S.Link(body, "Shares", function()
         if InCombat() then return end
         P.Close()
         if R.RefreshmentShares then R.RefreshmentShares.Show() end
@@ -431,24 +459,24 @@ local function Build()
     shares:SetPoint("TOPRIGHT", -PAD - 2, -47)
     Tip(shares, "Shares", "How much each class gets in a party and in a raid, and how much you keep. Opens the Mage options.")
 
-    blocks = { water = NewBlock(panel, "water", -68), food = NewBlock(panel, "food", -128) }
-    local hint = Text(panel, FONT_NOTE, 11, "GameFontNormalSmall")
+    blocks = { water = NewBlock(body, "water", -68), food = NewBlock(body, "food", -128) }
+    local hint = Text(body, FONT_NOTE, 11, "GameFontNormalSmall")
     hint:SetPoint("TOPLEFT", PAD + 2, -188)
     hint:SetPoint("RIGHT", -PAD, 0)
     hint:SetText("Each press conjures once. To hold a key instead, drag an icon to an action bar.")
     Color(hint, K.stone)
 
-    local header = Text(panel, FONT_HEADER, 13, "GameFontNormal")
+    local header = Text(body, FONT_HEADER, 13, "GameFontNormal")
     header:SetPoint("TOPLEFT", PAD + 2, -212)
     header:SetText("Group")
     Color(header, K.gold)
-    panel.summary = Text(panel, FONT_NOTE, 12, "GameFontNormalSmall")
+    panel.summary = Text(body, FONT_NOTE, 12, "GameFontNormalSmall")
     panel.summary:SetPoint("TOPRIGHT", -PAD - 2, -213)
     panel.summary:SetJustifyH("RIGHT")
     Color(panel.summary, K.textDim)
 
     local listH = VISIBLE_ROWS * ROW_H + 8
-    list = CreateFrame("Frame", nil, panel, "BackdropTemplate")
+    list = CreateFrame("Frame", nil, body, "BackdropTemplate")
     list:SetSize(WIDTH - PAD * 2, listH)
     list:SetPoint("TOPLEFT", PAD, -232)
     S.Well(list, WIDTH - PAD * 2, listH)
@@ -466,18 +494,18 @@ local function Build()
     Color(list.empty, K.stone)
     rows = {}
 
-    BuildStrip(panel)
+    BuildStrip(body)
     strip:SetPoint("TOPLEFT", PAD, -232 - listH - 8)
 
     footer = {}
-    footer.reset = S.Button(panel, "Reset session", 110, "secondary", function()
+    footer.reset = S.Button(body, "Reset session", 110, "secondary", function()
         R.Interact.Confirm("TWICHUI_REFRESHMENTS_RESET",
             "Forget what you've marked as handed out this session? Your shares stay as they are.",
             function() RF.ResetSession("manual") end)
     end)
     footer.reset:SetPoint("BOTTOMLEFT", PAD, 14)
     Tip(footer.reset, "Reset session", "Starts the checklist again: everyone is owed their whole share. Leaving the group or reloading does the same.")
-    footer.next = S.Link(panel, "", function() if footer.nextGuid then Select(footer.nextGuid) end end, K.gold, K.text)
+    footer.next = S.Link(body, "", function() if footer.nextGuid then Select(footer.nextGuid) end end, K.gold, K.text)
     footer.next:SetSize(180, 14)
     footer.next:SetPoint("BOTTOMRIGHT", -PAD - 2, 19)
     Tip(footer.next, "Next", "The first person in the group not yet supplied. Click to select them.")
@@ -487,6 +515,21 @@ local function Build()
         P.Listen(false)
     end)
 end
+
+-- Draws the player's look and grows the panel round its content to clear the border. Out of combat
+-- only: the panel holds secure buttons, so it can't be resized in combat.
+function Restyle()
+    if not panel then return end
+    if InCombat() then
+        restyle = true
+        Want("PLAYER_REGEN_ENABLED", OnRegenEnabled, true)
+        return
+    end
+    restyle = false
+    local edge = math.ceil(P.Style.Apply(panel))
+    panel:SetSize(WIDTH + edge * 2, HEIGHT + edge * 2)
+end
+P.Restyle = Restyle
 
 -- The buttons exist (for their keys) whenever the feature is on, even before the panel first opens.
 -- Out of combat only: they are secure. Turned on in combat (a reload mid-fight), they wait for it to end.
@@ -498,6 +541,7 @@ function Ensure()
         return
     end
     Build()
+    Restyle()
     P.UpdateButtons()
 end
 
@@ -566,7 +610,7 @@ function Render()
         r.name:SetText(row.name or "Unknown")
         Color(r.name, row.connected and ClassColor(row.class) or K.stone)
         r.counts:SetText(Counts(row))
-        local st = STATUS[row.status]
+        local st = RF.Unconfirmed(row.guid) and OFFERED or STATUS[row.status]
         r.status:SetText(row.connected and st[1] or "Offline")
         Color(r.status, row.connected and st[2] or K.stone)
         r.mark:SetShown(row.guid == plan.next)
@@ -608,8 +652,17 @@ function Render()
         end
     end
     if sel then
-        strip.name:SetText(sel.name or "Unknown")
-        Color(strip.name, ClassColor(sel.class))
+        local offered = RF.Unconfirmed(sel.guid)
+        local parts = {}
+        for _, kind in ipairs(RF.KINDS) do
+            if offered and offered[kind] > 0 then parts[#parts + 1] = ("%d %s"):format(offered[kind], kind) end
+        end
+        strip.name:SetText((sel.name or "Unknown") .. (offered and (": offered " .. table.concat(parts, " and ") .. "?") or ""))
+        Color(strip.name, offered and K.emberHi or ClassColor(sel.class))
+        strip.supplied.text:SetText(offered and "Confirm" or "Supplied")
+        strip.clear.text:SetText(offered and "Dismiss" or "Clear")
+        R.Interact.RefreshTip(strip.supplied)
+        R.Interact.RefreshTip(strip.clear)
     end
 
     footer.nextGuid = plan.next
@@ -626,9 +679,16 @@ function P.IsOpen() return panel ~= nil and panel:IsShown() end
 
 local function OnCombatStart() P.Close() end   -- the last moment the panel can be hidden
 
+local function OnScale() if P.IsOpen() then Restyle() end end   -- a border is a whole number of screen pixels
+
 function P.Listen(on)
     Want("PLAYER_REGEN_DISABLED", OnCombatStart, on)
+    Want("UI_SCALE_CHANGED", OnScale, on)
+    Want("DISPLAY_SIZE_CHANGED", OnScale, on)
 end
+
+-- A look changed in the options: an open panel follows at once; a shut one is drawn when it opens.
+P.Style.Subscribe(function() if P.IsOpen() then Restyle() end end)
 
 function P.Open()
     if not RF.ForPlayer() then
@@ -641,6 +701,7 @@ function P.Open()
     end
     if InCombat() then Notice("Refreshments can't be opened in combat.") return false end
     Ensure()
+    Restyle()
     Place()
     panel:Show()
     P.Listen(true)
@@ -664,6 +725,24 @@ function P.Toggle()
     if P.IsOpen() then P.Close() else P.Open() end
 end
 RF.TogglePanel = P.Toggle   -- Bindings.xml
+
+-- From the options' appearance section: the real panel, beside the Options window so both can be seen.
+-- Placed against UIParent at that spot rather than anchored to the Options window; its saved place is
+-- kept, and used the next time it opens.
+function P.TogglePreview()
+    if P.IsOpen() then P.Close() return end
+    if not P.Open() then return end
+    local sp = SettingsPanel
+    if sp and sp:IsShown() then
+        local right, top = sp:GetRight(), sp:GetTop()
+        local scale = (sp:GetEffectiveScale() or 1) / ((panel:GetEffectiveScale() or 1))
+        if right and top then
+            panel:ClearAllPoints()
+            panel:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", right * scale + 8, top * scale)
+        end
+    end
+    panel:Raise()
+end
 
 -- One line, once, when a kind reaches what the plan needs just after a conjure: the cue to let go of a
 -- held key. Whether or not the panel is open, since the key may be held with it shut.

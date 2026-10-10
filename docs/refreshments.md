@@ -2,11 +2,11 @@
 
 For anyone changing the refreshments feature. Code: `modules/Refreshments.lua` (shares, roster, session, plan),
 `modules/RefreshmentsPanel.lua` (the window and its secure buttons), `modules/RefreshmentsShares.lua` (the shares page
-in Options), `diag/Refreshments.lua`, `Bindings.xml`. Tests: `tests/test_refreshments.lua`. **Nothing here has been
+in Options), `modules/RefreshmentsBroker.lua` (the data bar plugin), `diag/Refreshments.lua`, `Bindings.xml`. Tests: `tests/test_refreshments.lua`. **Nothing here has been
 verified in the game yet**; see "Manual acceptance test".
 
-This is milestone 1: plan, conjure by click or key, manual checklist. Trade assistance (a "Fill trade" button and
-delivery tracking) is milestone 2 and is not built; see the end of this file.
+Milestone 1: plan, conjure by click or key, checklist. Milestone 2: trade assistance (a **Fill trade** button and
+delivery tracking), at the end of this file.
 
 ## What it does, and what it never does
 
@@ -25,7 +25,36 @@ delivery tracking) is milestone 2 and is not built; see the end of this file.
 - **Checklist**: by GUID, marked by hand (Supplied, Clear, plus or minus a stack). The first member not yet supplied
   (and online) is marked "next".
 - Never: casting by itself, repeating or stopping a cast, editing action bars or key bindings, changing game
-  settings, moving bag items, trading, whispering or chat, sounds.
+  settings, moving bag items except inside a Fill trade click, opening or accepting trades, whispering or chat,
+  sounds.
+
+## Appearance
+
+The panel and its trade strip share a look the player sets on the Mage page (**Refreshments panel appearance**):
+background texture, color and opacity; border texture, thickness (screen pixels, 0 to 16), color and opacity; a
+**Preview** (the real panel, opened beside the Options window) and a **Reset**. It is a second instance of the
+broker menus' look (`R.MenuStyle.New("refreshmentsStyle", defaults)` in `modules/MenuStyle.lua`), so it offers the
+same textures. Backgrounds: the game's own, the textures EllesmereUI offers for its own backgrounds (read from its
+`EllesmereUI.BuildBarTextureTables`, while it is installed), and LibSharedMedia's background and status bar textures
+(EllesmereUI offers status bars as backgrounds too); EllesmereUI's and the status bar ones are stretched and tinted, as
+EllesmereUI draws them. Borders: the game's own, EllesmereUI's own border textures (drawn by its `ApplyBorderStyle` on a
+frame of TwichUI's), and LibSharedMedia's. Nothing of EllesmereUI's is copied. Saved apart from
+the menus' look, in `TwichUIDB.ui.refreshmentsStyle`, only the values changed; checked on every read. The defaults are
+the Chronicle's umber with a 1-pixel bronze line.
+
+The look is drawn on the outer frame; the content sits in a fixed-size frame inside it, and the outer frame grows by
+the border's thickness on each side, so a thick border never covers anything. The panel holds secure buttons, so it
+is redrawn only out of combat (a change made in combat waits for it to end); it is redrawn when it opens, at once
+while open, and on a UI scale change. The trade strip has no secure parts and follows at once.
+
+## Data bar plugin
+
+"TwichUI Mage Refreshments", a LibDataBroker data source for any data bar that lists them (EllesmereUI's Broker
+Plugin block follows its text as it changes). Made for a Mage once the feature is on, at login or when it is turned
+on, without a reload; never for another class. Text (`TwichUIDB.ui.refreshmentsText`): `progress` ("3/5 supplied",
+"Refreshments" on your own), `label`, or `none`; "Off" once turned off, until a reload (a data object can't be
+removed). Tooltip: water and food prepared against the plan, who is supplied, who is next, trades to confirm. Click
+toggles the panel (refused in combat like the panel); right-click opens the Mage options page. It only reads the plan.
 
 ## Why there is no hold-to-cast from TwichUI's buttons
 
@@ -83,7 +112,8 @@ documented.
 | Party to raid | Same records by GUID; raid shares |
 
 Reason codes: `deferred-combat`, `waiting-for-world`, `cancelled-stale-refreshments`, `refreshments-reset-manual`,
-`refreshments-reset-left-group`.
+`refreshments-reset-left-group`, `trade-place-not-shown`, `trade-split-not-seen`, `trade-not-completed`,
+`trade-move-blocked`.
 
 ## Manual acceptance test
 
@@ -111,13 +141,62 @@ installed.
 12. **Leaving the group, reload, switching off.** Each starts a fresh checklist; nothing returns after a reload.
 13. **Screen.** Smallest window and largest UI scale: the panel fits; long names are cut and readable in the tooltip.
 14. **Data.** Record the item IDs your conjures make (`/tui probe`) and whether a seventh rank exists on Forever.
+15. **Trade opens.** Trade a group member: the strip appears under the trade window; nothing moves by itself. With
+    Conjurer or Water Dispenser filling automatically, Fill counts what they put in.
+16. **Fill, whole stacks.** Owed 40, two full stacks: one click puts both in; record any "action blocked" message.
+17. **Fill, a split.** Owed 25 with two full stacks: one click puts 20 in and splits 5 into a bag slot; the button
+    waits, then a second click adds the 5. Record whether the split reads on the cursor at once (if the strip says
+    "didn't split", it doesn't).
+18. **No bag slot.** Full bags with a part stack owed: "Free a bag slot", nothing over-given.
+19. **Your own items.** Put linen and some water in first: they stay where they are; the water counts.
+20. **Cursor, combat.** Hold an item and click Fill: refused. Fill in combat: refused.
+21. **Completed.** Both accept: the row becomes Supplied and one line says what was handed over. Check
+    `/tui diagnostics`: which trade-complete constant exists, and the message code seen.
+22. **Cancelled.** Accept, then the other side cancels: nothing counted (or "Offered?" if no completion message
+    has ever been recognised); Confirm and Dismiss work.
+23. **Outside the group, unreadable partner, switch off.** No Fill; the strip explains, or doesn't appear when off.
+24. **Data bar.** Turn the feature on without reloading: "TwichUI Mage Refreshments" appears in EllesmereUI's Broker
+    Plugin list; its text follows marking someone supplied; click and right-click; the three text choices; "Off"
+    after turning the feature off.
+25. **Appearance.** With the panel open (Preview), change each control: it follows at once. Pick EllesmereUI's Pixels
+    Textured border and the thickest size: nothing inside is covered, and the trade strip matches. Change it in
+    combat (with the panel shut): it applies when next opened. Without EllesmereUI the choice falls back to a line.
 
-## Milestone 2 (not built): trade assistance
+## Trade assistance (milestone 2)
 
-Planned, pending the in-game checks above and these: whether `C_Container.PickupContainerItem`,
-`C_Container.SplitContainerItem` and `ClickTradeButton` work from one click without a click per step (the docs don't
-say; Conjurer and Water Dispenser do it from timers), and whether `UI_INFO_MESSAGE` carries a "trade complete"
-message on Forever (no such constant is in the local UI source). A trade strip under the trade window with **Fill
-trade** (on a click only, never on opening, never accepting), only empty slots 1 to 6, never with something on the
-cursor or in combat, bounded and cancelled when the trade closes. Delivery counted only on a recognised completion;
-otherwise "offered, unconfirmed" with a click to confirm.
+`modules/RefreshmentsTrade.lua`, switch `modules.mageRefreshmentsTrade` (on, but only active while refreshments are
+on). Tests: `tests/test_refreshments_trade.lua`.
+
+- **When:** while trading with a group member (by GUID from the trade unit, `"NPC"`), a plain strip under Blizzard's
+  trade window shows what their share still asks for and a **Fill trade** button. Nothing moves when the trade opens.
+  Someone outside the group, or a partner whose GUID can't be read, gets an explanation and no button.
+- **Every move is inside the click.** No timer or event ever moves an item, so it doesn't matter whether Forever
+  allows timer-driven moves. One click: whole stacks of the planned rank (full, or exactly what is left, largest
+  first) go into empty slots 1 to 6 (`C_Container.PickupContainerItem` then `ClickTradeButton`); what is left is
+  split from the smallest bigger stack into an empty ordinary bag slot (`C_Container.SplitContainerItem`, then a
+  pickup on the empty slot). The **next click**, once the game has shown the split stack unlocked, puts it in. One
+  split per click. With no stack big enough to split, loose stacks go as they are; with no empty bag slot, nothing is
+  split and the strip says so (it never sends a whole stack for part of one).
+- **Never:** the seventh slot, a slot already in use, any item but the planned rank of conjured food or water, taking
+  anything out of the window, accepting, acting with something on the cursor (it asks you to put it down) or in
+  combat. Each move is checked: the cursor must hold the expected item after a pickup and be empty after placing; the
+  first refusal stops the click and puts anything on the cursor back.
+- **Already in the window:** conjured food or water of any rank (put in by hand or an earlier click) counts towards
+  the share. A placement the game hasn't shown yet counts too, and the button waits ("Waiting for the game...") until
+  `TRADE_PLAYER_ITEM_CHANGED` (or three seconds), so a second click can't add a second stack.
+- **Blocked:** if `ADDON_ACTION_BLOCKED` names TwichUI during a trade, filling stops for that trade.
+
+### What counts as handed over
+
+- **Planned:** the plan's remaining share. **Placed:** the click's own record until the game shows it. **Offered:**
+  your side of the window at the moment you accept (`TRADE_ACCEPT_UPDATE` with yours 1; cleared when it resets).
+  **Delivered:** the offer, credited only when `UI_INFO_MESSAGE` matches `LE_GAME_ERR_TRADE_COMPLETE` or
+  `ERR_TRADE_COMPLETE`, during the trade or within three seconds of `TRADE_CLOSED`. Accepting alone never counts.
+- Neither constant is in the local Forever UI source, so they are looked up at run time. If no completion message is
+  seen and none has ever been recognised this session, the offer is kept as **"Offered?"** in the panel to
+  **Confirm** or **Dismiss** (and counts towards the share in later trades until then, so it isn't given twice).
+  Once a completion message has been recognised this session, a trade closed without one is taken as not completed.
+- Only group members' records change; nothing is saved.
+- Diagnostics list which of the two constants the client defines and the message codes seen during trades, to check
+  which one Forever uses.
+

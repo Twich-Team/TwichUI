@@ -72,6 +72,9 @@ Methods = {
   GetText = function(s) return s.text end,
   SetTexture = function(s, v) s.texture = v end,
   HasFocus = function() return false end,
+  SetBackdrop = function(s, b) s.backdrop = b end,
+  SetBackdropColor = function(s, r, g, b, a) s.bgColor = { r, g, b, a } end,
+  SetSize = function(s, w, h) s.w, s.h = w, h end,
 }
 c.CreateFrame = function(kind, name, parent, template)
   local f = Fake(kind); f.name, f.parent, f.template = name, parent, template
@@ -129,7 +132,10 @@ Load(c, { "chronicle/Style.lua", "modules/TrainingData.lua", "modules/Borders.lu
   "modules/MageTravel.lua", "modules/MageConjure.lua", "modules/Refreshments.lua" })
 local castFrame = made[#made]   -- the only frame Refreshments.lua makes at load: its watch on your own casts
 assert(castFrame.kind == "Frame" and castFrame.scripts.OnEvent, "a frame of its own for the player's casts")
-Load(c, { "modules/RefreshmentsPanel.lua", "modules/RefreshmentsShares.lua", "diag/Diagnostics.lua", "diag/Refreshments.lua" })
+local brokers = {}
+local LDB = c.LibStub:NewLibrary("LibDataBroker-1.1", 1)
+LDB.NewDataObject = function(_, name, o) brokers[name] = o; return o end
+Load(c, { "modules/RefreshmentsPanel.lua", "modules/RefreshmentsShares.lua", "modules/RefreshmentsBroker.lua", "diag/Diagnostics.lua", "diag/Refreshments.lua" })
 local R = c.TwichUI
 local RF, P = R.Refreshments, R.RefreshmentsPanel
 
@@ -229,6 +235,7 @@ end
 c.FireEvent("PLAYER_LOGIN"); c.FireEvent("PLAYER_ENTERING_WORLD", true, false); FlushTimers()
 assert(#RF.Snapshot().events == 0 and not RF.Enabled(), "off: no events")
 assert(c.TwichUIRefreshmentsWater == nil, "off: no secure buttons")
+assert(brokers["TwichUI Mage Refreshments"] == nil, "off: no data bar plugin")
 c.printed = {}
 c.SlashCmdList.TWICHUI("refreshments")
 assert(c.printed[#c.printed]:find("turned off", 1, true), "the command says it is off")
@@ -246,6 +253,33 @@ RF.Refresh(); FlushTimers()
 local snap = RF.Snapshot()
 assert(snap.enabled and #snap.events > 0 and snap.context == "party" and snap.members == 2, "on: listening, the party read")
 local water, food = c.TwichUIRefreshmentsWater, c.TwichUIRefreshmentsFood
+
+-- The data bar plugin: made when it is turned on (no reload), its text the group's progress.
+local broker = brokers["TwichUI Mage Refreshments"]
+local RB = R.RefreshmentsBroker
+assert(broker and broker.type == "data source" and broker.label == "Refreshments" and RB.Available(), "on the data bar's list once it is on")
+assert(broker.text == "0/2 supplied", "its text: " .. tostring(broker.text))
+assert(broker.icon == 1000 + 5504, "Conjure Water's icon")
+assert(RB.TextChoice() == "progress")
+assert(RB.SetTextChoice("label") and broker.text == "Refreshments" and c.TwichUIDB.ui.refreshmentsText == "label")
+assert(RB.SetTextChoice("none") and broker.text == "")
+assert(not RB.SetTextChoice("Portals") and RB.TextChoice() == "none", "an unknown choice is refused")
+assert(RB.SetTextChoice("progress") and broker.text == "0/2 supplied")
+do
+  local lines = {}
+  local t = { AddLine = function(_, a) lines[#lines + 1] = a end, AddDoubleLine = function(_, a, b) lines[#lines + 1] = a .. ": " .. b end }
+  broker.OnTooltipShow(t)
+  local all = table.concat(lines, "\n")
+  assert(all:find("Supplied: 0 of 2", 1, true) and all:find("Next: Thrall", 1, true) and all:find("to conjure", 1, true), all)
+  local opened
+  R.OpenSettings = function(_, key) opened = key end
+  broker.OnClick(nil, "RightButton")
+  assert(opened == "mage", "right-click: the Mage options page")
+  broker.OnClick(nil, "LeftButton")
+  assert(P.IsOpen(), "click: the panel")
+  broker.OnClick(nil, "LeftButton")
+  assert(not P.IsOpen(), "and again closes it")
+end
 assert(water and food and water.template == "SecureActionButtonTemplate", "the two secure buttons exist for their keys")
 assert(water.clicks[1] == "LeftButtonUp" and #water.clicks == 1 and water.attrs.useOnKeyDown == false, "once, on the release: a drag never casts")
 local plan = RF.Plan()
@@ -262,6 +296,7 @@ assert(c.picked == nil, "nothing is picked up in combat")
 assert(plan.next == "G-1")
 RF.MarkSupplied("G-1"); plan = RF.Plan()
 assert(plan.rows[1].status == "supplied" and plan.next == "G-2", "marked supplied; the next person is next")
+assert(broker.text == "1/2 supplied", "the data bar follows: " .. tostring(broker.text))
 RF.Adjust("G-2", "food", 10); plan = RF.Plan()
 assert(plan.rows[2].status == "partial" and plan.rows[2].remaining.food == 10)
 RF.Adjust("G-2", "food", -50); assert(RF.Entry("G-2").food == 0, "never below 0")
@@ -336,6 +371,41 @@ COMBAT = false
 c.FireEvent("PLAYER_REGEN_ENABLED")
 assert(not P.IsOpen(), "and closes when combat ends")
 
+-- The panel's look: its own settings, drawn at once on an open panel, the panel grown round its border.
+do
+  local PS = P.Style
+  local frame = c.TwichUIRefreshments
+  assert(PS ~= R.MenuStyle and PS.Get("bgOpacity") == 98 and PS.Get("borderTexture") == "solid", "its own look, its own defaults")
+  assert(P.Open())
+  assert(frame.backdrop and frame.backdrop.bgFile and frame.w == 382 and frame.h == 550, "a 1-pixel line: the content plus one each side")
+  assert(PS.Set("bgOpacity", 40) and math.abs(frame.bgColor[4] - 0.4) < 1e-9, "an open panel follows at once")
+  assert(c.TwichUIDB.ui.refreshmentsStyle.bgOpacity == 40 and c.TwichUIDB.ui.brokerMenu == nil, "saved apart from the menus' look")
+  assert(R.MenuStyle.Get("bgOpacity") == 100, "and the menus keep theirs")
+  local calls = {}
+  c.EllesmereUI = {
+    PP = {}, GetBorderTextureList = function() return { { key = "pixels-textured", name = "Pixels Textured" } } end,
+    ResolveBorderTexture = function(k) return k == "pixels-textured" and "p" or nil end,
+    BorderPxStep = function() return 2 end, BorderLegacyPx = function() return 12 end, GetBorderDefaultSize = function() return 2 end,
+    ApplyBorderStyle = function(_, _, _, _, _, _, key, ...) calls[#calls + 1] = { key = key, edge = select(8, ...) } end,
+  }
+  local listed = false
+  for _, ch in ipairs(PS.BorderChoices()) do if ch[1] == "eui:pixels-textured" and ch[2] == "Pixels Textured" then listed = true end end
+  assert(listed, "EllesmereUI's border textures are offered")
+  assert(PS.Set("borderTexture", "eui:pixels-textured") and PS.Get("borderSize") == 12, "with a thickness that suits it")
+  assert(#calls > 0 and calls[#calls].key == "pixels-textured" and calls[#calls].edge == 12, "drawn by EllesmereUI round the panel")
+  assert(frame.w == 380 + 24 and frame.h == 548 + 24, "grown so the border doesn't cover the content: " .. tostring(frame.w))
+  assert(R.MenuStyle.Get("borderTexture") == "solid", "the menus' border is untouched")
+  COMBAT = true
+  assert(PS.Set("borderSize", 4) and frame.w == 404, "not resized in combat")
+  COMBAT = false
+  c.FireEvent("PLAYER_REGEN_ENABLED")
+  assert(frame.w == 388, "redrawn when combat ends")
+  PS.Reset()
+  assert(c.TwichUIDB.ui.refreshmentsStyle == nil and frame.w == 382, "reset: the defaults, and nothing saved")
+  c.EllesmereUI = nil
+  P.Close()
+end
+
 -- Items per cast: learned from the bags after a conjure, at this level.
 c.BAGS[8078] = 100
 castFrame.scripts.OnEvent(castFrame, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-1", 10139)
@@ -382,6 +452,7 @@ c.TwichUIDB.modules.mageRefreshments = false
 RF.Refresh()
 assert(#RF.Snapshot().events == 0 and RF.Entry("G-1") == nil, "off: unregistered and forgotten")
 assert(water.attrs.type == nil and water.attrs.spell == nil, "off: its key does nothing")
+assert(broker.text == "Off", "the data bar says it is off")
 c.printed = {}
 assert(not P.Open() and c.printed[#c.printed]:find("turned off", 1, true))
 c.TwichUIDB.modules.mageRefreshments = true
@@ -399,13 +470,17 @@ do
   w.UIParent, w.UISpecialFrames, w.UIErrorsFrame = c.UIParent, {}, c.UIErrorsFrame
   w.printed = {}
   w.print = function(s) table.insert(w.printed, tostring(s)) end
+  local wbrokers = {}
+  local wLDB = w.LibStub:NewLibrary("LibDataBroker-1.1", 1)
+  wLDB.NewDataObject = function(_, name, o) wbrokers[name] = o; return o end
   Load(w, { "chronicle/Style.lua", "modules/TrainingData.lua", "modules/Borders.lua", "modules/MenuStyle.lua", "modules/SpellMenu.lua",
-    "modules/MageTravel.lua", "modules/MageConjure.lua", "modules/Refreshments.lua", "modules/RefreshmentsPanel.lua" })
+    "modules/MageTravel.lua", "modules/MageConjure.lua", "modules/Refreshments.lua", "modules/RefreshmentsPanel.lua", "modules/RefreshmentsBroker.lua" })
   w.TwichUIDB = { modules = { mageRefreshments = true } }
   w.LOADED["!!!TwichUI"] = true; w.FireEvent("ADDON_LOADED", "!!!TwichUI"); w.FireEvent("PLAYER_LOGIN"); FlushTimers()
   local WR = w.TwichUI
   assert(not WR.Refreshments.Enabled() and #WR.Refreshments.Snapshot().events == 0, "not a Mage: nothing listens, even switched on")
   assert(not WR.RefreshmentsPanel.Open() and w.printed[#w.printed]:find("for Mages", 1, true), "and it says why")
+  assert(wbrokers["TwichUI Mage Refreshments"] == nil and wbrokers["TwichUI Chronicle"], "no refreshments plugin for another class (the Chronicle's is for everyone)")
 end
 
 ---------------------------------------------------------------------------

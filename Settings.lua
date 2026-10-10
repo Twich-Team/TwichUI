@@ -667,77 +667,112 @@ local function Build()
             conjure, function() return R:Enabled("mageConjure") end)
 
         local RF = R.Refreshments
+        local refreshToggle   -- the refreshments switch, which its appearance is greyed out under
         if RF then
             Header("Mage refreshments", "Plan the conjured food and water you hand to your party or raid, conjure it by click or key, and tick off who you've supplied. TwichUI never casts, trades or whispers for you.")
             local refresh = Toggle("mageRefreshments", "Refreshments panel",
                 "A small panel (/tui refreshments, or its key in Key Bindings > TwichUI) for getting your group fed and watered. It works out how much water and food your party or raid needs from each class's share and what you keep, at the best rank each person can use, against what is in your bags. Its Water and Food buttons conjure once per click or key press; drag one to an action bar to hold a key with the game's Press and Hold Casting instead. A checklist shows who you've supplied; you mark it yourself, and it starts again when you leave the group or reload.\n\nIt can't be opened in combat and closes when combat starts. Off by default.",
                 false, function() RF.Refresh() end)
+            refreshToggle = refresh
             local function RefreshOn() return R:Enabled("mageRefreshments") end
             Under(Button("Refreshments panel", "Open", function()
                 if SettingsPanel and SettingsPanel:IsShown() then HideUIPanel(SettingsPanel) end
                 if R.RefreshmentsPanel then R.RefreshmentsPanel.Open() end
             end, "Opens the panel (same as typing /tui refreshments)."), refresh, RefreshOn)
+            local RB = R.RefreshmentsBroker
+            if RB then
+                Under(Choice("refreshmentsText", "Text on the data bar",
+                    "Adds \"TwichUI Mage Refreshments\" to the list of your data bar addon (any that shows LibDataBroker plugins, such as EllesmereUI's Broker Plugin block) once refreshments are on; no reload needed. Click it to open the panel, right-click for these options; hover it for how much water and food is prepared and who is supplied.\n\nThe word beside its icon: how many of your group are supplied (\"3/5 supplied\"), \"Refreshments\", or none. On your own it reads \"Refreshments\". Turned off, it reads \"Off\" until you reload.",
+                    STRING, RB.DEFAULT_TEXT, RB.TextChoice, RB.SetTextChoice, RB.TEXTS), refresh, RefreshOn)
+            end
+            if R.RefreshmentsTrade then
+                Under(Toggle("mageRefreshmentsTrade", "Fill trade button and trade tracking",
+                    "While you trade with someone in your group, a small strip under the trade window shows what their share still asks for, with a Fill trade button. Nothing happens until you click it: it puts whole stacks of the rank planned for them into empty slots, and when a part stack is needed, splits it into an empty bag slot for your next click to add. It never takes out what is already in the window, never puts in anything else, and never accepts the trade.\n\nWhen the game says a trade was completed, what you offered is marked as handed over. If TwichUI can't confirm it, the panel asks you to confirm or dismiss it. People outside your group get no share.",
+                    false, function() R.RefreshmentsTrade.Refresh() end), refresh, RefreshOn)
+            end
             if R.RefreshmentShares then
                 Button("Refreshment shares", "Edit", function() R.RefreshmentShares.Show() end,
                     "How many water and food each class gets in a party and in a raid, and how many you keep. Single items, not stacks.")
             end
         end
 
-        local MS = R.MenuStyle
+        -- One look's controls (modules/MenuStyle.lua): background and border texture, color and opacity,
+        -- border thickness, a preview and a reset. style: the look; prefix: its settings' names; noun: what
+        -- it is the look of ("menu", "panel"); parent, isOn: the switch it is greyed out under, if any.
+        local function Appearance(style, prefix, noun, previewTip, preview, resetLabel, resetTip, parent, isOn)
+            local resettable = {}   -- { setting, default }, for Reset
+            local function Add(initializer)
+                if parent and initializer then Under(initializer, parent, isOn) end
+                return initializer
+            end
+            local function Remember(suffix, varType, label, key)
+                local setting = Proxy(prefix .. suffix, varType, label, style.DEFAULTS[key],
+                    function() return style.Get(key) end, function(value) style.Set(key, value) end)
+                if setting then resettable[#resettable + 1] = { setting = setting, default = style.DEFAULTS[key] } end
+                return setting
+            end
+            local function Textures(suffix, key, label, tooltip, choices)
+                local setting = Remember(suffix, STRING, label, key)
+                if setting and Settings.CreateDropdown and Settings.CreateControlTextContainer then
+                    Add(Settings.CreateDropdown(category, setting, function()
+                        local container = Settings.CreateControlTextContainer()
+                        for _, choice in ipairs(choices()) do container:Add(choice[1], choice[2]) end
+                        return container:GetData()
+                    end, tooltip))
+                end
+            end
+            local function Swatch(suffix, key, label, tooltip)
+                local setting = Remember(suffix, STRING, label, key)
+                if setting and Settings.CreateColorSwatch then Add(Settings.CreateColorSwatch(category, setting, tooltip)) end
+            end
+            local function Slider(suffix, key, label, tooltip)
+                local limit = style.LIMITS[key]
+                local setting = Remember(suffix, NUMBER, label, key)
+                if not (setting and Settings.CreateSlider and Settings.CreateSliderOptions) then return end
+                local options = Settings.CreateSliderOptions(limit[1], limit[2], 1)
+                if MinimalSliderWithSteppersMixin and options.SetLabelFormatter then
+                    options:SetLabelFormatter(MinimalSliderWithSteppersMixin.Label.Right)
+                end
+                Add(Settings.CreateSlider(category, setting, options, tooltip))
+            end
+            Textures("BgTexture", "bgTexture", "Background texture",
+                "None leaves the " .. noun .. " see-through apart from its border. Solid color is a flat fill. The rest are the game's own backgrounds, the textures EllesmereUI offers for its own backgrounds (while it is installed), and any LibSharedMedia background or status bar texture, so an addon that adds textures there adds them here. A texture is tinted by the color below; choose white to see it as it is.",
+                style.BackgroundChoices)
+            Swatch("BgColor", "bgColor", "Background color", "The color of the background, or the tint of a textured one.")
+            Slider("BgOpacity", "bgOpacity", "Background opacity",
+                "How solid the background is, in percent. Only the background fades; the " .. noun .. "'s text, icons and border stay as they are.")
+            Textures("BorderTexture", "borderTexture", "Border texture",
+                "None draws no border. Solid line is a plain line. The rest are the game's own borders, EllesmereUI's own border textures while it is installed, and any LibSharedMedia border. Picking one sets a thickness that suits it unless you have set your own; change it below.",
+                style.BorderChoices)
+            Slider("BorderSize", "borderSize", "Border thickness",
+                "The border's width in screen pixels, so it looks the same at any UI scale. 0 for none. A textured border needs about 8 or more to read well. It never covers the " .. noun .. "'s text.")
+            Swatch("BorderColor", "borderColor", "Border color", "The color of the border, or the tint of a textured one.")
+            Slider("BorderOpacity", "borderOpacity", "Border opacity",
+                "How solid the border is, in percent. Only the border fades.")
+            Add(Button("Preview", "Show or hide", preview, previewTip))
+            Add(Button(resetLabel, "Reset", function()
+                for _, entry in ipairs(resettable) do
+                    if entry.setting.SetValue then pcall(entry.setting.SetValue, entry.setting, entry.default) end
+                end
+                style.Reset()   -- and forget the saved values altogether, so the defaults are used as they come
+            end, resetTip))
+        end
+
         Header("Broker menu appearance", "How the menus of your data bar launchers look. One background and border for all of them. Only the look changes; what the menus do doesn't.")
-        local resettable = {}   -- { setting, default }, for Reset
-        local function Remember(variable, varType, label, key)
-            local setting = Proxy(variable, varType, label, MS.DEFAULTS[key],
-                function() return MS.Get(key) end, function(value) MS.Set(key, value) end)
-            if setting then resettable[#resettable + 1] = { setting = setting, default = MS.DEFAULTS[key] } end
-            return setting
+        Appearance(R.MenuStyle, "brokerMenu", "menu",
+            "A sample menu beside this window that shows these settings as you change them. It does nothing when clicked. Esc closes it.",
+            function() R.SpellMenu.TogglePreview() end,
+            "Menu appearance", "Puts the background and border of the menus back to their defaults. Nothing else is changed.")
+
+        local RP = R.RefreshmentsPanel
+        if RP and RP.Style and refreshToggle then
+            Header("Refreshments panel appearance", "How the refreshments panel and its strip under the trade window look. Only the look changes; what they do doesn't.")
+            Appearance(RP.Style, "refreshmentsPanel", "panel",
+                "Opens the refreshments panel beside this window, to see these settings as you change them. It is the real panel; Esc or its close box shuts it.",
+                function() RP.TogglePreview() end,
+                "Panel appearance", "Puts the background and border of the refreshments panel and its trade strip back to their defaults. Nothing else is changed.",
+                refreshToggle, function() return R:Enabled("mageRefreshments") end)
         end
-        local function Textures(variable, key, label, tooltip, choices)
-            local setting = Remember(variable, STRING, label, key)
-            if setting and Settings.CreateDropdown and Settings.CreateControlTextContainer then
-                Settings.CreateDropdown(category, setting, function()
-                    local container = Settings.CreateControlTextContainer()
-                    for _, choice in ipairs(choices()) do container:Add(choice[1], choice[2]) end
-                    return container:GetData()
-                end, tooltip)
-            end
-        end
-        local function Swatch(variable, key, label, tooltip)
-            local setting = Remember(variable, STRING, label, key)
-            if setting and Settings.CreateColorSwatch then Settings.CreateColorSwatch(category, setting, tooltip) end
-        end
-        local function Slider(variable, key, label, tooltip)
-            local limit = MS.LIMITS[key]
-            local setting = Remember(variable, NUMBER, label, key)
-            if not (setting and Settings.CreateSlider and Settings.CreateSliderOptions) then return end
-            local options = Settings.CreateSliderOptions(limit[1], limit[2], 1)
-            if MinimalSliderWithSteppersMixin and options.SetLabelFormatter then
-                options:SetLabelFormatter(MinimalSliderWithSteppersMixin.Label.Right)
-            end
-            Settings.CreateSlider(category, setting, options, tooltip)
-        end
-        Textures("brokerMenuBgTexture", "bgTexture", "Background texture",
-            "None leaves the menu see-through apart from its border. Solid color is a flat fill. The rest are the game's own backgrounds and any LibSharedMedia background, so an addon that adds backgrounds to it adds them here. A texture is tinted by the color below; choose white to see it as it is.",
-            MS.BackgroundChoices)
-        Swatch("brokerMenuBgColor", "bgColor", "Background color", "The color of the background, or the tint of a textured one.")
-        Slider("brokerMenuBgOpacity", "bgOpacity", "Background opacity",
-            "How solid the background is, in percent. Only the background fades; the menu's text, icons and border stay as they are.")
-        Textures("brokerMenuBorderTexture", "borderTexture", "Border texture",
-            "None draws no border. Solid line is a plain line. The rest are the game's own borders and any LibSharedMedia border. Picking one sets a thickness that suits it unless you have set your own; change it below.",
-            MS.BorderChoices)
-        Slider("brokerMenuBorderSize", "borderSize", "Border thickness",
-            "The border's width in screen pixels, so it looks the same at any UI scale. 0 for none. A textured border needs about 8 or more to read well. It never covers the menu's text.")
-        Swatch("brokerMenuBorderColor", "borderColor", "Border color", "The color of the border, or the tint of a textured one.")
-        Slider("brokerMenuBorderOpacity", "borderOpacity", "Border opacity",
-            "How solid the border is, in percent. Only the border fades.")
-        Button("Preview", "Show or hide", function() R.SpellMenu.TogglePreview() end,
-            "A sample menu beside this window that shows these settings as you change them. It does nothing when clicked. Esc closes it.")
-        Button("Menu appearance", "Reset", function()
-            for _, entry in ipairs(resettable) do
-                if entry.setting.SetValue then pcall(entry.setting.SetValue, entry.setting, entry.default) end
-            end
-            MS.Reset()   -- and forget the saved values altogether, so the defaults are used as they come
-        end, "Puts the background and border of the menus back to their defaults. Nothing else is changed.")
         if R.RefreshmentShares and R.RefreshmentShares.Register then R.RefreshmentShares.Register(pages.mage.category) end
     end
 

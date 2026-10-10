@@ -11,7 +11,7 @@ is keyed by `"Name - Realm"` inside an account-wide variable.
 
 | Variable | Kind | Owner | Version | Holds |
 |---|---|---|---|---|
-| `TwichUIDB` | configuration | `Persist.lua`, `Core.lua`, each feature | `schema` (integer) | `modules` (on/off switches), `ui` (places, text choices, `qol`, `foodDrink`, `brokerMenu`, `refreshments`), `gear` (preferences, stat weights, per-character tree choice), `shareTransport`, `whisperProbe`, `storedData` (addon-data scan notes), `setup` (see below) |
+| `TwichUIDB` | configuration | `Persist.lua`, `Core.lua`, each feature | `schema` (integer) | `modules` (on/off switches), `ui` (places, text choices, `qol`, `foodDrink`, `brokerMenu`, `refreshments`, `refreshmentsStyle`), `gear` (preferences, stat weights, per-character tree choice), `shareTransport`, `whisperProbe`, `storedData` (addon-data scan notes), `setup` (see below) |
 | `TwichUIDB.setup` | sharing records | `setup/Setups.lua`, `Share.lua`, `Ellesmere.lua` | covered by `schema` | `detected`/`selection` (last "find settings" result), `received` (setups friends sent), `trusted`, `recommend`, and the one-shot hand-offs `pending`, `scanNext`, `restoreNext`, `lastScan`, `eui` |
 | `TwichUIShareDB` | your shareable setup | `setup/Setups.lua` | `pack.format = 2` | `pack` |
 | `TwichUIBackupDB` | undo snapshots | `setup/Setups.lua` | none | one `[character]` snapshot per character that applied a setup |
@@ -87,7 +87,7 @@ from 1, repeat, injected failure). Document the step here. Never reuse or reorde
   stray number or text would switch a feature on; it is put back to its default and counted (`module-not-boolean`).
   Switches TwichUI does not define are left untouched.
 - **Groups** must be tables (`modules`, `ui`, `setup`, `gear`, `storedData`, `whisperProbe`, and `ui.qol`,
-  `ui.foodDrink`, `ui.brokerMenu`, `ui.refreshments`). One that is not is dropped and rebuilt by its owner (`container-not-table`); its
+  `ui.foodDrink`, `ui.brokerMenu`, `ui.refreshments`, `ui.refreshmentsStyle`). One that is not is dropped and rebuilt by its owner (`container-not-table`); its
   neighbours are untouched.
 - **Values** (ranges, texts, textures, positions) are judged by the feature that reads them, every time it reads
   them (for example `FoodDrink.Get`, `MenuStyle.Get`, `Position()`), and an unusable one falls back to the default

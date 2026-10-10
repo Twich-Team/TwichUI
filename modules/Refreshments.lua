@@ -8,8 +8,10 @@
 --   The plan: for each group member, their class's share at the best rank this Mage knows that the
 --   member's level can use, less what they were given this session; added up per item with the Mage's
 --   own reserve, against what the Mage's bags hold. Nothing is guessed about what anyone else carries.
---   The session: what this Mage has marked as handed to each member, by GUID. Kept in memory only, so a
---   reload, leaving the group or Reset starts it again. Names are shown in the panel and never saved.
+--   The session: what this Mage has handed each member, by GUID: marked by hand, or counted from a trade
+--   the game said was completed (modules/RefreshmentsTrade.lua); a trade it didn't confirm waits as
+--   "offered" for the player to confirm or dismiss. Kept in memory only, so a reload, leaving the group or
+--   Reset starts it again. Names are shown in the panel and never saved.
 -- TwichUI never casts, trades or whispers for the player. The panel's conjure buttons cast only when
 -- clicked or their key is pressed, once per press; the game repeats a held cast only from its own
 -- action bars (see docs/refreshments.md).
@@ -355,7 +357,7 @@ local function Track(members)
     for guid, e in pairs(entries) do
         if not present[guid] then
             e.inGroup = false
-            if e.water == 0 and e.food == 0 then
+            if e.water == 0 and e.food == 0 and not e.unconfirmed then
                 entries[guid] = nil   -- nothing to remember about them
             else
                 departed = departed + 1
@@ -487,7 +489,7 @@ end
 function RF.ClearGiven(guid)
     local e = Given(guid)
     if not e then return false end
-    e.water, e.food = 0, 0
+    e.water, e.food, e.unconfirmed = 0, 0, nil
     Corrected()
     return true
 end
@@ -501,11 +503,107 @@ function RF.Adjust(guid, kind, delta)
     return true
 end
 
+-- The plan's row for a group member, or nil.
+function RF.RowFor(guid)
+    local current = RF.Plan()
+    for _, row in ipairs(current and current.rows or {}) do
+        if row.guid == guid then return row end
+    end
+    return nil
+end
+
+local function Amounts(amounts)
+    local water, food = amounts and amounts.water or 0, amounts and amounts.food or 0
+    if type(water) ~= "number" or type(food) ~= "number" or water < 0 or food < 0 then return nil end
+    return water, food
+end
+
+-- A trade the game said was completed: what was offered counts as handed over. False when they aren't
+-- someone this session is keeping (not in the group).
+function RF.Credit(guid, amounts)
+    local e = Given(guid)
+    local water, food = Amounts(amounts)
+    if not (e and water) then return false end
+    e.water, e.food = Clamp(e.water + water), Clamp(e.food + food)
+    Corrected()
+    return true
+end
+
+-- A trade TwichUI couldn't confirm: kept apart, for the player to confirm or dismiss.
+function RF.Offered(guid, amounts)
+    local e = Given(guid)
+    local water, food = Amounts(amounts)
+    if not (e and water) or water + food == 0 then return false end
+    local u = e.unconfirmed or { water = 0, food = 0 }
+    u.water, u.food = Clamp(u.water + water), Clamp(u.food + food)
+    e.unconfirmed = u
+    Corrected()
+    return true
+end
+
+-- { water, food } offered in a trade that wasn't confirmed, or nil.
+function RF.Unconfirmed(guid)
+    local e = entries[guid]
+    return e and e.unconfirmed
+end
+
+function RF.ConfirmOffered(guid)
+    local e = Given(guid)
+    if not (e and e.unconfirmed) then return false end
+    local u = e.unconfirmed
+    e.unconfirmed = nil
+    e.water, e.food = Clamp(e.water + u.water), Clamp(e.food + u.food)
+    Corrected()
+    return true
+end
+
+function RF.DismissOffered(guid)
+    local e = Given(guid)
+    if not (e and e.unconfirmed) then return false end
+    e.unconfirmed = nil
+    Corrected()
+    return true
+end
+
+-- Every stack of an item in the ordinary bags: { { bag, slot, count, locked }, ... }.
+function RF.Stacks(item)
+    local out = {}
+    if not C_Container then return out end
+    local last = NUM_TOTAL_EQUIPPED_BAG_SLOTS or NUM_BAG_SLOTS or 4
+    for bag = 0, last do
+        for slot = 1, C_Container.GetContainerNumSlots(bag) or 0 do
+            local info = C_Container.GetContainerItemInfo(bag, slot)
+            if info and Plain(info.itemID) == item then
+                local count = Plain(info.stackCount)
+                if type(count) == "number" and count > 0 then
+                    out[#out + 1] = { bag = bag, slot = slot, count = count, locked = Plain(info.isLocked) == true }
+                end
+            end
+        end
+    end
+    return out
+end
+
+-- An empty slot in an ordinary bag (a profession bag won't take food), or nil.
+function RF.EmptyBagSlot()
+    if not C_Container then return nil end
+    local last = NUM_TOTAL_EQUIPPED_BAG_SLOTS or NUM_BAG_SLOTS or 4
+    for bag = 0, last do
+        local _, family = C_Container.GetContainerNumFreeSlots(bag)
+        if (Plain(family) or 0) == 0 then
+            for slot = 1, C_Container.GetContainerNumSlots(bag) or 0 do
+                if not C_Container.GetContainerItemInfo(bag, slot) then return bag, slot end
+            end
+        end
+    end
+    return nil
+end
+
 -- Forgets what everyone was handed. Records of people still in the group are zeroed where they are
 -- (the plan's rows point at them); those of people who left go. why: a reason code for diagnostics.
 function RF.ResetSession(why)
     for guid, e in pairs(entries) do
-        if e.inGroup then e.water, e.food = 0, 0 else entries[guid] = nil end
+        if e.inGroup then e.water, e.food, e.unconfirmed = 0, 0, nil else entries[guid] = nil end
     end
     departed = 0
     resets = resets + 1
@@ -658,13 +756,17 @@ function RF.Snapshot()
     for event in pairs(active) do events[#events + 1] = event end
     table.sort(events)
     local inGroup, seen = 0, {}
-    for _, e in pairs(entries) do if e.inGroup then inGroup = inGroup + 1 end end
+    local offered = 0
+    for _, e in pairs(entries) do
+        if e.inGroup then inGroup = inGroup + 1 end
+        if e.unconfirmed then offered = offered + 1 end
+    end
     for spell, y in pairs(yields) do seen[#seen + 1] = { spell = spell, n = y.n, level = y.level } end
     table.sort(seen, function(a, b) return a.spell < b.spell end)
     return {
         mage = RF.ForPlayer(), enabled = RF.Enabled(), switchOn = R:Enabled("mageRefreshments"),
         context = state.context, members = #state.members, unreadable = state.unreadable,
-        sessionInGroup = inGroup, sessionDeparted = departed, resets = resets,
+        sessionInGroup = inGroup, sessionDeparted = departed, sessionOffered = offered, resets = resets,
         scheduled = scheduled, rosterAfterCombat = rosterAfterCombat, watching = watch ~= nil,
         events = events, yields = seen, plan = RF.Enabled() and RF.Plan() or nil,
     }
