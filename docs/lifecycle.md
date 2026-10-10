@@ -48,6 +48,7 @@ function twice is one registration. Modules still guard with their own `Want(eve
 | Mage refreshments panel and its conjure buttons | yes (secure buttons) | **Reject** opening in combat; close at combat start (or when it ends). The buttons' spell **defers** to `PLAYER_REGEN_ENABLED`; turned on in combat, they are made when it ends (docs/refreshments.md) |
 | Quick Keybind (`QuickKeybindFrame:Show()`) | yes | **Disable** the button in combat with the reason; never deferred (it must be the player's click) |
 | Cards, movers, tooltips, the notification coordinator | no (plain frames) | act at once; previews clear at combat start |
+| Chronicle window, note editor and date picker (their appearance) | no (plain frames) | one coalesced pass while open, none while closed; a waiting pass is dropped when the window closes (docs/chronicle-appearance.md) |
 | `BNToastFrame` event list | no | act at once |
 | Settings previews, apply/restore/reset buttons | n/a | **Reject** in combat with a message |
 

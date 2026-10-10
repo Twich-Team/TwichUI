@@ -381,8 +381,6 @@ function SM.New(spec)
         b.text = Text(b, FONT_NOTE, 13, "GameFontNormalSmall")
         b.text:SetPoint("LEFT", 6, 0)
         b.text:SetPoint("RIGHT", -6, 0)
-        b.text:SetText(spec.footer.label)
-        b.text:SetTextColor(K.gold[1], K.gold[2], K.gold[3])
         b:SetScript("OnClick", function()
             if InCombat() then return end
             menu:Hide()
@@ -484,6 +482,11 @@ function SM.New(spec)
             footerRow:SetPoint("TOPLEFT", menu, "TOPLEFT", pad, y)
             footerRow:SetPoint("RIGHT", menu, "RIGHT", -pad, 0)
             footerRow:Show()
+            -- Written after it is anchored and shown, as a row's is in Fill: a label set while the
+            -- button had no width was sometimes never drawn, though the button still took clicks.
+            local K = Palette()
+            footerRow.text:SetText(spec.footer.label)
+            footerRow.text:SetTextColor(K.gold[1], K.gold[2], K.gold[3])
             y = y - ROW_HEIGHT
         elseif footerRow then
             footerRow:Hide()

@@ -62,6 +62,7 @@ chronicle\Data.lua
 chronicle\Filter.lua
 chronicle\Recorder.lua
 chronicle\Style.lua
+chronicle\Appearance.lua
 chronicle\Window.lua
 chronicle\Broker.lua
 
@@ -133,6 +134,7 @@ diag\Friends.lua
 diag\Food.lua
 diag\Refreshments.lua
 diag\RestedXPSkin.lua
+diag\ChronicleLook.lua
 diag\Zones.lua
 diag\Sharing.lua
 diag\Saved.lua

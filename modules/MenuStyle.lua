@@ -27,6 +27,14 @@
 -- as EllesmereUI draws them; the game's and LibSharedMedia's backgrounds repeat.
 -- A saved name that is no longer there is drawn as "solid" and stays saved and listed, marked
 -- "(not available)", until the player picks.
+-- A look may also name three optional settings (a look that doesn't keeps the behaviour above):
+--   bgTiling   "auto" (as above), "tile" or "stretch": how a textured background fills the frame;
+--   bgTileSize the size a tiled background repeats at, in pixels;
+--   bgInset    how far the background sits in from the frame's edge, in pixels.
+-- A look may add border ids of its own (options.extraBorders, { id, label } pairs); such a border is
+-- drawn by the look's owner, Apply only draws no edge for it and says so (its second result).
+-- options.sources labels the textures EllesmereUI offers, so a list says where each comes from.
+-- R.MenuStyle.Fonts is the font side of the same idea: LibSharedMedia's fonts, by stable name.
 
 local R = TwichUI
 
@@ -41,7 +49,13 @@ local MENU_DEFAULTS = {
 }
 -- Border thickness is in screen pixels. A textured border needs a few to read at all, and a frame
 -- keeps its text clear of a thick one, so the limit is modest.
-local LIMITS = { bgOpacity = { 0, 100 }, borderOpacity = { 0, 100 }, borderSize = { 0, 16 } }
+local LIMITS = {
+    bgOpacity = { 0, 100 }, borderOpacity = { 0, 100 }, borderSize = { 0, 16 },
+    bgTileSize = { 16, 256 }, bgInset = { 0, 16 },
+}
+-- What a look gets for the optional settings it does not name in its own defaults.
+local OPTIONAL_DEFAULTS = { bgTiling = "auto", bgTileSize = TILE, bgInset = 0 }
+local TILINGS = { auto = true, tile = true, stretch = true }
 
 -- The game's own textures, by LibSharedMedia's usual names. Each path is one Blizzard's own
 -- interface code (the Forever branch of the UI source) draws, so the client has it. Nothing is
@@ -108,6 +122,7 @@ local function Valid(key, value)
         return type(value) == "number" and value == value and value >= limit[1] and value <= limit[2]
             and math.floor(value) == value
     elseif key == "bgTexture" or key == "borderTexture" then return R.Borders.ValidName(value)
+    elseif key == "bgTiling" then return type(value) == "string" and TILINGS[value] == true
     elseif key == "bgColor" or key == "borderColor" then
         return type(value) == "string" and value:match("^%x%x%x%x%x%x%x%x$") ~= nil
     end
@@ -167,20 +182,34 @@ local function Offered(kind, name)
     return not name:find("^Blizzard ")
 end
 
--- { { id, label }, ... } for a texture choice of a kind: None, Solid, the game's own, EllesmereUI's
--- (borders, while it is installed), then every LibSharedMedia entry of that kind, sorted. The saved choice stays listed, marked, if it's gone.
-local function Choices(kind, current)
-    local list = { { "none", "None" }, { "solid", kind == "border" and "Solid line" or "Solid color" } }
+-- { { id, label }, ... } for a texture choice of a kind: the look's own extras, None, Solid, the
+-- game's own, EllesmereUI's (while it is installed), then every LibSharedMedia entry of that kind,
+-- sorted. The saved choice stays listed, marked, if it's gone.
+-- extras: { { id, label }, ... } listed first. sources: label what EllesmereUI and the status bar
+-- list offer, so the list says where a texture comes from.
+local SOURCE_EUI, SOURCE_BAR = "  (EllesmereUI)", "  (status bar)"
+
+local function Choices(kind, current, extras, sources)
+    local list = {}
+    for _, extra in ipairs(extras or {}) do list[#list + 1] = { extra[1], extra[2] } end
+    list[#list + 1] = { "none", "None" }
+    list[#list + 1] = { "solid", kind == "border" and "Solid line" or "Solid color" }
     for _, entry in ipairs(BUILTIN[kind]) do list[#list + 1] = { entry[1], entry[1] } end
     local files = {}   -- files already listed, so the same texture isn't offered twice under two names
+    local named = {}   -- names already listed (without a source label)
+    for _, choice in ipairs(list) do named[choice[2]] = true end
     if kind == "border" then
         for _, choice in ipairs(R.Borders.EllesmereChoices()) do
-            if not builtinPath.border[choice[2]] then list[#list + 1] = choice end   -- not a name listed above
+            if not builtinPath.border[choice[2]] then
+                list[#list + 1] = sources and { choice[1], choice[2] .. SOURCE_EUI } or choice   -- not a name listed above
+                named[choice[2]] = true
+            end
         end
     else
         local eb = EllesmereBackgrounds()
         for _, choice in ipairs(eb and eb.list or {}) do
-            list[#list + 1] = choice
+            list[#list + 1] = sources and { choice[1], choice[2] .. SOURCE_EUI } or choice
+            named[choice[2]] = true
             files[eb.path[R.Borders.EllesmereKey(choice[1])]] = true
         end
     end
@@ -191,19 +220,20 @@ local function Choices(kind, current)
         if Offered(kind, name) then sorted[#sorted + 1] = name end
     end
     table.sort(sorted)
-    for _, name in ipairs(sorted) do list[#list + 1] = { name, name } end
+    for _, name in ipairs(sorted) do list[#list + 1] = { name, name }; named[name] = true end
     if kind == "background" then
         -- Status bar textures, as EllesmereUI offers them for its backgrounds.
         local bars = LSM and LSM:HashTable("statusbar")
-        local labels, barNames = {}, {}
-        for _, choice in ipairs(list) do labels[choice[2]] = true end
+        local barNames = {}
         for name, file in pairs(bars or {}) do
-            if Offered(kind, name) and not NOT_TEXTURES[name] and not labels[name] and not files[file] then
+            if Offered(kind, name) and not NOT_TEXTURES[name] and not named[name] and not files[file] then
                 barNames[#barNames + 1] = name
             end
         end
         table.sort(barNames)
-        for _, name in ipairs(barNames) do list[#list + 1] = { BAR_PREFIX .. name, name } end
+        for _, name in ipairs(barNames) do
+            list[#list + 1] = { BAR_PREFIX .. name, sources and (name .. SOURCE_BAR) or name }
+        end
     end
     for _, choice in ipairs(list) do if choice[1] == current then return list end end
     list[#list + 1] = { current, (R.Borders.EllesmereKey(current) or BarName(current) or current) .. " (not available)" }
@@ -222,10 +252,17 @@ end
 
 ---------------------------------------------------------------------------
 -- One look, saved in TwichUIDB.ui[savedKey]. defaults: a value for each of bgTexture, bgColor,
--- bgOpacity, borderTexture, borderColor, borderOpacity and borderSize.
+-- bgOpacity, borderTexture, borderColor, borderOpacity and borderSize (and, if the look uses them,
+-- bgTiling, bgTileSize and bgInset). options: nil, or { extraBorders = { { id, label }, ... },
+-- sources = true } (see the top of this file).
 ---------------------------------------------------------------------------
-local function New(savedKey, defaults)
+local function New(savedKey, defaults, options)
+    local extraBorders = options and options.extraBorders or nil
+    local sources = options and options.sources or false
+    local custom = {}   -- id -> true for the borders the look's owner draws
+    for _, extra in ipairs(extraBorders or {}) do custom[extra[1]] = true end
     local MS = { DEFAULTS = defaults, LIMITS = LIMITS, ParseColor = ParseColor, Resolve = Resolve, Choices = Choices }
+    function MS.IsCustomBorder(id) return custom[id] == true end
     local rules = { defaultSize = defaults.borderSize, defaultColor = defaults.borderColor,
         solidMax = 4, texturedMin = 8, texturedSeed = 12, maxSize = LIMITS.borderSize[2] }
 
@@ -239,7 +276,9 @@ local function New(savedKey, defaults)
         local saved = Saved()
         local value = saved and saved[key]
         if Valid(key, value) then return value end
-        return defaults[key]
+        local default = defaults[key]
+        if default == nil then default = OPTIONAL_DEFAULTS[key] end
+        return default
     end
 
     local subscribers = {}
@@ -261,7 +300,7 @@ local function New(savedKey, defaults)
         if type(TwichUIDB.ui[savedKey]) ~= "table" then TwichUIDB.ui[savedKey] = {} end
         local saved = TwichUIDB.ui[savedKey]
         -- a new border texture gets a thickness that suits it, unless the player set their own
-        if key == "borderTexture" and value ~= "none" then
+        if key == "borderTexture" and value ~= "none" and not custom[value] then
             local size, color = MS.Get("borderSize"), MS.Get("borderColor")
             local newSize, newColor = R.Borders.Reseed(MS.Get("borderTexture"), value, size, color, rules)
             if newSize ~= size then saved.borderSize = newSize end
@@ -278,8 +317,15 @@ local function New(savedKey, defaults)
         Notify()
     end
 
-    function MS.BackgroundChoices() return Choices("background", MS.Get("bgTexture")) end
-    function MS.BorderChoices() return Choices("border", MS.Get("borderTexture")) end
+    function MS.BackgroundChoices() return Choices("background", MS.Get("bgTexture"), nil, sources) end
+    function MS.BorderChoices() return Choices("border", MS.Get("borderTexture"), extraBorders, sources) end
+
+    -- Whether the chosen background is an image that can be tiled or stretched (a plain color and
+    -- None are neither), so a page can leave out the controls that would do nothing.
+    function MS.BackgroundIsImage()
+        local path, state = Resolve("background", MS.Get("bgTexture"))
+        return state == "ok" and path ~= nil and path ~= WHITE
+    end
 
     -- Media added after TwichUI loaded (another addon's pack): a saved choice that was waiting for
     -- it can now be drawn. The lists above are read afresh whenever a dropdown opens.
@@ -299,11 +345,18 @@ local function New(savedKey, defaults)
     -- border drawn inside the frame's edge) and, for the plain line, a faint highlight and shade just
     -- inside it as the Chronicle's popovers have. Only changes the frame's own pieces, never its
     -- children. Returns how far the border reaches in from the frame's edge, in UI units, so the
-    -- caller can keep its content clear of it.
+    -- caller can keep its content clear of it, and what was drawn for the border: "line", "texture",
+    -- "eui", "none" (nothing), "custom" (one of the look's extra borders, which its owner draws) or
+    -- "missing" (the saved name is not available, and the plain line is drawn).
     function MS.Apply(frame)
         local bgPath, _, stretch = Resolve("background", MS.Get("bgTexture"))
         local borderName = MS.Get("borderTexture")
-        local edgePath, edgeState = Resolve("border", borderName)
+        local edgePath, edgeState
+        if custom[borderName] then
+            edgePath, edgeState = nil, "custom"
+        else
+            edgePath, edgeState = Resolve("border", borderName)
+        end
         local size = MS.Get("borderSize")
         local br, bg, bb = ParseColor(MS.Get("borderColor"))
         local alpha = MS.Get("borderOpacity") / 100
@@ -329,10 +382,17 @@ local function New(savedKey, defaults)
         local info = {}
         if bgPath then
             info.bgFile = bgPath
-            info.tile = bgPath ~= WHITE and not stretch
-            info.tileSize = info.tile and Pixels(frame, TILE) or nil
+            -- a flat color is neither tiled nor stretched; an image follows the look's tiling choice
+            -- ("auto": EllesmereUI's and the status bar textures stretch, the rest repeat)
+            local tiling = MS.Get("bgTiling")
+            if bgPath == WHITE then info.tile = false
+            elseif tiling == "tile" then info.tile = true
+            elseif tiling == "stretch" then info.tile = false
+            else info.tile = not stretch end
+            info.tileSize = info.tile and Pixels(frame, MS.Get("bgTileSize")) or nil
             -- a textured border's corners are rounded: keep the background off them
             local inset = (edge > 0 and not line and not eui) and math.floor(edge / 4) or 0
+            inset = math.max(inset, Pixels(frame, MS.Get("bgInset")))
             info.insets = { left = inset, right = inset, top = inset, bottom = inset }
         end
         if edge > 0 and edgePath then info.edgeFile = edgePath end
@@ -360,13 +420,133 @@ local function New(savedKey, defaults)
             t:SetPoint(up and "TOPRIGHT" or "BOTTOMRIGHT", -edge, up and -edge or edge)
             t:SetShown(line)
         end
-        return edge
+        local drawn
+        if edgeState == "custom" then drawn = "custom"
+        elseif edgeState == "none" then drawn = "none"
+        elseif eui then drawn = "eui"
+        elseif edgeState == "missing" then drawn = "missing"
+        elseif line then drawn = "line"
+        elseif edge > 0 then drawn = "texture"
+        else drawn = "none" end   -- a size of 0
+        return edge, drawn
     end
 
     return MS
 end
 
+---------------------------------------------------------------------------
+-- Fonts: LibSharedMedia's "font" list, by stable name. A saved name that is no longer there is drawn
+-- with the caller's own font and stays saved (and listed, marked) until the player picks. The list is
+-- built when asked for and kept until a font is registered, which is the one thing that changes it.
+---------------------------------------------------------------------------
+local Fonts = {}
+local fontRest                       -- { { name, label }, ... } of every LibSharedMedia font, grouped and sorted
+local fontUsable, fontUsableCount = {}, 0
+local fontProbe
+local fontSubscribers = {}
+local FONT_CACHE = 16
+
+-- Whether the game can draw a font file: asked once per file, with one hidden string, and the answers
+-- kept for a few files only.
+function Fonts.Usable(path)
+    local known = fontUsable[path]
+    if known ~= nil then return known end
+    if not fontProbe then
+        local holder = CreateFrame("Frame")
+        holder:Hide()
+        fontProbe = holder:CreateFontString()
+    end
+    local ok, result = pcall(fontProbe.SetFont, fontProbe, path, 12, "")
+    local good = ok and result ~= false
+    if fontUsableCount >= FONT_CACHE then
+        for k in pairs(fontUsable) do fontUsable[k] = nil end
+        fontUsableCount = 0
+    end
+    fontUsable[path] = good
+    fontUsableCount = fontUsableCount + 1
+    return good
+end
+
+-- The file for a saved font name, and what became of it: "ok", "default" (the name says to use the
+-- caller's own: "default" or "inherit"), or "missing" (it isn't there or can't be drawn; the caller's
+-- own is returned). fallback: the caller's own font file.
+function Fonts.Resolve(id, fallback)
+    if id == "default" or id == "inherit" then return fallback, "default" end
+    local LSM = SharedMedia()
+    local list = LSM and LSM:HashTable("font")
+    local path = list and list[id]
+    if type(path) == "string" and path ~= "" and Fonts.Usable(path) then return path, "ok" end
+    return fallback, "missing"
+end
+
+-- Who a font name comes from, where that is known: "TwichUI", "EllesmereUI" or nil.
+local function FontSource(name)
+    local mine = R.MediaFonts
+    if type(mine) == "table" and mine[name] then return "TwichUI" end
+    local e = rawget(_G, "EllesmereUI")
+    if type(e) == "table" then
+        local files, game = e.FONT_FILES, e.FONT_BLIZZARD
+        if (type(files) == "table" and files[name]) or (type(game) == "table" and game[name]) then return "EllesmereUI" end
+    end
+end
+
+local function BuildFontRest()
+    local LSM = SharedMedia()
+    local names = LSM and LSM:HashTable("font")
+    local groups = { TwichUI = {}, EllesmereUI = {}, other = {} }
+    for name in pairs(names or {}) do
+        if name ~= "default" and name ~= "inherit" and R.Borders.ValidName(name) then
+            local g = groups[FontSource(name) or "other"]
+            g[#g + 1] = name
+        end
+    end
+    local out = {}
+    for _, key in ipairs({ "TwichUI", "EllesmereUI", "other" }) do
+        table.sort(groups[key])
+        for _, name in ipairs(groups[key]) do
+            out[#out + 1] = { name, key == "other" and name or (name .. "  (" .. key .. ")") }
+        end
+    end
+    return out
+end
+
+-- { { id, label }, ... }: first (the caller's own entries, such as { "default", "Game font" }), then
+-- TwichUI's fonts, EllesmereUI's, and every other LibSharedMedia font. current stays listed, marked, if gone.
+function Fonts.Choices(current, first)
+    fontRest = fontRest or BuildFontRest()
+    local list = {}
+    for _, entry in ipairs(first or {}) do list[#list + 1] = entry end
+    for _, entry in ipairs(fontRest) do list[#list + 1] = entry end
+    for _, entry in ipairs(list) do if entry[1] == current then return list end end
+    list[#list + 1] = { current, tostring(current) .. " (not available)" }
+    return list
+end
+
+-- fn(name) is called after LibSharedMedia registers a font (the list and what can be drawn may have changed).
+function Fonts.Subscribe(fn) fontSubscribers[#fontSubscribers + 1] = fn end
+
+-- What the font code has kept (for the troubleshooting report).
+function Fonts.Stats()
+    return { listed = fontRest ~= nil and #fontRest or 0, probed = fontUsableCount, subscribers = #fontSubscribers }
+end
+
+R:OnInit(function()
+    local LSM = SharedMedia()
+    if not (LSM and LSM.RegisterCallback) then return end
+    LSM.RegisterCallback(Fonts, "LibSharedMedia_Registered", function(_, kind, name)
+        if kind ~= "font" then return end
+        fontRest = nil
+        for k in pairs(fontUsable) do fontUsable[k] = nil end
+        fontUsableCount = 0
+        for _, fn in ipairs(fontSubscribers) do
+            local ok, err = pcall(fn, name)
+            if not ok then geterrorhandler()(err) end
+        end
+    end)
+end)
+
 -- The broker menus' look, as it always was; New makes others.
 local MS = New("brokerMenu", MENU_DEFAULTS)
 MS.New = New
+MS.Fonts = Fonts
 R.MenuStyle = MS

@@ -3,6 +3,7 @@ local c = MakeClient("Rich", {"!!!TwichUI"})
 local function Obj()
   local o = {text = "", checked = false, shown = true}
   return setmetatable(o, {__index = function(t, k)
+    if type(k) == "string" and k:find("^twich") then return nil end   -- the addon's own fields on a frame
     if k == "GetText" then return function(s) return s.text end end
     if k == "SetText" then return function(s, v) s.text = tostring(v or "") end end
     if k == "GetChecked" then return function(s) return s.checked end end
@@ -22,7 +23,7 @@ c.CreateFrame = function(_, name) local o = Obj(); ALL[#ALL + 1] = o; if name th
 c.UISpecialFrames = {}; c.UIParent = Obj(); c.GameTooltip = Obj()
 c.StaticPopupDialogs = {}; c.StaticPopup_Show = function() end
 c.CANCEL = "Cancel"; c.Settings = nil; c.TwichUIDB = {}
-for _, file in ipairs({"chronicle/Style.lua", "chronicle/Window.lua"}) do
+for _, file in ipairs({"modules/Borders.lua", "modules/MenuStyle.lua", "chronicle/Style.lua", "chronicle/Appearance.lua", "chronicle/Window.lua"}) do
   local chunk = assert(loadfile(ROOT .. file)); setfenv(chunk, c); chunk("!!!TwichUI", {})
 end
 c.LOADED["!!!TwichUI"] = true; c.FireEvent("ADDON_LOADED", "!!!TwichUI")

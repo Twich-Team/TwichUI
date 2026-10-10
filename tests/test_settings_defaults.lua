@@ -77,7 +77,7 @@ c.StaticPopupDialogs = {}; c.StaticPopup_Show = function() end
 for _, f in ipairs({ "gear/Weights.lua", "gear/Evaluate.lua", "gear/Prefs.lua", "gear/Data.lua",
   "gear/Hints.lua", "gear/Tooltip.lua", "gear/Bags.lua", "gear/Window.lua", "modules/Notify.lua", "modules/Arrival.lua", "modules/Media.lua", "modules/FriendLogin.lua", "modules/Borders.lua", "modules/FoodDrink.lua",
   "modules/TrainingData.lua", "modules/Borders.lua", "modules/MenuStyle.lua", "modules/SpellMenu.lua", "modules/MageTravel.lua", "modules/MageConjure.lua",
-  "chronicle/Style.lua", "modules/Refreshments.lua", "modules/RefreshmentsPanel.lua", "modules/RefreshmentsShares.lua", "modules/RefreshmentsTrade.lua", "modules/RefreshmentsBroker.lua",
+  "chronicle/Style.lua", "chronicle/Appearance.lua", "modules/Refreshments.lua", "modules/RefreshmentsPanel.lua", "modules/RefreshmentsShares.lua", "modules/RefreshmentsTrade.lua", "modules/RefreshmentsBroker.lua",
   "modules/RestedXPSkin.lua", "qol/QoL.lua", "qol/Summons.lua", "qol/Resurrect.lua", "qol/ReleasePvP.lua", "qol/Duels.lua", "qol/QuickKeybind.lua", "Settings.lua" }) do
   local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
 end
@@ -120,7 +120,9 @@ end
 assert(c.TwichUIDB.ui.showAdvanced == false, "advanced starts hidden")
 for name, i in pairs(advanced) do assert(not i:Shown(), name .. " hidden by default") end
 c.TwichUIDB.ui.showAdvanced = true
-for name, i in pairs(advanced) do assert(i:Shown(), name .. " shown with advanced on") end
+-- (the background's tiling rows also wait for an image background: checked with the Chronicle's below)
+local IMAGE_ONLY = { ["Background tiling"] = true, ["Background tile size"] = true, ["Background inset"] = true }
+for name, i in pairs(advanced) do assert(IMAGE_ONLY[name] or i:Shown(), name .. " shown with advanced on") end
 for _, name in ipairs({"Upgrade hints in item tooltips", "Mark upgrades in my bags", "Weigh gear for", "Stat weights",
   "Configuration sharing", "Let friends send me addon configurations", "Hide addon welcome messages", "Show advanced options"}) do
   assert(visible[name], name .. " is visible by default")
@@ -688,6 +690,76 @@ do
     "sizes, spacing and what shows are part of the appearance reset")
   assert(c.TwichUIDB.modules.restedxpSkin == true, "the switch is not part of the look")
   c.TwichUIDB.modules.restedxpSkin = false
+end
+
+-- Journey Chronicle appearance: on the Chronicle's page, common settings in plain view, the technical ones
+-- Advanced, each written through to the look; greyed or hidden where they would do nothing; and a reset
+-- that is only the appearance.
+do
+  local CA = R.ChronicleAppearance
+  assert(CA and CA.Look, "the appearance is loaded")
+  local function RowFor(variable)
+    for _, i in ipairs(initializers) do if i.setting == proxies[variable] then return i end end
+  end
+  local function Find(name) for _, i in ipairs(initializers) do if i.data.name == name then return i end end end
+  for _, v in ipairs({ "TWICHUI_chronicleLookBgTexture", "TWICHUI_chronicleLookBgColor", "TWICHUI_chronicleLookBgOpacity",
+    "TWICHUI_chronicleLookBorderTexture", "TWICHUI_chronicleLookBorderColor", "TWICHUI_chronicleLookBorderOpacity",
+    "TWICHUI_chronicleLookBorderSize", "TWICHUI_chronicleFont", "TWICHUI_chronicleHeadingFont", "TWICHUI_chronicleTitleColor",
+    "TWICHUI_chronicleBodyColor", "TWICHUI_chronicleAccentColor", "TWICHUI_chronicleHoverOpacity", "TWICHUI_chronicleButtonStyle" }) do
+    assert(variables[v] == "Journey Chronicle", v .. " is on the Chronicle's page: " .. tostring(variables[v]))
+    assert(RowFor(v) and #RowFor(v).shown == 0, v .. " is a common setting")
+  end
+  for _, v in ipairs({ "TWICHUI_chronicleLookBgTiling", "TWICHUI_chronicleLookBgTileSize", "TWICHUI_chronicleLookBgInset" }) do
+    assert(#RowFor(v).shown >= 2, v .. " is Advanced and only for an image background")
+  end
+  for _, v in ipairs({ "TWICHUI_chroniclePadding", "TWICHUI_chronicleWindowOpacity", "TWICHUI_chronicleOutline",
+    "TWICHUI_chronicleScrollThumbColor", "TWICHUI_chronicleDividerColor" }) do
+    assert(#RowFor(v).shown >= 1, v .. " is Advanced")
+  end
+  -- tiling controls mean something only for an image
+  c.TwichUIDB.ui.showAdvanced = true
+  assert(not RowFor("TWICHUI_chronicleLookBgTiling"):Shown(), "a plain color is neither tiled nor stretched")
+  proxies.TWICHUI_chronicleLookBgTexture.set("Blizzard Marble")
+  assert(RowFor("TWICHUI_chronicleLookBgTiling"):Shown() and RowFor("TWICHUI_chronicleLookBgTileSize"):Shown(), "an image can be")
+  proxies.TWICHUI_chronicleLookBgTexture.set("none")
+  assert(not RowFor("TWICHUI_chronicleLookBgInset"):Shown(), "None has nothing to inset")
+  proxies.TWICHUI_chronicleLookBgTexture.set("solid")
+  -- thickness has no meaning for the ledger or for None
+  local size = RowFor("TWICHUI_chronicleLookBorderSize")
+  assert(CA.Look.Get("borderTexture") == "ledger" and not size:Enabled(), "the ledger has a fixed width")
+  assert(size:GetTooltip():find("fixed width", 1, true), "and the tooltip says why")
+  proxies.TWICHUI_chronicleLookBorderTexture.set("solid")
+  assert(size:Enabled(), "a plain line has a thickness")
+  proxies.TWICHUI_chronicleLookBorderTexture.set("none")
+  assert(not size:Enabled() and not RowFor("TWICHUI_chronicleLookBorderColor"):Enabled(), "None draws nothing to size or color")
+  -- sizes are greyed until chosen
+  local titleSize = RowFor("TWICHUI_chronicleTitleSize")
+  assert(not titleSize:Enabled(), "sizes follow the game until chosen")
+  proxies.TWICHUI_chronicleCustomSizes.set(true)
+  assert(titleSize:Enabled() and titleSize.options.min == 10 and titleSize.options.max == 28)
+  -- each writes through; invalid values are not saved
+  proxies.TWICHUI_chronicleFont.set("Some Font")
+  proxies.TWICHUI_chronicleAccentColor.set("ff102030")
+  proxies.TWICHUI_chronicleWindowOpacity.set(10)   -- below the floor
+  proxies.TWICHUI_chronicleLookBgOpacity.set(45)
+  assert(CA.Get("font") == "Some Font" and CA.Get("accentColor") == "ff102030" and CA.Get("windowOpacity") == 100)
+  assert(CA.Look.Get("bgOpacity") == 45)
+  assert(proxies.TWICHUI_chronicleAccentColor.get() == "ff102030")
+  local container = dropdowns.TWICHUI_chronicleFont()
+  local listed
+  for _, entry in ipairs(container) do if entry.value == "Some Font" then listed = entry.label end end
+  assert(container[1].value == "default" and listed and listed:find("not available", 1, true), "the saved font stays listed, marked")
+  local styles = dropdowns.TWICHUI_chronicleLookBorderTexture()
+  assert(styles[1].value == "ledger", "the ledger is listed first")
+  -- appearance only
+  c.TwichUIDB.ui.chronicleClock = "24"
+  c.TwichUIDB.modules.chronicleSound = false
+  Find("Reset Chronicle appearance").click()
+  assert(CA.Get("font") == "default" and CA.Get("accentColor") == CA.DEFAULTS.accentColor and CA.Look.Get("bgOpacity") == 98)
+  assert(CA.Look.Get("borderTexture") == "ledger" and CA.Get("customSizes") == false)
+  assert(c.TwichUIDB.ui.chronicleClock == "24" and c.TwichUIDB.modules.chronicleSound == false, "nothing but the look is reset")
+  assert(Find("Chronicle window") and Find("Chronicle window").click, "a way to open the real window beside the settings")
+  c.TwichUIDB.ui.showAdvanced = false
 end
 
 print("SETTINGS DEFAULTS TESTS PASSED")

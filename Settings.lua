@@ -211,6 +211,7 @@ local function Build()
         local function Add(initializer, suffix)
             if advanced and advanced[suffix] then Advanced(initializer) end
             if parent and initializer then Under(initializer, parent, isOn) end
+            if initializer and options and options.decorate then options.decorate(suffix, initializer) end
             return initializer
         end
         local function Remember(suffix, varType, label, key)
@@ -273,13 +274,27 @@ local function Build()
                 Slider("BorderOpacity", "borderOpacity", "Border opacity",
                     "How solid the border is, in percent. Only the border fades.")
             end,
+            -- only for a look that names them (they have defaults of their own)
+            BgTiling = function()
+                Textures("BgTiling", "bgTiling", "Background tiling",
+                    "How a textured background fills the " .. noun .. ". Automatic repeats the game's and LibSharedMedia's backgrounds and stretches the textures EllesmereUI and status bars offer, as they are drawn there. Repeat tiles any texture at the size below; Stretch fits it to the " .. noun .. ". A plain color is neither.",
+                    function() return R.ChronicleAppearance and R.ChronicleAppearance.TILING_CHOICES or {} end)
+            end,
+            BgTileSize = function()
+                Slider("BgTileSize", "bgTileSize", "Background tile size",
+                    "How big one repeat of a tiled background is, in screen pixels.")
+            end,
+            BgInset = function()
+                Slider("BgInset", "bgInset", "Background inset",
+                    "How far the background sits in from the " .. noun .. "'s edge, in screen pixels, so a thick or textured border has a margin of plain " .. noun .. " behind it. Not the same as the border's own thickness or the content padding.")
+            end,
         }
         local headed = false
         for _, suffix in ipairs(options and options.order or
             { "BgTexture", "BgColor", "BgOpacity", "BorderTexture", "BorderSize", "BorderColor", "BorderOpacity" }) do
             if advanced and advanced[suffix] and not headed then
                 headed = true
-                Advanced(Header("Advanced look", "Textures, thickness and opacity."))
+                Advanced(Header(options.advancedHeader or "Advanced look", options.advancedTip or "Textures, thickness and opacity."))
             end
             rows[suffix]()
         end
@@ -1062,6 +1077,166 @@ local function Build()
         if SettingsPanel and SettingsPanel:IsShown() then HideUIPanel(SettingsPanel) end
         if R.ChronicleWindow then R.ChronicleWindow:Show() end
     end, "Opens your Chronicle (same as typing /tui chronicle).")
+
+    -- Appearance of the Chronicle window (chronicle/Appearance.lua). Not the zone arrival card or the Welcome
+    -- Back card, and nothing to do with what is recorded.
+    local CA = R.ChronicleAppearance
+    local Fonts = R.MenuStyle and R.MenuStyle.Fonts
+    if CA and CA.Look then
+        local resettable = {}
+        Header("Appearance", "How the Chronicle window looks: its background, border, text and accents. It changes nothing about what is recorded, your entries or notes, and not the zone arrival or Welcome Back cards. Changes show at once in the window if it is open; the defaults are the look it has always had.")
+        Button("Chronicle window", "Show or hide", function()
+            if R.ChronicleWindow then R.ChronicleWindow:Toggle() end
+        end, "Shows your real Chronicle beside these settings so you can watch each change as you make it. It opens above this panel; drag it by its title to move it aside. It only reads your entries. (The Open button above closes this panel first.)")
+
+        local rowsBy = {}
+        local function Decorate(suffix, initializer)
+            rowsBy[suffix] = initializer
+            if suffix == "BgTiling" or suffix == "BgTileSize" then
+                initializer:AddShownPredicate(function() return CA.BackgroundIsImage() end)
+            elseif suffix == "BgInset" then
+                initializer:AddShownPredicate(function() return CA.Look.Get("bgTexture") ~= "none" end)
+            elseif suffix == "BorderSize" then
+                Under(initializer, rowsBy.BorderTexture, CA.BorderHasWidth, function()
+                    if CA.Look.Get("borderTexture") == "none" then return "Greyed out: no border is drawn." end
+                    return "Greyed out: the Chronicle ledger border has a fixed width. Pick another border to set a thickness."
+                end)
+            elseif suffix == "BorderColor" or suffix == "BorderOpacity" then
+                Under(initializer, rowsBy.BorderTexture, CA.BorderIsShown, "Greyed out: no border is drawn.")
+            end
+        end
+        local function Merge(list) for _, entry in ipairs(list) do resettable[#resettable + 1] = entry end end
+
+        Header("Background", "The window's fill. A plain color is the default; textures come from the game, from EllesmereUI (while it is installed) and from any LibSharedMedia pack. The header band and the list behind the entries fade with it, so a faint window is faint all through. Text, icons, buttons and the border keep their own strength.")
+        Merge(Appearance(CA.Look, "chronicleLook", "window", nil, nil, nil, nil, nil, nil, {
+            order = { "BgTexture", "BgColor", "BgOpacity", "BgTiling", "BgTileSize", "BgInset" },
+            advanced = { BgTiling = true, BgTileSize = true, BgInset = true },
+            advancedHeader = "Advanced background", advancedTip = "How a textured background repeats and where it sits.",
+            labels = { BgTexture = "Background texture", BgColor = "Background color", BgOpacity = "Background opacity" },
+            decorate = Decorate,
+        }))
+
+        Header("Border", "The window's edge. The Chronicle ledger is the default: a bronze rim with a lit inner edge, tinted by the color below. Any other choice replaces it with a single border of the thickness you set. The window grows to give a border and the content padding room; its place and your entries do not move.")
+        Merge(Appearance(CA.Look, "chronicleLook", "window", nil, nil, nil, nil, nil, nil, {
+            order = { "BorderTexture", "BorderColor", "BorderOpacity", "BorderSize" },
+            labels = { BorderTexture = "Border style", BorderColor = "Border color", BorderOpacity = "Border opacity", BorderSize = "Border thickness" },
+            decorate = Decorate,
+        }))
+
+        local function Setting(variable, varType, label, key)
+            local setting = Proxy("chronicle" .. variable, varType, label, CA.DEFAULTS[key],
+                function() return CA.Get(key) end, function(value) CA.Set(key, value) end)
+            if setting then resettable[#resettable + 1] = { setting = setting, default = CA.DEFAULTS[key] } end
+            return setting
+        end
+        local function Swatch(variable, key, label, tooltip, isAdvanced)
+            local setting = Setting(variable, STRING, label, key)
+            if setting and Settings.CreateColorSwatch then
+                local row = Settings.CreateColorSwatch(category, setting, tooltip)
+                if isAdvanced then Advanced(row) end
+                return row
+            end
+        end
+        local function Pick(variable, key, label, tooltip, choices, isAdvanced)
+            local setting = Setting(variable, STRING, label, key)
+            if setting and Settings.CreateDropdown and Settings.CreateControlTextContainer then
+                local row = Settings.CreateDropdown(category, setting, function()
+                    local container = Settings.CreateControlTextContainer()
+                    for _, choice in ipairs(choices(CA.Get(key))) do container:Add(choice[1], choice[2]) end
+                    return container:GetData()
+                end, tooltip)
+                if isAdvanced then Advanced(row) end
+                return row
+            end
+        end
+        local function Check(variable, key, label, tooltip, isAdvanced)
+            local setting = Setting(variable, BOOL, label, key)
+            if setting and Settings.CreateCheckbox then
+                local row = Settings.CreateCheckbox(category, setting, tooltip)
+                if isAdvanced then Advanced(row) end
+                return row
+            end
+        end
+        local function Slide(variable, key, label, tooltip, isAdvanced)
+            local limit = CA.LIMITS[key]
+            local setting = Setting(variable, NUMBER, label, key)
+            if not (setting and limit and Settings.CreateSlider and Settings.CreateSliderOptions) then return end
+            local options = Settings.CreateSliderOptions(limit[1], limit[2], 1)
+            if MinimalSliderWithSteppersMixin and options.SetLabelFormatter then
+                options:SetLabelFormatter(MinimalSliderWithSteppersMixin.Label.Right)
+            end
+            local row = Settings.CreateSlider(category, setting, options, tooltip)
+            if isAdvanced then Advanced(row) end
+            return row
+        end
+        local function FontChoices(first)
+            return function(current)
+                return Fonts and Fonts.Choices(current, first) or first
+            end
+        end
+
+        Header("Typography", "The Chronicle's text. Title, headline, note and date text are separate colors; fonts come from LibSharedMedia, so TwichUI's, EllesmereUI's and any other addon's fonts are listed. Sizes follow the game's own until you set them. Meaningful colors (the red Delete link, warnings, unavailable controls) are kept.")
+        Pick("Font", "font", "Text font",
+            "The font for dates, notes, labels and button text. The game's own is the default. A font that has gone is drawn as the game's own and stays chosen.",
+            FontChoices({ { "default", "Game font (default)" } }))
+        Pick("HeadingFont", "headingFont", "Title and headline font",
+            "The font for the window's title and each entry's headline. \"Same as text\" follows the text font.",
+            FontChoices({ { "inherit", "Same as text font" }, { "default", "Game font" } }))
+        Swatch("TitleColor", "titleColor", "Title color", "The color of the window's title.")
+        Swatch("HeadingColor", "headingColor", "Headline color", "The color of each entry's headline, and of text under the pointer on controls.")
+        Swatch("BodyColor", "bodyColor", "Note color", "The color of the note text under an entry's headline, and of resting button labels.")
+        Swatch("MetaColor", "metaColor", "Date and detail color", "The color of dates, places, counts and hints, and of disabled controls.")
+        Slide("TextOpacity", "textOpacity", "Text opacity",
+            "How solid the text is, in percent. Only text fades; the background, border and icons are not affected. It cannot go below 30 so the window stays readable.")
+        local sizes = Check("CustomSizes", "customSizes", "Set text sizes here",
+            "Off: sizes are the game's own (title 16, headlines 12, notes and dates 10). On: the four sizes below are used. Rows, the header and the list grow to fit; buttons and the date picker keep their size.")
+        local function SizesOn() return CA.Get("customSizes") end
+        local function SizesWhy() return "Greyed out: needs \"Set text sizes here\" turned on." end
+        for _, def in ipairs({
+            { "TitleSize", "titleSize", "Title size", "The window's title." },
+            { "HeadingSize", "headingSize", "Headline size", "Each entry's headline." },
+            { "BodySize", "bodySize", "Note size", "The note text under a headline, and the text you type in the editor." },
+            { "MetaSize", "metaSize", "Date and detail size", "Dates, places, counts and hints." },
+        }) do
+            local row = Slide(def[1], def[2], def[3], def[4] .. " In points.")
+            if row and sizes then Under(row, sizes, SizesOn, SizesWhy) end
+        end
+        Slide("LineSpacing", "lineSpacing", "Line spacing",
+            "Extra pixels between the lines of text that wraps. Rows grow to fit. 0 is the game's own.")
+        Pick("Outline", "outline", "Text outline", "An outline round all of the Chronicle's text.",
+            function() return CA.OUTLINE_CHOICES end, true)
+
+        Header("Controls and accents", "The color that picks things out, and the small surfaces around the entries.")
+        Swatch("AccentColor", "accentColor", "Accent color",
+            "The warm gold used for the Write a note button, the Edit link, a note's frame, the date picker's marks, the scroll bar's arrows and the rim's lit edge.")
+        Swatch("HeaderColor", "headerColor", "Header band color", "The band behind the title.")
+        Swatch("ListColor", "listColor", "Entry list color", "The recessed area behind the entries.")
+        Slide("HoverOpacity", "hoverOpacity", "Entry highlight",
+            "How strongly an entry is tinted with the accent color while the pointer is on it. 0 for none.")
+        Check("ShowDividers", "showDividers", "Show dividers",
+            "The thin lines between entries and under the title band.")
+        Check("Worn", "worn", "Worn surface",
+            "A faint speckle and a soft shade toward the bottom, so the window reads as worn material rather than flat color. Off for a plain surface.")
+        Pick("ButtonStyle", "buttonStyle", "Main button",
+            "Filled: the Write a note and Save buttons are filled with a dark tone of the accent. Outline: they are drawn like the others, with an accent border and text.",
+            function() return CA.BUTTON_CHOICES end)
+        Swatch("ScrollThumbColor", "scrollThumbColor", "Scroll bar thumb", "The color of the scroll bar's moving part.", true)
+        Swatch("ScrollTrackColor", "scrollTrackColor", "Scroll bar track", "The color of the scroll bar's groove, drawn faintly.", true)
+        Swatch("DividerColor", "dividerColor", "Divider color", "The color of the lines between entries and under the title band.", true)
+
+        Advanced(Header("Advanced layout", "Room and strength of the whole window."))
+        Slide("Padding", "padding", "Content padding",
+            "Extra space between the border and the content, in pixels. The window grows by twice this; its place doesn't change. This is separate from the border's own thickness.", true)
+        Slide("WindowOpacity", "windowOpacity", "Overall window opacity",
+            "Fades the whole window, text and border included, in percent. It multiplies the background, border and text strengths above rather than replacing them, so 50 here with a 50 background is a quarter. 100 is the default; it cannot go below 40 so the window can always be found.", true)
+
+        Button("Reset Chronicle appearance", "Reset", function()
+            for _, entry in ipairs(resettable) do
+                if entry.setting.SetValue then pcall(entry.setting.SetValue, entry.setting, entry.default) end
+            end
+            CA.Reset()
+        end, "Puts the Chronicle window's background, border, text, accents and layout back to the defaults. Nothing else changes: your entries and notes, the date filter, the time format, what is recorded, sounds and the cards are left as they are.")
+    end
 
     -----------------------------------------------------------------------
     Use("sharing")
