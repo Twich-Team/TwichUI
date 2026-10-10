@@ -194,6 +194,10 @@ local function Client(name)
 end
 
 local c = Client("Rich")
+-- The manual button, and only what is still owed: the settings the first part of this file is about.
+c.TwichUIDB.modules.mageRefreshmentsAutoFill = false
+c.TwichUIDB.ui = c.TwichUIDB.ui or {}
+c.TwichUIDB.ui.refreshmentsTradeGives = "owed"
 local R = c.TwichUI
 local RF, T = R.Refreshments, R.RefreshmentsTrade
 assert(c.TwichUIDB.modules.mageRefreshmentsTrade == true, "on with refreshments, which are off by default")
@@ -327,6 +331,9 @@ c.FireEvent("TRADE_CLOSED")
 ---------------------------------------------------------------------------
 do
   local d = Client("Dee")
+  d.TwichUIDB.modules.mageRefreshmentsAutoFill = false
+  d.TwichUIDB.ui = d.TwichUIDB.ui or {}
+  d.TwichUIDB.ui.refreshmentsTradeGives = "owed"
   local DRF = d.TwichUI.Refreshments
   d.BAG[1] = { item = 8077, count = 20 }
   d.FireEvent("BAG_UPDATE_DELAYED"); FlushTimers()
@@ -354,6 +361,131 @@ do
   DRF.Offered("G-1", { water = 20, food = 0 })
   assert(DRF.DismissOffered("G-1") and DRF.Entry("G-1").water == 0 and not DRF.Unconfirmed("G-1"), "dismissed: not counted")
   assert(not DRF.Offered("G-STRANGER", { water = 20, food = 0 }), "only people in the session")
+end
+
+---------------------------------------------------------------------------
+-- Filling by itself, and a whole share every trade (the defaults).
+---------------------------------------------------------------------------
+do
+  local a = Client("Auto")
+  local ART, ARF = a.TwichUI.RefreshmentsTrade, a.TwichUI.Refreshments
+  assert(a.TwichUIDB.modules.mageRefreshmentsAutoFill == true and ART.Gives() == "share", "the defaults")
+  local function Stock()
+    a.BAG = {}
+    a.BAG[1] = { item = 8077, count = 20 }
+    a.BAG[2] = { item = 8077, count = 20 }
+    a.BAG[3] = { item = 8075, count = 15 }
+    a.BAG[4] = { item = 8075, count = 15 }
+    a.FireEvent("BAG_UPDATE_DELAYED"); FlushTimers()
+  end
+  Stock()
+  local function Strip() return a.TwichUIRefreshmentsTrade end
+  -- They open a trade with you: a moment later their share goes in, a part stack split to follow.
+  a.TRADE, a.UNACKED, a.calls = {}, {}, {}
+  a.FireEvent("TRADE_SHOW")
+  assert(#a.calls == 0, "not at the very instant it opens")
+  FlushTimers()
+  assert(table.concat(a.calls, ",") == "pickup 1,trade 1,pickup 3,trade 2,split 4 5,pickup 5", "by itself: " .. table.concat(a.calls, ","))
+  a.calls = {}
+  a.Ack(); FlushTimers()
+  assert(#a.calls == 0, "waits for the split to land")
+  a.Land(); FlushTimers()
+  assert(table.concat(a.calls, ",") == "pickup 5,trade 3", "and adds it when it does: " .. table.concat(a.calls, ","))
+  a.Ack(); a.Land(); FlushTimers()
+  a.calls = {}
+  a.FireEvent("BAG_UPDATE_DELAYED"); FlushTimers()
+  assert(#a.calls == 0 and Strip().line.text:find("in the window", 1, true), "done: nothing more goes in")
+  a.ERR_TRADE_COMPLETE = "Trade complete."
+  a.FireEvent("TRADE_ACCEPT_UPDATE", 1, 1)
+  a.FireEvent("UI_INFO_MESSAGE", 226, "Trade complete."); a.FireEvent("TRADE_CLOSED")
+  assert(ARF.Entry("G-1").water == 20 and ARF.Entry("G-1").food == 20 and ARF.RowFor("G-1").status == "supplied", "marked as handed over by itself")
+
+  -- They come back for more: their whole share goes in again, and adds up.
+  Stock()
+  a.TRADE, a.UNACKED, a.calls = {}, {}, {}
+  a.FireEvent("TRADE_SHOW"); FlushTimers()
+  assert(table.concat(a.calls, ","):find("^pickup 1,trade 1,pickup 3,trade 2"), "the whole share again: " .. table.concat(a.calls, ","))
+  a.Ack(); a.Land(); FlushTimers(); a.Ack(); a.Land(); FlushTimers()
+  a.FireEvent("TRADE_ACCEPT_UPDATE", 1, 1)
+  a.FireEvent("UI_INFO_MESSAGE", 226, "Trade complete."); a.FireEvent("TRADE_CLOSED")
+  assert(ARF.Entry("G-1").water == 40 and ARF.Entry("G-1").food == 40, "both trades count")
+
+  -- Only what is still owed: once supplied, a trade adds nothing.
+  ART.SetGives("owed")
+  Stock()
+  a.TRADE, a.UNACKED, a.calls = {}, {}, {}
+  a.FireEvent("TRADE_SHOW"); FlushTimers()
+  assert(#a.calls == 0 and Strip().line.text:find("already marked", 1, true), "nothing owed: " .. tostring(Strip().line.text))
+  a.FireEvent("TRADE_CLOSED")
+  ART.SetGives("share")
+
+  -- Taking something out stops it for that trade: it never puts it back.
+  Stock()
+  a.TRADE, a.UNACKED, a.calls = {}, {}, {}
+  a.FireEvent("TRADE_SHOW"); FlushTimers(); a.Ack()
+  a.TRADE[1] = nil; a.BAG[1].locked = false
+  a.FireEvent("TRADE_PLAYER_ITEM_CHANGED", 1)
+  a.calls = {}
+  a.Land(); FlushTimers()
+  assert(#a.calls == 0, "your change stands: " .. table.concat(a.calls, ","))
+  assert(Strip().fill.enabled, "and the button can still put it back if you want")
+  a.FireEvent("TRADE_CLOSED")
+
+  -- Someone has accepted: nothing is added (it would undo the acceptance).
+  Stock()
+  a.TRADE, a.UNACKED, a.calls = {}, {}, {}
+  a.FireEvent("TRADE_SHOW")
+  a.FireEvent("TRADE_ACCEPT_UPDATE", 0, 1)
+  FlushTimers()
+  assert(#a.calls == 0, "they accepted first: nothing by itself")
+  a.FireEvent("TRADE_CLOSED")
+
+  -- Holding something: it waits, then fills once the cursor is free.
+  Stock()
+  a.TRADE, a.UNACKED, a.calls = {}, {}, {}
+  a.CURSOR = { item = 9999, count = 1 }
+  a.FireEvent("TRADE_SHOW"); FlushTimers()
+  assert(#a.calls == 0, "nothing while you hold something")
+  a.CURSOR = nil
+  a.FireEvent("BAG_UPDATE_DELAYED"); FlushTimers()
+  assert(a.calls[1] == "pickup 1", "then it goes in")
+  a.FireEvent("TRADE_CLOSED")
+
+  -- Outside the group: nothing by itself.
+  Stock()
+  a.TRADE, a.UNACKED, a.calls = {}, {}, {}
+  a.PARTNER = "G-STRANGER"
+  a.FireEvent("TRADE_SHOW"); FlushTimers()
+  assert(#a.calls == 0)
+  a.FireEvent("TRADE_CLOSED")
+  a.PARTNER = "G-1"
+
+  -- The game blocks a move made by itself: no more of those this session, one line, the button still works.
+  Stock()
+  a.TRADE, a.UNACKED, a.calls, a.notices = {}, {}, {}, {}
+  local pickup = a.C_Container.PickupContainerItem
+  a.C_Container.PickupContainerItem = function(...)
+    a.FireEvent("ADDON_ACTION_BLOCKED", "!!!TwichUI", "PickupContainerItem")
+    return pickup(...)
+  end
+  a.FireEvent("TRADE_SHOW"); FlushTimers()
+  a.C_Container.PickupContainerItem = pickup
+  assert(not a.CURSOR, "nothing left on the cursor")
+  assert(not ART.AutoOn() and ART.Snapshot().autoBlocked, "switched off for the session")
+  local said = 0
+  for _, n in ipairs(a.notices) do if n:find("doesn't let TwichUI fill", 1, true) then said = said + 1 end end
+  assert(said == 1, "one line says so")
+  assert(Strip().fill.enabled, "the Fill trade button still works")
+  a.calls = {}
+  assert(ART.Fill() and a.calls[1] == "pickup 1", "a click still fills")
+  a.FireEvent("TRADE_CLOSED")
+  a.TRADE, a.UNACKED, a.calls = {}, {}, {}
+  Stock()
+  a.FireEvent("TRADE_SHOW"); FlushTimers()
+  assert(#a.calls == 0, "and the next trade isn't filled by itself")
+  a.FireEvent("TRADE_CLOSED")
+  local autoReport = a.TwichUI.Diag.Build()
+  assert(autoReport:find("each trade puts in: share; fill by itself: switch on, blocked by the game this session: yes", 1, true))
 end
 
 print("REFRESHMENTS TRADE TESTS PASSED")

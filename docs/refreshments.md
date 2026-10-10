@@ -25,8 +25,8 @@ delivery tracking), at the end of this file.
 - **Checklist**: by GUID, marked by hand (Supplied, Clear, plus or minus a stack). The first member not yet supplied
   (and online) is marked "next".
 - Never: casting by itself, repeating or stopping a cast, editing action bars or key bindings, changing game
-  settings, moving bag items except inside a Fill trade click, opening or accepting trades, whispering or chat,
-  sounds.
+  settings, moving bag items other than to fill a group member's open trade, opening or accepting trades,
+  whispering or chat, sounds.
 
 ## Appearance
 
@@ -113,7 +113,7 @@ documented.
 
 Reason codes: `deferred-combat`, `waiting-for-world`, `cancelled-stale-refreshments`, `refreshments-reset-manual`,
 `refreshments-reset-left-group`, `trade-place-not-shown`, `trade-split-not-seen`, `trade-not-completed`,
-`trade-move-blocked`.
+`trade-move-blocked`, `trade-auto-blocked`, `trade-auto-limit`, `trade-auto-stopped-by-you`, `trade-place-refused`.
 
 ## Manual acceptance test
 
@@ -141,15 +141,21 @@ installed.
 12. **Leaving the group, reload, switching off.** Each starts a fresh checklist; nothing returns after a reload.
 13. **Screen.** Smallest window and largest UI scale: the panel fits; long names are cut and readable in the tooltip.
 14. **Data.** Record the item IDs your conjures make (`/tui probe`) and whether a seventh rank exists on Forever.
-15. **Trade opens.** Trade a group member: the strip appears under the trade window; nothing moves by itself. With
-    Conjurer or Water Dispenser filling automatically, Fill counts what they put in.
-16. **Fill, whole stacks.** Owed 40, two full stacks: one click puts both in; record any "action blocked" message.
-17. **Fill, a split.** Owed 25 with two full stacks: one click puts 20 in and splits 5 into a bag slot; the button
-    waits, then a second click adds the 5. Record whether the split reads on the cursor at once (if the strip says
-    "didn't split", it doesn't).
+15. **Trade opens, by itself.** A group member opens a trade with you, then you open one with them: each time their
+    share goes in a moment later without a click. Record any "Interface action failed because of an AddOn" message
+    (if it appears, filling by itself switches off and says so: use the button). With Conjurer or Water Dispenser
+    filling too, what they put in counts.
+16. **Fill, whole stacks.** With filling by itself off, owed 40, two full stacks: one click puts both in.
+17. **Fill, a split.** Owed 25 with two full stacks: 20 goes in and 5 is split into a bag slot, then added (by itself,
+    or with a second click). Record whether the split reads on the cursor at once (if the strip says "didn't split",
+    it doesn't).
 18. **No bag slot.** Full bags with a part stack owed: "Free a bag slot", nothing over-given.
 19. **Your own items.** Put linen and some water in first: they stay where they are; the water counts.
-20. **Cursor, combat.** Hold an item and click Fill: refused. Fill in combat: refused.
+20. **Cursor, combat, your changes.** Hold an item when the trade opens: it waits, then fills when you put it down.
+    Take a stack out of the window: it isn't put back. Press Trade before it fills: nothing is added.
+    Click Fill holding an item: refused. Fill in combat: refused.
+26. **Coming back for more.** After a completed trade, trade them again: their whole share goes in again and the
+    checklist adds it up. With "Only what is still owed": nothing goes in.
 21. **Completed.** Both accept: the row becomes Supplied and one line says what was handed over. Check
     `/tui diagnostics`: which trade-complete constant exists, and the message code seen.
 22. **Cancelled.** Accept, then the other side cancels: nothing counted (or "Offered?" if no completion message
@@ -167,16 +173,27 @@ installed.
 `modules/RefreshmentsTrade.lua`, switch `modules.mageRefreshmentsTrade` (on, but only active while refreshments are
 on). Tests: `tests/test_refreshments_trade.lua`.
 
-- **When:** while trading with a group member (by GUID from the trade unit, `"NPC"`), a plain strip under Blizzard's
-  trade window shows what their share still asks for and a **Fill trade** button. Nothing moves when the trade opens.
-  Someone outside the group, or a partner whose GUID can't be read, gets an explanation and no button.
-- **Every move is inside the click.** No timer or event ever moves an item, so it doesn't matter whether Forever
-  allows timer-driven moves. One click: whole stacks of the planned rank (full, or exactly what is left, largest
+- **When:** while trading with a group member (by GUID from the trade unit, `"NPC"`), whoever opened the trade, a
+  plain strip under Blizzard's trade window shows what goes in for them and a **Fill trade** button. Someone outside
+  the group, or a partner whose GUID can't be read, gets an explanation and nothing is filled.
+- **How much** (`TwichUIDB.ui.refreshmentsTradeGives`): `share` (default), their whole class share in every trade,
+  however much they had before, so someone who comes back for more gets it again; or `owed`, their share less what
+  they've been handed this session (and less an unconfirmed earlier trade), so once supplied a trade adds nothing.
+  Either way, what is in the window already counts, and deliveries add up in the checklist.
+- **One pass** (a click, or by itself): whole stacks of the planned rank (full, or exactly what is left, largest
   first) go into empty slots 1 to 6 (`C_Container.PickupContainerItem` then `ClickTradeButton`); what is left is
   split from the smallest bigger stack into an empty ordinary bag slot (`C_Container.SplitContainerItem`, then a
-  pickup on the empty slot). The **next click**, once the game has shown the split stack unlocked, puts it in. One
-  split per click. With no stack big enough to split, loose stacks go as they are; with no empty bag slot, nothing is
+  pickup on the empty slot), and goes in on the next pass once the game has shown the split stack unlocked. One
+  split per pass. With no stack big enough to split, loose stacks go as they are; with no empty bag slot, nothing is
   split and the strip says so (it never sends a whole stack for part of one).
+- **By itself** (`modules.mageRefreshmentsAutoFill`, on): a pass 0.3 s after the trade opens, and again after each
+  change the game shows (`TRADE_PLAYER_ITEM_CHANGED`, `BAG_UPDATE_DELAYED`, combat ending), so a split goes in once it
+  lands and water conjured during the trade can follow. It stops for the trade when the player takes something out
+  of the window (or the game doesn't take a placement), never adds once either side has accepted, waits while
+  something is on the cursor or in combat, and makes at most 8 passes per trade. If `ADDON_ACTION_BLOCKED` names
+  TwichUI during a pass made by itself, filling by itself is off until a reload (one line says so), and the Fill
+  trade button still works; a block during a click stops filling for that trade. Whether Forever allows moves
+  outside a click isn't in its documentation; Conjurer and Water Dispenser make them, and this is how to find out.
 - **Never:** the seventh slot, a slot already in use, any item but the planned rank of conjured food or water, taking
   anything out of the window, accepting, acting with something on the cursor (it asks you to put it down) or in
   combat. Each move is checked: the cursor must hold the expected item after a pickup and be empty after placing; the
@@ -184,7 +201,6 @@ on). Tests: `tests/test_refreshments_trade.lua`.
 - **Already in the window:** conjured food or water of any rank (put in by hand or an earlier click) counts towards
   the share. A placement the game hasn't shown yet counts too, and the button waits ("Waiting for the game...") until
   `TRADE_PLAYER_ITEM_CHANGED` (or three seconds), so a second click can't add a second stack.
-- **Blocked:** if `ADDON_ACTION_BLOCKED` names TwichUI during a trade, filling stops for that trade.
 
 ### What counts as handed over
 

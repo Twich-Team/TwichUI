@@ -1,12 +1,18 @@
 -- TwichUI: Mage refreshments, trade assistance
--- While a Mage with Mage refreshments on trades with a group member, a small strip under the game's trade
--- window says what their share still asks for and offers **Fill trade**. Nothing happens until it is
--- clicked, and every bag and trade move is made inside that click:
+-- While a Mage with Mage refreshments on trades with a group member (whoever opened the trade), a small
+-- strip under the game's trade window says what goes in for them and offers **Fill trade**:
 --   whole stacks of the rank planned for them go into empty trade slots (1 to 6, never the seventh, the
---   "will not be traded" slot); what is left over is split off into an empty bag slot, and the next click,
---   once the game has shown the new stack, puts it in. Items already in the window, placed by hand or
---   by an earlier click, count towards the share and are never moved or taken out. Only the conjured
---   food and water of the rank planned is ever picked up. It never accepts the trade.
+--   "will not be traded" slot); what is left over is split off into an empty bag slot, and goes in once
+--   the game has shown the new stack. Items already in the window, placed by hand or earlier, count and
+--   are never moved or taken out. Only the conjured food and water of the rank planned is ever picked up.
+--   It never accepts the trade.
+-- How much: by default their whole class share in every trade, however much they had before (they may
+-- need more); or, by the player's choice, only what is still owed this session.
+-- By itself (Fill trades automatically, on by default): a moment after the trade opens, and again as the
+-- game shows each move, what is planned goes in without a click. It stops for the trade as soon as the
+-- player takes something out of it, never adds once either side has accepted, waits while something is
+-- on the cursor or in combat, and makes a few passes at most. If the game blocks a move made that way,
+-- filling by itself is switched off for the session (one line says so) and the button still works.
 -- What was handed over: the window as it stood when you accepted is counted when the game says the
 -- trade was completed. If no such message is seen (WoW: Forever's own message for it is not in its UI
 -- source, so it is looked for, not assumed), the offer is kept as "offered" in the refreshments panel to
@@ -30,6 +36,31 @@ local SLOTS = 6          -- the trade window's item slots; the seventh is never 
 local ACK_WAIT = 3       -- seconds for the game to show a placed stack, or a split stack in the bags
 local CLOSE_WAIT = 3     -- seconds after a trade closes for its "complete" message
 local MAX_CODES = 8      -- message codes kept for diagnostics
+local AUTO_DELAY = 0.3   -- seconds after a trade opens, or the game shows a move, before filling by itself
+local MAX_AUTO = 8       -- passes that fill by itself in one trade
+
+T.GIVES = { { "share", "Their whole share, every trade" }, { "owed", "Only what is still owed this session" } }
+T.DEFAULT_GIVES = "share"
+
+-- What each trade puts in: "share" (their whole share every time) or "owed" (what is still owed).
+function T.Gives()
+    local v = TwichUIDB and TwichUIDB.ui and TwichUIDB.ui.refreshmentsTradeGives
+    return (v == "share" or v == "owed") and v or T.DEFAULT_GIVES
+end
+
+local Update   -- below
+
+function T.SetGives(value)
+    if value ~= "share" and value ~= "owed" then return false end
+    TwichUIDB.ui = type(TwichUIDB.ui) == "table" and TwichUIDB.ui or {}
+    TwichUIDB.ui.refreshmentsTradeGives = value
+    Update()
+    return true
+end
+
+local autoBlocked = false   -- the game blocked a move made by itself: no more of those this session
+
+function T.AutoOn() return R:Enabled("mageRefreshmentsAutoFill") and not autoBlocked end
 
 local KIND_OF = {}       -- [itemID] = "water" | "food", for every conjured rank
 for kind, list in pairs(RF.ITEMS) do
@@ -131,8 +162,10 @@ local closing            -- a closed trade waiting a moment for its "complete" m
 local pending = {}       -- [tradeSlot] = { item, kind, count, at }: placed, not yet shown by the game
 local splitPending       -- { bag, slot, item, kind, count, at }: split into the bags, not yet landed
 local generation = 0
-local stats = { trades = 0, fills = 0, placed = 0, splits = 0, refused = 0, blocked = 0,
+local stats = { trades = 0, fills = 0, autoPasses = 0, placed = 0, splits = 0, refused = 0, blocked = 0,
     confirmed = 0, unconfirmed = 0, notCompleted = 0, completionSeen = false }
+local running             -- "auto" or "click" while moves are being made
+local halted = false      -- the game blocked one of them
 local codes = {}         -- message codes seen while a trade was open or closing, for diagnostics
 local lastOutcome
 local status             -- the strip's last message after a click, until the next change
@@ -190,13 +223,17 @@ local function View()
     if not v.row then v.reason = "not-in-group" return v end
     if Waiting() then v.reason = "waiting" return v end
     local free, offered = ReadWindow()
-    local earlier = RF.Unconfirmed(trade.guid) or {}
+    local whole = T.Gives() == "share"
+    -- an unconfirmed earlier trade counts only towards what is owed; a whole share is per trade
+    local earlier = (not whole and RF.Unconfirmed(trade.guid)) or {}
     v.offered, v.earlier, v.need, v.kinds = offered, earlier, {}, {}
     local any = false
     for _, kind in ipairs(RF.KINDS) do
-        local need = v.row.remaining[kind] - offered[kind] - (earlier[kind] or 0)
+        local base = whole and v.row.want[kind] or v.row.remaining[kind]
+        local need = base - offered[kind] - (earlier[kind] or 0)
         v.need[kind] = math.max(0, need)
         local rank = v.row.rank[kind]
+        if not rank and v.need[kind] > 0 then rank = RF.RankFor(RF.KnownRanks(kind), v.row.level) end
         if v.need[kind] > 0 and rank then
             local item = RF.ITEMS[kind][rank]
             v.kinds[#v.kinds + 1] = { kind = kind, item = item, rank = rank, need = v.need[kind],
@@ -205,7 +242,9 @@ local function View()
         end
     end
     if not any then
-        v.reason = (v.row.remaining.water + v.row.remaining.food == 0) and "supplied" or "in-window"
+        if v.row.want.water + v.row.want.food == 0 then v.reason = "no-share"
+        elseif not whole and v.row.remaining.water + v.row.remaining.food == 0 then v.reason = "supplied"
+        else v.reason = "in-window" end
         return v
     end
     v.result = T.PlanMoves({ freeSlots = #free, canSplit = RF.EmptyBagSlot() ~= nil, kinds = v.kinds })
@@ -230,6 +269,7 @@ local REASON_TEXT = {
     unknown = "Couldn't tell who you're trading with, so nothing is filled.",
     ["not-in-group"] = "Not in your group, so no share is planned for them.",
     waiting = "Waiting for the game to show the last move...",
+    ["no-share"] = "Their class has no share set. Shares are on the Mage options page.",
     supplied = "Their share is already marked as handed over this session.",
     ["in-window"] = "Their share is in the window. Press Trade when you're both ready.",
 }
@@ -238,13 +278,16 @@ local REASON_TEXT = {
 local function Describe(v)
     local head
     if v.row then
+        local whole = T.Gives() == "share"
         local want = {}
         for _, kind in ipairs(RF.KINDS) do
-            if v.row.remaining[kind] > 0 then
-                want[#want + 1] = ("%d %s%s"):format(v.row.remaining[kind], kind, v.row.rank[kind] and (" (rank " .. v.row.rank[kind] .. ")") or "")
+            local n = whole and v.row.want[kind] or v.row.remaining[kind]
+            if n > 0 then
+                local rank = v.row.rank[kind] or RF.RankFor(RF.KnownRanks(kind), v.row.level)
+                want[#want + 1] = ("%d %s%s"):format(n, kind, rank and (" (rank " .. rank .. ")") or "")
             end
         end
-        head = Name(v.row) .. ": " .. (#want > 0 and table.concat(want, ", ") or "nothing owed")
+        head = Name(v.row) .. ": " .. (#want > 0 and table.concat(want, ", ") or (whole and "no share" or "nothing owed"))
     else
         head = "Mage refreshments"
     end
@@ -261,11 +304,13 @@ local function Describe(v)
     if v.reason == "nothing-to-move" then return head, status or table.concat(notes, " "), false end
     local plan = {}
     if next(r.placing) then plan[#plan + 1] = "puts in " .. Summary(r.placing) end
-    if next(r.splitting) then plan[#plan + 1] = "splits " .. Summary(r.splitting) .. " to add with your next click" end
+    if next(r.splitting) then
+        plan[#plan + 1] = "splits " .. Summary(r.splitting) .. ((trade and trade.auto and T.AutoOn()) and ", which goes in once it lands" or " to add with your next click")
+    end
     return head, status or ("Fill trade " .. table.concat(plan, ", ") .. "." .. (#notes > 0 and (" " .. table.concat(notes, " ")) or "")), true
 end
 
-local function Update()
+function Update()
     if not (strip and strip:IsShown()) then return end
     local head, line, can = Describe(View())
     strip.head:SetText(head)
@@ -293,15 +338,23 @@ local function Settle(gen)
 end
 
 -- One click's moves, in the click. Stops at the first one the game doesn't take.
+local BLOCKED = "The game blocked that move."
+
 local function Execute(v)
     local slots = v.free
     local nextSlot = 1
     local placed, split = 0, nil
+    halted = false
+    local function Halt()
+        if GetCursorInfo() then ClearCursor() end
+        return placed, split, BLOCKED
+    end
     for _, m in ipairs(v.result.moves) do
         if m.op == "place" then
             local tslot = slots[nextSlot]
             if not tslot then break end
             pcall(C_Container.PickupContainerItem, m.bag, m.slot)
+            if halted then return Halt() end
             local what, id = GetCursorInfo()
             if what ~= "item" or Plain(id) ~= m.item then
                 if GetCursorInfo() then ClearCursor() end
@@ -309,6 +362,7 @@ local function Execute(v)
                 return placed, split, "The game didn't let TwichUI pick up the " .. m.kind .. "."
             end
             pcall(ClickTradeButton, tslot)
+            if halted then return Halt() end
             if GetCursorInfo() then
                 ClearCursor()
                 stats.refused = stats.refused + 1
@@ -322,6 +376,7 @@ local function Execute(v)
             local bag, slot = RF.EmptyBagSlot()
             if not bag then break end
             pcall(C_Container.SplitContainerItem, m.bag, m.slot, m.count)
+            if halted then return Halt() end
             local what, id = GetCursorInfo()
             if what ~= "item" or Plain(id) ~= m.item then
                 if GetCursorInfo() then ClearCursor() end
@@ -329,6 +384,7 @@ local function Execute(v)
                 return placed, split, "The game didn't split the " .. m.kind .. "."
             end
             pcall(C_Container.PickupContainerItem, bag, slot)
+            if halted then return Halt() end
             if GetCursorInfo() then
                 ClearCursor()
                 stats.refused = stats.refused + 1
@@ -354,11 +410,50 @@ function T.Fill()
     if v.reason then Update() return false end
     stats.fills = stats.fills + 1
     trade.fills = trade.fills + 1
+    running = "click"
     local placed, split, why = Execute(v)
+    running = nil
     if why then status = why end
     if placed > 0 or split then Settle(trade.gen) end
     Update()
     return why == nil
+end
+
+-- One pass by itself: what a click would do, when nothing is in the way. Stops for the trade when a move
+-- isn't taken or nothing more can move (the next change in the bags or the window tries again).
+local function AutoStep(gen)
+    if not (trade and trade.open and trade.gen == gen and trade.auto and T.AutoOn()) then return end
+    if trade.offer or trade.theyAccepted then return end   -- adding now would undo an acceptance
+    if InCombat() or GetCursorInfo() then return end        -- waits for the next change
+    local v = View()
+    if v.reason then return end
+    if trade.autoPasses >= MAX_AUTO then
+        trade.auto = false
+        R.Life.Note("trade-auto-limit")
+        return
+    end
+    trade.autoPasses = trade.autoPasses + 1
+    stats.autoPasses = stats.autoPasses + 1
+    status = nil
+    running = "auto"
+    local placed, split, why = Execute(v)
+    running = nil
+    if why then
+        trade.auto = false
+        if why ~= BLOCKED then status = why end
+    end
+    if placed > 0 or split then Settle(trade.gen) else trade.auto = false end
+    Update()
+end
+
+local function AutoSoon()
+    if not (trade and trade.open and trade.auto) or trade.autoQueued then return end
+    trade.autoQueued = true
+    local gen = trade.gen
+    C_Timer.After(AUTO_DELAY, function()
+        if trade and trade.gen == gen then trade.autoQueued = false end
+        AutoStep(gen)
+    end)
 end
 
 ---------------------------------------------------------------------------
@@ -473,13 +568,21 @@ end
 ---------------------------------------------------------------------------
 local function OnItemChanged(slot)
     slot = Plain(slot)
+    local was = slot and pending[slot]
     if slot then pending[slot] = nil end
+    if slot and trade and trade.open and trade.auto and not Trade(slot) then
+        -- Taken out, by the player (or not taken by the game): the trade is theirs to finish.
+        trade.auto = false
+        R.Life.Note(was and "trade-place-refused" or "trade-auto-stopped-by-you")
+    end
     status = nil
     Update()
+    AutoSoon()
 end
 
-local function OnAccept(player)
+local function OnAccept(player, target)
     if not (trade and trade.open) then return end
+    trade.theyAccepted = Plain(target) == 1
     if Plain(player) == 1 then
         local _, offered, items = ReadWindow()
         trade.offer, trade.items = offered, items
@@ -495,6 +598,7 @@ local function OnBags()
         if info and Plain(info.itemID) == splitPending.item and Plain(info.isLocked) ~= true then splitPending = nil end
     end
     Update()
+    AutoSoon()
 end
 
 local function OnInfo(errorType, message)
@@ -513,13 +617,25 @@ end
 
 local function OnBlocked(addon)
     if Plain(addon) ~= R.ADDON or not (trade and trade.open) then return end
-    trade.blocked = true
     stats.blocked = stats.blocked + 1
-    R.Life.Note("trade-move-blocked")
+    halted = true
+    if running == "auto" then
+        -- Moves made by itself aren't allowed here; one made by your click may still be.
+        if not autoBlocked then Notice("The game doesn't let TwichUI fill the trade by itself. Click Fill trade instead.") end
+        autoBlocked = true
+        trade.auto = false
+        R.Life.Note("trade-auto-blocked")
+    else
+        trade.blocked = true
+        R.Life.Note("trade-move-blocked")
+    end
     Update()
 end
 
-local function OnCombat() Update() end
+local function OnCombat()
+    Update()
+    AutoSoon()
+end
 
 local active = {}
 local function Want(event, handler, wanted)
@@ -548,10 +664,12 @@ local function OnShow()
     wipe(pending)
     splitPending, status = nil, nil
     local guid = Plain(UnitGUID("NPC"))
-    trade = { gen = generation, open = true, guid = type(guid) == "string" and guid or nil, fills = 0 }
+    trade = { gen = generation, open = true, guid = type(guid) == "string" and guid or nil, fills = 0, autoPasses = 0 }
+    trade.auto = T.AutoOn() and trade.guid ~= nil and RF.RowFor(trade.guid) ~= nil
     stats.trades = stats.trades + 1
     ListenTrade(true)
     ShowStrip()
+    AutoSoon()
 end
 
 local function OnClosed()
@@ -609,5 +727,7 @@ function T.Snapshot()
         blocked = trade ~= nil and trade.blocked or false, pending = n, splitPending = splitPending ~= nil,
         closing = closing ~= nil, lastOutcome = lastOutcome, stats = copy, codes = { unpack(codes) }, events = events,
         completionString = ERR_TRADE_COMPLETE ~= nil, completionCode = LE_GAME_ERR_TRADE_COMPLETE ~= nil,
+        autoSwitch = R:Enabled("mageRefreshmentsAutoFill"), autoBlocked = autoBlocked, gives = T.Gives(),
+        autoThisTrade = trade ~= nil and trade.auto or false,
     }
 end

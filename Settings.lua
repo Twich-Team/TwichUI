@@ -686,9 +686,17 @@ local function Build()
                     STRING, RB.DEFAULT_TEXT, RB.TextChoice, RB.SetTextChoice, RB.TEXTS), refresh, RefreshOn)
             end
             if R.RefreshmentsTrade then
-                Under(Toggle("mageRefreshmentsTrade", "Fill trade button and trade tracking",
+                local trade = Under(Toggle("mageRefreshmentsTrade", "Fill trade button and trade tracking",
                     "While you trade with someone in your group, a small strip under the trade window shows what their share still asks for, with a Fill trade button. Nothing happens until you click it: it puts whole stacks of the rank planned for them into empty slots, and when a part stack is needed, splits it into an empty bag slot for your next click to add. It never takes out what is already in the window, never puts in anything else, and never accepts the trade.\n\nWhen the game says a trade was completed, what you offered is marked as handed over. If TwichUI can't confirm it, the panel asks you to confirm or dismiss it. People outside your group get no share.",
                     false, function() R.RefreshmentsTrade.Refresh() end), refresh, RefreshOn)
+                local RT = R.RefreshmentsTrade
+                local function TradeOn() return RefreshOn() and R:Enabled("mageRefreshmentsTrade") end
+                Under(Toggle("mageRefreshmentsAutoFill", "Fill trades automatically",
+                    "When a trade with someone in your group opens, whoever opened it, what is planned for them goes in by itself a moment later, without clicking Fill trade; a part stack goes in once the game has split it. It never accepts the trade, never adds anything once either of you has pressed Trade, and stops for that trade as soon as you take something out of it. It waits while you hold something on the cursor or are in combat.\n\nIf the game doesn't allow it, it switches itself off until you reload (one line says so) and the Fill trade button still works.",
+                    false), trade, TradeOn)
+                Under(Choice("refreshmentsTradeGives", "Each trade puts in",
+                    "Their whole share: every trade with them gets their class's whole share again, however much they had before, for when they come back for more. What is handed over still adds up in the checklist.\n\nOnly what is still owed: their share less what they've been handed this session, so once they're supplied, a trade adds nothing.",
+                    STRING, RT.DEFAULT_GIVES, RT.Gives, RT.SetGives, RT.GIVES), trade, TradeOn)
             end
             if R.RefreshmentShares then
                 Button("Refreshment shares", "Edit", function() R.RefreshmentShares.Show() end,

@@ -56,8 +56,10 @@ local function Refreshments()
             t.switchOn and "on" or "off", D.Flag(t.enabled), D.Flag(t.open), D.Flag(t.partnerRead), D.Flag(t.partnerInGroup), D.Flag(t.blocked))
         Line("trade moves waiting: %d placed not shown yet, split waiting: %s; closed trade waiting for its message: %s",
             t.pending, D.Flag(t.splitPending), D.Flag(t.closing))
-        Line("trades %d, fill clicks %d, stacks placed %d, splits %d, refused %d, blocked %d",
-            st.trades, st.fills, st.placed, st.splits, st.refused, st.blocked)
+        Line("each trade puts in: %s; fill by itself: switch %s, blocked by the game this session: %s, on for this trade: %s",
+            t.gives, t.autoSwitch and "on" or "off", D.Flag(t.autoBlocked), D.Flag(t.autoThisTrade))
+        Line("trades %d, fill clicks %d, passes by itself %d, stacks placed %d, splits %d, refused %d, blocked %d",
+            st.trades, st.fills, st.autoPasses, st.placed, st.splits, st.refused, st.blocked)
         Line("deliveries: confirmed %d, unconfirmed %d, not completed %d; a completion message recognised this session: %s; last outcome: %s",
             st.confirmed, st.unconfirmed, st.notCompleted, D.Flag(st.completionSeen), tostring(t.lastOutcome or "none"))
         Line("this client defines the trade-complete text: %s, its message code: %s; message codes seen during trades: %s",

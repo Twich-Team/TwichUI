@@ -90,7 +90,7 @@ for key, default in pairs(defaults) do
   n = n + 1
   assert(default == R.DEFAULT_MODULES[key], key .. " default matches a new install")
 end
-assert(n == 44, "every module has a toggle: " .. n)
+assert(n == 45, "every module has a toggle: " .. n)
 assert(defaults.arrival == true and defaults.arrivalSubzones == true and defaults.arrivalReducedMotion == false,
   "arrival card and subzone cards on; reduced motion opt-in")
 assert(defaults.arrivalDungeons == true, "dungeon and raid arrival cards on by default")
@@ -103,6 +103,7 @@ assert(defaults.foodDrink == false and defaults.foodDrinkFood == true and defaul
 assert(defaults.mageTravel == true and defaults.mageConjure == true, "the Mage launchers are on (they show only on a data bar)")
 assert(defaults.mageRefreshments == false, "Mage refreshments are opt-in")
 assert(defaults.mageRefreshmentsTrade == true, "its trade strip comes with it when it is turned on")
+assert(defaults.mageRefreshmentsAutoFill == true, "and fills a group member's trade by itself")
 assert(c.canvases["Stat weights"] == "Gear comparison" and c.canvases["Refreshment shares"] == "Mage", "the shares page sits under Mage")
 assert(defaults.auctionPosting == true, "Sell from Bags tab is on by default (it only searches when you pick an item)")
 assert(defaults.trainingNotice == true, "new training card is on by default")
@@ -260,7 +261,7 @@ for variable, page in pairs({
   TWICHUI_qolReleaseWait = "Quality of life", TWICHUI_qolDuels = "Quality of life", TWICHUI_qolDuelsFrom = "Quality of life",
   TWICHUI_qolDuelsToDeath = "Quality of life", TWICHUI_qolQuickKeybind = "Quality of life",
   TWICHUI_foodDrink = "Food and drink", TWICHUI_foodDrinkFood = "Food and drink", TWICHUI_foodDrinkDrink = "Food and drink",
-  TWICHUI_mageTravel = "Mage", TWICHUI_mageTravelText = "Mage", TWICHUI_mageConjure = "Mage", TWICHUI_mageConjureText = "Mage", TWICHUI_mageRefreshments = "Mage", TWICHUI_mageRefreshmentsTrade = "Mage", TWICHUI_refreshmentsText = "Mage",
+  TWICHUI_mageTravel = "Mage", TWICHUI_mageTravelText = "Mage", TWICHUI_mageConjure = "Mage", TWICHUI_mageConjureText = "Mage", TWICHUI_mageRefreshments = "Mage", TWICHUI_mageRefreshmentsTrade = "Mage", TWICHUI_mageRefreshmentsAutoFill = "Mage", TWICHUI_refreshmentsTradeGives = "Mage", TWICHUI_refreshmentsText = "Mage",
   TWICHUI_attuneSkin = "Addon skins", TWICHUI_whatsTrainingSkin = "Addon skins",
   TWICHUI_setupSharing = "Configuration sharing", TWICHUI_shareTransport = "Configuration sharing",
 }) do assert(variables[variable] == page, variable .. " is on " .. page .. ", not " .. tostring(variables[variable])) end
