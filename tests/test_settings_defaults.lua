@@ -24,7 +24,8 @@ c.Settings = {
   VarType = {Boolean = "boolean", String = "string", Number = "number"},
   RegisterVerticalLayoutCategory = function(name) return {GetID = function() return 1 end, name = name}, {AddInitializer = function() end} end,
   RegisterVerticalLayoutSubcategory = function(parent, name)
-    assert(parent.name == "TwichUI", "pages sit directly under TwichUI")
+    assert(parent.name == "TwichUI" or (name == "RestedXP guide window" and parent.name == "Addon skins"),
+      "pages sit directly under TwichUI, except RestedXP's, which is under Addon skins")
     table.insert(pageOrder, name)
     local id = #pageOrder + 10
     return {GetID = function() return id end, name = name}, {AddInitializer = function() end}
@@ -249,7 +250,7 @@ assert(attune.data.tooltip:find("after reload"), "toggle change shows it needs a
 
 -- The overview links to one page per feature, in this order; every setting
 -- is on exactly one page (registration above refuses a repeat).
-assert(table.concat(pageOrder, ",") == "Gear comparison,Notifications,Quality of life,Food and drink,Mage,Journey Chronicle,Auction House,Addon skins,Configuration sharing", table.concat(pageOrder, ","))
+assert(table.concat(pageOrder, ",") == "Gear comparison,Notifications,Quality of life,Food and drink,Mage,Journey Chronicle,Auction House,Addon skins,RestedXP guide window,Configuration sharing", table.concat(pageOrder, ","))
 for variable, page in pairs({
   TWICHUI_media = "TwichUI", TWICHUI_quietLogin = "TwichUI", TWICHUI_showAdvanced = "TwichUI", 
   TWICHUI_gearHints = "Gear comparison", TWICHUI_gearTree = "Gear comparison", TWICHUI_gearBagStyle = "Gear comparison",
@@ -588,10 +589,103 @@ do
   assert(marked and marked:find("not available", 1, true), "a missing font stays listed, marked")
   assert(container[1].value == "default", "RestedXP's own font is first")
 
+  -- RestedXP's settings are a page of their own under Addon skins, with a pointer on that page
+  assert(variables.TWICHUI_restedxpSkin == "RestedXP guide window", "the switch is on RestedXP's page: " .. tostring(variables.TWICHUI_restedxpSkin))
+  assert(variables.TWICHUI_restedxpLookBgColor == "RestedXP guide window" and variables.TWICHUI_restedxpArrowShape == "RestedXP guide window")
+  assert(R.settingsCategories.restedxp, "R:OpenSettings can open it")
+  local pointer = Find("RestedXP guide window")
+  local pointerButton
+  for _, i in ipairs(initializers) do if i.click and i.data.name == "RestedXP guide window" then pointerButton = i end end
+  assert(pointerButton, "a pointer button on the Addon skins page")
+  pointerButton.click()
+  assert(c.opened == R.settingsCategories.restedxp:GetID(), "it opens the page")
+  local skinsPageIndex, restedxpPageIndex
+  for i, name in ipairs(pageOrder) do
+    if name == "Addon skins" then skinsPageIndex = i elseif name == "RestedXP guide window" then restedxpPageIndex = i end
+  end
+  assert(skinsPageIndex and restedxpPageIndex == skinsPageIndex + 1, "listed right under Addon skins")
+
+  -- the waypoint arrow: common settings, validated, written through, and part of the appearance reset
+  for _, v in ipairs({ "TWICHUI_restedxpArrowShape", "TWICHUI_restedxpArrowColor", "TWICHUI_restedxpArrowOpacity",
+    "TWICHUI_restedxpArrowSize", "TWICHUI_restedxpArrowTextShown", "TWICHUI_restedxpArrowTextSize" }) do
+    local row = RowFor(v)
+    assert(row and #row.shown == 0, v .. " is a common setting")
+    assert(not row:Enabled(), v .. " is greyed out while the skin is off")
+  end
+  assert(RowFor("TWICHUI_restedxpArrowSize").options.min == 50 and RowFor("TWICHUI_restedxpArrowSize").options.max == 250)
+  assert(RS.Text.Get("arrowShape") == "bronze" and RS.Text.Get("arrowSize") == 100 and RS.Text.Get("arrowColor") == "ffffffff"
+    and RS.Text.Get("arrowOpacity") == 100 and RS.Text.Get("arrowTextShown") == true and RS.Text.Get("arrowTextSize") == 100,
+    "the bronze plate at RestedXP's own size by default")
+  proxies.TWICHUI_restedxpArrowShape.set("RXP Gold")
+  proxies.TWICHUI_restedxpArrowSize.set(140)
+  proxies.TWICHUI_restedxpArrowColor.set("ff40a0ff")
+  proxies.TWICHUI_restedxpArrowOpacity.set(5)      -- out of range
+  proxies.TWICHUI_restedxpArrowTextSize.set(500)   -- out of range
+  assert(RS.Text.Get("arrowShape") == "RXP Gold" and RS.Text.Get("arrowSize") == 140 and RS.Text.Get("arrowColor") == "ff40a0ff")
+  assert(RS.Text.Get("arrowOpacity") == 100 and RS.Text.Get("arrowTextSize") == 100, "out of range is refused")
+  local shapes = dropdowns.TWICHUI_restedxpArrowShape()
+  assert(shapes[1].value == "bronze" and shapes[2].value == "default", "the shape list opens with the bronze plate, then RestedXP's own")
+  local listed
+  for _, entry in ipairs(shapes) do if entry.value == "RXP Gold" then listed = entry.label end end
+  assert(listed and listed:find("not available", 1, true), "a saved shape that is not there is listed, marked")
+
+  -- the layout and size controls: the everyday ones are common, the technical one is Advanced, and
+  -- the sizes are greyed until the player chooses to set them
+  for _, v in ipairs({ "TWICHUI_restedxpShowCog", "TWICHUI_restedxpShowResizeHandle", "TWICHUI_restedxpShowTitle", "TWICHUI_restedxpShowLogo", "TWICHUI_restedxpShowClassIcon", "TWICHUI_restedxpFooter",
+    "TWICHUI_restedxpCustomSizes", "TWICHUI_restedxpLineSpacing", "TWICHUI_restedxpStepPadding", "TWICHUI_restedxpScrollbar" }) do
+    local row = RowFor(v)
+    assert(row and #row.shown == 0, v .. " is a common setting")
+    assert(not row:Enabled(), v .. " is greyed out while the skin is off")
+  end
+  assert(RowFor("TWICHUI_restedxpDividers") and #RowFor("TWICHUI_restedxpDividers").shown > 0, "section borders are Advanced")
+  for _, v in ipairs({ "TWICHUI_restedxpTitleSize", "TWICHUI_restedxpActiveSize", "TWICHUI_restedxpListSize" }) do
+    local row = RowFor(v)
+    assert(row and #row.shown == 0 and row.options and row.options.min >= 8, v .. " is a ranged slider")
+    c.TwichUIDB.modules.restedxpSkin = true
+    assert(not row:Enabled(), v .. " is greyed out until sizes are set here")
+    RS.Text.Set("customSizes", true)
+    assert(row:Enabled(), v .. " is enabled once they are")
+    RS.Text.Set("customSizes", false)
+    c.TwichUIDB.modules.restedxpSkin = false
+  end
+  assert(RowFor("TWICHUI_restedxpListSize").options.max == RS.Text.LIMITS.listSize[2], "the slider's range is the validated one")
+  local fade = RowFor("TWICHUI_restedxpFutureFade")
+  assert(fade and #fade.shown == 0 and fade.options.min == 0 and fade.options.max == 70, "the fade is a common 0-70 slider")
+  assert(RS.Text.Get("futureFade") == 35, "a gentle fade by default")
+  proxies.TWICHUI_restedxpFutureFade.set(50)
+  assert(RS.Text.Get("futureFade") == 50)
+  proxies.TWICHUI_restedxpFutureFade.set(90)
+  assert(RS.Text.Get("futureFade") == 50, "out of range is refused")
+  assert(RS.Text.Get("showLogo") == false and RS.Text.Get("showClassIcon") == false, "decoration is off by default")
+  assert(RS.Text.Get("showTitle") == true, "the title is shown unless the player hides it")
+  assert(RS.Text.Get("showCog") == true and RS.Text.Get("showResizeHandle") == true, "the cog and handle are RestedXP's own by default")
+  proxies.TWICHUI_restedxpShowCog.set(false)
+  assert(RS.Text.Get("showCog") == false, "the cog can be hidden")
+  proxies.TWICHUI_restedxpShowTitle.set(false)
+  assert(RS.Text.Get("showTitle") == false and proxies.TWICHUI_restedxpShowTitle.get() == false, "the title can be hidden")
+  assert(proxies.TWICHUI_restedxpShowLogo.get() == false)
+  proxies.TWICHUI_restedxpShowLogo.set(true)
+  proxies.TWICHUI_restedxpListSize.set(13)
+  proxies.TWICHUI_restedxpFooter.set("hidden")
+  proxies.TWICHUI_restedxpScrollbar.set("original")
+  proxies.TWICHUI_restedxpStepPadding.set(5)
+  assert(RS.Text.Get("showLogo") == true and RS.Text.Get("listSize") == 13 and RS.Text.Get("footer") == "hidden"
+    and RS.Text.Get("scrollbar") == "original" and RS.Text.Get("stepPadding") == 5, "each writes through")
+  proxies.TWICHUI_restedxpListSize.set(40)   -- out of range: refused
+  proxies.TWICHUI_restedxpFooter.set("nowhere")
+  assert(RS.Text.Get("listSize") == 13 and RS.Text.Get("footer") == "hidden", "invalid values are not saved")
+  local footerChoices = dropdowns.TWICHUI_restedxpFooter()
+  assert(#footerChoices == 3 and footerChoices[1].value == "subtle", "the footer choices")
+
   c.TwichUIDB.modules.restedxpSkin = true
   Find("Reset appearance").click()
   assert(RS.Look.Get("bgOpacity") == RS.Look.DEFAULTS.bgOpacity and RS.Look.Get("borderColor") == RS.Look.DEFAULTS.borderColor)
   assert(RS.Text.Get("titleOutline") == "none" and RS.Text.Get("bodyFont") == "default", "text back to its defaults")
+  assert(RS.Text.Get("showLogo") == false and RS.Text.Get("listSize") == RS.Text.DEFAULTS.listSize
+    and RS.Text.Get("footer") == "subtle" and RS.Text.Get("scrollbar") == "slim" and RS.Text.Get("stepPadding") == 2
+    and RS.Text.Get("showTitle") == true and RS.Text.Get("futureFade") == 35 and RS.Text.Get("showCog") == true
+    and RS.Text.Get("arrowShape") == "bronze" and RS.Text.Get("arrowSize") == 100,
+    "sizes, spacing and what shows are part of the appearance reset")
   assert(c.TwichUIDB.modules.restedxpSkin == true, "the switch is not part of the look")
   c.TwichUIDB.modules.restedxpSkin = false
 end

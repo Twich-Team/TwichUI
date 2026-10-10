@@ -36,7 +36,7 @@ local function Snapshot()
     Line("media: LibSharedMedia %s, EllesmereUI borders %s; title font %s, body font %s",
         s.sharedMedia and "available" or "not available", s.ellesmere and "available" or "not available",
         s.fallbackTitle and "fell back to RestedXP's own" or "as chosen", s.fallbackBody and "fell back to RestedXP's own" or "as chosen")
-    Line("holds: %d frames drawn on, %d hooks, %d tray hooks, %d remembered colours", s.owned or 0, s.hooks or 0, s.trayHooks or 0, s.knownColors or 0)
+    Line("holds: %d frames drawn on, %d hooks, %d frame hooks, %d remembered colours", s.owned or 0, s.hooks or 0, s.trayHooks or 0, s.knownColors or 0)
     Line("work: %d passes, %d RestedXP refreshes, %d held for combat; update waiting: %s; waiting for combat: %s; select theme when ready: %s; strip waiting: %s",
         s.passes or 0, s.refreshes or 0, s.skipped or 0, D.Flag(s.scheduled), D.Flag(s.waitingCombat), D.Flag(s.pendingSelect), D.Flag(s.pendingTeardown))
     local status, reason

@@ -72,10 +72,13 @@ local function Build()
     -- helpers below add to whichever page Use() last selected; the page is
     -- built in one go, so nothing is added after the next Use().
     local pages = { overview = { category = root, layout = rootLayout } }
-    local function NewPage(key, name)
-        local category, layout = Settings.RegisterVerticalLayoutSubcategory(root, name)
+    -- parentKey: a page of its own under another page (the list shows it indented, under that page)
+    local function NewPage(key, name, parentKey)
+        local parent = parentKey and pages[parentKey] and pages[parentKey].category or root
+        local category, layout = Settings.RegisterVerticalLayoutSubcategory(parent, name)
         pages[key] = { category = category, layout = layout }
         R.settingsCategories[key] = category
+        if parent ~= root and category.SetExpanded and parent.SetExpanded then parent:SetExpanded(true) end
     end
     NewPage("gear", "Gear comparison")
     NewPage("notifications", "Notifications")
@@ -85,6 +88,7 @@ local function Build()
     NewPage("chronicle", "Journey Chronicle")
     NewPage("auction", "Auction House")
     NewPage("skins", "Addon skins")
+    if R.RestedXPSkin then NewPage("restedxp", "RestedXP guide window", "skins") end
     NewPage("sharing", "Configuration sharing")
     if R.Diag and R.DiagWindow then NewPage("troubleshooting", "Troubleshooting") end
 
@@ -440,9 +444,14 @@ local function Build()
 
     -----------------------------------------------------------------------
     -- RestedXP: its own look, set here. Not through EllesmereUI, which it doesn't need.
+    -- Its settings are a page of their own under this one (they are many): a short pointer here.
     local RS = R.RestedXPSkin
     if RS then
-        Header("RestedXP guide window", "Gives the RestedXP Guides window a TwichUI look: a background and border, text colors and fonts, and a matching scroll bar. It never changes guide content, progress, step completion, positions or sizes. Works with or without EllesmereUI.")
+        Header("RestedXP guide window", "Gives the RestedXP Guides window a TwichUI look, and its waypoint arrow a shape, color and size of your choosing. Its settings are on a page of their own, under this one.")
+        Button("RestedXP guide window", "Open its settings", function() R:OpenSettings("restedxp") end,
+            "Opens the RestedXP guide window page, under Addon skins: the switch, the look, text, spacing, scroll bar, header and footer, and the waypoint arrow.")
+        Use("restedxp")
+        Header("RestedXP guide window", "Gives the RestedXP Guides window a TwichUI look: a background and border, text colors, fonts and sizes, a quieter header and footer, and a slim scroll bar; and its waypoint arrow a shape, color and size of your choosing. It never changes guide content, progress, step completion or the window's position and size. Works with or without EllesmereUI.")
         local STATUS = {
             off = { "Off", nil },
             ["restedxp-missing"] = { "RestedXP not installed", "Install RestedXP Guides to use this. Your settings here are kept." },
@@ -509,7 +518,8 @@ local function Build()
                 Under(row, rxpToggle, RxpOn)
             end
         end
-        local function TextChoice(variable, key, label, tooltip, choices)
+        -- common: a plain choice rather than one under Advanced
+        local function TextChoice(variable, key, label, tooltip, choices, common)
             local setting = TextSetting(variable, STRING, label, key)
             if setting and Settings.CreateDropdown and Settings.CreateControlTextContainer then
                 local row = Settings.CreateDropdown(category, setting, function()
@@ -517,36 +527,118 @@ local function Build()
                     for _, choice in ipairs(choices(RS.Text.Get(key))) do container:Add(choice[1], choice[2]) end
                     return container:GetData()
                 end, tooltip)
-                Advanced(row)
+                if not common then Advanced(row) end
                 Under(row, rxpToggle, RxpOn)
+                return row
             end
+        end
+        local function TextToggle(variable, key, label, tooltip, isAdvanced)
+            local setting = TextSetting(variable, BOOL, label, key)
+            if setting and Settings.CreateCheckbox then
+                local row = Settings.CreateCheckbox(category, setting, tooltip)
+                if isAdvanced then Advanced(row) end
+                Under(row, rxpToggle, RxpOn)
+                return row
+            end
+        end
+        local function TextSlider(variable, key, label, tooltip, parent, isOn, why)
+            local limit = RS.Text.LIMITS[key]
+            local setting = TextSetting(variable, NUMBER, label, key)
+            if not (setting and limit and Settings.CreateSlider and Settings.CreateSliderOptions) then return end
+            local options = Settings.CreateSliderOptions(limit[1], limit[2], 1)
+            if MinimalSliderWithSteppersMixin and options.SetLabelFormatter then
+                options:SetLabelFormatter(MinimalSliderWithSteppersMixin.Label.Right)
+            end
+            return Under(Settings.CreateSlider(category, setting, options, tooltip), parent or rxpToggle, isOn or RxpOn, why)
         end
         TextSwatch("TitleColor", "titleColor", "Title text color",
             "The color of the guide's title, the footer and each step's number tab. Colors RestedXP gives meaning to in a step's own text (warnings, objectives, links) are not changed.")
         TextSwatch("BodyColor", "bodyColor", "Step text color",
             "The base color of the step and objective text. Colors RestedXP gives meaning to (warnings, objectives, links) are not changed.")
-        Advanced(Header("Advanced text", "Fonts and outlines. Text size follows RestedXP's own Guide Font Size option."))
+
+        Header("Header and footer", "What sits around the guide list. RestedXP's logo and class badge are hidden by default, which gives the guide's title the room they took.")
+        TextToggle("ShowTitle", "showTitle", "Show the guide's title",
+            "The guide's name in the header. Off, the header's background and border go too, leaving a slim invisible strip (it is still the window's handle, and right-click on it still opens RestedXP's menu), and the name is in the tooltip of the menu button at the footer's left.")
+        TextToggle("ShowLogo", "showLogo", "Show RestedXP's logo",
+            "RestedXP's round logo at the left of the guide's title. Off, the title takes the room it kept. It is only a picture; the header's menu and the menu button work either way.")
+        TextToggle("ShowClassIcon", "showClassIcon", "Show the class badge",
+            "The small badge of your class that RestedXP draws beside its logo. Off by default. On, it sits by itself at the left of the title when the logo is off.")
+        TextToggle("ShowCog", "showCog", "Show the menu button",
+            "The small cog at the footer's left, which opens RestedXP's menu (choose a guide, go to a step, options). Off, the guide menu is still on a right click of the header, and choosing a guide or opening the options is on a right click of a step in the list; the version text loses its tooltip. With the resize handle off as well, the whole bar at the bottom goes and the list takes its room.")
+        TextToggle("ShowResizeHandle", "showResizeHandle", "Show the resize handle",
+            "The small grip at the footer's right, which resizes the window when dragged. Off, hold Alt and drag the window to resize it, as RestedXP allows. With the menu button off as well, the whole bar at the bottom goes and the list takes its room.")
+        TextChoice("Footer", "footer", "Version text",
+            "RestedXP's footer shows its version and the range of guide formats it supports. Subdued: smaller and quieter. Hidden: not drawn; it is then in the tooltip of the menu button at the footer's left, which is always there. As RestedXP draws it: unchanged.",
+            function() return RS.FOOTER_CHOICES end, true)
+
+        Header("Text size", "Sizes of the guide's text. They follow RestedXP's own Guide Font Size option until you set them here.")
+        local sizes = TextToggle("CustomSizes", "customSizes", "Set text sizes here",
+            "Off: the sizes follow RestedXP's Guide Font Size option, as they always have. On: the three sizes below are used instead, and rows and the window's header grow to fit. RestedXP's option is not changed.")
+        local function SizesOn() return RxpOn() and RS.Text.Get("customSizes") end
+        local function SizesWhy() if RxpOn() then return "Greyed out: needs \"Set text sizes here\" turned on." end end
+        if sizes then
+            TextSlider("TitleSize", "titleSize", "Guide title size",
+                "The size of the guide's title in the header. The footer text follows it, a little smaller. RestedXP's own is its Guide Font Size plus 2.", sizes, SizesOn, SizesWhy)
+            TextSlider("ActiveSize", "activeSize", "Current step text size",
+                "The size of the text in the current-step panel above the guide, and of its step tab and icons. RestedXP's own is its Guide Font Size plus 2.", sizes, SizesOn, SizesWhy)
+            TextSlider("ListSize", "listSize", "Guide list text size",
+                "The size of the text in the list of steps, and of its numbers (one smaller). RestedXP's own is its Guide Font Size.", sizes, SizesOn, SizesWhy)
+        end
+
+        Header("Spacing", "Room around the guide's text. Heights, wrapping and the scroll range are RestedXP's own and follow these.")
+        TextSlider("LineSpacing", "lineSpacing", "Line spacing",
+            "Extra pixels between the lines of a step that wraps, in the list and in the current-step panel. 0 is RestedXP's own.")
+        TextSlider("StepPadding", "stepPadding", "Step padding",
+            "Extra pixels under each line of the current-step panel and between rows of the list. 0 is RestedXP's own.")
+
+        TextSlider("FutureFade", "futureFade", "Fade the guide list",
+            "How much the whole guide list is dimmed, in percent: its background and border, the scroll bar, the steps, and the bar below it with the menu button and the resize handle. The header and the current-step panel stay as they are, so the step you are on stands out. It is only less visible: everything still works. 0 leaves it as RestedXP draws it.")
+
+        Header("Scroll bar", "The guide list's scroll bar.")
+        TextChoice("Scrollbar", "scrollbar", "Scroll bar style",
+            "Slim: RestedXP's own scroll bar, narrower, with a thin strip for the thumb and a faint track. With EllesmereUI installed the arrows are its arrow icons and the strip is drawn the way its windows draw theirs; without it they are the game's own arrows. Scrolling is unchanged. RestedXP's own: its round arrows and knob.",
+            function() return RS.SCROLLBAR_CHOICES end, true)
+        local tint = ProxyToggle("restedxpTintScrollbar", "Tint the scroll bar",
+            "The slim scroll bar's strip and arrows take the border color, at a soft strength. Off: EllesmereUI's neutral white (or the game's own arrows). Applies to RestedXP's own scroll bar too, which is tinted to the border color.", RS.Text.DEFAULTS.tintScrollbar,
+            function() return RS.Text.Get("tintScrollbar") end, function(value) RS.Text.Set("tintScrollbar", value) end)
+        Advanced(tint)
+        Under(tint, rxpToggle, RxpOn)
+
+        Header("Waypoint arrow", "RestedXP's arrow that points to the next place in the guide. Its own options (Arrow Scale, Arrow Text Size, turning it off) are RestedXP's and stay; these are applied on top. It is only its picture and string that change: where it points, and when it shows, are RestedXP's.")
+        TextChoice("ArrowShape", "arrowShape", "Arrow shape",
+            "The arrow's picture: TwichUI's bronze plate, RestedXP's own pointer for its theme, the pointer each of RestedXP's other themes draws (blue, red, gold, green and so on), its v2 pointer, and EllesmereUI's chevron when it is installed. All of them point up, so RestedXP rotates them the same way. A shape that has gone is drawn as RestedXP's own and stays chosen.",
+            RS.ArrowChoices, true)
+        TextSwatch("ArrowColor", "arrowColor", "Arrow color",
+            "A tint over the picture. White leaves it as drawn; a color multiplies it, so it shows best on a light picture such as EllesmereUI's chevron, and the bronze plate takes it as a stain.")
+        TextSlider("ArrowOpacity", "arrowOpacity", "Arrow opacity",
+            "How solid the arrow's picture is, in percent. The text beside it is not affected.")
+        TextSlider("ArrowSize", "arrowSize", "Arrow size",
+            "The arrow's size as a percentage of RestedXP's own, which its Arrow Scale option sets: 100 is RestedXP's. The two multiply.")
+        TextToggle("ArrowTextShown", "arrowTextShown", "Show the arrow's text",
+            "The name of the step and the distance under the arrow. Off, only the arrow is drawn.")
+        TextSlider("ArrowTextSize", "arrowTextSize", "Arrow text size",
+            "The text under the arrow as a percentage of RestedXP's own, which its Arrow Text Size option sets: 100 is RestedXP's.")
+
+        Advanced(Header("Advanced text", "Fonts and outlines. Sizes are set under Text size, or follow RestedXP's own Guide Font Size option."))
         TextChoice("TitleFont", "titleFont", "Title font",
-            "The font of the guide's title, the footer and step number tabs. The list comes from LibSharedMedia, so fonts other addons add appear here. RestedXP's own is the default. A font that has gone is drawn as the default and stays chosen. The text size follows RestedXP's Guide Font Size.",
+            "The font of the guide's title, the footer and step number tabs. The list comes from LibSharedMedia, so fonts other addons add appear here. RestedXP's own is the default. A font that has gone is drawn as the default and stays chosen.",
             RS.FontChoices)
         TextChoice("TitleOutline", "titleOutline", "Title outline", "An outline round the title text.",
             function() return RS.OUTLINE_CHOICES end)
         TextChoice("BodyFont", "bodyFont", "Step text font",
-            "The font of step and objective text. A font that has gone is drawn as RestedXP's own and stays chosen. The text size follows RestedXP's Guide Font Size.",
+            "The font of step and objective text. A font that has gone is drawn as RestedXP's own and stays chosen.",
             RS.FontChoices)
         TextChoice("BodyOutline", "bodyOutline", "Step text outline", "An outline round the step and objective text.",
             function() return RS.OUTLINE_CHOICES end)
-        local tint = ProxyToggle("restedxpTintScrollbar", "Tint the scroll bar",
-            "Colors RestedXP's scroll bar to the border color so it sits with the rest of the look. Off leaves RestedXP's own gray.", RS.Text.DEFAULTS.tintScrollbar,
-            function() return RS.Text.Get("tintScrollbar") end, function(value) RS.Text.Set("tintScrollbar", value) end)
-        Advanced(tint)
-        Under(tint, rxpToggle, RxpOn)
+        TextChoice("Dividers", "dividers", "Header and footer borders",
+            "Light: the header, the footer and each step's tab draw a fainter border than the window, with no highlight line, so the borders don't stack. Full border: the same border as the window.",
+            function() return RS.DIVIDER_CHOICES end)
         local reset = Button("Reset appearance", "Reset", function()
             for _, entry in ipairs(resettable) do
                 if entry.setting.SetValue then pcall(entry.setting.SetValue, entry.setting, entry.default) end
             end
             RS.Reset()
-        end, "Puts this look's background, border, fonts and colors back to the defaults. Nothing else changes: not the switch, RestedXP's settings, guide progress or positions, or the rest of TwichUI.")
+        end, "Puts this look's background, border, colors, fonts, sizes, spacing, what shows and the waypoint arrow back to the defaults. Nothing else changes: not the switch, RestedXP's settings, guide progress or positions, or the rest of TwichUI.")
         Under(reset, rxpToggle, RxpOn)
 
         R:On("PLAYER_LOGIN", RefreshOverview)
