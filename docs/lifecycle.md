@@ -44,9 +44,11 @@ function twice is one registration. Modules still guard with their own `Want(eve
 | Operation | Protected in combat? | Policy |
 |---|---|---|
 | Food/Drink button attributes, size, position of the buttons' parent | yes (secure buttons) | **Defer**, coalesced to the latest state; run on `PLAYER_REGEN_ENABLED` after revalidating the setting. The tooltip says a change is waiting. |
+| Food/Drink place from EllesmereUI's Unlock Mode (docs/food-drink-unlock.md) | the buttons' parent: not documented; EllesmereUI's anchor frame: no | EllesmereUI moves a **separate plain anchor**; the buttons' parent follows it **out of combat only**. In combat only the fact is kept (`unlock-deferred-combat`); at the end the parent goes to wherever the anchor is then. Dropped when the option or buttons are turned off. |
 | Mage menu rows, shift-click cover | yes | **Reject** opening in combat; close at combat start (or when it ends); cover is put away out of combat only |
 | Mage refreshments panel and its conjure buttons | yes (secure buttons) | **Reject** opening in combat; close at combat start (or when it ends). The buttons' spell **defers** to `PLAYER_REGEN_ENABLED`; turned on in combat, they are made when it ends (docs/refreshments.md) |
 | Quick Keybind (`QuickKeybindFrame:Show()`) | yes | **Disable** the button in combat with the reason; never deferred (it must be the player's click) |
+| Selling ordinary food and drink (`UseContainerItem` at a merchant; docs/mage-sell.md) | not documented | **Never started or continued in combat**; a run stops when combat begins, the merchant closes, another merchant opens, or the feature or an option changes. Whether the game allows an addon's sale is checked in the game: a block ends the run and stops automatic runs until reload. |
 | Cards, movers, tooltips, the notification coordinator | no (plain frames) | act at once; previews clear at combat start |
 | Chronicle window, note editor and date picker (their appearance) | no (plain frames) | one coalesced pass while open, none while closed; a waiting pass is dropped when the window closes (docs/chronicle-appearance.md) |
 | `BNToastFrame` event list | no | act at once |
@@ -60,7 +62,8 @@ Mocked tests cannot show combat lockdown, protected-frame errors or taint. Those
 `friend-bnet-baseline`, `friend-bnet-disconnected`, `init-failed`, `welcome-deferred`, `cancelled-stale-refreshments`,
 `refreshments-reset-manual`, `refreshments-reset-left-group`, `trade-place-not-shown`, `trade-split-not-seen`,
 `trade-not-completed`, `trade-move-blocked`, `trade-auto-blocked`, `trade-auto-limit`, `trade-auto-stopped-by-you`,
-`trade-place-refused`. Counts only; no names, places or items.
+`trade-place-refused`, `cancelled-stale-mage-sell`, `unlock-deferred-combat`, `unlock-save-ignored`,
+`unlock-save-refused`, `unlock-register-failed`. Counts only; no names, places or items.
 
 ## Manual acceptance test
 

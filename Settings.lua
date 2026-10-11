@@ -1041,6 +1041,38 @@ local function Build()
             "When you carry Mage-conjured food or water you can use, the buttons choose it over ordinary food or drink, even when an ordinary item restores more health or mana. Food and water are chosen separately: with conjured food but no conjured water, the Food button holds the conjured food and the Drink button holds the best ordinary drink. With none of a kind, that button chooses as it always does. Among conjured items, the one that restores the most is chosen. It works for any character carrying conjured items, not only Mages, and never lets in an item the buttons would otherwise skip. Off, the choice is the one that restores the most.",
             FD.DEFAULTS.preferConjured, function() return FD.Get("preferConjured") end,
             function(value) FD.Set("preferConjured", value and true or false) end), foodDrink, FoodDrinkOn)
+
+        -- Where they go. Edit Mode moves the buttons unless this is on and EllesmereUI is there.
+        local FDU = FD.Unlock
+        if FDU then
+            local unlockBase = "Move the buttons in EllesmereUI's Unlock Mode instead of Edit Mode. A \"TwichUI Food & Drink\" anchor appears there, and you drag it, nudge it, type its X and Y or anchor it to another element the way you do the rest of your interface. Turning this on keeps the buttons where they are. The place is still saved by TwichUI; EllesmereUI's anchor links are saved by EllesmereUI.\n\nOpen Unlock Mode with /unlock. It can't be opened in combat, and nothing is moved then.\n\nOff, or without EllesmereUI, the buttons are moved in Edit Mode as before. Your choice is kept while EllesmereUI is away."
+            local UNLOCK_STATUS = {
+                off = { "Off" },
+                ["no-eui"] = { "EllesmereUI isn't installed or turned on", "The buttons are moved in Edit Mode until it is." },
+                ["no-api"] = { "This EllesmereUI has no Unlock Mode", "The buttons are moved in Edit Mode." },
+                waiting = { "Waiting for EllesmereUI", "It hasn't finished loading yet." },
+                ["register-failed"] = { "EllesmereUI didn't take the anchor", "The buttons are moved in Edit Mode. /tui diagnostics has the details." },
+                ["module-off"] = { "Ready", "The anchor appears in Unlock Mode while a Food or Drink button is on." },
+                active = { "In EllesmereUI's Unlock Mode", "Type /unlock and look for \"TwichUI Food & Drink\"." },
+            }
+            local unlock = Under(Toggle("foodDrinkUnlock", "Use EllesmereUI Unlock Mode", unlockBase, false,
+                function() FD.Refresh() end), foodDrink, FoodDrinkOn)
+            if unlock and unlock.GetTooltip ~= nil then
+                -- read when the tooltip is shown, so it is never stale
+                local withParent = unlock.GetTooltip
+                unlock.GetTooltip = function(self)
+                    local code = FDU.Status()
+                    local text = UNLOCK_STATUS[code] or { code }
+                    local color = (code == "active" and R.GREEN) or (code == "off" and R.GREY) or R.GOLD
+                    local tip = withParent(self) or unlockBase
+                    return tip .. "\n\nStatus: " .. color .. text[1] .. "|r" .. (text[2] and ("\n" .. text[2]) or "")
+                end
+            end
+            Under(Button("Position", "Reset", function() FD.ResetPosition() end,
+                "Puts the Food and Drink buttons back at their default place. Only their place changes. An anchor you made to another element in EllesmereUI's Unlock Mode is EllesmereUI's, and is removed there."),
+                foodDrink, FoodDrinkOn)
+        end
+
         Header("Appearance", "Make the buttons match the rest of your interface.")
         local resettable = {}   -- { setting, default }, for Reset
         local function Remember(variable, varType, label, key, set)
@@ -1188,6 +1220,35 @@ local function Build()
             if R.RefreshmentShares then
                 Button("Refreshment shares", "Edit", function() R.RefreshmentShares.Show() end,
                     "How many water and food each class gets in a party and in a raid, and how many you keep. Single items, not stacks.")
+            end
+        end
+
+        local MSL, MSW = R.MageSell, R.MageSellWindow
+        if MSL then
+            Header("Sell ordinary food and drink", "Optional. Sells plain, non-conjured food and drink when you open a merchant, so conjured refreshments are what your bags hold. Off by default. Conjured items, special food, quest items, anything locked or without a sell price, and anything on your never-sell list are always kept.")
+            local sell = Toggle("mageSell", "Sell non-conjured food and drink",
+                "When you open a merchant, TwichUI sells the ordinary food and drink in your bags: plain items that only restore health or mana. It keeps Mage-conjured food and water (made by you or another Mage), buff food, feasts, potions and reagents, quest items, locked items, items with no sell price, and anything on your never-sell list; when it can't tell, it keeps the item.\n\nIt starts in Dry run, which only says what it would sell. A visit sells at most a few stacks so your own sales stay in the merchant's Buyback tab, which holds a limited number; other sales can still push entries out. Nothing is destroyed, bought or taken from the bank, mail or anywhere but your bags.\n\nOff by default. Other Mage features don't turn it on.",
+                false, function()
+                    MSL.Refresh()
+                    if MSL.Enabled() then
+                        R.Print("ordinary food and drink will be sold at merchants" .. (MSL.DryRun() and " once Dry run is turned off (for now it only reports). /tui sell shows what would go." or ". /tui sell shows what is kept."))
+                    end
+                end)
+            local function SellOn() return MSL.Enabled() end
+            Under(Toggle("mageSellFood", "Sell ordinary food",
+                "Plain food that only restores health. Food that restores both health and mana is sold only when drink is on as well.",
+                false, function() MSL.Refresh() end), sell, SellOn)
+            Under(Toggle("mageSellDrink", "Sell ordinary drink",
+                "Plain drink that only restores mana. Food that restores both health and mana is sold only when food is on as well.",
+                false, function() MSL.Refresh() end), sell, SellOn)
+            Under(Toggle("mageSellDryRun", "Dry run: report only, sell nothing",
+                "While this is on, opening a merchant only tells you what would be sold, once, in your own chat. Nothing is sold. It is on until you turn it off: check /tui sell first, then turn it off to sell for real.",
+                false, function() MSL.Refresh() end), sell, SellOn)
+            if MSW then
+                Under(Button("Eligible items and never-sell list", "Open", function()
+                    if SettingsPanel and SettingsPanel:IsShown() then HideUIPanel(SettingsPanel) end
+                    MSW.Show()
+                end, "Shows what would be sold now and what is kept and why, and lets you add items to a never-sell list. Nothing is sold by opening it (same as /tui sell)."), sell, SellOn)
             end
         end
 
@@ -1528,11 +1589,12 @@ local function Build()
     FeatureRow("food", "Food and drink", "Two buttons you click to eat or drink the best food or drink in your bags.",
         function() return OnOff(R:Enabled("foodDrink")) end)
     if pages.mage then
-        local mageParts = R.Refreshments and 3 or 2
+        local mageParts = (R.Refreshments and 3 or 2) + (R.MageSell and 1 or 0)
         FeatureRow("mage", "Mage", "Data bar launchers for your teleports and portals and for conjuring food and water, and a refreshments panel for your group.",
             function()
                 local on = (R:Enabled("mageTravel") and 1 or 0) + (R:Enabled("mageConjure") and 1 or 0)
                     + ((R.Refreshments and R:Enabled("mageRefreshments")) and 1 or 0)
+                    + ((R.MageSell and R.MageSell.Enabled()) and 1 or 0)
                 return OnOff(on > 0, ("%d of %d on"):format(on, mageParts), "Off")
             end)
     end

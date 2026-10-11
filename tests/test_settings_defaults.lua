@@ -75,9 +75,9 @@ end
 c.CreateFrame = function() return Obj() end
 c.StaticPopupDialogs = {}; c.StaticPopup_Show = function() end
 for _, f in ipairs({ "gear/Weights.lua", "gear/Evaluate.lua", "gear/Prefs.lua", "gear/Data.lua",
-  "gear/Hints.lua", "gear/Tooltip.lua", "gear/Bags.lua", "gear/Window.lua", "modules/Notify.lua", "modules/Arrival.lua", "modules/Media.lua", "modules/FriendLogin.lua", "modules/Borders.lua", "modules/FoodDrink.lua",
+  "gear/Hints.lua", "gear/Tooltip.lua", "gear/Bags.lua", "gear/Window.lua", "modules/Notify.lua", "modules/Arrival.lua", "modules/Media.lua", "modules/FriendLogin.lua", "modules/Borders.lua", "modules/FoodDrink.lua", "modules/FoodDrinkUnlock.lua",
   "modules/TrainingData.lua", "modules/Borders.lua", "modules/MenuStyle.lua", "modules/SpellMenu.lua", "modules/MageTravel.lua", "modules/MageConjure.lua",
-  "chronicle/Style.lua", "chronicle/Appearance.lua", "modules/Refreshments.lua", "modules/RefreshmentsPanel.lua", "modules/RefreshmentsShares.lua", "modules/RefreshmentsTrade.lua", "modules/RefreshmentsBroker.lua",
+  "chronicle/Style.lua", "chronicle/Appearance.lua", "modules/Refreshments.lua", "modules/RefreshmentsPanel.lua", "modules/RefreshmentsShares.lua", "modules/RefreshmentsTrade.lua", "modules/RefreshmentsBroker.lua", "modules/MageSell.lua", "modules/MageSellWindow.lua",
   "modules/RestedXPSkin.lua", "modules/RestedXPTimers.lua", "qol/QoL.lua", "qol/Summons.lua", "qol/Resurrect.lua", "qol/ReleasePvP.lua", "qol/Duels.lua", "qol/QuickKeybind.lua", "qol/GuideWaypoint.lua", "Settings.lua" }) do
   local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
 end
@@ -91,7 +91,7 @@ for key, default in pairs(defaults) do
   n = n + 1
   assert(default == R.DEFAULT_MODULES[key], key .. " default matches a new install")
 end
-assert(n == 47, "every module has a toggle: " .. n)
+assert(n == 52, "every module has a toggle: " .. n)
 assert(defaults.restedxpSkin == false, "the RestedXP skin is opt-in")
 assert(defaults.arrival == true and defaults.arrivalSubzones == true and defaults.arrivalReducedMotion == false,
   "arrival card and subzone cards on; reduced motion opt-in")
@@ -106,6 +106,9 @@ assert(defaults.mageTravel == true and defaults.mageConjure == true, "the Mage l
 assert(defaults.mageRefreshments == false, "Mage refreshments are opt-in")
 assert(defaults.mageRefreshmentsTrade == true, "its trade strip comes with it when it is turned on")
 assert(defaults.mageRefreshmentsAutoFill == true, "and fills a group member's trade by itself")
+assert(defaults.mageSell == false, "selling ordinary food and drink is opt-in")
+assert(defaults.mageSellFood == true and defaults.mageSellDrink == true and defaults.mageSellDryRun == true,
+  "its kinds are on once it is, and it starts as a dry run")
 assert(c.canvases["Stat weights"] == "Gear comparison" and c.canvases["Refreshment shares"] == "Mage", "the shares page sits under Mage")
 assert(defaults.auctionPosting == true, "Sell from Bags tab is on by default (it only searches when you pick an item)")
 assert(defaults.trainingNotice == true, "new training card is on by default")
@@ -266,6 +269,7 @@ for variable, page in pairs({
   TWICHUI_qolDuelsToDeath = "Quality of life", TWICHUI_qolQuickKeybind = "Quality of life",
   TWICHUI_foodDrink = "Food and drink", TWICHUI_foodDrinkFood = "Food and drink", TWICHUI_foodDrinkDrink = "Food and drink",
   TWICHUI_mageTravel = "Mage", TWICHUI_mageTravelText = "Mage", TWICHUI_mageConjure = "Mage", TWICHUI_mageConjureText = "Mage", TWICHUI_mageRefreshments = "Mage", TWICHUI_mageRefreshmentsTrade = "Mage", TWICHUI_mageRefreshmentsAutoFill = "Mage", TWICHUI_refreshmentsTradeGives = "Mage", TWICHUI_refreshmentsText = "Mage",
+  TWICHUI_mageSell = "Mage", TWICHUI_mageSellFood = "Mage", TWICHUI_mageSellDrink = "Mage", TWICHUI_mageSellDryRun = "Mage",
   TWICHUI_attuneSkin = "Addon skins", TWICHUI_whatsTrainingSkin = "Addon skins",
   TWICHUI_setupSharing = "Configuration sharing", TWICHUI_shareTransport = "Configuration sharing",
 }) do assert(variables[variable] == page, variable .. " is on " .. page .. ", not " .. tostring(variables[variable])) end
@@ -297,6 +301,22 @@ do
   for _, i in ipairs(initializers) do if i.setting and i.setting.variable == "TWICHUI_foodDrinkPreferConjured" then preferInit = i end end
   assert(preferInit and #preferInit.modify == 1, "live only while the buttons are on")
   assert(preferInit.data.tooltip and preferInit.data.tooltip:find("even when an ordinary item restores more", 1, true), "the tooltip says what prefer means")
+  -- EllesmereUI's Unlock Mode: off by default, live only while the buttons are on, says what it does and where it stands
+  assert(defaults.foodDrinkUnlock == false and c.TwichUIDB.modules.foodDrinkUnlock == false, "the Unlock Mode choice is opt-in")
+  local unlockInit
+  for _, i in ipairs(initializers) do if i.setting and i.setting.name == "Use EllesmereUI Unlock Mode" then unlockInit = i end end
+  assert(unlockInit and #unlockInit.modify == 1, "live only while the buttons are on")
+  local tip = unlockInit:GetTooltip()
+  assert(tip:find("/unlock", 1, true) and tip:find("Edit Mode", 1, true), "the tooltip says how to open it and what happens without it")
+  assert(tip:find("Status:", 1, true) and tip:find("Off", 1, true), "and where it stands")
+  assert(not c.TwichUIDB.ui.foodDrinkPosition, "nothing is saved by looking")
+  c.TwichUIDB.ui.foodDrinkPosition = { x = 5, y = 6 }
+  c.TwichUIDB.ui.trainingPosition = { x = 1, y = 2 }
+  local positionReset
+  for _, i in ipairs(initializers) do if i.click and i.data.name == "Position" then positionReset = i end end
+  assert(positionReset, "a Position reset button")
+  positionReset.click()
+  assert(c.TwichUIDB.ui.foodDrinkPosition == nil and c.TwichUIDB.ui.trainingPosition.x == 1, "it clears this place and no other")
   local size = proxies.TWICHUI_foodDrinkSize
   size.set(41.4); assert(FD.Get("size") == 41 and size.get() == 41, "a slider value is kept as a whole number")
   size.set(500); assert(FD.Get("size") == 41, "out of range is refused")

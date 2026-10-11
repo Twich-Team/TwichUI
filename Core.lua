@@ -48,11 +48,16 @@ local DEFAULT_MODULES = {
     foodDrink = false,       -- Food and Drink buttons: you click, they eat or drink the best food or drink in your bags (opt-in)
     foodDrinkFood = true,    -- ... the Food button
     foodDrinkDrink = true,   -- ... the Drink button
+    foodDrinkUnlock = false, -- ... moved in EllesmereUI's Unlock Mode instead of Edit Mode (needs EllesmereUI; opt-in, explicit true only)
     mageTravel = true,       -- Mage Travel launcher on a data bar: teleports and portals, cast by your click (Mages only)
     mageConjure = true,      -- Mage Conjuring launcher on a data bar: food and water ranks, cast by your click (Mages only)
     mageRefreshments = false, -- Mage refreshments panel: plan food and water for your group, conjure by click or key, a checklist (Mages only, opt-in)
     mageRefreshmentsTrade = true, -- ... and a Fill trade button under the trade window, and counting completed trades (needs the one above)
     mageRefreshmentsAutoFill = true, -- ... and filling a group member's trade by itself when it opens (needs the one above)
+    mageSell = false,        -- Mage: sell ordinary (non-conjured) food and drink at merchants (Mages only, opt-in; explicit true only)
+    mageSellFood = true,     -- ... ordinary food (needs the one above)
+    mageSellDrink = true,    -- ... ordinary drink (needs the first one)
+    mageSellDryRun = true,   -- ... only say what would be sold, sell nothing (on until turned off)
     auctionPosting = true,   -- "Sell from Bags" tab in the Auction House (searches only when you pick an item)
     qolSummons = false,      -- Quality of Life (all opt-in, see qol/QoL.lua): accept summons
     qolResurrect = false,    -- ... accept a resurrection offered to you
@@ -339,6 +344,9 @@ COMMANDS = {
     end },
     { name = "refreshments", usage = "refreshments", desc = "Mage refreshments panel (Mages)", fn = function()
         if R.RefreshmentsPanel then R.RefreshmentsPanel.Toggle() else Unavailable("Mage refreshments") end
+    end },
+    { name = "sell", usage = "sell", desc = "what selling ordinary food and drink would keep and sell (Mages; listed in the Mage options)", hidden = true, fn = function()
+        if R.MageSellWindow then R.MageSellWindow.Toggle() else Unavailable("Selling ordinary food and drink") end
     end },
     { name = "about", usage = "about", desc = "show the TwichUI welcome again", fn = function()
         if R.Welcome then R.Welcome.Show() else Unavailable("The welcome") end

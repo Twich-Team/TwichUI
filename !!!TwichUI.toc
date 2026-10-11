@@ -93,8 +93,10 @@ modules\FriendLogin.lua
 # Border textures for TwichUI's own frames (plain, LibSharedMedia, EllesmereUI's)
 modules\Borders.lua
 
-# Food and Drink buttons (click to eat or drink the best food or drink in your bags)
+# Food and Drink buttons (click to eat or drink the best food or drink in your bags), and, optionally,
+# their place in EllesmereUI's Unlock Mode (works without EllesmereUI; off until turned on)
 modules\FoodDrink.lua
+modules\FoodDrinkUnlock.lua
 modules\FoodDrinkProbe.lua
 
 # Mage spells on a data bar: Mage Travel (teleports and portals) and Mage Conjuring (food and
@@ -112,6 +114,11 @@ modules\RefreshmentsPanel.lua
 modules\RefreshmentsShares.lua
 modules\RefreshmentsTrade.lua
 modules\RefreshmentsBroker.lua
+
+# Mage selling: sells plain, non-conjured food and drink at merchants (Mages, off until turned on, dry run
+# first; reads items as modules\FoodDrink.lua does and uses the Chronicle palette for its window)
+modules\MageSell.lua
+modules\MageSellWindow.lua
 
 # RestedXP skin: a TwichUI theme and finish for the RestedXP guide window (off until turned on; uses
 # modules\MenuStyle.lua; needs RestedXP, and works without EllesmereUI)
@@ -142,6 +149,7 @@ diag\Notifications.lua
 diag\Friends.lua
 diag\Food.lua
 diag\Refreshments.lua
+diag\MageSell.lua
 diag\RestedXPSkin.lua
 diag\ChronicleLook.lua
 diag\Zones.lua

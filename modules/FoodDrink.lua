@@ -14,7 +14,8 @@
 -- ordinary one even when the ordinary one restores more; see F.CONJURED. It is a preference
 -- among items already eligible: it never lets in an item the rules above leave out.
 -- The choice is refreshed when bags change. A secure button can't be changed in combat, so a
--- change during a fight waits until it ends. Move them in Edit Mode.
+-- change during a fight waits until it ends. Move them in Edit Mode, or, when the player has chosen
+-- it and EllesmereUI is installed, in its Unlock Mode (modules/FoodDrinkUnlock.lua).
 -- Their look is the player's to set (Food and drink options page): size, spacing, layout, border
 -- (texture, thickness, colour or class colour, opacity), icon zoom and the stack count, and how
 -- solid the buttons are, with an option to fade them until the mouse is over them. Border
@@ -57,6 +58,7 @@ local dirty = false           -- something changed in combat; look again when it
 local scheduled = false
 local loading = false         -- the last look found an item or spell text the game hadn't loaded yet
 local active = {}             -- [event] = handler, while registered
+local moveWaiting = false     -- the place changed in combat; the buttons' parent moves when it ends
 local editHooked = false
 
 local function Plain(v)
@@ -116,21 +118,36 @@ function F.Classify(spellName, text, names, words)
     return nil
 end
 
--- One item in the bags as a candidate, or nil when it can't be offered: not food and drink as
--- the game classifies it, not plain, above the character's level, or none left.
--- The second result is true when the game hasn't loaded the item or its text yet (a look is
--- asked for). The third says why there is no candidate, as a code, for /tui diagnostics.
+-- Whether the game files an item under Food & Drink. Item data this needs is always there; nothing
+-- is requested.
+function F.IsFoodAndDrink(id)
+    local _, _, _, _, _, classID, subClassID = C_Item.GetItemInfoInstant(id)
+    return classID == CONSUMABLE and subClassID == FOOD_AND_DRINK
+end
+
+-- The game's own names for the plain Food and Drink use-spells and its words for the two resources,
+-- as Classify wants them. A name or word that can't be read is nil.
+function F.Vocabulary()
+    return { food = Plain(C_Spell.GetSpellName(FOOD_SPELL)), drink = Plain(C_Spell.GetSpellName(DRINK_SPELL)) },
+        { health = Plain(HEALTH), mana = Plain(MANA) }
+end
+
+-- What the game says one item is, apart from who is looking: { id, name, icon, kinds, amount,
+-- minLevel, quality, sellPrice } when it is plain food or drink, else nil. The second result is true
+-- when the game hasn't loaded the item or its text yet (a look is asked for). The third says why
+-- there is no item, as a code, for /tui diagnostics.
+-- maxLevel: when given, an item that needs more than that level is left out ("level-too-high").
 -- readOnly: ask the game for nothing (a report must not change what the game loads).
-local function Candidate(id, names, words, readOnly)
+function F.Inspect(id, names, words, readOnly, maxLevel)
     local _, _, _, _, icon, classID, subClassID = C_Item.GetItemInfoInstant(id)
     if classID ~= CONSUMABLE or subClassID ~= FOOD_AND_DRINK then return nil, false, "not-food-and-drink" end
-    local name, _, _, _, minLevel = C_Item.GetItemInfo(id)
+    local name, _, quality, _, minLevel, _, _, _, _, _, sellPrice = C_Item.GetItemInfo(id)
     name = Plain(name)
     if not name then
         if not readOnly and C_Item.RequestLoadItemDataByID then C_Item.RequestLoadItemDataByID(id) end
         return nil, true, "item-data-pending"
     end
-    if (minLevel or 0) > (UnitLevel("player") or 0) then return nil, false, "level-too-high" end
+    if maxLevel and (minLevel or 0) > maxLevel then return nil, false, "level-too-high" end
     local spellName, spellID = C_Item.GetItemSpell(id)
     spellName, spellID = Plain(spellName), Plain(spellID)
     if not (spellName and spellID) then return nil, false, "no-use-spell" end
@@ -141,12 +158,25 @@ local function Candidate(id, names, words, readOnly)
     end
     local kinds, amount = F.Classify(spellName, text, names, words)
     if not kinds then return nil, false, "not-plain-food-or-drink" end
+    return { id = id, name = name, icon = icon, kinds = kinds, amount = amount, minLevel = minLevel or 0,
+        quality = Plain(quality), sellPrice = Plain(sellPrice) }
+end
+
+-- One item in the bags as a candidate, or nil when it can't be offered: not food and drink as
+-- the game classifies it, not plain, above the character's level, or none left.
+-- The second result is true when the game hasn't loaded the item or its text yet (a look is
+-- asked for). The third says why there is no candidate, as a code, for /tui diagnostics.
+-- readOnly: ask the game for nothing (a report must not change what the game loads).
+local function Candidate(id, names, words, readOnly)
+    local item, still, why = F.Inspect(id, names, words, readOnly, UnitLevel("player") or 0)
+    if not item then return nil, still, why end
     -- Not C_Item.IsUsableItem: it is false while dead or a ghost, which would drop every item from
     -- the choice and leave it empty after resurrection (no bag event follows). Whether the item
     -- can be used right now is the game's to enforce when the player clicks.
     local count = C_Item.GetItemCount(id) or 0
     if count < 1 then return nil, false, "none-left" end
-    return { id = id, name = name, icon = icon, kinds = kinds, amount = amount, count = count, conjured = F.CONJURED[id] ~= nil }
+    return { id = id, name = item.name, icon = item.icon, kinds = item.kinds, amount = item.amount, count = count,
+        conjured = F.CONJURED[id] ~= nil }
 end
 
 -- The best food and the best drink in the bags: { food = candidate|nil, drink = candidate|nil }.
@@ -154,8 +184,7 @@ end
 -- summary: when given, this is a read-only look for /tui diagnostics; it is filled with the candidates
 -- by kind, how many items were left out and why, and whether the game's names for the plain spells were read.
 local function Scan(summary)
-    local names = { food = Plain(C_Spell.GetSpellName(FOOD_SPELL)), drink = Plain(C_Spell.GetSpellName(DRINK_SPELL)) }
-    local words = { health = Plain(HEALTH), mana = Plain(MANA) }
+    local names, words = F.Vocabulary()
     if summary then
         summary.spellNamesRead = names.food ~= nil and names.drink ~= nil
         summary.wordsRead = words.health ~= nil and words.mana ~= nil
@@ -277,6 +306,7 @@ function F.TextureChoices() return Borders.Choices(F.Get("borderTexture")) end
 -- (TwichUIDB.ui.foodDrinkPosition), or the default.
 ---------------------------------------------------------------------------
 local function Offset(n) return type(n) == "number" and n == n and n > -10000 and n < 10000 end
+F.ValidOffset = Offset
 
 function F.Position()
     local saved = TwichUIDB and TwichUIDB.ui and TwichUIDB.ui.foodDrinkPosition
@@ -284,10 +314,40 @@ function F.Position()
     return DEFAULT_X, DEFAULT_Y
 end
 
+-- Where the set goes now: the saved place or, while EllesmereUI's Unlock Mode is in charge of it
+-- (modules/FoodDrinkUnlock.lua), the place its anchor is at. Same coordinates either way.
+function F.Placement()
+    local U = F.Unlock
+    if U then
+        local x, y = U.Offset()
+        if x then return x, y end
+    end
+    return F.Position()
+end
+
 local function Place(frame)
-    local x, y = F.Position()
+    local x, y = F.Placement()
     frame:ClearAllPoints()
     frame:SetPoint("CENTER", UIParent, "CENTER", x, y)
+end
+
+-- The size of the set for a number of shown buttons, the button size, the gap and the layout. The
+-- container is sized with it, and so is the anchor EllesmereUI's Unlock Mode moves.
+function F.FootprintFor(shown, size, spacing, vertical)
+    local length = math.max(size, shown * (size + spacing) - spacing)
+    if vertical then return size, length end
+    return length, size
+end
+
+-- How many of the two buttons are switched on, and the set's size for them (from the settings alone:
+-- it does not depend on what is in the bags).
+function F.Footprint()
+    local shown = 0
+    for _, kind in ipairs(KINDS) do
+        if R:Enabled(kind.setting) then shown = shown + 1 end
+    end
+    local w, h = F.FootprintFor(shown, F.Get("size"), F.Get("spacing"), F.Get("layout") == "vertical")
+    return w, h, shown
 end
 
 ---------------------------------------------------------------------------
@@ -514,9 +574,10 @@ local function Update()
             button:Hide()
         end
     end
-    local length = math.max(size, shown * step - F.Get("spacing"))
-    if vertical then container:SetSize(size, length) else container:SetSize(length, size) end
+    container:SetSize(F.FootprintFor(shown, size, F.Get("spacing"), vertical))
     Place(container)
+    moveWaiting = false
+    if F.Unlock then F.Unlock.Sync() end
     container:SetShown(shown > 0)
     if mover and mover:IsShown() then mover:SetSize(container:GetSize()); Place(mover) end
     if not (mover and mover:IsShown()) and EditModeActive() then ShowMover(true) end
@@ -560,6 +621,10 @@ local function OnRegenEnabled()
     if dirty then
         Trace("combat-ended", "running the deferred look")
         Schedule()
+    elseif moveWaiting then
+        -- The look also places the buttons' parent, at the place it has by then (the anchor's, not the
+        -- one the move was asked for), after the settle delay that lets the lockdown clear.
+        Schedule()
     end
 end
 
@@ -597,6 +662,7 @@ function F.Snapshot()
     local out = {
         enabled = R:Enabled("foodDrink"), built = container ~= nil, shown = container ~= nil and container:IsShown() or false,
         deferred = dirty, scheduled = scheduled, loading = loading, inCombat = InCombat() and true or false,
+        moveWaiting = moveWaiting,
         preferConjured = F.Get("preferConjured"), conjuredKnown = 0, buttons = {}, apiMissing = nil,
     }
     for _ in pairs(F.CONJURED) do out.conjuredKnown = out.conjuredKnown + 1 end
@@ -641,6 +707,32 @@ local function SavePosition(x, y)
         if InCombat() then dirty = true else Place(container) end
     end
     if mover then Place(mover) end
+end
+
+-- The one place a position is written, for Edit Mode here and EllesmereUI's Unlock Mode: a place, or
+-- nil to clear it (back to the default). The buttons move out of combat; in combat they wait.
+F.SetPosition = SavePosition
+
+-- Back to the default place: this one record is cleared and nothing else is touched. For the options
+-- page, and the only way back when Edit Mode's outline is not the one in charge.
+function F.ResetPosition()
+    SavePosition(nil)
+    if F.Unlock then F.Unlock.Reset() end
+end
+
+-- The place the buttons should be at may have changed (EllesmereUI's anchor moved). Their parent is
+-- moved out of combat only; in combat the move waits and goes to wherever the place is by then, so
+-- nothing is queued but the fact. Returns whether it moved now.
+function F.Reposition()
+    if not container then return false end
+    if InCombat() then
+        moveWaiting = true
+        R.Life.Note("unlock-deferred-combat")
+        return false
+    end
+    Place(container)
+    if mover and mover:IsShown() then Place(mover) end
+    return true
 end
 
 local function BuildMover()
@@ -695,6 +787,9 @@ function EditModeActive()
 end
 
 function ShowMover(shown)
+    -- One mover for the place: when EllesmereUI's Unlock Mode is in charge of it, this outline stays away.
+    local U = F.Unlock
+    if shown and U and U.Drives() then shown = false end
     if shown and R:Enabled("foodDrink") and container and container:IsShown() then
         if not mover then BuildMover() end
         mover:SetSize(container:GetSize())
@@ -706,6 +801,10 @@ function ShowMover(shown)
     end
     ApplyAlpha()
 end
+
+-- Shows or hides the outline to suit Edit Mode and who is in charge of the place (the Unlock Mode
+-- option was turned on or off, or EllesmereUI came or went).
+function F.RefreshMover() ShowMover(EditModeActive()) end
 
 local function HookEditMode()
     if editHooked or not (EventRegistry and EventRegistry.RegisterCallback) then return end
@@ -739,10 +838,12 @@ function F.Refresh()
         ApplyAlpha()   -- opacity changes at once, even in combat
         Schedule()
     else
-        dirty, loading = false, false
+        dirty, loading, moveWaiting = false, false, false
         if container then container:Hide() end
         ShowMover(false)
     end
+    -- After the lines above: it reads whether the buttons are on, and settles who moves them.
+    if F.Unlock then F.Unlock.Refresh() end
 end
 
 R:OnInit(F.Refresh)

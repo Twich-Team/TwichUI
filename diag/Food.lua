@@ -40,6 +40,18 @@ local function Food()
     Line("prefer Mage-conjured: %s; conjured item IDs the rules know: %d (from the Classic-era game; not read from the Forever client)",
         s.preferConjured and "on" or "off", s.conjuredKnown)
 
+    -- Where the buttons are placed from. Codes only; nothing of EllesmereUI's data is read or listed.
+    local u = F.Unlock and F.Unlock.Snapshot()
+    if u then
+        Line("place: owned by %s; EllesmereUI Unlock Mode option: %s; Unlock Mode support: %s; status: %s",
+            u.owner, u.wanted and "on" or "off", u.api, u.status)
+        if u.wanted then
+            Line("anchor registered once: %s; registration failed: %s; anchor in charge: %s; Unlock Mode open: %s; "
+                .. "move waiting for combat to end: %s", D.Flag(u.registered), D.Flag(u.failed), D.Flag(u.drives),
+                D.Flag(u.session), D.Flag(s.moveWaiting))
+        end
+    end
+
     local scan = s.scan
     if scan then
         local left = {}
