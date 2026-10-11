@@ -61,6 +61,7 @@ local DEFAULT_MODULES = {
     qolDuels = false,        -- ... decline duel requests (except from the people you choose)
     qolDuelsToDeath = false, -- ... and duels to the death (needs the one above)
     qolQuickKeybind = false, -- ... a Quick Keybind button in the Game Menu
+    qolGuideWaypoint = false, -- ... the game's waypoint on RestedXP's current destination (needs RestedXP)
 }
 R.DEFAULT_MODULES = DEFAULT_MODULES   -- Settings.lua uses these for the panel's Defaults button
 

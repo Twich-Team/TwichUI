@@ -78,7 +78,7 @@ for _, f in ipairs({ "gear/Weights.lua", "gear/Evaluate.lua", "gear/Prefs.lua", 
   "gear/Hints.lua", "gear/Tooltip.lua", "gear/Bags.lua", "gear/Window.lua", "modules/Notify.lua", "modules/Arrival.lua", "modules/Media.lua", "modules/FriendLogin.lua", "modules/Borders.lua", "modules/FoodDrink.lua",
   "modules/TrainingData.lua", "modules/Borders.lua", "modules/MenuStyle.lua", "modules/SpellMenu.lua", "modules/MageTravel.lua", "modules/MageConjure.lua",
   "chronicle/Style.lua", "chronicle/Appearance.lua", "modules/Refreshments.lua", "modules/RefreshmentsPanel.lua", "modules/RefreshmentsShares.lua", "modules/RefreshmentsTrade.lua", "modules/RefreshmentsBroker.lua",
-  "modules/RestedXPSkin.lua", "qol/QoL.lua", "qol/Summons.lua", "qol/Resurrect.lua", "qol/ReleasePvP.lua", "qol/Duels.lua", "qol/QuickKeybind.lua", "Settings.lua" }) do
+  "modules/RestedXPSkin.lua", "qol/QoL.lua", "qol/Summons.lua", "qol/Resurrect.lua", "qol/ReleasePvP.lua", "qol/Duels.lua", "qol/QuickKeybind.lua", "qol/GuideWaypoint.lua", "Settings.lua" }) do
   local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
 end
 c.LOADED["!!!TwichUI"] = true; c.FireEvent("ADDON_LOADED", "!!!TwichUI")
@@ -91,7 +91,7 @@ for key, default in pairs(defaults) do
   n = n + 1
   assert(default == R.DEFAULT_MODULES[key], key .. " default matches a new install")
 end
-assert(n == 46, "every module has a toggle: " .. n)
+assert(n == 47, "every module has a toggle: " .. n)
 assert(defaults.restedxpSkin == false, "the RestedXP skin is opt-in")
 assert(defaults.arrival == true and defaults.arrivalSubzones == true and defaults.arrivalReducedMotion == false,
   "arrival card and subzone cards on; reduced motion opt-in")
@@ -446,7 +446,7 @@ assert(rows["Addon skins"].data.name:find("of") or rows["Addon skins"].data.name
 
 -- Quality of life: everything is opt-in, there is no "requested invites" row (the game's interface
 -- for it isn't in Forever), choices read and write the saved options, and the waits are advanced.
-for _, key in ipairs({ "qolSummons", "qolResurrect", "qolResurrectCombat", "qolReleasePvP", "qolDuels", "qolDuelsToDeath", "qolQuickKeybind" }) do
+for _, key in ipairs({ "qolSummons", "qolResurrect", "qolResurrectCombat", "qolReleasePvP", "qolDuels", "qolDuelsToDeath", "qolQuickKeybind", "qolGuideWaypoint" }) do
   assert(defaults[key] == false, key .. " is off by default")
 end
 for variable in pairs(variables) do assert(not variable:lower():find("invite"), variable .. ": no invite setting") end
@@ -473,7 +473,16 @@ c.TwichUIDB.modules.qolSummons = false; summonToggle.setting.changed(); assert(n
 local qolRow = assert(rows["Quality of life"], "overview has a Quality of life row")
 assert(qolRow.data.name:find("Off"), qolRow.data.name)
 c.TwichUIDB.modules.qolDuels, c.TwichUIDB.modules.qolReleasePvP = true, true; summonToggle.setting.changed()
-assert(qolRow.data.name:find("2 of 5 on"), qolRow.data.name)
+assert(qolRow.data.name:find("2 of 6 on"), qolRow.data.name)
+-- The RestedXP destination row: off, visible, and its tooltip says what it is doing right now.
+do
+  local guideRow; for _, i in ipairs(initializers) do if i.setting and i.setting.name == "Mark RestedXP's destination" then guideRow = i end end
+  assert(guideRow and visible["Mark RestedXP's destination"], "the RestedXP destination row is there and visible")
+  assert(guideRow:GetTooltip():find("Status: .*Off"), guideRow:GetTooltip())
+  c.TwichUIDB.modules.qolGuideWaypoint = true
+  assert(guideRow:GetTooltip():find("RestedXP not installed"), guideRow:GetTooltip())
+  c.TwichUIDB.modules.qolGuideWaypoint = false
+end
 qolRow.click(); assert(c.opened == R.settingsCategories.qol:GetID(), "row opens the Quality of life page")
 -- Leatrix Plus overlap shows in the tooltip, and leaves its settings alone.
 c.C_AddOns.IsAddOnLoaded = function(n) return n == "Leatrix_Plus" end
