@@ -571,6 +571,13 @@ local function Build()
         TextSwatch("BodyColor", "bodyColor", "Step text color",
             "The base color of the step and objective text. Colors RestedXP gives meaning to (warnings, objectives, links) are not changed.")
 
+        Header("Current step", "The panel above the guide list that shows the step you are on.")
+        TextToggle("SettingsButton", "settingsButton", "Show settings button on current-step hover",
+            "A small cog in the upper-right corner of the current-step panel, shown while the pointer is over the panel. It opens RestedXP's menu (choose a guide, go to a step, RestedXP's options), the same one as the menu button at the footer's left, so it is there even when that button is hidden below. It is only a shortcut: it changes nothing in RestedXP and does not move the text.")
+        TextChoice("StepLabel", "stepLabel", "Step label format",
+            "What the tab above the current step says. X is the step's number in the guide, the one RestedXP shows in its list. Y is how many steps the guide has: its whole list, including steps with nothing to do (so it is the number of the last row), for the character you are on. The percentage is X divided by Y, rounded to the nearest whole number: it is how far along the guide's steps you are, not time spent and not a promise that every objective on the way was done (the last step reads 100 %). A tab with a title of its own, such as a tip, is left as RestedXP draws it; where the guide's size isn't known, the tab says Step X. While in combat the tab shows RestedXP's own text and changes when it ends.",
+            function() return RS.STEPLABEL_CHOICES end, true)
+
         Header("Header and footer", "What sits around the guide list. RestedXP's logo and class badge are hidden by default, which gives the guide's title the room they took.")
         TextToggle("ShowTitle", "showTitle", "Show the guide's title",
             "The guide's name in the header. Off, the header's background and border go too, leaving a slim invisible strip (it is still the window's handle, and right-click on it still opens RestedXP's menu), and the name is in the tooltip of the menu button at the footer's left.")

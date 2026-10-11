@@ -12,8 +12,9 @@
 --     CurrentStepFrame.UpdateText, UpdateGuideFontSize, a frame's UpdateVisuals) are hooked once, each
 --     hook doing a few comparisons and changing only what differs. Settings changes are coalesced into
 --     one timer. Nothing is applied in combat; the latest request waits for it to end.
---   * Nothing about guide content, progress, step completion, positions or sizes is read or changed. Only
+--   * Nothing about guide content, progress, step completion, positions or sizes is changed. Only
 --     colours, fonts, borders and backgrounds of RestedXP's own frames, never a secure frame's functions.
+--     (The one thing read of the guide is how many steps its list has, for the step tab's "Step X/Y".)
 --   * Frames and text are restored by looking, not by remembering: a string showing a colour or font this
 --     skin applied is set to what RestedXP's own theme says, so there are no snapshots to go stale when
 --     RestedXP recycles a frame. The only thing kept is the name of the theme to go back to.
@@ -30,6 +31,16 @@
 --     a lighter border than the window, so the borders don't stack.
 --   * Only what this skin moved is put back, from a few anchors captured once before the first change
 --     (origin) and from RestedXP's own refresh.
+--
+-- The current-step panel (the step cards above the list), two small additions that change nothing the
+-- guide does:
+--   * The step tab can say "Step X", "Step X/Y", "Step X (59%)" or "Step X/Y (59%)". X is RestedXP's own
+--     number (the step's position in the guide's step list, which is also what the list's rows count), Y
+--     is the length of that same list and the percentage is X / Y. A tab that has a title of its own
+--     (a tip) is left as RestedXP draws it, and where the numbers can't be checked the tab is RestedXP's.
+--   * A small menu button in the panel's upper-right corner, shown while the pointer is over the panel. It
+--     calls the very function the footer's menu button calls (RXPFrame.DropDownMenu), so it works with
+--     that button hidden.
 --
 -- Not covered (RestedXP draws them itself or another addon owns them): the v2 guide window (beta; only
 -- the theme's colours and font reach it), the map arrow and pins, RestedXP's right-click menus
@@ -84,6 +95,8 @@ local TEXT_DEFAULTS = {
     customSizes = false, titleSize = 11, activeSize = 11, listSize = 9,
     lineSpacing = 1, stepPadding = 2,
     footer = "subtle", dividers = "subtle", scrollbar = "slim",
+    -- the current-step panel: what the step tab says, and the menu button that shows while the pointer is over it
+    stepLabel = "step", settingsButton = true,
 }
 local TEXT_LIMITS = {
     titleSize = { 8, 24 }, activeSize = { 8, 22 }, listSize = { 8, 20 },
@@ -94,9 +107,10 @@ local OUTLINES = { none = "", outline = "OUTLINE", thick = "THICKOUTLINE" }
 local FOOTERS = { subtle = true, hidden = true, normal = true }
 local DIVIDERS = { subtle = true, full = true }
 local SCROLLBARS = { slim = true, original = true }
+local STEP_LABELS = { step = true, total = true, percent = true, both = true }
 local FLAGS = {
     tintScrollbar = true, showLogo = true, showClassIcon = true, showTitle = true, customSizes = true,
-    showCog = true, showResizeHandle = true, arrowTextShown = true,
+    showCog = true, showResizeHandle = true, arrowTextShown = true, settingsButton = true,
 }
 Skin.OUTLINE_CHOICES = { { "none", "None" }, { "outline", "Outline" }, { "thick", "Thick outline" } }
 Skin.FOOTER_CHOICES = {
@@ -105,6 +119,9 @@ Skin.FOOTER_CHOICES = {
 }
 Skin.DIVIDER_CHOICES = { { "subtle", "Light" }, { "full", "Full border" } }
 Skin.SCROLLBAR_CHOICES = { { "slim", "Slim" }, { "original", "RestedXP's own" } }
+Skin.STEPLABEL_CHOICES = {
+    { "step", "Step X" }, { "total", "Step X/Y" }, { "percent", "Step X (59%)" }, { "both", "Step X/Y (59%)" },
+}
 Skin.THEME, Skin.SWITCH = THEME, SWITCH
 
 local Look = R.MenuStyle.New("restedxpSkin", LOOK_DEFAULTS)
@@ -175,7 +192,8 @@ local function ValidText(key, value)
     elseif key == "arrowShape" then return R.Borders.ValidName(value)
     elseif key == "footer" then return type(value) == "string" and FOOTERS[value] == true
     elseif key == "dividers" then return type(value) == "string" and DIVIDERS[value] == true
-    elseif key == "scrollbar" then return type(value) == "string" and SCROLLBARS[value] == true end
+    elseif key == "scrollbar" then return type(value) == "string" and SCROLLBARS[value] == true
+    elseif key == "stepLabel" then return type(value) == "string" and STEP_LABELS[value] == true end
     return false
 end
 
@@ -199,7 +217,7 @@ end
 local LAYOUT_KEYS = {
     titleFont = true, bodyFont = true, titleOutline = true, bodyOutline = true, showLogo = true, showClassIcon = true,
     showTitle = true, customSizes = true, titleSize = true, activeSize = true, listSize = true,
-    lineSpacing = true, stepPadding = true, footer = true, scrollbar = true,
+    lineSpacing = true, stepPadding = true, footer = true, scrollbar = true, settingsButton = true,
 }
 
 local function Changed(layout)
@@ -530,6 +548,7 @@ local function Wants()
         want.title, want.active, want.list = nil, nil, nil   -- RestedXP's Guide Font Size governs
     end
     want.spacing, want.pad = Text.Get("lineSpacing"), Text.Get("stepPadding")
+    want.stepLabel, want.settingsButton = Text.Get("stepLabel"), Text.Get("settingsButton")
 end
 
 -- Remembers a colour this skin has applied, so strings showing it can be found after the setting changes.
@@ -1268,6 +1287,488 @@ local function SpaceRow(row)
     relayoutList = true
 end
 
+---------------------------------------------------------------------------
+-- The current-step panel (RestedXP's CurrentStepFrame: the step cards above the list).
+--
+-- Step tab. RestedXP's LoadGuide numbers every step of the guide it built (addon.currentGuide, with the
+-- class, race and faction conditions already applied: steps that do not apply to the character are not
+-- in it) by its position in currentGuide.steps, the list's rows show the same numbers, and the tab says
+-- "Step <index>" in the player's language. So X is step.index, Y is #currentGuide.steps and X / Y is the
+-- step's position in that list. Nothing is cached: the table is RestedXP's and replaced when it loads a
+-- guide, and `#` on it is read only when a tab is drawn (a step change), never per frame. A tab is
+-- formatted only when RestedXP's default text is on it (no title of its own, not a sticky or tip step)
+-- and the step is the one at that place in the list; anything else is RestedXP's own label.
+--
+-- Menu button. A child of the panel, in its upper-right corner, shown while the pointer is over the panel
+-- and its click calls RXPFrame.DropDownMenu(), which is what the footer's cog calls on click. Hover is
+-- learned from OnEnter of the panel, its cards and their lines, and the button then checks the pointer
+-- itself (a throttled OnUpdate that only runs while the button is shown), so a pointer crossing from a
+-- card to a line, or onto the button, never hides it.
+---------------------------------------------------------------------------
+local TAB_X, TAB_Y, TAB_H, TAB_CLEAR = 9, 5, 17, 4
+
+-- (Tables rather than a local each: a Lua function has at most 200 locals, and this file is near it.)
+local Current = { Label = {} }
+local Label = Current.Label
+Skin.StepLabel = Label
+
+function Current.Whole(n)
+    return type(n) == "number" and n == n and n >= 0 and n < 2 ^ 31 and n == math.floor(n)
+end
+
+-- Where in the guide's steps a step is, in whole percent: rounded half up (50 of 100 steps is 50, 1 of 3 is
+-- 33, 2 of 3 is 67) and held to 0-100. nil unless both are whole numbers and 1 <= index <= total, so a step
+-- number from another list than the total never turns into a number.
+function Label.Percent(index, total)
+    if not (Current.Whole(index) and Current.Whole(total)) then return nil end
+    if index < 1 or total < 1 or index > total then return nil end
+    return math.min(100, math.max(0, math.floor((index * 200 + total) / (total * 2))))
+end
+
+-- What stands in place of the number for a format: the whole, then a shorter one for a tab that is too
+-- narrow for it. nil for the plain format and when the numbers can't be trusted.
+function Label.Tokens(kind, index, total)
+    local percent = Label.Percent(index, total)
+    if not percent then return nil end
+    if kind == "total" then return string.format("%d/%d", index, total)
+    elseif kind == "percent" then return string.format("%d (%d%%)", index, percent)
+    elseif kind == "both" then
+        return string.format("%d/%d (%d%%)", index, total, percent), string.format("%d/%d", index, total)
+    end
+end
+
+-- RestedXP's own tab text with the number replaced by token (so "Step 5" in any language keeps its words).
+function Label.Splice(base, index, token)
+    if type(base) ~= "string" or type(token) ~= "string" then return nil end
+    local from, to = string.find(base, string.format("%d", index), 1, true)
+    if not from then return nil end
+    return string.sub(base, 1, from - 1) .. token .. string.sub(base, to + 1)
+end
+
+-- What RestedXP puts on a step's tab (GuideWindow.lua: step.title or fmt(L("Step %d"), index)), or nil and
+-- why when this is not a tab it would label that way.
+function Label.Base(step)
+    if type(step) ~= "table" then return nil, "no-step" end
+    if step.title ~= nil or step.sticky or step.tip then return nil, "own-title" end
+    local index = step.index
+    if not (Current.Whole(index) and index >= 1) then return nil, "no-index" end
+    local locale = RXP and RXP.locale
+    local get = type(locale) == "table" and locale.Get
+    if type(get) ~= "function" then return nil, "no-locale" end
+    local ok, pattern = pcall(get, "Step %d")
+    if not (ok and type(pattern) == "string") then return nil, "no-locale" end
+    local made, text = pcall(string.format, pattern, index)
+    if made and type(text) == "string" then return text end
+    return nil, "no-locale"
+end
+
+Current.PAD = 16         -- a tab is its text's width plus this
+Current.SIZE = 14        -- the menu button's side
+Current.EDGE_X = 4       -- from the panel's right edge
+Current.EDGE_Y = 2       -- ... and its top
+Current.ICON = 10
+Current.TICK = 0.1       -- how often a shown button looks at the pointer
+Current.FIRST_LINE = 11  -- RestedXP's first line of text begins this far under its card's top (10, plus 1)
+Current.fallbacks = 0    -- tabs left as RestedXP draws them because the numbers could not be checked
+Current.formatted = 0    -- tabs drawn with a number added
+Current.built = 0        -- menu buttons made (one for the life of the window)
+Current.shown = 0        -- times the button was revealed
+Current.records = setmetatable({}, { __mode = "k" })      -- tab string -> what this skin last decided for it
+Current.hideHooked = setmetatable({}, { __mode = "k" })   -- the panel's OnHide is hooked
+Current.BACKDROP = {
+    bgFile = WHITE, edgeFile = WHITE, edgeSize = 1, insets = { left = 1, right = 1, top = 1, bottom = 1 },
+}
+
+-- The room the button needs on the right of a tab, and under the card's top for a line's text.
+function Current.ButtonRoom() return Current.EDGE_X + Current.SIZE + 4 end
+function Current.LinePush() return math.max(0, Current.SIZE + Current.EDGE_Y - Current.FIRST_LINE) end
+
+-- The tab's size as RestedXP lays it out for a larger font plus this skin's roomier tab. Returns its height.
+function Current.FitTab(tab)
+    local _, size = tab.text:GetFont()
+    local h = math.max(TAB_H, math.ceil(size or 11) + 7)
+    tab:SetSize(math.ceil(tab.text:GetStringWidth() or 0) + Current.PAD, h)
+    return h
+end
+
+function Current.GuideSteps()
+    local guide = RXP and RXP.currentGuide
+    if type(guide) ~= "table" then return nil, "no-guide" end
+    local steps = guide.steps
+    if type(steps) ~= "table" or #steps == 0 then return nil, "no-steps" end
+    return steps
+end
+
+-- Whether text fits a tab whose room is `available` (0: not known, so it does). Leaves it on the string.
+function Current.Fits(fs, text, available)
+    fs:SetText(text)
+    return available <= 0 or math.ceil(fs:GetStringWidth() or 0) + Current.PAD <= available
+end
+
+-- One card's tab. True when its text was changed (its width then has to be fitted again).
+function Current.StyleLabel(card, fs, steps, why, kind, available)
+    local step = card.step
+    local base, baseWhy = Label.Base(step)
+    if not base then
+        if baseWhy ~= "own-title" and baseWhy ~= "no-step" then Current.reason = baseWhy end
+        return false
+    end
+    local index = step.index
+    local rec = Current.records[fs]
+    if not rec then
+        rec = {}
+        Current.records[fs] = rec
+    end
+    local current = fs:GetText()
+    local total = steps and #steps or 0
+    local target = base
+    if kind ~= "step" then
+        local reason = why
+        if steps and steps[index] ~= step then reason = "index-mismatch" end
+        local full, reduced
+        if not reason then
+            full, reduced = Label.Tokens(kind, index, total)
+            if not full then reason = "bad-numbers" end
+        end
+        if reason then
+            Current.reason = reason
+            Current.fallbacks = Current.fallbacks + 1
+        elseif rec.step == step and rec.index == index and rec.total == total and rec.kind == kind
+            and rec.available == available and rec.base == base and rec.target then
+            target = rec.target
+        else
+            -- the whole first, then the shorter one, then RestedXP's: the first that fits the card
+            local text = Label.Splice(base, index, full)
+            if text and Current.Fits(fs, text, available) then
+                target = text
+            elseif reduced then
+                text = Label.Splice(base, index, reduced)
+                if text and Current.Fits(fs, text, available) then target = text end
+            end
+            fs:SetText(current or base)
+            Current.reason = nil
+        end
+    end
+    rec.step, rec.index, rec.total, rec.kind, rec.available, rec.base = step, index, total, kind, available, base
+    local previous = rec.target
+    rec.target = target
+    if current == target then return false end
+    -- RestedXP's text, or what this skin drew earlier: ours to change. Anything else was set by something
+    -- else and is left alone.
+    if current == base or (previous ~= nil and current == previous) then
+        fs:SetText(target)
+        if target ~= base then Current.formatted = Current.formatted + 1 end
+        return true
+    end
+    return false
+end
+
+-- Runs after RestedXP's layout (which sets every tab's text again) and before the padding is added.
+function Current.StyleLabels()
+    local window = _G.RXPFrame
+    local csf = window and window.CurrentStepFrame
+    local pool = csf and csf.framePool
+    if type(pool) ~= "table" then return false end
+    local kind = want.stepLabel
+    local steps, why
+    if kind ~= "step" then steps, why = Current.GuideSteps() end
+    local room = want.settingsButton and Current.ButtonRoom() or 6
+    local changed = false
+    for i = 1, #pool do
+        local card = pool[i]
+        local fs = card.number and card.number.text
+        if fs and fs.GetText and fs.SetText and type(card.step) == "table" then
+            local width = card.GetWidth and card:GetWidth() or 0
+            if not (width and width > 0) then width = csf.GetWidth and csf:GetWidth() or 0 end
+            local available = (width and width > 0) and (width - TAB_X - room) or 0
+            if Current.StyleLabel(card, fs, steps, why, kind, available) then changed = true end
+        end
+    end
+    return changed
+end
+
+-- A label changed without RestedXP laying the cards out: only the tabs' widths follow.
+function Current.FitTabs()
+    local window = _G.RXPFrame
+    local pool = window and window.CurrentStepFrame and window.CurrentStepFrame.framePool
+    if type(pool) ~= "table" then return end
+    for i = 1, #pool do
+        local card = pool[i]
+        local tab = card.number
+        if tab and tab.text and card.IsShown and card:IsShown() and tab:GetAlpha() > 0.01 then Current.FitTab(tab) end
+    end
+end
+
+-- Puts RestedXP's own text back on a tab that still shows what this skin drew.
+function Current.RestoreLabel(card)
+    local tab = card.number
+    local fs = tab and tab.text
+    local rec = fs and Current.records[fs]
+    if not rec then return end
+    Current.records[fs] = nil
+    if rec.base and rec.target and rec.target ~= rec.base and fs:GetText() == rec.target then
+        fs:SetText(rec.base)
+        if tab.SetSize then tab:SetSize(math.ceil(fs:GetStringWidth() or 0) + 10, TAB_H) end   -- RestedXP's own size
+    end
+end
+
+---- the menu button
+
+-- Whether RestedXP's menu is open: the dropdown list is showing and belongs to RestedXP's menu frame. The
+-- library RestedXP uses (LibUIDropDownMenu) names its list and open menu with an L_ prefix; the game's own
+-- are checked as well.
+function Current.MenuOpen()
+    local window = _G.RXPFrame
+    local menu = window and window.MenuFrame
+    if not menu then return false end
+    local list, open = _G.L_DropDownList1, _G.L_UIDROPDOWNMENU_OPEN_MENU
+    if list and list.IsShown and list:IsShown() and open == menu then return true end
+    list, open = _G.DropDownList1, _G.UIDROPDOWNMENU_OPEN_MENU
+    return (list and list.IsShown and list:IsShown() and open == menu) and true or false
+end
+
+-- The same cog RestedXP's footer button shows (its own file, named through its own theme call; nothing is
+-- copied). nil if RestedXP won't say.
+function Current.IconFile()
+    local get = RXP and RXP.GetV1Texture
+    if type(get) == "function" then
+        local ok, path = pcall(get, "rxp_cog-32")
+        if ok and type(path) == "string" and path ~= "" then return path end
+    end
+    local window = _G.RXPFrame
+    local cog = window and window.Footer and window.Footer.cog
+    local normal = cog and cog.GetNormalTexture and cog:GetNormalTexture()
+    local file = normal and normal.GetTexture and normal:GetTexture()
+    if type(file) == "string" and file ~= "" then return file end
+end
+
+-- Resting, under the pointer, and pressed: the background lifts a little, the border and the cog strengthen.
+function Current.Paint(button)
+    if not button.SetBackdropColor then return end
+    local r, g, b = Look.ParseColor(Look.Get("bgColor"))
+    local strength = Look.Get("borderOpacity") / 100
+    local pressed, hover = button.twichPressed, button.twichHover
+    local lift = pressed and -0.04 or (hover and 0.07 or 0)
+    button:SetBackdropColor(math.max(0, math.min(1, r + lift)), math.max(0, math.min(1, g + lift)),
+        math.max(0, math.min(1, b + lift)), 0.94)
+    button:SetBackdropBorderColor(want.ar, want.ag, want.ab, strength * ((hover or pressed) and 1 or 0.6))
+    local icon = button.icon
+    if icon then
+        icon:SetVertexColor(want.tr, want.tg, want.tb)
+        icon:SetAlpha((hover or pressed) and 1 or 0.72)
+        icon:ClearAllPoints()
+        icon:SetPoint("CENTER", button, "CENTER", pressed and 1 or 0, pressed and -1 or 0)
+    end
+end
+
+function Current.ReleaseTooltip(button)
+    local tip = _G.GameTooltip
+    if tip and tip.GetOwner and tip:GetOwner() == button then tip:Hide() end
+end
+
+function Current.OnClick(button)
+    Current.ReleaseTooltip(button)
+    if not Active() then return end
+    local window = _G.RXPFrame
+    local open = window and window.DropDownMenu
+    if type(open) ~= "function" then return end
+    local ok, err = pcall(open)
+    if not ok then R.Fault("RestedXP skin menu button", err) end
+end
+
+function Current.OnEnter(button)
+    button.twichHover = true
+    Current.Paint(button)
+    local tip = _G.GameTooltip
+    if not Active() or not tip or (tip.IsForbidden and tip:IsForbidden()) then return end
+    tip:SetOwner(button, "ANCHOR_TOPLEFT")
+    tip:AddLine("RestedXP settings", 1, 1, 1)
+    tip:AddLine("Opens RestedXP's menu: choose a guide, go to a step or open its options.", 0.8, 0.8, 0.8, true)
+    tip:Show()
+end
+
+function Current.OnLeave(button)
+    button.twichHover = false
+    button.twichPressed = false
+    Current.Paint(button)
+    Current.ReleaseTooltip(button)
+end
+
+function Current.OnHide(button)
+    button.twichHover, button.twichPressed = false, false
+    Current.ReleaseTooltip(button)
+end
+
+-- Runs only while the button is shown. The pointer is over the panel (any card or line of it) or the
+-- button, or RestedXP's menu is open from it; otherwise it goes.
+function Current.Tick(button, elapsed)
+    button.twichWait = (button.twichWait or 0) + (elapsed or 0)
+    if button.twichWait < Current.TICK then return end
+    button.twichWait = 0
+    local panel = button:GetParent()
+    local wanted = Active() and want.settingsButton
+    if not wanted or not (button:IsMouseOver() or (panel and panel:IsMouseOver()) or Current.MenuOpen()) then
+        button:Hide()
+    end
+end
+
+-- Any frame of the panel under the pointer asks for the button. The pointer must really be in the panel
+-- (a tip window is a frame of RestedXP's own, elsewhere on the screen).
+function Current.Reveal()
+    local button = Current.button
+    if not button or not button.twichReady or button:IsShown() then return end
+    if not Active() then return end
+    Wants()
+    if not want.settingsButton then return end
+    local panel = button:GetParent()
+    if not (panel and panel:IsMouseOver()) then return end
+    button.twichWait = 0
+    button:Show()
+    Current.shown = Current.shown + 1
+end
+
+function Current.HideButton()
+    local button = Current.button
+    if button and button:IsShown() then button:Hide() end
+end
+
+function Current.HookEnter(frame)
+    if frame and type(frame.HookScript) == "function" and not hookedFrames[frame] then
+        hookedFrames[frame] = true
+        frame:HookScript("OnEnter", Current.Reveal)
+    end
+end
+
+-- A line's own OnEnter is RestedXP's (it sets it when it makes the line and clears it on every step
+-- change), so this one calls RestedXP's and then asks for the button, as the list rows' are wrapped.
+function Current.LineEnter(line, ...)
+    local original = line.twichLineEnter
+    if original then original(line, ...) end
+    Current.Reveal()
+end
+
+function Current.WrapLine(line)
+    if not (line.GetScript and line.SetScript) then return end
+    local enter = line:GetScript("OnEnter")
+    if enter ~= Current.LineEnter then
+        line.twichLineEnter = enter or false
+        line:SetScript("OnEnter", Current.LineEnter)
+    end
+end
+
+function Current.UnwrapLine(line)
+    if line.GetScript and line.twichLineEnter ~= nil then
+        if line:GetScript("OnEnter") == Current.LineEnter then line:SetScript("OnEnter", line.twichLineEnter or nil) end
+        line.twichLineEnter = nil
+    end
+end
+
+-- Hover hooks on the panel, a card and its lines (once per frame; a line's wrapper after each step change,
+-- when RestedXP has cleared it).
+function Current.HookCard(card)
+    Current.HookEnter(card)
+    local lines = card.elements
+    if type(lines) ~= "table" then return end
+    for j = 1, #lines do
+        local line = lines[j]
+        Current.WrapLine(line)
+        Current.HookEnter(line.button)
+    end
+end
+
+function Current.Build(panel)
+    local button = Current.button
+    if not button then
+        if type(_G.CreateFrame) ~= "function" then return nil end
+        button = _G.CreateFrame("Button", nil, panel, "BackdropTemplate")
+        Current.button = button
+        Current.built = Current.built + 1
+        button:SetSize(Current.SIZE, Current.SIZE)
+        button:SetBackdrop(Current.BACKDROP)
+        button:RegisterForClicks("LeftButtonUp")
+        -- a little more to hit than to see, on the sides and top (the lines below are RestedXP's)
+        button:SetHitRectInsets(-3, -3, -3, 0)
+        button.icon = button:CreateTexture(nil, "ARTWORK")
+        button.icon:SetSize(Current.ICON, Current.ICON)
+        button:SetScript("OnClick", Current.OnClick)
+        button:SetScript("OnEnter", Current.OnEnter)
+        button:SetScript("OnLeave", Current.OnLeave)
+        button:SetScript("OnHide", Current.OnHide)
+        button:SetScript("OnMouseDown", function(self) self.twichPressed = true; Current.Paint(self) end)
+        button:SetScript("OnMouseUp", function(self) self.twichPressed = false; Current.Paint(self) end)
+        button:SetScript("OnUpdate", Current.Tick)
+        button:Hide()
+    end
+    if button:GetParent() ~= panel then
+        button:SetParent(panel)
+        button.twichRev = nil
+    end
+    return button
+end
+
+-- One pass: builds the button, draws it, and hooks the panel and its cards; or, with the option off, puts
+-- it away.
+function Current.Apply(pool)
+    local window = _G.RXPFrame
+    local panel = window and window.CurrentStepFrame
+    if not panel then return end
+    if not want.settingsButton then
+        Current.Unhover(panel)
+        return
+    end
+    local file = Current.IconFile()
+    local button = file and Current.Build(panel)
+    if not button then
+        Current.HideButton()
+        return
+    end
+    Current.HookEnter(panel)
+    if not Current.hideHooked[panel] and type(panel.HookScript) == "function" then
+        Current.hideHooked[panel] = true
+        panel:HookScript("OnHide", Current.HideButton)
+    end
+    if button.twichRev ~= rev or button.twichFile ~= file then
+        button.twichRev, button.twichFile = rev, file
+        button:ClearAllPoints()
+        button:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -Current.EDGE_X, -Current.EDGE_Y)
+        button:SetFrameLevel(panel:GetFrameLevel() + 10)
+        button.icon:SetTexture(file)
+        Current.Paint(button)
+    end
+    button.twichReady = true
+    for i = 1, #pool do
+        local card = pool[i]
+        -- a tip window is a frame of its own, elsewhere on the screen: not part of the panel's hover
+        if not (type(card.step) == "table" and card.step.tip) then Current.HookCard(card) end
+    end
+end
+
+-- The option is off, the skin is off or the window is stripped: nothing of this skin's stays on RestedXP's
+-- scripts and the button goes.
+function Current.Unhover(panel)
+    local button = Current.button
+    if button then
+        button.twichReady = false
+        if button:IsShown() then button:Hide() end
+    end
+    local pool = panel and panel.framePool
+    for i = 1, type(pool) == "table" and #pool or 0 do
+        local lines = pool[i].elements
+        for j = 1, type(lines) == "table" and #lines or 0 do Current.UnwrapLine(lines[j]) end
+    end
+end
+
+-- Counts and flags only.
+function Current.Snapshot()
+    local button = Current.button
+    return {
+        kind = want.stepLabel, formatted = Current.formatted, fallbacks = Current.fallbacks, reason = Current.reason,
+        buttonOn = want.settingsButton, built = Current.built, shown = Current.shown,
+        visible = button ~= nil and button:IsShown() or false, ready = button ~= nil and button.twichReady == true,
+    }
+end
+Skin.Current = Current
+
 local function FinishSteps(edgeInfo, guideInfo)
     local frame = _G.RXPFrame
     local pool = frame and frame.CurrentStepFrame and frame.CurrentStepFrame.framePool
@@ -1293,6 +1794,7 @@ local function FinishSteps(edgeInfo, guideInfo)
                 end
             end
         end
+        Current.Apply(pool)
     end
     local rows = frame and frame.ScrollChild and frame.ScrollChild.framePool
     if type(rows) == "table" then
@@ -1316,8 +1818,6 @@ end
 -- and every line as high as its text. After RestedXP's own layout this adds the step padding under each
 -- line and room for a taller tab. It must run only straight after RestedXP's layout (which sets every
 -- height afresh); it is never run twice on the same layout.
-local TAB_X, TAB_Y, TAB_H, TAB_CLEAR = 9, 5, 17, 4
-
 local function PadSteps()
     local frame = _G.RXPFrame
     local csf = frame and frame.CurrentStepFrame
@@ -1325,21 +1825,28 @@ local function PadSteps()
     if type(pool) ~= "table" then return end
     local pad = want.pad
     local added = 0
+    local room = want.settingsButton and Current.LinePush() or nil
+    local roomGiven = false
     for i = 1, #pool do
         local card = pool[i]
         if card.IsShown and card:IsShown() and card:GetAlpha() > 0.01 then
+            local isTip = type(card.step) == "table" and card.step.tip
             local extra = 0
             local tab = card.number
             -- the first line starts clear of the tab (RestedXP's own is flush against it), by the step
             -- padding and a little; with no padding it is RestedXP's own
             local push = pad > 0 and (TAB_CLEAR + pad) or 0
             if tab and tab.text and tab:GetAlpha() > 0.01 then
-                local _, size = tab.text:GetFont()
-                local h = math.max(TAB_H, math.ceil(size or 11) + 7)
-                tab:SetSize(math.ceil(tab.text:GetStringWidth() or 0) + 16, h)
+                local h = Current.FitTab(tab)
                 tab:ClearAllPoints()
                 tab:SetPoint("TOPLEFT", card, TAB_X, TAB_Y + math.floor((h - TAB_H) / 2))
                 push = push + math.ceil((h - TAB_H) / 2)
+            end
+            -- the menu button sits in the panel's corner, over the first card's first line's end: that line
+            -- starts clear of it (always, so nothing moves when it appears)
+            if room and not isTip and not roomGiven then
+                roomGiven = true
+                push = math.max(push, room)
             end
             local lines = card.elements
             if type(lines) == "table" then
@@ -1665,7 +2172,10 @@ function FinishAll(fresh)
             RelayoutList()
         end
         busy = false
-        if laidOut then PadSteps() end
+        -- RestedXP's layout above sets every tab's text again; the labels go on after it and before the
+        -- padding, which sizes each tab from its text
+        local relabelled = Current.StyleLabels()
+        if laidOut then PadSteps() elseif relabelled then Current.FitTabs() end
         settledRev = layoutRev
     end
     for role in pairs(sizeBack) do
@@ -1801,8 +2311,10 @@ local function StripAll()
         UnstyleText(header and header.text, true, "header")
         UnstyleText(footer and footer.text, true, "footer")
         local pool = frame.CurrentStepFrame and frame.CurrentStepFrame.framePool
+        Current.Unhover(frame.CurrentStepFrame)
         for i = 1, type(pool) == "table" and #pool or 0 do
             local step = pool[i]
+            Current.RestoreLabel(step)
             if step.number then
                 UnstyleText(step.number.text, true, "label")
                 -- RestedXP sets the tab's anchor once, when it makes the card; its level is the card's + 1
@@ -2109,5 +2621,6 @@ function Skin.Snapshot()
     s.ellesmere = R.Borders.Ellesmere() ~= nil
     s.remembered = RememberedTheme() ~= nil
     s.knownColors = known.n
+    s.current = Current.Snapshot()
     return s
 end

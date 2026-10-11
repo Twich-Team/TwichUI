@@ -39,6 +39,20 @@ local function Snapshot()
     Line("holds: %d frames drawn on, %d hooks, %d frame hooks, %d remembered colours", s.owned or 0, s.hooks or 0, s.trayHooks or 0, s.knownColors or 0)
     Line("work: %d passes, %d RestedXP refreshes, %d held for combat; update waiting: %s; waiting for combat: %s; select theme when ready: %s; strip waiting: %s",
         s.passes or 0, s.refreshes or 0, s.skipped or 0, D.Flag(s.scheduled), D.Flag(s.waitingCombat), D.Flag(s.pendingSelect), D.Flag(s.pendingTeardown))
+    local cur = s.current
+    if cur then
+        local REASON = {
+            ["no-guide"] = "RestedXP has no guide loaded", ["no-steps"] = "the guide has no step list",
+            ["index-mismatch"] = "a step's number was not its place in the guide's list",
+            ["bad-numbers"] = "the step numbers could not be used", ["no-index"] = "a step has no number",
+            ["no-locale"] = "RestedXP's wording for the tab could not be read",
+        }
+        Line("current step: tab format %s; %d tabs drawn with a number added, %d left as RestedXP draws them%s",
+            cur.kind or "step", cur.formatted or 0, cur.fallbacks or 0,
+            cur.reason and (" (last: " .. (REASON[cur.reason] or cur.reason) .. ")") or "")
+        Line("current step: menu button %s; made %d, shown %d times; ready: %s; showing now: %s",
+            cur.buttonOn and "on" or "off", cur.built or 0, cur.shown or 0, D.Flag(cur.ready), D.Flag(cur.visible))
+    end
     local t = S.Timers and S.Timers.Snapshot()
     if t then
         Line("timer bars: %s; hooks on StartTimer %s and ShowTimers %s, stop callback %s; supported by this RestedXP: %s",
@@ -64,6 +78,7 @@ local function Snapshot()
             "Other RestedXP skins can only be recognised if they are EUI-RestedXP or LiteTweaks.",
             "RestedXP gives themes no way to be removed; turning the skin off takes the entry out of its list.",
             "Timer bars: RestedXP's own bars only, and not while its v2 guide window is on. They have no spark; width is RestedXP's.",
+            "Step tab: the number and the total are RestedXP's list positions; its percentage is position, not time or verified completion.",
         },
     }
 end

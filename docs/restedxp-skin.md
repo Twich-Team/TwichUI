@@ -166,6 +166,78 @@ and number anchors are RestedXP's constants (it sets the text and gap again on e
 only when it makes the row) and are put back by value. Everything else is put back by RestedXP's own refresh
 (`RenderFrame`), plus `UpdateScrollBar` for the scroll bar art.
 
+## The current-step panel
+
+Two small additions to RestedXP's panel of step cards (`CurrentStepFrame`), both in the skin's own pass and
+both under **Addon skins > RestedXP guide window > Current step**.
+
+### Step tab: Step X, X/Y, with a percentage
+
+What RestedXP does (v4.11.22, `GuideWindow.lua`): `LoadGuide` runs `step.index = n` over
+`addon.currentGuide.steps`, the list `ProcessGuideTable` built for this character (steps whose `<<` conditions
+do not apply, and steps hidden by `IsStepShown`, are not in it, so there is nothing to filter again). The tab
+says `step.title or fmt(L("Step %d"), step.index)`; the list's rows count `n` the same way. So:
+
+| | Source | Meaning |
+| --- | --- | --- |
+| X | `step.index` of the card's step | RestedXP's own number, as the list shows it |
+| Y | `#addon.currentGuide.steps` | the length of the list X is a position in: every step, including optional and hidden-row steps and ones with nothing to do (it is the last row's number) |
+| % | `floor((200 X + Y) / (2 Y))` | X / Y rounded half up, 0-100; the last step is 100 %. It is position in the guide's steps, not time spent, travel, or verified quest completion |
+
+* **No cache.** `currentGuide` is replaced when RestedXP loads a guide and `#steps` is read only when a tab is
+  drawn (a step change), so there is nothing to invalidate. (A pooled card's text is remembered only to know
+  what this skin wrote.)
+* **When a tab is not touched:** it has a title of its own (a tip, a guide's custom title), the step is sticky
+  (RestedXP draws its tab hidden), `steps[index]` is not that very step (a number from another list is never
+  paired with this total), the guide or its list is missing, or RestedXP's `locale.Get` is not there. The tab
+  is then RestedXP's own `Step X`; `/tui diagnostics` counts these and says why. `0/0`, `nan` and a total
+  smaller than the number cannot be drawn.
+* **Wording:** the number in RestedXP's own text is replaced (`Step 5` -> `Step 5/120 (4%)`, `第 5 步` ->
+  `第 5/120 (4%) 步`), so the language stays RestedXP's.
+* **When:** RestedXP sets every tab's text in its `UpdateText` (also on each step change); the skin's hook
+  for that runs the labels after RestedXP's layout and before the padding (which sizes the tab from its
+  text). A format change alone relabels the visible cards and refits the tabs, with no RestedXP layout.
+* **Narrow panels:** the whole label is used if it fits between the tab's place and the menu button's room
+  (`width - 9 - 22`); else `X/Y` (for the percentage formats); else `Step X`. Measured only when a tab is
+  drawn, not while the window is dragged wider or narrower (the release of a resize runs RestedXP's layout).
+* **Combat:** nothing is applied in combat (the rule of the whole skin); the tab shows RestedXP's text and
+  changes when combat ends.
+* **Restore:** turning the skin off puts RestedXP's text back through its own refresh, and the strip does it
+  itself for a tab that still shows what this skin wrote (a text another addon wrote is left alone).
+
+### Menu button on hover
+
+* **What it does:** `RXPFrame.DropDownMenu()`, resolved at click time, which is exactly the footer cog's
+  `OnClick` (`Footer.cog:SetScript("OnClick", function() RXPFrame.DropDownMenu() end)`; the header's right
+  click calls the same). The cog is a plain Button (left click only), so is this. It is RestedXP's menu
+  (choose a guide, go to a step, Options...); it does not open TwichUI's skin settings. It does not depend
+  on the cog being shown.
+* **Where:** a 14 px child of `CurrentStepFrame`, `TOPRIGHT` at (-4, -2), above the cards. RestedXP's
+  first line of text begins 11 px under its card's top; the first card's lines are therefore pushed to start
+  at least 5 px lower (the skin's step padding already does 6 by default), always, so nothing moves when the
+  button appears. The hit area is 3 px larger than the picture on its sides and top, not below.
+* **Picture and look:** RestedXP's own `rxp_cog-32` (the file named by `GetV1Texture`, as the footer cog
+  uses; read at run time, never copied), tinted with the skin's title colour; the background and a 1 px
+  border in the skin's look, lighter on hover and darker pressed. Not a textured border: at 14 px it would be
+  a blob.
+* **Hover without polling:** `OnEnter` is hooked (`HookScript`, once per frame) on the panel, on each card and
+  on each line's check box; a line's own `OnEnter` is RestedXP's, set when it makes the line and cleared on
+  every step change, so it is wrapped after each layout (RestedXP's runs first), as the list rows are. An
+  enter only counts while `panel:IsMouseOver()`, which keeps a tip window (a frame of RestedXP's elsewhere)
+  from showing it. While shown, the button runs one `OnUpdate` throttled to 0.1 s that checks
+  `IsMouseOver` of the panel and the button (geometry, so moving between a card, a line and the button never
+  flickers) and whether RestedXP's menu is open (`L_DropDownList1` shown and `L_UIDROPDOWNMENU_OPEN_MENU` is
+  RestedXP's `MenuFrame`, or the game's `DropDownList1` equivalents). A hidden frame's `OnUpdate` does not
+  run, so nothing runs while it is not shown; a tip card is not hooked.
+* **Combat:** showing, hiding and clicking are on plain frames and are allowed; drawing it (building,
+  texture, colours) waits for the pass, which is not run in combat.
+* **Lifetime:** one button for the window's life (re-parented if RestedXP ever hands a different panel). The
+  option off, the skin off, or another theme hide it and put RestedXP's line `OnEnter` back. Hover state is
+  never saved.
+
+Saved: `ui.restedxpSkinText.stepLabel` (`step` / `total` / `percent` / `both`, default `step`: existing players
+see no change) and `settingsButton` (default on, with the skin).
+
 ## Media
 
 Backgrounds and borders: `MenuStyle`'s lists (game textures, LibSharedMedia, EllesmereUI's when it is
@@ -336,6 +408,25 @@ switch, Reset appearance (progress, positions and RestedXP settings untouched); 
 restoration; 13. changes in combat; 14. another RestedXP skin on; 15. a font pack disabled; 16. guide
 progression and clickable actions unchanged; 17. repeated changes without sustained growth; 18. memory and
 CPU comparison per the steps above.
+
+Current step (C1-C15, none run in game yet):
+
+C1. Hover the panel (over text, over a gap, over a tab): the cog appears at its upper-right corner and no text moves.
+C2. Move the pointer from the panel onto the cog: it stays. C3. Click it: RestedXP's menu opens at the pointer
+(guide list, go to step, Options...); with the footer's menu button hidden in the skin's settings it still works
+and the footer button stays hidden. C4. Leave the panel: it goes within a moment; a tooltip is not left behind.
+C5. With RestedXP's menu open from it, it stays until the menu closes. C6. Drag the window by the panel's gaps,
+click a check box, a link and an action button in the step text: all as before; the first line's text does not
+touch the cog (default padding, padding 0, a large font, a narrow window). C7. Each step-label format on the
+first, a middle and the last step; the percentage reads 100 at the last. C8. A guide with steps for another class
+or faction (the total is the number of the list's last row), a guide with sticky steps and optional steps, a
+tip window (tip tab unchanged, hovering it does not show the cog on the panel). C9. Switch guides, load a
+guide with no steps, `/rxp` reset: the tab never says 0/0 or nan. C10. A very long guide (hundreds of steps),
+large fonts, a 220 px wide window at several UI scales. C11. Switch RestedXP profile, `/reload`. C12. Turn each
+option off, then the skin, then on: RestedXP's tab text and hover behaviour return, one cog only. C13. Combat:
+the tab shows RestedXP's text and is formatted when combat ends; the cog still shows and opens the menu.
+C14. Step completion, skipping and navigation are identical with the look on and off. C15. `/tui diagnostics`
+shows the tabs drawn / left alone and the button's counts.
 
 Timer bars (T1-T17, none run in game yet):
 

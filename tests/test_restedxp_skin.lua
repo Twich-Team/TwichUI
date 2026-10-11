@@ -101,6 +101,9 @@ local function Boot(opts)
     GetVertexColor = function(s) return s.vertex[1], s.vertex[2], s.vertex[3], s.vertex[4] end,
     EnableMouse = function() end,
     GetEffectiveScale = function() return 1 end,
+    GetParent = function(s) return s.parent end,
+    SetParent = function(s, p) s.parent = p end,
+    IsMouseOver = function(s) return s.mouseOver == true end,
   }
   c.Fake, c.made = Fake, made
   c.CreateFrame = function(kind, name, parent) local f = Fake(kind); f.name, f.parent = name, parent; return f end
@@ -156,6 +159,9 @@ local function MakeRestedXP(c, opts)
     RXP.themes[t.name] = t
   end
   RXP.activeTheme, RXP.colors, RXP.font = RXP.themes["RXP Blue"], RXP.themes["RXP Blue"], ORIGIN
+  RXP.locale = { Get = function(text) return text end }   -- RXPGuides' Locale.lua (English: the text itself)
+  function RXP.GetV1Texture(name) return RXP.activeTheme.texturePath .. name end   -- Themes.lua
+  RXP.menuCalls = 0
 
   local edge = { bgFile = WHITE, edgeFile = "rxp/borders", tile = true, edgeSize = 8, tileSize = 8,
     insets = { left = 4, right = 2, top = 2, bottom = 4 } }
@@ -217,6 +223,8 @@ local function MakeRestedXP(c, opts)
   end
   frame.GuideName.text:SetText("Guide title: " .. (opts.guideText or "Durotar"))
   RXP.frame = frame
+  frame.MenuFrame = Fake("Frame")
+  function frame.DropDownMenu() RXP.menuCalls = RXP.menuCalls + 1 end   -- GuideWindow.lua RXPFrame.DropDownMenu
 
   local function Paint(f, info)
     f:ClearBackdrop()
@@ -255,7 +263,9 @@ local function MakeRestedXP(c, opts)
         Paint(sf, edge)
         Paint(sf.number, edge)
       end
-      sf.number.text:SetText(step.title or ("Step " .. i))
+      -- GuideWindow.lua: step.title or fmt(L("Step %d"), loopStepIndex); a RestedXP without a locale table is
+      -- only here to test that the skin leaves such a tab alone
+      sf.number.text:SetText(step.title or string.format(RXP.locale and RXP.locale.Get("Step %d") or "Step %d", step.index or i))
       sf.number:SetSize(sf.number.text:GetStringWidth() + 10, 17)
       local sum = 0
       for j, element in ipairs(step.elements) do
@@ -1450,6 +1460,406 @@ do
   assert(S.Text.Get("listSize") == S.Text.DEFAULTS.listSize and S.Text.Get("footer") == "subtle", "bad ones fall back")
   assert(S.Text.Get("showLogo") == false and S.Text.Get("scrollbar") == "slim", "new settings take their defaults")
   assert(c.TwichUIDB.ui.restedxpSkinText.bodyFont == "Saved Font", "and nothing was written to the saved table")
+end
+
+---------------------------------------------------------------------------
+-- The current-step panel: what the step tab says (Step X, X/Y, with a percentage) and the menu button that
+-- shows while the pointer is over the panel. RestedXP's numbering is its list position (LoadGuide: step.index
+-- = n over currentGuide.steps), so the total is #currentGuide.steps and X / Y is that position.
+---------------------------------------------------------------------------
+local function GuideOf(RXP, count)
+  local steps = {}
+  for i = 1, count do steps[i] = { index = i, elements = { { text = "objective " .. i } } } end
+  RXP.currentGuide = { steps = steps }
+  return steps
+end
+-- RestedXP makes step `n` the current one: its own layout sets the tab, then the skin's hook runs.
+local function Show(RXP, step, ...)
+  RXP.activeSteps = { step, ... }
+  RXP.frame.CurrentStepFrame.UpdateText()
+  return RXP.frame.CurrentStepFrame.framePool[1].number
+end
+
+-- the numbers and the text, as pure functions
+do
+  local c = Boot({ db = { modules = {} } })
+  local R = Start(c)
+  local L = R.RestedXPSkin.StepLabel
+  assert(L.Percent(59, 100) == 59 and L.Percent(1, 3) == 33 and L.Percent(2, 3) == 67, "rounded to the nearest")
+  assert(L.Percent(1, 200) == 1, "half rounds up: 0.5 is 1")
+  assert(L.Percent(199, 200) == 100, "99.5 is 100")
+  assert(L.Percent(1, 1000) == 0 and L.Percent(7, 7) == 100 and L.Percent(1, 1) == 100, "0 to 100")
+  assert(L.Percent(0, 10) == nil and L.Percent(11, 10) == nil and L.Percent(5, 0) == nil, "no number from a mismatched pair")
+  assert(L.Percent(nil, 10) == nil and L.Percent("5", 10) == nil and L.Percent(1.5, 10) == nil and L.Percent(0 / 0, 10) == nil
+    and L.Percent(-1, 10) == nil and L.Percent(5, -10) == nil, "bad values give nothing, never 0/0 or nan")
+  assert(L.Tokens("total", 5, 20) == "5/20" and L.Tokens("percent", 5, 20) == "5 (25%)")
+  local whole, short = L.Tokens("both", 5, 20)
+  assert(whole == "5/20 (25%)" and short == "5/20")
+  assert(L.Tokens("step", 5, 20) == nil and L.Tokens("both", 5, 0) == nil)
+  assert(L.Splice("Step 5", 5, "5/20") == "Step 5/20")
+  assert(L.Splice("第 5 步", 5, "5/20 (25%)") == "第 5/20 (25%) 步", "the words stay where the language puts them")
+  assert(L.Splice("Tip", 5, "5/20") == nil, "no number, no change")
+  assert(L.Splice("Step 12", 12, "12 (9%)") == "Step 12 (9%)")
+end
+
+-- every format, over the whole set of steps: first, middle, last
+do
+  local c = Boot({ db = { modules = { restedxpSkin = true } } })
+  local R = Start(c)
+  local S = R.RestedXPSkin
+  local RXP = MakeRestedXP(c)
+  RestedXPLoads(c, RXP)
+  assert(S.UseTheme()); FlushTimers()
+  local steps = GuideOf(RXP, 100)
+  assert(S.Text.Get("stepLabel") == "step" and S.Text.DEFAULTS.stepLabel == "step", "RestedXP's own wording by default")
+  local tab = Show(RXP, steps[59])
+  assert(tab.text.text == "Step 59", "default: unchanged: " .. tostring(tab.text.text))
+
+  local want = {
+    total = { [1] = "Step 1/100", [59] = "Step 59/100", [100] = "Step 100/100" },
+    percent = { [1] = "Step 1 (1%)", [59] = "Step 59 (59%)", [100] = "Step 100 (100%)" },
+    both = { [1] = "Step 1/100 (1%)", [59] = "Step 59/100 (59%)", [100] = "Step 100/100 (100%)" },
+  }
+  for _, kind in ipairs({ "total", "percent", "both" }) do
+    assert(S.Text.Set("stepLabel", kind)); FlushTimers()
+    for _, n in ipairs({ 1, 59, 100 }) do
+      tab = Show(RXP, steps[n])
+      assert(tab.text.text == want[kind][n], kind .. " " .. n .. ": " .. tostring(tab.text.text))
+    end
+  end
+  assert(S.Text.Set("stepLabel", "step")); FlushTimers()
+  assert(Show(RXP, steps[59]).text.text == "Step 59", "back to RestedXP's own")
+  assert(not S.Text.Set("stepLabel", "everything") and not S.Text.Set("stepLabel", 3), "only the four formats")
+  c.TwichUIDB.ui.restedxpSkinText = { stepLabel = "garbage" }
+  assert(S.Text.Get("stepLabel") == "step", "a damaged saved value is the default")
+  c.TwichUIDB.ui.restedxpSkinText = nil
+
+  -- a change of the setting alone relabels the card on screen (no RestedXP layout), and the tab follows
+  tab = Show(RXP, steps[59])
+  tab.text.GetStringWidth = function(s) return #(s.text or "") * 6 end
+  local before = RXP.layouts
+  S.Text.Set("stepLabel", "both"); FlushTimers()
+  assert(tab.text.text == "Step 59/100 (59%)", "the card now showing: " .. tostring(tab.text.text))
+  assert(tab.width == #"Step 59/100 (59%)" * 6 + 16, "the tab is as wide as its text: " .. tostring(tab.width))
+  assert(RXP.layouts == before, "RestedXP's layout didn't have to run again for it")
+  S.Text.Set("stepLabel", "step"); FlushTimers()
+  assert(tab.text.text == "Step 59" and tab.width == #"Step 59" * 6 + 16)
+end
+
+-- accuracy: filtered lists, stale numbers, guide changes, own titles
+do
+  local c = Boot({ db = { modules = { restedxpSkin = true, } } })
+  local R = Start(c)
+  local S = R.RestedXPSkin
+  local RXP = MakeRestedXP(c)
+  RestedXPLoads(c, RXP)
+  assert(S.UseTheme()); FlushTimers()
+  S.Text.Set("stepLabel", "both"); FlushTimers()
+
+  -- the list RestedXP built for this character is the whole of what it numbers: 40 steps apply, so 12 of 40
+  local steps = GuideOf(RXP, 40)
+  assert(Show(RXP, steps[12]).text.text == "Step 12/40 (30%)")
+  -- a step whose number is from another list (the guide before its conditions were applied) is not trusted
+  local stale = { index = 55, elements = { { text = "x" } } }
+  assert(Show(RXP, stale).text.text == "Step 55", "never 55/40: " .. tostring(RXP.frame.CurrentStepFrame.framePool[1].number.text.text))
+  -- a step that is the right number but not the list's own object (a copy) is not trusted either
+  local copy = { index = 3, elements = { { text = "x" } } }
+  assert(Show(RXP, copy).text.text == "Step 3")
+
+  -- another guide: the total follows at once, from the new list
+  local second = GuideOf(RXP, 10)
+  assert(Show(RXP, second[3]).text.text == "Step 3/10 (30%)", "no total kept from the other guide")
+  -- the same guide grows (RestedXP rebuilt its list): the next layout has the new total
+  for i = 11, 30 do second[i] = { index = i, elements = { { text = "y" } } } end
+  assert(Show(RXP, second[3]).text.text == "Step 3/30 (10%)")
+
+  -- no guide data: RestedXP's own words, never 0/0 or nan
+  RXP.currentGuide = true
+  assert(Show(RXP, second[3]).text.text == "Step 3")
+  RXP.currentGuide = { steps = {} }
+  assert(Show(RXP, second[3]).text.text == "Step 3")
+  RXP.currentGuide = nil
+  assert(Show(RXP, second[3]).text.text == "Step 3")
+  local snap = S.Snapshot().current
+  assert(snap.fallbacks >= 3 and snap.reason == "no-guide", "the limitation is counted: " .. tostring(snap.reason))
+  assert(not R.Diag.Build():find("nan", 1, true))
+
+  -- a tab with a title of its own, and a sticky step, are RestedXP's
+  local list = GuideOf(RXP, 40)
+  list[5].title = "Beware the boar"
+  assert(Show(RXP, list[5]).text.text == "Beware the boar")
+  list[6].sticky = true
+  assert(Show(RXP, list[6]).text.text == "Step 6", "RestedXP's own text on a sticky step, which it draws hidden")
+  local tip = { tip = true, title = "Tip", elements = { { text = "t" } } }
+  assert(Show(RXP, tip).text.text == "Tip")
+
+  -- a card reused: a formatted tab doesn't leak into the next step that has a title
+  assert(Show(RXP, list[9]).text.text == "Step 9/40 (23%)")
+  assert(Show(RXP, list[5]).text.text == "Beware the boar")
+
+  -- another language: RestedXP's own words stay where its language puts them
+  RXP.locale.Get = function(text) return text == "Step %d" and "第 %d 步" or text end
+  assert(Show(RXP, list[9]).text.text == "第 9/40 (23%) 步", Show(RXP, list[9]).text.text)
+  RXP.locale.Get = function() return "Étape %d" end
+  assert(Show(RXP, list[9]).text.text == "Étape 9/40 (23%)")
+  RXP.locale = nil   -- a RestedXP that doesn't say: its tab is left alone
+  assert(Show(RXP, list[9]).text.text == "Step 9")
+end
+
+-- narrow panel: the whole label, then a shorter one, then RestedXP's own
+do
+  local c = Boot({ db = { modules = { restedxpSkin = true } } })
+  local R = Start(c)
+  local S = R.RestedXPSkin
+  local RXP = MakeRestedXP(c)
+  RestedXPLoads(c, RXP)
+  assert(S.UseTheme()); FlushTimers()
+  S.Text.Set("stepLabel", "both"); FlushTimers()
+  local steps = GuideOf(RXP, 100)
+  local card = (function() Show(RXP, steps[59]); return RXP.frame.CurrentStepFrame.framePool[1] end)()
+  card.number.text.GetStringWidth = function(s) return #(s.text or "") * 6 end
+  local function Width(w) card.width = w; return Show(RXP, steps[59]).text.text end
+  -- room = width - 9 (tab's place) - 22 (the menu button), a tab is its text + 16
+  assert(Width(300) == "Step 59/100 (59%)")
+  assert(Width(130) == "Step 59/100", "no room for the percentage: " .. Width(130))
+  assert(Width(100) == "Step 59", "no room for the total either: " .. Width(100))
+  assert(Width(0) == "Step 59/100 (59%)", "a width that isn't known yet is no limit")
+  -- without the menu button its room is not kept
+  S.Text.Set("settingsButton", false); FlushTimers()
+  assert(Width(138) == "Step 59/100 (59%)", "the room is the panel's alone: " .. Width(138))
+  S.Text.Set("settingsButton", true); FlushTimers()
+  assert(Width(138) == "Step 59/100")
+end
+
+-- the menu button
+do
+  local c = Boot({ db = { modules = { restedxpSkin = true } } })
+  local R = Start(c)
+  local S = R.RestedXPSkin
+  local RXP = MakeRestedXP(c)
+  RestedXPLoads(c, RXP)
+  local csf, frame = RXP.frame.CurrentStepFrame, RXP.frame
+  assert(S.Text.DEFAULTS.settingsButton == true and S.Text.Get("settingsButton") == true, "on with the skin")
+  assert(S.Current.button == nil, "nothing is made before the skin draws")
+  -- RestedXP's own handlers, to be left alone
+  csf.scripts.OnMouseDown = function() end
+  local drag = csf.scripts.OnMouseDown
+  local steps = GuideOf(RXP, 30)
+  RXP.activeSteps = { steps[4] }
+  RXP.frame.CurrentStepFrame.UpdateText()
+  local originals = {}
+  assert(S.UseTheme()); FlushTimers()
+  local b = S.Current.button
+  assert(b and b.parent == csf and S.Snapshot().current.built == 1, "one button, on the panel")
+  assert(b.shown == false, "hidden until the pointer is over the panel")
+  assert(b:GetWidth() == 14 and b:GetHeight() == 14, "small")
+  local point, rel, relPoint, x, y = b:GetPoint(1)
+  assert(point == "TOPRIGHT" and rel == csf and relPoint == "TOPRIGHT" and x == -4 and y == -2, "inside the upper-right corner")
+  assert(b:GetFrameLevel() > csf:GetFrameLevel(), "above the cards")
+  assert(b.icon.file == "y/rxp_cog-32" or b.icon.file:find("rxp_cog%-32"), "RestedXP's own cog picture: " .. tostring(b.icon.file))
+  assert(b.backdropInfo and b.backdropInfo.edgeFile == WHITE, "drawn in the skin's look")
+  assert(csf.scripts.OnMouseDown == drag, "the panel's drag handler is RestedXP's own")
+  assert(csf.hooked and csf.hooked.OnEnter, "the panel asks for the button on enter")
+  local card = csf.framePool[1]
+  assert(card.hooked and card.hooked.OnEnter, "and so does each card")
+  local line = card.elements[1]
+  assert(line.scripts.OnEnter ~= nil, "a line asks too")
+
+  -- the pointer enters through a card or a line, but it must really be over the panel
+  card.hooked.OnEnter(card)
+  assert(b.shown == false, "an enter that isn't over the panel (a tip window) shows nothing")
+  csf.mouseOver = true
+  line.scripts.OnEnter(line)
+  assert(b.shown == true, "over a line of the panel")
+  local count = S.Snapshot().current.shown
+  card.hooked.OnEnter(card)
+  assert(S.Snapshot().current.shown == count, "already shown: nothing again")
+
+  -- leaving: from a card onto a line, onto the button, stays; out of the panel goes
+  local tick = b.scripts.OnUpdate
+  tick(b, 0.01)
+  assert(b.shown == true, "a throttled check: nothing yet")
+  tick(b, 0.2)
+  assert(b.shown == true, "over the panel")
+  csf.mouseOver = false; b.mouseOver = true
+  tick(b, 0.2)
+  assert(b.shown == true, "over the button")
+  b.mouseOver = false
+  tick(b, 0.2)
+  assert(b.shown == false, "left both")
+  -- the menu it opened keeps it up
+  csf.mouseOver = true; line.scripts.OnEnter(line)
+  assert(b.shown == true)
+  csf.mouseOver = false
+  c.L_DropDownList1 = { IsShown = function() return true end }
+  c.L_UIDROPDOWNMENU_OPEN_MENU = frame.MenuFrame
+  tick(b, 0.2)
+  assert(b.shown == true, "RestedXP's menu is open")
+  c.L_DropDownList1 = { IsShown = function() return false end }
+  tick(b, 0.2)
+  assert(b.shown == false, "closed: gone")
+  c.L_UIDROPDOWNMENU_OPEN_MENU = nil
+
+  -- the click is the footer cog's: RXPFrame.DropDownMenu, with the cog hidden or not
+  S.Text.Set("showCog", false); FlushTimers()
+  assert(frame.Footer.cog.shown == false, "the standard button is hidden by the skin")
+  csf.mouseOver = true; line.scripts.OnEnter(line)
+  assert(b.shown == true, "the menu button is still there")
+  b.scripts.OnClick(b, "LeftButton")
+  assert(RXP.menuCalls == 1, "RestedXP's menu opened once")
+  assert(frame.Footer.cog.shown == false, "and the standard button was not shown")
+  S.Text.Set("showCog", true); FlushTimers()
+
+  -- tooltip: one, and gone with the button
+  local lines, owner, hidden = {}, nil, 0
+  c.GameTooltip = { SetOwner = function(_, o) owner = o end, AddLine = function(_, t) lines[#lines + 1] = t end, Show = function() end,
+    Hide = function() hidden = hidden + 1; owner = nil end, IsForbidden = function() return false end, GetOwner = function() return owner end }
+  b.scripts.OnEnter(b)
+  assert(owner == b and lines[1] == "RestedXP settings", "a short tooltip")
+  b.scripts.OnLeave(b)
+  assert(owner == nil and hidden == 1, "gone when the pointer leaves")
+  b.scripts.OnEnter(b)
+  b.scripts.OnClick(b)
+  assert(owner == nil, "and when it is clicked")
+
+  -- room: the first line starts clear of the button, whether or not there is step padding
+  S.Text.Set("stepPadding", 0); FlushTimers()
+  local first = card.elements[1]
+  local _, _, _, _, fy = first:GetPoint(1)
+  assert(fy == -10 - 5, "pushed down to clear the button even with no padding: " .. tostring(fy))
+  S.Text.Set("stepPadding", 2); FlushTimers()
+  _, _, _, _, fy = first:GetPoint(1)
+  assert(fy == -10 - 6, "RestedXP's, plus the padding's own push: " .. tostring(fy))
+
+  -- turned off: hidden, and RestedXP's own scripts are where they were
+  csf.mouseOver = true; line.scripts.OnEnter(line)
+  assert(b.shown == true)
+  S.Text.Set("settingsButton", false); FlushTimers()
+  assert(b.shown == false, "hidden")
+  csf.mouseOver = true
+  if card.hooked.OnEnter then card.hooked.OnEnter(card) end
+  assert(b.shown == false, "and it doesn't come back while off")
+  S.Text.Set("stepPadding", 0); FlushTimers()
+  _, _, _, _, fy = first:GetPoint(1)
+  assert(fy == -10, "RestedXP's own first line with no button and no padding: " .. tostring(fy))
+  S.Text.Set("settingsButton", true); S.Text.Set("stepPadding", 2); FlushTimers()
+  assert(S.Snapshot().current.built == 1, "the same button is used again")
+end
+
+-- RestedXP's own line handler is called, and put back
+do
+  local c = Boot({ db = { modules = { restedxpSkin = true } } })
+  local R = Start(c)
+  local S = R.RestedXPSkin
+  local RXP = MakeRestedXP(c)
+  RestedXPLoads(c, RXP)
+  local steps = GuideOf(RXP, 30)
+  RXP.activeSteps = { steps[4] }
+  local csf = RXP.frame.CurrentStepFrame
+  csf.UpdateText()
+  local line = csf.framePool[1].elements[1]
+  local tooltips = 0
+  local original = function() tooltips = tooltips + 1 end
+  line.scripts.OnEnter = original   -- RestedXP's ActiveStepElementOnEnter
+  assert(S.UseTheme()); FlushTimers()
+  assert(line.scripts.OnEnter ~= original, "wrapped")
+  csf.mouseOver = true
+  line.scripts.OnEnter(line)
+  assert(tooltips == 1, "RestedXP's own handler still runs")
+  assert(S.Current.button.shown == true)
+  -- RestedXP clears it on every step change and the skin puts its own back after the layout; no stacking
+  line.scripts.OnEnter = nil
+  csf.UpdateText()
+  assert(line.scripts.OnEnter ~= nil and line.twichLineEnter == false, "set again over nothing")
+  for _ = 1, 5 do csf.UpdateText() end
+  line.scripts.OnEnter(line)
+  assert(tooltips == 1, "no RestedXP handler to call, none called")
+  -- the skin turned off puts RestedXP's back
+  line.scripts.OnEnter = original
+  line.twichLineEnter = nil
+  csf.UpdateText()
+  c.TwichUIDB.modules.restedxpSkin = false
+  S.OnSwitch(); FlushTimers()
+  assert(line.scripts.OnEnter == original, "RestedXP's handler is back")
+  assert(S.Current.button.shown == false, "and the button is away")
+end
+
+-- off and on again: one button, no piling up; the tab goes back to RestedXP's
+do
+  local c = Boot({ db = { modules = { restedxpSkin = true } } })
+  local R = Start(c)
+  local S = R.RestedXPSkin
+  local RXP = MakeRestedXP(c)
+  RestedXPLoads(c, RXP)
+  local steps = GuideOf(RXP, 100)
+  assert(S.UseTheme()); FlushTimers()
+  S.Text.Set("stepLabel", "both"); FlushTimers()
+  local tab = Show(RXP, steps[59])
+  assert(tab.text.text == "Step 59/100 (59%)")
+  local csf = RXP.frame.CurrentStepFrame
+  csf.mouseOver = true
+  csf.hooked.OnEnter()
+  local hooks, built = c.hookCount, S.Snapshot().current.built
+  local made = #c.made
+  local frames = S.Snapshot().trayHooks
+  for _ = 1, 4 do
+    c.TwichUIDB.modules.restedxpSkin = false
+    S.OnSwitch(); FlushTimers()
+    c.TwichUIDB.modules.restedxpSkin = true
+    S.OnSwitch(); FlushTimers()
+    Show(RXP, steps[59])
+  end
+  assert(c.hookCount == hooks, "no hook was added")
+  assert(S.Snapshot().current.built == built and built == 1, "one button")
+  assert(S.Snapshot().trayHooks == frames, "no frame was hooked twice")
+  assert(#c.made - made <= 2, "nothing piles up (" .. (#c.made - made) .. " objects)")
+
+  -- RestedXP not asked to lay the cards out again: the strip itself puts its text back
+  Show(RXP, steps[59])
+  assert(tab.text.text == "Step 59/100 (59%)")
+  RXP.currentGuide = nil   -- RenderFrame then lays no card out
+  c.TwichUIDB.modules.restedxpSkin = false
+  S.OnSwitch(); FlushTimers()
+  assert(tab.text.text == "Step 59", "RestedXP's own text again: " .. tostring(tab.text.text))
+  assert(S.Current.button.shown == false)
+  -- a tab someone else wrote is not ours to put back
+  c.TwichUIDB.modules.restedxpSkin = true
+  S.OnSwitch(); FlushTimers()
+  GuideOf(RXP, 100)
+  assert(Show(RXP, RXP.currentGuide.steps[59]).text.text == "Step 59/100 (59%)")
+  tab.text.text = "Another addon's words"
+  RXP.currentGuide = nil
+  c.TwichUIDB.modules.restedxpSkin = false
+  S.OnSwitch(); FlushTimers()
+  assert(tab.text.text == "Another addon's words")
+end
+
+-- combat: the tab is RestedXP's until it ends; the button needs nothing built then
+do
+  local c = Boot({ db = { modules = { restedxpSkin = true } } })
+  local R = Start(c)
+  local S = R.RestedXPSkin
+  local RXP = MakeRestedXP(c)
+  RestedXPLoads(c, RXP)
+  local steps = GuideOf(RXP, 100)
+  assert(S.UseTheme()); FlushTimers()
+  S.Text.Set("stepLabel", "total"); FlushTimers()
+  c.COMBAT = true
+  local tab = Show(RXP, steps[7])
+  assert(tab.text.text == "Step 7", "RestedXP's own in combat: " .. tostring(tab.text.text))
+  c.COMBAT = false
+  c.FireEvent("PLAYER_REGEN_ENABLED"); FlushTimers()
+  assert(tab.text.text == "Step 7/100", "applied when combat ends: " .. tostring(tab.text.text))
+  -- the button works in combat (a plain frame of ours under a plain frame of RestedXP's)
+  local b = S.Current.button
+  c.COMBAT = true
+  local csf = RXP.frame.CurrentStepFrame
+  csf.mouseOver = true
+  csf.hooked.OnEnter()
+  assert(b.shown == true, "shown in combat")
+  b.scripts.OnClick(b)
+  assert(RXP.menuCalls == 1, "and opens RestedXP's menu as the cog does")
+  c.COMBAT = false
 end
 
 ---------------------------------------------------------------------------

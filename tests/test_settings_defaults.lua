@@ -660,6 +660,27 @@ do
   for _, entry in ipairs(shapes) do if entry.value == "RXP Gold" then listed = entry.label end end
   assert(listed and listed:find("not available", 1, true), "a saved shape that is not there is listed, marked")
 
+  -- the current-step panel: a menu button on hover (on) and the step tab's format (RestedXP's own wording)
+  for _, v in ipairs({ "TWICHUI_restedxpSettingsButton", "TWICHUI_restedxpStepLabel" }) do
+    local row = RowFor(v)
+    assert(row and #row.shown == 0, v .. " is a common setting")
+    assert(not row:Enabled(), v .. " is greyed out while the skin is off")
+  end
+  assert(Find("Show settings button on current-step hover") and Find("Step label format"), "named as asked")
+  assert(RS.Text.Get("settingsButton") == true and RS.Text.Get("stepLabel") == "step", "defaults: button on, Step X")
+  local formats = dropdowns.TWICHUI_restedxpStepLabel()
+  local labels = {}
+  for _, entry in ipairs(formats) do labels[#labels + 1] = entry.label end
+  assert(table.concat(labels, "|") == "Step X|Step X/Y|Step X (59%)|Step X/Y (59%)", table.concat(labels, "|"))
+  proxies.TWICHUI_restedxpStepLabel.set("both")
+  assert(RS.Text.Get("stepLabel") == "both" and proxies.TWICHUI_restedxpStepLabel.get() == "both")
+  proxies.TWICHUI_restedxpStepLabel.set("nonsense")
+  assert(RS.Text.Get("stepLabel") == "both", "an unknown format is refused")
+  proxies.TWICHUI_restedxpSettingsButton.set(false)
+  assert(RS.Text.Get("settingsButton") == false and proxies.TWICHUI_restedxpSettingsButton.get() == false)
+  proxies.TWICHUI_restedxpSettingsButton.set(true)
+  proxies.TWICHUI_restedxpStepLabel.set("step")
+
   -- the layout and size controls: the everyday ones are common, the technical one is Advanced, and
   -- the sizes are greyed until the player chooses to set them
   for _, v in ipairs({ "TWICHUI_restedxpShowCog", "TWICHUI_restedxpShowResizeHandle", "TWICHUI_restedxpShowTitle", "TWICHUI_restedxpShowLogo", "TWICHUI_restedxpShowClassIcon", "TWICHUI_restedxpFooter",
