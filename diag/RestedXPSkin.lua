@@ -39,6 +39,18 @@ local function Snapshot()
     Line("holds: %d frames drawn on, %d hooks, %d frame hooks, %d remembered colours", s.owned or 0, s.hooks or 0, s.trayHooks or 0, s.knownColors or 0)
     Line("work: %d passes, %d RestedXP refreshes, %d held for combat; update waiting: %s; waiting for combat: %s; select theme when ready: %s; strip waiting: %s",
         s.passes or 0, s.refreshes or 0, s.skipped or 0, D.Flag(s.scheduled), D.Flag(s.waitingCombat), D.Flag(s.pendingSelect), D.Flag(s.pendingTeardown))
+    local t = S.Timers and S.Timers.Snapshot()
+    if t then
+        Line("timer bars: %s; hooks on StartTimer %s and ShowTimers %s, stop callback %s; supported by this RestedXP: %s",
+            t.switchOn and "skinning on" or "skinning off", D.Flag(t.hookStart), D.Flag(t.hookShow), D.Flag(t.stopCallback),
+            D.Flag(t.supported))
+        Line("timer bars: %d bars known, %d drawn now; %d drawn, %d put back, %d refreshes; fill %s, label font %s, time font %s; "
+            .. "gradient fallbacks %d; height changed: %s; held for combat: %s; preview shown: %s",
+            t.bars or 0, t.drawn or 0, t.styled or 0, t.restored or 0, t.refreshes or 0,
+            t.fallbackFill and "fell back to RestedXP's own" or "as chosen",
+            t.fallbackLabel and "fell back" or "as chosen", t.fallbackTime and "fell back" or "as chosen",
+            t.gradientFallbacks or 0, D.Flag(t.heightChanged), D.Flag(t.waiting), D.Flag(t.previewShown))
+    end
     local status, reason
     if s.code == "off" then status = "off"
     elseif s.code == "active" then status = "ready"
@@ -51,6 +63,7 @@ local function Snapshot()
             "Only RestedXP's legacy guide window is drawn on; the v2 window, map arrow, right-click menus and tooltips are not.",
             "Other RestedXP skins can only be recognised if they are EUI-RestedXP or LiteTweaks.",
             "RestedXP gives themes no way to be removed; turning the skin off takes the entry out of its list.",
+            "Timer bars: RestedXP's own bars only, and not while its v2 guide window is on. They have no spark; width is RestedXP's.",
         },
     }
 end

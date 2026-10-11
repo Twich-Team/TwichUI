@@ -78,7 +78,7 @@ for _, f in ipairs({ "gear/Weights.lua", "gear/Evaluate.lua", "gear/Prefs.lua", 
   "gear/Hints.lua", "gear/Tooltip.lua", "gear/Bags.lua", "gear/Window.lua", "modules/Notify.lua", "modules/Arrival.lua", "modules/Media.lua", "modules/FriendLogin.lua", "modules/Borders.lua", "modules/FoodDrink.lua",
   "modules/TrainingData.lua", "modules/Borders.lua", "modules/MenuStyle.lua", "modules/SpellMenu.lua", "modules/MageTravel.lua", "modules/MageConjure.lua",
   "chronicle/Style.lua", "chronicle/Appearance.lua", "modules/Refreshments.lua", "modules/RefreshmentsPanel.lua", "modules/RefreshmentsShares.lua", "modules/RefreshmentsTrade.lua", "modules/RefreshmentsBroker.lua",
-  "modules/RestedXPSkin.lua", "qol/QoL.lua", "qol/Summons.lua", "qol/Resurrect.lua", "qol/ReleasePvP.lua", "qol/Duels.lua", "qol/QuickKeybind.lua", "qol/GuideWaypoint.lua", "Settings.lua" }) do
+  "modules/RestedXPSkin.lua", "modules/RestedXPTimers.lua", "qol/QoL.lua", "qol/Summons.lua", "qol/Resurrect.lua", "qol/ReleasePvP.lua", "qol/Duels.lua", "qol/QuickKeybind.lua", "qol/GuideWaypoint.lua", "Settings.lua" }) do
   local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
 end
 c.LOADED["!!!TwichUI"] = true; c.FireEvent("ADDON_LOADED", "!!!TwichUI")
@@ -699,6 +699,94 @@ do
     "sizes, spacing and what shows are part of the appearance reset")
   assert(c.TwichUIDB.modules.restedxpSkin == true, "the switch is not part of the look")
   c.TwichUIDB.modules.restedxpSkin = false
+end
+
+-- RestedXP timer bars: a group on RestedXP's page, greyed out unless the skin and "Skin timer bars" are on,
+-- the everyday controls in plain view and the technical ones Advanced, each written through (and validated);
+-- only controls that have an effect are offered; its own reset; a preview that is a sample.
+do
+  local RS = R.RestedXPSkin
+  local TM = RS.Timers
+  assert(TM, "the timer bars are loaded")
+  local function RowFor(variable)
+    for _, i in ipairs(initializers) do if i.setting == proxies[variable] then return i end end
+  end
+  local function Find(name) for _, i in ipairs(initializers) do if i.data.name == name then return i end end end
+  local common = { "TWICHUI_restedxpSkinTimers", "TWICHUI_restedxpTimerFillGradient", "TWICHUI_restedxpTimerFillColor",
+    "TWICHUI_restedxpTimerFillColor2", "TWICHUI_restedxpTimerFillOpacity", "TWICHUI_restedxpTimerLabelColor",
+    "TWICHUI_restedxpTimerTimeColor", "TWICHUI_restedxpTimerLabelSize", "TWICHUI_restedxpTimerTimeSize",
+    "TWICHUI_restedxpTimerShowIcon", "TWICHUI_restedxpTimerBarHeight", "TWICHUI_restedxpTimerLookBgColor",
+    "TWICHUI_restedxpTimerLookBorderColor" }
+  for _, v in ipairs(common) do
+    assert(variables[v] == "RestedXP guide window", v .. " is on RestedXP's page: " .. tostring(variables[v]))
+    local row = RowFor(v)
+    assert(row and #row.shown == 0, v .. " is a common setting")
+    assert(not row:Enabled(), v .. " is greyed out while the skin is off")
+  end
+  for _, v in ipairs({ "TWICHUI_restedxpTimerTextPadding", "TWICHUI_restedxpTimerFillTexture", "TWICHUI_restedxpTimerLabelFont",
+    "TWICHUI_restedxpTimerLabelOutline", "TWICHUI_restedxpTimerTimeFont", "TWICHUI_restedxpTimerTimeOutline",
+    "TWICHUI_restedxpTimerLookBgTexture", "TWICHUI_restedxpTimerLookBgOpacity", "TWICHUI_restedxpTimerLookBorderTexture",
+    "TWICHUI_restedxpTimerLookBorderSize", "TWICHUI_restedxpTimerLookBorderOpacity" }) do
+    local row = RowFor(v)
+    assert(row and #row.shown > 0, v .. " is under Advanced")
+  end
+  -- nothing is offered that has no effect: no spark, no width
+  for _, i in ipairs(initializers) do
+    local name = i.data.name or ""
+    assert(not name:lower():find("spark", 1, true) and not name:find("Timer width", 1, true), "no control without an effect: " .. name)
+  end
+  assert(RowFor("TWICHUI_restedxpTimerBarHeight").options.min == 12 and RowFor("TWICHUI_restedxpTimerBarHeight").options.max == 28)
+  assert(RowFor("TWICHUI_restedxpTimerLabelSize").options.min == 8 and RowFor("TWICHUI_restedxpTimerLabelSize").options.max == 18)
+  -- greyed out until the skin is on, and again when the timer switch is off
+  c.TwichUIDB.modules.restedxpSkin = true
+  assert(RowFor("TWICHUI_restedxpSkinTimers"):Enabled(), "the switch follows the skin")
+  assert(RowFor("TWICHUI_restedxpTimerFillColor"):Enabled(), "on by default with the skin")
+  proxies.TWICHUI_restedxpSkinTimers.set(false)
+  assert(RS.Timers.Opt.Get("skinTimers") == false and not RowFor("TWICHUI_restedxpTimerFillColor"):Enabled(), "greyed out with its own switch off")
+  assert(RowFor("TWICHUI_restedxpSkinTimers"):Enabled(), "the switch itself stays reachable")
+  proxies.TWICHUI_restedxpSkinTimers.set(true)
+  c.TwichUIDB.modules.restedxpSkin = false
+
+  -- writes through, validated
+  proxies.TWICHUI_restedxpTimerFillColor.set("ff102030")
+  proxies.TWICHUI_restedxpTimerBarHeight.set(20)
+  proxies.TWICHUI_restedxpTimerLabelOutline.set("thick")
+  proxies.TWICHUI_restedxpTimerShowIcon.set(true)
+  proxies.TWICHUI_restedxpTimerLookBorderSize.set(2)
+  assert(TM.Opt.Get("fillColor") == "ff102030" and TM.Opt.Get("barHeight") == 20 and TM.Opt.Get("labelOutline") == "thick"
+    and TM.Opt.Get("showIcon") == true and TM.Look.Get("borderSize") == 2)
+  proxies.TWICHUI_restedxpTimerBarHeight.set(80)           -- out of range: refused
+  proxies.TWICHUI_restedxpTimerLabelOutline.set("nowhere")
+  assert(TM.Opt.Get("barHeight") == 20 and TM.Opt.Get("labelOutline") == "thick", "invalid values are not saved")
+  assert(proxies.TWICHUI_restedxpTimerBarHeight.get() == 20, "reads back")
+  -- a missing texture and font stay listed, marked
+  proxies.TWICHUI_restedxpTimerFillTexture.set("Lost Bar")
+  proxies.TWICHUI_restedxpTimerLabelFont.set("Lost Font")
+  local fills, labels = dropdowns.TWICHUI_restedxpTimerFillTexture(), dropdowns.TWICHUI_restedxpTimerLabelFont()
+  assert(fills[1].value == "default" and fills[2].value == "solid", "RestedXP's own, then a flat fill")
+  assert(fills[#fills].value == "Lost Bar" and fills[#fills].label:find("not available", 1, true))
+  assert(labels[1].value == "inherit" and labels[#labels].value == "Lost Font" and labels[#labels].label:find("not available", 1, true))
+  assert(dropdowns.TWICHUI_restedxpTimerTimeFont()[1].value == "inherit" and dropdowns.TWICHUI_restedxpTimerTimeOutline()[1].value == "inherit")
+  assert(#dropdowns.TWICHUI_restedxpTimerFillGradient() == 3)
+
+  -- a preview button that is a sample, and a reset that is only the timer bars
+  local preview
+  for _, i in ipairs(initializers) do
+    if i.click and i.data.name == "Preview" and i.data.tooltip and i.data.tooltip:find("made-up timer bars", 1, true) then preview = i end
+  end
+  assert(preview, "a preview of the timer bars")
+  -- (this page's frames are stateless stand-ins; showing and hiding are tested in test_restedxp_timers.lua)
+  preview.click()
+  preview.click()
+  c.TwichUIDB.modules.restedxpSkin = true
+  RS.Text.Set("bodyFont", "Keep This")
+  Find("Reset timer bars").click()
+  assert(TM.Opt.Get("fillColor") == "ff80502d" and TM.Opt.Get("barHeight") == 16 and TM.Opt.Get("labelOutline") == "outline"
+    and TM.Opt.Get("showIcon") == false and TM.Look.Get("borderSize") == 1 and TM.Opt.Get("skinTimers") == true,
+    "the timer bars are back to their defaults")
+  assert(RS.Text.Get("bodyFont") == "Keep This" and c.TwichUIDB.modules.restedxpSkin == true, "nothing else was touched")
+  c.TwichUIDB.modules.restedxpSkin = false
+  RS.Text.Reset()
 end
 
 -- Journey Chronicle appearance: on the Chronicle's page, common settings in plain view, the technical ones

@@ -35,6 +35,9 @@
 -- the theme's colours and font reach it), the map arrow and pins, RestedXP's right-click menus
 -- (Blizzard's dropdown), tooltips, its options, the tracker, talent and importer windows.
 --
+-- Extensions: another part of RestedXP's window that follows this skin's switch registers with
+-- Skin.Extend (install, finished, stripped, disabled). The countdown bars are one: modules/RestedXPTimers.lua.
+--
 -- Saved: TwichUIDB.modules.restedxpSkin (the switch, off by default), TwichUIDB.ui.restedxpSkin (the
 -- background and border look; MenuStyle's), TwichUIDB.ui.restedxpSkinText (fonts, outlines, colours, sizes,
 -- spacing and which decorations show; only values the player changed are saved, so a new setting takes
@@ -138,6 +141,22 @@ local slimOn = false             -- the scroll bar is drawn slim right now
 local slimFiles = {}             -- piece -> the file the game reports for what this skin set; a different one is seen
 
 local FinishAll
+
+-- Features that finish another part of RestedXP's window under this skin's switch (the timer bars:
+-- modules/RestedXPTimers.lua) register here. Each may have install() (RestedXP is usable: hook what it
+-- needs, once), finished() (a pass drew the skin), stripped() (the skin was taken off the frames) and
+-- disabled() (the switch went off). Called in registration order, each guarded.
+local extensions = {}
+
+local function Notify(name)
+    for i = 1, #extensions do
+        local fn = extensions[i][name]
+        if fn then
+            local ok, err = pcall(fn)
+            if not ok then R.Fault("RestedXP skin extension", err) end
+        end
+    end
+end
 
 ---------------------------------------------------------------------------
 -- Settings: the look is MenuStyle's; the text settings are here.
@@ -279,6 +298,18 @@ local function Active()
     return enabled and RXP ~= nil and theme ~= nil and conflict == nil and RXP.activeTheme == theme and not V2Window()
 end
 
+-- What an extension may read of this skin: whether it is drawing, RestedXP's addon object, and the font
+-- file the guide's step text is drawn with.
+Skin.Active = Active
+function Skin.Addon() return RXP end
+function Skin.Extend(extension)
+    for i = 1, #extensions do
+        if extensions[i] == extension then return end
+    end
+    extensions[#extensions + 1] = extension
+    if enabled and Usable(RXP) and extension.install then extension.install() end
+end
+
 ---------------------------------------------------------------------------
 -- Fonts. Saved as LibSharedMedia names ("default" is RestedXP's own). A missing one is drawn as the
 -- default and stays saved and listed, marked, until the player picks.
@@ -323,6 +354,9 @@ local function ResolveFont(id)
     if type(path) == "string" and path ~= "" and UsableFont(path) then return path end
     return DefaultFont(), "missing"
 end
+
+-- The file the guide's step text is drawn with (what a feature that follows it should use).
+function Skin.BodyFont() return (ResolveFont(Text.Get("bodyFont"))) end
 
 local function BuildFontList()
     local list = { { "default", "RestedXP's own font" } }
@@ -1638,6 +1672,7 @@ function FinishAll(fresh)
         appliedSize[role] = nil
         sizeBack[role] = nil
     end
+    Notify("finished")
 end
 
 -- Gives a frame back its RestedXP look: our overlays go, and a backdrop of ours still on it is
@@ -1810,6 +1845,7 @@ local function StripAll()
     listPending = false
     settledRev = -1
     touched = false
+    Notify("stripped")
 end
 
 ---------------------------------------------------------------------------
@@ -1863,6 +1899,7 @@ local function InstallHooks()
         hooks.fontSize = true
         hooksecurefunc(RXP, "UpdateGuideFontSize", OnFontSize)
     end
+    Notify("install")
     return true
 end
 
@@ -1981,6 +2018,7 @@ local function Stop()
     if not enabled then return end
     enabled = false
     scheduled, wantTheme, waitingCombat, pendingSelect = false, false, false, false
+    Notify("disabled")
     R:Off("ADDON_LOADED", OnAddonLoaded)
     R:Off("PLAYER_LOGIN", Attach)
     -- RestedXP's own setting goes back first (a plain value: allowed in combat)

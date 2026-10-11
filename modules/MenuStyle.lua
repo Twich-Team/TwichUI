@@ -35,6 +35,7 @@
 -- drawn by the look's owner, Apply only draws no edge for it and says so (its second result).
 -- options.sources labels the textures EllesmereUI offers, so a list says where each comes from.
 -- R.MenuStyle.Fonts is the font side of the same idea: LibSharedMedia's fonts, by stable name.
+-- R.MenuStyle.StatusBars is the same for the textures a bar's fill is drawn with.
 
 local R = TwichUI
 
@@ -545,8 +546,80 @@ R:OnInit(function()
     end)
 end)
 
+---------------------------------------------------------------------------
+-- Status bar textures: the textures a bar's fill is drawn with, by stable id. "solid" is a flat fill,
+-- "eui:<key>" one of the textures EllesmereUI offers for its own bars (listed and drawn only while it is
+-- installed; nothing of its is copied), and any other id is a LibSharedMedia "statusbar" name, so a pack
+-- another addon registers appears here too. A saved id that is no longer there resolves to nothing and
+-- the caller draws its own; the choice stays saved and listed, marked, until the player picks.
+---------------------------------------------------------------------------
+local StatusBars = {}
+local barSubscribers = {}
+
+-- The file for an id and what became of it: "ok", or "missing" (and no file: the caller's own is drawn).
+function StatusBars.Resolve(id)
+    if id == "solid" then return WHITE, "ok" end
+    local euiKey = R.Borders.EllesmereKey(id)
+    if euiKey then
+        local eb = EllesmereBackgrounds()
+        local file = eb and eb.path[euiKey]
+        if file then return file, "ok" end
+        return nil, "missing"
+    end
+    local LSM = SharedMedia()
+    local list = LSM and LSM:HashTable("statusbar")
+    local file = list and list[id]
+    if (type(file) == "string" and file ~= "") or (type(file) == "number" and file > 0) then return file, "ok" end
+    return nil, "missing"
+end
+
+-- { { id, label }, ... }: first (the caller's own entries), a flat fill, EllesmereUI's textures, then every
+-- LibSharedMedia status bar texture sorted by name. current stays listed, marked, if it has gone.
+function StatusBars.Choices(current, first)
+    local list, named, files = {}, {}, {}
+    for _, entry in ipairs(first or {}) do list[#list + 1] = entry; named[entry[2]] = true end
+    list[#list + 1] = { "solid", "Flat color" }
+    named["Flat color"] = true
+    local eb = EllesmereBackgrounds()
+    for _, choice in ipairs(eb and eb.list or {}) do
+        list[#list + 1] = { choice[1], choice[2] .. SOURCE_EUI }
+        named[choice[2]] = true
+        files[eb.path[R.Borders.EllesmereKey(choice[1])]] = true
+    end
+    local LSM = SharedMedia()
+    local names = LSM and LSM:HashTable("statusbar")
+    local sorted = {}
+    for name, file in pairs(names or {}) do
+        if R.Borders.ValidName(name) and name ~= "None" and name ~= "Solid" and not NOT_TEXTURES[name]
+            and not name:find("^Blizzard ") and not named[name] and not files[file] then
+            sorted[#sorted + 1] = name
+        end
+    end
+    table.sort(sorted)
+    for _, name in ipairs(sorted) do list[#list + 1] = { name, name } end
+    for _, entry in ipairs(list) do if entry[1] == current then return list end end
+    list[#list + 1] = { current, (R.Borders.EllesmereKey(current) or tostring(current)) .. " (not available)" }
+    return list
+end
+
+-- fn(name) is called after LibSharedMedia registers a status bar texture.
+function StatusBars.Subscribe(fn) barSubscribers[#barSubscribers + 1] = fn end
+
+R:OnInit(function()
+    local LSM = SharedMedia()
+    if not (LSM and LSM.RegisterCallback) then return end
+    LSM.RegisterCallback(StatusBars, "LibSharedMedia_Registered", function(_, kind, name)
+        if kind ~= "statusbar" then return end
+        for _, fn in ipairs(barSubscribers) do
+            local ok, err = pcall(fn, name)
+            if not ok then geterrorhandler()(err) end
+        end
+    end)
+end)
+
 -- The broker menus' look, as it always was; New makes others.
 local MS = New("brokerMenu", MENU_DEFAULTS)
 MS.New = New
 MS.Fonts = Fonts
+MS.StatusBars = StatusBars
 R.MenuStyle = MS

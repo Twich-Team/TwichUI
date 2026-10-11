@@ -91,7 +91,7 @@ from 1, repeat, injected failure). Document the step here. Never reuse or reorde
   Switches TwichUI does not define are left untouched.
 - **Groups** must be tables (`modules`, `ui`, `setup`, `gear`, `storedData`, `whisperProbe`, and `ui.qol`,
   `ui.foodDrink`, `ui.brokerMenu`, `ui.refreshments`, `ui.refreshmentsStyle`, `ui.restedxpSkin`, `ui.restedxpSkinText`,
-  `ui.restedxpSkinState`, `ui.chronicleLook`, `ui.chronicleAppearance`, `ui.guideWaypoint`). One that is not is dropped and rebuilt by its owner (`container-not-table`); its
+  `ui.restedxpSkinState`, `ui.restedxpTimerLook`, `ui.restedxpTimerText`, `ui.chronicleLook`, `ui.chronicleAppearance`, `ui.guideWaypoint`). One that is not is dropped and rebuilt by its owner (`container-not-table`); its
   neighbours are untouched.
 - **Values** (ranges, texts, textures, positions) are judged by the feature that reads them, every time it reads
   them (for example `FoodDrink.Get`, `MenuStyle.Get`, `Position()`), and an unusable one falls back to the default

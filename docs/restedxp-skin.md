@@ -199,6 +199,110 @@ pcall per call (`Core.lua:39`), font option list rebuilt per call (`Core.lua:133
 rewritten at login (`DisableAnnouncements`). Pools are bounded by the largest pass. Hypothesis, not
 confirmed: most of its memory is compiled Lua source (~450 KB of source) rather than retained data.
 
+## Timer bars
+
+RestedXP's countdown bars (waiting for an event or scene, a flight, Hearthstone timing) get the same look,
+as a finish on the skin: `modules/RestedXPTimers.lua`. It is an extension of the skin, not a second timer
+system: RestedXP starts, counts down and ends every bar exactly as before.
+
+### What the bars are (RXPGuides v4.11.22, read from source)
+
+| Piece | Source | Notes |
+| --- | --- | --- |
+| `addon.StartTimer(duration, label)` | `Timers.lua` | the one place any bar is started: guide steps' `element.timer` / `timerText` (`functions.lua`, `map.lua`: event, RP and scene waits), the flight timer (`PLAYER_CONTROL_LOST`), Hearthstone batching (`HSBatching.lua`) |
+| `barPool`, `CreateBar` | `Timers.lua` | RestedXP's own pool of LibCandyBar bars: a hidden bar is reused, else `candy:New` |
+| `BarContainer` (`RXPFrame.BarContainer`) | `Timers.lua` | anchors and stacks the bars on the footer; `.height` (16) is read by `StartTimer` and `SortTimers` |
+| `candyBarBar`, `candyBarBackground`, `candyBarLabel`, `candyBarDuration`, `candyBarIconFrame`, `candyBarBackdrop` | `libs/LibCandyBar-3.0` | the fill (a StatusBar), its background texture, the two strings, RestedXP's pocket-watch texture, and a frame the library provides for stylers |
+
+All the timer types share this implementation, so there is one integration and no per-type code. There is no
+spark, so none is offered. Bars the library makes for other addons are never touched: only the bar
+`StartTimer` just put under a label in `BarContainer.bars` is drawn.
+
+### How it is integrated
+
+* **Hooks (installed once, gated on the skin and its switch):** `hooksecurefunc` on `addon.StartTimer`
+  (draw the bar it just started or reused) and `addon.ShowTimers` (RestedXP showed bars it had hidden), plus
+  LibCandyBar's `LibCandyBar_Stop` callback. Nothing is hooked per tick: the library's own update, the
+  countdown text and the fill's value are never touched, and no `OnUpdate` or ticker is added.
+* **When it draws:** at each start (the fill colour and the icon, which RestedXP resets at every start, and
+  the text, which the library resets whenever it makes a bar), and when a setting changes (one coalesced
+  update after 0.2 s). A bar already drawn for the current settings is skipped.
+* **Height** is RestedXP's own `BarContainer.height`, which its stacking reads; `addon:SortTimers()` is run
+  once after a change. The bar is never shorter than its text needs (`ceil(size * 1.25) + 2`), so a large
+  font is not clipped. Width follows the footer and is not offered.
+* **Border and background:** the library's `candyBarBackdrop` frame (one of ours when an older library has
+  none), drawn with the shared `MenuStyle` look, just under the fill and just outside the bar's edge, so a
+  border never covers the fill and stacked bars keep RestedXP's spacing. The library's own background is
+  made transparent while ours is drawn.
+* **Text:** the label is at the left and the time at the right. The time takes its own width and the label
+  stops at it (word wrap off, so a long label is cut with an ellipsis; bars take no mouse, so there is no
+  tooltip: a tooltip would take clicks from the footer's buttons). Padding is in from the bar's ends.
+* **Icon:** hidden with the library's own `SetIcon(nil)`, which gives the bar its room (no gap), and set
+  again by RestedXP at the next start.
+* **Gradient:** `Texture:SetGradient(orientation, ColorMixin, ColorMixin)` (the Forever signature; the old
+  seven-argument form is not in its API documentation) on the status bar's texture. The shading spans the
+  part of the bar that is filled, so it narrows as the bar runs down. A gradient and a vertex colour share
+  the texture's vertex colours, so the colour is set neutral first and the gradient last, with the opacity
+  carried by the gradient's colours; clearing it sets a neutral gradient before the colour. If the call
+  fails, the average of the two colours is used and `/tui diagnostics` counts it. **Not verified in the
+  game.**
+
+### Restoration
+
+* Each bar has one record (a weak-keyed table, reused: starting a timer allocates nothing). It holds a
+  snapshot taken the first time the look draws on it (texture, background strength, both strings' font,
+  colour and anchors, the icon) and a few flags.
+* A bar that stops is put back **at the stop callback**: the library keeps stopped bars in a cache shared
+  with every other addon's bars (and RestedXP keeps its pooled bars in that cache too, so one can be handed
+  out again), so a bar must never go back carrying this look.
+* Turning the look off (the switch, the skin, another RestedXP theme, a conflict, the v2 window) puts back
+  every bar drawn, running or not. It never restarts, stops, hides or re-times one.
+* The fill's colour and the height are not restored from a snapshot: the colour is RestedXP's
+  `colors.mapPins` as it is then, and the height is put back only if it is still the value this set, so a
+  newer RestedXP setting is never overwritten.
+* In combat nothing is drawn or restored; the latest request waits for `PLAYER_REGEN_ENABLED`. (The bars are
+  not protected frames, but their anchors hang from RestedXP's window, so this follows the skin's own rule.)
+
+### Settings (Addon skins > RestedXP guide window > Timer bars)
+
+| Setting | Default | Notes |
+| --- | --- | --- |
+| Skin timer bars | on | with the skin; never turns the skin on |
+| Fill gradient / Fill color / Fill gradient end color | left to right, `#80502D`, `#C69A52` | "None" is one colour |
+| Fill opacity | 100 | the fill only |
+| Label color / Time color | `#E9E1CF` | warm ivory |
+| Label size / Time size | 10 / 10 | 8-18 |
+| Show RestedXP's clock icon | off | decoration; off gives its room to the bar |
+| Bar height | 16 (RestedXP's) | 12-28; the text's need wins |
+| Timer background and border (texture, color, opacity, thickness) | solid, `#17110B` at 85 %, a 1 px `#8C6E38` line at 90 % | "None" textures and a thickness of 0 are supported |
+| Advanced: Text padding, Fill texture, label and time fonts and outlines | 4 px, flat color, the guide's step font, outline | |
+| Preview | | two made-up bars (a short and a long label) on frames of their own |
+| Reset timer bars | | only the timer bars; not the switch of the skin or its look |
+
+Saved in `ui.restedxpTimerText` and `ui.restedxpTimerLook`; only values the player changed are saved.
+
+### Media
+
+Fill textures: RestedXP's own (the path it gives the library), a flat fill, EllesmereUI's bar textures (its
+public `BuildBarTextureTables`, only while it is installed; nothing copied), and every LibSharedMedia
+`statusbar` entry (`MenuStyle.StatusBars`). Backgrounds and borders: `MenuStyle`'s lists. Fonts:
+`MenuStyle.Fonts` (TwichUI's, EllesmereUI's when registered with LibSharedMedia, then the rest). Ids are
+stable names; a missing one is drawn as RestedXP's own texture or the guide's font, stays saved and listed
+"(not available)", and is drawn when LibSharedMedia registers it (no list is rebuilt per timer).
+
+### Preview
+
+`TogglePreview` shows two sample bars on a frame of its own beside the Options window. They are built from
+plain frames with the library's part names and drawn by the same functions as a real bar. They are **not**
+LibCandyBar bars (a bar made with `candy:New` would be taken from the cache every addon's bars share, and
+could be one RestedXP is about to reuse), run no countdown, start no timer, call nothing of RestedXP's and
+have records of their own. They go away with the Options window, the Preview button, or the skin switch.
+
+### Not covered
+
+RestedXP's v2 guide window (its bars are left as RestedXP draws them), other addons' LibCandyBar bars,
+bar width, and any guide-window redesign.
+
 ## Manual profiling
 
 1. `/reload` with only RXPGuides; `/run collectgarbage(); UpdateAddOnMemoryUsage(); print(GetAddOnMemoryUsage("RXPGuides"))`.
@@ -232,3 +336,26 @@ switch, Reset appearance (progress, positions and RestedXP settings untouched); 
 restoration; 13. changes in combat; 14. another RestedXP skin on; 15. a font pack disabled; 16. guide
 progression and clickable actions unchanged; 17. repeated changes without sustained growth; 18. memory and
 CPU comparison per the steps above.
+
+Timer bars (T1-T17, none run in game yet):
+
+T1. An RP / event wait (a guide step with a timer) shows the bar in the look; its countdown, ending and
+the step's completion are unchanged. T2. A flight timer (take a flight path with RestedXP's flight timers
+on) the same. T3. Hearthstone timing (a Hearthstone cast with the batching option) and a gossip-cancel wait
+if available. T4. Two bars at once keep RestedXP's stacking; with the window anchored to the bottom of the
+screen they stack upward as before. T5. Fill texture, colour and opacity change on a running bar without
+restarting it. T6. Background and border: None, solid, a textured border, thickness 0 and 8; the border
+never covers the fill or the text. T7. Gradient left to right and bottom to top and None: look at the fill
+at full and at 20 %; if the game draws anything else, set the gradient to None and report it. T8. Label and
+time font, size, outline and colour; the label never overlaps the time. T9. A long label on a narrow window,
+and size 18 (the bar grows; nothing clipped). T10. The clock icon on and off: no gap when off. T11. A timer
+ending and another starting: the same bar is reused and is drawn once (no stale look, no duplicate border).
+T12. Change every setting while a timer runs. T13. Turn "Skin timer bars" off, then the whole skin, with a
+timer running: RestedXP's own look returns at once, the countdown carries on, its colour is its theme's.
+T14. Choose another RestedXP theme, switch RestedXP profile, `/reload`. T15. With and without EllesmereUI
+(its textures listed or not; saved EllesmereUI textures stay chosen). T16. Durations, countdown text and
+guide progression identical with the look on and off (compare a flight's time to the same flight with the
+look off). T17. Start 30 timers: `/tui diagnostics` shows one bar record per pooled bar and no growth in
+frames drawn on; with BigWigs or DBM installed, a BigWigs bar made after a RestedXP bar stopped has no
+TwichUI look. The preview: opens beside Options, follows every change, is gone when Options closes, and never
+shows up in RestedXP's footer.

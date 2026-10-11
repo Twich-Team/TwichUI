@@ -117,6 +117,9 @@ modules\RefreshmentsBroker.lua
 # modules\MenuStyle.lua; needs RestedXP, and works without EllesmereUI)
 modules\RestedXPSkin.lua
 
+# RestedXP timer bars: the same look on RestedXP's countdown bars (a finish on the skin above; off when it is)
+modules\RestedXPTimers.lua
+
 # Sell from Bags: Auction House posting tab (uses the Chronicle palette)
 auction\Price.lua
 auction\Scan.lua

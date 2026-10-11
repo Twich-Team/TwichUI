@@ -634,6 +634,144 @@ local function Build()
         TextSlider("ArrowTextSize", "arrowTextSize", "Arrow text size",
             "The text under the arrow as a percentage of RestedXP's own, which its Arrow Text Size option sets: 100 is RestedXP's.")
 
+        -- Timer bars: the countdown bars RestedXP shows for waits and flights. A finish on this skin
+        -- (modules/RestedXPTimers.lua); greyed out unless the skin and its own switch are on.
+        local TM = RS.Timers
+        if TM then
+            local Opt = TM.Opt
+            local function TimersOn() return RxpOn() and Opt.Get("skinTimers") end
+            local function TimersWhy() if RxpOn() then return "Greyed out: needs \"Skin timer bars\" turned on." end end
+            local resettableTimers = {}
+            local timerSwitch = ProxyToggle("restedxpSkinTimers", "Skin timer bars",
+                "Gives the countdown bars RestedXP shows at the bottom of its window (waiting for an event or scene, a flight, Hearthstone timing) the same look. Off: the guide window keeps its look and the bars stay as RestedXP draws them. It only changes how a bar is drawn: durations, countdowns and guide progress are RestedXP's own.",
+                Opt.DEFAULTS.skinTimers, function() return Opt.Get("skinTimers") end, function(value) Opt.Set("skinTimers", value) end)
+            Under(timerSwitch, rxpToggle, RxpOn)
+            if timerSwitch and timerSwitch.GetTooltip ~= nil then
+                local TIMER_STATUS = {
+                    off = "Off: timer bars are drawn as RestedXP draws them.",
+                    ["skin-off"] = "Waiting: the guide window's look isn't drawing (the skin is off, another RestedXP theme is chosen, or another skin is replacing the window).",
+                    unsupported = "This version of RestedXP has no timer bars this can draw. Nothing was changed.",
+                    active = "Active.",
+                }
+                local base = timerSwitch:GetTooltip()
+                timerSwitch.GetTooltip = function()
+                    local state = TM.Status()
+                    return (base or "") .. "\n\nStatus: " .. (TIMER_STATUS[state.code] or state.code)
+                end
+            end
+            local function Timer(setting, default)
+                if setting then resettableTimers[#resettableTimers + 1] = { setting = setting, default = default } end
+                return setting
+            end
+            local function TimerSetting(variable, varType, label, key)
+                return Timer(Proxy("restedxpTimer" .. variable, varType, label, Opt.DEFAULTS[key],
+                    function() return Opt.Get(key) end, function(value) Opt.Set(key, value) end), Opt.DEFAULTS[key])
+            end
+            local function TimerChoice(variable, key, label, tooltip, choices, isAdvanced)
+                local setting = TimerSetting(variable, STRING, label, key)
+                if setting and Settings.CreateDropdown and Settings.CreateControlTextContainer then
+                    local row = Settings.CreateDropdown(category, setting, function()
+                        local container = Settings.CreateControlTextContainer()
+                        for _, choice in ipairs(type(choices) == "function" and choices(Opt.Get(key)) or choices) do
+                            container:Add(choice[1], choice[2])
+                        end
+                        return container:GetData()
+                    end, tooltip)
+                    if isAdvanced then Advanced(row) end
+                    Under(row, timerSwitch, TimersOn, TimersWhy)
+                end
+            end
+            local function TimerSwatch(variable, key, label, tooltip, isAdvanced)
+                local setting = TimerSetting(variable, STRING, label, key)
+                if setting and Settings.CreateColorSwatch then
+                    local row = Settings.CreateColorSwatch(category, setting, tooltip)
+                    if isAdvanced then Advanced(row) end
+                    Under(row, timerSwitch, TimersOn, TimersWhy)
+                end
+            end
+            local function TimerSlider(variable, key, label, tooltip, isAdvanced)
+                local limit = Opt.LIMITS[key]
+                local setting = TimerSetting(variable, NUMBER, label, key)
+                if not (setting and limit and Settings.CreateSlider and Settings.CreateSliderOptions) then return end
+                local options = Settings.CreateSliderOptions(limit[1], limit[2], 1)
+                if MinimalSliderWithSteppersMixin and options.SetLabelFormatter then
+                    options:SetLabelFormatter(MinimalSliderWithSteppersMixin.Label.Right)
+                end
+                local row = Settings.CreateSlider(category, setting, options, tooltip)
+                if isAdvanced then Advanced(row) end
+                Under(row, timerSwitch, TimersOn, TimersWhy)
+            end
+            local function TimerToggle(variable, key, label, tooltip, isAdvanced)
+                local setting = TimerSetting(variable, BOOL, label, key)
+                if setting and Settings.CreateCheckbox then
+                    local row = Settings.CreateCheckbox(category, setting, tooltip)
+                    if isAdvanced then Advanced(row) end
+                    Under(row, timerSwitch, TimersOn, TimersWhy)
+                end
+            end
+
+            Header("Timer bars", "The countdown bars RestedXP shows under its window while you wait for an event or a scene, or ride a flight. Only how they are drawn changes: their time, when they start and end, and what a step needs are RestedXP's own. While RestedXP's v2 guide window (beta) is on they are left as RestedXP draws them.")
+            TimerChoice("FillGradient", "fillGradient", "Fill gradient",
+                "How the fill shades from the fill color to the second color: left to right, bottom to top, or one color. The shading is drawn across the part of the bar that is filled, so it narrows as the bar runs down. If the game can't draw it, the average of the two colors is used.",
+                TM.GRADIENT_CHOICES)
+            TimerSwatch("FillColor", "fillColor", "Fill color",
+                "The color of the fill, or its darker end when it shades to a second color. The default is a burnished bronze.")
+            TimerSwatch("FillColor2", "fillColor2", "Fill gradient end color",
+                "The lighter end of the fill's shading (the right or the top). Not used when the gradient is set to None. The default is a muted antique gold.")
+            TimerSlider("FillOpacity", "fillOpacity", "Fill opacity",
+                "How solid the fill is, in percent. The background, border and text stay as they are.")
+            TimerSwatch("LabelColor", "labelColor", "Label color",
+                "The color of the text at the left of the bar: what you are waiting for.")
+            TimerSwatch("TimeColor", "timeColor", "Time color",
+                "The color of the remaining time at the right of the bar.")
+            TimerSlider("LabelSize", "labelSize", "Label size",
+                "The size of the label. The bar grows to fit a larger size, so the text is never cut off at the top or bottom. A label too long for the bar is cut short with an ellipsis, never run into the time.")
+            TimerSlider("TimeSize", "timeSize", "Time size",
+                "The size of the remaining time.")
+            TimerToggle("ShowIcon", "showIcon", "Show RestedXP's clock icon",
+                "The small pocket watch at the left of each bar. It is only a picture. Off, the bar takes its room.")
+            TimerSlider("BarHeight", "barHeight", "Bar height",
+                "How tall each bar is, in pixels. RestedXP's own is 16. Taller than the footer's strip, a bar covers the bottom of the list while it runs. RestedXP stacks several bars as it always did, and decides their width, which follows the window's.")
+            TimerSlider("TextPadding", "textPadding", "Text padding",
+                "The room between the label or the time and the bar's ends, in pixels.", true)
+
+            local timerLook = Appearance(TM.Look, "restedxpTimerLook", "bar", "Shows two made-up timer bars beside this window (a short and a long label) in the look set here. They are only a sample: no timer is started, nothing in RestedXP changes, and they go away when this window closes.",
+                function() TM.TogglePreview() end, nil, nil, timerSwitch, TimersOn, {
+                order = { "BgColor", "BorderColor", "BgTexture", "BgOpacity", "BorderTexture", "BorderSize", "BorderOpacity" },
+                advanced = { BgTexture = true, BgOpacity = true, BorderTexture = true, BorderSize = true, BorderOpacity = true },
+                advancedHeader = "Advanced timer bar look",
+                labels = {
+                    BgTexture = "Timer background texture", BgColor = "Timer background color",
+                    BgOpacity = "Timer background opacity", BorderTexture = "Timer border texture",
+                    BorderSize = "Timer border thickness", BorderColor = "Timer border color",
+                    BorderOpacity = "Timer border opacity",
+                },
+            })
+            for _, entry in ipairs(timerLook) do resettableTimers[#resettableTimers + 1] = entry end
+
+            Advanced(Header("Advanced timer bar text and fill", "Textures, fonts and outlines for the timer bars. The lists come from LibSharedMedia, so media other addons add appears here; EllesmereUI's textures are listed while it is installed."))
+            TimerChoice("FillTexture", "fillTexture", "Fill texture",
+                "The texture the fill is drawn with: a flat fill (the default, which shows the colors exactly), RestedXP's own bar texture, EllesmereUI's bar textures while it is installed, and any LibSharedMedia status bar texture. A texture that has gone is drawn as RestedXP's own and stays chosen.",
+                TM.FillChoices, true)
+            TimerChoice("LabelFont", "labelFont", "Label font",
+                "The font of the label. By default the same as the guide's step text. A font that has gone is drawn as that and stays chosen.",
+                TM.LabelFontChoices, true)
+            TimerChoice("LabelOutline", "labelOutline", "Label outline",
+                "An outline round the label. The default keeps light text readable over the fill.",
+                TM.OUTLINE_CHOICES, true)
+            TimerChoice("TimeFont", "timeFont", "Time font",
+                "The font of the remaining time. By default the same as the label's.", TM.TimeFontChoices, true)
+            TimerChoice("TimeOutline", "timeOutline", "Time outline",
+                "An outline round the remaining time. By default the same as the label's.", TM.TIME_OUTLINE_CHOICES, true)
+            local resetTimers = Button("Reset timer bars", "Reset", function()
+                for _, entry in ipairs(resettableTimers) do
+                    if entry.setting.SetValue then pcall(entry.setting.SetValue, entry.setting, entry.default) end
+                end
+                TM.Reset()
+            end, "Puts the timer bars' fill, text, size, background and border back to the defaults, and turns Skin timer bars on. Nothing else changes: not the window's look, RestedXP's settings or its timers.")
+            Under(resetTimers, rxpToggle, RxpOn)
+        end
+
         Advanced(Header("Advanced text", "Fonts and outlines. Sizes are set under Text size, or follow RestedXP's own Guide Font Size option."))
         TextChoice("TitleFont", "titleFont", "Title font",
             "The font of the guide's title, the footer and step number tabs. The list comes from LibSharedMedia, so fonts other addons add appear here. RestedXP's own is the default. A font that has gone is drawn as the default and stays chosen.",

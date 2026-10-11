@@ -121,7 +121,7 @@ local function Boot(opts)
     end
   end
   c.TwichUIDB = opts.db or { modules = {} }
-  for _, f in ipairs({ "modules/Borders.lua", "modules/MenuStyle.lua", "modules/RestedXPSkin.lua", "diag/Diagnostics.lua", "diag/RestedXPSkin.lua" }) do
+  for _, f in ipairs({ "modules/Borders.lua", "modules/MenuStyle.lua", "modules/RestedXPSkin.lua", "modules/RestedXPTimers.lua", "diag/Diagnostics.lua", "diag/RestedXPSkin.lua" }) do
     local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
   end
   if opts.ellesmere == false then c.EllesmereUI = nil end
