@@ -588,13 +588,17 @@ local function BuildShare(p)
     mine.save:SetPoint("TOPRIGHT", -16, -148)
     mine.saved = Text(p, "GameFontHighlightSmall")
     mine.saved:SetPoint("TOPLEFT", 16, -182)
-    mine.saved:SetWidth(WIDTH - 120)
+    mine.saved:SetWidth(WIDTH - 260)
     mine.delete = Btn(p, "Delete", 70, function()
         Confirm("TWICHUI_DELETE_MINE", "Delete your saved setup?\n\nFriends keep the copy they already have. This can't be undone, but you can save a new one any time.", function()
             ST:DeleteMine(); W:Refresh()
         end, { accept = DELETE })
     end)
     mine.delete:SetPoint("TOPRIGHT", -16, -177)
+    mine.review = Btn(p, "Review", 70, function()
+        if R.ExplorerWindow then R.ExplorerWindow.Show("share:preview") end
+    end, "Opens the Saved Data Explorer on exactly what Send sends from your saved setup: every message, what is in it, what is left out, and its size. Nothing is sent.")
+    mine.review:SetPoint("RIGHT", mine.delete, "LEFT", -6, 0)
     mine.recommend = Btn(p, "Recommend addons to friends", 220, function() W:ShowRecommend() end,
         "Optional. Lists addons your friends may want to install, with download links. It doesn't include their settings.")
     mine.recommend:SetPoint("TOPLEFT", 16, -212)
@@ -700,6 +704,7 @@ local function RefreshShare()
         mine.saved:SetText(GREY .. "Not saved yet.|r")
     end
     mine.delete:SetShown(m ~= nil)
+    mine.review:SetShown(m ~= nil)
 
     mine.hint:SetShown(mine.name:GetText() == "" and not mine.name:HasFocus())
     local o = SH.outgoing
@@ -2111,6 +2116,10 @@ local function BuildStorage()
     sp.note = Text(sp, "GameFontDisableSmall")
     sp.note:SetPoint("BOTTOMLEFT", 18, 6)
     sp.note:SetText("Deleted data leaves the saved file the next time you reload or log out.")
+    local explore = Btn(sp, "Look inside", 100, function()
+        if R.ExplorerWindow then R.ExplorerWindow.Show() end
+    end, "Opens the Saved Data Explorer: a read-only look at everything listed here and the rest of what TwichUI keeps.")
+    explore:SetPoint("BOTTOMRIGHT", -16, 12)
 end
 
 local function StorageRow(i)

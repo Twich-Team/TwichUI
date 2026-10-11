@@ -162,7 +162,7 @@ local function AddonTooltip(row)
     if a.title ~= a.name then GameTooltip:AddLine(a.name, 0.6, 0.6, 0.6) end
     GameTooltip:AddLine(a.statusText, 1, 0.82, 0)
     if a.own then
-        GameTooltip:AddLine("TwichUI's own data, as its .toc declares it. All of it is account-wide. Delete what you no longer need from Saved data, below.", nil, nil, nil, true)
+        GameTooltip:AddLine("TwichUI's own data, as its .toc declares it. All of it is account-wide. Look through it in the Saved Data Explorer; delete what you no longer need from Saved data, below.", nil, nil, nil, true)
     elseif #a.vars + #a.working > 0 then
         local first = SD.Found(a.vars[1] or a.working[1])
         GameTooltip:AddLine(("%d item(s) appeared as it loaded, in the scan on %s."):format(#a.vars + #a.working, When(first and first.seen)), nil, nil, nil, true)
@@ -223,7 +223,9 @@ end
 
 local function LeftClick(row)
     local d = row.data
-    if d.addon then
+    if d.explorer then
+        if R.ExplorerWindow then R.ExplorerWindow.Show() end
+    elseif d.addon then
         if #d.addon.vars + #d.addon.working == 0 then return end
         open[d.addon.name] = not open[d.addon.name] or nil
         DW:Refresh()
@@ -253,6 +255,12 @@ local function InitLeft(row, d)
         local bytes = a.status == "loaded" and #a.vars > 0 and AddonBytes(a)
         if a.status == "loaded" then right = bytes and ("about " .. SD.FormatSize(bytes)) or (#a.vars > 0 and "counting..." or "") end
         row.right:SetText(right)
+    elseif d.explorer then
+        row:SetScript("OnEnter", nil)
+        row.label:SetPoint("LEFT", 26, 0)
+        row.label:SetFontObject("GameFontHighlightSmall")
+        row.label:SetText(GOLD .. "Open in the Saved Data Explorer|r")
+        row.right:SetText("")
     elseif d.group then
         row:SetScript("OnEnter", GroupTooltip)
         row.label:SetPoint("LEFT", 26, 0)
@@ -272,7 +280,10 @@ local function LeftRows()
     local rows = {}
     for _, a in ipairs(addons) do
         rows[#rows + 1] = { addon = a }
-        if open[a.name] then
+        -- TwichUI's own data has its own explorer, which knows what each part is.
+        if open[a.name] and a.own then
+            rows[#rows + 1] = { explorer = true }
+        elseif open[a.name] then
             for _, name in ipairs(a.vars) do rows[#rows + 1] = { name = name } end
             if #a.working > 0 then
                 rows[#rows + 1] = { group = a }

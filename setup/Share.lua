@@ -98,26 +98,41 @@ local function RunJobs()
     local start = clock()
     while jobs[1] and clock() - start < BUDGET_MS do
         local job = jobs[1]
-        local ok, finished = pcall(job.step)
-        if not ok then
+        if job.cancelled then
             table.remove(jobs, 1)
-            pcall(job.fail, finished)
-        elseif finished then
-            table.remove(jobs, 1)
+        else
+            local ok, finished = pcall(job.step)
+            if not ok then
+                table.remove(jobs, 1)
+                pcall(job.fail, finished)
+            elseif finished then
+                table.remove(jobs, 1)
+            end
         end
     end
     if not jobs[1] then jobFrame:SetScript("OnUpdate", nil) end
 end
 
-local function AddJob(step, fail)
-    jobs[#jobs + 1] = { step = step, fail = fail }
+-- Returns the job; setting job.cancelled drops it before its next step (nothing is called back).
+-- A background job (a preview's size) waits behind every transfer's job, never in front of one.
+local function AddJob(step, fail, background)
+    local job = { step = step, fail = fail, background = background }
+    local at = #jobs + 1
+    if not background then
+        -- Each job keeps its own place, so one half done simply waits.
+        for i, j in ipairs(jobs) do
+            if j.background then at = i break end
+        end
+    end
+    table.insert(jobs, at, job)
     jobFrame:SetScript("OnUpdate", RunJobs)
+    return job
 end
 
-local function EncodeBig(t, done, fail)
+local function EncodeBig(t, done, fail, background)
     local handler = LibSerialize:SerializeAsync(t)
     local serialized, pos, pieces = nil, 1, {}
-    AddJob(function()
+    return AddJob(function()
         if not serialized then
             local completed, result = handler()
             if completed then serialized = result end
@@ -132,7 +147,7 @@ local function EncodeBig(t, done, fail)
         local enc = LibDeflate:EncodeForWoWAddonChannel(LibDeflate:CompressDeflate(slice, { level = 5 }))
         pieces[#pieces + 1] = #enc .. ":" .. enc
         return false
-    end, fail)
+    end, fail, background)
 end
 
 local function DecodeBig(str, done, fail)
@@ -420,6 +435,68 @@ local function StartWatchdog()
     end)
 end
 
+---------------------------------------------------------------------------
+-- What is sent, built without sending. SendTo and SendData use these, and so does the Saved Data
+-- Explorer's preview, so the preview is the real message. They read your saved setup and change
+-- nothing: no transfer is started, no id is drawn (the caller passes one), nothing is stored.
+-- Send() adds the recipient's name ("to") to a control message when it goes out.
+---------------------------------------------------------------------------
+function SH.BuildOffer(mine, id)
+    local list = {}
+    for tname, e in pairs(mine.tables) do list[tname] = { owner = e.owner, hash = e.hash } end
+    return {
+        t = "offer", p = PROTOCOL, id = id,
+        from = SH.SelfName(), created = mine.created, version = mine.version,
+        tables = list, em = mine.editModeHash, addons = ST.CountAddons(mine),
+        bytes = ST.PackBytes(mine),
+    }
+end
+
+-- want: the table names the friend asked for (all of them the first time); wantEM: they asked for the
+-- Edit Mode layout. The settings are referenced, not copied: your saved setup is not changed after it
+-- is saved (saving again makes a new one).
+function SH.BuildData(mine, id, want, wantEM)
+    local tables = {}
+    for _, tname in ipairs(want or {}) do
+        local e = mine.tables[tname]
+        if e then tables[tname] = { owner = e.owner, data = e.data, hash = e.hash } end
+    end
+    local payload = {
+        t = "data", p = PROTOCOL, id = id,
+        meta = { created = mine.created, version = mine.version, source = mine.source, sourceName = mine.sourceName },
+        keep = {}, tables = tables,
+    }
+    for tname, e in pairs(mine.tables) do payload.keep[tname] = { owner = e.owner, hash = e.hash } end
+    if wantEM and mine.editMode then payload.em, payload.emName = mine.editMode, mine.editModeName end
+    payload.emHash = mine.editModeHash
+    payload.addons = mine.addons
+    payload.eui = mine.eui   -- one EllesmereUI profile, as EllesmereUI exported it
+    return payload
+end
+
+-- A data payload packed exactly as it is for sending (a few frames' work, behind any transfer's own).
+-- Returns a handle whose Cancel() drops the work; done(encoded) is then never called.
+function SH.EncodeData(payload, done, fail)
+    local job = EncodeBig(payload, done, fail, true)
+    return { Cancel = function() job.cancelled = true end }
+end
+
+-- A control message as it goes out (the recipient's name is added first; see Send).
+function SH.EncodeControl(msg) return Encode(msg) end
+
+-- How an encoded payload is split over the data lanes: the texts handed to the game, and their total size.
+function SH.LanePieces(id, encoded)
+    local nLanes = math.max(1, math.min(#LANES, math.ceil(#encoded / 1500)))
+    local per = math.ceil(#encoded / nLanes)
+    local pieces, total = {}, 0
+    for i = 1, nLanes do
+        local text = ("%s:%d:%d:"):format(id, i, nLanes) .. encoded:sub((i - 1) * per + 1, i * per)
+        pieces[i] = text
+        total = total + #text
+    end
+    return pieces, total
+end
+
 -- Returns false, reason if it can't start.
 -- selfTest: send to your own character. It goes through the real addon
 -- message path, so you can try the whole flow without a friend.
@@ -445,18 +522,11 @@ function SH:SendTo(name, selfTest)
     local route, why = SH.Route(target)
     if not route then return false, why end
 
-    local list = {}
-    for tname, e in pairs(mine.tables) do list[tname] = { owner = e.owner, hash = e.hash } end
     local id = NewId()
     local o = { target = target, id = id, stage = "offered", sent = 0, total = 0, started = GetTime(), route = route }
     SH.outgoing = o
     StartWatchdog()
-    Send(target, {
-        t = "offer", p = PROTOCOL, id = id,
-        from = SH.SelfName(), created = mine.created, version = mine.version,
-        tables = list, em = mine.editModeHash, addons = ST.CountAddons(mine),
-        bytes = ST.PackBytes(mine),
-    }, "ALERT", route, function()
+    Send(target, SH.BuildOffer(mine, id), "ALERT", route, function()
         if SH.outgoing == o and o.stage == "offered" then
             o.stage = "failed"; o.reason = RefusedReason(route, SH.Short(target))
             Code(o, "offer-refused-by-game", target)
@@ -542,22 +612,7 @@ function SH:CancelSend()
 end
 
 local function SendData(o, want, wantEM)
-    local mine = ST.Mine()
-    local tables = {}
-    for _, tname in ipairs(want or {}) do
-        local e = mine.tables[tname]
-        if e then tables[tname] = { owner = e.owner, data = e.data, hash = e.hash } end
-    end
-    local payload = {
-        t = "data", p = PROTOCOL, id = o.id,
-        meta = { created = mine.created, version = mine.version, source = mine.source, sourceName = mine.sourceName },
-        keep = {}, tables = tables,
-    }
-    for tname, e in pairs(mine.tables) do payload.keep[tname] = { owner = e.owner, hash = e.hash } end
-    if wantEM and mine.editMode then payload.em, payload.emName = mine.editMode, mine.editModeName end
-    payload.emHash = mine.editModeHash
-    payload.addons = mine.addons
-    payload.eui = mine.eui   -- one EllesmereUI profile, as EllesmereUI exported it
+    local payload = SH.BuildData(ST.Mine(), o.id, want, wantEM)
 
     o.stage = "packing"
     o.last = GetTime()
@@ -576,14 +631,8 @@ local function SendData(o, want, wantEM)
 end
 
 function SH.SendLanes(o, encoded)
-    local nLanes = math.max(1, math.min(#LANES, math.ceil(#encoded / 1500)))
-    local per = math.ceil(#encoded / nLanes)
-    local pieces, total = {}, 0
-    for i = 1, nLanes do
-        local text = ("%s:%d:%d:"):format(o.id, i, nLanes) .. encoded:sub((i - 1) * per + 1, i * per)
-        pieces[i] = text
-        total = total + #text
-    end
+    local pieces, total = SH.LanePieces(o.id, encoded)
+    local nLanes = #pieces
     o.stage = "sending"
     o.last = GetTime()
     o.sent, o.total = 0, total

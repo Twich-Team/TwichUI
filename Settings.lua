@@ -1293,6 +1293,10 @@ local function Build()
         if SettingsPanel and SettingsPanel:IsShown() then HideUIPanel(SettingsPanel) end
         if R.StoredDataWindow then R.StoredDataWindow:Show() end
     end, "See which addons keep data between sessions, about how big it is, and look through it. Read-only: nothing can be changed there (same as typing /tui data).")
+    Button("Saved Data Explorer", "Open", function()
+        if SettingsPanel and SettingsPanel:IsShown() then HideUIPanel(SettingsPanel) end
+        if R.ExplorerWindow then R.ExplorerWindow.Show() end
+    end, "Look through what TwichUI keeps: its settings, your backups and Undo copies, your saved setup, setups friends sent, the Journey Chronicle, and exactly what Send would send. Read-only: nothing is changed, restored or sent there (same as typing /tui saved).")
     Advanced(Header("Advanced"))
     Advanced(Choice("shareTransport", "Send configurations by",
         "How your configuration travels when you press Send. TwichUI uses only the one you pick and never switches by itself if it fails. Receiving works on all three, whatever you pick here.\n\n" .. R.Share.TRANSPORT_EXPLAIN,

@@ -31,6 +31,9 @@ diagnostic traces and timers, pending transfers, acknowledgments and timeouts (`
 callbacks, animations and event registrations. A test saves a session that used all of these and checks that no
 variable holds anything but plain data, that only declared fields exist, and that none of it returns after a reload.
 
+To look through these tables in the game, read-only, use the Saved Data Explorer (`/tui saved`; see
+`docs/saved-data-explorer.md`).
+
 ## Versions and upgrade paths
 
 Two numbers, separate from the release version (`## Version:` in the `.toc`):
