@@ -303,7 +303,7 @@ function P.Normalize(db, fresh)
     -- Groups the features write into without checking first.
     if type(db.ui) == "table" then
         for _, k in ipairs({ "qol", "foodDrink", "brokerMenu", "refreshments", "refreshmentsStyle",
-            "restedxpSkin", "restedxpSkinText", "restedxpSkinState", "restedxpTimerLook", "restedxpTimerText", "chronicleLook", "chronicleAppearance", "guideWaypoint", "mageSell",
+            "restedxpSkin", "restedxpSkinText", "restedxpSkinState", "restedxpTimerLook", "restedxpTimerText", "speakstoneSkin", "speakstoneSkinStyle", "chronicleLook", "chronicleAppearance", "guideWaypoint", "mageSell",
             "partyPins", "pinsLook", "pinsAppearance", "pinsMapText", "pinsBroker", "pinsBrokerMenu", "pinsEditorLook" }) do
             if db.ui[k] ~= nil and type(db.ui[k]) ~= "table" then
                 db.ui[k] = nil

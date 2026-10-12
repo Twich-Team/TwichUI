@@ -9,7 +9,7 @@ built from its standard controls; TwichUI does not skin it. Workflows with lists
 | File | Holds |
 |---|---|
 | `settings/Kit.lua` | The page list (`K.Page`), the controls every page uses (`K.Toggle`, `K.Proxy`, `K.Choice`, `K.Slider`, `K.Swatch`, `K.Dropdown`, `K.Checkbox`, `K.Button`, `K.Header`, `K.Appearance`, `K.ResetButton`), `K.Advanced`/`K.Under`, the overview's rows, `K.SetSwitch` |
-| `settings/<Page>.lua` | One page each: `Gear`, `Notifications`, `QoL`, `FoodDrink`, `Mage`, `Chronicle` (+ Chronicle appearance), `Pins` (+ Pin appearance), `Auction`, `Skins`, `RestedXP`, `Sharing`, `Troubleshooting`, `Overview` |
+| `settings/<Page>.lua` | One page each: `Gear`, `Notifications`, `QoL`, `FoodDrink`, `Mage`, `Chronicle` (+ Chronicle appearance), `Pins` (+ Pin appearance), `Auction`, `Skins`, `RestedXP`, `SpeakStone`, `Sharing`, `Troubleshooting`, `Overview` |
 | `settings/Register.lua` | At start-up: makes the pages in order, builds each in its own `pcall`, adds a page's Advanced row, builds the overview last, adds TwichUI to the AddOns list |
 
 Load order (`.toc`): after every feature, `Kit.lua` first, `Register.lua` last. Nothing is built until TwichUI's
@@ -27,13 +27,13 @@ TwichUI   overview: a row per page with its status, Help, General (Show advanced
 ├ Journey Chronicle › Chronicle appearance
 ├ Party pins › Pin appearance
 ├ Auction House
-├ Addon skins › RestedXP guide window
+├ Addon skins › RestedXP guide window, SpeakStone speech frame
 ├ Configuration sharing
 └ Troubleshooting
 ```
 
 `R:OpenSettings(key)` opens a page by its key (`gear`, `notifications`, `qol`, `food`, `mage`, `chronicle`,
-`chronicleLook`, `pins`, `pinsLook`, `auction`, `skins`, `restedxp`, `sharing`, `troubleshooting`; none for the
+`chronicleLook`, `pins`, `pinsLook`, `auction`, `skins`, `restedxp`, `speakstone`, `sharing`, `troubleshooting`; none for the
 overview).
 
 ## Adding a page

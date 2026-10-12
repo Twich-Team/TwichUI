@@ -97,5 +97,12 @@ K.Page({
             Button("RestedXP guide window", "Open its settings", function() R:OpenSettings("restedxp") end,
                 "Opens the RestedXP guide window page, under Addon skins: the switch, the look, text, spacing, scroll bar, header and footer, and the waypoint arrow.")
         end
+
+        -- SpeakStone: the same, its own page, not through EllesmereUI.
+        if R.SpeakStoneSkin then
+            Header("SpeakStone speech frame", "Gives SpeakStone's speech frame a TwichUI look: background and border, fonts and colors, the controls, the portrait and the progress line. Its settings are on a page of their own, under this one.")
+            Button("SpeakStone speech frame", "Open its settings", function() R:OpenSettings("speakstone") end,
+                "Opens the SpeakStone speech frame page, under Addon skins: the switch, the look, text, controls, portrait, progress line and spacing.")
+        end
     end,
 })

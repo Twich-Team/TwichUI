@@ -21,6 +21,7 @@ local DEFAULT_MODULES = {
     foreverDungeonJournalSkin = true, -- EllesmereUI look for Forever Dungeon Journal
     attuneSkin = true,       -- EllesmereUI look for Attune
     restedxpSkin = false,    -- TwichUI's look for the RestedXP guide window (needs RestedXP; opt-in; not through EllesmereUI)
+    speakstoneSkin = false,  -- TwichUI's look for SpeakStone's speech frame (needs SpeakStone; opt-in; not through EllesmereUI)
     setupSharing = true,     -- capture / send / receive / apply setups
     acceptSetups = true,     -- let friends offer setups (always asks first)
     quietLogin = true,       -- hide addon welcome messages at login/reload

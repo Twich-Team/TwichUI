@@ -24,7 +24,7 @@ c.Settings = {
   VarType = {Boolean = "boolean", String = "string", Number = "number"},
   RegisterVerticalLayoutCategory = function(name) return {GetID = function() return 1 end, name = name}, {AddInitializer = function() end} end,
   RegisterVerticalLayoutSubcategory = function(parent, name)
-    local under = { ["RestedXP guide window"] = "Addon skins", ["Chronicle appearance"] = "Journey Chronicle", ["Pin appearance"] = "Party pins" }
+    local under = { ["RestedXP guide window"] = "Addon skins", ["SpeakStone speech frame"] = "Addon skins", ["Chronicle appearance"] = "Journey Chronicle", ["Pin appearance"] = "Party pins" }
     assert(parent.name == (under[name] or "TwichUI"),
       "pages sit directly under TwichUI, except the appearance pages, each under the page it belongs to: " .. name)
     table.insert(pageOrder, name)
@@ -79,7 +79,7 @@ for _, f in ipairs({ "gear/Weights.lua", "gear/Evaluate.lua", "gear/Prefs.lua", 
   "gear/Hints.lua", "gear/Tooltip.lua", "gear/Bags.lua", "gear/Window.lua", "modules/Notify.lua", "modules/Arrival.lua", "modules/Media.lua", "modules/FriendLogin.lua", "modules/Borders.lua", "modules/FoodDrink.lua", "modules/FoodDrinkUnlock.lua",
   "modules/TrainingData.lua", "modules/Borders.lua", "modules/MenuStyle.lua", "modules/SpellMenu.lua", "modules/MageTravel.lua", "modules/MageConjure.lua",
   "chronicle/Style.lua", "chronicle/Appearance.lua", "modules/Refreshments.lua", "modules/RefreshmentsPanel.lua", "modules/RefreshmentsShares.lua", "modules/RefreshmentsTrade.lua", "modules/RefreshmentsBroker.lua", "modules/MageSell.lua", "modules/MageSellWindow.lua",
-  "modules/RestedXPSkin.lua", "modules/RestedXPTimers.lua", "qol/QoL.lua", "qol/Summons.lua", "qol/Resurrect.lua", "qol/ReleasePvP.lua", "qol/Duels.lua", "qol/QuickKeybind.lua", "qol/GuideWaypoint.lua",
+  "modules/RestedXPSkin.lua", "modules/RestedXPTimers.lua", "modules/SpeakStoneSkin.lua", "qol/QoL.lua", "qol/Summons.lua", "qol/Resurrect.lua", "qol/ReleasePvP.lua", "qol/Duels.lua", "qol/QuickKeybind.lua", "qol/GuideWaypoint.lua",
   "pins/Pins.lua", "pins/Sync.lua", "pins/Look.lua", "pins/Map.lua", "pins/Minimap.lua", "pins/Editor.lua", "pins/Window.lua", "pins/BrokerMenu.lua", "pins/Broker.lua",
   unpack(SettingsFiles()) }) do
   local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
@@ -94,7 +94,7 @@ for key, default in pairs(defaults) do
   n = n + 1
   assert(default == R.DEFAULT_MODULES[key], key .. " default matches a new install")
 end
-assert(n == 53, "every module has a toggle: " .. n)
+assert(n == 54, "every module has a toggle: " .. n)
 assert(defaults.restedxpSkin == false, "the RestedXP skin is opt-in")
 assert(defaults.arrival == true and defaults.arrivalSubzones == true and defaults.arrivalReducedMotion == false,
   "arrival card and subzone cards on; reduced motion opt-in")
@@ -261,7 +261,7 @@ assert(attune.data.tooltip:find("after reload"), "toggle change shows it needs a
 
 -- The overview links to one page per feature, in this order; every setting
 -- is on exactly one page (registration above refuses a repeat).
-assert(table.concat(pageOrder, ",") == "Gear comparison,Notifications,Quality of life,Food and drink,Mage,Journey Chronicle,Chronicle appearance,Party pins,Pin appearance,Auction House,Addon skins,RestedXP guide window,Configuration sharing", table.concat(pageOrder, ","))
+assert(table.concat(pageOrder, ",") == "Gear comparison,Notifications,Quality of life,Food and drink,Mage,Journey Chronicle,Chronicle appearance,Party pins,Pin appearance,Auction House,Addon skins,RestedXP guide window,SpeakStone speech frame,Configuration sharing", table.concat(pageOrder, ","))
 for variable, page in pairs({
   TWICHUI_media = "TwichUI", TWICHUI_quietLogin = "TwichUI", TWICHUI_showAdvanced = "TwichUI", 
   TWICHUI_gearHints = "Gear comparison", TWICHUI_gearTree = "Gear comparison", TWICHUI_gearBagStyle = "Gear comparison",
@@ -813,6 +813,116 @@ do
     "sizes, spacing and what shows are part of the appearance reset")
   assert(c.TwichUIDB.modules.restedxpSkin == true, "the switch is not part of the look")
   c.TwichUIDB.modules.restedxpSkin = false
+end
+
+-- SpeakStone skin: opt-in; its page sits right under Addon skins; the everyday rows are in plain view and the
+-- technical ones Advanced; everything is greyed out with the switch off; each row writes through and refuses what
+-- is invalid; the sample line asks SpeakStone's own command; Reset touches only this look.
+do
+  local SS = R.SpeakStoneSkin
+  assert(SS, "the module is loaded")
+  assert(defaults.speakstoneSkin == false, "the SpeakStone skin is opt-in")
+  local function RowFor(variable)
+    for _, i in ipairs(initializers) do if i.setting == proxies[variable] then return i end end
+  end
+  local function Find(name) for _, i in ipairs(initializers) do if i.data.name == name then return i end end end
+  local toggle = Find("Skin the SpeakStone speech frame")
+  assert(toggle and toggle.GetTooltip and toggle:GetTooltip():find("Status: ", 1, true), "its tooltip says where it stands")
+  assert(toggle:GetTooltip():find("Off", 1, true), "off by default")
+  assert(toggle:GetTooltip():find("no reload is needed", 1, true), "and that it can be turned off live")
+  assert(variables.TWICHUI_speakstoneSkin == "SpeakStone speech frame", "the switch is on its own page")
+  assert(R.settingsCategories.speakstone, "R:OpenSettings can open it")
+
+  local common = { "TWICHUI_speakstoneLookBgColor", "TWICHUI_speakstoneLookBgOpacity", "TWICHUI_speakstoneLookBorderColor",
+    "TWICHUI_speakstoneNameFont", "TWICHUI_speakstoneNameSize", "TWICHUI_speakstoneNameColor",
+    "TWICHUI_speakstoneTextFont", "TWICHUI_speakstoneTextSize", "TWICHUI_speakstoneTextColor", "TWICHUI_speakstoneTimeColor",
+    "TWICHUI_speakstoneButtonText", "TWICHUI_speakstoneButtonFill", "TWICHUI_speakstoneButtonBorder", "TWICHUI_speakstoneAccentColor",
+    "TWICHUI_speakstoneRightClickClose",
+    "TWICHUI_speakstoneShowPortrait", "TWICHUI_speakstonePortraitSize", "TWICHUI_speakstonePortraitShape",
+    "TWICHUI_speakstonePortraitBorderColor", "TWICHUI_speakstoneShowProgress", "TWICHUI_speakstoneProgressColor",
+    "TWICHUI_speakstoneTrackColor", "TWICHUI_speakstoneProgressHeight" }
+  for _, v in ipairs(common) do
+    local row = RowFor(v)
+    assert(row and #row.shown == 0, v .. " is a common setting")
+    assert(not row:Enabled(), v .. " is greyed out while the skin is off")
+  end
+  for _, v in ipairs({ "TWICHUI_speakstoneLookBgTexture", "TWICHUI_speakstoneLookBorderTexture", "TWICHUI_speakstoneLookBorderSize",
+    "TWICHUI_speakstoneLookBorderOpacity", "TWICHUI_speakstoneTimeFont", "TWICHUI_speakstoneTimeSize",
+    "TWICHUI_speakstoneButtonFont", "TWICHUI_speakstoneButtonSize", "TWICHUI_speakstoneLineSpacing",
+    "TWICHUI_speakstonePadding", "TWICHUI_speakstonePortraitBorderSize" }) do
+    local row = RowFor(v)
+    assert(row and #row.shown > 0, v .. " is under Advanced")
+  end
+  c.TwichUIDB.modules.speakstoneSkin = true
+  assert(RowFor("TWICHUI_speakstoneNameColor"):Enabled(), "enabled with the skin on")
+  c.TwichUIDB.modules.speakstoneSkin = false
+
+  assert(RowFor("TWICHUI_speakstoneTextSize").options.min == 10 and RowFor("TWICHUI_speakstoneTextSize").options.max == 24)
+  proxies.TWICHUI_speakstoneLookBgOpacity.set(40)
+  proxies.TWICHUI_speakstoneNameColor.set("ff102030")
+  proxies.TWICHUI_speakstoneTextSize.set(15)
+  proxies.TWICHUI_speakstonePortraitShape.set("square")
+  proxies.TWICHUI_speakstoneShowProgress.set(false)
+  assert(SS.Style.Get("rightClickClose") == true, "closing with a right-click is on by default")
+  proxies.TWICHUI_speakstoneRightClickClose.set(false)
+  assert(SS.Style.Get("rightClickClose") == false and proxies.TWICHUI_speakstoneRightClickClose.get() == false)
+  assert(SS.Look.Get("bgOpacity") == 40 and SS.Style.Get("nameColor") == "ff102030" and SS.Style.Get("textSize") == 15
+    and SS.Style.Get("portraitShape") == "square" and SS.Style.Get("showProgress") == false)
+  assert(proxies.TWICHUI_speakstoneTextSize.get() == 15, "reads back the saved value")
+  proxies.TWICHUI_speakstoneTextSize.set(99)          -- refused, not saved
+  proxies.TWICHUI_speakstonePortraitShape.set("oval")
+  proxies.TWICHUI_speakstoneNameColor.set("gold")
+  assert(SS.Style.Get("textSize") == 15 and SS.Style.Get("portraitShape") == "square" and SS.Style.Get("nameColor") == "ff102030")
+  -- the name's font is listed with SpeakStone's own first, and a font that has gone stays listed, marked
+  proxies.TWICHUI_speakstoneNameFont.set("Some Font")
+  local container = dropdowns.TWICHUI_speakstoneNameFont()
+  local marked
+  for _, entry in ipairs(container) do if entry.value == "Some Font" then marked = entry.label end end
+  assert(marked and marked:find("not available", 1, true), "a missing font stays listed, marked")
+  assert(container[1].value == "default", "SpeakStone's own font is first")
+  local shapes = dropdowns.TWICHUI_speakstonePortraitShape()
+  assert(#shapes == 2 and shapes[1].value == "round", "round is first")
+
+  -- the sample line is SpeakStone's own command, and a missing one is not an error
+  local sample = Find("Sample line")
+  assert(sample and sample.click and not sample:Enabled(), "a sample line row, greyed out with the skin off")
+  local asked
+  c.SlashCmdList = c.SlashCmdList or {}
+  c.SlashCmdList.SPEAKSTONE = function(msg) asked = msg end
+  sample.click()
+  assert(asked == "frame", "it asks /ss frame")
+  c.SlashCmdList.SPEAKSTONE = nil
+  sample.click()
+
+  -- listed right under Addon skins, with a pointer on that page
+  local skinsPageIndex, ownPageIndex
+  for i, name in ipairs(pageOrder) do
+    if name == "Addon skins" then skinsPageIndex = i elseif name == "SpeakStone speech frame" then ownPageIndex = i end
+  end
+  assert(skinsPageIndex and ownPageIndex and ownPageIndex > skinsPageIndex, "listed under Addon skins")
+  local pointerButton
+  for _, i in ipairs(initializers) do if i.click and i.data.name == "SpeakStone speech frame" then pointerButton = i end end
+  assert(pointerButton, "a pointer button on the Addon skins page")
+  pointerButton.click()
+  assert(c.opened == R.settingsCategories.speakstone:GetID(), "it opens the page")
+
+  -- reset: only this look; the switch and the rest of TwichUI stay
+  c.TwichUIDB.modules.speakstoneSkin = true
+  Find("Reset appearance")  -- RestedXP's page has one of the same name: the one for this page is the last built
+  local resets = {}
+  for _, i in ipairs(initializers) do if i.click and i.data.name == "Reset appearance" then resets[#resets + 1] = i end end
+  local mine
+  for _, i in ipairs(resets) do
+    if i.data.tooltip and i.data.tooltip:find("SpeakStone", 1, true) then mine = i end
+  end
+  assert(mine, "its own reset button")
+  mine.click()
+  assert(SS.Look.Get("bgOpacity") == SS.Look.DEFAULTS.bgOpacity and SS.Style.Get("nameColor") == SS.Style.DEFAULTS.nameColor
+    and SS.Style.Get("textSize") == 13 and SS.Style.Get("portraitShape") == "round" and SS.Style.Get("showProgress") == true
+    and SS.Style.Get("nameFont") == "Cinzel" and SS.Style.Get("rightClickClose") == true, "everything of the look is back")
+  assert(c.TwichUIDB.modules.speakstoneSkin == true, "the switch is not part of the look")
+  assert(proxies.TWICHUI_speakstoneTextSize.get() == 13, "and the control shows it")
+  c.TwichUIDB.modules.speakstoneSkin = false
 end
 
 -- RestedXP timer bars: a group on RestedXP's page, greyed out unless the skin and "Skin timer bars" are on,
