@@ -535,8 +535,10 @@ local function Build()
     -- state its OnLoad already left showing.
     scroll.scrollBarHideable = true
     scroll.ScrollBar:Hide()
-    scroll.ScrollBar.ScrollUpButton:Hide()
-    scroll.ScrollBar.ScrollDownButton:Hide()
+    for _, key in ipairs({ "ScrollUpButton", "ScrollDownButton" }) do
+        local arrow = scroll.ScrollBar[key]
+        if arrow then arrow:Hide() end
+    end
     content = CreateFrame("Frame", nil, scroll)
     content:SetSize(WIDTH - PAD * 2, 1)
     scroll:SetScrollChild(content)
