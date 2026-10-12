@@ -165,7 +165,8 @@ function PW.Actions(e)
     Add("waypoint", "Set waypoint", function() R.PinsMap.SetWaypoint(e) end,
         "Puts the game's own waypoint here. It replaces the waypoint you had, as setting one on the map does.")
     if not party or pin.mine then
-        Add("edit", "Edit pin...", function() R.PinsEditor.OpenEdit(e) end,
+        -- asked as "keep": the editor opens whenever Keep can change, and refuses a new name or color itself
+        Add("keep", "Edit pin...", function() R.PinsEditor.OpenEdit(e) end,
             party and "Changes its name or color for everyone in the party who has it, and whether you keep it." or "Changes this pin's name or color, and whether it is kept: protected from deletion and cleanup.")
     end
     if party then

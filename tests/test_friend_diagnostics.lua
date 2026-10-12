@@ -173,7 +173,7 @@ assert(Has(Report(), "never started this session"), "the report says why there i
 ---------------------------------------------------------------------------
 local friend = Section(Report(), "Friend notifications")
 assert(Has(friend, "Friend notifications: configured on, initialized yes, ready"), friend)
-assert(Has(friend, "friend login card: on; chime: on (follows the SFX volume)"), friend)
+assert(Has(friend, "friend login card: on; chime: on, default (follows the SFX volume)"), friend)
 assert(Has(friend, "required events: 8 of 8 registered"), friend)
 assert(Has(friend, "would show a login now: yes"), friend)
 assert(Has(friend, "game's own pop-up: event-removed; TwichUI has taken the event from it: yes"), friend)

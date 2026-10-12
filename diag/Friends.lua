@@ -269,7 +269,7 @@ local function Friend()
     end
     local lines = {}
     local function Line(fmt, ...) lines[#lines + 1] = fmt:format(...) end
-    Line("friend login card: %s; chime: %s (follows the %s volume)", s.enabled and "on" or "off", s.soundOn and "on" or "off", s.channel)
+    Line("friend login card: %s; chime: %s, %s (follows the %s volume)", s.enabled and "on" or "off", s.soundOn and "on" or "off", s.chime, s.channel)
     if s.enabled then
         Line("required events: %d of %d registered%s", #s.wantedEvents - #missing, #s.wantedEvents,
             #missing > 0 and ("; missing: " .. table.concat(missing, ", ")) or "")

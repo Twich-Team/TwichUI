@@ -29,6 +29,11 @@ local LANE_SET = {}
 for i, p in ipairs(LANES) do LANE_SET[p] = i end
 local OFFER_TIMEOUT = 120      -- seconds to wait for the friend to click Accept
 local DATA_TIMEOUT = 60        -- seconds of silence before a transfer is called off
+-- An encoded control message, after AceComm has joined its pieces. Anyone can whisper one, and it is
+-- decompressed before it can be read, so a longer one is dropped unread. An offer listing 400 settings
+-- tables is about 18 KB; the largest legitimate message is an offer, which is checked against this
+-- before it is sent.
+local MAX_CONTROL = 65536
 
 SH.outgoing = nil   -- { target, id, stage, sent, total, started, want }
 SH.incoming = {}    -- [sender] = { id, offer, stage, expected, got }
@@ -523,10 +528,16 @@ function SH:SendTo(name, selfTest)
     if not route then return false, why end
 
     local id = NewId()
+    local offer = SH.BuildOffer(mine, id)
+    offer.to = target
+    if #Encode(offer) > MAX_CONTROL then
+        -- a receiver would drop it unread (OnControl), so it is not sent to wait for an answer that can't come
+        return false, "Your saved setup lists too many settings to offer at once. Select fewer and save it again."
+    end
     local o = { target = target, id = id, stage = "offered", sent = 0, total = 0, started = GetTime(), route = route }
     SH.outgoing = o
     StartWatchdog()
-    Send(target, SH.BuildOffer(mine, id), "ALERT", route, function()
+    Send(target, offer, "ALERT", route, function()
         if SH.outgoing == o and o.stage == "offered" then
             o.stage = "failed"; o.reason = RefusedReason(route, SH.Short(target))
             Code(o, "offer-refused-by-game", target)
@@ -887,6 +898,12 @@ end
 
 OnControl = function(_, text, dist, sender)
     sender = SH.FullName(sender)
+    if type(text) ~= "string" or #text > MAX_CONTROL then
+        SH.lastDropped = ("oversized message from %s"):format(tostring(sender))
+        SH.droppedCode = "control-too-large"
+        Trace("ignored", SH.droppedCode, sender)
+        return
+    end
     local okDecode, msg = pcall(Decode, text)
     if not okDecode then Fail("reading a message", msg) return end
     if not msg or type(msg.t) ~= "string" then

@@ -165,7 +165,9 @@ end
 
 function PS.UpdateParty(key, fields)
     local pin = PN.Shared(key)
-    local ok, why = PN.Can("edit", { kind = "party", pin = pin or { key = key } })
+    -- a change of Keep alone sends nothing, so only it is allowed while sending is not
+    local sends = fields.name ~= nil or fields.color ~= nil
+    local ok, why = PN.Can(sends and "edit" or "keep", { kind = "party", pin = pin or { key = key } })
     if not ok then return nil, why end
     local updated, shared = PN.UpdateOwn(key, fields)
     if not updated then return nil, PN.Reason(shared) end

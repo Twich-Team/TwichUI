@@ -172,6 +172,15 @@ assert(channel and channel.default == "SFX" and channel.get() == "SFX", "Sound E
 channel.set("Master"); assert(c.TwichUIDB.ui.friendLoginChannel == "Master" and channel.get() == "Master")
 local channels = dropdowns.TWICHUI_friendLoginChannel()
 assert(#channels == 4 and channels[1].value == "SFX" and channels[4].value == "Master" and channels[2].tooltip:find("Dialog"), "four channels, each explained")
+local chimeSound = proxies.TWICHUI_friendLoginChime
+assert(chimeSound and variables.TWICHUI_friendLoginChime == "Notifications", "a sound choice on the Notifications page")
+assert(chimeSound.default == "TwichUI Notification" and chimeSound.get() == "TwichUI Notification", "the notification chime by default")
+local chimeChoices = dropdowns.TWICHUI_friendLoginChime()
+local chimeAt = {}
+for i, choice in ipairs(chimeChoices) do chimeAt[choice.value] = i end
+assert(chimeAt["TwichUI Notification"] and chimeAt["TwichUI Drums"] and chimeAt["TwichUI Map Pin"], "TwichUI's sounds are offered, the drums among them")
+chimeSound.set("TwichUI Drums"); assert(c.TwichUIDB.ui.friendLoginChime == "TwichUI Drums" and chimeSound.get() == "TwichUI Drums")
+chimeSound.set("TwichUI Notification")
 local heard = {}
 c.PlaySoundFile = function(path, ch) heard[#heard + 1] = { path = path, channel = ch }; return true end
 local hear, chime

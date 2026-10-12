@@ -186,6 +186,24 @@ assert(PN.IsKept(camp) and sent() == sentBefore and camp.rev == rev)
 assert(PS.UpdateParty(camp.key, { name = "Camp 2", kept = true })); settle()
 assert(camp.rev == rev + 1 and sent() == sentBefore + 1 and BPN.Shared(onB.key).name == "Camp 2", "a rename is shared as before")
 
+-- paused in a raid (nothing can be sent): Keep alone still changes, a new name or color is refused
+RAID = true
+sentBefore, rev = sent(), camp.rev
+local entry = { kind = "party", pin = camp }
+assert(PN.Can("keep", entry) and not PN.Can("edit", entry), "Keep is allowed while paused; editing for the party isn't")
+assert(PS.UpdateParty(camp.key, { kept = false }), "Keep can be turned off while paused")
+assert(not PN.IsKept(camp) and sent() == sentBefore and camp.rev == rev)
+assert(PS.UpdateParty(camp.key, { kept = true }), "and on again")
+local none, whyPaused = PS.UpdateParty(camp.key, { name = "Not now" })
+assert(none == nil and whyPaused:find("paused") and camp.name == "Camp 2" and camp.rev == rev and sent() == sentBefore,
+  "a rename waits: " .. tostring(whyPaused))
+assert(not PS.UpdateParty(camp.key, { color = "moss", kept = true }) and camp.color ~= "moss", "so does a color, even with Keep in the same change")
+RAID = false
+assert(PN.IsKept(camp))
+-- someone else's pin is never yours to keep
+local onBEntry = { kind = "party", pin = BPN.Shared(onB.key) }
+assert(not BPN.Can("keep", onBEntry) and select(2, BPN.Can("keep", onBEntry)):find("Only the player"))
+
 -- not removable for the party while kept, by any route
 ok, why = PS.RemoveForParty(camp.key)
 assert(ok == false and why:find("kept"), "the sync layer refuses: " .. tostring(why))
@@ -274,6 +292,36 @@ local a2 = boot(A, a.TwichUIDB, true)
 local PN2 = a2.TwichUI.Pins
 assert(PN2.Shared(mine.key) and PN2.IsKept(PN2.Shared(mine.key)) and PN2.Shared(mine.key).mine, "kept across a reload")
 assert(select(2, PN2.DeleteOwn(mine.key)) == "kept")
+-- a damaged saved session whose count is behind its own ids: a new pin takes a fresh id, never the kept
+-- pin's place, nor an id removed earlier this session
+do
+  local PS2 = a2.TwichUI.PinSync
+  local gone = assert(PS2.CreateParty({ map = 1429, x = 1, y = 1, name = "Gone" })); settle()
+  assert(PS2.RemoveForParty(gone.key)); settle()
+  local damaged = PN2.ExportSession()
+  damaged.seq = 0
+  PN2.EndSession()
+  assert(PN2.ImportSession(damaged))
+  local anchor = PN2.Shared(mine.key)
+  assert(anchor and PN2.IsKept(anchor))
+  local before = {}
+  for _, p in ipairs(PN2.OwnPins()) do before[p.key] = p.name end
+  local made = {}
+  -- enough to pass every id handed out before, the kept pin's and the removed one's included
+  for i = 1, 5 do made[i] = assert(PS2.CreateParty({ map = 1429, x = 50 + i, y = 50, name = "New " .. i })) end
+  settle()
+  local anchorNow = PN2.Shared(mine.key)
+  assert(anchorNow == anchor and anchorNow.name == "Anchor" and PN2.IsKept(anchorNow), "the kept pin is untouched")
+  for key, name in pairs(before) do
+    assert(PN2.Shared(key) and PN2.Shared(key).name == name, "an earlier pin of yours is untouched: " .. name)
+  end
+  for _, p in ipairs(made) do
+    assert(p.key ~= mine.key and p.key ~= gone.key and PN2.Shared(p.key) == p, "a fresh id: " .. p.id)
+    assert(BPN.Shared(BPN.Key(A, p.id)), "and the party gets it (not dropped as removed): " .. p.id)
+  end
+  for _, p in ipairs(made) do PS2.RemoveForParty(p.key) end
+  settle()
+end
 -- a saved session can't make someone else's pin kept
 local ses = a2.TwichUIDB.pins.session or PN2.ExportSession()
 for _, p in ipairs(ses.pins) do p.k = true end

@@ -11,9 +11,10 @@
 -- combat, and it waits for combat and banners to pass. It shows beside the zone, training and Welcome Back cards,
 -- which sit at the top, and waits only for another card in its own place (modules/Notify.lua decides that). Several friends
 -- arriving together give one card. Only the name, character and faction the game gives are
--- shown; nothing is stored but the card's place (if moved in Edit Mode) and the chime's channel. No chat,
--- nothing sent, and it takes no clicks. It plays one soft chime (media/sounds/TwichUI_Notification.mp3)
--- unless that is switched off. A sound file can't be given its own volume, so the chime follows one of
+-- shown; nothing is stored but the card's place (if moved in Edit Mode) and the chime's channel and sound. No chat,
+-- nothing sent, and it takes no clicks. It plays one soft chime (media/sounds/TwichUI_Notification.mp3
+-- by default; one of TwichUI's other bundled sounds can be chosen in the options) unless that is
+-- switched off. A sound file can't be given its own volume, so the chime follows one of
 -- the game's own volume channels, chosen in the options (Sound Effects by default).
 -- Scope, as it stands: Battle.net account-level logins only (BN_FRIEND_ACCOUNT_ONLINE). It does not announce
 -- logoffs, character (in-game list) friends, or a Battle.net friend who was already online starting WoW.
@@ -37,7 +38,7 @@ local WIDTH, HEIGHT = 360, 64
 local ICON = 22             -- the faction mark's height
 local ICON_GAP = 7
 local DEFAULT_X, DEFAULT_Y = 16, 300   -- default place: near the left edge, above the lower-left where the game's pop-up sits by default
-local SOUND_FILE = "TwichUI_Notification.mp3"
+local SOUND_FILE = "TwichUI_Notification.mp3"   -- the chime when nothing (or something unknown) is chosen
 local MOVER_ATLAS = "editmode-actionbar-highlight-NineSlice-Center"   -- Edit Mode's own highlight, when the client has it
 
 -- Faction names are the game's English tokens, as UnitFactionGroup gives them. The mark is the
@@ -162,10 +163,34 @@ function F.SetSoundChannel(key)
     return false
 end
 
--- Plays the chime once on the chosen channel. Returns whether the game took it.
+-- Which sound it is: a LibSharedMedia sound name (TwichUI's own are registered by modules/Media.lua), saved as
+-- TwichUIDB.ui.friendLoginChime. One that has gone (its addon isn't loaded) stays chosen and the default plays
+-- in its place, so the choice is back when the addon is.
+F.SOUND_DEFAULT = "TwichUI Notification"
+
+function F.Sound()
+    local saved = TwichUIDB and TwichUIDB.ui and TwichUIDB.ui.friendLoginChime
+    if type(saved) == "string" and #saved >= 1 and #saved <= 64 then return saved end
+    return F.SOUND_DEFAULT
+end
+
+-- Saves the sound name (a non-empty string of at most 64 characters; anything else is refused). Returns whether it was kept.
+function F.SetSound(name)
+    if type(name) ~= "string" or #name < 1 or #name > 64 or type(TwichUIDB) ~= "table" then return false end
+    TwichUIDB.ui = type(TwichUIDB.ui) == "table" and TwichUIDB.ui or {}
+    if TwichUIDB.ui.friendLoginChime ~= name then TwichUIDB.ui.friendLoginChime = name end
+    return true
+end
+
+-- The dropdown's list: TwichUI's sounds, then LibSharedMedia's.
+function F.SoundChoices() return R:SoundChoices(F.Sound()) end
+
+-- Plays the chime once on the chosen channel: the chosen sound, or the default when it isn't available.
+-- Returns whether the game took it.
 function F.PlaySound()
     if not PlaySoundFile then return false end
-    return PlaySoundFile(R:SoundPath(SOUND_FILE), F.SoundChannel()) and true or false
+    local path = R:ResolveSound(F.Sound()) or R:ResolveSound(F.SOUND_DEFAULT) or R:SoundPath(SOUND_FILE)
+    return PlaySoundFile(path, F.SoundChannel()) and true or false
 end
 
 ---------------------------------------------------------------------------
@@ -522,6 +547,7 @@ function F.State()
         inTheWay = InTheWay(),
         soundOn = R:Enabled("friendLoginSound"),
         channel = F.SoundChannel(),
+        chime = F.Sound() == F.SOUND_DEFAULT and "default" or "chosen",
     }
 end
 

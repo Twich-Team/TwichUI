@@ -417,6 +417,24 @@ assert(mineActs["Remove from my map"] and mineActs["Save to my pins..."])
 local palE = { kind = "party", pin = pal, token = "party:" .. pal.key }
 local palActs = labels(PW.Actions(palE))
 assert(not palActs["Remove for entire party..."] and not palActs["Edit pin..."], "someone else's pin: no owner actions offered")
+-- paused in a raid: your own pin's editor still opens; Keep saves and sends nothing; a rename is refused with why
+do
+  local inRaid = c.IsInRaid
+  c.IsInRaid = function() return true end
+  local acts = labels(PW.Actions(mineE))
+  assert(acts["Edit pin..."].enabled and not acts["Remove for entire party..."].enabled, "Edit stays offered for Keep; removing for the party waits")
+  assert(PE.OpenEdit(mineE) and ed.save.enabled ~= false and ed.status.text:find("Keep can still be changed"), ed.status.text)
+  local wasKept, before = PN.IsKept(mine), sent()
+  ed.keep.scripts.OnClick(ed.keep); ed.save.scripts.OnClick(ed.save)
+  assert(PN.IsKept(mine) ~= wasKept and sent() == before and not PE.IsOpen(), "Keep changed, nothing sent")
+  local name = mine.name
+  assert(PE.OpenEdit(mineE))
+  ed.name:SetText("Renamed in a raid"); ed.save.scripts.OnClick(ed.save)
+  assert(mine.name == name and PE.IsOpen() and ed.status.text:find("paused") and sent() == before, "a rename waits: " .. ed.status.text)
+  ed.name.scripts.OnEscapePressed(ed.name)
+  assert(PS.UpdateParty(mine.key, { kept = wasKept }))
+  c.IsInRaid = inRaid
+end
 assert(palActs["Remove from my map"] and palActs["Save to my pins..."] and palActs["Set waypoint"])
 -- Set waypoint only when picked; a map that can't hold one says so
 assert(#waypoints == 0, "nothing set the player's waypoint by itself")

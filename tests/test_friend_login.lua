@@ -245,6 +245,41 @@ for _, bad in ipairs({ "Music", 3, "", true }) do
 end
 c.TwichUIDB.ui.friendLoginChannel = nil
 assert(#F.CHANNELS == 4 and F.CHANNELS[1].key == F.CHANNEL_DEFAULT)
+-- Which sound: TwichUI's default, another TwichUI sound, LibSharedMedia's; a gone one keeps its name and plays the default.
+do
+  local DEFAULT = [[Interface\AddOns\!!!TwichUI\media\sounds\TwichUI_Notification.mp3]]
+  local DRUMS = [[Interface\AddOns\!!!TwichUI\media\sounds\TwichUI_Drums.mp3]]
+  assert(F.Sound() == "TwichUI Notification" and F.SOUND_DEFAULT == "TwichUI Notification", "the notification chime by default")
+  assert(R.MediaSounds["TwichUI Drums"] == "TwichUI_Drums.mp3", "the drums are in the sound registry")
+  assert(c.TwichUIDB.ui.friendLoginChime == nil, "nothing is saved until a choice is made")
+  assert(not F.SetSound("") and not F.SetSound(5) and not F.SetSound(("x"):rep(65)) and not F.SetSound(nil), "an unusable name is refused")
+  assert(F.Sound() == "TwichUI Notification" and c.TwichUIDB.ui.friendLoginChime == nil)
+  assert(F.SetSound("TwichUI Drums") and c.TwichUIDB.ui.friendLoginChime == "TwichUI Drums")
+  Sounds()
+  Online(1); Settle()
+  assert(#c.SOUNDS == 1 and c.SOUNDS[1].path == DRUMS and c.SOUNDS[1].channel == "SFX", "the chosen sound, on the chosen channel")
+  Sounds(); Finish(card.anim)
+  for _, bad in ipairs({ "", 3, true, ("x"):rep(65) }) do
+    c.TwichUIDB.ui.friendLoginChime = bad
+    assert(F.Sound() == "TwichUI Notification", "an unusable saved name falls back to the default")
+  end
+  local LSM = c.LibStub("LibSharedMedia-3.0")
+  LSM:Register("sound", "Other Addon Ding", [[Interface\AddOns\OtherAddon\ding.ogg]])
+  assert(F.SetSound("Other Addon Ding"))
+  assert(F.PlaySound() and c.SOUNDS[1].path == [[Interface\AddOns\OtherAddon\ding.ogg]], "another addon's sound")
+  Sounds()
+  local at = {}
+  for i, choice in ipairs(F.SoundChoices()) do at[choice[1]] = i end
+  assert(at["TwichUI Notification"] and at["TwichUI Drums"] and at["Other Addon Ding"], "TwichUI's and LibSharedMedia's are listed")
+  assert(at["TwichUI Drums"] < at["Other Addon Ding"] and not at["None"], "TwichUI's first; LibSharedMedia's silent entry is not offered")
+  assert(F.SetSound("Vanished Sound") and F.Sound() == "Vanished Sound")
+  local gone = F.SoundChoices()
+  assert(gone[#gone][1] == "Vanished Sound" and gone[#gone][2]:find("not available", 1, true), "kept and marked")
+  assert(F.PlaySound() and c.SOUNDS[1].path == DEFAULT, "the default plays in its place")
+  assert(c.TwichUIDB.ui.friendLoginChime == "Vanished Sound", "and the choice is not erased")
+  Sounds()
+  c.TwichUIDB.ui.friendLoginChime = nil
+end
 M.friendLoginSound = false
 Online(1); Settle()
 assert(card.shown and Sounds() == 0, "the card still shows, silently, with the chime off")

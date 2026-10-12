@@ -30,7 +30,10 @@ Written against RestedXP Guides v4.11.22 (Interface 16001 listed). Off by defaul
   uses one zero-delay call.
 * **Combat:** nothing is drawn or refreshed in combat; the latest request waits for
   `PLAYER_REGEN_ENABLED`. A skin turned off in combat gives RestedXP's setting back at once and finishes
-  the repaint when combat ends.
+  the repaint when combat ends. A skin turned on in combat chooses its theme when combat ends. When only
+  RestedXP's own redraws were passed over (a step completed mid-fight), combat's end finishes them with one
+  step layout, one list layout and the padding, not RestedXP's full refresh, which reloads the guide; a
+  theme change that waited still gets that refresh.
 
 ## Surfaces
 

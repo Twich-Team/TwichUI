@@ -44,9 +44,14 @@ K.Page({
             false, function() if R.FriendLogin then R.FriendLogin.Refresh() end end)
         local function FriendLoginOn() return R:Enabled("friendLogin") end
         Under(Toggle("friendLoginSound", "Play a soft chime with it",
-            "A short chime (TwichUI Notification) when the card appears. Off: the card is silent."), friendLogin, FriendLoginOn)
+            "A short chime when the card appears; choose which one below. Off: the card is silent."), friendLogin, FriendLoginOn)
         local FriendLogin = R.FriendLogin
         if FriendLogin then
+            local chime = K.Proxy("friendLoginChime", STRING, "Chime sound", FriendLogin.SOUND_DEFAULT,
+                function() return FriendLogin.Sound() end, function(value) FriendLogin.SetSound(value) end)
+            Under(K.Dropdown(chime, FriendLogin.SoundChoices,
+                "The sound to play. TwichUI's own are listed first, then every sound other addons have added to LibSharedMedia. Press Hear the chime to try it. A sound that has gone (its addon isn't loaded) stays chosen, and TwichUI Notification plays in its place until it returns."),
+                friendLogin, FriendLoginOn)
             local channels = {}
             for i, channel in ipairs(FriendLogin.CHANNELS) do channels[i] = { channel.key, channel.label, channel.tooltip } end
             Under(Choice("friendLoginChannel", "Chime volume follows",
@@ -56,7 +61,7 @@ K.Page({
                 function(value) FriendLogin.SetSoundChannel(value) end,
                 channels), friendLogin, FriendLoginOn)
             Under(Button("Hear the chime", "Play", function() FriendLogin.PlaySound() end,
-                "Plays the chime now, at the volume you have chosen."), friendLogin, FriendLoginOn)
+                "Plays the chosen chime now, at the volume you have chosen."), friendLogin, FriendLoginOn)
         end
 
         local Notify = R.Notify

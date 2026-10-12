@@ -81,11 +81,16 @@ local function Refresh()
     if not (f and state) then return end
     local party = state.party
     local blocked = party and state.mode == "new" and PN.SendBlocked() or nil
-    if state.mode == "edit" and state.entry.kind == "party" then blocked = PN.SendBlocked() end
+    -- editing your own party pin while nothing can be sent: Keep still saves (it is never sent); a new name
+    -- or color is refused with the reason when saved
+    local keepOnly = state.mode == "edit" and state.entry.kind == "party" and PN.SendBlocked() or nil
     f.save:SetEnabled(blocked == nil and state.mode ~= "preview")
     if state.mode == "preview" then
         f.status:SetText("A preview. Nothing is made, saved or sent.")
         f.status:SetTextColor(pal.stone[1], pal.stone[2], pal.stone[3])
+    elseif keepOnly then
+        f.status:SetText(PN.Reason(keepOnly) .. " Keep can still be changed.")
+        f.status:SetTextColor(0.80, 0.45, 0.35)
     elseif blocked then
         f.status:SetText(PN.Reason(blocked))
         f.status:SetTextColor(0.80, 0.45, 0.35)
@@ -328,7 +333,7 @@ end
 
 -- Rename or recolor a local pin, or one of your own party pins.
 function PE.OpenEdit(e)
-    local ok, why = PN.Can("edit", e)
+    local ok, why = PN.Can("keep", e)   -- opens whenever Keep can change; Save asks again for a name or color
     if not ok then R.PinsMap.Notice(why) return false end
     local pin = PN.Fresh(e)
     state = { mode = "edit", entry = e, party = e.kind == "party", color = pin.color, kept = PN.IsKept(pin) }

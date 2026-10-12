@@ -112,6 +112,7 @@ No permanent `OnUpdate`, no recurring ticker and no polling loop for an optional
 | Gear judgement cache | 300 | cleared when full |
 | Chronicle | 500 entries per character | when full, the oldest automatic zone entry goes first, then other automatic ones; your notes and the first "begun" line are kept |
 | Imported backups | 20 points, 32 MiB total | |
+| Sharing control message (offer, reply, group check) | 64 KB encoded | longer ones are dropped before they are decompressed, whoever sends them; an offer over it is not sent. Deflate can still expand an accepted one several hundredfold (measured about 400:1 on a run of one byte), so this bounds the work rather than removing it |
 | Received setups | one per sender, stored only after you accept an offer; a newer one from the same sender replaces it | no total limit; deletable in Received setups |
 | **Backups you create yourself** | **none** | **needs your decision, below** |
 

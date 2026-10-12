@@ -212,6 +212,12 @@ Bad("101 50", "range"); Bad("50 100.01", "range"); Bad("-1 50", "range"); Bad("5
 Bad("52.3.4 40", "bad-number"); Bad("5-2 40", "bad-number"); Bad("50 4..0", "bad-number")
 Bad("#abc 1 2", "bad-map-token"); Bad("#12x 1 2", "bad-map-token"); Bad("# 1 2", "bad-map-token")
 Bad("#1453 Elwynn 1 2", "map-and-zone")
+-- decimal commas are refused, never read as x,y and a name (that would be a pin at 52, 3 named "40,7")
+Bad("52,3 40,7", "decimal-comma"); Bad("52,3 40,7 Rare spawn", "decimal-comma"); Bad("Westfall 52,3 40,7", "decimal-comma")
+Bad("#1453 52,3 40,7", "decimal-comma")
+assert(PW.Message("decimal-comma"):find("52%.3 40%.7"), "the refusal shows the form to use")
+e = assert(P("52,40 Camp 3,4")); assert(e.x == 52 and e.y == 40 and e.name == "Camp 3,4", "a pair followed by a name still works")
+e = assert(P("52,40 30 Camp")); assert(e.x == 52 and e.y == 40 and e.name == "30 Camp", "a whole number after a pair is still the name")
 assert(select(3, P("101 50")) == "101", "the offending number is named")
 
 ---------------------------------------------------------------------------
@@ -356,6 +362,12 @@ assert(big.skipped == 300 - PN.MAX_LOCAL - 1, "the rest were not tried")
 c.TwichUIDB.pins.list = {}
 local long = PW.ImportText("/way 5 5 " .. ("x"):rep(400))
 assert(long.count == 0 and long.errors[1].text:find("too long"))
+local comma = PW.ImportText("/way 52,3 40,7 Rare\n/way 52.3 40.7 Rare")
+assert(comma.count == 1 and comma.failed == 1 and comma.errors[1].line == 1 and comma.errors[1].text:find("point for decimals"),
+  "a decimal-comma line is refused on its own; the next line still makes its pin")
+local made = PN.LocalPins()[1]
+assert(made.x == 5230 and made.y == 4070, "only the pin from the line with points")
+c.TwichUIDB.pins.list = {}
 
 ---------------------------------------------------------------------------
 -- 5. The paste window is made on demand, reads the box and keeps what failed

@@ -254,7 +254,9 @@ clear or a cleanup. There is no separate favorite or lock.
   table, a corruption case that isn't new). No path expires a local pin; the only cap is `MAX_LOCAL`, which
   refuses new pins. Backups, restore points and sharing don't contain pins.
 * **The editor** has a "Keep this pin" box under the colors. It is a draft until Save; Cancel and Esc change
-  nothing. Turning only Keep on or off on one of your own party pins sends nothing (no revision change).
+  nothing. Turning only Keep on or off on one of your own party pins sends nothing (no revision change), so
+  it works while nothing can be sent (paused in a raid, or held by the game): the editor opens and says so,
+  and a new name or color is refused with the reason when saved.
 * **The data bar menu** lists kept pins first, under "Kept" (and "Other pins" when both groups have pins), in
   the same order as before within each. A kept row shows a padlock in muted gold where the x was; clicking it
   opens the editor and unlocks nothing. Its title is "Map pins" since the list is local and party pins.

@@ -28,11 +28,45 @@ local SOUNDS = {
     ["GTFO Fail"]        = "GTFO_Fail.ogg",
     ["TwichUI Notification"] = "TwichUI_Notification.mp3",
     ["TwichUI Map Pin"]  = "TwichUI_MapPin.mp3",
+    ["TwichUI Drums"]    = "TwichUI_Drums.mp3",
 }
 R.MediaFonts, R.MediaSounds = FONTS, SOUNDS
 
 -- Handy for GTFO, which takes a file path: /gtfo custom1 <path>
 function R:SoundPath(file) return R.PATH .. [[media\sounds\]] .. file end
+
+-- What to hand PlaySoundFile for a sound name: TwichUI's own by its file (found without LibSharedMedia,
+-- and whether or not the module below registered them), then LibSharedMedia's list. nil when it isn't there.
+function R:ResolveSound(name)
+    local file = SOUNDS[name]
+    if file then return R:SoundPath(file) end
+    local lib = LibStub and LibStub("LibSharedMedia-3.0", true)
+    if lib and lib.Fetch then return lib:Fetch("sound", name, true) end
+    return nil
+end
+
+-- { { name, label }, ... } for a sound dropdown: TwichUI's sounds, then every other LibSharedMedia sound.
+-- current stays listed, marked, when it has gone.
+function R:SoundChoices(current)
+    local list, seen = {}, {}
+    local own = {}
+    for name in pairs(SOUNDS) do own[#own + 1] = name end
+    table.sort(own)
+    for _, name in ipairs(own) do
+        seen[name] = true
+        list[#list + 1] = { name, name }
+    end
+    local lib = LibStub and LibStub("LibSharedMedia-3.0", true)
+    local names = lib and lib.List and lib:List("sound") or {}
+    for _, name in ipairs(names) do
+        if name ~= "None" and not seen[name] then
+            seen[name] = true
+            list[#list + 1] = { name, name }
+        end
+    end
+    if current and not seen[current] then list[#list + 1] = { current, current .. " (not available)" } end
+    return list
+end
 
 R:OnInit(function()
     if not R:Enabled("media") then return end

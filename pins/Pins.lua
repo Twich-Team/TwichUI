@@ -447,6 +447,12 @@ function PN.CreateOwn(fields)
     if not (PN.ValidCoord(fields.x) and PN.ValidCoord(fields.y)) then return nil, "bad-coordinates" end
     session.seq = session.seq + 1
     local id = session.epoch .. ":" .. session.seq
+    -- never an id in use or removed this session (a damaged saved session can hold a lower count): a new pin
+    -- must not replace a kept one, nor be ignored by the party as one already removed
+    while session.pins[PN.Key(me, id)] or session.deleted[PN.Key(me, id)] do
+        session.seq = session.seq + 1
+        id = session.epoch .. ":" .. session.seq
+    end
     local pin = {
         key = PN.Key(me, id), owner = me, id = id, rev = 1, mine = true,
         map = fields.map, x = fields.x, y = fields.y,
@@ -810,7 +816,7 @@ function PN.Can(action, entry)
         return false, REASONS["no-waypoint"]
     end
     if entry.kind == "local" then
-        if action == "edit" then return true end
+        if action == "edit" or action == "keep" then return true end
         if action == "delete" then
             if PN.IsKept(pin) then return false, REASONS.kept end
             return true
@@ -826,6 +832,10 @@ function PN.Can(action, entry)
         return true
     elseif action == "restore" then
         if not dismissed then return false, "It is already on your map." end
+        return true
+    elseif action == "keep" then
+        -- Keep is yours alone and sends nothing, so it doesn't wait for the party channel (a raid, a block)
+        if not pin.mine then return false, REASONS["not-owner"] end
         return true
     elseif action == "edit" or action == "removeParty" then
         if not pin.mine then return false, REASONS["not-owner"] end

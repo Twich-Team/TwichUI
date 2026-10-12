@@ -2461,7 +2461,20 @@ local function OnRegenEnabled()
         Teardown()
     elseif waitingCombat then
         waitingCombat = false
-        if enabled then Skin.Request(true) end
+        if enabled then
+            -- What waited is a change of the theme itself (wantTheme, kept through combat: RestedXP's refresh
+            -- follows), or only passes over RestedXP's own redraws. Those need ours again, with the step cards
+            -- and list laid out once more (RestedXP may have laid them out meanwhile, without the padding), and
+            -- not RestedXP's full refresh, which reloads the whole guide. The theme chosen in combat (the skin
+            -- turned on mid-fight) is chosen now, which has RestedXP refresh.
+            if pendingSelect and Usable(RXP) then
+                pendingSelect = false
+                Skin.UseTheme()
+            elseif not wantTheme then
+                settledRev = -1
+            end
+            Skin.Request(false)
+        end
     end
     if not enabled and not pendingTeardown then R:Off("PLAYER_REGEN_ENABLED", OnRegenEnabled) end
 end
@@ -2500,7 +2513,8 @@ function Skin.UseTheme()
     if not (enabled and Usable(RXP)) then return false, "not-ready" end
     conflict = FindConflict()
     if conflict then return false, "conflict" end
-    if InCombatLockdown() then waitingCombat = true; wantTheme = true; return false, "combat" end
+    -- chosen once combat ends (OnRegenEnabled), as it is once RestedXP loads when it isn't there yet
+    if InCombatLockdown() then waitingCombat = true; pendingSelect = true; return false, "combat" end
     Publish()
     FillTheme()
     local profile = RXP.settings.profile

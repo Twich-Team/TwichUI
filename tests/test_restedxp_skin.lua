@@ -1158,11 +1158,57 @@ do
   c.FireEvent("PLAYER_REGEN_ENABLED"); FlushTimers(); FlushTimers()   -- the update, then the settle it queued
   assert(el.text.font[2] == 20, "applied when combat ends")
   assert(el:GetHeight() == math.ceil(20 * 1.1) + 1 + 8, "with the padding once: " .. el:GetHeight())
-  -- RestedXP's own refresh (what follows combat) lays everything out once; the settings that changed
-  -- meanwhile are settled with one more layout of each, not one per setting
-  assert(RXP.layouts == layouts + 2, "step layout: " .. RXP.layouts - layouts)
-  assert(RXP.listLayouts == lists + 2, "list layout: " .. RXP.listLayouts - lists)
+  -- the settings that changed meanwhile are settled with one layout of each, not one per setting, and
+  -- RestedXP's full refresh (which reloads the guide) is not asked for: no theme change was waiting
+  assert(RXP.layouts == layouts + 1, "step layout: " .. RXP.layouts - layouts)
+  assert(RXP.listLayouts == lists + 1, "list layout: " .. RXP.listLayouts - lists)
   assert(RXP.lastListSelf == f.BottomFrame, "the list is laid out the way RestedXP does while it is resized (no step update)")
+end
+
+-- After combat: RestedXP laying its steps out in combat (a step completed mid-fight) is finished with one
+-- layout and the padding, without RestedXP's full refresh (which reloads the guide). A theme change that
+-- waited for combat still gets that refresh.
+do
+  local c = Boot({ db = { modules = { restedxpSkin = true } } })
+  local R = Start(c)
+  local S = R.RestedXPSkin
+  local RXP = MakeRestedXP(c, { rows = 3 })
+  RXP.LoadRows()
+  RestedXPLoads(c, RXP)
+  assert(S.UseTheme())
+  S.Text.Set("stepPadding", 8)
+  FlushTimers(); FlushTimers()
+  local csf = RXP.frame.CurrentStepFrame
+  local el = csf.framePool[1].elements[1]
+  local padded = el:GetHeight()
+  local native = math.ceil(el.text:GetStringHeight() * 1.1) + 1
+  assert(padded == native + 8, "padded before combat: " .. padded)
+
+  c.COMBAT = true
+  csf.UpdateText()   -- RestedXP's own layout in combat: its heights, no padding
+  FlushTimers()
+  assert(el:GetHeight() == native, "RestedXP's own in combat")
+  local renders, layouts, lists = RXP.renders, RXP.layouts, RXP.listLayouts
+  c.COMBAT = false
+  c.FireEvent("PLAYER_REGEN_ENABLED"); FlushTimers(); FlushTimers()
+  assert(el:GetHeight() == native + 8, "padded once again after combat: " .. el:GetHeight())
+  assert(RXP.renders == renders, "RestedXP's full refresh was not asked for")
+  assert(RXP.layouts == layouts + 1 and RXP.listLayouts == lists + 1, "one step layout and one list layout")
+  assert(Ours(RXP, RXP.frame.BottomFrame), "the window still has the look")
+  -- nothing waiting: the next combat end does nothing
+  c.FireEvent("PLAYER_REGEN_ENABLED"); FlushTimers(); FlushTimers()
+  assert(RXP.renders == renders and RXP.layouts == layouts + 1, "no work when nothing waited")
+
+  -- the theme chosen in combat (turned on mid-fight) waits, then RestedXP refreshes once
+  c.TwichUIDB.modules.restedxpSkin = false; S.OnSwitch(); FlushTimers()
+  c.COMBAT = true
+  c.TwichUIDB.modules.restedxpSkin = true; S.OnSwitch()
+  local used, why = S.UseTheme()
+  assert(not used and why == "combat")
+  renders = RXP.renders
+  c.COMBAT = false
+  c.FireEvent("PLAYER_REGEN_ENABLED"); FlushTimers(); FlushTimers()
+  assert(RXP.renders == renders + 1 and RXP.activeTheme == RXP.themes.TwichUI, "the theme waited for combat, then one refresh")
 end
 
 

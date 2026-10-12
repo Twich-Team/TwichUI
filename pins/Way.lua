@@ -80,6 +80,9 @@ function PW.Parse(text)
     local xs, ys, last = words[j][1], nil, j
     local a, b = xs:match("^([^,]*),([^,]*)$")
     if a then
+        -- "52,3 40,7": decimal commas, not an x,y pair followed by a name. Never guessed either way.
+        local after = words[j + 1] and words[j + 1][1]
+        if b ~= "" and after and after:match("^%d+,%d+$") then return nil, "decimal-comma" end
         xs = a
         if b ~= "" then ys = b end
     elseif xs:find(",", 1, true) then
@@ -243,6 +246,7 @@ local function Message(code, detail)
     if code == "missing-coords" or code == "empty" then return "Needs two coordinates, like 52.3 40.7." end
     if code == "missing-y" then return "Needs two coordinates; only one number was given." end
     if code == "bad-number" then return ("'%s' isn't a valid number."):format(Esc(detail)) end
+    if code == "decimal-comma" then return "Use a point for decimals, like 52.3 40.7 (a comma only separates the two numbers)." end
     if code == "range" then return ("%s is outside 0 to 100."):format(Esc(detail)) end
     if code == "bad-map-token" then return ("'%s' isn't a map number. Use #<mapID>, like #1453."):format(Esc(detail)) end
     if code == "map-and-zone" then return "Give a zone name or a #mapID, not both." end
