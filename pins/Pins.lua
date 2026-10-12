@@ -9,6 +9,11 @@
 -- What you do on your own map stays on your map: "remove from my map" (dismiss) is a local record that
 -- later updates and resyncs respect, and "keep as a local copy" makes an independent local pin that a
 -- party-wide removal of the original never touches.
+-- Keep: a pin of yours (local, or one of your own party pins) can be "kept", a personal protection that is
+-- never sent and never changed by a message. A kept pin can't be deleted, cleared or moved until you turn
+-- Keep off in the editor; renaming, recoloring and hiding it stay possible. It is enforced here, in the
+-- functions that delete or move a pin, not by the windows. A kept party pin of yours lasts as long as the
+-- party session does (it is carried over a /reload with the rest of the session, like the pin itself).
 -- Everything a pin carries is checked here, the same way for what you type and what arrives: names are
 -- plain text (escape sequences, links, textures and control characters are taken out), coordinates are
 -- whole steps of 1/10000 of the map from 0 to 10000, the map must be one the game knows, and the color
@@ -184,7 +189,11 @@ function PN.FindLocal(id)
     end
 end
 
--- fields: { map, x, y (0..COORD), name, color, copiedFrom }. Returns the pin, or nil and a reason.
+-- Whether the pin is kept (protected). Only an explicit true counts, so a missing or odd saved value is
+-- an ordinary pin.
+function PN.IsKept(pin) return type(pin) == "table" and pin.kept == true end
+
+-- fields: { map, x, y (0..COORD), name, color, copiedFrom, kept }. Returns the pin, or nil and a reason.
 function PN.AddLocal(fields)
     local db = Store(true)
     if not db then return nil, "not-ready" end
@@ -197,6 +206,7 @@ function PN.AddLocal(fields)
         id = "L" .. db.nextId, map = fields.map, x = fields.x, y = fields.y, name = name,
         color = PN.ValidColor(fields.color) and fields.color or PN.DEFAULT_COLOR,
         created = time(), copiedFrom = PN.CleanName(fields.copiedFrom),
+        kept = fields.kept == true or nil,
     }
     db.nextId = db.nextId + 1
     db.list[#db.list + 1] = pin
@@ -204,39 +214,92 @@ function PN.AddLocal(fields)
     return pin
 end
 
--- Rename or recolor; the id and place stay. Returns true, or false and a reason.
+-- Rename, recolor, keep or unkeep; the id stays. fields: { name, color, kept, and optionally map, x, y }.
+-- A kept pin's place can't change: map, x and y are refused with "kept" unless this same call turns Keep off
+-- (the editor saves an unlock and a move together). Nothing is changed unless everything passes.
+-- Returns true, or false and a reason.
 function PN.UpdateLocal(id, fields)
     local pin = PN.FindLocal(id)
     if not pin then return false, "gone" end
     local name = pin.name
     if fields.name ~= nil then name = PN.CleanName(fields.name) end
     if not name then return false, "empty-name" end
-    pin.name = name
-    if fields.color ~= nil then
-        if not PN.ValidColor(fields.color) then return false, "bad-color" end
-        pin.color = fields.color
+    if fields.color ~= nil and not PN.ValidColor(fields.color) then return false, "bad-color" end
+    local kept = PN.IsKept(pin)
+    if fields.kept ~= nil then kept = fields.kept == true end
+    local moving = fields.map ~= nil or fields.x ~= nil or fields.y ~= nil
+    local map, x, y = pin.map, pin.x, pin.y
+    if moving then
+        if PN.IsKept(pin) and kept then return false, "kept" end
+        if fields.map ~= nil then map = fields.map end
+        if fields.x ~= nil then x = fields.x end
+        if fields.y ~= nil then y = fields.y end
+        if not PN.ValidMap(map) then return false, "unknown-map" end
+        if not (PN.ValidCoord(x) and PN.ValidCoord(y)) then return false, "bad-coordinates" end
     end
+    pin.name = name
+    if fields.color ~= nil then pin.color = fields.color end
+    pin.kept = kept or nil
+    pin.map, pin.x, pin.y = map, x, y
     Changed()
     return true
 end
 
+-- Deleting one pin. A kept pin is refused with "kept"; the way to delete it is to turn Keep off first.
 function PN.RemoveLocal(id)
     local pin, i = PN.FindLocal(id)
     if not pin then return false, "gone" end
+    if PN.IsKept(pin) then return false, "kept" end
     table.remove(TwichUIDB.pins.list, i)
     if PN.selected == "local:" .. id then PN.selected = nil end
     Changed()
     return true
 end
 
--- Every local pin, after the player confirmed. Party pins are not touched and nothing is sent.
-function PN.ClearLocal()
+-- What a clear may delete: a pin that can be read and isn't kept. An entry that can't be read is left
+-- alone (it may be a kept pin from a newer version), as everywhere else.
+local function Clearable(p) return ValidLocal(p) and not PN.IsKept(p) end
+
+-- The local pins a clear would delete (as a set of ids) and how many kept ones it would leave, as saved now.
+function PN.LocalClearScope()
     local db = Store()
-    if not db then return 0 end
-    local n = #db.list
-    db.list = {}
-    Changed()
-    return n
+    local ids, n, kept = {}, 0, 0
+    if not db then return ids, n, kept end
+    for _, p in ipairs(db.list) do
+        if Clearable(p) then
+            ids[p.id] = true
+            n = n + 1
+        elseif PN.IsKept(p) and ValidLocal(p) then
+            kept = kept + 1
+        end
+    end
+    return ids, n, kept
+end
+
+-- Deletes the local pins that aren't kept, after the player confirmed; each pin is judged now, not when the
+-- question was asked. only: a set of ids (from PN.LocalClearScope), so that a pin made since the question is
+-- never swept up; nil means every unkept pin. Party pins are not touched and nothing is sent. Returns how
+-- many were deleted and how many kept pins were left.
+function PN.ClearLocal(only)
+    local db = Store()
+    if not db then return 0, 0 end
+    local left, removed, kept = {}, 0, 0
+    for _, p in ipairs(db.list) do
+        if Clearable(p) and (only == nil or only[p.id]) then
+            removed = removed + 1
+        else
+            left[#left + 1] = p
+            if PN.IsKept(p) and ValidLocal(p) then kept = kept + 1 end
+        end
+    end
+    if removed > 0 then
+        db.list = left
+        if type(PN.selected) == "string" and PN.selected:find("^local:") and not PN.FindLocal(PN.selected:sub(7)) then
+            PN.selected = nil
+        end
+        Changed()
+    end
+    return removed, kept
 end
 
 function PN.DefaultName()
@@ -389,14 +452,16 @@ function PN.CreateOwn(fields)
         map = fields.map, x = fields.x, y = fields.y,
         name = PN.CleanName(fields.name) or PN.DefaultName(),
         color = PN.ValidColor(fields.color) and fields.color or PN.DEFAULT_COLOR,
-        at = time(),
+        at = time(), kept = fields.kept == true or nil,   -- yours alone: not in the wire form (pins/Sync.lua)
     }
     Put(pin)
     Changed()
     return pin
 end
 
--- Rename or recolor one of your own; the next revision. Returns the pin, or nil and a reason.
+-- Rename, recolor, keep or unkeep one of your own. fields: { name, color, kept }. A new revision is made
+-- only when a name or color is given (what the party sees); turning Keep on or off alone is yours, changes
+-- no revision and is not sent. Returns the pin and whether the party's copy changed, or nil and a reason.
 function PN.UpdateOwn(key, fields)
     local pin = session and session.pins[key]
     if not pin then return nil, "gone" end
@@ -405,11 +470,15 @@ function PN.UpdateOwn(key, fields)
     if fields.name ~= nil then name = PN.CleanName(fields.name) end
     if not name then return nil, "empty-name" end
     if fields.color ~= nil and not PN.ValidColor(fields.color) then return nil, "bad-color" end
-    pin.name = name
-    if fields.color ~= nil then pin.color = fields.color end
-    pin.rev = pin.rev + 1
+    local shared = fields.name ~= nil or fields.color ~= nil
+    if shared then
+        pin.name = name
+        if fields.color ~= nil then pin.color = fields.color end
+        pin.rev = pin.rev + 1
+    end
+    if fields.kept ~= nil then pin.kept = fields.kept == true or nil end
     Changed()
-    return pin
+    return pin, shared
 end
 
 -- Removes one of your own from the session and records it removed. Returns its last revision + 1 (what
@@ -418,6 +487,7 @@ function PN.DeleteOwn(key)
     local pin = session and session.pins[key]
     if not pin then return nil, "gone" end
     if not pin.mine then return nil, "not-owner" end
+    if PN.IsKept(pin) then return nil, "kept" end
     local rev = pin.rev + 1
     Take(key)
     Tombstone(key, rev)
@@ -610,12 +680,12 @@ function PN.Restore(key)
     return true
 end
 
--- Hides every party pin on your map (yours too); nothing is sent and each can be restored.
+-- Hides every party pin on your map (yours too) except kept ones; nothing is sent and each can be restored.
 function PN.DismissAll()
     if not session then return 0 end
     local n = 0
-    for key in pairs(session.pins) do
-        if not session.dismissed[key] then
+    for key, p in pairs(session.pins) do
+        if not session.dismissed[key] and not PN.IsKept(p) then
             Remember(session.dismissed, session.dismissOrder, key, true, PN.MAX_DISMISSED)
             n = n + 1
         end
@@ -624,13 +694,73 @@ function PN.DismissAll()
     return n
 end
 
--- A local pin made from a party pin: same place, name and color, no link to the original.
-function PN.KeepCopy(key)
+-- What a local copy of a party pin starts with: the same place, name and color, who made it, and no link
+-- to the original. Returns the fields (a snapshot: later changes to the party pin don't reach it), or nil
+-- and a reason. The editor shows them for review and PN.AddLocal makes the pin when it is saved.
+function PN.CopyFields(key)
     local pin = session and session.pins[key]
     if not pin then return nil, "gone" end
     local SH = R.Share
     local from = pin.mine and nil or (SH and SH.Short(pin.owner) or pin.owner)
-    return PN.AddLocal({ map = pin.map, x = pin.x, y = pin.y, name = pin.name, color = pin.color, copiedFrom = from })
+    return { map = pin.map, x = pin.x, y = pin.y, name = pin.name, color = pin.color, copiedFrom = from }
+end
+
+-- A local pin made from a party pin at once, without the editor. kept: make it a kept pin.
+function PN.KeepCopy(key, kept)
+    local fields, why = PN.CopyFields(key)
+    if not fields then return nil, why end
+    fields.kept = kept == true
+    return PN.AddLocal(fields)
+end
+
+---------------------------------------------------------------------------
+-- Clearing: every pin that isn't kept. Local pins are deleted; party pins (yours and others') are taken
+-- off your map, which sends nothing and deletes nothing for anyone, and can be undone under Removed.
+-- This is the whole scope of the old "clear all", minus the kept pins.
+---------------------------------------------------------------------------
+-- What a clear would do right now, for the question that is asked first:
+-- { localDelete, partyHide, kept, localIds, partyKeys } (kept: the kept pins in that scope, which stay;
+-- localIds and partyKeys: sets naming exactly the pins counted, handed back to PN.ClearUnprotected).
+function PN.ClearScope()
+    local localIds, localDelete, kept = PN.LocalClearScope()
+    local partyKeys, partyHide = {}, 0
+    if session then
+        for key, p in pairs(session.pins) do
+            if not session.dismissed[key] then
+                if PN.IsKept(p) then
+                    kept = kept + 1
+                else
+                    partyKeys[key] = true
+                    partyHide = partyHide + 1
+                end
+            end
+        end
+    end
+    return { localDelete = localDelete, partyHide = partyHide, kept = kept, localIds = localIds, partyKeys = partyKeys }
+end
+
+-- Does it. scope: what PN.ClearScope returned when the question was asked; only pins it named are touched,
+-- and each is judged again now, so one that has become kept since stays. Without a scope, every unkept pin.
+-- Returns pins deleted, party pins taken off your map, kept pins left.
+function PN.ClearUnprotected(scope)
+    local removed, hidden, kept = 0, 0, 0
+    PN.Batch(function()
+        removed, kept = PN.ClearLocal(scope and scope.localIds or nil)
+        if not session then return end
+        for key, p in pairs(session.pins) do
+            if not session.dismissed[key] then
+                if PN.IsKept(p) then
+                    kept = kept + 1
+                elseif scope == nil or scope.partyKeys[key] then
+                    Remember(session.dismissed, session.dismissOrder, key, true, PN.MAX_DISMISSED)
+                    if PN.selected == "party:" .. key then PN.selected = nil end
+                    hidden = hidden + 1
+                end
+            end
+        end
+        if hidden > 0 then Changed() end
+    end)
+    return removed, hidden, kept
 end
 
 ---------------------------------------------------------------------------
@@ -642,6 +772,7 @@ local REASONS = {
     paused = "Party pins are paused while you are in a raid.",
     blocked = "The game is holding addon messages here right now. Try again in a moment.",
     ["not-owner"] = "Only the player who made it can do that.",
+    kept = "That pin is kept. Edit it and turn off Keep first.",
     gone = "That pin is no longer there.",
     off = "Party pins are turned off.",
     ["owner-limit"] = ("You already have %d party pins. Remove one first."):format(PN.MAX_PER_OWNER),
@@ -679,7 +810,11 @@ function PN.Can(action, entry)
         return false, REASONS["no-waypoint"]
     end
     if entry.kind == "local" then
-        if action == "edit" or action == "delete" then return true end
+        if action == "edit" then return true end
+        if action == "delete" then
+            if PN.IsKept(pin) then return false, REASONS.kept end
+            return true
+        end
         return false, REASONS.gone
     end
     local dismissed = PN.IsDismissed(pin.key)
@@ -694,6 +829,7 @@ function PN.Can(action, entry)
         return true
     elseif action == "edit" or action == "removeParty" then
         if not pin.mine then return false, REASONS["not-owner"] end
+        if action == "removeParty" and PN.IsKept(pin) then return false, REASONS.kept end
         local blocked = PN.SendBlocked()
         if blocked then return false, PN.Reason(blocked) end
         return true
@@ -708,7 +844,7 @@ function PN.ExportSession()
     if not session then return nil end
     local pins = {}
     for _, p in pairs(session.pins) do
-        pins[#pins + 1] = { owner = p.owner, id = p.id, r = p.rev, m = p.map, x = p.x, y = p.y, n = p.name, c = p.color, mine = p.mine or nil }
+        pins[#pins + 1] = { owner = p.owner, id = p.id, r = p.rev, m = p.map, x = p.x, y = p.y, n = p.name, c = p.color, mine = p.mine or nil, k = p.mine and p.kept or nil }
     end
     local dismissed, deleted = {}, {}
     for _, key in ipairs(session.dismissOrder) do dismissed[#dismissed + 1] = key end
@@ -740,7 +876,7 @@ function PN.ImportSession(s)
                 local key = PN.Key(owner, data.id)
                 if not session.deleted[key] and (session.perOwner[owner] or 0) < PN.MAX_PER_OWNER then
                     Put({ key = key, owner = owner, id = data.id, rev = data.rev, map = data.map, x = data.x, y = data.y,
-                        name = data.name, color = data.color, mine = mine, at = time() })
+                        name = data.name, color = data.color, mine = mine, at = time(), kept = mine and t.k == true or nil })
                 end
             end
         end
@@ -773,7 +909,7 @@ end
 function PN.Entries()
     local out = {}
     for _, p in ipairs(PN.LocalPins()) do
-        out[#out + 1] = { kind = "local", pin = p, token = "local:" .. p.id, dismissed = false }
+        out[#out + 1] = { kind = "local", pin = p, token = "local:" .. p.id, dismissed = false, kept = PN.IsKept(p) }
     end
     local shared = PN.SharedPins()
     table.sort(shared, function(a, b)
@@ -782,9 +918,19 @@ function PN.Entries()
         return a.at < b.at or (a.at == b.at and a.id < b.id)
     end)
     for _, p in ipairs(shared) do
-        out[#out + 1] = { kind = "party", pin = p, token = "party:" .. p.key, dismissed = PN.IsDismissed(p.key) }
+        out[#out + 1] = { kind = "party", pin = p, token = "party:" .. p.key, dismissed = PN.IsDismissed(p.key), kept = PN.IsKept(p) }
     end
     return out
+end
+
+-- Kept pins of yours, local and party. A count only.
+function PN.KeptCount()
+    local n = 0
+    for _, p in ipairs(PN.LocalPins()) do if PN.IsKept(p) then n = n + 1 end end
+    if session then
+        for _, p in pairs(session.pins) do if p.mine and PN.IsKept(p) then n = n + 1 end end
+    end
+    return n
 end
 
 -- Read only, for /tui diagnostics: counts and codes, never names, places or text.
@@ -795,7 +941,7 @@ function PN.Snapshot()
     local deleted = 0
     if session then for _ in pairs(session.deleted) do deleted = deleted + 1 end end
     return {
-        localPins = PN.LocalCount(), shared = PN.SharedCount(), own = PN.OwnCount(),
+        localPins = PN.LocalCount(), shared = PN.SharedCount(), own = PN.OwnCount(), kept = PN.KeptCount(),
         dismissed = PN.DismissedCount(), deleted = deleted, owners = #PN.Owners(),
         session = session ~= nil, drops = drops,
     }

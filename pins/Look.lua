@@ -128,6 +128,11 @@ end
 PL.PIN_TEXTURE = R.PATH .. [[media\textures\map-pin]]
 PL.PIN_BADGE = { 0.78, 0.22 }
 
+-- A kept pin's padlock (data bar menu and pin window rows): the game's own, the one Blizzard_MountCollection's
+-- Classic frame uses for a locked mount; white, so a muted gold tint colors it. Not on map markers.
+PL.LOCK_TEXTURE = [[Interface\PetBattles\PetBattle-LockIcon]]
+PL.LOCK_TINT = { 0.79, 0.64, 0.29, 0.85 }
+
 -- Where the badge goes, in a button or icon `size` units square: { x from the left, y from the top }.
 function PL.BadgePoint(size)
     return PL.PIN_BADGE[1] * size, -PL.PIN_BADGE[2] * size

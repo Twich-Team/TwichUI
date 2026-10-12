@@ -1,10 +1,12 @@
 -- TwichUI: Party pins, the pin window
 -- Every pin you have in one list: your local pins, and the party's while you are in a party. A count in
 -- the header, a search box, filters (All, Local, Party, Removed), and for each pin its icon, name, map and
--- coordinates, and who made it. Right-click a row (or its menu button) for what can be done with it:
---   Show on map, Set waypoint (the game's own, replacing yours, only when you pick it), Rename or recolor
---   (your own), Keep as local copy, Remove from my map / Restore to my map, Remove pin (a local one), and
---   Remove for entire party (your own party pins, after you confirm).
+-- coordinates, and who made it. A padlock marks a kept pin (protected from deletion and clearing), and the
+-- Kept filter lists them. Right-click a row (or its menu button) for what can be done with it:
+--   Show on map, Set waypoint (the game's own, replacing yours, only when you pick it), Edit pin (your
+--   own: name, color and Keep), Save to my pins (a party pin, as a local pin of your own, reviewed first),
+--   Remove from my map / Restore to my map, Remove pin (a local one; not a kept one), and Remove for
+--   entire party (your own party pins, after you confirm; not a kept one).
 -- What can be done is asked when the menu opens and again when you pick it, so a pin that changed or
 -- went meanwhile is never acted on. Opened with /tui pins, the data bar or the Party pins options; it
 -- never opens by itself. TwichUI's own look (pins/Look.lua), which works without EllesmereUI.
@@ -163,14 +165,14 @@ function PW.Actions(e)
     Add("waypoint", "Set waypoint", function() R.PinsMap.SetWaypoint(e) end,
         "Puts the game's own waypoint here. It replaces the waypoint you had, as setting one on the map does.")
     if not party or pin.mine then
-        Add("edit", "Rename or recolor...", function() R.PinsEditor.OpenEdit(e) end,
-            party and "Changes it for everyone in the party who has it." or "Changes this pin's name or color.")
+        Add("edit", "Edit pin...", function() R.PinsEditor.OpenEdit(e) end,
+            party and "Changes its name or color for everyone in the party who has it, and whether you keep it." or "Changes this pin's name or color, and whether it is kept: protected from deletion and cleanup.")
     end
     if party then
-        Add("copy", "Keep as local copy", function()
-            local copy, why = PN.KeepCopy(pin.key)
-            if copy then Notice("Kept as a local pin.") else Notice(PN.Reason(why)) end
-        end, "Makes a local pin of your own in the same place. It isn't linked to this one: it stays when this party pin is removed or you leave the party, and changes to this one don't reach it.")
+        Add("copy", "Save to my pins...", function()
+            local fields, why = PN.CopyFields(pin.key)
+            if fields then R.PinsEditor.OpenCopy(fields) else Notice(PN.Reason(why)) end
+        end, "Opens a new local pin of your own here, kept by default, for you to review and save. It isn't linked to this one: it stays when this party pin is removed or you leave the party, and nothing is sent.")
         if dismissed then
             Add("restore", "Restore to my map", function() PN.Restore(pin.key) end, "Shows it on your map again.")
         else
@@ -196,20 +198,36 @@ function PW.OpenActions(e, anchor)
     OpenMenu(anchor, pin.name, PW.Actions(e))
 end
 
+-- Asks first, with the counts of what it will delete; only those pins are deleted, each judged again when
+-- the question is accepted, so one that became kept in between stays.
+local function ConfirmDeleteLocal()
+    local ids, n, kept = PN.LocalClearScope()
+    if n == 0 then
+        Notice(kept > 0 and "Every local pin you have is kept, so there is nothing to delete." or "You have no local pins.")
+        return
+    end
+    local text = ("Delete %d unprotected local %s? This can't be undone. Party pins are not touched."):format(n, n == 1 and "pin" or "pins")
+    if kept > 0 then
+        text = text .. ("\n\nYour %d kept %s will remain."):format(kept, kept == 1 and "pin" or "pins")
+    end
+    R.Interact.Confirm("TWICHUI_PINS_CLEAR_LOCAL", text, function() PN.ClearLocal(ids) end, { accept = "Delete", valid = function()
+        local _, now = PN.LocalClearScope()
+        if now == 0 then return false, "Nothing is left to delete now. Nothing was changed." end
+        return true
+    end })
+end
+
 local function OpenMore(anchor)
-    local localCount, partyCount = PN.LocalCount(), PN.SharedCount()
-    OpenMenu(anchor, "Party pins", {
-        { label = "Remove all party pins from my map", enabled = partyCount > PN.DismissedCount(),
-          why = "No party pins are on your map.",
-          tip = "Takes every party pin off your map, yours included. Nothing is sent; each can be restored under Removed.",
+    local scope = PN.ClearScope()
+    OpenMenu(anchor, "Pins", {
+        { label = "Remove all party pins from my map", enabled = scope.partyHide > 0,
+          why = scope.kept > 0 and "The party pins on your map are all kept." or "No party pins are on your map.",
+          tip = "Takes every party pin off your map, yours included, except kept ones. Nothing is sent; each can be restored under Removed.",
           run = function() PN.DismissAll() end },
-        { label = "Delete all local pins...", enabled = localCount > 0, why = "You have no local pins.", danger = true,
-          tip = "Asks first. Party pins and anything shared are not touched; nothing is sent.",
-          run = function()
-              R.Interact.Confirm("TWICHUI_PINS_CLEAR_LOCAL",
-                  ("Delete all %d of your local pins? This can't be undone. Party pins are not touched."):format(PN.LocalCount()),
-                  function() PN.ClearLocal() end, { accept = "Delete" })
-          end },
+        { label = "Delete unprotected local pins...", enabled = scope.localDelete > 0,
+          why = scope.kept > 0 and "Every local pin you have is kept." or "You have no local pins.", danger = true,
+          tip = "Asks first. Kept pins, party pins and anything shared are not touched; nothing is sent.",
+          run = ConfirmDeleteLocal },
         { label = "Party pins options", run = function()
             if not (InCombatLockdown and InCombatLockdown()) then R:OpenSettings("pins") end
         end },
@@ -222,6 +240,7 @@ end
 local function Match(e)
     if filter == "local" and e.kind ~= "local" then return false end
     if filter == "party" and (e.kind ~= "party" or e.dismissed) then return false end
+    if filter == "kept" and (not e.kept or e.dismissed) then return false end
     if filter == "dismissed" and not e.dismissed then return false end
     if filter == "all" and e.dismissed then return false end
     if search == "" then return true end
@@ -272,6 +291,13 @@ local function NewRow(i)
     row.more:SetPoint("RIGHT", -4, 0)
     row.more.text:SetJustifyH("CENTER")
     Tip(row.more, nil, "Actions for this pin (or right-click the row).")
+    row.lock = row:CreateTexture(nil, "ARTWORK")
+    row.lock:SetTexture(PL.LOCK_TEXTURE)
+    row.lock:SetSize(12, 12)
+    row.lock:SetPoint("RIGHT", row.more, "LEFT", -4, 0)
+    local t = PL.LOCK_TINT
+    row.lock:SetVertexColor(t[1], t[2], t[3], t[4])
+    row.lock:Hide()
     row.owner = PL.Text(row, "GameFontNormalSmall", "meta")
     row.owner:SetPoint("RIGHT", row.more, "LEFT", -4, 0)
     row.owner:SetJustifyH("RIGHT")
@@ -321,6 +347,15 @@ local function DressRow(row, e, y, h)
     row.name:SetPoint(h >= 30 and "TOPLEFT" or "LEFT", row.icon, h >= 30 and "TOPRIGHT" or "RIGHT", 6, h >= 30 and 2 or 0)
     row.name:SetPoint("RIGHT", row.owner, "LEFT", -6, 0)
     row.owner:SetText(e.dismissed and "removed" or Owner(e))
+    -- a kept pin's padlock sits where the owner's name ends, which moves left to make room
+    local kept = PN.IsKept(pin)
+    row.lock:SetShown(kept)
+    row.owner:ClearAllPoints()
+    if kept then
+        row.owner:SetPoint("RIGHT", row.lock, "LEFT", -4, 0)
+    else
+        row.owner:SetPoint("RIGHT", row.more, "LEFT", -4, 0)
+    end
     Paint(row.name, pal.text)
     Paint(row.sub, pal.stone)
     Paint(row.owner, party and pal.gold or pal.stone)
@@ -342,6 +377,7 @@ local EMPTY = {
     all = "No pins yet.\n\n%s",
     ["local"] = "No local pins.\n\n%s",
     party = "No party pins on your map.",
+    kept = "No kept pins. Keep a pin from its Edit pin window to protect it from deletion and cleanup.",
     dismissed = "Nothing removed from your map. Party pins you remove from your map wait here until you leave the party.",
 }
 
@@ -479,9 +515,10 @@ local function Build()
     -- filters
     panel.filters = {}
     local x = PAD
-    for _, def in ipairs({ { "all", "All", 52, "Every pin on your map." }, { "local", "Local", 56, "Only you see these; they are kept between sessions." },
-        { "party", "Party", 56, "Shared with party members who have TwichUI, for this party only." },
-        { "dismissed", "Removed", 72, "Party pins you removed from your map. Restore them from here." } }) do
+    for _, def in ipairs({ { "all", "All", 40, "Every pin on your map." }, { "local", "Local", 50, "Only you see these; they are kept between sessions." },
+        { "party", "Party", 50, "Shared with party members who have TwichUI, for this party only." },
+        { "kept", "Kept", 46, "Pins you kept: protected from deletion and clearing until you turn Keep off." },
+        { "dismissed", "Removed", 66, "Party pins you removed from your map. Restore them from here." } }) do
         local key = def[1]
         local b = W(S.Toggle(body, def[2], def[3], function()
             filter = key
@@ -492,9 +529,10 @@ local function Build()
         panel.filters[key] = b
         x = x + def[3] + 4
     end
+    -- on the title row: the filter row is full now
     panel.state = PL.Text(body, "GameFontNormalSmall", "meta")
-    panel.state:SetPoint("LEFT", panel.filters.dismissed, "RIGHT", 8, 0)
-    panel.state:SetPoint("RIGHT", -PAD, 0)
+    panel.state:SetPoint("LEFT", panel.count, "RIGHT", 8, 0)
+    panel.state:SetPoint("RIGHT", close, "LEFT", -6, 0)
     panel.state:SetJustifyH("RIGHT")
     panel.state:SetWordWrap(false)
 

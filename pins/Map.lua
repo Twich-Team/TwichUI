@@ -89,10 +89,11 @@ local function Tooltip(b, anchor, yards)
     GameTooltip:SetOwner(b, anchor or "ANCHOR_RIGHT", anchor and 0 or -4, anchor and 0 or -4)
     GameTooltip:SetText(pin.name, 1, 1, 1, 1, true)
     local SH = R.Share
+    local kept = PN.IsKept(pin) and "Kept \194\183 " or ""   -- "Kept · Local pin"
     if e.kind == "local" then
-        GameTooltip:AddLine(pin.copiedFrom and ("Local pin, copied from " .. pin.copiedFrom .. "'s") or "Local pin", 0.78, 0.74, 0.66)
+        GameTooltip:AddLine(kept .. (pin.copiedFrom and ("Local pin, copied from " .. pin.copiedFrom .. "'s") or "Local pin"), 0.78, 0.74, 0.66)
     elseif pin.mine then
-        GameTooltip:AddLine("Your party pin", 0.86, 0.69, 0.30)
+        GameTooltip:AddLine(kept .. "Your party pin", 0.86, 0.69, 0.30)
     else
         GameTooltip:AddLine("Party pin from " .. (SH and SH.Short(pin.owner) or pin.owner), 0.86, 0.69, 0.30)
     end

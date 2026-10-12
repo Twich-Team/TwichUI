@@ -108,7 +108,7 @@ end
 
 local function OnTooltipShow(tip)
     local K = R.PinsLook.palette
-    tip:AddLine("Party pins", 1, 1, 1)
+    tip:AddLine("Map pins", 1, 1, 1)   -- local and party pins both
     if not Enabled() then
         tip:AddLine("Turned off in TwichUI options (Party pins).", K.stone[1], K.stone[2], K.stone[3])
         return
@@ -116,6 +116,10 @@ local function OnTooltipShow(tip)
     local _, party = R.PinsWindow.Count()
     tip:AddDoubleLine("Local pins", tostring(PN.LocalCount()), K.textDim[1], K.textDim[2], K.textDim[3], K.text[1], K.text[2], K.text[3])
     tip:AddDoubleLine("Party pins on your map", tostring(party), K.textDim[1], K.textDim[2], K.textDim[3], K.text[1], K.text[2], K.text[3])
+    local kept = PN.KeptCount()
+    if kept > 0 then
+        tip:AddDoubleLine("Kept", tostring(kept), K.textDim[1], K.textDim[2], K.textDim[3], K.text[1], K.text[2], K.text[3])
+    end
     local removed = PN.DismissedCount()
     if removed > 0 then
         tip:AddDoubleLine("Removed from your map", tostring(removed), K.textDim[1], K.textDim[2], K.textDim[3], K.text[1], K.text[2], K.text[3])

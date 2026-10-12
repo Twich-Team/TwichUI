@@ -1,6 +1,9 @@
 -- TwichUI: Party pins, the pin editor
 -- A small window for a new pin's name, color and kind (local or party), and for renaming or recoloring
--- one you can change. Nothing is made, changed or sent until Save; Cancel, Esc or closing it leaves
+-- one you can change. A "Keep this pin" box protects it from deletion, clearing and moving (pins/Pins.lua
+-- enforces that; the box is only where it is chosen). The same window, filled in, is "Save to my pins" for
+-- a party pin someone else made: a local pin of your own, kept by default, made only when you press Save.
+-- Nothing is made, changed or sent until Save; Cancel, Esc or closing it leaves
 -- everything as it was. Save checks again at that moment (still in a party, still your pin, still under
 -- the limits) and says why when it can't, keeping what you typed.
 -- Drawn with TwichUI's own look (pins/Look.lua): its background and border are the player's own choice
@@ -15,13 +18,13 @@ local PE = {}
 R.PinsEditor = PE
 
 local NAME = "TwichUIPinEditor"
-local WIDTH, HEIGHT = 300, 214
+local WIDTH, HEIGHT = 300, 242
 local PAD = 14
 local SWATCH, SWATCH_ON = 22, 24
 local pal = PL.palette
 local f       -- the window: it carries the player's background and border, and the fields below
 local body    -- WIDTH x HEIGHT inside it, clear of the border; everything is drawn on this
-local state   -- { mode = "new" | "edit" | "preview", map, x, y, party, entry, color }
+local state   -- { mode = "new" | "edit" | "preview", map, x, y, party, entry, color, kept, copy, copiedFrom }
 
 local function Swatch(parent, i, color)
     local b = CreateFrame("Button", nil, parent, "BackdropTemplate")
@@ -40,6 +43,40 @@ local function Swatch(parent, i, color)
     return b
 end
 
+-- A small bronze check box with its label, drawn in the editor's palette (no game template to restyle).
+local function CheckBox(parent, label, onClick)
+    local b = CreateFrame("Button", nil, parent)
+    b:SetSize(WIDTH - PAD * 2, 20)
+    b.box = CreateFrame("Frame", nil, b, "BackdropTemplate")
+    b.box:SetSize(14, 14)
+    b.box:SetPoint("LEFT", 0, 0)
+    b.box:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
+    b.mark = b.box:CreateTexture(nil, "OVERLAY")
+    b.mark:SetSize(8, 8)
+    b.mark:SetPoint("CENTER")
+    b.text = PL.Text(b, "GameFontNormalSmall", "name")
+    b.text:SetPoint("LEFT", b.box, "RIGHT", 8, 0)
+    b.text:SetText(label)
+    local on, over = false, false
+    local function Paint_()
+        local edge = (on or over) and pal.gold or pal.bronzeLo
+        b.box:SetBackdropColor(pal.well[1], pal.well[2], pal.well[3], 1)
+        b.box:SetBackdropBorderColor(edge[1], edge[2], edge[3], 1)
+        b.mark:SetColorTexture(pal.gold[1], pal.gold[2], pal.gold[3], 1)
+        b.mark:SetShown(on)
+        local t = over and pal.text or pal.textDim
+        b.text:SetTextColor(t[1], t[2], t[3])
+    end
+    function b:SetOn(v) on = v and true or false; Paint_() end
+    function b:IsOn() return on end
+    b:SetScript("OnEnter", function() over = true; Paint_() end)
+    b:SetScript("OnLeave", function() over = false; Paint_() end)
+    b:SetScript("OnClick", onClick)
+    b.Repaint = Paint_
+    Paint_()
+    return b
+end
+
 local function Refresh()
     if not (f and state) then return end
     local party = state.party
@@ -52,6 +89,9 @@ local function Refresh()
     elseif blocked then
         f.status:SetText(PN.Reason(blocked))
         f.status:SetTextColor(0.80, 0.45, 0.35)
+    elseif state.copy then
+        f.status:SetText("A copy that is only yours. It stays if the original is removed.")
+        f.status:SetTextColor(pal.stone[1], pal.stone[2], pal.stone[3])
     elseif party then
         f.status:SetText("Party members with TwichUI will see it, with this name.")
         f.status:SetTextColor(pal.stone[1], pal.stone[2], pal.stone[3])
@@ -72,6 +112,7 @@ function PE.Paint()
     end
     f.kindLocal:SetOn(not state.party)
     f.kindParty:SetOn(state.party)
+    f.keep:SetOn(state.kept == true)
     Refresh()
 end
 
@@ -83,7 +124,7 @@ local function Save()
     if not state or state.mode == "preview" then return end
     if not R:Enabled("partyPins") then Close() return end
     local name = f.name:GetText()
-    local fields = { name = name, color = state.color }
+    local fields = { name = name, color = state.color, kept = state.kept == true }
     if not PN.CleanName(name) then
         f.status:SetText(PN.Reason("empty-name"))
         f.status:SetTextColor(0.80, 0.45, 0.35)
@@ -92,6 +133,7 @@ local function Save()
     local done, why
     if state.mode == "new" then
         fields.map, fields.x, fields.y = state.map, state.x, state.y
+        fields.copiedFrom = state.copiedFrom
         if state.party then
             done, why = R.PinSync.CreateParty(fields)
         else
@@ -101,7 +143,19 @@ local function Save()
     elseif state.entry.kind == "local" then
         done, why = PN.UpdateLocal(state.entry.pin.id, fields)
     else
-        done, why = R.PinSync.UpdateParty(state.entry.pin.key, fields)
+        -- only what changed is handed over, so turning Keep on or off alone sends nothing to the party
+        local pin, diff = PN.Fresh(state.entry), fields
+        if pin then
+            diff = {}
+            if PN.CleanName(name) ~= pin.name then diff.name = name end
+            if state.color ~= pin.color then diff.color = state.color end
+            if (state.kept == true) ~= PN.IsKept(pin) then diff.kept = state.kept == true end
+        end
+        if next(diff) == nil then
+            done = pin
+        else
+            done, why = R.PinSync.UpdateParty(state.entry.pin.key, diff)
+        end
     end
     if not done then
         -- a code from Pins, or already a sentence from a permission check
@@ -163,10 +217,24 @@ local function Build()
     f.swatches = {}
     for i, color in ipairs(PN.COLORS) do f.swatches[i] = Swatch(row, i, color) end
 
+    f.keep = CheckBox(body, "Keep this pin", function()
+        if not state then return end
+        state.kept = not (state.kept == true)
+        PE.Paint()
+    end)
+    f.keep:SetPoint("TOPLEFT", PAD + 2, -150)
+    R.Interact.Tip(f.keep, "Keep this pin", function()
+        local body_ = "Protects this pin from deletion and cleanup.\nUnlock it before moving or deleting it."
+        if state and state.party then
+            body_ = body_ .. "\nA kept party pin stays kept for as long as this party lasts."
+        end
+        return body_
+    end)
+
     f.kindLocal = S.Toggle(body, "Local", 64, function()
         if state and state.mode ~= "edit" then state.party = false; PE.Paint() end
     end, pal)
-    f.kindLocal:SetPoint("TOPLEFT", PAD + 2, -150)
+    f.kindLocal:SetPoint("TOPLEFT", PAD + 2, -178)
     f.kindParty = S.Toggle(body, "Party", 64, function()
         if state and state.mode ~= "edit" then state.party = true; PE.Paint() end
     end, pal)
@@ -190,7 +258,7 @@ local function Build()
     end)
 
     f:SetScript("OnHide", function() state = nil end)
-    f.widgets = { f.save, cancel, f.kindLocal, f.kindParty, close }
+    f.widgets = { f.save, cancel, f.kindLocal, f.kindParty, close, f.keep }
     f.labels = { label, colorLabel }
 end
 
@@ -243,12 +311,27 @@ function PE.OpenNew(map, x, y, party)
     PE.Paint()
 end
 
+-- "Save to my pins": a local pin made from a party pin's fields (PN.CopyFields), for the player to review.
+-- Kept by default. Nothing is made until Save, and the original party pin is not touched or sent anywhere.
+function PE.OpenCopy(fields)
+    if type(fields) ~= "table" then return false end
+    state = { mode = "new", copy = true, map = fields.map, x = fields.x, y = fields.y, party = false,
+        color = PN.ValidColor(fields.color) and fields.color or PN.DEFAULT_COLOR, kept = true, copiedFrom = fields.copiedFrom }
+    Open()
+    f.title:SetText("Save to my pins")
+    f.where:SetText(PN.Describe(fields))
+    f.name:SetText(fields.name or PN.DefaultName())
+    f.kindLocal:Hide(); f.kindParty:Hide()
+    PE.Paint()
+    return true
+end
+
 -- Rename or recolor a local pin, or one of your own party pins.
 function PE.OpenEdit(e)
     local ok, why = PN.Can("edit", e)
     if not ok then R.PinsMap.Notice(why) return false end
     local pin = PN.Fresh(e)
-    state = { mode = "edit", entry = e, party = e.kind == "party", color = pin.color }
+    state = { mode = "edit", entry = e, party = e.kind == "party", color = pin.color, kept = PN.IsKept(pin) }
     Open()
     f.title:SetText(e.kind == "party" and "Edit party pin" or "Edit pin")
     f.where:SetText(PN.Describe(pin))

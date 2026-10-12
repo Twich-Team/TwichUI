@@ -273,11 +273,11 @@ do
 
   keys(true, false, false)
   assert(click("LeftButton", 0.4, 0.5) and PE.IsOpen())
-  assert(drawn.bg and math.abs(drawn.bg[4] - 0.98) < 1e-9 and drawn.w == 300 + 2 and drawn.h == 214 + 2,
+  assert(drawn.bg and math.abs(drawn.bg[4] - 0.98) < 1e-9 and drawn.w == 300 + 2 and drawn.h == 242 + 2,
     "drawn with the look's background, a 1 pixel border making the window 2 larger")
   -- a change redraws the open window at once
   assert(EL.Set("bgOpacity", 40) and EL.Set("borderSize", 6))
-  assert(math.abs(drawn.bg[4] - 0.40) < 1e-9 and drawn.w == 300 + 12 and drawn.h == 214 + 12, "a thicker border makes it larger")
+  assert(math.abs(drawn.bg[4] - 0.40) < 1e-9 and drawn.w == 300 + 12 and drawn.h == 242 + 12, "a thicker border makes it larger")
   assert(c.TwichUIDB.ui.pinsEditorLook.bgOpacity == 40)
   assert(c.TwichUIDB.ui.pinsLook == nil or c.TwichUIDB.ui.pinsLook.bgOpacity == nil, "the pin window's look is not the editor's")
   assert(PL.Look.Get("bgOpacity") == PL.Look.DEFAULTS.bgOpacity and PL.MenuLook.Get("bgOpacity") == PL.MenuLook.DEFAULTS.bgOpacity)
@@ -408,16 +408,16 @@ assert(PW.Show())
 PW.Refresh()
 local function labels(list) local t = {} for _, a in ipairs(list) do t[a.label] = a end return t end
 local localActs = labels(PW.Actions({ kind = "local", pin = ore, token = "local:" .. ore.id }))
-assert(localActs["Show on map"] and localActs["Set waypoint"] and localActs["Rename or recolor..."] and localActs["Remove pin"])
+assert(localActs["Show on map"] and localActs["Set waypoint"] and localActs["Edit pin..."] and localActs["Remove pin"])
 assert(not localActs["Remove for entire party..."] and not localActs["Remove from my map"])
 local mineE = { kind = "party", pin = mine, token = "party:" .. mine.key }
 local mineActs = labels(PW.Actions(mineE))
-assert(mineActs["Remove for entire party..."] and mineActs["Remove for entire party..."].enabled and mineActs["Rename or recolor..."])
-assert(mineActs["Remove from my map"] and mineActs["Keep as local copy"])
+assert(mineActs["Remove for entire party..."] and mineActs["Remove for entire party..."].enabled and mineActs["Edit pin..."])
+assert(mineActs["Remove from my map"] and mineActs["Save to my pins..."])
 local palE = { kind = "party", pin = pal, token = "party:" .. pal.key }
 local palActs = labels(PW.Actions(palE))
-assert(not palActs["Remove for entire party..."] and not palActs["Rename or recolor..."], "someone else's pin: no owner actions offered")
-assert(palActs["Remove from my map"] and palActs["Keep as local copy"] and palActs["Set waypoint"])
+assert(not palActs["Remove for entire party..."] and not palActs["Edit pin..."], "someone else's pin: no owner actions offered")
+assert(palActs["Remove from my map"] and palActs["Save to my pins..."] and palActs["Set waypoint"])
 -- Set waypoint only when picked; a map that can't hold one says so
 assert(#waypoints == 0, "nothing set the player's waypoint by itself")
 palActs["Set waypoint"].run()
@@ -446,9 +446,13 @@ local doomedActs = labels(PW.Actions({ kind = "local", pin = doomed, token = "lo
 assert(PN.RemoveLocal(doomed.id))
 doomedActs["Remove pin"].run()
 assert(lastNotice():find("no longer there"), "checked again when it runs")
--- keep a local copy of Pal's pin; remove Pal's from my map; restore it
-palActs["Keep as local copy"].run()
-assert(PN.LocalPins()[#PN.LocalPins()].copiedFrom == "Pal Stonebrook")
+-- save Pal's pin to my pins: the editor opens filled in, nothing is made until Save; remove Pal's from my map; restore it
+local savedBefore, sentBefore = PN.LocalCount(), sent()
+palActs["Save to my pins..."].run()
+assert(PE.IsOpen() and ed.title.text == "Save to my pins" and PN.LocalCount() == savedBefore and sent() == sentBefore, "reviewed first")
+ed.save.scripts.OnClick(ed.save)
+assert(PN.LocalPins()[#PN.LocalPins()].copiedFrom == "Pal Stonebrook" and PN.LocalPins()[#PN.LocalPins()].kept == true)
+assert(sent() == sentBefore, "a local copy is never sent")
 local before = sent()
 palActs["Remove from my map"].run()
 assert(PN.IsDismissed(pal.key) and sent() == before, "removing from my map sends nothing")
@@ -887,7 +891,9 @@ do
   assert(not PN.FindLocal(extra.id), "a local pin is deleted")
   FlushTimers()
 
-  -- Clear all pins asks first, says what happens, and keeps what is the party's
+  -- Clear unprotected pins asks first, says what happens, and keeps what is the party's (kept pins are in
+  -- tests/test_pins_keep.lua; the copy saved above is kept, so it is let go of here to see the plain case)
+  for _, p in ipairs(PN.LocalPins()) do assert(PN.UpdateLocal(p.id, { kept = false })) end
   local keptLocal = {}
   for _, p in ipairs(c.TwichUIDB.pins.list) do
     local copy = {}; for k, v in pairs(p) do copy[k] = v end
@@ -898,7 +904,7 @@ do
   assert(#keptLocal > 0 and #onMap > 0)
   before = sent()
   local asked = #popups
-  local clear = assert(c.TwichUIPinsMenu.clear, "a Clear all pins link")
+  local clear = assert(c.TwichUIPinsMenu.clear, "a Clear unprotected pins link")
   click(clear)
   assert(not BM.IsOpen(), "the menu is put away for the question")
   assert(#popups == asked + 1 and popups[#popups].key == "TWICHUI_PINS_CLEAR_ALL", "asks first")
@@ -923,6 +929,185 @@ do
   PN.Changed()
   FlushTimers()
   assert(PN.LocalCount() == #keptLocal)
+
+  -- Keep: the menu groups kept pins first with a padlock, the editor chooses it, Clear unprotected pins is
+  -- scoped to what it asked, the window filters and explains, and the marker's tooltip says it
+  do
+    local ed = c.TwichUIPinEditor
+    local baseList = c.TwichUIDB.pins.list
+    local hiddenHere = {}
+    for _, p in ipairs(PN.SharedPins()) do
+      if not PN.IsDismissed(p.key) and not PN.IsKept(p) then hiddenHere[#hiddenHere + 1] = p.key end
+    end
+    PN.DismissAll()                                  -- the party pins are off the map for this: only the list below
+    local list = {}
+    c.TwichUIDB.pins.list = list
+    c.TwichUIDB.pins.nextId = 100
+    local ordinary = assert(PN.AddLocal({ map = 1429, x = 100, y = 100, name = "Ore stop" }))
+    local vendor = assert(PN.AddLocal({ map = 1429, x = 4520, y = 6380, name = "Reagent vendor", kept = true }))
+    FlushTimers()
+
+    -- one group only: no headings
+    local function countText(text)   -- the "Kept" filter button has that word too, so headings are counted against it
+      local n = 0
+      for _, fs in ipairs(MAPSTRINGS) do if fs.text == text and fs.shown then n = n + 1 end end
+      return n
+    end
+    local function shownText(text) return countText(text) > 0 end
+    local function rowsNow()
+      local out = {}
+      for _, f in ipairs(FRAMES) do
+        if rawget(f, "pick") and rawget(f, "nameBtn") and rawget(f, "entry") and f.shown ~= false then out[#out + 1] = f end
+      end
+      return out
+    end
+    local ys = setmetatable({}, { __mode = "k" })
+    for _, f in ipairs(FRAMES) do
+      if rawget(f, "pick") and rawget(f, "nameBtn") then
+        rawset(f, "SetPoint", function(self, point, _, _, _, y) if point == "TOPLEFT" then ys[self] = -(y or 0) end end)
+      end
+    end
+    BM.Open(host)
+    local vendorRow = assert(rowFor("Reagent vendor"))
+    local oreRow = assert(rowFor("Ore stop"))
+    assert(vendorRow.remove.lock.shown == true and vendorRow.remove.text.shown == false, "a kept row has a padlock where the x was")
+    assert(oreRow.remove.lock.shown == false and oreRow.remove.text.shown == true, "an ordinary row keeps its x")
+    assert(shownText("Other pins"), "headings when both groups have pins")
+    local keptWords = countText("Kept")
+    assert(ys[vendorRow] < ys[oreRow], "kept pins first " .. tostring(ys[vendorRow]) .. " " .. tostring(ys[oreRow]))
+
+    -- its tooltip: a title and what to do
+    local tip = vendorRow.remove.twichuiTip
+    local body = tip.body(vendorRow.remove)
+    assert(tip.title == "Kept pin" and body:find("Protected from deletion and cleanup.", 1, true) and body:find("Edit this pin to unlock it.", 1, true),
+      "the padlock explains itself")
+    tip.body(oreRow.remove)
+    assert(oreRow.remove.twichuiTip.title == nil and oreRow.remove.twichuiTip.body(oreRow.remove):find("Delete this pin"), "an ordinary x as before")
+
+    -- the padlock opens the editor and changes nothing; the editor shows Keep on
+    local countBefore, sentBefore = PN.LocalCount(), sent()
+    click(vendorRow.remove)
+    assert(not BM.IsOpen() and PE.IsOpen() and ed.title.text == "Edit pin", "it opens the editor")
+    assert(PN.IsKept(vendor) and PN.LocalCount() == countBefore, "and neither unlocks nor deletes")
+    assert(ed.keep:IsOn() == true, "the box shows the pin as kept")
+    -- a draft until Save: unticking and cancelling leaves it as it was
+    ed.keep.scripts.OnClick(ed.keep)
+    assert(ed.keep:IsOn() == false and PN.IsKept(vendor), "unticked in the draft only")
+    ed.name.scripts.OnEscapePressed(ed.name)
+    assert(not PE.IsOpen() and PN.IsKept(vendor) and vendor.name == "Reagent vendor", "Cancel changes nothing")
+    -- rename and recolor while kept
+    assert(PE.OpenEdit({ kind = "local", pin = vendor, token = "local:" .. vendor.id }))
+    ed.name:SetText("Orgrimmar reagents")
+    ed.swatches[4].scripts.OnClick(ed.swatches[4])
+    ed.save.scripts.OnClick(ed.save)
+    assert(vendor.name == "Orgrimmar reagents" and vendor.color == PN.COLORS[4][1] and PN.IsKept(vendor) and not PE.IsOpen(),
+      "renamed and recolored, still kept")
+    assert(sent() == sentBefore, "a local pin sends nothing")
+    -- unlock and save, then lock again
+    assert(PE.OpenEdit({ kind = "local", pin = vendor, token = "local:" .. vendor.id }))
+    ed.keep.scripts.OnClick(ed.keep); ed.save.scripts.OnClick(ed.save)
+    assert(not PN.IsKept(vendor) and PN.LocalCount() == countBefore, "unlocked by Save, and not deleted by it")
+    assert(PE.OpenEdit({ kind = "local", pin = vendor, token = "local:" .. vendor.id }))
+    assert(ed.keep:IsOn() == false)
+    ed.keep.scripts.OnClick(ed.keep); ed.save.scripts.OnClick(ed.save)
+    assert(PN.IsKept(vendor))
+
+    -- a new pin can be made kept in the same dialog; the default is not
+    PE.OpenNew(1429, 2000, 2000, false)
+    assert(ed.keep:IsOn() == false, "new pins are ordinary by default")
+    ed.keep.scripts.OnClick(ed.keep)
+    ed.name:SetText("Mailbox")
+    ed.save.scripts.OnClick(ed.save)
+    local mail
+    for _, p in ipairs(PN.LocalPins()) do if p.name == "Mailbox" then mail = p end end
+    assert(mail and PN.IsKept(mail), "made kept")
+    assert(PN.RemoveLocal(mail.id) == false)
+    assert(PN.UpdateLocal(mail.id, { kept = false }) and PN.RemoveLocal(mail.id))
+    FlushTimers()
+
+    -- the window: a padlock, a filter, and a delete that says why it is off
+    local panel = c.TwichUIPins
+    assert(PW.Show())
+    panel.filters.kept.scripts.OnClick(panel.filters.kept)
+    FlushTimers()
+    local seen = 0
+    for _, f in ipairs(FRAMES) do
+      if rawget(f, "more") and rawget(f, "lock") and rawget(f, "entry") then
+        assert(f.entry.kept == true and f.lock.shown == true, "the Kept filter lists kept pins, with their padlock")
+        seen = seen + 1
+      end
+    end
+    assert(seen == 1, "one kept pin listed (" .. seen .. ")")
+    local acts = labels(PW.Actions({ kind = "local", pin = vendor, token = "local:" .. vendor.id }))
+    assert(acts["Remove pin"].enabled == false and acts["Remove pin"].why:find("kept"), "Remove pin is off, and says why")
+    acts["Remove pin"].run()
+    assert(PN.FindLocal(vendor.id) and lastNotice():find("kept"), "and picking it anyway deletes nothing")
+    assert(acts["Edit pin..."].enabled)
+    panel.filters["all"].scripts.OnClick(panel.filters["all"])
+    PW.Hide()
+
+    -- the marker's tooltip
+    local lines = {}
+    rawset(c.GameTooltip, "SetText", function(_, text) lines[#lines + 1] = text end)
+    rawset(c.GameTooltip, "AddLine", function(_, text) lines[#lines + 1] = text end)
+    PM.Tooltip({ entry = { kind = "local", pin = vendor, token = "local:" .. vendor.id } })
+    local tipText = table.concat(lines, "\n")
+    assert(tipText:find("Orgrimmar reagents", 1, true) and tipText:find("Kept \194\183 Local pin", 1, true), "the tooltip says Kept")
+    lines = {}
+    PM.Tooltip({ entry = { kind = "local", pin = ordinary, token = "local:" .. ordinary.id } })
+    assert(not table.concat(lines, "\n"):find("Kept", 1, true), "and only for a kept pin")
+    rawset(c.GameTooltip, "SetText", nil); rawset(c.GameTooltip, "AddLine", nil)
+
+    -- Clear unprotected pins: the question has the counts of its scope, singular here
+    FlushTimers()
+    BM.Open(host)
+    local asked = #popups
+    click(c.TwichUIPinsMenu.clear)
+    assert(#popups == asked + 1 and popups[#popups].key == "TWICHUI_PINS_CLEAR_ALL")
+    local text = popups[#popups].text
+    assert(text:find("Remove 1 unprotected pin?", 1, true) and text:find("Your 1 kept pin will remain.", 1, true), text)
+    assert(not text:find("party", 1, true), "no party pins are in this scope")
+    assert(PN.LocalCount() == 2, "nothing changed before confirming")
+    -- while it is open: a new pin is made, and the pin it counted becomes kept
+    local late = assert(PN.AddLocal({ map = 1429, x = 300, y = 300, name = "Made meanwhile" }))
+    assert(PN.UpdateLocal(ordinary.id, { kept = true }))
+    c.StaticPopupDialogs.TWICHUI_PINS_CLEAR_ALL.OnAccept()
+    assert(PN.FindLocal(ordinary.id) and PN.IsKept(ordinary), "a pin kept since the question stays")
+    assert(PN.FindLocal(late.id), "a pin made since is not what was confirmed")
+    -- clearing for real, with plural wording
+    assert(PN.UpdateLocal(ordinary.id, { kept = false }))
+    local late2 = assert(PN.AddLocal({ map = 1429, x = 301, y = 301, name = "Another" }))
+    FlushTimers()
+    BM.Open(host)
+    click(c.TwichUIPinsMenu.clear)
+    text = popups[#popups].text
+    assert(text:find("Remove 3 unprotected pins?", 1, true) and text:find("Your 1 kept pin will remain.", 1, true), text)
+    sentBefore = sent()
+    c.StaticPopupDialogs.TWICHUI_PINS_CLEAR_ALL.OnAccept()
+    assert(PN.LocalCount() == 1 and PN.IsKept(vendor) and sent() == sentBefore, "only the kept pin remains; nothing was sent")
+    FlushTimers()
+    -- only kept pins left: no headings and the link is off, with the reason
+    BM.Open(host)
+    assert(c.TwichUIPinsMenu.clear.enabled == false, "nothing to clear: the link is off")
+    local clearTip = c.TwichUIPinsMenu.clear.twichuiTip
+    local _, reason = clearTip.body(c.TwichUIPinsMenu.clear)
+    assert(reason and reason:find("kept"), "and says why")
+    assert(not shownText("Other pins") and countText("Kept") == keptWords - 1, "no headings with one group")
+    BM.Close()
+    -- asked anyway (the link is greyed out in the game), it says so instead of asking
+    local askedNow, noticesNow = #popups, #notices
+    BM.Open(host)
+    c.TwichUIPinsMenu.clear.scripts.OnClick(c.TwichUIPinsMenu.clear)
+    assert(#popups == askedNow and #notices == noticesNow + 1 and lastNotice():find("kept"), "nothing to ask about: it says why")
+
+    -- put the state back for what follows
+    c.TwichUIDB.pins.list = baseList
+    c.TwichUIDB.pins.nextId = nil
+    for _, key in ipairs(hiddenHere) do PN.Restore(key) end
+    PN.Changed()
+    FlushTimers()
+    assert(PN.LocalCount() == #keptLocal)
+  end
 
   -- a pin arriving from another player is pointed out for a while, then the text goes back
   do

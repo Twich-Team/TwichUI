@@ -1,13 +1,16 @@
 -- TwichUI: Party pins, the data bar menu
--- What a click on the data bar entry opens (pins/Broker.lua): a short list of the pins on your map, a
--- pared-down version of the pin window. Each row has the pin's color (click it to pick another), its name
--- (click it to rename), where it is, who made it, and a remove button. Under the list: a link to the full
--- pin window and Clear all pins.
+-- What a click on the data bar entry opens (pins/Broker.lua): a short list of the pins on your map, local
+-- and party, a pared-down version of the pin window. Each row has the pin's color (click it to pick
+-- another), its name (click it to rename), where it is, who made it, and a remove button. Kept pins are
+-- listed first (with a heading when there are others too) and show a padlock where the remove button would
+-- be: it opens the editor, where Keep is turned off, and never unlocks or deletes by itself. Under the
+-- list: a link to the full pin window and Clear unprotected pins.
 --   Remove: a local pin is deleted; one of your own party pins asks first and is then removed for the
 --   whole party; someone else's party pin is taken off your map only (the pin window's Removed filter
 --   restores it).
---   Clear all pins: asks first. Deletes your local pins and takes party pins off your map. Nothing is sent
---   and party pins you shared stay on your party's maps.
+--   Clear unprotected pins: asks first, with the counts of what it will do. Deletes your local pins and
+--   takes party pins off your map, except the kept ones, which stay. Nothing is sent and party pins you
+--   shared stay on your party's maps.
 -- Everything is checked again when it runs (PN.Can), exactly as in the pin window. The menu has nothing
 -- secure in it, so unlike the Mage launchers' menus it can be used in combat. Its background and border are
 -- the player's own (pinsBrokerMenu in pins/Look.lua); its text follows the pin window's font and size.
@@ -24,11 +27,11 @@ R.PinsBrokerMenu = BM
 
 local NAME = "TwichUIPinsMenu"
 local WIDTH, PAD = 300, 8
-local TITLE_H, FOOT_H, ROW_H, MAX_ROWS, EMPTY_H = 28, 26, 34, 7, 66
+local TITLE_H, FOOT_H, ROW_H, MAX_ROWS, EMPTY_H, HEAD_H = 28, 26, 34, 7, 66, 18
 local BAR = 22                       -- room kept for the scroll bar
 local DANGER = { 0.92, 0.55, 0.44 }
 local pal = PL.palette
-local menu, scroll, content, rows, picker, edit
+local menu, scroll, content, rows, heads, picker, edit
 local owner                          -- the data bar frame it was opened from
 local previewing = false             -- opened from the options page: stays until closed
 local editing                        -- the entry being renamed
@@ -66,6 +69,11 @@ end
 local function Remove(e)
     local pin = PN.Fresh(e)
     if not pin then Notice(PN.Reason("gone")) return end
+    if PN.IsKept(pin) then
+        -- a kept pin has no remove button; this is for a caller that got here anyway
+        Notice(PN.Reason("kept"))
+        return
+    end
     if e.kind == "local" then
         local ok, why = PN.Can("delete", e)
         if not ok then Notice(why) return end
@@ -88,25 +96,38 @@ local function CountPins()
     return #entries, party
 end
 
--- Asks first; the question says exactly what will happen, for the pins there are now.
-local function ClearAll()
-    local localCount, party = PN.LocalCount(), 0
-    for _, p in ipairs(PN.SharedPins()) do if not PN.IsDismissed(p.key) then party = party + 1 end end
-    if localCount + party == 0 then return end
-    local text
-    if localCount > 0 and party > 0 then
-        text = ("Clear all pins?\n\nThis deletes your %d local %s for good and takes %d party %s off your map. Party pins aren't deleted for anyone else: nothing is sent, and you can restore them under Removed in the pin window."):format(
-            localCount, localCount == 1 and "pin" or "pins", party, party == 1 and "pin" or "pins")
-    elseif localCount > 0 then
-        text = ("Delete all %d of your local %s? This can't be undone."):format(localCount, localCount == 1 and "pin" or "pins")
-    else
-        text = ("Take all %d party %s off your map? Nothing is sent and the pins stay with your party. You can restore them under Removed in the pin window."):format(
-            party, party == 1 and "pin" or "pins")
+local function Plural(n, one, many) return n == 1 and one or many end
+
+-- Asks first; the question says exactly what will happen, from the pins there are now, and what is done is
+-- only that: a pin made since, or the scope's count going up, is left for the next question. A pin that
+-- became kept in the meantime is left alone.
+local function ClearUnprotected()
+    local scope = PN.ClearScope()
+    local total = scope.localDelete + scope.partyHide
+    if total == 0 then
+        Notice(scope.kept > 0 and "Every pin you have is kept, so there is nothing to clear." or "There are no pins to clear.")
+        return
+    end
+    local parts = {}
+    if scope.localDelete > 0 then
+        parts[#parts + 1] = ("Deletes your %d local %s for good."):format(scope.localDelete, Plural(scope.localDelete, "pin", "pins"))
+    end
+    if scope.partyHide > 0 then
+        parts[#parts + 1] = ("Takes %d party %s off your map: nothing is sent, they stay with your party, and you can restore them under Removed in the pin window."):format(
+            scope.partyHide, Plural(scope.partyHide, "pin", "pins"))
+    end
+    local text = ("Remove %d unprotected %s?\n\n%s"):format(total, Plural(total, "pin", "pins"), table.concat(parts, " "))
+    if scope.kept > 0 then
+        text = text .. ("\n\nYour %d kept %s will remain."):format(scope.kept, Plural(scope.kept, "pin", "pins"))
     end
     R.Interact.Confirm("TWICHUI_PINS_CLEAR_ALL", text, function()
-        PN.ClearLocal()
-        PN.DismissAll()
-    end, { accept = "Clear all", valid = function() return R:Enabled("partyPins") end })
+        PN.ClearUnprotected(scope)
+    end, { accept = "Remove", valid = function()
+        if not R:Enabled("partyPins") then return false, "Party pins are turned off. Nothing was changed." end
+        local now = PN.ClearScope()
+        if now.localDelete + now.partyHide == 0 then return false, "Nothing is left to clear now. Nothing was changed." end
+        return true
+    end })
 end
 
 ---------------------------------------------------------------------------
@@ -241,8 +262,11 @@ end
 local function RemoveTip(row)
     local e = row.entry
     if not e then return nil end
-    if e.kind == "local" then return "Delete this pin. It can't be undone." end
     local pin = PN.Fresh(e)
+    local tip = row.remove.twichuiTip
+    if tip then tip.title = PN.IsKept(pin) and "Kept pin" or nil end   -- read after this returns
+    if PN.IsKept(pin) then return "Protected from deletion and cleanup.\nEdit this pin to unlock it." end
+    if e.kind == "local" then return "Delete this pin. It can't be undone." end
     if pin and pin.mine then return "Remove it for the entire party. Asks first." end
     return "Takes it off your map only. Nothing is sent; restore it under Removed in the pin window."
 end
@@ -281,7 +305,24 @@ local function NewRow(i)
     row.remove.text:SetPoint("CENTER")
     row.remove.text:SetJustifyH("CENTER")
     row.remove.text:SetText("x")
-    row.remove:SetScript("OnClick", function() local e = row.entry if e then Remove(e) end end)
+    -- a kept pin's padlock, in place of the x: clicking it opens the editor and changes nothing by itself
+    row.remove.lock = row.remove:CreateTexture(nil, "ARTWORK")
+    row.remove.lock:SetTexture(PL.LOCK_TEXTURE)
+    row.remove.lock:SetSize(14, 14)
+    row.remove.lock:SetPoint("CENTER")
+    local t = PL.LOCK_TINT
+    row.remove.lock:SetVertexColor(t[1], t[2], t[3], t[4])
+    row.remove.lock:Hide()
+    row.remove:SetScript("OnClick", function()
+        local e = row.entry
+        if not e then return end
+        if PN.IsKept(PN.Fresh(e)) then
+            BM.Close()
+            R.PinsEditor.OpenEdit(e)
+        else
+            Remove(e)
+        end
+    end)
     Tip(row.remove, nil, function() return RemoveTip(row) end, "ANCHOR_RIGHT")
     row.remove:HookScript("OnEnter", function(self) Paint(self.text, DANGER) end)
     row.remove:HookScript("OnLeave", function(self) Paint(self.text, pal.stone) end)
@@ -343,6 +384,9 @@ local function DressRow(row, e, y)
     Paint(row.sub, pal.stone)
     Paint(row.owner, party and pal.gold or pal.stone)
     Paint(row.remove.text, pal.stone)
+    local kept = PN.IsKept(pin)
+    row.remove.text:SetShown(not kept)
+    row.remove.lock:SetShown(kept)
     S.PaintRow(row, pal)
     row:Show()
 end
@@ -350,23 +394,55 @@ end
 ---------------------------------------------------------------------------
 -- Drawing the menu
 ---------------------------------------------------------------------------
+local function Heading(i, text, y)
+    local h = heads[i]
+    if not h then
+        h = PL.Text(content, "GameFontNormalSmall", "meta")
+        h:SetJustifyH("LEFT")
+        heads[i] = h
+    end
+    h:ClearAllPoints()
+    h:SetPoint("TOPLEFT", content, "TOPLEFT", 6, -(y + 4))
+    h:SetText(text)
+    Paint(h, pal.stone)
+    h:Show()
+end
+
+-- Kept pins first, then the others, each in the order the entries come in. Headings only when both groups
+-- have pins; with only one kind there is nothing to tell apart.
 local function Render()
     dirty = false
     if not (menu and menu:IsShown()) then return end
     HidePicker()
     wipe(entries)
+    local others = {}
     for _, e in ipairs(PN.Entries()) do
-        if not e.dismissed then entries[#entries + 1] = e end
+        if not e.dismissed then
+            if e.kept then entries[#entries + 1] = e else others[#others + 1] = e end
+        end
     end
+    local keptCount = #entries
+    local headed = keptCount > 0 and #others > 0
+    for _, e in ipairs(others) do entries[#entries + 1] = e end
     local total, party = CountPins()
     menu.count:SetText(party > 0 and ("%d pins, %d party"):format(total, party) or (total == 1 and "1 pin" or ("%d pins"):format(total)))
-    for i, e in ipairs(entries) do DressRow(rows[i] or NewRow(i), e, (i - 1) * ROW_H) end
+    local y, headCount = 0, 0
+    for i, e in ipairs(entries) do
+        if headed and (i == 1 or i == keptCount + 1) then
+            headCount = headCount + 1
+            Heading(headCount, i == 1 and "Kept" or "Other pins", y)
+            y = y + HEAD_H
+        end
+        DressRow(rows[i] or NewRow(i), e, y)
+        y = y + ROW_H
+    end
+    for i = headCount + 1, #heads do heads[i]:Hide() end
     for i = #entries + 1, #rows do rows[i]:Hide(); rows[i].entry = nil end
-    content:SetHeight(math.max(1, total * ROW_H))
+    content:SetHeight(math.max(1, y))
     menu.empty:SetShown(total == 0)
     menu.empty:SetText("No pins yet.\n\n" .. PL.HowToPlace())
 
-    local viewH = total == 0 and EMPTY_H or math.min(total, MAX_ROWS) * ROW_H
+    local viewH = total == 0 and EMPTY_H or math.min(y, MAX_ROWS * ROW_H)
     local inner = WIDTH - pad * 2
     scroll:ClearAllPoints()
     scroll:SetPoint("TOPLEFT", menu, "TOPLEFT", pad, -(pad + TITLE_H))
@@ -379,7 +455,9 @@ local function Render()
     menu.open:SetPoint("BOTTOMLEFT", menu, "BOTTOMLEFT", pad + 4, pad + 5)
     menu.clear:ClearAllPoints()
     menu.clear:SetPoint("BOTTOMRIGHT", menu, "BOTTOMRIGHT", -(pad + 4), pad + 5)
-    menu.clear:SetEnabled(total > 0)
+    local scope = PN.ClearScope()
+    menu.clear.keptOnly = total > 0 and scope.localDelete + scope.partyHide == 0
+    menu.clear:SetEnabled(total > 0 and not menu.clear.keptOnly)
     Paint(menu.clear.text, menu.clear:IsEnabled() and pal.stone or pal.bronzeLo)
     menu:SetSize(WIDTH, pad + TITLE_H + viewH + 8 + FOOT_H + pad)
     if scroll.UpdateScrollChildRect then scroll:UpdateScrollChildRect() end
@@ -443,9 +521,9 @@ local function Build()
     menu:SetClampedToScreen(true)
     menu:EnableMouse(true)
     menu:Hide()
-    rows = {}
+    rows, heads = {}, {}
     menu.title = PL.Text(menu, "GameFontNormal", "title")
-    menu.title:SetText("Party pins")
+    menu.title:SetText("Map pins")
     menu.count = PL.Text(menu, "GameFontNormalSmall", "meta")
 
     scroll = CreateFrame("ScrollFrame", nil, menu, "UIPanelScrollFrameTemplate")
@@ -464,17 +542,17 @@ local function Build()
         PW.Show()
     end)
     Tip(menu.open, "Pin window", "Every pin with its map and coordinates, search and filters, and everything you can do with each: show it on the map, set a waypoint, keep a party pin as a local copy.", "ANCHOR_TOP")
-    menu.clear = TextButton(menu, "Clear all pins...", pal.stone, DANGER, function()
+    menu.clear = TextButton(menu, "Clear unprotected pins...", pal.stone, DANGER, function()
         BM.Close()
-        ClearAll()
+        ClearUnprotected()
     end)
     menu.clear.text:ClearAllPoints()
     menu.clear.text:SetPoint("RIGHT")
     menu.clear.text:SetJustifyH("RIGHT")
-    Tip(menu.clear, "Clear all pins", function()
-        local body = "Asks first. Deletes your local pins and takes party pins off your map. Nothing is sent: pins you shared stay on your party's maps, and removed party pins can be restored in the pin window."
+    Tip(menu.clear, "Clear unprotected pins", function()
+        local body = "Asks first. Deletes your local pins and takes party pins off your map, except kept pins, which stay. Nothing is sent: pins you shared stay on your party's maps, and removed party pins can be restored in the pin window."
         if menu.clear:IsEnabled() then return body end
-        return body, "There are no pins."
+        return body, menu.clear.keptOnly and "Every pin is kept." or "There are no pins."
     end, "ANCHOR_TOP")
 
     menu:SetScript("OnShow", function()

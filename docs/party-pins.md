@@ -52,7 +52,9 @@ stable ids: gold, ember, moss, river, violet, rose, parchment, slate.
 
 **Saved** (`TwichUIDB.pins`, account-wide like the rest of TwichUI's own data):
 
-* `list`: local pins `{ id = "L<n>", map, x, y, name, color, created, copiedFrom? }`.
+* `list`: local pins `{ id = "L<n>", map, x, y, name, color, created, copiedFrom?, kept? }`. `kept` is
+  `true` for a kept pin (see "Keeping pins") and absent otherwise; a pin saved before it existed is an
+  ordinary pin, and only an explicit `true` counts.
 * `nextId`: never reuses an id, even one held by an entry that can't be read. Unreadable entries are
   skipped, never erased.
 * `session`: the party session, written at logout and read by the next load only. See "Reload".
@@ -202,12 +204,12 @@ is free:
 
 | Action | Who | Sends | Effect |
 |---|---|---|---|
-| Remove pin | local pins | nothing | deletes that local pin |
+| Remove pin | local pins | nothing | deletes that local pin; refused for a kept one |
 | Remove from my map | any party pin, yours too | nothing | hidden on your map; survives updates and resyncs; listed under **Removed**, from where **Restore to my map** brings it back. Kept up to 100, for this party session. |
-| Remove all party pins from my map | you | nothing | the same for every party pin |
-| Remove for entire party... | **the pin's creator only** | `del` | asks first; then removed from your map and from every member who receives it; a removal record (up to 200) stops a late or replayed copy coming back |
-| Delete all local pins... | you | nothing | asks first; party pins untouched |
-| Keep as local copy | any party pin | nothing | an independent local pin (`copiedFrom`); a party-wide removal of the original never touches it |
+| Remove all party pins from my map | you | nothing | the same for every party pin except kept ones |
+| Remove for entire party... | **the pin's creator only** | `del` | asks first; then removed from your map and from every member who receives it; a removal record (up to 200) stops a late or replayed copy coming back. Refused for a kept pin. |
+| Delete unprotected local pins... | you | nothing | asks first, with the counts; party pins and kept pins untouched |
+| Save to my pins... | any party pin | nothing | opens the new pin window filled in (kept by default); Save makes an independent local pin (`copiedFrom`); a party-wide removal of the original never touches it |
 
 * **Authorization is structural.** A pin's key includes its sender, so a `del` or `put` from B naming A's id
   only ever addresses B's own pins. There is no leader moderation. Leadership isn't needed to identify the
@@ -216,6 +218,62 @@ is free:
   (`Pins.Can`).
 * The removal confirmation says party members with TwichUI remove it "when your message reaches them".
   Nothing confirms delivery and nothing claims it did.
+
+## Keeping pins
+
+One protection, **Keep**, on a pin of your own: a persistent landmark you don't want lost to a slip, a bulk
+clear or a cleanup. There is no separate favorite or lock.
+
+* **Data.** `pin.kept = true` on a local pin (saved, account-wide with the list). On one of your own party
+  pins it is a session field: carried across a `/reload` with the session (`k` in the saved session) and
+  gone with the session when you leave the party or log out, like the pin itself. It is **never sent**: it
+  isn't in the wire form of a pin (`Wire`), and `Accept` writes only name, color, place and revision, so a
+  message can't set, clear or read it. A pin received from another player is never kept.
+* **Enforced in `pins/Pins.lua`**, not by disabling controls:
+
+  | Function | Kept pin |
+  |---|---|
+  | `RemoveLocal(id)` | refused, `false, "kept"` |
+  | `ClearLocal(only?)`, `ClearUnprotected(scope?)` | skipped, and judged pin by pin when it runs |
+  | `DeleteOwn(key)` (and so `PinSync.RemoveForParty`) | refused, `nil, "kept"` |
+  | `UpdateLocal(id, fields)` with `map`, `x` or `y` | refused, `false, "kept"`, unless the same call sets `kept = false` |
+  | `DismissAll()` | skipped (hiding one pin from its row stays possible) |
+  | `Can("delete" / "removeParty", entry)` | `false` and a sentence, so menus say why |
+
+  Renaming, recoloring and hiding (Remove from my map) are not blocked. Nothing in the UI moves a pin today
+  (no drag, no coordinate field), so the move guard is defense in depth for a later feature, and is tested
+  at the data layer. The normal way to delete a kept pin is Edit pin, turn off Keep, Save, then delete. There
+  is no force-delete.
+* **Paths audited** (everything that deletes, replaces, expires or moves a pin): `RemoveLocal` (the pin
+  window's Remove pin, the data bar menu's remove button), `ClearLocal` (the window's "Delete unprotected
+  local pins...", the menu's clear), `ClearUnprotected`, `DeleteOwn` / `RemoveForParty` (window, menu),
+  `DismissAll`, `ApplyDel` / `ApplyAll` / `RemoveOwner` / `EndSession` (other players' pins and the session;
+  they can't reach yours, which `SameName` already refuses, and a kept party pin of yours is not theirs to
+  remove), `ImportSession`, `/way` and paste (`AddLocal` only: they create and never replace, so there is no
+  duplicate resolution to guard), and the Persist container check (it drops a `pins` value that isn't a
+  table, a corruption case that isn't new). No path expires a local pin; the only cap is `MAX_LOCAL`, which
+  refuses new pins. Backups, restore points and sharing don't contain pins.
+* **The editor** has a "Keep this pin" box under the colors. It is a draft until Save; Cancel and Esc change
+  nothing. Turning only Keep on or off on one of your own party pins sends nothing (no revision change).
+* **The data bar menu** lists kept pins first, under "Kept" (and "Other pins" when both groups have pins), in
+  the same order as before within each. A kept row shows a padlock in muted gold where the x was; clicking it
+  opens the editor and unlocks nothing. Its title is "Map pins" since the list is local and party pins.
+* **Clear unprotected pins...** keeps the scope of the old Clear all: your local pins are deleted and party
+  pins on your map are taken off it (nothing is sent, nothing is deleted for anyone else), minus kept pins.
+  The question has the counts of exactly those pins ("Remove 3 unprotected pins? ... Your 2 kept pins will
+  remain.") and, when accepted, only the pins it named are touched, each judged again: one made since the
+  question is left, and one that has become kept stays. If nothing is left to clear, nothing is done and it
+  says so.
+* **Save to my pins...** (a party pin's action) opens the new pin window with its place, name and color,
+  kept by default and local only. Save makes a local pin with a new id (`copiedFrom` set when someone else
+  made it). The original is untouched and nothing is sent; later messages about the original can't reach the
+  copy, which is a different record. It never replaces an existing pin (there is no duplicate policy to
+  overrule, and a kept pin is never overwritten).
+* **Presentation.** The window has a Kept filter and a padlock on kept rows; the marker tooltip says
+  "Kept · Local pin" (or "Kept · Your party pin"); the data bar tooltip (headed "Map pins") shows the kept
+  count when there is one. The diamonds themselves are unchanged. The padlock is the
+  game's `Interface\PetBattles\PetBattle-LockIcon` (used by Blizzard's Classic mount collection frame),
+  tinted muted gold: not verified in the game.
 
 ## Protocol (version 1)
 
@@ -379,10 +437,11 @@ seven in view and a scroll bar for more.
   changed until Enter.
 * **x** removes: a local pin is deleted (no question; it can't be undone); one of your own party pins asks
   first and is removed for the whole party, the same question as in the window; someone else's party pin is
-  taken off your map only, and the window's Removed filter restores it.
-* **Open the pin window**, and **Clear all pins...**. Clear all asks first, with the numbers: it deletes your
-  local pins and takes party pins off your map. Nothing is sent, and party pins you made stay on your
-  party's maps.
+  taken off your map only, and the window's Removed filter restores it. A kept pin has a padlock instead
+  (see "Keeping pins"): it opens the editor.
+* **Open the pin window**, and **Clear unprotected pins...**. It asks first, with the numbers: it deletes
+  your unprotected local pins and takes unprotected party pins off your map, and says how many kept pins
+  remain. Nothing is sent, and party pins you made stay on your party's maps.
 
 Rename and recolor are for local pins and your own party pins only, as in the window, and every action is
 checked again when it runs (`PN.Can`). There is nothing secure in the menu, so it works in combat. While a
@@ -434,18 +493,21 @@ frame regardless of the pin window's choices.
 6. On B, Restore it from the Removed filter.
 7. On A, Remove for entire party. Check the confirmation, then that it is gone on B and C.
 8. On B, try to remove or edit A's pin. Check those actions aren't offered.
-9. On B, Keep as local copy, then remove the original on A. Check B's copy stays.
+9. On B, Save to my pins on A's pin: the new pin window opens filled in with Keep on; Cancel makes nothing,
+   then again and Save. Remove the original on A, move A's pin (re-place it), have A leave the party. Check
+   B's copy stays, is unchanged, shows as Kept and was never sent (A and C see nothing new).
 10. Join and leave, change the leader, `/reload` in a party, log out and in, and group in an instance
     (`INSTANCE_CHAT`). Convert to a raid and back.
 11. Group with a member without TwichUI. Check they see nothing and no chat appears.
 12. In the window, try search, each filter, a long list (scrolling), and each action.
+12b. Keep: see "Keeping pins checklist" below.
 13. With a data bar addon, check the text, tooltip, click and right-click. Try each text choice, the icon
     off (and text None with the icon off: the icon stays), and a text color, with and without the bar's
     color stripping. Have another member place a pin: the text and icon change for the set time and then
     go back; place several quickly; join a party that already has pins. In the menu: rename (Enter, Esc, clicking away), recolor, remove a local pin, remove one
     of your own party pins (it asks), remove another member's (off your map only, restorable under
-    Removed), open the window from it, and Clear all pins (it asks; check the other client still has your
-    party pins). Open it in combat, with the bar at the top and at the bottom of the screen, and with more
+    Removed), open the window from it, and Clear unprotected pins (it asks, with counts; check the other
+    client still has your party pins and your kept pins are still there). Open it in combat, with the bar at the top and at the bottom of the screen, and with more
     than seven pins.
 14. Change the window's textures, font and accent. Remove EllesmereUI or a media pack and check the
     fallbacks.
@@ -461,6 +523,30 @@ frame regardless of the pin window's choices.
     Sound Effects off in the game's Audio options and check it is silent, then pick Master and check it
     plays. Try Hear the sound, another sound from the list, and the toggle off. Have the member place
     several pins in a second or two and check there is one sound.
+
+### Keeping pins checklist (one client; the last item needs a second)
+
+1. Make a local pin, edit it, tick Keep this pin, Cancel: nothing changed. Edit again, tick it, Save. The
+   data bar menu lists it under Kept with a padlock and the marker tooltip says "Kept · Local pin".
+2. `/reload` and log out and in: it is still kept. An older saved pin (made before this) is not.
+3. Rename and recolor it while kept (editor and menu). Both work.
+4. Click the padlock in the menu: the editor opens, the pin is still kept. Check its tooltip.
+5. Try to delete it: the window's Remove pin is greyed with the reason; there is no x in the menu.
+6. Make a few ordinary pins. Clear unprotected pins: the question's numbers match what you have (kept pins
+   not counted as removed), and after Remove only the kept pins remain. With one pin and one kept pin, check
+   the singular wording. With only kept pins the link is greyed out and says why.
+7. Open the question, then (with the window) turn Keep on for one of the pins it counted, and accept: that
+   pin stays. Open it again, make a pin with /way, and accept: the new pin stays.
+8. The window's More menu: Delete unprotected local pins... asks with counts and leaves kept pins.
+9. Edit a kept pin, untick Keep, Save: it can be deleted again, and nothing was deleted by unticking alone.
+10. Hide a kept party pin of yours (Remove from my map): it comes back under Removed and is still kept.
+11. Make a party pin with Keep ticked: Remove for entire party is greyed. `/reload` in the party: still
+    kept. Leave the party: the pin ends with the session, as every party pin does.
+12. Kept filter in the window; a long list of kept pins in the menu (heading, scrolling).
+13. On a second client: Keep on one of your own party pins and check nothing is sent and the other client
+    sees no difference (`/tui diagnostics`: sent count unchanged).
+14. `/console scriptErrors 1`: no errors from the padlock texture, the heading rows or opening the editor
+    from the menu in combat.
 
 ### Waypoint commands (one client; the last two with and without TomTom)
 

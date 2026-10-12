@@ -9,6 +9,8 @@
 --   hi   { v, o = "hi" }              the sender joined, reloaded or turned party pins on
 --   all  { v, o = "all", l = { pin } } the sender's full list, in answer to hi (unlisted ones were removed)
 -- pin = { id, r = revision, m = map, x, y (0..10000), n = name, c = color id }.
+-- Whether a pin is kept (pins/Pins.lua) is a private choice of its owner: it is not a field of the message,
+-- and a message can never set, clear or read it.
 -- Who sent it is what the game says, never a field of the message: a pin's owner is always its sender,
 -- so a member can only add, change or remove their own. Every message is checked before anything is
 -- kept: the channel, that the sender is in your party now, the size, the version, and every field of
@@ -165,9 +167,10 @@ function PS.UpdateParty(key, fields)
     local pin = PN.Shared(key)
     local ok, why = PN.Can("edit", { kind = "party", pin = pin or { key = key } })
     if not ok then return nil, why end
-    local updated, code = PN.UpdateOwn(key, fields)
-    if not updated then return nil, PN.Reason(code) end
-    Send({ o = "put", p = Wire(updated) })
+    local updated, shared = PN.UpdateOwn(key, fields)
+    if not updated then return nil, PN.Reason(shared) end
+    -- Keep is yours alone: changing only that sends nothing, and it is never part of what is sent
+    if shared then Send({ o = "put", p = Wire(updated) }) end
     return updated
 end
 

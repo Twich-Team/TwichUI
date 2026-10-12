@@ -20,8 +20,8 @@ local function Pins()
     Line("switch: %s; protocol %d on prefix %s (%s); channel: %s", on and "on" or "off", s.protocol, s.prefix, s.prefixState, s.transport)
     Line("session: %s, paused in a raid: %s, restored after a reload: %s; members with pins: %d",
         D.Flag(p.session), D.Flag(s.paused), D.Flag(s.restored), p.owners)
-    Line("pins: local %d, party %d (yours %d), removed from your map %d, removal records %d",
-        p.localPins, p.shared, p.own, p.dismissed, p.deleted)
+    Line("pins: local %d, party %d (yours %d), kept %d, removed from your map %d, removal records %d",
+        p.localPins, p.shared, p.own, p.kept or 0, p.dismissed, p.deleted)
     Line("messages: sent %d (the game refused %d), taken in %d; hellos %d, full lists %d; answer waiting: %s; last hello %s",
         s.sent, s.refused, s.received, s.hellos, s.lists, D.Flag(s.listPending), s.helloAge and (s.helloAge .. "s ago") or "never")
     Line("set aside: %s", #p.drops > 0 and table.concat(p.drops, ", ") or "nothing")
