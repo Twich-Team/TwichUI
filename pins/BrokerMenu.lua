@@ -444,10 +444,13 @@ local function Render()
 
     local viewH = total == 0 and EMPTY_H or math.min(y, MAX_ROWS * ROW_H)
     local inner = WIDTH - pad * 2
+    -- The bar only exists once the list outgrows the menu (the template hides it at zero range);
+    -- the strip it needs is given back to the rows until then.
+    local listW = inner - (y > MAX_ROWS * ROW_H and BAR or 0)
     scroll:ClearAllPoints()
     scroll:SetPoint("TOPLEFT", menu, "TOPLEFT", pad, -(pad + TITLE_H))
-    scroll:SetSize(inner - BAR, viewH)
-    content:SetWidth(inner - BAR)
+    scroll:SetSize(listW, viewH)
+    content:SetWidth(listW)
     menu.empty:ClearAllPoints()
     menu.empty:SetPoint("TOPLEFT", menu, "TOPLEFT", pad + 4, -(pad + TITLE_H + 6))
     menu.empty:SetPoint("RIGHT", menu, "RIGHT", -(pad + 4), 0)
@@ -528,8 +531,14 @@ local function Build()
 
     scroll = CreateFrame("ScrollFrame", nil, menu, "UIPanelScrollFrameTemplate")
     scroll.paintBar = S.ScrollBar(scroll, pal)
+    -- Hidden until the list is long enough to scroll: the template's own switch for it, applied to the
+    -- state its OnLoad already left showing.
+    scroll.scrollBarHideable = true
+    scroll.ScrollBar:Hide()
+    scroll.ScrollBar.ScrollUpButton:Hide()
+    scroll.ScrollBar.ScrollDownButton:Hide()
     content = CreateFrame("Frame", nil, scroll)
-    content:SetSize(WIDTH - PAD * 2 - BAR, 1)
+    content:SetSize(WIDTH - PAD * 2, 1)
     scroll:SetScrollChild(content)
     scroll:HookScript("OnVerticalScroll", HidePicker)
 
