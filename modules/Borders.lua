@@ -177,6 +177,21 @@ function B.Draw(store, host, name, edge, r, g, b, a, outset)
     return mode
 end
 
+-- How far into its host a border drawn by B.Draw reaches, in pixels, for a caller that keeps content clear
+-- of it. edge: the thickness it was drawn at. A plain line or a LibSharedMedia edge reaches in by that
+-- much, and so does what isn't known. EllesmereUI's textures don't: an edge cell of `edge` pixels is
+-- centered on the host's edge and the line inside it is a fraction of the cell (Pixels Textured's solid
+-- part is about a seventh of it, and the cell has a margin of nothing at each side), so the content only
+-- has to clear what reaches in. EllesmereUI's BorderReach gives how far the line reaches out past the
+-- host; the line is centered in its cell, so that is taken as how far it reaches in (plus a pixel).
+function B.Inside(name, edge)
+    local key, e = B.EllesmereKey(name), B.Ellesmere()
+    if not (key and e and type(e.BorderReach) == "function" and type(edge) == "number" and edge > 0) then return edge end
+    local ok, reach = pcall(e.BorderReach, e.BorderPxStep(edge, key), key, nil, nil, nil, nil, nil, nil, edge)
+    if ok and type(reach) == "number" and reach > 0 then return math.min(edge, reach + 1) end
+    return edge
+end
+
 -- Hides whatever B.Draw made for a host.
 function B.Hide(store)
     if store.ellesmere then store.ellesmere:Hide() end

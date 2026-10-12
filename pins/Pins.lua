@@ -454,6 +454,22 @@ function PN.ReadPin(t)
     return { id = t.id, rev = t.r, map = t.m, x = t.x, y = t.y, name = name, color = color }
 end
 
+-- Pins from other players that were not here before, for the message being applied (nil between messages).
+-- Updates, pins already held and your own are never in it.
+local arrived
+local receivedListeners = {}
+
+-- fn(pins) is called once per message, after Changed, with the new pins in the order they came.
+function PN.OnReceived(fn) receivedListeners[#receivedListeners + 1] = fn end
+
+local function Received(pins)
+    if #pins == 0 then return end
+    for _, fn in ipairs(receivedListeners) do
+        local ok, err = pcall(fn, pins)
+        if not ok and R.Fault then R.Fault("party pins", err) end
+    end
+end
+
 -- Adds or updates one pin of `owner`'s. No event: callers fire Changed once per message.
 local function Accept(owner, data)
     local key = PN.Key(owner, data.id)
@@ -467,8 +483,10 @@ local function Accept(owner, data)
     end
     if (session.perOwner[owner] or 0) >= PN.MAX_PER_OWNER then return PN.Drop("owner-limit") end
     if session.count >= PN.MAX_SHARED then return PN.Drop("session-limit") end
-    Put({ key = key, owner = owner, id = data.id, rev = data.rev, map = data.map, x = data.x, y = data.y,
-        name = data.name, color = data.color, mine = false, at = time() })
+    local pin = { key = key, owner = owner, id = data.id, rev = data.rev, map = data.map, x = data.x, y = data.y,
+        name = data.name, color = data.color, mine = false, at = time() }
+    Put(pin)
+    if arrived then arrived[#arrived + 1] = pin end
     return true
 end
 
@@ -477,8 +495,14 @@ function PN.ApplyPut(owner, t)
     if SameName(owner, SelfName()) then return PN.Drop("own-echo") end
     local data, why = PN.ReadPin(t)
     if not data then return PN.Drop(why) end
+    arrived = {}
     local ok, code = Accept(owner, data)
-    if ok then Changed() end
+    local new = arrived
+    arrived = nil
+    if ok then
+        Changed()
+        Received(new)
+    end
     return ok, code
 end
 
@@ -504,6 +528,7 @@ function PN.ApplyAll(owner, list)
     if SameName(owner, SelfName()) then return PN.Drop("own-echo") end
     if type(list) ~= "table" or #list > PN.MAX_PER_OWNER then return PN.Drop("malformed") end
     local listed = {}
+    arrived = {}
     for i = 1, #list do
         local data = PN.ReadPin(list[i])
         if data then
@@ -519,7 +544,10 @@ function PN.ApplyAll(owner, list)
             Tombstone(key, p.rev + 1)
         end
     end
+    local new = arrived
+    arrived = nil
     Changed()
+    Received(new)
     return true
 end
 

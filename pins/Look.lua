@@ -6,7 +6,13 @@
 --                   LibSharedMedia and EllesmereUI while it is installed, with the same fallbacks);
 --   pinsAppearance  its text and accents: font, text size, accent color and row spacing;
 --   pinsMapText     the names drawn under pins on the world map and the minimap: font, size, color, outline
---                   and shadow (one look for both maps; the window's text is separate).
+--                   and shadow (one look for both maps; the window's text is separate);
+--   pinsBroker      the data bar entry: what its text says, whether it has its icon, its text color, and
+--                   how a newly received pin is pointed out (on or off, for how long, in what color);
+--   pinsBrokerMenu  the background and border of the menu a click on that entry opens (a MenuStyle look,
+--                   separate from the Mage launchers' and from the window's);
+--   pinsEditorLook  the background and border of the new pin window (the editor: a MenuStyle look, separate
+--                   from the pin window's; its text follows the pin window's font, size and accent).
 -- A value that can't be used is read as its default and kept as it was, so a font from a media pack that
 -- is missing today is still chosen when the pack returns. Resetting the appearance never touches pins or
 -- the click and label choices, and neither touches the map text. Frames, fonts and media paths are never saved.
@@ -174,6 +180,16 @@ function PL.Set(key, value)
     TwichUIDB.ui.pinsAppearance[key] = value
     Notify()
     return true
+end
+
+-- Draws `look` (a MenuStyle look: PL.Look, PL.MenuLook or PL.EditorLook) on a BackdropTemplate frame and
+-- returns how far content must sit in from the frame's edge, in UI units. MenuStyle's own answer is the
+-- border's thickness; an EllesmereUI texture's visible line is only a part of that (see Borders.Inside), so
+-- for one the content is brought out to the line instead of leaving the whole thickness empty.
+function PL.Surface(look, frame)
+    local edge, drawn = look.Apply(frame)
+    if drawn == "eui" then edge = math.min(edge, R.Borders.Inside(look.Get("borderTexture"), edge)) end
+    return edge
 end
 
 -- The window's look back to its defaults: background, border, text and accent. Pins and the click and
@@ -385,9 +401,93 @@ function MT.Reset()
 end
 if R.MenuStyle and R.MenuStyle.Fonts then R.MenuStyle.Fonts.Subscribe(RestyleMapText) end
 
+---------------------------------------------------------------------------
+-- The data bar entry (pins/Broker.lua): what its text says, its icon and the color of its text. The color is
+-- only applied when asked for: a data bar draws its text in its own color otherwise, and a bar can strip
+-- the color codes TwichUI writes (EllesmereUI's Broker Plugin block does, until its Strip Colors is off).
+-- flash, flashSeconds, flashColor: for that many seconds after a pin arrives from another player the text
+-- says so, in that color, and then goes back.
+---------------------------------------------------------------------------
+local BR = {}
+PL.Bar = BR
+BR.TEXTS = {
+    { "count", "Pin count (5 pins, 2 party)" },
+    { "number", "Number only (5)" },
+    { "label", "Map Pins" },
+    { "none", "None (icon only)" },
+}
+BR.DEFAULTS = { text = "count", icon = true, customColor = false, color = "ffc9a34a",
+    flash = true, flashSeconds = 8, flashColor = "ffe8b64a" }
+BR.LIMITS = { flashSeconds = { 2, 30 } }
+local BAR_TEXT = {}
+for _, t in ipairs(BR.TEXTS) do BAR_TEXT[t[1]] = true end
+
+function BR.Valid(key, value)
+    if key == "text" then return type(value) == "string" and BAR_TEXT[value] == true end
+    if key == "icon" or key == "customColor" or key == "flash" then return type(value) == "boolean" end
+    if key == "color" or key == "flashColor" then return Valid("accentColor", value) end
+    if key == "flashSeconds" then
+        local l = BR.LIMITS.flashSeconds
+        return type(value) == "number" and value == value and value % 1 == 0 and value >= l[1] and value <= l[2]
+    end
+    return false
+end
+
+function BR.Get(key)
+    local ui = TwichUIDB and TwichUIDB.ui
+    local t = ui and ui.pinsBroker
+    local value
+    if type(t) == "table" then value = t[key] end   -- not "and ... or": a saved false is a value
+    if BR.Valid(key, value) then return value end
+    return BR.DEFAULTS[key]
+end
+
+local barSubscribers = {}
+function BR.Subscribe(fn) barSubscribers[#barSubscribers + 1] = fn end
+local function BarChanged()
+    for _, fn in ipairs(barSubscribers) do
+        local ok, err = pcall(fn)
+        if not ok then geterrorhandler()(err) end
+    end
+end
+
+function BR.Set(key, value)
+    if BR.DEFAULTS[key] == nil or not BR.Valid(key, value) or type(TwichUIDB) ~= "table" then return false end
+    TwichUIDB.ui = type(TwichUIDB.ui) == "table" and TwichUIDB.ui or {}
+    if type(TwichUIDB.ui.pinsBroker) ~= "table" then TwichUIDB.ui.pinsBroker = {} end
+    TwichUIDB.ui.pinsBroker[key] = value
+    BarChanged()
+    return true
+end
+
+function BR.Reset()
+    if type(TwichUIDB) == "table" and type(TwichUIDB.ui) == "table" then TwichUIDB.ui.pinsBroker = nil end
+    BarChanged()
+end
+
+---------------------------------------------------------------------------
+-- The data bar menu's look: its own, saved apart from the Mage launchers' and the window's. Its defaults are
+-- the launchers' (a copy, so the menus match until the player changes one).
+---------------------------------------------------------------------------
+local menuDefaults = {}
+for k, v in pairs(R.MenuStyle.DEFAULTS) do menuDefaults[k] = v end
+PL.MenuLook = R.MenuStyle.New("pinsBrokerMenu", menuDefaults, { sources = true })
+
+---------------------------------------------------------------------------
+-- The new pin window's look (pins/Editor.lua): its own, saved apart from the pin window's. Its defaults are the
+-- pin window's (a copy), so the two match until the player changes one.
+---------------------------------------------------------------------------
+local editorDefaults = {}
+for k, v in pairs(PL.Look.DEFAULTS) do editorDefaults[k] = v end
+PL.EditorLook = R.MenuStyle.New("pinsEditorLook", editorDefaults, { sources = true })
+
 -- Read only, for /tui diagnostics.
 function PL.Snapshot()
     return {
+        barText = BR.Get("text"), barIcon = BR.Get("icon"), barColor = BR.Get("customColor"),
+        barFlash = BR.Get("flash"), barFlashSeconds = BR.Get("flashSeconds"),
+        menuBg = PL.MenuLook.Get("bgTexture") == "solid" and "solid" or "textured", menuBorder = PL.MenuLook.Get("borderTexture"),
+        editorBg = PL.EditorLook.Get("bgTexture") == "solid" and "solid" or "textured", editorBorder = PL.EditorLook.Get("borderTexture"),
         localClick = PL.Pref("localClick"), partyClick = PL.Pref("partyClick"), labels = PL.Pref("labels"),
         minimap = PL.Pref("minimap"), minimapLabels = PL.Pref("minimapLabels"),
         mapFont = MT.Get("font") == "default" and "default" or "chosen", mapFontFallback = MT.fallback,

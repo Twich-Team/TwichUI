@@ -14,10 +14,11 @@ Players without TwichUI see nothing: nothing is written in chat and there is no 
 |---|---|
 | `pins/Pins.lua` | the data: checks, local pins, the party session's pins, dismissals, removal records, permissions |
 | `pins/Sync.lua` | the protocol, the party session's lifecycle, rate limits, `/reload` hand-over |
-| `pins/Look.lua` | the click and label choices, the window's look (MenuStyle look, font, size, accent, rows) |
+| `pins/Look.lua` | the click and label choices, the window's look (MenuStyle look, font, size, accent, rows), the data bar entry's text, icon and color, and the data bar menu's look |
 | `pins/Map.lua` | the world map: data provider, pin buttons, placing clicks, Show on map, Set waypoint |
-| `pins/Editor.lua` | the name, color and kind editor |
+| `pins/Editor.lua` | the name, color and kind editor (the new pin window) |
 | `pins/Window.lua` | the pin window and the action menu (also opened from a map pin) |
+| `pins/BrokerMenu.lua` | the small pin menu a click on the data bar entry opens |
 | `pins/Broker.lua` | the optional LibDataBroker data source |
 | `diag/Pins.lua` | the troubleshooting section |
 
@@ -55,7 +56,8 @@ stable ids: gold, ember, moss, river, violet, rose, parchment, slate.
 * `session`: the party session, written at logout and read by the next load only. See "Reload".
 
 The pin window's choices live in `TwichUIDB.ui`: `partyPins` (clicks, labels, window position), `pinsLook`
-`pinsAppearance` and `pinsMapText` (the names on the maps). Only changed values are stored. An unusable value reads as its default and is kept.
+`pinsAppearance` and `pinsMapText` (the names on the maps), `pinsBroker` (the data bar entry) and
+`pinsBrokerMenu` (the data bar menu's look) and `pinsEditorLook` (the new pin window's look). Only changed values are stored. An unusable value reads as its default and is kept.
 
 **Session only** (in memory): party pins keyed by *owner + id*. The owner is the sender's name as the game
 reported it, never a field of the message. Ids are a random six-character word per session plus a running
@@ -228,9 +230,78 @@ is as it was) puts a name under each minimap pin in the same text look. The tool
 
 ## Data bar
 
-The data bar entry is `TwichUI Party Pins`: the text is "5 pins, 2 party", click opens the window,
-right-click opens the options. LibDataBroker is not bundled. The object is made only when another addon
-provides the library, as with TwichUI's other data sources.
+The data bar entry is `TwichUI Party Pins`. Click opens the pin menu, right-click opens the options.
+LibDataBroker is not bundled. The object is made only when another addon provides the library, as with
+TwichUI's other data sources. A data object can't be taken away, so with Party pins off it reads "Off"
+until a reload.
+
+Party pins options > **Data bar**:
+
+* **Text on the data bar**: the count ("5 pins, 2 party", the default, as it always was), the number alone,
+  "Map Pins", or none. With none the icon stays, so the entry is never empty.
+* **Show the icon on the data bar**: on by default. Off sets the object's `icon` to nil, which a data bar
+  reads as no icon (EllesmereUI's Broker Plugin block hides it).
+* **Use my own text color** and its color: off by default, so the data bar's own text color applies. On, the
+  text is wrapped in a color code. This is a limit of the object, not of TwichUI: a data bar may strip color
+  codes from plugin text. EllesmereUI's Broker Plugin block does by default (its **Strip Colors** option, in
+  the block's settings), so there the color shows only once that is off for this block. Source:
+  `EllesmereUIDataBars/Blocks/LDB.lua`, `LDBStripColors` and `stripColors`.
+
+* **Point out a new pin on the data bar** (on by default), **New pin shown for (seconds)** (2 to 30, 8 by
+  default) and **New pin color**: when a pin arrives from someone else in the party, the text changes to
+  "New pin: <name>" (a name is cut to 24 bytes; "2 new pins" when several arrive within the time), in the
+  chosen color, then goes back to what it was. Nothing in chat, no sound. The icon is tinted the same
+  through `iconR`/`iconG`/`iconB`, which EllesmereUI's Broker Plugin block honors
+  (`Blocks/LDB.lua`, `IconTint`), so there is still a color change when it strips the text's color codes.
+
+  What counts as arriving: a pin that was not in the session before, from `PN.ApplyPut`, or new in a
+  member's full list (`PN.ApplyAll`, so joining a party that already has pins says "N new pins" once).
+  Not: updates and stale copies, pins you already held (a hello after `/reload`), your own, or a restored
+  session. Another arrival restarts the time (the older timer is ignored by a token), and the highlight
+  ends at once if the option is turned off or Party pins is. `PN.OnReceived(fn)` is the hook.
+
+Saved in `TwichUIDB.ui.pinsBroker`, only once changed (`text`, `icon`, `customColor`, `color`, `flash`,
+`flashSeconds`, `flashColor`).
+
+### The pin menu
+
+`pins/BrokerMenu.lua`. It opens beside the data bar entry, on the side with room (the same placement the
+Mage launchers use, `SpellMenu.PlaceNear`), and closes on Esc, a click elsewhere, or a second click on the
+entry. A pared-down pin window: a row for each pin on your map (not the ones you removed from it), at most
+seven in view and a scroll bar for more.
+
+* The **pin icon** is the color: click it for a row of the pin colors.
+* The **name**: click it to rename in place. Enter keeps it, Esc or clicking elsewhere leaves it. Nothing is
+  changed until Enter.
+* **x** removes: a local pin is deleted (no question; it can't be undone); one of your own party pins asks
+  first and is removed for the whole party, the same question as in the window; someone else's party pin is
+  taken off your map only, and the window's Removed filter restores it.
+* **Open the pin window**, and **Clear all pins...**. Clear all asks first, with the numbers: it deletes your
+  local pins and takes party pins off your map. Nothing is sent, and party pins you made stay on your
+  party's maps.
+
+Rename and recolor are for local pins and your own party pins only, as in the window, and every action is
+checked again when it runs (`PN.Can`). There is nothing secure in the menu, so it works in combat. While a
+name is being typed the list isn't redrawn, so a message from the party doesn't take the text away.
+
+Its **background and border** are its own look (`pinsBrokerMenu`, Party pins options > Data bar menu
+appearance, with a Preview that opens the real menu beside the options). Its defaults are the Mage launchers'
+menu defaults, so they match until one is changed; changing one doesn't change the other. Its text follows
+the pin window's font and size.
+
+## The new pin window
+
+The editor that opens for a new pin, and to rename or recolor one, has its **background and border** as its
+own look (`pinsEditorLook`, Party pins options > New pin window appearance, with a **Preview** that opens
+the real window beside the options with a made-up pin; its Save does nothing). The choices are the pin
+window's: background and border texture, color, opacity and border thickness. Its defaults are the pin
+window's, so the two match until one is changed; changing one doesn't change the other, and resetting it
+touches nothing else. The window grows by the border's reach so a thick border never covers its content.
+For an EllesmereUI texture that reach is the visible line's, not the whole thickness (`Borders.Inside`): the
+texture's edge cell is centered on the frame's edge and its line is only a fraction of the cell, so the
+cell's size is not empty margin. The pin window and the data bar menu use the same rule (`PL.Surface`).
+Its text follows the pin window's font, text size and accent. Before this it drew the Chronicle's ledger
+frame regardless of the pin window's choices.
 
 ## References and licenses
 
@@ -264,7 +335,14 @@ provides the library, as with TwichUI's other data sources.
     (`INSTANCE_CHAT`). Convert to a raid and back.
 11. Group with a member without TwichUI. Check they see nothing and no chat appears.
 12. In the window, try search, each filter, a long list (scrolling), and each action.
-13. With a data bar addon, check the text, tooltip, click and right-click.
+13. With a data bar addon, check the text, tooltip, click and right-click. Try each text choice, the icon
+    off (and text None with the icon off: the icon stays), and a text color, with and without the bar's
+    color stripping. Have another member place a pin: the text and icon change for the set time and then
+    go back; place several quickly; join a party that already has pins. In the menu: rename (Enter, Esc, clicking away), recolor, remove a local pin, remove one
+    of your own party pins (it asks), remove another member's (off your map only, restorable under
+    Removed), open the window from it, and Clear all pins (it asks; check the other client still has your
+    party pins). Open it in combat, with the bar at the top and at the bottom of the screen, and with more
+    than seven pins.
 14. Change the window's textures, font and accent. Remove EllesmereUI or a media pack and check the
     fallbacks.
 15. Try different UI scales, long names (48 bytes, multibyte characters), and a full-screen map.

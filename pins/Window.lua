@@ -143,6 +143,7 @@ local function ConfirmRemoveForParty(e)
         end,
         { valid = function() return Can("removeParty", e) end, accept = "Remove for party" })
 end
+PW.ConfirmRemoveForParty = ConfirmRemoveForParty   -- the data bar menu asks the same question
 
 -- The actions for one pin, in a fixed order. Owner-only actions are left out for someone else's pin.
 function PW.Actions(e)
@@ -402,7 +403,7 @@ end
 
 local function Restyle()
     if not panel then return end
-    local edge = math.ceil(PL.Look.Apply(panel))
+    local edge = math.ceil(PL.Surface(PL.Look, panel))
     panel:SetSize(WIDTH + edge * 2, HEIGHT + edge * 2)
     S.PaintHeader(body, pal)
     S.PaintWell(list, pal)

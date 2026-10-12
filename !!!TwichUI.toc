@@ -136,6 +136,7 @@ pins\Map.lua
 pins\Minimap.lua
 pins\Editor.lua
 pins\Window.lua
+pins\BrokerMenu.lua
 pins\Broker.lua
 
 # Sell from Bags: Auction House posting tab (uses the Chronicle palette)

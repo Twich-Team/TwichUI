@@ -78,7 +78,9 @@ for _, f in ipairs({ "gear/Weights.lua", "gear/Evaluate.lua", "gear/Prefs.lua", 
   "gear/Hints.lua", "gear/Tooltip.lua", "gear/Bags.lua", "gear/Window.lua", "modules/Notify.lua", "modules/Arrival.lua", "modules/Media.lua", "modules/FriendLogin.lua", "modules/Borders.lua", "modules/FoodDrink.lua", "modules/FoodDrinkUnlock.lua",
   "modules/TrainingData.lua", "modules/Borders.lua", "modules/MenuStyle.lua", "modules/SpellMenu.lua", "modules/MageTravel.lua", "modules/MageConjure.lua",
   "chronicle/Style.lua", "chronicle/Appearance.lua", "modules/Refreshments.lua", "modules/RefreshmentsPanel.lua", "modules/RefreshmentsShares.lua", "modules/RefreshmentsTrade.lua", "modules/RefreshmentsBroker.lua", "modules/MageSell.lua", "modules/MageSellWindow.lua",
-  "modules/RestedXPSkin.lua", "modules/RestedXPTimers.lua", "qol/QoL.lua", "qol/Summons.lua", "qol/Resurrect.lua", "qol/ReleasePvP.lua", "qol/Duels.lua", "qol/QuickKeybind.lua", "qol/GuideWaypoint.lua", "Settings.lua" }) do
+  "modules/RestedXPSkin.lua", "modules/RestedXPTimers.lua", "qol/QoL.lua", "qol/Summons.lua", "qol/Resurrect.lua", "qol/ReleasePvP.lua", "qol/Duels.lua", "qol/QuickKeybind.lua", "qol/GuideWaypoint.lua",
+  "pins/Pins.lua", "pins/Sync.lua", "pins/Look.lua", "pins/Map.lua", "pins/Minimap.lua", "pins/Editor.lua", "pins/Window.lua", "pins/BrokerMenu.lua", "pins/Broker.lua",
+  "Settings.lua" }) do
   local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
 end
 c.LOADED["!!!TwichUI"] = true; c.FireEvent("ADDON_LOADED", "!!!TwichUI")
@@ -91,7 +93,7 @@ for key, default in pairs(defaults) do
   n = n + 1
   assert(default == R.DEFAULT_MODULES[key], key .. " default matches a new install")
 end
-assert(n == 52, "every module has a toggle: " .. n)
+assert(n == 53, "every module has a toggle: " .. n)
 assert(defaults.restedxpSkin == false, "the RestedXP skin is opt-in")
 assert(defaults.arrival == true and defaults.arrivalSubzones == true and defaults.arrivalReducedMotion == false,
   "arrival card and subzone cards on; reduced motion opt-in")
@@ -255,7 +257,7 @@ assert(attune.data.tooltip:find("after reload"), "toggle change shows it needs a
 
 -- The overview links to one page per feature, in this order; every setting
 -- is on exactly one page (registration above refuses a repeat).
-assert(table.concat(pageOrder, ",") == "Gear comparison,Notifications,Quality of life,Food and drink,Mage,Journey Chronicle,Auction House,Addon skins,RestedXP guide window,Configuration sharing", table.concat(pageOrder, ","))
+assert(table.concat(pageOrder, ",") == "Gear comparison,Notifications,Quality of life,Food and drink,Mage,Journey Chronicle,Party pins,Auction House,Addon skins,RestedXP guide window,Configuration sharing", table.concat(pageOrder, ","))
 for variable, page in pairs({
   TWICHUI_media = "TwichUI", TWICHUI_quietLogin = "TwichUI", TWICHUI_showAdvanced = "TwichUI", 
   TWICHUI_gearHints = "Gear comparison", TWICHUI_gearTree = "Gear comparison", TWICHUI_gearBagStyle = "Gear comparison",
@@ -281,6 +283,52 @@ for variable, module in pairs({ TWICHUI_mageTravelText = R.MageTravel, TWICHUI_m
   assert(module.TextChoice() == "none" and proxy.get() == "none", variable .. " saves")
 end
 assert(c.TwichUIDB.ui.mageTravelText == "none" and c.TwichUIDB.ui.mageConjureText == "none")
+-- Party pins: the data bar entry's text, icon and color, and the menu's look, are on the Party pins page and
+-- read and write the pins' own settings (not the window's or the Mage launchers').
+do
+  local BR, PL = R.PinsLook.Bar, R.PinsLook
+  for variable, key in pairs({ TWICHUI_pinsBarText = "text", TWICHUI_pinsBarIcon = "icon",
+      TWICHUI_pinsBarCustomColor = "customColor", TWICHUI_pinsBarColor = "color",
+      TWICHUI_pinsBarFlash = "flash", TWICHUI_pinsBarFlashSeconds = "flashSeconds", TWICHUI_pinsBarFlashColor = "flashColor" }) do
+    local proxy = assert(proxies[variable], variable .. " is on the page")
+    assert(variables[variable] == "Party pins", variable)
+    assert(proxy.default == BR.DEFAULTS[key] and proxy.get() == BR.DEFAULTS[key], key .. " starts at its default")
+  end
+  assert(BR.DEFAULTS.icon == true and BR.DEFAULTS.customColor == false and BR.DEFAULTS.text == "count",
+    "as the entry has always been: the count, the icon, and the data bar's own color")
+  proxies.TWICHUI_pinsBarText:SetValue("label")
+  proxies.TWICHUI_pinsBarIcon:SetValue(false)
+  proxies.TWICHUI_pinsBarCustomColor:SetValue(true)
+  proxies.TWICHUI_pinsBarColor:SetValue("ff336699")
+  assert(BR.Get("text") == "label" and BR.Get("icon") == false and BR.Get("customColor") == true and BR.Get("color") == "ff336699")
+  assert(c.TwichUIDB.ui.pinsBroker.icon == false, "a chosen false is saved as a value")
+  proxies.TWICHUI_pinsBarFlashSeconds:SetValue(15)
+  proxies.TWICHUI_pinsBarFlashColor:SetValue("ff00aa44")
+  proxies.TWICHUI_pinsBarFlash:SetValue(false)
+  assert(BR.Get("flashSeconds") == 15 and BR.Get("flashColor") == "ff00aa44" and BR.Get("flash") == false)
+  assert(BR.DEFAULTS.flash == true and BR.DEFAULTS.flashSeconds == 8, "pointed out for 8 seconds unless changed")
+  BR.Reset()
+  for _, suffix in ipairs({ "BgTexture", "BgColor", "BgOpacity", "BorderTexture", "BorderSize", "BorderColor", "BorderOpacity" }) do
+    assert(variables["TWICHUI_pinsMenu" .. suffix] == "Party pins", "pinsMenu" .. suffix .. " is on the page")
+    assert(variables["TWICHUI_pinsLook" .. suffix] == "Party pins", "the window's look is still its own")
+  end
+  proxies.TWICHUI_pinsMenuBgOpacity:SetValue(40)
+  assert(PL.MenuLook.Get("bgOpacity") == 40 and c.TwichUIDB.ui.pinsBrokerMenu.bgOpacity == 40)
+  assert(R.MenuStyle.Get("bgOpacity") == R.MenuStyle.DEFAULTS.bgOpacity and PL.Look.Get("bgOpacity") == PL.Look.DEFAULTS.bgOpacity,
+    "the launchers' and the window's looks are not changed")
+  PL.MenuLook.Reset()
+  assert(c.TwichUIDB.ui.pinsBrokerMenu == nil and c.TwichUIDB.ui.pinsBroker == nil)
+  -- the new pin window's look: every control is on the page, writes its own saved look and nothing else
+  for _, suffix in ipairs({ "BgTexture", "BgColor", "BgOpacity", "BorderTexture", "BorderSize", "BorderColor", "BorderOpacity" }) do
+    assert(variables["TWICHUI_pinsEditor" .. suffix] == "Party pins", "pinsEditor" .. suffix .. " is on the page")
+  end
+  proxies.TWICHUI_pinsEditorBgOpacity:SetValue(55)
+  assert(PL.EditorLook.Get("bgOpacity") == 55 and c.TwichUIDB.ui.pinsEditorLook.bgOpacity == 55)
+  assert(PL.Look.Get("bgOpacity") == PL.Look.DEFAULTS.bgOpacity and PL.MenuLook.Get("bgOpacity") == PL.MenuLook.DEFAULTS.bgOpacity,
+    "the window's and the menu's looks are not changed")
+  PL.EditorLook.Reset()
+  assert(c.TwichUIDB.ui.pinsEditorLook == nil)
+end
 -- Food and Drink appearance: each control reads and writes the module's own setting; Reset restores them.
 do
   local FD = R.FoodDrink

@@ -125,6 +125,25 @@ local function ScreenRect(frame)
     return left * k, bottom * k, width * k, height * k
 end
 
+-- Puts a menu next to a data bar frame, on the side with room. Positioned against UIParent at the
+-- frame's place on screen rather than anchored to it, so the data bar's frame never joins the
+-- menu's anchor chain (a launcher's secure rows are anchored to the menu). Shared with the party
+-- pins menu (pins/BrokerMenu.lua).
+function SM.PlaceNear(menu, frame)
+    menu:ClearAllPoints()
+    local left, bottom, width, height = ScreenRect(frame)
+    if not left then
+        menu:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+        return
+    end
+    local below = bottom + height / 2 > UIParent:GetHeight() / 2   -- a bar near the top: open downward
+    local alignRight = left + width / 2 > UIParent:GetWidth() / 2
+    local point = (below and "TOP" or "BOTTOM") .. (alignRight and "RIGHT" or "LEFT")
+    local x = alignRight and (left + width) or left
+    local y = below and (bottom - 2) or (bottom + height + 2)
+    menu:SetPoint(point, UIParent, "BOTTOMLEFT", x, y)
+end
+
 ---------------------------------------------------------------------------
 -- Drawing helpers
 ---------------------------------------------------------------------------
@@ -495,23 +514,7 @@ function SM.New(spec)
         menu:SetHeight(-y + pad)
     end
 
-    -- Next to the data bar frame, on the side with room. Positioned against UIParent at the
-    -- frame's place on screen rather than anchored to it, so the data bar's frame never joins
-    -- the secure rows' anchor chain.
-    local function Place(frame)
-        menu:ClearAllPoints()
-        local left, bottom, width, height = ScreenRect(frame)
-        if not left then
-            menu:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
-            return
-        end
-        local below = bottom + height / 2 > UIParent:GetHeight() / 2   -- a bar near the top: open downward
-        local alignRight = left + width / 2 > UIParent:GetWidth() / 2
-        local point = (below and "TOP" or "BOTTOM") .. (alignRight and "RIGHT" or "LEFT")
-        local x = alignRight and (left + width) or left
-        local y = below and (bottom - 2) or (bottom + height + 2)
-        menu:SetPoint(point, UIParent, "BOTTOMLEFT", x, y)
-    end
+    local function Place(frame) SM.PlaceNear(menu, frame) end
 
     function L.IsOpen() return menu ~= nil and menu:IsShown() end
 

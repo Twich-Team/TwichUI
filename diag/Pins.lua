@@ -49,7 +49,13 @@ local function Pins()
     Line("map text: font %s (fell back: %s), size %s, outline %s, shadow %s; names on the minimap: %s",
         tostring(look.mapFont), D.Flag(look.mapFontFallback), tostring(look.mapSize), tostring(look.mapOutline),
         D.Flag(look.mapShadow), tostring(look.minimapLabels))
-    Line("data bar: %s", R.PinsBroker and R.PinsBroker.Available() and "listed" or "not listed (no LibDataBroker provider, or off)")
+    Line("data bar: %s; text %s, icon %s, own text color %s", R.PinsBroker and R.PinsBroker.Available() and "listed" or "not listed (no LibDataBroker provider, or off)",
+        tostring(look.barText), D.Flag(look.barIcon), D.Flag(look.barColor))
+    local bm = R.PinsBrokerMenu and R.PinsBrokerMenu.Snapshot() or {}
+    Line("data bar menu: built %s, open %s, rows %d, renaming %s; background %s, border %s",
+        D.Flag(bm.built), D.Flag(bm.open), bm.rows or 0, D.Flag(bm.editing), tostring(look.menuBg), tostring(look.menuBorder))
+    Line("new pin window: open %s; background %s, border %s",
+        D.Flag(R.PinsEditor and R.PinsEditor.IsOpen()), tostring(look.editorBg), tostring(look.editorBorder))
     local status, reason = "ready", nil
     if not on then status = "off"
     elseif not m.mapLoaded then status, reason = "waiting", "map-not-loaded"

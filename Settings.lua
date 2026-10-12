@@ -1493,6 +1493,7 @@ local function Build()
                 if not PinsOn() then
                     if R.PinsWindow then R.PinsWindow.Hide(); R.PinsWindow.CloseMenu() end
                     if R.PinsEditor then R.PinsEditor.Close() end
+                    if R.PinsBrokerMenu then R.PinsBrokerMenu.Close() end
                 end
             end)
         Under(Button("Your pins", "Open", function()
@@ -1537,6 +1538,52 @@ local function Build()
             "Pin names beside the pins on the minimap. Never leaves the minimap as it is (names are in the tooltip). On hover shows a name when the pointer is on its pin, and for the pin selected in the pin window. Always can crowd a small minimap. Only applies while Show pins on the minimap is on.",
             STRING, PL.PREF_DEFAULTS.minimapLabels, function() return PL.Pref("minimapLabels") end,
             function(value) PL.SetPref("minimapLabels", value) end, PL.MINIMAP_LABELS), pinsToggle, PinsOn)
+
+        local BR = PL.Bar
+        Header("Data bar", "\"TwichUI Party Pins\" in a data bar addon that shows LibDataBroker plugins (for example EllesmereUI's Broker Plugin block). Click it for a small menu of your pins, right-click for these options. It is listed once Party pins is on, with no reload. What it says, its icon and its color are yours; the data bar addon still sets its font and size.")
+        Under(Choice("pinsBarText", "Text on the data bar",
+            "The words beside the entry's icon: how many pins are on your map (\"5 pins, 2 party\"), just the number, \"Map Pins\", or nothing. With none, the icon stays so there is still something to click. Turned off, it reads \"Off\" until you reload.",
+            STRING, BR.DEFAULTS.text, function() return BR.Get("text") end, function(value) BR.Set("text", value) end, BR.TEXTS),
+            pinsToggle, PinsOn)
+        Under(ProxyToggle("pinsBarIcon", "Show the icon on the data bar",
+            "The small map icon beside the text. Off leaves just the text. It always shows while the text is set to None, so the entry is never empty.",
+            BR.DEFAULTS.icon, function() return BR.Get("icon") end, function(value) BR.Set("icon", value and true or false) end),
+            pinsToggle, PinsOn)
+        local barColor = Under(ProxyToggle("pinsBarCustomColor", "Use my own text color",
+            "Draws the entry's text in the color below. Off leaves it in the data bar's own text color.\n\nSome data bars remove color codes from plugin text so that their own text color applies. EllesmereUI's Broker Plugin block does that until you turn off its Strip Colors option for this block.",
+            BR.DEFAULTS.customColor, function() return BR.Get("customColor") end, function(value) BR.Set("customColor", value and true or false) end),
+            pinsToggle, PinsOn)
+        local barColorSetting = Proxy("pinsBarColor", STRING, "Data bar text color", BR.DEFAULTS.color,
+            function() return BR.Get("color") end, function(value) BR.Set("color", value) end)
+        if barColorSetting and Settings.CreateColorSwatch then
+            Under(Settings.CreateColorSwatch(category, barColorSetting, "The color of the data bar entry's text. The icon keeps its own colors."),
+                barColor, function() return PinsOn() and BR.Get("customColor") end)
+        end
+
+        local flashToggle = Under(ProxyToggle("pinsBarFlash", "Point out a new pin on the data bar",
+            "When a pin arrives from someone in your party, the entry's text changes to \"New pin: <name>\" in the color below, for the time below, and then goes back to what it was. Pins you place, and ones you already had, don't trigger it. Several arriving within the time are counted together.\n\nNothing is written in chat and no sound plays.",
+            BR.DEFAULTS.flash, function() return BR.Get("flash") end, function(value) BR.Set("flash", value and true or false) end),
+            pinsToggle, PinsOn)
+        local function FlashOn() return PinsOn() and BR.Get("flash") end
+        local flashSeconds = Proxy("pinsBarFlashSeconds", NUMBER, "New pin shown for (seconds)", BR.DEFAULTS.flashSeconds,
+            function() return BR.Get("flashSeconds") end, function(value) BR.Set("flashSeconds", value) end)
+        if flashSeconds and Settings.CreateSlider and Settings.CreateSliderOptions then
+            local options = Settings.CreateSliderOptions(BR.LIMITS.flashSeconds[1], BR.LIMITS.flashSeconds[2], 1)
+            if MinimalSliderWithSteppersMixin and options.SetLabelFormatter then options:SetLabelFormatter(MinimalSliderWithSteppersMixin.Label.Right) end
+            Under(Settings.CreateSlider(category, flashSeconds, options, "How long the text stays changed after a pin arrives, in seconds. Another pin arriving restarts the time."), flashToggle, FlashOn)
+        end
+        local flashColor = Proxy("pinsBarFlashColor", STRING, "New pin color", BR.DEFAULTS.flashColor,
+            function() return BR.Get("flashColor") end, function(value) BR.Set("flashColor", value) end)
+        if flashColor and Settings.CreateColorSwatch then
+            Under(Settings.CreateColorSwatch(category, flashColor, "The color of the text while a new pin is pointed out, whatever the text color above. The icon is tinted the same, for a data bar that removes color codes from text (EllesmereUI's Broker Plugin block does, until its Strip Colors option is off for this block; its icon tint is honored)."), flashToggle, FlashOn)
+        end
+
+        Header("Data bar menu appearance", "How the menu a click on the data bar entry opens looks: background and border. Only the menu's look changes; its text follows the pin window's font and size, and what it does doesn't change. It starts out looking like the Mage launchers' menus, and changing one doesn't change the other.")
+        Appearance(PL.MenuLook, "pinsMenu", "menu",
+            "Opens the real pin menu beside this window to see these settings as you change them. It stays until you press this again or Esc. Its buttons work, so it is your actual pins.",
+            function() if R.PinsBrokerMenu then R.PinsBrokerMenu.TogglePreview() end end,
+            "Pin menu appearance", "Puts the background and border of the data bar menu back to their defaults. Nothing else is changed.",
+            pinsToggle, PinsOn)
 
         local MT = PL.MapText
         Header("Map text", "How pin names look on the world map and the minimap: one look for both. Only the names change; pins, clicks and the pin window don't.")
@@ -1626,6 +1673,13 @@ local function Build()
             end
             PL.Reset()
         end, "Puts the pin window's background, border, font, text size, accent and rows back to the defaults. Your pins, the map clicks and the label choice are not touched."), pinsToggle, PinsOn)
+
+        Header("New pin window appearance", "How the window that opens when you place a pin (and when you rename or recolor one) looks: background and border. Only that window's look changes; its text follows the pin window's font, size and accent, and what it does doesn't change. It starts out like the pin window, and changing one doesn't change the other.")
+        Appearance(PL.EditorLook, "pinsEditor", "window",
+            "Opens the real new pin window, with a made-up pin, beside this window to see these settings as you change them. Its Save does nothing. It stays until you press this again or Esc.",
+            function() if R.PinsEditor then R.PinsEditor.TogglePreview() end end,
+            "New pin window appearance", "Puts the background and border of the new pin window back to their defaults. Nothing else is changed.",
+            pinsToggle, PinsOn)
     end
 
     -----------------------------------------------------------------------

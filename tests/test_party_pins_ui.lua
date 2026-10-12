@@ -52,8 +52,11 @@ local function Obj()
   end })
 end
 local realCreate = c.CreateFrame
+local FRAMES = {}
 c.CreateFrame = function(kind, name)
   local o = Obj()
+  rawset(o, "kindOf", kind)
+  FRAMES[#FRAMES + 1] = o
   local base = realCreate()
   for k, v in pairs(base) do
     if k ~= "Show" and k ~= "Hide" and k ~= "IsShown" then rawset(o, k, v) end   -- keep the mock's shown state
@@ -170,8 +173,12 @@ local function click(button, x, y)
 end
 local function refreshMap() for p in pairs(WMF.providers) do p:RefreshAllData() end end
 
-for _, f in ipairs({ "chronicle/Style.lua", "modules/Borders.lua", "modules/MenuStyle.lua",
-  "pins/Pins.lua", "pins/Sync.lua", "pins/Look.lua", "pins/Map.lua", "pins/Minimap.lua", "pins/Editor.lua", "pins/Window.lua", "pins/Broker.lua",
+local brokers = {}
+local LDB = c.LibStub:NewLibrary("LibDataBroker-1.1", 1)
+LDB.NewDataObject = function(_, name, o) brokers[name] = o; return o end
+for _, f in ipairs({ "chronicle/Style.lua", "modules/Borders.lua", "modules/MenuStyle.lua", "modules/SpellMenu.lua",
+  "pins/Pins.lua", "pins/Sync.lua", "pins/Look.lua", "pins/Map.lua", "pins/Minimap.lua", "pins/Editor.lua", "pins/Window.lua",
+  "pins/BrokerMenu.lua", "pins/Broker.lua",
   "diag/Diagnostics.lua", "diag/Pins.lua" }) do
   local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
 end
@@ -250,6 +257,105 @@ assert(PM.Arm())
 assert(click("LeftButton", 0.6, 0.6), "the armed click places")
 assert(PE.IsOpen()); ed.name.scripts.OnEscapePressed(ed.name)
 assert(not click("LeftButton", 0.6, 0.6), "only once")
+
+---------------------------------------------------------------------------
+-- 2b. The new pin window's look: its own, applied to its frame, never the pin window's
+---------------------------------------------------------------------------
+do
+  local drawn = {}
+  rawset(ed, "SetBackdropColor", function(s, r, g, b, a) drawn.bg = { r, g, b, a } end)
+  rawset(ed, "SetSize", function(s, w, h) drawn.w, drawn.h = w, h end)
+  local EL = PL.EditorLook
+  assert(EL ~= PL.Look and EL.DEFAULTS ~= PL.Look.DEFAULTS, "its own look, not the pin window's table")
+  assert(EL.Get("bgColor") == PL.Look.Get("bgColor") and EL.Get("borderColor") == PL.Look.Get("borderColor"),
+    "starts out like the pin window")
+  assert(not (c.TwichUIDB.ui and c.TwichUIDB.ui.pinsEditorLook), "nothing saved until a choice is made")
+
+  keys(true, false, false)
+  assert(click("LeftButton", 0.4, 0.5) and PE.IsOpen())
+  assert(drawn.bg and math.abs(drawn.bg[4] - 0.98) < 1e-9 and drawn.w == 300 + 2 and drawn.h == 214 + 2,
+    "drawn with the look's background, a 1 pixel border making the window 2 larger")
+  -- a change redraws the open window at once
+  assert(EL.Set("bgOpacity", 40) and EL.Set("borderSize", 6))
+  assert(math.abs(drawn.bg[4] - 0.40) < 1e-9 and drawn.w == 300 + 12 and drawn.h == 214 + 12, "a thicker border makes it larger")
+  assert(c.TwichUIDB.ui.pinsEditorLook.bgOpacity == 40)
+  assert(c.TwichUIDB.ui.pinsLook == nil or c.TwichUIDB.ui.pinsLook.bgOpacity == nil, "the pin window's look is not the editor's")
+  assert(PL.Look.Get("bgOpacity") == PL.Look.DEFAULTS.bgOpacity and PL.MenuLook.Get("bgOpacity") == PL.MenuLook.DEFAULTS.bgOpacity)
+  -- and the pin window's look doesn't change it
+  PL.Look.Set("bgOpacity", 70)
+  assert(EL.Get("bgOpacity") == 40)
+  PL.Look.Reset()
+  assert(ed.name:GetText() ~= nil and PE.IsOpen(), "restyling leaves the open editor as it was")
+  -- an unusable saved value is read as the default and kept
+  c.TwichUIDB.ui.pinsEditorLook.bgTexture = "Some Pack Texture"
+  assert(EL.Get("bgTexture") == "Some Pack Texture" and c.TwichUIDB.ui.pinsEditorLook.bgTexture == "Some Pack Texture")
+  c.TwichUIDB.ui.pinsEditorLook.borderOpacity = "bad"
+  assert(EL.Get("borderOpacity") == EL.DEFAULTS.borderOpacity and c.TwichUIDB.ui.pinsEditorLook.borderOpacity == "bad")
+  ed.name.scripts.OnEscapePressed(ed.name)
+
+  EL.Reset()
+  assert(c.TwichUIDB.ui.pinsEditorLook == nil, "reset: nothing saved")
+  assert(PL.Snapshot().editorBg == "solid" and PL.Snapshot().editorBorder == "solid")
+
+  -- Preview: the real window with a made-up pin; Save does nothing; pressing again closes it
+  local before = PN.LocalCount()
+  PE.TogglePreview()
+  assert(PE.IsOpen() and ed.title.text == "New pin" and ed.save.enabled == false and ed.status.text:find("preview"))
+  ed.save.scripts.OnClick(ed.save)
+  ed.name.scripts.OnEnterPressed(ed.name)
+  assert(PN.LocalCount() == before and sent() == 0 and PE.IsOpen(), "Save in a preview makes and sends nothing")
+  PE.TogglePreview()
+  assert(not PE.IsOpen(), "pressed again, it closes")
+  -- a real pin being placed is not taken over by the preview
+  assert(click("LeftButton", 0.4, 0.5) and PE.IsOpen())
+  ed.name:SetText("Keep me")
+  PE.TogglePreview()
+  assert(PE.IsOpen() and ed.name:GetText() == "Keep me" and ed.save.enabled ~= false, "the real editor is left alone")
+  ed.name.scripts.OnEscapePressed(ed.name)
+  assert(not PE.IsOpen() and PN.LocalCount() == before)
+  -- a real pin opened over a preview replaces it, and can be saved
+  PE.TogglePreview()
+  assert(click("LeftButton", 0.4, 0.5) and PE.IsOpen() and ed.save.enabled ~= false)
+  ed.name.scripts.OnEscapePressed(ed.name)
+  keys(false, false, false)
+  rawset(ed, "SetBackdropColor", nil); rawset(ed, "SetSize", nil)
+end
+
+-- An EllesmereUI texture's visible line is a part of its edge cell, so the window makes room for the line,
+-- not for the whole thickness (a 16 pixel Pixels Textured border isn't 16 pixels of empty margin).
+do
+  local drawn = {}
+  rawset(ed, "SetSize", function(s, w, h) drawn.w, drawn.h = w, h end)
+  local reach = true
+  c.EllesmereUI = {
+    PP = {},
+    GetBorderTextureList = function() return { { key = "pixels-textured", name = "Pixels Textured" } } end,
+    ResolveBorderTexture = function(k) return k == "pixels-textured" and "p" or nil end,
+    BorderPxStep = function() return 2 end,
+    BorderLegacyPx = function() return 16 end,
+    GetBorderDefaultSize = function() return 2 end,
+    ApplyBorderStyle = function() end,
+    -- the cell is centered on the edge and the line starts 0.321 of the cell in from its outer edge
+    BorderReach = reach and function(_, _, _, _, _, _, _, _, edgePx) return edgePx / 2 - 0.321 * edgePx end or nil,
+  }
+  local EL = PL.EditorLook
+  assert(EL.Set("borderTexture", "eui:pixels-textured") and EL.Set("borderSize", 16))
+  keys(true, false, false)
+  assert(click("LeftButton", 0.4, 0.5) and PE.IsOpen())
+  assert(drawn.w == 300 + 2 * 4, "16 pixels of border: room for the line (3 and a pixel), not 16: " .. tostring(drawn.w))
+  assert(EL.Set("borderSize", 8))
+  assert(drawn.w == 300 + 2 * 3, "a smaller size takes less room: " .. tostring(drawn.w))
+  c.EllesmereUI.BorderReach = nil
+  assert(EL.Set("borderSize", 16))
+  assert(drawn.w == 300 + 2 * 16, "without EllesmereUI's reach the whole thickness is kept clear")
+  c.EllesmereUI = nil
+  assert(EL.Set("borderSize", 12))
+  assert(drawn.w == 300 + 2 * 12, "without EllesmereUI the plain line is drawn and takes its thickness")
+  ed.name.scripts.OnEscapePressed(ed.name)
+  EL.Reset()
+  keys(false, false, false)
+  rawset(ed, "SetSize", nil)
+end
 
 ---------------------------------------------------------------------------
 -- 3. Party pins: refused outside a party; Cancel sends nothing; Save sends once
@@ -644,6 +750,281 @@ do
 
   PN.RemoveLocal(north.id); PN.RemoveLocal(south.id)
   PS.RemoveForParty(party.key)
+end
+
+---------------------------------------------------------------------------
+-- 7c. The data bar entry and its menu
+---------------------------------------------------------------------------
+do
+  local BM, BR = R.PinsBrokerMenu, PL.Bar
+  local obj = assert(brokers["TwichUI Party Pins"], "listed once a data bar provides LibDataBroker")
+  assert(R.PinsBroker.Available())
+  -- pins that arrived in the sections above are being pointed out (their timers were thrown away): end that
+  assert(obj.text:find("New pin"), "a pin that arrived from the party was pointed out")
+  BR.Set("flash", false)
+  BR.Reset()
+
+  -- what it says, its icon and its color: the defaults are what it always was, and nothing is saved until a choice
+  assert(c.TwichUIDB.ui.pinsBroker == nil and c.TwichUIDB.ui.pinsBrokerMenu == nil, "nothing saved until a choice is made")
+  local total, party = PW.Count()
+  assert(obj.text:find("pin") and obj.icon == "Interface\\Icons\\inv_misc_map02", "the count and the icon, as before")
+  assert(obj.text:find(tostring(total), 1, true) and obj.text:find(("%d party"):format(party), 1, true))
+  assert(BR.Set("text", "number") and obj.text == tostring(total), "the number alone")
+  assert(BR.Set("text", "label") and obj.text == "Map Pins", "the words")
+  assert(BR.Set("text", "none") and obj.text == "" and obj.icon, "no words: the icon stays, so there is something to click")
+  assert(BR.Set("icon", false) and obj.icon, "still there while there is no text")
+  assert(BR.Set("text", "label") and obj.icon == nil and obj.text == "Map Pins", "the icon can be left off")
+  assert(not BR.Set("text", "shouting") and not BR.Set("icon", "no") and not BR.Set("color", "red") and BR.Get("text") == "label",
+    "an unusable choice is refused")
+  assert(BR.Set("customColor", true) and obj.text == "|cffc9a34aMap Pins|r", "colored only once asked for")
+  assert(BR.Set("color", "ff4488cc") and obj.text == "|cff4488ccMap Pins|r")
+  assert(BR.Set("customColor", false) and obj.text == "Map Pins", "off: the data bar's own color")
+  c.TwichUIDB.ui.pinsBroker.text = "huge"
+  assert(BR.Get("text") == "count" and c.TwichUIDB.ui.pinsBroker.text == "huge", "an unusable saved value reads as the default and is kept")
+  BR.Reset()
+  assert(c.TwichUIDB.ui.pinsBroker == nil and obj.icon and obj.text:find("pin"), "reset: back to the defaults, nothing saved")
+
+  -- the menu: a click opens it, not the window
+  PW.Hide()
+  local host = Obj()
+  obj.OnClick(host, "LeftButton")
+  assert(BM.IsOpen() and not PW.IsOpen(), "a click opens the pin menu")
+  assert(BM.Snapshot().rows == total, "one row for each pin on your map")
+  local function rowFor(name, kind)   -- kind: "local" or "party", when two pins share a name (a kept copy)
+    for _, f in ipairs(FRAMES) do
+      local e = rawget(f, "entry")
+      if rawget(f, "pick") and e and e.pin.name == name and (kind == nil or e.kind == kind) then return f end
+    end
+  end
+  local function click(btn) btn.scripts.OnClick(btn) end
+  obj.OnClick(host, "LeftButton")
+  assert(not BM.IsOpen(), "the same click closes it")
+  obj.OnClick(host, "LeftButton")
+
+  -- rename in place: nothing changes until Enter, Esc leaves the name as it was, an empty name is refused
+  local oreRow = assert(rowFor("Ore vein"), "the local pin is listed with its name")
+  local oreId = oreRow.entry.pin.id
+  local framesBefore = #FRAMES
+  click(oreRow.nameBtn)
+  local box
+  for i = framesBefore + 1, #FRAMES do if FRAMES[i].kindOf == "EditBox" then box = FRAMES[i] end end
+  assert(box and box:GetText() == "Ore vein" and BM.Snapshot().editing, "the name becomes a box holding the old name")
+  box:SetText("Copper vein")
+  box.scripts.OnEscapePressed(box)
+  assert(PN.FindLocal(oreId).name == "Ore vein" and not BM.Snapshot().editing, "Esc: as it was")
+  click(oreRow.nameBtn)
+  box:SetText("   ")
+  box.scripts.OnEnterPressed(box)
+  assert(PN.FindLocal(oreId).name == "Ore vein" and lastNotice():find("needs a name"), "an empty name is refused, with the reason")
+  local before = sent()
+  click(oreRow.nameBtn)
+  box:SetText("|cffff0000Copper|r vein")
+  box.scripts.OnEnterPressed(box)
+  assert(PN.FindLocal(oreId).name == "Copper vein" and sent() == before, "renamed, as plain text; a local pin sends nothing")
+  FlushTimers()
+  assert(rowFor("Copper vein") and not rowFor("Ore vein"), "the list follows")
+
+  -- recolor: the swatch opens a row of the pin colors
+  oreRow = rowFor("Copper vein")
+  local color0 = oreRow.entry.pin.color
+  framesBefore = #FRAMES
+  click(oreRow.pick)
+  local picker
+  for i = framesBefore + 1, #FRAMES do if rawget(FRAMES[i], "swatches") then picker = FRAMES[i] end end
+  assert(picker and #picker.swatches == #PN.COLORS and picker.shown, "a swatch for each pin color")
+  local choice
+  for _, b in ipairs(picker.swatches) do if b.id ~= color0 then choice = b break end end
+  click(choice)
+  assert(PN.FindLocal(oreId).color == choice.id and not picker.shown, "recolored, and the picker closes")
+
+  -- someone else's party pin: no rename or recolor, and remove takes it off my map only
+  local palRow = assert(rowFor("Westfall camp", "party"), "party pins are listed too")
+  before = sent()
+  framesBefore = #FRAMES
+  click(palRow.nameBtn)
+  assert(not BM.Snapshot().editing and lastNotice():find("Only the player who made it"), "not yours to rename: the reason")
+  click(palRow.pick)
+  assert(not picker.shown and PN.Shared(pal.key).color == "river", "nor to recolor")
+  click(palRow.remove)
+  assert(PN.IsDismissed(pal.key) and PN.Shared(pal.key) and sent() == before, "taken off my map; nothing sent and it is still the party's")
+  FlushTimers()
+  assert(not rowFor("Westfall camp", "party"), "and out of the list")
+  assert(PN.Restore(pal.key))
+
+  -- my own party pin: rename and recolor are sent once each; remove asks first
+  local camp = assert(PS.CreateParty({ map = 1429, x = 3000, y = 3000, name = "Camp", color = "gold" }))
+  FlushTimers()
+  local campRow = assert(rowFor("Camp"))
+  before = sent()
+  click(campRow.nameBtn)
+  box:SetText("Base camp")
+  box.scripts.OnEnterPressed(box)
+  assert(PN.Shared(camp.key).name == "Base camp" and sent() == before + 1, "a rename of your own party pin is sent once")
+  FlushTimers()
+  campRow = rowFor("Base camp")
+  click(campRow.pick)
+  click(picker.swatches[3])
+  assert(PN.Shared(camp.key).color == PN.COLORS[3][1] and sent() == before + 2)
+  popups[#popups] = nil
+  local askedBefore = #popups
+  click(campRow.remove)
+  assert(#popups == askedBefore + 1 and popups[#popups].key == "TWICHUI_PINS_REMOVE_PARTY", "removing for the party asks first")
+  assert(PN.Shared(camp.key) and sent() == before + 2, "nothing sent before confirming")
+  c.StaticPopupDialogs.TWICHUI_PINS_REMOVE_PARTY.OnAccept()
+  assert(not PN.Shared(camp.key) and sent() == before + 3)
+  FlushTimers()
+
+  -- a local pin's remove button deletes it (a pin that went meanwhile is refused with a sentence)
+  local extra = assert(PN.AddLocal({ map = 1429, x = 20, y = 20, name = "Scratch" }))
+  FlushTimers()
+  local extraRow = assert(rowFor("Scratch"))
+  assert(PN.RemoveLocal(extra.id))
+  click(extraRow.remove)
+  assert(lastNotice():find("no longer there"), "checked again when it runs")
+  extra = assert(PN.AddLocal({ map = 1429, x = 20, y = 20, name = "Scratch" }))
+  FlushTimers()
+  click(rowFor("Scratch").remove)
+  assert(not PN.FindLocal(extra.id), "a local pin is deleted")
+  FlushTimers()
+
+  -- Clear all pins asks first, says what happens, and keeps what is the party's
+  local keptLocal = {}
+  for _, p in ipairs(c.TwichUIDB.pins.list) do
+    local copy = {}; for k, v in pairs(p) do copy[k] = v end
+    keptLocal[#keptLocal + 1] = copy
+  end
+  local onMap = {}
+  for _, p in ipairs(PN.SharedPins()) do if not PN.IsDismissed(p.key) then onMap[#onMap + 1] = p.key end end
+  assert(#keptLocal > 0 and #onMap > 0)
+  before = sent()
+  local asked = #popups
+  local clear = assert(c.TwichUIPinsMenu.clear, "a Clear all pins link")
+  click(clear)
+  assert(not BM.IsOpen(), "the menu is put away for the question")
+  assert(#popups == asked + 1 and popups[#popups].key == "TWICHUI_PINS_CLEAR_ALL", "asks first")
+  local text = popups[#popups].text
+  assert(text:find(tostring(#keptLocal), 1, true) and text:find("local") and text:find("party") and text:find("nothing is sent"),
+    "says what will be deleted and what only leaves the map")
+  assert(PN.LocalCount() == #keptLocal and sent() == before, "nothing changed before confirming")
+  c.StaticPopupDialogs.TWICHUI_PINS_CLEAR_ALL.OnAccept()
+  assert(PN.LocalCount() == 0, "local pins deleted")
+  for _, key in ipairs(onMap) do assert(PN.Shared(key) and PN.IsDismissed(key), "party pins are off my map, not gone") end
+  assert(sent() == before, "clearing sends nothing")
+  c.StaticPopupDialogs.TWICHUI_PINS_CLEAR_ALL.OnAccept()
+  assert(PN.LocalCount() == 0 and sent() == before, "accepting twice does nothing more")
+  -- the menu with nothing in it says how to start, and its clear link is greyed out
+  BM.Open(host)
+  assert(c.TwichUIPinsMenu.clear.enabled == false and c.TwichUIPinsMenu.empty.shown)
+  BM.Close()
+
+  -- put the state back for what follows
+  for _, key in ipairs(onMap) do PN.Restore(key) end
+  c.TwichUIDB.pins.list = keptLocal
+  PN.Changed()
+  FlushTimers()
+  assert(PN.LocalCount() == #keptLocal)
+
+  -- a pin arriving from another player is pointed out for a while, then the text goes back
+  do
+    local timers = {}
+    local realAfter = c.C_Timer.After
+    c.C_Timer.After = function(delay, fn) timers[#timers + 1] = { delay = delay, fn = fn } end
+    local function pending() local n = 0 for _, t in ipairs(timers) do if t.delay >= 1 then n = n + 1 end end return n end
+    local function fire(i) local t = table.remove(timers, i); t.fn() end
+    local function put(id, rev, name)
+      return PN.ApplyPut("Pal Stonebrook", { id = id, r = rev, m = 1429, x = 2000, y = 2000, n = name, c = "rose" })
+    end
+    assert(BR.Get("flash") == true and BR.Get("flashSeconds") == 8 and BR.Get("flashColor") == "ffe8b64a", "on, 8 seconds, gold")
+    assert(not BR.Set("flashSeconds", 1) and not BR.Set("flashSeconds", 31) and not BR.Set("flashSeconds", 5.5) and not BR.Set("flashColor", "gold"),
+      "an unusable time or color is refused")
+    -- not for what you do yourself
+    assert(PN.AddLocal({ map = 1429, x = 5, y = 5, name = "Mine" }))
+    assert(PS.CreateParty({ map = 1429, x = 6, y = 6, name = "Mine too" }))
+    assert(not obj.text:find("New pin") and obj.iconR == nil and pending() == 0, "your own pins are not pointed out")
+    -- a new one: the words, the color on the text and the icon, and the time it was given
+    assert(put("pal:9", 1, "Mine shaft"))
+    assert(obj.text == "|cffe8b64aNew pin: Mine shaft|r", "says so, in the color")
+    local r, g, b = PL.Rgb("ffe8b64a")
+    assert(obj.iconR == r and obj.iconG == g and obj.iconB == b, "the icon is tinted the same")
+    assert(pending() == 1 and timers[#timers].delay == 8)
+    -- an update to it, or a stale copy, is not a new pin
+    assert(put("pal:9", 2, "Mine shaft deep"))
+    assert(not put("pal:9", 2, "Again"))
+    assert(obj.text == "|cffe8b64aNew pin: Mine shaft|r" and pending() == 1, "no new highlight, no new timer")
+    -- the count changing meanwhile keeps the highlight; a second arrival restarts the time
+    assert(put("pal:10", 1, "Quarry"))
+    assert(obj.text == "|cffe8b64a2 new pins|r" and pending() == 2)
+    fire(#timers - 1)   -- the first timer is out of date: nothing happens
+    assert(obj.text:find("2 new pins") and obj.iconR, "the older timer doesn't end it early")
+    fire(#timers)
+    assert(obj.text == "" or not obj.text:find("new pin"), "back to normal when the time is up")
+    assert(obj.text:find("pin") and obj.iconR == nil and obj.iconG == nil and obj.iconB == nil, "the usual count, the icon untinted")
+    -- the player's own time and color
+    assert(BR.Set("flashSeconds", 12) and BR.Set("flashColor", "ff112233"))
+    assert(put("pal:11", 1, "A very long name that would not fit on any data bar at all"))
+    assert(obj.text:find("^|cff112233New pin: A very long name that%.%.%.|r$") or obj.text:find("^|cff112233New pin: .-%.%.%.|r$"),
+      "a long name is cut: " .. obj.text)
+    assert(timers[#timers].delay == 12)
+    -- turned off while it shows: gone at once, and nothing more is pointed out
+    assert(BR.Set("flash", false))
+    assert(not obj.text:find("New pin") and obj.iconR == nil, "turned off: back at once")
+    assert(put("pal:12", 1, "Ignored"))
+    assert(not obj.text:find("New pin"), "off: not pointed out")
+    assert(BR.Set("flash", true))
+    -- a party member's full list: only the pins that are new here count, and it is said once
+    local before = #timers
+    assert(PN.ApplyAll("Pal Stonebrook", {
+      { id = "pal:1", r = 1, m = 1436, x = 5000, y = 5000, n = "Westfall camp", c = "river" },   -- already held
+      { id = "pal:9", r = 2, m = 1429, x = 2000, y = 2000, n = "Mine shaft deep", c = "rose" },
+      { id = "pal:11", r = 1, m = 1429, x = 2000, y = 2000, n = "Quarry", c = "rose" },
+      { id = "pal:12", r = 1, m = 1429, x = 2000, y = 2000, n = "Ignored", c = "rose" },
+      { id = "pal:20", r = 1, m = 1429, x = 2100, y = 2000, n = "Watchtower", c = "rose" },
+      { id = "pal:21", r = 1, m = 1429, x = 2200, y = 2000, n = "Well", c = "rose" },
+    }))
+    assert(obj.text == "|cff1122332 new pins|r", "two were new here, said once: " .. obj.text)
+    -- the same list again changes nothing and points out nothing
+    for i = #timers, 1, -1 do fire(i) end
+    assert(not obj.text:find("new pin") and obj.iconR == nil)
+    assert(PN.ApplyAll("Pal Stonebrook", {
+      { id = "pal:1", r = 1, m = 1436, x = 5000, y = 5000, n = "Westfall camp", c = "river" },
+      { id = "pal:9", r = 2, m = 1429, x = 2000, y = 2000, n = "Mine shaft deep", c = "rose" },
+      { id = "pal:11", r = 1, m = 1429, x = 2000, y = 2000, n = "Quarry", c = "rose" },
+      { id = "pal:12", r = 1, m = 1429, x = 2000, y = 2000, n = "Ignored", c = "rose" },
+      { id = "pal:20", r = 1, m = 1429, x = 2100, y = 2000, n = "Watchtower", c = "rose" },
+      { id = "pal:21", r = 1, m = 1429, x = 2200, y = 2000, n = "Well", c = "rose" },
+    }))
+    assert(not obj.text:find("new pin") and pending() == 0, "a list with nothing new points out nothing")
+    -- put the state back for what follows
+    for _, id in ipairs({ "pal:9", "pal:10", "pal:11", "pal:12", "pal:20", "pal:21" }) do PN.ApplyDel("Pal Stonebrook", id, 5) end
+    for _, p in ipairs(PN.OwnPins()) do if p.name == "Mine too" then PS.RemoveForParty(p.key) end end
+    for _, p in ipairs(PN.LocalPins()) do if p.name == "Mine" then PN.RemoveLocal(p.id) end end
+    BR.Reset()
+    c.C_Timer.After = realAfter
+    TIMERS = {}
+    FlushTimers()
+    assert(PN.LocalCount() == #keptLocal)
+  end
+
+  -- its look is its own, kept apart from the window's and the launchers'
+  assert(PL.MenuLook.Set("bgOpacity", 40) and c.TwichUIDB.ui.pinsBrokerMenu.bgOpacity == 40)
+  assert(c.TwichUIDB.ui.pinsLook == nil or c.TwichUIDB.ui.pinsLook.bgOpacity == nil, "the window's look is not the menu's")
+  assert(c.TwichUIDB.ui.brokerMenu == nil, "the Mage launchers' look is not touched")
+  assert(PL.MenuLook.DEFAULTS ~= R.MenuStyle.DEFAULTS and PL.MenuLook.Get("bgColor") == R.MenuStyle.Get("bgColor"),
+    "a copy of the launchers' defaults, so the two match until one is changed")
+  PL.MenuLook.Reset()
+  assert(c.TwichUIDB.ui.pinsBrokerMenu == nil, "reset: nothing saved")
+  -- the options page's Preview opens the real menu and Esc/again closes it
+  BM.TogglePreview(); assert(BM.IsOpen())
+  BM.TogglePreview(); assert(not BM.IsOpen())
+
+  -- the troubleshooting section holds no names
+  local rep2 = R.Diag.Build()
+  local f2 = rep2:find("== Party pins ==", 1, true)
+  local sec = rep2:sub(f2, rep2:find("\n== ", f2 + 5, true) or #rep2)
+  assert(sec:find("data bar menu:", 1, true) and sec:find("data bar:", 1, true))
+  for _, needle in ipairs({ "Copper", "Camp", "Westfall", "Stonebrook" }) do
+    assert(not sec:find(needle, 1, true), "the report must not hold " .. needle)
+  end
 end
 
 ---------------------------------------------------------------------------

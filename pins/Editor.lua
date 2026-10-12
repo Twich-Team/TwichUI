@@ -3,7 +3,9 @@
 -- one you can change. Nothing is made, changed or sent until Save; Cancel, Esc or closing it leaves
 -- everything as it was. Save checks again at that moment (still in a party, still your pin, still under
 -- the limits) and says why when it can't, keeping what you typed.
--- Drawn with TwichUI's own look (pins/Look.lua); it doesn't need EllesmereUI.
+-- Drawn with TwichUI's own look (pins/Look.lua): its background and border are the player's own choice
+-- (PL.EditorLook, Party pins options > New pin window appearance, with a Preview), its text follows the
+-- pin window's font, size and accent. It doesn't need EllesmereUI.
 
 local R = TwichUI
 local PN = R.Pins
@@ -15,14 +17,17 @@ R.PinsEditor = PE
 local NAME = "TwichUIPinEditor"
 local WIDTH, HEIGHT = 300, 214
 local PAD = 14
+local SWATCH, SWATCH_ON = 22, 24
 local pal = PL.palette
-local f
-local state   -- { mode = "new" | "edit", map, x, y, party, entry, color }
+local f       -- the window: it carries the player's background and border, and the fields below
+local body    -- WIDTH x HEIGHT inside it, clear of the border; everything is drawn on this
+local state   -- { mode = "new" | "edit" | "preview", map, x, y, party, entry, color }
 
 local function Swatch(parent, i, color)
     local b = CreateFrame("Button", nil, parent, "BackdropTemplate")
-    b:SetSize(22, 22)
-    b:SetPoint("TOPLEFT", (i - 1) * 28, 0)
+    b:SetSize(SWATCH, SWATCH)
+    -- anchored by its center so the selected swatch can grow in place (SetScale would shift its anchor offset)
+    b:SetPoint("CENTER", parent, "TOPLEFT", (i - 1) * 28 + SWATCH / 2, -SWATCH / 2)
     b:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
     local c = color[3]
     b:SetBackdropColor(c[1], c[2], c[3], 1)
@@ -40,8 +45,11 @@ local function Refresh()
     local party = state.party
     local blocked = party and state.mode == "new" and PN.SendBlocked() or nil
     if state.mode == "edit" and state.entry.kind == "party" then blocked = PN.SendBlocked() end
-    f.save:SetEnabled(blocked == nil)
-    if blocked then
+    f.save:SetEnabled(blocked == nil and state.mode ~= "preview")
+    if state.mode == "preview" then
+        f.status:SetText("A preview. Nothing is made, saved or sent.")
+        f.status:SetTextColor(pal.stone[1], pal.stone[2], pal.stone[3])
+    elseif blocked then
         f.status:SetText(PN.Reason(blocked))
         f.status:SetTextColor(0.80, 0.45, 0.35)
     elseif party then
@@ -59,7 +67,8 @@ function PE.Paint()
         local on = b.id == state.color
         local edge = on and pal.text or pal.bronzeLo
         b:SetBackdropBorderColor(edge[1], edge[2], edge[3], 1)
-        b:SetScale(on and 1.1 or 1)
+        local size = on and SWATCH_ON or SWATCH
+        b:SetSize(size, size)
     end
     f.kindLocal:SetOn(not state.party)
     f.kindParty:SetOn(state.party)
@@ -71,7 +80,7 @@ local function Close()
 end
 
 local function Save()
-    if not state then return end
+    if not state or state.mode == "preview" then return end
     if not R:Enabled("partyPins") then Close() return end
     local name = f.name:GetText()
     local fields = { name = name, color = state.color }
@@ -118,22 +127,25 @@ local function Build()
     f:SetScript("OnDragStop", f.StopMovingOrSizing)
     f:Hide()
     if UISpecialFrames then tinsert(UISpecialFrames, NAME) end
-    S.Frame(f, WIDTH, HEIGHT, pal)
-    S.Header(f, 30, pal)
-    f.title = PL.Text(f, "GameFontNormal", "name")
+    -- the player's background and border are on f (Restyle); the content sits on body, inside the border
+    body = CreateFrame("Frame", nil, f)
+    body:SetSize(WIDTH, HEIGHT)
+    body:SetPoint("CENTER")
+    S.Header(body, 30, pal)
+    f.title = PL.Text(body, "GameFontNormal", "name")
     f.title:SetPoint("TOPLEFT", PAD + 2, -12)
-    local close = S.Close(f, Close, pal)
+    local close = S.Close(body, Close, pal)
     close:SetPoint("TOPRIGHT", -8, -8)
 
-    f.where = PL.Text(f, "GameFontNormalSmall", "meta")
+    f.where = PL.Text(body, "GameFontNormalSmall", "meta")
     f.where:SetPoint("TOPLEFT", PAD + 2, -42)
     f.where:SetPoint("RIGHT", -PAD, 0)
     f.where:SetWordWrap(false)
 
-    local label = PL.Text(f, "GameFontNormalSmall", "meta")
+    local label = PL.Text(body, "GameFontNormalSmall", "meta")
     label:SetPoint("TOPLEFT", PAD + 2, -62)
     label:SetText("Name")
-    f.name = CreateFrame("EditBox", nil, f, "InputBoxTemplate")
+    f.name = CreateFrame("EditBox", nil, body, "InputBoxTemplate")
     f.name:SetSize(WIDTH - PAD * 2 - 8, 20)
     f.name:SetPoint("TOPLEFT", PAD + 6, -76)
     f.name:SetAutoFocus(false)
@@ -142,35 +154,35 @@ local function Build()
     f.name:SetScript("OnEnterPressed", Save)
     f.name:SetScript("OnEscapePressed", Close)
 
-    local colorLabel = PL.Text(f, "GameFontNormalSmall", "meta")
+    local colorLabel = PL.Text(body, "GameFontNormalSmall", "meta")
     colorLabel:SetPoint("TOPLEFT", PAD + 2, -104)
     colorLabel:SetText("Color")
-    local row = CreateFrame("Frame", nil, f)
+    local row = CreateFrame("Frame", nil, body)
     row:SetSize(WIDTH - PAD * 2, 24)
     row:SetPoint("TOPLEFT", PAD + 2, -118)
     f.swatches = {}
     for i, color in ipairs(PN.COLORS) do f.swatches[i] = Swatch(row, i, color) end
 
-    f.kindLocal = S.Toggle(f, "Local", 64, function()
-        if state and state.mode == "new" then state.party = false; PE.Paint() end
+    f.kindLocal = S.Toggle(body, "Local", 64, function()
+        if state and state.mode ~= "edit" then state.party = false; PE.Paint() end
     end, pal)
     f.kindLocal:SetPoint("TOPLEFT", PAD + 2, -150)
-    f.kindParty = S.Toggle(f, "Party", 64, function()
-        if state and state.mode == "new" then state.party = true; PE.Paint() end
+    f.kindParty = S.Toggle(body, "Party", 64, function()
+        if state and state.mode ~= "edit" then state.party = true; PE.Paint() end
     end, pal)
     f.kindParty:SetPoint("LEFT", f.kindLocal, "RIGHT", 4, 0)
     R.Interact.Tip(f.kindLocal, "Local pin", "Only on your map, and kept between sessions.")
     R.Interact.Tip(f.kindParty, "Party pin", "Shared with party members who have TwichUI turned on, for as long as you are in this party. Players without TwichUI see nothing.")
 
-    f.status = PL.Text(f, "GameFontNormalSmall", "meta")
+    f.status = PL.Text(body, "GameFontNormalSmall", "meta")
     f.status:SetPoint("TOPLEFT", f.kindParty, "TOPRIGHT", 10, -1)
     f.status:SetPoint("RIGHT", -PAD, 0)
     f.status:SetHeight(26)
     f.status:SetJustifyV("TOP")
 
-    f.save = S.Button(f, "Save", 90, "primary", Save, pal)
+    f.save = S.Button(body, "Save", 90, "primary", Save, pal)
     f.save:SetPoint("BOTTOMRIGHT", -PAD, 12)
-    local cancel = S.Button(f, "Cancel", 80, "secondary", Close, pal)
+    local cancel = S.Button(body, "Cancel", 80, "secondary", Close, pal)
     cancel:SetPoint("RIGHT", f.save, "LEFT", -6, 0)
     R.Interact.Tip(f.save, "Save", function()
         local blocked = state and (state.party or (state.entry and state.entry.kind == "party")) and PN.SendBlocked()
@@ -178,30 +190,46 @@ local function Build()
     end)
 
     f:SetScript("OnHide", function() state = nil end)
-    PL.Subscribe(function()
-        if f then
-            S.PaintFrame(f, pal); S.PaintHeader(f, pal)
-            f.save:Repaint(); cancel:Repaint(); f.kindLocal:Repaint(); f.kindParty:Repaint(); close:Repaint()
-            f.title:SetTextColor(pal.text[1], pal.text[2], pal.text[3])
-            f.where:SetTextColor(pal.stone[1], pal.stone[2], pal.stone[3])
-        end
-    end)
-    f.title:SetTextColor(pal.text[1], pal.text[2], pal.text[3])
-    f.where:SetTextColor(pal.stone[1], pal.stone[2], pal.stone[3])
-    label:SetTextColor(pal.textDim[1], pal.textDim[2], pal.textDim[3])
-    colorLabel:SetTextColor(pal.textDim[1], pal.textDim[2], pal.textDim[3])
+    f.widgets = { f.save, cancel, f.kindLocal, f.kindParty, close }
+    f.labels = { label, colorLabel }
 end
 
-local function Open()
+-- Draws the player's background and border, then the text and controls in the palette. The window grows by
+-- the border's reach so a thick border never covers the content.
+local function Restyle()
+    if not f then return end
+    local edge = math.ceil(PL.Surface(PL.EditorLook, f))
+    f:SetSize(WIDTH + edge * 2, HEIGHT + edge * 2)
+    S.PaintHeader(body, pal)
+    for _, w in ipairs(f.widgets) do w:Repaint() end
+    f.title:SetTextColor(pal.text[1], pal.text[2], pal.text[3])
+    f.where:SetTextColor(pal.stone[1], pal.stone[2], pal.stone[3])
+    for _, fs in ipairs(f.labels) do fs:SetTextColor(pal.textDim[1], pal.textDim[2], pal.textDim[3]) end
+    if state then PE.Paint() end   -- the status line's color
+end
+PE.Restyle = Restyle
+
+local function OnLookChanged() if f and f:IsShown() then Restyle() end end
+PL.Subscribe(OnLookChanged)
+PL.EditorLook.Subscribe(OnLookChanged)
+
+local function Open(preview)
     Build()
+    Restyle()
     f:ClearAllPoints()
-    local anchor = (WorldMapFrame and WorldMapFrame:IsShown()) and WorldMapFrame.ScrollContainer or UIParent
-    f:SetPoint("TOP", anchor, "TOP", 0, -60)
+    if preview and SettingsPanel and SettingsPanel:IsShown() then
+        f:SetPoint("TOPLEFT", SettingsPanel, "TOPRIGHT", 8, -48)
+    else
+        local anchor = (WorldMapFrame and WorldMapFrame:IsShown()) and WorldMapFrame.ScrollContainer or UIParent
+        f:SetPoint("TOP", anchor, "TOP", 0, -60)
+    end
     R.FitToScreen(f)
     f:Show()
     f:Raise()
-    f.name:SetFocus()
-    f.name:HighlightText()
+    if not preview then
+        f.name:SetFocus()
+        f.name:HighlightText()
+    end
 end
 
 -- A new pin at (map, x, y) in 0..COORD; party: start as a party pin (it can be switched before Save).
@@ -228,6 +256,23 @@ function PE.OpenEdit(e)
     f.kindLocal:Hide(); f.kindParty:Hide()
     PE.Paint()
     return true
+end
+
+-- The options page's Preview: the real window, with a made-up pin, beside the options window. Save does
+-- nothing in it. It stays until pressed again or Esc, and a real editor opened meanwhile replaces it.
+function PE.TogglePreview()
+    if f and f:IsShown() and state then
+        if state.mode == "preview" then Close() end   -- a real pin being edited is left alone
+        return
+    end
+    if not R:Enabled("partyPins") then return end
+    state = { mode = "preview", party = false, color = PN.DEFAULT_COLOR }
+    Open(true)
+    f.title:SetText("New pin")
+    f.where:SetText("Elwynn Forest (40.0, 50.0)")
+    f.name:SetText(PN.DefaultName())
+    f.kindLocal:Show(); f.kindParty:Show()
+    PE.Paint()
 end
 
 function PE.IsOpen() return f ~= nil and f:IsShown() end
