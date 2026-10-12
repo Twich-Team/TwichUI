@@ -326,12 +326,28 @@ function PM.ShowOnMap(e)
     return true
 end
 
+-- WaypointUI's public API (WaypointUIAPI.Navigation.NewUserNavigation) sets the game's waypoint and
+-- gives it a name, which is the only way its marker can show the pin's name rather than the zone's.
+-- Its x and y are 0..100. Returns true if it took the waypoint; anything else leaves the caller to
+-- set the game's own.
+local function SetNamedWaypointUI(pin)
+    local nav = WaypointUIAPI and WaypointUIAPI.Navigation
+    if not (nav and nav.NewUserNavigation) then return false end
+    local ok, result = pcall(nav.NewUserNavigation, {
+        name = pin.name, mapID = pin.map, x = pin.x / PN.COORD * 100, y = pin.y / PN.COORD * 100,
+        suppressAudio = true,   -- the click sound below stays the one sound for this action
+    })
+    return ok and result ~= nil
+end
+
 -- The game's waypoint, only when asked. It replaces the waypoint you had, as setting one in the game does.
+-- With WaypointUI installed it is named for the pin.
 function PM.SetWaypoint(e)
     local ok, why = PN.Can("waypoint", e)
     if not ok then Notice(why) return false end
     local pin = PN.Fresh(e)
-    local set = C_Map.SetUserWaypoint(UiMapPoint.CreateFromCoordinates(pin.map, pin.x / PN.COORD, pin.y / PN.COORD))
+    local set = SetNamedWaypointUI(pin)
+        or C_Map.SetUserWaypoint(UiMapPoint.CreateFromCoordinates(pin.map, pin.x / PN.COORD, pin.y / PN.COORD))
     if not set then Notice(PN.Reason("no-waypoint")) return false end
     if PlaySound and SOUNDKIT and SOUNDKIT.UI_MAP_WAYPOINT_CONTROL_CLICK then PlaySound(SOUNDKIT.UI_MAP_WAYPOINT_CONTROL_CLICK) end
     return true
