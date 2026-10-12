@@ -1,6 +1,6 @@
 # TwichUI changelog
 
-## Unreleased
+## v3.0.12
 - **Fixed: a waypoint written with decimal commas** (`/way 52,3 40,7`, and the same in `/twichway`, pasted lines and **Also make a pin from /way**) made a pin at 52, 3 named "40,7". It is now refused with "Use a point for decimals, like 52.3 40.7" and no pin is made; in a paste only that line is refused. `52,40` (a comma between the two numbers) works as before.
 - **Fixed: Keep on your own party pin while nothing can be sent.** While party pins are paused in a raid, or the game is holding addon messages, the editor opens for your own party pin and Keep can be turned on or off (it is never sent). A new name or color still waits, and the editor says why.
 - **Fixed: the RestedXP skin turned on during combat** never chose its theme after combat; it does now, once combat ends. When RestedXP redraws a step during combat (a step completed mid-fight), the skin now finishes it after combat with one layout and the padding instead of asking RestedXP to reload the whole guide (**needs checking in the game**).
