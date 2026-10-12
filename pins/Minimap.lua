@@ -124,13 +124,23 @@ end
 ---------------------------------------------------------------------------
 -- The buttons
 ---------------------------------------------------------------------------
+-- Whether this pin's name is drawn now, by the Names on the minimap choice.
+local function LabelShown(b)
+    local mode = PL.Pref("minimapLabels")
+    if mode == "always" then return true end
+    if mode == "off" then return false end
+    return b.over or (b.entry ~= nil and PN.selected == b.entry.token)
+end
+
 local function OnEnter(b)
     b.over = true
+    b.label:SetShown(LabelShown(b))
     PM.Tooltip(b, "ANCHOR_LEFT", b.yards)
 end
 
 local function OnLeave(b)
     b.over = false
+    b.label:SetShown(LabelShown(b))
     GameTooltip:Hide()
 end
 
@@ -166,6 +176,13 @@ local function NewSlot()
     b.badge:SetColorTexture(0.93, 0.87, 0.71, 1)
     b.badge:SetSize(4, 4)
     b.badge:SetPoint("CENTER", b.badgeEdge, "CENTER", 0, 0)
+    -- the name, under the pin; made once and left hidden unless asked for
+    b.label = b:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmallOutline")
+    b.label:SetPoint("TOP", b, "BOTTOM", 0, 1)
+    b.label:SetWordWrap(false)
+    b.label:SetJustifyH("CENTER")
+    PL.MapText.Apply(b.label, 120)
+    b.label:Hide()
     b:SetScript("OnEnter", OnEnter)
     b:SetScript("OnLeave", OnLeave)
     b:SetScript("OnClick", OnClick)
@@ -188,7 +205,12 @@ local function Dress(b, e)
         b.badge:SetShown(party)
         b.badgeEdge:SetShown(party)
     end
+    if b.name ~= pin.name then
+        b.name = pin.name
+        b.label:SetText(pin.name)   -- plain text: Pins.CleanName took out every escape sequence
+    end
     b.glow:SetShown(PN.selected == e.token)
+    b.label:SetShown(LabelShown(b))
 end
 
 local function HideSlot(b)
@@ -408,8 +430,15 @@ PMM.Refresh = Refresh
 -- The minimap's map changes with the zone; the next update notices it. A change of pins, choices or the
 -- switch rebuilds the list.
 PN.OnChange(function() if active then PMM.Rebuild() end end)
--- Other choices (the window's place, the labels) don't concern the minimap.
-PL.OnPrefChange(function() if Enabled() ~= active then Refresh() end end)
+-- Other choices (the window's place, the world map's labels) don't concern the minimap, except whether
+-- names are drawn beside its pins, which only shows or hides what is already there.
+PL.OnPrefChange(function()
+    if Enabled() ~= active then
+        Refresh()
+    else
+        for i = 1, #eligible do slots[i].label:SetShown(LabelShown(slots[i])) end
+    end
+end)
 R:On("PLAYER_LOGIN", Refresh)
 
 -- Read only, for /tui diagnostics: states, kinds and counts, never names, places or coordinates. It asks the
@@ -451,7 +480,8 @@ function PMM.State()
     local out = {}
     for i = 1, #eligible do
         local b = slots[i]
-        out[i] = { token = eligible[i].token, shown = b.on == true, x = b.px, y = b.py, yards = b.yards }
+        out[i] = { token = eligible[i].token, shown = b.on == true, x = b.px, y = b.py, yards = b.yards,
+            name = b.label:IsShown() and b.label:GetText() or nil }
     end
     return out
 end

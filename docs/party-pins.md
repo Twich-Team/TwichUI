@@ -55,7 +55,7 @@ stable ids: gold, ember, moss, river, violet, rose, parchment, slate.
 * `session`: the party session, written at logout and read by the next load only. See "Reload".
 
 The pin window's choices live in `TwichUIDB.ui`: `partyPins` (clicks, labels, window position), `pinsLook`
-and `pinsAppearance`. Only changed values are stored. An unusable value reads as its default and is kept.
+`pinsAppearance` and `pinsMapText` (the names on the maps). Only changed values are stored. An unusable value reads as its default and is kept.
 
 **Session only** (in memory): party pins keyed by *owner + id*. The owner is the sender's name as the game
 reported it, never a field of the message. Ids are a random six-character word per session plus a running
@@ -207,6 +207,20 @@ Appearance is under Party pins options > Window appearance:
 
 A missing texture or font is drawn plainly and stays chosen. **Reset window appearance** resets only these;
 pins and the click and label choices stay. It looks complete without EllesmereUI.
+
+### Map text
+
+Party pins options > **Map text** styles the names drawn under pins on the world map and beside them on the
+minimap, one look for both: font (LibSharedMedia), size 8 to 20, color, outline (none, outline, thick) and
+shadow (on or off). Saved in `TwichUIDB.ui.pinsMapText`, only once changed. The defaults are the game's own
+`GameFontHighlightSmallOutline` as this client defines it (`SystemFont_Shadow_Small`: Friz Quadrata 10, white,
+1 pixel black shadow, no outline), so nothing changes until a choice is made. A name's width grows with its
+size. A font that is missing or can't be drawn is drawn as the game's own and stays chosen. **Reset map text**
+resets only this; the window's look, pins and the click and label choices stay (and **Reset window
+appearance** leaves the map text alone).
+
+**Pin names on the minimap** (Never, On hover and for the selected pin, Always; Never by default, so the minimap
+is as it was) puts a name under each minimap pin in the same text look. The tooltip still has the name.
 
 ## Data bar
 

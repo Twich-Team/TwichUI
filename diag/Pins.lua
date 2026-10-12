@@ -46,6 +46,9 @@ local function Pins()
     Line("window: built %s, open %s, rows %d; font %s (fell back: %s), background %s, border %s, rows %s",
         D.Flag(w.built), D.Flag(w.open), w.rows or 0, tostring(look.font), D.Flag(look.fontFallback), tostring(look.bg),
         tostring(look.border), tostring(look.density))
+    Line("map text: font %s (fell back: %s), size %s, outline %s, shadow %s; names on the minimap: %s",
+        tostring(look.mapFont), D.Flag(look.mapFontFallback), tostring(look.mapSize), tostring(look.mapOutline),
+        D.Flag(look.mapShadow), tostring(look.minimapLabels))
     Line("data bar: %s", R.PinsBroker and R.PinsBroker.Available() and "listed" or "not listed (no LibDataBroker provider, or off)")
     local status, reason = "ready", nil
     if not on then status = "off"

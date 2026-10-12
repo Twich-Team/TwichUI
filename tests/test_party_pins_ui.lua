@@ -14,6 +14,7 @@ local c = MakeClient("Rich Hale", { "!!!TwichUI" })
 CLIENTS["Rich Hale"] = c
 
 -- permissive UI mocks (as in test_window_smoke.lua), with numbers where layout needs them
+local MAPSTRINGS = {}
 local function Obj()
   local o = { text = "", shown = true }
   return setmetatable(o, { __index = function(t, k)
@@ -28,7 +29,20 @@ local function Obj()
     if k == "HasFocus" or k == "IsMouseOver" or k == "IsTruncated" then return function() return false end end
     if k == "GetStringWidth" then return function() return 60 end end
     if k == "GetFrameLevel" then return function() return 5 end end
-    if k == "CreateFontString" or k == "CreateTexture" then return function() return Obj() end end
+    if k == "CreateFontString" then
+      -- remembers what a name was dressed with, for the map text checks
+      return function(_, _, _, template)
+        local fs = Obj()
+        fs.template = template
+        rawset(fs, "SetFont", function(s, path, size, flags) s.font = { path, size, flags } end)
+        rawset(fs, "SetTextColor", function(s, r, g, b) s.color = { r, g, b } end)
+        rawset(fs, "SetShadowOffset", function(s, x, y) s.shadow = { x, y } end)
+        rawset(fs, "SetWidth", function(s, w) s.width = w end)
+        MAPSTRINGS[#MAPSTRINGS + 1] = fs
+        return fs
+      end
+    end
+    if k == "CreateTexture" then return function() return Obj() end end
     if k == "ScrollBar" then
       local sb = Obj(); rawset(sb, "ThumbTexture", false); rawset(sb, "ScrollUpButton", false); rawset(sb, "ScrollDownButton", false)
       rawset(t, k, sb); return sb
@@ -48,6 +62,7 @@ c.CreateFrame = function(kind, name)
   return o
 end
 c.tinsert = table.insert
+c.GameFontHighlightSmallOutline = { GetFont = function() return "Fonts\\FRIZQT__.TTF", 10, "" end }
 c.UISpecialFrames = {}
 c.UIParent = Obj()
 c.GameTooltip = Obj()
@@ -359,6 +374,56 @@ local pinsBefore = PN.LocalCount()
 PL.Reset()
 assert(c.TwichUIDB.ui.pinsAppearance == nil and c.TwichUIDB.ui.pinsLook == nil)
 assert(PN.LocalCount() == pinsBefore and PL.Pref("labels") == "always", "reset is only the look")
+-- the names on the maps: dressed the way the game's own was until chosen, then as chosen, on both maps
+do
+  local MT = PL.MapText
+  local function names()
+    local out = {}
+    for _, fs in ipairs(MAPSTRINGS) do
+      if fs.template == "GameFontHighlightSmallOutline" then out[#out + 1] = fs end
+    end
+    return out
+  end
+  local list = names()
+  assert(#list > 0, "pins on the maps have names")
+  local mini = 0
+  for _, fs in ipairs(list) do
+    assert(fs.font and fs.font[1] == "Fonts\\FRIZQT__.TTF" and fs.font[2] == 10 and fs.font[3] == "", "defaults are the game's own look")
+    assert(fs.color and fs.color[1] == 1 and fs.color[3] == 1 and fs.shadow and fs.shadow[1] == 1 and fs.shadow[2] == -1)
+    if fs.width == 120 then mini = mini + 1 end
+  end
+  assert(mini > 0 and mini < #list, "names exist on both the world map and the minimap")
+  assert(c.TwichUIDB.ui.pinsMapText == nil, "nothing is saved until a choice is made")
+
+  assert(MT.Set("size", 16) and MT.Set("color", "ffe0c070") and MT.Set("outline", "thick") and MT.Set("shadow", false))
+  for _, fs in ipairs(list) do
+    assert(fs.font[2] == 16 and fs.font[3] == "THICKOUTLINE", "every name follows, on both maps")
+    assert(math.abs(fs.color[1] - 0xe0 / 255) < 1e-6 and fs.shadow[1] == 0 and fs.shadow[2] == 0)
+  end
+  for _, fs in ipairs(list) do
+    assert(fs.width == 224 or fs.width == 192, "a larger name has more room (140 and 120 at size 10)")
+  end
+  assert(not MT.Set("size", 40) and not MT.Set("size", 12.5) and not MT.Set("color", "red")
+    and not MT.Set("outline", "glow") and not MT.Set("shadow", "yes") and not MT.Set("nope", 1), "unusable values are refused")
+  c.TwichUIDB.ui.pinsMapText.size = "huge"
+  assert(MT.Get("size") == 10 and c.TwichUIDB.ui.pinsMapText.size == "huge", "an unusable saved value reads as the default and is kept")
+
+  -- a font that is gone is drawn as the game's own and stays chosen
+  assert(MT.Set("font", "Gone Font") and MT.Get("font") == "Gone Font")
+  assert(PL.Snapshot().mapFontFallback == true and c.TwichUIDB.ui.pinsMapText.font == "Gone Font")
+  for _, fs in ipairs(list) do assert(fs.font[1] == "Fonts\\FRIZQT__.TTF") end
+
+  -- the window's reset leaves the map text alone, and the map text's reset leaves the rest alone
+  local labelsBefore, pinsN = PL.Pref("labels"), PN.LocalCount()
+  PL.Reset()
+  assert(MT.Get("outline") == "thick", "resetting the window doesn't touch the map text")
+  assert(PL.SetPref("minimapLabels", "always") and not PL.SetPref("minimapLabels", "sometimes"))
+  MT.Reset()
+  assert(c.TwichUIDB.ui.pinsMapText == nil and MT.Get("size") == 10 and MT.Get("outline") == "none" and MT.Get("shadow") == true)
+  assert(PL.Pref("labels") == labelsBefore and PL.Pref("minimapLabels") == "always" and PN.LocalCount() == pinsN, "only the text is reset")
+  for _, fs in ipairs(list) do assert(fs.font[2] == 10 and fs.font[3] == "" and fs.shadow[1] == 1) end
+  assert(PL.SetPref("minimapLabels", "off"))
+end
 -- picking the party pin's click for local pins swaps them
 assert(PL.SetPref("localClick", "altshift") and PL.Pref("partyClick") == "alt")
 assert(PL.SetPref("localClick", "alt") and PL.Pref("partyClick") == "altshift")
@@ -535,6 +600,23 @@ do
   local rebuilds = MM.Snapshot().rebuilds
   R.PinsLook.SetPref("position", { x = 5, y = 5 })
   assert(MM.Snapshot().rebuilds == rebuilds)
+
+  -- names beside minimap pins: off as before; on hover only for the selected pin; always for all
+  local function namesShown()
+    local n = 0
+    for _, st in ipairs(MM.State()) do if st.name then n = n + 1 end end
+    return n
+  end
+  assert(R.PinsLook.Pref("minimapLabels") == "off" and namesShown() == 0, "no names on the minimap unless asked")
+  assert(R.PinsLook.SetPref("minimapLabels", "always") and namesShown() == #MM.State() and namesShown() > 1)
+  assert(at("local:" .. ore.id).name == ore.name, "a name is the pin's own, plain text: " .. tostring(at("local:" .. ore.id).name))
+  PN.Select(nil)
+  assert(R.PinsLook.SetPref("minimapLabels", "hover") and namesShown() == 0, "on hover: none until hovered or selected")
+  PN.Select("local:" .. ore.id)
+  assert(namesShown() == 1 and at("local:" .. ore.id).name == ore.name, "the selected pin shows its name")
+  PN.Select(nil)
+  assert(namesShown() == 0)
+  assert(R.PinsLook.SetPref("minimapLabels", "off"))
 
   -- troubleshooting: counts, no names or places
   local rep = R.Diag.Build()

@@ -1533,6 +1533,57 @@ local function Build()
             "Shows pins that are within range of you on your minimap, in their color and, for a party pin, with its badge. A pin appears only while you are on the map it was placed on (or a map inside it), and only when it is close enough to be on the minimap: nothing points at a pin that is out of range. Names are in the tooltip, and right-click opens the same actions as on the world map. Pins you removed from your map aren't shown.",
             PL.PREF_DEFAULTS.minimap, function() return PL.Pref("minimap") end, function(value) PL.SetPref("minimap", value and true or false) end),
             pinsToggle, PinsOn)
+        Under(Choice("pinsMinimapLabels", "Pin names on the minimap",
+            "Pin names beside the pins on the minimap. Never leaves the minimap as it is (names are in the tooltip). On hover shows a name when the pointer is on its pin, and for the pin selected in the pin window. Always can crowd a small minimap. Only applies while Show pins on the minimap is on.",
+            STRING, PL.PREF_DEFAULTS.minimapLabels, function() return PL.Pref("minimapLabels") end,
+            function(value) PL.SetPref("minimapLabels", value) end, PL.MINIMAP_LABELS), pinsToggle, PinsOn)
+
+        local MT = PL.MapText
+        Header("Map text", "How pin names look on the world map and the minimap: one look for both. Only the names change; pins, clicks and the pin window don't.")
+        local mapReset = {}
+        local function MapRemember(variable, varType, label, key)
+            local setting = Proxy(variable, varType, label, MT.DEFAULTS[key], function() return MT.Get(key) end, function(value) MT.Set(key, value) end)
+            if setting then mapReset[#mapReset + 1] = { setting = setting, default = MT.DEFAULTS[key] } end
+            return setting
+        end
+        local mapFont = MapRemember("pinsMapFont", STRING, "Name font", "font")
+        if mapFont and Settings.CreateDropdown and Settings.CreateControlTextContainer then
+            Under(Settings.CreateDropdown(category, mapFont, function()
+                local container = Settings.CreateControlTextContainer()
+                local Fonts = R.MenuStyle and R.MenuStyle.Fonts
+                local first = { { "default", "Game font (default)" } }
+                for _, choice in ipairs(Fonts and Fonts.Choices(MT.Get("font"), first) or first) do container:Add(choice[1], choice[2]) end
+                return container:GetData()
+            end, "The font for pin names on the maps. A font that has gone (its media pack is not loaded) is drawn as the game's own and stays chosen."), pinsToggle, PinsOn)
+        end
+        local mapSize = MapRemember("pinsMapSize", NUMBER, "Name size", "size")
+        if mapSize and Settings.CreateSlider and Settings.CreateSliderOptions then
+            local options = Settings.CreateSliderOptions(MT.LIMITS.size[1], MT.LIMITS.size[2], 1)
+            if MinimalSliderWithSteppersMixin and options.SetLabelFormatter then options:SetLabelFormatter(MinimalSliderWithSteppersMixin.Label.Right) end
+            Under(Settings.CreateSlider(category, mapSize, options, "The size of pin names on the maps, in points. A name has more room as it grows, and a long one is shortened with ... when it still doesn't fit."), pinsToggle, PinsOn)
+        end
+        local mapColor = MapRemember("pinsMapColor", STRING, "Name color", "color")
+        if mapColor and Settings.CreateColorSwatch then
+            Under(Settings.CreateColorSwatch(category, mapColor, "The color of pin names on the maps. A pin's own color tints the pin, not its name."), pinsToggle, PinsOn)
+        end
+        local mapOutline = MapRemember("pinsMapOutline", STRING, "Name outline", "outline")
+        if mapOutline and Settings.CreateDropdown and Settings.CreateControlTextContainer then
+            Under(Settings.CreateDropdown(category, mapOutline, function()
+                local container = Settings.CreateControlTextContainer()
+                for _, choice in ipairs(MT.OUTLINES) do container:Add(choice[1], choice[2]) end
+                return container:GetData()
+            end, "A dark edge round each letter, which keeps a name readable over a busy map. It works with or without the shadow."), pinsToggle, PinsOn)
+        end
+        local mapShadow = MapRemember("pinsMapShadow", BOOL, "Name shadow", "shadow")
+        if mapShadow and Settings.CreateCheckbox then
+            Under(Settings.CreateCheckbox(category, mapShadow, "A soft dark shadow one pixel below and right of each letter. On by default, as the game draws it."), pinsToggle, PinsOn)
+        end
+        Under(Button("Reset map text", "Reset", function()
+            for _, entry in ipairs(mapReset) do
+                if entry.setting.SetValue then pcall(entry.setting.SetValue, entry.setting, entry.default) end
+            end
+            MT.Reset()
+        end, "Puts pin names on the maps back to the game font, size 10, white, no outline and the shadow on. Your pins, the map clicks, the label choices and the pin window's look are not touched."), pinsToggle, PinsOn)
 
         Header("Window appearance", "How the pin window looks: background, border, text and accent. Only the window changes; your pins, the clicks and the map pins don't. It looks complete without EllesmereUI; EllesmereUI's and LibSharedMedia's textures and fonts are listed when they are there.")
         local pinsReset = Appearance(PL.Look, "pinsLook", "window", nil, nil, nil, nil, pinsToggle, PinsOn)

@@ -1,13 +1,15 @@
 -- TwichUI: Party pins, preferences and appearance
--- Two kinds of saved choice, both account-wide in TwichUIDB.ui and only stored once changed:
+-- Saved choices, all account-wide in TwichUIDB.ui and only stored once changed:
 --   partyPins       how pins are placed and shown: the map clicks for a local pin and a party pin, and
 --                   whether names show on the map always or only on hover and for the selected pin;
 --   pinsLook        the pin window's background and border (a MenuStyle look: textures from the game,
 --                   LibSharedMedia and EllesmereUI while it is installed, with the same fallbacks);
---   pinsAppearance  its text and accents: font, text size, accent color and row spacing.
+--   pinsAppearance  its text and accents: font, text size, accent color and row spacing;
+--   pinsMapText     the names drawn under pins on the world map and the minimap: font, size, color, outline
+--                   and shadow (one look for both maps; the window's text is separate).
 -- A value that can't be used is read as its default and kept as it was, so a font from a media pack that
 -- is missing today is still chosen when the pack returns. Resetting the appearance never touches pins or
--- the click and label choices. Frames, fonts and media paths are never saved.
+-- the click and label choices, and neither touches the map text. Frames, fonts and media paths are never saved.
 
 local R = TwichUI
 local S = R.ChronicleStyle
@@ -29,8 +31,11 @@ local CLICK = {}
 for _, c in ipairs(PL.CLICKS) do CLICK[c[1]] = c end
 PL.LABELS = { { "hover", "On hover, and for the selected pin" }, { "always", "Always" } }
 local LABEL = { hover = true, always = true }
+-- Names beside minimap pins: off keeps the minimap as it was (the tooltip has the name).
+PL.MINIMAP_LABELS = { { "off", "Never (in the tooltip)" }, { "hover", "On hover, and for the selected pin" }, { "always", "Always" } }
+local MINIMAP_LABEL = { off = true, hover = true, always = true }
 
-local PREF_DEFAULTS = { localClick = "alt", partyClick = "altshift", labels = "hover", minimap = true }
+local PREF_DEFAULTS = { localClick = "alt", partyClick = "altshift", labels = "hover", minimap = true, minimapLabels = "off" }
 PL.PREF_DEFAULTS = PREF_DEFAULTS
 
 local function Prefs()
@@ -42,6 +47,7 @@ end
 local function ValidPref(key, value)
     if key == "localClick" or key == "partyClick" then return type(value) == "string" and CLICK[value] ~= nil end
     if key == "labels" then return type(value) == "string" and LABEL[value] == true end
+    if key == "minimapLabels" then return type(value) == "string" and MINIMAP_LABEL[value] == true end
     if key == "minimap" then return type(value) == "boolean" end
     if key == "position" then
         return type(value) == "table" and type(value.x) == "number" and type(value.y) == "number"
@@ -282,11 +288,110 @@ end
 PL.Subscribe(PL.Restyle)
 if R.MenuStyle and R.MenuStyle.Fonts then R.MenuStyle.Fonts.Subscribe(PL.Restyle) end
 
+---------------------------------------------------------------------------
+-- The text on the maps: the names under pins on the world map and beside them on the minimap. One look for
+-- both, kept apart from the window's: it is not reset with the window and resetting it leaves the window
+-- alone. Strings are made from the game's GameFontHighlightSmallOutline (in this client that is the small
+-- game font, white, with a 1 pixel shadow and no outline), so the defaults below are what was drawn before
+-- there was a choice. A face that is gone, or can't be drawn, is drawn as the game's own and stays chosen.
+---------------------------------------------------------------------------
+local MT = {}
+PL.MapText = MT
+MT.DEFAULTS = { font = "default", size = 10, color = "ffffffff", outline = "none", shadow = true }
+MT.LIMITS = { size = { 8, 20 } }
+MT.OUTLINES = { { "none", "None" }, { "outline", "Outline" }, { "thick", "Thick outline" } }
+local OUTLINE_FLAGS = { none = "", outline = "OUTLINE", thick = "THICKOUTLINE" }
+local MAP_TEMPLATE = "GameFontHighlightSmallOutline"
+MT.fallback = false
+
+function MT.Valid(key, value)
+    if key == "font" then return Valid("font", value) end
+    if key == "size" then
+        local l = MT.LIMITS.size
+        return type(value) == "number" and value == value and value % 1 == 0 and value >= l[1] and value <= l[2]
+    end
+    if key == "color" then return Valid("accentColor", value) end
+    if key == "outline" then return type(value) == "string" and OUTLINE_FLAGS[value] ~= nil end
+    if key == "shadow" then return type(value) == "boolean" end
+    return false
+end
+
+function MT.Get(key)
+    local ui = TwichUIDB and TwichUIDB.ui
+    local t = ui and ui.pinsMapText
+    local value
+    if type(t) == "table" then value = t[key] end   -- not "and ... or": a saved false is a value
+    if MT.Valid(key, value) then return value end
+    return MT.DEFAULTS[key]
+end
+
+local mapStrings = setmetatable({}, { __mode = "k" })   -- FontString -> the width it was given for size 10, or true
+local mapSubscribers = {}
+function MT.Subscribe(fn) mapSubscribers[#mapSubscribers + 1] = fn end
+
+local function StyleMapString(fs, baseWidth)
+    local obj = rawget(_G, MAP_TEMPLATE)
+    local basePath, baseSize
+    if type(obj) == "table" and obj.GetFont then basePath, baseSize = obj:GetFont() end
+    local MS = R.MenuStyle
+    local path, state = basePath, "default"
+    if MS and MS.Fonts then path, state = MS.Fonts.Resolve(MT.Get("font"), basePath) end
+    if state == "missing" then MT.fallback = true end
+    local size, flags = MT.Get("size"), OUTLINE_FLAGS[MT.Get("outline")]
+    if path and fs:SetFont(path, size, flags) == false and basePath then
+        fs:SetFont(basePath, baseSize or size, flags)
+        MT.fallback = true
+    end
+    fs:SetTextColor(Rgb(MT.Get("color")))
+    if MT.Get("shadow") then
+        fs:SetShadowColor(0, 0, 0, 1)
+        fs:SetShadowOffset(1, -1)
+    else
+        fs:SetShadowOffset(0, 0)
+    end
+    -- the room a name has grows with its size, so a larger face isn't cut short
+    if baseWidth then fs:SetWidth(math.floor(baseWidth * size / MT.DEFAULTS.size + 0.5)) end
+end
+
+-- Dresses a FontString for a pin's name and keeps it in step with the choices. baseWidth: its width at the
+-- default size, when it has one.
+function MT.Apply(fs, baseWidth)
+    mapStrings[fs] = baseWidth or true
+    StyleMapString(fs, baseWidth)
+end
+
+local function RestyleMapText()
+    MT.fallback = false
+    for fs, baseWidth in pairs(mapStrings) do StyleMapString(fs, baseWidth ~= true and baseWidth or nil) end
+    for _, fn in ipairs(mapSubscribers) do
+        local ok, err = pcall(fn)
+        if not ok then geterrorhandler()(err) end
+    end
+end
+
+function MT.Set(key, value)
+    if MT.DEFAULTS[key] == nil or not MT.Valid(key, value) or type(TwichUIDB) ~= "table" then return false end
+    TwichUIDB.ui = type(TwichUIDB.ui) == "table" and TwichUIDB.ui or {}
+    if type(TwichUIDB.ui.pinsMapText) ~= "table" then TwichUIDB.ui.pinsMapText = {} end
+    TwichUIDB.ui.pinsMapText[key] = value
+    RestyleMapText()
+    return true
+end
+
+-- The map text back to its defaults. Pins, the window and the label choices are not touched.
+function MT.Reset()
+    if type(TwichUIDB) == "table" and type(TwichUIDB.ui) == "table" then TwichUIDB.ui.pinsMapText = nil end
+    RestyleMapText()
+end
+if R.MenuStyle and R.MenuStyle.Fonts then R.MenuStyle.Fonts.Subscribe(RestyleMapText) end
+
 -- Read only, for /tui diagnostics.
 function PL.Snapshot()
     return {
         localClick = PL.Pref("localClick"), partyClick = PL.Pref("partyClick"), labels = PL.Pref("labels"),
-        minimap = PL.Pref("minimap"),
+        minimap = PL.Pref("minimap"), minimapLabels = PL.Pref("minimapLabels"),
+        mapFont = MT.Get("font") == "default" and "default" or "chosen", mapFontFallback = MT.fallback,
+        mapSize = MT.Get("size"), mapOutline = MT.Get("outline"), mapShadow = MT.Get("shadow"),
         font = PL.Get("font") == "default" and "default" or "chosen", fontFallback = PL.fallback,
         bg = PL.Look.Get("bgTexture") == "solid" and "solid" or "textured", border = PL.Look.Get("borderTexture"),
         density = PL.Get("density"),
