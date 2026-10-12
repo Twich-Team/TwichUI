@@ -109,6 +109,7 @@ assert(defaults.mageRefreshments == false, "Mage refreshments are opt-in")
 assert(defaults.mageRefreshmentsTrade == true, "its trade strip comes with it when it is turned on")
 assert(defaults.mageRefreshmentsAutoFill == true, "and fills a group member's trade by itself")
 assert(defaults.mageSell == false, "selling ordinary food and drink is opt-in")
+assert(defaults.partyPins == true, "Party pins (map pins) are on for a new profile")
 assert(defaults.mageSellFood == true and defaults.mageSellDrink == true and defaults.mageSellDryRun == true,
   "its kinds are on once it is, and it starts as a dry run")
 assert(c.canvases["Stat weights"] == "Gear comparison" and c.canvases["Refreshment shares"] == "Mage", "the shares page sits under Mage")
@@ -483,11 +484,15 @@ do
   end
   assert(n == 7)
   local headers, controls, reset, preview = {}, {}, nil, nil
+  local inPanel = false   -- other pages have a "Preview" button too (Party pins' are on while it is on)
   for _, i in ipairs(initializers) do
-    if not i.setting and not i.click then headers[i.data.name] = true end
+    if not i.setting and not i.click then
+      headers[i.data.name] = true
+      inPanel = i.data.name == "Refreshments panel appearance"
+    end
     if i.setting and i.setting.variable and i.setting.variable:find("^TWICHUI_refreshmentsPanel") then controls[#controls + 1] = i end
     if i.click and i.data.name == "Panel appearance" then reset = i end
-    if i.click and i.data.name == "Preview" then preview = i end
+    if inPanel and i.click and i.data.name == "Preview" and not preview then preview = i end
   end
   assert(headers["Refreshments panel appearance"] and reset and preview and #controls == 7)
   c.TwichUIDB.modules.mageRefreshments = false

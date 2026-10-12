@@ -127,8 +127,8 @@ modules\RestedXPSkin.lua
 # RestedXP timer bars: the same look on RestedXP's countdown bars (a finish on the skin above; off when it is)
 modules\RestedXPTimers.lua
 
-# Party pins: named map pins of your own, and ones shared with party members who have TwichUI (off until turned
-# on; their own addon prefix, never chat; uses the Chronicle palette, modules\MenuStyle.lua and setup\Share.lua's names)
+# Party pins: named map pins of your own, and ones shared with party members who have TwichUI (on by default,
+# can be turned off; their own addon prefix, never chat; uses the Chronicle palette, modules\MenuStyle.lua and setup\Share.lua's names)
 pins\Pins.lua
 pins\Sync.lua
 pins\Look.lua
