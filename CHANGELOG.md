@@ -1,6 +1,6 @@
 # TwichUI changelog
 
-## Unreleased
+## V3.0.11
 - **Options: easier to find your way** (**needs checking in the game**). The Journey Chronicle's and Party pins' looks are now pages of their own, **Chronicle appearance** and **Pin appearance**, under those pages, so what is recorded and how pins work come first; each page links to its appearance page. A page with options under an Advanced header ends with an **Advanced options — Show** row while they are hidden, and the overview's **Show advanced options** lists which pages have them. Food and Drink's Appearance says that the buttons change after combat (opacity at once). No setting, saved value or default changed; Defaults on Journey Chronicle or Party pins now leaves their appearance to the appearance page's own Defaults.
 - **Options: less work for each change.** Pressing Defaults, or a value that is already set, no longer re-runs the feature or asks to reload; a skin switched off and on again before reloading doesn't ask either. Reset buttons redraw once instead of once per option. A Food and Drink border, zoom or count change redraws the buttons without looking through your bags again. One options page that fails to build no longer takes the others with it.
 - **Fixed:** the "Skin timer bars" tooltip could keep saying it was greyed out after the RestedXP skin was turned on (or not say so after it was turned off).
