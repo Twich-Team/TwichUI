@@ -31,11 +31,10 @@ local function Text(parent, template, role, color)
     return A.Text(parent, template, role or "body", color)
 end
 
--- "12" (default) or "24", chosen in the options.
+-- "12" (default) or "24", chosen in the options (chronicle/Data.lua's C.Clock).
 local function When(t)
     if not C.DayKey(t) then return "Date unknown" end   -- never an invented date
-    local ui = TwichUIDB and TwichUIDB.ui
-    if ui and ui.chronicleClock == "24" then return date("%b %d, %Y  %H:%M", t) end
+    if C.Clock() == "24" then return date("%b %d, %Y  %H:%M", t) end
     return (date("%b %d, %Y  %I:%M %p", t):gsub(" 0(%d:)", " %1"))
 end
 

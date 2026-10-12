@@ -4,7 +4,7 @@
 -- A canvas page inside TwichUI's settings, since a ranked list and a table of
 -- numbers don't fit Blizzard's standard controls. It sits in Blizzard's
 -- Options window, so it uses Blizzard's own look (no EllesmereUI skinning).
--- Which tree is used and how hints behave are ordinary settings (Settings.lua).
+-- Which tree is used and how hints behave are ordinary settings (settings/Gear.lua).
 
 local R = TwichUI
 local W, E, D, P, H = R.GearWeights, R.GearEval, R.GearData, R.GearPrefs, R.GearHints
@@ -483,7 +483,7 @@ function GW:Refresh()
     end
 end
 
--- The canvas frame Settings.lua registers as TwichUI > Stat weights. Its
+-- The canvas frame settings/Gear.lua registers as TwichUI > Stat weights. Its
 -- contents are built the first time it's shown, once your class is known.
 local function Frame()
     if f then return f end

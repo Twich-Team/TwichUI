@@ -19,6 +19,23 @@ local R = TwichUI
 local C = {}
 R.Chronicle = C
 
+-- How times are shown: "12" (the default) or "24", chosen in the options. A preference, kept in TwichUIDB.ui
+-- with the other settings, not in the Chronicle's own saved data.
+function C.Clock()
+    local ui = TwichUIDB and TwichUIDB.ui
+    return ui and ui.chronicleClock == "24" and "24" or "12"
+end
+
+-- Saves "12" or "24" (anything else is refused) and redraws an open Chronicle. Returns whether it was kept.
+function C.SetClock(value)
+    if value ~= "12" and value ~= "24" then return false end
+    TwichUIDB.ui = TwichUIDB.ui or {}
+    if TwichUIDB.ui.chronicleClock == value then return true end
+    TwichUIDB.ui.chronicleClock = value
+    if R.ChronicleWindow then R.ChronicleWindow:Refresh() end
+    return true
+end
+
 C.MAX_ENTRIES = 500       -- per character
 C.MAX_NOTE = 240          -- characters in a note
 C.MAX_TITLE = 120

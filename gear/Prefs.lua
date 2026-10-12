@@ -64,7 +64,9 @@ function P.Get(key)
 end
 
 function P.Set(key, value)
-    DB()[key] = value
+    local db = DB()
+    if db[key] == value then return end   -- unchanged: hints and bag marks need no new look
+    db[key] = value
     P.Changed()
 end
 

@@ -155,3 +155,15 @@ function RunLongTimers(maxDelay)
     if e.d <= maxDelay then e.fn() else table.insert(LONG_TIMERS, e) end
   end
 end
+
+-- The options panel's files (settings\ in the .toc), in the .toc's order, so tests that
+-- build the panel load exactly what the game does.
+function SettingsFiles()
+  local list = {}
+  for line in io.lines(ROOT .. "!!!TwichUI.toc") do
+    line = line:gsub("\r", ""):gsub("%s+$", "")
+    if line:find("^settings\\") then list[#list + 1] = (line:gsub("\\", "/")) end
+  end
+  assert(#list > 0, "the .toc lists the options panel's files")
+  return list
+end

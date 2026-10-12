@@ -627,7 +627,7 @@ function BM.TogglePreview()
     previewing = true
 end
 
--- The switch changed (Settings.lua).
+-- The switch changed (settings/Pins.lua).
 function BM.Refresh()
     if not R:Enabled("partyPins") then BM.Close() end
 end

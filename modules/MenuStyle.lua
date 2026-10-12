@@ -300,6 +300,7 @@ local function New(savedKey, defaults, options)
         TwichUIDB.ui = TwichUIDB.ui or {}
         if type(TwichUIDB.ui[savedKey]) ~= "table" then TwichUIDB.ui[savedKey] = {} end
         local saved = TwichUIDB.ui[savedKey]
+        if saved[key] == value then return true end   -- the same value again changes nothing and redraws nothing
         -- a new border texture gets a thickness that suits it, unless the player set their own
         if key == "borderTexture" and value ~= "none" and not custom[value] then
             local size, color = MS.Get("borderSize"), MS.Get("borderColor")

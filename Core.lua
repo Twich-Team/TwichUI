@@ -69,7 +69,7 @@ local DEFAULT_MODULES = {
     qolGuideWaypoint = false, -- ... the game's waypoint on RestedXP's current destination (needs RestedXP)
     partyPins = true,        -- Party pins: named map pins of your own, and ones shared with party members who have TwichUI (on; a profile that already saved false keeps it)
 }
-R.DEFAULT_MODULES = DEFAULT_MODULES   -- Settings.lua uses these for the panel's Defaults button
+R.DEFAULT_MODULES = DEFAULT_MODULES   -- settings/Kit.lua uses these for the panel's Defaults button
 
 function R.Print(fmt, ...)
     print((R.GOLD .. "TwichUI:|r " .. fmt):format(...))
@@ -77,6 +77,15 @@ end
 
 function R:Enabled(key)
     return TwichUIDB and TwichUIDB.modules and TwichUIDB.modules[key] ~= false
+end
+
+-- Turns a switch on or off from somewhere other than its checkbox. It goes through the options (settings/Kit.lua)
+-- so the feature's own update runs once, the overview and an open options panel follow, and a later click on
+-- the checkbox is judged against the right value. alreadyApplied: the caller has done what the change needs.
+function R:SetEnabled(key, on, alreadyApplied)
+    on = on and true or false
+    if R.SettingsKit and R.SettingsKit.SetSwitch(key, on, alreadyApplied) then return end
+    if TwichUIDB and type(TwichUIDB.modules) == "table" then TwichUIDB.modules[key] = on end
 end
 
 -- An error caught in one of our own handlers: noted for the troubleshooting report (if loaded), then
@@ -285,7 +294,7 @@ R:On("PLAYER_LOGIN", RegisterWithEllesmere)   -- in case EllesmereUI loaded oddl
 ---------------------------------------------------------------------------
 -- Entry points
 ---------------------------------------------------------------------------
--- key: a page under TwichUI (see Settings.lua); the overview when omitted.
+-- key: a page under TwichUI (see settings/); the overview when omitted.
 -- Returns true when the game was asked to open it, false when TwichUI's options aren't there (yet).
 function R:OpenSettings(key)
     local category = R.settingsCategories and R.settingsCategories[key or "overview"] or R.settingsCategory

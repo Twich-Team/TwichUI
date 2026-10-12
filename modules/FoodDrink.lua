@@ -260,12 +260,13 @@ function F.Get(key)
     return F.DEFAULTS[key]
 end
 
--- Saves one setting (an invalid value is refused) and redraws.
+-- Saves one setting (an invalid value is refused) and redraws what it changes (F.Changed, below).
 function F.Set(key, value)
     if not Valid(key, value) then return false end
     TwichUIDB.ui = TwichUIDB.ui or {}
     TwichUIDB.ui.foodDrink = TwichUIDB.ui.foodDrink or {}
     local saved = TwichUIDB.ui.foodDrink
+    if saved[key] == value then return true end   -- unchanged: nothing to redraw
     -- a new texture gets a thickness and colour that suit it, unless the player set their own
     if key == "borderTexture" then
         local size, color = F.Get("borderSize"), F.Get("borderColor")
@@ -274,8 +275,20 @@ function F.Set(key, value)
         if newColor ~= color then saved.borderColor = newColor end
     end
     saved[key] = value
-    F.Refresh()
+    F.Changed(key)
     return true
+end
+
+-- Puts the look back to its defaults: size, spacing, layout, border, zoom, opacity and the count. The place
+-- and the conjured preference are not the look and are kept.
+function F.ResetLook()
+    local saved = TwichUIDB and TwichUIDB.ui and TwichUIDB.ui.foodDrink
+    if type(saved) ~= "table" then return end
+    local any = false
+    for key in pairs(F.DEFAULTS) do
+        if key ~= "preferConjured" and saved[key] ~= nil then saved[key] = nil; any = true end
+    end
+    if any then F.Refresh() end
 end
 
 -- "AARRGGBB" as r, g, b, a in 0-1.
@@ -811,6 +824,37 @@ local function HookEditMode()
     editHooked = true
     EventRegistry:RegisterCallback("EditMode.Enter", function() ShowMover(true) end, F)
     EventRegistry:RegisterCallback("EditMode.Exit", function() ShowMover(false) end, F)
+end
+
+---------------------------------------------------------------------------
+-- What a setting changes, so a change redraws only that.
+--   opacity and the mouseover fade: only the buttons' alpha, which is not protected, so at once even in combat;
+--   border, zoom and count: the buttons' look, with no new look at the bags (Style resizes a secure button, so
+--     it waits for combat to end like everything else that touches them);
+--   size, spacing, layout and the conjured preference: a whole new look (which items, and where they sit).
+---------------------------------------------------------------------------
+local ALPHA_KEYS = { buttonOpacity = true, mouseover = true, idleOpacity = true }
+local LOOK_KEYS = { borderTexture = true, borderSize = true, borderColor = true, borderClass = true,
+    borderOpacity = true, zoom = true, showCount = true }
+
+local function Restyle()
+    if not (container and R:Enabled("foodDrink")) then return end
+    -- in combat, or with a whole look already on its way, that look draws this too
+    if InCombat() or dirty or scheduled then Schedule() return end
+    for _, kind in ipairs(KINDS) do
+        local button = buttons[kind.key]
+        if button then
+            local choice = rawget(button, "choice")
+            button.count:SetText(F.Get("showCount") and choice and choice.count > 1 and choice.count or "")
+            Style(button, choice)
+        end
+    end
+end
+
+function F.Changed(key)
+    if ALPHA_KEYS[key] then ApplyAlpha()
+    elseif LOOK_KEYS[key] then Restyle()
+    else F.Refresh() end
 end
 
 ---------------------------------------------------------------------------

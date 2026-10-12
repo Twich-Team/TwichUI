@@ -142,7 +142,7 @@ local function Build(p)
     R.Interact.Tip(reset, "Reset shares", "Puts the party and raid shares and what you keep back to TwichUI's starting amounts. Nothing else changes.")
 end
 
--- The canvas frame Settings.lua registers under Mage. Built the first time it is shown.
+-- The canvas frame settings/Mage.lua registers under Mage. Built the first time it is shown.
 local function Frame()
     if f then return f end
     f = CreateFrame("Frame")

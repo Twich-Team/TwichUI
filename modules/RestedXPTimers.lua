@@ -524,6 +524,7 @@ function Opt.Set(key, value)
     if DEFAULTS[key] == nil or not Valid(key, value) then return false end
     TwichUIDB.ui = TwichUIDB.ui or {}
     if type(TwichUIDB.ui.restedxpTimerText) ~= "table" then TwichUIDB.ui.restedxpTimerText = {} end
+    if TwichUIDB.ui.restedxpTimerText[key] == value then return true end   -- unchanged: nothing to redraw
     TwichUIDB.ui.restedxpTimerText[key] = value
     Changed()
     return true

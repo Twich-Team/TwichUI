@@ -143,6 +143,7 @@ function A.Set(key, value)
     if DEFAULTS[key] == nil or not Valid(key, value) then return false end
     TwichUIDB.ui = TwichUIDB.ui or {}
     if type(TwichUIDB.ui.chronicleAppearance) ~= "table" then TwichUIDB.ui.chronicleAppearance = {} end
+    if TwichUIDB.ui.chronicleAppearance[key] == value then return true end   -- unchanged: nothing to redraw
     TwichUIDB.ui.chronicleAppearance[key] = value
     Changed(TYPE_KEYS[key])
     return true

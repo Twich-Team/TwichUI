@@ -415,6 +415,11 @@ function N.PreviewSounds()
     return TwichUIDB and TwichUIDB.ui and TwichUIDB.ui.previewSounds == true or false
 end
 
+function N.SetPreviewSounds(on)
+    TwichUIDB.ui = TwichUIDB.ui or {}
+    TwichUIDB.ui.previewSounds = on and true or false
+end
+
 -- Whether a card should play its sound now: a real one when the feature's own sound setting is on, a
 -- preview only when previews are allowed sound as well.
 function N.SoundWanted(preview, featureSound)

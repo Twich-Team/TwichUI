@@ -82,6 +82,7 @@ function PL.SetPref(key, value)
     TwichUIDB.ui = type(TwichUIDB.ui) == "table" and TwichUIDB.ui or {}
     if type(TwichUIDB.ui.partyPins) ~= "table" then TwichUIDB.ui.partyPins = {} end
     local t = TwichUIDB.ui.partyPins
+    if t[key] == value then return true end   -- unchanged: nothing to tell
     if (key == "localClick" or key == "partyClick") and value ~= "none" then
         local other = key == "localClick" and "partyClick" or "localClick"
         if PL.Pref(other) == value then t[other] = PL.Pref(key) end
@@ -185,6 +186,7 @@ function PL.Set(key, value)
     if DEFAULTS[key] == nil or not Valid(key, value) or type(TwichUIDB) ~= "table" then return false end
     TwichUIDB.ui = type(TwichUIDB.ui) == "table" and TwichUIDB.ui or {}
     if type(TwichUIDB.ui.pinsAppearance) ~= "table" then TwichUIDB.ui.pinsAppearance = {} end
+    if TwichUIDB.ui.pinsAppearance[key] == value then return true end   -- unchanged: nothing to redraw
     TwichUIDB.ui.pinsAppearance[key] = value
     Notify()
     return true
@@ -397,6 +399,7 @@ function MT.Set(key, value)
     if MT.DEFAULTS[key] == nil or not MT.Valid(key, value) or type(TwichUIDB) ~= "table" then return false end
     TwichUIDB.ui = type(TwichUIDB.ui) == "table" and TwichUIDB.ui or {}
     if type(TwichUIDB.ui.pinsMapText) ~= "table" then TwichUIDB.ui.pinsMapText = {} end
+    if TwichUIDB.ui.pinsMapText[key] == value then return true end   -- unchanged: nothing to redraw
     TwichUIDB.ui.pinsMapText[key] = value
     RestyleMapText()
     return true
@@ -463,6 +466,7 @@ function BR.Set(key, value)
     if BR.DEFAULTS[key] == nil or not BR.Valid(key, value) or type(TwichUIDB) ~= "table" then return false end
     TwichUIDB.ui = type(TwichUIDB.ui) == "table" and TwichUIDB.ui or {}
     if type(TwichUIDB.ui.pinsBroker) ~= "table" then TwichUIDB.ui.pinsBroker = {} end
+    if TwichUIDB.ui.pinsBroker[key] == value then return true end   -- unchanged: nothing to redraw
     TwichUIDB.ui.pinsBroker[key] = value
     BarChanged()
     return true

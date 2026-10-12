@@ -150,6 +150,18 @@ function F.SoundChannel()
     return F.CHANNEL_DEFAULT
 end
 
+-- Saves the channel (one of CHANNELS; anything else is refused). Returns whether it was kept.
+function F.SetSoundChannel(key)
+    for _, channel in ipairs(F.CHANNELS) do
+        if channel.key == key then
+            TwichUIDB.ui = TwichUIDB.ui or {}
+            if TwichUIDB.ui.friendLoginChannel ~= key then TwichUIDB.ui.friendLoginChannel = key end
+            return true
+        end
+    end
+    return false
+end
+
 -- Plays the chime once on the chosen channel. Returns whether the game took it.
 function F.PlaySound()
     if not PlaySoundFile then return false end

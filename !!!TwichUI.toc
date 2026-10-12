@@ -172,4 +172,19 @@ diag\Saved.lua
 diag\Pins.lua
 diag\Window.lua
 
-Settings.lua
+# Options (Esc > Options > AddOns > TwichUI): the shared controls, one file per page, then putting them together
+settings\Kit.lua
+settings\Gear.lua
+settings\Notifications.lua
+settings\QoL.lua
+settings\FoodDrink.lua
+settings\Mage.lua
+settings\Chronicle.lua
+settings\Pins.lua
+settings\Auction.lua
+settings\Skins.lua
+settings\RestedXP.lua
+settings\Sharing.lua
+settings\Troubleshooting.lua
+settings\Overview.lua
+settings\Register.lua

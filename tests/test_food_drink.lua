@@ -506,10 +506,33 @@ do
   assert(math.abs(food.icon.texcoord[1] - 0.1) < 1e-9 and math.abs(food.icon.texcoord[2] - 0.9) < 1e-9, "icon zoom")
   assert(food.count.text ~= nil)
   Bags({ 2287 }); c.ITEMS[2287].count = 12
+  c.FireEvent("BAG_UPDATE_DELAYED"); Look()   -- the game says when the bags change
   F.Set("showCount", true); Look()
   assert(food.count.text == 12)
   assert(F.Set("showCount", false)); Look()
   assert(food.count.text == "", "count hidden")
+
+  -- A change redraws only what it changes: the border is restyled without a new look at the bags; the same
+  -- value again does nothing; the size is a whole new look. In combat the look waits until it ends.
+  do
+    local scans, slots = 0, c.C_Container.GetContainerNumSlots
+    c.C_Container.GetContainerNumSlots = function(...) scans = scans + 1; return slots(...) end
+    assert(F.Set("borderColor", "ff203040")); Look()
+    assert(scans == 0 and math.abs(food.rim.top.color[1] - 32 / 255) < 0.001, "border color: restyled, no bag scan")
+    assert(F.Set("borderColor", "ff203040")); Look()
+    assert(scans == 0, "the same value again: nothing")
+    assert(F.Set("size", 38)); Look()
+    assert(scans > 0 and food.w == 38, "size: a whole new look")
+    local combat = c.InCombatLockdown
+    c.InCombatLockdown = function() return true end
+    assert(F.Set("borderColor", "ff304050")); Look()
+    assert(math.abs(food.rim.top.color[1] - 32 / 255) < 0.001, "in combat the look waits")
+    c.InCombatLockdown = function() return false end
+    c.FireEvent("PLAYER_REGEN_ENABLED"); Look()
+    assert(math.abs(food.rim.top.color[1] - 48 / 255) < 0.001, "and is drawn once combat ends")
+    c.InCombatLockdown = combat
+    c.C_Container.GetContainerNumSlots = slots
+  end
 
   for key, v in pairs(D) do F.Set(key, v) end
   Look()
@@ -574,6 +597,7 @@ do
   local LSM = c.LibStub("LibSharedMedia-3.0")
   LSM:Register("border", "Blizzard Dialog", "Interface\\DialogFrame\\UI-DialogBox-Border")
   Bags({ 2287, 1179 })   -- both buttons filled, so both are drawn at full strength
+  c.FireEvent("BAG_UPDATE_DELAYED"); Look()
   local calls, fail = {}, false
   c.EllesmereUI = {
     PP = {},
@@ -625,7 +649,7 @@ do
   assert(F.Get("borderSize") == 1 and F.Get("borderColor") == F.DEFAULTS.borderColor, "its own thickness and colour back")
 
   -- an error in EllesmereUI's call falls back to the line
-  assert(F.Set("borderTexture", "eui:glow")); fail = true; Look()
+  fail = true; assert(F.Set("borderTexture", "eui:glow")); Look()   -- a look change is drawn at once
   assert(food.rim.top.shown, "falls back when the call fails")
   fail = false
 

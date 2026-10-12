@@ -485,7 +485,7 @@ local function BuildParty()
     end)
     gp.run:SetPoint("TOPLEFT", 16, -222)
     gp.enable = Btn(gp, "Turn on group check", 170, function()
-        TwichUIDB.modules.groupCheck = true
+        R:SetEnabled("groupCheck", true, true)
         R.Group:SayHello()
         W:Refresh()
     end, "Lets TwichUI trade version numbers with other TwichUI users in your group (a few bytes, group channel only). Everyone who wants to show up here needs it on too. You can turn it off again in Esc > Options > AddOns > TwichUI.")

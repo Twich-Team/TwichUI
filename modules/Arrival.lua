@@ -54,6 +54,18 @@ function A.HoldChoice()
     return fallback.key, fallback.seconds
 end
 
+-- Saves the choice (one of HOLDS; anything else is refused). Returns whether it was kept. The next card uses it.
+function A.SetHoldChoice(key)
+    for _, hold in ipairs(A.HOLDS) do
+        if hold.key == key then
+            TwichUIDB.ui = TwichUIDB.ui or {}
+            if TwichUIDB.ui.arrivalHold ~= key then TwichUIDB.ui.arrivalHold = key end
+            return true
+        end
+    end
+    return false
+end
+
 local function Hold(kind)
     local _, seconds = A.HoldChoice()
     if kind == "subzone" then return math.max(1, seconds - 0.8) end

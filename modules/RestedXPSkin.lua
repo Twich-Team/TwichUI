@@ -230,6 +230,7 @@ function Text.Set(key, value)
     if TEXT_DEFAULTS[key] == nil or not ValidText(key, value) then return false end
     TwichUIDB.ui = TwichUIDB.ui or {}
     if type(TwichUIDB.ui.restedxpSkinText) ~= "table" then TwichUIDB.ui.restedxpSkinText = {} end
+    if TwichUIDB.ui.restedxpSkinText[key] == value then return true end   -- unchanged: nothing to redraw
     TwichUIDB.ui.restedxpSkinText[key] = value
     Changed(LAYOUT_KEYS[key])
     return true
