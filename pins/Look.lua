@@ -41,7 +41,8 @@ local LABEL = { hover = true, always = true }
 PL.MINIMAP_LABELS = { { "off", "Never (in the tooltip)" }, { "hover", "On hover, and for the selected pin" }, { "always", "Always" } }
 local MINIMAP_LABEL = { off = true, hover = true, always = true }
 
-local PREF_DEFAULTS = { localClick = "alt", partyClick = "altshift", labels = "hover", minimap = true, minimapLabels = "off" }
+-- wayAlso: when another addon has /way, also make a pin from what it was given (pins/Way.lua); off until chosen.
+local PREF_DEFAULTS = { localClick = "alt", partyClick = "altshift", labels = "hover", minimap = true, minimapLabels = "off", wayAlso = false }
 PL.PREF_DEFAULTS = PREF_DEFAULTS
 
 local function Prefs()
@@ -54,7 +55,7 @@ local function ValidPref(key, value)
     if key == "localClick" or key == "partyClick" then return type(value) == "string" and CLICK[value] ~= nil end
     if key == "labels" then return type(value) == "string" and LABEL[value] == true end
     if key == "minimapLabels" then return type(value) == "string" and MINIMAP_LABEL[value] == true end
-    if key == "minimap" then return type(value) == "boolean" end
+    if key == "minimap" or key == "wayAlso" then return type(value) == "boolean" end
     if key == "position" then
         return type(value) == "table" and type(value.x) == "number" and type(value.y) == "number"
             and value.x == value.x and value.y == value.y and math.abs(value.x) < 10000 and math.abs(value.y) < 10000

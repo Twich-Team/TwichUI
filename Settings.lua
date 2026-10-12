@@ -1490,6 +1490,7 @@ local function Build()
                 if R.PinsMap then R.PinsMap.Refresh() end
                 if R.PinsMinimap then R.PinsMinimap.Refresh() end
                 if R.PinsBroker then R.PinsBroker.Refresh() end
+                if R.PinsWay then R.PinsWay.Refresh() end
                 if not PinsOn() then
                     if R.PinsWindow then R.PinsWindow.Hide(); R.PinsWindow.CloseMenu() end
                     if R.PinsEditor then R.PinsEditor.Close() end
@@ -1500,6 +1501,12 @@ local function Build()
             if SettingsPanel and SettingsPanel:IsShown() then HideUIPanel(SettingsPanel) end
             if R.PinsWindow then R.PinsWindow.Show() end
         end, "Opens the pin window (same as /tui pins): every pin with its place and who made it, search, filters, and what you can do with each."), pinsToggle, PinsOn)
+
+        Header("Waypoint commands", "/twichway 52.3 40.7 Name makes a local pin on your map. Put a zone name or #mapID before the numbers for another map, or use /twichway paste for several lines. /way does the same when no other addon has it.")
+        Under(ProxyToggle("pinsWayAlso", "Also make a pin from /way",
+            "Off by default. When another addon such as WaypointUI or TomTom has /way, TwichUI lets it handle the command as usual and then also makes a pin from the same text. You get both: that addon's waypoint and a TwichUI pin. Text that isn't a waypoint (reset, paste, list) makes no pin. Nothing of the other addon is replaced; /twichway works either way.",
+            PL.PREF_DEFAULTS.wayAlso, function() return PL.Pref("wayAlso") end, function(value) PL.SetPref("wayAlso", value and true or false) end),
+            pinsToggle, PinsOn)
 
         Header("Placing and showing", "Ctrl-click stays the game's own waypoint and Shift-click is left for other map addons. Only the exact click chosen here places a pin; every other click works on the map as before.")
         local function ClickChoices()

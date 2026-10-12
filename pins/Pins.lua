@@ -101,14 +101,29 @@ end
 -- What changed, for the map, the window and the data bar. Listeners must not change pins.
 ---------------------------------------------------------------------------
 local listeners = {}
+local holding, held = 0, false   -- PN.Batch: notifications wait until the outermost batch ends
 function PN.OnChange(fn) listeners[#listeners + 1] = fn end
 local function Changed()
+    if holding > 0 then held = true return end
     for _, fn in ipairs(listeners) do
         local ok, err = pcall(fn)
         if not ok and R.Fault then R.Fault("party pins", err) end
     end
 end
 PN.Changed = Changed
+
+-- Runs fn with the map, window and data bar told once afterwards instead of after every pin it changes
+-- (a pasted list of waypoints). A failure in fn still ends the hold, then is raised again.
+function PN.Batch(fn)
+    holding = holding + 1
+    local ok, err = pcall(fn)
+    holding = holding - 1
+    if holding == 0 and held then
+        held = false
+        Changed()
+    end
+    if not ok then error(err, 0) end
+end
 
 -- Reason codes for /tui diagnostics: a fixed vocabulary, never names, places or text.
 PN.drops = {}

@@ -18,6 +18,7 @@ Players without TwichUI see nothing: nothing is written in chat and there is no 
 | `pins/Map.lua` | the world map: data provider, pin buttons, placing clicks, Show on map, Set waypoint |
 | `pins/Editor.lua` | the name, color and kind editor (the new pin window) |
 | `pins/Window.lua` | the pin window and the action menu (also opened from a map pin) |
+| `pins/Way.lua` | waypoint commands: `/twichway`, `/way` when free, the parser, the zone lookup and the paste window |
 | `pins/BrokerMenu.lua` | the small pin menu a click on the data bar entry opens |
 | `pins/Broker.lua` | the optional LibDataBroker data source |
 | `diag/Pins.lua` | the troubleshooting section |
@@ -63,6 +64,84 @@ The pin window's choices live in `TwichUIDB.ui`: `partyPins` (clicks, labels, wi
 reported it, never a field of the message. Ids are a random six-character word per session plus a running
 number (`k3x9qa:4`). Also kept: dismissal records ("removed from my map") and removal records (tombstones).
 Frames, timers, queues and rate buckets are never saved.
+
+## Waypoint commands
+
+`pins/Way.lua`. A TomTom/Wowhead style waypoint becomes a **local pin**, through the same `Pins.AddLocal` the
+map click and the editor use, so it is saved in `TwichUIDB.pins.list`, drawn, listed and limited exactly like
+one placed by hand. Needs the Party pins switch on; with it off the commands say so and make nothing.
+
+```
+/twichway <x> <y> [name]                 the map you are on
+/twichway <zone name> <x> <y> [name]     a continent, zone or dungeon by its full name
+/twichway #<mapID> <x> <y> [name]        a map by number
+/twichway paste                          a window for several lines
+```
+
+`/way` accepts the same text when no other addon has it (see below). Coordinates are percentages from 0 to
+100 inclusive, integers or decimals, `52.3 40.7`, `52.3, 40.7`, `52.3,40.7` or `52.3 , 40.7`. Only the first
+two numbers are coordinates: everything after them is the name, numbers included
+(`10 20 Camp 30 40` is a pin called "Camp 30 40"). Extra spaces are ignored. A name is plain text cut to 48
+bytes by the pin rule (`Pins.CleanName`); the command says when it was shortened. No name gives the feature's
+own default (`Pin <n>`).
+
+* **Which map.** Coordinates alone use `C_Map.GetBestMapForUnit("player")`, never the map open in the world
+  map window, which is neither read nor moved. `#mapID` must pass `Pins.ValidMap` (`C_Map.GetMapInfo` knows
+  it), which is the check `AddLocal` makes for every pin: that is the whole of "supported by the pin system".
+  A zone name is matched whole and case-insensitively against a list built once from the game's map tree
+  (`GetMapChildrenInfo(top, nil, true)` from the top of the current map's parent chain, as the world map's own
+  navigation climbs it, and the fallback world map). Continents, zones and dungeons are listed; micro and
+  orphan maps are reached by `#mapID`. A name found on more than one map is **never guessed**: the message
+  lists the candidates with their ids and suggests `#mapID`. A tree that doesn't hang off the player's is read
+  the first time the player is in it, once. Nothing is read per command.
+* **Coordinates.** Percent to the pin system's 0..10000 steps is `Quantize(pct / 100)`, once.
+* **Duplicates.** The pin system has no duplicate policy: the editor and the map click both allow two pins at
+  one place with one name, and so do these commands. Nothing is ever replaced or merged by name or place, so
+  pasting the same list twice makes the pins twice.
+* **Defaults and side effects.** The default color and id rules apply, and the new pin is picked out
+  (`Pins.Select`) as the editor's Save does, so its name shows. Not done: opening or moving the world map,
+  setting the game's waypoint, any navigation.
+* **Paste.** `/twichway paste` builds a small window on first use (nothing exists until then), drawn with the
+  new pin window's look. One waypoint per line, with or without a leading `/way` or `/twichway`; blank lines
+  are skipped; lines are read in order and each is checked alone. A line that starts with any other slash
+  command is refused, never run, and nothing pasted is evaluated as Lua. The pins are made inside one
+  `Pins.Batch`, so the map, window and data bar refresh once. The result is a summary plus up to eight reasons
+  with their line numbers in chat and five in the window. Lines that made a pin are blanked in place, so
+  numbers still match and pressing the button again only tries what is left.
+  Limits: 250 lines, 240 bytes a line, 30000 bytes in all, and the local pin limit (200), at which the rest
+  is reported as not tried.
+* **Combat.** Everything is plain data plus the existing refresh listeners. No secure or protected frame is
+  touched, there is no `OnUpdate`, and the pin refresh is the one every pin change already causes.
+
+### Who has `/way`
+
+`/twichway` is registered when the file loads and always works. `/way` is added at `PLAYER_LOGIN` (after every
+non-load-on-demand addon has registered its commands) and again when the switch is turned on, and only if it
+is free:
+
+* This client's chat frame moves each `SlashCmdList` entry into `hash_SlashCmdList` (keyed by the upper-cased
+  tag) the first time it parses a command, empties the list, and lets the last one imported win
+  (`ChatFrameUtil.lua` `ImportListToHash`, `ChatFrameSetup.lua`). So both are checked: the hash for an
+  imported command, and the `SLASH_<key><n>` globals of the entries still in `SlashCmdList` for pending ones.
+* If another addon has it, `/way` is not touched. Nothing is wrapped, hooked or overwritten. The Party pins
+  options page names `/twichway`, and the usage text says `/way` belongs to another addon only when it is
+  shown (an empty or malformed `/twichway`); nothing is printed unprompted.
+* An addon that registers `/way` after TwichUI took it is imported later and wins; TwichUI doesn't fight it
+  and `/twichway` keeps working. `/tui diagnostics` says who has it.
+* **Also make a pin from /way (opt in, off by default; Party pins options > Waypoint commands).** When another
+  addon has `/way` (WaypointUI, TomTom), TwichUI follows that entry's handler: it keeps the original function,
+  calls it first with the same arguments, then makes a pin from the same text. This is the pattern
+  WaypointUI itself uses on `TOMTOM_WAY` (`packages/slash-command/index.lua` `HookCommand`), and the one
+  deliberate exception to "never wrap another addon's handler". The slash names, and every other entry, are
+  untouched. The owner's key is found among the entries not yet imported, or in the list's proxy table
+  (`getmetatable(SlashCmdList).__index`) when the game has imported it, preferring the entry whose handler is
+  `hash_SlashCmdList["/WAY"]`. It is followed once per entry per session and gated on the choice on every
+  call, so turning it off takes nothing back; if the owner later replaces its handler, the follow is lost
+  until `/reload`. Text that doesn't read as a waypoint (`reset`, `paste`, `list`, a zone with no numbers) makes
+  no pin and says nothing; a waypoint that can't be placed (unknown or ambiguous zone, pin limit) says why.
+  The owner's own waypoint is still created, so you get both. Not applied when TwichUI has `/way` itself.
+* The switch off after `/way` was taken: the command stays registered (a registered command can't be handed
+  back to the game) and says Party pins are off.
 
 ## Rendering
 
@@ -352,3 +431,28 @@ frame regardless of the pin window's choices.
 17. Watch `/console scriptErrors 1` and the taint log (`/console taintLog 1`) for errors and "blocked"
     messages, especially opening the map and quest pins in combat after using pins.
 18. Run `/tui diagnostics` and read the Party pins section.
+
+### Waypoint commands (one client; the last two with and without TomTom)
+
+1. Party pins on. `/twichway 52.3 40.7` on a zone map: a pin there, named "Pin n", the chat line names the zone
+   and coordinates. Compare its place with the same spot on the world map.
+2. `/twichway 52.3 40.7 Rare spawn`: named "Rare spawn". `/twichway Nagrand 45 50 Rare spawn` and a
+   multiword zone (`/twichway Elwynn Forest 45 50 Hidden chest`) land on those zones.
+3. `/twichway #<a map id> 67.2 49.6 Name`; an id the game doesn't have is refused and makes nothing.
+4. Decimals (`12.34 56.78`), the corners `0 0` and `100 100`, `52.3, 40.7`, `52.3,40.7`, extra spaces,
+   `10 20 Camp 30 40` (one pin, name "Camp 30 40").
+5. Refused with a message and no pin: no coordinates, one coordinate, `101 5`, `-1 5`, `5.5.5 4`, an unknown
+   zone, a name that matches two maps (it lists them and suggests `#mapID`).
+6. Coordinates only, with the world map closed, and with it open on another zone: always your own map, and
+   the world map isn't moved or opened. Same while in combat.
+7. `/reload`: the pins are still there. Existing placing (Alt-click, Place a pin) still works.
+8. `/twichway paste`: paste several `/way` lines with a blank, a bad number and a `/run ...` line. The good
+   ones become pins in order, the bad ones stay in the box with line numbers in the messages, `/run` is not
+   executed. Press the button again: nothing is made twice. Open it in combat.
+9. Without TomTom: `/way 52.3 40.7` makes a pin. With TomTom enabled: `/way` stays TomTom's, `/twichway` still
+   works and an empty `/twichway` mentions it. `/tui diagnostics` shows who has `/way`.
+10. Turn Party pins off in options: `/twichway ...` explains and makes nothing.
+11. With WaypointUI (and no TomTom): `/way 52.3 40.7 Name` makes only WaypointUI's waypoint. Turn on
+    "Also make a pin from /way": the same command makes WaypointUI's waypoint *and* a pin, and `/way reset`
+    or `/way paste` make no pin. Turn it off again: back to the waypoint only, no reload needed. Check
+    `/tui diagnostics` for "following it".

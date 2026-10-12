@@ -43,6 +43,10 @@ local function Pins()
         tostring(mm.last), mm.errors or 0)
     Line("placing: local %s, party %s, Place a pin waiting %s; labels %s", tostring(look.localClick), tostring(look.partyClick),
         D.Flag(m.armed), tostring(look.labels))
+    local wy = R.PinsWay and R.PinsWay.Snapshot() or {}
+    Line("waypoint commands: /twichway registered; /way is %s; commands %d, pins made %d, lines or commands refused %d, pastes %d, paste window open %s; also make a pin from another addon's /way: %s (following it: %s, pins made that way %d)",
+        wy.way == "ours" and "TwichUI's" or (wy.way == "other" and "another addon's" or "not taken"), wy.commands or 0, wy.made or 0,
+        wy.failed or 0, wy.pastes or 0, D.Flag(wy.open), D.Flag(wy.also), D.Flag(wy.followed), wy.alsoMade or 0)
     Line("window: built %s, open %s, rows %d; font %s (fell back: %s), background %s, border %s, rows %s",
         D.Flag(w.built), D.Flag(w.open), w.rows or 0, tostring(look.font), D.Flag(look.fontFallback), tostring(look.bg),
         tostring(look.border), tostring(look.density))
