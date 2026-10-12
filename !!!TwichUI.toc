@@ -137,6 +137,7 @@ pins\Minimap.lua
 pins\Editor.lua
 pins\Window.lua
 pins\Way.lua
+pins\Sound.lua
 pins\BrokerMenu.lua
 pins\Broker.lua
 

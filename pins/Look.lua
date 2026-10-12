@@ -9,6 +9,8 @@
 --                   and shadow (one look for both maps; the window's text is separate);
 --   pinsBroker      the data bar entry: what its text says, whether it has its icon, its text color, and
 --                   how a newly received pin is pointed out (on or off, for how long, in what color);
+--   pinsSound       the sound a pin arriving from another player makes: on or off, which sound (a
+--                   LibSharedMedia name) and which game volume it follows;
 --   pinsBrokerMenu  the background and border of the menu a click on that entry opens (a MenuStyle look,
 --                   separate from the Mage launchers' and from the window's);
 --   pinsEditorLook  the background and border of the new pin window (the editor: a MenuStyle look, separate
@@ -467,6 +469,49 @@ function BR.Reset()
 end
 
 ---------------------------------------------------------------------------
+-- The sound a party pin arriving makes (pins/Sound.lua): whether it plays, which sound, and which of the
+-- game's volume sliders it follows. PlaySoundFile has no volume of its own, so the channel is how loud it is.
+-- sound is a LibSharedMedia sound name; TwichUI's own are listed in modules/Media.lua.
+---------------------------------------------------------------------------
+local SD = {}
+PL.Sound = SD
+SD.CHANNELS = {
+    { "SFX", "Sound Effects", "Follows the Sound Effects volume in the game's Audio options, and is silent when sound effects are off. Like the game's own pop-ups." },
+    { "Dialog", "Dialog", "Follows the Dialog volume, so you can set it apart from other sound effects." },
+    { "Ambience", "Ambience", "Follows the Ambience volume, so you can set it apart from other sound effects." },
+    { "Master", "Master", "Follows only the Master volume, so it plays even when sound effects are off." },
+}
+SD.DEFAULTS = { enabled = true, sound = "TwichUI Map Pin", channel = "SFX" }
+local SOUND_CHANNEL = {}
+for _, ch in ipairs(SD.CHANNELS) do SOUND_CHANNEL[ch[1]] = true end
+
+function SD.Valid(key, value)
+    if key == "enabled" then return type(value) == "boolean" end
+    if key == "sound" then return type(value) == "string" and #value >= 1 and #value <= 64 end
+    if key == "channel" then return type(value) == "string" and SOUND_CHANNEL[value] == true end
+    return false
+end
+
+-- A sound that is not available today is still what Get returns, so it is chosen again when its media pack
+-- returns; pins/Sound.lua plays the default in the meantime.
+function SD.Get(key)
+    local ui = TwichUIDB and TwichUIDB.ui
+    local t = ui and ui.pinsSound
+    local value
+    if type(t) == "table" then value = t[key] end   -- not "and ... or": a saved false is a value
+    if SD.Valid(key, value) then return value end
+    return SD.DEFAULTS[key]
+end
+
+function SD.Set(key, value)
+    if SD.DEFAULTS[key] == nil or not SD.Valid(key, value) or type(TwichUIDB) ~= "table" then return false end
+    TwichUIDB.ui = type(TwichUIDB.ui) == "table" and TwichUIDB.ui or {}
+    if type(TwichUIDB.ui.pinsSound) ~= "table" then TwichUIDB.ui.pinsSound = {} end
+    TwichUIDB.ui.pinsSound[key] = value
+    return true
+end
+
+---------------------------------------------------------------------------
 -- The data bar menu's look: its own, saved apart from the Mage launchers' and the window's. Its defaults are
 -- the launchers' (a copy, so the menus match until the player changes one).
 ---------------------------------------------------------------------------
@@ -487,6 +532,8 @@ function PL.Snapshot()
     return {
         barText = BR.Get("text"), barIcon = BR.Get("icon"), barColor = BR.Get("customColor"),
         barFlash = BR.Get("flash"), barFlashSeconds = BR.Get("flashSeconds"),
+        sound = SD.Get("enabled"), soundChannel = SD.Get("channel"),
+        soundFile = SD.Get("sound") == SD.DEFAULTS.sound and "default" or "chosen",
         menuBg = PL.MenuLook.Get("bgTexture") == "solid" and "solid" or "textured", menuBorder = PL.MenuLook.Get("borderTexture"),
         editorBg = PL.EditorLook.Get("bgTexture") == "solid" and "solid" or "textured", editorBorder = PL.EditorLook.Get("borderTexture"),
         localClick = PL.Pref("localClick"), partyClick = PL.Pref("partyClick"), labels = PL.Pref("labels"),

@@ -1568,7 +1568,7 @@ local function Build()
         end
 
         local flashToggle = Under(ProxyToggle("pinsBarFlash", "Point out a new pin on the data bar",
-            "When a pin arrives from someone in your party, the entry's text changes to \"New pin: <name>\" in the color below, for the time below, and then goes back to what it was. Pins you place, and ones you already had, don't trigger it. Several arriving within the time are counted together.\n\nNothing is written in chat and no sound plays.",
+            "When a pin arrives from someone in your party, the entry's text changes to \"New pin: <name>\" in the color below, for the time below, and then goes back to what it was. Pins you place, and ones you already had, don't trigger it. Several arriving within the time are counted together.\n\nNothing is written in chat. The sound is set separately, below.",
             BR.DEFAULTS.flash, function() return BR.Get("flash") end, function(value) BR.Set("flash", value and true or false) end),
             pinsToggle, PinsOn)
         local function FlashOn() return PinsOn() and BR.Get("flash") end
@@ -1583,6 +1583,34 @@ local function Build()
             function() return BR.Get("flashColor") end, function(value) BR.Set("flashColor", value) end)
         if flashColor and Settings.CreateColorSwatch then
             Under(Settings.CreateColorSwatch(category, flashColor, "The color of the text while a new pin is pointed out, whatever the text color above. The icon is tinted the same, for a data bar that removes color codes from text (EllesmereUI's Broker Plugin block does, until its Strip Colors option is off for this block; its icon tint is honored)."), flashToggle, FlashOn)
+        end
+
+        do
+            local SD = PL.Sound
+            Header("Sound", "A short sound when a pin arrives from someone in your party, so you notice it without looking at the map. Pins you place yourself make no sound, and nothing is written in chat.")
+            local soundToggle = Under(ProxyToggle("pinsSound", "Play a sound when a party pin arrives",
+                "Plays the sound below once when a pin arrives from another player. Pins you place, updates to pins you already have, and ones you already held don't play it, and several arriving within a couple of seconds give one sound. Off: pins arrive silently.",
+                SD.DEFAULTS.enabled, function() return SD.Get("enabled") end, function(value) SD.Set("enabled", value and true or false) end),
+                pinsToggle, PinsOn)
+            local function SoundOn() return PinsOn() and SD.Get("enabled") end
+            local soundFile = Proxy("pinsSoundFile", STRING, "Sound", SD.DEFAULTS.sound,
+                function() return SD.Get("sound") end, function(value) SD.Set("sound", value) end)
+            if soundFile and Settings.CreateDropdown and Settings.CreateControlTextContainer then
+                Under(Settings.CreateDropdown(category, soundFile, function()
+                    local container = Settings.CreateControlTextContainer()
+                    for _, choice in ipairs(R.PinsSound and R.PinsSound.Choices(SD.Get("sound")) or {}) do container:Add(choice[1], choice[2]) end
+                    return container:GetData()
+                end, "The sound to play. TwichUI's own are listed first, then every sound other addons have added to LibSharedMedia. Press Hear the sound to try it. A sound that has gone (its addon isn't loaded) stays chosen, and TwichUI Map Pin plays in its place."),
+                    soundToggle, SoundOn)
+            end
+            local soundChannels = {}
+            for i, ch in ipairs(SD.CHANNELS) do soundChannels[i] = { ch[1], ch[2], ch[3] } end
+            Under(Choice("pinsSoundChannel", "Volume follows",
+                "A sound file can't have a volume of its own, so the sound is as loud as the game volume you choose here. Set that volume in the game's Audio options: lower it to make the sound quieter, or pick the one you keep lowest.",
+                STRING, SD.DEFAULTS.channel, function() return SD.Get("channel") end, function(value) SD.Set("channel", value) end,
+                soundChannels), soundToggle, SoundOn)
+            Under(Button("Hear the sound", "Play", function() if R.PinsSound then R.PinsSound.Play() end end,
+                "Plays the sound now, at the volume you have chosen."), soundToggle, SoundOn)
         end
 
         Header("Data bar menu appearance", "How the menu a click on the data bar entry opens looks: background and border. Only the menu's look changes; its text follows the pin window's font and size, and what it does doesn't change. It starts out looking like the Mage launchers' menus, and changing one doesn't change the other.")

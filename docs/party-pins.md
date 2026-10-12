@@ -19,6 +19,7 @@ Players without TwichUI see nothing: nothing is written in chat and there is no 
 | `pins/Editor.lua` | the name, color and kind editor (the new pin window) |
 | `pins/Window.lua` | the pin window and the action menu (also opened from a map pin) |
 | `pins/Way.lua` | waypoint commands: `/twichway`, `/way` when free, the parser, the zone lookup and the paste window |
+| `pins/Sound.lua` | the sound a pin arriving from another player plays (the choices are in `pins/Look.lua`, `PL.Sound`) |
 | `pins/BrokerMenu.lua` | the small pin menu a click on the data bar entry opens |
 | `pins/Broker.lua` | the optional LibDataBroker data source |
 | `diag/Pins.lua` | the troubleshooting section |
@@ -307,6 +308,30 @@ appearance** leaves the map text alone).
 **Pin names on the minimap** (Never, On hover and for the selected pin, Always; Never by default, so the minimap
 is as it was) puts a name under each minimap pin in the same text look. The tooltip still has the name.
 
+## Arrival sound
+
+`pins/Sound.lua`. When a pin arrives from another player, one short sound plays (`PN.OnReceived`, the same
+hook as the data bar highlight, so the same meaning of "arrives": a pin that was not in the session before,
+not an update, a stale copy, a pin you already held or your own). It does not need a data bar addon.
+
+* **Play a sound when a party pin arrives**: on by default.
+* **Sound**: a LibSharedMedia sound name. TwichUI's own come first (`R.MediaSounds`, `modules/Media.lua`;
+  the default is **TwichUI Map Pin**, `media/sounds/TwichUI_MapPin.mp3`), then every sound other addons have
+  registered. TwichUI's are found by file, so they play with the "Custom fonts and sounds" switch off and
+  without LibSharedMedia. A saved name that is no longer available stays chosen and the default plays
+  in its place.
+* **Volume follows**: the game channel the sound is played on (Sound Effects by default, Dialog, Ambience
+  or Master). `PlaySoundFile(file, channel)` takes no volume, so this is the only volume control there is:
+  the loudness is that channel's slider in the game's Audio options, and a muted channel is silent. This
+  is the same limit and the same choice as the Friend login chime.
+* **Hear the sound** plays it now, on the chosen channel.
+
+Several arrivals within two seconds give one sound (a member placing several pins, or a burst of
+messages). A full list that brings pins you did not have (joining a party that already has pins) plays it
+once, as it highlights once. Pins you place yourself, and updates, play nothing. Nothing is written in chat.
+
+Saved in `TwichUIDB.ui.pinsSound`, only once changed (`enabled`, `sound`, `channel`).
+
 ## Data bar
 
 The data bar entry is `TwichUI Party Pins`. Click opens the pin menu, right-click opens the options.
@@ -329,7 +354,7 @@ Party pins options > **Data bar**:
 * **Point out a new pin on the data bar** (on by default), **New pin shown for (seconds)** (2 to 30, 8 by
   default) and **New pin color**: when a pin arrives from someone else in the party, the text changes to
   "New pin: <name>" (a name is cut to 24 bytes; "2 new pins" when several arrive within the time), in the
-  chosen color, then goes back to what it was. Nothing in chat, no sound. The icon is tinted the same
+  chosen color, then goes back to what it was. Nothing in chat; the sound is separate (see Arrival sound below). The icon is tinted the same
   through `iconR`/`iconG`/`iconB`, which EllesmereUI's Broker Plugin block honors
   (`Blocks/LDB.lua`, `IconTint`), so there is still a color change when it strips the text's color codes.
 
@@ -431,6 +456,11 @@ frame regardless of the pin window's choices.
 17. Watch `/console scriptErrors 1` and the taint log (`/console taintLog 1`) for errors and "blocked"
     messages, especially opening the map and quest pins in combat after using pins.
 18. Run `/tui diagnostics` and read the Party pins section.
+19. Arrival sound: have another member place a pin and check the sound plays once, on the channel chosen
+    (Sound Effects by default), and not for your own pins, for an update to one, or after a `/reload`. Turn
+    Sound Effects off in the game's Audio options and check it is silent, then pick Master and check it
+    plays. Try Hear the sound, another sound from the list, and the toggle off. Have the member place
+    several pins in a second or two and check there is one sound.
 
 ### Waypoint commands (one client; the last two with and without TomTom)
 

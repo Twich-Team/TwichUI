@@ -176,8 +176,8 @@ local function refreshMap() for p in pairs(WMF.providers) do p:RefreshAllData() 
 local brokers = {}
 local LDB = c.LibStub:NewLibrary("LibDataBroker-1.1", 1)
 LDB.NewDataObject = function(_, name, o) brokers[name] = o; return o end
-for _, f in ipairs({ "chronicle/Style.lua", "modules/Borders.lua", "modules/MenuStyle.lua", "modules/SpellMenu.lua",
-  "pins/Pins.lua", "pins/Sync.lua", "pins/Look.lua", "pins/Map.lua", "pins/Minimap.lua", "pins/Editor.lua", "pins/Window.lua",
+for _, f in ipairs({ "chronicle/Style.lua", "modules/Borders.lua", "modules/MenuStyle.lua", "modules/SpellMenu.lua", "modules/Media.lua",
+  "pins/Pins.lua", "pins/Sync.lua", "pins/Look.lua", "pins/Sound.lua", "pins/Map.lua", "pins/Minimap.lua", "pins/Editor.lua", "pins/Window.lua",
   "pins/BrokerMenu.lua", "pins/Broker.lua",
   "diag/Diagnostics.lua", "diag/Pins.lua" }) do
   local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
@@ -1003,6 +1003,116 @@ do
     TIMERS = {}
     FlushTimers()
     assert(PN.LocalCount() == #keptLocal)
+  end
+
+  -- the arrival sound: once for a pin that is new here, on the chosen channel, and for nothing else
+  do
+    local heard, now = {}, 100
+    local realTime = c.GetTime
+    c.GetTime = function() return now end
+    c.PlaySoundFile = function(path, channel) heard[#heard + 1] = { path = path, channel = channel }; return true end
+    local SD, SN = PL.Sound, R.PinsSound
+    local DEFAULT = [[Interface\AddOns\!!!TwichUI\media\sounds\TwichUI_MapPin.mp3]]
+    local function put(id, rev, name)
+      return PN.ApplyPut("Pal Stonebrook", { id = id, r = rev, m = 1429, x = 2000, y = 2000, n = name, c = "rose" })
+    end
+    assert(SD.Get("enabled") == true and SD.Get("sound") == "TwichUI Map Pin" and SD.Get("channel") == "SFX",
+      "on, TwichUI's map pin sound, the Sound Effects volume")
+    assert(c.TwichUIDB.ui.pinsSound == nil, "nothing saved until a choice is made")
+    assert(R.MediaSounds["TwichUI Map Pin"] == "TwichUI_MapPin.mp3", "offered to other addons' sound lists too")
+    -- not for what you do yourself
+    assert(PN.AddLocal({ map = 1429, x = 5, y = 5, name = "Mine" }))
+    assert(PS.CreateParty({ map = 1429, x = 6, y = 6, name = "Mine too" }))
+    assert(#heard == 0, "your own pins make no sound")
+    -- a new pin from another player: once, on the default sound and channel
+    assert(put("pal:31", 1, "Camp"))
+    assert(#heard == 1 and heard[1].path == DEFAULT and heard[1].channel == "SFX", "the default sound on Sound Effects")
+    -- an update or a stale copy is not an arrival
+    now = 110
+    assert(put("pal:31", 2, "Camp two"))
+    assert(not put("pal:31", 2, "Again"))
+    assert(#heard == 1, "updates and stale copies make no sound")
+    -- several in a moment give one; a later one sounds again
+    local heldBefore = SN.Snapshot().held
+    assert(put("pal:32", 1, "Well"))
+    assert(#heard == 2)
+    now = 110.5
+    assert(put("pal:33", 1, "Mill"))
+    assert(#heard == 2 and SN.Snapshot().held == heldBefore + 1, "within two seconds: held back")
+    now = 113
+    assert(put("pal:34", 1, "Smithy"))
+    assert(#heard == 3, "and again once the time has passed")
+    -- one message with several new pins is one sound
+    now = 120
+    assert(PN.ApplyAll("Pal Stonebrook", {
+      { id = "pal:31", r = 2, m = 1429, x = 2000, y = 2000, n = "Camp two", c = "rose" },
+      { id = "pal:35", r = 1, m = 1429, x = 2100, y = 2000, n = "Dock", c = "rose" },
+      { id = "pal:36", r = 1, m = 1429, x = 2200, y = 2000, n = "Quay", c = "rose" },
+    }))
+    assert(#heard == 4, "a list with two new pins sounds once")
+    assert(PN.ApplyAll("Pal Stonebrook", {
+      { id = "pal:31", r = 2, m = 1429, x = 2000, y = 2000, n = "Camp two", c = "rose" },
+      { id = "pal:35", r = 1, m = 1429, x = 2100, y = 2000, n = "Dock", c = "rose" },
+    }))
+    assert(#heard == 4, "a list with nothing new is silent")
+    -- the player's channel
+    assert(not SD.Set("channel", "Music") and not SD.Set("channel", 3) and SD.Get("channel") == "SFX", "an unknown channel is refused")
+    assert(SD.Set("channel", "Master") and c.TwichUIDB.ui.pinsSound.channel == "Master")
+    now = 130
+    assert(put("pal:37", 1, "Gate"))
+    assert(heard[#heard].channel == "Master" and heard[#heard].path == DEFAULT, "the chosen channel")
+    -- the player's sound: LibSharedMedia's list, listed after TwichUI's own
+    local LSM = c.LibStub("LibSharedMedia-3.0")
+    LSM:Register("sound", "Other Addon Ding", [[Interface\AddOns\OtherAddon\ding.ogg]])
+    local choices = SN.Choices(SD.Get("sound"))
+    local at = {}
+    for i, ch in ipairs(choices) do at[ch[1]] = i end
+    assert(at["TwichUI Map Pin"] and at["Other Addon Ding"] and at["Other Addon Ding"] > at["TwichUI Map Pin"], "TwichUI's first")
+    assert(at["TwichUI Notification"] and at["TwichUI Notification"] < at["Other Addon Ding"])
+    assert(not at["None"], "LibSharedMedia's silent entry is not offered; the switch is the way to silence it")
+    assert(not SD.Set("sound", "") and not SD.Set("sound", 5) and not SD.Set("sound", ("x"):rep(65)), "an unusable name is refused")
+    assert(SD.Set("sound", "Other Addon Ding"))
+    now = 140
+    assert(put("pal:38", 1, "Bridge"))
+    assert(heard[#heard].path == [[Interface\AddOns\OtherAddon\ding.ogg]], "the chosen sound")
+    -- one that has gone stays chosen, listed as such, and the default plays in its place
+    assert(SD.Set("sound", "Vanished Sound") and SD.Get("sound") == "Vanished Sound")
+    local gone = SN.Choices(SD.Get("sound"))
+    assert(gone[#gone][1] == "Vanished Sound" and gone[#gone][2]:find("not available", 1, true), "kept and marked")
+    now = 150
+    assert(put("pal:39", 1, "Tower"))
+    assert(heard[#heard].path == DEFAULT and SN.Snapshot().fallback, "the default plays instead")
+    assert(c.TwichUIDB.ui.pinsSound.sound == "Vanished Sound", "and the choice is not erased")
+    -- Hear the sound: plays now, whatever the switch or the time since the last
+    assert(SD.Set("enabled", false))
+    local n = #heard
+    now = 160
+    assert(put("pal:40", 1, "Dam") and #heard == n, "off: arrivals are silent")
+    assert(SN.Play() and #heard == n + 1, "the preview plays even so")
+    -- a game that refuses the sound is counted and not an error
+    c.PlaySoundFile = function() return false end
+    local refused = SN.Snapshot().refused
+    assert(SN.Play() == false and SN.Snapshot().refused == refused + 1)
+    c.PlaySoundFile = nil
+    assert(SN.Play() == false, "no sound function: nothing happens")
+    -- the troubleshooting section says how it went and names no sound or path
+    local rep = R.Diag.Build()
+    local from = rep:find("== Party pins ==", 1, true)
+    local sec = rep:sub(from, rep:find("\n== ", from + 5, true) or #rep)
+    assert(sec:find("arrival sound: off, volume follows Master, sound chosen", 1, true), "arrival sound line: " .. sec)
+    for _, needle in ipairs({ "Vanished", "Other Addon", "ding.ogg", "MapPin" }) do
+      assert(not sec:find(needle, 1, true), "the report must not hold " .. needle)
+    end
+    -- put the state back for what follows
+    for _, id in ipairs({ "pal:31", "pal:32", "pal:33", "pal:34", "pal:35", "pal:36", "pal:37", "pal:38", "pal:39", "pal:40" }) do
+      PN.ApplyDel("Pal Stonebrook", id, 9)
+    end
+    for _, p in ipairs(PN.OwnPins()) do if p.name == "Mine too" then PS.RemoveForParty(p.key) end end
+    for _, p in ipairs(PN.LocalPins()) do if p.name == "Mine" then PN.RemoveLocal(p.id) end end
+    c.TwichUIDB.ui.pinsSound = nil
+    c.GetTime = realTime
+    TIMERS = {}
+    FlushTimers()
   end
 
   -- its look is its own, kept apart from the window's and the launchers'

@@ -27,6 +27,7 @@ local SOUNDS = {
     ["GTFO Low Damage"]  = "GTFO_Low.ogg",
     ["GTFO Fail"]        = "GTFO_Fail.ogg",
     ["TwichUI Notification"] = "TwichUI_Notification.mp3",
+    ["TwichUI Map Pin"]  = "TwichUI_MapPin.mp3",
 }
 R.MediaFonts, R.MediaSounds = FONTS, SOUNDS
 

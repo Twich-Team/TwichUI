@@ -56,6 +56,10 @@ local function Pins()
     Line("data bar: %s; text %s, icon %s, own text color %s", R.PinsBroker and R.PinsBroker.Available() and "listed" or "not listed (no LibDataBroker provider, or off)",
         tostring(look.barText), D.Flag(look.barIcon), D.Flag(look.barColor))
     local bm = R.PinsBrokerMenu and R.PinsBrokerMenu.Snapshot() or {}
+    local sd = R.PinsSound and R.PinsSound.Snapshot() or {}
+    Line("arrival sound: %s, volume follows %s, sound %s (default played instead: %s); played %d, refused %d, held back %d",
+        look.sound and "on" or "off", tostring(look.soundChannel), tostring(look.soundFile), D.Flag(sd.fallback),
+        sd.played or 0, sd.refused or 0, sd.held or 0)
     Line("data bar menu: built %s, open %s, rows %d, renaming %s; background %s, border %s",
         D.Flag(bm.built), D.Flag(bm.open), bm.rows or 0, D.Flag(bm.editing), tostring(look.menuBg), tostring(look.menuBorder))
     Line("new pin window: open %s; background %s, border %s",

@@ -308,6 +308,23 @@ do
   assert(BR.Get("flashSeconds") == 15 and BR.Get("flashColor") == "ff00aa44" and BR.Get("flash") == false)
   assert(BR.DEFAULTS.flash == true and BR.DEFAULTS.flashSeconds == 8, "pointed out for 8 seconds unless changed")
   BR.Reset()
+  -- the arrival sound: on the Party pins page, in its own saved table
+  do
+    local SD = PL.Sound
+    for variable, key in pairs({ TWICHUI_pinsSound = "enabled", TWICHUI_pinsSoundFile = "sound", TWICHUI_pinsSoundChannel = "channel" }) do
+      local proxy = assert(proxies[variable], variable .. " is on the page")
+      assert(variables[variable] == "Party pins", variable)
+      assert(proxy.default == SD.DEFAULTS[key] and proxy.get() == SD.DEFAULTS[key], key .. " starts at its default")
+    end
+    assert(SD.DEFAULTS.enabled == true and SD.DEFAULTS.sound == "TwichUI Map Pin" and SD.DEFAULTS.channel == "SFX")
+    proxies.TWICHUI_pinsSound:SetValue(false)
+    proxies.TWICHUI_pinsSoundChannel:SetValue("Dialog")
+    proxies.TWICHUI_pinsSoundFile:SetValue("GTFO Fail")
+    assert(SD.Get("enabled") == false and SD.Get("channel") == "Dialog" and SD.Get("sound") == "GTFO Fail")
+    assert(c.TwichUIDB.ui.pinsSound.enabled == false, "a chosen false is saved as a value")
+    assert(c.TwichUIDB.ui.pinsBroker == nil, "the data bar's settings are not touched")
+    c.TwichUIDB.ui.pinsSound = nil
+  end
   for _, suffix in ipairs({ "BgTexture", "BgColor", "BgOpacity", "BorderTexture", "BorderSize", "BorderColor", "BorderOpacity" }) do
     assert(variables["TWICHUI_pinsMenu" .. suffix] == "Party pins", "pinsMenu" .. suffix .. " is on the page")
     assert(variables["TWICHUI_pinsLook" .. suffix] == "Party pins", "the window's look is still its own")
