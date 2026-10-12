@@ -84,7 +84,8 @@ Frames, timers, queues and rate buckets are never saved.
 * **Minimap** (`pins/Minimap.lua`, on by default with the feature; Party pins options > Show pins on the
   minimap). Pins within range of you are drawn as small buttons that are children of `Minimap`, same shape
   and color, with the party badge. Names are in the tooltip, which also says about how many yards away it is;
-  right-click opens the same actions. No edge arrows or routes: a pin out of range isn't shown.
+  a left click selects the pin and sets the waypoint there (as on the world map), right-click opens the same
+  actions. No edge arrows or routes: a pin out of range isn't shown.
   * *Position.* From the game's map data, the way Blizzard's `HybridMinimap` works: the player's place on the
     pin's own map (`C_Map.GetPlayerMapPosition(pin.map, "player")`) and that map's size in yards
     (`C_Map.GetMapWorldSize`). The map's x runs east and y south, so the pin is
@@ -187,9 +188,12 @@ take it back.
   code). EllesmereUI's quest tracker notes that this can leave the map unable to do some things in combat.
   **Show on map** moves a map the player already opened (`SetMapID`), or waits up to 2 minutes for them to
   open it.
-* **Set waypoint** is `C_Map.SetUserWaypoint`, only when picked, and only where
+* **Set waypoint** is `C_Map.SetUserWaypoint` (`PM.SetWaypoint`), and only where
   `C_Map.CanSetUserWaypointOnMap` allows it. It replaces the player's waypoint, as setting one on the map
-  does. TwichUI doesn't super-track and never changes the waypoint otherwise.
+  does. TwichUI doesn't super-track. It runs when **Set waypoint** is picked and when a pin is left-clicked
+  on the world map or minimap, which also selects it (`PM.Activate`). Clicking the selected pin again
+  deselects it and leaves the waypoint as it is. Selecting from the window's list, Show on map and saving a
+  pin select without touching the waypoint.
 * Nothing is protected: no secure buttons, no casting, nothing deferred for combat.
 
 ## Window and appearance
@@ -264,7 +268,9 @@ provides the library, as with TwichUI's other data sources.
 14. Change the window's textures, font and accent. Remove EllesmereUI or a media pack and check the
     fallbacks.
 15. Try different UI scales, long names (48 bytes, multibyte characters), and a full-screen map.
-16. Check the player's own waypoint is unchanged until Set waypoint is picked.
+16. Check the player's own waypoint is unchanged until a pin is left-clicked on the map or minimap, or Set
+    waypoint is picked (not by list rows, Show on map or saving a pin). Click the selected pin again and check
+    it deselects and the waypoint stays.
 17. Watch `/console scriptErrors 1` and the taint log (`/console taintLog 1`) for errors and "blocked"
     messages, especially opening the map and quest pins in combat after using pins.
 18. Run `/tui diagnostics` and read the Party pins section.

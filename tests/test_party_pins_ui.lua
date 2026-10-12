@@ -319,6 +319,21 @@ assert(#waypoints == 1 and waypoints[1].uiMapID == 1436)
 local onContinent = assert(PN.AddLocal({ map = 1415, x = 10, y = 10, name = "Far" }))
 local farActs = labels(PW.Actions({ kind = "local", pin = onContinent, token = "local:" .. onContinent.id }))
 assert(farActs["Set waypoint"].enabled == false and farActs["Set waypoint"].why:find("waypoint"))
+-- a left click on a map pin (PM.Activate) selects it and sets the waypoint there; clicking the selected pin
+-- again only deselects, and a map that can't hold a waypoint still selects, with the reason
+do
+  local PMap = R.PinsMap
+  PN.Select(nil)
+  local n = #waypoints
+  PMap.Activate(palE)
+  assert(PN.selected == palE.token and #waypoints == n + 1 and waypoints[n + 1].uiMapID == 1436, "selected, and the waypoint is there")
+  PMap.Activate(palE)
+  assert(PN.selected == nil and #waypoints == n + 1, "clicking the selected pin deselects and leaves the waypoint")
+  local farE = { kind = "local", pin = onContinent, token = "local:" .. onContinent.id }
+  PMap.Activate(farE)
+  assert(PN.selected == farE.token and #waypoints == n + 1 and lastNotice():find("waypoint"), "selected; a map without waypoints says so")
+  PN.Select(nil)
+end
 -- an action picked after its pin went is refused, not run
 local doomed = assert(PN.AddLocal({ map = 1429, x = 1, y = 1, name = "Doomed" }))
 local doomedActs = labels(PW.Actions({ kind = "local", pin = doomed, token = "local:" .. doomed.id }))

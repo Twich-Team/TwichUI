@@ -11,8 +11,8 @@
 --   Placing: a canvas click handler (the map's own, which runs addon handlers through securecallfunction)
 --     answers only the exact clicks chosen in Party pins options (Alt-click and Alt-Shift-click unless
 --     changed) or one click after Place a pin; every other click carries on to the map as before. Ctrl-
---     click stays the game's waypoint, and the player's own waypoint is never changed except by Set
---     waypoint. A click opens the pin editor: nothing is made, and nothing sent, until it is saved.
+--     click stays the game's waypoint, and the player's own waypoint is changed only by clicking a pin
+--     (which selects it and sets the waypoint there) or by Set waypoint. A click opens the pin editor: nothing is made, and nothing sent, until it is saved.
 -- TwichUI never opens or closes the world map itself (opening it from addon code can leave it unable to
 -- do some things in combat); Show on map moves an open map, or waits for the player to open it.
 
@@ -98,7 +98,7 @@ local function Tooltip(b, anchor, yards)
     end
     GameTooltip:AddLine(PN.Describe(pin), 0.62, 0.58, 0.51)
     if yards then GameTooltip:AddLine(("About %d yards away"):format(yards), 0.78, 0.74, 0.66) end
-    GameTooltip:AddLine("Right-click for actions", 0.45, 0.43, 0.38)
+    GameTooltip:AddLine("Click to select and set waypoint, right-click for actions", 0.45, 0.43, 0.38)
     GameTooltip:Show()
 end
 PM.Tooltip = Tooltip
@@ -122,7 +122,7 @@ local function OnClick(b, button)
     if button == "RightButton" then
         if R.PinsWindow then R.PinsWindow.OpenActions(e, b) end
     else
-        PN.Select(PN.selected == e.token and nil or e.token)
+        PM.Activate(e)
     end
 end
 
@@ -351,6 +351,17 @@ function PM.SetWaypoint(e)
     if not set then Notice(PN.Reason("no-waypoint")) return false end
     if PlaySound and SOUNDKIT and SOUNDKIT.UI_MAP_WAYPOINT_CONTROL_CLICK then PlaySound(SOUNDKIT.UI_MAP_WAYPOINT_CONTROL_CLICK) end
     return true
+end
+
+-- A plain left click on a pin (map or minimap): picks it out and sets the game's waypoint there. Clicking
+-- the selected pin again only deselects it; the waypoint is left as it is.
+function PM.Activate(e)
+    if PN.selected == e.token then
+        PN.Select(nil)
+        return
+    end
+    PN.Select(e.token)
+    PM.SetWaypoint(e)
 end
 
 local function Build()

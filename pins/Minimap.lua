@@ -151,7 +151,7 @@ local function OnClick(b, button)
     if button == "RightButton" then
         if R.PinsWindow then R.PinsWindow.OpenActions(e, b) end
     else
-        PN.Select(PN.selected == e.token and nil or e.token)
+        R.PinsMap.Activate(e)
     end
 end
 
