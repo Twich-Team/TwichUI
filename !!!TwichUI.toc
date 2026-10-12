@@ -133,6 +133,7 @@ pins\Pins.lua
 pins\Sync.lua
 pins\Look.lua
 pins\Map.lua
+pins\Minimap.lua
 pins\Editor.lua
 pins\Window.lua
 pins\Broker.lua

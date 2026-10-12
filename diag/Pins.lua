@@ -27,6 +27,20 @@ local function Pins()
     Line("set aside: %s", #p.drops > 0 and table.concat(p.drops, ", ") or "nothing")
     Line("map: loaded %s, pins on it %s, open %s; drawn %d, on this map but not placeable %d, layouts %d, clicks refused %d",
         D.Flag(m.mapLoaded), D.Flag(m.installed), D.Flag(m.open), m.drawn, m.unplaced, m.layouts, m.refused)
+    local mm = R.PinsMinimap and R.PinsMinimap.Snapshot() or {}
+    Line("minimap: setting %s, on %s, updater running %s; could be shown %d, shown %d, range %s yards, rotating %s; updates %d, moved %d, rebuilds %d",
+        D.Flag(look.minimap), D.Flag(mm.active), D.Flag(mm.running), mm.eligible or 0, mm.shown or 0,
+        mm.rangeYards and tostring(math.floor(mm.rangeYards + 0.5)) or "?", D.Flag(mm.rotating), mm.ticks or 0, mm.moves or 0, mm.rebuilds or 0)
+    Line("minimap inputs now: result %s; minimap shown %s; its map: %s from %s; view radius: %s from %s%s; width %s; facing: %s",
+        tostring(mm.now), D.Flag(mm.visible), tostring(mm.mapKind), tostring(mm.mapSource), tostring(mm.radiusKind), tostring(mm.radiusSource),
+        mm.radius and (" (" .. math.floor(mm.radius + 0.5) .. " yards)") or "", mm.width and tostring(math.floor(mm.width + 0.5)) or "?",
+        tostring(mm.facingKind))
+    if mm.probe then
+        Line("minimap, first pin that could show: its map is the minimap's or a parent %s; map size known %s; your place on it: %s",
+            D.Flag(mm.probe.related), D.Flag(mm.probe.sized), tostring(mm.probe.position))
+    end
+    Line("minimap updates by result: %s; last: %s; errors caught: %d", #(mm.reasons or {}) > 0 and table.concat(mm.reasons, ", ") or "none yet",
+        tostring(mm.last), mm.errors or 0)
     Line("placing: local %s, party %s, Place a pin waiting %s; labels %s", tostring(look.localClick), tostring(look.partyClick),
         D.Flag(m.armed), tostring(look.labels))
     Line("window: built %s, open %s, rows %d; font %s (fell back: %s), background %s, border %s, rows %s",
@@ -43,7 +57,8 @@ local function Pins()
             "Party pins reach only party members who have TwichUI with Party pins turned on; others see nothing.",
             "The game accepting a message isn't proof it arrived; nothing confirms delivery.",
             "Party pins are paused in a raid and end when you leave the party.",
-            "A pin shows on its own map and that map's parents only. No minimap pins yet.",
+            "A pin shows on its own map and that map's parents only, and on the minimap only within its range.",
+            "Minimap pins use the game's map position and view radius; a minimap with no map (a dungeon) shows none.",
         },
     }
 end

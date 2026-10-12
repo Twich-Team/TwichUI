@@ -30,7 +30,7 @@ for _, c in ipairs(PL.CLICKS) do CLICK[c[1]] = c end
 PL.LABELS = { { "hover", "On hover, and for the selected pin" }, { "always", "Always" } }
 local LABEL = { hover = true, always = true }
 
-local PREF_DEFAULTS = { localClick = "alt", partyClick = "altshift", labels = "hover" }
+local PREF_DEFAULTS = { localClick = "alt", partyClick = "altshift", labels = "hover", minimap = true }
 PL.PREF_DEFAULTS = PREF_DEFAULTS
 
 local function Prefs()
@@ -42,6 +42,7 @@ end
 local function ValidPref(key, value)
     if key == "localClick" or key == "partyClick" then return type(value) == "string" and CLICK[value] ~= nil end
     if key == "labels" then return type(value) == "string" and LABEL[value] == true end
+    if key == "minimap" then return type(value) == "boolean" end
     if key == "position" then
         return type(value) == "table" and type(value.x) == "number" and type(value.y) == "number"
             and value.x == value.x and value.y == value.y and math.abs(value.x) < 10000 and math.abs(value.y) < 10000
@@ -285,6 +286,7 @@ if R.MenuStyle and R.MenuStyle.Fonts then R.MenuStyle.Fonts.Subscribe(PL.Restyle
 function PL.Snapshot()
     return {
         localClick = PL.Pref("localClick"), partyClick = PL.Pref("partyClick"), labels = PL.Pref("labels"),
+        minimap = PL.Pref("minimap"),
         font = PL.Get("font") == "default" and "default" or "chosen", fontFallback = PL.fallback,
         bg = PL.Look.Get("bgTexture") == "solid" and "solid" or "textured", border = PL.Look.Get("borderTexture"),
         density = PL.Get("density"),

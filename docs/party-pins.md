@@ -81,9 +81,39 @@ Frames, timers, queues and rate buckets are never saved.
   can't land on the wrong map.
 * Labels show on hover and for the selected pin (the default), or always. The tooltip has the name, local or
   party and who made it, the map and coordinates.
-* **Minimap: not in this version.** The APIs exist (`UnitPosition`, `C_Minimap.GetViewRadius`,
-  `GetPlayerFacing`), but drawing on the minimap needs a per-frame updater. It also needs in-game checks of
-  rotation and of EllesmereUI's square minimap.
+* **Minimap** (`pins/Minimap.lua`, on by default with the feature; Party pins options > Show pins on the
+  minimap). Pins within range of you are drawn as small buttons that are children of `Minimap`, same shape
+  and color, with the party badge. Names are in the tooltip, which also says about how many yards away it is;
+  right-click opens the same actions. No edge arrows or routes: a pin out of range isn't shown.
+  * *Position.* From the game's map data, the way Blizzard's `HybridMinimap` works: the player's place on the
+    pin's own map (`C_Map.GetPlayerMapPosition(pin.map, "player")`) and that map's size in yards
+    (`C_Map.GetMapWorldSize`). The map's x runs east and y south, so the pin is
+    `(x difference * width)` yards east and `(y difference * height)` yards south of you. Yards to pixels:
+    the minimap's half width is `C_Minimap.GetViewRadius()` yards (as in `HybridMinimap:UpdateZoom`).
+    `UnitPosition` and world coordinates aren't used, so no axis convention is assumed.
+  * *Rotation.* With `rotateMinimap` on (`GetCVarBool`, as Blizzard's minimap reads it) the offset is turned
+    by `GetPlayerFacing()` (counterclockwise from north). If the facing can't be read, nothing is placed.
+  * *Which pins.* Those on the minimap's map (`C_Minimap.GetUiMapID`) or one of its parents. A pin on another
+    map, or when the minimap has no map (a dungeon), isn't shown. Pins removed from your map aren't shown.
+  * *Cost.* One updater, created only while the feature and the setting are on and a pin could be shown: every
+    0.04 s while the minimap rotates, 0.1 s otherwise. Buttons are made once per pin and moved only when
+    their place changed by half a pixel. Per update it makes one map-position call per distinct map that has
+    a pin on it, and nothing while the minimap is hidden.
+  * *Readings the game won't give.* This client has secret values, and other minimap addons here guard the
+    view radius and facing for that reason. Every reading is checked for being secret or unusable before any
+    arithmetic. If `C_Minimap.GetUiMapID` gives nothing, the player's map (`C_Map.GetBestMapForUnit("player")`)
+    is used. If `C_Minimap.GetViewRadius` gives nothing usable, the radius comes from the minimap's zoom step
+    and HereBeDragons' yard table (outdoor when the zoom is the one `minimapZoom` names), which is not verified
+    in the game. If the facing is needed and unreadable, or nothing gives a radius, nothing is placed. An
+    error inside an update is caught: it is counted, shown once through the error handler, and the pins carry
+    on at the next update.
+  * *Troubleshooting.* The Party pins section reads each input again when the report is made: whether the
+    minimap is shown, the kind of each reading (number, nil, secret) and which source was used, the radius,
+    whether the first pin's map is the minimap's or a parent with a known size and whether you have a place on
+    it, and how many updates ended in each result (`ok`, `minimap-hidden`, `no-map`, `no-radius`,
+    `no-width`, `no-facing`, `error`).
+  * *The minimap's shape.* The range is a circle of the minimap's half width, so a square minimap (EllesmereUI)
+    shows pins only within that circle; its corners stay empty.
 
 ## Removing
 
@@ -188,7 +218,7 @@ provides the library, as with TwichUI's other data sources.
 
 * **PartyPins 0.9.0** (`../reference_addons/PartyPins`, Interface 16001; files examined: `PartyPins.lua`,
   `PartyPins.toc`). It has no license file and no `X-License`, so nothing was copied. It shares markers as map
-  links in party chat, takes over the game's single user waypoint, and redraws minimap pins every frame.
+  links in party chat, takes over the game's single user waypoint, and redraws minimap pins every frame (TwichUI throttles its updater and moves a button only when it needs to).
   TwichUI does none of these.
 * **MapPinEnhanced 3.2.2** (`~/Downloads/MapPinEnhanced-3.2.2.zip`, read in place and not extracted; Interface
   120007, so Retail; files examined: `modules/pins/pinFactory.lua`, `pinManager.lua`,

@@ -81,11 +81,12 @@ local function LabelShown(b)
     return b.over or (b.entry and PN.selected == b.entry.token)
 end
 
-local function Tooltip(b)
+-- anchor: where the tooltip goes (the map's by default); yards: how far you are from it, on the minimap.
+local function Tooltip(b, anchor, yards)
     local e = b.entry
     if not e then return end
     local pin = e.pin
-    GameTooltip:SetOwner(b, "ANCHOR_RIGHT", -4, -4)
+    GameTooltip:SetOwner(b, anchor or "ANCHOR_RIGHT", anchor and 0 or -4, anchor and 0 or -4)
     GameTooltip:SetText(pin.name, 1, 1, 1, 1, true)
     local SH = R.Share
     if e.kind == "local" then
@@ -96,9 +97,11 @@ local function Tooltip(b)
         GameTooltip:AddLine("Party pin from " .. (SH and SH.Short(pin.owner) or pin.owner), 0.86, 0.69, 0.30)
     end
     GameTooltip:AddLine(PN.Describe(pin), 0.62, 0.58, 0.51)
+    if yards then GameTooltip:AddLine(("About %d yards away"):format(yards), 0.78, 0.74, 0.66) end
     GameTooltip:AddLine("Right-click for actions", 0.45, 0.43, 0.38)
     GameTooltip:Show()
 end
+PM.Tooltip = Tooltip
 
 local function OnEnter(b)
     b.over = true

@@ -92,6 +92,42 @@ c.C_Map = {
 }
 c.UiMapPoint = { CreateFromCoordinates = function(map, x, y) return { uiMapID = map, x = x, y = y } end }
 
+-- the minimap: where the player is (on MINI.map, as 0..1), how far it sees, and whether it turns
+local MINI = { visible = true, rotate = false, facing = 0, map = 1429, x = 0.5, y = 0.5, radius = 100 }
+local Minimap = Obj()
+rawset(Minimap, "IsVisible", function() return MINI.visible end)
+rawset(Minimap, "GetWidth", function() return 140 end)   -- 70 pixels from the middle to the rim
+c.Minimap = Minimap
+c.C_Minimap = {
+  GetUiMapID = function() if MINI.noMapID then return nil end return MINI.map end,   -- noMapID: the game gives none
+  GetViewRadius = function() return MINI.radius end,
+}
+c.GetCVarBool = function() return MINI.rotate end
+c.GetPlayerFacing = function() return MINI.facing end
+-- a reading the game marks secret (a number here: the client's real ones are numbers too)
+local SECRET = -777.25
+c.issecretvalue = function(v) return v == SECRET end
+c.canaccessvalue = function(v) return v ~= SECRET end
+MINI.zoom = 4
+rawset(Minimap, "GetZoom", function() return MINI.zoom end)
+c.GetCVar = function(name) if name == "minimapZoom" then return "4" end end   -- the outdoor zoom
+c.C_Map.GetBestMapForUnit = function() return MINI.best end
+local caught = {}
+c.geterrorhandler = function() return function(e) caught[#caught + 1] = e end end
+c.C_Map.GetMapWorldSize = function(id) local m = MAPS[id]; if m and m.size then return m.size, m.size end end
+c.C_Map.GetPlayerMapPosition = function(map, unit)
+  local here = MAPS[MINI.map]
+  if unit ~= "player" or not here then return nil end
+  if map == MINI.map then return c.CreateVector2D(MINI.x, MINI.y) end
+  -- on a map the player is inside (a parent of the one they are on)
+  local id, inside = MINI.map, false
+  for _ = 1, 8 do id = MAPS[id] and MAPS[id].parent; if id == map then inside = true break end if not id or id == 0 then break end end
+  local m = MAPS[map]
+  if not (inside and m and m.size) then return nil end
+  local wx, wy = here.ox + MINI.x * here.size, here.oy + MINI.y * here.size
+  return c.CreateVector2D((wx - m.ox) / m.size, (wy - m.oy) / m.size)
+end
+
 -- the world map: data providers and click handlers, as MapCanvasMixin keeps them
 c.MapCanvasDataProviderMixin = { OnAdded = function(self, map) self.owningMap = map end, OnRemoved = function() end }
 c.CreateFromMixins = function(...) local t = {} for _, m in ipairs({ ... }) do for k, v in pairs(m) do t[k] = v end end return t end
@@ -120,7 +156,7 @@ end
 local function refreshMap() for p in pairs(WMF.providers) do p:RefreshAllData() end end
 
 for _, f in ipairs({ "chronicle/Style.lua", "modules/Borders.lua", "modules/MenuStyle.lua",
-  "pins/Pins.lua", "pins/Sync.lua", "pins/Look.lua", "pins/Map.lua", "pins/Editor.lua", "pins/Window.lua", "pins/Broker.lua",
+  "pins/Pins.lua", "pins/Sync.lua", "pins/Look.lua", "pins/Map.lua", "pins/Minimap.lua", "pins/Editor.lua", "pins/Window.lua", "pins/Broker.lua",
   "diag/Diagnostics.lua", "diag/Pins.lua" }) do
   local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
 end
@@ -341,6 +377,179 @@ end
 assert(section:find("protocol 1", 1, true))
 
 ---------------------------------------------------------------------------
+-- 7b. The minimap
+---------------------------------------------------------------------------
+do
+  local MM = R.PinsMinimap
+  local function tick() MM.Update(nil, 1) end
+  local function at(token)
+    for _, s in ipairs(MM.State()) do if s.token == token then return s end end
+  end
+  local function near(a, b) return a ~= nil and math.abs(a - b) < 0.51 end   -- half a pixel is the placing step
+
+  assert(MM.Snapshot().active and MM.Snapshot().running, "on with the feature, with pins to show")
+  -- the ore (local, 40 yards west of the player; the minimap sees 100 yards over 70 pixels, so 0.7 pixels a yard)
+  MINI.map, MINI.x, MINI.y, MINI.radius, MINI.rotate, MINI.facing = 1429, 0.5, 0.5, 100, false, 0
+  tick()
+  local s = at("local:" .. ore.id)
+  assert(s and s.shown and near(s.x, -28) and near(s.y, 0) and s.yards == 40, "west of you is left of the middle")
+  -- north is up (the map's y runs south)
+  local north = assert(PN.AddLocal({ map = 1429, x = 5000, y = 4500, name = "North" }))
+  local south = assert(PN.AddLocal({ map = 1429, x = 5000, y = 5500, name = "South" }))
+  tick()
+  s = at("local:" .. north.id); assert(s.shown and near(s.x, 0) and near(s.y, 14), "20 yards north is 14 pixels up")
+  s = at("local:" .. south.id); assert(s.shown and near(s.x, 0) and near(s.y, -14), "20 yards south is 14 pixels down")
+
+  -- nothing moves when nothing changed
+  local moves = MM.Snapshot().moves
+  tick(); tick()
+  assert(MM.Snapshot().moves == moves, "a button is moved only when its place changed")
+  MINI.x = 0.5 + 0.0001   -- 0.04 yards east: 0.03 of a pixel, far under the half pixel step
+  tick()
+  assert(MM.Snapshot().moves == moves, "a change under the step moves nothing")
+  MINI.x = 0.5 + 0.01     -- 4 yards east: nearly 3 pixels
+  tick()
+  assert(MM.Snapshot().moves > moves and near(at("local:" .. ore.id).x, -30.8), "walking east puts a pin to the west further left")
+  MINI.x = 0.5; tick()
+
+  -- the minimap turns with you: facing west puts west up and north to the right
+  MINI.rotate, MINI.facing = true, math.pi / 2
+  tick()
+  s = at("local:" .. ore.id); assert(near(s.x, 0) and near(s.y, 28), "facing west, west is up")
+  s = at("local:" .. north.id); assert(near(s.x, 14) and near(s.y, 0), "facing west, north is to the right")
+  MINI.facing = math.pi   -- facing south: north is down, west is to the right
+  tick()
+  s = at("local:" .. north.id); assert(near(s.x, 0) and near(s.y, -14), "facing south, north is down")
+  s = at("local:" .. ore.id); assert(near(s.x, 28) and near(s.y, 0), "facing south, west is right")
+  MINI.facing = nil
+  tick()
+  assert(not at("local:" .. ore.id).shown and MM.Snapshot().shown == 0, "an unreadable facing places nothing")
+  MINI.rotate, MINI.facing = false, 0
+  tick()
+  assert(at("local:" .. ore.id).shown)
+
+  -- range: the zoom decides what is on it; the rim hides what is past it, with no arrow
+  MINI.radius = 20; tick()
+  assert(not at("local:" .. ore.id).shown, "40 yards is out of a 20 yard view")
+  assert(not at("local:" .. north.id).shown, "20 yards is at the rim, which is kept clear")
+  MINI.radius = 50; tick()
+  s = at("local:" .. ore.id); assert(s.shown and near(s.x, -56), "zoomed in, the same pin is further out")
+  MINI.radius = 100
+
+  -- party pins show with their badge, and a pin removed from your map isn't on the minimap
+  local party = assert(PS.CreateParty({ map = 1429, x = 5500, y = 5000, name = "Meet here", color = "river" }))
+  tick()
+  s = at("party:" .. party.key); assert(s and s.shown and near(s.x, 14) and s.yards == 20, "a party pin, 20 yards east")
+  assert(PN.Dismiss(party.key))
+  tick()
+  assert(not at("party:" .. party.key), "removed from my map: not on the minimap")
+  assert(PN.Restore(party.key)); tick()
+  assert(at("party:" .. party.key).shown)
+
+  -- parents and strangers: a pin on a map you are inside is placed through that map; one on another map never is
+  MINI.map, MINI.x, MINI.y, MINI.radius = 1453, 0.5, 0.5, 200   -- Stormwind, inside Elwynn: the player is at (0.375, 0.25) on it
+  tick()
+  s = at("local:" .. ore.id); assert(s and s.shown and near(s.x, 3.5) and near(s.y, -35) and s.yards == 100,
+    "a pin on the map you are inside: 10 yards east, 100 yards south")
+  MINI.map, MINI.x, MINI.y, MINI.radius = 1436, 0.5, 0.5, 100   -- Westfall: a sibling of Elwynn
+  tick()
+  assert(not at("local:" .. ore.id).shown and not at("party:" .. party.key).shown, "a sibling map's pins are never placed")
+  local westfall = nil
+  for _, e in ipairs(MM.State()) do
+    if PN.FindLocal(e.token:sub(7)) and PN.FindLocal(e.token:sub(7)).map == 1436 then westfall = e end
+  end
+  assert(westfall and westfall.shown and near(westfall.x, 0) and near(westfall.y, 0), "the pin copied from Westfall, where you stand")
+  MINI.map = 947   -- a map with no size known: nothing to place
+  tick()
+  assert(MM.Snapshot().shown == 0)
+  MINI.map = nil   -- no map at all (a dungeon)
+  tick()
+  assert(MM.Snapshot().shown == 0 and not at("local:" .. ore.id).shown, "no map, no pins")
+  MINI.map, MINI.x, MINI.y = 1429, 0.5, 0.5
+
+  -- a hidden minimap costs nothing and a shown one catches up
+  MINI.visible = false
+  local ticks, moves2 = MM.Snapshot().ticks, MM.Snapshot().moves
+  tick()
+  assert(MM.Snapshot().moves == moves2)
+  MINI.visible = true; tick()
+  assert(at("local:" .. ore.id).shown)
+
+  -- throttled: a small elapsed time does nothing
+  local t0 = MM.Snapshot().ticks
+  MM.Update(nil, 0.01); MM.Update(nil, 0.01)
+  assert(MM.Snapshot().ticks == t0, "10 updates a second, not one per frame")
+  MM.Update(nil, 0.2)
+  assert(MM.Snapshot().ticks == t0 + 1)
+
+  -- a secret view radius is never compared: the zoom setting gives the radius instead (and the report says so)
+  MINI.map, MINI.x, MINI.y, MINI.radius = 1429, 0.5, 0.5, SECRET
+  tick()
+  local snap = MM.Snapshot()
+  assert(snap.radiusKind == "secret" and snap.radiusSource == "zoom" and snap.now == "ok", "secret radius: the zoom table, said so")
+  s = at("local:" .. ore.id); assert(s.shown and near(s.x, -28), "outdoors at zoom 4 is 100 yards: the same place as before")
+  MINI.zoom = 2   -- not the outdoor zoom: indoors, 90 yards
+  tick()
+  s = at("local:" .. ore.id); assert(s.shown and near(s.x, -40 * 70 / 90), "indoors the view is 90 yards")
+  MINI.zoom = 4
+  -- the minimap has no map of its own to give: the player's map is used, and the report names the source
+  MINI.radius, MINI.noMapID, MINI.best = 100, true, 1429
+  tick()
+  snap = MM.Snapshot()
+  assert(snap.mapKind == "nil" and snap.mapSource == "player" and at("local:" .. ore.id).shown, "no minimap map: the player's")
+  MINI.noMapID, MINI.best = nil, nil
+  -- nothing usable: nothing is placed, and the reason is the report's
+  MINI.radius, MINI.zoom = SECRET, nil
+  tick()
+  snap = MM.Snapshot()
+  assert(snap.now == "no-radius" and snap.last == "no-radius" and snap.shown == 0, "no radius to use")
+  assert(snap.radiusSource == "none" and not at("local:" .. ore.id).shown)
+  MINI.radius, MINI.zoom = 100, 4
+  -- the first pin's own readings, for the report
+  MINI.map = 1429
+  tick()
+  snap = MM.Snapshot()
+  assert(snap.probe and snap.probe.related and snap.probe.sized and snap.probe.position == "yes", "map related, sized, and you are on it")
+  MINI.map = 1436
+  snap = MM.Snapshot()
+  assert(snap.probe and not snap.probe.related, "a pin's map that isn't the minimap's or a parent is said so")
+  MINI.map = 1429
+  -- an error inside an update is caught: counted, shown once, never repeated every update
+  rawset(Minimap, "GetWidth", function() error("boom") end)
+  local before = #caught
+  tick(); tick(); tick()
+  rawset(Minimap, "GetWidth", function() return 140 end)
+  snap = MM.Snapshot()
+  assert(snap.errors == 3 and snap.last == "error" and #caught == before + 1, "caught three times, shown once")
+  tick()
+  assert(MM.Snapshot().last == "ok" and at("local:" .. ore.id).shown, "and it carries on once the reading is back")
+
+  -- the setting: off takes the updater away; on brings it back
+  assert(R.PinsLook.SetPref("minimap", false))
+  assert(not MM.Snapshot().active and not MM.Snapshot().running and #MM.State() == 0, "no updater while it is off")
+  assert(R.PinsLook.SetPref("minimap", true))
+  assert(MM.Snapshot().active and MM.Snapshot().running)
+  tick()
+  assert(at("local:" .. ore.id).shown)
+  -- the window being dragged (a saved preference) doesn't rebuild it
+  local rebuilds = MM.Snapshot().rebuilds
+  R.PinsLook.SetPref("position", { x = 5, y = 5 })
+  assert(MM.Snapshot().rebuilds == rebuilds)
+
+  -- troubleshooting: counts, no names or places
+  local rep = R.Diag.Build()
+  local line = rep:match("\nminimap: [^\n]+")
+  assert(line and line:find("could be shown", 1, true), "the report has a minimap line")
+  local inputs = rep:match("\nminimap inputs now: [^\n]+")
+  assert(inputs and inputs:find("view radius: number from client", 1, true) and inputs:find("yards)", 1, true), "and one for what it reads now")
+  assert(rep:find("\nminimap updates by result: ", 1, true) and rep:find("errors caught: 3", 1, true))
+  for _, needle in ipairs({ "North", "South", "Meet here", "Ore", "1429", "1453" }) do assert(not line:find(needle, 1, true), needle) end
+
+  PN.RemoveLocal(north.id); PN.RemoveLocal(south.id)
+  PS.RemoveForParty(party.key)
+end
+
+---------------------------------------------------------------------------
 -- 8. Off: TwichUI's handlers and pins leave the map; the game's and others' are untouched
 ---------------------------------------------------------------------------
 local other = function() return false end
@@ -351,6 +560,9 @@ local left = 0
 for _ in pairs(WMF.clicks) do left = left + 1 end
 assert(left == 1 and WMF.clicks[other] == 90, "only TwichUI's handler was removed")
 assert(next(WMF.providers) == nil and next(WMF.cursors) == nil and not PM.Snapshot().installed)
+R.PinsMinimap.Refresh()
+assert(not R.PinsMinimap.Snapshot().active and not R.PinsMinimap.Snapshot().running and R.PinsMinimap.Snapshot().shown == 0,
+  "off: no minimap pins and no updater")
 assert(PN.SharedCount() == 0 and PN.LocalCount() == pinsBefore, "party pins dropped; local pins kept")
 assert(not PW.Show(), "the window says it is off")
 

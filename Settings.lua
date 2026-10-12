@@ -1488,6 +1488,7 @@ local function Build()
             false, function()
                 if R.PinSync then R.PinSync.Refresh() end
                 if R.PinsMap then R.PinsMap.Refresh() end
+                if R.PinsMinimap then R.PinsMinimap.Refresh() end
                 if R.PinsBroker then R.PinsBroker.Refresh() end
                 if not PinsOn() then
                     if R.PinsWindow then R.PinsWindow.Hide(); R.PinsWindow.CloseMenu() end
@@ -1528,6 +1529,10 @@ local function Build()
             "Pin names under the pins on the world map. On hover keeps a busy map clear: a name shows when the pointer is on its pin, and for the pin selected in the pin window or by a click. Pin names are always in the tooltip.",
             STRING, PL.PREF_DEFAULTS.labels, function() return PL.Pref("labels") end, function(value) PL.SetPref("labels", value) end,
             PL.LABELS), pinsToggle, PinsOn)
+        Under(ProxyToggle("pinsMinimap", "Show pins on the minimap",
+            "Shows pins that are within range of you on your minimap, in their color and, for a party pin, with its badge. A pin appears only while you are on the map it was placed on (or a map inside it), and only when it is close enough to be on the minimap: nothing points at a pin that is out of range. Names are in the tooltip, and right-click opens the same actions as on the world map. Pins you removed from your map aren't shown.",
+            PL.PREF_DEFAULTS.minimap, function() return PL.Pref("minimap") end, function(value) PL.SetPref("minimap", value and true or false) end),
+            pinsToggle, PinsOn)
 
         Header("Window appearance", "How the pin window looks: background, border, text and accent. Only the window changes; your pins, the clicks and the map pins don't. It looks complete without EllesmereUI; EllesmereUI's and LibSharedMedia's textures and fonts are listed when they are there.")
         local pinsReset = Appearance(PL.Look, "pinsLook", "window", nil, nil, nil, nil, pinsToggle, PinsOn)
