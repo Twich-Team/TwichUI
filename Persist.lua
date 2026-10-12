@@ -185,7 +185,7 @@ end
 -- ctx.own(key) makes a private copy of one of them; it must change nothing it did not take with own().
 -- Steps are repeatable: running one on data it already upgraded changes nothing.
 ---------------------------------------------------------------------------
-local CONTAINERS = { "modules", "ui", "setup", "gear", "storedData", "whisperProbe" }
+local CONTAINERS = { "modules", "ui", "setup", "gear", "storedData", "whisperProbe", "pins" }
 
 local function DeriveTransport(modules)
     local m = type(modules) == "table" and modules or {}
@@ -303,7 +303,8 @@ function P.Normalize(db, fresh)
     -- Groups the features write into without checking first.
     if type(db.ui) == "table" then
         for _, k in ipairs({ "qol", "foodDrink", "brokerMenu", "refreshments", "refreshmentsStyle",
-            "restedxpSkin", "restedxpSkinText", "restedxpSkinState", "restedxpTimerLook", "restedxpTimerText", "chronicleLook", "chronicleAppearance", "guideWaypoint", "mageSell" }) do
+            "restedxpSkin", "restedxpSkinText", "restedxpSkinState", "restedxpTimerLook", "restedxpTimerText", "chronicleLook", "chronicleAppearance", "guideWaypoint", "mageSell",
+            "partyPins", "pinsLook", "pinsAppearance" }) do
             if db.ui[k] ~= nil and type(db.ui[k]) ~= "table" then
                 db.ui[k] = nil
                 P.Repair("container-not-table")

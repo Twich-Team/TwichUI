@@ -1,0 +1,292 @@
+-- TwichUI: Party pins, preferences and appearance
+-- Two kinds of saved choice, both account-wide in TwichUIDB.ui and only stored once changed:
+--   partyPins       how pins are placed and shown: the map clicks for a local pin and a party pin, and
+--                   whether names show on the map always or only on hover and for the selected pin;
+--   pinsLook        the pin window's background and border (a MenuStyle look: textures from the game,
+--                   LibSharedMedia and EllesmereUI while it is installed, with the same fallbacks);
+--   pinsAppearance  its text and accents: font, text size, accent color and row spacing.
+-- A value that can't be used is read as its default and kept as it was, so a font from a media pack that
+-- is missing today is still chosen when the pack returns. Resetting the appearance never touches pins or
+-- the click and label choices. Frames, fonts and media paths are never saved.
+
+local R = TwichUI
+local S = R.ChronicleStyle
+local PL = {}
+R.PinsLook = PL
+
+---------------------------------------------------------------------------
+-- Placing: which click makes which pin. The map's own clicks are left alone: Ctrl-click is the game's
+-- waypoint and Shift-click is ShortestPathForever's journey, so neither is offered. Modifiers must match
+-- exactly (Alt-click is not Alt-Shift-click).
+---------------------------------------------------------------------------
+PL.CLICKS = {
+    { "alt", "Alt-click", "LeftButton", true, false, false },
+    { "altshift", "Alt-Shift-click", "LeftButton", true, true, false },
+    { "altright", "Alt-right-click", "RightButton", true, false, false },
+    { "none", "Off (use Place a pin in the pin window)" },
+}
+local CLICK = {}
+for _, c in ipairs(PL.CLICKS) do CLICK[c[1]] = c end
+PL.LABELS = { { "hover", "On hover, and for the selected pin" }, { "always", "Always" } }
+local LABEL = { hover = true, always = true }
+
+local PREF_DEFAULTS = { localClick = "alt", partyClick = "altshift", labels = "hover" }
+PL.PREF_DEFAULTS = PREF_DEFAULTS
+
+local function Prefs()
+    local ui = TwichUIDB and TwichUIDB.ui
+    local t = ui and ui.partyPins
+    return type(t) == "table" and t or nil
+end
+
+local function ValidPref(key, value)
+    if key == "localClick" or key == "partyClick" then return type(value) == "string" and CLICK[value] ~= nil end
+    if key == "labels" then return type(value) == "string" and LABEL[value] == true end
+    if key == "position" then
+        return type(value) == "table" and type(value.x) == "number" and type(value.y) == "number"
+            and value.x == value.x and value.y == value.y and math.abs(value.x) < 10000 and math.abs(value.y) < 10000
+    end
+    return false
+end
+
+function PL.Pref(key)
+    local t = Prefs()
+    local value = t and t[key]
+    if ValidPref(key, value) then return value end
+    return PREF_DEFAULTS[key]
+end
+
+local prefListeners = {}
+function PL.OnPrefChange(fn) prefListeners[#prefListeners + 1] = fn end
+
+-- Saves one choice (an unusable one is refused). Picking the click the other kind of pin uses swaps
+-- them, so the two never share a click. Returns whether it was kept.
+function PL.SetPref(key, value)
+    if not ValidPref(key, value) or type(TwichUIDB) ~= "table" then return false end
+    TwichUIDB.ui = type(TwichUIDB.ui) == "table" and TwichUIDB.ui or {}
+    if type(TwichUIDB.ui.partyPins) ~= "table" then TwichUIDB.ui.partyPins = {} end
+    local t = TwichUIDB.ui.partyPins
+    if (key == "localClick" or key == "partyClick") and value ~= "none" then
+        local other = key == "localClick" and "partyClick" or "localClick"
+        if PL.Pref(other) == value then t[other] = PL.Pref(key) end
+    end
+    t[key] = value
+    for _, fn in ipairs(prefListeners) do pcall(fn) end
+    return true
+end
+
+function PL.ClickLabel(id) return CLICK[id] and CLICK[id][2] or CLICK.none[2] end
+
+-- Whether a map click is the one chosen for `which` ("localClick" or "partyClick").
+-- alt, shift, ctrl: whether each is held (asked of the game when left out).
+function PL.Matches(which, button, alt, shift, ctrl)
+    local c = CLICK[PL.Pref(which)]
+    if not c or not c[3] then return false end
+    if alt == nil then alt, shift, ctrl = IsAltKeyDown(), IsShiftKeyDown(), IsControlKeyDown() end
+    return button == c[3] and (alt and true or false) == c[4] and (shift and true or false) == c[5]
+        and (ctrl and true or false) == c[6]
+end
+
+-- Whether the keys held now are a placing click's (for the map's pin cursor). Left-button clicks only.
+function PL.Held()
+    local alt, shift, ctrl = IsAltKeyDown(), IsShiftKeyDown(), IsControlKeyDown()
+    return PL.Matches("localClick", "LeftButton", alt, shift, ctrl) or PL.Matches("partyClick", "LeftButton", alt, shift, ctrl)
+end
+
+-- One line saying how to place pins, for the window and the settings.
+function PL.HowToPlace()
+    local l, p = PL.Pref("localClick"), PL.Pref("partyClick")
+    local parts = {}
+    if l ~= "none" then parts[#parts + 1] = PL.ClickLabel(l) .. " the map for a pin" end
+    if p ~= "none" then parts[#parts + 1] = PL.ClickLabel(p) .. " for a party pin" end
+    if #parts == 0 then return "Use Place a pin, then click the map." end
+    return table.concat(parts, "; ") .. "."
+end
+
+---------------------------------------------------------------------------
+-- The pin's shape: media/textures/map-pin.tga, TwichUI's own (64 x 64, a gray bevelled diamond with a see-through
+-- middle; a pin's color tints it). The diamond is 60 x 60, centered, so a pin button is anchored by its CENTER.
+-- PIN_BADGE is where a party pin's badge sits, as fractions of the texture (from the left, from the top): on
+-- the diamond's upper-right edge, a little outside it.
+---------------------------------------------------------------------------
+PL.PIN_TEXTURE = R.PATH .. [[media\textures\map-pin]]
+PL.PIN_BADGE = { 0.78, 0.22 }
+
+-- Where the badge goes, in a button or icon `size` units square: { x from the left, y from the top }.
+function PL.BadgePoint(size)
+    return PL.PIN_BADGE[1] * size, -PL.PIN_BADGE[2] * size
+end
+
+---------------------------------------------------------------------------
+-- The window's appearance
+---------------------------------------------------------------------------
+PL.Look = R.MenuStyle.New("pinsLook", {
+    bgTexture = "solid", bgColor = "ff261d15", bgOpacity = 98,
+    borderTexture = "solid", borderColor = "ff8c6e38", borderOpacity = 90, borderSize = 1,
+}, { sources = true })
+
+local DEFAULTS = { font = "default", textSize = 12, accentColor = "ffc9a34a", density = "comfortable" }
+local LIMITS = { textSize = { 9, 16 } }
+PL.DEFAULTS, PL.LIMITS = DEFAULTS, LIMITS
+PL.DENSITY = { { "comfortable", "Comfortable" }, { "compact", "Compact" } }
+local DENSITY = { comfortable = 34, compact = 26 }   -- row height
+
+local function Valid(key, value)
+    if key == "font" then return type(value) == "string" and #value > 0 and #value <= 100 and not value:find("[%c|]") end
+    if key == "textSize" then
+        return type(value) == "number" and value == value and value % 1 == 0 and value >= LIMITS.textSize[1] and value <= LIMITS.textSize[2]
+    end
+    if key == "accentColor" then return type(value) == "string" and value:match("^%x%x%x%x%x%x%x%x$") ~= nil end
+    if key == "density" then return type(value) == "string" and DENSITY[value] ~= nil end
+    return false
+end
+PL.Valid = Valid
+
+function PL.Get(key)
+    local ui = TwichUIDB and TwichUIDB.ui
+    local t = ui and ui.pinsAppearance
+    local value = type(t) == "table" and t[key] or nil
+    if Valid(key, value) then return value end
+    return DEFAULTS[key]
+end
+
+local subscribers = {}
+function PL.Subscribe(fn) subscribers[#subscribers + 1] = fn end
+local function Notify()
+    PL.Sync()
+    for _, fn in ipairs(subscribers) do
+        local ok, err = pcall(fn)
+        if not ok then geterrorhandler()(err) end
+    end
+end
+
+function PL.Set(key, value)
+    if DEFAULTS[key] == nil or not Valid(key, value) or type(TwichUIDB) ~= "table" then return false end
+    TwichUIDB.ui = type(TwichUIDB.ui) == "table" and TwichUIDB.ui or {}
+    if type(TwichUIDB.ui.pinsAppearance) ~= "table" then TwichUIDB.ui.pinsAppearance = {} end
+    TwichUIDB.ui.pinsAppearance[key] = value
+    Notify()
+    return true
+end
+
+-- The window's look back to its defaults: background, border, text and accent. Pins and the click and
+-- label choices are not appearance and are not touched.
+function PL.Reset()
+    if type(TwichUIDB) == "table" and type(TwichUIDB.ui) == "table" then TwichUIDB.ui.pinsAppearance = nil end
+    PL.Look.Reset()   -- notifies through its own subscription below
+end
+
+PL.Look.Subscribe(Notify)
+
+function PL.RowHeight() return DENSITY[PL.Get("density")] end
+
+-- The palette the window draws with: the Chronicle's, with the accent the player chose.
+PL.palette = S.NewPalette()
+local pal = PL.palette
+local D = S.palette
+
+local function Rgb(hex)
+    return tonumber(hex:sub(3, 4), 16) / 255, tonumber(hex:sub(5, 6), 16) / 255, tonumber(hex:sub(7, 8), 16) / 255
+end
+PL.Rgb = Rgb
+
+local function Scaled(dst, base, value, ref)
+    for i = 1, 3 do
+        local ratio = ref[i] > 0 and value[i] / ref[i] or 1
+        dst[i] = math.min(1, base[i] * ratio)
+    end
+end
+
+function PL.Sync()
+    local hex = PL.Get("accentColor")
+    if hex == DEFAULTS.accentColor then
+        pal.gold[1], pal.gold[2], pal.gold[3] = D.gold[1], D.gold[2], D.gold[3]
+    else
+        pal.gold[1], pal.gold[2], pal.gold[3] = Rgb(hex)
+    end
+    local bg = PL.Look.Get("bgColor")
+    if bg == "ff261d15" then
+        pal.bg[1], pal.bg[2], pal.bg[3] = D.bg[1], D.bg[2], D.bg[3]
+    else
+        pal.bg[1], pal.bg[2], pal.bg[3] = Rgb(bg)
+    end
+    pal.bgAlpha = PL.Look.Get("bgOpacity") / 100
+    local k = math.min(1, PL.Look.Get("bgOpacity") / 98)
+    pal.bandAlpha, pal.wellAlpha = D.bandAlpha * k, D.wellAlpha * k
+    local pr = pal.primary
+    pr.border[1], pr.border[2], pr.border[3] = pal.gold[1], pal.gold[2], pal.gold[3]
+    Scaled(pr.bg, D.primary.bg, pal.gold, D.gold)
+    Scaled(pr.text, D.primary.text, pal.gold, D.gold)
+    Scaled(pr.hotBorder, D.primary.hotBorder, pal.gold, D.gold)
+    Scaled(pr.hotBg, D.primary.hotBg, pal.gold, D.gold)
+    Scaled(pr.hotText, D.primary.hotText, pal.gold, D.gold)
+end
+PL.Sync()
+R:OnInit(PL.Sync)   -- the saved choices are readable now
+
+-- A FontString in the chosen face. role "name" uses the text size, "meta" two points smaller, "title" four
+-- larger. The game's own font object is the base: a face that can't be drawn falls back to it and stays chosen.
+local tracked = {}
+local SIZE = { name = 0, meta = -2, title = 4, control = -1 }
+PL.fallback = false
+
+local function Style(e)
+    local fs, template, role = e.fs, e.template, e.role
+    local obj = rawget(_G, template)
+    local basePath, baseSize, baseFlags
+    if type(obj) == "table" and obj.GetFont then basePath, baseSize, baseFlags = obj:GetFont() end
+    local MS = R.MenuStyle
+    local path, state = basePath, "default"
+    if MS and MS.Fonts then path, state = MS.Fonts.Resolve(PL.Get("font"), basePath) end
+    if state == "missing" then PL.fallback = true end
+    local size = PL.Get("textSize") + (SIZE[role] or 0)
+    if path and fs:SetFont(path, size, baseFlags or "") == false and basePath then
+        fs:SetFont(basePath, baseSize or size, baseFlags or "")
+        PL.fallback = true
+    end
+end
+
+function PL.Text(parent, template, role, layer)
+    local fs = parent:CreateFontString(nil, layer or "OVERLAY", template)
+    fs:SetJustifyH("LEFT")
+    local e = { fs = fs, template = template, role = role }
+    tracked[#tracked + 1] = e
+    Style(e)
+    return fs
+end
+
+-- Edit boxes follow the face and the text size.
+function PL.Edit(box)
+    local path, size, flags = box:GetFont()
+    local e = { box = box, path = path, size = size, flags = flags }
+    tracked[#tracked + 1] = e
+    e.edit = true
+    local MS = R.MenuStyle
+    local face = MS and MS.Fonts and MS.Fonts.Resolve(PL.Get("font"), path) or path
+    if face then box:SetFont(face, PL.Get("textSize"), flags or "") end
+end
+
+function PL.Restyle()
+    PL.fallback = false
+    local MS = R.MenuStyle
+    for _, e in ipairs(tracked) do
+        if e.edit then
+            local face = MS and MS.Fonts and MS.Fonts.Resolve(PL.Get("font"), e.path) or e.path
+            if face then e.box:SetFont(face, PL.Get("textSize"), e.flags or "") end
+        else
+            Style(e)
+        end
+    end
+end
+PL.Subscribe(PL.Restyle)
+if R.MenuStyle and R.MenuStyle.Fonts then R.MenuStyle.Fonts.Subscribe(PL.Restyle) end
+
+-- Read only, for /tui diagnostics.
+function PL.Snapshot()
+    return {
+        localClick = PL.Pref("localClick"), partyClick = PL.Pref("partyClick"), labels = PL.Pref("labels"),
+        font = PL.Get("font") == "default" and "default" or "chosen", fontFallback = PL.fallback,
+        bg = PL.Look.Get("bgTexture") == "solid" and "solid" or "textured", border = PL.Look.Get("borderTexture"),
+        density = PL.Get("density"),
+    }
+end

@@ -127,6 +127,16 @@ modules\RestedXPSkin.lua
 # RestedXP timer bars: the same look on RestedXP's countdown bars (a finish on the skin above; off when it is)
 modules\RestedXPTimers.lua
 
+# Party pins: named map pins of your own, and ones shared with party members who have TwichUI (off until turned
+# on; their own addon prefix, never chat; uses the Chronicle palette, modules\MenuStyle.lua and setup\Share.lua's names)
+pins\Pins.lua
+pins\Sync.lua
+pins\Look.lua
+pins\Map.lua
+pins\Editor.lua
+pins\Window.lua
+pins\Broker.lua
+
 # Sell from Bags: Auction House posting tab (uses the Chronicle palette)
 auction\Price.lua
 auction\Scan.lua
@@ -155,6 +165,7 @@ diag\ChronicleLook.lua
 diag\Zones.lua
 diag\Sharing.lua
 diag\Saved.lua
+diag\Pins.lua
 diag\Window.lua
 
 Settings.lua

@@ -67,6 +67,7 @@ local DEFAULT_MODULES = {
     qolDuelsToDeath = false, -- ... and duels to the death (needs the one above)
     qolQuickKeybind = false, -- ... a Quick Keybind button in the Game Menu
     qolGuideWaypoint = false, -- ... the game's waypoint on RestedXP's current destination (needs RestedXP)
+    partyPins = false,       -- Party pins: named map pins of your own, and ones shared with party members who have TwichUI (opt-in)
 }
 R.DEFAULT_MODULES = DEFAULT_MODULES   -- Settings.lua uses these for the panel's Defaults button
 
@@ -344,6 +345,11 @@ COMMANDS = {
     end },
     { name = "refreshments", usage = "refreshments", desc = "Mage refreshments panel (Mages)", fn = function()
         if R.RefreshmentsPanel then R.RefreshmentsPanel.Toggle() else Unavailable("Mage refreshments") end
+    end },
+    { name = "pins", usage = "pins", desc = "your map pins and your party's (Party pins; listed in its options)", hidden = true, fn = function()
+        if not R.PinsWindow then Unavailable("Party pins") return end
+        if not R:Enabled("partyPins") then R.Print("Party pins are turned off. Turn them on in /tui options (Party pins).") return end
+        R.PinsWindow.Toggle()
     end },
     { name = "sell", usage = "sell", desc = "what selling ordinary food and drink would keep and sell (Mages; listed in the Mage options)", hidden = true, fn = function()
         if R.MageSellWindow then R.MageSellWindow.Toggle() else Unavailable("Selling ordinary food and drink") end

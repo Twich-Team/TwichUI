@@ -528,7 +528,7 @@ local ST4 = tr.TwichUI.Setups
 for _, name in ipairs(SV) do
   assert(ST4.CheckData(sv[name]), name .. " holds only plain data (no functions, frames, timers or cycles)")
 end
-local TOP = { schema = true, modules = true, ui = true, gear = true, setup = true, storedData = true, shareTransport = true, whisperProbe = true, welcome = true }
+local TOP = { schema = true, modules = true, ui = true, gear = true, setup = true, storedData = true, shareTransport = true, whisperProbe = true, welcome = true, pins = true }
 for k in pairs(sv.TwichUIDB) do assert(TOP[k], "undeclared top-level field in TwichUIDB: " .. tostring(k)) end
 local SETUP = { detected = true, selection = true, received = true, trusted = true, recommend = true, scanNext = true, restoreNext = true,
   lastScan = true, pending = true, eui = true }

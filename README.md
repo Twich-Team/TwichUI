@@ -43,6 +43,8 @@ This addon is intended to work alongside EllesmereUI.
 
 **Journey Chronicle:** A private journal for each character (`/tui chronicle`). Write your own short notes, and let it keep a few moments for you: levels, new zones and defeated encounters, with deaths off until you choose them. Automatic entries are on by default for a new installation and each kind can be switched off; a quiet line in your own chat window (never sent to anyone) says when one is added, and that can be switched off too. Never shared or backed up with your configuration. At login, an optional small "Welcome Back" bookmark can remind you of the last place the Chronicle noted. Its window's background, border, fonts and accents can be changed under Journey Chronicle options > Appearance (`docs/chronicle-appearance.md`); the defaults are the look it has always had.
 
+**Party pins:** Named pins on your world map (off until you turn it on). Alt-click places a local pin only you see; Alt-Shift-click places a party pin that party members with TwichUI see, with its name and color, for as long as you are in that party. Both clicks can be changed. Removing a pin from your map affects only you; removing one for the whole party is for its creator only and asks first. One window (`/tui pins`) lists them all with search, filters and actions. Nothing is written in chat, and players without TwichUI see nothing (`docs/party-pins.md`).
+
 **Configuration sharing** Provides an ecosystem to share your addon configurations with friends.
 
   * Pick the addons whose settings you want to share and save them as your addon configuration.

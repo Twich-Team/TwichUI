@@ -86,6 +86,7 @@ local function Build()
     NewPage("food", "Food and drink")
     if R.MageTravel and R.MageTravel.ForPlayer() then NewPage("mage", "Mage") end   -- Mages only
     NewPage("chronicle", "Journey Chronicle")
+    if R.Pins then NewPage("pins", "Party pins") end
     NewPage("auction", "Auction House")
     NewPage("skins", "Addon skins")
     if R.RestedXPSkin then NewPage("restedxp", "RestedXP guide window", "skins") end
@@ -1475,6 +1476,103 @@ local function Build()
     end
 
     -----------------------------------------------------------------------
+    -- Party pins (pins/). The switch, how pins are placed and labelled, and the pin window's look. The pins
+    -- themselves are managed in the pin window, not here.
+    local PL = R.PinsLook
+    if pages.pins and PL then
+        Use("pins")
+        Header("Party pins", "Named pins on your world map: local pins only you see, kept between sessions, and party pins shared with party members who have TwichUI, for as long as you are in that party. Players without TwichUI see nothing. Nothing is written in chat. Off until you turn it on.")
+        local function PinsOn() return R:Enabled("partyPins") end
+        local pinsToggle = Toggle("partyPins", "Party pins",
+            "Turns on map pins: place them with the map clicks below or Place a pin in the pin window, see your party's, and manage them all in one window (/tui pins).\n\nOff: TwichUI's pins leave the map, party pins you received are dropped and nothing is sent or taken in. Your local pins are kept for when you turn it on again.",
+            false, function()
+                if R.PinSync then R.PinSync.Refresh() end
+                if R.PinsMap then R.PinsMap.Refresh() end
+                if R.PinsBroker then R.PinsBroker.Refresh() end
+                if not PinsOn() then
+                    if R.PinsWindow then R.PinsWindow.Hide(); R.PinsWindow.CloseMenu() end
+                    if R.PinsEditor then R.PinsEditor.Close() end
+                end
+            end)
+        Under(Button("Your pins", "Open", function()
+            if SettingsPanel and SettingsPanel:IsShown() then HideUIPanel(SettingsPanel) end
+            if R.PinsWindow then R.PinsWindow.Show() end
+        end, "Opens the pin window (same as /tui pins): every pin with its place and who made it, search, filters, and what you can do with each."), pinsToggle, PinsOn)
+
+        Header("Placing and showing", "Ctrl-click stays the game's own waypoint and Shift-click is left for other map addons. Only the exact click chosen here places a pin; every other click works on the map as before.")
+        local function ClickChoices()
+            local out = {}
+            for _, c in ipairs(PL.CLICKS) do out[#out + 1] = { c[1], c[2] } end
+            return out
+        end
+        local clickSettings = {}
+        local function ClickChoice(key, variable, label, tooltip)
+            local other = key == "localClick" and "partyClick" or "localClick"
+            local row = Choice(variable, label, tooltip, STRING, PL.PREF_DEFAULTS[key],
+                function() return PL.Pref(key) end,
+                function(value)
+                    local before = PL.Pref(other)
+                    PL.SetPref(key, value)
+                    -- picking the other's click swapped them: show the other's new value too
+                    local swapped = clickSettings[other]
+                    if PL.Pref(other) ~= before and swapped and swapped.SetValue then pcall(swapped.SetValue, swapped, PL.Pref(other)) end
+                end, ClickChoices)
+            if row and row.GetSetting then clickSettings[key] = row:GetSetting() end
+            Under(row, pinsToggle, PinsOn)
+        end
+        ClickChoice("localClick", "pinsLocalClick", "Map click for a local pin",
+            "The click on the world map that places a local pin, which only you see. It opens a small editor first, for its name and color. Picking the click a party pin uses swaps the two.")
+        ClickChoice("partyClick", "pinsPartyClick", "Map click for a party pin",
+            "The click that places a party pin. It opens the editor first and is sent to your party only when you press Save; Cancel sends nothing. Picking the click a local pin uses swaps the two.")
+        Under(Choice("pinsLabels", "Pin names on the map",
+            "Pin names under the pins on the world map. On hover keeps a busy map clear: a name shows when the pointer is on its pin, and for the pin selected in the pin window or by a click. Pin names are always in the tooltip.",
+            STRING, PL.PREF_DEFAULTS.labels, function() return PL.Pref("labels") end, function(value) PL.SetPref("labels", value) end,
+            PL.LABELS), pinsToggle, PinsOn)
+
+        Header("Window appearance", "How the pin window looks: background, border, text and accent. Only the window changes; your pins, the clicks and the map pins don't. It looks complete without EllesmereUI; EllesmereUI's and LibSharedMedia's textures and fonts are listed when they are there.")
+        local pinsReset = Appearance(PL.Look, "pinsLook", "window", nil, nil, nil, nil, pinsToggle, PinsOn)
+        local function Remember(variable, varType, label, key)
+            local setting = Proxy(variable, varType, label, PL.DEFAULTS[key], function() return PL.Get(key) end, function(value) PL.Set(key, value) end)
+            if setting then pinsReset[#pinsReset + 1] = { setting = setting, default = PL.DEFAULTS[key] } end
+            return setting
+        end
+        local fontSetting = Remember("pinsFont", STRING, "Text font", "font")
+        if fontSetting and Settings.CreateDropdown and Settings.CreateControlTextContainer then
+            Under(Settings.CreateDropdown(category, fontSetting, function()
+                local container = Settings.CreateControlTextContainer()
+                local Fonts = R.MenuStyle and R.MenuStyle.Fonts
+                local first = { { "default", "Game font (default)" } }
+                for _, choice in ipairs(Fonts and Fonts.Choices(PL.Get("font"), first) or first) do container:Add(choice[1], choice[2]) end
+                return container:GetData()
+            end, "The font for the pin window's text. A font that has gone (its media pack is not loaded) is drawn as the game's own and stays chosen."), pinsToggle, PinsOn)
+        end
+        local sizeSetting = Remember("pinsTextSize", NUMBER, "Text size", "textSize")
+        if sizeSetting and Settings.CreateSlider and Settings.CreateSliderOptions then
+            local options = Settings.CreateSliderOptions(PL.LIMITS.textSize[1], PL.LIMITS.textSize[2], 1)
+            if MinimalSliderWithSteppersMixin and options.SetLabelFormatter then options:SetLabelFormatter(MinimalSliderWithSteppersMixin.Label.Right) end
+            Under(Settings.CreateSlider(category, sizeSetting, options, "The size of pin names, in points. Places, counts and hints are drawn two points smaller."), pinsToggle, PinsOn)
+        end
+        local accentSetting = Remember("pinsAccent", STRING, "Accent color", "accentColor")
+        if accentSetting and Settings.CreateColorSwatch then
+            Under(Settings.CreateColorSwatch(category, accentSetting, "The color of the Place a pin button, the selected row and the scroll bar's arrows. Pin colors are each pin's own."), pinsToggle, PinsOn)
+        end
+        local densitySetting = Remember("pinsDensity", STRING, "Rows", "density")
+        if densitySetting and Settings.CreateDropdown and Settings.CreateControlTextContainer then
+            Under(Settings.CreateDropdown(category, densitySetting, function()
+                local container = Settings.CreateControlTextContainer()
+                for _, choice in ipairs(PL.DENSITY) do container:Add(choice[1], choice[2]) end
+                return container:GetData()
+            end, "Comfortable shows each pin's map and coordinates under its name. Compact is one line per pin (the place is in the pin's tooltip on the map)."), pinsToggle, PinsOn)
+        end
+        Under(Button("Reset window appearance", "Reset", function()
+            for _, entry in ipairs(pinsReset) do
+                if entry.setting.SetValue then pcall(entry.setting.SetValue, entry.setting, entry.default) end
+            end
+            PL.Reset()
+        end, "Puts the pin window's background, border, font, text size, accent and rows back to the defaults. Your pins, the map clicks and the label choice are not touched."), pinsToggle, PinsOn)
+    end
+
+    -----------------------------------------------------------------------
     Use("sharing")
     Header("Addon configurations", "Share the settings of the addons you choose with friends, and apply theirs. You always choose what to apply, and Undo puts your own settings back.")
     local sharing = Toggle("setupSharing", "Configuration sharing",
@@ -1607,6 +1705,10 @@ local function Build()
     end
     FeatureRow("chronicle", "Journey Chronicle", "Your private journal for this character.",
         function() return OnOff(R:Enabled("chronicle"), "Recording", "Notes only") end)
+    if pages.pins then
+        FeatureRow("pins", "Party pins", "Named pins on your world map, and pins shared with party members who have TwichUI.",
+            function() return OnOff(R:Enabled("partyPins")) end)
+    end
     FeatureRow("auction", "Auction House", "A Sell from Bags tab for listing items one at a time.",
         function() return OnOff(R:Enabled("auctionPosting")) end)
     FeatureRow("skins", "Addon skins", "The EllesmereUI look for supported addons. Needs EllesmereUI; the rest of TwichUI works without it.", function()
