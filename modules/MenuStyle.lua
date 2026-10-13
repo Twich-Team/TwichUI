@@ -257,6 +257,8 @@ end
 -- bgTiling, bgTileSize and bgInset). options: nil, or { extraBorders = { { id, label }, ... },
 -- sources = true } (see the top of this file).
 ---------------------------------------------------------------------------
+local looks = {}   -- each look's Notify, for a profile change (Profiles.lua)
+
 local function New(savedKey, defaults, options)
     local extraBorders = options and options.extraBorders or nil
     local sources = options and options.sources or false
@@ -293,6 +295,7 @@ local function New(savedKey, defaults, options)
             if not ok then geterrorhandler()(err) end
         end
     end
+    looks[#looks + 1] = Notify
 
     -- Saves one setting (an invalid value is refused) and redraws.
     function MS.Set(key, value)
@@ -619,6 +622,11 @@ R:OnInit(function()
 end)
 
 -- The broker menus' look, as it always was; New makes others.
+-- A profile change: every look redraws once for what is saved now.
+R.Profiles.OnApply("look", "menu-looks", function()
+    for _, notify in ipairs(looks) do notify() end
+end)
+
 local MS = New("brokerMenu", MENU_DEFAULTS)
 MS.New = New
 MS.Fonts = Fonts

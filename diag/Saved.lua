@@ -45,6 +45,17 @@ local function Saved()
         end
     end
     Line("stored values reset or set aside at this load: %d", r.lost)
+    -- Profiles: counts only, never their names or the characters'.
+    local PF = R.Profiles
+    if PF and PF.Snapshot then
+        local s = PF.Snapshot()
+        if s.available then
+            Line("profiles: %d; this character's is shared with %d other character%s; changed %d time%s this session",
+                s.profiles, s.sharedWith, s.sharedWith == 1 and "" or "s", s.generation, s.generation == 1 and "" or "s")
+        else
+            Line("profiles: not available this session (%s)", tostring(s.reason))
+        end
+    end
 
     local status, reason = "ready", nil
     if r.main.outcome == "future" or r.chronicle.outcome == "future" then status, reason = "unavailable", "newer-saved-data"

@@ -482,6 +482,17 @@ end
 -- game's volume sliders it follows. PlaySoundFile has no volume of its own, so the channel is how loud it is.
 -- sound is a LibSharedMedia sound name; TwichUI's own are listed in modules/Media.lua.
 ---------------------------------------------------------------------------
+-- A profile change: the map text and data bar entry are drawn again, and whatever follows the pin choices
+-- (map clicks, labels, minimap, /way) is told. The window's look follows PL.Look, a MenuStyle look.
+R.Profiles.OnApply("look", "pins-look", function()
+    RestyleMapText()
+    BarChanged()
+    for _, fn in ipairs(prefListeners) do
+        local ok, err = pcall(fn)
+        if not ok then geterrorhandler()(err) end
+    end
+end)
+
 local SD = {}
 PL.Sound = SD
 SD.CHANNELS = {

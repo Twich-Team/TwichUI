@@ -611,6 +611,9 @@ function MS.Refresh()
     if MS.OnChange then MS.OnChange() end
 end
 
+-- A profile change: a sale in progress stops (its settings may differ), whatever changed.
+R.Profiles.OnApply("views", "mage-sell", function() MS.Refresh() end)
+
 ---------------------------------------------------------------------------
 -- For /tui diagnostics (diag/MageSell.lua) and the window. Counts and codes; no names, no bag places.
 ---------------------------------------------------------------------------

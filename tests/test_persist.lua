@@ -67,7 +67,7 @@ end
 local fresh = boot("Fresh")
 local R = fresh.TwichUI
 local P = R.Persist
-assert(P.SCHEMA == 1 and fresh.TwichUIDB.schema == P.SCHEMA, "new data is written at the current schema")
+assert(P.SCHEMA == 2 and fresh.TwichUIDB.schema == P.SCHEMA, "new data is written at the current schema")
 for k, v in pairs(R.DEFAULT_MODULES) do assert(fresh.TwichUIDB.modules[k] == v, "default for " .. k) end
 assert(fresh.TwichUIDB.shareTransport == "DIRECT", "a new install sends Direct")
 assert(fresh.TwichUIChronicleDB.version == 1 and type(fresh.TwichUIChronicleDB.chars) == "table")
@@ -167,15 +167,15 @@ assert(range.TwichUIDB.ui.foodDrink.size == 9999 and range.TwichUIDB.ui.training
 
 -- The whole variable the wrong type
 local junkRoot = boot("JunkRoot", { TwichUIDB = 5, TwichUIBackupDB = "x", TwichUIShareDB = true, TwichUIRestoreDB = 3, TwichUIChronicleDB = "text" })
-assert(type(junkRoot.TwichUIDB) == "table" and junkRoot.TwichUIDB.schema == 1 and type(junkRoot.TwichUIBackupDB) == "table")
+assert(type(junkRoot.TwichUIDB) == "table" and junkRoot.TwichUIDB.schema == P.SCHEMA and type(junkRoot.TwichUIBackupDB) == "table")
 assert(type(junkRoot.TwichUIShareDB) == "table" and type(junkRoot.TwichUIRestoreDB) == "table" and junkRoot.TwichUIChronicleDB.version == 1)
 assert(junkRoot.TwichUI.Persist.Report().repairs["root-not-table"] == 5, "five roots were not tables")
 
 local nan = 0 / 0
 local badSchema = boot("BadSchema", { TwichUIDB = { schema = "two", modules = { chronicle = false } } })
-assert(badSchema.TwichUIDB.schema == 1 and badSchema.TwichUIDB.modules.chronicle == false and badSchema.TwichUI.Persist.Report().repairs["schema-invalid"] == 1, "an unreadable number is treated as unversioned")
+assert(badSchema.TwichUIDB.schema == P.SCHEMA and badSchema.TwichUIDB.modules.chronicle == false and badSchema.TwichUI.Persist.Report().repairs["schema-invalid"] == 1, "an unreadable number is treated as unversioned")
 local nanSchema = boot("NanSchema", { TwichUIDB = { schema = nan, modules = {} } })
-assert(nanSchema.TwichUIDB.schema == 1)
+assert(nanSchema.TwichUIDB.schema == P.SCHEMA)
 
 ---------------------------------------------------------------------------
 -- 6. The older layout (schema 0 = every release before schemas): a synthetic fixture built from what
@@ -198,7 +198,7 @@ local function legacy()
 end
 local old = boot("Legacy", { TwichUIDB = legacy() })
 local od = old.TwichUIDB
-assert(od.schema == 1 and old.TwichUI.Persist.Report().main.outcome == "migrated" and old.TwichUI.Persist.Report().main.stored == nil)
+assert(od.schema == P.SCHEMA and old.TwichUI.Persist.Report().main.outcome == "migrated" and old.TwichUI.Persist.Report().main.stored == nil)
 assert(od.shareTransport == "PARTY" and od.modules.shareGroup == true and od.modules.shareWhisper == true, "group choice kept; the old keys are left as they were")
 assert(od.modules.comboPoints == nil and od.modules.comboPointsHideGame == nil and od.ui.comboPoints == nil and od.ui.comboPointsPosition == nil, "only the combo points keys are removed")
 assert(od.storedData.scanMode == nil and od.svTest == nil and od.storedData.found.FooDB.owner == "Foo")
@@ -216,7 +216,7 @@ for _, tag in ipairs({ "v3.0.4", "v3.0.5", "v3.0.6", "v3.0.7", "v3.0.8" }) do
   local fixture = dofile(TESTS .. "fixtures/saved_" .. tag .. ".lua")
   local c = boot("Oldie", copy(fixture))
   local d, rp = c.TwichUIDB, c.TwichUI.Persist.Report()
-  assert(d.schema == 1 and rp.main.outcome == "migrated" and rp.main.stored == nil, tag .. ": upgraded to schema 1")
+  assert(d.schema == P.SCHEMA and rp.main.outcome == "migrated" and rp.main.stored == nil, tag .. ": upgraded to the current schema")
   assert(d.modules.chronicleDeaths == true and d.modules.groupCheck == false and d.modules.auctionatorSkin == false, tag .. ": the player's choices survive")
   assert(d.shareTransport == "DIRECT", tag .. ": no group or guild choice was ever made")
   for k, v in pairs(c.TwichUI.DEFAULT_MODULES) do assert(d.modules[k] ~= nil, tag .. ": " .. k .. " filled in") end
@@ -285,7 +285,7 @@ assert(fd.modules.shareGroup == true and fd.ui.trainingPosition.x == 12 and fd.m
 assert(failing.TwichUI.Persist.Report().main.outcome == "failed")
 assert(heard(failing, "could not upgrade"), "one notice")
 local retried = boot("Failing", copy(saved(failing)))
-assert(retried.TwichUIDB.schema == 1 and retried.TwichUI.Persist.Report().main.outcome == "migrated", "it is tried again next load, and then works")
+assert(retried.TwichUIDB.schema == P.SCHEMA and retried.TwichUI.Persist.Report().main.outcome == "migrated", "it is tried again next load, and then works")
 
 ---------------------------------------------------------------------------
 -- 9. Data from a newer TwichUI is left alone
@@ -293,7 +293,7 @@ assert(retried.TwichUIDB.schema == 1 and retried.TwichUI.Persist.Report().main.o
 local futureDb = { schema = 99, modules = { chronicle = false, newFeature = true }, newStuff = { list = { 1, 2, 3 } }, ui = { arrivalHold = "future-choice" } }
 local futureSnap = copy(futureDb)
 local fut = boot("Future", { TwichUIDB = futureDb })
-assert(fut.TwichUIDB ~= futureDb and fut.TwichUIDB.schema == 1, "the session runs on a stand-in with defaults")
+assert(fut.TwichUIDB ~= futureDb and fut.TwichUIDB.schema == P.SCHEMA, "the session runs on a stand-in with defaults")
 assert(fut.TwichUIDB.modules.chronicle == true, "defaults, not the newer file's values")
 assert(same(futureDb, (function() local x = copy(futureDb); x.heldStored = nil; return x end)()) , "the newer data was not touched while in use")
 assert(heard(fut, "newer TwichUI") and heard(fut, "Update TwichUI"), "one actionable notice")
@@ -325,7 +325,7 @@ local fo = logout(fc)
 assert(fo.TwichUIChronicleDB == futureChron and same(futureChron, chronSnap) and futureChron.version == 5, "the newer Chronicle is handed back unchanged, version included")
 
 ---------------------------------------------------------------------------
--- 10. Profiles: TwichUI has none of its own. What it does with another addon's profile keys when it
+-- 10. Another addon's profiles (TwichUI's own are in test_profiles.lua). What it does with their profile keys when it
 --     applies a setup: point this character at a profile that exists, never touch a profile
 ---------------------------------------------------------------------------
 local function applyFoo(fooData, sourceProfileKeys)
@@ -528,7 +528,8 @@ local ST4 = tr.TwichUI.Setups
 for _, name in ipairs(SV) do
   assert(ST4.CheckData(sv[name]), name .. " holds only plain data (no functions, frames, timers or cycles)")
 end
-local TOP = { schema = true, modules = true, ui = true, gear = true, setup = true, storedData = true, shareTransport = true, whisperProbe = true, welcome = true, pins = true }
+local TOP = { schema = true, modules = true, ui = true, gear = true, setup = true, storedData = true, shareTransport = true, whisperProbe = true, welcome = true, pins = true,
+  profiles = true, profileKeys = true, profileState = true }
 for k in pairs(sv.TwichUIDB) do assert(TOP[k], "undeclared top-level field in TwichUIDB: " .. tostring(k)) end
 local SETUP = { detected = true, selection = true, received = true, trusted = true, recommend = true, scanNext = true, restoreNext = true,
   lastScan = true, pending = true, eui = true }

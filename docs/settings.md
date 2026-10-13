@@ -9,7 +9,7 @@ built from its standard controls; TwichUI does not skin it. Workflows with lists
 | File | Holds |
 |---|---|
 | `settings/Kit.lua` | The page list (`K.Page`), the controls every page uses (`K.Toggle`, `K.Proxy`, `K.Choice`, `K.Slider`, `K.Swatch`, `K.Dropdown`, `K.Checkbox`, `K.Button`, `K.Header`, `K.Appearance`, `K.ResetButton`), `K.Advanced`/`K.Under`, the overview's rows, `K.SetSwitch` |
-| `settings/<Page>.lua` | One page each: `Gear`, `Notifications`, `QoL`, `FoodDrink`, `Mage`, `Chronicle` (+ Chronicle appearance), `Pins` (+ Pin appearance), `Auction`, `Skins`, `RestedXP`, `SpeakStone`, `Sharing`, `Troubleshooting`, `Overview` |
+| `settings/<Page>.lua` | One page each: `Gear`, `Notifications`, `QoL`, `FoodDrink`, `Mage`, `Chronicle` (+ Chronicle appearance), `Pins` (+ Pin appearance), `Auction`, `Skins`, `RestedXP`, `SpeakStone`, `Sharing`, `Profiles`, `Troubleshooting`, `Overview` |
 | `settings/Register.lua` | At start-up: makes the pages in order, builds each in its own `pcall`, adds a page's Advanced row, builds the overview last, adds TwichUI to the AddOns list |
 
 Load order (`.toc`): after every feature, `Kit.lua` first, `Register.lua` last. Nothing is built until TwichUI's
@@ -29,12 +29,13 @@ TwichUI   overview: a row per page with its status, Help, General (Show advanced
 ├ Auction House
 ├ Addon skins › RestedXP guide window, SpeakStone speech frame
 ├ Configuration sharing
+├ Profiles
 └ Troubleshooting
 ```
 
 `R:OpenSettings(key)` opens a page by its key (`gear`, `notifications`, `qol`, `food`, `mage`, `chronicle`,
-`chronicleLook`, `pins`, `pinsLook`, `auction`, `skins`, `restedxp`, `speakstone`, `sharing`, `troubleshooting`; none for the
-overview).
+`chronicleLook`, `pins`, `pinsLook`, `auction`, `skins`, `restedxp`, `speakstone`, `sharing`, `profiles`, `troubleshooting`; none
+for the overview).
 
 ## Adding a page
 
@@ -89,6 +90,20 @@ A page that errors while building is reported (`R.Fault`) and the other pages ar
 | `buttonOpacity`, `mouseover`, `idleOpacity` | the buttons' alpha only | at once (not protected) |
 | `borderTexture`, `borderSize`, `borderColor`, `borderClass`, `borderOpacity`, `zoom`, `showCount` | restyle the buttons, no bag scan | waits for combat to end (it resizes secure buttons) |
 | `size`, `spacing`, `layout`, `preferConjured` | a whole new look (bags, layout) | waits, as before |
+
+## Profiles
+
+The options in `modules`, `ui` and `gear` belong to the profile in use (`docs/profiles.md`). A new option needs nothing
+extra to be part of profiles, as long as it follows the rules above:
+
+- it is read through its feature's `Get` (or `R:Enabled`) when needed, never kept in a variable at start-up;
+- its feature registers once what a profile change means for it, if anything has to be redrawn:
+  `R.Profiles.OnApply("look" | "layout" | "views", name, fn)`. A switch needs nothing: profile changes go through
+  `SettingsKit.SyncSwitches`, which runs its `onChange` as a click does.
+
+An option that must be the same in every profile (a protection, a record, another addon's setting) is added to
+`Profiles.ACCOUNT` and to the list in `docs/profiles.md`. The Profiles page's dropdowns have no default, so the
+panel's Defaults button never acts on profiles.
 
 ## Defaults and Reset scope
 

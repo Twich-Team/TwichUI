@@ -36,6 +36,11 @@ function C.SetClock(value)
     return true
 end
 
+-- A profile change may bring the other clock: an open Chronicle is drawn again.
+R.Profiles.OnApply("views", "chronicle-clock", function()
+    if R.ChronicleWindow then R.ChronicleWindow:Refresh() end
+end)
+
 C.MAX_ENTRIES = 500       -- per character
 C.MAX_NOTE = 240          -- characters in a note
 C.MAX_TITLE = 120

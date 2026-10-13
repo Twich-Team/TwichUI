@@ -182,6 +182,7 @@ function Style.Reset()
 end
 
 Look.Subscribe(Changed)
+R.Profiles.OnApply("look", "speakstone-skin", Changed)   -- a profile change: one redraw, if it is drawn
 
 -- Puts the whole look (background, border, text, controls, portrait, progress, spacing) back to the defaults.
 -- The switch, SpeakStone's own settings and everything else of TwichUI's are not touched.

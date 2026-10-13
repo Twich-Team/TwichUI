@@ -16,7 +16,7 @@ forces a reload, a logout or a write.
 
 | Kind | Shown as | Notes |
 |---|---|---|
-| Current configuration | **TwichUI settings** (`TwichUIDB`) | Account-wide. TwichUI has no profiles; a few entries are kept per character inside (by name or character id). |
+| Current configuration | **TwichUI settings** (`TwichUIDB`) | Account-wide. `modules`, `ui` and `gear` are the profile this character uses; `profiles` holds the others and `profileKeys` each character's choice (see `profiles.md`). A few entries are kept per character inside (by name or character id). |
 | Stored snapshots | **Backups**: each restore point (`TwichUIRestoreDB.points[i]`) and each **Undo copy** (`TwichUIBackupDB[character]`) | The stored record, never the live settings. Restore points carry no version number; created/imported dates and the maker are shown when recorded. Sizes are estimates of the data, not the file. |
 | Prepared outgoing data | **Outgoing share**, and **Your saved setup** (`TwichUIShareDB.pack`) | TwichUI has no share presets: Send always sends the one saved setup. The outgoing share is built on request (below) and is not saved. |
 | Received data | **From ...** (`TwichUIDB.setup.received[sender]`) | A friend's setup kept on this computer. |

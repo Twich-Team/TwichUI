@@ -154,12 +154,16 @@ end
 --   onStatus()    status text (tooltips) to rewrite, every time: cheap, and never touches the feature.
 -- The overview's status is rewritten every time too.
 K.switches, K.applied = {}, {}
+K.switchOrder = {}   -- keys in the order registered (a page's parent switch before the ones under it)
+K.reloadAtLoad = {}  -- [key] = the value the UI loaded with, for switches that take effect after a reload
 function K.Toggle(key, label, tooltip, needsReload, onChange, onStatus)
     if needsReload then tooltip = tooltip .. "\n\nTakes effect after you reload your UI." end
     local setting = Settings.RegisterAddOnSetting(K.category, "TWICHUI_" .. key, key, TwichUIDB.modules, K.BOOL, label, R.DEFAULT_MODULES[key])
     local initializer = Settings.CreateCheckbox(K.category, setting, tooltip)
     local atLoad = R:Enabled(key)
     K.switches[key], K.applied[key] = setting, atLoad
+    K.switchOrder[#K.switchOrder + 1] = key
+    if needsReload then K.reloadAtLoad[key] = atLoad end
     if setting.SetValueChangedCallback then
         setting:SetValueChangedCallback(function()
             local on = R:Enabled(key)
@@ -173,6 +177,44 @@ function K.Toggle(key, label, tooltip, needsReload, onChange, onStatus)
         end)
     end
     return initializer, setting
+end
+
+-- After a profile change (Profiles.lua) has put other values in TwichUIDB.modules: each switch is told to
+-- read its value again, in the order registered, so a feature whose switch changed runs its own update once,
+-- one that didn't change does nothing, and a switch that needs a reload asks as it does when clicked.
+-- Returns the keys whose update failed (each reported); the rest are still told.
+function K.SyncSwitches()
+    local failed = {}
+    for _, key in ipairs(K.switchOrder) do
+        local setting = K.switches[key]
+        if setting and setting.NotifyUpdate then
+            local ok, err = pcall(setting.NotifyUpdate, setting)
+            if not ok then
+                failed[#failed + 1] = key
+                R.Fault("switch " .. key, err)
+            end
+        end
+    end
+    return failed
+end
+
+-- Whether a switch that takes effect after a reload now differs from the value the UI loaded with.
+function K.ReloadPending()
+    for key, atLoad in pairs(K.reloadAtLoad) do
+        if R:Enabled(key) ~= atLoad then return true end
+    end
+    return false
+end
+
+-- Every option stored somewhere other than the modules table shows its value again (an open panel redraws
+-- them). Nothing is set.
+function K.RefreshValues()
+    for _, setting in ipairs(K.proxies) do
+        if setting.NotifyUpdate then
+            local ok, err = pcall(setting.NotifyUpdate, setting)
+            if not ok then R.Fault("option " .. tostring(setting.GetVariable and setting:GetVariable()), err) end
+        end
+    end
 end
 
 -- Turns a switch on or off through its checkbox, so its update, the overview and an open options panel all
@@ -195,9 +237,12 @@ function K.Button(label, buttonText, onClick, tooltip)
 end
 
 -- A setting stored somewhere other than the modules table.
+K.proxies = {}
 function K.Proxy(variable, varType, label, default, get, set)
     if not Settings.RegisterProxySetting then return end
-    return Settings.RegisterProxySetting(K.category, "TWICHUI_" .. variable, varType, label, default, get, set)
+    local setting = Settings.RegisterProxySetting(K.category, "TWICHUI_" .. variable, varType, label, default, get, set)
+    if setting then K.proxies[#K.proxies + 1] = setting end
+    return setting
 end
 
 function K.ProxyToggle(variable, label, tooltip, default, get, set)

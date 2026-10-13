@@ -4,6 +4,7 @@
 -- what the panel's Defaults button does. Used by test_settings_contract.lua and test_settings_kit.lua.
 --
 -- SettingsClient(opts) -> c, S
+--   opts.name: the character ("Rich" when left out)
 --   opts.beforeInit(c): runs after the files are loaded and before the saved variables "arrive"
 --   S.pages: categories in the order made, each { name, parent, kind, rows = { initializers } }
 --   S.variables[name] = setting; S.list: settings in the order registered; S.registered(): the category added
@@ -11,7 +12,7 @@
 
 function SettingsClient(opts)
   opts = opts or {}
-  local c = MakeClient("Rich", {"!!!TwichUI", "Attune"})
+  local c = MakeClient(opts.name or "Rich", {"!!!TwichUI", "Attune"})
   local S = { pages = {}, variables = {}, list = {}, popups = 0 }
   local registered
 

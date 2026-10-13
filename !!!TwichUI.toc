@@ -24,6 +24,7 @@ libs\LibDeflate\LibDeflate.lua
 # Core
 Core.lua
 Persist.lua
+Profiles.lua
 modules\Interact.lua
 modules\QuietLogin.lua
 modules\Media.lua
@@ -191,6 +192,7 @@ settings\Skins.lua
 settings\RestedXP.lua
 settings\SpeakStone.lua
 settings\Sharing.lua
+settings\Profiles.lua
 settings\Troubleshooting.lua
 settings\Overview.lua
 settings\Register.lua

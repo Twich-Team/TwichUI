@@ -71,6 +71,8 @@ function RS.Refresh()
     end
 end
 
+R.Profiles.OnApply("views", "refreshment-shares", function() RS.Refresh() end)   -- a profile change: its numbers again
+
 local function Build(p)
     built = true
     local help = Text(p, "GameFontHighlightSmall")

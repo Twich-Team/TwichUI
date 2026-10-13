@@ -4,8 +4,8 @@
 -- from this; the zone arrival card, the Welcome Back card and every other window that shares
 -- chronicle/Style.lua are not (they keep Style.lua's own colours, which this never changes).
 --
--- Saved account-wide, like TwichUI's other looks (TwichUI has no profiles; the Chronicle's own
--- entries are per character and are never read or copied here):
+-- Saved in the profile in use, like TwichUI's other looks (Profiles.lua; the Chronicle's own
+-- entries are per character, in no profile, and are never read or copied here):
 --   TwichUIDB.ui.chronicleLook        background and border: a MenuStyle look (modules/MenuStyle.lua),
 --                                     so textures, EllesmereUI's and LibSharedMedia's included, resolve
 --                                     and fall back the way the broker menus' and RestedXP's do;
@@ -159,6 +159,9 @@ function A.Reset()
     end
     Changed(true)
 end
+
+-- A profile change: one pass for what is saved now, type included.
+R.Profiles.OnApply("look", "chronicle-appearance", function() Changed(true) end)
 
 -- The background and border look (A.Look, a MenuStyle look) is made once the saved data is loaded.
 R:OnInit(function()

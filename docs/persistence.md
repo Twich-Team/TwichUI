@@ -11,7 +11,7 @@ is keyed by `"Name - Realm"` inside an account-wide variable.
 
 | Variable | Kind | Owner | Version | Holds |
 |---|---|---|---|---|
-| `TwichUIDB` | configuration | `Persist.lua`, `Core.lua`, each feature | `schema` (integer) | `modules` (on/off switches), `ui` (places, text choices, `qol`, `foodDrink`, `brokerMenu`, `refreshments`, `refreshmentsStyle`, `chronicleLook`, `chronicleAppearance`, `mageSell`, `partyPins`, `pinsLook`, `pinsAppearance`, `pinsMapText`, `pinsBroker`, `pinsBrokerMenu`, `pinsEditorLook`), `gear` (preferences, stat weights, per-character tree choice), `shareTransport`, `whisperProbe`, `storedData` (addon-data scan notes), `pins` (local map pins, and a party session kept for one `/reload`; see `docs/party-pins.md`), `setup` (see below) |
+| `TwichUIDB` | configuration | `Persist.lua`, `Core.lua`, `Profiles.lua`, each feature | `schema` (integer) | `profiles`, `profileState`, `profileKeys` (TwichUI's profiles; see `docs/profiles.md`), and the profile in use: `modules` (on/off switches), `ui` (places, text choices, `qol`, `foodDrink`, `brokerMenu`, `refreshments`, `refreshmentsStyle`, `chronicleLook`, `chronicleAppearance`, `mageSell`, `partyPins`, `pinsLook`, `pinsAppearance`, `pinsMapText`, `pinsBroker`, `pinsBrokerMenu`, `pinsEditorLook`), `gear` (preferences, stat weights, per-character tree choice), `shareTransport`, `whisperProbe`, `storedData` (addon-data scan notes), `pins` (local map pins, and a party session kept for one `/reload`; see `docs/party-pins.md`), `setup` (see below) |
 | `TwichUIDB.setup` | sharing records | `setup/Setups.lua`, `Share.lua`, `Ellesmere.lua` | covered by `schema` | `detected`/`selection` (last "find settings" result), `received` (setups friends sent), `trusted`, `recommend`, and the one-shot hand-offs `pending`, `scanNext`, `restoreNext`, `lastScan`, `eui` |
 | `TwichUIShareDB` | your shareable setup | `setup/Setups.lua` | `pack.format = 2` | `pack` |
 | `TwichUIBackupDB` | undo snapshots | `setup/Setups.lua` | none | one `[character]` snapshot per character that applied a setup |
@@ -22,9 +22,12 @@ Kept apart on purpose: configuration (`TwichUIDB`) is small and safe to reset; s
 other addons' tables kept verbatim; the Chronicle is the player's own writing. The Chronicle is never part of
 sharing, setups, backups or exports (names beginning `TwichUI` are refused everywhere; a test checks it).
 
-Profiles: **TwichUI has none.** Profiles exist only inside other addons (EllesmereUI, AceDB-style tables). When a setup
-is applied, `PointProfiles` points this character's `profileKeys` at a profile that exists in the data it just
-applied, falls back to `Default`, and otherwise leaves the reference empty. It never rewrites a profile.
+Profiles: TwichUI's own are described in `docs/profiles.md`: named sets of `modules`/`ui`/`gear`, the one in use kept
+where it always was, the others in `TwichUIDB.profiles`, each character's choice in `TwichUIDB.profileKeys`. Map
+pins, sharing records, the Chronicle and the other variables are never part of one. Other addons' profiles
+(EllesmereUI, AceDB-style tables) are separate: when a setup is applied, `PointProfiles` points this character's
+`profileKeys` *in that addon's data* at a profile that exists in the data it just applied, falls back to `Default`,
+and otherwise leaves the reference empty. It never rewrites a profile.
 
 Not stored (runtime only): the notification queue and which card owns which lane, previews and their sample data,
 diagnostic traces and timers, pending transfers, acknowledgments and timeouts (`Share.incoming`/`outgoing`), frames,
@@ -38,13 +41,14 @@ To look through these tables in the game, read-only, use the Saved Data Explorer
 
 Two numbers, separate from the release version (`## Version:` in the `.toc`):
 
-- `TwichUIDB.schema`, currently **1** (`Persist.SCHEMA`). A missing number means **0**: every release before schemas.
+- `TwichUIDB.schema`, currently **2** (`Persist.SCHEMA`). A missing number means **0**: every release before schemas.
 - `TwichUIChronicleDB.version`, currently **1** (`Persist.CHRONICLE_VERSION`).
 
 The other variables carry no number. They hold other addons' tables as they were saved, and are checked for shape on
 load. A change to their layout has to add a number first.
 
-Supported upgrade: **schema 0 → 1**, for the layouts of releases 3.0.4 to 3.0.8. The tests load what each of those
+Supported upgrades: **schema 0 → 1 → 2**, for the layouts of releases 3.0.4 to 3.0.8 (schema 0), and **1 → 2** for
+3.0.10 to 3.0.12 (`tests/fixtures/saved_v3.0.12.lua`, made by running 3.0.12's code, is tested in `test_profiles.lua`). The tests load what each of those
 releases actually wrote (`tests/fixtures/saved_v3.0.*.lua`, produced by running that release's own code for a made-up
 character), not hand-written approximations. Earlier releases than 3.0.4 and anything not listed are not claimed.
 
@@ -76,11 +80,22 @@ reads it; it is left alone.
 Migrations do not draw, play sounds, register game events or touch the game. Profile and setting changes at runtime
 are separate from all of this and keep their combat rules.
 
-### Adding a schema 2
+### Schema 2: profiles
 
-Add `STEPS[2]` (it must be repeatable and must take `ctx.own(key)` before changing anything), raise `Persist.SCHEMA`,
-add a fixture of schema 1 data to `tests/fixtures`, and add the cases to `tests/test_persist.lua` (upgrade from 0 and
-from 1, repeat, injected failure). Document the step here. Never reuse or reorder a number.
+Step 2 (`Persist.STEPS[2]`) adds `profileState = { live = "Default", newCharacters = "Default" }`, `profiles = {}`
+and `profileKeys = {}`, and moves nothing: the settings every character shared become the profile "Default" where they
+already are. It derives a sending method for a schema-1 save that lost its own (as step 1 does). From schema 2 the
+result must have the three profile roots as tables. Load-time checks of profiles are in `docs/profiles.md`.
+
+A release that writes schema 1 treats a schema 2 save as newer data (below): it runs that session on defaults and
+hands the save back unchanged.
+
+### Adding a schema 3
+
+Add `STEPS[3]` (it must be repeatable and must take `ctx.own(key)` before changing anything), raise `Persist.SCHEMA`,
+add a fixture of schema 2 data to `tests/fixtures`, and add the cases to `tests/test_persist.lua` (upgrade from 0, 1
+and 2, repeat, injected failure). Document the step here. Never reuse or reorder a number. Stored profiles hold
+`modules`/`ui`/`gear` too: a step that changes a key there must change it in every `profiles[name]` as well.
 
 ## Defaults and validation
 
@@ -89,7 +104,8 @@ from 1, repeat, injected failure). Document the step here. Never reuse or reorde
 - **Switches** (`modules.*` that TwichUI defines) must be booleans. `Enabled()` treats anything but `false` as on, so a
   stray number or text would switch a feature on; it is put back to its default and counted (`module-not-boolean`).
   Switches TwichUI does not define are left untouched.
-- **Groups** must be tables (`modules`, `ui`, `setup`, `gear`, `storedData`, `whisperProbe`, and `ui.qol`,
+- **Groups** must be tables (`modules`, `ui`, `setup`, `gear`, `storedData`, `whisperProbe`, `profiles`, `profileKeys`,
+  `profileState`, and `ui.qol`,
   `ui.foodDrink`, `ui.brokerMenu`, `ui.refreshments`, `ui.refreshmentsStyle`, `ui.restedxpSkin`, `ui.restedxpSkinText`,
   `ui.restedxpSkinState`, `ui.restedxpTimerLook`, `ui.restedxpTimerText`, `ui.speakstoneSkin`, `ui.speakstoneSkinStyle`, `ui.chronicleLook`, `ui.chronicleAppearance`, `ui.guideWaypoint`, `ui.mageSell`, `ui.partyPins`, `ui.pinsLook`, `ui.pinsAppearance`,
   `ui.pinsMapText`, `ui.pinsBroker`, `ui.pinsBrokerMenu`, `ui.pinsEditorLook`). One that is not is dropped and rebuilt by its owner (`container-not-table`); its
@@ -221,8 +237,8 @@ setting values, setup contents, character names, notes or dumps.
 
 | Code | Meaning | Counts as "reset or set aside" |
 |---|---|---|
-| `defaults-added`, `legacy-key-removed`, `schema-invalid`, `held-recovered`, `list-entry-dropped`, `pack-field-reset`, `apply-entry-rejected`, `chronicle-entry-set-aside`, `chronicle-entry-repaired`, `chronicle-trimmed`, `restore-point-repaired` | ordinary: something filled, tidied or kept | no |
-| `root-not-table`, `container-not-table`, `module-not-boolean`, `received-pack-dropped`, `setup-table-dropped`, `pending-dropped`, `share-pack-dropped`, `backup-dropped`, `restore-point-dropped`, `chronicle-record-dropped`, `chronicle-entry-dropped`, `migration-failed`, `future-schema` | a stored value was reset, dropped or set aside | yes |
+| `defaults-added`, `legacy-key-removed`, `schema-invalid`, `held-recovered`, `list-entry-dropped`, `pack-field-reset`, `apply-entry-rejected`, `chronicle-entry-set-aside`, `chronicle-entry-repaired`, `chronicle-trimmed`, `restore-point-repaired`, `profile-renamed`, `profile-state-repaired`, `profile-selection-missing` | ordinary: something filled, tidied or kept | no |
+| `root-not-table`, `container-not-table`, `module-not-boolean`, `received-pack-dropped`, `setup-table-dropped`, `pending-dropped`, `share-pack-dropped`, `backup-dropped`, `restore-point-dropped`, `chronicle-record-dropped`, `chronicle-entry-dropped`, `profile-dropped`, `migration-failed`, `future-schema` | a stored value was reset, dropped or set aside | yes |
 
 One login notice, only when something in the second group happened: newer data (and how to fix it), a failed upgrade,
 or "reset or set aside N saved items it could not read"; always ending with where to look. It is never shown for an
@@ -276,8 +292,9 @@ lists what is in it without running it (read-only; add `--redact` to share a rep
    Chronicle notes. Create a **Backup** in `/tui restore` and note its name.
 4. **Restore point.** Change one addon's settings (any addon you are willing to change), then restore the backup,
    accept the reload, and check the addon went back and that **Undo** is offered. Restore Undo too.
-5. **Profiles.** TwichUI has none; if you use EllesmereUI, switch its profile and confirm TwichUI's settings did not
-   move, and that EllesmereUI's profiles are unchanged after TwichUI applied or restored anything.
+5. **Profiles.** TwichUI's own: follow "In-game checks" in `docs/profiles.md`. Other addons': if you use EllesmereUI,
+   switch its profile and confirm TwichUI's settings did not move, and that EllesmereUI's profiles are unchanged after
+   TwichUI applied, restored or switched anything.
 6. **Reload, then log out and in.** `/reload`, check everything from step 3 is as you left it. Then log out
    normally, quit the game, start it, and check again.
 7. **Upgrade from a supported version.** Close the game. Restore the moved `!!!TwichUI.lua` from step 2's backup (or,

@@ -247,6 +247,11 @@ R.frame:HookScript("OnEvent", function(_, event, name)
     TwichUIBackupDB = type(TwichUIBackupDB) == "table" and TwichUIBackupDB or {}
     TwichUIShareDB = type(TwichUIShareDB) == "table" and TwichUIShareDB or {}   -- only your saved setup (what make_pack ships)
     if type(TwichUIDB.modules) ~= "table" then TwichUIDB.modules = {} end
+    -- This character's profile is put in place before anything reads the settings (Profiles.lua).
+    if R.Profiles then
+        local ok, err = pcall(R.Profiles.Load)
+        if not ok then Fault("profiles", err) end
+    end
     for k, v in pairs(DEFAULT_MODULES) do
         if TwichUIDB.modules[k] == nil then TwichUIDB.modules[k] = v end
     end

@@ -53,6 +53,8 @@ This addon is intended to work alongside EllesmereUI.
   * Your recommended addon list travels with it, with a download link for each addon they're missing.
   * **EllesmereUI** is shared one profile at a time (**EllesmereUI profile** on the Share setup page), never as a whole saved-data table. Your friend reviews it and it is added as a **new profile** with an unused name; none of their profiles, spec assignments or global settings are replaced. EllesmereUI has no import that doesn't switch to the new profile, so the review says that it becomes the profile in use, and their previous one stays saved. The profile's look (fonts, custom colours, dark mode, accent) comes with it; UI scale, window skins, click-cast and per-character data are left out.
 
+**Profiles:** Save TwichUI's own options as named profiles (Options > TwichUI > Profiles). Each character remembers which one it uses; characters that choose the same profile share it, and **Duplicate current** makes an independent copy. New, copy settings from another profile, rename, delete an unused one, or reset. Map pins, the Journey Chronicle, backups and other addons' settings are never part of a profile. Profile changes wait until you are out of combat (`docs/profiles.md`).
+
 **Backups:** Save your own settings before you tinker, go back any time.
 
 **Export & import configuration:** Your configuration backups can easily be exported to a string. The addon also allows imports of your own saved exports or your friends.

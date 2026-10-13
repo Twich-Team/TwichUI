@@ -181,6 +181,6 @@ soulbound one if you have it, and one item you add to the list.
     the visit sold and note which earlier entries were pushed out.
 11. **Auto-vendor compatibility.** With Leatrix_Plus's junk selling (or any junk seller) on, open a merchant:
     junk and food are both handled once, no Lua errors, no stack sold twice.
-12. **Reload, profiles and errors.** `/reload` mid-visit: nothing resumes. Switch an EllesmereUI profile: nothing changes
-    (TwichUI has no profiles). Turn the feature off while a run is going: it stops with no summary. Watch for Lua
+12. **Reload, profiles and errors.** `/reload` mid-visit: nothing resumes. Switch an EllesmereUI profile: nothing changes.
+    Switch a TwichUI profile: a run stops (its switches may differ), and the never-sell list is the same in every profile. Turn the feature off while a run is going: it stops with no summary. Watch for Lua
     errors and "action blocked" messages; a block shows as "the game blocked the sale" and `blocked` in diagnostics.

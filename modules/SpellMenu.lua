@@ -821,6 +821,10 @@ function SM.New(spec)
     end
 
     MenuStyle.Subscribe(L.ApplyAppearance)
+    -- A profile change may bring another data bar text.
+    R.Profiles.OnApply("views", "spell-menu-" .. spec.textKey, function()
+        if obj then obj.text = BarText() end
+    end)
 
     R:On("PLAYER_LOGIN", function()
         loggedIn = true

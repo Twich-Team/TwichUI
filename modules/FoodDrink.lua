@@ -891,3 +891,6 @@ function F.Refresh()
 end
 
 R:OnInit(F.Refresh)
+-- A profile change: size, layout, look and place may all differ. One refresh, out of combat (Profiles.lua
+-- refuses a change in combat; the buttons' own rule would wait anyway).
+R.Profiles.OnApply("layout", "food-drink", F.Refresh)

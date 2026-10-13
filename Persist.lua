@@ -3,7 +3,7 @@
 -- made safe to use. docs/persistence.md describes every saved variable, who owns it and the upgrade paths.
 --
 -- Versions (separate from the addon's release version, and from each other):
---   TwichUIDB.schema           settings and sharing records, SCHEMA below. Missing = 0 = every release
+--   TwichUIDB.schema           settings, profiles and sharing records, SCHEMA below. Missing = 0 = every release
 --                              before schemas existed. Ordered, repeatable steps in STEPS bring it up to date.
 --   TwichUIChronicleDB.version the Journey Chronicle, owned by chronicle/Data.lua (CHRONICLE_VERSION).
 --   The other roots (restore points, undo backups, your shareable setup) carry no number: they hold
@@ -28,8 +28,13 @@ local R = TwichUI
 local P = {}
 R.Persist = P
 
-P.SCHEMA = 1
+P.SCHEMA = 2
 P.CHRONICLE_VERSION = 1
+
+-- Profiles (Profiles.lua runs them; their shape is checked here with the rest). The name a profile made from
+-- the settings of an earlier release, or a new installation's, is given.
+P.DEFAULT_PROFILE = "Default"
+P.PROFILE_NAME_MAX = 32   -- characters
 
 -- Must match Share.lua's SH.TRANSPORTS (a test checks that they do).
 local VALID_TRANSPORT = { DIRECT = true, PARTY = true, GUILD = true }
@@ -50,6 +55,10 @@ P.CODES = {
     ["chronicle-entry-repaired"] = false,  -- a Chronicle entry kept after fixing its id, title or date
     ["chronicle-trimmed"] = false,       -- automatic Chronicle entries removed to keep within the limit
     ["restore-point-repaired"] = false,  -- a backup kept after fixing its id, name or date
+    ["profile-renamed"] = false,         -- a stored profile with the name of the one in use, kept under a free name
+    ["profile-state-repaired"] = false,  -- which profile is in use, or the one for new characters, had to be named again
+    ["profile-selection-missing"] = false, -- this character's profile was not there; it uses the one for new characters
+    ["profile-dropped"] = true,          -- a stored profile that was not a table
     ["root-not-table"] = true,           -- a whole saved variable was not a table
     ["container-not-table"] = true,      -- a settings group was not a table
     ["module-not-boolean"] = true,       -- an on/off setting held something else; back to its default
@@ -185,7 +194,9 @@ end
 -- ctx.own(key) makes a private copy of one of them; it must change nothing it did not take with own().
 -- Steps are repeatable: running one on data it already upgraded changes nothing.
 ---------------------------------------------------------------------------
-local CONTAINERS = { "modules", "ui", "setup", "gear", "storedData", "whisperProbe", "pins" }
+local CONTAINERS = { "modules", "ui", "setup", "gear", "storedData", "whisperProbe", "pins",
+    "profiles", "profileKeys", "profileState" }
+local PROFILE_ROOTS = { "profiles", "profileKeys", "profileState" }
 
 local function DeriveTransport(modules)
     local m = type(modules) == "table" and modules or {}
@@ -217,6 +228,20 @@ P.STEPS = {
         if stored and stored.scanMode ~= nil then stored.scanMode = nil; ctx.repair("legacy-key-removed") end
         if work.svTest ~= nil then work.svTest = nil; ctx.repair("legacy-key-removed") end
     end,
+    -- 1 -> 2: profiles (Profiles.lua). The settings every character has shared until now become the profile
+    -- "Default" where they already are (modules, ui, gear): nothing is moved, copied or removed. No character
+    -- has a choice yet, so each one uses the profile for new characters, "Default", as before. A profile root
+    -- that is already a table (this step ran before) is left as it is.
+    [2] = function(work)
+        -- A schema 1 save always has a sending method (every load wrote one); one that was lost since is
+        -- derived again as step 1 does, so the upgraded copy is usable.
+        if not VALID_TRANSPORT[work.shareTransport] then work.shareTransport = DeriveTransport(work.modules) end
+        if type(work.profileState) ~= "table" then
+            work.profileState = { live = P.DEFAULT_PROFILE, newCharacters = P.DEFAULT_PROFILE }
+        end
+        if type(work.profiles) ~= "table" then work.profiles = {} end
+        if type(work.profileKeys) ~= "table" then work.profileKeys = {} end
+    end,
 }
 
 -- A migrated copy must be usable before it replaces anything.
@@ -226,6 +251,11 @@ local function Valid(work, target)
         if work[key] ~= nil and type(work[key]) ~= "table" then return false, key end
     end
     if not VALID_TRANSPORT[work.shareTransport] then return false, "shareTransport" end
+    if target >= 2 then
+        for _, key in ipairs(PROFILE_ROOTS) do
+            if type(work[key]) ~= "table" then return false, key end
+        end
+    end
     return true
 end
 
@@ -277,6 +307,150 @@ local function NormalizeWelcome(db, fresh)
     end
 end
 
+-- Groups the features write into without checking first.
+local UI_GROUPS = { "qol", "foodDrink", "brokerMenu", "refreshments", "refreshmentsStyle",
+    "restedxpSkin", "restedxpSkinText", "restedxpSkinState", "restedxpTimerLook", "restedxpTimerText", "speakstoneSkin", "speakstoneSkinStyle", "chronicleLook", "chronicleAppearance", "guideWaypoint", "mageSell",
+    "partyPins", "pinsLook", "pinsAppearance", "pinsMapText", "pinsBroker", "pinsBrokerMenu", "pinsEditorLook" }
+
+local function NormalizeUiGroups(ui)
+    for _, k in ipairs(UI_GROUPS) do
+        if ui[k] ~= nil and type(ui[k]) ~= "table" then
+            ui[k] = nil
+            P.Repair("container-not-table")
+        end
+    end
+end
+
+---------------------------------------------------------------------------
+-- Profiles: names, and the shape of what is stored (Profiles.lua does everything else)
+---------------------------------------------------------------------------
+local function Characters(s)
+    local n = 0
+    for _ in s:gmatch("[^\128-\191]") do n = n + 1 end
+    return n
+end
+
+-- The first n characters of s (whole characters, never part of one).
+local function FirstCharacters(s, n)
+    local out, count = {}, 0
+    for ch in s:gmatch("[^\128-\191][\128-\191]*") do
+        if count >= n then break end
+        count = count + 1
+        out[count] = ch
+    end
+    return table.concat(out)
+end
+
+-- A profile name as typed, with the spaces around it trimmed: the name, or nil and why ("empty", "long",
+-- "characters"). A name is plain text: "|" (where the game's color and texture codes start) and control
+-- characters are refused. The length is counted in characters, not bytes.
+function P.ProfileName(raw)
+    if type(raw) ~= "string" then return nil, "empty" end
+    if #raw > P.PROFILE_NAME_MAX * 8 then return nil, "long" end
+    local name = raw:match("^%s*(.-)%s*$")
+    if name == "" then return nil, "empty" end
+    if name:find("[%c|]") then return nil, "characters" end
+    if Characters(name) > P.PROFILE_NAME_MAX then return nil, "long" end
+    return name
+end
+
+-- base, or "base (2)", "base (3)" ... : the first that taken(name) says is free, shortened to fit the limit.
+function P.FreeProfileName(base, taken)
+    for n = 1, 999 do
+        local suffix = n == 1 and "" or (" (" .. n .. ")")
+        local name = FirstCharacters(base, P.PROFILE_NAME_MAX - Characters(suffix)) .. suffix
+        if P.ProfileName(name) == name and not taken(name) then return name end
+    end
+end
+
+-- One stored profile (not the one in use): its groups must be tables and its switches booleans. A value that
+-- can't be used is removed, so it takes its default when the profile is used; its neighbours are kept.
+function P.NormalizeProfileData(data)
+    for _, key in ipairs({ "modules", "ui", "gear" }) do
+        if data[key] ~= nil and type(data[key]) ~= "table" then
+            data[key] = nil
+            P.Repair("container-not-table")
+        end
+        if data[key] == nil then data[key] = {} end
+    end
+    for k in pairs(R.DEFAULT_MODULES or {}) do
+        local cur = data.modules[k]
+        if cur ~= nil and type(cur) ~= "boolean" then
+            data.modules[k] = nil
+            P.Repair("module-not-boolean")
+        end
+    end
+    NormalizeUiGroups(data.ui)
+end
+
+-- profileState { live, newCharacters }, profiles[name], profileKeys[character] = name. Repeatable.
+local function NormalizeProfiles(db, fresh)
+    if type(db.profiles) ~= "table" then db.profiles = {} end
+    if type(db.profileKeys) ~= "table" then db.profileKeys = {} end
+    if type(db.profileState) ~= "table" then
+        db.profileState = {}
+        if not fresh then P.Repair("profile-state-repaired") end
+    end
+    local state, profiles, keys = db.profileState, db.profiles, db.profileKeys
+
+    -- The profile in use is the one modules, ui and gear hold: it always has a name.
+    local live = P.ProfileName(state.live)
+    if live == nil or live ~= state.live then
+        live = live or P.DEFAULT_PROFILE
+        if not fresh then P.Repair("profile-state-repaired") end
+        state.live = live
+    end
+
+    -- Stored profiles. One that isn't a table can't be used and is dropped. A key that isn't a usable name (a
+    -- number, a text with spaces around it) is kept as it is but never offered.
+    local drop, clash = {}, nil
+    for name, data in pairs(profiles) do
+        if type(data) ~= "table" then
+            drop[#drop + 1] = name
+        elseif P.ProfileName(name) == name then
+            P.NormalizeProfileData(data)
+            if name == live then clash = data end
+        end
+    end
+    for _, name in ipairs(drop) do
+        profiles[name] = nil
+        P.Repair("profile-dropped")
+    end
+    -- A stored copy under the name of the one in use (a hand-edited file): both are kept, the stored one
+    -- under a free name.
+    if clash then
+        local function Taken(n)
+            local lower = n:lower()
+            if live:lower() == lower then return true end
+            for k in pairs(profiles) do
+                if type(k) == "string" and k:lower() == lower then return true end
+            end
+            return false
+        end
+        profiles[live] = nil
+        local name = P.FreeProfileName(live, Taken)
+        if name then profiles[name] = clash end
+        P.Repair("profile-renamed")
+    end
+
+    local nc = state.newCharacters
+    if not (type(nc) == "string" and (nc == live or (type(profiles[nc]) == "table" and P.ProfileName(nc) == nc))) then
+        if not fresh then P.Repair("profile-state-repaired") end
+        state.newCharacters = live
+    end
+
+    -- A character's choice is a name; one naming a profile that is gone is kept here and settled when that
+    -- character logs in (Profiles.lua), so it can be told.
+    local bad = {}
+    for k, v in pairs(keys) do
+        if type(k) ~= "string" or type(v) ~= "string" then bad[#bad + 1] = k end
+    end
+    for _, k in ipairs(bad) do
+        keys[k] = nil
+        P.Repair("list-entry-dropped")
+    end
+end
+
 -- Fills what is missing and fixes what cannot be used, one value at a time. Repeatable.
 -- fresh: this load found no saved settings (see "First run" above).
 function P.Normalize(db, fresh)
@@ -300,19 +474,12 @@ function P.Normalize(db, fresh)
         end
     end
     if added > 0 then P.Repair("defaults-added", added) end
-    -- Groups the features write into without checking first.
-    if type(db.ui) == "table" then
-        for _, k in ipairs({ "qol", "foodDrink", "brokerMenu", "refreshments", "refreshmentsStyle",
-            "restedxpSkin", "restedxpSkinText", "restedxpSkinState", "restedxpTimerLook", "restedxpTimerText", "speakstoneSkin", "speakstoneSkinStyle", "chronicleLook", "chronicleAppearance", "guideWaypoint", "mageSell",
-            "partyPins", "pinsLook", "pinsAppearance", "pinsMapText", "pinsBroker", "pinsBrokerMenu", "pinsEditorLook" }) do
-            if db.ui[k] ~= nil and type(db.ui[k]) ~= "table" then
-                db.ui[k] = nil
-                P.Repair("container-not-table")
-            end
-        end
-    end
+    if type(db.ui) == "table" then NormalizeUiGroups(db.ui) end
     if not VALID_TRANSPORT[db.shareTransport] then db.shareTransport = DeriveTransport(db.modules) end
     NormalizeWelcome(db, fresh)
+    -- Profiles exist from schema 2 on. Data still at an older schema (an upgrade that failed this load) is
+    -- left without them until its upgrade succeeds.
+    if fresh or (P.IsCount(db.schema) and db.schema >= 2) then NormalizeProfiles(db, fresh) end
 end
 
 local function ValidSchemaNumber(n) return P.IsCount(n) end

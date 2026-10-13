@@ -151,8 +151,13 @@ proxies.TWICHUI_gearFuture.set(false); assert(P.Get("futureLevels") == false)
 assert(proxies.TWICHUI_gearTree.get() == 0, "automatic by default")
 proxies.TWICHUI_gearTree.set(8); assert(P.TreeChoice() == 8)
 proxies.TWICHUI_gearTree.set(0); assert(P.TreeChoice() == nil, "0 puts it back to automatic")
+-- The Profiles page's choices have no default on purpose: the panel's Defaults button must never switch,
+-- copy into or delete a profile.
+local NO_DEFAULT = { TWICHUI_gearTree = true, TWICHUI_profileCurrent = true, TWICHUI_profileCopyFrom = true, TWICHUI_profileDelete = true }
 for variable, s in pairs(proxies) do
-  if variable ~= "TWICHUI_gearTree" then
+  if NO_DEFAULT[variable] then
+    if variable ~= "TWICHUI_gearTree" then assert(s.default == nil, variable .. " has no default") end
+  else
     assert(s.default ~= nil, variable .. " has a default")
   end
 end
@@ -270,7 +275,7 @@ assert(attune.data.tooltip:find("after reload"), "toggle change shows it needs a
 
 -- The overview links to one page per feature, in this order; every setting
 -- is on exactly one page (registration above refuses a repeat).
-assert(table.concat(pageOrder, ",") == "Gear comparison,Notifications,Quality of life,Food and drink,Mage,Journey Chronicle,Chronicle appearance,Party pins,Pin appearance,Auction House,Addon skins,RestedXP guide window,SpeakStone speech frame,Configuration sharing", table.concat(pageOrder, ","))
+assert(table.concat(pageOrder, ",") == "Gear comparison,Notifications,Quality of life,Food and drink,Mage,Journey Chronicle,Chronicle appearance,Party pins,Pin appearance,Auction House,Addon skins,RestedXP guide window,SpeakStone speech frame,Configuration sharing,Profiles", table.concat(pageOrder, ","))
 for variable, page in pairs({
   TWICHUI_media = "TwichUI", TWICHUI_quietLogin = "TwichUI", TWICHUI_showAdvanced = "TwichUI", 
   TWICHUI_gearHints = "Gear comparison", TWICHUI_gearTree = "Gear comparison", TWICHUI_gearBagStyle = "Gear comparison",
@@ -287,6 +292,7 @@ for variable, page in pairs({
   TWICHUI_mageSell = "Mage", TWICHUI_mageSellFood = "Mage", TWICHUI_mageSellDrink = "Mage", TWICHUI_mageSellDryRun = "Mage",
   TWICHUI_attuneSkin = "Addon skins", TWICHUI_whatsTrainingSkin = "Addon skins",
   TWICHUI_setupSharing = "Configuration sharing", TWICHUI_shareTransport = "Configuration sharing",
+  TWICHUI_profileCurrent = "Profiles", TWICHUI_profileCopyFrom = "Profiles", TWICHUI_profileDelete = "Profiles",
 }) do assert(variables[variable] == page, variable .. " is on " .. page .. ", not " .. tostring(variables[variable])) end
 -- The Mage launchers' text choices read and write each launcher's own setting.
 for variable, module in pairs({ TWICHUI_mageTravelText = R.MageTravel, TWICHUI_mageConjureText = R.MageConjure }) do

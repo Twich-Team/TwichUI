@@ -721,6 +721,11 @@ local function OnRegenEnabled()
 end
 
 -- Registers what is wanted and lets go of the rest. Safe to call any number of times.
+-- A profile change may bring other amounts: the plan is made again (it is only made while the feature is on).
+R.Profiles.OnApply("views", "refreshments-plan", function()
+    if RF.Enabled() then Schedule() end
+end)
+
 function RF.Refresh()
     local on = RF.Enabled()
     Want("GROUP_ROSTER_UPDATE", Schedule, on)

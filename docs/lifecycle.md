@@ -53,6 +53,7 @@ function twice is one registration. Modules still guard with their own `Want(eve
 | Chronicle window, note editor and date picker (their appearance) | no (plain frames) | one coalesced pass while open, none while closed; a waiting pass is dropped when the window closes (docs/chronicle-appearance.md) |
 | `BNToastFrame` event list | no | act at once |
 | Settings previews, apply/restore/reset buttons | n/a | **Reject** in combat with a message |
+| Profile switch, New, Duplicate, Copy settings from, Reset (docs/profiles.md) | they re-apply the whole configuration, secure Food and Drink buttons included | **Reject** in combat in `Profiles.lua` itself, rechecked when a confirmation is accepted; Rename and Delete change no option and are allowed. A character named only at login switches after combat |
 
 Mocked tests cannot show combat lockdown, protected-frame errors or taint. Those need the game.
 
@@ -63,7 +64,7 @@ Mocked tests cannot show combat lockdown, protected-frame errors or taint. Those
 `refreshments-reset-manual`, `refreshments-reset-left-group`, `trade-place-not-shown`, `trade-split-not-seen`,
 `trade-not-completed`, `trade-move-blocked`, `trade-auto-blocked`, `trade-auto-limit`, `trade-auto-stopped-by-you`,
 `trade-place-refused`, `cancelled-stale-mage-sell`, `unlock-deferred-combat`, `unlock-save-ignored`,
-`unlock-save-refused`, `unlock-register-failed`. Counts only; no names, places or items.
+`unlock-save-refused`, `unlock-register-failed`, `profile-apply-failed`. Counts only; no names, places or items.
 
 ## Manual acceptance test
 
@@ -87,8 +88,8 @@ Test TwichUI alone first, then with EllesmereUI. After each step, check `/tui di
    combat; after it the buttons use the last value only.
 7. **Disable with pending work.** In combat change a Food/Drink setting, then turn Food and Drink off. *Expect:* after
    combat nothing reappears. Turn it on again: buttons build once.
-8. **Profile switch with things open.** (TwichUI has no profiles; switch an EllesmereUI profile.) With the options
-   panel, a preview card and a mover open. *Expect:* nothing stuck on screen, no stale tooltip.
+8. **Profile switch with things open.** Switch a TwichUI profile (Options > Profiles), and separately an EllesmereUI
+   profile, with the options panel, a preview card and a mover open. *Expect:* nothing stuck on screen, no stale tooltip.
 9. **Repeated enable/disable.** Toggle Zone card, Friend login, Welcome Back, Food/Drink and Chronicle zones 5 times
    each. *Expect:* each behaves as one copy (one card, one chime, one entry).
 10. **Friends.** Log in with friends already online: no cards. A friend who signs in later gets one card and one

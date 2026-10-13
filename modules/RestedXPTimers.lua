@@ -538,6 +538,7 @@ function T.Reset()
 end
 
 Look.Subscribe(Changed)
+R.Profiles.OnApply("look", "restedxp-timers", Changed)   -- a profile change: one update
 MS.StatusBars.Subscribe(function() if fallback.fill then Changed() end end)
 MS.Fonts.Subscribe(function() if fallback.label or fallback.time then Changed() end end)
 

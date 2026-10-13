@@ -677,6 +677,12 @@ end
 ---------------------------------------------------------------------------
 function P.IsOpen() return panel ~= nil and panel:IsShown() end
 
+-- A profile change: an open panel goes to that profile's place (out of combat only: Profiles.lua refuses a
+-- change in combat, and the panel is closed in combat anyway). Its look follows its MenuStyle look.
+R.Profiles.OnApply("layout", "refreshments-panel", function()
+    if P.IsOpen() and not InCombat() then Place() end
+end)
+
 local function OnCombatStart() P.Close() end   -- the last moment the panel can be hidden
 
 local function OnScale() if P.IsOpen() then Restyle() end end   -- a border is a whole number of screen pixels

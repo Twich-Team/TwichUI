@@ -578,6 +578,12 @@ end
 -- with its layouts, and is the same for every character.
 ---------------------------------------------------------------------------
 local mover
+
+-- A profile change may bring another place: the card and its Edit Mode outline go there.
+R.Profiles.OnApply("layout", "training-card", function()
+    if mover then Place(mover) end
+    if card then Place(card) end
+end)
 local editHooked = false
 
 local function SavePosition(x, y)

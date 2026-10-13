@@ -59,6 +59,8 @@ function B.Update()
     if obj then obj.text = BarText() end
 end
 
+R.Profiles.OnApply("views", "refreshments-broker", function() B.Update() end)   -- a profile change: its text again
+
 local function Color()
     local K = R.ChronicleStyle and R.ChronicleStyle.color
     return K or { text = { 1, 1, 1 }, textDim = { 0.8, 0.8, 0.8 }, stone = { 0.6, 0.6, 0.6 }, gold = { 0.8, 0.7, 0.3 } }

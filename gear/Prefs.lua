@@ -3,9 +3,11 @@
 -- tree to weigh for and how hints behave (the TwichUI page), and how each
 -- tree values stats (your stat weights or ranked stat priority, on the Stat
 -- weights page, /twichui gear).
--- Kept account-wide in TwichUIDB.gear; the talent tree choice is per
--- character. The on/off switches live with TwichUI's other toggles
--- (TwichUIDB.modules.gearHints and gearBagIcons).
+-- Kept in TwichUIDB.gear. The preferences in DEFAULTS belong to the profile
+-- in use (Profiles.lua); stat weights and priorities stay account-wide, by
+-- class and tree, and the talent tree choice is per character. The on/off
+-- switches live with TwichUI's other toggles (TwichUIDB.modules.gearHints and
+-- gearBagIcons).
 
 local R = TwichUI
 local P = {}
@@ -18,6 +20,7 @@ local DEFAULTS = {
     strictness = "balanced",  -- how big a gain counts: "cautious", "balanced" or "eager"
     bagStyle = "gilded",      -- bag icon: "gilded", "green" or "badge"
 }
+P.DEFAULTS = DEFAULTS   -- Profiles.lua: what a profile that leaves one out takes
 
 -- Gain over what you wear needed for "Likely" and "Possible".
 P.STRICTNESS = {
@@ -58,6 +61,9 @@ function P.Changed()
         if not ok then geterrorhandler()(err) end
     end
 end
+
+-- A profile change: hints and bag marks follow the preferences now in place (the same table, refilled).
+R.Profiles.OnApply("views", "gear-hints", function() P.Changed() end)
 
 function P.Get(key)
     return DB()[key]

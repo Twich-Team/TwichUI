@@ -242,6 +242,8 @@ function Text.Reset()
 end
 
 Look.Subscribe(Changed)
+-- A profile change: text, sizes and decorations may all differ, so the layout is redone too.
+R.Profiles.OnApply("look", "restedxp-skin", function() Changed(true) end)
 
 -- Puts the whole RestedXP look (background, border, fonts, colours) back to the defaults. The switch, the
 -- remembered theme and RestedXP's own settings are not touched.

@@ -25,9 +25,9 @@ checks that `S.color`, `S.palette` and an ordinary `S.Button` are unchanged afte
 
 ## Saved data
 
-Account-wide, in `TwichUIDB.ui`, like TwichUI's other looks. **TwichUI has no profiles** (see `persistence.md`), so
-there is no profile switching to follow; the Chronicle's entries are per character in `TwichUIChronicleDB`, which
-this never reads or writes.
+In the profile in use (`TwichUIDB.ui`; see `profiles.md`), like TwichUI's other looks; a profile change redraws an
+open Chronicle once. The Chronicle's entries are per character in `TwichUIChronicleDB`, in no profile, which this
+never reads or writes.
 
 * `ui.chronicleLook`: a `MenuStyle` look: `bgTexture`, `bgColor`, `bgOpacity`, `borderTexture`, `borderColor`,
   `borderOpacity`, `borderSize`, and the optional `bgTiling`, `bgTileSize`, `bgInset`.
@@ -123,7 +123,7 @@ accent.
 * The text you type in the editor follows face, size and outline but not color.
 * There is no per-button styling, and no sample entries are created to preview: **Chronicle window** under the
   Appearance header shows the real window above the options panel (drag it by its title).
-* Per-profile appearance does not exist because TwichUI has no profiles.
+* Appearance is per TwichUI profile (`profiles.md`); switching profile redraws an open Chronicle once.
 * Rendering has not been looked at in the game.
 
 ## Manual checklist (in the game)
@@ -140,7 +140,7 @@ accent.
 6. Hover tint, Edit and Delete links, Delete stays red, a disabled Save, the picker's today/selected/range marks.
 7. Scroll through many entries; open and close; add and delete entries; rows recycled keep the look.
 8. Different UI scales (and a small game window): the border is the thickness chosen, the window fits the screen.
-9. Switch EllesmereUI profiles: the Chronicle look does not change (TwichUI has no profiles of its own).
+9. Switch EllesmereUI profiles: the Chronicle look does not change. Switch TwichUI profiles: it changes to that profile's look, once.
 10. Reset Chronicle appearance: look is back; entries, notes, the date filter, the clock, the sound setting, and
     where you dragged the window are as they were.
 11. EllesmereUI present, absent (disable it, reload), and a saved choice of one of its media with it disabled;

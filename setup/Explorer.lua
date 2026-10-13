@@ -239,7 +239,7 @@ function EX.Sources()
 
     Add({ id = "settings", group = "Configuration", label = "TwichUI settings", path = "TwichUIDB",
         detail = "account-wide", Root = function() return G("TwichUIDB") end,
-        scope = "Account-wide: every character on this account uses the same TwichUI settings. TwichUI has no profiles. A few entries inside are kept per character, under a character's name or id." })
+        scope = "Account-wide. modules, ui and gear hold the profile this character uses; profiles holds the others, profileKeys which profile each character uses. A few entries are the same for every profile (map pins, sharing records, stat weights, the never-sell list), and a few are kept per character, under a character's name or id." })
 
     local rdb = G("TwichUIRestoreDB")
     local points = type(rdb) == "table" and type(rdb.points) == "table" and rdb.points or {}
