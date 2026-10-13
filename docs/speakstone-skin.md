@@ -3,7 +3,7 @@
 The settings are a page of their own, **Addon skins > SpeakStone speech frame** (a nested page of the Addon skins
 page, which keeps a short pointer to it).
 
-An optional look for SpeakStone's speech frame (`modules/SpeakStoneSkin.lua`, `settings/SpeakStone.lua`,
+An optional look for SpeakStone's speech frame (`modules/SpeakStoneSkin.lua`, `TwichUI_Settings/pages/SpeakStone.lua`,
 `diag/SpeakStoneSkin.lua`). Written against SpeakStone Forever - Main 3.1.6 (Interface 16001), `SpeechFrame.lua`.
 Off by default. A visual finish only: SpeakStone keeps its narration, queue, timer, text, dragging, position, size,
 lock and visibility. Nothing is verified in the game yet (see the checklist).

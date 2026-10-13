@@ -1,0 +1,36 @@
+## Interface: 16001
+## Title: |cffC9A24ATwich|rUI Settings
+## Notes: The settings window for TwichUI. Loaded only when you open TwichUI's settings; keep it turned on alongside TwichUI.
+## Author: twichie
+## Version: 3.0.12
+## RequiredDeps: !!!TwichUI
+## LoadOnDemand: 1
+## IconTexture: Interface\AddOns\!!!TwichUI\media\icon
+## X-License: MIT (code); see !!!TwichUI\LICENSE
+## Category: Interface Enhancements
+
+# The page list and the controls pages describe themselves with (no frames)
+Kit.lua
+
+# One file per page, in any order (each page says its place)
+pages\Overview.lua
+pages\Gear.lua
+pages\Notifications.lua
+pages\QoL.lua
+pages\FoodDrink.lua
+pages\Mage.lua
+pages\Chronicle.lua
+pages\Pins.lua
+pages\Auction.lua
+pages\Skins.lua
+pages\RestedXP.lua
+pages\SpeakStone.lua
+pages\Sharing.lua
+pages\Profiles.lua
+pages\Troubleshooting.lua
+
+# Search over the pages' descriptions, the controls the window draws with, and the window (last: it tells
+# TwichUI the settings are ready)
+Search.lua
+Widgets.lua
+Window.lua

@@ -1,4 +1,4 @@
--- TwichUI options: the SpeakStone speech frame's look (modules/SpeakStoneSkin.lua). A page of its own under
+-- TwichUI settings: the SpeakStone speech frame's look (modules/SpeakStoneSkin.lua). A page of its own under
 -- Addon skins. Not through EllesmereUI, which it doesn't need.
 
 local R = TwichUI
@@ -16,6 +16,8 @@ local STATUS = {
 
 K.Page({
     key = "speakstone", name = "SpeakStone speech frame", parent = "skins", order = 96,
+    description = "A TwichUI look for SpeakStone's speech frame. Narration, timing and position stay SpeakStone's own.",
+    keywords = "speakstone speech voice narration dialogue portrait talking head",
     when = function() return R.SpeakStoneSkin ~= nil end,
     build = function()
         local SS = R.SpeakStoneSkin
@@ -23,7 +25,7 @@ K.Page({
         local Header, Toggle, Button, Proxy, ProxyToggle, Advanced, Under = K.Header, K.Toggle, K.Button, K.Proxy, K.ProxyToggle, K.Advanced, K.Under
         local BOOL, STRING, NUMBER = K.BOOL, K.STRING, K.NUMBER
 
-        Header("SpeakStone speech frame", "Gives SpeakStone's speech frame (the bar that shows who is speaking, the text, a progress line and Pause, Stop and Replay) a TwichUI look: a warm background and thin bronze border, fonts and colors of your choosing, quieter controls and a ringed portrait. It only changes how the frame is drawn: SpeakStone's narration, queue, timing, text, size, position and lock are its own. Works with or without EllesmereUI.")
+        local intro = Header("SpeakStone speech frame", "Gives SpeakStone's speech frame (the bar that shows who is speaking, the text, a progress line and Pause, Stop and Replay) a TwichUI look: a warm background and thin bronze border, fonts and colors of your choosing, quieter controls and a ringed portrait. It only changes how the frame is drawn: SpeakStone's narration, queue, timing, text, size, position and lock are its own. Works with or without EllesmereUI.")
         local function SkinStatus()
             local state = SS.Status()
             local text = STATUS[state.code] or { state.code }
@@ -31,10 +33,7 @@ K.Page({
             return color .. text[1] .. "|r", text[2]
         end
         local base = "Gives SpeakStone's speech frame the TwichUI look. Turning it off puts SpeakStone's own look back at once; no reload is needed. Everything below is TwichUI's look; SpeakStone's own settings (its size, position, lock and narration) are unchanged."
-        local toggle = Toggle("speakstoneSkin", "Skin the SpeakStone speech frame", base, false, function()
-            SS.OnSwitch()
-            K.RefreshOverview()
-        end)
+        local toggle = Toggle("speakstoneSkin", "Skin the SpeakStone speech frame", base)
         if toggle and toggle.GetTooltip ~= nil then
             -- the status is read when the tooltip is shown, so it is never stale
             toggle.GetTooltip = function()
@@ -146,8 +145,6 @@ K.Page({
 
         local reset = K.ResetButton("Reset appearance", resettable, SS.Reset,
             "Puts this look's background, border, text, controls, portrait, progress line and spacing back to the defaults. Nothing else changes: not the switch, SpeakStone's settings, its size and position, or the rest of TwichUI.")
-        Under(reset, toggle, On)
-
-        R:On("PLAYER_LOGIN", K.RefreshOverview)
+        Under(K.InSection(reset, intro), toggle, On)
     end,
 })

@@ -157,7 +157,7 @@ end
 -- Whether it is on a data bar's list (false while no addon provides LibDataBroker).
 function B.Available() return obj ~= nil end
 
--- The switch changed (settings/Pins.lua).
+-- The switch changed (Switches.lua).
 function B.Refresh()
     if not Enabled() then EndFlash() end
     if loggedIn then Create() end

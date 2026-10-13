@@ -25,6 +25,8 @@ libs\LibDeflate\LibDeflate.lua
 Core.lua
 Persist.lua
 Profiles.lua
+Switches.lua
+SettingsLauncher.lua
 modules\Interact.lua
 modules\QuietLogin.lua
 modules\Media.lua
@@ -178,21 +180,4 @@ diag\Saved.lua
 diag\Pins.lua
 diag\Window.lua
 
-# Options (Esc > Options > AddOns > TwichUI): the shared controls, one file per page, then putting them together
-settings\Kit.lua
-settings\Gear.lua
-settings\Notifications.lua
-settings\QoL.lua
-settings\FoodDrink.lua
-settings\Mage.lua
-settings\Chronicle.lua
-settings\Pins.lua
-settings\Auction.lua
-settings\Skins.lua
-settings\RestedXP.lua
-settings\SpeakStone.lua
-settings\Sharing.lua
-settings\Profiles.lua
-settings\Troubleshooting.lua
-settings\Overview.lua
-settings\Register.lua
+# The settings window is an addon of its own, TwichUI_Settings (load on demand; SettingsLauncher.lua opens it)

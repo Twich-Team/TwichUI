@@ -1,107 +1,25 @@
--- A client with TwichUI's features and options loaded, and a stand-in for the game's Settings API that behaves
--- like WoW: Forever's SettingMixin (Blizzard_Setting.lua): SetValue writes only a value that differs, and the
--- value-changed callbacks run either way; NotifyUpdate runs them with the current value; SetValueToDefault is
--- what the panel's Defaults button does. Used by test_settings_contract.lua and test_settings_kit.lua.
+-- A client with TwichUI's features loaded and the settings window's pages described (TwichUI_Settings, loaded
+-- as the game loads it on demand: after everything else, once the saved variables are in). No window is made:
+-- R.SettingsUI.Open only records the page and setting asked for (c.opened, c.openedSetting), so tests read the
+-- pages' descriptions, which is what search and the window both use. The settings objects behave like the
+-- game's own did: SetValue writes only a value that differs, and the change callbacks run either way.
 --
 -- SettingsClient(opts) -> c, S
 --   opts.name: the character ("Rich" when left out)
---   opts.beforeInit(c): runs after the files are loaded and before the saved variables "arrive"
---   S.pages: categories in the order made, each { name, parent, kind, rows = { initializers } }
---   S.variables[name] = setting; S.list: settings in the order registered; S.registered(): the category added
---   S.popups: how many times the reload question was asked
+--   opts.beforeInit(c): runs after the features are loaded and before the saved variables "arrive"
+--   opts.beforeDescribe(c): runs after the settings window's files are loaded and before the pages are described
+--   S.pages: the pages in their order, each { key, name, parent (its name), kind ("page" or "hosted"), rows }
+--   S.variables[name] = setting; S.list: settings in the order made; S.registered(): the AddOns entry's category
+--   S.popups: how many times the reload question was asked; S.K: the settings kit
 
 function SettingsClient(opts)
   opts = opts or {}
-  local c = MakeClient(opts.name or "Rich", {"!!!TwichUI", "Attune"})
-  local S = { pages = {}, variables = {}, list = {}, popups = 0 }
+  local c = MakeClient(opts.name or "Rich", {"!!!TwichUI", "Attune", "TwichUI_Settings"})
+  local S = { popups = 0 }
   local registered
 
-  local function Category(name, parent, kind)
-    local cat = { name = name, parent = parent and parent.name or nil, kind = kind or "vertical", rows = {} }
-    local id = #S.pages + 1
-    function cat:GetID() return id end
-    function cat:GetName() return self.name end
-    function cat:SetExpanded() end
-    S.pages[#S.pages + 1] = cat
-    return cat, { AddInitializer = function(_, initializer) table.insert(cat.rows, initializer) end }
-  end
-
-  local function Initializer(kind, data)
-    local i = { kind = kind, data = data, shown = {}, modify = {} }
-    function i:AddShownPredicate(fn) table.insert(self.shown, fn) end
-    function i:AddModifyPredicate(fn) table.insert(self.modify, fn) end
-    function i:SetParentInitializer(parent, fn) self.parent = parent; if fn then table.insert(self.modify, fn) end end
-    function i:GetTooltip() return self.data.tooltip end
-    function i:GetName() if self.data.setting then return self.data.setting:GetName() end return self.data.name end
-    function i:GetSetting() return self.data.setting end
-    function i:GetData() return self.data end
-    function i:Enabled() for _, fn in ipairs(self.modify) do if not fn() then return false end end return true end
-    return i
-  end
-
-  local function NewSetting(cat, variable, varType, name, default, get, set, kind)
-    assert(not S.variables[variable], variable .. " is registered once")
-    local s = { variable = variable, varType = varType, name = name, default = default, get = get, set = set,
-      page = cat.name, kind = kind, callbacks = {}, notified = 0 }
-    function s:GetName() return self.name end
-    function s:GetVariable() return self.variable end
-    function s:GetValue() return self.get() end
-    function s:GetDefaultValue() return self.default end
-    function s:SetValueChangedCallback(fn) table.insert(self.callbacks, fn) end
-    function s:TriggerValueChanged(value) for _, fn in ipairs(self.callbacks) do fn(self, value) end end
-    function s:SetValue(value)
-      assert(type(value) == self.varType, variable .. ": SetValue needs a " .. self.varType)
-      if self.get() ~= value then self.set(value) end
-      self:TriggerValueChanged(value)
-    end
-    function s:NotifyUpdate() self.notified = self.notified + 1; self:TriggerValueChanged(self.get()) end
-    function s:SetValueToDefault() if self.default == nil then return false end self:SetValue(self.default) return true end
-    S.variables[variable] = s
-    S.list[#S.list + 1] = s
-    return s
-  end
-
-  local function Control(kind)
-    return function(category, setting, a, b)
-      local tooltip = (kind == "slider" or kind == "dropdown") and b or a
-      local i = Initializer(kind, { setting = setting, tooltip = tooltip })
-      if kind == "slider" then setting.slider = a end
-      if kind == "dropdown" then setting.options = a end
-      if kind == "swatch" then setting.swatch = true end
-      table.insert(category.rows, i)
-      return i
-    end
-  end
-
-  c.CreateSettingsListSectionHeaderInitializer = function(name, tooltip) return Initializer("header", { name = name, tooltip = tooltip }) end
-  c.CreateSettingsButtonInitializer = function(name, buttonText, click, tooltip)
-    local i = Initializer("button", { name = name, buttonText = buttonText, tooltip = tooltip }); i.click = click; return i
-  end
   c.Settings = {
-    VarType = { Boolean = "boolean", String = "string", Number = "number" },
-    RegisterVerticalLayoutCategory = function(name) return Category(name) end,
-    RegisterVerticalLayoutSubcategory = function(parent, name) return Category(name, parent) end,
-    RegisterCanvasLayoutSubcategory = function(parent, _, name) return (Category(name, parent, "canvas")) end,
-    RegisterAddOnSetting = function(category, variable, key, tbl, varType, name, default)
-      if tbl[key] == nil then tbl[key] = default end
-      local where = (tbl == c.TwichUIDB.modules and "modules") or (tbl == c.TwichUIDB.ui and "ui") or "?"
-      return NewSetting(category, variable, varType, name, default,
-        function() return tbl[key] end, function(value) tbl[key] = value end, "switch:" .. where .. "." .. key)
-    end,
-    RegisterProxySetting = function(category, variable, varType, name, default, get, set)
-      return NewSetting(category, variable, varType, name, default, get, set, "proxy")
-    end,
-    CreateSliderOptions = function(min, max, step) return { min = min, max = max, step = step } end,
-    CreateSlider = Control("slider"),
-    CreateColorSwatch = Control("swatch"),
-    CreateCheckbox = Control("checkbox"),
-    CreateDropdown = Control("dropdown"),
-    CreateControlTextContainer = function()
-      local data = {}
-      return { Add = function(_, value, label, tip) table.insert(data, { value = value, label = label, tooltip = tip }) end,
-        GetData = function() return data end }
-    end,
-    OpenToCategory = function(id) c.opened = id end,
+    RegisterCanvasLayoutCategory = function(frame, name) return { name = name, frame = frame, GetID = function() return 1 end } end,
     RegisterAddOnCategory = function(category) registered = category end,
   }
   function S.registered() return registered end
@@ -137,7 +55,6 @@ function SettingsClient(opts)
     "pins/Pins.lua", "pins/Sync.lua", "pins/Look.lua", "pins/Map.lua", "pins/Minimap.lua", "pins/Editor.lua", "pins/Window.lua",
     "pins/BrokerMenu.lua", "pins/Broker.lua",
     "diag/Diagnostics.lua", "diag/Window.lua" }
-  for _, f in ipairs(SettingsFiles()) do FILES[#FILES + 1] = f end
   for _, f in ipairs(FILES) do
     local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
   end
@@ -145,5 +62,35 @@ function SettingsClient(opts)
   c.LOADED["!!!TwichUI"] = true; c.FireEvent("ADDON_LOADED", "!!!TwichUI")
   c.FireEvent("PLAYER_LOGIN")
   c.FireEvent("PLAYER_ENTERING_WORLD", true, false)
+
+  -- The settings window's addon, as the game loads it on demand.
+  local function LoadCompanion()
+    for _, f in ipairs(SettingsFiles()) do
+      local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("TwichUI_Settings", {})
+    end
+    c.LOADED.TwichUI_Settings = true
+  end
+  c.C_AddOns.LoadAddOn = function(name)
+    if name ~= "TwichUI_Settings" then return false, "MISSING" end
+    if not c.LOADED.TwichUI_Settings then LoadCompanion() end
+    return true
+  end
+  LoadCompanion()
+  local R = c.TwichUI
+  local K = R.SettingsKit
+  -- no window in these tests: opening records where it would go
+  R.SettingsUI.Open = function(page, setting) c.opened, c.openedSetting = page or "overview", setting end
+  if opts.beforeDescribe then opts.beforeDescribe(c) end
+  K.Describe()
+
+  S.K = K
+  S.variables, S.list = K.variables, K.settings
+  S.pages = {}
+  for _, page in ipairs(K.NavOrder()) do
+    S.pages[#S.pages + 1] = {
+      key = page.key, name = page.name, parent = page.parent and K.pages[page.parent].name or nil,
+      kind = page.def.host and "hosted" or "page", rows = page.rows, group = page.group,
+    }
+  end
   return c, S
 end

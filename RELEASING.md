@@ -10,7 +10,8 @@
    GitHub repository as the secret `CF_API_KEY` (and `WAGO_API_TOKEN` for Wago).
 
 ## Each release
-1. Update `## Version:` in the TOC and add an entry to `CHANGELOG.md`.
+1. Update `## Version:` in both TOCs (`!!!TwichUI.toc` and `TwichUI_Settings/TwichUI_Settings.toc`;
+   `tests/test_settings_package.lua` fails if they differ) and add an entry to `CHANGELOG.md`.
 2. Run `./tools/update_training_data.sh` (needs `git` and `lua5.1`) to refresh the
    class training data from the newest What's Training? commit, then
    `./tests/run.sh` (needs `lua5.1` and `lua-bitop`).
@@ -34,4 +35,7 @@
   interface 16001; if CurseForge doesn't list it, upload for the closest version
   CurseForge offers and say "WoW Forever" in the release notes.
 - Keep the `!!!` folder name: TwichUI must load before other addons.
+- The zip holds two folders: `!!!TwichUI` and `TwichUI_Settings` (the settings window, load on demand; `.pkgmeta`
+  `move-folders`). Unzip a release once to check both are there, side by side, and that `!!!TwichUI` has no
+  `TwichUI_Settings` folder inside it.
 - The CurseForge description can reuse README.md.

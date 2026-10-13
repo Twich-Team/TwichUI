@@ -1,19 +1,20 @@
 dofile(TESTS .. "harness.lua")
 dofile(TESTS .. "settings_mock.lua")
--- The options' shared behaviour (settings/Kit.lua, settings/Register.lua) and the update paths it calls:
---   * a page that fails to build does not take the other pages, or the TwichUI category, with it;
+-- The settings' shared behaviour (TwichUI_Settings/Kit.lua, Switches.lua) and the update paths it calls:
+--   * a page that fails to describe does not take the other pages, or the AddOns launcher, with it;
 --   * a switch acts only when its value changes, and asks to reload only when the value differs from the one
 --     the UI loaded with; R:SetEnabled goes the same way;
 --   * a Reset forgets the look in one go (one redraw) and each control shows its value again;
 --   * the same value again redraws nothing;
 --   * the features' own setters refuse what they can't use;
---   * nothing on the options pages, Reset buttons or Defaults included, touches map pins.
+--   * Advanced rows are marked, and "Show advanced options" names the pages that have them;
+--   * nothing on the settings pages, Reset buttons and "Reset this page" included, touches map pins.
 
 local errors = {}
 local harnessHandler
-local c, S = SettingsClient({ beforeInit = function(c)
+local c, S = SettingsClient({ beforeDescribe = function(c)
   -- a page whose build fails, between two that work
-  c.TwichUI.SettingsKit.Page({ key = "broken", name = "Broken page", order = 15, build = function() error("boom") end })
+  c.TwichUI.SettingsKit.Page({ key = "broken", name = "Broken page", order = 15, group = "everyday", build = function() error("boom") end })
   harnessHandler = c.geterrorhandler
   c.geterrorhandler = function() return function(e) errors[#errors + 1] = tostring(e) end end
 end })
@@ -33,7 +34,7 @@ end
 -- 1. One broken page: reported, and everything else is there.
 assert(#errors == 1 and errors[1]:find("boom", 1, true), "the failure is reported: " .. table.concat(errors, " | "))
 assert(S.registered() and S.registered().name == "TwichUI", "TwichUI is still added to the AddOns list")
-assert(Page("Broken page"), "the broken page's place is kept")
+assert(Page("Broken page") and K.pages.broken.failed, "the broken page's place is kept, and it says so")
 for _, name in ipairs({ "Gear comparison", "Notifications", "Party pins", "Configuration sharing" }) do
   assert(#Page(name).rows > 0, name .. " is built")
 end
@@ -56,7 +57,7 @@ assert(refreshed == 2 and c.TwichUIDB.modules.arrival == true, "Defaults changed
 local notifications = Row("TwichUI", "Notifications")
 c.TwichUIDB.modules.trainingNotice = false
 arrival:NotifyUpdate()
-assert(notifications.data.name:find("2 of 3 on", 1, true), notifications.data.name)
+assert(notifications.status():find("2 of 3 on", 1, true), notifications.status())
 assert(refreshed == 2)
 c.TwichUIDB.modules.trainingNotice = true
 
@@ -136,25 +137,30 @@ assert(Page("Chronicle appearance").parent == "Journey Chronicle" and Page("Pin 
 assert(S.variables.TWICHUI_chronicleAccentColor.page == "Chronicle appearance" and S.variables.TWICHUI_chronicle.page == "Journey Chronicle")
 assert(S.variables.TWICHUI_pinsLookBgColor.page == "Pin appearance" and S.variables.TWICHUI_partyPins.page == "Party pins")
 Row("Journey Chronicle", "Chronicle appearance", "button").click()
-assert(c.opened == R.settingsCategories.chronicleLook:GetID(), "the Chronicle's pointer opens its appearance page")
+assert(c.opened == "chronicleLook", "the Chronicle's pointer opens its appearance page")
 Row("Party pins", "Pin appearance", "button").click()
-assert(c.opened == R.settingsCategories.pinsLook:GetID(), "and the pins' theirs")
+assert(c.opened == "pinsLook", "and the pins' theirs")
 c.TwichUIDB.modules.partyPins = false
 assert(not Row("Pin appearance", "Accent color"):Enabled(), "the pins' look is greyed out while Party pins is off")
 c.TwichUIDB.modules.partyPins = true
 
--- Advanced: a page with an Advanced section ends with a row that shows it, there only while it is hidden.
-local hint = Row("Gear comparison", "Advanced options", "button")
-assert(hint and not Row("Food and drink", "Advanced options", "button"), "only on pages that have one")
-c.TwichUIDB.ui.showAdvanced = false
-assert(hint.shown[1]() == true and not Row("Gear comparison", "How big a gain counts").shown[1](), "hidden: the row says so")
-hint.click()
-assert(c.TwichUIDB.ui.showAdvanced == true and hint.shown[1]() == false, "Show turns on the one switch, and the row goes")
+-- Advanced: rows are marked (the window opens them on request, or always with "Show advanced options");
+-- a whole Advanced section's header is marked too, and an ordinary row after it belongs to the section before.
+assert(not Row("Gear comparison", "Advanced options", "button"), "no row of its own any more: the window shows them")
+local strict = Row("Gear comparison", "How big a gain counts")
+assert(strict.advanced and strict.section.advanced and strict.section:GetName() == "Advanced", "advanced, in its Advanced section")
+assert(not Row("Gear comparison", "Upgrade hints in item tooltips").advanced, "the switch is not")
+local resetTimers = Row("RestedXP guide window", "Reset timer bars")
+assert(not resetTimers.advanced and resetTimers.section:GetName() == "Timer bars", "the timer bars' Reset stays with them")
+local resetLook = Row("RestedXP guide window", "Reset appearance")
+assert(resetLook.section:GetName() == "RestedXP guide window", "the look's Reset is with the switch it resets: " .. resetLook.section:GetName())
 local tip = Row("TwichUI", "Show advanced options"):GetTooltip()
 for _, name in ipairs({ "Gear comparison", "Notifications", "Quality of life", "Chronicle appearance", "RestedXP guide window", "Configuration sharing" }) do
   assert(tip:find(name, 1, true), "the switch names " .. name)
 end
 assert(not tip:find("Food and drink", 1, true), "and only pages that have an Advanced section")
+S.variables.TWICHUI_showAdvanced:SetValue(true)
+assert(c.TwichUIDB.ui.showAdvanced == true and K.AdvancedShown())
 S.variables.TWICHUI_showAdvanced:SetValue(false)
 
 -- 6. Map pins: no setting, Reset or Defaults touches them, kept pins included.
@@ -176,14 +182,17 @@ local function Snapshot(t, out)
   return table.concat(out, ",")
 end
 local before = Snapshot(c.TwichUIDB.pins)
+local chronicleBefore = Snapshot(c.TwichUIChronicleDB or {})
+assert(chronicleBefore ~= "", "the Chronicle has entries to keep")
 for _, cat in ipairs(S.pages) do
   for _, i in ipairs(cat.rows) do
     if i.kind == "button" and i.data.buttonText == "Reset" and i.click then i.click() end
   end
 end
-for _, s in ipairs(S.list) do s:SetValueToDefault() end
+for _, page in ipairs(K.NavOrder()) do K.ResetPage(page.key) end
 FlushTimers()
 assert(Snapshot(c.TwichUIDB.pins) == before, "pins are as they were")
+assert(Snapshot(c.TwichUIChronicleDB or {}) == chronicleBefore, "the Chronicle is as it was")
 assert(#PN.LocalPins() == 2)
 
 print("PASSED")

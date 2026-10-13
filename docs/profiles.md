@@ -1,7 +1,7 @@
 # Profiles
 
 For anyone changing what TwichUI saves or adding an option. The code is `Profiles.lua` (operations, choosing at load,
-telling the addon), `Persist.lua` (schema 2, names, the shape checked at load) and `settings/Profiles.lua` (the
+telling the addon), `Persist.lua` (schema 2, names, the shape checked at load) and `TwichUI_Settings/pages/Profiles.lua` (the
 options page). Nothing here has been checked in the game yet; see "In-game checks".
 
 ## What a profile is
@@ -20,7 +20,7 @@ All in `TwichUIDB` (account-wide), schema 2:
 
 | Field | Holds |
 |---|---|
-| `modules`, `ui`, `gear` | the profile **in use**, where every feature and the options panel already read and write |
+| `modules`, `ui`, `gear` | the profile **in use**, where every feature and the settings window already read and write |
 | `profiles[name]` | every other profile: `{ modules = {}, ui = {}, gear = {} }`, a copy of its own |
 | `profileState.live` | the name of the profile `modules`/`ui`/`gear` hold |
 | `profileState.newCharacters` | the profile a character without a choice uses (at first "Default") |
@@ -28,9 +28,10 @@ All in `TwichUIDB` (account-wide), schema 2:
 
 Why the profile in use stays in `modules`/`ui`/`gear`:
 
-- The options' checkboxes are bound to `TwichUIDB.modules` itself. `Settings.RegisterAddOnSetting` keeps the table
-  it is given (`Blizzard_Setting.lua`, `AddOnSettingMixin:Init`, Forever 1.60.1). So those tables stay the same for
-  the whole session, and a profile change replaces what is *in* them.
+- Those tables stay the same for the whole session, and a profile change replaces what is *in* them, so nothing
+  that keeps a reference to one (a feature, the settings window) ever sees another profile's. (When the settings were
+  in the game's own options, its checkboxes held on to `TwichUIDB.modules` itself; that is no longer the case, but the
+  design stays.)
 - Every feature already reads `TwichUIDB.ui.<key>` when it needs it, so no reader had to change.
 - The profile in use is never stored twice.
 - No two saved tables are the same table, so nothing depends on how the client writes shared tables.
@@ -46,7 +47,7 @@ second defaults system, and AceDB's removal of values equal to their defaults.
 | **Profile** | `ui`: `arrivalHold`, `brokerMenu`, `chronicleAppearance`, `chronicleClock`, `chronicleLook`, `foodDrink`, `foodDrinkPosition`, `friendLoginChannel`, `friendLoginChime`, `friendLoginPlace`, `mageConjureText`, `mageTravelText`, `partyPins` (clicks, labels, minimap, `/way`, the pin window's place), `pinsAppearance`, `pinsBroker`, `pinsBrokerMenu`, `pinsEditorLook`, `pinsMapText`, `pinsSound`, `previewSounds`, `qol`, `refreshments` (amounts and the panel's place), `refreshmentsStyle`, `refreshmentsText`, `refreshmentsTradeGives`, `restedxpSkin`, `restedxpSkinText`, `restedxpTimerLook`, `restedxpTimerText` (the skin's look and its timer bars), `speakstoneSkin`, `speakstoneSkinStyle`, `trainingPosition`, `welcomeBackPlace`, and any `ui` key added later |
 | **Profile** | `gear`: `glancePossible`, `futureLevels`, `reveal`, `strictness`, `bagStyle` |
 | **Account, every profile** | `modules.restedxpSkin`: turning it on or off sets RestedXP's own chosen theme (`RXP.settings.profile.activeTheme`), and a profile change must never write another addon's settings |
-| **Account, every profile** | `ui.showAdvanced`: how the options panel itself looks |
+| **Account, every profile** | `ui.showAdvanced` and `ui.settingsWindow`: how the settings window itself looks, and where it sits |
 | **Account, every profile** | `ui.restedxpSkinState`: the RestedXP theme to go back to (a record of RestedXP's setting) |
 | **Account, every profile** | `ui.mageSell`: the never-sell list, a protection no profile change may lift |
 | **Account, every profile** | `gear.weights`, `gear.priority`, `gear.usePriority`: stat weights and priorities, already kept per class and talent tree |
@@ -129,8 +130,8 @@ no defaults metatables, so a copy is the stored values. What a profile leaves ou
 
 After the values are in place (every copy is made first, then plain assignments), `Apply` does the following:
 
-1. **Switches**, through the options (`SettingsKit.SyncSwitches`). `NotifyUpdate` on each, in the order registered.
-   A switch that changed runs its feature's own update once, an unchanged one does nothing, and one that needs a
+1. **Switches** (`Switches.Sync`, in `Switches.lua`, part of the core: it works whether or not the settings window
+   was ever opened), in the registry's order. A switch that changed runs its feature's own update once, an unchanged one does nothing, and one that needs a
    reload asks as it does when clicked. Those are custom fonts and sounds, quiet login, configuration sharing, the
    version check and the four EllesmereUI skins.
 2. **Phases**, each feature having registered once with `Profiles.OnApply(phase, name, fn)`:
@@ -141,8 +142,8 @@ After the values are in place (every copy is made first, then plain assignments)
      an open refreshments panel's place.
    - `views`: an open Chronicle (clock), the Mage launchers' and refreshments' data bar texts, the refreshments plan
      and Refreshment shares, and gear hints and bag marks.
-3. **Options panel**: `SettingsKit.RefreshValues` has every option show its value again, and the Profiles page and
-   overview update.
+3. **Settings window**, if it is open: the page shown and its footer (the profile name) are drawn again. Values are read
+   through each feature's `Get` whenever a page is drawn, so a page shown later is current too.
 
 A part that errors is reported to the error handler and named in the result. The others are still told, and the
 player is asked to reload to finish. Nothing is hidden behind a blanket `pcall`, and success is not claimed after a
@@ -161,9 +162,10 @@ Not moved live (by design or by the game):
 - RestedXP's own settings, SpeakStone's and EllesmereUI's are never changed. The RestedXP skin's switch is
   account-wide for that reason.
 
-## Options page
+## Settings page
 
-**Esc > Options > AddOns > TwichUI > Profiles** (`settings/Profiles.lua`, order 105, with a row on the overview):
+**TwichUI settings > Profiles** (`/tui options`, Your configuration group; `TwichUI_Settings/pages/Profiles.lua`, with a
+row on Home; the window's footer also names the profile in use and opens this page):
 
 - Current profile (switches at once)
 - A line saying who else uses it, with the names in its tooltip and in the Current profile tooltip: "Changes to this
@@ -230,8 +232,8 @@ first (see `docs/persistence.md`).
    name refused, `|` refused, "default" refused while "Default" exists.
 4. **Live switch.** Between two profiles that differ in Chronicle colors, Food and Drink size and place, map pin text,
    the zone card hold, a Mage menu look and gear strictness: each changes once, with no Lua error and no flicker of
-   other windows. The options page shows the new values. Switch with the options panel open, close it, `/reload`:
-   the new profile's values stay (the panel does not put back the values it opened with).
+   other windows. The settings window shows the new values. Switch with the settings window open, close it, `/reload`:
+   the new profile's values stay.
 5. **Reload switches.** Switch to a profile where custom fonts or an EllesmereUI skin differs: one reload question;
    reload, and it applies.
 6. **Reload and relog.** The choice is kept.

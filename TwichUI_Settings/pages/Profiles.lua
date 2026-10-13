@@ -1,9 +1,9 @@
--- TwichUI options: Profiles (Profiles.lua). Named sets of TwichUI's options: which one this character uses, a new
+-- TwichUI settings: Profiles (Profiles.lua). Named sets of TwichUI's options: which one this character uses, a new
 -- one, a copy, copying settings in, a new name, and, apart from those, deleting and resetting. Every action
 -- goes through Profiles.lua, which refuses what changes the options in use during combat when the action
 -- runs (after a confirmation too), not only here.
 --
--- None of these controls has a default, so the panel's Defaults button never switches, copies or resets a
+-- None of these controls has a default, so a page's "Reset this page" never switches, copies or resets a
 -- profile. The dropdowns for copying and deleting only pick what to ask about; nothing happens until the
 -- confirmation is accepted.
 
@@ -110,7 +110,9 @@ end
 local NOT_AFFECTED = "Map pins, the Journey Chronicle, backups, stat weights and other addons' own settings are not affected."
 
 K.Page({
-    key = "profiles", name = "Profiles", order = 105,
+    key = "profiles", name = "Profiles", order = 105, group = "config",
+    description = "Saved sets of TwichUI's options. Each character uses one; characters using the same profile share it.",
+    keywords = "profile character alt copy duplicate rename delete reset new",
     overview = {
         label = "Profiles", tip = "Save sets of TwichUI options, choose one for each character, and share one between characters.",
         status = function()

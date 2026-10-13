@@ -19,7 +19,7 @@ end
 -- know as conjured.
 ---------------------------------------------------------------------------
 do
-  local env = setmetatable({ TwichUI = { PATH = "", On = function() end, OnInit = function() end, Enabled = function() return false end, Profiles = { OnApply = function() end } } }, { __index = _G })
+  local env = setmetatable({ TwichUI = { PATH = "", On = function() end, OnInit = function() end, Enabled = function() return false end, Profiles = { OnApply = function() end }, OnSettingsClosed = function() end, SettingsAnchor = function() end } }, { __index = _G })
   env.CreateFrame = function() return setmetatable({}, { __index = function() return function() end end }) end
   Load(env, { "modules/TrainingData.lua", "modules/Borders.lua", "modules/MenuStyle.lua", "modules/SpellMenu.lua", "modules/MageConjure.lua",
     "modules/FoodDrink.lua", "modules/Refreshments.lua" })

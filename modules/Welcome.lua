@@ -100,10 +100,8 @@ local function Height(fs, minimum)
 end
 
 local function OpenSettings()
-    if not R:OpenSettings() then
-        R.Print("the settings aren't available right now.")
-        return   -- the dialog stays, so the player is not left with nothing
-    end
+    -- (R:OpenSettings says why in chat when it can't)
+    if not R:OpenSettings() then return end   -- the dialog stays, so the player is not left with nothing
     frame:Hide()
 end
 

@@ -89,7 +89,7 @@ Test TwichUI alone first, then with EllesmereUI. After each step, check `/tui di
 7. **Disable with pending work.** In combat change a Food/Drink setting, then turn Food and Drink off. *Expect:* after
    combat nothing reappears. Turn it on again: buttons build once.
 8. **Profile switch with things open.** Switch a TwichUI profile (Options > Profiles), and separately an EllesmereUI
-   profile, with the options panel, a preview card and a mover open. *Expect:* nothing stuck on screen, no stale tooltip.
+   profile, with the settings window, a preview card and a mover open. *Expect:* nothing stuck on screen, no stale tooltip.
 9. **Repeated enable/disable.** Toggle Zone card, Friend login, Welcome Back, Food/Drink and Chronicle zones 5 times
    each. *Expect:* each behaves as one copy (one card, one chime, one entry).
 10. **Friends.** Log in with friends already online: no cards. A friend who signs in later gets one card and one
@@ -117,9 +117,9 @@ means moving `!!!TwichUI.lua` (and `.bak`) out of `SavedVariables` with the game
    or any character; "welcome dialog: seen".
 3. **Closing.** Close button, the **x** in the title area, and Escape each close it. None brings it back (reload, relog,
    change characters, enter and leave instances).
-4. **Open Settings.** *Expect:* the dialog closes and Esc > Options > AddOns > TwichUI (the overview) opens. With the
-   Settings panel unable to open, the dialog stays and chat says why.
-5. **Manual reopening.** `/tui about`, and Help > Welcome > Show in the options overview (which closes the options
+4. **Open Settings.** *Expect:* the dialog closes and TwichUI's settings window opens at Home. With the
+   settings window unable to load (TwichUI_Settings turned off or missing), the dialog stays and chat says why.
+5. **Manual reopening.** `/tui about`, and Help > Welcome > Show on the settings window's Home page (which closes the settings
    first). It opens any number of times as one frame and changes no setting.
 6. **Reload, relog, characters.** `/reload` before it appears (move fast): it still appears next time. After it was shown:
    never again, on any character.

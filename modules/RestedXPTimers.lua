@@ -713,9 +713,8 @@ local function BuildPreview()
         previewRecs[bar] = { on = false, rev = -1 }
     end
     if _G.UISpecialFrames then table.insert(_G.UISpecialFrames, "TwichUIRXPTimerPreview") end
-    local panel = rawget(_G, "SettingsPanel")
-    if panel and panel.HookScript then panel:HookScript("OnHide", function() T.HidePreview() end) end
 end
+R.OnSettingsClosed(function() T.HidePreview() end)   -- the sample goes away with the settings window
 
 -- The real drawing code on the samples, with the settings as they are now (whether or not the RestedXP skin
 -- is drawing: the preview shows what a timer bar would look like).
@@ -752,15 +751,15 @@ function T.HidePreview()
     end
 end
 
--- Shows the sample beside the options window, or puts it away.
+-- Shows the sample beside the settings window, or puts it away.
 function T.TogglePreview()
     if T.PreviewShown() then T.HidePreview() return end
     BuildPreview()
     T.PaintPreview()
     local frame = preview.frame
     frame:ClearAllPoints()
-    local panel = rawget(_G, "SettingsPanel")
-    if panel and panel:IsShown() then
+    local panel = R.SettingsAnchor()
+    if panel then
         frame:SetPoint("TOPLEFT", panel, "TOPRIGHT", 8, -64)
     else
         frame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)

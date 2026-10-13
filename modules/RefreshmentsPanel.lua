@@ -732,14 +732,14 @@ function P.Toggle()
 end
 RF.TogglePanel = P.Toggle   -- Bindings.xml
 
--- From the options' appearance section: the real panel, beside the Options window so both can be seen.
--- Placed against UIParent at that spot rather than anchored to the Options window; its saved place is
--- kept, and used the next time it opens.
+-- From the settings' appearance section: the real panel, beside the settings window so both can be seen.
+-- Placed against UIParent at that spot rather than anchored to the window; its saved place is kept, and used
+-- the next time it opens. It is the real panel, so it stays when the settings close.
 function P.TogglePreview()
     if P.IsOpen() then P.Close() return end
     if not P.Open() then return end
-    local sp = SettingsPanel
-    if sp and sp:IsShown() then
+    local sp = R.SettingsAnchor()
+    if sp then
         local right, top = sp:GetRight(), sp:GetTop()
         local scale = (sp:GetEffectiveScale() or 1) / ((panel:GetEffectiveScale() or 1))
         if right and top then

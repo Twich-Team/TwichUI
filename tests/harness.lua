@@ -9,7 +9,7 @@ local ROOT = ROOT
 local FILES = {
  "libs/LibStub/LibStub.lua","libs/CallbackHandler-1.0/CallbackHandler-1.0.lua","libs/LibSharedMedia-3.0/LibSharedMedia-3.0.lua",
  "libs/AceComm-3.0/ChatThrottleLib.lua","libs/AceComm-3.0/AceComm-3.0.lua","libs/LibSerialize/LibSerialize.lua","libs/LibDeflate/LibDeflate.lua",
- "Core.lua","Persist.lua","Profiles.lua","modules/Interact.lua","modules/QuietLogin.lua","modules/Media.lua","modules/AuctionatorSkin.lua","setup/PackFile.lua","setup/Setups.lua","setup/Ellesmere.lua","setup/Share.lua","setup/Group.lua","setup/CommTest.lua","setup/Restore.lua","setup/Portable.lua","chronicle/Data.lua","chronicle/Filter.lua","chronicle/Recorder.lua","chronicle/Broker.lua",
+ "Core.lua","Persist.lua","Profiles.lua","Switches.lua","SettingsLauncher.lua","modules/Interact.lua","modules/QuietLogin.lua","modules/Media.lua","modules/AuctionatorSkin.lua","setup/PackFile.lua","setup/Setups.lua","setup/Ellesmere.lua","setup/Share.lua","setup/Group.lua","setup/CommTest.lua","setup/Restore.lua","setup/Portable.lua","chronicle/Data.lua","chronicle/Filter.lua","chronicle/Recorder.lua","chronicle/Broker.lua",
 }
 NET = {}   -- queued deliveries {toEnv, prefix, text, sender}
 function MakeClient(charName, addons)
@@ -156,14 +156,14 @@ function RunLongTimers(maxDelay)
   end
 end
 
--- The options panel's files (settings\ in the .toc), in the .toc's order, so tests that
--- build the panel load exactly what the game does.
+-- The settings window's files (TwichUI_Settings/TwichUI_Settings.toc), in the .toc's order, so tests that
+-- describe the pages load exactly what the game does when the window first opens.
 function SettingsFiles()
   local list = {}
-  for line in io.lines(ROOT .. "!!!TwichUI.toc") do
+  for line in io.lines(ROOT .. "TwichUI_Settings/TwichUI_Settings.toc") do
     line = line:gsub("\r", ""):gsub("%s+$", "")
-    if line:find("^settings\\") then list[#list + 1] = (line:gsub("\\", "/")) end
+    if line ~= "" and not line:find("^#") then list[#list + 1] = "TwichUI_Settings/" .. (line:gsub("\\", "/")) end
   end
-  assert(#list > 0, "the .toc lists the options panel's files")
+  assert(#list > 0, "the settings window's .toc lists its files")
   return list
 end

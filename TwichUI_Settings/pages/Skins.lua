@@ -1,5 +1,5 @@
--- TwichUI options: Addon skins (the EllesmereUI look for supported addons, and a pointer to the RestedXP
--- guide window's own page, settings/RestedXP.lua).
+-- TwichUI settings: Addon skins (the EllesmereUI look for supported addons, and a pointer to the RestedXP
+-- guide window's own page, pages/RestedXP.lua).
 
 local R = TwichUI
 local K = R.SettingsKit
@@ -40,7 +40,9 @@ local function SkinStatus(skin, onAtLoad)
 end
 
 K.Page({
-    key = "skins", name = "Addon skins", order = 90,
+    key = "skins", name = "Addon skins", order = 90, group = "addons",
+    description = "The EllesmereUI look for supported addons, and TwichUI's own look for the RestedXP guide window and SpeakStone. The rest of TwichUI works without them.",
+    keywords = "skin theme ellesmere attune auctionator dungeon journal whatstraining",
     overview = {
         label = "Addon skins", tip = "The EllesmereUI look for supported addons. Needs EllesmereUI; the rest of TwichUI works without it.",
         status = function()
@@ -59,49 +61,36 @@ K.Page({
         local Header, Toggle, Button = K.Header, K.Toggle, K.Button
 
         Header("EllesmereUI look", "Gives these addons the EllesmereUI look. Needs EllesmereUI with its third-party addon skins on. TwichUI only skins the addons listed here.")
-        -- Each skin's tooltip ends with its status, kept current by the events
-        -- that can change it (no polling).
-        local skinRows = {}
-        local function RefreshSkinStatus()
-            for _, row in ipairs(skinRows) do
-                local status, detail = SkinStatus(row.skin, row.onAtLoad)
-                if row.initializer.data then
-                    row.initializer.data.tooltip = row.skin.what .. "\n\nTakes effect after you reload your UI.\n\nStatus: " .. status .. (detail and ("\n" .. detail) or "")
-                end
-            end
-            K.RefreshOverview()
-        end
+        -- Each skin's tooltip ends with its status, read when it is shown.
         for _, skin in ipairs(SKINS) do
             local installed = K.AddonState(skin.addon) ~= "missing"
             local label = installed and skin.label or (skin.label .. "  " .. R.GREY .. "(not installed)|r")
-            local initializer = Toggle(skin.key, label, skin.what, true, nil, RefreshSkinStatus)
-            if initializer then
-                skinRows[#skinRows + 1] = { skin = skin, initializer = initializer, onAtLoad = R:Enabled(skin.key) }
-                if not installed and initializer.AddModifyPredicate then
-                    initializer:AddModifyPredicate(function() return false end)
+            local onAtLoad = R.Switches.atLoad[skin.key]
+            if onAtLoad == nil then onAtLoad = R:Enabled(skin.key) end
+            local row = Toggle(skin.key, label, skin.what)
+            if row then
+                row.data.tooltip = function()
+                    local status, detail = SkinStatus(skin, onAtLoad)
+                    return skin.what .. "\n\nTakes effect after you reload your UI.\n\nStatus: " .. status .. (detail and ("\n" .. detail) or "")
+                end
+                if not installed then
+                    row:AddModifyPredicate(function() return false end)
+                    row.why = "Install " .. skin.label .. " to use this skin."
                 end
             end
         end
-        RefreshSkinStatus()
-        R:OnSkin(RefreshSkinStatus)
-        R:On("PLAYER_LOGIN", RefreshSkinStatus)
-        R:On("ADDON_LOADED", function(name)
-            for _, skin in ipairs(SKINS) do
-                if name == skin.addon then RefreshSkinStatus() return end
-            end
-        end)
 
         -- RestedXP: its own look, set on a page of its own under this one (they are many): a short pointer here.
         if R.RestedXPSkin then
             Header("RestedXP guide window", "Gives the RestedXP Guides window a TwichUI look, and its waypoint arrow a shape, color and size of your choosing. Its settings are on a page of their own, under this one.")
-            Button("RestedXP guide window", "Open its settings", function() R:OpenSettings("restedxp") end,
+            Button("RestedXP guide window", "Open its page", function() R:OpenSettings("restedxp") end,
                 "Opens the RestedXP guide window page, under Addon skins: the switch, the look, text, spacing, scroll bar, header and footer, and the waypoint arrow.")
         end
 
         -- SpeakStone: the same, its own page, not through EllesmereUI.
         if R.SpeakStoneSkin then
             Header("SpeakStone speech frame", "Gives SpeakStone's speech frame a TwichUI look: background and border, fonts and colors, the controls, the portrait and the progress line. Its settings are on a page of their own, under this one.")
-            Button("SpeakStone speech frame", "Open its settings", function() R:OpenSettings("speakstone") end,
+            Button("SpeakStone speech frame", "Open its page", function() R:OpenSettings("speakstone") end,
                 "Opens the SpeakStone speech frame page, under Addon skins: the switch, the look, text, controls, portrait, progress line and spacing.")
         end
     end,

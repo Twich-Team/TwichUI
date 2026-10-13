@@ -1,0 +1,1015 @@
+-- TwichUI Settings: the settings window
+-- One window, made the first time it opens: a header (title, search, close), the pages on the left grouped by
+-- what they are for, the page on the right, and a footer with the profile in use and any reload a change waits
+-- for. A page's rows are made the first time the page is shown and kept for the session; a page is drawn again
+-- (values, what is greyed out and why) each time it is shown and after a change. Nothing runs while it is shut.
+--
+-- Esc: the dropdown list first, then the window (the search box, while typing, clears itself first). The window
+-- never takes keys while no box has focus, so play keys keep working with it open.
+
+local R = TwichUI
+local K = R.SettingsKit
+local Wg = R.SettingsWidgets
+local Search = R.SettingsSearch
+local I = R.Interact
+local S = R.ChronicleStyle
+local pal = Wg.pal
+local UI = {}
+
+local WIDTH, HEIGHT = 920, 660
+local HEADER_H, FOOTER_H, NAV_W, PAD = 54, 38, 212, 14
+local CONTENT_W = WIDTH - PAD - NAV_W - 12 - 24 - PAD
+local CONTROL_W = 236
+local ROW_MIN, SECTION_PAD, GAP = 30, 14, 12
+local NAV_ROW, NAV_GROUP = 22, 24
+local HOST_H = 540
+local HIGHLIGHT_SECONDS = 2.5
+
+local win, nav, scroll, content, resultsView, footer, searchBox
+local state = { views = {}, open = {}, results = {}, selected = 1, suspend = 0, navItems = {} }
+
+local function Place()
+    local saved = TwichUIDB.ui.settingsWindow
+    win:ClearAllPoints()
+    if type(saved) == "table" and type(saved.point) == "string" and type(saved.relativePoint) == "string"
+        and type(saved.x) == "number" and type(saved.y) == "number" and saved.x == saved.x and saved.y == saved.y then
+        win:SetPoint(saved.point, UIParent, saved.relativePoint, saved.x, saved.y)
+    else
+        win:SetPoint("CENTER", UIParent, "CENTER", 0, 20)
+    end
+end
+
+local function SavePlace()
+    local point, _, relativePoint, x, y = win:GetPoint(1)
+    if not point then return end
+    TwichUIDB.ui.settingsWindow = { point = point, relativePoint = relativePoint, x = x, y = y }
+end
+
+---------------------------------------------------------------------------
+-- Rows
+---------------------------------------------------------------------------
+local function ShowTipOf(frame)
+    local fn = frame:GetScript("OnEnter")
+    if fn then fn(frame) end
+end
+
+local function LinkTip(frame, control)
+    control:HookScript("OnEnter", function() ShowTipOf(frame) end)
+    control:HookScript("OnLeave", function() I.HideTip(frame) end)
+end
+
+local function ButtonText(row)
+    local text = row.data.buttonText
+    if type(text) == "function" then text = text() end
+    return text or ""
+end
+
+-- The label of a dropdown's value (looked up again only when the value changes).
+local function ChoiceLabel(v, value)
+    if v.lastValue == value and v.lastLabel then return v.lastLabel end
+    local label
+    for _, choice in ipairs(v.row.choices and v.row.choices() or {}) do
+        if choice.value == value then label = choice.label break end
+    end
+    v.lastValue, v.lastLabel = value, label or tostring(value or "")
+    return v.lastLabel
+end
+
+local function MakeRow(parent, row, width)
+    local v = { row = row }
+    local f = CreateFrame("Button", nil, parent)
+    f:SetWidth(width)
+    f:SetHeight(ROW_MIN)
+    v.frame = f
+    f.bg = Wg.Solid(f, "BACKGROUND", pal.gold, 0)
+    f.bg:SetAllPoints()
+    local indent = row.parent and 18 or 0
+    if row.parent then
+        local guide = Wg.Solid(f, "BORDER", pal.bronzeLo, 0.9)
+        guide:SetWidth(1)
+        guide:SetPoint("TOPLEFT", 7, -4)
+        guide:SetPoint("BOTTOMLEFT", 7, 4)
+    end
+    local labelW = width - CONTROL_W - indent - 16
+    v.label = Wg.Text(f, "body")
+    v.label:SetPoint("TOPLEFT", indent + 6, -8)
+    v.label:SetWidth(labelW)
+    v.label:SetWordWrap(true)
+    v.reason = Wg.Text(f, "meta")
+    v.reason:SetPoint("TOPLEFT", v.label, "BOTTOMLEFT", 0, -3)
+    v.reason:SetWidth(labelW)
+    if row.badge then
+        v.badge = CreateFrame("Frame", nil, f, "BackdropTemplate")
+        Wg.Surface(v.badge, pal.well, 0.9, pal.bronzeLo, 0.9)
+        v.badge.text = Wg.Text(v.badge, "meta")
+        v.badge.text:SetPoint("CENTER", 0, 0)
+        v.badge.text:SetText(row.badge)
+        v.badge:SetSize(v.badge.text:GetStringWidth() + 12, 15)
+    end
+
+    local setting = row.data.setting
+    local controlX = width - CONTROL_W
+    local kind = row.kind
+
+    -- The tooltip first (a script set later would drop hooks added before it), then each kind's own hover.
+    I.Tip(f, nil, function()
+        local tip = row:GetTooltip()
+        if kind ~= "link" then
+            local why = not row:Enabled() and row:DisabledReason() or nil
+            if why and tip and tip:lower():find(why:lower(), 1, true) then why = nil end   -- said already
+            return tip, why
+        end
+        return tip
+    end)
+    local show = f:GetScript("OnEnter")
+    f:SetScript("OnEnter", function(self)
+        -- the tooltip's title is the row's label as it is now
+        self.twichuiTip.title = (row:GetName() or ""):gsub("%s%s%s.*$", "")
+        if kind == "checkbox" or kind == "link" then self.bg:SetColorTexture(pal.gold[1], pal.gold[2], pal.gold[3], 0.05) end
+        show(self)
+    end)
+    f:HookScript("OnLeave", function(self)
+        if not v.highlighted then self.bg:SetColorTexture(pal.gold[1], pal.gold[2], pal.gold[3], 0) end
+    end)
+    if kind == "checkbox" then
+        v.control = Wg.Checkbox(f, function(on) setting:SetValue(on) end)
+        v.control:SetPoint("TOPLEFT", f, "TOPLEFT", controlX, -6)
+        -- the whole row is the checkbox's label
+        f:SetScript("OnClick", function()
+            if row:Enabled() then setting:SetValue(not setting:GetValue()) end
+        end)
+        f:HookScript("OnEnter", function() v.control:SetHot(true) end)
+        f:HookScript("OnLeave", function() v.control:SetHot(false) end)
+    elseif kind == "dropdown" then
+        v.control = Wg.Dropdown(f, CONTROL_W - 8, function(value) setting:SetValue(value) end)
+        v.control:SetChoices(row.choices)
+        v.control:SetPoint("TOPLEFT", f, "TOPLEFT", controlX, -4)
+    elseif kind == "slider" then
+        v.control = Wg.Slider(f, CONTROL_W - 8, function(value) setting:SetValue(value) end)
+        v.control:SetRange(row.options.min, row.options.max, row.options.step)
+        v.control:SetPoint("TOPLEFT", f, "TOPLEFT", controlX, -4)
+    elseif kind == "swatch" then
+        v.control = Wg.Swatch(f, function(hex) setting:SetValue(hex) end)
+        v.control:SetPoint("TOPLEFT", f, "TOPLEFT", controlX, -6)
+    elseif kind == "button" then
+        v.control = Wg.Button(f, ButtonText(row), 110, row.reset and "danger" or "secondary", function()
+            if row:Enabled() and row.click then row.click() end
+        end)
+        v.control:SetPoint("TOPLEFT", f, "TOPLEFT", controlX, -4)
+    elseif kind == "link" then
+        v.status = Wg.Text(f, "small")
+        v.status:SetPoint("TOPLEFT", f, "TOPLEFT", controlX, -9)
+        v.status:SetWidth(CONTROL_W - 30)
+        v.status:SetWordWrap(false)
+        v.chevron = Wg.Text(f, "meta")
+        v.chevron:SetPoint("TOPRIGHT", f, "TOPRIGHT", -10, -9)
+        v.chevron:SetText("Open")
+        f:SetScript("OnClick", function() if row.click then row.click() end end)
+        f:HookScript("OnEnter", function() Wg.Color(v.chevron, pal.gold) end)
+        f:HookScript("OnLeave", function() Wg.Color(v.chevron, pal.stone) end)
+    end
+    if row.extra and v.control then
+        local ok, extra = pcall(row.extra, f, v.control)
+        if ok then v.extra = extra else R.Fault("settings row " .. row.id, extra) end
+    end
+
+    if v.control then
+        LinkTip(f, v.control)
+        if v.control.slider then LinkTip(f, v.control.slider) end
+    end
+
+    -- What it shows now. Cheap: values and states only.
+    function v.RefreshValue()
+        local enabled = row:Enabled()
+        if kind == "checkbox" then
+            v.control:SetChecked(setting:GetValue() and true or false)
+            v.control:SetActive(enabled)
+        elseif kind == "dropdown" then
+            local value = setting:GetValue()
+            v.control:SetValue(value, ChoiceLabel(v, value))
+            v.control:SetActive(enabled)
+        elseif kind == "slider" then
+            v.control:SetValue(setting:GetValue() or row.options.min)
+            v.control:SetActive(enabled)
+        elseif kind == "swatch" then
+            v.control:SetValue(setting:GetValue())
+            v.control:SetActive(enabled)
+        elseif kind == "button" then
+            local text = ButtonText(row)
+            v.control.text:SetText(text)
+            v.control:SetWidth(math.min(CONTROL_W - 8, math.max(110, v.control.text:GetStringWidth() + 28)))
+            v.control:SetEnabled(enabled)
+        elseif kind == "link" then
+            local ok, status = pcall(row.status or function() return "" end)
+            v.status:SetText(ok and status or "")
+        end
+        if v.extra and row.refreshExtra then pcall(row.refreshExtra, v.extra) end
+        return enabled
+    end
+
+    -- Everything, and its height (which can change with the label or the reason).
+    function v.Refresh()
+        v.lastLabel = nil   -- a choice's label can change (a tree's name in "Automatic (...)", a renamed profile)
+        local enabled = v.RefreshValue()
+        local label = row:GetName() or ""
+        if kind == "link" then label = label:gsub("%s%s%s.*$", "") end
+        v.label:SetText(label)
+        Wg.Color(v.label, (enabled or kind == "link") and pal.text or pal.stone)
+        local reason = kind ~= "link" and not enabled and row:DisabledReason() or nil
+        v.reason:SetText(reason or "")
+        v.reason:SetShown(reason ~= nil)
+        if v.badge then
+            v.badge:ClearAllPoints()
+            v.badge:SetPoint("LEFT", v.label, "LEFT", math.min(v.label:GetStringWidth(), v.label:GetWidth()) + 8, 0)
+        end
+        local h = (v.label:GetStringHeight() or 12) + 16
+        if reason then h = h + (v.reason:GetStringHeight() or 10) + 3 end
+        f:SetHeight(math.max(ROW_MIN, h))
+        return f:GetHeight()
+    end
+    return v
+end
+
+---------------------------------------------------------------------------
+-- Pages
+---------------------------------------------------------------------------
+local function SectionId(page, header) return header and header.id or (page.key .. ":intro") end
+
+-- A clickable "Show advanced options" line: a chevron and its words.
+local function Disclosure(parent)
+    local b = CreateFrame("Button", nil, parent)
+    b:SetHeight(22)
+    b.text = Wg.Text(b, "small")
+    b.text:SetPoint("LEFT", 18, 0)
+    b.down = Wg.Chevron(b, b, "LEFT", 8, 0, true)
+    b.up = Wg.Chevron(b, b, "LEFT", 8, 0, false)
+    b:SetScript("OnEnter", function(self) Wg.Color(self.text, pal.gold) end)
+    b:SetScript("OnLeave", function(self) Wg.Color(self.text, pal.textDim) end)
+    function b:SetOpen(open, label)
+        self.text:SetText(label)
+        for _, t in ipairs(self.down) do t:SetShown(not open) end
+        for _, t in ipairs(self.up) do t:SetShown(open) end
+        self:SetWidth(self.text:GetStringWidth() + 26)
+    end
+    return b
+end
+
+local Layout   -- (below)
+
+local function BuildView(page)
+    local view = { page = page, sections = {}, rows = {} }
+    local frame = CreateFrame("Frame", nil, content)
+    frame:SetPoint("TOPLEFT", 0, 0)
+    frame:SetWidth(CONTENT_W)
+    view.frame = frame
+    state.views[page.key] = view
+
+    -- the page's own header: title, status, one line of what it is for
+    view.title = Wg.Text(frame, "title")
+    view.title:SetPoint("TOPLEFT", 2, -4)
+    view.title:SetText(page.name)
+    view.status = Wg.Text(frame, "small")
+    view.status:SetPoint("TOPRIGHT", -4, -8)
+    view.status:SetJustifyH("RIGHT")
+    view.desc = Wg.Text(frame, "small")
+    view.desc:SetPoint("TOPLEFT", view.title, "BOTTOMLEFT", 0, -6)
+    view.desc:SetWidth(CONTENT_W - 8)
+    view.desc:SetText(page.def.description or (page.def.overview and page.def.overview.tip) or "")
+    view.rule = Wg.Solid(frame, "BORDER", pal.bronzeLo, 0.9)
+    view.rule:SetHeight(1)
+    view.rule:SetPoint("LEFT", frame, "LEFT", 0, 0)
+    view.rule:SetPoint("RIGHT", frame, "RIGHT", 0, 0)
+
+    if page.failed then
+        view.failed = Wg.Text(frame, "small")
+        view.failed:SetWidth(CONTENT_W - 8)
+        view.failed:SetText("Part of this page couldn't be built, so some of its settings may be missing. /tui diagnostics has the error. The rest of TwichUI is unaffected.")
+        Wg.Color(view.failed, pal.danger.text)
+    end
+
+    if page.def.host then
+        local ok, hosted = pcall(page.def.host)
+        if ok and hosted then
+            hosted:SetParent(frame)
+            hosted:ClearAllPoints()
+            hosted:SetSize(CONTENT_W, HOST_H)
+            view.hosted = hosted
+        else
+            R.Fault("settings page " .. page.key, hosted)
+            view.failed = view.failed or Wg.Text(frame, "small")
+            view.failed:SetWidth(CONTENT_W - 8)
+            view.failed:SetText("This page couldn't be shown. /tui diagnostics has the error. The rest of TwichUI is unaffected.")
+            Wg.Color(view.failed, pal.danger.text)
+        end
+    end
+
+    -- sections, in the order their headers come; rows in theirs
+    local byId = {}
+    local function Section(header)
+        local id = SectionId(page, header)
+        local sec = byId[id]
+        if sec then return sec end
+        sec = { id = id, header = header, rows = {}, advanced = header and header.advanced or false, advCount = 0 }
+        byId[id] = sec
+        view.sections[#view.sections + 1] = sec
+        sec.card = CreateFrame("Frame", nil, frame, "BackdropTemplate")
+        Wg.Surface(sec.card, pal.surface, 0.62, pal.bronzeLo, 0.55)
+        sec.card:SetWidth(CONTENT_W)
+        if header then
+            local titled = (header:GetName() or ""):lower() ~= page.name:lower()
+            sec.titled = titled
+            sec.title = Wg.Text(sec.card, "heading")
+            sec.title:SetWidth(CONTENT_W - SECTION_PAD * 2 - 90)
+            sec.desc = Wg.Text(sec.card, "small")
+            sec.desc:SetWidth(CONTENT_W - SECTION_PAD * 2)
+            if header.badge then
+                sec.badge = Wg.Text(sec.card, "meta")
+                sec.badge:SetText(header.badge)
+            end
+            if sec.advanced then
+                sec.toggle = Disclosure(sec.card)
+                sec.toggle:SetScript("OnClick", function()
+                    state.open[id] = not state.open[id]
+                    Layout(view)
+                end)
+            end
+        end
+        return sec
+    end
+    for _, row in ipairs(page.rows) do
+        if row.kind == "header" then
+            Section(row)
+        else
+            local sec = Section(row.section)
+            local v = MakeRow(sec.card, row, CONTENT_W - SECTION_PAD * 2 + 8)
+            v.section = sec
+            sec.rows[#sec.rows + 1] = v
+            view.rows[row.id] = v
+            if row.advanced and not sec.advanced then sec.advCount = sec.advCount + 1 end
+        end
+    end
+    for _, sec in ipairs(view.sections) do
+        if sec.advCount > 0 then
+            sec.more = Disclosure(sec.card)
+            sec.more:SetScript("OnClick", function()
+                state.open[sec.id] = not state.open[sec.id]
+                Layout(view)
+            end)
+        end
+    end
+
+    -- Reset this page: every setting on it back to its default, after saying exactly what that covers
+    local resettable = K.Resettable(page.key)
+    if #resettable > 0 then
+        view.reset = CreateFrame("Frame", nil, frame)
+        view.reset:SetSize(CONTENT_W, 64)
+        local rule = Wg.Solid(view.reset, "BORDER", pal.danger.border, 0.5)
+        rule:SetHeight(1)
+        rule:SetPoint("TOPLEFT", 0, 0)
+        rule:SetPoint("TOPRIGHT", 0, 0)
+        local text = Wg.Text(view.reset, "small")
+        text:SetPoint("TOPLEFT", 2, -14)
+        text:SetWidth(CONTENT_W - 170)
+        text:SetText(("Restore defaults: puts the %d settings on this page back to how a new installation has them. Other pages, map pins, the Journey Chronicle, backups and profiles are not changed."):format(#resettable))
+        local button = Wg.Button(view.reset, "Reset this page", 140, "danger", function()
+            I.Confirm("TWICHUI_SETTINGS_RESET_PAGE",
+                ("Reset every setting on the %s page to its default?\n\n%d settings go back to their defaults, as if you changed each one yourself. Nothing on other pages changes, and map pins, the Journey Chronicle, backups, stat weights and profiles are not affected."):format(page.name, #resettable),
+                function()
+                    state.suspend = state.suspend + 1
+                    local ok, err = pcall(K.ResetPage, page.key)
+                    state.suspend = state.suspend - 1
+                    if not ok then R.Fault("reset page " .. page.key, err) end
+                    Layout(view)
+                    UI.RefreshFooter()
+                end, { accept = "Reset" })
+        end)
+        button:SetPoint("TOPRIGHT", -2, -12)
+    end
+    return view
+end
+
+-- Places every visible row, section and the reset area, top to bottom; draws each row as it goes.
+function Layout(view)
+    local frame, page = view.frame, view.page
+    local ok, status = true, ""
+    if page.def.overview and page.def.overview.status then ok, status = pcall(page.def.overview.status) end
+    view.status:SetText(ok and status or "")
+    local y = 4 + (view.title:GetStringHeight() or 18) + 6
+    if view.desc:GetText() ~= "" then y = y + (view.desc:GetStringHeight() or 12) + 10 else y = y + 4 end
+    view.rule:ClearAllPoints()
+    view.rule:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, -y)
+    view.rule:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 0, -y)
+    y = y + 14
+    if view.failed then
+        view.failed:ClearAllPoints()
+        view.failed:SetPoint("TOPLEFT", 2, -y)
+        y = y + (view.failed:GetStringHeight() or 12) + 12
+    end
+    if view.hosted then
+        view.hosted:ClearAllPoints()
+        view.hosted:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, -y)
+        view.hosted:Show()
+        y = y + HOST_H
+    end
+    local always = K.AdvancedShown()
+    for _, sec in ipairs(view.sections) do
+        local open = always or state.open[sec.id] or false
+        local card, inner = sec.card, SECTION_PAD
+        local visible = 0
+        if sec.header and (sec.titled or sec.advanced) then
+            sec.title:SetText(sec.header:GetName() or "")
+            sec.title:ClearAllPoints()
+            sec.title:SetPoint("TOPLEFT", SECTION_PAD, -inner)
+            sec.title:Show()
+            if sec.badge then
+                sec.badge:ClearAllPoints()
+                sec.badge:SetPoint("LEFT", sec.title, "LEFT", math.min(sec.title:GetStringWidth(), sec.title:GetWidth()) + 10, 0)
+            end
+            if sec.toggle then
+                sec.toggle:ClearAllPoints()
+                sec.toggle:SetPoint("TOPRIGHT", -SECTION_PAD + 4, -inner + 4)
+                sec.toggle:SetOpen(open, open and "Hide" or "Show")
+                sec.toggle:SetShown(not always)
+                Wg.Color(sec.title, pal.textDim)
+            end
+            inner = inner + (sec.title:GetStringHeight() or 14) + 4
+        elseif sec.title then
+            sec.title:Hide()
+            if sec.badge then sec.badge:Hide() end
+        end
+        if sec.desc then
+            local desc = sec.header:GetTooltip() or ""
+            sec.desc:SetText(desc)
+            sec.desc:ClearAllPoints()
+            sec.desc:SetPoint("TOPLEFT", SECTION_PAD, -inner)
+            sec.desc:SetShown(desc ~= "")
+            if desc ~= "" then inner = inner + (sec.desc:GetStringHeight() or 12) + 8 end
+        end
+        local showRows = not sec.advanced or open
+        for _, v in ipairs(sec.rows) do
+            local row = v.row
+            local shown = showRows and row:Shown() and (sec.advanced or not row.advanced or open)
+            if shown then
+                v.frame:ClearAllPoints()
+                v.frame:SetPoint("TOPLEFT", card, "TOPLEFT", SECTION_PAD - 4, -inner)
+                v.y = y + inner
+                inner = inner + v.Refresh()
+                v.frame:Show()
+                visible = visible + 1
+            else
+                v.frame:Hide()
+                v.y = nil
+            end
+        end
+        if sec.more then
+            sec.more:ClearAllPoints()
+            sec.more:SetPoint("TOPLEFT", SECTION_PAD - 6, -inner - 2)
+            sec.more:SetOpen(open, open and "Hide advanced options" or ("Show advanced options (" .. sec.advCount .. ")"))
+            sec.more:SetShown(not always)
+            if not always then inner = inner + 26 end
+        end
+        inner = inner + SECTION_PAD - 6
+        local empty = visible == 0 and not sec.header and not sec.more
+        card:SetShown(not empty)
+        if not empty then
+            card:ClearAllPoints()
+            card:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, -y)
+            card:SetHeight(inner)
+            y = y + inner + GAP
+        end
+    end
+    if view.reset then
+        view.reset:ClearAllPoints()
+        view.reset:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, -(y + 6))
+        y = y + 6 + 64
+    end
+    frame:SetHeight(y + 8)
+    content:SetHeight(y + 8)
+end
+UI.Layout = Layout
+
+---------------------------------------------------------------------------
+-- Navigation
+---------------------------------------------------------------------------
+local function PaintNav()
+    for _, item in ipairs(state.navItems) do
+        local selected = not state.searching and item.page.key == state.page
+        item.bar:SetShown(selected)
+        item.fill:SetShown(selected)
+        Wg.Color(item.text, selected and pal.gold or (item.child and pal.textDim or pal.text))
+    end
+end
+
+local function ScrollTo(offset)
+    local most = math.max(0, (content:GetHeight() or 0) - (scroll:GetHeight() or 0))
+    scroll:SetVerticalScroll(math.max(0, math.min(offset, most)))
+end
+
+local function Highlight(v)
+    state.token = (state.token or 0) + 1
+    local token = state.token
+    v.highlighted = true
+    v.frame.bg:SetColorTexture(pal.gold[1], pal.gold[2], pal.gold[3], 0.14)
+    C_Timer.After(HIGHLIGHT_SECONDS, function()
+        if state.token ~= token then return end
+        v.highlighted = false
+        v.frame.bg:SetColorTexture(pal.gold[1], pal.gold[2], pal.gold[3], 0)
+    end)
+end
+
+local function ShowResults(on)
+    state.searching = on
+    resultsView:SetShown(on)
+    for key, view in pairs(state.views) do view.frame:SetShown(not on and key == state.page) end
+    PaintNav()
+end
+
+-- Goes to a page, and to one of its rows: opens the row's Advanced section if it is in one, scrolls to it and
+-- marks it briefly. Changes nothing.
+function UI.Navigate(key, rowId)
+    local page = K.pages[key] or K.pages.overview
+    if not page then return end
+    Wg.CloseMenu()
+    if state.searching then
+        state.clearing = true
+        searchBox:SetText("")
+        state.clearing = false
+        ShowResults(false)
+    end
+    if state.page ~= page.key then scroll:SetVerticalScroll(0) end
+    state.page = page.key
+    local view = state.views[page.key] or BuildView(page)
+    for k, other in pairs(state.views) do other.frame:SetShown(k == page.key) end
+    local row = rowId and K.rowsById[rowId]
+    if row and row.page ~= page.key then row = nil end
+    if row then
+        local sec = row.kind == "header" and SectionId(page, row) or SectionId(page, row.section)
+        if row.advanced or (row.section and row.section.advanced) or row.kind == "header" then state.open[sec] = true end
+    end
+    Layout(view)
+    PaintNav()
+    if row then
+        local v = view.rows[row.id]
+        local y
+        if v and v.y then
+            y = v.y
+            Highlight(v)
+        else
+            for _, sec in ipairs(view.sections) do
+                if sec.id == SectionId(page, row.kind == "header" and row or row.section) and sec.card:IsShown() then
+                    local _, _, _, _, top = sec.card:GetPoint(1)
+                    y = top and -top or nil
+                end
+            end
+        end
+        if y then
+            local target = math.max(0, y - 60)
+            ScrollTo(target)
+            C_Timer.After(0, function() if state.page == page.key then ScrollTo(target) end end)
+        end
+    end
+end
+
+local function BuildNav()
+    local list = CreateFrame("ScrollFrame", nil, nav)
+    list:SetPoint("TOPLEFT", 6, -8)
+    list:SetPoint("BOTTOMRIGHT", -6, 8)
+    list:EnableMouseWheel(true)
+    local child = CreateFrame("Frame", nil, list)
+    child:SetWidth(NAV_W - 12)
+    list:SetScrollChild(child)
+    local labels = {}
+    for _, group in ipairs(K.GROUPS) do labels[group.key] = group.label end
+    local y, lastGroup = 0, nil
+    for _, page in ipairs(K.NavOrder()) do
+        if page.group ~= lastGroup then
+            lastGroup = page.group
+            if labels[page.group] then
+                y = y + 8
+                local g = Wg.Text(child, "meta")
+                g:SetPoint("TOPLEFT", 10, -y - 6)
+                g:SetText(labels[page.group]:upper())
+                y = y + NAV_GROUP - 8
+            end
+        end
+        local item = CreateFrame("Button", nil, child)
+        item:SetHeight(NAV_ROW)
+        item:SetPoint("TOPLEFT", 0, -y)
+        item:SetPoint("TOPRIGHT", 0, -y)
+        item.page, item.child = page, page.parent ~= nil
+        item.fill = Wg.Solid(item, "BACKGROUND", pal.band, 1)
+        item.fill:SetAllPoints()
+        item.hover = Wg.Solid(item, "BORDER", pal.gold, 0.07)
+        item.hover:SetAllPoints()
+        item.hover:Hide()
+        item.bar = Wg.Solid(item, "ARTWORK", pal.gold, 1)
+        item.bar:SetWidth(2)
+        item.bar:SetPoint("TOPLEFT", 0, -3)
+        item.bar:SetPoint("BOTTOMLEFT", 0, 3)
+        item.text = Wg.Text(item, item.child and "small" or "body")
+        item.text:SetPoint("LEFT", item.child and 24 or 12, 0)
+        item.text:SetPoint("RIGHT", -6, 0)
+        item.text:SetWordWrap(false)
+        item.text:SetText(page.nav)
+        item:SetScript("OnEnter", function(self) self.hover:Show() end)
+        item:SetScript("OnLeave", function(self) self.hover:Hide() end)
+        item:SetScript("OnClick", function(self) UI.Navigate(self.page.key) end)
+        state.navItems[#state.navItems + 1] = item
+        y = y + NAV_ROW
+    end
+    child:SetHeight(y + 4)
+    list:SetScript("OnMouseWheel", function(self, delta)
+        local most = math.max(0, child:GetHeight() - self:GetHeight())
+        self:SetVerticalScroll(math.max(0, math.min(most, self:GetVerticalScroll() - delta * NAV_ROW * 2)))
+    end)
+end
+
+---------------------------------------------------------------------------
+-- Search results
+---------------------------------------------------------------------------
+local resultRows = {}
+
+local function ResultRow(i)
+    local row = resultRows[i]
+    if row then return row end
+    row = CreateFrame("Button", nil, resultsView)
+    row:SetSize(CONTENT_W, 42)
+    row.bg = Wg.Solid(row, "BACKGROUND", pal.gold, 0)
+    row.bg:SetAllPoints()
+    row.bar = Wg.Solid(row, "ARTWORK", pal.gold, 1)
+    row.bar:SetWidth(2)
+    row.bar:SetPoint("TOPLEFT", 0, -4)
+    row.bar:SetPoint("BOTTOMLEFT", 0, 4)
+    row.label = Wg.Text(row, "body")
+    row.label:SetPoint("TOPLEFT", 12, -6)
+    row.label:SetWidth(CONTENT_W - 220)
+    row.label:SetWordWrap(false)
+    row.context = Wg.Text(row, "meta")
+    row.context:SetPoint("TOPLEFT", row.label, "BOTTOMLEFT", 0, -3)
+    row.context:SetWidth(CONTENT_W - 220)
+    row.context:SetWordWrap(false)
+    row.note = Wg.Text(row, "meta")
+    row.note:SetPoint("TOPRIGHT", -10, -8)
+    row.note:SetWidth(196)
+    row.note:SetJustifyH("RIGHT")
+    row:SetScript("OnEnter", function(self) if not self.selected then self.bg:SetColorTexture(pal.gold[1], pal.gold[2], pal.gold[3], 0.05) end end)
+    row:SetScript("OnLeave", function(self) if not self.selected then self.bg:SetColorTexture(pal.gold[1], pal.gold[2], pal.gold[3], 0) end end)
+    row:SetScript("OnClick", function(self) UI.Go(self.result) end)
+    resultRows[i] = row
+    return row
+end
+
+local function PaintSelection()
+    for i, row in ipairs(resultRows) do
+        local selected = row:IsShown() and i == state.selected
+        row.selected = selected
+        row.bar:SetShown(selected)
+        row.bg:SetColorTexture(pal.gold[1], pal.gold[2], pal.gold[3], selected and 0.10 or 0)
+    end
+end
+
+local function DrawResults(query)
+    local results = Search.Run(query)
+    state.results, state.selected = results, 1
+    local y = 4
+    resultsView.title:SetText(#results == 0
+        and ("Nothing matches \"" .. query .. "\".")
+        or (#results == 1 and "1 result" or (#results .. " results")))
+    resultsView.help:SetText(#results == 0
+        and "Try fewer or shorter words, or a feature's name, such as \"pins\", \"chronicle\" or \"sound\"."
+        or "Enter opens the highlighted one; Up and Down move between them. Choosing one shows it on its page and changes nothing.")
+    y = y + (resultsView.title:GetStringHeight() or 16) + 4 + (resultsView.help:GetStringHeight() or 12) + 14
+    local alsoShown = false
+    resultsView.also:Hide()
+    for i, result in ipairs(results) do
+        if result.tipOnly and not alsoShown then
+            alsoShown = true
+            resultsView.also:ClearAllPoints()
+            resultsView.also:SetPoint("TOPLEFT", 4, -y - 4)
+            resultsView.also:Show()
+            y = y + 24
+        end
+        local row = ResultRow(i)
+        local e = result.entry
+        row.result = result
+        row.label:SetText(e.label)
+        row.context:SetText(e.kind == "page" and ("Page" .. Search.SEP .. (e.context or "")) or e.context)
+        local note = Search.Note(e)
+        row.note:SetText(note or "")
+        Wg.Color(row.note, (note and note ~= "Advanced") and pal.danger.text or pal.stone)
+        row:ClearAllPoints()
+        row:SetPoint("TOPLEFT", 0, -y)
+        row:Show()
+        y = y + 44
+    end
+    for i = #results + 1, #resultRows do resultRows[i]:Hide() end
+    resultsView:SetHeight(y + 8)
+    content:SetHeight(y + 8)
+    scroll:SetVerticalScroll(0)
+    PaintSelection()
+end
+
+function UI.Go(result)
+    if not result then return end
+    local e = result.entry
+    searchBox:ClearFocus()
+    UI.Navigate(e.page, e.row and e.row.id or nil)
+end
+
+function UI.SetQuery(text)
+    if state.clearing then return end
+    text = (text or ""):gsub("^%s+", "")
+    if text == "" then
+        if state.searching then
+            ShowResults(false)
+            local view = state.views[state.page]
+            if view then Layout(view) end
+        end
+        return
+    end
+    if not state.searching then ShowResults(true) end
+    DrawResults(text)
+end
+
+local function MoveSelection(delta)
+    local n = #state.results
+    if n == 0 then return end
+    state.selected = math.max(1, math.min(n, state.selected + delta))
+    PaintSelection()
+    local row = resultRows[state.selected]
+    local _, _, _, _, top = row:GetPoint(1)
+    if top then
+        local y, visible = -top, scroll:GetHeight()
+        local now = scroll:GetVerticalScroll()
+        if y < now then ScrollTo(y) elseif y + 44 > now + visible then ScrollTo(y + 44 - visible) end
+    end
+end
+
+---------------------------------------------------------------------------
+-- Footer: the profile in use, and a reload a change waits for
+---------------------------------------------------------------------------
+function UI.RefreshFooter()
+    if not footer then return end
+    local P = R.Profiles
+    local current = P and P.Current and P.Current()
+    if current then
+        local others = #P.UsedBy(current, true)
+        local shared = others == 0 and "used only by this character"
+            or ("shared with " .. (others == 1 and "1 other character" or (others .. " other characters")))
+        footer.profile.text:SetText("Profile: " .. R.GOLD .. current .. "|r" .. Search.SEP .. shared)
+    else
+        footer.profile.text:SetText("Profiles aren't available right now.")
+    end
+    footer.profile:SetWidth(footer.profile.text:GetStringWidth() + 8)
+    local pending = R.Switches.ReloadPending()
+    footer.reloadText:SetShown(pending)
+    footer.reload:SetShown(pending)
+end
+
+function UI.ReloadNotice() UI.RefreshFooter() end
+
+local function BuildFooter()
+    footer = CreateFrame("Frame", nil, win)
+    footer:SetPoint("BOTTOMLEFT", PAD, 8)
+    footer:SetPoint("BOTTOMRIGHT", -PAD, 8)
+    footer:SetHeight(FOOTER_H - 12)
+    local rule = Wg.Solid(win, "BORDER", pal.bronzeLo, 0.8)
+    rule:SetHeight(1)
+    rule:SetPoint("BOTTOMLEFT", footer, "TOPLEFT", 0, 4)
+    rule:SetPoint("BOTTOMRIGHT", footer, "TOPRIGHT", 0, 4)
+    footer.profile = CreateFrame("Button", nil, footer)
+    footer.profile:SetHeight(20)
+    footer.profile:SetPoint("LEFT", 0, 0)
+    footer.profile.text = Wg.Text(footer.profile, "small")
+    footer.profile.text:SetPoint("LEFT", 4, 0)
+    footer.profile:SetScript("OnClick", function() UI.Navigate("profiles") end)
+    I.Tip(footer.profile, "Profile", "The saved set of TwichUI options this character uses. Choose another, or make one, on the Profiles page.")
+    footer.reload = Wg.Button(footer, "Reload now", 100, "primary", function() ReloadUI() end)
+    footer.reload:SetPoint("RIGHT", 0, 0)
+    footer.reloadText = Wg.Text(footer, "small")
+    footer.reloadText:SetPoint("RIGHT", footer.reload, "LEFT", -10, 0)
+    footer.reloadText:SetText("Some changes take effect after you reload your UI.")
+    Wg.Color(footer.reloadText, pal.gold)
+end
+
+---------------------------------------------------------------------------
+-- The window
+---------------------------------------------------------------------------
+local function BuildSearch(header)
+    searchBox = Wg.EditBox(header, 260, 24)
+    searchBox:SetPoint("RIGHT", header, "RIGHT", -40, 0)
+    searchBox:SetTextInsets(24, 22, 0, 0)
+    searchBox:SetMaxLetters(60)
+    local icon = searchBox:CreateTexture(nil, "OVERLAY")
+    icon:SetAtlas("common-search-magnifyingglass")   -- the game's own search glass (SearchBoxTemplate's)
+    icon:SetSize(14, 14)
+    icon:SetPoint("LEFT", 6, -1)
+    icon:SetVertexColor(pal.stone[1], pal.stone[2], pal.stone[3])
+    local hint = Wg.Text(searchBox, "meta")
+    hint:SetPoint("LEFT", 24, 0)
+    hint:SetText("Search settings")
+    local clear = CreateFrame("Button", nil, searchBox)
+    clear:SetSize(18, 18)
+    clear:SetPoint("RIGHT", -3, 0)
+    clear.text = Wg.Text(clear, "small")
+    clear.text:SetPoint("CENTER", 0, 1)
+    clear.text:SetText("x")
+    clear:SetScript("OnClick", function() searchBox:SetText(""); searchBox:ClearFocus() end)
+    clear:SetScript("OnEnter", function(self) Wg.Color(self.text, pal.gold) end)
+    clear:SetScript("OnLeave", function(self) Wg.Color(self.text, pal.textDim) end)
+    local function Hints()
+        local empty = (searchBox:GetText() or "") == ""
+        hint:SetShown(empty and not searchBox:HasFocus())
+        clear:SetShown(not empty)
+    end
+    searchBox:SetScript("OnTextChanged", function(self)
+        Hints()
+        UI.SetQuery(self:GetText())
+    end)
+    searchBox:HookScript("OnEditFocusGained", Hints)
+    searchBox:HookScript("OnEditFocusLost", Hints)
+    -- Esc while typing clears the search first; a second Esc lets go of the box.
+    searchBox:SetScript("OnEscapePressed", function(self)
+        if (self:GetText() or "") ~= "" then self:SetText("") else self:ClearFocus() end
+    end)
+    searchBox:SetScript("OnEnterPressed", function()
+        if state.searching then UI.Go(state.results[state.selected]) end
+    end)
+    searchBox:SetScript("OnArrowPressed", function(_, key)
+        if not state.searching then return end
+        if key == "UP" then MoveSelection(-1) elseif key == "DOWN" then MoveSelection(1) end
+    end)
+    I.Tip(searchBox, "Search settings", "Finds settings on every page by their name, their page and the words in their description. Enter opens the highlighted result; Esc clears the search.")
+    Hints()
+end
+
+local function BuildWindow()
+    win = CreateFrame("Frame", "TwichUISettingsWindow", UIParent, "BackdropTemplate")
+    win:SetSize(WIDTH, HEIGHT)
+    win:SetFrameStrata("HIGH")
+    win:SetToplevel(true)
+    win:SetClampedToScreen(true)
+    win:SetMovable(true)
+    win:EnableMouse(true)
+    if win.SetDontSavePosition then win:SetDontSavePosition(true) end
+    win:Hide()
+    S.Frame(win, WIDTH, HEIGHT, pal)
+    S.PaintFrame(win, pal)
+    S.Header(win, HEADER_H - 4, pal)
+
+    local header = CreateFrame("Frame", nil, win)
+    header:SetPoint("TOPLEFT", 4, -4)
+    header:SetPoint("TOPRIGHT", -4, -4)
+    header:SetHeight(HEADER_H - 4)
+    header:EnableMouse(true)
+    header:RegisterForDrag("LeftButton")
+    header:SetScript("OnDragStart", function() win:StartMoving() end)
+    header:SetScript("OnDragStop", function()
+        win:StopMovingOrSizing()
+        SavePlace()
+    end)
+    local brand = Wg.Text(header, "brand")
+    brand:SetPoint("LEFT", 16, 0)
+    brand:SetText("TwichUI")
+    local sub = Wg.Text(header, "meta")
+    sub:SetPoint("BOTTOMLEFT", brand, "BOTTOMRIGHT", 10, 2)
+    sub:SetText("Settings")
+    local close = S.Close(header, function() UI.Close() end, pal)
+    close:SetPoint("RIGHT", header, "RIGHT", -10, 0)
+    I.Tip(close, "Close", "Closes the settings. Your changes are already saved.")
+    BuildSearch(header)
+
+    nav = CreateFrame("Frame", nil, win, "BackdropTemplate")
+    nav:SetPoint("TOPLEFT", PAD, -(HEADER_H + 10))
+    nav:SetPoint("BOTTOMLEFT", PAD, FOOTER_H + 8)
+    nav:SetWidth(NAV_W)
+    Wg.Surface(nav, pal.nav, 0.95, pal.bronzeLo, 0.8)
+
+    local area = CreateFrame("Frame", nil, win)
+    area:SetPoint("TOPLEFT", nav, "TOPRIGHT", 12, 0)
+    area:SetPoint("BOTTOMRIGHT", -PAD, FOOTER_H + 8)
+    scroll, content = Wg.Scroll(area, CONTENT_W)
+    scroll:SetPoint("TOPLEFT", 0, 0)
+    scroll:SetPoint("BOTTOMRIGHT", -24, 0)
+
+    resultsView = CreateFrame("Frame", nil, content)
+    resultsView:SetPoint("TOPLEFT", 0, 0)
+    resultsView:SetWidth(CONTENT_W)
+    resultsView:Hide()
+    resultsView.title = Wg.Text(resultsView, "title")
+    resultsView.title:SetPoint("TOPLEFT", 2, -4)
+    resultsView.help = Wg.Text(resultsView, "small")
+    resultsView.help:SetPoint("TOPLEFT", resultsView.title, "BOTTOMLEFT", 0, -4)
+    resultsView.help:SetWidth(CONTENT_W - 8)
+    resultsView.also = Wg.Text(resultsView, "meta")
+    resultsView.also:SetText("ALSO MENTIONED IN")
+
+    BuildNav()
+    BuildFooter()
+
+    win:SetScript("OnShow", function(self)
+        R.FitToScreen(self)
+        UI.RefreshFooter()
+    end)
+    win:SetScript("OnHide", function()
+        Wg.CloseMenu()
+        if searchBox:HasFocus() then searchBox:ClearFocus() end
+        if GameTooltip and GameTooltip:IsOwned(win) then GameTooltip:Hide() end
+        R.SettingsLauncher.Closed()
+    end)
+    Place()
+end
+
+---------------------------------------------------------------------------
+-- What the rest of TwichUI calls (SettingsLauncher.lua)
+---------------------------------------------------------------------------
+function UI.IsShown() return win ~= nil and win:IsShown() end
+function UI.Frame() return win end
+
+-- page: a page key (unknown or nil: the start page, or the page shown last time); setting: a setting's name
+-- (TWICHUI_ prefix optional) or a row id, to go to and mark.
+function UI.Open(page, setting)
+    K.Describe()
+    if not win then BuildWindow() end
+    if type(setting) == "string" then setting = setting:gsub("^TWICHUI_", "") end
+    local row = setting and K.rowsById[setting]
+    local key
+    if row then key = row.page
+    elseif page ~= nil then key = K.pages[page] and page or "overview"   -- an unknown page: the start page
+    else key = state.page or "overview" end                              -- none named: where it was left
+    win:Show()
+    win:Raise()
+    UI.Navigate(key, row and row.id or nil)
+end
+
+function UI.Close()
+    if win and win:IsShown() then win:Hide() end
+end
+
+function UI.Toggle(page)
+    if UI.IsShown() then UI.Close() else UI.Open(page) end
+end
+
+-- The page shown, drawn again (after a change somewhere else).
+function UI.Refresh()
+    if not UI.IsShown() then return end
+    if state.searching then
+        DrawResults(searchBox:GetText() or "")
+    else
+        local view = state.views[state.page]
+        if view then Layout(view) end
+    end
+    UI.RefreshFooter()
+end
+UI.RefreshValues = UI.Refresh
+
+-- A setting changed through its control (or a Reset told it to show its value again): a slider or a color
+-- redraws its own row (they change many times a second while dragged); anything else redraws the page, since
+-- other rows may be greyed out or shown because of it.
+K.onSettingChanged = function(setting)
+    if not UI.IsShown() then return end
+    if setting.kind:find("^switch:modules") then return end   -- Switches.lua's listener below redraws
+    if state.suspend > 0 then return end
+    local view = state.views[state.page]
+    if not view or state.searching then return end
+    if setting.slider or setting.swatch then
+        for _, v in pairs(view.rows) do
+            if v.row.data.setting == setting and v.frame:IsShown() then v.RefreshValue() end
+        end
+        return
+    end
+    Layout(view)
+end
+K.onRefresh = UI.Refresh
+R.Switches.OnChange(function()
+    if state.suspend > 0 then return end
+    UI.Refresh()
+end)
+
+---------------------------------------------------------------------------
+-- Esc: the open list, then the window. Through the game's Esc handlers where it has them (an open dialog
+-- or the game's color picker is put away first); otherwise the usual list of frames Esc closes.
+---------------------------------------------------------------------------
+if RegisterGameMenuEscHandler and GameMenuEscPriority and GameMenuEscPriority.Menu and GameMenuEscPriority.AddOn then
+    RegisterGameMenuEscHandler(GameMenuEscPriority.Menu, function()
+        if Wg.MenuShown() then
+            Wg.CloseMenu()
+            return true
+        end
+        return false
+    end)
+    RegisterGameMenuEscHandler(GameMenuEscPriority.AddOn, function()
+        if not UI.IsShown() then return false end
+        if ColorPickerFrame and ColorPickerFrame:IsShown() then return false end
+        UI.Close()
+        return true
+    end)
+    UI.escape = "handlers"
+elseif UISpecialFrames then
+    tinsert(UISpecialFrames, "TwichUISettingsMenu")
+    tinsert(UISpecialFrames, "TwichUISettingsWindow")
+    UI.escape = "special-frames"
+end
+
+-- Last: the rest of TwichUI knows the settings window is here once every file of it has loaded.
+R.SettingsUI = UI

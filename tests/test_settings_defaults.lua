@@ -1,92 +1,42 @@
 dofile(TESTS .. "harness.lua")
--- The options panel's Defaults button must put every toggle back to what a
--- new install gets: the opt-in channels and group check stay off.
--- Also: advanced options hide behind one remembered switch, gear options
--- read and write the gear preferences, and skins report their status.
-local c = MakeClient("Rich", {"!!!TwichUI", "Attune"})
-local defaults, initializers, proxies, dropdowns = {}, {}, {}, {}
-local pageOrder, variables = {}, {}   -- variables[name] = the page it was registered on
-local function Initializer(name, tooltip)
-  local i = {data = {name = name, tooltip = tooltip}, shown = {}, modify = {}}
-  function i:AddShownPredicate(fn) table.insert(self.shown, fn) end
-  function i:AddModifyPredicate(fn) table.insert(self.modify, fn) end
-  function i:SetParentInitializer(parent, fn) self.parent = parent; if fn then table.insert(self.modify, fn) end end
-  function i:GetTooltip() return self.data.tooltip end     -- as Blizzard's initializers do
-  function i:GetName() return self.data.name end
-  function i:Enabled() for _, fn in ipairs(self.modify) do if not fn() then return false end end return true end
-  function i:Shown() for _, fn in ipairs(self.shown) do if not fn() then return false end end return true end
-  table.insert(initializers, i)
-  return i
+dofile(TESTS .. "settings_mock.lua")
+-- Every switch's default is what a new install gets: the opt-in channels and group check stay off.
+-- Also: advanced options are marked as such, gear options read and write the gear preferences, skins report
+-- their status, each page reads and writes its feature's own settings, and its Reset puts back only its own.
+-- The pages are TwichUI_Settings' descriptions (tests/settings_mock.lua); no window is drawn here.
+local c, S = SettingsClient()
+local R, K = c.TwichUI, S.K
+local defaults, initializers, proxies, dropdowns, variables, pageOrder = {}, {}, {}, {}, {}, {}
+for _, page in ipairs(K.list) do   -- (described order: by each page's place, the start page last)
+  for _, row in ipairs(page.rows) do
+    initializers[#initializers + 1] = row
+    if row.kind == "swatch" then row.swatch = true end
+    if row.setting and row.data.name == nil then row.data.name = row.setting.name end   -- (as the game's rows had it)
+    if row.choices and row.setting then dropdowns[row.setting.variable] = row.choices end
+  end
 end
-c.CreateSettingsListSectionHeaderInitializer = function(name, tooltip) return Initializer(name, tooltip) end
-c.CreateSettingsButtonInitializer = function(name, _, click, tooltip) local i = Initializer(name, tooltip); i.click = click; return i end
-c.Settings = {
-  VarType = {Boolean = "boolean", String = "string", Number = "number"},
-  RegisterVerticalLayoutCategory = function(name) return {GetID = function() return 1 end, name = name}, {AddInitializer = function() end} end,
-  RegisterVerticalLayoutSubcategory = function(parent, name)
-    local under = { ["RestedXP guide window"] = "Addon skins", ["SpeakStone speech frame"] = "Addon skins", ["Chronicle appearance"] = "Journey Chronicle", ["Pin appearance"] = "Party pins" }
-    assert(parent.name == (under[name] or "TwichUI"),
-      "pages sit directly under TwichUI, except the appearance pages, each under the page it belongs to: " .. name)
-    table.insert(pageOrder, name)
-    local id = #pageOrder + 10
-    return {GetID = function() return id end, name = name}, {AddInitializer = function() end}
-  end,
-  RegisterAddOnSetting = function(category, variable, key, tbl, _, name, default)
-    assert(not variables[variable], variable .. " is registered once")
-    variables[variable] = category.name
-    if tbl == c.TwichUIDB.modules then defaults[key] = default
-    else assert(variable == "TWICHUI_showAdvanced" and tbl == c.TwichUIDB.ui and default == false, "only the advanced switch lives elsewhere") end
-    return {name = name, SetValueChangedCallback = function(self, fn) self.changed = fn end}
-  end,
-  RegisterProxySetting = function(category, variable, varType, name, default, get, set)
-    assert(not variables[variable], variable .. " is registered once")
-    variables[variable] = category.name
-    local s = {variable = variable, varType = varType, name = name, default = default, get = get, set = set}
-    s.SetValue = function(self, value) self.set(value) end
-    proxies[variable] = s
-    return s
-  end,
-  CreateSliderOptions = function(min, max, step) return { min = min, max = max, step = step } end,
-  CreateSlider = function(_, setting, options, tooltip) local i = Initializer(setting.name, tooltip); i.setting = setting; i.options = options; return i end,
-  CreateColorSwatch = function(_, setting, tooltip) local i = Initializer(setting.name, tooltip); i.setting = setting; i.swatch = true; return i end,
-  CreateCheckbox = function(_, setting, tooltip) local i = Initializer(setting.name, tooltip); i.setting = setting; return i end,
-  CreateDropdown = function(_, setting, options, tooltip) local i = Initializer(setting.name, tooltip); i.setting = setting; dropdowns[setting.variable] = options; return i end,
-  CreateControlTextContainer = function()
-    local data = {}
-    return {Add = function(_, value, label, tip) table.insert(data, {value = value, label = label, tooltip = tip}) end, GetData = function() return data end}
-  end,
-  RegisterCanvasLayoutSubcategory = function(parent, _, name)
-    assert((parent.name == "Gear comparison" and name == "Stat weights") or (parent.name == "Mage" and name == "Refreshment shares"), name)
-    c.canvases = c.canvases or {}; c.canvases[name] = parent.name
-    return {GetID = function() return 2 end}
-  end,
-  OpenToCategory = function(id) c.opened = id end,
-  RegisterAddOnCategory = function() end,
-}
-c.UnitClass = function() return "Mage", "MAGE" end
-c.UnitLevel = function() return 30 end
-c.C_SpecializationInfo = { GetActiveSpecGroup = function() return 1 end, GetCombatConfigIDForSpecGroup = function() return nil end }
-local function Obj()
-  return setmetatable({}, {__index = function(t, k)
-    if k == "twichBevel" or k == "twichBorders" then return nil end   -- a field TwichUI sets itself, not a method
-    if k == "CreateFontString" or k == "CreateTexture" or k == "CreateAnimationGroup" or k == "CreateAnimation" then return function() return Obj() end end
-    return function() end
-  end})
+for name, s in pairs(K.variables) do
+  variables[name] = s.page
+  local key = s.kind:match("^switch:modules%.(.+)$")
+  if key then
+    defaults[key] = s.default
+    s.changed = function() R.Switches.Sync() end   -- the value was put in TwichUIDB.modules: follow it, as a profile change does
+  else
+    s.changed = function() s:NotifyUpdate() end
+  end
+  if s.kind == "proxy" then proxies[name] = s end
 end
-c.CreateFrame = function() return Obj() end
-c.StaticPopupDialogs = {}; c.StaticPopup_Show = function() end
-for _, f in ipairs({ "gear/Weights.lua", "gear/Evaluate.lua", "gear/Prefs.lua", "gear/Data.lua",
-  "gear/Hints.lua", "gear/Tooltip.lua", "gear/Bags.lua", "gear/Window.lua", "modules/Notify.lua", "modules/Arrival.lua", "modules/Media.lua", "modules/FriendLogin.lua", "modules/Borders.lua", "modules/FoodDrink.lua", "modules/FoodDrinkUnlock.lua",
-  "modules/TrainingData.lua", "modules/Borders.lua", "modules/MenuStyle.lua", "modules/SpellMenu.lua", "modules/MageTravel.lua", "modules/MageConjure.lua",
-  "chronicle/Style.lua", "chronicle/Appearance.lua", "modules/Refreshments.lua", "modules/RefreshmentsPanel.lua", "modules/RefreshmentsShares.lua", "modules/RefreshmentsTrade.lua", "modules/RefreshmentsBroker.lua", "modules/MageSell.lua", "modules/MageSellWindow.lua",
-  "modules/RestedXPSkin.lua", "modules/RestedXPTimers.lua", "modules/SpeakStoneSkin.lua", "qol/QoL.lua", "qol/Summons.lua", "qol/Resurrect.lua", "qol/ReleasePvP.lua", "qol/Duels.lua", "qol/QuickKeybind.lua", "qol/GuideWaypoint.lua",
-  "pins/Pins.lua", "pins/Sync.lua", "pins/Look.lua", "pins/Map.lua", "pins/Minimap.lua", "pins/Editor.lua", "pins/Window.lua", "pins/BrokerMenu.lua", "pins/Broker.lua",
-  unpack(SettingsFiles()) }) do
-  local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
+for _, page in ipairs(K.NavOrder()) do
+  if page.key ~= "overview" and not page.def.host then pageOrder[#pageOrder + 1] = page.name end
 end
-c.LOADED["!!!TwichUI"] = true; c.FireEvent("ADDON_LOADED", "!!!TwichUI")
-c.FireEvent("PLAYER_ENTERING_WORLD", true, false)   -- previews need the world, as they do in the game
-local R = c.TwichUI
+c.canvases = {}
+for _, page in ipairs(K.list) do if page.def.host then c.canvases[page.name] = K.pages[page.parent].name end end
+-- pages sit directly under TwichUI, except the appearance and addon pages, each under the page it belongs to
+for _, page in ipairs(K.list) do
+  local under = { ["RestedXP guide window"] = "Addon skins", ["SpeakStone speech frame"] = "Addon skins", ["Chronicle appearance"] = "Journey Chronicle",
+    ["Pin appearance"] = "Party pins", ["Stat weights"] = "Gear comparison", ["Refreshment shares"] = "Mage" }
+  assert((page.parent and K.pages[page.parent].name) == under[page.name], page.name .. " is in its place")
+end
 
 -- Every module toggle defaults to what a new install gets.
 local n = 0
@@ -119,19 +69,16 @@ assert(defaults.trainingNotice == true, "new training card is on by default")
 assert(defaults.friendLogin == true, "Battle.net friend login card is on by default")
 assert(defaults.friendLoginSound == true, "the friend login chime is on by default")
 
--- Advanced options: hidden until the switch is on, then shown; essentials never hidden.
+-- Advanced options: marked as such (the window opens their sections on request); essentials never are.
 local advanced, visible = {}, {}
 for _, i in ipairs(initializers) do
-  -- ("Advanced options": the row that shows them, the other way round: there only while they are hidden)
-  if i.data.name == "Advanced options" then
-  elseif #i.shown > 0 then advanced[i.data.name] = i else visible[i.data.name] = true end
+  local name = i:GetName()
+  if name then if i.advanced then advanced[name] = i else visible[name] = true end end
 end
-assert(c.TwichUIDB.ui.showAdvanced == false, "advanced starts hidden")
-for name, i in pairs(advanced) do assert(not i:Shown(), name .. " hidden by default") end
-c.TwichUIDB.ui.showAdvanced = true
+assert(c.TwichUIDB.ui.showAdvanced == false, "advanced sections start closed")
 -- (the background's tiling rows also wait for an image background: checked with the Chronicle's below)
 local IMAGE_ONLY = { ["Background tiling"] = true, ["Background tile size"] = true, ["Background inset"] = true }
-for name, i in pairs(advanced) do assert(IMAGE_ONLY[name] or i:Shown(), name .. " shown with advanced on") end
+for name, i in pairs(advanced) do assert(IMAGE_ONLY[name] or i:Shown(), name .. " is drawn when its section is open") end
 for _, name in ipairs({"Upgrade hints in item tooltips", "Mark upgrades in my bags", "Weigh gear for", "Stat weights",
   "Configuration sharing", "Let friends send me addon configurations", "Hide addon welcome messages", "Show advanced options"}) do
   assert(visible[name], name .. " is visible by default")
@@ -207,17 +154,17 @@ assert(c.TwichUI.MediaSounds["TwichUI Notification"] == "TwichUI_Notification.mp
 -- and saved with the UI options, a button per display (only for the displays that exist), a sequence test and Clear.
 local byName = {}
 for _, i in ipairs(initializers) do if i.data.name then byName[i.data.name] = i end end
-assert(byName["Notification previews"] and #byName["Notification previews"].shown == 0, "a visible section header")
+assert(byName["Notification previews"] and not byName["Notification previews"].advanced, "a visible section header")
 local previewSounds = proxies.TWICHUI_previewSounds
 assert(previewSounds and variables.TWICHUI_previewSounds == "Notifications", "on the Notifications page")
 assert(previewSounds.default == false and previewSounds.get() == false, "silent unless chosen")
 previewSounds.set(true); assert(c.TwichUIDB.ui.previewSounds == true and previewSounds.get() == true and R.Notify.PreviewSounds())
 previewSounds.set(false); assert(c.TwichUIDB.ui.previewSounds == false and not R.Notify.PreviewSounds())
 for _, name in ipairs({ "Zone arrival", "Friend login", "Test coordinated sequence", "Clear previews" }) do
-  assert(byName[name] and byName[name].click and #byName[name].shown == 0, name .. " has a visible button")
+  assert(byName[name] and byName[name].click and not byName[name].advanced, name .. " has a visible button")
 end
 assert(not byName["Training available"] and not byName["Chronicle welcome back"], "no button for a display that isn't there")
-assert(byName["Zone arrival"].data.tooltip:find("made-up", 1, true) and byName["Friend login"].data.tooltip:find("No friend state", 1, true))
+assert(byName["Zone arrival"]:GetTooltip():find("made-up", 1, true) and byName["Friend login"]:GetTooltip():find("No friend state", 1, true))
 local ui = c.TwichUIDB.ui
 local savedBefore = ui.arrivalHold .. tostring(ui.friendLoginChannel)
 byName["Zone arrival"].click()
@@ -233,8 +180,8 @@ assert(ui.arrivalHold .. tostring(ui.friendLoginChannel) == savedBefore and c.Tw
 -- Help: where to find the welcome and the commands. Both are visible buttons that change no setting.
 do
   local welcomeRow, commandsRow = byName["Welcome"], byName["Chat commands"]
-  assert(welcomeRow and welcomeRow.click and #welcomeRow.shown == 0 and commandsRow and commandsRow.click, "Help buttons on the overview")
-  assert(welcomeRow.data.tooltip:find("/tui about", 1, true) and welcomeRow.data.tooltip:find("changes nothing", 1, true))
+  assert(welcomeRow and welcomeRow.click and not welcomeRow.advanced and commandsRow and commandsRow.click, "Help buttons on the overview")
+  assert(welcomeRow:GetTooltip():find("/tui about", 1, true) and welcomeRow:GetTooltip():find("changes nothing", 1, true))
   local modulesBefore = {}
   for k, v in pairs(c.TwichUIDB.modules) do modulesBefore[k] = v end
   commandsRow.click()   -- runs /tui help through the one parser
@@ -254,8 +201,8 @@ do
     if i.data.name == "Upgrade hints in item tooltips" then gearHints = i end
     if i.data.name == "Weigh gear for" then tree = i end
   end
-  assert(gearHints and gearHints.data.tooltip:find("don't have to enter anything", 1, true), "says no setup is needed")
-  assert(tree and tree.data.tooltip:find("override", 1, true) and tree.data.tooltip:find("tied", 1, true), "explains automatic detection and the override")
+  assert(gearHints and gearHints:GetTooltip():find("don't have to enter anything", 1, true), "says no setup is needed")
+  assert(tree and tree:GetTooltip():find("override", 1, true) and tree:GetTooltip():find("tied", 1, true), "explains automatic detection and the override")
 end
 
 -- Skins: missing addons say so and can't be ticked; installed ones report status.
@@ -267,15 +214,15 @@ end
 assert(attune and #attune.modify == 0, "installed skin can be changed")
 assert(auctionator.data.name:find("not installed"), "missing addon labelled")
 assert(#auctionator.modify == 1 and auctionator.modify[1]() == false, "missing addon's skin greyed out")
-assert(auctionator.data.tooltip:find("Status: .*Not installed"), auctionator.data.tooltip)
-assert(type(attune.data.tooltip) == "string" and attune.data.tooltip:find("Status:"), "status in a plain-string tooltip")
+assert(auctionator:GetTooltip():find("Status: .*Not installed"), auctionator.data.tooltip)
+assert(type(attune:GetTooltip()) == "string" and attune:GetTooltip():find("Status:"), "status in a plain-string tooltip")
 c.TwichUIDB.modules.attuneSkin = false
 attune.setting.changed()
-assert(attune.data.tooltip:find("after reload"), "toggle change shows it needs a reload")
+assert(attune:GetTooltip():find("after reload"), "toggle change shows it needs a reload")
 
 -- The overview links to one page per feature, in this order; every setting
 -- is on exactly one page (registration above refuses a repeat).
-assert(table.concat(pageOrder, ",") == "Gear comparison,Notifications,Quality of life,Food and drink,Mage,Journey Chronicle,Chronicle appearance,Party pins,Pin appearance,Auction House,Addon skins,RestedXP guide window,SpeakStone speech frame,Configuration sharing,Profiles", table.concat(pageOrder, ","))
+assert(table.concat(pageOrder, ",") == "Notifications,Quality of life,Food and drink,Auction House,Journey Chronicle,Chronicle appearance,Party pins,Pin appearance,Gear comparison,Mage,Addon skins,RestedXP guide window,SpeakStone speech frame,Configuration sharing,Profiles,Troubleshooting", table.concat(pageOrder, ","))
 for variable, page in pairs({
   TWICHUI_media = "TwichUI", TWICHUI_quietLogin = "TwichUI", TWICHUI_showAdvanced = "TwichUI", 
   TWICHUI_gearHints = "Gear comparison", TWICHUI_gearTree = "Gear comparison", TWICHUI_gearBagStyle = "Gear comparison",
@@ -384,7 +331,7 @@ do
   local preferInit
   for _, i in ipairs(initializers) do if i.setting and i.setting.variable == "TWICHUI_foodDrinkPreferConjured" then preferInit = i end end
   assert(preferInit and #preferInit.modify == 1, "live only while the buttons are on")
-  assert(preferInit.data.tooltip and preferInit.data.tooltip:find("even when an ordinary item restores more", 1, true), "the tooltip says what prefer means")
+  assert(preferInit.data.tooltip and preferInit:GetTooltip():find("even when an ordinary item restores more", 1, true), "the tooltip says what prefer means")
   -- EllesmereUI's Unlock Mode: off by default, live only while the buttons are on, says what it does and where it stands
   assert(defaults.foodDrinkUnlock == false and c.TwichUIDB.modules.foodDrinkUnlock == false, "the Unlock Mode choice is opt-in")
   local unlockInit
@@ -528,28 +475,28 @@ do
   MS.Reset()
   c.TwichUIDB.modules.mageRefreshments = false
 end
-assert(R.settingsCategories.chronicle and R.settingsCategories.sharing and R.settingsCategories.overview == R.settingsCategory)
-R:OpenSettings("chronicle"); assert(c.opened == R.settingsCategories.chronicle:GetID(), "opens a named page")
-R:OpenSettings(); assert(c.opened == R.settingsCategory:GetID(), "opens the overview by default")
+assert(K.pages.chronicle and K.pages.sharing and K.pages.overview)
+R:OpenSettings("chronicle"); assert(c.opened == "chronicle", "opens a named page")
+R:OpenSettings(); assert(c.opened == "overview", "opens the start page by default")
 
 -- Overview rows: status text follows the toggles, and each opens its page.
 local rows = {}
-for _, i in ipairs(initializers) do if i.click and i.data.name:find("%s%s%s") then rows[i.data.name:match("^(.-)%s%s%s")] = i end end
+for _, i in ipairs(initializers) do if i.kind == "link" then rows[i.data.name] = i end end
 assert(not rows["Zone arrival"], "the zone card no longer has a row of its own")
 local zone = assert(rows["Notifications"], "overview has one Notifications row")
-assert(zone.data.name:find("3 of 3 on"), zone.data.name)
+assert(zone.status():find("3 of 3 on"), zone.status())
 c.TwichUIDB.modules.arrival = false
 c.TwichUIDB.modules.attuneSkin = true
 -- a toggle change refreshes the status
 local arrivalToggle; for _, i in ipairs(initializers) do if i.setting and i.setting.name == "Show a title card when I arrive in a new zone" then arrivalToggle = i end end
 arrivalToggle.setting.changed()
-assert(zone.data.name:find("2 of 3 on"), zone.data.name)
+assert(zone.status():find("2 of 3 on"), zone.status())
 c.TwichUIDB.modules.trainingNotice, c.TwichUIDB.modules.friendLogin = false, false
 arrivalToggle.setting.changed()
-assert(zone.data.name:find("Off"), "all three off: " .. zone.data.name)
-zone.click(); assert(c.opened == R.settingsCategories.notifications:GetID(), "row opens the Notifications page")
-assert(not R.settingsCategories.arrival, "no separate zone arrival page")
-assert(rows["Addon skins"].data.name:find("of") or rows["Addon skins"].data.name:find("None installed"), rows["Addon skins"].data.name)
+assert(zone.status():find("Off"), "all three off: " .. zone.status())
+zone.click(); assert(c.opened == "notifications", "row opens the Notifications page")
+assert(not K.pages.arrival, "no separate zone arrival page")
+assert(rows["Addon skins"].status():find("of") or rows["Addon skins"].status():find("None installed"), rows["Addon skins"].status())
 
 
 -- Quality of life: everything is opt-in, there is no "requested invites" row (the game's interface
@@ -579,9 +526,9 @@ c.TwichUIDB.modules.qolSummons = true; summonToggle.setting.changed(); assert(R.
 c.TwichUIDB.modules.qolSummons = false; summonToggle.setting.changed(); assert(not R.frame.events.CONFIRM_SUMMON, "and not once off")
 -- The overview row follows the switches.
 local qolRow = assert(rows["Quality of life"], "overview has a Quality of life row")
-assert(qolRow.data.name:find("Off"), qolRow.data.name)
+assert(qolRow.status():find("Off"), qolRow.status())
 c.TwichUIDB.modules.qolDuels, c.TwichUIDB.modules.qolReleasePvP = true, true; summonToggle.setting.changed()
-assert(qolRow.data.name:find("2 of 6 on"), qolRow.data.name)
+assert(qolRow.status():find("2 of 6 on"), qolRow.status())
 -- The RestedXP destination row: off, visible, and its tooltip says what it is doing right now.
 do
   local guideRow; for _, i in ipairs(initializers) do if i.setting and i.setting.name == "Mark RestedXP's destination" then guideRow = i end end
@@ -591,14 +538,14 @@ do
   assert(guideRow:GetTooltip():find("RestedXP not installed"), guideRow:GetTooltip())
   c.TwichUIDB.modules.qolGuideWaypoint = false
 end
-qolRow.click(); assert(c.opened == R.settingsCategories.qol:GetID(), "row opens the Quality of life page")
+qolRow.click(); assert(c.opened == "qol", "row opens the Quality of life page")
 -- Leatrix Plus overlap shows in the tooltip, and leaves its settings alone.
 c.C_AddOns.IsAddOnLoaded = function(n) return n == "Leatrix_Plus" end
 c.LeaPlusDB = { AutoAcceptSummon = "On" }
 summonToggle.setting.changed()
-assert(summonToggle.data.tooltip:find("Leatrix Plus also has this turned on"), "overlap note")
+assert(summonToggle:GetTooltip():find("Leatrix Plus also has this turned on"), "overlap note")
 c.LeaPlusDB.AutoAcceptSummon = "Off"; summonToggle.setting.changed()
-assert(not summonToggle.data.tooltip:find("Leatrix"), "no note when Leatrix has it off")
+assert(not summonToggle:GetTooltip():find("Leatrix"), "no note when Leatrix has it off")
 
 -- Interaction details: a greyed-out row says why in its tooltip (and keeps its saved value); a setting
 -- that needs a reload says so; previews wait for combat and say so; nothing is hidden silently.
@@ -631,13 +578,13 @@ do
 
   -- reload-only changes say so before the player changes them
   for _, name in ipairs({ "Hide addon welcome messages", "Custom fonts and sounds", "Configuration sharing", "Attune" }) do
-    assert(Row(name).data.tooltip:find("Takes effect after you reload your UI.", 1, true), name .. " mentions the reload")
+    assert(Row(name):GetTooltip():find("Takes effect after you reload your UI.", 1, true), name .. " mentions the reload")
   end
-  assert(not Row("Show Food and Drink buttons").data.tooltip:find("reload your UI", 1, true), "an immediate setting doesn't")
+  assert(not Row("Show Food and Drink buttons"):GetTooltip():find("reload your UI", 1, true), "an immediate setting doesn't")
 
   -- the sharing window button is greyed while sharing is off, and says what to do if pressed anyway
   local sharingOpen
-  for _, i in ipairs(initializers) do if i.data.name == "Configuration sharing" and i.click then sharingOpen = i end end
+  for _, i in ipairs(initializers) do if i.data.name == "Configuration sharing" and i.kind == "button" then sharingOpen = i end end
   M.setupSharing = false
   assert(sharingOpen and not sharingOpen:Enabled() and sharingOpen:GetTooltip():find("turned on", 1, true), "greyed with a reason")
   M.setupSharing = true
@@ -679,14 +626,14 @@ do
   for _, v in ipairs({ "TWICHUI_restedxpLookBgColor", "TWICHUI_restedxpLookBorderColor", "TWICHUI_restedxpTitleColor",
     "TWICHUI_restedxpBodyColor" }) do
     local row = RowFor(v)
-    assert(row and #row.shown == 0, v .. " is a common setting")
+    assert(row and not row.advanced, v .. " is a common setting")
     assert(not row:Enabled(), v .. " is greyed out while the skin is off")
   end
   for _, v in ipairs({ "TWICHUI_restedxpLookBgTexture", "TWICHUI_restedxpLookBgOpacity", "TWICHUI_restedxpLookBorderTexture",
     "TWICHUI_restedxpLookBorderSize", "TWICHUI_restedxpLookBorderOpacity", "TWICHUI_restedxpTitleFont", "TWICHUI_restedxpTitleOutline",
     "TWICHUI_restedxpBodyFont", "TWICHUI_restedxpBodyOutline", "TWICHUI_restedxpTintScrollbar" }) do
     local row = RowFor(v)
-    assert(row and #row.shown > 0, v .. " is under Advanced")
+    assert(row and row.advanced, v .. " is under Advanced")
   end
   c.TwichUIDB.modules.restedxpSkin = true
   assert(RowFor("TWICHUI_restedxpLookBgColor"):Enabled(), "enabled with the skin on")
@@ -711,13 +658,13 @@ do
   -- RestedXP's settings are a page of their own under Addon skins, with a pointer on that page
   assert(variables.TWICHUI_restedxpSkin == "RestedXP guide window", "the switch is on RestedXP's page: " .. tostring(variables.TWICHUI_restedxpSkin))
   assert(variables.TWICHUI_restedxpLookBgColor == "RestedXP guide window" and variables.TWICHUI_restedxpArrowShape == "RestedXP guide window")
-  assert(R.settingsCategories.restedxp, "R:OpenSettings can open it")
+  assert(K.pages.restedxp, "R:OpenSettings can open it")
   local pointer = Find("RestedXP guide window")
   local pointerButton
   for _, i in ipairs(initializers) do if i.click and i.data.name == "RestedXP guide window" then pointerButton = i end end
   assert(pointerButton, "a pointer button on the Addon skins page")
   pointerButton.click()
-  assert(c.opened == R.settingsCategories.restedxp:GetID(), "it opens the page")
+  assert(c.opened == "restedxp", "it opens the page")
   local skinsPageIndex, restedxpPageIndex
   for i, name in ipairs(pageOrder) do
     if name == "Addon skins" then skinsPageIndex = i elseif name == "RestedXP guide window" then restedxpPageIndex = i end
@@ -728,7 +675,7 @@ do
   for _, v in ipairs({ "TWICHUI_restedxpArrowShape", "TWICHUI_restedxpArrowColor", "TWICHUI_restedxpArrowOpacity",
     "TWICHUI_restedxpArrowSize", "TWICHUI_restedxpArrowTextShown", "TWICHUI_restedxpArrowTextSize" }) do
     local row = RowFor(v)
-    assert(row and #row.shown == 0, v .. " is a common setting")
+    assert(row and not row.advanced, v .. " is a common setting")
     assert(not row:Enabled(), v .. " is greyed out while the skin is off")
   end
   assert(RowFor("TWICHUI_restedxpArrowSize").options.min == 50 and RowFor("TWICHUI_restedxpArrowSize").options.max == 250)
@@ -751,7 +698,7 @@ do
   -- the current-step panel: a menu button on hover (on) and the step tab's format (RestedXP's own wording)
   for _, v in ipairs({ "TWICHUI_restedxpSettingsButton", "TWICHUI_restedxpStepLabel" }) do
     local row = RowFor(v)
-    assert(row and #row.shown == 0, v .. " is a common setting")
+    assert(row and not row.advanced, v .. " is a common setting")
     assert(not row:Enabled(), v .. " is greyed out while the skin is off")
   end
   assert(Find("Show settings button on current-step hover") and Find("Step label format"), "named as asked")
@@ -774,13 +721,13 @@ do
   for _, v in ipairs({ "TWICHUI_restedxpShowCog", "TWICHUI_restedxpShowResizeHandle", "TWICHUI_restedxpShowTitle", "TWICHUI_restedxpShowLogo", "TWICHUI_restedxpShowClassIcon", "TWICHUI_restedxpFooter",
     "TWICHUI_restedxpCustomSizes", "TWICHUI_restedxpLineSpacing", "TWICHUI_restedxpStepPadding", "TWICHUI_restedxpScrollbar" }) do
     local row = RowFor(v)
-    assert(row and #row.shown == 0, v .. " is a common setting")
+    assert(row and not row.advanced, v .. " is a common setting")
     assert(not row:Enabled(), v .. " is greyed out while the skin is off")
   end
-  assert(RowFor("TWICHUI_restedxpDividers") and #RowFor("TWICHUI_restedxpDividers").shown > 0, "section borders are Advanced")
+  assert(RowFor("TWICHUI_restedxpDividers") and RowFor("TWICHUI_restedxpDividers").advanced, "section borders are Advanced")
   for _, v in ipairs({ "TWICHUI_restedxpTitleSize", "TWICHUI_restedxpActiveSize", "TWICHUI_restedxpListSize" }) do
     local row = RowFor(v)
-    assert(row and #row.shown == 0 and row.options and row.options.min >= 8, v .. " is a ranged slider")
+    assert(row and not row.advanced and row.options and row.options.min >= 8, v .. " is a ranged slider")
     c.TwichUIDB.modules.restedxpSkin = true
     assert(not row:Enabled(), v .. " is greyed out until sizes are set here")
     RS.Text.Set("customSizes", true)
@@ -790,7 +737,7 @@ do
   end
   assert(RowFor("TWICHUI_restedxpListSize").options.max == RS.Text.LIMITS.listSize[2], "the slider's range is the validated one")
   local fade = RowFor("TWICHUI_restedxpFutureFade")
-  assert(fade and #fade.shown == 0 and fade.options.min == 0 and fade.options.max == 70, "the fade is a common 0-70 slider")
+  assert(fade and not fade.advanced and fade.options.min == 0 and fade.options.max == 70, "the fade is a common 0-70 slider")
   assert(RS.Text.Get("futureFade") == 35, "a gentle fade by default")
   proxies.TWICHUI_restedxpFutureFade.set(50)
   assert(RS.Text.Get("futureFade") == 50)
@@ -846,7 +793,7 @@ do
   assert(toggle:GetTooltip():find("Off", 1, true), "off by default")
   assert(toggle:GetTooltip():find("no reload is needed", 1, true), "and that it can be turned off live")
   assert(variables.TWICHUI_speakstoneSkin == "SpeakStone speech frame", "the switch is on its own page")
-  assert(R.settingsCategories.speakstone, "R:OpenSettings can open it")
+  assert(K.pages.speakstone, "R:OpenSettings can open it")
 
   local common = { "TWICHUI_speakstoneLookBgColor", "TWICHUI_speakstoneLookBgOpacity", "TWICHUI_speakstoneLookBorderColor",
     "TWICHUI_speakstoneNameFont", "TWICHUI_speakstoneNameSize", "TWICHUI_speakstoneNameColor",
@@ -858,7 +805,7 @@ do
     "TWICHUI_speakstoneTrackColor", "TWICHUI_speakstoneProgressHeight" }
   for _, v in ipairs(common) do
     local row = RowFor(v)
-    assert(row and #row.shown == 0, v .. " is a common setting")
+    assert(row and not row.advanced, v .. " is a common setting")
     assert(not row:Enabled(), v .. " is greyed out while the skin is off")
   end
   for _, v in ipairs({ "TWICHUI_speakstoneLookBgTexture", "TWICHUI_speakstoneLookBorderTexture", "TWICHUI_speakstoneLookBorderSize",
@@ -866,7 +813,7 @@ do
     "TWICHUI_speakstoneButtonFont", "TWICHUI_speakstoneButtonSize", "TWICHUI_speakstoneLineSpacing",
     "TWICHUI_speakstonePadding", "TWICHUI_speakstonePortraitBorderSize" }) do
     local row = RowFor(v)
-    assert(row and #row.shown > 0, v .. " is under Advanced")
+    assert(row and row.advanced, v .. " is under Advanced")
   end
   c.TwichUIDB.modules.speakstoneSkin = true
   assert(RowFor("TWICHUI_speakstoneNameColor"):Enabled(), "enabled with the skin on")
@@ -919,7 +866,7 @@ do
   for _, i in ipairs(initializers) do if i.click and i.data.name == "SpeakStone speech frame" then pointerButton = i end end
   assert(pointerButton, "a pointer button on the Addon skins page")
   pointerButton.click()
-  assert(c.opened == R.settingsCategories.speakstone:GetID(), "it opens the page")
+  assert(c.opened == "speakstone", "it opens the page")
 
   -- reset: only this look; the switch and the rest of TwichUI stay
   c.TwichUIDB.modules.speakstoneSkin = true
@@ -928,7 +875,7 @@ do
   for _, i in ipairs(initializers) do if i.click and i.data.name == "Reset appearance" then resets[#resets + 1] = i end end
   local mine
   for _, i in ipairs(resets) do
-    if i.data.tooltip and i.data.tooltip:find("SpeakStone", 1, true) then mine = i end
+    if i.data.tooltip and i:GetTooltip():find("SpeakStone", 1, true) then mine = i end
   end
   assert(mine, "its own reset button")
   mine.click()
@@ -959,7 +906,7 @@ do
   for _, v in ipairs(common) do
     assert(variables[v] == "RestedXP guide window", v .. " is on RestedXP's page: " .. tostring(variables[v]))
     local row = RowFor(v)
-    assert(row and #row.shown == 0, v .. " is a common setting")
+    assert(row and not row.advanced, v .. " is a common setting")
     assert(not row:Enabled(), v .. " is greyed out while the skin is off")
   end
   for _, v in ipairs({ "TWICHUI_restedxpTimerTextPadding", "TWICHUI_restedxpTimerFillTexture", "TWICHUI_restedxpTimerLabelFont",
@@ -967,7 +914,7 @@ do
     "TWICHUI_restedxpTimerLookBgTexture", "TWICHUI_restedxpTimerLookBgOpacity", "TWICHUI_restedxpTimerLookBorderTexture",
     "TWICHUI_restedxpTimerLookBorderSize", "TWICHUI_restedxpTimerLookBorderOpacity" }) do
     local row = RowFor(v)
-    assert(row and #row.shown > 0, v .. " is under Advanced")
+    assert(row and row.advanced, v .. " is under Advanced")
   end
   -- nothing is offered that has no effect: no spark, no width
   for _, i in ipairs(initializers) do
@@ -1011,7 +958,7 @@ do
   -- a preview button that is a sample, and a reset that is only the timer bars
   local preview
   for _, i in ipairs(initializers) do
-    if i.click and i.data.name == "Preview" and i.data.tooltip and i.data.tooltip:find("made-up timer bars", 1, true) then preview = i end
+    if i.click and i.data.name == "Preview" and i.data.tooltip and i:GetTooltip():find("made-up timer bars", 1, true) then preview = i end
   end
   assert(preview, "a preview of the timer bars")
   -- (this page's frames are stateless stand-ins; showing and hiding are tested in test_restedxp_timers.lua)
@@ -1043,14 +990,14 @@ do
     "TWICHUI_chronicleLookBorderSize", "TWICHUI_chronicleFont", "TWICHUI_chronicleHeadingFont", "TWICHUI_chronicleTitleColor",
     "TWICHUI_chronicleBodyColor", "TWICHUI_chronicleAccentColor", "TWICHUI_chronicleHoverOpacity", "TWICHUI_chronicleButtonStyle" }) do
     assert(variables[v] == "Chronicle appearance", v .. " is on the Chronicle's appearance page: " .. tostring(variables[v]))
-    assert(RowFor(v) and #RowFor(v).shown == 0, v .. " is a common setting")
+    assert(RowFor(v) and not RowFor(v).advanced, v .. " is a common setting")
   end
   for _, v in ipairs({ "TWICHUI_chronicleLookBgTiling", "TWICHUI_chronicleLookBgTileSize", "TWICHUI_chronicleLookBgInset" }) do
-    assert(#RowFor(v).shown >= 2, v .. " is Advanced and only for an image background")
+    assert((RowFor(v).advanced and RowFor(v).advanced), v .. " is Advanced and only for an image background")
   end
   for _, v in ipairs({ "TWICHUI_chroniclePadding", "TWICHUI_chronicleWindowOpacity", "TWICHUI_chronicleOutline",
     "TWICHUI_chronicleScrollThumbColor", "TWICHUI_chronicleDividerColor" }) do
-    assert(#RowFor(v).shown >= 1, v .. " is Advanced")
+    assert(RowFor(v).advanced, v .. " is Advanced")
   end
   -- tiling controls mean something only for an image
   c.TwichUIDB.ui.showAdvanced = true

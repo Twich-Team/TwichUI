@@ -1,11 +1,13 @@
--- TwichUI options: Journey Chronicle (what is recorded automatically, the time format, Welcome Back), and the
+-- TwichUI settings: Journey Chronicle (what is recorded automatically, the time format, Welcome Back), and the
 -- Chronicle window's appearance (chronicle/Appearance.lua) on a page of its own under it.
 
 local R = TwichUI
 local K = R.SettingsKit
 
 K.Page({
-    key = "chronicle", name = "Journey Chronicle", order = 60,
+    key = "chronicle", name = "Journey Chronicle", order = 60, group = "journey",
+    description = "A quiet, private journal for this character. It isn't shared, sent or backed up with your configuration.",
+    keywords = "journal diary notes log history level death boss gold riding profession welcome back bookmark clock time",
     overview = {
         label = "Journey Chronicle", tip = "Your private journal for this character.",
         status = function() return K.OnOff(R:Enabled("chronicle"), "Recording", "Notes only") end,
@@ -16,12 +18,10 @@ K.Page({
 
         Header("Automatic entries", "A quiet, private journal for this character. It isn't shared, sent or backed up with your configuration, and it never tells you what to do next.")
         local chronicle = Toggle("chronicle", "Keep moments for me automatically",
-            "On by default. TwichUI adds a short entry to this character's Chronicle for the moments you pick below. It starts the moment it is on and never looks back. You can always write your own notes, whatever this is set to.",
-            false, function() if R.ChronicleRecorder then R.ChronicleRecorder.Refresh() end end)
+            "On by default. TwichUI adds a short entry to this character's Chronicle for the moments you pick below. It starts the moment it is on and never looks back. You can always write your own notes, whatever this is set to.")
         local function ChronicleOn() return R:Enabled("chronicle") end
         local function ChronicleToggle(key, label, tooltip)
-            Under(Toggle(key, label, tooltip, false, function() if R.ChronicleRecorder then R.ChronicleRecorder.Refresh() end end),
-                chronicle, ChronicleOn)
+            Under(Toggle(key, label, tooltip), chronicle, ChronicleOn)
         end
         ChronicleToggle("chronicleLevels", "Reaching a new level", "Adds an entry when you gain a level.")
         ChronicleToggle("chronicleZones", "Arriving somewhere new", "Adds an entry when you travel into a new zone, including entering a dungeon. Not when you log in.")
@@ -33,8 +33,7 @@ K.Page({
         ChronicleToggle("chronicleChat", "Show Chronicle entries in chat", "Prints a quiet line in your own chat window when an entry is added automatically. Only you see it; it is never sent to anyone. Entries are still recorded when this is off.")
         Toggle("chronicleSound", "Play Chronicle opening sound", "Plays a soft page-turn sound each time you open the Chronicle. It follows your game sound settings and volume.")
         Toggle("welcomeBack", "Show a Welcome Back bookmark",
-            "When you log in to a character that has Chronicle entries, a small bookmark shows the last place the Chronicle noted and how long ago, with a link to open it. It fades by itself, doesn't appear after a reload or in combat, and makes no sound or chat line. It only reads your entries; it adds none. Move it in Edit Mode.",
-            false, function() if R.WelcomeBack then R.WelcomeBack.Refresh() end end)
+            "When you log in to a character that has Chronicle entries, a small bookmark shows the last place the Chronicle noted and how long ago, with a link to open it. It fades by itself, doesn't appear after a reload or in combat, and makes no sound or chat line. It only reads your entries; it adds none. Move it in Edit Mode.")
         Choice("chronicleClock", "Time format",
             "How times are shown in your Chronicle.",
             STRING, "12",
@@ -48,7 +47,7 @@ K.Page({
         -- The window's look has a page of its own, under this one (they are many): a short pointer here.
         if K.pages.chronicleLook then
             Header("Appearance", "How the Chronicle window looks: its background, border, text and accents. Its settings are on a page of their own, under this one.")
-            Button("Chronicle appearance", "Open its settings", function() R:OpenSettings("chronicleLook") end,
+            Button("Chronicle appearance", "Open its page", function() R:OpenSettings("chronicleLook") end,
                 "Opens the Chronicle appearance page, under this one: background, border, typography, accents and layout. Nothing there changes what is recorded.")
         end
     end,
@@ -57,7 +56,9 @@ K.Page({
 -- Appearance of the Chronicle window (chronicle/Appearance.lua). Not the zone arrival card or the Welcome
 -- Back card, and nothing to do with what is recorded.
 K.Page({
-    key = "chronicleLook", name = "Chronicle appearance", parent = "chronicle", order = 61,
+    key = "chronicleLook", name = "Chronicle appearance", nav = "Appearance", parent = "chronicle", order = 61,
+    description = "How the Chronicle window looks. Nothing here changes what is recorded, your entries or notes.",
+    keywords = "chronicle look theme background border font color accent texture opacity",
     when = function() return R.ChronicleAppearance ~= nil and R.ChronicleAppearance.Look ~= nil end,
     build = function()
         local Header, Button, Proxy, Advanced, Under = K.Header, K.Button, K.Proxy, K.Advanced, K.Under
@@ -65,10 +66,10 @@ K.Page({
         local CA = R.ChronicleAppearance
         local Fonts = R.MenuStyle and R.MenuStyle.Fonts
         local resettable = {}
-        Header("The Chronicle window", "How the Chronicle window looks: its background, border, text and accents. It changes nothing about what is recorded, your entries or notes, and not the zone arrival or Welcome Back cards. Changes show at once in the window if it is open; the defaults are the look it has always had.")
+        local intro = Header("The Chronicle window", "How the Chronicle window looks: its background, border, text and accents. It changes nothing about what is recorded, your entries or notes, and not the zone arrival or Welcome Back cards. Changes show at once in the window if it is open; the defaults are the look it has always had.")
         Button("Chronicle window", "Show or hide", function()
             if R.ChronicleWindow then R.ChronicleWindow:Toggle() end
-        end, "Shows your real Chronicle beside these settings so you can watch each change as you make it. It opens above this panel; drag it by its title to move it aside. It only reads your entries. (The Open button on the Journey Chronicle page closes this panel first.)")
+        end, "Shows your real Chronicle beside these settings so you can watch each change as you make it. It opens beside these settings; drag it by its title to move it aside. It only reads your entries. (The Open button on the Journey Chronicle page closes the settings first.)")
 
         local rowsBy = {}
         local function Decorate(suffix, initializer)
@@ -194,7 +195,7 @@ K.Page({
         Slide("WindowOpacity", "windowOpacity", "Overall window opacity",
             "Fades the whole window, text and border included, in percent. It multiplies the background, border and text strengths above rather than replacing them, so 50 here with a 50 background is a quarter. 100 is the default; it cannot go below 40 so the window can always be found.", true)
 
-        K.ResetButton("Reset Chronicle appearance", resettable, CA.Reset,
-            "Puts the Chronicle window's background, border, text, accents and layout back to the defaults. Nothing else changes: your entries and notes, the date filter, the time format, what is recorded, sounds and the cards are left as they are.")
+        K.InSection(K.ResetButton("Reset Chronicle appearance", resettable, CA.Reset,
+            "Puts the Chronicle window's background, border, text, accents and layout back to the defaults. Nothing else changes: your entries and notes, the date filter, the time format, what is recorded, sounds and the cards are left as they are."), intro)
     end,
 })

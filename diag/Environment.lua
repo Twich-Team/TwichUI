@@ -76,6 +76,15 @@ local function Environment()
         local v = Metadata(name, "Version")
         Line("optional addon %s: %s%s", name, Presence(name), v and (", version " .. v) or "")
     end
+    -- The settings window: an addon of its own, loaded the first time the settings are opened.
+    local L = R.SettingsLauncher
+    if L then
+        local s = L.Snapshot()
+        local v = Metadata(L.COMPANION, "Version")
+        Line("settings window (%s): %s%s; loaded=%s, open=%s, load attempts=%d, last failure=%s, AddOns entry=%s",
+            L.COMPANION, Presence(L.COMPANION), v and (", version " .. v) or "", D.Flag(s.loaded), D.Flag(s.shown),
+            s.attempts, s.failed or "none", D.Flag(s.launcher))
+    end
     for _, name in ipairs(BUNDLED_LIBS) do Line("library %s (bundled): %s", name, Library(name)) end
     for _, name in ipairs(EXTERNAL_LIBS) do Line("library %s (not bundled; optional): %s", name, Library(name)) end
 

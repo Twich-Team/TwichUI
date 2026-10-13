@@ -347,7 +347,7 @@ function PS.Evaluate()
     end
 end
 
--- The switch changed (settings/Pins.lua).
+-- The switch changed (Switches.lua).
 function PS.Refresh()
     if Enabled() then
         R:On("GROUP_ROSTER_UPDATE", PS.Evaluate)

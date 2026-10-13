@@ -4,10 +4,9 @@
 -- design, which saved fields belong to a profile, and the checks still to make in the game.
 --
 -- Where things are (TwichUIDB from schema 2; Persist.lua checks the shape when it loads):
---   modules, ui, gear    the profile in use, where every feature and the options panel already read and write.
---                        They stay the same tables all session: the options' checkboxes are bound to
---                        TwichUIDB.modules itself (Settings.RegisterAddOnSetting keeps the table it is given), so
---                        changing profile changes what is in them, never which tables they are.
+--   modules, ui, gear    the profile in use, where every feature and the settings window already read and write.
+--                        They stay the same tables all session, so changing profile changes what is in them,
+--                        never which tables they are, and nothing holding on to one sees another profile's.
 --   profiles[name]       every other profile, a copy of its own: { modules = {}, ui = {}, gear = {} }
 --   profileState         { live = the profile modules, ui and gear hold, newCharacters = the one a character
 --                        without a choice of its own uses }
@@ -20,7 +19,7 @@
 -- never touched by a profile change: TwichUI's own options for them are.
 --
 -- What changes the options in use (a switch, Copy settings from, Reset) is refused in combat, checked here
--- when it runs, not only by the options page. It is done as one step: every copy is made first, then plain
+-- when it runs, not only by the settings window. It is done as one step: every copy is made first, then plain
 -- assignments put it in place, then each feature is told once (Apply). Nothing waits for later but what
 -- always does: a switch whose feature needs a reload asks for one, as it does when clicked.
 
@@ -35,7 +34,8 @@ PF.ACCOUNT = {
         restedxpSkin = true,      -- turning it on or off chooses RestedXP's own theme (a RestedXP setting)
     },
     ui = {
-        showAdvanced = true,      -- how the options panel itself looks
+        showAdvanced = true,      -- how the settings window itself looks: Advanced sections always open
+        settingsWindow = true,    -- where the settings window sits
         restedxpSkinState = true, -- the RestedXP theme to go back to: a record of RestedXP's setting, not a choice
         mageSell = true,          -- the never-sell list: a protection, which no profile change may lift
         guideWaypoint = true,     -- the waypoint each character placed: a record per character
@@ -264,12 +264,7 @@ end
 local function Apply()
     generation = generation + 1
     local failed = {}
-    local K = R.SettingsKit
-    if K and K.SyncSwitches and K.switches and next(K.switches) then
-        for _, key in ipairs(K.SyncSwitches()) do failed[#failed + 1] = "switch " .. key end
-    else
-        failed[#failed + 1] = "switches"   -- the options aren't built: features follow their switches after a reload
-    end
+    for _, key in ipairs(R.Switches.Sync()) do failed[#failed + 1] = "switch " .. key end
     for _, phase in ipairs(PHASES) do
         for _, entry in ipairs(appliers[phase]) do
             local ok, err = pcall(entry.fn)
@@ -279,14 +274,18 @@ local function Apply()
             end
         end
     end
-    if K and K.RefreshValues then K.RefreshValues() end
+    -- an open settings window shows the new values (one that was never opened has nothing to redraw)
+    local UI = R.SettingsUI
+    if UI and UI.RefreshValues then
+        local ok, err = pcall(UI.RefreshValues)
+        if not ok then R.Fault("profile settings window", err) end
+    end
     return failed
 end
 
 local function Finish(kind)
     local failed = Apply()
-    local K = R.SettingsKit
-    local info = { failed = failed, reload = K and K.ReloadPending and K.ReloadPending() or false }
+    local info = { failed = failed, reload = R.Switches.ReloadPending() }
     if #failed > 0 and R.Life then R.Life.Note("profile-apply-failed") end
     Changed(kind)
     return true, kind, info

@@ -618,8 +618,9 @@ function BM.Open(frame)
         R.SpellMenu.PlaceNear(menu, frame)
     else
         menu:ClearAllPoints()
-        if SettingsPanel and SettingsPanel:IsShown() then
-            menu:SetPoint("TOPLEFT", SettingsPanel, "TOPRIGHT", 8, -48)
+        local anchor = R.SettingsAnchor()
+        if anchor then
+            menu:SetPoint("TOPLEFT", anchor, "TOPRIGHT", 8, -48)
         else
             menu:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
         end
@@ -643,7 +644,12 @@ function BM.TogglePreview()
     previewing = true
 end
 
--- The switch changed (settings/Pins.lua).
+-- The settings window closed: a menu opened as its preview goes too (one opened from the data bar stays).
+R.OnSettingsClosed(function()
+    if previewing and BM.IsOpen() then BM.Close() end
+end)
+
+-- The switch changed (Switches.lua).
 function BM.Refresh()
     if not R:Enabled("partyPins") then BM.Close() end
 end

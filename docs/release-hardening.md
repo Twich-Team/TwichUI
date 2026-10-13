@@ -176,8 +176,8 @@ things). Report before/after only from the same scenario, same character, same m
 Turn on **Display Lua Errors** in the game's options first. After each step check for Lua errors and
 "action blocked" messages. Everything below is **untested**.
 
-**A. TwichUI alone.** Disable every other addon. Log in. *Expect:* no errors; options open from Esc > Options > AddOns
-> TwichUI; skin rows say "Not installed"; `/tui diagnostics` Environment lists EllesmereUI as not installed and
+**A. TwichUI alone.** Disable every other addon. Log in. *Expect:* no errors; settings open from `/tui options` and from Esc > Options > AddOns
+> TwichUI > Open TwichUI Settings; skin rows say "Not installed"; `/tui diagnostics` Environment lists EllesmereUI as not installed and
 "EllesmereUI integration: not active".
 
 **B. With EllesmereUI.** Enable it and its third-party skins. *Expect:* TwichUI's windows use the EllesmereUI look; the

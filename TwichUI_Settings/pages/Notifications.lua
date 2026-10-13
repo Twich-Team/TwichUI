@@ -1,10 +1,12 @@
--- TwichUI options: Notifications (zone arrival, new training and friend login cards, and their previews).
+-- TwichUI settings: Notifications (zone arrival, new training and friend login cards, and their previews).
 
 local R = TwichUI
 local K = R.SettingsKit
 
 K.Page({
-    key = "notifications", name = "Notifications", order = 20,
+    key = "notifications", name = "Notifications", order = 20, group = "everyday",
+    description = "Small, quiet cards for arriving somewhere new, new training at a level-up, and friends logging in.",
+    keywords = "zone text title card banner toast popup friend online chime level up trainer preview",
     overview = {
         label = "Notifications", tip = "Quiet cards for arriving somewhere new, new training at a level-up, and friends logging in. Previews of each card are on this page.",
         status = function()
@@ -21,27 +23,21 @@ K.Page({
             "The notification cards only fade in and out, without moving. Applies to the zone, training and friend cards.")
 
         Header("Zone arrival", "A short, quiet title card when you arrive somewhere new, in place of the game's own zone text.")
-        local function RefreshArrival() if R.Arrival then R.Arrival.Refresh() end end
         local arrival = Toggle("arrival", "Show a title card when I arrive in a new zone",
-            "The zone's name appears near the top of the screen under a thin bronze rule, with the smaller place you're in beneath it, then fades away. It replaces the game's own zone text while on. Not shown when you log in or reload, or while on a flight path: only where you land.\n\nIf another addon also replaces the zone text, you may see both.",
-            false, RefreshArrival)
+            "The zone's name appears near the top of the screen under a thin bronze rule, with the smaller place you're in beneath it, then fades away. It replaces the game's own zone text while on. Not shown when you log in or reload, or while on a flight path: only where you land.\n\nIf another addon also replaces the zone text, you may see both.")
         local function ArrivalOn() return R:Enabled("arrival") end
         Under(Toggle("arrivalSubzones", "Also for smaller places",
-            "A quieter card when you walk into a smaller place within the zone, such as a town. Off: moving within a zone shows nothing.",
-            false, RefreshArrival), arrival, ArrivalOn)
+            "A quieter card when you walk into a smaller place within the zone, such as a town. Off: moving within a zone shows nothing."), arrival, ArrivalOn)
         Under(Toggle("arrivalDungeons", "Show dungeon and raid arrival cards",
-            "Walking into a dungeon or raid shows its name with \"Dungeon\" or \"Raid\" beneath it. Off: you get the ordinary zone card there, as before. Not shown when you log in or reload inside one.",
-            false, RefreshArrival), arrival, ArrivalOn)
+            "Walking into a dungeon or raid shows its name with \"Dungeon\" or \"Raid\" beneath it. Off: you get the ordinary zone card there, as before. Not shown when you log in or reload inside one."), arrival, ArrivalOn)
 
         Header("New training", "A short card when you level up and there is class training you haven't taken yet.")
         Toggle("trainingNotice", "Show new training when I level up",
-            "When you level up and there are class spells or ranks you could train and don't know yet, including ones from earlier levels you haven't trained, a short title card near the top of the screen, below the zone's name, lists them (only the highest rank of each spell), in the zone card's style with no frame. Move it in Edit Mode. They are available to train at your class trainer; nothing is learned for you. Nothing shows when there is nothing to train. It waits until you're out of combat, fades by itself, and makes no sound or chat line. Reduced motion (above) applies.\n\nType /tui training to see the card for your current level. Spell data comes from What's Training?.",
-            false, function() if R.Training then R.Training.Refresh() end end)
+            "When you level up and there are class spells or ranks you could train and don't know yet, including ones from earlier levels you haven't trained, a short title card near the top of the screen, below the zone's name, lists them (only the highest rank of each spell), in the zone card's style with no frame. Move it in Edit Mode. They are available to train at your class trainer; nothing is learned for you. Nothing shows when there is nothing to train. It waits until you're out of combat, fades by itself, and makes no sound or chat line. Reduced motion (above) applies.\n\nType /tui training to see the card for your current level. Spell data comes from What's Training?.")
 
         Header("Friend login", "A short card when a Battle.net friend comes online, in place of the game's own pop-up.")
         local friendLogin = Toggle("friendLogin", "Show Battle.net friend logins as a TwichUI card",
-            "When a Battle.net friend comes online, a short card with their name, a Horde or Alliance mark if the game says which faction they play, and the character they are on, in the zone card's style with no frame. It replaces the game's own friend-online pop-up while on; the pop-ups for friends going offline, broadcasts, friend requests and invitations, and the line in chat, are unchanged. Turn it off to get the game's pop-up back. The game's own Social options still apply: with Show Toast Window or Online Friends off, nothing shows. Nothing shows at login or reload, or in combat; several friends arriving together give one card. Move it in Edit Mode. It plays a soft chime, which you can change below. Reduced motion (above) applies.\n\nType /tui friend to see the card.",
-            false, function() if R.FriendLogin then R.FriendLogin.Refresh() end end)
+            "When a Battle.net friend comes online, a short card with their name, a Horde or Alliance mark if the game says which faction they play, and the character they are on, in the zone card's style with no frame. It replaces the game's own friend-online pop-up while on; the pop-ups for friends going offline, broadcasts, friend requests and invitations, and the line in chat, are unchanged. Turn it off to get the game's pop-up back. The game's own Social options still apply: with Show Toast Window or Online Friends off, nothing shows. Nothing shows at login or reload, or in combat; several friends arriving together give one card. Move it in Edit Mode. It plays a soft chime, which you can change below. Reduced motion (above) applies.\n\nType /tui friend to see the card.")
         local function FriendLoginOn() return R:Enabled("friendLogin") end
         Under(Toggle("friendLoginSound", "Play a soft chime with it",
             "A short chime when the card appears; choose which one below. Off: the card is silent."), friendLogin, FriendLoginOn)

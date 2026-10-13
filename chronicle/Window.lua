@@ -710,7 +710,8 @@ local function Build()
     f.new = Btn(f, "Write a note", 120, "primary", function() OpenEditor(nil) end)
     f.new:SetPoint("BOTTOMLEFT", 16, 16)
     f.options = Btn(f, "Options", 90, "secondary", function()
-        if SettingsPanel and R.OpenSettings then f:Hide(); R:OpenSettings("chronicle") end
+        f:Hide()
+        R:OpenSettings("chronicle")
     end)
     f.options:SetPoint("BOTTOMRIGHT", -16, 16)
     -- OnShow runs once per opening, not on refreshes: the sound and the played-time request belong here.

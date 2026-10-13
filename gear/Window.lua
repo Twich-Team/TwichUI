@@ -1,37 +1,39 @@
--- TwichUI: stat weights page (Options > AddOns > TwichUI > Stat weights; /twichui gear)
+-- TwichUI: stat weights page (TwichUI settings > Gear comparison > Stat weights; /twichui gear)
 -- How each of your class's talent trees values stats: a stat priority you
 -- rank, as guides give them, or stat weights you can change and reset.
--- A canvas page inside TwichUI's settings, since a ranked list and a table of
--- numbers don't fit Blizzard's standard controls. It sits in Blizzard's
--- Options window, so it uses Blizzard's own look (no EllesmereUI skinning).
--- Which tree is used and how hints behave are ordinary settings (settings/Gear.lua).
+-- A frame of its own, which the settings window shows as a page (TwichUI_Settings/pages/Gear.lua), since a
+-- ranked list and a table of numbers don't fit the ordinary rows. It is built the first time it is shown, from
+-- the settings window's controls (R.SettingsWidgets, there whenever the window is). Which tree is used and how
+-- hints behave are ordinary settings on the Gear comparison page.
 
 local R = TwichUI
 local W, E, D, P, H = R.GearWeights, R.GearEval, R.GearData, R.GearPrefs, R.GearHints
 local GW = {}
 R.GearWindow = GW
 
-local WIDTH = 620
+local WIDTH = 640
 local ROW_H = 22
-local TOP = -62                -- below the page title and divider
-local f                        -- the canvas frame
+local TOP = -2                 -- the settings window draws the page's title above
+local f                        -- the page's frame
 local built = false
 local editTree                 -- skill line of the tree whose values are shown
 local weights, priority = {}, {}
 
 local ACCENT = { 0.79, 0.64, 0.29 }
+local INK = { 0.93, 0.88, 0.76 }   -- the settings window's text
 
 local function Text(parent, template)
     local fs = parent:CreateFontString(nil, "OVERLAY", template or "GameFontHighlight")
     fs:SetJustifyH("LEFT")
+    if template == nil or template == "GameFontHighlight" then fs:SetTextColor(INK[1], INK[2], INK[3]) end
     return fs
 end
 
 local function Help(parent, text, y)
     local fs = Text(parent, "GameFontHighlightSmall")
-    fs:SetPoint("TOPLEFT", 16, y)
-    fs:SetWidth(WIDTH - 32)
-    fs:SetTextColor(0.72, 0.70, 0.66)
+    fs:SetPoint("TOPLEFT", 4, y)
+    fs:SetWidth(WIDTH - 8)
+    fs:SetTextColor(0.78, 0.74, 0.66)
     fs:SetText(text)
     return fs
 end
@@ -41,20 +43,24 @@ end
 local function Tip(frame, title, text) R.Interact.Tip(frame, title, text) end
 
 local function Btn(parent, label, w, onClick, tooltip)
-    local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
-    b:SetSize(w, 22)
-    b:SetText(label)
-    b:SetScript("OnClick", onClick)
+    local b = R.SettingsWidgets.Button(parent, label, w, "secondary", onClick)
     if tooltip then Tip(b, label, tooltip) end
     return b
 end
 
--- Blizzard's dropdown; build(root) adds the radio choices.
-local function Dropdown(parent, width, build)
-    local dd = CreateFrame("DropdownButton", nil, parent, "WowStyle1DropdownTemplate")
-    dd:SetWidth(width)
-    dd:SetupMenu(function(_, root) build(root) end)
+-- The settings window's dropdown. choices(): { { value, label, tooltip }, ... }; onPick(value).
+local function Dropdown(parent, width, choices, onPick)
+    local dd = R.SettingsWidgets.Dropdown(parent, width, onPick)
+    dd:SetChoices(choices)
     return dd
+end
+
+-- Shows a dropdown's current value by its label.
+local function ShowChoice(dd, value)
+    for _, choice in ipairs(dd.choices()) do
+        if choice.value == value then dd:SetValue(value, choice.label) return end
+    end
+    dd:SetValue(value, "")
 end
 
 ---------------------------------------------------------------------------
@@ -123,16 +129,14 @@ local function WeightRow(content, i, stat)
     row.stat = stat
     row.label = Text(row, "GameFontHighlight")
     row.label:SetPoint("LEFT", 8, 0)
-    row.label:SetWidth(250)
+    row.label:SetWidth(260)
     row.label:SetWordWrap(false)
     row.label:SetText(EDITOR_LABEL[stat] or E.Label(stat))
     row.unit = Text(row, "GameFontDisableSmall")
-    row.unit:SetPoint("LEFT", 264, 0)
+    row.unit:SetPoint("LEFT", 274, 0)
     row.unit:SetText(Unit(stat))
-    row.edit = CreateFrame("EditBox", nil, row, "InputBoxTemplate")
-    row.edit:SetSize(56, 20)
+    row.edit = R.SettingsWidgets.EditBox(row, 56, 20)
     row.edit:SetPoint("RIGHT", -10, 0)
-    row.edit:SetAutoFocus(false)
     row.edit:SetJustifyH("RIGHT")
     row.edit:SetScript("OnEnterPressed", row.edit.ClearFocus)
     row.edit:SetScript("OnEscapePressed", function(self) self.revert = true; self:ClearFocus() end)
@@ -162,22 +166,18 @@ local function Confirm(key, text, onAccept, opts)
 end
 
 local function Panel(p, y)
+    local Wg = R.SettingsWidgets
     local box = CreateFrame("Frame", nil, p, "BackdropTemplate")
-    box:SetPoint("TOPLEFT", 16, y)
-    box:SetPoint("BOTTOMRIGHT", -16, 14)
-    box:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
-    box:SetBackdropColor(0, 0, 0, 0.35)
-    box:SetBackdropBorderColor(1, 1, 1, 0.08)
+    box:SetPoint("TOPLEFT", 0, y)
+    box:SetPoint("BOTTOMRIGHT", 0, 6)
+    Wg.Surface(box, Wg.pal.well, 0.9, Wg.pal.bronzeLo, 0.8)
     return box
 end
 
 local function ScrollContent(box, rightInset)
-    local scroll = CreateFrame("ScrollFrame", nil, box, "UIPanelScrollFrameTemplate")
+    local scroll, content = R.SettingsWidgets.Scroll(box, WIDTH - 70 - rightInset)
     scroll:SetPoint("TOPLEFT", 6, -6)
     scroll:SetPoint("BOTTOMRIGHT", -26 - rightInset, 6)
-    local content = CreateFrame("Frame", nil, scroll)
-    content:SetSize(WIDTH - 70 - rightInset, 1)
-    scroll:SetScrollChild(content)
     return content
 end
 
@@ -241,10 +241,7 @@ local function AddMenu(owner)
 end
 
 local function ArrowButton(parent, dir)
-    local b = CreateFrame("Button", nil, parent,
-        dir == "up" and "UIPanelScrollUpButtonTemplate" or "UIPanelScrollDownButtonTemplate")
-    b:SetMotionScriptsWhileDisabled(true)
-    return b
+    return R.SettingsWidgets.ArrowButton(parent, dir)
 end
 
 local function PriorityRow(content, i)
@@ -294,36 +291,32 @@ local function Build(p)
     Help(p, "Each tree starts from TwichUI's rough weights, so nothing here has to be filled in; change them only to follow a guide. Which tree is used is chosen on the Gear comparison page.", TOP)
 
     local treeLabel = Text(p, "GameFontNormal")
-    treeLabel:SetPoint("TOPLEFT", 16, TOP - 36)
+    treeLabel:SetPoint("TOPLEFT", 4, TOP - 40)
     treeLabel:SetText("Talent tree")
-    weights.tree = Dropdown(p, 180, function(root)
-        local trees = D.Trees()
+    weights.tree = Dropdown(p, 180, function()
+        local list = {}
         local who = D.Character()
         local using = who and who.basis and who.basis.skillLine
-        for _, tree in ipairs(trees or {}) do
-            local label = tree.skillLine == using and (tree.name .. " (in use)") or tree.name
-            root:CreateRadio(label, function() return editTree == tree.skillLine end, function()
-                FinishEditing()
-                editTree = tree.skillLine
-                GW:Refresh()
-            end)
+        for _, tree in ipairs(D.Trees() or {}) do
+            list[#list + 1] = { value = tree.skillLine, label = tree.skillLine == using and (tree.name .. " (in use)") or tree.name }
         end
+        return list
+    end, function(skillLine)
+        FinishEditing()
+        editTree = skillLine
+        GW:Refresh()
     end)
     weights.tree:SetPoint("LEFT", treeLabel, "RIGHT", 10, 0)
 
     local modeLabel = Text(p, "GameFontNormal")
     modeLabel:SetPoint("LEFT", weights.tree, "RIGHT", 24, 0)
     modeLabel:SetText("Value stats by")
-    weights.mode = Dropdown(p, 150, function(root)
-        local _, classFile = UnitClass("player")
-        local function IsMode(mode) return (P.UsesPriority(classFile, editTree) and "priority" or "weights") == mode end
-        local byPriority = root:CreateRadio("Stat priority", function() return IsMode("priority") end, function() SetMode("priority") end)
-        local byWeights = root:CreateRadio("Stat weights", function() return IsMode("weights") end, function() SetMode("weights") end)
-        if byPriority.SetTooltip then
-            byPriority:SetTooltip(function(tooltip) GameTooltip_AddNormalLine(tooltip, "Rank the stats your guide lists, like \"Strength > Hit > Critical Strike\". The simplest way to follow a guide.") end)
-            byWeights:SetTooltip(function(tooltip) GameTooltip_AddNormalLine(tooltip, "Give each stat a number. More exact, if your guide or simulator gives stat weights.") end)
-        end
-    end)
+    weights.mode = Dropdown(p, 150, function()
+        return {
+            { value = "priority", label = "Stat priority", tooltip = "Rank the stats your guide lists, like \"Strength > Hit > Critical Strike\". The simplest way to follow a guide." },
+            { value = "weights", label = "Stat weights", tooltip = "Give each stat a number. More exact, if your guide or simulator gives stat weights." },
+        }
+    end, function(mode) SetMode(mode) end)
     weights.mode:SetPoint("LEFT", modeLabel, "RIGHT", 10, 0)
 
     -- The tree is fixed when the question is asked: picking another tree while it is open must not
@@ -353,9 +346,9 @@ local function Build(p)
         local custom = editTree and P.CustomWeights(select(2, UnitClass("player")), editTree)
         return "Puts every stat weight of this tree back to TwichUI's defaults.", not (custom and next(custom)) and "No weight has been changed for this tree." or nil
     end)
-    weights.reset:SetPoint("TOPRIGHT", -16, TOP - 72)
-    weights.help = Help(p, "", TOP - 72)
-    weights.help:SetWidth(WIDTH - 32 - 130)
+    weights.reset:SetPoint("TOPRIGHT", 0, TOP - 76)
+    weights.help = Help(p, "", TOP - 76)
+    weights.help:SetWidth(WIDTH - 8 - 140)
 
     -- Stat weights: every stat with an editable number.
     weights.box = Panel(p, TOP - 120)
@@ -407,7 +400,7 @@ local function Build(p)
     priority.clear:SetPoint("TOP", priority.fill, "BOTTOM", 0, -6)
 
     -- Shown instead of everything above for a class without weights.
-    f.noClass = Help(p, "TwichUI has no stat weights for your class, so upgrade hints are not shown.", TOP - 36)
+    f.noClass = Help(p, "TwichUI has no stat weights for your class, so upgrade hints are not shown.", TOP - 40)
     f.noClass:Hide()
 end
 
@@ -421,7 +414,7 @@ local function RefreshWeightRows(classFile, tree)
             row.label:SetTextColor(ACCENT[1], ACCENT[2], ACCENT[3])
             row.default:SetText("default " .. Number(default))
         else
-            row.label:SetTextColor(1, 1, 1)
+            row.label:SetTextColor(INK[1], INK[2], INK[3])
             row.default:SetText("")
         end
     end
@@ -467,10 +460,9 @@ function GW:Refresh()
         local who = D.Character()
         editTree = (who and who.basis.skillLine) or trees[1].skillLine
     end
-    weights.tree:GenerateMenu()
-    weights.mode:GenerateMenu()
-
     local usesPriority = P.UsesPriority(classFile, editTree)
+    ShowChoice(weights.tree, editTree)
+    ShowChoice(weights.mode, usesPriority and "priority" or "weights")
     weights.box:SetShown(not usesPriority)
     weights.reset:SetShown(not usesPriority)
     priority.box:SetShown(usesPriority)
@@ -483,41 +475,26 @@ function GW:Refresh()
     end
 end
 
--- The canvas frame settings/Gear.lua registers as TwichUI > Stat weights. Its
--- contents are built the first time it's shown, once your class is known.
+-- The page's frame (the settings window shows it on the Stat weights page). Its contents are built the first
+-- time it's shown, once your class is known.
 local function Frame()
     if f then return f end
     f = CreateFrame("Frame")
     f:Hide()
-    local title = Text(f, "GameFontHighlightHuge")
-    title:SetPoint("TOPLEFT", 7, -22)
-    title:SetText("Stat weights")
-    local divider = f:CreateTexture(nil, "ARTWORK")
-    divider:SetAtlas("Options_HorizontalDivider", true)
-    divider:SetPoint("TOP", 0, -50)
     f:SetScript("OnShow", function()
         if not built then Build(f) end
         GW:Refresh()
     end)
-    -- Called by the settings panel when it opens. No OnDefault: "Defaults"
-    -- for all game settings shouldn't wipe hand-entered weights; the page
-    -- has its own reset buttons.
-    f.OnRefresh = function() GW:Refresh() end
+    -- No reset of its own in "Reset this page": hand-entered weights are reset with the buttons on the page.
     H:OnChange(function() GW:Refresh() end)
     return f
 end
-
-function GW:Register(parentCategory)
-    if not (Settings and Settings.RegisterCanvasLayoutSubcategory) then return end
-    GW.category = Settings.RegisterCanvasLayoutSubcategory(parentCategory, Frame(), "Stat weights")
-end
+GW.Frame = Frame
 
 function GW:Show()
     if not D.Trees() then
         R.Print("upgrade hints have no weights for your class.")
         return
     end
-    if GW.category and Settings and Settings.OpenToCategory then
-        Settings.OpenToCategory(GW.category:GetID())
-    end
+    R:OpenSettings("statWeights")
 end

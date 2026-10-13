@@ -1,66 +1,20 @@
-## Notice
+> **NOTICE** In preparation for the official launch of WoW: Forever, the addon will be refactoring its release versioning, which may require a manual reinstall. The first official non-beta release of the addon will be v1.0.0, and is expected to launch on the final day of the beta.**
 
-Preperation is underway for the initial launch of WoW: Forever. This addon is under heavy development and the features and stability it provides will fluctuate until the launch of the game.
+**Countdown to v1.0.0**
+-
+This addon is under heavy development in perparation for the official launch of the game on November 4th. In order to ensure users are prepared for the launch, I am targeting the October 22 as the release date for the first non-beta version of the addon.
 
-## Addon
+### Remaining Tasks
+- **Settings Refactor:** The addon has grown beyond its initial expectations, and the default addon settings is no longer able to neatly contain the various customizations and feature the addon provides. This settings refactor will bring TwichUI settings into a centralized window owned by TwichUI, allowing us to provide a cleaner experience. You will still be able to find a button to open the new settings interface in the default game addon options panel.
+- **Configuration Sharing Hardening:** The configuration sharing implementation contained within TwichUI is unique in that it is replicating configuration at the saved variable level. This is increbily powerful, and requires additional hardening to prevent misuse. Additionally, it will be made compatible with TwichUI settings itself, allowing you to share your custom configurations with your friends.
+- **Optimization, Polish, and Hardening:** Minor adjustments throughout the addon to optimize its speed, reduce memory usage, increase polish, and protected against errors and combat lockdown.
+- **Versioning Fix:** Due to various reasons, the versioning of this addon is quite out of touch. Before final release, previous versions of the addon will be removed from CurseForge, and the highest version made available will be the first official release, V1.0.0. The addon will then follow standard semantic versioning from that point forward. Alpha/Beta versions will be made available through the methods officially supported by CurseForge.
 
-Its purpose is to refine the experience, not replace it. Small, thoughtful touches should help players read the game and make their own decisions while preserving the atmosphere, discovery, and sense of place that make Forever compelling.
+# TwichUI: What is it?
+This addon was developed to consolidate several common tweaks, and provide several small, thoughtful touches that should help players read the game and make their own decisions while preserving the atmosphere, discovery and sense of place that make Forever compelling. Offering elegant, unobtrusive features familiar to RPGs, such as zone arrival messages, friend notifications, available training, and journey chronicling.
 
-This addon is intended to work alongside EllesmereUI.
+In addition, several features exist to dive deep into your addon settings and configurations, create backup snapshots, export and import, as well as share your configuration with your friends through in-game addon channels.
+
+The addon is intended to work alongside EllesmereUI.
 
 ## Features
-
-**Welcome:** A new installation opens one short "Welcome to TwichUI" page the first time you log in, once for the whole account, and never for an upgrade. It points to the settings, the notification previews and the troubleshooting report, and changes nothing. `/tui about` shows it again.
-
-**Fonts and sounds:** Adds various thematic fonts to the game, allowing them to be utilized for interface customization.
-
-  
-**Quiet login:** Attempts to hide all addon welcome messages when logging in to prevent being brought out of immersion by being inundated with unnecessary information. 
-
-**Upgrade hints:** When something you could wear looks better than what you have, its tooltip gets one quiet line such as "Likely upgrade for Fury". Hold Shift (your compare-items key) to see why: what it's compared with, the stat changes that mattered most and which weights were used. Items that aren't upgrades, or that you can't use, get nothing unless you ask.
-
-**Sell from Bags:** A tab at the bottom of the Auction House that lists what in your bags can be listed. Pick an item and it searches that item's current listings (only that item, only when you pick it) and suggests a price that matches the lowest comparable listing, saying what that's based on: how many listings it found, and which it left out (your own, bid-only, or other versions of a piece of equipment). You choose the quantity, price and duration; nothing is posted until you press Post. Nothing is saved or sent.
-
-**Addon skins:** Provides EllemereUI skinning to various addons to create a cohesive look and feel. Currently supprts: Attune, Auctionator, DungeonJournal, and WhatsTraining.
-
-**Quality of life:** Four small conveniences, all off by default and each on its own page switch: accept summons (from friends, guild and group members, or whoever you choose, after a short wait), accept resurrection (keeping the game's own waiting time, and combat resurrections only if you ask), release in battlegrounds (battlegrounds only, never when a resurrection or self-resurrection is on offer, hold Shift to keep your body), and decline duel requests (except from the people you allow). Nothing is sent to chat. Where Leatrix Plus does the same, each tooltip says so.
-
-**Food and Drink buttons:** Optional (off by default). Two small buttons that hold the food and drink in your bags that restore the most, and eat or drink it when you click them. TwichUI never uses anything itself, skips buff food and feasts, and changes the choice out of combat only. Optionally it prefers Mage-conjured food and water over ordinary ones, food and water chosen separately. Each button can be switched off, and their size, spacing, layout, border (texture, thickness, color or class color, opacity) icon zoom and opacity (with an option to fade them until the mouse is over them) are yours to set. With EllesmereUI installed they can optionally be moved in its Unlock Mode instead of Edit Mode (`docs/food-drink-unlock.md`).
-
-**Mage Travel:** For Mages, on by default, and shown through a data bar addon that lists LibDataBroker launchers (such as EllesmereUI's Broker Plugin block). It shows its icon with "Travel" or "Portals" (or just the icon), as you choose. A small menu of the teleports and portals your faction can learn on WoW: Forever. Click a learned one to cast it through the game's own secure button; ones you haven't learned stay readable, and their tooltip gives the level they are trained at. It can't be opened in combat and closes when combat starts.
-
-**Mage Conjuring:** For Mages, on by default, beside Mage Travel on your data bar. A small menu with one entry each for Conjure Food and Conjure Water: the highest rank you have learned of each. Click one to cast it. If you haven't learned any rank of one, its first rank is shown muted with the level it is trained at. Shift-left-click the launcher to conjure water and shift-right-click to conjure food, each at your highest rank. Its data bar text is "Conjure", "Food & Water" or none, as you choose.
-
-**Mage refreshments:** For Mages, off until you turn it on (Mage options page). A small panel (`/tui refreshments`, a key in Key Bindings > TwichUI, the Mage Conjuring menu, or its own data bar plugin, "TwichUI Mage Refreshments", showing how many of your group are supplied) that works out how much conjured water and food your party or raid needs: each class's share (single items, separate amounts for a party and a raid, set on the Refreshment shares page), at the best rank each person's level can use, plus what you keep, against what is in your bags. Its Water and Food buttons conjure the rank still needed, once per click or key press; drag one to an action bar to hold a key with the game's Press and Hold Casting instead (the game repeats a held cast only from its own bars, and TwichUI can't stop it at a target: the bar turns green and you let go). A checklist shows who you've supplied; you mark it yourself, and it starts again when you leave the group or reload. When you trade with someone in your group, whoever opens the trade, their share of the planned rank goes into empty slots by itself (or with the **Fill trade** button under the trade window, if you turn that off), every trade, even when they come back for more. It never moves what is already there, stops if you take something out, and never accepts. A trade counts as handed over only when the game says it was completed; otherwise the panel asks you to confirm it. The panel's look (background and border texture, color, opacity and thickness, including EllesmereUI's own border textures) is yours to set on the Mage options page. TwichUI never casts, opens or accepts trades, or whispers for you, and nothing about your group is saved. **Experimental: needs checking in the game.**
-
-**Broker menu appearance:** For Mages, the background and border of the Mage Travel and Mage Conjuring menus are yours to set on the Mage options page: texture (None, a flat color, the game's own, or any LibSharedMedia background or border), color, opacity, and border thickness, with a preview and a reset. Background and border opacity are separate, so text and icons never fade.
-
-**New training:** After a level-up, a short title card in the zone card's style lists the class spells you could train and don't know yet, including any from earlier levels you haven't trained, showing only the highest rank of each. It never trains anything for you, shows nothing when there is nothing new, and fades by itself.
-
-**Friend login:** When a Battle.net friend comes online, a small card in the zone card's style shows their name, a Horde or Alliance mark if the game says which faction they play, and the character they're on, in place of the game's own friend-online pop-up. Other pop-ups (going offline, broadcasts, requests) and the chat line are unchanged, the game's own Social options still apply, and it stays quiet at login and in combat. It plays a soft chime (you choose which game volume it follows) that can be switched off. Switch the card off to get the game's pop-up back. Nothing is sent.
-
-**Zone arrival:** Arriving somewhere new shows the zone's name as a brief, quiet title card in place of the game's zone text: not at login, not while on a flight path, and only for the last place when crossing zones quickly. Walking into a dungeon or raid shows its name with "Dungeon" or "Raid" beneath it. Smaller places within a zone, dungeon and raid cards, and Reduced motion are optional.
-
-**Journey Chronicle:** A private journal for each character (`/tui chronicle`). Write your own short notes, and let it keep a few moments for you: levels, new zones and defeated encounters, with deaths off until you choose them. Automatic entries are on by default for a new installation and each kind can be switched off; a quiet line in your own chat window (never sent to anyone) says when one is added, and that can be switched off too. Never shared or backed up with your configuration. At login, an optional small "Welcome Back" bookmark can remind you of the last place the Chronicle noted. Its window's background, border, fonts and accents can be changed under Journey Chronicle options > Appearance (`docs/chronicle-appearance.md`); the defaults are the look it has always had.
-
-**Party pins:** Named pins on your world map, and on your minimap when they are in range (off until you turn it on). Alt-click places a local pin only you see; Alt-Shift-click places a party pin that party members with TwichUI see, with its name and color, for as long as you are in that party. Both clicks can be changed. Removing a pin from your map affects only you; removing one for the whole party is for its creator only and asks first. One window (`/tui pins`) lists them all with search, filters and actions, and a data bar entry opens a smaller menu to rename, recolor and remove them. Nothing is written in chat, and players without TwichUI see nothing (`docs/party-pins.md`).
-
-**Configuration sharing** Provides an ecosystem to share your addon configurations with friends.
-
-  * Pick the addons whose settings you want to share and save them as your addon configuration.
-  * Send it to a friend in game. They get a prompt, it downloads with a progress bar, and they choose what to apply. Their own settings are backed up first; Undo puts them back.
-  * Later sends only include addons you changed.
-  * Your recommended addon list travels with it, with a download link for each addon they're missing.
-  * **EllesmereUI** is shared one profile at a time (**EllesmereUI profile** on the Share setup page), never as a whole saved-data table. Your friend reviews it and it is added as a **new profile** with an unused name; none of their profiles, spec assignments or global settings are replaced. EllesmereUI has no import that doesn't switch to the new profile, so the review says that it becomes the profile in use, and their previous one stays saved. The profile's look (fonts, custom colours, dark mode, accent) comes with it; UI scale, window skins, click-cast and per-character data are left out.
-
-**Profiles:** Save TwichUI's own options as named profiles (Options > TwichUI > Profiles). Each character remembers which one it uses; characters that choose the same profile share it, and **Duplicate current** makes an independent copy. New, copy settings from another profile, rename, delete an unused one, or reset. Map pins, the Journey Chronicle, backups and other addons' settings are never part of a profile. Profile changes wait until you are out of combat (`docs/profiles.md`).
-
-**Backups:** Save your own settings before you tinker, go back any time.
-
-**Export & import configuration:** Your configuration backups can easily be exported to a string. The addon also allows imports of your own saved exports or your friends.
-
-**Addon data:** A read-only look at what your addons keep between sessions (`/tui data`): which data belongs to which addon, about how big it is, and what's in it, opened a level at a time. Only addons loaded right now can be shown, since the game doesn't load data for addons that are off or removed and addons can't read files on disk. Sizes are estimates. Nothing can be changed or deleted there, except TwichUI's own data through its Saved data list.
-
-**Saved Data Explorer:** A read-only look at what TwichUI itself keeps (`/tui saved`, or Options > Configuration sharing > Saved Data Explorer): its settings, your backups and Undo copies, your saved setup, setups friends sent you, the Journey Chronicle, and **exactly what Send sends**, built by the same code that sends it, with what is included, what is left out and how big it is. Open any part a level at a time, search keys and values, and copy a path, a value or a readable text (or a sanitized copy for asking for help). Character and friend names, ids and your notes are hidden until you choose Reveal, and the share view says plainly that hidden values are still sent. It shows the data as it is in memory now, not the file on disk. Nothing is changed, restored or sent there.
-
-**Troubleshooting:** If something does not work, `/tui diagnostics` opens a report you can read and copy: versions, which optional addons are present, and what each part of TwichUI says about itself. Optional temporary tracing (`/tui diagnostics start`) records TwichUI's own decisions for a few minutes, in memory only. It holds codes and counts, not names, chat or Chronicle entries, and nothing is ever sent anywhere unless you copy it out yourself.

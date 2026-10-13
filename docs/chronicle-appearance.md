@@ -122,7 +122,7 @@ accent.
 * The date picker's text keeps its size (fixed cells), and only its face and outline follow.
 * The text you type in the editor follows face, size and outline but not color.
 * There is no per-button styling, and no sample entries are created to preview: **Chronicle window** under the
-  Appearance header shows the real window above the options panel (drag it by its title).
+  Appearance header shows the real window beside the settings window (drag it by its title).
 * Appearance is per TwichUI profile (`profiles.md`); switching profile redraws an open Chronicle once.
 * Rendering has not been looked at in the game.
 

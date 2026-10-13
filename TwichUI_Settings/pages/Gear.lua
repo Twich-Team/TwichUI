@@ -1,26 +1,27 @@
--- TwichUI options: Gear comparison (upgrade hints, bag marks, and the stat weights page under it).
+-- TwichUI settings: Gear comparison (upgrade hints, bag marks), and Stat weights under it (gear/Window.lua's
+-- own frame, shown as a page).
 
 local R = TwichUI
 local K = R.SettingsKit
 
 K.Page({
-    key = "gear", name = "Gear comparison", order = 10,
+    key = "gear", name = "Gear comparison", order = 10, group = "class",
+    description = "Quiet upgrade hints in item tooltips and bags. A rough guide from item stats, not a simulation.",
+    keywords = "upgrade item level ilvl compare tooltip bags",
     overview = {
         label = "Gear comparison", tip = "Quiet upgrade hints in item tooltips and bags, and the stat weights behind them.",
         when = function() return R.GearPrefs ~= nil end,
         status = function() return K.OnOff(R:Enabled("gearHints") or R:Enabled("gearBagIcons")) end,
     },
-    build = function(page)
+    build = function()
         local Header, Toggle, Button, Choice, ProxyToggle, Advanced, Under = K.Header, K.Toggle, K.Button, K.Choice, K.ProxyToggle, K.Advanced, K.Under
         local STRING, NUMBER = K.STRING, K.NUMBER
 
         Header("Upgrade hints", "Quiet upgrade hints for your class and main talent tree. A rough estimate from item stats, not a simulation. Nothing to set up first: TwichUI starts from its own rough stat weights for each class and tree, which you can change under Stat weights if you follow a guide.")
         Toggle("gearHints", "Upgrade hints in item tooltips",
-            "Adds a short line to an item's tooltip when it looks like an upgrade for your class and main talent tree, such as \"Likely upgrade for Fury\". Hold Shift (your compare-items key) to see why.\n\nWorks as soon as it is on, using TwichUI's built-in rough stat weights for your class and tree; you don't have to enter anything. No hint is shown for a class TwichUI has no weights for.\n\n\"Use:\" and \"Chance on hit:\" effects aren't weighed.",
-            false)
+            "Adds a short line to an item's tooltip when it looks like an upgrade for your class and main talent tree, such as \"Likely upgrade for Fury\". Hold Shift (your compare-items key) to see why.\n\nWorks as soon as it is on, using TwichUI's built-in rough stat weights for your class and tree; you don't have to enter anything. No hint is shown for a class TwichUI has no weights for.\n\n\"Use:\" and \"Chance on hit:\" effects aren't weighed.")
         local bags = Toggle("gearBagIcons", "Mark upgrades in my bags",
-            "A small mark in the corner of bag slots holding gear the tooltip would call an upgrade, fainter for possible upgrades. Works with Blizzard's bags and EllesmereUI Bags.",
-            false, function() if R.GearBags then R.GearBags.Refresh() end end)
+            "A small mark in the corner of bag slots holding gear the tooltip would call an upgrade, fainter for possible upgrades. Works with Blizzard's bags and EllesmereUI Bags.")
 
         local P, D, B = R.GearPrefs, R.GearData, R.GearBags
         if P and D then
@@ -37,7 +38,7 @@ K.Page({
                 end)
         end
         if R.GearWindow then
-            Button("Stat weights", "Edit", function() R.GearWindow:Show() end,
+            Button("Stat weights", "Edit", function() R:OpenSettings("statWeights") end,
                 "Optional. How each of your talent trees values stats. Each starts from TwichUI's rough weights; change them only if you want hints to follow a guide: rank the stats it lists (a stat priority), or edit the numbers (stat weights). A priority with nothing ranked yet falls back to the tree's weights.")
         end
         if P then
@@ -74,52 +75,41 @@ K.Page({
                     { "always", "Always", "The reasoning shows under every item you could wear." },
                 }))
             if B then
-                local stylePreview
                 local styles = {}
                 for i, style in ipairs(B.STYLES) do styles[i] = { style.key, style.label } end
                 local styleRow = Choice("gearBagStyle", "Bag mark style",
                     "The mark on upgrades in your bags. All use the game's own art. The square beside the list shows how it looks on a bag slot.",
                     STRING, "gilded",
                     function() return P.Get("bagStyle") end,
-                    function(value)
-                        P.Set("bagStyle", value)
-                        if stylePreview then B.ApplyStyle(stylePreview.mark, value) end
-                    end,
+                    function(value) P.Set("bagStyle", value) end,
                     styles)
-                -- A preview slot beside the dropdown. Setting rows are recycled, so
-                -- the slot is made once per row frame and tracked only while shown.
-                if styleRow and styleRow.InitFrame then
-                    local initFrame, resetter = styleRow.InitFrame, styleRow.Resetter
-                    styleRow.InitFrame = function(self, frame)
-                        initFrame(self, frame)
-                        local slot = frame.TwichUIStylePreview
-                        if not slot then
-                            slot = CreateFrame("Frame", nil, frame)
-                            slot:SetSize(26, 26)
-                            slot.back = slot:CreateTexture(nil, "BACKGROUND")
-                            slot.back:SetAllPoints()
-                            slot.back:SetColorTexture(0.05, 0.05, 0.05, 0.9)
-                            slot.mark = slot:CreateTexture(nil, "OVERLAY")
-                            slot.mark:SetPoint("TOPLEFT", 1, -1)
-                            frame.TwichUIStylePreview = slot
-                        end
-                        slot:ClearAllPoints()
-                        slot:SetPoint("RIGHT", frame, "CENTER", -90, 0)
-                        slot:SetFrameLevel(frame:GetFrameLevel() + 5)
-                        B.ApplyStyle(slot.mark, P.Get("bagStyle"))
-                        slot:Show()
-                        stylePreview = slot
+                -- A preview slot beside the dropdown, made with the row and drawn again whenever it is.
+                if styleRow then
+                    styleRow.extra = function(holder, control)
+                        local slot = CreateFrame("Frame", nil, holder)
+                        slot:SetSize(24, 24)
+                        slot:SetPoint("RIGHT", control, "LEFT", -10, 0)
+                        slot.back = slot:CreateTexture(nil, "BACKGROUND")
+                        slot.back:SetAllPoints()
+                        slot.back:SetColorTexture(0.05, 0.05, 0.05, 0.9)
+                        slot.mark = slot:CreateTexture(nil, "OVERLAY")
+                        slot.mark:SetPoint("TOPLEFT", 1, -1)
+                        return slot
                     end
-                    styleRow.Resetter = function(self, frame)
-                        if resetter then resetter(self, frame) end
-                        if frame.TwichUIStylePreview then frame.TwichUIStylePreview:Hide() end
-                        if stylePreview == frame.TwichUIStylePreview then stylePreview = nil end
-                    end
+                    styleRow.refreshExtra = function(slot) B.ApplyStyle(slot.mark, P.Get("bagStyle")) end
                 end
                 Under(Advanced(styleRow), bags, function() return R:Enabled("gearBagIcons") end)
             end
         end
-
-        if R.GearWindow and R.GearWindow.Register then R.GearWindow:Register(page.category) end
     end,
+})
+
+-- Stat weights: how each talent tree values stats (gear/Window.lua). A ranked list and a table of numbers, so
+-- the feature draws it itself; the window shows it as a page.
+K.Page({
+    key = "statWeights", name = "Stat weights", parent = "gear", order = 11,
+    description = "How each of your talent trees values stats. Optional: change them only to follow a guide.",
+    keywords = "stat priority weights guide simulator rank hit crit",
+    when = function() return R.GearWindow ~= nil and R.GearWindow.Frame ~= nil end,
+    host = function() return R.GearWindow.Frame() end,
 })

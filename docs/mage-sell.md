@@ -1,7 +1,7 @@
 # Mage: sell ordinary food and drink
 
 For anyone changing the feature. Code: `modules/MageSell.lua` (classifier, never-sell list, the run),
-`modules/MageSellWindow.lua` (`/tui sell`, Options > Mage > Open), `diag/MageSell.lua`, the options in `settings/Mage.lua`
+`modules/MageSellWindow.lua` (`/tui sell`, Options > Mage > Open), `diag/MageSell.lua`, the settings in `TwichUI_Settings/pages/Mage.lua`
 (Mage page), `modules.mageSell*` in `Core.lua`. Tests: `tests/test_mage_sell.lua`. **Nothing here has been tried in the
 game.** Selling is destructive, so read "What is not verified" before releasing.
 

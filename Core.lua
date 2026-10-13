@@ -70,7 +70,7 @@ local DEFAULT_MODULES = {
     qolGuideWaypoint = false, -- ... the game's waypoint on RestedXP's current destination (needs RestedXP)
     partyPins = true,        -- Party pins: named map pins of your own, and ones shared with party members who have TwichUI (on; a profile that already saved false keeps it)
 }
-R.DEFAULT_MODULES = DEFAULT_MODULES   -- settings/Kit.lua uses these for the panel's Defaults button
+R.DEFAULT_MODULES = DEFAULT_MODULES   -- Switches.lua and the settings window (each switch's default)
 
 function R.Print(fmt, ...)
     print((R.GOLD .. "TwichUI:|r " .. fmt):format(...))
@@ -80,13 +80,15 @@ function R:Enabled(key)
     return TwichUIDB and TwichUIDB.modules and TwichUIDB.modules[key] ~= false
 end
 
--- Turns a switch on or off from somewhere other than its checkbox. It goes through the options (settings/Kit.lua)
--- so the feature's own update runs once, the overview and an open options panel follow, and a later click on
--- the checkbox is judged against the right value. alreadyApplied: the caller has done what the change needs.
+-- Turns a switch on or off from somewhere other than its checkbox. It goes through Switches.lua, so the
+-- feature's own update runs once, an open settings window follows, and a later click on the checkbox is judged
+-- against the right value. alreadyApplied: the caller has done what the change needs.
 function R:SetEnabled(key, on, alreadyApplied)
-    on = on and true or false
-    if R.SettingsKit and R.SettingsKit.SetSwitch(key, on, alreadyApplied) then return end
-    if TwichUIDB and type(TwichUIDB.modules) == "table" then TwichUIDB.modules[key] = on end
+    if R.Switches then
+        R.Switches.Set(key, on, alreadyApplied)
+    elseif TwichUIDB and type(TwichUIDB.modules) == "table" then
+        TwichUIDB.modules[key] = on and true or false
+    end
 end
 
 -- An error caught in one of our own handlers: noted for the troubleshooting report (if loaded), then
@@ -300,17 +302,7 @@ R:On("PLAYER_LOGIN", RegisterWithEllesmere)   -- in case EllesmereUI loaded oddl
 ---------------------------------------------------------------------------
 -- Entry points
 ---------------------------------------------------------------------------
--- key: a page under TwichUI (see settings/); the overview when omitted.
--- Returns true when the game was asked to open it, false when TwichUI's options aren't there (yet).
-function R:OpenSettings(key)
-    local category = R.settingsCategories and R.settingsCategories[key or "overview"] or R.settingsCategory
-    if category and Settings and Settings.OpenToCategory then
-        Settings.OpenToCategory(category:GetID())
-        return true
-    end
-    return false
-end
-
+-- R:OpenSettings(page, setting) is in SettingsLauncher.lua.
 function TwichUI_OnCompartmentClick(_, button)
     if button == "RightButton" then R:OpenSettings()
     elseif R.Window then R.Window:Toggle() end
@@ -333,7 +325,7 @@ end
 
 COMMANDS = {
     { name = "help", usage = "help", desc = "this list", fn = ShowHelp },
-    { name = "options", usage = "options", desc = "open TwichUI options", fn = function() R:OpenSettings() end },
+    { name = "options", usage = "options", desc = "open TwichUI settings", fn = function() R:OpenSettings() end },
     { name = "share", usage = "share [test|status]", desc = "share setup window; test sends to yourself", fn = function(arg)
         R.ShareCommand(arg)
     end },
@@ -451,7 +443,7 @@ function TwichUI_OnCompartmentEnter(_, button)
     GameTooltip:SetOwner(button or UIParent, "ANCHOR_LEFT")
     GameTooltip:SetText("TwichUI", 1, 1, 1)
     GameTooltip:AddLine("Left-click: share and back up your setup", 0.8, 0.8, 0.8)
-    GameTooltip:AddLine("Right-click: options", 0.8, 0.8, 0.8)
+    GameTooltip:AddLine("Right-click: settings", 0.8, 0.8, 0.8)
     GameTooltip:Show()
 end
 function TwichUI_OnCompartmentLeave() GameTooltip:Hide() end

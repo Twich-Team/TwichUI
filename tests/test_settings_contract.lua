@@ -1,15 +1,16 @@
 dofile(TESTS .. "harness.lua")
--- The options panel's contract: what a reorganisation of the panel must not change without saying so.
+-- The settings' contract: what a reorganisation of the settings window must not change without saying so.
 --   * every setting's variable name, kind (switch or proxy), type, default and label;
 --   * where each one writes: every setting is changed to another valid value and the whole of TwichUIDB is
---     compared, and then Blizzard's "Defaults" is run over all of them and compared again;
---   * the pages, their parents and the keys R:OpenSettings accepts;
---   * each page's rows in order: kind, label, whether it is advanced, what it is greyed out under, and a
---     checksum of its tooltip.
+--     compared, and then every page's "Reset this page" is run, in page order, and compared again (it must put
+--     back what the game's own Defaults button did when the settings were in the game's options);
+--   * the pages, their parents and groups, and the keys R:OpenSettings accepts;
+--   * each page's rows in order: kind, label, section, whether it is advanced, what it is greyed out under, and
+--     a checksum of its tooltip.
 -- tests/fixtures/settings_contract.lua holds the expected values. To record it again after an intended change:
 --   cd tests && TWICHUI_GENERATE_CONTRACT=1 lua5.1 -e 'require("bit"); ROOT="../"; TESTS="./"' test_settings_contract.lua
 -- and review the fixture's diff: only the intended lines may change.
--- The setting objects (tests/settings_mock.lua) behave like WoW: Forever's SettingMixin: a value is only
+-- The setting objects (TwichUI_Settings/Kit.lua) behave like WoW: Forever's SettingMixin did: a value is only
 -- written when it differs, and the value-changed callbacks run either way.
 local GENERATE = os.getenv("TWICHUI_GENERATE_CONTRACT") == "1"
 local FIXTURE = TESTS .. "fixtures/settings_contract.lua"
@@ -17,8 +18,8 @@ local FIXTURE = TESTS .. "fixtures/settings_contract.lua"
 dofile(TESTS .. "settings_mock.lua")
 local c, S = SettingsClient()
 local pages, variables = S.pages, S.variables
-local R = c.TwichUI
-assert(S.registered() and S.registered().name == "TwichUI", "the TwichUI category is added to the AddOns list")
+local R, K = c.TwichUI, S.K
+assert(S.registered() and S.registered().name == "TwichUI", "the TwichUI launcher is added to the AddOns list")
 
 local function Checksum(s)
   if s == nil then return "-" end
@@ -56,11 +57,11 @@ end
 
 local contract = { pages = {}, keys = {}, settings = {}, rows = {}, changed = {}, defaulted = {} }
 
-for _, cat in ipairs(pages) do
-  contract.pages[#contract.pages + 1] = cat.name .. " < " .. tostring(cat.parent) .. " (" .. cat.kind .. ")"
+for _, page in ipairs(pages) do
+  contract.pages[#contract.pages + 1] = page.name .. " < " .. tostring(page.parent) .. " (" .. page.kind .. ", " .. page.group .. ")"
 end
 local keys = {}
-for key, cat in pairs(R.settingsCategories) do keys[#keys + 1] = key .. " -> " .. cat:GetName() end
+for key, page in pairs(K.pages) do keys[#keys + 1] = key .. " -> " .. page.name end
 table.sort(keys)
 contract.keys = keys
 
@@ -73,12 +74,12 @@ for _, name in ipairs(names) do
     name, s.page, s.kind, s.varType, tostring(s.default), s.name)
 end
 
-for _, cat in ipairs(pages) do
-  for n, i in ipairs(cat.rows) do
+for _, page in ipairs(pages) do
+  for n, i in ipairs(page.rows) do
     local label = i:GetName() or ""
-    if i.kind == "button" then label = label:gsub("%s%s%s.*$", "") end   -- the overview's live status
-    contract.rows[#contract.rows + 1] = ("%s #%d %s %q%s%s%s tip:%s"):format(cat.name, n, i.kind, label,
-      #i.shown > 0 and " advanced" or "",
+    contract.rows[#contract.rows + 1] = ("%s #%d %s %q%s%s%s%s tip:%s"):format(page.name, n, i.kind, label,
+      (i.kind ~= "header" and i.section) and (" in:%q"):format(i.section:GetName() or "?") or "",
+      i.advanced and " advanced" or "",
       i.parent and (" under:%q"):format(i.parent:GetName() or "?") or "",
       i.data.setting and (" " .. i.data.setting.variable) or "",
       Checksum(i:GetTooltip()))
@@ -111,9 +112,13 @@ for _, name in ipairs(names) do
 end
 contract.changedDB = Serialize(c.TwichUIDB)
 
--- Blizzard's "Defaults" (all settings): each registered setting put back to its default.
-for _, name in ipairs(names) do variables[name]:SetValueToDefault() end
+-- "Reset this page" on every page, in the left-hand list's order.
+local reset = 0
+for _, page in ipairs(K.NavOrder()) do reset = reset + K.ResetPage(page.key) end
 FlushTimers()
+local withDefault = 0
+for _, name in ipairs(names) do if variables[name].default ~= nil then withDefault = withDefault + 1 end end
+assert(reset == withDefault, ("every setting with a default is on a page's reset once: %d of %d"):format(reset, withDefault))
 for _, name in ipairs(names) do
   contract.defaulted[#contract.defaulted + 1] = name .. " = " .. Serialize(variables[name].get())[1]
 end

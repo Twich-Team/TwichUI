@@ -1,4 +1,4 @@
--- TwichUI options: the RestedXP guide window's look (modules/RestedXPSkin.lua) and its timer bars
+-- TwichUI settings: the RestedXP guide window's look (modules/RestedXPSkin.lua) and its timer bars
 -- (modules/RestedXPTimers.lua). A page of its own under Addon skins. Not through EllesmereUI, which it doesn't need.
 
 local R = TwichUI
@@ -24,14 +24,16 @@ local TIMER_STATUS = {
 }
 
 K.Page({
-    key = "restedxp", name = "RestedXP guide window", parent = "skins", order = 95,
+    key = "restedxp", name = "RestedXP guide window", nav = "RestedXP guide window", parent = "skins", order = 95,
+    description = "A TwichUI look for the RestedXP Guides window, its waypoint arrow and its timer bars. Guide content and progress are RestedXP's own.",
+    keywords = "restedxp rxp guide leveling arrow timer bar step theme",
     when = function() return R.RestedXPSkin ~= nil end,
     build = function()
         local RS = R.RestedXPSkin
         local Header, Toggle, Button, Proxy, ProxyToggle, Advanced, Under = K.Header, K.Toggle, K.Button, K.Proxy, K.ProxyToggle, K.Advanced, K.Under
         local BOOL, STRING, NUMBER = K.BOOL, K.STRING, K.NUMBER
 
-        Header("RestedXP guide window", "Gives the RestedXP Guides window a TwichUI look: a background and border, text colors, fonts and sizes, a quieter header and footer, and a slim scroll bar; and its waypoint arrow a shape, color and size of your choosing. It never changes guide content, progress, step completion or the window's position and size. Works with or without EllesmereUI.")
+        local intro = Header("RestedXP guide window", "Gives the RestedXP Guides window a TwichUI look: a background and border, text colors, fonts and sizes, a quieter header and footer, and a slim scroll bar; and its waypoint arrow a shape, color and size of your choosing. It never changes guide content, progress, step completion or the window's position and size. Works with or without EllesmereUI.")
         local function RestedXPStatus()
             local state = RS.Status()
             local text = STATUS[state.code] or { state.code }
@@ -39,10 +41,7 @@ K.Page({
             return color .. text[1] .. "|r", text[2]
         end
         local rxpBase = "Gives the RestedXP guide window the TwichUI look. Turning it on makes TwichUI the theme RestedXP uses (it remembers the one you had); turning it off puts that one back. Everything below is TwichUI's look; RestedXP's own settings are unchanged."
-        local rxpToggle = Toggle("restedxpSkin", "Skin the RestedXP guide window", rxpBase, false, function()
-            RS.OnSwitch()
-            K.RefreshOverview()
-        end)
+        local rxpToggle = Toggle("restedxpSkin", "Skin the RestedXP guide window", rxpBase)
         if rxpToggle and rxpToggle.GetTooltip ~= nil then
             -- the status is read when the tooltip is shown, so it is never stale
             rxpToggle.GetTooltip = function(self)
@@ -324,8 +323,6 @@ K.Page({
             function() return RS.DIVIDER_CHOICES end)
         local reset = K.ResetButton("Reset appearance", resettable, RS.Reset,
             "Puts this look's background, border, colors, fonts, sizes, spacing, what shows and the waypoint arrow back to the defaults. Nothing else changes: not the switch, RestedXP's settings, guide progress or positions, or the rest of TwichUI.")
-        Under(reset, rxpToggle, RxpOn)
-
-        R:On("PLAYER_LOGIN", K.RefreshOverview)
+        Under(K.InSection(reset, intro), rxpToggle, RxpOn)
     end,
 })

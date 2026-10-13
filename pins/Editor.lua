@@ -336,8 +336,9 @@ local function Open(preview)
     Build()
     Restyle()
     f:ClearAllPoints()
-    if preview and SettingsPanel and SettingsPanel:IsShown() then
-        f:SetPoint("TOPLEFT", SettingsPanel, "TOPRIGHT", 8, -48)
+    local anchor = preview and R.SettingsAnchor()
+    if anchor then
+        f:SetPoint("TOPLEFT", anchor, "TOPRIGHT", 8, -48)
     else
         local anchor = (WorldMapFrame and WorldMapFrame:IsShown()) and WorldMapFrame.ScrollContainer or UIParent
         f:SetPoint("TOP", anchor, "TOP", 0, -60)
@@ -394,6 +395,11 @@ end
 
 -- The options page's Preview: the real window, with a made-up pin, beside the options window. Save does
 -- nothing in it. It stays until pressed again or Esc, and a real editor opened meanwhile replaces it.
+-- The settings window closed: the preview goes with it (a real pin being edited stays).
+R.OnSettingsClosed(function()
+    if f and f:IsShown() and state and state.mode == "preview" then Close() end
+end)
+
 function PE.TogglePreview()
     if f and f:IsShown() and state then
         if state.mode == "preview" then Close() end   -- a real pin being edited is left alone

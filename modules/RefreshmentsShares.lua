@@ -1,17 +1,17 @@
--- TwichUI: refreshment shares page (Options > AddOns > TwichUI > Mage > Refreshment shares)
+-- TwichUI: refreshment shares page (TwichUI settings > Mage > Refreshment shares)
 -- How many conjured water and food each class gets from the Mage, in a party and in a raid, and how
--- many the Mage keeps. A canvas page inside TwichUI's settings, since a table of numbers doesn't fit
--- Blizzard's standard controls. It sits in Blizzard's Options window, so it uses Blizzard's own look
--- (no EllesmereUI skinning), as the Stat weights page does. The numbers live in modules/Refreshments.lua.
+-- many the Mage keeps. A frame of its own, which the settings window shows as a page, since a table of numbers
+-- doesn't fit the ordinary rows; built the first time it is shown, from the settings window's controls (as the
+-- Stat weights page is). The numbers live in modules/Refreshments.lua.
 
 local R = TwichUI
 local RF = R.Refreshments
 local RS = {}
 R.RefreshmentShares = RS
 
-local WIDTH = 620
+local WIDTH = 640
 local ROW_H = 24
-local TOP = -62                -- below the page title and divider
+local TOP = -2                 -- the settings window draws the page's title above
 local COLUMNS = {              -- { context, kind, label }
     { "party", "water", "Water" }, { "party", "food", "Food" },
     { "raid", "water", "Water" }, { "raid", "food", "Food" },
@@ -24,6 +24,7 @@ local boxes = {}               -- every amount box, with .commit and .read
 local function Text(parent, template)
     local fs = parent:CreateFontString(nil, "OVERLAY", template or "GameFontHighlight")
     fs:SetJustifyH("LEFT")
+    if template == nil or template == "GameFontHighlight" then fs:SetTextColor(0.93, 0.88, 0.76) end
     return fs
 end
 
@@ -34,10 +35,8 @@ end
 
 -- A box for one amount. read() gives the value to show; write(value) saves it (false if refused).
 local function AmountBox(parent, x, y, label, read, write)
-    local eb = CreateFrame("EditBox", nil, parent, "InputBoxTemplate")
-    eb:SetSize(48, 20)
+    local eb = R.SettingsWidgets.EditBox(parent, 48, 20)
     eb:SetPoint("TOPLEFT", x, y)
-    eb:SetAutoFocus(false)
     eb:SetNumeric(true)
     eb:SetMaxLetters(3)
     eb:SetJustifyH("RIGHT")
@@ -76,9 +75,9 @@ R.Profiles.OnApply("views", "refreshment-shares", function() RS.Refresh() end)  
 local function Build(p)
     built = true
     local help = Text(p, "GameFontHighlightSmall")
-    help:SetPoint("TOPLEFT", 16, TOP)
-    help:SetWidth(WIDTH - 32)
-    help:SetTextColor(0.72, 0.70, 0.66)
+    help:SetPoint("TOPLEFT", 4, TOP)
+    help:SetWidth(WIDTH - 8)
+    help:SetTextColor(0.78, 0.74, 0.66)
     help:SetText("How many conjured water and food the refreshments panel plans for each class, as single items. Your party and your raid each have their own column. These are only a starting point: change any number, and 0 gives none. Each person is planned the best rank you know that their level can use.")
 
     local y = TOP - 54
@@ -125,14 +124,10 @@ local function Build(p)
     local keepHelp = Text(p, "GameFontHighlightSmall")
     keepHelp:SetPoint("TOPLEFT", 24, y - 26)
     keepHelp:SetWidth(WIDTH - 48)
-    keepHelp:SetTextColor(0.72, 0.70, 0.66)
+    keepHelp:SetTextColor(0.78, 0.74, 0.66)
     keepHelp:SetText("Planned at your own best rank, on top of the group's shares, in a group or on your own.")
 
-    local reset = CreateFrame("Button", nil, p, "UIPanelButtonTemplate")
-    reset:SetSize(140, 22)
-    reset:SetText("Reset shares")
-    reset:SetPoint("TOPLEFT", 20, y - 56)
-    reset:SetScript("OnClick", function()
+    local reset = R.SettingsWidgets.Button(p, "Reset shares", 140, "danger", function()
         for _, eb in ipairs(boxes) do if eb:HasFocus() then eb.revert = true; eb:ClearFocus() end end
         R.Interact.Confirm("TWICHUI_REFRESHMENT_SHARES_RESET",
             "Put every class's share and what you keep back to TwichUI's starting amounts?",
@@ -141,39 +136,24 @@ local function Build(p)
                 RS.Refresh()
             end, { combat = true })
     end)
+    reset:SetPoint("TOPLEFT", 20, y - 56)
     R.Interact.Tip(reset, "Reset shares", "Puts the party and raid shares and what you keep back to TwichUI's starting amounts. Nothing else changes.")
 end
 
--- The canvas frame settings/Mage.lua registers under Mage. Built the first time it is shown.
+-- The page's frame (the settings window shows it under Mage). Built the first time it is shown.
 local function Frame()
     if f then return f end
     f = CreateFrame("Frame")
     f:Hide()
-    local title = Text(f, "GameFontHighlightHuge")
-    title:SetPoint("TOPLEFT", 7, -22)
-    title:SetText("Refreshment shares")
-    local divider = f:CreateTexture(nil, "ARTWORK")
-    divider:SetAtlas("Options_HorizontalDivider", true)
-    divider:SetPoint("TOP", 0, -50)
     f:SetScript("OnShow", function()
         if not built then Build(f) end
         RS.Refresh()
     end)
-    -- No OnDefault: the game's "Defaults" for every setting shouldn't wipe hand-entered amounts; the page
-    -- has its own reset.
-    f.OnRefresh = RS.Refresh
+    -- Not part of "Reset this page": hand-entered amounts are reset with the page's own button.
     return f
 end
+RS.Frame = Frame
 
-function RS.Register(parentCategory)
-    if not (Settings and Settings.RegisterCanvasLayoutSubcategory) then return end
-    RS.category = Settings.RegisterCanvasLayoutSubcategory(parentCategory, Frame(), "Refreshment shares")
-end
-
-function RS.Show()
-    if RS.category and Settings and Settings.OpenToCategory then
-        Settings.OpenToCategory(RS.category:GetID())
-    end
-end
+function RS.Show() R:OpenSettings("refreshmentShares") end
 
 RF.OnChange(RS.Refresh)

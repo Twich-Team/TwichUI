@@ -13,7 +13,7 @@ do
   local levels = env.TwichUI.TrainingData.MAGE()
   local data = {}
   for level, list in pairs(levels) do for _, e in ipairs(list) do data[e[1]] = { level = level, faction = e.faction } end end
-  local menv = setmetatable({ TwichUI = { PATH = "", On = function() end, OnInit = function() end, TrainingData = env.TwichUI.TrainingData, Profiles = { OnApply = function() end } } }, { __index = _G })
+  local menv = setmetatable({ TwichUI = { PATH = "", On = function() end, OnInit = function() end, TrainingData = env.TwichUI.TrainingData, Profiles = { OnApply = function() end }, OnSettingsClosed = function() end, SettingsAnchor = function() end } }, { __index = _G })
   for _, f in ipairs({ "modules/Borders.lua", "modules/MenuStyle.lua", "modules/SpellMenu.lua", "modules/MageTravel.lua" }) do
     local mchunk = assert(loadfile(ROOT .. f)); setfenv(mchunk, menv); mchunk("!!!TwichUI", {})
   end

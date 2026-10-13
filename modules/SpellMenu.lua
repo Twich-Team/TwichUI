@@ -244,14 +244,20 @@ end
 
 function SM.PreviewShown() return preview ~= nil and preview:IsShown() end
 
--- Shows the sample beside the options window, or puts it away.
+-- Shows the sample beside the settings window, or puts it away. It goes away with the settings window.
+function SM.HidePreview()
+    if SM.PreviewShown() then preview:Hide() end
+end
+R.OnSettingsClosed(SM.HidePreview)
+
 function SM.TogglePreview()
     if SM.PreviewShown() then preview:Hide() return end
     if not preview then BuildPreview() end
     DrawPreview()
     preview:ClearAllPoints()
-    if SettingsPanel and SettingsPanel:IsShown() then
-        preview:SetPoint("TOPLEFT", SettingsPanel, "TOPRIGHT", 8, -48)
+    local anchor = R.SettingsAnchor()
+    if anchor then
+        preview:SetPoint("TOPLEFT", anchor, "TOPRIGHT", 8, -48)
     else
         preview:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
     end

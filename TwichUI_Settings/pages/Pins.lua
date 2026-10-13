@@ -1,4 +1,4 @@
--- TwichUI options: Party pins (pins/). The switch, how pins are placed and labelled, the data bar entry and the
+-- TwichUI settings: Party pins (pins/). The switch, how pins are placed and labelled, the data bar entry and the
 -- arrival sound; and, on a page of its own under it, the look of the pin window, its menu, the new pin window and
 -- pin names on the maps. The pins themselves are managed in the pin window, not here; nothing on these pages
 -- reads or writes them.
@@ -9,7 +9,9 @@ local K = R.SettingsKit
 local pinsToggle   -- the Party pins switch (the Party pins page), which the look is greyed out under
 
 K.Page({
-    key = "pins", name = "Party pins", order = 70,
+    key = "pins", name = "Party pins", order = 70, group = "journey",
+    description = "Named pins on your world map: local pins only you see, and party pins shared with party members who have TwichUI.",
+    keywords = "map pin waypoint way tomtom marker minimap party share coordinates",
     when = function() return R.Pins ~= nil end,
     overview = {
         label = "Party pins", tip = "Named pins on your world map, and pins shared with party members who have TwichUI.",
@@ -24,19 +26,7 @@ K.Page({
         Header("Party pins", "Named pins on your world map: local pins only you see, kept between sessions, and party pins shared with party members who have TwichUI, for as long as you are in that party. Players without TwichUI see nothing. Nothing is written in chat. Off until you turn it on.")
         local function PinsOn() return R:Enabled("partyPins") end
         pinsToggle = Toggle("partyPins", "Party pins",
-            "Turns on map pins: place them with the map clicks below or Place a pin in the pin window, see your party's, and manage them all in one window (/tui pins).\n\nOff: TwichUI's pins leave the map, party pins you received are dropped and nothing is sent or taken in. Your local pins are kept for when you turn it on again.",
-            false, function()
-                if R.PinSync then R.PinSync.Refresh() end
-                if R.PinsMap then R.PinsMap.Refresh() end
-                if R.PinsMinimap then R.PinsMinimap.Refresh() end
-                if R.PinsBroker then R.PinsBroker.Refresh() end
-                if R.PinsWay then R.PinsWay.Refresh() end
-                if not PinsOn() then
-                    if R.PinsWindow then R.PinsWindow.Hide(); R.PinsWindow.CloseMenu() end
-                    if R.PinsEditor then R.PinsEditor.Close() end
-                    if R.PinsBrokerMenu then R.PinsBrokerMenu.Close() end
-                end
-            end)
+            "Turns on map pins: place them with the map clicks below or Place a pin in the pin window, see your party's, and manage them all in one window (/tui pins).\n\nOff: TwichUI's pins leave the map, party pins you received are dropped and nothing is sent or taken in. Your local pins are kept for when you turn it on again.")
         Under(Button("Your pins", "Open", function()
             K.CloseOptions()
             if R.PinsWindow then R.PinsWindow.Show() end
@@ -144,7 +134,7 @@ K.Page({
         -- The look of the pin window, its menu, the new pin window and pin names: a page of its own, under this one.
         if K.pages.pinsLook then
             Header("Appearance", "How the pin window, the data bar menu, the new pin window and pin names on the maps look. Their settings are on a page of their own, under this one.")
-            Under(Button("Pin appearance", "Open its settings", function() R:OpenSettings("pinsLook") end,
+            Under(Button("Pin appearance", "Open its page", function() R:OpenSettings("pinsLook") end,
                 "Opens the Pin appearance page, under this one: the pin window, its data bar menu, the new pin window and pin names on the maps. Nothing there changes your pins."),
                 pinsToggle, PinsOn)
         end
@@ -152,7 +142,9 @@ K.Page({
 })
 
 K.Page({
-    key = "pinsLook", name = "Pin appearance", parent = "pins", order = 71,
+    key = "pinsLook", name = "Pin appearance", nav = "Appearance", parent = "pins", order = 71,
+    description = "How the pin window, its data bar menu, the new pin window and pin names on the maps look. Nothing here changes your pins.",
+    keywords = "pins look theme font size outline shadow window menu editor",
     when = function() return R.Pins ~= nil and R.PinsLook ~= nil end,
     build = function()
         local PL = R.PinsLook

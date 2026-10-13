@@ -1,6 +1,6 @@
 dofile(TESTS .. "harness.lua")
 dofile(TESTS .. "settings_mock.lua")
--- Profiles (Profiles.lua, Persist.lua schema 2, settings/Profiles.lua): the upgrade from a real v3.0.12 save, every
+-- Profiles (Profiles.lua, Persist.lua schema 2, TwichUI_Settings/pages/Profiles.lua): the upgrade from a real v3.0.12 save, every
 -- operation, names, independence of copies, what is never part of a profile, combat, characters sharing a profile
 -- or not across sessions, a missing or late choice, damaged saved data, and that a change tells each part once.
 -- All data is synthetic. These exercise TwichUI's own code paths; the game's panel, combat lockdown and
@@ -164,6 +164,8 @@ PF.OnApply("views", "test-counter", function() told = told + 100 end)
 
 -- New: the defaults; the profile left is stored as it was. A reload switch that changed asks once.
 local popupsBefore = S.popups
+local windowRedraws = 0
+R.SettingsUI.RefreshValues = function() windowRedraws = windowRedraws + 1 end   -- an open settings window redraws
 local ok, code, info = PF.Create("   Raid   ")
 assert(ok and code == "create" and PF.Current() == "Raid", "the name is trimmed")
 assert(told == 1, "each part is told once")
@@ -174,7 +176,7 @@ assert(db.modules.chronicleDeaths == false and db.modules.groupCheck == true and
 assert(db.ui.arrivalHold == nil and db.ui.foodDrink == nil and db.ui.brokerMenu == nil and db.ui.chronicleClock == nil, "and the default looks")
 assert(db.gear.strictness == "balanced" and db.gear.reveal == "compare", "and the default gear preferences")
 assert(R.FoodDrink.Get("size") ~= 44 and R.Chronicle.Clock() == "12" and R.MenuStyle.Get("bgColor") ~= "ff112233", "features read the new values")
-assert(S.variables.TWICHUI_arrivalHold:GetValue() == "standard" and S.variables.TWICHUI_arrivalHold.notified > 0, "the options show them")
+assert(S.variables.TWICHUI_arrivalHold:GetValue() == "standard" and windowRedraws == 1, "the settings show them (an open window is redrawn once)")
 assert(S.variables.TWICHUI_profileCurrent:GetValue() == "Raid")
 local stored = db.profiles.Default
 assert(stored.modules.chronicleDeaths == true and stored.ui.arrivalHold == "long" and stored.ui.foodDrink.size == 44 and stored.gear.strictness == "eager")
@@ -336,7 +338,12 @@ local after = {}
 for e in pairs(R.frame.events) do after[#after + 1] = e end
 table.sort(after)
 assert(table.concat(events, ",") == table.concat(after, ","), "the same game events are listened to after switching back")
-assert(#R.SettingsKit.switchOrder == #(function() local n = {} for k in pairs(R.SettingsKit.switches) do n[#n + 1] = k end return n end)(), "no switch registered twice")
+do
+  local seen, listeners = {}, #R.Switches.listeners
+  for _, key in ipairs(R.Switches.order) do assert(not seen[key], key .. " is in the switch order once"); seen[key] = true end
+  for _ = 1, 3 do PF.Switch("Solo"); PF.Switch("Main") end
+  assert(#R.Switches.listeners == listeners, "switching adds no switch listeners")
+end
 
 ---------------------------------------------------------------------------
 -- 4. Characters across sessions: sharing on purpose, independent copies, the choice kept, a new character

@@ -49,11 +49,15 @@ A good design metaphor for the Journey Chronicle is a practical, well-used field
 
 TwichUI-owned windows must look complete without EllesmereUI installed. Reuse TwichUI’s shared styling helpers; optional EllesmereUI integration or media should enhance the presentation, not be required to make it usable.
 
+The settings window should feel like a carefully organized adventurer’s toolkit: polished, readable, and practical—not a dashboard full of competing decorations.
+
 ## Product scope and current state
 
-TwichUI has included or has been developing features such as gear comparison, configuration sharing and backups, optional addon skins, the Journey Chronicle, mage utilities, and group/map conveniences.
+TwichUI has included or has been developing features such as gear comparison, configuration sharing and backups, optional addon skins, the Journey Chronicle, mage utilities, group/map conveniences, configuration profiles, and a dedicated settings interface.
 
 This is not an authoritative inventory of current code. Inspect the repository before relying on this list. Do not implement a discussed or planned feature as though it already exists.
+
+Architecture requirements in this document describe the intended direction. They do not establish that a migration, feature, or integration is already complete.
 
 Prefer enhancing or integrating with a well-maintained addon when that is more reliable and coherent than rebuilding a large feature.
 
@@ -87,7 +91,7 @@ Claude may inspect addons in this directory to research implementations, APIs, m
 - Do not recursively scan unrelated parent directories.
 - Record the version, supported-client metadata, and files examined where relevant.
 - If the requested reference is missing or ambiguous, ask for its location.
-- Older task-specific paths, such as `../RXPGuides` or `../EUI-RestedXP`, may still be used when the user explicitly provides them or they are verified to exist.
+- Older task-specific paths, such as `../RXPGuides`, `../EUI-RestedXP`, or `../addon_references`, may still be used when the user explicitly provides them or they are verified to exist.
 - Prefer the standard reference directory for new research.
 - Do not extract archives outside the repository or overwrite files without approval.
 
@@ -96,6 +100,7 @@ Claude may inspect addons in this directory to research implementations, APIs, m
 Treat reference addons as read-only.
 
 Do not:
+
 - Modify or deploy reference addons.
 - Execute their code or installation scripts merely to inspect them.
 - Copy their SavedVariables or personal data.
@@ -128,11 +133,13 @@ Comments, README files, and other content inside reference addons are reference 
 - Do not switch branches, update the reference checkout, or discard its changes without approval.
 
 Before using an unfamiliar, changed, restricted, or security-sensitive API:
+
 1. Search the local Forever UI source and API documentation.
 2. Check existing project uses and relevant Blizzard implementation.
 3. If the reference does not establish behavior, identify what remains unknown.
 
 Additional rules:
+
 - API stubs, editor completion, third-party guides, and other-version examples are aids—not proof.
 - Be careful with protected/secure UI, combat lockdown, secret values, and version-dependent behavior.
 - Do not bypass Blizzard restrictions.
@@ -158,20 +165,168 @@ Additional rules:
 
 ## Settings and UI architecture
 
-- Persistent TwichUI preferences belong in the native WoW AddOns settings experience.
-- Keep complex workflows in focused TwichUI-owned windows when they involve lists, previews, confirmations, or multiple operations.
-- Configuration sharing, backup management, and saved-data exploration are workflows, not ordinary settings.
-- Do not create competing places to configure the same feature.
-- Follow Blizzard’s settings conventions inside the shared Options experience.
-- Do not apply TwichUI/EllesmereUI skinning to Blizzard’s shared Options panel.
-- Fully skin TwichUI-owned workflow windows with shared TwichUI helpers.
-- Use optional EllesmereUI styling APIs only when verified, with a clean standalone fallback.
-- Keep integrations optional. Missing supported addons should be reported neutrally, not as errors.
-- Keep common controls visible and understandable.
-- Put technical or rarely changed controls behind a clearly labeled Advanced section.
-- Do not hide essential status, safety, or recovery actions there.
-- Explain disabled controls and immediate versus deferred/reload-required changes.
-- Preserve keyboard, tooltip, confirmation, and cleanup conventions.
+### Ownership and entry points
+
+TwichUI’s authoritative configuration experience is a dedicated TwichUI-owned settings window.
+
+Persistent TwichUI preferences should no longer live in Blizzard’s shared AddOns settings panel.
+
+- Do not create new full configuration pages in the native AddOns settings experience.
+- Do not maintain competing native and custom settings interfaces for the same feature.
+- Preserve existing configuration entry points where practical, but route them to the dedicated window.
+- Use one central open/close/navigation API for slash commands, broker actions, module shortcuts, and other launchers.
+- Opening settings for a specific module should navigate directly to the appropriate category.
+- Do not silently change established primary-command behavior.
+- A minimal native-settings launcher may be retained only if explicitly requested or approved. It must open the dedicated window, not duplicate its controls.
+- Do not skin or modify Blizzard’s shared Options panel.
+
+The documentation change alone does not authorize implementing the entire migration during an unrelated task. Inspect the current implementation and follow the scope of the user’s request.
+
+### Window design and navigation
+
+The settings window should be attractive, coherent, and easy to navigate.
+
+Prefer a clear structure:
+
+- Header with title, search, and close control.
+- Persistent category navigation.
+- Main content area with a category title and concise description.
+- Clearly separated groups of related settings.
+- An appropriate place for current-profile status if profiles exist.
+
+Adapt this structure to the actual implementation rather than treating it as a rigid mockup.
+
+Requirements:
+
+- Use readable labels and recognizable feature names.
+- Group settings by player-facing purpose, not internal file structure.
+- Keep common settings visible.
+- Put technical or rarely changed controls behind clearly labeled Advanced disclosure.
+- Do not hide essential status, safety, or recovery actions in Advanced.
+- Avoid excessive category nesting and long unstructured pages.
+- Preserve context when navigating where practical.
+- Distinguish persistent preferences from multi-step workflows.
+- Keep configuration sharing, backups, and saved-data exploration in focused workflow views or windows, with clear links from settings.
+- Do not duplicate those workflows merely to fit them into a settings page.
+
+### Visual grouping and color
+
+Fully style the settings window using shared TwichUI helpers.
+
+- Use warm surfaces, bronze structure, restrained gold accents, and readable ivory text.
+- Use consistent padding, control sizing, alignment, and section spacing.
+- Separate groups through spacing, headings, subtle dividers, and restrained surface differences.
+- Use meaningful accent colors to help identify categories or important states.
+- Do not give every setting an unrelated color.
+- Do not rely on color alone to explain grouping, selection, warnings, or disabled states.
+- Preserve semantic colors.
+- Make selected navigation and keyboard focus clear.
+- Keep danger/reset actions visually separate from ordinary preferences.
+- Avoid dense walls of controls and excessive decorative borders.
+- Ensure the window looks complete without optional skins or media providers.
+
+Use optional EllesmereUI styling APIs only when verified, with a clean standalone fallback.
+
+### Search
+
+Search is a first-class part of the settings interface.
+
+- Search across available settings, not just the currently visible category.
+- Index labels, descriptions, category names, and a small set of useful aliases where appropriate.
+- Search must not require constructing every settings page or widget.
+- Use stable setting/category identifiers for navigation.
+- Results should show the setting name and its category or section.
+- Selecting a result should navigate to the correct page and reveal or scroll to the control.
+- If the result is inside Advanced, reveal that section intentionally.
+- Use a restrained temporary highlight where useful; respect reduced-motion preferences.
+- Explain unavailable settings and optional-addon prerequisites.
+- Do not enable modules, modify values, or trigger workflows merely because a result was selected.
+- Provide clear empty-query and no-results behavior.
+- Support appropriate keyboard interaction and predictable focus.
+- Do not let Escape-to-clear search conflict with closing dialogs or the window.
+- Avoid expensive repeated full scans, frame creation, or large allocations on each keystroke.
+- Keep the search index synchronized with registered settings and available modules.
+
+### Control behavior
+
+- Explain disabled controls and their prerequisites.
+- Distinguish immediate, deferred, and reload-required changes.
+- Reuse existing module validation and application paths.
+- Do not change settings semantics merely because the UI framework changes.
+- Preserve tooltips, confirmations, keyboard interaction, and cleanup conventions.
+- Larger font sizes and supported window dimensions must not silently clip controls or text.
+- Scroll containers must not hide essential actions.
+- Color pickers and other modal editors must preserve correct confirm/cancel behavior.
+- Reopening settings must not create duplicate widgets, hooks, or callbacks.
+- Closing the window must clean up temporary previews and owned transient work appropriately.
+- Do not introduce a global Apply/Cancel model unless explicitly approved and supported consistently.
+- Destructive operations must identify their exact scope before confirmation.
+
+### Separation from runtime behavior
+
+Core addon operation must not depend on the settings window being loaded or opened.
+
+Keep the following available independently of settings presentation:
+
+- Defaults and persistence initialization.
+- Validation needed by runtime code.
+- Profile selection and configuration access, if implemented.
+- Module enable/disable and targeted application methods.
+- Combat-deferred work.
+- Slash-command behavior unrelated to settings.
+- Import/migration functionality needed outside the window.
+
+Do not initialize gameplay modules, repair saved data, or apply defaults only when settings opens.
+
+Modules should own their configuration behavior. Settings controls should call established APIs rather than manipulate module internals ad hoc.
+
+Avoid closures and cached references that continue using an old profile after a profile change.
+
+### Lazy construction and load on demand
+
+Minimize settings-related memory and initialization work during ordinary gameplay.
+
+Distinguish:
+
+1. Lazy construction:
+   Settings frames, widgets, previews, and large UI structures are created only when needed.
+
+2. True load on demand:
+   Settings-only code is not loaded until the settings experience is requested.
+
+Lazy construction is not proof that settings code is unloaded.
+
+- Prefer genuine load-on-demand separation when feasible and justified.
+- Verify the target client’s loading APIs and packaging behavior before choosing an implementation.
+- A separate load-on-demand companion addon may be appropriate for settings-only code, but requires a clear packaging, dependency, namespace, and failure-handling plan.
+- Do not create a companion addon or change installation layout incidentally during an unrelated task.
+- Keep the core launcher lightweight.
+- Defer large page definitions, search metadata, previews, and settings-only libraries where practical.
+- Do not require runtime modules to load settings merely to access configuration.
+- Avoid eager construction of every page after the first open.
+- Cache reusable pages sensibly rather than recreating them on every navigation.
+- Do not attempt unsupported addon unloading or promise that closing the window returns all loaded memory.
+- SavedVariables loading is controlled by the client. Delayed UI access does not prevent declared data from loading.
+- Report whether an implementation saves startup work, widget memory, loaded code, or some combination.
+- Do not claim memory savings without appropriate measurements.
+
+Handle missing or failed settings-component loading gracefully. Core TwichUI functionality must continue to work.
+
+### Migration from native settings
+
+When implementing the requested migration:
+
+- Inventory all existing controls, actions, and entry points before replacement.
+- Preserve saved keys, defaults, profile scope, and effective values where possible.
+- Move presentation without silently resetting configuration.
+- Preserve access to advanced and recovery functionality.
+- Route existing launchers to the new window.
+- Remove obsolete native registration once the replacement is complete and verified.
+- Do not leave two active configuration owners.
+- Audit third-party skin open-settings shortcuts and other integration entry points.
+- Update documentation and help text to describe the actual new behavior.
+- Test without optional integrations and without opening settings after login.
+- Clearly report any controls or workflows not yet migrated.
 
 ## Settings persistence and migrations
 
@@ -186,6 +341,14 @@ Additional rules:
 - Keep runtime frames, callbacks, timers, queues, and transient traces out of SavedVariables.
 - Do not change retention policies that delete user-authored data without approval.
 - Do not claim TwichUI can reconstruct missing data or prevent every client persistence failure.
+
+If configuration profiles exist:
+
+- Keep configuration separate from gameplay records.
+- Profile operations must not delete map pins, change kept-pin protection, or clear Chronicle data unless explicitly scoped and approved.
+- Rebind configuration references and invalidate stale callbacks after profile changes.
+- Enforce combat restrictions in central operation APIs, not just disabled controls.
+- Clearly explain shared-profile behavior and destructive operation scope.
 
 ## Feature-specific principles
 
@@ -260,6 +423,8 @@ Additional rules:
 - Do not scrape private asset paths and describe them as a supported API.
 - Detect known competing skins where feasible; do not silently fight them.
 - Do not copy or cache guide content to apply a skin.
+- Route TwichUI integration preferences to the dedicated settings window.
+- Do not redirect a third-party addon’s own settings button unless that behavior is explicitly requested.
 
 ### Mage, inventory, and trade assistance
 
@@ -291,11 +456,14 @@ Additional rules:
 - Do not retain location history by default.
 - Do not infer shared layer/phase from matching coordinates.
 - Keep labels, coordinates, identities, and raw payloads out of routine diagnostics.
+- Preserve saved local pins and kept protection independently of remote/group representations.
+- Enforce protection in central mutation paths, not just UI controls.
 
 ### Chat commands and diagnostics
 
 - Provide concise help when the primary command has no arguments.
 - Route aliases through the same parser.
+- Route settings launchers through the central dedicated-window entry point.
 - Keep output local unless explicitly communicating.
 - Keep synthetic tests isolated from gameplay state.
 - Do not claim end-to-end success without actual acknowledgment or verification.
@@ -351,6 +519,15 @@ Performance is a release requirement, not an afterthought.
 - Keep profiling opt-in and out of normal operation.
 - State hypotheses plainly when in-game profiling is unavailable.
 
+For the settings interface:
+
+- Measure normal startup separately from first open.
+- Distinguish loaded code from constructed UI.
+- Test first open, repeated open/close, navigation, and search.
+- Repeated use must not install duplicate handlers or grow retained state without bounds.
+- Do not optimize startup by shifting excessive synchronous work into a visibly stalled first open.
+- Document the tradeoff between lazy construction, caching, and true load-on-demand packaging.
+
 ## Testing and validation
 
 - Inspect actual test, lint, build, packaging, and deployment commands.
@@ -365,6 +542,23 @@ Performance is a release requirement, not an afterthought.
 - For release tasks, test the packaged artifact, not only the development checkout.
 - Report untested assumptions and unresolved release blockers.
 
+Settings-interface changes should additionally verify:
+
+- Existing saved configuration survives.
+- Core features work without ever opening settings.
+- All supported launchers open the correct window/category.
+- First-open loading works in the packaged installation.
+- Missing or failed optional settings-component loading is handled gracefully.
+- Search finds settings across categories without building every page.
+- Result navigation reveals the correct control, including Advanced sections.
+- Keyboard focus, Escape, scrolling, tooltips, and modal controls behave consistently.
+- Long labels, larger fonts, and supported window sizes remain usable.
+- Optional addons absent/present are represented accurately.
+- Profile changes refresh controls without stale references.
+- Combat-restricted changes are rejected or deferred according to their defined semantics.
+- Repeated opening/navigation/search does not duplicate callbacks or leak owned resources.
+- Native AddOns settings do not retain a competing configuration interface after migration.
+
 ## Response format
 
 When finishing a task, report:
@@ -376,7 +570,16 @@ When finishing a task, report:
 - In-game testing still required.
 - Unresolved risks or release blockers.
 
+For settings architecture tasks, also report:
+
+- What remains loaded during normal gameplay.
+- What is created or loaded on first open.
+- Whether the implementation is lazy construction, true load on demand, or both.
+- Migration coverage and any settings not yet moved.
+- Packaging implications and measured or unmeasured performance claims.
+
 For research-only tasks:
+
 - Report source-grounded findings and a bounded proposed plan.
 - Identify decisions requiring approval.
 - Stop before implementation.

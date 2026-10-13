@@ -28,7 +28,7 @@ c.UnitIsPlayer = function() return false end
 c.InCombatLockdown = function() return false end
 c.ACCEPT, c.CANCEL = "Accept", "Cancel"
 c.Settings = nil
-for _, f in ipairs({"setup/Window.lua", unpack(SettingsFiles())}) do
+for _, f in ipairs({"setup/Window.lua"}) do
   local chunk = assert(loadfile(ROOT..f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
 end
 c.LOADED["!!!TwichUI"] = true; c.FireEvent("ADDON_LOADED", "!!!TwichUI")

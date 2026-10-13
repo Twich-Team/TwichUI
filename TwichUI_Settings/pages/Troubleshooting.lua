@@ -1,10 +1,12 @@
--- TwichUI options: Troubleshooting (diag/: the report to copy, and optional temporary tracing).
+-- TwichUI settings: Troubleshooting (diag/: the report to copy, and optional temporary tracing).
 
 local R = TwichUI
 local K = R.SettingsKit
 
 K.Page({
-    key = "troubleshooting", name = "Troubleshooting", order = 110,
+    key = "troubleshooting", name = "Troubleshooting", order = 110, group = "config",
+    description = "A report to copy when something does not work, and optional temporary tracing. Nothing is sent anywhere.",
+    keywords = "diagnostics report bug error debug trace log",
     when = function() return R.Diag ~= nil and R.DiagWindow ~= nil end,
     overview = {
         label = "Troubleshooting", tip = "A report to copy when something does not work, and optional temporary tracing.",
@@ -27,7 +29,7 @@ K.Page({
             tracing.data.buttonText = function() return Diag.Tracing() and "Stop" or "Start" end
             Diag.OnChange(function()
                 tracing.data.name = TracingName()
-                if SettingsPanel and SettingsPanel:IsShown() and SettingsPanel.RepairDisplay then SettingsPanel:RepairDisplay() end
+                K.RefreshOverview()
             end)
         end
         Button("Collected records", "Clear", function() Window.Command("clear") end,

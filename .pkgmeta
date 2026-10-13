@@ -1,5 +1,9 @@
 package-as: "!!!TwichUI"
 
+# The settings window is an addon of its own (load on demand), shipped as its own folder beside !!!TwichUI
+move-folders:
+  "!!!TwichUI/TwichUI_Settings": TwichUI_Settings
+
 enable-nolib-creation: no
 
 manual-changelog:

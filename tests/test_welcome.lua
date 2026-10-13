@@ -65,7 +65,7 @@ local function Boot(sv, opts)
   c.NOW = 1700000000
   c.GetTime = function() return c.NOW end
   c.opened = nil
-  c.Settings = { OpenToCategory = function(id) c.opened = id end }
+  c.Settings = nil   -- (the settings window is TwichUI's own; no AddOns entry in these tests)
   for k, v in pairs(sv or {}) do c[k] = v end
   for _, f in ipairs(opts.files or {"chronicle/Style.lua", "modules/Notify.lua", "modules/Arrival.lua", "modules/WelcomeBack.lua", "modules/Welcome.lua"}) do
     local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
@@ -272,20 +272,25 @@ assert(not Showing(p) and W(p).Snapshot().shown == 1, "the waiting look did not 
 -- 5. Actions
 ---------------------------------------------------------------------------
 local a = Boot()
-a.TwichUI.settingsCategories = { overview = { GetID = function() return 42 end } }
+-- the settings window's addon loads on demand; here it only records where it was asked to open
+a.C_AddOns.LoadAddOn = function(name)
+  if name ~= "TwichUI_Settings" then return false, "MISSING" end
+  a.TwichUI.SettingsUI = { Open = function(page) a.opened = page or "overview" end, IsShown = function() return false end }
+  return true
+end
 Enter(a); Settle()
 local dlg = D(a)
 assert(dlg.shown)
 dlg.open.scripts.OnClick(dlg.open)
-assert(a.opened == 42 and not dlg.shown, "Open Settings closes the dialog and opens TwichUI's own page")
--- No settings page (the options failed to build): say so, keep the dialog.
+assert(a.opened == "overview" and not dlg.shown, "Open Settings closes the dialog and opens TwichUI's settings at the start")
+-- The settings window can't load (its folder is missing): say so, keep the dialog.
 local b = Boot({ TwichUIDB = { schema = 1, modules = {}, welcome = { state = "seen" } } })
 b.TwichUI.RunCommand("about")
-b.TwichUI.settingsCategories, b.TwichUI.settingsCategory = nil, nil
+b.C_AddOns.LoadAddOn = function() return false, "MISSING" end
 D(b).open.scripts.OnClick(D(b).open)
-assert(D(b).shown and b.opened == nil, "the dialog stays when the settings are missing")
+assert(D(b).shown and b.opened == nil, "the dialog stays when the settings can't be opened")
 local told = false
-for _, s in ipairs(b.said) do if s:find("settings aren't available", 1, true) then told = true end end
+for _, s in ipairs(b.said) do if s:find("couldn't open the settings", 1, true) and s:find("TwichUI_Settings", 1, true) then told = true end end
 assert(told, "and says why, in plain words")
 -- /tui help lists the command; the Welcome Back preview keeps its own name.
 local listed = {}

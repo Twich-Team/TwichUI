@@ -1,6 +1,6 @@
 # Party pins
 
-**Options > AddOns > TwichUI > Party pins** (`pins/`, switch `modules.partyPins`, on by default for a new profile; a profile that has already saved it as off keeps it off). Written
+**TwichUI settings > Party pins** (`pins/`, switch `modules.partyPins`, on by default for a new profile; a profile that has already saved it as off keeps it off). Written
 against the WoW: Forever UI source (`../wow-ui-source`, branch `forever`). **Nothing here has been run in the
 game yet**: everything below is source-verified and covered by offline tests, not seen working in play.
 
