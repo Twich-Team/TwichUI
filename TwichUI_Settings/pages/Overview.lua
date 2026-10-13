@@ -11,16 +11,6 @@ K.Page({
     build = function()
         local Header, Toggle, Button = K.Header, K.Toggle, K.Button
 
-        Header("Features", "What each part of TwichUI is doing now. Choose one to see its settings.")
-        -- In the left-hand list's order; a page that is not there this session (not a Mage, an addon missing) has no row.
-        for _, page in ipairs(K.NavOrder()) do
-            local row = page.def.overview
-            if row and (row.when == nil or row.when()) then
-                K.Link(row.label, page.key, row.status, row.tip)
-            end
-        end
-
-        -----------------------------------------------------------------------
         Header("Help", "Where to find things. Neither button here changes a setting.")
         Button("Welcome", "Show", function()
             K.CloseOptions()

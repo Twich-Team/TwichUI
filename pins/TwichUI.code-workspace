@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"path": ".."
+		},
+		{
+			"path": "../../wow-ui-source"
+		},
+		{
+			"path": "../../reference_addons"
+		}
+	],
+	"settings": {}
+}

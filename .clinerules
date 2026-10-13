@@ -1,0 +1,16 @@
+# TwichUI project instructions
+
+Before inspecting or modifying this project, read the root CLAUDE.md.
+Its instructions apply regardless of which assistant is used.
+
+Edit only the TwichUI development repository.
+Treat reference addons and wow-ui-source as read-only.
+
+Preserve user settings, saved pins, kept-pin protection, and Chronicle data.
+Verify WoW: Forever APIs rather than assuming Retail behavior.
+
+Follow requested planning/approval checkpoints.
+Do not commit, deploy, publish, or change release metadata unless requested.
+
+Report actual file changes, checks performed, and remaining in-game tests.
+Never present suggestions or unperformed tests as completed work.
