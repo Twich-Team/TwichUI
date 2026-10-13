@@ -97,6 +97,9 @@ local function Tooltip(b, anchor, yards)
     else
         GameTooltip:AddLine("Party pin from " .. (SH and SH.Short(pin.owner) or pin.owner), 0.86, 0.69, 0.30)
     end
+    if e.kind == "local" and e.shared then
+        GameTooltip:AddLine("Shared with your party", 0.86, 0.69, 0.30)
+    end
     GameTooltip:AddLine(PN.Describe(pin), 0.62, 0.58, 0.51)
     if yards then GameTooltip:AddLine(("About %d yards away"):format(yards), 0.78, 0.74, 0.66) end
     GameTooltip:AddLine("Click to select and set waypoint, right-click for actions", 0.45, 0.43, 0.38)

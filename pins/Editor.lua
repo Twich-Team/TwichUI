@@ -3,7 +3,9 @@
 -- one you can change. A "Keep this pin" box protects it from deletion, clearing and moving (pins/Pins.lua
 -- enforces that; the box is only where it is chosen). The same window, filled in, is "Save to my pins" for
 -- a party pin someone else made: a local pin of your own, kept by default, made only when you press Save.
--- Nothing is made, changed or sent until Save; Cancel, Esc or closing it leaves
+-- Editing one of your local pins also offers Share: it saves the changes, then publishes the pin to your
+-- party as a snapshot (pins/Sync.lua), without making it a party pin or changing Keep.
+-- Nothing is made, changed or sent until Save or Share; Cancel, Esc or closing it leaves
 -- everything as it was. Save checks again at that moment (still in a party, still your pin, still under
 -- the limits) and says why when it can't, keeping what you typed.
 -- Drawn with TwichUI's own look (pins/Look.lua): its background and border are the player's own choice
@@ -85,6 +87,20 @@ local function Refresh()
     -- or color is refused with the reason when saved
     local keepOnly = state.mode == "edit" and state.entry.kind == "party" and PN.SendBlocked() or nil
     f.save:SetEnabled(blocked == nil and state.mode ~= "preview")
+    -- Share: only when editing a saved pin of yours; its reason is the button's tooltip
+    local canShare = state.mode == "edit" and state.entry.kind == "local"
+    f.share:SetShown(canShare)
+    if canShare then
+        f.share:SetEnabled((PN.Can("share", state.entry)))
+    end
+    f.status:ClearAllPoints()
+    if canShare then
+        f.status:SetPoint("TOPLEFT", f.share, "TOPRIGHT", 10, -1)
+    else
+        f.status:SetPoint("TOPLEFT", f.kindParty, "TOPRIGHT", 10, -1)
+    end
+    f.status:SetPoint("RIGHT", -PAD, 0)
+    local sharedNow = canShare and PN.GroupCopy(state.entry.pin.id) ~= nil
     if state.mode == "preview" then
         f.status:SetText("A preview. Nothing is made, saved or sent.")
         f.status:SetTextColor(pal.stone[1], pal.stone[2], pal.stone[3])
@@ -99,6 +115,9 @@ local function Refresh()
         f.status:SetTextColor(pal.stone[1], pal.stone[2], pal.stone[3])
     elseif party then
         f.status:SetText("Party members with TwichUI will see it, with this name.")
+        f.status:SetTextColor(pal.stone[1], pal.stone[2], pal.stone[3])
+    elseif sharedNow then
+        f.status:SetText("Shared with your party. Changes reach them when you share again.")
         f.status:SetTextColor(pal.stone[1], pal.stone[2], pal.stone[3])
     else
         f.status:SetText("Only you see it.")
@@ -125,8 +144,11 @@ local function Close()
     if f then f:Hide() end
 end
 
-local function Save()
+-- share: also publish the saved pin to the party once its changes are saved (a local pin being edited).
+-- Passed as true by the Share button only; the Enter key hands this function the edit box.
+local function Save(share)
     if not state or state.mode == "preview" then return end
+    local wantShare = share == true and state.mode == "edit" and state.entry.kind == "local"
     if not R:Enabled("partyPins") then Close() return end
     local name = f.name:GetText()
     local fields = { name = name, color = state.color, kept = state.kept == true }
@@ -168,9 +190,21 @@ local function Save()
         f.status:SetTextColor(0.80, 0.45, 0.35)
         return
     end
+    if wantShare then
+        -- the changes are saved; the share is its own step and says why if it can't go
+        local ok, text = R.PinsWindow.ShareLocal(state.entry.pin.id)
+        if not ok then
+            Refresh()
+            f.status:SetText("Saved, not shared. " .. tostring(text))
+            f.status:SetTextColor(0.80, 0.45, 0.35)
+            return
+        end
+    end
     state = nil
     Close()
 end
+
+local function SaveAndShare() Save(true) end
 
 local function Build()
     if f then return end
@@ -247,6 +281,18 @@ local function Build()
     R.Interact.Tip(f.kindLocal, "Local pin", "Only on your map, and kept between sessions.")
     R.Interact.Tip(f.kindParty, "Party pin", "Shared with party members who have TwichUI turned on, for as long as you are in this party. Players without TwichUI see nothing.")
 
+    f.share = S.Button(body, "Share", 70, "secondary", SaveAndShare, pal)
+    f.share:SetPoint("TOPLEFT", PAD + 2, -176)
+    f.share:Hide()
+    R.Interact.Tip(f.share, "Share with group", function()
+        local why
+        if state and state.mode == "edit" and state.entry.kind == "local" then
+            local ok, reason = PN.Can("share", state.entry)
+            if not ok then why = reason end
+        end
+        return "Saves your changes, then sends this pin to your party members who have TwichUI. Your saved pin stays local and keeps its Keep setting. Share again to update their copy.", why
+    end)
+
     f.status = PL.Text(body, "GameFontNormalSmall", "meta")
     f.status:SetPoint("TOPLEFT", f.kindParty, "TOPRIGHT", 10, -1)
     f.status:SetPoint("RIGHT", -PAD, 0)
@@ -263,7 +309,7 @@ local function Build()
     end)
 
     f:SetScript("OnHide", function() state = nil end)
-    f.widgets = { f.save, cancel, f.kindLocal, f.kindParty, close, f.keep }
+    f.widgets = { f.save, cancel, f.kindLocal, f.kindParty, close, f.keep, f.share }
     f.labels = { label, colorLabel }
 end
 

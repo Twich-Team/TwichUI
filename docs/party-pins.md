@@ -12,7 +12,7 @@ Players without TwichUI see nothing: nothing is written in chat and there is no 
 
 | File | Owns |
 |---|---|
-| `pins/Pins.lua` | the data: checks, local pins, the party session's pins, dismissals, removal records, permissions |
+| `pins/Pins.lua` | the data: checks, local pins, the party session's pins (and a saved pin's group copy), dismissals, removal records, permissions |
 | `pins/Sync.lua` | the protocol, the party session's lifecycle, rate limits, `/reload` hand-over |
 | `pins/Look.lua` | the click and label choices, the window's look (MenuStyle look, font, size, accent, rows), the data bar entry's text, icon and color, and the data bar menu's look |
 | `pins/Map.lua` | the world map: data provider, pin buttons, placing clicks, Show on map, Set waypoint |
@@ -207,6 +207,8 @@ is free:
 | Remove pin | local pins | nothing | deletes that local pin; refused for a kept one |
 | Remove from my map | any party pin, yours too | nothing | hidden on your map; survives updates and resyncs; listed under **Removed**, from where **Restore to my map** brings it back. Kept up to 100, for this party session. |
 | Remove all party pins from my map | you | nothing | the same for every party pin except kept ones |
+| Share with group / Share again | a saved (local) pin | `put` | publishes a snapshot of it to your party; see "Sharing a saved pin". The saved pin is not changed, moved or protected differently. |
+| Stop sharing... | a saved pin that is shared | `del` | asks first; takes only the shared copy off your party's maps. The saved pin stays. |
 | Remove for entire party... | **the pin's creator only** | `del` | asks first; then removed from your map and from every member who receives it; a removal record (up to 200) stops a late or replayed copy coming back. Refused for a kept pin. |
 | Delete unprotected local pins... | you | nothing | asks first, with the counts; party pins and kept pins untouched |
 | Save to my pins... | any party pin | nothing | opens the new pin window filled in (kept by default); Save makes an independent local pin (`copiedFrom`); a party-wide removal of the original never touches it |
@@ -218,6 +220,59 @@ is free:
   (`Pins.Can`).
 * The removal confirmation says party members with TwichUI remove it "when your message reaches them".
   Nothing confirms delivery and nothing claims it did.
+
+## Sharing a saved pin
+
+**Share with group** publishes one of your saved (local) pins to your party without recreating it,
+converting it or changing it. It is in the pin window's action menu (so also the right-click menu of a pin
+on the map and on the minimap), in the data bar menu through a right-click on a pin's name (it opens that
+same action menu; the rows gain no button), and as a **Share** button in the editor when you edit a local
+pin (it saves your changes, then shares).
+
+* **A snapshot, on request.** The party gets the pin's map, coordinates, name and color as they are at that
+  moment. Editing the saved pin afterwards sends nothing; **Share again** sends the new state. Nothing is
+  shared automatically: not at login, not when you join or rejoin a party, not when the pin changes.
+* **One group copy per saved pin.** The first share makes a party pin of yours (a normal one, with an id like
+  `k3x9qa:5`, counting against the 20 per player and 60 per session) and links it to the saved pin by a
+  session-only `source` (the saved id, `L12`). It is not in the message, not in the saved data and not
+  something a message can set. Sharing again gives that pin a new revision under the same id, so recipients
+  update it in place and never see two. The link survives a `/reload` in the same party (it travels with the
+  session) and is dropped with the session.
+* **Preserved.** The saved pin keeps its id, place, name, color, Keep and everything else; the share only
+  reads it. Kept is never sent and the group copy is not kept (so Stop sharing works). There is no hidden
+  state on a local pin in this addon, so "hidden" pins don't come up.
+* **One marker for you.** While a saved pin has its group copy, the copy is not listed or drawn for you as a
+  second pin: the saved pin stands for both (its row says "shared", its tooltip says "Shared with your
+  party"), and the party pin counts, Clear and Remove all leave the copy alone. For everyone else it is a
+  normal party pin from you.
+* **Saved pin deleted.** Deleting it (or clearing it) sends nothing and does not take the shared copy back; it
+  becomes an ordinary party pin of yours, listed as such, removable with Remove for entire party. This
+  matches "Clear unprotected pins": nothing is sent and what you shared stays with your party. A kept pin
+  can't be deleted; to take back its shared copy, use Stop sharing.
+* **Catch-up.** A member who joins, reloads or says hello gets your party pins (the existing `hi` / `all`
+  answer), including the group copies, as they were last shared. This is the existing behavior of party pins
+  while you stay in the party, not new publication: the copy is the snapshot, never the saved pin's current
+  state. Leaving the party ends the session and the copies; rejoining publishes nothing.
+* **Recipients.** An ordinary party pin: their window, map and tooltip say it is yours. They can remove it from
+  their own map, or **Save to my pins** for an independent local copy with a new id (kept by default, as
+  before). Nothing they do reaches your saved pin: a message from them addresses their own pins only.
+* **Not shareable.** Someone else's party pin is offered greyed out with "Save it to your pins first, then
+  share your own copy.": sharing it would pass it off as yours. One of your own party pins is already shared.
+* **When it can't run**, the action is greyed with the reason (and the same sentence is the message if it is
+  picked anyway, so nothing is printed over and over): "Join a party to share this pin." when not grouped;
+  "Pins can only be shared with a party, not a raid." in a raid; the game's own message lockdown; the limits
+  (20 per player, 60 per session); a map the game doesn't know. It works in combat: it is only a message.
+* **Rate.** Sharing a saved pin again within 3 seconds with nothing changed sends nothing ("Already sent to
+  your party a moment ago."); a change goes out at once. Receivers' per-sender rate limit (a burst of 15)
+  is unchanged. If the game refuses the send, the player is told once ("The game didn't take the shared pin.").
+  "Pin sent to your party." is all that is claimed: acceptance by the game is not proof anyone received it.
+* **Raids are not supported.** Party pins pause in a raid (nothing sent or taken in), and raid sharing would
+  need more than this feature: a roster check over `raid1..40` instead of `party1..4`, a different answer to
+  `hi` (up to 39 members each answering with a full list), per-sender rate buckets sized for 40, and session
+  limits that a raid fills at once. That is a protocol and lifecycle change, so it was not done; the action
+  says so in a raid. Instance groups (`INSTANCE_CHAT`) work as they did for party pins.
+* **Protocol:** unchanged, version 1. A group copy is an ordinary `put`; older TwichUI versions that speak
+  version 1 show it as a party pin from you. Nothing new is added to the wire.
 
 ## Keeping pins
 
@@ -525,6 +580,36 @@ frame regardless of the pin window's choices.
     Sound Effects off in the game's Audio options and check it is silent, then pick Master and check it
     plays. Try Hear the sound, another sound from the list, and the toggle off. Have the member place
     several pins in a second or two and check there is one sound.
+
+### Sharing a saved pin checklist (two clients A and B in a party; items 12 to 14 need a third or a raid)
+
+1. A: a local pin "Reagent vendor" on a map A isn't on, not kept. Not grouped: right-click it in the window,
+   Share with group is greyed with "Join a party to share this pin." Picking it prints nothing else.
+2. Group A and B. A: Share with group. B sees "Reagent vendor" at the saved coordinates (not A's position),
+   color and name, as a party pin from A; A sees one marker, whose row says "shared".
+3. A: Keep this pin on, then Share again; the same pin updates on B (no duplicate). Turn Keep off and delete
+   the saved pin: nothing is sent, B keeps the pin, and A now lists it as "Your party pin" and can remove it
+   for the party.
+4. A: a kept pin. Share it. Check it stays kept, can't be deleted, B's copy isn't kept (B: Edit pin isn't
+   offered), and Stop sharing... asks first and removes only B's copy.
+5. A: rename and recolor the saved pin. B sees no change until A chooses Share again; then B updates the
+   same pin.
+6. A: the editor's Share button: changes are saved and sent in one step; Save alone sends nothing; Enter in
+   the name box saves without sharing. The status line says "Shared with your party..." afterwards.
+7. A: share on the minimap and map pins' right-click menu, and from the data bar menu's name right-click (the
+   menu stays open; the row changes to "shared").
+8. B: Save to my pins from A's shared pin: a new, independent local pin. A deletes or changes the shared
+   pin: B's copy is unchanged. B tries Share with group on A's pin: greyed with the reason; B shares its
+   saved copy: C (if present) sees it as B's.
+9. A leaves the party and rejoins: A's saved pins are all still there and nothing is published; B has none of
+   them until A shares again. `/reload` in the party: the saved pin still reads "shared" and sharing again
+   updates the same pin on B.
+10. A shares, B `/reload`s or rejoins: B receives A's copy once (the existing catch-up), as last shared.
+11. In a raid: Share with group is greyed with "Pins can only be shared with a party, not a raid."
+12. Share 20 saved pins: the 21st says why. `/tui diagnostics` shows the count of shared copies and no names.
+13. In combat (a target dummy): the action works and no taint messages appear.
+14. During an encounter or other chat lockdown: greyed with "The game is holding addon messages here right
+    now."; no error. After it ends, sharing works.
 
 ### Keeping pins checklist (one client; the last item needs a second)
 

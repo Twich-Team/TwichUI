@@ -22,6 +22,11 @@
 -- are still in the party the session is put back as it was (kept in TwichUIDB.pins.session for that one
 -- load and cleared at the next); a fresh login always starts empty. A member who leaves takes their pins.
 -- The group leader plays no part: it doesn't identify the party and has no say over anyone's pins.
+-- Sharing a saved pin (PS.ShareLocal) is an explicit publication: one `put` of the pin's place, name and
+-- color as they are at that moment, under one id that later shares of the same saved pin reuse (a new
+-- revision), so recipients update in place. Nothing is sent when the saved pin is edited or deleted, when
+-- you join, or when someone else does, except the existing catch-up: a member who says hello gets the
+-- party pins you have, which for a shared saved pin is what you last shared, not what it is now.
 -- The game accepting a message is not proof anyone received it; nothing here claims it.
 
 local R = TwichUI
@@ -37,6 +42,7 @@ local LibDeflate = LibStub("LibDeflate")
 PS.PREFIX = "TwichUIPins"
 local MAX_TEXT = 4000          -- an encoded message, after AceComm has joined its pieces
 local HELLO_GAP = 15           -- seconds between your own hellos
+local SHARE_GAP = 3            -- seconds in which sharing the same unchanged saved pin again sends nothing
 local LIST_GAP = 6             -- seconds between your full lists
 local BUCKET_SIZE, BUCKET_REFILL = 15, 0.5   -- per sender: a burst of 15, then one message every 2 seconds
 local MAX_BUCKETS = 8
@@ -45,6 +51,7 @@ local stats = { sent = 0, refused = 0, received = 0, hellos = 0, lists = 0, rest
 local buckets = {}             -- [sender] = { tokens, at }
 local token = 0                -- bumped as a session starts or ends: a waiting timer for an older one does nothing
 local lastHello, lastList = -math.huge, -math.huge
+local lastShare = {}           -- [saved pin id] = when it was last shared, this session
 local listPending = false
 local paused = false           -- in a raid with a session open
 local firstWorld = true
@@ -93,7 +100,8 @@ local function Trace(code, detail)
 end
 
 -- Returns true when the game took the message (not that anyone got it), or false and a reason code.
-local function Send(msg)
+-- onRefused: called later, once, if the game refuses it while the same session is still open.
+local function Send(msg, onRefused)
     local blocked = PS.Blocked()
     if blocked then return false, blocked end
     msg.v = PN.PROTOCOL
@@ -103,6 +111,7 @@ local function Send(msg)
         if accepted == false and mine == token then
             stats.refused = stats.refused + 1
             Trace("refused", msg.o)
+            if onRefused then onRefused() end
         end
     end)
     stats.sent = stats.sent + 1
@@ -174,6 +183,36 @@ function PS.UpdateParty(key, fields)
     -- Keep is yours alone: changing only that sends nothing, and it is never part of what is sent
     if shared then Send({ o = "put", p = Wire(updated) }) end
     return updated
+end
+
+-- Shares a saved (local) pin with your party: a snapshot of its place, name and color. The saved pin itself
+-- is only read. The first share makes the party pin that stands for it; a later share of the same saved pin
+-- refreshes that one (same id, new revision), so nobody gets a second marker. Asked again here, at the
+-- moment it runs. Returns the party pin and "new", "updated" or "unchanged" (shared a moment ago and
+-- nothing has changed since: nothing is sent), or nil and a sentence.
+function PS.ShareLocal(localId)
+    local ok, why = PN.Can("share", { kind = "local", pin = { id = localId } })
+    if not ok then return nil, why end
+    local now = Now()
+    local last = lastShare[localId]
+    if last and now - last < SHARE_GAP and PN.GroupCopyCurrent(localId) then
+        return PN.GroupCopy(localId), "unchanged"
+    end
+    local pin, isNew = PN.PublishLocal(localId)
+    if not pin then return nil, PN.Reason(isNew) end
+    Send({ o = "put", p = Wire(pin) }, function()
+        if R.PinsMap then R.PinsMap.Notice("The game didn't take the shared pin. Try again in a moment.") end
+    end)
+    lastShare[localId] = now
+    return pin, isNew and "new" or "updated"
+end
+
+-- Takes only the group copy of a saved pin back from the party (the same removal as Remove for entire
+-- party). The saved pin is untouched.
+function PS.UnshareLocal(localId)
+    local copy = PN.GroupCopy(localId)
+    if not copy then return false, PN.Reason("gone") end
+    return PS.RemoveForParty(copy.key)
 end
 
 -- Asked again here, at the moment it runs, whatever the menu showed.
@@ -271,6 +310,7 @@ local function Begin()
     token = token + 1
     listPending = false
     lastHello, lastList = -math.huge, -math.huge
+    wipe(lastShare)
 end
 
 local function Finish()
@@ -278,6 +318,7 @@ local function Finish()
     listPending = false
     paused = false
     wipe(buckets)
+    wipe(lastShare)
     PN.EndSession()
 end
 

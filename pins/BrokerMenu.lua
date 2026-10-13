@@ -11,6 +11,8 @@
 --   Clear unprotected pins: asks first, with the counts of what it will do. Deletes your local pins and
 --   takes party pins off your map, except the kept ones, which stay. Nothing is sent and party pins you
 --   shared stay on your party's maps.
+-- A right-click on a pin's name opens the same action menu as in the pin window (Show on map, Share with
+-- group, Edit pin, ...), so there is no extra button on the rows.
 -- Everything is checked again when it runs (PN.Can), exactly as in the pin window. The menu has nothing
 -- secure in it, so unlike the Mage launchers' menus it can be used in combat. Its background and border are
 -- the player's own (pinsBrokerMenu in pins/Look.lua); its text follows the pin window's font and size.
@@ -253,7 +255,10 @@ end
 ---------------------------------------------------------------------------
 local function OwnerText(e)
     local pin = e.pin
-    if e.kind == "local" then return pin.copiedFrom and "copy" or "local" end
+    if e.kind == "local" then
+        if e.shared then return "shared" end
+        return pin.copiedFrom and "copy" or "local"
+    end
     if pin.mine then return "you" end
     local SH = R.Share
     return SH and SH.Short(pin.owner) or pin.owner
@@ -341,15 +346,25 @@ local function NewRow(i)
     row.name = PL.Text(row.nameBtn, "GameFontHighlight", "name")
     row.name:SetAllPoints()
     row.name:SetWordWrap(false)
-    row.nameBtn:SetScript("OnClick", function() StartEdit(row) end)
+    row.nameBtn:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    row.nameBtn:SetScript("OnClick", function(_, button)
+        if button == "RightButton" then
+            if row.entry then
+                HidePicker()
+                PW.OpenActions(row.entry, row)
+            end
+        else
+            StartEdit(row)
+        end
+    end)
     Tip(row.nameBtn, nil, function()
         local e = row.entry
         local pin = e and PN.Fresh(e)
         if not pin then return nil end
         local ok, why = PN.Can("edit", e)
         local body = pin.name .. "\n" .. PN.Describe(pin)
-        if ok then return body .. "\nClick the name to rename it." end
-        return body, why
+        if ok then return body .. "\nClick the name to rename it. Right-click for more." end
+        return body .. "\nRight-click for more.", why
     end, "ANCHOR_RIGHT")
     row.nameBtn:HookScript("OnEnter", function(self)
         local e = row.entry
@@ -382,7 +397,7 @@ local function DressRow(row, e, y)
     row.owner:SetText(OwnerText(e))
     Paint(row.name, pal.text)
     Paint(row.sub, pal.stone)
-    Paint(row.owner, party and pal.gold or pal.stone)
+    Paint(row.owner, (party or e.shared) and pal.gold or pal.stone)
     Paint(row.remove.text, pal.stone)
     local kept = PN.IsKept(pin)
     row.remove.text:SetShown(not kept)
@@ -496,6 +511,7 @@ local function OnMouseDown()
     if previewing or not (menu and menu:IsShown()) then return end
     if menu:IsMouseOver() or (picker and picker:IsShown() and picker:IsMouseOver()) then return end
     if owner and owner.IsMouseOver and owner:IsMouseOver() then return end   -- its own click closes it
+    if PW.MenuIsMouseOver() then return end   -- a pick from the action menu opened from a row
     BM.Close()
 end
 

@@ -4,9 +4,11 @@
 -- coordinates, and who made it. A padlock marks a kept pin (protected from deletion and clearing), and the
 -- Kept filter lists them. Right-click a row (or its menu button) for what can be done with it:
 --   Show on map, Set waypoint (the game's own, replacing yours, only when you pick it), Edit pin (your
---   own: name, color and Keep), Save to my pins (a party pin, as a local pin of your own, reviewed first),
---   Remove from my map / Restore to my map, Remove pin (a local one; not a kept one), and Remove for
---   entire party (your own party pins, after you confirm; not a kept one).
+--   own: name, color and Keep), Share with group / Share again and Stop sharing (a saved pin: publishes a
+--   snapshot of it to your party; the saved pin is untouched, kept or not), Save to my pins (a party pin,
+--   as a local pin of your own, reviewed first), Remove from my map / Restore to my map, Remove pin (a
+--   local one; not a kept one), and Remove for entire party (your own party pins, after you confirm; not
+--   a kept one).
 -- What can be done is asked when the menu opens and again when you pick it, so a pin that changed or
 -- went meanwhile is never acted on. Opened with /tui pins, the data bar or the Party pins options; it
 -- never opens by itself. TwichUI's own look (pins/Look.lua), which works without EllesmereUI.
@@ -42,6 +44,11 @@ local function CloseMenu()
     if menu and menu:IsShown() then menu:Hide() end
 end
 PW.CloseMenu = CloseMenu
+
+-- Whether the action menu is open under the mouse (the data bar menu keeps itself open for it).
+function PW.MenuIsMouseOver()
+    return menu ~= nil and menu:IsShown() and menu:IsMouseOver()
+end
 
 local function OnGlobalMouseDown()
     if menu and menu:IsShown() and not menu:IsMouseOver() then CloseMenu() end
@@ -147,6 +154,38 @@ local function ConfirmRemoveForParty(e)
 end
 PW.ConfirmRemoveForParty = ConfirmRemoveForParty   -- the data bar menu asks the same question
 
+-- Shares a saved pin with the party and says what happened, in one short line. Returns whether it was sent.
+-- It says "sent": the game accepting a message is not proof that anyone received it.
+function PW.ShareLocal(localId)
+    local pin, status = R.PinSync.ShareLocal(localId)
+    if not pin then
+        Notice(status)
+        return false
+    end
+    if status == "unchanged" then
+        Notice("Already sent to your party a moment ago.")
+    elseif status == "updated" then
+        Notice("Shared pin updated for your party.")
+    else
+        Notice("Pin sent to your party.")
+    end
+    return true
+end
+
+-- Takes only the shared copy back; the saved pin stays.
+local function ConfirmUnshare(e)
+    local pin = PN.Fresh(e)
+    if not pin then return end
+    R.Interact.Confirm("TWICHUI_PINS_UNSHARE",
+        ("Stop sharing \"%s\" with your party?\n\nYour saved pin stays exactly as it is. Party members with TwichUI have the shared pin taken off their maps when your message reaches them. Copies they saved stay theirs."):format(pin.name),
+        function()
+            local ok, why = R.PinSync.UnshareLocal(e.pin.id)
+            if ok then Notice("Removal sent to your party.") else Notice(why) end
+        end,
+        { valid = function() return Can("unshare", e) end, accept = "Stop sharing" })
+end
+PW.ConfirmUnshare = ConfirmUnshare
+
 -- The actions for one pin, in a fixed order. Owner-only actions are left out for someone else's pin.
 function PW.Actions(e)
     local out = {}
@@ -168,6 +207,18 @@ function PW.Actions(e)
         -- asked as "keep": the editor opens whenever Keep can change, and refuses a new name or color itself
         Add("keep", "Edit pin...", function() R.PinsEditor.OpenEdit(e) end,
             party and "Changes its name or color for everyone in the party who has it, and whether you keep it." or "Changes this pin's name or color, and whether it is kept: protected from deletion and cleanup.")
+    end
+    if not party then
+        local shared = PN.GroupCopy(pin.id) ~= nil
+        Add("share", shared and "Share again" or "Share with group", function() PW.ShareLocal(pin.id) end,
+            "Sends this pin's place, name and color to party members who have TwichUI, as they are now. Your saved pin isn't changed or protected differently. Sharing it again updates their copy instead of adding another; edits you make later aren't sent until you share again.")
+        if shared then
+            Add("unshare", "Stop sharing...", function() ConfirmUnshare(e) end,
+                "Asks first. Takes the shared copy off your party's maps. Your saved pin stays.")
+        end
+    elseif not pin.mine then
+        Add("share", "Share with group", function() end,
+            "Another player's pin can't be shared as yours. Save it to your pins first, then share that copy.")
     end
     if party then
         Add("copy", "Save to my pins...", function()
@@ -251,7 +302,10 @@ end
 
 local function Owner(e)
     local pin = e.pin
-    if e.kind == "local" then return pin.copiedFrom and "copy" or "local" end
+    if e.kind == "local" then
+        if e.shared then return "shared" end
+        return pin.copiedFrom and "copy" or "local"
+    end
     if pin.mine then return "you" end
     local SH = R.Share
     return SH and SH.Short(pin.owner) or pin.owner
@@ -359,7 +413,7 @@ local function DressRow(row, e, y, h)
     end
     Paint(row.name, pal.text)
     Paint(row.sub, pal.stone)
-    Paint(row.owner, party and pal.gold or pal.stone)
+    Paint(row.owner, (party or e.shared) and pal.gold or pal.stone)
     row:SetAlpha(e.dismissed and 0.6 or 1)
     S.PaintRow(row, pal)
     row.sel:SetColorTexture(pal.gold[1], pal.gold[2], pal.gold[3], 0.14)

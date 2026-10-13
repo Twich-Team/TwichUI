@@ -1341,6 +1341,96 @@ do
 end
 
 ---------------------------------------------------------------------------
+-- 7d. Share with group: the action menu, the editor's Share button, the data bar menu's right-click
+---------------------------------------------------------------------------
+do
+  local BM = R.PinsBrokerMenu
+  local function labels2(list) local t = {} for _, a in ipairs(list) do t[a.label] = a end return t end
+  local vendor2 = assert(PN.AddLocal({ map = 1429, x = 4400, y = 5100, name = "Shared vendor", color = "river", kept = true }))
+  local ve = { kind = "local", pin = vendor2, token = "local:" .. vendor2.id }
+  -- in the group: offered, enabled, and it doesn't touch Keep
+  local acts = labels2(PW.Actions(ve))
+  assert(acts["Share with group"] and acts["Share with group"].enabled and not acts["Stop sharing..."], "offered for a kept pin")
+  local before = sent()
+  acts["Share with group"].run()
+  assert(sent() == before + 1 and lastNotice() == "Pin sent to your party.", "one message, and 'sent' is all it claims: " .. lastNotice())
+  assert(PN.IsKept(vendor2) and PN.GroupCopy(vendor2.id), "still kept; the group copy exists")
+  acts = labels2(PW.Actions(ve))
+  assert(acts["Share again"] and acts["Stop sharing..."] and not acts["Share with group"], "now it is Share again, with Stop sharing")
+  -- another player's pin: shown, off, and the reason names the way forward
+  assert(PN.ApplyPut("Pal Stonebrook", { id = "pal:77", r = 1, m = 1429, x = 3000, y = 3000, n = "Pal's pin", c = "gold" }))
+  local pal2 = PN.Shared(PN.Key("Pal Stonebrook", "pal:77"))
+  local palActs2 = labels2(PW.Actions({ kind = "party", pin = pal2, token = "party:" .. pal2.key }))
+  assert(palActs2["Share with group"] and palActs2["Share with group"].enabled == false
+    and palActs2["Share with group"].why:find("Save it to your pins first"), "someone else's pin can't be shared as yours")
+  palActs2["Share with group"].run()
+  assert(lastNotice():find("Save it to your pins first"))
+  -- stop sharing asks first, then removes only the group copy
+  acts["Stop sharing..."].run()
+  assert(popups[#popups].key == "TWICHUI_PINS_UNSHARE" and popups[#popups].text:find("saved pin stays"), "asks first")
+  assert(PN.GroupCopy(vendor2.id) and sent() == before + 1, "nothing is sent before accepting")
+  c.StaticPopupDialogs.TWICHUI_PINS_UNSHARE.OnAccept()
+  assert(not PN.GroupCopy(vendor2.id) and PN.FindLocal(vendor2.id) and PN.IsKept(vendor2) and sent() == before + 2, "only the copy went")
+
+  -- the editor: a Share button for a saved pin, disabled with the reason when there is no party
+  local function isShown(f) return f.shown ~= false end
+  assert(PE.OpenEdit(ve))
+  assert(isShown(ed.share) and ed.share.enabled ~= false, "Share is offered when editing a local pin")
+  ed.name:SetText("Shared vendor (Org)")
+  local n = sent()
+  ed.share.scripts.OnClick(ed.share)
+  assert(vendor2.name == "Shared vendor (Org)" and PN.IsKept(vendor2) and PN.GroupCopy(vendor2.id), "saved, then shared")
+  assert(PN.GroupCopy(vendor2.id).name == "Shared vendor (Org)" and sent() == n + 1 and not PE.IsOpen())
+  -- Save alone sends nothing and keeps the pin local
+  assert(PE.OpenEdit(ve))
+  assert(ed.status.text:find("Shared with your party"), "it says it is shared: " .. ed.status.text)
+  ed.name:SetText("Quiet rename")
+  ed.save.scripts.OnClick(ed.save)
+  assert(vendor2.name == "Quiet rename" and sent() == n + 1 and PN.GroupCopy(vendor2.id).name == "Shared vendor (Org)",
+    "Save alone doesn't send; the party keeps the last share")
+  -- Enter in the name box is Save, not Share
+  assert(PE.OpenEdit(ve))
+  ed.name:SetText("Enter rename")
+  ed.name.scripts.OnEnterPressed(ed.name)
+  assert(vendor2.name == "Enter rename" and sent() == n + 1, "Enter saves without sharing")
+  -- someone else's party pin and a new pin have no Share button
+  PE.OpenNew(1429, 100, 100, false)
+  assert(not isShown(ed.share), "a new pin has no Share button")
+  ed.name.scripts.OnEscapePressed(ed.name)
+  -- no party: disabled, with the sentence; the pin is saved but not shared if it is pressed some other way
+  local inGroup, inRaid = c.IsInGroup, c.IsInRaid
+  c.IsInRaid = function() return true end
+  assert(PE.OpenEdit(ve))
+  assert(ed.share.enabled == false, "disabled in a raid")
+  local tip = ed.share.twichuiTip
+  assert(tip and select(2, tip.body(ed.share)) == "Pins can only be shared with a party, not a raid.")
+  ed.name.scripts.OnEscapePressed(ed.name)
+  assert(labels2(PW.Actions(ve))["Share again"].enabled == false)
+  c.IsInRaid = inRaid
+
+  -- the data bar menu: a right-click on a pin's name opens the same action menu; shared pins say so
+  local host2 = Obj()
+  brokers["TwichUI Party Pins"].OnClick(host2, "LeftButton")
+  assert(BM.IsOpen())
+  local function rowOf(name)
+    for _, f in ipairs(FRAMES) do
+      local e = rawget(f, "entry")
+      if rawget(f, "pick") and e and e.pin.name == name and f.shown ~= false then return f end
+    end
+  end
+  local row = assert(rowOf("Enter rename"))
+  assert(row.owner.text == "shared", "the row says shared: " .. tostring(row.owner.text))
+  row.nameBtn.scripts.OnClick(row.nameBtn, "RightButton")
+  assert(c.TwichUIPinActions and c.TwichUIPinActions.shown ~= false, "the pin's action menu opened")
+  assert(not BM.Snapshot().editing, "a right-click doesn't start a rename")
+  PW.CloseMenu()
+  BM.Close()
+  PN.UpdateLocal(vendor2.id, { kept = false })
+  assert(PS.UnshareLocal(vendor2.id) and PN.RemoveLocal(vendor2.id))
+  FlushTimers()
+end
+
+---------------------------------------------------------------------------
 -- 8. Off: TwichUI's handlers and pins leave the map; the game's and others' are untouched
 ---------------------------------------------------------------------------
 local other = function() return false end

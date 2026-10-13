@@ -14,6 +14,11 @@
 -- Keep off in the editor; renaming, recoloring and hiding it stay possible. It is enforced here, in the
 -- functions that delete or move a pin, not by the windows. A kept party pin of yours lasts as long as the
 -- party session does (it is carried over a /reload with the rest of the session, like the pin itself).
+-- Share: a local pin can be published to the party as a snapshot. That makes (or refreshes) one party pin
+-- of yours, linked to the saved pin by `source` (the local id, session-only, never sent). The saved pin
+-- is not changed, moved or protected differently, and a message can never reach it; editing it sends
+-- nothing; deleting it sends nothing and just drops the link. While a saved pin has its group copy, the
+-- copy is not listed or drawn for you as a second pin: the saved pin stands for both.
 -- Everything a pin carries is checked here, the same way for what you type and what arrives: names are
 -- plain text (escape sequences, links, textures and control characters are taken out), coordinates are
 -- whole steps of 1/10000 of the map from 0 to 10000, the map must be one the game knows, and the color
@@ -252,6 +257,7 @@ function PN.RemoveLocal(id)
     if PN.IsKept(pin) then return false, "kept" end
     table.remove(TwichUIDB.pins.list, i)
     if PN.selected == "local:" .. id then PN.selected = nil end
+    PN.DropLinks()   -- a group copy it had stays with the party; nothing is sent
     Changed()
     return true
 end
@@ -297,6 +303,7 @@ function PN.ClearLocal(only)
         if type(PN.selected) == "string" and PN.selected:find("^local:") and not PN.FindLocal(PN.selected:sub(7)) then
             PN.selected = nil
         end
+        PN.DropLinks()
         Changed()
     end
     return removed, kept
@@ -366,11 +373,57 @@ end
 function PN.Shared(key) return session and session.pins[key] end
 
 -- Every party pin in the session (dismissed ones too), in no particular order.
-function PN.SharedPins()
+function PN.AllSharedPins()
     local out = {}
     if not session then return out end
     for _, p in pairs(session.pins) do out[#out + 1] = p end
     return out
+end
+
+-- The group copies of saved pins that can still be read: { [localId] = party pin }. Those are yours alone
+-- and stand behind the saved pin, so the lists, the maps and the counts leave them out.
+local function GroupCopies()
+    local out = {}
+    if not session then return out end
+    local ids
+    for _, p in pairs(session.pins) do
+        if p.mine and p.source then
+            if not ids then
+                ids = {}
+                local db = Store()
+                if db then
+                    for _, l in ipairs(db.list) do
+                        if ValidLocal(l) then ids[l.id] = true end
+                    end
+                end
+            end
+            if ids[p.source] then out[p.source] = p end
+        end
+    end
+    return out
+end
+
+-- The same pins as a set keyed by the pin itself, for skipping them in a loop over the session.
+local function CopySet()
+    local set = {}
+    for _, p in pairs(GroupCopies()) do set[p] = true end
+    return set
+end
+
+-- The party pins as they are listed: everything but the group copies of your saved pins.
+function PN.SharedPins()
+    local out = {}
+    if not session then return out end
+    local hidden = CopySet()
+    for _, p in pairs(session.pins) do
+        if not hidden[p] then out[#out + 1] = p end
+    end
+    return out
+end
+
+-- The group copy of a saved pin, or nil when it isn't shared in this party.
+function PN.GroupCopy(localId)
+    return GroupCopies()[localId]
 end
 
 function PN.SharedCount() return session and session.count or 0 end
@@ -388,6 +441,7 @@ function PN.DismissedCount()
     for key in pairs(session.dismissed) do if session.pins[key] then n = n + 1 end end
     return n
 end
+
 
 local function Put(pin)
     local old = session.pins[pin.key]
@@ -459,6 +513,7 @@ function PN.CreateOwn(fields)
         name = PN.CleanName(fields.name) or PN.DefaultName(),
         color = PN.ValidColor(fields.color) and fields.color or PN.DEFAULT_COLOR,
         at = time(), kept = fields.kept == true or nil,   -- yours alone: not in the wire form (pins/Sync.lua)
+        source = fields.source,   -- only PN.PublishLocal sets it: the saved pin this is the group copy of
     }
     Put(pin)
     Changed()
@@ -515,6 +570,52 @@ function PN.OwnPins()
     end
     table.sort(out, function(a, b) return a.id < b.id end)
     return out
+end
+
+---------------------------------------------------------------------------
+-- Sharing a saved pin. The saved pin is only read: its place, name and color are copied into one party pin
+-- of yours, which is the one thing a later share of the same saved pin refreshes. Nothing here changes the
+-- saved pin, and pins/Sync.lua does the sending.
+---------------------------------------------------------------------------
+-- Whether the group copy already shows what the saved pin has now.
+function PN.GroupCopyCurrent(localId)
+    local copy, src = PN.GroupCopy(localId), PN.FindLocal(localId)
+    return copy ~= nil and src ~= nil and copy.map == src.map and copy.x == src.x and copy.y == src.y
+        and copy.name == PN.CleanName(src.name) and copy.color == (PN.ValidColor(src.color) and src.color or PN.DEFAULT_COLOR)
+end
+
+-- Makes the group copy of a saved pin, or brings the one there is up to date (a new revision, the same id).
+-- Returns the party pin and whether it is new, or nil and a reason code.
+function PN.PublishLocal(localId)
+    if not session then return nil, "no-party" end
+    local src = PN.FindLocal(localId)
+    if not (src and ValidLocal(src)) then return nil, "gone" end
+    local fields = {
+        map = src.map, x = src.x, y = src.y, name = src.name,
+        color = PN.ValidColor(src.color) and src.color or PN.DEFAULT_COLOR,
+    }
+    local copy = PN.GroupCopy(localId)
+    if not copy then
+        fields.source = localId
+        local pin, why = PN.CreateOwn(fields)
+        if not pin then return nil, why end
+        return pin, true
+    end
+    if not PN.ValidMap(fields.map) then return nil, "unknown-map" end
+    copy.map, copy.x, copy.y = fields.map, fields.x, fields.y
+    copy.name, copy.color = PN.CleanName(fields.name), fields.color
+    copy.rev = math.min(copy.rev + 1, MAX_REV)
+    Changed()
+    return copy, false
+end
+
+-- A saved pin that is gone leaves its group copy as an ordinary party pin of yours: still shared, removable
+-- for the party, no longer tied to anything. A saved pin that can't be read now keeps its link.
+function PN.DropLinks()
+    if not session then return end
+    for _, p in pairs(session.pins) do
+        if p.source and not PN.FindLocal(p.source) then p.source = nil end
+    end
 end
 
 ---------------------------------------------------------------------------
@@ -690,8 +791,9 @@ end
 function PN.DismissAll()
     if not session then return 0 end
     local n = 0
+    local copies = CopySet()
     for key, p in pairs(session.pins) do
-        if not session.dismissed[key] and not PN.IsKept(p) then
+        if not session.dismissed[key] and not PN.IsKept(p) and not copies[p] then
             Remember(session.dismissed, session.dismissOrder, key, true, PN.MAX_DISMISSED)
             n = n + 1
         end
@@ -731,8 +833,9 @@ function PN.ClearScope()
     local localIds, localDelete, kept = PN.LocalClearScope()
     local partyKeys, partyHide = {}, 0
     if session then
+        local copies = CopySet()
         for key, p in pairs(session.pins) do
-            if not session.dismissed[key] then
+            if not session.dismissed[key] and not copies[p] then
                 if PN.IsKept(p) then
                     kept = kept + 1
                 else
@@ -751,10 +854,13 @@ end
 function PN.ClearUnprotected(scope)
     local removed, hidden, kept = 0, 0, 0
     PN.Batch(function()
+        -- the group copies of saved pins are told apart before any saved pin goes: one whose source this
+        -- clear deletes stays a party pin of yours, shared, and is not hidden by the same clear
+        local copies = CopySet()
         removed, kept = PN.ClearLocal(scope and scope.localIds or nil)
         if not session then return end
         for key, p in pairs(session.pins) do
-            if not session.dismissed[key] then
+            if not session.dismissed[key] and not copies[p] then
                 if PN.IsKept(p) then
                     kept = kept + 1
                 elseif scope == nil or scope.partyKeys[key] then
@@ -790,6 +896,11 @@ local REASONS = {
     ["bad-color"] = "That color isn't available.",
     ["no-waypoint"] = "The game doesn't allow a waypoint on that map.",
     ["not-ready"] = "Party pins aren't ready yet.",
+    ["share-no-party"] = "Join a party to share this pin.",
+    ["share-raid"] = "Pins can only be shared with a party, not a raid.",
+    ["share-own"] = "It is already shared with your party. Edit it to change what they see.",
+    ["share-theirs"] = "It is another player's pin. Save it to your pins first, then share your own copy.",
+    ["not-shared"] = "This pin isn't shared with your party.",
 }
 function PN.Reason(code) return REASONS[code] or "That can't be done right now." end
 
@@ -810,6 +921,29 @@ function PN.Can(action, entry)
     local pin = entry and Fresh(entry)
     if not pin then return false, REASONS.gone end
     if action == "show" then return true end
+    if action == "share" or action == "unshare" then
+        -- Sharing publishes a snapshot of a saved pin to the party; it needs a party the game will carry a
+        -- message to, a place the game knows, and room under the limits. It never depends on Keep.
+        if entry.kind ~= "local" then
+            if action == "unshare" then return false, REASONS["not-shared"] end
+            return false, pin.mine and REASONS["share-own"] or REASONS["share-theirs"]
+        end
+        local blocked = PN.SendBlocked()
+        if action == "unshare" then
+            if not PN.GroupCopy(pin.id) then return false, REASONS["not-shared"] end
+            if blocked then return false, PN.Reason(blocked) end
+            return true
+        end
+        if not PN.ValidMap(pin.map) then return false, REASONS["unknown-map"] end
+        if blocked == "no-party" then return false, REASONS["share-no-party"] end
+        if blocked == "paused" then return false, REASONS["share-raid"] end
+        if blocked then return false, PN.Reason(blocked) end
+        if not PN.GroupCopy(pin.id) then
+            if PN.OwnCount() >= PN.MAX_PER_OWNER then return false, REASONS["owner-limit"] end
+            if PN.SharedCount() >= PN.MAX_SHARED then return false, REASONS["session-limit"] end
+        end
+        return true
+    end
     if action == "waypoint" then
         local ok, can = pcall(function() return C_Map.CanSetUserWaypointOnMap(pin.map) end)
         if ok and can then return true end
@@ -854,7 +988,8 @@ function PN.ExportSession()
     if not session then return nil end
     local pins = {}
     for _, p in pairs(session.pins) do
-        pins[#pins + 1] = { owner = p.owner, id = p.id, r = p.rev, m = p.map, x = p.x, y = p.y, n = p.name, c = p.color, mine = p.mine or nil, k = p.mine and p.kept or nil }
+        pins[#pins + 1] = { owner = p.owner, id = p.id, r = p.rev, m = p.map, x = p.x, y = p.y, n = p.name, c = p.color, mine = p.mine or nil, k = p.mine and p.kept or nil,
+            s = p.mine and p.source or nil }
     end
     local dismissed, deleted = {}, {}
     for _, key in ipairs(session.dismissOrder) do dismissed[#dismissed + 1] = key end
@@ -885,8 +1020,10 @@ function PN.ImportSession(s)
                 local owner = mine and me or t.owner
                 local key = PN.Key(owner, data.id)
                 if not session.deleted[key] and (session.perOwner[owner] or 0) < PN.MAX_PER_OWNER then
+                    local source = mine and type(t.s) == "string" and #t.s <= 20 and t.s:match("^L%d+$") and t.s or nil
                     Put({ key = key, owner = owner, id = data.id, rev = data.rev, map = data.map, x = data.x, y = data.y,
-                        name = data.name, color = data.color, mine = mine, at = time(), kept = mine and t.k == true or nil })
+                        name = data.name, color = data.color, mine = mine, at = time(), kept = mine and t.k == true or nil,
+                        source = source })
                 end
             end
         end
@@ -918,8 +1055,10 @@ end
 -- Every pin, as entries { kind, pin, token, dismissed }, local first then party, each in a fixed order.
 function PN.Entries()
     local out = {}
+    local copies = GroupCopies()
     for _, p in ipairs(PN.LocalPins()) do
-        out[#out + 1] = { kind = "local", pin = p, token = "local:" .. p.id, dismissed = false, kept = PN.IsKept(p) }
+        out[#out + 1] = { kind = "local", pin = p, token = "local:" .. p.id, dismissed = false, kept = PN.IsKept(p),
+            shared = copies[p.id] ~= nil }
     end
     local shared = PN.SharedPins()
     table.sort(shared, function(a, b)
@@ -948,11 +1087,12 @@ function PN.Snapshot()
     local drops = {}
     for code, n in pairs(PN.drops) do drops[#drops + 1] = code .. " " .. n end
     table.sort(drops)
-    local deleted = 0
+    local deleted, sharedLocal = 0, 0
     if session then for _ in pairs(session.deleted) do deleted = deleted + 1 end end
+    for _ in pairs(GroupCopies()) do sharedLocal = sharedLocal + 1 end
     return {
         localPins = PN.LocalCount(), shared = PN.SharedCount(), own = PN.OwnCount(), kept = PN.KeptCount(),
         dismissed = PN.DismissedCount(), deleted = deleted, owners = #PN.Owners(),
-        session = session ~= nil, drops = drops,
+        session = session ~= nil, drops = drops, sharedLocal = sharedLocal,
     }
 end
