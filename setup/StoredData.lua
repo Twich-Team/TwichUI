@@ -127,6 +127,17 @@ end
 
 function SD.LastScan() return db and db.scanned end
 
+-- Forgets what a scan noted about one global: its owner and when it was seen. It is a note about another
+-- addon's variable, never the variable itself. Used by the Saved Data Explorer's advanced cleanup. Returns
+-- whether a note was there.
+function SD.Forget(name)
+    if not (db and type(name) == "string" and type(db.found) == "table" and db.found[name] ~= nil) then return false end
+    db.found[name] = nil
+    SD.sizes[name] = nil
+    Changed(name)
+    return true
+end
+
 ---------------------------------------------------------------------------
 -- Addons and where they stand
 ---------------------------------------------------------------------------

@@ -2021,7 +2021,7 @@ local function BuildStorage()
     sp.note:SetText("Deleted data leaves the saved file the next time you reload or log out.")
     local explore = Btn(sp, "Look inside", 100, function()
         if R.ExplorerWindow then R.ExplorerWindow.Show() end
-    end, "Opens the Saved Data Explorer: a read-only look at everything listed here and the rest of what TwichUI keeps.")
+    end, "Opens the Saved Data Explorer: a read-only look at everything listed here and the rest of what TwichUI keeps. Advanced cleanup there is off until you turn it on.")
     explore:SetPoint("BOTTOMRIGHT", -16, 12)
 end
 

@@ -216,10 +216,10 @@ Nothing is pruned by this pass. Findings:
 | Collection | Growth | Rule today | Player control | Proposed safeguard |
 |---|---|---|---|---|
 | Chronicle entries, per character | up to 500 | automatic entries go first; notes never | none | none needed |
-| Chronicle records | one per character ever played; never removed | none | none | **needs approval:** a "forget this character's Chronicle" action in Saved data. It deletes the player's writing, so it must be explicit and per character |
+| Chronicle records | one per character ever played; never removed | none | none | **built, opt-in (needs your review):** another character's record can be removed from the Saved Data Explorer's advanced cleanup (`Chronicle.Forget`): explicit, one character at a time, never the current character, with its notes named in the review and a bounded in-memory Undo. Nothing is removed automatically |
 | `rec.unreadable` (new) | only entries a newer version wrote | none | none | none until it is seen to matter |
 | Restore points | unbounded when you create them; imports stop at 20 points or 32 MB in total | imports capped | delete in Backups / Saved data | a size note in Backups once the total passes a threshold; no automatic deletion |
-| Undo snapshots | one per character, replaced by the next apply, kept when the character is gone | replace | delete in Saved data | list which are for characters this account no longer has |
+| Undo snapshots | one per character, replaced by the next apply, kept when the character is gone | replace | delete in Saved data, or advanced cleanup | other characters' are listed as information (TwichUI can't tell whether the character still exists) |
 | Received setups | one per sender | replace | delete in Saved data | none |
 | Your shareable setup | one | replace | delete in Saved data | none |
 | `setup.pending` | one slot, **no expiry**: a load-on-demand addon that never loads keeps it queued | cleared when done | none | **needs approval:** an expiry (it would change when a queued apply happens) |

@@ -50,9 +50,11 @@ setup\Window.lua
 setup\StoredData.lua
 setup\StoredDataWindow.lua
 
-# Saved Data Explorer: a read-only look at TwichUI's own saved data, its backups and the exact share Send makes
-# (the window uses the Chronicle palette, looked up when it opens)
+# Saved Data Explorer: a read-only look at TwichUI's own saved data, its backups and the exact share Send makes, with an
+# opt-in advanced cleanup (Cleanup.lua decides what may be removed and how). The window uses the Chronicle palette,
+# looked up when it opens.
 setup\Explorer.lua
+setup\Cleanup.lua
 setup\ExplorerWindow.lua
 
 # Upgrade hints in item tooltips and bags

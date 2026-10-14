@@ -356,4 +356,18 @@ function C.Delete(id)
     return true
 end
 
+-- Removes another character's whole record (its entries, notes and tracking state). Refused for this
+-- character, whose record is in use and has its own entry and note controls, and while the Chronicle is a
+-- newer version's, set aside for the session. Used by the Saved Data Explorer's advanced cleanup.
+-- Returns true, or false and a reason: "current", "gone", "held" or "unavailable".
+function C.Forget(key)
+    local P = R.Persist
+    if P.IsHeld("TwichUIChronicleDB") then return false, "held" end
+    if type(TwichUIChronicleDB) ~= "table" or type(TwichUIChronicleDB.chars) ~= "table" then return false, "unavailable" end
+    if key == C.CharKey() then return false, "current" end
+    if type(key) ~= "string" or TwichUIChronicleDB.chars[key] == nil then return false, "gone" end
+    TwichUIChronicleDB.chars[key] = nil
+    return true
+end
+
 R:OnInit(C.Init)

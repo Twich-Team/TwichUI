@@ -61,7 +61,7 @@ a.ScrollUtil = {InitScrollBoxListWithScrollBar = function(box, _, view) box.view
 a.CreateDataProvider = function(rows) return {rows = rows} end
 a.UIParent, a.UISpecialFrames, a.tinsert = Obj(), {}, table.insert
 a.GameTooltip = Obj(); a.GameTooltip_Hide = function() end
-for _, f in ipairs({"setup/StoredData.lua", "setup/Explorer.lua", "chronicle/Style.lua", "Look.lua", "setup/ExplorerWindow.lua"}) do
+for _, f in ipairs({"setup/StoredData.lua", "setup/Explorer.lua", "setup/Cleanup.lua", "chronicle/Style.lua", "Look.lua", "setup/ExplorerWindow.lua"}) do
   local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, a); chunk("!!!TwichUI", {})
 end
 

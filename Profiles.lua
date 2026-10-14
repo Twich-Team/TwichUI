@@ -410,6 +410,21 @@ function PF.Delete(name)
     return true, "delete"
 end
 
+-- Forgets which profile another character chose, so that a profile only it used can be deleted. The
+-- character then starts with the profile new characters use, as one with no choice does. Refused for this
+-- character (its choice is the profile in use), and for a name that isn't a recorded choice. Changes no
+-- option, so it is allowed in combat. Used by the Saved Data Explorer's advanced cleanup.
+function PF.Forget(char)
+    local ok, code = Guard(false)
+    if not ok then return false, code end
+    local _, _, _, keys = Store()
+    if type(char) ~= "string" or keys[char] == nil then return false, "not-found" end
+    if char == me then return false, "this-character" end
+    keys[char] = nil
+    Changed("forget")
+    return true, "forget"
+end
+
 ---------------------------------------------------------------------------
 -- Words for the codes above, for chat and the options page.
 ---------------------------------------------------------------------------
@@ -430,6 +445,7 @@ local EXPLAIN = {
     current = "The profile you are using can't be deleted. Switch to another one first.",
     ["new-characters"] = "New characters start with this profile, so it can't be deleted.",
     ["in-use"] = "Another character uses this profile, so it can't be deleted.",
+    ["this-character"] = "This character's choice is the profile in use. Switch profile instead.",
 }
 
 function PF.Explain(code, users)

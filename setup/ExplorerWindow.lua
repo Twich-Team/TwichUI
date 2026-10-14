@@ -1,12 +1,14 @@
 -- TwichUI: Saved Data Explorer window (/tui saved)
 -- Sources on the left (settings, backups, sharing, feature data), the chosen one as a tree in the
 -- middle, opened a level and a page at a time, and the chosen entry's details and copy box on the
--- right. Read-only: nothing here changes, applies, restores or sends anything. Drawn with TwichUI's own
--- look (Look.lua, the settings window's), so it looks finished without any other addon.
--- Built on first open; while closed it holds nothing and does nothing.
+-- right. Read-only unless the person turns advanced cleanup on (setup/Cleanup.lua decides what may be
+-- removed and how; this file only asks, shows and confirms). Opening the window, searching, copying and
+-- looking for cleanup candidates never change anything. Drawn with TwichUI's own look (Look.lua, the
+-- settings window's), so it looks finished without any other addon.
+-- Built on first open; while closed it holds nothing and does nothing. Closing it ends advanced cleanup.
 
 local R = TwichUI
-local EX, SD, ST, SH = R.Explorer, R.StoredData, R.Setups, R.Share
+local EX, SD, ST, SH, CL = R.Explorer, R.StoredData, R.Setups, R.Share, R.Cleanup
 local XW = {}
 R.ExplorerWindow = XW
 
@@ -27,7 +29,11 @@ local sourceId = "settings"      -- the chosen source
 local tree                       -- its tree (holds the source's tables while the window is open)
 local selected                   -- the chosen entry (a tree node)
 local reveal = false             -- personal-looking values shown (this window, until it closes)
-local mode = "tree"              -- "tree" or "results"
+local mode = "tree"              -- "tree", "results" (a search's) or "candidates" (cleanup suggestions)
+local candidate                  -- the chosen suggestion
+local dlg                        -- the confirmation dialog's frame (built on first use)
+local dialog                     -- what it is showing now
+local RenderCleanup, SelectCandidate, TogglePick   -- defined with the cleanup controls below
 local search                     -- the last search's results
 local searchToken = 0
 local readAt                     -- when the tree was read from memory
@@ -204,6 +210,136 @@ local function ResultValue(r)
 end
 
 ---------------------------------------------------------------------------
+-- Advanced cleanup: questions about the chosen entry and the suggestions (nothing here changes data)
+---------------------------------------------------------------------------
+-- The saved variable and keys of the chosen entry, and the policy's answer for it: plan, var, keys; or nil
+-- and why.
+local function PlanAt(node)
+    local s = Source()
+    if not s then return nil, "That source isn't there any more." end
+    local var, prefix = CL.SourceAddress(s)
+    if not var then return nil, prefix end
+    local keys = {}
+    for i, k in ipairs(prefix) do keys[i] = k end
+    local value = s.Root()
+    if node and not node.isRoot then
+        for _, k in ipairs(EX.KeysOf(node)) do keys[#keys + 1] = k end
+        value = node.value
+    end
+    if value == nil then return nil, "It isn't there any more." end
+    return CL.Policy(var, keys, value), var, keys
+end
+
+-- What the details say about deleting, only while advanced cleanup is on.
+local function CleanupLines(add, node)
+    if not CL.Enabled() then return end
+    add("")
+    add("CLEANUP")
+    local plan, why = PlanAt(node)
+    if not plan then
+        add("Not available: " .. tostring(why))
+    elseif plan.ok then
+        add("Can be deleted, after a review and your confirmation.")
+        add(plan.effect)
+        add("Done by " .. plan.via .. ".")
+    else
+        add("Protected: " .. plan.reason)
+    end
+end
+
+local function DateText(t) return date("%b %d %Y, %H:%M", t) end
+
+local function Subject(c)
+    if not c.subject then return "" end
+    return reveal and c.subject or EX.Hidden("a character's name")
+end
+
+-- A suggestion as it is explained on the right.
+local function CandidateReport(c)
+    local lines = {}
+    local function Add(s) lines[#lines + 1] = s end
+    Add(CL.TIER_LABEL[c.tier]:upper())
+    Add(c.category)
+    Add("")
+    Add("WHAT")
+    Add(c.title .. (c.subject and (": " .. Subject(c)) or ""))
+    Add("")
+    Add("WHY IT WAS SUGGESTED")
+    Add(c.reason)
+    Add("")
+    Add("EVIDENCE")
+    Add(c.evidence)
+    if c.uncertainty and c.uncertainty ~= "" then
+        Add("")
+        Add("WHAT IS NOT KNOWN")
+        Add(c.uncertainty)
+    end
+    if c.date then
+        Add("")
+        Add("DATE")
+        Add(("%s %s"):format(c.date.label, DateText(c.date.t)))
+        Add("A date in saved data says when something was made, received or seen. It is not when it was last used, and it is not used to call anything unused.")
+    end
+    Add("")
+    Add("WHERE")
+    for _, t in ipairs(c.targets) do
+        Add(EX.MaskedPath(t.var, t.keys, reveal))
+    end
+    Add("")
+    if c.tier == "info" then
+        Add("This is information, not a recommendation to delete anything.")
+    else
+        Add("A suggestion is not proof that something is unused, and nothing is selected for you.")
+    end
+    Add("Inspect shows it in the explorer.")
+    return table.concat(lines, "\n")
+end
+
+-- What was looked at and what can't be told, for the right-hand side and an empty result.
+local function ScanReport()
+    local res = CL.results
+    if not res then return "" end
+    local label = {}
+    for _, r in ipairs(CL.RULES) do label[r.id] = r end
+    local lines = {}
+    local function Add(t) lines[#lines + 1] = t end
+    Add("WHAT WAS CHECKED")
+    for _, c in ipairs(res.checked) do
+        local r = label[c.rule]
+        Add(("- %s: %d looked at"):format(r and r.label or c.rule, c.count))
+        if r and r.limit ~= "" then Add("    " .. r.limit) end
+    end
+    Add("")
+    Add("WHAT CAN'T BE TOLD")
+    for _, t in ipairs(CL.NOT_DETECTED) do Add("- " .. t) end
+    Add("")
+    Add(("Looked at %s. Suggestions are a snapshot; each entry is checked again, and you confirm it, before anything is removed."):format(DateText(res.at)))
+    return table.concat(lines, "\n")
+end
+
+-- The suggestions as list rows: a heading per tier, then its entries.
+local function CandidateRows()
+    local rows = {}
+    local res = CL.results
+    if not res then return rows end
+    for _, tier in ipairs({ "strong", "possible", "info" }) do
+        local first = true
+        local n = 0
+        for _, c in ipairs(res.list) do if c.tier == tier then n = n + 1 end end
+        for _, c in ipairs(res.list) do
+            if c.tier == tier then
+                if first then
+                    rows[#rows + 1] = { cgroup = CL.TIER_LABEL[tier], count = n, tier = tier }
+                    first = false
+                end
+                rows[#rows + 1] = { candidate = c }
+            end
+        end
+    end
+    return rows
+end
+
+---------------------------------------------------------------------------
 -- Details on the right
 ---------------------------------------------------------------------------
 local function ShareReport(lines)
@@ -310,6 +446,7 @@ local function SourceReport()
         lines[#lines + 1] = ""
         lines[#lines + 1] = "Choose an entry in the middle to see it here."
     end
+    CleanupLines(function(text) lines[#lines + 1] = text end, nil)
     lines[#lines + 1] = ""
     lines[#lines + 1] = "Read from memory: the tables the game loaded from TwichUI's saved variables, as they are now. Changes reach the file on disk when you reload or log out; an addon can't read the file itself."
     return table.concat(lines, "\n")
@@ -369,12 +506,18 @@ local function NodeReport(node)
         Add("")
         Add("This is part of the message Send makes. " .. (EX.PreviewStale() and "The preview is stale; refresh it." or ""))
     end
+    CleanupLines(Add, node)
     return table.concat(lines, "\n")
 end
 
 local function ShowDetails()
     if not f then return end
     local ok, text = pcall(function()
+        if mode == "candidates" then
+            if candidate then return CandidateReport(candidate) end
+            if CL.results then return ScanReport() end
+            return "Looking through TwichUI's saved data..."
+        end
         if selected and not selected.isRoot then return NodeReport(selected) end
         return SourceReport()
     end)
@@ -389,6 +532,12 @@ end
 -- The middle: source heading, notices, tree or search results
 ---------------------------------------------------------------------------
 local function Banner()
+    if mode == "candidates" then
+        if CL.Enabled() then
+            return GREY .. "Suggestions are not proof that anything is unused. Nothing is picked for you, and each entry is checked again before it is removed.|r"
+        end
+        return GREY .. "Suggestions only. Turn on advanced cleanup to pick entries and review them; nothing here changes data.|r"
+    end
     local s = Source()
     if not s then return WARN .. "That source isn't there any more: it was deleted or replaced. Choose another on the left.|r" end
     if s.kind == "preview" then
@@ -409,6 +558,15 @@ local function Banner()
 end
 
 local function Status()
+    if mode == "candidates" then
+        if CL.scanning then return "Looking through saved data... " .. (CL.scanning.step or "") end
+        local res = CL.results
+        if not res then return "" end
+        local n = #res.list
+        local text = ("%d %s from %s."):format(n, n == 1 and "suggestion" or "suggestions", When(res.at))
+        if res.extra > 0 then text = text .. (" %d more not listed."):format(res.extra) end
+        return text .. " They are a snapshot; each is checked again before removal."
+    end
     if mode == "results" and search then
         local n = #search.results
         local text = ("%d %s for \"%s\""):format(n, n == 1 and "match" or "matches", Esc(search.query))
@@ -423,7 +581,27 @@ local function Status()
     return text
 end
 
+local function ScanSummary()
+    local res = CL.results
+    if CL.scanning then return "Looking through TwichUI's own saved data, a little at a time." end
+    if not res then return "" end
+    local counts = { strong = 0, possible = 0, info = 0 }
+    for _, c in ipairs(res.list) do counts[c.tier] = counts[c.tier] + 1 end
+    return ("%s%s:|r %d\n%s%s:|r %d\n%s%s:|r %d"):format(
+        GREY, CL.TIER_LABEL.strong, counts.strong, GREY, CL.TIER_LABEL.possible, counts.possible,
+        GREY, CL.TIER_LABEL.info, counts.info)
+end
+
 local function RenderHead()
+    if mode == "candidates" then
+        f.head:SetText("Cleanup candidates")
+        f.path:SetText("What TwichUI's own saved data itself shows. Nothing was changed.")
+        f.summary:SetText(ScanSummary())
+        f.banner:SetText(Banner())
+        f.status:SetText(Status())
+        f.showResults:SetShown(false)
+        return
+    end
     local s = Source()
     f.head:SetText(s and Esc(SourceLabel(s)) or "")
     f.path:SetText(s and Esc(EX.PathOf(s, reveal) or "") or "")
@@ -448,6 +626,12 @@ local function RenderHead()
 end
 
 local function TreeRows()
+    if mode == "candidates" then
+        if CL.scanning then return {}, "Looking through TwichUI's saved data..." end
+        if not CL.results then return {}, "" end
+        local rows = CandidateRows()
+        return rows, "Nothing in TwichUI's saved data matched a cleanup rule, so there is nothing to suggest. The checks and what they can't tell are listed on the right."
+    end
     if mode == "results" and search then
         local rows = {}
         for _, r in ipairs(search.results) do rows[#rows + 1] = { result = r } end
@@ -521,6 +705,7 @@ local function Choose(id)
         searchToken = searchToken + 1
         f.search:SetText("")
     end
+    if mode == "candidates" then mode, candidate = "tree", nil end
     Load(false)
     XW.Render()
 end
@@ -620,6 +805,8 @@ end
 
 local function TreeClick(row)
     local d = row.data
+    if d.candidate then SelectCandidate(d.candidate) return end
+    if d.cgroup then return end
     if not Live() then XW.Refresh() return end
     if d.result then OpenResult(d.result) return end
     if d.more then
@@ -628,6 +815,7 @@ local function TreeClick(row)
         selected = d.node
         if type(d.node.value) == "table" then tree:Toggle(d.node) end
         ShowDetails()
+        RenderCleanup()
     else
         return
     end
@@ -663,6 +851,41 @@ local function InitTree(row, d)
     row.data = d
     row.label:ClearAllPoints()
     row.label:SetPoint("RIGHT", -6, 0)
+    if not row.pick then
+        -- the box a suggestion is picked with; only shown while advanced cleanup is on
+        row.pick = CreateFrame("Button", nil, row)
+        row.pick:SetSize(30, TREE_H)
+        row.pick:SetPoint("LEFT", 2, 0)
+        row.pick.text = Text(row.pick, "GameFontHighlightSmall")
+        row.pick.text:SetPoint("CENTER", 0, 0)
+        row.pick:SetScript("OnClick", function(b)
+            local data = b:GetParent().data
+            if data and data.candidate then TogglePick(data.candidate) end
+        end)
+    end
+    row.pick:Hide()
+    if d.cgroup then
+        row.sel:Hide()
+        row.label:SetPoint("LEFT", 6, 0)
+        row.label:SetText(("%s%s (%d)|r"):format(GOLD, Esc(d.cgroup):upper(), d.count))
+        return
+    end
+    if d.candidate then
+        local c = d.candidate
+        local gone = CL.CandidateGone(c)
+        row.sel:SetShown(c == candidate)
+        local on = CL.Enabled() and not gone
+        row.pick:SetShown(on)
+        if on then
+            local picked = CL.picks[c.id]
+            row.pick.text:SetText((picked and NUM_COLOR .. "[x]" or GREY .. "[ ]") .. "|r")
+        end
+        row.label:SetPoint("LEFT", on and 34 or 8, 0)
+        local who = c.subject and (" " .. GREY .. "·|r " .. Esc(Subject(c))) or ""
+        local note = gone and (GREY .. "  (not there any more)|r") or ("  " .. GREY .. Esc(c.reason) .. "|r")
+        row.label:SetText(Esc(c.title) .. who .. note)
+        return
+    end
     if d.result then
         row.sel:Hide()
         row.label:SetPoint("LEFT", 6, 0)
@@ -769,6 +992,586 @@ local function ToolButton(parent, label, w, onClick, tip)
     return b
 end
 
+---------------------------------------------------------------------------
+-- Advanced cleanup: the mode, the confirmation dialog, reviewing, undoing
+-- Nothing below deletes by itself: turning the mode on, finding candidates and opening a review change
+-- nothing. A removal needs the mode, a review that has finished counting, and the confirm button.
+---------------------------------------------------------------------------
+local DLG_W, DLG_H = 600, 480
+
+local function CloseDialog()
+    if dlg and dlg:IsShown() then dlg:Hide() end
+    dialog = nil
+end
+
+-- The confirm button's label, or nil when there is none now. (A function that answers nil must not fall
+-- back to the function itself, which `f() or f` would.)
+local function ConfirmLabel(spec)
+    local c = spec.confirm
+    if type(c) == "function" then return c() end
+    return c
+end
+
+-- Whether the confirm button may act now: it has a label, the work it waits for has finished, and any
+-- acknowledgment asked for is ticked. Asked again when the button is pressed, not only when it is drawn.
+local function CanConfirm(spec)
+    local confirm = ConfirmLabel(spec)
+    if confirm == nil then return false end
+    if spec.ready and not spec.ready() then return false end
+    if spec.ackLabel and spec.ackLabel() ~= nil and spec.ackOn ~= true then return false end
+    return true
+end
+
+local function RefreshDialog()
+    if not (dlg and dialog and dlg:IsShown()) then return end
+    local spec = dialog
+    local text = type(spec.text) == "function" and spec.text() or spec.text
+    dlg.title:SetText(Esc(type(spec.title) == "function" and spec.title() or spec.title))
+    dlg.body:Set(Esc(text or ""))
+    local ack = spec.ackLabel and spec.ackLabel() or nil
+    dlg.ack:SetShown(ack ~= nil)
+    if ack then
+        dlg.ack.text:SetText(ack)
+        dlg.ack:SetOn(spec.ackOn == true)
+    end
+    local confirm = ConfirmLabel(spec)
+    local can = CanConfirm(spec)
+    local button = spec.danger and dlg.confirmDanger or dlg.confirmPlain
+    dlg.confirmDanger:SetShown(confirm ~= nil and spec.danger == true)
+    dlg.confirmPlain:SetShown(confirm ~= nil and not spec.danger)
+    if confirm then
+        button.text:SetText(confirm)
+        button:SetEnabled(can)
+    end
+    dlg.again:SetShown(spec.again ~= nil and spec.again.show())
+    dlg.cancel.text:SetText(spec.cancelLabel and spec.cancelLabel() or "Cancel")
+    dlg.status:SetText(spec.status and spec.status() or "")
+end
+
+local function BuildDialog()
+    dlg = CreateFrame("Frame", "TwichUIExplorerCleanupDialog", f, "BackdropTemplate")
+    dlg:Hide()
+    dlg:SetSize(DLG_W, DLG_H)
+    dlg:SetPoint("CENTER", f, "CENTER", 0, 0)
+    dlg:SetFrameStrata("FULLSCREEN_DIALOG")
+    dlg:SetToplevel(true)
+    dlg:EnableMouse(true)
+    dlg:EnableKeyboard(true)
+    L.Shell(dlg, 34)
+
+    -- A dim layer over the explorer, so nothing behind is clicked by accident.
+    dlg.dim = CreateFrame("Frame", nil, f)
+    dlg.dim:SetAllPoints(f)
+    dlg.dim:SetFrameStrata("DIALOG")
+    dlg.dim:EnableMouse(true)
+    dlg.dim:Hide()
+    local wash = dlg.dim:CreateTexture(nil, "BACKGROUND")
+    wash:SetAllPoints()
+    wash:SetColorTexture(0, 0, 0, 0.6)
+
+    dlg.title = Text(dlg, "GameFontNormalLarge")
+    dlg.title:SetPoint("TOPLEFT", 16, -9)
+    dlg.body = TextBox(dlg, DLG_W - 32, DLG_H - 44 - 128)
+    dlg.body:SetPoint("TOPLEFT", 16, -44)
+
+    dlg.ack = S.Toggle(dlg, "", DLG_W - 32, function()
+        if dialog then
+            dialog.ackOn = not dialog.ackOn
+            RefreshDialog()
+        end
+    end, K)
+    dlg.ack:SetPoint("BOTTOMLEFT", 16, 56)
+    dlg.ack:SetHeight(24)
+
+    dlg.status = Text(dlg, "GameFontDisableSmall")
+    dlg.status:SetPoint("BOTTOMLEFT", 16, 40)
+    dlg.status:SetWidth(DLG_W - 32)
+    dlg.status:SetWordWrap(false)
+    Color(dlg.status, K.stone)
+
+    dlg.cancel = L.Button(dlg, "Cancel", 110, "secondary", function() CloseDialog() end)
+    dlg.cancel:SetPoint("BOTTOMRIGHT", -16, 12)
+    dlg.confirmPlain = L.Button(dlg, "Confirm", 230, "primary", function()
+        if dialog and dialog.onConfirm and CanConfirm(dialog) then dialog.onConfirm() end
+    end)
+    dlg.confirmPlain:SetPoint("RIGHT", dlg.cancel, "LEFT", -10, 0)
+    dlg.confirmDanger = L.Button(dlg, "Delete", 230, "danger", function()
+        if dialog and dialog.onConfirm and CanConfirm(dialog) then dialog.onConfirm() end
+    end)
+    dlg.confirmDanger:SetPoint("RIGHT", dlg.cancel, "LEFT", -10, 0)
+    dlg.again = L.Button(dlg, "Review again", 120, "secondary", function()
+        if dialog and dialog.again then dialog.again.run() end
+    end)
+    dlg.again:SetPoint("BOTTOMLEFT", 16, 12)
+
+    -- Escape closes only this dialog (it is a cancel, never a confirm); no key confirms anything.
+    dlg:SetScript("OnKeyDown", function(self, key)
+        if key == "ESCAPE" then
+            self:SetPropagateKeyboardInput(false)
+            CloseDialog()
+        else
+            self:SetPropagateKeyboardInput(true)
+        end
+    end)
+    dlg:SetScript("OnShow", function() dlg.dim:Show() end)
+    dlg:SetScript("OnHide", function()
+        dlg.dim:Hide()
+        EX.Cancel("cleanup-measure")
+        dialog = nil
+    end)
+end
+
+-- spec: { title, text (string or function), confirm (label or function), danger, ackLabel (function),
+--   ready (function), onConfirm, cancelLabel, status, again = { show, run } }
+local function ShowDialog(spec)
+    if not dlg then BuildDialog() end
+    spec.ackOn = false
+    dialog = spec
+    dlg:Show()
+    RefreshDialog()
+end
+
+---------------------------------------------------------------------------
+-- Turning the mode on and off
+---------------------------------------------------------------------------
+local ENABLE_TEXT = table.concat({
+    "Advanced cleanup can remove saved data and affect settings or features. Only delete entries you understand. Suggested candidates are not proof that data is unused.",
+    "",
+    "WHAT IT ADDS",
+    "- A Delete action for entries TwichUI knows how to remove safely. Each one is reviewed first: the exact path, what it holds, what follows and whether it can be undone. Then you confirm it.",
+    "- Entries that are required or in use right now stay protected, and say why.",
+    "- Removals use TwichUI's own actions where they exist (the same as Delete in Backups, Profiles and Saved data).",
+    "",
+    "WHAT STAYS THE SAME",
+    "- Nothing is chosen or deleted for you. Finding candidates only suggests.",
+    "- It turns itself off when this window closes, and it is never saved.",
+    "- A removal reaches the saved file when you reload or log out.",
+}, "\n")
+
+local function AskEnable()
+    ShowDialog({
+        title = "Enable advanced cleanup?",
+        text = ENABLE_TEXT,
+        ackLabel = function() return "I understand this can remove data, and that suggestions are not proof." end,
+        confirm = "Enable advanced cleanup",
+        onConfirm = function()
+            CloseDialog()
+            CL.Enable(true)
+        end,
+    })
+end
+
+---------------------------------------------------------------------------
+-- Reviewing, counting and removing
+---------------------------------------------------------------------------
+local function Num(n) return SD.Num(n) end
+
+-- Exact path and key of a target, hiding personal-looking keys unless revealed.
+local function TargetPath(t) return EX.MaskedPath(t.var, t.keys, reveal) end
+
+local function TargetKey(t)
+    local k = t.keys[#t.keys]
+    if k == nil then return "(the whole saved variable)" end
+    local why = not reveal and EX.PersonalKey(k, t.keys[#t.keys - 1])
+    return why and EX.Hidden(why) or EX.PathPart(k)
+end
+
+local function TargetPreview(t)
+    local v = t.value
+    if type(v) ~= "table" then
+        local k = t.keys[#t.keys]
+        local why = not reveal and EX.PersonalValue(k, v, t.parent)
+        return why and EX.Hidden(why) or EX.ValueText(v, 120)
+    end
+    if not EX.IsSecret(v) and canaccesstable and not canaccesstable(v) then return "a table the game hides from addons" end
+    local n, more, shape = EX.Shape(v)
+    local text = "a table: " .. EX.ShapeText(n, more, shape)
+    if n > 0 then
+        local names, keys = {}, SD.Keys(v)
+        for i = 1, math.min(#keys, 6) do
+            local k = keys[i]
+            local why = not reveal and EX.PersonalKey(k, t.keys[#t.keys])
+            names[#names + 1] = why and EX.Hidden(why) or (EX.PathPart(k):gsub("^%.", ""))
+        end
+        text = text .. "\n    holds: " .. table.concat(names, ", ") .. (#keys > 6 and ", ..." or "")
+    end
+    return text
+end
+
+local function CountText(t, r)
+    if t.print then
+        local p = t.print
+        local more = p.cut and "at least " or ""
+        if type(t.value) ~= "table" then return "just this value" end
+        local text = ("this entry and everything under it: %s%s %s in %s%s nested %s"):format(
+            more, Num(p.values), p.values == 1 and "value" or "values", more, Num(p.tables - 1), (p.tables - 1) == 1 and "table" or "tables")
+        for _, a in ipairs(t.alsoTargets or {}) do
+            if a.print then
+                text = text .. ("\n    and %s%s more in the related list it also takes"):format(more, Num(a.print.values))
+            end
+        end
+        return text
+    end
+    return ("counting... %s values so far"):format(Num(r.progress.current and r.progress.current.values or 0))
+end
+
+local function UndoText(t)
+    if t.recoverable then return "Undo is available" end
+    if t.print and (t.print.cut or t.print.hidden > 0) then return "CAN'T BE UNDONE: it is too large to keep a copy of, or part of it is hidden" end
+    if t.print then return "CAN'T BE UNDONE: it is too large to keep a copy of alongside the others in this review" end
+    return "worked out after counting"
+end
+
+local function TargetBlock(add, t, r, number)
+    local plan = t.plan
+    local head = number and ("%d. "):format(number) or ""
+    add(("%s%s"):format(head, plan.what or plan.dataset or "Entry"))
+    add("    Dataset: " .. (plan.dataset or "?"))
+    add("    Path: " .. TargetPath(t))
+    add("    Key: " .. TargetKey(t))
+    add("    Stored: " .. (plan.persisted == false and "runtime only, not saved" or "saved data (kept in the saved file)"))
+    add("    Holds: " .. TargetPreview(t))
+    for _, fact in ipairs(plan.facts or {}) do add("    - " .. fact) end
+    add("    Removes: " .. CountText(t, r))
+    add("    Done by: " .. plan.via)
+    add("    Effect: " .. plan.effect)
+    for _, c in ipairs(plan.consequences or {}) do add("    ! " .. c) end
+    add("    Recovery: " .. UndoText(t))
+end
+
+local function ReviewText(r)
+    local lines = {}
+    local function Add(text) lines[#lines + 1] = text end
+    local n = #r.list
+    if n == 0 then
+        Add("NOTHING CAN BE DELETED FROM THIS SELECTION")
+    else
+        Add(n == 1 and "THIS ENTRY WILL BE DELETED PERMANENTLY" or ("%d ENTRIES WILL BE DELETED PERMANENTLY"):format(n))
+    end
+    Add("Deleting a table deletes everything under it, not just the row you see. Review the exact path below; nothing is removed until you press Delete.")
+    Add("")
+    for i, t in ipairs(r.list) do
+        TargetBlock(Add, t, r, n > 1 and i or nil)
+        Add("")
+    end
+    if #r.covered > 0 then
+        Add(("%d selected %s inside an entry that is already being deleted, so %s not counted separately."):format(
+            #r.covered, #r.covered == 1 and "entry is" or "entries are", #r.covered == 1 and "it is" or "they are"))
+        Add("")
+    end
+    if #r.skipped > 0 then
+        Add("LEFT AS THEY ARE")
+        for _, t in ipairs(r.skipped) do
+            Add(("- %s: %s"):format(TargetPath(t), t.plan.reason or "protected"))
+        end
+        Add("")
+    end
+    if n > 0 then
+        Add("RELOAD")
+        Add(r.list[1].plan.reload)
+        Add("")
+        Add("Each entry is checked again just before it is removed. If anything has changed since this review, nothing is deleted and you review it again.")
+    end
+    return table.concat(lines, "\n")
+end
+
+local function ResultText(r)
+    local rep = r.report
+    local lines = {}
+    local function Add(text) lines[#lines + 1] = text end
+    if rep.status == "done" then
+        Add(("DELETED %d %s"):format(rep.removed, rep.removed == 1 and "ENTRY" or "ENTRIES"))
+    elseif rep.status == "partial" then
+        Add(("PARTLY DONE: %d deleted, %d NOT deleted"):format(rep.removed, rep.failed))
+    elseif rep.status == "failed" then
+        Add("NOTHING WAS DELETED")
+    else
+        Add("NOTHING WAS DELETED")
+        if rep.reason then Add(rep.reason) end
+    end
+    Add("")
+    for _, res in ipairs(rep.results) do
+        local t = res.target
+        Add(("%s %s"):format(res.ok and "Deleted:" or "NOT deleted:", TargetPath(t)))
+        if not res.ok and res.why then Add("    " .. res.why) end
+        if res.ok and not res.undoable then Add("    This can't be undone.") end
+    end
+    if rep.removed > 0 then
+        Add("")
+        Add("The explorer has read the data again. No reload is needed; the change reaches the saved file when you reload or log out.")
+        if rep.undoable > 0 then
+            Add(("Undo last cleanup puts back %d of these, while advanced cleanup is on, until you reload, log out or delete something else. The copy is in memory only."):format(rep.undoable))
+        end
+    end
+    return table.concat(lines, "\n")
+end
+
+local function AfterRemoval()
+    for _, c in ipairs(CL.results and CL.results.list or {}) do
+        if CL.CandidateGone(c) then CL.picks[c.id] = nil end
+    end
+    local s = Source()
+    if mode == "tree" or mode == "results" then
+        if not s or s.Root() == nil then
+            Choose("settings")
+        else
+            XW.Refresh()
+        end
+    else
+        RenderSources()
+        RenderTree(true)
+        RenderHead()
+        ShowDetails()
+    end
+    RenderCleanup()
+end
+
+-- Starts a review of targets (from CL.NewTarget / CL.TargetsFor): shows the dialog at once, counts in the
+-- background, and enables Delete only when counting has finished.
+local StartReview
+StartReview = function(targets, heading)
+    local deletable, skipped = {}, {}
+    for _, t in ipairs(targets) do
+        if t.plan.ok then deletable[#deletable + 1] = t else skipped[#skipped + 1] = t end
+    end
+    local list, covered = CL.Normalize(deletable)
+    local r = { list = list, covered = covered, skipped = skipped, progress = {}, counted = false, source = targets }
+    local function Poll()
+        if dialog == r.spec and EX.Busy("cleanup-measure") then
+            RefreshDialog()
+            C_Timer.After(0.25, Poll)
+        end
+    end
+    r.spec = {
+        title = heading,
+        text = function()
+            if r.report then return ResultText(r) end
+            if r.stale then
+                return "NOTHING WAS DELETED\n\nThis changed after it was reviewed:\n" .. r.stale ..
+                    "\n\nTo be safe, TwichUI does not delete something other than what you reviewed. Press Review again to look at it as it is now."
+            end
+            return ReviewText(r)
+        end,
+        danger = true,
+        confirm = function()
+            if r.report or r.stale then return nil end
+            if #list == 0 then return nil end
+            return ("Delete %d %s permanently"):format(#list, #list == 1 and "entry" or "entries")
+        end,
+        ready = function() return r.counted and #list > 0 and not r.report and not r.stale and CL.Enabled() end,
+        ackLabel = function()
+            if r.report or r.stale or not r.counted then return nil end
+            for _, t in ipairs(list) do
+                if not t.recoverable then return "I understand that at least one of these can't be undone." end
+            end
+            return nil
+        end,
+        cancelLabel = function() return (r.report or r.stale) and "Close" or "Cancel" end,
+        status = function()
+            if r.report or r.stale then return "" end
+            if not r.counted then return ("Counting what would be removed... (%d of %d)"):format(r.progress.index or 0, #list) end
+            return ""
+        end,
+        again = {
+            show = function() return r.stale ~= nil end,
+            run = function()
+                local fresh = {}
+                for _, t in ipairs(r.source) do
+                    -- a suggested backup is found again by its id, never by the position it had
+                    local keys = CL.LocateTarget({ var = t.var, keys = t.keys, byId = t.byId })
+                    local nt = keys and CL.NewTarget(t.var, keys)
+                    if nt then
+                        nt.candidate, nt.byId = t.candidate, t.byId
+                        fresh[#fresh + 1] = nt
+                    end
+                end
+                CloseDialog()
+                StartReview(fresh, heading)
+            end,
+        },
+        onConfirm = function()
+            if not (r.counted and CL.Enabled()) then return end
+            local report = CL.Commit(list)
+            if report.status == "changed" then
+                r.stale = report.reason or "It no longer matches."
+            else
+                r.report = report
+                if report.removed > 0 then AfterRemoval() end
+            end
+            RefreshDialog()
+        end,
+    }
+    ShowDialog(r.spec)
+    if #list == 0 then
+        r.counted = true
+        RefreshDialog()
+        return r
+    end
+    CL.Count(list, r.progress, function(ok)
+        if dialog ~= r.spec then return end
+        if ok then
+            CL.PlanRecovery(list)
+            r.counted = true
+        else
+            r.stale = "Counting what would be removed did not finish."
+        end
+        RefreshDialog()
+    end)
+    C_Timer.After(0.25, Poll)
+    return r
+end
+
+-- Delete…: the chosen entry.
+local function DeleteChosen()
+    if not CL.Enabled() or mode == "candidates" then return end
+    local plan, var, keys = PlanAt(selected)
+    if not plan then return end
+    local t = CL.NewTarget(var, keys)
+    if not t then return end
+    StartReview({ t }, "Delete this entry?")
+end
+
+local function ReviewPicked()
+    if not CL.Enabled() then return end
+    local picked = CL.PickedCandidates()
+    if #picked == 0 then return end
+    local targets = CL.TargetsFor(picked)
+    StartReview(targets, ("Delete %d suggested %s?"):format(#picked, #picked == 1 and "item" or "items"))
+end
+
+local function AskUndo()
+    if not CL.Enabled() then return end
+    local info = CL.RecoveryInfo()
+    if not info then return end
+    local report
+    ShowDialog({
+        title = "Undo the last cleanup?",
+        text = function()
+            if report then
+                local lines = { ("PUT BACK %d OF %d"):format(report.restored, report.restored + #report.failed) }
+                for _, f_ in ipairs(report.failed) do lines[#lines + 1] = "NOT put back: " .. (f_.why or "") end
+                if report.blocked then lines[#lines + 1] = report.blocked end
+                return table.concat(lines, "\n")
+            end
+            return ("This puts back what the last cleanup removed: %d %s, removed at %s.\n\nEach one is put back only where nothing new has taken its place. The copy was kept in memory only; it is never saved and ends when you reload or log out.")
+                :format(info.items, info.items == 1 and "entry" or "entries", When(info.at))
+        end,
+        confirm = function() return (not report) and "Put it back" or nil end,
+        ready = function() return CL.Enabled() end,
+        cancelLabel = function() return report and "Close" or "Cancel" end,
+        onConfirm = function()
+            report = CL.Undo()
+            AfterRemoval()
+            RefreshDialog()
+        end,
+    })
+end
+
+---------------------------------------------------------------------------
+-- Suggestions
+---------------------------------------------------------------------------
+local function PollScan()
+    if mode ~= "candidates" or not (f and f:IsShown()) then return end
+    if EX.Busy("cleanup-scan") then
+        RenderHead()
+        C_Timer.After(0.25, PollScan)
+    end
+end
+
+local function FindCandidates()
+    CloseDialog()
+    EX.Cancel("search")
+    mode, candidate = "candidates", nil
+    CL.picks = {}
+    CL.results = nil
+    CL.Scan({}, function()
+        if not (f and f:IsShown()) then return end
+        RenderTree()
+        RenderHead()
+        ShowDetails()
+        RenderCleanup()
+    end)
+    RenderTree()
+    RenderHead()
+    ShowDetails()
+    RenderCleanup()
+    C_Timer.After(0.25, PollScan)
+end
+
+SelectCandidate = function(c)
+    candidate = c
+    RenderTree(true)
+    ShowDetails()
+    RenderCleanup()
+end
+
+TogglePick = function(c)
+    if not CL.Enabled() then return end
+    CL.Pick(c.id, not CL.picks[c.id])
+    RenderTree(true)
+    RenderCleanup()
+end
+
+-- Shows a suggestion's entry in the explorer.
+local function InspectCandidate()
+    local c = candidate
+    if not c then return end
+    CL.CancelScan()
+    mode = "tree"
+    if not EX.Source(c.inspect.source) then
+        Load(false)
+        XW.Render()
+        f.status:SetText(WARN .. "That entry isn't there any more.|r")
+        return
+    end
+    Choose(c.inspect.source)
+    local node = tree and tree:Reveal(c.inspect.keys)
+    if node then
+        selected = node
+        RenderTree()
+        ScrollTo(node)
+        RenderHead()
+        ShowDetails()
+        RenderCleanup()
+    end
+end
+
+local function BackToTree()
+    CL.CancelScan()
+    mode, candidate = "tree", nil
+    XW.Render()
+end
+
+-- Shows or hides what only advanced cleanup (or the suggestions list) uses.
+RenderCleanup = function()
+    if not f then return end
+    local on = CL.Enabled()
+    local inCand = mode == "candidates"
+    f.advOn:SetShown(not on)
+    f.advOff:SetShown(on)
+    f.chip:SetShown(on)
+    f.advLine:SetShown(on)
+    f.sub:SetShown(not on)
+    f.search:SetShown(not inCand)
+    f.expand:SetShown(not inCand)
+    f.collapse:SetShown(not inCand)
+    f.cBack:SetShown(inCand)
+    f.cClear:SetShown(inCand and on)
+    f.cReview:SetShown(inCand and on)
+    local picked = #CL.PickedCandidates()
+    f.cReview.text:SetText(("Review picked (%d)..."):format(picked))
+    f.cReview:SetEnabled(picked > 0)
+    f.cClear:SetEnabled(picked > 0)
+    f.details:SetHeight((on or inCand) and 262 or 300)
+    local plan = (on and not inCand) and PlanAt(selected) or nil
+    f.delete:SetShown(on and not inCand)
+    f.delete:SetEnabled(plan ~= nil and plan.ok == true)
+    f.inspect:SetShown(inCand)
+    f.inspect:SetEnabled(candidate ~= nil)
+    f.undo:SetShown(on and CL.RecoveryInfo() ~= nil)
+    f.advHint:SetShown(not on and inCand)
+end
+
 local function Build()
     S = R.ChronicleStyle
     L = R.Look
@@ -801,6 +1604,25 @@ local function Build()
     sub:SetPoint("LEFT", title, "RIGHT", 10, -1)
     sub:SetText("what TwichUI keeps between sessions · read-only")
     Color(sub, K.stone)
+    f.sub = sub
+    -- Shown for as long as advanced cleanup is on, instead of "read-only": rust, and a rust line under the band.
+    f.chip = CreateFrame("Frame", nil, f)
+    f.chip:SetSize(330, 20)
+    f.chip:SetPoint("LEFT", title, "RIGHT", 10, 0)
+    local chipBg = f.chip:CreateTexture(nil, "BACKGROUND")
+    chipBg:SetAllPoints()
+    chipBg:SetColorTexture(K.danger.bg[1], K.danger.bg[2], K.danger.bg[3], 1)
+    local chipText = Text(f.chip, "GameFontNormalSmall")
+    chipText:SetPoint("CENTER", 0, 0)
+    chipText:SetText("ADVANCED CLEANUP ENABLED · deleting is on")
+    Color(chipText, K.danger.text)
+    f.chip:Hide()
+    f.advLine = f:CreateTexture(nil, "OVERLAY")
+    f.advLine:SetPoint("TOPLEFT", 1, -34)
+    f.advLine:SetPoint("TOPRIGHT", -1, -34)
+    f.advLine:SetHeight(2)
+    f.advLine:SetColorTexture(K.danger.border[1], K.danger.border[2], K.danger.border[3], 1)
+    f.advLine:Hide()
     local close = L.CloseBox(f)
     f.refresh = ToolButton(f, "Refresh", 76, function() XW.Refresh(true) end,
         "Reads the chosen source again (and rebuilds the share preview). Nothing is saved or reloaded.")
@@ -821,11 +1643,22 @@ local function Build()
     f.reveal:HookScript("OnLeave", GameTooltip_Hide)
 
     -- Left
-    local listH = HEIGHT - 48 - 40
+    local listH = HEIGHT - 48 - 40 - 74
     f.sources = List(f, LEFT_W, listH, SOURCE_H, InitSource)
     f.sources:SetPoint("TOPLEFT", 16, -48)
+    -- Finding candidates only looks; it works in read-only mode, and picking or deleting needs the mode.
+    f.find = ToolButton(f, "Find cleanup candidates", LEFT_W, FindCandidates,
+        "Looks through TwichUI's saved data for entries its own code can't use, and for records worth a look. It only suggests: nothing is selected for you and nothing is changed.")
+    f.find:SetPoint("TOPLEFT", f.sources, "BOTTOMLEFT", 0, -8)
+    f.advOn = ToolButton(f, "Enable advanced cleanup...", LEFT_W, AskEnable,
+        "Opens a warning first. Turning it on deletes nothing; it adds a reviewed, confirmed Delete for entries TwichUI can remove safely.")
+    f.advOn:SetPoint("TOPLEFT", f.find, "BOTTOMLEFT", 0, -6)
+    f.advOff = L.Button(f, "Return to read-only", LEFT_W, "primary", function() CL.Disable() end)
+    f.advOff:SetHeight(22)
+    f.advOff:SetPoint("TOPLEFT", f.find, "BOTTOMLEFT", 0, -6)
+    f.advOff:Hide()
     local foot = Text(f, "GameFontDisableSmall")
-    foot:SetPoint("TOPLEFT", f.sources, "BOTTOMLEFT", 2, -8)
+    foot:SetPoint("TOPLEFT", f.advOn, "BOTTOMLEFT", 2, -8)
     foot:SetWidth(LEFT_W)
     foot:SetText("Read from memory, not the file on disk.")
     Color(foot, K.stone)
@@ -877,6 +1710,7 @@ local function Build()
         if stopped then f.status:SetText(WARN .. ("Opened the first %s tables only. Open the rest one at a time.|r"):format(SD.Num(EX.EXPAND_LIMIT))) end
     end, "Opens everything under the chosen table (or the whole source), the first page of each, up to a limit.")
     expand:SetPoint("LEFT", f.search, "RIGHT", 8, 0)
+    f.expand = expand
     local collapse = ToolButton(f, "Collapse", 70, function()
         if not tree then return end
         tree:CollapseAll()
@@ -887,10 +1721,27 @@ local function Build()
         ShowDetails()
     end, "Closes everything and goes back to the top of the source.")
     collapse:SetPoint("LEFT", expand, "RIGHT", 4, 0)
+    f.collapse = collapse
     f.showResults = ToolButton(f, "Results", 64, function()
         if search then mode = "results"; RenderTree(); RenderHead() end
     end, "Back to the search results.")
     f.showResults:SetPoint("LEFT", collapse, "RIGHT", 4, 0)
+    -- The same row while suggestions are shown.
+    f.cBack = ToolButton(f, "Back to tree", 100, BackToTree, "Leaves the suggestions and shows the saved data as a tree.")
+    f.cBack:SetPoint("TOPLEFT", MID_X, -198)
+    f.cClear = ToolButton(f, "Clear picks", 90, function()
+        CL.picks = {}
+        RenderTree(true)
+        RenderCleanup()
+    end, "Unpicks everything. Nothing is picked unless you pick it.")
+    f.cClear:SetPoint("LEFT", f.cBack, "RIGHT", 6, 0)
+    f.cReview = ToolButton(f, "Review picked (0)...", 160, ReviewPicked,
+        "Shows exactly what would be deleted for the entries you picked, and what follows. Nothing is deleted until you confirm there.")
+    f.cReview:SetPoint("LEFT", f.cClear, "RIGHT", 6, 0)
+    f.advHint = Text(f, "GameFontDisableSmall")
+    f.advHint:SetPoint("LEFT", f.cBack, "RIGHT", 12, 0)
+    f.advHint:Hide()
+    for _, b in ipairs({ f.cBack, f.cClear, f.cReview }) do b:Hide() end
 
     f.tree = List(f, MID_W, HEIGHT - 228 - 40, TREE_H, InitTree)
     f.tree:SetPoint("TOPLEFT", MID_X, -228)
@@ -908,6 +1759,29 @@ local function Build()
     Color(dl, K.bronzeText)
     f.details = TextBox(f, RIGHT_W, 300)
     f.details:SetPoint("TOPLEFT", rx, -66)
+    -- Destructive and recovery actions sit under the details, only while advanced cleanup is on.
+    f.delete = L.Button(f, "Delete...", 130, "danger", DeleteChosen)
+    f.delete:SetHeight(22)
+    f.delete:SetPoint("TOPLEFT", rx, -336)
+    f.delete:HookScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_TOP")
+        local plan, why = PlanAt(selected)
+        if plan and plan.ok then
+            GameTooltip:SetText("Delete this entry", 1, 1, 1)
+            GameTooltip:AddLine("Opens a review: exact path, what it holds, what follows and whether it can be undone. Nothing is deleted until you confirm there.", nil, nil, nil, true)
+        else
+            GameTooltip:SetText("Can't be deleted", 1, 1, 1)
+            GameTooltip:AddLine(Esc((plan and plan.reason) or why or "Choose an entry first."), 0.9, 0.6, 0.5, true)
+        end
+        GameTooltip:Show()
+    end)
+    f.delete:HookScript("OnLeave", GameTooltip_Hide)
+    f.undo = ToolButton(f, "Undo last cleanup", 150, AskUndo,
+        "Puts back what the last cleanup removed, where nothing new has taken its place. Kept in memory only, until you reload or log out.")
+    f.undo:SetPoint("LEFT", f.delete, "RIGHT", 8, 0)
+    f.inspect = ToolButton(f, "Inspect in explorer", 150, InspectCandidate, "Shows the suggested entry in the tree. Changes nothing.")
+    f.inspect:SetPoint("TOPLEFT", rx, -336)
+    for _, b in ipairs({ f.delete, f.undo, f.inspect }) do b:Hide() end
     local cl = Text(f, "GameFontNormalSmall")
     cl:SetPoint("TOPLEFT", rx, -378)
     cl:SetText("COPY")
@@ -938,11 +1812,16 @@ local function Build()
         Load(false)
         XW.Render()
     end)
+    f.advHint:SetText("Turn on advanced cleanup to pick suggestions.")
+    Color(f.advHint, K.stone)
     -- Nothing is kept: the tables looked at, searches, the preview and any copied text go.
     f:SetScript("OnHide", function()
-        EX.Release()
+        if dlg then dlg:Hide() end
+        dialog = nil
+        EX.Release()          -- also ends advanced cleanup (setup/Cleanup.lua) and drops the suggestions
         searchToken = searchToken + 1
         tree, selected, search, mode, readAt, summary = nil, nil, nil, "tree", nil, nil
+        candidate = nil
         reveal = false
         f.reveal:SetOn(false)
         f.search:SetText("")
@@ -976,12 +1855,28 @@ EX.OnChange(function(what)
     end)
 end)
 
+-- Advanced cleanup turned on or off: the controls, the rows' pick boxes and the details follow.
+CL.OnChange(function(what)
+    if not (f and f:IsShown()) then return end
+    if what == "mode" and not CL.Enabled() then
+        if dlg and dialog then dlg:Hide() end
+        if mode == "candidates" and not CL.results then mode = "tree" end
+    end
+    if what == "mode" then
+        RenderTree(true)
+        RenderHead()
+        ShowDetails()
+        RenderCleanup()
+    end
+end)
+
 function XW.Render(keepScroll)
     if not (f and f:IsShown()) then return end
     RenderSources()
     RenderHead()
     RenderTree(keepScroll)
     ShowDetails()
+    RenderCleanup()
 end
 
 -- Reads the chosen source again; force: also rebuilds the share preview.

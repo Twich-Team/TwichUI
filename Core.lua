@@ -338,10 +338,10 @@ COMMANDS = {
     { name = "restore", usage = "restore", desc = "backups window", fn = function()
         if R.Window then R.Window:Show("backups") else Unavailable("Backups") end
     end },
-    { name = "data", usage = "data|saved", desc = "what your addons keep between sessions; saved: TwichUI's own, and what Send sends (read-only)", fn = function()
+    { name = "data", usage = "data|saved", desc = "what your addons keep between sessions; saved: TwichUI's own, and what Send sends (read-only unless you turn on advanced cleanup)", fn = function()
         if R.StoredDataWindow then R.StoredDataWindow:Show() else Unavailable("Addon data") end
     end },
-    { name = "saved", usage = "saved", desc = "TwichUI's own saved data, and what Send sends (read-only; listed with data)", hidden = true, fn = function()
+    { name = "saved", usage = "saved", desc = "TwichUI's own saved data, and what Send sends (read-only unless you turn on advanced cleanup; listed with data)", hidden = true, fn = function()
         if R.ExplorerWindow then R.ExplorerWindow.Show() else Unavailable("Saved Data Explorer") end
     end },
     { name = "gear", usage = "gear", desc = "stat weights for upgrade hints", fn = function()

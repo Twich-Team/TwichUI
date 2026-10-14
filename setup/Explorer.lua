@@ -1,7 +1,8 @@
 -- TwichUI: Saved Data Explorer, core (/tui saved)
 -- A read-only look at what TwichUI itself keeps between sessions: its settings, backups (restore
 -- points and Undo copies), your saved setup and the exact messages Send would make from it, setups
--- friends sent you, and the Journey Chronicle. setup/ExplorerWindow.lua draws it.
+-- friends sent you, and the Journey Chronicle. setup/ExplorerWindow.lua draws it. Removing anything is
+-- a separate, opt-in feature (setup/Cleanup.lua); nothing in this file changes data.
 --
 -- What "saved" means here: the tables the game loaded from TwichUI's saved variables at login, as
 -- they are in memory now. An addon can't read the file on disk; what changed this session reaches
@@ -516,6 +517,7 @@ local function StartJob(kind, body, done)
     jobs[kind] = { co = coroutine.create(body), done = done }
     runner:SetScript("OnUpdate", RunJobs)
 end
+EX.StartJob = StartJob    -- setup/Cleanup.lua runs its counting and scanning in the same sliced runner
 
 -- Calls visit(link, key, value, parentTable) for every entry under root in tree order (keys sorted as
 -- in the tree), each table once, to EX.MAX_DEPTH. link: { up, key } chain to the entry's table.

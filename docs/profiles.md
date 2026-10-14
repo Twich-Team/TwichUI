@@ -118,8 +118,9 @@ dialogs show them as text, never as a format string.
 
 **Delete** refuses the profile in use, the profile for new characters, and any profile a character has chosen, and
 names those characters. Limitation: a character deleted from the account keeps its choice in `profileKeys`, and there
-is no way yet to forget it. A profile it chose can't be deleted until a "forget this character" action exists (future
-work).
+is no way in the settings window to forget it. The Saved Data Explorer's opt-in advanced cleanup can (`Profiles.Forget`,
+refused for this character): that character then uses the profile new characters start with, and a profile only it
+used can be deleted afterwards.
 
 **Copies.** `Extract` and `Prepare` copy with `Persist.DeepCopy`, which copies plain data only. A profile never shares
 a table with another profile, the live tables or the defaults; a test walks every profile to check this. TwichUI has
