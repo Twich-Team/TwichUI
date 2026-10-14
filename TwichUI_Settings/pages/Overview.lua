@@ -31,14 +31,14 @@ K.Page({
             "Opens the Advanced sections by themselves. They hold options most players never need to change: textures, fonts, timings and similar. Off, each one opens when you choose it. These pages have one: "
             .. table.concat(withAdvanced, ", ") .. ". Advanced options keep their values and keep working either way.")
         local motionSetting = K.TableSetting("reduceSettingsMotion", "reduceSettingsMotion", function() return TwichUIDB.ui end,
-            "Reduce settings motion", false, "switch:ui.reduceSettingsMotion")
+            "Reduce window motion", false, "switch:ui.reduceSettingsMotion")
         -- changing it puts any easing in progress where it was going, so nothing is left half-way
         motionSetting:SetValueChangedCallback(function()
             local Wg = R.SettingsWidgets
             if Wg and Wg.Motion then Wg.Motion.Settle() end
         end)
         K.Checkbox(motionSetting,
-            "Turns off the settings window's own fades: it opens, changes page and answers the pointer at once, with no easing. It applies to this window only; the Reduced motion option under Notifications is separate and is not changed by this. Saved for the account, not per profile.")
+            "Turns off the fades in TwichUI's own windows, the settings and the sharing window: they open, change page and answer the pointer at once, with no easing. It applies to these windows only; the Reduced motion option under Notifications is separate and is not changed by this. Saved for the account, not per profile.")
         Toggle("media", "Custom fonts and sounds",
             "Adds Alegreya, Alegreya Sans, Barlow, Cinzel and Spectral fonts, plus the bell alert sounds, to the font and sound lists of EllesmereUI and other addons. Nothing changes until you pick them there.")
         Toggle("quietLogin", "Hide addon welcome messages",

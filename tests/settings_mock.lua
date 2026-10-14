@@ -48,7 +48,7 @@ function SettingsClient(opts)
     "gear/Hints.lua", "gear/Tooltip.lua", "gear/Bags.lua", "gear/Window.lua", "modules/Notify.lua", "modules/Arrival.lua", "modules/Media.lua",
     "modules/FriendLogin.lua", "modules/Borders.lua", "modules/FoodDrink.lua", "modules/FoodDrinkUnlock.lua",
     "modules/TrainingData.lua", "modules/MenuStyle.lua", "modules/SpellMenu.lua", "modules/MageTravel.lua", "modules/MageConjure.lua",
-    "chronicle/Style.lua", "chronicle/Appearance.lua", "modules/Refreshments.lua", "modules/RefreshmentsPanel.lua", "modules/RefreshmentsShares.lua",
+    "chronicle/Style.lua", "Look.lua", "chronicle/Appearance.lua", "modules/Refreshments.lua", "modules/RefreshmentsPanel.lua", "modules/RefreshmentsShares.lua",
     "modules/RefreshmentsTrade.lua", "modules/RefreshmentsBroker.lua", "modules/MageSell.lua", "modules/MageSellWindow.lua",
     "modules/RestedXPSkin.lua", "modules/RestedXPTimers.lua", "modules/SpeakStoneSkin.lua", "qol/QoL.lua", "qol/Summons.lua", "qol/Resurrect.lua", "qol/ReleasePvP.lua",
     "qol/Duels.lua", "qol/QuickKeybind.lua", "qol/GuideWaypoint.lua",

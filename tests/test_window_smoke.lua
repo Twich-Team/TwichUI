@@ -14,7 +14,7 @@ local function Obj()
     if k == "SetShown" then return function(s, v) s.shown = v end end
     if k == "HasFocus" then return function() return false end end
     if k == "CreateFontString" or k == "CreateTexture" then return function() return Obj() end end
-    if k == "ScrollBar" then local sb = Obj(); rawset(t, k, sb); return sb end
+    if k == "ScrollBar" or k == "ThumbTexture" or k == "ScrollUpButton" or k == "ScrollDownButton" then local sb = Obj(); rawset(t, k, sb); return sb end
     return function() end
   end})
 end
@@ -28,7 +28,7 @@ c.UnitIsPlayer = function() return false end
 c.InCombatLockdown = function() return false end
 c.ACCEPT, c.CANCEL = "Accept", "Cancel"
 c.Settings = nil
-for _, f in ipairs({"setup/Window.lua"}) do
+for _, f in ipairs({"chronicle/Style.lua", "Look.lua", "setup/Window.lua"}) do
   local chunk = assert(loadfile(ROOT..f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
 end
 c.LOADED["!!!TwichUI"] = true; c.FireEvent("ADDON_LOADED", "!!!TwichUI")
@@ -72,7 +72,12 @@ assert(#c.TwichUI.Restore.List() == 1 and not c.reloaded, "imported, not applied
 -- arrives (or the setup is deleted) while it is open, accepting applies nothing; the same setup applies once.
 do
   local function Button(label)
-    for _, o in ipairs(made) do if rawget(o, "text") == label and o.scripts and o.scripts.OnClick then return o end end
+    -- a button's label is its own text, or (Look's buttons) the text of its label font string
+    for _, o in ipairs(made) do
+      local t = rawget(o, "text")
+      if type(t) == "table" then t = rawget(t, "text") end
+      if t == label and o.scripts and o.scripts.OnClick then return o end
+    end
     error("no button " .. label)
   end
   W:Show("received")

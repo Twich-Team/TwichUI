@@ -49,20 +49,21 @@ claimed; see "Measuring".
 | `TwichUI_Settings/Kit.lua` | `K.Page`, the controls pages describe themselves with (`K.Toggle`, `K.Proxy`, `K.ProxyToggle`, `K.Choice`, `K.Dropdown`, `K.Slider`, `K.Swatch`, `K.Checkbox`, `K.Button`, `K.ResetButton`, `K.Link`, `K.Header`, `K.Appearance`), `K.Advanced`, `K.Under`, `K.Badge`, `K.InSection`, `K.Describe`, `K.NavOrder`, `K.SidebarOrder`, `K.Tabs`, `K.ResetPage` |
 | `TwichUI_Settings/pages/<Page>.lua` | One page each (some hold a page under it too: Gear + Stat weights, Mage + Refreshment shares, Chronicle + appearance, Pins + appearance) |
 | `TwichUI_Settings/Search.lua` | The index and ranking (descriptions only) |
-| `TwichUI_Settings/Widgets.lua` | The controls the window draws with, on `chronicle/Style.lua`'s helpers and a copy of its palette; the depth they share: `Wg.Frame` / `Wg.Header` (rim, corner brackets, tonal layers), `Wg.Raise` (buttons), `Wg.Recess` (inputs, checkbox, nav well), `Wg.Panel` (section cards), `Wg.Tag` (Reload and similar), `Wg.Fade` (a gradient that falls back to a flat fill) |
+| `Look.lua` (core) | The look TwichUI's own windows share: the palette, `Look.Text`, `Look.Surface`, `Look.Button`, `Look.Checkbox`, `Look.EditBox`, and the depth: `Look.Frame` / `Look.Header` (rim, corner brackets, tonal layers), `Look.Raise` (buttons), `Look.Recess` (inputs, checkbox, nav well), `Look.Panel` (section cards), `Look.Tag`, `Look.Fade` (a gradient that falls back to a flat fill), `Look.Motion`. The sharing window (`setup/Window.lua`) draws with it too |
+| `TwichUI_Settings/Widgets.lua` | The shared look as `Wg.*`, plus the controls only this window needs: slider, dropdown and its list, color swatch, the scrolling content area |
 | `TwichUI_Settings/Window.lua` | The window, the left-hand list, a feature's tabs, pages, search results, footer, Esc |
 
-The window's palette lives at the top of `Widgets.lua` (a copy of the Chronicle's, which is never changed), by role:
+The palette lives at the top of `Look.lua` in the core (a copy of the Chronicle's, which is never changed; the sharing window draws with it too), by role:
 bronze is crafted structure (rim, brackets, brand, section headings, the selection marker), charcoal is the list and the
 header, neutral stone is the page and its cards, ivory is text, one muted teal (`pal.teal`, `tealHi`, `tealLo`) is what
 is active (selected row, checked box, focus, slider fill, the one primary button), and rust is `pal.danger`. Interior
 edges use `pal.bronzeLo` (neutral gray, despite the name) and a control's own boundary `pal.control`; the rim's old
 brown is `pal.rimLo`. A new control takes its colors from these, not from a literal.
 
-Motion is `Wg.Motion` in `Widgets.lua`: one table of timings (`TIME`), `Fader` objects that ease a single alpha, and
+Motion is `Look.Motion` (`Wg.Motion`) in `Look.lua`: one table of timings (`TIME`), `Fader` objects that ease a single alpha, and
 one driver frame whose `OnUpdate` exists only while a fader is running (none while idle or shut). The window fades in
 on opening, a page's cards fade in on arrival (the title and tabs do not), and nav rows, tabs, buttons, dropdowns and
-checkbox rows ease a wash under the pointer. Nothing moves or resizes. **Reduce settings motion** (Home, saved
+checkbox rows ease a wash under the pointer. Nothing moves or resizes. **Reduce window motion** (Home, saved
 `ui.reduceSettingsMotion`, account-wide) makes every ease immediate; it is separate from Notifications' Reduced
 motion, which is the cards' and is not read here. Closing, leaving a page, and changing the preference call
 `Motion.Settle()` or `fade:Set(1)`, so no alpha is left part-way.

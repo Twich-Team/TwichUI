@@ -11,86 +11,93 @@ R.Window = W
 local GOLD, GREY, RED, GREEN = R.GOLD, R.GREY, R.RED, R.GREEN
 local WIDTH, HEIGHT = 720, 580
 local ROW_H = 24
+local POPUP_HEADER = 32       -- the title band of a popup
 local f                         -- main frame
 local page = "share"
 local expanded = {}             -- [owner] = true in the Choose addons popup
 local getSel = {}               -- [sourceKey] = { [owner] = bool }
 local sourceIndex = 1
-local fontStrings = {}
 local toast                      -- transfer toast (built on first use)
 
 ---------------------------------------------------------------------------
--- Skin helpers: use EllesmereUI's primitives when present, else plain.
+-- The look: TwichUI's own (Look.lua), the same family as the settings window, whether or not EllesmereUI is
+-- installed. It is looked up when something is first built (this file loads before it).
 ---------------------------------------------------------------------------
-local function Skin(kind, obj, ...)
-    local S = R.S
-    if not (S and S[kind] and obj) then return end
-    pcall(S[kind], obj, ...)
+local function Look() return R.Look end
+
+-- A font string's color from the palette's role ("text", "textDim", "stone", "bronzeText"), dimmed by k.
+local function Ink(fs, role, k)
+    local c = Look().pal[role]
+    k = k or 1
+    fs:SetTextColor(c[1] * k, c[2] * k, c[3] * k)
 end
 
--- UIPanelScrollFrameTemplate's bar is the old arrow-button slider, which
--- S.ScrollBar doesn't handle (it only knows MinimalScrollBar). Apply the same
--- treatment EllesmereUI gives old-style bars: arrows faded, thumb -> slim strip.
-local function SkinScrollFrame(scroll)
-    local sb = scroll and scroll.ScrollBar
-    if not (R.S and sb) then return end
-    Skin("ScrollBar", sb)
-    local name = sb:GetName() or ""
-    for _, suffix in ipairs({ "ScrollUpButton", "ScrollDownButton" }) do
-        local b = sb[suffix] or _G[name .. suffix]
-        if b then
-            for _, getter in ipairs({ "GetNormalTexture", "GetPushedTexture", "GetDisabledTexture", "GetHighlightTexture" }) do
-                local t = b[getter] and b[getter](b)
-                if t then t:SetAlpha(0) end
-            end
-        end
-    end
-    local thumb = sb.GetThumbTexture and sb:GetThumbTexture()
-    if thumb then
-        thumb:SetTexture("Interface\\Buttons\\WHITE8X8")
-        thumb:SetTexCoord(0, 1, 0, 1)
-        thumb:SetVertexColor(1, 1, 1, 0.3)
-        thumb:SetWidth(4)
-    end
-end
+-- The role each of the game's font objects takes in this look (the sizes stay the game's own).
+local ROLE = {
+    GameFontNormalLarge = "text", GameFontNormal = "bronzeText", GameFontHighlight = "text",
+    GameFontHighlightSmall = "textDim", GameFontDisableSmall = "stone", GameFontDisable = "stone",
+}
 
-local function Accent()
-    local S = R.S
-    if S and S.GetAccentColor then
-        local ok, r, g, b = pcall(S.GetAccentColor)
-        if ok and r then return r, g, b end
-    end
-    return 0.79, 0.64, 0.29
+-- A heading inside running text ("What it does"): the palette's bronze text, as an inline color. (GOLD stays
+-- for the states that mean "pay attention": newer, older, turned off.)
+local function Head()
+    local c = Look().pal.bronzeText
+    return ("|cff%02x%02x%02x"):format(math.floor(c[1] * 255 + 0.5), math.floor(c[2] * 255 + 0.5), math.floor(c[3] * 255 + 0.5))
 end
 
 local function Text(parent, template, size)
-    local fs = parent:CreateFontString(nil, "OVERLAY", template or "GameFontHighlight")
+    template = template or "GameFontHighlight"
+    local fs
+    if template == "GameFontNormalLarge" then
+        fs = Look().Text(parent, "title")   -- the title face, as the settings window's
+    else
+        fs = parent:CreateFontString(nil, "OVERLAY", template)
+    end
     fs:SetJustifyH("LEFT")
-    fontStrings[#fontStrings + 1] = fs
+    Ink(fs, ROLE[template] or "text")
     return fs
 end
 
-local function Btn(parent, label, w, onClick, tooltip)
-    local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
-    b:SetSize(w, 24)
-    b:SetText(label)
-    b:SetScript("OnClick", onClick)
+-- A button. kind: nil for an ordinary one, "danger" for one that puts things back. It is Look's raised button;
+-- SetText and GetText are the window's (the old buttons were the game's template and had them).
+local function Btn(parent, label, w, onClick, tooltip, kind)
+    -- (Delete is the one action here that can't be taken back: the rust button, as Reset is in the settings)
+    local b = Look().Button(parent, label, w, kind or (label == "Delete" and "danger") or "secondary", onClick)
+    function b:SetText(t) self.text:SetText(t) end
+    function b:GetText() return self.text:GetText() end
     -- tooltip: text, or a function giving the text and, when the button can't be used now, the reason
     if tooltip then R.Interact.Tip(b, label, tooltip) end
-    Skin("Button", b)
-    Skin("StateButtonLabel", b)
     return b
 end
 
+-- A check box with the game's CheckButton behaviour: a click flips it and then runs OnClick, which reads
+-- GetChecked; SetEnabled greys it. Look's checkbox is the drawing.
 local function Check(parent, label)
-    local c = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
-    c:SetSize(22, 22)
+    local c = Look().Checkbox(parent, nil)
+    local enabled = true
+    local nativeEnabled, nativeScript = c.SetEnabled, c.SetScript
+    function c:SetEnabled(v)
+        enabled = v and true or false
+        nativeEnabled(self, enabled)
+        self:SetActive(enabled)
+    end
+    function c:SetScript(name, fn)
+        if name == "OnClick" then
+            nativeScript(self, "OnClick", function(box, ...)
+                if not enabled then return end
+                box:SetChecked(not box:GetChecked())
+                if fn then fn(box, ...) end
+            end)
+        else
+            nativeScript(self, name, fn)
+        end
+    end
+    c:SetScript("OnClick", nil)   -- the flip alone, until a caller adds to it
     if label then
         c.label = Text(parent, "GameFontHighlightSmall")
-        c.label:SetPoint("LEFT", c, "RIGHT", 4, 0)
+        c.label:SetPoint("LEFT", c, "RIGHT", 6, 0)
         c.label:SetText(label)
     end
-    Skin("Checkbox", c)
     return c
 end
 
@@ -98,26 +105,24 @@ local function Section(parent, num, title, y)
     local n = Text(parent, "GameFontNormalLarge")
     n:SetPoint("TOPLEFT", 16, y)
     n:SetText(num)
-    n:SetTextColor(Accent())
+    Ink(n, "bronzeText")
     local t = Text(parent, "GameFontNormal")
     t:SetPoint("LEFT", n, "RIGHT", 8, 0)
     t:SetText(title)
-    t:SetTextColor(1, 1, 1)
-    n.isAccent = true
+    Ink(t, "text")
     return n, t
 end
 
 local function ProgressBar(parent)
+    local L = Look()
     local bar = CreateFrame("StatusBar", nil, parent, "BackdropTemplate")
     bar:SetSize(WIDTH - 32, 8)
     bar:SetStatusBarTexture("Interface\\Buttons\\WHITE8x8")
-    bar:SetStatusBarColor(Accent())
+    local c = L.pal.teal
+    bar:SetStatusBarColor(c[1], c[2], c[3])
     bar:SetMinMaxValues(0, 1)
     bar:SetValue(0)
-    bar.bg = bar:CreateTexture(nil, "BACKGROUND")
-    bar.bg:SetAllPoints()
-    bar.bg:SetColorTexture(1, 1, 1, 0.08)
-    Skin("ApplyBarFill", bar)
+    L.Well(bar, 1)
     return bar
 end
 
@@ -125,17 +130,11 @@ local function ListBox(parent, height, width)
     width = width or (WIDTH - 32)
     local box = CreateFrame("Frame", nil, parent, "BackdropTemplate")
     box:SetSize(width, height)
-    if R.S then
-        Skin("Panel", box, { inset = true })
-    else
-        box:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
-        box:SetBackdropColor(0, 0, 0, 0.35)
-        box:SetBackdropBorderColor(1, 1, 1, 0.08)
-    end
+    Look().Well(box, 0.9)
     local scroll = CreateFrame("ScrollFrame", nil, box, "UIPanelScrollFrameTemplate")
     scroll:SetPoint("TOPLEFT", 6, -6)
     scroll:SetPoint("BOTTOMRIGHT", -26, 6)
-    Skin("ScrollBar", scroll.ScrollBar)
+    Look().ScrollBar(scroll)
     local content = CreateFrame("Frame", nil, scroll)
     content:SetSize(width - 38, 1)
     scroll:SetScrollChild(content)
@@ -209,19 +208,11 @@ local function MakePopup(name, w, h, title, dx, dy)
     p:SetClampedToScreen(true)
     p:HookScript("OnShow", R.FitToScreen)
     tinsert(UISpecialFrames, name)
-    if R.S then Skin("Shell", p) else
-        p:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
-        p:SetBackdropColor(0.07, 0.065, 0.06, 0.98)
-        p:SetBackdropBorderColor(0.25, 0.23, 0.2, 1)
-    end
+    Look().Shell(p, POPUP_HEADER)
     p.title = Text(p, "GameFontNormalLarge")
     p.title:SetPoint("TOPLEFT", 16, -12)
     p.title:SetText(title)
-    p.title:SetTextColor(1, 1, 1)
-    local close = CreateFrame("Button", nil, p, "UIPanelCloseButton")
-    close:SetPoint("TOPRIGHT", -4, -4)
-    Skin("CloseButton", close)
-    for _, fs in ipairs({ p.title }) do if R.S then Skin("Font", fs) end end
+    Look().CloseBox(p)
     return p
 end
 
@@ -259,7 +250,7 @@ local function BuildChoose()
     cp.help:SetPoint("TOPLEFT", 16, -40)
     cp.help:SetWidth(POPUP_LIST_W)
 
-    cp.search = CreateFrame("EditBox", nil, cp, "InputBoxTemplate")
+    cp.search = Look().EditBox(cp, 100, 24)
     cp.search:SetSize(260, 24)
     cp.search:SetPoint("TOPLEFT", 22, -74)
     cp.search:SetAutoFocus(false)
@@ -271,7 +262,6 @@ local function BuildChoose()
     end)
     cp.search:SetScript("OnEditFocusGained", function() cp.hint:Hide() end)
     cp.search:SetScript("OnEditFocusLost", function(e) cp.hint:SetShown(e:GetText() == "") end)
-    Skin("EditBox", cp.search)
     cp.hint = Text(cp.search, "GameFontDisableSmall")
     cp.hint:SetPoint("LEFT", 6, 0)
     cp.hint:SetText("Search addons")
@@ -306,7 +296,6 @@ local function RefreshChoose()
             r.check:SetScript("OnClick", function(c) ST:SetAddonSelected(g.owner, c:GetChecked()); W:Refresh() end)
             r.arrow:SetText(expanded[g.owner] and "-" or "+")
             r.label:SetText(g.title)
-            r.label:SetTextColor(1, 1, 1)
             r.right:SetText(GREY .. (g.backupOnly and "Backups only" or (g.selected > 0 and ST.FormatSize(g.bytes) or "")) .. "|r")
             r:SetScript("OnClick", function() expanded[g.owner] = not expanded[g.owner]; W:Refresh() end)
             r:SetScript("OnEnter", function(self)
@@ -334,7 +323,7 @@ local function RefreshChoose()
                     c.check:SetScript("OnClick", function(cb) ST:SetTableSelected(t.name, cb:GetChecked()); W:Refresh() end)
                     c.arrow:SetText("")
                     c.label:SetText("    " .. t.name)
-                    c.label:SetTextColor(0.75, 0.75, 0.75)
+                    Ink(c.label, "textDim")
                     c.right:SetText((t.huge and RED or GREY) .. ST.FormatSize(t.bytes) .. "|r")
                     c:SetScript("OnClick", nil)
                     c:SetScript("OnEnter", nil)
@@ -424,7 +413,7 @@ local function RefreshRecommend()
         r.arrow:SetText("")
         r.label:SetText(g.title)
         local c = g.enabled and 1 or 0.55
-        r.label:SetTextColor(c, c, c)
+        Ink(r.label, "text", c)
         local _, where = ST.AddonLink(g)
         r.right:SetText(GREY .. (g.version and (g.version .. "  ·  ") or "") .. where .. "|r")
         r:SetScript("OnClick", nil)
@@ -474,9 +463,9 @@ local function BuildParty()
     gp.help:SetPoint("TOPLEFT", 16, -40)
     gp.help:SetWidth(POPUP_LIST_W)
     gp.help:SetSpacing(2)
-    gp.help:SetText(GOLD .. "What it does|r\nShows which TwichUI version each person in your party or raid runs, and which of the addons you recommend they're missing. It only runs when you press Check this party.\n\n"
-        .. GOLD .. "What it sends|r\nYour TwichUI version and the names and folders of your recommended addons, over the hidden party or raid addon channel (no chat text). Each reply carries only that person's TwichUI version and which of those addons they lack.\n\n"
-        .. GOLD .. "What it needs|r\nEveryone must run TwichUI with \"Version and group check\" turned on. Once it's on, TwichUI also says hello with its version when you join a group, and may test once per game build whether direct messages work again.")
+    gp.help:SetText(Head() .. "What it does|r\nShows which TwichUI version each person in your party or raid runs, and which of the addons you recommend they're missing. It only runs when you press Check this party.\n\n"
+        .. Head() .. "What it sends|r\nYour TwichUI version and the names and folders of your recommended addons, over the hidden party or raid addon channel (no chat text). Each reply carries only that person's TwichUI version and which of those addons they lack.\n\n"
+        .. Head() .. "What it needs|r\nEveryone must run TwichUI with \"Version and group check\" turned on. Once it's on, TwichUI also says hello with its version when you join a group, and may test once per game build whether direct messages work again.")
     gp.run = Btn(gp, "Check this party", 150, function() R.Group:RunCheck(true); W:Refresh() end, function()
         local why
         if not R:Enabled("groupCheck") then why = "Version and group check is turned off in the options."
@@ -510,7 +499,6 @@ local function RefreshParty()
         row.check:Hide()
         row.arrow:SetText("")
         row.label:SetText(r.short .. (r.version and (GREY .. "   TwichUI " .. r.version .. "|r") or ""))
-        row.label:SetTextColor(1, 1, 1)
         local right = GROUP_STATE[r.state] or ""
         if r.missing and #r.missing > 0 then right = right .. RED .. ("  ·  missing %d|r"):format(#r.missing) end
         row.right:SetText(right)
@@ -554,6 +542,12 @@ local function BuildShare(p)
     mine.intro:SetWidth(WIDTH - 32)
     mine.intro:SetText("Send your selected addon settings and optional layout to a friend. They can review everything before applying it.")
 
+    -- The three steps each sit on a card, as the settings window's sections do.
+    local L = Look()
+    L.Card(p, 8, -34, WIDTH - 8, -124)
+    L.Card(p, 8, -130, WIDTH - 8, -252)
+    L.Card(p, 8, -258, WIDTH - 8, -378)
+
     Section(p, "1", "Choose what to include", -40)
     mine.summary = Text(p, "GameFontHighlight")
     mine.summary:SetPoint("TOPLEFT", 16, -70)
@@ -567,15 +561,15 @@ local function BuildShare(p)
     mine.help:SetPoint("TOPLEFT", 16, -92)
     mine.help:SetWidth(WIDTH - 32)
 
-    Section(p, "2", "Save", -126)
+    Section(p, "2", "Save", -136)
     mine.em = Check(p, "Include my Edit Mode layout")
-    mine.em:SetPoint("TOPLEFT", 14, -152)
+    mine.em:SetPoint("TOPLEFT", 14, -162)
     mine.em:SetChecked(true)
     mine.eui = Btn(p, "EllesmereUI profile: none", 270, function() W:ShowEuiShare() end, function()
         local _, why = ES.Api()
         return why or "Choose one EllesmereUI profile to send with your setup. It reaches your friend as a new profile; nothing of theirs is replaced."
     end)
-    mine.eui:SetPoint("TOPLEFT", 214, -148)
+    mine.eui:SetPoint("TOPLEFT", 214, -158)
     mine.save = Btn(p, "Save setup", 150, function()
         ST:SaveMine(mine.em:GetChecked())
         R.Print("saved your setup: %d addons%s.", ST.CountAddons(ST.Mine()), ST.Mine().eui and " and an EllesmereUI profile" or "")
@@ -585,37 +579,36 @@ local function BuildShare(p)
         return ST:CanSave() and "Saves the ticked settings as your setup. You can send it straight away."
             or "Click \"Scan installed addons\" first. Saving uses the settings found in that scan."
     end)
-    mine.save:SetPoint("TOPRIGHT", -16, -148)
+    mine.save:SetPoint("TOPRIGHT", -16, -158)
     mine.saved = Text(p, "GameFontHighlightSmall")
-    mine.saved:SetPoint("TOPLEFT", 16, -182)
+    mine.saved:SetPoint("TOPLEFT", 16, -192)
     mine.saved:SetWidth(WIDTH - 260)
     mine.delete = Btn(p, "Delete", 70, function()
         Confirm("TWICHUI_DELETE_MINE", "Delete your saved setup?\n\nFriends keep the copy they already have. This can't be undone, but you can save a new one any time.", function()
             ST:DeleteMine(); W:Refresh()
         end, { accept = DELETE })
     end)
-    mine.delete:SetPoint("TOPRIGHT", -16, -177)
+    mine.delete:SetPoint("TOPRIGHT", -16, -187)
     mine.review = Btn(p, "Review", 70, function()
         if R.ExplorerWindow then R.ExplorerWindow.Show("share:preview") end
     end, "Opens the Saved Data Explorer on exactly what Send sends from your saved setup: every message, what is in it, what is left out, and its size. Nothing is sent.")
     mine.review:SetPoint("RIGHT", mine.delete, "LEFT", -6, 0)
     mine.recommend = Btn(p, "Recommend addons to friends", 220, function() W:ShowRecommend() end,
         "Optional. Lists addons your friends may want to install, with download links. It doesn't include their settings.")
-    mine.recommend:SetPoint("TOPLEFT", 16, -212)
+    mine.recommend:SetPoint("TOPLEFT", 16, -222)
     mine.recommendHelp = Text(p, "GameFontDisableSmall")
     mine.recommendHelp:SetPoint("LEFT", mine.recommend, "RIGHT", 12, 0)
     mine.recommendHelp:SetWidth(WIDTH - 280)
     mine.recommendHelp:SetText("Optional. Names addons to install; it doesn't include their settings.")
 
-    Section(p, "3", "Send to a friend", -258)
-    mine.name = CreateFrame("EditBox", nil, p, "InputBoxTemplate")
+    Section(p, "3", "Send to a friend", -264)
+    mine.name = Look().EditBox(p, 100, 24)
     mine.name:SetSize(230, 24)
-    mine.name:SetPoint("TOPLEFT", 22, -288)
+    mine.name:SetPoint("TOPLEFT", 22, -294)
     mine.name:SetAutoFocus(false)
     mine.name:SetScript("OnEnterPressed", function() mine.send:Click() end)
     mine.name:SetScript("OnEscapePressed", mine.name.ClearFocus)
     mine.name:SetScript("OnTextChanged", function() W:Refresh() end)
-    Skin("EditBox", mine.name)
     mine.hint = Text(mine.name, "GameFontDisableSmall")
     mine.hint:SetPoint("LEFT", 6, 0)
     mine.hint:SetText(SH.NameHint())
@@ -640,14 +633,15 @@ local function BuildShare(p)
     mine.cancel:SetPoint("LEFT", mine.send, "RIGHT", 8, 0)
 
     mine.bar = ProgressBar(p)
-    mine.bar:SetPoint("TOPLEFT", 16, -324)
+    mine.bar:SetPoint("TOPLEFT", 16, -330)
     mine.status = Text(p, "GameFontHighlightSmall")
     mine.status:SetPoint("TOPLEFT", mine.bar, "BOTTOMLEFT", 0, -6)
     mine.status:SetWidth(WIDTH - 32)
 
     -- Secondary tools, kept apart from the three-step path.
     local rule = p:CreateTexture(nil, "ARTWORK")
-    rule:SetColorTexture(1, 1, 1, 0.08)
+    local rc = Look().pal.bronzeLo
+    rule:SetColorTexture(rc[1], rc[2], rc[3], 0.6)
     rule:SetHeight(1)
     rule:SetPoint("TOPLEFT", 16, -396)
     rule:SetPoint("TOPRIGHT", -16, -396)
@@ -782,17 +776,10 @@ local function BuildAddonPopup()
     ap:SetClampedToScreen(true)
     ap:HookScript("OnShow", R.FitToScreen)
     tinsert(UISpecialFrames, "TwichUIAddonList")
-    if R.S then Skin("Shell", ap) else
-        ap:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
-        ap:SetBackdropColor(0.07, 0.065, 0.06, 0.98)
-        ap:SetBackdropBorderColor(0.25, 0.23, 0.2, 1)
-    end
+    Look().Shell(ap, POPUP_HEADER)
     ap.title = Text(ap, "GameFontNormalLarge")
     ap.title:SetPoint("TOPLEFT", 16, -12)
-    ap.title:SetTextColor(1, 1, 1)
-    local close = CreateFrame("Button", nil, ap, "UIPanelCloseButton")
-    close:SetPoint("TOPRIGHT", -4, -4)
-    Skin("CloseButton", close)
+    Look().CloseBox(ap)
     ap.sub = Text(ap, "GameFontHighlightSmall")
     ap.sub:SetPoint("TOPLEFT", 16, -38)
     ap.sub:SetWidth(528)
@@ -801,15 +788,11 @@ local function BuildAddonPopup()
     local box = CreateFrame("Frame", nil, ap, "BackdropTemplate")
     box:SetPoint("TOPLEFT", 16, -64)
     box:SetSize(528, 250)
-    if R.S then Skin("Panel", box, { inset = true }) else
-        box:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
-        box:SetBackdropColor(0, 0, 0, 0.35)
-        box:SetBackdropBorderColor(1, 1, 1, 0.08)
-    end
+    Look().Well(box, 0.9)
     local scroll = CreateFrame("ScrollFrame", nil, box, "UIPanelScrollFrameTemplate")
     scroll:SetPoint("TOPLEFT", 6, -6)
     scroll:SetPoint("BOTTOMRIGHT", -26, 6)
-    Skin("ScrollBar", scroll.ScrollBar)
+    Look().ScrollBar(scroll)
     ap.content = CreateFrame("Frame", nil, scroll)
     ap.content:SetSize(490, 1)
     scroll:SetScrollChild(ap.content)
@@ -822,15 +805,11 @@ local function BuildAddonPopup()
     local copyBox = CreateFrame("Frame", nil, ap, "BackdropTemplate")
     copyBox:SetPoint("TOPLEFT", box, "BOTTOMLEFT", 0, -28)
     copyBox:SetSize(528, 110)
-    if R.S then Skin("Panel", copyBox, { inset = true }) else
-        copyBox:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
-        copyBox:SetBackdropColor(0, 0, 0, 0.5)
-        copyBox:SetBackdropBorderColor(1, 1, 1, 0.08)
-    end
+    Look().Well(copyBox, 0.9)
     local cs = CreateFrame("ScrollFrame", nil, copyBox, "UIPanelScrollFrameTemplate")
     cs:SetPoint("TOPLEFT", 6, -6)
     cs:SetPoint("BOTTOMRIGHT", -26, 6)
-    Skin("ScrollBar", cs.ScrollBar)
+    Look().ScrollBar(cs)
     ap.edit = CreateFrame("EditBox", nil, cs)
     ap.edit:SetMultiLine(true)
     ap.edit:SetAutoFocus(false)
@@ -927,8 +906,8 @@ local function BuildEuiShare()
     ep.help:SetWidth(POPUP_LIST_W)
     ep.help:SetSpacing(2)
     ep.help:SetText("Pick one of your EllesmereUI profiles to include when you press Save setup. TwichUI asks EllesmereUI to export it, so your friend's EllesmereUI reads it like any of its own exports. It reaches them as a new profile; nothing of theirs is replaced.\n\n"
-        .. GOLD .. "Included|r  The profile's module settings, look (fonts, custom colours, dark mode, accent), layout links, Cooldown Manager spells and overrides.\n"
-        .. GOLD .. "Left out|r  UI scale, window and tooltip skins, which specs use a profile, click-cast, your other profiles, and your characters' names and gold.")
+        .. Head() .. "Included|r  The profile's module settings, look (fonts, custom colours, dark mode, accent), layout links, Cooldown Manager spells and overrides.\n"
+        .. Head() .. "Left out|r  UI scale, window and tooltip skins, which specs use a profile, click-cast, your other profiles, and your characters' names and gold.")
     ep.list = ListBox(ep, 190, POPUP_LIST_W)
     ep.list:SetPoint("TOPLEFT", 16, -176)
     ep.note = Text(ep, "GameFontDisableSmall")
@@ -955,7 +934,6 @@ local function RefreshEuiShare()
         r:SetScript("OnEnter", nil)
         r.arrow:SetText("")
         r.label:SetText(label)
-        r.label:SetTextColor(1, 1, 1)
         r.right:SetText(right or "")
         r:Show()
     end
@@ -997,14 +975,14 @@ end
 local function EuiBody(plan)
     if not plan.ok then return RED .. (plan.why or "Nothing to import.") .. "|r" end
     local lines = {
-        ("%sFrom|r  %s's profile \"%s\""):format(GOLD, plan.from, plan.sourceName),
-        ("%sCreates|r  a new profile named \"%s\". Your existing profiles are not changed, replaced or renamed."):format(GOLD, plan.dest),
-        ("%sIncluded|r  %s"):format(GOLD, EuiModules(plan)),
-        ("%sLeft out|r  %s"):format(GOLD, plan.excluded),
-        ("%sIn use afterwards|r  EllesmereUI has no import that doesn't switch to the new profile, so it becomes the one in use. \"%s\" stays saved exactly as it is; switch back any time in EllesmereUI > Profiles. If this spec has its own assigned profile, the new one is saved but not switched to. Spec assignments are never changed."):format(GOLD, plan.active or "?"),
+        ("%sFrom|r  %s's profile \"%s\""):format(Head(), plan.from, plan.sourceName),
+        ("%sCreates|r  a new profile named \"%s\". Your existing profiles are not changed, replaced or renamed."):format(Head(), plan.dest),
+        ("%sIncluded|r  %s"):format(Head(), EuiModules(plan)),
+        ("%sLeft out|r  %s"):format(Head(), plan.excluded),
+        ("%sIn use afterwards|r  EllesmereUI has no import that doesn't switch to the new profile, so it becomes the one in use. \"%s\" stays saved exactly as it is; switch back any time in EllesmereUI > Profiles. If this spec has its own assigned profile, the new one is saved but not switched to. Spec assignments are never changed."):format(Head(), plan.active or "?"),
     }
     if plan.previous and #plan.previous > 0 then
-        lines[#lines + 1] = ("%sImported before|r  TwichUI recorded an earlier import of this profile as \"%s\". It isn't touched; this makes a separate copy. Delete the one you don't want in EllesmereUI > Profiles."):format(GOLD, plan.previous[1].dest)
+        lines[#lines + 1] = ("%sImported before|r  TwichUI recorded an earlier import of this profile as \"%s\". It isn't touched; this makes a separate copy. Delete the one you don't want in EllesmereUI > Profiles."):format(Head(), plan.previous[1].dest)
     end
     for _, n in ipairs(plan.notes) do lines[#lines + 1] = GREY .. n .. "|r" end
     lines[#lines + 1] = GREY .. ("Your UI reloads when it's done. EllesmereUI %s here%s."):format(plan.version or "?",
@@ -1166,7 +1144,6 @@ local function BuildGet(p)
     get.emptyTitle:SetPoint("CENTER", 0, 40)
     get.emptyTitle:SetWidth(460)
     get.emptyTitle:SetJustifyH("CENTER")
-    get.emptyTitle:SetTextColor(1, 1, 1)
     get.emptyTitle:SetText("No setups received")
     get.emptySub = Text(p, "GameFontDisable")
     get.emptySub:SetPoint("TOP", get.emptyTitle, "BOTTOM", 0, -10)
@@ -1178,7 +1155,6 @@ local function BuildGet(p)
     -- Card (both states)
     get.title = Text(p, "GameFontNormalLarge")
     get.title:SetPoint("TOPLEFT", 16, -52)
-    get.title:SetTextColor(1, 1, 1)
     get.sub = Text(p, "GameFontHighlightSmall")
     get.sub:SetPoint("TOPLEFT", get.title, "BOTTOMLEFT", 0, -4)
     get.sub:SetWidth(WIDTH - 330)
@@ -1365,7 +1341,7 @@ local function RefreshGet()
                 r.check:SetScript("OnClick", function(c) sel[g.owner] = c:GetChecked() and true or false; W:Refresh() end)
                 r.arrow:SetText("")
                 r.label:SetText(g.title)
-                r.label:SetTextColor(usable and 1 or 0.5, usable and 1 or 0.5, usable and 1 or 0.5)
+                Ink(r.label, "text", usable and 1 or 0.55)
                 local effect = ST.ApplyEffect(g)
                 r.right:SetText(EFFECT_TEXT[effect] or STATE_TEXT[g.state] or "")
                 r:SetScript("OnClick", nil)
@@ -1428,7 +1404,7 @@ local function SetTransferStatus(text) tp.status:SetText(text or "") end
 local function PreviewText(r)
     local p = r.point
     local lines = {
-        ("%s%s|r"):format(GOLD, p.name),
+        ("%s%s|r"):format(Head(), p.name),
         ("Saved %s%s  ·  %d addons (%d settings tables)  ·  about %s"):format(When(p.created),
             p.sourceName and (" by " .. p.sourceName) or "", r.addons, r.count, ST.FormatSize(r.bytes)),
     }
@@ -1471,17 +1447,10 @@ local function BuildTransfer()
     tp:SetClampedToScreen(true)
     tp:HookScript("OnShow", R.FitToScreen)
     tinsert(UISpecialFrames, "TwichUIBackupTransfer")
-    if R.S then Skin("Shell", tp) else
-        tp:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
-        tp:SetBackdropColor(0.07, 0.065, 0.06, 0.98)
-        tp:SetBackdropBorderColor(0.25, 0.23, 0.2, 1)
-    end
+    Look().Shell(tp, POPUP_HEADER)
     tp.title = Text(tp, "GameFontNormalLarge")
     tp.title:SetPoint("TOPLEFT", 16, -12)
-    tp.title:SetTextColor(1, 1, 1)
-    local close = CreateFrame("Button", nil, tp, "UIPanelCloseButton")
-    close:SetPoint("TOPRIGHT", -4, -4)
-    Skin("CloseButton", close)
+    Look().CloseBox(tp)
     tp.sub = Text(tp, "GameFontHighlightSmall")
     tp.sub:SetPoint("TOPLEFT", 16, -38)
     tp.sub:SetWidth(528)
@@ -1503,15 +1472,11 @@ local function BuildTransfer()
     local box = CreateFrame("Frame", nil, tp, "BackdropTemplate")
     box:SetPoint("TOPLEFT", 16, -88)
     box:SetPoint("BOTTOMRIGHT", tp.status, "TOPRIGHT", 2, 10)
-    if R.S then Skin("Panel", box, { inset = true }) else
-        box:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
-        box:SetBackdropColor(0, 0, 0, 0.5)
-        box:SetBackdropBorderColor(1, 1, 1, 0.08)
-    end
+    Look().Well(box, 0.9)
     local sf = CreateFrame("ScrollFrame", nil, box, "UIPanelScrollFrameTemplate")
     sf:SetPoint("TOPLEFT", 6, -6)
     sf:SetPoint("BOTTOMRIGHT", -26, 6)
-    SkinScrollFrame(sf)
+    Look().ScrollBar(sf)
     tp.edit = CreateFrame("EditBox", nil, sf)
     tp.edit:SetMultiLine(true)
     tp.edit:SetAutoFocus(false)
@@ -1648,13 +1613,12 @@ local function BuildBackups(p)
     rp.help:SetPoint("TOPLEFT", 16, -4)
     rp.help:SetWidth(WIDTH - 32)
     rp.help:SetText("Save your own settings before you change things, and go back any time. A backup covers the addons you chose in Share setup, exactly as they're saved right now.")
-    rp.name = CreateFrame("EditBox", nil, p, "InputBoxTemplate")
+    rp.name = Look().EditBox(p, 100, 24)
     rp.name:SetSize(260, 24)
     rp.name:SetPoint("TOPLEFT", 22, -52)
     rp.name:SetAutoFocus(false)
     rp.name:SetScript("OnEscapePressed", rp.name.ClearFocus)
     rp.name:SetScript("OnTextChanged", function() rp.hint:SetShown(rp.name:GetText() == "") end)
-    Skin("EditBox", rp.name)
     rp.hint = Text(rp.name, "GameFontDisableSmall")
     rp.hint:SetPoint("LEFT", 6, 0)
     rp.hint:SetWidth(248)   -- inside the box, whatever the font or language
@@ -1784,12 +1748,7 @@ local function SetPage(which)
     f.pageBackups:SetShown(which == "backups")
     local tabs = { share = f.tabShare, received = f.tabReceived, backups = f.tabBackups }
     for key, tab in pairs(tabs) do
-        if R.S and R.S.SetTabSelection then
-            pcall(R.S.SetTabSelection, tab, which == key)
-        else
-            tab.line:SetShown(which == key)
-            tab:SetEnabled(which ~= key)
-        end
+        tab:SetSelected(which == key)
     end
     W:Refresh()
 end
@@ -1809,75 +1768,36 @@ local function Build()
     f:HookScript("OnShow", R.FitToScreen)
     tinsert(UISpecialFrames, "TwichUISetupWindow")
 
-    if R.S then
-        Skin("Shell", f)
-    else
-        f:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
-        f:SetBackdropColor(0.07, 0.065, 0.06, 0.97)
-        f:SetBackdropBorderColor(0.25, 0.23, 0.2, 1)
-    end
+    -- the rim, and a title band that holds the name and the tabs (its lower line is the tabs' rule)
+    Look().Shell(f, 62)
 
     local logo = f:CreateTexture(nil, "ARTWORK")
     logo:SetSize(26, 26)
     logo:SetPoint("TOPLEFT", 12, -8)
     logo:SetTexture(R.ICON)
-    local title = Text(f, "GameFontNormalLarge")
+    local title = Look().Text(f, "brand")   -- the name, as the settings window shows it
     title:SetPoint("LEFT", logo, "RIGHT", 8, 0)
     title:SetText("TwichUI")
-    title:SetTextColor(1, 1, 1)
     local sub = Text(f, "GameFontDisableSmall")
     sub:SetPoint("LEFT", title, "RIGHT", 10, -1)
     sub:SetText("share and back up your addon setup")
 
-    local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
-    close:SetPoint("TOPRIGHT", -4, -4)
-    Skin("CloseButton", close)
+    Look().CloseBox(f)
     local storage = Btn(f, "Saved data", 100, function() W:ShowStorage() end,
         "See and delete what TwichUI keeps: your saved setup, setups friends sent you, backups, and Undo copies.")
     storage:SetPoint("TOPRIGHT", -36, -9)
 
-    -- Tabs are plain buttons with no Blizzard template: UIPanelButtonTemplate
-    -- repaints its own art on every mouse down/up, which briefly showed through
-    -- EllesmereUI's tab skin.
+    -- Tabs are plain buttons with no Blizzard template (Look.Tab): UIPanelButtonTemplate repaints its own art
+    -- on every mouse down and up.
     local function TabBtn(label, onClick, width)
-        local b = CreateFrame("Button", nil, f)
-        b:SetSize(width or 130, 24)
-        b:SetNormalFontObject("GameFontNormal")
-        b:SetHighlightFontObject("GameFontHighlight")
-        b:SetDisabledFontObject("GameFontHighlight")
-        b:SetText(label)
-        b:SetScript("OnClick", onClick)
-        if R.S then
-            Skin("Tab", b)
-        else
-            -- Plain fallback: dark plate, accent underline on the active tab.
-            b.bg = b:CreateTexture(nil, "BACKGROUND")
-            b.bg:SetAllPoints()
-            b.bg:SetColorTexture(1, 1, 1, 0.04)
-            b.line = b:CreateTexture(nil, "ARTWORK")
-            b.line:SetHeight(2)
-            b.line:SetPoint("BOTTOMLEFT")
-            b.line:SetPoint("BOTTOMRIGHT")
-            b.line:SetColorTexture(Accent())
-            b.line:Hide()
-            local hl = b:CreateTexture(nil, "HIGHLIGHT")
-            hl:SetAllPoints()
-            hl:SetColorTexture(1, 1, 1, 0.05)
-        end
-        return b
+        return Look().Tab(f, label, width, onClick)
     end
     f.tabShare = TabBtn("Share setup", function() SetPage("share") end, 160)
-    f.tabShare:SetPoint("TOPLEFT", 14, -40)
+    f.tabShare:SetPoint("TOPLEFT", 14, -38)
     f.tabReceived = TabBtn("Received setups", function() SetPage("received") end, 170)
     f.tabReceived:SetPoint("LEFT", f.tabShare, "RIGHT", 4, 0)
     f.tabBackups = TabBtn("Backups", function() SetPage("backups") end, 130)
     f.tabBackups:SetPoint("LEFT", f.tabReceived, "RIGHT", 4, 0)
-
-    local line = f:CreateTexture(nil, "ARTWORK")
-    line:SetColorTexture(1, 1, 1, 0.08)
-    line:SetHeight(1)
-    line:SetPoint("TOPLEFT", 12, -66)
-    line:SetPoint("TOPRIGHT", -12, -66)
 
     f.pageShare = CreateFrame("Frame", nil, f)
     f.pageShare:SetPoint("TOPLEFT", 0, -74)
@@ -1891,8 +1811,6 @@ local function Build()
     BuildShare(f.pageShare)
     BuildGet(f.pageReceived)
     BuildBackups(f.pageBackups)
-
-    if R.S then for _, fs in ipairs(fontStrings) do Skin("Font", fs) end end
 
     f:SetScript("OnShow", function() W:Refresh() end)
     -- Transfers report progress per chunk; redraw at most a few times a second,
@@ -1988,11 +1906,8 @@ local function BuildToast()
     toast:SetPoint("TOP", 0, -140)
     toast:SetFrameStrata("DIALOG")
     toast:SetClampedToScreen(true)
-    if R.S then Skin("Panel", toast) else
-        toast:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
-        toast:SetBackdropColor(0.07, 0.065, 0.06, 0.95)
-        toast:SetBackdropBorderColor(0.25, 0.23, 0.2, 1)
-    end
+    Look().Surface(toast, Look().pal.band, 0.97, Look().pal.bronze, 0.85)
+    Look().Recess(toast, 0.6)
     toast.icon = toast:CreateTexture(nil, "ARTWORK")
     toast.icon:SetSize(30, 30)
     toast.icon:SetPoint("LEFT", 10, 0)
@@ -2005,7 +1920,6 @@ local function BuildToast()
     toast.bar:SetWidth(280)
     toast.bar:SetPoint("BOTTOMLEFT", toast.icon, "BOTTOMRIGHT", 10, 2)
     toast.bar:SetPoint("RIGHT", -10, 0)
-    if R.S then Skin("Font", toast.text) end
     toast:SetScript("OnClick", function(self) self:Hide(); W:Show(self.page) end)
     toast:Hide()
 end
@@ -2074,18 +1988,11 @@ local function BuildStorage()
     sp:SetClampedToScreen(true)
     sp:HookScript("OnShow", R.FitToScreen)
     tinsert(UISpecialFrames, "TwichUIStorage")
-    if R.S then Skin("Shell", sp) else
-        sp:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
-        sp:SetBackdropColor(0.07, 0.065, 0.06, 0.98)
-        sp:SetBackdropBorderColor(0.25, 0.23, 0.2, 1)
-    end
+    Look().Shell(sp, POPUP_HEADER)
     local title = Text(sp, "GameFontNormalLarge")
     title:SetPoint("TOPLEFT", 16, -12)
     title:SetText("Saved data")
-    title:SetTextColor(1, 1, 1)
-    local close = CreateFrame("Button", nil, sp, "UIPanelCloseButton")
-    close:SetPoint("TOPRIGHT", -4, -4)
-    Skin("CloseButton", close)
+    Look().CloseBox(sp)
     sp.sub = Text(sp, "GameFontHighlightSmall")
     sp.sub:SetPoint("TOPLEFT", 16, -38)
     sp.sub:SetWidth(528)
@@ -2094,15 +2001,11 @@ local function BuildStorage()
     local box = CreateFrame("Frame", nil, sp, "BackdropTemplate")
     box:SetPoint("TOPLEFT", 16, -76)
     box:SetSize(528, 280)
-    if R.S then Skin("Panel", box, { inset = true }) else
-        box:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
-        box:SetBackdropColor(0, 0, 0, 0.35)
-        box:SetBackdropBorderColor(1, 1, 1, 0.08)
-    end
+    Look().Well(box, 0.9)
     local scroll = CreateFrame("ScrollFrame", nil, box, "UIPanelScrollFrameTemplate")
     scroll:SetPoint("TOPLEFT", 6, -6)
     scroll:SetPoint("BOTTOMRIGHT", -26, 6)
-    Skin("ScrollBar", scroll.ScrollBar)
+    Look().ScrollBar(scroll)
     sp.content = CreateFrame("Frame", nil, scroll)
     sp.content:SetSize(490, 1)
     scroll:SetScrollChild(sp.content)
@@ -2193,24 +2096,17 @@ local function BuildChannels()
     sop:SetClampedToScreen(true)
     sop:HookScript("OnShow", R.FitToScreen)
     tinsert(UISpecialFrames, "TwichUISendingOptions")
-    if R.S then Skin("Shell", sop) else
-        sop:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
-        sop:SetBackdropColor(0.07, 0.065, 0.06, 0.98)
-        sop:SetBackdropBorderColor(0.25, 0.23, 0.2, 1)
-    end
+    Look().Shell(sop, POPUP_HEADER)
     local title = Text(sop, "GameFontNormalLarge")
     title:SetPoint("TOPLEFT", 16, -12)
     title:SetText("Sending options")
-    title:SetTextColor(1, 1, 1)
-    local close = CreateFrame("Button", nil, sop, "UIPanelCloseButton")
-    close:SetPoint("TOPRIGHT", -4, -4)
-    Skin("CloseButton", close)
+    Look().CloseBox(sop)
 
     local why = Text(sop, "GameFontHighlightSmall")
     why:SetPoint("TOPLEFT", 16, -42)
     why:SetWidth(508)
     why:SetSpacing(2)
-    why:SetText(GOLD .. "How to send|r\n" .. SH.TRANSPORT_EXPLAIN)
+    why:SetText(Head() .. "How to send|r\n" .. SH.TRANSPORT_EXPLAIN)
 
     local y = -150
     sop.opts = {}
@@ -2221,6 +2117,7 @@ local function BuildChannels()
         local c = Check(sop, SH.TRANSPORT_LABEL[key])
         c:SetPoint("TOPLEFT", 14, y)
         c.label:SetFontObject("GameFontHighlight")
+        Ink(c.label, "text")
         c.key = key
         c:SetScript("OnClick", function()
             SH.SetTransport(key)
@@ -2247,7 +2144,7 @@ end
 function W:ShowChannels()
     if not sop then BuildChannels() end
     sop.refreshChecks()
-    sop.status:SetText(GOLD .. "Direct test:|r " .. R.Group.WhisperStatus())
+    sop.status:SetText(Head() .. "Direct test:|r " .. R.Group.WhisperStatus())
     sop:Show()
 end
 
@@ -2265,25 +2162,20 @@ function W:ShowEditMode()
         em:SetPoint("CENTER", 0, 140)
         em:SetFrameStrata("DIALOG")
         em:HookScript("OnShow", R.FitToScreen)
-        if R.S then Skin("Panel", em) else
-            em:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
-            em:SetBackdropColor(0.07, 0.065, 0.06, 0.98)
-            em:SetBackdropBorderColor(0.25, 0.23, 0.2, 1)
-        end
+        Look().Shell(em, 0)
         em.text = Text(em, "GameFontHighlightSmall")
         em.text:SetPoint("TOPLEFT", 14, -12)
         em.text:SetPoint("TOPRIGHT", -14, -12)
-        em.box = CreateFrame("EditBox", nil, em, "InputBoxTemplate")
+        em.box = Look().EditBox(em, 100, 24)
         em.box:SetSize(440, 24)
         em.box:SetPoint("TOP", 0, -66)
         em.box:SetAutoFocus(false)
         em.box:SetScript("OnEditFocusGained", function(b) b:HighlightText() end)
         em.box:SetScript("OnEscapePressed", function() em:Hide() end)
-        Skin("EditBox", em.box)
         local done = Btn(em, "Done", 90, function() em:Hide() end)
         done:SetPoint("BOTTOM", 0, 12)
     end
-    em.text:SetText(("Layout: %s%s|r\nClick the box and press Ctrl+C. Then open Edit Mode, open the layout menu, choose Import, and paste."):format(GOLD, pack.editModeName or "shared layout"))
+    em.text:SetText(("Layout: %s%s|r\nClick the box and press Ctrl+C. Then open Edit Mode, open the layout menu, choose Import, and paste."):format(Head(), pack.editModeName or "shared layout"))
     em.box:SetText(pack.editMode)
     em.box:SetCursorPosition(0)
     em:Show()

@@ -70,6 +70,9 @@ chronicle\Data.lua
 chronicle\Filter.lua
 chronicle\Recorder.lua
 chronicle\Style.lua
+
+# The look TwichUI's own windows share (settings, sharing): palette, depth, motion
+Look.lua
 chronicle\Appearance.lua
 chronicle\Window.lua
 chronicle\Broker.lua

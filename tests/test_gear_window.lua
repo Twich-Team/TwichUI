@@ -37,7 +37,7 @@ c.UnitClass = function() return "Mage", "MAGE" end
 c.UnitLevel = function() return 30 end
 c.C_SpecializationInfo = { GetActiveSpecGroup = function() return 1 end, GetCombatConfigIDForSpecGroup = function() return nil end }
 local opened
-for _, f in ipairs({ "chronicle/Style.lua", "gear/Weights.lua", "gear/Evaluate.lua", "gear/Prefs.lua", "gear/Data.lua",
+for _, f in ipairs({ "chronicle/Style.lua", "Look.lua", "gear/Weights.lua", "gear/Evaluate.lua", "gear/Prefs.lua", "gear/Data.lua",
   "gear/Hints.lua", "gear/Tooltip.lua", "gear/Bags.lua", "gear/Window.lua" }) do
   local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
 end
