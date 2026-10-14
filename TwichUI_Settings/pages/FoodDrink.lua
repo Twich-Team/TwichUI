@@ -41,6 +41,13 @@ K.Page({
             "When you carry Mage-conjured food or water you can use, the buttons choose it over ordinary food or drink, even when an ordinary item restores more health or mana. Food and water are chosen separately: with conjured food but no conjured water, the Food button holds the conjured food and the Drink button holds the best ordinary drink. With none of a kind, that button chooses as it always does. Among conjured items, the one that restores the most is chosen. It works for any character carrying conjured items, not only Mages, and never lets in an item the buttons would otherwise skip. Off, the choice is the one that restores the most.",
             FD.DEFAULTS.preferConjured, function() return FD.Get("preferConjured") end,
             function(value) FD.Set("preferConjured", value and true or false) end), foodDrink, FoodDrinkOn)
+        
+        -- Add Mage Conjure Food & Drink setting for mages without consumables
+        Under(Toggle("qolMageConjureFoodDrink", "Show conjure food/water when no consumables in bags",
+            "Shows mage-conjured food and water buttons instead of empty ones when you are a mage and have no consumable items (food or drink) in your bags."),
+            foodDrink, FoodDrinkOn)
+        
+        -- Where they go. Edit Mode moves the buttons unless this is on and EllesmereUI is there.
 
         -- Where they go. Edit Mode moves the buttons unless this is on and EllesmereUI is there.
         local FDU = FD.Unlock
