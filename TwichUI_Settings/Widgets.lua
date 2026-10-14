@@ -5,7 +5,9 @@
 --   Wg.pal                      the window's palette (Style.lua's, plus a few colors of its own)
 --   Wg.Text(parent, kind)       a font string: "brand", "title", "heading", "body", "small", "meta"
 --   Wg.Surface(frame, ...)      a flat fill with a 1px edge
---   Wg.Button(parent, label, w, kind, onClick)    kind: "primary", "secondary" or "danger"
+--   Wg.Button(parent, label, w, kind, onClick)    kind: "primary", "secondary" or "danger"; a raised face
+--   Wg.Recess(frame), Wg.Raise(button), Wg.Panel(frame), Wg.Tag(parent, text)   the depth every control shares
+--   Wg.Frame(f, w, h), Wg.Header(f, height), Wg.Fade(texture, ...)             the window's rim and tonal layers
 --   Wg.Checkbox, Wg.Slider, Wg.Dropdown, Wg.Swatch, Wg.EditBox, Wg.ArrowButton, Wg.Scroll
 --   Wg.CloseMenu()              puts away the dropdown list, if one is open
 
@@ -29,6 +31,8 @@ pal.danger = {                            -- Reset and other actions that put th
     border = { 0.55, 0.30, 0.24 }, bg = { 0.13, 0.085, 0.066 }, text = { 0.92, 0.62, 0.52 },
     hotBorder = { 0.80, 0.44, 0.35 }, hotBg = { 0.20, 0.115, 0.09 }, hotText = { 1, 0.78, 0.68 },
 }
+pal.bronzeHi = { 0.70, 0.56, 0.30 }      -- the lit edge of the window's rim
+pal.ink = { 0.03, 0.02, 0.015 }           -- the outermost line, and the darkest shade
 Wg.pal = pal
 
 -- Style.lua's buttons read pal.primary or pal.quiet; a danger button is a quiet one in ember.
@@ -80,6 +84,75 @@ function Wg.Solid(parent, layer, c, a)
     return t
 end
 
+-- A tonal fade across a texture: color c from alpha `from` at the top (left, for "HORIZONTAL") to alpha `to` at
+-- the bottom (right). Gradients are in the client's texture API; where one is refused it is a flat fill of the
+-- mean alpha instead, so nothing here depends on it.
+function Wg.Fade(tex, c, from, to, orientation)
+    tex:SetColorTexture(1, 1, 1, 1)
+    if tex.SetGradient and CreateColor then
+        local a, b = from, to
+        if orientation ~= "HORIZONTAL" then
+            orientation = "VERTICAL"
+            a, b = to, from      -- vertical gradients run from the bottom color to the top one
+        end
+        if pcall(tex.SetGradient, tex, orientation, CreateColor(c[1], c[2], c[3], a), CreateColor(c[1], c[2], c[3], b)) then
+            return true
+        end
+    end
+    tex:SetColorTexture(c[1], c[2], c[3], (from + to) / 2)
+    return false
+end
+
+-- 1px lines just inside a frame's edge, each side { color, alpha } or nil. Returns them by side name. Lines
+-- are textures: they never take the mouse, and they cost no frame.
+function Wg.Shade(frame, top, left, bottom, right, inset, layer)
+    inset, layer = inset or 1, layer or "BORDER"
+    local lines = {}
+    local function Line(side, spec)
+        if not spec then return end
+        local t = Wg.Solid(frame, layer, spec[1], spec[2])
+        if side == "top" or side == "bottom" then
+            local edge = side == "top" and "TOP" or "BOTTOM"
+            t:SetHeight(1)
+            t:SetPoint(edge .. "LEFT", inset, side == "top" and -inset or inset)
+            t:SetPoint(edge .. "RIGHT", -inset, side == "top" and -inset or inset)
+        else
+            local edge = side == "left" and "LEFT" or "RIGHT"
+            t:SetWidth(1)
+            t:SetPoint("TOP" .. edge, side == "left" and inset or -inset, -(inset + 1))
+            t:SetPoint("BOTTOM" .. edge, side == "left" and inset or -inset, inset + 1)
+        end
+        lines[side] = t
+    end
+    Line("top", top); Line("left", left); Line("bottom", bottom); Line("right", right)
+    return lines
+end
+
+-- Pressed into the surface: a shadow along the top and left inside edge, a warm lip along the bottom. For
+-- inputs, the checkbox and the section panels; `k` scales it (a panel is gentler than a field).
+function Wg.Recess(frame, k)
+    k = k or 1
+    return Wg.Shade(frame, { pal.ink, 0.42 * k }, { pal.ink, 0.24 * k }, { pal.gold, 0.10 * k }, nil, 1)
+end
+
+-- A section's card: a surface a step lighter than the window, gently pressed in at its edge.
+function Wg.Panel(frame)
+    Wg.Surface(frame, pal.surface, 0.72, pal.bronzeLo, 0.5)
+    return Wg.Recess(frame, 0.6)
+end
+
+-- A flat information tag: a darker chip and quiet text. Not a button: no edge, no raised face, no hover.
+function Wg.Tag(parent, text)
+    local tag = CreateFrame("Frame", nil, parent)
+    tag.bg = Wg.Solid(tag, "BACKGROUND", pal.ink, 0.30)
+    tag.bg:SetAllPoints()
+    tag.text = Wg.Text(tag, "meta")
+    tag.text:SetPoint("CENTER", 0, 0)
+    tag.text:SetText(text)
+    tag:SetSize(tag.text:GetStringWidth() + 12, 15)
+    return tag
+end
+
 -- A small down- or up-pointing stepped arrowhead of 1px lines, centred on (x, y) of anchor.
 function Wg.Chevron(parent, anchor, point, x, y, down, c)
     local px = {}
@@ -104,6 +177,53 @@ function Wg.Button(parent, label, w, kind, onClick)
         b = S.Button(parent, label, w, kind == "primary" and "primary" or "secondary", onClick, pal)
     end
     b:SetMotionScriptsWhileDisabled(true)
+    Wg.Raise(b)
+    return b
+end
+
+-- Gives a button a raised face: a light upper edge, a darker lower edge and a faint sheen over its top half. It
+-- follows the button's own states: lit a little more under the pointer, sunk (the edges swap, the sheen goes)
+-- while pressed, flat when disabled. Works on any BackdropTemplate button; the button keeps its own colors.
+function Wg.Raise(b)
+    local warm = { 1, 0.93, 0.78 }
+    local sheen = b:CreateTexture(nil, "ARTWORK")
+    sheen:SetPoint("TOPLEFT", 1, -1)
+    sheen:SetPoint("TOPRIGHT", -1, -1)
+    sheen:SetHeight(11)
+    Wg.Fade(sheen, warm, 0.07, 0)
+    local lit = Wg.Solid(b, "ARTWORK", warm, 0.18)
+    lit:SetHeight(1)
+    lit:SetPoint("TOPLEFT", 1, -1)
+    lit:SetPoint("TOPRIGHT", -1, -1)
+    local dark = Wg.Solid(b, "ARTWORK", pal.ink, 0.45)
+    dark:SetHeight(1)
+    dark:SetPoint("BOTTOMLEFT", 1, 1)
+    dark:SetPoint("BOTTOMRIGHT", -1, 1)
+    local over, down = false, false
+    local function Paint()
+        local on = b:IsEnabled()
+        if not on then
+            sheen:Hide()
+            lit:SetColorTexture(warm[1], warm[2], warm[3], 0.05)
+            dark:SetColorTexture(pal.ink[1], pal.ink[2], pal.ink[3], 0.20)
+        elseif down then
+            sheen:Hide()
+            lit:SetColorTexture(pal.ink[1], pal.ink[2], pal.ink[3], 0.40)
+            dark:SetColorTexture(warm[1], warm[2], warm[3], 0.08)
+        else
+            sheen:Show()
+            lit:SetColorTexture(warm[1], warm[2], warm[3], over and 0.28 or 0.18)
+            dark:SetColorTexture(pal.ink[1], pal.ink[2], pal.ink[3], 0.45)
+        end
+    end
+    b:HookScript("OnEnter", function() over = true; Paint() end)
+    b:HookScript("OnLeave", function() over, down = false, false; Paint() end)
+    b:HookScript("OnMouseDown", function() down = true; Paint() end)
+    b:HookScript("OnMouseUp", function() down = false; Paint() end)
+    b:HookScript("OnEnable", Paint)
+    b:HookScript("OnDisable", Paint)
+    b:HookScript("OnHide", function() over, down = false, false end)
+    Paint()
     return b
 end
 
@@ -136,11 +256,13 @@ function Wg.Checkbox(parent, onToggle)
     local b = CreateFrame("Button", nil, parent, "BackdropTemplate")
     b:SetSize(18, 18)
     Wg.Surface(b, pal.well, 1, pal.bronze, 0.9)
+    Wg.Recess(b, 1.2)
     local mark = b:CreateTexture(nil, "OVERLAY")
     mark:SetTexture("Interface\\Buttons\\UI-CheckBox-Check")
+    if mark.SetDesaturated then mark:SetDesaturated(true) end   -- so the tint below is a clean amber
     mark:SetPoint("CENTER", 0, 0)
-    mark:SetSize(22, 22)
-    local fill = Wg.Solid(b, "ARTWORK", pal.gold, 0.16)
+    mark:SetSize(20, 20)
+    local fill = Wg.Solid(b, "ARTWORK", pal.gold, 0.22)         -- an amber glow in the recess
     fill:SetPoint("TOPLEFT", 2, -2)
     fill:SetPoint("BOTTOMRIGHT", -2, 2)
     local checked, active, over = false, true, false
@@ -176,9 +298,14 @@ function Wg.EditBox(parent, w, h)
     eb:SetFontObject("GameFontHighlightSmall")
     eb:SetTextInsets(6, 6, 0, 0)
     Wg.Surface(eb, pal.well, 1, pal.bronzeLo, 1)
+    Wg.Recess(eb)
+    -- keyboard focus: a gold edge and a faint inner ring (the only thing in the window that takes the keys)
+    local ring = Wg.Shade(eb, { pal.gold, 0.30 }, { pal.gold, 0.30 }, { pal.gold, 0.30 }, { pal.gold, 0.30 }, 1, "OVERLAY")
     local function Edge()
-        local c = eb:HasFocus() and pal.gold or (eb:IsMouseOver() and pal.bronze or pal.bronzeLo)
+        local focused = eb:HasFocus()
+        local c = focused and pal.gold or (eb:IsMouseOver() and pal.bronze or pal.bronzeLo)
         eb:SetBackdropBorderColor(c[1], c[2], c[3], 1)
+        for _, line in pairs(ring) do line:SetShown(focused) end
     end
     eb:HookScript("OnEditFocusGained", Edge)
     eb:HookScript("OnEditFocusLost", Edge)
@@ -187,6 +314,7 @@ function Wg.EditBox(parent, w, h)
     eb:SetScript("OnEscapePressed", eb.ClearFocus)
     eb:SetScript("OnEnterPressed", eb.ClearFocus)
     eb.PaintEdge = Edge
+    Edge()
     return eb
 end
 
@@ -419,6 +547,7 @@ function Wg.Dropdown(parent, w, onPick)
     end, pal)
     b.onPick = onPick
     b.active = true
+    Wg.Recess(b, 0.9)   -- it shows a value, like a field; only its arrowhead says it opens a list
     function b:SetChoices(fn) self.choices = fn end
     function b:SetValue(v, label)
         self.value = v
@@ -458,6 +587,7 @@ function Wg.Swatch(parent, onPick)
     local b = CreateFrame("Button", nil, parent, "BackdropTemplate")
     b:SetSize(40, 18)
     Wg.Surface(b, pal.well, 1, pal.bronze, 0.9)
+    Wg.Recess(b)
     local color = Wg.Solid(b, "ARTWORK", { 1, 1, 1 }, 1)
     color:SetPoint("TOPLEFT", 3, -3)
     color:SetPoint("BOTTOMRIGHT", -3, 3)
@@ -490,6 +620,75 @@ function Wg.Swatch(parent, onPick)
     end)
     b:SetMotionScriptsWhileDisabled(true)
     return b
+end
+
+---------------------------------------------------------------------------
+-- The window's own frame: a two-pixel bronze rim, lit along the top and left and shaded along the bottom and
+-- right, a dark line and a faint lit line inside it, small L-shaped brackets in the corners, and tonal layers
+-- (a warm light at the top, a settling shade at the bottom) over a very light speckle. Textures only; nothing
+-- here runs per frame or takes the mouse. (chronicle/Style.lua's S.Frame is the Chronicle's and stays as it is.)
+---------------------------------------------------------------------------
+local function Bracket(f, corner, inset, len, c, a)
+    local right, top = corner:find("RIGHT") ~= nil, corner:find("TOP") ~= nil
+    local x = right and -inset or inset
+    local y = top and -inset or inset
+    local h = Wg.Solid(f, "ARTWORK", c, a)
+    h:SetSize(len, 1)
+    h:SetPoint(corner, x, y)
+    local v = Wg.Solid(f, "ARTWORK", c, a)
+    v:SetSize(1, len)
+    v:SetPoint(corner, x, y)
+end
+
+function Wg.Frame(f, w, h, headerH)
+    f:SetBackdrop({ bgFile = WHITE, edgeFile = WHITE, edgeSize = 1 })
+    f:SetBackdropColor(pal.bg[1], pal.bg[2], pal.bg[3], 0.98)
+    f:SetBackdropBorderColor(pal.ink[1], pal.ink[2], pal.ink[3], 1)
+    Wg.Shade(f, { pal.bronzeHi, 0.95 }, { pal.bronzeHi, 0.80 }, { pal.bronze, 0.90 }, { pal.bronze, 0.90 }, 1)
+    Wg.Shade(f, { pal.bronze, 0.90 }, { pal.bronze, 0.80 }, { pal.bronzeLo, 0.95 }, { pal.bronzeLo, 0.95 }, 2)
+    Wg.Shade(f, { pal.ink, 0.60 }, { pal.ink, 0.50 }, { pal.ink, 0.40 }, { pal.ink, 0.45 }, 3)
+    Wg.Shade(f, { pal.gold, 0.12 }, { pal.gold, 0.05 }, { pal.ink, 0.22 }, { pal.ink, 0.22 }, 4)
+    for _, corner in ipairs({ "TOPLEFT", "TOPRIGHT", "BOTTOMLEFT", "BOTTOMRIGHT" }) do
+        Bracket(f, corner, 6, 8, pal.gold, 0.5)
+    end
+    -- tonal layers: light falls from the top, the bottom settles
+    local top = f:CreateTexture(nil, "BACKGROUND")
+    top:SetPoint("TOPLEFT", 5, -(headerH + 5))
+    top:SetPoint("TOPRIGHT", -5, -(headerH + 5))
+    top:SetHeight(170)
+    Wg.Fade(top, pal.gold, 0.055, 0)
+    local bottom = f:CreateTexture(nil, "BACKGROUND")
+    bottom:SetPoint("BOTTOMLEFT", 5, 5)
+    bottom:SetPoint("BOTTOMRIGHT", -5, 5)
+    bottom:SetHeight(120)
+    Wg.Fade(bottom, pal.ink, 0, 0.30)
+    -- a light grain, a third of the Chronicle's
+    S.Speckle(f, w, h, math.floor(w * h / 7500))
+end
+
+-- The title band: a surface a step above the window with a warm sheen along its top, a slight settling toward
+-- its bottom, and a fine separator (a bronze line over a dark one) below.
+function Wg.Header(f, height)
+    local band = Wg.Solid(f, "BACKGROUND", pal.band, 1)
+    band:SetPoint("TOPLEFT", 4, -4)
+    band:SetPoint("TOPRIGHT", -4, -4)
+    band:SetHeight(height)
+    local settle = f:CreateTexture(nil, "BACKGROUND", nil, 1)
+    settle:SetPoint("TOPLEFT", band, "TOPLEFT", 0, 0)
+    settle:SetPoint("BOTTOMRIGHT", band, "BOTTOMRIGHT", 0, 0)
+    Wg.Fade(settle, pal.ink, 0, 0.22)
+    local sheen = Wg.Solid(f, "BORDER", pal.gold, 0.10)
+    sheen:SetHeight(1)
+    sheen:SetPoint("TOPLEFT", band, "TOPLEFT", 0, 0)
+    sheen:SetPoint("TOPRIGHT", band, "TOPRIGHT", 0, 0)
+    local line = Wg.Solid(f, "BORDER", pal.bronze, 0.85)
+    line:SetHeight(1)
+    line:SetPoint("TOPLEFT", band, "BOTTOMLEFT", 0, 0)
+    line:SetPoint("TOPRIGHT", band, "BOTTOMRIGHT", 0, 0)
+    local shadow = Wg.Solid(f, "BORDER", pal.ink, 0.45)
+    shadow:SetHeight(1)
+    shadow:SetPoint("TOPLEFT", line, "BOTTOMLEFT", 0, 0)
+    shadow:SetPoint("TOPRIGHT", line, "BOTTOMRIGHT", 0, 0)
 end
 
 ---------------------------------------------------------------------------

@@ -49,7 +49,7 @@ claimed; see "Measuring".
 | `TwichUI_Settings/Kit.lua` | `K.Page`, the controls pages describe themselves with (`K.Toggle`, `K.Proxy`, `K.ProxyToggle`, `K.Choice`, `K.Dropdown`, `K.Slider`, `K.Swatch`, `K.Checkbox`, `K.Button`, `K.ResetButton`, `K.Link`, `K.Header`, `K.Appearance`), `K.Advanced`, `K.Under`, `K.Badge`, `K.InSection`, `K.Describe`, `K.NavOrder`, `K.SidebarOrder`, `K.Tabs`, `K.ResetPage` |
 | `TwichUI_Settings/pages/<Page>.lua` | One page each (some hold a page under it too: Gear + Stat weights, Mage + Refreshment shares, Chronicle + appearance, Pins + appearance) |
 | `TwichUI_Settings/Search.lua` | The index and ranking (descriptions only) |
-| `TwichUI_Settings/Widgets.lua` | The controls the window draws with, on `chronicle/Style.lua`'s helpers and a copy of its palette |
+| `TwichUI_Settings/Widgets.lua` | The controls the window draws with, on `chronicle/Style.lua`'s helpers and a copy of its palette; the depth they share: `Wg.Frame` / `Wg.Header` (rim, corner brackets, tonal layers), `Wg.Raise` (buttons), `Wg.Recess` (inputs, checkbox, nav well), `Wg.Panel` (section cards), `Wg.Tag` (Reload and similar), `Wg.Fade` (a gradient that falls back to a flat fill) |
 | `TwichUI_Settings/Window.lua` | The window, the left-hand list, a feature's tabs, pages, search results, footer, Esc |
 
 `gear/Window.lua` (Stat weights) and `modules/RefreshmentsShares.lua` (Refreshment shares) stay in the core: each
