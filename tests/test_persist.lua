@@ -84,7 +84,7 @@ assert(R.DEFAULT_MODULES.media ~= fresh.TwichUIDB.modules.media, "changing a set
 local mine = boot("Complete")
 mine.TwichUIDB.modules.chronicleDeaths = true
 mine.TwichUIDB.modules.media = false
-mine.TwichUIDB.ui = { showAdvanced = true, arrivalHold = "long", trainingPosition = { x = 12, y = -40 }, qol = { x = "y" }, chronicleClock = "24" }
+mine.TwichUIDB.ui = { reduceSettingsMotion = true, arrivalHold = "long", trainingPosition = { x = 12, y = -40 }, qol = { x = "y" }, chronicleClock = "24" }
 mine.TwichUIDB.gear = { strictness = "eager", weights = { MAGE = { [62] = { intellect = 2.5 } } }, priority = {}, usePriority = {}, trees = { ["Pal-Forever"] = 62 } }
 mine.TwichUI.Chronicle.Add("note", { title = "Note", note = "synthetic note one" })
 local snapshot = copy(logout(mine))
@@ -102,11 +102,11 @@ end
 ---------------------------------------------------------------------------
 -- 3. Partial settings get their missing defaults, and only those
 ---------------------------------------------------------------------------
-local partial = boot("Partial", { TwichUIDB = { schema = 1, shareTransport = "GUILD", modules = { chronicle = false }, ui = { showAdvanced = true } } })
+local partial = boot("Partial", { TwichUIDB = { schema = 1, shareTransport = "GUILD", modules = { chronicle = false }, ui = { reduceSettingsMotion = true } } })
 local pm = partial.TwichUIDB.modules
 assert(pm.chronicle == false, "a saved choice is kept")
 assert(pm.media == partial.TwichUI.DEFAULT_MODULES.media and pm.foodDrink == false and pm.arrival == true, "missing ones get their default")
-assert(partial.TwichUIDB.shareTransport == "GUILD" and partial.TwichUIDB.ui.showAdvanced == true)
+assert(partial.TwichUIDB.shareTransport == "GUILD" and partial.TwichUIDB.ui.reduceSettingsMotion == true)
 local added = partial.TwichUI.Persist.Report().repairs["defaults-added"]
 local total = 0
 for _ in pairs(partial.TwichUI.DEFAULT_MODULES) do total = total + 1 end
@@ -119,14 +119,14 @@ assert(partial.TwichUI.Persist.Report().lost == 0, "filling defaults loses nothi
 local odd = {
   schema = 1, shareTransport = "DIRECT",
   modules = { groupCheck = false, welcomeBack = false, arrival = false },
-  ui = { showAdvanced = false, arrivalHold = "", foodDrinkPosition = { x = 0, y = 0 }, qol = {}, foodDrink = { borderSize = 0, showCount = false },
+  ui = { reduceSettingsMotion = false, arrivalHold = "", foodDrinkPosition = { x = 0, y = 0 }, qol = {}, foodDrink = { borderSize = 0, showCount = false },
          brokerMenu = {} },
   gear = { glancePossible = false, weights = {}, priority = {}, usePriority = {}, trees = {} },
   setup = { detected = {}, selection = {}, received = {}, trusted = {}, recommend = { someAddon = false } },
 }
 local keep = boot("Odd", { TwichUIDB = copy(odd) })
 assert(keep.TwichUIDB.modules.groupCheck == false and keep.TwichUIDB.modules.welcomeBack == false and keep.TwichUIDB.modules.arrival == false)
-assert(keep.TwichUIDB.ui.showAdvanced == false and keep.TwichUIDB.ui.arrivalHold == "", "false and the empty string stay")
+assert(keep.TwichUIDB.ui.reduceSettingsMotion == false and keep.TwichUIDB.ui.arrivalHold == "", "false and the empty string stay")
 assert(keep.TwichUIDB.ui.foodDrinkPosition.x == 0 and keep.TwichUIDB.ui.foodDrink.borderSize == 0 and keep.TwichUIDB.ui.foodDrink.showCount == false, "zero and false stay")
 assert(next(keep.TwichUIDB.ui.qol) == nil and next(keep.TwichUIDB.ui.brokerMenu) == nil, "empty groups stay empty")
 assert(keep.TwichUIDB.gear.glancePossible == false and next(keep.TwichUIDB.gear.weights) == nil)
@@ -138,7 +138,7 @@ assert(keep.TwichUIDB.setup.recommend.someAddon == false, "a deliberate 'no' is 
 local bad = boot("Bad", { TwichUIDB = {
   schema = 1,
   modules = { chronicle = "yes", arrival = 0, welcomeBack = false, shareGroup = "legacy-and-unknown-kept" },
-  ui = { qol = "oops", foodDrink = 7, brokerMenu = { borderSize = 3 }, showAdvanced = true, futureField = { keep = "me" } },
+  ui = { qol = "oops", foodDrink = 7, brokerMenu = { borderSize = 3 }, reduceSettingsMotion = true, futureField = { keep = "me" } },
   gear = { reveal = "alt", weights = "nope", priority = { MAGE = 5 }, usePriority = { WARRIOR = { [71] = true } }, trees = {} },
   setup = 12,
   storedData = "x", whisperProbe = true, shareTransport = 12,
@@ -147,7 +147,7 @@ local bd = bad.TwichUIDB
 assert(bd.modules.chronicle == true and bd.modules.arrival == true, "a non-boolean switch returns to its default, not 'on' by accident")
 assert(bd.modules.welcomeBack == false and bd.modules.shareGroup == "legacy-and-unknown-kept", "valid and unknown values stay")
 assert(bd.ui.qol == nil and bd.ui.foodDrink == nil, "a group that is not a table is dropped so it can be rebuilt")
-assert(bd.ui.brokerMenu.borderSize == 3 and bd.ui.showAdvanced == true and bd.ui.futureField.keep == "me", "neighbours and unknown fields stay")
+assert(bd.ui.brokerMenu.borderSize == 3 and bd.ui.reduceSettingsMotion == true and bd.ui.futureField.keep == "me", "neighbours and unknown fields stay")
 assert(type(bd.setup) == "table" and type(bd.setup.received) == "table" and bd.storedData ~= "x" and bd.whisperProbe == nil)
 assert(bd.shareTransport == "DIRECT")
 assert(bd.gear.reveal == "alt")
@@ -207,7 +207,8 @@ assert(od.modules.auctionatorSkin == false and od.modules.groupCheck == false an
 assert(same(od.ui.trainingPosition, want.ui.trainingPosition) and od.ui.arrivalHold == "long" and od.ui.chronicleClock == "24" and od.ui.foodDrink.borderSize == 0, "valid values and positions survive")
 assert(same(od.gear.weights, want.gear.weights) and od.gear.trees["Pal-Forever"] == 62 and od.gear.strictness == "eager")
 assert(same(od.setup.selection, want.setup.selection) and od.setup.trusted["Rich-Forever"] == true and od.whisperProbe.ok == true)
-assert(old.TwichUI.Persist.Report().repairs["legacy-key-removed"] == 6 and old.TwichUI.Persist.Report().lost == 0, "six leftovers removed; nothing the player stored was lost")
+assert(od.ui.showAdvanced == nil, "the removed 'Show advanced options' preference is gone")
+assert(old.TwichUI.Persist.Report().repairs["legacy-key-removed"] == 7 and old.TwichUI.Persist.Report().lost == 0, "seven leftovers removed; nothing the player stored was lost")
 assert(not heard(old, "reset or set aside"), "an ordinary upgrade says nothing")
 
 -- What each earlier release really wrote (tests/fixtures: made by running that release's own code, for a
@@ -238,6 +239,23 @@ assert(transportFor({ shareGuild = true }) == "GUILD" and transportFor({ shareGr
 assert(boot("TChosen", { TwichUIDB = { shareTransport = "GUILD", modules = { shareGroup = true } } }).TwichUIDB.shareTransport == "GUILD", "an existing choice is never overwritten")
 for _, t in ipairs(fresh.TwichUI.Share.TRANSPORTS) do
   assert(boot("TV" .. t, { TwichUIDB = { schema = 1, shareTransport = t, modules = {} } }).TwichUIDB.shareTransport == t, t .. " is a valid transport for Persist too")
+end
+
+-- The removed "Show advanced options" preference, saved on or off, at the current schema: it is dropped quietly,
+-- hides and changes nothing, and its neighbours stay.
+for _, was in ipairs({ true, false }) do
+  local c = boot("Adv" .. tostring(was), { TwichUIDB = { schema = P.SCHEMA, shareTransport = "DIRECT", modules = {},
+    ui = { showAdvanced = was, reduceSettingsMotion = true, arrivalHold = "long" } } })
+  local rp = c.TwichUI.Persist.Report()
+  assert(c.TwichUIDB.ui.showAdvanced == nil, tostring(was) .. ": the obsolete preference is removed")
+  assert(c.TwichUIDB.ui.reduceSettingsMotion == true and c.TwichUIDB.ui.arrivalHold == "long", tostring(was) .. ": neighbours stay")
+  assert(rp.repairs["legacy-key-removed"] == 1 and rp.lost == 0 and not heard(c, "reset or set aside"), tostring(was) .. ": nothing lost, nothing announced")
+end
+-- Data from a newer TwichUI is never touched, whatever it holds.
+do
+  local newer = { schema = P.SCHEMA + 1, modules = {}, ui = { showAdvanced = true } }
+  local c = boot("AdvFuture", { TwichUIDB = newer })
+  assert(c.TwichUI.Persist.Report().main.outcome == "future" and newer.ui.showAdvanced == true, "a newer save keeps what it holds")
 end
 
 ---------------------------------------------------------------------------
@@ -630,7 +648,7 @@ local secret = boot("Zorblax", { TwichUIDB = (function() local d = legacy(); d.s
 local report = secret.TwichUI.Diag.Build()
 local function Has(text, needle) return text:find(needle, 1, true) ~= nil end
 assert(Has(report, "Saved data") and Has(report, "settings schema: stored none") and Has(report, "upgraded at this load"), "stored and current versions, and the outcome")
-assert(Has(report, "repair legacy-key-removed: 6") and Has(report, "repair chronicle-entry-set-aside: 1"), "repairs by stable code")
+assert(Has(report, "repair legacy-key-removed: 7") and Has(report, "repair chronicle-entry-set-aside: 1"), "repairs by stable code")
 for _, leak in ipairs({ "Zorblax", "PRIVATE NOTE TEXT", "hunter2", "SecretAddonDB", "FriendlyName", "Rich-Forever" }) do
   assert(not Has(report, leak), "the report must not contain: " .. leak)
 end

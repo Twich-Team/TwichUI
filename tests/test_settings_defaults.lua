@@ -1,7 +1,7 @@
 dofile(TESTS .. "harness.lua")
 dofile(TESTS .. "settings_mock.lua")
 -- Every switch's default is what a new install gets: the opt-in channels and group check stay off.
--- Also: advanced options are marked as such, gear options read and write the gear preferences, skins report
+-- Also: nothing is hidden behind an advanced flag, gear options read and write the gear preferences, skins report
 -- their status, each page reads and writes its feature's own settings, and its Reset puts back only its own.
 -- The pages are TwichUI_Settings' descriptions (tests/settings_mock.lua); no window is drawn here.
 local c, S = SettingsClient()
@@ -69,22 +69,28 @@ assert(defaults.trainingNotice == true, "new training card is on by default")
 assert(defaults.friendLogin == true, "Battle.net friend login card is on by default")
 assert(defaults.friendLoginSound == true, "the friend login chime is on by default")
 
--- Advanced options: marked as such (the window opens their sections on request); essentials never are.
-local advanced, visible = {}, {}
+-- No setting sits behind an "advanced" flag: every row is drawn whenever its own feature conditions hold.
+local visible = {}
 for _, i in ipairs(initializers) do
   local name = i:GetName()
-  if name then if i.advanced then advanced[name] = i else visible[name] = true end end
+  if name then
+    assert(i.advanced == nil, name .. " is not marked advanced")
+    visible[name] = true
+  end
 end
-assert(c.TwichUIDB.ui.showAdvanced == false, "advanced sections start closed")
+assert(c.TwichUIDB.ui.showAdvanced == nil, "no advanced-options preference is kept")
+assert(not proxies.TWICHUI_showAdvanced, "there is no 'Show advanced options' setting")
 -- (the background's tiling rows also wait for an image background: checked with the Chronicle's below)
 local IMAGE_ONLY = { ["Background tiling"] = true, ["Background tile size"] = true, ["Background inset"] = true }
-for name, i in pairs(advanced) do assert(IMAGE_ONLY[name] or i:Shown(), name .. " is drawn when its section is open") end
-for _, name in ipairs({"Upgrade hints in item tooltips", "Mark upgrades in my bags", "Weigh gear for", "Stat weights",
-  "Configuration sharing", "Let friends send me addon configurations", "Hide addon welcome messages", "Show advanced options"}) do
-  assert(visible[name], name .. " is visible by default")
+for _, i in ipairs(initializers) do
+  local name = i:GetName()
+  if name and i.kind ~= "header" then assert(IMAGE_ONLY[name] or i:Shown(), name .. " is drawn") end
 end
-for _, name in ipairs({"How big a gain counts", "Show the reasoning", "Bag mark style", "How long the zone card stays", "Send configurations by"}) do
-  assert(advanced[name], name .. " is advanced")
+for _, name in ipairs({"Upgrade hints in item tooltips", "Mark upgrades in my bags", "Weigh gear for", "Stat weights",
+  "Configuration sharing", "Let friends send me addon configurations", "Hide addon welcome messages",
+  "How big a gain counts", "Show the reasoning", "Show possible upgrades too", "Hint at gear for higher levels",
+  "Bag mark style", "How long the zone card stays", "Send configurations by"}) do
+  assert(visible[name], name .. " is visible")
 end
 
 -- Gear options read and write the gear preferences.
@@ -224,7 +230,7 @@ assert(attune:GetTooltip():find("after reload"), "toggle change shows it needs a
 -- is on exactly one page (registration above refuses a repeat).
 assert(table.concat(pageOrder, ",") == "Notifications,Quality of life,Food and drink,Auction House,Journey Chronicle,Chronicle appearance,Party pins,Pin appearance,Gear comparison,Mage,Addon skins,RestedXP guide window,SpeakStone speech frame,Configuration sharing,Profiles,Troubleshooting", table.concat(pageOrder, ","))
 for variable, page in pairs({
-  TWICHUI_media = "TwichUI", TWICHUI_quietLogin = "TwichUI", TWICHUI_showAdvanced = "TwichUI", 
+  TWICHUI_media = "TwichUI", TWICHUI_quietLogin = "TwichUI", 
   TWICHUI_gearHints = "Gear comparison", TWICHUI_gearTree = "Gear comparison", TWICHUI_gearBagStyle = "Gear comparison",
   TWICHUI_arrival = "Notifications", TWICHUI_arrivalHold = "Notifications", TWICHUI_arrivalReducedMotion = "Notifications",
   TWICHUI_previewSounds = "Notifications", TWICHUI_trainingNotice = "Notifications", TWICHUI_friendLogin = "Notifications", TWICHUI_friendLoginSound = "Notifications", TWICHUI_friendLoginChannel = "Notifications",
@@ -507,7 +513,7 @@ assert(rows["Addon skins"].status():find("of") or rows["Addon skins"].status():f
 
 
 -- Quality of life: everything is opt-in, there is no "requested invites" row (the game's interface
--- for it isn't in Forever), choices read and write the saved options, and the waits are advanced.
+-- for it isn't in Forever), choices read and write the saved options, and the waits sit with what they wait for.
 for _, key in ipairs({ "qolSummons", "qolResurrect", "qolResurrectCombat", "qolReleasePvP", "qolDuels", "qolDuelsToDeath", "qolQuickKeybind", "qolGuideWaypoint" }) do
   assert(defaults[key] == false, key .. " is off by default")
 end
@@ -522,10 +528,18 @@ proxies.TWICHUI_qolReleaseWait.set(0); assert(Q.Get("releaseWait") == 0)
 assert(#dropdowns.TWICHUI_qolSummonsFrom() == 3 and #dropdowns.TWICHUI_qolDuelsFrom() == 4)
 assert(dropdowns.TWICHUI_qolSummonsWait()[1].label == "Don't wait" and dropdowns.TWICHUI_qolSummonsWait()[2].label == "1 second")
 assert(proxies.TWICHUI_qolSummonsFrom.default == "known" and proxies.TWICHUI_qolSummonsWait.default == 3 and proxies.TWICHUI_qolReleaseWait.default == 2)
-c.TwichUIDB.ui.showAdvanced = false
-for _, name in ipairs({ "Wait before accepting a summon", "Wait before releasing" }) do assert(advanced[name], name .. " is advanced") end
-for _, name in ipairs({ "Accept summons", "Accept resurrection", "Release in battlegrounds", "Decline duel requests" }) do
+for _, name in ipairs({ "Accept summons", "Accept resurrection", "Release in battlegrounds", "Decline duel requests",
+  "Wait before accepting a summon", "Wait before releasing" }) do
   assert(visible[name], name .. " is visible by default")
+end
+-- the waits sit with what they wait for, indented under it
+do
+  local function Row(name) for _, i in ipairs(initializers) do if i:GetName() == name then return i end end end
+  local wait, from = Row("Wait before accepting a summon"), Row("Accept summons from")
+  assert(wait.section == from.section and wait.section:GetName() == "Summons and resurrection", "the summon wait is in Summons and resurrection")
+  assert(wait.parent and wait.parent:GetName() == "Accept summons" and from.parent == wait.parent, "both are under Accept summons")
+  local release = Row("Wait before releasing")
+  assert(release.section:GetName() == "Battlegrounds" and release.parent:GetName() == "Release in battlegrounds")
 end
 -- Turning a switch on or off starts and stops its listening, with no reload.
 local summonToggle; for _, i in ipairs(initializers) do if i.setting and i.setting.name == "Accept summons" then summonToggle = i end end
@@ -618,7 +632,7 @@ do
   end
 end
 
--- RestedXP skin: opt-in; its rows grey out with the switch; the detailed rows are Advanced; each writes
+-- RestedXP skin: opt-in; its rows grey out with the switch; the detailed rows sit with their section; each writes
 -- through to the look; Reset touches only the look (not the switch).
 do
   local RS = R.RestedXPSkin
@@ -640,7 +654,7 @@ do
     "TWICHUI_restedxpLookBorderSize", "TWICHUI_restedxpLookBorderOpacity", "TWICHUI_restedxpTitleFont", "TWICHUI_restedxpTitleOutline",
     "TWICHUI_restedxpBodyFont", "TWICHUI_restedxpBodyOutline", "TWICHUI_restedxpTintScrollbar" }) do
     local row = RowFor(v)
-    assert(row and row.advanced, v .. " is under Advanced")
+    assert(row and not row.advanced and row.section, v .. " is a plain setting in a section of its own page")
   end
   c.TwichUIDB.modules.restedxpSkin = true
   assert(RowFor("TWICHUI_restedxpLookBgColor"):Enabled(), "enabled with the skin on")
@@ -723,7 +737,7 @@ do
   proxies.TWICHUI_restedxpSettingsButton.set(true)
   proxies.TWICHUI_restedxpStepLabel.set("step")
 
-  -- the layout and size controls: the everyday ones are common, the technical one is Advanced, and
+  -- the layout and size controls: the everyday ones are common, the borders sit with the header, and
   -- the sizes are greyed until the player chooses to set them
   for _, v in ipairs({ "TWICHUI_restedxpShowCog", "TWICHUI_restedxpShowResizeHandle", "TWICHUI_restedxpShowTitle", "TWICHUI_restedxpShowLogo", "TWICHUI_restedxpShowClassIcon", "TWICHUI_restedxpFooter",
     "TWICHUI_restedxpCustomSizes", "TWICHUI_restedxpLineSpacing", "TWICHUI_restedxpStepPadding", "TWICHUI_restedxpScrollbar" }) do
@@ -731,7 +745,8 @@ do
     assert(row and not row.advanced, v .. " is a common setting")
     assert(not row:Enabled(), v .. " is greyed out while the skin is off")
   end
-  assert(RowFor("TWICHUI_restedxpDividers") and RowFor("TWICHUI_restedxpDividers").advanced, "section borders are Advanced")
+  assert(RowFor("TWICHUI_restedxpDividers") and not RowFor("TWICHUI_restedxpDividers").advanced
+  and RowFor("TWICHUI_restedxpDividers").section:GetName() == "Header and footer", "section borders sit with the header and footer")
   for _, v in ipairs({ "TWICHUI_restedxpTitleSize", "TWICHUI_restedxpActiveSize", "TWICHUI_restedxpListSize" }) do
     local row = RowFor(v)
     assert(row and not row.advanced and row.options and row.options.min >= 8, v .. " is a ranged slider")
@@ -785,7 +800,7 @@ do
 end
 
 -- SpeakStone skin: opt-in; its page sits right under Addon skins; the everyday rows are in plain view and the
--- technical ones Advanced; everything is greyed out with the switch off; each row writes through and refuses what
+-- the rest in their sections; everything is greyed out with the switch off; each row writes through and refuses what
 -- is invalid; the sample line asks SpeakStone's own command; Reset touches only this look.
 do
   local SS = R.SpeakStoneSkin
@@ -820,7 +835,7 @@ do
     "TWICHUI_speakstoneButtonFont", "TWICHUI_speakstoneButtonSize", "TWICHUI_speakstoneLineSpacing",
     "TWICHUI_speakstonePadding", "TWICHUI_speakstonePortraitBorderSize" }) do
     local row = RowFor(v)
-    assert(row and row.advanced, v .. " is under Advanced")
+    assert(row and not row.advanced and row.section, v .. " is a plain setting in a section of its own page")
   end
   c.TwichUIDB.modules.speakstoneSkin = true
   assert(RowFor("TWICHUI_speakstoneNameColor"):Enabled(), "enabled with the skin on")
@@ -895,7 +910,7 @@ do
 end
 
 -- RestedXP timer bars: a group on RestedXP's page, greyed out unless the skin and "Skin timer bars" are on,
--- the everyday controls in plain view and the technical ones Advanced, each written through (and validated);
+-- the everyday controls in plain view and the rest with them, each written through (and validated);
 -- only controls that have an effect are offered; its own reset; a preview that is a sample.
 do
   local RS = R.RestedXPSkin
@@ -921,7 +936,7 @@ do
     "TWICHUI_restedxpTimerLookBgTexture", "TWICHUI_restedxpTimerLookBgOpacity", "TWICHUI_restedxpTimerLookBorderTexture",
     "TWICHUI_restedxpTimerLookBorderSize", "TWICHUI_restedxpTimerLookBorderOpacity" }) do
     local row = RowFor(v)
-    assert(row and row.advanced, v .. " is under Advanced")
+    assert(row and not row.advanced and row.section, v .. " is a plain setting in a section of its own page")
   end
   -- nothing is offered that has no effect: no spark, no width
   for _, i in ipairs(initializers) do
@@ -983,7 +998,7 @@ do
 end
 
 -- Journey Chronicle appearance: on the Chronicle's page, common settings in plain view, the technical ones
--- Advanced, each written through to the look; greyed or hidden where they would do nothing; and a reset
+-- in their sections, each written through to the look; greyed or hidden where they would do nothing; and a reset
 -- that is only the appearance.
 do
   local CA = R.ChronicleAppearance
@@ -1000,14 +1015,14 @@ do
     assert(RowFor(v) and not RowFor(v).advanced, v .. " is a common setting")
   end
   for _, v in ipairs({ "TWICHUI_chronicleLookBgTiling", "TWICHUI_chronicleLookBgTileSize", "TWICHUI_chronicleLookBgInset" }) do
-    assert((RowFor(v).advanced and RowFor(v).advanced), v .. " is Advanced and only for an image background")
+    assert(RowFor(v) and not RowFor(v).advanced and RowFor(v).section:GetName() == "Background", v .. " sits with the background")
   end
-  for _, v in ipairs({ "TWICHUI_chroniclePadding", "TWICHUI_chronicleWindowOpacity", "TWICHUI_chronicleOutline",
-    "TWICHUI_chronicleScrollThumbColor", "TWICHUI_chronicleDividerColor" }) do
-    assert(RowFor(v).advanced, v .. " is Advanced")
+  for v, section in pairs({ TWICHUI_chroniclePadding = "Border", TWICHUI_chronicleWindowOpacity = "Background",
+    TWICHUI_chronicleOutline = "Typography", TWICHUI_chronicleScrollThumbColor = "Controls and accents",
+    TWICHUI_chronicleDividerColor = "Controls and accents" }) do
+    assert(RowFor(v) and not RowFor(v).advanced and RowFor(v).section:GetName() == section, v .. " sits in " .. section)
   end
   -- tiling controls mean something only for an image
-  c.TwichUIDB.ui.showAdvanced = true
   assert(not RowFor("TWICHUI_chronicleLookBgTiling"):Shown(), "a plain color is neither tiled nor stretched")
   proxies.TWICHUI_chronicleLookBgTexture.set("Blizzard Marble")
   assert(RowFor("TWICHUI_chronicleLookBgTiling"):Shown() and RowFor("TWICHUI_chronicleLookBgTileSize"):Shown(), "an image can be")
@@ -1049,7 +1064,6 @@ do
   assert(CA.Look.Get("borderTexture") == "ledger" and CA.Get("customSizes") == false)
   assert(c.TwichUIDB.ui.chronicleClock == "24" and c.TwichUIDB.modules.chronicleSound == false, "nothing but the look is reset")
   assert(Find("Chronicle window") and Find("Chronicle window").click, "a way to open the real window beside the settings")
-  c.TwichUIDB.ui.showAdvanced = false
 end
 
 print("SETTINGS DEFAULTS TESTS PASSED")

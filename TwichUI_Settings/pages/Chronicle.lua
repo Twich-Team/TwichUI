@@ -61,7 +61,7 @@ K.Page({
     keywords = "chronicle look theme background border font color accent texture opacity",
     when = function() return R.ChronicleAppearance ~= nil and R.ChronicleAppearance.Look ~= nil end,
     build = function()
-        local Header, Button, Proxy, Advanced, Under = K.Header, K.Button, K.Proxy, K.Advanced, K.Under
+        local Header, Button, Proxy, Under = K.Header, K.Button, K.Proxy, K.Under
         local BOOL, STRING, NUMBER = K.BOOL, K.STRING, K.NUMBER
         local CA = R.ChronicleAppearance
         local Fonts = R.MenuStyle and R.MenuStyle.Fonts
@@ -89,14 +89,41 @@ K.Page({
         end
         local function Merge(list) for _, entry in ipairs(list) do resettable[#resettable + 1] = entry end end
 
+        local function Setting(variable, varType, label, key)
+            local setting = Proxy("chronicle" .. variable, varType, label, CA.DEFAULTS[key],
+                function() return CA.Get(key) end, function(value) CA.Set(key, value) end)
+            if setting then resettable[#resettable + 1] = { setting = setting, default = CA.DEFAULTS[key] } end
+            return setting
+        end
+        local function Swatch(variable, key, label, tooltip)
+            return K.Swatch(Setting(variable, STRING, label, key), tooltip)
+        end
+        local function Pick(variable, key, label, tooltip, choices)
+            return K.Dropdown(Setting(variable, STRING, label, key), function() return choices(CA.Get(key)) end, tooltip)
+        end
+        local function Check(variable, key, label, tooltip)
+            return K.Checkbox(Setting(variable, BOOL, label, key), tooltip)
+        end
+        local function Slide(variable, key, label, tooltip)
+            local limit = CA.LIMITS[key]
+            local setting = Setting(variable, NUMBER, label, key)
+            if not limit then return end
+            return K.Slider(setting, limit[1], limit[2], tooltip)
+        end
+        local function FontChoices(first)
+            return function(current)
+                return Fonts and Fonts.Choices(current, first) or first
+            end
+        end
+
         Header("Background", "The window's fill. A plain color is the default; textures come from the game, from EllesmereUI (while it is installed) and from any LibSharedMedia pack. The header band and the list behind the entries fade with it, so a faint window is faint all through. Text, icons, buttons and the border keep their own strength.")
         Merge(K.Appearance(CA.Look, "chronicleLook", "window", nil, nil, nil, nil, nil, nil, {
             order = { "BgTexture", "BgColor", "BgOpacity", "BgTiling", "BgTileSize", "BgInset" },
-            advanced = { BgTiling = true, BgTileSize = true, BgInset = true },
-            advancedHeader = "Advanced background", advancedTip = "How a textured background repeats and where it sits.",
             labels = { BgTexture = "Background texture", BgColor = "Background color", BgOpacity = "Background opacity" },
             decorate = Decorate,
         }))
+        Slide("WindowOpacity", "windowOpacity", "Overall window opacity",
+            "Fades the whole window, text and border included, in percent. It multiplies the background, border and text strengths rather than replacing them, so 50 here with a 50 background is a quarter. 100 is the default; it cannot go below 40 so the window can always be found.")
 
         Header("Border", "The window's edge. The Chronicle ledger is the default: a bronze rim with a lit inner edge, tinted by the color below. Any other choice replaces it with a single border of the thickness you set. The window grows to give a border and the content padding room; its place and your entries do not move.")
         Merge(K.Appearance(CA.Look, "chronicleLook", "window", nil, nil, nil, nil, nil, nil, {
@@ -104,41 +131,8 @@ K.Page({
             labels = { BorderTexture = "Border style", BorderColor = "Border color", BorderOpacity = "Border opacity", BorderSize = "Border thickness" },
             decorate = Decorate,
         }))
-
-        local function Setting(variable, varType, label, key)
-            local setting = Proxy("chronicle" .. variable, varType, label, CA.DEFAULTS[key],
-                function() return CA.Get(key) end, function(value) CA.Set(key, value) end)
-            if setting then resettable[#resettable + 1] = { setting = setting, default = CA.DEFAULTS[key] } end
-            return setting
-        end
-        local function Swatch(variable, key, label, tooltip, isAdvanced)
-            local row = K.Swatch(Setting(variable, STRING, label, key), tooltip)
-            if row and isAdvanced then Advanced(row) end
-            return row
-        end
-        local function Pick(variable, key, label, tooltip, choices, isAdvanced)
-            local row = K.Dropdown(Setting(variable, STRING, label, key), function() return choices(CA.Get(key)) end, tooltip)
-            if row and isAdvanced then Advanced(row) end
-            return row
-        end
-        local function Check(variable, key, label, tooltip, isAdvanced)
-            local row = K.Checkbox(Setting(variable, BOOL, label, key), tooltip)
-            if row and isAdvanced then Advanced(row) end
-            return row
-        end
-        local function Slide(variable, key, label, tooltip, isAdvanced)
-            local limit = CA.LIMITS[key]
-            local setting = Setting(variable, NUMBER, label, key)
-            if not limit then return end
-            local row = K.Slider(setting, limit[1], limit[2], tooltip)
-            if row and isAdvanced then Advanced(row) end
-            return row
-        end
-        local function FontChoices(first)
-            return function(current)
-                return Fonts and Fonts.Choices(current, first) or first
-            end
-        end
+        Slide("Padding", "padding", "Content padding",
+            "Extra space between the border and the content, in pixels. The window grows by twice this; its place doesn't change. This is separate from the border's own thickness.")
 
         Header("Typography", "The Chronicle's text. Title, headline, note and date text are separate colors; fonts come from LibSharedMedia, so TwichUI's, EllesmereUI's and any other addon's fonts are listed. Sizes follow the game's own until you set them. Meaningful colors (the red Delete link, warnings, unavailable controls) are kept.")
         Pick("Font", "font", "Text font",
@@ -169,7 +163,7 @@ K.Page({
         Slide("LineSpacing", "lineSpacing", "Line spacing",
             "Extra pixels between the lines of text that wraps. Rows grow to fit. 0 is the game's own.")
         Pick("Outline", "outline", "Text outline", "An outline round all of the Chronicle's text.",
-            function() return CA.OUTLINE_CHOICES end, true)
+            function() return CA.OUTLINE_CHOICES end)
 
         Header("Controls and accents", "The color that picks things out, and the small surfaces around the entries.")
         Swatch("AccentColor", "accentColor", "Accent color",
@@ -185,15 +179,9 @@ K.Page({
         Pick("ButtonStyle", "buttonStyle", "Main button",
             "Filled: the Write a note and Save buttons are filled with a dark tone of the accent. Outline: they are drawn like the others, with an accent border and text.",
             function() return CA.BUTTON_CHOICES end)
-        Swatch("ScrollThumbColor", "scrollThumbColor", "Scroll bar thumb", "The color of the scroll bar's moving part.", true)
-        Swatch("ScrollTrackColor", "scrollTrackColor", "Scroll bar track", "The color of the scroll bar's groove, drawn faintly.", true)
-        Swatch("DividerColor", "dividerColor", "Divider color", "The color of the lines between entries and under the title band.", true)
-
-        Advanced(Header("Advanced layout", "Room and strength of the whole window."))
-        Slide("Padding", "padding", "Content padding",
-            "Extra space between the border and the content, in pixels. The window grows by twice this; its place doesn't change. This is separate from the border's own thickness.", true)
-        Slide("WindowOpacity", "windowOpacity", "Overall window opacity",
-            "Fades the whole window, text and border included, in percent. It multiplies the background, border and text strengths above rather than replacing them, so 50 here with a 50 background is a quarter. 100 is the default; it cannot go below 40 so the window can always be found.", true)
+        Swatch("ScrollThumbColor", "scrollThumbColor", "Scroll bar thumb", "The color of the scroll bar's moving part.")
+        Swatch("ScrollTrackColor", "scrollTrackColor", "Scroll bar track", "The color of the scroll bar's groove, drawn faintly.")
+        Swatch("DividerColor", "dividerColor", "Divider color", "The color of the lines between entries and under the title band.")
 
         K.InSection(K.ResetButton("Reset Chronicle appearance", resettable, CA.Reset,
             "Puts the Chronicle window's background, border, text, accents and layout back to the defaults. Nothing else changes: your entries and notes, the date filter, the time format, what is recorded, sounds and the cards are left as they are."), intro)

@@ -313,6 +313,20 @@ local UI_GROUPS = { "qol", "foodDrink", "brokerMenu", "refreshments", "refreshme
     "partyPins", "pinsLook", "pinsAppearance", "pinsMapText", "pinsBroker", "pinsBrokerMenu", "pinsEditorLook",
     "settingsWindow" }
 
+-- Keys the settings window used to keep and nothing reads any more. "Show advanced options" hid some settings
+-- behind a switch; every setting is shown now, so a stored value (true or false) has no effect. Removed
+-- wherever it is found, once it is, which is repeatable and needs no schema step.
+local OBSOLETE_UI = { "showAdvanced" }
+
+local function RemoveObsoleteUi(ui)
+    for _, k in ipairs(OBSOLETE_UI) do
+        if ui[k] ~= nil then
+            ui[k] = nil
+            P.Repair("legacy-key-removed")
+        end
+    end
+end
+
 local function NormalizeUiGroups(ui)
     for _, k in ipairs(UI_GROUPS) do
         if ui[k] ~= nil and type(ui[k]) ~= "table" then
@@ -475,7 +489,10 @@ function P.Normalize(db, fresh)
         end
     end
     if added > 0 then P.Repair("defaults-added", added) end
-    if type(db.ui) == "table" then NormalizeUiGroups(db.ui) end
+    if type(db.ui) == "table" then
+        NormalizeUiGroups(db.ui)
+        RemoveObsoleteUi(db.ui)
+    end
     if not VALID_TRANSPORT[db.shareTransport] then db.shareTransport = DeriveTransport(db.modules) end
     NormalizeWelcome(db, fresh)
     -- Profiles exist from schema 2 on. Data still at an older schema (an upgrade that failed this load) is

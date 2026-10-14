@@ -128,7 +128,7 @@ K.Page({
 
         Header("Profiles",
             "A profile is a saved set of TwichUI's options: which features are on, their looks, fonts and places. Each character uses one and remembers which. Characters using the same profile share it; a copy is independent.\n\n"
-            .. NOT_AFFECTED .. " The Mage never-sell list, the RestedXP skin's on/off switch and Show advanced options are the same for every profile.")
+            .. NOT_AFFECTED .. " The Mage never-sell list and the RestedXP skin's on/off switch are the same for every profile.")
 
         -- Who uses the profile in use: rewritten after every change (the panel shows it when the page is drawn).
         local function SharedLabel()

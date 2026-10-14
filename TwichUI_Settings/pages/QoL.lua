@@ -39,7 +39,7 @@ K.Page({
         end,
     },
     build = function()
-        local Header, Toggle, Choice, Advanced, Under = K.Header, K.Toggle, K.Choice, K.Advanced, K.Under
+        local Header, Toggle, Choice, Under = K.Header, K.Toggle, K.Choice, K.Under
         local STRING, NUMBER = K.STRING, K.NUMBER
         local Q = R.QoL
         -- Each row's tooltip ends with a note when Leatrix Plus has the same option on, read when it is shown.
@@ -76,6 +76,8 @@ K.Page({
                 { "group", "Group members only", "People in your party or raid." },
                 { "anyone", "Anyone", "Any player's summon, strangers included." },
             }), summons, SummonsOn)
+        Under(QolChoice("qolSummonsWait", "summonsWait", "Wait before accepting a summon",
+            "How long the summon's pop-up stays up before it is accepted, so you can decline it.", Waits("summonsWait")), summons, SummonsOn)
 
         local resurrect = QolToggle("qolResurrect", "Accept resurrection",
             "Accepts a resurrection another player offers you, so you get up without clicking the pop-up. The game's own waiting time is kept: if it hasn't passed, the offer is accepted when it ends, if it still stands. An offer that carries resurrection sickness is left for you to decide. Soulstones and other self-resurrection, spirit healers and corpse runs aren't touched, and it never releases your spirit. Not used on Hardcore rules.\n\nTurn it off if you'd rather choose who raises you.")
@@ -86,6 +88,9 @@ K.Page({
         Header("Battlegrounds", "Dying in a battleground, where the next step is nearly always to release.")
         local release = QolToggle("qolReleasePvP", "Release in battlegrounds",
             "After you die in a battleground, your spirit is released for you after a short wait. Battlegrounds only: never in dungeons, raids, arenas or the open world, where nothing here can tell that releasing is wanted. Nothing is released while you have a soulstone or other self-resurrection on offer, while someone's resurrection is on offer, or when the game says you can't release. Hold Shift as the wait ends to keep your body. Not used on Hardcore rules.\n\nThere is no second try: if it doesn't release, the game's own Release button is still there.")
+        Under(QolChoice("qolReleaseWait", "releaseWait", "Wait before releasing",
+            "How long after you die before your spirit is released. A resurrection offered in that time cancels the release, and holding Shift as it ends keeps your body.", Waits("releaseWait")),
+            release, function() return R:Enabled("qolReleasePvP") end)
 
         Header("Duels", "Duel requests from other players.")
         local duels = QolToggle("qolDuels", "Decline duel requests",
@@ -121,13 +126,5 @@ K.Page({
                 end
             end
         end
-
-        Advanced(Header("Advanced"))
-        Under(Advanced(QolChoice("qolSummonsWait", "summonsWait", "Wait before accepting a summon",
-            "How long the summon's pop-up stays up before it is accepted, so you can decline it.", Waits("summonsWait"))), summons, SummonsOn)
-        Under(Advanced(QolChoice("qolReleaseWait", "releaseWait", "Wait before releasing",
-            "How long after you die before your spirit is released. A resurrection offered in that time cancels the release, and holding Shift as it ends keeps your body.", Waits("releaseWait"))),
-            release, function() return R:Enabled("qolReleasePvP") end)
-
     end,
 })

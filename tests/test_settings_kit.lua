@@ -7,7 +7,7 @@ dofile(TESTS .. "settings_mock.lua")
 --   * a Reset forgets the look in one go (one redraw) and each control shows its value again;
 --   * the same value again redraws nothing;
 --   * the features' own setters refuse what they can't use;
---   * Advanced rows are marked, and "Show advanced options" names the pages that have them;
+--   * nothing is marked Advanced or hidden behind a preference; the old "Show advanced options" is gone;
 --   * nothing on the settings pages, Reset buttons and "Reset this page" included, touches map pins.
 
 local errors = {}
@@ -38,7 +38,8 @@ assert(Page("Broken page") and K.pages.broken.failed, "the broken page's place i
 for _, name in ipairs({ "Gear comparison", "Notifications", "Party pins", "Configuration sharing" }) do
   assert(#Page(name).rows > 0, name .. " is built")
 end
-assert(Row("TwichUI", "Show advanced options") and not Row("TwichUI", "Notifications", "link"), "the overview is built, and lists no features")
+assert(Row("TwichUI", "Reduce window motion") and not Row("TwichUI", "Notifications", "link"), "the overview is built, and lists no features")
+assert(not Row("TwichUI", "Show advanced options") and not S.variables.TWICHUI_showAdvanced, "the advanced-options switch is gone")
 
 -- 2. Switches act only on a real change.
 local arrival = S.variables.TWICHUI_arrival
@@ -144,24 +145,22 @@ c.TwichUIDB.modules.partyPins = false
 assert(not Row("Pin appearance", "Accent color"):Enabled(), "the pins' look is greyed out while Party pins is off")
 c.TwichUIDB.modules.partyPins = true
 
--- Advanced: rows are marked (the window opens them on request, or always with "Show advanced options");
--- a whole Advanced section's header is marked too, and an ordinary row after it belongs to the section before.
-assert(not Row("Gear comparison", "Advanced options", "button"), "no row of its own any more: the window shows them")
+-- No Advanced mechanism: the rows that used to be behind it sit in the section of what they belong with.
+assert(not K.Advanced and not K.AdvancedShown and not K.advancedPages, "the kit has no Advanced marking")
 local strict = Row("Gear comparison", "How big a gain counts")
-assert(strict.advanced and strict.section.advanced and strict.section:GetName() == "Advanced", "advanced, in its Advanced section")
-assert(not Row("Gear comparison", "Upgrade hints in item tooltips").advanced, "the switch is not")
+assert(strict.advanced == nil and strict.section:GetName() == "Upgrade hints", "plain, with the other upgrade hint settings")
+assert(Row("Gear comparison", "Bag mark style").section:GetName() == "Bag marks" and Row("Gear comparison", "Bag mark style").parent:GetName() == "Mark upgrades in my bags")
+for _, page in ipairs(K.list) do
+  for _, row in ipairs(page.rows) do
+    assert(row.advanced == nil, page.name .. ": " .. tostring(row:GetName()) .. " is not marked advanced")
+    assert(row.kind == "header" or row.section, page.name .. ": " .. tostring(row:GetName()) .. " is in a section")
+    assert(not (row.section and row.section:GetName() == "Advanced"), page.name .. " has no Advanced section")
+  end
+end
 local resetTimers = Row("RestedXP guide window", "Reset timer bars")
-assert(not resetTimers.advanced and resetTimers.section:GetName() == "Timer bars", "the timer bars' Reset stays with them")
+assert(resetTimers.section:GetName() == "Timer bar background and border", "the timer bars' Reset ends the timer bars' sections")
 local resetLook = Row("RestedXP guide window", "Reset appearance")
 assert(resetLook.section:GetName() == "RestedXP guide window", "the look's Reset is with the switch it resets: " .. resetLook.section:GetName())
-local tip = Row("TwichUI", "Show advanced options"):GetTooltip()
-for _, name in ipairs({ "Gear comparison", "Notifications", "Quality of life", "Chronicle appearance", "RestedXP guide window", "Configuration sharing" }) do
-  assert(tip:find(name, 1, true), "the switch names " .. name)
-end
-assert(not tip:find("Food and drink", 1, true), "and only pages that have an Advanced section")
-S.variables.TWICHUI_showAdvanced:SetValue(true)
-assert(c.TwichUIDB.ui.showAdvanced == true and K.AdvancedShown())
-S.variables.TWICHUI_showAdvanced:SetValue(false)
 
 -- 6. Map pins: no setting, Reset or Defaults touches them, kept pins included.
 c.C_Map = c.C_Map or {}

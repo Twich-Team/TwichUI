@@ -5,7 +5,7 @@ dofile(TESTS .. "harness.lua")
 --     compared, and then every page's "Reset this page" is run, in page order, and compared again (it must put
 --     back what the game's own Defaults button did when the settings were in the game's options);
 --   * the pages, their parents and groups, and the keys R:OpenSettings accepts;
---   * each page's rows in order: kind, label, section, whether it is advanced, what it is greyed out under, and
+--   * each page's rows in order: kind, label, section, what it is greyed out under, and
 --     a checksum of its tooltip.
 -- tests/fixtures/settings_contract.lua holds the expected values. To record it again after an intended change:
 --   cd tests && TWICHUI_GENERATE_CONTRACT=1 lua5.1 -e 'require("bit"); ROOT="../"; TESTS="./"' test_settings_contract.lua
@@ -77,9 +77,8 @@ end
 for _, page in ipairs(pages) do
   for n, i in ipairs(page.rows) do
     local label = i:GetName() or ""
-    contract.rows[#contract.rows + 1] = ("%s #%d %s %q%s%s%s%s tip:%s"):format(page.name, n, i.kind, label,
+    contract.rows[#contract.rows + 1] = ("%s #%d %s %q%s%s%s tip:%s"):format(page.name, n, i.kind, label,
       (i.kind ~= "header" and i.section) and (" in:%q"):format(i.section:GetName() or "?") or "",
-      i.advanced and " advanced" or "",
       i.parent and (" under:%q"):format(i.parent:GetName() or "?") or "",
       i.data.setting and (" " .. i.data.setting.variable) or "",
       Checksum(i:GetTooltip()))

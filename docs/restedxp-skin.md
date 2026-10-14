@@ -350,7 +350,7 @@ spark, so none is offered. Bars the library makes for other addons are never tou
 | Show RestedXP's clock icon | off | decoration; off gives its room to the bar |
 | Bar height | 16 (RestedXP's) | 12-28; the text's need wins |
 | Timer background and border (texture, color, opacity, thickness) | solid, `#17110B` at 85 %, a 1 px `#8C6E38` line at 90 % | "None" textures and a thickness of 0 are supported |
-| Advanced: Text padding, Fill texture, label and time fonts and outlines | 4 px, flat color, the guide's step font, outline | |
+| Text padding, Fill texture, label and time fonts and outlines | 4 px, flat color, the guide's step font, outline | |
 | Preview | | two made-up bars (a short and a long label) on frames of their own |
 | Reset timer bars | | only the timer bars; not the switch of the skin or its look |
 

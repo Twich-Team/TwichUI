@@ -34,7 +34,7 @@ PF.ACCOUNT = {
         restedxpSkin = true,      -- turning it on or off chooses RestedXP's own theme (a RestedXP setting)
     },
     ui = {
-        showAdvanced = true,      -- how the settings window itself looks: Advanced sections always open
+        showAdvanced = true,      -- removed (Persist.lua deletes it on load): kept out of profiles so an old copy never travels in one
         reduceSettingsMotion = true, -- how the settings window itself moves: no fades
         settingsWindow = true,    -- where the settings window sits
         restedxpSkinState = true, -- the RestedXP theme to go back to: a record of RestedXP's setting, not a choice

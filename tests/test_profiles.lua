@@ -103,7 +103,14 @@ assert(db.profileState.live == "Default" and db.profileState.newCharacters == "D
 assert(next(db.profiles) == nil and db.profileKeys["Rich - Forever"] == "Default", "no other profile; this character's choice is remembered")
 local want = fixture.TwichUIDB
 for k, v in pairs(want.modules) do assert(db.modules[k] == v, "modules." .. k .. " kept") end
-for k, v in pairs(want.ui) do assert(same(db.ui[k], v), "ui." .. k .. " kept") end
+for k, v in pairs(want.ui) do
+  if k == "showAdvanced" then
+    assert(db.ui[k] == nil, "ui.showAdvanced (the removed 'Show advanced options') is dropped")
+  else
+    assert(same(db.ui[k], v), "ui." .. k .. " kept")
+  end
+end
+db.ui.reduceSettingsMotion = true   -- an account-wide option that is still current
 for k, v in pairs(want.gear) do assert(same(db.gear[k], v), "gear." .. k .. " kept") end
 assert(same(db.pins, want.pins) and db.pins.list[1].kept == true, "pins and their kept state are untouched")
 assert(same(db.setup, want.setup) and db.shareTransport == want.shareTransport)
@@ -145,7 +152,7 @@ local function untouched(tag)
   assert(same(db.gear.weights, before.weights) and same(db.gear.trees, before.trees), tag .. ": stat weights and tree choices untouched")
   assert(same(db.ui.mageSell, before.sell), tag .. ": the never-sell list untouched")
   assert(same(db.ui.restedxpSkinState, before.rxpState) and same(db.ui.guideWaypoint, before.waypoint), tag .. ": per-character and third-party records untouched")
-  assert(db.ui.showAdvanced == true and db.modules.restedxpSkin == before.rxpSwitch, tag .. ": account-wide options untouched")
+  assert(db.ui.reduceSettingsMotion == true and db.modules.restedxpSkin == before.rxpSwitch, tag .. ": account-wide options untouched")
   assert(db.shareTransport == before.transport and same(db.welcome, before.welcome), tag .. ": sending method and welcome untouched")
   assert(db.modules == modulesTable and db.ui == uiTable and db.gear == gearTable, tag .. ": the live tables are the same tables")
   for name, data in pairs(db.profiles) do
@@ -180,7 +187,7 @@ assert(S.variables.TWICHUI_arrivalHold:GetValue() == "standard" and windowRedraw
 assert(S.variables.TWICHUI_profileCurrent:GetValue() == "Raid")
 local stored = db.profiles.Default
 assert(stored.modules.chronicleDeaths == true and stored.ui.arrivalHold == "long" and stored.ui.foodDrink.size == 44 and stored.gear.strictness == "eager")
-assert(stored.ui.showAdvanced == nil and stored.ui.mageSell == nil and stored.modules.restedxpSkin == nil and stored.gear.weights == nil,
+assert(stored.ui.reduceSettingsMotion == nil and stored.ui.showAdvanced == nil and stored.ui.mageSell == nil and stored.modules.restedxpSkin == nil and stored.gear.weights == nil,
   "account-wide entries are never stored in a profile")
 assert(db.profileKeys["Rich - Forever"] == "Raid")
 untouched("create")
@@ -211,7 +218,9 @@ ok, code, info = PF.Switch("Default")
 assert(ok and code == "switch" and told == 1 and PF.Current() == "Default")
 assert(info.reload == false and #info.failed == 0, "back to the values the UI loaded with: no reload needed")
 for k, v in pairs(want.modules) do assert(db.modules[k] == v, "switched back: modules." .. k) end
-for k, v in pairs(want.ui) do assert(same(db.ui[k], v), "switched back: ui." .. k) end
+for k, v in pairs(want.ui) do
+  if k ~= "showAdvanced" then assert(same(db.ui[k], v), "switched back: ui." .. k) end
+end
 assert(db.gear.strictness == "eager" and R.FoodDrink.Get("size") == 44 and R.Chronicle.Clock() == "24")
 assert(db.profiles["Raid copy"].ui.foodDrink.size == 60, "the copy kept its own value")
 assert(db.profiles.Default == nil, "the profile in use is not stored twice")

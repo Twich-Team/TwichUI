@@ -6,7 +6,7 @@ dofile(TESTS .. "settings_mock.lua")
 --   * opening builds one window; every page draws without error; reopening and navigating make nothing new;
 --   * an unknown page opens the start page; an unknown setting opens the page at its top;
 --   * search finds settings on pages that were never drawn, without drawing them; choosing a result goes to
---     its page, opens its Advanced section and changes nothing; Up/Down/Enter/Esc in the search box;
+--     its page and changes nothing; Up/Down/Enter/Esc in the search box;
 --   * a control writes through its feature's setter; a greyed-out control says why and does nothing;
 --   * "Reset this page" asks first, names its scope, and puts back only that page (pins untouched);
 --   * Esc: the dropdown list first, then the window; the game's color picker is left to close itself; it goes
@@ -153,6 +153,27 @@ assert(R.SettingsUI and win.shown)
 R:OpenSettings("chronicle", "TWICHUI_doesNotExist")
 R:OpenSettings(nil, "TWICHUI_arrivalHold")   -- a setting alone: its page
 
+-- A setting that used to sit behind "Show advanced options" is drawn at once, in view, with no toggle to open:
+-- reaching it by link or search needs nothing to be turned on first.
+do
+  local function Visible(frame, text)
+    if frame.text == text and frame.IsVisible and frame:IsVisible() then return true end
+    for _, child in ipairs(frame.children or {}) do
+      if Visible(child, text) then return true end
+    end
+    return false
+  end
+  assert(c.TwichUIDB.ui.showAdvanced == nil, "no advanced preference exists")
+  R:OpenSettings("qol", "TWICHUI_qolSummonsWait")
+  assert(Visible(win, "Wait before accepting a summon"), "the summon wait is drawn on Quality of life without any toggle")
+  assert(Visible(win, "Accept summons from"), "beside Accept summons from")
+  assert(not Visible(win, "Show advanced options") and not Visible(win, "Show"), "no disclosure control is drawn")
+  R:OpenSettings("gear", "TWICHUI_gearStrictness")
+  assert(Visible(win, "How big a gain counts"), "a formerly advanced gear setting is drawn")
+  R:OpenSettings("overview")
+  assert(not Visible(win, "Show advanced options"), "Home has no advanced-options checkbox")
+end
+
 ---------------------------------------------------------------------------
 -- 1b. Sidebar and tabs: a page under another is a tab of its parent, not a row of the list
 ---------------------------------------------------------------------------
@@ -285,7 +306,8 @@ assert(#Search.Run("") == 0 and #Search.Run("   ") == 0, "an empty query finds n
 assert(#Search.Run("xyzzy-nothing") == 0)
 assert(#Search.Run("%a+") == 0, "a query is plain text, not a pattern")
 local hold = Search.Run("how long the zone card")
-assert(hold[1] and hold[1].entry.row.id == "arrivalHold" and Search.Note(hold[1].entry) == "Advanced", "advanced results say so")
+assert(hold[1] and hold[1].entry.row.id == "arrivalHold" and Search.Note(hold[1].entry) == nil, "a formerly advanced setting is an ordinary result")
+assert(#Search.Run("show advanced options") == 0 or Search.Run("show advanced options")[1].entry.label ~= "Show advanced options", "the removed switch is not found")
 -- a secondary page's results name the feature and the tab, and open on that tab
 do
   local checked = 0

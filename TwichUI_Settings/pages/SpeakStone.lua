@@ -22,7 +22,7 @@ K.Page({
     build = function()
         local SS = R.SpeakStoneSkin
         local Style = SS.Style
-        local Header, Toggle, Button, Proxy, ProxyToggle, Advanced, Under = K.Header, K.Toggle, K.Button, K.Proxy, K.ProxyToggle, K.Advanced, K.Under
+        local Header, Toggle, Button, Proxy, ProxyToggle, Under = K.Header, K.Toggle, K.Button, K.Proxy, K.ProxyToggle, K.Under
         local BOOL, STRING, NUMBER = K.BOOL, K.STRING, K.NUMBER
 
         local intro = Header("SpeakStone speech frame", "Gives SpeakStone's speech frame (the bar that shows who is speaking, the text, a progress line and Pause, Stop and Replay) a TwichUI look: a warm background and thin bronze border, fonts and colors of your choosing, quieter controls and a ringed portrait. It only changes how the frame is drawn: SpeakStone's narration, queue, timing, text, size, position and lock are its own. Works with or without EllesmereUI.")
@@ -46,9 +46,8 @@ K.Page({
         Under(Button("Sample line", "Show or hide", function() SS.TogglePreview() end,
             "Shows SpeakStone's own sample line (the one /ss frame shows), so you can see the look as you change it. No narration is played and nothing is recorded. While SpeakStone is speaking it says so in chat and shows nothing."), toggle, On)
 
+        Header("Frame", "The speech frame's background and border, and the room inside it.")
         local resettable = K.Appearance(SS.Look, "speakstoneLook", "speech frame", nil, nil, nil, nil, toggle, On, {
-            order = { "BgColor", "BgOpacity", "BorderColor", "BgTexture", "BorderTexture", "BorderSize", "BorderOpacity" },
-            advanced = { BgTexture = true, BorderTexture = true, BorderSize = true, BorderOpacity = true },
             labels = {
                 BgTexture = "Frame background texture", BgColor = "Frame background color",
                 BgOpacity = "Frame background opacity", BorderTexture = "Frame border texture",
@@ -63,38 +62,31 @@ K.Page({
             if setting then resettable[#resettable + 1] = { setting = setting, default = Style.DEFAULTS[key] } end
             return setting
         end
-        local function Swatch(variable, key, label, tooltip, isAdvanced)
+        local function Swatch(variable, key, label, tooltip)
             local row = K.Swatch(StyleSetting(variable, STRING, label, key), tooltip)
-            if row then
-                if isAdvanced then Advanced(row) end
-                Under(row, toggle, On)
-            end
+            if row then Under(row, toggle, On) end
         end
-        local function Slider(variable, key, label, tooltip, isAdvanced)
+        local function Slider(variable, key, label, tooltip)
             local limit = Style.LIMITS[key]
             local setting = StyleSetting(variable, NUMBER, label, key)
             if not limit then return end
             local row = K.Slider(setting, limit[1], limit[2], tooltip)
-            if row then
-                if isAdvanced then Advanced(row) end
-                Under(row, toggle, On)
-            end
+            if row then Under(row, toggle, On) end
         end
-        local function Choice(variable, key, label, tooltip, choices, isAdvanced)
+        local function Choice(variable, key, label, tooltip, choices)
             local row = K.Dropdown(StyleSetting(variable, STRING, label, key), function() return choices(Style.Get(key)) end, tooltip)
-            if row then
-                if isAdvanced then Advanced(row) end
-                Under(row, toggle, On)
-            end
+            if row then Under(row, toggle, On) end
         end
-        local function Check(variable, key, label, tooltip, isAdvanced)
+        local function Check(variable, key, label, tooltip)
             local row = K.Checkbox(StyleSetting(variable, BOOL, label, key), tooltip)
             if row then
-                if isAdvanced then Advanced(row) end
                 Under(row, toggle, On)
                 return row
             end
         end
+
+        -- Padding sits with the frame's border (it is never less than the border's thickness needs)
+        Slider("Padding", "padding", "Padding", "The room between the border and the portrait, the text and the controls. It is never less than the border's thickness needs.")
 
         Header("Text", "The speaker's name, the dialogue and the playback time. Fonts come from LibSharedMedia, so fonts other addons add appear here; TwichUI's and EllesmereUI's are listed first. A font that has gone is drawn as SpeakStone's own and stays chosen. Colors SpeakStone puts in the text itself (a quest title after the name) are left as they are.")
         Choice("NameFont", "nameFont", "Speaker font",
@@ -107,10 +99,16 @@ K.Page({
         Slider("TextSize", "textSize", "Dialogue size",
             "The size of the dialogue. The text area keeps its four lines (or all of the text, with SpeakStone's \"Show all the text\"), at this size.")
         Swatch("TextColor", "textColor", "Dialogue color", "The color of the dialogue.")
+        Slider("LineSpacing", "lineSpacing", "Line spacing", "Extra pixels between the dialogue's lines. SpeakStone's own is 2.")
+        Choice("TimeFont", "timeFont", "Playback time font", "The font of the time and the queue position.", SS.FontChoices)
+        Slider("TimeSize", "timeSize", "Playback time size", "The size of the time and the queue position. Kept readable at SpeakStone's smallest size.")
         Swatch("TimeColor", "timeColor", "Playback time color",
             "The color of the time and the queue position, and of a button's label while it is unavailable. Kept quieter than the dialogue by default.")
 
         Header("Controls", "Pause, Stop, Replay and Next, and the settings and close icons. They keep SpeakStone's own labels, tooltips and clicks.")
+        Choice("ButtonFont", "buttonFont", "Button font", "The font of the buttons' labels.", SS.FontChoices)
+        Slider("ButtonSize", "buttonSize", "Button label size",
+            "The size of the buttons' labels. The buttons and their row grow to fit it, and a button widens to keep its label whole.")
         Swatch("ButtonText", "buttonText", "Button label color", "The color of a button's label, and of the settings and close icons.")
         Swatch("ButtonFill", "buttonFill", "Button fill color", "The color of a button's fill. It is a little darker while pressed.")
         Swatch("ButtonBorder", "buttonBorder", "Button border color", "The color of the thin line round each button.")
@@ -126,22 +124,13 @@ K.Page({
         Choice("PortraitShape", "portraitShape", "Portrait shape",
             "Round is SpeakStone's own. Square shows the whole picture.", function() return SS.SHAPE_CHOICES end)
         Swatch("PortraitBorderColor", "portraitBorderColor", "Portrait ring color", "The color of the thin ring round the portrait.")
+        Slider("PortraitBorderSize", "portraitBorderSize", "Portrait ring thickness", "How thick the ring round the portrait is, in pixels. 0 for none.")
 
         Header("Progress line", "The thin line under the text that follows the voice. SpeakStone works out how far along it is; this changes only how it is drawn.")
         Check("ShowProgress", "showProgress", "Show the progress line", "Off, the line is not drawn and the frame is that much shorter.")
         Swatch("ProgressColor", "progressColor", "Progress fill color", "The color of the part that has been spoken.")
         Swatch("TrackColor", "trackColor", "Progress track color", "The color of the line behind it.")
         Slider("ProgressHeight", "progressHeight", "Progress line thickness", "How thick the line is, in pixels.")
-
-        Advanced(Header("Advanced text and spacing", "Fonts and sizes of the smaller text, and room inside the frame."))
-        Choice("TimeFont", "timeFont", "Playback time font", "The font of the time and the queue position.", SS.FontChoices, true)
-        Slider("TimeSize", "timeSize", "Playback time size", "The size of the time and the queue position. Kept readable at SpeakStone's smallest size.", true)
-        Choice("ButtonFont", "buttonFont", "Button font", "The font of the buttons' labels.", SS.FontChoices, true)
-        Slider("ButtonSize", "buttonSize", "Button label size",
-            "The size of the buttons' labels. The buttons and their row grow to fit it, and a button widens to keep its label whole.", true)
-        Slider("LineSpacing", "lineSpacing", "Line spacing", "Extra pixels between the dialogue's lines. SpeakStone's own is 2.", true)
-        Slider("Padding", "padding", "Padding", "The room between the border and the portrait, the text and the controls. It is never less than the border's thickness needs.", true)
-        Slider("PortraitBorderSize", "portraitBorderSize", "Portrait ring thickness", "How thick the ring round the portrait is, in pixels. 0 for none.", true)
 
         local reset = K.ResetButton("Reset appearance", resettable, SS.Reset,
             "Puts this look's background, border, text, controls, portrait, progress line and spacing back to the defaults. Nothing else changes: not the switch, SpeakStone's settings, its size and position, or the rest of TwichUI.")

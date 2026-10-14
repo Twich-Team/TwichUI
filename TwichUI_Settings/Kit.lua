@@ -1,7 +1,7 @@
 -- TwichUI Settings: the page list and the controls every page uses
 -- Each page file (pages/<Page>.lua) declares a page with K.Page{ ... build = function(page) ... end }. Its build
 -- function calls the controls below, which only *describe* rows: a label, a tooltip, the setting it reads and
--- writes through its feature's own Get/Set, what it is greyed out under, whether it is advanced. No frame is
+-- writes through its feature's own Get/Set, what it is greyed out under. No frame is
 -- made here. The descriptions are made once, the first time the window opens (K.Describe), and are what search
 -- reads; Window.lua draws a page's rows the first time that page is shown.
 --
@@ -18,7 +18,6 @@ local K = {
     list = {},          -- the described pages, in their order
     variables = {},     -- [TWICHUI_name] = setting
     settings = {},      -- settings in the order made
-    advancedPages = {}, -- [page key] = true for pages with an Advanced section
     rowsById = {},      -- [row id] = row
     switchRows = {},    -- [switch key] = its checkbox row
 }
@@ -169,7 +168,7 @@ local function AddRow(kind, data)
     local page = K.current
     if not page then return nil end
     local row = setmetatable({
-        kind = kind, data = data, shown = {}, modify = {}, page = K.key, section = K.section, advanced = false,
+        kind = kind, data = data, shown = {}, modify = {}, page = K.key, section = K.section,
         setting = data.setting,
     }, Row)
     if kind == "header" then
@@ -206,19 +205,6 @@ function K.CloseOptions()
     if R.SettingsUI then R.SettingsUI.Close() end
 end
 
--- "Show advanced options": Advanced sections open by themselves.
-function K.AdvancedShown() return TwichUIDB.ui.showAdvanced == true end
-
--- An Advanced row, or, given a header, a section of Advanced rows (each row in it is marked too, as it always
--- was). The setting keeps its value and keeps working while it is out of sight.
-function K.Advanced(row)
-    if row then
-        row.advanced = true
-        K.advancedPages[row.page] = true
-    end
-    return row
-end
-
 -- Puts a row in a section other than the one it was described under (a page's own Reset, described after its
 -- last section).
 function K.InSection(row, header)
@@ -227,19 +213,6 @@ function K.InSection(row, header)
         row.fixedSection = true
     end
     return row
-end
-
--- An ordinary row described after an Advanced section's header belongs with the ordinary section before it
--- (the Advanced header used to be hidden, so that is where it showed).
-local function Settle(page)
-    local plain
-    for _, row in ipairs(page.rows) do
-        if row.kind == "header" then
-            if not row.advanced then plain = row end
-        elseif row.section and row.section.advanced and not row.advanced and not row.fixedSection then
-            row.section = plain
-        end
-    end
 end
 
 -- Greyed out while isOn() is false. The saved value is left alone; the tooltip and the row say why, for as long
@@ -314,7 +287,7 @@ function K.Toggle(key, label, tooltip)
     return row, setting
 end
 
--- A setting kept in a table of its own (key in tbl()), not through a feature. Only "Show advanced options".
+-- A setting kept in a table of its own (key in tbl()), not through a feature. Only "Reduce window motion".
 function K.TableSetting(variable, key, tbl, label, default, kind)
     return NewSetting(variable, K.BOOL, label, default,
         function() local t = tbl(); return t[key] end,
@@ -422,15 +395,13 @@ end
 -- thickness, a preview and a reset. style: the look; prefix: its settings' names; noun: what it is the look of
 -- ("menu", "panel"); parent, isOn: the switch it is greyed out under, if any. preview: nil for no Preview button.
 -- resetLabel: nil for no Reset button (the caller resets the returned { setting, default } list itself).
--- options, all optional: order: the rows' suffixes in the order to list them; advanced: { [suffix] = true } for
--- Advanced rows; labels: { [suffix] = a label of its own }; decorate(suffix, row).
+-- options, all optional: order: the rows' suffixes in the order to list them; labels: { [suffix] = a label of
+-- its own }; decorate(suffix, row).
 ---------------------------------------------------------------------------
 function K.Appearance(style, prefix, noun, previewTip, preview, resetLabel, resetTip, parent, isOn, options)
     local STRING, NUMBER = K.STRING, K.NUMBER
     local resettable = {}
-    local advanced = options and options.advanced
     local function Add(row, suffix)
-        if advanced and advanced[suffix] then K.Advanced(row) end
         if parent and row then K.Under(row, parent, isOn) end
         if row and options and options.decorate then options.decorate(suffix, row) end
         return row
@@ -499,13 +470,8 @@ function K.Appearance(style, prefix, noun, previewTip, preview, resetLabel, rese
                 "How far the background sits in from the " .. noun .. "'s edge, in screen pixels, so a thick or textured border has a margin of plain " .. noun .. " behind it. Not the same as the border's own thickness or the content padding.")
         end,
     }
-    local headed = false
     for _, suffix in ipairs(options and options.order or
         { "BgTexture", "BgColor", "BgOpacity", "BorderTexture", "BorderSize", "BorderColor", "BorderOpacity" }) do
-        if advanced and advanced[suffix] and not headed then
-            headed = true
-            K.Advanced(K.Header(options.advancedHeader or "Advanced look", options.advancedTip or "Textures, thickness and opacity."))
-        end
         rows[suffix]()
     end
     if preview then Add(K.Button("Preview", "Show or hide", preview, previewTip), "Preview") end
@@ -530,7 +496,6 @@ function K.Describe()
     if K.described then return end
     K.described = true
     TwichUIDB.ui = TwichUIDB.ui or {}
-    if TwichUIDB.ui.showAdvanced == nil then TwichUIDB.ui.showAdvanced = false end
 
     local defs, overview = {}, nil
     for _, def in ipairs(K.Ordered()) do
@@ -566,7 +531,6 @@ function K.Describe()
                 page.failed = true
                 R.Fault("settings page " .. def.key, err)
             end
-            Settle(page)
         end
     end
     K.Use(nil)

@@ -29,7 +29,7 @@ local HOST_H = 540
 local HIGHLIGHT_SECONDS = 2.5
 
 local win, nav, scroll, content, resultsView, footer, searchBox
-local state = { views = {}, open = {}, results = {}, selected = 1, suspend = 0, navItems = {} }
+local state = { views = {}, results = {}, selected = 1, suspend = 0, navItems = {} }
 
 local function Place()
     local saved = TwichUIDB.ui.settingsWindow
@@ -237,25 +237,6 @@ end
 ---------------------------------------------------------------------------
 local function SectionId(page, header) return header and header.id or (page.key .. ":intro") end
 
--- A clickable "Show advanced options" line: a chevron and its words.
-local function Disclosure(parent)
-    local b = CreateFrame("Button", nil, parent)
-    b:SetHeight(22)
-    b.text = Wg.Text(b, "small")
-    b.text:SetPoint("LEFT", 18, 0)
-    b.down = Wg.Chevron(b, b, "LEFT", 8, 0, true)
-    b.up = Wg.Chevron(b, b, "LEFT", 8, 0, false)
-    b:SetScript("OnEnter", function(self) Wg.Color(self.text, pal.tealHi) end)
-    b:SetScript("OnLeave", function(self) Wg.Color(self.text, pal.textDim) end)
-    function b:SetOpen(open, label)
-        self.text:SetText(label)
-        for _, t in ipairs(self.down) do t:SetShown(not open) end
-        for _, t in ipairs(self.up) do t:SetShown(open) end
-        self:SetWidth(self.text:GetStringWidth() + 26)
-    end
-    return b
-end
-
 -- A feature's tabs: one per page of the family, the shown one in gold with a bar on the rule below. Choosing one
 -- goes to that page (a stable page key, as search and direct links use); its rows are made the first time.
 local function TabStrip(parent, tabs, current)
@@ -351,7 +332,7 @@ local function BuildView(page)
         local id = SectionId(page, header)
         local sec = byId[id]
         if sec then return sec end
-        sec = { id = id, header = header, rows = {}, advanced = header and header.advanced or false, advCount = 0 }
+        sec = { id = id, header = header, rows = {} }
         byId[id] = sec
         view.sections[#view.sections + 1] = sec
         sec.card = CreateFrame("Frame", nil, frame, "BackdropTemplate")
@@ -368,13 +349,6 @@ local function BuildView(page)
                 sec.badge = Wg.Text(sec.card, "meta")
                 sec.badge:SetText(header.badge)
             end
-            if sec.advanced then
-                sec.toggle = Disclosure(sec.card)
-                sec.toggle:SetScript("OnClick", function()
-                    state.open[id] = not state.open[id]
-                    Layout(view)
-                end)
-            end
         end
         return sec
     end
@@ -387,16 +361,6 @@ local function BuildView(page)
             v.section = sec
             sec.rows[#sec.rows + 1] = v
             view.rows[row.id] = v
-            if row.advanced and not sec.advanced then sec.advCount = sec.advCount + 1 end
-        end
-    end
-    for _, sec in ipairs(view.sections) do
-        if sec.advCount > 0 then
-            sec.more = Disclosure(sec.card)
-            sec.more:SetScript("OnClick", function()
-                state.open[sec.id] = not state.open[sec.id]
-                Layout(view)
-            end)
         end
     end
 
@@ -484,12 +448,10 @@ function Layout(view)
         view.hosted:Show()
         y = y + HOST_H
     end
-    local always = K.AdvancedShown()
     for _, sec in ipairs(view.sections) do
-        local open = always or state.open[sec.id] or false
         local card, inner = sec.card, SECTION_PAD
         local visible = 0
-        if sec.header and (sec.titled or sec.advanced) then
+        if sec.header and sec.titled then
             sec.title:SetText(sec.header:GetName() or "")
             sec.title:ClearAllPoints()
             sec.title:SetPoint("TOPLEFT", SECTION_PAD, -inner)
@@ -497,13 +459,6 @@ function Layout(view)
             if sec.badge then
                 sec.badge:ClearAllPoints()
                 sec.badge:SetPoint("LEFT", sec.title, "LEFT", math.min(sec.title:GetStringWidth(), sec.title:GetWidth()) + 10, 0)
-            end
-            if sec.toggle then
-                sec.toggle:ClearAllPoints()
-                sec.toggle:SetPoint("TOPRIGHT", -SECTION_PAD + 4, -inner + 4)
-                sec.toggle:SetOpen(open, open and "Hide" or "Show")
-                sec.toggle:SetShown(not always)
-                Wg.Color(sec.title, pal.textDim)
             end
             inner = inner + (sec.title:GetStringHeight() or 14) + 4
         elseif sec.title then
@@ -518,11 +473,9 @@ function Layout(view)
             sec.desc:SetShown(desc ~= "")
             if desc ~= "" then inner = inner + (sec.desc:GetStringHeight() or 12) + 8 end
         end
-        local showRows = not sec.advanced or open
         for _, v in ipairs(sec.rows) do
             local row = v.row
-            local shown = showRows and row:Shown() and (sec.advanced or not row.advanced or open)
-            if shown then
+            if row:Shown() then
                 v.frame:ClearAllPoints()
                 v.frame:SetPoint("TOPLEFT", card, "TOPLEFT", SECTION_PAD - 4, -inner)
                 v.y = y + inner
@@ -534,15 +487,8 @@ function Layout(view)
                 v.y = nil
             end
         end
-        if sec.more then
-            sec.more:ClearAllPoints()
-            sec.more:SetPoint("TOPLEFT", SECTION_PAD - 6, -inner - 2)
-            sec.more:SetOpen(open, open and "Hide advanced options" or ("Show advanced options (" .. sec.advCount .. ")"))
-            sec.more:SetShown(not always)
-            if not always then inner = inner + 26 end
-        end
         inner = inner + SECTION_PAD - 6
-        local empty = visible == 0 and not sec.header and not sec.more
+        local empty = visible == 0 and not sec.header
         card:SetShown(not empty)
         if not empty then
             card:ClearAllPoints()
@@ -606,8 +552,7 @@ local function ShowResults(on)
     PaintNav()
 end
 
--- Goes to a page, and to one of its rows: opens the row's Advanced section if it is in one, scrolls to it and
--- marks it briefly. Changes nothing.
+-- Goes to a page, and to one of its rows: scrolls to it and marks it briefly. Changes nothing.
 function UI.Navigate(key, rowId)
     local page = K.pages[key] or K.pages.overview
     if not page then return end
@@ -630,10 +575,6 @@ function UI.Navigate(key, rowId)
     end
     local row = rowId and K.rowsById[rowId]
     if row and row.page ~= page.key then row = nil end
-    if row then
-        local sec = row.kind == "header" and SectionId(page, row) or SectionId(page, row.section)
-        if row.advanced or (row.section and row.section.advanced) or row.kind == "header" then state.open[sec] = true end
-    end
     Layout(view)
     PaintNav()
     -- The new page's content eases in; the page is already there and answering. Not while the window itself
@@ -812,7 +753,7 @@ local function DrawResults(query)
         row.context:SetText(e.kind == "page" and ("Page" .. Search.SEP .. (e.context or "")) or e.context)
         local note = Search.Note(e)
         row.note:SetText(note or "")
-        Wg.Color(row.note, (note and note ~= "Advanced") and pal.danger.text or pal.stone)
+        Wg.Color(row.note, note and pal.danger.text or pal.stone)
         row:ClearAllPoints()
         row:SetPoint("TOPLEFT", 0, -y)
         row:Show()

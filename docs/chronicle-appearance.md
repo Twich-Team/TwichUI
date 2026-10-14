@@ -47,24 +47,24 @@ the default.
 | --- | --- | --- |
 | Background | Background texture | None, Solid color (default), the game's, EllesmereUI's (installed only), LibSharedMedia backgrounds and status bars (labelled with where they come from) |
 | | Color, Opacity | the tint, and how solid the fill, header band and list are (98 is the default) |
-| | Tiling, Tile size, Inset (Advanced) | shown only for an image background; Tiling is Automatic, Repeat or Stretch |
+| | Tiling, Tile size, Inset | shown only for an image background; Tiling is Automatic, Repeat or Stretch |
+| | Overall window opacity | 40-100; multiplies everything, labelled as such; default 100 |
 | Border | Style | Chronicle ledger (default), None, Solid line, the game's, EllesmereUI's, LibSharedMedia |
 | | Color, Opacity | tint of the ledger's rim or of a single border; greyed for None |
 | | Thickness | 0-16 pixels; greyed (with the reason in the tooltip) for the ledger, whose width is fixed, and for None |
+| | Content padding | 0-12 pixels; separate from the border's thickness |
 | Typography | Text font, Title and headline font | LibSharedMedia fonts: TwichUI's, EllesmereUI's (it registers its own), and any other addon's; "Same as text font" |
 | | Title / Headline / Note / Date and detail color | four roles |
 | | Text opacity | 30-100; only text |
 | | Set text sizes here + four sizes | off follows the game's own (16, 12, 10, 10); on uses the sizes |
 | | Line spacing | 0-8 |
-| | Text outline (Advanced) | none, outline, thick outline |
+| | Text outline | none, outline, thick outline |
 | Controls and accents | Accent color | links, a note's frame, the main button, the picker's marks, scroll arrows, the rim's lit edge and corners |
 | | Header band color, Entry list color | |
 | | Entry highlight | strength of the accent tint under the pointer (0-40) |
 | | Show dividers, Worn surface | |
 | | Main button | Filled (default) or Outline |
-| | Scroll bar thumb and track, Divider color (Advanced) | |
-| Advanced layout | Content padding | 0-12 pixels; separate from the border |
-| | Overall window opacity | 40-100; multiplies everything, labelled as such; default 100 |
+| | Scroll bar thumb and track, Divider color | |
 
 Minimums (text opacity 30, window opacity 40) keep the window findable. Colors that mean something are not
 settings: the Delete link and warnings stay red, disabled controls stay muted, "today" in the picker stays the

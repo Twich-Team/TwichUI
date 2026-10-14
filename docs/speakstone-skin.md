@@ -78,15 +78,14 @@ Time: 11 px in stone `ff9e9482`. Buttons: label `ffe3d6b4`, fill `ff2c2218`, edg
 11 px. Portrait: 72 px round, 2 px ring `ff8c6e38`. Progress: 2 px, fill `ffc9a24a` at 90 % (SpeakStone's own
 strength), track `ff4a3a22`. Padding 12 (at which every offset is SpeakStone's own).
 
-## Settings (common first; Advanced behind "Show advanced options")
+## Settings (by section; all are shown)
 
 * **Switch**, **Sample line** (SpeakStone's own `/ss frame`, no narration).
-* **Look**: background color, opacity, border color; Advanced: background texture, border texture, thickness, opacity.
-* **Text**: speaker font, size, colour; dialogue font, size, colour; time colour.
-* **Controls**: label, fill, border and hover accent colours; close with a right-click (hides the close button).
-* **Portrait**: show, size, shape, ring colour; Advanced: ring thickness.
+* **Frame**: background texture, color, opacity; border texture, thickness, color, opacity; padding.
+* **Text**: speaker font, size, colour; dialogue font, size, colour; line spacing; time font, size, colour.
+* **Controls**: button font and size; label, fill, border and hover accent colours; close with a right-click (hides the close button).
+* **Portrait**: show, size, shape, ring colour and thickness.
 * **Progress line**: show, fill colour, track colour, thickness.
-* **Advanced**: time font and size, button font and size, line spacing, padding.
 * **Reset appearance**: the look and the style (`ui.speakstoneSkin`, `ui.speakstoneSkinStyle`) only. Not the switch,
   SpeakStone's settings, its position and size, or anything else of TwichUI.
 

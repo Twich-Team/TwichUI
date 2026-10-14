@@ -21,15 +21,6 @@ K.Page({
 
         -----------------------------------------------------------------------
         Header("General", "Settings for TwichUI as a whole.")
-        local advancedSetting = K.TableSetting("showAdvanced", "showAdvanced", function() return TwichUIDB.ui end,
-            "Show advanced options", false, "switch:ui.showAdvanced")
-        local withAdvanced = {}
-        for _, def in ipairs(K.Ordered()) do
-            if K.advancedPages[def.key] and K.pages[def.key] then withAdvanced[#withAdvanced + 1] = def.name end
-        end
-        K.Checkbox(advancedSetting,
-            "Opens the Advanced sections by themselves. They hold options most players never need to change: textures, fonts, timings and similar. Off, each one opens when you choose it. These pages have one: "
-            .. table.concat(withAdvanced, ", ") .. ". Advanced options keep their values and keep working either way.")
         local motionSetting = K.TableSetting("reduceSettingsMotion", "reduceSettingsMotion", function() return TwichUIDB.ui end,
             "Reduce window motion", false, "switch:ui.reduceSettingsMotion")
         -- changing it puts any easing in progress where it was going, so nothing is left half-way

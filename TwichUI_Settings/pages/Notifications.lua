@@ -15,7 +15,7 @@ K.Page({
         end,
     },
     build = function()
-        local Header, Toggle, Button, Choice, ProxyToggle, Advanced, Under = K.Header, K.Toggle, K.Button, K.Choice, K.ProxyToggle, K.Advanced, K.Under
+        local Header, Toggle, Button, Choice, ProxyToggle, Under = K.Header, K.Toggle, K.Button, K.Choice, K.ProxyToggle, K.Under
         local STRING = K.STRING
 
         Header("Notifications", "Small, quiet cards near the edges of the screen for moments worth a glance. None of them makes you do anything, and each can be turned off on its own.")
@@ -30,6 +30,19 @@ K.Page({
             "A quieter card when you walk into a smaller place within the zone, such as a town. Off: moving within a zone shows nothing."), arrival, ArrivalOn)
         Under(Toggle("arrivalDungeons", "Show dungeon and raid arrival cards",
             "Walking into a dungeon or raid shows its name with \"Dungeon\" or \"Raid\" beneath it. Off: you get the ordinary zone card there, as before. Not shown when you log in or reload inside one."), arrival, ArrivalOn)
+        local Arrival = R.Arrival
+        if Arrival then
+            local holds = {}
+            for i, hold in ipairs(Arrival.HOLDS) do
+                holds[i] = { hold.key, hold.label, ("Stays %g seconds before fading away."):format(hold.seconds) }
+            end
+            Under(Choice("arrivalHold", "How long the zone card stays",
+                "How long the zone's name stays before it fades away. Cards for smaller places stay a little shorter.",
+                STRING, Arrival.HOLD_DEFAULT,
+                function() return (Arrival.HoldChoice()) end,
+                function(value) Arrival.SetHoldChoice(value) end,
+                holds), arrival, ArrivalOn)
+        end
 
         Header("New training", "A short card when you level up and there is class training you haven't taken yet.")
         Toggle("trainingNotice", "Show new training when I level up",
@@ -95,21 +108,6 @@ K.Page({
             end, "Sends a fixed set of sample notices at once: a zone card, a friend card, a training card, a repeat of the zone card (which is dropped) and a Welcome Back card. The friend card shows beside the zone card; the training and Welcome Back cards wait their turn at the top.")
             Button("Clear previews", "Clear", function() Notify.ClearPreviews() end,
                 "Stops every preview, showing or waiting. Real notices aren't touched.")
-        end
-
-        local Arrival = R.Arrival
-        if Arrival then
-            local holds = {}
-            for i, hold in ipairs(Arrival.HOLDS) do
-                holds[i] = { hold.key, hold.label, ("Stays %g seconds before fading away."):format(hold.seconds) }
-            end
-            Advanced(Header("Advanced"))
-            Under(Advanced(Choice("arrivalHold", "How long the zone card stays",
-                "How long the zone's name stays before it fades away. Cards for smaller places stay a little shorter.",
-                STRING, Arrival.HOLD_DEFAULT,
-                function() return (Arrival.HoldChoice()) end,
-                function(value) Arrival.SetHoldChoice(value) end,
-                holds)), arrival, ArrivalOn)
         end
     end,
 })

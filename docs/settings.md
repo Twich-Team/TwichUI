@@ -46,7 +46,7 @@ claimed; see "Measuring".
 |---|---|
 | `Switches.lua` | Every switch's behaviour: the update to run, whether it needs a reload, whether its feature exists this session (`when`). `W.Set` (the one way to flip a switch), `W.Sync` (after a profile change), `W.ReloadPending` |
 | `SettingsLauncher.lua` | `R:OpenSettings(page, setting)`, `R:CloseSettings`, `R:ToggleSettings`, `R.SettingsAnchor()`, `R.OnSettingsClosed(fn)`, the AddOns entry |
-| `TwichUI_Settings/Kit.lua` | `K.Page`, the controls pages describe themselves with (`K.Toggle`, `K.Proxy`, `K.ProxyToggle`, `K.Choice`, `K.Dropdown`, `K.Slider`, `K.Swatch`, `K.Checkbox`, `K.Button`, `K.ResetButton`, `K.Link`, `K.Header`, `K.Appearance`), `K.Advanced`, `K.Under`, `K.Badge`, `K.InSection`, `K.Describe`, `K.NavOrder`, `K.SidebarOrder`, `K.Tabs`, `K.ResetPage` |
+| `TwichUI_Settings/Kit.lua` | `K.Page`, the controls pages describe themselves with (`K.Toggle`, `K.Proxy`, `K.ProxyToggle`, `K.Choice`, `K.Dropdown`, `K.Slider`, `K.Swatch`, `K.Checkbox`, `K.Button`, `K.ResetButton`, `K.Link`, `K.Header`, `K.Appearance`), `K.Under`, `K.Badge`, `K.InSection`, `K.Describe`, `K.NavOrder`, `K.SidebarOrder`, `K.Tabs`, `K.ResetPage` |
 | `TwichUI_Settings/pages/<Page>.lua` | One page each (some hold a page under it too: Gear + Stat weights, Mage + Refreshment shares, Chronicle + appearance, Pins + appearance) |
 | `TwichUI_Settings/Search.lua` | The index and ranking (descriptions only) |
 | `Look.lua` (core) | The look TwichUI's own windows share: the palette, `Look.Text`, `Look.Surface`, `Look.Button`, `Look.Checkbox`, `Look.EditBox`, and the depth: `Look.Frame` / `Look.Header` (rim, corner brackets, tonal layers), `Look.Raise` (buttons), `Look.Recess` (inputs, checkbox, nav well), `Look.Panel` (section cards), `Look.Tag`, `Look.Fade` (a gradient that falls back to a flat fill), `Look.Motion`. The sharing window (`setup/Window.lua`) draws with it too |
@@ -85,7 +85,7 @@ Your configuration        Configuration sharing, Profiles, Troubleshooting
 `R:OpenSettings(key)` keys: `overview`, `notifications`, `qol`, `food`, `auction`, `chronicle`, `chronicleLook`, `pins`,
 `pinsLook`, `gear`, `statWeights`, `mage`, `refreshmentShares`, `skins`, `restedxp`, `speakstone`, `sharing`,
 `profiles`, `troubleshooting`. A second argument names a setting (`"arrivalHold"` or `"TWICHUI_arrivalHold"`) or a
-row id: the window goes to its page, opens its Advanced section, scrolls to it and marks it for 2.5 seconds (no
+row id: the window goes to its page, scrolls to it and marks it for 2.5 seconds (no
 animation). An unknown page opens Home; an unknown setting opens the page at its top. No argument reopens the page
 shown last.
 
@@ -138,11 +138,12 @@ one-line description, so the title is the feature's name and the line describes 
 - **Reset this page** puts every setting on the page with a default back to it, one at a time through its setter (as
   Blizzard's Defaults did for "this page"). It asks first and names the page and how many settings. It never
   touches map pins, kept pins, the Chronicle, backups, stat weights or profiles (their controls have no default).
-- **Advanced:** `K.Advanced(row)` marks a row; `K.Advanced(K.Header(...))` a whole section. A section's Advanced
-  rows sit behind **Show advanced options (n)**; an Advanced section is a closed card with **Show**. Opened ones stay
-  open for the session. **Show advanced options** on Home (saved `ui.showAdvanced`, account-wide) keeps them all open.
-  Essential status, safety and recovery controls are never Advanced. An ordinary row described after an Advanced
-  header belongs to the ordinary section before it (`K.InSection` places one elsewhere on purpose).
+- **No hidden settings:** every setting is shown, in the section of the controls it relates to (a wait beside the
+  option it waits for, a font beside the colour it belongs with). There is no Advanced marking, section or
+  preference. `ui.showAdvanced`, saved by the old "Show advanced options", is deleted on load (`Persist.lua`) and
+  nothing reads it. Safety gates are separate and stay: the Saved Data Explorer's advanced cleanup is a mode that
+  must be turned on and confirmed before anything can be deleted. `K.InSection(row, header)` places a row in a
+  section other than the one it was described under (a page's own Reset).
 - **Greyed out:** `K.Under(row, parentRow, isOn, why)`. The row is indented under its parent and says why under its
   label (and in its tooltip) for as long as it is greyed out. The control ignores clicks.
 - **Status** in a tooltip or a Home row is a function, read when it is shown: never captured at load, no polling.
@@ -157,7 +158,7 @@ The index holds every page (name, list name, keywords, description), every secti
 label, with a few other words for some (`ALIASES` in `Search.lua`) and the row's tooltip. A query is lowercased plain
 text split into words; every word must appear. Label matches rank first (exact, then prefix, then all words), then
 page or section matches, then aliases; matches only in a tooltip come last under **Also mentioned in**. At most 60
-results. Results show the label, `Page · Section`, and a note when the setting is Advanced, greyed out (and why) or
+results. Results show the label, `Page · Section`, and a note when the setting is greyed out (and why) or
 shown only with other choices. Enter opens the highlighted result, Up/Down move, Esc clears the box first and then
 lets go of it. Choosing a result never changes a value or enables anything.
 
@@ -188,7 +189,7 @@ window) and, if the window is open, redraws the page shown and the footer. See `
 
 `tests/test_settings_contract.lua` compares the pages with `tests/fixtures/settings_contract.lua`: pages, parents and
 groups, `R:OpenSettings` keys, every setting's variable, kind, type, default and label, each page's rows (kind,
-label, section, advanced, greyed-out-under, tooltip checksum), what `TwichUIDB` holds after every setting is
+label, section, greyed-out-under, tooltip checksum), what `TwichUIDB` holds after every setting is
 changed to another valid value, and after **Reset this page** on every page. After an **intended** change:
 
 ```
@@ -234,11 +235,14 @@ Turn on Display Lua Errors. Test TwichUI alone, then with EllesmereUI. After eac
 6. **Every page.** Open each page; values match before the update. Change one control of each kind (checkbox,
    dropdown, slider by dragging and by typing a number, color with OK and with Cancel, button). Long labels wrap,
    nothing is clipped; badges sit after their label.
-7. **Advanced.** Show and hide a section's advanced options; an Advanced section's Show/Hide; **Show advanced
-   options** on Home keeps them all open on every page.
+7. **No hidden settings.** Home has no "Show advanced options". Quality of life shows **Wait before accepting a
+   summon** under **Accept summons from** in Summons and resurrection, and **Wait before releasing** under Release in
+   battlegrounds; Gear comparison, Notifications, Configuration sharing, Chronicle appearance, RestedXP guide window and
+   SpeakStone speech frame show their former Advanced rows in their sections. With an old save that had the option on or
+   off, nothing is hidden and nothing errors.
 8. **Greyed out.** Turn Party pins off: its rows grey out with "Needs ..." under each, and don't respond.
 9. **Search.** "minimap", "chime", "tomtom", "font", "how long": results from several pages, never-opened pages
-   included; Up/Down/Enter; a result in an Advanced section opens it and marks the row; Esc clears, Esc again lets go;
+   included; Up/Down/Enter; a result, including a former Advanced setting, goes to its section and marks the row; Esc clears, Esc again lets go;
    an empty and a no-match query read sensibly.
 10. **Esc order.** With a dropdown list open, Esc closes the list only. With the color picker open, Esc is the
     picker's. With a confirmation open, Esc closes it only. Then Esc closes the window.

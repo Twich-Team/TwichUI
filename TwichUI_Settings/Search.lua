@@ -31,7 +31,6 @@ local ALIASES = {
     quietLogin = "chat spam login messages",
     media = "fonts sounds libsharedmedia lsm",
     chronicleClock = "24-hour 12-hour time clock",
-    showAdvanced = "advanced expert",
     gearBagStyle = "icon marker",
     shareTransport = "whisper direct transport",
     restedxpArrowShape = "arrow pointer",
@@ -140,13 +139,12 @@ function Search.Run(query)
     return results
 end
 
--- A short note for a result that can't be used as it is: greyed out, Advanced, or not shown with the current
+-- A short note for a result that can't be used as it is: greyed out, or not shown with the current
 -- choices. Read when the results are drawn, so it is current.
 function Search.Note(entry)
     local row = entry.row
     if not row then return nil end
     if row.kind ~= "header" and not row:Enabled() then return row:DisabledReason() end
     if row.kind ~= "header" and not row:Shown() then return "Shown only with some of the choices above it." end
-    if row.advanced then return "Advanced" end
     return nil
 end

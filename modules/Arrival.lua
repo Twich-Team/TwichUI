@@ -32,8 +32,8 @@ local TIMING = {
     subzone = { fadeIn = 0.6, fadeOut = 1.0 },
 }
 
--- How long the name stays at full strength between fading in and out: the advanced
--- "How long the card stays" option, kept in TwichUIDB.ui.arrivalHold. A subzone card
+-- How long the name stays at full strength between fading in and out: the
+-- "How long the zone card stays" option, kept in TwichUIDB.ui.arrivalHold. A subzone card
 -- stays a little shorter.
 A.HOLDS = {
     { key = "brief", label = "Brief", seconds = 1.5 },

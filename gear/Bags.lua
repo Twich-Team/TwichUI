@@ -9,7 +9,7 @@
 -- (through its item overlay API; see the end of this file). Other bag addons
 -- draw their own slots and aren't marked.
 --
--- Toggle: /twichui > "Mark upgrades in my bags"; style under advanced options.
+-- Toggle: /twichui > "Mark upgrades in my bags"; style right under it.
 
 local R = TwichUI
 local P, H = R.GearPrefs, R.GearHints

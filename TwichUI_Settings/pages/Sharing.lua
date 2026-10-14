@@ -13,7 +13,7 @@ K.Page({
         status = function() return K.OnOff(R:Enabled("setupSharing")) end,
     },
     build = function()
-        local Header, Toggle, Button, Choice, Advanced, Under = K.Header, K.Toggle, K.Button, K.Choice, K.Advanced, K.Under
+        local Header, Toggle, Button, Choice, Under = K.Header, K.Toggle, K.Button, K.Choice, K.Under
 
         Header("Addon configurations", "Share the settings of the addons you choose with friends, and apply theirs. You always choose what to apply, and Undo puts your own settings back.")
         local sharing = Toggle("setupSharing", "Configuration sharing",
@@ -21,6 +21,21 @@ K.Page({
         local function SharingOn() return R:Enabled("setupSharing") end
         Under(Toggle("acceptSetups", "Let friends send me addon configurations",
             "When on, friends can offer you their addon configuration. You're always asked first, unless you chose \"Always accept\" for that friend. Nothing is applied until you click Apply."), sharing, SharingOn)
+        local Share = R.Share
+        if Share then
+            Choice("shareTransport", "Send configurations by",
+                "How your configuration travels when you press Send. TwichUI uses only the one you pick and never switches by itself if it fails. Receiving works on all three, whatever you pick here.\n\n" .. Share.TRANSPORT_EXPLAIN,
+                K.STRING, "DIRECT",
+                function() return Share.Transport() end,
+                function(value) Share.SetTransport(value) end,
+                function()
+                    local list = {}
+                    for _, key in ipairs(Share.TRANSPORTS) do
+                        list[#list + 1] = { key, Share.TRANSPORT_LABEL[key], Share.TRANSPORT_HELP[key] }
+                    end
+                    return list
+                end)
+        end
         Toggle("groupCheck", "Version and group check",
             "On by default. Both players need it on to see each other. Other players never see these messages, even without TwichUI.\n\nWhen you're in a group, TwichUI trades version numbers with other TwichUI users (a few bytes, group channel only) and tells you when someone's version is newer or too old to share with. Also powers /tui check and Party compatibility check in /tui share, and a once-per-game-build test message that shows in Sending options whether direct messages reached another TwichUI user.")
         Under(Button("Configuration sharing", "Open", function()
@@ -39,21 +54,5 @@ K.Page({
             K.CloseOptions()
             if R.ExplorerWindow then R.ExplorerWindow.Show() end
         end, "Look through what TwichUI keeps: its settings, your backups and Undo copies, your saved setup, setups friends sent, the Journey Chronicle, and exactly what Send would send. Read-only: nothing is changed, restored or sent there (same as typing /tui saved).")
-        local Share = R.Share
-        if Share then
-            Advanced(Header("Advanced"))
-            Advanced(Choice("shareTransport", "Send configurations by",
-                "How your configuration travels when you press Send. TwichUI uses only the one you pick and never switches by itself if it fails. Receiving works on all three, whatever you pick here.\n\n" .. Share.TRANSPORT_EXPLAIN,
-                K.STRING, "DIRECT",
-                function() return Share.Transport() end,
-                function(value) Share.SetTransport(value) end,
-                function()
-                    local list = {}
-                    for _, key in ipairs(Share.TRANSPORTS) do
-                        list[#list + 1] = { key, Share.TRANSPORT_LABEL[key], Share.TRANSPORT_HELP[key] }
-                    end
-                    return list
-                end))
-        end
     end,
 })

@@ -333,11 +333,11 @@ end
 
 -- Reset: only this appearance.
 do
-  c.TwichUIDB.ui = { mageTravelText = "none", showAdvanced = true, foodDrink = { size = 50 } }
+  c.TwichUIDB.ui = { mageTravelText = "none", reduceSettingsMotion = true, foodDrink = { size = 50 } }
   assert(MS.Set("bgOpacity", 20) and MS.Set("borderTexture", "Blizzard Dialog"))
   MS.Reset()
   assert(c.TwichUIDB.ui.brokerMenu == nil and MS.Get("bgOpacity") == 100 and MS.Get("borderTexture") == "solid" and MS.Get("borderSize") == 1)
-  assert(c.TwichUIDB.ui.mageTravelText == "none" and c.TwichUIDB.ui.showAdvanced == true and c.TwichUIDB.ui.foodDrink.size == 50,
+  assert(c.TwichUIDB.ui.mageTravelText == "none" and c.TwichUIDB.ui.reduceSettingsMotion == true and c.TwichUIDB.ui.foodDrink.size == 50,
     "nothing else is touched")
   c.TwichUIDB.ui = nil
 end

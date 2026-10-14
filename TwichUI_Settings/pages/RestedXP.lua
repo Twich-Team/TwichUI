@@ -30,7 +30,7 @@ K.Page({
     when = function() return R.RestedXPSkin ~= nil end,
     build = function()
         local RS = R.RestedXPSkin
-        local Header, Toggle, Button, Proxy, ProxyToggle, Advanced, Under = K.Header, K.Toggle, K.Button, K.Proxy, K.ProxyToggle, K.Advanced, K.Under
+        local Header, Toggle, Button, Proxy, ProxyToggle, Under = K.Header, K.Toggle, K.Button, K.Proxy, K.ProxyToggle, K.Under
         local BOOL, STRING, NUMBER = K.BOOL, K.STRING, K.NUMBER
 
         local intro = Header("RestedXP guide window", "Gives the RestedXP Guides window a TwichUI look: a background and border, text colors, fonts and sizes, a quieter header and footer, and a slim scroll bar; and its waypoint arrow a shape, color and size of your choosing. It never changes guide content, progress, step completion or the window's position and size. Works with or without EllesmereUI.")
@@ -61,9 +61,8 @@ K.Page({
         end, "Makes TwichUI's theme the one RestedXP uses, if you chose another in RestedXP's own options. The theme you had is remembered and put back if you turn the skin off.")
         Under(use, rxpToggle, RxpOn)
 
+        Header("Window background and border", "The guide window's fill and edge: textures, color, opacity and thickness. Textures come from the game, from EllesmereUI (while it is installed) and from any LibSharedMedia pack.")
         local resettable = K.Appearance(RS.Look, "restedxpLook", "window", nil, nil, nil, nil, rxpToggle, RxpOn, {
-            order = { "BgColor", "BorderColor", "BgTexture", "BgOpacity", "BorderTexture", "BorderSize", "BorderOpacity" },
-            advanced = { BgTexture = true, BgOpacity = true, BorderTexture = true, BorderSize = true, BorderOpacity = true },
             labels = {
                 BgTexture = "Window background texture", BgColor = "Window background color",
                 BgOpacity = "Window background opacity", BorderTexture = "Window border texture",
@@ -78,26 +77,20 @@ K.Page({
             if setting then resettable[#resettable + 1] = { setting = setting, default = RS.Text.DEFAULTS[key] } end
             return setting
         end
-        local function TextSwatch(variable, key, label, tooltip, isAdvanced)
+        local function TextSwatch(variable, key, label, tooltip)
             local row = K.Swatch(TextSetting(variable, STRING, label, key), tooltip)
-            if row then
-                if isAdvanced then Advanced(row) end
-                Under(row, rxpToggle, RxpOn)
-            end
+            if row then Under(row, rxpToggle, RxpOn) end
         end
-        -- common: a plain choice rather than one under Advanced
-        local function TextChoice(variable, key, label, tooltip, choices, common)
+        local function TextChoice(variable, key, label, tooltip, choices)
             local row = K.Dropdown(TextSetting(variable, STRING, label, key), function() return choices(RS.Text.Get(key)) end, tooltip)
             if row then
-                if not common then Advanced(row) end
                 Under(row, rxpToggle, RxpOn)
                 return row
             end
         end
-        local function TextToggle(variable, key, label, tooltip, isAdvanced)
+        local function TextToggle(variable, key, label, tooltip)
             local row = K.Checkbox(TextSetting(variable, BOOL, label, key), tooltip)
             if row then
-                if isAdvanced then Advanced(row) end
                 Under(row, rxpToggle, RxpOn)
                 return row
             end
@@ -108,17 +101,28 @@ K.Page({
             if not limit then return end
             return Under(K.Slider(setting, limit[1], limit[2], tooltip), parent or rxpToggle, isOn or RxpOn, why)
         end
+        Header("Text", "Colors, fonts and outlines of the guide's title and steps. Sizes are set under Text size, or follow RestedXP's own Guide Font Size option.")
         TextSwatch("TitleColor", "titleColor", "Title text color",
             "The color of the guide's title, the footer and each step's number tab. Colors RestedXP gives meaning to in a step's own text (warnings, objectives, links) are not changed.")
+        TextChoice("TitleFont", "titleFont", "Title font",
+            "The font of the guide's title, the footer and step number tabs. The list comes from LibSharedMedia, so fonts other addons add appear here. RestedXP's own is the default. A font that has gone is drawn as the default and stays chosen.",
+            RS.FontChoices)
+        TextChoice("TitleOutline", "titleOutline", "Title outline", "An outline round the title text.",
+            function() return RS.OUTLINE_CHOICES end)
         TextSwatch("BodyColor", "bodyColor", "Step text color",
             "The base color of the step and objective text. Colors RestedXP gives meaning to (warnings, objectives, links) are not changed.")
+        TextChoice("BodyFont", "bodyFont", "Step text font",
+            "The font of step and objective text. A font that has gone is drawn as RestedXP's own and stays chosen.",
+            RS.FontChoices)
+        TextChoice("BodyOutline", "bodyOutline", "Step text outline", "An outline round the step and objective text.",
+            function() return RS.OUTLINE_CHOICES end)
 
         Header("Current step", "The panel above the guide list that shows the step you are on.")
         TextToggle("SettingsButton", "settingsButton", "Show settings button on current-step hover",
             "A small cog in the upper-right corner of the current-step panel, shown while the pointer is over the panel. It opens RestedXP's menu (choose a guide, go to a step, RestedXP's options), the same one as the menu button at the footer's left, so it is there even when that button is hidden below. It is only a shortcut: it changes nothing in RestedXP and does not move the text.")
         TextChoice("StepLabel", "stepLabel", "Step label format",
             "What the tab above the current step says. X is the step's number in the guide, the one RestedXP shows in its list. Y is how many steps the guide has: its whole list, including steps with nothing to do (so it is the number of the last row), for the character you are on. The percentage is X divided by Y, rounded to the nearest whole number: it is how far along the guide's steps you are, not time spent and not a promise that every objective on the way was done (the last step reads 100 %). A tab with a title of its own, such as a tip, is left as RestedXP draws it; where the guide's size isn't known, the tab says Step X. While in combat the tab shows RestedXP's own text and changes when it ends.",
-            function() return RS.STEPLABEL_CHOICES end, true)
+            function() return RS.STEPLABEL_CHOICES end)
 
         Header("Header and footer", "What sits around the guide list. RestedXP's logo and class badge are hidden by default, which gives the guide's title the room they took.")
         TextToggle("ShowTitle", "showTitle", "Show the guide's title",
@@ -133,7 +137,10 @@ K.Page({
             "The small grip at the footer's right, which resizes the window when dragged. Off, hold Alt and drag the window to resize it, as RestedXP allows. With the menu button off as well, the whole bar at the bottom goes and the list takes its room.")
         TextChoice("Footer", "footer", "Version text",
             "RestedXP's footer shows its version and the range of guide formats it supports. Subdued: smaller and quieter. Hidden: not drawn; it is then in the tooltip of the menu button at the footer's left, which is always there. As RestedXP draws it: unchanged.",
-            function() return RS.FOOTER_CHOICES end, true)
+            function() return RS.FOOTER_CHOICES end)
+        TextChoice("Dividers", "dividers", "Header and footer borders",
+            "Light: the header, the footer and each step's tab draw a fainter border than the window, with no highlight line, so the borders don't stack. Full border: the same border as the window.",
+            function() return RS.DIVIDER_CHOICES end)
 
         Header("Text size", "Sizes of the guide's text. They follow RestedXP's own Guide Font Size option until you set them here.")
         local sizes = TextToggle("CustomSizes", "customSizes", "Set text sizes here",
@@ -161,17 +168,16 @@ K.Page({
         Header("Scroll bar", "The guide list's scroll bar.")
         TextChoice("Scrollbar", "scrollbar", "Scroll bar style",
             "Slim: RestedXP's own scroll bar, narrower, with a thin strip for the thumb and a faint track. With EllesmereUI installed the arrows are its arrow icons and the strip is drawn the way its windows draw theirs; without it they are the game's own arrows. Scrolling is unchanged. RestedXP's own: its round arrows and knob.",
-            function() return RS.SCROLLBAR_CHOICES end, true)
+            function() return RS.SCROLLBAR_CHOICES end)
         local tint = ProxyToggle("restedxpTintScrollbar", "Tint the scroll bar",
             "The slim scroll bar's strip and arrows take the border color, at a soft strength. Off: EllesmereUI's neutral white (or the game's own arrows). Applies to RestedXP's own scroll bar too, which is tinted to the border color.", RS.Text.DEFAULTS.tintScrollbar,
             function() return RS.Text.Get("tintScrollbar") end, function(value) RS.Text.Set("tintScrollbar", value) end)
-        Advanced(tint)
         Under(tint, rxpToggle, RxpOn)
 
         Header("Waypoint arrow", "RestedXP's arrow that points to the next place in the guide. Its own options (Arrow Scale, Arrow Text Size, turning it off) are RestedXP's and stay; these are applied on top. It is only its picture and string that change: where it points, and when it shows, are RestedXP's.")
         TextChoice("ArrowShape", "arrowShape", "Arrow shape",
             "The arrow's picture: TwichUI's bronze plate, RestedXP's own pointer for its theme, the pointer each of RestedXP's other themes draws (blue, red, gold, green and so on), its v2 pointer, and EllesmereUI's chevron when it is installed. All of them point up, so RestedXP rotates them the same way. A shape that has gone is drawn as RestedXP's own and stays chosen.",
-            RS.ArrowChoices, true)
+            RS.ArrowChoices)
         TextSwatch("ArrowColor", "arrowColor", "Arrow color",
             "A tint over the picture. White leaves it as drawn; a color multiplies it, so it shows best on a light picture such as EllesmereUI's chevron, and the bronze plate takes it as a stain.")
         TextSlider("ArrowOpacity", "arrowOpacity", "Arrow opacity",
@@ -215,36 +221,32 @@ K.Page({
                 return Timer(Proxy("restedxpTimer" .. variable, varType, label, Opt.DEFAULTS[key],
                     function() return Opt.Get(key) end, function(value) Opt.Set(key, value) end), Opt.DEFAULTS[key])
             end
-            local function TimerChoice(variable, key, label, tooltip, choices, isAdvanced)
+            local function TimerChoice(variable, key, label, tooltip, choices)
                 local row = K.Dropdown(TimerSetting(variable, STRING, label, key), function()
                     return type(choices) == "function" and choices(Opt.Get(key)) or choices
                 end, tooltip)
                 if row then
-                    if isAdvanced then Advanced(row) end
                     Under(row, timerSwitch, TimersOn, TimersWhy)
                 end
             end
-            local function TimerSwatch(variable, key, label, tooltip, isAdvanced)
+            local function TimerSwatch(variable, key, label, tooltip)
                 local row = K.Swatch(TimerSetting(variable, STRING, label, key), tooltip)
                 if row then
-                    if isAdvanced then Advanced(row) end
                     Under(row, timerSwitch, TimersOn, TimersWhy)
                 end
             end
-            local function TimerSlider(variable, key, label, tooltip, isAdvanced)
+            local function TimerSlider(variable, key, label, tooltip)
                 local limit = Opt.LIMITS[key]
                 local setting = TimerSetting(variable, NUMBER, label, key)
                 if not limit then return end
                 local row = K.Slider(setting, limit[1], limit[2], tooltip)
                 if row then
-                    if isAdvanced then Advanced(row) end
                     Under(row, timerSwitch, TimersOn, TimersWhy)
                 end
             end
-            local function TimerToggle(variable, key, label, tooltip, isAdvanced)
+            local function TimerToggle(variable, key, label, tooltip)
                 local row = K.Checkbox(TimerSetting(variable, BOOL, label, key), tooltip)
                 if row then
-                    if isAdvanced then Advanced(row) end
                     Under(row, timerSwitch, TimersOn, TimersWhy)
                 end
             end
@@ -259,26 +261,38 @@ K.Page({
                 "The lighter end of the fill's shading (the right or the top). Not used when the gradient is set to None. The default is a muted antique gold.")
             TimerSlider("FillOpacity", "fillOpacity", "Fill opacity",
                 "How solid the fill is, in percent. The background, border and text stay as they are.")
+            TimerChoice("FillTexture", "fillTexture", "Fill texture",
+                "The texture the fill is drawn with: a flat fill (the default, which shows the colors exactly), RestedXP's own bar texture, EllesmereUI's bar textures while it is installed, and any LibSharedMedia status bar texture. A texture that has gone is drawn as RestedXP's own and stays chosen.",
+                TM.FillChoices)
             TimerSwatch("LabelColor", "labelColor", "Label color",
                 "The color of the text at the left of the bar: what you are waiting for.")
+            TimerChoice("LabelFont", "labelFont", "Label font",
+                "The font of the label. By default the same as the guide's step text. A font that has gone is drawn as that and stays chosen.",
+                TM.LabelFontChoices)
+            TimerChoice("LabelOutline", "labelOutline", "Label outline",
+                "An outline round the label. The default keeps light text readable over the fill.",
+                TM.OUTLINE_CHOICES)
             TimerSwatch("TimeColor", "timeColor", "Time color",
                 "The color of the remaining time at the right of the bar.")
             TimerSlider("LabelSize", "labelSize", "Label size",
                 "The size of the label. The bar grows to fit a larger size, so the text is never cut off at the top or bottom. A label too long for the bar is cut short with an ellipsis, never run into the time.")
             TimerSlider("TimeSize", "timeSize", "Time size",
                 "The size of the remaining time.")
+            TimerChoice("TimeFont", "timeFont", "Time font",
+                "The font of the remaining time. By default the same as the label's.", TM.TimeFontChoices)
+            TimerChoice("TimeOutline", "timeOutline", "Time outline",
+                "An outline round the remaining time. By default the same as the label's.", TM.TIME_OUTLINE_CHOICES)
             TimerToggle("ShowIcon", "showIcon", "Show RestedXP's clock icon",
                 "The small pocket watch at the left of each bar. It is only a picture. Off, the bar takes its room.")
             TimerSlider("BarHeight", "barHeight", "Bar height",
                 "How tall each bar is, in pixels. RestedXP's own is 16. Taller than the footer's strip, a bar covers the bottom of the list while it runs. RestedXP stacks several bars as it always did, and decides their width, which follows the window's.")
             TimerSlider("TextPadding", "textPadding", "Text padding",
-                "The room between the label or the time and the bar's ends, in pixels.", true)
+                "The room between the label or the time and the bar's ends, in pixels.")
+
+            Header("Timer bar background and border", "The bar's own background and border. Preview shows two made-up bars beside this window; no timer is started.")
 
             local timerLook = K.Appearance(TM.Look, "restedxpTimerLook", "bar", "Shows two made-up timer bars beside this window (a short and a long label) in the look set here. They are only a sample: no timer is started, nothing in RestedXP changes, and they go away when this window closes.",
                 function() TM.TogglePreview() end, nil, nil, timerSwitch, TimersOn, {
-                order = { "BgColor", "BorderColor", "BgTexture", "BgOpacity", "BorderTexture", "BorderSize", "BorderOpacity" },
-                advanced = { BgTexture = true, BgOpacity = true, BorderTexture = true, BorderSize = true, BorderOpacity = true },
-                advancedHeader = "Advanced timer bar look",
                 labels = {
                     BgTexture = "Timer background texture", BgColor = "Timer background color",
                     BgOpacity = "Timer background opacity", BorderTexture = "Timer border texture",
@@ -288,39 +302,11 @@ K.Page({
             })
             for _, entry in ipairs(timerLook) do resettableTimers[#resettableTimers + 1] = entry end
 
-            Advanced(Header("Advanced timer bar text and fill", "Textures, fonts and outlines for the timer bars. The lists come from LibSharedMedia, so media other addons add appears here; EllesmereUI's textures are listed while it is installed."))
-            TimerChoice("FillTexture", "fillTexture", "Fill texture",
-                "The texture the fill is drawn with: a flat fill (the default, which shows the colors exactly), RestedXP's own bar texture, EllesmereUI's bar textures while it is installed, and any LibSharedMedia status bar texture. A texture that has gone is drawn as RestedXP's own and stays chosen.",
-                TM.FillChoices, true)
-            TimerChoice("LabelFont", "labelFont", "Label font",
-                "The font of the label. By default the same as the guide's step text. A font that has gone is drawn as that and stays chosen.",
-                TM.LabelFontChoices, true)
-            TimerChoice("LabelOutline", "labelOutline", "Label outline",
-                "An outline round the label. The default keeps light text readable over the fill.",
-                TM.OUTLINE_CHOICES, true)
-            TimerChoice("TimeFont", "timeFont", "Time font",
-                "The font of the remaining time. By default the same as the label's.", TM.TimeFontChoices, true)
-            TimerChoice("TimeOutline", "timeOutline", "Time outline",
-                "An outline round the remaining time. By default the same as the label's.", TM.TIME_OUTLINE_CHOICES, true)
             local resetTimers = K.ResetButton("Reset timer bars", resettableTimers, TM.Reset,
                 "Puts the timer bars' fill, text, size, background and border back to the defaults, and turns Skin timer bars on. Nothing else changes: not the window's look, RestedXP's settings or its timers.")
             Under(resetTimers, rxpToggle, RxpOn)
         end
 
-        Advanced(Header("Advanced text", "Fonts and outlines. Sizes are set under Text size, or follow RestedXP's own Guide Font Size option."))
-        TextChoice("TitleFont", "titleFont", "Title font",
-            "The font of the guide's title, the footer and step number tabs. The list comes from LibSharedMedia, so fonts other addons add appear here. RestedXP's own is the default. A font that has gone is drawn as the default and stays chosen.",
-            RS.FontChoices)
-        TextChoice("TitleOutline", "titleOutline", "Title outline", "An outline round the title text.",
-            function() return RS.OUTLINE_CHOICES end)
-        TextChoice("BodyFont", "bodyFont", "Step text font",
-            "The font of step and objective text. A font that has gone is drawn as RestedXP's own and stays chosen.",
-            RS.FontChoices)
-        TextChoice("BodyOutline", "bodyOutline", "Step text outline", "An outline round the step and objective text.",
-            function() return RS.OUTLINE_CHOICES end)
-        TextChoice("Dividers", "dividers", "Header and footer borders",
-            "Light: the header, the footer and each step's tab draw a fainter border than the window, with no highlight line, so the borders don't stack. Full border: the same border as the window.",
-            function() return RS.DIVIDER_CHOICES end)
         local reset = K.ResetButton("Reset appearance", resettable, RS.Reset,
             "Puts this look's background, border, colors, fonts, sizes, spacing, what shows and the waypoint arrow back to the defaults. Nothing else changes: not the switch, RestedXP's settings, guide progress or positions, or the rest of TwichUI.")
         Under(K.InSection(reset, intro), rxpToggle, RxpOn)
