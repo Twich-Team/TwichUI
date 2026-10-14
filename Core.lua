@@ -68,6 +68,7 @@ local DEFAULT_MODULES = {
     qolDuelsToDeath = false, -- ... and duels to the death (needs the one above)
     qolQuickKeybind = false, -- ... a Quick Keybind button in the Game Menu
     qolGuideWaypoint = false, -- ... the game's waypoint on RestedXP's current destination (needs RestedXP)
+    qolTwichUISettingsButton = true,  -- TwichUI button in the Game Menu (core feature, always enabled)
     partyPins = true,        -- Party pins: named map pins of your own, and ones shared with party members who have TwichUI (on; a profile that already saved false keeps it)
 }
 R.DEFAULT_MODULES = DEFAULT_MODULES   -- Switches.lua and the settings window (each switch's default)

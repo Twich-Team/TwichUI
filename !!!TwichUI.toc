@@ -166,6 +166,7 @@ qol\ReleasePvP.lua
 qol\Duels.lua
 qol\QuickKeybind.lua
 qol\GuideWaypoint.lua
+qol\TwichUISettingsButton.lua
 
 # Troubleshooting: one report to copy and optional temporary tracing (/tui diagnostics). Local only; off until asked for.
 diag\Diagnostics.lua
