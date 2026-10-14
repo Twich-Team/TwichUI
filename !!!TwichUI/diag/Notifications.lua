@@ -33,6 +33,16 @@ local function Notifications()
     Line("showing now: %s", #showing > 0 and table.concat(showing, ", ") or "nothing")
     Line("previews: sound in previews=%s; watching for combat to clear previews=%s; retry timer pending=%s",
         s.previewSounds and "on" or "off", D.Flag(s.watchingCombat), D.Flag(s.retryScheduled))
+    -- the look the cards are drawn with (modules/NotifyLook.lua): settings and counts only, no card text
+    local look = R.NotifyLook and R.NotifyLook.Snapshot and R.NotifyLook.Snapshot()
+    if look then
+        Line("appearance: title font=%s, text font=%s, size=%d%%, outline=%s, backdrop=%s; cards with their own look: %s",
+            look.shared.titleFont, look.shared.textFont, look.shared.textScale, look.shared.outline,
+            look.shared.backdrop and "on" or "off", #look.own > 0 and table.concat(look.own, ", ") or "none")
+        Line("appearance: fonts chosen but not available (the card's own is drawn): %s; redraws of a showing card=%d, "
+            .. "coalesced=%d, waiting=%s", #look.fallbackFonts > 0 and table.concat(look.fallbackFonts, ", ") or "none",
+            look.passes, look.coalesced, D.Flag(look.waiting))
+    end
     Line("shown since the game started: %s", Counts(s.shown))
     Line("let go while waiting, by reason: %s", Counts(s.dropped))
     Line("refused when sent (duplicate, queue full): %s", Counts(s.refused))

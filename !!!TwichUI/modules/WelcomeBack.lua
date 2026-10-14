@@ -61,7 +61,11 @@ end
 
 local function Escape(text) return (text:gsub("|", "||")) end
 
-local function Hex(c) return ("|cff%02x%02x%02x"):format(c[1] * 255, c[2] * 255, c[3] * 255) end
+-- The card's measures, for the text size chosen in the appearance settings (modules/NotifyLook.lua). They are the
+-- constants above at the default, and only ever grow.
+local function Grow() return R.Arrival.Grow("welcome") end
+local function CardWidth() return math.ceil(WIDTH * Grow()) end
+local function CardHeight() return math.ceil(HEIGHT * Grow()) end
 
 ---------------------------------------------------------------------------
 -- Where it goes: the top edge's offset from the top centre of the screen, as moved in Edit
@@ -137,6 +141,7 @@ local function Build()
     card:EnableMouse(false)
     card:Hide()
     card.K = K
+    card.payload = false   -- what it says, once it says it (for B.Restyle)
 
     card.title = Text(card, A.FONT_TITLE, 18, "SubZoneTextFont", K.text)
     card.title:SetPoint("TOP", 0, 0)
@@ -188,30 +193,61 @@ function B.Bounds()
     if type(width) ~= "number" or type(height) ~= "number" then return nil end
     local x, y = B.Position()
     local top = height + y
-    return width / 2 + x - WIDTH / 2, top - HEIGHT, width / 2 + x + WIDTH / 2, top
+    local half = CardWidth() / 2
+    return width / 2 + x - half, top - CardHeight(), width / 2 + x + half, top
 end
 
--- Draws the card; the coordinator calls this when its turn comes.
--- p: { zone, ago, more } as Present worked them out. preview: a settings preview, drawn above the
--- Settings panel, whose Open Chronicle link does nothing and which does not listen for combat or a new zone.
-local function Show(p, preview)
-    if not card and not Build() then return false end
-    Stop()   -- a card already up starts over, with its listeners set once
-    Place(card)
+-- Puts the line and the look on the card, for the look as it is now. The entrance and the listeners are not
+-- touched, so a change of look can redraw a card that is up (B.Restyle).
+local function Fill(p)
+    local A = R.Arrival
     local K = card.K
-    card.preview = preview and true or false
-    card.open:EnableMouse(not preview)
-    card.line:SetText(("%sLast noted:|r %s%s|r %s·  %s|r"):format(
-        Hex(K.stone), Hex(K.text), Escape(p.zone), Hex(K.stone), p.ago))
+    local width = CardWidth()
+    card:SetSize(width, CardHeight())
+    for _, fs in ipairs({ card.title, card.line, card.more }) do fs:SetWidth(width) end
+    A.Typeset("welcome", card.title, { role = "title", path = A.FONT_TITLE, size = 18, fallback = "SubZoneTextFont", color = K.text })
+    card.title:SetText("Welcome Back")
+    A.PaintRule("welcome", card.rule, 1)
+    A.Typeset("welcome", card.line, { role = "body", path = A.FONT_LINE, size = 15, fallback = "GameFontHighlight", color = K.text })
+    A.Typeset("welcome", card.more, { role = "detail", path = A.FONT_LINE, size = 13, fallback = "GameFontHighlightSmall", color = K.stone })
+    -- the link keeps its own colors (they say it can be clicked); its face and size follow the card's text
+    A.Typeset("welcome", card.open.text, { role = "detail", path = A.FONT_LINE, size = 13, fallback = "GameFontNormalSmall", fixed = true })
+    card.open:SetSize(math.ceil(120 * Grow()), math.ceil(16 * Grow()))
+    local stone, text = A.ToneHex("welcome", "detail", K.stone), A.ToneHex("welcome", "body", K.text)
+    card.line:SetText(("%sLast noted:|r %s%s|r %s·  %s|r"):format(stone, text, Escape(p.zone), stone, p.ago))
     local more = p.more
     card.more:SetText(more and Escape(more) or "")
     card.more:SetShown(more ~= nil)
     card.open:ClearAllPoints()
     card.open:SetPoint("TOP", more and card.more or card.line, "BOTTOM", 0, -6)
 
+    local widest = math.max(110, A.TextWidth(card.title, width), A.TextWidth(card.line, width), card.open:GetWidth() or 0)
+    if more then widest = math.max(widest, A.TextWidth(card.more, width)) end
+    A.Backdrop("welcome", card, { top = card.title, bottom = card.open, width = widest })
+    card.payload = p
+end
+
+-- Draws the card again for the look as it is now, if one is up; its animation carries on.
+function B.Restyle()
+    if card and card:IsShown() and card.payload then Fill(card.payload) end
+end
+
+-- Draws the card; the coordinator calls this when its turn comes.
+-- p: { zone, ago, more } as Present worked them out. preview: a settings preview, drawn above the
+-- Settings panel, whose Open Chronicle link does nothing and which does not listen for combat or a new zone.
+-- pinned: stays up until put away (the appearance settings) rather than fading after its hold.
+local function Show(p, preview, pinned)
+    if not card and not Build() then return false end
+    Stop()   -- a card already up starts over, with its listeners set once
+    Place(card)
+    card.preview = preview and true or false
+    card.open:EnableMouse(not preview)
+    Fill(p)
+
     local rise = R:Enabled("arrivalReducedMotion") and 0 or RISE
     card.drop:SetOffset(0, -rise)
     card.rise:SetOffset(0, rise)
+    card.fadeOut:SetStartDelay(pinned and N.PIN_SECONDS or HOLD)
     card:SetFrameStrata(preview and N.PREVIEW_STRATA or "LOW")
     card:SetAlpha(0)
     card:Show()
@@ -284,10 +320,11 @@ end
 
 N.Register("welcome", {
     label = "Chronicle welcome back",
-    show = function(p, ctx) return Show(p, ctx.preview) end,
+    show = function(p, ctx) return Show(p, ctx.preview, p.pinned) end,
     dismiss = Hide,
     bounds = function() return B.Bounds() end,
-    hold = function() return FADE_IN + HOLD + FADE_OUT end,
+    restyle = B.Restyle,
+    hold = function(p) return FADE_IN + (p and p.pinned and N.PIN_SECONDS or HOLD) + FADE_OUT end,
     ready = function() return not InTheWay() end,
     yields = true,
     -- Made up: no Chronicle entry is read.

@@ -174,12 +174,17 @@ local function Palette()
 end
 
 -- fallback: the game's font object to borrow from when ours can't be used.
-local function SetFont(fs, path, size, fallback)
+-- flags: "OUTLINE" or "THICKOUTLINE" (the appearance settings); nothing for the plain face.
+local function SetFont(fs, path, size, fallback, flags)
+    local function Draw(file)
+        if flags and flags ~= "" then return fs:SetFont(file, size, flags) end
+        return fs:SetFont(file, size)
+    end
     local locale = GetLocale and GetLocale()
-    if NON_WESTERN[locale] or not fs:SetFont(path, size) then
+    if NON_WESTERN[locale] or not Draw(path) then
         local font = _G[fallback]
         local file = font and font.GetFont and font:GetFont()
-        fs:SetFont(file or STANDARD_TEXT_FONT, size)
+        Draw(file or STANDARD_TEXT_FONT)
     end
 end
 
@@ -200,16 +205,21 @@ local STEP_WIDTH = 10
 local function Rule(parent, K)
     local rule = CreateFrame("Frame", nil, parent)
     rule:SetSize(160, 2)
+    -- Every texture and the strength it was drawn at, so the accent settings can color it again.
+    rule.parts = {}
+    local function Part(texture, tone, alpha) rule.parts[#rule.parts + 1] = { texture = texture, tone = tone, alpha = alpha } end
     local line = rule:CreateTexture(nil, "ARTWORK")
     line:SetColorTexture(K.bronze[1], K.bronze[2], K.bronze[3], 0.9)
     line:SetHeight(1)
     line:SetPoint("TOPLEFT")
     line:SetPoint("TOPRIGHT")
+    Part(line, "line", 0.9)
     local shadow = rule:CreateTexture(nil, "ARTWORK")
     shadow:SetColorTexture(K.bronzeLo[1], K.bronzeLo[2], K.bronzeLo[3], 0.6)
     shadow:SetHeight(1)
     shadow:SetPoint("BOTTOMLEFT")
     shadow:SetPoint("BOTTOMRIGHT")
+    Part(shadow, "shadow", 0.6)
     for _, side in ipairs({ "LEFT", "RIGHT" }) do
         local inner = side == "LEFT" and "TOPRIGHT" or "TOPLEFT"
         local outer = "TOP" .. side
@@ -219,6 +229,7 @@ local function Rule(parent, K)
             t:SetColorTexture(K.bronze[1], K.bronze[2], K.bronze[3], a)
             t:SetSize(STEP_WIDTH, 1)
             t:SetPoint(inner, anchor, outer)
+            Part(t, "line", a)
             anchor = t
         end
     end
@@ -226,6 +237,7 @@ local function Rule(parent, K)
     mark:SetColorTexture(K.gold[1], K.gold[2], K.gold[3], 0.9)
     mark:SetSize(3, 1)
     mark:SetPoint("TOP")
+    Part(mark, "mark", 0.9)
     return rule
 end
 
@@ -233,6 +245,51 @@ end
 A.FONT_TITLE, A.FONT_LINE = FONT_TITLE, FONT_LINE
 A.SetFont = SetFont
 A.Rule = Rule
+
+-- The cards share one look (modules/NotifyLook.lua). These three put it on a card's parts and fall back to
+-- the card's own default when that file is not there, so a card is never left without one.
+-- kind: the card's key; spec: see NotifyLook's L.Style (role, path, size, fallback, color, fixed, alpha).
+function A.Typeset(kind, fs, spec)
+    local look = R.NotifyLook
+    if look then
+        look.Style(kind, fs, spec)
+        return
+    end
+    SetFont(fs, spec.path, spec.size, spec.fallback)
+    local c = spec.color
+    if c then fs:SetTextColor(c[1], c[2], c[3], spec.alpha or 1) end
+end
+
+function A.PaintRule(kind, rule, alpha)
+    local look = R.NotifyLook
+    if look then look.PaintRule(kind, rule, alpha) else rule:SetAlpha(alpha or 1) end
+end
+
+-- The room a card's geometry has: 1, or more when the text is drawn larger.
+function A.Grow(kind)
+    local look = R.NotifyLook
+    return look and look.Grow(kind) or 1
+end
+
+-- A tone for inline color codes ("|cffRRGGBB") in a line of text.
+function A.ToneHex(kind, role, base)
+    local look = R.NotifyLook
+    if look then return look.Hex(kind, role, base) end
+    return ("|cff%02x%02x%02x"):format(base[1] * 255, base[2] * 255, base[3] * 255)
+end
+
+-- Backdrop behind a card's text, when one is chosen (see NotifyLook's L.Fit).
+function A.Backdrop(kind, card, spec)
+    local look = R.NotifyLook
+    if look then look.Fit(kind, card, spec) end
+end
+
+-- The width of a FontString's text, at most limit.
+function A.TextWidth(fs, limit)
+    local look = R.NotifyLook
+    if look then return look.TextWidth(fs, limit) end
+    return 0
+end
 
 local function Build()
     local K = Palette()
@@ -243,6 +300,7 @@ local function Build()
     card:EnableMouse(false)
     card:Hide()
     card.K = K
+    card.last = false   -- what it shows, once it does (for A.Restyle)
 
     card.title = Line(card, FONT_TITLE, 30, "ZoneTextFont")
     card.title:SetPoint("TOP", 0, 0)
@@ -297,40 +355,62 @@ function A.Bounds()
     local width, height = UIParent:GetWidth(), UIParent:GetHeight()
     if type(width) ~= "number" or type(height) ~= "number" then return nil end
     local top = height + TOP_OFFSET
-    return width / 2 - WIDTH / 2, top - HEIGHT, width / 2 + WIDTH / 2, top
+    return width / 2 - WIDTH / 2, top - math.ceil(HEIGHT * A.Grow("arrival")), width / 2 + WIDTH / 2, top
+end
+
+-- Puts the card's text, look and shape on it for what it says. The entrance is not touched, so a change of
+-- look can redraw a card that is already up (A.Restyle).
+local function Fill(kind, title, sub, pvpText, pvpType)
+    local K = card.K
+    local subzone = kind == "subzone"
+    local c = subzone and K.textDim or K.text
+    A.Typeset("arrival", card.title, { role = "title", path = FONT_TITLE, size = subzone and 20 or 30, fallback = "ZoneTextFont", color = c })
+    card.title:SetText(title)
+    local ruleWidth = subzone and 80 or 160
+    card.rule:SetWidth(ruleWidth)
+    A.PaintRule("arrival", card.rule, subzone and 0.6 or 1)
+    A.Typeset("arrival", card.sub, { role = "detail", path = FONT_LINE, size = 17, fallback = "SubZoneTextFont", color = K.stone })
+    card.sub:SetText(sub or "")
+    card.sub:SetShown(sub ~= nil)
+    local tint = TINT[pvpType] or K.stone
+    -- the territory line's tint means something (friendly, hostile, ...), so it keeps its color
+    A.Typeset("arrival", card.pvp, { role = "detail", path = FONT_LINE, size = 13, fallback = "SubZoneTextFont", color = tint, fixed = true, alpha = 0.9 })
+    card.pvp:ClearAllPoints()
+    card.pvp:SetPoint("TOP", sub and card.sub or card.rule, "BOTTOM", 0, -4)
+    card.pvp:SetText(pvpText or "")
+    card.pvp:SetShown(pvpText ~= nil)
+
+    -- larger text needs more room; the card never gets less than it had, and its place does not move
+    card:SetHeight(math.ceil(HEIGHT * A.Grow("arrival")))
+    local widest, last = math.max(A.TextWidth(card.title, WIDTH), ruleWidth), card.rule
+    if sub then widest, last = math.max(widest, A.TextWidth(card.sub, WIDTH)), card.sub end
+    if pvpText then widest, last = math.max(widest, A.TextWidth(card.pvp, WIDTH)), card.pvp end
+    A.Backdrop("arrival", card, { top = card.title, bottom = last, width = widest })
+    card.last = { kind = kind, title = title, sub = sub, pvpText = pvpText, pvpType = pvpType }
+end
+
+-- Draws the card again for the look as it is now, if one is up; its animation carries on.
+function A.Restyle()
+    local last = card and card:IsShown() and card.last
+    if last then Fill(last.kind, last.title, last.sub, last.pvpText, last.pvpType) end
 end
 
 -- Draws the card; the coordinator calls this when its turn comes.
 -- kind: "zone" (title, smaller subzone line, PvP line) or "subzone" (one quieter line, PvP line if it changed).
 -- preview: a settings preview, drawn above the Settings panel; nothing is noted or recorded either way.
-function A.Show(kind, title, sub, pvpText, pvpType, preview)
+-- pinned: a preview that stays up until put away (the appearance settings), instead of fading after its hold.
+function A.Show(kind, title, sub, pvpText, pvpType, preview, pinned)
     if not card then Build() end
-    local K, t = card.K, TIMING[kind]
+    local t = TIMING[kind]
     Stop()
-
-    local subzone = kind == "subzone"
-    local c = subzone and K.textDim or K.text
-    SetFont(card.title, FONT_TITLE, subzone and 20 or 30, "ZoneTextFont")
-    card.title:SetTextColor(c[1], c[2], c[3])
-    card.title:SetText(title)
-    card.rule:SetWidth(subzone and 80 or 160)
-    card.rule:SetAlpha(subzone and 0.6 or 1)
-    card.sub:SetTextColor(K.stone[1], K.stone[2], K.stone[3])
-    card.sub:SetText(sub or "")
-    card.sub:SetShown(sub ~= nil)
-    local tint = TINT[pvpType] or K.stone
-    card.pvp:ClearAllPoints()
-    card.pvp:SetPoint("TOP", sub and card.sub or card.rule, "BOTTOM", 0, -4)
-    card.pvp:SetTextColor(tint[1], tint[2], tint[3], 0.9)
-    card.pvp:SetText(pvpText or "")
-    card.pvp:SetShown(pvpText ~= nil)
+    Fill(kind, title, sub, pvpText, pvpType)
 
     local rise = R:Enabled("arrivalReducedMotion") and 0 or RISE
     card.drop:SetOffset(0, -rise)
     card.rise:SetOffset(0, rise)
     card.rise:SetDuration(t.fadeIn)
     card.fadeIn:SetDuration(t.fadeIn)
-    card.fadeOut:SetStartDelay(Hold(kind))
+    card.fadeOut:SetStartDelay(pinned and N.PIN_SECONDS or Hold(kind))
     card.fadeOut:SetDuration(t.fadeOut)
 
     card:SetFrameStrata(preview and N.PREVIEW_STRATA or "LOW")
@@ -353,12 +433,13 @@ end
 
 N.Register("arrival", {
     label = "Zone arrival",
-    show = function(p, ctx) return A.Show(p.kind, p.title, p.sub, p.pvpText, p.pvpType, ctx.preview) end,
+    show = function(p, ctx) return A.Show(p.kind, p.title, p.sub, p.pvpText, p.pvpType, ctx.preview, p.pinned) end,
     dismiss = function() A.Clear() end,
     bounds = function() return A.Bounds() end,
+    restyle = A.Restyle,
     hold = function(p)
         local t = TIMING[p.kind]
-        return t.fadeIn + Hold(p.kind) + t.fadeOut
+        return t.fadeIn + (p.pinned and N.PIN_SECONDS or Hold(p.kind)) + t.fadeOut
     end,
     sample = function() return { kind = "zone", title = "Sample Vale", sub = "A made-up place for previews" } end,
 })

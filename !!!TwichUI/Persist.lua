@@ -311,6 +311,7 @@ end
 local UI_GROUPS = { "qol", "foodDrink", "brokerMenu", "refreshments", "refreshmentsStyle",
     "restedxpSkin", "restedxpSkinText", "restedxpSkinState", "restedxpTimerLook", "restedxpTimerText", "speakstoneSkin", "speakstoneSkinStyle", "chronicleLook", "chronicleAppearance", "guideWaypoint", "mageSell",
     "partyPins", "pinsLook", "pinsAppearance", "pinsMapText", "pinsBroker", "pinsBrokerMenu", "pinsEditorLook",
+    "notifyLook", "notifyLookArrival", "notifyLookTraining", "notifyLookFriend", "notifyLookWelcome",
     "settingsWindow" }
 
 -- Keys the settings window used to keep and nothing reads any more. "Show advanced options" hid some settings

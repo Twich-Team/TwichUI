@@ -37,6 +37,11 @@
 --             everything real: any real notice drops the waiting previews and dismisses a
 --             showing one it would overlap. They skip the outside checks (combat, banners) because
 --             the player asked, and show above the Settings panel while they run.
+--  Pinned     The appearance settings keep one preview up while the player adjusts a look (payload.pinned):
+--             it holds for N.PIN_SECONDS instead of its card's own time, and is put away by the same
+--             rules as any preview (a real notice, combat, the settings closing, a profile change).
+--  Restyle    When the look changes, N.Restyle() asks every renderer that has a card up to draw it again
+--             with the new look, without replaying its entrance. Nothing is queued or shown for that.
 
 local R = TwichUI
 local N = {}
@@ -47,10 +52,12 @@ local GAP = 12              -- pixels kept between two cards before they are tak
 local RETRY = 2             -- seconds between looks while combat or a game banner holds a notice back
 local GRACE = 3             -- seconds past a card's expected display time before its place is taken as free
 local DEFAULT_TTL, DEFAULT_HOLD = 10, 12
+local PIN_SECONDS = 600     -- how long a pinned preview stays when nobody puts it away
 
 N.PRIORITY = { preview = 0, low = 1, normal = 2 }
 -- Above the Settings panel (DIALOG), so a preview can be seen while the options are open.
 N.PREVIEW_STRATA = "FULLSCREEN_DIALOG"
+N.PIN_SECONDS = PIN_SECONDS
 
 local specs = {}            -- [kind] = registration
 local order = {}            -- kinds, in registration order
@@ -66,6 +73,20 @@ local listening = false       -- the world listeners are registered (set by the 
 -- by an id. Notices are traced (kind and reason only) while tracing is on.
 local stats = { shown = {}, dropped = {}, refused = {} }
 local function Count(group, key) group[key] = (group[key] or 0) + 1 end
+
+-- Settings controls that show whether a preview is up are told when one starts or stops.
+local previewWatchers = {}
+function N.OnPreviewChange(fn)
+    for _, existing in ipairs(previewWatchers) do if existing == fn then return end end
+    previewWatchers[#previewWatchers + 1] = fn
+end
+
+local function PreviewChanged()
+    for _, fn in ipairs(previewWatchers) do
+        local ok, err = pcall(fn)
+        if not ok then geterrorhandler()(err) end
+    end
+end
 
 local function Trace(code, notice, detail)
     local D = R.Diag
@@ -88,6 +109,8 @@ end
 --   ready     = function() -> bool                 false while combat or a game banner is in the way (optional)
 --   sample    = function() -> payload              synthetic data for previews (optional)
 --   yields    = true                               gives way to any real notice that needs its area
+--   restyle   = function()                         draws the card again, in place, for the look as it is now
+--                                                  (optional; nothing when its card is not showing)
 -- }
 function N.Register(kind, spec)
     if not specs[kind] then order[#order + 1] = kind end
@@ -143,6 +166,7 @@ local function Discard(notice, reason)
     Count(stats.dropped, notice.preview and ("preview " .. reason) or reason)
     Trace("dropped", notice, reason)
     if notice.onDrop then pcall(notice.onDrop, reason) end
+    if notice.preview then PreviewChanged() end
 end
 
 -- Stops a showing notice at once and frees its place.
@@ -155,6 +179,7 @@ local function Dismiss(kind)
         local ok, err = pcall(dismiss)
         if not ok then geterrorhandler()(err) end
     end
+    if notice.preview then PreviewChanged() end
 end
 
 local Pump
@@ -180,8 +205,10 @@ end
 
 -- The renderer calls this whenever its card is gone, however that came about. Safe to call at any time.
 function N.Finished(kind)
-    if active[kind] then
+    local notice = active[kind]
+    if notice then
         active[kind] = nil
+        if notice.preview then PreviewChanged() end
         Pump()
     end
 end
@@ -201,6 +228,7 @@ local function Start(notice)
     active[notice.kind] = notice
     Count(stats.shown, notice.preview and (notice.kind .. " preview") or notice.kind)
     Trace("shown", notice)
+    if notice.preview then PreviewChanged() end
     -- If the card never reports back, its place is freed once it has certainly run its course.
     C_Timer.After(Expected(notice) + GRACE, function()
         if active[notice.kind] == notice then
@@ -425,6 +453,28 @@ end
 function N.SoundWanted(preview, featureSound)
     if not featureSound then return false end
     return not preview or N.PreviewSounds()
+end
+
+-- Whether a preview of this kind is waiting or showing.
+function N.PreviewShowing(kind)
+    for _, notice in ipairs(queue) do
+        if notice.kind == kind and notice.preview then return true end
+    end
+    return active[kind] ~= nil and active[kind].preview == true
+end
+
+-- The look changed: every card that is up draws itself again, in place. Only what is already showing is
+-- touched, and a renderer that has no card up does nothing. Cards may now be another size, so what waits
+-- is looked at again.
+function N.Restyle()
+    for _, kind in ipairs(order) do
+        local restyle = specs[kind].restyle
+        if restyle then
+            local ok, err = pcall(restyle)
+            if not ok then geterrorhandler()(err) end
+        end
+    end
+    Pump()
 end
 
 -- Takes back this kind's previews, waiting and showing.

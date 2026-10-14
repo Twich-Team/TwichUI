@@ -48,8 +48,6 @@ end
 
 local function Escape(text) return (text:gsub("|", "||")) end
 
-local function Hex(c) return ("|cff%02x%02x%02x"):format(c[1] * 255, c[2] * 255, c[3] * 255) end
-
 ---------------------------------------------------------------------------
 -- What's new. Pure, so it can be checked on its own.
 ---------------------------------------------------------------------------
@@ -294,7 +292,7 @@ local function Hold(rows) return HOLD_BASE + HOLD_PER_ROW * rows end
 
 -- "Frostbolt  Rank 3", the rank in stone; with the level after it when several levels were crossed.
 local function Label(row, multiLevel)
-    local stone = Hex(card.K.stone)
+    local stone = R.Arrival.ToneHex("training", "detail", card.K.stone)
     local text = Escape(row.name)
     if row.rank then text = text .. "  " .. stone .. Escape(row.rank) .. "|r" end
     if multiLevel then text = text .. stone .. ("  ·  level %d"):format(row.level) .. "|r" end
@@ -315,6 +313,13 @@ local function Width(fs)
     local width = fs.GetUnboundedStringWidth and fs:GetUnboundedStringWidth() or fs:GetStringWidth()
     return type(width) == "number" and width or 0
 end
+
+-- The card's measures, for the text size chosen in the appearance settings (modules/NotifyLook.lua). They are the
+-- constants above at the default, and only ever grow.
+local function Grow() return R.Arrival.Grow("training") end
+local function RowHeight() return math.ceil(ROW_HEIGHT * Grow()) end
+local function CardWidth() return math.ceil(WIDTH * Grow()) end
+local function ColumnWidth() return math.ceil(COLUMN_WIDTH * Grow()) end
 
 local function Row(i)
     local row = card.rowFrames[i]
@@ -346,36 +351,43 @@ end
 
 local function CardHeight(count)
     local _, _, perColumn = Shape(count)
-    return 64 + perColumn * ROW_HEIGHT
+    return math.ceil(64 * Grow()) + perColumn * RowHeight()
 end
 
--- Lays out the spells: one centred column, or two when there are many. Returns how many are shown.
+-- Lays out the spells: one centred column, or two when there are many. Returns how many are shown, and the
+-- width of the widest line (for the backdrop).
 local function Layout(rows)
     local shown, columns, perColumn = Shape(#rows)
     local multiLevel = rows[1].level ~= rows[#rows].level
+    local rowHeight, cardWidth, columnWidth = RowHeight(), CardWidth(), ColumnWidth()
+    local widest = columns == 2 and (columnWidth * 2 + 12) or 0
     for _, row in ipairs(card.rowFrames) do row:Hide() end
     for i = 1, shown do
         local data, row = rows[i], Row(i)
         local column, line = math.floor((i - 1) / perColumn), (i - 1) % perColumn
+        row:SetHeight(rowHeight)
         row.icon:SetTexture(data.icon)
+        -- the face and size first: the width below is measured from them
+        R.Arrival.Typeset("training", row.text, { role = "body", path = FONT_ROW, size = 15, fallback = "GameFontHighlight", color = card.K.text })
         row.text:SetWidth(0)
         row.text:SetText(Label(data, multiLevel))
         row:ClearAllPoints()
         if columns == 1 then
-            local width = math.min(Width(row.text), WIDTH - 60)
+            local width = math.min(Width(row.text), cardWidth - 60)
             row.text:SetWidth(width)
             row:SetWidth(24 + width)
-            row:SetPoint("TOP", card.list, "TOP", 0, -line * ROW_HEIGHT)
+            widest = math.max(widest, 24 + width)
+            row:SetPoint("TOP", card.list, "TOP", 0, -line * rowHeight)
         else
-            row.text:SetWidth(COLUMN_WIDTH - 24)
-            row:SetWidth(COLUMN_WIDTH)
-            row:SetPoint("TOPLEFT", card.list, "TOP", column == 0 and -COLUMN_WIDTH - 6 or 6, -line * ROW_HEIGHT)
+            row.text:SetWidth(columnWidth - 24)
+            row:SetWidth(columnWidth)
+            row:SetPoint("TOPLEFT", card.list, "TOP", column == 0 and -columnWidth - 6 or 6, -line * rowHeight)
         end
         row:Show()
     end
-    card.list:SetHeight(perColumn * ROW_HEIGHT)
+    card.list:SetHeight(perColumn * rowHeight)
     card:SetHeight(CardHeight(#rows))
-    return shown
+    return shown, widest
 end
 
 local function Build()
@@ -431,21 +443,43 @@ local function Build()
     return true
 end
 
+-- Puts the spells and the look on the card, for the look as it is now. The entrance is not touched, so a change
+-- of look can redraw a card that is up (T.Restyle). Returns how many spells are shown.
+local function Fill(rows)
+    local A = R.Arrival
+    card:SetWidth(CardWidth())
+    card.list:SetWidth(CardWidth())
+    A.Typeset("training", card.title, { role = "title", path = A.FONT_TITLE, size = 18, fallback = "SubZoneTextFont", color = card.K.text })
+    card.title:SetText("New Training Available")
+    A.PaintRule("training", card.rule, 1)
+    local shown, widest = Layout(rows)
+    local more = #rows - shown
+    A.Typeset("training", card.foot, { role = "detail", path = A.FONT_LINE, size = 13, fallback = "GameFontHighlightSmall", color = card.K.stone })
+    card.foot:SetText(more > 0 and ("and %d more  ·  Visit a class trainer"):format(more) or "Visit a class trainer")
+    local width = math.max(widest, A.TextWidth(card.title, CardWidth()), A.TextWidth(card.foot, CardWidth()), 110)
+    A.Backdrop("training", card, { top = card.title, bottom = card.foot, width = width })
+    return shown
+end
+
+-- Draws the card again for the look as it is now, if one is up; its animation carries on.
+function T.Restyle()
+    if card and card:IsShown() and card.rows then Fill(card.rows) end
+end
+
 -- Draws the card; the coordinator calls this when its turn comes. preview: a settings preview, drawn above
--- the Settings panel and not listening for combat (the coordinator clears previews then).
-local function Show(rows, preview)
+-- the Settings panel and not listening for combat (the coordinator clears previews then). pinned: stays up
+-- until put away (the appearance settings) rather than fading after its hold.
+local function Show(rows, preview, pinned)
     if not card and not Build() then return false end
     Stop()
     Place(card)
     card.rows = rows
-    local shown = Layout(rows)
-    local more = #rows - shown
-    card.foot:SetText(more > 0 and ("and %d more  ·  Visit a class trainer"):format(more) or "Visit a class trainer")
+    local shown = Fill(rows)
 
     local rise = R:Enabled("arrivalReducedMotion") and 0 or RISE
     card.drop:SetOffset(0, -rise)
     card.rise:SetOffset(0, rise)
-    card.fadeOut:SetStartDelay(Hold(shown))
+    card.fadeOut:SetStartDelay(pinned and N.PIN_SECONDS or Hold(shown))
     card:SetFrameStrata(preview and N.PREVIEW_STRATA or "LOW")
     card:SetAlpha(0)
     card:Show()
@@ -460,7 +494,8 @@ function T.Bounds(count)
     if type(width) ~= "number" or type(height) ~= "number" then return nil end
     local x, y = T.Position()
     local top = height + y
-    return width / 2 + x - WIDTH / 2, top - CardHeight(count), width / 2 + x + WIDTH / 2, top
+    local half = CardWidth() / 2
+    return width / 2 + x - half, top - CardHeight(count), width / 2 + x + half, top
 end
 
 -- Asks the coordinator to show the card for these rows. level: the level reached, which is what tells
@@ -697,10 +732,13 @@ end
 
 N.Register("training", {
     label = "Training available",
-    show = function(p, ctx) return Show(p.rows, ctx.preview) end,
+    show = function(p, ctx) return Show(p.rows, ctx.preview, p.pinned) end,
     dismiss = Hide,
     bounds = function(p) return T.Bounds(#p.rows) end,
-    hold = function(p) return FADE_IN + Hold(math.min(#p.rows, MAX_SHOWN)) + FADE_OUT end,
+    restyle = T.Restyle,
+    hold = function(p)
+        return FADE_IN + (p.pinned and N.PIN_SECONDS or Hold(math.min(#p.rows, MAX_SHOWN))) + FADE_OUT
+    end,
     ready = Ready,
     sample = Sample,
 })

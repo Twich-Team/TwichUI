@@ -83,6 +83,9 @@ chronicle\Broker.lua
 # Notification coordinator: lets the cards below take turns when they would overlap, and runs the settings previews
 modules\Notify.lua
 
+# Notification appearance: the fonts, colors and backdrop the cards below are drawn with (uses the Chronicle palette)
+modules\NotifyLook.lua
+
 # Zone arrival card (uses the Chronicle palette)
 modules\Arrival.lua
 

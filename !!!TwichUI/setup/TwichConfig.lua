@@ -94,6 +94,7 @@ end
 
 local ENUM = {
     outline = Set({ "none", "outline", "thick" }),
+    notifyOutline = Set({ "shadow", "none", "outline", "thick" }),
     layout = Set({ "horizontal", "vertical" }),
     buttonStyle = Set({ "filled", "outline" }),
     density = Set({ "comfortable", "compact" }),
@@ -436,6 +437,22 @@ local function Define()
         Scalar(g, { "ui" }, "friendLoginChannel", "enum", F and F.CHANNEL_DEFAULT, { values = ENUM.channel })
         Scalar(g, { "ui" }, "friendLoginChime", "sound", F and F.SOUND_DEFAULT)
         Scalar(g, { "ui" }, "previewSounds", "bool", false)
+    end
+
+    g = Group("notificationLook", "Notification appearance", { page = "notificationsLook",
+        note = "Fonts, colors, opacity and backdrop of the notification cards: the shared look, and any card's own. Previews are never shared." })
+    do
+        local NL = R.NotifyLook
+        if NL then
+            for _, scope in ipairs({ "shared", "arrival", "training", "friend", "welcome" }) do
+                local keys = {}
+                for _, key in ipairs(NL.Keys(scope)) do keys[#keys + 1] = key end
+                if scope ~= "shared" then keys[#keys + 1] = "own" end
+                Table(g, { "ui", NL.SAVED[scope] }, NL.Source(scope), keys, { outline = ENUM.notifyOutline })
+            end
+        else
+            g.complete = false
+        end
     end
 
     g = Group("qol", "Quality of life", { page = "qol",

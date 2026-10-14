@@ -34,7 +34,7 @@ for _, page in ipairs(K.list) do if page.def.host then c.canvases[page.name] = K
 -- pages sit directly under TwichUI, except the appearance and addon pages, each under the page it belongs to
 for _, page in ipairs(K.list) do
   local under = { ["RestedXP guide window"] = "Addon skins", ["SpeakStone speech frame"] = "Addon skins", ["Chronicle appearance"] = "Journey Chronicle",
-    ["Pin appearance"] = "Party pins", ["Stat weights"] = "Gear comparison", ["Refreshment shares"] = "Mage" }
+    ["Pin appearance"] = "Party pins", ["Notification appearance"] = "Notifications", ["Stat weights"] = "Gear comparison", ["Refreshment shares"] = "Mage" }
   assert((page.parent and K.pages[page.parent].name) == under[page.name], page.name .. " is in its place")
 end
 
@@ -81,7 +81,9 @@ end
 assert(c.TwichUIDB.ui.showAdvanced == nil, "no advanced-options preference is kept")
 assert(not proxies.TWICHUI_showAdvanced, "there is no 'Show advanced options' setting")
 -- (the background's tiling rows also wait for an image background: checked with the Chronicle's below)
-local IMAGE_ONLY = { ["Background tiling"] = true, ["Background tile size"] = true, ["Background inset"] = true }
+local IMAGE_ONLY = { ["Background tiling"] = true, ["Background tile size"] = true, ["Background inset"] = true,
+  -- only while a card (not the shared look) is being edited in the notification appearance page
+  ["Give this card its own look"] = true, ["Reset this card"] = true }
 for _, i in ipairs(initializers) do
   local name = i:GetName()
   if name and i.kind ~= "header" then assert(IMAGE_ONLY[name] or i:Shown(), name .. " is drawn") end
@@ -107,6 +109,12 @@ proxies.TWICHUI_gearTree.set(0); assert(P.TreeChoice() == nil, "0 puts it back t
 -- The Profiles page's choices have no default on purpose: the panel's Defaults button must never switch,
 -- copy into or delete a profile.
 local NO_DEFAULT = { TWICHUI_gearTree = true, TWICHUI_profileCurrent = true, TWICHUI_profileCopyFrom = true, TWICHUI_profileDelete = true }
+-- So do the notification appearance settings: each one reads and writes whichever card (or the shared look) is
+-- being edited, so a page-wide "Reset this page" would reset the wrong place. That page's own two Reset buttons
+-- say exactly what they cover instead.
+for variable in pairs(proxies) do
+  if variable:find("^TWICHUI_notifyLook") then NO_DEFAULT[variable] = true end
+end
 for variable, s in pairs(proxies) do
   if NO_DEFAULT[variable] then
     if variable ~= "TWICHUI_gearTree" then assert(s.default == nil, variable .. " has no default") end
@@ -228,7 +236,7 @@ assert(attune:GetTooltip():find("after reload"), "toggle change shows it needs a
 
 -- The overview links to one page per feature, in this order; every setting
 -- is on exactly one page (registration above refuses a repeat).
-assert(table.concat(pageOrder, ",") == "Notifications,Quality of life,Food and drink,Auction House,Journey Chronicle,Chronicle appearance,Party pins,Pin appearance,Gear comparison,Mage,Addon skins,RestedXP guide window,SpeakStone speech frame,Configuration sharing,Profiles,Troubleshooting", table.concat(pageOrder, ","))
+assert(table.concat(pageOrder, ",") == "Notifications,Notification appearance,Quality of life,Food and drink,Auction House,Journey Chronicle,Chronicle appearance,Party pins,Pin appearance,Gear comparison,Mage,Addon skins,RestedXP guide window,SpeakStone speech frame,Configuration sharing,Profiles,Troubleshooting", table.concat(pageOrder, ","))
 for variable, page in pairs({
   TWICHUI_media = "TwichUI", TWICHUI_quietLogin = "TwichUI", 
   TWICHUI_gearHints = "Gear comparison", TWICHUI_gearTree = "Gear comparison", TWICHUI_gearBagStyle = "Gear comparison",

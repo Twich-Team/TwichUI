@@ -65,7 +65,7 @@ for _, g in ipairs(groups) do
   Check(g.complete, "group " .. g.id .. " is complete (its feature registries are all there)")
   Check(TC.Usable(g), "group " .. g.id .. " is usable")
 end
-for _, id in ipairs({ "general", "notifications", "qol", "food", "auction", "chronicle", "chronicleLook", "pins", "pinsLook",
+for _, id in ipairs({ "general", "notifications", "notificationLook", "qol", "food", "auction", "chronicle", "chronicleLook", "pins", "pinsLook",
     "gear", "gearWeights", "mage", "skins", "restedxp", "speakstone" }) do
   Check(ids[id], "group " .. id .. " exists")
 end
@@ -97,6 +97,7 @@ local REGISTRY = {
   pinsLook = A.TwichUI.PinsLook.Look.DEFAULTS, pinsBrokerMenu = A.TwichUI.PinsLook.MenuLook.DEFAULTS,
   pinsEditorLook = A.TwichUI.PinsLook.EditorLook.DEFAULTS, speakstoneSkin = A.TwichUI.SpeakStoneSkin.Look.DEFAULTS,
   restedxpTimerLook = A.TwichUI.RestedXPSkin.Timers.Look.DEFAULTS, chronicleLook = A.TwichUI.ChronicleAppearance.LOOK_DEFAULTS,
+  notifyLook = A.TwichUI.NotifyLook.DEFAULTS,
 }
 for slot, defaults in pairs(REGISTRY) do
   for key in pairs(defaults) do
@@ -165,6 +166,11 @@ local function Customise(c)
   R:SetEnabled("gearBagIcons", true); R:SetEnabled("auctionPosting", false)
   R:SetEnabled("quietLogin", false)
   R.Arrival.SetHoldChoice("longer")
+  -- notification appearance: the shared look (a zero opacity among it) and one card's own look
+  R.NotifyLook.Set("shared", "textScale", 120); R.NotifyLook.Set("shared", "accentOpacity", 0)
+  R.NotifyLook.Set("shared", "outline", "thick"); R.NotifyLook.Set("shared", "titleColor", "ff445566")
+  R.NotifyLook.SetOwn("friend", true); R.NotifyLook.Set("friend", "textScale", 90); R.NotifyLook.Set("friend", "bgOpacity", 35)
+  R.NotifyLook.SetScope("friend")   -- the page's own state: not part of a share
   R.ChronicleAppearance.Set("titleSize", 20); R.ChronicleAppearance.Set("worn", false); R.ChronicleAppearance.Set("accentColor", "ff112233")
   R.ChronicleAppearance.Look.Set("bgOpacity", 0); R.ChronicleAppearance.Look.Set("borderSize", 3)
   R.Chronicle.SetClock("24")
@@ -262,6 +268,15 @@ do
   Check(data.twichui.groups.qol.modules.qolSummons == nil and data.twichui.groups.qol.modules.qolQuickKeybind ~= nil,
     "only the quick keybind button of Quality of life is in it")
   Check(data.twichui.groups.general.modules.quietLogin == false, "a false value is carried")
+  do
+    local look = data.twichui.groups.notificationLook
+    Check(look and look.notifyLook and look.notifyLook.textScale == 120 and look.notifyLook.outline == "thick", "the shared notification look is carried")
+    Check(look.notifyLook.accentOpacity == 0, "a zero opacity is carried")
+    Check(look.notifyLookFriend.own == true and look.notifyLookFriend.textScale == 90 and look.notifyLookFriend.bgOpacity == 35, "a card's own look is carried")
+    Check(look.notifyLookArrival.own == false and look.notifyLookTraining.own == false, "a card without one says so")
+    Check(look.notifyLookArrival.bodyColor == nil and look.notifyLookFriend.bodyColor == nil, "a card with no main text has no color for it")
+    Check(look.scope == nil and look.pinned == nil and look.notifyLook.scope == nil, "nothing of a preview or the page's state travels")
+  end
   Check(data.twichui.groups.food.foodDrink.zoom == 0 and data.twichui.groups.food.foodDrink.spacing == 0, "zero values are carried")
   Check(data.twichui.groups.restedxp.restedxpSkin.bgOpacity == 40 and not data.twichui.groups.restedxp.modules, "the RestedXP look, not its switch")
   Check(data.twichui.groups.pins.modules == nil, "whether party pins are on is not in it")
@@ -304,6 +319,8 @@ local pack = B.TwichUIDB.setup.received["Rich-Forever"]
 Check(pack and pack.twichui and pack.twichui.status == "ok", "Bob received TwichUI's settings")
 Check(pack.twichui.rejected and next(pack.twichui.rejected) == nil and pack.twichui.unknown == 0, "nothing was dropped")
 
+-- the receiver follows the shared look exactly, including the card with its own
+Check(B.TwichUI.NotifyLook.Get("arrival", "textScale") == 100, "before the import, the receiver has the default look")
 -- review
 local plan = BTC.Plan(pack.twichui)
 Check(plan.ok and plan.changed > 20, "the review lists what would change (" .. tostring(plan.changed) .. ")")
@@ -333,6 +350,13 @@ local ok2, report = BTC.Apply(pack.twichui, { from = "Rich" })
 Check(ok2 == true and report.changed == plan.changed, "applied: " .. tostring(report))
 Check(B.TwichUI.FoodDrink.Get("size") == 48 and B.TwichUI.FoodDrink.Get("spacing") == 0 and B.TwichUI.FoodDrink.Get("showCount") == false,
   "the feature follows at once")
+do
+  local NLB = B.TwichUI.NotifyLook
+  Check(NLB.Get("arrival", "textScale") == 120 and NLB.Get("arrival", "outline") == "thick", "the notification look follows at once")
+  Check(NLB.Get("arrival", "accentOpacity") == 0, "a zero opacity arrived as zero")
+  Check(NLB.Own("friend") and NLB.Get("friend", "textScale") == 90 and NLB.Get("friend", "bgOpacity") == 35, "and so does a card's own look")
+  Check(not NLB.Own("welcome") and NLB.Get("welcome", "titleColor") == "ff445566", "a card without one follows the shared look")
+end
 Check(B.TwichUI:Enabled("welcomeBack") == false and B.TwichUI:Enabled("chronicleDeaths") == true, "switches follow, including off")
 Check(B.TwichUI.Switches.ReloadPending(), "a reload is pending for the skins")
 Check(#report.reload >= 3, "the report names the reloads")

@@ -241,6 +241,7 @@ local function Build()
     card:EnableMouse(false)
     card:Hide()
     card.K = K
+    card.entries = false   -- who it shows, once it does (for F.Restyle)
 
     card.title = card:CreateFontString(nil, "OVERLAY")
     A.SetFont(card.title, A.FONT_TITLE, 20, "SubZoneTextFont")
@@ -290,17 +291,25 @@ local function Build()
     return true
 end
 
+-- The card's measures, for the text size chosen in the appearance settings (modules/NotifyLook.lua). They are the
+-- constants above at the default, and only ever grow.
+local function Grow() return R.Arrival.Grow("friend") end
+local function CardWidth() return math.ceil(WIDTH * Grow()) end
+local function CardHeight() return math.ceil(HEIGHT * Grow()) end
+
 -- Puts the faction's mark on the texture. False when there is no faction or the client has neither picture.
+-- The mark is as tall as the name's text is larger.
 local function SetFactionMark(texture, faction)
     local art = faction and FACTIONS[faction]
     if not art then return false end
+    local size = math.floor(ICON * Grow() + 0.5)
     local info = C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo(art.atlas)
     if info and info.width and info.height and info.height > 0 then
         texture:SetAtlas(art.atlas)
-        texture:SetSize(ICON * info.width / info.height, ICON)
+        texture:SetSize(size * info.width / info.height, size)
     else
         texture:SetTexture(art.texture)
-        texture:SetSize(ICON, ICON)
+        texture:SetSize(size, size)
     end
     return true
 end
@@ -309,36 +318,62 @@ end
 -- SLIDE pixels to the left, so that is counted too.
 function F.Bounds()
     local x, y = F.Position()
-    return x - SLIDE, y, x + WIDTH, y + HEIGHT
+    return x - SLIDE, y, x + CardWidth(), y + CardHeight()
+end
+
+-- Puts the friend and the look on the card, for the look as it is now. The entrance and the chime are not
+-- touched, so a change of look can redraw a card that is up (F.Restyle).
+local function Fill(entries)
+    local A = R.Arrival
+    local K = card.K
+    local first = entries[1]
+    card:SetSize(CardWidth(), CardHeight())
+    card.sub:SetWidth(CardWidth())
+    local marked = SetFactionMark(card.icon, first.faction)
+    card.icon:SetShown(marked)
+    -- Everything lines up on the card's left edge: the mark first, the name beside it, the rule and
+    -- the second line beneath, starting level with the mark.
+    local gap = math.floor(ICON_GAP * Grow() + 0.5)
+    local indent = marked and (card.icon:GetWidth() + gap) or 0
+    card.icon:ClearAllPoints()
+    card.icon:SetPoint("RIGHT", card.title, "LEFT", -gap, 0)
+    -- the face and size first: the width below is measured from them
+    A.Typeset("friend", card.title, { role = "title", path = A.FONT_TITLE, size = 20, fallback = "SubZoneTextFont", color = K.text })
+    card.title:SetWidth(0)
+    card.title:SetText(Escape(first.name))
+    card.title:SetWidth(math.min(card.title:GetStringWidth() + 2, CardWidth() - indent))
+    card.title:ClearAllPoints()
+    card.title:SetPoint("TOPLEFT", indent, 0)
+    card.rule:ClearAllPoints()
+    card.rule:SetPoint("TOPLEFT", card.title, "BOTTOMLEFT", -indent, -7)
+    A.PaintRule("friend", card.rule, 1)
+    A.Typeset("friend", card.sub, { role = "detail", path = A.FONT_LINE, size = 15, fallback = "SubZoneTextFont", color = K.stone })
+    card.sub:SetText(F.Subline(entries))
+    local width = math.max(indent + A.TextWidth(card.title, CardWidth()), 100, A.TextWidth(card.sub, CardWidth()))
+    A.Backdrop("friend", card, { top = card, bottom = card.sub, width = width, align = "LEFT" })
+    card.entries = entries
+end
+
+-- Draws the card again for the look as it is now, if one is up; its animation carries on.
+function F.Restyle()
+    if card and card:IsShown() and card.entries then Fill(card.entries) end
 end
 
 -- Draws the card; the coordinator calls this when its turn comes.
 -- entries: { { name, character, faction }, ... }, the first one's name leads.
 -- preview: a settings preview, drawn above the Settings panel. It touches no friend state and is not traced,
 -- and plays the chime only when previews are allowed sound (or asked for it: forceSound, the diagnostics).
-local function Show(entries, preview, forceSound)
+-- pinned: stays up until put away (the appearance settings) rather than fading after its hold.
+local function Show(entries, preview, forceSound, pinned)
     if not card and not Build() then Note("card:build-failed") return false end
     Stop()
     Place(card)
-    local first = entries[1]
-    local marked = SetFactionMark(card.icon, first.faction)
-    card.icon:SetShown(marked)
-    -- Everything lines up on the card's left edge: the mark first, the name beside it, the rule and
-    -- the second line beneath, starting level with the mark.
-    local indent = marked and (card.icon:GetWidth() + ICON_GAP) or 0
-    card.title:SetWidth(0)
-    card.title:SetText(Escape(first.name))
-    card.title:SetWidth(math.min(card.title:GetStringWidth() + 2, WIDTH - indent))
-    card.title:ClearAllPoints()
-    card.title:SetPoint("TOPLEFT", indent, 0)
-    card.rule:ClearAllPoints()
-    card.rule:SetPoint("TOPLEFT", card.title, "BOTTOMLEFT", -indent, -7)
-    card.sub:SetText(F.Subline(entries))
+    Fill(entries)
 
     local slide = R:Enabled("arrivalReducedMotion") and 0 or SLIDE
     card.setBack:SetOffset(-slide, 0)
     card.flow:SetOffset(slide, 0)
-    card.fadeOut:SetStartDelay(HOLD)
+    card.fadeOut:SetStartDelay(pinned and N.PIN_SECONDS or HOLD)
     card:SetFrameStrata(preview and N.PREVIEW_STRATA or "LOW")
     card:SetAlpha(0)
     card:Show()
@@ -573,10 +608,11 @@ end
 
 N.Register("friend", {
     label = "Friend login",
-    show = function(p, ctx) return Show(p.entries, ctx.preview, p.sound) end,
+    show = function(p, ctx) return Show(p.entries, ctx.preview, p.sound, p.pinned) end,
     dismiss = Hide,
     bounds = F.Bounds,
-    hold = function() return FADE_IN + HOLD + FADE_OUT end,
+    restyle = F.Restyle,
+    hold = function(p) return FADE_IN + (p and p.pinned and N.PIN_SECONDS or HOLD) + FADE_OUT end,
     ready = function() return External() == nil end,
     sample = Sample,
 })

@@ -86,6 +86,14 @@ local function Fake(kind, parent)
     SetAlpha = function(s, a) s.alpha = a end, GetAlpha = function(s) return s.alpha or 1 end,
     CreateTexture = function(s) return Fake("Texture", s) end,
     CreateFontString = function(s) return Fake("FontString", s) end,
+    -- the notification cards' animation (previews are shown from the appearance page)
+    CreateAnimationGroup = function()
+      local g = setmetatable({}, { __index = function() return function() end end })
+      function g:Play() self.playing = true end
+      function g:Stop() self.playing = false end
+      function g:CreateAnimation() return setmetatable({}, { __index = function() return function() end end }) end
+      return g
+    end,
   }
   if kind == "ScrollFrame" then f.ScrollBar = Fake("Slider", f); f.ScrollBar.ThumbTexture = Fake("Texture", f.ScrollBar) end
   -- a method the game has and the stand-in doesn't need is a no-op; a field never set is nil, as on a real frame
@@ -200,8 +208,9 @@ do
       assert(inSide[page.key], page.key .. " is in the sidebar")
     end
   end
-  assert(children == 6, "six secondary pages: " .. children)
-  assert(#K.Tabs("notifications") == 0 and #K.Tabs("overview") == 0, "a feature without pages under it has no tabs")
+  assert(children == 7, "seven secondary pages: " .. children)
+  assert(#K.Tabs("overview") == 0 and #K.Tabs("qol") == 0, "a feature without pages under it has no tabs")
+  assert(#K.Tabs("notifications") == 2 and K.Tabs("notifications")[2].key == "notificationsLook", "Notifications has its appearance tab")
   local tabs = {}
   for _, t in ipairs(K.Tabs("skins")) do tabs[#tabs + 1] = K.TabLabel(t) end
   assert(table.concat(tabs, ",") == "General,RestedXP guide window,SpeakStone speech frame", table.concat(tabs, ","))
@@ -457,6 +466,113 @@ do
   assert(setting:GetValue() == original, "Cancel puts the old color back")
   picker.shown = false
   c.ColorPickerFrame = nil
+end
+
+---------------------------------------------------------------------------
+-- 4b2. Notification appearance (TwichUI_Settings/pages/Notifications.lua, modules/NotifyLook.lua): the page edits
+-- the shared look or one card; a card that follows the shared look is greyed out and says so; a color edit that is
+-- cancelled puts the card's look back; a preview card stays up while it is edited
+---------------------------------------------------------------------------
+do
+  local NL, N = R.NotifyLook, R.Notify
+  local K = S.K
+  local scope, own = S.variables.TWICHUI_notifyLookScope, S.variables.TWICHUI_notifyLookOwn
+  local title = S.variables.TWICHUI_notifyLookTitleColor
+  UI.Navigate("notificationsLook")
+  assert(UI.Selected() == "notificationsLook", "the page is a tab of Notifications")
+  assert(K.pages.notificationsLook.parent == "notifications", "under Notifications")
+  assert(NL.Scope() == "shared" and K.rowsById.notifyLookTitleColor:Enabled(), "the shared look is edited at first")
+  assert(not K.rowsById.notifyLookOwn:Shown(), "the shared look has no 'own look' switch")
+  assert(K.rowsById.notifyLookBodyColor:Shown(), "and every color")
+
+  scope:SetValue("arrival")
+  local row = K.rowsById.notifyLookTitleColor
+  assert(NL.Scope() == "arrival" and K.rowsById.notifyLookOwn:Shown(), "a card has the switch")
+  assert(not row:Enabled() and row:DisabledReason():find("follows the shared look", 1, true), "its settings are greyed out and say why")
+  assert(not K.rowsById.notifyLookBodyColor:Shown(), "the zone card has no main text, so no color for it")
+  local before = title:GetValue()
+  title:SetValue("ff102030")
+  assert(title:GetValue() == before and c.TwichUIDB.ui.notifyLookArrival == nil, "a value for a card that follows the shared look is refused, and nothing is saved")
+  assert(c.TwichUIDB.ui.notifyLook == nil, "choosing a card changed nothing")
+
+  own:SetValue(true)
+  assert(NL.Own("arrival") and row:Enabled(), "with its own look the settings are open")
+  assert(K.rowsById.notifyLookPadding:Enabled() == false and K.rowsById.notifyLookPadding:DisabledReason():find("opacity", 1, true),
+    "padding waits for a backdrop")
+  S.variables.TWICHUI_notifyLookBgOpacity:SetValue(30)
+  assert(K.rowsById.notifyLookPadding:Enabled(), "and opens once there is one")
+  S.variables.TWICHUI_notifyLookBgOpacity:SetValue(0)
+  assert(NL.Get("arrival", "bgOpacity") == 0, "zero stays zero")
+
+  -- the Show button puts the real card up, and a color edit is live on it, and Cancel puts it back
+  local picker = { shown = false }
+  function picker:IsShown() return self.shown end
+  function picker:GetColorRGB() return self.cur.r, self.cur.g, self.cur.b end
+  function picker:SetupColorPickerAndShow(info)
+    self.info, self.shown = info, true
+    self.cur = { r = info.r, g = info.g, b = info.b }
+    if info.swatchFunc then info.swatchFunc() end
+  end
+  c.ColorPickerFrame = picker
+  local show = FindButton(win, "Show")
+  assert(show, "a Show button for each card")
+  show.scripts.OnClick(show)
+  assert(NL.Pinned("arrival") and N.State().active[1] == "arrival:preview", "the zone card is up as a preview")
+  assert(FindButton(win, "Hide"), "its button now says Hide")
+  local swatch
+  local function Walk(frame)
+    for _, ch in ipairs(frame.children) do
+      if rawget(ch, "SetColorRGB") and ch:IsVisible() and not swatch then swatch = ch end
+      Walk(ch)
+    end
+  end
+  Walk(win)
+  assert(swatch, "the title color swatch")
+  local original = NL.Get("arrival", "titleColor")
+  swatch.scripts.OnClick(swatch)
+  picker.cur = { r = 0.2, g = 0.4, b = 0.6 }
+  picker.info.swatchFunc()
+  assert(NL.Get("arrival", "titleColor") == "ff336699", "the wheel edits the card's own look live")
+  assert(NL.Get("training", "titleColor") == original, "and no other card's")
+  picker.info.cancelFunc()
+  assert(NL.Get("arrival", "titleColor") == original, "Cancel puts the card's look back")
+  assert(NL.Pinned("arrival"), "the preview is still up")
+  picker.shown = false
+  c.ColorPickerFrame = nil
+
+  -- the resets say what they cover, and do only that
+  NL.Set("arrival", "textScale", 120)
+  S.variables.TWICHUI_notifyLookScope:SetValue("shared")
+  NL.Set("shared", "textScale", 90)
+  scope:SetValue("arrival")
+  local resets = {}
+  local function Collect(frame)
+    for _, ch in ipairs(frame.children) do
+      if ch.text and type(ch.text) == "table" and ch.text.text == "Reset" and ch.scripts.OnClick and ch:IsVisible() then resets[#resets + 1] = ch end
+      Collect(ch)
+    end
+  end
+  Collect(win)
+  assert(#resets >= 2, "a reset for the shared look and one for the card")
+  asked = nil
+  resets[2].scripts.OnClick(resets[2])
+  assert(asked and asked.text:find("Zone arrival card", 1, true) and asked.text:find("shared look", 1, true), "it names the card and what is left alone")
+  assert(NL.Own("arrival"), "nothing happens before it is accepted")
+  asked.dlg.OnAccept()
+  assert(not NL.Own("arrival") and c.TwichUIDB.ui.notifyLookArrival == nil, "the card follows the shared look again, its own forgotten")
+  assert(NL.Get("arrival", "textScale") == 90 and c.TwichUIDB.ui.notifyLook.textScale == 90, "the shared look was not touched")
+  assert(c.TwichUIDB.modules.arrival == true, "whether the card is on is not touched")
+  scope:SetValue("shared")
+  asked = nil
+  resets = {}
+  Collect(win)
+  resets[1].scripts.OnClick(resets[1])
+  assert(asked and asked.text:find("Cards with a look of their own keep it", 1, true), "the shared reset says what it leaves")
+  asked.dlg.OnAccept()
+  assert(c.TwichUIDB.ui.notifyLook == nil, "the shared look is back to the defaults")
+  NL.ClearPreviews()
+  assert(not NL.Pinned("arrival"), "Hide all previews puts them away")
+  UI.Navigate("overview")
 end
 
 ---------------------------------------------------------------------------
