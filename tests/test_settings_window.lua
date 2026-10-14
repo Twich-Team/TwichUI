@@ -145,6 +145,53 @@ R:OpenSettings("chronicle", "TWICHUI_doesNotExist")
 R:OpenSettings(nil, "TWICHUI_arrivalHold")   -- a setting alone: its page
 
 ---------------------------------------------------------------------------
+-- 1b. Sidebar and tabs: a page under another is a tab of its parent, not a row of the list
+---------------------------------------------------------------------------
+do
+  local side, inSide = K.SidebarOrder(), {}
+  for _, page in ipairs(side) do
+    assert(not page.parent, page.key .. " is top-level")
+    assert(not inSide[page.key], page.key .. " is listed once")
+    inSide[page.key] = true
+  end
+  local seen, children = {}, 0
+  for _, page in ipairs(K.NavOrder()) do
+    assert(not seen[page.key], page.key .. " appears once in navigation order")
+    seen[page.key] = true
+    if page.parent then
+      children = children + 1
+      assert(not inSide[page.key] and inSide[page.parent], page.key .. " is a tab of " .. page.parent .. ", not a sidebar row")
+      local tabs = K.Tabs(page.key)
+      assert(tabs[1].key == page.parent and K.Tabs(page.parent)[1].key == page.parent, "the parent's tab is first")
+      local found
+      for _, t in ipairs(tabs) do if t.key == page.key then found = true end end
+      assert(found, page.key .. " has a tab")
+    else
+      assert(inSide[page.key], page.key .. " is in the sidebar")
+    end
+  end
+  assert(children == 6, "six secondary pages: " .. children)
+  assert(#K.Tabs("notifications") == 0 and #K.Tabs("overview") == 0, "a feature without pages under it has no tabs")
+  local tabs = {}
+  for _, t in ipairs(K.Tabs("skins")) do tabs[#tabs + 1] = K.TabLabel(t) end
+  assert(table.concat(tabs, ",") == "General,RestedXP guide window,SpeakStone speech frame", table.concat(tabs, ","))
+
+  -- each secondary page: opened directly, it is shown under its parent's sidebar row
+  for _, page in ipairs(K.NavOrder()) do
+    R:OpenSettings(page.key)
+    local shown, row = UI.Selected()
+    assert(shown == page.key and row == (page.parent or page.key), page.key .. " selects " .. tostring(row))
+  end
+  -- and the way back and forth between tabs leaves one selected
+  UI.Navigate("chronicleLook"); UI.Navigate("chronicle"); UI.Navigate("pinsLook")
+  local shown, row = UI.Selected()
+  assert(shown == "pinsLook" and row == "pins")
+  UI.Navigate("overview")
+  shown, row = UI.Selected()
+  assert(shown == "overview" and row == "overview")
+end
+
+---------------------------------------------------------------------------
 -- 2. Search: across pages, from descriptions only
 ---------------------------------------------------------------------------
 UI.Close()
@@ -163,6 +210,25 @@ assert(#Search.Run("xyzzy-nothing") == 0)
 assert(#Search.Run("%a+") == 0, "a query is plain text, not a pattern")
 local hold = Search.Run("how long the zone card")
 assert(hold[1] and hold[1].entry.row.id == "arrivalHold" and Search.Note(hold[1].entry) == "Advanced", "advanced results say so")
+-- a secondary page's results name the feature and the tab, and open on that tab
+do
+  local checked = 0
+  for _, e in ipairs(Search.Build()) do
+    local page = K.pages[e.page]
+    if page.parent then
+      local parent = K.pages[page.parent]
+      assert(e.context:find(parent.name, 1, true), e.label .. " is under " .. parent.name .. ": " .. e.context)
+      if e.kind ~= "page" then assert(e.context:find(K.TabLabel(page), 1, true), e.context) end
+      UI.Navigate(e.page, e.row and e.row.id or nil)
+      local shown, row = UI.Selected()
+      assert(shown == e.page and row == page.parent, e.label)
+      checked = checked + 1
+    end
+  end
+  assert(checked > 6, "rows and pages of secondary pages are indexed: " .. checked)
+  local found = Search.Run("refreshment shares")
+  assert(found[1] and found[1].entry.page == "refreshmentShares" and found[1].entry.kind == "page")
+end
 -- through the window: type, move, Enter
 R:OpenSettings("overview")
 local box

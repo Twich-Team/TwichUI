@@ -38,7 +38,7 @@ assert(Page("Broken page") and K.pages.broken.failed, "the broken page's place i
 for _, name in ipairs({ "Gear comparison", "Notifications", "Party pins", "Configuration sharing" }) do
   assert(#Page(name).rows > 0, name .. " is built")
 end
-assert(Row("TwichUI", "Notifications") and Row("TwichUI", "Show advanced options"), "the overview is built")
+assert(Row("TwichUI", "Show advanced options") and not Row("TwichUI", "Notifications", "link"), "the overview is built, and lists no features")
 
 -- 2. Switches act only on a real change.
 local arrival = S.variables.TWICHUI_arrival
@@ -54,7 +54,7 @@ assert(refreshed == 1, "again, or only told to show its value: no update")
 arrival:SetValueToDefault()
 assert(refreshed == 2 and c.TwichUIDB.modules.arrival == true, "Defaults changed it back: one update")
 -- the overview's status still follows a change made elsewhere (cheap, and nothing in the feature runs)
-local notifications = Row("TwichUI", "Notifications")
+local notifications = { status = K.pages.notifications.def.overview.status }
 c.TwichUIDB.modules.trainingNotice = false
 arrival:NotifyUpdate()
 assert(notifications.status():find("2 of 3 on", 1, true), notifications.status())

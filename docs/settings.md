@@ -46,11 +46,11 @@ claimed; see "Measuring".
 |---|---|
 | `Switches.lua` | Every switch's behaviour: the update to run, whether it needs a reload, whether its feature exists this session (`when`). `W.Set` (the one way to flip a switch), `W.Sync` (after a profile change), `W.ReloadPending` |
 | `SettingsLauncher.lua` | `R:OpenSettings(page, setting)`, `R:CloseSettings`, `R:ToggleSettings`, `R.SettingsAnchor()`, `R.OnSettingsClosed(fn)`, the AddOns entry |
-| `TwichUI_Settings/Kit.lua` | `K.Page`, the controls pages describe themselves with (`K.Toggle`, `K.Proxy`, `K.ProxyToggle`, `K.Choice`, `K.Dropdown`, `K.Slider`, `K.Swatch`, `K.Checkbox`, `K.Button`, `K.ResetButton`, `K.Link`, `K.Header`, `K.Appearance`), `K.Advanced`, `K.Under`, `K.Badge`, `K.InSection`, `K.Describe`, `K.NavOrder`, `K.ResetPage` |
+| `TwichUI_Settings/Kit.lua` | `K.Page`, the controls pages describe themselves with (`K.Toggle`, `K.Proxy`, `K.ProxyToggle`, `K.Choice`, `K.Dropdown`, `K.Slider`, `K.Swatch`, `K.Checkbox`, `K.Button`, `K.ResetButton`, `K.Link`, `K.Header`, `K.Appearance`), `K.Advanced`, `K.Under`, `K.Badge`, `K.InSection`, `K.Describe`, `K.NavOrder`, `K.SidebarOrder`, `K.Tabs`, `K.ResetPage` |
 | `TwichUI_Settings/pages/<Page>.lua` | One page each (some hold a page under it too: Gear + Stat weights, Mage + Refreshment shares, Chronicle + appearance, Pins + appearance) |
 | `TwichUI_Settings/Search.lua` | The index and ranking (descriptions only) |
 | `TwichUI_Settings/Widgets.lua` | The controls the window draws with, on `chronicle/Style.lua`'s helpers and a copy of its palette |
-| `TwichUI_Settings/Window.lua` | The window, the left-hand list, pages, search results, footer, Esc |
+| `TwichUI_Settings/Window.lua` | The window, the left-hand list, a feature's tabs, pages, search results, footer, Esc |
 
 `gear/Window.lua` (Stat weights) and `modules/RefreshmentsShares.lua` (Refreshment shares) stay in the core: each
 exposes `Frame()`, built the first time it is shown, which the window shows as a page.
@@ -81,7 +81,9 @@ when it has settings with defaults, **Reset this page** at the bottom.
 ```lua
 K.Page({
     key = "example", name = "Example", order = 85,           -- order: its place within its group
-    group = "everyday",                                       -- or parent = "<page key>" for a page under another
+    group = "everyday",                                       -- or parent = "<page key>": a tab of that feature's page
+    -- tab = "General",                                       -- optional: a page with pages under it names its own tab
+    -- nav = "Appearance",                                    -- optional: a page under another is labelled this in the tabs
     description = "One line under the title.",
     keywords = "other words search should find it by",
     when = function() return R.Example ~= nil end,           -- optional: whether it exists this session
@@ -97,6 +99,11 @@ K.Page({
 and list the file in `TwichUI_Settings/TwichUI_Settings.toc`. A new switch also needs its line in `Switches.lua`
 (what a change does) and its default in `Core.lua`'s `DEFAULT_MODULES`. A page whose build fails says so on the page;
 the others are unaffected. Hosted pages give `host = function() return frame end` instead of `build`.
+
+A page with `parent` has no row in the left-hand list: it is a tab beside its parent's (the parent's own settings are
+the first, "General" unless it sets `tab`). Its key, its rows and its search results are unchanged; opening it by key or
+from a search result shows the parent's row selected and that tab. The tabs are drawn between the page title and its
+one-line description, so the title is the feature's name and the line describes the tab shown.
 
 ## Rules for a setting
 

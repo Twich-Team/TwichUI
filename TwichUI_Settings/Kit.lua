@@ -39,7 +39,9 @@ K.GROUPS = {
 ---------------------------------------------------------------------------
 -- Pages
 ---------------------------------------------------------------------------
--- def: { key, name, nav (shorter name in the list, optional), group, parent (a page key), order, description
+-- def: { key, name, nav (shorter name in the list or in its parent's tabs, optional), tab (the label of a page that
+-- has pages under it, in their tab strip; default "General"), group, parent (a page key: the page is a tab of its
+-- parent, not a row in the list), order, description
 -- (one line under the title), when (whether the page exists this session), build (describes its rows),
 -- host (instead of rows: returns a frame of the feature's own, shown as the page), keywords (extra words search
 -- finds the page by), overview = { label, tip, status = function, when = function } (its row on Home) }.
@@ -563,21 +565,57 @@ function K.Describe()
     K.Use(nil)
 end
 
--- The pages in the order the left-hand list shows them: by group, then each top-level page with its children.
+-- Every page in navigation order: by group, then each top-level page followed by its children. Search and the
+-- tests walk this; the left-hand list shows only the top-level pages (K.SidebarOrder).
 function K.NavOrder()
     local out = {}
     for _, group in ipairs(K.GROUPS) do
         for _, page in ipairs(K.list) do
             if page.group == group.key and not page.parent then
                 out[#out + 1] = page
-                local kids = {}
-                for _, child in ipairs(page.children) do kids[#kids + 1] = child end
-                table.sort(kids, function(a, b) return (a.def.order or 0) < (b.def.order or 0) end)
-                for _, child in ipairs(kids) do out[#out + 1] = child end
+                for _, child in ipairs(K.Tabs(page.key)) do
+                    if child ~= page then out[#out + 1] = child end
+                end
             end
         end
     end
     return out
+end
+
+-- The pages the left-hand list shows: the top-level ones, by group. A page under another is reached through its
+-- parent's tabs, so it has no row of its own.
+function K.SidebarOrder()
+    local out = {}
+    for _, group in ipairs(K.GROUPS) do
+        for _, page in ipairs(K.list) do
+            if page.group == group.key and not page.parent then out[#out + 1] = page end
+        end
+    end
+    return out
+end
+
+-- The top-level page a page belongs to (itself when it is one).
+function K.Root(key)
+    local page = K.pages[key]
+    return page and (page.parent and K.pages[page.parent] or page) or nil
+end
+
+-- The tabs of a page's family, in order: the top-level page first, then each page under it. Empty when the page
+-- has nothing under it, so only a feature with secondary pages shows tabs.
+function K.Tabs(key)
+    local root = K.Root(key)
+    if not root or #root.children == 0 then return {} end
+    local kids = {}
+    for _, child in ipairs(root.children) do kids[#kids + 1] = child end
+    table.sort(kids, function(a, b) return (a.def.order or 0) < (b.def.order or 0) end)
+    table.insert(kids, 1, root)
+    return kids
+end
+
+-- A page's label in its family's tab strip: the top-level page is "General" unless it names a tab of its own.
+function K.TabLabel(page)
+    if page.parent then return page.nav end
+    return page.def.tab or "General"
 end
 
 -- The settings a page's "Reset this page" puts back (every setting on it with a default; profile choices have

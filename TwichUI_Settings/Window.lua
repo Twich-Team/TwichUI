@@ -22,6 +22,7 @@ local CONTENT_W = WIDTH - PAD - NAV_W - 12 - 24 - PAD
 local CONTROL_W = 236
 local ROW_MIN, SECTION_PAD, GAP = 30, 14, 12
 local NAV_ROW, NAV_GROUP = 30, 24
+local TAB_H = 28
 local HOST_H = 540
 local HIGHLIGHT_SECONDS = 2.5
 
@@ -254,6 +255,41 @@ local function Disclosure(parent)
     return b
 end
 
+-- A feature's tabs: one per page of the family, the shown one in gold with a bar on the rule below. Choosing one
+-- goes to that page (a stable page key, as search and direct links use); its rows are made the first time.
+local function TabStrip(parent, tabs, current)
+    local strip = CreateFrame("Frame", nil, parent)
+    strip:SetHeight(TAB_H)
+    strip:SetWidth(CONTENT_W)
+    local x = 0
+    for _, tab in ipairs(tabs) do
+        local selected = tab.key == current
+        local b = CreateFrame("Button", nil, strip)
+        b:SetHeight(TAB_H)
+        b.text = Wg.Text(b, "body")
+        b.text:SetPoint("LEFT", 12, 0)
+        b.text:SetText(K.TabLabel(tab))
+        b:SetWidth(b.text:GetStringWidth() + 24)
+        b:SetPoint("BOTTOMLEFT", strip, "BOTTOMLEFT", x, 0)
+        x = x + b:GetWidth() + 2
+        b.hover = Wg.Solid(b, "BACKGROUND", pal.gold, 0.07)
+        b.hover:SetAllPoints()
+        b.hover:Hide()
+        b.bar = Wg.Solid(b, "ARTWORK", pal.gold, 1)
+        b.bar:SetHeight(2)
+        b.bar:SetPoint("BOTTOMLEFT", 0, 0)
+        b.bar:SetPoint("BOTTOMRIGHT", 0, 0)
+        b.bar:SetShown(selected)
+        Wg.Color(b.text, selected and pal.gold or pal.textDim)
+        if not selected then
+            b:SetScript("OnEnter", function(self) self.hover:Show(); Wg.Color(self.text, pal.text) end)
+            b:SetScript("OnLeave", function(self) self.hover:Hide(); Wg.Color(self.text, pal.textDim) end)
+            b:SetScript("OnClick", function() UI.Navigate(tab.key) end)
+        end
+    end
+    return strip
+end
+
 local Layout   -- (below)
 
 local function BuildView(page)
@@ -264,15 +300,19 @@ local function BuildView(page)
     view.frame = frame
     state.views[page.key] = view
 
-    -- the page's own header: title, status, one line of what it is for
+    -- the page's own header: title, status, one line of what it is for. A feature with pages under it
+    -- (K.Tabs) is titled with the feature's name and shows its tabs between the title and the line, which then
+    -- describes the tab shown.
+    local tabs = K.Tabs(page.key)
+    local root = K.Root(page.key)
     view.title = Wg.Text(frame, "title")
     view.title:SetPoint("TOPLEFT", 2, -4)
-    view.title:SetText(page.name)
+    view.title:SetText(#tabs > 0 and root.name or page.name)
+    if #tabs > 0 then view.tabs = TabStrip(frame, tabs, page.key) end
     view.status = Wg.Text(frame, "small")
     view.status:SetPoint("TOPRIGHT", -4, -8)
     view.status:SetJustifyH("RIGHT")
     view.desc = Wg.Text(frame, "small")
-    view.desc:SetPoint("TOPLEFT", view.title, "BOTTOMLEFT", 0, -6)
     view.desc:SetWidth(CONTENT_W - 8)
     view.desc:SetText(page.def.description or (page.def.overview and page.def.overview.tip) or "")
     view.rule = Wg.Solid(frame, "BORDER", pal.bronzeLo, 0.9)
@@ -395,11 +435,32 @@ function Layout(view)
     if page.def.overview and page.def.overview.status then ok, status = pcall(page.def.overview.status) end
     view.status:SetText(ok and status or "")
     local y = 4 + (view.title:GetStringHeight() or 18) + 6
-    if view.desc:GetText() ~= "" then y = y + (view.desc:GetStringHeight() or 12) + 10 else y = y + 4 end
-    view.rule:ClearAllPoints()
-    view.rule:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, -y)
-    view.rule:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 0, -y)
-    y = y + 14
+    local hasDesc = view.desc:GetText() ~= ""
+    local function Desc()
+        view.desc:ClearAllPoints()
+        view.desc:SetPoint("TOPLEFT", frame, "TOPLEFT", 2, -y)
+        if hasDesc then y = y + (view.desc:GetStringHeight() or 12) + 10 else y = y + 4 end
+    end
+    local function Rule()
+        view.rule:ClearAllPoints()
+        view.rule:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, -y)
+        view.rule:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 0, -y)
+    end
+    if view.tabs then
+        -- title, tabs resting on the rule, then the line about the tab shown
+        view.tabs:ClearAllPoints()
+        view.tabs:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, -(y + 4))
+        y = y + 4 + TAB_H
+        Rule()
+        y = y + 10
+        Desc()
+        y = y + (hasDesc and 4 or 0)
+    else
+        -- title, the line about the page, then the rule
+        Desc()
+        Rule()
+        y = y + 14
+    end
     if view.failed then
         view.failed:ClearAllPoints()
         view.failed:SetPoint("TOPLEFT", 2, -y)
@@ -491,12 +552,19 @@ UI.Layout = Layout
 ---------------------------------------------------------------------------
 -- Navigation
 ---------------------------------------------------------------------------
+-- A row of the left-hand list: shown (gold, a bar and a lighter band), hovered (ivory, a faint wash) or at rest
+-- (muted). A feature stays shown while one of its tabs is.
+local function PaintItem(item, selected)
+    item.bar:SetShown(selected)
+    item.fill:SetShown(selected)
+    item.hover:SetShown(item.hovered and not selected)
+    Wg.Color(item.text, selected and pal.gold or (item.hovered and pal.text or pal.textDim))
+end
+
 local function PaintNav()
+    local root = K.Root(state.page)
     for _, item in ipairs(state.navItems) do
-        local selected = not state.searching and item.page.key == state.page
-        item.bar:SetShown(selected)
-        item.fill:SetShown(selected)
-        Wg.Color(item.text, selected and pal.gold or (item.child and pal.textDim or pal.text))
+        PaintItem(item, not state.searching and root ~= nil and item.page.key == root.key)
     end
 end
 
@@ -581,7 +649,7 @@ local function BuildNav()
     local labels = {}
     for _, group in ipairs(K.GROUPS) do labels[group.key] = group.label end
     local y, lastGroup = 0, nil
-    for _, page in ipairs(K.NavOrder()) do
+    for _, page in ipairs(K.SidebarOrder()) do
         if page.group ~= lastGroup then
             lastGroup = page.group
             if labels[page.group] then
@@ -596,7 +664,7 @@ local function BuildNav()
         item:SetHeight(NAV_ROW)
         item:SetPoint("TOPLEFT", 0, -y)
         item:SetPoint("TOPRIGHT", 0, -y)
-        item.page, item.child = page, page.parent ~= nil
+        item.page = page
         item.fill = Wg.Solid(item, "BACKGROUND", pal.band, 1)
         item.fill:SetAllPoints()
         item.hover = Wg.Solid(item, "BORDER", pal.gold, 0.07)
@@ -606,13 +674,19 @@ local function BuildNav()
         item.bar:SetWidth(2)
         item.bar:SetPoint("TOPLEFT", 0, -3)
         item.bar:SetPoint("BOTTOMLEFT", 0, 3)
-        item.text = Wg.Text(item, item.child and "small" or "body")
-        item.text:SetPoint("LEFT", item.child and 24 or 12, 0)
+        item.text = Wg.Text(item, "body")
+        item.text:SetPoint("LEFT", 12, 0)
         item.text:SetPoint("RIGHT", -6, 0)
         item.text:SetWordWrap(false)
         item.text:SetText(page.nav)
-        item:SetScript("OnEnter", function(self) self.hover:Show() end)
-        item:SetScript("OnLeave", function(self) self.hover:Hide() end)
+        item:SetScript("OnEnter", function(self)
+            self.hovered = true
+            PaintNav()
+        end)
+        item:SetScript("OnLeave", function(self)
+            self.hovered = false
+            PaintNav()
+        end)
         item:SetScript("OnClick", function(self) UI.Navigate(self.page.key) end)
         state.navItems[#state.navItems + 1] = item
         y = y + NAV_ROW
@@ -924,6 +998,12 @@ end
 -- What the rest of TwichUI calls (SettingsLauncher.lua)
 ---------------------------------------------------------------------------
 function UI.IsShown() return win ~= nil and win:IsShown() end
+
+-- Where the window is: the page shown (a tab, for a feature with tabs) and the left-hand row it sits under.
+function UI.Selected()
+    local root = K.Root(state.page)
+    return state.page, root and root.key or nil
+end
 function UI.Frame() return win end
 
 -- page: a page key (unknown or nil: the start page, or the page shown last time); setting: a setting's name

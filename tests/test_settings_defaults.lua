@@ -480,10 +480,17 @@ R:OpenSettings("chronicle"); assert(c.opened == "chronicle", "opens a named page
 R:OpenSettings(); assert(c.opened == "overview", "opens the start page by default")
 
 -- Overview rows: status text follows the toggles, and each opens its page.
+-- Home no longer lists the features; each page shows its own status under its title (the page's overview.status).
+for _, i in ipairs(initializers) do assert(i.kind ~= "link", "Home has no feature rows") end
 local rows = {}
-for _, i in ipairs(initializers) do if i.kind == "link" then rows[i.data.name] = i end end
+for _, page in ipairs(K.list) do
+  local o = page.def.overview
+  if o and o.status then
+    rows[page.name] = { status = o.status, click = function() R:OpenSettings(page.key) end }
+  end
+end
 assert(not rows["Zone arrival"], "the zone card no longer has a row of its own")
-local zone = assert(rows["Notifications"], "overview has one Notifications row")
+local zone = assert(rows["Notifications"], "the Notifications page has a status")
 assert(zone.status():find("3 of 3 on"), zone.status())
 c.TwichUIDB.modules.arrival = false
 c.TwichUIDB.modules.attuneSkin = true
@@ -525,7 +532,7 @@ local summonToggle; for _, i in ipairs(initializers) do if i.setting and i.setti
 c.TwichUIDB.modules.qolSummons = true; summonToggle.setting.changed(); assert(R.frame.events.CONFIRM_SUMMON, "listening once on")
 c.TwichUIDB.modules.qolSummons = false; summonToggle.setting.changed(); assert(not R.frame.events.CONFIRM_SUMMON, "and not once off")
 -- The overview row follows the switches.
-local qolRow = assert(rows["Quality of life"], "overview has a Quality of life row")
+local qolRow = assert(rows["Quality of life"], "the Quality of life page has a status")
 assert(qolRow.status():find("Off"), qolRow.status())
 c.TwichUIDB.modules.qolDuels, c.TwichUIDB.modules.qolReleasePvP = true, true; summonToggle.setting.changed()
 assert(qolRow.status():find("2 of 6 on"), qolRow.status())

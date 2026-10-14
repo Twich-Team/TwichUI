@@ -77,7 +77,8 @@ function Search.Build()
                 local label = Clean(row:GetName())
                 if label ~= "" then
                     local section = row.section and Clean(row.section:GetName()) or nil
-                    local context = page.name
+                    -- a page under another is a tab of it: "Mage . Refreshment shares . Section"
+                    local context = parent and (parent.name .. Search.SEP .. K.TabLabel(page)) or page.name
                     if row.kind ~= "header" and section and section ~= "" and section:lower() ~= page.name:lower() then
                         context = context .. Search.SEP .. section
                     end
