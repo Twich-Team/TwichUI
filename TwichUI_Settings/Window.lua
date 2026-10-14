@@ -1131,27 +1131,33 @@ R.Switches.OnChange(function()
 end)
 
 ---------------------------------------------------------------------------
--- Esc: the open list, then the window. Through the game's Esc handlers where it has them (an open dialog
--- or the game's color picker is put away first); otherwise the usual list of frames Esc closes.
+-- Esc: the open list, then the window. Through the game's list of frames Esc closes (UISpecialFrames), as an
+-- addon's window should: RegisterGameMenuEscHandler is the game's own, and an addon calling it writes into the
+-- game's handler table and re-sorts it from insecure code, which taints the Esc path (SpellStopCasting then
+-- reports ADDON_ACTION_FORBIDDEN). The one entry is a stand-in answering the two calls the game makes of a
+-- frame there, so the list is put away before the window, and a color picker that is open is left to close
+-- first (it is in the same list and closes itself; this entry is first, so it is asked while the picker is up).
 ---------------------------------------------------------------------------
-if RegisterGameMenuEscHandler and GameMenuEscPriority and GameMenuEscPriority.Menu and GameMenuEscPriority.AddOn then
-    RegisterGameMenuEscHandler(GameMenuEscPriority.Menu, function()
-        if Wg.MenuShown() then
-            Wg.CloseMenu()
-            return true
-        end
-        return false
-    end)
-    RegisterGameMenuEscHandler(GameMenuEscPriority.AddOn, function()
-        if not UI.IsShown() then return false end
-        if ColorPickerFrame and ColorPickerFrame:IsShown() then return false end
+local ESC_NAME = "TwichUISettingsEsc"
+local escape = {}
+function escape:IsShown()
+    if ColorPickerFrame and ColorPickerFrame:IsShown() then return false end
+    return Wg.MenuShown() or UI.IsShown()
+end
+function escape:Hide()
+    if Wg.MenuShown() then
+        Wg.CloseMenu()
+    else
         UI.Close()
-        return true
-    end)
-    UI.escape = "handlers"
-elseif UISpecialFrames then
-    tinsert(UISpecialFrames, "TwichUISettingsMenu")
-    tinsert(UISpecialFrames, "TwichUISettingsWindow")
+    end
+end
+if UISpecialFrames then
+    _G[ESC_NAME] = escape
+    local listed
+    for _, name in ipairs(UISpecialFrames) do
+        if name == ESC_NAME then listed = true end
+    end
+    if not listed then tinsert(UISpecialFrames, 1, ESC_NAME) end   -- before the picker: it is asked while the picker is still up
     UI.escape = "special-frames"
 end
 

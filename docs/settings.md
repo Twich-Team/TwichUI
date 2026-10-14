@@ -164,9 +164,11 @@ lets go of it. Choosing a result never changes a value or enables anything.
 ## Esc and keyboard
 
 The window never takes keys unless a box has focus, so play keys work with it open. Esc order: a typing box first
-(search clears, then lets go), then the game's dialogs, then TwichUI's open dropdown list, then the window. Through
-Forever's `RegisterGameMenuEscHandler` (Menu and AddOn priorities, `Blizzard_GameMenuEsc.lua`); the window steps
-aside while the game's color picker is open. Without that API it falls back to `UISpecialFrames`.
+(search clears, then lets go), then TwichUI's open dropdown list, then the window. Through the game's
+`UISpecialFrames` list, with one stand-in entry (`TwichUISettingsEsc`) that closes the list before the window; an
+open color picker closes on its own first. The window deliberately does not call `RegisterGameMenuEscHandler`: that
+writes into the game's own handler table from addon code, which taints the Esc path and makes the game's
+`SpellStopCasting` report `ADDON_ACTION_FORBIDDEN` against TwichUI_Settings.
 
 ## The window
 

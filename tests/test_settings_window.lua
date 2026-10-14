@@ -9,7 +9,9 @@ dofile(TESTS .. "settings_mock.lua")
 --     its page, opens its Advanced section and changes nothing; Up/Down/Enter/Esc in the search box;
 --   * a control writes through its feature's setter; a greyed-out control says why and does nothing;
 --   * "Reset this page" asks first, names its scope, and puts back only that page (pins untouched);
---   * Esc: the dropdown list first, then the window; the game's color picker is left to close itself;
+--   * Esc: the dropdown list first, then the window; the game's color picker is left to close itself; it goes
+--     through the game's list of frames Esc closes, never RegisterGameMenuEscHandler (an addon calling that
+--     taints the game's Esc path: ADDON_ACTION_FORBIDDEN for SpellStopCasting);
 --   * the AddOns entry opens the window; a missing settings addon is explained, and nothing breaks.
 
 ---------------------------------------------------------------------------
@@ -93,21 +95,26 @@ local function Fake(kind, parent)
   end })
 end
 
-local escHandlers = {}
+local registeredEscHandlers = 0   -- calls an addon made into the game's own handler table (taints it)
 local c, S = SettingsClient({ beforeInit = function(c)
   c.CreateFrame = function(kind, name, parent) local f = Fake(kind, parent); if name then c[name] = f end return f end
   c.UIParent = Fake("Frame")
   c.UIParent.w, c.UIParent.h = 1920, 1080
   c.GameTooltip = Fake("GameTooltip")
   c.GameMenuEscPriority = { Dialog = 1, Menu = 2, AddOn = 8 }
-  c.RegisterGameMenuEscHandler = function(priority, fn) table.insert(escHandlers, { priority = priority, fn = fn }) end
+  c.RegisterGameMenuEscHandler = function() registeredEscHandlers = registeredEscHandlers + 1 end
+  c.UISpecialFrames = { "ColorPickerFrame" }   -- as the game has it: the picker is in the list itself
   c.GetLocale = function() return "enUS" end
 end })
 local R, K = c.TwichUI, S.K
+-- The game's CloseSpecialWindows (Blizzard_UIParentPanelManager): every listed frame that is shown is hidden.
 local function PressEsc()
-  table.sort(escHandlers, function(a, b) return a.priority < b.priority end)
-  for _, h in ipairs(escHandlers) do if h.fn() then return true end end
-  return false
+  local found = false
+  for _, name in ipairs(c.UISpecialFrames) do
+    local frame = c[name]
+    if frame and frame:IsShown() then frame:Hide(); found = true end
+  end
+  return found
 end
 
 -- The settings client stands in for the window when it describes pages; this test wants the real one.
@@ -116,7 +123,8 @@ local function LoadWindow()
 end
 LoadWindow()
 local UI = R.SettingsUI
-assert(UI and UI.escape == "handlers", "Esc goes through the game's Esc handlers")
+assert(UI and UI.escape == "special-frames", "Esc goes through the game's list of frames Esc closes")
+assert(registeredEscHandlers == 0, "the game's own Esc handler table is never written to from the addon (taint)")
 
 ---------------------------------------------------------------------------
 -- 1. Opening: one window, every page draws, nothing made twice
@@ -443,8 +451,7 @@ dropdown.scripts.OnClick(dropdown)
 assert(Wg.MenuShown(), "the list opens")
 assert(PressEsc() and not Wg.MenuShown() and win.shown, "Esc puts the list away and leaves the window")
 c.ColorPickerFrame = Fake("Frame")
-assert(not PressEsc() and win.shown, "with the color picker open, Esc is the picker's")
-c.ColorPickerFrame:Hide()
+assert(PressEsc() and not c.ColorPickerFrame:IsShown() and win.shown, "with the color picker open, Esc closes the picker only")
 local closed = 0
 R.OnSettingsClosed(function() closed = closed + 1 end)
 assert(PressEsc() and not win.shown and closed == 1, "then the window, and its previews are told")
