@@ -61,7 +61,7 @@ a.ScrollUtil = {InitScrollBoxListWithScrollBar = function(box, _, view) box.view
 a.CreateDataProvider = function(rows) return {rows = rows} end
 a.UIParent, a.UISpecialFrames, a.tinsert = Obj(), {}, table.insert
 a.GameTooltip = Obj(); a.GameTooltip_Hide = function() end
-for _, f in ipairs({"setup/StoredData.lua", "setup/Explorer.lua", "chronicle/Style.lua", "setup/ExplorerWindow.lua"}) do
+for _, f in ipairs({"setup/StoredData.lua", "setup/Explorer.lua", "chronicle/Style.lua", "Look.lua", "setup/ExplorerWindow.lua"}) do
   local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, a); chunk("!!!TwichUI", {})
 end
 
@@ -154,6 +154,35 @@ assert(EX.TypeNote(false):find("not a missing one") and EX.TypeNote(function() e
 assert(EX.NumText(0.1) == "0.1" and EX.NumText(-3) == "-3" and EX.NumText(1e300) == "1e+300")
 for _, n in ipairs({1/3, 2^53, 1e-7, -2.5, 123456.789}) do assert(tonumber(EX.NumText(n)) == n, "reads back exactly: " .. EX.NumText(n)) end
 assert(EX.NumText(0/0) == "nan" and EX.NumText(1/0) == "inf")
+
+-- The client warns ("integer overflow attempting to store") when %d is given an integer outside 32 bits.
+-- Plain Lua 5.1 doesn't, so this stand-in for string.format records it, as the client would.
+local overflow
+do
+  local realFormat = string.format
+  local function checked(fmt, ...)
+    local args, i = {...}, 0
+    for spec in fmt:gmatch("%%[%-+ #0]*%d*%.?%d*(%a)") do
+      i = i + 1
+      if (spec == "d" or spec == "i") and type(args[i]) == "number" and (args[i] >= 2^31 or args[i] < -2^31) then
+        overflow = (overflow or 0) + 1
+      end
+    end
+    return realFormat(fmt, ...)
+  end
+  string.format = checked
+end
+local function Overflowed(fn) overflow = nil; local r = fn(); return overflow, r end
+for _, n in ipairs({3298500249, 2^31, -2^31 - 1, 4294967296, 1e14, 999999999999999}) do
+  local hits, text = Overflowed(function() return EX.NumText(n) end)
+  assert(not hits, "NumText must not format " .. n .. " with %d")
+  assert(tonumber(text) == n and not text:find("e"), "a whole number reads as digits: " .. text)
+  -- the saved-size estimate measures the same numbers, as values and as keys
+  hits = Overflowed(function() return a.TwichUI.StoredData.Count("Big", {n, [n] = true}) end)
+  assert(not hits, "the size estimate must not format " .. n .. " with %d")
+end
+assert(EX.NumText(-3) == "-3" and EX.NumText(0) == "0" and EX.NumText(2147483647) == "2147483647")
+assert(EX.NumText(-0) == "0" or EX.NumText(-0) == "-0")
 assert(EX.PathPart(1) == "[1]" and EX.PathPart("1") == '["1"]' and EX.PathPart(true) == "[true]")
 assert(EX.PathPart(2.5) == "[2.5]" and EX.PathPart("name") == ".name" and EX.PathPart("two words") == '["two words"]')
 assert(EX.PathPart('say "hi"\n') == '["say \\"hi\\"\\n"]', "quotes and line breaks escaped")

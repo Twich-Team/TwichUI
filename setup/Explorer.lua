@@ -62,12 +62,13 @@ R:On("PLAYER_LOGIN", function() EX.Changed("sources") end)   -- a backup finishe
 ---------------------------------------------------------------------------
 function EX.IsSecret(v) return issecretvalue ~= nil and issecretvalue(v) == true end
 
--- The shortest text that reads back as the same number.
+-- The shortest text that reads back as the same number. Whole numbers go through %.0f: the game's %d
+-- stores an integer in 32 bits and warns past 2,147,483,647 (ids and timestamps are larger).
 function EX.NumText(v)
     if v ~= v then return "nan" end
     if v == math.huge then return "inf" end
     if v == -math.huge then return "-inf" end
-    if v == math.floor(v) and v > -1e15 and v < 1e15 then return ("%d"):format(v) end
+    if v == math.floor(v) and v > -1e15 and v < 1e15 then return ("%.0f"):format(v + 0) end   -- + 0: -0 reads "0"
     for digits = 14, 17 do
         local s = ("%." .. digits .. "g"):format(v)
         if tonumber(s) == v then return s end

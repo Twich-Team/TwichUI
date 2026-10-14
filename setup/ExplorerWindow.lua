@@ -1,8 +1,8 @@
 -- TwichUI: Saved Data Explorer window (/tui saved)
 -- Sources on the left (settings, backups, sharing, feature data), the chosen one as a tree in the
 -- middle, opened a level and a page at a time, and the chosen entry's details and copy box on the
--- right. Read-only: nothing here changes, applies, restores or sends anything. Drawn with the
--- Chronicle's palette (chronicle/Style.lua), so it looks finished without any other addon.
+-- right. Read-only: nothing here changes, applies, restores or sends anything. Drawn with TwichUI's own
+-- look (Look.lua, the settings window's), so it looks finished without any other addon.
 -- Built on first open; while closed it holds nothing and does nothing.
 
 local R = TwichUI
@@ -10,16 +10,17 @@ local EX, SD, ST, SH = R.Explorer, R.StoredData, R.Setups, R.Share
 local XW = {}
 R.ExplorerWindow = XW
 
--- The Chronicle's palette and drawing helpers; chronicle/Style.lua loads after this file, so they are
+-- The Chronicle's drawing helpers and TwichUI's palette (Look.lua); both load after this file, so they are
 -- looked up when the window is first built.
-local S, K
+local S, K, L
 local WIDTH, HEIGHT = 1000, 640
 local LEFT_W, RIGHT_W = 240, 290
 local MID_X = 16 + LEFT_W + 12
 local MID_W = WIDTH - MID_X - 12 - RIGHT_W - 16
 local SOURCE_H, TREE_H = 30, 18
-local GOLD, GREY = R.GOLD, R.GREY
-local KEY_COLOR, NUM_COLOR, WARN = "|cffd9c7a0", "|cffb8c99a", "|cffd98a70"
+local GREY = R.GREY
+local WARN = "|cffd98a70"          -- a warning in running text (semantic: kept)
+local KEY_COLOR, NUM_COLOR, GOLD   -- keys, numbers and notes in running text: palette escapes, set when built
 
 local f                          -- the window
 local sourceId = "settings"      -- the chosen source
@@ -37,10 +38,29 @@ local reread                     -- ... and the source is to be read again if it
 -- A | is doubled for anything shown as text, so codes and links are shown as written, never used.
 local function Esc(s) return (s:gsub("|", "||")) end
 
+-- The palette role each of the game's font objects takes (the sizes stay the game's own).
+local ROLE = {
+    GameFontNormalLarge = "text", GameFontNormal = "text", GameFontNormalSmall = "bronzeText",
+    GameFontHighlight = "text", GameFontHighlightSmall = "textDim", GameFontDisableSmall = "stone",
+}
+
 local function Text(parent, template)
-    local fs = parent:CreateFontString(nil, "OVERLAY", template or "GameFontHighlight")
+    template = template or "GameFontHighlight"
+    local fs
+    if template == "GameFontNormalLarge" then
+        fs = L.Text(parent, "title")      -- the title face, as the settings window's
+    else
+        fs = parent:CreateFontString(nil, "OVERLAY", template)
+    end
     fs:SetJustifyH("LEFT")
+    local c = K[ROLE[template] or "text"]
+    fs:SetTextColor(c[1], c[2], c[3])
     return fs
+end
+
+-- A palette color as an inline escape.
+local function Hex(c)
+    return ("|cff%02x%02x%02x"):format(math.floor(c[1] * 255 + 0.5), math.floor(c[2] * 255 + 0.5), math.floor(c[3] * 255 + 0.5))
 end
 
 local function Color(fs, c) fs:SetTextColor(c[1], c[2], c[3]) end
@@ -50,31 +70,11 @@ local function When(t) return t and date("%H:%M:%S", t) or "?" end
 ---------------------------------------------------------------------------
 -- Pieces
 ---------------------------------------------------------------------------
--- MinimalScrollBar in the palette: its pieces are atlases the game re-sets on hover, which keeps
--- their tint, so they are desaturated and tinted once.
-local function WarmBar(bar)
-    local function Part(t, key) return type(t) == "table" and type(t[key]) == "table" and t[key] or nil end
-    local function Tint(tex, c, a)
-        if not (tex and tex.SetVertexColor) then return end
-        if tex.SetDesaturated then tex:SetDesaturated(true) end
-        tex:SetVertexColor(c[1], c[2], c[3], a or 1)
-    end
-    local track = Part(bar, "Track")
-    if track then
-        Tint(Part(track, "Begin"), K.bronzeLo, 0.7); Tint(Part(track, "Middle"), K.bronzeLo, 0.7); Tint(Part(track, "End"), K.bronzeLo, 0.7)
-        local thumb = Part(track, "Thumb")
-        if thumb then Tint(Part(thumb, "Begin"), K.gold); Tint(Part(thumb, "Middle"), K.gold); Tint(Part(thumb, "End"), K.gold) end
-    end
-    for _, key in ipairs({ "Back", "Forward" }) do
-        Tint(Part(Part(bar, key), "Texture"), K.gold, 0.9)
-    end
-end
-
 -- A recessed list that only makes the rows on screen; init(row, data) fills a row.
 local function List(parent, w, h, rowH, init)
     local box = CreateFrame("Frame", nil, parent, "BackdropTemplate")
     box:SetSize(w, h)
-    S.Well(box, w, h)
+    L.Well(box, 0.9)
     box.scroll = CreateFrame("Frame", nil, box, "WowScrollBoxList")
     box.scroll:SetPoint("TOPLEFT", 4, -4)
     box.scroll:SetPoint("BOTTOMRIGHT", -16, 4)
@@ -85,7 +85,7 @@ local function List(parent, w, h, rowH, init)
     view:SetElementExtent(rowH)
     view:SetElementInitializer("Button", init)
     ScrollUtil.InitScrollBoxListWithScrollBar(box.scroll, box.bar, view)
-    WarmBar(box.bar)
+    L.MinimalScrollBar(box.bar)
     box.empty = Text(box, "GameFontDisableSmall")
     box.empty:SetPoint("TOPLEFT", 14, -14)
     box.empty:SetPoint("TOPRIGHT", -26, -14)
@@ -104,11 +104,11 @@ end
 local function TextBox(parent, w, h)
     local box = CreateFrame("Frame", nil, parent, "BackdropTemplate")
     box:SetSize(w, h)
-    S.Well(box, w, h)
+    L.Well(box, 0.9)
     local scroll = CreateFrame("ScrollFrame", nil, box, "UIPanelScrollFrameTemplate")
     scroll:SetPoint("TOPLEFT", 6, -6)
     scroll:SetPoint("BOTTOMRIGHT", -24, 6)
-    S.ScrollBar(scroll)
+    L.ScrollBar(scroll)
     local edit = CreateFrame("EditBox", nil, scroll)
     edit:SetMultiLine(true)
     edit:SetAutoFocus(false)
@@ -537,12 +537,18 @@ local function SourceTip(row)
     GameTooltip:Show()
 end
 
+-- A row's hover wash and divider in the palette: a faint ivory wash, a neutral line.
+local function RowArt(row)
+    S.RowArt(row, K)
+    row.hover:SetColorTexture(K.text[1], K.text[2], K.text[3], 0.05)
+end
+
 local function InitSource(row, d)
     if not row.label then
-        S.RowArt(row)
+        RowArt(row)
         row.sel = row:CreateTexture(nil, "BACKGROUND", nil, 1)
         row.sel:SetAllPoints()
-        row.sel:SetColorTexture(K.gold[1], K.gold[2], K.gold[3], 0.14)
+        row.sel:SetColorTexture(K.teal[1], K.teal[2], K.teal[3], 0.16)   -- the chosen one: the accent
         row.label = Text(row, "GameFontHighlight")
         row.label:SetPoint("TOPLEFT", 10, -3)
         row.label:SetPoint("RIGHT", -6, 0)
@@ -564,7 +570,7 @@ local function InitSource(row, d)
         row.label:SetPoint("BOTTOMLEFT", 8, 4)
         row.label:SetPoint("RIGHT", -6, 0)
         row.label:SetText(d.group:upper())
-        Color(row.label, K.gold)
+        Color(row.label, K.bronzeText)
         row.detail:SetText("")
         return
     end
@@ -643,11 +649,11 @@ end
 
 local function InitTree(row, d)
     if not row.label then
-        S.RowArt(row)
+        RowArt(row)
         row.line:Hide()
         row.sel = row:CreateTexture(nil, "BACKGROUND", nil, 1)
         row.sel:SetAllPoints()
-        row.sel:SetColorTexture(K.gold[1], K.gold[2], K.gold[3], 0.14)
+        row.sel:SetColorTexture(K.teal[1], K.teal[2], K.teal[3], 0.16)   -- the chosen one: the accent
         row.label = Text(row, "GameFontHighlightSmall")
         row.label:SetWordWrap(false)
         row:SetScript("OnClick", TreeClick)
@@ -749,7 +755,7 @@ end
 -- Window
 ---------------------------------------------------------------------------
 local function ToolButton(parent, label, w, onClick, tip)
-    local b = S.Button(parent, label, w, "secondary", onClick)
+    local b = L.Button(parent, label, w, "secondary", onClick)
     b:SetHeight(22)
     if tip then
         b:HookScript("OnEnter", function(self)
@@ -765,7 +771,9 @@ end
 
 local function Build()
     S = R.ChronicleStyle
-    K = S.color
+    L = R.Look
+    K = L.pal
+    KEY_COLOR, NUM_COLOR, GOLD = Hex(K.bronzeText), Hex(K.tealHi), Hex(K.bronzeText)
     f = CreateFrame("Frame", "TwichUISavedDataExplorer", UIParent, "BackdropTemplate")
     f:Hide()                     -- so the first Show runs OnShow
     f:SetSize(WIDTH, HEIGHT)
@@ -780,8 +788,7 @@ local function Build()
     f:SetClampedToScreen(true)
     f:HookScript("OnShow", R.FitToScreen)
     tinsert(UISpecialFrames, "TwichUISavedDataExplorer")
-    S.Frame(f, WIDTH, HEIGHT)
-    S.Header(f, 34)
+    L.Shell(f, 34)   -- the rim, a title band, and a fade-in
 
     local logo = f:CreateTexture(nil, "ARTWORK")
     logo:SetSize(22, 22)
@@ -790,13 +797,11 @@ local function Build()
     local title = Text(f, "GameFontNormalLarge")
     title:SetPoint("LEFT", logo, "RIGHT", 8, 0)
     title:SetText("Saved Data Explorer")
-    Color(title, K.text)
     local sub = Text(f, "GameFontDisableSmall")
     sub:SetPoint("LEFT", title, "RIGHT", 10, -1)
     sub:SetText("what TwichUI keeps between sessions · read-only")
     Color(sub, K.stone)
-    local close = S.Close(f, function() f:Hide() end)
-    close:SetPoint("TOPRIGHT", -10, -10)
+    local close = L.CloseBox(f)
     f.refresh = ToolButton(f, "Refresh", 76, function() XW.Refresh(true) end,
         "Reads the chosen source again (and rebuilds the share preview). Nothing is saved or reloaded.")
     f.refresh:SetPoint("RIGHT", close, "LEFT", -10, 0)
@@ -804,7 +809,8 @@ local function Build()
         reveal = not reveal
         f.reveal:SetOn(reveal)
         XW.Render(true)
-    end)
+    end, K)
+    L.Raise(f.reveal)
     f.reveal:SetPoint("RIGHT", f.refresh, "LEFT", -8, 0)
     f.reveal:HookScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_TOP")
@@ -848,14 +854,10 @@ local function Build()
     f.banner:SetHeight(26)
     f.banner:SetJustifyV("TOP")
 
-    f.search = CreateFrame("EditBox", nil, f, "BackdropTemplate")
-    f.search:SetSize(170, 22)
+    f.search = L.EditBox(f, 170, 22)   -- a recessed field with a teal focus edge
     f.search:SetPoint("TOPLEFT", MID_X, -198)
     f.search:SetAutoFocus(false)
-    f.search:SetFontObject("GameFontHighlightSmall")
-    f.search:SetTextInsets(6, 6, 0, 0)
     f.search:SetMaxLetters(100)
-    S.Popover(f.search)
     f.search:SetScript("OnEscapePressed", f.search.ClearFocus)
     f.search:SetScript("OnEnterPressed", f.search.ClearFocus)
     f.search:SetScript("OnTextChanged", SearchChanged)
@@ -903,13 +905,13 @@ local function Build()
     local dl = Text(f, "GameFontNormalSmall")
     dl:SetPoint("TOPLEFT", rx, -50)
     dl:SetText("DETAILS")
-    Color(dl, K.gold)
+    Color(dl, K.bronzeText)
     f.details = TextBox(f, RIGHT_W, 300)
     f.details:SetPoint("TOPLEFT", rx, -66)
     local cl = Text(f, "GameFontNormalSmall")
     cl:SetPoint("TOPLEFT", rx, -378)
     cl:SetText("COPY")
-    Color(cl, K.gold)
+    Color(cl, K.bronzeText)
     local bw = math.floor((RIGHT_W - 12) / 4)
     local cpath = ToolButton(f, "Path", bw, function() Copy("path") end, "The chosen entry's full path.")
     cpath:SetPoint("TOPLEFT", rx, -394)

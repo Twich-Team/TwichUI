@@ -251,7 +251,7 @@ local function StrLen(s)
 end
 
 local function NumLen(v)
-    if v == math.floor(v) and v > -1e15 and v < 1e15 then return #("%d"):format(v) end
+    if v == math.floor(v) and v > -1e15 and v < 1e15 then return #("%.0f"):format(v + 0) end   -- not %d: past 32 bits the game warns
     return #("%.17g"):format(v) - 1
 end
 
