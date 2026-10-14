@@ -4,19 +4,18 @@
 -- right, opened a level at a time. Nothing can be changed here. TwichUI's own
 -- data can be deleted from its Saved data list, which this window links to.
 -- Lists are ScrollBoxes, so only the rows on screen exist however big the
--- data is. Styled by EllesmereUI's skin toolkit when it's available.
+-- data is. Drawn with TwichUI's own look (Look.lua), the same as the settings and sharing windows.
 
 local R = TwichUI
 local SD = R.StoredData
 local DW = {}
 R.StoredDataWindow = DW
 
-local GOLD, GREY = R.GOLD, R.GREY
+local GREY = R.GREY
 local WIDTH, HEIGHT = 900, 580
 local LEFT_W = 330
 local ADDON_H, TREE_H = 22, 18
 local PAGE = 200                 -- entries shown per table before "Show more"
-local KEY_COLOR = "|cffd9c7a0"
 
 local f                          -- main frame
 local open = {}                  -- [addon] = true: its data is listed under it
@@ -26,49 +25,49 @@ local tree                       -- { root = node, first = { [table] = path } }
 local refreshQueued = false
 
 ---------------------------------------------------------------------------
--- Helpers (same look as the sharing window)
+-- Helpers (the look is Look.lua's, as the sharing window's)
 ---------------------------------------------------------------------------
-local function Skin(kind, obj, ...)
-    local S = R.S
-    if not (S and S[kind] and obj) then return end
-    pcall(S[kind], obj, ...)
+local function Look() return R.Look end
+
+-- A font string's color from the palette's role, and the same as an inline escape.
+local function Ink(fs, role)
+    local c = Look().pal[role]
+    fs:SetTextColor(c[1], c[2], c[3])
+end
+local function Esc(role)
+    local c = Look().pal[role]
+    return ("|cff%02x%02x%02x"):format(math.floor(c[1] * 255 + 0.5), math.floor(c[2] * 255 + 0.5), math.floor(c[3] * 255 + 0.5))
 end
 
-local function Accent()
-    local S = R.S
-    if S and S.GetAccentColor then
-        local ok, r, g, b = pcall(S.GetAccentColor)
-        if ok and r then return r, g, b end
-    end
-    return 0.79, 0.64, 0.29
-end
+local ROLE = {
+    GameFontNormalLarge = "text", GameFontNormal = "text", GameFontHighlight = "text",
+    GameFontHighlightSmall = "textDim", GameFontDisableSmall = "stone", GameFontDisable = "stone",
+}
 
 local function Text(parent, template)
-    local fs = parent:CreateFontString(nil, "OVERLAY", template or "GameFontHighlight")
+    template = template or "GameFontHighlight"
+    local fs
+    if template == "GameFontNormalLarge" then
+        fs = Look().Text(parent, "title")
+    else
+        fs = parent:CreateFontString(nil, "OVERLAY", template)
+    end
     fs:SetJustifyH("LEFT")
-    if R.S then Skin("Font", fs) end
+    Ink(fs, ROLE[template] or "text")
     return fs
 end
 
 local function Btn(parent, label, w, onClick, tooltip)
-    local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
-    b:SetSize(w, 24)
-    b:SetText(label)
-    b:SetScript("OnClick", onClick)
+    local b = Look().Button(parent, label, w, "secondary", onClick)
+    function b:SetText(t) self.text:SetText(t) end
+    function b:GetText() return self.text:GetText() end
     if tooltip then R.Interact.Tip(b, label, tooltip) end
-    Skin("Button", b)
-    Skin("StateButtonLabel", b)
     return b
 end
 
+-- A recessed list box: a field's dark interior, pressed in.
 local function Well(box)
-    if R.S then
-        Skin("Panel", box, { inset = true })
-    else
-        box:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
-        box:SetBackdropColor(0, 0, 0, 0.35)
-        box:SetBackdropBorderColor(1, 1, 1, 0.08)
-    end
+    Look().Well(box, 0.9)
 end
 
 local function When(t) return t and date("%b %d, %H:%M", t) or "?" end
@@ -88,7 +87,7 @@ local function List(parent, w, h, rowH, init)
     view:SetElementExtent(rowH)
     view:SetElementInitializer("Button", init)
     ScrollUtil.InitScrollBoxListWithScrollBar(box.scroll, box.bar, view)
-    Skin("ScrollBar", box.bar)
+    Look().MinimalScrollBar(box.bar)
     box.empty = Text(box, "GameFontDisableSmall")
     box.empty:SetPoint("TOPLEFT", 16, -16)
     box.empty:SetPoint("TOPRIGHT", -30, -16)
@@ -105,11 +104,11 @@ end
 local function RowParts(row, labelTemplate)
     row.hl = row:CreateTexture(nil, "HIGHLIGHT")
     row.hl:SetAllPoints()
-    row.hl:SetColorTexture(1, 1, 1, 0.05)
+    local ivory, teal = Look().pal.text, Look().pal.teal
+    row.hl:SetColorTexture(ivory[1], ivory[2], ivory[3], 0.05)
     row.sel = row:CreateTexture(nil, "BACKGROUND")
     row.sel:SetAllPoints()
-    local r, g, b = Accent()
-    row.sel:SetColorTexture(r, g, b, 0.14)
+    row.sel:SetColorTexture(teal[1], teal[2], teal[3], 0.16)   -- the chosen item: the accent
     row.right = Text(row, "GameFontDisableSmall")
     row.right:SetPoint("RIGHT", -6, 0)
     row.right:SetJustifyH("RIGHT")
@@ -259,7 +258,7 @@ local function InitLeft(row, d)
         row:SetScript("OnEnter", nil)
         row.label:SetPoint("LEFT", 26, 0)
         row.label:SetFontObject("GameFontHighlightSmall")
-        row.label:SetText(GOLD .. "Open in the Saved Data Explorer|r")
+        row.label:SetText(Esc("tealHi") .. "Open in the Saved Data Explorer|r")
         row.right:SetText("")
     elseif d.group then
         row:SetScript("OnEnter", GroupTooltip)
@@ -359,7 +358,7 @@ end
 
 local function NodeText(node)
     local pad = ("    "):rep(node.depth - 1)
-    local key = KEY_COLOR .. SD.ShowKey(node.key) .. "|r"
+    local key = Esc("bronzeText") .. SD.ShowKey(node.key) .. "|r"
     local v = node.value
     if type(v) ~= "table" then return pad .. "   " .. key .. "  " .. SD.ShowValue(v, 160) end
     local mark = (node.loop or node.hiddenTable) and "   " or (node.open and "-  " or "+  ")
@@ -412,7 +411,7 @@ local function InitTree(row, d)
     row.sel:Hide()
     if d.more then
         local left = #d.more.keys - d.more.limit
-        row.label:SetText(("%s%s+  Show %d more (%s left)|r"):format(("    "):rep(d.more.depth), GOLD, math.min(PAGE, left), SD.Num(left)))
+        row.label:SetText(("%s%s+  Show %d more (%s left)|r"):format(("    "):rep(d.more.depth), Esc("tealHi"), math.min(PAGE, left), SD.Num(left)))
     elseif d.hiddenOf then
         row.label:SetText(("%s%s%d entries hidden by the game|r"):format(("    "):rep(d.hiddenOf.depth), GREY, d.hiddenOf.hidden))
     else
@@ -484,11 +483,7 @@ local function Build()
     f:SetClampedToScreen(true)
     f:HookScript("OnShow", R.FitToScreen)
     tinsert(UISpecialFrames, "TwichUIAddonData")
-    if R.S then Skin("Shell", f) else
-        f:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
-        f:SetBackdropColor(0.07, 0.065, 0.06, 0.97)
-        f:SetBackdropBorderColor(0.25, 0.23, 0.2, 1)
-    end
+    Look().Shell(f, 38)   -- the rim, and a title band for the name and the close box
 
     local logo = f:CreateTexture(nil, "ARTWORK")
     logo:SetSize(26, 26)
@@ -497,23 +492,19 @@ local function Build()
     local title = Text(f, "GameFontNormalLarge")
     title:SetPoint("LEFT", logo, "RIGHT", 8, 0)
     title:SetText("Addon data")
-    title:SetTextColor(1, 1, 1)
     local sub = Text(f, "GameFontDisableSmall")
     sub:SetPoint("LEFT", title, "RIGHT", 10, -1)
     sub:SetText("what your addons keep between sessions · read-only")
-    local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
-    close:SetPoint("TOPRIGHT", -4, -4)
-    Skin("CloseButton", close)
+    Look().CloseBox(f)
 
-    local listH = HEIGHT - 44 - 96
+    local listH = HEIGHT - 48 - 96
     f.left = List(f, LEFT_W, listH, ADDON_H, InitLeft)
-    f.left:SetPoint("TOPLEFT", 14, -44)
+    f.left:SetPoint("TOPLEFT", 14, -48)
 
     f.head = Text(f, "GameFontNormal")
     f.head:SetPoint("TOPLEFT", f.left, "TOPRIGHT", 14, -2)
     f.head:SetPoint("RIGHT", -16, 0)
     f.head:SetWordWrap(false)
-    f.head:SetTextColor(1, 1, 1)
     f.sub = Text(f, "GameFontDisableSmall")
     f.sub:SetPoint("TOPLEFT", f.head, "BOTTOMLEFT", 0, -4)
     f.sub:SetPoint("RIGHT", -16, 0)
@@ -572,7 +563,7 @@ function DW:Refresh()
     addons = addons or SD.Addons()
     local scanned = SD.LastScan()
     f.scanned:SetText(scanned and ("Last scan: %s. Run it again after adding or changing addons."):format(When(scanned))
-        or (GOLD .. "Not scanned yet.|r Press Find addon data to see which data each addon keeps."))
+        or (Esc("bronzeText") .. "Not scanned yet.|r Press Find addon data to see which data each addon keeps."))
     SetRows(f.left, LeftRows(), nil, true)
     DW:RefreshTree()
 end

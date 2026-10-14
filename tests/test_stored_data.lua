@@ -53,7 +53,7 @@ c.GameTooltip = Obj(); c.GameTooltip_Hide = function() end
 c.StaticPopupDialogs = {}; c.StaticPopup_Show = function(k) c.popup = k end
 c.ACCEPT, c.CANCEL = "Accept", "Cancel"
 c.UnitGUID = function() return "Player-1-0ABC" end
-for _, f in ipairs({"setup/StoredData.lua", "setup/StoredDataWindow.lua"}) do
+for _, f in ipairs({"setup/StoredData.lua", "chronicle/Style.lua", "Look.lua", "setup/StoredDataWindow.lua"}) do
   local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
 end
 local R = c.TwichUI

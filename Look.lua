@@ -604,6 +604,22 @@ function Wg.Header(f, height)
 end
 
 
+-- The game's MinimalScrollBar (a ScrollBox's bar), tinted into the palette: its track a quiet neutral and its
+-- thumb ivory. Its own art and behavior are untouched; only vertex colors change. Nothing happens if the bar
+-- isn't the shape expected.
+function Wg.MinimalScrollBar(bar)
+    local track = type(bar) == "table" and bar.Track
+    if type(track) ~= "table" then return end
+    local function Tint(parts, c, a)
+        for _, key in ipairs({ "Begin", "Middle", "End" }) do
+            local t = parts[key]
+            if type(t) == "table" and t.SetVertexColor then t:SetVertexColor(c[1], c[2], c[3], a) end
+        end
+    end
+    Tint(track, pal.control, 0.65)
+    if type(track.Thumb) == "table" then Tint(track.Thumb, pal.text, 0.85) end
+end
+
 ---------------------------------------------------------------------------
 -- Pieces for a window's own chrome (the sharing window and its popups).
 ---------------------------------------------------------------------------
