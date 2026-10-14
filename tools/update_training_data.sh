@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Regenerates modules/TrainingData.lua from the newest What's Training? source.
+# Regenerates !!!TwichUI/modules/TrainingData.lua from the newest What's Training? source.
 #
 #   ./tools/update_training_data.sh
 #
 # Fetches the head of the upstream `forever` branch (the branch that carries Classes/Camelot, the
 # WoW: Forever data) into a temporary directory, pins it to the commit it resolved, runs
 # tools/training_data.lua on it, validates the result with tools/validate_training_data.lua and only
-# then replaces modules/TrainingData.lua. Any failure leaves the current file untouched and exits
+# then replaces !!!TwichUI/modules/TrainingData.lua. Any failure leaves the current file untouched and exits
 # nonzero. Needs git and lua5.1. Run from anywhere; it works on the repository this script is in.
 #
 # Overrides, for testing: WT_UPSTREAM_URL, WT_UPSTREAM_BRANCH.
@@ -16,7 +16,7 @@ UPSTREAM_URL="${WT_UPSTREAM_URL:-https://github.com/fusionpit/WhatsTraining.git}
 UPSTREAM_BRANCH="${WT_UPSTREAM_BRANCH:-forever}"
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-output="$root/modules/TrainingData.lua"
+output="$root/!!!TwichUI/modules/TrainingData.lua"
 notice="$root/licenses/MIT-whatstraining.txt"
 
 fail() { echo "update_training_data: $*" >&2; exit 1; }
@@ -64,13 +64,13 @@ echo "Validating:"
 lua5.1 "$root/tools/validate_training_data.lua" "$generated" "$output" || fail "validation failed; $output left unchanged"
 
 if cmp -s "$generated" "$output"; then
-    echo "modules/TrainingData.lua is already up to date."
+    echo "!!!TwichUI/modules/TrainingData.lua is already up to date."
 else
     staged="$(mktemp "$output.XXXXXX")"
     cp "$generated" "$staged"
     mv "$staged" "$output"
     staged=""
-    echo "Updated modules/TrainingData.lua"
+    echo "Updated !!!TwichUI/modules/TrainingData.lua"
 fi
 echo "Source: What's Training? $label"
-echo "Output: modules/TrainingData.lua"
+echo "Output: !!!TwichUI/modules/TrainingData.lua"

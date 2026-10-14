@@ -1,8 +1,15 @@
 package-as: "!!!TwichUI"
 
-# The settings window is an addon of its own (load on demand), shipped as its own folder beside !!!TwichUI
+# The repository holds two addons side by side: !!!TwichUI/ (the core addon) and TwichUI_Settings/ (the settings
+# window, load on demand). The packager builds the whole repository as the package folder, so both land one level
+# down: the core addon is moved up over the package folder (repository-level files such as README.md, LICENSE and
+# licenses/ stay in it, as they always have), and the settings window is moved out beside it. The release zip
+# holds exactly two folders, !!!TwichUI and TwichUI_Settings. Keep the !!! folder name: TwichUI must load first,
+# and the game names saved variables files after the folder.
+# (The packager keeps the quotes of a key as part of it, so these keys are not quoted; values may be.)
 move-folders:
-  "!!!TwichUI/TwichUI_Settings": TwichUI_Settings
+  !!!TwichUI/!!!TwichUI: "!!!TwichUI"
+  !!!TwichUI/TwichUI_Settings: TwichUI_Settings
 
 enable-nolib-creation: no
 
@@ -18,3 +25,5 @@ ignore:
   - CLAUDE.md
   - assets
   - .gitignore
+  # an editor workspace file kept at pins/ (not the addon's pins/ folder): it must not collide with !!!TwichUI/pins
+  - pins/TwichUI.code-workspace

@@ -8,7 +8,7 @@ dofile(TESTS .. "harness.lua")
 --   * each page's rows in order: kind, label, section, what it is greyed out under, and
 --     a checksum of its tooltip.
 -- tests/fixtures/settings_contract.lua holds the expected values. To record it again after an intended change:
---   cd tests && TWICHUI_GENERATE_CONTRACT=1 lua5.1 -e 'require("bit"); ROOT="../"; TESTS="./"' test_settings_contract.lua
+--   cd tests && TWICHUI_GENERATE_CONTRACT=1 lua5.1 -e 'require("bit"); ROOT="../!!!TwichUI/"; REPO="../"; TESTS="./"' test_settings_contract.lua
 -- and review the fixture's diff: only the intended lines may change.
 -- The setting objects (TwichUI_Settings/Kit.lua) behave like WoW: Forever's SettingMixin did: a value is only
 -- written when it differs, and the value-changed callbacks run either way.

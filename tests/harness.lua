@@ -157,12 +157,13 @@ function RunLongTimers(maxDelay)
 end
 
 -- The settings window's files (TwichUI_Settings/TwichUI_Settings.toc), in the .toc's order, so tests that
--- describe the pages load exactly what the game does when the window first opens.
+-- describe the pages load exactly what the game does when the window first opens. TwichUI_Settings is a sibling
+-- of the core folder ROOT points at, so each entry is relative to ROOT (load it with loadfile(ROOT .. f)).
 function SettingsFiles()
   local list = {}
-  for line in io.lines(ROOT .. "TwichUI_Settings/TwichUI_Settings.toc") do
+  for line in io.lines(ROOT .. "../TwichUI_Settings/TwichUI_Settings.toc") do
     line = line:gsub("\r", ""):gsub("%s+$", "")
-    if line ~= "" and not line:find("^#") then list[#list + 1] = "TwichUI_Settings/" .. (line:gsub("\\", "/")) end
+    if line ~= "" and not line:find("^#") then list[#list + 1] = "../TwichUI_Settings/" .. (line:gsub("\\", "/")) end
   end
   assert(#list > 0, "the settings window's .toc lists its files")
   return list

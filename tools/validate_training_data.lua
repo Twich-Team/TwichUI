@@ -1,4 +1,4 @@
--- TwichUI: checks a generated training data file before it replaces modules/TrainingData.lua.
+-- TwichUI: checks a generated training data file before it replaces !!!TwichUI/modules/TrainingData.lua.
 -- Usage: lua5.1 tools/validate_training_data.lua <new file> [<current file>]
 -- Loads the file the way the addon does (a chunk that fills TwichUI.TrainingData), then checks every
 -- class returns levels and ranks in the shape modules/Training.lua reads, and that nothing looks

@@ -14,7 +14,11 @@ Nothing here has been checked in the game yet; see "In-game checklist".
 | `!!!TwichUI` | at login | every feature, defaults and saved data (`Persist.lua`), profiles (`Profiles.lua`), what each switch does (`Switches.lua`), and the launcher (`SettingsLauncher.lua`: `R:OpenSettings`, the AddOns entry) |
 | `TwichUI_Settings` | the first time the settings are opened (`## LoadOnDemand: 1`, `## RequiredDeps: !!!TwichUI`, no saved variables) | the page descriptions, search, the window and its controls |
 
-The release zip carries both folders side by side (`.pkgmeta` `move-folders`); `tools/deploy.sh` copies both.
+In the repository the two addons are sibling folders under the root, named as they are installed: `!!!TwichUI/`
+(`!!!TwichUI.toc`, `Core.lua`, `modules/`, `media/`, `libs/`, ...) and `TwichUI_Settings/`. Tests, tools, docs and
+the release workflow stay at the root. The release zip carries both folders side by side (`.pkgmeta`
+`move-folders`); `tools/deploy.sh` copies both. File names in these docs (`Core.lua`, `modules/...`) are relative to
+the `!!!TwichUI/` folder unless they start with `tests/`, `tools/` or `docs/`.
 `tests/test_settings_package.lua` keeps the two `.toc` files in step (interface, version, files listed).
 
 TwichUI never needs `TwichUI_Settings` to run: switches, profile changes, `R:SetEnabled` and every feature's own

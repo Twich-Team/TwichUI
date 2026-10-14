@@ -119,7 +119,7 @@ end
 
 -- The settings client stands in for the window when it describes pages; this test wants the real one.
 local function LoadWindow()
-  local chunk = assert(loadfile(ROOT .. "TwichUI_Settings/Window.lua")); setfenv(chunk, c); chunk("TwichUI_Settings", {})
+  local chunk = assert(loadfile(ROOT .. "../TwichUI_Settings/Window.lua")); setfenv(chunk, c); chunk("TwichUI_Settings", {})
 end
 LoadWindow()
 local UI = R.SettingsUI

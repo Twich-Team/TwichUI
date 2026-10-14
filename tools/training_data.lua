@@ -1,6 +1,6 @@
--- TwichUI: builds modules/TrainingData.lua from What's Training?'s WoW: Forever data.
+-- TwichUI: builds !!!TwichUI/modules/TrainingData.lua from What's Training?'s WoW: Forever data.
 -- Usage (from the repository root, with What's Training? checked out beside it):
---   lua5.1 tools/training_data.lua ../WhatsTraining > modules/TrainingData.lua
+--   lua5.1 tools/training_data.lua ../WhatsTraining > !!!TwichUI/modules/TrainingData.lua
 -- tools/update_training_data.sh does this from the newest upstream commit, then validates the result.
 -- Reads only Classes/Camelot (the data What's Training? loads on Forever) and keeps what the
 -- level-up training notice needs: spell IDs, the level each becomes trainable, prerequisite
