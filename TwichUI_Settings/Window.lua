@@ -565,6 +565,7 @@ function UI.Navigate(key, rowId)
         ShowResults(false)
         changed = true
     end
+    if changed then Wg.ColorPicker.Cancel() end   -- a color being picked belongs to the page it was opened on
     if state.page ~= page.key then scroll:SetVerticalScroll(0) end
     state.page = page.key
     local view = state.views[page.key] or BuildView(page)
@@ -992,6 +993,7 @@ local function BuildWindow()
             item.hoverFade:Set(0)
         end
         Wg.CloseMenu()
+        Wg.ColorPicker.Cancel()
         if searchBox:HasFocus() then searchBox:ClearFocus() end
         if GameTooltip and GameTooltip:IsOwned(win) then GameTooltip:Hide() end
         R.SettingsLauncher.Closed()
@@ -1082,7 +1084,7 @@ end)
 local ESC_NAME = "TwichUISettingsEsc"
 local escape = {}
 function escape:IsShown()
-    if ColorPickerFrame and ColorPickerFrame:IsShown() then return false end
+    if Wg.ColorPicker.Shown() then return false end
     return Wg.MenuShown() or UI.IsShown()
 end
 function escape:Hide()

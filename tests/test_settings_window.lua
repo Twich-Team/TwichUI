@@ -460,6 +460,240 @@ do
 end
 
 ---------------------------------------------------------------------------
+-- 4c. EllesmereUI's color picker, when it is there: the same swatches open it instead of the game's, with the
+-- same live preview, confirm and cancel; a stand-in that answers as EllesmereUIOptions' picker does (callbacks
+-- take no arguments and read the frame; Cancel, click-away and the close box call cancelFunc, some of them
+-- twice; OK fires swatchFunc and hides without cancelFunc; opening over an open one cancels it)
+---------------------------------------------------------------------------
+do
+  local game = { shown = false }
+  function game:IsShown() return self.shown end
+  function game:GetColorRGB() return self.cur.r, self.cur.g, self.cur.b end
+  function game:SetupColorPickerAndShow(info)
+    self.info, self.shown, self.cur = info, true, { r = info.r, g = info.g, b = info.b }
+    game.opened = (game.opened or 0) + 1
+  end
+  c.ColorPickerFrame = game
+
+  local frame = Fake("Frame"); frame.shown = false
+  local live, confirmed, shows, lastOpen = nil, false, 0, nil
+  local cur = { r = 0, g = 0, b = 0 }
+  function frame:GetColorRGB() return cur.r, cur.g, cur.b end
+  frame.scripts.OnHide = function()
+    if not confirmed and live and live.cancelFunc then live.cancelFunc() end
+    confirmed = false
+  end
+  local eui = {}
+  function eui:ShowColorPicker(info, anchor)
+    if frame.shown and live and live.cancelFunc then live.cancelFunc() end
+    live, lastOpen = info, { info = info, anchor = anchor }
+    cur = { r = info.r, g = info.g, b = info.b }
+    shows = shows + 1
+    c.EllesmereUIColorPicker = frame   -- built by its first open
+    frame.shown = true
+  end
+  local function Select(r, g, b) cur = { r = r, g = g, b = b }; if live.swatchFunc then live.swatchFunc() end end
+  local function OK() live.swatchFunc(); confirmed = true; frame:Hide() end
+  local function CancelBtn() confirmed = false; frame:Hide() end
+  local function CloseBox() if live.cancelFunc then live.cancelFunc() end; frame:Hide() end
+
+  local function Swatches()
+    local list = {}
+    local function Walk(f)
+      for _, ch in ipairs(f.children) do
+        if rawget(ch, "SetColorRGB") and ch:IsVisible() then list[#list + 1] = ch end
+        Walk(ch)
+      end
+    end
+    Walk(win)
+    return list
+  end
+  local function Click(sw) sw.scripts.OnClick(sw) end
+
+  UI.Navigate("chronicleLook")
+  local list = Swatches()
+  assert(#list >= 2, "the page has two swatches")
+  local bg = S.variables.TWICHUI_chronicleLookBgColor
+  local original = bg:GetValue()
+  local writes = 0
+  local plain = bg.SetValue
+  bg.SetValue = function(self, v) writes = writes + 1; return plain(self, v) end
+
+  -- EllesmereUI there but its options not loaded (no picker method yet): the game's picker, as before
+  c.EllesmereUI = { PP = {} }
+  Click(list[1])
+  assert(game.shown and game.opened == 1 and shows == 0, "without ShowColorPicker the game's picker opens")
+  game.info.cancelFunc(); game.shown = false
+  assert(bg:GetValue() == original)
+
+  -- and with it
+  c.EllesmereUI = eui
+  c.EllesmereUIColorPicker = frame
+  writes = 0
+  Click(list[1])
+  assert(frame.shown and shows == 1 and game.opened == 1, "EllesmereUI's picker opens, not the game's")
+  assert(lastOpen.anchor == list[1], "anchored on the swatch")
+  local rgb = { R.SettingsWidgets.ParseHex(original) }
+  assert(lastOpen.info.r == rgb[1] and lastOpen.info.g == rgb[2] and lastOpen.info.b == rgb[3],
+    "it starts on the swatch's current color")
+  assert(lastOpen.info.hasOpacity == false, "no opacity: these colors are opaque")
+  assert(bg:GetValue() == original and writes == 0, "opening changes nothing")
+  Select(0.2, 0.4, 0.6)
+  assert(bg:GetValue() == "ff336699" and writes == 1, "the preview goes through the setting: " .. tostring(bg:GetValue()))
+  Select(0.2, 0.4, 0.6)
+  assert(writes == 1, "the same color twice is one write")
+  OK()
+  assert(not frame.shown and bg:GetValue() == "ff336699" and writes == 1, "OK keeps it, with no write of its own")
+  bg:SetValue(original); writes = 0
+
+  -- Cancel, however it is done, puts the color back once
+  for name, how in pairs({ cancel = CancelBtn, close = CloseBox }) do
+    Click(list[1]); Select(1, 0, 0)
+    assert(bg:GetValue() == "ffff0000", name)
+    how()
+    assert(not frame.shown and bg:GetValue() == original, name .. " puts the old color back")
+  end
+  writes = 0
+  Click(list[1])
+  CancelBtn()
+  assert(writes == 0, "cancelling what never changed writes nothing")
+
+  -- a color given by the picker as exactly the starting one is not a change
+  Click(list[1])
+  Select(rgb[1], rgb[2], rgb[3])
+  assert(writes == 0 and bg:GetValue() == original, "the starting color again changes nothing")
+  CancelBtn(); bg:SetValue(original); writes = 0
+
+  -- another swatch opened while one is open: the first is put back, the second is its own edit
+  local other
+  local before = {}
+  for k, v in pairs(S.variables) do if k:find("^TWICHUI_chronicleLook.*Color$") then before[k] = v:GetValue() end end
+  Click(list[1]); Select(0, 1, 0)
+  assert(bg:GetValue() == "ff00ff00")
+  Click(list[2])
+  assert(bg:GetValue() == original, "the first swatch's color is back when another is opened")
+  assert(frame.shown and lastOpen.anchor == list[2], "the picker is now the second swatch's")
+  Select(0, 0, 1)
+  local changed = {}
+  for k, v in pairs(S.variables) do
+    if before[k] and v:GetValue() ~= before[k] then changed[#changed + 1] = k end
+  end
+  assert(#changed == 1 and changed[1] ~= "TWICHUI_chronicleLookBgColor", "only the second swatch's setting changed")
+  other = S.variables[changed[1]]
+  CancelBtn()
+  assert(other:GetValue() == before[changed[1]], "and Cancel puts that one back")
+
+  -- the window closing, or another page shown, during an edit
+  Click(list[1]); Select(1, 1, 0)
+  win:Hide()
+  assert(not frame.shown and bg:GetValue() == original, "closing the window puts the old color back and puts the picker away")
+  UI.Open("chronicleLook")
+  list = Swatches()
+  Click(list[1]); Select(1, 1, 0)
+  UI.Navigate("food")
+  assert(not frame.shown and bg:GetValue() == original, "showing another page does the same")
+  UI.Navigate("chronicleLook")
+  list = Swatches()
+
+  -- EllesmereUI installed but its picker not loaded yet: the first click has EllesmereUI load it (EnsureLoaded)
+  -- and the picker opens a frame later, with the game's never involved
+  do
+    local loads = 0
+    local lazy = {}
+    function lazy:EnsureLoaded() loads = loads + 1; self.ShowColorPicker = eui.ShowColorPicker end
+    c.EllesmereUI, c.EllesmereUIColorPicker = lazy, nil
+    local s0, g0 = shows, game.opened or 0
+    Click(list[1])
+    assert(loads == 1 and shows == s0 and not frame.shown and not game.shown, "the first click loads EllesmereUI's picker, opening next frame")
+    FlushTimers()
+    assert(frame.shown and shows == s0 + 1 and (game.opened or 0) == g0 and lastOpen.anchor == list[1], "then it opens EllesmereUI's picker")
+    Select(0.1, 0.2, 0.3)
+    assert(bg:GetValue() == "ff1a334d")
+    CancelBtn()
+    assert(bg:GetValue() == original)
+    Click(list[1])
+    assert(loads == 1 and frame.shown and shows == s0 + 2, "loaded once, opened at once after")
+    CancelBtn()
+
+    -- given up before the frame passes: nothing opens
+    lazy.ShowColorPicker, c.EllesmereUIColorPicker, loads = nil, nil, 0
+    s0 = shows
+    Click(list[1])
+    R.SettingsWidgets.ColorPicker.Cancel()
+    FlushTimers()
+    assert(loads == 1 and shows == s0 and not frame.shown and bg:GetValue() == original, "an edit given up while it loads does not open")
+
+    -- in combat it is not loaded: the game's picker, and loaded later out of combat
+    lazy.ShowColorPicker, loads, g0 = nil, 0, game.opened or 0
+    c.InCombatLockdown = function() return true end
+    Click(list[1])
+    assert(loads == 0 and game.shown and game.opened == g0 + 1, "in combat the game's picker opens and nothing is loaded")
+    game.info.cancelFunc(); game.shown = false
+    c.InCombatLockdown = function() return false end
+    Click(list[1])
+    FlushTimers()
+    assert(loads == 1 and frame.shown, "out of combat it is loaded")
+    CancelBtn()
+
+    -- a load that leaves no picker: the game's, and not tried again
+    lazy.ShowColorPicker, loads, g0 = nil, 0, game.opened or 0
+    lazy.EnsureLoaded = function() loads = loads + 1 end
+    Click(list[1])
+    assert(loads == 1 and game.shown and game.opened == g0 + 1, "a load that gave no picker falls back to the game's")
+    game.info.cancelFunc(); game.shown = false
+    Click(list[1])
+    assert(loads == 1 and game.opened == g0 + 2, "and is not tried again")
+    game.info.cancelFunc(); game.shown = false
+    assert(bg:GetValue() == original)
+    c.EllesmereUI = eui
+  end
+
+  -- a picker that does not open (its frame stays down): the game's takes over, nothing half-applied
+  local quiet = c.EllesmereUI
+  c.EllesmereUI = { ShowColorPicker = function() end }
+  game.opened = 0
+  Click(list[1])
+  assert(game.shown and game.opened == 1, "an EllesmereUI picker that did not show falls back to the game's")
+  game.cur = { r = 0.5, g = 0.5, b = 0.5 }; game.info.swatchFunc()
+  assert(bg:GetValue() == "ff808080", "the fallback picker previews through the setting")
+  game.info.cancelFunc(); game.shown = false
+  assert(bg:GetValue() == original, "and cancels")
+  -- one that errors: reported, then the same fallback
+  local faults = {}
+  local realFault = R.Fault
+  R.Fault = function(what, err) faults[#faults + 1] = what end
+  c.EllesmereUI = { ShowColorPicker = function() error("boom") end }
+  Click(list[1])
+  assert(#faults == 1 and game.shown and game.opened == 2, "an erroring picker is reported and the game's opens")
+  game.info.cancelFunc(); game.shown = false
+  R.Fault = realFault
+  c.EllesmereUI = quiet
+
+  -- a profile change during an edit: the picker is put away, and nothing it holds can write into the new profile
+  local function Pick()
+    local sw = Swatches()[1]
+    Click(sw)
+    return sw
+  end
+  Pick()
+  live = lastOpen.info
+  local staleSwatch, staleCancel = live.swatchFunc, live.cancelFunc
+  cur = { r = 1, g = 0, b = 1 }; staleSwatch()
+  assert(bg:GetValue() == "ffff00ff")
+  assert(R.Profiles.Create("PickerTest"))
+  assert(not frame.shown, "a profile change puts the picker away")
+  local inNew = bg:GetValue()
+  staleSwatch(); staleCancel()
+  assert(bg:GetValue() == inNew, "a callback from the old edit writes nothing into the new profile")
+  assert(R.Profiles.Switch("Default"))
+  bg:SetValue(original)
+  assert(R.Profiles.Delete("PickerTest"))
+
+  bg.SetValue = plain
+  c.EllesmereUI, c.EllesmereUIColorPicker, c.ColorPickerFrame = nil, nil, nil
+end
+
+---------------------------------------------------------------------------
 -- 5. Esc: the list first, then the window; never while the color picker is open
 ---------------------------------------------------------------------------
 local Wg = R.SettingsWidgets

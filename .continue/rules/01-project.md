@@ -134,7 +134,7 @@ WoW’s default addon settings should contain only the approved minimal launcher
 - Preserve direct category and setting navigation.
 - Keep primary features in the sidebar.
 - Put secondary navigation inside feature pages.
-- Keep common controls visible and Advanced options clearly disclosed.
+- Keep controls visible, each in the section of what it relates to.
 - Preserve access to recovery and safety actions.
 - Search must cover registered settings without requiring every page’s widgets to be created.
 - Selecting a search result must not change settings or enable modules.

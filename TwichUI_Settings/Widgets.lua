@@ -266,8 +266,8 @@ function Wg.Dropdown(parent, w, onPick)
 end
 
 ---------------------------------------------------------------------------
--- Color swatch: the color in a framed square; a click opens the game's color picker. Cancel there puts the
--- color it had back. Colors are AARRGGBB text, as the game's own swatches save them.
+-- Color swatch: the color in a framed square; a click opens a color picker (Wg.ColorPicker below). Cancel there
+-- puts the color it had back. Colors are AARRGGBB text, as the game's own swatches save them.
 ---------------------------------------------------------------------------
 local function Hex(r, g, b)
     if CreateColor then
@@ -286,6 +286,189 @@ function Wg.ParseHex(text)
     return tonumber(hex:sub(1, 2), 16) / 255, tonumber(hex:sub(3, 4), 16) / 255, tonumber(hex:sub(5, 6), 16) / 255
 end
 
+---------------------------------------------------------------------------
+-- The color picker a swatch opens: EllesmereUI's while it offers one, else the game's.
+--
+-- EllesmereUI's picker (EllesmereUI:ShowColorPicker(info, anchor), EllesmereUIOptions/EllesmereUI_Widgets_Color.lua)
+-- is defined by EllesmereUI's load-on-demand EllesmereUIOptions addon and its deferred inits, which
+-- EllesmereUI:EnsureLoaded() runs (EllesmereUI does this itself the first time its panel opens). So when
+-- EllesmereUI is installed and its picker is not there yet, the first swatch click calls EnsureLoaded (the
+-- synchronous, repeatable entry point EllesmereUI's own callers use), out of combat and once per session if it
+-- fails, and opens the picker a frame later, as EllesmereUI splits its own first open: the load and the build
+-- are not metered in one handler. If it cannot be loaded (not installed, options addon disabled, in combat) or
+-- fails to open, the game's picker is used. Its callbacks take no arguments (the color is read from the
+-- picker's frame, EllesmereUIColorPicker:GetColorRGB(), 0..1 channels, as the game's does), it calls
+-- cancelFunc on Cancel, click-away, Esc and the close box (more than once for some of them), and OK fires
+-- swatchFunc and then hides without cancelFunc. The game's picker does the same through the same fields.
+-- Neither is given opacity: every swatch saves an opaque AARRGGBB color.
+--
+-- One edit at a time. An edit is { owner, original, last, onPick, generation, done, opening }:
+--   * the color it started from is put back (once) by Cancel, whichever picker was used;
+--   * a color is passed on only when it differs from the last one passed on, and not while the picker is
+--     still opening (the game's picker calls its swatch function as it is set up);
+--   * an edit from before a profile change never writes: the setting would belong to another profile.
+-- An edit is over once its picker is hidden (OK, or a cancel that has already put the color back), so a
+-- Cancel() after that has nothing to undo.
+---------------------------------------------------------------------------
+local ColorPicker = {}
+Wg.ColorPicker = ColorPicker
+
+local edit   -- the edit in progress, or nil
+
+local function Generation()
+    local P = R.Profiles
+    return P and P.Generation and P.Generation() or 0
+end
+
+-- EllesmereUI when its picker can be opened now, else nil.
+local function Ellesmere()
+    local e = _G.EllesmereUI
+    if type(e) == "table" and type(e.ShowColorPicker) == "function" then return e end
+end
+
+local loadFailed   -- EnsureLoaded was tried and left no picker: not tried again this session
+
+-- Asks EllesmereUI to load what has the picker, once. Returns whether the picker can be opened now.
+local function LoadEllesmere()
+    if Ellesmere() then return true end
+    local e = _G.EllesmereUI
+    if loadFailed or type(e) ~= "table" or type(e.EnsureLoaded) ~= "function" then return false end
+    if InCombatLockdown and InCombatLockdown() then return false end   -- tried again out of combat
+    local ok, err = pcall(e.EnsureLoaded, e)
+    if not ok then R.Fault("settings color picker", err) end
+    if Ellesmere() then return true end
+    loadFailed = true
+    return false
+end
+
+-- The frame EllesmereUI's picker is, once it has been built (its first open builds it).
+local function EllesmereFrame()
+    local f = _G.EllesmereUIColorPicker
+    if type(f) == "table" and type(f.GetColorRGB) == "function" and type(f.IsShown) == "function" then return f end
+end
+
+local function GameFrame()
+    local f = _G.ColorPickerFrame
+    if f and f.SetupColorPickerAndShow then return f end
+end
+
+local function Live(e) return e ~= nil and e == edit and not e.done end
+
+-- The picker moved: pass the color on through the setting's normal path.
+local function Preview(e, r, g, b)
+    if not Live(e) or e.opening or r == nil then return end
+    if e.generation ~= Generation() then return end
+    local hex = Hex(r, g, b)
+    if hex == e.last then return end
+    e.last = hex
+    e.onPick(hex)
+end
+
+-- Cancel (or an edit given up): the starting color goes back, once, unless it never left or the profile changed.
+local function Restore(e)
+    if not Live(e) then return end
+    e.done = true
+    edit = nil
+    if e.generation == Generation() and e.last ~= e.original then
+        e.last = e.original
+        e.onPick(e.original)
+    end
+end
+
+local function OpenEllesmere(e, r, g, b)
+    local eui = Ellesmere()
+    if not eui then return false end
+    e.frame = EllesmereFrame
+    e.opening = true
+    local ok, err = pcall(eui.ShowColorPicker, eui, {
+        r = r, g = g, b = b, hasOpacity = false, opacity = 1,
+        swatchFunc = function()
+            local f = EllesmereFrame()
+            if f then Preview(e, f:GetColorRGB()) end
+        end,
+        cancelFunc = function() Restore(e) end,
+    }, e.owner)
+    e.opening = false
+    local f = EllesmereFrame()
+    if ok and f and f:IsShown() then return true end
+    if not ok then R.Fault("settings color picker", err) end
+    -- It did not open as asked: end this edit before the game's picker takes over, hiding what is half there
+    -- (its own cancel then finds the edit over and does nothing).
+    e.done = true
+    if f and f:IsShown() and f.Hide then f:Hide() end
+    return false
+end
+
+local function OpenGame(e, r, g, b)
+    local f = GameFrame()
+    if not f then return false end
+    e.frame = GameFrame
+    e.opening = true
+    f:SetupColorPickerAndShow({
+        swatch = e.owner, r = r, g = g, b = b, hasOpacity = false,
+        swatchFunc = function() Preview(e, f:GetColorRGB()) end,
+        cancelFunc = function() Restore(e) end,
+    })
+    e.opening = false
+    return true
+end
+
+-- Whether any color picker (the game's or EllesmereUI's) is up; Esc then belongs to it.
+function ColorPicker.Shown()
+    local f = _G.ColorPickerFrame
+    if f and f:IsShown() then return true end
+    f = EllesmereFrame()
+    return f ~= nil and f:IsShown() or false
+end
+
+-- Opens a picker on the color hex (AARRGGBB text, or nil for white) for owner, the swatch. onPick(hex) is how
+-- each color goes to the setting, live; the color the setting had goes back through it on Cancel. Returns
+-- whether a picker opened (or, the first time EllesmereUI is loaded for it, will open next frame).
+function ColorPicker.Open(owner, hex, onPick)
+    ColorPicker.Cancel()   -- an edit still open is cancelled first, so it is never left half-applied
+    local r, g, b = Wg.ParseHex(hex)
+    local e = {
+        owner = owner, onPick = onPick, generation = Generation(),
+        original = type(hex) == "string" and hex or Hex(r, g, b),
+    }
+    e.last = e.original
+    edit = e
+    local function Start()
+        if OpenEllesmere(e, r, g, b) then return true end
+        e.done = false
+        if OpenGame(e, r, g, b) then return true end
+        if edit == e then edit = nil end
+        return false
+    end
+    if not Ellesmere() and LoadEllesmere() and C_Timer and C_Timer.After then
+        -- just loaded: open next frame, unless the edit was given up meanwhile (Cancel clears it)
+        C_Timer.After(0, function() if edit == e then Start() end end)
+        return true
+    end
+    return Start()
+end
+
+-- Puts away the picker of an edit still open, its color back as it was: for the window closing, another page
+-- being shown, a profile change, another swatch being opened. An edit whose picker is already hidden was
+-- confirmed or cancelled there, and is left as it is.
+function ColorPicker.Cancel()
+    local e = edit
+    if not e then return end
+    local f = e.frame and e.frame()
+    if f and f:IsShown() then
+        Restore(e)
+        f:Hide()
+    else
+        e.done = true
+        edit = nil
+    end
+end
+
+-- A profile change ends an edit (its callbacks must not write into another profile).
+if R.Profiles and R.Profiles.OnChange then
+    R.Profiles.OnChange(function() ColorPicker.Cancel() end)
+end
+
 function Wg.Swatch(parent, onPick)
     local b = CreateFrame("Button", nil, parent, "BackdropTemplate")
     b:SetSize(40, 18)
@@ -296,7 +479,8 @@ function Wg.Swatch(parent, onPick)
     color:SetPoint("BOTTOMRIGHT", -3, 3)
     local active, value = true, nil
     -- The game's picker calls this on the swatch it was opened from, so the swatch follows the wheel as it
-    -- turns (a Cancel there puts the old color back through onPick).
+    -- turns (a Cancel there puts the old color back through onPick). EllesmereUI's picker does not; the
+    -- setting's own refresh redraws the swatch as each color is passed on.
     function b:SetColorRGB(r, g, bl)
         color:SetColorTexture(r, g, bl, active and 1 or 0.45)
     end
@@ -313,13 +497,8 @@ function Wg.Swatch(parent, onPick)
     b:SetScript("OnEnter", function(self) if active then self:SetBackdropBorderColor(pal.tealHi[1], pal.tealHi[2], pal.tealHi[3], 1) end end)
     b:SetScript("OnLeave", function(self) self:SetActive(active) end)
     b:SetScript("OnClick", function(self)
-        if not (active and ColorPickerFrame and ColorPickerFrame.SetupColorPickerAndShow) then return end
-        local r, g, bl = Wg.ParseHex(value)
-        ColorPickerFrame:SetupColorPickerAndShow({
-            swatch = self, r = r, g = g, b = bl, hasOpacity = false,
-            swatchFunc = function() onPick(Hex(ColorPickerFrame:GetColorRGB())) end,
-            cancelFunc = function() onPick(Hex(ColorPickerFrame:GetPreviousValues())) end,
-        })
+        if not active then return end
+        ColorPicker.Open(self, value, onPick)
     end)
     b:SetMotionScriptsWhileDisabled(true)
     return b

@@ -201,8 +201,7 @@ Requirements:
 - Use readable labels and recognizable feature names.
 - Group settings by player-facing purpose, not internal file structure.
 - Keep common settings visible.
-- Put technical or rarely changed controls behind clearly labeled Advanced disclosure.
-- Do not hide essential status, safety, or recovery actions in Advanced.
+- Place each setting beside the controls it relates to, in the section where its function belongs.
 - Avoid excessive category nesting and long unstructured pages.
 - Preserve context when navigating where practical.
 - Distinguish persistent preferences from multi-step workflows.
@@ -237,7 +236,6 @@ Search is a first-class part of the settings interface.
 - Use stable setting/category identifiers for navigation.
 - Results should show the setting name and its category or section.
 - Selecting a result should navigate to the correct page and reveal or scroll to the control.
-- If the result is inside Advanced, reveal that section intentionally.
 - Use a restrained temporary highlight where useful; respect reduced-motion preferences.
 - Explain unavailable settings and optional-addon prerequisites.
 - Do not enable modules, modify values, or trigger workflows merely because a result was selected.
@@ -319,7 +317,7 @@ When implementing the requested migration:
 - Inventory all existing controls, actions, and entry points before replacement.
 - Preserve saved keys, defaults, profile scope, and effective values where possible.
 - Move presentation without silently resetting configuration.
-- Preserve access to advanced and recovery functionality.
+- Preserve access to recovery functionality.
 - Route existing launchers to the new window.
 - Remove obsolete native registration once the replacement is complete and verified.
 - Do not leave two active configuration owners.
@@ -550,7 +548,7 @@ Settings-interface changes should additionally verify:
 - First-open loading works in the packaged installation.
 - Missing or failed optional settings-component loading is handled gracefully.
 - Search finds settings across categories without building every page.
-- Result navigation reveals the correct control, including Advanced sections.
+- Result navigation reveals the correct control.
 - Keyboard focus, Escape, scrolling, tooltips, and modal controls behave consistently.
 - Long labels, larger fonts, and supported window sizes remain usable.
 - Optional addons absent/present are represented accurately.
