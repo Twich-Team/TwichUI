@@ -14,6 +14,8 @@ local Search = R.SettingsSearch
 local I = R.Interact
 local S = R.ChronicleStyle
 local pal = Wg.pal
+local Motion = Wg.Motion
+local T = Motion.TIME   -- every duration used here is in Widgets.lua's table
 local UI = {}
 
 local WIDTH, HEIGHT = 920, 660
@@ -82,14 +84,18 @@ local function MakeRow(parent, row, width)
     f:SetWidth(width)
     f:SetHeight(ROW_MIN)
     v.frame = f
-    f.bg = Wg.Solid(f, "BACKGROUND", pal.gold, 0)
+    f.bg = Wg.Solid(f, "BACKGROUND", pal.text, 0)   -- the landing highlight from a search result
     f.bg:SetAllPoints()
+    local wash = Wg.Solid(f, "BACKGROUND", pal.text, 0.04)   -- the pointer's wash, eased
+    wash:SetAllPoints()
+    v.wash = Motion.Fader(function(x) wash:SetAlpha(x) end, 0)
     local indent = row.parent and 18 or 0
     if row.parent then
-        local guide = Wg.Solid(f, "BORDER", pal.bronzeLo, 0.9)
+        -- the rail a child setting hangs from: the whole height of the row, so rows in a run join up
+        local guide = Wg.Solid(f, "BORDER", pal.bronzeLo, 0.7)
         guide:SetWidth(1)
-        guide:SetPoint("TOPLEFT", 7, -4)
-        guide:SetPoint("BOTTOMLEFT", 7, 4)
+        guide:SetPoint("TOPLEFT", 7, 0)
+        guide:SetPoint("BOTTOMLEFT", 7, 0)
     end
     local labelW = width - CONTROL_W - indent - 16
     v.label = Wg.Text(f, "body")
@@ -121,12 +127,12 @@ local function MakeRow(parent, row, width)
     f:SetScript("OnEnter", function(self)
         -- the tooltip's title is the row's label as it is now
         self.twichuiTip.title = (row:GetName() or ""):gsub("%s%s%s.*$", "")
-        if kind == "checkbox" or kind == "link" then self.bg:SetColorTexture(pal.gold[1], pal.gold[2], pal.gold[3], 0.05) end
+        -- (a row greyed out gets none: it does nothing)
+        if kind == "link" or (kind == "checkbox" and row:Enabled()) then v.wash:To(1, T.hover) end
         show(self)
     end)
-    f:HookScript("OnLeave", function(self)
-        if not v.highlighted then self.bg:SetColorTexture(pal.gold[1], pal.gold[2], pal.gold[3], 0) end
-    end)
+    f:HookScript("OnLeave", function() v.wash:To(0, T.hover) end)
+    f:HookScript("OnHide", function() v.wash:Set(0) end)
     if kind == "checkbox" then
         v.control = Wg.Checkbox(f, function(on) setting:SetValue(on) end)
         v.control:SetPoint("TOPLEFT", f, "TOPLEFT", controlX, -6)
@@ -161,7 +167,7 @@ local function MakeRow(parent, row, width)
         v.chevron:SetPoint("TOPRIGHT", f, "TOPRIGHT", -10, -9)
         v.chevron:SetText("Open")
         f:SetScript("OnClick", function() if row.click then row.click() end end)
-        f:HookScript("OnEnter", function() Wg.Color(v.chevron, pal.gold) end)
+        f:HookScript("OnEnter", function() Wg.Color(v.chevron, pal.tealHi) end)
         f:HookScript("OnLeave", function() Wg.Color(v.chevron, pal.stone) end)
     end
     if row.extra and v.control then
@@ -239,7 +245,7 @@ local function Disclosure(parent)
     b.text:SetPoint("LEFT", 18, 0)
     b.down = Wg.Chevron(b, b, "LEFT", 8, 0, true)
     b.up = Wg.Chevron(b, b, "LEFT", 8, 0, false)
-    b:SetScript("OnEnter", function(self) Wg.Color(self.text, pal.gold) end)
+    b:SetScript("OnEnter", function(self) Wg.Color(self.text, pal.tealHi) end)
     b:SetScript("OnLeave", function(self) Wg.Color(self.text, pal.textDim) end)
     function b:SetOpen(open, label)
         self.text:SetText(label)
@@ -267,18 +273,19 @@ local function TabStrip(parent, tabs, current)
         b:SetWidth(b.text:GetStringWidth() + 24)
         b:SetPoint("BOTTOMLEFT", strip, "BOTTOMLEFT", x, 0)
         x = x + b:GetWidth() + 2
-        b.hover = Wg.Solid(b, "BACKGROUND", pal.gold, 0.07)
-        b.hover:SetAllPoints()
-        b.hover:Hide()
-        b.bar = Wg.Solid(b, "ARTWORK", pal.gold, 1)
+        local wash = Wg.Solid(b, "BACKGROUND", pal.text, 0.05)
+        wash:SetAllPoints()
+        b.wash = Motion.Fader(function(x) wash:SetAlpha(x) end, 0)
+        b.bar = Wg.Solid(b, "ARTWORK", pal.bronzeText, 1)
         b.bar:SetHeight(2)
         b.bar:SetPoint("BOTTOMLEFT", 0, 0)
         b.bar:SetPoint("BOTTOMRIGHT", 0, 0)
         b.bar:SetShown(selected)
-        Wg.Color(b.text, selected and pal.gold or pal.textDim)
+        Wg.Color(b.text, selected and pal.text or pal.textDim)
         if not selected then
-            b:SetScript("OnEnter", function(self) self.hover:Show(); Wg.Color(self.text, pal.text) end)
-            b:SetScript("OnLeave", function(self) self.hover:Hide(); Wg.Color(self.text, pal.textDim) end)
+            b:SetScript("OnEnter", function(self) self.wash:To(1, T.hover); Wg.Color(self.text, pal.text) end)
+            b:SetScript("OnLeave", function(self) self.wash:To(0, T.hover); Wg.Color(self.text, pal.textDim) end)
+            b:SetScript("OnHide", function(self) self.wash:Set(0); Wg.Color(self.text, pal.textDim) end)
             b:SetScript("OnClick", function() UI.Navigate(tab.key) end)
         end
     end
@@ -310,7 +317,7 @@ local function BuildView(page)
     view.desc = Wg.Text(frame, "small")
     view.desc:SetWidth(CONTENT_W - 8)
     view.desc:SetText(page.def.description or (page.def.overview and page.def.overview.tip) or "")
-    view.rule = Wg.Solid(frame, "BORDER", pal.bronzeLo, 0.9)
+    view.rule = Wg.Solid(frame, "BORDER", pal.bronzeLo, 0.75)
     view.rule:SetHeight(1)
     view.rule:SetPoint("LEFT", frame, "LEFT", 0, 0)
     view.rule:SetPoint("RIGHT", frame, "RIGHT", 0, 0)
@@ -420,6 +427,16 @@ local function BuildView(page)
         end)
         button:SetPoint("TOPRIGHT", -2, -12)
     end
+
+    -- What arrives when the page does: the cards, the hosted frame, Reset. The title and tabs stay put, so
+    -- moving between a feature's tabs changes only what is under them. Alpha only; nothing moves.
+    local body = {}
+    for _, sec in ipairs(view.sections) do body[#body + 1] = sec.card end
+    if view.hosted then body[#body + 1] = view.hosted end
+    if view.reset then body[#body + 1] = view.reset end
+    view.fade = Motion.Fader(function(a)
+        for i = 1, #body do body[i]:SetAlpha(a) end
+    end, 1)
     return view
 end
 
@@ -554,8 +571,8 @@ local function PaintItem(item, selected)
     item.fill:SetShown(selected)
     item.wash:SetShown(selected)
     item.edge:SetShown(selected)
-    item.hover:SetShown(item.hovered and not selected)
-    Wg.Color(item.text, selected and pal.gold or (item.hovered and pal.text or pal.textDim))
+    item.hoverFade:To((item.hovered and not selected) and 1 or 0, T.hover)
+    Wg.Color(item.text, (selected or item.hovered) and pal.text or pal.textDim)
 end
 
 local function PaintNav()
@@ -574,11 +591,11 @@ local function Highlight(v)
     state.token = (state.token or 0) + 1
     local token = state.token
     v.highlighted = true
-    v.frame.bg:SetColorTexture(pal.gold[1], pal.gold[2], pal.gold[3], 0.14)
+    v.frame.bg:SetColorTexture(pal.teal[1], pal.teal[2], pal.teal[3], 0.16)
     C_Timer.After(HIGHLIGHT_SECONDS, function()
         if state.token ~= token then return end
         v.highlighted = false
-        v.frame.bg:SetColorTexture(pal.gold[1], pal.gold[2], pal.gold[3], 0)
+        v.frame.bg:SetColorTexture(pal.text[1], pal.text[2], pal.text[3], 0)
     end)
 end
 
@@ -595,16 +612,22 @@ function UI.Navigate(key, rowId)
     local page = K.pages[key] or K.pages.overview
     if not page then return end
     Wg.CloseMenu()
+    local changed = state.page ~= page.key
     if state.searching then
         state.clearing = true
         searchBox:SetText("")
         state.clearing = false
         ShowResults(false)
+        changed = true
     end
     if state.page ~= page.key then scroll:SetVerticalScroll(0) end
     state.page = page.key
     local view = state.views[page.key] or BuildView(page)
-    for k, other in pairs(state.views) do other.frame:SetShown(k == page.key) end
+    for k, other in pairs(state.views) do
+        other.frame:SetShown(k == page.key)
+        -- a page left (or interrupted mid-arrival) goes back to full opacity, so it is never found dim later
+        if k ~= page.key and other.fade then other.fade:Set(1) end
+    end
     local row = rowId and K.rowsById[rowId]
     if row and row.page ~= page.key then row = nil end
     if row then
@@ -613,6 +636,16 @@ function UI.Navigate(key, rowId)
     end
     Layout(view)
     PaintNav()
+    -- The new page's content eases in; the page is already there and answering. Not while the window itself
+    -- is still opening (one fade, not two), and not for a row on the page already shown.
+    if changed and view.fade then
+        if Motion.Enabled() and not (state.winFade and state.winFade:Active()) then
+            view.fade:Set(0)
+            view.fade:To(1, T.page)
+        else
+            view.fade:Set(1)
+        end
+    end
     if row then
         local v = view.rows[row.id]
         local y
@@ -651,7 +684,7 @@ local function BuildNav()
             lastGroup = page.group
             if labels[page.group] then
                 y = y + 8
-                local rule = Wg.Solid(child, "BORDER", pal.bronzeLo, 0.55)   -- a hairline between groups
+                local rule = Wg.Solid(child, "BORDER", pal.bronzeLo, 0.30)   -- a quiet hairline between groups
                 rule:SetHeight(1)
                 rule:SetPoint("TOPLEFT", 10, -y + 2)
                 rule:SetPoint("TOPRIGHT", -10, -y + 2)
@@ -666,20 +699,20 @@ local function BuildNav()
         item:SetPoint("TOPLEFT", 0, -y)
         item:SetPoint("TOPRIGHT", 0, -y)
         item.page = page
-        -- shown: a warm wash fading to the right over the band, a crisp bar at the left and a lit top edge
+        -- shown: a teal wash fading to the right over the band, a crisp bronze bar at the left and a lit top edge
         item.fill = Wg.Solid(item, "BACKGROUND", pal.band, 1)
         item.fill:SetAllPoints()
         item.wash = item:CreateTexture(nil, "BORDER")
         item.wash:SetAllPoints()
-        Wg.Fade(item.wash, pal.gold, 0.20, 0, "HORIZONTAL")
-        item.edge = Wg.Solid(item, "ARTWORK", pal.gold, 0.16)
+        Wg.Fade(item.wash, pal.teal, 0.30, 0, "HORIZONTAL")
+        item.edge = Wg.Solid(item, "ARTWORK", pal.tealHi, 0.14)
         item.edge:SetHeight(1)
         item.edge:SetPoint("TOPLEFT", 0, 0)
         item.edge:SetPoint("TOPRIGHT", 0, 0)
-        item.hover = Wg.Solid(item, "BORDER", pal.gold, 0.07)
+        item.hover = Wg.Solid(item, "BORDER", pal.text, 0.05)
         item.hover:SetAllPoints()
-        item.hover:Hide()
-        item.bar = Wg.Solid(item, "ARTWORK", pal.gold, 1)
+        item.hoverFade = Motion.Fader(function(x) item.hover:SetAlpha(x) end, 0)
+        item.bar = Wg.Solid(item, "ARTWORK", pal.bronzeText, 1)
         item.bar:SetWidth(3)
         item.bar:SetPoint("TOPLEFT", 0, -2)
         item.bar:SetPoint("BOTTOMLEFT", 0, 2)
@@ -717,9 +750,9 @@ local function ResultRow(i)
     if row then return row end
     row = CreateFrame("Button", nil, resultsView)
     row:SetSize(CONTENT_W, 42)
-    row.bg = Wg.Solid(row, "BACKGROUND", pal.gold, 0)
+    row.bg = Wg.Solid(row, "BACKGROUND", pal.teal, 0)
     row.bg:SetAllPoints()
-    row.bar = Wg.Solid(row, "ARTWORK", pal.gold, 1)
+    row.bar = Wg.Solid(row, "ARTWORK", pal.bronzeText, 1)
     row.bar:SetWidth(2)
     row.bar:SetPoint("TOPLEFT", 0, -4)
     row.bar:SetPoint("BOTTOMLEFT", 0, 4)
@@ -735,8 +768,8 @@ local function ResultRow(i)
     row.note:SetPoint("TOPRIGHT", -10, -8)
     row.note:SetWidth(196)
     row.note:SetJustifyH("RIGHT")
-    row:SetScript("OnEnter", function(self) if not self.selected then self.bg:SetColorTexture(pal.gold[1], pal.gold[2], pal.gold[3], 0.05) end end)
-    row:SetScript("OnLeave", function(self) if not self.selected then self.bg:SetColorTexture(pal.gold[1], pal.gold[2], pal.gold[3], 0) end end)
+    row:SetScript("OnEnter", function(self) if not self.selected then self.bg:SetColorTexture(pal.text[1], pal.text[2], pal.text[3], 0.05) end end)
+    row:SetScript("OnLeave", function(self) if not self.selected then self.bg:SetColorTexture(pal.text[1], pal.text[2], pal.text[3], 0) end end)
     row:SetScript("OnClick", function(self) UI.Go(self.result) end)
     resultRows[i] = row
     return row
@@ -747,7 +780,7 @@ local function PaintSelection()
         local selected = row:IsShown() and i == state.selected
         row.selected = selected
         row.bar:SetShown(selected)
-        row.bg:SetColorTexture(pal.gold[1], pal.gold[2], pal.gold[3], selected and 0.10 or 0)
+        row.bg:SetColorTexture(pal.teal[1], pal.teal[2], pal.teal[3], selected and 0.16 or 0)
     end
 end
 
@@ -839,7 +872,7 @@ function UI.RefreshFooter()
         local others = #P.UsedBy(current, true)
         local shared = others == 0 and "used only by this character"
             or ("shared with " .. (others == 1 and "1 other character" or (others .. " other characters")))
-        footer.profile.text:SetText("Profile: " .. R.GOLD .. current .. "|r" .. Search.SEP .. shared)
+        footer.profile.text:SetText("Profile: |c" .. Wg.Hex(pal.text[1], pal.text[2], pal.text[3]) .. current .. "|r" .. Search.SEP .. shared)
     else
         footer.profile.text:SetText("Profiles aren't available right now.")
     end
@@ -856,7 +889,7 @@ local function BuildFooter()
     footer:SetPoint("BOTTOMLEFT", PAD, 8)
     footer:SetPoint("BOTTOMRIGHT", -PAD, 8)
     footer:SetHeight(FOOTER_H - 12)
-    local rule = Wg.Solid(win, "BORDER", pal.bronzeLo, 0.8)
+    local rule = Wg.Solid(win, "BORDER", pal.bronzeLo, 0.6)
     rule:SetHeight(1)
     rule:SetPoint("BOTTOMLEFT", footer, "TOPLEFT", 0, 4)
     rule:SetPoint("BOTTOMRIGHT", footer, "TOPRIGHT", 0, 4)
@@ -872,7 +905,7 @@ local function BuildFooter()
     footer.reloadText = Wg.Text(footer, "small")
     footer.reloadText:SetPoint("RIGHT", footer.reload, "LEFT", -10, 0)
     footer.reloadText:SetText("Some changes take effect after you reload your UI.")
-    Wg.Color(footer.reloadText, pal.gold)
+    Wg.Color(footer.reloadText, pal.bronzeText)
 end
 
 ---------------------------------------------------------------------------
@@ -898,7 +931,7 @@ local function BuildSearch(header)
     clear.text:SetPoint("CENTER", 0, 1)
     clear.text:SetText("x")
     clear:SetScript("OnClick", function() searchBox:SetText(""); searchBox:ClearFocus() end)
-    clear:SetScript("OnEnter", function(self) Wg.Color(self.text, pal.gold) end)
+    clear:SetScript("OnEnter", function(self) Wg.Color(self.text, pal.tealHi) end)
     clear:SetScript("OnLeave", function(self) Wg.Color(self.text, pal.textDim) end)
     local function Hints()
         local empty = (searchBox:GetText() or "") == ""
@@ -971,7 +1004,7 @@ local function BuildWindow()
     nav:SetPoint("TOPLEFT", PAD, -(HEADER_H + 10))
     nav:SetPoint("BOTTOMLEFT", PAD, FOOTER_H + 8)
     nav:SetWidth(NAV_W)
-    Wg.Surface(nav, pal.nav, 0.95, pal.bronzeLo, 0.8)
+    Wg.Surface(nav, pal.nav, 0.97, pal.bronzeLo, 0.5)
     Wg.Recess(nav, 1.3)   -- the list sits pressed into the window
 
     local area = CreateFrame("Frame", nil, win)
@@ -996,11 +1029,27 @@ local function BuildWindow()
     BuildNav()
     BuildFooter()
 
+    -- The window fades in as it opens (opacity only: its position, anchors and scale are the game's and the
+    -- player's). Opening is not delayed: the content is built and answering from the first frame.
+    state.winFade = Motion.Fader(function(a) win:SetAlpha(a) end, 1)
     win:SetScript("OnShow", function(self)
         R.FitToScreen(self)
         UI.RefreshFooter()
+        if Motion.Enabled() then
+            state.winFade:Set(0)
+            state.winFade:To(1, T.window)
+        else
+            state.winFade:Set(1)
+        end
     end)
     win:SetScript("OnHide", function()
+        -- Closing is immediate; whatever was easing is put where it was going, so a reopened window is never
+        -- found dim, and no hover is left lit for a pointer that has gone.
+        Motion.Settle()
+        for _, item in ipairs(state.navItems) do
+            item.hovered = false
+            item.hoverFade:Set(0)
+        end
         Wg.CloseMenu()
         if searchBox:HasFocus() then searchBox:ClearFocus() end
         if GameTooltip and GameTooltip:IsOwned(win) then GameTooltip:Hide() end

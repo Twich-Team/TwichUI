@@ -268,9 +268,16 @@ function K.Badge(row, text)
     return row
 end
 
+-- The status words on a page's title line ("3 of 3 on", "Off"): the window's accent when something is on and
+-- its quiet gray when not (the game-wide green and gray are the fallback where the palette isn't loaded).
+local function Escape(c)
+    local function B(v) return math.floor(math.max(0, math.min(1, v)) * 255 + 0.5) end
+    return ("|cff%02x%02x%02x"):format(B(c[1]), B(c[2]), B(c[3]))
+end
 function K.OnOff(on, onText, offText)
-    if on then return R.GREEN .. (onText or "On") .. "|r" end
-    return R.GREY .. (offText or "Off") .. "|r"
+    local pal = R.SettingsWidgets and R.SettingsWidgets.pal
+    if on then return (pal and Escape(pal.tealHi) or R.GREEN) .. (onText or "On") .. "|r" end
+    return (pal and Escape(pal.stone) or R.GREY) .. (offText or "Off") .. "|r"
 end
 
 -- Something changed that other rows show (a status, the start page's statuses): an open window redraws.

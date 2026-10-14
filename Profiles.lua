@@ -35,6 +35,7 @@ PF.ACCOUNT = {
     },
     ui = {
         showAdvanced = true,      -- how the settings window itself looks: Advanced sections always open
+        reduceSettingsMotion = true, -- how the settings window itself moves: no fades
         settingsWindow = true,    -- where the settings window sits
         restedxpSkinState = true, -- the RestedXP theme to go back to: a record of RestedXP's setting, not a choice
         mageSell = true,          -- the never-sell list: a protection, which no profile change may lift

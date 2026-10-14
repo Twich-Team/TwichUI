@@ -52,6 +52,21 @@ claimed; see "Measuring".
 | `TwichUI_Settings/Widgets.lua` | The controls the window draws with, on `chronicle/Style.lua`'s helpers and a copy of its palette; the depth they share: `Wg.Frame` / `Wg.Header` (rim, corner brackets, tonal layers), `Wg.Raise` (buttons), `Wg.Recess` (inputs, checkbox, nav well), `Wg.Panel` (section cards), `Wg.Tag` (Reload and similar), `Wg.Fade` (a gradient that falls back to a flat fill) |
 | `TwichUI_Settings/Window.lua` | The window, the left-hand list, a feature's tabs, pages, search results, footer, Esc |
 
+The window's palette lives at the top of `Widgets.lua` (a copy of the Chronicle's, which is never changed), by role:
+bronze is crafted structure (rim, brackets, brand, section headings, the selection marker), charcoal is the list and the
+header, neutral stone is the page and its cards, ivory is text, one muted teal (`pal.teal`, `tealHi`, `tealLo`) is what
+is active (selected row, checked box, focus, slider fill, the one primary button), and rust is `pal.danger`. Interior
+edges use `pal.bronzeLo` (neutral gray, despite the name) and a control's own boundary `pal.control`; the rim's old
+brown is `pal.rimLo`. A new control takes its colors from these, not from a literal.
+
+Motion is `Wg.Motion` in `Widgets.lua`: one table of timings (`TIME`), `Fader` objects that ease a single alpha, and
+one driver frame whose `OnUpdate` exists only while a fader is running (none while idle or shut). The window fades in
+on opening, a page's cards fade in on arrival (the title and tabs do not), and nav rows, tabs, buttons, dropdowns and
+checkbox rows ease a wash under the pointer. Nothing moves or resizes. **Reduce settings motion** (Home, saved
+`ui.reduceSettingsMotion`, account-wide) makes every ease immediate; it is separate from Notifications' Reduced
+motion, which is the cards' and is not read here. Closing, leaving a page, and changing the preference call
+`Motion.Settle()` or `fade:Set(1)`, so no alpha is left part-way.
+
 `gear/Window.lua` (Stat weights) and `modules/RefreshmentsShares.lua` (Refreshment shares) stay in the core: each
 exposes `Frame()`, built the first time it is shown, which the window shows as a page.
 

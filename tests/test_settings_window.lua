@@ -81,6 +81,7 @@ local function Fake(kind, parent)
     SetOwner = function(s, o) s.owner = o end,
     GetFont = function() return "Fonts\\FRIZQT__.TTF", 12, "" end,
     SetFont = function() return true end,
+    SetAlpha = function(s, a) s.alpha = a end, GetAlpha = function(s) return s.alpha or 1 end,
     CreateTexture = function(s) return Fake("Texture", s) end,
     CreateFontString = function(s) return Fake("FontString", s) end,
   }
@@ -189,6 +190,73 @@ do
   UI.Navigate("overview")
   shown, row = UI.Selected()
   assert(shown == "overview" and row == "overview")
+end
+
+---------------------------------------------------------------------------
+-- 1c. Motion: eases only while something is easing, stops cleanly, and respects the preference
+---------------------------------------------------------------------------
+do
+  local M = R.SettingsWidgets.Motion
+  local ui = c.TwichUIDB.ui
+  UI.Close(); M.Settle()
+  assert(M.Count() == 0 and win.alpha == 1, "shut and settled: nothing easing, the window at full opacity")
+
+  -- a Fader eases there, and nothing runs afterwards
+  local f = M.Fader(function() end, 0)
+  f:To(1, 0.1)
+  assert(M.Count() == 1 and f:Active())
+  M.Advance(0.04)
+  assert(f.value > 0 and f.value < 1, "part of the way")
+  f:To(0, 0.1)                      -- reversed mid-way: from where it is, not from the end
+  assert(M.Count() == 1 and f.value > 0 and f.value < 1)
+  M.Advance(1)
+  assert(f.value == 0 and M.Count() == 0 and not f:Active(), "arrived, and the driver is idle")
+  f:To(1, 1); M.Settle()
+  assert(f.value == 1 and M.Count() == 0, "settling puts it where it was going")
+
+  -- the preference: immediate states, nothing easing; changing it cancels what is easing
+  ui.reduceSettingsMotion = true
+  f:To(0, 0.1)
+  assert(f.value == 0 and M.Count() == 0, "reduced: shown at once")
+  ui.reduceSettingsMotion = false
+  f:To(1, 1)
+  assert(M.Count() == 1)
+  local pref = S.variables.TWICHUI_reduceSettingsMotion
+  assert(pref and pref:GetValue() == false, "the preference is on Home, off by default")
+  pref:SetValue(true)
+  assert(M.Count() == 0 and f.value == 1, "changing it settles what was easing")
+  pref:SetValue(false)
+  assert(ui.reduceSettingsMotion == false)
+
+  -- the window: opens at once, fades in, arrives, closes immediately
+  R:OpenSettings("overview")
+  assert(win.shown and win.alpha == 0 and M.Count() >= 1, "opening starts a fade, the window is already there")
+  UI.Navigate("chronicle")          -- during the window's own fade: no second fade on top
+  M.Advance(1)
+  assert(win.alpha == 1 and M.Count() == 0, "it arrived and the driver is idle")
+  UI.Navigate("pins")
+  assert(M.Count() == 1, "a new page's content eases in")
+  UI.Navigate("chronicle"); UI.Navigate("gear"); UI.Navigate("chronicleLook")
+  assert(M.Count() == 1, "rapid navigation: only the latest page is easing, nothing queued")
+  assert(select(1, UI.Selected()) == "chronicleLook")
+  M.Advance(1)
+  assert(M.Count() == 0)
+  UI.Navigate("pins")               -- left mid-arrival...
+  UI.Close()                        -- ...and closed
+  assert(not win.shown and M.Count() == 0 and win.alpha == 1, "closing is immediate and leaves nothing half-way")
+  R:OpenSettings("pins")            -- reopened: shown, not found dim or stuck
+  M.Advance(1)
+  assert(win.shown and win.alpha == 1 and M.Count() == 0)
+
+  -- reduced motion: no fade on opening or on a page
+  UI.Close()
+  ui.reduceSettingsMotion = true
+  R:OpenSettings("overview")
+  assert(win.alpha == 1 and M.Count() == 0, "opens at once")
+  UI.Navigate("gear")
+  assert(M.Count() == 0, "pages arrive at once")
+  ui.reduceSettingsMotion = false
+  UI.Close()
 end
 
 ---------------------------------------------------------------------------
