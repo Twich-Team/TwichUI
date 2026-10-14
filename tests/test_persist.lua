@@ -550,7 +550,7 @@ local TOP = { schema = true, modules = true, ui = true, gear = true, setup = tru
   profiles = true, profileKeys = true, profileState = true }
 for k in pairs(sv.TwichUIDB) do assert(TOP[k], "undeclared top-level field in TwichUIDB: " .. tostring(k)) end
 local SETUP = { detected = true, selection = true, received = true, trusted = true, recommend = true, scanNext = true, restoreNext = true,
-  lastScan = true, pending = true, eui = true }
+  lastScan = true, pending = true, eui = true, twichui = true, twichUndo = true }
 for k in pairs(sv.TwichUIDB.setup) do assert(SETUP[k], "undeclared field in TwichUIDB.setup: " .. tostring(k)) end
 local function contains(t, needle, seen)
   seen = seen or {}

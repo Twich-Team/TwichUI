@@ -282,9 +282,71 @@ local function BuildChoose()
     cp.done:SetPoint("BOTTOMRIGHT", -16, 14)
 end
 
+local TWICHUI_KEY = "TwichUI settings"
+
+-- The first row of the list: TwichUI's own settings, by feature (setup/TwichConfig.lua). They are live data, so
+-- they can be ticked without a scan.
+local function TwichChooseRows()
+    local TC = R.TwichConfig
+    if not TC then return 0 end
+    if search ~= "" and not ("twichui settings"):find(search, 1, true) then return 0 end
+    local lines = 0
+    local included = TC.Included()
+    local list = TC.GroupList()
+    local ticked, usable = 0, 0
+    for _, gi in ipairs(list) do
+        if gi.usable then usable = usable + 1 end
+        if gi.usable and gi.selected then ticked = ticked + 1 end
+    end
+    lines = lines + 1
+    local r = ListRow(cp.list, lines)
+    r.check:Show()
+    r.check:SetChecked(included)
+    r.check:SetEnabled(usable > 0)
+    r.check:SetScript("OnClick", function(c) TC.SetIncluded(c:GetChecked()); W:Refresh() end)
+    r.arrow:SetText(expanded[TWICHUI_KEY] and "-" or "+")
+    r.label:SetText("TwichUI's own settings")
+    Ink(r.label, "text")
+    r.right:SetText(GREY .. (included and ("%d of %d features"):format(ticked, usable) or "Not included") .. "|r")
+    r:SetScript("OnClick", function() expanded[TWICHUI_KEY] = not expanded[TWICHUI_KEY]; W:Refresh() end)
+    r:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText("TwichUI's own settings", 1, 1, 1)
+        GameTooltip:AddLine("How TwichUI's features behave and look, as they are on this profile right now. Click to choose features.", 0.8, 0.8, 0.8, true)
+        GameTooltip:AddLine("Never included: backups, Undo copies, received setups, the Journey Chronicle, map pins, positions, and anything that acts for you in the game or decides what you send to others.", 0.9, 0.8, 0.5, true)
+        GameTooltip:Show()
+    end)
+    r:Show()
+    if expanded[TWICHUI_KEY] then
+        for _, gi in ipairs(list) do
+            lines = lines + 1
+            local c = ListRow(cp.list, lines)
+            c.check:Show()
+            c.check:SetChecked(included and gi.selected and gi.usable)
+            c.check:SetEnabled(included and gi.usable)
+            c.check:SetScript("OnClick", function(cb) TC.SetGroupSelected(gi.id, cb:GetChecked()); W:Refresh() end)
+            c.arrow:SetText("")
+            c.label:SetText("    " .. gi.label)
+            Ink(c.label, "textDim", gi.usable and 1 or 0.55)
+            local right = not gi.usable and "not available" or (gi.scope == "account" and "every profile")
+                or (gi.custom and "by class and tree") or ("%d settings"):format(gi.count)
+            c.right:SetText(GREY .. right .. "|r")
+            c:SetScript("OnClick", nil)
+            c:SetScript("OnEnter", gi.note and function(self)
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                GameTooltip:SetText(gi.label, 1, 1, 1)
+                GameTooltip:AddLine(gi.note, 0.8, 0.8, 0.8, true)
+                GameTooltip:Show()
+            end or nil)
+            c:Show()
+        end
+    end
+    return lines
+end
+
 local function RefreshChoose()
     local groups = ST:DetectedByAddon()
-    local lines = 0
+    local lines = TwichChooseRows()
     local n, bytes = Chosen()
     for _, g in ipairs(groups) do
         if search == "" or g.title:lower():find(search, 1, true) then
@@ -342,7 +404,9 @@ local function RefreshChoose()
     else
         cp.help:SetText("Scan installed addons first to find which of them have settings you can share.")
     end
-    cp.summary:SetText(("%d addons ticked, about %s"):format(n, ST.FormatSize(bytes)))
+    local TC = R.TwichConfig
+    cp.summary:SetText(("%d addons ticked, about %s%s"):format(n, ST.FormatSize(bytes),
+        (TC and TC.Included()) and "; and TwichUI's own settings" or ""))
 end
 
 function W:ShowChoose()
@@ -572,12 +636,18 @@ local function BuildShare(p)
     mine.eui:SetPoint("TOPLEFT", 214, -158)
     mine.save = Btn(p, "Save setup", 150, function()
         ST:SaveMine(mine.em:GetChecked())
-        R.Print("saved your setup: %d addons%s.", ST.CountAddons(ST.Mine()), ST.Mine().eui and " and an EllesmereUI profile" or "")
+        local saved = ST.Mine()
+        R.Print("saved your setup: %d addons%s%s.", ST.CountAddons(saved), saved.eui and ", an EllesmereUI profile" or "",
+            saved.twichui and " and TwichUI's own settings" or "")
         if ST.euiError then R.Print("couldn't include the EllesmereUI profile: %s", ST.euiError) end
         W:Refresh()
     end, function()
-        return ST:CanSave() and "Saves the ticked settings as your setup. You can send it straight away."
-            or "Click \"Scan installed addons\" first. Saving uses the settings found in that scan."
+        local TC = R.TwichConfig
+        if ST:CanSave() then return "Saves the ticked settings as your setup. You can send it straight away." end
+        if TC and TC.WillInclude() then
+            return "Saves TwichUI's own settings (and the EllesmereUI profile, if you chose one) as they are now. The addon settings already in your saved setup stay as they were; scan first to bring those up to date."
+        end
+        return "Click \"Scan installed addons\" first. Saving uses the settings found in that scan."
     end)
     mine.save:SetPoint("TOPRIGHT", -16, -158)
     mine.saved = Text(p, "GameFontHighlightSmall")
@@ -671,9 +741,12 @@ end
 local function RefreshShare()
     local n, bytes, total = Chosen()
     local profile = ES.ChosenProfile()
+    local TC = R.TwichConfig
+    local twich = TC and TC.WillInclude()
     local what = {}
     if n > 0 then what[#what + 1] = ("%d %s · %s"):format(n, n == 1 and "addon" or "addons", ST.FormatSize(bytes)) end
     if profile then what[#what + 1] = "EllesmereUI profile" end
+    if twich then what[#what + 1] = "TwichUI settings" end
     if #what == 0 then
         mine.summary:SetText(GREY .. "Included settings: nothing chosen yet|r")
     else
@@ -688,12 +761,17 @@ local function RefreshShare()
     else
         mine.help:SetText("Start with Scan installed addons to find which of them have settings you can share. It reloads your UI once and never saves on its own.")
     end
-    mine.save:SetEnabled(ST.capture ~= nil and (n > 0 or profile ~= nil))
+    mine.save:SetEnabled((ST.capture ~= nil and (n > 0 or profile ~= nil or twich)) or (ST.capture == nil and twich and true or false))
+    if twich and not ST.capture then
+        mine.help:SetText(mine.help:GetText() .. " TwichUI's own settings need no scan.")
+    end
 
     local m = ST.Mine()
     if m then
-        mine.saved:SetText(("%sSaved|r %s  ·  version %d  ·  %d addons%s%s"):format(GREEN, When(m.created), m.version or 1,
-            ST.CountAddons(m), m.eui and "  ·  EllesmereUI profile" or "", m.editMode and "  ·  Edit Mode layout" or ""))
+        mine.saved:SetText(("%sSaved|r %s  ·  version %d  ·  %d addons%s%s%s"):format(GREEN, When(m.created), m.version or 1,
+            ST.CountAddons(m), m.eui and "  ·  EllesmereUI profile" or "",
+            (type(m.twichui) == "table" and m.twichui.status == "ok") and "  ·  TwichUI settings" or "",
+            m.editMode and "  ·  Edit Mode layout" or ""))
     else
         mine.saved:SetText(GREY .. "Not saved yet.|r")
     end
@@ -1045,6 +1123,235 @@ function W:ShowEuiImport(src)
 end
 
 ---------------------------------------------------------------------------
+-- Popup: TwichUI's own settings from a friend's setup (setup/TwichConfig.lua)
+-- Reviewed by feature, applied to the profile in use or to a new copy of it, one Undo.
+---------------------------------------------------------------------------
+local tw
+local twSel = {}                 -- [sourceKey] = { [groupId] = false } for the features left unticked
+
+local STATE_WORD = {
+    same = GREY .. "no change|r", invalid = RED .. "can't be used|r", unavailable = GREY .. "not available here|r",
+}
+
+local function TwichBody(plan, from)
+    if not plan.ok then return RED .. (plan.why or "Nothing to import.") .. "|r" end
+    local TC = R.TwichConfig
+    local lines = {}
+    lines[#lines + 1] = ("%sFrom|r  %s's TwichUI settings%s%s"):format(Head(), from or "?",
+        plan.addon and (", made with TwichUI " .. plan.addon) or "", plan.made and (", " .. When(plan.made)) or "")
+    local scope = plan.profile and ("%sApplies to|r  your profile \"%s\""):format(Head(), plan.profile) or (Head() .. "Applies to|r  your profile in use")
+    if plan.sharedWith and plan.sharedWith > 0 then
+        scope = scope .. (", which %d other %s also use%s: they would see these changes too. \"Apply to a new profile\" leaves it alone."):format(
+            plan.sharedWith, plan.sharedWith == 1 and "character" or "characters", plan.sharedWith == 1 and "s" or "")
+    else
+        scope = scope .. "."
+    end
+    lines[#lines + 1] = scope
+    local account = false
+    for _, g in ipairs(plan.groups) do
+        if g.selected and g.state == "changed" then
+            for _, c in ipairs(g.changes) do if c.scope == "account" then account = true end end
+        end
+    end
+    if account then
+        lines[#lines + 1] = ("%sEvery profile|r  stat weights (kept by class and talent tree) and the settings window's motion setting are account-wide: they change for all your profiles."):format(Head())
+    end
+    lines[#lines + 1] = ("%sStays yours|r  selling and anything that acts for you, what you send or accept, where windows sit, RestedXP's on/off switch, your Journey Chronicle, pins and backups."):format(Head())
+    if plan.absent and #plan.absent > 0 then
+        lines[#lines + 1] = GREY .. ("Not in this share: %s."):format(table.concat(plan.absent, ", ")) .. "|r"
+    end
+    if plan.unknown and plan.unknown > 0 then
+        lines[#lines + 1] = GREY .. ("%d %s from a newer TwichUI ignored."):format(plan.unknown, plan.unknown == 1 and "setting" or "settings") .. "|r"
+    end
+    if #plan.reload > 0 then
+        lines[#lines + 1] = ("%sNeeds a reload|r  %s take effect after reloading your UI. Nothing else does."):format(GOLD, table.concat(plan.reload, ", "))
+    end
+    lines[#lines + 1] = GREY .. "Nothing changes until you confirm. The values this replaces are kept, so Undo can put them back; Undo keeps only the last import." .. "|r"
+    return table.concat(lines, "\n\n")
+end
+
+local function TwichSelection()
+    twSel[tw.sourceKey] = twSel[tw.sourceKey] or {}
+    return twSel[tw.sourceKey]
+end
+
+local function TwichApply(newProfile)
+    local TC = R.TwichConfig
+    local plan, pack = tw.plan, ST.SourcePack(tw.sourceKey)
+    if not (plan and plan.ok and pack and pack.twichui) or not NoCombat() then return end
+    if plan.changed == 0 then R.Print("nothing to change.") return end
+    local stamp, entry, from = pack.created, pack.twichui, tw.from
+    local sel = TwichSelection()
+    local where
+    if newProfile then
+        where = ("a new profile named \"%s\", a copy of \"%s\"; this character switches to it. \"%s\" stays exactly as it is"):format(
+            TC.NewProfileName(from) or "?", plan.profile or "?", plan.profile or "?")
+    else
+        where = ("your profile \"%s\"%s"):format(plan.profile or "?",
+            plan.sharedWith > 0 and (" (also used by %d other %s)"):format(plan.sharedWith, plan.sharedWith == 1 and "character" or "characters") or "")
+    end
+    local account = false
+    for _, g in ipairs(plan.groups) do
+        if g.selected and g.state == "changed" then
+            for _, c in ipairs(g.changes) do if c.scope == "account" then account = true end end
+        end
+    end
+    local text = ("Apply %d %s from %s's TwichUI settings to %s?\n\n%s%s"):format(plan.changed,
+        plan.changed == 1 and "setting" or "settings", from, where,
+        #plan.reload > 0 and ("Reload needed afterwards for: " .. table.concat(plan.reload, ", ") .. ".") or "No reload is needed.",
+        account and "\n\nStat weights and the window-motion setting are account-wide: they change for every profile." or "")
+    Confirm("TWICHUI_TWICH_APPLY", text, function()
+        local ok, report, extra = TC.Apply(entry, { selection = sel, from = from, newProfile = newProfile })
+        if not ok then
+            tw.failed = TC.Explain(report, extra)
+            R.Print("%s", tw.failed)
+            W:Refresh()
+            return
+        end
+        tw.failed, tw.report = false, report
+        R.Print("%s's TwichUI settings applied: %d changed in profile \"%s\".%s", from, report.changed, report.profile or "?",
+            #report.reload > 0 and (" Reload your UI for: " .. table.concat(report.reload, ", ") .. ".") or "")
+        if #report.failed > 0 then
+            R.Print("%s didn't update; see /tui diagnostics.", table.concat(report.failed, ", "))
+        end
+        W:Refresh()
+    end, {
+        combat = true,
+        valid = function()
+            local now = ST.SourcePack(tw.sourceKey)
+            if not now or now.created ~= stamp or now.twichui ~= entry then
+                return false, "That setup was replaced or removed while you were deciding, so nothing was applied. Review it again."
+            end
+            return true
+        end,
+    })
+end
+
+local function BuildTwichImport()
+    tw = MakePopup("TwichUITwichImport", POPUP_W, 600, "TwichUI settings from a friend", 0, 0)
+    tw.body = Text(tw, "GameFontHighlightSmall")
+    tw.body:SetPoint("TOPLEFT", 16, -40)
+    tw.body:SetWidth(POPUP_LIST_W)
+    tw.body:SetJustifyV("TOP")
+    tw.body:SetSpacing(2)
+    tw.list = ListBox(tw, 150, POPUP_LIST_W)
+    tw.list:SetPoint("BOTTOMLEFT", 16, 92)
+    tw.result = Text(tw, "GameFontHighlightSmall")
+    tw.result:SetPoint("BOTTOMLEFT", 16, 66)
+    tw.result:SetWidth(POPUP_LIST_W)
+    tw.go = Btn(tw, "Apply to this profile", 190, function() TwichApply(false) end,
+        "Changes the profile you are using now: the ticked features take the shared values. Asks first; Undo puts them back.")
+    tw.go:SetPoint("BOTTOMLEFT", 16, 12)
+    tw.copy = Btn(tw, "Apply to a new profile", 190, function() TwichApply(true) end,
+        "Makes a copy of your profile, switches this character to it, and applies the shared values there. Your current profile stays exactly as it is.")
+    tw.copy:SetPoint("LEFT", tw.go, "RIGHT", 8, 0)
+    tw.undo = Btn(tw, "Undo last import", 140, function()
+        if not NoCombat() then return end
+        local info = R.TwichConfig.UndoInfo()
+        if not info then return end
+        Confirm("TWICHUI_TWICH_UNDO", ("Put back the %d TwichUI %s the last import replaced%s?\n\nWhat they are now is replaced and not kept."):format(
+            info.count, info.count == 1 and "setting" or "settings", info.from and (" (from " .. info.from .. ")") or ""),
+            function()
+                local ok, report, extra = R.TwichConfig.Undo()
+                if ok then
+                    tw.failed = false
+                    R.Print("put back %d TwichUI settings.%s", report.restored, report.reloadPending and " Some take effect after a reload." or "")
+                else
+                    tw.failed = R.TwichConfig.Explain(report, extra)
+                    if report == "profile" then
+                        tw.failed = ("That import changed the profile \"%s\". Switch to it (Profiles) to undo it."):format(tostring(extra))
+                    end
+                    R.Print("%s", tw.failed)
+                end
+                W:Refresh()
+            end, { combat = true })
+    end, "Puts back what the last import of TwichUI settings replaced.")
+    tw.undo:SetPoint("LEFT", tw.copy, "RIGHT", 8, 0)
+    tw.close = Btn(tw, "Close", 80, function() tw:Hide() end)
+    tw.close:SetPoint("BOTTOMRIGHT", -16, 12)
+    tw:SetScript("OnHide", function() tw.failed, tw.report = false, nil end)
+end
+
+local function RefreshTwichImport()
+    local TC = R.TwichConfig
+    local pack = ST.SourcePack(tw.sourceKey)
+    local plan
+    if pack and pack.twichui then
+        plan = TC.Plan(pack.twichui, { selection = TwichSelection() })
+    else
+        plan = { why = "That setup is no longer here.", groups = {}, reload = {}, absent = {} }
+    end
+    tw.plan = plan
+    tw.body:SetText(TwichBody(plan, tw.from))
+    local sel = TwichSelection()
+    local lines = 0
+    for _, g in ipairs(plan.groups) do
+        lines = lines + 1
+        local r = ListRow(tw.list, lines)
+        local usable = g.state == "changed" or g.state == "same"
+        r.check:Show()
+        r.check:SetChecked(usable and sel[g.id] ~= false)
+        r.check:SetEnabled(g.state == "changed")
+        r.check:SetScript("OnClick", function(c) sel[g.id] = c:GetChecked() and nil or false; W:Refresh() end)
+        r.arrow:SetText("")
+        r.label:SetText(g.label .. (g.scope == "account" and (GREY .. "  (every profile)|r") or ""))
+        Ink(r.label, "text", usable and 1 or 0.55)
+        if g.state == "changed" then
+            r.right:SetText(("%d %s"):format(#g.changes, #g.changes == 1 and "change" or "changes"))
+        else
+            r.right:SetText(STATE_WORD[g.state] or "")
+        end
+        r:SetScript("OnClick", nil)
+        r:SetScript("OnEnter", function(self)
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetText(g.label, 1, 1, 1)
+            if g.note then GameTooltip:AddLine(g.note, 0.9, 0.8, 0.5, true) end
+            if g.state == "invalid" then
+                GameTooltip:AddLine("This feature holds values this version can't use, so none of it is applied.", 0.9, 0.5, 0.4, true)
+            elseif g.state == "unavailable" then
+                GameTooltip:AddLine("This feature isn't loaded here.", 0.7, 0.7, 0.7, true)
+            elseif g.state == "same" then
+                GameTooltip:AddLine("Already the same as yours.", 0.7, 0.7, 0.7, true)
+            else
+                for i, c in ipairs(g.changes) do
+                    if i > 14 then GameTooltip:AddLine(("... and %d more"):format(#g.changes - 14), 0.7, 0.7, 0.7) break end
+                    GameTooltip:AddDoubleLine(c.label .. (c.reload and " (reload)" or ""), ("%s > %s"):format(c.old, c.new), 1, 1, 1, 0.7, 0.8, 0.6)
+                end
+            end
+            GameTooltip:Show()
+        end)
+        r:Show()
+    end
+    FinishList(tw.list, lines, "")
+    local info = TC.UndoInfo()
+    tw.undo:SetShown(info ~= nil)
+    local count = 0
+    for _, g in ipairs(plan.groups) do if g.selected and g.state == "changed" then count = count + #g.changes end end
+    plan.changed = count
+    local can = plan.ok and count > 0 and plan.profilesAvailable
+    tw.go:SetEnabled(can and true or false)
+    tw.copy:SetEnabled(can and true or false)
+    if tw.failed then
+        tw.result:SetText(RED .. tw.failed .. "|r")
+    elseif tw.report then
+        tw.result:SetText(GREEN .. ("Applied: %d changed in \"%s\"."):format(tw.report.changed, tw.report.profile or "?") .. "|r")
+    elseif plan.ok and not plan.profilesAvailable then
+        tw.result:SetText(GREY .. "Profiles aren't available this session, so nothing can be applied now." .. "|r")
+    elseif plan.ok and count == 0 then
+        tw.result:SetText(GREY .. "Nothing ticked would change anything." .. "|r")
+    else
+        tw.result:SetText("")
+    end
+end
+
+function W:ShowTwichImport(src)
+    if not tw then BuildTwichImport() end
+    tw.sourceKey, tw.from, tw.failed, tw.report = src.key, src.from, false, nil
+    tw:Show()
+    W:Refresh()
+end
+
+---------------------------------------------------------------------------
 -- Page: Received setups
 ---------------------------------------------------------------------------
 local get = {}
@@ -1199,6 +1506,13 @@ local function BuildGet(p)
     get.eui = Btn(p, "EllesmereUI profile...", 190, OpenEuiImport,
         "See the EllesmereUI profile in this setup. It is only ever added as a new profile; nothing you have is replaced.")
     get.eui:SetPoint("TOPLEFT", 16, -248)
+    local function OpenTwichImport()
+        local src = CurrentSource()
+        if src then W:ShowTwichImport(src) end
+    end
+    get.twich = Btn(p, "TwichUI settings...", 190, OpenTwichImport,
+        "See TwichUI's own settings in this setup, by feature. You choose what to apply, and Undo puts back what it replaced.")
+    get.twich:SetPoint("TOPLEFT", 214, -248)
 
     -- Review state
     get.list = ListBox(p, 200)
@@ -1239,6 +1553,9 @@ local function BuildGet(p)
     get.euiR = Btn(p, "EllesmereUI profile...", 190, OpenEuiImport,
         "See the EllesmereUI profile in this setup. It is only ever added as a new profile; nothing you have is replaced.")
     get.euiR:SetPoint("TOPLEFT", 16, -490)
+    get.twichR = Btn(p, "TwichUI settings...", 190, OpenTwichImport,
+        "See TwichUI's own settings in this setup, by feature. You choose what to apply, and Undo puts back what it replaced.")
+    get.twichR:SetPoint("TOPLEFT", 214, -490)
     get.report = Text(p, "GameFontHighlightSmall")
     get.report:SetPoint("TOPLEFT", 16, -458)
     get.report:SetWidth(WIDTH - 32)
@@ -1300,7 +1617,7 @@ local function RefreshGet()
 
     local lines = 0
     local missing = {}
-    local offersEui = false
+    local offersEui, offersTwich = false, false
     if src then
         local pack = src.pack
         get.title:SetText(("%s's setup"):format(src.from))
@@ -1313,14 +1630,16 @@ local function RefreshGet()
         end
         local euiSrc, euiWhy = ES.Source(pack)
         offersEui = euiSrc ~= nil or euiWhy ~= nil
+        offersTwich = type(pack.twichui) == "table"
         local bits = {
             ("%d addon %s"):format(ST.CountAddons(pack), ST.CountAddons(pack) == 1 and "setting" or "settings"),
             euiSrc and "EllesmereUI profile" or nil,
+            offersTwich and "TwichUI settings" or nil,
             pack.editMode and "Edit Mode layout" or nil,
             recCount > 0 and ("%d recommended addons"):format(recCount) or nil,
         }
         local sub = {}
-        for i = 1, 4 do if bits[i] then sub[#sub + 1] = bits[i] end end
+        for i = 1, 5 do if bits[i] then sub[#sub + 1] = bits[i] end end
         get.sub:SetText(("Updated %s  ·  version %d  ·  %s%s"):format(When(pack.created), pack.version or 1,
             table.concat(sub, "  ·  "), #sources > 1 and ("  ·  %d of %d"):format(sourceIndex, #sources) or ""))
 
@@ -1369,10 +1688,16 @@ local function RefreshGet()
     FinishList(get.list, lines, "")
     get.eui:SetShown(offersEui and not reviewing)
     get.euiR:SetShown(offersEui and reviewing)
+    get.twich:ClearAllPoints()
+    get.twich:SetPoint("TOPLEFT", offersEui and 214 or 16, -248)
+    get.twichR:ClearAllPoints()
+    get.twichR:SetPoint("TOPLEFT", offersEui and 214 or 16, -490)
+    get.twich:SetShown(offersTwich and not reviewing)
+    get.twichR:SetShown(offersTwich and reviewing)
     get.missing:SetText(#missing > 0 and (RED .. "Install first to get these settings: " .. table.concat(missing, ", ") .. "|r") or "")
 
     local preview = src and Preview(src)
-    get.preview:SetText(src and (preview or (GREY .. (offersEui and "No addon settings ticked. The EllesmereUI profile is imported with its own button below.|r"
+    get.preview:SetText(src and (preview or (GREY .. ((offersEui or offersTwich) and "No addon settings ticked. The EllesmereUI profile and TwichUI's own settings are imported with their own buttons below.|r"
         or "Nothing ticked. Tick the addons whose settings you want to use.|r"))) or "")
     get.apply:SetEnabled(preview ~= nil)
     get.alt:SetEnabled(src ~= nil)
@@ -1836,6 +2161,7 @@ function W:Refresh()
     if gp and gp:IsShown() then RefreshParty() end
     if ep and ep:IsShown() then RefreshEuiShare() end
     if ip and ip:IsShown() then RefreshEuiImport() end
+    if tw and tw:IsShown() then RefreshTwichImport() end
 end
 
 function W:Show(which)
@@ -1876,8 +2202,9 @@ function W:AskAccept(sender, offer)
         OnAlt = function() SH:Respond(sender, true, true) end,
         timeout = 110, whileDead = true, hideOnEscape = true, preferredIndex = 3,
     }
-    local text = ("%s wants to share their setup with you: %d addons, about %s.\n\nAccepting just downloads it. You choose what to apply afterwards."):format(
-        who, offer.addons or 0, ST.FormatSize(offer.bytes or 0))
+    local also = type(offer.twichui) == "table" and " and TwichUI's own settings" or ""
+    local text = ("%s wants to share their setup with you: %d addons%s, about %s.\n\nAccepting just downloads it. You choose what to apply afterwards."):format(
+        who, offer.addons or 0, also, ST.FormatSize(offer.bytes or 0))
     StaticPopup_Show("TWICHUI_OFFER", text, nil, sender)
 end
 

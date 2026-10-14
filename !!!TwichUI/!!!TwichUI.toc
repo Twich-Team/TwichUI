@@ -39,6 +39,7 @@ modules\AttuneSkin.lua
 setup\PackFile.lua
 setup\Setups.lua
 setup\Ellesmere.lua
+setup\TwichConfig.lua
 setup\Share.lua
 setup\Group.lua
 setup\CommTest.lua

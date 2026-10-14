@@ -454,6 +454,8 @@ function SH.BuildOffer(mine, id)
         from = SH.SelfName(), created = mine.created, version = mine.version,
         tables = list, em = mine.editModeHash, addons = ST.CountAddons(mine),
         bytes = ST.PackBytes(mine),
+        -- TwichUI's own settings: only that they are there (a few numbers, not the settings)
+        twichui = R.TwichConfig and R.TwichConfig.OfferInfo(mine.twichui) or nil,
     }
 end
 
@@ -476,6 +478,9 @@ function SH.BuildData(mine, id, want, wantEM)
     payload.emHash = mine.editModeHash
     payload.addons = mine.addons
     payload.eui = mine.eui   -- one EllesmereUI profile, as EllesmereUI exported it
+    -- TwichUI's own settings, always in full (a few KB, however much else is saved): the group's values the
+    -- sender included, by name. Receivers that don't know the field ignore it.
+    payload.twichui = mine.twichui
     return payload
 end
 
@@ -507,7 +512,7 @@ end
 -- message path, so you can try the whole flow without a friend.
 function SH:SendTo(name, selfTest)
     local mine = ST.Mine()
-    if not mine or not (next(mine.tables or {}) or mine.eui) then return false, "Save your configuration first." end
+    if not mine or not (next(mine.tables or {}) or mine.eui or mine.twichui) then return false, "Save your configuration first." end
     local target = SH.FullName(name)
     if not target then return false, "Type your friend's name, or target them." end
     if target:find("#", 1, true) then
@@ -768,6 +773,12 @@ local function StoreReceived(sender, msg)
         end
     end
     pack.eui = R.Ellesmere.CleanEntry(msg.eui)   -- nil unless it is a well-formed EllesmereUI profile
+    -- TwichUI's own settings: kept only as the fields TwichUI names, each checked (setup/TwichConfig.lua). One
+    -- that can't be read is kept as a note saying so, so the review can say why there is nothing to apply.
+    if msg.twichui ~= nil and R.TwichConfig then
+        local okClean, clean = pcall(R.TwichConfig.CleanEntry, msg.twichui)
+        pack.twichui = okClean and clean or { status = "damaged" }
+    end
     if msg.em then
         pack.editMode, pack.editModeName, pack.editModeHash = msg.em, msg.emName, msg.emHash
     elseif old and old.editModeHash and old.editModeHash == msg.emHash then

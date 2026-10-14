@@ -12,15 +12,17 @@ is keyed by `"Name - Realm"` inside an account-wide variable.
 | Variable | Kind | Owner | Version | Holds |
 |---|---|---|---|---|
 | `TwichUIDB` | configuration | `Persist.lua`, `Core.lua`, `Profiles.lua`, each feature | `schema` (integer) | `profiles`, `profileState`, `profileKeys` (TwichUI's profiles; see `docs/profiles.md`), and the profile in use: `modules` (on/off switches), `ui` (places, text choices, `qol`, `foodDrink`, `brokerMenu`, `refreshments`, `refreshmentsStyle`, `chronicleLook`, `chronicleAppearance`, `mageSell`, `partyPins`, `pinsLook`, `pinsAppearance`, `pinsMapText`, `pinsBroker`, `pinsBrokerMenu`, `pinsEditorLook`), `gear` (preferences, stat weights, per-character tree choice), `shareTransport`, `whisperProbe`, `storedData` (addon-data scan notes), `pins` (local map pins, and a party session kept for one `/reload`; see `docs/party-pins.md`), `setup` (see below) |
-| `TwichUIDB.setup` | sharing records | `setup/Setups.lua`, `Share.lua`, `Ellesmere.lua` | covered by `schema` | `detected`/`selection` (last "find settings" result), `received` (setups friends sent), `trusted`, `recommend`, and the one-shot hand-offs `pending`, `scanNext`, `restoreNext`, `lastScan`, `eui` |
-| `TwichUIShareDB` | your shareable setup | `setup/Setups.lua` | `pack.format = 2` | `pack` |
+| `TwichUIDB.setup` | sharing records | `setup/Setups.lua`, `Share.lua`, `Ellesmere.lua`, `TwichConfig.lua` | covered by `schema` | `detected`/`selection` (last "find settings" result), `received` (setups friends sent, each possibly with a `twichui` part), `trusted`, `recommend`, `twichui` (which of TwichUI's own settings go into your setup; absent until ticked), `twichUndo` (the values the last import of someone else's TwichUI settings replaced; one slot), and the one-shot hand-offs `pending`, `scanNext`, `restoreNext`, `lastScan`, `eui` |
+| `TwichUIShareDB` | your shareable setup | `setup/Setups.lua` | `pack.format = 2` | `pack` (addon tables, an EllesmereUI profile, and optionally `twichui`: TwichUI's own settings by feature, `schema` 1; see `docs/twichui-sharing.md`) |
 | `TwichUIBackupDB` | undo snapshots | `setup/Setups.lua` | none | one `[character]` snapshot per character that applied a setup |
 | `TwichUIRestoreDB` | restore points ("Backups") | `setup/Restore.lua` | none | `points[]` |
 | `TwichUIChronicleDB` | feature data (the Journey Chronicle) | `chronicle/Data.lua` | `version` (integer) | `chars["Name - Realm"]` records: entries, notes, tracking state |
 
 Kept apart on purpose: configuration (`TwichUIDB`) is small and safe to reset; sharing records and restore points are
 other addons' tables kept verbatim; the Chronicle is the player's own writing. The Chronicle is never part of
-sharing, setups, backups or exports (names beginning `TwichUI` are refused everywhere; a test checks it).
+sharing, setups, backups or exports (names beginning `TwichUI` are refused everywhere; a test checks it). TwichUI's own
+settings are shared only as the curated `twichui` part of a setup, by named field (`docs/twichui-sharing.md`), never
+as a table and never from a walk of the saved variables.
 
 Profiles: TwichUI's own are described in `docs/profiles.md`: named sets of `modules`/`ui`/`gear`, the one in use kept
 where it always was, the others in `TwichUIDB.profiles`, each character's choice in `TwichUIDB.profileKeys`. Map

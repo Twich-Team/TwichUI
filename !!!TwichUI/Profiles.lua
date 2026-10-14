@@ -292,6 +292,14 @@ local function Finish(kind)
     return true, kind, info
 end
 
+-- Every feature follows the options now in place, after something other than a profile operation changed
+-- them as a whole (importing a shared configuration: setup/TwichConfig.lua). The same steps as a profile
+-- change; the caller has already written the values, in place, with plain assignments.
+-- Returns true, kind, { failed, reload }.
+function PF.Refresh(kind)
+    return Finish(kind or "refresh")
+end
+
 ---------------------------------------------------------------------------
 -- Operations. Each returns true, what was done, { failed, reload }, or false and a reason code (PF.Explain).
 ---------------------------------------------------------------------------

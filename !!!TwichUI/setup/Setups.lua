@@ -249,19 +249,32 @@ local function ActiveEditModeString()
     if ok2 and type(str) == "string" and #str > 0 then return str, info.layoutName end
 end
 
+-- Saves your setup: the ticked addon settings of this session's scan, an EllesmereUI profile if one is chosen,
+-- and TwichUI's own settings if they are included. TwichUI's settings and the EllesmereUI profile are live
+-- data and need no scan: with none this session, a save keeps the addon settings already saved and renews the
+-- live parts.
 function ST:SaveMine(includeEditMode)
-    if not ST.capture then return 0 end
+    local TC = R.TwichConfig
+    local withTwichUI = TC and TC.WillInclude()
+    if not ST.capture and not withTwichUI then return 0 end
     local tables, count = {}, 0
-    for name, sel in pairs(db.selection) do
-        local cap = ST.capture[name]
-        if sel and cap and not R.Ellesmere.IsTable(name) then
-            tables[name] = { owner = cap.owner, data = DeepCopy(cap.data), hash = ST.Hash(cap.data) }
+    local old = ST.Mine()
+    if ST.capture then
+        for name, sel in pairs(db.selection) do
+            local cap = ST.capture[name]
+            if sel and cap and not R.Ellesmere.IsTable(name) then
+                tables[name] = { owner = cap.owner, data = DeepCopy(cap.data), hash = ST.Hash(cap.data) }
+                count = count + 1
+            end
+        end
+    elseif old and type(old.tables) == "table" then
+        for name, e in pairs(old.tables) do
+            tables[name] = { owner = e.owner, data = DeepCopy(e.data), hash = e.hash }
             count = count + 1
         end
     end
     local eui, euiWhy = R.Ellesmere.Build()
     ST.euiError = euiWhy
-    local old = ST.Mine()
     local mine = {
         format = 2,
         created = time(),
@@ -272,12 +285,13 @@ function ST:SaveMine(includeEditMode)
         eui = eui,
         addons = ST:BuildAddonList(),
     }
+    if withTwichUI then mine.twichui = TC.Build() end
     if includeEditMode then
         mine.editMode, mine.editModeName = ActiveEditModeString()
         mine.editModeHash = mine.editMode and LibDeflate:Adler32(mine.editMode) or nil
     end
     TwichUIShareDB.pack = mine
-    return count + (eui and 1 or 0)
+    return count + (eui and 1 or 0) + (mine.twichui and 1 or 0)
 end
 
 ---------------------------------------------------------------------------
@@ -467,6 +481,7 @@ end
 
 function ST.PackBytes(pack)
     local total = pack and pack.eui and type(pack.eui.str) == "string" and #pack.eui.str or 0
+    if pack and type(pack.twichui) == "table" and R.TwichConfig then total = total + R.TwichConfig.Bytes(pack.twichui) end
     for _, e in pairs(pack and pack.tables or {}) do
         local _, b = Inspect(e.data or {})
         total = total + b
@@ -732,7 +747,8 @@ function ST.StorageItems()
         items[#items + 1] = {
             key = "mine", kind = "Your configuration",
             label = "Your saved configuration",
-            detail = ("version %d, %d addons with settings"):format(mine.version or 1, ST.CountAddons(mine)),
+            detail = ("version %d, %d addons with settings%s"):format(mine.version or 1, ST.CountAddons(mine),
+                type(mine.twichui) == "table" and mine.twichui.status == "ok" and ", TwichUI settings" or ""),
             bytes = ST.SizeOf(mine), remove = function() ST:DeleteMine() end,
             warn = "Friends keep the copy they already have. You can save a new one any time.",
         }
@@ -757,6 +773,8 @@ function ST.StorageItems()
             }
         end
     end
+    local tc = R.TwichConfig and R.TwichConfig.StorageItem()
+    if tc then items[#items + 1] = tc end
     if next(db.detected or {}) then
         items[#items + 1] = {
             key = "search", kind = "Settings search",
@@ -812,6 +830,14 @@ local function CleanPackFields(pack)
     for _, key in ipairs({ "created", "version", "received" }) do Field(key, Num) end
     for _, key in ipairs({ "source", "sourceName", "sender", "editMode", "editModeName" }) do Field(key, Text) end
     if pack.eui ~= nil and type(pack.eui) ~= "table" then pack.eui = nil; reset = reset + 1 end
+    -- TwichUI's own settings (setup/TwichConfig.lua): its contents were checked when they arrived and are
+    -- checked again when reviewed and applied; here only the shape the windows read.
+    if pack.twichui ~= nil then
+        local t = pack.twichui
+        if type(t) ~= "table" or (t.status == "ok" and type(t.groups) ~= "table") then
+            pack.twichui = nil; reset = reset + 1
+        end
+    end
     if pack.addons ~= nil then
         if type(pack.addons) ~= "table" then
             pack.addons = nil; reset = reset + 1
@@ -888,6 +914,28 @@ function ST.NormalizeDb(d)
         else
             DropIf(p.tables, function(name, v) return type(name) ~= "string" or v ~= true end, "pending-dropped")
             if Num(p.stamp) == nil then p.stamp = 0 end
+        end
+    end
+    -- Which of TwichUI's own settings go into your setup (setup/TwichConfig.lua), and the Undo copy of the last
+    -- import of someone else's.
+    local tw = d.twichui
+    if tw ~= nil then
+        if type(tw) ~= "table" then d.twichui = nil
+        else
+            if type(tw.included) ~= "boolean" then tw.included = false end
+            if type(tw.skip) ~= "table" then tw.skip = {} end
+            DropIf(tw.skip, function(id, v) return type(id) ~= "string" or v ~= true end, "list-entry-dropped")
+        end
+    end
+    local undo = d.twichUndo
+    if undo ~= nil then
+        if type(undo) ~= "table" or type(undo.profile) ~= "string" or type(undo.fields) ~= "table" then
+            d.twichUndo = nil
+            Repair("backup-dropped")
+        else
+            if type(undo.weights) ~= "table" then undo.weights = {} end
+            DropIf(undo.fields, function(_, u) return type(u) ~= "table" or type(u.g) ~= "string" or type(u.s) ~= "string"
+                or type(u.k) ~= "string" or type(u.had) ~= "boolean" end, "list-entry-dropped")
         end
     end
     -- EllesmereUI profile bookkeeping (setup/Ellesmere.lua).

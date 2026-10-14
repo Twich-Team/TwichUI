@@ -870,6 +870,18 @@ function EX.ShareContents(p)
     end
     c.eui = mine.eui and { name = mine.eui.name, version = mine.eui.euiVersion, chars = type(mine.eui.str) == "string" and #mine.eui.str or 0 }
     c.editMode = mine.editMode and { name = mine.editModeName, chars = #mine.editMode }
+    -- TwichUI's own settings: the features and the number of values, never the values themselves
+    if type(mine.twichui) == "table" and mine.twichui.status == "ok" and type(mine.twichui.groups) == "table" then
+        local TC = R.TwichConfig
+        local features, values = {}, 0
+        for id, data in pairs(mine.twichui.groups) do
+            local g = TC and TC.Group(id)
+            features[#features + 1] = g and g.label or id
+            values = values + CountTables(data)
+        end
+        table.sort(features)
+        c.twichui = { features = features, bytes = ST.SizeOf(mine.twichui.groups), slots = values }
+    end
     c.recommended = CountTables(mine.addons)
     c.identity = {
         { "offer.from", p.offer.from, "your character's name, so they know who it's from" },
@@ -890,7 +902,8 @@ function EX.ShareContents(p)
         end
     end
     c.rules = {
-        "TwichUI's own saved data (its settings, backups, received setups and the Journey Chronicle): the settings scan skips every name starting with TwichUI, and a receiving TwichUI refuses one.",
+        "TwichUI's own saved variables are never sent as tables: the settings scan skips every name starting with TwichUI, and a receiving TwichUI refuses one. Backups, Undo copies, received setups, the Journey Chronicle and map pins are not part of a setup.",
+        "TwichUI's own settings are a part of a setup of their own, only when ticked: the values of the features you ticked, by name (setup/TwichConfig.lua). Positions, per-character records, anything that acts for you and anything that decides what you send or accept stay behind.",
         "Anything in an addon's settings that isn't plain data (code, game objects) is left out when the setup is saved.",
         "Transfers in progress, diagnostics, previews and scan results: kept in memory only, never in a setup.",
         "Your Edit Mode layout is included only when \"Include my Edit Mode layout\" was ticked as you saved.",
@@ -951,13 +964,15 @@ Summary = function(source, root, reveal)
     elseif kind == "mine" then
         Line(lines, "Saved", When(root.created) or "not recorded")
         Line(lines, "Version", ("%s (format %s)"):format(tostring(root.version or "?"), tostring(root.format or "?")))
-        Line(lines, "Contains", ("%d addons%s%s"):format(ST.CountAddons(root), root.eui and ", an EllesmereUI profile" or "", root.editMode and ", an Edit Mode layout" or ""))
+        Line(lines, "Contains", ("%d addons%s%s%s"):format(ST.CountAddons(root), root.eui and ", an EllesmereUI profile" or "",
+            type(root.twichui) == "table" and ", TwichUI's own settings" or "", root.editMode and ", an Edit Mode layout" or ""))
         Line(lines, "Size", Size(root))
     elseif kind == "received" then
         Line(lines, "From", Name(root.sourceName or root.sender))
         Line(lines, "Received", When(root.received) or "not recorded")
         Line(lines, "Version", tostring(root.version or "?"))
-        Line(lines, "Contains", ("%d addons%s"):format(ST.CountAddons(root), root.eui and ", an EllesmereUI profile" or ""))
+        Line(lines, "Contains", ("%d addons%s%s"):format(ST.CountAddons(root), root.eui and ", an EllesmereUI profile" or "",
+            type(root.twichui) == "table" and ", TwichUI's own settings" or ""))
         Line(lines, "Size", Size(root))
     elseif kind == "chronicle" then
         local chars, entries, notes = 0, 0, 0

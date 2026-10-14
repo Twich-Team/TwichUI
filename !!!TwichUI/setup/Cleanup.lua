@@ -1126,7 +1126,7 @@ function CL.Scan(progress, done)
             local n = 0
             if type(pack) == "table" and not P.IsHeld("TwichUIShareDB") then
                 n = 1
-                if not (type(pack.tables) == "table" and next(pack.tables)) and not pack.eui then
+                if not (type(pack.tables) == "table" and next(pack.tables)) and not pack.eui and not pack.twichui then
                     Add({
                         id = "mine-empty", tier = "strong", group = "Your saved setup", category = "Empty saved setup",
                         title = "Your saved setup",
@@ -1204,7 +1204,7 @@ function CL.Scan(progress, done)
                     for name, e in next, type(pack.tables) == "table" and pack.tables or {} do
                         if ST.ValidEntry(name, e) then usable = usable + 1 end
                     end
-                    if usable == 0 and not pack.eui and not PendingSource("recv:" .. sender) then
+                    if usable == 0 and not pack.eui and not pack.twichui and not PendingSource("recv:" .. sender) then
                         Add({
                             id = "received-empty:" .. sender, tier = "strong", group = "Received setups", category = "Received setup with nothing to apply",
                             title = "Received setup", subject = sender,

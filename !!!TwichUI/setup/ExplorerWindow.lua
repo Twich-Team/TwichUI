@@ -376,6 +376,9 @@ local function ShareReport(lines)
         Add(("EllesmereUI profile \"%s\"%s: %s characters, exported by EllesmereUI itself."):format(
             c.eui.name or "?", c.eui.version and (" (EllesmereUI " .. c.eui.version .. ")") or "", SD.Num(c.eui.chars)))
     end
+    if c.twichui then
+        Add(("TwichUI's own settings: %s (about %s)."):format(table.concat(c.twichui.features, ", "), ST.FormatSize(c.twichui.bytes)))
+    end
     if c.editMode then Add(("Edit Mode layout \"%s\": %s characters."):format(c.editMode.name or "?", SD.Num(c.editMode.chars))) end
     Add(("Recommended addons: %d (names, versions and download links)."):format(c.recommended))
     Add("")
