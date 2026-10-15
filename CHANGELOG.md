@@ -1,8 +1,9 @@
 # TwichUI changelog
 
-From the first release after v3.0.12, release notes are generated from commit messages and published with each
-GitHub release and CurseForge file (see RELEASING.md); this file is no longer updated. It keeps the notes written
-by hand until then, including the Unreleased section below: changes made after v3.0.12.
+TwichUI's first release for WoW: Forever's launch is 1.0.0. From then on, release notes are generated from commit
+messages and published with each GitHub release and CurseForge file (see RELEASING.md); this file is no longer
+updated. It keeps the notes written by hand during development, when the builds were numbered 3.0.x, including
+the Unreleased section below: changes made after 3.0.12.
 
 ## Unreleased
 - **Saved Data Explorer: advanced cleanup** (new, off until you turn it on; **needs checking in the game**). `/tui saved` stays read-only. **Enable advanced cleanup...** (left, under the sources) shows a warning, needs a tick and a confirmation, shows **ADVANCED CLEANUP ENABLED** for as long as it is on, and ends when the window closes (it is never saved). With it on, **Delete...** reviews the chosen entry first: the exact path and key, what it holds, how much sits under it, whether it is saved, what follows, and whether it can be undone; then you confirm. It is checked again just before it is removed, and nothing is removed if anything changed since the review. Removals go through TwichUI's own functions (a backup's Delete, a profile's Delete, a pin's Remove, ...), and the rest stays protected with the reason: the saved variables, the schema and profile bookkeeping, the options of the profile in use, this character's own records, kept pins, queued applies, and anything a newer TwichUI wrote. **Find cleanup candidates** (works in read-only mode) suggests entries TwichUI's own code can't use, entries worth a look, and facts such as another character's records; each says why, with the evidence and what is not known, and nothing is picked for you. A dated entry is never called unused because of its age. **Undo last cleanup** puts back the last removal, from a copy kept in memory only (bounded; never saved). Also new: Profiles can forget another character's recorded choice, and the Chronicle can forget another character's whole record, both only through this feature. See `docs/saved-data-explorer.md`.

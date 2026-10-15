@@ -2,7 +2,7 @@
 ## Title: |cffC9A24ATwich|rUI Settings
 ## Notes: The settings window for TwichUI. Loaded only when you open TwichUI's settings; keep it turned on alongside TwichUI.
 ## Author: twichie
-## Version: 3.0.12
+## Version: 1.0.0
 ## RequiredDeps: !!!TwichUI
 ## LoadOnDemand: 1
 ## IconTexture: Interface\AddOns\!!!TwichUI\media\icon

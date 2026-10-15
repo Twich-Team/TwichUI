@@ -34,6 +34,8 @@ STABLE_TAG = re.compile(r"^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
 PRE_TAG = re.compile(r"^v([0-9]+)\.([0-9]+)\.([0-9]+)-(alpha|beta)\.([0-9]+)\.g([0-9a-f]{7})$")
 # TwichConfig keeps the addon version of a shared setup only when it is at most 40 characters (L.addon).
 MAX_VERSION_LEN = 40
+# The version the first stable release takes; prereleases made before any stable tag build toward it.
+FIRST_VERSION = (1, 0, 0)
 MAX_ENTRIES = 100
 MAX_SUBJECT = 200
 MAX_HIGHLIGHTS = 20000
@@ -119,7 +121,8 @@ def plan(ref, sha=None, repo_url=None, cwd=None):
         if earlier_stable:
             previous = max(earlier_stable, key=earlier_stable.get)
             if earlier_stable[previous] >= stable[tag]:
-                meta["warnings"].append(f"{tag} is not newer than {previous}, which this commit already contains")
+                raise ReleaseError(f"{tag} is not newer than {previous}, which this commit already contains; "
+                                   "nothing was published (retired tags belong outside v*, e.g. archive/v3.0.12)")
         meta["base"] = tag
     else:
         stable_here = sorted(t for t in at_head if STABLE_TAG.match(t))
@@ -135,12 +138,12 @@ def plan(ref, sha=None, repo_url=None, cwd=None):
         if earlier_stable:
             base = max(earlier_stable, key=earlier_stable.get)
             major, minor, patch = earlier_stable[base]
+            target = (major, minor, patch + 1)
             distance = int(git("rev-list", "--count", f"{base}..HEAD", cwd=cwd).strip())
         else:
-            base, (major, minor, patch) = None, (0, 0, 0)
+            base, target = None, FIRST_VERSION
             distance = int(git("rev-list", "--count", "HEAD", cwd=cwd).strip())
-            meta["warnings"].append("no stable tag is reachable: versions start from 0.0.1")
-        version = f"{major}.{minor}.{patch + 1}-{channel}.{distance}.g{head[:7]}"
+        version = "{}.{}.{}".format(*target) + f"-{channel}.{distance}.g{head[:7]}"
         meta["base"] = base
         previous = nearest(sorted(t for t in reachable if pre(t)), "HEAD", cwd) or base
 
@@ -241,22 +244,25 @@ def notes(meta, repo_url, highlights, cwd):
         if repo_url:
             since += f": [compare]({repo_url}/compare/{prev['commit'][:12]}...{head[:12]})"
         out += [since + ".", ""]
+    elif meta["channel"] == "release":
+        out += ["The first release.", ""]
     else:
         out += ["No earlier release was found, so this lists the whole history.", ""]
     if highlights:
         out += ["### Highlights", "", highlights, ""]
+    if meta["channel"] == "release" and not prev:
+        groups = {kind: [] for kind, _ in SECTIONS}  # a first release lists no development history
+        total = hidden = 0
     for kind, title in SECTIONS:
         if groups[kind]:
             out += [f"### {title}", ""] + groups[kind] + [""]
     listed = sum(len(v) for v in groups.values())
     if total > listed:
         out += [f"…and {total - listed} more.", ""]
-    if not total:
+    if not total and prev:
         out += ["No player-facing changes are listed." if hidden else "No new commits.", ""]
     if hidden:
         out += [f"_{hidden} maintenance commit{'s' if hidden != 1 else ''} (build, tests, documentation) not listed._", ""]
-    if meta["channel"] == "release":
-        out += ["Notes for v3.0.12 and earlier are in CHANGELOG.md.", ""]
     return "\n".join(out).rstrip() + "\n"
 
 
@@ -530,21 +536,26 @@ def publish(meta, zip_path, notes_text, gh, cf, log=print):
 
     # Assets on the draft: the zip, and release.json for addon managers that install from GitHub releases.
     # An asset already uploaded by an earlier attempt is kept, so GitHub and CurseForge hold the same zip.
+    # GitHub drops the leading "!!!" from asset names, so the zip goes up as TwichUI-...zip, the name
+    # release.json gives (the zip's folders inside keep their names).
+    asset_name = zip_path.name.lstrip("!")
     with tempfile.TemporaryDirectory() as d:
         with zipfile.ZipFile(zip_path) as z:
             interface = toc_field(z.read(TOCS[CORE]).decode("utf-8", "replace"), "Interface")
         rj = Path(d, "release.json")
-        rj.write_text(json.dumps({"releases": [{"name": PROJECT, "version": tag, "filename": zip_path.name,
+        rj.write_text(json.dumps({"releases": [{"name": PROJECT, "version": tag, "filename": asset_name,
                                                  "nolib": False, "metadata": [{"flavor": "forever",
                                                                                "interface": int(interface)}]}]}))
         existing = {a["name"]: a for a in rel.get("assets", [])}
-        for path, name in ((zip_path, zip_path.name), (rj, "release.json")):
+        for path, name in ((zip_path, asset_name), (rj, "release.json")):
             a = existing.get(name)
             if a and a.get("state") == "uploaded":
                 continue
             if a:
                 gh.delete_asset(a["id"])
-            gh.upload_asset(rel["id"], path, name)
+            uploaded = gh.upload_asset(rel["id"], path, name) or {}
+            if uploaded.get("name", name) != name:
+                raise ReleaseError(f"GitHub stored {name} as {uploaded.get('name')}; release.json would not match it")
             log(f"Attached {name}.")
 
     cf_state = state.get("curseforge")

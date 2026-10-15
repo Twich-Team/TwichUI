@@ -7,9 +7,9 @@ version and the release notes. No version or changelog needs editing by hand.
 | --- | --- | --- | --- |
 | a commit to `main` | alpha | prerelease (never "Latest") | alpha file |
 | a commit to `beta` | beta | prerelease (never "Latest") | beta file |
-| a tag `vMAJOR.MINOR.PATCH` (e.g. `v3.0.13`) | release | release, marked Latest | release file |
+| a tag `vMAJOR.MINOR.PATCH` (e.g. `v1.0.0`) | release | release, marked Latest | release file |
 
-Nothing else publishes: not other branches, not pull requests, not tags of another form (`v3.1.0-beta1` is
+Nothing else publishes: not other branches, not pull requests, not tags of another form (`v1.1.0-beta1` is
 ignored).
 
 ## One-time setup
@@ -30,16 +30,18 @@ ignored).
 One version string per build, used for both `.toc` files, the zip name, the GitHub tag and title, and the
 CurseForge display name:
 
-- Stable: the tag without its `v`. Tag `v3.0.13` -> `3.0.13`, `!!!TwichUI-v3.0.13-forever.zip`.
-- Alpha and beta: `<next patch>-<channel>.<commits>.g<commit>`, for example `3.0.13-alpha.23.g3e8a397`:
-  - `<next patch>`: the patch after the highest stable tag the commit contains (after `v3.0.12`: `3.0.13`).
+- Stable: the tag without its `v`. Tag `v1.0.0` -> `1.0.0`, `!!!TwichUI-v1.0.0-forever.zip`. A stable tag must be
+  newer than every stable tag its commit already contains, or nothing is published.
+- Alpha and beta: `<next patch>-<channel>.<commits>.g<commit>`, for example `1.0.1-alpha.23.g3e8a397`:
+  - `<next patch>`: the patch after the highest stable tag the commit contains (after `v1.0.0`: `1.0.1`).
     A prerelease never guesses whether the next release is a patch, minor or major; the stable tag decides
-    that, and `3.0.13-alpha...` sorts below any of them.
+    that, and `1.0.1-alpha...` sorts below any of them.
   - `<commits>`: how many commits the build is past that tag, so builds on one branch count up.
   - `g<commit>`: the first 7 characters of the commit it was built from.
   - A tag the commit does not contain (made on another branch) does not count: the version says what the
-    build contains. So a `beta` branch that has not merged `v3.0.13` still builds `3.0.13-beta...`.
-  - With no stable tag at all, versions start at `0.0.1-alpha.<all commits>...` (and the build warns).
+    build contains. So a `beta` branch that has not merged `v1.0.1` still builds `1.0.1-beta...`.
+  - Before the first stable tag, prereleases build toward the first release, 1.0.0:
+    `1.0.0-alpha.<all commits>.g<commit>`.
 - The same commit always gets the same version, so a re-run makes the same release, not a second one.
 - At most 40 characters: shared setups keep the addon version only up to that length.
 
@@ -48,7 +50,7 @@ repository stays as it is, so the `## Version:` committed in the `.toc` files is
 local checkout, `tools/deploy.sh`) shows; it is no longer changed for releases. In game, `/tui version`, the
 group check and the diagnostics report the packaged version.
 
-TwichUI's group check compares the `MAJOR.MINOR.PATCH` part only: `3.0.13-alpha.23...` counts as 3.0.13.
+TwichUI's group check compares the `MAJOR.MINOR.PATCH` part only: `1.0.1-alpha.23...` counts as 1.0.1.
 
 ## Each stable release
 1. Optional, before tagging: `./tools/update_training_data.sh` and commit it if it changed (the build refreshes
@@ -56,9 +58,9 @@ TwichUI's group check compares the `MAJOR.MINOR.PATCH` part only: `3.0.13-alpha.
    `./tests/run.sh`. `docs/release-hardening.md` has the support scope, the profiling steps and the in-game
    checklist. If the release changes what is saved, follow `docs/persistence.md` ("Adding a schema 2") first.
 2. Tag the commit and push the tag:
-   `git tag v3.0.13 && git push origin v3.0.13`.
+   `git tag v1.0.1 && git push origin v1.0.1`.
    To add hand-written highlights above the generated notes, make it an annotated tag:
-   `git tag -a v3.0.13 -F highlights.md` (the message is Markdown; a message that is only the tag name is ignored).
+   `git tag -a v1.0.1 -F highlights.md` (the message is Markdown; a message that is only the tag name is ignored).
 3. The workflow tests, packages and publishes. Check the run's summary for the version and notes.
 
 Pushing `main` and the tag together is fine: the alpha build of a commit that carries a stable tag is skipped
@@ -83,7 +85,10 @@ Generated from commit messages, the same Markdown for GitHub and CurseForge:
 - The notes are only as good as the commit subjects: write them for players ("Easy Fishing: reel in with the
   same key"), not "refinement".
 
-`CHANGELOG.md` keeps the notes written by hand up to v3.0.12 and is no longer updated.
+The first release (no earlier stable tag) lists no commits, only "The first release." and its highlights: write
+them in the annotated tag.
+
+`CHANGELOG.md` keeps the notes written by hand during development (the 3.0.x builds) and is no longer updated.
 
 ## Re-runs, failures and recovery
 The publish job works in steps, recording each in the GitHub release it creates:
@@ -110,6 +115,14 @@ recorded step. What each failure leaves:
   did not make: nothing is published. Sort out the tag or release by hand.
 - A file published to CurseForge by mistake: CurseForge's project page lets you archive or delete it; the
   workflow never deletes anything. For GitHub, delete the release and its tag.
+
+## Versions before 1.0.0
+TwichUI was built as 3.0.x during development; the first release for WoW: Forever's launch is 1.0.0. The 3.0.x
+tags are kept as `archive/v3.0.1` ... `archive/v3.0.12`: outside `v*`, so they publish nothing and don't count
+as stable tags. Never push a `v3.*` tag again (keep the `archive/` names, and delete stray `v3.*` tags in any
+clone, so `git push --tags` can't bring them back): a pushed `v3.0.x` tag would publish that old version as Latest.
+Saved data is upgraded by its schema number, not by the addon version, so going from 3.0.12 to 1.0.0 changes
+nothing for players' saved settings.
 
 ## Keeping prereleases
 Nothing is deleted automatically: every alpha and beta stays on GitHub (as a prerelease with its tag) and on

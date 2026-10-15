@@ -151,18 +151,43 @@ class PlanTests(unittest.TestCase):
         r.tag("v1.0.0")
         _, notes = r.plan("refs/tags/v1.0.0")
         self.assertNotIn("Highlights", notes)
-        self.assertIn("No earlier release", notes)
+        self.assertIn("The first release.", notes)
 
     def test_first_release_without_tags(self):
         r = self.repo
         r.commit("first")
         head = r.commit("second")
         meta, notes = r.plan("refs/heads/main")
-        self.assertEqual(meta["version"], f"0.0.1-alpha.2.g{head[:7]}")
+        self.assertEqual(meta["version"], f"1.0.0-alpha.2.g{head[:7]}", "prereleases build toward 1.0.0")
         self.assertIsNone(meta["previous"])
-        self.assertTrue(meta["warnings"])
         self.assertIn("- first", notes)
         self.assertIn("whole history", notes)
+
+    def test_version_reset_with_retired_tags_archived(self):
+        r = self.repo
+        r.commit("old work")
+        r.tag("archive/v3.0.12")  # a retired 3.x tag, moved out of v*
+        head = r.commit("launch prep")
+        meta, _ = r.plan("refs/heads/main")
+        self.assertEqual(meta["version"], f"1.0.0-alpha.2.g{head[:7]}")
+        r.run("tag", "v1.0.0")
+        meta, notes = r.plan("refs/tags/v1.0.0")
+        self.assertEqual(meta["version"], "1.0.0")
+        self.assertIsNone(meta["previous"])
+        self.assertIn("The first release.", notes)
+        self.assertNotIn("launch prep", notes, "a first release lists no development history")
+        r.commit("after launch")
+        meta, _ = r.plan("refs/heads/main")
+        self.assertTrue(meta["version"].startswith("1.0.1-alpha.1."))
+
+    def test_stable_tag_below_a_contained_one_is_refused(self):
+        r = self.repo
+        r.commit("old work")
+        r.tag("v3.0.12")  # a retired tag left in place
+        r.commit("launch")
+        r.tag("v1.0.0")
+        with self.assertRaisesRegex(rel.ReleaseError, "not newer than v3.0.12"):
+            r.plan("refs/tags/v1.0.0")
 
     def test_diverged_branches_use_the_tags_they_contain(self):
         r = self.repo
@@ -425,7 +450,9 @@ class FakeGitHub:
 
     def upload_asset(self, rid, path, name):
         self.calls.append(f"asset {name}")
-        self._find(rid)["assets"].append({"id": len(self.calls), "name": name, "state": "uploaded"})
+        asset = {"id": len(self.calls), "name": name.lstrip("!"), "state": "uploaded"}  # as GitHub renames
+        self._find(rid)["assets"].append(asset)
+        return dict(asset)
 
 
 class FakeCurseForge:
@@ -461,13 +488,15 @@ class PublishTests(unittest.TestCase):
     def test_happy_path_then_rerun(self):
         cf = FakeCurseForge([("uploaded", 99)])
         self.assertEqual(self.publish(cf), "published")
-        self.assertEqual(self.gh.calls, ["create", "asset " + self.zip.name, "asset release.json",
+        self.assertEqual(self.gh.calls, ["create", "asset " + self.zip.name.lstrip("!"), "asset release.json",
                                          "publish latest=false"])
         self.assertEqual(cf.uploads[0]["releaseType"], "alpha")
         self.assertEqual(cf.uploads[0]["displayName"], "v1.0.1-alpha.2.gabcdef0-forever")
         self.assertEqual(cf.uploads[0]["gameVersions"], [1234])
         self.assertEqual(self.state()["curseforge"], "uploaded")
         self.assertEqual(self.gh.tags[self.meta["tag"]], self.meta["commit"])
+        self.assertEqual([a["name"] for a in self.gh.releases_[0]["assets"]],
+                         ["TwichUI-v1.0.1-alpha.2.gabcdef0-forever.zip", "release.json"])
         self.assertEqual(self.publish(FakeCurseForge([])), "already-published")
         self.assertEqual(len(cf.uploads), 1)
 
@@ -489,7 +518,7 @@ class PublishTests(unittest.TestCase):
         self.assertEqual(self.publish(cf), "published")
         self.assertEqual(len(cf.uploads), 1)
         self.assertEqual(self.gh.calls.count("create"), 1)
-        self.assertEqual(self.gh.calls.count("asset " + self.zip.name), 1)
+        self.assertEqual(self.gh.calls.count("asset " + self.zip.name.lstrip("!")), 1)
 
     def test_ambiguous_upload_is_not_retried(self):
         with self.assertRaisesRegex(rel.ReleaseError, "outcome unknown"):
