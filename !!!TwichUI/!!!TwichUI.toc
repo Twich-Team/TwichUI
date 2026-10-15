@@ -189,6 +189,7 @@ diag\ChronicleLook.lua
 diag\Zones.lua
 diag\Sharing.lua
 diag\Saved.lua
+diag\Memory.lua
 diag\Pins.lua
 diag\Window.lua
 

@@ -1001,6 +1001,14 @@ function UI.Selected()
 end
 function UI.Frame() return win end
 
+-- What has been made so far, for /tui diagnostics: pages described, pages drawn (kept until a reload), and
+-- whether search has its index. Read only; it builds nothing.
+function UI.Stats()
+    local drawn = 0
+    for _ in pairs(state.views) do drawn = drawn + 1 end
+    return { described = #K.list, drawn = drawn, window = win ~= nil, searchIndex = Search.Built() }
+end
+
 -- page: a page key (unknown or nil: the start page, or the page shown last time); setting: a setting's name
 -- (TWICHUI_ prefix optional) or a row id, to go to and mark.
 function UI.Open(page, setting)

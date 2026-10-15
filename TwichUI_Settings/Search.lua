@@ -99,6 +99,9 @@ end
 -- Forgets the index (the pages were described again; only tests do that).
 function Search.Reset() index = nil end
 
+-- Whether the index has been made this session (for /tui diagnostics).
+function Search.Built() return index ~= nil end
+
 local function Words(query)
     local list = {}
     for word in query:lower():gmatch("%S+") do list[#list + 1] = word end
@@ -112,22 +115,32 @@ local function AllIn(words, text)
     return true
 end
 
+-- Every word in one text or the other. The same as AllIn on the two joined (a word has no spaces, so it can't
+-- span the join), without making that joined text for every entry at every keystroke.
+local function AllInEither(words, text, more)
+    for _, w in ipairs(words) do
+        if not (text:find(w, 1, true) or more:find(w, 1, true)) then return false end
+    end
+    return true
+end
+
 -- Returns { { entry, score, tipOnly }, ... } best first, at most Search.LIMIT, for a query of plain text.
 function Search.Run(query)
     query = (query or ""):gsub("^%s+", ""):gsub("%s+$", "")
     if query == "" then return {} end
     local words = Words(query)
     local low = query:lower()
+    local wordStart = "%f[%w]" .. words[1]:gsub("%p", "%%%0")   -- the first word at the start of a word
     local results = {}
     for _, e in ipairs(Search.Build()) do
         local score
         if e.labelLow == low then score = 120
-        elseif e.labelLow:sub(1, #low) == low then score = 100
+        elseif e.labelLow:find(low, 1, true) == 1 then score = 100   -- starts with it
         elseif AllIn(words, e.labelLow) then
             score = 80
-            if e.labelLow:find("%f[%w]" .. words[1]:gsub("%p", "%%%0")) then score = 85 end
+            if e.labelLow:find(wordStart) then score = 85 end
         elseif AllIn(words, e.hay) then score = 50
-        elseif e.tip and AllIn(words, e.hay .. " " .. e.tip) then score = 10 end
+        elseif e.tip and AllInEither(words, e.hay, e.tip) then score = 10 end
         if score then
             if e.kind == "page" then score = score + 5 elseif e.kind == "section" then score = score + 2 end
             results[#results + 1] = { entry = e, score = score, tipOnly = score < 20 }

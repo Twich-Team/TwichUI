@@ -336,6 +336,55 @@ do
   local found = Search.Run("refreshment shares")
   assert(found[1] and found[1].entry.page == "refreshmentShares" and found[1].entry.kind == "page")
 end
+-- Matching each word in the summary or the tooltip separately (instead of joining the two for every entry at
+-- every keystroke) ranks exactly as joining them did: the same results, scores and order as the old way, for
+-- whole and partial words, many matches, no match, and words split between a setting's name and its tooltip.
+do
+  local function OldRun(query)
+    query = query:gsub("^%s+", ""):gsub("%s+$", "")
+    if query == "" then return {} end
+    local words = {}
+    for w in query:lower():gmatch("%S+") do words[#words + 1] = w end
+    local function AllIn(text) for _, w in ipairs(words) do if not text:find(w, 1, true) then return false end end return true end
+    local low = query:lower()
+    local out = {}
+    for _, e in ipairs(Search.Build()) do
+      local score
+      if e.labelLow == low then score = 120
+      elseif e.labelLow:sub(1, #low) == low then score = 100
+      elseif AllIn(e.labelLow) then
+        score = 80
+        if e.labelLow:find("%f[%w]" .. words[1]:gsub("%p", "%%%0")) then score = 85 end
+      elseif AllIn(e.hay) then score = 50
+      elseif e.tip and AllIn(e.hay .. " " .. e.tip) then score = 10 end
+      if score then
+        if e.kind == "page" then score = score + 5 elseif e.kind == "section" then score = score + 2 end
+        out[#out + 1] = { entry = e, score = score }
+      end
+    end
+    table.sort(out, function(a, b) if a.score ~= b.score then return a.score > b.score end return a.entry.order < b.entry.order end)
+    for i = #out, Search.LIMIT + 1, -1 do out[i] = nil end
+    return out
+  end
+  -- one word only in a setting's name, another only in its tooltip
+  local split
+  for _, e in ipairs(Search.Build()) do
+    local a, b = e.labelLow:match("%a%a%a%a+"), e.tip and e.tip:match("%a%a%a%a%a+")
+    if a and b and not e.hay:find(b, 1, true) then split = a .. " " .. b break end
+  end
+  assert(split, "an entry with a word only in its tooltip")
+  local tipOnly = false
+  for _, q in ipairs({ "minimap", "pins", "p", "a", "so", "sound", "notification sound", "zone card", "card zone",
+      "reset", "chronicle", "xyzzy", split }) do
+    local new, old = Search.Run(q), OldRun(q)
+    assert(#new == #old, q .. ": " .. #new .. " results, the old way " .. #old)
+    for i = 1, #new do
+      assert(new[i].entry == old[i].entry and new[i].score == old[i].score, q .. ": result " .. i .. " differs")
+      if new[i].tipOnly then tipOnly = true end
+    end
+  end
+  assert(tipOnly, "the comparison covered a match found only in a tooltip")
+end
 -- through the window: type, move, Enter
 R:OpenSettings("overview")
 local box
