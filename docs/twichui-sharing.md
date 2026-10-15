@@ -43,7 +43,7 @@ and `LIMITS` supply defaults and ranges, so the schema cannot drift from the fea
 | Pin appearance | the pin window, map text, data bar menu and editor looks |
 | Gear comparison | hints, bag marks, and how hints behave |
 | Gear stat weights | weights, rankings and "weigh by ranking", by class and talent tree (account-wide) |
-| Mage | launchers, refreshments panel and its look, shares and reserve, trade button (not selling, not auto-fill) |
+| Mage | launchers, refreshments panel and its look, shares and reserve, trade button, and how selling is handled (`ui.mageSellMode`: sell directly or mark with EllesmereUI). Not whether selling is on, Dry run, the never-sell list or the confirmation, and not auto-fill |
 | Addon skins | the four EllesmereUI-based skins' switches (they need a reload) |
 | RestedXP guide window | the skin's look, text and timer bars (not the on/off switch) |
 | SpeakStone speech frame | the switch and the whole look |
@@ -60,7 +60,7 @@ registries and every key the settings window can save is either shared or listed
 
 | Reason | Keys |
 |---|---|
-| Acts for you | `mageSell*`, `mageRefreshmentsAutoFill`, `qolSummons`, `qolResurrect*`, `qolReleasePvP`, `qolDuels*`, `qolGuideWaypoint`, `ui.qol`, `ui.mageSell`, `ui.guideWaypoint` |
+| Acts for you | `mageSell*` (the switches; not `ui.mageSellMode`), `mageRefreshmentsAutoFill`, `qolSummons`, `qolResurrect*`, `qolReleasePvP`, `qolDuels*`, `qolGuideWaypoint`, `ui.qol`, `ui.mageSell` (the never-sell list and `euiAck`, your confirmation of EllesmereUI marking), `ui.guideWaypoint` |
 | Sent to or accepted from others | `setupSharing`, `acceptSetups`, `groupCheck`, `partyPins`, `shareTransport` |
 | Where things sit | `foodDrinkUnlock`, every `*Position`/`*Place`, `ui.settingsWindow`, the refreshments panel's and pin window's place |
 | Other | `restedxpSkin` (turning it on chooses RestedXP's own theme), `restedxpSkinState`, `gear.trees` (per character), pins, `setup`, profiles and their bookkeeping, `welcome`, `schema` |

@@ -48,7 +48,7 @@ Every feature has its own page in the TwichUI settings (`/tui options`), and eve
 - **Travel and Conjuring launchers:** Data bar launchers for your teleports and portals and for your best Conjure Food and Conjure Water.
 - **Refreshments panel:** Works out how much food and water your party or raid needs, lets you conjure by click or key, and keeps a checklist of who you've supplied.
 - **Trade help:** Fill a trade with the planned refreshments. Trades are never accepted for you.
-- **Sell leftover food and drink:** Optionally sell ordinary, non-conjured food and drink to a vendor, with a dry-run mode that only reports what would be sold.
+- **Sell leftover food and drink:** Optionally sell ordinary, non-conjured food and drink to a vendor, with a dry-run mode that only reports what would be sold. With EllesmereUI's bags you can instead have TwichUI mark those items as junk there, and let EllesmereUI sell them.
 
 ### Addon skins
 - **EllesmereUI look:** Matching skins for Attune, Auctionator, the Forever Dungeon Journal and WhatsTraining (needs EllesmereUI).

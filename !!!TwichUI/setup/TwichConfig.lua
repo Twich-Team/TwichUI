@@ -117,6 +117,7 @@ local ENUM = {
     bagStyle = Set({ "gilded", "green", "badge" }),
     clock = Set({ "12", "24" }),
     gives = Set({ "share", "owed" }),
+    sellMode = Set({ "direct", "ellesmere" }),
 }
 
 ---------------------------------------------------------------------------
@@ -524,7 +525,7 @@ local function Define()
     g.custom = Weights
 
     g = Group("mage", "Mage", { page = "mage",
-        note = "Used when you play a Mage; the settings are stored either way. Selling and filling trades by itself stay yours." })
+        note = "Used when you play a Mage; the settings are stored either way. Selling and filling trades by itself stay yours: whether they are on, Dry run and your never-sell list never travel. How selling is handled (sell directly, or mark as junk with EllesmereUI) does; marking waits for your own confirmation on this computer." })
     Switches(g, { "mageTravel", "mageConjure", "mageRefreshments", "mageRefreshmentsTrade" })
     do
         local MT, MC, RB, RT, RF, RP = R.MageTravel, R.MageConjure, R.RefreshmentsBroker, R.RefreshmentsTrade, R.Refreshments, R.RefreshmentsPanel
@@ -532,6 +533,8 @@ local function Define()
         Scalar(g, { "ui" }, "mageConjureText", "enum", MC and MC.DEFAULT_TEXT, { values = ChoiceSet(MC and MC.TEXTS) })
         Scalar(g, { "ui" }, "refreshmentsText", "enum", RB and RB.DEFAULT_TEXT, { values = ChoiceSet(RB and RB.TEXTS) })
         Scalar(g, { "ui" }, "refreshmentsTradeGives", "enum", RT and RT.DEFAULT_GIVES, { values = ENUM.gives })
+        local SL = R.MageSell
+        Scalar(g, { "ui" }, "mageSellMode", "enum", SL and SL.DEFAULT_MODE, { values = ENUM.sellMode })
         local MS = R.MenuStyle
         Table(g, { "ui", "brokerMenu" }, MS, LOOK, LOOK_ENUMS)
         Table(g, { "ui", "refreshmentsStyle" }, RP and RP.Style, LOOK, LOOK_ENUMS)

@@ -5,6 +5,76 @@ For anyone changing the feature. Code: `modules/MageSell.lua` (classifier, never
 (Mage page), `modules.mageSell*` in `Core.lua`. Tests: `tests/test_mage_sell.lua`. **Nothing here has been tried in the
 game.** Selling is destructive, so read "What is not verified" before releasing.
 
+## Handling mode: sell directly, or mark as junk with EllesmereUI
+
+`ui.mageSellMode` (profile; `"direct"` is the default, and anything but an explicit `"ellesmere"` reads as direct).
+Everything in "What it does" and "The run" below is the **Sell directly** mode and is unchanged. **Mark as junk with
+EllesmereUI** uses the same classifier (`MS.Judge` / `MS.Scan`, so the same exclusions, kinds switches, never-sell
+list and Dry run) and never sells: `MS.Begin` refuses with `marking-mode`, and no `UseContainerItem` is called.
+Code: `modules/EllesmereJunk.lua` (the only place that talks to EllesmereUI), the marking part of
+`modules/MageSell.lua`. Tests: `tests/test_mage_sell_mark.lua`, `tests/test_mage_sell_settings.lua`.
+
+### What was read, in EllesmereUI Bags 9.5.5 (installed copy; the `reference_addons` copy is 9.3.5 and has no Junk Marker)
+
+| Question | Answer (file, symbol) |
+|---|---|
+| Where is it? | `_G.EUI_CategoryManager`, set by `EllesmereUIBags_Categories.lua` as the Bags module loads. Not a documented API: it is the accessor the module's own UI calls. |
+| How is an item marked? | `AssignItem(itemID, JUNK_KEY)` (`JUNK_KEY = "Junk"`). Its header comment says every marking route (header coin, a drop on the Junk row, its "+") goes through it, then `EUI_Bags:RefreshInventory()`. `ToggleJunk` flips, so it is not used. |
+| What identity does a mark have? | **The item ID**: `EllesmereUIDB.bagItemAssignments[itemID] = "Junk"`. Not a stack, bag slot, link or character. The table is in `EllesmereUIDB` (account-wide); `bagJunkPrev[itemID]` remembers the category an item was filed in so unmarking can put it back. |
+| What is junk? | `IsJunk(itemID, quality)`: marked, or grey and not filed elsewhere (and not a quest item). `IsJunkMarkerEnabled()` is Bag Top Bar Icons > Junk Icon (`bagShowJunkIcon ~= false`); with it off, nothing is junk. |
+| Who sells? | `EUI_Bags:SellJunk()`. `EllesmereUIQoL` calls it at `MERCHANT_SHOW` when `EllesmereUIDB.autoSellJunk ~= false` (its "Auto Sell Junk"), and the bag header's "Sell Junk" button calls it at a merchant. It takes every carried copy of a marked ID, except no-price items, equipment-set gear, pinned items and refundable purchases. |
+| Marked items are unmarked how? | The junk coin's mark mode, or `ToggleJunk`/`UnassignItem` through the UI. TwichUI never calls these. |
+
+### What TwichUI asks of it, and when
+
+- **Available** means: `EllesmereUI` and `EllesmereUIBags` loaded (not just installed), `EUI_CLIENT_BLOCKED` not set,
+  `EUI_CategoryManager` with `AssignItem`, `IsJunk`, `IsJunkMarkerEnabled` and a string `JUNK_KEY`, `EllesmereUIDB` a
+  table, and the Junk Marker on (`EJ.Status()` says which one fails: `not-installed`, `disabled`, `not-loaded`,
+  `blocked`, `not-ready`, `marker-off`). It is checked on every look, so it resumes by itself when EllesmereUI loads
+  (`ADDON_LOADED`) or the Junk Marker is turned on (next bag change).
+- **When items are marked**: on `BAG_UPDATE_DELAYED` (and entering the world, ending combat, and `ADDON_LOADED` of an
+  EllesmereUI addon), folded into one look by a 0.5 s timer. Items whose data hasn't loaded wait for
+  `GET_ITEM_INFO_RECEIVED` / `SPELL_TEXT_UPDATE`, at most three looks in a row that find the same ones still loading.
+  Nothing marks at a merchant, so marks exist before a visit and EllesmereUI's own `MERCHANT_SHOW` handler finds them.
+- **A look**: `MS.Scan`, then one `EJ.Mark` per item ID. An ID is marked only when **every** carried stack of it is
+  eligible (a locked, bound or quest-flagged copy keeps the whole ID out for now), because the mark is for the ID. The
+  slot is judged again immediately before `AssignItem`. Already junk (marked, or grey) is not touched; an item the
+  player filed in a category of their own is not touched (this is the one read of `bagItemAssignments`; without it
+  `AssignItem` would replace their filing). After a mark, `EUI_Bags:RefreshInventory()` is asked once, as its own UI
+  does; nothing else is repainted.
+- **Not in combat** (EllesmereUI's own coin refuses it too); a held look runs at `PLAYER_REGEN_ENABLED`.
+- **Guards**: a look from inside a look is ignored; a mark EllesmereUI does not keep is tried 3 times per session and
+  then left alone; an item this session marked that is no longer junk was taken off by the player and is not marked
+  again until a reload (the never-sell list is the lasting way to keep an item out).
+
+### Confirmation, dry run, status
+
+- Choosing the mode the first time shows a confirmation that says a mark covers every copy, on every character, until
+  unmarked in EllesmereUI, and that TwichUI never removes marks. It is kept as `ui.mageSell.euiAck = true`: account
+  wide, **not shared** and not part of a profile. A mode that arrives from a setup or another profile has no
+  confirmation here, and marks nothing until the **EllesmereUI marking status** row is clicked and confirmed.
+- Dry run applies: nothing is marked; at a merchant one line says how many kinds would be marked. Dry run starts
+  on, so choosing the mode alone changes nothing in EllesmereUI.
+- The row shows Active, Dry run, Needs confirmation, Not available or Not in use; its tooltip and `/tui sell` say why.
+  The option is annotated "(not available now)" while the integration can't be used, and the saved choice is kept:
+  nothing is switched to selling, and nothing is sold, in the meantime.
+- Whether marked items sell is EllesmereUI's: `/tui sell` and diagnostics say "Auto Sell Junk" or "its Sell Junk
+  button only" from `EllesmereUIDB.autoSellJunk` and whether `EllesmereUIQoL` is loaded. TwichUI never changes it.
+  Items marked after the merchant opened wait for the next visit or the Sell Junk button.
+
+### What happens to marks
+
+Nothing TwichUI did is ever undone by TwichUI: switching mode, turning the feature off or adding an item to the
+never-sell list leaves existing marks as they are. Ownership is not tracked across sessions, so no "remove TwichUI's
+marks" exists; unmark in EllesmereUI (the junk coin, then click the item) or its Junk Items window. The player's own
+marks are never changed, and an item they filed elsewhere is never taken from that category.
+
+### Not verified in the game
+
+That `EUI_CategoryManager:AssignItem` called from another addon repaints the bags and that EllesmereUI's sweep sells
+what was marked here; the 9.5.5 source was read, not run. Whether a client with the same addon at a different
+version keeps the same functions (a missing one reads as `not-ready`). The test mock of EllesmereUI follows its source.
+
 ## What it does, and what it never does
 
 - Mages only, off by default (`modules.mageSell`). Other Mage features don't turn it on. On another class nothing is

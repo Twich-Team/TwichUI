@@ -195,7 +195,8 @@ A.TwichUIDB.ui.partyPins = A.TwichUIDB.ui.partyPins or {}
 A.TwichUIDB.ui.partyPins.position = { x = 5, y = 5 }
 A.TwichUIDB.ui.guideWaypoint = { ["Player-1-Sentinel"] = { x = 1 } }
 A.TwichUIDB.ui.qol = { summonsFrom = "anyone", summonsWait = 9 }
-A.TwichUIDB.ui.mageSell = { never = { [12345] = true } }
+A.TwichUIDB.ui.mageSell = { never = { [12345] = true }, euiAck = true }
+A.TwichUIDB.ui.mageSellMode = "ellesmere"
 A.TwichUIDB.modules.qolSummons = true
 A.TwichUIDB.modules.mageSell = true
 A.TwichUIDB.modules.mageSellDryRun = false
@@ -260,11 +261,12 @@ do
   -- ("pins" and "qol" are feature names here, not the saved tables of those names)
   for _, name in ipairs({ "shareTransport", "profiles", "profileKeys", "profileState", "setup", "trees", "position",
       "foodDrinkPosition", "trainingPosition", "settingsWindow", "guideWaypoint", "mageSell", "qolSummons",
-      "mageSellDryRun", "welcome", "received", "points", "chars", "never", "summonsFrom" }) do
+      "mageSellDryRun", "euiAck", "welcome", "received", "points", "chars", "never", "summonsFrom" }) do
     Check(not keys[name], "the payload has no key " .. name)
   end
   Check(data.twichui.groups.mage.modules.mageSell == nil and data.twichui.groups.mage.modules.mageRefreshmentsAutoFill == nil,
     "selling and auto-fill are not in it")
+  Check(data.twichui.groups.mage.ui.mageSellMode == "ellesmere", "how selling is handled is carried (sell directly or mark with EllesmereUI)")
   Check(data.twichui.groups.qol.modules.qolSummons == nil and data.twichui.groups.qol.modules.qolQuickKeybind ~= nil,
     "only the quick keybind button of Quality of life is in it")
   Check(data.twichui.groups.general.modules.quietLogin == false, "a false value is carried")
@@ -358,6 +360,9 @@ do
   Check(not NLB.Own("welcome") and NLB.Get("welcome", "titleColor") == "ff445566", "a card without one follows the shared look")
 end
 Check(B.TwichUI:Enabled("welcomeBack") == false and B.TwichUI:Enabled("chronicleDeaths") == true, "switches follow, including off")
+Check(B.TwichUI.MageSell.Mode() == "ellesmere", "the handling mode follows")
+Check(B.TwichUI.MageSell.Acknowledged() == false and B.TwichUIDB.modules.mageSell ~= true,
+  "but the receiver has not confirmed marking and selling is not on: nothing is marked until they do")
 Check(B.TwichUI.Switches.ReloadPending(), "a reload is pending for the skins")
 Check(#report.reload >= 3, "the report names the reloads")
 -- B now uses exactly A's shared configuration, group by group (the pinsLook group was not shared, so it is B's own)

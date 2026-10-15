@@ -21,6 +21,20 @@ local function Sell()
     local function Line(fmt, ...) lines[#lines + 1] = fmt:format(...) end
     Line("switch: %s; sell food: %s; sell drink: %s; DRY RUN: %s", s.switchOn and "on" or "off", D.Flag(s.food), D.Flag(s.drink),
         s.dryRun and "on (nothing is sold)" or "off (sells for real)")
+    Line("handling mode: %s; marking confirmed on this computer: %s; EllesmereUI Junk Marker: %s; how marked items sell: %s",
+        s.mode == "ellesmere" and "mark as junk with EllesmereUI" or "sell directly", D.Flag(s.acknowledged), s.bridge,
+        s.selling == "auto" and "EllesmereUI's Auto Sell Junk" or (s.selling == "button" and "its Sell Junk button only" or "unknown"))
+    if s.mode == "ellesmere" then
+        local k, l = s.marks, s.markLast
+        Line("marking: %s. this session: looks %d, kinds marked %d, already junk %d, filed by you elsewhere %d, failed %d, "
+            .. "kept out for a stack that is kept %d, not kept by EllesmereUI %d, changed before marking %d, taken off by you %d, held for combat %d",
+            s.markText, k.looks, k.marked, k.already, k.filed, k.failed, k.mixed, k.stuck, k.stale, k.released, k.deferred)
+        if l then
+            Line("last look: %s; marked %d, already junk %d, filed elsewhere %d, failed %d, still loading %d%s",
+                l.dry and "dry run" or "for real", l.marked, l.already, l.filed, l.failed, l.pending or 0,
+                l.dry and (", would mark %d"):format(l.would or 0) or "")
+        end
+    end
     Line("listening for: %s", #s.events > 0 and table.concat(s.events, ", ") or "nothing")
     Line("merchant open: %s (visit %d); run in progress: %s; blocked by the game this session: %s",
         D.Flag(s.merchantOpen), s.visit, s.running and ("stack %d of %d, limit %d%s"):format(s.running.index, s.running.total,
@@ -57,7 +71,9 @@ local function Sell()
     if not s.enabled then status = "off"
     elseif s.enabled and not (m.conjuredText and m.tooltipApi) then
         status, reason = "waiting", "conjured-check-unavailable"   -- nothing can be shown not to be conjured, so nothing is sold
-    elseif s.blocked then status, reason = "waiting", "blocked-by-the-game" end
+    elseif s.mode == "ellesmere" and s.markState ~= "active" and s.markState ~= "dry-run" then
+        status, reason = "waiting", s.markState   -- needs-ack, or why EllesmereUI's Junk Marker can't be used
+    elseif s.blocked and s.mode ~= "ellesmere" then status, reason = "waiting", "blocked-by-the-game" end
     return {
         configured = s.switchOn, initialized = D.When(s.enabled, #s.events > 0), status = status, reason = reason, lines = lines,
         limits = {
@@ -65,6 +81,7 @@ local function Sell()
             "Quest relevance is only what the game's quest flag and tooltip say; an item a quest needs without being flagged can't be told apart.",
             "A sale is counted only when the bag slot changes. Value is from sell prices, not from gold received.",
             "The buyback list holds a limited number of entries; other sales can still push this run's entries out.",
+            "EllesmereUI mode: a mark is per item ID for the whole account, and TwichUI never unmarks. Whether marked items sell depends on EllesmereUI's own Auto Sell Junk and Sell Junk button.",
         },
     }
 end

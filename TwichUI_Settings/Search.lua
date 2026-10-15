@@ -29,6 +29,7 @@ local ALIASES = {
     mageTravel = "teleport portal",
     mageConjure = "water bread conjure",
     mageSell = "vendor merchant junk",
+    mageSellMode = "junk ellesmere bags mark sell marker",
     quietLogin = "chat spam login messages",
     media = "fonts sounds libsharedmedia lsm",
     chronicleClock = "24-hour 12-hour time clock",

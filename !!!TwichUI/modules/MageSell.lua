@@ -29,6 +29,13 @@
 -- is sold only if it is unbound, priced, Common, plain food/drink and its tooltip says nothing: the one
 -- case no layer can see. See docs/mage-sell.md.
 --
+-- Handling mode (ui.mageSellMode): "direct" (the default; everything below) or "ellesmere". In "ellesmere" this
+-- file never sells: the same classifier (MS.Judge/MS.Scan) picks the items and each item ID is marked as junk
+-- through EllesmereUI's Junk Marker (EllesmereJunk.lua); EllesmereUI files and sells it by its own rules. A mark
+-- is per item ID for the whole account, so an ID is marked only when every carried stack of it is eligible, and
+-- only after the player has confirmed that once (ui.mageSell.euiAck, never shared). Marks are never removed here.
+-- Marking is driven by bag changes, not by the merchant, so the junk is in place before a visit.
+--
 -- Selling: one run per merchant visit, started a moment after MERCHANT_SHOW, through the same
 -- classifier the preview uses. Each stack is revalidated at the moment it is sold (feature, class,
 -- merchant open, not in combat, item still in that slot with that count, not locked, classification
@@ -113,6 +120,59 @@ function MS.DryRun()
 end
 function MS.SellsFood() return Switch("mageSellFood") end
 function MS.SellsDrink() return Switch("mageSellDrink") end
+
+---------------------------------------------------------------------------
+-- Handling mode. "direct" sells at merchants; "ellesmere" marks the same items as junk in EllesmereUI. Anything
+-- but an explicit "ellesmere" reads as "direct", so a damaged value never starts the other behavior.
+---------------------------------------------------------------------------
+MS.DEFAULT_MODE = "direct"
+MS.MODES = { { "direct", "Sell directly" }, { "ellesmere", "Mark as junk with EllesmereUI" } }
+
+function MS.Mode()
+    local ui = TwichUIDB and TwichUIDB.ui
+    return (type(ui) == "table" and ui.mageSellMode == "ellesmere") and "ellesmere" or "direct"
+end
+
+local function GroupTable(create)
+    local ui = TwichUIDB and TwichUIDB.ui
+    if create then
+        if type(TwichUIDB) ~= "table" then return nil end
+        if type(TwichUIDB.ui) ~= "table" then TwichUIDB.ui = {} end
+        ui = TwichUIDB.ui
+        if type(ui.mageSell) ~= "table" then ui.mageSell = {} end
+    end
+    return type(ui) == "table" and type(ui.mageSell) == "table" and ui.mageSell or nil
+end
+
+-- Whether this player has confirmed, on this computer, that EllesmereUI marks reach every copy of an item and
+-- stay until they are unmarked. Never shared or carried by a profile: a setup someone sends can choose the mode
+-- but cannot confirm it for you.
+function MS.Acknowledged()
+    local g = GroupTable(false)
+    return g ~= nil and g.euiAck == true
+end
+
+function MS.Acknowledge()
+    local g = GroupTable(true)
+    if not g then return false end
+    g.euiAck = true
+    return true
+end
+
+-- Returns true, or false and why: "invalid", "needs-ack" (choosing EllesmereUI before confirming), "no-settings".
+function MS.SetMode(value)
+    if value ~= "direct" and value ~= "ellesmere" then return false, "invalid" end
+    if value == "ellesmere" and not MS.Acknowledged() then return false, "needs-ack" end
+    if type(TwichUIDB) ~= "table" then return false, "no-settings" end
+    if type(TwichUIDB.ui) ~= "table" then TwichUIDB.ui = {} end
+    TwichUIDB.ui.mageSellMode = value
+    MS.Refresh()
+    return true
+end
+
+-- The feature is on and sells itself / marks in EllesmereUI.
+function MS.SellsDirectly() return MS.Enabled() and MS.Mode() == "direct" end
+function MS.Marks() return MS.Enabled() and MS.Mode() == "ellesmere" end
 
 -- The most stacks one run sells: the buyback list's size less a margin, so the run's own first sales
 -- are still there at its end.
@@ -280,7 +340,7 @@ function MS.Judge(bag, slot, names, words, readOnly)
     if type(id) ~= "number" or not FD.IsFoodAndDrink(id) then return nil end
     local count = Plain(info.stackCount)
     local v = { id = id, bag = bag, slot = slot, count = type(count) == "number" and count or 0,
-        icon = Plain(info.iconFileID), name = Plain(info.itemName), eligible = false }
+        icon = Plain(info.iconFileID), name = Plain(info.itemName), quality = Plain(info.quality), eligible = false }
     local function Skip(why) v.why = why; return v end
 
     if MS.IsExcluded(id) then return Skip("excluded") end
@@ -453,7 +513,7 @@ end
 -- and the outcome code.
 local function Valid(r)
     if r.gen ~= generation then return false, "changed" end
-    if not MS.Enabled() then return false, "changed" end
+    if not MS.SellsDirectly() then return false, "changed" end
     if r.visit ~= visit or not MS.MerchantOpen() then return false, "closed" end
     if InCombat() then return false, "combat" end
     if not r.dry and MS.DryRun() then return false, "changed" end
@@ -528,6 +588,7 @@ end
 -- manual: asked for by the player's click (the automatic run is once per merchant visit).
 function MS.Begin(manual)
     if not MS.Enabled() then return false, "off" end
+    if MS.Mode() ~= "direct" then return false, "marking-mode" end   -- EllesmereUI sells in the other mode
     if run then return false, "busy" end
     if not R.Life.InWorld() then return false, "not-in-world" end
     if not MS.MerchantOpen() then return false, "no-merchant" end
@@ -566,6 +627,207 @@ local function Cancel()
 end
 
 ---------------------------------------------------------------------------
+-- Marking (mode "ellesmere"). Same eligibility as a sale (MS.Scan), then one EllesmereJunk.Mark per item ID.
+-- Event-driven: a bag change asks for a look, bursts are folded into one (BAG_UPDATE_DELAYED is already the end
+-- of a burst; a short timer folds the rest), and nothing runs on a timer of its own. A look that finds nothing
+-- new costs one pass over the bags and writes nothing, so EllesmereUI's own bag refresh (which this asks for
+-- only after it actually marked something) cannot start a cycle.
+---------------------------------------------------------------------------
+local EJ = R.EllesmereJunk
+local MARK_DELAY = 0.5         -- seconds a bag change waits, so a burst of changes is one look
+local MAX_ATTEMPTS = 3         -- times one ID's mark was not kept by EllesmereUI before it is left alone this session
+local MAX_INFO_STALLS = 3      -- looks in a row that found the same items still loading before waiting for a bag change
+local markActive = {}          -- [event] = handler, while registered for marking
+local markGen = 0              -- bumped to drop the look a timer is waiting for
+local markQueued = false       -- a look is already waiting
+local markBusy = false         -- inside a look: nothing asks for another look from within it
+local markDeferred = false     -- a look was held back (combat, loading screen) and runs when that ends
+local markAttempts = {}        -- [itemID] = times EllesmereUI did not keep a mark this session
+local markedByUs = {}          -- [itemID] = true for what this session marked: if it stops being junk, the player took it off
+local infoStalls, lastPending = 0, nil
+local markStats = { looks = 0, marked = 0, already = 0, filed = 0, failed = 0, mixed = 0, stuck = 0, deferred = 0, stale = 0, dry = 0,
+    released = 0 }
+local markLast                 -- the last look's outcome, counts only
+
+local function WantMark(event, handler, wanted)
+    if wanted and not markActive[event] then
+        markActive[event] = handler
+        R:On(event, handler)
+    elseif not wanted and markActive[event] then
+        R:Off(event, markActive[event])
+        markActive[event] = nil
+    end
+end
+
+local RequestMark, OnMarkInfo
+
+-- The items a look would mark: { { v, ... } one per item ID, in bag order; mixed = n; pending = n }.
+-- An ID is offered only when every carried stack of it is eligible, because the mark is for the ID.
+local function Candidates(readOnly)
+    local scan = MS.Scan(readOnly)
+    local kept, seen, list, mixed = {}, {}, {}, 0
+    for _, v in ipairs(scan.kept) do kept[v.id] = true end
+    for _, v in ipairs(scan.eligible) do
+        if not seen[v.id] then
+            seen[v.id] = true
+            if kept[v.id] then mixed = mixed + 1 else list[#list + 1] = v end
+        end
+    end
+    return list, mixed, scan.pending
+end
+
+local function RunMark(gen)
+    markQueued = false
+    if gen ~= markGen or not MS.Marks() then return end
+    if InCombat() then markDeferred = true; markStats.deferred = markStats.deferred + 1; return end
+    if not R.Life.InWorld() then markDeferred = true; return end
+    if not MS.Acknowledged() or not EJ.Ready() then return end
+    markDeferred = false
+    markBusy = true
+    local ok, err = pcall(function()
+        local list, mixed, pending = Candidates(false)
+        local dry = MS.DryRun()
+        local out = { marked = 0, already = 0, filed = 0, failed = 0, mixed = mixed, stuck = 0, stale = 0, would = 0, released = 0, dry = dry }
+        local names, words = FD.Vocabulary()
+        for _, v in ipairs(list) do
+            if dry then
+                local peek = EJ.Peek(v.id, v.quality)
+                if peek == "markable" then out.would = out.would + 1
+                elseif peek == "already" then out.already = out.already + 1
+                elseif peek == "filed-elsewhere" then out.filed = out.filed + 1 end
+            elseif markedByUs[v.id] then
+                -- marked here earlier: still junk is nothing to do; not junk now means the player unmarked it, and
+                -- that is theirs to decide (until a reload it is not marked again; the never-sell list is the
+                -- lasting way to keep an item out)
+                local peek = EJ.Peek(v.id, v.quality)
+                if peek == "markable" then out.released = out.released + 1
+                elseif peek == "already" then out.already = out.already + 1 end
+            elseif (markAttempts[v.id] or 0) >= MAX_ATTEMPTS then
+                out.stuck = out.stuck + 1
+            else
+                -- the slot again, as it is now: the same item, still eligible, before anything is asked of EllesmereUI
+                local again = MS.Judge(v.bag, v.slot, names, words, true)
+                if again and again.eligible and again.id == v.id then
+                    local result = EJ.Mark(v.id, again.quality)
+                    if result == "failed" then markAttempts[v.id] = (markAttempts[v.id] or 0) + 1 end
+                    if result == "marked" then
+                        out.marked = out.marked + 1
+                        markedByUs[v.id] = true
+                    elseif result == "already" then out.already = out.already + 1
+                    elseif result == "filed-elsewhere" then out.filed = out.filed + 1
+                    else out.failed = out.failed + 1 end
+                else
+                    out.stale = out.stale + 1
+                end
+            end
+        end
+        if out.marked > 0 then EJ.Repaint() end
+        -- items still loading are asked about again when the game says they arrived, a few times at most
+        if pending > 0 then
+            infoStalls = (pending == lastPending) and (infoStalls + 1) or 0
+            lastPending = pending
+        else
+            infoStalls, lastPending = 0, nil
+        end
+        local waiting = pending > 0 and infoStalls < MAX_INFO_STALLS
+        WantMark("GET_ITEM_INFO_RECEIVED", OnMarkInfo, waiting)
+        WantMark("SPELL_TEXT_UPDATE", OnMarkInfo, waiting)
+        out.pending = pending
+        markLast = out
+        markStats.looks = markStats.looks + 1
+        for _, k in ipairs({ "marked", "already", "filed", "failed", "mixed", "stuck", "stale", "released" }) do
+            markStats[k] = markStats[k] + out[k]
+        end
+        markStats.dry = markStats.dry + out.would
+    end)
+    markBusy = false
+    if not ok and R.Diag then R.Diag.Error("mage sell mark", err) end
+    if MS.OnChange then MS.OnChange() end
+end
+
+-- Asks for a look at the bags soon. Folds into one that is already waiting.
+function RequestMark()
+    if markBusy or markQueued or not MS.Marks() then return end
+    markQueued = true
+    local gen = markGen
+    C_Timer.After(MARK_DELAY, function() RunMark(gen) end)
+end
+
+local function OnMarkBags() infoStalls = 0; RequestMark() end
+function OnMarkInfo() RequestMark() end
+
+local function OnMarkResume()
+    if markDeferred then RequestMark() end
+end
+
+local function OnMarkAddon(name)
+    name = Plain(name)
+    if type(name) == "string" and name:find("^EllesmereUI") then RequestMark() end
+end
+
+local function OnMarkLeaving()
+    markGen = markGen + 1
+    markQueued = false
+    markDeferred = true          -- looked at again when the next world is entered
+end
+
+-- Start or stop listening to match the settings. Safe to call any time.
+local function RefreshMarking()
+    markGen = markGen + 1        -- a look waiting under older settings does nothing
+    markQueued = false
+    local on = MS.Marks()
+    WantMark("BAG_UPDATE_DELAYED", OnMarkBags, on)
+    WantMark("PLAYER_REGEN_ENABLED", OnMarkResume, on)
+    WantMark("PLAYER_ENTERING_WORLD", OnMarkResume, on)
+    WantMark("PLAYER_LEAVING_WORLD", OnMarkLeaving, on)
+    WantMark("ADDON_LOADED", OnMarkAddon, on)
+    if not on then
+        WantMark("GET_ITEM_INFO_RECEIVED", OnMarkInfo, false)
+        WantMark("SPELL_TEXT_UPDATE", OnMarkInfo, false)
+        markDeferred, infoStalls, lastPending = false, 0, nil
+        markedByUs, markAttempts = {}, {}
+        return
+    end
+    if R.Life.InWorld() then RequestMark() else markDeferred = true end
+end
+
+-- What marking is doing, for the settings page, the window and diagnostics:
+-- code, one sentence. Codes: off, direct, needs-ack, dry-run, active, or EllesmereJunk's reason.
+function MS.MarkState()
+    if not MS.ForPlayer() then return "off", "This is for Mages." end
+    if not MS.Enabled() then return "off", "Off." end
+    if MS.Mode() ~= "ellesmere" then return "direct", "Selling directly at merchants." end
+    if not MS.Acknowledged() then
+        return "needs-ack", "Waiting for your confirmation: choose this mode in the Mage options to read what it does and confirm."
+    end
+    local status = EJ.Status()
+    if status ~= "ready" then
+        return status, EJ.REASONS[status] .. " Nothing is marked and nothing is sold by TwichUI until it is."
+    end
+    if MS.DryRun() then return "dry-run", "Dry run: eligible items are only counted. Nothing is marked." end
+    return "active", "Eligible items are marked as junk in EllesmereUI's bags as they arrive."
+end
+
+-- One line on how EllesmereUI will sell what is marked ("auto", "button" or "unknown").
+function MS.MarkSelling() return EJ.Selling() end
+function MS.MarkLast() return markLast end
+
+-- A merchant opened in marking mode with Dry run on: say once what would be marked. Reads only.
+local function ReportDryMark(mine)
+    if mine ~= visit or not MS.Marks() or not MS.DryRun() or autoVisit == visit then return end
+    if not MS.Acknowledged() or not EJ.Ready() or InCombat() then return end
+    autoVisit = visit
+    local list = Candidates(true)
+    local would = 0
+    for _, v in ipairs(list) do
+        if EJ.Peek(v.id, v.quality) == "markable" then would = would + 1 end
+    end
+    if would == 0 then return end
+    Say("Dry run: would mark %d kind%s of ordinary food and drink as junk in EllesmereUI (every copy, from now on). Nothing was marked. Turn off Dry run in the Mage options to mark.",
+        would, would == 1 and "" or "s")
+end
+
+---------------------------------------------------------------------------
 -- Events: only while the feature is on
 ---------------------------------------------------------------------------
 local function OnShow()
@@ -575,7 +837,8 @@ local function OnShow()
     if run then Finish(run, "closed") end
     local mine = visit
     C_Timer.After(SETTLE, function()
-        if mine == visit and merchantOpen then MS.Begin(false) end
+        if mine ~= visit or not merchantOpen then return end
+        if MS.Mode() == "ellesmere" then ReportDryMark(mine) else MS.Begin(false) end
     end)
 end
 
@@ -599,15 +862,17 @@ end
 -- the options have changed under.
 function MS.Refresh()
     local on = MS.Enabled()
-    Want("MERCHANT_SHOW", OnShow, on)
-    Want("MERCHANT_CLOSED", OnClosed, on)
-    Want("PLAYER_REGEN_DISABLED", OnCombat, on)
-    Want("PLAYER_LEAVING_WORLD", OnLeaving, on)
+    local direct = on and MS.Mode() == "direct"
+    -- Marking mode listens at a merchant only to say what a dry run would mark; it never sells there.
+    local atMerchant = direct or (on and MS.Mode() == "ellesmere" and MS.DryRun())
+    Want("MERCHANT_SHOW", OnShow, atMerchant)
+    Want("MERCHANT_CLOSED", OnClosed, atMerchant)
+    Want("PLAYER_REGEN_DISABLED", OnCombat, direct)
+    Want("PLAYER_LEAVING_WORLD", OnLeaving, atMerchant)
     if run then Cancel() end
-    if not on then
-        merchantOpen = false
-        MS.ClearCache()
-    end
+    if not atMerchant then merchantOpen = false end
+    if not on then MS.ClearCache() end
+    RefreshMarking()
     if MS.OnChange then MS.OnChange() end
 end
 
@@ -626,6 +891,7 @@ function MS.Snapshot()
         drink = MS.SellsDrink(), dryRun = MS.DryRun(), merchantOpen = MS.MerchantOpen(), visit = visit,
         blocked = blocked, limit = MS.Limit(), excluded = #MS.Excluded(), cache = cacheSize, last = last,
         conjuredKnown = 0, stats = {},
+        mode = MS.Mode(), acknowledged = MS.Acknowledged(), marks = {}, markLast = markLast,
         markers = {
             conjuredText = type(_G.ITEM_CONJURED) == "string" and _G.ITEM_CONJURED ~= "",
             questText = type(_G.ITEM_BIND_QUEST) == "string" and _G.ITEM_BIND_QUEST ~= "",
@@ -635,10 +901,15 @@ function MS.Snapshot()
         },
     }
     for k, v in pairs(stats) do out.stats[k] = v end
+    for k, v in pairs(markStats) do out.marks[k] = v end
+    out.markState, out.markText = MS.MarkState()
+    out.selling = EJ.Selling()
+    out.bridge = EJ.Status()
     for _ in pairs(FD.CONJURED) do out.conjuredKnown = out.conjuredKnown + 1 end
     for _ in pairs(MS.CONJURED_EXTRA) do out.conjuredKnown = out.conjuredKnown + 1 end
     local events = {}
     for event in pairs(active) do events[#events + 1] = event end
+    for event in pairs(markActive) do events[#events + 1] = event .. " (marking)" end
     table.sort(events)
     out.events = events
     if run then

@@ -129,6 +129,7 @@ modules\RefreshmentsBroker.lua
 
 # Mage selling: sells plain, non-conjured food and drink at merchants (Mages, off until turned on, dry run
 # first; reads items as modules\FoodDrink.lua does and uses the Chronicle palette for its window)
+modules\EllesmereJunk.lua
 modules\MageSell.lua
 modules\MageSellWindow.lua
 

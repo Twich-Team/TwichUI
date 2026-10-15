@@ -78,21 +78,84 @@ K.Page({
 
         local MSL, MSW = R.MageSell, R.MageSellWindow
         if MSL then
-            Header("Sell ordinary food and drink", "Optional. Sells plain, non-conjured food and drink when you open a merchant, so conjured refreshments are what your bags hold. Off by default. Conjured items, special food, quest items, anything locked or without a sell price, and anything on your never-sell list are always kept.")
+            Header("Sell ordinary food and drink", "Optional. Sells plain, non-conjured food and drink when you open a merchant, so conjured refreshments are what your bags hold; or, if you use EllesmereUI's bags, marks them as junk there and lets it sell them. Off by default. Conjured items, special food, quest items, anything locked or without a sell price, and anything on your never-sell list are always left alone.")
             local sell = Toggle("mageSell", "Sell non-conjured food and drink",
-                "When you open a merchant, TwichUI sells the ordinary food and drink in your bags: plain items that only restore health or mana. It keeps Mage-conjured food and water (made by you or another Mage), buff food, feasts, potions and reagents, quest items, locked items, items with no sell price, and anything on your never-sell list; when it can't tell, it keeps the item.\n\nIt starts in Dry run, which only says what it would sell. A visit sells at most a few stacks so your own sales stay in the merchant's Buyback tab, which holds a limited number; other sales can still push entries out. Nothing is destroyed, bought or taken from the bank, mail or anywhere but your bags.\n\nOff by default. Other Mage features don't turn it on.")
+                "When this is on, TwichUI handles the ordinary food and drink in your bags: plain items that only restore health or mana. It leaves Mage-conjured food and water (made by you or another Mage), buff food, feasts, potions and reagents, quest items, locked items, items with no sell price, and anything on your never-sell list; when it can't tell, it leaves the item. How it handles them is the next choice: it sells them itself when you open a merchant, or marks them as junk for EllesmereUI.\n\nIt starts in Dry run, which only says what it would do. Selling directly sells at most a few stacks a visit so your own sales stay in the merchant's Buyback tab, which holds a limited number; other sales can still push entries out. Nothing is destroyed, bought or taken from the bank, mail or anywhere but your bags.\n\nOff by default. Other Mage features don't turn it on.")
             local function SellOn() return MSL.Enabled() end
+            local function Marking() return MSL.Enabled() and MSL.Mode() == "ellesmere" end
+            local EJ = R.EllesmereJunk
+            local modeRow
+            local MODE_TIP = "Sell directly: TwichUI sells the items itself when you open a merchant.\n\nMark as junk with EllesmereUI: TwichUI sells nothing. It marks the same items as junk in EllesmereUI's bags as they arrive, so they sit in its Junk section, and EllesmereUI sells them by its own rules.\n\nA mark is for the kind of item, not for one stack: every copy you carry or pick up later, on any of your characters, is treated as junk until you unmark it with EllesmereUI's junk coin. Turning this feature off, or switching back to Sell directly, does not remove marks. Needs EllesmereUI's Bags with its Junk Marker on. EllesmereUI sells marked items itself only while its Auto Sell Junk is on; otherwise press its Sell Junk button at a merchant."
+            local function ModeChoices()
+                local label = "Mark as junk with EllesmereUI"
+                if EJ and not EJ.Ready() then label = label .. "  (not available now)" end
+                return {
+                    { "direct", "Sell directly", "TwichUI sells the items when you open a merchant." },
+                    { "ellesmere", label, "TwichUI marks the items as junk in EllesmereUI's bags. EllesmereUI files and sells them. A mark covers every copy of that item." },
+                }
+            end
+            local function ConfirmEllesmere(accept)
+                StaticPopupDialogs.TWICHUI_MAGE_SELL_MARK = {
+                    text = "%s", button1 = "Mark with EllesmereUI", button2 = CANCEL or "Cancel", showAlert = 1,
+                    OnAccept = function() accept() end,
+                    timeout = 0, whileDead = 1, hideOnEscape = 1, preferredIndex = 3,
+                }
+                StaticPopup_Show("TWICHUI_MAGE_SELL_MARK",
+                    "Mark ordinary food and drink as junk in EllesmereUI?\n\nA mark is for the kind of item, not for one stack. Every copy of it that you carry or pick up later, on any of your characters, is treated as junk by EllesmereUI: it goes to its Junk section and is sold by its Auto Sell Junk or its Sell Junk button.\n\nTwichUI never removes marks, whether you switch back or turn the feature off. Unmark items with the junk coin in EllesmereUI's bags.\n\nDry run stays on until you turn it off, so nothing is marked yet.")
+            end
+            modeRow = Under(Choice("mageSellMode", "Handling mode", MODE_TIP,
+                STRING, MSL.DEFAULT_MODE, MSL.Mode,
+                function(value)
+                    if value == "ellesmere" and not MSL.Acknowledged() then
+                        ConfirmEllesmere(function()
+                            MSL.Acknowledge()
+                            MSL.SetMode("ellesmere")
+                            if modeRow then modeRow:GetSetting():NotifyUpdate() end
+                        end)
+                        return
+                    end
+                    MSL.SetMode(value)
+                end, ModeChoices), sell, SellOn)
+            if modeRow then
+                local base = modeRow.GetTooltip
+                modeRow.GetTooltip = function(self)
+                    local tip = base(self)
+                    if not Marking() then return tip end
+                    local _, text = MSL.MarkState()
+                    return (tip and (tip .. "\n\n") or "") .. "Status: " .. text
+                end
+            end
+            Under(Button("EllesmereUI marking status", function()
+                local state = MSL.MarkState()
+                if state == "active" then return "Active" end
+                if state == "dry-run" then return "Dry run" end
+                if state == "needs-ack" then return "Needs confirmation" end
+                if state == "off" or state == "direct" then return "Not in use" end
+                return "Not available"
+            end, function()
+                -- a mode that arrived in a shared setup is confirmed here, once, on this computer
+                if Marking() and not MSL.Acknowledged() then
+                    ConfirmEllesmere(function()
+                        MSL.Acknowledge()
+                        MSL.Refresh()
+                        if modeRow then modeRow:GetSetting():NotifyUpdate() end
+                    end)
+                elseif MSW then
+                    K.CloseOptions(); MSW.Show()
+                end
+            end, "The state of EllesmereUI marking, and what it will do. \"Needs confirmation\" appears when this mode was chosen in a shared setup or another profile and you haven't confirmed it here: click to read what it does and confirm. Otherwise click to open the eligible items window (same as /tui sell)."), sell, Marking,
+                "Greyed out unless Handling mode is Mark as junk with EllesmereUI.")
             Under(Toggle("mageSellFood", "Sell ordinary food",
-                "Plain food that only restores health. Food that restores both health and mana is sold only when drink is on as well."), sell, SellOn)
+                "Plain food that only restores health. Food that restores both health and mana is handled only when drink is on as well. This applies to both handling modes."), sell, SellOn)
             Under(Toggle("mageSellDrink", "Sell ordinary drink",
-                "Plain drink that only restores mana. Food that restores both health and mana is sold only when food is on as well."), sell, SellOn)
+                "Plain drink that only restores mana. Food that restores both health and mana is handled only when food is on as well. This applies to both handling modes."), sell, SellOn)
             Under(Toggle("mageSellDryRun", "Dry run: report only, sell nothing",
-                "While this is on, opening a merchant only tells you what would be sold, once, in your own chat. Nothing is sold. It is on until you turn it off: check /tui sell first, then turn it off to sell for real."), sell, SellOn)
+                "While this is on, opening a merchant only tells you what would be sold, once, in your own chat. Nothing is sold. In EllesmereUI mode it only says what would be marked, and nothing is marked. It is on until you turn it off: check /tui sell first, then turn it off to act for real."), sell, SellOn)
             if MSW then
                 Under(Button("Eligible items and never-sell list", "Open", function()
                     K.CloseOptions()
                     MSW.Show()
-                end, "Shows what would be sold now and what is kept and why, and lets you add items to a never-sell list. Nothing is sold by opening it (same as /tui sell)."), sell, SellOn)
+                end, "Shows what would be handled now and what is left alone and why, and lets you add items to a never-sell list. Nothing is sold or marked by opening it (same as /tui sell). The never-sell list keeps TwichUI from selling or marking an item; it does not unmark anything already marked in EllesmereUI."), sell, SellOn)
             end
         end
 

@@ -132,7 +132,7 @@ end
 local function Flush() FlushTimers() end
 
 for _, f in ipairs({ "chronicle/Style.lua", "modules/Interact.lua", "modules/Borders.lua", "modules/FoodDrink.lua",
-  "modules/MageSell.lua", "modules/MageSellWindow.lua" }) do
+  "modules/EllesmereJunk.lua", "modules/MageSell.lua", "modules/MageSellWindow.lua" }) do
   local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
 end
 c.TwichUIDB = { modules = {} }

@@ -137,7 +137,9 @@ Define("mageSell", {
     apply = function()
         local MSL = R.MageSell
         MSL.Refresh()
-        if MSL.Enabled() then
+        if MSL.Enabled() and MSL.Mode() == "ellesmere" then
+            R.Print("ordinary food and drink will be marked as junk in EllesmereUI's bags" .. (MSL.DryRun() and " once Dry run is turned off (for now it only reports). /tui sell shows what would be marked." or ". /tui sell shows what is kept."))
+        elseif MSL.Enabled() then
             R.Print("ordinary food and drink will be sold at merchants" .. (MSL.DryRun() and " once Dry run is turned off (for now it only reports). /tui sell shows what would go." or ". /tui sell shows what is kept."))
         end
     end,

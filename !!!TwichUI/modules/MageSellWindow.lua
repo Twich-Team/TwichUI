@@ -60,11 +60,18 @@ function W.Rows(scan)
     local out = {}
     local function Add(row) out[#out + 1] = row end
     local sell = Group(scan.eligible, false)
-    Add({ kind = "header", text = ("Would be sold at a merchant (%s)"):format(Count(scan.stacks, "stack", "stacks")),
-        right = scan.stacks > 0 and (("about %s"):format(MS.Money(scan.value))) or nil })
+    local marking = MS.Mode() == "ellesmere"
+    if marking then
+        Add({ kind = "header", text = ("Would be marked as junk in EllesmereUI (%s)"):format(Count(scan.stacks, "stack", "stacks")) })
+    else
+        Add({ kind = "header", text = ("Would be sold at a merchant (%s)"):format(Count(scan.stacks, "stack", "stacks")),
+            right = scan.stacks > 0 and (("about %s"):format(MS.Money(scan.value))) or nil })
+    end
     if #sell == 0 then
         Add({ kind = "note", text = scan.pending > 0 and "Waiting for the game to load some items; this fills in by itself."
-            or "Nothing in your bags would be sold." })
+            or (marking and "Nothing in your bags would be marked." or "Nothing in your bags would be sold.") })
+    elseif marking then
+        Add({ kind = "note", text = "A mark covers every copy of an item, in any bag and on any of your characters, until you unmark it in EllesmereUI. An item with a copy that is kept below is not marked." })
     end
     for _, g in ipairs(sell) do
         local detail = MS.REASONS[g.reason] or "Ordinary food or drink"
@@ -72,10 +79,10 @@ function W.Rows(scan)
             detail = ("%s, restores %d"):format(detail, g.amount)
         end
         Add({ kind = "item", id = g.id, name = Name(g), icon = g.icon,
-            text = ("%s  x%d"):format(Name(g), g.count), detail = detail, right = MS.Money(g.value), action = "Never sell" })
+            text = ("%s  x%d"):format(Name(g), g.count), detail = detail, right = (not marking) and MS.Money(g.value) or nil, action = "Never sell" })
     end
     local limit = MS.Limit()
-    if scan.stacks > limit then
+    if scan.stacks > limit and not marking then
         Add({ kind = "note", text = ("A visit sells at most %d stacks, so your buyback list keeps this visit's sales; the rest wait for the next click or visit."):format(limit) })
     end
 
@@ -208,6 +215,16 @@ local function ModeLine()
         return "This is for Mages.", S.color.stone
     elseif not MS.Enabled() then
         return "Selling is off. Turn on \"Sell non-conjured food and drink\" in the Mage options to use it. This list shows what it would sell.", S.color.stone
+    elseif MS.Mode() == "ellesmere" then
+        local state, text = MS.MarkState()
+        local color = state == "active" and S.color.emberHi or (state == "dry-run" and S.color.gold or S.color.stone)
+        local how = MS.MarkSelling()
+        if state == "active" or state == "dry-run" then
+            text = text .. (how == "auto" and " EllesmereUI sells marked items when you open a merchant."
+                or how == "button" and " EllesmereUI's Auto Sell Junk is off or unavailable, so marked items sell only when you press its Sell Junk button at a merchant."
+                or "")
+        end
+        return "EllesmereUI mode: TwichUI sells nothing. " .. text .. " This list shows what it would mark.", color
     elseif MS.DryRun() then
         return "DRY RUN is on: at a merchant this says what would be sold and sells nothing. Turn Dry run off in the Mage options to sell.", S.color.gold
     end
@@ -218,6 +235,7 @@ end
 local function SellBlock(scan)
     if not MS.ForPlayer() then return "This is for Mages." end
     if not MS.Enabled() then return "Turn on selling in the Mage options first." end
+    if MS.Mode() ~= "direct" then return "Handling mode is Mark as junk with EllesmereUI: EllesmereUI sells, not TwichUI." end
     if MS.DryRun() then return "Dry run is on: nothing is sold. Turn it off in the Mage options." end
     if MS.Running() then return "A sale is in progress." end
     if InCombatLockdown and InCombatLockdown() then return "Not in combat." end
@@ -244,7 +262,12 @@ function W.Refresh()
     f.mode:SetText(text)
     f.mode:SetTextColor(Color(color))
     local last = MS.Last()
-    if MS.Running() then
+    local look = MS.Marks() and MS.MarkLast()
+    if look then
+        f.result:SetText(("Last look: %s. Nothing is ever unmarked by TwichUI."):format(look.dry
+            and ("would mark %s, %d already junk"):format(Count(look.would, "kind", "kinds"), look.already)
+            or ("marked %s, %d already junk, %d filed by you elsewhere"):format(Count(look.marked, "kind", "kinds"), look.already, look.filed)))
+    elseif MS.Running() then
         f.result:SetText("Selling...")
     elseif last and not last.dry and last.stacks > 0 then
         f.result:SetText(("Last visit: sold %s (%d items), about %s."):format(Count(last.stacks, "stack", "stacks"), last.items, MS.Money(last.value)))
