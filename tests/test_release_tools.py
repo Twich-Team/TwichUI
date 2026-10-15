@@ -438,10 +438,16 @@ class FakeGitHub:
         r = self._find(rid)
         if getattr(self, "fail_publish", False) and fields.get("draft") is False:
             raise rel.ReleaseError("GitHub API failed")
+        if r["draft"] and "tag_name" not in fields:
+            # as GitHub did on 2026-10-15: a draft edited without its tag falls back to the placeholder tag
+            r["tag_name"] = f"untagged-{rid:020x}"
+        if "target_commitish" in fields:
+            r["target"] = fields.pop("target_commitish")
         r.update(fields)
+        if r["draft"] is False and r["tag_name"] not in self.tags:
+            self.tags[r["tag_name"]] = r["target"]
         if fields.get("draft") is False:
             self.calls.append(f"publish latest={fields['make_latest']}")
-            self.tags.setdefault(r["tag_name"], r["target"])
         return dict(r)
 
     def delete_asset(self, aid):
@@ -480,7 +486,7 @@ class PublishTests(unittest.TestCase):
         self.log = []
 
     def publish(self, cf):
-        return rel.publish(self.meta, self.zip, "notes\n", self.gh, cf, log=self.log.append)
+        return rel.publish(self.meta, self.zip, "notes\n", self.gh, cf, log=self.log.append, sleep=lambda s: None)
 
     def state(self):
         return rel.marker(self.gh.releases_[0]["body"])
@@ -499,6 +505,38 @@ class PublishTests(unittest.TestCase):
                          ["TwichUI-v1.0.1-alpha.2.gabcdef0-forever.zip", "release.json"])
         self.assertEqual(self.publish(FakeCurseForge([])), "already-published")
         self.assertEqual(len(cf.uploads), 1)
+
+    def test_release_keeps_its_tag_through_every_edit(self):
+        self.publish(FakeCurseForge([("uploaded", 99)]))
+        self.assertEqual(self.gh.releases_[0]["tag_name"], self.meta["tag"])
+        self.assertEqual(list(self.gh.tags), [self.meta["tag"]], "no placeholder tag is made")
+
+    def test_release_published_under_a_placeholder_tag_is_repaired(self):
+        # what the first alpha (v1.0.0-alpha.116.g0926105) was left as
+        r = self.gh.create_draft(self.meta["tag"], self.meta["commit"], self.meta["tag"],
+                                 rel.with_marker("notes", {"channel": "alpha", "commit": self.meta["commit"],
+                                                           "version": self.meta["version"],
+                                                           "curseforge": "uploaded"}), True)
+        self.gh.update(r["id"], {"draft": False, "make_latest": "false"})
+        stray = self.gh.releases_[0]["tag_name"]
+        self.assertTrue(stray.startswith("untagged-"))
+        cf = FakeCurseForge([])
+        self.assertEqual(self.publish(cf), "repaired")
+        self.assertEqual(cf.uploads, [], "CurseForge is not uploaded again")
+        self.assertEqual(self.gh.releases_[0]["tag_name"], self.meta["tag"])
+        self.assertEqual(self.gh.tags[self.meta["tag"]], self.meta["commit"])
+        self.assertIn(f"Delete the leftover tag {stray}", self.log[-1])
+        self.assertEqual(self.publish(cf), "already-published")
+
+    def test_tag_made_a_moment_late(self):
+        real = self.gh.tag_commit
+        seen = []
+
+        def late(tag):
+            seen.append(tag)
+            return real(tag) if len(seen) > 3 else None  # missing for the first checks after publishing
+        self.gh.tag_commit = late
+        self.assertEqual(self.publish(FakeCurseForge([("uploaded", 1)])), "published")
 
     def test_stable_is_marked_latest(self):
         self.meta.update(channel="release", prerelease=False, make_latest=True)

@@ -21,6 +21,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 import urllib.parse
 import zipfile
 from pathlib import Path
@@ -500,9 +501,22 @@ def game_version(interface):
     return f"{int(i[:-4])}.{int(i[-4:-2])}.{int(i[-2:])}"
 
 
-def publish(meta, zip_path, notes_text, gh, cf, log=print):
+def publish(meta, zip_path, notes_text, gh, cf, log=print, sleep=time.sleep):
     """Publish one build. Safe to re-run: every step looks at what is already there first."""
     tag, sha, channel = meta["tag"], meta["commit"], meta["channel"]
+
+    def save(fields):
+        # Every edit repeats the tag and commit: a draft edited without them is published by GitHub under its
+        # placeholder tag ("untagged-..."), not ours (seen 2026-10-15 with v1.0.0-alpha.116.g0926105).
+        return gh.update(rel["id"], {"tag_name": tag, "target_commitish": sha, **fields})
+
+    def tag_on_github():
+        for wait in (0, 2, 4, 8):  # GitHub may make the tag a moment after the release is published
+            sleep(wait)
+            remote = gh.tag_commit(tag)
+            if remote:
+                return remote
+        return None
     zip_path = Path(zip_path)
     label = zip_path.name[len(CORE) + 1:-len(".zip")] if zip_path.name.startswith(CORE + "-") else tag
 
@@ -510,7 +524,11 @@ def publish(meta, zip_path, notes_text, gh, cf, log=print):
     if remote and remote != sha:
         raise ReleaseError(f"tag {tag} already exists on {remote}, not {sha}; nothing was published")
     all_releases = gh.releases()
-    rel = next((r for r in all_releases if r.get("tag_name") == tag), None)
+    ours = lambda r: (m := marker(r.get("body"))) and (m.get("channel"), m.get("commit"), m.get("version")) == \
+        (channel, sha, meta["version"])
+    # By tag, or by what our marker records (GitHub may have given the release its placeholder tag)
+    rel = next((r for r in all_releases if r.get("tag_name") == tag), None) or \
+        next((r for r in all_releases if ours(r)), None)
     if not rel and channel != "release":
         for r in all_releases:
             m = marker(r.get("body"))
@@ -527,8 +545,16 @@ def publish(meta, zip_path, notes_text, gh, cf, log=print):
         if state.get("commit") != sha:
             raise ReleaseError(f"release {tag} records commit {state.get('commit')}, not {sha}")
         if not rel.get("draft"):
-            log(f"{tag} is already published ({rel.get('html_url')}); nothing to do.")
-            return "already-published"
+            if rel.get("tag_name") == tag and tag_on_github() == sha:
+                log(f"{tag} is already published ({rel.get('html_url')}); nothing to do.")
+                return "already-published"
+            stray = rel.get("tag_name")
+            rel = save({})
+            if tag_on_github() != sha:
+                raise ReleaseError(f"release {tag} is published but its tag could not be set to {sha}: fix it by hand")
+            log(f"{tag} was published under the tag {stray}; it now has its own tag."
+                + (f" Delete the leftover tag {stray} by hand." if stray != tag else ""))
+            return "repaired"
     else:
         state = {"channel": channel, "commit": sha, "version": meta["version"], "curseforge": "not-started"}
         rel = gh.create_draft(tag, sha, tag, with_marker(notes_text, state), meta["prerelease"])
@@ -568,28 +594,30 @@ def publish(meta, zip_path, notes_text, gh, cf, log=print):
         if warning:
             log(f"::warning::{warning}")
         state["curseforge"] = "uploading"
-        rel = gh.update(rel["id"], {"body": with_marker(rel.get("body"), state)})
+        rel = save({"body": with_marker(rel.get("body"), state)})
         result, detail = cf.upload(zip_path, {
             "displayName": label, "gameVersions": [version_id], "releaseType": channel,
             "changelog": notes_text, "changelogType": "markdown"})
         state["curseforge"] = result
         if result == "uploaded":
             state["curseforge_file"] = detail
-        rel = gh.update(rel["id"], {"body": with_marker(rel.get("body"), state)})
+        rel = save({"body": with_marker(rel.get("body"), state)})
         if result == "failed":
             raise ReleaseError(f"CurseForge refused the upload ({detail}). The GitHub release is still a draft; "
                                "re-running the job tries CurseForge again.")
         if result == "unknown":
             raise ReleaseError(f"CurseForge upload outcome unknown ({detail}).\n"
                                + RECONCILE.format(label=label, state="unknown", tag=tag))
-        log(f"Uploaded {label} to CurseForge as a {channel} (file {detail}, game version {version_name}).")
+        log(f"Uploaded {label} to CurseForge ({channel}, file {detail}, game version {version_name}).")
 
     remote = gh.tag_commit(tag)
     if remote and remote != sha:
         raise ReleaseError(f"tag {tag} appeared on {remote}, not {sha}; the GitHub release is left as a draft")
-    gh.update(rel["id"], {"draft": False, "prerelease": meta["prerelease"],
-                          "make_latest": "true" if meta["make_latest"] else "false"})
-    remote = gh.tag_commit(tag)
+    rel = save({"draft": False, "prerelease": meta["prerelease"],
+                "make_latest": "true" if meta["make_latest"] else "false"})
+    if rel.get("tag_name") != tag:
+        raise ReleaseError(f"GitHub published {tag} under the tag {rel.get('tag_name')}; re-run the job to repair it")
+    remote = tag_on_github()
     if remote != sha:
         raise ReleaseError(f"published {tag}, but the tag points at {remote}, not {sha}: fix the tag by hand")
     log(f"Published GitHub {'prerelease' if meta['prerelease'] else 'release'} {tag}.")
