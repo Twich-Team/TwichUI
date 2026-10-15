@@ -205,6 +205,9 @@ identical before and after the move to the window (the old ones came from Blizza
 
 ## Measuring (in the game; none of this has been measured yet)
 
+Offline figures for the window (code, page descriptions, pages drawn, search) and a fuller procedure using
+`/tui diagnostics memory collect` are in `docs/memory.md`.
+
 With only TwichUI (and the same other addons) loaded, in the same place:
 
 1. **Login cost.** `/reload`, wait ~30 s, `/run collectgarbage("collect") UpdateAddOnMemoryUsage() print(GetAddOnMemoryUsage("!!!TwichUI"), GetAddOnMemoryUsage("TwichUI_Settings"))`

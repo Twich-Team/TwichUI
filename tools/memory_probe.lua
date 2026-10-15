@@ -1,5 +1,9 @@
 -- TwichUI: offline memory probe (Lua 5.1, outside the game). Not part of the addon or its tests.
--- Usage: lua5.1 tools/memory_probe.lua [--saved <SavedVariables\!!!TwichUI.lua>] [--class MAGE] [--no-settings] [--verbose]
+-- Usage: lua5.1 tools/memory_probe.lua [--saved <SavedVariables\!!!TwichUI.lua>] [--class MAGE] [--no-settings]
+--            [--pages N] [--by-addon] [--verbose]
+--   --pages N    draw only the first N settings pages (to match a reading taken in the game)
+--   --by-addon   also say, per settings stage, how much was made by !!!TwichUI's code and how much by
+--                TwichUI_Settings' (the settings window draws with the core's Look.lua; about 7 times slower)
 --
 -- Loads !!!TwichUI in its .toc order under a permissive stand-in for the game, fires ADDON_LOADED, PLAYER_LOGIN and
 -- PLAYER_ENTERING_WORLD, then (unless --no-settings) loads TwichUI_Settings, opens it, visits every page, searches,
@@ -27,6 +31,8 @@ do
         elseif a == "--class" then args.class = (arg[i + 1] or "MAGE"):upper(); i = i + 1
         elseif a == "--no-settings" then args.noSettings = true
         elseif a == "--verbose" then args.verbose = true
+        elseif a == "--by-addon" then args.byAddon = true
+        elseif a == "--pages" then args.pages = tonumber(arg[i + 1]); i = i + 1
         else io.stderr:write("memory_probe: unknown argument " .. a .. "\n"); os.exit(2) end
         i = i + 1
     end
@@ -34,7 +40,54 @@ end
 local REPO = (arg[0]:match("^(.*)[/\\]tools[/\\][^/\\]+$") or ".") .. "/"
 local CORE, SETTINGS = REPO .. "!!!TwichUI/", REPO .. "TwichUI_Settings/"
 
-local function KB() collectgarbage("collect"); collectgarbage("collect"); return collectgarbage("count") end
+-- --by-addon: from the settings window's first load on, every allocation is charged to the addon whose code is
+-- running (the innermost function from an addon's folder; the stand-in's functions, which play the game's own,
+-- pass through to their caller), which is how the game appears to count. The collector stays stopped between the
+-- collections at each stage, so a stage's charge is what was made in it, kept or not.
+local attributing, charged, owner, mark = false, {}, "stand-in", 0
+local ownerOf = {}
+local function SourceOwner(src)
+    local o = ownerOf[src]
+    if o == nil then
+        o = (src:find("/TwichUI_Settings/", 1, true) and "TwichUI_Settings") or (src:find("/!!!TwichUI/", 1, true) and "!!!TwichUI") or false
+        ownerOf[src] = o
+    end
+    return o
+end
+local function Running(level)
+    while true do
+        local info = debug.getinfo(level, "S")
+        if not info then return "stand-in" end
+        local o = info.what ~= "C" and SourceOwner(info.source)
+        if o then return o end
+        level = level + 1
+    end
+end
+local function Hook(event)
+    charged[owner] = (charged[owner] or 0) + (collectgarbage("count") - mark)
+    -- Running's level 1 is itself, 2 this hook, 3 the function called or returning; after a return, its caller.
+    owner = Running(event == "call" and 3 or 4)
+    if collectgarbage("count") > 1048576 then collectgarbage("collect"); collectgarbage("stop") end   -- the hook's own garbage
+    mark = collectgarbage("count")
+end
+local function Attribute(on)
+    attributing = on
+    if on then
+        collectgarbage("stop")
+        mark = collectgarbage("count")
+        debug.sethook(Hook, "cr")
+    else
+        debug.sethook()
+        collectgarbage("restart")
+    end
+end
+
+local function KB()
+    collectgarbage("collect"); collectgarbage("collect")
+    local n = collectgarbage("count")
+    if attributing then collectgarbage("stop"); mark = collectgarbage("count") end
+    return n
+end
 local errors, errorCount = {}, 0
 local function Err(where, e)
     errorCount = errorCount + 1
@@ -308,10 +361,18 @@ local function RunFile(dir, f, addon, ns)
 end
 
 local stages, last = {}, nil
+local chargedBefore = {}
 local function Stage(name)
+    local by
+    if attributing then
+        debug.sethook()
+        by = {}
+        for who, n in pairs(charged) do by[who] = n - (chargedBefore[who] or 0); chargedBefore[who] = n end
+    end
     local now = KB()
-    stages[#stages + 1] = { name, now, now - (last or now), #frames }
+    stages[#stages + 1] = { name, now, now - (last or now), #frames, by }
     last = now
+    if attributing then debug.sethook(Hook, "cr") end
 end
 
 Stage("stand-in for the game")
@@ -348,6 +409,7 @@ end
 if not args.noSettings and R and R.OpenSettings then
     LoadSettings()
     Stage("TwichUI_Settings files run")
+    if args.byAddon then Attribute(true) end
     local K, UI, Search = R.SettingsKit, R.SettingsUI, R.SettingsSearch
     if K and K.Describe then
         local ok, e = pcall(K.Describe)
@@ -361,10 +423,12 @@ if not args.noSettings and R and R.OpenSettings then
     FlushTimers()
     Stage("first open: the window and one page")
     local keys = {}
-    for _, page in ipairs(K and K.list or {}) do keys[#keys + 1] = page.key end
+    for _, page in ipairs(K and K.list or {}) do
+        if not args.pages or #keys < args.pages then keys[#keys + 1] = page.key end
+    end
     for _, key in ipairs(keys) do local ok2, e2 = pcall(R.OpenSettings, R, key) if not ok2 then Err("page " .. key, e2) end end
     FlushTimers()
-    Stage(("every page drawn (%d)"):format(#keys))
+    Stage(("pages drawn (%d of %d)"):format(#keys, K and #K.list or 0))
     if Search and UI and UI.SetQuery then
         UI.SetQuery("sound")
         Stage("first search (the index, the result rows)")
@@ -387,6 +451,7 @@ if not args.noSettings and R and R.OpenSettings then
             churn[#churn + 1] = ("%-20s Search.Run %5.1f KB, the whole keystroke (search and drawing) %5.1f KB"):format(("%q"):format(q), run / #q, all / #q)
         end
         UI.SetQuery("")
+        Stage(("typing %d queries (result rows: at most %d, reused)"):format(#churn, Search.LIMIT or 0))
     end
     pcall(R.CloseSettings, R)
     FlushTimers()
@@ -397,7 +462,8 @@ if not args.noSettings and R and R.OpenSettings then
         pcall(R.CloseSettings, R)
         FlushTimers()
     end
-    Stage("ten more rounds of open, every page, close")
+    Stage("ten more rounds of open, those pages, close")
+    if args.byAddon then Attribute(false) end
 end
 
 ---------------------------------------------------------------------------
@@ -407,6 +473,17 @@ print(("TwichUI memory probe: Lua heap after full collections (%s, class %s, %s)
     args.saved and "saved variables given" or "no saved variables"))
 print(("  %-58s %9s %8s %8s"):format("stage", "heap KB", "+KB", "widgets"))
 for _, s in ipairs(stages) do print(("  %-58s %9.0f %8.0f %8d"):format(s[1], s[2], s[3], s[4])) end
+if args.byAddon then
+    print("made in each stage (collector stopped), charged to the addon whose code was running:")
+    print(("  %-58s %10s %10s %10s %8s"):format("stage", "!!!TwichUI", "Settings", "made KB", "kept KB"))
+    for _, s in ipairs(stages) do
+        local by = s[5]
+        if by then
+            local core, set = by["!!!TwichUI"] or 0, by.TwichUI_Settings or 0
+            print(("  %-58s %10.0f %10.0f %10.0f %8.0f"):format(s[1], core, set, core + set, s[3]))
+        end
+    end
+end
 table.sort(perFile, function(a, b) return a[2] > b[2] end)
 print("largest files (compiled code and what running the file kept):")
 for i = 1, math.min(args.verbose and #perFile or 12, #perFile) do

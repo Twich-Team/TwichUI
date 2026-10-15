@@ -125,6 +125,8 @@ cap the imports use and ask you to delete one. Nothing is deleted without you in
 ## 4. Measuring
 
 ### What exists
+`docs/memory.md` has the memory cost map (offline figures), what the game's number includes, and the steps for
+`/tui diagnostics memory collect`.
 - `C_AddOnProfiler` (documented in the Forever API docs): `IsEnabled()`, `GetAddOnMetric(name, metric)` with
   `Enum.AddOnProfilerMetric.RecentAverageTime | SessionAverageTime | PeakTime | CountTimeOver1Ms…`. These are **CPU
   time per frame** for the addon named `!!!TwichUI`, not memory and not FPS.
