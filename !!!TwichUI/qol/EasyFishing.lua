@@ -21,15 +21,18 @@
 --   UNIT_SPELLCAST_CHANNEL_START / _STOP events. Their values can be secret in restricted contexts, so they
 --   are read through Readable and an unreadable value never counts as fishing. A fishing channel is a
 --   channel whose spell id is a known Fishing id, or whose name is the localized Fishing name.
---   Which object. UnitIsGameObject("softinteract") (Blizzard's gamepad action bar asks it the same way) is
---   asked while a fishing channel is active, and the key reels only while the game's soft interact target
---   is a world object. Otherwise the key is bound to an inert secure button, so it does nothing: it never
---   attacks or talks to an NPC, and it never casts Fishing again over a line that is out. The same inert
---   binding is used while the player channels something that is not Fishing.
+--   Which object. While a fishing channel is active the key reels (INTERACTTARGET) unless the game's soft
+--   interact target is positively a unit: UnitExists("softinteract") true and UnitIsGameObject("softinteract")
+--   false (Blizzard's gamepad action bar asks both the same way). Then, and while the player channels something
+--   that is not Fishing, the key is bound to an inert secure button, so it does nothing: it never attacks or
+--   talks to an NPC, and it never casts Fishing again over a line that is out. A target the game hasn't picked
+--   yet, or one that can't be read, still reels: the bobber is picked a moment after the cast starts, and a
+--   key that does nothing in that moment is what made reeling unreliable.
 --
 -- What can't be known (needs the game; see docs/easy-fishing.md):
 --   * That the soft interact target is *your bobber*. The API says "a world object", nothing more: a chest
---     or a mailbox the game prefers would be the one reeled. Nothing here can see a bite either, so a press
+--     or a mailbox the game prefers would be the one reeled, and with no target picked INTERACTTARGET
+--     picks whatever the client resolves at the press. Nothing here can see a bite either, so a press
 --     before the bite pulls the line in empty, as clicking the bobber early does.
 --   * That the client picks the bobber as its soft interact target at all. That needs the soft-target
 --     settings below; whether they are enough is unverified.
@@ -126,8 +129,13 @@ function E.Channel()
     return "other"
 end
 
-local function SoftTargetIsObject()
-    return UnitIsGameObject ~= nil and Readable(UnitIsGameObject("softinteract")) == true
+-- True only when the game's soft interact target is positively a unit (an NPC or a player) and not a world
+-- object. A missing target, or a value that can't be read, is not "a unit": the line's bobber may not have been
+-- picked yet at the moment of the press, and refusing then is what made reeling unreliable.
+local function SoftTargetIsUnit()
+    if UnitExists == nil or UnitIsGameObject == nil then return false end
+    if Readable(UnitExists("softinteract")) ~= true then return false end
+    return Readable(UnitIsGameObject("softinteract")) == false
 end
 
 ---------------------------------------------------------------------------
@@ -319,7 +327,7 @@ local function Wanted()
     if fighting or not (cast and R:Enabled(E.SWITCH)) then return "idle" end
     local channel = E.Channel()
     if channel == nil then return "idle" end
-    if channel == "fishing" and SoftTargetIsObject() then return "reel" end
+    if channel == "fishing" and not SoftTargetIsUnit() then return "reel" end
     return "hold"
 end
 

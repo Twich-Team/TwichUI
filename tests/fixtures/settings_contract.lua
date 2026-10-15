@@ -418,7 +418,7 @@ return {
     "Quality of life #12 dropdown \"Still allow duels from\" in:\"Duels\" under:\"Decline duel requests\" TWICHUI_qolDuelsFrom tip:f191f1b2",
     "Quality of life #13 checkbox \"Also decline duels to the death\" in:\"Duels\" under:\"Decline duel requests\" TWICHUI_qolDuelsToDeath tip:c78a5d1c",
     "Quality of life #14 header \"Fishing\" tip:5e8728d8",
-    "Quality of life #15 checkbox \"Easy Fishing\" in:\"Fishing\" TWICHUI_qolEasyFishing tip:27c8a8e9",
+    "Quality of life #15 checkbox \"Easy Fishing\" in:\"Fishing\" TWICHUI_qolEasyFishing tip:e4515f3e",
     "Quality of life #16 button \"Key: not set\" in:\"Fishing\" under:\"Easy Fishing\" tip:55e0018d",
     "Quality of life #17 button \"Clear the key\" in:\"Fishing\" under:\"Easy Fishing\" tip:4f5c81df",
     "Quality of life #18 button \"Adjust interaction targeting while fishing\" in:\"Fishing\" under:\"Easy Fishing\" tip:28f12a58",

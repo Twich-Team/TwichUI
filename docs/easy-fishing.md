@@ -11,9 +11,10 @@ life feature; switch `qolEasyFishing`, off by default), its rows in `TwichUI_Set
   used; acts on the press only).
 - Line out (a fishing channel is active): the same key is given the game's `INTERACTTARGET` action by an override
   binding, so a press interacts with the world object the game has picked (the bobber).
-- Line out but the game has picked no world object, or the player is channeling something else: the key is bound to
-  an inert secure button and does nothing. It never casts over a line that is out, and never interacts with an NPC
-  or attacks.
+- Line out but the game's soft interact target is positively a unit (NPC or player), or the player is channeling
+  something else: the key is bound to an inert secure button and does nothing. It never casts over a line that is out,
+  and never interacts with an NPC or attacks. A target the game hasn't picked yet, or one that can't be read, still
+  reels (the bobber is picked a moment after the cast; a key that did nothing then made reeling unreliable).
 - The line ends (catch, interruption, death, zoning, another cast): the overrides are removed and the key casts again.
 
 Every cast and every reel is the player's own key press. There is no automatic casting, no bite detection and no
@@ -28,7 +29,7 @@ timer.
 | Override bindings | `SetOverrideBinding`, `SetOverrideBindingClick`, `ClearOverrideBindings`: protected in combat; used by Blizzard_GamepadSharedUtility and the restricted environment |
 | Player's key | `GetBindingKey`, `GetBindingAction`, `SetBinding`, `SaveBindings(GetCurrentBindingSet())`, `C_KeyBindings.GetBindingContextForAction` as Blizzard_Keybindings.lua uses them; `UPDATE_BINDINGS` |
 | Fishing channel | `UnitChannelInfo("player")` (spell id is the 8th result), `UNIT_SPELLCAST_CHANNEL_START` / `_STOP`; both may be secret (`SecretWhenUnitSpellCastRestricted`), so values go through `issecretvalue` |
-| Soft interact target | `UnitIsGameObject("softinteract")` (Blizzard_GamepadActionBars/MainActionBarFrame.lua), `PLAYER_SOFT_INTERACT_CHANGED` (registered only while a line is out) |
+| Soft interact target | `UnitExists("softinteract")` and `UnitIsGameObject("softinteract")` (Blizzard_GamepadActionBars/MainActionBarFrame.lua), `PLAYER_SOFT_INTERACT_CHANGED` (registered only while a line is out) |
 | Interaction settings | `C_CVar.GetCVar` / `SetCVar`; `SoftTargetInteract`, `SoftTargetInteractRange`, `SoftTargetInteractArc` (Blizzard_Gamepad/Core.lua); `Enum.SoftTargetEnableFlags` (None 0, Gamepad 1, Kbm 2, Any 3) |
 
 **From the BetterFishing reference only, not from the client:** Fishing's spell ids (`FISHING_ORDER`) and the three

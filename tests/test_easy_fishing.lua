@@ -18,7 +18,7 @@ local W, calls, ov, frames, cvars
 local function Reset()
   W = {
     combat = false, known = { [7620] = true }, channel = nil,   -- channel = { name, spellID }
-    softObject = false, bound = {},                             -- bound[key] = action
+    softObject = false, softUnit = false, bound = {},                             -- bound[key] = action
     secret = {},                                                -- [value] = true: issecretvalue says so
   }
   calls = { setOverride = 0, setClick = 0, clear = 0, setBinding = 0, saved = 0, setCVar = {} }
@@ -47,6 +47,8 @@ c.UnitChannelInfo = function(unit)
   if unit ~= "player" or not W.channel then return nil end
   return W.channel[1], W.channel[1], 1, 0, 0, false, false, W.channel[2]
 end
+-- like the client: a world object is not "existing" as a unit, a unit is not a game object
+c.UnitExists = function(unit) return unit == "softinteract" and W.softUnit end
 c.UnitIsGameObject = function(unit) return unit == "softinteract" and W.softObject end
 c.GetBindingKey = function(action)
   local keys = {}
@@ -130,21 +132,29 @@ assert(E.Status() == "needs-targeting" or E.Status() == "ready")
 c.FireEvent("UPDATE_BINDINGS")
 assert(CountOverrides() == 0, "no line out: the key is its own binding, which casts")
 Channel("Fishing", 7620); Start()
-assert(ov.F == "idle", "line out, nothing the game picked: the key does nothing")
+assert(ov.F == "reel", "line out, nothing picked yet: the key already reels, so an early press is not lost")
 assert(Listening("PLAYER_SOFT_INTERACT_CHANGED"), "now the soft target matters")
-assert(calls.setOverride == 0, "and never reels on that")
 W.softObject = true
 c.FireEvent("PLAYER_SOFT_INTERACT_CHANGED", "", "GameObject-1")
 assert(ov.F == "reel", "a world object picked: the key interacts")
 local setBefore = calls.setOverride
 Start(); Start(); c.FireEvent("PLAYER_SOFT_INTERACT_CHANGED", "", "GameObject-1")
 assert(calls.setOverride == setBefore, "repeated events change nothing: the same state is not re-bound")
-W.softObject = false
-c.FireEvent("PLAYER_SOFT_INTERACT_CHANGED", "GameObject-1", "")
-assert(ov.F == "idle", "the object is gone (an NPC is nearer): back to doing nothing, never an interaction with it")
-W.softObject = true
-c.FireEvent("PLAYER_SOFT_INTERACT_CHANGED", "", "GameObject-1")
+W.softObject = false; W.softUnit = true
+c.FireEvent("PLAYER_SOFT_INTERACT_CHANGED", "GameObject-1", "Creature-1")
+assert(ov.F == "idle", "an NPC is the target: the key does nothing, never an interaction with it")
+W.softUnit = false; W.softObject = true
+c.FireEvent("PLAYER_SOFT_INTERACT_CHANGED", "Creature-1", "GameObject-1")
 assert(ov.F == "reel")
+-- a target that can't be read is not known to be a unit
+local SECRET_U = {}
+W.secret[SECRET_U] = true
+W.softObject = false; W.softUnit = true
+c.UnitIsGameObject = function() return SECRET_U end
+c.FireEvent("PLAYER_SOFT_INTERACT_CHANGED", "", "")
+assert(ov.F == "reel", "an unreadable soft target still reels")
+c.UnitIsGameObject = function(unit) return unit == "softinteract" and W.softObject end
+W.softUnit = false
 Stop()
 assert(CountOverrides() == 0, "the line is gone: the key casts again")
 assert(not Listening("PLAYER_SOFT_INTERACT_CHANGED"), "and the soft-target event is dropped")
@@ -152,7 +162,7 @@ W.softObject = false
 
 -- Name match covers a rank whose id isn't in the list
 Channel("Fishing", 999999); Start()
-assert(ov.F == "idle", "the localized name counts as Fishing")
+assert(ov.F == "reel", "the localized name counts as Fishing")
 Stop()
 
 ---------------------------------------------------------------------------
