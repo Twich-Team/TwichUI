@@ -51,7 +51,7 @@ function SettingsClient(opts)
     "chronicle/Style.lua", "Look.lua", "chronicle/Appearance.lua", "modules/NotifyLook.lua", "modules/Refreshments.lua", "modules/RefreshmentsPanel.lua", "modules/RefreshmentsShares.lua",
     "modules/RefreshmentsTrade.lua", "modules/RefreshmentsBroker.lua", "modules/MageSell.lua", "modules/MageSellWindow.lua",
     "modules/RestedXPSkin.lua", "modules/RestedXPTimers.lua", "modules/SpeakStoneSkin.lua", "qol/QoL.lua", "qol/Summons.lua", "qol/Resurrect.lua", "qol/ReleasePvP.lua",
-    "qol/Duels.lua", "qol/QuickKeybind.lua", "qol/GuideWaypoint.lua",
+    "qol/Duels.lua", "qol/QuickKeybind.lua", "qol/EasyFishing.lua", "qol/GuideWaypoint.lua",
     "pins/Pins.lua", "pins/Sync.lua", "pins/Look.lua", "pins/Map.lua", "pins/Minimap.lua", "pins/Editor.lua", "pins/Window.lua",
     "pins/BrokerMenu.lua", "pins/Broker.lua",
     "diag/Diagnostics.lua", "diag/Window.lua" }

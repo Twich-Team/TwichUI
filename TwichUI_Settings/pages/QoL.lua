@@ -1,8 +1,17 @@
--- TwichUI settings: Quality of life (qol/: summons, resurrection, battleground release, duels, Quick Keybind,
--- and the game's waypoint on RestedXP's destination). Everything here is off until turned on.
+-- TwichUI settings: Quality of life (qol/: summons, resurrection, battleground release, duels, Easy Fishing,
+-- Quick Keybind, and the game's waypoint on RestedXP's destination). Everything here is off until turned on.
 
 local R = TwichUI
 local K = R.SettingsKit
+
+local FISHING_STATUS = {
+    off = { "Off" },
+    unsupported = { "Not available", "This client doesn't have the key binding functions Easy Fishing needs. Nothing was changed." },
+    ["not-learned"] = { "Fishing isn't learned", "Learn Fishing from a trainer; the key then casts it. Nothing else is needed." },
+    ["no-key"] = { "No key chosen", "Choose a key below, or in Key Bindings > TwichUI." },
+    ["needs-targeting"] = { "Can cast, can't reel yet", "The game's interaction targeting is off, so it can't pick your bobber. Allow the adjustment below, or turn it on yourself." },
+    ready = { "Ready" },
+}
 
 local GUIDE_STATUS = {
     off = { "Off" },
@@ -22,15 +31,15 @@ local GUIDE_STATUS = {
 K.Page({
     key = "qol", name = "Quality of life", order = 30, group = "everyday",
     description = "Small opt-in conveniences. Each is off until you turn it on, and each does only the one thing it says.",
-    keywords = "summon resurrect res rez battleground release spirit duel decline keybind quick keybind waypoint restedxp leatrix",
+    keywords = "summon resurrect res rez battleground release spirit duel decline fishing fish cast reel bobber keybind quick keybind waypoint restedxp leatrix",
     when = function() return R.QoL ~= nil end,
     overview = {
-        label = "Quality of life", tip = "Small opt-in conveniences: accepting summons and resurrection, releasing in battlegrounds, declining duels, a Quick Keybind button in the Game Menu, and the game's waypoint on RestedXP's destination.",
+        label = "Quality of life", tip = "Small opt-in conveniences: accepting summons and resurrection, releasing in battlegrounds, declining duels, one key for fishing, a Quick Keybind button in the Game Menu, and the game's waypoint on RestedXP's destination.",
         status = function()
             local on = (R:Enabled("qolSummons") and 1 or 0) + (R:Enabled("qolResurrect") and 1 or 0)
                 + (R:Enabled("qolReleasePvP") and 1 or 0) + (R:Enabled("qolDuels") and 1 or 0)
-                + (R:Enabled("qolQuickKeybind") and 1 or 0)
-            local total = 5
+                + (R:Enabled("qolQuickKeybind") and 1 or 0) + (R:Enabled("qolEasyFishing") and 1 or 0)
+            local total = 6
             if R.QoLGuideWaypoint then
                 total = total + 1
                 if R:Enabled("qolGuideWaypoint") then on = on + 1 end
@@ -39,7 +48,7 @@ K.Page({
         end,
     },
     build = function()
-        local Header, Toggle, Choice, Under = K.Header, K.Toggle, K.Choice, K.Under
+        local Header, Toggle, Choice, Under, Button = K.Header, K.Toggle, K.Choice, K.Under, K.Button
         local STRING, NUMBER = K.STRING, K.NUMBER
         local Q = R.QoL
         -- Each row's tooltip ends with a note when Leatrix Plus has the same option on, read when it is shown.
@@ -106,6 +115,143 @@ K.Page({
             }), duels, DuelsOn)
         Under(QolToggle("qolDuelsToDeath", "Also decline duels to the death",
             "Also declines a duel to the death, which Forever treats as a separate, lethal kind of duel (accepting one asks you to type a confirmation). The same exceptions apply. Off: duels to the death still reach you."), duels, DuelsOn)
+
+        local EF = R.QoLEasyFishing
+        if EF then
+            Header("Fishing", "One key for casting your line and reeling in the catch. Every cast and every reel is your own key press.")
+            local fishBase = "Use the same key to cast your line and reel in a catch.\n\nWith no line out, the key casts Fishing. While your line is out, the same key does the game's Interact action on the world object it has picked, which should be your bobber. TwichUI never casts, reels or watches for a bite for you: press when the bobber dips. Pressing early pulls the line in empty, as clicking the bobber early does.\n\nIf the game has picked something else (a chest beside you, say), that is what the key reaches; when it has picked no object, the key does nothing, and it never casts over a line that is out. Needs Fishing learned and a fishing pole, like the spell itself. Key presses can't change in combat; there is no default key.\n\nBetterFishing, if you have it, also puts keys on fishing: give the two different keys."
+            local fishing = QolToggle("qolEasyFishing", "Easy Fishing", fishBase)
+            if fishing and fishing.GetTooltip ~= nil then
+                -- read when the tooltip is shown, so it is never stale
+                fishing.GetTooltip = function()
+                    local code = EF.Status()
+                    local text = FISHING_STATUS[code] or { code }
+                    local color = (code == "ready" and R.GREEN) or (code == "off" and R.GREY) or R.GOLD
+                    return fishBase .. "\n\nStatus: " .. color .. text[1] .. "|r" .. (text[2] and ("\n" .. text[2]) or "")
+                end
+            end
+            local function FishingOn() return R:Enabled("qolEasyFishing") end
+            local function CanBind() return FishingOn() and not InCombatLockdown() end
+            local function CantBind() return FishingOn() and "Key bindings can't be changed in combat." or "Needs \"Easy Fishing\" turned on." end
+
+            local function KeyText()
+                local keys = EF.Keys()
+                if #keys == 0 then return "not set" end
+                local parts = {}
+                for i, key in ipairs(keys) do parts[i] = EF.KeyText(key) end
+                return table.concat(parts, " or ")
+            end
+
+            -- Applies a key the player pressed, asking first when it is in use. Nothing is taken silently.
+            local function Apply(chord)
+                local result, other = EF.Assign(chord)
+                if result == "conflict" then
+                    R.Interact.Confirm("TWICHUI_EASYFISHING_KEY",
+                        ("Use %s for Easy Fishing?\n\nThat key is already used for \"%s\". If you continue, that action loses this key and Easy Fishing takes it. Its other key, if it has one, and every other binding stay as they are. You can give it a key again in Key Bindings."):format(EF.KeyText(chord), tostring(other)),
+                        function()
+                            local again = EF.Assign(chord, true)
+                            if again ~= "ok" and again ~= "same" then R.Print("that key couldn't be given to Easy Fishing. Nothing was changed.") end
+                            K.RefreshOverview()
+                        end, { accept = "Use this key", combat = true })
+                elseif result == "combat" then
+                    R.Print("key bindings can't change in combat. Nothing was changed.")
+                elseif result == "ok" or result == "same" then
+                    K.RefreshOverview()
+                else
+                    R.Print("that key couldn't be given to Easy Fishing. Nothing was changed.")
+                end
+            end
+
+            -- Listens for one key press while the row is on screen; Escape or leaving the page cancels. The
+            -- frame is made when the row is, and does nothing until the button is pressed.
+            local listener
+            local function Capture(parent)
+                local c = CreateFrame("Frame", nil, parent)
+                c.listening = false
+                local function Stop() c.listening = false; c:EnableKeyboard(false); c:Hide(); K.RefreshOverview() end
+                c.Stop = Stop
+                c:SetScript("OnKeyDown", function(_, input)
+                    if not c.listening then return end
+                    local key = GetConvertedKeyOrButton and GetConvertedKeyOrButton(input) or input
+                    if key == "ESCAPE" then Stop() return end
+                    if IsKeyPressIgnoredForBinding then
+                        if IsKeyPressIgnoredForBinding(key) then return end
+                    elseif key == "UNKNOWN" or key:find("^[LR]?ALT$") or key:find("^[LR]?CTRL$") or key:find("^[LR]?SHIFT$") then
+                        return
+                    end
+                    local chord
+                    if CreateKeyChordStringUsingMetaKeyState then
+                        chord = CreateKeyChordStringUsingMetaKeyState(key)
+                    else
+                        chord = (IsAltKeyDown() and "ALT-" or "") .. (IsControlKeyDown() and "CTRL-" or "") .. (IsShiftKeyDown() and "SHIFT-" or "") .. key
+                    end
+                    Stop()
+                    Apply(chord)
+                end)
+                c:SetScript("OnHide", function() if c.listening then Stop() end end)
+                return c
+            end
+
+            local keyRow = Button("Key", function()
+                if listener and listener.listening then return "Press a key..." end
+                return "Set key"
+            end, function()
+                if not (listener and CanBind()) then return end
+                if listener.listening then listener.Stop() return end
+                listener.listening = true
+                listener:Show()
+                listener:EnableKeyboard(true)
+                K.RefreshOverview()
+            end, "Press this, then the key you want for Easy Fishing; Escape cancels. A key that is already used asks you first, naming what uses it, and nothing is taken without that. The same entry is in Key Bindings > TwichUI.\n\nShown after the name: the key now. No key is set by default.")
+            if keyRow then
+                keyRow.extra = function(frame) listener = Capture(frame) return listener end
+                keyRow.GetName = function()
+                    local code = EF.Status()
+                    local note = (code == "not-learned" and "  Fishing isn't learned") or (code == "needs-targeting" and "  can't reel yet") or ""
+                    local others = EF.OtherFishingKeys()
+                    for _, mine in ipairs(EF.Keys()) do
+                        for _, theirs in ipairs(others) do
+                            if mine == theirs then note = "  also BetterFishing's key" end
+                        end
+                    end
+                    return "Key: " .. KeyText() .. note
+                end
+                Under(keyRow, fishing, CanBind, CantBind)
+            end
+            local clearRow = Button("Clear the key", "Clear", function()
+                if EF.ClearKeys() == "combat" then R.Print("key bindings can't change in combat. Nothing was changed.") end
+                K.RefreshOverview()
+            end, "Takes Easy Fishing's key off it. Only that key is removed; no other binding is touched. With no key, nothing is cast or reeled.")
+            Under(clearRow, fishing, function() return CanBind() and #EF.Keys() > 0 end,
+                function() if not CanBind() then return CantBind() end return "No key is set." end)
+
+            local function TargetingNow()
+                local on = EF.InteractionOn()
+                if on == nil then return "can't be read" end
+                return on and "on" or "off"
+            end
+            local targetTip = "Reeling needs the game's interaction targeting to pick your bobber, and a range and arc wide enough to include it. This lets Easy Fishing set those game settings only while a line is out and put them back afterwards. It asks first and changes nothing until you allow it. Off, nothing of the game's is touched."
+            local targetRow = Button("Adjust interaction targeting while fishing", function()
+                return EF.TargetingAllowed() and "Stop adjusting" or "Allow"
+            end, function()
+                if EF.TargetingAllowed() then
+                    EF.SetTargeting(false)
+                    K.RefreshOverview()
+                    return
+                end
+                local lines = {}
+                for _, item in ipairs(EF.TARGETING) do lines[#lines + 1] = ("%s to %s"):format(item.name, item.value) end
+                R.Interact.Confirm("TWICHUI_EASYFISHING_TARGETING",
+                    "Let Easy Fishing adjust the game's interaction targeting while you fish?\n\nWhile a fishing line is out it sets " .. table.concat(lines, ", ") ..
+                    ", so the game can pick your bobber when you press the key. When the line is gone, when you turn Easy Fishing off and when you log out, each one is put back to what it was, unless you changed it yourself in the meantime. While the line is out, the game's interact icons and its own Interact key reach further. Nothing else is changed, and without this the key can still cast but may not be able to reel.",
+                    function() EF.SetTargeting(true); K.RefreshOverview() end, { accept = "Allow", combat = true })
+            end, function()
+                return targetTip .. "\n\nInteraction targeting is " .. TargetingNow() .. " in the game right now."
+            end)
+            if targetRow then
+                Under(targetRow, fishing, function() return CanBind() end, CantBind)
+            end
+        end
 
         Header("Game Menu", "A shortcut in the Escape menu.")
         QolToggle("qolQuickKeybind", "Quick Keybind button",

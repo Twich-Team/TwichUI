@@ -22,7 +22,8 @@ local WIDTH, HEIGHT = 920, 660
 local HEADER_H, FOOTER_H, NAV_W, PAD = 54, 38, 212, 14
 local CONTENT_W = WIDTH - PAD - NAV_W - 12 - 24 - PAD
 local CONTROL_W = 236
-local ROW_MIN, SECTION_PAD, GAP = 30, 14, 12
+local ROW_MIN, SECTION_PAD, GAP = 30, 14, 14
+local RESET_H, PAGE_BOTTOM = 52, 12   -- the page's own Reset area, and the room under the last thing on a page
 local NAV_ROW, NAV_GROUP = 30, 24
 local TAB_H = 28
 local HOST_H = 540
@@ -237,8 +238,9 @@ end
 ---------------------------------------------------------------------------
 local function SectionId(page, header) return header and header.id or (page.key .. ":intro") end
 
--- A feature's tabs: one per page of the family, the shown one in gold with a bar on the rule below. Choosing one
--- goes to that page (a stable page key, as search and direct links use); its rows are made the first time.
+-- A feature's tabs: one per page of the family (Look's Tab: the shown one has a faint bronze fill and a bar on
+-- the rule below). Choosing one goes to that page (a stable page key, as search and direct links use); its rows
+-- are made the first time.
 local function TabStrip(parent, tabs, current)
     local strip = CreateFrame("Frame", nil, parent)
     strip:SetHeight(TAB_H)
@@ -246,29 +248,11 @@ local function TabStrip(parent, tabs, current)
     local x = 0
     for _, tab in ipairs(tabs) do
         local selected = tab.key == current
-        local b = CreateFrame("Button", nil, strip)
-        b:SetHeight(TAB_H)
-        b.text = Wg.Text(b, "body")
-        b.text:SetPoint("LEFT", 12, 0)
-        b.text:SetText(K.TabLabel(tab))
-        b:SetWidth(b.text:GetStringWidth() + 24)
+        local b = Wg.Tab(strip, K.TabLabel(tab), 24, not selected and function() UI.Navigate(tab.key) end or nil)
+        b:SetSize(b.text:GetStringWidth() + 24, TAB_H)
         b:SetPoint("BOTTOMLEFT", strip, "BOTTOMLEFT", x, 0)
+        b:SetSelected(selected)
         x = x + b:GetWidth() + 2
-        local wash = Wg.Solid(b, "BACKGROUND", pal.text, 0.05)
-        wash:SetAllPoints()
-        b.wash = Motion.Fader(function(x) wash:SetAlpha(x) end, 0)
-        b.bar = Wg.Solid(b, "ARTWORK", pal.bronzeText, 1)
-        b.bar:SetHeight(2)
-        b.bar:SetPoint("BOTTOMLEFT", 0, 0)
-        b.bar:SetPoint("BOTTOMRIGHT", 0, 0)
-        b.bar:SetShown(selected)
-        Wg.Color(b.text, selected and pal.text or pal.textDim)
-        if not selected then
-            b:SetScript("OnEnter", function(self) self.wash:To(1, T.hover); Wg.Color(self.text, pal.text) end)
-            b:SetScript("OnLeave", function(self) self.wash:To(0, T.hover); Wg.Color(self.text, pal.textDim) end)
-            b:SetScript("OnHide", function(self) self.wash:Set(0); Wg.Color(self.text, pal.textDim) end)
-            b:SetScript("OnClick", function() UI.Navigate(tab.key) end)
-        end
     end
     return strip
 end
@@ -368,15 +352,15 @@ local function BuildView(page)
     local resettable = K.Resettable(page.key)
     if #resettable > 0 then
         view.reset = CreateFrame("Frame", nil, frame)
-        view.reset:SetSize(CONTENT_W, 64)
-        local rule = Wg.Solid(view.reset, "BORDER", pal.danger.border, 0.5)
+        view.reset:SetSize(CONTENT_W, RESET_H)
+        local rule = Wg.Solid(view.reset, "BORDER", pal.bronzeLo, 0.45)   -- neutral: Reset is not the page's headline
         rule:SetHeight(1)
         rule:SetPoint("TOPLEFT", 0, 0)
         rule:SetPoint("TOPRIGHT", 0, 0)
         local text = Wg.Text(view.reset, "small")
-        text:SetPoint("TOPLEFT", 2, -14)
+        text:SetPoint("TOPLEFT", 2, -17)
         text:SetWidth(CONTENT_W - 170)
-        text:SetText(("Restore defaults: puts the %d settings on this page back to how a new installation has them. Other pages, map pins, the Journey Chronicle, backups and profiles are not changed."):format(#resettable))
+        text:SetText("Reset this page's settings to their defaults. Other pages and saved data are unchanged.")
         local button = Wg.Button(view.reset, "Reset this page", 140, "danger", function()
             I.Confirm("TWICHUI_SETTINGS_RESET_PAGE",
                 ("Reset every setting on the %s page to its default?\n\n%d settings go back to their defaults, as if you changed each one yourself. Nothing on other pages changes, and map pins, the Journey Chronicle, backups, stat weights and profiles are not affected."):format(page.name, #resettable),
@@ -448,6 +432,7 @@ function Layout(view)
         view.hosted:Show()
         y = y + HOST_H
     end
+    local placed = false
     for _, sec in ipairs(view.sections) do
         local card, inner = sec.card, SECTION_PAD
         local visible = 0
@@ -495,15 +480,18 @@ function Layout(view)
             card:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, -y)
             card:SetHeight(inner)
             y = y + inner + GAP
+            placed = true
         end
     end
+    if placed then y = y - GAP end   -- the gap belongs between two things, not after the last
     if view.reset then
         view.reset:ClearAllPoints()
-        view.reset:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, -(y + 6))
-        y = y + 6 + 64
+        view.reset:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, -(y + 18))
+        y = y + 18 + RESET_H
     end
-    frame:SetHeight(y + 8)
-    content:SetHeight(y + 8)
+    -- exactly what is drawn, so the scroll range (and its bar) is there only when something is out of view
+    frame:SetHeight(y + PAGE_BOTTOM)
+    content:SetHeight(y + PAGE_BOTTOM)
 end
 UI.Layout = Layout
 

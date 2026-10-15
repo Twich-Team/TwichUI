@@ -40,6 +40,7 @@ PF.ACCOUNT = {
         restedxpSkinState = true, -- the RestedXP theme to go back to: a record of RestedXP's setting, not a choice
         mageSell = true,          -- the never-sell list: a protection, which no profile change may lift
         guideWaypoint = true,     -- the waypoint each character placed: a record per character
+        easyFishingClient = true, -- the game settings Easy Fishing changed while a line was out, to put back: a record of the client
     },
 }
 -- The gear entries that are a profile's. The rest stay account-wide: stat weights and priorities are kept

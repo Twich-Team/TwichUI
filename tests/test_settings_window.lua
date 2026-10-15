@@ -838,6 +838,67 @@ assert(R.Profiles.Current() == "Second")
 assert(R.Profiles.Switch("Default"))
 
 ---------------------------------------------------------------------------
+-- 6b. The finishing pass: Home's wording and height, the scroll bar only where there is something to scroll,
+-- Notifications' one introduction, and the tabs
+---------------------------------------------------------------------------
+do
+  local function Find(frame, pred)
+    if pred(frame) then return frame end
+    for _, ch in ipairs(frame.children or {}) do
+      local found = Find(ch, pred)
+      if found then return found end
+    end
+  end
+  local function Texts(frame, out)
+    out = out or {}
+    if frame.shown == false then return out end   -- a page or row not drawn now
+    if type(frame.text) == "string" and frame.text ~= "" then out[#out + 1] = frame.text end
+    if type(frame.text) == "table" and type(frame.text.text) == "string" then out[#out + 1] = frame.text.text end
+    for _, ch in ipairs(frame.children or {}) do Texts(ch, out) end
+    return out
+  end
+  local function Has(frame, text)
+    for _, t in ipairs(Texts(frame)) do if t == text then return true end end
+    return false
+  end
+  local viewport = 660 - (54 + 10) - (38 + 8)   -- the window's height less its header and footer (Window.lua)
+  local scroll = Find(win, function(f) return f.kind == "ScrollFrame" and f.scrollBarHideable ~= nil end)
+  assert(scroll and scroll.scrollBarHideable, "the content's scroll bar hides while nothing overflows")
+
+  UI.Navigate("overview")
+  assert(Has(win, "Show welcome") and Has(win, "View commands"), "Home's buttons say what they do")
+  assert(not Has(win, "Show") and not Has(win, "List"), "and the bare words are gone")
+  local homeHeight = scroll.child.h
+  assert(homeHeight > 0 and homeHeight < viewport, "Home fits the window with room to spare: " .. homeHeight)
+  local blurb = false
+  for _, t in ipairs(Texts(win)) do
+    if t:find("Reset this page's settings to their defaults", 1, true) then blurb = true end
+    assert(not t:find("Restore defaults:", 1, true), "the long scope sentence is not drawn")
+  end
+  assert(blurb, "Reset says what it covers in one line")
+
+  UI.Navigate("notifications")
+  assert(scroll.child.h > viewport, "a dense page still scrolls: " .. scroll.child.h)
+  assert(Has(win, "Accessibility") and Has(win, "Reduced motion"), "Notifications has an Accessibility section")
+  for _, t in ipairs(Texts(win)) do
+    assert(not t:find("Small, quiet cards near the edges of the screen", 1, true), "the introduction is not said twice")
+  end
+  -- its tabs: the shown one is not a link; the other goes to its page
+  local tabs = {}
+  Find(win, function(f)
+    if f.kind == "Button" and type(f.text) == "table" and (f.text.text == "General" or f.text.text == "Appearance") and f.bar and f:IsVisible() then
+      tabs[f.text.text] = f
+    end
+  end)
+  assert(tabs.General and tabs.Appearance, "both tabs are drawn")
+  assert(tabs.General.scripts.OnClick == nil and tabs.General.bar.shown, "the shown tab is marked and does nothing")
+  assert(tabs.Appearance.scripts.OnClick and not tabs.Appearance.bar.shown, "the other is a way to its page")
+  tabs.Appearance.scripts.OnClick(tabs.Appearance)
+  assert(select(1, UI.Selected()) == "notificationsLook", "choosing a tab goes to its page")
+  UI.Navigate("overview")
+end
+
+---------------------------------------------------------------------------
 -- 7. The game's AddOns entry: one page with one button that opens the window
 ---------------------------------------------------------------------------
 UI.Close()

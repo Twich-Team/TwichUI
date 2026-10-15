@@ -50,6 +50,7 @@ second defaults system, and AceDB's removal of values equal to their defaults.
 | **Account, every profile** | `ui.reduceSettingsMotion` and `ui.settingsWindow`: how the settings window itself moves, and where it sits (`ui.showAdvanced`, the removed "Show advanced options", is deleted on load) |
 | **Account, every profile** | `ui.restedxpSkinState`: the RestedXP theme to go back to (a record of RestedXP's setting) |
 | **Account, every profile** | `ui.mageSell`: the never-sell list, a protection no profile change may lift |
+| **Account, every profile** | `ui.easyFishingClient`: the game settings Easy Fishing changed while a line was out, kept so they can be put back (a record of the client, docs/easy-fishing.md) |
 | **Account, every profile** | `gear.weights`, `gear.priority`, `gear.usePriority`: stat weights and priorities, already kept per class and talent tree |
 | **Per character** | `gear.trees[char]`, `ui.guideWaypoint[guid]` |
 | **Never in a profile** | `pins` (pins, kept state, ids, the party session), `setup.*`, `shareTransport`, `whisperProbe`, `storedData`, `welcome`, `schema`, `migrated`, `heldStored`, and the other saved variables (`TwichUIChronicleDB`, `TwichUIBackupDB`, `TwichUIShareDB`, `TwichUIRestoreDB`) |

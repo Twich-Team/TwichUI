@@ -68,6 +68,7 @@ local DEFAULT_MODULES = {
     qolDuelsToDeath = false, -- ... and duels to the death (needs the one above)
     qolQuickKeybind = false, -- ... a Quick Keybind button in the Game Menu
     qolGuideWaypoint = false, -- ... the game's waypoint on RestedXP's current destination (needs RestedXP)
+    qolEasyFishing = false,  -- ... one key to cast your line and, while it is out, reel in (your own key press each time; no default key)
     qolMageConjureFoodDrink = false, -- ... show conjure food/water when no consumables are in bags and player is a mage
     qolTwichUISettingsButton = true,  -- TwichUI button in the Game Menu (core feature, always enabled)
     partyPins = true,        -- Party pins: named map pins of your own, and ones shared with party members who have TwichUI (on; a profile that already saved false keeps it)

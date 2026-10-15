@@ -44,7 +44,7 @@ for key, default in pairs(defaults) do
   n = n + 1
   assert(default == R.DEFAULT_MODULES[key], key .. " default matches a new install")
 end
-assert(n == 55, "every module has a toggle: " .. n)
+assert(n == 56, "every module has a toggle: " .. n)
 assert(defaults.restedxpSkin == false, "the RestedXP skin is opt-in")
 assert(defaults.arrival == true and defaults.arrivalSubzones == true and defaults.arrivalReducedMotion == false,
   "arrival card and subzone cards on; reduced motion opt-in")
@@ -247,7 +247,7 @@ for variable, page in pairs({
   TWICHUI_qolSummons = "Quality of life", TWICHUI_qolSummonsFrom = "Quality of life", TWICHUI_qolSummonsWait = "Quality of life",
   TWICHUI_qolResurrect = "Quality of life", TWICHUI_qolResurrectCombat = "Quality of life", TWICHUI_qolReleasePvP = "Quality of life",
   TWICHUI_qolReleaseWait = "Quality of life", TWICHUI_qolDuels = "Quality of life", TWICHUI_qolDuelsFrom = "Quality of life",
-  TWICHUI_qolDuelsToDeath = "Quality of life", TWICHUI_qolQuickKeybind = "Quality of life",
+  TWICHUI_qolDuelsToDeath = "Quality of life", TWICHUI_qolQuickKeybind = "Quality of life", TWICHUI_qolEasyFishing = "Quality of life",
   TWICHUI_foodDrink = "Food and drink", TWICHUI_foodDrinkFood = "Food and drink", TWICHUI_foodDrinkDrink = "Food and drink",
   TWICHUI_mageTravel = "Mage", TWICHUI_mageTravelText = "Mage", TWICHUI_mageConjure = "Mage", TWICHUI_mageConjureText = "Mage", TWICHUI_mageRefreshments = "Mage", TWICHUI_mageRefreshmentsTrade = "Mage", TWICHUI_mageRefreshmentsAutoFill = "Mage", TWICHUI_refreshmentsTradeGives = "Mage", TWICHUI_refreshmentsText = "Mage",
   TWICHUI_mageSell = "Mage", TWICHUI_mageSellFood = "Mage", TWICHUI_mageSellDrink = "Mage", TWICHUI_mageSellDryRun = "Mage",
@@ -522,7 +522,7 @@ assert(rows["Addon skins"].status():find("of") or rows["Addon skins"].status():f
 
 -- Quality of life: everything is opt-in, there is no "requested invites" row (the game's interface
 -- for it isn't in Forever), choices read and write the saved options, and the waits sit with what they wait for.
-for _, key in ipairs({ "qolSummons", "qolResurrect", "qolResurrectCombat", "qolReleasePvP", "qolDuels", "qolDuelsToDeath", "qolQuickKeybind", "qolGuideWaypoint" }) do
+for _, key in ipairs({ "qolSummons", "qolResurrect", "qolResurrectCombat", "qolReleasePvP", "qolDuels", "qolDuelsToDeath", "qolQuickKeybind", "qolGuideWaypoint", "qolEasyFishing" }) do
   assert(defaults[key] == false, key .. " is off by default")
 end
 for variable in pairs(variables) do assert(not variable:lower():find("invite"), variable .. ": no invite setting") end
@@ -557,7 +557,7 @@ c.TwichUIDB.modules.qolSummons = false; summonToggle.setting.changed(); assert(n
 local qolRow = assert(rows["Quality of life"], "the Quality of life page has a status")
 assert(qolRow.status():find("Off"), qolRow.status())
 c.TwichUIDB.modules.qolDuels, c.TwichUIDB.modules.qolReleasePvP = true, true; summonToggle.setting.changed()
-assert(qolRow.status():find("2 of 6 on"), qolRow.status())
+assert(qolRow.status():find("2 of 7 on"), qolRow.status())
 -- The RestedXP destination row: off, visible, and its tooltip says what it is doing right now.
 do
   local guideRow; for _, i in ipairs(initializers) do if i.setting and i.setting.name == "Mark RestedXP's destination" then guideRow = i end end
@@ -566,6 +566,25 @@ do
   c.TwichUIDB.modules.qolGuideWaypoint = true
   assert(guideRow:GetTooltip():find("RestedXP not installed"), guideRow:GetTooltip())
   c.TwichUIDB.modules.qolGuideWaypoint = false
+end
+-- Easy Fishing: off, its key and client-setting rows wait for it, the status says what is missing, and nothing
+-- is bound or changed until the player says so.
+do
+  local function ByName(prefix) for _, i in ipairs(initializers) do if (i:GetName() or ""):sub(1, #prefix) == prefix then return i end end end
+  local fishRow = ByName("Easy Fishing")
+  local keyRow, clearRow = ByName("Key:"), ByName("Clear the key")
+  local targetRow = ByName("Adjust interaction targeting while fishing")
+  assert(fishRow and keyRow and clearRow and targetRow, "the Easy Fishing rows are there")
+  assert(fishRow.data.tooltip:find("Use the same key to cast your line and reel in a catch.", 1, true), "its explanation")
+  assert(fishRow:GetTooltip():find("Status: .*Off"), fishRow:GetTooltip())
+  assert(keyRow:GetName() == "Key: not set", keyRow:GetName())
+  assert(not keyRow:Enabled() and not clearRow:Enabled() and not targetRow:Enabled(), "greyed out while Easy Fishing is off")
+  assert(keyRow:DisabledReason():find("Easy Fishing"), keyRow:DisabledReason())
+  c.TwichUIDB.modules.qolEasyFishing = true
+  assert(keyRow:Enabled() and targetRow:Enabled(), "on: the key and the permission can be used")
+  assert(not clearRow:Enabled() and clearRow:DisabledReason():find("No key"), "nothing to clear while no key is set")
+  c.TwichUIDB.modules.qolEasyFishing = false
+  assert(R.DEFAULT_MODULES.qolEasyFishing == false and R.QoL.Get("easyFishingTargeting") == "leave", "off, and no permission, for a new install")
 end
 qolRow.click(); assert(c.opened == "qol", "row opens the Quality of life page")
 -- Leatrix Plus overlap shows in the tooltip, and leaves its settings alone.

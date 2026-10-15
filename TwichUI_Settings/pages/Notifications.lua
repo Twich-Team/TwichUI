@@ -19,9 +19,9 @@ K.Page({
         local Header, Toggle, Button, Choice, ProxyToggle, Under = K.Header, K.Toggle, K.Button, K.Choice, K.ProxyToggle, K.Under
         local STRING = K.STRING
 
-        Header("Notifications", "Small, quiet cards near the edges of the screen for moments worth a glance. None of them makes you do anything, and each can be turned off on its own.")
+        Header("Accessibility", "Applies to the notification cards only: not to TwichUI's windows.")
         Toggle("arrivalReducedMotion", "Reduced motion",
-            "The notification cards only fade in and out, without moving. Applies to the zone, training and friend cards.")
+            "The notification cards only fade in and out, without moving: no rise or slide. Applies to the zone, training, friend login and Welcome Back cards, and to their previews. TwichUI's windows have their own setting, Reduce window motion on Home.")
 
         Header("Zone arrival", "A short, quiet title card when you arrive somewhere new, in place of the game's own zone text.")
         local arrival = Toggle("arrival", "Show a title card when I arrive in a new zone",

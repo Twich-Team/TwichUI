@@ -43,9 +43,9 @@ pal.bg = { 0.137, 0.135, 0.130 }          -- the page: neutral dark stone
 pal.nav = { 0.090, 0.087, 0.084 }         -- the left-hand list: deep charcoal
 pal.band = { 0.108, 0.103, 0.097 }        -- the header (and a selected row's base): charcoal, a touch warmer
 pal.well = { 0.072, 0.071, 0.069 }        -- fields, the checkbox, slider tracks: pressed in, not black
-pal.surface = { 0.196, 0.187, 0.173 }     -- a section's card: desaturated taupe stone, a step above the page
+pal.surface = { 0.178, 0.170, 0.158 }     -- a section's card: desaturated taupe stone, a gentle step above the page
 pal.text = { 0.94, 0.91, 0.82 }           -- warm ivory
-pal.textDim = { 0.76, 0.74, 0.69 }        -- descriptions: gray-beige
+pal.textDim = { 0.80, 0.78, 0.72 }        -- descriptions: gray-beige, quieter than a label but easy to read
 pal.stone = { 0.62, 0.60, 0.56 }          -- category labels, hints, disabled
 pal.bronzeText = { 0.76, 0.63, 0.38 }     -- a bronze readable as text: section headings and the selection marker
 pal.bronzeLo = { 0.34, 0.33, 0.31 }       -- quiet interior edges and dividers (neutral; the rim has rimLo)
@@ -62,13 +62,13 @@ pal.primary = {                           -- the one affirming action (Reload no
     border = { 0.40, 0.64, 0.62 }, bg = { 0.17, 0.30, 0.30 }, text = { 0.96, 0.94, 0.88 },
     hotBorder = { 0.58, 0.78, 0.76 }, hotBg = { 0.17, 0.30, 0.30 }, hotText = { 1, 0.98, 0.92 },
 }
-pal.quiet = {                             -- an ordinary button: a stone face with a clear edge
-    border = { 0.44, 0.43, 0.40 }, bg = { 0.235, 0.226, 0.212 }, text = { 0.88, 0.85, 0.77 },
-    hotBorder = { 0.60, 0.58, 0.54 }, hotBg = { 0.235, 0.226, 0.212 }, hotText = { 0.97, 0.94, 0.86 },
+pal.quiet = {                             -- an ordinary button: a darker stone face, a soft edge, a bronze lift on hover
+    border = { 0.38, 0.36, 0.32 }, bg = { 0.200, 0.191, 0.177 }, text = { 0.90, 0.87, 0.79 },
+    hotBorder = { 0.58, 0.52, 0.42 }, hotBg = { 0.200, 0.191, 0.177 }, hotText = { 0.98, 0.95, 0.88 },
 }
 pal.danger = {                            -- Reset and other actions that put things back: subdued rust
-    border = { 0.56, 0.30, 0.25 }, bg = { 0.20, 0.135, 0.12 }, text = { 0.90, 0.64, 0.56 },
-    hotBorder = { 0.76, 0.42, 0.34 }, hotBg = { 0.20, 0.135, 0.12 }, hotText = { 1, 0.78, 0.68 },
+    border = { 0.50, 0.28, 0.23 }, bg = { 0.18, 0.125, 0.11 }, text = { 0.90, 0.64, 0.56 },
+    hotBorder = { 0.72, 0.40, 0.32 }, hotBg = { 0.18, 0.125, 0.11 }, hotText = { 1, 0.78, 0.68 },
 }
 Wg.pal = pal
 
@@ -93,7 +93,7 @@ local KINDS = {
     title = { "GameFontNormalLarge", 17, FONT_TITLE, pal.text },
     heading = { "GameFontNormal", nil, nil, pal.bronzeText },
     body = { "GameFontHighlight", nil, nil, pal.text },
-    small = { "GameFontHighlightSmall", nil, nil, pal.textDim },
+    small = { "GameFontHighlightSmall2", nil, nil, pal.textDim },   -- 11px: descriptions, a step under the 12px label
     meta = { "GameFontHighlightSmall", nil, nil, pal.stone },
 }
 
@@ -313,8 +313,8 @@ end
 
 -- A section's card: a surface a step lighter than the window, gently pressed in at its edge.
 function Wg.Panel(frame)
-    Wg.Surface(frame, pal.surface, 0.85, pal.bronzeLo, 0.26)
-    return Wg.Recess(frame, 0.5)
+    Wg.Surface(frame, pal.surface, 0.85, pal.bronzeLo, 0.20)
+    return Wg.Recess(frame, 0.4)
 end
 
 -- A flat information tag: a darker chip and quiet text. Not a button: no edge, no raised face, no hover.
@@ -353,7 +353,7 @@ function Wg.Button(parent, label, w, kind, onClick)
         b = S.Button(parent, label, w, kind == "primary" and "primary" or "secondary", onClick, pal)
     end
     b:SetMotionScriptsWhileDisabled(true)
-    Wg.Raise(b)
+    Wg.Raise(b, kind == "primary" and { 0.96, 0.94, 0.89 } or nil)
     return b
 end
 
@@ -385,21 +385,22 @@ function Wg.Hover(frame, c, alpha, inset)
     return fader
 end
 
--- Gives a button a raised face: a light upper edge, a darker lower edge and a faint sheen over its top half. It
--- follows the button's own states: lit a little more under the pointer, sunk (the edges swap, the sheen goes)
--- while pressed, flat when disabled. Works on any BackdropTemplate button; the button keeps its own colors.
-function Wg.Raise(b)
-    local warm = { 0.96, 0.94, 0.89 }
+-- Gives a button a raised face: a lit upper edge (bronze, or `tone`), a darker lower edge and a faint sheen over
+-- its top half. It follows the button's own states: lit a little more under the pointer, sunk (the edges swap,
+-- the sheen goes) while pressed, flat when disabled. Works on any BackdropTemplate button; the button keeps its
+-- own colors.
+function Wg.Raise(b, tone)
+    local warm = tone or pal.bronzeText
     local sheen = b:CreateTexture(nil, "ARTWORK")
     sheen:SetPoint("TOPLEFT", 1, -1)
     sheen:SetPoint("TOPRIGHT", -1, -1)
     sheen:SetHeight(11)
-    Wg.Fade(sheen, warm, 0.07, 0)
-    local lit = Wg.Solid(b, "ARTWORK", warm, 0.18)
+    Wg.Fade(sheen, pal.text, 0.05, 0)
+    local lit = Wg.Solid(b, "ARTWORK", warm, 0.30)
     lit:SetHeight(1)
     lit:SetPoint("TOPLEFT", 1, -1)
     lit:SetPoint("TOPRIGHT", -1, -1)
-    local dark = Wg.Solid(b, "ARTWORK", pal.ink, 0.45)
+    local dark = Wg.Solid(b, "ARTWORK", pal.ink, 0.40)
     dark:SetHeight(1)
     dark:SetPoint("BOTTOMLEFT", 1, 1)
     dark:SetPoint("BOTTOMRIGHT", -1, 1)
@@ -408,16 +409,16 @@ function Wg.Raise(b)
         local on = b:IsEnabled()
         if not on then
             sheen:Hide()
-            lit:SetColorTexture(warm[1], warm[2], warm[3], 0.05)
+            lit:SetColorTexture(warm[1], warm[2], warm[3], 0.08)
             dark:SetColorTexture(pal.ink[1], pal.ink[2], pal.ink[3], 0.20)
         elseif down then
             sheen:Hide()
             lit:SetColorTexture(pal.ink[1], pal.ink[2], pal.ink[3], 0.40)
-            dark:SetColorTexture(warm[1], warm[2], warm[3], 0.08)
+            dark:SetColorTexture(warm[1], warm[2], warm[3], 0.10)
         else
             sheen:Show()
-            lit:SetColorTexture(warm[1], warm[2], warm[3], over and 0.24 or 0.18)
-            dark:SetColorTexture(pal.ink[1], pal.ink[2], pal.ink[3], 0.45)
+            lit:SetColorTexture(warm[1], warm[2], warm[3], over and 0.42 or 0.30)
+            dark:SetColorTexture(pal.ink[1], pal.ink[2], pal.ink[3], 0.40)
         end
     end
     Wg.Hover(b, pal.text, 0.07)
@@ -640,10 +641,10 @@ function Wg.Card(parent, x1, y1, x2, y2)
         return t
     end
     Piece("BACKGROUND", pal.surface, 0.85, x1, y1, x2, y2)
-    Piece("BORDER", pal.bronzeLo, 0.26, x1, y1, x2, y1 - 1)       -- edge
-    Piece("BORDER", pal.bronzeLo, 0.26, x1, y2 + 1, x2, y2)
-    Piece("BORDER", pal.bronzeLo, 0.26, x1, y1, x1 + 1, y2)
-    Piece("BORDER", pal.bronzeLo, 0.26, x2 - 1, y1, x2, y2)
+    Piece("BORDER", pal.bronzeLo, 0.20, x1, y1, x2, y1 - 1)       -- edge
+    Piece("BORDER", pal.bronzeLo, 0.20, x1, y2 + 1, x2, y2)
+    Piece("BORDER", pal.bronzeLo, 0.20, x1, y1, x1 + 1, y2)
+    Piece("BORDER", pal.bronzeLo, 0.20, x2 - 1, y1, x2, y2)
     Piece("BORDER", pal.ink, 0.21, x1 + 1, y1 - 1, x2 - 1, y1 - 2)   -- pressed in: shadow above and left,
     Piece("BORDER", pal.ink, 0.12, x1 + 1, y1 - 2, x1 + 2, y2 + 2)  -- a faint lip below
     Piece("BORDER", pal.text, 0.035, x1 + 1, y2 + 2, x2 - 1, y2 + 1)
@@ -676,8 +677,9 @@ function Wg.CloseBox(frame, onClick)
     return b
 end
 
--- A tab: quiet text with a wash under the pointer; the selected one is ivory with a bronze bar on its bottom
--- edge. b:SetSelected(bool). It is a plain button (no Blizzard template, whose art repaints on every click).
+-- A tab: quiet text with a wash under the pointer; the selected one is ivory with a faint bronze fill and a
+-- bronze bar on its bottom edge (the label never moves). b:SetSelected(bool). It is a plain button (no
+-- Blizzard template, whose art repaints on every click).
 function Wg.Tab(parent, label, width, onClick)
     local b = CreateFrame("Button", nil, parent)
     b:SetSize(width or 130, 26)
@@ -687,6 +689,8 @@ function Wg.Tab(parent, label, width, onClick)
     local washTex = Wg.Solid(b, "BACKGROUND", pal.text, 0.05)
     washTex:SetAllPoints()
     local wash = Motion.Fader(function(v) washTex:SetAlpha(v) end, 0)
+    b.fill = Wg.Solid(b, "BACKGROUND", pal.bronzeText, 0.11)   -- the shown tab: a warm tint, not a box
+    b.fill:SetAllPoints()
     b.bar = Wg.Solid(b, "ARTWORK", pal.bronzeText, 1)
     b.bar:SetHeight(2)
     b.bar:SetPoint("BOTTOMLEFT", 0, 0)
@@ -694,6 +698,7 @@ function Wg.Tab(parent, label, width, onClick)
     local selected = false
     local function Paint()
         b.bar:SetShown(selected)
+        b.fill:SetShown(selected)
         Wg.Color(b.text, selected and pal.text or pal.textDim)
     end
     function b:SetSelected(on) selected = on and true or false; Paint() end
@@ -702,7 +707,7 @@ function Wg.Tab(parent, label, width, onClick)
         Wg.Color(b.text, pal.text)
     end)
     b:SetScript("OnLeave", function() wash:To(0, Motion.TIME.hover); Paint() end)
-    b:SetScript("OnHide", function() wash:Set(0) end)
+    b:SetScript("OnHide", function() wash:Set(0); Paint() end)
     b:SetScript("OnClick", onClick)
     Paint()
     return b

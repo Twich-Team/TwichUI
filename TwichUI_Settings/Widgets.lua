@@ -505,10 +505,15 @@ function Wg.Swatch(parent, onPick)
 end
 
 ---------------------------------------------------------------------------
--- A scroll frame with Style.lua's slim bar. Returns scroll, content.
+-- A scroll frame with Style.lua's slim bar, shown only while there is something to scroll. Returns scroll, content.
 ---------------------------------------------------------------------------
 function Wg.Scroll(parent, contentWidth)
     local scroll = CreateFrame("ScrollFrame", nil, parent, "UIPanelScrollFrameTemplate")
+    -- Unless told otherwise the template keeps its bar (arrows, track and a full-length thumb) up while there is
+    -- nothing to scroll. Hideable, it shows only when the content is taller than the view (the range is
+    -- ScrollFrame_OnScrollRangeChanged's to follow, as Blizzard's own hideable frames do).
+    scroll.scrollBarHideable = 1
+    if type(ScrollFrame_OnScrollRangeChanged) == "function" then pcall(ScrollFrame_OnScrollRangeChanged, scroll) end
     local content = CreateFrame("Frame", nil, scroll)
     content:SetSize(contentWidth, 1)
     scroll:SetScrollChild(content)

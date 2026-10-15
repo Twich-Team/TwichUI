@@ -11,12 +11,12 @@ K.Page({
     build = function()
         local Header, Toggle, Button = K.Header, K.Toggle, K.Button
 
-        Header("Help", "Where to find things. Neither button here changes a setting.")
-        Button("Welcome", "Show", function()
+        Header("Help", "Neither action changes a setting.")
+        Button("Welcome", "Show welcome", function()
             K.CloseOptions()
             if R.Welcome then R.Welcome.Show() end
         end, "Shows the short introduction again (same as typing /tui about). It changes nothing.")
-        Button("Chat commands", "List", function() R.RunCommand("help") end,
+        Button("Chat commands", "View commands", function() R.RunCommand("help") end,
             "Prints the /tui commands in your chat window: this window, the Chronicle, the sharing window, the troubleshooting report and card previews.")
 
         -----------------------------------------------------------------------

@@ -1,3 +1,0 @@
-TwichUI local agent smoke test
-Status: edited
-This file is not part of the addon.

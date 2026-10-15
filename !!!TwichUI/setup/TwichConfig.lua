@@ -65,6 +65,7 @@ TC.LOCAL = {
     -- the rest
     ["modules.restedxpSkin"] = "other", ["modules.qolTwichUISettingsButton"] = "other",
     ["ui.restedxpSkinState"] = "other", ["ui.showAdvanced"] = "other", ["gear.trees"] = "other",
+    ["ui.easyFishingClient"] = "other",
     ["pins"] = "other", ["setup"] = "other", ["storedData"] = "other", ["whisperProbe"] = "other", ["welcome"] = "other",
     ["schema"] = "other", ["migrated"] = "other", ["heldStored"] = "other",
     ["profiles"] = "other", ["profileKeys"] = "other", ["profileState"] = "other",
@@ -456,8 +457,8 @@ local function Define()
     end
 
     g = Group("qol", "Quality of life", { page = "qol",
-        note = "Only the Quick Keybind button is shared. The automatic ones (summons, resurrection, release, duels, the waypoint) stay yours." })
-    Switches(g, { "qolQuickKeybind" })
+        note = "Only the Quick Keybind button and the Easy Fishing switch are shared. The automatic ones (summons, resurrection, release, duels, the waypoint) stay yours, and so do Easy Fishing's key and its permission to adjust the game's interaction settings: key bindings and game settings are never sent." })
+    Switches(g, { "qolQuickKeybind", "qolEasyFishing" })
 
     g = Group("food", "Food and drink", { page = "food" })
     Switches(g, { "foodDrink", "foodDrinkFood", "foodDrinkDrink" })
