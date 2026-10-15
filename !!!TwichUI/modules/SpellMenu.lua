@@ -95,6 +95,12 @@ function SM.TrainingInfo(class, wanted)
     return info
 end
 
+-- How many of an item the character carries in their bags (0 when the game doesn't say).
+function SM.ItemCount(id)
+    local n = C_Item and C_Item.GetItemCount and Plain(C_Item.GetItemCount(id))
+    return type(n) == "number" and n or 0
+end
+
 -- The game's name and icon for a spell, or nil when its name hasn't loaded yet (then it is
 -- asked for, and the open menu redraws when it arrives).
 function SM.Spell(id)
@@ -283,9 +289,12 @@ MenuStyle.Subscribe(function() if SM.PreviewShown() then DrawPreview() end end)
 --   forPlayer()  true when this character's class has the spells
 --   entries()    sections, loading: { { label, rows = { entry, ... } }, ... } (nil for none) and
 --                whether a name was still loading. entry: { id, text, icon, known, note }; note
---                is shown at the right of an unlearned row. A section may give learned and
+--                is shown at the right of an unlearned row. A section may give stock = { text,
+--                empty }, shown at the right of its header (in a warning color when empty); a
+--                launcher with stock sets watchBags. A section may give learned and
 --                total for the launcher tooltip's count, when its rows aren't every spell.
 --   learnLines(tip, entry)  adds the lines under an unlearned spell's tooltip
+--   watchBags    optional: while the menu is open, bag changes redraw it (for entries' stock)
 --   shortcuts    optional: { { button = "LeftButton"|"RightButton", label, ranks = { spellIDs,
 --                lowest first } }, ... }; shift and that button casts the highest rank known
 --   footer       optional: { label, hint, shown(), onClick() }: a plain (not secure) entry under the
@@ -419,6 +428,9 @@ function SM.New(spec)
         local K = Palette()
         local h = CreateFrame("Frame", nil, menu)
         h:SetHeight(HEADER_HEIGHT)
+        h.stock = Text(h, FONT_NOTE, 12, "GameFontNormalSmall")
+        h.stock:SetPoint("BOTTOMRIGHT", -4, 4)
+        h.stock:SetJustifyH("RIGHT")
         h.text = Text(h, FONT_HEADER, 12, "GameFontNormalSmall")
         h.text:SetPoint("BOTTOMLEFT", 4, 4)
         h.text:SetTextColor(K.gold[1], K.gold[2], K.gold[3])
@@ -483,6 +495,11 @@ function SM.New(spec)
             local h = headers[i] or NewHeader()
             headers[i] = h
             h.text:SetText(section.label)
+            local stock = section.stock
+            local K = Palette()
+            local sc = (stock and stock.empty) and K.ember or K.stone
+            h.stock:SetText(stock and stock.text or "")
+            h.stock:SetTextColor(sc[1], sc[2], sc[3])
             h:ClearAllPoints()
             h:SetPoint("TOPLEFT", menu, "TOPLEFT", pad, y)
             h:SetPoint("RIGHT", menu, "RIGHT", -pad, 0)
@@ -599,6 +616,8 @@ function SM.New(spec)
         UI_SCALE_CHANGED = L.ApplyAppearance,   -- a border is a whole number of screen pixels
         DISPLAY_SIZE_CHANGED = L.ApplyAppearance,
     }
+
+    if spec.watchBags then HANDLERS.BAG_UPDATE_DELAYED = Schedule end
 
     function Listen(on)
         for event, handler in pairs(HANDLERS) do

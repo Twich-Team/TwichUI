@@ -99,6 +99,8 @@ local function Boot(class, faction, withLDB)
     GetSpellTexture = function(id) return 1000 + id end,
     RequestLoadSpellData = function(id) c.requested[id] = true end,
   }
+  c.ITEMS = { [17031] = 4, [17032] = 0 }
+  c.C_Item = { GetItemCount = function(id) return c.ITEMS[id] or 0 end }
   c.Enum = { SpellBookSpellBank = { Player = 0, Pet = 1 } }
   c.C_SpellBook = { IsSpellKnown = function(id, bank) assert(bank == 0); return c.KNOWN[id] == true end }
   c.made = {}
@@ -190,6 +192,18 @@ assert(byID[10059].attrs.type == nil, "nor an unlearned portal")
 assert(byID[3561].name.text == "Stormwind" and byID[3565].note.text == "Level 30" and byID[3561].note.text == "", "destination, and the level when unlearned")
 assert(byID[3565].icon.desaturated == true and byID[3561].icon.desaturated == false, "unlearned icons greyed, names kept")
 
+-- Reagents: Rune of Teleportation for teleports, Rune of Portals for portals, counted in the bags
+-- and shown at the right of each section's header, not on the rows.
+assert(M.REAGENTS.teleport.item == 17031 and M.REAGENTS.portal.item == 17032)
+local function Header(label)
+  for _, f in ipairs(c.frames) do
+    if f.kind == "Frame" and f.parent == menu and f.text and f.text.text == label then return f end
+  end
+end
+local function Stock(label) local h = Header(label); return h and h.stock.text end
+assert(Stock("Teleports") == "4 runes" and Stock("Portals") == "No runes", tostring(Stock("Teleports")) .. " / " .. tostring(Stock("Portals")))
+assert(byID[3562].note.text == "" and byID[3565].note.text == "Level 30" and byID[10059].note.text == "Level 40", "rows carry no counts")
+
 -- Hovering: the game's spell tooltip, then the honest learning lines.
 byID[10059].scripts.OnEnter(byID[10059])
 local t = table.concat(c.GameTooltip.lines, "\n")
@@ -206,6 +220,17 @@ assert(c.GameTooltip.owner == nil)
 local bus = c.TwichUI.frame
 assert(bus.events.SPELLS_CHANGED and bus.events.PLAYER_REGEN_DISABLED and bus.events.GLOBAL_MOUSE_DOWN, "listens while open")
 
+-- Bags changing while it is open update the counts; one rune reads singular.
+assert(bus.events.BAG_UPDATE_DELAYED, "watches the bags while open")
+c.ITEMS[17031] = 1
+c.FireEvent("BAG_UPDATE_DELAYED"); FlushTimers()
+assert(Stock("Teleports") == "1 rune", Stock("Teleports"))
+c.ITEMS[17031] = 0
+c.FireEvent("BAG_UPDATE_DELAYED"); FlushTimers()
+assert(Stock("Teleports") == "No runes")
+c.ITEMS[17031] = 4
+c.FireEvent("BAG_UPDATE_DELAYED"); FlushTimers()
+
 -- Learning a spell while it is open.
 c.KNOWN[10059] = true
 c.FireEvent("SPELLS_CHANGED"); FlushTimers()
@@ -218,7 +243,8 @@ byID[3561].scripts.PostClick(byID[3561], "LeftButton", true)
 assert(M.IsOpen(), "the press may be the one that casts: still open")
 byID[3561].scripts.PostClick(byID[3561], "LeftButton", false)
 assert(not M.IsOpen(), "closed after the release")
-assert(not bus.events.SPELLS_CHANGED and not bus.events.GLOBAL_MOUSE_DOWN and not bus.events.PLAYER_REGEN_DISABLED, "stops listening when closed")
+assert(not bus.events.SPELLS_CHANGED and not bus.events.GLOBAL_MOUSE_DOWN and not bus.events.PLAYER_REGEN_DISABLED
+  and not bus.events.BAG_UPDATE_DELAYED, "stops listening when closed")
 
 -- A click elsewhere closes it; on the menu or the launcher it doesn't.
 obj.OnClick(bar, "LeftButton")

@@ -29,6 +29,14 @@ M.SPELLS = {
         portal = { 11417, 11418, 11420 },
     },
 }
+-- The reagent each kind of spell uses, by kind. Teleports: ShortestPathForever's Forever teleport
+-- data lists Rune of Teleportation (17031) for every one. Portals: Rune of Portals (17032), as
+-- EllesmereUI's Supplies block lists it; no local Forever source states the portal quantity.
+-- The name is for reading the code and the tests; the menu says only "runes".
+M.REAGENTS = {
+    teleport = { item = 17031, name = "Rune of Teleportation" },
+    portal = { item = 17032, name = "Rune of Portals" },
+}
 M.KINDS = {
     { key = "teleport", label = "Teleports", one = "Teleport" },
     { key = "portal", label = "Portals", one = "Portal" },
@@ -62,6 +70,18 @@ function M.Destination(name)
     return name:match("^[^:]+:%s*(.+)$") or name
 end
 
+-- The stock for a spell kind: { text (shown at the right of the section's header), empty } from
+-- the runes in the bags, or nil for a kind with no reagent.
+function M.Stock(kindKey)
+    local r = M.REAGENTS[kindKey]
+    if not r then return nil end
+    local n = SM.ItemCount(r.item)
+    return {
+        text = n == 0 and "No runes" or (n == 1 and "1 rune" or ("%d runes"):format(n)),
+        empty = n == 0,
+    }
+end
+
 -- This character's sections: { { label, kind, rows = { entry, ... } }, ... }, and whether a
 -- name was still loading (its row is left out until it arrives). An entry is { id, name, text
 -- (the destination), icon, known, level, note, kind }. nil when the faction isn't known.
@@ -81,7 +101,7 @@ function M.Entries()
                 loading = true
             end
         end
-        sections[#sections + 1] = { label = kind.label, kind = kind, rows = list }
+        sections[#sections + 1] = { label = kind.label, kind = kind, rows = list, stock = M.Stock(kind.key) }
     end
     return sections, loading
 end
@@ -112,6 +132,7 @@ local launcher = SM.New({
     hint = "Click to choose a destination",
     empty = "No destinations for this character.",
     forPlayer = M.ForPlayer,
+    watchBags = true,
     entries = M.Entries,
     learnLines = LearnLines,
 })
