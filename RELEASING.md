@@ -1,46 +1,136 @@
 # Releasing TwichUI
 
-## One-time setup
-1. Put this folder in a GitHub repository (the repository root is this folder). The root holds two addon folders,
-   `!!!TwichUI/` (the core addon, with `!!!TwichUI.toc`) and `TwichUI_Settings/` (the settings window), beside the
-   repository-level files: `.pkgmeta`, `.github/`, `tests/`, `tools/`, `docs/`, `README.md`, `CHANGELOG.md`,
-   `LICENSE` and `licenses/`.
-2. Create the project on CurseForge (World of Warcraft > Addons). CurseForge
-   projects are public once approved. Note the **Project ID** on the project page.
-3. Add it to `!!!TwichUI/!!!TwichUI.toc`: `## X-Curse-Project-ID: 123456`.
-   (Optional: `## X-Wago-ID: xxxxxx` for Wago Addons.)
-4. Create a CurseForge API token (CurseForge > My API Tokens) and add it to the
-   GitHub repository as the secret `CF_API_KEY` (and `WAGO_API_TOKEN` for Wago).
+Releases are built and published by `.github/workflows/release.yml`, with `tools/release.py` deciding the
+version and the release notes. No version or changelog needs editing by hand.
 
-## Each release
-1. Update `## Version:` in both TOCs (`!!!TwichUI/!!!TwichUI.toc` and `TwichUI_Settings/TwichUI_Settings.toc`;
-   `tests/test_settings_package.lua` fails if they differ) and add an entry to `CHANGELOG.md`.
-2. Run `./tools/update_training_data.sh` (needs `git` and `lua5.1`) to refresh the
-   class training data from the newest What's Training? commit, then
-   `./tests/run.sh` (needs `lua5.1` and `lua-bitop`).
-   `docs/release-hardening.md` has the support scope, the profiling steps and the in-game checklist to go through first.
-   If the release changes what is saved (a new or changed layout in any saved variable), follow
-   `docs/persistence.md` ("Adding a schema 2") first: a numbered, repeatable upgrade step and a test with the
-   previous layout.
-3. Commit (including `!!!TwichUI/modules/TrainingData.lua` if it changed), then tag and push:
-   `git tag v3.0.1 && git push --tags`.
-4. The GitHub Action refreshes the training data again, tests, packages (folder `!!!TwichUI`, without tests/ and
-   .github/) and uploads the release. Friends using the CurseForge app or WowUp
-   get it as a normal update.
+| You push | Channel | GitHub | CurseForge |
+| --- | --- | --- | --- |
+| a commit to `main` | alpha | prerelease (never "Latest") | alpha file |
+| a commit to `beta` | beta | prerelease (never "Latest") | beta file |
+| a tag `vMAJOR.MINOR.PATCH` (e.g. `v3.0.13`) | release | release, marked Latest | release file |
+
+Nothing else publishes: not other branches, not pull requests, not tags of another form (`v3.1.0-beta1` is
+ignored).
+
+## One-time setup
+1. The repository root holds two addon folders, `!!!TwichUI/` (the core addon, with `!!!TwichUI.toc`) and
+   `TwichUI_Settings/` (the settings window), beside the repository-level files: `.pkgmeta`, `.github/`, `tests/`,
+   `tools/`, `docs/`, `README.md`, `CHANGELOG.md`, `LICENSE` and `licenses/`.
+2. The CurseForge project ID is in `!!!TwichUI/!!!TwichUI.toc` as `## X-Curse-Project-ID:`.
+3. Repository secret `CF_API_KEY`: a CurseForge API token (CurseForge > My API Tokens) that can upload to the
+   project. GitHub releases use the workflow's own `GITHUB_TOKEN`; no other secret is needed.
+4. Settings > Actions > General > Workflow permissions: the publish job asks for `contents: write`. If an
+   organization policy caps the token at read-only, publishing fails at the GitHub step (before CurseForge).
+5. Create the `beta` branch when you want beta builds; until it exists there are none.
+6. Recommended (repository settings, not done by the workflow): a tag ruleset so only maintainers can create,
+   move or delete `v*` tags; and, if you want a manual approval before anything is published, an environment
+   with required reviewers referenced from the publish job (`environment: release`).
+
+## Versions
+One version string per build, used for both `.toc` files, the zip name, the GitHub tag and title, and the
+CurseForge display name:
+
+- Stable: the tag without its `v`. Tag `v3.0.13` -> `3.0.13`, `!!!TwichUI-v3.0.13-forever.zip`.
+- Alpha and beta: `<next patch>-<channel>.<commits>.g<commit>`, for example `3.0.13-alpha.23.g3e8a397`:
+  - `<next patch>`: the patch after the highest stable tag the commit contains (after `v3.0.12`: `3.0.13`).
+    A prerelease never guesses whether the next release is a patch, minor or major; the stable tag decides
+    that, and `3.0.13-alpha...` sorts below any of them.
+  - `<commits>`: how many commits the build is past that tag, so builds on one branch count up.
+  - `g<commit>`: the first 7 characters of the commit it was built from.
+  - A tag the commit does not contain (made on another branch) does not count: the version says what the
+    build contains. So a `beta` branch that has not merged `v3.0.13` still builds `3.0.13-beta...`.
+  - With no stable tag at all, versions start at `0.0.1-alpha.<all commits>...` (and the build warns).
+- The same commit always gets the same version, so a re-run makes the same release, not a second one.
+- At most 40 characters: shared setups keep the addon version only up to that length.
+
+The version is written into both `.toc` files in the build's working copy only. Nothing is committed and the
+repository stays as it is, so the `## Version:` committed in the `.toc` files is what an unpackaged copy (a
+local checkout, `tools/deploy.sh`) shows; it is no longer changed for releases. In game, `/tui version`, the
+group check and the diagnostics report the packaged version.
+
+TwichUI's group check compares the `MAJOR.MINOR.PATCH` part only: `3.0.13-alpha.23...` counts as 3.0.13.
+
+## Each stable release
+1. Optional, before tagging: `./tools/update_training_data.sh` and commit it if it changed (the build refreshes
+   the packaged data anyway; committing keeps GitHub's "Source code" archives the same as the zip), and
+   `./tests/run.sh`. `docs/release-hardening.md` has the support scope, the profiling steps and the in-game
+   checklist. If the release changes what is saved, follow `docs/persistence.md` ("Adding a schema 2") first.
+2. Tag the commit and push the tag:
+   `git tag v3.0.13 && git push origin v3.0.13`.
+   To add hand-written highlights above the generated notes, make it an annotated tag:
+   `git tag -a v3.0.13 -F highlights.md` (the message is Markdown; a message that is only the tag name is ignored).
+3. The workflow tests, packages and publishes. Check the run's summary for the version and notes.
+
+Pushing `main` and the tag together is fine: the alpha build of a commit that carries a stable tag is skipped
+(if the branch push is processed before the tag arrives, an alpha of that commit is published as well; harmless).
+
+## Release notes
+Generated from commit messages, the same Markdown for GitHub and CurseForge:
+
+- Range: alpha, since the nearest earlier published alpha this commit contains; beta, likewise for betas;
+  stable, since the highest earlier stable tag the commit contains. With no earlier one on the channel, since
+  the last stable tag; with none at all, the whole history (at most 100 entries are listed).
+  "Published" means a tag made by this workflow, and ancestry decides "earlier", not the tag's name. A build
+  that failed never made a tag, so the next one covers its commits too.
+- Merge commits are left out; the commits they bring in are listed. A squash merge is one commit, listed once.
+  Commits with the same message are listed once.
+- Conventional Commits are understood but not required: `feat:` goes under Features, `fix:` under Fixes,
+  `perf:` under Performance, a `!` or `BREAKING CHANGE:` is marked Breaking, and `build`, `chore`, `ci`,
+  `docs`, `refactor`, `style` and `test` commits are counted but not listed. Every other message is listed
+  under Changes as written.
+- Left out: `fixup!`/`squash!`/`amend!` commits and messages containing `[skip changelog]` or `[no changelog]`.
+- Commit text is shown as plain text (Markdown, HTML and @mentions are neutralized).
+- The notes are only as good as the commit subjects: write them for players ("Easy Fishing: reel in with the
+  same key"), not "refinement".
+
+`CHANGELOG.md` keeps the notes written by hand up to v3.0.12 and is no longer updated.
+
+## Re-runs, failures and recovery
+The publish job works in steps, recording each in the GitHub release it creates:
+
+1. Create a **draft** GitHub release for the tag (not visible to players, no tag yet) and attach the zip and
+   `release.json` (read by addon managers that install from GitHub).
+2. Upload the zip to CurseForge, once. The draft's last line records the outcome
+   (`<!-- twichui-release {... "curseforge": "uploaded" ...} -->`).
+3. Publish the GitHub release, which creates its tag on the built commit, and check the tag points there.
+
+Re-run a failed run with **Re-run failed jobs**: the build is not repeated and publishing continues from the
+recorded step. What each failure leaves:
+
+- Tests or packaging failed: nothing was published. Fix and push again.
+- CurseForge refused the file (an error answer, or it could not be reached): the draft says `"failed"`.
+  Fix the cause (for example the `CF_API_KEY` secret), then re-run: it uploads again.
+- CurseForge's answer was lost (timeout, server error) or the job stopped mid-upload: the draft says
+  `"unknown"` or `"uploading"`, and re-runs stop rather than risk a second file. Look at the project's Files
+  on CurseForge for the file named in the error. If it is there, edit the draft and change the state to
+  `"uploaded"`; if not, change it to `"retry"`. Then re-run.
+- The GitHub release could not be published after CurseForge took the file: re-run; CurseForge is not uploaded
+  again.
+- A tag of that name already exists on another commit, or a release of that name exists that this workflow
+  did not make: nothing is published. Sort out the tag or release by hand.
+- A file published to CurseForge by mistake: CurseForge's project page lets you archive or delete it; the
+  workflow never deletes anything. For GitHub, delete the release and its tag.
+
+## Keeping prereleases
+Nothing is deleted automatically: every alpha and beta stays on GitHub (as a prerelease with its tag) and on
+CurseForge. If the list grows too long, delete old prereleases by hand (on GitHub, the release and its tag).
+Notes stay correct: the next build's notes then start from the nearest prerelease that is left, or from the
+last stable tag.
 
 ## Notes
-- The release job refreshes `!!!TwichUI/modules/TrainingData.lua` before packaging and fails the
-  release if fetching, generating or validating it fails. The uploaded zip contains the
-  refreshed data. A tag is never rewritten, so GitHub's automatic "Source code" archives
-  hold whatever was committed at the tag: step 2 keeps them the same as the zip. The job
-  logs the upstream commit and warns when the zip's data differs from the tagged commit.
-- Mark the release for the right game version on CurseForge. Forever reports
-  interface 16001; if CurseForge doesn't list it, upload for the closest version
-  CurseForge offers and say "WoW Forever" in the release notes.
-- Keep the `!!!` folder name: TwichUI must load before other addons.
+- The build refreshes `!!!TwichUI/modules/TrainingData.lua` from the newest What's Training? commit before
+  packaging and fails if fetching, generating or validating it fails. It logs the upstream commit and warns when
+  the zip's data differs from the commit's.
+- CurseForge's game version comes from `## Interface:` (16001 -> WoW: Forever 1.60.1, as the packager names it).
+  If CurseForge doesn't list it, the newest lower Forever version is used, with a warning in the run.
+- Keep the `!!!` folder name: TwichUI must load before other addons, and the game names saved variables files
+  after the folder.
 - The zip holds two folders: `!!!TwichUI` and `TwichUI_Settings` (the settings window, load on demand; `.pkgmeta`
   `move-folders`: the packager builds the whole repository as the package folder, so the core addon is moved up
-  over it and the settings window out beside it). Unzip a release once to check both are there, side by side, that
-  `!!!TwichUI` has its `.toc` at its top (not a second `!!!TwichUI` folder inside it) and no `TwichUI_Settings`
-  folder, and that there is no other top-level folder in the zip.
+  over it and the settings window out beside it). The build checks the zip: exactly those two folders, nothing
+  nested or misspelled, both `.toc` files at the build's version with the committed Interface, every file the
+  `.toc` files load present, and no development files, machine paths or secret-like text.
+- The packager (BigWigsMods/packager, pinned in the workflow) only builds; it uploads nothing.
+- Wago and WoWInterface are not set up: there is no `X-Wago-ID` or `X-WoWI-ID`, and the workflow doesn't upload
+  there.
 - The CurseForge description can reuse README.md.

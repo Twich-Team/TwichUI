@@ -25,5 +25,8 @@ ignore:
   - CLAUDE.md
   - assets
   - .gitignore
+  - docs
+  - .clinerules
+  - KNOWN_BUGS.md
   # an editor workspace file kept at pins/ (not the addon's pins/ folder): it must not collide with !!!TwichUI/pins
   - pins/TwichUI.code-workspace

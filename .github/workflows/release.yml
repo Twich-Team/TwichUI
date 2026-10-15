@@ -1,37 +1,71 @@
 name: Package and release
 
-# Push a tag like v3.0.0 to build the addon zip and upload it to CurseForge
-# (and Wago / GitHub releases if configured). The training data is refreshed from What's Training?
-# first. See RELEASING.md.
+# One pipeline for three channels (see RELEASING.md):
+#   push to main            -> alpha:   GitHub prerelease + CurseForge alpha
+#   push to beta            -> beta:    GitHub prerelease + CurseForge beta
+#   push a tag like v3.0.13 -> release: GitHub release (marked latest) + CurseForge release
+# tools/release.py decides the version and the release notes from git. The build job has no secrets: it
+# tests, stamps the version into both .toc files, packages (the packager only builds, -d) and checks the zip.
+# The publish job gets the credentials and publishes exactly the zip the build job checked.
 on:
   push:
-    tags:
-      - "v*"
+    branches: [main, beta]
+    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
+
+permissions:
+  contents: read
+
+# One run at a time per branch or tag, in push order; a newer push replaces a run still waiting to start.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  release:
+  build:
     runs-on: ubuntu-latest
-    env:
-      CF_API_KEY: ${{ secrets.CF_API_KEY }}
-      WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
-      GITHUB_OAUTH: ${{ secrets.GITHUB_TOKEN }}
-    permissions:
-      contents: write
+    timeout-minutes: 20
+    outputs:
+      publish: ${{ steps.plan.outputs.publish }}
+      tag: ${{ steps.plan.outputs.tag }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
-          fetch-depth: 0
+          fetch-depth: 0 # the version and the notes need every commit and tag
+          persist-credentials: false
+
+      # Writes $RUNNER_TEMP/release/meta.json (channel, version, tag, commit, previous release) and notes.md.
+      # A build that would duplicate a release (this commit is a stable tag, or already published or
+      # superseded on its channel) sets publish=false and stops here.
+      - name: Plan version and release notes
+        id: plan
+        env:
+          REF: ${{ github.ref }}
+          SHA: ${{ github.sha }}
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+        run: |
+          python3 -I tools/release.py plan --ref "$REF" --sha "$SHA" --repo-url "$REPO_URL" \
+            --out "$RUNNER_TEMP/release" --github-output "$GITHUB_OUTPUT"
+          meta="$RUNNER_TEMP/release/meta.json"
+          jq -r '"### \(.channel): \(.version // "no build")",
+                 "- Commit: \(.commit)",
+                 (if .publish then "- Publishing \(.tag)" else "- Not publishing: \(.skip_reason)" end)' \
+            "$meta" >> "$GITHUB_STEP_SUMMARY"
+          if [ -f "$RUNNER_TEMP/release/notes.md" ]; then
+            { echo; cat "$RUNNER_TEMP/release/notes.md"; } >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Install Lua
+        if: steps.plan.outputs.publish == 'true'
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq lua5.1 lua-bitop
 
       # Rebuilds !!!TwichUI/modules/TrainingData.lua from the newest What's Training? commit. Any failure here
-      # (fetch, generation, validation) fails the release before anything is packaged or uploaded.
+      # (fetch, generation, validation) fails the build before anything is packaged or published.
       # The packager zips this working tree, so the downloadable zip carries the refreshed data; the
-      # tagged commit itself, and GitHub's automatic source archives, keep the data committed at the tag.
+      # commit itself, and GitHub's automatic source archives, keep the data committed at it.
       - name: Refresh training data
+        if: steps.plan.outputs.publish == 'true'
         run: |
           set -o pipefail
           log="$RUNNER_TEMP/training-data.log"
@@ -41,10 +75,79 @@ jobs:
             sed -n 's/^Upstream commit: /- What'"'"'s Training? commit: /p' "$log"
           } >> "$GITHUB_STEP_SUMMARY"
           if ! git diff --quiet -- '!!!TwichUI/modules/TrainingData.lua'; then
-            echo "::warning::The packaged training data differs from the data committed at this tag. Run tools/update_training_data.sh and commit before tagging if the tagged source should match."
+            echo "::warning::The packaged training data differs from the data committed at this commit. Run tools/update_training_data.sh and commit before tagging if the tagged source should match."
           fi
 
       - name: Offline tests
+        if: steps.plan.outputs.publish == 'true'
         run: ./tests/run.sh
 
-      - uses: BigWigsMods/packager@v2
+      # The version lives in the build, not in a commit: both .toc files get the planned version here, in
+      # this working tree only.
+      - name: Stamp version into the .toc files
+        if: steps.plan.outputs.publish == 'true'
+        run: python3 -I tools/release.py stamp --meta "$RUNNER_TEMP/release/meta.json"
+
+      # The packager builds an untagged commit as an untagged build, but stops ("Found future tag") when a
+      # branch push lands on a tagged commit, such as a beta push of a commit already published as an alpha.
+      # The plan is made, so the local tags on this commit are no longer needed (nothing is pushed from here).
+      - name: Drop local tags on this commit (alpha and beta builds)
+        if: steps.plan.outputs.publish == 'true' && startsWith(github.ref, 'refs/heads/')
+        run: git tag --points-at HEAD | while IFS= read -r t; do git tag -d -- "$t"; done
+
+      - name: Package (build only)
+        if: steps.plan.outputs.publish == 'true'
+        uses: BigWigsMods/packager@e50a250f8705041e40f2fa1ddcb280a686d65aa0 # v2.6.1
+        with:
+          args: -d -n "${{ steps.plan.outputs.packager_name }}"
+          pandoc: false
+
+      - name: Check the package
+        if: steps.plan.outputs.publish == 'true'
+        run: |
+          shopt -s nullglob
+          zips=(.release/*.zip)
+          if [ "${#zips[@]}" -ne 1 ]; then echo "::error::expected one zip in .release, found ${#zips[@]}"; exit 1; fi
+          python3 -I tools/release.py check --meta "$RUNNER_TEMP/release/meta.json" "${zips[0]}"
+          cp -- "${zips[0]}" "$RUNNER_TEMP/release/"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: steps.plan.outputs.publish == 'true'
+        with:
+          name: release
+          path: ${{ runner.temp }}/release/
+          if-no-files-found: error
+          overwrite: true # "Re-run all jobs" rebuilds; the publish job then takes the newer build
+          retention-days: 30
+
+  publish:
+    needs: build
+    if: needs.build.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write # create the release and its tag
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release
+          path: ${{ runner.temp }}/release
+
+      # Draft GitHub release with the zip -> CurseForge upload (once; never retried blindly) -> publish the
+      # GitHub release, creating its tag on the built commit. Each step records its outcome in the draft,
+      # so re-running this job continues where it stopped. RELEASING.md has the recovery steps.
+      - name: Publish to GitHub and CurseForge
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CF_API_KEY: ${{ secrets.CF_API_KEY }}
+          REPO: ${{ github.repository }}
+        run: |
+          shopt -s nullglob
+          zips=("$RUNNER_TEMP"/release/*.zip)
+          if [ "${#zips[@]}" -ne 1 ]; then echo "::error::expected one zip in the build artifact, found ${#zips[@]}"; exit 1; fi
+          python3 -I tools/release.py publish --meta "$RUNNER_TEMP/release/meta.json" --zip "${zips[0]}" \
+            --notes "$RUNNER_TEMP/release/notes.md" --repo "$REPO"
