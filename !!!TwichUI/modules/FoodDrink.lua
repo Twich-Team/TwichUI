@@ -46,8 +46,8 @@ F.CONJURED = {
 local MOVER_ATLAS = "editmode-actionbar-highlight-NineSlice-Center"   -- Edit Mode's own highlight, when the client has it
 
 local KINDS = {
-    { key = "food", label = "Food", use = "Click to eat it.", setting = "foodDrinkFood", rule = "The food in your bags that restores the most health." },
-    { key = "drink", label = "Drink", use = "Click to drink it.", setting = "foodDrinkDrink", rule = "The drink in your bags that restores the most mana." },
+    { key = "food", label = "Food", use = "Click to eat it.", setting = "foodDrinkFood", conjure = "food", rule = "The food in your bags that restores the most health." },
+    { key = "drink", label = "Drink", use = "Click to drink it.", setting = "foodDrinkDrink", conjure = "water", rule = "The drink in your bags that restores the most mana." },
 }
 
 local container, mover
@@ -179,6 +179,25 @@ local function Candidate(id, names, words, readOnly)
         conjured = F.CONJURED[id] ~= nil }
 end
 
+-- Mage only, and only when the player turned it on (Show conjure food/water ...): for a button with
+-- nothing in the bags, the highest Conjure Food or Conjure Water rank this character has learned, as a
+-- choice that casts the spell instead of using an item. { spell, name, icon, kinds, count = 0 }, or nil;
+-- the second result is true when the spell's name hasn't loaded yet. The ranks are MageConjure's, and
+-- the spellbook test is SpellMenu's. Both load after this file, so they are looked up when needed.
+local function ConjureChoice(kind)
+    local M, SM = R.MageConjure, R.SpellMenu
+    if not (kind.conjure and M and SM and M.ForPlayer() and R:Enabled("qolMageConjureFoodDrink")) then return nil end
+    local ranks = M.SPELLS[kind.conjure]
+    for rank = #ranks, 1, -1 do
+        if SM.Known(ranks[rank]) then
+            local name, icon = SM.Spell(ranks[rank])
+            if not name then return nil, true end
+            return { spell = ranks[rank], name = name, icon = icon, kinds = { [kind.key] = true }, amount = 0, count = 0 }
+        end
+    end
+    return nil
+end
+
 -- The best food and the best drink in the bags: { food = candidate|nil, drink = candidate|nil }.
 -- Also whether anything was still loading.
 -- summary: when given, this is a read-only look for /tui diagnostics; it is filled with the candidates
@@ -212,6 +231,13 @@ local function Scan(summary)
     local prefer = F.Get("preferConjured")
     local chosen = { food = F.Pick(byKind.food, prefer), drink = F.Pick(byKind.drink, prefer) }
     for _, c in pairs(chosen) do c.preferred = prefer and c.conjured end   -- so the tooltip can say why
+    for _, kind in ipairs(KINDS) do
+        if not chosen[kind.key] then
+            local spell, still = ConjureChoice(kind)
+            chosen[kind.key] = spell
+            if still then waiting = true end
+        end
+    end
     if summary then
         summary.candidates, summary.chosen = byKind, chosen
     end
@@ -384,6 +410,11 @@ local function ShowTooltip(button)
             GameTooltip:AddLine("Mage-conjured, which your options prefer over ordinary " .. button.label:lower() .. ".", 0.69, 0.66, 0.6, true)
         end
         GameTooltip:AddLine(button.use, 0.79, 0.64, 0.29)
+    elseif button.spellID then
+        GameTooltip:SetSpellByID(button.spellID)
+        GameTooltip:AddLine(" ")
+        GameTooltip:AddLine("Nothing in your bags to " .. (button.label == "Food" and "eat" or "drink") .. ", so this conjures some.", 0.69, 0.66, 0.6, true)
+        GameTooltip:AddLine("Click to conjure it.", 0.79, 0.64, 0.29)
     else
         GameTooltip:SetText(button.label, 1, 1, 1)
         GameTooltip:AddLine("Nothing in your bags that TwichUI can tell is plain " .. button.label:lower() .. " you can use.", nil, nil, nil, true)
@@ -526,9 +557,12 @@ end
 -- Points a button at a choice (or at nothing). Out of combat only: it sets secure attributes.
 local function Fill(button, choice)
     local filled = choice ~= nil
-    button:SetAttribute("type", filled and "item" or nil)
-    button:SetAttribute("item", filled and choice.name or nil)
-    button.itemID = filled and choice.id or nil
+    local casts = filled and choice.spell ~= nil   -- a Mage's Conjure spell rather than an item
+    button:SetAttribute("type", filled and (casts and "spell" or "item") or nil)
+    button:SetAttribute("item", filled and not casts and choice.name or nil)
+    button:SetAttribute("spell", casts and choice.spell or nil)
+    button.itemID = filled and not casts and choice.id or nil
+    button.spellID = casts and choice.spell or nil
     button.choice = choice
     button.preferred = filled and choice.preferred or nil
     if filled then button.icon:SetTexture(choice.icon) end
@@ -565,7 +599,7 @@ local function Update()
         -- current choice for a kind while it is still in the bags, and look again when data arrives.
         for _, kind in ipairs(KINDS) do
             local old = rawget(buttons[kind.key], "choice")
-            local count = old and C_Item.GetItemCount(old.id) or 0
+            local count = old and old.id and C_Item.GetItemCount(old.id) or 0
             if not best[kind.key] and count > 0 then
                 best[kind.key] = { id = old.id, name = old.name, icon = old.icon, kinds = old.kinds,
                     amount = old.amount, count = count, conjured = old.conjured, preferred = old.preferred }
@@ -598,7 +632,7 @@ local function Update()
     ApplyAlpha()
     if R.Diag and R.Diag.Tracing() then
         Trace("updated", ("food=%s drink=%s waiting-for-data=%s"):format(
-            best.food and best.food.id or "none", best.drink and best.drink.id or "none", tostring(waiting and true or false)))
+            best.food and (best.food.id or best.food.spell) or "none", best.drink and (best.drink.id or best.drink.spell) or "none", tostring(waiting and true or false)))
     end
 end
 
@@ -650,6 +684,7 @@ end
 local function SecureMatches(button)
     local choice = rawget(button, "choice")
     local kind, item = button:GetAttribute("type"), button:GetAttribute("item")
+    if choice and choice.spell then return kind == "spell" and button:GetAttribute("spell") == choice.spell end
     if choice then return kind == "item" and item == choice.name end
     return kind == nil and item == nil
 end
@@ -661,7 +696,7 @@ function F.Brief()
     for _, kind in ipairs(KINDS) do
         local button = buttons[kind.key]
         local choice = button and rawget(button, "choice")
-        parts[#parts + 1] = ("%s=%s%s"):format(kind.key, choice and choice.id or "none",
+        parts[#parts + 1] = ("%s=%s%s"):format(kind.key, choice and (choice.id or choice.spell) or "none",
             (button and not SecureMatches(button)) and "(secure action differs)" or "")
     end
     parts[#parts + 1] = ("deferred=%s"):format(tostring(dirty))

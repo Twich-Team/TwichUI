@@ -848,6 +848,53 @@ do
   c.EDITING = false; c.EventRegistry.callbacks["EditMode.Exit"]()
 end
 
+-- Mage with nothing in the bags: the button casts the highest Conjure rank known, once the option is on.
+do
+  for _, f in ipairs({"modules/MenuStyle.lua", "modules/SpellMenu.lua", "modules/MageConjure.lua"}) do
+    local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
+  end
+  local MC = R.MageConjure
+  local known = {}
+  c.C_SpellBook = { IsSpellKnown = function(id) return known[id] == true end }
+  c.C_Spell.GetSpellName = function(id)
+    return ({ [434] = "Food", [431] = "Drink", [597] = "Conjure Food", [5505] = "Conjure Water" })[id]
+  end
+  c.C_Spell.GetSpellTexture = function(id) return 900000 + id end
+  c.UnitClass = function() return "Mage", "MAGE" end
+  M.foodDrink = true; M.qolMageConjureFoodDrink = false; F.Refresh()
+  Bags({})
+  known[587], known[597], known[5504], known[5505] = true, true, true, true
+  c.FireEvent("BAG_UPDATE_DELAYED"); Look()
+  local food, drink = Buttons()
+  assert(food.attrs.type == nil and drink.attrs.type == nil, "off: empty buttons, as before")
+
+  M.qolMageConjureFoodDrink = true; F.Refresh(); Look()
+  assert(food.attrs.type == "spell" and food.attrs.spell == 597, "highest known Conjure Food rank: " .. tostring(food.attrs.spell))
+  assert(drink.attrs.type == "spell" and drink.attrs.spell == 5505, "highest known Conjure Water rank: " .. tostring(drink.attrs.spell))
+  assert(food.attrs.item == nil and rawget(food, "itemID") == nil and rawget(food, "spellID") == 597)
+  assert(food.icon.texture == 900597, "shows the spell's icon")
+
+  -- Food arrives for one kind only: that button goes back to the item, the other keeps casting.
+  Item(2287, "Haunch of Meat", 5, 10)
+  Bags({ 2287 }); c.FireEvent("BAG_UPDATE_DELAYED"); Look()
+  assert(food.attrs.type == "item" and food.attrs.item == "Haunch of Meat" and food.attrs.spell == nil, "food in bags wins")
+  assert(drink.attrs.type == "spell" and drink.attrs.spell == 5505, "drink still conjures")
+
+  -- A rank not learned yet is never offered; with none learned the button stays empty.
+  Bags({})
+  known[587], known[597], known[5504], known[5505] = nil, nil, nil, nil
+  c.FireEvent("BAG_UPDATE_DELAYED"); Look()
+  assert(food.attrs.type == nil and drink.attrs.type == nil and rawget(food, "spellID") == nil, "no spell known: empty")
+
+  -- Not a Mage: never.
+  known[597], known[5505] = true, true
+  c.UnitClass = function() return "Warrior", "WARRIOR" end
+  c.FireEvent("BAG_UPDATE_DELAYED"); Look()
+  assert(food.attrs.type == nil and drink.attrs.type == nil, "only for a Mage")
+  c.UnitClass = nil
+  M.qolMageConjureFoodDrink = false
+end
+
 -- Off: nothing listened for, nothing shown.
 M.foodDrink = false; F.Refresh()
 assert(not events.BAG_UPDATE_DELAYED and not events.PLAYER_REGEN_ENABLED and not events.GET_ITEM_INFO_RECEIVED and not events.SPELL_TEXT_UPDATE, "no listeners when off")

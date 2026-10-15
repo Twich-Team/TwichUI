@@ -53,7 +53,7 @@ TC.LOCAL = {
     ["modules.mageSellDryRun"] = "acts", ["modules.mageRefreshmentsAutoFill"] = "acts",
     ["modules.qolSummons"] = "acts", ["modules.qolResurrect"] = "acts", ["modules.qolResurrectCombat"] = "acts",
     ["modules.qolReleasePvP"] = "acts", ["modules.qolDuels"] = "acts", ["modules.qolDuelsToDeath"] = "acts",
-    ["modules.qolGuideWaypoint"] = "acts",
+    ["modules.qolGuideWaypoint"] = "acts", ["modules.qolMageConjureFoodDrink"] = "acts",
     ["ui.qol"] = "acts", ["ui.mageSell"] = "acts", ["ui.guideWaypoint"] = "acts",
     -- sent to or accepted from other players
     ["modules.setupSharing"] = "network", ["modules.acceptSetups"] = "network", ["modules.groupCheck"] = "network",

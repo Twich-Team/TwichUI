@@ -1,44 +1,62 @@
-# TwichUI rules (World of Warcraft: Forever addon, Lua)
+# TwichUI: rules for every task
 
 ## Project
-TwichUI is a focused, curated interface companion for WoW: Forever. It is not a UI replacement or a bundle of unrelated utilities.
-Feature test: does it make the game clearer, more personal or more enjoyable without taking attention from the world or control from the player?
-No intrusive prompts, chat spam, persistent reminders or hand-holding. Never automate protected gameplay actions.
-Use the project's own spelling and namespace. Do not rename TwichUI.
+TwichUI is a World of Warcraft addon for WoW: Forever (Lua 5.1): a small, curated interface companion, not a UI replacement. Features are quiet and opt-in: no unasked-for chat, pop-ups or reminders, and never automated casting, item use, trading or selling. `CLAUDE.md` has the full rules; read only the section a task needs.
 
-## Layout (use this instead of searching)
-Repo root: /home/rich/dev/personal/TwichUI/
-- `!!!TwichUI/` is the addon folder. Spelled T-w-i-c-h-U-I. There is NO "t" after "Twi". Never write "TwitchUI".
-- `!!!TwichUI/` holds feature modules
-- `TwichUI_Settings/pages/` holds settings pages (separate load-on-demand addon)
+## Layout (verified; use it instead of searching)
+Spelling: TwichUI (T-w-i-c-h, never "Twitch"). The core addon folder is `!!!TwichUI/` (three `!`).
+- `!!!TwichUI/!!!TwichUI.toc`: load order. A core file not listed there never loads.
+- `!!!TwichUI/Core.lua`: `R` (`local R = TwichUI`), events, `R.Print`, `DEFAULT_MODULES` (switch defaults), `COMMANDS` (`/tui`).
+- `!!!TwichUI/Switches.lua`: what each switch does.
+- Feature folders in `!!!TwichUI/`: `modules/`, `qol/`, `pins/`, `setup/`, `chronicle/`, `gear/`, `auction/`, `diag/`.
+- `TwichUI_Settings/`: the settings window, a separate load-on-demand addon (`Kit.lua`, `pages/`, its own `.toc`).
+- `tests/`: offline tests.
+- Edit only files in `!!!TwichUI/`, `TwichUI_Settings/` and `tests/`, plus `TASK_NOTES.md`. Never edit `!!!TwichUI/libs/` or `!!!TwichUI/media/`.
+- WoW API reference (read-only, outside the repo): `../wow-ui-source/`.
 
 ## Paths
-- Copy file paths exactly from tool output or from my message. Never retype or "correct" a path.
-- Use the read tool with workspace-relative paths (e.g. `!!!TwichUI/modules/FoodDrink.lua`), not `cat` with absolute paths.
-- If a file read fails, stop and show me the exact error. Do not write code for a file you have not read.
-- `grep` exit code 1 means no matches, not an error.
+- Copy every path exactly from this file, the user or tool output. Never retype or "fix" one. Use repo-relative paths.
+- In terminal commands, single-quote paths with `!!!`: `'!!!TwichUI/Core.lua'`. Unquoted or in double quotes, the shell replaces `!!`.
+- If a read or command fails, stop and show the exact error. Write code only for files you read in this task.
+- Files over 300 lines: `grep -n 'name' '<file>'`, then read a range: `sed -n '120,180p' '<file>'`.
+- `grep` exit code 1 means no match, not an error.
+
+## Commands (from the repo root; verified)
+- After every Lua edit: `luac5.1 -p '<file>'` (no output means OK). Never run plain `luac`.
+- One test (any `tests/test_*.lua`): `(cd tests && lua5.1 -e 'require("bit"); ROOT="../!!!TwichUI/"; REPO="../"; TESTS="./"' test_qol.lua)`
+- All tests (about 10 s): `./tests/run.sh`
+- No lint exists. Unless the user asks, never run `tools/` scripts, deploys, `git commit` or `git push`.
+
 ## Hard rules
-1. Target is WoW: Forever, not Retail or Classic. Before using an API you are not certain exists in this client, search the Blizzard source reference for its name. If you cannot find it, say so and ask. Never invent an API.
-2. Lua syntax supported by the WoW client only: no `goto`, no `//`, no bitwise operators.
-3. Use `local` everywhere. Use the addon namespace. No new globals.
-4. Never edit `Libs/`, reference addons or the Blizzard source. Edit only this repository, never the deployed AddOns copy.
-5. Never rename SavedVariables or change existing keys. Apply defaults only to missing values. Keep valid `false`, `0` and `""`.
-6. Never use `loadstring` or `load`. Treat imports and addon messages as untrusted: validate size, version, types and structure.
-7. Respect combat lockdown (`InCombatLockdown()`). Do not bypass protected or secure UI restrictions.
-8. Settings live in the TwichUI-owned settings window, not Blizzard's AddOns panel. Open it through the central open/navigate function. Core features must work without the settings window ever opening.
-9. Do not add libraries, dependencies or copied code without asking.
-10. Do not commit, deploy, publish, or change `.toc` interface/version numbers unless asked.
-11. Prefer events over `OnUpdate`. No duplicate hooks, frames, timers or callbacks. Keep caches and queues bounded.
-12. Visuals: warm charcoal, umber, aged bronze, muted gold, parchment and ivory text. No neon, glass effects, heavy gradients or heavy glow. Reuse the shared styling helpers. Windows must look complete without EllesmereUI installed.
-13. Make the smallest change that solves the request. No unrelated cleanup, renaming or reformatting.
+1. Use a WoW API or event only after finding it in this repo or `../wow-ui-source/`. Not found: say so and stop.
+2. Lua 5.1: `local` for everything, no new globals, no `goto`, `//` or bitwise operators.
+3. `R:On("EVENT", fn)`: `fn` gets only the event's payload, never `self, event`. Undo with `R:Off("EVENT", fn)`.
+4. Secure frames and protected actions can't change in combat: check `InCombatLockdown()`, redo the work on `PLAYER_REGEN_ENABLED`.
+5. Saved values go only through the feature's `Get`/`Set` (switches: `R:Enabled`, `R:SetEnabled`). Never rename a saved key.
+6. Settings rows go in `TwichUI_Settings/pages/`, never Blizzard's options. Open the window with `R:OpenSettings(page)`.
+7. Chat: `R.Print("text %s", value)`, only in answer to the player's own command or click.
+8. Write complete code: no stubs or placeholder comments. If you can't finish, stop and say what is missing.
+9. Make the smallest change that works: no renaming, reformatting or cleanup. Never change `## Interface` or `## Version` in a `.toc`.
+10. Ask before adding a library or copied code. Never use `loadstring` or `load`.
 
 ## How to work
-1. Read only the files you need. Check the layout above first. Do not re-search for a file you already found; remember its path.
-2. Before editing, state in 2 to 3 lines which files you will change and why.
-3. If the task needs more than about 3 files, touches architecture, or is ambiguous, stop and propose a plan first. For research or planning requests, change no files.
-4. If you are stuck or repeating yourself, stop and ask me one specific question instead of looping.
-5. Run lint or tests only if the command is listed here. Do not invent commands: `[FILL IN or delete this line]`.
-6. When finished, report: files changed, what and why, checks you actually ran, what I must test in game (`/reload`, what to look for), and any risk. Never say something was tested if you did not run it.
+1. Read `TASK_NOTES.md`, then the matching recipe, then only the files it names.
+2. Before editing, state in 2 or 3 lines which files and functions you will change, and why. Research or planning request: change no file except `TASK_NOTES.md`.
+3. Edit one file at a time, run `luac5.1 -p` on it, then update `TASK_NOTES.md`. More than 3 files: list the steps under `Next` first.
+4. Finish with the recipe's tests, then `./tests/run.sh`.
+5. Unsure, stuck, or about to repeat a search or an edit: stop and ask one specific question.
 
-## Deeper guidance
-For work on the settings window, config sharing and backups, Journey Chronicle, shared pins or location, optional skins, or mage/inventory/trade features, search `CLAUDE.md` for that feature's heading and read only that section. Do not read the whole file.
+## TASK_NOTES.md (survives context compaction)
+Repo root, gitignored; create it if missing. Read it at the start of every task and right after any context compaction. Update it after every edit and every verified fact. Rewrite, don't append; under 40 lines; exactly these sections: `## Goal`, `## Done` (path, function), `## Facts` (verified paths, APIs, line ranges), `## Next` (1 to 3 steps), `## Open questions`. Record only what a file or tool output showed; mark the rest `UNVERIFIED`. If notes and code disagree, trust the code. When the task is finished, replace everything with `No active task.`
+
+## Final report
+Files changed (path, function); what changed and why; commands run and their results; what to test in game after `/reload`; risks and open questions. Never claim a check you did not run.
+
+## Recipes (read the matching one before you start)
+- `docs/recipes/add-switch.md`: on/off checkbox
+- `docs/recipes/add-feature-setting.md`: slider, dropdown, color, feature option
+- `docs/recipes/add-settings-page.md`: new page, page keys
+- `docs/recipes/add-module.md`: new feature file, events, combat
+- `docs/recipes/add-slash-command.md`: `/tui` command
+- `docs/recipes/wow-api-lookup.md`: any WoW API or event
+- `docs/recipes/food-drink-module.md`: before editing `!!!TwichUI/modules/FoodDrink.lua`

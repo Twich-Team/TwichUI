@@ -7,3 +7,5 @@ luac.out
 *:com.apple.*
 
 tools/deploy.sh
+
+TASK_NOTES.md

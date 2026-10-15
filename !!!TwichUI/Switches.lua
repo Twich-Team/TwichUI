@@ -95,6 +95,7 @@ end
 
 -- Food and drink
 Define("foodDrink", { apply = Refresh("FoodDrink") })
+Define("qolMageConjureFoodDrink", { apply = Refresh("FoodDrink") })   -- read by modules/FoodDrink.lua
 Define("foodDrinkFood", { apply = Refresh("FoodDrink") })
 Define("foodDrinkDrink", { apply = Refresh("FoodDrink") })
 Define("foodDrinkUnlock", {

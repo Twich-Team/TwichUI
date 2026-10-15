@@ -44,7 +44,7 @@ K.Page({
         
         -- Add Mage Conjure Food & Drink setting for mages without consumables
         Under(Toggle("qolMageConjureFoodDrink", "Show conjure food/water when no consumables in bags",
-            "Shows mage-conjured food and water buttons instead of empty ones when you are a mage and have no consumable items (food or drink) in your bags."),
+            "Mage only. When the Food or Drink button has nothing it can use in your bags, it becomes Conjure Food or Conjure Water, at the highest rank you have learned, and casts it when you click it. Once the food or water is in your bags, the button goes back to it. A button that has an item is never changed."),
             foodDrink, FoodDrinkOn)
         
         -- Where they go. Edit Mode moves the buttons unless this is on and EllesmereUI is there.
