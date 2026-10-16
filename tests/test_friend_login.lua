@@ -185,10 +185,30 @@ Online(1); Settle()
 assert(card.icon.shown and card.title.point[2] == 44 + 7 and card.rule.point[4] == -(44 + 7), "the name moves over to make room for the mark")
 Finish(card.anim)
 
--- Text from the game is shown as plain text, and a name that can't be read is never shown.
+-- The account name the game gives is a kstring, a code the font string draws as the real name: it reaches the
+-- card untouched (escaped, the code itself showed, e.g. "|Ks1|k"), and its width is the string's own, not the code's.
+Friend(4, "|Ks1|k", "Thrall", "Horde")
+Online(4); Settle()
+assert(card.shown and card.title.text == "|Ks1|k", card.title.text)
+assert(card.title.width == 0, "with no width of its own the string sizes itself to the name")
+Finish(card.anim)
+card.title.GetWidth = function() return 120 end
+Online(4); Settle()
+assert(card.title.width == 120, "the drawn name's width is kept")
+Finish(card.anim)
+card.title.GetWidth = function() return 9999 end
+Online(4); Settle()
+assert(card.title.width == 360 - 51, "and clamped to the card")
+Finish(card.anim)
+card.title.GetWidth = nil
+-- Anything else from the game is shown as plain text, and a name that can't be read is never shown.
 Friend(4, "Pipe|cffff0000Red", "Bad|rName", "Horde")
 Online(4); Settle()
 assert(card.title.text == "Pipe||cffff0000Red" and card.sub.text == "Online as Bad||rName", "escape codes are not interpreted")
+Finish(card.anim)
+Friend(4, "|Ks1|k|cffff0000Red", "Thrall", "Horde")
+Online(4); Settle()
+assert(card.title.text == "||Ks1||k||cffff0000Red", "only a lone kstring is let through: " .. card.title.text)
 Finish(card.anim)
 Friend(5, "", "Nameless", "Horde")   -- no account name and a BattleTag with nothing before the number
 Online(5); for _ = 1, 6 do RunLongTimers(2); FlushTimers() end

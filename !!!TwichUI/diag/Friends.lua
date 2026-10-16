@@ -331,6 +331,46 @@ function T.TestCard()
     Say("shown a made-up login card (and its chime). This proves the card can be drawn; it says nothing about whether real friend events arrive.")
 end
 
+-- /tui diagnostics test friend real: one of your own Battle.net friends on the card, read through the same
+-- F.Describe a real login uses, so the name can be checked against the game's without waiting for anyone to
+-- log in. A friend online in WoW first (their character and faction show too), then anyone online, then
+-- anyone. The card is a preview; no friend is named in chat or the records.
+local MAX_LOOKED = 200   -- friends looked at, at most
+
+local function Readable(v) return v ~= nil and not (issecretvalue and issecretvalue(v)) end
+
+function T.TestRealFriend()
+    local F = R.FriendLogin
+    if not F then Say("friend login isn't available.") return end
+    local list = C_BattleNet and C_BattleNet.GetFriendAccountInfo
+    if not (BNGetNumFriends and list) then Say("the game's Battle.net friend list isn't available.") return end
+    local total = BNGetNumFriends()
+    if not Readable(total) or type(total) ~= "number" then total = 0 end
+    local best, bestRank
+    for i = 1, math.min(total, MAX_LOOKED) do
+        local info = list(i)
+        local id = type(info) == "table" and info.bnetAccountID or nil
+        local entry = Readable(id) and F.Describe(id) or nil
+        if entry then
+            local game = type(info.gameAccountInfo) == "table" and info.gameAccountInfo or {}
+            local online = Readable(game.isOnline) and game.isOnline == true
+            local inWow = online and Readable(game.clientProgram) and game.clientProgram == (BNET_CLIENT_WOW or "WoW")
+            local rank = inWow and 1 or online and 2 or 3
+            if not bestRank or rank < bestRank then best, bestRank = entry, rank end
+            if rank == 1 then break end
+        end
+    end
+    if not best then
+        Say("no Battle.net friend the game gives a name for was found (%d on your list). Nothing was shown.", total)
+        return
+    end
+    local kind = bestRank == 1 and "a friend playing WoW" or bestRank == 2 and "an online friend" or "an offline friend"
+    D.Synthetic("friend", "real-friend-test", kind .. " from your list; not a real event; kstring=" .. (best.kstring and "y" or "n"))
+    F.Preview(true, { best })
+    Say("shown %s from your Battle.net list on the login card, read the way a real login is. The large name should be "
+        .. "their name as your friends list shows it, not a code. It says nothing about whether real friend events arrive.", kind)
+end
+
 function T.TestSound(stock)
     local F = R.FriendLogin
     if not F then Say("friend login isn't available.") return end

@@ -101,9 +101,15 @@ local function ShortTag(tag)
     return Plain(short or tag)
 end
 
--- { name, character, faction } for a Battle.net account id, or nil when the game doesn't (yet) give a name;
--- then a second value says why ("bad-id", "no-api", "no-info", "no-name").
+-- The account name the game gives is a kstring: a short code such as "|Kq12|k" that a font string draws
+-- as the friend's real name. It has to reach SetText untouched (escaped, the code itself shows), so only
+-- that exact shape counts as one; anything else is shown as plain text.
+local function IsKString(text) return text:match("^|K%w+|k$") ~= nil end
+
+-- { name, character, faction, kstring } for a Battle.net account id, or nil when the game doesn't (yet) give
+-- a name; then a second value says why ("bad-id", "no-api", "no-info", "no-name").
 -- faction is "Horde" or "Alliance" only; anything else (no game, or Neutral) is left out.
+-- kstring: the name is the game's code for the real name, to be drawn as it is (see Fill).
 function F.Describe(id)
     if type(id) ~= "number" or (issecretvalue and issecretvalue(id)) then return nil, "bad-id" end
     if not (C_BattleNet and C_BattleNet.GetAccountInfoByID) then return nil, "no-api" end
@@ -115,6 +121,7 @@ function F.Describe(id)
     local faction = Plain(game.factionName)
     return {
         name = name,
+        kstring = IsKString(name) or nil,
         character = Plain(game.characterName),
         faction = faction and FACTIONS[faction] and faction or nil,
     }
@@ -340,8 +347,20 @@ local function Fill(entries)
     -- the face and size first: the width below is measured from them
     A.Typeset("friend", card.title, { role = "title", path = A.FONT_TITLE, size = 20, fallback = "SubZoneTextFont", color = K.text })
     card.title:SetWidth(0)
-    card.title:SetText(Escape(first.name))
-    card.title:SetWidth(math.min(card.title:GetStringWidth() + 2, CardWidth() - indent))
+    local nameWidth
+    if first.kstring then
+        -- The string widths measure a kstring's code, not the name drawn for it. With no width of its own the
+        -- string sizes itself to the name, so that size is read back and only clamped, as the game's own
+        -- friends list does (0 leaves it sizing itself).
+        card.title:SetText(first.name)
+        nameWidth = card.title:GetWidth()
+        if type(nameWidth) ~= "number" or nameWidth ~= nameWidth or nameWidth < 0 then nameWidth = 0 end
+        nameWidth = math.min(nameWidth, CardWidth() - indent)
+        card.title:SetWidth(nameWidth)
+    else
+        card.title:SetText(Escape(first.name))
+        card.title:SetWidth(math.min(card.title:GetStringWidth() + 2, CardWidth() - indent))
+    end
     card.title:ClearAllPoints()
     card.title:SetPoint("TOPLEFT", indent, 0)
     card.rule:ClearAllPoints()
@@ -349,7 +368,7 @@ local function Fill(entries)
     A.PaintRule("friend", card.rule, 1)
     A.Typeset("friend", card.sub, { role = "detail", path = A.FONT_LINE, size = 15, fallback = "SubZoneTextFont", color = K.stone })
     card.sub:SetText(F.Subline(entries))
-    local width = math.max(indent + A.TextWidth(card.title, CardWidth()), 100, A.TextWidth(card.sub, CardWidth()))
+    local width = math.max(indent + (nameWidth or A.TextWidth(card.title, CardWidth())), 100, A.TextWidth(card.sub, CardWidth()))
     A.Backdrop("friend", card, { top = card, bottom = card.sub, width = width, align = "LEFT" })
     card.entries = entries
 end
@@ -602,8 +621,12 @@ end
 -- /tui friend: shows the card now with made-up sample details, so it can be looked at without a friend
 -- logging in. Skips the combat and options checks (the player asked). No friend state is touched.
 -- withSound: play the chime as a real card would, whatever the previews' sound choice (the diagnostics).
-function F.Preview(withSound)
-    return N.Preview("friend", nil, withSound and { sound = true } or nil)
+-- entries: real details from F.Describe in place of the sample (/tui diagnostics test friend real).
+function F.Preview(withSound, entries)
+    local extra = (withSound or entries) and {} or nil
+    if withSound then extra.sound = true end
+    if entries then extra.entries = entries end
+    return N.Preview("friend", nil, extra)
 end
 
 N.Register("friend", {

@@ -244,7 +244,7 @@ D.OnChange(W.RefreshStatus)
 ---------------------------------------------------------------------------
 -- /tui diagnostics
 ---------------------------------------------------------------------------
-local USAGE = "start | stop | clear | status | memory [collect] | test friend | test sound [stock] | probe"
+local USAGE = "start | stop | clear | status | memory [collect] | test friend [real] | test sound [stock] | probe"
 
 local function Status()
     local s = D.Status()
@@ -283,8 +283,9 @@ function W.Command(arg)
     elseif word == "test" then
         local Friends = R.DiagFriends
         if rest == "friend" and Friends then Friends.TestCard()
+        elseif rest == "friend real" and Friends then Friends.TestRealFriend()
         elseif rest:match("^sound") and Friends then Friends.TestSound(rest == "sound stock")
-        else Say("usage: /tui diagnostics test friend | test sound [stock]. Tests are made-up: they show the card or chime works, not that real events arrive.") end
+        else Say("usage: /tui diagnostics test friend [real] | test sound [stock]. Tests are not real events: they show the card or chime works, not that real events arrive; friend real puts one of your own friends on the card.") end
     elseif word == "memory" then
         if R.DiagMemory then R.DiagMemory.Command(rest) else Say("the memory reading isn't available right now.") end
     elseif word == "probe" then

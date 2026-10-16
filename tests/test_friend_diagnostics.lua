@@ -226,6 +226,27 @@ assert(Has(Cmd("test sound stock"), "accepted") and stock == 1234, "the game's o
 assert(#D.Records() == 0, "synthetic tests are not recorded while not tracing")
 assert(Has(Cmd("test"), "usage: /tui diagnostics test friend"), "a bare test says what the tests are")
 
+-- One of your own friends on the card, read as a real login is: someone playing WoW first, then anyone online.
+-- The game's kstring name reaches the card as it is, and nobody is named in chat.
+local savedBN = c.BN
+c.BN = {}
+assert(Has(Cmd("test friend real"), "no Battle.net friend"), "an empty list shows nothing")
+BN(301, false, "")
+BN(302, true, "App")
+BN(303, true, "WoW", "Thrallson")
+c.FRIENDS[303].accountName = "|Kq303|k"
+Sounds()
+out = Cmd("test friend real")
+assert(Card().shown and Card().title.text == "|Kq303|k" and Card().sub.text == "Online as Thrallson", Card().title.text)
+assert(Sounds() == 1, "with the chime, as a real card")
+assert(Has(out, "a friend playing WoW") and not Has(out, "Thrallson") and not Has(out, "Kq303"), out)
+Finish(Card().anim)
+c.BN = { c.FRIENDS[301], c.FRIENDS[302] }
+assert(Has(Cmd("test friend real"), "an online friend") and Card().title.text == "Secretname302", "anyone online next")
+Finish(Card().anim)
+c.BN = savedBN
+c.FRIENDS[301], c.FRIENDS[302], c.FRIENDS[303] = nil, nil, nil
+
 ---------------------------------------------------------------------------
 -- The old command still leads somewhere.
 ---------------------------------------------------------------------------
