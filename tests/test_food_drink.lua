@@ -613,7 +613,7 @@ do
     GetBorderStyleSelectDefaults = function(key) if key == "pixels-textured" then return { r = 1, g = 1, b = 1 } end return { r = 0, g = 0, b = 0 } end,
     ApplyBorderStyle = function(frame, step, r, g, b, a, key, ...)
       if fail then error("boom") end
-      calls[#calls + 1] = { frame = frame, step = step, r = r, g = g, b = b, a = a, key = key, extra = select("#", ...), edge = select(8, ...) }
+      calls[#calls + 1] = { frame = frame, step = step, r = r, g = g, b = b, a = a, key = key, extra = select("#", ...), normalize = select(7, ...), edge = select(8, ...) }
     end,
   }
   local labels, count = {}, {}
@@ -630,6 +630,7 @@ do
   assert(#calls == 2, "one call for each button: " .. #calls)
   local call = calls[#calls]
   assert(call.key == "pixels-textured" and call.step == 2 and call.edge == 16 and call.extra == 8, "its key, step and exact edge")
+  assert(call.normalize == nil, "and it grows and shrinks with the button, as before")
   assert(call.r == 1 and call.g == 1 and call.b == 1 and call.a == 1, "the colour and opacity")
   assert(call.frame ~= food and call.frame.shown, "drawn on a frame of ours, not on the secure button")
   assert(food.rim.top.shown == false, "the plain line is hidden")

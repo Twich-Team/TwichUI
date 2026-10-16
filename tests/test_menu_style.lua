@@ -254,7 +254,7 @@ do
     GetBorderStyleSelectDefaults = function() return { r = 1, g = 1, b = 1 } end,
     ApplyBorderStyle = function(frame, step, r, g, b, a, key, ...)
       if fail then error("boom") end
-      calls[#calls + 1] = { frame = frame, r = r, g = g, b = b, a = a, key = key, edge = select(8, ...) }
+      calls[#calls + 1] = { frame = frame, r = r, g = g, b = b, a = a, key = key, normalize = select(7, ...), edge = select(8, ...) }
     end,
   }
   local labels, count = {}, {}
@@ -269,6 +269,7 @@ do
   assert(MS.Set("borderOpacity", 50))
   local f, edge = Styled()
   assert(#calls == 1 and calls[1].key == "pixels-textured" and calls[1].edge == 12, "drawn through EllesmereUI at the exact pixels")
+  assert(calls[1].normalize == true, "screen pixels on a scaled frame too (RestedXP's window scale), as the line is")
   assert(calls[1].a == 0.5 and calls[1].r == 1, "its opacity and color reach it")
   assert(calls[1].frame ~= f and calls[1].frame.shown, "on a frame of ours")
   assert(f.backdrop.edgeFile == nil and f.backdrop.bgFile == WHITE and edge == 12, "the backdrop draws only the background")
@@ -344,9 +345,8 @@ end
 
 -- Screen pixels: a border is a whole number of them at any UI scale.
 do
-  c.GetPhysicalScreenSize = function() return 1920, 1080 end
-  local factor = 0.5   -- UI units per pixel for the frame being drawn, as PixelUtil would work it out
-  c.PixelUtil = { ConvertPixelsToUIForRegion = function(pixels) return pixels * factor end }
+  local factor = 0.5   -- UI units per pixel for the frame being drawn: 768 / the screen's height / its scale
+  c.GetPhysicalScreenSize = function() return 768 / factor, 768 / factor end
   assert(MS.Set("borderSize", 4))
   local f, edge = Styled()
   assert(edge == 2 and f.backdrop.edgeSize == 2, "4 pixels is 2 units at this scale")

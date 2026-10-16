@@ -133,7 +133,7 @@ Skin.Look = Look
 local enabled = false           -- the switch is on and Start has run
 local RXP                       -- RestedXP's addon object, once found and usable
 local theme                     -- the one theme table registered with RestedXP (changed in place)
-local hooks = { render = false, stepText = false, fontSize = false, arrow = false }
+local hooks = { render = false, stepText = false, fontSize = false, arrow = false, scale = false }
 local hookedFrames = setmetatable({}, { __mode = "k" })
 local owned = setmetatable({}, { __mode = "k" })   -- frame -> { info, origin, rev } for frames drawn on
 local touched = false           -- anything has been drawn since the last strip
@@ -242,6 +242,12 @@ function Text.Reset()
 end
 
 Look.Subscribe(Changed)
+
+-- A line's thickness is worked out in UI units for the scale its frame has when it is drawn (MenuStyle:
+-- one screen pixel at any scale). RestedXP scales its windows afterwards and again whenever a scale slider
+-- moves, which makes the line 0.8 or 1.3 px thick (drawn thick on one side and thin on the other), so a
+-- change of scale draws the borders again. Only the border is redrawn: nothing is laid out again.
+local function OnScale() Changed(false) end
 -- A profile change: text, sizes and decorations may all differ, so the layout is redone too.
 R.Profiles.OnApply("look", "restedxp-skin", function() Changed(true) end)
 
@@ -1923,6 +1929,7 @@ local function HookTray(tray)
     if tray and type(tray.UpdateVisuals) == "function" and not hookedFrames[tray] then
         hookedFrames[tray] = true
         hooksecurefunc(tray, "UpdateVisuals", OnTrayVisuals)
+        if type(tray.SetScale) == "function" then hooksecurefunc(tray, "SetScale", OnScale) end
     end
 end
 
@@ -2398,7 +2405,12 @@ local function InstallHooks()
         hooks.render = true
         hooksecurefunc(RXP, "RenderFrame", OnRender)
     end
-    local csf = _G.RXPFrame.CurrentStepFrame
+    local window = _G.RXPFrame
+    if not hooks.scale and type(window.SetScale) == "function" then
+        hooks.scale = true
+        hooksecurefunc(window, "SetScale", OnScale)
+    end
+    local csf = window.CurrentStepFrame
     if not hooks.stepText and type(csf) == "table" and type(csf.UpdateText) == "function" then
         hooks.stepText = true
         hooksecurefunc(csf, "UpdateText", OnStepText)
@@ -2538,6 +2550,8 @@ local function Start()
     if not theme then theme = BuildTheme(); FillTheme() end
     R:On("ADDON_LOADED", OnAddonLoaded)
     R:On("PLAYER_REGEN_ENABLED", OnRegenEnabled)
+    R:On("UI_SCALE_CHANGED", OnScale)
+    R:On("DISPLAY_SIZE_CHANGED", OnScale)
     if not (R.Life and R.Life.loggedIn) then R:On("PLAYER_LOGIN", Attach) end
     Publish()
     if Usable(RXP) then InstallHooks() end
@@ -2550,6 +2564,8 @@ local function Stop()
     Notify("disabled")
     R:Off("ADDON_LOADED", OnAddonLoaded)
     R:Off("PLAYER_LOGIN", Attach)
+    R:Off("UI_SCALE_CHANGED", OnScale)
+    R:Off("DISPLAY_SIZE_CHANGED", OnScale)
     -- RestedXP's own setting goes back first (a plain value: allowed in combat)
     if Usable(RXP) then
         local profile = RXP.settings.profile

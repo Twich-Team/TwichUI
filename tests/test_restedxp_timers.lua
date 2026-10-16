@@ -460,7 +460,7 @@ do
   local c, R, S, RXP, lib = World()
   local T = S.Timers
   assert(S.Status().code == "active")
-  assert(c.hookCount == 3 + 2, "RenderFrame, UpdateText, UpdateGuideFontSize, then StartTimer and ShowTimers: " .. c.hookCount)
+  assert(c.hookCount == 3 + 1 + 2, "RenderFrame, UpdateText, UpdateGuideFontSize, the window's SetScale, then StartTimer and ShowTimers: " .. c.hookCount)
   local bar = RXP.StartTimer(45, "Waiting for the ceremony")
   local sb = bar.candyBarBar
   -- fill: flat texture, a gradient from the dark to the light end, the opacity carried by its colours

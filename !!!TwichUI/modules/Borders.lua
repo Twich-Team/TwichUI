@@ -128,8 +128,10 @@ end
 -- Draws a textured border round host, or says the caller should draw its plain line.
 -- store: a table kept for this host (the frames made for it live there). name: the texture;
 -- edge: its thickness in pixels (0 for none); outset: how far a LibSharedMedia edge reaches
--- out past host (EllesmereUI places its own). Returns "ellesmere", "texture" or "line".
-function B.Draw(store, host, name, edge, r, g, b, a, outset)
+-- out past host (EllesmereUI places its own). normalize: an EllesmereUI texture is `edge` screen
+-- pixels whatever host's own scale (EllesmereUI's normalizeScale); without it, it is `edge` pixels at
+-- UIParent's scale and grows or shrinks with host's. Returns "ellesmere", "texture" or "line".
+function B.Draw(store, host, name, edge, r, g, b, a, outset, normalize)
     local mode, path = "line", nil
     local key, e = B.EllesmereKey(name), B.Ellesmere()
     local level = (host:GetFrameLevel() or 1) + 2
@@ -149,9 +151,11 @@ function B.Draw(store, host, name, edge, r, g, b, a, outset)
         end
         frame:SetFrameLevel(level)
         frame:Show()
-        -- ApplyBorderStyle(frame, step, r, g, b, a, texture, then its offset/shift/addon overrides, unused here, and the exact edge in pixels)
+        -- ApplyBorderStyle(frame, step, r, g, b, a, texture, then its offset/shift/addon overrides, unused here,
+        -- normalizeScale, and the exact edge in pixels). EllesmereUI samples the scale as it draws: a caller
+        -- that normalizes draws again when host's scale changes.
         local ok = pcall(e.ApplyBorderStyle, frame, e.BorderPxStep(edge, key), r, g, b, a, key,
-            nil, nil, nil, nil, nil, nil, nil, edge)
+            nil, nil, nil, nil, nil, nil, normalize and true or nil, edge)
         if not ok then mode = "line"; frame:Hide() end
     elseif store.ellesmere then
         store.ellesmere:Hide()

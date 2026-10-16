@@ -167,6 +167,7 @@ local function MakeRestedXP(c, opts)
     insets = { left = 4, right = 2, top = 2, bottom = 4 } }
   local guideName = { edgeFile = "rxp/borders", edgeSize = 8, insets = { left = 4, right = 2, top = 2, bottom = 4 } }
   local frame = Fake("Frame")
+  function frame:SetScale(v) self.scale = v end   -- RestedXP's Window Scale (RXPGuides.lua, SettingsPanel.lua)
   frame.backdrop = { edge = edge, guideName = guideName, bottom = { bgFile = WHITE, tile = true, tileSize = 16 } }
   local csf = Fake("Frame")
   csf.framePool = {}
@@ -496,7 +497,7 @@ do
     "texturePath", "headerTexture", "font", "bgTextures", "edges" }) do
     assert(theme[key] ~= nil, "the theme carries " .. key .. ", so RestedXP fills nothing in")
   end
-  assert(c.hookCount == 3, "RenderFrame, UpdateText and UpdateGuideFontSize are hooked: " .. c.hookCount)
+  assert(c.hookCount == 4, "RenderFrame, UpdateText, UpdateGuideFontSize and the window's SetScale are hooked: " .. c.hookCount)
   assert(RXP.settings.profile.activeTheme == "RXP Blue", "RestedXP's own choice is respected at login")
   assert(S.Status().code == "theme-not-selected")
   assert(RXP.frame.BottomFrame.backdropInfo == RXP.frame.backdrop.edge, "nothing drawn on")
@@ -528,9 +529,9 @@ do
   -- hooks are installed once, however often RestedXP finishes loading or the skin is asked to attach
   c.FireEvent("ADDON_LOADED", "RXPGuides"); FlushTimers()
   c.FireEvent("PLAYER_LOGIN"); FlushTimers()
-  assert(c.hookCount == 3 + 1, "the item tray is hooked once, the rest unchanged: " .. c.hookCount)
+  assert(c.hookCount == 4 + 2, "the item tray is hooked once (its visuals and its scale), the rest unchanged: " .. c.hookCount)
   c.FireEvent("ADDON_LOADED", "RXPGuides"); FlushTimers()
-  assert(c.hookCount == 4, "still once")
+  assert(c.hookCount == 6, "still once")
   assert(RXP.registered == 1, "the theme is not registered again")
 end
 
@@ -568,6 +569,34 @@ do
   FlushTimers()
   assert(RXP.renders == renders, "a border change alone is drawn without RestedXP refreshing: " .. RXP.renders - renders)
   assert(near(RXP.frame.BottomFrame.edgeColor[4], 0.5) and RXP.frame.BottomFrame.backdropInfo.edgeSize == 3)
+
+  -- A line is one screen pixel at the scale its frame has when it is drawn. RestedXP scales the window
+  -- after this skin has drawn (at login) and again whenever its scale slider moves, and the display's
+  -- scale changes too: the border is drawn again at the new scale, and RestedXP is not asked to refresh.
+  do
+    c.GetPhysicalScreenSize = function() return 1024, 768 end   -- one pixel is one UI unit at scale 1
+    local list = RXP.frame.BottomFrame
+    list.GetEffectiveScale = function() return RXP.frame.scale or 1 end
+    S.Look.Set("borderSize", 1)
+    FlushTimers()
+    assert(list.backdropInfo.edgeSize == 1, "a pixel at scale 1")
+    renders = RXP.renders
+    RXP.frame:SetScale(0.5)
+    assert(#TIMERS == 1, "one update waits: " .. #TIMERS)
+    FlushTimers()
+    assert(list.backdropInfo.edgeSize == 2, "a pixel at half scale is 2 units, not the 1 drawn at scale 1: " .. list.backdropInfo.edgeSize)
+    assert(RXP.renders == renders, "drawn again without RestedXP refreshing")
+    RXP.frame.scale = 0.25   -- the display's scale, which no hook on the window sees
+    c.FireEvent("UI_SCALE_CHANGED"); FlushTimers()
+    assert(list.backdropInfo.edgeSize == 4, "and again when the UI scale changes: " .. list.backdropInfo.edgeSize)
+    RXP.frame.scale = 0.2   -- a small window: the line is still a pixel (a size rounded to whole pixels is 0)
+    c.FireEvent("UI_SCALE_CHANGED"); FlushTimers()
+    assert(near(list.backdropInfo.edgeSize, 5), "never 0: " .. list.backdropInfo.edgeSize)
+    S.Look.Set("borderSize", 3)
+    RXP.frame.scale = nil
+    FlushTimers()
+    c.GetPhysicalScreenSize = nil
+  end
 
   -- the same state again draws nothing
   local calls = {}
@@ -648,7 +677,7 @@ do
   assert(not Ours(RXP, RXP.item), "not ours yet")
   local hooksBefore = c.hookCount
   RXP.frame.CurrentStepFrame.UpdateText()
-  assert(c.hookCount == hooksBefore + 1, "hooked when it was first seen")
+  assert(c.hookCount == hooksBefore + 2, "hooked when it was first seen")
   assert(Ours(RXP, RXP.item) and Ours(RXP, RXP.item.title), "tray and tab drawn on")
   RXP.item.UpdateVisuals(RXP.item)   -- RestedXP repaints the tray alone
   assert(Ours(RXP, RXP.item), "and again after its own repaint")
@@ -712,7 +741,7 @@ do
     Cycle()
     ThemeAt[i] = RXP.registered
   end
-  assert(c.hookCount == 3 or c.hookCount == 4, "hooks are never added again: " .. c.hookCount)
+  assert(c.hookCount == 4 or c.hookCount == 6, "hooks are never added again: " .. c.hookCount)
   assert(#c.made == frameCount, "five more cycles created nothing: " .. #c.made - frameCount)
   assert(RXP.registered == 6, "one registration per turn on: " .. RXP.registered)
   assert(c.TwichUIDB.ui.restedxpSkinState.previousTheme == "RXP Gold")

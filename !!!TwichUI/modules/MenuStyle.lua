@@ -242,11 +242,17 @@ local function Choices(kind, current, extras, sources)
 end
 
 -- UI units for some screen pixels at a frame's scale, so a 1-pixel line is one pixel at any UI
--- scale (a plain 1 is a blur or a skipped line at many scales).
+-- scale (a plain 1 is a blur or a skipped line at many scales). Worked out directly: the client's
+-- PixelUtil.ConvertPixelsToUIForRegion rounds a size in UI units to a whole number of pixels, which is
+-- 0 (no line at all) for a frame scaled below about half.
 local function Pixels(frame, pixels)
     if pixels <= 0 then return 0 end
-    if PixelUtil and PixelUtil.ConvertPixelsToUIForRegion and GetPhysicalScreenSize then
-        return PixelUtil.ConvertPixelsToUIForRegion(pixels, frame)
+    if GetPhysicalScreenSize and frame and frame.GetEffectiveScale then
+        local _, height = GetPhysicalScreenSize()
+        local scale = frame:GetEffectiveScale()
+        if type(height) == "number" and height > 0 and type(scale) == "number" and scale > 0 then
+            return pixels * (768 / height) / scale
+        end
     end
     return pixels
 end
@@ -366,14 +372,15 @@ local function New(savedKey, defaults, options)
         local br, bg, bb = ParseColor(MS.Get("borderColor"))
         local alpha = MS.Get("borderOpacity") / 100
 
-        -- EllesmereUI's border is drawn by it on a frame of ours; if it can't be, the plain line is
+        -- EllesmereUI's border is drawn by it on a frame of ours; if it can't be, the plain line is. Like the
+        -- line, it is the chosen number of screen pixels on a scaled frame too (RestedXP's window scale).
         local store = frame.twichBorders
         if not store then
             store = {}
             frame.twichBorders = store
         end
         if edgeState == "eui" and size > 0 then
-            if R.Borders.Draw(store, frame, borderName, size, br, bg, bb, alpha) ~= "ellesmere" then
+            if R.Borders.Draw(store, frame, borderName, size, br, bg, bb, alpha, nil, true) ~= "ellesmere" then
                 edgePath, edgeState = WHITE, "missing"
             end
         else

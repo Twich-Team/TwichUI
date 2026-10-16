@@ -241,6 +241,20 @@ says `step.title or fmt(L("Step %d"), step.index)`; the list's rows count `n` th
 Saved: `ui.restedxpSkinText.stepLabel` (`step` / `total` / `percent` / `both`, default `step`: existing players
 see no change) and `settingsButton` (default on, with the skin).
 
+### Borders and scale
+
+A border's thickness is worked out in UI units, for the scale its frame has when it is drawn (one screen pixel
+at any scale; `MenuStyle`). RestedXP scales its windows after the skin has first drawn (login) and again
+whenever its Window, Active Items or Active Targets scale slider moves, and the game's own UI scale can
+change. Each of those draws the borders again (one debounced pass, borders only: RestedXP is not asked to
+refresh and nothing is laid out again): `SetScale` on the window and on the two trays is hooked once, and
+`UI_SCALE_CHANGED` / `DISPLAY_SIZE_CHANGED` are listened for while the skin is on.
+
+An EllesmereUI border texture is drawn by EllesmereUI's `ApplyBorderStyle`, which sizes the edge in pixels at
+UIParent's scale; the backdrop then shrinks with RestedXP's window scale (a 12 px Pixels Textured edge at a
+0.5 window scale was 6 px, its line under a pixel). `MenuStyle` passes its `normalizeScale`, so the edge is the
+chosen number of screen pixels on the scaled window too, as the plain line is.
+
 ## Media
 
 Backgrounds and borders: `MenuStyle`'s lists (game textures, LibSharedMedia, EllesmereUI's when it is
