@@ -8,6 +8,9 @@
 		},
 		{
 			"path": "../../reference_addons"
+		},
+		{
+			"path": "../../RXPGuideRebinder"
 		}
 	],
 	"settings": {}
