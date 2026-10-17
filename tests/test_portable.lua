@@ -32,7 +32,7 @@ end
 -- Round trip
 local str = export(point)
 print("export length", #str, "bytes", ST.SizeOf(point.tables))
-assert(str:find("^TUIBK1:%d+:%d+:%d+:"), "header")
+assert(str:find("^TUIBK2:%d+:%d+:%d+:"), "header")
 assert(not str:find("[^%w%(%):]"), "printable only")
 local before = snapshot()
 local ok, r = check(str)
@@ -84,12 +84,12 @@ reject("nil-ish", "   \n ", "Paste")
 reject("garbage", "hello world", "isn't a TwichUI backup")
 reject("truncated", str:sub(1, #str - 40), "incomplete")
 reject("truncated header", str:sub(1, 20))
-reject("wrong version", str:gsub("^TUIBK1", "TUIBK2"), "format 2")
-reject("version 0", str:gsub("^TUIBK1", "TUIBK0"), "format 0")
+reject("wrong version", str:gsub("^TUIBK2", "TUIBK3"), "format 3")
+reject("version 0", str:gsub("^TUIBK2", "TUIBK0"), "format 0")
 local flipped = str:sub(1, #str - 60) .. (str:sub(#str - 59, #str - 59) == "A" and "B" or "A") .. str:sub(#str - 58)
 reject("corrupted", flipped)
 reject("oversize", string.rep("A", P.LIMITS.input + 1), "too large")
-reject("declared too big", ("TUIBK1:%d:1:0:"):format(P.LIMITS.raw + 1), "larger")
+reject("declared too big", ("TUIBK2:%d:1:0:"):format(P.LIMITS.raw + 1), "larger")
 -- whitespace and line wrapping from a text file are fine
 local wrapped = str:gsub("(" .. string.rep(".", 100) .. ")", "%1\r\n  ")
 ok, r = check(wrapped); assert(ok, r)
@@ -109,7 +109,7 @@ end
 local good = function() return { fmt = 1, addon = "3.0.7", point = { name = "x", created = 1, tables = { FooDB = { owner = "Foo", data = { a = 1 } } } } } end
 ok, r = check(pack(good())); assert(ok, r)
 local e = good(); e.point.tables.TwichUIDB = { owner = "TwichUI", data = {} }
-reject("TwichUI table", pack(e), "TwichUI's own data")
+reject("TwichUI table", pack(e), "TwichUI's data where")
 e = good(); e.fmt = 7; reject("env fmt", pack(e), "format 7")
 e = good(); e.extra = 1; reject("unknown field", pack(e), "newer version")
 e = good(); e.point.extra = 1; reject("unknown point field", pack(e), "newer version")

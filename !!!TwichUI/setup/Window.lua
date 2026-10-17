@@ -1444,13 +1444,26 @@ end
 
 local function AskUndo()
     if not NoCombat() then return end
-    local count = #ST:BackupNames()
-    Confirm("TWICHUI_UNDO", ("Put back the settings you had on this character before the last apply or restore (%d %s)? What you have now for them is replaced and not kept. Your UI reloads."):format(
-        count, count == 1 and "addon" or "addons"),
-        function() ST:Queue("undo", ST:BackupNames(), nil) end, {
+    local RS = R.Restore
+    local addons, own = RS.UndoPlan()
+    local parts = {}
+    if addons then
+        local count = #ST:BackupNames()
+        parts[#parts + 1] = ("the addon settings you had on this character before the last apply or restore (%d %s)"):format(count, count == 1 and "addon" or "addons")
+    end
+    if own then
+        local u = RS.OwnUndo()
+        parts[#parts + 1] = ("TwichUI's own settings from before you restored %s"):format(u and u.from and ("\"" .. u.from .. "\"") or "a backup")
+    end
+    if #parts == 0 then R.Print("there is nothing left to put back.") return end
+    Confirm("TWICHUI_UNDO", ("Put back %s? What you have now for them is replaced and not kept. Your UI reloads."):format(table.concat(parts, ", and ")),
+        function()
+            local ok, why = RS:UndoLast()
+            if not ok then R.Print("%s", why) end
+        end, {
             combat = true,
             valid = function()
-                if not ST:HasBackup() then return false, "There is nothing left to put back, so nothing was changed." end
+                if not RS.CanUndo() then return false, "There is nothing left to put back, so nothing was changed." end
                 return true
             end,
         })
@@ -1746,7 +1759,7 @@ local tp
 
 local EXPORT_HELP = "Press Ctrl+C to copy the whole string, then paste it into a text file (Notepad, for instance) to keep it or move it to another computer. WoW can't save files itself, so the text file is yours to make. Nothing is sent to anyone."
 local IMPORT_HELP = "Paste a backup string you exported earlier (Ctrl+V), then press Check backup. You'll see what's in it before anything is added."
-local DETAILS = "Format: TUIBK1:<length>:<check>:<size>:<data>. The data is compressed settings (LibSerialize + LibDeflate), read only as data and never run as code. The check number only catches accidental damage, like a cut-off paste; it doesn't prove who made the string. A backup holds the settings of the addons you chose, plus its name, date and character. It never holds TwichUI's own settings or your Chronicle. Imports up to 8 MB, 20 backups and 32 MB in total."
+local DETAILS = "Format: TUIBK2:<length>:<check>:<size>:<data> (TUIBK1 strings from earlier versions still import). The data is compressed settings (LibSerialize + LibDeflate), read only as data and never run as code. The check number only catches accidental damage, like a cut-off paste; it doesn't prove who made the string. A backup holds the settings of the addons you chose and TwichUI's own settings, plus its name, date and character. It never holds other backups, Undo copies, received setups, map pins or your Chronicle. Imports up to 8 MB, 20 backups and 32 MB in total."
 
 local function CloseTransfer() if tp then tp:Hide() end end
 
@@ -1756,10 +1769,13 @@ local function PreviewText(r)
     local p = r.point
     local lines = {
         ("%s%s|r"):format(Head(), p.name),
-        ("Saved %s%s  ·  %d addons (%d settings tables)  ·  about %s"):format(When(p.created),
-            p.sourceName and (" by " .. p.sourceName) or "", r.addons, r.count, ST.FormatSize(r.bytes)),
+        ("Saved %s%s  ·  %d addons (%d settings tables)%s  ·  about %s"):format(When(p.created),
+            p.sourceName and (" by " .. p.sourceName) or "", r.addons, r.count, r.own and " and TwichUI's settings" or "", ST.FormatSize(r.bytes)),
     }
     if r.addonVersion and r.addonVersion ~= "?" then lines[#lines + 1] = "Made with TwichUI " .. r.addonVersion end
+    if r.own then
+        lines[#lines + 1] = "Also holds TwichUI's own settings: every switch, place and look, your profiles and stat weights. Restoring it replaces yours, including the switches that sell, fill trades or accept things for you, and whom you accept setups from."
+    end
     if #r.missing > 0 then
         lines[#lines + 1] = ("%sNot installed or turned off on this client:|r %s. Their settings stay in the backup and apply if you install them."):format(GOLD, table.concat(r.missing, ", "))
     end
@@ -1936,7 +1952,7 @@ local function BuildTransfer()
     tp.importBtn = Btn(tp, "Import as backup", 150, function()
         local point, why = R.Portable.Commit(tp.result)
         if not point then SetTransferStatus(RED .. (why or "That couldn't be imported.") .. "|r") return end
-        R.Print("backup \"%s\" imported (%d addons). It hasn't been applied; use Restore on the Backups page when you want it.", point.name, ST.CountAddons(point))
+        R.Print("backup \"%s\" imported (%s). It hasn't been applied; use Restore on the Backups page when you want it.", point.name, R.Restore.Contents(point))
         CloseTransfer()
         W:Refresh()
     end, function()
@@ -2017,7 +2033,7 @@ local function BuildBackups(p)
     rp.help = Text(p, "GameFontHighlightSmall")
     rp.help:SetPoint("TOPLEFT", 16, -4)
     rp.help:SetWidth(WIDTH - 32)
-    rp.help:SetText("Save your own settings before you change things, and go back any time. A backup covers the addons you chose in Share setup, exactly as they're saved right now.")
+    rp.help:SetText("Save your own settings before you change things, and go back any time. A backup covers TwichUI's own settings and the addons you chose in Share setup, exactly as they're saved right now. It leaves out other backups, Undo copies, setups you received, map pins and your Chronicle.")
     rp.name = Look().EditBox(p, 100, 24)
     rp.name:SetSize(260, 24)
     rp.name:SetPoint("TOPLEFT", 22, -52)
@@ -2032,7 +2048,7 @@ local function BuildBackups(p)
     local function CreateBackup()
         local status, why = R.Restore:Create(rp.name:GetText())
         if status == "created" then
-            R.Print("backup \"%s\" saved (%d addons).", why.name, ST.CountAddons(why))
+            R.Print("backup \"%s\" saved (%s).", why.name, R.Restore.Contents(why))
             rp.name:SetText("")
         elseif not status then
             R.Print(why)
@@ -2040,13 +2056,14 @@ local function BuildBackups(p)
         W:Refresh()
     end
     rp.create = Btn(p, "Create backup", 150, function()
-        if ST.capture then CreateBackup() return end
+        if not R.Restore.NeedsReload() then CreateBackup() return end
         -- Without this session's scan the backup is finished after a reload; say so before reloading.
-        Confirm("TWICHUI_RP_CREATE", "Save a backup of the addons chosen in Share setup?\n\nYour UI reloads once so TwichUI can read your settings exactly as they're saved. Nothing is changed, sent or applied.",
+        Confirm("TWICHUI_RP_CREATE", "Save a backup of TwichUI's settings and the addons chosen in Share setup?\n\nYour UI reloads once so TwichUI can read your addons' settings exactly as they're saved. Nothing is changed, sent or applied.",
             CreateBackup, { combat = true })
     end, function()
-        return ST.capture and "Saves the ticked addons' settings from this session's scan."
-            or "Reloads your UI once to read your settings exactly as they're saved, then saves the backup."
+        if ST.capture then return "Saves TwichUI's settings and the ticked addons' settings from this session's scan." end
+        if not R.Restore.NeedsReload() then return "Saves TwichUI's own settings. Tick addons in Share setup to back theirs up too." end
+        return "Reloads your UI once to read your addons' settings exactly as they're saved, then saves the backup with TwichUI's settings."
     end)
     rp.create:SetPoint("LEFT", rp.name, "RIGHT", 10, 0)
     rp.import = Btn(p, "Import backup", 130, function() W:ImportBackup() end,
@@ -2062,7 +2079,7 @@ local function BuildBackups(p)
     rp.safe:SetWidth(WIDTH - 230)
     rp.safe:SetText("Restoring saves your current settings first, so you can undo it. Applying a received setup does the same.")
     rp.undo = Btn(p, "Undo last change", 150, AskUndo,
-        "Restores what you had on this character before you last restored a backup or applied a setup.")
+        "Puts back what you had before you last restored a backup or applied a setup: that character's addon settings, and TwichUI's own if a backup replaced them.")
     rp.undo:SetPoint("TOPRIGHT", rp.list, "BOTTOMRIGHT", 0, -6)
 end
 
@@ -2085,7 +2102,7 @@ local function RestoreRow(i)
     r.detail:SetWidth(380)
     r.del = Btn(r, "Delete", 70, function(b)
         local point = b.point
-        Confirm("TWICHUI_RP_DELETE", ("Delete backup \"%s\" (%d addons)?\n\nThis can't be undone: you won't be able to go back to it."):format(point.name, ST.CountAddons(point)), function()
+        Confirm("TWICHUI_RP_DELETE", ("Delete backup \"%s\" (%s)?\n\nThis can't be undone: you won't be able to go back to it."):format(point.name, R.Restore.Contents(point)), function()
             R.Restore:Delete(point.id); W:Refresh()
         end, { accept = DELETE })
     end)
@@ -2100,10 +2117,17 @@ local function RestoreRow(i)
                 break
             end
         end
-        Confirm("TWICHUI_RP_RESTORE", ("Go back to \"%s\" (%d addons)?%s\n\nYour current settings for these addons are saved first, so you can Undo from Backups or Received setups. Your UI reloads."):format(point.name, ST.CountAddons(point), eui),
+        local own = ""
+        if R.Restore.HasOwn(point) then
+            local blocked = R.Restore.OwnBlocked(point)
+            own = blocked and ("\n\nTwichUI's settings in it won't be restored: " .. blocked)
+                or "\n\nTwichUI's own settings are replaced too: every switch (including those that sell, fill trades or accept things for you), place and look, your profiles, and whom you accept setups from. Your map pins, Chronicle, backups and received setups stay as they are."
+        end
+        Confirm("TWICHUI_RP_RESTORE", ("Go back to \"%s\" (%s)?%s%s\n\nWhat you have now is saved first, so you can Undo from Backups. Your UI reloads."):format(point.name, R.Restore.Contents(point), eui, own),
             function()
                 local ok, why = R.Restore:Restore(point.id)
-                if not ok then R.Print("%s Nothing was restored.", why or "That couldn't be restored.") end
+                if not ok then R.Print("%s Nothing was restored.", why or "That couldn't be restored.")
+                elseif why then R.Print("%s", why) end
             end, {
                 combat = true,
                 valid = function()
@@ -2126,8 +2150,8 @@ local function RefreshBackups()
         local r = RestoreRow(i)
         r.label:SetText(point.name)
         r.fullName = point.name
-        r.detail:SetText(("%s  ·  %s  ·  %d addons  ·  %s"):format(When(point.created), point.sourceName or "?",
-            ST.CountAddons(point), ST.FormatSize(R.Restore.Size(point))))
+        r.detail:SetText(("%s  ·  %s  ·  %s  ·  %s"):format(When(point.created), point.sourceName or "?",
+            R.Restore.Contents(point), ST.FormatSize(R.Restore.Size(point))))
         r.go.point, r.del.point, r.export.point = point, point, point
         r:Show()
     end
@@ -2135,7 +2159,7 @@ local function RefreshBackups()
     rp.list.content:SetHeight(math.max(1, #points * 42))
     rp.list.empty:SetText(#points == 0 and "No backups yet. Create one before you change things, and you can come back to it any time." or "")
     rp.hint:SetShown(rp.name:GetText() == "" and not rp.name:HasFocus())
-    rp.undo:SetShown(ST:HasBackup() and true or false)
+    rp.undo:SetShown(R.Restore.CanUndo() and true or false)
 end
 
 ---------------------------------------------------------------------------

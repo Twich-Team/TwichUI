@@ -9,7 +9,8 @@ export, the checks, the review, applying and Undo); the windows are in `setup/Wi
 A setup (Share setup / Received setups) carried other addons' saved settings tables, and one EllesmereUI profile.
 TwichUI's own settings are now a third part of it, `pack.twichui`, chosen by feature and reviewed by feature. It is not
 a table the way an addon's settings are: tables whose names start `TwichUI` are still refused at every door
-(`Setups.ValidName`), and backups (`TUIBK1`, restore points) are unchanged and still never hold TwichUI's settings.
+(`Setups.ValidName`). Your own backups (restore points, `TUIBK2`) keep a full copy of TwichUI's settings separately, as
+`point.own` (`docs/persistence.md`); that is never sent to anyone.
 
 ```
 pack.twichui = {

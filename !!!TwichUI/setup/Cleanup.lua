@@ -227,6 +227,8 @@ function CL.Policy(var, keys, value)
 
     ---------------------------------------------------------------- backups
     if var == "TwichUIRestoreDB" then
+        if k1 == "ownUndo" then return Block("The Undo copy of TwichUI's own settings from before your last restore. Remove it from Saved data, where it is listed with what it holds.", "Backups") end
+        if k1 == "applyOwn" then return Block("A restore of TwichUI's settings queued for the next reload.", "Backups") end
         if k1 ~= "points" then return Block("Not an entry this version of TwichUI recognises as removable. It may belong to a newer version, so it is left alone.", "Backups") end
         if n == 1 then return Block("The list of backups. Delete one backup at a time.", "Backups") end
         if n > 2 then return Block("A backup is deleted whole, never edited.", "Backups") end
@@ -240,7 +242,7 @@ function CL.Policy(var, keys, value)
             ok = true, dataset = "Backups", what = ("Backup \"%s\""):format(label), via = "Backups' own Delete",
             ident = "restore:" .. id, restore = "list", refresh = RefreshSharing,
             facts = { When(value.created) and ("Made " .. When(value.created)) or "Date not recorded", unpack(PackFacts(value)) },
-            effect = "Removes this backup: the addon settings copied into it.",
+            effect = "Removes this backup: the addon settings and TwichUI settings copied into it.",
             consequences = {
                 "You can no longer restore from it. Settings you already restored stay as they are.",
                 "Other backups and Undo copies are not affected.",

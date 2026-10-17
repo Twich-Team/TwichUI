@@ -260,7 +260,7 @@ function EX.Sources()
                 return "TwichUIRestoreDB.points[?]"
             end,
             Root = function() return id and RS.Get(id) end,
-            scope = "Account-wide. Addon settings copied when the backup was made; restoring it is in the sharing window's Backups page." })
+            scope = "Account-wide. Addon settings and TwichUI's own settings (under own) copied when the backup was made; restoring it is in the sharing window's Backups page." })
     end
     local bdb = G("TwichUIBackupDB")
     if type(bdb) == "table" then

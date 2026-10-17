@@ -521,6 +521,13 @@ function P.LoadMain()
     P.EnsureRoot("TwichUIShareDB")
     local db = P.EnsureRoot("TwichUIDB")
 
+    -- A backup's TwichUI settings (or their Undo) queued last session go in first, so the upgrade and checks
+    -- below run on them exactly as on any saved file (setup/Restore.lua).
+    if R.Restore and R.Restore.ApplyOwnAtLoad then
+        local okRestore, err = pcall(R.Restore.ApplyOwnAtLoad, db)
+        if not okRestore and R.Diag then R.Diag.Error("backup restore", tostring(err)) end
+    end
+
     if next(db) == nil then
         main.outcome = "fresh"
         -- No settings, so defaults. It is a new installation (owed the welcome) only if nothing else of TwichUI's is

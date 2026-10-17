@@ -15,14 +15,35 @@ is keyed by `"Name - Realm"` inside an account-wide variable.
 | `TwichUIDB.setup` | sharing records | `setup/Setups.lua`, `Share.lua`, `Ellesmere.lua`, `TwichConfig.lua` | covered by `schema` | `detected`/`selection` (last "find settings" result), `received` (setups friends sent, each possibly with a `twichui` part), `trusted`, `recommend`, `twichui` (which of TwichUI's own settings go into your setup; absent until ticked), `twichUndo` (the values the last import of someone else's TwichUI settings replaced; one slot), and the one-shot hand-offs `pending`, `scanNext`, `restoreNext`, `lastScan`, `eui` |
 | `TwichUIShareDB` | your shareable setup | `setup/Setups.lua` | `pack.format = 2` | `pack` (addon tables, an EllesmereUI profile, and optionally `twichui`: TwichUI's own settings by feature, `schema` 1; see `docs/twichui-sharing.md`) |
 | `TwichUIBackupDB` | undo snapshots | `setup/Setups.lua` | none | one `[character]` snapshot per character that applied a setup |
-| `TwichUIRestoreDB` | restore points ("Backups") | `setup/Restore.lua` | none | `points[]` |
+| `TwichUIRestoreDB` | restore points ("Backups") | `setup/Restore.lua` | none | `points[]` (each: addon `tables`, and `own`: TwichUI's own settings, see "Backups of TwichUI's own settings"), `ownUndo` (the TwichUI settings the last restore replaced; one slot), `applyOwn` (a restore or Undo of them queued for the next load) |
 | `TwichUIChronicleDB` | feature data (the Journey Chronicle) | `chronicle/Data.lua` | `version` (integer) | `chars["Name - Realm"]` records: entries, notes, tracking state |
 
 Kept apart on purpose: configuration (`TwichUIDB`) is small and safe to reset; sharing records and restore points are
 other addons' tables kept verbatim; the Chronicle is the player's own writing. The Chronicle is never part of
 sharing, setups, backups or exports (names beginning `TwichUI` are refused everywhere; a test checks it). TwichUI's own
 settings are shared only as the curated `twichui` part of a setup, by named field (`docs/twichui-sharing.md`), never
-as a table and never from a walk of the saved variables.
+as a table and never from a walk of the saved variables. Your own backups keep them as `own`, below.
+
+## Backups of TwichUI's own settings
+
+A backup (`setup/Restore.lua`) holds `own = { schema, made, addon, keys }`: copies of the `TwichUIDB` keys that are
+settings. `RS.OWN_KEYS`: `modules`, `ui`, `gear`, `shareTransport`, `profiles`, `profileKeys`, `profileState`;
+`RS.OWN_SETUP` (inside `setup`): `selection`, `recommend`, `trusted`, `twichui`. That is every setting, including the
+switches that act for you, places and the profile choices. Everything else is a record or a copy, not a setting, and
+is listed in `RS.OWN_LEFT_OUT` with its reason: `pins` (a restore never removes a pin), `storedData`, `whisperProbe`,
+`welcome`, `schema`, `migrated`, `heldStored`, and `setup.detected`/`received`/`pending`/`scanNext`/`restoreNext`/
+`lastScan`/`twichUndo`/`eui`. The other saved variables (backups, Undo copies, your saved setup, the Chronicle) are
+never in a backup. `tests/test_backup_own.lua` fails when `TwichUIDB` gains a key that is in neither list.
+
+Restoring queues `applyOwn` and reloads. At the start of the next load, inside `Persist.LoadMain` and before the
+upgrade, the checks, profiles or any feature, `RS.ApplyOwnAtLoad` takes the job once, checks the part
+(`RS.OwnProblem`, `ST.CheckData`), copies everything, keeps what it replaces as `ownUndo`, and writes with plain
+assignments; `TwichUIDB.schema` becomes the backup's. The usual upgrade steps and checks then run on the result as on
+any saved file (steps are repeatable, so the keys a backup doesn't hold pass through unchanged). Nothing written at
+logout can follow it. Refused, with a message and nothing changed: a part from a newer schema or with fields this
+version doesn't know, a damaged part, and current settings from a newer TwichUI (those are never replaced). "Undo last
+change" puts back `ownUndo` the same way, together with the addon Undo copy when one restore made both (matched by
+the backup's date), otherwise only the later of the two.
 
 Profiles: TwichUI's own are described in `docs/profiles.md`: named sets of `modules`/`ui`/`gear`, the one in use kept
 where it always was, the others in `TwichUIDB.profiles`, each character's choice in `TwichUIDB.profileKeys`. Map
@@ -160,7 +181,7 @@ UI source, and it is exactly the case to check in the game.
 |---|---|---|
 | `Persist.lua` | roots, schema, upgrade, groups, switches, `shareTransport` | every load |
 | `setup/Setups.lua` `NormalizeDb`/`NormalizeStores` | the shape of `setup.*`, received setups, your setup, undo snapshots, `pending`, hand-off flags | every load |
-| `setup/Restore.lua` `Normalize` | restore points: id, name, date, unreadable tables | every load |
+| `setup/Restore.lua` `Normalize` | restore points: id, name, date, unreadable tables, an `own` that isn't one; `ownUndo`, `applyOwn` | every load |
 | `chronicle/Data.lua` | version, records, entries (below) | every load |
 | `gear/Prefs.lua` | the groups inside `gear` | first use |
 | `setup/StoredData.lua` | `storedData.found` | every load |
@@ -188,15 +209,17 @@ Before this pass `SafeName` accepted any existing table, so a setup naming `_G` 
 it would have wiped the global environment and, at logout, every addon's saved variables. That is closed.
 
 Nothing is executed: data is decoded with LibDeflate and LibSerialize and walked, never loaded as Lua. Exports hold
-only the backup's chosen tables, never `TwichUI…` data, Chronicle entries, notes or transient state.
+only the backup's chosen tables and its `own` part, never `TwichUI…` tables, Chronicle entries, notes or transient
+state. An imported `own` is checked by the same `RS.OwnProblem` and data walk as at restore time.
 
 Isolation: a restore point, your shareable setup and the search results are separate copies (`DeepCopy` at creation).
 Applying copies again. `Portable.Commit` hands the checked tables over to the stored backup and gives them up (no
 24 MB second copy), so a second click imports nothing; the count and size limits are checked again at that moment.
 
-**Export string format:** unchanged (`TUIBK1`, format 1). The `ST.ValidName` rule is the one the importer already
-enforced (identifier, ≤ 128, not `TwichUI…`) plus `_G`/`_ENV`. A backup string made by an earlier version imports the
-same way.
+**Export string format:** `TUIBK2`, format 2, which adds the optional `own` part. Format 1 (`TUIBK1`) strings from
+earlier versions still import; an earlier TwichUI given a format 2 string says to update rather than dropping part of
+it. The `ST.ValidName` rule is the one the importer already enforced (identifier, ≤ 128, not `TwichUI…`) plus
+`_G`/`_ENV`.
 
 ## The Chronicle
 
@@ -296,7 +319,9 @@ lists what is in it without running it (read-only; add `--redact` to share a rep
    Edit Mode, pick a Mage menu texture if a Mage, choose a sending method, change two Gear preferences, write two
    Chronicle notes. Create a **Backup** in `/tui restore` and note its name.
 4. **Restore point.** Change one addon's settings (any addon you are willing to change), then restore the backup,
-   accept the reload, and check the addon went back and that **Undo** is offered. Restore Undo too.
+   accept the reload, and check the addon went back and that **Undo** is offered. Restore Undo too. Then change a few
+   TwichUI settings (a switch, a window's place, a look) and add a map pin, restore the backup, and check the settings
+   went back, the pin stayed, the chat line says so, and **Undo** puts the changed settings back.
 5. **Profiles.** TwichUI's own: follow "In-game checks" in `docs/profiles.md`. Other addons': if you use EllesmereUI,
    switch its profile and confirm TwichUI's settings did not move, and that EllesmereUI's profiles are unchanged after
    TwichUI applied, restored or switched anything.

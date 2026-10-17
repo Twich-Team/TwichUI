@@ -667,7 +667,8 @@ function ST:Queue(mode, names, sourceKey)
     db.pending = { mode = mode, tables = t, source = sourceKey, stamp = pack and pack.created or 0, char = CharKey() }
     if mode == "apply" and pack then
         local me = CharKey()
-        TwichUIBackupDB[me] = TwichUIBackupDB[me] or {}
+        -- With its tables from the start: a slot holding only owners would not read as an Undo copy next load.
+        TwichUIBackupDB[me] = TwichUIBackupDB[me] or { tables = {} }
         local owners = TwichUIBackupDB[me].owners or {}
         for _, n in ipairs(names) do owners[n] = pack.tables[n] and pack.tables[n].owner end
         TwichUIBackupDB[me].owners = owners
@@ -869,6 +870,8 @@ function ST.NormalizeStores()
     end
     -- Undo backups, one per character: { stamp, created, tables = { [name] = { present, data } }, owners }.
     for charKey, b in pairs(TwichUIBackupDB) do
+        -- A slot with no tables yet (a first apply queued by an earlier build) keeps its owners: Undo needs them.
+        if type(b) == "table" and b.tables == nil then b.tables = {} end
         if type(charKey) ~= "string" or type(b) ~= "table" or type(b.tables) ~= "table" then
             TwichUIBackupDB[charKey] = nil
             Repair("backup-dropped")
@@ -912,8 +915,9 @@ function ST.NormalizeDb(d)
     if d.lastScan ~= nil and not Num(d.lastScan) then d.lastScan = nil end
     local p = d.pending
     if p ~= nil then
+        -- An undo has no source (it puts back this character's Undo copy), so only an apply needs one.
         if type(p) ~= "table" or not PENDING_MODES[p.mode] or type(p.tables) ~= "table"
-            or type(p.source) ~= "string" or type(p.char) ~= "string" then
+            or (p.mode ~= "undo" and type(p.source) ~= "string") or type(p.char) ~= "string" then
             d.pending = nil
             Repair("pending-dropped")
         else

@@ -56,7 +56,7 @@ local pt = c.TwichUI.Restore.AddImported({name = "Smoke", created = 1, tables = 
 W:Show("backups"); W:ExportBackup(pt)
 for _ = 1, 50 do FlushTimers() end
 local tp = c.TwichUIBackupTransfer
-assert(tp.edit:GetText():find("^TUIBK1:"), "export string shown")
+assert(tp.edit:GetText():find("^TUIBK2:"), "export string shown")
 local str = tp.edit:GetText()
 W:ImportBackup(); assert(tp.edit:GetText() == "" and tp.PastedText() == nil, "buffer cleared between uses")
 -- a paste arrives as one OnChar per character and lands as one string a frame later

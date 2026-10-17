@@ -6,8 +6,8 @@
 -- is stored. Importing never applies a backup; restoring stays a separate,
 -- deliberate step.
 --
--- Format, version 1 (one line of plain text):
---   TUIBK1:<length>:<check>:<size>:<payload>
+-- Format, version 2 (one line of plain text):
+--   TUIBK2:<length>:<check>:<size>:<payload>
 --   length  size of the data once unpacked
 --   check   Adler-32 of the unpacked data. It catches accidental damage such
 --           as a cut-off paste or a mangled character; it is not security
@@ -15,7 +15,9 @@
 --   size    length of <payload>, to catch truncation
 --   payload "<n>:<piece>" pieces, each a separately compressed slice of the
 --           serialized backup, printable characters only
--- The data is { fmt, addon, point = { name, created, source, sourceName, tables } }.
+-- The data is { fmt, addon, point = { name, created, source, sourceName, tables, own } }.
+-- own is TwichUI's own settings (setup/Restore.lua) and is new in version 2. A version 1 string (no own) is still
+-- read; an older TwichUI given a version 2 string says to update rather than dropping part of it.
 
 local R = TwichUI
 local ST, RS = R.Setups, R.Restore
@@ -25,7 +27,8 @@ local LibDeflate = LibStub("LibDeflate")
 local P = {}
 R.Portable = P
 
-local FORMAT = 1
+local FORMAT = 2
+local READS = { [1] = true, [2] = true }   -- formats this version reads
 local MAGIC = "TUIBK"
 local SLICE = 16384          -- unpacked bytes per piece
 local PIECE_MAX = 26000      -- packed characters per piece, far above what SLICE produces
@@ -111,7 +114,8 @@ function P.Export(point, done, fail)
         if type(point) ~= "table" or type(point.tables) ~= "table" then return false, "That backup can't be read." end
         local handler = LibSerialize:SerializeAsync({
             fmt = FORMAT, addon = AddonVersion(),
-            point = { name = point.name, created = point.created, source = point.source, sourceName = point.sourceName, tables = point.tables },
+            point = { name = point.name, created = point.created, source = point.source, sourceName = point.sourceName,
+                tables = point.tables, own = RS.HasOwn(point) and point.own or nil },
         })
         local serialized
         while true do
@@ -152,7 +156,8 @@ end
 
 local function SetOf(list) local s = {} for _, k in ipairs(list) do s[k] = true end return s end
 local ENVELOPE_KEYS = SetOf({ "fmt", "addon", "point" })
-local POINT_KEYS = SetOf({ "name", "created", "source", "sourceName", "tables" })
+local POINT_KEYS = { [1] = SetOf({ "name", "created", "source", "sourceName", "tables" }),
+    [2] = SetOf({ "name", "created", "source", "sourceName", "tables", "own" }) }
 local ENTRY_KEYS = SetOf({ "owner", "data" })
 
 local function OnlyKeys(t, allowed)
@@ -161,16 +166,16 @@ local function OnlyKeys(t, allowed)
 end
 
 -- Cheap checks on the outer structure. Returns the point, or nil, message.
-local function CheckShape(env)
+local function CheckShape(env, version)
     if type(env) ~= "table" or type(env.point) ~= "table" or not OnlyKeys(env, ENVELOPE_KEYS) then
         return nil, "That isn't a TwichUI backup, or it was made by a newer version of TwichUI."
     end
-    if env.fmt ~= FORMAT then
+    if env.fmt ~= version then
         return nil, ("That backup uses export format %s; this TwichUI reads format %d."):format(tostring(env.fmt), FORMAT)
     end
     if env.addon ~= nil and (type(env.addon) ~= "string" or #env.addon > 32) then return nil, "That backup is damaged." end
     local p = env.point
-    if not OnlyKeys(p, POINT_KEYS) then
+    if not OnlyKeys(p, POINT_KEYS[version]) then
         return nil, "That backup has fields this TwichUI doesn't know. It was probably made by a newer version."
     end
     if type(p.name) ~= "string" or type(p.created) ~= "number" or p.created ~= p.created
@@ -183,7 +188,8 @@ local function CheckShape(env)
         n = n + 1
         if n > L.tables then return nil, "That backup holds more settings tables than a backup can." end
         if type(name) == "string" and name:find("^TwichUI") then
-            return nil, "That backup contains TwichUI's own data, which a backup never includes. It isn't a backup TwichUI made."
+            -- TwichUI's own settings travel only as point.own, checked field by field; never as a whole table.
+            return nil, "That backup has TwichUI's data where only other addons' settings go. It isn't a backup TwichUI made."
         end
         if not ST.ValidName(name) then return nil, "That backup is damaged." end
         if type(e) ~= "table" or not OnlyKeys(e, ENTRY_KEYS) or type(e.data) ~= "table"
@@ -191,7 +197,16 @@ local function CheckShape(env)
             return nil, "That backup is damaged."
         end
     end
-    if n == 0 then return nil, "That backup is empty." end
+    -- TwichUI's own settings: only the fields Restore.lua names, each of the kind it expects.
+    if p.own ~= nil then
+        local why = RS.OwnProblem(p.own)
+        if why == "newer" or why == "unknown" then
+            return nil, "That backup holds TwichUI settings from a newer version of TwichUI. Update TwichUI to import it."
+        elseif why then
+            return nil, "That backup is damaged."
+        end
+    end
+    if n == 0 and p.own == nil then return nil, "That backup is empty." end
     return p, n
 end
 
@@ -251,14 +266,14 @@ local hashCache = {}   -- [point id] = hash (this session only; never saved)
 local function HashOf(point)
     local h = point.id and hashCache[point.id]
     if h == nil then
-        h = ST.Hash(point.tables) or false
+        h = RS.Hash(point) or false
         if point.id then hashCache[point.id] = h end
     end
     return h or nil
 end
 
 -- done(result) where result = {
---   point, bytes, count, addons, addonVersion, inputSize,
+--   point, bytes, count, addons, addonVersion, inputSize, own = holds TwichUI's own settings,
 --   missing = { addon titles }, skipped = n (tables that won't apply here),
 --   duplicate = name of an identical backup you already have | nil,
 --   blocked = reason an import isn't allowed | nil }
@@ -274,7 +289,7 @@ function P.Check(text, done, fail)
         local version, rest = text:match("^" .. MAGIC .. "(%d+):(.*)$")
         if not version then return Fail("That isn't a TwichUI backup string.") end
         version = tonumber(version)
-        if version ~= FORMAT then
+        if not READS[version] then
             return Fail(("That backup uses export format %d; this TwichUI reads format %d. Update TwichUI on whichever client is older."):format(version, FORMAT))
         end
         local rawLen, check, size, payload = rest:match("^(%d+):(%d+):(%d+):(.*)$")
@@ -323,10 +338,11 @@ function P.Check(text, done, fail)
             yield()
         end
 
-        local point, count = CheckShape(env)
+        local point, count = CheckShape(env, version)
         if not point then return Fail(count) end
         local roots = {}
         for _, e in pairs(point.tables) do roots[#roots + 1] = e.data end
+        if point.own then roots[#roots + 1] = point.own.keys end
         local ok, msg = CheckData(roots)
         if not ok then return Fail(msg) end
         roots = nil
@@ -335,13 +351,13 @@ function P.Check(text, done, fail)
 
         local clean = {
             name = CleanName(point.name), created = point.created, source = point.source,
-            sourceName = point.sourceName and CleanName(point.sourceName) or nil, tables = point.tables,
+            sourceName = point.sourceName and CleanName(point.sourceName) or nil, tables = point.tables, own = point.own,
         }
         if clean.name == "" then clean.name = date("%b %d %H:%M", math.max(0, math.min(clean.created, 4e9))) end
 
         local result = {
             point = clean, count = count, addonVersion = addonVersion, inputSize = inputSize,
-            bytes = ST.SizeOf(clean.tables), missing = {}, skipped = 0,
+            bytes = RS.Size(clean), missing = {}, skipped = 0, own = RS.HasOwn(clean),
         }
         local owners, nOwners = {}, 0
         for name, e in pairs(clean.tables) do
@@ -360,7 +376,7 @@ function P.Check(text, done, fail)
 
         -- Limits and repeats. Hashes of backups you already have are kept in
         -- memory only, so looking never changes saved data.
-        local hash = ST.Hash(clean.tables)
+        local hash = RS.Hash(clean)
         result.hash = hash
         local points = RS.List()
         local totalBytes = 0
@@ -399,7 +415,7 @@ function P.Commit(result)
         return nil, ("Your backups would take more than %s of saved data. Delete a backup first."):format(ST.FormatSize(P.MAX_TOTAL))
     end
     local point = RS.AddImported({
-        name = p.name, created = p.created, source = p.source, sourceName = p.sourceName, tables = p.tables,
+        name = p.name, created = p.created, source = p.source, sourceName = p.sourceName, tables = p.tables, own = p.own,
     })
     if not point then return nil, "That backup couldn't be added." end
     result.point = nil
