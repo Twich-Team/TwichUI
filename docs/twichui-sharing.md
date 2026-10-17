@@ -28,7 +28,7 @@ pack.twichui = {
 
 ## What is in it
 
-One group per feature, each listing its settings explicitly (`Define` in TwichConfig.lua). A feature's own `DEFAULTS`
+One group per feature, each listing its settings explicitly (`Define` in TwichConfig.lua). Two groups are not flat and answer a small interface of their own (`usable`, `count`, `label`, `export`, `clean`, `plan`, `review`, `apply`, `restore`; their Undo records are kept in `twichUndo.weights` and `twichUndo.custom[group]`): stat weights and the restock list. A feature's own `DEFAULTS`
 and `LIMITS` supply defaults and ranges, so the schema cannot drift from the feature.
 
 | Group | Holds |
@@ -38,6 +38,8 @@ and `LIMITS` supply defaults and ranges, so the schema cannot drift from the fea
 | Quality of life | only the Quick Keybind button |
 | Food and drink | the switches and the whole look |
 | Auction House | the Sell from Bags tab |
+| Vendor restocking | how it buys (`ui.restock.mode`: ask first or automatically), the spending limit for a visit (`useLimit`, `limit`). Not whether restocking is on, and not your confirmation that it may buy without asking (`ui.restockAck`) |
+| Restock items | the restock list: item IDs, targets and on/off, in order (merged by item on import: named items are set, new ones go at the end, nothing is removed). Never bag counts, merchants or purchases |
 | Journey Chronicle | which events are recorded, sound, chat line, Welcome Back, the clock |
 | Chronicle appearance | the window's background, border, text and accents |
 | Party pins | clicks, labels, minimap, `/way`, the data bar entry, the sound (not whether pins are on) |
@@ -61,7 +63,7 @@ registries and every key the settings window can save is either shared or listed
 
 | Reason | Keys |
 |---|---|
-| Acts for you | `mageSell*` (the switches; not `ui.mageSellMode`), `mageRefreshmentsAutoFill`, `qolSummons`, `qolResurrect*`, `qolReleasePvP`, `qolDuels*`, `qolGuideWaypoint`, `ui.qol`, `ui.mageSell` (the never-sell list and `euiAck`, your confirmation of EllesmereUI marking), `ui.guideWaypoint` |
+| Acts for you | `mageSell*` (the switches; not `ui.mageSellMode`), `mageRefreshmentsAutoFill`, `qolSummons`, `qolResurrect*`, `qolReleasePvP`, `qolDuels*`, `qolGuideWaypoint`, `ui.qol`, `ui.mageSell` (the never-sell list and `euiAck`, your confirmation of EllesmereUI marking), `ui.guideWaypoint`, `restock` (whether vendor restocking is on), `ui.restockAck` (your confirmation that it may buy without asking) |
 | Sent to or accepted from others | `setupSharing`, `acceptSetups`, `groupCheck`, `partyPins`, `shareTransport` |
 | Where things sit | `foodDrinkUnlock`, every `*Position`/`*Place`, `ui.settingsWindow`, the refreshments panel's and pin window's place |
 | Other | `restedxpSkin` (turning it on chooses RestedXP's own theme), `restedxpSkinState`, `gear.trees` (per character), pins, `setup`, profiles and their bookkeeping, `welcome`, `schema` |
@@ -111,7 +113,7 @@ this session (a newer save is running on a stand-in that isn't saved).
 The review (the popup, `setup/Window.lua`) says where the settings come from (sender, the TwichUI version that made
 them, when), the profile they go to and how many other characters share it, that **only the values listed are
 replaced** (every other setting in the profile keeps its value), which features it **turns on or off**
-(`plan.turnsOn` / `plan.turnsOff`, for switches in the share), what needs a reload (named, never done for you),
+(`plan.turnsOn` / `plan.turnsOff`, for switches in the share), what it means for spending (`plan.spending`, from a group's `disclose`: vendor restocking's purchase mode, whether automatic buying is confirmed here, the spending limit and how many restock items it turns on), what needs a reload (named, never done for you),
 what the share doesn't hold or this version can't use (skipped features and counts), what always stays yours, and that
 Undo can put the replaced values back (last import only). Hovering a feature lists its values, yours first.
 

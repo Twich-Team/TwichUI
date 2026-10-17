@@ -184,6 +184,9 @@ local function Customise(c)
   R.Refreshments.SetShare("raid", "MAGE", "food", 7)
   R:SetEnabled("mageTravel", false)
   R.MageTravel.SetTextChoice("Portals")
+  local instant = c.C_Item.GetItemInfoInstant   -- the game knows these two items
+  c.C_Item.GetItemInfoInstant = function(id) if id == 17020 or id == 2512 then return id end return instant(id) end
+  R.Restock.Add(17020, 40, true); R.Restock.Add(2512, 1000, false)
 end
 
 Customise(A)

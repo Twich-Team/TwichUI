@@ -12,6 +12,7 @@ it; its pages call the core (`R:Enabled`, a feature's `Get`/`Set`).
 | `Notifications.lua` | `notifications` (20), tab `notificationsLook` (21) | `everyday` |
 | `QoL.lua` | `qol` (30) | `everyday` |
 | `FoodDrink.lua` | `food` (40) | `everyday` |
+| `Restock.lua`, `RestockItems.lua` | `restock` (45), tab `restockItems` (46) | `everyday` |
 | `Auction.lua` | `auction` (80) | `everyday` |
 | `Chronicle.lua` | `chronicle` (60), tab `chronicleLook` (61) | `journey` |
 | `Pins.lua` | `pins` (70), tab `pinsLook` (71) | `journey` |

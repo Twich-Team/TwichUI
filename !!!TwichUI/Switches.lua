@@ -176,6 +176,7 @@ Define("partyPins", {
 
 -- Auction House
 Define("auctionPosting", { apply = Refresh("AuctionWindow") })
+Define("restock", { apply = Refresh("Restock") })
 
 -- Addon skins: through EllesmereUI, after a reload
 for _, key in ipairs({ "attuneSkin", "auctionatorSkin", "foreverDungeonJournalSkin", "whatsTrainingSkin" }) do

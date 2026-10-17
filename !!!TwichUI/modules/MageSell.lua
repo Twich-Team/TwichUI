@@ -11,6 +11,7 @@
 --
 -- What is never sold, in the order it is checked (the codes are what /tui diagnostics counts):
 --   excluded                 on the player's never-sell list (item ID, every stack)
+--   restock                  an enabled rule of vendor restocking (modules/Restock.lua): selling it would only be bought back
 --   conjured                 a known Mage-conjured item (FoodDrink.CONJURED, MS.CONJURED_EXTRA), or one whose
 --                            tooltip carries the game's own "Conjured Item" text
 --   conjured-check-unavailable  the tooltip couldn't be read, or this client doesn't define that text:
@@ -75,6 +76,7 @@ MS.REASONS = {
     ["ordinary-drink"] = "Ordinary drink",
     ["ordinary-food-and-drink"] = "Ordinary food and drink",
     excluded = "On your never-sell list",
+    restock = "On your vendor restocking list",
     conjured = "Mage-conjured",
     ["conjured-check-unavailable"] = "Can't tell whether it is conjured",
     ["not-plain-food-or-drink"] = "Has an effect beyond restoring health or mana",
@@ -344,6 +346,7 @@ function MS.Judge(bag, slot, names, words, readOnly)
     local function Skip(why) v.why = why; return v end
 
     if MS.IsExcluded(id) then return Skip("excluded") end
+    if R.Restock and R.Restock.Protects(id) then return Skip("restock") end
     local static, pending, why = Static(id, names, words, readOnly, bag, slot)
     if not static then
         v.pending = pending and true or nil

@@ -41,7 +41,7 @@ local L = TC.LIMITS
 -- under it.
 ---------------------------------------------------------------------------
 TC.STAYS = {
-    { code = "acts", text = "Anything that acts for you in the game: selling, filling trades by itself, accepting summons, resurrections or duels, releasing your spirit, and placing the waypoint. These only turn on by your own choice." },
+    { code = "acts", text = "Anything that acts for you in the game: selling, whether vendor restocking is on and your confirmation that it may buy without asking, filling trades by itself, accepting summons, resurrections or duels, releasing your spirit, and placing the waypoint. These only turn on by your own choice." },
     { code = "network", text = "What TwichUI sends to or accepts from other players: configuration sharing, accepting setups, the group check, how you send, and whether Party pins are on." },
     { code = "place", text = "Where windows, cards and buttons sit: that stays as you placed it on this screen." },
     { code = "other", text = "RestedXP's on/off switch (it chooses RestedXP's own theme), records of this character, map pins, the Journey Chronicle, backups, Undo copies and the setups you have received." },
@@ -55,6 +55,7 @@ TC.LOCAL = {
     ["modules.qolReleasePvP"] = "acts", ["modules.qolDuels"] = "acts", ["modules.qolDuelsToDeath"] = "acts",
     ["modules.qolGuideWaypoint"] = "acts", ["modules.qolMageConjureFoodDrink"] = "acts",
     ["ui.qol"] = "acts", ["ui.mageSell"] = "acts", ["ui.guideWaypoint"] = "acts",
+    ["modules.restock"] = "acts", ["ui.restockAck"] = "acts",
     -- sent to or accepted from other players
     ["modules.setupSharing"] = "network", ["modules.acceptSetups"] = "network", ["modules.groupCheck"] = "network",
     ["modules.partyPins"] = "network", ["shareTransport"] = "network",
@@ -118,6 +119,7 @@ local ENUM = {
     clock = Set({ "12", "24" }),
     gives = Set({ "share", "owed" }),
     sellMode = Set({ "direct", "ellesmere" }),
+    restockMode = Set({ "ask", "auto" }),
 }
 
 ---------------------------------------------------------------------------
@@ -410,6 +412,199 @@ function Weights.restore(records)
     return n
 end
 
+-- What every group that isn't flat answers (Weights here, the restock list below):
+--   usable(), count(), label(count): whether it can be shared here, how much it holds, its line in the window
+--   export() -> data | nil; clean(raw) -> clean, values | nil, reason
+--   plan(clean) -> what applying would change; review(clean) -> rows { label, old, new, scope }, unchanged count
+--   apply(clean, plan) -> undo records; restore(records) -> how many were put back
+function Weights.usable() return StatSets() ~= nil end
+function Weights.count() return #((Weights.export() or { units = {} }).units) end
+function Weights.label() return "by class and tree" end
+function Weights.review(clean)
+    local changes = Weights.plan(clean)
+    local rows = {}
+    for _, c in ipairs(changes) do
+        rows[#rows + 1] = { label = ("%s, tree %d"):format(TC.Humanize(c.class:lower()), c.line), old = "your values", new = c.what,
+            scope = "account" }
+    end
+    return rows, #clean.units - #changes
+end
+
+---------------------------------------------------------------------------
+-- The vendor restocking list (modules/Restock.lua): { items = { { id, target, enabled }, ... } }, in its order. Applying
+-- merges by item ID: an item the share names takes the share's target and on/off (a new one goes at the end of
+-- your list); items it doesn't name are left as they are, and nothing is removed. Bag counts, merchants and
+-- purchases are never part of it.
+---------------------------------------------------------------------------
+local RestockList = {}
+
+local function RestockRules() return R.Restock and R.Restock.Rules() or {} end
+
+local function ItemLabel(id)
+    local name = C_Item and C_Item.GetItemInfo and C_Item.GetItemInfo(id)
+    if issecretvalue and issecretvalue(name) then name = nil end
+    if type(name) == "string" and name ~= "" and not name:find("[%c|]") then return name:sub(1, L.name) end
+    return ("Item %d"):format(id)
+end
+
+local function RuleText(rule)
+    if not rule then return "not on your list" end
+    return ("keep %d, %s"):format(rule.target, rule.enabled and "on" or "off")
+end
+
+function RestockList.usable() return R.Restock ~= nil end
+function RestockList.count() return #RestockRules() end
+function RestockList.label(n) return n == 1 and "1 item" or (("%d items"):format(n)) end
+
+function RestockList.export()
+    local list = {}
+    for i, rule in ipairs(RestockRules()) do list[i] = { id = rule.id, target = rule.target, enabled = rule.enabled } end
+    if #list == 0 then return nil end
+    return { items = list }
+end
+
+function RestockList.clean(raw)
+    local RS = R.Restock
+    if not RS then return nil, "feature" end
+    if type(raw) ~= "table" or type(raw.items) ~= "table" then return nil, "shape" end
+    local n = 0
+    for k in pairs(raw.items) do
+        if type(k) ~= "number" then return nil, "shape" end
+        n = n + 1
+        if n > RS.MAX_ITEMS then return nil, "too-large" end
+    end
+    local out, seen = {}, {}
+    for i = 1, n do
+        local e = raw.items[i]
+        if type(e) ~= "table" or type(e.enabled) ~= "boolean" then return nil, "invalid" end
+        local rule = RS.CleanRule(e)
+        if not rule or seen[rule.id] then return nil, "invalid" end
+        seen[rule.id] = true
+        out[#out + 1] = rule
+    end
+    if #out == 0 then return nil, "empty" end
+    return { items = out }, #out * 3
+end
+
+-- { { id, old = rule or nil, new = rule } } for each item that would change, in the share's order; items that would
+-- not fit on a full list are counted in .full.
+function RestockList.plan(clean)
+    local live, byId = RestockRules(), {}
+    for _, rule in ipairs(live) do byId[rule.id] = rule end
+    local changes, room = { full = 0 }, R.Restock.MAX_ITEMS - #live
+    for _, rule in ipairs(clean.items) do
+        local cur = byId[rule.id]
+        if not cur then
+            if room > 0 then
+                room = room - 1
+                changes[#changes + 1] = { id = rule.id, new = rule }
+            else
+                changes.full = changes.full + 1
+            end
+        elseif cur.target ~= rule.target or cur.enabled ~= rule.enabled then
+            changes[#changes + 1] = { id = rule.id, old = cur, new = rule }
+        end
+    end
+    return changes
+end
+
+function RestockList.review(clean)
+    local changes = RestockList.plan(clean)
+    local rows = {}
+    for _, c in ipairs(changes) do
+        -- keyed by item ID, so a name that loads between the review and the approval doesn't change what was approved
+        rows[#rows + 1] = { label = ItemLabel(c.id), key = "item:" .. c.id, old = RuleText(c.old), new = RuleText(c.new) }
+    end
+    if changes.full > 0 then
+        rows[#rows + 1] = { label = "Items that don't fit", key = "full", old = "your full list", new = ("%d left out"):format(changes.full) }
+    end
+    return rows, #clean.items - #changes - changes.full
+end
+
+-- Plain writes into the restock list in use. Returns undo records: { id, had, target, enabled, at }.
+function RestockList.apply(clean, plan)
+    if type(TwichUIDB.ui) ~= "table" then TwichUIDB.ui = {} end
+    local ui = TwichUIDB.ui
+    if type(ui.restock) ~= "table" then ui.restock = {} end
+    local list = RestockRules()
+    local undo = {}
+    for _, c in ipairs(plan) do
+        local at
+        for i, rule in ipairs(list) do if rule.id == c.id then at = i end end
+        if at then
+            undo[#undo + 1] = { id = c.id, had = true, target = list[at].target, enabled = list[at].enabled, at = at }
+            list[at] = { id = c.id, target = c.new.target, enabled = c.new.enabled }
+        else
+            undo[#undo + 1] = { id = c.id, had = false }
+            list[#list + 1] = { id = c.id, target = c.new.target, enabled = c.new.enabled }
+        end
+    end
+    ui.restock.items = list
+    return undo
+end
+
+function RestockList.restore(records)
+    local RS = R.Restock
+    if not RS then return 0 end
+    if type(TwichUIDB.ui) ~= "table" then TwichUIDB.ui = {} end
+    if type(TwichUIDB.ui.restock) ~= "table" then TwichUIDB.ui.restock = {} end
+    local list = RestockRules()
+    local n = 0
+    for i = #records, 1, -1 do
+        local u = records[i]
+        if type(u) == "table" and type(u.id) == "number" then
+            local at
+            for j, rule in ipairs(list) do if rule.id == u.id then at = j end end
+            if u.had == true then
+                local rule = RS.CleanRule({ id = u.id, target = u.target, enabled = u.enabled })
+                if rule then
+                    if at then list[at] = rule else table.insert(list, math.min(math.max(1, tonumber(u.at) or #list + 1), #list + 1), rule) end
+                    n = n + 1
+                end
+            elseif at then
+                table.remove(list, at)
+                n = n + 1
+            end
+        end
+    end
+    TwichUIDB.ui.restock.items = list
+    return n
+end
+
+-- What an import means for spending, said in the review apart from the list of values.
+local function RestockSpending(vals)
+    local RS = R.Restock
+    local out = {}
+    local t = vals and vals.restock
+    if not (RS and t) then return out end
+    if t.mode == "auto" and RS.Get("mode") ~= "auto" then
+        if RS.Acknowledged() then
+            out[#out + 1] = "Vendor restocking: chooses Purchase automatically. You confirmed automatic buying on this account, so while restocking is on it buys at merchants without asking."
+        else
+            out[#out + 1] = "Vendor restocking: chooses Purchase automatically. It keeps asking before each purchase until you confirm automatic buying yourself (Vendor restocking settings)."
+        end
+    elseif t.mode == "ask" and RS.Get("mode") == "auto" then
+        out[#out + 1] = "Vendor restocking: asks before purchasing again."
+    end
+    local useLimit = t.useLimit
+    if useLimit == nil then useLimit = RS.Get("useLimit") end
+    local limit = t.limit or RS.Get("limit")
+    if useLimit ~= RS.Get("useLimit") or (useLimit and limit ~= RS.Get("limit")) then
+        out[#out + 1] = useLimit and ("Vendor restocking: spending limit for a visit set to %s."):format(RS.MoneyText(limit))
+            or "Vendor restocking: no spending limit of its own (only the money you have)."
+    end
+    return out
+end
+
+local function RestockItemsSpending(clean)
+    local changes = RestockList.plan(clean)
+    local enabled = 0
+    for _, c in ipairs(changes) do if c.new.enabled then enabled = enabled + 1 end end
+    if #changes == 0 then return {} end
+    return { ("Vendor restocking: changes %s on your restock list, %d of them on. While restocking is on, merchants that sell them are bought from (asked first unless you confirmed automatic buying)."):format(
+        RestockList.label(#changes), enabled) }
+end
+
 ---------------------------------------------------------------------------
 -- The groups
 ---------------------------------------------------------------------------
@@ -469,6 +664,24 @@ local function Define()
 
     g = Group("auction", "Auction House", { page = "auction" })
     Switches(g, { "auctionPosting" })
+
+    g = Group("restock", "Vendor restocking", { page = "restock",
+        note = "How restocking buys: asking first or automatically, and the spending limit for a visit. Whether restocking is on stays yours, and so does your confirmation that it may buy without asking." })
+    do
+        local RS = R.Restock
+        Table(g, { "ui", "restock" }, RS, { "mode", "useLimit", "limit" }, { mode = ENUM.restockMode })
+        local idx = g.index.restock
+        if idx and idx.mode and idx.useLimit and idx.limit then
+            idx.mode.label, idx.useLimit.label, idx.limit.label = "Purchasing", "Limit spending per visit", "Spending limit per visit"
+            idx.limit.show = function(v) return RS.MoneyText(v) end
+        end
+        g.disclose = RestockSpending
+    end
+
+    g = Group("restockItems", "Restock items", { page = "restockItems",
+        note = "The items on your restock list, each with its target and whether it is on. Merged by item: what the share names is set, the rest of your list is kept. Bag counts and purchases are never shared." })
+    g.custom = RestockList
+    g.disclose = RestockItemsSpending
 
     g = Group("chronicle", "Journey Chronicle", { page = "chronicle",
         note = "Which events are written down and how the window reads. The entries and notes themselves are never shared." })
@@ -613,7 +826,7 @@ end
 -- Whether a group can be shared on this client right now (its feature and everything it needs are there).
 local function Usable(g)
     if not g.complete then return false end
-    if g.custom then return StatSets() ~= nil end
+    if g.custom then return g.custom.usable() end
     return #g.fields > 0
 end
 TC.Usable = Usable
@@ -710,9 +923,10 @@ end
 function TC.GroupList()
     local list = {}
     for _, g in ipairs(TC.Groups()) do
-        local count = g.custom and (Usable(g) and #((Weights.export() or { units = {} }).units) or 0) or #g.fields
+        local count = g.custom and (Usable(g) and g.custom.count() or 0) or #g.fields
         list[#list + 1] = { id = g.id, label = g.label, page = g.page, note = g.note, scope = g.scope, count = count,
-            selected = TC.GroupSelected(g.id), usable = Usable(g), custom = g.custom ~= nil }
+            selected = TC.GroupSelected(g.id), usable = Usable(g), custom = g.custom ~= nil,
+            customLabel = g.custom and g.custom.label(count) or nil }
     end
     return list
 end
@@ -880,7 +1094,7 @@ end
 --   same, rejected } }, changed, reload = { labels }, absent = { labels }, profile, sharedWith, unknown, scopes }
 function TC.Plan(entry, opts)
     opts = opts or {}
-    local plan = { groups = {}, changed = 0, reload = {}, absent = {}, unknown = 0, turnsOn = {}, turnsOff = {} }
+    local plan = { groups = {}, changed = 0, reload = {}, absent = {}, unknown = 0, turnsOn = {}, turnsOff = {}, spending = {} }
     if type(entry) ~= "table" then plan.why = "There are no TwichUI settings in this setup." return plan end
     plan.status, plan.schema, plan.addon, plan.made = entry.status, entry.schema, entry.addon, entry.made
     if entry.status == "newer" then
@@ -922,13 +1136,10 @@ function TC.Plan(entry, opts)
             if not Usable(g) then
                 row.state = "unavailable"
             elseif g.custom then
-                local changes = g.custom.plan(data)
-                for _, c in ipairs(changes) do
-                    row.changes[#row.changes + 1] = { label = ("%s, tree %d"):format(Humanize(c.class:lower()), c.line), old = "your values", new = c.what,
-                        scope = "account" }
-                end
-                row.same = #data.units - #changes
-                row.state = #changes > 0 and "changed" or "same"
+                local rows, same = g.custom.review(data)
+                for _, c in ipairs(rows) do row.changes[#row.changes + 1] = c end
+                row.same = same
+                row.state = #rows > 0 and "changed" or "same"
             else
                 for _, f in ipairs(g.fields) do
                     local v = data[f.slot] and data[f.slot][f.key]
@@ -936,8 +1147,9 @@ function TC.Plan(entry, opts)
                         local cur = Effective(f)
                         if cur ~= v then
                             local reload = f.switch and W and W.NeedsReload(f.key) or false
-                            row.changes[#row.changes + 1] = { label = Humanize(f.key), key = f.key, slot = f.slot, old = Show(cur), new = Show(v),
-                                reload = reload, scope = f.scope }
+                            local show = f.show or Show
+                            row.changes[#row.changes + 1] = { label = f.label or Humanize(f.key), key = f.key, slot = f.slot, old = show(cur),
+                                new = show(v), reload = reload, scope = f.scope }
                             if reload and row.selected then plan.reload[#plan.reload + 1] = Humanize(f.key) end
                             -- a feature's own on/off switch changing is said plainly, apart from the long list of values
                             if f.switch and row.selected then
@@ -950,6 +1162,10 @@ function TC.Plan(entry, opts)
                     end
                 end
                 row.state = #row.changes > 0 and "changed" or "same"
+            end
+            -- what a change means for spending is said plainly, apart from the list of values
+            if g.disclose and row.selected and row.state == "changed" then
+                for _, line in ipairs(g.disclose(data)) do plan.spending[#plan.spending + 1] = line end
             end
             plan.groups[#plan.groups + 1] = row
             if row.selected then plan.changed = plan.changed + #row.changes end
@@ -1021,7 +1237,7 @@ function TC.Apply(entry, opts)
 
     local data = plan.entry.groups
     local undo = { created = time(), from = type(opts.from) == "string" and opts.from:sub(1, 64) or nil,
-        profile = PF.Current(), fields = {}, weights = {} }
+        profile = PF.Current(), fields = {}, weights = {}, custom = {} }
     local writes, groups = {}, {}
     local weightPlans = {}
     for _, row in ipairs(plan.groups) do
@@ -1049,7 +1265,11 @@ function TC.Apply(entry, opts)
         for _, w in ipairs(writes) do Container(w.f, true)[w.f.key] = w.value end
         for _, wp in ipairs(weightPlans) do
             local records = wp.g.custom.apply(wp.data, wp.plan)
-            for _, r in ipairs(records) do undo.weights[#undo.weights + 1] = r end
+            if wp.g.custom == Weights then
+                for _, r in ipairs(records) do undo.weights[#undo.weights + 1] = r end
+            else
+                undo.custom[wp.g.id] = records
+            end
         end
     end)
     if not ok then
@@ -1064,10 +1284,15 @@ function TC.Apply(entry, opts)
             end
         end
         Weights.restore(undo.weights)
+        for id, records in pairs(undo.custom) do
+            local g = TC.Group(id)
+            if g and g.custom then pcall(g.custom.restore, records) end
+        end
         return false, "failed"
     end
 
     undo.count = #undo.fields + #undo.weights
+    for _, records in pairs(undo.custom) do undo.count = undo.count + #records end
     if ST.db then ST.db.twichUndo = undo end
 
     local refreshOk, _, info = PF.Refresh("import")
@@ -1087,6 +1312,7 @@ end
 -- Shape check of an Undo copy (our own data, but a hand-edited file is possible).
 local function CleanUndo(u)
     if type(u) ~= "table" or type(u.profile) ~= "string" or type(u.fields) ~= "table" or type(u.weights) ~= "table" then return false end
+    if u.custom ~= nil and type(u.custom) ~= "table" then return false end
     return true
 end
 TC.CleanUndo = CleanUndo
@@ -1113,6 +1339,10 @@ function TC.Undo()
         end
     end
     n = n + Weights.restore(snap.weights)
+    for id, records in pairs(snap.custom or {}) do
+        local g = type(id) == "string" and TC.Group(id)
+        if g and g.custom and g.custom ~= Weights and type(records) == "table" then n = n + g.custom.restore(records) end
+    end
     ST.db.twichUndo = nil
     local ok, _, info = PF.Refresh("import-undo")
     return true, { restored = n, reloadPending = ok and info and info.reload or false }
@@ -1134,7 +1364,8 @@ function TC.StorageItem()
     return {
         key = "twichui-undo", kind = "Undo copy",
         label = "Undo for imported TwichUI settings",
-        detail = ("%d settings, replaced %s"):format(#snap.fields + #snap.weights, date("%b %d", type(snap.created) == "number" and snap.created or 0)),
+        detail = ("%d settings, replaced %s"):format(type(snap.count) == "number" and snap.count or (#snap.fields + #snap.weights),
+            date("%b %d", type(snap.created) == "number" and snap.created or 0)),
         bytes = ST.SizeOf(snap), remove = function() ST.db.twichUndo = nil end,
         warn = "Without it, the last import of TwichUI settings can't be undone.",
     }

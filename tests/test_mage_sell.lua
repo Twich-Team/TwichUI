@@ -609,4 +609,30 @@ do
   Leave()
 end
 
+---------------------------------------------------------------------------
+-- Vendor restocking (modules/Restock.lua): an item it keeps stocked is never sold, since selling it would only
+-- be bought back at the next merchant.
+---------------------------------------------------------------------------
+do
+  local chunk = assert(loadfile(ROOT .. "modules/Restock.lua")); setfenv(chunk, c); chunk("!!!TwichUI", {})
+  c.CLASS, c.COMBAT = "MAGE", false
+  c.TwichUIDB.ui.mageSell.exclude = {}
+  MS.ClearCache()
+  M.mageSell, M.mageSellFood, M.mageSellDrink = true, true, true
+  Bags({ { 4540, 5 } })
+  local names, words = R.FoodDrink.Vocabulary()
+  assert(MS.Judge(0, 1, names, words, true).eligible, "ordinary bread is sold")
+  c.TwichUIDB.ui.restock = { items = { { id = 4540, target = 10, enabled = true } } }
+  M.restock = true
+  local v = MS.Judge(0, 1, names, words, true)
+  assert(not v.eligible and v.why == "restock" and MS.REASONS.restock, "an item on the restock list is kept")
+  c.TwichUIDB.ui.restock.items[1].enabled = false
+  assert(MS.Judge(0, 1, names, words, true).eligible, "a rule that is off doesn't keep it")
+  c.TwichUIDB.ui.restock.items[1].enabled = true
+  M.restock = false
+  assert(MS.Judge(0, 1, names, words, true).eligible, "nor does restocking that is off")
+  M.mageSell = false
+  MS.Refresh()
+end
+
 print("MAGE SELL TEST PASSED")

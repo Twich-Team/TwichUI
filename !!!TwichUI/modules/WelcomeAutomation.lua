@@ -125,6 +125,21 @@ A.ENTRIES = {
         scope = function() return "Puts conjured food and water into a group member's trade window when they trade with you. It never accepts the trade." end,
     },
     {
+        key = "restock", page = "restock", label = "Vendor restocking",
+        off = "buying the items on your restock list from merchants",
+        available = function() return R.Restock ~= nil end,
+        on = function() return R.Restock.Enabled() end,
+        scope = function()
+            local RS = R.Restock
+            local n = 0
+            for _, rule in ipairs(RS.Rules()) do if rule.enabled then n = n + 1 end end
+            local how = RS.Mode() == "auto" and "buys them by itself" or "asks before buying them"
+            local limit = RS.SpendLimit()
+            return ("Keeps %d %s on your restock list at their targets: when you open a merchant that sells one, it %s%s."):format(
+                n, n == 1 and "item" or "items", how, limit and (", spending at most " .. RS.MoneyText(limit) .. " a visit") or "")
+        end,
+    },
+    {
         key = "groupCheck", page = "sharing", label = "Group version check", off = "announcing your TwichUI version to your group",
         available = function() return R.Group ~= nil end,
         scope = function() return "In a group, sends your TwichUI version number over the hidden addon channel, and tells you if someone's is newer. Nothing is written in chat." end,
@@ -141,7 +156,8 @@ A.ENTRIES = {
 }
 
 -- Where each page is named for a link.
-A.PAGE_LABEL = { qol = "Quality of life", mage = "Mage", sharing = "Sharing", pins = "Party pins", overview = "Home" }
+A.PAGE_LABEL = { qol = "Quality of life", mage = "Mage", sharing = "Sharing", pins = "Party pins", overview = "Home",
+    restock = "Vendor restocking" }
 
 -- { on = { entry... }, off = { entry... }, pages = { key... } }, each entry { key, label, page, text }.
 -- `text` is the scope for what is on and the short phrase for what is off. `pages` are the settings pages that

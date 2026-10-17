@@ -79,14 +79,14 @@ exposes `Frame()`, built the first time it is shown, which the window shows as a
 
 ```
 Home                      feature statuses (each opens its page), Help, General
-Everyday                  Notifications, Quality of life, Food and drink, Auction House
+Everyday                  Notifications, Quality of life, Food and drink, Vendor restocking › Restock items, Auction House
 Journey                   Journey Chronicle › Appearance, Party pins › Appearance
 Gear & class              Gear comparison › Stat weights, Mage (Mages only) › Refreshment shares
 Other addons              Addon skins › RestedXP guide window, SpeakStone speech frame
 Your configuration        Configuration sharing, Profiles, Troubleshooting
 ```
 
-`R:OpenSettings(key)` keys: `overview`, `notifications`, `qol`, `food`, `auction`, `chronicle`, `chronicleLook`, `pins`,
+`R:OpenSettings(key)` keys: `overview`, `notifications`, `qol`, `food`, `restock`, `restockItems`, `auction`, `chronicle`, `chronicleLook`, `pins`,
 `pinsLook`, `gear`, `statWeights`, `mage`, `refreshmentShares`, `skins`, `restedxp`, `speakstone`, `sharing`,
 `profiles`, `troubleshooting`. A second argument names a setting (`"arrivalHold"` or `"TWICHUI_arrivalHold"`) or a
 row id: the window goes to its page, scrolls to it and marks it for 2.5 seconds (no

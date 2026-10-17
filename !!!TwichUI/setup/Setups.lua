@@ -943,6 +943,7 @@ function ST.NormalizeDb(d)
             Repair("backup-dropped")
         else
             if type(undo.weights) ~= "table" then undo.weights = {} end
+            if undo.custom ~= nil and type(undo.custom) ~= "table" then undo.custom = nil end
             DropIf(undo.fields, function(_, u) return type(u) ~= "table" or type(u.g) ~= "string" or type(u.s) ~= "string"
                 or type(u.k) ~= "string" or type(u.had) ~= "boolean" end, "list-entry-dropped")
         end

@@ -342,7 +342,7 @@ local function TwichChooseRows()
             c.label:SetText("    " .. gi.label)
             Ink(c.label, "textDim", gi.usable and 1 or 0.55)
             local right = not gi.usable and "not available" or (gi.scope == "account" and "every profile")
-                or (gi.custom and "by class and tree") or ("%d settings"):format(gi.count)
+                or (gi.custom and (gi.customLabel or "by class and tree")) or ("%d settings"):format(gi.count)
             c.right:SetText(GREY .. right .. "|r")
             c:SetScript("OnClick", nil)
             c:SetScript("OnEnter", gi.note and function(self)
@@ -1171,7 +1171,7 @@ local function TwichBody(plan, from)
     if account then
         lines[#lines + 1] = ("%sEvery profile|r  stat weights (kept by class and talent tree) and the settings window's motion setting are account-wide: they change for all your profiles."):format(Head())
     end
-    lines[#lines + 1] = ("%sStays yours|r  selling and anything that acts for you, what you send or accept, where windows sit, RestedXP's on/off switch, your Journey Chronicle, pins and backups."):format(Head())
+    lines[#lines + 1] = ("%sStays yours|r  selling, whether vendor restocking is on, and anything else that acts for you, what you send or accept, where windows sit, RestedXP's on/off switch, your Journey Chronicle, pins and backups."):format(Head())
     if plan.absent and #plan.absent > 0 then
         lines[#lines + 1] = GREY .. ("Not in this share: %s."):format(table.concat(plan.absent, ", ")) .. "|r"
     end
@@ -1183,6 +1183,9 @@ local function TwichBody(plan, from)
         if #plan.turnsOn > 0 then parts[#parts + 1] = "turns on " .. table.concat(plan.turnsOn, ", ") end
         if #plan.turnsOff > 0 then parts[#parts + 1] = "turns off " .. table.concat(plan.turnsOff, ", ") end
         lines[#lines + 1] = ("%sFeatures|r  this %s."):format(GOLD, table.concat(parts, " and "))
+    end
+    if plan.spending and #plan.spending > 0 then
+        lines[#lines + 1] = ("%sSpending|r  %s"):format(GOLD, table.concat(plan.spending, " "))
     end
     if #plan.reload > 0 then
         lines[#lines + 1] = ("%sNeeds a reload|r  %s take effect after reloading your UI. Nothing else does, and nothing reloads by itself."):format(GOLD, table.concat(plan.reload, ", "))
@@ -1220,6 +1223,7 @@ local function TwichApply(newProfile)
     local features = {}
     if #plan.turnsOn > 0 then features[#features + 1] = "Turns on: " .. table.concat(plan.turnsOn, ", ") .. "." end
     if #plan.turnsOff > 0 then features[#features + 1] = "Turns off: " .. table.concat(plan.turnsOff, ", ") .. "." end
+    for _, line in ipairs(plan.spending or {}) do features[#features + 1] = line end
     local reviewed = TC.PlanKey(plan)   -- the review this approval is for: refused if it is not true any more
     local text = ("Apply %d %s from %s's TwichUI settings to %s?\n\n%s%s%s\n\nThe values this replaces are kept so Undo can put them back (it keeps only the last import)."):format(plan.changed,
         plan.changed == 1 and "setting" or "settings", from, where,

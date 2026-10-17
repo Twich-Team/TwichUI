@@ -18,6 +18,8 @@ pages\Gear.lua
 pages\Notifications.lua
 pages\QoL.lua
 pages\FoodDrink.lua
+pages\Restock.lua
+pages\RestockItems.lua
 pages\Mage.lua
 pages\Chronicle.lua
 pages\Pins.lua
