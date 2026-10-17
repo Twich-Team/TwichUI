@@ -125,7 +125,10 @@ and 2, repeat, injected failure). Document the step here. Never reuse or reorder
 `TwichUIDB.welcome = { state = "pending" | "seen" }`, written by `Persist.Normalize`.
 
 - A load that finds **no saved settings at all** (`next(TwichUIDB) == nil`, the same test that says `outcome = "fresh"`)
-  writes `pending`. Nothing else ever does: not a missing marker, not a schema upgrade, not a failed upgrade, not a
+  **and nothing in the other TwichUI saved variables** (`TwichUIChronicleDB`, `TwichUIBackupDB`, `TwichUIShareDB`,
+  `TwichUIRestoreDB`; they are in the same file, so deleting `!!!TwichUI.lua` empties them all) writes `pending`. A
+  player whose settings were lost but whose Chronicle, backups or received setups remain has used TwichUI before and gets
+  `seen` (the settings are still fresh defaults). Nothing else ever writes `pending`: not a missing marker, not a schema upgrade, not a failed upgrade, not a
   damaged marker, not a newer save's stand-in. Those write or leave `seen`, so an upgrade can never start onboarding.
 - `modules/Welcome.lua` changes `pending` to `seen` once the dialog is really on screen. A `/reload` before that keeps
   `pending`; the dialog is tried again. Showing it by hand (`/tui about`) while `pending` also counts as seen.

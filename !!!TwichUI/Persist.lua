@@ -19,8 +19,9 @@
 --   * A failed upgrade leaves the saved data exactly as it was and is tried again next load.
 --   * Nothing here plays a sound, shows a card, registers a game event for a feature or touches the game.
 --
--- First run: TwichUIDB.welcome.state is "pending" only when this very load found no saved settings at all
--- (the one reliable sign of a new installation). Every other load, whatever its schema, leaves a missing or
+-- First run: TwichUIDB.welcome.state is "pending" only when this very load found no saved settings at all and no
+-- other TwichUI saved variable (Chronicle, backups, received setups) holding anything: the reliable signs of a new
+-- installation. Every other load, whatever its schema, leaves a missing or
 -- unreadable marker as "seen", so an upgrade can never start onboarding. modules/Welcome.lua owns what the
 -- marker means and moves it from "pending" to "seen" once the dialog has actually been shown.
 
@@ -503,6 +504,16 @@ end
 
 local function ValidSchemaNumber(n) return P.IsCount(n) end
 
+-- Whether any other TwichUI saved variable holds something (read as loaded from disk; nothing is created).
+local OTHER_ROOTS = { "TwichUIChronicleDB", "TwichUIBackupDB", "TwichUIShareDB", "TwichUIRestoreDB" }
+local function HasOtherData()
+    for _, name in ipairs(OTHER_ROOTS) do
+        local t = _G[name]
+        if type(t) == "table" and next(t) ~= nil then return true end
+    end
+    return false
+end
+
 -- Called once from Core.lua when the saved variables have loaded, before any module starts.
 function P.LoadMain()
     local main = report.main
@@ -512,7 +523,10 @@ function P.LoadMain()
 
     if next(db) == nil then
         main.outcome = "fresh"
-        P.Normalize(db, true)
+        -- No settings, so defaults. It is a new installation (owed the welcome) only if nothing else of TwichUI's is
+        -- saved either: a player whose settings file was lost but whose Chronicle, backups or received setups remain
+        -- has used TwichUI before.
+        P.Normalize(db, not HasOtherData())
         db.schema = P.SCHEMA
         return
     end

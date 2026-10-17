@@ -1,11 +1,12 @@
 -- TwichUI: welcome dialog
--- One short page that says what TwichUI is and where its settings, notification previews and
--- troubleshooting report are. It is shown once, automatically, for a new installation, and any time
--- the player asks (/tui about, or Welcome in the options overview). It changes no setting and enables
--- nothing: its only buttons close it or open TwichUI's options.
+-- One compact page that says what TwichUI is, shows a few of its features, says which features act for the player
+-- (and which of those are on), and opens the settings or a preview of the notification cards. It is shown once,
+-- automatically, for a new installation, and any time the player asks (/tui about, or Welcome in the settings'
+-- Home page). It changes no setting and enables nothing: its buttons close it, open TwichUI's settings (at Home or
+-- at the page of something it lists) or show a sample card.
 --
 -- When it appears on its own. Persist.lua writes TwichUIDB.welcome.state = "pending" only when a load
--- found no saved settings at all; every other load leaves it "seen" (see "First run" there). Here:
+-- found no saved TwichUI data at all; every other load leaves it "seen" (see "First run" there). Here:
 --   * nothing happens unless the state is "pending";
 --   * the dialog waits for the world, and for combat, a flight path, a game banner, a cinematic, a hidden
 --     interface and any TwichUI card (Welcome Back, zone, training, friend) to be out of the way. It looks
@@ -14,39 +15,56 @@
 --   * the state becomes "seen" only once the dialog is really on screen. Closing it, or showing it by
 --     hand first, never brings it back by itself.
 -- It never holds back or removes a real notice: cards in the coordinator (modules/Notify.lua) go on as
--- before, and the dialog only waits for them. A deleted TwichUIDB.lua is a new installation again, and
--- shows it once more; switching characters, profiles of other addons or resetting a feature does not.
--- Look: the Chronicle's umber and bronze (chronicle/Style.lua) and the zone card's fonts, drawn from
--- flat colours and fonts shipped with TwichUI. It does not use EllesmereUI's skin, so it is the same
--- with or without it and is never skinned twice.
+-- before, and the dialog only waits for them. A profile change, a reload, a new character or resetting a feature
+-- does not bring it back. "Hide addon welcome messages" (Home) is a different thing: it hides other addons' lines
+-- in chat and has no say over this dialog.
+--
+-- What it says about automation comes from modules/WelcomeAutomation.lua, read each time the dialog is shown, so it
+-- matches the switches of the moment. The settings window (TwichUI_Settings) is not loaded to draw the dialog or to
+-- read that summary; it loads only when a button asks to open it (R:OpenSettings).
+--
+-- Preview: the button shows the zone card and the friend card through the notification coordinator's own preview
+-- (Notify.Preview): made-up details, no sound unless the player allowed preview sounds, nothing recorded, no game
+-- state touched, reduced motion honoured by the cards. Closing the dialog takes back the previews it started.
+--
+-- Look: TwichUI's own window look (Look.lua), the same family as the settings window, with or without
+-- EllesmereUI; it is never skinned by it. Its fade follows "Reduce window motion" on Home.
 
 local R = TwichUI
 local W = {}
 R.Welcome = W
 
 local FRAME_NAME = "TwichUIWelcome"
-local WIDTH = 440
+local WIDTH = 460
 local PAD = 22                -- space inside the frame's sides
 local BAND = 44               -- title band height
 local SETTLE = 3              -- seconds after entering the world before the first look
 local RETRY = 2               -- seconds between looks while something is in the way
 local MAX_TRIES = 15          -- looks per world entry; after that it waits for the next event
+local PREVIEW_KINDS = { "arrival", "friend" }   -- the sample cards the Preview button shows (different places, so together)
 
 -- What the dialog says. Plain text; a point is a label and a sentence.
 W.TITLE = "Welcome to TwichUI"
 W.INTRO = "A quiet companion for the interface of WoW: Forever. It tidies and clarifies a few things without taking over, and each feature has its own settings and can be turned off."
 W.POINTS = {
-    { "Choose what you want", "Open the settings to see each feature and switch it on or off. A few are off until you turn them on." },
-    { "Preview before you decide", "Notifications in the settings can show each on-screen card with made-up details first. Nothing is recorded." },
-    { "If something doesn't work", "Troubleshooting in the settings builds a report you can read and copy. Nothing is sent anywhere." },
+    { "Cards for what's new", "Small cards for new zones, new spells to train and Battle.net friends signing in, in place of the game's own text and pop-up." },
+    { "Journey Chronicle", "A private journal for each character: levels, zones, bosses and your own notes." },
+    { "Gear hints", "Item tooltips can say when something is a likely upgrade, from stat weights you can edit. It's a hint, not a simulation." },
 }
-W.FOOTER = "Type /tui for all commands."
+W.AUTO_HEAD = "What can act for you"
+W.AUTO_LEAD = "Opening this window or a preview turns nothing on. Each feature below has its own switch in the settings."
+W.ON_LABEL = "On now"
+W.NONE_ON = "Nothing here is turned on."
+W.OFF_LABEL = "Off until you turn them on"
+W.LINKS_LABEL = "Review in settings:"
+W.FOOTER = "Type /tui for all commands. Troubleshooting in the settings builds a report if something goes wrong."
 
 local frame
 local token = 0               -- bumped to drop a waiting timer; a timer only acts if it is still current
 local waiting = false         -- one timer is waiting (a second is never started)
 local tries = 0
 local shownCount = 0          -- for the troubleshooting report
+local previewing = false      -- this dialog started previews that are still up
 local active = {}             -- [event] = handler, while registered
 
 ---------------------------------------------------------------------------
@@ -68,25 +86,18 @@ end
 ---------------------------------------------------------------------------
 -- The dialog
 ---------------------------------------------------------------------------
-local function Color(c, a) return c[1], c[2], c[3], a end
+local function Look() return R.Look end
 
--- A font string in the zone card's fonts (with that card's fallback for scripts they don't cover).
-local function Text(parent, path, size, fallback, color)
-    local A = R.Arrival
-    local fs = parent:CreateFontString(nil, "OVERLAY")
-    A.SetFont(fs, path, size, fallback)
-    fs:SetShadowColor(0, 0, 0, 0.7)
-    fs:SetShadowOffset(1, -1)
-    fs:SetTextColor(Color(color))
-    fs:SetJustifyH("LEFT")
+-- A wrapped, top-aligned text in the window look. kind: "body", "small", "meta" or "heading" (Look.Text).
+local function Text(parent, kind, wrap)
+    local fs = Look().Text(parent, kind)
     fs:SetJustifyV("TOP")
-    fs:SetWordWrap(true)
+    fs:SetWordWrap(wrap and true or false)
     return fs
 end
 
-local function Rule(parent, K)
-    local t = parent:CreateTexture(nil, "BORDER")
-    t:SetColorTexture(K.bronzeLo[1], K.bronzeLo[2], K.bronzeLo[3], 0.8)
+local function Rule(parent)
+    local t = Look().Solid(parent, "BORDER", Look().pal.divider, 0.8)
     t:SetHeight(1)
     return t
 end
@@ -99,59 +110,106 @@ local function Height(fs, minimum)
     return h
 end
 
-local function OpenSettings()
-    -- (R:OpenSettings says why in chat when it can't)
-    if not R:OpenSettings() then return end   -- the dialog stays, so the player is not left with nothing
+local function Width(fs)
+    local w = fs:GetStringWidth()
+    return type(w) == "number" and w or 0
+end
+
+-- Opens the settings (at a page, or at Home) and puts the dialog away. R:OpenSettings loads the settings addon
+-- the first time and says why in chat when it can't; then the dialog stays, so the player is not left with nothing.
+local function OpenSettings(page)
+    if not R:OpenSettings(page) then return end
     frame:Hide()
 end
 
--- Positions everything from the text as the client lays it out now, then sizes the frame to fit.
--- Safe to repeat; run each time the dialog opens so a different font, scale or locale is measured, not assumed.
-local function Layout()
-    local inner = WIDTH - PAD * 2
-    local y = BAND + 16
-    frame.intro:SetWidth(inner)
-    frame.intro:ClearAllPoints()
-    frame.intro:SetPoint("TOPLEFT", PAD, -y)
-    y = y + Height(frame.intro, 16) + 14
-
-    frame.ruleTop:ClearAllPoints()
-    frame.ruleTop:SetPoint("TOPLEFT", PAD, -y)
-    frame.ruleTop:SetPoint("TOPRIGHT", -PAD, -y)
-    y = y + 15
-
-    for i, point in ipairs(frame.points) do
-        point.label:SetWidth(inner)
-        point.label:ClearAllPoints()
-        point.label:SetPoint("TOPLEFT", PAD + 14, -y)
-        point.mark:ClearAllPoints()
-        point.mark:SetPoint("TOPLEFT", PAD + 2, -(y + 6))
-        y = y + Height(point.label, 16) + 2
-        point.body:SetWidth(inner - 14)
-        point.body:ClearAllPoints()
-        point.body:SetPoint("TOPLEFT", PAD + 14, -y)
-        y = y + Height(point.body, 16) + (i < #frame.points and 12 or 0)
+-- Shows the sample zone and friend cards. Returns true, or false and a reason: "unavailable" (no coordinator),
+-- "combat" (previews wait, as the settings' do) or "refused".
+function W.Preview()
+    local N = R.Notify
+    if not (N and N.Preview) then return false, "unavailable" end
+    if InCombatLockdown() then
+        R.Print("previews wait until you're out of combat.")
+        return false, "combat"
     end
-    y = y + 16
+    local shown = 0
+    for _, kind in ipairs(PREVIEW_KINDS) do
+        if N.Preview(kind) then shown = shown + 1 end
+    end
+    if shown == 0 then
+        R.Print("couldn't show the sample cards right now.")
+        return false, "refused"
+    end
+    previewing = true
+    return true
+end
 
-    frame.ruleBottom:ClearAllPoints()
-    frame.ruleBottom:SetPoint("TOPLEFT", PAD, -y)
-    frame.ruleBottom:SetPoint("TOPRIGHT", -PAD, -y)
-    y = y + 14
+-- Takes back the previews this dialog started (only those: previews begun in the settings are left alone).
+local function DropPreviews()
+    if not previewing then return end
+    previewing = false
+    local N = R.Notify
+    if not (N and N.DropPreviews) then return end
+    for _, kind in ipairs(PREVIEW_KINDS) do N.DropPreviews(kind) end
+end
 
-    frame.footer:SetWidth(inner - frame.open:GetWidth() - frame.dismiss:GetWidth() - 24)
-    frame.footer:ClearAllPoints()
-    frame.footer:SetPoint("TOPLEFT", PAD, -(y + 5))
-    frame.open:ClearAllPoints()
-    frame.open:SetPoint("TOPRIGHT", -PAD, -y)
-    frame.dismiss:ClearAllPoints()
-    frame.dismiss:SetPoint("RIGHT", frame.open, "LEFT", -8, 0)
-    local footerBottom = y + 5 + Height(frame.footer, 14)
-    y = math.max(y + 24, footerBottom) + PAD - 4
+-- "a, b and c"
+local function Join(list)
+    local n = #list
+    if n <= 1 then return list[1] or "" end
+    return table.concat(list, ", ", 1, n - 1) .. " and " .. list[n]
+end
 
-    local height = math.ceil(y)
-    frame:SetSize(WIDTH, height)
-    return height
+-- Fills in what depends on the moment: the automation summary. Safe to repeat. Row and link frames are made once
+-- and reused, so showing the dialog again adds nothing.
+local function Populate()
+    local f = frame
+    local pal = Look().pal
+    local sum = R.WelcomeAutomation and R.WelcomeAutomation.Summary() or { on = {}, off = {}, pages = {} }
+    f.summary = sum
+
+    for i, item in ipairs(sum.on) do
+        local row = f.rows[i]
+        if not row then
+            row = { label = Text(f, "body", false), body = Text(f, "small", true) }
+            f.rows[i] = row
+        end
+        row.label:SetText(item.label)
+        row.body:SetText(item.text)
+        row.label:Show()
+        row.body:Show()
+    end
+    for i = #sum.on + 1, #f.rows do
+        f.rows[i].label:Hide()
+        f.rows[i].body:Hide()
+    end
+    if #sum.on == 0 then f.onNone:Show() else f.onNone:Hide() end
+
+    local phrases = {}
+    for i, item in ipairs(sum.off) do phrases[i] = item.text end
+    if #phrases > 0 then
+        local line = Join(phrases)
+        f.offText:SetText(line:sub(1, 1):upper() .. line:sub(2) .. ".")
+        f.offLabel:Show()
+        f.offText:Show()
+    else
+        f.offLabel:Hide()
+        f.offText:Hide()
+    end
+
+    for i, page in ipairs(sum.pages) do
+        local link = f.links[i]
+        if not link then
+            link = R.ChronicleStyle.Link(f, "", function(self) OpenSettings(self.page) end, pal.tealHi, pal.text)
+            link.text:SetJustifyH("LEFT")
+            link.text:SetWordWrap(false)   -- its width is then the text's own, which the layout measures
+            f.links[i] = link
+        end
+        link.page = page
+        link.text:SetText(R.WelcomeAutomation.PAGE_LABEL[page] or page)
+        link:Show()
+    end
+    for i = #sum.pages + 1, #f.links do f.links[i]:Hide() end
+    if #sum.pages > 0 then f.linksLabel:Show() else f.linksLabel:Hide() end
 end
 
 -- Buttons are wide enough for their label, never narrower than a standard button.
@@ -160,10 +218,113 @@ local function WideEnough(button, minimum)
     button:SetWidth(math.max(minimum, (type(w) == "number" and w or 0) + 32))
 end
 
+-- Positions everything from the text as the client lays it out now, then sizes the frame to fit.
+-- Safe to repeat; run each time the dialog opens so a different font, scale or locale is measured, not assumed.
+local function Layout()
+    local f = frame
+    local inner = WIDTH - PAD * 2
+    local y = BAND + 16
+
+    local function Place(fs, x, width, minimum, gap)
+        fs:SetWidth(width)
+        fs:ClearAllPoints()
+        fs:SetPoint("TOPLEFT", x, -y)
+        y = y + Height(fs, minimum) + gap
+    end
+    local function Line(rule)
+        rule:ClearAllPoints()
+        rule:SetPoint("TOPLEFT", PAD, -y)
+        rule:SetPoint("TOPRIGHT", -PAD, -y)
+    end
+
+    Place(f.intro, PAD, inner, 16, 14)
+    Line(f.ruleTop)
+    y = y + 15
+
+    for i, point in ipairs(f.points) do
+        point.mark:ClearAllPoints()
+        point.mark:SetPoint("TOPLEFT", PAD + 2, -(y + 6))
+        Place(point.label, PAD + 14, inner - 14, 16, 2)
+        Place(point.body, PAD + 14, inner - 14, 14, i < #f.points and 10 or 0)
+    end
+    y = y + 16
+    Line(f.ruleMid)
+    y = y + 15
+
+    -- What can act for you
+    Place(f.autoHead, PAD, inner, 16, 2)
+    Place(f.autoLead, PAD, inner, 14, 12)
+
+    local sum = f.summary
+    Place(f.onLabel, PAD, inner, 14, 4)
+    if #sum.on == 0 then
+        Place(f.onNone, PAD + 14, inner - 14, 14, 10)
+    else
+        for i, item in ipairs(sum.on) do
+            local row = f.rows[i]
+            Place(row.label, PAD + 14, inner - 14, 14, 1)
+            Place(row.body, PAD + 14, inner - 14, 13, i < #sum.on and 7 or 10)
+        end
+    end
+    if #sum.off > 0 then
+        Place(f.offLabel, PAD, inner, 14, 4)
+        Place(f.offText, PAD + 14, inner - 14, 13, 12)
+    end
+
+    if #sum.pages > 0 then
+        f.linksLabel:ClearAllPoints()
+        f.linksLabel:SetPoint("TOPLEFT", PAD, -(y + 1))
+        local x, rowTop = PAD + Width(f.linksLabel) + 10, y
+        for i = 1, #sum.pages do
+            local link = f.links[i]
+            local w = math.ceil(Width(link.text)) + 4
+            if x + w > PAD + inner and x > PAD + 1 then   -- no room left on this line: the next
+                x = PAD
+                rowTop = rowTop + 18
+            end
+            link:SetSize(w, 14)
+            link:ClearAllPoints()
+            link:SetPoint("TOPLEFT", x, -rowTop)
+            x = x + w + 12
+        end
+        y = rowTop + 18
+    end
+    y = y + 6
+    Line(f.ruleBottom)
+    y = y + 14
+
+    Place(f.footer, PAD, inner, 13, 12)
+
+    -- Buttons, right to left: Open Settings, Preview notifications, Close. If they don't fit on one line they
+    -- go on two rather than overlapping.
+    local buttons = { f.open }
+    if f.preview:IsShown() then buttons[#buttons + 1] = f.preview end
+    buttons[#buttons + 1] = f.dismiss
+    local total = -8
+    for _, b in ipairs(buttons) do total = total + b:GetWidth() + 8 end
+    local wrapAt = total > inner and #buttons - 1 or #buttons
+    local x, rowY = -PAD, y
+    for i, b in ipairs(buttons) do
+        if i > wrapAt then
+            x, rowY = -PAD, rowY + 30
+        end
+        b:ClearAllPoints()
+        b:SetPoint("TOPRIGHT", x, -rowY)
+        x = x - b:GetWidth() - 8
+    end
+    y = rowY + 24 + PAD - 4
+
+    local height = math.ceil(y)
+    f:SetSize(WIDTH, height)
+    return height
+end
+
 local function Build()
-    local S, A = R.ChronicleStyle, R.Arrival
-    if not (S and S.Frame and A and A.SetFont and A.FONT_TITLE) then return false end
-    local K = S.color
+    local L = Look()
+    if not (L and L.Shell and L.Text and L.Button and L.Solid and L.CloseBox and R.ChronicleStyle and R.ChronicleStyle.Link) then
+        return false
+    end
+    local pal = L.pal
     local f = CreateFrame("Frame", FRAME_NAME, UIParent, "BackdropTemplate")
     f:SetSize(WIDTH, 300)   -- replaced by Layout() from the real text below
     f:SetPoint("CENTER", UIParent, "CENTER", 0, 60)
@@ -177,50 +338,76 @@ local function Build()
     f:SetScript("OnDragStop", f.StopMovingOrSizing)
     f:Hide()
     tinsert(UISpecialFrames, FRAME_NAME)   -- Escape closes it
+    frame = f
 
-    f.title = Text(f, A.FONT_TITLE, 18, "GameFontNormalLarge", K.text)
-    f.title:SetWordWrap(false)
-    f.title:SetWidth(WIDTH - PAD - 48)
-    f.title:SetPoint("LEFT", f, "TOPLEFT", PAD, -(BAND / 2))
-    f.title:SetText(W.TITLE)
-    f.close = S.Close(f, function() f:Hide() end)
-    f.close:SetPoint("TOPRIGHT", -10, -(BAND / 2 - 10))
-
-    f.intro = Text(f, A.FONT_LINE, 15, "GameFontHighlight", K.text)
+    f.intro = Text(f, "body", true)
     f.intro:SetText(W.INTRO)
-    f.ruleTop = Rule(f, K)
+    f.ruleTop = Rule(f)
 
     f.points = {}
     for i, p in ipairs(W.POINTS) do
         local point = {}
-        point.mark = f:CreateTexture(nil, "ARTWORK")      -- a small bronze square, as a ledger's bullet
-        point.mark:SetColorTexture(Color(K.gold, 0.9))
+        point.mark = L.Solid(f, "ARTWORK", pal.bronzeText, 0.9)   -- a small bronze square, as a ledger's bullet
         point.mark:SetSize(5, 5)
-        point.label = Text(f, A.FONT_LINE, 15, "GameFontNormal", K.gold)
-        point.label:SetWordWrap(false)
+        point.label = Text(f, "heading", false)
         point.label:SetText(p[1])
-        point.body = Text(f, A.FONT_LINE, 14, "GameFontHighlightSmall", K.textDim)
+        point.body = Text(f, "small", true)
         point.body:SetText(p[2])
         f.points[i] = point
     end
-    f.ruleBottom = Rule(f, K)
+    f.ruleMid = Rule(f)
 
-    f.footer = Text(f, A.FONT_LINE, 13, "GameFontDisableSmall", K.stone)
+    f.autoHead = Text(f, "heading", false)
+    f.autoHead:SetText(W.AUTO_HEAD)
+    f.autoLead = Text(f, "small", true)
+    f.autoLead:SetText(W.AUTO_LEAD)
+    f.onLabel = Text(f, "meta", false)
+    f.onLabel:SetText(W.ON_LABEL)
+    f.onLabel:SetTextColor(pal.tealHi[1], pal.tealHi[2], pal.tealHi[3])
+    f.onNone = Text(f, "small", true)
+    f.onNone:SetText(W.NONE_ON)
+    f.rows = {}
+    f.offLabel = Text(f, "meta", false)
+    f.offLabel:SetText(W.OFF_LABEL)
+    f.offText = Text(f, "small", true)
+    f.linksLabel = Text(f, "meta", false)
+    f.linksLabel:SetText(W.LINKS_LABEL)
+    f.links = {}
+    f.summary = { on = {}, off = {}, pages = {} }
+    f.ruleBottom = Rule(f)
+
+    f.footer = Text(f, "meta", true)
     f.footer:SetText(W.FOOTER)
-    f.open = S.Button(f, "Open Settings", 110, "primary", OpenSettings)
-    f.dismiss = S.Button(f, "Close", 80, "secondary", function() f:Hide() end)
+    f.open = L.Button(f, "Open Settings", 110, "primary", function() OpenSettings() end)
+    f.preview = L.Button(f, "Preview notifications", 150, "secondary", function() W.Preview() end)
+    f.dismiss = L.Button(f, "Close", 80, "secondary", function() f:Hide() end)
     WideEnough(f.open, 110)
+    WideEnough(f.preview, 150)
     WideEnough(f.dismiss, 80)
-    frame = f
-    -- The frame's art is drawn for the height the text really needs, measured here and again at each opening.
-    S.Frame(f, WIDTH, Layout())
-    S.Header(f, BAND - 8)
+    local I = R.Interact
+    if I and I.Tip then
+        I.Tip(f.preview, "Preview notifications", "Shows a sample zone card and friend card with made-up details. Nothing is recorded or turned on, and no sound plays unless you've allowed preview sounds in the settings.")
+        I.Tip(f.open, "Open Settings", "Opens TwichUI's settings at Home. Each feature has its own page, and every one can be turned off.")
+    end
 
-    -- Whatever closes it (button, close box, Escape, a new loading screen taking the UI), it is simply gone.
+    -- Whatever closes it (button, close box, Escape, a new loading screen taking the UI), it is simply gone,
+    -- and so are the sample cards it showed.
     f:SetScript("OnHide", function(self)
         self:StopMovingOrSizing()
+        DropPreviews()
         if R.Interact then R.Interact.HideTip(self) end
     end)
+    Populate()
+    Layout()   -- the frame's height now follows its text, and its art is drawn for that height
+
+    -- The rim and title band, and a short fade in unless "Reduce window motion" is on (Look.Shell).
+    L.Shell(f, BAND)
+    f.title = L.Text(f, "title")
+    f.title:SetWordWrap(false)
+    f.title:SetWidth(WIDTH - PAD - 48)
+    f.title:SetPoint("LEFT", f, "TOPLEFT", PAD, -(BAND / 2))
+    f.title:SetText(W.TITLE)
+    f.close = L.CloseBox(f, function() f:Hide() end)
     return true
 end
 
@@ -234,6 +421,9 @@ function W.Show(auto)
         if not auto then R.Print("the welcome isn't available right now.") end
         return false, "unavailable"
     end
+    Populate()
+    -- The Preview button needs the coordinator; without it (it didn't load) the button is left out.
+    if R.Notify and R.Notify.Preview then frame.preview:Show() else frame.preview:Hide() end
     Layout()
     R.FitToScreen(frame)   -- its height follows its text, so it is fitted after Layout, not on OnShow
     frame:Show()

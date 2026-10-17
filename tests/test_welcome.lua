@@ -58,6 +58,8 @@ local function Boot(sv, opts)
   c.UIParent = Fake(); c.UIParent.shown = true
   c.UISpecialFrames = {}
   c.COMBAT, c.TAXI, c.TOAST = false, false, false
+  c.CLASS = "WARRIOR"
+  c.UnitClass = function() return c.CLASS:sub(1, 1) .. c.CLASS:sub(2):lower(), c.CLASS end
   c.InCombatLockdown = function() return c.COMBAT end
   c.UnitOnTaxi = function() return c.TAXI end
   c.EventToastManagerFrame = Fake()
@@ -67,7 +69,7 @@ local function Boot(sv, opts)
   c.opened = nil
   c.Settings = nil   -- (the settings window is TwichUI's own; no AddOns entry in these tests)
   for k, v in pairs(sv or {}) do c[k] = v end
-  for _, f in ipairs(opts.files or {"chronicle/Style.lua", "modules/Notify.lua", "modules/Arrival.lua", "modules/WelcomeBack.lua", "modules/Welcome.lua"}) do
+  for _, f in ipairs(opts.files or {"chronicle/Style.lua", "Look.lua", "modules/Notify.lua", "modules/Arrival.lua", "modules/WelcomeBack.lua", "modules/WelcomeAutomation.lua", "modules/Welcome.lua"}) do
     local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
   end
   c.LOADED["!!!TwichUI"] = true
@@ -110,7 +112,7 @@ assert(c.UISpecialFrames[#c.UISpecialFrames] == "TwichUIWelcome", "Escape closes
 assert(f.title.text == "Welcome to TwichUI" and f.intro.text == W(c).INTRO)
 assert(#f.points == 3 and f.open.text.text == "Open Settings" and f.dismiss.text.text == "Close", "title, three points, two buttons")
 assert(f.footer.text:find("/tui", 1, true), "a /tui reminder in the footer")
-assert(f.h and f.h > 150 and f.w == 440, "sized from its content")
+assert(f.h and f.h > 150 and f.w == 460, "sized from its content")
 -- It changes nothing the player set.
 assert(copy(c.TwichUIDB.modules) ~= nil)
 for k, v in pairs(modulesBefore) do assert(c.TwichUIDB.modules[k] == v, "setting unchanged: " .. k) end
@@ -240,7 +242,7 @@ bare.TwichUI.Notify = nil
 Enter(bare); Settle()
 assert(Showing(bare), "without the coordinator it still shows")
 local noLook = Fresh()
-noLook.TwichUI.ChronicleStyle = nil
+noLook.TwichUI.Look = nil
 Enter(noLook); Settle()
 assert(not Showing(noLook) and State(noLook) == "pending", "without its look it does not show, and stays owed")
 local said = false
@@ -312,5 +314,210 @@ short.TwichUI.RunCommand("about")
 local h2 = D(short).h
 LINE = nil
 assert(h1 and h2 and h2 > h1 + 40, "a bigger font or a longer translation grows the frame (" .. tostring(h1) .. " -> " .. tostring(h2) .. ")")
+
+---------------------------------------------------------------------------
+-- 7. Automation summary: what is on, what is off, scope as set, class filter. It reads and changes nothing.
+---------------------------------------------------------------------------
+local function Stubs(c, opts)
+  opts = opts or {}
+  local R = c.TwichUI
+  R.Group, R.PinSync = {}, {}
+  R.QoL = { Get = function(key) return (opts.qol or {})[key] or ({ summonsFrom = "known", summonsWait = 3, duelsFrom = "known", releaseWait = 2 })[key] end }
+  R.QoLGuideWaypoint = {}
+  R.Setups = { AddonState = function() return opts.rxp or "ready" end }
+  if opts.mage then
+    R.MageSell = { Mode = function() return opts.mode or "direct" end, DryRun = function() return opts.dry ~= false end }
+    R.RefreshmentsTrade = {}
+  end
+end
+local function Keys(list) local out = {} for _, e in ipairs(list) do out[#out + 1] = e.key end return table.concat(out, ",") end
+local function Has(list, key) for _, e in ipairs(list) do if e.key == key then return e end end end
+
+local n = Boot()
+Stubs(n)
+local A = n.TwichUI.WelcomeAutomation
+local modulesNow, uiNow = copy(n.TwichUIDB.modules), copy(n.TwichUIDB.ui or {})
+local sum = A.Summary()
+assert(Keys(sum.on) == "groupCheck,partyPins,quietLogin", "a new installation: only the default-on background features are on (" .. Keys(sum.on) .. ")")
+for _, key in ipairs({ "qolSummons", "qolResurrect", "qolReleasePvP", "qolDuels", "qolGuideWaypoint" }) do
+  assert(Has(sum.off, key), key .. " is available but off")
+end
+assert(not Has(sum.on, "mageSell") and not Has(sum.off, "mageSell") and not Has(sum.off, "mageRefreshmentsAutoFill"), "a Warrior is told nothing about Mage features")
+assert(Has(sum.on, "groupCheck").text:find("hidden addon channel", 1, true) and Has(sum.on, "groupCheck").text:find("Nothing is written in chat", 1, true), "background messaging is described, not hidden")
+assert(sum.pages[1] == "qol" and #sum.pages == 4, "pages to review, once each, in order")
+for k, v in pairs(modulesNow) do assert(n.TwichUIDB.modules[k] == v, "summary changed a switch: " .. k) end
+
+-- Turning a feature on elsewhere moves it to "on", with the scope as set. A damaged value never reads as on.
+n.TwichUIDB.modules.qolSummons = true
+n.TwichUIDB.modules.qolDuels = "yes"
+n.TwichUI.QoL.Get = function(key) return ({ summonsFrom = "group", summonsWait = 0, duelsFrom = "friends" })[key] end
+sum = A.Summary()
+local s1 = Has(sum.on, "qolSummons")
+assert(s1 and s1.text:find("group members", 1, true) and s1.text:find("at once", 1, true) and not s1.text:find("guild", 1, true), "scope follows the chosen source and wait")
+assert(Has(sum.off, "qolDuels") and not Has(sum.on, "qolDuels"), "a damaged switch is not on")
+n.TwichUIDB.modules.qolDuels = true; n.TwichUIDB.modules.qolDuelsToDeath = true
+local s2 = Has(A.Summary().on, "qolDuels")
+assert(s2.text:find("friends", 1, true) and s2.text:find("to the death", 1, true), "duel scope names who is excepted and the lethal kind")
+-- No RestedXP: its waypoint is not offered at all.
+local noRxp = Boot(); Stubs(noRxp, { rxp = "missing" })
+assert(not Has(noRxp.TwichUI.WelcomeAutomation.Summary().off, "qolGuideWaypoint"), "RestedXP absent: not listed")
+
+-- Mage: its features appear, with their real state.
+local mage = Boot(); mage.CLASS = "MAGE"; Stubs(mage, { mage = true })
+local ms = mage.TwichUI.WelcomeAutomation.Summary()
+assert(Has(ms.off, "mageSell") and Has(ms.off, "mageRefreshmentsAutoFill") and ms.pages[2] == "mage", "a Mage sees the Mage features, off by default")
+mage.TwichUIDB.modules.mageSell = true
+local sell = Has(mage.TwichUI.WelcomeAutomation.Summary().on, "mageSell")
+assert(sell.text:find("Sells ordinary", 1, true) and sell.text:find("dry run", 1, true), "selling: direct mode, still a dry run")
+mage.TwichUI.MageSell.Mode = function() return "ellesmere" end
+mage.TwichUI.MageSell.DryRun = function() return false end
+sell = Has(mage.TwichUI.WelcomeAutomation.Summary().on, "mageSell")
+assert(sell.text:find("junk in EllesmereUI", 1, true) and not sell.text:find("dry run", 1, true) and not sell.text:find("Sells", 1, true), "EllesmereUI mode marks, never sells, and says so")
+-- Trade filling needs the refreshments panel too.
+mage.TwichUIDB.modules.mageRefreshmentsAutoFill = true
+assert(not Has(mage.TwichUI.WelcomeAutomation.Summary().on, "mageRefreshmentsAutoFill"), "trade filling is not on while the panel is off")
+mage.TwichUIDB.modules.mageRefreshments = true
+local fill = Has(mage.TwichUI.WelcomeAutomation.Summary().on, "mageRefreshmentsAutoFill")
+assert(fill and fill.text:find("never accepts the trade", 1, true), "trade filling on, and says it never accepts")
+
+---------------------------------------------------------------------------
+-- 8. The dialog shows the summary, links to the right pages, and opens settings only when asked
+---------------------------------------------------------------------------
+local g = Boot()
+Stubs(g)
+local loads, openedPages = 0, {}
+g.C_AddOns.LoadAddOn = function(name)
+  if name ~= "TwichUI_Settings" then return false, "MISSING" end
+  loads = loads + 1
+  g.TwichUI.SettingsUI = { Open = function(page) openedPages[#openedPages + 1] = page or "overview" end, IsShown = function() return false end }
+  return true
+end
+Enter(g); Settle()
+local gd = D(g)
+assert(gd.shown and loads == 0 and g.TwichUI.SettingsUI == nil, "showing the welcome does not load the settings addon")
+g.TwichUI.RunCommand("about")
+assert(loads == 0, "nor does reopening it")
+assert(#gd.rows == 3 and gd.rows[1].label.text == "Group version check" and gd.onNone.shown == false, "one row for each feature that is on")
+assert(gd.offText.text:find("^Accepting summons") and gd.offText.text:find("%.$"), "what is off is a short sentence")
+assert(#gd.links == 4 and gd.links[1].text.text == "Quality of life" and gd.links[2].text.text == "Sharing" and gd.links[3].text.text == "Party pins", "a link to each page that holds one of them")
+assert(gd.links[1].shown and gd.links[1].page == "qol")
+gd.links[1].scripts.OnClick(gd.links[1])
+assert(loads == 1 and openedPages[1] == "qol" and not gd.shown, "a link opens its settings page through the normal entry point")
+g.TwichUI.RunCommand("about")
+gd.links[3].scripts.OnClick(gd.links[3])
+assert(loads == 1 and openedPages[2] == "pins", "the settings addon loads once")
+-- Showing again after a feature changed rebuilds the text without making new frames.
+local rowFrames, linkFrames = #gd.rows, #gd.links
+g.TwichUIDB.modules.qolSummons = true
+g.TwichUI.RunCommand("about")
+assert(#gd.rows == rowFrames + 1 and gd.rows[4].label.shown, "a feature turned on shows up the next time")
+assert(not gd.offText.text:find("^Accepting summons"), "and leaves the off list")
+for _ = 1, 5 do g.TwichUI.RunCommand("about") end
+assert(#gd.rows == rowFrames + 1 and #gd.links == linkFrames, "reopening makes no new widgets")
+-- With everything off there is a plain statement, not an empty box.
+local quiet = Boot({ TwichUIDB = { schema = 2, modules = { groupCheck = false, partyPins = false, quietLogin = false }, welcome = { state = "seen" } } })
+Stubs(quiet)
+quiet.TwichUI.RunCommand("about")
+assert(D(quiet).onNone.shown and D(quiet).rows[1] == nil, "nothing on: says so")
+
+---------------------------------------------------------------------------
+-- 9. Preview: the coordinator's own, isolated, silent, bounded, taken back on close
+---------------------------------------------------------------------------
+local v = Boot({ TwichUIDB = { schema = 2, modules = {}, welcome = { state = "seen" } } },
+  { files = { "chronicle/Style.lua", "Look.lua", "modules/Notify.lua", "modules/WelcomeAutomation.lua", "modules/Welcome.lua" } })
+Stubs(v)
+-- Stand-ins for the zone and friend cards (their real renderers need animation frames this fake lacks): what
+-- matters here is how the welcome asks for them. Each records what it was shown with.
+local shownCards, previewFlags = {}, {}
+for i, kind in ipairs({ "arrival", "friend" }) do
+  v.TwichUI.Notify.Register(kind, {
+    label = kind, sample = function() return { made_up = true } end,
+    show = function(payload, ctx) shownCards[#shownCards + 1] = kind; previewFlags[#previewFlags + 1] = ctx and ctx.preview; return true end,
+    dismiss = function() v.TwichUI.Notify.Finished(kind) end,
+    bounds = function() return i * 100, 0, i * 100 + 50, 50 end, hold = function() return 100 end,
+  })
+end
+local sounds = 0
+v.PlaySound = function() sounds = sounds + 1 end
+v.PlaySoundFile = function() sounds = sounds + 1 end
+Enter(v); Settle()
+v.TwichUI.RunCommand("about")
+local vd = D(v)
+assert(vd.preview.shown, "the preview button is offered when the coordinator is there")
+local N = v.TwichUI.Notify
+local beforeDB = copy(v.TwichUIDB)
+vd.preview.scripts.OnClick(vd.preview)
+local snap = N.Snapshot()
+assert(snap.active.arrival == "preview" and snap.active.friend == "preview", "the sample zone and friend cards are up, marked as previews")
+for _, flag in ipairs(previewFlags) do assert(flag == true, "each was shown as a preview") end
+assert(sounds == 0 and not N.PreviewSounds(), "silent by default")
+for _ = 1, 4 do vd.preview.scripts.OnClick(vd.preview) end
+snap = N.Snapshot()
+assert(snap.queued == 0 and snap.active.arrival == "preview" and snap.active.friend == "preview", "pressing again restarts the samples; nothing piles up")
+assert(v.TwichUI.Welcome.Snapshot().state == "seen")
+for k, val in pairs(beforeDB) do
+  if type(val) ~= "table" then assert(v.TwichUIDB[k] == val, "saved value unchanged: " .. k) end
+end
+for k, val in pairs(beforeDB.modules) do assert(v.TwichUIDB.modules[k] == val, "no switch changed by a preview: " .. k) end
+assert(v.TwichUIDB.ui == nil or v.TwichUIDB.ui.previewSounds == nil, "the preview-sound choice is not touched")
+-- Closing the dialog takes back what it showed.
+vd:Hide()
+snap = N.Snapshot()
+assert(next(snap.active) == nil and snap.queued == 0, "closing the welcome clears its sample cards")
+-- A preview started in the settings is not the welcome's to remove.
+v.TwichUI.RunCommand("about")
+N.Preview("arrival")
+vd:Hide()
+assert(N.Snapshot().active.arrival == "preview", "the welcome leaves previews it didn't start")
+N.ClearPreviews()
+-- Not during combat; says so.
+v.TwichUI.RunCommand("about")
+v.COMBAT = true
+v.said = {}
+local okCombat, whyCombat = v.TwichUI.Welcome.Preview()
+assert(okCombat == false and whyCombat == "combat" and next(N.Snapshot().active) == nil, "no preview in combat")
+local toldCombat = false
+for _, line in ipairs(v.said) do if line:find("out of combat", 1, true) then toldCombat = true end end
+assert(toldCombat, "and it says why")
+-- Without the coordinator the button is left out and the rest still works.
+local nn = Boot({ TwichUIDB = { schema = 2, modules = {}, welcome = { state = "seen" } } },
+  { files = { "chronicle/Style.lua", "Look.lua", "modules/WelcomeAutomation.lua", "modules/Welcome.lua" } })
+nn.TwichUI.RunCommand("about")
+assert(D(nn).shown and not D(nn).preview.shown, "no coordinator: no Preview button, dialog still works")
+assert(select(2, nn.TwichUI.Welcome.Preview()) == "unavailable")
+
+---------------------------------------------------------------------------
+-- 10. Escape, UI scale and reduced motion
+---------------------------------------------------------------------------
+local e2 = Boot({ TwichUIDB = { schema = 2, modules = {}, welcome = { state = "seen" } } })
+Stubs(e2)
+local scaled
+local create = e2.CreateFrame
+e2.CreateFrame = function(...)
+  local fr = create(...)
+  fr.SetScale = function(s, x) s.scale = x end
+  fr.GetScale = function(s) return rawget(s, "scale") or 1 end
+  fr.GetHeight = function(s) return rawget(s, "h") or 0 end
+  fr.SetAlpha = function(s, x) s.alpha = x end
+  return fr
+end
+e2.UIParent.w = 1000; e2.UIParent.GetHeight = function() return 300 end
+e2.TwichUI.RunCommand("about")
+local ed = D(e2)
+assert(ed.scale and ed.scale < 1 and ed.scale >= 0.6, "a small screen scales the dialog down, not below the floor (" .. tostring(ed.scale) .. ")")
+e2.UIParent.w = 4000; e2.UIParent.GetHeight = function() return 3000 end
+e2.TwichUI.RunCommand("about")
+assert(ed.scale == 1, "and back to full size when there is room")
+-- Escape goes through the game's list; the frame hides and nothing is left running.
+assert(e2.UISpecialFrames[#e2.UISpecialFrames] == "TwichUIWelcome")
+ed:Hide()
+assert(not ed.shown)
+-- "Reduce window motion" turns its fade off; otherwise it fades in from clear.
+e2.TwichUIDB.ui = { reduceSettingsMotion = true }
+ed.hooks.OnShow(ed)
+assert(ed.alpha == 1, "reduced motion: opens at once")
+e2.TwichUIDB.ui.reduceSettingsMotion = false
+ed.hooks.OnShow(ed)
+assert(ed.alpha == 0, "otherwise it fades in from clear")
 
 print("WELCOME TESTS PASSED")

@@ -92,7 +92,8 @@ modules\Arrival.lua
 # Welcome Back bookmark (reads the Chronicle, shows once at login)
 modules\WelcomeBack.lua
 
-# Welcome dialog: one short page for a new installation, and /tui about (uses the Chronicle palette and the arrival card's fonts)
+# Welcome dialog: one compact page for a new installation, and /tui about (TwichUI's window look; the automation summary it reads is in WelcomeAutomation.lua)
+modules\WelcomeAutomation.lua
 modules\Welcome.lua
 
 # New training at level-up (uses the arrival card's look; data from What's Training?, MIT)

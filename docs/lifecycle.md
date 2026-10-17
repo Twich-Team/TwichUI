@@ -112,10 +112,19 @@ Nothing here has been verified in the game yet. Test TwichUI alone first, then w
 means moving `!!!TwichUI.lua` (and `.bak`) out of `SavedVariables` with the game closed; put it back afterwards.
 
 1. **Fresh install.** *Expect:* a few seconds after the world loads, once, **Welcome to TwichUI**, centred a little above
-   the middle, over the world (no zone card, no Welcome Back card, no sound). `/tui diagnostics` → "welcome dialog:
-   seen".
+   the middle, over the world (no zone card, no Welcome Back card, no sound), in the settings window's look. It holds a
+   short intro, three features (cards, Journey Chronicle, gear hints), **What can act for you** and the buttons
+   **Close**, **Preview notifications** and **Open Settings**. Under **On now** only the background features that are
+   on by default (Group version check, Party pins, Hide addon welcome messages); everything else is under **Off until
+   you turn them on**, and a Mage sees the Mage items too. `/tui diagnostics` → "welcome dialog: seen". The settings
+   window has not been loaded (`/tui diagnostics` → settings window: not loaded) until a button or link asks.
+   Also open **Preview notifications** (a sample zone card and a friend card appear, silent, nothing in the
+   Chronicle), press it again (it restarts, nothing piles up), then close the dialog: the sample cards go.
+   In combat the button says previews wait. A link under **Review in settings** opens that page.
 2. **Existing installation.** Install this build over a save from the previous one. *Expect:* no dialog, ever, on this
-   or any character; "welcome dialog: seen".
+   or any character; "welcome dialog: seen". The same if only the Chronicle (or backups) of an earlier install remains
+   and the settings were lost. Turn on Accept summons (Quality of life) and open `/tui about`: it is under **On now**
+   with the people and wait you chose.
 3. **Closing.** Close button, the **x** in the title area, and Escape each close it. None brings it back (reload, relog,
    change characters, enter and leave instances).
 4. **Open Settings.** *Expect:* the dialog closes and TwichUI's settings window opens at Home. With the

@@ -680,6 +680,20 @@ do
     c.TwichUI.Persist.STEPS[1] = function() error("synthetic failure") end
   end })
   assert(failedUp.TwichUI.Persist.Report().main.outcome == "failed" and state(failedUp) == "seen", "an upgrade that failed is still not a new installation")
+  -- Settings lost but other TwichUI data remains (the Journey Chronicle, backups, received setups): not new.
+  for name, sv in pairs({
+    chronicle = { TwichUIChronicleDB = { version = 1, chars = { ["Rich - Forever"] = {} } } },
+    backups = { TwichUIBackupDB = { { stamp = 1 } } },
+    received = { TwichUIShareDB = { received = { x = 1 } } },
+    restore = { TwichUIRestoreDB = { points = { 1 } } },
+  }) do
+    local c = boot("LostSettings_" .. name, sv)
+    assert(c.TwichUI.Persist.Report().main.outcome == "fresh", name .. ": settings are fresh defaults")
+    assert(state(c) == "seen", name .. ": but TwichUI was used before, so no onboarding")
+  end
+  -- Empty containers (what a new installation's other variables are) do not count as data.
+  assert(state(boot("EmptyOthers", { TwichUIChronicleDB = {}, TwichUIBackupDB = {}, TwichUIShareDB = {} })) == "pending",
+    "empty saved variables are still a new installation")
   -- It is repeatable and never touches the other settings.
   local before = copy(fresh.TwichUIDB)
   fresh.TwichUI.Persist.Normalize(fresh.TwichUIDB, true); fresh.TwichUI.Persist.Normalize(fresh.TwichUIDB)
