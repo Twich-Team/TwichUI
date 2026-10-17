@@ -59,6 +59,17 @@ local function Ready(changesOptions)
     return true
 end
 
+-- Greys a row out while in combat and says why, as Profiles.lua refuses these then anyway (the refusal there is
+-- the real one; this only keeps the control from looking usable). The window redraws as combat starts and ends.
+local COMBAT_WHY = "Greyed out: profile changes wait until combat ends."
+local function WaitsForCombat(row)
+    if row then
+        row:AddModifyPredicate(function() return not InCombatLockdown() end)
+        row.why = COMBAT_WHY
+    end
+    return row
+end
+
 ---------------------------------------------------------------------------
 -- Dialogs: Blizzard's own, with an edit box for a name or a question to confirm. The profile names go in as
 -- plain text (text_arg1 with an empty format), never as a format string.
@@ -186,6 +197,7 @@ K.Page({
                 return list
             end)
         controls.current = current and current.GetSetting and current:GetSetting() or (current and current.data and current.data.setting)
+        WaitsForCombat(current)
         if current then
             local base = current.GetTooltip
             current.GetTooltip = function(self)
@@ -196,13 +208,13 @@ K.Page({
         end
 
         Header("Make a profile", "New starts from the default settings; Duplicate copies the one you use. Either way this character switches to it, and the profile it leaves is kept as it was.")
-        Button("New profile", "New...", function()
+        WaitsForCombat(Button("New profile", "New...", function()
             if not Ready(true) then return end
             AskName("Name for the new profile (it starts with the default settings):", "", "Create", function(text)
                 Report(P.Create(text))
             end)
-        end, "Makes a profile with TwichUI's default settings, and switches this character to it. The profile you are using now is kept as it is.")
-        Button("Duplicate current", "Duplicate...", function()
+        end, "Makes a profile with TwichUI's default settings, and switches this character to it. The profile you are using now is kept as it is."))
+        WaitsForCombat(Button("Duplicate current", "Duplicate...", function()
             if not Ready(true) then return end
             local from = P.Current()
             local suggestion = R.Persist.FreeProfileName(from .. " copy", function(n)
@@ -213,7 +225,7 @@ K.Page({
                 local ok, code, info = P.Duplicate(text)
                 Report(ok, code, info, from)
             end)
-        end, "Makes a new, independent copy of the profile you are using and switches this character to it. Changes to the copy never affect the original or the characters using it.")
+        end, "Makes a new, independent copy of the profile you are using and switches this character to it. Changes to the copy never affect the original or the characters using it."))
 
         -- Copy settings from: the profile in use takes another's settings and keeps its name.
         local copy = Choice("profileCopyFrom", "Copy settings from...",
@@ -244,6 +256,7 @@ K.Page({
                 return list
             end)
         controls.copy = copy and copy.GetSetting and copy:GetSetting() or (copy and copy.data and copy.data.setting)
+        WaitsForCombat(copy)
 
         Button("Rename", "Rename...", function()
             if not Ready(false) then return end
@@ -293,17 +306,33 @@ K.Page({
             end)
         controls.delete = delete and delete.GetSetting and delete:GetSetting() or (delete and delete.data and delete.data.setting)
 
-        Button("Reset current profile", "Reset...", function()
+        -- Which switches that take effect only after a reload would end up different from what this session loaded
+        -- with if the profile went back to its defaults (read from Switches.lua; a reload is never done for you).
+        local function ResetReloadNames()
+            local W, names = R.Switches, {}
+            for key, def in pairs(W.defs) do
+                if def.reload and W.atLoad[key] ~= nil and R.DEFAULT_MODULES[key] ~= W.atLoad[key] then
+                    names[#names + 1] = W.ReloadName(key) or key
+                end
+            end
+            table.sort(names)
+            return names
+        end
+        local resetRow = Button("Reset current profile", "Reset...", function()
             if not Ready(true) then return end
             local name = P.Current()
             local note = SharedNote(name)
-            Confirm(("Reset profile %s to the default settings?\n\nEvery TwichUI option in it goes back to its default.%s %s"):format(
-                Quote(name), note and (" " .. note) or "", NOT_AFFECTED),
+            local reload = ResetReloadNames()
+            Confirm(("Reset profile %s to the default settings?\n\nEvery TwichUI option in it goes back to its default, including which features are on.%s %s%s"):format(
+                Quote(name), note and (" " .. note) or "", NOT_AFFECTED,
+                #reload > 0 and ("\n\nTakes effect after you reload your UI: " .. table.concat(reload, ", ") .. ". Nothing reloads by itself.") or ""),
                 "Reset", function()
                     local ok, code, info = P.Reset()
                     Report(ok, code, info, name)
                 end)
-        end, "Puts every TwichUI option in the profile you are using back to its default. Asks first. Not available during combat.")
+        end, "Puts every TwichUI option in the profile you are using back to its default, including which features are on. Asks first and says who else uses it. Not available during combat.")
+        if resetRow then resetRow.reset = true end   -- apart from ordinary controls, in the danger style
+        WaitsForCombat(resetRow)
 
         -- After any change to profiles: the labels and choices show what is true now.
         P.OnChange(function()

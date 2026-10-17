@@ -16,22 +16,23 @@ local SKINS = {
       what = "Gives WhatsTraining's floating window (/wt) the EllesmereUI look." },
 }
 
--- What a skin is doing right now: a word or two, and a sentence (or nil).
--- onAtLoad: whether the skin's toggle was on when the UI loaded.
-local function SkinStatus(skin, onAtLoad)
+-- What a skin is doing right now: a word or two, a sentence (or nil) and, third, whether it is on but can't work
+-- as set for want of EllesmereUI (the row says so under its label, not only in its tooltip).
+local function SkinStatus(skin)
     local state = K.AddonState(skin.addon)
     if state == "missing" then return R.GREY .. "Not installed|r", "Install " .. skin.label .. " to use this skin." end
     if state == "disabled" then return R.GREY .. "Turned off|r", skin.label .. " is turned off in your AddOns list." end
     local on = R:Enabled(skin.key)
-    if on ~= onAtLoad then
+    -- the one record of what waits for a reload (Switches.lua): a skin turned back before a reload is not pending
+    if R.Switches.IsPending(skin.key) then
         return R.GOLD .. (on and "On" or "Off") .. " after reload|r", "Reload your UI for this to take effect."
     end
     if not on then return R.GREY .. "Off|r", nil end
     if K.AddonState("EllesmereUI") == "missing" then
-        return R.GREY .. "Waiting for EllesmereUI|r", "EllesmereUI isn't installed. The skin only works with it."
+        return R.GREY .. "Waiting for EllesmereUI|r", "EllesmereUI isn't installed. The skin only works with it.", true
     end
     if not R.S then
-        return R.GREY .. "Waiting for EllesmereUI|r", "EllesmereUI hasn't switched on TwichUI's skins. Check its third-party addon skin options."
+        return R.GREY .. "Waiting for EllesmereUI|r", "EllesmereUI hasn't switched on TwichUI's skins. Check its third-party addon skin options.", true
     end
     if not K.Loaded(skin.addon) then
         return R.GREEN .. "Ready|r", "Applies when " .. skin.label .. " loads."
@@ -65,14 +66,17 @@ K.Page({
         for _, skin in ipairs(SKINS) do
             local installed = K.AddonState(skin.addon) ~= "missing"
             local label = installed and skin.label or (skin.label .. "  " .. R.GREY .. "(not installed)|r")
-            local onAtLoad = R.Switches.atLoad[skin.key]
-            if onAtLoad == nil then onAtLoad = R:Enabled(skin.key) end
             local row = Toggle(skin.key, label, skin.what)
             if row then
                 row.data.tooltip = function()
-                    local status, detail = SkinStatus(skin, onAtLoad)
+                    local status, detail = SkinStatus(skin)
                     return skin.what .. "\n\nTakes effect after you reload your UI.\n\nStatus: " .. status .. (detail and ("\n" .. detail) or "")
                 end
+                -- on, installed, but EllesmereUI isn't giving it a look: said under the label, with what to do
+                K.Note(row, function()
+                    local _, detail, needs = SkinStatus(skin)
+                    if needs then return detail, "warn" end
+                end)
                 if not installed then
                     row:AddModifyPredicate(function() return false end)
                     row.why = "Install " .. skin.label .. " to use this skin."

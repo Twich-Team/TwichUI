@@ -857,12 +857,30 @@ local function Profiles()
     return PF
 end
 
+-- A short fingerprint of what a review shows: the destination profile (and how many characters share it) and,
+-- for each ticked group, each setting with the value it would replace and the one it would bring. Two reviews
+-- with the same fingerprint would do exactly the same thing. Used to refuse an approval given for a review that
+-- is no longer true (the profile or a setting changed while the question was open). Reads only.
+function TC.PlanKey(plan)
+    if type(plan) ~= "table" or not plan.ok then return "" end
+    local parts = { tostring(plan.profile), tostring(plan.sharedWith) }
+    for _, g in ipairs(plan.groups) do
+        if g.selected and g.state == "changed" then
+            parts[#parts + 1] = g.id
+            for _, c in ipairs(g.changes) do
+                parts[#parts + 1] = tostring(c.slot) .. "." .. tostring(c.key or c.label) .. "=" .. tostring(c.old) .. ">" .. tostring(c.new)
+            end
+        end
+    end
+    return table.concat(parts, "|")
+end
+
 -- opts.selection = { [groupId] = false } leaves groups out.
 -- Returns { ok, why, status, groups = { { id, label, scope, note, state, changes = { { label, old, new, reload } },
 --   same, rejected } }, changed, reload = { labels }, absent = { labels }, profile, sharedWith, unknown, scopes }
 function TC.Plan(entry, opts)
     opts = opts or {}
-    local plan = { groups = {}, changed = 0, reload = {}, absent = {}, unknown = 0 }
+    local plan = { groups = {}, changed = 0, reload = {}, absent = {}, unknown = 0, turnsOn = {}, turnsOff = {} }
     if type(entry) ~= "table" then plan.why = "There are no TwichUI settings in this setup." return plan end
     plan.status, plan.schema, plan.addon, plan.made = entry.status, entry.schema, entry.addon, entry.made
     if entry.status == "newer" then
@@ -921,6 +939,11 @@ function TC.Plan(entry, opts)
                             row.changes[#row.changes + 1] = { label = Humanize(f.key), key = f.key, slot = f.slot, old = Show(cur), new = Show(v),
                                 reload = reload, scope = f.scope }
                             if reload and row.selected then plan.reload[#plan.reload + 1] = Humanize(f.key) end
+                            -- a feature's own on/off switch changing is said plainly, apart from the long list of values
+                            if f.switch and row.selected then
+                                local list = v and plan.turnsOn or plan.turnsOff
+                                list[#list + 1] = Humanize(f.key)
+                            end
                         else
                             row.same = row.same + 1
                         end
@@ -945,6 +968,7 @@ end
 ---------------------------------------------------------------------------
 local FAILURE = {
     combat = "That has to wait until you're out of combat.",
+    stale = "Your profile or the settings it would change are not what you reviewed (something changed while you were deciding), so nothing was applied. Review it again.",
     nothing = "There is nothing to change: your settings already match.",
     none = "There are no TwichUI settings in this setup.",
 }
@@ -972,7 +996,8 @@ function TC.NewProfileName(who)
 end
 
 -- entry: a cleaned entry (pack.twichui). opts: selection, from (a name, for the Undo copy and the profile name),
--- newProfile (true: a copy of the profile in use is made and used first).
+-- newProfile (true: a copy of the profile in use is made and used first), expect (the TC.PlanKey of the review
+-- that was approved: if what would happen now differs, nothing is applied and the reason is "stale").
 -- Returns true, report | false, reason code, extra.
 --   report = { changed, groups = { label }, reload = { label }, reloadPending, failed = { part }, profile, newProfile, scopes }
 function TC.Apply(entry, opts)
@@ -984,6 +1009,7 @@ function TC.Apply(entry, opts)
     local plan = TC.Plan(entry, opts)
     if not plan.ok then return false, "none" end
     if plan.changed == 0 then return false, "nothing" end
+    if opts.expect and TC.PlanKey(plan) ~= opts.expect then return false, "stale" end
 
     local newName
     if opts.newProfile then

@@ -70,7 +70,7 @@ K.Page({
                 foodDrink, FoodDrinkOn)
         end
 
-        K.Badge(Header("Appearance", "Make the buttons match the rest of your interface. In combat the game doesn't let the buttons change, so a change waits until combat ends; opacity changes at once."), "Waits for combat")
+        K.Badge(Header("Appearance", "Make the buttons match the rest of your interface. In combat the game doesn't let the buttons change, so a change waits until combat ends; opacity changes at once. There is no separate sample: the buttons themselves change, so watch them on your screen."), "Waits for combat")
         local resettable = {}   -- { setting, default }, for Reset
         local function Remember(variable, varType, label, key, set)
             local setting = Proxy(variable, varType, label, FD.DEFAULTS[key], function() return FD.Get(key) end, set)

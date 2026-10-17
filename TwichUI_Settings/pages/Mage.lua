@@ -27,6 +27,7 @@ K.Page({
         Header("Mage Travel", "A launcher for your data bar that lists your teleports and portals. It casts only the one you click, and never chooses a destination for you.")
         local mage = Toggle("mageTravel", "Mage Travel launcher on my data bar",
             "Adds \"TwichUI Mage Travel\" to the list of your data bar addon (any that shows LibDataBroker launchers, such as EllesmereUI's Broker Plugin block). Click it for a small menu of the teleports and portals your faction can learn: click a learned one to cast it; hover one you haven't learned for the level it is trained at. It can't be opened in combat, and closes when combat starts.\n\nWithout a data bar addon there is nowhere for it to show. Turning it off takes it off your data bar after a reload.")
+        K.DataBarNote(mage, function() return R:Enabled("mageTravel") end)
         Under(Choice("mageTravelText", "Text on the data bar",
             "The word shown beside the launcher's icon on your data bar. None leaves just the icon. If your data bar shows plugin names too, it may read \"Mage Travel: Travel\"; that is the data bar's own label option.",
             STRING, MT.DEFAULT_TEXT, MT.TextChoice, MT.SetTextChoice, MT.TEXTS),
@@ -36,6 +37,7 @@ K.Page({
         Header("Mage Conjuring", "A launcher for your data bar with your best Conjure Food and Conjure Water. It casts only the one you click.")
         local conjure = Toggle("mageConjure", "Mage Conjuring launcher on my data bar",
             "Adds \"TwichUI Mage Conjuring\" to the list of your data bar addon (any that shows LibDataBroker launchers, such as EllesmereUI's Broker Plugin block). Click it for a small menu with one entry each for Conjure Food and Conjure Water, the highest rank you have learned of each: click one to cast it. With none learned, the first rank is shown muted; hover it for the level it is trained at. Shift-left-click the launcher to conjure water and shift-right-click to conjure food, each at your highest rank. It can't be opened in combat, and closes when combat starts; the shift-clicks don't work in combat either.\n\nWithout a data bar addon there is nowhere for it to show. Turning it off takes it off your data bar after a reload.")
+        K.DataBarNote(conjure, function() return R:Enabled("mageConjure") end)
         Under(Choice("mageConjureText", "Text on the data bar",
             "The word shown beside the launcher's icon on your data bar. None leaves just the icon. If your data bar shows plugin names too, it may read \"Mage Conjuring: Conjure\"; that is the data bar's own label option.",
             STRING, MC.DEFAULT_TEXT, MC.TextChoice, MC.SetTextChoice, MC.TEXTS),
@@ -55,9 +57,9 @@ K.Page({
             end, "Opens the panel (same as typing /tui refreshments)."), refresh, RefreshOn)
             local RB = R.RefreshmentsBroker
             if RB then
-                Under(Choice("refreshmentsText", "Text on the data bar",
+                K.DataBarNote(Under(Choice("refreshmentsText", "Text on the data bar",
                     "Adds \"TwichUI Mage Refreshments\" to the list of your data bar addon (any that shows LibDataBroker plugins, such as EllesmereUI's Broker Plugin block) once refreshments are on; no reload needed. Click it to open the panel, right-click for these options; hover it for how much water and food is prepared and who is supplied.\n\nThe word beside its icon: how many of your group are supplied (\"3/5 supplied\"), \"Refreshments\", or none. On your own it reads \"Refreshments\". Turned off, it reads \"Off\" until you reload.",
-                    STRING, RB.DEFAULT_TEXT, RB.TextChoice, RB.SetTextChoice, RB.TEXTS), refresh, RefreshOn)
+                    STRING, RB.DEFAULT_TEXT, RB.TextChoice, RB.SetTextChoice, RB.TEXTS), refresh, RefreshOn))
             end
             if R.RefreshmentsTrade then
                 local trade = Under(Toggle("mageRefreshmentsTrade", "Fill trade button and trade tracking",
@@ -117,6 +119,14 @@ K.Page({
                     MSL.SetMode(value)
                 end, ModeChoices), sell, SellOn)
             if modeRow then
+                -- The chosen mode is kept when EllesmereUI can't be used, and TwichUI doesn't fall back to selling:
+                -- the row says so under its label for as long as it is true.
+                K.Note(modeRow, function()
+                    if not Marking() then return nil end
+                    local state, text = MSL.MarkState()
+                    if state == "active" or state == "dry-run" then return nil end
+                    return text, "warn"
+                end)
                 local base = modeRow.GetTooltip
                 modeRow.GetTooltip = function(self)
                     local tip = base(self)

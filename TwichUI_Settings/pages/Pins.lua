@@ -78,10 +78,10 @@ K.Page({
 
         local BR = PL.Bar
         Header("Data bar", "\"TwichUI Party Pins\" in a data bar addon that shows LibDataBroker plugins (for example EllesmereUI's Broker Plugin block). Click it for a small menu of your pins, right-click for these options. It is listed once Party pins is on, with no reload. What it says, its icon and its color are yours; the data bar addon still sets its font and size.")
-        Under(Choice("pinsBarText", "Text on the data bar",
+        K.DataBarNote(Under(Choice("pinsBarText", "Text on the data bar",
             "The words beside the entry's icon: how many pins are on your map (\"5 pins, 2 party\"), just the number, \"Map Pins\", or nothing. With none, the icon stays so there is still something to click. Turned off, it reads \"Off\" until you reload.",
             STRING, BR.DEFAULTS.text, function() return BR.Get("text") end, function(value) BR.Set("text", value) end, BR.TEXTS),
-            pinsToggle, PinsOn)
+            pinsToggle, PinsOn))
         Under(ProxyToggle("pinsBarIcon", "Show the icon on the data bar",
             "The small map icon beside the text. Off leaves just the text. It always shows while the text is set to None, so the entry is never empty.",
             BR.DEFAULTS.icon, function() return BR.Get("icon") end, function(value) BR.Set("icon", value and true or false) end),
@@ -165,7 +165,7 @@ K.Page({
             local first = { { "default", "Game font (default)" } }
             return Fonts and Fonts.Choices(current, first) or first
         end
-        Header("Map text", "How pin names look on the world map and the minimap: one look for both. Only the names change; pins, clicks and the pin window don't.")
+        Header("Map text", "How pin names look on the world map and the minimap: one look for both. Only the names change; pins, clicks and the pin window don't. There is no sample: open your world map or minimap with a pin on it to see each change.")
         local mapReset = {}
         local function MapRemember(variable, varType, label, key)
             local setting = Proxy(variable, varType, label, MT.DEFAULTS[key], function() return MT.Get(key) end, function(value) MT.Set(key, value) end)
@@ -185,7 +185,7 @@ K.Page({
         Under(K.ResetButton("Reset map text", mapReset, MT.Reset,
             "Puts pin names on the maps back to the game font, size 10, white, no outline and the shadow on. Your pins, the map clicks, the label choices and the pin window's look are not touched."), pinsToggle, PinsOn)
 
-        Header("Window appearance", "How the pin window looks: background, border, text and accent. Only the window changes; your pins, the clicks and the map pins don't. It looks complete without EllesmereUI; EllesmereUI's and LibSharedMedia's textures and fonts are listed when they are there.")
+        Header("Window appearance", "How the pin window looks: background, border, text and accent. Only the window changes; your pins, the clicks and the map pins don't. It looks complete without EllesmereUI; EllesmereUI's and LibSharedMedia's textures and fonts are listed when they are there. There is no sample: open the pin window (/tui pins) to see each change.")
         local pinsReset = K.Appearance(PL.Look, "pinsLook", "window", nil, nil, nil, nil, pinsToggle, PinsOn)
         local function Remember(variable, varType, label, key)
             local setting = Proxy(variable, varType, label, PL.DEFAULTS[key], function() return PL.Get(key) end, function(value) PL.Set(key, value) end)

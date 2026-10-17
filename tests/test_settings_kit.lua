@@ -99,7 +99,7 @@ assert(redraws == 2, "the same value again redraws nothing")
 c.TwichUIDB.ui.mageTravelText = "none"
 for _, s in ipairs(S.list) do s.notified = 0 end
 redraws = 0
-Row("Mage", "Menu appearance", "button").click()
+S.ClickReset(Row("Mage", "Menu appearance", "button"))
 assert(redraws == 1, "Reset redraws once: " .. redraws)
 assert(c.TwichUIDB.ui.brokerMenu == nil and MS.Get("bgOpacity") == MS.DEFAULTS.bgOpacity, "the look is forgotten")
 for _, suffix in ipairs({ "BgTexture", "BgColor", "BgOpacity", "BorderTexture", "BorderSize", "BorderColor", "BorderOpacity" }) do
@@ -111,7 +111,7 @@ assert(c.TwichUIDB.ui.mageTravelText == "none", "nothing else is touched")
 local FD = R.FoodDrink
 FD.Set("size", 50); FD.Set("preferConjured", true)
 c.TwichUIDB.ui.foodDrinkPosition = { x = 3, y = 4 }
-Row("Food and drink", "Appearance", "button").click()
+S.ClickReset(Row("Food and drink", "Appearance", "button"))
 assert(FD.Get("size") == FD.DEFAULTS.size and FD.Get("preferConjured") == true and c.TwichUIDB.ui.foodDrinkPosition.x == 3)
 FD.Set("preferConjured", false)
 
@@ -185,7 +185,9 @@ local chronicleBefore = Snapshot(c.TwichUIChronicleDB or {})
 assert(chronicleBefore ~= "", "the Chronicle has entries to keep")
 for _, cat in ipairs(S.pages) do
   for _, i in ipairs(cat.rows) do
-    if i.kind == "button" and i.data.buttonText == "Reset" and i.click then i.click() end
+    if i.kind == "button" and i.data.buttonText == "Reset" and i.click then
+      if i.reset and i.data.name ~= "Position" then S.ClickReset(i) else i.click() end
+    end
   end
 end
 for _, page in ipairs(K.NavOrder()) do K.ResetPage(page.key) end

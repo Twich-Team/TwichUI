@@ -389,7 +389,7 @@ do
   FD.Set("mouseover", false); assert(not idle.modify[1](), "greyed while the fade is off")
   FD.Set("mouseover", true); assert(idle.modify[1](), "live while it is on")
   c.TwichUIDB.modules.foodDrink = false
-  reset.click()
+  S.ClickReset(reset)
   assert(FD.Get("size") == 36 and FD.Get("layout") == "horizontal" and FD.Get("borderColor") == FD.DEFAULTS.borderColor, "Reset puts the look back")
   assert(FD.Get("preferConjured") == true, "Reset leaves the preference alone")
   prefer.set(false)
@@ -447,7 +447,7 @@ do
   end
   assert(preview and reset, "a preview and a reset")
   preview.click(); preview.click()   -- shows and puts away without error
-  reset.click()
+  S.ClickReset(reset)
   assert(c.TwichUIDB.ui.brokerMenu == nil, "Reset forgets the saved appearance")
   for _, key in pairs(keys) do assert(MS.Get(key) == MS.DEFAULTS[key], key .. " is back to its default") end
   assert(c.TwichUIDB.ui.mageTravelText == "none" and c.TwichUIDB.ui.foodDrink.size == 50, "Reset leaves everything else alone")
@@ -484,7 +484,7 @@ do
   proxies.TWICHUI_refreshmentsPanelBorderTexture.set("Blizzard Tooltip")
   assert(PS.Get("bgOpacity") == 55 and PS.Get("borderTexture") == "Blizzard Tooltip" and c.TwichUIDB.ui.refreshmentsStyle.bgOpacity == 55)
   MS.Set("bgOpacity", 20)
-  reset.click()
+  S.ClickReset(reset)
   assert(c.TwichUIDB.ui.refreshmentsStyle == nil and PS.Get("bgOpacity") == PS.DEFAULTS.bgOpacity, "the panel's look is reset")
   assert(MS.Get("bgOpacity") == 20, "the menus' look is not")
   MS.Reset()
@@ -815,7 +815,7 @@ do
   assert(#footerChoices == 3 and footerChoices[1].value == "subtle", "the footer choices")
 
   c.TwichUIDB.modules.restedxpSkin = true
-  Find("Reset appearance").click()
+  S.ClickReset(Find("Reset appearance"))
   assert(RS.Look.Get("bgOpacity") == RS.Look.DEFAULTS.bgOpacity and RS.Look.Get("borderColor") == RS.Look.DEFAULTS.borderColor)
   assert(RS.Text.Get("titleOutline") == "none" and RS.Text.Get("bodyFont") == "default", "text back to its defaults")
   assert(RS.Text.Get("showLogo") == false and RS.Text.Get("listSize") == RS.Text.DEFAULTS.listSize
@@ -928,7 +928,7 @@ do
     if i.data.tooltip and i:GetTooltip():find("SpeakStone", 1, true) then mine = i end
   end
   assert(mine, "its own reset button")
-  mine.click()
+  S.ClickReset(mine)
   assert(SS.Look.Get("bgOpacity") == SS.Look.DEFAULTS.bgOpacity and SS.Style.Get("nameColor") == SS.Style.DEFAULTS.nameColor
     and SS.Style.Get("textSize") == 13 and SS.Style.Get("portraitShape") == "round" and SS.Style.Get("showProgress") == true
     and SS.Style.Get("nameFont") == "Cinzel" and SS.Style.Get("rightClickClose") == true, "everything of the look is back")
@@ -1016,7 +1016,7 @@ do
   preview.click()
   c.TwichUIDB.modules.restedxpSkin = true
   RS.Text.Set("bodyFont", "Keep This")
-  Find("Reset timer bars").click()
+  S.ClickReset(Find("Reset timer bars"))
   assert(TM.Opt.Get("fillColor") == "ff80502d" and TM.Opt.Get("barHeight") == 16 and TM.Opt.Get("labelOutline") == "outline"
     and TM.Opt.Get("showIcon") == false and TM.Look.Get("borderSize") == 1 and TM.Opt.Get("skinTimers") == true,
     "the timer bars are back to their defaults")
@@ -1087,7 +1087,7 @@ do
   -- appearance only
   c.TwichUIDB.ui.chronicleClock = "24"
   c.TwichUIDB.modules.chronicleSound = false
-  Find("Reset Chronicle appearance").click()
+  S.ClickReset(Find("Reset Chronicle appearance"))
   assert(CA.Get("font") == "default" and CA.Get("accentColor") == CA.DEFAULTS.accentColor and CA.Look.Get("bgOpacity") == 98)
   assert(CA.Look.Get("borderTexture") == "ledger" and CA.Get("customSizes") == false)
   assert(c.TwichUIDB.ui.chronicleClock == "24" and c.TwichUIDB.modules.chronicleSound == false, "nothing but the look is reset")

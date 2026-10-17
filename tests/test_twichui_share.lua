@@ -444,6 +444,48 @@ do
 end
 
 ---------------------------------------------------------------------------
+-- 3b. An approval is for the review that was shown: the destination and the values it would replace. If the
+-- profile in use or a setting changed while the question was open, nothing is applied.
+---------------------------------------------------------------------------
+do
+  local C = Boot("Cleo2")
+  local CT = C.TwichUI.TwichConfig
+  local PF = C.TwichUI.Profiles
+  local FD = C.TwichUI.FoodDrink
+  local entry = CT.CleanEntry({ schema = 1, groups = { food = { foodDrink = { size = 60 } }, general = { modules = { quietLogin = false } } } })
+  local plan = CT.Plan(entry)
+  Check(plan.ok and plan.changed == 2, "set up: two changes")
+  Check(#plan.turnsOff == 1 and plan.turnsOff[1] == "Quiet login" and #plan.turnsOn == 0,
+    "a feature's switch changing is listed apart from the values: " .. table.concat(plan.turnsOff, ","))
+  Check(#plan.reload == 1 and plan.reload[1] == "Quiet login", "and so is the reload it needs")
+  local key = CT.PlanKey(plan)
+  Check(key ~= "" and key == CT.PlanKey(CT.Plan(entry)), "the same review has the same fingerprint")
+  Check(CT.PlanKey(CT.Plan(entry, { selection = { food = false } })) ~= key, "leaving a feature out changes it")
+  Check(CT.PlanKey({}) == "", "a failed review has none")
+
+  -- the profile in use changed while the question was open
+  Check(PF.Duplicate("Raid"), "set up: another profile in use")
+  local ok1, why1 = CT.Apply(entry, { from = "Rich", expect = key })
+  Check(ok1 == false and why1 == "stale", "a review made for another profile is refused: " .. tostring(why1))
+  Check(FD.Get("size") ~= 60 and C.TwichUI:Enabled("quietLogin"), "nothing was applied")
+  Check(CT.Explain("stale"):find("Review it again", 1, true), "and the reason is said")
+
+  -- a value the review would replace changed while the question was open
+  PF.Switch("Default")
+  key = CT.PlanKey(CT.Plan(entry))
+  FD.Set("size", 55)
+  local ok2, why2 = CT.Apply(entry, { from = "Rich", expect = key })
+  Check(ok2 == false and why2 == "stale" and FD.Get("size") == 55, "a changed value is refused too")
+
+  -- reviewed again, it applies; and a call that names no review behaves as before
+  local ok3 = CT.Apply(entry, { from = "Rich", expect = CT.PlanKey(CT.Plan(entry)) })
+  Check(ok3 and FD.Get("size") == 60 and C.TwichUI:Enabled("quietLogin") == false, "the review that is true applies")
+  CT.Undo()
+  local ok4 = CT.Apply(entry, { from = "Rich" })
+  Check(ok4 and FD.Get("size") == 60, "without a review named it applies as it always did")
+end
+
+---------------------------------------------------------------------------
 -- 4. Defaulted settings: a sender who never changed anything sends the defaults
 ---------------------------------------------------------------------------
 do

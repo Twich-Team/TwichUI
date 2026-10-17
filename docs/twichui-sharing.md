@@ -104,8 +104,22 @@ Nothing is run or loaded as code; the data is read with LibSerialize and walked.
 
 ## Applying
 
-`TwichConfig.Apply(entry, { selection, from, newProfile })`, refused in combat and when profiles aren't available
+`TwichConfig.Apply(entry, { selection, from, newProfile, expect })`, refused in combat and when profiles aren't available
 this session (a newer save is running on a stand-in that isn't saved).
+
+The review (the popup, `setup/Window.lua`) says where the settings come from (sender, the TwichUI version that made
+them, when), the profile they go to and how many other characters share it, that **only the values listed are
+replaced** (every other setting in the profile keeps its value), which features it **turns on or off**
+(`plan.turnsOn` / `plan.turnsOff`, for switches in the share), what needs a reload (named, never done for you),
+what the share doesn't hold or this version can't use (skipped features and counts), what always stays yours, and that
+Undo can put the replaced values back (last import only). Hovering a feature lists its values, yours first.
+
+**The approval is for what was reviewed.** `TwichConfig.PlanKey(plan)` is a fingerprint of the destination profile
+(and how many characters share it) and, for each ticked feature, each setting with the value it would replace and the
+one it would bring. The confirmation passes the review's key as `expect`; `Apply` plans again at that moment and
+refuses with `"stale"` (nothing written, "Review it again") if the key differs: the profile in use changed, or a
+setting did, while the question was open. The popup also still refuses if the received setup was replaced or removed.
+A caller that passes no `expect` behaves as before.
 
 1. Plan: re-check the entry, compare with what is in use, list the changes (shown before confirming).
 2. Take the Undo copy: the raw value (or its absence) of every field about to change, and the stat weight entries.

@@ -1147,6 +1147,7 @@ local function TwichBody(plan, from)
         scope = scope .. "."
     end
     lines[#lines + 1] = scope
+    lines[#lines + 1] = ("%sReplaces|r  only the values listed for each ticked feature (hover one to see them, yours first, then theirs). Every other setting in the profile keeps its value."):format(Head())
     local account = false
     for _, g in ipairs(plan.groups) do
         if g.selected and g.state == "changed" then
@@ -1163,8 +1164,14 @@ local function TwichBody(plan, from)
     if plan.unknown and plan.unknown > 0 then
         lines[#lines + 1] = GREY .. ("%d %s from a newer TwichUI ignored."):format(plan.unknown, plan.unknown == 1 and "setting" or "settings") .. "|r"
     end
+    if (plan.turnsOn and #plan.turnsOn > 0) or (plan.turnsOff and #plan.turnsOff > 0) then
+        local parts = {}
+        if #plan.turnsOn > 0 then parts[#parts + 1] = "turns on " .. table.concat(plan.turnsOn, ", ") end
+        if #plan.turnsOff > 0 then parts[#parts + 1] = "turns off " .. table.concat(plan.turnsOff, ", ") end
+        lines[#lines + 1] = ("%sFeatures|r  this %s."):format(GOLD, table.concat(parts, " and "))
+    end
     if #plan.reload > 0 then
-        lines[#lines + 1] = ("%sNeeds a reload|r  %s take effect after reloading your UI. Nothing else does."):format(GOLD, table.concat(plan.reload, ", "))
+        lines[#lines + 1] = ("%sNeeds a reload|r  %s take effect after reloading your UI. Nothing else does, and nothing reloads by itself."):format(GOLD, table.concat(plan.reload, ", "))
     end
     lines[#lines + 1] = GREY .. "Nothing changes until you confirm. The values this replaces are kept, so Undo can put them back; Undo keeps only the last import." .. "|r"
     return table.concat(lines, "\n\n")
@@ -1196,12 +1203,17 @@ local function TwichApply(newProfile)
             for _, c in ipairs(g.changes) do if c.scope == "account" then account = true end end
         end
     end
-    local text = ("Apply %d %s from %s's TwichUI settings to %s?\n\n%s%s"):format(plan.changed,
+    local features = {}
+    if #plan.turnsOn > 0 then features[#features + 1] = "Turns on: " .. table.concat(plan.turnsOn, ", ") .. "." end
+    if #plan.turnsOff > 0 then features[#features + 1] = "Turns off: " .. table.concat(plan.turnsOff, ", ") .. "." end
+    local reviewed = TC.PlanKey(plan)   -- the review this approval is for: refused if it is not true any more
+    local text = ("Apply %d %s from %s's TwichUI settings to %s?\n\n%s%s%s\n\nThe values this replaces are kept so Undo can put them back (it keeps only the last import)."):format(plan.changed,
         plan.changed == 1 and "setting" or "settings", from, where,
-        #plan.reload > 0 and ("Reload needed afterwards for: " .. table.concat(plan.reload, ", ") .. ".") or "No reload is needed.",
+        #features > 0 and (table.concat(features, " ") .. "\n\n") or "",
+        #plan.reload > 0 and ("Reload needed afterwards for: " .. table.concat(plan.reload, ", ") .. ". Nothing reloads by itself.") or "No reload is needed.",
         account and "\n\nStat weights and the window-motion setting are account-wide: they change for every profile." or "")
     Confirm("TWICHUI_TWICH_APPLY", text, function()
-        local ok, report, extra = TC.Apply(entry, { selection = sel, from = from, newProfile = newProfile })
+        local ok, report, extra = TC.Apply(entry, { selection = sel, from = from, newProfile = newProfile, expect = reviewed })
         if not ok then
             tw.failed = TC.Explain(report, extra)
             R.Print("%s", tw.failed)

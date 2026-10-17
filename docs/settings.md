@@ -137,11 +137,18 @@ one-line description, so the title is the feature's name and the line describes 
   change; a reload is asked for only when the value differs from the one the UI loaded with (in the window: a
   footer notice with **Reload now**; outside it: the usual question). Code elsewhere calls
   `R:SetEnabled(key, on, alreadyApplied)`, never `TwichUIDB.modules[key] = ...`.
-- **Reset buttons** (`K.ResetButton`) call the feature's own `Reset` once, then tell each control to show its value.
-  They are drawn as ember-outlined buttons, separate from ordinary controls.
+- **Reset buttons** (`K.ResetButton`) are a section's reset. They **ask first**: the question is the button's label,
+  its tooltip (the feature's own sentence about what is reset and what is kept) and a count made from the settings as
+  they are (`K.ResetPlan` / `K.ResetEffects`: "N of the M settings shown here differ from their defaults", plus
+  "Turns on / Turns off" for on/off settings and the reload some need). Accepting calls the feature's own `Reset`
+  once, then tells each control to show its value. Drawn as ember-outlined buttons, apart from ordinary controls.
 - **Reset this page** puts every setting on the page with a default back to it, one at a time through its setter (as
-  Blizzard's Defaults did for "this page"). It asks first and names the page and how many settings. It never
-  touches map pins, kept pins, the Chronicle, backups, stat weights or profiles (their controls have no default).
+  Blizzard's Defaults did for "this page"). It asks first, names the page and says how many of its settings differ
+  from their defaults (counted, never fixed), which on/off settings it turns on or off, and which of those need a
+  reload (only when the default is not what this session loaded with: putting back a change that was not reloaded for
+  clears it instead). When nothing differs it asks nothing. It never touches map pins, kept pins, the Chronicle,
+  backups, stat weights or profiles (their controls have no default). A per-card or per-feature **override** reset
+  (Notification appearance › Reset this card) only forgets that override, so the card follows the shared look again.
 - **No hidden settings:** every setting is shown, in the section of the controls it relates to (a wait beside the
   option it waits for, a font beside the colour it belongs with). There is no Advanced marking, section or
   preference. `ui.showAdvanced`, saved by the old "Show advanced options", is deleted on load (`Persist.lua`) and
@@ -149,9 +156,27 @@ one-line description, so the title is the feature's name and the line describes 
   must be turned on and confirmed before anything can be deleted. `K.InSection(row, header)` places a row in a
   section other than the one it was described under (a page's own Reset).
 - **Greyed out:** `K.Under(row, parentRow, isOn, why)`. The row is indented under its parent and says why under its
-  label (and in its tooltip) for as long as it is greyed out. The control ignores clicks.
+  label (and in its tooltip) for as long as it is greyed out. The control ignores clicks. For a reason that is not a
+  parent switch, `row:AddModifyPredicate(fn)` with `row.why` (Profiles: "Profile changes wait until combat ends.";
+  the window redraws as combat starts and ends). Wording: "Needs ... turned on" for a parent that is off, "follows
+  ..." for inherited, "not available" for a missing addon or class, and "wait until combat ends" for combat.
+- **Notes:** `K.Note(row, fn)` puts a short line under a row's label while it is *not* greyed out: what it is doing
+  that its label doesn't say. `fn()` returns the sentence and a tone (`"warn"` for something chosen that can't work as
+  set, `"reload"` for a change waiting on a reload, nil for quiet). The words carry the meaning, never the color alone.
+  In use: a skin that is on without EllesmereUI, Mage selling in EllesmereUI mode while it is unusable (the chosen mode
+  is kept, nothing is sold by TwichUI), a data bar entry with no LibDataBroker provider (`K.DataBarNote`; read from
+  `DiagStatus.DataBarLibrary()`, the same answer as Troubleshooting). A color swatch's tooltip says which picker a
+  click opens (EllesmereUI's, or the game's own when it isn't there); neither is an error.
 - **Status** in a tooltip or a Home row is a function, read when it is shown: never captured at load, no polling.
-- **Reload:** switches that need one show a **Reload** badge.
+- **Reload:** switches that need one show a **Reload** badge. `Switches.lua` is the one record of what waits
+  (`W.IsPending(key)`, `W.ReloadPending()`, `W.PendingReloads()`): a switch is pending only when its value now
+  differs from the one this session loaded with (or a Mage launcher is waiting to leave the data bar), so turning it
+  back, resetting it, importing, or switching profile clears or sets it correctly, and a click that changes nothing
+  waits for nothing. A pending row says "Reload your UI to apply this change." under its label; the footer says "Reload
+  your UI to apply: <name> [and N more]." beside **Reload now** (its tooltip lists all). Nothing reloads by itself.
+  Troubleshooting's "Reload needed" reads the same record and names. Not every switch needs a reload for the same
+  reason: `groupCheck` and `setupSharing` are read live by their handlers (`setup/Group.lua`, `setup/Share.lua`) and
+  may not need one; they are left as they were until checked in the game.
 - **Combat:** the window does not decide. Features apply what they can and defer protected work, coalesced
   (`docs/lifecycle.md`); a section that waits says so (`K.Badge(header, "Waits for combat")`, Food and drink's
   Appearance). Profile changes are refused in combat by `Profiles.lua` itself.
@@ -266,3 +291,22 @@ Turn on Display Lua Errors. Test TwichUI alone, then with EllesmereUI. After eac
     position is kept after a reload; Stat weights and Refreshment shares fit their page.
 16. **Repeated use.** Steps 3 of "Measuring"; no errors; no growing count of frames (`/fstack` spot checks).
 17. **Without EllesmereUI.** The window looks complete; with it, nothing changes in the window.
+18. **Reload feedback.** On Home, turn **Custom fonts and sounds** off: the row says "Reload your UI to apply this
+    change.", the footer says "Reload your UI to apply: Custom fonts and sounds." beside **Reload now**, and nothing
+    reloads. Turn it back on: both go away. Change it again and press **Reload now**: the game reloads and the change
+    holds. Switch to a profile that differs from the one you loaded with: the same notice appears and clears the same way.
+    Troubleshooting › Reload needed names the same thing.
+19. **Reset questions.** **Reset this page** on a page with a changed setting: the question counts what differs, names any
+    feature it turns on or off, and says if a reload follows; on a page already at its defaults it asks nothing. A section
+    **Reset** (Food and drink › Appearance, Chronicle appearance, ...) asks first and repeats what it keeps. **Reset this
+    card** (Notification appearance) makes the card follow the shared look again and leaves the shared look alone.
+20. **Unavailable controls.** In combat, the Profiles page's New, Duplicate, Copy, Current and Reset controls grey out
+    with "Profile changes wait until combat ends." and wake when combat ends. With Party pins off, its rows say they need
+    it. Without a data bar addon, a Mage launcher you turned on says it has nowhere to appear; with it, nothing.
+21. **Integrations.** Without EllesmereUI: a skin you turned on says what is missing, and a color swatch's tooltip says the
+    game's picker opens; Mage selling set to EllesmereUI marking says nothing is marked or sold until it is usable, and
+    the mode stays chosen. With it: the picker is EllesmereUI's; Cancel in it puts the color back.
+22. **Import review.** Receive a TwichUI share (or **Test on myself**): the review names the sender and version, the
+    profile it changes, "Replaces only the values listed", any features it turns on or off, the reload it needs, what it
+    skipped and that Undo keeps the last import. Open the confirmation, then switch profile (or change a listed setting)
+    before accepting: it refuses, says to review again, and changes nothing.

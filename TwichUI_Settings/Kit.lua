@@ -242,6 +242,28 @@ function K.Badge(row, text)
     return row
 end
 
+-- A short line under a row's label that is there whether or not the row is greyed out: what a setting is
+-- doing right now that its label doesn't say (a fallback in use, an integration missing). fn() returns the
+-- sentence (or nil for none) and, optionally, a tone: "warn" for something the person chose that can't work as
+-- set, "reload" for a change waiting on a reload; anything else is quiet. Read whenever the page is drawn, so it
+-- is never captured at load. A greyed-out row shows why it is greyed out instead.
+function K.Note(row, fn)
+    if row then row.note = fn end
+    return row
+end
+
+-- The note for a data bar entry (a Mage launcher, the pins entry) while no addon provides LibDataBroker, which is
+-- the one check Troubleshooting's "Data bar library" line reads too. isOn: whether the entry is wanted (nothing
+-- is said about one that is off). It is not an error: the feature's other parts work without a data bar.
+function K.DataBarNote(row, isOn)
+    return K.Note(row, function()
+        local S = R.DiagStatus
+        if S and S.DataBarLibrary and not S.DataBarLibrary() and (not isOn or isOn()) then
+            return "No data bar addon provides LibDataBroker, so this has nowhere to appear. Nothing else is affected."
+        end
+    end)
+end
+
 -- The status words on a page's title line ("3 of 3 on", "Off"): the window's accent when something is on and
 -- its quiet gray when not (the game-wide green and gray are the fallback where the palette isn't loaded).
 local function Escape(c)
@@ -386,14 +408,82 @@ function K.Link(label, target, status, tooltip)
     return row
 end
 
+---------------------------------------------------------------------------
+-- Resets: what putting settings back to their defaults would change right now
+---------------------------------------------------------------------------
+-- settings: a list of settings (with defaults). Returns { total, count (how many differ from their default now),
+-- on, off (names of on/off settings that would be turned on or off), reload (names of those that take effect
+-- only after a reload) }. Reads only.
+function K.ResetPlan(settings)
+    local plan = { total = #settings, count = 0, on = {}, off = {}, reload = {} }
+    for _, s in ipairs(settings) do
+        if s.default ~= nil then
+            local ok, current = pcall(s.get)
+            if ok and current ~= s.default then
+                plan.count = plan.count + 1
+                if s.varType == K.BOOL then
+                    local list = s.default and plan.on or plan.off
+                    list[#list + 1] = s.name
+                    -- a reload is needed only if the default is not what this session loaded with: a change not yet
+                    -- reloaded for, put back to the default, clears instead
+                    if s.kind:find("^switch:modules%.") and R.Switches.NeedsReload(s.id) and R.Switches.atLoad[s.id] ~= s.default then
+                        plan.reload[#plan.reload + 1] = s.name
+                    end
+                end
+            end
+        end
+    end
+    return plan
+end
+
+local function Names(list, max)
+    max = max or 4
+    local shown = {}
+    for i = 1, math.min(#list, max) do shown[i] = "\"" .. tostring(list[i]) .. "\"" end
+    local text = table.concat(shown, ", ")
+    if #list > max then text = text .. (" and %d more"):format(#list - max) end
+    return text
+end
+
+-- The part of a reset confirmation that says what changes: how many settings differ, what is turned on or off
+-- and whether a reload is needed. Nothing here is a fixed number: it is counted from the settings as they are.
+function K.ResetEffects(plan)
+    local lines = {}
+    lines[#lines + 1] = ("%d of the %d settings shown here differ from their defaults and go back to them."):format(plan.count, plan.total)
+    if #plan.on > 0 then lines[#lines + 1] = "Turns on: " .. Names(plan.on) .. "." end
+    if #plan.off > 0 then lines[#lines + 1] = "Turns off: " .. Names(plan.off) .. "." end
+    if #plan.reload > 0 then
+        lines[#lines + 1] = "Takes effect after you reload your UI: " .. Names(plan.reload) .. ". Nothing reloads by itself."
+    end
+    return table.concat(lines, " ")
+end
+
 -- A Reset button: reset() is the feature's own Reset, which forgets the saved values and redraws once; then
--- each control in resettable ({ setting, default } entries) shows its value again.
+-- each control in resettable ({ setting, default } entries) shows its value again. It asks first, with the
+-- scope the button's tooltip states (the feature's own sentence about what is and is not reset) and what would
+-- actually change now. Nothing is reset until the question is accepted.
 function K.ResetButton(label, resettable, reset, tooltip)
-    local row = K.Button(label, "Reset", function()
+    local row
+    local function Settings()
+        local list = {}
+        for i, entry in ipairs(resettable) do list[i] = entry.setting end
+        return list
+    end
+    local function Apply()
         reset()
         for _, entry in ipairs(resettable) do
             local setting = entry.setting
             if setting.NotifyUpdate then pcall(setting.NotifyUpdate, setting) end
+        end
+        K.RefreshOverview()
+    end
+    row = K.Button(label, "Reset", function()
+        local question = label:find("^Reset") and (label .. "?") or ("Reset " .. label:lower() .. "?")
+        local text = question .. "\n\n" .. (tooltip or "") .. "\n\n" .. K.ResetEffects(K.ResetPlan(Settings()))
+        if R.Interact and R.Interact.Confirm then
+            R.Interact.Confirm("TWICHUI_SETTINGS_RESET_SECTION", text, Apply, { accept = "Reset" })
+        else
+            Apply()
         end
     end, tooltip)
     if row then row.reset = true end
@@ -612,6 +702,16 @@ function K.Resettable(key)
         end
     end
     return out
+end
+
+-- What "Reset this page" would change now (K.ResetPlan of the page's settings).
+function K.ResetPagePlan(key) return K.ResetPlan(K.Resettable(key)) end
+
+-- The question "Reset this page" asks: names the page, counts what differs, says what is turned on or off and
+-- what needs a reload, and what is never touched.
+function K.ResetPageText(page, plan)
+    return ("Reset every setting on the %s page to its default?\n\n%s\n\nNothing on other pages changes, and map pins, the Journey Chronicle, backups, stat weights and profiles are not affected."):format(
+        page.name, K.ResetEffects(plan))
 end
 
 -- Puts every setting on one page back to its default, one at a time, through its feature's own setter (as the

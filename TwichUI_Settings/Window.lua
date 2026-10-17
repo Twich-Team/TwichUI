@@ -79,6 +79,33 @@ local function ChoiceLabel(v, value)
     return v.lastLabel
 end
 
+-- The colors a row's note can take (K.Note): quiet by default, bronze for a change waiting on a reload, the
+-- warning color for something chosen that can't work as set. The words say the same, so color is never the
+-- only signal.
+local TONE = { reload = pal.bronzeText, warn = pal.danger.text }
+
+-- The line a row shows under its label when it is not greyed out, and its tone: a pending reload first (read
+-- from Switches.lua, the one record of it), then the row's own note.
+local function Note(row)
+    if row.switch and R.Switches.IsPending(row.switch) then
+        return "Reload your UI to apply this change.", "reload"
+    end
+    if row.note then
+        local ok, text, tone = pcall(row.note)
+        if ok and type(text) == "string" and text ~= "" then return text, tone end
+    end
+    return nil
+end
+
+-- What a color swatch opens (Widgets.lua's ColorPicker.Status): EllesmereUI's picker when it is there, else the
+-- game's own. Not an error either way.
+local PICKER_NOTE = {
+    ready = "Opens EllesmereUI's color picker.",
+    ["on-demand"] = "Opens EllesmereUI's color picker, which loads the first time you click.",
+    ["load-failed"] = "EllesmereUI's color picker couldn't be loaded, so the game's own color picker is used. Colors are saved the same way.",
+    unsupported = "Opens the game's own color picker (EllesmereUI's isn't available). Colors are saved the same way.",
+}
+
 local function MakeRow(parent, row, width)
     local v = { row = row }
     local f = CreateFrame("Button", nil, parent)
@@ -117,6 +144,11 @@ local function MakeRow(parent, row, width)
     -- The tooltip first (a script set later would drop hooks added before it), then each kind's own hover.
     I.Tip(f, nil, function()
         local tip = row:GetTooltip()
+        if kind == "swatch" then
+            -- which picker a click opens, read now (nothing is loaded or asked of EllesmereUI to say it)
+            local note = PICKER_NOTE[Wg.ColorPicker.Status()]
+            if note then tip = (tip and (tip .. "\n\n") or "") .. note end
+        end
         if kind ~= "link" then
             local why = not row:Enabled() and row:DisabledReason() or nil
             if why and tip and tip:lower():find(why:lower(), 1, true) then why = nil end   -- said already
@@ -238,7 +270,15 @@ local function MakeRow(parent, row, width)
             local ok, text = pcall(row.detail)
             if ok and type(text) == "string" and text ~= "" then reason = text end
         end
+        -- Not greyed out: a change waiting on a reload, or the row's own note (a fallback in use, an
+        -- integration missing). A greyed-out row says why it is greyed out instead.
+        local tone, noted
+        if not reason and kind ~= "link" and kind ~= "status" then
+            reason, tone = Note(row)
+            noted = reason ~= nil
+        end
         v.reason:SetText(reason or "")
+        Wg.Color(v.reason, TONE[tone] or (noted and pal.textDim or pal.stone))
         v.reason:SetShown(reason ~= nil)
         if v.badge then
             v.badge:ClearAllPoints()
@@ -380,10 +420,15 @@ local function BuildView(page)
         local text = Wg.Text(view.reset, "small")
         text:SetPoint("TOPLEFT", 2, -17)
         text:SetWidth(CONTENT_W - 170)
-        text:SetText("Reset this page's settings to their defaults. Other pages and saved data are unchanged.")
+        text:SetText("Reset this page's settings to their defaults. It asks first and lists what would change. Other pages and saved data are unchanged.")
         local button = Wg.Button(view.reset, "Reset this page", 140, "danger", function()
-            I.Confirm("TWICHUI_SETTINGS_RESET_PAGE",
-                ("Reset every setting on the %s page to its default?\n\n%d settings go back to their defaults, as if you changed each one yourself. Nothing on other pages changes, and map pins, the Journey Chronicle, backups, stat weights and profiles are not affected."):format(page.name, #resettable),
+            -- counted now, from the settings as they are: only what differs is changed, and the question says what
+            local plan = K.ResetPagePlan(page.key)
+            if plan.count == 0 then
+                R.Print("everything on the %s page is already at its default.", page.name)
+                return
+            end
+            I.Confirm("TWICHUI_SETTINGS_RESET_PAGE", K.ResetPageText(page, plan),
                 function()
                     state.suspend = state.suspend + 1
                     local ok, err = pcall(K.ResetPage, page.key)
@@ -834,6 +879,24 @@ function UI.RefreshFooter()
     local pending = R.Switches.ReloadPending()
     footer.reloadText:SetShown(pending)
     footer.reload:SetShown(pending)
+    if pending then footer.reloadText:SetText(UI.ReloadSummary()) end
+end
+
+-- What a pending reload is for, in words, from Switches.lua (the one record of it, which Troubleshooting reads
+-- too): the first named, then a count (the footer is narrow; the Reload now tooltip lists them all). Without a
+-- name for one, "another setting".
+function UI.PendingNames()
+    local W, names = R.Switches, {}
+    for _, key in ipairs(W.PendingReloads()) do names[#names + 1] = W.ReloadName(key) or "another setting" end
+    return names
+end
+
+function UI.ReloadSummary()
+    local names = UI.PendingNames()
+    if #names == 0 then return "" end
+    local text = names[1]
+    if #names > 1 then text = text .. (" and %d more"):format(#names - 1) end
+    return "Reload your UI to apply: " .. text .. "."
 end
 
 function UI.ReloadNotice() UI.RefreshFooter() end
@@ -859,7 +922,14 @@ local function BuildFooter()
     footer.reloadText = Wg.Text(footer, "small")
     footer.reloadText:SetPoint("RIGHT", footer.reload, "LEFT", -10, 0)
     footer.reloadText:SetText("Some changes take effect after you reload your UI.")
+    footer.reloadText:SetWordWrap(false)
     Wg.Color(footer.reloadText, pal.bronzeText)
+    -- the button reloads only when pressed; the tooltip lists everything that waits
+    I.Tip(footer.reload, "Reload now", function()
+        local names = UI.PendingNames()
+        local list = #names > 0 and ("\n\nWaiting for it: " .. table.concat(names, ", ") .. ".") or ""
+        return "Reloads your UI so these changes take effect. TwichUI never reloads for you; turning a change back before you reload clears it." .. list
+    end)
 end
 
 ---------------------------------------------------------------------------
@@ -1088,6 +1158,11 @@ K.onSettingChanged = function(setting)
     Layout(view)
 end
 K.onRefresh = UI.Refresh
+-- Rows greyed out for combat (profile changes, key bindings) follow it: redrawn as it starts and ends. Nothing
+-- runs for this while the window is shut.
+local function OnCombatChange() if UI.IsShown() then UI.Refresh() end end
+R:On("PLAYER_REGEN_DISABLED", OnCombatChange)
+R:On("PLAYER_REGEN_ENABLED", OnCombatChange)
 R.Switches.OnChange(function()
     if state.suspend > 0 then return end
     UI.Refresh()

@@ -8,7 +8,9 @@
 --                                   only when the value differs from the one last acted on
 --   W.Sync()                        after a profile change put other values in TwichUIDB.modules: each switch
 --                                   in turn, as a click would (a feature whose switch didn't change does nothing)
---   W.ReloadPending()               whether a switch now differs from the value the UI loaded with
+--   W.IsPending(key)                whether one switch waits for a reload (differs from the value the UI loaded with)
+--   W.ReloadPending()               whether any switch does
+--   W.PendingReloads()              which, as sorted keys (W.ReloadName(key): in words)
 --   W.OnChange(fn)                  fn(key, on) after every Set and Sync (the settings window follows)
 --
 -- A switch whose feature isn't there this session (not a Mage, no RestedXP skin module) has `when`, and is
@@ -277,27 +279,40 @@ function W.Sync()
     return failed
 end
 
--- Whether a switch that takes effect after a reload now differs from the value the UI loaded with, or a
--- feature is waiting for one (a Mage launcher turned off leaves the data bar only after a reload).
+-- Whether one switch waits for a reload: it takes effect only after one and now differs from the value the UI
+-- loaded with (so turning it back before a reload clears it), or its feature is waiting for one (a Mage
+-- launcher turned off leaves the data bar only after a reload). Nothing here is set by a click alone.
+function W.IsPending(key)
+    if W.wantsReload[key] then return true end
+    local def = W.defs[key]
+    return def ~= nil and def.reload == true and W.atLoad[key] ~= nil and R:Enabled(key) ~= W.atLoad[key]
+end
+
+-- Whether any switch waits for a reload.
 function W.ReloadPending()
     if next(W.wantsReload) then return true end
-    for key, def in pairs(W.defs) do
-        if def.reload and W.atLoad[key] ~= nil and R:Enabled(key) ~= W.atLoad[key] then return true end
+    for key in pairs(W.defs) do
+        if W.IsPending(key) then return true end
     end
     return false
 end
 
--- The switches ReloadPending is waiting on, as sorted keys (the troubleshooting status names them). Read only.
+-- The switches ReloadPending is waiting on, as sorted keys (the troubleshooting status and the settings window
+-- name them). Read only.
 function W.PendingReloads()
-    local list = {}
-    for key in pairs(W.wantsReload) do list[#list + 1] = key end
-    for key, def in pairs(W.defs) do
-        if def.reload and not W.wantsReload[key] and W.atLoad[key] ~= nil and R:Enabled(key) ~= W.atLoad[key] then
-            list[#list + 1] = key
-        end
+    local seen, list = {}, {}
+    for key in pairs(W.wantsReload) do seen[key] = true; list[#list + 1] = key end
+    for key in pairs(W.defs) do
+        if not seen[key] and W.IsPending(key) then list[#list + 1] = key end
     end
     table.sort(list)
     return list
+end
+
+-- A pending switch's name in words (the one the troubleshooting status uses), or nil.
+function W.ReloadName(key)
+    local S = R.DiagStatus
+    return S and S.RELOAD_NAMES and S.RELOAD_NAMES[key] or nil
 end
 
 -- The values the UI loaded with: noted once the saved variables (and this character's profile) are in.

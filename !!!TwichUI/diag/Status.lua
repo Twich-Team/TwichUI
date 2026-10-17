@@ -406,7 +406,7 @@ S.GROUPS = {
                 fallback = "TwichUI makes no data bar entries until an addon provides the library.",
                 todo = { ["not-installed"] = "Optional: a data bar addon provides it, if you want those entries." },
                 check = function()
-                    local LDB = LibStub and LibStub:GetLibrary("LibDataBroker-1.1", true)
+                    local LDB = S.DataBarLibrary()
                     if LDB then return Result("available", "ready", "A data bar addon provides the library; it does not show that each entry is on a bar.") end
                     return Result("not-installed", "no-ldb", "No data bar addon here provides LibDataBroker.")
                 end,
@@ -443,6 +443,12 @@ local RELOAD_NAMES = {
     mageTravel = "Mage Travel", mageConjure = "Mage Conjuring",
 }
 S.RELOAD_NAMES = RELOAD_NAMES
+
+-- Whether a data bar addon provides LibDataBroker (a single library lookup: nothing is loaded or asked of the
+-- library). The status line above and the settings pages' notes read this one answer.
+function S.DataBarLibrary()
+    return LibStub and LibStub:GetLibrary("LibDataBroker-1.1", true) or nil
+end
 
 ---------------------------------------------------------------------------
 -- Collecting

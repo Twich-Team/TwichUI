@@ -1021,4 +1021,152 @@ open.scripts.OnClick(open)
 assert(win.shown and exited == nil and c.SettingsPanel.shown, "unapplied game settings are left for the player")
 UI.Close()
 assert(#R.SettingsLauncher.closers > 0)
+---------------------------------------------------------------------------
+-- 5. Feedback: what waits for a reload, why a control is unavailable, what a reset or an integration means
+---------------------------------------------------------------------------
+do
+  local function Shown(frame, fragment)
+    if type(frame.text) == "string" and frame.text:find(fragment, 1, true) and frame:IsVisible() then return true end
+    for _, child in ipairs(frame.children or {}) do
+      if Shown(child, fragment) then return true end
+    end
+    return false
+  end
+  local W = R.Switches
+  local popupsBefore = S.popups
+
+  -- 5a. Reload: one record (Switches.lua), shown next to the control and in the footer, cleared when reverted
+  UI.Close(); R:OpenSettings("overview")
+  assert(not W.ReloadPending() and not Shown(win, "Reload your UI to apply"), "nothing waits to begin with")
+  local media0, quiet0 = R:Enabled("media"), R:Enabled("quietLogin")
+  R:SetEnabled("media", not media0)
+  assert(W.IsPending("media") and W.ReloadPending(), "a changed switch that needs a reload is pending")
+  assert(Shown(win, "Reload your UI to apply this change."), "the control says so beside it")
+  assert(Shown(win, "Reload your UI to apply: Custom fonts and sounds."), "the footer names it")
+  assert(not Shown(win, "and 1 more"), "one thing waits")
+  R:SetEnabled("quietLogin", not quiet0)
+  assert(Shown(win, "Reload your UI to apply: Custom fonts and sounds and 1 more."), "the footer counts the rest")
+  assert(S.popups == popupsBefore, "with the window open it is a notice, not a question, and never an automatic reload")
+  R:SetEnabled("media", media0)
+  assert(not W.IsPending("media") and W.IsPending("quietLogin"), "turned back before a reload, it no longer waits")
+  assert(Shown(win, "Reload your UI to apply: Hide addon welcome messages."), "the footer follows")
+  R:SetEnabled("quietLogin", quiet0)
+  assert(not W.ReloadPending() and not Shown(win, "Reload your UI to apply"), "nothing waits again, anywhere")
+
+  -- a profile change moves what waits: a profile whose value is what loaded clears it, and coming back restores it
+  do
+    local P = R.Profiles
+    local home = P.Current()
+    R:SetEnabled("quietLogin", not quiet0)
+    assert(W.IsPending("quietLogin") and Shown(win, "Reload your UI to apply: Hide addon welcome messages."), "set up: pending in this profile")
+    local made = P.Create("Plain")   -- the default settings, which are what this session loaded with
+    assert(made, "set up: a profile of defaults")
+    assert(R:Enabled("quietLogin") == R.DEFAULT_MODULES.quietLogin)
+    assert(W.IsPending("quietLogin") == (R.DEFAULT_MODULES.quietLogin ~= quiet0), "switching profiles re-reads it")
+    P.Switch(home)
+    assert(W.IsPending("quietLogin") and Shown(win, "Reload your UI to apply: Hide addon welcome messages."), "and back again it waits again")
+    R:SetEnabled("quietLogin", quiet0)
+    assert(not W.ReloadPending(), "reverted in the profile, nothing waits")
+    P.Delete("Plain")
+  end
+
+  -- clicking is not enough: a switch set to the value the UI loaded with is never pending
+  R:SetEnabled("media", media0)
+  assert(not W.IsPending("media"), "setting what is already so waits for nothing")
+
+  -- 5b. A page reset names what it turns on or off, and the reload it needs; it clears what it undoes
+  local function Ask(button)
+    asked = nil
+    button.scripts.OnClick(button)
+    return asked
+  end
+  UI.Navigate("overview")
+  R:SetEnabled("media", not R.DEFAULT_MODULES.media)
+  local resetPage = FindButton(win, "Reset this page")
+  assert(resetPage, "Home has a reset")
+  local q = Ask(resetPage)
+  assert(q and q.text:find("of the", 1, true) and q.text:find("settings shown here differ", 1, true), "it counts what differs")
+  assert(q.text:find("Custom fonts and sounds", 1, true), "it names the switch that changes")
+  assert(q.text:find(R.DEFAULT_MODULES.media and "Turns on:" or "Turns off:", 1, true), "and which way")
+  assert(not q.text:find("reload your UI", 1, true), "putting back a change not yet reloaded for needs no reload: it clears")
+  -- when the session loaded with something else, the default is the change that needs one
+  W.atLoad.media = not R.DEFAULT_MODULES.media
+  q = Ask(resetPage)
+  assert(q.text:find("Takes effect after you reload your UI: \"Custom fonts and sounds\". Nothing reloads by itself.", 1, true), q.text)
+  W.atLoad.media = media0
+  q = Ask(resetPage)
+  q.dlg.OnAccept()
+  assert(R:Enabled("media") == R.DEFAULT_MODULES.media, "the switch is back to its default")
+  assert(W.IsPending("media") == (R.DEFAULT_MODULES.media ~= media0), "pending follows what the session loaded with")
+  R:SetEnabled("media", media0)
+  assert(not W.ReloadPending(), "back to what loaded: nothing waits")
+  -- when nothing differs, nothing is asked
+  local allDefault = FindButton(win, "Reset this page")
+  q = Ask(allDefault)
+  if q then q.dlg.OnAccept(); q = Ask(allDefault) end
+  assert(q == nil, "a page already at its defaults asks nothing and changes nothing")
+
+  -- 5c. A section reset asks first and says what it covers and what differs
+  UI.Navigate("food")
+  R.FoodDrink.Set("size", 50)
+  local sectionReset
+  for _, row in ipairs(K.pages.food.rows) do
+    if row.kind == "button" and row.data.name == "Appearance" then sectionReset = row end
+  end
+  assert(sectionReset and sectionReset.reset and sectionReset.data.buttonText == "Reset", "Food and drink's appearance reset")
+  asked = nil
+  sectionReset.click()
+  assert(asked and asked.key == "TWICHUI_SETTINGS_RESET_SECTION", "it asks")
+  assert(asked.text:find("The place is kept", 1, true), "with the feature's own sentence about what is kept")
+  assert(asked.text:find("1 of the", 1, true), "and how many shown here differ: " .. asked.text)
+  assert(R.FoodDrink.Get("size") == 50, "nothing happens before it is accepted")
+  asked.dlg.OnAccept()
+  assert(R.FoodDrink.Get("size") == R.FoodDrink.DEFAULTS.size, "accepted, it resets")
+
+  -- 5d. Combat: profile changes are greyed out with the reason, and follow combat starting and ending
+  UI.Navigate("profiles")
+  local newProfile = K.rowsById["profiles:new-profile"]
+  assert(newProfile and newProfile:Enabled() and not Shown(win, "Profile changes wait until combat ends."), "available out of combat")
+  c.InCombatLockdown = function() return true end
+  c.FireEvent("PLAYER_REGEN_DISABLED")
+  assert(not newProfile:Enabled() and newProfile:DisabledReason() == "Profile changes wait until combat ends.", "greyed out in combat")
+  assert(Shown(win, "Profile changes wait until combat ends."), "and the reason is on the page")
+  c.InCombatLockdown = function() return false end
+  c.FireEvent("PLAYER_REGEN_ENABLED")
+  assert(newProfile:Enabled() and not Shown(win, "Profile changes wait until combat ends."), "available again when combat ends")
+
+  -- 5e. Integrations: a missing optional addon is a note, not an error, and never changes the chosen mode
+  local MSL = R.MageSell
+  R:SetEnabled("mageSell", true)
+  MSL.Acknowledge(); MSL.SetMode("ellesmere")
+  local mode = K.rowsById.mageSellMode
+  local text, tone = mode.note()
+  assert(tone == "warn" and text:find("Nothing is marked and nothing is sold by TwichUI", 1, true),
+    "with EllesmereUI unusable the row says so: " .. tostring(text))
+  assert(MSL.Mode() == "ellesmere", "the chosen mode is kept, not switched to selling")
+  MSL.SetMode("direct")
+  assert(mode.note() == nil, "no note when the mode doesn't need it")
+  R:SetEnabled("mageSell", false)
+
+  R:SetEnabled("mageTravel", true)
+  c.LibStub = { GetLibrary = function() return nil end }
+  local travel = K.rowsById.mageTravel
+  assert(travel.note():find("nowhere to appear", 1, true), "no data bar library: said under the launcher")
+  c.LibStub = { GetLibrary = function() return {} end }
+  assert(travel.note() == nil, "with one, nothing is said")
+  R:SetEnabled("mageTravel", false)
+  c.LibStub = { GetLibrary = function() return nil end }
+  assert(travel.note() == nil, "and nothing is said about a launcher that is off")
+
+  local skin = K.rowsById.attuneSkin
+  local before = R:Enabled("attuneSkin")
+  R:SetEnabled("attuneSkin", true)
+  local skinText, skinTone = skin.note()
+  assert(skinTone == "warn" and skinText:find("EllesmereUI", 1, true), "a skin that is on without EllesmereUI says what is missing")
+  R:SetEnabled("attuneSkin", before)
+
+  UI.Close()
+  assert(not W.ReloadPending(), "feedback tests leave nothing pending")
+end
+
 print("PASSED")

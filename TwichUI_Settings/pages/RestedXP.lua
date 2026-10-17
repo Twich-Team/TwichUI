@@ -33,7 +33,7 @@ K.Page({
         local Header, Toggle, Button, Proxy, ProxyToggle, Under = K.Header, K.Toggle, K.Button, K.Proxy, K.ProxyToggle, K.Under
         local BOOL, STRING, NUMBER = K.BOOL, K.STRING, K.NUMBER
 
-        local intro = Header("RestedXP guide window", "Gives the RestedXP Guides window a TwichUI look: a background and border, text colors, fonts and sizes, a quieter header and footer, and a slim scroll bar; and its waypoint arrow a shape, color and size of your choosing. It never changes guide content, progress, step completion or the window's position and size. Works with or without EllesmereUI.")
+        local intro = Header("RestedXP guide window", "Gives the RestedXP Guides window a TwichUI look: a background and border, text colors, fonts and sizes, a quieter header and footer, and a slim scroll bar; and its waypoint arrow a shape, color and size of your choosing. It never changes guide content, progress, step completion or the window's position and size. Works with or without EllesmereUI. There is no sample here: open RestedXP's guide window to see each change as you make it.")
         local function RestedXPStatus()
             local state = RS.Status()
             local text = STATUS[state.code] or { state.code }

@@ -10,7 +10,8 @@
 --   opts.beforeDescribe(c): runs after the settings window's files are loaded and before the pages are described
 --   S.pages: the pages in their order, each { key, name, parent (its name), kind ("page" or "hosted"), rows }
 --   S.variables[name] = setting; S.list: settings in the order made; S.registered(): the AddOns entry's category
---   S.popups: how many times the reload question was asked; S.K: the settings kit
+--   S.popups: how many times the reload question was asked; S.popup: the last question asked ({ key, text });
+--   S.ClickReset(row): clicks a section Reset and accepts what it asks; S.K: the settings kit
 
 function SettingsClient(opts)
   opts = opts or {}
@@ -36,7 +37,20 @@ function SettingsClient(opts)
   end
   c.CreateFrame = function() return Obj() end
   c.StaticPopupDialogs = {}
-  c.StaticPopup_Show = function(name) if name == "TWICHUI_RELOAD" then S.popups = S.popups + 1 end end
+  c.StaticPopup_Show = function(name, text)
+    if name == "TWICHUI_RELOAD" then S.popups = S.popups + 1 end
+    S.popup = { key = name, text = text }   -- the last question asked
+    return {}
+  end
+  -- Clicks a Reset button and accepts the question it asks (K.ResetButton asks first). Returns the question's text.
+  function S.ClickReset(row)
+    S.popup = nil
+    row.click()
+    local asked = S.popup
+    assert(asked and asked.key:find("RESET", 1, true), "a Reset asks before it resets")
+    c.StaticPopupDialogs[asked.key].OnAccept()
+    return asked.text
+  end
   c.PlaySoundFile = function() return true end
   -- empty bags, for the features that look in them when they are turned on
   c.C_Spell = { GetSpellName = function() return nil end, GetSpellDescription = function() return nil end }
