@@ -58,8 +58,12 @@ for _ = 1, 50 do FlushTimers() end
 local tp = c.TwichUIBackupTransfer
 assert(tp.edit:GetText():find("^TUIBK1:"), "export string shown")
 local str = tp.edit:GetText()
-W:ImportBackup(); assert(tp.edit:GetText() == "", "buffer cleared between uses")
-tp.edit:SetText(str); tp.check.scripts.OnClick(tp.check)
+W:ImportBackup(); assert(tp.edit:GetText() == "" and tp.PastedText() == nil, "buffer cleared between uses")
+-- a paste arrives as one OnChar per character and lands as one string a frame later
+for ch in str:gmatch(".") do tp.line.scripts.OnChar(tp.line, ch) end
+assert(tp.PastedText() == nil, "still collecting")
+tp.line.scripts.OnUpdate(tp.line); tp.line.scripts.OnUpdate(tp.line)
+assert(tp.PastedText() == str, "whole paste captured"); tp.check.scripts.OnClick(tp.check)
 for _ = 1, 50 do FlushTimers() end
 assert(tp.result and tp.result.blocked, "repeat is blocked in the preview")
 c.TwichUI.Restore:Delete(pt.id)

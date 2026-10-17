@@ -270,6 +270,19 @@ local function BuildChoose()
         "Tick the settings most people want to share, and skip big data like price history, caches and logs.")
     cp.suggest:SetPoint("TOPRIGHT", -16, -72)
 
+    cp.all = Btn(cp, "Select all", 90, function()
+        ST:SelectAll()
+        local TC = R.TwichConfig
+        if TC then
+            TC.SetIncluded(true)
+            for _, gi in ipairs(TC.GroupList()) do
+                if gi.usable then TC.SetGroupSelected(gi.id, true) end
+            end
+        end
+        W:Refresh()
+    end, "Tick every addon and every part of each, including TwichUI's own settings. Tables too big to share stay unticked.")
+    cp.all:SetPoint("RIGHT", cp.suggest, "LEFT", -8, 0)
+
     cp.list = ListBox(cp, 340, POPUP_LIST_W)
     cp.list:SetPoint("TOPLEFT", 16, -106)
     cp.summary = Text(cp, "GameFontDisableSmall")
@@ -404,6 +417,7 @@ local function RefreshChoose()
     else
         cp.help:SetText("Scan installed addons first to find which of them have settings you can share.")
     end
+    cp.all:SetEnabled(ST.capture ~= nil)
     local TC = R.TwichConfig
     cp.summary:SetText(("%d addons ticked, about %s%s"):format(n, ST.FormatSize(bytes),
         (TC and TC.Included()) and "; and TwichUI's own settings" or ""))
@@ -1836,6 +1850,54 @@ local function BuildTransfer()
         end
     end)
     sf:SetScrollChild(tp.edit)
+    tp.scroll = sf
+
+    -- Import never lets an edit box hold the string. A paste arrives one character at a time and the box's work
+    -- grows with its length, so a backup of hundreds of KB locks the client. The field is capped at no text at all
+    -- (one byte is only the terminator); each character arriving through OnChar goes into a plain table instead, and
+    -- on the first frame where no more arrived, the table is joined into the string Check backup reads.
+    tp.line = Look().EditBox(box, 100, 24)
+    tp.line:SetPoint("TOPLEFT", 6, -6)
+    tp.line:SetPoint("TOPRIGHT", -6, -6)
+    tp.line:SetMaxBytes(1)
+    tp.pasted = Text(box, "GameFontDisableSmall")
+    tp.pasted:SetPoint("TOPLEFT", tp.line, "BOTTOMLEFT", 2, -8)
+    tp.pasted:SetWidth(480)
+    tp.pasted:SetJustifyH("LEFT")
+    local chars, n, seen, pasted = {}, 0, 0, nil
+    function tp.PastedText() return pasted end
+    local function ShowPasted()
+        local size = pasted and #pasted or 0
+        tp.pasted:SetText(size > 0 and ("%s of text pasted. Click Check backup."):format(ST.FormatSize(size))
+            or "Click the box above and press Ctrl+V.")
+    end
+    local function Absorbed()
+        tp.line:SetScript("OnUpdate", nil)
+        pasted = table.concat(chars, "", 1, n)
+        chars, n, seen = {}, 0, 0
+        ShowPasted()
+    end
+    tp.line:SetScript("OnChar", function(_, c)
+        if n == 0 then
+            -- a new paste replaces the last one
+            pasted, tp.result = nil, nil
+            tp.importBtn:Disable()
+            if not R.Portable.Busy() then SetTransferStatus("") end
+            tp.pasted:SetText("Reading the paste...")
+            seen = 0
+            tp.line:SetScript("OnUpdate", function()
+                if n == seen then Absorbed() else seen = n end
+            end)
+        end
+        n = n + 1
+        chars[n] = c
+    end)
+    function tp.ResetPaste()
+        tp.line:SetScript("OnUpdate", nil)
+        chars, n, seen, pasted = {}, 0, 0, nil
+        tp.line:SetText("")
+        ShowPasted()
+    end
 
     tp.details = Btn(tp, "Details", 80, function()
         tp.detailsText:SetShown(not tp.detailsText:IsShown())
@@ -1851,7 +1913,7 @@ local function BuildTransfer()
     tp.copy:SetPoint("BOTTOMRIGHT", -16, 12)
 
     tp.check = Btn(tp, "Check backup", 120, function()
-        local text = tp.edit:GetText()
+        local text = tp.PastedText()
         tp.result = nil
         tp.importBtn:Disable()
         tp.check:Disable()
@@ -1892,6 +1954,8 @@ local function BuildTransfer()
         tp.exported, tp.result = nil, nil
         tp.edit:SetText("")
         tp.edit:ClearFocus()
+        tp.ResetPaste()
+        tp.line:ClearFocus()
         SetTransferStatus("")
     end)
 end
@@ -1901,8 +1965,12 @@ local function OpenTransfer(mode)
     R.Portable.Cancel()
     tp.mode, tp.exported, tp.result = mode, nil, nil
     tp.edit:SetText("")
+    tp.ResetPaste()
     tp.detailsText:Hide()
     local exporting = mode == "export"
+    tp.scroll:SetShown(exporting)
+    tp.line:SetShown(not exporting)
+    tp.pasted:SetShown(not exporting)
     tp.status:SetHeight(exporting and 30 or 110)   -- import shows a longer preview
     PlaceTransferStatus()
     tp.copy:SetShown(exporting)
@@ -1937,7 +2005,7 @@ end
 
 function W:ImportBackup()
     OpenTransfer("import")
-    tp.edit:SetFocus()
+    tp.line:SetFocus()
 end
 
 ---------------------------------------------------------------------------

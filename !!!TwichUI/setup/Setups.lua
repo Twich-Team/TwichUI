@@ -236,6 +236,11 @@ function ST:SelectSuggested()
     for name, e in pairs(db.detected) do db.selection[name] = ST.Suggest(name, e.bytes) end
 end
 
+-- Every part of every scanned addon, except tables too big to share (those can never be ticked).
+function ST:SelectAll()
+    for name, e in pairs(db.detected) do db.selection[name] = not e.huge end
+end
+
 function ST:CanSave() return ST.capture ~= nil end
 
 local function ActiveEditModeString()
