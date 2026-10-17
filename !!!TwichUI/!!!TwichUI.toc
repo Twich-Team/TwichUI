@@ -178,7 +178,8 @@ qol\EasyFishing.lua
 qol\GuideWaypoint.lua
 qol\TwichUISettingsButton.lua
 
-# Troubleshooting: one report to copy and optional temporary tracing (/tui diagnostics). Local only; off until asked for.
+# Troubleshooting: one report to copy and optional temporary tracing (/tui diagnostics), and a short status and support
+# information view (diag\Status.lua, diag\SupportWindow.lua). Local only; off until asked for.
 diag\Diagnostics.lua
 diag\Environment.lua
 diag\Lifecycle.lua
@@ -195,6 +196,8 @@ diag\Sharing.lua
 diag\Saved.lua
 diag\Memory.lua
 diag\Pins.lua
+diag\Status.lua
+diag\SupportWindow.lua
 diag\Window.lua
 
 # The settings window is an addon of its own, TwichUI_Settings (load on demand; SettingsLauncher.lua opens it)

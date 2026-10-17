@@ -341,6 +341,18 @@ local function LoadEllesmere()
     return false
 end
 
+-- What the picker a swatch opens would be, for the troubleshooting status. Reads only: it asks nothing of
+-- EllesmereUI and loads nothing. "ready" (EllesmereUI's picker can be opened now), "on-demand" (EllesmereUI is
+-- here and loads it on the first swatch click), "load-failed" (that load was tried and left no picker) or
+-- "unsupported" (no EllesmereUI, or one with neither the picker nor a way to load it: the game's picker is used).
+function ColorPicker.Status()
+    if Ellesmere() then return "ready" end
+    local e = _G.EllesmereUI
+    if loadFailed then return "load-failed" end
+    if type(e) == "table" and type(e.EnsureLoaded) == "function" then return "on-demand" end
+    return "unsupported"
+end
+
 -- The frame EllesmereUI's picker is, once it has been built (its first open builds it).
 local function EllesmereFrame()
     local f = _G.EllesmereUIColorPicker

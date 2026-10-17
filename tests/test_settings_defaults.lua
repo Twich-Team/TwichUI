@@ -86,7 +86,8 @@ local IMAGE_ONLY = { ["Background tiling"] = true, ["Background tile size"] = tr
   ["Give this card its own look"] = true, ["Reset this card"] = true }
 for _, i in ipairs(initializers) do
   local name = i:GetName()
-  if name and i.kind ~= "header" then assert(IMAGE_ONLY[name] or i:Shown(), name .. " is drawn") end
+  -- (a status line of the troubleshooting page is shown or folded away by whether its addon is there: test_status.lua)
+  if name and i.kind ~= "header" and i.kind ~= "status" then assert(IMAGE_ONLY[name] or i:Shown(), name .. " is drawn") end
 end
 for _, name in ipairs({"Upgrade hints in item tooltips", "Mark upgrades in my bags", "Weigh gear for", "Stat weights",
   "Configuration sharing", "Let friends send me addon configurations", "Hide addon welcome messages",

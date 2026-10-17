@@ -54,7 +54,7 @@ function SettingsClient(opts)
     "qol/Duels.lua", "qol/QuickKeybind.lua", "qol/EasyFishing.lua", "qol/GuideWaypoint.lua",
     "pins/Pins.lua", "pins/Sync.lua", "pins/Look.lua", "pins/Map.lua", "pins/Minimap.lua", "pins/Editor.lua", "pins/Window.lua",
     "pins/BrokerMenu.lua", "pins/Broker.lua",
-    "diag/Diagnostics.lua", "diag/Window.lua" }
+    "diag/Diagnostics.lua", "diag/Status.lua", "diag/SupportWindow.lua", "diag/Window.lua" }
   for _, f in ipairs(FILES) do
     local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
   end

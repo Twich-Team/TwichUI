@@ -43,7 +43,8 @@ K.GROUPS = {
 -- parent, not a row in the list), order, description
 -- (one line under the title), when (whether the page exists this session), build (describes its rows),
 -- host (instead of rows: returns a frame of the feature's own, shown as the page), keywords (extra words search
--- finds the page by), overview = { label, tip, status = function, when = function } (its row on Home) }.
+-- finds the page by), onShow (called each time the window goes to the page, before it is drawn: a page that shows
+-- a snapshot takes it there), overview = { label, tip, status = function, when = function } (its row on Home) }.
 function K.Page(def)
     assert(type(def.key) == "string" and type(def.name) == "string" and (type(def.build) == "function" or type(def.host) == "function"),
         "a page needs a key, a name and a build or host function")
@@ -363,6 +364,15 @@ end
 function K.Button(label, buttonText, onClick, tooltip)
     local row = AddRow("button", { name = label, buttonText = buttonText, tooltip = tooltip })
     if row then row.click = onClick end
+    return row
+end
+
+-- A line of information, not a control: the label, its current value at the right and, under the label, a
+-- sentence. value(), detail() and tone() are called whenever the page is drawn and return text (detail: or nil);
+-- tone() returns "ok", "warn", "quiet" or nil and only colors the value: the words say the same.
+function K.Status(label, value, detail, tooltip, tone)
+    local row = AddRow("status", { name = label, tooltip = tooltip })
+    if row then row.value, row.detail, row.tone = value, detail, tone end
     return row
 end
 

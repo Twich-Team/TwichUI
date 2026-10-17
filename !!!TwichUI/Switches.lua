@@ -287,6 +287,19 @@ function W.ReloadPending()
     return false
 end
 
+-- The switches ReloadPending is waiting on, as sorted keys (the troubleshooting status names them). Read only.
+function W.PendingReloads()
+    local list = {}
+    for key in pairs(W.wantsReload) do list[#list + 1] = key end
+    for key, def in pairs(W.defs) do
+        if def.reload and not W.wantsReload[key] and W.atLoad[key] ~= nil and R:Enabled(key) ~= W.atLoad[key] then
+            list[#list + 1] = key
+        end
+    end
+    table.sort(list)
+    return list
+end
+
 -- The values the UI loaded with: noted once the saved variables (and this character's profile) are in.
 R:OnInit(function()
     for key in pairs(R.DEFAULT_MODULES) do

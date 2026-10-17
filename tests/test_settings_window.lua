@@ -231,6 +231,54 @@ do
 end
 
 ---------------------------------------------------------------------------
+-- 1b2. Troubleshooting status: drawn with its values, optional addons folded while absent, a snapshot taken
+-- when the page opens and dropped when the settings close, Refresh and the support window's button
+---------------------------------------------------------------------------
+do
+  local function Visible(frame, text)
+    if frame.text == text and frame.IsVisible and frame:IsVisible() then return true end
+    for _, child in ipairs(frame.children or {}) do
+      if Visible(child, text) then return true end
+    end
+    return false
+  end
+  local St = R.DiagStatus
+  R:OpenSettings("troubleshooting")
+  for _, label in ipairs({ "TwichUI version", "Release channel", "Game client", "Core", "Settings window", "Reload needed",
+    "Status snapshot", "Support information", "Optional integrations", "Skin for Attune", "Data bar library (LibDataBroker)", "Full report" }) do
+    assert(Visible(win, label), label .. " is drawn on the Troubleshooting page")
+  end
+  assert(Visible(win, "1.60.1 (build 70009)") and Visible(win, "Loaded this session") and Visible(win, "Started"), "the values are drawn")
+  assert(Visible(win, "EllesmereUI") and Visible(win, "RestedXP") and not Visible(win, "EllesmereUI: Color picker"),
+    "EllesmereUI is not installed here: one line, not five")
+  assert(not Visible(win, "Healthy") and not Visible(win, "Safe"), "no verdict is drawn")
+  -- the snapshot is taken when the page opens, and the next page's navigation leaves it alone
+  local snap = St.Current()
+  UI.Navigate("troubleshooting")
+  assert(St.Current() ~= snap, "going to the page takes a new snapshot")
+  snap = St.Current()
+  UI.Refresh()
+  assert(St.Current() == snap, "redrawing the page does not take another")
+  K.rowsById["troubleshooting:status-snapshot"].click()
+  assert(St.Current() ~= snap, "Refresh takes a new one")
+  -- Support information closes the settings and opens the copy window
+  local asked = 0
+  local show = R.SupportWindow.Show
+  R.SupportWindow.Show = function() asked = asked + 1 return true end
+  K.rowsById["troubleshooting:support-information"].click()
+  assert(asked == 1 and not UI.IsShown(), "it closes the settings and opens the support window")
+  R.SupportWindow.Show = show
+  -- closing dropped the snapshot; opening again takes one
+  snap = St.Current()
+  R.SettingsLauncher.Closed()
+  assert(St.Current() ~= snap, "closing the settings drops the snapshot")
+  local frames = made
+  for _ = 1, 3 do R:OpenSettings("troubleshooting"); UI.Close() end
+  assert(made == frames, "opening and closing the page makes nothing new")
+  R:OpenSettings("overview")
+end
+
+---------------------------------------------------------------------------
 -- 1c. Motion: eases only while something is easing, stops cleanly, and respects the preference
 ---------------------------------------------------------------------------
 do

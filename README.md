@@ -61,7 +61,7 @@ Every feature has its own page in the TwichUI settings (`/tui options`), and eve
 - **Configuration sharing:** Send your TwichUI settings, other addons' settings and an EllesmereUI profile to friends through in-game addon channels. Everything is previewed and confirmed before it's applied, with a way to undo.
 - **Backups and restore points:** Snapshot your addon settings and restore them later.
 - **Saved Data Explorer:** A read-only look at what TwichUI and other addons have saved, with optional, confirmed cleanup.
-- **Troubleshooting report:** A report you can copy when something isn't working. Nothing is sent anywhere.
+- **Troubleshooting:** A status snapshot (versions, whether TwichUI and its optional addons are set up and reachable), a short support report to read and copy when something isn't working, and a fuller diagnostic report. Nothing is sent anywhere.
 
 ### Works with
 EllesmereUI, RestedXP Guides, SpeakStone, Attune, Auctionator, WhatsTraining and Forever Dungeon Journal. All are optional; TwichUI runs fine without any of them.

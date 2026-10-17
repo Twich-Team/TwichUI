@@ -159,6 +159,11 @@ local function MakeRow(parent, row, width)
             if row:Enabled() and row.click then row.click() end
         end)
         v.control:SetPoint("TOPLEFT", f, "TOPLEFT", controlX, -4)
+    elseif kind == "status" then
+        v.status = Wg.Text(f, "small")
+        v.status:SetPoint("TOPLEFT", f, "TOPLEFT", controlX, -9)
+        v.status:SetWidth(CONTROL_W - 8)
+        v.status:SetWordWrap(true)
     elseif kind == "link" then
         v.status = Wg.Text(f, "small")
         v.status:SetPoint("TOPLEFT", f, "TOPLEFT", controlX, -9)
@@ -205,6 +210,16 @@ local function MakeRow(parent, row, width)
         elseif kind == "link" then
             local ok, status = pcall(row.status or function() return "" end)
             v.status:SetText(ok and status or "")
+        elseif kind == "status" then
+            local ok, text = pcall(row.value or function() return "" end)
+            v.status:SetText(ok and tostring(text or "") or "")
+            local toneOk, tone = true, nil
+            if row.tone then toneOk, tone = pcall(row.tone) end
+            local c = pal.text
+            if toneOk and tone == "ok" then c = pal.tealHi
+            elseif toneOk and tone == "warn" then c = pal.danger.text
+            elseif toneOk and tone == "quiet" then c = pal.stone end
+            Wg.Color(v.status, c)
         end
         if v.extra and row.refreshExtra then pcall(row.refreshExtra, v.extra) end
         return enabled
@@ -218,7 +233,11 @@ local function MakeRow(parent, row, width)
         if kind == "link" then label = label:gsub("%s%s%s.*$", "") end
         v.label:SetText(label)
         Wg.Color(v.label, (enabled or kind == "link") and pal.text or pal.stone)
-        local reason = kind ~= "link" and not enabled and row:DisabledReason() or nil
+        local reason = kind ~= "link" and kind ~= "status" and not enabled and row:DisabledReason() or nil
+        if kind == "status" and row.detail then
+            local ok, text = pcall(row.detail)
+            if ok and type(text) == "string" and text ~= "" then reason = text end
+        end
         v.reason:SetText(reason or "")
         v.reason:SetShown(reason ~= nil)
         if v.badge then
@@ -227,6 +246,7 @@ local function MakeRow(parent, row, width)
         end
         local h = (v.label:GetStringHeight() or 12) + 16
         if reason then h = h + (v.reason:GetStringHeight() or 10) + 3 end
+        if kind == "status" then h = math.max(h, (v.status:GetStringHeight() or 12) + 18) end   -- a value that wraps
         f:SetHeight(math.max(ROW_MIN, h))
         return f:GetHeight()
     end
@@ -564,6 +584,10 @@ function UI.Navigate(key, rowId)
     end
     local row = rowId and K.rowsById[rowId]
     if row and row.page ~= page.key then row = nil end
+    if page.def.onShow then
+        local ok, err = pcall(page.def.onShow)
+        if not ok then R.Fault("settings page " .. page.key, err) end
+    end
     Layout(view)
     PaintNav()
     -- The new page's content eases in; the page is already there and answering. Not while the window itself
