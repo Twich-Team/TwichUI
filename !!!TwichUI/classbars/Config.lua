@@ -31,7 +31,7 @@ local WHITE = [[Interface\Buttons\WHITE8x8]]
 
 CB.DEFAULTS = {
     -- when to show
-    show = "always", hideDead = true, hideMounted = false, hideVehicle = true,
+    show = "always", fadeIdle = 0, hideDead = true, hideMounted = false, hideVehicle = true,
     -- layout
     opacity = 100, scale = 100, placement = "below", gap = 2, segmentGap = 3,
     primaryOn = true, primaryWidth = 240, primaryHeight = 18,
@@ -52,7 +52,7 @@ CB.LIMITS = {
     primaryWidth = { 40, 800 }, primaryHeight = { 2, 80 },
     secondaryWidth = { 40, 800 }, secondaryHeight = { 2, 80 },
     tertiaryWidth = { 40, 800 }, tertiaryHeight = { 2, 80 },
-    shade = { 20, 200 }, fontSize = { 6, 32 }, effectsThreshold = { 1, 100 },
+    fadeIdle = { 0, 100 }, shade = { 20, 200 }, fontSize = { 6, 32 }, effectsThreshold = { 1, 100 },
 }
 
 local function Set(list)
@@ -63,7 +63,7 @@ end
 
 -- The choices of each text value, in the order settings lists them (also the sets a value is checked against).
 CB.CHOICES = {
-    show = { { "always", "Always" }, { "combat", "Only in combat" }, { "active", "In combat or when not at rest" } },
+    show = { { "always", "Always" }, { "fade", "Fade in during combat" }, { "combat", "Only in combat" }, { "active", "In combat or when not at rest" } },
     placement = { { "below", "Below the main bar" }, { "above", "Above the main bar" }, { "separate", "Its own place" } },
     text = { { "current", "Current value" }, { "currentMax", "Current / maximum" }, { "percent", "Percentage" }, { "none", "Hidden" } },
     fillStyle = { { "solid", "Solid" }, { "gradient", "Gradient" } },
@@ -79,12 +79,12 @@ for key, list in pairs(CB.CHOICES) do
     ENUM[key] = Set(values)
 end
 ENUM.primaryText, ENUM.secondaryText, ENUM.tertiaryText = ENUM.text, ENUM.text, ENUM.text
-ENUM.overrideShow = Set({ "always", "combat", "active", "never" })
+ENUM.overrideShow = Set({ "always", "fade", "combat", "active", "never" })
 CB.ENUM = ENUM
 
 -- Which keys belong to which part of the settings, for narrow resets.
 CB.GROUPS = {
-    behavior = { "show", "hideDead", "hideMounted", "hideVehicle" },
+    behavior = { "show", "fadeIdle", "hideDead", "hideMounted", "hideVehicle" },
     layout = { "opacity", "scale", "placement", "gap", "segmentGap", "primaryOn", "primaryWidth", "primaryHeight",
         "secondaryOn", "secondaryWidth", "secondaryHeight", "tertiaryOn", "tertiaryWidth", "tertiaryHeight" },
     appearance = { "texture", "fillStyle", "gradientDir", "colorSource", "color", "color2", "shade", "smoothing",

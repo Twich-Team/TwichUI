@@ -92,7 +92,7 @@ local function Wants(rec)
     if flags.vehicle and CB.Get("hideVehicle") then return false end
     local show = rec.style and rec.style.show or CB.Get("show")
     if show == "never" then return false end
-    if show == "always" then return true end
+    if show == "always" or show == "fade" then return true end   -- fade: always there, its opacity follows combat
     if show == "combat" then return flags.combat end
     if flags.combat then return true end                           -- "active": in combat, or
     return not CBR.AtRest(rec.key, rec.cur, rec.max)               -- not at the resource's own resting value
@@ -254,8 +254,43 @@ local function Layout()
     end
 end
 
--- Decides who is shown; lays out again when that changed.
-local function Visibility(force)
+-- Fade with combat: a bar whose rule is "fade" is always there, and its own opacity eases up to full in combat and down
+-- to the out-of-combat opacity (Config "fadeIdle") out of it. It is the bar's alpha, on top of the group's overall
+-- opacity, so the two settings stay separate. The easing runs on the shared driver only while it is moving.
+local FADE_TIME = 0.35   -- seconds for the whole way
+
+local function FadeTarget(rec)
+    if preview.active or not (rec.style and rec.style.show == "fade") or flags.combat then return 1 end
+    return CB.Get("fadeIdle") / 100
+end
+
+local function FadeStep(self, dt)
+    local rec = self.rec
+    local target = rec.fadeTarget
+    local a = rec.fadeAlpha
+    local step = dt / FADE_TIME
+    if a < target then a = math.min(target, a + step) else a = math.max(target, a - step) end
+    rec.fadeAlpha = a
+    rec.bar.frame:SetAlpha(a)
+    return a == target
+end
+
+-- animate: ease (a combat change); otherwise the new opacity is taken at once (a start, a setting, a bar just shown).
+local function ApplyFade(rec, animate)
+    local bar = rec.bar
+    if not bar then return end
+    local target = FadeTarget(rec)
+    rec.fadeObj = rec.fadeObj or { rec = rec, Step = FadeStep }
+    if target == rec.fadeTarget and (rec.fadeObj.animating or rec.fadeAlpha == target) then return end   -- nothing new; leave a fade under way alone
+    rec.fadeTarget = target
+    if animate and rec.fadeAlpha and bar:IsShown() and rec.fadeAlpha ~= target and A.Add(rec.fadeObj) then return end
+    A.Remove(rec.fadeObj)
+    rec.fadeAlpha = target
+    bar.frame:SetAlpha(target)
+end
+
+-- Decides who is shown; lays out again when that changed. animate: a combat change, so fades ease.
+local function Visibility(force, animate)
     local changed = force
     for _, slot in ipairs(SLOTS) do
         local rec = recs[slot]
@@ -270,8 +305,14 @@ local function Visibility(force)
         if rec.bar then
             local shown = rec.visible and rec.style ~= nil
             if rec.bar:IsShown() ~= shown then
+                if shown then ApplyFade(rec, false) end        -- appears at its right opacity
                 rec.bar:SetShown(shown)
-                if not shown and FX then FX.Stop(rec.bar) end
+                if not shown then
+                    A.Remove(rec.fadeObj or rec)
+                    if FX then FX.Stop(rec.bar) end
+                end
+            elseif shown then
+                ApplyFade(rec, animate)
             end
         end
     end
@@ -473,11 +514,11 @@ HANDLERS.PLAYER_LOSES_VEHICLE_DATA = function() StateChanged(false) end
 HANDLERS.PLAYER_REGEN_DISABLED = function()
     flags.combat = true
     if preview.active then CB.PreviewStop() end     -- the real display takes over
-    Visibility(false)
+    Visibility(false, true)
 end
 HANDLERS.PLAYER_REGEN_ENABLED = function()
     flags.combat = false
-    Visibility(false)
+    Visibility(false, true)
 end
 
 local function OnEvent(_, event, ...)
@@ -503,6 +544,8 @@ local function Teardown()
         if rec and rec.bar then
             rec.bar:Clear()
             rec.bar:SetShown(false)
+            rec.bar.frame:SetAlpha(1)
+            rec.fadeAlpha, rec.fadeTarget = nil, nil
             rec.provider, rec.visible = nil, false
         end
     end

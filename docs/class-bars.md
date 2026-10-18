@@ -114,7 +114,7 @@ cannot filter by unit); the client never delivers other units' power events to L
 
 ### Visibility rules (resource-aware)
 
-`Show the bars` is one of: **Always**; **Only in combat**; **In combat or when not at rest**. "At rest" is per
+`Show the bars` is one of: **Always**; **Fade in during combat**; **Only in combat**; **In combat or when not at rest**. "At rest" is per
 resource (`Resources.lua` `REST`): mana, energy and focus at their maximum; rage, runic power and combo points at 0. A
 resource with no known resting value is never at rest, so it is never hidden by this rule. Each resource of a class can
 override it (including "Never show"). On top: hide while dead or a ghost (on), mounted (off), in a vehicle (on). A bar
@@ -128,7 +128,7 @@ invalid stored value reads as the default and is not erased; `0` and `false` are
 
 | Key | Holds |
 |---|---|
-| `ui.classBars` | Shared style: `show`, `hideDead/Mounted/Vehicle`; `opacity`, `scale`, `placement`, `gap`, `segmentGap`, `<slot>On/Width/Height`; `texture`, `fillStyle`, `gradientDir`, `colorSource`, `color`, `color2`, `shade`, `smoothing`; `<slot>Text`, `font`, `fontSize`, `fontOutline`, `textColor`, `textPlace`; `effects*`. Ranges in `Config.LIMITS` |
+| `ui.classBars` | Shared style: `show`, `fadeIdle`, `hideDead/Mounted/Vehicle`; `opacity`, `scale`, `placement`, `gap`, `segmentGap`, `<slot>On/Width/Height`; `texture`, `fillStyle`, `gradientDir`, `colorSource`, `color`, `color2`, `shade`, `smoothing`; `<slot>Text`, `font`, `fontSize`, `fontOutline`, `textColor`, `textPlace`; `effects*`. Ranges in `Config.LIMITS` |
 | `ui.classBarsLook` | Background and border: a MenuStyle look (the same textures, LibSharedMedia and EllesmereUI choices as the Mage menus) |
 | `ui.classBarsOverrides` | `["CLASS:RESOURCE"] = { colorSource, color, text, show }`. At most 48 entries |
 | `ui.classBarsPosition` | `{ main = { x, y }, aux = { x, y } }`: the group centre in screen units from the screen centre. Never shared |

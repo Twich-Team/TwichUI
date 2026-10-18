@@ -52,7 +52,11 @@ K.Page({
             return setting
         end
         Under(K.Dropdown(Shared("Show", "show", STRING, "Show the bars"), function() return CB.CHOICES.show end,
-            "Always shows each bar whenever it has something to show. Only in combat hides it out of combat. In combat or when not at rest shows it in combat, and out of combat whenever its resource is away from its resting value: a Warrior's rage while it decays, a Rogue's combo points while you hold any, a Mage's mana while it regenerates. A resource with no known resting value is never hidden by this rule. A resource of your class can follow its own rule on the Appearance page."), main, On)
+            "Always shows each bar whenever it has something to show. Fade in during combat keeps it there but eases it to full strength when combat starts and back down to the opacity below when it ends. Only in combat hides it out of combat. In combat or when not at rest shows it in combat, and out of combat whenever its resource is away from its resting value: a Warrior's rage while it decays, a Rogue's combo points while you hold any, a Mage's mana while it regenerates. A resource with no known resting value is never hidden by this rule. A resource of your class can follow its own rule on the Appearance page."), main, On)
+        local fade = K.Slider(Shared("FadeIdle", "fadeIdle", NUMBER, "Opacity out of combat", function(v) CB.Set("fadeIdle", math.floor(v + 0.5)) end),
+            CB.LIMITS.fadeIdle[1], CB.LIMITS.fadeIdle[2],
+            "How solid a bar is out of combat, in percent, when its rule is \"Fade in during combat\". In combat it is at full strength. 0 makes it invisible until combat. It is the bar's own opacity, on top of the overall opacity on the Layout page, and has no effect on bars that follow another rule.")
+        Under(fade, main, On)
         Under(K.Checkbox(Shared("HideDead", "hideDead", BOOL, "Hide while dead or a ghost", function(v) CB.Set("hideDead", v and true or false) end),
             "Hides the bars while you are dead or a ghost. They come back as soon as you are alive."), main, On)
         Under(K.Checkbox(Shared("HideMounted", "hideMounted", BOOL, "Hide while mounted", function(v) CB.Set("hideMounted", v and true or false) end),

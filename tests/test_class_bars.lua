@@ -582,6 +582,55 @@ do
   assert(bar.frame.shown)
 end
 
+-- Fade with combat: always there, its own opacity eases with combat
+do
+  Reset(); World("MAGE")
+  On(); EnterWorld()
+  local bar = Slot("primary")
+  CB.Set("show", "fade"); CB.Set("fadeIdle", 20)
+  assert(bar.frame.shown and near(bar.frame.alpha, 0.2), "out of combat it rests at the idle opacity, still drawn")
+  assert(not A.Running(), "a settled fade runs nothing")
+  W.combat = true; Fire("PLAYER_REGEN_DISABLED")
+  assert(A.Running() and bar.frame.alpha < 0.3, "combat starts it easing, not jumping")
+  W.P[0] = 700; Fire("UNIT_POWER_FREQUENT", "player", "MANA")
+  assert(A.Running(), "a power event in the middle of the fade does not cut it short")
+  Tick(1, 0.1)
+  local mid = bar.frame.alpha
+  assert(mid > 0.2 and mid < 1, "partway: " .. mid)
+  Tick(20, 0.05)
+  assert(near(bar.frame.alpha, 1) and not A.Running() and UpdateScripts() == 0, "full in combat, and the driver is idle again")
+  W.combat = false; Fire("PLAYER_REGEN_ENABLED")
+  Tick(3, 0.05)
+  assert(bar.frame.alpha < 1 and bar.frame.alpha > 0.2, "leaving combat eases down")
+  Tick(30, 0.05)
+  assert(near(bar.frame.alpha, 0.2) and not A.Running(), "to the idle opacity")
+  -- the idle opacity can be 0 (invisible) and is kept as a value
+  CB.Set("fadeIdle", 0)
+  assert(bar.frame.alpha == 0 and bar.frame.shown, "0 is a value: invisible, not removed")
+  -- a bar on another rule is untouched, and the overall opacity is the group's own
+  CB.Set("show", "always")
+  assert(bar.frame.alpha == 1)
+  CB.Set("show", "fade"); CB.Set("opacity", 50)
+  assert(near(bar.frame.parent.alpha, 0.5) and bar.frame.alpha == 0, "overall opacity and the fade are separate")
+  -- the preview shows it at full strength; the real fade comes back with the real display
+  CB.PreviewStart()
+  assert(bar.frame.alpha == 1, "the preview is not faded")
+  CB.PreviewStop()
+  assert(bar.frame.alpha == 0, "and the real display fades again")
+  -- a per-resource rule can fade one resource only
+  CB.Set("show", "always"); CB.SetOverride("MAGE:MANA", "show", "fade")
+  assert(bar.frame.alpha == 0)
+  -- hiding stops a fade; switching off leaves nothing behind
+  W.combat = true; Fire("PLAYER_REGEN_DISABLED")
+  assert(A.Running())
+  W.dead = true; Fire("PLAYER_DEAD")
+  assert(not A.Running(), "a hidden bar stops fading")
+  Off()
+  assert(bar.frame.alpha == 1 and not A.Running(), "off: its opacity is put back")
+  W.combat = false; W.dead = false
+  Reset()
+end
+
 ---------------------------------------------------------------------------
 -- 8. Layout: stacking, separate groups, scale, opacity, recoverable places
 ---------------------------------------------------------------------------
