@@ -190,6 +190,9 @@ Define("chatClean", { apply = Refresh("ChatClean") })
 -- Class resource bars
 Define("classBars", { apply = Refresh("ClassBars") })
 
+-- Dungeon Journal on a data bar (modules/DungeonJournalBroker.lua; the switch itself needs no reload)
+Define("dungeonJournalBroker", { apply = Refresh("DungeonJournalBroker") })
+
 -- Addon skins: through EllesmereUI, after a reload
 for _, key in ipairs({ "attuneSkin", "auctionatorSkin", "foreverDungeonJournalSkin", "whatsTrainingSkin" }) do
     Define(key, { reload = true })

@@ -113,6 +113,10 @@ modules\FoodDrink.lua
 modules\FoodDrinkUnlock.lua
 modules\FoodDrinkProbe.lua
 
+# Dungeon Journal on a data bar: an icon that opens or closes the Forever Dungeon Journal (off until turned on; needs
+# that addon and a data bar addon that provides LibDataBroker)
+modules\DungeonJournalBroker.lua
+
 # Mage spells on a data bar: Mage Travel (teleports and portals) and Mage Conjuring (food and
 # water), sharing one menu (uses the Chronicle palette, the arrival card's fonts and the training data)
 # and one background and border for it (game textures and LibSharedMedia's; uses modules\Borders.lua)
