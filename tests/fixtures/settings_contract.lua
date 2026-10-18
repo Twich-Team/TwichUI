@@ -450,7 +450,7 @@ return {
     "Chat cleaning #3 status \"Channels cleaned\" in:\"Chat cleaning\" tip:412bbff2",
     "Chat cleaning #4 button \"Channels and filters\" in:\"Chat cleaning\" tip:318c818d",
     "Chat cleaning #5 header \"Built-in filters\" tip:4a238ce0",
-    "Chat cleaning #6 status \"Gold selling spam\" in:\"Built-in filters\" tip:7427e58d",
+    "Chat cleaning #6 status \"Gold selling spam\" in:\"Built-in filters\" tip:0ee96a00",
     "Chat cleaning #7 status \"Guild recruitment\" in:\"Built-in filters\" tip:6ac0b856",
     "Chat cleaning #8 status \"Repeated messages\" in:\"Built-in filters\" tip:72f91bff",
     "Chat cleaning #9 header \"Custom rules\" tip:467ceb28",

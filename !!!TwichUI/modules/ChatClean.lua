@@ -58,7 +58,7 @@ CC.EVENT = "CHAT_MSG_CHANNEL"
 -- The built-in filters, in the order they are checked.
 CC.CATEGORIES = {
     { key = "spam", label = "Gold selling spam", short = "Spam",
-      text = "Adverts selling gold, boosts or levelling for real money: a message with a web address, something for sale and a price or discount, all together. An ordinary trade message (WTS [item] 5g), a link or a capitalized message is never enough on its own. Spam that disguises itself well still gets through." },
+      text = "Adverts selling gold, boosts or levelling for real money: a message with a web address, something for sale and a price or discount, all together. Also community and guild invitation links named like a gold shop (a web address and gold, boosts or levelling). An ordinary trade message (WTS [item] 5g), a link or a capitalized message is never enough on its own. Spam that disguises itself well still gets through." },
     { key = "recruit", label = "Guild recruitment", short = "Recruiting",
       text = "Guild recruitment adverts: messages with the word recruit, or that mention a guild and invite you to join, whisper or apply. Also catches \"looking for a guild\" messages and some other guild talk, so it is off unless you choose it." },
     { key = "repeats", label = "Repeated messages", short = "Repeats",
@@ -580,7 +580,7 @@ local function Judge(ch, text, repeatKey, now)
     end
     local squashed
     if ch.spam or ch.repeats then squashed = M.Squash(lowered) end
-    if ch.spam and M.Spam(lowered, squashed) then return { kind = "category", id = "spam", label = CATEGORY.spam.label } end
+    if ch.spam and M.Spam(lowered, squashed, M.HasClubLink(text)) then return { kind = "category", id = "spam", label = CATEGORY.spam.label } end
     if ch.recruit and M.Recruit(lowered) then return { kind = "category", id = "recruit", label = CATEGORY.recruit.label } end
     if ch.repeats and repeatKey and squashed ~= "" then
         local before = Seen(repeatKey .. "\31" .. M.Hash(squashed), now)

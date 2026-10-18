@@ -346,9 +346,26 @@ local function Price(lowered)
         or find(lowered, "promo") or find(lowered, "%f[%a]sale%f[%A]") or find(lowered, "deliver")
 end
 
+-- Whether the message carries a community or guild invitation link (|HclubFinder:...|h or |HclubTicket:...|h, the
+-- links the Guild & Communities window opens on, with Accept and Decline). Read from the link's type only; a typed
+-- "||Hclub..." is not a link. Gold sellers use them because the name shown on the link is free text.
+function M.HasClubLink(msg)
+    if type(msg) ~= "string" then return false end
+    if #msg > M.SCAN_MAX then msg = sub(msg, 1, M.SCAN_MAX) end
+    if not find(msg, "|Hclub", 1, true) then return false end
+    msg = gsub(msg, "||", "")
+    return (find(msg, "|HclubFinder:", 1, true) or find(msg, "|HclubTicket:", 1, true)) and true or false
+end
+
 -- Selling gold, boosts or levelling for money: a web address, something sold and a price or discount, all three.
-function M.Spam(lowered, squashed)
-    return (Site(lowered, squashed) and Goods(squashed) and Price(lowered)) and true or false
+-- With a community or guild invitation link (clubLink), the name on the link is itself the advert, so a web address
+-- and something sold, or something sold and a price, are enough.
+function M.Spam(lowered, squashed, clubLink)
+    local goods = Goods(squashed)
+    if not goods then return false end
+    local site = Site(lowered, squashed)
+    if site and Price(lowered) then return true end
+    return (clubLink and (site or Price(lowered))) and true or false
 end
 
 -- Guild recruitment: the word recruit, or "guild" with an invitation to join, whisper or apply.

@@ -255,6 +255,16 @@ do
   Check(not Spam("WTS BOOST IN DEADMINES PST"), "capitals and a service, no site")
   Check(not Spam("|cff1eff00|Hitem:1:|h[Gold Ring]|h|r 5g cheap"), "a link, no site")
   Check(not Spam("Verkaufe Gold, sehr günstig"), "another language alone")
+  local function Club(text) local v = M.Lower(M.Visible(text)); return M.Spam(v, M.Squash(v), M.HasClubLink(text)) end
+  local FINDER = "|cff00ccff|HclubFinder:Club-1-2|h[Community: SAFE GOLD AT ForeverGold.net]|h|r"
+  Check(M.HasClubLink(FINDER) and M.HasClubLink("|cffffd200|HclubTicket:123|h[Invite: x]|h|r"), "club links are recognised")
+  Check(not M.HasClubLink("||HclubFinder:x||h typed") and not M.HasClubLink("|Hitem:1:|h[Gold]|h") and not M.HasClubLink(nil), "other text is not a club link")
+  Check(Club(FINDER), "a gold shop community link, no price")
+  Check(Club("Safe gold |cff00ccff|HclubFinder:Club-1-2|h[Community: cheap gold shop]|h|r"), "gold and a price in the link name")
+  Check(not Spam(FINDER), "the same text without the link type is not enough (the three-sign rule stays)")
+  Check(not Club("|cff00ccff|HclubFinder:Club-1-2|h[Guild: Ashen Raiders]|h|r"), "an ordinary guild finder link")
+  Check(not Club("|cff00ccff|HclubFinder:Club-1-2|h[Community: Golden Eagles]|h|r"), "a name with gold in it but nothing else")
+  Check(not Club("|cff00ccff|HclubFinder:Club-1-2|h[Community: wowhead.com fans]|h|r"), "a web address in the name, nothing sold")
   local function Recruit(text) return M.Recruit(M.Lower(text)) end
   Check(Recruit("<Ashen> is recruiting all classes!"), "recruiting")
   Check(Recruit("Friendly guild looking for members, /w for invite"), "guild invite")

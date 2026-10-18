@@ -87,6 +87,10 @@ frames, so each message is evaluated, counted and listed once. Then, in this ord
 2. **Gold selling spam** (recommended): a web address (plain, or spelled out: `www . x . c o m`, `x dot com`, any of a
    short list of top-level domains), something sold (gold, boost, power-levelling, levelling, carry, account) **and** a
    price or discount ($, €, £, `10%`, USD/EUR, cheap, price, discount, coupon, promo, sale, delivery), all three.
+   A community or guild invitation link (`|HclubFinder:` / `|HclubTicket:`, which opens the Guild & Communities window
+   with Accept and Decline) needs only two: something sold plus a web address or a price. The name shown on such a
+   link is free text, so gold sellers use it as the advert. The link type alone never hides anything, so ordinary
+   guild-finder links are untouched (Guild recruitment, below, is the filter for those).
 3. **Guild recruitment** (opt-in): the word "recruit", or "guild" with join/invite/whisper/apply/members/looking for.
 4. **Repeated messages** (recommended): the same text, ignoring case, spaces and punctuation, from the same player
    (GUID, else name) within 60 seconds of their previous copy. The first copy is shown; repeats stay hidden while they
