@@ -11,7 +11,7 @@ K.Page({
     overview = {
         label = "Gear comparison", tip = "Quiet upgrade hints in item tooltips and bags, and the stat weights behind them.",
         when = function() return R.GearPrefs ~= nil end,
-        status = function() return K.OnOff(R:Enabled("gearHints") or R:Enabled("gearBagIcons")) end,
+        status = function() return K.OnOff(R:Enabled("gearHints") or R:Enabled("gearBagIcons") or R:Enabled("gearRollIcons")) end,
     },
     build = function()
         local Header, Toggle, Button, Choice, ProxyToggle, Under = K.Header, K.Toggle, K.Button, K.Choice, K.ProxyToggle, K.Under
@@ -80,7 +80,7 @@ K.Page({
             local styles = {}
             for i, style in ipairs(B.STYLES) do styles[i] = { style.key, style.label } end
             local styleRow = Choice("gearBagStyle", "Bag mark style",
-                "The mark on upgrades in your bags. All use the game's own art. The square beside the list shows how it looks on a bag slot.",
+                "The mark on upgrades in your bags and on loot rolls. All use the game's own art. The square beside the list shows how it looks on a bag slot.",
                 STRING, "gilded",
                 function() return P.Get("bagStyle") end,
                 function(value) P.Set("bagStyle", value) end,
@@ -100,8 +100,13 @@ K.Page({
                 end
                 styleRow.refreshExtra = function(slot) B.ApplyStyle(slot.mark, P.Get("bagStyle")) end
             end
-            Under(styleRow, bags, function() return R:Enabled("gearBagIcons") end)
+            Under(styleRow, bags, function() return R:Enabled("gearBagIcons") or R:Enabled("gearRollIcons") end,
+                "Greyed out: needs \"Mark upgrades in my bags\" or \"Mark upgrades on loot rolls\" turned on.")
         end
+
+        Header("Loot rolls", "A small mark on a group loot roll when the item would get an upgrade line in its tooltip. It is only a signal beside your own choice: it never rolls for you.")
+        Toggle("gearRollIcons", "Mark upgrades on loot rolls",
+            "A small mark in the corner of the item's icon on a Need / Greed roll when the item looks like an upgrade for your class and main talent tree, fainter for possible upgrades. It uses the same estimate and the same mark style as the bag marks, so the stat weights and the gain you choose above apply here too. It never rolls for you or changes the roll buttons.")
     end,
 })
 

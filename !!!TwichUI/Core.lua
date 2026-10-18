@@ -27,6 +27,7 @@ local DEFAULT_MODULES = {
     quietLogin = true,       -- hide addon welcome messages at login/reload
     gearHints = true,        -- "Likely upgrade" line in item tooltips (stat weights: /twichui gear)
     gearBagIcons = false,    -- ... and a mark on upgrades in your bags (opt-in)
+    gearRollIcons = false,   -- ... and a mark on upgrades on group loot rolls (opt-in)
     groupCheck = true,       -- version hello / group check / DM probe (group channel)
     chronicle = true,        -- Journey Chronicle: write automatic entries (your own notes always work)
     chronicleLevels = true,  -- ... level milestones

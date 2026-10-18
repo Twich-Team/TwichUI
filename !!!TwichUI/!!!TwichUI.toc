@@ -66,6 +66,7 @@ gear\Data.lua
 gear\Hints.lua
 gear\Tooltip.lua
 gear\Bags.lua
+gear\Rolls.lua
 gear\Window.lua
 
 # Journey Chronicle: optional personal journal

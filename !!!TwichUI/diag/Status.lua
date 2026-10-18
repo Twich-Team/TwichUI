@@ -419,7 +419,7 @@ S.GROUPS = {
 -- Features: the switches the report lists, by readable name (the allowlist; a switch not here is not reported)
 ---------------------------------------------------------------------------
 S.FEATURES = {
-    { "gearHints", "Gear upgrade hints" }, { "gearBagIcons", "Upgrade marks in bags" },
+    { "gearHints", "Gear upgrade hints" }, { "gearBagIcons", "Upgrade marks in bags" }, { "gearRollIcons", "Upgrade marks on loot rolls" },
     { "chronicle", "Journey Chronicle" }, { "welcomeBack", "Welcome Back bookmark" },
     { "arrival", "Zone arrival card" }, { "trainingNotice", "New training notice" }, { "friendLogin", "Friend login card" },
     { "foodDrink", "Food and Drink buttons" }, { "foodDrinkUnlock", "Food and Drink in EllesmereUI Unlock Mode" },

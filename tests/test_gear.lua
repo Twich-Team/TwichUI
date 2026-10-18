@@ -108,8 +108,36 @@ c.EUI_Bags = {
   RefreshInventory = function() elleRefreshes = elleRefreshes + 1 end,
 }
 
+-- Loot rolls: two of the game's pooled roll frames, which show an item's icon and carry the roll they are for.
+local ROLL = { [11] = "chest:better", [12] = "chest:caster", [13] = "chest:future", [14] = "chest:slight", [15] = "chest:late" }
+local ROLL_LINES = { [13] = LEVEL_LOCK }
+local rollNoData = false
+c.GetLootRollItemLink = function(id) return ROLL[id] end
+c.C_TooltipInfo.GetLootRollItem = function(id) if ROLL[id] and not rollNoData then return { lines = ROLL_LINES[id] or {} } end end
+c.NUM_GROUP_LOOT_FRAMES = 2
+local rollFrames = {}
+for i = 1, 2 do
+  local created = {}
+  local f = { shown = false, hooks = {}, IconFrame = { CreateTexture = function() local t = Texture(); created[#created + 1] = t; return t end } }
+  function f:IsShown() return self.shown end
+  function f:HookScript(name, fn) self.hooks[name] = fn end
+  rollFrames[i] = { frame = f, created = created }
+  c["GroupLootFrame" .. i] = f
+end
+local function ShowRoll(i, rollID)
+  local f = rollFrames[i].frame
+  f.rollID, f.shown = rollID, true
+  f.hooks.OnShow(f)
+end
+local function HideRoll(i)
+  local f = rollFrames[i].frame
+  f.shown = false
+  f.hooks.OnHide(f)
+end
+local function RollMark(i) return rollFrames[i].created[1] end
+
 for _, f in ipairs({ "gear/Weights.lua", "gear/Evaluate.lua", "gear/Prefs.lua", "gear/Data.lua",
-  "gear/Hints.lua", "gear/Tooltip.lua", "gear/Bags.lua" }) do
+  "gear/Hints.lua", "gear/Tooltip.lua", "gear/Bags.lua", "gear/Rolls.lua" }) do
   local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
 end
 c.LOADED["!!!TwichUI"] = true; c.FireEvent("ADDON_LOADED", "!!!TwichUI")
@@ -330,6 +358,64 @@ c.TwichUIDB.modules.gearBagIcons = false
 paint(counting, { bag = 0, slot = 1, itemLink = "chest:better" })
 assert(not created.shown, "feature off clears the mark")
 c.TwichUIDB.modules.gearBagIcons = false
+
+-- Loot rolls: off by default (and independent of the bag switch); on, an upgrade is marked on the roll's icon.
+assert(c.TwichUIDB.modules.gearRollIcons == false, "roll marks are opt-in")
+c.TwichUIDB.modules.gearBagIcons = true
+ShowRoll(1, 11)
+assert(not RollMark(1), "roll marks off: nothing drawn, even with bag marks on")
+c.TwichUIDB.modules.gearBagIcons = false
+c.TwichUIDB.modules.gearRollIcons = true
+ShowRoll(1, 11)
+assert(RollMark(1).shown and RollMark(1).alpha == 1, "likely upgrade marked on the roll")
+ShowRoll(2, 14)
+assert(RollMark(2).shown and RollMark(2).alpha == 0.6, "possible upgrade marked faintly")
+HideRoll(1)
+assert(not RollMark(1).shown, "the mark goes when the roll ends")
+ShowRoll(1, 12)
+assert(not RollMark(1).shown, "a reused frame for a non-upgrade is not marked")
+ShowRoll(1, 13)
+assert(not RollMark(1).shown, "gear held back by level is not marked, as in bags")
+ShowRoll(1, 11)
+assert(RollMark(1).shown, "marked again for the next upgrade")
+ShowRoll(1, 11)
+assert(#rollFrames[1].created == 1, "one mark per frame, however often it is shown")
+EQUIPPED[5] = "chest:better"
+Changed("PLAYER_EQUIPMENT_CHANGED")
+assert(not RollMark(1).shown, "open rolls follow what you wear")
+EQUIPPED[5] = "chest:old"
+Changed("PLAYER_EQUIPMENT_CHANGED")
+assert(RollMark(1).shown, "and follow it back")
+rollNoData = true
+ShowRoll(1, 11)
+rollNoData = false
+assert(not RollMark(1).shown, "no tooltip data for the roll: not judged, so not marked")
+ShowRoll(1, 11)
+-- An item the game hasn't loaded yet is asked about again shortly, a few times, then left alone.
+ShowRoll(2, 15)
+assert(not RollMark(2).shown, "an item not loaded yet is not marked")
+ITEMS["chest:late"] = { "Late Chest", 3, "INVTYPE_CHEST", { ITEM_MOD_STRENGTH_SHORT = 14, ITEM_MOD_STAMINA_SHORT = 10, RESISTANCE0_NAME = 320 } }
+FlushTimers()
+assert(RollMark(2).shown, "marked once the game has the item")
+ITEMS["chest:late"] = nil
+Changed("PLAYER_EQUIPMENT_CHANGED")
+HideRoll(2)
+do
+  local asked, real = 0, c.GetLootRollItemLink
+  c.GetLootRollItemLink = function(...) asked = asked + 1; return real(...) end
+  ShowRoll(2, 15)
+  for _ = 1, 6 do FlushTimers() end
+  c.GetLootRollItemLink = real
+  assert(not RollMark(2).shown, "an item that never loads stays unmarked")
+  assert(asked == 3, "and the asking stops after a few tries (" .. asked .. ")")
+end
+HideRoll(2)
+c.TwichUIDB.modules.gearRollIcons = false
+R.GearRolls.Refresh()
+assert(not RollMark(1).shown, "turning roll marks off clears an open roll")
+ShowRoll(1, 11)
+assert(not RollMark(1).shown, "off: new rolls are not marked")
+HideRoll(1)
 
 -- Equipment changes are picked up.
 modifier = true

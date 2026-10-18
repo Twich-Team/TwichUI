@@ -62,6 +62,7 @@ end
 -- Gear comparison
 Define("gearHints")
 Define("gearBagIcons", { apply = Refresh("GearBags") })
+Define("gearRollIcons", { apply = Refresh("GearRolls") })
 
 -- Notifications
 Define("arrivalReducedMotion")

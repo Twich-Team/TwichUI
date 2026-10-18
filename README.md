@@ -29,7 +29,7 @@ Every feature has its own page in the TwichUI settings (`/tui options`), and eve
 - **Where you want them:** Pins show on the minimap and a data bar launcher, with an optional sound when one arrives.
 
 ### Gear
-- **Upgrade hints:** Quiet "likely upgrade" lines in item tooltips and small markers in your bags, based on your class and talent tree. Hold Shift to see why. It's a rough guide, not a simulation.
+- **Upgrade hints:** Quiet "likely upgrade" lines in item tooltips and small markers in your bags and, if you turn it on, on group loot rolls, based on your class and talent tree. Hold Shift to see why. It's a rough guide, not a simulation.
 - **Stat weights:** Adjust how each talent tree values stats if you follow a guide.
 
 ### Everyday conveniences

@@ -728,7 +728,7 @@ local function Define()
     end
 
     g = Group("gear", "Gear comparison", { page = "gear" })
-    Switches(g, { "gearHints", "gearBagIcons" })
+    Switches(g, { "gearHints", "gearBagIcons", "gearRollIcons" })
     Table(g, { "gear" }, R.GearPrefs, { "glancePossible", "futureLevels", "reveal", "strictness", "bagStyle" },
         { reveal = ENUM.reveal, strictness = ENUM.strictness, bagStyle = ENUM.bagStyle })
 
