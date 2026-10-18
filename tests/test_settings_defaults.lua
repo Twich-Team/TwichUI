@@ -698,12 +698,8 @@ do
   assert(variables.TWICHUI_restedxpSkin == "RestedXP", "the switch is on RestedXP's page: " .. tostring(variables.TWICHUI_restedxpSkin))
   assert(variables.TWICHUI_restedxpLookBgColor == "RestedXP" and variables.TWICHUI_restedxpArrowShape == "RestedXP")
   assert(variables.TWICHUI_qolGuideWaypoint == "RestedXP", "the map waypoint switch moved with it: " .. tostring(variables.TWICHUI_qolGuideWaypoint))
-  assert(K.pages.restedxp.group == "restedxp" and K.pages.restedxp.parent == nil, "a section of its own")
-  do
-    local groups, after = {}, nil
-    for i, g in ipairs(K.GROUPS) do groups[g.key] = i end
-    assert(groups.restedxp == groups.addons + 1, "the RestedXP section is listed right under Other addons")
-  end
+  assert(K.pages.restedxp.group == "addons" and K.pages.restedxp.parent == nil, "a top-level page under Other addons")
+  for _, g in ipairs(K.GROUPS) do assert(g.key ~= "restedxp", "no separate RestedXP section in the list") end
   assert(K.pages.restedxp, "R:OpenSettings can open it")
   local pointer = Find("RestedXP guide window")
   local pointerButton

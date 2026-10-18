@@ -1,6 +1,6 @@
 # RestedXP skin
 
-The settings are a page of their own, **RestedXP** (a section of its own in the list, under Other addons; the Addon skins page keeps a short pointer to it). The page also holds the map waypoint switch, **Mark RestedXP's destination**.
+The settings are a page of their own, **RestedXP** (listed under Other addons, after Addon skins; the Addon skins page keeps a short pointer to it). The page also holds the map waypoint switch, **Mark RestedXP's destination**.
 
 An optional look for the RestedXP Guides window (`modules/RestedXPSkin.lua`, `diag/RestedXPSkin.lua`).
 Written against RestedXP Guides v4.11.22 (Interface 16001 listed). Off by default.

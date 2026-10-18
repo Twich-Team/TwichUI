@@ -1,4 +1,4 @@
--- TwichUI settings: everything TwichUI does for RestedXP Guides, in a section of its own in the list: the game's
+-- TwichUI settings: everything TwichUI does for RestedXP Guides, listed under Other addons: the game's
 -- waypoint on RestedXP's destination (qol/GuideWaypoint.lua), the guide window's look (modules/RestedXPSkin.lua) and
 -- its timer bars (modules/RestedXPTimers.lua). The look is not through EllesmereUI, which it doesn't need. The data
 -- bar entry (modules/RestedXPBroker.lua) has no settings: it is there whenever RestedXP and a data bar addon are.
@@ -41,7 +41,7 @@ local TIMER_STATUS = {
 }
 
 K.Page({
-    key = "restedxp", name = "RestedXP", order = 95, group = "restedxp",
+    key = "restedxp", name = "RestedXP", order = 95, group = "addons",
     description = "The game's waypoint on RestedXP's destination, and a TwichUI look for the RestedXP Guides window, its waypoint arrow and its timer bars. Guide content and progress are RestedXP's own.",
     keywords = "restedxp rxp guide leveling map waypoint destination marker arrow timer bar step theme skin data bar broker",
     when = function() return R.RestedXPSkin ~= nil end,

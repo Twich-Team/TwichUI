@@ -82,8 +82,7 @@ Home                      feature statuses (each opens its page), Help, General
 Everyday                  Notifications, Quality of life, Chat cleaning › Channels, Custom rules, Live view, Food and drink, Vendor restocking › Restock items, Auction House
 Journey                   Journey Chronicle › Appearance, Party pins › Appearance
 Gear & class              Gear comparison › Stat weights, Mage (Mages only) › Refreshment shares, Class resource bars › Layout, Appearance, Effects
-Other addons              Addon skins › SpeakStone speech frame
-RestedXP                  RestedXP (map waypoint, guide window look, timer bars)
+Other addons              Addon skins › SpeakStone speech frame, RestedXP (map waypoint, guide window look, timer bars)
 Your configuration        Configuration sharing, Profiles, Troubleshooting
 ```
 

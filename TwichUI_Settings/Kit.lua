@@ -32,7 +32,6 @@ K.GROUPS = {
     { key = "journey", label = "Journey" },
     { key = "class", label = "Gear & class" },
     { key = "addons", label = "Other addons" },
-    { key = "restedxp", label = "RestedXP" },
     { key = "config", label = "Your configuration" },
 }
 
