@@ -95,7 +95,8 @@ TwichUI's authoritative configuration UI is a **dedicated TwichUI-owned settings
 ### EllesmereUI textured borders (this has gone wrong more than once)
 
 Symptom: with an `eui:` border such as Pixels Textured there is a wide empty margin between the content and the border; a smaller
-thickness shrinks the margin but the border looks invisible; or the border is the wrong size after the frame is scaled. Fix:
+thickness shrinks the margin but the border looks invisible; the border is the wrong size after the frame is scaled; or it is a thick white
+line until something redraws it after a reload. Fix:
 - **Padding comes from the line, not the setting.** An EllesmereUI edge is drawn in a cell as many pixels thick as the setting, centred on the
   frame's edge, and only the outer part of the cell is line (`_borderInk`, `EllesmereUI_PixelPerfect.lua`: Pixels Textured starts at 0.321).
   `MenuStyle`'s `Style.Apply(frame)` returns the whole thickness, so padding by it leaves a margin that grows with the setting. Use
@@ -103,10 +104,16 @@ thickness shrinks the margin but the border looks invisible; or the border is th
   `R.Borders.Inside` when `drawn == "eui"` as `classbars/Bar.lua` does. Never lay content out by `Apply`'s first result.
 - **Set the frame's scale before drawing the border.** EllesmereUI's `ApplyBorderStyle` and `MenuStyle`'s `Pixels` read the frame's effective scale
   as they draw, so `SetScale` (or a new parent) after `Apply` leaves the border drawn for the old scale. Draw again after any later scale change.
+- **Don't draw an `eui:` border before every addon has loaded.** TwichUI loads first (`!!!TwichUI`), so in `R:OnInit` (our `ADDON_LOADED`)
+  EllesmereUI's border list does not exist yet: `Borders.Ellesmere()` is nil, `MenuStyle` resolves the border as "missing" and draws a plain
+  line at the saved thickness in the texture's seeded colour. That is a thick white border after every `/reload`, fixed by opening anything that
+  redraws the look. A frame that is built and styled at startup must draw its look again at `PLAYER_LOGIN` (or build lazily when first shown, as
+  the menus do); `markers/Bar.lua` does the former. EllesmereUI's border functions exist from then on.
 - **A thin textured border is invisible by nature.** The line is a fraction of the cell (under about 8 px it is sub-pixel); do not widen the
   padding or clamp the thickness to compensate. `MenuStyle` seeds a suitable thickness when a texture is chosen, and the setting's tooltip says so.
-- Test it with a stand-in `EllesmereUI` (`tests/test_marker_bar.lua`, section 7b): assert the padding is far smaller than the cell and that the
-  border was drawn at the frame's final scale, and check the test fails with the old code.
+- Test it with a stand-in `EllesmereUI` (`tests/test_marker_bar.lua`, section 7b): assert the padding is far smaller than the cell, that the
+  border was drawn at the frame's final scale, and that it is drawn with EllesmereUI's border after `PLAYER_LOGIN` when the stand-in appears only
+  then; check each test fails with the old code.
 - When touching a frame that uses `Style.Apply(...)` for padding (`grep -rn "Style.Apply(" '!!!TwichUI'`), check it for the same fault.
 
 ## Persistence and migrations

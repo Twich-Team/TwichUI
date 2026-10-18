@@ -523,7 +523,8 @@ Check(#game.calls == 0 and Count("SetRaidTarget") == 0, "showing, moving and clo
 -- centred on the frame's edge, and the line starts 0.321 of the way in (EllesmereUI_PixelPerfect.lua, _borderInk), so it
 -- reaches 0.5 - 0.321 = 0.179 of the cell past the edge (BorderReach).
 local euiDraws = {}
-c.EllesmereUI = {
+local eui
+eui = {
   PP = { mult = 1 },
   ApplyBorderStyle = function(frame, _, _, _, _, _, key, _, _, _, _, _, _, normalize, edgePx)
     euiDraws[#euiDraws + 1] = { key = key, scale = frame:GetEffectiveScale(), normalize = normalize, edgePx = edgePx }
@@ -534,7 +535,13 @@ c.EllesmereUI = {
   BorderLegacyPx = function() return 12 end,
   BorderReach = function(_, _, _, _, _, _, _, _, edgePx) return 0.179 * edgePx end,
 }
+-- At startup TwichUI loads (and draws the bar) before EllesmereUI exists, so a saved EllesmereUI border can't be resolved: the
+-- look falls back to a plain line, at the saved (textured) thickness. That was a thick white border after every reload.
 B.Style.Set("borderTexture", "eui:pixels-textured")
+Check(#euiDraws == 0 and nearBar.root.backdrop and nearBar.root.backdrop.edgeFile, "(no EllesmereUI yet) the plain line is what is drawn")
+c.EllesmereUI = eui   -- now every addon has loaded
+c.FireEvent("PLAYER_LOGIN")
+Check(#euiDraws > 0 and euiDraws[#euiDraws].key == "pixels-textured", "at login the bar is drawn again, now with EllesmereUI's border")
 Check(B.Style.Get("borderSize") == 12, "choosing Pixels Textured seeds a thickness that suits it: " .. B.Style.Get("borderSize"))
 local lastDraw = euiDraws[#euiDraws]
 Check(lastDraw and lastDraw.key == "pixels-textured" and lastDraw.normalize and lastDraw.edgePx == 12, "drawn by EllesmereUI at the exact size, normalized to the bar's scale")

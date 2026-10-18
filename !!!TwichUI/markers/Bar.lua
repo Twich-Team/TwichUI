@@ -584,6 +584,10 @@ function B.TogglePreview() return B.ShowPreview(not B.Previewing()) end
 B.Style.Subscribe(function() Apply() end)
 M.OnChange(function(kind) if kind == nil or kind == "target" then Apply() end end)   -- the cycle's order is the bar's
 R:OnInit(function() Apply() end)
+-- TwichUI loads before the other addons, so at that first draw an EllesmereUI border in the saved look (or a
+-- LibSharedMedia one another addon registers) can't be found yet and the look falls back to a plain line at the saved
+-- thickness: a thick white one. Draw the bar again once every addon has loaded.
+R:On("PLAYER_LOGIN", function() if built or R:Enabled("markersBar") then Apply() end end)
 if R.Profiles and R.Profiles.OnApply then
     R.Profiles.OnApply("views", "markerBar", function() Apply() end)
 end
