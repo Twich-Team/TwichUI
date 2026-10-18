@@ -1,4 +1,4 @@
--- TwichUI settings: Quality of life › Marker bar (markers/Bar.lua). The switch and the key to hold, which markers are on
+-- TwichUI settings: Markers › Marker bar (markers/Bar.lua). The switch and the key to hold, which markers are on
 -- the bar (a frame of this window's own: eight ticks with their icons), where it appears and what it does in combat,
 -- and its size and look. The bar's fixed place is moved by dragging the preview ("Show and move"), an ordinary copy
 -- of the bar that marks nothing; the preview closes when this page is left, the window closes or combat starts.
@@ -112,7 +112,7 @@ end
 local function On() return R:Enabled("markersBar") end
 
 K.Page({
-    key = "markersBar", name = "Marker bar", parent = "qol", order = 33,
+    key = "markersBar", name = "Marker bar", parent = "markers", order = 34,
     description = "Hold a key to show a bar of target markers for your target, and click one to mark it.",
     keywords = "marker markers bar raid target icon skull cross square moon triangle diamond circle star pick choose click modifier shift ctrl alt nameplate fixed combat",
     when = function() return R.Markers ~= nil and R.MarkerBar ~= nil end,

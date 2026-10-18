@@ -210,10 +210,11 @@ do
   end
   assert(children == 17, "seventeen secondary pages: " .. children)
   assert(#K.Tabs("overview") == 0 and #K.Tabs("auction") == 0, "a feature without pages under it has no tabs")
-  do   -- Quality of life: its own options, then the two kinds of marker cycling, each a tab of its own
+  do   -- Markers: its own list in Everyday, then the two kinds of marker cycling and the bar, each a tab of its own
     local labels = {}
-    for _, t in ipairs(K.Tabs("qol")) do labels[#labels + 1] = K.TabLabel(t) end
-    assert(table.concat(labels, "|") == "General|Target markers|World markers|Marker bar", "Quality of life's tabs: " .. table.concat(labels, "|"))
+    for _, t in ipairs(K.Tabs("markers")) do labels[#labels + 1] = K.TabLabel(t) end
+    assert(table.concat(labels, "|") == "General|Target markers|World markers|Marker bar", "Markers' tabs: " .. table.concat(labels, "|"))
+    assert(#K.Tabs("qol") == 0, "Quality of life has no tabs")
   end
   assert(#K.Tabs("notifications") == 2 and K.Tabs("notifications")[2].key == "notificationsLook", "Notifications has its appearance tab")
   local tabs = {}

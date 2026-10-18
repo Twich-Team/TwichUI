@@ -1,4 +1,4 @@
--- TwichUI settings: Quality of life › Target markers and World markers (markers/: Markers.lua keeps each kind's
+-- TwichUI settings: Markers › Target markers and World markers (markers/: Markers.lua keeps each kind's
 -- order, Keys.lua the keys and the game's secure buttons they press). Each tab has the switch and its options,
 -- then the order (a frame of this window's own, since eight markers to drag and tick don't fit ordinary rows),
 -- then the keys. The order frame is built the first time its tab is shown and its eight tiles are reused on every
@@ -571,8 +571,47 @@ end
 
 local KEYWORDS = "marker markers raid target icon mark skull cross square moon triangle diamond circle star cycle cycler rotate next order key keybind binding restart reset clear remove"
 
+-- The page the three marker tabs (Target markers and World markers here, Marker bar in MarkerBar.lua) sit under.
+local function Marks(key) return R:Enabled(key) and true or false end
+
 K.Page({
-    key = "markersTarget", name = "Target markers", parent = "qol", order = 31,
+    key = "markers", name = "Markers", order = 31, group = "everyday",
+    description = "Keys and a bar for marking your target and the ground. Each is off until you turn it on.",
+    keywords = KEYWORDS .. " bar",
+    when = function() return R.Markers ~= nil and R.MarkerKeys ~= nil end,
+    overview = {
+        label = "Markers", tip = "Keys to cycle target and world markers, and a bar of target markers to click. Each is off until you turn it on.",
+        status = function()
+            local on = (Marks("markersTarget") and 1 or 0) + (Marks("markersWorld") and 1 or 0)
+            local total = 2
+            if R.MarkerBar then
+                total = 3
+                on = on + (Marks("markersBar") and 1 or 0)
+            end
+            return K.OnOff(on > 0, ("%d of %d on"):format(on, total), "Off")
+        end,
+    },
+    build = function()
+        K.Header("Markers", "Three separate things, each off until you turn it on and each on its own tab. None of them marks anything by itself: a marker is placed only when you press a key you chose, or click the bar.")
+        K.Status("Target markers", function() return K.OnOff(Marks("markersTarget")) end, nil,
+            "A key that marks your target with the next marker, in an order you choose.")
+        K.Button("Target markers", "Open", function() R:OpenSettings("markersTarget") end,
+            "The switch, the order of the markers and the keys for cycling target markers.")
+        K.Status("World markers", function() return K.OnOff(Marks("markersWorld")) end, nil,
+            "A key that places the next world marker at your mouse pointer, in an order you choose.")
+        K.Button("World markers", "Open", function() R:OpenSettings("markersWorld") end,
+            "The switch, the order of the markers and the keys for placing world markers.")
+        if R.MarkerBar then
+            K.Status("Marker bar", function() return K.OnOff(Marks("markersBar")) end, nil,
+                "A bar of target markers that appears while you hold a key; click one to mark your target.")
+            K.Button("Marker bar", "Open", function() R:OpenSettings("markersBar") end,
+                "The switch, the key to hold, which markers are on the bar, and where it appears.")
+        end
+    end,
+})
+
+K.Page({
+    key = "markersTarget", name = "Target markers", parent = "markers", order = 32,
     description = "A key that marks your target with the next marker, in an order you choose.",
     keywords = KEYWORDS .. " target unit mouseover",
     when = function() return R.Markers ~= nil and R.MarkerKeys ~= nil end,
@@ -603,7 +642,7 @@ K.Page({
 })
 
 K.Page({
-    key = "markersWorld", name = "World markers", parent = "qol", order = 32,
+    key = "markersWorld", name = "World markers", parent = "markers", order = 33,
     description = "A key that places the next world marker at your mouse pointer, in an order you choose.",
     keywords = KEYWORDS .. " world ground flare place cursor pointer",
     when = function() return R.Markers ~= nil and R.MarkerKeys ~= nil end,

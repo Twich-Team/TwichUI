@@ -605,7 +605,7 @@ Reset()
 UI.Open("markersTarget")
 local ed = R.MarkersPage.Frame("target")
 Check(ed.built and ed:IsShown(), "the target markers tab shows its order")
-Check(K.pages.markersTarget.parent == "qol" and K.pages.markersWorld.parent == "qol", "both are tabs of Quality of life")
+Check(K.pages.markersTarget.parent == "markers" and K.pages.markersWorld.parent == "markers", "both are tabs of Markers")
 local function Order() return table.concat(M.Order("target"), ",") end
 local tiles = ed.tiles
 Check(tiles[1].name.text == "Skull" and tiles[1].number.text == "1" and tiles[1].icon.texture:find("_8$"), "each marker shows its icon, name and number")

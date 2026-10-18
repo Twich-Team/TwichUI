@@ -35,7 +35,7 @@ for _, page in ipairs(K.list) do if page.def.host then c.canvases[page.name] = K
 for _, page in ipairs(K.list) do
   local under = { ["RestedXP guide window"] = "Addon skins", ["SpeakStone speech frame"] = "Addon skins", ["Chronicle appearance"] = "Journey Chronicle",
     ["Pin appearance"] = "Party pins", ["Notification appearance"] = "Notifications", ["Stat weights"] = "Gear comparison", ["Refreshment shares"] = "Mage",
-    ["Restock items"] = "Vendor restocking", ["Target markers"] = "Quality of life", ["World markers"] = "Quality of life", ["Marker bar"] = "Quality of life",
+    ["Restock items"] = "Vendor restocking", ["Target markers"] = "Markers", ["World markers"] = "Markers", ["Marker bar"] = "Markers",
     ["Class resource bar layout"] = "Class resource bars", ["Class resource bar appearance"] = "Class resource bars",
     ["Class resource bar effects"] = "Class resource bars",
     ["Chat cleaning channels"] = "Chat cleaning", ["Chat cleaning rules"] = "Chat cleaning", ["Chat cleaning live view"] = "Chat cleaning" }
@@ -244,7 +244,7 @@ assert(attune:GetTooltip():find("after reload"), "toggle change shows it needs a
 
 -- The overview links to one page per feature, in this order; every setting
 -- is on exactly one page (registration above refuses a repeat).
-assert(table.concat(pageOrder, ",") == "Notifications,Notification appearance,Quality of life,Chat cleaning,Food and drink,Vendor restocking,Auction House,Journey Chronicle,Chronicle appearance,Party pins,Pin appearance,Gear comparison,Mage,Class resource bars,Class resource bar layout,Class resource bar appearance,Class resource bar effects,Addon skins,RestedXP guide window,SpeakStone speech frame,Configuration sharing,Profiles,Troubleshooting", table.concat(pageOrder, ","))
+assert(table.concat(pageOrder, ",") == "Notifications,Notification appearance,Quality of life,Markers,Chat cleaning,Food and drink,Vendor restocking,Auction House,Journey Chronicle,Chronicle appearance,Party pins,Pin appearance,Gear comparison,Mage,Class resource bars,Class resource bar layout,Class resource bar appearance,Class resource bar effects,Addon skins,RestedXP guide window,SpeakStone speech frame,Configuration sharing,Profiles,Troubleshooting", table.concat(pageOrder, ","))
 for variable, page in pairs({
   TWICHUI_media = "TwichUI", TWICHUI_quietLogin = "TwichUI", 
   TWICHUI_gearHints = "Gear comparison", TWICHUI_gearTree = "Gear comparison", TWICHUI_gearBagStyle = "Gear comparison",
@@ -567,7 +567,7 @@ c.TwichUIDB.modules.qolSummons = false; summonToggle.setting.changed(); assert(n
 local qolRow = assert(rows["Quality of life"], "the Quality of life page has a status")
 assert(qolRow.status():find("Off"), qolRow.status())
 c.TwichUIDB.modules.qolDuels, c.TwichUIDB.modules.qolReleasePvP = true, true; summonToggle.setting.changed()
-assert(qolRow.status():find("2 of 9 on"), qolRow.status())   -- (with the three marker switches on its tabs)
+assert(qolRow.status():find("2 of 6 on"), qolRow.status())
 -- The RestedXP destination row: off, visible, and its tooltip says what it is doing right now.
 do
   local guideRow; for _, i in ipairs(initializers) do if i.setting and i.setting.name == "Mark RestedXP's destination" then guideRow = i end end

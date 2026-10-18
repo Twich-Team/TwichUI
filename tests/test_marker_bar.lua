@@ -575,7 +575,7 @@ local UI = R.SettingsUI
 UI.Open("markersBar")
 local P = R.MarkerBarPage
 local page = K.pages.markersBar
-Check(page and page.parent == "qol", "Marker bar is a tab of Quality of life")
+Check(page and page.parent == "markers", "Marker bar is a tab of Markers")
 local function Row(name) for _, r in ipairs(page.rows) do if r.data.name == name or (r.data.setting and r.data.setting.name == name) then return r end end error("no row " .. name) end
 local frame = P.Frame()
 Check(frame:IsVisible(), "the markers frame is shown with the page")
