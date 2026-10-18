@@ -35,7 +35,7 @@ local function Create()
     obj = LDB:NewDataObject(NAME, {
         type = "data source",
         label = "Chronicle",
-        icon = (R.ChronicleStyle and R.ChronicleStyle.icons.start) or R.ICON,
+        icon = R.PATH .. [[media\textures\chronicle-broker]],   -- a bound journal with a compass star (64 x 64)
         text = "Journey Chronicle",
         OnClick = function()
             if R.ChronicleWindow then R.ChronicleWindow:Toggle() end
