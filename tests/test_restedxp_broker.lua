@@ -223,4 +223,34 @@ do
   assert(#c.made == 1 and c.obj.text == "Guide on", "made once a data bar brings LibDataBroker")
 end
 
+-- A row from another addon (the Guide Rebinder): added once, below the built-in rows, closes the menu.
+do
+  local c = Boot()
+  local M = c.TwichUI.RestedXPBrokerMenu
+  local opened = 0
+  assert(not M.AddRow(nil) and not M.AddRow({ key = "x", label = "X" }) and not M.AddRow({ key = "", label = "X", act = function() end }),
+    "an invalid spec is refused")
+  assert(not M.AddRow({ key = "guide", label = "Dup", act = function() end }), "a built-in key is refused")
+  assert(M.AddRow({ key = "Rebinder", label = "Guide rebinder...", act = function() opened = opened + 1 end }), "added before the menu is built")
+  assert(not M.AddRow({ key = "Rebinder", label = "Again", act = function() end }), "a second add with the same key is ignored")
+  c.obj.OnClick(c.obj, "LeftButton")
+  local menu
+  for _, f in ipairs(c.frames) do if f.name == "TwichUIRestedXPMenu" then menu = f end end
+  local rows = {}
+  for _, f in ipairs(c.frames) do if f.kind == "Button" and f.parent == menu then rows[#rows + 1] = f end end
+  assert(#rows == 4 and rows[4].name.text == "Guide rebinder..." and rows[4].enabled, "a fourth, enabled row")
+  rows[4].scripts.OnClick(rows[4])
+  assert(opened == 1 and not menu.shown, "its action runs and the menu closes")
+  -- Added while the menu already exists.
+  assert(M.AddRow({ key = "Late", label = "Late", act = function() end, enabled = function() return false end, why = "Not now" }))
+  c.obj.OnClick(c.obj, "LeftButton")
+  rows = {}
+  for _, f in ipairs(c.frames) do if f.kind == "Button" and f.parent == menu then rows[#rows + 1] = f end end
+  assert(#rows == 5 and not rows[5].enabled and rows[5].note.text == "Not now", "a late row is greyed out with its reason")
+  -- RestedXP unreadable: the other addon's row still works.
+  c.rxp.settings.ToggleActive = nil
+  M.Refresh()
+  assert(rows[4].enabled, "an added row doesn't depend on RestedXP being readable")
+end
+
 print("PASSED")

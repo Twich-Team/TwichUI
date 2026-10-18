@@ -10,6 +10,7 @@
 -- it changes (its own minimap button, a profile change). Nothing in it is secure, so it works in combat
 -- too, and it listens for events only while it is open. A click anywhere else, Esc or a second click on the
 -- data bar entry closes it. What the rows do is the broker's (R.RestedXPBroker); this file only draws.
+-- Another addon may add a plain row below those with M.AddRow (see there); the menu closes when it is clicked.
 
 local R = TwichUI
 local SM = R.SpellMenu
@@ -89,6 +90,7 @@ local function NewRow(spec)
     row:SetScript("OnClick", function(self)
         local s = self.spec
         if s.enabled and not s.enabled() then return end
+        if s.external then M.Close() end
         s.act()
         if menu and menu:IsShown() then M.Refresh() end
     end)
@@ -99,7 +101,7 @@ local function Fill(row)
     local K = Palette()
     local s = row.spec
     local B = Broker()
-    local usable = B.GuideOn() ~= nil
+    local usable = s.external or B.GuideOn() ~= nil   -- another addon's row doesn't depend on RestedXP being readable
     local enabled = usable and (not s.enabled or s.enabled())
     row.name:SetText(s.label)
     Paint(row.name, enabled and K.text or K.stone)
@@ -176,6 +178,32 @@ local function Render()
         y = y - ROW_H
     end
     menu:SetHeight(-y + pad)
+end
+
+---------------------------------------------------------------------------
+-- A row from another addon
+---------------------------------------------------------------------------
+-- spec = { key = "unique", label = "Text...", act = function, enabled = function (optional), why = "short
+-- note shown while greyed out" (optional) }. A plain row, added once per key below the built-in ones: a
+-- second call with the same key is ignored, and so is a spec that isn't valid. Returns whether it was added.
+function M.AddRow(spec)
+    if type(spec) ~= "table" or type(spec.key) ~= "string" or spec.key == ""
+        or type(spec.label) ~= "string" or type(spec.act) ~= "function"
+        or (spec.enabled ~= nil and type(spec.enabled) ~= "function") then
+        return false
+    end
+    for _, s in ipairs(SPEC) do if s.key == spec.key then return false end end
+    local row = {
+        key = spec.key, label = spec.label, act = spec.act, enabled = spec.enabled,
+        why = type(spec.why) == "string" and spec.why or nil,
+        plain = true, external = true,
+    }
+    SPEC[#SPEC + 1] = row
+    if menu then
+        rows[#SPEC] = NewRow(row)
+        M.Refresh()
+    end
+    return true
 end
 
 ---------------------------------------------------------------------------
