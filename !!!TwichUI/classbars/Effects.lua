@@ -6,7 +6,8 @@
 -- and nothing runs. The bar is complete without any of this.
 --
 -- What is drawn, honestly: these are flat tinted textures and, for the Mage preset, a few small star-shaped glow
--- textures (Blizzard's own Interface\Cooldown\star4, the one its cooldown "bling" uses) that rise and fade. They
+-- textures (Blizzard's own Interface\Cooldown\star4, the one its cooldown "bling" uses) that rise and fade, and for the
+-- Rogue preset, a thin bright edge with a fading streak that slides along the combo point bar. They
 -- are particle-like, not a particle system: the game's model and particle APIs are not used and no asset of ours
 -- is added. Motion runs on the shared driver (Anim.lua) only while an effect is playing.
 --
@@ -334,3 +335,223 @@ end
 frost.Release = frost.Stop
 
 FX.Register(frost)
+
+---------------------------------------------------------------------------
+-- Rogue: the blade's glint. When the combo points are all lit, a thin bright edge with a short trailing streak
+-- slides once across the combo bar, like light running along a blade. Only the Rogue's combo point bar (a Druid in
+-- Cat Form has the same bar but no class touch of its own yet). Needs motion, so it draws nothing under reduced
+-- motion (the highlight still plays).
+---------------------------------------------------------------------------
+local GLINT_TIME, GLINT_EDGE, GLINT_TRAIL = 0.45, 3, 16
+local STEEL = { 0.92, 0.94, 1.0 }
+
+local function GlintStep(self, dt)
+    local bar = self.bar
+    self.t = self.t + dt
+    local u = self.t / GLINT_TIME
+    if u >= 1 then
+        self.edge:Hide()
+        self.trail:Hide()
+        return true
+    end
+    local a = math.sin(PI * u)
+    local x = bar.edge + u * math.max(0, bar.innerW - GLINT_EDGE)
+    self.edge:ClearAllPoints()
+    self.edge:SetPoint("LEFT", bar.fx, "LEFT", x, 0)
+    self.edge:SetAlpha(0.85 * a)
+    self.trail:SetAlpha(0.35 * a)
+    return false
+end
+
+local glint = { id = "glint", setting = "effectsClass" }
+
+function glint.Applies(view, ctx, slot)
+    return ctx.class == "ROGUE" and view.key == "COMBO_POINTS" and slot == "secondary"
+end
+
+function glint.Attach(bar)
+    local edge = bar.fx:CreateTexture(nil, "ARTWORK", nil, 3)
+    edge:SetTexture(WHITE)
+    edge:SetBlendMode("ADD")
+    edge:SetVertexColor(STEEL[1], STEEL[2], STEEL[3], 1)
+    edge:Hide()
+    local trail = bar.fx:CreateTexture(nil, "ARTWORK", nil, 3)
+    trail:SetTexture(WHITE)
+    trail:SetBlendMode("ADD")
+    trail:SetVertexColor(STEEL[1], STEEL[2], STEEL[3], 1)
+    if CreateColor and trail.SetGradient then   -- fades out behind the edge
+        trail:SetGradient("HORIZONTAL", CreateColor(STEEL[1], STEEL[2], STEEL[3], 0), CreateColor(STEEL[1], STEEL[2], STEEL[3], 1))
+    end
+    trail:Hide()
+    return { bar = bar, edge = edge, trail = trail, t = 0, Step = GlintStep }
+end
+
+function glint.Play(inst)
+    if FX.Reduced() then return end
+    local bar = inst.bar
+    if not bar.innerW then return end
+    inst.t = 0
+    inst.edge:SetSize(GLINT_EDGE, bar.innerH)
+    inst.edge:SetAlpha(0)
+    inst.edge:Show()
+    inst.trail:ClearAllPoints()
+    inst.trail:SetPoint("RIGHT", inst.edge, "LEFT", 0, 0)   -- follows the edge
+    inst.trail:SetSize(GLINT_TRAIL, bar.innerH)
+    inst.trail:SetAlpha(0)
+    inst.trail:Show()
+    if not A.Add(inst) then
+        inst.edge:Hide()
+        inst.trail:Hide()
+    end
+end
+
+function glint.Update(inst, view, quiet)
+    if FX.Rising(inst, Percent(view), 100, quiet) then glint.Play(inst) end
+end
+
+function glint.Stop(inst)
+    A.Remove(inst)
+    inst.edge:Hide()
+    inst.trail:Hide()
+    inst.primed, inst.armed, inst.pct = nil, nil, nil
+end
+glint.Release = glint.Stop
+
+FX.Register(glint)
+
+---------------------------------------------------------------------------
+-- Rogue: venom drips. When combo points are spent (the count falls to 0 through a real power change), one drop falls
+-- down the combo bar for each point that was spent, staggered, each with a few soft green puffs drifting around it,
+-- and they fade. It is decoration tied to what the bar really knows, the points going away; it says nothing about
+-- whether any poison is applied, which the bars cannot see. The Rogue's combo bar only; nothing under reduced motion.
+-- Setting: effectsPoison.
+-- The two textures are ours (media\classbars\): venom-drip.tga is the project's own rendered drop, scaled down to
+-- 32x128, and venom-puff.tga a generated soft cloud puff (32x32, white, tinted when drawn). The puffs are the
+-- "particle cloud": particle-like tinted textures moved by the shared driver, not the game's particle system. At most
+-- 5 drops and 15 puffs exist, made once per bar.
+---------------------------------------------------------------------------
+local DRIP_TEXTURE = R.PATH .. [[media\classbars\venom-drip.tga]]
+local PUFF_TEXTURE = R.PATH .. [[media\classbars\venom-puff.tga]]
+local DRIPS, PUFFS, DRIP_LIFE, DRIP_DELAY = 5, 3, 0.75, 0.07
+local VENOM = { 0.5, 0.9, 0.25 }
+local DRIP_COLUMNS = { 3, 1, 5, 2, 4 }   -- fewer drops spread out instead of bunching on the left
+-- where each puff sits around the drop's bulb (pixels at a 28 px drop), and where it drifts to
+local PUFF_AT = { { -7, 2 }, { 7, -1 }, { 2, -8 } }
+
+local function DripStep(self, dt)
+    local bar = self.bar
+    local live = false
+    local fall = bar.innerH
+    local k = self.dh / 28
+    for i = 1, DRIPS do
+        local d = self.drips[i]
+        if d.on then
+            d.t = d.t + dt
+            if d.t >= DRIP_LIFE * 1.2 then
+                d.on = false
+                d.tex:Hide()
+                for j = 1, PUFFS do d.puffs[j]:Hide() end
+            elseif d.t >= 0 then
+                live = true
+                local u = math.min(1, d.t / DRIP_LIFE)
+                local bulbY = -(bar.edge + u * u * fall)            -- the bulb speeds up as it falls
+                local x = bar.edge + d.x
+                -- the drop: opaque, fading out over the last 40%
+                d.tex:SetAlpha(math.min(1, u * 8) * (u < 0.6 and 1 or (1 - u) / 0.4))
+                d.tex:ClearAllPoints()
+                d.tex:SetPoint("CENTER", bar.fx, "TOPLEFT", x, bulbY + 0.35 * self.dh)   -- the bulb is the lower end of the picture
+                d.tex:Show()
+                -- the cloud: puffs around the bulb that swell, drift outward and thin out, one after another
+                for j = 1, PUFFS do
+                    local p = d.puffs[j]
+                    local pu = (d.t - j * 0.05) / (DRIP_LIFE * 1.1)
+                    if pu > 0 and pu < 1 then
+                        local at = PUFF_AT[j]
+                        local size = (8 + 10 * pu) * k
+                        p:SetSize(size, size)
+                        p:SetAlpha(0.45 * math.sin(PI * pu))
+                        p:ClearAllPoints()
+                        p:SetPoint("CENTER", bar.fx, "TOPLEFT", x + at[1] * k * (1 + 0.8 * pu), bulbY + (at[2] + 6 * pu) * k)
+                        p:Show()
+                    else
+                        p:Hide()
+                    end
+                end
+            else
+                live = true
+            end
+        end
+    end
+    return not live
+end
+
+local venom = { id = "venom", setting = "effectsPoison" }
+
+function venom.Applies(view, ctx, slot)
+    return ctx.class == "ROGUE" and view.key == "COMBO_POINTS" and slot == "secondary"
+end
+
+function venom.Attach(bar)
+    local inst = { bar = bar, drips = {}, dh = 28, Step = DripStep }
+    for i = 1, DRIPS do
+        local tex = bar.fx:CreateTexture(nil, "ARTWORK", nil, 3)
+        tex:SetTexture(DRIP_TEXTURE)
+        tex:Hide()
+        local d = { tex = tex, on = false, t = 0, x = 0, puffs = {} }
+        for j = 1, PUFFS do
+            local puff = bar.fx:CreateTexture(nil, "ARTWORK", nil, 2)
+            puff:SetTexture(PUFF_TEXTURE)
+            puff:SetVertexColor(VENOM[1], VENOM[2], VENOM[3], 1)
+            puff:Hide()
+            d.puffs[j] = puff
+        end
+        inst.drips[i] = d
+    end
+    return inst
+end
+
+-- trigger: how many points were spent (a drop each), or "test".
+function venom.Play(inst, trigger)
+    if FX.Reduced() then return end
+    local bar = inst.bar
+    if not bar.innerW then return end
+    local n = type(trigger) == "number" and math.max(1, math.min(DRIPS, math.floor(trigger))) or DRIPS
+    inst.dh = math.max(20, math.min(36, bar.innerH * 2.5))   -- the drop is picture-sized to the bar, a quarter as wide as tall
+    for i = 1, DRIPS do
+        local d = inst.drips[i]
+        d.on = i <= n
+        if d.on then
+            d.t = -(i - 1) * DRIP_DELAY
+            d.x = bar.innerW * (DRIP_COLUMNS[i] - 0.5) / DRIPS
+            d.tex:SetSize(inst.dh / 4, inst.dh)
+            d.tex:SetAlpha(0)
+        end
+    end
+    if not A.Add(inst) then
+        for i = 1, DRIPS do inst.drips[i].on = false end
+    end
+end
+
+function venom.Update(inst, view, quiet)
+    local before = inst.prev
+    inst.prev = view.cur
+    if quiet or not inst.primed then
+        inst.primed = true
+        return
+    end
+    if before and before >= 1 and view.cur == 0 then venom.Play(inst, before) end
+end
+
+function venom.Stop(inst)
+    A.Remove(inst)
+    for i = 1, DRIPS do
+        local d = inst.drips[i]
+        d.on = false
+        d.tex:Hide()
+        for j = 1, PUFFS do d.puffs[j]:Hide() end
+    end
+    inst.primed, inst.prev = nil, nil
+end
+venom.Release = venom.Stop
+
+FX.Register(venom)

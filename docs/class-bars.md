@@ -128,7 +128,7 @@ invalid stored value reads as the default and is not erased; `0` and `false` are
 
 | Key | Holds |
 |---|---|
-| `ui.classBars` | Shared style: `show`, `fadeIdle`, `hideDead/Mounted/Vehicle`; `opacity`, `scale`, `placement`, `gap`, `segmentGap`, `<slot>On/Width/Height`; `texture`, `fillStyle`, `gradientDir`, `colorSource`, `color`, `color2`, `shade`, `smoothing`; `<slot>Text`, `font`, `fontSize`, `fontOutline`, `textColor`, `textPlace`; `effects*`. Ranges in `Config.LIMITS` |
+| `ui.classBars` | Shared style: `show`, `fadeIdle`, `hideDead/Mounted/Vehicle`; `opacity`, `scale`, `placement`, `gap`, `segmentGap`, `<slot>On/Width/Height`; `texture`, `fillStyle`, `gradientDir`, `colorSource`, `color`, `color2`, `shade`, `smoothing`; `<slot>Text`, `font`, `fontSize`, `fontOutline`, `textColor`, `textPlace`; `effects*` (including `effectsPoison`). Ranges in `Config.LIMITS` |
 | `ui.classBarsLook` | Background and border: a MenuStyle look (the same textures, LibSharedMedia and EllesmereUI choices as the Mage menus) |
 | `ui.classBarsOverrides` | `["CLASS:RESOURCE"] = { colorSource, color, text, show }`. At most 48 entries |
 | `ui.classBarsPosition` | `{ main = { x, y }, aux = { x, y } }`: the group centre in screen units from the screen centre. Never shared |
@@ -164,10 +164,12 @@ resource changes or the preview ends.
 |---|---|---|
 | Highlight at the threshold | `effectsAccent` | A soft tinted highlight over the bar (flat texture, additive, peak alpha 0.3, 0.5 s) when the resource rises through `effectsThreshold` (default 100%). Any bar and resource: combo points complete, rage reaches the top, mana is back to full |
 | Mage frost glints | `effectsClass` | Six small star-shaped glints (`Interface\Cooldown\star4`, Blizzard's own cooldown "bling" texture) rise from the mana bar and fade when mana is back to full. Mage mana bar only. Other classes have no preset yet |
+| Rogue blade glint | `effectsClass` | A thin bright edge (3 px) with a 16 px fading streak slides once along the combo point bar in 0.45 s when every combo point is lit. The Rogue's combo bar only (a Druid in Cat Form has the same bar but no touch yet). Two additive textures, no asset of ours |
+| Rogue venom drips | `effectsPoison` | When the combo count falls to 0 through a real power change (a finisher), one drop falls down the combo bar for each point spent (staggered, accelerating, fading over about 0.75 s), each with three soft green puffs that swell, drift outward and thin out around it: at most 5 drops and 15 puffs, made once per bar. Decoration tied to the points going away; it says nothing about poison being applied, which the bars cannot see (aura data). Losing a target (target or combo target change) is not a spend. Rogue combo bar only. Assets: `media/classbars/venom-drip.tga` (the project's own rendered drop, scaled to 32x128, 16 KB) and `venom-puff.tga` (a generated soft puff, 32x32, 4 KB), uncompressed 32-bit TGA |
 
 These are particle-like (tinted textures moved by the shared driver), not particles: the game's model and particle APIs
 and any asset of ours were not used. Reduced motion (`effectsReducedMotion`, its own setting, not the notification or
-settings-window ones): the highlight becomes a brief steady one and the glints are not drawn. Objects are made once per
+settings-window ones): the highlight becomes a brief steady one and the glints, the blade glint and the venom drips are not drawn. Objects are made once per
 bar in `Attach` and reused; nothing is created while playing; the driver holds at most 24 animated objects and refuses
 more rather than queueing.
 

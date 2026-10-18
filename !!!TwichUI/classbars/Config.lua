@@ -44,7 +44,7 @@ CB.DEFAULTS = {
     primaryText = "current", secondaryText = "current", tertiaryText = "none",
     font = "default", fontSize = 12, fontOutline = "outline", textColor = "fff0e8d2", textPlace = "center",
     -- effects (off until turned on)
-    effects = false, effectsAccent = true, effectsClass = true, effectsThreshold = 100, effectsReducedMotion = false,
+    effects = false, effectsAccent = true, effectsClass = true, effectsPoison = true, effectsThreshold = 100, effectsReducedMotion = false,
 }
 
 CB.LIMITS = {
@@ -89,7 +89,7 @@ CB.GROUPS = {
         "secondaryOn", "secondaryWidth", "secondaryHeight", "tertiaryOn", "tertiaryWidth", "tertiaryHeight" },
     appearance = { "texture", "fillStyle", "gradientDir", "colorSource", "color", "color2", "shade", "smoothing",
         "primaryText", "secondaryText", "tertiaryText", "font", "fontSize", "fontOutline", "textColor", "textPlace" },
-    effects = { "effects", "effectsAccent", "effectsClass", "effectsThreshold", "effectsReducedMotion" },
+    effects = { "effects", "effectsAccent", "effectsClass", "effectsPoison", "effectsThreshold", "effectsReducedMotion" },
 }
 
 local function Finite(v) return type(v) == "number" and v == v and v ~= math.huge and v ~= -math.huge end

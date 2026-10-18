@@ -333,7 +333,9 @@ K.Page({
         Check("EffectsAccent", "effectsAccent", "Highlight at the threshold",
             "A brief soft highlight over a bar when its resource rises to the threshold below: your combo points complete, your rage reaches the top, your mana comes back to full. It plays again only after the resource has dropped well below the threshold.", effects, EffectsOn, why)
         Check("EffectsClass", "effectsClass", "My class's touch",
-            "Adds the class touch where there is one. Mage: a few frost glints rise from the mana bar when mana comes back to full. Other classes have none yet, so this changes nothing for them.", effects, EffectsOn, why)
+            "Adds the class touch where there is one. Mage: a few frost glints rise from the mana bar when mana comes back to full. Rogue: a thin bright edge slides once along the combo points bar when all of them are lit, like light along a blade. Other classes have none yet, so this changes nothing for them.", effects, EffectsOn, why)
+        Check("EffectsPoison", "effectsPoison", "Rogue: venom drips",
+            "Rogue only. When your combo points are spent, a green drop falls down the combo points bar for each point that was spent, with a few soft green puffs drifting around it. It is decoration tied to the points going away; it does not mean any poison is applied, which the bars cannot see. Needs Effects on; with reduced motion nothing is drawn.", effects, EffectsOn, why)
         Under(K.Slider(Shared("EffectsThreshold", "effectsThreshold", NUMBER, "Threshold", function(v) CB.Set("effectsThreshold", math.floor(v + 0.5)) end),
             CB.LIMITS.effectsThreshold[1], CB.LIMITS.effectsThreshold[2],
             "The level, in percent of the bar, a resource rises to for the highlight. 100 is full. For combo points, 100 is every segment lit."), effects, EffectsOn, why)

@@ -999,6 +999,127 @@ do
 end
 
 do
+  -- the Rogue's blade glint: the combo bar only, on completion only, nothing under reduced motion
+  Reset(); World("ROGUE"); W.combo = 2
+  On(); EnterWorld(); CB.Set("effects", true); CB.Set("effectsAccent", false)
+  local seg, prim = Slot("secondary"), Slot("primary")
+  W.combo = 4; Fire("UNIT_POWER_FREQUENT", "player", "COMBO_POINTS")
+  assert(A.Count() == 0, "four of five is not complete")
+  W.combo = 5; Fire("UNIT_POWER_FREQUENT", "player", "COMBO_POINTS")
+  assert(A.Count() == 1, "all five plays the glint")
+  local glint = {}
+  for _, f in ipairs(frames) do if f.kind == "texture" and f.blend == "ADD" and f.parent == seg.fx and f.shown then glint[#glint + 1] = f end end
+  assert(#glint == 2, "an edge and its streak, on the combo bar")
+  Tick(2, 0.1)
+  local x1 = glint[1].points[1][4]
+  Tick(2, 0.1)
+  assert(glint[1].points[1][4] > x1 and glint[1].points[1][4] <= seg.edge + seg.innerW, "the edge slides along the bar")
+  assert(glint[1].height == seg.innerH, "and keeps to the bar's height")
+  Tick(20, 0.05)
+  assert(A.Count() == 0 and not glint[1].shown and not glint[2].shown, "then it is put away")
+  W.combo = 0; Fire("PLAYER_TARGET_CHANGED")
+  W.combo = 5; Fire("PLAYER_TARGET_CHANGED")
+  assert(A.Count() == 0, "a target that already has five is not a completion")
+  W.combo = 1; Fire("UNIT_POWER_FREQUENT", "player", "COMBO_POINTS")
+  W.combo = 5; Fire("UNIT_POWER_FREQUENT", "player", "COMBO_POINTS")
+  assert(A.Count() == 1, "spending and building again plays it again")
+  Tick(20, 0.05)
+  local before = created
+  W.combo = 1; Fire("UNIT_POWER_FREQUENT", "player", "COMBO_POINTS")
+  W.combo = 5; Fire("UNIT_POWER_FREQUENT", "player", "COMBO_POINTS")
+  Tick(20, 0.05)
+  assert(created == before, "no new frame when it plays again")
+  CB.Set("effectsReducedMotion", true)
+  W.combo = 1; Fire("UNIT_POWER_FREQUENT", "player", "COMBO_POINTS")
+  W.combo = 5; Fire("UNIT_POWER_FREQUENT", "player", "COMBO_POINTS")
+  assert(A.Count() == 0, "reduced motion: no sliding edge")
+  CB.Set("effectsReducedMotion", false); CB.Set("effectsClass", false)
+  W.combo = 1; Fire("UNIT_POWER_FREQUENT", "player", "COMBO_POINTS")
+  W.combo = 5; Fire("UNIT_POWER_FREQUENT", "player", "COMBO_POINTS")
+  assert(A.Count() == 0, "the class touch can be turned off")
+  CB.Set("effectsClass", true)
+  -- not on the energy bar, and not a Druid's
+  W.P[3] = 10; Fire("UNIT_POWER_FREQUENT", "player", "ENERGY")
+  W.P[3] = 100; Fire("UNIT_POWER_FREQUENT", "player", "ENERGY")
+  assert(A.Count() == 0, "energy has the highlight's setting only, which is off here")
+  World("DRUID"); W.ptype, W.token = 3, "ENERGY"; W.combo = 1
+  Fire("UNIT_DISPLAYPOWER", "player")
+  W.combo = 5; Fire("UNIT_POWER_FREQUENT", "player", "COMBO_POINTS")
+  assert(A.Count() == 0, "a Druid in Cat Form has no class touch yet")
+  Reset()
+end
+
+do
+  -- the Rogue's venom drips: one per spent point, on a real spend only
+  Reset(); World("ROGUE"); W.combo = 3
+  On(); EnterWorld(); CB.Set("effects", true); CB.Set("effectsAccent", false); CB.Set("effectsClass", false)
+  local seg = Slot("secondary")
+  local function Count(file)
+    local n = 0
+    for _, f in ipairs(frames) do
+      if f.kind == "texture" and f.parent == seg.fx and f.texture and f.texture:find(file, 1, true) and f.shown then n = n + 1 end
+    end
+    return n
+  end
+  local function Drips() return Count("venom-drip.tga") end
+  local function Puffs() return Count("venom-puff.tga") end
+  W.combo = 5; Fire("UNIT_POWER_FREQUENT", "player", "COMBO_POINTS")
+  assert(A.Count() == 0, "building points drips nothing")
+  W.combo = 0; Fire("UNIT_POWER_FREQUENT", "player", "COMBO_POINTS")
+  assert(A.Count() == 1, "spending them does")
+  Tick(3, 0.1)
+  assert(Drips() == 5, "a drip for each of the five spent: " .. Drips())
+  assert(Puffs() >= 5 and Puffs() <= 15, "with a cloud of puffs around them, a bounded number: " .. Puffs())
+  local drop
+  for _, f in ipairs(frames) do if f.texture and f.texture:find("venom-drip.tga", 1, true) and f.shown then drop = f break end end
+  assert(drop.width * 4 == drop.height and drop.height >= 20 and drop.height <= 36, "the drop keeps its proportions and is sized to the bar")
+  Tick(40, 0.05)
+  assert(A.Count() == 0 and Drips() == 0 and Puffs() == 0 and UpdateScripts() == 0, "they fade away, the cloud with them, and the driver stops")
+  W.combo = 2; Fire("UNIT_POWER_FREQUENT", "player", "COMBO_POINTS")
+  W.combo = 0; Fire("UNIT_POWER_FREQUENT", "player", "COMBO_POINTS")
+  Tick(3, 0.1)
+  assert(Drips() == 2, "two spent, two drips: " .. Drips())
+  Tick(40, 0.05)
+  W.combo = 4; Fire("PLAYER_TARGET_CHANGED")
+  W.combo = 0; Fire("PLAYER_TARGET_CHANGED")
+  W.combo = 3; Fire("COMBO_TARGET_CHANGED")
+  W.combo = 0; Fire("COMBO_TARGET_CHANGED")
+  assert(A.Count() == 0, "losing the target is not a spend")
+  W.combo = 3; Fire("UNIT_POWER_FREQUENT", "player", "COMBO_POINTS")
+  W.combo = 2; Fire("UNIT_POWER_FREQUENT", "player", "COMBO_POINTS")
+  assert(A.Count() == 0, "a partial spend is not the points going away")
+  W.combo = 0; Fire("UNIT_POWER_FREQUENT", "player", "COMBO_POINTS")
+  Tick(40, 0.05)
+  local before = created
+  for _ = 1, 3 do
+    W.combo = 4; Fire("UNIT_POWER_FREQUENT", "player", "COMBO_POINTS")
+    W.combo = 0; Fire("UNIT_POWER_FREQUENT", "player", "COMBO_POINTS")
+    Tick(40, 0.05)
+  end
+  assert(created == before, "no new frame when it plays again")
+  W.combo = 4; Fire("UNIT_POWER_FREQUENT", "player", "COMBO_POINTS")
+  W.combo = 0; Fire("UNIT_POWER_FREQUENT", "player", "COMBO_POINTS")
+  assert(A.Count() == 1)
+  W.dead = true; Fire("PLAYER_DEAD")
+  assert(A.Count() == 0 and Drips() == 0 and Puffs() == 0, "hiding stops them")
+  W.dead = false; Fire("PLAYER_ALIVE")
+  CB.Set("effectsReducedMotion", true)
+  W.combo = 4; Fire("UNIT_POWER_FREQUENT", "player", "COMBO_POINTS")
+  W.combo = 0; Fire("UNIT_POWER_FREQUENT", "player", "COMBO_POINTS")
+  assert(A.Count() == 0, "reduced motion: nothing moves")
+  CB.Set("effectsReducedMotion", false); CB.Set("effectsPoison", false)
+  W.combo = 4; Fire("UNIT_POWER_FREQUENT", "player", "COMBO_POINTS")
+  W.combo = 0; Fire("UNIT_POWER_FREQUENT", "player", "COMBO_POINTS")
+  assert(A.Count() == 0, "it has its own setting")
+  CB.Set("effectsPoison", true)
+  World("DRUID"); W.ptype, W.token = 3, "ENERGY"; W.combo = 4
+  Fire("UNIT_DISPLAYPOWER", "player")
+  W.combo = 0; Fire("UNIT_POWER_FREQUENT", "player", "COMBO_POINTS")
+  assert(A.Count() == 0, "a Druid has none")
+  Reset()
+end
+
+do
   -- sample transitions in the preview play the effects (the way to see the real trigger without a fight)
   Reset(); World("ROGUE"); W.combo = 0
   On(); EnterWorld(); CB.Set("effects", true)
@@ -1091,6 +1212,23 @@ do
   A.Add(a1); Tick(1, 5)
   assert(order[1] == A.MAX_STEP, "a hitch moves an effect no further than one step")
   A.Clear()
+end
+
+---------------------------------------------------------------------------
+-- 18. The effects' own textures exist, as valid uncompressed 32-bit TGAs of the sizes the code assumes
+---------------------------------------------------------------------------
+do
+  local function Header(name)
+    local f = assert(io.open(ROOT .. "media/classbars/" .. name, "rb"), name .. " is shipped")
+    local d = f:read("*a"); f:close()
+    local function u16(i) return d:byte(i) + d:byte(i + 1) * 256 end
+    return { type = d:byte(3), w = u16(13), h = u16(15), bpp = d:byte(17), size = #d }
+  end
+  local drip, puff = Header("venom-drip.tga"), Header("venom-puff.tga")
+  assert(drip.type == 2 and drip.bpp == 32 and drip.w == 32 and drip.h == 128 and drip.size == 18 + 32 * 128 * 4, "the drop is 32x128, 32 bit")
+  assert(puff.type == 2 and puff.bpp == 32 and puff.w == 32 and puff.h == 32 and puff.size == 18 + 32 * 32 * 4, "the puff is 32x32, 32 bit")
+  local f = assert(io.open(ROOT .. "classbars/Effects.lua")); local src = f:read("*a"); f:close()
+  assert(src:find([[media\classbars\venom-drip.tga]], 1, true) and src:find([[media\classbars\venom-puff.tga]], 1, true), "the code names exactly those files")
 end
 
 print("CLASS BARS TESTS PASSED")
