@@ -789,7 +789,7 @@ do
   -- what it says, its icon and its color: the defaults are what it always was, and nothing is saved until a choice
   assert(c.TwichUIDB.ui.pinsBroker == nil and c.TwichUIDB.ui.pinsBrokerMenu == nil, "nothing saved until a choice is made")
   local total, party = PW.Count()
-  assert(obj.text:find("pin") and obj.icon == "Interface\\Icons\\inv_misc_map02", "the count and the icon, as before")
+  assert(obj.text:find("pin") and obj.icon == c.TwichUI.PATH .. "media\\textures\\map-pins-broker", "the count and TwichUI's own icon")
   assert(obj.text:find(tostring(total), 1, true) and obj.text:find(("%d party"):format(party), 1, true))
   assert(BR.Set("text", "number") and obj.text == tostring(total), "the number alone")
   assert(BR.Set("text", "label") and obj.text == "Map Pins", "the words")

@@ -21,7 +21,7 @@ local loggedIn = false
 
 local function Enabled() return R:Enabled("partyPins") end
 
-local ICON = "Interface\\Icons\\inv_misc_map02"
+local ICON = R.PATH .. [[media\textures\map-pins-broker]]   -- a map with a gem-set pin and a spark (64 x 64)
 local LABEL = "Map Pins"
 
 -- A pin from another player has just arrived: for a few seconds the text says so, in its own color (and the
