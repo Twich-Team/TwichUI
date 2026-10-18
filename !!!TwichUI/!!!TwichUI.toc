@@ -137,6 +137,7 @@ modules\MageSellWindow.lua
 # Vendor restocking: keeps chosen items at a target in your bags, bought from merchants that sell them (off until
 # turned on; asks before buying unless you confirm otherwise; waits for the selling above to finish first)
 modules\Restock.lua
+modules\RestockPrompt.lua
 
 # RestedXP skin: a TwichUI theme and finish for the RestedXP guide window (off until turned on; uses
 # modules\MenuStyle.lua; needs RestedXP, and works without EllesmereUI)

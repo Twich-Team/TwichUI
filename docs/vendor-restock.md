@@ -1,9 +1,9 @@
 # Vendor restocking
 
-For anyone changing the feature. Code: `modules/Restock.lua` (rules, plan, purchases, summary), the settings in
+For anyone changing the feature. Code: `modules/Restock.lua` (rules, plan, purchases, summary), `modules/RestockPrompt.lua` (the question's window), the settings in
 `TwichUI_Settings/pages/Restock.lua` (on/off, purchase mode, spending limit) and `TwichUI_Settings/pages/RestockItems.lua`
 (the list, adding items, class suggestions), `modules.restock` in `Core.lua`, the two sharing groups in
-`setup/TwichConfig.lua`. Tests: `tests/test_restock.lua`, `tests/test_restock_settings.lua`, and the coexistence block at
+`setup/TwichConfig.lua`. Tests: `tests/test_restock.lua`, `tests/test_restock_prompt.lua`, `tests/test_restock_settings.lua`, and the coexistence block at
 the end of `tests/test_mage_sell.lua`. **Nothing here has been tried in the game**, and no purchase has been made by it.
 
 ## What it does
@@ -63,8 +63,13 @@ merchant call TwichUI makes is one that file makes:
 3. One plan (`RS.Plan`, read only). If a listing or an item's details haven't arrived, wait for `MERCHANT_UPDATE` /
    `GET_ITEM_INFO_RECEIVED` (or 1 s), at most three times, then plan with what is known; what isn't is left out with a
    reason.
-4. Ask: the question (`RS.QuestionText`) lists each item with how many, the price per item or per bundle, and the cost;
-   what falls short and why; the total, your money and the limit. Purchase buys that plan. Cancel, Esc, the merchant
+4. Ask: the question is TwichUI's own window (`modules/RestockPrompt.lua`, drawn with the shared `Look`): one row per
+   item (up to eight; the rest are counted in the total) with its icon, its name in the item's quality color, how many,
+   what you carry against the target, and the price with the g/s/c letters colored (`RS.ColorMoney`); a row that falls
+   short says how many and why; under the list a card with the total, your money and the limit, and what couldn't be
+   bought. It is built the first time it is needed and reuses one frame and its rows; Esc closes it through
+   `UISpecialFrames`. Where it can't be drawn, `RS.QuestionText` is asked with the game's own dialog, same words.
+   Purchase buys that plan. Cancel, Esc, the merchant
    closing, combat, or any change to the settings buys nothing (the question is put away, and a stale Purchase only
    says nothing was bought). Auto: straight on.
 5. One plan per visit. Bags changing afterwards, `MERCHANT_UPDATE`, or the question being cancelled never start

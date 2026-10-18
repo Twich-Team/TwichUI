@@ -200,6 +200,19 @@ function RS.MoneyText(copper)
     return table.concat(parts, " ")
 end
 
+-- The same with the letters colored as the game colors its coins (the question's prices and totals).
+RS.COIN_COLORS = { g = "ffffd700", s = "ffc7c7cf", c = "ffeda55f" }
+function RS.ColorMoney(copper)
+    copper = math.max(0, math.floor(tonumber(copper) or 0))
+    local g, s, c = math.floor(copper / 10000), math.floor(copper / 100) % 100, copper % 100
+    local parts = {}
+    local function Add(n, unit) parts[#parts + 1] = ("%d|c%s%s|r"):format(n, RS.COIN_COLORS[unit], unit) end
+    if g > 0 then Add(g, "g") end
+    if s > 0 then Add(s, "s") end
+    if c > 0 or #parts == 0 then Add(c, "c") end
+    return table.concat(parts, " ")
+end
+
 -- For chat: the game's coin string where it has one.
 local function Money(copper)
     if type(GetMoneyString) == "function" then
@@ -812,6 +825,7 @@ end
 local function ClosePrompt()
     if prompt then
         prompt = nil
+        if R.RestockPrompt then R.RestockPrompt.Hide() end
         if StaticPopup_Hide then StaticPopup_Hide(PROMPT) end
     end
 end
@@ -1037,24 +1051,37 @@ local function Visit(mine, lead)
     ClosePrompt()
     local p = { visit = mine, gen = generation, plan = plan }
     prompt = p
-    R.Interact.Confirm(PROMPT, RS.QuestionText(plan, lead), function()
+    -- Still the question that was asked? (checked when Purchase is pressed, not only when it was shown)
+    local function Valid()
+        if prompt ~= p or p.visit ~= visit or p.gen ~= generation or not RS.MerchantOpen() or not RS.Enabled() then
+            prompt = nil
+            return false, "The merchant closed or your restock settings changed, so nothing was bought."
+        end
+        if InCombat() then return false, "Nothing was bought: combat started." end
+        return true
+    end
+    local function Accepted()
         if prompt ~= p then return end
         prompt = nil
         Begin(plan)
-    end, {
-        accept = "Purchase", cancel = CANCEL or "Cancel",
-        valid = function()
-            if prompt ~= p or p.visit ~= visit or p.gen ~= generation or not RS.MerchantOpen() or not RS.Enabled() then
-                prompt = nil
-                return false, "The merchant closed or your restock settings changed, so nothing was bought."
-            end
-            if InCombat() then return false, "Nothing was bought: combat started." end
-            return true
-        end,
-        onCancel = function()
-            if prompt == p then prompt = nil end
-            last = { outcome = "cancelled" }
-        end,
+    end
+    local function Cancelled()
+        if prompt == p then prompt = nil end
+        last = { outcome = "cancelled" }
+    end
+    -- TwichUI's own window, when it can be drawn; otherwise the game's dialog with the same words
+    local PR = R.RestockPrompt
+    if PR and PR.Show(plan, lead, function()
+        local ok, why = Valid()
+        if not ok then
+            prompt = nil
+            R.Print("%s", why)
+            return
+        end
+        Accepted()
+    end, Cancelled) then return end
+    R.Interact.Confirm(PROMPT, RS.QuestionText(plan, lead), Accepted, {
+        accept = "Purchase", cancel = CANCEL or "Cancel", valid = Valid, onCancel = Cancelled,
     })
 end
 
