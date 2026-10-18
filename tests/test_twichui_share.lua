@@ -97,7 +97,7 @@ local REGISTRY = {
   pinsLook = A.TwichUI.PinsLook.Look.DEFAULTS, pinsBrokerMenu = A.TwichUI.PinsLook.MenuLook.DEFAULTS,
   pinsEditorLook = A.TwichUI.PinsLook.EditorLook.DEFAULTS, speakstoneSkin = A.TwichUI.SpeakStoneSkin.Look.DEFAULTS,
   restedxpTimerLook = A.TwichUI.RestedXPSkin.Timers.Look.DEFAULTS, chronicleLook = A.TwichUI.ChronicleAppearance.LOOK_DEFAULTS,
-  notifyLook = A.TwichUI.NotifyLook.DEFAULTS,
+  notifyLook = A.TwichUI.NotifyLook.DEFAULTS, restockPromptStyle = A.TwichUI.RestockPrompt.Style.DEFAULTS,
 }
 for slot, defaults in pairs(REGISTRY) do
   for key in pairs(defaults) do

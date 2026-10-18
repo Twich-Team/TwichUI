@@ -27,6 +27,11 @@ Per profile, `TwichUIDB.ui.restock`:
 | `useLimit` | `false` (default): no limit of TwichUI's own. `true`: at most `limit` per merchant visit. |
 | `limit` | copper, 0–99,999,999 (default 10,000 = 1g). 0 is a real limit: nothing is bought. Kept while `useLimit` is off. |
 
+The question window's look is its own table, `TwichUIDB.ui.restockPromptStyle` (a `MenuStyle` look: `bgTexture`,
+`bgColor`, `bgOpacity`, `borderTexture`, `borderColor`, `borderOpacity`, `borderSize`; only values the player changed
+are saved, and an invalid one reads as the default without being erased). Per profile and shared with the restock
+settings, below.
+
 Account-wide, never in a profile or a share: `TwichUIDB.ui.restockAck = true` once the player confirmed automatic
 buying (`Profiles.ACCOUNT.ui`, `TwichConfig.LOCAL`). `RS.Mode()` is `"auto"` only with both `mode == "auto"` and the
 confirmation, so a profile, an import or another computer can choose automatic buying but can't authorize it.
@@ -123,6 +128,35 @@ that didn't arrive ("was asked for but it didn't show up in your bags. Nothing m
 ("Restocking stopped: the merchant closed."). Nothing is said for a visit with nothing to buy. An item the merchant
 sells that can't be bought at all ("Couldn't restock [X] (costs tokens…)") is said once a session per item and reason.
 
+## The question window's appearance
+
+Vendor restocking settings end with **Question window appearance**: background texture, color and opacity, and border
+texture, thickness, color and opacity, with **Preview** and **Reset**. It is the same choices as the refreshments
+panel and the pin windows (`K.Appearance` over `MenuStyle.New("restockPromptStyle", ...)`, `RestockPrompt.Style`), and
+changes only the frame: what is asked, the rows, the total and the Purchase and Cancel answers are untouched. The
+section is not tied to the "Restock from merchants" switch, so the look can be set before restocking is on.
+
+* **Default:** exactly what the window had: the TwichUI rim (`Look.Shell`'s bronze edge, corner brackets, grain and
+  shade) over `ff232221` at 98 %. The rim is a border id of the look's own (`RestockPrompt.LEDGER`, "TwichUI rim
+  (default)"); `MenuStyle.Apply` draws no edge for it and says `"custom"`, and the window then shows the rim.
+* **Any other border** (none, a solid line, the game's, EllesmereUI's, LibSharedMedia's) hides the rim, the corner
+  brackets, the grain and the shade (`Look.ShellParts`, which uses the pieces `Look.Frame` now keeps in
+  `frame.twichShell`). The title band moves in to the border's reach (`frame.twichBand`), and a border thicker than the
+  rim (4 px) pushes the content in by the difference and grows the window by twice it, so nothing is covered. A thinner
+  border leaves the content where it was. A textured background also drops the rim's grain and shade.
+* **Greyed out with a reason:** thickness, color and opacity while the rim is chosen (its width and colors are fixed) or
+  no border is.
+* **Not covered:** the title band, the list and the total panel keep their own tint (only the window behind them
+  fades); text fonts, sizes and colors, the rim's color, and the Purchase and Cancel buttons are the shared look's.
+* **Redraws:** a change while the window is open redraws it once, in place, with the same plan (`Redraw`; no frame,
+  texture or hook is created). A profile change goes through `MenuStyle`'s own notification. Border thickness is in
+  screen pixels, worked out when the window is shown or redrawn.
+* **Preview** (`RestockPrompt.TogglePreview`): the real window with three made-up items (real Classic reagent IDs, for
+  icons and names only), one short row and one "not bought" note, under a line saying it is a sample. Purchase and
+  Cancel only close it: it is never a question (`Restock.Asking()` stays false), calls nothing, reads no bags and no
+  merchant. It opens beside the settings window and goes with it (`R.OnSettingsClosed`). A real question that is up is
+  never replaced by it; a real question that arrives replaces it and opens in the window's usual place.
+
 ## Coexistence with selling
 
 `MageSell.Judge` keeps any item an enabled rule keeps stocked while restocking is on (reason `restock`, "On your vendor
@@ -189,3 +223,15 @@ Use cheap items (Light Feather, Rough Arrow, a vendor drink) at a merchant that 
 14. Share TwichUI's settings with a second client: the review names the restock changes and spending; applying merges;
     Undo restores. Restocking stays off on the receiver until turned on there.
 15. /reload: the list, mode and limit are kept; nothing of the last visit is.
+16. Question window appearance, default: compare the question with how it looked before (rim, corner brackets, grain,
+    title band, list, total panel, buttons).
+17. Preview: opens beside the settings window with three items, one short, a "not bought" line and the sample line;
+    Purchase closes it and buys nothing; pressing Preview again or Esc closes it; closing the settings closes it.
+18. Each border kind (none, solid at 1 / 4 / 12 / 16 px, a game border, an EllesmereUI border): the rim goes, the
+    title band and close box sit inside the border, the rows, the total and both buttons are clear of it, the window
+    stays on screen. Background none, a color, a texture, opacity 0 and 100: text, icons and buttons stay solid.
+19. Open the real question, then change the look in the settings: it redraws in place; Purchase and Cancel still answer.
+20. A different UI scale and a small game window: the border is the thickness chosen and the window fits the screen.
+21. Reset: the look is back; the list, mode and limit are as they were. Switch profiles: the look follows the profile.
+22. Share TwichUI's settings: the Vendor restocking group includes the look; the review shows it; applying changes only
+    the look.

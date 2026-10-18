@@ -168,6 +168,52 @@ useLimit:SetValue(false)
 Check(RS.SpendLimit() == nil and RS.Get("limit") == 0, "off: no limit, and the amount is kept for next time")
 
 ---------------------------------------------------------------------------
+-- 1b. The question window's appearance: its controls, the greyed-out ones with a reason, Preview and Reset
+---------------------------------------------------------------------------
+do
+  local PR = R.RestockPrompt
+  local Style = PR.Style
+  local rowsByName, header = {}, false
+  for _, row in ipairs(K.pages.restock.rows) do
+    if row.data and row.data.name then rowsByName[row.data.name] = row end
+    if row.setting and row.setting.variable then rowsByName[row.setting.variable] = row end
+    if not row.setting and not row.click and row.data.name == "Question window appearance" then header = true end
+  end
+  Check(header, "a section for the question window's look")
+  for _, suffix in ipairs({ "BgTexture", "BgColor", "BgOpacity", "BorderTexture", "BorderSize", "BorderColor", "BorderOpacity" }) do
+    Check(S.variables["TWICHUI_restockPrompt" .. suffix], suffix .. " is on the page")
+  end
+  local size, color, opacity = rowsByName.TWICHUI_restockPromptBorderSize, rowsByName.TWICHUI_restockPromptBorderColor, rowsByName.TWICHUI_restockPromptBorderOpacity
+  Check(size and color and opacity and rowsByName.TWICHUI_restockPromptBgTexture:Enabled(), "the rows are there")
+  Check(not size:Enabled() and size:DisabledReason():find("fixed width", 1, true), "the rim's thickness is greyed out, and says why")
+  Check(not color:Enabled() and color:DisabledReason():find("own colors", 1, true) and not opacity:Enabled(), "and its color and opacity")
+  S.variables.TWICHUI_restockPromptBorderTexture:SetValue("solid")
+  Check(size:Enabled() and color:Enabled() and opacity:Enabled(), "another border can be sized, colored and faded")
+  Check(Style.Get("borderTexture") == "solid" and c.TwichUIDB.ui.restockPromptStyle.borderTexture == "solid", "saved in its own table")
+  S.variables.TWICHUI_restockPromptBorderTexture:SetValue("none")
+  Check(not size:Enabled() and size:DisabledReason():find("o border is drawn", 1, true), "no border: greyed out, and says why")
+  S.variables.TWICHUI_restockPromptBorderTexture:SetValue(PR.LEDGER)
+  S.variables.TWICHUI_restockPromptBgOpacity:SetValue(40)
+  Check(Style.Get("bgOpacity") == 40 and RS.Get("mode") == "ask" and RS.Get("limit") == 0 and #RS.Rules() == 0, "only the look is written")
+
+  -- Preview works whether or not restocking is on, and buys nothing
+  c.UISpecialFrames = c.UISpecialFrames or {}
+  local preview = rowsByName["Preview"]
+  R:SetEnabled("restock", false)
+  Check(preview and preview:Enabled(), "Preview is there with restocking off")
+  preview.click()
+  Check(PR.IsPreview(), "Preview shows the window")
+  preview.click()
+  Check(not PR.IsShown(), "and puts it away")
+
+  local reset = rowsByName["Question window appearance"]
+  Check(reset and reset.click, "a reset for the look")
+  S.ClickReset(reset)
+  Check(c.TwichUIDB.ui.restockPromptStyle == nil and Style.Get("bgOpacity") == Style.DEFAULTS.bgOpacity, "Reset puts the look back")
+  Check(RS.Get("mode") == "ask", "and leaves how it buys alone")
+end
+
+---------------------------------------------------------------------------
 -- 2. The Restock items tab
 ---------------------------------------------------------------------------
 local P = R.RestockItemsPage

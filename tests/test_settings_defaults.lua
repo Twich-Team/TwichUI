@@ -443,8 +443,10 @@ do
   c.TwichUIDB.ui.mageTravelText = "none"
   c.TwichUIDB.ui.foodDrink = { size = 50 }
   local preview, reset
+  local inMenus = false   -- other pages have a "Preview" button too (Vendor restocking's comes first)
   for _, i in ipairs(initializers) do
-    if i.click and i.data.name == "Preview" and not preview then preview = i end   -- the menus' (the panel's comes later)
+    if not i.setting and not i.click then inMenus = i.data.name == "Broker menu appearance" end
+    if inMenus and i.click and i.data.name == "Preview" and not preview then preview = i end   -- the menus' (the panel's comes later)
     if i.click and i.data.name == "Menu appearance" then reset = i end
   end
   assert(preview and reset, "a preview and a reset")

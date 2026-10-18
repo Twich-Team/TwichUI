@@ -12,6 +12,8 @@
 --   Look.Button(parent, label, w, kind, onClick)    kind: "primary", "secondary" or "danger"; a raised face
 --   Look.Recess(frame), Look.Raise(button), Look.Panel(frame), Look.Tag(parent, text)   the depth controls share
 --   Look.Frame(f, w, h, headerH), Look.Header(f, height), Look.Fade(texture, ...)   the rim and tonal layers
+--   Look.ShellParts(f, rim, tone)   shows or hides the rim and the tonal layers Look.Frame drew (a window whose
+--                               border the player sets); Look.Header leaves the band at f.twichBand
 --   Look.Motion                 the one place motion lives: timings, Fader objects, one driver that only runs
 --                               while something is easing, and Settle() (everything to its resting state)
 --   Look.Hover(frame, ...)      an eased wash under the pointer, for buttons and fields
@@ -551,18 +553,23 @@ local function Bracket(f, corner, inset, len, c, a)
     local v = Wg.Solid(f, "ARTWORK", c, a)
     v:SetSize(1, len)
     v:SetPoint(corner, x, y)
+    return h, v
 end
 
 function Wg.Frame(f, w, h, headerH)
     f:SetBackdrop({ bgFile = WHITE, edgeFile = WHITE, edgeSize = 1 })
     f:SetBackdropColor(pal.bg[1], pal.bg[2], pal.bg[3], 0.98)
     f:SetBackdropBorderColor(pal.ink[1], pal.ink[2], pal.ink[3], 1)
-    Wg.Shade(f, { pal.bronzeHi, 0.95 }, { pal.bronzeHi, 0.80 }, { pal.bronze, 0.90 }, { pal.bronze, 0.90 }, 1)
-    Wg.Shade(f, { pal.bronze, 0.90 }, { pal.bronze, 0.80 }, { pal.rimLo, 0.95 }, { pal.rimLo, 0.95 }, 2)
-    Wg.Shade(f, { pal.ink, 0.60 }, { pal.ink, 0.50 }, { pal.ink, 0.40 }, { pal.ink, 0.45 }, 3)
-    Wg.Shade(f, { pal.gold, 0.12 }, { pal.gold, 0.05 }, { pal.ink, 0.22 }, { pal.ink, 0.22 }, 4)
+    -- the pieces are kept (f.twichShell) so a window whose look the player sets can hide the rim, or the grain
+    local rim, tone = {}, {}
+    local function Keep(into, lines) for _, t in pairs(lines) do into[#into + 1] = t end end
+    Keep(rim, Wg.Shade(f, { pal.bronzeHi, 0.95 }, { pal.bronzeHi, 0.80 }, { pal.bronze, 0.90 }, { pal.bronze, 0.90 }, 1))
+    Keep(rim, Wg.Shade(f, { pal.bronze, 0.90 }, { pal.bronze, 0.80 }, { pal.rimLo, 0.95 }, { pal.rimLo, 0.95 }, 2))
+    Keep(rim, Wg.Shade(f, { pal.ink, 0.60 }, { pal.ink, 0.50 }, { pal.ink, 0.40 }, { pal.ink, 0.45 }, 3))
+    Keep(rim, Wg.Shade(f, { pal.gold, 0.12 }, { pal.gold, 0.05 }, { pal.ink, 0.22 }, { pal.ink, 0.22 }, 4))
     for _, corner in ipairs({ "TOPLEFT", "TOPRIGHT", "BOTTOMLEFT", "BOTTOMRIGHT" }) do
-        Bracket(f, corner, 6, 8, pal.gold, 0.5)
+        local a, b = Bracket(f, corner, 6, 8, pal.gold, 0.5)
+        rim[#rim + 1], rim[#rim + 2] = a, b
     end
     -- tonal layers: light falls from the top, the bottom settles
     local top = f:CreateTexture(nil, "BACKGROUND")
@@ -575,8 +582,19 @@ function Wg.Frame(f, w, h, headerH)
     bottom:SetPoint("BOTTOMRIGHT", -5, 5)
     bottom:SetHeight(120)
     Wg.Fade(bottom, pal.ink, 0, 0.30)
+    tone[1], tone[2] = top, bottom
     -- a light grain, a third of the Chronicle's
-    S.Speckle(f, w, h, math.floor(w * h / 7500))
+    Keep(tone, S.Speckle(f, w, h, math.floor(w * h / 7500)))
+    f.twichShell = { rim = rim, tone = tone }
+end
+
+-- Shows or hides the rim (the bronze edge and its corner brackets) and the tonal layers and grain that
+-- Wg.Frame drew. For a window whose background and border the player sets; nothing else of the frame changes.
+function Wg.ShellParts(f, rim, tone)
+    local shell = f and f.twichShell
+    if not shell then return end
+    for _, t in ipairs(shell.rim) do t:SetShown(rim and true or false) end
+    for _, t in ipairs(shell.tone) do t:SetShown(tone and true or false) end
 end
 
 -- The title band: a surface a step above the window with a warm sheen along its top, a slight settling toward
@@ -602,6 +620,8 @@ function Wg.Header(f, height)
     shadow:SetHeight(1)
     shadow:SetPoint("TOPLEFT", line, "BOTTOMLEFT", 0, 0)
     shadow:SetPoint("TOPRIGHT", line, "BOTTOMRIGHT", 0, 0)
+    f.twichBand = band   -- the rest of the band is anchored to it: moving it moves the band
+    return band
 end
 
 

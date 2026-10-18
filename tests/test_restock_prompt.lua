@@ -6,7 +6,12 @@ dofile(TESTS .. "harness.lua")
 --   * Purchase buys the approved plan (checked again, as before); Cancel, the close box and Esc buy nothing;
 --   * putting it away for the code's own reasons (merchant closed, rule edited, combat) answers nothing;
 --   * a stale Purchase says nothing was bought; asking again reuses the same frame and rows;
---   * where it can't be drawn, the game's dialog is used with the same words.
+--   * where it can't be drawn, the game's dialog is used with the same words;
+--   * its background and border are the player's (RestockPrompt.Style): the default is the TwichUI rim, any other
+--     border replaces it and the window grows so the content keeps clear of it, a change redraws an open window,
+--     Reset puts it back, and only the look moves (rows, texts, buttons and answers are the same);
+--   * the settings page's preview shows the real window with made-up items: it buys nothing, never replaces a real
+--     question, is replaced by one, and leaves the real window where it always opens.
 -- Stand-in frames keep their scripts, text, colors and shown state; nothing here is the game.
 
 local made = 0
@@ -130,7 +135,7 @@ end }
 c.BOUGHT = {}
 c.BuyMerchantItem = function(index, n) table.insert(c.BOUGHT, { index = index, n = n }) end
 
-for _, file in ipairs({ "chronicle/Style.lua", "Look.lua", "modules/Interact.lua", "modules/Restock.lua", "modules/RestockPrompt.lua" }) do
+for _, file in ipairs({ "chronicle/Style.lua", "Look.lua", "modules/Interact.lua", "modules/Borders.lua", "modules/MenuStyle.lua", "modules/Restock.lua", "modules/RestockPrompt.lua" }) do
   local chunk = assert(loadfile(ROOT .. file)); setfenv(chunk, c); chunk("!!!TwichUI", {})
 end
 c.TwichUIDB = { modules = {} }
@@ -302,6 +307,147 @@ do
   Check(#c.BOUGHT == 1, "and it buys on Purchase")
   Close()
   R.RestockPrompt = saved
+end
+
+---------------------------------------------------------------------------
+-- 6. The player's background and border
+---------------------------------------------------------------------------
+do
+  local Style = PR.Style
+  Check(Style and Style.DEFAULTS.borderTexture == PR.LEDGER and Style.DEFAULTS.bgTexture == "solid", "the default is the rim over a solid page")
+  Rules({ { id = 17020, target = 20, enabled = true }, { id = 4000, target = 10, enabled = true } })
+  c.MERCHANT = { { id = 17020, price = 500 }, { id = 4000, price = 20000, avail = 3 } }
+  Bags({ [1] = { 17020, 7 } })
+  local backdrops = {}
+  f.SetBackdrop = function(_, info) backdrops[#backdrops + 1] = info end
+  local function Pt(region, i) local p = region.points[i or 1]; return p and { p[3], p[4], p[5] } end
+  local function Shown(list) for _, t in ipairs(list) do if not t.shown then return false end end return #list > 0 end
+  local function Hidden(list) for _, t in ipairs(list) do if t.shown then return false end end return #list > 0 end
+
+  Reset(); Open()
+  local shell = f.twichShell
+  Check(shell and Shown(shell.rim) and Shown(shell.tone), "the default shows the rim, the grain and the shade")
+  do
+    local inkLines = {}
+    for _, line in pairs(f.edgeInk) do inkLines[#inkLines + 1] = line end
+    Check(#inkLines == 4 and Shown(inkLines), "and the dark line at the very edge that the backdrop used to draw")
+  end
+  Check(f.w == 460 and f.twichBand.points[1][4] == 4 and f.twichBand.points[1][5] == -4, "and the layout it always had: width " .. f.w)
+  local baseH, baseList = f.h, f.list.points[1]
+  local baseTitle = f.title.points[1]
+  Check(baseList[4] == 16 and baseTitle[4] == 16 and baseTitle[5] == -(44 / 2 + 4), "the content at its usual margin")
+  local baseTexts = { f.title.text, f.total.text, f.have.text, f.promise.text, Rows(f)[1].name.text, Rows(f)[1].cost.text }
+  Check(backdrops[#backdrops] and backdrops[#backdrops].edgeFile == nil, "the rim is drawn by the window, not as a backdrop edge")
+
+  -- a solid line 12 px thick replaces the rim; the window grows by the difference from the rim's own reach
+  Check(Style.Set("borderTexture", "solid") and Style.Set("borderSize", 12), "a border can be chosen")
+  Check(Hidden(shell.rim) and Hidden(shell.tone), "the rim and the grain are put away")
+  local inkLines = {}
+  for _, line in pairs(f.edgeInk) do inkLines[#inkLines + 1] = line end
+  Check(Hidden(inkLines), "and the rim's outer dark line")
+  Check(f.w == 460 + 2 * 8 and f.h == baseH + 2 * 8, "the window grows by twice the extra: " .. f.w .. " x " .. f.h)
+  Check(f.twichBand.points[1][4] == 12 and f.twichBand.points[1][5] == -12, "the title band sits inside the border")
+  Check(f.list.points[1][4] == 24 and f.list.points[1][5] == baseList[5] - 8 and f.title.points[1][4] == 24,
+    "the content is pushed in: list at " .. tostring(f.list.points[1][4]))
+  Check(f.close.points[1][2] == -18 and f.close.points[1][3] == -19, "and the close box with it")
+  Check(f.purchase and f.cancel.points[1][4] == -24, "the buttons keep clear of it")
+  Check(backdrops[#backdrops].edgeFile and backdrops[#backdrops].edgeSize == 12, "the border is drawn at the thickness chosen")
+  Check(f.total.text == baseTexts[2] and f.title.text == baseTexts[1] and Rows(f)[1].name.text == baseTexts[5]
+    and Rows(f)[1].cost.text == baseTexts[6] and #Rows(f) == 2, "only the look moved: the same texts and rows")
+  Check(PR.IsShown() and RS.Asking(), "and it is still asking")
+
+  -- no border: nothing to keep clear of
+  Style.Set("borderTexture", "none")
+  Check(f.w == 460 and f.twichBand.points[1][4] == 0, "no border: the band reaches the edge and the window is its usual width")
+  -- thinner than the rim: the content stays where it was
+  Style.Set("borderTexture", "solid"); Style.Set("borderSize", 2)
+  Check(f.w == 460 and f.list.points[1][4] == 16 and f.twichBand.points[1][4] == 2, "a thin line leaves the content where it was")
+
+  -- the answers are the same whatever it looks like
+  Style.Set("borderSize", 12)
+  f.purchase:Fire("OnClick")
+  Check(#c.BOUGHT == 1 and c.BOUGHT[1].n == 13 and not PR.IsShown(), "Purchase buys the approved plan with any border")
+  Close()
+  Reset(); Open(); f.cancel:Fire("OnClick")
+  Check(#c.BOUGHT == 0 and RS.Last().outcome == "cancelled", "and Cancel buys nothing")
+  Close()
+
+  -- opened with a saved look: drawn that way from the first frame
+  Reset(); Open()
+  Check(f.w == 476 and Hidden(shell.rim), "the next question opens with the saved look")
+  -- Reset: the defaults, nothing else touched
+  c.TwichUIDB.ui.restock.items[1].target = 20
+  local before = c.TwichUIDB.ui.restock
+  Style.Reset()
+  Check(c.TwichUIDB.ui.restockPromptStyle == nil and c.TwichUIDB.ui.restock == before, "Reset forgets the look and leaves the restock list alone")
+  Check(f.w == 460 and Shown(shell.rim) and Shown(shell.tone) and f.twichBand.points[1][4] == 4, "an open window is back to its default look")
+  f.cancel:Fire("OnClick")
+  Close()
+
+  -- invalid saved values never break it
+  c.TwichUIDB.ui.restockPromptStyle = { borderTexture = 7, borderSize = "wide", bgColor = "red", bgOpacity = 400 }
+  Reset(); Open()
+  Check(PR.IsShown() and f.w == 460 and Style.Get("borderSize") == 1 and Style.Get("bgOpacity") == 98, "damaged saved values read as the defaults")
+  f.cancel:Fire("OnClick")
+  Close()
+  c.TwichUIDB.ui.restockPromptStyle = nil
+end
+
+---------------------------------------------------------------------------
+-- 7. The settings page's preview
+---------------------------------------------------------------------------
+do
+  local anchor = { GetRight = function() return 900 end }
+  R.SettingsAnchor = function() return anchor end
+  Rules({ { id = 17020, target = 20, enabled = true } })
+  c.MERCHANT = { { id = 17020, price = 500 } }
+  Bags({})
+  Reset()
+  PR.TogglePreview()
+  Check(PR.IsShown() and PR.IsPreview() and #Rows(f) == 3, "the preview shows the window with three made-up items")
+  Check(f.lead.shown and f.lead.text:find("sample", 1, true) and f.lead.text:find("buys nothing", 1, true), "and says it is a sample: " .. tostring(f.lead.text))
+  Check(f.points[1][2] == anchor and f.points[1][3] == "TOPRIGHT", "beside the settings window")
+  Check(#c.POPUPS == 0 and not RS.Asking(), "it is not a question: no dialog, nothing pending")
+  f.purchase:Fire("OnClick")
+  Check(not PR.IsShown() and #c.BOUGHT == 0, "Purchase in the preview only closes it")
+  PR.TogglePreview(); PR.TogglePreview()
+  Check(not PR.IsShown(), "pressed again it goes away")
+  PR.TogglePreview(); f:Hide()
+  Check(not PR.IsShown() and #c.BOUGHT == 0 and #c.R_OUT == 0, "Esc closes it and says nothing")
+
+  -- a real question is never replaced by it
+  Reset(); Open()
+  Check(PR.IsShown() and not PR.IsPreview() and RS.Asking(), "a real question is up")
+  local rows = #Rows(f)
+  PR.TogglePreview()
+  Check(PR.IsShown() and not PR.IsPreview() and RS.Asking() and #Rows(f) == rows, "the preview leaves it alone")
+  f.cancel:Fire("OnClick")
+  Close()
+
+  -- and a real question replaces it, opening where it always does
+  PR.TogglePreview()
+  Check(PR.IsPreview(), "preview up")
+  Reset(); Open()
+  Check(PR.IsShown() and not PR.IsPreview() and RS.Asking() and not f.lead.shown, "a visit replaces the preview with the real question")
+  Check(f.points[1][2] == c.UIParent and f.points[1][4] == 0 and f.points[1][5] == 150, "in its usual place, not beside the settings")
+  f.purchase:Fire("OnClick")
+  Check(#c.BOUGHT == 1, "and Purchase buys, as ever")
+  Close()
+
+  -- the merchant closing does not take a preview away, and the settings closing does
+  PR.TogglePreview()
+  c.MERCHANT_UP = false; c.FireEvent("MERCHANT_CLOSED")
+  Check(PR.IsPreview(), "a merchant closing leaves the preview")
+  Check(R.SettingsLauncher and R.SettingsLauncher.Closed, "the settings launcher is there to tell it")
+  R.SettingsLauncher.Closed()
+  Check(not PR.IsShown(), "the settings window closing takes the preview with it")
+  -- ...but not a real question
+  Reset(); Open()
+  R.SettingsLauncher.Closed()
+  Check(PR.IsShown() and RS.Asking(), "and leaves a real question up")
+  f.cancel:Fire("OnClick")
+  Close()
+  R.SettingsAnchor = nil
 end
 
 if failures > 0 then

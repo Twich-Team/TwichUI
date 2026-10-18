@@ -933,10 +933,11 @@ local function Define()
     Switches(g, { "auctionPosting" })
 
     g = Group("restock", "Vendor restocking", { page = "restock",
-        note = "How restocking buys: asking first or automatically, and the spending limit for a visit. Whether restocking is on stays yours, and so does your confirmation that it may buy without asking." })
+        note = "How restocking buys: asking first or automatically, and the spending limit for a visit, and how the question window looks. Whether restocking is on stays yours, and so does your confirmation that it may buy without asking." })
     do
         local RS = R.Restock
         Table(g, { "ui", "restock" }, RS, { "mode", "useLimit", "limit" }, { mode = ENUM.restockMode })
+        Table(g, { "ui", "restockPromptStyle" }, R.RestockPrompt and R.RestockPrompt.Style, LOOK, LOOK_ENUMS)
         local idx = g.index.restock
         if idx and idx.mode and idx.useLimit and idx.limit then
             idx.mode.label, idx.useLimit.label, idx.limit.label = "Purchasing", "Limit spending per visit", "Spending limit per visit"
