@@ -28,7 +28,7 @@ pack.twichui = {
 
 ## What is in it
 
-One group per feature, each listing its settings explicitly (`Define` in TwichConfig.lua). Two groups are not flat and answer a small interface of their own (`usable`, `count`, `label`, `export`, `clean`, `plan`, `review`, `apply`, `restore`; their Undo records are kept in `twichUndo.weights` and `twichUndo.custom[group]`): stat weights and the restock list. A feature's own `DEFAULTS`
+One group per feature, each listing its settings explicitly (`Define` in TwichConfig.lua). Three groups are not flat and answer a small interface of their own (`usable`, `count`, `label`, `export`, `clean`, `plan`, `review`, `apply`, `restore`; their Undo records are kept in `twichUndo.weights` and `twichUndo.custom[group]`): stat weights, the restock list and chat cleaning's channels and rules. A feature's own `DEFAULTS`
 and `LIMITS` supply defaults and ranges, so the schema cannot drift from the feature.
 
 | Group | Holds |
@@ -40,6 +40,8 @@ and `LIMITS` supply defaults and ranges, so the schema cannot drift from the fea
 | Auction House | the Sell from Bags tab |
 | Vendor restocking | how it buys (`ui.restock.mode`: ask first or automatically), the spending limit for a visit (`useLimit`, `limit`). Not whether restocking is on, and not your confirmation that it may buy without asking (`ui.restockAck`) |
 | Restock items | the restock list: item IDs, targets and on/off, in order (merged by item on import: named items are set, new ones go at the end, nothing is removed). Never bag counts, merchants or purchases |
+| Chat cleaning | whether chat cleaning is on (`modules.chatClean`; the review says plainly when an import turns it on or off) |
+| Chat cleaning channels and rules | `ui.chatClean`: each channel's choice (by key: `zone:<id>` or `custom:<name>`) and the custom rules with the channels they apply to. Every key, flag, label and rule is checked as the feature checks its own (Lua patterns for shape and cost too); one bad entry refuses the group. Merged on import: a named channel takes the share's choice; a rule is matched by mode, case and text and takes the share's name, on/off and channels; new rules go at the end; nothing is removed. Undo puts the whole channel choice and rule list back. Never hidden messages, senders, counts or the repeat memory; a shared rule that matches every message is called out in the review |
 | Journey Chronicle | which events are recorded, sound, chat line, Welcome Back, the clock |
 | Chronicle appearance | the window's background, border, text and accents |
 | Party pins | clicks, labels, minimap, `/way`, the data bar entry, the sound (not whether pins are on) |
@@ -113,7 +115,7 @@ this session (a newer save is running on a stand-in that isn't saved).
 The review (the popup, `setup/Window.lua`) says where the settings come from (sender, the TwichUI version that made
 them, when), the profile they go to and how many other characters share it, that **only the values listed are
 replaced** (every other setting in the profile keeps its value), which features it **turns on or off**
-(`plan.turnsOn` / `plan.turnsOff`, for switches in the share), what it means for spending (`plan.spending`, from a group's `disclose`: vendor restocking's purchase mode, whether automatic buying is confirmed here, the spending limit and how many restock items it turns on), what needs a reload (named, never done for you),
+(`plan.turnsOn` / `plan.turnsOff`, for switches in the share), what it means for spending (`plan.spending`, from a group's `disclose`: vendor restocking's purchase mode, whether automatic buying is confirmed here, the spending limit and how many restock items it turns on; chat cleaning turning on or off and how many channel choices and rules change), what needs a reload (named, never done for you),
 what the share doesn't hold or this version can't use (skipped features and counts), what always stays yours, and that
 Undo can put the replaced values back (last import only). Hovering a feature lists its values, yours first.
 

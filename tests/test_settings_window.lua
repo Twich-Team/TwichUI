@@ -208,7 +208,7 @@ do
       assert(inSide[page.key], page.key .. " is in the sidebar")
     end
   end
-  assert(children == 8, "eight secondary pages: " .. children)
+  assert(children == 11, "eleven secondary pages: " .. children)
   assert(#K.Tabs("overview") == 0 and #K.Tabs("qol") == 0, "a feature without pages under it has no tabs")
   assert(#K.Tabs("notifications") == 2 and K.Tabs("notifications")[2].key == "notificationsLook", "Notifications has its appearance tab")
   local tabs = {}

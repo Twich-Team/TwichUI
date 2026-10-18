@@ -140,6 +140,12 @@ modules\MageSellWindow.lua
 modules\Restock.lua
 modules\RestockPrompt.lua
 
+# Chat cleaning: hides unwanted messages in the public channels you choose (General, Trade, ...) through the game's
+# chat message filters, before any chat frame (or EllesmereUI's chat, which uses the same frames) shows them. Off until
+# turned on; whispers, group, guild and system messages are never looked at. Matching is in ChatCleanMatch.lua.
+modules\ChatCleanMatch.lua
+modules\ChatClean.lua
+
 # RestedXP skin: a TwichUI theme and finish for the RestedXP guide window (off until turned on; uses
 # modules\MenuStyle.lua; needs RestedXP, and works without EllesmereUI)
 modules\RestedXPSkin.lua
@@ -204,6 +210,7 @@ diag\Sharing.lua
 diag\Saved.lua
 diag\Memory.lua
 diag\Pins.lua
+diag\ChatClean.lua
 diag\Status.lua
 diag\SupportWindow.lua
 diag\Window.lua

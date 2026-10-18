@@ -35,7 +35,8 @@ for _, page in ipairs(K.list) do if page.def.host then c.canvases[page.name] = K
 for _, page in ipairs(K.list) do
   local under = { ["RestedXP guide window"] = "Addon skins", ["SpeakStone speech frame"] = "Addon skins", ["Chronicle appearance"] = "Journey Chronicle",
     ["Pin appearance"] = "Party pins", ["Notification appearance"] = "Notifications", ["Stat weights"] = "Gear comparison", ["Refreshment shares"] = "Mage",
-    ["Restock items"] = "Vendor restocking" }
+    ["Restock items"] = "Vendor restocking",
+    ["Chat cleaning channels"] = "Chat cleaning", ["Chat cleaning rules"] = "Chat cleaning", ["Chat cleaning live view"] = "Chat cleaning" }
   assert((page.parent and K.pages[page.parent].name) == under[page.name], page.name .. " is in its place")
 end
 
@@ -238,7 +239,7 @@ assert(attune:GetTooltip():find("after reload"), "toggle change shows it needs a
 
 -- The overview links to one page per feature, in this order; every setting
 -- is on exactly one page (registration above refuses a repeat).
-assert(table.concat(pageOrder, ",") == "Notifications,Notification appearance,Quality of life,Food and drink,Vendor restocking,Auction House,Journey Chronicle,Chronicle appearance,Party pins,Pin appearance,Gear comparison,Mage,Addon skins,RestedXP guide window,SpeakStone speech frame,Configuration sharing,Profiles,Troubleshooting", table.concat(pageOrder, ","))
+assert(table.concat(pageOrder, ",") == "Notifications,Notification appearance,Quality of life,Chat cleaning,Food and drink,Vendor restocking,Auction House,Journey Chronicle,Chronicle appearance,Party pins,Pin appearance,Gear comparison,Mage,Addon skins,RestedXP guide window,SpeakStone speech frame,Configuration sharing,Profiles,Troubleshooting", table.concat(pageOrder, ","))
 for variable, page in pairs({
   TWICHUI_media = "TwichUI", TWICHUI_quietLogin = "TwichUI", 
   TWICHUI_gearHints = "Gear comparison", TWICHUI_gearTree = "Gear comparison", TWICHUI_gearBagStyle = "Gear comparison",

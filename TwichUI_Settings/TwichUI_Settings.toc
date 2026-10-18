@@ -17,6 +17,10 @@ pages\Overview.lua
 pages\Gear.lua
 pages\Notifications.lua
 pages\QoL.lua
+pages\ChatClean.lua
+pages\ChatCleanChannels.lua
+pages\ChatCleanRules.lua
+pages\ChatCleanLive.lua
 pages\FoodDrink.lua
 pages\Restock.lua
 pages\RestockItems.lua

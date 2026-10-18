@@ -62,6 +62,7 @@ local DEFAULT_MODULES = {
     mageSellDryRun = true,   -- ... only say what would be sold, sell nothing (on until turned off)
     auctionPosting = true,   -- "Sell from Bags" tab in the Auction House (searches only when you pick an item)
     restock = false,         -- Vendor restocking: keep chosen items at a target in your bags, bought from merchants (opt-in, explicit true only; asks first unless you confirm otherwise)
+    chatClean = false,       -- Chat cleaning: hide unwanted messages in the public channels you choose (opt-in, explicit true only)
     qolSummons = false,      -- Quality of Life (all opt-in, see qol/QoL.lua): accept summons
     qolResurrect = false,    -- ... accept a resurrection offered to you
     qolResurrectCombat = false, -- ... including a combat resurrection (needs the one above)

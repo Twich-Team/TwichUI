@@ -605,6 +605,274 @@ local function RestockItemsSpending(clean)
 end
 
 ---------------------------------------------------------------------------
+-- Chat cleaning's channels and rules (modules/ChatClean.lua): { channels = { [key] = { on, spam, repeats, recruit,
+-- label } }, rules = { { name, mode, text, case, enabled, all, channels }, ... } }. Every channel key, flag, label and
+-- rule is checked as the feature checks its own (a Lua pattern for shape and cost too); one that fails refuses the
+-- group. Applying merges: a channel the share names takes the share's choice, a rule is matched by what it matches
+-- (mode, case and text) and takes the share's name, on/off and channels, a new one goes at the end; nothing is
+-- removed. Hidden messages, senders, counts and the repeat memory are never part of it. Undo puts back the channel
+-- choices and rules exactly as they were.
+---------------------------------------------------------------------------
+local ChatCleanConfig = {}
+local CC_FLAGS = { "on", "spam", "repeats", "recruit" }
+
+local function CCPlain(text) return R.ChatCleanMatch and R.ChatCleanMatch.Plain(text) or tostring(text) end
+
+local function RuleIdentity(r) return r.mode .. "\0" .. (r.case and "1" or "0") .. "\0" .. r.text end
+
+local function SameSet(a, b)
+    for k in pairs(a) do if not b[k] then return false end end
+    for k in pairs(b) do if not a[k] then return false end end
+    return true
+end
+
+local function ChannelText(e)
+    if not (e and e.on) then return "not cleaned" end
+    local what = {}
+    for _, c in ipairs(R.ChatClean.CATEGORIES) do if e[c.key] then what[#what + 1] = c.short:lower() end end
+    return #what > 0 and ("cleaned: " .. table.concat(what, ", ")) or "cleaned: custom rules only"
+end
+
+local function ChatRuleText(r)
+    if not r then return "not in your rules" end
+    local where
+    if r.all then where = "all cleaned channels"
+    else
+        local names = {}
+        for key in pairs(r.channels) do names[#names + 1] = R.ChatClean.ChannelLabel(key) end
+        table.sort(names)
+        where = table.concat(names, ", ")
+    end
+    return CCPlain(("%s, %s%s"):format(r.enabled and "on" or "off", where, r.name and (", named \"" .. r.name .. "\"") or ""))
+end
+
+function ChatCleanConfig.usable() return R.ChatClean ~= nil and R.ChatCleanMatch ~= nil end
+function ChatCleanConfig.count()
+    local n = #R.ChatClean.Rules()
+    for _ in pairs(R.ChatClean.Channels()) do n = n + 1 end
+    return n
+end
+function ChatCleanConfig.label() return "channels and rules" end
+
+function ChatCleanConfig.export()
+    local CC = R.ChatClean
+    local channels, rules = {}, {}
+    for key, e in pairs(CC.Channels()) do
+        channels[key] = { on = e.on, spam = e.spam, repeats = e.repeats, recruit = e.recruit, label = e.label }
+    end
+    for i, r in ipairs(CC.Rules()) do
+        local copy = CC.CopyRule(r)
+        copy.id = nil
+        rules[i] = copy
+    end
+    return { channels = channels, rules = rules }
+end
+
+function ChatCleanConfig.clean(raw)
+    local CC = R.ChatClean
+    if not CC then return nil, "feature" end
+    if type(raw) ~= "table" then return nil, "shape" end
+    local out, values = { channels = {}, rules = {} }, 0
+    if raw.channels ~= nil then
+        if type(raw.channels) ~= "table" then return nil, "shape" end
+        local n = 0
+        for key, e in pairs(raw.channels) do
+            n = n + 1
+            if n > CC.MAX_CHANNELS then return nil, "too-large" end
+            if not CC.ValidKey(key) or type(e) ~= "table" then return nil, "invalid" end
+            for _, flag in ipairs(CC_FLAGS) do
+                if e[flag] ~= nil and type(e[flag]) ~= "boolean" then return nil, "invalid" end
+            end
+            if e.label ~= nil and not PlainText(e.label, CC.LABEL_MAX * 4) then return nil, "invalid" end
+            out.channels[key] = CC.CleanChannel(e)
+            values = values + 5
+        end
+    end
+    if raw.rules ~= nil then
+        if type(raw.rules) ~= "table" then return nil, "shape" end
+        local n = 0
+        for k in pairs(raw.rules) do
+            if type(k) ~= "number" then return nil, "shape" end
+            n = n + 1
+            if n > CC.MAX_RULES then return nil, "too-large" end
+        end
+        local seen = {}
+        for i = 1, n do
+            local e = raw.rules[i]
+            if type(e) ~= "table" then return nil, "invalid" end
+            for _, flag in ipairs({ "case", "enabled", "all" }) do
+                if e[flag] ~= nil and type(e[flag]) ~= "boolean" then return nil, "invalid" end
+            end
+            if e.channels ~= nil and type(e.channels) ~= "table" then return nil, "invalid" end
+            local rule = CC.CheckRule({ name = e.name, mode = e.mode, text = e.text, case = e.case, enabled = e.enabled,
+                all = e.all, channels = e.channels })
+            if not rule then return nil, "invalid" end
+            local ident = RuleIdentity(rule)
+            if not seen[ident] then
+                seen[ident] = true
+                rule.id = nil
+                out.rules[#out.rules + 1] = rule
+                values = values + 7
+            end
+        end
+    end
+    if next(out.channels) == nil and #out.rules == 0 then return nil, "empty" end
+    return out, values
+end
+
+-- { channels = { { key, old, new } }, rules = { { id (yours, if it is there), old, new } }, fullChannels, fullRules }
+function ChatCleanConfig.plan(clean)
+    local CC = R.ChatClean
+    local changes = { channels = {}, rules = {}, fullChannels = 0, fullRules = 0 }
+    local cur, n = CC.Channels(), 0
+    for _ in pairs(cur) do n = n + 1 end
+    local keys = {}
+    for key in pairs(clean.channels) do keys[#keys + 1] = key end
+    table.sort(keys)
+    for _, key in ipairs(keys) do
+        local e, c = clean.channels[key], cur[key]
+        if not c then
+            if n < CC.MAX_CHANNELS then
+                n = n + 1
+                changes.channels[#changes.channels + 1] = { key = key, new = e }
+            else
+                changes.fullChannels = changes.fullChannels + 1
+            end
+        elseif c.on ~= e.on or c.spam ~= e.spam or c.repeats ~= e.repeats or c.recruit ~= e.recruit then
+            changes.channels[#changes.channels + 1] = { key = key, old = c, new = e }
+        end
+    end
+    local live, byIdent = CC.Rules(), {}
+    for _, r in ipairs(live) do byIdent[RuleIdentity(r)] = r end
+    local room = CC.MAX_RULES - #live
+    for _, r in ipairs(clean.rules) do
+        local c = byIdent[RuleIdentity(r)]
+        if not c then
+            if room > 0 then
+                room = room - 1
+                changes.rules[#changes.rules + 1] = { new = r }
+            else
+                changes.fullRules = changes.fullRules + 1
+            end
+        elseif c.name ~= r.name or c.enabled ~= r.enabled or c.all ~= r.all or not SameSet(c.channels, r.channels) then
+            changes.rules[#changes.rules + 1] = { id = c.id, old = c, new = r }
+        end
+    end
+    return changes
+end
+
+function ChatCleanConfig.review(clean)
+    local CC = R.ChatClean
+    local changes = ChatCleanConfig.plan(clean)
+    local rows = {}
+    for _, c in ipairs(changes.channels) do
+        local label = (c.new.label and not c.key:find("^zone:")) and c.new.label or CC.ChannelLabel(c.key)
+        rows[#rows + 1] = { label = "Channel: " .. CCPlain(label), key = "channel:" .. c.key, old = ChannelText(c.old), new = ChannelText(c.new) }
+    end
+    for _, c in ipairs(changes.rules) do
+        rows[#rows + 1] = { label = "Rule: " .. CCPlain(R.ChatCleanMatch.Summary(c.new)), key = "rule:" .. RuleIdentity(c.new),
+            old = ChatRuleText(c.old), new = ChatRuleText(c.new) }
+    end
+    if changes.fullChannels > 0 then
+        rows[#rows + 1] = { label = "Channels that don't fit", key = "full-channels", old = "your channel choices",
+            new = ("%d left out"):format(changes.fullChannels) }
+    end
+    if changes.fullRules > 0 then
+        rows[#rows + 1] = { label = "Rules that don't fit", key = "full-rules", old = "your full list", new = ("%d left out"):format(changes.fullRules) }
+    end
+    local total = #clean.rules
+    for _ in pairs(clean.channels) do total = total + 1 end
+    return rows, total - #changes.channels - #changes.rules - changes.fullChannels - changes.fullRules
+end
+
+local function ChatStore()
+    if type(TwichUIDB.ui) ~= "table" then TwichUIDB.ui = {} end
+    if type(TwichUIDB.ui.chatClean) ~= "table" then TwichUIDB.ui.chatClean = {} end
+    return TwichUIDB.ui.chatClean
+end
+
+-- Plain writes into the channel choices and rules in use. Returns undo records: one snapshot of both as they were.
+function ChatCleanConfig.apply(clean, plan)
+    local CC = R.ChatClean
+    local t = ChatStore()
+    local undo = { { kind = "chatClean", had = type(t.channels) == "table", channels = Copy(t.channels), rules = Copy(t.rules),
+        nextId = t.nextId } }
+    undo.count = #plan.channels + #plan.rules
+    local channels = CC.Channels()
+    for _, c in ipairs(plan.channels) do
+        local e = CC.CleanChannel(c.new)
+        e.label = e.label or (channels[c.key] and channels[c.key].label)
+        channels[c.key] = e
+    end
+    t.channels = channels
+    local list, top = CC.Rules(), 0
+    for _, r in ipairs(list) do if r.id > top then top = r.id end end
+    if type(t.nextId) == "number" and t.nextId > top + 1 then top = t.nextId - 1 end
+    for _, c in ipairs(plan.rules) do
+        local rule = CC.CopyRule(c.new)
+        if c.id then
+            for i, cur in ipairs(list) do
+                if cur.id == c.id then rule.id = c.id; list[i] = rule end
+            end
+        else
+            top = top + 1
+            rule.id = top
+            list[#list + 1] = rule
+        end
+    end
+    local out = {}
+    for i, r in ipairs(list) do out[i] = CC.CopyRule(r) end
+    t.rules = out
+    t.nextId = top + 1
+    return undo
+end
+
+function ChatCleanConfig.restore(records)
+    if not R.ChatClean then return 0 end
+    local n = 0
+    for _, u in ipairs(records) do
+        if type(u) == "table" and u.kind == "chatClean" then
+            local t = ChatStore()
+            t.channels = (u.had == true and type(u.channels) == "table") and Copy(u.channels) or nil
+            t.rules = type(u.rules) == "table" and Copy(u.rules) or nil
+            t.nextId = type(u.nextId) == "number" and u.nextId or nil
+            n = n + (type(records.count) == "number" and records.count or 1)
+        end
+    end
+    return n
+end
+
+-- What an import means for what is hidden in your chat, said in the review apart from the list of values.
+local function ChatCleanSwitchDisclose(vals)
+    local on = vals and vals.modules and vals.modules.chatClean
+    local CC = R.ChatClean
+    if not CC then return {} end
+    if on == true and not CC.Enabled() then
+        return { "Chat cleaning: turns on. Messages matching its filters and rules are hidden from your chat in the channels it cleans (Chat cleaning settings › Live view shows them while it is open). Whispers, group, guild and system messages are never touched." }
+    elseif on == false and CC.Enabled() then
+        return { "Chat cleaning: turns off. Nothing is hidden from your chat by TwichUI." }
+    end
+    return {}
+end
+
+local function ChatCleanDisclose(clean)
+    local CC, M = R.ChatClean, R.ChatCleanMatch
+    local changes = ChatCleanConfig.plan(clean)
+    local out = {}
+    if #changes.channels + #changes.rules == 0 then return out end
+    out[1] = ("Chat cleaning: changes %d channel %s and %d custom %s.%s"):format(#changes.channels,
+        #changes.channels == 1 and "choice" or "choices", #changes.rules, #changes.rules == 1 and "rule" or "rules",
+        CC.Enabled() and " They hide messages from your chat as soon as they are applied." or " Chat cleaning is off here, so nothing is hidden until you turn it on.")
+    for _, c in ipairs(changes.rules) do
+        local warning = c.new.enabled and M.Warning(c.new)
+        if warning and warning.code == "everything" then
+            out[#out + 1] = ("Chat cleaning: the rule %s matches every message, so it would hide everything in its channels."):format(CCPlain(M.Summary(c.new)))
+        end
+    end
+    return out
+end
+
+---------------------------------------------------------------------------
 -- The groups
 ---------------------------------------------------------------------------
 local schema   -- built once everything it needs was there
@@ -681,6 +949,16 @@ local function Define()
         note = "The items on your restock list, each with its target and whether it is on. Merged by item: what the share names is set, the rest of your list is kept. Bag counts and purchases are never shared." })
     g.custom = RestockList
     g.disclose = RestockItemsSpending
+
+    g = Group("chatClean", "Chat cleaning", { page = "chatClean",
+        note = "Whether chat cleaning is on. Which channels it cleans and your rules are the next part." })
+    Switches(g, { "chatClean" })
+    g.disclose = ChatCleanSwitchDisclose
+
+    g = Group("chatCleanRules", "Chat cleaning channels and rules", { page = "chatCleanChannels",
+        note = "Which channels are cleaned, with which built-in filters, and your custom rules with the channels they apply to. Merged: what the share names is set, the rest is kept. Hidden messages, senders and counts are never shared." })
+    g.custom = ChatCleanConfig
+    g.disclose = ChatCleanDisclose
 
     g = Group("chronicle", "Journey Chronicle", { page = "chronicle",
         note = "Which events are written down and how the window reads. The entries and notes themselves are never shared." })
@@ -1291,7 +1569,7 @@ function TC.Apply(entry, opts)
     end
 
     undo.count = #undo.fields + #undo.weights
-    for _, records in pairs(undo.custom) do undo.count = undo.count + #records end
+    for _, records in pairs(undo.custom) do undo.count = undo.count + (type(records.count) == "number" and records.count or #records) end
     if ST.db then ST.db.twichUndo = undo end
 
     local refreshOk, _, info = PF.Refresh("import")
