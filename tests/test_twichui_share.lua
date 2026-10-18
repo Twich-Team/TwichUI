@@ -98,6 +98,7 @@ local REGISTRY = {
   pinsEditorLook = A.TwichUI.PinsLook.EditorLook.DEFAULTS, speakstoneSkin = A.TwichUI.SpeakStoneSkin.Look.DEFAULTS,
   restedxpTimerLook = A.TwichUI.RestedXPSkin.Timers.Look.DEFAULTS, chronicleLook = A.TwichUI.ChronicleAppearance.LOOK_DEFAULTS,
   notifyLook = A.TwichUI.NotifyLook.DEFAULTS, restockPromptStyle = A.TwichUI.RestockPrompt.Style.DEFAULTS,
+  classBars = A.TwichUI.ClassBars.DEFAULTS, classBarsLook = A.TwichUI.ClassBars.Look.DEFAULTS,
 }
 for slot, defaults in pairs(REGISTRY) do
   for key in pairs(defaults) do
@@ -117,6 +118,12 @@ do
     end
     return false
   end
+  -- a saved table whose contents a custom group shares as a whole (not field by field): the group, by the table's name
+  local CUSTOM_UI = { classBarsOverrides = "classBarsOverrides" }
+  local function CustomUi(sub)
+    local g = CUSTOM_UI[sub] and TC.Group(CUSTOM_UI[sub])
+    return g ~= nil and g.custom ~= nil
+  end
   local checked = 0
   for _, line in ipairs(fixture.changedDB or {}) do
     local indent, name, rest = line:match("^( *)([%w_%- ]+)(.*)$")
@@ -134,7 +141,7 @@ do
           checked = checked + 1
         end
       elseif depth == 2 and (top == "ui" or top == "gear") and sub then
-        Check(SharedKey(sub, name) or Covered(top .. "." .. sub .. "." .. name) or Covered(top .. "." .. sub),
+        Check(SharedKey(sub, name) or Covered(top .. "." .. sub .. "." .. name) or Covered(top .. "." .. sub) or CustomUi(sub),
           "saved key " .. top .. "." .. sub .. "." .. name .. " is placed")
         checked = checked + 1
       end
@@ -187,11 +194,17 @@ local function Customise(c)
   local instant = c.C_Item.GetItemInfoInstant   -- the game knows these two items
   c.C_Item.GetItemInfoInstant = function(id) if id == 17020 or id == 2512 then return id end return instant(id) end
   R.Restock.Add(17020, 40, true); R.Restock.Add(2512, 1000, false)
+  -- class resource bars: the shared style, the bar's look, and what a Mage's mana and a Druid's rage do differently
+  R.ClassBars.Set("fillStyle", "gradient"); R.ClassBars.Set("primaryWidth", 300); R.ClassBars.Set("effectsThreshold", 80)
+  R.ClassBars.Look.Set("bgOpacity", 33)
+  R.ClassBars.SetOverride("MAGE:MANA", "text", "percent"); R.ClassBars.SetOverride("DRUID:RAGE", "colorSource", "class")
+  R.ClassBars.SetOverride("DRUID:RAGE", "show", "never")
 end
 
 Customise(A)
 -- places and records that must stay behind
 A.TwichUIDB.ui.foodDrinkPosition = { x = 123, y = 456 }
+A.TwichUIDB.ui.classBarsPosition = { main = { x = 11, y = 22 }, aux = { x = 33, y = 44 } }
 A.TwichUIDB.ui.trainingPosition = { x = 7, y = 8 }
 A.TwichUIDB.ui.settingsWindow = { x = 9, y = 9 }
 A.TwichUIDB.ui.partyPins = A.TwichUIDB.ui.partyPins or {}
@@ -229,6 +242,8 @@ B.TwichUI:SetEnabled("welcomeBack", true)
 B.TwichUI.GearPrefs.Get("reveal")   -- the gear table is made on first use
 B.TwichUIDB.gear.weights = { WARRIOR = { [1] = { STR = 3 } }, MAGE = { [6] = { SP = 1.1 } } }
 B.TwichUIDB.ui.foodDrinkPosition = { x = -50, y = -50 }
+B.TwichUIDB.ui.classBarsPosition = { main = { x = -9, y = -9 } }
+B.TwichUI.ClassBars.SetOverride("PRIEST:MANA", "show", "combat")
 B.TwichUIDB.modules.qolSummons = false
 
 -- A saves with TwichUI included (no scan this session: the live parts only)
@@ -263,7 +278,7 @@ do
   for _, k in ipairs(Walk(data.twichui, "twichui", {})) do keys[k] = true end
   -- ("pins" and "qol" are feature names here, not the saved tables of those names)
   for _, name in ipairs({ "shareTransport", "profiles", "profileKeys", "profileState", "setup", "trees", "position",
-      "foodDrinkPosition", "trainingPosition", "settingsWindow", "guideWaypoint", "mageSell", "qolSummons",
+      "foodDrinkPosition", "trainingPosition", "classBarsPosition", "settingsWindow", "guideWaypoint", "mageSell", "qolSummons",
       "mageSellDryRun", "euiAck", "welcome", "received", "points", "chars", "never", "summonsFrom" }) do
     Check(not keys[name], "the payload has no key " .. name)
   end
@@ -376,6 +391,17 @@ do
       -- B keeps its own entry for a class and tree the sender has none for
       Check(#b[id].units == 2 and b[id].units[2].class == "WARRIOR" and Same(b[id].units[1], a[id].units[1]),
         "stat weights: the shared tree matches, the other stays")
+    elseif id == "classBarsOverrides" then
+      -- merged: B keeps the entry for a class and resource the sender has none for
+      Check(#b[id].overrides == #a[id].overrides + 1, "class bar overrides: the shared entries are set and B's other stays")
+      for i = 1, #b[id].overrides do
+        local e = b[id].overrides[i]
+        if e.key ~= "PRIEST:MANA" then
+          local mine
+          for _, m in ipairs(a[id].overrides) do if m.key == e.key then mine = m end end
+          Check(mine and Same(mine, e), "class bar override " .. e.key .. " matches the sender's")
+        end
+      end
     else
       Check(Same(a[id], b[id]), "group " .. id .. " matches the sender's")
     end
@@ -383,6 +409,15 @@ do
 end
 -- what must stay B's own
 Check(B.TwichUIDB.ui.foodDrinkPosition.x == -50, "B's own place is untouched")
+do
+  local CBB = B.TwichUI.ClassBars
+  Check(CBB.Get("fillStyle") == "gradient" and CBB.Get("primaryWidth") == 300 and CBB.Get("effectsThreshold") == 80, "the class bars' shared style came across")
+  Check(CBB.Look.Get("bgOpacity") == 33, "and their background")
+  Check(CBB.GetOverride("MAGE:MANA", "text") == "percent" and CBB.GetOverride("DRUID:RAGE", "colorSource") == "class"
+    and CBB.GetOverride("DRUID:RAGE", "show") == "never", "and the overrides")
+  Check(CBB.GetOverride("PRIEST:MANA", "show") == "combat", "an override for another class that the share does not name is kept")
+  Check(B.TwichUIDB.ui.classBarsPosition.main.x == -9 and B.TwichUIDB.ui.classBarsPosition.aux == nil, "where the bars sit is B's own")
+end
 Check(B.TwichUIDB.modules.qolSummons == false and B.TwichUIDB.shareTransport == "DIRECT", "B's acts-for-you and sending choices are untouched")
 Check(B.TwichUIDB.gear.weights.WARRIOR and B.TwichUIDB.gear.weights.WARRIOR[1].STR == 3, "another class's weights are untouched")
 Check(B.TwichUIDB.gear.weights.MAGE[6].SP == 2.5 and B.TwichUIDB.gear.priority.MAGE[6][1] == "SP", "the shared tree's weights are replaced")

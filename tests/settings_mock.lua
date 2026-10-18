@@ -27,15 +27,31 @@ function SettingsClient(opts)
 
   c.UnitClass = function() return "Mage", "MAGE" end
   c.UnitLevel = function() return 30 end
+  -- a Mage with some mana, for the class resource bars (classbars/): the power APIs, and the state they read
+  c.UnitPowerType = function() return 0, "MANA", 0.3, 0.5, 0.9 end
+  c.UnitPower = function() return 100 end
+  c.UnitPowerMax = function() return 200 end
+  c.GetComboPoints = function() return 0 end
+  c.UnitAffectingCombat = function() return false end
+  c.UnitIsDeadOrGhost = function() return false end
+  c.IsMounted = function() return false end
+  c.UnitHasVehicleUI = function() return false end
+  c.CreateColor = function(r, g, b, a) return { r = r, g = g, b = b, a = a } end
   c.C_SpecializationInfo = { GetActiveSpecGroup = function() return 1 end, GetCombatConfigIDForSpecGroup = function() return nil end }
   local function Obj()
     return setmetatable({}, { __index = function(t, k)
       if k == "twichBevel" or k == "twichBorders" then return nil end
+      if k == "GetFrameLevel" or k == "GetEffectiveScale" or k == "GetScale" then return function() return 1 end end
+      if k == "GetStringWidth" then return function() return 100 end end
       if k == "CreateFontString" or k == "CreateTexture" or k == "CreateAnimationGroup" or k == "CreateAnimation" then return function() return Obj() end end
       return function() end
     end })
   end
   c.CreateFrame = function() return Obj() end
+  local screen = Obj()   -- UIParent, for the class resource bars' places
+  screen.GetWidth, screen.GetHeight = function() return 1024 end, function() return 768 end
+  screen.GetCenter = function() return 512, 384 end
+  c.UIParent = screen
   c.StaticPopupDialogs = {}
   c.StaticPopup_Show = function(name, text)
     if name == "TWICHUI_RELOAD" then S.popups = S.popups + 1 end
@@ -64,6 +80,7 @@ function SettingsClient(opts)
     "modules/TrainingData.lua", "modules/MenuStyle.lua", "modules/SpellMenu.lua", "modules/MageTravel.lua", "modules/MageConjure.lua",
     "chronicle/Style.lua", "Look.lua", "chronicle/Appearance.lua", "modules/NotifyLook.lua", "modules/Refreshments.lua", "modules/RefreshmentsPanel.lua", "modules/RefreshmentsShares.lua",
     "modules/RefreshmentsTrade.lua", "modules/RefreshmentsBroker.lua", "modules/EllesmereJunk.lua", "modules/MageSell.lua", "modules/MageSellWindow.lua", "modules/Restock.lua", "modules/RestockPrompt.lua", "modules/ChatCleanMatch.lua", "modules/ChatClean.lua",
+    "classbars/Anim.lua", "classbars/Resources.lua", "classbars/Config.lua", "classbars/Bar.lua", "classbars/Effects.lua", "classbars/Controller.lua",
     "modules/RestedXPSkin.lua", "modules/RestedXPTimers.lua", "modules/SpeakStoneSkin.lua", "qol/QoL.lua", "qol/Summons.lua", "qol/Resurrect.lua", "qol/ReleasePvP.lua",
     "qol/Duels.lua", "qol/QuickKeybind.lua", "qol/GuideWaypoint.lua",
     "pins/Pins.lua", "pins/Sync.lua", "pins/Look.lua", "pins/Map.lua", "pins/Minimap.lua", "pins/Editor.lua", "pins/Window.lua",

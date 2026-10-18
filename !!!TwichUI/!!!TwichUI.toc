@@ -146,6 +146,17 @@ modules\RestockPrompt.lua
 modules\ChatCleanMatch.lua
 modules\ChatClean.lua
 
+# Class resource bars: your class's resources as bars (the power the client reports, combo points on the target for
+# Rogues and Cat Form Druids, a Druid's mana while shapeshifted), with optional effects. Off until turned on. Resource
+# providers know the game, the bar knows how to draw, effects only decorate; the controller owns the events. Uses
+# modules\MenuStyle.lua for the background, border, fonts and textures; the settings are in TwichUI_Settings.
+classbars\Anim.lua
+classbars\Resources.lua
+classbars\Config.lua
+classbars\Bar.lua
+classbars\Effects.lua
+classbars\Controller.lua
+
 # RestedXP skin: a TwichUI theme and finish for the RestedXP guide window (off until turned on; uses
 # modules\MenuStyle.lua; needs RestedXP, and works without EllesmereUI)
 modules\RestedXPSkin.lua
@@ -211,6 +222,7 @@ diag\Saved.lua
 diag\Memory.lua
 diag\Pins.lua
 diag\ChatClean.lua
+diag\ClassBars.lua
 diag\Status.lua
 diag\SupportWindow.lua
 diag\Window.lua

@@ -25,6 +25,7 @@ pages\FoodDrink.lua
 pages\Restock.lua
 pages\RestockItems.lua
 pages\Mage.lua
+pages\ClassBars.lua
 pages\Chronicle.lua
 pages\Pins.lua
 pages\Auction.lua

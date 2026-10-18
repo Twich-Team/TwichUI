@@ -62,7 +62,7 @@ TC.LOCAL = {
     -- where things sit
     ["modules.foodDrinkUnlock"] = "place", ["ui.foodDrinkPosition"] = "place", ["ui.trainingPosition"] = "place",
     ["ui.welcomeBackPlace"] = "place", ["ui.friendLoginPlace"] = "place", ["ui.settingsWindow"] = "place",
-    ["ui.refreshments.position"] = "place", ["ui.partyPins.position"] = "place",
+    ["ui.refreshments.position"] = "place", ["ui.partyPins.position"] = "place", ["ui.classBarsPosition"] = "place",
     -- the rest
     ["modules.restedxpSkin"] = "other", ["modules.qolTwichUISettingsButton"] = "other",
     ["ui.restedxpSkinState"] = "other", ["ui.showAdvanced"] = "other", ["gear.trees"] = "other",
@@ -873,6 +873,176 @@ local function ChatCleanDisclose(clean)
 end
 
 ---------------------------------------------------------------------------
+-- Class resource bar overrides (classbars/Config.lua): { overrides = { { key = "CLASS:RESOURCE", colorSource, color,
+-- text, show }, ... } }, in key order. An entry is what one resource of one class does differently from the shared
+-- style; a field it does not name is inherited. Applying replaces the entries the share names and leaves every other
+-- entry (every other class) alone; nothing is removed. Every key and field is checked as the feature checks its own.
+-- Positions, resource values and anything live are never part of it.
+---------------------------------------------------------------------------
+local ClassBarOverrides = {}
+local CBO_FIELDS = { "colorSource", "color", "text", "show" }
+
+local function CBOEntry(key)
+    local CB = R.ClassBars
+    local entry
+    for _, f in ipairs(CBO_FIELDS) do
+        local v = CB.GetOverride(key, f)
+        if v ~= nil then
+            entry = entry or {}
+            entry[f] = v
+        end
+    end
+    return entry
+end
+
+local function CBOText(entry)
+    if not entry then return "following the shared style" end
+    local parts = {}
+    if entry.colorSource then parts[#parts + 1] = "color: " .. entry.colorSource end
+    if entry.color then parts[#parts + 1] = "color " .. entry.color:sub(3) end
+    if entry.text then parts[#parts + 1] = "text: " .. entry.text end
+    if entry.show then parts[#parts + 1] = "show: " .. entry.show end
+    return table.concat(parts, ", ")
+end
+
+local function CBOSame(a, b)
+    for _, f in ipairs(CBO_FIELDS) do
+        if (a and a[f]) ~= (b and b[f]) then return false end
+    end
+    return true
+end
+
+local function CBOLabel(key)
+    local class, resource = key:match("^(%u[%u_]*):(%u[%u_]*)$")
+    local CBR = R.ClassBarResources
+    return ("%s, %s"):format(TC.Humanize(class:lower()), CBR and CBR.Label(resource) or resource)
+end
+
+function ClassBarOverrides.usable() return R.ClassBars ~= nil and R.ClassBarResources ~= nil end
+function ClassBarOverrides.count() return #R.ClassBars.OverrideKeys() end
+function ClassBarOverrides.label(n) return n == 1 and "1 resource" or (("%d resources"):format(n)) end
+
+function ClassBarOverrides.export()
+    local CB = R.ClassBars
+    local list = {}
+    for _, key in ipairs(CB.OverrideKeys()) do
+        local entry = CBOEntry(key)
+        if entry then
+            entry.key = key
+            list[#list + 1] = entry
+        end
+    end
+    if #list == 0 then return nil end
+    return { overrides = list }
+end
+
+function ClassBarOverrides.clean(raw)
+    local CB = R.ClassBars
+    if not CB then return nil, "feature" end
+    if type(raw) ~= "table" or type(raw.overrides) ~= "table" then return nil, "shape" end
+    local n = 0
+    for k in pairs(raw.overrides) do
+        if type(k) ~= "number" then return nil, "shape" end
+        n = n + 1
+        if n > CB.MAX_OVERRIDES then return nil, "too-large" end
+    end
+    local out, seen, values = {}, {}, 0
+    for i = 1, n do
+        local e = raw.overrides[i]
+        if type(e) ~= "table" or not CB.ValidOverrideKey(e.key) or seen[e.key] then return nil, "invalid" end
+        seen[e.key] = true
+        local clean = { key = e.key }
+        local fields = 0
+        for field, v in pairs(e) do
+            if field ~= "key" then
+                if not CB.OverrideValid(field, v) then return nil, "invalid" end
+                clean[field] = v
+                fields = fields + 1
+            end
+        end
+        if fields == 0 then return nil, "invalid" end
+        out[#out + 1] = clean
+        values = values + fields + 1
+    end
+    if #out == 0 then return nil, "empty" end
+    return { overrides = out }, values
+end
+
+-- { { key, old = entry or nil, new = entry } } for each entry that would change.
+function ClassBarOverrides.plan(clean)
+    local CB = R.ClassBars
+    local changes = { full = 0 }
+    local room = CB.MAX_OVERRIDES - #CB.OverrideKeys()
+    for _, e in ipairs(clean.overrides) do
+        local cur = CBOEntry(e.key)
+        if not CBOSame(cur, e) then
+            if cur or room > 0 then
+                if not cur then room = room - 1 end
+                changes[#changes + 1] = { key = e.key, old = cur, new = e }
+            else
+                changes.full = changes.full + 1
+            end
+        end
+    end
+    return changes
+end
+
+function ClassBarOverrides.review(clean)
+    local changes = ClassBarOverrides.plan(clean)
+    local rows = {}
+    for _, c in ipairs(changes) do
+        rows[#rows + 1] = { label = CBOLabel(c.key), key = "bars:" .. c.key, old = CBOText(c.old), new = CBOText(c.new) }
+    end
+    if changes.full > 0 then
+        rows[#rows + 1] = { label = "Resources that don't fit", key = "full", old = "your full list", new = ("%d left out"):format(changes.full) }
+    end
+    return rows, #clean.overrides - #changes - changes.full
+end
+
+local function CBOStore()
+    if type(TwichUIDB.ui) ~= "table" then TwichUIDB.ui = {} end
+    if type(TwichUIDB.ui.classBarsOverrides) ~= "table" then TwichUIDB.ui.classBarsOverrides = {} end
+    return TwichUIDB.ui.classBarsOverrides
+end
+
+-- Plain writes. Returns undo records: { key, had, entry }.
+function ClassBarOverrides.apply(clean, plan)
+    local t = CBOStore()
+    local undo = {}
+    for _, c in ipairs(plan) do
+        local old = t[c.key]
+        undo[#undo + 1] = { key = c.key, had = type(old) == "table", entry = type(old) == "table" and Copy(old) or nil }
+        local entry = {}
+        for _, f in ipairs(CBO_FIELDS) do entry[f] = c.new[f] end
+        t[c.key] = entry
+    end
+    return undo
+end
+
+function ClassBarOverrides.restore(records)
+    local CB = R.ClassBars
+    if not CB then return 0 end
+    local t = CBOStore()
+    local n = 0
+    for i = #records, 1, -1 do
+        local u = records[i]
+        if type(u) == "table" and CB.ValidOverrideKey(u.key) then
+            if u.had == true and type(u.entry) == "table" then
+                local entry = {}
+                for _, f in ipairs(CBO_FIELDS) do
+                    if u.entry[f] ~= nil and CB.OverrideValid(f, u.entry[f]) then entry[f] = u.entry[f] end
+                end
+                t[u.key] = next(entry) and entry or nil
+            else
+                t[u.key] = nil
+            end
+            n = n + 1
+        end
+    end
+    return n
+end
+
+---------------------------------------------------------------------------
 -- The groups
 ---------------------------------------------------------------------------
 local schema   -- built once everything it needs was there
@@ -960,6 +1130,34 @@ local function Define()
         note = "Which channels are cleaned, with which built-in filters, and your custom rules with the channels they apply to. Merged: what the share names is set, the rest is kept. Hidden messages, senders and counts are never shared." })
     g.custom = ChatCleanConfig
     g.disclose = ChatCleanDisclose
+
+    g = Group("classBars", "Class resource bars", { page = "classBars",
+        note = "Whether the bars are on, when they show, their sizes and spacing, fill, text and effects. Where they sit on your screen stays yours. The bars never hide or move another addon's." })
+    Switches(g, { "classBars" })
+    do
+        local CB = R.ClassBars
+        local keys = {}
+        for _, part in ipairs({ "behavior", "layout", "appearance", "effects" }) do
+            for _, key in ipairs(CB and CB.GROUPS[part] or {}) do keys[#keys + 1] = key end
+        end
+        local enums = {}
+        if CB then
+            for key in pairs(CB.DEFAULTS) do
+                if CB.ENUM[key] then enums[key] = CB.ENUM[key] end
+            end
+        end
+        Table(g, { "ui", "classBars" }, CB, keys, enums)
+    end
+
+    g = Group("classBarsLook", "Class resource bar background and border", { page = "classBarsLook" })
+    do
+        local CB = R.ClassBars
+        Table(g, { "ui", "classBarsLook" }, CB and CB.Look, LOOK, LOOK_ENUMS)
+    end
+
+    g = Group("classBarsOverrides", "Class resource bar overrides", { page = "classBarsLook",
+        note = "What one resource of one class does differently from the shared style (its color, text and when it shows). Merged: what the share names is set, every other class's is kept." })
+    g.custom = ClassBarOverrides
 
     g = Group("chronicle", "Journey Chronicle", { page = "chronicle",
         note = "Which events are written down and how the window reads. The entries and notes themselves are never shared." })

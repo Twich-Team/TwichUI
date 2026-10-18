@@ -36,6 +36,8 @@ for _, page in ipairs(K.list) do
   local under = { ["RestedXP guide window"] = "Addon skins", ["SpeakStone speech frame"] = "Addon skins", ["Chronicle appearance"] = "Journey Chronicle",
     ["Pin appearance"] = "Party pins", ["Notification appearance"] = "Notifications", ["Stat weights"] = "Gear comparison", ["Refreshment shares"] = "Mage",
     ["Restock items"] = "Vendor restocking",
+    ["Class resource bar layout"] = "Class resource bars", ["Class resource bar appearance"] = "Class resource bars",
+    ["Class resource bar effects"] = "Class resource bars",
     ["Chat cleaning channels"] = "Chat cleaning", ["Chat cleaning rules"] = "Chat cleaning", ["Chat cleaning live view"] = "Chat cleaning" }
   assert((page.parent and K.pages[page.parent].name) == under[page.name], page.name .. " is in its place")
 end
@@ -46,7 +48,7 @@ for key, default in pairs(defaults) do
   n = n + 1
   assert(default == R.DEFAULT_MODULES[key], key .. " default matches a new install")
 end
-assert(n == 57, "every module has a toggle: " .. n)
+assert(n == 58, "every module has a toggle: " .. n)
 assert(defaults.restedxpSkin == false, "the RestedXP skin is opt-in")
 assert(defaults.arrival == true and defaults.arrivalSubzones == true and defaults.arrivalReducedMotion == false,
   "arrival card and subzone cards on; reduced motion opt-in")
@@ -117,6 +119,8 @@ local NO_DEFAULT = { TWICHUI_gearTree = true, TWICHUI_profileCurrent = true, TWI
 -- say exactly what they cover instead.
 for variable in pairs(proxies) do
   if variable:find("^TWICHUI_notifyLook") then NO_DEFAULT[variable] = true end
+  -- a class resource's own color: "no override" is the dropdown above it, so a page-wide reset must not write a color
+  if variable:find("^TWICHUI_classBarsOv.*Color$") then NO_DEFAULT[variable] = true end
 end
 for variable, s in pairs(proxies) do
   if NO_DEFAULT[variable] then
@@ -239,7 +243,7 @@ assert(attune:GetTooltip():find("after reload"), "toggle change shows it needs a
 
 -- The overview links to one page per feature, in this order; every setting
 -- is on exactly one page (registration above refuses a repeat).
-assert(table.concat(pageOrder, ",") == "Notifications,Notification appearance,Quality of life,Chat cleaning,Food and drink,Vendor restocking,Auction House,Journey Chronicle,Chronicle appearance,Party pins,Pin appearance,Gear comparison,Mage,Addon skins,RestedXP guide window,SpeakStone speech frame,Configuration sharing,Profiles,Troubleshooting", table.concat(pageOrder, ","))
+assert(table.concat(pageOrder, ",") == "Notifications,Notification appearance,Quality of life,Chat cleaning,Food and drink,Vendor restocking,Auction House,Journey Chronicle,Chronicle appearance,Party pins,Pin appearance,Gear comparison,Mage,Class resource bars,Class resource bar layout,Class resource bar appearance,Class resource bar effects,Addon skins,RestedXP guide window,SpeakStone speech frame,Configuration sharing,Profiles,Troubleshooting", table.concat(pageOrder, ","))
 for variable, page in pairs({
   TWICHUI_media = "TwichUI", TWICHUI_quietLogin = "TwichUI", 
   TWICHUI_gearHints = "Gear comparison", TWICHUI_gearTree = "Gear comparison", TWICHUI_gearBagStyle = "Gear comparison",

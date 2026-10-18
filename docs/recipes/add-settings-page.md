@@ -18,6 +18,7 @@ it; its pages call the core (`R:Enabled`, a feature's `Get`/`Set`).
 | `Pins.lua` | `pins` (70), tab `pinsLook` (71) | `journey` |
 | `Gear.lua` | `gear` (10), tab `statWeights` (11) | `class` |
 | `Mage.lua` | `mage` (50), tab `refreshmentShares` (51) | `class` |
+| `ClassBars.lua` | `classBars` (55), tabs `classBarsLayout` (56), `classBarsLook` (57), `classBarsEffects` (58) | `class` |
 | `Skins.lua`, `RestedXP.lua`, `SpeakStone.lua` | `skins` (90), tabs `restedxp` (95), `speakstone` (96) | `addons` |
 | `Sharing.lua`, `Profiles.lua`, `Troubleshooting.lua` | `sharing` (100), `profiles` (105), `troubleshooting` (110) | `config` |
 

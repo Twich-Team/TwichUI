@@ -181,6 +181,9 @@ Define("restock", { apply = Refresh("Restock") })
 -- Chat cleaning
 Define("chatClean", { apply = Refresh("ChatClean") })
 
+-- Class resource bars
+Define("classBars", { apply = Refresh("ClassBars") })
+
 -- Addon skins: through EllesmereUI, after a reload
 for _, key in ipairs({ "attuneSkin", "auctionatorSkin", "foreverDungeonJournalSkin", "whatsTrainingSkin" }) do
     Define(key, { reload = true })
