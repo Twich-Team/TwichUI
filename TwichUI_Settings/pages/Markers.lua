@@ -588,6 +588,10 @@ K.Page({
                 { "target", "Your target", "Only the unit you have targeted." },
                 { "mouseover", "An enemy under your mouse, else your target", "A living enemy under your mouse pointer when there is one; otherwise your target." },
             }), toggle, On)
+        Under(K.ProxyToggle("markersTargetRestartAfterCombat", "Restart the cycle when combat ends",
+            "On: each time combat ends, the next press starts at the first ticked marker again, so every pull begins with the same marker. It only changes which marker comes next: no marker is removed, and nothing is said. Off: the cycle keeps its place until you restart it, remove a marker or reload.\n\nIf you change the order during combat, that is given to your keys first, then the cycle restarts.",
+            M.DEFAULTS.targetRestartAfterCombat, function() return M.Get("targetRestartAfterCombat") end,
+            function(value) M.Set("targetRestartAfterCombat", value and true or false) end), toggle, On)
         Restarts("target", "Removing your target's marker restarts the cycle",
             "On: pressing \"Remove your target's marker\" also makes the next press start at the first ticked marker. Off: it only removes the marker. Either way, restarting never removes anything.", toggle, On)
 

@@ -269,13 +269,16 @@ end
 M.DEFAULTS = {
     targetUnit = "target",          -- "target": your target; "mouseover": a living enemy under the pointer, else your target
     targetClearRestarts = true,     -- removing your target's mark also restarts the target cycle
+    targetRestartAfterCombat = false, -- the target cycle starts again at the first marker when combat ends
     worldClearRestarts = true,      -- removing every world marker also restarts the world cycle
 }
 M.UNITS = { target = true, mouseover = true }
 
 function M.Valid(key, value)
     if key == "targetUnit" then return type(value) == "string" and M.UNITS[value] == true end
-    if key == "targetClearRestarts" or key == "worldClearRestarts" then return type(value) == "boolean" end
+    if key == "targetClearRestarts" or key == "worldClearRestarts" or key == "targetRestartAfterCombat" then
+        return type(value) == "boolean"
+    end
     return false
 end
 

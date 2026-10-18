@@ -27,7 +27,8 @@
 --
 -- The order and options (markers/Markers.lua) reach the buttons as attributes, which can't be changed in
 -- combat: a change made in combat is saved at once and given to the buttons when combat ends (the latest one
--- only), and MK.Pending says so meanwhile. Giving a kind a different sequence restarts its cycle.
+-- only), and MK.Pending says so meanwhile. Giving a kind a different sequence restarts its cycle. Optionally
+-- (targetRestartAfterCombat) the target cycle also restarts each time combat ends.
 
 local R = TwichUI
 local M = R.Markers
@@ -267,9 +268,27 @@ local function WaitForCombat()
     R:On("PLAYER_REGEN_ENABLED", OnRegenEnabled)
 end
 
+-- Restarting the target cycle when combat ends (an option, off by default). Listened for only while it is wanted:
+-- the target kind is on and the option is ticked. Anything that waited for combat is given first, so the restart
+-- is of the sequence the keys will use. It removes nothing and says nothing; an open settings tab redraws.
+local restartListening = false
+local function OnCombatEnded()
+    MK.Apply(nil)
+    if MK.Step("target") ~= 0 then MK.Restart("target") end
+end
+
+local function FollowCombatRestart()
+    local want = R:Enabled(M.SWITCH.target) and M.Get("targetRestartAfterCombat") and true or false
+    if want == restartListening then return end
+    restartListening = want
+    if want then R:On("PLAYER_REGEN_ENABLED", OnCombatEnded) else R:Off("PLAYER_REGEN_ENABLED", OnCombatEnded) end
+end
+function MK.RestartsAfterCombat() return restartListening end
+
 -- The buttons follow the saved order and options, for one kind or (nil) both. Safe to call any time: what is
 -- already in place is left alone, and in combat the change waits (only the latest is given afterwards).
 function MK.Apply(kind)
+    if kind == nil or kind == "target" then FollowCombatRestart() end
     for _, k in ipairs(M.KINDS) do
         if kind == nil or kind == k then
             local want = Wanted(k)

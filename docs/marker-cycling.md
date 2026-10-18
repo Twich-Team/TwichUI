@@ -72,10 +72,16 @@ system being off. Those presses still use their turn. TwichUI never claims a mar
 target's marker, or every world marker) and, while "Removing ... restarts the cycle" is ticked (default, as the reference does), also
 restarts; with it unticked it only removes. Clear with no target does nothing at all.
 
+**Restart when combat ends** (option `targetRestartAfterCombat`, target markers only, off by default). While it and target
+cycling are both on, `markers/Keys.lua` listens for `PLAYER_REGEN_ENABLED` (and stops listening when either is turned off or a profile
+without it is switched to). When combat ends it first gives the keys anything that waited for combat, then, if the cycle is not already
+at its start, sets the step to 0, exactly as the restart key does: nothing is removed, nothing is said, and an open settings tab
+redraws its preview. It does not touch world markers, and it is not a clear. It runs from the event, never from a timer.
+
 ## The order, and combat
 
 Saved per profile in `TwichUIDB.ui.markerOrder[kind] = { order = { all eight ids }, off = { skipped ids } }`; options in
-`TwichUIDB.ui.markers` (`targetUnit`, `targetClearRestarts`, `worldClearRestarts`). The order always holds all eight, so a
+`TwichUIDB.ui.markers` (`targetUnit`, `targetClearRestarts`, `worldClearRestarts`, `targetRestartAfterCombat`). The order always holds all eight, so a
 skipped marker keeps its place and moving one never changes its tick. A damaged order is used as the default and a damaged
 skipped list as "none skipped", each on its own; nothing else is reset. The step and anything waiting for combat are runtime only:
 a reload starts each kind at its first marker.
@@ -107,7 +113,7 @@ over the game's bindings for the same key, which the row reports.
 
 ## Configuration sharing
 
-`markers`: both switches and the three options, field by field. `markerOrder` (custom): each kind's order and skipped list, replaced
+`markers`: both switches and the four options, field by field. `markerOrder` (custom): each kind's order and skipped list, replaced
 per kind as a whole; checked by `M.Clean` (only `target`/`world`, only `order`/`off`, the eight known ids once each, skipped ids known
 and once). An import never changes key bindings, and the cycle's place never travels.
 
@@ -130,14 +136,16 @@ Solo:
    close the settings.
 10. Enter combat, change the order: the tab says it waits; the key keeps the old order; leaving combat applies the new one once.
     In combat, the restart key works and Restart cycle is greyed out. Record any "action blocked" or taint message.
-11. `/reload`: orders and keys kept; both cycles start at their first marker. Repeat after a `/reload` in combat.
+11. Option "Restart the cycle when combat ends": mark a few targets so the cycle is mid-way, fight something, and after combat the
+    next press is the first marker. With the option off it keeps its place. Record any message.
+12. `/reload`: orders and keys kept; both cycles start at their first marker. Repeat after a `/reload` in combat.
 
 In a party (as leader, then not), and a raid (leader, assistant, plain member), with consent:
-12. World markers: point at the ground and press: placed at once under the pointer, in order; pointing at the sky; pressing while a
+13. World markers: point at the ground and press: placed at once under the pointer, in order; pointing at the sky; pressing while a
     spell's targeting circle is up (record what happens); pressing again for a marker already down (does it move?).
-13. Remove all world markers: all go (yours and others'); restart follows the box.
-14. Permission: as a plain raid member, record what the game says and that the cycle still moved on.
-15. Another player marks a unit with your next marker: record what the game does when you then press.
-16. Profiles: a profile with marking off; switch to it: keys do nothing and say so; switch back.
-17. Share a setup including Marker order with a second account: their keys unchanged, orders replaced, Undo restores.
-18. With World Marker Cycler loaded and its default `B` key: the TwichUI row with the same key shows that another addon has it.
+14. Remove all world markers: all go (yours and others'); restart follows the box.
+15. Permission: as a plain raid member, record what the game says and that the cycle still moved on.
+16. Another player marks a unit with your next marker: record what the game does when you then press.
+17. Profiles: a profile with marking off; switch to it: keys do nothing and say so; switch back.
+18. Share a setup including Marker order with a second account: their keys unchanged, orders replaced, Undo restores.
+19. With World Marker Cycler loaded and its default `B` key: the TwichUI row with the same key shows that another addon has it.

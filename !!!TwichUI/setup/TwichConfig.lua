@@ -1178,11 +1178,12 @@ local function Define()
     g = Group("markers", "Marker cycling", { page = "markersTarget",
         note = "Whether target and world marker cycling are on, which unit a target-marker key marks, and whether removing markers also restarts the cycle. Your keys are the game's key bindings and stay yours." })
     Switches(g, { "markersTarget", "markersWorld" })
-    Table(g, { "ui", "markers" }, R.Markers, { "targetUnit", "targetClearRestarts", "worldClearRestarts" },
+    Table(g, { "ui", "markers" }, R.Markers, { "targetUnit", "targetClearRestarts", "worldClearRestarts", "targetRestartAfterCombat" },
         { targetUnit = R.Markers and R.Markers.UNITS or {} })
     do
         local idx = g.index.markers
-        if idx and idx.targetUnit and idx.targetClearRestarts and idx.worldClearRestarts then
+        if idx and idx.targetUnit and idx.targetClearRestarts and idx.worldClearRestarts and idx.targetRestartAfterCombat then
+            idx.targetRestartAfterCombat.label = "Restart the target-marker cycle when combat ends"
             idx.targetUnit.label = "Target-marker key marks"
             idx.targetClearRestarts.label, idx.worldClearRestarts.label = "Removing your target's marker restarts the cycle", "Removing world markers restarts the cycle"
         end

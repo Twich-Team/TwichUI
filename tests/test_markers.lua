@@ -449,6 +449,53 @@ M.ResetOrder("target")
 Check(c[T].attrs["twichui-count"] == 8, "out of combat a change is given at once")
 
 ---------------------------------------------------------------------------
+-- 5b. Restarting the target cycle when combat ends (an option)
+---------------------------------------------------------------------------
+local function EndCombat()
+  game.combat = false
+  c.FireEvent("PLAYER_REGEN_ENABLED")
+end
+local function AdvanceTarget(n)
+  for _ = 1, n do Press(T) end
+end
+Check(M.Get("targetRestartAfterCombat") == false and not MK.RestartsAfterCombat(), "off by default, and not listening")
+MK.Restart("target"); Reset()
+AdvanceTarget(3)
+game.combat = true; EndCombat()
+Check(MK.Step("target") == 3, "off: leaving combat leaves the cycle where it was")
+
+Check(M.Set("targetRestartAfterCombat", true) and MK.RestartsAfterCombat(), "on: listening for the end of combat")
+Check(not M.Set("targetRestartAfterCombat", "yes"), "only a true or false is accepted")
+Reset()
+game.combat = true
+Check(MK.Step("target") == 3, "nothing happens when combat starts")
+EndCombat()
+Check(MK.Step("target") == 0 and #game.calls == 0 and #said == 0, "on: combat ends, the next press is the first again; nothing removed, nothing said")
+AdvanceTarget(2)
+Check(LastMark("Ogre") == 7, "and a press then goes on from the first")
+MK.Restart("world"); Press(WN); Press(WN)
+game.combat = true; EndCombat()
+Check(MK.Step("world") == 2, "the world cycle is not restarted")
+
+-- a change that waited for combat is given first, and the restart then follows
+MK.Restart("target")
+game.combat = true
+M.SetOn("target", 8, false)
+Check(MK.Pending("target"), "a change made in combat waits")
+EndCombat()
+Check(not MK.Pending("target") and c[T].attrs["twichui-count"] == 7 and MK.Step("target") == 0, "given first, then the cycle is at its first marker")
+M.SetOn("target", 8, true)
+
+-- off again, or the feature off: no longer listening
+Check(M.Set("targetRestartAfterCombat", false) and not MK.RestartsAfterCombat(), "ticked off: no longer listening")
+M.Set("targetRestartAfterCombat", true)
+R:SetEnabled("markersTarget", false)
+Check(not MK.RestartsAfterCombat(), "target cycling off: not listening either")
+R:SetEnabled("markersTarget", true)
+Check(MK.RestartsAfterCombat(), "and on again")
+M.Set("targetRestartAfterCombat", false)
+
+---------------------------------------------------------------------------
 -- 6. Keys: only ours, asked about first when taken, kept while off
 ---------------------------------------------------------------------------
 binds["SHIFT-F"] = "MOVEFORWARD"
@@ -491,6 +538,12 @@ Check(c[T].attrs["twichui-on"] == false and c[T].attrs["twichui-count"] == 8, "t
 Check(PF.Switch("Default"), "back")
 Check(not M.IsOn("target", 3) and M.Order("world")[8] == 8 and R:Enabled("markersTarget"), "the first profile's orders are as they were")
 Check(c[T].attrs["twichui-count"] == 7 and c[T].attrs["twichui-on"] == true, "and so are the buttons")
+do   -- the restart-after-combat choice is the profile's
+  M.Set("targetRestartAfterCombat", true)
+  Check(PF.Create("Pulls") and not M.Get("targetRestartAfterCombat") and not MK.RestartsAfterCombat(), "a new profile: off, and not listening")
+  Check(PF.Switch("Default") and M.Get("targetRestartAfterCombat") and MK.RestartsAfterCombat(), "back: on, and listening again")
+  M.Set("targetRestartAfterCombat", false)
+end
 do
   local function Has(t, word)
     for k, v in pairs(t) do
@@ -509,6 +562,7 @@ local entry = TC.Build({ all = true })
 local shared = entry.groups.markerOrder
 Check(shared and table.concat(shared.target.off, ",") == "3" and shared.world.order[8] == 8, "the orders in use are shared")
 Check(entry.groups.markers.modules.markersTarget == true and entry.groups.markers.markers.targetUnit == "target", "the switches and options too")
+Check(entry.groups.markers.markers.targetRestartAfterCombat == false, "including restarting after combat (a false is carried)")
 do
   local function Text(t, out)
     for k, v in pairs(t) do
