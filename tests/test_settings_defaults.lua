@@ -33,7 +33,7 @@ c.canvases = {}
 for _, page in ipairs(K.list) do if page.def.host then c.canvases[page.name] = K.pages[page.parent].name end end
 -- pages sit directly under TwichUI, except the appearance and addon pages, each under the page it belongs to
 for _, page in ipairs(K.list) do
-  local under = { ["RestedXP guide window"] = "Addon skins", ["SpeakStone speech frame"] = "Addon skins", ["Chronicle appearance"] = "Journey Chronicle",
+  local under = { ["SpeakStone speech frame"] = "Addon skins", ["Chronicle appearance"] = "Journey Chronicle",
     ["Pin appearance"] = "Party pins", ["Notification appearance"] = "Notifications", ["Stat weights"] = "Gear comparison", ["Refreshment shares"] = "Mage",
     ["Restock items"] = "Vendor restocking", ["Target markers"] = "Markers", ["World markers"] = "Markers", ["Marker bar"] = "Markers",
     ["Class resource bar layout"] = "Class resource bars", ["Class resource bar appearance"] = "Class resource bars",
@@ -244,7 +244,7 @@ assert(attune:GetTooltip():find("after reload"), "toggle change shows it needs a
 
 -- The overview links to one page per feature, in this order; every setting
 -- is on exactly one page (registration above refuses a repeat).
-assert(table.concat(pageOrder, ",") == "Notifications,Notification appearance,Quality of life,Markers,Chat cleaning,Food and drink,Vendor restocking,Auction House,Journey Chronicle,Chronicle appearance,Party pins,Pin appearance,Gear comparison,Mage,Class resource bars,Class resource bar layout,Class resource bar appearance,Class resource bar effects,Addon skins,RestedXP guide window,SpeakStone speech frame,Configuration sharing,Profiles,Troubleshooting", table.concat(pageOrder, ","))
+assert(table.concat(pageOrder, ",") == "Notifications,Notification appearance,Quality of life,Markers,Chat cleaning,Food and drink,Vendor restocking,Auction House,Journey Chronicle,Chronicle appearance,Party pins,Pin appearance,Gear comparison,Mage,Class resource bars,Class resource bar layout,Class resource bar appearance,Class resource bar effects,Addon skins,SpeakStone speech frame,RestedXP,Configuration sharing,Profiles,Troubleshooting", table.concat(pageOrder, ","))
 for variable, page in pairs({
   TWICHUI_media = "TwichUI", TWICHUI_quietLogin = "TwichUI", 
   TWICHUI_gearHints = "Gear comparison", TWICHUI_gearTree = "Gear comparison", TWICHUI_gearBagStyle = "Gear comparison",
@@ -567,8 +567,8 @@ c.TwichUIDB.modules.qolSummons = false; summonToggle.setting.changed(); assert(n
 local qolRow = assert(rows["Quality of life"], "the Quality of life page has a status")
 assert(qolRow.status():find("Off"), qolRow.status())
 c.TwichUIDB.modules.qolDuels, c.TwichUIDB.modules.qolReleasePvP = true, true; summonToggle.setting.changed()
-assert(qolRow.status():find("2 of 6 on"), qolRow.status())
--- The RestedXP destination row: off, visible, and its tooltip says what it is doing right now.
+assert(qolRow.status():find("2 of 5 on"), qolRow.status())
+-- The RestedXP destination row (on the RestedXP page now): off, visible, and its tooltip says what it is doing right now.
 do
   local guideRow; for _, i in ipairs(initializers) do if i.setting and i.setting.name == "Mark RestedXP's destination" then guideRow = i end end
   assert(guideRow and visible["Mark RestedXP's destination"], "the RestedXP destination row is there and visible")
@@ -694,9 +694,16 @@ do
   assert(marked and marked:find("not available", 1, true), "a missing font stays listed, marked")
   assert(container[1].value == "default", "RestedXP's own font is first")
 
-  -- RestedXP's settings are a page of their own under Addon skins, with a pointer on that page
-  assert(variables.TWICHUI_restedxpSkin == "RestedXP guide window", "the switch is on RestedXP's page: " .. tostring(variables.TWICHUI_restedxpSkin))
-  assert(variables.TWICHUI_restedxpLookBgColor == "RestedXP guide window" and variables.TWICHUI_restedxpArrowShape == "RestedXP guide window")
+  -- RestedXP's settings are a page of their own, in a section of their own, with a pointer on the Addon skins page
+  assert(variables.TWICHUI_restedxpSkin == "RestedXP", "the switch is on RestedXP's page: " .. tostring(variables.TWICHUI_restedxpSkin))
+  assert(variables.TWICHUI_restedxpLookBgColor == "RestedXP" and variables.TWICHUI_restedxpArrowShape == "RestedXP")
+  assert(variables.TWICHUI_qolGuideWaypoint == "RestedXP", "the map waypoint switch moved with it: " .. tostring(variables.TWICHUI_qolGuideWaypoint))
+  assert(K.pages.restedxp.group == "restedxp" and K.pages.restedxp.parent == nil, "a section of its own")
+  do
+    local groups, after = {}, nil
+    for i, g in ipairs(K.GROUPS) do groups[g.key] = i end
+    assert(groups.restedxp == groups.addons + 1, "the RestedXP section is listed right under Other addons")
+  end
   assert(K.pages.restedxp, "R:OpenSettings can open it")
   local pointer = Find("RestedXP guide window")
   local pointerButton
@@ -706,9 +713,9 @@ do
   assert(c.opened == "restedxp", "it opens the page")
   local skinsPageIndex, restedxpPageIndex
   for i, name in ipairs(pageOrder) do
-    if name == "Addon skins" then skinsPageIndex = i elseif name == "RestedXP guide window" then restedxpPageIndex = i end
+    if name == "Addon skins" then skinsPageIndex = i elseif name == "RestedXP" then restedxpPageIndex = i end
   end
-  assert(skinsPageIndex and restedxpPageIndex == skinsPageIndex + 1, "listed right under Addon skins")
+  assert(skinsPageIndex and restedxpPageIndex and restedxpPageIndex > skinsPageIndex, "listed after Addon skins")
 
   -- the waypoint arrow: common settings, validated, written through, and part of the appearance reset
   for _, v in ipairs({ "TWICHUI_restedxpArrowShape", "TWICHUI_restedxpArrowColor", "TWICHUI_restedxpArrowOpacity",
@@ -944,7 +951,7 @@ do
     "TWICHUI_restedxpTimerShowIcon", "TWICHUI_restedxpTimerBarHeight", "TWICHUI_restedxpTimerLookBgColor",
     "TWICHUI_restedxpTimerLookBorderColor" }
   for _, v in ipairs(common) do
-    assert(variables[v] == "RestedXP guide window", v .. " is on RestedXP's page: " .. tostring(variables[v]))
+    assert(variables[v] == "RestedXP", v .. " is on RestedXP's page: " .. tostring(variables[v]))
     local row = RowFor(v)
     assert(row and not row.advanced, v .. " is a common setting")
     assert(not row:Enabled(), v .. " is greyed out while the skin is off")

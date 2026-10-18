@@ -116,7 +116,7 @@ assert(FD.Get("size") == FD.DEFAULTS.size and FD.Get("preferConjured") == true a
 FD.Set("preferConjured", false)
 
 -- 4. The timer bars switch's tooltip is read when shown, so it follows the skin's own switch.
-local timers = Row("RestedXP guide window", "Skin timer bars")
+local timers = Row("RestedXP", "Skin timer bars")
 c.TwichUIDB.modules.restedxpSkin = false
 assert(timers:GetTooltip():find("Greyed out", 1, true) and timers:GetTooltip():find("Status:", 1, true))
 c.TwichUIDB.modules.restedxpSkin = true
@@ -157,9 +157,9 @@ for _, page in ipairs(K.list) do
     assert(not (row.section and row.section:GetName() == "Advanced"), page.name .. " has no Advanced section")
   end
 end
-local resetTimers = Row("RestedXP guide window", "Reset timer bars")
+local resetTimers = Row("RestedXP", "Reset timer bars")
 assert(resetTimers.section:GetName() == "Timer bar background and border", "the timer bars' Reset ends the timer bars' sections")
-local resetLook = Row("RestedXP guide window", "Reset appearance")
+local resetLook = Row("RestedXP", "Reset appearance")
 assert(resetLook.section:GetName() == "RestedXP guide window", "the look's Reset is with the switch it resets: " .. resetLook.section:GetName())
 
 -- 6. Map pins: no setting, Reset or Defaults touches them, kept pins included.

@@ -1,6 +1,6 @@
 # RestedXP destination waypoint
 
-**Quality of life > RestedXP guides > Mark RestedXP's destination** (`qol/GuideWaypoint.lua`, switch
+**RestedXP > Map waypoint > Mark RestedXP's destination** (`qol/GuideWaypoint.lua`, switch
 `modules.qolGuideWaypoint`, off by default). Written against RestedXP Guides v4.11.22 and the WoW: Forever
 UI source (1.60.1). Nothing here has been run in the game yet.
 

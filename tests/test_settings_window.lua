@@ -208,7 +208,7 @@ do
       assert(inSide[page.key], page.key .. " is in the sidebar")
     end
   end
-  assert(children == 17, "seventeen secondary pages: " .. children)
+  assert(children == 16, "sixteen secondary pages: " .. children)
   assert(#K.Tabs("overview") == 0 and #K.Tabs("auction") == 0, "a feature without pages under it has no tabs")
   do   -- Markers: its own list in Everyday, then the two kinds of marker cycling and the bar, each a tab of its own
     local labels = {}
@@ -219,7 +219,7 @@ do
   assert(#K.Tabs("notifications") == 2 and K.Tabs("notifications")[2].key == "notificationsLook", "Notifications has its appearance tab")
   local tabs = {}
   for _, t in ipairs(K.Tabs("skins")) do tabs[#tabs + 1] = K.TabLabel(t) end
-  assert(table.concat(tabs, ",") == "General,RestedXP guide window,SpeakStone speech frame", table.concat(tabs, ","))
+  assert(table.concat(tabs, ",") == "General,SpeakStone speech frame", table.concat(tabs, ","))
 
   -- each secondary page: opened directly, it is shown under its parent's sidebar row
   for _, page in ipairs(K.NavOrder()) do

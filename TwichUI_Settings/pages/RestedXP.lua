@@ -1,5 +1,7 @@
--- TwichUI settings: the RestedXP guide window's look (modules/RestedXPSkin.lua) and its timer bars
--- (modules/RestedXPTimers.lua). A page of its own under Addon skins. Not through EllesmereUI, which it doesn't need.
+-- TwichUI settings: everything TwichUI does for RestedXP Guides, in a section of its own in the list: the game's
+-- waypoint on RestedXP's destination (qol/GuideWaypoint.lua), the guide window's look (modules/RestedXPSkin.lua) and
+-- its timer bars (modules/RestedXPTimers.lua). The look is not through EllesmereUI, which it doesn't need. The data
+-- bar entry (modules/RestedXPBroker.lua) has no settings: it is there whenever RestedXP and a data bar addon are.
 
 local R = TwichUI
 local K = R.SettingsKit
@@ -16,6 +18,21 @@ local STATUS = {
     active = { "Active", nil },
 }
 
+local GUIDE_STATUS = {
+    off = { "Off" },
+    ["restedxp-missing"] = { "RestedXP not installed", "Install RestedXP Guides to use this." },
+    ["restedxp-disabled"] = { "RestedXP turned off", "RestedXP Guides is turned off in your AddOns list." },
+    waiting = { "Waiting for RestedXP", "RestedXP hasn't finished loading yet." },
+    unsupported = { "This RestedXP isn't supported", "This version of RestedXP doesn't have what this needs (its arrow and map updates). Nothing was changed." },
+    ["no-guide"] = { "No guide", "RestedXP has no guide showing." },
+    ["no-destination"] = { "No destination", "RestedXP's arrow isn't leading anywhere right now (for example, in an instance)." },
+    route = { "No single destination", "This step only has a route or an area, so there is nothing to mark." },
+    ["map-refused"] = { "Can't mark this map", "The game doesn't allow a waypoint on the map this destination is on." },
+    yours = { "Your waypoint is in use", "Your own waypoint is left as it is. Clear it to let this mark the next destination." },
+    cleared = { "Waiting for the next destination", "Its waypoint was cleared or replaced, so it waits for RestedXP's next destination." },
+    shown = { "Showing the destination" },
+}
+
 local TIMER_STATUS = {
     off = "Off: timer bars are drawn as RestedXP draws them.",
     ["skin-off"] = "Waiting: the guide window's look isn't drawing (the skin is off, another RestedXP theme is chosen, or another skin is replacing the window).",
@@ -24,14 +41,31 @@ local TIMER_STATUS = {
 }
 
 K.Page({
-    key = "restedxp", name = "RestedXP guide window", nav = "RestedXP guide window", parent = "skins", order = 95,
-    description = "A TwichUI look for the RestedXP Guides window, its waypoint arrow and its timer bars. Guide content and progress are RestedXP's own.",
-    keywords = "restedxp rxp guide leveling arrow timer bar step theme",
+    key = "restedxp", name = "RestedXP", order = 95, group = "restedxp",
+    description = "The game's waypoint on RestedXP's destination, and a TwichUI look for the RestedXP Guides window, its waypoint arrow and its timer bars. Guide content and progress are RestedXP's own.",
+    keywords = "restedxp rxp guide leveling map waypoint destination marker arrow timer bar step theme skin data bar broker",
     when = function() return R.RestedXPSkin ~= nil end,
     build = function()
         local RS = R.RestedXPSkin
         local Header, Toggle, Button, Proxy, ProxyToggle, Under = K.Header, K.Toggle, K.Button, K.Proxy, K.ProxyToggle, K.Under
         local BOOL, STRING, NUMBER = K.BOOL, K.STRING, K.NUMBER
+
+        -- The game's own waypoint on the place RestedXP's arrow leads to. Off until turned on (qol/GuideWaypoint.lua).
+        local GW = R.QoLGuideWaypoint
+        if GW then
+            Header("Map waypoint", "Uses the game's own waypoint for where RestedXP is leading you. RestedXP's arrow and map pins are unchanged.")
+            local gwBase = "Puts the game's waypoint (its map pin and the marker in the world) on the place RestedXP's arrow is leading you to, and moves it on when RestedXP does. Where RestedXP only routes you along a path, it marks where that path ends; a kill area with no single destination gets none.\n\nA waypoint you placed yourself is never moved or cleared: while yours is there, this waits. If you clear or replace its waypoint, it leaves it so until the next destination. Each new destination is made the tracked one, which can take the in-world marker from a quest you were tracking. Turning this off clears its own waypoint."
+            local guideToggle = Toggle("qolGuideWaypoint", "Mark RestedXP's destination", gwBase)
+            if guideToggle and guideToggle.GetTooltip ~= nil then
+                -- read when the tooltip is shown, so it is never stale
+                guideToggle.GetTooltip = function()
+                    local code = GW.Status()
+                    local text = GUIDE_STATUS[code] or { code }
+                    local color = (code == "shown" and R.GREEN) or (code == "off" and R.GREY) or R.GOLD
+                    return gwBase .. "\n\nStatus: " .. color .. text[1] .. "|r" .. (text[2] and ("\n" .. text[2]) or "")
+                end
+            end
+        end
 
         local intro = Header("RestedXP guide window", "Gives the RestedXP Guides window a TwichUI look: a background and border, text colors, fonts and sizes, a quieter header and footer, and a slim scroll bar; and its waypoint arrow a shape, color and size of your choosing. It never changes guide content, progress, step completion or the window's position and size. Works with or without EllesmereUI. There is no sample here: open RestedXP's guide window to see each change as you make it.")
         local function RestedXPStatus()

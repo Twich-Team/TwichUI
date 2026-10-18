@@ -1,6 +1,6 @@
 # RestedXP skin
 
-The settings are a page of their own, **Addon skins > RestedXP guide window** (a nested page of the Addon skins page, which keeps a short pointer to it).
+The settings are a page of their own, **RestedXP** (a section of its own in the list, under Other addons; the Addon skins page keeps a short pointer to it). The page also holds the map waypoint switch, **Mark RestedXP's destination**.
 
 An optional look for the RestedXP Guides window (`modules/RestedXPSkin.lua`, `diag/RestedXPSkin.lua`).
 Written against RestedXP Guides v4.11.22 (Interface 16001 listed). Off by default.
@@ -172,7 +172,7 @@ only when it makes the row) and are put back by value. Everything else is put ba
 ## The current-step panel
 
 Two small additions to RestedXP's panel of step cards (`CurrentStepFrame`), both in the skin's own pass and
-both under **Addon skins > RestedXP guide window > Current step**.
+both under **RestedXP > Current step**.
 
 ### Step tab: Step X, X/Y, with a percentage
 
@@ -352,7 +352,7 @@ spark, so none is offered. Bars the library makes for other addons are never tou
 * In combat nothing is drawn or restored; the latest request waits for `PLAYER_REGEN_ENABLED`. (The bars are
   not protected frames, but their anchors hang from RestedXP's window, so this follows the skin's own rule.)
 
-### Settings (Addon skins > RestedXP guide window > Timer bars)
+### Settings (RestedXP > Timer bars)
 
 | Setting | Default | Notes |
 | --- | --- | --- |

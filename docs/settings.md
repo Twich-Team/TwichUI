@@ -82,7 +82,8 @@ Home                      feature statuses (each opens its page), Help, General
 Everyday                  Notifications, Quality of life, Chat cleaning › Channels, Custom rules, Live view, Food and drink, Vendor restocking › Restock items, Auction House
 Journey                   Journey Chronicle › Appearance, Party pins › Appearance
 Gear & class              Gear comparison › Stat weights, Mage (Mages only) › Refreshment shares, Class resource bars › Layout, Appearance, Effects
-Other addons              Addon skins › RestedXP guide window, SpeakStone speech frame
+Other addons              Addon skins › SpeakStone speech frame
+RestedXP                  RestedXP (map waypoint, guide window look, timer bars)
 Your configuration        Configuration sharing, Profiles, Troubleshooting
 ```
 
@@ -269,7 +270,7 @@ Turn on Display Lua Errors. Test TwichUI alone, then with EllesmereUI. After eac
    nothing is clipped; badges sit after their label.
 7. **No hidden settings.** Home has no "Show advanced options". Quality of life shows **Wait before accepting a
    summon** under **Accept summons from** in Summons and resurrection, and **Wait before releasing** under Release in
-   battlegrounds; Gear comparison, Notifications, Configuration sharing, Chronicle appearance, RestedXP guide window and
+   battlegrounds; Gear comparison, Notifications, Configuration sharing, Chronicle appearance, RestedXP and
    SpeakStone speech frame show their former Advanced rows in their sections. With an old save that had the option on or
    off, nothing is hidden and nothing errors.
 8. **Greyed out.** Turn Party pins off: its rows grey out with "Needs ..." under each, and don't respond.

@@ -1,5 +1,5 @@
 -- TwichUI settings: Addon skins (the EllesmereUI look for supported addons, and a pointer to the RestedXP
--- guide window's own page, pages/RestedXP.lua).
+-- guide window's own page, pages/RestedXP.lua, in the RestedXP section of the list).
 
 local R = TwichUI
 local K = R.SettingsKit
@@ -42,7 +42,7 @@ end
 
 K.Page({
     key = "skins", name = "Addon skins", order = 90, group = "addons",
-    description = "The EllesmereUI look for supported addons, and TwichUI's own look for the RestedXP guide window and SpeakStone. The rest of TwichUI works without them.",
+    description = "The EllesmereUI look for supported addons, and TwichUI's own look for SpeakStone and the RestedXP guide window (in its own section). The rest of TwichUI works without them.",
     keywords = "skin theme ellesmere attune auctionator dungeon journal whatstraining",
     overview = {
         label = "Addon skins", tip = "The EllesmereUI look for supported addons. Needs EllesmereUI; the rest of TwichUI works without it.",
@@ -84,11 +84,11 @@ K.Page({
             end
         end
 
-        -- RestedXP: its own look, set on a page of its own under this one (they are many): a short pointer here.
+        -- RestedXP: its own section in the list (they are many): a short pointer here.
         if R.RestedXPSkin then
-            Header("RestedXP guide window", "Gives the RestedXP Guides window a TwichUI look, and its waypoint arrow a shape, color and size of your choosing. Its settings are on a page of their own, under this one.")
+            Header("RestedXP guide window", "Gives the RestedXP Guides window a TwichUI look, and its waypoint arrow a shape, color and size of your choosing. Its settings are in the RestedXP section of the list, on the left.")
             Button("RestedXP guide window", "Open its page", function() R:OpenSettings("restedxp") end,
-                "Opens the RestedXP guide window page, under Addon skins: the switch, the look, text, spacing, scroll bar, header and footer, and the waypoint arrow.")
+                "Opens the RestedXP page, in the RestedXP section: the game's waypoint on RestedXP's destination, and the guide window's switch, look, text, spacing, scroll bar, header and footer, waypoint arrow and timer bars.")
         end
 
         -- SpeakStone: the same, its own page, not through EllesmereUI.
