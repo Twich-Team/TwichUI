@@ -36,6 +36,9 @@ Methods = {
   CreateTexture = function(s) local t = Fake("texture"); t.parent = s; return t end,
   CreateFontString = function(s) local t = Fake("font"); t.parent = s; return t end,
   SetText = function(s, v) s.text = v; Count(s, "SetText") end,
+  SetMinMaxValues = function(s, lo, hi) s.minMax = { lo, hi } end,
+  SetValue = function(s, v, interp) s.value, s.interp = v, interp; Count(s, "SetValue") end,
+  GetStatusBarTexture = function(s) s.sbTex = s.sbTex or Fake("texture"); return s.sbTex end,
   GetStringWidth = function() return 100 end,
   ClearAllPoints = function(s) s.points = {} end,
   SetPoint = function(s, ...) s.points[#s.points + 1] = { ... } end,
@@ -87,7 +90,13 @@ c.RAID_CLASS_COLORS = { MAGE = { r = 0.25, g = 0.78, b = 0.92 }, WARRIOR = { r =
 c.CreateColor = function(r, g, b, a) return { r = r, g = g, b = b, a = a } end
 
 -- The player: a table the fake APIs read, changed by the tests.
-local SECRET = {}
+-- A restricted value: addon code may not compute with it or order it, so every such attempt is an error here too.
+local SECRET = setmetatable({}, {
+  __lt = function() error("compared a secret value") end, __le = function() error("compared a secret value") end,
+  __add = function() error("computed with a secret value") end, __sub = function() error("computed with a secret value") end,
+  __mul = function() error("computed with a secret value") end, __div = function() error("computed with a secret value") end,
+  __concat = function() error("concatenated a secret value") end, __unm = function() error("computed with a secret value") end,
+})
 local W
 local function World(class)
   local presets = {
@@ -103,6 +112,13 @@ c.UnitClass = function() return W.name, W.class end
 c.UnitPowerType = function() return W.ptype, W.token, 0.3, 0.5, 0.9 end
 c.UnitPower = function(_, t) return W.P[t] end
 c.UnitPowerMax = function(_, t) return W.PM[t] end
+c.CurveConstants = { ScaleTo100 = {} }
+-- The game's own percentage: restricted exactly when the current value is.
+c.UnitPowerPercent = function(_, t, _, curve)
+  assert(curve == c.CurveConstants.ScaleTo100, "asked for 0 to 100")
+  if W.P[t] == SECRET then return SECRET end
+  return W.P[t] / W.PM[t] * 100
+end
 c.GetComboPoints = function() return W.combo end
 c.UnitAffectingCombat = function() return W.combat end
 c.UnitIsDeadOrGhost = function() return W.dead end
@@ -209,7 +225,14 @@ do
   -- unavailable or restricted values are never guessed at
   World("MAGE"); CBR.Sense()
   W.P[0] = SECRET; s = CBR.Read(CBR.Resolve("primary"), ctx)
-  assert(s.ok == false, "a secret value is unavailable, not zero")
+  assert(s.ok and s.secret and s.cur == SECRET and s.max == 1000, "a restricted current value is kept as it is, flagged, with its plain maximum")
+  W.P[0] = 800; s = CBR.Read(CBR.Resolve("primary"), ctx)
+  assert(s.ok and not s.secret and s.cur == 800, "and the flag clears when the value is plain again")
+  W.P[0] = SECRET; W.PM[0] = SECRET; s = CBR.Read(CBR.Resolve("primary"), ctx)
+  assert(s.ok == false and not s.secret, "a restricted maximum leaves nothing to fill against: unavailable, not zero")
+  W.PM[0] = 1000; W.P[0] = nil; s = CBR.Read(CBR.Resolve("primary"), ctx)
+  assert(s.ok == false, "a missing value is unavailable")
+  W.P[0] = 800
   W.P[0] = 800; W.PM[0] = 0; s = CBR.Read(CBR.Resolve("primary"), ctx)
   assert(s.ok == false, "a maximum of 0 is unavailable")
   W.PM[0] = 1000; W.P[0] = 5000; s = CBR.Read(CBR.Resolve("primary"), ctx)
@@ -442,12 +465,55 @@ do
   CB.Set("primaryText", "none"); assert(not bar.textHolder.shown, "hidden text is hidden")
   CB.Set("primaryText", "current"); assert(bar.text.text == "300" and bar.textHolder.shown)
   -- unavailable: the bar hides rather than guess
-  W.P[0] = SECRET
+  W.PM[0] = SECRET
+  Fire("UNIT_MAXPOWER", "player", "MANA")
+  assert(not bar.frame.shown, "a restricted maximum hides the bar")
+  W.PM[0] = 1000; W.P[0] = nil
   Fire("UNIT_POWER_FREQUENT", "player", "MANA")
-  assert(not bar.frame.shown, "a restricted value hides the bar")
+  assert(not bar.frame.shown, "so does a missing value")
   W.P[0] = 400
   Fire("UNIT_POWER_FREQUENT", "player", "MANA")
   assert(bar.frame.shown and bar.text.text == "400", "and it returns when the value does")
+
+  -- a restricted current value (a Mage's mana in Forever): drawn by a StatusBar, never computed with
+  W.P[0] = SECRET
+  Fire("UNIT_POWER_FREQUENT", "player", "MANA")
+  assert(bar.frame.shown, "a restricted current value still shows the bar")
+  local sb = bar.status
+  assert(sb and sb.shown and sb.value == SECRET and sb.minMax[1] == 0 and sb.minMax[2] == 1000, "the StatusBar is handed the value and the plain maximum")
+  assert(not bar.fill.shown, "the fill texture is not used for it")
+  Fire("UNIT_POWER_FREQUENT", "player", "MANA")
+  Fire("UNIT_POWER_FREQUENT", "player", "MANA")
+  assert(bar.frame.shown, "every event for it is taken as a change, without comparing")
+  CB.Set("primaryText", "percent")
+  assert(bar.text.text == "", "no formatter takes a restricted percentage here: blank, never wrong")
+  CB.Set("primaryText", "current")
+  -- with a formatter that takes it, the words are the formatter's
+  do
+    local fmt = string.format
+    string.format = function(f, v, ...) if v == SECRET then return "restricted " .. f end return fmt(f, v, ...) end
+    Fire("UNIT_POWER_FREQUENT", "player", "MANA")
+    assert(bar.text.text == "restricted %d", "the text is built by the formatter, not by us")
+    CB.Set("primaryText", "percent")
+    assert(bar.text.text == "restricted %.0f%%", "the percentage is the game's own, not computed here")
+    W.P[0] = 400   -- plain again: ordinary arithmetic
+    Fire("UNIT_POWER_FREQUENT", "player", "MANA")
+    assert(bar.text.text == "40%", "and a plain value is a plain percentage")
+    W.P[0] = SECRET
+    Fire("UNIT_POWER_FREQUENT", "player", "MANA")
+    string.format = fmt
+    CB.Set("primaryText", "current")
+  end
+  -- "active" never calls a restricted value "at rest"; the settings snapshot never carries it
+  CB.Set("show", "active")
+  assert(bar.frame.shown, "Show when active keeps a restricted bar shown")
+  local snap = CB.Snapshot().slots.primary
+  assert(snap.secret == true and snap.cur == nil and snap.max == 1000, "the snapshot hands out no restricted value")
+  CB.Set("show", "always")
+  -- back to a plain value: the fill returns and the StatusBar goes
+  W.P[0] = 250
+  Fire("UNIT_POWER_FREQUENT", "player", "MANA")
+  assert(not sb.shown and bar.fill.shown and near(bar.fill.width / bar.innerW, 0.25) and bar.text.text == "250", "a plain value goes back to the fill")
 end
 
 ---------------------------------------------------------------------------

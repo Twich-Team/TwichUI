@@ -95,6 +95,7 @@ local function Wants(rec)
     if show == "always" or show == "fade" then return true end   -- fade: always there, its opacity follows combat
     if show == "combat" then return flags.combat end
     if flags.combat then return true end                           -- "active": in combat, or
+    if rec.secret then return true end                             -- a restricted value cannot be compared: never "at rest"
     return not CBR.AtRest(rec.key, rec.cur, rec.max)               -- not at the resource's own resting value
 end
 
@@ -327,13 +328,14 @@ end
 local function Push(rec, snap)
     local view = View(rec)
     if not (view and rec.bar and rec.style) then return end
-    if preview.active or view.ok then rec.bar:SetState(view.cur, view.max, snap) end
+    if preview.active or view.ok then rec.bar:SetState(view.cur, view.max, snap, view.secret, view.pct) end
 end
 
 -- Lets the effects see a slot's numbers, when it is shown. quiet: a start, not a transition.
 local function Effects(rec, quiet)
     local view = View(rec)
     if not (FX and view and rec.bar and rec.style and rec.visible) then return end
+    if view.secret and not preview.active then return end   -- effects read the number; a restricted one is not theirs to read
     if FX.Enabled() and (preview.active or view.ok) then FX.Update(rec.bar, view, ctx, quiet) end
 end
 
@@ -374,7 +376,7 @@ local function ResetRec(rec)
         rec.bar:Clear()
         if FX then FX.Reset(rec.bar) end
     end
-    rec.ok, rec.cur, rec.max, rec.key = false, nil, nil, nil
+    rec.ok, rec.cur, rec.max, rec.key, rec.secret = false, nil, nil, nil, false
 end
 
 -- Reads every active provider into its slot. Returns true when a slot's resource itself changed.
@@ -390,7 +392,7 @@ local function ReadAll()
                 rec.key = s.key
                 switched = true
             end
-            rec.ok, rec.cur, rec.max = s.ok, s.cur, s.max
+            rec.ok, rec.cur, rec.max, rec.secret = s.ok, s.cur, s.max, s.secret
         end
     end
     return switched
@@ -460,8 +462,9 @@ local function Update(quiet)
         local p = rec.provider
         if p then
             local s = CBR.Read(p, ctx)
-            if s.ok ~= rec.ok or s.cur ~= rec.cur or s.max ~= rec.max then
-                rec.ok, rec.cur, rec.max = s.ok, s.cur, s.max
+            -- a restricted value cannot be compared with the last one, so every event for it counts as a change
+            if s.secret or rec.secret or s.ok ~= rec.ok or s.cur ~= rec.cur or s.max ~= rec.max then
+                rec.ok, rec.cur, rec.max, rec.secret = s.ok, s.cur, s.max, s.secret
                 if not preview.active then
                     Push(rec, false)
                     n = n + 1
@@ -710,7 +713,7 @@ function CB.Snapshot()
     for _, slot in ipairs(SLOTS) do
         local rec = recs[slot]
         out.slots[slot] = rec and { provider = rec.provider and rec.provider.id or nil, key = rec.key, shown = rec.visible,
-            cur = rec.cur, max = rec.max, ok = rec.ok } or {}
+            cur = (not rec.secret) and rec.cur or nil, max = rec.max, ok = rec.ok, secret = rec.secret or false } or {}
     end
     return out
 end

@@ -21,7 +21,8 @@ local function Snapshot()
         (s.refused or 0) > 0 and (" (%d refused by the client)"):format(s.refused) or "")
     for _, slot in ipairs({ "primary", "secondary", "tertiary" }) do
         local info = s.slots[slot] or {}
-        Line("%s: %s; shown: %s", slot, info.key and (info.provider .. " / " .. info.key) or "no resource", D.Flag(info.shown))
+        Line("%s: %s; shown: %s%s", slot, info.key and (info.provider .. " / " .. info.key) or "no resource", D.Flag(info.shown),
+            info.secret and "; value restricted by the game (drawn by the game's own bar)" or "")
     end
     local A, FX = R.ClassBarAnim, R.ClassBarEffects
     Line("animation driver: %s (%d running); effects: %s, %d effect objects on %d bars", A and A.Running() and "running" or "idle",

@@ -23,8 +23,12 @@
 --     and anything that would have to be inferred from auras. Nothing here recharges, so there is no cooldown
 --     display. A resource the client does not report is never drawn as another one.
 --
--- A game value that is "secret" (restricted) cannot be compared or formatted. Every read goes through Plain(): a
--- secret value makes the state not ok, which the bar shows as unavailable (it hides), never as a guess.
+-- A game value that is "secret" (restricted) cannot be compared, computed with or formatted by addon code. Every read
+-- goes through Plain(), and a secret value makes the state not ok (the bar hides), never a guess, with one exception:
+-- the current value of a continuous power (a Mage's mana is secret in Forever; its maximum is not). That state is ok
+-- with secret = true, cur holds the restricted value untouched (pct, when the game supplies it, is the game's own
+-- 0 to 100 of the same), and the only things that may touch them are a StatusBar's SetValue and a FontString's
+-- SetText (Bar.lua). Nothing compares it, adds it or tests it for rest.
 --
 -- Adding a resource: R.ClassBarResources.Register{ id, slot, kind, classes (optional set), keys (optional list, what
 -- settings offers an override for), unitEvents, events, Applies(ctx), Read(provider, ctx) } and, if it has a
@@ -159,7 +163,7 @@ function CBR.Register(def)
     if type(def.Applies) ~= "function" or type(def.Read) ~= "function" then return false, "functions" end
     if def.classes ~= nil and type(def.classes) ~= "table" then return false, "classes" end
     def.keys, def.unitEvents, def.events = List(def.keys), List(def.unitEvents), List(def.events)
-    def.state = { id = def.id, slot = def.slot, kind = def.kind, key = nil, token = nil, label = nil, cur = 0, max = 0, ok = false }
+    def.state = { id = def.id, slot = def.slot, kind = def.kind, key = nil, token = nil, label = nil, cur = 0, max = 0, ok = false, secret = false, pct = nil }
     providers[#providers + 1] = def
     byId[def.id] = def
     local list = bySlot[def.slot]
@@ -260,7 +264,26 @@ local function Clamp(cur, max)
 end
 
 local function Unavailable(s)
-    s.ok, s.cur, s.max = false, 0, 0
+    s.ok, s.cur, s.max, s.secret, s.pct = false, 0, 0, false, nil
+end
+
+-- Reads a continuous power into a state. A plain current value is clamped; a restricted one (the maximum must still be
+-- plain, or there is nothing to fill against) is kept as it came, flagged secret, and never looked at.
+local function ReadContinuous(s, powerType)
+    local raw = UnitPower("player", powerType)
+    local max = PlainNumber(UnitPowerMax("player", powerType))
+    if not max or max <= 0 then Unavailable(s) return end
+    if issecretvalue and issecretvalue(raw) then
+        s.cur, s.max, s.ok, s.secret = raw, max, true, true
+        -- The percentage needs arithmetic we may not do, so the game does it: 0 to 100, itself restricted (text only).
+        local curve = rawget(_G, "CurveConstants")
+        s.pct = nil
+        if UnitPowerPercent and curve and curve.ScaleTo100 then s.pct = UnitPowerPercent("player", powerType, false, curve.ScaleTo100) end   -- never tested for truth
+        return
+    end
+    local cur = PlainNumber(raw)
+    if not cur then Unavailable(s) return end
+    s.cur, s.max, s.ok, s.secret, s.pct = Clamp(cur, max), max, true, false, nil
 end
 
 -- The power the client reports for the player.
@@ -272,9 +295,7 @@ CBR.Register({
         local s = p.state
         s.key, s.token, s.label = c.token, c.token, c.token and CBR.Label(c.token) or nil
         if not c.powerType then Unavailable(s) return end
-        local cur, max = PlainNumber(UnitPower("player", c.powerType)), PlainNumber(UnitPowerMax("player", c.powerType))
-        if not cur or not max or max <= 0 then Unavailable(s) return end
-        s.cur, s.max, s.ok = Clamp(cur, max), max, true
+        ReadContinuous(s, c.powerType)
     end,
 })
 
@@ -295,7 +316,7 @@ CBR.Register({
         if not max or max < 1 or not cur then Unavailable(s) return end
         if max > CBR.COMBO_CAP then max = CBR.COMBO_CAP end
         max = math.floor(max)
-        s.cur, s.max, s.ok = math.floor(Clamp(cur, max)), max, true
+        s.cur, s.max, s.ok, s.secret = math.floor(Clamp(cur, max)), max, true, false
     end,
 })
 
@@ -307,8 +328,6 @@ CBR.Register({
     Read = function(p)
         local s = p.state
         s.key, s.token, s.label = "MANA", "MANA", CBR.Label("MANA")
-        local cur, max = PlainNumber(UnitPower("player", POWER_MANA)), PlainNumber(UnitPowerMax("player", POWER_MANA))
-        if not cur or not max or max <= 0 then Unavailable(s) return end
-        s.cur, s.max, s.ok = Clamp(cur, max), max, true
+        ReadContinuous(s, POWER_MANA)
     end,
 })

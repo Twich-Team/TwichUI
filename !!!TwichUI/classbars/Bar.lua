@@ -7,6 +7,9 @@
 -- Parts, all made once and reused for every resource the bar ever shows:
 --   frame     a BackdropTemplate frame: the background and border are the shared MenuStyle look, drawn by its Apply
 --   fill      the continuous fill (a texture whose width is the fraction), hidden while the bar is segmented
+--   status    a StatusBar, made only when a current value first arrives restricted ("secret": a Mage's mana in Forever).
+--             Addon code may not compute with such a value, but SetValue and SetText accept it, so the game does the
+--             drawing. Plain values never use it; the fill texture above stays the one path for them.
 --   cells     up to MAX_SEGMENTS pairs (a dim slot, a lit fill), made as the largest max seen needs them
 --   fx        a frame above the fill for effects (Effects.lua); text sits above it, so an effect never covers it
 --   text      the value, drawn only when its displayed number changes
@@ -33,8 +36,7 @@ BF.Bar = Bar
 
 local white   -- a white color object, to put a texture's gradient back to plain
 
-local function PaintTexture(tex, style)
-    tex:SetTexture(style.texture)
+local function PaintTint(tex, style)
     if style.gradient and style.c1 and style.c2 and tex.SetGradient then
         tex:SetVertexColor(1, 1, 1, 1)
         tex:SetGradient(style.dir, style.c1, style.c2)
@@ -47,6 +49,11 @@ local function PaintTexture(tex, style)
     end
     tex.twichGradient = nil
     tex:SetVertexColor(style.r, style.g, style.b, 1)
+end
+
+local function PaintTexture(tex, style)
+    tex:SetTexture(style.texture)
+    PaintTint(tex, style)
 end
 
 function BF.New(parent, slot)
@@ -155,6 +162,36 @@ local function PlaceFill(self)
     self.geometry = "fill"
 end
 
+-- The StatusBar for restricted values, placed and painted like the fill. Only touched once it exists.
+local function PlaceStatus(self)
+    local sb, f = self.status, self.frame
+    if not sb then return end
+    sb:ClearAllPoints()
+    sb:SetPoint("TOPLEFT", f, "TOPLEFT", self.edge, -self.edge)
+    sb:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -self.edge, self.edge)
+    sb:SetStatusBarTexture(self.style.texture)
+    local tex = sb:GetStatusBarTexture()
+    if tex then PaintTint(tex, self.style) end
+end
+
+local function EnsureStatus(self)
+    if self.status then return self.status end
+    local sb = CreateFrame("StatusBar", nil, self.frame)
+    sb:SetFrameLevel(self.frame:GetFrameLevel() + 1)   -- above the background, below the effects and the text
+    sb:Hide()
+    self.status = sb
+    PlaceStatus(self)
+    return sb
+end
+
+-- Leaves restricted mode: the status bar goes away and the fill texture is drawn from scratch.
+local function LeaveSecret(self)
+    if not self.secretMode then return end
+    self.secretMode = false
+    if self.status then self.status:Hide() end
+    self.display = nil
+end
+
 local function PaintFill(self)
     local d = self.display or 0
     local fill = self.fill
@@ -185,6 +222,15 @@ local function PaintCells(self)
     self.lit = lit
 end
 
+-- The words for a restricted current value. The text is built by the game's own formatter and handed straight to
+-- SetText; if the client refuses either step the bar shows no words, never a wrong number. A percentage needs
+-- arithmetic, which a restricted value does not allow, so it is the game's own (the provider's pct), or nothing.
+local function SecretWords(fs, mode, cur, max, pct)
+    if mode == "percent" then fs:SetText(("%.0f%%"):format(pct))
+    elseif mode == "currentMax" then fs:SetText(("%d / %d"):format(cur, max))
+    else fs:SetText(("%d"):format(cur)) end
+end
+
 local function UpdateText(self)
     local s = self.style
     local mode = s.text
@@ -198,6 +244,11 @@ local function UpdateText(self)
     if self.textShown ~= true then
         self.textHolder:Show()
         self.textShown = true
+    end
+    if self.secretMode then
+        self.textMode, self.textA, self.textB = nil, nil, nil   -- nothing to compare with: set it again when plain
+        if not pcall(SecretWords, self.text, mode, self.cur, self.max, self.pct) then self.text:SetText("") end   -- no pct: blank
+        return
     end
     local cur, max = math.floor((self.cur or 0) + 0.0001), math.floor(self.max or 0)
     local b = max
@@ -245,23 +296,44 @@ function Bar:Configure(style)
         end
         self.cellsN = 0
         PlaceFill(self)
+        PlaceStatus(self)
         self.display = nil
     else
         self.fill:Hide()
         self.fillShown = false
         A.Remove(self)
         self.geometry = nil
+        self.secretMode = false
+        if self.status then self.status:Hide() end
     end
     self.textMode = nil
-    if self.cur ~= nil then self:SetState(self.cur, self.max, true) end
+    if self.hasState then self:SetState(self.cur, self.max, true, self.secretMode, self.pct) end
     return true
 end
 
--- The numbers to show. snap: no easing (a first value, a new resource).
-function Bar:SetState(cur, max, snap)
-    self.cur, self.max = cur, max
+-- The numbers to show. snap: no easing (a first value, a new resource). secret: cur is a restricted value; it is only
+-- ever handed to the StatusBar and the text, never compared or computed with (a continuous bar only). pct: the game's
+-- own 0 to 100 for it, for the percentage text.
+function Bar:SetState(cur, max, snap, secret, pct)
+    self.cur, self.max, self.hasState, self.pct = cur, max, true, pct
     local s = self.style
     if not s then return end
+    if secret and s.kind == "continuous" then
+        local sb = EnsureStatus(self)
+        local fresh = not self.secretMode
+        self.secretMode = true
+        A.Remove(self)
+        self.display, self.target = nil, nil
+        self.fill:Hide()
+        self.fillShown = false
+        sb:SetMinMaxValues(0, max)
+        local ease = s.smoothing and not snap and not fresh and rawget(_G, "Enum") and Enum.StatusBarInterpolation
+        if ease and ease.ExponentialEaseOut then sb:SetValue(cur, ease.ExponentialEaseOut) else sb:SetValue(cur) end
+        if not sb:IsShown() then sb:Show() end
+        UpdateText(self)
+        return
+    end
+    LeaveSecret(self)
     if s.kind == "continuous" then
         local frac = max > 0 and cur / max or 0
         if frac > 1 then frac = 1 elseif frac < 0 then frac = 0 end
@@ -303,7 +375,9 @@ end
 -- Forgets what was drawn (a different resource is coming): no stale fill, segments or words.
 function Bar:Clear()
     A.Remove(self)
-    self.cur, self.max, self.display, self.target = nil, nil, nil, nil
+    self.cur, self.max, self.display, self.target, self.hasState, self.pct = nil, nil, nil, nil, false, nil
+    self.secretMode = false
+    if self.status then self.status:Hide() end
     self.fill:Hide()
     self.fillShown = false
     for i = 1, self.cellsN do self.cells[i].fill:Hide() end

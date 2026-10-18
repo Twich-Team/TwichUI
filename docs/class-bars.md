@@ -29,8 +29,15 @@ Not covered, and why:
 | Cooldown / recharge displays | No Forever resource recharges in a way the client exposes; the segmented bar never animates a recharge. If one is added later it needs a driver (`Anim.lua`) and a data source first |
 | Hiding or moving Blizzard's, EllesmereUI's or another addon's bars | Not offered. If it ever is, it must be a separate explicit option with verified ownership |
 
-If the client reports a value TwichUI cannot read (a restricted/"secret" value, a maximum of 0, no power at all), that
+If the client reports a value TwichUI cannot read (a restricted maximum, a maximum of 0, no power at all), that
 bar is **hidden**, never drawn from a guess, and it returns when the value does.
+
+One restricted value is drawn: the **current** value of a continuous power (observed on a Mage in Forever: current mana
+is secret, the maximum is plain). Addon code cannot compute with it, so the bar hands it to a native `StatusBar`
+(`SetValue` accepts restricted values) and to `SetText`. In that state the effects (they read the
+number) and "Show when active"'s rest test are not applied: the bar simply stays shown. Percentage text is the game's
+own `UnitPowerPercent(..., CurveConstants.ScaleTo100)`, formatted and not computed, and blank if the client lacks it. Troubleshooting says when a
+bar is in this state. Plain values keep using the fill texture.
 
 ## Architecture
 
@@ -221,7 +228,9 @@ stand-in for the game: they prove our logic and lifecycles, not the client's beh
 - Druid: Caster, Cat, Bear and back: bars switch with no stale label or lit segments; combo points only in Cat; the thin
   mana bar in Cat and Bear; no combo bar in Bear. Confirm `UnitPower("player", Enum.PowerType.Mana)` returns mana in Cat.
 - Hunter / Priest / Shaman / Paladin / Warlock: the bar follows what `UnitPowerType` reports (Focus vs mana for Hunters).
-- Whether any value is restricted ("secret") for the player's own power in combat; the bar should hide, not guess.
+- Restricted current power (a Mage's mana was secret outside combat): the bar fills and follows mana through casts and
+  regeneration, in and out of combat; the gradient and texture match the plain bars; "Current" and "Current / max" text
+  show a number (or nothing if the client refuses it, never a wrong one); "Percent" shows the game's own percentage; smoothing eases.
 - Death, release, resurrection, zoning, instances, `/reload`, mounting, a vehicle.
 - Preview and Move: sample numbers, "Preview" tag, handle drag, right-click finish, Reset position; at different UI
   scales (the Graphics UI Scale slider and 0.64 / 1.0 / 1.2 scale) and a different resolution: the bars stay on screen.
