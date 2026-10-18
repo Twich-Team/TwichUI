@@ -38,7 +38,6 @@ Every feature has its own page in the TwichUI settings (`/tui options`), and eve
   - Accept summons and resurrections from people you choose.
   - Release your spirit in battlegrounds.
   - Decline duel requests.
-  - Easy Fishing: one key to cast and reel in.
   - A Quick Keybind button in the Game Menu.
   - Show the game's waypoint on the place RestedXP's arrow is leading you.
 - **Vendor restocking:** Keep chosen items, such as reagents and ammunition, at a set number in your bags. When a merchant sells one you are short of, TwichUI asks before buying the difference (or buys it by itself, once you confirm that), within your money, bag space and an optional spending limit. Off until you turn it on.

@@ -82,8 +82,7 @@ Generated from commit messages, the same Markdown for GitHub and CurseForge:
   under Changes as written.
 - Left out: `fixup!`/`squash!`/`amend!` commits and messages containing `[skip changelog]` or `[no changelog]`.
 - Commit text is shown as plain text (Markdown, HTML and @mentions are neutralized).
-- The notes are only as good as the commit subjects: write them for players ("Easy Fishing: reel in with the
-  same key"), not "refinement".
+- The notes are only as good as the commit subjects: write them for players ("Vendor restocking: ask before buying"), not "refinement".
 
 The first release (no earlier stable tag) lists no commits, only "The first release." and its highlights: write
 them in the annotated tag.

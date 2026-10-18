@@ -175,14 +175,13 @@ auction\Price.lua
 auction\Scan.lua
 auction\Window.lua
 
-# Quality of Life: small opt-in conveniences (summons, resurrection, release in battlegrounds, duels, Easy Fishing key)
+# Quality of Life: small opt-in conveniences (summons, resurrection, release in battlegrounds, duels)
 qol\QoL.lua
 qol\Summons.lua
 qol\Resurrect.lua
 qol\ReleasePvP.lua
 qol\Duels.lua
 qol\QuickKeybind.lua
-qol\EasyFishing.lua
 qol\GuideWaypoint.lua
 qol\TwichUISettingsButton.lua
 

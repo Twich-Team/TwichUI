@@ -35,12 +35,12 @@ PF.ACCOUNT = {
     },
     ui = {
         showAdvanced = true,      -- removed (Persist.lua deletes it on load): kept out of profiles so an old copy never travels in one
+        easyFishingClient = true, -- removed with Easy Fishing (Persist.lua deletes it on load): kept out of profiles for the same reason
         reduceSettingsMotion = true, -- how the settings window itself moves: no fades
         settingsWindow = true,    -- where the settings window sits
         restedxpSkinState = true, -- the RestedXP theme to go back to: a record of RestedXP's setting, not a choice
         mageSell = true,          -- the never-sell list: a protection, which no profile change may lift
         guideWaypoint = true,     -- the waypoint each character placed: a record per character
-        easyFishingClient = true, -- the game settings Easy Fishing changed while a line was out, to put back: a record of the client
         restockAck = true,        -- your confirmation that vendor restocking may buy without asking: no profile change may give it
     },
 }

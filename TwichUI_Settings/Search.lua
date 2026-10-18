@@ -23,7 +23,6 @@ local ALIASES = {
     pinsMinimap = "minimap",
     foodDrinkUnlock = "move position anchor /unlock",
     qolQuickKeybind = "keybind bindings hotkey",
-    qolEasyFishing = "fishing fish cast reel bobber keybind bindings hotkey",
     qolSummons = "summon portal warlock meeting stone",
     qolResurrect = "res rez",
     mageTravel = "teleport portal",

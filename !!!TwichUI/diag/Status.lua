@@ -427,7 +427,7 @@ S.FEATURES = {
     { "mageSell", "Mage selling" }, { "mageSellDryRun", "Mage selling dry run" },
     { "partyPins", "Party pins" }, { "auctionPosting", "Sell from Bags (Auction House)" }, { "restock", "Vendor restocking" },
     { "qolSummons", "Accept summons" }, { "qolResurrect", "Accept resurrection" }, { "qolReleasePvP", "Release in battlegrounds" },
-    { "qolDuels", "Decline duels" }, { "qolQuickKeybind", "Quick Keybind button" }, { "qolEasyFishing", "Easy Fishing" },
+    { "qolDuels", "Decline duels" }, { "qolQuickKeybind", "Quick Keybind button" },
     { "qolGuideWaypoint", "Guide waypoint (RestedXP)" },
     { "restedxpSkin", "RestedXP skin" }, { "speakstoneSkin", "SpeakStone skin" }, { "auctionatorSkin", "Auctionator skin" },
     { "whatsTrainingSkin", "What's Training? skin" }, { "foreverDungeonJournalSkin", "Forever Dungeon Journal skin" },

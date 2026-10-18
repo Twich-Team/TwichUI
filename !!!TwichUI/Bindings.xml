@@ -7,7 +7,4 @@
 	</Binding>
 	<Binding name="CLICK TwichUIRefreshmentsWater:LeftButton" category="BINDING_HEADER_TWICHUI"/>
 	<Binding name="CLICK TwichUIRefreshmentsFood:LeftButton" category="BINDING_HEADER_TWICHUI"/>
-	<!-- Easy Fishing (qol/EasyFishing.lua): casts Fishing, and while a line is out the file puts the game's
-	     interact action on the same key. No default key; with the feature off the button does nothing. -->
-	<Binding name="CLICK TwichUIEasyFishingCast:LeftButton" category="BINDING_HEADER_TWICHUI"/>
 </Bindings>

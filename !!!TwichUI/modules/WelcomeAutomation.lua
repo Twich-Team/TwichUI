@@ -10,7 +10,7 @@
 --   * Mage features are listed for a Mage only; the RestedXP waypoint only while RestedXP is installed and turned on.
 --   * The words describe the scope the player has chosen today (who a summons is accepted from, how long it waits,
 --     whether selling is still a dry run), read through the feature's own accessors, never from a copy here.
---   * Features that need the player's own key press or click (Easy Fishing, the Food and Drink buttons, the Mage
+--   * Features that need the player's own key press or click (the Food and Drink buttons, the Mage
 --     launchers) are not automation and are not listed.
 -- A feature that is not in this client this session (its file is missing) is left out, not guessed at.
 

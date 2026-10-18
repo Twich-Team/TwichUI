@@ -89,7 +89,6 @@ Define("qolReleasePvP", QoL("QoLRelease"))
 Define("qolDuels", QoL("QoLDuels"))
 Define("qolDuelsToDeath", QoL("QoLDuels"))
 Define("qolQuickKeybind", QoL("QoLQuickKeybind"))
-Define("qolEasyFishing", QoL("QoLEasyFishing"))
 do
     local def = QoL("QoLGuideWaypoint")
     def.when = function() return R.QoL ~= nil and R.QoLGuideWaypoint ~= nil end

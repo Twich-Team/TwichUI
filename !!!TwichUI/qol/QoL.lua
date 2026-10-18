@@ -34,9 +34,8 @@ Q.CHOICES = {
     summonsWait = { 0, 1, 2, 3, 5, 10 },     -- seconds
     duelsFrom = { "known", "friendsGuild", "friends", "nobody" },
     releaseWait = { 0, 1, 2, 3, 5 },         -- seconds
-    easyFishingTargeting = { "leave", "fishing" },   -- may Easy Fishing set the game's interaction targeting while a line is out
 }
-Q.DEFAULTS = { summonsFrom = "known", summonsWait = 3, duelsFrom = "known", releaseWait = 2, easyFishingTargeting = "leave" }
+Q.DEFAULTS = { summonsFrom = "known", summonsWait = 3, duelsFrom = "known", releaseWait = 2 }
 
 -- Who counts, for a "from" option. true: anyone, even when the game gives no name.
 Q.SOURCES = {

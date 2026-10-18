@@ -310,15 +310,16 @@ end
 
 -- Groups the features write into without checking first.
 local UI_GROUPS = { "qol", "foodDrink", "brokerMenu", "refreshments", "refreshmentsStyle",
-    "restedxpSkin", "restedxpSkinText", "restedxpSkinState", "restedxpTimerLook", "restedxpTimerText", "speakstoneSkin", "speakstoneSkinStyle", "chronicleLook", "chronicleAppearance", "guideWaypoint", "mageSell", "easyFishingClient", "restock",
+    "restedxpSkin", "restedxpSkinText", "restedxpSkinState", "restedxpTimerLook", "restedxpTimerText", "speakstoneSkin", "speakstoneSkinStyle", "chronicleLook", "chronicleAppearance", "guideWaypoint", "mageSell", "restock",
     "partyPins", "pinsLook", "pinsAppearance", "pinsMapText", "pinsBroker", "pinsBrokerMenu", "pinsEditorLook",
     "notifyLook", "notifyLookArrival", "notifyLookTraining", "notifyLookFriend", "notifyLookWelcome",
     "settingsWindow" }
 
 -- Keys the settings window used to keep and nothing reads any more. "Show advanced options" hid some settings
 -- behind a switch; every setting is shown now, so a stored value (true or false) has no effect. Removed
--- wherever it is found, once it is, which is repeatable and needs no schema step.
-local OBSOLETE_UI = { "showAdvanced" }
+-- wherever it is found, once it is, which is repeatable and needs no schema step. "easyFishingClient" was the
+-- record Easy Fishing (since removed) kept of the game settings it had changed.
+local OBSOLETE_UI = { "showAdvanced", "easyFishingClient" }
 
 local function RemoveObsoleteUi(ui)
     for _, k in ipairs(OBSOLETE_UI) do
