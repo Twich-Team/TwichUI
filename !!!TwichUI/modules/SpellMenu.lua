@@ -177,6 +177,10 @@ local function Solid(parent, layer, c, a)
     return t
 end
 
+-- Shared with the other data bar menus drawn in this style (modules/RestedXPBrokerMenu.lua).
+SM.Text, SM.Solid = Text, Solid
+SM.FONTS = { title = FONT_TITLE, header = FONT_HEADER, row = FONT_ROW, note = FONT_NOTE }
+
 -- A short local message where the game shows its own "can't do that" messages. Never chat.
 local function Notice(text)
     if UIErrorsFrame and UIErrorsFrame.AddMessage then UIErrorsFrame:AddMessage(text, 1, 0.82, 0) end

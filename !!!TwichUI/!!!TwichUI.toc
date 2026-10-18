@@ -146,8 +146,10 @@ modules\RestedXPSkin.lua
 # RestedXP timer bars: the same look on RestedXP's countdown bars (a finish on the skin above; off when it is)
 modules\RestedXPTimers.lua
 
-# RestedXP guide on a data bar: click to turn RestedXP's guide on or off (calls RestedXP's own Show/Hide;
-# needs RestedXP and a data bar addon that provides LibDataBroker)
+# RestedXP guide on a data bar: click for a menu to turn RestedXP's guide on or off, lock its windows and open its
+# guide import (calls RestedXP's own functions; needs RestedXP and a data bar addon that provides LibDataBroker;
+# the menu is drawn like the Mage launchers', so it follows modules\SpellMenu.lua and modules\MenuStyle.lua)
+modules\RestedXPBrokerMenu.lua
 modules\RestedXPBroker.lua
 
 # SpeakStone skin: a TwichUI look for SpeakStone's speech frame (off until turned on; uses

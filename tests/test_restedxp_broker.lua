@@ -1,5 +1,6 @@
 -- RestedXP guide data source (modules/RestedXPBroker.lua): made once, only with RestedXP and LibDataBroker;
--- its text follows the guide; a click calls RestedXP's own ToggleActive (nothing else of RestedXP's is
+-- its text follows the guide; a click opens a menu (show guide = RestedXP's own ToggleActive, lock windows =
+-- profile.lockFrames, import = guideImporter:Open(), greyed out in combat; nothing else of RestedXP's is
 -- touched); a toggle or profile change made elsewhere is followed; hooks go in once; an unknown RestedXP
 -- shape makes nothing.
 -- RestedXP is simulated from the source of v4.11.22 (SettingsPanel.lua: settings.ToggleActive flips
@@ -22,7 +23,41 @@ local function Boot(opts)
   c.tipHidden = 0
   c.GameTooltip = { Hide = function() c.tipHidden = c.tipHidden + 1 end }
   c.TwichUIDB = { modules = {} }
+  c.inCombat = false
+  c.InCombatLockdown = function() return c.inCombat end
   c.made = {}
+  -- Frames that record what the menu does to them.
+  c.frames = {}
+  local Methods
+  local function Fake(kind)
+    local o = { kind = kind, shown = false, scripts = {}, enabled = true }
+    table.insert(c.frames, o)
+    return setmetatable(o, { __index = function(_, k)
+      if Methods[k] then return Methods[k] end
+      if type(k) == "string" and k:find("^%u") then return function() end end
+    end })
+  end
+  Methods = {
+    Show = function(s) s.shown = true end,
+    Hide = function(s) if s.shown then s.shown = false; if s.scripts.OnHide then s.scripts.OnHide(s) end end end,
+    IsShown = function(s) return s.shown end,
+    SetShown = function(s, v) s.shown = v and true or false end,
+    SetScript = function(s, n, fn) s.scripts[n] = fn end,
+    CreateTexture = function() return Fake("texture") end,
+    CreateFontString = function() return Fake("font") end,
+    SetText = function(s, v) s.text = v end,
+    SetEnabled = function(s, v) s.enabled = v end,
+    IsMouseOver = function(s) return s.mouse == true end,
+    SetPoint = function(s, ...) s.point = { ... } end,
+    SetHeight = function(s, v) s.height = v end,
+  }
+  c.CreateFrame = function(kind, name, parent, template)
+    local f = Fake(kind); f.name, f.parent, f.template = name, parent, template; return f
+  end
+  c.UIParent = Fake("UIParent")
+  c.UISpecialFrames = {}
+  c.tinsert = table.insert
+  c.STANDARD_TEXT_FONT = "Fonts\\FRIZQT__.TTF"
   if not opts.noRXP then
     local rxp = { settings = { profile = { showEnabled = true } }, toggles = 0 }
     function rxp.settings.ToggleActive()
@@ -31,6 +66,7 @@ local function Boot(opts)
     end
     function rxp.settings:RefreshProfile() self.profile = rxp.nextProfile end
     function rxp.GetGuideName(guide) return guide.displayname end
+    rxp.guideImporter = { opens = 0, Open = function(self) self.opens = self.opens + 1 end }
     if opts.broken then rxp.settings.ToggleActive = nil end
     local ace = c.LibStub:NewLibrary("AceAddon-3.0", 1)
     function ace:GetAddon(name) if name == "RXPGuides" then return rxp end end
@@ -40,7 +76,10 @@ local function Boot(opts)
     local LDB = c.LibStub:NewLibrary("LibDataBroker-1.1", 1)
     function LDB:NewDataObject(name, o) if name == "TwichUI RestedXP Guide" then c.made[#c.made + 1] = name; c.obj = o end return o end
   end
-  local chunk = assert(loadfile(ROOT .. "modules/RestedXPBroker.lua")); setfenv(chunk, c); chunk("!!!TwichUI", {})
+  for _, f in ipairs({ "chronicle/Style.lua", "modules/Borders.lua", "modules/MenuStyle.lua", "modules/SpellMenu.lua",
+    "modules/RestedXPBrokerMenu.lua", "modules/RestedXPBroker.lua" }) do
+    local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
+  end
   c.LOADED["!!!TwichUI"] = true
   c.FireEvent("ADDON_LOADED", "!!!TwichUI")
   c.FireEvent("PLAYER_LOGIN")
@@ -81,16 +120,79 @@ do
   assert(c.hookCount == 2, "ToggleActive and RefreshProfile hooked once each: " .. c.hookCount)
 
   local tip = Tip(obj)
-  assert(tip:find("Guide: On", 1, true) and tip:find("Click to turn the guide off", 1, true), tip)
+  assert(tip:find("Guide: On", 1, true) and tip:find("Click for options", 1, true), tip)
+  assert(tip:find("Windows: Unlocked", 1, true), tip)
   assert(not tip:find("Current", 1, true), "no guide loaded, no name: " .. tip)
 
-  obj.OnClick(obj, "LeftButton")
-  assert(c.rxp.toggles == 1 and c.rxp.settings.profile.showEnabled == false and obj.text == "Guide off", "click turns it off")
-  assert(c.tipHidden == 1, "the out-of-date tooltip is hidden")
-  assert(Tip(obj):find("Click to turn the guide on", 1, true), "tooltip offers turning it on")
+  -- What the open menu shows: the rows' labels and notes, whether each switch is filled, and which can be clicked.
+  local function Open(button)
+    obj.OnClick(obj, button)
+    local menu
+    for _, f in ipairs(c.frames) do if f.name == "TwichUIRestedXPMenu" then menu = f end end
+    assert(menu and menu.shown, "a click opens the menu")
+    local rows = {}
+    for _, f in ipairs(c.frames) do if f.kind == "Button" and f.parent == menu then rows[#rows + 1] = f end end
+    assert(#rows == 3, "three rows: " .. #rows)
+    local function Click(row) if row.enabled then row.scripts.OnClick(row) end end
+    return menu, rows, Click
+  end
 
+  local bus = c.TwichUI.frame
+  assert(not bus.events.GLOBAL_MOUSE_DOWN and not bus.events.PLAYER_REGEN_DISABLED, "listens to nothing while closed")
+  local menu, rows, Click = Open("LeftButton")
+  assert(bus.events.GLOBAL_MOUSE_DOWN and bus.events.PLAYER_REGEN_DISABLED, "listens while open")
+  local guide, lock, import = rows[1], rows[2], rows[3]
+  assert(menu.template == "BackdropTemplate", "a backdrop frame, as the Mage menus are")
+  assert(c.rxp.toggles == 0, "opening the menu changes nothing")
+  assert(c.tipHidden == 1, "the tooltip is hidden so it does not sit over the menu")
+  assert(guide.name.text == "Show guide" and guide.note.text == "On" and guide.fill.shown == true, "Show guide: on, said in words")
+  assert(lock.name.text == "Lock windows" and lock.note.text == "Unlocked" and lock.fill.shown == false, "Lock windows: unlocked")
+  assert(import.name.text == "Import guides..." and import.enabled and import.note.text == "", "import is available out of combat")
+  assert(c.UISpecialFrames[1] == "TwichUIRestedXPMenu", "Esc closes it")
+
+  Click(guide)
+  assert(c.rxp.toggles == 1 and c.rxp.settings.profile.showEnabled == false and obj.text == "Guide off", "Show guide turns it off")
+  assert(menu.shown and guide.note.text == "Off" and guide.fill.shown == false, "the menu stays open and shows the new state")
+  Click(guide)
+  assert(c.rxp.toggles == 2 and obj.text == "Guide on" and guide.note.text == "On", "and back on")
+
+  Click(lock)
+  assert(c.rxp.settings.profile.lockFrames == true and lock.note.text == "Locked" and lock.fill.shown == true, "Lock windows locks")
+  assert(Tip(obj):find("Windows: Locked", 1, true), "tooltip says so")
+  Click(lock)
+  assert(c.rxp.settings.profile.lockFrames == false and lock.note.text == "Unlocked" and c.rxp.toggles == 2, "unlocks, without touching the guide")
+
+  -- A toggle made in RestedXP itself while the menu is open: the rows follow.
+  c.rxp.settings.ToggleActive()
+  assert(guide.note.text == "Off", "follows RestedXP's own toggle")
+  c.rxp.settings.ToggleActive()
+
+  -- A second click on the data bar entry closes it; so does a click elsewhere.
+  obj.OnClick(obj, "LeftButton")
+  assert(not menu.shown, "a second click closes it")
+  assert(not bus.events.GLOBAL_MOUSE_DOWN and not bus.events.PLAYER_REGEN_DISABLED, "and it stops listening")
+  obj.OnClick(obj, "LeftButton")
+  assert(menu.shown)
+  c.FireEvent("GLOBAL_MOUSE_DOWN")
+  assert(not menu.shown, "a click elsewhere closes it")
   obj.OnClick(obj, "RightButton")
-  assert(c.rxp.toggles == 2 and obj.text == "Guide on", "any button toggles")
+  assert(menu.shown, "any button opens it")
+
+  Click(import)
+  assert(c.rxp.guideImporter.opens == 1 and not menu.shown, "Import opens RestedXP's import window and closes the menu")
+
+  -- Combat: Import is greyed out and says why; the switches stay.
+  obj.OnClick(obj, "LeftButton")
+  c.inCombat = true
+  c.FireEvent("PLAYER_REGEN_DISABLED")
+  assert(not import.enabled and import.note.text == "In combat", "import is greyed out in combat")
+  Click(import)
+  assert(c.rxp.guideImporter.opens == 1, "and does nothing in combat")
+  assert(guide.enabled and lock.enabled, "the rest stay available")
+  c.inCombat = false
+  c.FireEvent("PLAYER_REGEN_ENABLED")
+  assert(import.enabled and import.note.text == "", "back out of combat")
+  menu:Hide()
 
   -- RestedXP's own minimap button or /rxp toggle: the text follows.
   c.rxp.settings.ToggleActive()

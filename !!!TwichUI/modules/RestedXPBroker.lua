@@ -1,15 +1,20 @@
 -- TwichUI: RestedXP guide on a data bar
 -- A LibDataBroker data source, "TwichUI RestedXP Guide", for a data bar (for example EllesmereUI's
 -- "Broker Plugin" block). Its text says whether RestedXP's guide is on ("Guide on" / "Guide off"); a click
--- turns it on or off. Made only when RestedXP is loaded. TwichUI doesn't bundle LibDataBroker: nothing
+-- opens a small menu (modules/RestedXPBrokerMenu.lua, drawn like the Mage launchers' menus): show the
+-- guide (on or off), lock its windows, and open RestedXP's guide import window. Made only when RestedXP is loaded. TwichUI doesn't bundle LibDataBroker: nothing
 -- happens without a data bar addon that provides it.
 --
 -- What RestedXP gives us (RXPGuides v4.11.22 source, SettingsPanel.lua; not a public interface, checked
 -- on every use): its addon object is registered with AceAddon as "RXPGuides". settings.ToggleActive()
 -- flips settings.profile.showEnabled and shows or hides every RestedXP frame (the guide window, arrow,
 -- item and target buttons, flight timers). It is what RestedXP's own minimap button, its menu's
--- Show/Hide and "/rxp toggle" call, so a click here does exactly what those do, combat included (RestedXP
--- itself leaves its secure buttons alone in combat). Nothing else of RestedXP's is changed.
+-- Show/Hide and "/rxp toggle" call, so the menu's switch does exactly what those do, combat included
+-- (RestedXP itself leaves its secure buttons alone in combat). Lock is RestedXP's "Lock Frames" option,
+-- settings.profile.lockFrames, a plain boolean RestedXP reads whenever a window is dragged (its options
+-- page sets it with no other step). Import calls guideImporter:Open(), as its own menu and "/rxp import"
+-- do; RestedXP puts that off itself during combat, so the menu entry is greyed out then. Nothing else of
+-- RestedXP's is changed.
 -- ToggleActive and settings:RefreshProfile (a RestedXP profile change) are hooked, once, so the text
 -- follows a toggle made anywhere.
 
@@ -38,6 +43,11 @@ local function Usable(addon)
 end
 
 -- true / false, or nil when RestedXP can't be read.
+function B.GuideLocked()
+    if not Usable(rxp) then return nil end
+    return rxp.settings.profile.lockFrames and true or false
+end
+
 function B.GuideOn()
     if not Usable(rxp) then return nil end
     return rxp.settings.profile.showEnabled and true or false
@@ -51,9 +61,10 @@ end
 
 function B.Update()
     if obj then obj.text = BarText() end
+    if R.RestedXPBrokerMenu then R.RestedXPBrokerMenu.Refresh() end
 end
 
-local function GuideName()
+function B.GuideName()
     local guide = rxp and rxp.currentGuide
     if type(guide) ~= "table" or type(rxp.GetGuideName) ~= "function" then return nil end
     local ok, name = pcall(rxp.GetGuideName, guide)
@@ -75,20 +86,50 @@ local function OnTooltipShow(tip)
         return
     end
     tip:AddDoubleLine("Guide", on and "On" or "Off", K.textDim[1], K.textDim[2], K.textDim[3], K.text[1], K.text[2], K.text[3])
-    local name = GuideName()
+    local name = B.GuideName()
     if name then tip:AddDoubleLine("Current", name, K.textDim[1], K.textDim[2], K.textDim[3], K.text[1], K.text[2], K.text[3]) end
     if on and rxp.settings.profile.hideGuideWindow then
         tip:AddLine("The guide window is hidden in RestedXP's options.", K.stone[1], K.stone[2], K.stone[3])
     end
+    tip:AddDoubleLine("Windows", B.GuideLocked() and "Locked" or "Unlocked", K.textDim[1], K.textDim[2], K.textDim[3], K.text[1], K.text[2], K.text[3])
     tip:AddLine(" ")
-    tip:AddLine(on and "Click to turn the guide off" or "Click to turn the guide on", K.gold[1], K.gold[2], K.gold[3])
+    tip:AddLine("Click for options", K.gold[1], K.gold[2], K.gold[3])
 end
 
-local function OnClick()
+---------------------------------------------------------------------------
+-- What the menu does. Each asks RestedXP again at that moment.
+---------------------------------------------------------------------------
+function B.SetGuideOn(on)
     if not Usable(rxp) then return end
-    if GameTooltip then GameTooltip:Hide() end   -- its "Click to turn ..." line would be out of date
-    rxp.settings.ToggleActive()
+    if B.GuideOn() ~= (on and true or false) then rxp.settings.ToggleActive() end
     B.Update()
+end
+
+function B.SetLocked(locked)
+    if not Usable(rxp) then return end
+    rxp.settings.profile.lockFrames = locked and true or false
+end
+
+function B.CanImport()
+    local importer = type(rxp) == "table" and rxp.guideImporter
+    return type(importer) == "table" and type(importer.Open) == "function"
+        and not (InCombatLockdown and InCombatLockdown())
+end
+
+function B.OpenImport()
+    if not B.CanImport() then return end
+    rxp.guideImporter:Open()
+end
+
+local function OnClick(frame)
+    if not Usable(rxp) then return end
+    if GameTooltip then GameTooltip:Hide() end   -- it would sit over the menu
+    if R.RestedXPBrokerMenu then
+        R.RestedXPBrokerMenu.Toggle(frame)
+    else
+        rxp.settings.ToggleActive()   -- no menu: the click keeps its old job
+        B.Update()
+    end
 end
 
 local function Hook()
