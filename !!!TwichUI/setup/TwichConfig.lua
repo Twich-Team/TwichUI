@@ -62,7 +62,7 @@ TC.LOCAL = {
     -- where things sit
     ["modules.foodDrinkUnlock"] = "place", ["ui.foodDrinkPosition"] = "place", ["ui.trainingPosition"] = "place",
     ["ui.welcomeBackPlace"] = "place", ["ui.friendLoginPlace"] = "place", ["ui.settingsWindow"] = "place",
-    ["ui.refreshments.position"] = "place", ["ui.partyPins.position"] = "place", ["ui.classBarsPosition"] = "place",
+    ["ui.markerBarPosition"] = "place", ["ui.refreshments.position"] = "place", ["ui.partyPins.position"] = "place", ["ui.classBarsPosition"] = "place",
     -- the rest
     ["modules.restedxpSkin"] = "other", ["modules.qolTwichUISettingsButton"] = "other",
     ["ui.restedxpSkinState"] = "other", ["ui.showAdvanced"] = "other", ["gear.trees"] = "other",
@@ -1187,6 +1187,24 @@ local function Define()
             idx.targetUnit.label = "Target-marker key marks"
             idx.targetClearRestarts.label, idx.worldClearRestarts.label = "Removing your target's marker restarts the cycle", "Removing world markers restarts the cycle"
         end
+    end
+
+    g = Group("markerBar", "Marker bar", { page = "markersBar",
+        note = "Whether the marker bar is on, the key held to show it, where it appears and what it does in combat, which markers are on it, its size and its look. Where you put its fixed place on your screen stays yours." })
+    Switches(g, { "markersBar" })
+    do
+        local MB = R.MarkerBar
+        local keys = { "modifier", "where", "combat", "side", "offsetX", "offsetY", "iconSize", "spacing", "scale", "remove" }
+        for id = 1, 8 do keys[#keys + 1] = "show" .. id end
+        Table(g, { "ui", "markerBar" }, MB, keys, MB and MB.ENUMS or {})
+        local idx = g.index.markerBar
+        if idx and R.Markers then
+            for id = 1, 8 do if idx["show" .. id] then idx["show" .. id].label = R.Markers.Name("target", id) .. " on the marker bar" end end
+            if idx.where then idx.where.label = "Marker bar placement" end
+            if idx.combat then idx.combat.label = "Marker bar in combat" end
+            if idx.remove then idx.remove.label = "Marker bar Remove button" end
+        end
+        Table(g, { "ui", "markerBarStyle" }, MB and MB.Style, LOOK, LOOK_ENUMS)
     end
 
     g = Group("markerOrder", "Marker order", { page = "markersTarget",

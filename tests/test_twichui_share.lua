@@ -99,7 +99,7 @@ local REGISTRY = {
   restedxpTimerLook = A.TwichUI.RestedXPSkin.Timers.Look.DEFAULTS, chronicleLook = A.TwichUI.ChronicleAppearance.LOOK_DEFAULTS,
   notifyLook = A.TwichUI.NotifyLook.DEFAULTS, restockPromptStyle = A.TwichUI.RestockPrompt.Style.DEFAULTS,
   classBars = A.TwichUI.ClassBars.DEFAULTS, classBarsLook = A.TwichUI.ClassBars.Look.DEFAULTS,
-  markers = A.TwichUI.Markers.DEFAULTS,
+  markers = A.TwichUI.Markers.DEFAULTS, markerBar = A.TwichUI.MarkerBar.DEFAULTS, markerBarStyle = A.TwichUI.MarkerBar.Style.DEFAULTS,
 }
 for slot, defaults in pairs(REGISTRY) do
   for key in pairs(defaults) do

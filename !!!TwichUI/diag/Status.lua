@@ -429,7 +429,7 @@ S.FEATURES = {
     { "qolSummons", "Accept summons" }, { "qolResurrect", "Accept resurrection" }, { "qolReleasePvP", "Release in battlegrounds" },
     { "qolDuels", "Decline duels" }, { "qolQuickKeybind", "Quick Keybind button" },
     { "qolGuideWaypoint", "Guide waypoint (RestedXP)" },
-    { "markersTarget", "Target marker cycling" }, { "markersWorld", "World marker cycling" },
+    { "markersTarget", "Target marker cycling" }, { "markersWorld", "World marker cycling" }, { "markersBar", "Marker bar" },
     { "restedxpSkin", "RestedXP skin" }, { "speakstoneSkin", "SpeakStone skin" }, { "auctionatorSkin", "Auctionator skin" },
     { "whatsTrainingSkin", "What's Training? skin" }, { "foreverDungeonJournalSkin", "Forever Dungeon Journal skin" },
     { "attuneSkin", "Attune skin" },

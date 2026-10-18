@@ -443,6 +443,21 @@ local function New(savedKey, defaults, options)
         return edge, drawn
     end
 
+    -- Apply, for a frame that lays content out inside its border: the same drawing, but the first result is how
+    -- far content must sit in from the edge, which is not always how thick the border is. An EllesmereUI texture
+    -- is drawn in a cell as thick as the setting, centred on the frame's edge, and only a part of that cell is line
+    -- (Pixels Textured: the line starts about a third of the way in), so clearing the whole cell leaves a wide
+    -- empty margin that grows with the thickness. For one, the result is the line's reach (Borders.Inside), in
+    -- the same units as Apply's. Anything else is Apply's answer. Draw first, then use the result.
+    function MS.ApplyInset(frame)
+        local edge, drawn = MS.Apply(frame)
+        if drawn == "eui" then
+            local size = MS.Get("borderSize")
+            if size > 0 then edge = edge * (R.Borders.Inside(MS.Get("borderTexture"), size) / size) end
+        end
+        return edge, drawn
+    end
+
     return MS
 end
 

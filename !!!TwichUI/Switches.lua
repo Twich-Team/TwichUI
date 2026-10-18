@@ -99,6 +99,7 @@ end
 -- Marker cycling: the keys' secure buttons follow (markers/Keys.lua; a change in combat waits for it to end)
 Define("markersTarget", { apply = Refresh("MarkerKeys") })
 Define("markersWorld", { apply = Refresh("MarkerKeys") })
+Define("markersBar", { apply = Refresh("MarkerBar") })
 
 -- Food and drink
 Define("foodDrink", { apply = Refresh("FoodDrink") })

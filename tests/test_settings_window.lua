@@ -208,12 +208,12 @@ do
       assert(inSide[page.key], page.key .. " is in the sidebar")
     end
   end
-  assert(children == 16, "sixteen secondary pages: " .. children)
+  assert(children == 17, "seventeen secondary pages: " .. children)
   assert(#K.Tabs("overview") == 0 and #K.Tabs("auction") == 0, "a feature without pages under it has no tabs")
   do   -- Quality of life: its own options, then the two kinds of marker cycling, each a tab of its own
     local labels = {}
     for _, t in ipairs(K.Tabs("qol")) do labels[#labels + 1] = K.TabLabel(t) end
-    assert(table.concat(labels, "|") == "General|Target markers|World markers", "Quality of life's tabs: " .. table.concat(labels, "|"))
+    assert(table.concat(labels, "|") == "General|Target markers|World markers|Marker bar", "Quality of life's tabs: " .. table.concat(labels, "|"))
   end
   assert(#K.Tabs("notifications") == 2 and K.Tabs("notifications")[2].key == "notificationsLook", "Notifications has its appearance tab")
   local tabs = {}

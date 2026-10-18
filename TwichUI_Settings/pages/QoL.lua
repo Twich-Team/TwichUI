@@ -25,7 +25,7 @@ K.Page({
     keywords = "summon resurrect res rez battleground release spirit duel decline keybind quick keybind waypoint restedxp leatrix marker markers",
     when = function() return R.QoL ~= nil end,
     overview = {
-        label = "Quality of life", tip = "Small opt-in conveniences: accepting summons and resurrection, releasing in battlegrounds, declining duels, a Quick Keybind button in the Game Menu, the game's waypoint on RestedXP's destination, and keys that cycle target and world markers.",
+        label = "Quality of life", tip = "Small opt-in conveniences: accepting summons and resurrection, releasing in battlegrounds, declining duels, a Quick Keybind button in the Game Menu, the game's waypoint on RestedXP's destination, and keys and a bar for target and world markers.",
         status = function()
             local on = (R:Enabled("qolSummons") and 1 or 0) + (R:Enabled("qolResurrect") and 1 or 0)
                 + (R:Enabled("qolReleasePvP") and 1 or 0) + (R:Enabled("qolDuels") and 1 or 0)
@@ -34,6 +34,10 @@ K.Page({
             if R.Markers then
                 total = total + 2
                 on = on + (R:Enabled("markersTarget") and 1 or 0) + (R:Enabled("markersWorld") and 1 or 0)
+            end
+            if R.MarkerBar then
+                total = total + 1
+                on = on + (R:Enabled("markersBar") and 1 or 0)
             end
             if R.QoLGuideWaypoint then
                 total = total + 1

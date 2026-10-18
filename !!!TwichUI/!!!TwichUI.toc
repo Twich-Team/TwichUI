@@ -212,6 +212,10 @@ qol\TwichUISettingsButton.lua
 markers\Markers.lua
 markers\Keys.lua
 
+# Marker bar: hold a modifier key and a bar of target markers appears for your target (above its nameplate, or at a
+# place you choose); click one to mark it. Off until turned on. Bar.lua; its look uses modules\MenuStyle.lua.
+markers\Bar.lua
+
 # Troubleshooting: one report to copy and optional temporary tracing (/tui diagnostics), and a short status and support
 # information view (diag\Status.lua, diag\SupportWindow.lua). Local only; off until asked for.
 diag\Diagnostics.lua

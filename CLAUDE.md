@@ -92,6 +92,23 @@ TwichUI's authoritative configuration UI is a **dedicated TwichUI-owned settings
 - TwichUI-owned windows must look complete without EllesmereUI or other optional addons. Reuse the shared styling helpers, and use optional EllesmereUI styling APIs only when verified, with a clean standalone fallback.
 - The Journey Chronicle should read as a practical, well-used field ledger, not a dashboard or a theatrical parchment prop. The settings window should feel like an organized adventurer's toolkit.
 
+### EllesmereUI textured borders (this has gone wrong more than once)
+
+Symptom: with an `eui:` border such as Pixels Textured there is a wide empty margin between the content and the border; a smaller
+thickness shrinks the margin but the border looks invisible; or the border is the wrong size after the frame is scaled. Fix:
+- **Padding comes from the line, not the setting.** An EllesmereUI edge is drawn in a cell as many pixels thick as the setting, centred on the
+  frame's edge, and only the outer part of the cell is line (`_borderInk`, `EllesmereUI_PixelPerfect.lua`: Pixels Textured starts at 0.321).
+  `MenuStyle`'s `Style.Apply(frame)` returns the whole thickness, so padding by it leaves a margin that grows with the setting. Use
+  `Style.ApplyInset(frame)` (draws the same, returns the line's reach for an `eui` border and `Apply`'s answer for anything else), or
+  `R.Borders.Inside` when `drawn == "eui"` as `classbars/Bar.lua` does. Never lay content out by `Apply`'s first result.
+- **Set the frame's scale before drawing the border.** EllesmereUI's `ApplyBorderStyle` and `MenuStyle`'s `Pixels` read the frame's effective scale
+  as they draw, so `SetScale` (or a new parent) after `Apply` leaves the border drawn for the old scale. Draw again after any later scale change.
+- **A thin textured border is invisible by nature.** The line is a fraction of the cell (under about 8 px it is sub-pixel); do not widen the
+  padding or clamp the thickness to compensate. `MenuStyle` seeds a suitable thickness when a texture is chosen, and the setting's tooltip says so.
+- Test it with a stand-in `EllesmereUI` (`tests/test_marker_bar.lua`, section 7b): assert the padding is far smaller than the cell and that the
+  border was drawn at the frame's final scale, and check the test fails with the old code.
+- When touching a frame that uses `Style.Apply(...)` for padding (`grep -rn "Style.Apply(" '!!!TwichUI'`), check it for the same fault.
+
 ## Persistence and migrations
 
 - Schema version is separate from addon release version.
