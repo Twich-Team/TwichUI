@@ -176,6 +176,7 @@ Define("partyPins", {
 
 -- Auction House
 Define("auctionPosting", { apply = Refresh("AuctionWindow") })
+Define("mailGoldSummary", { apply = Refresh("MailGold") })
 Define("restock", { apply = Refresh("Restock") })
 
 -- Chat cleaning

@@ -425,7 +425,7 @@ S.FEATURES = {
     { "foodDrink", "Food and Drink buttons" }, { "foodDrinkUnlock", "Food and Drink in EllesmereUI Unlock Mode" },
     { "mageTravel", "Mage Travel" }, { "mageConjure", "Mage Conjuring" }, { "mageRefreshments", "Mage refreshments" },
     { "mageSell", "Mage selling" }, { "mageSellDryRun", "Mage selling dry run" },
-    { "partyPins", "Party pins" }, { "auctionPosting", "Sell from Bags (Auction House)" }, { "restock", "Vendor restocking" },
+    { "partyPins", "Party pins" }, { "auctionPosting", "Sell from Bags (Auction House)" }, { "mailGoldSummary", "Mailbox gold summary" }, { "restock", "Vendor restocking" },
     { "qolSummons", "Accept summons" }, { "qolResurrect", "Accept resurrection" }, { "qolReleasePvP", "Release in battlegrounds" },
     { "qolDuels", "Decline duels" }, { "qolQuickKeybind", "Quick Keybind button" },
     { "qolGuideWaypoint", "Guide waypoint (RestedXP)" },

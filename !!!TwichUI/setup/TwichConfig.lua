@@ -1100,7 +1100,7 @@ local function Define()
         { layout = ENUM.layout })
 
     g = Group("auction", "Auction House", { page = "auction" })
-    Switches(g, { "auctionPosting" })
+    Switches(g, { "auctionPosting", "mailGoldSummary" })
 
     g = Group("restock", "Vendor restocking", { page = "restock",
         note = "How restocking buys: asking first or automatically, and the spending limit for a visit, and how the question window looks. Whether restocking is on stays yours, and so does your confirmation that it may buy without asking." })

@@ -61,6 +61,7 @@ local DEFAULT_MODULES = {
     mageSellDrink = true,    -- ... ordinary drink (needs the first one)
     mageSellDryRun = true,   -- ... only say what would be sold, sell nothing (on until turned off)
     auctionPosting = true,   -- "Sell from Bags" tab in the Auction House (searches only when you pick an item)
+    mailGoldSummary = true,  -- one chat line when you close the mailbox: the money you took from mail during that visit (nothing is saved)
     restock = false,         -- Vendor restocking: keep chosen items at a target in your bags, bought from merchants (opt-in, explicit true only; asks first unless you confirm otherwise)
     chatClean = false,       -- Chat cleaning: hide unwanted messages in the public channels you choose (opt-in, explicit true only)
     classBars = false,       -- Class resource bars: your class's resources as bars (opt-in; nothing else's bars are hidden or moved)

@@ -37,7 +37,7 @@ and `LIMITS` supply defaults and ranges, so the schema cannot drift from the fea
 | Notifications | the zone and training cards, the Battle.net friend card, their sound choices |
 | Quality of life | only the Quick Keybind button |
 | Food and drink | the switches and the whole look |
-| Auction House | the Sell from Bags tab |
+| Auction House | the Sell from Bags tab and the mailbox gold summary switches |
 | Vendor restocking | how it buys (`ui.restock.mode`: ask first or automatically), the spending limit for a visit (`useLimit`, `limit`), and how the question window looks (`ui.restockPromptStyle`: background and border). Not whether restocking is on, and not your confirmation that it may buy without asking (`ui.restockAck`) |
 | Restock items | the restock list: item IDs, targets and on/off, in order (merged by item on import: named items are set, new ones go at the end, nothing is removed). Never bag counts, merchants or purchases |
 | Chat cleaning | whether chat cleaning is on (`modules.chatClean`; the review says plainly when an import turns it on or off) |

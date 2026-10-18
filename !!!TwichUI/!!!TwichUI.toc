@@ -192,6 +192,8 @@ pins\Broker.lua
 auction\Price.lua
 auction\Scan.lua
 auction\Window.lua
+# Mailbox gold summary: one chat line per mailbox visit (auction\Mail.lua)
+auction\Mail.lua
 
 # Quality of Life: small opt-in conveniences (summons, resurrection, release in battlegrounds, duels)
 qol\QoL.lua

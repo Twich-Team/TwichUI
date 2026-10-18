@@ -48,7 +48,7 @@ for key, default in pairs(defaults) do
   n = n + 1
   assert(default == R.DEFAULT_MODULES[key], key .. " default matches a new install")
 end
-assert(n == 58, "every module has a toggle: " .. n)
+assert(n == 59, "every module has a toggle: " .. n)
 assert(defaults.restedxpSkin == false, "the RestedXP skin is opt-in")
 assert(defaults.arrival == true and defaults.arrivalSubzones == true and defaults.arrivalReducedMotion == false,
   "arrival card and subzone cards on; reduced motion opt-in")
@@ -69,6 +69,7 @@ assert(defaults.mageSellFood == true and defaults.mageSellDrink == true and defa
   "its kinds are on once it is, and it starts as a dry run")
 assert(c.canvases["Stat weights"] == "Gear comparison" and c.canvases["Refreshment shares"] == "Mage", "the shares page sits under Mage")
 assert(defaults.auctionPosting == true, "Sell from Bags tab is on by default (it only searches when you pick an item)")
+assert(defaults.mailGoldSummary == true, "the mailbox gold summary is on by default (one chat line per visit that took money)")
 assert(defaults.trainingNotice == true, "new training card is on by default")
 assert(defaults.friendLogin == true, "Battle.net friend login card is on by default")
 assert(defaults.friendLoginSound == true, "the friend login chime is on by default")
@@ -250,7 +251,7 @@ for variable, page in pairs({
   TWICHUI_arrival = "Notifications", TWICHUI_arrivalHold = "Notifications", TWICHUI_arrivalReducedMotion = "Notifications",
   TWICHUI_previewSounds = "Notifications", TWICHUI_trainingNotice = "Notifications", TWICHUI_friendLogin = "Notifications", TWICHUI_friendLoginSound = "Notifications", TWICHUI_friendLoginChannel = "Notifications",
   TWICHUI_chronicle = "Journey Chronicle", TWICHUI_chronicleClock = "Journey Chronicle", TWICHUI_chronicleSound = "Journey Chronicle", TWICHUI_welcomeBack = "Journey Chronicle",
-  TWICHUI_auctionPosting = "Auction House",
+  TWICHUI_auctionPosting = "Auction House", TWICHUI_mailGoldSummary = "Auction House",
   TWICHUI_qolSummons = "Quality of life", TWICHUI_qolSummonsFrom = "Quality of life", TWICHUI_qolSummonsWait = "Quality of life",
   TWICHUI_qolResurrect = "Quality of life", TWICHUI_qolResurrectCombat = "Quality of life", TWICHUI_qolReleasePvP = "Quality of life",
   TWICHUI_qolReleaseWait = "Quality of life", TWICHUI_qolDuels = "Quality of life", TWICHUI_qolDuelsFrom = "Quality of life",
