@@ -30,15 +30,18 @@ local function Load(file, wt)
     chunk("WhatsTraining", wt)
 end
 
+-- What's Training? files fill wt.forClass(TOKEN) with spellsByLevel, overriddenGroups and petAbilityIds.
 local function Read(class)
-    local wt = { currentClass = class }
-    function wt.FactionFilter(t) return t end   -- keep every faction and race; the notice filters in game
-    function wt.RaceFilter(t) return t end
-    function wt:AddOverriddenSpells(...) self.ranks = { ... } end
+    local wt = { ClassData = {} }
+    function wt.forClass(token)
+        wt.ClassData[token] = wt.ClassData[token] or {}
+        return wt.ClassData[token]
+    end
     Load(Title(class) .. ".lua", wt)
     if class == "HUNTER" then Load("HunterPets.lua", wt) end
-    assert(type(wt.SpellsByLevel) == "table", "no SpellsByLevel for " .. class)
-    return wt
+    local data = wt.ClassData[class]
+    assert(data and type(data.spellsByLevel) == "table", "no spellsByLevel for " .. class)
+    return data
 end
 
 local function List(t)
@@ -78,16 +81,16 @@ Put("R.TrainingData = D")
 Put("")
 local total = 0
 for _, class in ipairs(CLASSES) do
-    local wt = Read(class)
-    local pets = wt.PetAbilityIds or {}
+    local data = Read(class)
+    local pets = data.petAbilityIds or {}
     local levels = {}
-    for level in pairs(wt.SpellsByLevel) do levels[#levels + 1] = level end
+    for level in pairs(data.spellsByLevel) do levels[#levels + 1] = level end
     table.sort(levels)
     Put(("D.%s = function()"):format(class))
     Put("    local levels = {")
     for _, level in ipairs(levels) do
         local entries = {}
-        for _, spell in ipairs(wt.SpellsByLevel[level]) do
+        for _, spell in ipairs(data.spellsByLevel[level]) do
             if not pets[spell.id] then entries[#entries + 1] = Entry(spell) end
         end
         if #entries > 0 then
@@ -99,7 +102,7 @@ for _, class in ipairs(CLASSES) do
     end
     Put("    }")
     Put("    local ranks = {")
-    for _, group in ipairs(wt.ranks or {}) do Put("        " .. List(group) .. ",") end
+    for _, group in ipairs(data.overriddenGroups or {}) do Put("        " .. List(group) .. ",") end
     Put("    }")
     Put("    return levels, ranks")
     Put("end")
