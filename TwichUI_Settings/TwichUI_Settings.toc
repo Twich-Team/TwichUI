@@ -32,7 +32,6 @@ pages\Chronicle.lua
 pages\Pins.lua
 pages\Auction.lua
 pages\Skins.lua
-pages\DungeonJournal.lua
 pages\RestedXP.lua
 pages\SpeakStone.lua
 pages\Sharing.lua

@@ -5,9 +5,8 @@
 -- The journal is its own addon (ForeverDungeonJournal, /fj). It publishes a global
 -- ForeverDungeonJournal_Toggle, which its own minimap button also calls, and its window is the global
 -- ForeverDungeonJournalFrame, built at its PLAYER_LOGIN. Nothing else of the journal is touched.
--- Made only when the journal is loaded and a data bar addon provides LibDataBroker, and only once the
--- switch is on (Switches.lua). TwichUI doesn't bundle LibDataBroker: nothing happens without it.
--- A data object can't be taken away again, so turned off it does nothing when clicked until the next reload.
+-- Made only when the journal is loaded and a data bar addon provides LibDataBroker. TwichUI doesn't bundle
+-- LibDataBroker: nothing happens without it.
 
 local R = TwichUI
 local B = {}
@@ -17,8 +16,6 @@ local NAME = "TwichUI Dungeon Journal"
 local ICON = R.PATH .. [[media\textures\dungeon-journal-broker]]   -- a leather-bound journal with a gate (64 x 64)
 local obj
 local loggedIn = false
-
-local function Enabled() return R:Enabled("dungeonJournalBroker") end
 
 -- The journal's own frame, once it has built it. nil before its PLAYER_LOGIN, which can run after ours (TwichUI
 -- loads first), so a click checks it rather than the broker's creation.
@@ -46,25 +43,20 @@ local function OnTooltipShow(tip)
         tip:AddLine("The journal's window isn't ready yet.", K.stone[1], K.stone[2], K.stone[3])
         return
     end
-    if not Enabled() then
-        tip:AddLine("Turned off in TwichUI. Clicks do nothing until the next reload.", K.stone[1], K.stone[2], K.stone[3])
-        return
-    end
     tip:AddDoubleLine("Window", B.IsOpen() and "Open" or "Closed", K.textDim[1], K.textDim[2], K.textDim[3], K.text[1], K.text[2], K.text[3])
     tip:AddLine(" ")
     tip:AddLine(B.IsOpen() and "Click to close" or "Click to open", K.gold[1], K.gold[2], K.gold[3])
 end
 
--- Opens or closes the journal. Does nothing when the switch is off or the journal isn't ready; it never
--- builds anything itself.
+-- Opens or closes the journal. Does nothing when the journal isn't ready; it never builds anything itself.
 function B.Toggle()
-    if not Enabled() or not B.Ready() or type(Frame()) ~= "table" then return end
+    if not B.Ready() or type(Frame()) ~= "table" then return end
     _G.ForeverDungeonJournal_Toggle()
 end
 
--- Once, when the journal is loaded and a data bar addon provides LibDataBroker, and only while the switch is on.
+-- Once, when the journal is loaded and a data bar addon provides LibDataBroker.
 function B.Refresh()
-    if obj or not Enabled() or not B.Ready() then return end
+    if obj or not B.Ready() then return end
     local LDB = LibStub and LibStub:GetLibrary("LibDataBroker-1.1", true)
     if not LDB then return end
     obj = LDB:NewDataObject(NAME, {
@@ -77,7 +69,7 @@ function B.Refresh()
     })
 end
 
--- Whether it is on a data bar's list (false without the journal, the switch, or LibDataBroker).
+-- Whether it is on a data bar's list (false without the journal or LibDataBroker).
 function B.Available() return obj ~= nil end
 
 R:On("PLAYER_LOGIN", function()

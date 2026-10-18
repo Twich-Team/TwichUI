@@ -433,7 +433,6 @@ S.FEATURES = {
     { "restedxpSkin", "RestedXP skin" }, { "speakstoneSkin", "SpeakStone skin" }, { "auctionatorSkin", "Auctionator skin" },
     { "whatsTrainingSkin", "What's Training? skin" }, { "foreverDungeonJournalSkin", "Forever Dungeon Journal skin" },
     { "attuneSkin", "Attune skin" },
-    { "dungeonJournalBroker", "Dungeon Journal icon" },
     { "setupSharing", "Configuration sharing" }, { "groupCheck", "Group check" },
     { "media", "Custom fonts and sounds" }, { "quietLogin", "Hide addon welcome messages" },
 }

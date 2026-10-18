@@ -1,6 +1,6 @@
--- Dungeon Journal on a data bar: made only when the journal is loaded, LibDataBroker exists and the switch is on;
--- a click opens and closes the journal's own window through its global toggle; nothing happens when the switch is
--- off or the window isn't built yet; late loading of the journal or of LibDataBroker is picked up; made once.
+-- Dungeon Journal on a data bar: made only when the journal is loaded and LibDataBroker exists; a click opens and
+-- closes the journal's own window through its global toggle; nothing happens when the window isn't built yet; late
+-- loading of the journal or of LibDataBroker is picked up; made once.
 dofile(TESTS .. "harness.lua")
 
 local OURS = "TwichUI Dungeon Journal"
@@ -18,7 +18,6 @@ end
 
 local function Client(withJournal, withLDB)
   local c = MakeClient("Rich", { "!!!TwichUI", "ForeverDungeonJournal" })
-  c.TwichUIDB = { modules = { dungeonJournalBroker = true } }
   c.made, c.objects = {}, {}
   if withLDB then
     local LDB = c.LibStub:NewLibrary("LibDataBroker-1.1", 1)
@@ -30,7 +29,7 @@ local function Client(withJournal, withLDB)
   return c
 end
 
--- 1. Logged in with the journal and a data bar's LibDataBroker: made once, with its icon, no text, and the switch on.
+-- 1. Logged in with the journal and a data bar's LibDataBroker: made once, with its icon and no text.
 do
   local c = Client(true, true)
   c.FireEvent("ADDON_LOADED", "!!!TwichUI"); c.FireEvent("PLAYER_LOGIN")
@@ -54,20 +53,16 @@ do
   assert(not j.shown and j.toggles == 2, "the second click closes it")
 end
 
--- 3. The switch off: a click does nothing, and the tooltip says so. Turned on again, clicks work.
+-- 3. The tooltip shows the window's state, and the click toggles it.
 do
   local c = Client(true, true)
   c.FireEvent("ADDON_LOADED", "!!!TwichUI"); c.FireEvent("PLAYER_LOGIN")
   local obj, j = Obj(c), c.j
-  c.TwichUI.Switches.Set("dungeonJournalBroker", false)
-  obj.OnClick("frame", "LeftButton")
-  assert(j.toggles == 0 and not j.shown, "off: a click leaves the journal alone")
   local lines = {}
   obj.OnTooltipShow({ AddLine = function(_, t) lines[#lines + 1] = t end, AddDoubleLine = function(_, a, b) lines[#lines + 1] = a .. ": " .. b end })
-  assert(table.concat(lines, "\n"):find("Turned off", 1, true), "the tooltip says it is off")
-  c.TwichUI.Switches.Set("dungeonJournalBroker", true)
+  assert(table.concat(lines, "\n"):find("Window: Closed", 1, true), "the tooltip says the window is closed")
   obj.OnClick("frame", "LeftButton")
-  assert(j.toggles == 1 and j.shown, "back on: the click opens it again")
+  assert(j.toggles == 1 and j.shown, "the click opens it")
 end
 
 -- 4. The window isn't built yet (a click before the journal's own PLAYER_LOGIN): nothing happens, no error.
@@ -99,14 +94,6 @@ do
   function LDB:NewDataObject(name, o) table.insert(d.made, name); return o end
   d.FireEvent("ADDON_LOADED", "SomeDataBar")
   assert(Count(d) == 1 and d.TwichUI.DungeonJournalBroker.Available(), "made when a data bar brings LibDataBroker later")
-end
-
--- 6. The switch off before login: nothing is made at all.
-do
-  local c = Client(true, true)
-  c.TwichUIDB.modules.dungeonJournalBroker = false
-  c.FireEvent("ADDON_LOADED", "!!!TwichUI"); c.FireEvent("PLAYER_LOGIN")
-  assert(Count(c) == 0, "switch off at login: nothing made")
 end
 
 print("DUNGEON JOURNAL BROKER TESTS PASSED")

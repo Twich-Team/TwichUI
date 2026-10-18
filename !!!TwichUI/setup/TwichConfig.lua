@@ -1368,10 +1368,6 @@ local function Define()
         note = "Each needs its addon, and takes effect after a reload." })
     Switches(g, { "attuneSkin", "auctionatorSkin", "foreverDungeonJournalSkin", "whatsTrainingSkin" })
 
-    g = Group("dungeonJournal", "Dungeon Journal", { page = "dungeonJournal",
-        note = "The data bar icon. Needs the Forever Dungeon Journal." })
-    Switches(g, { "dungeonJournalBroker" })
-
     g = Group("restedxp", "RestedXP guide window", { page = "restedxp",
         note = "The look only. Whether the skin is on stays yours: turning it on chooses RestedXP's own theme. Needs RestedXP." })
     do

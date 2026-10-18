@@ -19,7 +19,6 @@ local DEFAULT_MODULES = {
     auctionatorSkin = true,  -- EllesmereUI look for Auctionator
     whatsTrainingSkin = true, -- EllesmereUI look for WhatsTraining's window
     foreverDungeonJournalSkin = true, -- EllesmereUI look for Forever Dungeon Journal
-    dungeonJournalBroker = false, -- Dungeon Journal icon on a data bar: click to open or close the Forever Dungeon Journal (needs that addon; opt-in)
     attuneSkin = true,       -- EllesmereUI look for Attune
     restedxpSkin = false,    -- TwichUI's look for the RestedXP guide window (needs RestedXP; opt-in; not through EllesmereUI)
     speakstoneSkin = false,  -- TwichUI's look for SpeakStone's speech frame (needs SpeakStone; opt-in; not through EllesmereUI)
