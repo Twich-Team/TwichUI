@@ -1,8 +1,9 @@
 -- TwichUI: RestedXP guide on a data bar
 -- A LibDataBroker data source, "TwichUI RestedXP Guide", for a data bar (for example EllesmereUI's
 -- "Broker Plugin" block). Its text says whether RestedXP's guide is on ("Guide on" / "Guide off"); a click
--- opens a small menu (modules/RestedXPBrokerMenu.lua, drawn like the Mage launchers' menus): show the
--- guide (on or off), lock its windows, and open RestedXP's guide import window. Made only when RestedXP is loaded. TwichUI doesn't bundle LibDataBroker: nothing
+-- opens a small menu (modules/RestedXPBrokerMenu.lua, drawn like the Mage launchers' menus): choose which
+-- guide to load, show the guide (on or off), lock its windows, and open RestedXP's guide import window.
+-- Made only when RestedXP is loaded. TwichUI doesn't bundle LibDataBroker: nothing
 -- happens without a data bar addon that provides it.
 --
 -- What RestedXP gives us (RXPGuides v4.11.22 source, SettingsPanel.lua; not a public interface, checked
@@ -13,8 +14,11 @@
 -- (RestedXP itself leaves its secure buttons alone in combat). Lock is RestedXP's "Lock Frames" option,
 -- settings.profile.lockFrames, a plain boolean RestedXP reads whenever a window is dragged (its options
 -- page sets it with no other step). Import calls guideImporter:Open(), as its own menu and "/rxp import"
--- do; RestedXP puts that off itself during combat, so the menu entry is greyed out then. Nothing else of
--- RestedXP's is changed.
+-- do; RestedXP puts that off itself during combat, so the menu entry is greyed out then. Choosing a guide
+-- lists what RXPFrame:GenerateMenuTable({}) returns (the list its own guide menu and v2 window show,
+-- already filtered for the character) and loads the pick by calling that entry's own click handler, which
+-- is addon:LoadGuide; RestedXP has no combat check there, nor does its menu. Nothing else of RestedXP's
+-- is changed.
 -- ToggleActive and settings:RefreshProfile (a RestedXP profile change) are hooked, once, so the text
 -- follows a toggle made anywhere.
 
@@ -119,6 +123,74 @@ end
 function B.OpenImport()
     if not B.CanImport() then return end
     rxp.guideImporter:Open()
+end
+
+---------------------------------------------------------------------------
+-- Choosing a guide
+---------------------------------------------------------------------------
+local MAX_DEPTH = 6   -- RestedXP nests groups, sub-groups, guides and chapters; this only stops a loop
+
+local function Plain(text)
+    text = type(text) == "string" and text or ""
+    return (text:gsub("[\r\n]+", " "))
+end
+
+-- RestedXP's own menu table (RXPFrame:GenerateMenuTable, the list its guide window's menu is shown from,
+-- also called with a table of our own by its v2 window) as plain entries the data bar menu can draw:
+--   { heading = true, text }                          a section title ("Available Guides")
+--   { text, children = { ... }, current }             a group, sub-group or guide with chapters
+--   { text, func, arg1, arg2, current, disabled }     a guide; func is RestedXP's own click handler
+-- current marks the loaded guide and the groups on the way to it. The menu table ends where RestedXP
+-- starts its own settings entries (an empty title); only what is before it is read.
+local function Convert(list, depth, group, name)
+    local out, onPath = {}, false
+    for _, item in ipairs(list) do
+        if type(item) == "table" then
+            local text = Plain(item.text)
+            if item.isTitle and text == "" and depth == 0 then break end
+            if text ~= "" then
+                if item.isTitle then
+                    out[#out + 1] = depth == 0 and { heading = true, text = text } or { text = text, disabled = true }
+                elseif type(item.menuList) == "table" and depth < MAX_DEPTH then
+                    local children, hasCurrent = Convert(item.menuList, depth + 1, group, name)
+                    if #children > 0 then
+                        out[#out + 1] = { text = text, children = children, current = hasCurrent }
+                        onPath = onPath or hasCurrent
+                    end
+                elseif type(item.func) == "function" then
+                    local isCurrent = group ~= nil and item.arg1 == group and item.arg2 == name
+                    out[#out + 1] = { text = text, func = item.func, arg1 = item.arg1, arg2 = item.arg2, current = isCurrent }
+                    onPath = onPath or isCurrent
+                end
+            end
+        end
+    end
+    return out, onPath
+end
+
+function B.CanChoose()
+    local frame = type(rxp) == "table" and rxp.RXPFrame
+    return Usable(rxp) and type(frame) == "table" and type(frame.GenerateMenuTable) == "function"
+end
+
+-- The guides RestedXP offers right now (its own filters: faction, level, season, "show unused guides"),
+-- or nil when it can't be read. Read when asked, never at login: building it walks every guide's name.
+function B.GuideTree()
+    if not B.CanChoose() then return nil end
+    local frame = rxp.RXPFrame
+    local ok, list = xpcall(function() return frame:GenerateMenuTable({}) end, geterrorhandler())
+    if not ok or type(list) ~= "table" then return nil end
+    local current = rxp.currentGuide
+    local tree = Convert(list, 0, type(current) == "table" and current.group or nil, type(current) == "table" and current.name or nil)
+    return tree
+end
+
+-- Loads a guide entry the way RestedXP's own menu does (its click handler, which also closes its menu).
+function B.LoadGuide(entry)
+    if not (B.CanChoose() and type(entry) == "table" and type(entry.func) == "function") then return false end
+    entry.func(entry, entry.arg1, entry.arg2)
+    B.Update()
+    return true
 end
 
 local function OnClick(frame)

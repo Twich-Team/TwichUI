@@ -3,6 +3,9 @@
 -- profile.lockFrames, import = guideImporter:Open(), greyed out in combat; nothing else of RestedXP's is
 -- touched); a toggle or profile change made elsewhere is followed; hooks go in once; an unknown RestedXP
 -- shape makes nothing.
+-- Choosing a guide: the menu lists RXPFrame:GenerateMenuTable({}) up to its empty title (sections, groups,
+-- guides, chapters), marks the loaded guide and the groups leading to it, steps in and back, and loads a pick
+-- through that entry's own click handler. The menu table is shaped as GuideWindow.lua builds it.
 -- RestedXP is simulated from the source of v4.11.22 (SettingsPanel.lua: settings.ToggleActive flips
 -- settings.profile.showEnabled; settings:RefreshProfile swaps settings.profile), not the game.
 dofile(TESTS .. "harness.lua")
@@ -21,7 +24,7 @@ local function Boot(opts)
     end
   end
   c.tipHidden = 0
-  c.GameTooltip = { Hide = function() c.tipHidden = c.tipHidden + 1 end }
+  c.GameTooltip = { Hide = function() c.tipHidden = c.tipHidden + 1 end, GetOwner = function() end }
   c.TwichUIDB = { modules = {} }
   c.inCombat = false
   c.InCombatLockdown = function() return c.inCombat end
@@ -52,7 +55,13 @@ local function Boot(opts)
     SetHeight = function(s, v) s.height = v end,
   }
   c.CreateFrame = function(kind, name, parent, template)
-    local f = Fake(kind); f.name, f.parent, f.template = name, parent, template; return f
+    local f = Fake(kind); f.name, f.parent, f.template = name, parent, template
+    if template == "UIPanelScrollFrameTemplate" then
+      f.ScrollBar = Fake("bar")
+      f.ScrollBar.ThumbTexture = Fake("texture")
+      f.ScrollBar.ScrollUpButton, f.ScrollBar.ScrollDownButton = Fake("button"), Fake("button")
+    end
+    return f
   end
   c.UIParent = Fake("UIParent")
   c.UISpecialFrames = {}
@@ -67,6 +76,33 @@ local function Boot(opts)
     function rxp.settings:RefreshProfile() self.profile = rxp.nextProfile end
     function rxp.GetGuideName(guide) return guide.displayname end
     rxp.guideImporter = { opens = 0, Open = function(self) self.opens = self.opens + 1 end }
+    -- RestedXP's menu table: a title, groups with guides (and a sub-group), a guide with chapters, a disabled
+    -- guide, then the empty title where its own entries start (which must not be read).
+    rxp.loaded = {}
+    local function OnClick(_, group, name) rxp.loaded[#rxp.loaded + 1] = group .. "/" .. name; rxp.currentGuide = { group = group, name = name, displayname = name } end
+    local function Guide(group, name, text) return { text = text or name, func = OnClick, arg1 = group, arg2 = name, notCheckable = 1 } end
+    rxp.RXPFrame = {
+      builds = 0,
+      GenerateMenuTable = function(self, menu)
+        assert(self == rxp.RXPFrame and type(menu) == "table", "called as RXPFrame:GenerateMenuTable(table)")
+        self.builds = self.builds + 1
+        local out = menu
+        out[#out + 1] = { text = "Available Guides", isTitle = 1, notCheckable = 1 }
+        out[#out + 1] = { text = "Alliance", hasArrow = true, notCheckable = 1, menuList = {
+          Guide("Alliance", "1-6 Elwynn", "1-6 Elwynn Forest\nStart"),
+          Guide("Alliance", "6-10 Westfall"),
+          { text = "Dungeons", hasArrow = true, notCheckable = 1, menuList = { Guide("Alliance", "Deadmines") } },
+          { text = "Hidden", isTitle = 1, notCheckable = 1 },
+        } }
+        out[#out + 1] = { text = "Questlines", hasArrow = true, notCheckable = 1, menuList = {
+          { text = "Chain", hasArrow = true, notCheckable = 1, menuList = { Guide("Questlines", "Chain 1") } },
+        } }
+        out[#out + 1] = { text = "Empty group", hasArrow = true, notCheckable = 1, menuList = {} }
+        out[#out + 1] = { text = "", isTitle = 1, notCheckable = 1 }
+        out[#out + 1] = { text = "Display Tips", notCheckable = 1, func = function() error("must not be read") end }
+        return out
+      end,
+    }
     if opts.broken then rxp.settings.ToggleActive = nil end
     local ace = c.LibStub:NewLibrary("AceAddon-3.0", 1)
     function ace:GetAddon(name) if name == "RXPGuides" then return rxp end end
@@ -132,7 +168,7 @@ do
     assert(menu and menu.shown, "a click opens the menu")
     local rows = {}
     for _, f in ipairs(c.frames) do if f.kind == "Button" and f.parent == menu then rows[#rows + 1] = f end end
-    assert(#rows == 3, "three rows: " .. #rows)
+    assert(#rows == 4, "four rows: " .. #rows)
     local function Click(row) if row.enabled then row.scripts.OnClick(row) end end
     return menu, rows, Click
   end
@@ -141,7 +177,8 @@ do
   assert(not bus.events.GLOBAL_MOUSE_DOWN and not bus.events.PLAYER_REGEN_DISABLED, "listens to nothing while closed")
   local menu, rows, Click = Open("LeftButton")
   assert(bus.events.GLOBAL_MOUSE_DOWN and bus.events.PLAYER_REGEN_DISABLED, "listens while open")
-  local guide, lock, import = rows[1], rows[2], rows[3]
+  local choose, guide, lock, import = rows[1], rows[2], rows[3], rows[4]
+  assert(choose.name.text == "Choose guide" and choose.chev.shown and choose.enabled, "Choose guide leads the menu, with an arrow")
   assert(menu.template == "BackdropTemplate", "a backdrop frame, as the Mage menus are")
   assert(c.rxp.toggles == 0, "opening the menu changes nothing")
   assert(c.tipHidden == 1, "the tooltip is hidden so it does not sit over the menu")
@@ -208,6 +245,98 @@ do
   assert(tip:find("Current: 1-6 Elwynn Forest", 1, true), tip)
   assert(tip:find("guide window is hidden in RestedXP's options", 1, true), "says when the window itself is hidden: " .. tip)
 
+  -- Choosing a guide.
+  do
+    local menu2
+    c.rxp.currentGuide = { group = "Alliance", name = "6-10 Westfall", displayname = "6-10 Westfall" }
+    obj.OnClick(obj, "LeftButton")
+    for _, f in ipairs(c.frames) do if f.name == "TwichUIRestedXPMenu" then menu2 = f end end
+    local main = {}
+    for _, f in ipairs(c.frames) do if f.kind == "Button" and f.parent == menu2 then main[#main + 1] = f end end
+    assert(c.rxp.RXPFrame.builds == 0, "the guide list is not read until asked for")
+    main[1].scripts.OnClick(main[1])
+    assert(c.rxp.RXPFrame.builds == 1, "read once when Choose guide is clicked")
+    assert(menu2.shown, "the menu stays open")
+
+    local function Level()
+      local list = {}
+      local scrollShown
+      for _, f in ipairs(c.frames) do if f.template == "UIPanelScrollFrameTemplate" then scrollShown = f.shown end end
+      if not scrollShown then return list end   -- (the fake frames don't hide children with their parent)
+      for _, f in ipairs(c.frames) do
+        if f.kind == "Button" and f.entry and f.shown then list[#list + 1] = f end
+      end
+      return list
+    end
+    local function Find(text) for _, r in ipairs(Level()) do if r.entry.text == text then return r end end end
+    local back
+    for _, f in ipairs(c.frames) do if f.kind == "Button" and f.parent == menu2 and f.text and f.text.text == "Back" then back = f end end
+    assert(back, "a Back button is shown")
+
+    local top = Level()
+    assert(#top == 3 and top[1].entry.heading and top[1].head.text == "Available Guides", "a heading, then the groups; nothing after the empty title")
+    assert(top[2].entry.text == "Alliance" and top[2].chev.shown and top[2].mark.shown, "a group is marked as holding the loaded guide")
+    assert(top[3].entry.text == "Questlines" and not top[3].mark.shown, "another group is not")
+    assert(not Find("Empty group"), "a group with nothing in it is left out")
+    assert(not Find("Display Tips"), "RestedXP's own entries are not listed")
+    assert(not top[1].enabled, "a heading can't be clicked")
+
+    top[3].scripts.OnClick(top[3])
+    local inner = Level()
+    assert(#inner == 1 and inner[1].entry.text == "Chain" and inner[1].chev.shown, "stepping into a group shows its contents")
+    back.scripts.OnClick(back)
+    assert(#Level() == 3, "Back returns to the list")
+
+    Find("Alliance").scripts.OnClick(Find("Alliance"))
+    local alliance = Level()
+    assert(#alliance == 4, "guides, a sub-group, a disabled guide")
+    local elwynn, westfall, dungeons, hidden = alliance[1], alliance[2], alliance[3], alliance[4]
+    assert(elwynn.entry.text == "1-6 Elwynn Forest Start", "a newline in a name becomes a space: " .. tostring(elwynn.entry.text))
+    assert(westfall.entry.current and westfall.mark.shown and westfall.note.text == "Current", "the loaded guide is marked, in words as well")
+    assert(not elwynn.mark.shown and elwynn.note.text == "" and not elwynn.chev.shown, "others are not")
+    assert(dungeons.chev.shown and not hidden.enabled, "a sub-group has an arrow; a disabled guide can't be clicked")
+    hidden.scripts.OnClick(hidden)
+    assert(#c.rxp.loaded == 0 and #Level() == 4, "a disabled guide does nothing")
+
+    elwynn.scripts.OnClick(elwynn)
+    assert(#c.rxp.loaded == 1 and c.rxp.loaded[1] == "Alliance/1-6 Elwynn", "a pick loads the guide through RestedXP's own handler")
+    assert(not menu2.shown, "and closes the menu")
+    assert(Tip(obj):find("Current: 1-6 Elwynn", 1, true), "the tooltip follows")
+
+    -- It opens at the top level again, and the list is read again.
+    obj.OnClick(obj, "LeftButton")
+    assert(#Level() == 0 and menu2.shown and main[1].shown, "closing leaves browsing: the menu opens on its rows again")
+    main[1].scripts.OnClick(main[1])
+    assert(c.rxp.RXPFrame.builds == 2, "read again on the next visit")
+    c.FireEvent("GLOBAL_MOUSE_DOWN")
+    assert(not menu2.shown)
+
+    -- Combat does not stop a choice (RestedXP's own menu doesn't).
+    c.inCombat = true
+    obj.OnClick(obj, "LeftButton")
+    assert(main[1].enabled, "Choose guide stays available in combat")
+    c.inCombat = false
+    menu2:Hide()
+
+    -- A menu table that can't be built, or RestedXP without the function.
+    local frame = c.rxp.RXPFrame
+    local real = frame.GenerateMenuTable
+    frame.GenerateMenuTable = function() error("boom") end
+    local handled, realHandler = 0, c.geterrorhandler
+    c.geterrorhandler = function() return function() handled = handled + 1 end end
+    obj.OnClick(obj, "LeftButton")
+    main[1].scripts.OnClick(main[1])
+    c.geterrorhandler = realHandler
+    assert(handled == 1, "the error goes to the normal error handler, not swallowed")
+    assert(#Level() == 0 and menu2.shown, "a failing list shows nothing, the menu survives")
+    menu2:Hide()
+    frame.GenerateMenuTable = nil
+    obj.OnClick(obj, "LeftButton")
+    assert(not main[1].enabled and main[1].note.text == "Unavailable" and not main[1].chev.shown, "greyed out when RestedXP has no such list")
+    menu2:Hide()
+    frame.GenerateMenuTable = real
+  end
+
   -- Later ADDON_LOADED events: nothing made or hooked again.
   c.FireEvent("ADDON_LOADED", "SomeAddon")
   assert(#c.made == 1 and c.hookCount == 2, "made and hooked once")
@@ -238,19 +367,19 @@ do
   for _, f in ipairs(c.frames) do if f.name == "TwichUIRestedXPMenu" then menu = f end end
   local rows = {}
   for _, f in ipairs(c.frames) do if f.kind == "Button" and f.parent == menu then rows[#rows + 1] = f end end
-  assert(#rows == 4 and rows[4].name.text == "Guide rebinder..." and rows[4].enabled, "a fourth, enabled row")
-  rows[4].scripts.OnClick(rows[4])
+  assert(#rows == 5 and rows[5].name.text == "Guide rebinder..." and rows[5].enabled, "a fifth, enabled row")
+  rows[5].scripts.OnClick(rows[5])
   assert(opened == 1 and not menu.shown, "its action runs and the menu closes")
   -- Added while the menu already exists.
   assert(M.AddRow({ key = "Late", label = "Late", act = function() end, enabled = function() return false end, why = "Not now" }))
   c.obj.OnClick(c.obj, "LeftButton")
   rows = {}
   for _, f in ipairs(c.frames) do if f.kind == "Button" and f.parent == menu then rows[#rows + 1] = f end end
-  assert(#rows == 5 and not rows[5].enabled and rows[5].note.text == "Not now", "a late row is greyed out with its reason")
+  assert(#rows == 6 and not rows[6].enabled and rows[6].note.text == "Not now", "a late row is greyed out with its reason")
   -- RestedXP unreadable: the other addon's row still works.
   c.rxp.settings.ToggleActive = nil
   M.Refresh()
-  assert(rows[4].enabled, "an added row doesn't depend on RestedXP being readable")
+  assert(rows[5].enabled, "an added row doesn't depend on RestedXP being readable")
 end
 
 print("PASSED")
