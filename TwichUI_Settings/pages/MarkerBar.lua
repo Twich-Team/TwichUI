@@ -163,6 +163,19 @@ K.Page({
             { "above", "Above" }, { "below", "Below" } }), where, Near, nearWhy)
         Under(Number("offsetY", "Distance from the nameplate", "How far from the nameplate's top (or bottom), in screen pixels. Raise it to clear the name and health bar; lower it to sit closer."), where, Near, nearWhy)
         Under(Number("offsetX", "Sideways shift", "Moves the bar left (negative) or right of the nameplate's middle, in screen pixels."), where, Near, nearWhy)
+        K.Status("Last shown", function()
+            local seen = B.LastPlacement()
+            if not seen then return "Not shown yet this session" end
+            if seen == "nameplate" then return B.Get("side") == "below" and "Below the target's nameplate" or "Above the target's nameplate" end
+            return "At the fixed place"
+        end, function()
+            local seen, why = B.LastPlacement()
+            if seen == "fixed" and why and B.WHY[why] then return "Because " .. B.WHY[why] .. "." end
+        end, "Where the bar was the last time it appeared this session, and, when that was the fixed place although you chose the nameplate, why. Hold the key with a target to update it.", function()
+            local seen, why = B.LastPlacement()
+            if seen == "fixed" and why and why ~= "combat" and why ~= "chosen" then return "warn" end
+            return "quiet"
+        end)
         local move = Button("Fixed place", function() return B.Previewing() and "Done" or "Show and move" end, function()
             local ok, why = B.TogglePreview()
             if not ok and why == "combat" then R.Print("the bar can't be moved in combat.") end

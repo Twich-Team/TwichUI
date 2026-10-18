@@ -98,11 +98,16 @@ Why it is built this way (all from the Forever UI source):
   condition always has `nocombat`; the **fixed** bar sits at the fixed place and is the one shown in combat. "Place the bar" and "In combat"
   are only these conditions (`B.Conditions`): nameplate + show: near out of combat, fixed in combat; nameplate + hide: near out of combat
   only; fixed + show: fixed always; fixed + hide: fixed out of combat only. All of them need a target and the held key.
-- The nameplate is **never anchored to**: a protected bar anchored to a frame Blizzard's nameplate code moves would make that frame
-  restricted. The near bar is placed from the plate's screen position (`C_NamePlate.GetNamePlateForUnit("target")`: nothing for a plate the
-  game forbids addons to touch; its centre, top and bottom, converted for the plates' scale; kept on screen), read about 30 times a second
-  only while that bar is shown, out of combat and the plate is readable. A missing, forbidden, anchoring-restricted or secret plate puts it at
-  the fixed place. An unmoved plate isn't re-anchored.
+- The near bar is **anchored to the target's nameplate** (`C_NamePlate.GetNamePlateForUnit("target")`; nothing for a plate the game forbids
+  addons to touch), so the game moves it and nothing runs per frame. A first version computed a position from the plate's rectangle and put the
+  bar at the fixed place in the game: the API docs mark `GetCenter` as secret when a frame's anchoring is, so a nameplate's position is probably
+  not readable. The anchor is made only while the near bar is shown (so out of combat), redone on `PLAYER_TARGET_CHANGED` and
+  `NAME_PLATE_UNIT_ADDED/REMOVED`, and let go of (back to the fixed place) as the bar hides, so nothing stays attached to a plate the game
+  reuses. With no usable plate (off, out of range, a forbidden one, a failed lookup, or an anchor the game refuses) it sits at the fixed place;
+  the tab's **Last shown** row says where the bar was the last time it appeared and why (`B.LastPlacement`, `B.WHY`).
+- A click must act as the mouse button comes up: `SecureActionButton_OnClick` treats a click on an addon's button as a key press, so with
+  "cast on key down" on (`ActionButtonUseKeyDown`, the default) it acts on the press edge only. The buttons register `AnyUp` and set
+  `useOnKeyDown = false` (as the refreshments panel's do), so they act on the release either way. Without it a click did nothing.
 - Markers on the bar, size, spacing, scale, the look and the place change the protected frames, so they are applied out of combat; in combat they
   are saved at once and given when combat ends (the latest only), and the tab says so (`B.Pending`). The held key and the two conditions are part
   of that, so switching the bar off in combat takes effect after it.
@@ -178,7 +183,8 @@ Solo:
 12. Marker bar (needs checking, in this order): turn it on, hold Shift with a target: the bar appears above its nameplate, follows it
     as the target or you move, and a click marks (record whether solo marking works and what a plain member of a group gets). Right-click and
     Remove clear. Try Ctrl and Alt; try nameplates turned off, a target off screen, and a friendly NPC (fixed place expected when there is
-    no readable plate). Choose "Show it at the fixed place" and pull: the bar appears at the fixed place in combat and holding the key
+    no usable plate). Read the tab's **Last shown** row after each: it names the reason when the bar was not on a nameplate. Try both
+    settings of Options > Combat > cast on key down. Choose "Show it at the fixed place" and pull: the bar appears at the fixed place in combat and holding the key
     still works; choose Hide: nothing in combat. Choose a fixed placement. Show and move: drag it, close the page: the preview closes.
     Change the bar's markers/size in combat: waits, and applies afterwards. Record any "action blocked" message, and whether the bar
     ever sits in a wrong place for a frame when combat starts or ends (the driver takes up to 0.2 s).

@@ -164,15 +164,30 @@ local function Plate(cx, top, bottom, scale)
   return p
 end
 
--- The game's secure raidtarget action for a click on one of the bar's buttons (SecureTemplates.lua).
+-- The game's secure raidtarget action for a click on one of the bar's buttons (SecureTemplates.lua). The edge matters:
+-- SecureActionButton_OnClick treats a mouse click on an addon's button as a key press, so with "cast on key down" on
+-- (ActionButtonUseKeyDown, on by default) it acts on the press edge only, unless the button says useOnKeyDown = false.
+game.keyDownCVar = true
 local function Attr(b, name, suffix) local v = b.attrs["*" .. name .. suffix]; if v == nil then v = b.attrs[name] end return v end
-local function Click(b, mouse)
-  local suffix = mouse == "right" and "2" or "1"
+local function Perform(b, suffix)
   if Attr(b, "type", suffix) ~= "raidtarget" then return end
   local unit = b.attrs.unit or "target"
   local marker, action = tonumber(Attr(b, "marker", suffix)) or 1, Attr(b, "action", suffix) or "toggle"
   if action == "set" and game.marks[unit] ~= marker then Call("SetRaidTarget", unit, marker); game.marks[unit] = marker
   elseif action == "clear" then Call("SetRaidTarget", unit, 0); game.marks[unit] = nil end
+end
+local function Click(b, mouse)
+  local suffix = mouse == "right" and "2" or "1"
+  -- the edges the button is registered for reach it: a press, a release, or both
+  local registered = {}
+  for _, r in ipairs(b.clicks or {}) do registered[r] = true end
+  for _, down in ipairs({ true, false }) do
+    if (down and (registered.AnyDown or registered.LeftButtonDown)) or (not down and (registered.AnyUp or registered.LeftButtonUp)) then
+      local useOnKeyDown = b.attrs.useOnKeyDown
+      if useOnKeyDown == nil then useOnKeyDown = game.keyDownCVar end
+      if (down and useOnKeyDown) or (not down and not useOnKeyDown) then Perform(b, suffix) end
+    end
+  end
 end
 
 local function Bars() local all = B.Bars() return all.near, all.fixed end
@@ -259,6 +274,25 @@ for id = 0, 8 do
     else Check(b.attrs["*action1"] == "set" and b.attrs["*marker1"] == id, "marker " .. id .. " sets itself (never toggle)") end
   end
 end
+for id = 0, 8 do
+  Check(nearBar.buttons[id].attrs.useOnKeyDown == false and fixedBar.buttons[id].attrs.useOnKeyDown == false,
+    "button " .. id .. " acts as the mouse button comes up, whatever the game's cast-on-key-down setting")
+end
+do   -- the model has teeth: a button registered for the release without that attribute does nothing while the setting is on
+  local bare = { clicks = { "AnyUp" }, attrs = { unit = "target", ["*type1"] = "raidtarget", ["*action1"] = "set", ["*marker1"] = 8 } }
+  game.calls, game.marks, game.keyDownCVar = {}, {}, true
+  Click(bare, "left")
+  Check(#game.calls == 0, "(control) without useOnKeyDown = false, a release-only button does nothing with cast on key down on")
+end
+for _, cvar in ipairs({ true, false }) do
+  game.keyDownCVar = cvar
+  game.calls, game.marks = {}, {}
+  Click(nearBar.buttons[8], "left")
+  Check(Count("SetRaidTarget") == 1 and game.marks.target == 8, "a click marks the target, with cast on key down " .. (cvar and "on" or "off"))
+  Click(nearBar.buttons[6], "right")
+  Check(game.marks.target == nil, "and a right-click removes it, with cast on key down " .. (cvar and "on" or "off"))
+end
+game.keyDownCVar = true
 game.calls, game.marks = {}, {}
 Click(nearBar.buttons[8], "left")
 Check(Count("SetRaidTarget") == 1 and game.calls[1][3] == 8 and game.marks.target == 8, "a click on Skull marks the target with Skull")
@@ -324,75 +358,111 @@ Check(not B.Pending() and next(game.drivers) == nil, "... and then they are")
 R:SetEnabled("markersBar", true)
 
 ---------------------------------------------------------------------------
--- 6. Following the nameplate (the near bar)
+-- 6. Sitting on the nameplate (the near bar)
 ---------------------------------------------------------------------------
+-- A nameplate's position is not read: the bar is anchored to the plate, which the game moves. Only while the near bar
+-- is shown (out of combat), re-anchored when the target or its plate changes, and let go of as it hides.
 local function Point(root) return root.points[1] end
-Check(B.Tracker() and B.Tracker().scripts.OnUpdate == nil, "while no bar is shown, nothing follows")
-game.plate = Plate(1000, 650, 620)
-game.hasTarget = true
+local fx, fy = B.Position()
+local plateA, plateB = Fake("Frame"), Fake("Frame")
+game.plate = plateA
 nearBar.root:Show()
 local p = Point(nearBar.root)
-Check(p[1] == "BOTTOM" and p[2] == uiParent and p[3] == "BOTTOMLEFT" and p[4] == 1000 and p[5] == 650 + B.Get("offsetY"),
-  ("placed above the plate's top from its screen position: %s %s %s %s"):format(tostring(p[1]), tostring(p[3]), tostring(p[4]), tostring(p[5])))
-Check(p[2] ~= game.plate, "never anchored to the nameplate itself")
-Check(c.TwichUI.frame.events.PLAYER_TARGET_CHANGED and c.TwichUI.frame.events.RAID_TARGET_UPDATE, "while shown it listens for target and marker changes")
-local tracker = B.Tracker().scripts.OnUpdate
-Check(tracker ~= nil, "while shown, the per-frame follow runs")
--- moves with the plate
-game.plate.cx, game.plate.top, game.plate.bottom = 400, 500, 470
-tracker(nil, 0.1)
-p = Point(nearBar.root)
-Check(p[4] == 400 and p[5] == 500 + B.Get("offsetY"), "follows the plate as it moves")
-local clearsBefore = #nearBar.root.points
-tracker(nil, 0.1); tracker(nil, 0.1)
-Check(#nearBar.root.points == clearsBefore and nearBar.root.points[1] == p, "an unmoved plate isn't re-anchored")
--- side, offsets
-B.Set("side", "below"); B.Set("offsetX", 30); B.Set("offsetY", 10)
-nearBar.root:Hide(); nearBar.root:Show()
-p = Point(nearBar.root)
-Check(p[1] == "TOP" and p[4] == 430 and p[5] == 470 - 10, "below the plate, shifted sideways")
-B.Set("side", "above"); B.Set("offsetX", 0); B.Set("offsetY", 24)
--- scales
-B.Set("scale", 200)
-nearBar.root:Hide(); nearBar.root:Show()
-p = Point(nearBar.root)
-Check(p[4] == 400 / 2 and p[5] == (500 + 24) / 2, "the bar's own scale divides the offsets (they are in its units)")
-B.Set("scale", 100)
-game.plate.scale = 0.8
-nearBar.root:Hide(); nearBar.root:Show()
-p = Point(nearBar.root)
-Check(math.abs(p[4] - 400 * 0.8) < 1e-9 and math.abs(p[5] - (500 * 0.8 + 24)) < 1e-9, "a plate on another scale is converted to the screen's units")
-game.plate.scale = 1
--- kept on screen
-game.plate.cx, game.plate.top, game.plate.bottom = 5, 1075, 1045
-nearBar.root:Hide(); nearBar.root:Show()
-p = Point(nearBar.root)
-Check(p[4] == nearBar.width / 2 and p[5] == 1080 - nearBar.height, "clamped inside the screen")
--- no usable plate: the fixed place
-local fx, fy = B.Position()
-for name, plate in pairs({
-  none = false,
-  forbidden = (function() local f = Plate(300, 400, 380); f.IsForbidden = function() return true end; return f end)(),
-  restricted = (function() local f = Plate(300, 400, 380); f.IsAnchoringRestricted = function() return true end; return f end)(),
-  secret = Plate(SECRET, 400, 380),
-  broken = (function() local f = Plate(300, 400, 380); f.GetCenter = function() error("boom") end; return f end)(),
-}) do
-  game.plate = plate or nil
-  nearBar.root:Hide(); nearBar.root:Show()
-  p = Point(nearBar.root)
-  Check(p[1] == "CENTER" and p[4] == fx and p[5] == fy, "plate " .. name .. ": the bar is at the fixed place")
+Check(p[1] == "BOTTOM" and p[2] == plateA and p[3] == "TOP" and p[4] == 0 and p[5] == B.Get("offsetY"),
+  "shown: anchored to the top of the target's nameplate, offsets from the settings")
+Check(#nearBar.root.points == 1, "one anchor, and nothing else")
+local L1, L2 = B.LastPlacement()
+Check(L1 == "nameplate" and L2 == nil, "remembered: on the nameplate")
+Check(c.TwichUI.frame.events.PLAYER_TARGET_CHANGED and c.TwichUI.frame.events.NAME_PLATE_UNIT_ADDED and c.TwichUI.frame.events.NAME_PLATE_UNIT_REMOVED,
+  "while shown it listens for target, nameplate and marker changes")
+-- nothing per frame
+for _, fr in pairs(c) do
+  if type(fr) == "table" and fr.scripts and fr.scripts.OnUpdate and (fr == nearBar.root or fr == fixedBar.root) then error("the bars have an OnUpdate") end
 end
--- in combat the near bar is never moved
-game.plate = Plate(700, 800, 770)
-nearBar.root:Hide(); nearBar.root:Show()
+-- same plate again: not re-anchored
+local pointsBefore = nearBar.root.points
+c.FireEvent("PLAYER_TARGET_CHANGED")
+c.FireEvent("NAME_PLATE_UNIT_ADDED", "nameplate3")
+Check(nearBar.root.points == pointsBefore, "the same plate and settings are not anchored again")
+-- another target, another plate
+game.plate = plateB
+c.FireEvent("PLAYER_TARGET_CHANGED")
+p = Point(nearBar.root)
+Check(p[2] == plateB and #nearBar.root.points == 1, "a new target: the bar moves to its plate")
+-- side, offsets, scale
+B.Set("side", "below"); B.Set("offsetX", 30); B.Set("offsetY", 10)
+p = Point(nearBar.root)
+Check(p[1] == "TOP" and p[2] == plateB and p[3] == "BOTTOM" and p[4] == 30 and p[5] == -10, "below the plate, shifted sideways")
+B.Set("side", "above"); B.Set("offsetX", 0); B.Set("offsetY", 24)
+B.Set("scale", 200)
+p = Point(nearBar.root)
+Check(p[4] == 0 and p[5] == 12, "the bar's own scale divides the offsets (they are in its units): " .. tostring(p[5]))
+B.Set("scale", 100)
+Check(Point(nearBar.root)[5] == 24, "and back")
+-- the plate goes away
+game.plate = nil
+c.FireEvent("NAME_PLATE_UNIT_REMOVED", "nameplate3")
+p = Point(nearBar.root)
+Check(p[1] == "CENTER" and p[2] == uiParent and p[4] == fx and p[5] == fy, "no nameplate: the fixed place")
+local w1, why1 = B.LastPlacement()
+Check(w1 == "fixed" and why1 == "none" and B.WHY.none, "... and the reason is remembered: " .. tostring(why1))
+game.plate = plateA
+c.FireEvent("NAME_PLATE_UNIT_ADDED", "nameplate1")
+Check(Point(nearBar.root)[2] == plateA and B.LastPlacement() == "nameplate", "the plate comes back: the bar goes to it")
+-- a plate that can't be used, or a lookup that fails, or an anchor the game refuses: the fixed place, with the reason
+local forbidden = Fake("Frame"); forbidden.IsForbidden = function() return true end
+for name, setup in pairs({
+  forbidden = function() game.plate = forbidden end,
+  lookup = function() game.plate = "boom" end,
+}) do
+  setup()
+  local realGet = c.C_NamePlate.GetNamePlateForUnit
+  if name == "lookup" then c.C_NamePlate.GetNamePlateForUnit = function() error("bad unit") end end
+  c.FireEvent("PLAYER_TARGET_CHANGED")
+  c.C_NamePlate.GetNamePlateForUnit = realGet
+  local where, why = B.LastPlacement()
+  Check(where == "fixed" and why == name and Point(nearBar.root)[2] == uiParent, name .. ": at the fixed place, and says why")
+end
+game.plate = plateA
+c.FireEvent("PLAYER_TARGET_CHANGED")
+nearBar.root.SetPoint = function(self, point, rel, ...)
+  if rel == plateB then error("blocked") end
+  table.insert(self.points, { point, rel, ... })
+end
+game.plate = plateB
+c.FireEvent("PLAYER_TARGET_CHANGED")
+local rw, rwhy = B.LastPlacement()
+Check(rw == "fixed" and rwhy == "refused" and Point(nearBar.root)[2] == uiParent, "an anchor the game refuses: the fixed place, and says so")
+nearBar.root.SetPoint = nil
+game.plate = plateA
+c.FireEvent("PLAYER_TARGET_CHANGED")
+-- in combat nothing is re-anchored
 local before = Point(nearBar.root)
 game.combat = true
-game.plate.cx = 100
-tracker(nil, 0.1)
+game.plate = plateB
 c.FireEvent("PLAYER_TARGET_CHANGED")
 Check(Point(nearBar.root) == before, "nothing is moved in combat")
 game.combat = false
+game.plate = plateA
+-- hiding lets go of the plate
+nearBar.root:Hide()
+p = Point(nearBar.root)
+Check(p[1] == "CENTER" and p[2] == uiParent, "hidden: no longer attached to the nameplate")
+Check(c.TwichUI.frame.events.NAME_PLATE_UNIT_ADDED == nil and c.TwichUI.frame.events.PLAYER_TARGET_CHANGED == nil, "hidden: it listens for nothing")
+-- the fixed bar says why it is there
+B.Set("where", "nameplate")
+fixedBar.root:Show()
+local fw, fwhy = B.LastPlacement()
+Check(fw == "fixed" and fwhy == "combat", "the fixed bar shown while placement is the nameplate: because of combat")
+fixedBar.root:Hide()
+B.Set("where", "fixed")
+fixedBar.root:Show()
+fw, fwhy = B.LastPlacement()
+Check(fw == "fixed" and fwhy == "chosen", "... or because it was chosen")
+fixedBar.root:Hide()
+B.Set("where", "nameplate")
 -- the highlight
+nearBar.root:Show()
 game.index = 6
 c.FireEvent("RAID_TARGET_UPDATE")
 local function Ring(bar, id) for _, line in pairs(bar.buttons[id].ring) do return line.shown end end
@@ -401,10 +471,7 @@ game.index = SECRET
 c.FireEvent("RAID_TARGET_UPDATE")
 Check(not Ring(nearBar, 6), "a secret answer rings nothing (and errors nothing)")
 game.index = nil
--- hidden: nothing runs
 nearBar.root:Hide()
-Check(c.TwichUI.frame.events.PLAYER_TARGET_CHANGED == nil and c.TwichUI.frame.events.RAID_TARGET_UPDATE == nil, "hidden: it no longer listens for target and marker changes")
-Check(B.Tracker().scripts.OnUpdate == nil, "hidden: nothing follows")
 
 ---------------------------------------------------------------------------
 -- 7. The fixed place and the preview

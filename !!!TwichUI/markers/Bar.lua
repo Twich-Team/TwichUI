@@ -19,11 +19,14 @@
 --     allowed to show out of combat; "fixed" sits at the place you choose (draggable) and is the one that shows in
 --     combat, always (placement "fixed"), or only if you ask for it. Which of them may show, and when, is just the
 --     condition each is driven by (B.Conditions); that is what the "Where" and "In combat" choices are.
---   * The nameplate is never anchored to: a protected bar anchored to a frame Blizzard's nameplate code moves
---     would make that frame restricted. The bar is placed from the nameplate's screen position instead
---     (C_NamePlate.GetNamePlateForUnit("target"), which gives nothing for a nameplate the game forbids addons to
---     touch), read each frame only while the near bar is shown and out of combat, and put at the fixed place when
---     there is no usable nameplate (nameplates turned off, the target off screen or behind you, or a forbidden one).
+--   * The near bar is anchored to the target's nameplate (C_NamePlate.GetNamePlateForUnit("target"); nothing for a
+--     nameplate the game forbids addons to touch), so the game moves it with the plate and nothing runs per frame.
+--     A nameplate's position may not be something addons can read on this client (the API docs mark GetCenter as secret
+--     when a frame's anchoring is), so the bar anchors instead of computing a place from a position it was refused. The anchor is made only while the
+--     near bar is shown, which is only ever out of combat, redone when the target or its plate changes, and let go
+--     of (back to the fixed place) as the bar hides, so nothing stays attached to a frame the game reuses. With no
+--     usable nameplate (nameplates turned off, the target off screen or behind you, a forbidden one, or the game
+--     refusing the anchor) the bar is at the fixed place; B.LastPlacement says which, and why, for the settings.
 --
 -- Saved (the profile's): TwichUIDB.ui.markerBar (B.DEFAULTS), the look TwichUIDB.ui.markerBarStyle (the same choices
 -- as the other TwichUI frames: markers/ uses modules/MenuStyle.lua), and the fixed place TwichUIDB.ui.markerBarPosition
@@ -229,6 +232,10 @@ local function NewButton(bar, id)
     for _, line in pairs(b.ring) do line:Hide() end
     if secure then
         b:RegisterForClicks("AnyUp")
+        -- Act as the mouse button comes up, whatever the game's "cast on key down" setting: SecureActionButton_OnClick acts
+        -- on the press edge when that setting is on (and a mouse click on an addon's button is treated as a key press),
+        -- so without this a button registered for the release does nothing (as the refreshments panel's buttons do).
+        b:SetAttribute("useOnKeyDown", false)
         b:SetAttribute("unit", "target")
         b:SetAttribute("*type1", "raidtarget")
         b:SetAttribute("*type2", "raidtarget")
@@ -307,57 +314,73 @@ local function PlaceFixed(bar)
 end
 
 ---------------------------------------------------------------------------
--- Following the nameplate (the near bar, shown and out of combat only)
+-- Sitting on the nameplate (the near bar, shown and out of combat only)
 ---------------------------------------------------------------------------
--- The target nameplate's middle, top and bottom, in the units the bar is placed in, or nil.
-local function PlateRect()
-    if not (C_NamePlate and C_NamePlate.GetNamePlateForUnit) then return nil end
-    local ok, plate = pcall(C_NamePlate.GetNamePlateForUnit, "target")
-    if not ok or not plate then return nil end
-    local good, cx, top, bottom, ratio = pcall(function()
-        if plate.IsForbidden and plate:IsForbidden() then return nil end
-        if plate.IsAnchoringRestricted and plate:IsAnchoringRestricted() then return nil end
-        local px = plate:GetCenter()
-        local ui = UIParent:GetEffectiveScale()
-        return Num(px), Num(plate:GetTop()), Num(plate:GetBottom()), (Num(plate:GetEffectiveScale()) or 0) / ((Num(ui) or 0) > 0 and ui or 1)
-    end)
-    if not good or not (cx and top and bottom and ratio and ratio > 0) then return nil end
-    return cx * ratio, top * ratio, bottom * ratio
+-- Why the near bar was at the fixed place instead (shown in the settings, so a bar in the wrong place can be explained).
+B.WHY = {
+    none = "your target has no nameplate (nameplates turned off, or it is out of range or off screen)",
+    forbidden = "the game doesn't let addons use that nameplate",
+    lookup = "the game refused the nameplate lookup for your target",
+    refused = "the game wouldn't attach the bar to that nameplate",
+    api = "this client has no nameplate calls",
+    combat = "you were in combat",
+    chosen = "you chose the fixed place",
+}
+local last   -- where the bar was the last time it appeared this session: { where = "nameplate" | "fixed", why = code }
+
+-- Remembers it, and tells whatever shows it only when it changed.
+local function Remember(where, why)
+    if last and last.where == where and last.why == why then return end
+    last = { where = where, why = why }
+    Notify("state")
+end
+function B.LastPlacement()
+    if not last then return nil end
+    return last.where, last.why
 end
 
+-- The nameplate of your target, or nil and why.
+local function TargetPlate()
+    if not (C_NamePlate and C_NamePlate.GetNamePlateForUnit) then return nil, "api" end
+    local ok, plate = pcall(C_NamePlate.GetNamePlateForUnit, "target")
+    if not ok then return nil, "lookup" end
+    if not plate then return nil, "none" end
+    local good, forbidden = pcall(function() return plate.IsForbidden and plate:IsForbidden() end)
+    if not good or forbidden then return nil, "forbidden" end
+    return plate
+end
+
+-- Anchors the near bar to your target's nameplate (the game moves the plate, so nothing follows it per frame; a
+-- nameplate's position may not be readable by addons here: the API docs mark GetCenter as secret when a frame's
+-- anchoring is), or puts it at the fixed place when there is none. Out of combat only: a protected frame's
+-- anchors can't change in combat, and the near bar is never shown then.
 local function PlaceNear(bar)
     if InCombat() then return end
-    local cx, top, bottom = PlateRect()
-    if not cx then
+    local plate, why = TargetPlate()
+    if not plate then
         if bar.placed ~= "fixed" then PlaceFixed(bar) end
+        Remember("fixed", why)
         return
     end
     local s = bar.root:GetScale()
     if not s or s <= 0 then s = 1 end
-    local w, h = bar.width * s, bar.height * s
-    local uiW, uiH = UIParent:GetWidth(), UIParent:GetHeight()
     local above = B.Get("side") == "above"
-    local x = cx + B.Get("offsetX")
-    local y = above and (top + B.Get("offsetY")) or (bottom - B.Get("offsetY"))
-    x = math.max(w / 2, math.min(uiW - w / 2, x))
-    y = above and math.max(0, math.min(uiH - h, y)) or math.max(h, math.min(uiH, y))
-    local key = ("%d:%d:%s"):format(math.floor(x * 2 + 0.5), math.floor(y * 2 + 0.5), above and "a" or "b")
-    if bar.placed == key then return end
-    bar.placed = key
-    bar.root:ClearAllPoints()
-    bar.root:SetPoint(above and "BOTTOM" or "TOP", UIParent, "BOTTOMLEFT", x / s, y / s)
+    local x, y = B.Get("offsetX"), B.Get("offsetY")
+    local key = table.concat({ tostring(plate), above and "a" or "b", x, y, s }, ":")
+    if bar.placed ~= key then
+        bar.root:ClearAllPoints()
+        local ok = pcall(bar.root.SetPoint, bar.root, above and "BOTTOM" or "TOP", plate, above and "TOP" or "BOTTOM", x / s, (above and y or -y) / s)
+        if not ok then
+            PlaceFixed(bar)
+            Remember("fixed", "refused")
+            return
+        end
+        bar.placed = key
+    end
+    Remember("nameplate")
 end
 
--- Events and the per-frame follow run only while a bar is shown. The frame that follows is made with the bars.
-local tracker
-local since = 0
-local function Tick(_, elapsed)
-    since = since + elapsed
-    if since < 0.03 then return end
-    since = 0
-    if bars.near and bars.near.root:IsShown() then PlaceNear(bars.near) end
-end
-
+-- Events run only while a bar is shown.
 local function OnMarkersChanged()
     for _, key in ipairs({ "near", "fixed" }) do
         local bar = bars[key]
@@ -366,7 +389,14 @@ local function OnMarkersChanged()
 end
 local function OnTargetChanged()
     OnMarkersChanged()
-    if bars.near and bars.near.root:IsShown() and not InCombat() then PlaceNear(bars.near) end
+    if bars.near and bars.near.root:IsShown() then PlaceNear(bars.near) end
+end
+-- A nameplate that goes away may still be the target's for the rest of the event, so look again a moment later.
+local function OnPlateRemoved()
+    OnTargetChanged()
+    C_Timer.After(0.1, function()
+        if bars.near and bars.near.root:IsShown() then PlaceNear(bars.near) end
+    end)
 end
 
 local watching = false
@@ -380,30 +410,41 @@ local function Watch()
         watching = true
         R:On("PLAYER_TARGET_CHANGED", OnTargetChanged)
         R:On("RAID_TARGET_UPDATE", OnMarkersChanged)
+        R:On("NAME_PLATE_UNIT_ADDED", OnTargetChanged)
+        R:On("NAME_PLATE_UNIT_REMOVED", OnPlateRemoved)
     elseif not any and watching then
         watching = false
         R:Off("PLAYER_TARGET_CHANGED", OnTargetChanged)
         R:Off("RAID_TARGET_UPDATE", OnMarkersChanged)
+        R:Off("NAME_PLATE_UNIT_ADDED", OnTargetChanged)
+        R:Off("NAME_PLATE_UNIT_REMOVED", OnPlateRemoved)
     end
-    local following = bars.near and bars.near.root:IsShown()
-    if tracker then tracker:SetScript("OnUpdate", following and Tick or nil) end
 end
 
 local function OnShown(bar)
     Highlight(bar)
-    if bar == bars.near then PlaceNear(bar) end
+    if bar == bars.near then
+        PlaceNear(bar)
+    else
+        Remember("fixed", B.Get("where") == "nameplate" and "combat" or "chosen")
+    end
+    Watch()
+end
+
+-- Hidden: the near bar lets go of the nameplate (out of combat), so nothing stays attached to a frame the game reuses.
+local function OnHidden(bar)
+    if bar == bars.near and not InCombat() and bar.placed ~= "fixed" then PlaceFixed(bar) end
     Watch()
 end
 
 function B.Build()
     if built then return true end
     if InCombat() or not (CreateFrame and RegisterStateDriver) then return false end
-    tracker = CreateFrame("Frame")
     for _, spec in ipairs({ { "near", "TwichUIMarkerBarNear" }, { "fixed", "TwichUIMarkerBarFixed" } }) do
         local bar = NewBar(spec[2], true)
         bars[spec[1]] = bar
         bar.root:HookScript("OnShow", function() OnShown(bar) end)
-        bar.root:HookScript("OnHide", Watch)
+        bar.root:HookScript("OnHide", function() OnHidden(bar) end)
     end
     built = true
     return true
@@ -486,7 +527,6 @@ function B.Built() return built end
 -- A change made in combat is saved but the bar still has what it had.
 function B.Pending() return pending end
 function B.Bars() return bars, preview end
-function B.Tracker() return tracker end
 
 ---------------------------------------------------------------------------
 -- The preview: an ordinary copy of the bar at the fixed place, drawn from the settings and the look, which can
