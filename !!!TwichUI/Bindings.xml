@@ -7,4 +7,12 @@
 	</Binding>
 	<Binding name="CLICK TwichUIRefreshmentsWater:LeftButton" category="BINDING_HEADER_TWICHUI"/>
 	<Binding name="CLICK TwichUIRefreshmentsFood:LeftButton" category="BINDING_HEADER_TWICHUI"/>
+	<!-- Marker cycling (markers/Keys.lua names them). Each clicks one of TwichUI's own secure buttons once per
+	     press; with its kind of marker cycling off they do nothing. No key is bound until you choose one. -->
+	<Binding name="CLICK TwichUIMarkTargetNext:LeftButton" category="BINDING_HEADER_TWICHUI"/>
+	<Binding name="CLICK TwichUIMarkTargetRestart:LeftButton" category="BINDING_HEADER_TWICHUI"/>
+	<Binding name="CLICK TwichUIMarkTargetClear:LeftButton" category="BINDING_HEADER_TWICHUI"/>
+	<Binding name="CLICK TwichUIMarkWorldNext:LeftButton" category="BINDING_HEADER_TWICHUI"/>
+	<Binding name="CLICK TwichUIMarkWorldRestart:LeftButton" category="BINDING_HEADER_TWICHUI"/>
+	<Binding name="CLICK TwichUIMarkWorldClear:LeftButton" category="BINDING_HEADER_TWICHUI"/>
 </Bindings>

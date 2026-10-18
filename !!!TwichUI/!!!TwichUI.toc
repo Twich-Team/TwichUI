@@ -205,6 +205,13 @@ qol\QuickKeybind.lua
 qol\GuideWaypoint.lua
 qol\TwichUISettingsButton.lua
 
+# Marker cycling: a key that marks your target with the next target marker, and one that places the next world
+# marker at the mouse pointer, in an order you choose; each with a restart key and a clear key (off until turned on;
+# no key is bound until you choose one; key bindings in Bindings.xml). Markers.lua is the order, Keys.lua the
+# game's secure buttons the keys press.
+markers\Markers.lua
+markers\Keys.lua
+
 # Troubleshooting: one report to copy and optional temporary tracing (/tui diagnostics), and a short status and support
 # information view (diag\Status.lua, diag\SupportWindow.lua). Local only; off until asked for.
 diag\Diagnostics.lua

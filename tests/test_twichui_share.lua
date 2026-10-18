@@ -99,6 +99,7 @@ local REGISTRY = {
   restedxpTimerLook = A.TwichUI.RestedXPSkin.Timers.Look.DEFAULTS, chronicleLook = A.TwichUI.ChronicleAppearance.LOOK_DEFAULTS,
   notifyLook = A.TwichUI.NotifyLook.DEFAULTS, restockPromptStyle = A.TwichUI.RestockPrompt.Style.DEFAULTS,
   classBars = A.TwichUI.ClassBars.DEFAULTS, classBarsLook = A.TwichUI.ClassBars.Look.DEFAULTS,
+  markers = A.TwichUI.Markers.DEFAULTS,
 }
 for slot, defaults in pairs(REGISTRY) do
   for key in pairs(defaults) do
@@ -119,7 +120,7 @@ do
     return false
   end
   -- a saved table whose contents a custom group shares as a whole (not field by field): the group, by the table's name
-  local CUSTOM_UI = { classBarsOverrides = "classBarsOverrides" }
+  local CUSTOM_UI = { classBarsOverrides = "classBarsOverrides", markerOrder = "markerOrder" }
   local function CustomUi(sub)
     local g = CUSTOM_UI[sub] and TC.Group(CUSTOM_UI[sub])
     return g ~= nil and g.custom ~= nil

@@ -40,6 +40,7 @@ Every feature has its own page in the TwichUI settings (`/tui options`), and eve
   - Decline duel requests.
   - A Quick Keybind button in the Game Menu.
   - Show the game's waypoint on the place RestedXP's arrow is leading you.
+  - Marker cycling: one key marks your target with the next target marker, another places the next world marker at your mouse pointer, each in an order you arrange by dragging, with keys to restart the cycle and to remove markers.
 - **Vendor restocking:** Keep chosen items, such as reagents and ammunition, at a set number in your bags. When a merchant sells one you are short of, TwichUI asks before buying the difference (or buys it by itself, once you confirm that), within your money, bag space and an optional spending limit. Off until you turn it on.
 - **Auction House:** A Sell from Bags tab that suggests a price from current listings. You set quantity, price and duration; nothing posts until you press Post. Closing the mailbox can print one line with the money you took from mail that visit (on by default; nothing is saved).
 - **Quiet login and fonts:** Hide addon "loaded" messages, and add Alegreya, Barlow, Cinzel and Spectral fonts plus bell sounds to your font and sound lists.

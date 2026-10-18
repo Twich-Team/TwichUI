@@ -82,7 +82,7 @@ function SettingsClient(opts)
     "modules/RefreshmentsTrade.lua", "modules/RefreshmentsBroker.lua", "modules/EllesmereJunk.lua", "modules/MageSell.lua", "modules/MageSellWindow.lua", "modules/Restock.lua", "modules/RestockPrompt.lua", "modules/ChatCleanMatch.lua", "modules/ChatClean.lua",
     "classbars/Anim.lua", "classbars/Resources.lua", "classbars/Config.lua", "classbars/Bar.lua", "classbars/Effects.lua", "classbars/Controller.lua",
     "modules/RestedXPSkin.lua", "modules/RestedXPTimers.lua", "modules/SpeakStoneSkin.lua", "qol/QoL.lua", "qol/Summons.lua", "qol/Resurrect.lua", "qol/ReleasePvP.lua",
-    "qol/Duels.lua", "qol/QuickKeybind.lua", "qol/GuideWaypoint.lua",
+    "qol/Duels.lua", "qol/QuickKeybind.lua", "qol/GuideWaypoint.lua", "markers/Markers.lua", "markers/Keys.lua",
     "pins/Pins.lua", "pins/Sync.lua", "pins/Look.lua", "pins/Map.lua", "pins/Minimap.lua", "pins/Editor.lua", "pins/Window.lua",
     "pins/BrokerMenu.lua", "pins/Broker.lua",
     "diag/Diagnostics.lua", "diag/Status.lua", "diag/SupportWindow.lua", "diag/Window.lua" }

@@ -42,7 +42,8 @@ K.GROUPS = {
 -- has pages under it, in their tab strip; default "General"), group, parent (a page key: the page is a tab of its
 -- parent, not a row in the list), order, description
 -- (one line under the title), when (whether the page exists this session), build (describes its rows),
--- host (instead of rows: returns a frame of the feature's own, shown as the page), keywords (extra words search
+-- host (returns a frame of the feature's own, shown before the page's rows; hostHeight: its height, hostAfter: the
+-- name of the section it follows instead, for a page with rows on both sides of it), keywords (extra words search
 -- finds the page by), onShow (called each time the window goes to the page, before it is drawn: a page that shows
 -- a snapshot takes it there), overview = { label, tip, status = function, when = function } (its row on Home) }.
 function K.Page(def)

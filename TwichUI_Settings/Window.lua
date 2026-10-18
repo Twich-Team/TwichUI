@@ -298,6 +298,14 @@ end
 ---------------------------------------------------------------------------
 local function SectionId(page, header) return header and header.id or (page.key .. ":intro") end
 
+-- A page's own frame (def.host) is HOST_H tall and comes before its rows, unless the page gives def.hostHeight
+-- and def.hostAfter (the name of the section it follows: rows on either side of it, such as a switch above a
+-- list and its keys below).
+local function HostHeight(page)
+    local h = page.def.hostHeight
+    return (type(h) == "number" and h > 0) and h or HOST_H
+end
+
 -- A feature's tabs: one per page of the family (Look's Tab: the shown one has a faint bronze fill and a bar on
 -- the rule below). Choosing one goes to that page (a stable page key, as search and direct links use); its rows
 -- are made the first time.
@@ -359,7 +367,7 @@ local function BuildView(page)
         if ok and hosted then
             hosted:SetParent(frame)
             hosted:ClearAllPoints()
-            hosted:SetSize(CONTENT_W, HOST_H)
+            hosted:SetSize(CONTENT_W, HostHeight(page))
             view.hosted = hosted
         else
             R.Fault("settings page " .. page.key, hosted)
@@ -491,12 +499,14 @@ function Layout(view)
         view.failed:SetPoint("TOPLEFT", 2, -y)
         y = y + (view.failed:GetStringHeight() or 12) + 12
     end
-    if view.hosted then
+    local after = view.hosted and page.def.hostAfter or nil
+    local function PlaceHost(gap)
         view.hosted:ClearAllPoints()
         view.hosted:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, -y)
         view.hosted:Show()
-        y = y + HOST_H
+        y = y + HostHeight(page) + gap
     end
+    if view.hosted and not after then PlaceHost(0) end
     local placed = false
     for _, sec in ipairs(view.sections) do
         local card, inner = sec.card, SECTION_PAD
@@ -547,6 +557,14 @@ function Layout(view)
             y = y + inner + GAP
             placed = true
         end
+        if after and sec.header and sec.header:GetName() == after then
+            PlaceHost(GAP)
+            after = nil
+        end
+    end
+    if after then   -- the section it follows isn't on the page: after the last one
+        PlaceHost(GAP)
+        placed = true
     end
     if placed then y = y - GAP end   -- the gap belongs between two things, not after the last
     if view.reset then

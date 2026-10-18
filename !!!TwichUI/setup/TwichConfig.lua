@@ -1043,6 +1043,88 @@ function ClassBarOverrides.restore(records)
 end
 
 ---------------------------------------------------------------------------
+-- Marker cycling's orders: for each kind (target, world), the eight markers in order and the ones skipped,
+-- checked by markers/Markers.lua (the eight known ids, each once; skipped ones known and once). Shared and
+-- replaced per kind, as a whole. The keys are the game's key bindings: never part of a share, never changed by
+-- an import. The cycle's position isn't saved, so it can't travel either.
+---------------------------------------------------------------------------
+local MarkerOrders = {}
+
+local function MOText(kind, e)
+    local M = R.Markers
+    local skipped = {}
+    for _, id in ipairs(e.off) do skipped[id] = true end
+    local on, off = {}, {}
+    for _, id in ipairs(e.order) do
+        local list = skipped[id] and off or on
+        list[#list + 1] = M.Name(kind, id)
+    end
+    local text = #on > 0 and table.concat(on, ", ") or "every marker skipped"
+    if #off > 0 and #on > 0 then text = text .. " (skipped: " .. table.concat(off, ", ") .. ")" end
+    return text
+end
+
+local function MOCurrent(kind)
+    local M = R.Markers
+    return M.Export()[kind]
+end
+
+local function MOSame(a, b)
+    local M = R.Markers
+    return M.SameList(a.order, b.order) and M.SameList(a.off, b.off)
+end
+
+function MarkerOrders.usable() return R.Markers ~= nil end
+function MarkerOrders.count() return 2 end
+function MarkerOrders.label() return "target and world marker orders" end
+function MarkerOrders.export() return R.Markers.Export() end
+
+function MarkerOrders.clean(raw)
+    local clean, why = R.Markers.Clean(raw)
+    if not clean then return nil, why end
+    local values = 0
+    for _, e in pairs(clean) do values = values + #e.order + #e.off end
+    return clean, values
+end
+
+function MarkerOrders.plan(clean)
+    local changes = {}
+    for _, kind in ipairs(R.Markers.KINDS) do
+        local e = clean[kind]
+        if e and not MOSame(MOCurrent(kind), e) then changes[#changes + 1] = { kind = kind, new = e } end
+    end
+    return changes
+end
+
+local MO_LABEL = { target = "Target marker order", world = "World marker order" }
+
+function MarkerOrders.review(clean)
+    local rows, same = {}, 0
+    for _, kind in ipairs(R.Markers.KINDS) do
+        local e = clean[kind]
+        if e then
+            local cur = MOCurrent(kind)
+            if MOSame(cur, e) then same = same + 1
+            else rows[#rows + 1] = { label = MO_LABEL[kind], key = "markers:" .. kind, old = MOText(kind, cur), new = MOText(kind, e) } end
+        end
+    end
+    return rows, same
+end
+
+-- Plain writes. Returns undo records (markers/Markers.lua's ApplyClean).
+function MarkerOrders.apply(clean, plan)
+    local only = {}
+    for _, c in ipairs(plan) do only[c.kind] = clean[c.kind] end
+    if type(TwichUIDB.ui) ~= "table" then TwichUIDB.ui = {} end
+    return R.Markers.ApplyClean(only)
+end
+
+function MarkerOrders.restore(records)
+    if not R.Markers then return 0 end
+    return R.Markers.RestoreRecords(records)
+end
+
+---------------------------------------------------------------------------
 -- The groups
 ---------------------------------------------------------------------------
 local schema   -- built once everything it needs was there
@@ -1092,6 +1174,23 @@ local function Define()
     g = Group("qol", "Quality of life", { page = "qol",
         note = "Only the Quick Keybind button is shared. The automatic ones (summons, resurrection, release, duels, the waypoint) stay yours." })
     Switches(g, { "qolQuickKeybind" })
+
+    g = Group("markers", "Marker cycling", { page = "markersTarget",
+        note = "Whether target and world marker cycling are on, which unit a target-marker key marks, and whether removing markers also restarts the cycle. Your keys are the game's key bindings and stay yours." })
+    Switches(g, { "markersTarget", "markersWorld" })
+    Table(g, { "ui", "markers" }, R.Markers, { "targetUnit", "targetClearRestarts", "worldClearRestarts" },
+        { targetUnit = R.Markers and R.Markers.UNITS or {} })
+    do
+        local idx = g.index.markers
+        if idx and idx.targetUnit and idx.targetClearRestarts and idx.worldClearRestarts then
+            idx.targetUnit.label = "Target-marker key marks"
+            idx.targetClearRestarts.label, idx.worldClearRestarts.label = "Removing your target's marker restarts the cycle", "Removing world markers restarts the cycle"
+        end
+    end
+
+    g = Group("markerOrder", "Marker order", { page = "markersTarget",
+        note = "The order of the target markers and of the world markers, and which ones are skipped. Each kind replaces yours as a whole. Keys and the cycle's position never travel." })
+    g.custom = MarkerOrders
 
     g = Group("food", "Food and drink", { page = "food" })
     Switches(g, { "foodDrink", "foodDrinkFood", "foodDrinkDrink" })

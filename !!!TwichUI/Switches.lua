@@ -96,6 +96,10 @@ do
     Define("qolGuideWaypoint", def)
 end
 
+-- Marker cycling: the keys' secure buttons follow (markers/Keys.lua; a change in combat waits for it to end)
+Define("markersTarget", { apply = Refresh("MarkerKeys") })
+Define("markersWorld", { apply = Refresh("MarkerKeys") })
+
 -- Food and drink
 Define("foodDrink", { apply = Refresh("FoodDrink") })
 Define("qolMageConjureFoodDrink", { apply = Refresh("FoodDrink") })   -- read by modules/FoodDrink.lua

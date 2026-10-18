@@ -17,6 +17,7 @@ pages\Overview.lua
 pages\Gear.lua
 pages\Notifications.lua
 pages\QoL.lua
+pages\Markers.lua
 pages\ChatClean.lua
 pages\ChatCleanChannels.lua
 pages\ChatCleanRules.lua
