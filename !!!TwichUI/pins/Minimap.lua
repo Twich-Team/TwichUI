@@ -120,6 +120,7 @@ local function Gather(out)
     if not out.halfWidth then return "no-width" end
     if out.facing == nil then return "no-facing" end
 end
+PMM.Gather = Gather   -- read only: navigation's minimap trail places its route the same way (nav/MinimapTrail.lua)
 
 ---------------------------------------------------------------------------
 -- The buttons

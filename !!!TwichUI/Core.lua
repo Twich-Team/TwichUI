@@ -90,6 +90,7 @@ local DEFAULT_MODULES = {
     mapPings = true,         -- ... and map pings: a spot on the world map shared with your group for a few seconds (works only while Party pins is on)
     mapPingsSend = true,     -- ... your gesture sends a ping to your group
     mapPingsReceive = true,  -- ... pings from your group are taken in (shown, listed, with a sound)
+    navigation = false,      -- Navigation: walking routes to a place you choose, with a frame, an arrow and trails on the maps (opt-in; nav/)
 }
 R.DEFAULT_MODULES = DEFAULT_MODULES   -- Switches.lua and the settings window (each switch's default)
 

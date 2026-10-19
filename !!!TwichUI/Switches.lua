@@ -200,7 +200,16 @@ Define("mapPings", {
     end,
 })
 
-Define("mapPingsSend", { apply = Refresh("MapTools", "Update") })   -- read when a ping is sent; the tool bar's Group ping follows it
+Define("mapPingsSend", { apply = Refresh("MapTools", "Update") })
+
+-- Navigation: off ends any navigation and lets the walking maps' decoded tables go; the map tool and the pin action follow
+Define("navigation", {
+    when = function() return R.Nav ~= nil end,
+    apply = function()
+        R.Nav.Refresh()
+        if R.MapTools then R.MapTools.Refresh() end
+    end,
+})   -- read when a ping is sent; the tool bar's Group ping follows it
 Define("mapPingsReceive")   -- read when one arrives
 
 -- Auction House

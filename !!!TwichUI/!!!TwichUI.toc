@@ -198,6 +198,20 @@ pins\MapTools.lua
 pins\BrokerMenu.lua
 pins\Broker.lua
 
+# Navigation: a walking route to a place you choose (a pin's Navigate here, the map tool, /tui nav), planned over walking
+# maps baked from the client's terrain (TwichUI_NavData, load on demand, loaded the first time a route is planned; tools/navbake
+# has how they are made). A frame, a direction arrow, and the route on the world map and the minimap. Off until turned on;
+# nothing runs while no destination is set. Data.lua and Route.lua have no frames.
+nav\Prefs.lua
+nav\Data.lua
+nav\Route.lua
+nav\Nav.lua
+nav\Paint.lua
+nav\Frame.lua
+nav\Arrow.lua
+nav\MapTrail.lua
+nav\MinimapTrail.lua
+
 # Sell from Bags: Auction House posting tab (uses the Chronicle palette)
 auction\Price.lua
 auction\Scan.lua
