@@ -42,7 +42,7 @@ local L = TC.LIMITS
 ---------------------------------------------------------------------------
 TC.STAYS = {
     { code = "acts", text = "Anything that acts for you in the game: selling, whether vendor restocking is on and your confirmation that it may buy without asking, filling trades by itself, accepting summons, resurrections or duels, releasing your spirit, and placing the waypoint. These only turn on by your own choice." },
-    { code = "network", text = "What TwichUI sends to or accepts from other players: configuration sharing, accepting setups, the group check, how you send, and whether Party pins are on." },
+    { code = "network", text = "What TwichUI sends to or accepts from other players: configuration sharing, accepting setups, the group check, how you send, and whether Party pins and Map pings are on, and whether you send and take in pings." },
     { code = "place", text = "Where windows, cards and buttons sit: that stays as you placed it on this screen." },
     { code = "other", text = "RestedXP's on/off switch (it chooses RestedXP's own theme), records of this character, map pins, the Journey Chronicle, backups, Undo copies and the setups you have received." },
 }
@@ -62,6 +62,7 @@ TC.LOCAL = {
     -- sent to or accepted from other players
     ["modules.setupSharing"] = "network", ["modules.acceptSetups"] = "network", ["modules.groupCheck"] = "network",
     ["modules.partyPins"] = "network", ["shareTransport"] = "network",
+    ["modules.mapPings"] = "network", ["modules.mapPingsSend"] = "network", ["modules.mapPingsReceive"] = "network",
     -- where things sit
     ["modules.foodDrinkUnlock"] = "place", ["ui.foodDrinkPosition"] = "place", ["ui.trainingPosition"] = "place",
     ["ui.welcomeBackPlace"] = "place", ["ui.friendLoginPlace"] = "place", ["ui.settingsWindow"] = "place",
@@ -106,6 +107,7 @@ local ENUM = {
     labels = Set({ "hover", "always" }),
     minimapLabels = Set({ "off", "hover", "always" }),
     clicks = Set({ "alt", "altshift", "altright", "none" }),
+    pingGesture = Set({ "ctrlalt", "ctrlaltright", "none" }),
     barText = Set({ "count", "number", "label", "none" }),
     channel = Set({ "SFX", "Dialog", "Ambience", "Master" }),
     footer = Set({ "subtle", "hidden", "normal" }),
@@ -1307,6 +1309,8 @@ local function Define()
         Table(g, { "ui", "pinsBroker" }, PL and PL.Bar, { "text", "icon", "customColor", "color", "flash", "flashSeconds", "flashColor" },
             { text = ENUM.barText })
         Table(g, { "ui", "pinsSound" }, PL and PL.Sound, { "enabled", "sound", "channel" }, { channel = ENUM.channel }, { sound = "sound" })
+        Table(g, { "ui", "pinsPing" }, PL and PL.Ping, { "gesture", "hint", "sound", "soundFile", "channel", "seconds", "list",
+            "listSize", "listMinutes", "reducedMotion" }, { gesture = ENUM.pingGesture, channel = ENUM.channel }, { soundFile = "sound" })
         -- The two clicks never share a pin: the same rule the setter keeps.
         g.check = function(vals)
             local p = vals.partyPins

@@ -11,6 +11,8 @@
 --                   how a newly received pin is pointed out (on or off, for how long, in what color);
 --   pinsSound       the sound a pin arriving from another player makes: on or off, which sound (a
 --                   LibSharedMedia name) and which game volume it follows;
+--   pinsPing        map pings (pins/Ping.lua): the gesture, the sound, how long a ping stays and the recent-pings
+--                   list (see PL.Ping below); preferences only, no ping or name is ever saved;
 --   pinsBrokerMenu  the background and border of the menu a click on that entry opens (a MenuStyle look,
 --                   separate from the Mage launchers' and from the window's);
 --   pinsEditorLook  the background and border of the new pin window (the editor: a MenuStyle look, separate
@@ -532,6 +534,116 @@ function SD.Set(key, value)
 end
 
 ---------------------------------------------------------------------------
+-- Map pings (pins/Ping.lua, pins/PingMap.lua): the choices in TwichUIDB.ui.pinsPing. Only preferences are saved;
+-- received pings, the recent list and every counter live in memory. The ping gestures all hold Ctrl, so none
+-- of them is a pin-placing click above (those hold Alt, or Alt and Shift, and never Ctrl). Whether pings are sent
+-- and taken in at all are switches (mapPings, mapPingsSend, mapPingsReceive in TwichUIDB.modules), which stay
+-- yours when a setup is shared.
+--   gesture         the map click that sends one ("none": only Ping the map, then one click);
+--   hint            a small tooltip at the pointer while the gesture's keys are held over the map;
+--   sound, soundFile, channel   the sound a ping from another player makes, which one (the game's own map ping
+--                   or a LibSharedMedia sound) and which game volume it follows (PlaySoundFile takes a channel;
+--                   the game's own sound has none, so that choice ignores it);
+--   seconds         how long a ping stays on the map before it fades;
+--   list, listSize, listMinutes   the recent-pings list on the map: shown or not, how many entries at most,
+--                   and for how many minutes an entry is kept;
+--   reducedMotion   a still marker and name instead of rings (its own choice: no other feature's is read).
+---------------------------------------------------------------------------
+local PG = {}
+PL.Ping = PG
+PG.GAME_SOUND = "Game map ping"
+PG.GESTURES = {
+    { "ctrlalt", "Ctrl-Alt-click", "LeftButton", true, false, true },
+    { "ctrlaltright", "Ctrl-Alt-right-click", "RightButton", true, false, true },
+    { "none", "Off (use Ping the map, then click)" },
+}
+local GESTURE = {}
+for _, g in ipairs(PG.GESTURES) do GESTURE[g[1]] = g end
+PG.DEFAULTS = {
+    gesture = "ctrlalt", hint = true,
+    sound = true, soundFile = PG.GAME_SOUND, channel = "SFX",
+    seconds = 4, list = true, listSize = 5, listMinutes = 3, reducedMotion = false,
+}
+PG.LIMITS = { seconds = { 2, 10 }, listSize = { 3, 8 }, listMinutes = { 1, 10 } }
+
+local function WholeIn(value, limits)
+    return type(value) == "number" and value == value and value % 1 == 0 and value >= limits[1] and value <= limits[2]
+end
+
+function PG.Valid(key, value)
+    if key == "hint" or key == "sound" or key == "list" or key == "reducedMotion" then
+        return type(value) == "boolean"
+    end
+    if key == "gesture" then return type(value) == "string" and GESTURE[value] ~= nil end
+    if key == "soundFile" then return SD.Valid("sound", value) end
+    if key == "channel" then return SD.Valid("channel", value) end
+    if PG.LIMITS[key] then return WholeIn(value, PG.LIMITS[key]) end
+    return false
+end
+
+-- An unusable saved value reads as its default and is kept as it was.
+function PG.Get(key)
+    local ui = TwichUIDB and TwichUIDB.ui
+    local t = ui and ui.pinsPing
+    local value
+    if type(t) == "table" then value = t[key] end   -- not "and ... or": a saved false is a value
+    if PG.Valid(key, value) then return value end
+    return PG.DEFAULTS[key]
+end
+
+local pingListeners = {}
+function PG.OnChange(fn) pingListeners[#pingListeners + 1] = fn end
+local function PingChanged()
+    for _, fn in ipairs(pingListeners) do
+        local ok, err = pcall(fn)
+        if not ok then geterrorhandler()(err) end
+    end
+end
+
+function PG.Set(key, value)
+    if PG.DEFAULTS[key] == nil or not PG.Valid(key, value) or type(TwichUIDB) ~= "table" then return false end
+    TwichUIDB.ui = type(TwichUIDB.ui) == "table" and TwichUIDB.ui or {}
+    if type(TwichUIDB.ui.pinsPing) ~= "table" then TwichUIDB.ui.pinsPing = {} end
+    if TwichUIDB.ui.pinsPing[key] == value then return true end   -- unchanged: nothing to redraw
+    TwichUIDB.ui.pinsPing[key] = value
+    PingChanged()
+    return true
+end
+
+-- The ping choices back to their defaults. Pins, the switch and every other pin choice are not touched.
+function PG.Reset()
+    if type(TwichUIDB) == "table" and type(TwichUIDB.ui) == "table" then TwichUIDB.ui.pinsPing = nil end
+    PingChanged()
+end
+
+function PG.GestureLabel(id) return GESTURE[id] and GESTURE[id][2] or GESTURE.none[2] end
+
+-- Whether a map click is the ping gesture: this button with exactly its keys (alt, shift, ctrl are asked of the
+-- game when left out).
+function PG.Matches(button, alt, shift, ctrl)
+    local g = GESTURE[PG.Get("gesture")]
+    if not g or not g[3] then return false end
+    if alt == nil then alt, shift, ctrl = IsAltKeyDown(), IsShiftKeyDown(), IsControlKeyDown() end
+    return button == g[3] and (alt and true or false) == g[4] and (shift and true or false) == g[5]
+        and (ctrl and true or false) == g[6]
+end
+
+-- Whether the keys held now are the gesture's (for the hint at the pointer), whichever button it clicks with.
+function PG.Held()
+    local g = GESTURE[PG.Get("gesture")]
+    if not g or not g[3] then return false end
+    return (IsAltKeyDown() and true or false) == g[4] and (IsShiftKeyDown() and true or false) == g[5]
+        and (IsControlKeyDown() and true or false) == g[6]
+end
+
+-- One line saying how to ping, for the map's hint, the pin window and the settings.
+function PG.HowTo()
+    local g = PG.Get("gesture")
+    if g == "none" then return "Use Ping the map, then click the map." end
+    return PG.GestureLabel(g) .. " the world map to ping your group."
+end
+
+---------------------------------------------------------------------------
 -- The data bar menu's look: its own, saved apart from the Mage launchers' and the window's. Its defaults are
 -- the launchers' (a copy, so the menus match until the player changes one).
 ---------------------------------------------------------------------------
@@ -552,6 +664,8 @@ function PL.Snapshot()
     return {
         barText = BR.Get("text"), barIcon = BR.Get("icon"), barColor = BR.Get("customColor"),
         barFlash = BR.Get("flash"), barFlashSeconds = BR.Get("flashSeconds"),
+        pingSend = R:Enabled("mapPingsSend"), pingReceive = R:Enabled("mapPingsReceive"), pingGesture = PG.Get("gesture"),
+        pingSound = PG.Get("sound"), pingReduced = PG.Get("reducedMotion"), pingList = PG.Get("list"),
         sound = SD.Get("enabled"), soundChannel = SD.Get("channel"),
         soundFile = SD.Get("sound") == SD.DEFAULTS.sound and "default" or "chosen",
         menuBg = PL.MenuLook.Get("bgTexture") == "solid" and "solid" or "textured", menuBorder = PL.MenuLook.Get("borderTexture"),

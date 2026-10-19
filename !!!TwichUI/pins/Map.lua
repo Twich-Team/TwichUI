@@ -192,22 +192,34 @@ local function Dress(b, e)
     b.label:SetShown(LabelShown(b))
 end
 
-local function FrameLevel()
+-- The frame level pins are drawn at (a level the map's own manager names; above the canvas when it won't say).
+local function FrameLevel(name)
     local ok, level = pcall(function()
-        return WorldMapFrame:GetPinFrameLevelsManager():GetValidFrameLevel("PIN_FRAME_LEVEL_WAYPOINT_LOCATION")
+        return WorldMapFrame:GetPinFrameLevelsManager():GetValidFrameLevel(name or "PIN_FRAME_LEVEL_WAYPOINT_LOCATION")
     end)
     return (ok and type(level) == "number") and level or (canvas:GetFrameLevel() + 500)
 end
+PM.FrameLevel = function(name) return canvas and FrameLevel(name) or nil end
+PM.Canvas = function() return canvas end
+PM.MapOpen = MapOpen
 
-local function Place(b)
+-- Puts a frame's middle at a place on the map (mx, my: 0..1 on the viewed map), the size it has on screen whatever
+-- the map's zoom, as MapCanvasMixin:ApplyPinPosition does. Pings (pins/PingMap.lua) are placed the same way.
+-- Returns whether it could (the canvas has a scale).
+function PM.PlaceAt(frame, mx, my)
+    if not (canvas and WorldMapFrame) then return false end
     local scale = WorldMapFrame:GetCanvasScale()
-    if not scale or scale <= 0 then return end
+    if not scale or scale <= 0 then return false end
     local global = WorldMapFrame.GetGlobalPinScale and WorldMapFrame:GetGlobalPinScale() or 1
     local s = global / scale
-    b:SetScale(s)
-    b:ClearAllPoints()
-    -- the middle of the diamond is the place
-    b:SetPoint("CENTER", canvas, "TOPLEFT", canvas:GetWidth() * b.mx / s, -canvas:GetHeight() * b.my / s)
+    frame:SetScale(s)
+    frame:ClearAllPoints()
+    frame:SetPoint("CENTER", canvas, "TOPLEFT", canvas:GetWidth() * mx / s, -canvas:GetHeight() * my / s)
+    return true
+end
+
+local function Place(b)
+    PM.PlaceAt(b, b.mx, b.my)   -- the middle of the diamond is the place
 end
 
 local function HideFrom(n)

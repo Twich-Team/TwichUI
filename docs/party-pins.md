@@ -20,6 +20,7 @@ Players without TwichUI see nothing: nothing is written in chat and there is no 
 | `pins/Window.lua` | the pin window and the action menu (also opened from a map pin) |
 | `pins/Way.lua` | waypoint commands: `/twichway`, `/way` when free, the parser, the zone lookup and the paste window |
 | `pins/Sound.lua` | the sound a pin arriving from another player plays (the choices are in `pins/Look.lua`, `PL.Sound`) |
+| `pins/Ping.lua`, `pins/PingMap.lua` | map pings: the message, its checks and limits and the recent list (`Ping.lua`, no frames); the rings, the list on the map, the gesture and the replay (`PingMap.lua`). See `docs/map-pings.md` |
 | `pins/BrokerMenu.lua` | the small pin menu a click on the data bar entry opens |
 | `pins/Broker.lua` | the optional LibDataBroker data source |
 | `diag/Pins.lua` | the troubleshooting section |

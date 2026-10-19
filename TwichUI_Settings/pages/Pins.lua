@@ -1,5 +1,5 @@
 -- TwichUI settings: Party pins (pins/). The switch, how pins are placed and labelled, the data bar entry and the
--- arrival sound; and, on a page of its own under it, the look of the pin window, its menu, the new pin window and
+-- arrival sound, map pings; and, on a page of its own under it, the look of the pin window, its menu, the new pin window and
 -- pin names on the maps. The pins themselves are managed in the pin window, not here; nothing on these pages
 -- reads or writes them.
 
@@ -11,7 +11,7 @@ local pinsToggle   -- the Party pins switch (the Party pins page), which the loo
 K.Page({
     key = "pins", name = "Party pins", order = 70, group = "journey",
     description = "Named pins on your world map: local pins only you see, and party pins shared with party members who have TwichUI.",
-    keywords = "map pin waypoint way tomtom marker minimap party share coordinates",
+    keywords = "map pin waypoint way tomtom marker minimap party share coordinates ping",
     when = function() return R.Pins ~= nil end,
     overview = {
         label = "Party pins", tip = "Named pins on your world map, and pins shared with party members who have TwichUI.",
@@ -129,6 +129,83 @@ K.Page({
                 soundChannels), soundToggle, SoundOn)
             Under(Button("Hear the sound", "Play", function() if R.PinsSound then R.PinsSound.Play() end end,
                 "Plays the sound now, at the volume you have chosen."), soundToggle, SoundOn)
+        end
+
+        do
+            local PG, MP = PL.Ping, R.MapPing
+            Header("Map pings", "Ping a spot on the world map to show your group where. Everyone sees a marker with your name for a few seconds, and a short list at the top right of the map keeps the latest ones. Pings go to your party, raid or instance group over the hidden addon channel: nothing is written in chat. Group members need TwichUI, with Party pins and Map pings on, to see them; players without it see nothing, and other addons' pings aren't read. They work only while Party pins is on.")
+            local pingToggle = Under(Toggle("mapPings", "Map pings",
+                "Turns map pings on or off, for sending and receiving. They are part of Party pins and do nothing while it is off. Off: nothing is sent or taken in, pings on the map and the list go away.\n\nPings are never passed on, never saved and never shown in chat."),
+                pinsToggle, PinsOn)
+            local function PingsOn() return PinsOn() and R:Enabled("mapPings") end
+            Under(Toggle("mapPingsSend", "Send pings with the gesture",
+                "Your gesture (below) sends a ping to your group. Off: the gesture does nothing, so its click goes on to the map as it would without TwichUI. Only that click ever sends a ping: browsing the map never does."),
+                pingToggle, PingsOn)
+            Under(Toggle("mapPingsReceive", "Take in pings from my group",
+                "Shows pings your party, raid or instance group send, lists them and plays the sound below. Off: they are set aside unread. A ping never opens or moves your map."),
+                pingToggle, PingsOn)
+
+            local pingReset = {}
+            local function PingRemember(variable, varType, label, key)
+                local setting = K.Proxy(variable, varType, label, PG.DEFAULTS[key], function() return PG.Get(key) end, function(value) PG.Set(key, value) end)
+                if setting then pingReset[#pingReset + 1] = { setting = setting, default = PG.DEFAULTS[key] } end
+                return setting
+            end
+            local function PingChoice(variable, label, tooltip, key, choices)
+                local setting = PingRemember(variable, STRING, label, key)
+                if not setting then return nil end
+                return K.Dropdown(setting, choices, tooltip)
+            end
+            local gestureChoices = {}
+            for i, g in ipairs(PG.GESTURES) do gestureChoices[i] = { g[1], g[2] } end
+            Under(PingChoice("pinsPingGesture", "Ping gesture",
+                "The map click that sends a ping. Ctrl-Alt-click is the default: pins use Alt and Alt-Shift, Ctrl-click is the game's waypoint and Shift-click belongs to other map addons, so none of those change. Only this exact click sends a ping; every other click works on the map as before. Off leaves only Ping the map: press it (or type /tui ping), then click the map once within a minute.",
+                "gesture", function() return gestureChoices end), pingToggle, PingsOn)
+            Under(K.Checkbox(PingRemember("pinsPingHint", BOOL, "Show a hint while the gesture's keys are held", "hint"),
+                "While you hold the gesture's keys over the world map, a small tooltip at the pointer says that a click pings your group. Nothing else on the map shows a hint, and it appears only then."), pingToggle, PingsOn)
+            Under(Button("Ping the map", "Ping", function()
+                if R.MapPingView then R.MapPingView.Arm() end
+            end, "Your next plain click on the world map, within a minute, pings your group. For when you would rather not hold keys. TwichUI doesn't open the map for you: open it, then click. Same as /tui ping."), pingToggle, PingsOn)
+
+            Under(K.Slider(PingRemember("pinsPingSeconds", NUMBER, "Ping shown for (seconds)", "seconds"), PG.LIMITS.seconds[1], PG.LIMITS.seconds[2],
+                "How long a ping stays on the map before it fades, in seconds. The rings play a few times in the first part; the marker and name stay until the fade."), pingToggle, PingsOn)
+            Under(K.Checkbox(PingRemember("pinsPingReduced", BOOL, "Reduced motion for pings", "reducedMotion"),
+                "A still marker and name, without the expanding rings or the pop when it appears. It fades at the end. This is its own choice: it doesn't follow or change any other motion setting in TwichUI."), pingToggle, PingsOn)
+
+            local soundOn = Under(K.Checkbox(PingRemember("pinsPingSound", BOOL, "Play a sound when a ping arrives", "sound"),
+                "One short sound when a ping arrives from someone in your group, even with the map closed. At most one every second and a half overall and one every five seconds from the same player; clicking an entry in the list again plays it under its own limit. Off: no sound at all, replays included."), pingToggle, PingsOn)
+            local function PingSoundOn() return PingsOn() and PG.Get("sound") end
+            Under(PingChoice("pinsPingSoundFile", "Ping sound",
+                "The sound to play. Game map ping is the game's own map ping sound. TwichUI's sounds and every sound other addons have added to LibSharedMedia are listed too. A sound that has gone (its addon isn't loaded) stays chosen and the game's map ping plays in its place.",
+                "soundFile", function()
+                    local current = PG.Get("soundFile")
+                    local out = { { PG.GAME_SOUND, "Game map ping (default)" } }
+                    for _, c in ipairs(R:SoundChoices(current ~= PG.GAME_SOUND and current or nil)) do out[#out + 1] = c end
+                    return out
+                end), soundOn, PingSoundOn)
+            local pingChannels = {}
+            for i, ch in ipairs(PL.Sound.CHANNELS) do pingChannels[i] = { ch[1], ch[2] } end
+            Under(PingChoice("pinsPingChannel", "Volume follows",
+                "Which game volume a ping sound from a file follows (the same choices as the pin arrival sound). The game's own map ping sound has no channel of its own and ignores this.",
+                "channel", function() return pingChannels end), soundOn, PingSoundOn)
+            Under(Button("Hear the sound", "Play", function() if MP then MP.PlayChosen() end end,
+                "Plays the chosen ping sound now, at the volume you have chosen. Nothing is sent."), soundOn, PingSoundOn)
+
+            Under(K.Checkbox(PingRemember("pinsPingList", BOOL, "Show the recent pings list", "list"),
+                "A short list at the top right of the world map, beside the game's own buttons, while it has something to show. Each entry names the player, the map and how long ago; click one to open its map and see the ping again. A ping on another map is marked Open map. It never opens the map by itself, and it is empty after a /reload or when you leave the group."), pingToggle, PingsOn)
+            local function ListOn() return PingsOn() and PG.Get("list") end
+            Under(K.Slider(PingRemember("pinsPingListSize", NUMBER, "Entries in the list (at most)", "listSize"), PG.LIMITS.listSize[1], PG.LIMITS.listSize[2],
+                "How many recent pings the list keeps, newest first. Never more than two from the same player. Pings on the map follow their own time above."), pingToggle, ListOn)
+            Under(K.Slider(PingRemember("pinsPingListMinutes", NUMBER, "Keep an entry for (minutes)", "listMinutes"), PG.LIMITS.listMinutes[1], PG.LIMITS.listMinutes[2],
+                "How long an entry stays in the list, counted from when it reached you. The list is never saved: it is gone after a /reload."), pingToggle, ListOn)
+
+            Under(Button("Test ping", "Test", function()
+                if not R.MapPingView then return end
+                local ok, text = R.MapPingView.Test()
+                if text then R.PinsMap.Notice(text) elseif not ok then R.PinsMap.Notice("Turn on Party pins and Map pings to try a ping.") end
+            end, "Shows a ping called \"Test ping\" in the middle of the world map you are looking at, with the real marker, the real sound and your choices above. If the map is closed it waits for you to open it (for half a minute). Nothing is sent to anyone, nothing is listed or saved, and nothing about you or the map changes."), pingToggle, PingsOn)
+            Under(K.ResetButton("Reset map pings", pingReset, PG.Reset,
+                "Puts the gesture, hint, sound, how long pings and entries stay, the list and reduced motion back to their defaults. The Map pings, Send and Take in switches, your pins and every other pin choice are not touched."), pingToggle, PingsOn)
         end
 
         -- The look of the pin window, its menu, the new pin window and pin names: a page of its own, under this one.

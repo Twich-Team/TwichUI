@@ -90,7 +90,7 @@ local REGISTRY = {
   foodDrink = A.TwichUI.FoodDrink.DEFAULTS, chronicleAppearance = A.TwichUI.ChronicleAppearance.DEFAULTS,
   partyPins = A.TwichUI.PinsLook.PREF_DEFAULTS, pinsAppearance = A.TwichUI.PinsLook.DEFAULTS,
   pinsMapText = A.TwichUI.PinsLook.MapText.DEFAULTS, pinsBroker = A.TwichUI.PinsLook.Bar.DEFAULTS,
-  pinsSound = A.TwichUI.PinsLook.Sound.DEFAULTS, restedxpSkinText = A.TwichUI.RestedXPSkin.Text.DEFAULTS,
+  pinsSound = A.TwichUI.PinsLook.Sound.DEFAULTS, pinsPing = A.TwichUI.PinsLook.Ping.DEFAULTS, restedxpSkinText = A.TwichUI.RestedXPSkin.Text.DEFAULTS,
   restedxpTimerText = A.TwichUI.RestedXPSkin.Timers.Opt.DEFAULTS, speakstoneSkinStyle = A.TwichUI.SpeakStoneSkin.Style.DEFAULTS,
   gear = A.TwichUI.GearPrefs.DEFAULTS, brokerMenu = A.TwichUI.MenuStyle.DEFAULTS,
   refreshmentsStyle = A.TwichUI.RefreshmentsPanel.Style.DEFAULTS, restedxpSkin = A.TwichUI.RestedXPSkin.Look.DEFAULTS,

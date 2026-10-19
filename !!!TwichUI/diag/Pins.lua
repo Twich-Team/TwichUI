@@ -60,6 +60,20 @@ local function Pins()
     Line("arrival sound: %s, volume follows %s, sound %s (default played instead: %s); played %d, refused %d, held back %d",
         look.sound and "on" or "off", tostring(look.soundChannel), tostring(look.soundFile), D.Flag(sd.fallback),
         sd.played or 0, sd.refused or 0, sd.held or 0)
+    local mp = R.MapPing and R.MapPing.Snapshot() or nil
+    if mp then
+        local mv = R.MapPingView and R.MapPingView.Snapshot() or {}
+        Line("map pings: switch %s, sending %s, receiving %s; gesture %s, sound %s (default played instead: %s), reduced motion %s, recent list %s",
+            D.Flag(R:Enabled("mapPings")), D.Flag(R:Enabled("mapPingsSend")), D.Flag(R:Enabled("mapPingsReceive")), tostring(look.pingGesture),
+            D.Flag(look.pingSound), D.Flag(mp.soundFallback), D.Flag(look.pingReduced), D.Flag(look.pingList))
+        Line("map pings, messages: protocol %d on prefix %s (%s); channel: %s; sent %d (the game refused %d), taken in %d, your own shown %d; sounds played %d, held back %d, muted %d",
+            mp.protocol, mp.prefix, mp.prefixState, mp.channel, mp.sent, mp.refused, mp.received, mp.own, mp.soundPlayed, mp.soundHeld, mp.silent)
+        Line("map pings, kept in memory: %d recent entries from %d senders; expiry timer waiting %s; set aside: %s",
+            mp.entries, mp.senders, D.Flag(mp.timerWaiting), #mp.drops > 0 and table.concat(mp.drops, ", ") or "nothing")
+        Line("map pings, map: on it %s, open %s; list built %s, showing %s with %d rows; %d showing on %d frames, updater running %s; shown %d, replays %d, map changes asked for %d, stale %d, expired clicks %d; click waiting %s, Ping the map waiting %s",
+            D.Flag(mv.installed), D.Flag(mv.open), D.Flag(mv.panel), D.Flag(mv.panelShown), mv.rows or 0, mv.showing or 0, mv.frames or 0,
+            D.Flag(mv.updating), mv.shown or 0, mv.replays or 0, mv.navigations or 0, mv.stale or 0, mv.expired or 0, D.Flag(mv.waiting), D.Flag(mv.armed))
+    end
     Line("data bar menu: built %s, open %s, rows %d, renaming %s; background %s, border %s",
         D.Flag(bm.built), D.Flag(bm.open), bm.rows or 0, D.Flag(bm.editing), tostring(look.menuBg), tostring(look.menuBorder))
     Line("new pin window: open %s; background %s, border %s",
@@ -73,7 +87,7 @@ local function Pins()
         limits = {
             "Party pins reach only party members who have TwichUI with Party pins turned on; others see nothing.",
             "The game accepting a message isn't proof it arrived; nothing confirms delivery.",
-            "Party pins are paused in a raid and end when you leave the party.",
+            "Party pins are paused in a raid and end when you leave the party. Map pings work in a party, a raid and an instance group, and reach only members who have TwichUI with Party pins and Map pings on.",
             "A pin shows on its own map and that map's parents only, and on the minimap only within its range.",
             "Minimap pins use the game's map position and view radius; a minimap with no map (a dungeon) shows none.",
         },

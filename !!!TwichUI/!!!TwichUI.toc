@@ -180,6 +180,8 @@ modules\SpeakStoneSkin.lua
 
 # Party pins: named map pins of your own, and ones shared with party members who have TwichUI (on by default,
 # can be turned off; their own addon prefix, never chat; uses the Chronicle palette, modules\MenuStyle.lua and setup\Share.lua's names)
+# Map pings (Ping.lua, PingMap.lua): a spot on the world map shared with your group for a few seconds, with a recent list
+# at the top right of the map. Part of Party pins, with its own prefix; Ping.lua has no frames, PingMap.lua draws them.
 pins\Pins.lua
 pins\Sync.lua
 pins\Look.lua
@@ -189,6 +191,8 @@ pins\Editor.lua
 pins\Window.lua
 pins\Way.lua
 pins\Sound.lua
+pins\Ping.lua
+pins\PingMap.lua
 pins\BrokerMenu.lua
 pins\Broker.lua
 

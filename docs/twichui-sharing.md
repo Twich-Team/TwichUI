@@ -47,6 +47,7 @@ and `LIMITS` supply defaults and ranges, so the schema cannot drift from the fea
 | Journey Chronicle | which events are recorded, sound, chat line, Welcome Back, the clock |
 | Chronicle appearance | the window's background, border, text and accents |
 | Party pins | clicks, labels, minimap, `/way`, the data bar entry, the sound (not whether pins are on) |
+| Map pings | `ui.pinsPing`: the gesture, hint, sound and its channel, how long a ping and a list entry stay, the list, reduced motion. Not whether pings are on, sent or taken in (`modules.mapPings*` stay on this computer, like Party pins), and never a ping or the list |
 | Pin appearance | the pin window, map text, data bar menu and editor looks |
 | Gear comparison | hints, bag marks, and how hints behave |
 | Gear stat weights | weights, rankings and "weigh by ranking", by class and talent tree (account-wide) |

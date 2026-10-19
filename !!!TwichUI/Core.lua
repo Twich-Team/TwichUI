@@ -86,6 +86,9 @@ local DEFAULT_MODULES = {
     markersWorld = false,    -- ... and a key places the next world marker at the mouse pointer (opt-in)
     markersBar = false,      -- ... and a bar of target markers appears while you hold a modifier key, to click one (opt-in)
     partyPins = true,        -- Party pins: named map pins of your own, and ones shared with party members who have TwichUI (on; a profile that already saved false keeps it)
+    mapPings = true,         -- ... and map pings: a spot on the world map shared with your group for a few seconds (works only while Party pins is on)
+    mapPingsSend = true,     -- ... your gesture sends a ping to your group
+    mapPingsReceive = true,  -- ... pings from your group are taken in (shown, listed, with a sound)
 }
 R.DEFAULT_MODULES = DEFAULT_MODULES   -- Switches.lua and the settings window (each switch's default)
 
@@ -375,6 +378,11 @@ COMMANDS = {
         if not R.PinsWindow then Unavailable("Party pins") return end
         if not R:Enabled("partyPins") then R.Print("Party pins are turned off. Turn them on in /tui options (Party pins).") return end
         R.PinsWindow.Toggle()
+    end },
+    { name = "ping", usage = "ping", desc = "ping your group on the world map: the next map click (Map pings; listed in the Party pins options)", hidden = true, fn = function()
+        if not R.MapPingView then Unavailable("Map pings") return end
+        if not R:Enabled("partyPins") or not R:Enabled("mapPings") then R.Print("Map pings are turned off. Turn them on in /tui options (Party pins).") return end
+        R.MapPingView.Arm()
     end },
     { name = "sell", usage = "sell", desc = "what selling ordinary food and drink would keep and sell (Mages; listed in the Mage options)", hidden = true, fn = function()
         if R.MageSellWindow then R.MageSellWindow.Toggle() else Unavailable("Selling ordinary food and drink") end

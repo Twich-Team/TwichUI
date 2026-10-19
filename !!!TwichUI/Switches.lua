@@ -174,7 +174,7 @@ Define("welcomeBack", { apply = Refresh("WelcomeBack") })
 Define("partyPins", {
     when = function() return R.Pins ~= nil and R.PinsLook ~= nil end,
     apply = function(on)
-        for _, module in ipairs({ "PinSync", "PinsMap", "PinsMinimap", "PinsBroker", "PinsWay" }) do
+        for _, module in ipairs({ "PinSync", "PinsMap", "PinsMinimap", "PinsBroker", "PinsWay", "MapPing", "MapPingView" }) do
             if R[module] then R[module].Refresh() end
         end
         if not on then
@@ -184,6 +184,18 @@ Define("partyPins", {
         end
     end,
 })
+
+-- Map pings (a part of Party pins: they do nothing while it is off)
+Define("mapPings", {
+    when = function() return R.MapPing ~= nil end,
+    apply = function()
+        if R.MapPing then R.MapPing.Refresh() end
+        if R.MapPingView then R.MapPingView.Refresh() end
+    end,
+})
+
+Define("mapPingsSend")      -- read when a ping is sent
+Define("mapPingsReceive")   -- read when one arrives
 
 -- Auction House
 Define("auctionPosting", { apply = Refresh("AuctionWindow") })

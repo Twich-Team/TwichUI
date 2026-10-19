@@ -147,7 +147,13 @@ A.ENTRIES = {
     {
         key = "partyPins", page = "pins", label = "Party pins", off = "sharing party pins with your group",
         available = function() return R.PinSync ~= nil end,
-        scope = function() return "Pins you mark for your party reach members who have TwichUI, over the hidden addon channel. Nothing is written in chat." end,
+        scope = function()
+            local text = "Pins you mark for your party reach members who have TwichUI, over the hidden addon channel. Nothing is written in chat."
+            if R:Enabled("mapPings") then
+                text = text .. " Map pings from your group show on your map, with a sound; yours are sent only when you click for one."
+            end
+            return text
+        end,
     },
     {
         key = "quietLogin", page = "overview", label = "Hide addon welcome messages", off = "hiding other addons' \"loaded\" lines at login",
