@@ -521,6 +521,7 @@ function V.Armed() return armed > Now() end
 
 -- Ping the map: the next plain left-click on the map, within a minute. Returns whether it is armed.
 function V.Arm()
+    if R.MapTools then R.MapTools.Cancel() end   -- one armed click at a time
     local dist, why = MP.Route()
     if not dist then Say(MP.Reason(why)) return false end
     if not R:Enabled("mapPingsSend") then Say(MP.Reason("send-off")) return false end
@@ -531,6 +532,18 @@ end
 
 function V.Disarm() armed = 0 end
 
+-- Pings the group at a map click's place: the one path the gesture and the map tool bar (pins/MapTools.lua) share.
+-- cx, cy: the map's own normalized cursor position on the map being viewed. Says why in one sentence when it can't.
+-- Returns true, or false and a reason code (MP.Reason words it).
+function V.PingAt(cx, cy)
+    local ok, why = MP.Send(WorldMapFrame:GetMapID(), cx, cy)
+    if not ok then
+        stats.refused = stats.refused + 1
+        Say(MP.Reason(why))
+    end
+    return ok, why
+end
+
 local function OnCanvasClick(_, button, cx, cy)
     if not (installed and MP.Active() and R:Enabled("mapPingsSend")) then return false end
     local take = PG.Matches(button)
@@ -539,12 +552,7 @@ local function OnCanvasClick(_, button, cx, cy)
     end
     if not take then return false end
     armed = 0
-    local map = WorldMapFrame:GetMapID()
-    local ok, why = MP.Send(map, cx, cy)
-    if not ok then
-        stats.refused = stats.refused + 1
-        Say(MP.Reason(why))
-    end
+    V.PingAt(cx, cy)
     return true   -- this click was a ping (or a refused one): the map doesn't also zoom, move or set a waypoint
 end
 

@@ -43,6 +43,7 @@ PF.ACCOUNT = {
         guideWaypoint = true,     -- the waypoint each character placed: a record per character
         guideAuto = true,         -- whether each character's RestedXP guide was hidden by TwichUI: a record per character
         restockAck = true,        -- your confirmation that vendor restocking may buy without asking: no profile change may give it
+        mapToolsIntro = true,     -- that the map tool bar's once-only note was seen: a record, not a choice
     },
 }
 -- The gear entries that are a profile's. The rest stay account-wide: stat weights and priorities are kept

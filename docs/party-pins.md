@@ -21,6 +21,7 @@ Players without TwichUI see nothing: nothing is written in chat and there is no 
 | `pins/Way.lua` | waypoint commands: `/twichway`, `/way` when free, the parser, the zone lookup and the paste window |
 | `pins/Sound.lua` | the sound a pin arriving from another player plays (the choices are in `pins/Look.lua`, `PL.Sound`) |
 | `pins/Ping.lua`, `pins/PingMap.lua` | map pings: the message, its checks and limits and the recent list (`Ping.lua`, no frames); the rings, the list on the map, the gesture and the replay (`PingMap.lua`). See `docs/map-pings.md` |
+| `pins/MapTools.lua` | the world map's tool bar: Pin, Group pin, Group ping and Help as one-shot buttons through the same helpers as the clicks. See `docs/map-tools.md` |
 | `pins/BrokerMenu.lua` | the small pin menu a click on the data bar entry opens |
 | `pins/Broker.lua` | the optional LibDataBroker data source |
 | `diag/Pins.lua` | the troubleshooting section |
@@ -38,6 +39,8 @@ Players without TwichUI see nothing: nothing is written in chat and there is no 
   `MapCanvasSecureUtil.CreateHandlerRegistry` calls addon handlers through `securecallfunction`. Priority 95
   runs before the waypoint handler (90). It returns false, so the click goes on to the map, for anything
   that isn't an exact match. Canvas handlers don't run over pins.
+* The **map tools bar** (top left of the map, `docs/map-tools.md`) offers the same placing as buttons, for anyone who would
+  rather not remember the clicks. It goes through `PinsMap.PlacePin`, which the click handler below also uses.
 * **Place a pin** in the window arms one plain left-click for 60 seconds. TwichUI doesn't open the map for you
   (see "Taint").
 * A click opens the editor at the clicked map and position (`ScrollContainer:NormalizeUIPosition`, already

@@ -74,6 +74,12 @@ local function Pins()
             D.Flag(mv.installed), D.Flag(mv.open), D.Flag(mv.panel), D.Flag(mv.panelShown), mv.rows or 0, mv.showing or 0, mv.frames or 0,
             D.Flag(mv.updating), mv.shown or 0, mv.replays or 0, mv.navigations or 0, mv.stale or 0, mv.expired or 0, D.Flag(mv.waiting), D.Flag(mv.armed))
     end
+    local mt = R.MapTools and R.MapTools.Snapshot() or nil
+    if mt then
+        Line("map tools: on the map %s, built %s, showing %s, folded %s, icons only %s; armed %s, help open %s, keyboard catcher %s, note seen %s; armed %d, pins %d, pings %d, put away %d, refused %d",
+            D.Flag(mt.installed), D.Flag(mt.built), D.Flag(mt.shown), D.Flag(mt.collapsed), D.Flag(mt.compact), tostring(mt.armed or "no"),
+            D.Flag(mt.helpOpen), D.Flag(mt.keyboard), D.Flag(mt.introSeen), mt.arms, mt.placed, mt.pinged, mt.cancels, mt.refused)
+    end
     Line("data bar menu: built %s, open %s, rows %d, renaming %s; background %s, border %s",
         D.Flag(bm.built), D.Flag(bm.open), bm.rows or 0, D.Flag(bm.editing), tostring(look.menuBg), tostring(look.menuBorder))
     Line("new pin window: open %s; background %s, border %s",

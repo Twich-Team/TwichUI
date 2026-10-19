@@ -275,6 +275,7 @@ function PM.Armed() return armed > GetTime() end
 -- Place a pin: the next plain left-click on the map, within a minute.
 function PM.Arm()
     if not Enabled() then return false end
+    if R.MapTools then R.MapTools.Cancel() end   -- one armed click at a time
     armed = GetTime() + ARM_SECONDS
     if MapOpen() then
         Notice("Click the map where the pin goes.")
@@ -286,6 +287,23 @@ end
 
 function PM.Disarm() armed = 0 end
 
+-- Opens the new pin window at a map click's place: the one path the pin clicks and the map tool bar (pins/MapTools.lua)
+-- share. kind: "local" or "party" (the window can still switch it). cx, cy: the map's own normalized cursor position.
+-- Nothing is made or sent here: that waits for Save. Returns true, or false and a reason code (PN.Reason words it).
+function PM.PlacePin(kind, cx, cy)
+    local map = WorldMapFrame and WorldMapFrame:GetMapID()
+    local x, y = PN.Quantize(cx), PN.Quantize(cy)
+    if not (PN.ValidMap(map) and x and y) then
+        stats.refused = stats.refused + 1
+        local why = not PN.ValidMap(map) and "unknown-map" or "bad-coordinates"
+        Notice(PN.Reason(why))
+        return false, why
+    end
+    if not R.PinsEditor then return false, "not-ready" end
+    R.PinsEditor.OpenNew(map, x, y, kind == "party")
+    return true
+end
+
 local function OnCanvasClick(_, button, cx, cy)
     if not (Enabled() and installed) then return false end
     local kind
@@ -296,14 +314,7 @@ local function OnCanvasClick(_, button, cx, cy)
     end
     if not kind then return false end
     armed = 0
-    local map = WorldMapFrame:GetMapID()
-    local x, y = PN.Quantize(cx), PN.Quantize(cy)
-    if not (PN.ValidMap(map) and x and y) then
-        stats.refused = stats.refused + 1
-        Notice(PN.Reason(not PN.ValidMap(map) and "unknown-map" or "bad-coordinates"))
-        return true
-    end
-    if R.PinsEditor then R.PinsEditor.OpenNew(map, x, y, kind == "party") end
+    PM.PlacePin(kind, cx, cy)
     return true   -- this click made a pin: the map doesn't also zoom or move
 end
 

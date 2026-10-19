@@ -174,7 +174,7 @@ Define("welcomeBack", { apply = Refresh("WelcomeBack") })
 Define("partyPins", {
     when = function() return R.Pins ~= nil and R.PinsLook ~= nil end,
     apply = function(on)
-        for _, module in ipairs({ "PinSync", "PinsMap", "PinsMinimap", "PinsBroker", "PinsWay", "MapPing", "MapPingView" }) do
+        for _, module in ipairs({ "PinSync", "PinsMap", "PinsMinimap", "PinsBroker", "PinsWay", "MapPing", "MapPingView", "MapTools" }) do
             if R[module] then R[module].Refresh() end
         end
         if not on then
@@ -191,10 +191,11 @@ Define("mapPings", {
     apply = function()
         if R.MapPing then R.MapPing.Refresh() end
         if R.MapPingView then R.MapPingView.Refresh() end
+        if R.MapTools then R.MapTools.Update() end   -- the Group ping button says whether it can be used
     end,
 })
 
-Define("mapPingsSend")      -- read when a ping is sent
+Define("mapPingsSend", { apply = Refresh("MapTools", "Update") })   -- read when a ping is sent; the tool bar's Group ping follows it
 Define("mapPingsReceive")   -- read when one arrives
 
 -- Auction House

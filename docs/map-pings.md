@@ -42,6 +42,8 @@ So there is **no native world-map ping**, and TwichUI sends a small message of i
   being viewed (`MapCanvasScrollControllerMixin:OnMouseUp` hands handlers `NormalizeUIPosition(cursor)`), never the
   screen or the zone you are in. Only this click sends: browsing, dragging, zooming and pointer movement never do. A
   click that was a ping (or a refused one) does not also pan, zoom or set a waypoint.
+* **The map tools bar** (`docs/map-tools.md`) has a **Group ping** button: click it, then click the map. It arms one plain
+  left-click through the same `MapPingView.PingAt` the gesture uses, so it sends the same message under the same limits.
 * **Hint.** While the gesture's keys are held with the pointer over the map, a small tooltip at the pointer says
   "Click to ping your group" (`MODIFIER_STATE_CHANGED`, no `OnUpdate`). It can be turned off. The list's title has a
   tooltip with the same line, and so does the settings page.

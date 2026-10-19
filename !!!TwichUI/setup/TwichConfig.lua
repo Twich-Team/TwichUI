@@ -70,7 +70,7 @@ TC.LOCAL = {
     -- the rest
     ["modules.restedxpSkin"] = "other", ["modules.qolTwichUISettingsButton"] = "other",
     ["ui.restedxpSkinState"] = "other", ["ui.showAdvanced"] = "other", ["gear.trees"] = "other",
-    ["pins"] = "other", ["setup"] = "other", ["storedData"] = "other", ["whisperProbe"] = "other", ["welcome"] = "other",
+    ["pins"] = "other", ["ui.mapToolsIntro"] = "other", ["setup"] = "other", ["storedData"] = "other", ["whisperProbe"] = "other", ["welcome"] = "other",
     ["schema"] = "other", ["migrated"] = "other", ["heldStored"] = "other",
     ["profiles"] = "other", ["profileKeys"] = "other", ["profileState"] = "other",
 }
@@ -1304,7 +1304,7 @@ local function Define()
     do
         local PL = R.PinsLook
         Table(g, { "ui", "partyPins" }, PL and { DEFAULTS = PL.PREF_DEFAULTS } or nil,
-            { "localClick", "partyClick", "labels", "minimap", "minimapLabels", "wayAlso" },
+            { "localClick", "partyClick", "labels", "minimap", "minimapLabels", "wayAlso", "toolbar" },
             { localClick = ENUM.clicks, partyClick = ENUM.clicks, labels = ENUM.labels, minimapLabels = ENUM.minimapLabels })
         Table(g, { "ui", "pinsBroker" }, PL and PL.Bar, { "text", "icon", "customColor", "color", "flash", "flashSeconds", "flashColor" },
             { text = ENUM.barText })
