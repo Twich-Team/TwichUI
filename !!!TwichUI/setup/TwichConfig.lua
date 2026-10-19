@@ -56,8 +56,9 @@ TC.LOCAL = {
     ["modules.qolGuideWaypoint"] = "acts", ["modules.qolMageConjureFoodDrink"] = "acts",
     ["modules.qolGuideAuto"] = "acts", ["modules.qolGuideAutoDungeon"] = "acts", ["modules.qolGuideAutoRaid"] = "acts",
     ["modules.qolGuideAutoPvP"] = "acts", ["modules.qolGuideAutoGroup"] = "acts", ["modules.qolGuideAutoResting"] = "acts",
-    ["modules.qolGuideAutoFlight"] = "acts",
+    ["modules.qolGuideAutoFlight"] = "acts", ["modules.qolGuideTracker"] = "acts",
     ["ui.qol"] = "acts", ["ui.mageSell"] = "acts", ["ui.guideWaypoint"] = "acts", ["ui.guideAuto"] = "acts",
+    ["ui.guideTracker"] = "acts",
     ["modules.restock"] = "acts", ["ui.restockAck"] = "acts",
     -- sent to or accepted from other players
     ["modules.setupSharing"] = "network", ["modules.acceptSetups"] = "network", ["modules.groupCheck"] = "network",

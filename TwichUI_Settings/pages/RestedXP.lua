@@ -44,6 +44,19 @@ local AUTO_STATUS = {
     hidden = { "Guide hidden for now", "It comes back when the situation ends." },
 }
 
+local TRACKER_STATUS = {
+    off = { "Off" },
+    ["restedxp-missing"] = { "RestedXP not installed", "Install RestedXP Guides to use this. Your settings here are kept." },
+    ["restedxp-disabled"] = { "RestedXP turned off", "RestedXP Guides is turned off in your AddOns list. Your settings here are kept." },
+    ["ellesmere-missing"] = { "EllesmereUI's Quest Tracker isn't on", "Turn on EllesmereUI's Quest Tracker to use this. Your settings here are kept." },
+    waiting = { "Waiting for RestedXP and EllesmereUI", "One of them hasn't finished loading yet." },
+    unsupported = { "This RestedXP isn't supported", "This version of RestedXP doesn't have the Show/Hide this needs. Nothing was changed." },
+    overridden = { "Held by EllesmereUI's Spec Override", "The tracker's Visibility is set by a Spec Override, so it is left alone." },
+    held = { "Mouseover while the guide is shown", "The tracker's Visibility goes back when the guide is hidden." },
+    ["already-mouseover"] = { "Already on Mouseover", "The tracker is on Mouseover already, so its setting is left as it is." },
+    watching = { "Watching", "The tracker's Visibility is as you left it." },
+}
+
 local TIMER_STATUS = {
     off = "Off: timer bars are drawn as RestedXP draws them.",
     ["skin-off"] = "Waiting: the guide window's look isn't drawing (the skin is off, another RestedXP theme is chosen, or another skin is replacing the window).",
@@ -54,7 +67,7 @@ local TIMER_STATUS = {
 K.Page({
     key = "restedxp", name = "RestedXP", order = 95, group = "addons",
     description = "The game's waypoint on RestedXP's destination, hiding the guide in situations you choose, and a TwichUI look for the RestedXP Guides window, its waypoint arrow and its timer bars. Guide content and progress are RestedXP's own.",
-    keywords = "restedxp rxp guide leveling map waypoint destination marker arrow timer bar step theme skin data bar broker hide show automatic dungeon raid group resting flight battleground",
+    keywords = "restedxp rxp guide leveling map waypoint destination marker arrow timer bar step theme skin data bar broker hide show automatic dungeon raid group resting flight battleground quest tracker ellesmere mouseover fade objective",
     when = function() return R.RestedXPSkin ~= nil end,
     build = function()
         local RS = R.RestedXPSkin
@@ -104,6 +117,23 @@ K.Page({
             }
             for _, situation in ipairs(GA.SITUATIONS) do
                 Under(Toggle(situation.key, situation.label, TIPS[situation.id]), autoToggle, AutoOn)
+            end
+        end
+
+        -- Puts EllesmereUI's quest tracker on Mouseover while the guide is shown (qol/GuideTracker.lua). Off until turned on.
+        local GT = R.QoLGuideTracker
+        if GT then
+            Header("EllesmereUI quest tracker", "Fades EllesmereUI's quest tracker out while RestedXP's guide is shown, so it comes back when you point at it. RestedXP's guide and the tracker's other settings are untouched.")
+            local trackBase = "Sets EllesmereUI's Quest Tracker to Mouseover while RestedXP's guide is shown, so the tracker fades out and comes back when you point at it. When the guide is hidden, the Visibility it had is put back. If you change the tracker's Visibility yourself while the guide is shown, your choice is kept until the guide is next shown or hidden. The tracker's other visibility rules (hide while mounted, only in instances and so on) still apply. Nothing is changed in combat; it waits for combat to end. Needs RestedXP and EllesmereUI's Quest Tracker."
+            local trackToggle = Toggle("qolGuideTracker", "Quest tracker on mouseover while the guide is shown", trackBase)
+            if trackToggle and trackToggle.GetTooltip ~= nil then
+                -- read when the tooltip is shown, so it is never stale
+                trackToggle.GetTooltip = function()
+                    local code = GT.Status()
+                    local text = TRACKER_STATUS[code] or { code }
+                    local color = (code == "held" or code == "already-mouseover" or code == "watching") and R.GREEN or (code == "off" and R.GREY) or R.GOLD
+                    return trackBase .. "\n\nStatus: " .. color .. text[1] .. "|r" .. (text[2] and ("\n" .. text[2]) or "")
+                end
             end
         end
 

@@ -214,6 +214,7 @@ qol\Duels.lua
 qol\QuickKeybind.lua
 qol\GuideWaypoint.lua
 qol\GuideAutoHide.lua
+qol\GuideTracker.lua
 qol\TwichUISettingsButton.lua
 
 # Marker cycling: a key that marks your target with the next target marker, and one that places the next world

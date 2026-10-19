@@ -80,6 +80,7 @@ local DEFAULT_MODULES = {
     qolGuideAutoGroup = false,   -- ... in a party or raid, anywhere
     qolGuideAutoResting = false, -- ... while resting (an inn or a city)
     qolGuideAutoFlight = false,  -- ... on a flight path
+    qolGuideTracker = false,     -- EllesmereUI's quest tracker on mouseover while RestedXP's guide is shown, and back when hidden (needs RestedXP and EllesmereUI's Quest Tracker)
     qolMageConjureFoodDrink = false, -- ... show conjure food/water when no consumables are in bags and player is a mage
     qolTwichUISettingsButton = true,  -- TwichUI button in the Game Menu (core feature, always enabled)
     markersTarget = false,   -- Marker cycling: a key marks your target with the next target marker in your order (opt-in; markers/)

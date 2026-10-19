@@ -379,6 +379,29 @@ S.GROUPS = {
                     return Result("available", code, nil, extra)
                 end,
             },
+            {
+                id = "rxp-tracker", label = "EllesmereUI quest tracker on mouseover",
+                affects = "setting EllesmereUI's quest tracker to Mouseover while RestedXP's guide is shown",
+                fallback = "The quest tracker keeps the Visibility you set.",
+                check = function()
+                    local T = R.QoLGuideTracker
+                    if not (T and T.Status) then return Result("not-applicable", "not-loaded", "This option is not part of this install.") end
+                    local code = T.Status()
+                    local extra = { wanted = true }
+                    if code == "off" then return Result("off", code, "This option is turned off.", { wanted = false }) end
+                    if code == "restedxp-missing" then return Result("not-installed", code, nil, extra) end
+                    if code == "restedxp-disabled" then return Result("disabled", code, nil, extra) end
+                    if code == "ellesmere-missing" then return Result("not-installed", code, "EllesmereUI's Quest Tracker is not turned on.", extra) end
+                    if code == "waiting" then return Result("not-initialized", code, "RestedXP or EllesmereUI has not finished loading.", extra) end
+                    if code == "unsupported" then
+                        return Result("unavailable", code, "This RestedXP does not offer the Show/Hide this needs.", { wanted = true, actionable = true })
+                    end
+                    if code == "overridden" then
+                        return Result("unavailable", code, "EllesmereUI's Spec Override holds the tracker's Visibility, so it is left alone.", extra)
+                    end
+                    return Result("available", code, nil, extra)
+                end,
+            },
         },
     },
     {
@@ -449,6 +472,7 @@ S.FEATURES = {
     { "qolDuels", "Decline duels" }, { "qolQuickKeybind", "Quick Keybind button" },
     { "qolGuideWaypoint", "Guide waypoint (RestedXP)" },
     { "qolGuideAuto", "Hide the guide in some situations (RestedXP)" },
+    { "qolGuideTracker", "EllesmereUI quest tracker on mouseover while the guide is shown (RestedXP)" },
     { "markersTarget", "Target marker cycling" }, { "markersWorld", "World marker cycling" }, { "markersBar", "Marker bar" },
     { "restedxpSkin", "RestedXP skin" }, { "speakstoneSkin", "SpeakStone skin" }, { "auctionatorSkin", "Auctionator skin" },
     { "whatsTrainingSkin", "What's Training? skin" }, { "foreverDungeonJournalSkin", "Forever Dungeon Journal skin" },

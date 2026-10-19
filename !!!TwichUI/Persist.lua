@@ -310,7 +310,7 @@ end
 
 -- Groups the features write into without checking first.
 local UI_GROUPS = { "qol", "foodDrink", "brokerMenu", "refreshments", "refreshmentsStyle",
-    "restedxpSkin", "restedxpSkinText", "restedxpSkinState", "restedxpTimerLook", "restedxpTimerText", "speakstoneSkin", "speakstoneSkinStyle", "chronicleLook", "chronicleAppearance", "guideWaypoint", "guideAuto", "mageSell", "restock", "restockPromptStyle", "chatClean", "classBars", "classBarsLook", "classBarsOverrides", "classBarsPosition",
+    "restedxpSkin", "restedxpSkinText", "restedxpSkinState", "restedxpTimerLook", "restedxpTimerText", "speakstoneSkin", "speakstoneSkinStyle", "chronicleLook", "chronicleAppearance", "guideWaypoint", "guideAuto", "guideTracker", "mageSell", "restock", "restockPromptStyle", "chatClean", "classBars", "classBarsLook", "classBarsOverrides", "classBarsPosition",
     "markers", "markerOrder", "markerBar", "markerBarStyle", "markerBarPosition",
     "partyPins", "pinsLook", "pinsAppearance", "pinsMapText", "pinsBroker", "pinsBrokerMenu", "pinsEditorLook",
     "notifyLook", "notifyLookArrival", "notifyLookTraining", "notifyLookFriend", "notifyLookWelcome",

@@ -42,6 +42,7 @@ PF.ACCOUNT = {
         mageSell = true,          -- the never-sell list: a protection, which no profile change may lift
         guideWaypoint = true,     -- the waypoint each character placed: a record per character
         guideAuto = true,         -- whether each character's RestedXP guide was hidden by TwichUI: a record per character
+        guideTracker = true,      -- the quest tracker Visibility each profile had before the guide set it to Mouseover: a record, not a choice
         restockAck = true,        -- your confirmation that vendor restocking may buy without asking: no profile change may give it
         mapToolsIntro = true,     -- that the map tool bar's once-only note was seen: a record, not a choice
     },
