@@ -1,6 +1,7 @@
 -- RestedXP guide data source (modules/RestedXPBroker.lua): made once, only with RestedXP and LibDataBroker;
 -- its text follows the guide; a click opens a menu (show guide = RestedXP's own ToggleActive, lock windows =
--- profile.lockFrames, import = guideImporter:Open(), greyed out in combat; nothing else of RestedXP's is
+-- profile.lockFrames, auto quests / auto flight path = profile.enableQuestAutomation / enableFPAutomation,
+-- import = guideImporter:Open(), greyed out in combat; nothing else of RestedXP's is
 -- touched); a toggle or profile change made elsewhere is followed; hooks go in once; an unknown RestedXP
 -- shape makes nothing.
 -- Choosing a guide: the menu lists RXPFrame:GenerateMenuTable({}) up to its empty title (sections, groups,
@@ -68,7 +69,7 @@ local function Boot(opts)
   c.tinsert = table.insert
   c.STANDARD_TEXT_FONT = "Fonts\\FRIZQT__.TTF"
   if not opts.noRXP then
-    local rxp = { settings = { profile = { showEnabled = true } }, toggles = 0 }
+    local rxp = { settings = { profile = { showEnabled = true, enableQuestAutomation = true, enableFPAutomation = false } }, toggles = 0 }
     function rxp.settings.ToggleActive()
       rxp.toggles = rxp.toggles + 1
       rxp.settings.profile.showEnabled = not rxp.settings.profile.showEnabled
@@ -168,7 +169,7 @@ do
     assert(menu and menu.shown, "a click opens the menu")
     local rows = {}
     for _, f in ipairs(c.frames) do if f.kind == "Button" and f.parent == menu then rows[#rows + 1] = f end end
-    assert(#rows == 4, "four rows: " .. #rows)
+    assert(#rows == 6, "six rows: " .. #rows)
     local function Click(row) if row.enabled then row.scripts.OnClick(row) end end
     return menu, rows, Click
   end
@@ -177,7 +178,7 @@ do
   assert(not bus.events.GLOBAL_MOUSE_DOWN and not bus.events.PLAYER_REGEN_DISABLED, "listens to nothing while closed")
   local menu, rows, Click = Open("LeftButton")
   assert(bus.events.GLOBAL_MOUSE_DOWN and bus.events.PLAYER_REGEN_DISABLED, "listens while open")
-  local choose, guide, lock, import = rows[1], rows[2], rows[3], rows[4]
+  local choose, guide, lock, quests, flight, import = rows[1], rows[2], rows[3], rows[4], rows[5], rows[6]
   assert(choose.name.text == "Choose guide" and choose.chev.shown and choose.enabled, "Choose guide leads the menu, with an arrow")
   assert(menu.template == "BackdropTemplate", "a backdrop frame, as the Mage menus are")
   assert(c.rxp.toggles == 0, "opening the menu changes nothing")
@@ -198,6 +199,19 @@ do
   assert(Tip(obj):find("Windows: Locked", 1, true), "tooltip says so")
   Click(lock)
   assert(c.rxp.settings.profile.lockFrames == false and lock.note.text == "Unlocked" and c.rxp.toggles == 2, "unlocks, without touching the guide")
+
+  -- Auto quests and auto flight path: plain profile switches, no RestedXP toggle, the menu stays open.
+  assert(quests.name.text == "Auto quests" and quests.note.text == "On" and quests.fill.shown == true, "auto quests starts on")
+  assert(flight.name.text == "Auto flight path" and flight.note.text == "Off" and flight.fill.shown == false, "auto flight path starts off")
+  Click(quests)
+  assert(c.rxp.settings.profile.enableQuestAutomation == false and quests.note.text == "Off" and menu.shown, "auto quests turns off in place")
+  assert(c.rxp.toggles == 2 and obj.text == "Guide on", "without touching the guide")
+  Click(flight)
+  assert(c.rxp.settings.profile.enableFPAutomation == true and flight.note.text == "On" and flight.fill.shown == true, "auto flight path turns on")
+  Click(flight)
+  assert(c.rxp.settings.profile.enableFPAutomation == false and flight.note.text == "Off", "and back off")
+  Click(quests)
+  assert(c.rxp.settings.profile.enableQuestAutomation == true and quests.note.text == "On", "auto quests back on")
 
   -- A toggle made in RestedXP itself while the menu is open: the rows follow.
   c.rxp.settings.ToggleActive()
@@ -367,19 +381,19 @@ do
   for _, f in ipairs(c.frames) do if f.name == "TwichUIRestedXPMenu" then menu = f end end
   local rows = {}
   for _, f in ipairs(c.frames) do if f.kind == "Button" and f.parent == menu then rows[#rows + 1] = f end end
-  assert(#rows == 5 and rows[5].name.text == "Guide rebinder..." and rows[5].enabled, "a fifth, enabled row")
-  rows[5].scripts.OnClick(rows[5])
+  assert(#rows == 7 and rows[7].name.text == "Guide rebinder..." and rows[7].enabled, "a seventh, enabled row")
+  rows[7].scripts.OnClick(rows[7])
   assert(opened == 1 and not menu.shown, "its action runs and the menu closes")
   -- Added while the menu already exists.
   assert(M.AddRow({ key = "Late", label = "Late", act = function() end, enabled = function() return false end, why = "Not now" }))
   c.obj.OnClick(c.obj, "LeftButton")
   rows = {}
   for _, f in ipairs(c.frames) do if f.kind == "Button" and f.parent == menu then rows[#rows + 1] = f end end
-  assert(#rows == 6 and not rows[6].enabled and rows[6].note.text == "Not now", "a late row is greyed out with its reason")
+  assert(#rows == 8 and not rows[8].enabled and rows[8].note.text == "Not now", "a late row is greyed out with its reason")
   -- RestedXP unreadable: the other addon's row still works.
   c.rxp.settings.ToggleActive = nil
   M.Refresh()
-  assert(rows[5].enabled, "an added row doesn't depend on RestedXP being readable")
+  assert(rows[7].enabled, "an added row doesn't depend on RestedXP being readable")
 end
 
 print("PASSED")

@@ -2,7 +2,8 @@
 -- A LibDataBroker data source, "TwichUI RestedXP Guide", for a data bar (for example EllesmereUI's
 -- "Broker Plugin" block). Its text says whether RestedXP's guide is on ("Guide on" / "Guide off"); a click
 -- opens a small menu (modules/RestedXPBrokerMenu.lua, drawn like the Mage launchers' menus): choose which
--- guide to load, show the guide (on or off), lock its windows, and open RestedXP's guide import window.
+-- guide to load, show the guide (on or off), lock its windows, switch quest auto accept/turn in and flight
+-- path automation on or off, and open RestedXP's guide import window.
 -- Made only when RestedXP is loaded. TwichUI doesn't bundle LibDataBroker: nothing
 -- happens without a data bar addon that provides it.
 --
@@ -55,6 +56,18 @@ end
 function B.GuideOn()
     if not Usable(rxp) then return nil end
     return rxp.settings.profile.showEnabled and true or false
+end
+
+-- RestedXP's "Quest auto accept/turn in" and "Flight Path automation" options (SettingsPanel.lua: plain profile
+-- booleans, enableQuestAutomation and enableFPAutomation, read whenever a quest or taxi map is handled).
+function B.QuestAutoOn()
+    if not Usable(rxp) then return nil end
+    return rxp.settings.profile.enableQuestAutomation and true or false
+end
+
+function B.FlightAutoOn()
+    if not Usable(rxp) then return nil end
+    return rxp.settings.profile.enableFPAutomation and true or false
 end
 
 local function BarText()
@@ -112,6 +125,16 @@ end
 function B.SetLocked(locked)
     if not Usable(rxp) then return end
     rxp.settings.profile.lockFrames = locked and true or false
+end
+
+function B.SetQuestAuto(on)
+    if not Usable(rxp) then return end
+    rxp.settings.profile.enableQuestAutomation = on and true or false
+end
+
+function B.SetFlightAuto(on)
+    if not Usable(rxp) then return end
+    rxp.settings.profile.enableFPAutomation = on and true or false
 end
 
 function B.CanImport()

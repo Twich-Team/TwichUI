@@ -7,9 +7,12 @@
 --                 carry a marker, and the list opens scrolled to it. A pick loads the guide and closes the menu.
 --   Show guide    a switch for RestedXP's guide, like its minimap button. The row says On or Off.
 --   Lock windows  a switch for RestedXP's "Lock Frames" option. The row says Locked or Unlocked.
+--   Auto accept / turn in, Auto flight path
+--                 switches for RestedXP's "Quest auto accept/turn in" and "Flight Path automation" options.
+--                 Each row says On or Off.
 --   Import guides opens RestedXP's guide import window and closes this menu. Greyed out in combat, when
 --                 RestedXP would only queue it.
--- The two switches leave the menu open, so both can be set in one visit, and the rows follow RestedXP when
+-- The switches leave the menu open, so several can be set in one visit, and the rows follow RestedXP when
 -- it changes (its own minimap button, a profile change). Nothing in it is secure, so it works in combat
 -- too, and it listens for events only while it is open. A click anywhere else, Esc or a second click on the
 -- data bar entry closes it. What the rows do is the broker's (R.RestedXPBroker); this file only draws.
@@ -68,6 +71,18 @@ local SPEC = {
         state = function() return Broker().GuideLocked() end,
         words = { [true] = "Locked", [false] = "Unlocked" },
         act = function() local B = Broker(); B.SetLocked(not B.GuideLocked()) end,
+    },
+    {
+        key = "quests", label = "Auto quests",
+        state = function() return Broker().QuestAutoOn() end,
+        words = { [true] = "On", [false] = "Off" },
+        act = function() local B = Broker(); B.SetQuestAuto(not B.QuestAutoOn()) end,
+    },
+    {
+        key = "flight", label = "Auto flight path",
+        state = function() return Broker().FlightAutoOn() end,
+        words = { [true] = "On", [false] = "Off" },
+        act = function() local B = Broker(); B.SetFlightAuto(not B.FlightAutoOn()) end,
     },
     {
         key = "import", label = "Import guides...", plain = true,
