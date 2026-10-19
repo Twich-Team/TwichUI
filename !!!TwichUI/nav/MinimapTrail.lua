@@ -71,14 +71,14 @@ end
 
 local function Draw(force)
     local snap = NV.Snapshot()
-    local route = snap.route
-    if not (route and (snap.state == "navigating" or snap.state == "recalculating")) then
+    local legs = snap.legs
+    if not (legs and (snap.state == "navigating" or snap.state == "recalculating" or snap.state == "riding")) then
         if painter then painter:Clear() end
         stats.why = "no-route"
         return
     end
     local ok, cont, px, py = NV.Position()
-    if not ok or cont ~= route.map then
+    if not ok then
         if painter then painter:Clear() end
         stats.why = "no-position"
         return
@@ -92,11 +92,13 @@ local function Draw(force)
     local facing = view.rotating and view.facing or nil
     local half = view.halfWidth
     if not force and last.x == px and last.y == py and last.f == facing and last.r == view.radius and last.h == half
-        and last.p == phase and last.seg == snap.seg and last.route == route and last.state == snap.state then
+        and last.p == phase and last.seg == snap.seg and last.legs == legs and last.leg == snap.leg and last.state == snap.state
+        and last.cont == cont then
         stats.skipped = stats.skipped + 1
         return
     end
-    last.x, last.y, last.f, last.r, last.h, last.p, last.seg, last.route, last.state = px, py, facing, view.radius, half, phase, snap.seg, route, snap.state
+    last.x, last.y, last.f, last.r, last.h, last.p, last.seg, last.legs, last.leg, last.state, last.cont =
+        px, py, facing, view.radius, half, phase, snap.seg, legs, snap.leg, snap.state, cont
     Holder()
     stats.draws = stats.draws + 1
     stats.why = "drawn"
@@ -113,34 +115,42 @@ local function Draw(force)
     local reachYards = view.radius * 1.5
     painter:Begin()
     n = 0
-    for i = snap.seg, route.n - 1 do
-        local ax, ay = route.xs[i], route.ys[i]
-        if i == snap.seg then ax, ay = px, py end
-        local bx, by = route.xs[i + 1], route.ys[i + 1]
-        -- legs nowhere near the view are skipped before anything is projected
-        if NV.SegDist(px, py, ax, ay, bx, by) <= reachYards then
-            local x1, y1 = NPaint.MinimapOffset(ax, ay, px, py, scale, facing)
-            local x2, y2 = NPaint.MinimapOffset(bx, by, px, py, scale, facing)
-            local c1, c2, c3, c4
-            if square then c1, c2, c3, c4 = NPaint.ClipBox(x1, y1, x2, y2, -limit, -limit, limit, limit)
-            else c1, c2, c3, c4 = NPaint.ClipCircle(x1, y1, x2, y2, limit) end
-            if c1 then
-                if n == 0 or xs[n] ~= c1 or ys[n] ~= c2 then
+    -- the walks still to do on the continent you are on (the current one from where you are)
+    for li = snap.leg or 1, #legs do
+        local L = legs[li]
+        local route = L.kind == "walk" and L.route or nil
+        if route and route.map == cont then
+            local from = (li == snap.leg) and snap.seg or 1
+            for i = from, route.n - 1 do
+                local ax, ay = route.xs[i], route.ys[i]
+                if li == snap.leg and i == from then ax, ay = px, py end
+                local bx, by = route.xs[i + 1], route.ys[i + 1]
+                -- legs nowhere near the view are skipped before anything is projected
+                if NV.SegDist(px, py, ax, ay, bx, by) <= reachYards then
+                    local x1, y1 = NPaint.MinimapOffset(ax, ay, px, py, scale, facing)
+                    local x2, y2 = NPaint.MinimapOffset(bx, by, px, py, scale, facing)
+                    local c1, c2, c3, c4
+                    if square then c1, c2, c3, c4 = NPaint.ClipBox(x1, y1, x2, y2, -limit, -limit, limit, limit)
+                    else c1, c2, c3, c4 = NPaint.ClipCircle(x1, y1, x2, y2, limit) end
+                    if c1 then
+                        if n == 0 or xs[n] ~= c1 or ys[n] ~= c2 then
+                            Flush()
+                            n = 1
+                            xs[1], ys[1] = c1, c2
+                        end
+                        n = n + 1
+                        xs[n], ys[n] = c3, c4
+                        if c3 ~= x2 or c4 ~= y2 then Flush() end
+                    else
+                        Flush()
+                    end
+                else
                     Flush()
-                    n = 1
-                    xs[1], ys[1] = c1, c2
                 end
-                n = n + 1
-                xs[n], ys[n] = c3, c4
-                if c3 ~= x2 or c4 ~= y2 then Flush() end
-            else
-                Flush()
             end
-        else
             Flush()
         end
     end
-    Flush()
     painter:End()
 end
 MM.Draw = Draw
@@ -158,7 +168,7 @@ local function OnZoom() if ticking then Draw(true) end end
 
 local function Update()
     local snap = NV.Snapshot()
-    local want = Want() and snap.route ~= nil and (snap.state == "navigating" or snap.state == "recalculating")
+    local want = Want() and snap.legs ~= nil and (snap.state == "navigating" or snap.state == "recalculating" or snap.state == "riding")
     if want and not ticking then
         NV.AddTicker(Tick)
         R:On("MINIMAP_UPDATE_ZOOM", OnZoom)   -- zoom: drawn at once rather than at the next tick

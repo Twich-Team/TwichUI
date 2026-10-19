@@ -24,7 +24,7 @@ local PAD = 8
 
 local STATE_WORDS = {
     loading = "Loading walking maps…", calculating = "Calculating route…", recalculating = "Recalculating route…",
-    unavailable = "Position unavailable", noroute = "No walking route", arrived = "Arrived",
+    unavailable = "Position unavailable", noroute = "No way there", arrived = "Arrived",
 }
 
 local Frame = {}
@@ -162,13 +162,35 @@ function NF.Words(s)
     local dest = s.dest
     local title = dest and dest.name or ""
     local line, meta, note = "", "", nil
-    local Y = NV.Yards
-    if s.state == "navigating" or (s.state == "recalculating" and s.route) then
+    local Y, J = NV.Yards, R.NavJourney
+    local legs = s.legs
+    local L = legs and legs[s.leg or 1] or nil
+    -- the lines about the journey as a whole: what comes next, the step, the time left (an estimate)
+    local function Journey(first)
+        local parts = {}
+        if first then parts[#parts + 1] = first end
+        if s.nextText then parts[#parts + 1] = "Then " .. s.nextText end
+        if (s.steps or 0) > 1 and s.eta and J then
+            parts[#parts + 1] = ("Step %d of %d · %s in all (estimate)"):format(s.leg or 1, s.steps, J.Minutes(s.eta))
+        end
+        return #parts > 0 and table.concat(parts, "\n") or nil
+    end
+    if s.state == "navigating" or (s.state == "recalculating" and (s.route or L)) then
         line = s.instruction or ""
-        meta = ("Route %s  ·  Next %s  ·  Straight %s"):format(Y(s.remaining or 0), Y(s.toNext or 0), Y(s.straight or 0))
-        if s.state == "recalculating" then note = "Recalculating route…" end
+        if L and L.kind ~= "walk" then
+            meta = NV.LegDetail(L)
+        else
+            local bits = { ("Route %s"):format(Y(s.remaining or 0)), ("Next %s"):format(Y(s.toNext or 0)) }
+            if s.straight then bits[#bits + 1] = ("Straight %s"):format(Y(s.straight)) end
+            meta = table.concat(bits, "  ·  ")
+        end
+        note = Journey(s.state == "recalculating" and "Recalculating route…" or nil)
+    elseif s.state == "riding" then
+        line = (s.reason == "taxi") and "In flight" or "Under way"
+        meta = (s.reason == "taxi") and "Nothing to follow until you land." or "Nothing to follow until you arrive."
+        note = Journey(s.instruction)
     elseif s.state == "noroute" then
-        line = "No walking route"
+        line = "No way there"
         note = NV.ReasonText(s.reason)
         if s.fallback then meta = ("Straight line %s (a direct bearing, not a route)"):format(Y(s.straight or 0)) end
     elseif s.state == "arrived" then

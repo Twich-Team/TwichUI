@@ -109,34 +109,10 @@ local function Project(route, c, w, h, fromSeg, fromX, fromY)
     return nRuns
 end
 
-local function Draw()
-    if not (installed and Shown()) then return end
-    Holder()
-    local snap = NV.Snapshot()
-    local route = snap.route
-    local live = route and (snap.state == "navigating" or snap.state == "recalculating")
-    local map = WorldMapFrame:GetMapID()
-    local c = live and map and Corners(map)
-    painter:Begin()
-    if not (live and c and c.cont == route.map) then
-        painter:End()
-        return
-    end
-    local w, h = holder:GetWidth(), holder:GetHeight()
-    if not (w and h and w > 0 and h > 0) then painter:End() return end
-    local scale = Scale()
-    local r, g, b = NP.Rgb(NP.Get("trailColor"))
-    local a = NP.Get("trailOpacity") / 100
-    if snap.state == "recalculating" then a = a * 0.45 end
-    local thick = NP.Get("trailWidth") / scale
-    -- from where you are on the current leg, so the part behind you isn't drawn
-    local ok, cont, px, py = NV.Position()
-    local fromX, fromY
-    if ok and cont == route.map then fromX, fromY = px, py end
-    local nRuns = Project(route, c, w, h, snap.seg, fromX, fromY)
+-- One walking leg's route on the map shown (the part from startSeg on, from where you are when it is the current leg).
+local function DrawRoute(route, c, w, h, startSeg, fromX, fromY, last, scale, r, g, b, a, thick, dots, antsOn)
+    local nRuns = Project(route, c, w, h, startSeg, fromX, fromY)
     stats.draws = stats.draws + 1
-    local dots = NP.Get("trailStyle") == "dots"
-    local antsOn = NP.Get("ants") and not NP.ReducedMotion()
     for k = 1, nRuns do
         local xs, ys = runsX[k], runsY[k]
         if dots then
@@ -157,10 +133,45 @@ local function Draw()
             end
         end
     end
-    -- the destination: a dot a little larger than the trail
+    -- where the leg ends: a dot a little larger than the trail (largest at the destination)
     local gx, gy = ToMap(c, route.goalX, route.goalY)
     if gx >= 0 and gx <= 1 and gy >= 0 and gy <= 1 then
-        painter:Dot(gx * w, -gy * h, (NP.Get("trailWidth") * 2 + 6) / scale, r, g, b, math.min(1, a + 0.15))
+        painter:Dot(gx * w, -gy * h, ((last and 2 or 1.4) * NP.Get("trailWidth") + 5) / scale, r, g, b, math.min(1, a + 0.15))
+    end
+end
+
+local function Draw()
+    if not (installed and Shown()) then return end
+    Holder()
+    local snap = NV.Snapshot()
+    local legs = snap.legs
+    local live = legs and (snap.state == "navigating" or snap.state == "recalculating" or snap.state == "riding")
+    local map = WorldMapFrame:GetMapID()
+    local c = live and map and Corners(map)
+    painter:Begin()
+    local w, h = holder:GetWidth(), holder:GetHeight()
+    if not (live and c and w and h and w > 0 and h > 0) then
+        painter:End()
+        return
+    end
+    local scale = Scale()
+    local r, g, b = NP.Rgb(NP.Get("trailColor"))
+    local a = NP.Get("trailOpacity") / 100
+    if snap.state == "recalculating" then a = a * 0.45 end
+    local thick = NP.Get("trailWidth") / scale
+    local dots = NP.Get("trailStyle") == "dots"
+    local antsOn = NP.Get("ants") and not NP.ReducedMotion()
+    local ok, cont, px, py = NV.Position()
+    -- every walk still to do on this continent: the current one from where you are, the later ones whole
+    for i = snap.leg or 1, #legs do
+        local L = legs[i]
+        local route = L.kind == "walk" and L.route or nil
+        if route and c.cont == route.map then
+            local current = i == snap.leg
+            local fromX, fromY
+            if current and ok and cont == route.map then fromX, fromY = px, py end
+            DrawRoute(route, c, w, h, current and snap.seg or 1, fromX, fromY, i == #legs, scale, r, g, b, a, thick, dots, antsOn)
+        end
     end
     painter:End()
 end
@@ -179,7 +190,7 @@ end
 local function UpdateTicking()
     local snap = NV.Snapshot()
     local want = installed and Shown() and NP.Get("ants") and not NP.ReducedMotion()
-        and snap.route ~= nil and (snap.state == "navigating" or snap.state == "recalculating")
+        and snap.legs ~= nil and (snap.state == "navigating" or snap.state == "recalculating" or snap.state == "riding")
     if want and not ticking then NV.AddTicker(Tick) ticking = true
     elseif not want and ticking then NV.RemoveTicker(Tick) ticking = false end
 end

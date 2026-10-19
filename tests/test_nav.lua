@@ -5,6 +5,7 @@
 --   4  arrival (one sound, then idle)  5  position lost and back      6  another continent; an island (direct bearing)
 --   7  a newer destination replaces a search still running            8  stop, the switch, cleanup
 --   9  the client's world frame checked (swapped is followed; a diagonal is refused)
+--  13  journeys across continents: legs followed in order, a boat's arrival, being aboard, in the air, the Hearthstone
 --  10  geometry: clipping, the minimap's rotation, ants, bearings     11  the preview and the words, and that the
 --      preview never touches navigation                               12  /tui nav
 -- What this cannot show: the game's real coordinates, frames, textures and drawing, or how following a route feels.
@@ -89,6 +90,8 @@ end
 Tile(1001, 9001, 32, 32)       -- the U
 Tile(1003, 9003, 40, 40)       -- islands
 Tile(2002, 9100, 32, 32)       -- a continent with no walking map
+Tile(1201, 9201, 32, 33)       -- the journey planner's two continents (tools/navbake/fixtures.py)
+Tile(1202, 9202, 32, 34)
 local function W(map, u, w)    -- tile-local cells (u north, w west) to world
   local m = MAPS[map]
   return m.x0 - TILE + u * CS, m.y0 - TILE + w * CS
@@ -115,7 +118,7 @@ c.C_Map.GetMapInfo = function(map) return { name = "Zone " .. map, parentMapID =
 c.GetPlayerFacing = function() return P.facing end
 
 local EXTRA = { "modules/Borders.lua", "modules/MenuStyle.lua", "nav/Prefs.lua", "nav/Data.lua", "nav/Route.lua",
-  "nav/Nav.lua", "nav/Paint.lua", "nav/Frame.lua", "nav/Arrow.lua", "nav/MapTrail.lua", "nav/MinimapTrail.lua" }
+  "nav/Journey.lua", "nav/Nav.lua", "nav/Travel.lua", "nav/Paint.lua", "nav/Frame.lua", "nav/Arrow.lua", "nav/MapTrail.lua", "nav/MinimapTrail.lua" }
 for _, f in ipairs(EXTRA) do
   local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
 end
@@ -262,7 +265,7 @@ Run(0.5)
 assert(S().state == "noroute" and S().reason == "unreachable", "an island: " .. tostring(S().reason))
 local tx, ty, kind = NV.Target()
 assert(kind == "direct" and S().fallback, "a direct bearing is offered, as one")
-assert(select(2, NF.Words(S())):find("No walking route"), "and the frame says there is no route")
+assert(select(2, NF.Words(S())):find("No way there"), "and the frame says there is no route")
 assert(select(3, NF.Words(S())):find("direct bearing, not a route"), "the straight line is labelled")
 -- it tries again later, not every update
 local p0 = NV.Diagnostics().plans
@@ -376,5 +379,136 @@ assert(not NV.Active(), "stop")
 R.RunCommand("nav banana")
 assert(said[#said]:find("didn't follow"), "anything else: usage")
 print("12 command ok")
+
+---------------------------------------------------------------------------
+-- 13. A journey across continents
+---------------------------------------------------------------------------
+R.NavDataStore.transit = NAV_FIXTURE.transit
+c.UnitFactionGroup = function() return "Alliance", "Alliance" end
+local TV = R.NavTravel
+assert(TV and TV.Faction() == 1, "the faction is read")
+local function Dest(map, u, w, name)
+  local gx2, gy2 = W(map, u, w)
+  local mm = MAPS[map]
+  return (mm.y0 - gy2) / mm.size, (mm.x0 - gx2) / mm.size
+end
+local function Follow(routeSeconds)      -- walk the current leg's route to its end
+  local sn = S()
+  local rt = sn.route
+  assert(rt, "the leg has a route")
+  for i = 1, rt.n - 1 do
+    for k = 1, 8 do
+      P.x, P.y = rt.xs[i] + (rt.xs[i + 1] - rt.xs[i]) * k / 8, rt.ys[i] + (rt.ys[i + 1] - rt.ys[i]) * k / 8
+      Run(routeSeconds or 0.3)
+    end
+  end
+end
+local eu, ev = Dest(1202, 34, 20)
+At(1201, 5, 21)
+assert(NV.StartAt(1202, eu, ev, "Beta Peak", "pin"))
+Run(1)
+s = S()
+assert(s.state == "navigating" and s.steps == 3 and s.leg == 1 and s.legKind == "walk", "three steps, the first a walk: " .. tostring(s.state) .. " " .. tostring(s.steps))
+assert(s.eta and s.eta > 250 and s.eta < 450, "the time left, an estimate: " .. tostring(s.eta))
+assert(s.nextText == "take the boat to Beta", "what comes next: " .. tostring(s.nextText))
+assert(s.instruction:find("turn") or s.instruction:find("Alpha dock ahead", 1, true) or s.instruction:find("In "), "the walk's words: " .. s.instruction)
+local t3, l3, m3, n3 = NF.Words(s)
+assert(n3:find("Then take the boat to Beta", 1, true) and n3:find("Step 1 of 3", 1, true) and n3:find("(estimate)", 1, true), "the note: " .. tostring(n3))
+assert(s.legs[1].route and not s.legs[3].route or s.legs[3].route, "later walks are planned too")
+-- the first walk ends at the dock: on to the ferry
+Follow()
+Run(0.5)
+s = S()
+assert(s.leg == 2 and s.legKind == "ferry", "at the dock: the ferry is the thing to do: leg " .. tostring(s.leg))
+assert(s.instruction == "Take the boat to Beta", "its words: " .. tostring(s.instruction))
+assert(NV.Target() == nil, "no arrow while you wait for a boat")
+local _, l4, m4 = NF.Words(s)
+assert(m4:find("Wait for it here", 1, true) and m4:find("(estimates)", 1, true), "what to expect: " .. m4)
+assert(s.legs[3].route, "the walk after it is ready before you need it")
+-- aboard: nothing under the boat but sea; held, not given up
+local plans = NV.Diagnostics().plans
+local px0, py0 = P.x, P.y
+P.x, P.y = px0 + 3000, py0
+Run(1)
+assert(S().state == "riding", "aboard: the journey is held, not given up: " .. S().state)
+assert(S().legKind == "ferry" and S().leg == 2 and S().legs[3].route, "still on the ferry leg, the rest kept")
+local _, lr, mr = NF.Words(S())
+assert(lr == "Under way" and mr:find("until you arrive", 1, true), "its words: " .. lr)
+-- back at the dock (a different case: the boat hasn't left), then aboard by small steps off the land: held at once
+P.x, P.y = px0, py0
+Run(0.6)
+assert(S().state == "navigating", "at the dock again: waiting for the boat: " .. S().state)
+do
+  local ux, uy = px0, py0
+  for _ = 1, 30 do
+    uy = uy - 8                                    -- eight yards at a time, west to east off this tile's ground
+    P.x, P.y = ux, uy
+    Run(0.3)
+  end
+end
+assert(S().state == "riding" and select(2, NF.Words(S())) == "Under way", "off the land by small steps: aboard: " .. S().state)
+P.x, P.y = px0 + 3000, py0
+Run(1)
+-- arriving: the other continent, near the other dock, replans from there
+At(1202, 20, 37)
+Run(1)
+s = S()
+assert(s.state == "navigating" and s.legKind == "walk" and s.steps == 1, "from the dock it is a walk: " .. s.state .. " " .. tostring(s.steps))
+assert(NV.Diagnostics().plans > plans, "planned again on arrival")
+Follow()
+Run(0.5)
+assert(S().state == "arrived", "arrived at the end of the journey: " .. S().state)
+NV.Stop("test")
+print("13a journey ok")
+
+-- in flight: nothing to follow, then a plan from where you land
+At(1201, 5, 21)
+assert(NV.StartAt(1202, eu, ev, "Beta Peak", "pin"))
+Run(1)
+c.UnitOnTaxi = function() return true end
+Run(0.5)
+assert(S().state == "riding" and select(2, NF.Words(S())) == "In flight", "in flight: " .. S().state)
+assert(NV.Target() == nil, "no arrow in the air")
+local before = NV.Diagnostics().plans
+c.UnitOnTaxi = function() return false end
+At(1201, 35, 20)
+Run(1)
+assert(NV.Diagnostics().plans == before + 1 and S().state == "navigating", "landing plans once from where you land: " .. S().state)
+NV.Stop("test")
+c.UnitOnTaxi = nil
+print("13b flight ok")
+
+-- the Hearthstone: needs the stone, a bind point, and its cooldown counts
+c.C_Item = { GetItemCount = function(id) return id == 6948 and 1 or 0 end, GetItemCooldown = function() return 0, 0, 1 end }
+assert(TV.Hearth() == nil and TV.HearthWhy():find("bind point", 1, true), "no bind point yet: " .. tostring(TV.HearthWhy()))
+local bx2, by2 = W(1202, 34, 18)
+assert(TV.SetBind(9202, bx2, by2) and TV.Bind().c == 9202, "the bind point is kept for this character")
+local h = TV.Hearth()
+assert(h and h.cont == 9202 and h.seconds == 10, "ready: " .. tostring(h and h.seconds))
+c.C_Item.GetItemCooldown = function() return CLOCK - 100, 1800, 1 end
+assert(math.abs(TV.Hearth().seconds - (10 + 1700)) < 1, "what is left of the cooldown counts")
+c.C_Item.GetItemCooldown = function() return 0, 0, 1 end
+assert(c.TwichUIDB.ui.navTravel[c.UnitGUID("player")].bind, "saved on this character's record")
+At(1201, 5, 21)
+assert(NV.StartAt(1202, eu, ev, "Beta Peak", "pin"))
+Run(1)
+s = S()
+assert(s.legKind == "hearth" and s.instruction == "Use your Hearthstone", "the stone is the quickest: " .. tostring(s.legKind))
+assert(NV.Target() == nil, "no arrow to a Hearthstone")
+At(1202, 34, 18)                                  -- it worked: you are at the bind point
+Run(1)
+assert(S().legKind == "walk" and S().steps == 1, "from the bind point it is a short walk")
+NV.Stop("test")
+c.C_Item = nil
+-- every option off: no way across, said so
+for _, key in ipairs({ "useShips", "useFlights", "useTeleports", "useHearth" }) do NP.Set(key, false) end
+At(1201, 5, 21)
+assert(NV.StartAt(1202, eu, ev, "Beta Peak", "pin"))
+Run(1)
+assert(S().state == "noroute" and S().reason == "other-continent", "with nothing to travel by: " .. tostring(S().reason))
+NV.Stop("test")
+NP.Reset("behavior")
+assert(NP.Get("useShips") == true and NP.Get("speed") == "foot", "reset puts the travel choices back")
+print("13c hearth ok")
 
 print("PASSED")

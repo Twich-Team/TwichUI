@@ -18,6 +18,8 @@ local DEFAULTS = {
     frame = true, arrow = true, worldTrail = true, minimapTrail = true,
     -- behaviour
     arrivalYards = 8, offRouteYards = 20, arrivalSound = true, reducedMotion = false,
+    -- getting there (nav/Journey.lua): what a journey may use, and how fast you move on the ground
+    useFlights = true, useShips = true, useTeleports = true, useHearth = true, speed = "foot",
     -- the frame
     locked = true, frameScale = 100, font = "default", textSize = 12,
     titleColor = "ffefe6d0", textColor = "ffd6cfbd", accentColor = "ff5c9491",
@@ -30,13 +32,15 @@ local LIMITS = {
     arrivalYards = { 3, 30 }, offRouteYards = { 10, 60 }, frameScale = { 60, 160 }, textSize = { 9, 18 },
     arrowScale = { 50, 200 }, trailOpacity = { 20, 100 }, trailWidth = { 2, 8 }, antSpeed = { 1, 4 },
 }
-local ENUM = { trailStyle = { line = true, dots = true } }
+local ENUM = { trailStyle = { line = true, dots = true }, speed = { foot = true, mount = true, fast = true } }
 NP.DEFAULTS, NP.LIMITS, NP.ENUM = DEFAULTS, LIMITS, ENUM
 NP.TRAIL_STYLES = { { "line", "Line" }, { "dots", "Dots" } }
+NP.SPEEDS = { { "foot", "On foot" }, { "mount", "Mounted (60% faster)" }, { "fast", "Fast mount (100% faster)" } }
 
 -- The scopes a reset covers (positions are their own: resetting the look never moves anything)
 NP.GROUPS = {
-    behavior = { "frame", "arrow", "worldTrail", "minimapTrail", "arrivalYards", "offRouteYards", "arrivalSound", "reducedMotion" },
+    behavior = { "frame", "arrow", "worldTrail", "minimapTrail", "arrivalYards", "offRouteYards", "arrivalSound", "reducedMotion",
+        "useFlights", "useShips", "useTeleports", "useHearth", "speed" },
     appearance = { "locked", "frameScale", "font", "textSize", "titleColor", "textColor", "accentColor", "arrowAttached",
         "arrowScale", "arrowColor", "trailColor", "trailOpacity", "trailWidth", "trailStyle", "ants", "antSpeed" },
 }

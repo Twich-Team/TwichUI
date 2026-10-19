@@ -118,8 +118,34 @@ def link_tiles(tiles):
     return links
 
 
+def inner_components(t):
+    """Each polygon's connected area inside its own tile (neighbours across shared edges), numbered from 0. Cached."""
+    if getattr(t, "inner", None) is None:
+        comp = [-1] * len(t.polys)
+        n = 0
+        for start in range(len(t.polys)):
+            if comp[start] >= 0:
+                continue
+            comp[start] = n
+            stack = [start]
+            while stack:
+                p = stack.pop()
+                for _, q in t.adj[p]:
+                    if comp[q] < 0:
+                        comp[q] = n
+                        stack.append(q)
+            n += 1
+        t.inner = comp
+    return t.inner
+
+
 def crossings(tiles, links):
-    """Group links into crossings. Returns list of dicts and fills each tile's link list."""
+    """Group links into crossings. Returns list of dicts and fills each tile's link list.
+    A run of linked edges along a tile side is one crossing (or one per RUN_SPLIT yards), represented by one polygon on each
+    side. A run whose links touch polygons that are not connected to each other inside their tile (a pier's planks and the
+    shore, side by side along the border) must not share one: only one of them would get a crossing, and the other would be
+    cut off from the crossing graph while its polygons are in fact connected. So a run is first split by the pair of
+    connected areas its links join."""
     for key, pi, e, nb, opi, oe, d, s0, s1, z in links:
         tiles[key].links.append((pi, e, d, opi, oe))
         tiles[nb].links.append((opi, oe, OPPOSITE[d], pi, e))
@@ -140,7 +166,14 @@ def crossings(tiles, links):
         runs.append(cur)
         t = tiles[key]
         cs = t.m.cs
+        ca, cb = inner_components(t), inner_components(tiles[nb])
+        split = []
         for run in runs:
+            by = {}
+            for ln in run:
+                by.setdefault((ca[ln[1]], cb[ln[4]]), []).append(ln)
+            split.extend(by[k] for k in sorted(by))
+        for run in split:
             s_lo, s_hi = run[0][7], max(ln[8] for ln in run)
             pieces = max(1, math.ceil((s_hi - s_lo) * cs / RUN_SPLIT))
             for k in range(pieces):
@@ -233,7 +266,7 @@ def components(tiles, links):
                 union((key, pi), (key, q))
     for ln in links:
         union((ln[0], ln[1]), (ln[3], ln[4]))
-    comp_ids, area = {}, []
+    comp_ids, area, ground = {}, [], []
     poly_comp = {}
     for key in sorted(tiles):
         t = tiles[key]
@@ -244,13 +277,18 @@ def components(tiles, links):
                 cid = len(comp_ids) + 1
                 comp_ids[r] = cid
                 area.append(0.0)
+                ground.append(0.0)
             poly_comp[(key, pi)] = cid
             pts = [t.verts[v] for v in poly.verts]
             a2 = 0.0
             for i in range(len(pts)):
                 (u1, w1, _), (u2, w2, _) = pts[i], pts[(i + 1) % len(pts)]
                 a2 += u1 * w2 - u2 * w1
-            area[cid - 1] += abs(a2) / 2 * t.m.cs * t.m.cs
+            sq = abs(a2) / 2 * t.m.cs * t.m.cs
+            area[cid - 1] += sq
+            if poly.area == 1:
+                ground[cid - 1] += sq
+    components.ground = ground      # the same components' ground (not water) area, for the last call
     return poly_comp, area
 
 
@@ -279,10 +317,11 @@ def prune(tiles, poly_comp, area, min_area):
     return out
 
 
-def pack_map(tiles, map_id, quiet=False, min_area=0):
+def pack_map(tiles, map_id, quiet=False, min_area=0, places=None):
     """One map's graph record and tile records: ((base64, raw size), [((x, y), base64), ...]). Also used by
     fixtures.py, so the offline tests' synthetic maps go through exactly this. min_area: drop isolated pockets
-    smaller than this (square yards) first."""
+    smaller than this (square yards) first. places: this map's places (transit.py's spec), put on the map and joined to
+    it (places.py): the graph record then carries their stand points, attachments and the costs between them."""
     if min_area > 0:
         before = sum(len(t.polys) for t in tiles.values())
         poly_comp, area = components(tiles, link_tiles(tiles))
@@ -314,9 +353,38 @@ def pack_map(tiles, map_id, quiet=False, min_area=0):
     # floors stack and the client gives no height, nav/Data.lua takes the floor in the larger connected area (a city's
     # street, not ground sealed under it). A crossing's component is its polygons'.
     poly_comp, area = components(tiles, links)
+    ground = components.ground
     comp = [poly_comp[(c["a"], c["pa"])] for c in cross]
     if not quiet:
         print("intra-tile edges", len(edges), "components", len(area))
+
+    pl, pw = [], []
+    if places:
+        import places as P
+        snapped = {}
+        pc_, _ = components(tiles, links)
+        comp_area = {k: components.ground[c - 1] for k, c in pc_.items()}   # connected LAND, not the sea round a pier
+        for p in places:
+            s_ = P.snap(tiles, p, comp_area)
+            if s_:
+                snapped[p["id"]] = s_
+            elif not quiet:
+                print("  not on the map (no ground within %d yd): %s %s" % (P.SNAP_REACH, p["name"], (round(p["x"]), round(p["y"]))))
+        attach, pairs, pstats = P.attach_and_pairs(tiles, cross, edges, snapped, touch)
+        for pid in sorted(snapped):
+            s_ = snapped[pid]
+            t = tiles[s_["tile"]]
+            wx, wy = t.world(s_["u"], s_["w"])
+            at = [v for ci, c in attach[pid] for v in (ci + 1, max(1, math.ceil(c)))]
+            pl.extend([pid, s_["tile"][0] * 64 + s_["tile"][1], s_["poly"] + 1, round(wx * 10), round(wy * 10),
+                       len(attach[pid])] + at)
+        for a, b, c in pairs:
+            pw.extend((a, b, max(1, math.ceil(c))))
+        if not quiet:
+            worst = sorted(((s_["dist"], pid) for pid, s_ in snapped.items()), reverse=True)[:4]
+            names = {p["id"]: p["name"] for p in places}
+            print("places", len(snapped), "of", len(places), "joined,", pstats["pairs"], "walks between them; farthest snaps:",
+                  ", ".join("%s %.0f yd" % (names[pid], d) for d, pid in worst))
 
     n = []
     for c in cross:
@@ -326,8 +394,10 @@ def pack_map(tiles, map_id, quiet=False, min_area=0):
     for ci, cj, cost, key in edges:
         e.extend((ci + 1, cj + 1, max(1, math.ceil(cost)), key[0] * 64 + key[1]))
     graph = {"f": FORMAT, "cells": next(iter(tiles.values())).cells, "n": n, "e": e, "k": comp,
-             "ca": [max(1, round(a)) for a in area],
+             "ca": [max(1, round(a)) for a in area], "cg": [round(a) for a in ground],
              "t": sorted("%d_%d" % k for k in tiles), "factor": [FACTOR[1], FACTOR[2], FACTOR[3]]}
+    if pl:
+        graph["pl"], graph["pw"] = pl, pw
     records = []
     for key in sorted(tiles):
         t = tiles[key]
@@ -383,14 +453,49 @@ def write_toc(out, client):
     print("toc lists", len(files), "files")
 
 
+def transit_record(spec):
+    """The travel network as one record (see TwichUI_NavData/README.md): identities, factions, flights, ferries, teleports.
+    Positions are not here: a place's stand point is in its map's graph record (where it was joined to the map)."""
+    places = spec["places"]
+    rec = {"f": FORMAT,
+           "p": [v for p in places for v in (p["id"], p["kind"], p["cont"], p["faction"], p["node"])],
+           "n": [p["name"] for p in places], "t": [p["town"] for p in places],
+           "fl": [v for fl in spec["flights"] for v in fl],
+           "fe": [v for fe in spec["ferries"] for v in (fe["a"], fe["b"], fe["travel"], fe["dwell"], fe["cycle"], fe["kind"])],
+           "tp": [v for tp in spec["landings"] for v in (tp["spell"], tp["place"], tp["cast"])],
+           "sp": [round(spec["speeds"][k]) for k in ("flight", "ship", "zeppelin")]}
+    return rec
+
+
+def write_transit(spec_path, out, client):
+    import json
+    with open(spec_path) as f:
+        spec = json.load(f)
+    b64, raw = encode(transit_record(spec))
+    os.makedirs(os.path.join(out, "Data"), exist_ok=True)
+    with open(os.path.join(out, "Data", "Transit.lua"), "w", newline="\n") as f:
+        f.write("-- Transit.lua: flights, boats, zeppelins and teleports, generated by tools/navbake/transit.py and pack.py from the client %s.\n" % client)
+        f.write("local S = TwichUI and TwichUI.NavDataStore\nif not S then return end\n")
+        f.write('S.transit = "%s"\n' % b64)
+    os.makedirs(MANIFESTS, exist_ok=True)
+    with open(os.path.join(MANIFESTS, "Transit.files"), "w", newline="\n") as f:
+        f.write("Data\\Transit.lua\n")
+    print("transit", raw, "raw", len(b64), "base64,", len(spec["places"]), "places")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--tnm")
     ap.add_argument("--map", type=int)
     ap.add_argument("--out", required=True)
     ap.add_argument("--client", required=True, help="client version the bake was read from")
+    ap.add_argument("--transit", help="transit.py's spec (JSON): put its places for this map on the map")
+    ap.add_argument("--transit-lua", metavar="SPEC", help="write Data/Transit.lua from transit.py's spec")
     ap.add_argument("--toc", action="store_true", help="write TwichUI_NavData.toc from the maps packed so far")
     a = ap.parse_args()
+    if a.transit_lua:
+        write_transit(a.transit_lua, a.out, a.client)
+        return
     if a.toc:
         write_toc(a.out, a.client)
         return
@@ -403,7 +508,12 @@ def main():
             t = Tile(tnm.load(os.path.join(a.tnm, name)))
             if t.polys:
                 tiles[t.key] = t
-    (g64, graw), records = pack_map(tiles, a.map, min_area=MIN_POCKET)
+    places = None
+    if a.transit:
+        import json
+        with open(a.transit) as f:
+            places = [p for p in json.load(f)["places"] if p["cont"] == a.map]
+    (g64, graw), records = pack_map(tiles, a.map, min_area=MIN_POCKET, places=places)
     os.makedirs(os.path.join(a.out, "Data"), exist_ok=True)
     # parts this map had last time and may not have now: only files the last run's manifest named are removed
     os.makedirs(MANIFESTS, exist_ok=True)

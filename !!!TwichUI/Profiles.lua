@@ -45,6 +45,7 @@ PF.ACCOUNT = {
         guideTracker = true,      -- the quest tracker Visibility each profile had before the guide set it to Mouseover: a record, not a choice
         restockAck = true,        -- your confirmation that vendor restocking may buy without asking: no profile change may give it
         mapToolsIntro = true,     -- that the map tool bar's once-only note was seen: a record, not a choice
+        navTravel = true,         -- each character's Hearthstone bind point, for navigation: a record per character
     },
 }
 -- The gear entries that are a profile's. The rest stay account-wide: stat weights and priorities are kept

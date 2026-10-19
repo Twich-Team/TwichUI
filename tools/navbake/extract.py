@@ -25,7 +25,7 @@ import casc            # noqa: E402
 import wowfiles as wf  # noqa: E402
 
 BORDER = 12.0            # yards of neighbouring geometry each tile carries (navbuild's border is smaller)
-MAPS = {0: 775971, 1: 782779}
+MAPS = {0: 775971, 1: 782779, 2991: 7198644}   # Eastern Kingdoms, Kalimdor, Zephras Isle (file IDs from the community listfile)
 # Doodads (M2s) block only when they are barrier-shaped: at their base (BASE yards up from their lowest point)
 # at least BARRIER_LENGTH long and at most a third as wide, like a fence or a palisade. Every other doodad, a
 # tree, a boulder or a lamp post, gives only its walkable surfaces (a bridge deck, a dock, a platform). A player

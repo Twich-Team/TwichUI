@@ -6,8 +6,9 @@ route planning is tested offline on synthetic maps and on the real walking maps 
 controller, views and settings with mocked frames (`tests/test_nav.lua`, the settings tests). Movement, drawing, the
 client's coordinates and how it feels to follow are for the game.
 
-A walking route to a place you choose, a compact frame with the next instruction, a direction arrow, and the route on the
-world map and the minimap. It never moves your character, turns the camera, casts, clicks or presses anything, and
+A journey to a place you choose, on this continent or another: walking, boats and zeppelins, flights you have learned, Mage
+teleports and your Hearthstone, whichever is quickest by estimate. A compact frame with the next instruction, a direction
+arrow, and the walks on the world map and the minimap. It never moves your character, turns the camera, casts, clicks or presses anything, and
 nothing another player sends you (a ping, a party pin) ever starts it or changes its destination.
 
 ## Starting and stopping
@@ -20,7 +21,8 @@ nothing another player sends you (a ping, a party pin) ever starts it or changes
   `/tui nav recalc`; `/tui nav` alone says what it is doing. Listed on the settings page, not in `/tui help`.
 - The frame's **Stop** and **Recalculate**. Arriving ends navigation after a few seconds.
 
-One destination at a time; a new one replaces the last. Map pings are not offered as destinations.
+One destination at a time; a new one replaces the last. Map pings are not offered as destinations. A destination on another
+continent, or a long way off, becomes a journey (below).
 
 ## Routes
 
@@ -36,24 +38,72 @@ A* over the crossings between tiles, with costs worked out by the bake inside ea
 each tile between crossings and pulls the line tight with the funnel algorithm, so the route turns only at corners. It runs
 three milliseconds a frame, so a long route never stalls the game; a newer request drops the older search.
 
-**What "best" means.** The lowest-cost route under this model: 2D distance through each polygon times its area's factor
-(ground 1, swimming 3, ocean 5), measured between the midpoints of the edges it passes, at the granularity of the
+**What "best" means for a walk.** The lowest-cost route under this model: 2D distance through each polygon times its area's
+factor (ground 1, swimming 3, ocean 5), measured between the midpoints of the edges it passes, at the granularity of the
 crossings (one per run of tile edge, up to 128 yards). It is not a proof of the shortest or the fastest path: heights,
-slopes, mounts, speed and creatures aren't modelled. There is no travel time.
+slopes, mounts, speed and creatures aren't modelled.
 
 **What it knows and doesn't.**
 
 | Supported | Not supported (refused or not offered, never drawn through) |
 |---|---|
-| Going round mountains, cliffs, walls, buildings and barrier doodads (fences, palisades) | Boats, zeppelins, flights, lifts, the tram, portals, teleports |
+| Going round mountains, cliffs, walls, buildings and barrier doodads (fences, palisades) | Lifts and elevators (Thunder Bluff's mesas, Freewind Post's plateau), the Deeprun Tram, the Darnassus portal: they aren't in the client's tables (the server places them) |
 | Through gates, streets, bridges and tunnels the client's collision has | Instances (no position, no walking map) |
-| Swimming across water when going round costs more (3x) | Another continent: "No walking route" with the reason |
-| Stepping or hopping up ledges up to 2 yards | Map 2991 (Zephras Isle): not baked yet |
+| Swimming across water when going round costs more (3x) | A destination in one of those cut-off places: "No way there" with the reason |
+| Stepping or hopping up ledges up to 2 yards | Portals other than the Mage's own teleports, class-specific travel (Druid, Shaman), mounts' flight |
 | Stacked floors, chosen by the larger connected area | Small isolated pockets (under 5,000 sq yd): left out; a destination there snaps to ground within 40 yd |
+| Eastern Kingdoms, Kalimdor and Zephras Isle | Anything else (other maps): no walking map |
 
 Trees, boulders and lamp posts don't block a route: a player steers round them. The client gives no usable height, so
 where floors stack the one in the larger connected area is taken (a city's street over the ground sealed under it), then
 ground over water, then the lowest; once you are on a floor it is kept.
+
+## Journeys
+
+`nav/Journey.lua` plans a journey as legs: **walk**, **boat or zeppelin**, **flight**, **teleport**, **Hearthstone**. A trip on
+one continent shorter than 700 yards, or with nothing but walking on offer, is just walked; anything else is planned over
+the network below, and the plain walk is always one of the candidates.
+
+**The network** (`TwichUI_NavData/Data/Transit.lua`, from the client's TaxiNodes, TaxiPath and TaxiPathNode tables by
+`tools/navbake/transit.py`): 68 flight points, 25 docks (boats and zeppelins, including Forever's new ones: Stormwind harbour,
+Gadgetzan to Powderfuse Port, the zeppelins to Zephras Isle) in 27 directed ferry legs, 288 flights, six teleport
+arrivals. A place on the walking map is joined to it at the bake: its stand point, its walking cost to the crossings of its
+tile and to every other place within reach (so planning between places needs no search at all).
+
+**What it uses** (settings, Navigation › Getting there, each can be turned off):
+
+| Mode | When it is offered | Cost in the plan |
+|---|---|---|
+| Flights | both ends are flight points the character has learned (`C_TaxiMap.GetTaxiNodesForMap`, `isUndiscovered` false; no flight master needed) and your faction's | the path's length at 32 yd/s, plus 12 s to board |
+| Boats and zeppelins | both docks allow your faction | the ride (16 yd/s for a boat, 20 for a zeppelin), plus the expected wait (a transport visits a dock once a cycle and stays 60 s: someone arriving at random waits (cycle − stay)² / (2 · cycle) on average), plus 12 s to board |
+| Mage teleports | the spell is known and a Rune of Teleportation is in the bags | the cast (10 s) plus a 20 s bias, because it uses a rune; it lands at the city's flight point (Darnassus: the middle of its map region) |
+| Hearthstone | in the bags, and the bind point is known to TwichUI | the cast (10 s) plus what is left of the cooldown |
+
+Walking is the weighted yards divided by your ground speed (7 yd/s on foot; the setting offers a mount at +60% and a fast
+mount at +100%: mounts aren't read). **Every figure that isn't a distance is an estimate**, and the frame says so: the
+client has no speeds, and where a boat is now isn't known. The plan is the cheapest under that model, not a proof of the
+fastest way.
+
+**The Hearthstone's bind point.** The game tells an addon only the name of the place (`GetBindLocation`), so TwichUI keeps
+where the player stood when `HEARTHSTONE_BOUND` fired (at the innkeeper), per character, in `ui.navTravel` (account-wide,
+never in a profile or shared). Without one the Hearthstone is not offered, and Navigation's settings say so.
+
+**Reading a journey.** Steps are shown as "Step 2 of 4"; the note under the instruction says what comes next and the time
+left. A walk before a boat ends at "Stormwind dock", before a zeppelin at "Orgrimmar zeppelin tower", before a flight at
+"Stormwind flight master". A boat leg says to board it and what to expect ("Wait for it here: about 2 min, then about 3 min
+aboard (estimates)"); a flight says to talk to the flight master and choose the destination; a teleport names the spell; the
+Hearthstone says to use it. Nothing is ever cast, ridden or clicked for you.
+
+**Following one.** A walk ends when you are within a few yards of its place and the next leg becomes the current one. Aboard
+a boat or on a flight path (`UnitOnTaxi`) the state is "riding": nothing to follow, the plan is held. A boat's arrival (you
+are within 150 yd of its arrival dock), a landing, a teleport or the Hearthstone (a jump of 120 yd or a new continent), or
+walking well away from a dock you were to board, plans again from where you are.
+
+**Known gaps.** The walking maps have no lifts, the tram or the Darnassus portal, so Teldrassil is reached only by boat and
+Darnassus (a teleport lands there) is cut off from the rest of Kalimdor; Thunder Bluff's mesas likewise. A destination
+inside a cut-off place is refused, and a teleport into one is never chosen for somewhere else. A ship dock's stand point is
+the nearest connected land (the shore end of its pier, up to about 90 yards from the boat's stop): the walk ends there and
+the last steps onto the pier are yours.
 
 ## Following
 
@@ -66,10 +116,11 @@ other way round is read the other way round, anything else is refused ("axis").
 |---|---|---|
 | Loading | Loading walking maps… | Waits for combat to end |
 | Calculating | Calculating route… | |
-| Navigating | the instruction and distances | |
+| Navigating | the instruction and distances (a walk), or what to do and expect (a boat, flight, teleport or Hearthstone) | |
+| Riding | "Under way" or "In flight" | Aboard a boat or on a flight path; held, and planned again on arrival |
 | Recalculating | Recalculating route…; the old route stays drawn, fainter | |
 | Position unavailable | Position unavailable | An instance, a loading screen; continues by itself |
-| No walking route | the reason; a direct bearing when on the destination's continent | Tries again after 5, 10, 20, 30 s, not every update |
+| No way there | the reason; a direct bearing when on the destination's continent | Tries again after 5, 10, 20, 30 s, not every update |
 | Arrived | Arrived | Within the arrival distance (default 8 yd), then ends |
 
 Corners are passed in order: when you are within reach of the next one, or past it along the next leg and nearer that leg.
@@ -170,5 +221,23 @@ Turn on Display Lua Errors. Test alone, then with EllesmereUI.
     say what they keep; Lock off lets you drag the frame and arrow, and Put back returns them.
 13. **Cleanup.** Stop: frame, arrow and trails go; `/run local d=TwichUI.Nav.Diagnostics() print(d.driver, d.tickers,
     d.data.decodedTiles)` prints `false 0 0`.
+14. **Journeys: a boat.** Alliance in Stormwind, navigate to a pin in Darkshore (Auberdine): the frame shows Step 1 of 3, a walk
+    to "Stormwind dock" with "Then take the boat to Auberdine" and a time (an estimate). At the dock the step becomes
+    "Take the boat to Auberdine" with the wait and ride, and the arrow goes away. Board it: "Under way". At Auberdine the
+    walk to the destination appears by itself. Note the real wait and ride; if they are far from the estimates, say so.
+15. **Journeys: a zeppelin and a flight.** Horde in Orgrimmar to a pin in Undercity (the zeppelin), and a trip that includes a
+    flight between flight points you have learned: the step says who to talk to and where to fly. Take the flight: "In
+    flight". Land: a new plan from where you land. A flight point you haven't learned is never used.
+16. **Journeys: a teleport and the Hearthstone** (a Mage with a Rune of Teleportation; anyone with a Hearthstone). Navigate
+    somewhere far where a teleport or the Hearthstone saves time: the step says "Cast Teleport: ..." or "Use your
+    Hearthstone" and nothing is cast for you. Do it: a new plan from where you land. The Hearthstone is offered only once
+    your bind point is known (bind again at an innkeeper, or use the stone once during a journey); Navigation's settings say
+    when it isn't. With the stone on cooldown the plan counts what is left.
+17. **Journeys: leaving the plan.** Walk away from the dock you were to board; stand on the pier by it; swim; fly a different
+    flight. A new plan after a few seconds each time, never one every update. Turn the options off one by one (boats, flights,
+    teleports, Hearthstone): the plan changes, and with all four off another continent says there is no way.
+18. **Cut-off places.** Navigate to Thunder Bluff's mesa top from below, to Darnassus, and to a spot on a lift-only plateau:
+    "No way there" with the reason, never a line through the air.
+19. **Faction.** An Alliance character is never sent by a Horde zeppelin or flight, and the other way round.
 14. **Pins and pings unchanged.** Party pins, map pings and the other map tools work as before; Ctrl-click still sets the
     game's waypoint.

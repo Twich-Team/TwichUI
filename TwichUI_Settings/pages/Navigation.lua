@@ -119,9 +119,9 @@ K.Page({
             return Slider(setting, NP.LIMITS[key][1], NP.LIMITS[key][2], tooltip)
         end
 
-        Header("Navigation", "Plans a walking route to a place you choose and guides you along it. Off until you turn it on. It never moves your character, turns the camera, casts or clicks anything, and nothing another player sends you starts it.")
+        Header("Navigation", "Plans a way to a place you choose, on foot or by boat, zeppelin, flight, teleport or Hearthstone, and guides you along it. Off until you turn it on. It never moves your character, turns the camera, casts or clicks anything, and nothing another player sends you starts it.")
         local toggle = Toggle("navigation", "Turn on navigation",
-            "Adds Navigate here to your pins' menus (Party pins) and a Navigate tool to the world map's tool bar, and /tui nav. Choosing one plans a walking route there and shows it.\n\nRoutes are planned on walking maps made from the game's own terrain, buildings and water: they go round mountains, walls and lakes, and through gates and over bridges the maps know. They stay on one continent: boats, zeppelins, flights, lifts and portals aren't planned. The walking maps (about 10 MB) load the first time you plan a route, never at login and never in combat.")
+            "Adds Navigate here to your pins' menus (Party pins) and a Navigate tool to the world map's tool bar, and /tui nav. Choosing one plans the way there and shows it.\n\nWalks are planned on maps made from the game's own terrain, buildings and water: they go round mountains, walls and lakes, and through gates and over bridges the maps know. Longer trips, and trips to another continent, are planned in steps with what you have (see Getting there). Lifts, the tram and portals aren't known. The walking maps (about 10 MB) load the first time you plan something, never at login and never in combat.")
         Under(K.Status("Walking maps", DataStatus, nil, "The walking maps are a separate addon, TwichUI_NavData, loaded the first time you plan a route."), toggle, On)
 
         Header("How to start", "Right-click one of your pins (or a party pin) and choose Navigate here; or press the Navigate button on the world map's tool bar and click the map; or type /tui nav followed by coordinates on your current map (/tui nav 45.2 61.8), /tui nav waypoint for the game's waypoint, or /tui nav stop.")
@@ -132,6 +132,21 @@ K.Page({
         Under(Check("navigationWorldTrail", "worldTrail", "Draw the route on the world map", "The route from where you are to the destination, on whichever map of its continent you look at. Under the map's pins and labels."), toggle, On)
         Under(Check("navigationMinimapTrail", "minimapTrail", "Draw the route on the minimap", "The part of the route near you. It turns with the minimap when the minimap rotates."), toggle, On)
 
+        Header("Getting there", "What a journey may use. A trip to another continent, or a long one, is planned in steps: walk, boat, zeppelin, flight, a Mage teleport, your Hearthstone. TwichUI never casts, rides or interacts for you: it says what to do and where.")
+        Under(Check("navigationShips", "useShips", "Use boats and zeppelins", "Transports between docks, from the game's own data. How long you wait is an average: where a boat is right now isn't known."), toggle, On)
+        Under(Check("navigationFlights", "useFlights", "Use flights you have learned", "Only flight points your character has learned (the game says which, with no flight master needed), and only your faction's."), toggle, On)
+        Under(Check("navigationTeleports", "useTeleports", "Use Mage teleports", "Only the teleports you know, and only while you carry a Rune of Teleportation. It lands at the city's flight point, give or take some yards. TwichUI never casts it."), toggle, On)
+        local hearth = Under(Check("navigationHearth", "useHearth", "Use the Hearthstone", "Only with a Hearthstone in your bags and your bind point known to TwichUI (it learns it when you bind, or when a journey uses the stone). What is left of its cooldown counts as time."), toggle, On)
+        K.Note(hearth, function()
+            local TV = R.NavTravel
+            local why = TV and TV.HearthWhy()
+            if why and NP.Get("useHearth") then return why, "warn" end
+        end)
+        local speedSetting = Proxy("navigationSpeed", K.STRING, "How you travel on the ground", NP.DEFAULTS.speed, function() return NP.Get("speed") end,
+            function(value) NP.Set("speed", value) end)
+        if speedSetting then behavior[#behavior + 1] = { setting = speedSetting, default = NP.DEFAULTS.speed } end
+        Under(K.Dropdown(speedSetting, function() return NP.SPEEDS end,
+            "Times in a journey assume this ground speed, and so decide whether a flight or a boat saves you anything. Mounts and buffs aren't read: choose what you usually have."), toggle, On)
         Header("Arriving and leaving the route", "When you count as there, and how far off the route counts as off it. Planning again waits a moment, so a quick step aside doesn't replan.")
         Under(Number("navigationArrival", "arrivalYards", "Arrived within", "How near the destination (in yards, straight line) counts as arrived. Navigation then ends by itself after a moment."), toggle, On)
         Under(Number("navigationOffRoute", "offRouteYards", "Off the route beyond", "How far from the route (in yards) counts as off it. Off it for a few seconds plans a new route from where you are. A teleport or a long jump plans again at once."), toggle, On)

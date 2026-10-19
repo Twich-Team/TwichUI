@@ -143,6 +143,14 @@ do
   print("1f floors ok")
 end
 
+-- 1f2. Start and goal the same point: a route of two points (the same one twice), never one
+do
+  local x, y = W(32, 32, 5, 20)
+  local r = assert(RT.PlanNow(9001, x, y, x, y))
+  assert(r.n == 2 and r.length == 0 and r.xs[1] == r.xs[2], "a zero-length route has two points: " .. r.n)
+  print("1f2 same point ok")
+end
+
 -- 1g. The funnel alone: a straight corridor gives no corners; a bend gives its corner.
 do
   local lx, ly, rx, ry = { 0, 10, 20, 30 }, { 0, 1, 1, 0 }, { 0, 10, 20, 30 }, { 0, -1, -1, 0 }

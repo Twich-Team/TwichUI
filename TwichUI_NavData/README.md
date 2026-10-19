@@ -20,4 +20,12 @@ Each value is Base64 of zlib-compressed CBOR, decoded by the client's `C_Encodin
   the next tile (polygon, edge, direction 1 east / 2 north / 3 west / 4 south, polygon there, edge there), `c` each
   polygon's component.
 
+- Graph, places: `pl` per place joined to this map, flat: id, tile (x·64 + y), polygon, stand point x·10, y·10, the number of
+  attachments, then that many (crossing, cost) pairs; `pw` the walks between places (a, b, weighted yards, a < b); `cg` each
+  component's ground area in square yards.
+- `Data/Transit.lua` sets `TwichUI.NavDataStore.transit`: `p` places (id, kind 1 flight point / 2 dock / 3 teleport arrival, map,
+  faction 1 Alliance / 2 Horde / 3 both, taxi node), `n` names, `t` town names, `fl` flights (from, to, seconds), `fe` ferries
+  (from, to, ride seconds, stay, cycle, kind 1 boat / 2 zeppelin), `tp` teleports (spell, arrival place, cast seconds), `sp` the
+  speeds used (yards a second).
+
 World frame: continent yards, x north and y west, as `UnitPosition` and `C_Map.GetWorldPosFromMapPos` give them.

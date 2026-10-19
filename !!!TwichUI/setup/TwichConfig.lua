@@ -72,7 +72,7 @@ TC.LOCAL = {
     -- the rest
     ["modules.restedxpSkin"] = "other", ["modules.qolTwichUISettingsButton"] = "other",
     ["ui.restedxpSkinState"] = "other", ["ui.showAdvanced"] = "other", ["gear.trees"] = "other",
-    ["pins"] = "other", ["ui.mapToolsIntro"] = "other", ["setup"] = "other", ["storedData"] = "other", ["whisperProbe"] = "other", ["welcome"] = "other",
+    ["pins"] = "other", ["ui.mapToolsIntro"] = "other", ["ui.navTravel"] = "other", ["setup"] = "other", ["storedData"] = "other", ["whisperProbe"] = "other", ["welcome"] = "other",
     ["schema"] = "other", ["migrated"] = "other", ["heldStored"] = "other",
     ["profiles"] = "other", ["profileKeys"] = "other", ["profileState"] = "other",
 }
@@ -1340,7 +1340,7 @@ local function Define()
         for _, part in ipairs({ "behavior", "appearance" }) do
             for _, key in ipairs(NP and NP.GROUPS[part] or {}) do keys[#keys + 1] = key end
         end
-        Table(g, { "ui", "navigation" }, NP, keys, { trailStyle = NP and NP.ENUM.trailStyle }, { font = "name" })
+        Table(g, { "ui", "navigation" }, NP, keys, { trailStyle = NP and NP.ENUM.trailStyle, speed = NP and NP.ENUM.speed }, { font = "name" })
         Table(g, { "ui", "navigationLook" }, NP and NP.Look, LOOK, LOOK_ENUMS)
     end
 

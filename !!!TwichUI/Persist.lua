@@ -313,7 +313,7 @@ local UI_GROUPS = { "qol", "foodDrink", "brokerMenu", "refreshments", "refreshme
     "restedxpSkin", "restedxpSkinText", "restedxpSkinState", "restedxpTimerLook", "restedxpTimerText", "speakstoneSkin", "speakstoneSkinStyle", "chronicleLook", "chronicleAppearance", "guideWaypoint", "guideAuto", "guideTracker", "mageSell", "restock", "restockPromptStyle", "chatClean", "classBars", "classBarsLook", "classBarsOverrides", "classBarsPosition",
     "markers", "markerOrder", "markerBar", "markerBarStyle", "markerBarPosition",
     "partyPins", "pinsLook", "pinsAppearance", "pinsMapText", "pinsBroker", "pinsBrokerMenu", "pinsEditorLook",
-    "navigation", "navigationLook",
+    "navigation", "navigationLook", "navTravel",
     "notifyLook", "notifyLookArrival", "notifyLookTraining", "notifyLookFriend", "notifyLookWelcome",
     "settingsWindow" }
 

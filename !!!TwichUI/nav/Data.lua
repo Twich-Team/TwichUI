@@ -108,7 +108,7 @@ end
 --   cells, cs (yards per cell)
 --   per crossing c: ta[c], pa[c] (tile id and polygon on one side), tb[c], pb[c] (the other), cx[c], cy[c], cz[c],
 --     comp[c] (connected component)
---   compArea[k]: component k's walkable area in square yards
+--   compArea[k]: component k's walkable area in square yards (water included); compGround[k]: its ground (not water) alone
 --   adjacency: first[c] .. into flat arrays nb, cost, via (the tile the step crosses)
 --   byTile[tileId] = { crossing ids }
 function ND.Graph(map)
@@ -122,7 +122,7 @@ function ND.Graph(map)
         return nil
     end
     g = { cells = d.cells, cs = TILE / d.cells, ta = {}, pa = {}, tb = {}, pb = {}, cx = {}, cy = {}, cz = {},
-        comp = d.k or {}, compArea = d.ca or {}, byTile = {}, n = 0 }
+        comp = d.k or {}, compArea = d.ca or {}, compGround = d.cg or {}, byTile = {}, n = 0 }
     local n = d.n
     local c = 0
     for i = 1, #n - 8, 9 do
@@ -161,8 +161,91 @@ function ND.Graph(map)
         fill[b] = fill[b] + 1
     end
     g.first, g.nb, g.cost, g.via = first, nb, cost, via
+    -- places joined to this map (tools/navbake/places.py): their stand points, their attachments to the crossings of their
+    -- tile (what a start or goal is joined with at plan time), and the walks between them
+    --   g.place[id] = { tid, poly, x, y, ca = { crossing ... }, cc = { cost ... } }, g.walk[a][b] = weighted yards
+    g.place, g.walk = {}, {}
+    local pl = d.pl or {}
+    local i = 1
+    while i <= #pl do
+        local id, tid, poly, x10, y10, cnt = pl[i], pl[i + 1], pl[i + 2], pl[i + 3], pl[i + 4], pl[i + 5]
+        local ca, cc = {}, {}
+        for k = 1, cnt do
+            ca[k], cc[k] = pl[i + 4 + 2 * k], pl[i + 5 + 2 * k]
+        end
+        g.place[id] = { tid = tid, poly = poly, x = x10 / 10, y = y10 / 10, ca = ca, cc = cc }
+        i = i + 6 + 2 * cnt
+    end
+    local pw = d.pw or {}
+    for j = 1, #pw - 2, 3 do
+        local a, b, yards = pw[j], pw[j + 1], pw[j + 2]
+        local wa, wb = g.walk[a], g.walk[b]
+        if not wa then wa = {} g.walk[a] = wa end
+        if not wb then wb = {} g.walk[b] = wb end
+        wa[b], wb[a] = yards, yards
+    end
     graphs[map] = g
     return g
+end
+
+---------------------------------------------------------------------------
+-- The travel network (flights, boats and zeppelins, teleports): tools/navbake/transit.py
+---------------------------------------------------------------------------
+--   tr.place[id] = { id, kind (1 flight point, 2 dock, 3 teleport arrival), cont, faction (1 Alliance, 2 Horde, 3 both),
+--                    node (the game's taxi node ID, 0 for a dock), name, town }
+--   tr.flights   = { { a, b, seconds }, ... } (directed)      tr.flightsFrom[a] = the same, by start
+--   tr.ferries   = { { a, b, travel, dwell, cycle, kind (1 boat, 2 zeppelin) }, ... }   tr.ferriesFrom[a]
+--   tr.teleports = { { spell, place, cast }, ... }            tr.speed = { flight, ship, zeppelin } yards a second
+local transit
+function ND.Transit()
+    if transit ~= nil then return transit or nil end
+    local d = type(Store.transit) == "string" and Decode(Store.transit)
+    if not d or d.f ~= ND.FORMAT then
+        transit = false
+        return nil
+    end
+    local tr = { place = {}, flights = {}, flightsFrom = {}, ferries = {}, ferriesFrom = {}, teleports = {}, byNode = {} }
+    local p, names, towns = d.p or {}, d.n or {}, d.t or {}
+    for i = 1, #p - 4, 5 do
+        local k = (i - 1) / 5 + 1
+        local pl = { id = p[i], kind = p[i + 1], cont = p[i + 2], faction = p[i + 3], node = p[i + 4], name = names[k], town = towns[k] }
+        tr.place[pl.id] = pl
+        if pl.node ~= 0 then tr.byNode[pl.node] = pl.id end
+    end
+    local fl = d.fl or {}
+    for i = 1, #fl - 2, 3 do
+        local f = { a = fl[i], b = fl[i + 1], seconds = fl[i + 2] }
+        tr.flights[#tr.flights + 1] = f
+        local list = tr.flightsFrom[f.a]
+        if not list then list = {} tr.flightsFrom[f.a] = list end
+        list[#list + 1] = f
+    end
+    local fe = d.fe or {}
+    for i = 1, #fe - 5, 6 do
+        local f = { a = fe[i], b = fe[i + 1], travel = fe[i + 2], dwell = fe[i + 3], cycle = fe[i + 4], kind = fe[i + 5] }
+        tr.ferries[#tr.ferries + 1] = f
+        local list = tr.ferriesFrom[f.a]
+        if not list then list = {} tr.ferriesFrom[f.a] = list end
+        list[#list + 1] = f
+    end
+    local tp = d.tp or {}
+    for i = 1, #tp - 2, 3 do tr.teleports[#tr.teleports + 1] = { spell = tp[i], place = tp[i + 1], cast = tp[i + 2] } end
+    local sp = d.sp or {}
+    tr.speed = { flight = sp[1] or 32, ship = sp[2] or 16, zeppelin = sp[3] or 20 }
+    transit = tr
+    return tr
+end
+
+-- A place's stand point on its continent's walking map: continent, x, y, and its entry in that map's graph; or nil
+-- (the place isn't on a map this data holds).
+function ND.Stand(id)
+    local tr = ND.Transit()
+    local pl = tr and tr.place[id]
+    if not pl then return nil end
+    local g = ND.Graph(pl.cont)
+    local e = g and g.place[id]
+    if not e then return nil end
+    return pl.cont, e.x, e.y, e, pl
 end
 
 -- A decoded tile:
@@ -264,6 +347,7 @@ local function BuildTile(map, tx, ty, d)
     t.np = np
     t.comp = d.c or {}
     t.compArea = g and g.compArea or {}
+    t.compGround = g and g.compGround or {}
     local x = d.x or {}
     for j = 1, #x - 4, 5 do
         local kk = pk[x[j]] and (pk[x[j]] + x[j + 1] - 1)
@@ -314,6 +398,7 @@ function ND.TileById(map, id) return ND.Tile(map, floor(id / 64), id % 64) end
 
 -- Everything decoded goes; the loaded strings stay (the game cannot unload an addon).
 function ND.Release()
+    transit = nil
     wipe(graphs)
     wipe(tiles)
     wipe(lru)
@@ -384,8 +469,8 @@ local function Better(t, p, best, prefer)
     if prefer and p == prefer then return true end
     if prefer and best == prefer then return false end
     -- the floor in the larger connected area: a city's street, not sealed ground under it or a roof above it
-    local ap = t.compArea[t.comp[p] or 0] or 0
-    local ab = t.compArea[t.comp[best] or 0] or 0
+    local ap = t.compGround[t.comp[p] or 0] or t.compArea[t.comp[p] or 0] or 0
+    local ab = t.compGround[t.comp[best] or 0] or t.compArea[t.comp[best] or 0] or 0
     if ap > ab * 1.5 then return true end
     if ab > ap * 1.5 then return false end
     local wa, wb = t.area[p] ~= 1, t.area[best] ~= 1
@@ -399,25 +484,10 @@ end
 -- The client gives no usable height, so where floors stack the one in the larger connected area is taken (a city's street
 -- over sealed ground under it), then ground over water, then the lowest, unless `prefer` says otherwise. Recorded as a
 -- limitation in docs/navigation.md.
-function ND.Locate(map, x, y, reach, prefer)
+-- The nearest polygon within `reach` yards of (x, y), in the tile there or a neighbour; with `land`, only ground (not
+-- water) in a connected area of ND.LAND_AREA square yards of ground or more. Returns tile, polygon and the point on it.
+local function Nearest(map, x, y, reach, land)
     local tx, ty = ND.TileOf(x, y)
-    local t = ND.Tile(map, tx, ty)
-    if t then
-        local b = BucketOf(t, x, y)
-        local list = b and t.buckets[b]
-        local pick
-        local pp = prefer and prefer.tile == t.id and prefer.poly or nil
-        if list then
-            for i = 1, #list do
-                local p = list[i]
-                if Inside(t, p, x, y) and Better(t, p, pick, pp) then pick = p end
-            end
-        end
-        if pick then return t, pick, x, y end
-    end
-    -- nothing under it: the nearest polygon within reach, in this tile or a neighbour
-    reach = reach or 0
-    if reach <= 0 then return nil end
     local bestD, bestT, bestP, bx, by = reach * reach, nil, nil, nil, nil
     for dx = -1, 1 do
         for dy = -1, 1 do
@@ -435,9 +505,11 @@ function ND.Locate(map, x, y, reach, prefer)
                                 local p = list[i]
                                 if not seen[p] then
                                     seen[p] = true
-                                    local d2, px, py = PolyDist2(u, p, x, y)
-                                    if d2 < bestD or (d2 == bestD and bestT == u and Better(u, p, bestP)) then
-                                        bestD, bestT, bestP, bx, by = d2, u, p, px, py
+                                    if not land or (u.area[p] == 1 and (u.compGround[u.comp[p] or 0] or 0) >= ND.LAND_AREA) then
+                                        local d2, px, py = PolyDist2(u, p, x, y)
+                                        if d2 < bestD or (d2 == bestD and bestT == u and Better(u, p, bestP)) then
+                                            bestD, bestT, bestP, bx, by = d2, u, p, px, py
+                                        end
                                     end
                                 end
                             end
@@ -454,6 +526,40 @@ function ND.Locate(map, x, y, reach, prefer)
     local len = sqrt(dx * dx + dy * dy)
     if len > 0.05 then bx, by = bx + dx / len * 0.05, by + dy / len * 0.05 end
     return bestT, bestP, bx, by
+end
+
+ND.LAND_AREA = 50000        -- square yards of connected ground that count as land (the bake's tools/navbake/places.py too)
+
+function ND.Locate(map, x, y, reach, prefer, landReach)
+    local tx, ty = ND.TileOf(x, y)
+    local t = ND.Tile(map, tx, ty)
+    local found, fp
+    if t then
+        local b = BucketOf(t, x, y)
+        local list = b and t.buckets[b]
+        local pick
+        local pp = prefer and prefer.tile == t.id and prefer.poly or nil
+        if list then
+            for i = 1, #list do
+                local p = list[i]
+                if Inside(t, p, x, y) and Better(t, p, pick, pp) then pick = p end
+            end
+        end
+        if pick then found, fp = t, pick end
+    end
+    if found then
+        -- landReach: standing on a scrap of ground the map doesn't join to the land (a pier's planks, a boat's deck by one)
+        -- counts as standing on the nearest land, when there is some within that many yards
+        if landReach and landReach > 0 and not ((found.compGround[found.comp[fp] or 0] or 0) >= ND.LAND_AREA and found.area[fp] == 1) then
+            local lt, lp, lx, ly = Nearest(map, x, y, landReach, true)
+            if lt then return lt, lp, lx, ly end
+        end
+        return found, fp, x, y
+    end
+    -- nothing under it: the nearest polygon within reach, in this tile or a neighbour
+    reach = reach or 0
+    if reach <= 0 then return nil end
+    return Nearest(map, x, y, reach, false)
 end
 
 -- The two ends of polygon p's edge j (0-based within the polygon), world x and y.

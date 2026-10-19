@@ -205,7 +205,9 @@ pins\Broker.lua
 nav\Prefs.lua
 nav\Data.lua
 nav\Route.lua
+nav\Journey.lua
 nav\Nav.lua
+nav\Travel.lua
 nav\Paint.lua
 nav\Frame.lua
 nav\Arrow.lua

@@ -1,18 +1,26 @@
 -- TwichUI: Navigation, the journey being followed
--- One destination at a time, chosen by the player (a pin's Navigate here, the map tool, /tui nav). A walking route to it
--- is planned over the baked walking maps (nav/Route.lua), followed as the player moves, planned again when the player
--- leaves it, and put away on arrival. It never moves the character, turns the camera, casts, clicks or presses anything,
--- and nothing it receives from another player (a ping, a party pin arriving) ever starts or changes it.
+-- One destination at a time, chosen by the player (a pin's Navigate here, the map tool, /tui nav). A journey to it is
+-- planned (nav/Journey.lua: walking, boats and zeppelins, learned flights, Mage teleports, the Hearthstone, whichever is
+-- quickest by estimate; a short trip on one continent is just walked over nav/Route.lua's routes), followed as the player
+-- moves, planned again when the player leaves it, and put away on arrival. It never moves the character, turns the camera,
+-- casts, rides, clicks or presses anything, and nothing it receives from another player (a ping, a party pin arriving)
+-- ever starts or changes it.
+--
+-- A journey is legs in order: "walk" (a route; the one being followed is `route`), "ferry" (a boat or zeppelin), "flight",
+-- "teleport", "hearth". A walk to a place ends within a few yards of it and the next leg becomes the current one; a leg that
+-- isn't a walk is words (what to do, where, what to expect) and ends when you arrive: a new plan from where you are.
 --
 -- States (NV.Snapshot().state):
 --   "loading"        the walking maps are being loaded (they wait for combat to end: "waiting for combat")
---   "calculating"    the first route is being planned
---   "navigating"     a route is being followed
---   "recalculating"  a new route is being planned; the old one stays drawn, marked as being replaced
+--   "calculating"    the first plan or route is being worked out
+--   "navigating"     a journey is being followed (Snapshot().legKind says which kind of leg)
+--   "recalculating"  a new plan is being worked out; the old one stays drawn, marked as being replaced
+--   "riding"         aboard a boat or zeppelin, or on a flight path: nothing to follow until you arrive; the plan is held and
+--                    looked at again every few seconds (a flight: once you land)
 --   "unavailable"    where you are can't be read (an instance, a loading screen, a map with no position)
---   "noroute"        no walking route: reason "other-continent", "no-data", "unreachable", "start-off", "goal-off",
---                    "limit", "axis". Where a direct bearing still means something (same continent) it is offered, and
---                    always labelled as one, never as a route.
+--   "noroute"        no way there: reason "other-continent" (nothing available crosses), "no-data", "unreachable", "start-off",
+--                    "goal-off", "limit", "axis". Where a direct bearing still means something (same continent) it is offered,
+--                    and always labelled as one, never as a route.
 --   "arrived"        within the arrival distance; shown for a moment, then navigation ends
 --
 -- Where you are: the map the game puts you on (C_Map.GetBestMapForUnit), your place on it (GetPlayerMapPosition) and that
@@ -21,15 +29,18 @@
 -- y west) by moving a point east on your map and seeing which coordinate falls; anything else stops with "axis".
 -- Facing (GetPlayerFacing) is read by the arrow only.
 --
--- Progress, four times a second: the route's corners are passed in order (a corner counts as passed when you are within
+-- Progress, four times a second: a walk's corners are passed in order (a corner counts as passed when you are within
 -- reach of it, or past it along the next leg and closer to that leg); never skipped because a later one is near in a
 -- straight line. Off the route by more than the chosen distance for OFF_HOLD seconds (and at least REPLAN_GAP after the
 -- last plan) plans again from where you are; back within 60% of it clears the count. A jump of JUMP yards (a teleport,
--- a graveyard, a flight landing) or a change of continent plans again at once. A newer plan always replaces an older one
--- (by generation); a superseded search is dropped, never finished.
+-- the Hearthstone, a graveyard), a change of continent, the end of a boat ride (within reach of its arrival dock), the end
+-- of a flight (UnitOnTaxi turning false) or walking well away from a dock you were to board at plans again at once or
+-- after the hold. A newer plan always replaces an older one (by generation); a superseded search is dropped, never
+-- finished. A new journey replaces the one followed only once its first walk has a route, so nothing drawn goes missing.
 --
 -- Work: one driver frame whose OnUpdate exists only while a destination is set. No events are listened to while idle.
--- Saved: nothing (preferences only, nav/Prefs.lua). The destination ends with the session.
+-- Saved: nothing but preferences (nav/Prefs.lua) and the Hearthstone's bind point (nav/Travel.lua). The destination ends with
+-- the session.
 
 local R = TwichUI
 local ND, RT, NP = R.NavData, R.NavRoute, R.NavPrefs
@@ -50,7 +61,13 @@ local sqrt, atan2, abs, floor, pi = math.sqrt, math.atan2, math.abs, math.floor,
 local dest                      -- the destination (NV.Destination), or nil
 local state = "idle"
 local reason                    -- why, for unavailable and noroute
-local route                     -- the route being followed
+local route                     -- the route being followed: the current leg's, when that is a walk
+local journey, leg              -- the journey being followed, and the index of its current leg
+local pending                   -- a journey just planned, held until its first walk has a route
+local legJob, legJobJourney, legJobIdx, legJobGen
+local legStart                  -- where you were when the current leg (not a walk) became the current one
+local wasTaxi = false
+local J = R.NavJourney          -- nav/Journey.lua (loaded before this file)
 local job, jobGen               -- the search running, and its generation
 local gen = 0
 local seg = 1                   -- following the leg from corner seg to corner seg + 1
@@ -67,6 +84,8 @@ local posWhy                    -- why the last reading failed
 local stats = { plans = 0, replansOff = 0, replansJump = 0, failures = 0, arrivals = 0, superseded = 0 }
 
 local function Now() return GetTime() end
+local function Dist(x1, y1, x2, y2) return sqrt((x1 - x2) ^ 2 + (y1 - y2) ^ 2) end
+local function CurLeg() return journey and journey.legs[leg] or nil end
 
 local function Readable(v)
     if type(v) ~= "number" then return nil end
@@ -162,6 +181,12 @@ end
 -- The last reading: ok, continent, x, y (a view reads this; nothing is read twice a tick).
 function NV.Position() return pos.ok, pos.cont, pos.x, pos.y end
 
+-- A reading now (the Hearthstone's bind point asks, with no navigation under way).
+function NV.PositionNow()
+    local ok = ReadPosition()
+    return ok, pos.cont, pos.x, pos.y
+end
+
 ---------------------------------------------------------------------------
 -- Destinations
 ---------------------------------------------------------------------------
@@ -202,9 +227,9 @@ end
 -- Words
 ---------------------------------------------------------------------------
 local REASONS = {
-    ["other-continent"] = "The destination is on another continent. Walking routes stay on one continent; travel by boat, zeppelin or flight isn't planned.",
+    ["other-continent"] = "Nothing on offer crosses to the destination: no boat, zeppelin, learned flight, teleport or Hearthstone connects the two (see Navigation › Getting there).",
     ["no-data"] = "There is no walking map for where you are (instances and some maps have none).",
-    unreachable = "No walking route reaches it: it may be on an island, up a lift or behind something the walking map can't cross.",
+    unreachable = "No way there: it may be on an island, up a lift, or in a place no boat, flight or teleport you can use reaches.",
     ["start-off"] = "You are not on ground the walking map knows. Move a little and it will try again.",
     ["goal-off"] = "The destination isn't near walkable ground (in the sea, inside a mountain, high on a roof).",
     limit = "The route search grew too large and was stopped.",
@@ -263,7 +288,9 @@ local function Instruction()
     local xs, ys, n = route.xs, route.ys, route.n
     local toNext = prog.toNext
     if seg >= n - 1 then
-        return ("Destination ahead, %s"):format(Yards(prog.remaining)), "arrive"
+        local L = CurLeg()
+        local what = (not L or L.to == "G") and "Destination" or (L.toLabel or L.toName)
+        return ("%s ahead, %s"):format(what, Yards(prog.remaining)), "arrive"
     end
     if route.swim[seg] then
         return ("Swim %s, then %s"):format(Yards(toNext), "continue"), "swim"
@@ -326,14 +353,104 @@ local function OffBy(px, py)
 end
 
 ---------------------------------------------------------------------------
--- Planning
+-- The journey: legs, in order. A leg is a walk (a route over the walking maps), a boat or zeppelin, a flight, a teleport or
+-- the Hearthstone (nav/Journey.lua plans them). `route` is the current leg's route when it is a walk. A journey
+-- planned while another is followed waits (pending) until its first walk has a route, so nothing drawn goes missing
+-- while a new route is worked out.
 ---------------------------------------------------------------------------
 local StartDriver, StopDriver, Plan
+local function TravelSpeed() local TV = R.NavTravel return TV and TV.Speed() or 7 end
+
+local function SetRoute()
+    local L = CurLeg()
+    route = (L and L.kind == "walk") and L.route or nil
+    seg = 1
+end
+
+-- On ground, not on the sea or the water: what a boat's deck, a ferry in the harbour, is not.
+local function OnLand()
+    local t, p = ND.Locate(pos.cont, pos.x, pos.y, 0)
+    return t ~= nil and t.area[p] == 1
+end
+
+local function SpellLabel(id)
+    local TV = R.NavTravel
+    return TV and TV.SpellName(id) or "Teleport"
+end
+
+-- The words of a leg that is not a walk (a walk's come from its route, Instruction above).
+local function LegInstruction(L)
+    if L.kind == "ferry" then
+        if L.fromName == L.toName then return ("Take the %s to the other dock at %s"):format(L.transport, L.toName), "ferry" end
+        return ("Take the %s to %s"):format(L.transport, L.toName), "ferry"
+    elseif L.kind == "flight" then
+        local via = #L.via > 0 and (" via " .. table.concat(L.via, ", ")) or ""
+        return ("Fly from %s to %s%s"):format(L.fromName, L.toName, via), "flight"
+    elseif L.kind == "teleport" then
+        return ("Cast %s (to %s)"):format(SpellLabel(L.spell), L.toName), "teleport"
+    elseif L.kind == "hearth" then
+        return "Use your Hearthstone", "hearth"
+    end
+    return "", "walk"
+end
+
+-- A leg in a few words, for "Then ...".
+local function LegShort(L)
+    if L.kind == "walk" then
+        if L.to == "G" then return "walk to the destination" end
+        return "walk to the " .. (L.toLabel or L.toName)
+    end
+    local text = LegInstruction(L)
+    return text:sub(1, 1):lower() .. text:sub(2)
+end
+NV.LegShort = LegShort
+
+-- The line under a leg that is not a walk: what to expect, every figure an estimate and said to be.
+function NV.LegDetail(L)
+    if L.kind == "ferry" then
+        return ("Wait for it here: %s, then %s aboard (estimates)"):format(J.Minutes(L.wait), J.Minutes(L.travel))
+    elseif L.kind == "flight" then
+        return ("Talk to the flight master and choose %s. %s in the air (estimate)"):format(L.toName, J.Minutes(L.seconds))
+    elseif L.kind == "teleport" then
+        return "About 10 seconds to cast. Uses a Rune of Teleportation."
+    elseif L.kind == "hearth" then
+        return "About 10 seconds to cast, if it is ready."
+    end
+    return ""
+end
+
+local function UpdateProgress()
+    local L = CurLeg()
+    if not (L and pos.ok) then return end
+    prog.straight = (pos.cont == dest.continent) and Dist(dest.wx, dest.wy, pos.x, pos.y) or nil
+    local speed = TravelSpeed()
+    if L.kind == "walk" then
+        if route then
+            Advance(pos.x, pos.y)
+            prog.toNext, prog.remaining = Remaining(pos.x, pos.y)
+            prog.wet = route.swim[seg] and true or false
+            prog.instruction, prog.kind = Instruction()
+        else
+            prog.toNext, prog.remaining, prog.wet = 0, 0, false
+            prog.instruction, prog.kind = "Calculating route…", "wait"
+        end
+    else
+        prog.toNext, prog.remaining, prog.wet = 0, 0, false
+        prog.instruction, prog.kind = LegInstruction(L)
+    end
+    local eta = (L.kind == "walk" and route) and (route.cost and route.cost / speed or prog.remaining / speed) or L.seconds
+    if L.kind == "walk" and route then eta = prog.remaining / speed end
+    for i = leg + 1, #journey.legs do eta = eta + journey.legs[i].seconds end
+    prog.eta = eta
+    local nxt = journey.legs[leg + 1]
+    prog.nextText = nxt and LegShort(nxt) or nil
+    Emit("progress")
+end
 
 local function Arrive()
     stats.arrivals = stats.arrivals + 1
     arrivedAt = Now()
-    job = nil
+    job, pending, legJob = nil, nil, nil
     SetState("arrived")
     if NP.Get("arrivalSound") and PlaySoundFile then
         local path = R.ResolveSound and R:ResolveSound("TwichUI Map Pin")
@@ -343,24 +460,82 @@ end
 
 local function Fail(why)
     stats.failures = stats.failures + 1
-    job = nil
+    job, pending, legJob = nil, nil, nil
+    local L = CurLeg()
+    if (why == "start-off" or why == "unreachable") and L and L.kind ~= "walk" then
+        -- aboard a boat or in the air with the journey still good: hold it, and look again in a moment
+        retryAt = Now() + 3
+        SetState("riding", why)
+        return
+    end
     retries = retries + 1
     retryAt = Now() + RETRY[math.min(retries, #RETRY)]
     SetState("noroute", why)
 end
 
--- Plans from where you are. kind: "start", "manual", "off", "jump", "retry".
+-- A route job for the first walk of journey j (from leg `from`) that has no route yet.
+local function NextRouteJob(j, from)
+    if legJob or not j then return end
+    for i = from or 1, #j.legs do
+        local L = j.legs[i]
+        if L.kind == "walk" and not L.route and not L.routeFailed then
+            local fx, fy = L.fx, L.fy
+            local prefer
+            if L.from == "S" and pos.ok and pos.cont == L.cont then
+                fx, fy = pos.x, pos.y                      -- the first walk starts where you are now
+                prefer = route and route.startTile and { tile = route.startTile, poly = route.startPoly } or nil
+            end
+            legJob = RT.Plan(L.cont, fx, fy, L.tx, L.ty, prefer)
+            legJobJourney, legJobIdx, legJobGen = j, i, gen
+            return
+        end
+    end
+end
+
+local function Commit(j)
+    journey, leg, pending = j, 1, nil
+    legStart = nil
+    retries, retryAt, offSince = 0, nil, nil
+    SetRoute()
+    Emit("route")
+    SetState("navigating")
+    UpdateProgress()
+    NextRouteJob(j, 1)
+end
+
+-- A journey was planned: followed at once when it starts with something other than a walk, else once that walk's route is in.
+local function OnJourney(j)
+    pending = j
+    if j.legs[1].kind ~= "walk" then Commit(j) return end
+    NextRouteJob(j, 1)
+end
+
+local function WalkJourney()
+    local L = { kind = "walk", cont = pos.cont, fcont = pos.cont, tcont = dest.continent, fx = pos.x, fy = pos.y,
+        tx = dest.wx, ty = dest.wy, from = "S", to = "G", fromName = "where you are", toName = dest.name, seconds = 0 }
+    return { legs = { L }, seconds = 0, walkOnly = true }
+end
+
+-- The next leg of the journey you follow (a walk ended at a place, the ride or flight is the one to do now).
+local function AdvanceLeg()
+    leg = leg + 1
+    local L = CurLeg()
+    if not L then Arrive() return end
+    legStart = { x = pos.x, y = pos.y, cont = pos.cont }
+    offSince = nil
+    SetRoute()
+    Emit("route")
+    SetState((L.kind == "walk" and not route) and "calculating" or "navigating")
+    UpdateProgress()
+    NextRouteJob(journey, leg)
+end
+
+-- Plans from where you are. kind: "start", "manual", "off", "jump", "retry", "leg" (a ride is over), "land" (a flight is).
 function Plan(kind)
     if not dest then return end
     if not pos.ok then
         local ok, why = ReadPosition()
         if not ok then SetState("unavailable", why) return end
-    end
-    if pos.cont ~= dest.continent then
-        job, route = nil, nil
-        Emit("route")
-        SetState("noroute", "other-continent")
-        return
     end
     local loaded, lwhy = ND.Load()
     if not loaded then
@@ -373,21 +548,36 @@ function Plan(kind)
         end
         return
     end
-    if not ND.HasMap(pos.cont) then
-        job, route = nil, nil
-        Emit("route")
-        SetState("noroute", "no-data")
-        return
-    end
-    if job then stats.superseded = stats.superseded + 1 end
-    gen = gen + 1
+    if job or legJob then stats.superseded = stats.superseded + 1 end
+    gen = gen + 1                                     -- anything still being searched is now stale
+    job, pending, legJob = nil, nil, nil
     stats.plans = stats.plans + 1
-    local prefer = route and route.startTile and { tile = route.startTile, poly = route.startPoly } or nil
-    job, jobGen = RT.Plan(pos.cont, pos.x, pos.y, dest.wx, dest.wy, prefer), gen
     lastPlanAt, offSince = Now(), nil
     if kind == "off" then stats.replansOff = stats.replansOff + 1 end
-    if kind == "jump" then stats.replansJump = stats.replansJump + 1 end
-    SetState(route and "recalculating" or "calculating")
+    if kind == "jump" or kind == "land" then stats.replansJump = stats.replansJump + 1 end
+    local direct = pos.cont == dest.continent
+    local TV = R.NavTravel
+    local straight = direct and Dist(dest.wx, dest.wy, pos.x, pos.y) or math.huge
+    if direct and (straight <= J.MULTI_YARDS or not (TV and TV.Any()) or not ND.Transit()) then
+        if not ND.HasMap(pos.cont) then
+            Emit("route")
+            SetState("noroute", "no-data")
+            return
+        end
+        SetState(journey and "recalculating" or "calculating")
+        OnJourney(WalkJourney())
+        return
+    end
+    if not ND.Transit() then
+        SetState("noroute", "other-continent")
+        return
+    end
+    local req = TV and TV.Request() or { faction = 1, speed = 7, ships = false, teleports = {} }
+    req.start = { cont = pos.cont, x = pos.x, y = pos.y }
+    req.goal = { cont = dest.continent, x = dest.wx, y = dest.wy }
+    req.prefer = route and route.startTile and { tile = route.startTile, poly = route.startPoly } or nil
+    job, jobGen = J.Plan(req), gen
+    SetState(journey and "recalculating" or "calculating")
 end
 
 function NV.OnCombatEnd()
@@ -397,24 +587,32 @@ function NV.OnCombatEnd()
     if dest then Plan("start") end
 end
 
-local function Accept(r)
-    route = r
-    seg = 1
-    retries, retryAt = 0, nil
-    job = nil
-    Emit("route")
-    SetState("navigating")
-end
-
-local function UpdateProgress()
-    if not (route and pos.ok) then return end
-    local px, py = pos.x, pos.y
-    Advance(px, py)
-    prog.toNext, prog.remaining = Remaining(px, py)
-    prog.straight = sqrt((dest.wx - px) ^ 2 + (dest.wy - py) ^ 2)
-    prog.wet = route.swim[seg] and true or false
-    prog.instruction, prog.kind = Instruction()
-    Emit("progress")
+-- Off a leg that isn't a walk, or its end: what to do about it.
+local function LegProgress(L, now)
+    local dArr = (pos.cont == L.tcont) and Dist(pos.x, pos.y, L.tx, L.ty) or math.huge
+    local dDep = (pos.cont == L.fcont) and Dist(pos.x, pos.y, L.fx, L.fy) or math.huge
+    if L.kind == "ferry" or L.kind == "flight" then
+        if dArr <= (L.kind == "ferry" and 150 or 200) then Plan("leg") return end
+        local land = OnLand()
+        if dDep > 100 and not land then
+            -- away from where it starts and not on ground: aboard. Nothing to follow until it arrives
+            offSince = nil
+            if state ~= "riding" then SetState("riding", "aboard") end
+            return
+        end
+        if state == "riding" and reason == "aboard" then SetState("navigating") end
+        -- well away from where it starts, on land and not aboard anything: you have left the plan
+        if dDep > 150 and land then
+            offSince = offSince or now
+            if now - offSince >= OFF_HOLD and now - lastPlanAt >= REPLAN_GAP then Plan("off") end
+        else
+            offSince = nil
+        end
+    else
+        -- a teleport or the Hearthstone can be used anywhere; walking far from where it became the thing to do is leaving the plan
+        legStart = legStart or { x = pos.x, y = pos.y, cont = pos.cont }
+        if pos.cont == legStart.cont and Dist(pos.x, pos.y, legStart.x, legStart.y) > 400 then Plan("off") end
+    end
 end
 
 local lastX, lastY, lastCont
@@ -430,23 +628,39 @@ local function Progress()
         return
     end
     if state == "loading" then return end
-    -- a jump or a new continent: plan again now
-    local jumped = lastCont and (pos.cont ~= lastCont or sqrt((pos.x - lastX) ^ 2 + (pos.y - lastY) ^ 2) > JUMP)
+    -- on a flight path: nothing to follow until you land, and then a plan from where you are
+    local taxi = UnitOnTaxi and UnitOnTaxi("player") and true or false
+    if taxi then
+        wasTaxi = true
+        lastX, lastY, lastCont = pos.x, pos.y, pos.cont
+        offSince = nil
+        SetState("riding", "taxi")
+        return
+    end
+    if wasTaxi then
+        wasTaxi = false
+        lastX, lastY, lastCont = pos.x, pos.y, pos.cont
+        Plan("land")
+        return
+    end
+    -- a jump or a new continent (a teleport, a boat's arrival, a graveyard): plan again now
+    local jumped = lastCont and (pos.cont ~= lastCont or Dist(pos.x, pos.y, lastX, lastY) > JUMP)
     lastX, lastY, lastCont = pos.x, pos.y, pos.cont
     if jumped then Plan("jump") return end
     if state == "unavailable" then
-        if route and route.map == pos.cont then SetState("navigating") else Plan("start") end
+        if journey then SetState("navigating") else Plan("start") end
         return
     end
     -- arrived?
-    if prog and dest and pos.cont == dest.continent then
-        local straight = sqrt((dest.wx - pos.x) ^ 2 + (dest.wy - pos.y) ^ 2)
-        local atRouteEnd = route and sqrt((route.goalX - pos.x) ^ 2 + (route.goalY - pos.y) ^ 2) or math.huge
-        local arrival = NP.Get("arrivalYards")
-        if straight <= arrival or (route and atRouteEnd <= arrival and seg >= route.n - 1) then
-            Arrive()
-            return
-        end
+    if pos.cont == dest.continent and Dist(dest.wx, dest.wy, pos.x, pos.y) <= NP.Get("arrivalYards") then
+        Arrive()
+        return
+    end
+    if state == "riding" then
+        if retryAt and now >= retryAt then retryAt = nil Plan("retry") return end
+        local L = CurLeg()
+        if L and L.kind ~= "walk" then LegProgress(L, now) end   -- it may have arrived
+        return
     end
     if state == "noroute" then
         -- try again later, and only from somewhere else
@@ -455,12 +669,25 @@ local function Progress()
             retryAt = nil
             Plan("retry")
         end
-        prog.straight = sqrt((dest.wx - pos.x) ^ 2 + (dest.wy - pos.y) ^ 2)
+        prog.straight = (pos.cont == dest.continent) and Dist(dest.wx, dest.wy, pos.x, pos.y) or nil
         Emit("progress")
         return
     end
-    if not route or state ~= "navigating" then return end
+    if state ~= "navigating" then return end
+    local L = CurLeg()
+    if not L then return end
+    if L.kind ~= "walk" then
+        UpdateProgress()
+        LegProgress(L, now)
+        return
+    end
+    if not route then return end                      -- its route is still being worked out
     UpdateProgress()
+    -- the end of a walk that ends at a place (a dock, a flight master): on to the next leg
+    if L.to ~= "G" and seg >= route.n - 1 and Dist(pos.x, pos.y, route.goalX, route.goalY) <= NP.Get("arrivalYards") + 4 then
+        AdvanceLeg()
+        return
+    end
     local off = OffBy(pos.x, pos.y)
     local limit = NP.Get("offRouteYards")
     if off > limit then
@@ -472,15 +699,40 @@ local function Progress()
 end
 
 local function StepJob()
-    if not job then return end
-    local status, result = job:Step(SEARCH_BUDGET)
-    if status == "running" then return end
-    if jobGen ~= gen then job = nil return end      -- superseded meanwhile
-    if status == "done" then
-        Accept(result)
-        UpdateProgress()
-    else
-        Fail(result)
+    if job then
+        local status, result = job:Step(SEARCH_BUDGET)
+        if status == "running" then return end
+        local stale = jobGen ~= gen
+        job = nil
+        if stale then return end
+        if status == "done" then OnJourney(result) else Fail(result) end
+        return
+    end
+    if legJob then
+        local status, result = legJob:Step(SEARCH_BUDGET)
+        if status == "running" then return end
+        local j, i, stale = legJobJourney, legJobIdx, legJobGen ~= gen
+        legJob = nil
+        if stale then return end
+        local L = j.legs[i]
+        if status == "done" then
+            L.route = result
+            if j.walkOnly then L.seconds = (result.cost or 0) / TravelSpeed() end
+            if j == pending and i == 1 then
+                Commit(j)
+            elseif j == journey and i == leg then
+                SetRoute()
+                SetState("navigating")
+                Emit("route")
+                UpdateProgress()
+            else
+                Emit("route")
+            end
+        else
+            L.routeFailed = result
+            if (j == pending and i == 1) or (j == journey and i == leg) then Fail(result) end
+        end
+        NextRouteJob(j == pending and pending or journey, 1)
     end
 end
 
@@ -532,6 +784,7 @@ function NV.Start(d)
     if type(d) ~= "table" or not d.continent then return false, NV.ReasonText("bad-map") end
     dest = d
     route, job, seg = nil, nil, 1
+    journey, leg, pending, legJob, legStart, wasTaxi = nil, 1, nil, nil, nil, false
     retries, retryAt, offSince, arrivedAt = 0, nil, nil, nil
     lastCont = nil
     gen = gen + 1
@@ -559,6 +812,7 @@ end
 function NV.Stop(why)
     if not dest and state == "idle" then return end
     dest, route, job = nil, nil, nil
+    journey, leg, pending, legJob, legStart, wasTaxi = nil, 1, nil, nil, nil, false
     gen = gen + 1
     waitCombat = false
     R:Off("PLAYER_REGEN_ENABLED", NV.OnCombatEnd)
@@ -591,6 +845,9 @@ function NV.Snapshot()
         toNext = prog.toNext, remaining = prog.remaining, straight = prog.straight,
         instruction = prog.instruction, kind = prog.kind, wet = prog.wet,
         fallback = (state == "noroute" and dest and pos.ok and pos.cont == dest.continent) or false,
+        -- the journey: its legs (shared: never change them), the current one, what comes next, the time left (an estimate)
+        legs = journey and journey.legs or nil, leg = leg, legKind = (CurLeg() or {}).kind,
+        steps = journey and #journey.legs or 0, eta = prog.eta, nextText = prog.nextText,
     }
 end
 
@@ -598,6 +855,8 @@ end
 -- when there is no route but you are on its continent. Returns x, y, kind ("route" or "direct"), or nil.
 function NV.Target()
     if not (dest and pos.ok) then return nil end
+    local L = CurLeg()
+    if L and L.kind ~= "walk" and (state == "navigating" or state == "recalculating") then return nil end   -- nothing to walk toward
     if route and (state == "navigating" or state == "recalculating") and pos.cont == route.map then
         local i = math.min(seg + 1, route.n)
         return route.xs[i], route.ys[i], "route"
@@ -669,6 +928,7 @@ end
 -- Read only, for /tui diagnostics: states and counts, never a place or a name.
 function NV.Diagnostics()
     return { state = state, reason = reason, active = dest ~= nil, routePoints = route and route.n or 0,
+        legs = journey and #journey.legs or 0, leg = leg,
         searching = job ~= nil, axis = axis, plans = stats.plans, offRoute = stats.replansOff, jumps = stats.replansJump,
         failures = stats.failures, arrivals = stats.arrivals, superseded = stats.superseded, tickers = #tickers,
         driver = driver ~= nil and driver:GetScript("OnUpdate") ~= nil, data = ND.Snapshot() }

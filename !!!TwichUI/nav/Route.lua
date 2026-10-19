@@ -25,6 +25,7 @@ local sqrt, huge, floor = math.sqrt, math.huge, math.floor
 local yield, running = coroutine.yield, coroutine.running
 
 RT.START_REACH = 12          -- yards: how far you may stand from walkable ground and still be put on it
+RT.LAND_REACH = 120          -- yards: standing on a scrap of ground cut off from the land (a pier) puts you on land this near
 RT.GOAL_REACH = 40           -- yards: how far a destination may be from walkable ground (a pin on a roof, in a lake's middle)
 RT.TILE_LIMIT = 30000        -- polygons settled in one tile search
 RT.GRAPH_LIMIT = 60000       -- crossings settled in one search
@@ -434,6 +435,7 @@ local function Plan(map, sx, sy, gx, gy, prefer)
     end
     lx[#lx + 1], ly[#ly + 1], rx[#rx + 1], ry[#ry + 1] = gx2, gy2, gx2, gy2
     local xs, ys, at = Funnel(lx, ly, rx, ry, #lx)
+    if #xs == 1 then xs[2], ys[2], at[2] = xs[1], ys[1], at[1] end   -- start and goal are the same point: still two
 
     -- Per segment: the yards of it in water. Funnel portal j (j >= 2) leads from polyAt[j - 1] into polyAt[j]; a segment
     -- between corners at portals a and b runs through polyAt[a] .. polyAt[b - 1], crossing portals a + 1 .. b - 1 in
@@ -475,10 +477,91 @@ local function Plan(map, sx, sy, gx, gy, prefer)
     }
 end
 
--- A planning job. job:Step(ms) runs it for up to ms milliseconds: returns "running", or "done" and the route, or "failed"
--- and a reason. Dropping the job (not calling Step again) abandons it; nothing else holds its state.
-function RT.Plan(map, sx, sy, gx, gy, prefer)
-    local co = coroutine.create(function() return Plan(map, sx, sy, gx, gy, prefer) end)
+---------------------------------------------------------------------------
+-- One start to many places (the journey planner's walking costs)
+---------------------------------------------------------------------------
+-- A point joined to the crossing graph: the polygon under it (or the nearest within `reach` yards), where that puts it, and
+-- its cost to each crossing of its tile. nil and "off" when there is no walkable ground near it.
+function RT.AttachOf(map, x, y, prefer, reach, landReach)
+    local gr = ND.Graph(map)
+    if not gr then return nil, "no-data" end
+    local t, p, sx, sy = ND.Locate(map, x, y, reach or RT.GOAL_REACH, prefer, landReach)
+    if not t then return nil, "off" end
+    local ca, cc = {}, {}
+    for c, cost in pairs(Seeds(gr, t, p, sx, sy)) do
+        ca[#ca + 1], cc[#cc + 1] = c, cost
+    end
+    return { tid = t.id, poly = p, x = sx, y = sy, ca = ca, cc = cc, tile = t }
+end
+
+-- Dijkstra over the whole crossing graph from `seeds` (crossing -> cost), no goal: every crossing's cost.
+local function AllSearch(gr, ca, cc)
+    local best, done = {}, {}
+    local heap = NewHeap()
+    for k = 1, #ca do
+        local c, cost = ca[k], cc[k]
+        if cost < (best[c] or huge) then best[c] = cost Push(heap, cost, c) end
+    end
+    local first, nb, cost, settled = gr.first, gr.nb, gr.cost, 0
+    while true do
+        local c, d = Pop(heap)
+        if not c then break end
+        if not done[c] then
+            done[c] = true
+            settled = settled + 1
+            if settled % 256 == 0 then Pause() end
+            for i = first[c], first[c + 1] - 1 do
+                local e = nb[i]
+                if not done[e] then
+                    local nd = d + cost[i]
+                    if nd < (best[e] or huge) then best[e] = nd Push(heap, nd, e) end
+                end
+            end
+        end
+    end
+    return best
+end
+
+-- The walking cost (weighted yards) from `start` (an AttachOf result) to each target: targets[key] = { tid, poly, x, y, ca, cc }
+-- (a place's entry in the graph, or another AttachOf result). Costs[key] is nil where there is no walk. The same crossing-level
+-- model as everywhere: through the crossings, and exactly inside the start's own tile.
+function RT.CostsFrom(map, start, targets)
+    local gr = ND.Graph(map)
+    local out = {}
+    if not (gr and start) then return out end
+    local dist = AllSearch(gr, start.ca, start.cc)
+    local g, px, py
+    for key, tg in pairs(targets) do
+        local best
+        local ca, cc = tg.ca, tg.cc
+        for k = 1, #ca do
+            local d = dist[ca[k]]
+            if d then
+                local v = d + cc[k]
+                if not best or v < best then best = v end
+            end
+        end
+        if tg.tid == start.tid then
+            if g == nil then
+                g, px, py = TileSearch(start.tile, start.poly, start.x, start.y)
+                g = g or false
+            end
+            local gp = g and g[tg.poly]
+            if gp then
+                local fac = FACTOR[start.tile.area[tg.poly]] or 1
+                local v = gp + sqrt((tg.x - px[tg.poly]) ^ 2 + (tg.y - py[tg.poly]) ^ 2) * fac
+                if not best or v < best then best = v end
+            end
+        end
+        out[key] = best
+    end
+    return out
+end
+
+-- A job. job:Step(ms) runs fn for up to ms milliseconds a frame: returns "running", or "done" and its result, or "failed" and a
+-- reason. Dropping the job (not calling Step again) abandons it; nothing else holds its state. fn may call RT.Pause().
+function RT.Job(fn)
+    local co = coroutine.create(fn)
     local job = { done = false }
     function job:Step(ms)
         if self.done then return self.status, self.result end
@@ -499,6 +582,12 @@ function RT.Plan(map, sx, sy, gx, gy, prefer)
         return "running"
     end
     return job
+end
+
+RT.Pause = Pause
+
+function RT.Plan(map, sx, sy, gx, gy, prefer)
+    return RT.Job(function() return Plan(map, sx, sy, gx, gy, prefer) end)
 end
 
 -- The same, at once (tests and tools; never from a game handler).
