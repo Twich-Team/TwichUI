@@ -12,3 +12,4 @@ TASK_NOTES.md
 # navbake: fetched third-party build tools and build outputs (never committed)
 tools/navbake/.deps/
 tools/navbake/build/
+__pycache__/

@@ -27,8 +27,10 @@ import zipfile
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-CORE, SETTINGS = "!!!TwichUI", "TwichUI_Settings"
-TOCS = {CORE: f"{CORE}/{CORE}.toc", SETTINGS: f"{SETTINGS}/{SETTINGS}.toc"}
+CORE, SETTINGS, NAVDATA = "!!!TwichUI", "TwichUI_Settings", "TwichUI_NavData"
+ADDONS = (CORE, SETTINGS, NAVDATA)
+LOAD_ON_DEMAND = (SETTINGS, NAVDATA)   # each needs CORE and loads only when asked for (the settings window, the first route)
+TOCS = {a: f"{a}/{a}.toc" for a in ADDONS}
 PROJECT = "TwichUI"
 CHANNEL_BY_BRANCH = {"main": "alpha", "beta": "beta"}
 STABLE_TAG = re.compile(r"^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
@@ -309,13 +311,13 @@ def check_archive(zip_path, version, root=None):
         names = [n for n in z.namelist() if not n.endswith("/")]
         files = set(names)
         tops = {n.split("/", 1)[0] for n in z.namelist()}
-        if tops != {CORE, SETTINGS}:
-            problems.append(f"top-level folders are {sorted(tops)}; expected exactly {CORE} and {SETTINGS}")
+        if tops != set(ADDONS):
+            problems.append(f"top-level folders are {sorted(tops)}; expected exactly {', '.join(ADDONS)}")
         for n in names:
             parts = n.split("/")
             if n.startswith("/") or ".." in parts or "\\" in n:
                 problems.append(f"unsafe path {n}")
-            if parts[0] in (CORE, SETTINGS) and len(parts) > 1 and parts[1] in (CORE, SETTINGS):
+            if parts[0] in ADDONS and len(parts) > 1 and parts[1] in ADDONS:
                 problems.append(f"nested addon folder {n}")
             if "twitchui" in n.lower():
                 problems.append(f"misspelled name {n}")
@@ -345,14 +347,16 @@ def check_archive(zip_path, version, root=None):
                     listed = f"{addon}/" + line.replace("\\", "/")
                     if listed not in files:
                         problems.append(f"{rel} loads {line}, which is not in the package")
-        if len(tocs) == 2:
-            core, settings = tocs[CORE], tocs[SETTINGS]
-            if toc_field(settings, "Interface") != toc_field(core, "Interface"):
-                problems.append("the two .toc files have different Interface values")
-            if toc_field(settings, "LoadOnDemand") != "1":
-                problems.append(f"{SETTINGS} is not load on demand")
-            if toc_field(settings, "RequiredDeps") != CORE:
-                problems.append(f"{SETTINGS} does not require {CORE}")
+        if len(tocs) == len(TOCS):
+            core = tocs[CORE]
+            for addon in LOAD_ON_DEMAND:
+                other = tocs[addon]
+                if toc_field(other, "Interface") != toc_field(core, "Interface"):
+                    problems.append(f"{addon}.toc has a different Interface value from {CORE}.toc")
+                if toc_field(other, "LoadOnDemand") != "1":
+                    problems.append(f"{addon} is not load on demand")
+                if toc_field(other, "RequiredDeps") != CORE:
+                    problems.append(f"{addon} does not require {CORE}")
             if not (toc_field(core, "X-Curse-Project-ID") or "").isdigit():
                 problems.append(f"{CORE}.toc has no X-Curse-Project-ID")
     return problems
@@ -675,7 +679,7 @@ def main(argv=None):
                 print(f"::error::{msg}")
             if problems:
                 return 1
-            print(f"{Path(args.zip).name}: {CORE} and {SETTINGS}, both at Version {meta['version']}: OK")
+            print(f"{Path(args.zip).name}: {', '.join(ADDONS)}, all at Version {meta['version']}: OK")
         elif args.cmd == "publish":
             token = os.environ.get("CF_API_KEY")
             if not token:

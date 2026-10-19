@@ -34,7 +34,7 @@ for _, page in ipairs(K.list) do if page.def.host then c.canvases[page.name] = K
 -- pages sit directly under TwichUI, except the appearance and addon pages, each under the page it belongs to
 for _, page in ipairs(K.list) do
   local under = { ["SpeakStone speech frame"] = "Addon skins", ["Chronicle appearance"] = "Journey Chronicle",
-    ["Pin appearance"] = "Party pins", ["Notification appearance"] = "Notifications", ["Stat weights"] = "Gear comparison", ["Refreshment shares"] = "Mage",
+    ["Pin appearance"] = "Party pins", ["Navigation appearance"] = "Navigation", ["Notification appearance"] = "Notifications", ["Stat weights"] = "Gear comparison", ["Refreshment shares"] = "Mage",
     ["Restock items"] = "Vendor restocking", ["Target markers"] = "Markers", ["World markers"] = "Markers", ["Marker bar"] = "Markers",
     ["Class resource bar layout"] = "Class resource bars", ["Class resource bar appearance"] = "Class resource bars",
     ["Class resource bar effects"] = "Class resource bars",
@@ -48,7 +48,7 @@ for key, default in pairs(defaults) do
   n = n + 1
   assert(default == R.DEFAULT_MODULES[key], key .. " default matches a new install")
 end
-assert(n == 65, "every module has a toggle: " .. n)
+assert(n == 66, "every module has a toggle: " .. n)
 assert(defaults.restedxpSkin == false, "the RestedXP skin is opt-in")
 assert(defaults.arrival == true and defaults.arrivalSubzones == true and defaults.arrivalReducedMotion == false,
   "arrival card and subzone cards on; reduced motion opt-in")
@@ -244,7 +244,7 @@ assert(attune:GetTooltip():find("after reload"), "toggle change shows it needs a
 
 -- The overview links to one page per feature, in this order; every setting
 -- is on exactly one page (registration above refuses a repeat).
-assert(table.concat(pageOrder, ",") == "Notifications,Notification appearance,Quality of life,Markers,Chat cleaning,Food and drink,Vendor restocking,Auction House,Journey Chronicle,Chronicle appearance,Party pins,Pin appearance,Gear comparison,Mage,Class resource bars,Class resource bar layout,Class resource bar appearance,Class resource bar effects,Addon skins,SpeakStone speech frame,RestedXP,Configuration sharing,Profiles,Troubleshooting", table.concat(pageOrder, ","))
+assert(table.concat(pageOrder, ",") == "Notifications,Notification appearance,Quality of life,Markers,Chat cleaning,Food and drink,Vendor restocking,Auction House,Journey Chronicle,Chronicle appearance,Party pins,Pin appearance,Navigation,Gear comparison,Mage,Class resource bars,Class resource bar layout,Class resource bar appearance,Class resource bar effects,Addon skins,SpeakStone speech frame,RestedXP,Configuration sharing,Profiles,Troubleshooting", table.concat(pageOrder, ","))
 for variable, page in pairs({
   TWICHUI_media = "TwichUI", TWICHUI_quietLogin = "TwichUI", 
   TWICHUI_gearHints = "Gear comparison", TWICHUI_gearTree = "Gear comparison", TWICHUI_gearBagStyle = "Gear comparison",

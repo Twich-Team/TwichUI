@@ -222,14 +222,14 @@ local function BuildTile(map, tx, ty, d)
             local vi = p[i + 1 + j]
             k = k + 1
             ev[k], nb[k] = vi, 0
-            local x, y, z = X[vi], Y[vi], Z[vi]
-            sx, sy = sx + x, sy + y
-            if z < zl then zl = z end
-            if z > zh then zh = z end
-            if x < xl then xl = x end
-            if x > xh then xh = x end
-            if y < yl then yl = y end
-            if y > yh then yh = y end
+            local vx, vy, vz = X[vi], Y[vi], Z[vi]
+            sx, sy = sx + vx, sy + vy
+            if vz < zl then zl = vz end
+            if vz > zh then zh = vz end
+            if vx < xl then xl = vx end
+            if vx > xh then xh = vx end
+            if vy < yl then yl = vy end
+            if vy > yh then yh = vy end
         end
         -- neighbours by shared edge
         for j = 1, n do

@@ -38,16 +38,20 @@ function SettingsClient(opts)
   c.UnitHasVehicleUI = function() return false end
   c.CreateColor = function(r, g, b, a) return { r = r, g = g, b = b, a = a } end
   c.C_SpecializationInfo = { GetActiveSpecGroup = function() return 1 end, GetCombatConfigIDForSpecGroup = function() return nil end }
-  local function Obj()
+  -- The real game gives a frame SetBackdrop only when it was made with BackdropTemplate; a mock that has it everywhere hides
+  -- the mistake (a plain frame handed to Look.Surface).
+  local BACKDROP = { SetBackdrop = true, SetBackdropColor = true, SetBackdropBorderColor = true, GetBackdrop = true }
+  local function Obj(backdrop)
     return setmetatable({}, { __index = function(t, k)
       if k == "twichBevel" or k == "twichBorders" then return nil end
+      if BACKDROP[k] and not backdrop then return nil end
       if k == "GetFrameLevel" or k == "GetEffectiveScale" or k == "GetScale" then return function() return 1 end end
       if k == "GetStringWidth" then return function() return 100 end end
-      if k == "CreateFontString" or k == "CreateTexture" or k == "CreateAnimationGroup" or k == "CreateAnimation" then return function() return Obj() end end
+      if k == "CreateFontString" or k == "CreateTexture" or k == "CreateAnimationGroup" or k == "CreateAnimation" or k == "CreateLine" then return function() return Obj() end end
       return function() end
     end })
   end
-  c.CreateFrame = function() return Obj() end
+  c.CreateFrame = function(_, _, _, template) return Obj(type(template) == "string" and template:find("BackdropTemplate", 1, true) ~= nil) end
   local screen = Obj()   -- UIParent, for the class resource bars' places
   screen.GetWidth, screen.GetHeight = function() return 1024 end, function() return 768 end
   screen.GetCenter = function() return 512, 384 end
@@ -85,6 +89,7 @@ function SettingsClient(opts)
     "qol/Duels.lua", "qol/QuickKeybind.lua", "qol/GuideWaypoint.lua", "markers/Markers.lua", "markers/Keys.lua", "markers/Bar.lua",
     "pins/Pins.lua", "pins/Sync.lua", "pins/Look.lua", "pins/Map.lua", "pins/Minimap.lua", "pins/Editor.lua", "pins/Window.lua",
     "pins/BrokerMenu.lua", "pins/Broker.lua",
+    "nav/Prefs.lua", "nav/Data.lua", "nav/Route.lua", "nav/Nav.lua", "nav/Paint.lua", "nav/Frame.lua", "nav/Arrow.lua", "nav/MapTrail.lua", "nav/MinimapTrail.lua",
     "diag/Diagnostics.lua", "diag/Status.lua", "diag/SupportWindow.lua", "diag/Window.lua" }
   for _, f in ipairs(FILES) do
     local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})

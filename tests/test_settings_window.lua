@@ -18,7 +18,8 @@ dofile(TESTS .. "settings_mock.lua")
 -- Stand-in frames
 ---------------------------------------------------------------------------
 local made = 0
-local function Fake(kind, parent)
+local BACKDROP = { SetBackdrop = true, SetBackdropColor = true, SetBackdropBorderColor = true, GetBackdrop = true }
+local function Fake(kind, parent, template)
   made = made + 1
   local f = { kind = kind, parent = parent, scripts = {}, hooks = {}, points = {}, shown = true, w = 0, h = 0,
     text = "", value = 0, min = 0, max = 1, enabled = true, focus = false, scroll = 0, children = {} }
@@ -85,6 +86,7 @@ local function Fake(kind, parent)
     SetFont = function() return true end,
     SetAlpha = function(s, a) s.alpha = a end, GetAlpha = function(s) return s.alpha or 1 end,
     CreateTexture = function(s) return Fake("Texture", s) end,
+    CreateLine = function(s) return Fake("Line", s) end,
     CreateFontString = function(s) return Fake("FontString", s) end,
     -- the notification cards' animation (previews are shown from the appearance page)
     CreateAnimationGroup = function()
@@ -97,15 +99,18 @@ local function Fake(kind, parent)
   }
   if kind == "ScrollFrame" then f.ScrollBar = Fake("Slider", f); f.ScrollBar.ThumbTexture = Fake("Texture", f.ScrollBar) end
   -- a method the game has and the stand-in doesn't need is a no-op; a field never set is nil, as on a real frame
+  -- as in the game: a backdrop's methods exist only on a frame made with BackdropTemplate
+  local backdrop = type(template) == "string" and template:find("BackdropTemplate", 1, true) ~= nil
   return setmetatable(f, { __index = function(_, k)
     if methods[k] then return methods[k] end
+    if BACKDROP[k] and not backdrop then return nil end
     if type(k) == "string" and k:find("^%u") then return function() end end
   end })
 end
 
 local registeredEscHandlers = 0   -- calls an addon made into the game's own handler table (taints it)
 local c, S = SettingsClient({ beforeInit = function(c)
-  c.CreateFrame = function(kind, name, parent) local f = Fake(kind, parent); if name then c[name] = f end return f end
+  c.CreateFrame = function(kind, name, parent, template) local f = Fake(kind, parent, template); if name then c[name] = f end return f end
   c.UIParent = Fake("Frame")
   c.UIParent.w, c.UIParent.h = 1920, 1080
   c.GameTooltip = Fake("GameTooltip")
@@ -208,7 +213,7 @@ do
       assert(inSide[page.key], page.key .. " is in the sidebar")
     end
   end
-  assert(children == 16, "sixteen secondary pages: " .. children)
+  assert(children == 17, "seventeen secondary pages: " .. children)
   assert(#K.Tabs("overview") == 0 and #K.Tabs("auction") == 0, "a feature without pages under it has no tabs")
   do   -- Markers: its own list in Everyday, then the two kinds of marker cycling and the bar, each a tab of its own
     local labels = {}

@@ -68,6 +68,7 @@ TC.LOCAL = {
     ["modules.foodDrinkUnlock"] = "place", ["ui.foodDrinkPosition"] = "place", ["ui.trainingPosition"] = "place",
     ["ui.welcomeBackPlace"] = "place", ["ui.friendLoginPlace"] = "place", ["ui.settingsWindow"] = "place",
     ["ui.markerBarPosition"] = "place", ["ui.refreshments.position"] = "place", ["ui.partyPins.position"] = "place", ["ui.classBarsPosition"] = "place",
+    ["ui.navigation.position"] = "place", ["ui.navigation.arrowPosition"] = "place",
     -- the rest
     ["modules.restedxpSkin"] = "other", ["modules.qolTwichUISettingsButton"] = "other",
     ["ui.restedxpSkinState"] = "other", ["ui.showAdvanced"] = "other", ["gear.trees"] = "other",
@@ -1328,6 +1329,19 @@ local function Define()
         Table(g, { "ui", "pinsLook" }, PL and PL.Look, LOOK, LOOK_ENUMS)
         Table(g, { "ui", "pinsBrokerMenu" }, PL and PL.MenuLook, LOOK, LOOK_ENUMS)
         Table(g, { "ui", "pinsEditorLook" }, PL and PL.EditorLook, LOOK, LOOK_ENUMS)
+    end
+
+    g = Group("navigation", "Navigation", { page = "navigation",
+        note = "Whether navigation is on, what it shows, how near counts as arrived and how it looks. Where its frame and arrow sit stays yours. Destinations and routes are never shared." })
+    Switches(g, { "navigation" })
+    do
+        local NP = R.NavPrefs
+        local keys = {}
+        for _, part in ipairs({ "behavior", "appearance" }) do
+            for _, key in ipairs(NP and NP.GROUPS[part] or {}) do keys[#keys + 1] = key end
+        end
+        Table(g, { "ui", "navigation" }, NP, keys, { trailStyle = NP and NP.ENUM.trailStyle }, { font = "name" })
+        Table(g, { "ui", "navigationLook" }, NP and NP.Look, LOOK, LOOK_ENUMS)
     end
 
     g = Group("gear", "Gear comparison", { page = "gear" })

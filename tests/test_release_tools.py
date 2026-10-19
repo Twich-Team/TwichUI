@@ -20,6 +20,8 @@ import release as rel  # noqa: E402
 CORE_TOC = "## Interface: 16001\n## Title: |cffC9A24ATwich|rUI\n## Version: 1.0.0\n## X-Curse-Project-ID: 1719280\n\nCore.lua\n"
 SETTINGS_TOC = ("## Interface: 16001\n## Title: Settings\n## Version: 1.0.0\n## RequiredDeps: !!!TwichUI\n"
                 "## LoadOnDemand: 1\n\nKit.lua\n")
+NAVDATA_TOC = ("## Interface: 16001\n## Title: Navigation Data\n## Version: 1.0.0\n## RequiredDeps: !!!TwichUI\n"
+               "## LoadOnDemand: 1\n\nData\\Map0.lua\n")
 
 
 class Repo:
@@ -34,6 +36,7 @@ class Repo:
         self.run("config", "tag.gpgsign", "false")
         self.write(rel.TOCS[rel.CORE], CORE_TOC)
         self.write(rel.TOCS[rel.SETTINGS], SETTINGS_TOC)
+        self.write(rel.TOCS[rel.NAVDATA], NAVDATA_TOC)
         self.n = 0
 
     def run(self, *args):
@@ -342,7 +345,7 @@ class NotesTests(unittest.TestCase):
 class StampTests(unittest.TestCase):
     def test_stamps_only_the_version_line(self):
         with tempfile.TemporaryDirectory() as d:
-            for rel_path, text in ((rel.TOCS[rel.CORE], CORE_TOC), (rel.TOCS[rel.SETTINGS], SETTINGS_TOC)):
+            for rel_path, text in ((rel.TOCS[rel.CORE], CORE_TOC), (rel.TOCS[rel.SETTINGS], SETTINGS_TOC), (rel.TOCS[rel.NAVDATA], NAVDATA_TOC)):
                 p = Path(d, rel_path)
                 p.parent.mkdir(parents=True)
                 p.write_bytes(text.replace("\n", "\r\n").encode())
@@ -367,7 +370,7 @@ class ArchiveTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
-        for rel_path, text in ((rel.TOCS[rel.CORE], CORE_TOC), (rel.TOCS[rel.SETTINGS], SETTINGS_TOC)):
+        for rel_path, text in ((rel.TOCS[rel.CORE], CORE_TOC), (rel.TOCS[rel.SETTINGS], SETTINGS_TOC), (rel.TOCS[rel.NAVDATA], NAVDATA_TOC)):
             (self.root / rel_path).parent.mkdir(parents=True)
             (self.root / rel_path).write_text(text)
 
@@ -375,8 +378,10 @@ class ArchiveTests(unittest.TestCase):
         entries = {
             rel.TOCS[rel.CORE]: CORE_TOC.replace("1.0.0", version),
             rel.TOCS[rel.SETTINGS]: SETTINGS_TOC.replace("1.0.0", version),
+            rel.TOCS[rel.NAVDATA]: NAVDATA_TOC.replace("1.0.0", version),
             "!!!TwichUI/Core.lua": "-- core\n",
             "TwichUI_Settings/Kit.lua": "-- kit\n",
+            "TwichUI_NavData/Data/Map0.lua": "-- walking map\n",
         }
         entries.update(files or {})
         path = self.root / "pkg.zip"
@@ -392,7 +397,8 @@ class ArchiveTests(unittest.TestCase):
     def test_good_package_with_windows_line_endings(self):
         # the packager writes CRLF unless told otherwise (-u)
         crlf = {rel.TOCS[rel.CORE]: CORE_TOC.replace("1.0.0", self.VERSION).replace("\n", "\r\n"),
-                rel.TOCS[rel.SETTINGS]: SETTINGS_TOC.replace("1.0.0", self.VERSION).replace("\n", "\r\n")}
+                rel.TOCS[rel.SETTINGS]: SETTINGS_TOC.replace("1.0.0", self.VERSION).replace("\n", "\r\n"),
+                rel.TOCS[rel.NAVDATA]: NAVDATA_TOC.replace("1.0.0", self.VERSION).replace("\n", "\r\n")}
         self.assertEqual(self.make(crlf), [])
 
     def test_problems_are_found(self):
@@ -411,6 +417,9 @@ class ArchiveTests(unittest.TestCase):
         self.assertTrue(any("loads Core.lua" in p for p in self.make(drop=("!!!TwichUI/Core.lua",))))
         lod = SETTINGS_TOC.replace("## LoadOnDemand: 1\n", "").replace("1.0.0", self.VERSION)
         self.assertTrue(any("load on demand" in p for p in self.make({rel.TOCS[rel.SETTINGS]: lod})))
+        navlod = NAVDATA_TOC.replace("## LoadOnDemand: 1\n", "").replace("1.0.0", self.VERSION)
+        self.assertTrue(any("TwichUI_NavData is not load on demand" in p for p in self.make({rel.TOCS[rel.NAVDATA]: navlod})))
+        self.assertTrue(any("top-level" in p for p in self.make(drop=(rel.TOCS[rel.NAVDATA], "TwichUI_NavData/Data/Map0.lua"))))
 
 
 class FakeGitHub:

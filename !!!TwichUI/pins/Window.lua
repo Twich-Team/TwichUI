@@ -3,7 +3,8 @@
 -- the header, a search box, filters (All, Local, Party, Removed), and for each pin its icon, name, map and
 -- coordinates, and who made it. A padlock marks a kept pin (protected from deletion and clearing), and the
 -- Kept filter lists them. Right-click a row (or its menu button) for what can be done with it:
---   Show on map, Set waypoint (the game's own, replacing yours, only when you pick it), Edit pin (your
+--   Show on map, Set waypoint (the game's own, replacing yours, only when you pick it), Navigate here (while Navigation
+--   is on: a walking route there, nav/Nav.lua), Edit pin (your
 --   own: name, color and Keep), Share with group / Share again and Stop sharing (a saved pin: publishes a
 --   snapshot of it to your party; the saved pin is untouched, kept or not), Save to my pins (a party pin,
 --   as a local pin of your own, reviewed first), Remove from my map / Restore to my map, Remove pin (a
@@ -203,6 +204,12 @@ function PW.Actions(e)
     end
     Add("waypoint", "Set waypoint", function() R.PinsMap.SetWaypoint(e) end,
         "Puts the game's own waypoint here. It replaces the waypoint you had, as setting one on the map does.")
+    if R.Nav and R.Nav.Enabled() then
+        Add("navigate", "Navigate here", function()
+            local ok, why = R.Nav.StartAt(pin.map, pin.x / PN.COORD, pin.y / PN.COORD, pin.name, party and "group" or "pin")
+            if not ok then Notice(why) end
+        end, "Plans a walking route here and guides you along it (Navigation). It replaces any destination you were navigating to. The pin and your waypoint aren't changed, and nothing is sent.")
+    end
     if not party or pin.mine then
         -- asked as "keep": the editor opens whenever Keep can change, and refuses a new name or color itself
         Add("keep", "Edit pin...", function() R.PinsEditor.OpenEdit(e) end,

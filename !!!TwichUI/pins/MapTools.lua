@@ -2,7 +2,8 @@
 -- A small bar in the world map's header (the empty stretch of the title row, to the right of the map's navigation
 -- breadcrumbs) that offers what Party pins and Map pings already do with modifier clicks, as four icon buttons: Pin (a
 -- personal pin), Group pin, Group ping and Help. Their tooltips name them. The shortcuts stay as they were and stay the
--- fast path; this is how a player finds them, or does without them.
+-- fast path; this is how a player finds them, or does without them. While Navigation is on (nav/Nav.lua) a fifth, Navigate,
+-- plans a walking route to the clicked spot; it has no shortcut of its own, so the map's clicks keep their meanings.
 --   A tool is one-shot. Clicking its button arms it (the button stays lit and a strip under the bar says what the next
 --     click does); the next plain left-click on the map does the action once and puts the tool away. Arming sends and
 --     makes nothing.
@@ -50,6 +51,9 @@ local TOOLS = {
         prompt = "Click the map to place a group pin. Esc to cancel." },
     { id = "ping", name = "Group ping", icon = "ping",
         prompt = "Click the map to ping your group. Esc to cancel." },
+    -- last: on the bar and in the help only while Navigation is on (nav/Nav.lua)
+    { id = "nav", name = "Navigate", icon = "navigate",
+        prompt = "Click the map to navigate there. Esc to cancel." },
 }
 local BY_ID = {}
 for _, t in ipairs(TOOLS) do BY_ID[t.id] = t end
@@ -121,9 +125,16 @@ function T.Shortcut(id)
     return nil
 end
 
+local function NavOn() return R.Nav ~= nil and R.Nav.Enabled() end
+T.NavOn = NavOn
+
 -- true, or false and one sentence. Asked when the bar is drawn and again at the moment of a click.
 function T.Available(id)
     if not (R:Enabled("partyPins") and PL.Pref("toolbar")) then return false, PN.Reason("off") end
+    if id == "nav" then
+        if not NavOn() then return false, "Navigation is turned off. Turn it on in TwichUI's settings (Navigation)." end
+        return true
+    end
     if id == "pin" then
         if PN.LocalCount() >= PN.MAX_LOCAL then return false, PN.Reason("local-limit") end
         return true
@@ -164,6 +175,10 @@ function T.Describe(id)
         out.title = "Group ping"
         Add("A temporary signal: a marker with your name shows on your group's maps for a few seconds. It is not saved and makes no pin.")
         Add("It goes to your party, raid or instance group. Members need TwichUI with Party pins and Map pings on; others see nothing.")
+    elseif id == "nav" then
+        out.title = "Navigate"
+        Add("Plans a walking route from where you are to the spot you click, and guides you along it with the navigation frame, the arrow and the route on your maps.")
+        Add("It replaces any destination you were navigating to. Nothing is sent to anyone and no pin is made.")
     elseif id == "help" then
         out.title = "Map tools help"
         Add("What each tool does and the shortcut for it.")
@@ -173,7 +188,11 @@ function T.Describe(id)
     end
     Add(armed == id and "Armed. Click the map to use it, or click here again to cancel." or "Click this button, then click the map. Esc cancels.", "gold")
     local shortcut = T.Shortcut(id)
-    Add(shortcut and ("Shortcut: " .. shortcut .. ".") or "No shortcut is set. You can choose one in the Party pins options.")
+    if id == "nav" then
+        Add("It has no map shortcut: the map's own clicks stay as they are. A pin's menu has Navigate here too.")
+    else
+        Add(shortcut and ("Shortcut: " .. shortcut .. ".") or "No shortcut is set. You can choose one in the Party pins options.")
+    end
     local ok, why = T.Available(id)
     if not ok then Add(why, "warn") end
     return out
@@ -183,9 +202,11 @@ end
 function T.HelpRows()
     local rows = {}
     for _, t in ipairs(TOOLS) do
-        local shortcut = T.Shortcut(t.id)
-        rows[#rows + 1] = { id = t.id, name = t.name, how = "Click the button, then click the map.",
-            shortcut = shortcut and ("Shortcut: " .. shortcut) or "No shortcut set" }
+        if t.id ~= "nav" or NavOn() then
+            local shortcut = T.Shortcut(t.id)
+            rows[#rows + 1] = { id = t.id, name = t.name, how = "Click the button, then click the map.",
+                shortcut = t.id == "nav" and "No map shortcut" or (shortcut and ("Shortcut: " .. shortcut) or "No shortcut set") }
+        end
     end
     return rows
 end
@@ -327,15 +348,18 @@ local function LayoutBar()
     if not bar then return end
     local pad = bar.pad or Skin(bar)
     local x = pad + 2
-    for _, id in ipairs({ "pin", "group", "ping", "help" }) do
+    if buttons.nav then buttons.nav:SetShown(NavOn()) end   -- Navigate only while Navigation is on
+    for _, id in ipairs({ "pin", "group", "ping", "nav", "help" }) do
         local b = buttons[id]
-        b:ClearAllPoints()
-        b:SetPoint("LEFT", bar, "LEFT", x, 0)
-        b:SetWidth(BUTTON_W)
-        b.icon:ClearAllPoints()
-        b.icon:SetPoint("CENTER", b, "CENTER", 0, 0)
-        b:Show()
-        x = x + BUTTON_W + GAP
+        if b and (id ~= "nav" or NavOn()) then
+            b:ClearAllPoints()
+            b:SetPoint("LEFT", bar, "LEFT", x, 0)
+            b:SetWidth(BUTTON_W)
+            b.icon:ClearAllPoints()
+            b.icon:SetPoint("CENTER", b, "CENTER", 0, 0)
+            b:Show()
+            x = x + BUTTON_W + GAP
+        end
     end
     bar:SetSize(x - GAP + pad + 2, BUTTON_H + pad * 2)
     bar:ClearAllPoints()
@@ -461,6 +485,11 @@ local function LayoutHelp()
         r.icon:SetDesaturated(not usable)
         r.icon:SetAlpha(usable and 1 or 0.4)
         y = y - rowH
+        r.icon:Show(); r.name:Show(); r.how:Show()
+    end
+    for i = #T.HelpRows() + 1, #helpRows do   -- a tool not offered now (Navigate while Navigation is off)
+        local r = helpRows[i]
+        r.icon:Hide(); r.name:Hide(); r.how:Hide()
     end
     help.foot:ClearAllPoints()
     help.foot:SetPoint("TOPLEFT", help, "TOPLEFT", pad + 6, y - 2)
@@ -628,7 +657,12 @@ local function OnCanvasClick(_, button, cx, cy)
         return true
     end
     local done, reason
-    if id == "ping" then
+    if id == "nav" then
+        local map = WorldMapFrame:GetMapID()
+        local why
+        done, why = R.Nav.StartAt(map, cx, cy, nil, "map")
+        if done then stats.navigated = (stats.navigated or 0) + 1 else Say(why) reason = "unsupported-map" end
+    elseif id == "ping" then
         done, reason = V.PingAt(cx, cy)
         if done then stats.pinged = stats.pinged + 1 end
     else

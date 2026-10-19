@@ -32,7 +32,6 @@ local installed = false
 local corners = {}            -- [map] = { cont, x0, y0, x1, y1 } (world at the map's top left and bottom right), or false
 local phase, antWait = 0, 0
 local ticking = false
-local drawnFor                -- what the last draw was for (dirty check)
 local stats = { draws = 0, segments = 0, clipped = 0, ants = 0 }
 
 local function Shown() return WorldMapFrame and WorldMapFrame:IsShown() end

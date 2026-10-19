@@ -30,6 +30,9 @@ LINK_DZ = 3.0                           # yards: two border edges further apart 
 RUN_GAP = 1                             # cells: links closer than this along a side make one run
 RUN_SPLIT = 128.0                       # yards: a longer run is split, one crossing per piece
 PART_BYTES = 2_000_000
+# Which data files each map was packed into, for the .toc and for removing parts a map no longer has: kept with the
+# tool (the packager leaves tools/ out), not in the addon.
+MANIFESTS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "manifest")
 MIN_POCKET = 5000.0                     # square yards: isolated pockets smaller than this are left out (see prune)
 # Directions in the packed data: 1 east (tx + 1), 2 north (ty - 1), 3 west (tx - 1), 4 south (ty + 1).
 # Recast's edge directions: 0 x == 0 (world y min: east), 1 z == max (north), 2 x == max (west), 3 z == 0 (south).
@@ -370,10 +373,9 @@ TOC_HEAD = """## Interface: 16001
 
 def write_toc(out, client):
     files = []
-    data = os.path.join(out, "Data")
-    for name in sorted(os.listdir(data)):
+    for name in sorted(os.listdir(MANIFESTS)):
         if name.endswith(".files"):
-            with open(os.path.join(data, name)) as f:
+            with open(os.path.join(MANIFESTS, name)) as f:
                 files.extend(ln.strip() for ln in f if ln.strip())
     with open(os.path.join(out, "TwichUI_NavData.toc"), "w", newline="\n") as f:
         f.write(TOC_HEAD % client)
@@ -404,7 +406,8 @@ def main():
     (g64, graw), records = pack_map(tiles, a.map, min_area=MIN_POCKET)
     os.makedirs(os.path.join(a.out, "Data"), exist_ok=True)
     # parts this map had last time and may not have now: only files the last run's manifest named are removed
-    manifest = os.path.join(a.out, "Data", "Map%d.files" % a.map)
+    os.makedirs(MANIFESTS, exist_ok=True)
+    manifest = os.path.join(MANIFESTS, "Map%d.files" % a.map)
     if os.path.exists(manifest):
         with open(manifest) as f:
             for ln in f:
@@ -446,7 +449,7 @@ def main():
         total += len(s64)
     out.close()
     print("tiles base64", total, "bytes in", part, "parts")
-    with open(os.path.join(a.out, "Data", "Map%d.files" % a.map), "w", newline="\n") as f:
+    with open(manifest, "w", newline="\n") as f:
         f.write("\n".join(files) + "\n")
 
 

@@ -21,7 +21,7 @@ local ND = R.NavData
 local RT = {}
 R.NavRoute = RT
 
-local sqrt, huge, floor, abs = math.sqrt, math.huge, math.floor, math.abs
+local sqrt, huge, floor = math.sqrt, math.huge, math.floor
 local yield, running = coroutine.yield, coroutine.running
 
 RT.START_REACH = 12          -- yards: how far you may stand from walkable ground and still be put on it

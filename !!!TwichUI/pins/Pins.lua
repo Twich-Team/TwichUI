@@ -944,6 +944,10 @@ function PN.Can(action, entry)
         end
         return true
     end
+    if action == "navigate" then
+        if not (R.Nav and R.Nav.CanNavigate) then return false, "Navigation isn't available." end
+        return R.Nav.CanNavigate(pin.map, pin.x / PN.COORD, pin.y / PN.COORD)
+    end
     if action == "waypoint" then
         local ok, can = pcall(function() return C_Map.CanSetUserWaypointOnMap(pin.map) end)
         if ok and can then return true end

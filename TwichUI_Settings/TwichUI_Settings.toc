@@ -30,6 +30,7 @@ pages\Mage.lua
 pages\ClassBars.lua
 pages\Chronicle.lua
 pages\Pins.lua
+pages\Navigation.lua
 pages\Auction.lua
 pages\Skins.lua
 pages\RestedXP.lua

@@ -386,6 +386,9 @@ COMMANDS = {
         if not R:Enabled("partyPins") or not R:Enabled("mapPings") then R.Print("Map pings are turned off. Turn them on in /tui options (Party pins).") return end
         R.MapPingView.Arm()
     end },
+    { name = "nav", usage = "nav [x y|waypoint|stop|recalc]", desc = "walk to a place: coordinates on your map, or the game's waypoint; stop or plan again (Navigation; listed in its options)", hidden = true, fn = function(arg)
+        if R.Nav then R.Nav.Command(arg) else Unavailable("Navigation") end
+    end },
     { name = "sell", usage = "sell", desc = "what selling ordinary food and drink would keep and sell (Mages; listed in the Mage options)", hidden = true, fn = function()
         if R.MageSellWindow then R.MageSellWindow.Toggle() else Unavailable("Selling ordinary food and drink") end
     end },

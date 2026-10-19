@@ -50,7 +50,7 @@ local sqrt, atan2, abs, floor, pi = math.sqrt, math.atan2, math.abs, math.floor,
 local dest                      -- the destination (NV.Destination), or nil
 local state = "idle"
 local reason                    -- why, for unavailable and noroute
-local route, routeGen           -- the route being followed, and the generation it was planned for
+local route                     -- the route being followed
 local job, jobGen               -- the search running, and its generation
 local gen = 0
 local seg = 1                   -- following the leg from corner seg to corner seg + 1
@@ -398,7 +398,7 @@ function NV.OnCombatEnd()
 end
 
 local function Accept(r)
-    route, routeGen = r, jobGen
+    route = r
     seg = 1
     retries, retryAt = 0, nil
     job = nil
@@ -417,7 +417,7 @@ local function UpdateProgress()
     Emit("progress")
 end
 
-local lastX, lastY, lastCont, lastT
+local lastX, lastY, lastCont
 local function Progress()
     if not dest then return end
     local now = Now()
@@ -432,7 +432,7 @@ local function Progress()
     if state == "loading" then return end
     -- a jump or a new continent: plan again now
     local jumped = lastCont and (pos.cont ~= lastCont or sqrt((pos.x - lastX) ^ 2 + (pos.y - lastY) ^ 2) > JUMP)
-    lastX, lastY, lastCont, lastT = pos.x, pos.y, pos.cont, now
+    lastX, lastY, lastCont = pos.x, pos.y, pos.cont
     if jumped then Plan("jump") return end
     if state == "unavailable" then
         if route and route.map == pos.cont then SetState("navigating") else Plan("start") end
@@ -617,6 +617,54 @@ end
 
 NP.Subscribe(function() Emit("prefs") end)
 R.Profiles.OnApply("views", "navigation", function() Emit("prefs") end)
+
+---------------------------------------------------------------------------
+-- /tui nav (Core.lua's parser): output in your own chat frame only
+---------------------------------------------------------------------------
+local USAGE = "/tui nav 45.2 61.8 (coordinates on your current map), /tui nav waypoint (the game's waypoint), /tui nav stop, /tui nav recalc."
+
+function NV.Command(arg)
+    arg = (arg or ""):lower()
+    if not NV.Enabled() then
+        R.Print("Navigation is turned off. Turn it on in /tui options (Navigation).")
+        return
+    end
+    if arg == "" then
+        if dest then
+            R.Print("navigating to %s (%s). %s", dest.name, state, USAGE)
+        else
+            R.Print("not navigating. %s", USAGE)
+        end
+        return
+    end
+    if arg == "stop" then
+        if dest then NV.Stop("stopped") R.Print("navigation stopped.") else R.Print("not navigating.") end
+        return
+    end
+    if arg == "recalc" or arg == "again" then
+        if not NV.Recalculate() and dest then R.Print(NV.ReasonText(reason or "no-position")) end
+        if not dest then R.Print("not navigating.") end
+        return
+    end
+    if arg == "waypoint" then
+        local point = C_Map.GetUserWaypoint and C_Map.GetUserWaypoint()
+        if not point then R.Print("you have no waypoint set.") return end
+        local x, y = point.position:GetXY()
+        local ok, why = NV.StartAt(point.uiMapID, x, y, "Your waypoint", "waypoint")
+        if not ok then R.Print(why) end
+        return
+    end
+    local a, b = arg:match("^%s*([%d%.]+)[%s,]+([%d%.]+)%s*$")
+    a, b = tonumber(a), tonumber(b)
+    if a and b then
+        local map = Readable(C_Map.GetBestMapForUnit("player"))
+        if not map then R.Print(NV.ReasonText("no-map")) return end
+        local ok, why = NV.StartAt(map, a / 100, b / 100, nil, "command")
+        if not ok then R.Print(why) end
+        return
+    end
+    R.Print("I didn't follow that. %s", USAGE)
+end
 
 -- Read only, for /tui diagnostics: states and counts, never a place or a name.
 function NV.Diagnostics()
