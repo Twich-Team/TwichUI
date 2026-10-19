@@ -24,7 +24,17 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import cbor  # noqa: E402
 import tnm   # noqa: E402
 
-FORMAT = 1
+FORMAT = 2
+# An edge of the crossing graph is one number: neighbour + CROSS_BASE * (cost + COST_BASE * tile). All three are small
+# whole numbers, so the number is exact in a double, and a Lua array of them costs 16 bytes an edge where three arrays
+# cost 48 (and the file holds the runtime's own adjacency, so nothing is built from it at load).
+CROSS_BASE, COST_BASE = 16384, 8192
+# The costs between crossings inside a tile start as every pair (a tile with 60 crossings has 1,770 edges). A greedy
+# spanner keeps the cheapest edges first and drops an edge when the ones already kept connect its ends within
+# (1 + SPANNER) times its cost, so every path through the stored graph is at most that much longer than through the full
+# one (on Kalimdor: half the edges, paths 0.5% longer on average, 5% at worst, nothing disconnected). It only decides which
+# corridor a route follows; the route itself is then found over the polygons.
+SPANNER = 0.05
 FACTOR = {1: 1.0, 2: 3.0, 3: 5.0}       # ground, water (swimming), ocean
 LINK_DZ = 3.0                           # yards: two border edges further apart in height are different floors
 RUN_GAP = 1                             # cells: links closer than this along a side make one run
@@ -234,6 +244,36 @@ def local_point(tile, c, side):
     return (u, w)
 
 
+def spanner(edges, tol=SPANNER):
+    """The edges (a, b, cost, tile) a (1 + tol) spanner of each tile's graph keeps."""
+    by = {}
+    for e in edges:
+        by.setdefault(e[3], []).append(e)
+    keep = []
+    for es in by.values():
+        adj = {}
+        for a, b, c, k in sorted(es, key=lambda e: e[2]):
+            limit = (1 + tol) * c
+            dist, heap, joined = {a: 0}, [(0, a)], False
+            while heap:
+                d, u = heapq.heappop(heap)
+                if u == b:
+                    joined = d <= limit
+                    break
+                if d > dist.get(u, math.inf) or d > limit:
+                    continue
+                for v, w in adj.get(u, ()):
+                    nd = d + w
+                    if nd <= limit and nd < dist.get(v, math.inf):
+                        dist[v] = nd
+                        heapq.heappush(heap, (nd, v))
+            if not joined:
+                adj.setdefault(a, []).append((b, c))
+                adj.setdefault(b, []).append((a, c))
+                keep.append((a, b, c, k))
+    return keep
+
+
 def encode(obj):
     raw = cbor.dumps(obj)
     packed = zlib.compress(raw, 9)
@@ -349,6 +389,10 @@ def pack_map(tiles, map_id, quiet=False, min_area=0, places=None):
                 cj = lst[i + 1 + j][0]
                 if cost is not None and cj != ci:
                     edges.append((ci, cj, cost, key))
+    full = len(edges)
+    edges = spanner(edges)
+    if not quiet:
+        print("edges between crossings: %d of %d kept by the spanner" % (len(edges), full))
     # Each polygon's component goes into its tile, each component's walkable area (square yards) into the graph: where
     # floors stack and the client gives no height, nav/Data.lua takes the floor in the larger connected area (a city's
     # street, not ground sealed under it). A crossing's component is its polygons'.
@@ -390,14 +434,27 @@ def pack_map(tiles, map_id, quiet=False, min_area=0, places=None):
     for c in cross:
         n.extend((c["a"][0], c["a"][1], c["pa"] + 1, c["b"][0], c["b"][1], c["pb"] + 1,
                   round(c["x"] * 10), round(c["y"] * 10), round(c["z"])))
-    e = []
+    # adjacency, both directions, packed (see CROSS_BASE): af[c] is where crossing c's edges start in ad (1-based), af[#n + 1]
+    # one past the last
+    assert len(cross) < CROSS_BASE, "more crossings than the packed edge holds"
+    out = [[] for _ in cross]
     for ci, cj, cost, key in edges:
-        e.extend((ci + 1, cj + 1, max(1, math.ceil(cost)), key[0] * 64 + key[1]))
-    graph = {"f": FORMAT, "cells": next(iter(tiles.values())).cells, "n": n, "e": e, "k": comp,
+        w = max(1, math.ceil(cost))
+        tid = key[0] * 64 + key[1]
+        assert w < COST_BASE and tid < 4096, "a cost or tile number the packed edge cannot hold"
+        out[ci].append(cj + 1 + CROSS_BASE * (w + COST_BASE * tid))
+        out[cj].append(ci + 1 + CROSS_BASE * (w + COST_BASE * tid))
+    ad, af = [], []
+    for lst in out:
+        af.append(len(ad) + 1)
+        ad.extend(lst)
+    af.append(len(ad) + 1)
+    graph = {"f": FORMAT, "cells": next(iter(tiles.values())).cells, "n": n, "ad": ad, "af": af, "k": comp,
              "ca": [max(1, round(a)) for a in area], "cg": [round(a) for a in ground],
              "t": sorted("%d_%d" % k for k in tiles), "factor": [FACTOR[1], FACTOR[2], FACTOR[3]]}
-    if pl:
-        graph["pl"], graph["pw"] = pl, pw
+    # the places' part is its own, small record: planning needs it for every map a journey passes through, and the crossing
+    # graph only for the maps it starts, ends or walks on
+    light = {"f": FORMAT, "pl": pl, "pw": pw} if pl else None
     records = []
     for key in sorted(tiles):
         t = tiles[key]
@@ -423,7 +480,7 @@ def pack_map(tiles, map_id, quiet=False, min_area=0, places=None):
             x.extend((pi + 1, e_ + 1, d, opi + 1, oe + 1))
         c = [poly_comp[(key, pi)] for pi in range(len(t.polys))]
         records.append((key, encode({"v": v, "p": p, "x": x, "c": c})[0]))
-    return encode(graph), records
+    return encode(graph), records, (encode(light) if light else None)
 
 
 TOC_HEAD = """## Interface: 16001
@@ -513,7 +570,7 @@ def main():
         import json
         with open(a.transit) as f:
             places = [p for p in json.load(f)["places"] if p["cont"] == a.map]
-    (g64, graw), records = pack_map(tiles, a.map, min_area=MIN_POCKET, places=places)
+    (g64, graw), records, light = pack_map(tiles, a.map, min_area=MIN_POCKET, places=places)
     os.makedirs(os.path.join(a.out, "Data"), exist_ok=True)
     # parts this map had last time and may not have now: only files the last run's manifest named are removed
     os.makedirs(MANIFESTS, exist_ok=True)
@@ -531,6 +588,8 @@ def main():
                 % (a.map, a.map, a.client))
         f.write("local S = TwichUI and TwichUI.NavDataStore\nif not S then return end\n")
         f.write('S.graph[%d] = "%s"\n' % (a.map, g64))
+        if light:
+            f.write('S.places[%d] = "%s"\n' % (a.map, light[0]))
     files.append("Data\\Map%d.lua" % a.map)
     print("graph", graw, "raw", len(g64), "base64")
 

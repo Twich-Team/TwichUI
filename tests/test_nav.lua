@@ -384,6 +384,7 @@ print("12 command ok")
 -- 13. A journey across continents
 ---------------------------------------------------------------------------
 R.NavDataStore.transit = NAV_FIXTURE.transit
+R.NavDataStore.places = NAV_FIXTURE.places
 c.UnitFactionGroup = function() return "Alliance", "Alliance" end
 local TV = R.NavTravel
 assert(TV and TV.Faction() == 1, "the faction is read")

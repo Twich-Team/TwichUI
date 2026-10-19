@@ -11,7 +11,7 @@ dofile(TESTS .. "fixtures/nav_fixture.lua")
 local env = setmetatable({}, { __index = _G })
 env._G = env
 env.TwichUI = { Fault = function(src, err) error(src .. ": " .. tostring(err)) end,
-  NavDataStore = { graph = NAV_FIXTURE.graph, tiles = NAV_FIXTURE.tiles, transit = NAV_FIXTURE.transit } }
+  NavDataStore = { graph = NAV_FIXTURE.graph, tiles = NAV_FIXTURE.tiles, places = NAV_FIXTURE.places, transit = NAV_FIXTURE.transit } }
 env.C_EncodingUtil, env.Enum = NAV_CODEC.C_EncodingUtil, NAV_CODEC.Enum
 env.InCombatLockdown = function() return false end
 env.debugprofilestop = function() return os.clock() * 1000 end
@@ -196,7 +196,7 @@ do
       if line:match("%.lua%s*$") and not line:match("^#") then files[#files + 1] = (line:gsub("\\", "/"):gsub("%s+$", "")) end
     end
     toc:close()
-    local store = { graph = {}, tiles = {} }
+    local store = { graph = {}, tiles = {}, places = {} }
     local e2 = setmetatable({}, { __index = _G })
     e2._G = e2
     e2.TwichUI = { Fault = function(src, err) error(src .. ": " .. tostring(err)) end, NavDataStore = store }

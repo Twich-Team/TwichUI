@@ -98,12 +98,13 @@ server's).
 | Deep water | surfaces where at least 1.5 yd deep are walkable as swimming; the floor under them costs the same | |
 | Magma, slime | impassable | |
 | Pockets | components under 5,000 sq yd dropped | Unreachable by walking; dropping them lets a destination snap to reachable ground |
-| Crossings | one per run of linked edges, split every 128 yd | |
+| Crossings | one per run of linked edges, split every 128 yd |
+| Edges between crossings | a 5% greedy spanner of each tile's pairs | Half the edges (and memory): every path through the stored graph is at most 5% longer than over all pairs, 0.5% on average, nothing disconnected. Measured on Kalimdor: 133,575 edges to 68,286; the same test at 10% keeps 38% and 20% keeps 27%, with mean paths 1.8% and 4.3% longer | |
 
 ## Sizes (both continents)
 
-About 10.1 MB in Lua files: 8.6 MB of tiles (Eastern Kingdoms 3.7 MB, Kalimdor 4.8 MB, Zephras Isle 0.1 MB), 1.8 MB of crossing
-graphs (with their places and the walks between them) and 4 KB of travel network. Zephras Isle's WDT is file 7198644 (its
+About 10 MB in Lua files: 8.7 MB of tiles (Eastern Kingdoms 3.7 MB, Kalimdor 4.8 MB, Zephras Isle 0.1 MB), 1.5 MB of crossing
+graphs and 0.2 MB of places and the walks between them, and 4 KB of travel network. Zephras Isle's WDT is file 7198644 (its
 name, `world/maps/2991/2991.wdt`, is in the community listfile; `Map.db2` isn't stored locally).
 
 ## Debugging a bake

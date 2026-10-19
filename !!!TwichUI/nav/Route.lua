@@ -190,7 +190,7 @@ local function GraphSearch(gr, seeds, goals, gx, gy, direct)
     end
     local goalCost, goalVia = direct or huge, nil
     local settled = 0
-    local first, nb, cost, via = gr.first, gr.nb, gr.cost, gr.via
+    local first, adj = gr.first, gr.adj
     while true do
         local c, f = Pop(heap)
         if not c or f >= goalCost then break end
@@ -203,11 +203,14 @@ local function GraphSearch(gr, seeds, goals, gx, gy, direct)
             local gl = goals[c]
             if gl and bc + gl < goalCost then goalCost, goalVia = bc + gl, c end
             for i = first[c], first[c + 1] - 1 do
-                local d = nb[i]
+                local v = adj[i]
+                local d = v % 16384                          -- (ND.Edge, in line)
                 if not done[d] then
-                    local nd = bc + cost[i]
+                    local q = (v - d) / 16384
+                    local w = q % 8192
+                    local nd = bc + w
                     if nd < (best[d] or huge) then
-                        best[d], from[d], fromTile[d] = nd, c, via[i]
+                        best[d], from[d], fromTile[d] = nd, c, (q - w) / 8192
                         Push(heap, nd + sqrt((gr.cx[d] - gx) ^ 2 + (gr.cy[d] - gy) ^ 2), d)
                     end
                 end
@@ -502,7 +505,7 @@ local function AllSearch(gr, ca, cc)
         local c, cost = ca[k], cc[k]
         if cost < (best[c] or huge) then best[c] = cost Push(heap, cost, c) end
     end
-    local first, nb, cost, settled = gr.first, gr.nb, gr.cost, 0
+    local first, adj, settled = gr.first, gr.adj, 0
     while true do
         local c, d = Pop(heap)
         if not c then break end
@@ -511,9 +514,10 @@ local function AllSearch(gr, ca, cc)
             settled = settled + 1
             if settled % 256 == 0 then Pause() end
             for i = first[c], first[c + 1] - 1 do
-                local e = nb[i]
+                local v = adj[i]
+                local e = v % 16384                          -- (ND.Edge, in line: only the neighbour and cost matter here)
                 if not done[e] then
-                    local nd = d + cost[i]
+                    local nd = d + ((v - e) / 16384) % 8192
                     if nd < (best[e] or huge) then best[e] = nd Push(heap, nd, e) end
                 end
             end

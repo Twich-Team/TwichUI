@@ -30,7 +30,7 @@ continent, or a long way off, becomes a journey (below).
 doodads and liquids by TwichUI's tool (`tools/navbake/README.md`: provenance, licences, the settings and why, the checked
 file facts). It loads the first time a route is planned, never at login and never in combat (navigation says it is
 waiting for combat to end). About 9.8 MB of Lua strings for Eastern Kingdoms and Kalimdor; once loaded they stay in memory
-until a reload (the game cannot unload an addon). Decoded tiles are kept for the walk (at most 24) and released when
+until a reload (the game cannot unload an addon). Decoded tiles are kept for the walk (at most 16) and released when
 navigation stops.
 
 **Search** (`nav/Route.lua`). The walking map is a set of convex polygons per 533-yard tile. Across tiles the planner uses
@@ -173,11 +173,18 @@ following; they go when the settings window closes.
   in drawing.
 - Searches allocate their working tables per plan (a plan happens at the start, when you leave the route, or after a
   jump).
-- Not measured in the game. To measure: with only TwichUI loaded, `/run collectgarbage("collect") UpdateAddOnMemoryUsage()
-  print(GetAddOnMemoryUsage("!!!TwichUI"), GetAddOnMemoryUsage("TwichUI_NavData"))` before the first route, after it, and
-  after walking a while; for CPU, `/console scriptProfile 1`, reload, then `UpdateAddOnCPUUsage()` and
-  `GetAddOnCPUUsage("!!!TwichUI")` around planning a long route and around five minutes of following one; turn profiling
-  off afterwards. Expect the first route's load to be noticeable once (about 10 MB of Lua parsed).
+- Memory, measured offline on the real data (`tools/navbake/memory_probe.lua`, steady sizes after a collection; the game's
+  decoders are native, so only the Lua tables are comparable): the data addon's strings are 10 MB and stay as long as the
+  game runs (an addon can't be unloaded); a long trip on one continent adds 6 MB (one crossing graph), a trip to another
+  continent 14 MB more (two), the tiles a route touches about 0.35 MB each (at most 16 kept). All of it but the strings is let go
+  when navigation stops. Two things keep it small: an edge of a crossing graph is one packed number (neighbour, cost and tile),
+  and the graph is a 5% spanner of the pairs inside each tile (half the edges; see `tools/navbake/README.md`). A map's
+  places and the walks between them are a record of their own, so a journey that merely passes through a map doesn't decode
+  its graph. These are not in-game figures. To measure in the game, with only TwichUI loaded: `/run collectgarbage("collect")
+  UpdateAddOnMemoryUsage() print(GetAddOnMemoryUsage("!!!TwichUI"), GetAddOnMemoryUsage("TwichUI_NavData"))` before the first
+  route, after it, and after walking a while; `TwichUI_NavData` counts the strings, `!!!TwichUI` the decoded tables. For
+  CPU, `/console scriptProfile 1`, reload, then `UpdateAddOnCPUUsage()` and `GetAddOnCPUUsage("!!!TwichUI")` around planning
+  a long route and around five minutes of following one; turn profiling off afterwards.
 
 ## Files
 

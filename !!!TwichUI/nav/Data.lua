@@ -19,14 +19,15 @@ local ND = {}
 R.NavData = ND
 
 ND.ADDON = "TwichUI_NavData"
-ND.FORMAT = 1
+ND.FORMAT = 2
 ND.TILE = 1600 / 3
 ND.ORIGIN = 32 * ND.TILE
-ND.MAX_TILES = 24
+ND.MAX_TILES = 16
 ND.FACTOR = { [1] = 1, [2] = 3, [3] = 5 }    -- ground, water (swimming), ocean: as tools/navbake/pack.py
 
-R.NavDataStore = R.NavDataStore or { graph = {}, tiles = {} }
+R.NavDataStore = R.NavDataStore or { graph = {}, tiles = {}, places = {} }
 local Store = R.NavDataStore
+Store.places = Store.places or {}
 
 local TILE, ORIGIN = ND.TILE, ND.ORIGIN
 local floor, sqrt, huge = math.floor, math.sqrt, math.huge
@@ -104,19 +105,28 @@ function ND.TileOf(x, y)
     return floor((ORIGIN - y) / TILE), floor((ORIGIN - x) / TILE)
 end
 
+-- Packed edges (tools/navbake/pack.py's CROSS_BASE and COST_BASE): neighbour, cost (weighted yards) and tile ID of an edge.
+ND.CROSS_BASE, ND.COST_BASE = 16384, 8192
+function ND.Edge(v)
+    local nb = v % 16384
+    local q = (v - nb) / 16384
+    local cost = q % 8192
+    return nb, cost, (q - cost) / 8192
+end
+
 -- A map's graph:
 --   cells, cs (yards per cell)
 --   per crossing c: ta[c], pa[c] (tile id and polygon on one side), tb[c], pb[c] (the other), cx[c], cy[c], cz[c],
 --     comp[c] (connected component)
 --   compArea[k]: component k's walkable area in square yards (water included); compGround[k]: its ground (not water) alone
---   adjacency: first[c] .. into flat arrays nb, cost, via (the tile the step crosses)
+--   adjacency: first[c] .. first[c + 1] - 1 index adj (packed edges: ND.Edge gives neighbour, cost, the tile it runs through)
 --   byTile[tileId] = { crossing ids }
 function ND.Graph(map)
     local g = graphs[map]
     if g ~= nil then return g or nil end
     local s = Store.graph[map]
     local d = type(s) == "string" and Decode(s)
-    if not d or d.f ~= ND.FORMAT or type(d.n) ~= "table" or type(d.e) ~= "table" then
+    if not d or d.f ~= ND.FORMAT or type(d.n) ~= "table" or type(d.ad) ~= "table" or type(d.af) ~= "table" then
         if d and d.f ~= ND.FORMAT then loadState = "format" end
         graphs[map] = false
         return nil
@@ -137,34 +147,30 @@ function ND.Graph(map)
         end
     end
     g.n = c
-    -- adjacency from the undirected edge list (a, b, cost, tile)
-    local deg = {}
-    local e = d.e
-    for i = 1, #e - 3, 4 do
-        deg[e[i]] = (deg[e[i]] or 0) + 1
-        deg[e[i + 1]] = (deg[e[i + 1]] or 0) + 1
+    -- The adjacency is the file's own, kept as it came: first[c] .. first[c + 1] - 1 index adj, and an edge is one number,
+    -- neighbour + ND.CROSS_BASE * (cost + ND.COST_BASE * tile it runs through) (ND.Edge unpacks it). One array of numbers
+    -- is a third of the memory the three it replaces were, and nothing is copied at load.
+    g.first, g.adj = d.af, d.ad
+    graphs[map] = g
+    return g
+end
+
+---------------------------------------------------------------------------
+-- The places joined to a map (tools/navbake/places.py), a record of their own so that a journey passing through a map needs
+-- not decode its crossing graph:
+--   pl.place[id] = { tid, poly, x, y, ca = { crossing ... }, cc = { cost ... } }: the place's stand point and its attachment
+--                  to the crossings of its tile (what a start or goal is joined with at plan time)
+--   pl.walk[a][b] = weighted yards between two places on the map
+local placeSets = {}
+function ND.Places(map)
+    local p = placeSets[map]
+    if p ~= nil then return p or nil end
+    local d = type(Store.places[map]) == "string" and Decode(Store.places[map])
+    if not d or d.f ~= ND.FORMAT then
+        placeSets[map] = false
+        return nil
     end
-    local first, fill = {}, {}
-    local at = 1
-    for k = 1, c do
-        first[k] = at
-        fill[k] = at
-        at = at + (deg[k] or 0)
-    end
-    first[c + 1] = at
-    local nb, cost, via = {}, {}, {}
-    for i = 1, #e - 3, 4 do
-        local a, b, w, t = e[i], e[i + 1], e[i + 2], e[i + 3]
-        nb[fill[a]], cost[fill[a]], via[fill[a]] = b, w, t
-        fill[a] = fill[a] + 1
-        nb[fill[b]], cost[fill[b]], via[fill[b]] = a, w, t
-        fill[b] = fill[b] + 1
-    end
-    g.first, g.nb, g.cost, g.via = first, nb, cost, via
-    -- places joined to this map (tools/navbake/places.py): their stand points, their attachments to the crossings of their
-    -- tile (what a start or goal is joined with at plan time), and the walks between them
-    --   g.place[id] = { tid, poly, x, y, ca = { crossing ... }, cc = { cost ... } }, g.walk[a][b] = weighted yards
-    g.place, g.walk = {}, {}
+    p = { place = {}, walk = {} }
     local pl = d.pl or {}
     local i = 1
     while i <= #pl do
@@ -173,19 +179,19 @@ function ND.Graph(map)
         for k = 1, cnt do
             ca[k], cc[k] = pl[i + 4 + 2 * k], pl[i + 5 + 2 * k]
         end
-        g.place[id] = { tid = tid, poly = poly, x = x10 / 10, y = y10 / 10, ca = ca, cc = cc }
+        p.place[id] = { tid = tid, poly = poly, x = x10 / 10, y = y10 / 10, ca = ca, cc = cc }
         i = i + 6 + 2 * cnt
     end
     local pw = d.pw or {}
     for j = 1, #pw - 2, 3 do
         local a, b, yards = pw[j], pw[j + 1], pw[j + 2]
-        local wa, wb = g.walk[a], g.walk[b]
-        if not wa then wa = {} g.walk[a] = wa end
-        if not wb then wb = {} g.walk[b] = wb end
+        local wa, wb = p.walk[a], p.walk[b]
+        if not wa then wa = {} p.walk[a] = wa end
+        if not wb then wb = {} p.walk[b] = wb end
         wa[b], wb[a] = yards, yards
     end
-    graphs[map] = g
-    return g
+    placeSets[map] = p
+    return p
 end
 
 ---------------------------------------------------------------------------
@@ -242,7 +248,7 @@ function ND.Stand(id)
     local tr = ND.Transit()
     local pl = tr and tr.place[id]
     if not pl then return nil end
-    local g = ND.Graph(pl.cont)
+    local g = ND.Places(pl.cont)
     local e = g and g.place[id]
     if not e then return nil end
     return pl.cont, e.x, e.y, e, pl
@@ -400,6 +406,7 @@ function ND.TileById(map, id) return ND.Tile(map, floor(id / 64), id % 64) end
 function ND.Release()
     transit = nil
     wipe(graphs)
+    wipe(placeSets)
     wipe(tiles)
     wipe(lru)
     lruN = 0

@@ -61,9 +61,12 @@ local function Plan(req)
     local S, G = req.start, req.goal
     local speed = req.speed or J.GROUND_SPEED
     local graphs = {}
-    local function Graph(c)
+    local function Graph(c)        -- a map's crossing graph: only for the maps you start, end or have the bind point on
         if graphs[c] == nil then graphs[c] = (ND.HasMap(c) and ND.Graph(c)) or false end
         return graphs[c] or nil
+    end
+    local function Places(c)       -- its places and the walks between them: for every map a journey passes through
+        return ND.HasMap(c) and ND.Places(c) or nil
     end
 
     -- Where you are, the destination and the bind point, joined to their maps
@@ -77,7 +80,7 @@ local function Plan(req)
 
     local function Targets(cont, extra)
         local t = {}
-        local g = Graph(cont)
+        local g = Places(cont)
         if g then for id, e in pairs(g.place) do t[id] = e end end
         for k, v in pairs(extra) do t[k] = v end
         return t
@@ -114,7 +117,7 @@ local function Plan(req)
             for v, c in pairs(from) do Try(v, c / speed, "walk") end
         elseif u ~= "G" then
             local pl = tr and tr.place[u]
-            local g = pl and Graph(pl.cont)
+            local g = pl and Places(pl.cont)
             local w = g and g.walk[u]
             if w then for v, c in pairs(w) do Try(v, c / speed, "walk") end end
             if pl and pl.cont == G.cont and costG[u] then Try("G", costG[u] / speed, "walk") end
