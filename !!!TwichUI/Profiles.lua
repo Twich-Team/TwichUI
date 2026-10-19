@@ -41,6 +41,7 @@ PF.ACCOUNT = {
         restedxpSkinState = true, -- the RestedXP theme to go back to: a record of RestedXP's setting, not a choice
         mageSell = true,          -- the never-sell list: a protection, which no profile change may lift
         guideWaypoint = true,     -- the waypoint each character placed: a record per character
+        guideAuto = true,         -- whether each character's RestedXP guide was hidden by TwichUI: a record per character
         restockAck = true,        -- your confirmation that vendor restocking may buy without asking: no profile change may give it
     },
 }

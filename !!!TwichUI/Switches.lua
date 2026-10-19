@@ -95,6 +95,12 @@ do
     def.when = function() return R.QoL ~= nil and R.QoLGuideWaypoint ~= nil end
     Define("qolGuideWaypoint", def)
 end
+for _, key in ipairs({ "qolGuideAuto", "qolGuideAutoDungeon", "qolGuideAutoRaid", "qolGuideAutoPvP", "qolGuideAutoGroup",
+        "qolGuideAutoResting", "qolGuideAutoFlight" }) do
+    local def = QoL("QoLGuideAuto")
+    def.when = function() return R.QoL ~= nil and R.QoLGuideAuto ~= nil end
+    Define(key, def)
+end
 
 -- Marker cycling: the keys' secure buttons follow (markers/Keys.lua; a change in combat waits for it to end)
 Define("markersTarget", { apply = Refresh("MarkerKeys") })

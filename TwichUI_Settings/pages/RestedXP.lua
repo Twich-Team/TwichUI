@@ -33,6 +33,17 @@ local GUIDE_STATUS = {
     shown = { "Showing the destination" },
 }
 
+local AUTO_STATUS = {
+    off = { "Off" },
+    ["restedxp-missing"] = { "RestedXP not installed", "Install RestedXP Guides to use this. Your settings here are kept." },
+    ["restedxp-disabled"] = { "RestedXP turned off", "RestedXP Guides is turned off in your AddOns list. Your settings here are kept." },
+    waiting = { "Waiting for RestedXP", "RestedXP hasn't finished loading yet." },
+    unsupported = { "This RestedXP isn't supported", "This version of RestedXP doesn't have the Show/Hide this needs. Nothing was changed." },
+    ["none-chosen"] = { "No situation chosen", "Tick at least one situation below." },
+    watching = { "Watching", "The guide is as you left it." },
+    hidden = { "Guide hidden for now", "It comes back when the situation ends." },
+}
+
 local TIMER_STATUS = {
     off = "Off: timer bars are drawn as RestedXP draws them.",
     ["skin-off"] = "Waiting: the guide window's look isn't drawing (the skin is off, another RestedXP theme is chosen, or another skin is replacing the window).",
@@ -42,8 +53,8 @@ local TIMER_STATUS = {
 
 K.Page({
     key = "restedxp", name = "RestedXP", order = 95, group = "addons",
-    description = "The game's waypoint on RestedXP's destination, and a TwichUI look for the RestedXP Guides window, its waypoint arrow and its timer bars. Guide content and progress are RestedXP's own.",
-    keywords = "restedxp rxp guide leveling map waypoint destination marker arrow timer bar step theme skin data bar broker",
+    description = "The game's waypoint on RestedXP's destination, hiding the guide in situations you choose, and a TwichUI look for the RestedXP Guides window, its waypoint arrow and its timer bars. Guide content and progress are RestedXP's own.",
+    keywords = "restedxp rxp guide leveling map waypoint destination marker arrow timer bar step theme skin data bar broker hide show automatic dungeon raid group resting flight battleground",
     when = function() return R.RestedXPSkin ~= nil end,
     build = function()
         local RS = R.RestedXPSkin
@@ -64,6 +75,35 @@ K.Page({
                     local color = (code == "shown" and R.GREEN) or (code == "off" and R.GREY) or R.GOLD
                     return gwBase .. "\n\nStatus: " .. color .. text[1] .. "|r" .. (text[2] and ("\n" .. text[2]) or "")
                 end
+            end
+        end
+
+        -- Hides the guide in the situations chosen and shows it again after (qol/GuideAutoHide.lua). Off until turned on.
+        local GA = R.QoLGuideAuto
+        if GA then
+            Header("Show and hide automatically", "Hides RestedXP's guide while one of the situations you choose is on, and shows it again when none is. RestedXP's own settings and your progress are untouched.")
+            local autoBase = "Hides RestedXP's guide (the same as its Hide button) when a situation you tick below begins, and shows it again when the last one ends. It only shows the guide again if it was the one that hid it: a guide you had hidden stays hidden, and if you show or hide the guide yourself in the meantime, that is left as you made it until the next time a situation begins or ends. Nothing is changed in combat; it waits for combat to end."
+            local autoToggle = Toggle("qolGuideAuto", "Hide the guide in some situations", autoBase)
+            if autoToggle and autoToggle.GetTooltip ~= nil then
+                -- read when the tooltip is shown, so it is never stale
+                autoToggle.GetTooltip = function()
+                    local code = GA.Status()
+                    local text = AUTO_STATUS[code] or { code }
+                    local color = (code == "watching" or code == "hidden") and R.GREEN or (code == "off" and R.GREY) or R.GOLD
+                    return autoBase .. "\n\nStatus: " .. color .. text[1] .. "|r" .. (text[2] and ("\n" .. text[2]) or "")
+                end
+            end
+            local function AutoOn() return R:Enabled("qolGuideAuto") end
+            local TIPS = {
+                dungeon = "Hide the guide inside a five-player dungeon, and show it again when you leave.",
+                raid = "Hide the guide inside a raid instance, and show it again when you leave.",
+                pvp = "Hide the guide inside a battleground or an arena, and show it again when you leave.",
+                group = "Hide the guide while you are in a party or a raid, wherever you are, and show it again when you are on your own. This includes the times you are in a dungeon or raid group.",
+                resting = "Hide the guide while the game says you are resting: in an inn or a city. It comes back when you leave.",
+                flight = "Hide the guide while you ride a flight path, and show it again when you land. The game may take a moment to say the flight has begun or ended.",
+            }
+            for _, situation in ipairs(GA.SITUATIONS) do
+                Under(Toggle(situation.key, situation.label, TIPS[situation.id]), autoToggle, AutoOn)
             end
         end
 

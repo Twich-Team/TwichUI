@@ -360,6 +360,25 @@ S.GROUPS = {
                     return Result("available", code, nil, extra)
                 end,
             },
+            {
+                id = "rxp-auto-hide", label = "Hide the guide in some situations",
+                affects = "hiding RestedXP's guide in the situations you chose, and showing it again after",
+                fallback = "The guide stays as you leave it.",
+                check = function()
+                    local A = R.QoLGuideAuto
+                    if not (A and A.Status) then return Result("not-applicable", "not-loaded", "This option is not part of this install.") end
+                    local code = A.Status()
+                    local extra = { wanted = true }
+                    if code == "off" then return Result("off", code, "This option is turned off.", { wanted = false }) end
+                    if code == "restedxp-missing" then return Result("not-installed", code, nil, extra) end
+                    if code == "restedxp-disabled" then return Result("disabled", code, nil, extra) end
+                    if code == "waiting" then return Result("not-initialized", code, "RestedXP has not finished loading.", extra) end
+                    if code == "unsupported" then
+                        return Result("unavailable", code, "This RestedXP does not offer the Show/Hide this needs.", { wanted = true, actionable = true })
+                    end
+                    return Result("available", code, nil, extra)
+                end,
+            },
         },
     },
     {
@@ -429,6 +448,7 @@ S.FEATURES = {
     { "qolSummons", "Accept summons" }, { "qolResurrect", "Accept resurrection" }, { "qolReleasePvP", "Release in battlegrounds" },
     { "qolDuels", "Decline duels" }, { "qolQuickKeybind", "Quick Keybind button" },
     { "qolGuideWaypoint", "Guide waypoint (RestedXP)" },
+    { "qolGuideAuto", "Hide the guide in some situations (RestedXP)" },
     { "markersTarget", "Target marker cycling" }, { "markersWorld", "World marker cycling" }, { "markersBar", "Marker bar" },
     { "restedxpSkin", "RestedXP skin" }, { "speakstoneSkin", "SpeakStone skin" }, { "auctionatorSkin", "Auctionator skin" },
     { "whatsTrainingSkin", "What's Training? skin" }, { "foreverDungeonJournalSkin", "Forever Dungeon Journal skin" },
