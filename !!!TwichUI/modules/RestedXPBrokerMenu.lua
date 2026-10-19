@@ -10,6 +10,9 @@
 --   Auto accept / turn in, Auto flight path
 --                 switches for RestedXP's "Quest auto accept/turn in" and "Flight Path automation" options.
 --                 Each row says On or Off.
+--   Discard junk if full
+--                 a switch for RestedXP's "Discard junk items if bag is full" option. Greyed out, with the reason
+--                 in its row ("Inventory off", "Unavailable"), when RestedXP's own option page would hide it.
 --   Import guides opens RestedXP's guide import window and closes this menu. Greyed out in combat, when
 --                 RestedXP would only queue it.
 -- The switches leave the menu open, so several can be set in one visit, and the rows follow RestedXP when
@@ -85,6 +88,14 @@ local SPEC = {
         act = function() local B = Broker(); B.SetFlightAuto(not B.FlightAutoOn()) end,
     },
     {
+        key = "discard", label = "Discard junk if full",
+        state = function() return Broker().DiscardOn() end,
+        words = { [true] = "On", [false] = "Off" },
+        enabled = function() return Broker().DiscardBlocker() == nil end,
+        why = function() return Broker().DiscardBlocker() end,
+        act = function() local B = Broker(); B.SetDiscard(not B.DiscardOn()) end,
+    },
+    {
         key = "import", label = "Import guides...", plain = true,
         enabled = function() return Broker().CanImport() end,
         why = "In combat",
@@ -143,6 +154,12 @@ local function NewRow(spec)
     return row
 end
 
+-- A row's reason for being greyed out: a string, or a function that returns one (nil when there is none).
+local function Why(s)
+    if type(s.why) == "function" then return s.why() end
+    return s.why
+end
+
 local function Fill(row)
     local K = Palette()
     local s = row.spec
@@ -152,14 +169,16 @@ local function Fill(row)
     row.name:SetText(s.label)
     Paint(row.name, enabled and K.text or K.stone)
     if s.plain then
-        row.note:SetText(enabled and "" or (usable and s.why or ""))
+        row.note:SetText(enabled and "" or (usable and Why(s) or ""))
         if row.chev then row.chev:SetShown(enabled and true or false) end
     else
         local on = s.state()
         row.fill:SetShown(on == true)
         local rim = on and K.bronze or K.bronzeLo
         row.rim:SetColorTexture(rim[1], rim[2], rim[3])
-        row.note:SetText(on == nil and "" or s.words[on])
+        -- A greyed switch says why instead of its state; the box still shows the state.
+        local why = usable and not enabled and Why(s)
+        row.note:SetText(why or (on == nil and "" or s.words[on]))
     end
     Paint(row.note, K.stone)
     row:SetEnabled(enabled and true or false)

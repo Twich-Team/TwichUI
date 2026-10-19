@@ -2,8 +2,8 @@
 -- A LibDataBroker data source, "TwichUI RestedXP Guide", for a data bar (for example EllesmereUI's
 -- "Broker Plugin" block). Its text says whether RestedXP's guide is on ("Guide on" / "Guide off"); a click
 -- opens a small menu (modules/RestedXPBrokerMenu.lua, drawn like the Mage launchers' menus): choose which
--- guide to load, show the guide (on or off), lock its windows, switch quest auto accept/turn in and flight
--- path automation on or off, and open RestedXP's guide import window.
+-- guide to load, show the guide (on or off), lock its windows, switch quest auto accept/turn in, flight
+-- path automation and discarding junk when the bags are full on or off, and open RestedXP's guide import window.
 -- Made only when RestedXP is loaded. TwichUI doesn't bundle LibDataBroker: nothing
 -- happens without a data bar addon that provides it.
 --
@@ -20,6 +20,7 @@
 -- already filtered for the character) and loads the pick by calling that entry's own click handler, which
 -- is addon:LoadGuide; RestedXP has no combat check there, nor does its menu. Nothing else of RestedXP's
 -- is changed.
+-- Discard junk when the bags are full is profile.autoDiscardItems, set the way RestedXP's own option sets it.
 -- ToggleActive and settings:RefreshProfile (a RestedXP profile change) are hooked, once, so the text
 -- follows a toggle made anywhere.
 
@@ -68,6 +69,25 @@ end
 function B.FlightAutoOn()
     if not Usable(rxp) then return nil end
     return rxp.settings.profile.enableFPAutomation and true or false
+end
+
+-- RestedXP's "Discard junk items if bag is full" (SettingsPanel.lua: profile.autoDiscardItems, a plain boolean that
+-- InventoryManager.lua reads as bag events come in). Its page shows the option only with the inventory manager on
+-- (enableInventoryManager) and a bag addon it supports (inventoryManager.bagManager:IsAvailable(), the same check).
+function B.DiscardOn()
+    if not Usable(rxp) then return nil end
+    return rxp.settings.profile.autoDiscardItems and true or false
+end
+
+-- nil when the switch can be used now, else the short reason the menu shows.
+function B.DiscardBlocker()
+    if not Usable(rxp) then return nil end
+    if not rxp.settings.profile.enableInventoryManager then return "Inventory off" end
+    local bags = type(rxp.inventoryManager) == "table" and rxp.inventoryManager.bagManager
+    if not (type(bags) == "table" and type(bags.IsAvailable) == "function" and bags:IsAvailable()) then
+        return "Unavailable"
+    end
+    return nil
 end
 
 local function BarText()
@@ -135,6 +155,13 @@ end
 function B.SetFlightAuto(on)
     if not Usable(rxp) then return end
     rxp.settings.profile.enableFPAutomation = on and true or false
+end
+
+-- Refused while RestedXP can't take it (its options page hides the option then). Like its own option, it takes
+-- effect at the next bag event; nothing else of RestedXP's is called.
+function B.SetDiscard(on)
+    if not Usable(rxp) or B.DiscardBlocker() ~= nil then return end
+    rxp.settings.profile.autoDiscardItems = on and true or false
 end
 
 function B.CanImport()

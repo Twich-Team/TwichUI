@@ -1,7 +1,8 @@
 -- RestedXP guide data source (modules/RestedXPBroker.lua): made once, only with RestedXP and LibDataBroker;
 -- its text follows the guide; a click opens a menu (show guide = RestedXP's own ToggleActive, lock windows =
 -- profile.lockFrames, auto quests / auto flight path = profile.enableQuestAutomation / enableFPAutomation,
--- import = guideImporter:Open(), greyed out in combat; nothing else of RestedXP's is
+-- discard junk if full = profile.autoDiscardItems (greyed out while enableInventoryManager is off or no bag
+-- addon is supported), import = guideImporter:Open(), greyed out in combat; nothing else of RestedXP's is
 -- touched); a toggle or profile change made elsewhere is followed; hooks go in once; an unknown RestedXP
 -- shape makes nothing.
 -- Choosing a guide: the menu lists RXPFrame:GenerateMenuTable({}) up to its empty title (sections, groups,
@@ -69,7 +70,9 @@ local function Boot(opts)
   c.tinsert = table.insert
   c.STANDARD_TEXT_FONT = "Fonts\\FRIZQT__.TTF"
   if not opts.noRXP then
-    local rxp = { settings = { profile = { showEnabled = true, enableQuestAutomation = true, enableFPAutomation = false } }, toggles = 0 }
+    local rxp = { settings = { profile = { showEnabled = true, enableQuestAutomation = true, enableFPAutomation = false,
+      enableInventoryManager = true, autoDiscardItems = false } }, toggles = 0, bagsAvailable = true }
+    rxp.inventoryManager = { bagManager = { IsAvailable = function() return rxp.bagsAvailable end } }
     function rxp.settings.ToggleActive()
       rxp.toggles = rxp.toggles + 1
       rxp.settings.profile.showEnabled = not rxp.settings.profile.showEnabled
@@ -169,7 +172,7 @@ do
     assert(menu and menu.shown, "a click opens the menu")
     local rows = {}
     for _, f in ipairs(c.frames) do if f.kind == "Button" and f.parent == menu then rows[#rows + 1] = f end end
-    assert(#rows == 6, "six rows: " .. #rows)
+    assert(#rows == 7, "seven rows: " .. #rows)
     local function Click(row) if row.enabled then row.scripts.OnClick(row) end end
     return menu, rows, Click
   end
@@ -178,7 +181,8 @@ do
   assert(not bus.events.GLOBAL_MOUSE_DOWN and not bus.events.PLAYER_REGEN_DISABLED, "listens to nothing while closed")
   local menu, rows, Click = Open("LeftButton")
   assert(bus.events.GLOBAL_MOUSE_DOWN and bus.events.PLAYER_REGEN_DISABLED, "listens while open")
-  local choose, guide, lock, quests, flight, import = rows[1], rows[2], rows[3], rows[4], rows[5], rows[6]
+  local choose, guide, lock, quests, flight, discard, import =
+    rows[1], rows[2], rows[3], rows[4], rows[5], rows[6], rows[7]
   assert(choose.name.text == "Choose guide" and choose.chev.shown and choose.enabled, "Choose guide leads the menu, with an arrow")
   assert(menu.template == "BackdropTemplate", "a backdrop frame, as the Mage menus are")
   assert(c.rxp.toggles == 0, "opening the menu changes nothing")
@@ -212,6 +216,39 @@ do
   assert(c.rxp.settings.profile.enableFPAutomation == false and flight.note.text == "Off", "and back off")
   Click(quests)
   assert(c.rxp.settings.profile.enableQuestAutomation == true and quests.note.text == "On", "auto quests back on")
+
+  -- Discard junk if full: RestedXP's own option, set in place, the guide untouched.
+  assert(discard.name.text == "Discard junk if full" and discard.note.text == "Off" and discard.fill.shown == false
+    and discard.enabled, "discard junk starts off and can be clicked")
+  Click(discard)
+  assert(c.rxp.settings.profile.autoDiscardItems == true and discard.note.text == "On" and discard.fill.shown == true
+    and menu.shown, "discard junk turns on in place")
+  assert(c.rxp.toggles == 2 and obj.text == "Guide on", "without touching the guide")
+  Click(discard)
+  assert(c.rxp.settings.profile.autoDiscardItems == false and discard.note.text == "Off", "and back off")
+
+  -- Greyed out, with the reason, while RestedXP's own option page would hide it; its box still shows the state.
+  -- The central operation refuses too, so a stale click can't change it.
+  local B = c.TwichUI.RestedXPBroker
+  c.rxp.settings.profile.autoDiscardItems = true
+  c.rxp.settings.profile.enableInventoryManager = false
+  c.TwichUI.RestedXPBrokerMenu.Refresh()
+  assert(not discard.enabled and discard.note.text == "Inventory off" and discard.fill.shown == true,
+    "greyed out while the inventory manager is off")
+  Click(discard)
+  B.SetDiscard(false)
+  assert(c.rxp.settings.profile.autoDiscardItems == true, "a greyed switch changes nothing")
+  c.rxp.settings.profile.enableInventoryManager = true
+  c.rxp.bagsAvailable = false
+  c.TwichUI.RestedXPBrokerMenu.Refresh()
+  assert(not discard.enabled and discard.note.text == "Unavailable", "greyed out when no supported bag addon is there")
+  B.SetDiscard(false)
+  assert(c.rxp.settings.profile.autoDiscardItems == true, "the operation refuses then too")
+  c.rxp.bagsAvailable = true
+  c.TwichUI.RestedXPBrokerMenu.Refresh()
+  assert(discard.enabled and discard.note.text == "On", "available again, and on")
+  Click(discard)
+  assert(c.rxp.settings.profile.autoDiscardItems == false and discard.note.text == "Off", "switched off again")
 
   -- A toggle made in RestedXP itself while the menu is open: the rows follow.
   c.rxp.settings.ToggleActive()
@@ -381,19 +418,20 @@ do
   for _, f in ipairs(c.frames) do if f.name == "TwichUIRestedXPMenu" then menu = f end end
   local rows = {}
   for _, f in ipairs(c.frames) do if f.kind == "Button" and f.parent == menu then rows[#rows + 1] = f end end
-  assert(#rows == 7 and rows[7].name.text == "Guide rebinder..." and rows[7].enabled, "a seventh, enabled row")
-  rows[7].scripts.OnClick(rows[7])
+  assert(#rows == 8 and rows[8].name.text == "Guide rebinder..." and rows[8].enabled, "an eighth, enabled row")
+  rows[8].scripts.OnClick(rows[8])
   assert(opened == 1 and not menu.shown, "its action runs and the menu closes")
   -- Added while the menu already exists.
   assert(M.AddRow({ key = "Late", label = "Late", act = function() end, enabled = function() return false end, why = "Not now" }))
   c.obj.OnClick(c.obj, "LeftButton")
   rows = {}
   for _, f in ipairs(c.frames) do if f.kind == "Button" and f.parent == menu then rows[#rows + 1] = f end end
-  assert(#rows == 8 and not rows[8].enabled and rows[8].note.text == "Not now", "a late row is greyed out with its reason")
+  assert(#rows == 9 and not rows[9].enabled and rows[9].note.text == "Not now",
+    "a late row is greyed out with its reason")
   -- RestedXP unreadable: the other addon's row still works.
   c.rxp.settings.ToggleActive = nil
   M.Refresh()
-  assert(rows[7].enabled, "an added row doesn't depend on RestedXP being readable")
+  assert(rows[8].enabled, "an added row doesn't depend on RestedXP being readable")
 end
 
 print("PASSED")
