@@ -209,6 +209,7 @@ nav\Journey.lua
 nav\Nav.lua
 nav\Travel.lua
 nav\Paint.lua
+nav\Unlock.lua
 nav\Frame.lua
 nav\Arrow.lua
 nav\MapTrail.lua

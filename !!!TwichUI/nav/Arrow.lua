@@ -5,16 +5,19 @@
 --   No route but on the destination's continent: the arrow points straight at the destination, drawn in stone grey and
 --     labelled "Direct bearing, not a route". Arrived, calculating, no position or no facing: no arrow, a word instead.
 --   On its own (movable when the frame is unlocked; ui.navigation.arrowPosition) or in the frame (Arrow attached).
---     Scaled by Arrow size. Takes no mouse input when locked.
+--     Scaled by Arrow size. Takes no mouse input when locked. With "Use EllesmereUI Unlock Mode" on and EllesmereUI there
+--     (nav/Unlock.lua), that mover places it instead: it is centred on the mover's stand-in, and dragging it here is off.
 --   Turned at most 30 times a second, only while shown; the distance under it is set only when it changes by a yard.
--- The texture is TwichUI's own (media/textures/nav-arrow.tga, tools/make_nav_textures.py): white with a dark rim, tinted.
+-- The picture is the one RestedXP's guide skin uses for its arrow (its "bronze" shape, RestedXPSkin.lua: Arrow.BRONZE, which
+-- is media/textures/arrow-bronze.tga, TwichUI's own, 128 x 128, pointing up). Its colour is the chosen one, white by default
+-- (no tint), as the skin's; a direct bearing is still drawn grey.
 
 local R = TwichUI
 local NV, NP = R.Nav, R.NavPrefs
 local NA = {}
 R.NavArrow = NA
 
-local TEXTURE = R.PATH .. [[media\textures\nav-arrow]]
+local TEXTURE = R.PATH .. [[media\textures\arrow-bronze]]   -- as RestedXPSkin.lua's Arrow.BRONZE
 local SIZE = 40
 local EVERY = 1 / 30
 local STONE = { 0.62, 0.60, 0.56 }
@@ -114,6 +117,8 @@ end
 
 local function PlaceOwn()
     own:ClearAllPoints()
+    local stand = R.NavUnlock and R.NavUnlock.Anchor("arrow")
+    if stand then own:SetPoint("CENTER", stand, "CENTER", 0, 0) return end
     local p = NP.Get("arrowPosition")
     local s = UIParent:GetScale() / own:GetScale()
     if p then own:SetPoint("CENTER", UIParent, "CENTER", p.x * s, p.y * s)
@@ -172,7 +177,7 @@ function NA.Refresh(frameObj)
         MakeOwn()
         own:SetScale(NP.Get("arrowScale") / 100)
         Style(own)
-        local unlocked = not NP.Get("locked")
+        local unlocked = not NP.Get("locked") and not (R.NavUnlock and R.NavUnlock.Drives("arrow"))   -- or EllesmereUI moves it
         own:EnableMouse(unlocked)
         if unlocked then own:RegisterForDrag("LeftButton") else own:RegisterForDrag() end
         PlaceOwn()
@@ -215,6 +220,12 @@ function NA.AttachPreview(frameObj)
 end
 
 function NA.HidePreview() if previewArrow then previewArrow:Hide() end end
+
+-- The arrow's size in screen units (its scale applied), for the Unlock Mode stand-in (nav/Unlock.lua).
+function NA.Footprint()
+    local scale = NP.Get("arrowScale") / 100
+    return (SIZE + 20) * scale, (SIZE + 30) * scale
+end
 
 function NA.Diagnostics()
     return { ticking = ticking, attached = active ~= nil and active == inFrame, shown = active ~= nil and active:IsShown() or false }

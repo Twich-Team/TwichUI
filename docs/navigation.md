@@ -138,12 +138,24 @@ to the destination). With no route only the straight line is given, and called a
 ## On screen
 
 - **Frame** (`nav/Frame.lua`): destination, instruction, distances, state, Stop and Recalculate. A MenuStyle look
-  (`ui.navigationLook`), so it looks complete without EllesmereUI; a teal rule on the left. Locked, only its two buttons
+  (`ui.navigationLook`), so it looks complete without EllesmereUI; a teal rule across the top. Locked, only its two buttons
   take the mouse; unlocked, drag it. Text is set only when it changes; updated on events, never per frame.
-- **Arrow** (`nav/Arrow.lua`, `media/textures/nav-arrow.tga`, TwichUI's own): points at the route's next corner, turned
+- **Arrow** (`nav/Arrow.lua`, `media/textures/arrow-bronze.tga`, the picture RestedXP's guide skin uses for its arrow; white by default, no tint): points at the route's next corner, turned
   by the bearing less your facing (`GetPlayerFacing`), at most 30 times a second while shown. A direct bearing is grey and
   labelled "Direct bearing, not a route". With no position, no facing, while calculating or on arrival: a word, no arrow.
   On its own or in the frame.
+- **EllesmereUI's Unlock Mode** (`nav/Unlock.lua`, optional): Appearance > Frame and arrow > **Move them in EllesmereUI's Unlock Mode**,
+  off by default and only with EllesmereUI installed. `/unlock` then shows a **TwichUI Navigation** mover and a **TwichUI
+  Navigation Arrow** mover (the arrow's only while it sits on its own), with EllesmereUI's own dragging, snapping, nudging,
+  X and Y boxes and anchoring (no size boxes: the size is Frame size and Arrow size). Each mover is a small stand-in frame
+  the size of what it stands for, scale applied; the frame or arrow is centred on it, so it follows with no hook and no
+  per-frame work. The place is still `position` / `arrowPosition`, so Reset position, Save & Exit, a discard and configuration
+  sharing ("place") behave as before; a place never set stays unset. While it is in charge, dragging in the game is off
+  (Lock does nothing). The frame's stand-in is as tall as the frame once it has been laid out, else a typical three-line
+  frame, so its outline can be a little off until a route has been followed once. Registered once and never unregistered
+  (that would delete the player's anchor links in EllesmereUI); a mover is hidden from Unlock Mode instead. Same interface
+  as `modules/FoodDrinkUnlock.lua`. Nothing is secure, so combat needs nothing special; Unlock Mode can't be opened in
+  combat.
 - **World map** (`nav/MapTrail.lua`): a data provider; the route from where you are to the destination, clipped to the map
   shown and drawn only on its continent, under the map's pins. Thickness stays the same on screen at every zoom.
 - **Minimap** (`nav/MinimapTrail.lua`): the part of the route near you, turned with a rotating minimap (as the party pins
@@ -195,6 +207,7 @@ following; they go when the settings window closes.
 | `nav/Route.lua` | planning (no frames) |
 | `nav/Nav.lua` | the destination, states, progress, the driver, `/tui nav` |
 | `nav/Paint.lua` | drawing lines and dots, clipping, the minimap's projection |
+| `nav/Unlock.lua` | the optional EllesmereUI Unlock Mode movers for the frame and the arrow |
 | `nav/Frame.lua`, `nav/Arrow.lua`, `nav/MapTrail.lua`, `nav/MinimapTrail.lua` | the views |
 | `TwichUI_Settings/pages/Navigation.lua` | the settings page and its Appearance tab |
 | `TwichUI_NavData/` | the walking maps (format in its README) |
@@ -248,3 +261,11 @@ Turn on Display Lua Errors. Test alone, then with EllesmereUI.
 19. **Faction.** An Alliance character is never sent by a Horde zeppelin or flight, and the other way round.
 14. **Pins and pings unchanged.** Party pins, map pings and the other map tools work as before; Ctrl-click still sets the
     game's waypoint.
+20. **EllesmereUI Unlock Mode** (needs EllesmereUI; nothing here has been seen in the game). Turn on Appearance > Move them in
+    EllesmereUI's Unlock Mode: the frame and arrow do not move. `/unlock` lists "TwichUI Navigation" and "TwichUI Navigation
+    Arrow" (with the arrow in the frame, only the first) even when no route is being followed. Drag both, nudge with the arrow
+    keys, type X and Y, anchor one to another element, Save & Exit: follow a route, the frame and arrow are where you left
+    them, also after `/reload`. Repeat and discard: they go back. Check the outlines are about the right size (the frame's
+    may be a little off before the first route), change Frame size and Arrow size and look at them again. With Lock off,
+    the frame can't be dragged in the game while this is on; turn it off and it can. Reset position puts both at the top
+    of the screen again. Disable EllesmereUI: they sit at the saved places and the tooltip says why.

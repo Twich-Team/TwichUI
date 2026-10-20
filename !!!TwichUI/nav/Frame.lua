@@ -7,8 +7,10 @@
 --     is shown: mounts, speed and the way you walk make any figure a guess.
 --   Click-through: locked (the default), only the two buttons take the mouse; unlocked, the frame can be dragged and its
 --     place is kept (ui.navigation.position, this screen's, not shared). Reset position in the settings puts it back.
+--     With "Use EllesmereUI Unlock Mode" on and EllesmereUI there (nav/Unlock.lua), that mover places it instead: the frame
+--     is anchored to the mover's stand-in, the same saved place, and dragging it here is off.
 --   Look: the frame's background and border are a MenuStyle look (ui.navigationLook: works without EllesmereUI); text in
---     the chosen font, size and colours; a teal accent rule on the left. Nothing flashes; state changes are words.
+--     the chosen font, size and colours; a teal accent rule across the top. Nothing flashes; state changes are words.
 --   Text is set only when it changed, and the layout redone only when the look or a line's height changed. Updated on
 --     Nav.lua's events (four times a second at most while moving), never per frame.
 -- The settings preview is a second frame from the same code (NF.New(true)): it shows sample values, says "Preview", and
@@ -21,6 +23,8 @@ R.NavFrame = NF
 
 local WIDTH = 250
 local PAD = 8
+
+local function Width() return math.floor(WIDTH * NP.Get("textSize") / 12 + 0.5) end
 
 local STATE_WORDS = {
     loading = "Loading walking maps…", calculating = "Calculating route…", recalculating = "Recalculating route…",
@@ -125,10 +129,9 @@ function Frame:Style()
         f.tag:SetFont(font, math.max(9, size - 2), "")
         f.tag:SetTextColor(ar, ag, ab)
     end
-    local width = math.floor(WIDTH * size / 12 + 0.5)
-    f:SetWidth(width)
+    f:SetWidth(Width())
     if not self.preview then
-        local unlocked = not NP.Get("locked")
+        local unlocked = not NP.Get("locked") and not (R.NavUnlock and R.NavUnlock.Drives("frame"))   -- or EllesmereUI moves it
         f:EnableMouse(unlocked)                        -- locked: only the buttons take the mouse
         if unlocked then f:RegisterForDrag("LeftButton") else f:RegisterForDrag() end
         self:Place()
@@ -140,6 +143,11 @@ end
 function Frame:Place()
     local f = self.f
     f:ClearAllPoints()
+    local stand = R.NavUnlock and R.NavUnlock.Anchor("frame")
+    if stand then                                    -- EllesmereUI's Unlock Mode moves the stand-in; centre on it
+        f:SetPoint("CENTER", stand, "CENTER", 0, 0)
+        return
+    end
     local p = NP.Get("position")
     if p then
         local s = UIParent:GetScale() / f:GetScale()
@@ -224,16 +232,17 @@ function Frame:Layout()
     local f = self.f
     local inset = self.inset or PAD
     local w = f:GetWidth()
-    local left = inset + 8
+    local left = inset
     local attached = self.arrowSlot ~= nil and self.arrowSlot:IsShown()
     local arrowW = attached and (self.arrowSlot:GetWidth() + 8) or 0
+    -- the accent rule across the top; the content starts below it
     f.accent:ClearAllPoints()
     f.accent:SetPoint("TOPLEFT", f, "TOPLEFT", inset, -inset)
-    f.accent:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", inset, inset)
-    f.accent:SetWidth(2)
+    f.accent:SetPoint("TOPRIGHT", f, "TOPRIGHT", -inset, -inset)
+    f.accent:SetHeight(2)
     -- the controls, top right
     local right = inset
-    local top = -inset
+    local top = -(inset + 2 + 6)
     for _, b in ipairs({ f.stop, f.again }) do
         if b and b:IsShown() then
             b:ClearAllPoints()
@@ -269,6 +278,7 @@ function Frame:Layout()
     local h = -y + inset
     if attached then h = math.max(h, -(top - (f.title:GetStringHeight() or 14) - 4) + self.arrowSlot:GetHeight() + inset) end
     f:SetHeight(math.ceil(h))
+    if not self.preview and R.NavUnlock then R.NavUnlock.Sync() end   -- the mover's stand-in is as tall as the frame
 end
 
 function Frame:Show() self.f:Show() end
@@ -285,6 +295,15 @@ local function Wanted()
 end
 
 function NF.Main() return main end
+
+-- The frame's size in screen units (its scale applied), for the Unlock Mode stand-in (nav/Unlock.lua): the real size once
+-- the frame has been laid out, else what a destination, an instruction and a distance line typically take.
+function NF.Footprint()
+    local scale = NP.Get("frameScale") / 100
+    local h = main and main.f:GetHeight() or 0
+    if not (h and h > 0) then h = 2 * PAD + 8 + 4 * (NP.Get("textSize") + 4) end
+    return Width() * scale, h * scale
+end
 
 function NF.Refresh()
     if not Wanted() then

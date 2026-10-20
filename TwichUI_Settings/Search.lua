@@ -26,6 +26,7 @@ local ALIASES = {
     pinsWayAlso = "tomtom waypointui /way",
     pinsMinimap = "minimap",
     foodDrinkUnlock = "move position anchor /unlock",
+    navigationUnlockMode = "move position anchor /unlock ellesmere mover",
     qolQuickKeybind = "keybind bindings hotkey",
     qolSummons = "summon portal warlock meeting stone",
     qolResurrect = "res rez",

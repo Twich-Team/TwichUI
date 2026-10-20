@@ -84,6 +84,16 @@ if R.NavPrefs then R.NavPrefs.Subscribe(function() if strip and strip:IsVisible(
 ---------------------------------------------------------------------------
 local function On() return R:Enabled("navigation") end
 
+local UNLOCK_STATUS = {
+    off = { "Off" },
+    ["no-eui"] = { "EllesmereUI isn't installed or turned on", "You drag the frame and arrow here until it is." },
+    ["no-api"] = { "This EllesmereUI has no Unlock Mode", "You drag the frame and arrow here." },
+    waiting = { "Waiting for EllesmereUI", "It hasn't finished loading yet." },
+    ["register-failed"] = { "EllesmereUI didn't take the movers", "You drag the frame and arrow here." },
+    ["module-off"] = { "Ready", "The movers appear in Unlock Mode while navigation is turned on." },
+    active = { "In EllesmereUI's Unlock Mode", "Type /unlock and look for \"TwichUI Navigation\"." },
+}
+
 local function DataStatus()
     local ND = R.NavData
     local st = ND and ND.LoadState() or "no"
@@ -194,7 +204,23 @@ K.Page({
 
         Header("Frame and arrow", "Where they sit, how big they are, and whether the arrow is part of the frame.")
         Under(K.Checkbox(Remember("navigationLocked", K.BOOL, "Lock the frame and arrow", "locked"),
-            "Locked, they let clicks through to the world except the frame's two buttons. Unlock to drag them; their places are kept on this computer."), toggle, On2)
+            "Locked, they let clicks through to the world except the frame's two buttons. Unlock to drag them; their places are kept on this computer. With EllesmereUI's Unlock Mode turned on below, they are moved there instead and this does nothing."), toggle, On2)
+        local NU = R.NavUnlock
+        if NU then
+            local unlockBase = "Move the frame and the arrow in EllesmereUI's Unlock Mode instead of dragging them here. A \"TwichUI Navigation\" and a \"TwichUI Navigation Arrow\" mover appear there, and you drag them, nudge them, type their X and Y or anchor them to other elements the way you do the rest of your interface. Turning this on keeps them where they are. Their places are still saved by TwichUI; EllesmereUI's anchor links are saved by EllesmereUI.\n\nOpen Unlock Mode with /unlock. It can't be opened in combat, and nothing is moved then. The arrow's mover is there while the arrow is on its own, not in the frame.\n\nOff, or without EllesmereUI, you drag them here while unlocked, as before. Your choice is kept while EllesmereUI is away."
+            local unlock = K.Checkbox(K.Proxy("navigationUnlockMode", K.BOOL, "Move them in EllesmereUI's Unlock Mode", NP.DEFAULTS.unlockMode,
+                function() return NP.Get("unlockMode") end, function(value) NP.Set("unlockMode", value and true or false) end), unlockBase)
+            if unlock then
+                -- read when the tooltip is shown, so the status is never stale
+                local withParent = unlock.GetTooltip
+                unlock.GetTooltip = function(self)
+                    local code = NU.Status()
+                    local text = UNLOCK_STATUS[code] or { code }
+                    local color = (code == "active" and R.GREEN) or (code == "off" and R.GREY) or R.GOLD
+                    return (withParent(self) or unlockBase) .. "\n\nStatus: " .. color .. text[1] .. "|r" .. (text[2] and ("\n" .. text[2]) or "")
+                end
+            end
+        end
         Under(K.Checkbox(Remember("navigationArrowAttached", K.BOOL, "Show the arrow in the frame", "arrowAttached"),
             "The arrow sits at the left of the frame instead of on its own. Needs the frame shown."), toggle, On2)
         Under(K.Slider(Remember("navigationFrameScale", NUMBER, "Frame size", "frameScale"), NP.LIMITS.frameScale[1], NP.LIMITS.frameScale[2],
@@ -202,7 +228,7 @@ K.Page({
         Under(K.Slider(Remember("navigationArrowScale", NUMBER, "Arrow size", "arrowScale"), NP.LIMITS.arrowScale[1], NP.LIMITS.arrowScale[2],
             "The arrow's scale on its own, in percent. In the frame it follows the frame's size."), toggle, On2)
         Under(K.Swatch(Remember("navigationArrowColor", STRING, "Arrow color", "arrowColor"),
-            "The arrow's color while it follows a route. A direct bearing is always grey, so the two are never confused."), toggle, On2)
+            "The arrow's color while it follows a route, over the same picture RestedXP's guide skin uses for its arrow (white is the picture as drawn). A direct bearing is always grey, so the two are never confused."), toggle, On2)
         K.Button("Put the frame and arrow back", "Put back", function()
             R.Interact.Confirm("TWICHUI_NAV_PLACE", "Put the navigation frame and arrow back in their default places?\n\nOnly their places change.", function() NP.Reset("position") end, { accept = "Put back" })
         end, "Moves the frame and the arrow back to their default places at the top of the screen. Asks first.").reset = true
@@ -214,7 +240,7 @@ K.Page({
             "The instruction and destination are a point larger, the distances a point smaller."), toggle, On2)
         Under(K.Swatch(Remember("navigationTitleColor", STRING, "Destination color", "titleColor"), "The destination's name."), toggle, On2)
         Under(K.Swatch(Remember("navigationTextColor", STRING, "Text color", "textColor"), "The instruction; the distances and notes are a little dimmer."), toggle, On2)
-        Under(K.Swatch(Remember("navigationAccent", STRING, "Accent color", "accentColor"), "The rule at the frame's left and the buttons under the pointer."), toggle, On2)
+        Under(K.Swatch(Remember("navigationAccent", STRING, "Accent color", "accentColor"), "The rule across the frame's top and the buttons under the pointer."), toggle, On2)
 
         Header("The trail", "How the route is drawn on the world map and the minimap. The strip below draws a sample shape the same way; it is not a route.")
         Under(K.Dropdown(Remember("navigationTrailStyle", STRING, "Style", "trailStyle"), function() return NP.TRAIL_STYLES end,

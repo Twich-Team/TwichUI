@@ -3,7 +3,8 @@
 --   navigation      what navigation shows and how it behaves: the frame, the arrow, the world map and minimap trails, how
 --                   near counts as arrived and how far off the route counts as off it, the arrival sound, reduced motion,
 --                   and the appearance of its text, arrow and trail; where the frame and the arrow sit (`position`,
---                   `arrowPosition`, kept on this screen when settings are shared: TwichConfig's "place")
+--                   `arrowPosition`, kept on this screen when settings are shared: TwichConfig's "place"; `unlockMode`, whether
+--                   EllesmereUI's Unlock Mode moves them, nav/Unlock.lua: opt-in, local to this computer, in no reset scope)
 --   navigationLook  the frame's background and border (a MenuStyle look)
 -- Never saved: the destination, the route, progress, the search, anything about where you are. Nothing here is read per
 -- frame: views ask when they are drawn and keep what they need until a change is announced (NP.Subscribe).
@@ -21,10 +22,10 @@ local DEFAULTS = {
     -- getting there (nav/Journey.lua): what a journey may use, and how fast you move on the ground
     useFlights = true, useShips = true, useTeleports = true, useHearth = true, speed = "foot",
     -- the frame
-    locked = true, frameScale = 100, font = "default", textSize = 12,
+    locked = true, unlockMode = false, frameScale = 100, font = "default", textSize = 12,
     titleColor = "ffefe6d0", textColor = "ffd6cfbd", accentColor = "ff5c9491",
     -- the arrow
-    arrowAttached = false, arrowScale = 100, arrowColor = "ff94c7c2",
+    arrowAttached = false, arrowScale = 100, arrowColor = "ffffffff",
     -- the trail
     trailColor = "ff6cc0b8", trailOpacity = 85, trailWidth = 3, trailStyle = "line", ants = true, antSpeed = 2,
 }
@@ -98,6 +99,16 @@ function NP.Set(key, value)
     t[key] = value
     Notify(key)
     return true
+end
+
+-- Forgets one saved place ("position" or "arrowPosition") so the default applies. Nothing else changes.
+function NP.Clear(key)
+    if key ~= "position" and key ~= "arrowPosition" then return end
+    local t = Saved()
+    if t and t[key] ~= nil then
+        t[key] = nil
+        Notify(key)
+    end
 end
 
 -- Puts one scope back: "behavior", "appearance" (with the frame's background and border), or "position" (the frame and
