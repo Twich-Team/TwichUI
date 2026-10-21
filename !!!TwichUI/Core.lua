@@ -66,6 +66,7 @@ local DEFAULT_MODULES = {
     chatClean = false,       -- Chat cleaning: hide unwanted messages in the public channels you choose (opt-in, explicit true only)
     classBars = false,       -- Class resource bars: your class's resources as bars (opt-in; nothing else's bars are hidden or moved)
     ammoWarning = false,     -- Hunter ammunition warning: a line of text near the centre of the screen when ammunition is missing, out or wrong (Hunters only, opt-in; nothing is equipped or moved for you)
+    hazardAlerts = false,    -- Hazard alerts: the game plays a sound when an aura you list lands on you, grows or fades (opt-in; no combat log is read, nothing is automated)
     qolSummons = false,      -- Quality of Life (all opt-in, see qol/QoL.lua): accept summons
     qolResurrect = false,    -- ... accept a resurrection offered to you
     qolResurrectCombat = false, -- ... including a combat resurrection (needs the one above)

@@ -746,6 +746,203 @@ function AmmoList.restore(records)
 end
 
 ---------------------------------------------------------------------------
+-- Hazard alerts' rules (hazard/Config.lua): { rules = { { name, spell, trigger, category, throttle, enabled }, ... },
+-- off = { builtinRuleId, ... } }. Every field is checked as the feature checks its own; one that fails refuses the group.
+-- Applying merges: a rule is matched by its spell and trigger and takes the share's name, category, cooldown and on/off
+-- (a new one goes at the end, while there is room); a built-in rule the share turns off is turned off. Nothing is removed
+-- and nothing is turned back on. A rule only names an aura; it plays no sound until the alerts are on and the category has
+-- one. Undo puts the rules and the built-in choices back exactly as they were.
+---------------------------------------------------------------------------
+local HazardRules = {}
+
+local function HzRuleText(rule)
+    if not rule then return "not on your list" end
+    local cat = R.Hazard.CATEGORY[rule.category]
+    return ("%s, %s, %ds, %s"):format(cat and cat[2] or rule.category, R.Hazard.TRIGGER[rule.trigger][2]:lower(), rule.throttle, rule.enabled and "on" or "off")
+end
+
+function HazardRules.usable() return R.Hazard ~= nil end
+function HazardRules.count()
+    local n = R.Hazard.Count()
+    for _ in pairs(R.Hazard.BuiltinOff()) do n = n + 1 end
+    return n
+end
+function HazardRules.label(n) return n == 1 and "1 rule" or (("%d rules"):format(n)) end
+
+function HazardRules.export()
+    local HZ = R.Hazard
+    local rules, off = {}, {}
+    for i, r in ipairs(HZ.List()) do
+        rules[i] = { name = r.name, spell = r.spell, trigger = r.trigger, category = r.category, throttle = r.throttle, enabled = r.enabled }
+    end
+    for id in pairs(HZ.BuiltinOff()) do off[#off + 1] = id end
+    table.sort(off)
+    if #rules == 0 and #off == 0 then return nil end
+    return { rules = rules, off = off }
+end
+
+function HazardRules.clean(raw)
+    local HZ = R.Hazard
+    if not HZ then return nil, "feature" end
+    if type(raw) ~= "table" then return nil, "shape" end
+    local rules, off = {}, {}
+    local seen = {}
+    if raw.rules ~= nil then
+        if type(raw.rules) ~= "table" then return nil, "shape" end
+        local n = 0
+        for k in pairs(raw.rules) do
+            if type(k) ~= "number" then return nil, "shape" end
+            n = n + 1
+            if n > HZ.MAX_CUSTOM then return nil, "too-large" end
+        end
+        for i = 1, n do
+            local r = raw.rules[i]
+            if type(r) ~= "table" then return nil, "invalid" end
+            local rule = HZ.CleanRule({ id = "c0", enabled = r.enabled, name = r.name, spell = r.spell, trigger = r.trigger,
+                category = r.category, throttle = r.throttle })
+            local key = rule and (rule.spell .. ":" .. rule.trigger)
+            if not rule or seen[key] then return nil, "invalid" end
+            seen[key] = true
+            rules[#rules + 1] = rule
+        end
+    end
+    if raw.off ~= nil then
+        if type(raw.off) ~= "table" then return nil, "shape" end
+        local n, ids = 0, {}
+        for k, id in pairs(raw.off) do
+            if type(k) ~= "number" then return nil, "shape" end
+            n = n + 1
+            if n > HZ.MAX_BUILTIN_OFF then return nil, "too-large" end
+            if not HZ.ValidRuleId(id) or ids[id] then return nil, "invalid" end
+            ids[id] = true
+        end
+        for i = 1, n do off[#off + 1] = raw.off[i] end
+    end
+    if #rules == 0 and #off == 0 then return nil, "empty" end
+    return { rules = rules, off = off }, (#rules + #off) * 2
+end
+
+-- { { rule = new, old = existing or nil } or { off = id } ... }; rules that would not fit are counted in .full.
+function HazardRules.plan(clean)
+    local HZ = R.Hazard
+    local changes = { full = 0 }
+    local room = HZ.MAX_CUSTOM - HZ.Count()
+    for _, new in ipairs(clean.rules) do
+        local old = HZ.Duplicate(new.spell, new.trigger)
+        if not old then
+            if room > 0 then
+                room = room - 1
+                changes[#changes + 1] = { rule = new }
+            else
+                changes.full = changes.full + 1
+            end
+        elseif old.name ~= new.name or old.category ~= new.category or old.throttle ~= new.throttle or old.enabled ~= new.enabled then
+            changes[#changes + 1] = { rule = new, old = old }
+        end
+    end
+    local current = HZ.BuiltinOff()
+    for _, id in ipairs(clean.off) do
+        if not current[id] then changes[#changes + 1] = { off = id } end
+    end
+    return changes
+end
+
+function HazardRules.review(clean)
+    local changes = HazardRules.plan(clean)
+    local rows = {}
+    for _, c in ipairs(changes) do
+        if c.rule then
+            rows[#rows + 1] = { label = c.rule.name, key = "hazard:" .. c.rule.spell .. ":" .. c.rule.trigger, old = HzRuleText(c.old), new = HzRuleText(c.rule) }
+        else
+            rows[#rows + 1] = { label = "Built-in rule " .. c.off, key = "hazard-off:" .. c.off, old = "on", new = "off" }
+        end
+    end
+    if changes.full > 0 then
+        rows[#rows + 1] = { label = "Rules that don't fit", key = "full", old = "your full list", new = ("%d left out"):format(changes.full) }
+    end
+    return rows, #clean.rules + #clean.off - #changes - changes.full
+end
+
+local function HzStore(name, create)
+    if type(TwichUIDB.ui) ~= "table" then TwichUIDB.ui = {} end
+    local ui = TwichUIDB.ui
+    if type(ui[name]) ~= "table" then
+        if not create then return nil end
+        ui[name] = {}
+    end
+    return ui[name]
+end
+
+-- Plain writes. Returns undo records: { rule = id, had = false } | { rule = id, had = true, old = rule } | { off = id }.
+function HazardRules.apply(clean, plan)
+    local HZ = R.Hazard
+    local undo = {}
+    local store = HzStore("hazardCustom", true)
+    if type(store.rules) ~= "table" then store.rules = {} end
+    for _, c in ipairs(plan) do
+        if c.rule then
+            if c.old then
+                for i, stored in ipairs(store.rules) do
+                    if type(stored) == "table" and stored.id == c.old.id then
+                        undo[#undo + 1] = { rule = c.old.id, had = true, old = HZ.CleanRule(stored) }
+                        store.rules[i] = { id = c.old.id, enabled = c.rule.enabled, name = c.rule.name, spell = c.rule.spell,
+                            trigger = c.rule.trigger, category = c.rule.category, throttle = c.rule.throttle }
+                    end
+                end
+            else
+                local n = type(store.next) == "number" and store.next or 0
+                local taken = {}
+                for _, r in ipairs(store.rules) do if type(r) == "table" then taken[r.id] = true end end
+                repeat n = n + 1 until not taken["c" .. n]
+                store.next = n
+                local id = "c" .. n
+                store.rules[#store.rules + 1] = { id = id, enabled = c.rule.enabled, name = c.rule.name, spell = c.rule.spell,
+                    trigger = c.rule.trigger, category = c.rule.category, throttle = c.rule.throttle }
+                undo[#undo + 1] = { rule = id, had = false }
+            end
+        else
+            local b = HzStore("hazardBuiltin", true)
+            if type(b.off) ~= "table" then b.off = {} end
+            b.off[c.off] = true
+            undo[#undo + 1] = { off = c.off }
+        end
+    end
+    HZ.Invalidate()
+    return undo
+end
+
+function HazardRules.restore(records)
+    local HZ = R.Hazard
+    if not HZ then return 0 end
+    local n = 0
+    local store = HzStore("hazardCustom", false)
+    for i = #records, 1, -1 do
+        local u = records[i]
+        if type(u) == "table" then
+            if type(u.off) == "string" then
+                local b = HzStore("hazardBuiltin", false)
+                if b and type(b.off) == "table" and b.off[u.off] then b.off[u.off] = nil; n = n + 1 end
+            elseif type(u.rule) == "string" and store and type(store.rules) == "table" then
+                for j, stored in ipairs(store.rules) do
+                    if type(stored) == "table" and stored.id == u.rule then
+                        if u.had == true then
+                            local old = HZ.CleanRule(u.old)
+                            if old then store.rules[j] = old; n = n + 1 end
+                        else
+                            table.remove(store.rules, j)
+                            n = n + 1
+                        end
+                        break
+                    end
+                end
+            end
+        end
+    end
+    HZ.Invalidate()
+    return n
+end
+
+---------------------------------------------------------------------------
 -- Chat cleaning's channels and rules (modules/ChatClean.lua): { channels = { [key] = { on, spam, repeats, recruit,
 -- politics, lgbt, label } }, rules = { { name, mode, text, case, enabled, all, channels }, ... } }. Every channel key, flag, label and
 -- rule is checked as the feature checks its own (a Lua pattern for shape and cost too); one that fails refuses the
@@ -1440,6 +1637,21 @@ local function Define()
     g = Group("ammoCustom", "Custom ammunition", { page = "ammoCustom",
         note = "The ammunition you registered, arrows or bullets, by item ID. Merged: what the share names is set, the rest of your list is kept. Registering says only what an item is; it never says anything is equipped or carried." })
     g.custom = AmmoList
+
+    g = Group("hazard", "Hazard alerts", { page = "hazard",
+        note = "Whether the alerts are on, which categories play and the sound each uses. The game plays the sounds when an aura you list is put on you. No combat log is read." })
+    Switches(g, { "hazardAlerts" })
+    do
+        local HZ = R.Hazard
+        local enums = {}
+        if HZ then for key in pairs(HZ.DEFAULTS) do if HZ.ENUM[key] then enums[key] = HZ.ENUM[key] end end end
+        Table(g, { "ui", "hazard" }, HZ, { "highOn", "lowOn", "failOn", "highSound", "lowSound", "failSound", "channel" }, enums,
+            { highSound = "sound", lowSound = "sound", failSound = "sound" })
+    end
+
+    g = Group("hazardRules", "Hazard alert rules", { page = "hazardRules",
+        note = "The auras you listed, by spell ID, and the built-in rules you turned off. Merged: what the share names is set, the rest of your list is kept. A rule only names an aura; nothing plays until the alerts are on." })
+    g.custom = HazardRules
 
     g = Group("chronicle", "Journey Chronicle", { page = "chronicle",
         note = "Which events are written down and how the window reads. The entries and notes themselves are never shared." })

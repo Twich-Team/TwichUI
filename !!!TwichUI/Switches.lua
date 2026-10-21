@@ -226,6 +226,9 @@ Define("classBars", { apply = Refresh("ClassBars") })
 -- Hunter ammunition warning
 Define("ammoWarning", { apply = Refresh("Ammo") })
 
+-- Hazard alerts: aura sounds the game plays; off removes every one TwichUI registered
+Define("hazardAlerts", { apply = Refresh("HazardAlerts") })
+
 -- Addon skins: through EllesmereUI, after a reload
 for _, key in ipairs({ "attuneSkin", "auctionatorSkin", "foreverDungeonJournalSkin", "whatsTrainingSkin" }) do
     Define(key, { reload = true })

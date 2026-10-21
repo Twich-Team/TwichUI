@@ -233,6 +233,14 @@ ammo\Items.lua
 ammo\State.lua
 ammo\Warning.lua
 
+# Hazard alerts: a sound for each of three alert categories when an aura you list lands on you, grows or fades, played by the
+# game itself through its aura-sound registration (the client gives addons no combat-log payload, so no damage is read).
+# Off until turned on; nothing runs when a hazard happens. Config.lua is what it stores, Rules.lua what is registered (no game
+# calls), Alerts.lua the registration and the preview sound. The settings are in TwichUI_Settings.
+hazard\Config.lua
+hazard\Rules.lua
+hazard\Alerts.lua
+
 # Sell from Bags: Auction House posting tab (uses the Chronicle palette)
 auction\Price.lua
 auction\Scan.lua
@@ -284,6 +292,7 @@ diag\Pins.lua
 diag\ChatClean.lua
 diag\ClassBars.lua
 diag\Ammo.lua
+diag\Hazard.lua
 diag\Status.lua
 diag\SupportWindow.lua
 diag\Window.lua

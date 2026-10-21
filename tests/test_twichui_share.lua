@@ -357,7 +357,7 @@ Check(byId.gearWeights and byId.gearWeights.state == "changed" and byId.gearWeig
 do   -- an empty list (Custom ammunition) and an unused look (Pin appearance) are left out, and said
   local absent = {}
   for _, name in ipairs(plan.absent) do absent[name] = true end
-  Check(#plan.absent == 2 and absent["Pin appearance"] and absent["Custom ammunition"], "what the sender left out is said: " .. table.concat(plan.absent, ","))
+  Check(#plan.absent == 3 and absent["Pin appearance"] and absent["Custom ammunition"] and absent["Hazard alert rules"], "what the sender left out is said: " .. table.concat(plan.absent, ","))
 end
 local beforeApply = Copy(B.TwichUIDB)
 -- a review changes nothing

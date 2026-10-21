@@ -23,6 +23,8 @@ pages\ChatClean.lua
 pages\ChatCleanChannels.lua
 pages\ChatCleanRules.lua
 pages\ChatCleanLive.lua
+pages\Hazard.lua
+pages\HazardRules.lua
 pages\FoodDrink.lua
 pages\Restock.lua
 pages\RestockItems.lua
