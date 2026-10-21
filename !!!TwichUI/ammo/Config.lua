@@ -1,4 +1,4 @@
--- TwichUI: Hunter ammunition warning, configuration
+-- TwichUI: Ammunition warning, configuration
 -- What the warning stores and how a stored value is read. Nothing here touches a frame or the game's inventory.
 --
 -- What is stored (all in the profile in use, TwichUIDB.ui; docs/ammo-warning.md has the details):
@@ -20,6 +20,7 @@ local AM = {}
 R.Ammo = AM
 
 AM.DEFAULTS = {
+    style = "standard",
     show = "equipped",
     icon = true,
     scale = 100, opacity = 100,
@@ -37,6 +38,10 @@ end
 
 -- The choices of each text value, in the order settings lists them (also the sets a value is checked against).
 AM.CHOICES = {
+    style = {
+        { "standard", "Standard", "The warning as one line of text, with the optional icon, background and border." },
+        { "rpg", "RPG Notification", "A small heading, a bronze rule and the warning in the same type as the zone arrival card. It stays up until the problem is fixed." },
+    },
     show = {
         { "equipped", "Whenever my ranged weapon needs ammunition", "Shown as soon as a problem is found, in or out of combat, so you can fix it before you pull." },
         { "combat", "Only in combat", "Shown only while you are in combat. A problem found out of combat appears when combat starts." },

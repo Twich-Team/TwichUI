@@ -1,4 +1,4 @@
--- TwichUI: Hunter ammunition warning, deciding what is wrong
+-- TwichUI: Ammunition warning, deciding what is wrong
 -- Pure: it reads a table of plain facts (Warning.lua fills it from the game) and answers with one state. It touches
 -- no frame, no event and no game API, so the tests run the same code the game does.
 --
@@ -32,6 +32,14 @@ AS.MESSAGES = {
     noAmmo = "NO AMMO EQUIPPED",
     outOfAmmo = "OUT OF AMMO",
     wrong = "WRONG AMMO EQUIPPED",
+}
+-- A short line under the warning in the RPG Notification style: only what the state itself establishes. NO AMMO
+-- EQUIPPED means compatible ammunition is carried (so it says so); OUT OF AMMO is not tied to the bags because a selected
+-- stack that is empty gets it too.
+AS.DETAIL = {
+    noAmmo = "Ammunition that fits is in your bags.",
+    outOfAmmo = "No usable ammunition left.",
+    wrong = "It does not match your ranged weapon.",
 }
 AS.ORDER = { "noAmmo", "outOfAmmo", "wrong" }   -- the order the preview shows them in
 

@@ -1,6 +1,6 @@
-# Hunter ammunition warning
+# Ammunition warning
 
-An opt-in line of text near the middle of the screen when a Hunter's ranged weapon has no usable ammunition. Code:
+An opt-in line of text near the middle of the screen when an equipped ranged weapon that takes ammunition has none usable (any class; the client's `UnitUsesAmmo` decides). Code:
 `!!!TwichUI/ammo/`; settings: `TwichUI_Settings/pages/Ammo.lua` and `AmmoItems.lua`; tests: `tests/test_ammo.lua`,
 `tests/test_ammo_settings.lua`.
 
@@ -85,8 +85,9 @@ No other ammunition type is offered: none is present in the Forever source.
 
 | Moment | What happens |
 |---|---|
-| Off, or any class but Hunter | no frame, no timer, no ammunition event. A class that cannot be read yet listens for `PLAYER_ENTERING_WORLD` only |
-| A Hunter with it on | `PLAYER_ENTERING_WORLD`, `PLAYER_EQUIPMENT_CHANGED` (ammo and ranged slots only; others are dropped before any work), `BAG_UPDATE_DELAYED`, `UNIT_INVENTORY_CHANGED` (registered for the player only), plus `PLAYER_REGEN_DISABLED/ENABLED` while "Only in combat" is chosen. They only note that a look is due |
+| Off | no frame, no timer, no event |
+| On, ranged weapon takes no ammunition (or none) | `PLAYER_ENTERING_WORLD` and `PLAYER_EQUIPMENT_CHANGED` (ranged slot only). No bag is read |
+| On, `UnitUsesAmmo` true | also the ammo slot, `BAG_UPDATE_DELAYED`, `UNIT_INVENTORY_CHANGED` (registered for the player only), plus `PLAYER_REGEN_DISABLED/ENABLED` while "Only in combat" is chosen. They only note that a look is due |
 | A look | one 0.15 s timer however many events arrive; at most six reads of the character, and the bags only when nothing is selected. No `OnUpdate` exists, anywhere |
 | Setting, profile or custom-list change | one refresh; `quiet` (no sound) |
 | Switching off, a profile without it | everything unregistered, hidden and forgotten at once; timers from before do nothing |
@@ -110,7 +111,35 @@ disabled: it is click-through. Text only by default; the optional icon is the it
 selected, or what was last selected). No background or border is drawn until chosen (`ui.ammoLook`, a MenuStyle look: the
 same textures, LibSharedMedia and EllesmereUI choices as the other frames; it is built the first time something is shown,
 so an EllesmereUI border is never drawn before every addon has loaded). Font, size, outline and color are settings; so are
-scale and opacity. Nothing animates, so there is nothing for reduced motion to reduce.
+scale and opacity. Standard does not animate; RPG Notification does (see Display style) and follows Reduced motion.
+
+### Display style
+
+`ui.ammo.style`: **Standard** (the default, everything above) or **RPG Notification**. Both draw the same state under the same
+visibility rule and sound rule; only the presentation differs, and exactly one is ever visible. Changing the style updates
+a showing warning (or preview) at once without a sound. Each style keeps its own settings; nothing is erased on a switch.
+
+RPG Notification is a separate frame (`W.RpgFrame()`), built the first time it is shown. It borrows the **zone arrival
+card's look** and nothing of its machinery:
+
+| Reused from `modules/Arrival.lua` | Not reused |
+|---|---|
+| Cinzel for the main line, Alegreya for the heading and the line beneath (`Arrival.FONT_TITLE/FONT_LINE`, `Arrival.SetFont` with its non-Western fallback) | the `Notify` queue, its TTL and "make way" rules |
+| the stepped bronze rule (`Arrival.Rule`) and the Chronicle palette | the arrival frame, its hold and fade-out timers |
+| the rise-and-fade entrance shape and the **Reduced motion** switch (`arrivalReducedMotion`: fade only) | zone events, the game's zone text hooks, any sound |
+
+Hierarchy: heading "Ammunition" at half the Text size, the warning text at the Text size, a supporting line at 0.6 of it
+(`AmmoState.DETAIL`: only what the state establishes; NO AMMO EQUIPPED says ammunition that fits is carried, OUT OF AMMO
+only that none is usable). Text color, outline, size, font ("Game font" means the arrival card's face), scale, opacity and
+the place are shared with Standard; the icon and the background/border are Standard only (the settings say so).
+
+Lifetime is the warning's, not a toast's: the card settles in once when a problem begins, stays while it persists and the
+visibility rule permits, and fades once (0.35 s) when it ends. Bag events, a changed message or a changed setting redraw
+it in place without replaying the entrance; returning during a fade cancels the fade. No timer dismisses it and there is
+no `OnUpdate`. Disabling, a profile change and a style switch stop both animation groups and reset alpha at once. The
+preview marks its heading "(preview)", cycles the same three messages, never plays a sound and ends as before. The
+place is the one saved place (`ui.ammoPosition`), applied to whichever frame is showing; the default is above the middle of
+the screen, clear of the zone card at the top. The zone card and this card are independent frames.
 
 **Preview**: a sample of the frame for any class (Hunter or not), cycling the three messages. It uses none of the real
 state, plays no sound and ends when settings close, combat starts or the feature is turned off. **Unlock/Lock**: the
@@ -129,7 +158,7 @@ sound" button plays it once on request). Nothing is printed.
 | Key | Holds |
 |---|---|
 | `modules.ammoWarning` | the switch (false until turned on) |
-| `ui.ammo` | `show`, `icon`, `scale`, `opacity`, `font`, `fontSize`, `fontOutline`, `textColor`, `sound`, `soundName`, `soundChannel`. Ranges in `Config.LIMITS` |
+| `ui.ammo` | `style` ("standard" or "rpg"; anything else reads as Standard), `show`, `icon`, `scale`, `opacity`, `font`, `fontSize`, `fontOutline`, `textColor`, `sound`, `soundName`, `soundChannel`. Ranges in `Config.LIMITS` |
 | `ui.ammoLook` | background and border (none by default) |
 | `ui.ammoPosition` | `{ x, y }` from the screen centre. Never shared |
 | `ui.ammoCustom` | `{ items = { { id, kind } } }` |
@@ -163,4 +192,8 @@ Values are validated on the way in and out (an invalid stored value reads as its
 8. `/reload` and log in with a problem present: it appears without a sound; with the sound on, create a problem in play:
    one sound, not repeated by bag changes.
 9. Register a server item as arrows/bullets and check it counts when selected and carried, and `/reload` keeps the list.
-10. Another class: nothing happens (`/tui diagnostics` shows no events registered); Preview still works.
+10. RPG Notification (Display style): Preview, then with a real warning. Fade-in once, stays past 15 s, fades when fixed.
+    Swap style while it is up: only one shows. Repeat bag moves: no re-entrance. Zone into a new area while it is up:
+    both appear, neither disturbs the other. Turn on Reduced motion (Notifications): no upward settle. Check the
+    heading/main/line sizes, rule width and overlap with the zone card at the top.
+11. Another class: nothing happens (`/tui diagnostics` shows no events registered); Preview still works.

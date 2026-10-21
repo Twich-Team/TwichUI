@@ -1427,7 +1427,7 @@ local function Define()
         local AM = R.Ammo
         local enums = {}
         if AM then for key in pairs(AM.DEFAULTS) do if AM.ENUM[key] then enums[key] = AM.ENUM[key] end end end
-        Table(g, { "ui", "ammo" }, AM, { "show", "icon", "scale", "opacity", "font", "fontSize", "fontOutline", "textColor",
+        Table(g, { "ui", "ammo" }, AM, { "style", "show", "icon", "scale", "opacity", "font", "fontSize", "fontOutline", "textColor",
             "sound", "soundName", "soundChannel" }, enums, { soundName = "sound" })
     end
 

@@ -1,4 +1,4 @@
--- TwichUI: Hunter ammunition warning, what counts as ammunition
+-- TwichUI: Ammunition warning, what counts as ammunition
 -- Two things, and nothing else: how an item ID is recognized as arrows or bullets, and the list of ammunition the
 -- player registered themselves. Neither says anything about what is equipped or carried; that is read from the
 -- game each time (Warning.lua) and judged by State.lua.

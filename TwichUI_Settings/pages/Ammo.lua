@@ -1,4 +1,4 @@
--- TwichUI settings: Hunter ammunition warning (ammo/). Two pages: General (the switch, when to show, the text and
+-- TwichUI settings: ammunition warning (ammo/). Two pages: General (the switch, when to show, the text and
 -- icon, the optional background and border, the place, the preview, the optional sound) and Custom ammunition (the
 -- items you registered; Ammo.lua's sibling AmmoItems.lua draws that list). The warning is decided and drawn, and every
 -- value is checked and saved, by the core addon's ammo/ files; this file only describes rows that call their Get/Set.
@@ -10,17 +10,12 @@ local K = R.SettingsKit
 local function AM() return R.Ammo end
 local function On() return R:Enabled("ammoWarning") end
 
-local function Class()
-    local _, class = UnitClass("player")
-    return class
-end
-
 K.Page({
     key = "ammo", name = "Ammunition warning", nav = "Ammunition warning", order = 52, group = "class",
-    description = "A line of text near the middle of the screen when a Hunter's ammunition is missing, out or the wrong kind. Off until you turn it on.",
-    keywords = "hunter ammo ammunition arrows bullets quiver ranged bow gun crossbow warning alert out of ammo no ammo wrong ammo sound position move preview",
+    description = "A line of text near the middle of the screen when the ammunition for your equipped ranged weapon is missing, out or the wrong kind. Off until you turn it on.",
+    keywords = "display style rpg notification standard hunter warrior ammo ammunition arrows bullets quiver ranged bow gun crossbow warning alert out of ammo no ammo wrong ammo sound position move preview",
     overview = {
-        label = "Ammunition warning", tip = "A warning near the middle of the screen when a Hunter's ammunition is missing, out or the wrong kind.",
+        label = "Ammunition warning", tip = "A warning near the middle of the screen when the ammunition for your equipped ranged weapon is missing, out or the wrong kind.",
         when = function() return R.Ammo ~= nil end,
         status = function() return K.OnOff(R:Enabled("ammoWarning")) end,
     },
@@ -31,29 +26,27 @@ K.Page({
         local BOOL, STRING, NUMBER = K.BOOL, K.STRING, K.NUMBER
         local am = AM()
 
-        Header("Ammunition warning", "Shows one line of text near the middle of the screen while a Hunter's ranged weapon has no usable ammunition. It only reads what is equipped and carried, never equips or moves anything, says nothing in chat and does nothing until you turn it on.")
+        Header("Ammunition warning", "Shows one line of text near the middle of the screen while an equipped ranged weapon that takes ammunition has none you can use. It only reads what is equipped and carried, never equips or moves anything, says nothing in chat and does nothing until you turn it on.")
         local main = Toggle("ammoWarning", "Warn when my ammunition is missing, out or wrong",
-            "For a Hunter whose ranged weapon takes ammunition (the game says whether it does), shows NO AMMO EQUIPPED when none is selected but you carry some that fits, OUT OF AMMO when none is selected and none that fits is carried (or the selected stack is empty), and WRONG AMMO EQUIPPED when arrows are selected for a gun or bullets for a bow. It stays quiet when the weapon takes no ammunition, when you have no ranged weapon, and while the game has not yet told it enough to be sure.\n\nThe bank, mail and the auction house are never counted. Turn it off to remove it completely: nothing listens for the game's events and nothing is drawn. Other classes never run it.")
+            "When your equipped ranged weapon takes ammunition (the game says whether it does, whatever your class), shows NO AMMO EQUIPPED when none is selected but you carry some that fits, OUT OF AMMO when none is selected and none that fits is carried (or the selected stack is empty), and WRONG AMMO EQUIPPED when arrows are selected for a gun or bullets for a bow. It stays quiet when the weapon takes no ammunition, when you have no ranged weapon, and while the game has not yet told it enough to be sure.\n\nThe bank, mail and the auction house are never counted. Turn it off to remove it completely: nothing listens for the game's events and nothing is drawn. With a weapon that takes no ammunition equipped, only the change of weapon is noticed.")
         Under(K.Status("On this character",
             function()
-                if Class() ~= "HUNTER" then return "No: not a Hunter" end
                 if not On() then return "Off" end
                 local s = R.AmmoWarning.Snapshot()
                 if not s.running then return "Waiting for the game world" end
                 if s.shown then return R.AmmoState.MESSAGES[s.shown] end
                 if s.state == "ok" then return "Ammunition is fine" end
-                if s.state == "inactive" then return "Nothing to warn about" end
+                if s.state == "inactive" then return "No ranged weapon that takes ammunition" end
                 return "Checking"
             end,
             function()
-                if Class() ~= "HUNTER" then return "The warning only runs for Hunters. You can still set it up and preview it here." end
                 return "What it concluded the last time it looked."
             end,
             "Whether the warning applies to the character you are playing, and what it last found. Read when this page is drawn; it is not polled.",
             function()
-                local s = On() and Class() == "HUNTER" and R.AmmoWarning.Snapshot()
+                local s = On() and R.AmmoWarning.Snapshot()
                 if s and s.shown then return "warn" end
-                return On() and Class() == "HUNTER" and "ok" or "quiet"
+                return On() and "ok" or "quiet"
             end), main, On)
 
         Header("When to show", "Showing it out of combat lets you fix the problem before you pull. It never shows for a weapon that takes no ammunition.")
@@ -68,14 +61,16 @@ K.Page({
             "Whenever my ranged weapon needs ammunition shows it as soon as a problem is found, in or out of combat. Only in combat keeps it hidden until you are in combat; if your ammunition runs out mid-fight it appears then."), main, On)
 
         Header("Text and icon", "The words are fixed: NO AMMO EQUIPPED, OUT OF AMMO and WRONG AMMO EQUIPPED. How they look is yours.")
-        Under(K.Checkbox(Shared("Icon", "icon", BOOL, "Show an ammunition icon", function(v) am.Set("icon", v and true or false) end),
-            "Shows the icon of the ammunition beside the words, when there is one to show: what is selected, or what you carry that fits, or what you last had selected."), main, On)
+        Under(K.Dropdown(Shared("Style", "style", STRING, "Display style"), function() return am.CHOICES.style end,
+            "Standard is the warning as one line of text. RPG Notification draws it like the zone arrival card: a small heading, a bronze rule, the warning in the card's type and a short line beneath. It settles in once when a problem begins, fades once when it is fixed and stays up for as long as the problem does. Both show the same warnings under the same rules, and each keeps its own settings when you switch. Use Show under Place and preview to see the one you chose."), main, On)
+        Under(K.Checkbox(Shared("Icon", "icon", BOOL, "Show an ammunition icon (Standard)", function(v) am.Set("icon", v and true or false) end),
+            "Standard style only. Shows the icon of the ammunition beside the words, when there is one to show: what is selected, or what you carry that fits, or what you last had selected."), main, On)
         Under(K.Dropdown(Shared("Font", "font", STRING, "Font"),
             function() return MS.Fonts.Choices(am.Get("font"), { { "default", "Game font (default)" } }) end,
-            "The text's typeface. Fonts come from LibSharedMedia, so TwichUI's, EllesmereUI's and any other addon's are listed. A font that has gone is drawn with the game's own and stays chosen."), main, On)
+            "The warning text's typeface. In RPG Notification, Game font means the zone arrival card's own typeface. Fonts come from LibSharedMedia, so TwichUI's, EllesmereUI's and any other addon's are listed. A font that has gone is drawn with the game's own and stays chosen."), main, On)
         local size = am.LIMITS.fontSize
         Under(K.Slider(Shared("FontSize", "fontSize", NUMBER, "Text size", function(v) am.Set("fontSize", math.floor(v + 0.5)) end),
-            size[1], size[2], "The text's size in pixels."), main, On)
+            size[1], size[2], "The size in pixels of the warning text. In RPG Notification this is the main line; the heading and the line beneath are drawn smaller so the hierarchy stays."), main, On)
         Under(K.Dropdown(Shared("FontOutline", "fontOutline", STRING, "Text outline"), function() return am.CHOICES.fontOutline end,
             "Outline and Thick outline draw a line round each letter, which keeps the words readable over any background. Shadow is a soft dark edge. None leaves the text bare."), main, On)
         Under(K.Swatch(Shared("TextColor", "textColor", STRING, "Text color"), "The color of the warning text."), main, On)
@@ -86,7 +81,7 @@ K.Page({
         Under(K.Slider(Shared("Opacity", "opacity", NUMBER, "Opacity", function(v) am.Set("opacity", math.floor(v + 0.5)) end),
             opacity[1], opacity[2], "How solid the warning is as a whole, in percent: its text, icon, background and border together."), main, On)
 
-        Header("Background and border", "Nothing is drawn behind the words until you choose a background or a border, so the warning does not cover the world. Both can be switched on here, either alone.")
+        Header("Background and border", "Standard style only; RPG Notification draws its own rule instead. Nothing is drawn behind the words until you choose a background or a border, so the warning does not cover the world. Both can be switched on here, either alone.")
         K.Appearance(am.Look, "ammoLook", "warning", "Shows a sample of the warning drawn with this look. The sample is not a real warning and plays no sound.",
             function()
                 local W = R.AmmoWarning

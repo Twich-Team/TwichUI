@@ -149,13 +149,13 @@ Check(soundName and not soundName:Enabled() and soundName:DisabledReason():find(
 S.variables.TWICHUI_ammoSound:SetValue(true)
 Check(soundName:Enabled() and rows["Play the sound"]:Enabled(), "and work once it is on")
 
--- not a Hunter: it says so
+-- no class gate: the status describes the equipment, not the class
 local status = rows["On this character"]
-Check(status and status.value():find("not a Hunter", 1, true), "the status says this character is not a Hunter (" .. tostring(status and status.value()) .. ")")
+Check(status and not status.value():find("Hunter", 1, true), "the status names no class (" .. tostring(status and status.value()) .. ")")
 
 -- the preview works for any class; the position buttons call through
 rows["Preview"].click()
-Check(R.AmmoWarning.PreviewActive() and R.AmmoWarning.PreviewMessage() == "NO AMMO EQUIPPED", "Preview shows a sample on a character that is not a Hunter")
+Check(R.AmmoWarning.PreviewActive() and R.AmmoWarning.PreviewMessage() == "NO AMMO EQUIPPED", "Preview shows a sample on any character")
 rows["Sample message"].click()
 Check(R.AmmoWarning.PreviewMessage() == "OUT OF AMMO", "and the next message")
 rows["Preview"].click()

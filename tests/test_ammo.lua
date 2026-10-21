@@ -53,6 +53,23 @@ Methods = {
   StartMoving = function(s) s.moving = true end,
   StopMovingOrSizing = function(s) s.moving = false end,
   SetFont = function(s, path, size, flags) s.font = { path, size, flags }; s.fontSize = size; return true end,
+  SetTextColor = function(s, r, g, b, a) s.color = { r, g, b, a } end,
+  SetShadowOffset = function(s, x, y) s.shadow = { x, y } end,
+  -- animation groups record what was played and stopped; Finish() is what the game does when one runs out
+  CreateAnimationGroup = function(s)
+    local g = Fake("group")
+    g.owner, g.plays, g.stops, g.anims = s, 0, 0, {}
+    g.Play = function(self) self.plays = self.plays + 1; self.playing = true end
+    g.Stop = function(self) if self.playing then self.stops = self.stops + 1 end self.playing = false end
+    g.Finish = function(self) self.playing = false; if self.scripts.OnFinished then self.scripts.OnFinished(self) end end
+    g.CreateAnimation = function(_, kind)
+      local an = Fake("anim"); an.type = kind
+      an.SetOffset = function(self, x, y) self.offset = { x, y } end
+      g.anims[#g.anims + 1] = an
+      return an
+    end
+    return g
+  end,
 }
 c.CreateFrame = function(kind, name, parent, template)
   local f = Fake(kind)
@@ -241,27 +258,6 @@ do
 end
 
 ---------------------------------------------------------------------------
--- 3. Not a Hunter: no warning and no inventory monitoring
----------------------------------------------------------------------------
-do
-  Reset(); World("MAGE")
-  W.ammo, W.ranged = nil, nil
-  On(); EnterWorld()
-  assert(RegisteredAmmoEvents() == 0, "no inventory event on another class")
-  assert(AllEvents() == 0 and AW.Frame() == nil, "nothing at all on another class")
-  Fire("BAG_UPDATE_DELAYED"); Fire("PLAYER_EQUIPMENT_CHANGED", 0); Settle()
-  assert(calls.inv == 0 and calls.bag == 0 and calls.uses == 0, "no ammunition is read on another class")
-  assert(Words() == nil)
-  local s = AW.Snapshot()
-  assert(s.enabled and not s.hunter and not s.running and s.events == 0)
-  -- the class is localized elsewhere: the token is what counts
-  World("HUNTER"); AW.Refresh(); EnterWorld()
-  assert(RegisteredAmmoEvents() == 3, "a Hunter listens (" .. RegisteredAmmoEvents() .. ")")
-  Off()
-  assert(RegisteredAmmoEvents() == 0 and AllEvents() == 0, "off again: nothing is registered")
-end
-
----------------------------------------------------------------------------
 -- 4. A Hunter: the warning states, from what the game reports
 ---------------------------------------------------------------------------
 do
@@ -359,7 +355,7 @@ do
   Changed({ "PLAYER_EQUIPMENT_CHANGED" })
   assert(Words() == nil)
   W.uses = true
-  Changed({ "PLAYER_EQUIPMENT_CHANGED" })
+  Fire("PLAYER_EQUIPMENT_CHANGED", 18); Settle()   -- the ranged slot: what makes the client's answer change
   assert(Words() == "OUT OF AMMO", "now it takes ammunition, and there is none")
 end
 
@@ -762,7 +758,7 @@ do
   Reset()
   assert(AW.PreviewStart() == false, "the preview needs the feature on")
   On()
-  World("MAGE"); AW.Refresh()   -- not a Hunter: the preview still works
+  World("MAGE"); W.uses = false; AW.Refresh()   -- no ammunition weapon: the preview still works
   assert(AW.PreviewStart() == true and AW.PreviewActive())
   assert(Words() == "NO AMMO EQUIPPED", "first sample")
   assert(AW.PreviewNext() and Words() == "OUT OF AMMO")
@@ -895,5 +891,269 @@ do
   assert(c2 ~= nil and saved.ui.ammoCustom.items[1].id == 90001)
   Reset()
 end
+
+---------------------------------------------------------------------------
+-- 3b. Any class: what the equipped weapon takes decides, not the class
+---------------------------------------------------------------------------
+do
+  -- no ranged weapon, a wand: the client says no ammunition. Only the weapon-change events are listened for.
+  Reset(); World("WARRIOR")
+  W.ammo, W.ranged, W.uses = nil, nil, false
+  On(); EnterWorld()
+  assert(RegisteredAmmoEvents() == 1 and AllEvents() >= 2, "idle: world + ranged-slot events only (" .. AllEvents() .. ")")
+  assert(Words() == nil)
+  local bags, looks = calls.bag, AW.Snapshot().looks
+  Fire("BAG_UPDATE_DELAYED"); Fire("UNIT_INVENTORY_CHANGED", "player"); Fire("PLAYER_EQUIPMENT_CHANGED", 4); Fire("PLAYER_EQUIPMENT_CHANGED", 0); Settle()
+  assert(calls.bag == bags and AW.Snapshot().looks == looks, "irrelevant events cause no look and no bag scan")
+  local s = AW.Snapshot()
+  assert(s.enabled and s.running and not s.monitoring)
+
+  -- a Warrior equips a gun, no ammunition anywhere: OUT OF AMMO, and bag monitoring starts
+  W.ranged, W.uses = 2508, true
+  Changed({ "PLAYER_EQUIPMENT_CHANGED" })
+  Fire("PLAYER_EQUIPMENT_CHANGED", 18); Settle()
+  assert(Words() == "OUT OF AMMO", "warrior, gun, no ammunition: " .. tostring(Words()))
+  assert(AW.Snapshot().monitoring and RegisteredAmmoEvents() == 3)
+  -- compatible ammunition equipped: quiet; incompatible: wrong
+  W.ammo, W.count = 2516, 50
+  Changed({ "PLAYER_EQUIPMENT_CHANGED" })
+  assert(Words() == "OUT OF AMMO" or Words() == nil)
+  Fire("PLAYER_EQUIPMENT_CHANGED", 0); Settle()
+  assert(Words() == nil, "bullets for a gun: no warning")
+  W.ammo = 2512
+  Fire("PLAYER_EQUIPMENT_CHANGED", 0); Settle()
+  assert(Words() == "WRONG AMMO EQUIPPED", "arrows for a gun")
+  -- custom ammunition on a non-Hunter (a server item the client has no data for)
+  W.ranged, W.ammo, W.count = 2508, 90001, 20
+  AI.Add(90001, "bullet")
+  Fire("PLAYER_EQUIPMENT_CHANGED", 0); Settle()
+  assert(Words() == nil, "custom bullets for a gun on a Warrior: no warning")
+  W.ammo, W.count = 2512, 20
+  AI.Remove(90001)
+
+  -- swap to a wand: the warning clears, bag events are dropped, no duplicates after repeated swaps
+  local base = AllEvents() - 4
+  for _ = 1, 5 do
+    W.ranged, W.uses = 5000, false
+    Fire("PLAYER_EQUIPMENT_CHANGED", 18); Settle()
+    assert(Words() == nil and not AW.Snapshot().monitoring and RegisteredAmmoEvents() == 1, "wand: cleared and idle")
+    W.ranged, W.uses = 2508, true
+    Fire("PLAYER_EQUIPMENT_CHANGED", 18); Settle()
+    assert(Words() == "WRONG AMMO EQUIPPED" and RegisteredAmmoEvents() == 3 and AllEvents() == base + 4, "gun again, still one set of listeners")
+  end
+  for _, f in ipairs(frames) do assert(f.scripts.OnUpdate == nil) end
+
+  -- removing the weapon entirely
+  W.ranged, W.ammo, W.uses = nil, nil, false
+  Fire("PLAYER_EQUIPMENT_CHANGED", 18); Settle()
+  assert(Words() == nil and RegisteredAmmoEvents() == 1)
+
+  -- uncached weapon data: nothing is concluded, then the answer arrives
+  W.ranged, W.uses = 2504, nil
+  Fire("PLAYER_EQUIPMENT_CHANGED", 18); Settle()
+  assert(Words() == nil, "unknown is never a warning")
+  W.uses = true; W.ammo, W.count = 2512, 10
+  Fire("PLAYER_EQUIPMENT_CHANGED", 18); Settle()
+  assert(Words() == nil and AW.Snapshot().state == "ok")
+
+  -- login/reload on a non-Hunter already holding a gun and no ammunition
+  Reset(); World("WARRIOR"); W.ranged, W.ammo, W.uses = 2508, nil, true
+  On(); EnterWorld()
+  assert(Words() == "OUT OF AMMO", "warrior at login")
+
+  -- switched off: nothing listens
+  Off()
+  assert(RegisteredAmmoEvents() == 0 and AllEvents() == 0 and Words() == nil, "off: nothing is registered")
+end
+
+---------------------------------------------------------------------------
+-- 18. RPG Notification style: the same state in another presentation
+---------------------------------------------------------------------------
+do
+  Reset()
+  local function Rpg() return AW.RpgFrame() end
+  local function RpgUp() local r = Rpg(); return r ~= nil and r.shown end
+  local function Card()
+    local root = Rpg()
+    for _, f in ipairs(frames) do if f.parent == root and f.kind == "Frame" and f.template == nil then return f end end
+  end
+  local function Strings()
+    local card = Card()
+    local list = {}
+    for _, f in ipairs(frames) do if f.parent == card and f.kind == "font" then list[#list + 1] = f end end
+    return list[1], list[2], list[3]   -- heading, main line, supporting line
+  end
+  local function Groups()
+    local card, list = Card(), {}
+    for _, f in ipairs(frames) do if f.kind == "group" and f.owner == card then list[#list + 1] = f end end
+    return list[1], list[2]            -- entrance, exit
+  end
+  local function Standard() local f = AW.Frame(); return f ~= nil and f.shown end
+
+  -- defaults and validation: existing profiles stay Standard
+  assert(AM.DEFAULTS.style == "standard" and AM.Get("style") == "standard", "Standard is the default")
+  assert(AM.Set("style", "cinematic") == false and AM.Set("style", 3) == false and AM.Get("style") == "standard", "unknown styles are refused")
+  c.TwichUIDB.ui = { ammo = { style = "cinematic", scale = 120 } }
+  assert(AM.Get("style") == "standard" and c.TwichUIDB.ui.ammo.style == "cinematic", "a bad stored value reads as Standard and is not erased")
+  c.TwichUIDB.ui = { ammo = { scale = 120 } }
+  assert(AM.Get("style") == "standard" and AM.Get("scale") == 120, "an old profile without it is Standard, its other values kept")
+  Reset()
+
+  -- the same warning, two presentations; the words come from the same table
+  On(); EnterWorld()
+  W.ammo, W.count = nil, nil
+  Changed({ "PLAYER_EQUIPMENT_CHANGED" })
+  assert(Words() == "OUT OF AMMO" or Words() == "NO AMMO EQUIPPED")
+  local standardWords = Words()
+  assert(Rpg() == nil, "nothing of the RPG style is built while Standard is chosen")
+  assert(AM.Set("style", "rpg"))
+  assert(RpgUp() and not Standard(), "switching shows exactly one presentation")
+  local heading, main, detail = Strings()
+  assert(main.text == standardWords, "the same warning text: " .. tostring(main.text))
+  assert(heading.text == "Ammunition" and detail.text == AS.DETAIL[AW.Snapshot().shown] and detail.shown, "heading and supporting line")
+  assert(heading.fontSize < detail.fontSize and detail.fontSize < main.fontSize, "a hierarchy of sizes, not one size")
+  local enter, leave = Groups()
+  assert(enter.plays == 1 and leave.plays == 0, "one entrance")
+  assert(Card().alpha == 0 or enter.playing, "the card is entering")
+
+  -- it is not a toast: nothing dismisses it, no timer or update loop exists for it
+  FlushTimers(); if RunLongTimers then RunLongTimers(120) end
+  assert(RpgUp(), "still up long after any zone card would be gone")
+  assert(leave.plays == 0 and OnUpdates() == 0)
+
+  -- event bursts: no new entrance, no sound
+  AM.Set("sound", true)
+  local before, sbefore = enter.plays, #sounds
+  for _ = 1, 5 do Changed({ "BAG_UPDATE_DELAYED", "UNIT_INVENTORY_CHANGED" }) end
+  assert(enter.plays == before and #sounds == sbefore and RpgUp(), "a burst replays nothing and sounds nothing")
+  AM.Set("sound", false)
+
+  -- a setting changes under it: redrawn in place, no entrance
+  AM.Set("fontSize", 40)
+  local _, main2 = Strings()
+  assert(main2.fontSize == 40 and enter.plays == before, "redrawn at the new size without replaying")
+
+  -- state changes while up: the text follows without a second entrance
+  W.ammo, W.count = 2512, 10
+  Changed({ "PLAYER_EQUIPMENT_CHANGED" })
+  assert(leave.plays == 1 and AW.Snapshot().rpgVisible == false, "ammunition restored: it starts to leave")
+  leave:Finish()
+  assert(not RpgUp(), "and is gone when the fade ends")
+  W.ammo, W.count = nil, nil
+  W.bags = {}; Bag(1, 2512)
+  Changed({ "PLAYER_EQUIPMENT_CHANGED" })
+  assert(RpgUp(), "and comes back when the problem does")
+
+  -- rapid hide / show leaves nothing half-way
+  W.ammo, W.count = 2512, 10
+  Changed({ "PLAYER_EQUIPMENT_CHANGED" })
+  assert(leave.playing and Card().alpha == 1, "fading out")
+  local plays = enter.plays
+  W.ammo, W.count = nil, nil
+  Changed({ "PLAYER_EQUIPMENT_CHANGED" })
+  assert(RpgUp() and not leave.playing and Card().alpha == 1 and enter.plays == plays, "back during the fade: no second entrance, no stale alpha")
+  W.ammo, W.count = 2512, 10
+  Changed({ "PLAYER_EQUIPMENT_CHANGED" })
+  leave:Finish()
+  assert(not RpgUp() and Card().alpha == 1, "the fade ends hidden and the card is reset for reuse")
+  leave:Finish()   -- a stale finish does nothing
+  assert(not RpgUp())
+
+  -- switching back and forth with a warning up
+  W.ammo, W.count = nil, nil
+  Changed({ "PLAYER_EQUIPMENT_CHANGED" })
+  assert(RpgUp() and not Standard())
+  AM.Set("style", "standard")
+  assert(Standard() and not RpgUp() and Words() == AS.MESSAGES[AW.Snapshot().shown], "back to Standard: one presentation, same words")
+  assert(not enter.playing and Card().alpha == 1, "the RPG card's animations are cancelled")
+  AM.Set("style", "rpg")
+  assert(RpgUp() and not Standard())
+  AM.Set("style", "standard"); AM.Set("style", "rpg"); AM.Set("style", "standard")
+  assert(Standard() and not RpgUp())
+
+  -- every state, then the visibility policy and the weapon
+  AM.Set("style", "rpg")
+  AM.Set("show", "combat")
+  assert(AW.Snapshot().rpgVisible == false, "Only in combat: put away out of combat")
+  leave:Finish()
+  assert(not RpgUp())
+  W.combat = true; Fire("PLAYER_REGEN_DISABLED"); Settle()
+  assert(RpgUp(), "and shown in combat")
+  W.combat = false; Fire("PLAYER_REGEN_ENABLED"); Settle()
+  leave:Finish()
+  assert(not RpgUp())
+  AM.Set("show", "equipped"); Settle()
+  assert(RpgUp())
+  W.uses = false; W.ranged = 5000
+  Changed({ "PLAYER_EQUIPMENT_CHANGED" })
+  leave:Finish()
+  assert(not RpgUp(), "a weapon that needs no ammunition clears it")
+  W.uses, W.ranged = true, 2504
+  Fire("PLAYER_EQUIPMENT_CHANGED", 18); Settle()   -- the weapon slot, the one change noticed while the weapon takes none
+  assert(RpgUp())
+  Off()
+  assert(not RpgUp() and not leave.playing and not enter.playing and Card().alpha == 1, "disabling clears it at once and stops every animation")
+
+  -- reduced motion: the card fades but does not move
+  Reset(); On(); EnterWorld(); AM.Set("style", "rpg")
+  W.ammo, W.count = nil, nil
+  Changed({ "PLAYER_EQUIPMENT_CHANGED" })
+  local enterGroup = Groups()
+  local function Rise() for _, an in ipairs(enterGroup.anims) do if an.type == "Translation" and an.offset and an.offset[2] ~= 0 then return an.offset[2] end end return 0 end
+  assert(Rise() ~= 0, "it settles upward by default")
+  Off(); R:SetEnabled("arrivalReducedMotion", true); On(); EnterWorld()
+  Changed({ "PLAYER_EQUIPMENT_CHANGED" })
+  assert(RpgUp() and Rise() == 0, "Reduced motion: no movement")
+  R:SetEnabled("arrivalReducedMotion", false)
+
+  -- place, scale, opacity: the one saved place, on the style's own frame
+  AM.SetPosition(-200, 90); AM.Set("scale", 200); AM.Set("opacity", 50)
+  local root = Rpg()
+  assert(root.points[1][1] == "CENTER" and root.points[1][4] == -100 and root.points[1][5] == 45 and root.scale == 2 and root.alpha == 0.5,
+    "placed, scaled and dimmed like the standard frame")
+  assert(root.mouse == false, "click-through")
+  AM.SetPosition(nil, nil); AM.Set("scale", 100); AM.Set("opacity", 100)
+  assert(Rpg().points[1][4] == 0 and Rpg().points[1][5] == 140, "reset puts the default back")
+
+  -- preview in the RPG style: any class, no real state, no sound, restored afterwards
+  Reset(); World("MAGE"); W.uses = false; On(); EnterWorld(); AM.Set("style", "rpg"); AM.Set("sound", true)
+  assert(AW.PreviewStart() and RpgUp() and not Standard())
+  local ph, pm = Strings()
+  assert(pm.text == "NO AMMO EQUIPPED" and ph.text:find("preview"), "the sample says it is one")
+  local e1 = Groups()
+  local plays1 = e1.plays
+  AW.PreviewNext(); AW.PreviewNext()
+  assert(pm.text == "WRONG AMMO EQUIPPED" and e1.plays == plays1, "cycling samples does not replay the entrance")
+  AM.Set("style", "standard")
+  assert(Standard() and not RpgUp() and Words() == "WRONG AMMO EQUIPPED", "changing the style refreshes the preview")
+  AM.Set("style", "rpg")
+  assert(AW.Snapshot().shown == nil and #sounds == 0, "no real state, no sound")
+  AW.PreviewStop()
+  Groups()
+  local _, l2 = Groups()
+  l2:Finish()
+  assert(not RpgUp() and not Standard(), "the preview ends")
+  World("HUNTER"); W.ammo, W.count = nil, nil; AW.Refresh(); EnterWorld()
+  assert(RpgUp() and #sounds == 0, "the real warning shows without a sound at login")
+  AW.PreviewStart(); AW.PreviewStop()
+  assert(RpgUp(), "a real warning survives a preview")
+
+  -- positioning in the RPG style shows the handle on the RPG frame
+  assert(AW.PositionStart() and AW.PositioningActive())
+  local handleOn
+  for _, f in ipairs(frames) do if f.parent == Rpg() and f.template == "BackdropTemplate" then handleOn = f.shown and f.mouse end end
+  assert(handleOn, "the handle takes the mouse while positioning")
+  AW.PositionEnd(); AW.PreviewStop()
+
+  -- sharing: the style travels with the other warning settings
+  local TC = R.TwichConfig
+  local shared = {}
+  for _, g in ipairs(TC.Groups()) do if g.id == "ammo" then for _, f in ipairs(g.fields) do shared[f.key] = true end end end
+  assert(shared.style, "the style is part of the shared settings")
+  AM.ResetSettings()
+  assert(AM.Get("style") == "standard", "reset puts Standard back")
+  Reset()
+end
+
 
 print("PASSED")

@@ -1,4 +1,4 @@
--- TwichUI settings: Custom ammunition (ammo/Items.lua). The ammunition you registered for the Hunter warning, each with
+-- TwichUI settings: Custom ammunition (ammo/Items.lua). The ammunition you registered for the ammunition warning, each with
 -- what it is (arrows or bullets) and Remove; adding one by dropping it from your bags, pasting its link or typing its
 -- item ID. A frame of this window's own, shown as the tab's page, since a list of items with their own controls doesn't
 -- fit the ordinary rows. Built the first time the tab is shown; list rows are made as they are first needed and reused
