@@ -420,6 +420,119 @@ c.EllesmereUI = nil
 Check(Hidden({ text = SPAM }) == true, "without it")
 
 ---------------------------------------------------------------------------
+-- 3b. The topic presets (Politics, LGBTQ Topics): matching, channel scope, migration, sharing
+---------------------------------------------------------------------------
+do
+  -- the production path: visible text, lowered, topic text, then the prepared lookups
+  local function Topic(key, text)
+    local hit = M.Topic(key, M.TopicText(M.Lower(M.Visible(text))))
+    return hit and hit.label or nil
+  end
+  local POLITICS = { "TRUMP again?", "What do you think about Biden?", "(MAGA)", "GOP!", "Democrats and Republicans are arguing.",
+    "Democratic candidate", "The Supreme Court decision", "The   White House", "PRESIDENTIAL ELECTION", "Let's go Brandon",
+    "Lets go Brandon", "Let\226\128\153s go Brandon" }
+  local LGBT = { "LGBTQ", "LGBTQ+", "LGBTQIA+", "(LGBT)", "Gay marriage", "A transgender character", "NONBINARY", "non-binary",
+    "non binary", "Gender identity", "Same-sex marriage", "Trans rights", "Pride month", "Pride parade" }
+  local NEITHER = { "Looking for a party for BRD.", "Vote on the next raid time.", "Which race is best for mage?", "Go left after the bridge.",
+    "Right wing needs more healers.", "Guild politics are exhausting.", "Need a conservative pull here.", "That trumpeter is loud.",
+    "That magazine is empty.", "Can someone transmute this?", "Need a transmog recommendation.", "Ace that mechanic.", "Bring a frying pan.",
+    "Pride of the guild.", "What gender is that character model?", "My partner is joining the raid." }
+  for _, text in ipairs(POLITICS) do Check((Topic("politics", text) or ""):find("^Politics: "), "politics: " .. text) end
+  for _, text in ipairs(LGBT) do Check((Topic("lgbt", text) or ""):find("^LGBTQ Topics: "), "lgbt: " .. text) end
+  for _, text in ipairs(NEITHER) do Check(Topic("politics", text) == nil and Topic("lgbt", text) == nil, "neither preset: " .. text) end
+
+  -- the reasons name the preset, the kind and the term as listed
+  Check(Topic("politics", "TRUMP again?") == "Politics: political keyword — Trump", "a keyword reason")
+  Check(Topic("politics", "The   White House") == "Politics: political phrase — white house", "a phrase reason, spacing varied")
+  Check(Topic("politics", "Let\226\128\153s go Brandon") == "Politics: political phrase — let's go brandon", "curly apostrophe matches")
+  Check(Topic("politics", "PRESIDENTIAL ELECTIONS") == "Politics: political phrase — presidential elections", "the plural is its own phrase")
+  Check(Topic("lgbt", "LGBTQ+") == "LGBTQ Topics: topic keyword — LGBTQ", "+ after an acronym is a boundary")
+  Check(Topic("lgbt", "LGBTQIA+") == "LGBTQ Topics: topic keyword — LGBTQIA", "LGBTQIA+ matches its own acronym")
+  Check(Topic("lgbt", "Pride month") == "LGBTQ Topics: topic phrase — pride month", "a phrase reason")
+  Check(Topic("lgbt", "non binary") == "LGBTQ Topics: topic phrase — non binary", "the spaced hyphen variant")
+
+  -- whole words and phrases only: embedded text, longer words and fuzzy punctuation never match
+  for _, text in ipairs({ "bidenomics", "trumpeter", "magazine", "white houses", "supreme courtroom", "politically" }) do
+    Check(Topic("politics", text) == nil, "an embedded or longer word: " .. text)
+  end
+  Check(Topic("lgbt", "LGBTQIAX") == nil and Topic("lgbt", "LGBTQQ") == nil, "a longer letter sequence is not the acronym")
+  Check(Topic("lgbt", "Pride-month") == nil, "a phrase written with a hyphen where the list has a space")
+  Check(Topic("lgbt", "trans") == nil and Topic("lgbt", "pronouns") == nil and Topic("lgbt", "identity") == nil, "ambiguous words alone")
+  for _, word in ipairs({ "bi", "pan", "ace", "pride", "rainbow", "gender", "pronoun", "straight", "partner", "marriage", "sex",
+    "male", "female", "man", "woman" }) do
+    Check(Topic("lgbt", word) == nil, "not filtered alone: " .. word)
+  end
+  for _, word in ipairs({ "party", "politics", "vote", "president", "left", "right", "war", "race", "border", "red", "blue",
+    "government", "liberal", "conservative", "china", "russia", "us", "eu" }) do
+    Check(Topic("politics", word) == nil, "not filtered alone: " .. word)
+  end
+  Check(Topic("politics", "[GOP]") ~= nil and Topic("politics", "vote democrats") == "Politics: political keyword — Democrats", "punctuation around a word is a boundary")
+
+  -- the list is prepared once: the same reasons come back, and repeated preparation adds nothing
+  local before = Topic("politics", "Biden")
+  Check(before == Topic("politics", "Biden") and before == "Politics: political keyword — Biden", "stable reasons")
+
+  -- through the filter: chosen per channel, nothing else changes
+  R:SetEnabled("chatClean", true)
+  CC.SetChannel("zone:2", "on", true, "Trade")
+  local general = CC.Channels()["zone:1"]
+  Check(CC.Channels()["zone:2"].politics == false and CC.Channels()["zone:2"].lgbt == false, "both presets off in Trade by default")
+  Check(not (general and general.politics) and not (general and general.lgbt), "both presets off in General by default")
+  CC.SetChannel("zone:2", "politics", true)
+  Check(not (CC.Channels()["zone:1"] and CC.Channels()["zone:1"].politics), "ticking Politics in Trade does not tick it in General")
+  local reasons = {}
+  CC.SetCapture(function(entry) reasons[#reasons + 1] = entry end)
+  Check(Hidden({ text = "Trump again? A", zone = 2 }) == true, "Politics on in Trade: hidden")
+  Check(Hidden({ text = "Trump again? B", zone = 1, base = "General - Elwynn", index = 1 }) == false, "General: shown")
+  Check(Hidden({ text = "Gay marriage A", zone = 2 }) == false, "LGBTQ Topics is off: shown")
+  Check(#reasons == 1 and reasons[1].reason == "Politics: political keyword — Trump" and reasons[1].kind == "category",
+    "the live view names the preset and the term")
+  Check(Hidden({ text = "Clean message", sender = "Biden Maga Supporter", zone = 2 }) == false, "a sender's name is never checked")
+  Check(Hidden({ text = "Looking for a party for BRD.", zone = 2 }) == false, "a negative case in Trade")
+  local tested = CC.Test("Trump again? C", "zone:2")
+  Check(tested.hidden and tested.reason == "Politics: political keyword — Trump" and tested.id == "politics" and tested.rule == "politics:trump", "tester: reason and rule id")
+  Check(CC.Test("Trump again? C", "zone:1").hidden == false, "tester: General not cleaned for it")
+  CC.SetChannel("zone:2", "lgbt", true)
+  Check(Hidden({ text = "Gay marriage B", zone = 2 }) == true, "both on together: LGBTQ Topics hidden")
+  Check(Hidden({ text = "Trump again? D", zone = 2 }) == true, "both on together: Politics still hidden")
+  Check(Hidden({ text = "What gender is that character model?", zone = 2 }) == false, "a negative case with both on")
+  CC.SetChannel("zone:2", "politics", false)
+  Check(Hidden({ text = "Trump again? E", zone = 2 }) == false, "turning Politics off stops it at once")
+  Check(Hidden({ text = "Gay marriage C", zone = 2 }) == true, "and LGBTQ Topics stays on")
+  CC.SetChannel("zone:2", "lgbt", false)
+  Check(Hidden({ text = "Gay marriage D", zone = 2 }) == false, "turning the last one off stops it at once")
+  CC.SetCapture(nil)
+
+  -- repeated preparation registers nothing new
+  local n = #registry.CHAT_MSG_CHANNEL
+  CC.Refresh(); CC.Refresh()
+  Check(#registry.CHAT_MSG_CHANNEL == n, "refreshing adds no filter")
+
+  -- a saved choice from before these presets keeps everything it had; the new ones are off
+  local t = c.TwichUIDB.ui.chatClean
+  t.channels = { ["zone:1"] = { on = true, spam = true, repeats = false, recruit = true, label = "General" } }
+  CC.Refresh()
+  local saved = CC.Channels()["zone:1"]
+  Check(saved.on and saved.spam and not saved.repeats and saved.recruit and not saved.politics and not saved.lgbt,
+    "an older saved choice: its filters kept, the presets off")
+  CC.ResetChannels()
+  local back = CC.Channels()["zone:2"]
+  Check(back and back.politics == false and back.lgbt == false and CC.RECOMMENDED.politics == false and CC.RECOMMENDED.lgbt == false,
+    "the recommended choice has both presets off")
+
+  -- sharing: the presets travel with the channel, and a change to one is reviewed like the other filters
+  local TC = R.TwichConfig
+  CC.SetChannel("zone:2", "politics", true)
+  local entry = TC.Build({ all = true })
+  local data = entry.groups.chatCleanRules
+  Check(data.channels["zone:2"].politics == true and data.channels["zone:2"].lgbt == false, "the presets are part of a shared channel choice")
+  CC.SetChannel("zone:2", "politics", false)
+  local plan = TC.Plan(TC.CleanEntry(entry))
+  Check(table.concat(plan.spending, " "):find("changes 1 channel choice", 1, true), "the review counts the preset change")
+  CC.SetChannel("zone:2", "on", true, "Trade")
+end
+
+---------------------------------------------------------------------------
 -- 4. Profiles
 ---------------------------------------------------------------------------
 do

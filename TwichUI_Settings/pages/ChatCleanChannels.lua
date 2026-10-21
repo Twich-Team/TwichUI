@@ -16,10 +16,10 @@ local ROW_H, VISIBLE = 36, 9
 local LIST_TOP = -66
 local LIST_H = ROW_H * VISIBLE + 8
 local LIST_W = W - 12 - 26
-local NAME_W = 250
-local CLEAN_X = 286
-local CAT_X = { spam = 362, recruit = 440, repeats = 518 }
-local RULES_X = 574
+local NAME_W = 214
+local CLEAN_X = 232
+local CAT_X = { spam = 268, recruit = 324, politics = 380, lgbt = 436, repeats = 492 }
+local RULES_X = 548
 
 local f, built
 local rows = {}

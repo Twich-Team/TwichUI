@@ -28,6 +28,7 @@ local function Snapshot()
         limits = {
             "Only TwichUI's own decisions are counted; messages another addon hides are not seen here.",
             "The built-in filters look for several signs together and can miss well-disguised spam or catch an unusual ordinary message.",
+            "Politics and LGBTQ Topics match only their listed words and phrases, so they can hide unrelated mentions and miss others.",
         },
     }
 end

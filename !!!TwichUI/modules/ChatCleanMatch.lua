@@ -376,3 +376,92 @@ function M.Recruit(lowered)
         or find(lowered, "whisper") or find(lowered, "members") or find(lowered, "raiders") or find(lowered, "all levels")
         or find(lowered, "apply")) and true or false
 end
+
+---------------------------------------------------------------------------
+-- Topic presets (Politics, LGBTQ Topics): a short, explicit list of words and phrases, opt-in per channel. They read
+-- the message text only, never the sender, a character or guild name or the channel. They match vocabulary, not what
+-- a message means: whether it is supportive, hostile or a joke, or who wrote it. English starter lists.
+--   keyword  one word. A run of letters and digits in the message is that word, so "Biden" matches "BIDEN!" and
+--            "(MAGA)" but not "bidenomics" or "trumpeter". "+" is not a letter, so "LGBTQ+" and "LGBTQIA+" match.
+--   phrase   its words in order, with any run of spaces, tabs or line breaks between them, and not part of a longer
+--            word on either side. Hyphens are literal: "non-binary" and "non binary" are both listed.
+-- Curly apostrophes read as straight ones. Keywords and phrases are compared lowercase; the name shown is as listed.
+-- Each entry has a stable id (the second half of its rule id, "politics:biden"): change a name, never an id.
+---------------------------------------------------------------------------
+M.TOPIC_DATA = {
+    politics = {
+        label = "Politics", noun = "political",
+        keywords = {
+            { "trump", "Trump" }, { "biden", "Biden" }, { "kamala", "Kamala" }, { "obama", "Obama" },
+            { "putin", "Putin" }, { "zelensky", "Zelensky" }, { "zelenskyy", "Zelenskyy" }, { "netanyahu", "Netanyahu" },
+            { "democrat", "Democrat" }, { "democrats", "Democrats" }, { "democratic", "Democratic" },
+            { "republican", "Republican" }, { "republicans", "Republicans" },
+            { "maga", "MAGA" }, { "gop", "GOP" },
+        },
+        phrases = {
+            { "white-house", "white house" }, { "supreme-court", "supreme court" },
+            { "presidential-election", "presidential election" }, { "presidential-elections", "presidential elections" },
+            { "electoral-college", "electoral college" }, { "political-party", "political party" },
+            { "political-parties", "political parties" }, { "vote-democrat", "vote democrat" },
+            { "vote-republican", "vote republican" }, { "make-america-great-again", "make america great again" },
+            { "let-s-go-brandon", "let's go brandon" }, { "lets-go-brandon", "lets go brandon" },
+        },
+    },
+    lgbt = {
+        label = "LGBTQ Topics", noun = "topic",
+        keywords = {
+            { "lgbt", "LGBT" }, { "lgbtq", "LGBTQ" }, { "lgbtqia", "LGBTQIA" },
+            { "lesbian", "lesbian" }, { "lesbians", "lesbians" }, { "gay", "gay" }, { "gays", "gays" },
+            { "bisexual", "bisexual" }, { "bisexuality", "bisexuality" }, { "transgender", "transgender" },
+            { "nonbinary", "nonbinary" }, { "queer", "queer" }, { "genderfluid", "genderfluid" },
+        },
+        phrases = {
+            { "non-binary", "non-binary" }, { "non-binary-spaced", "non binary" },
+            { "gender-identity", "gender identity" }, { "gender-identities", "gender identities" },
+            { "sexual-orientation", "sexual orientation" }, { "sexual-orientations", "sexual orientations" },
+            { "same-sex-marriage", "same-sex marriage" }, { "same-sex-marriage-spaced", "same sex marriage" },
+            { "gay-marriage", "gay marriage" }, { "trans-rights", "trans rights" },
+            { "transgender-rights", "transgender rights" }, { "pride-month", "pride month" },
+            { "pride-parade", "pride parade" }, { "pride-flag", "pride flag" },
+        },
+    },
+}
+M.TOPIC_KEYS = { "politics", "lgbt" }
+
+-- Prepared once, at load: keyword lookups and phrase patterns, so a message costs no table building.
+local TOPIC = {}
+local function Escape(s) return (gsub(s, "[%^%$%(%)%%%.%[%]%*%+%-%?]", "%%%0")) end
+
+for key, def in pairs(M.TOPIC_DATA) do
+    local t = { words = {}, phrases = {} }
+    for _, e in ipairs(def.keywords) do
+        local show = e[2]
+        t.words[lower(show)] = { rule = key .. ":" .. e[1], show = show, label = def.label .. ": " .. def.noun .. " keyword \226\128\148 " .. show }
+    end
+    for _, e in ipairs(def.phrases) do
+        local show = e[2]
+        t.phrases[#t.phrases + 1] = { rule = key .. ":" .. e[1], show = show, pattern = "%f[%w]" .. Escape(lower(show)) .. "%f[^%w]",
+            label = def.label .. ": " .. def.noun .. " phrase \226\128\148 " .. show }
+    end
+    TOPIC[key] = t
+end
+
+-- The text topic rules read: lowercase (from M.Lower), curly apostrophes straight, every run of whitespace one space.
+function M.TopicText(lowered)
+    local s = gsub(lowered, "\226\128[\152\153]", "'")
+    return (gsub(s, "%s+", " "))
+end
+
+-- The first keyword (in the message's order), then the first phrase (in list order), of a topic in TopicText's output.
+-- Returns { rule, show, label } as prepared, or nil. label reads "Politics: political keyword — Biden".
+function M.Topic(key, text)
+    local t = TOPIC[key]
+    if not t then return nil end
+    for word in gmatch(text, "%w+") do
+        local hit = t.words[word]
+        if hit then return hit end
+    end
+    for _, p in ipairs(t.phrases) do
+        if find(text, p.pattern) then return p end
+    end
+end

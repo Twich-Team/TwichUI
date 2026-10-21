@@ -747,7 +747,7 @@ end
 
 ---------------------------------------------------------------------------
 -- Chat cleaning's channels and rules (modules/ChatClean.lua): { channels = { [key] = { on, spam, repeats, recruit,
--- label } }, rules = { { name, mode, text, case, enabled, all, channels }, ... } }. Every channel key, flag, label and
+-- politics, lgbt, label } }, rules = { { name, mode, text, case, enabled, all, channels }, ... } }. Every channel key, flag, label and
 -- rule is checked as the feature checks its own (a Lua pattern for shape and cost too); one that fails refuses the
 -- group. Applying merges: a channel the share names takes the share's choice, a rule is matched by what it matches
 -- (mode, case and text) and takes the share's name, on/off and channels, a new one goes at the end; nothing is
@@ -755,7 +755,7 @@ end
 -- choices and rules exactly as they were.
 ---------------------------------------------------------------------------
 local ChatCleanConfig = {}
-local CC_FLAGS = { "on", "spam", "repeats", "recruit" }
+local CC_FLAGS = { "on", "spam", "repeats", "recruit", "politics", "lgbt" }
 
 local function CCPlain(text) return R.ChatCleanMatch and R.ChatCleanMatch.Plain(text) or tostring(text) end
 
@@ -799,7 +799,8 @@ function ChatCleanConfig.export()
     local CC = R.ChatClean
     local channels, rules = {}, {}
     for key, e in pairs(CC.Channels()) do
-        channels[key] = { on = e.on, spam = e.spam, repeats = e.repeats, recruit = e.recruit, label = e.label }
+        channels[key] = { on = e.on, spam = e.spam, repeats = e.repeats, recruit = e.recruit, politics = e.politics,
+            lgbt = e.lgbt, label = e.label }
     end
     for i, r in ipairs(CC.Rules()) do
         local copy = CC.CopyRule(r)
@@ -879,7 +880,8 @@ function ChatCleanConfig.plan(clean)
             else
                 changes.fullChannels = changes.fullChannels + 1
             end
-        elseif c.on ~= e.on or c.spam ~= e.spam or c.repeats ~= e.repeats or c.recruit ~= e.recruit then
+        elseif c.on ~= e.on or c.spam ~= e.spam or c.repeats ~= e.repeats or c.recruit ~= e.recruit
+            or c.politics ~= e.politics or c.lgbt ~= e.lgbt then
             changes.channels[#changes.channels + 1] = { key = key, old = c, new = e }
         end
     end

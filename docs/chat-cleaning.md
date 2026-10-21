@@ -71,7 +71,7 @@ Per profile, `TwichUIDB.ui.chatClean` (only through `ChatClean.lua`'s functions)
 
 | Key | Meaning |
 |---|---|
-| `channels` | `{ [key] = { on, spam, repeats, recruit, label } }`, at most 32. Missing: the recommended choice is in use and not saved; the first change saves it with the change. `label` is only for showing a channel the player isn't in. |
+| `channels` | `{ [key] = { on, spam, repeats, recruit, politics, lgbt, label } }`, at most 32. `politics` and `lgbt` (the topic presets) are off unless ticked; a missing one is off, so older saves keep their choices with both presets off. Missing: the recommended choice is in use and not saved; the first change saves it with the change. `label` is only for showing a channel the player isn't in. |
 | `rules` | `{ { id, name, mode, text, case, enabled, all, channels = { [key] = true } }, ... }`, at most 50, in the order they are checked. `all`: every channel being cleaned. |
 | `nextId` | the next rule's id |
 
@@ -92,7 +92,9 @@ frames, so each message is evaluated, counted and listed once. Then, in this ord
    link is free text, so gold sellers use it as the advert. The link type alone never hides anything, so ordinary
    guild-finder links are untouched (Guild recruitment, below, is the filter for those).
 3. **Guild recruitment** (opt-in): the word "recruit", or "guild" with join/invite/whisper/apply/members/looking for.
-4. **Repeated messages** (recommended): the same text, ignoring case, spaces and punctuation, from the same player
+4. **Politics** and **LGBTQ Topics** (opt-in, both off by default; see Topic presets below): a listed word or phrase.
+   Keywords are checked first, in the message's order, then phrases, in list order. The first match is the reason.
+5. **Repeated messages** (recommended): the same text, ignoring case, spaces and punctuation, from the same player
    (GUID, else name) within 60 seconds of their previous copy. The first copy is shown; repeats stay hidden while they
    keep coming. Memory: at most 200 entries of a player ID and a 31-bit hash of the text (never the text), swept by a
    one-shot timer that runs only while there are entries, and forgotten when cleaning is turned off or the profile
@@ -104,6 +106,50 @@ copied or changed; the filter returns only `true` or `false`.
 Limits (said in the settings): the spam filter misses disguised spam (look-alike letters are not translated, unlike
 BadBoy) and can catch an unusual ordinary message that has all three signs; recruitment also catches "looking for a
 guild" and some other guild talk; repeats hide a genuine player's repeated LFG post within the window.
+
+## Topic presets (Politics, LGBTQ Topics)
+
+Two built-in presets, each ticked per channel on the Channels tab (the same grid as the other filters) and off by
+default for everyone, new and existing. They hide messages that contain a listed word or phrase, and nothing else. They
+match **vocabulary**, not meaning: a message is not judged supportive, hostile, a joke or a self-description, and the
+sender, the character or guild name and the channel are never checked. Only the message text is read.
+
+Matching (`ChatCleanMatch.lua`, `TOPIC_DATA`, prepared once at load): a **keyword** is one word, a run of letters and
+digits, so `Biden` matches `BIDEN!` and `(MAGA)` but not `bidenomics` or `trumpeter`; `+` is not a letter, so `LGBTQ+`
+and `LGBTQIA+` match. A **phrase** is its words in order with any run of spaces, tabs or line breaks between them, and
+not part of a longer word on either side. Hyphens are literal, so `non-binary` and `non binary` are separate entries.
+Curly apostrophes read as straight ones. Keywords and phrases are compared lowercase; the reason shows the term as listed.
+Each entry has a stable id (`politics:biden`, `lgbt:pride-month`); change a term's name, not its id. No Lua pattern is
+built from message text, and no pattern is built per message. Letters beyond A–Z are not part of a word, so a keyword
+beside an accented letter still matches.
+
+**Politics** (`politics:`), reason "Politics: political keyword — …" or "… political phrase — …":
+- Keywords: Trump, Biden, Kamala, Obama, Putin, Zelensky, Zelenskyy, Netanyahu, Democrat, Democrats, Democratic,
+  Republican, Republicans, MAGA, GOP.
+- Phrases: white house, supreme court, presidential election, presidential elections, electoral college, political party,
+  political parties, vote democrat, vote republican, make america great again, let's go brandon, lets go brandon.
+
+**LGBTQ Topics** (`lgbt:`), reason "LGBTQ Topics: topic keyword — …" or "… topic phrase — …":
+- Keywords: LGBT, LGBTQ, LGBTQIA, lesbian, lesbians, gay, gays, bisexual, bisexuality, transgender, nonbinary, queer,
+  genderfluid.
+- Phrases: non-binary, non binary, gender identity, gender identities, sexual orientation, sexual orientations,
+  same-sex marriage, same sex marriage, gay marriage, trans rights, transgender rights, pride month, pride parade,
+  pride flag.
+
+Deliberately not listed, alone: party, politics, vote, president, left, right, war, race, border, red, blue, government,
+liberal, conservative, china, russia, us, eu (Politics); trans, bi, pan, ace, pride, rainbow, gender, identity,
+pronoun(s), straight, partner, marriage, sex, male, female, man, woman (LGBTQ Topics). No slur lists, and no broader
+geopolitical or controversial-topic list. The lists are English starter lists.
+
+Limits, also said in the settings: a keyword hides an unrelated mention too (for example a Democrat in a guild name is
+not checked, but "that democrat" in a raid call is hidden); a reply that leaves out the listed words stays visible;
+topic vocabulary does not reveal a speaker's identity or beliefs. Only what you see in your own chat changes: nothing is
+reported, sent or shared, and no message or sender is kept.
+
+Enabling a preset in a channel does not enable any other channel; the General and Trade recommendation is untouched.
+Both presets are included in the channel choice in configuration sharing (the review counts them as channel changes).
+A share from a build without these two presets sets them off on the channels it names, as it does for any other
+channel flag it carries.
 
 ## Reading a message
 
@@ -187,5 +233,9 @@ Never post test spam to a public channel. Turn on Display Lua Errors. Test Twich
 11. **Profiles and sharing.** Another profile has its own channels and rules. Send a TwichUI share to yourself
     (`/tui share test`) with chat cleaning included: the review names the channels and rules and whether it turns
     cleaning on; Undo puts them back.
-12. **Combat and instances.** In a dungeon or during an encounter (chat messaging lockdown), nothing errors; messages in
+12. **Topic presets.** Tick Politics in Trade only. "Trump again?" in Trade is hidden and the live view says
+    "Politics: political keyword — Trump"; in General it is shown. "Gay marriage" is shown until LGBTQ Topics is also
+    ticked; then it is hidden. Untick a preset: its messages show at once. Nothing is sent to chat, and no test message is
+    posted in a public channel (use a friend's message or the Live view tester instead).
+13. **Combat and instances.** In a dungeon or during an encounter (chat messaging lockdown), nothing errors; messages in
     lockdown are not filtered (the game skips addon filters for secret values).

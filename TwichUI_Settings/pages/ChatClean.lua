@@ -52,7 +52,7 @@ if R.ChatClean then R.ChatClean.OnChange(function() K.RefreshOverview() end) end
 K.Page({
     key = "chatClean", name = "Chat cleaning", order = 35, group = "everyday",
     description = "Hide unwanted messages, such as gold-selling spam, in the public channels you choose.",
-    keywords = "chat spam filter clean cleaning hide block trade general channel gold seller advert advertisement recruitment repeat repeated keyword word badboy",
+    keywords = "chat spam filter clean cleaning hide block trade general channel gold seller advert advertisement recruitment repeat repeated keyword word badboy politics political election party lgbt lgbtq gay trans queer pride topic",
     when = function() return R.ChatClean ~= nil end,
     overview = {
         label = "Chat cleaning", tip = "Hide unwanted messages, such as gold-selling spam, in the public channels you choose.",
@@ -93,7 +93,7 @@ K.Page({
         Button("Channels and filters", "Choose", function() R:OpenSettings("chatCleanChannels") end,
             "Choose which channels are cleaned and which built-in filters each one uses.")
 
-        Header("Built-in filters", "Chosen per channel on the Channels tab. Each looks for several signs together, so ordinary trade messages, links, other languages and capital letters are not hidden for that alone. None of them is perfect.")
+        Header("Built-in filters", "Chosen per channel on the Channels tab. Spam and recruitment look for several signs together, so ordinary trade messages, links, other languages and capital letters are not hidden for that alone. Politics and LGBTQ Topics hide only the words and phrases listed for them, and are off until you tick them. None of them is perfect.")
         for _, c in ipairs(CC().CATEGORIES) do
             Status(c.label, function()
                 local names = CategoryNames(c.key)
