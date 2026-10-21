@@ -486,6 +486,13 @@ do
   Cz.ResetPosition()
   x, y, saved = Cz.Position()
   Check(not saved and x == Cz.DEFAULT_POSITION[1], "reset puts it back")
+  -- compact view: remembered, folds the list away, and the button names the other view
+  Check(not Cz.Compact() and f.size.text:GetText() == "Compact", "full by default")
+  f.size.scripts.OnClick(f.size)
+  Check(Cz.Compact() and f.size.text:GetText() == "Full", "compact after the button")
+  Check(f:GetHeight() < 568 and not f.list:IsShown(), "compact folds the list and shortens the window")
+  Cz.SetCompact(false); Win.Render()
+  Check(f:GetHeight() == 568 and f.list:IsShown(), "full view comes back")
   Win.Hide()
 end
 

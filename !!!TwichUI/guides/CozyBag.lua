@@ -226,6 +226,20 @@ function C.SetLocked(on)
     return true
 end
 
+-- The compact view: the same window with the intro, the step list and the housekeeping buttons folded away.
+function C.Compact()
+    local t = Ui(false)
+    return t ~= nil and t.compact == true
+end
+
+function C.SetCompact(on)
+    local t = Ui(true)
+    if not t then return false end
+    t.compact = on == true or nil
+    Tell()
+    return true
+end
+
 function C.Position()
     local t = Ui(false)
     if t and Usable(t.x) and Usable(t.y) then return t.x, t.y, true end

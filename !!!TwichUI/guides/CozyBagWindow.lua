@@ -14,6 +14,9 @@ local W = {}
 R.CozyBagWindow = W
 
 local WIDTH, HEIGHT = 400, 568
+local COMPACT_WIDTH, COMPACT_PAD = 320, 10
+local COMPACT_MAX_DETAIL = 230   -- the most the chosen step takes in the compact view before it scrolls
+local DIM = 0.45                 -- the compact view's opacity when the pointer is elsewhere
 local PAD = 14
 local ROW_H, MAX_ROWS = 24, 8
 local PLACE_H = 24
@@ -244,6 +247,86 @@ local function RenderDetail(r)
     end
 end
 
+-- Full or compact. Compact is a slim strip: a thin title bar, the progress, the chosen step with its places, and the pin /
+-- current-step buttons; the intro, the step list and the Reset / Remove buttons fold away. Anchors and widths are set each
+-- time, so it is safe to call often. The compact height follows the step's text (SizeCompact, after the detail is drawn).
+local function Layout()
+    local compact = C.Compact()
+    local w, pad = compact and COMPACT_WIDTH or WIDTH, compact and COMPACT_PAD or PAD
+    local inner = w - pad * 2
+    f:SetWidth(w)
+    f.twichBand:SetHeight(compact and 22 or 34)
+    f.title:SetShown(not compact)
+    f.titleSmall:SetShown(compact)
+    f.close:SetSize(compact and 16 or 20, compact and 16 or 20)
+    f.close:ClearAllPoints()
+    f.close:SetPoint("TOPRIGHT", compact and -6 or -10, compact and -7 or -11)
+    f.lock:SetHeight(compact and 16 or BUTTON_H - 2)
+    f.size:SetHeight(compact and 16 or BUTTON_H - 2)
+    f.lock:ClearAllPoints()
+    f.lock:SetPoint("RIGHT", f.close, "LEFT", compact and -4 or -8, 0)
+    f.size:ClearAllPoints()
+    f.size:SetPoint("RIGHT", f.lock, "LEFT", compact and -4 or -6, 0)
+    f.intro:SetShown(not compact)
+    f.intro2:SetShown(not compact)
+    f.list:SetShown(not compact)
+    f.reset:SetShown(not compact)
+    f.remove:SetShown(not compact)
+    for _, fs in ipairs({ f.dTitle, f.dStatus, f.dText }) do fs:SetWidth(inner - 22) end
+    f.content:SetWidth(inner - 22)
+    f.progress:ClearAllPoints()
+    f.barBack:ClearAllPoints()
+    f.scroll:ClearAllPoints()
+    f.pinStep:ClearAllPoints()
+    f.note:ClearAllPoints()
+    if compact then
+        f.progress:SetPoint("TOPLEFT", pad, -32)
+        f.barBack:SetPoint("TOPLEFT", pad, -48)
+        f.barBack:SetSize(inner, 4)
+        f.scroll:SetPoint("TOPLEFT", pad, -56)
+        f.scroll:SetPoint("TOPRIGHT", -pad - 18, -56)
+        f.pinStep:SetPoint("BOTTOMLEFT", pad, 8)
+        f.note:SetPoint("BOTTOMLEFT", f.pinStep, "TOPLEFT", 0, 4)
+        f.note:SetPoint("RIGHT", f, "RIGHT", -pad, 0)
+    else
+        f.progress:SetPoint("TOPLEFT", pad, -98)
+        f.barBack:SetPoint("TOPLEFT", pad, -118)
+        f.barBack:SetSize(inner, 6)
+        f.scroll:SetPoint("TOPLEFT", pad, -134 - (MAX_ROWS * ROW_H + 8) - 10)
+        f.scroll:SetPoint("BOTTOMRIGHT", -pad - 18, 92)
+        f.pinStep:SetPoint("BOTTOMLEFT", pad, 56)
+        f.note:SetPoint("BOTTOMLEFT", f.reset, "BOTTOMRIGHT", 10, 6)
+        f.note:SetPoint("RIGHT", f, "RIGHT", -pad, 0)
+    end
+    f.size.text:SetText(compact and "Full" or "Compact")
+    f.lock:SetWidth(compact and 46 or 56)
+    f.size:SetWidth(compact and 52 or 66)
+end
+
+-- The scroll bar only while there is something to scroll to.
+local function UpdateBar()
+    local bar = f and f.scroll and f.scroll.ScrollBar
+    if not bar then return end
+    local range = f.scroll:GetVerticalScrollRange() or 0
+    bar:SetShown(range > 0.5)
+end
+
+-- Compact only: height = title bar + progress + the step's own height (up to a cap, then it scrolls) + buttons (+ a line
+-- for what an action said). Nothing is left blank below the places.
+local function SizeCompact()
+    if not C.Compact() then
+        f:SetHeight(HEIGHT)
+        UpdateBar()
+        return
+    end
+    local want = math.min(math.ceil(f.content:GetHeight() or 0), COMPACT_MAX_DETAIL)
+    f.scroll:SetHeight(math.max(want, 20))
+    local noteH = (note and note ~= "") and 16 or 0
+    f.note:SetShown(noteH > 0)
+    f:SetHeight(56 + math.max(want, 20) + 6 + noteH + BUTTON_H + 8)
+    UpdateBar()
+end
+
 local function RenderPosition()
     if not f then return end
     local x, y = C.Position()
@@ -263,12 +346,14 @@ end
 
 function W.Render()
     if not (f and f:IsShown()) then return end
+    Layout()
     local r = C.Result()
     RenderProgress(r)
     RenderList(r)
     RenderDetail(r)
-    RenderPosition()
     f.note:SetText(note or "")
+    SizeCompact()
+    RenderPosition()
 end
 
 ---------------------------------------------------------------------------
@@ -331,16 +416,34 @@ local function Build()
     f:SetClampedToScreen(true)
     f:RegisterForDrag("LeftButton")
     if f.SetDontSavePosition then f:SetDontSavePosition(true) end   -- TwichUI keeps the place, not the game's layout cache
-    f:SetScript("OnDragStart", function(self) if not C.Locked() then self:StartMoving() end end)
+    f:SetScript("OnDragStart", function(self) if not C.Locked() then self.dragging = true self:StartMoving() end end)
     f:SetScript("OnDragStop", function(self)
         self:StopMovingOrSizing()
+        self.dragging = nil
         local cx, cy = self:GetCenter()
         local px, py = UIParent:GetCenter()
         local s = self:GetScale() or 1
         if cx and cy and px and py then C.SetPosition(math.floor(cx * s - px + 0.5), math.floor(cy * s - py + 0.5)) end
         RenderPosition()
     end)
+    -- The compact view fades down while the pointer is elsewhere and returns when it comes back (never while dragging).
+    -- A small throttled check while the window is shown; the easing is the shared Motion fader, so "Reduce settings motion"
+    -- makes it a plain switch.
+    local fade = L.Motion.Fader(function(v) f:SetAlpha(DIM + (1 - DIM) * v) end, 1)
+    local since, wasOver = 0, true
+    f:HookScript("OnUpdate", function(self, elapsed)
+        since = since + elapsed
+        if since < 0.1 then return end
+        since = 0
+        local over = not C.Compact() or self.dragging or self:IsMouseOver()
+        if over ~= wasOver then
+            wasOver = over
+            fade:To(over and 1 or 0, 0.18)
+        end
+    end)
     f:HookScript("OnShow", function(self)
+        wasOver = true
+        fade:Set(1)
         R.FitToScreen(self)
         note = nil
         C.Opened()
@@ -352,11 +455,20 @@ local function Build()
     local title = L.Text(f, "title")
     title:SetPoint("TOPLEFT", PAD, -9)
     title:SetText(D.title)
+    f.title = title
+    f.titleSmall = L.Text(f, "heading")   -- the compact view's thinner title bar
+    f.titleSmall:SetPoint("TOPLEFT", COMPACT_PAD, -9)
+    f.titleSmall:SetText(D.title)
     local close = L.CloseBox(f)
+    f.close = close
     f.lock = L.Button(f, "Lock", 56, "secondary", function() C.SetLocked(not C.Locked()) W.Render() end)
     f.lock:SetHeight(BUTTON_H - 2)
     f.lock:SetPoint("RIGHT", close, "LEFT", -8, 0)
     Tip(f.lock, "Lock or unlock", "Locked, the window stays where it is. Unlocked, drag it by any empty part.")
+    f.size = L.Button(f, "Compact", 66, "secondary", function() C.SetCompact(not C.Compact()) W.Render() end)
+    f.size:SetHeight(BUTTON_H - 2)
+    f.size:SetPoint("RIGHT", f.lock, "LEFT", -6, 0)
+    Tip(f.size, "Compact or full view", "Compact keeps just your progress and the chosen step, to sit beside the game while you work. Full shows the step list and the other buttons.")
 
     -- Intro and progress
     f.intro = L.Text(f, "small")
@@ -396,6 +508,7 @@ local function Build()
     f.content = CreateFrame("Frame", nil, f.scroll)
     f.content:SetSize(WIDTH - PAD * 2 - 22, 200)
     f.scroll:SetScrollChild(f.content)
+    f.scroll:HookScript("OnScrollRangeChanged", UpdateBar)
     f.dTitle = L.Text(f.content, "heading")
     f.dTitle:SetPoint("TOPLEFT", 0, -8)
     f.dTitle:SetWidth(WIDTH - PAD * 2 - 22)
