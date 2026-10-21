@@ -34,7 +34,7 @@ for _, page in ipairs(K.list) do if page.def.host then c.canvases[page.name] = K
 -- pages sit directly under TwichUI, except the appearance and addon pages, each under the page it belongs to
 for _, page in ipairs(K.list) do
   local under = { ["SpeakStone speech frame"] = "Addon skins", ["Chronicle appearance"] = "Journey Chronicle",
-    ["Pin appearance"] = "Party pins", ["Navigation appearance"] = "Navigation", ["Notification appearance"] = "Notifications", ["Stat weights"] = "Gear comparison", ["Refreshment shares"] = "Mage",
+    ["Pin appearance"] = "Party Map", ["Map pings"] = "Party Map", ["Navigation appearance"] = "Navigation", ["Notification appearance"] = "Notifications", ["Stat weights"] = "Gear comparison", ["Refreshment shares"] = "Mage",
     ["Restock items"] = "Vendor restocking", ["Target markers"] = "Markers", ["World markers"] = "Markers", ["Marker bar"] = "Markers",
     ["Class resource bar layout"] = "Class resource bars", ["Class resource bar appearance"] = "Class resource bars",
     ["Class resource bar effects"] = "Class resource bars", ["Custom ammunition"] = "Ammunition warning",
@@ -244,7 +244,7 @@ assert(attune:GetTooltip():find("after reload"), "toggle change shows it needs a
 
 -- The overview links to one page per feature, in this order; every setting
 -- is on exactly one page (registration above refuses a repeat).
-assert(table.concat(pageOrder, ",") == "Notifications,Notification appearance,Quality of life,Markers,Chat cleaning,Food and drink,Vendor restocking,Auction House,Journey Chronicle,Chronicle appearance,Party pins,Pin appearance,Navigation,Cozy Sleeping Bag,Gear comparison,Mage,Ammunition warning,Class resource bars,Class resource bar layout,Class resource bar appearance,Class resource bar effects,Addon skins,SpeakStone speech frame,RestedXP,Configuration sharing,Profiles,Troubleshooting", table.concat(pageOrder, ","))
+assert(table.concat(pageOrder, ",") == "Notifications,Notification appearance,Quality of life,Markers,Chat cleaning,Food and drink,Vendor restocking,Auction House,Journey Chronicle,Chronicle appearance,Party Map,Map pings,Pin appearance,Navigation,Cozy Sleeping Bag,Gear comparison,Mage,Ammunition warning,Class resource bars,Class resource bar layout,Class resource bar appearance,Class resource bar effects,Addon skins,SpeakStone speech frame,RestedXP,Configuration sharing,Profiles,Troubleshooting", table.concat(pageOrder, ","))
 for variable, page in pairs({
   TWICHUI_media = "TwichUI", TWICHUI_quietLogin = "TwichUI", 
   TWICHUI_gearHints = "Gear comparison", TWICHUI_gearTree = "Gear comparison", TWICHUI_gearBagStyle = "Gear comparison",
@@ -271,7 +271,7 @@ for variable, module in pairs({ TWICHUI_mageTravelText = R.MageTravel, TWICHUI_m
   assert(module.TextChoice() == "none" and proxy.get() == "none", variable .. " saves")
 end
 assert(c.TwichUIDB.ui.mageTravelText == "none" and c.TwichUIDB.ui.mageConjureText == "none")
--- Party pins: the data bar entry's text, icon and color, and the menu's look, are on the Party pins page and
+-- Party pins: the data bar entry's text, icon and color, and the menu's look, are on the Party Map page and
 -- read and write the pins' own settings (not the window's or the Mage launchers').
 do
   local BR, PL = R.PinsLook.Bar, R.PinsLook
@@ -279,7 +279,7 @@ do
       TWICHUI_pinsBarCustomColor = "customColor", TWICHUI_pinsBarColor = "color",
       TWICHUI_pinsBarFlash = "flash", TWICHUI_pinsBarFlashSeconds = "flashSeconds", TWICHUI_pinsBarFlashColor = "flashColor" }) do
     local proxy = assert(proxies[variable], variable .. " is on the page")
-    assert(variables[variable] == "Party pins", variable)
+    assert(variables[variable] == "Party Map", variable)
     assert(proxy.default == BR.DEFAULTS[key] and proxy.get() == BR.DEFAULTS[key], key .. " starts at its default")
   end
   assert(BR.DEFAULTS.icon == true and BR.DEFAULTS.customColor == false and BR.DEFAULTS.text == "count",
@@ -301,7 +301,7 @@ do
     local SD = PL.Sound
     for variable, key in pairs({ TWICHUI_pinsSound = "enabled", TWICHUI_pinsSoundFile = "sound", TWICHUI_pinsSoundChannel = "channel" }) do
       local proxy = assert(proxies[variable], variable .. " is on the page")
-      assert(variables[variable] == "Party pins", variable)
+      assert(variables[variable] == "Party Map", variable)
       assert(proxy.default == SD.DEFAULTS[key] and proxy.get() == SD.DEFAULTS[key], key .. " starts at its default")
     end
     assert(SD.DEFAULTS.enabled == true and SD.DEFAULTS.sound == "TwichUI Map Pin" and SD.DEFAULTS.channel == "SFX")

@@ -1,15 +1,15 @@
--- TwichUI settings: Party pins (pins/). The switch, how pins are placed and labelled, the data bar entry and the
--- arrival sound, map pings; and, on a page of its own under it, the look of the pin window, its menu, the new pin window and
--- pin names on the maps. The pins themselves are managed in the pin window, not here; nothing on these pages
--- reads or writes them.
+-- TwichUI settings: Party Map (pins/). Its Pins tab has the switch, how pins are placed and labelled, the data bar entry
+-- and the arrival sound. Its Pings tab (pings, below) has map pings, and its Appearance tab (pinsLook, further down) the
+-- look of the pin window, its menu, the new pin window and pin names on the maps. The pins themselves are managed in the
+-- pin window, not here; nothing on these pages reads or writes them.
 
 local R = TwichUI
 local K = R.SettingsKit
 
-local pinsToggle   -- the Party pins switch (the Party pins page), which the look is greyed out under
+local pinsToggle   -- the Party pins switch (the Pins tab), which the other tabs' rows are greyed out under
 
 K.Page({
-    key = "pins", name = "Party pins", order = 70, group = "journey",
+    key = "pins", name = "Party Map", tab = "Pins", order = 70, group = "journey",
     description = "Named pins on your world map: local pins only you see, and party pins shared with party members who have TwichUI.",
     keywords = "map pin waypoint way tomtom marker minimap party share coordinates ping toolbar map tools bar",
     when = function() return R.Pins ~= nil end,
@@ -135,6 +135,28 @@ K.Page({
                 "Plays the sound now, at the volume you have chosen."), soundToggle, SoundOn)
         end
 
+        -- The look of the pin window, its menu, the new pin window and pin names: the Appearance tab, its own page.
+        if K.pages.pinsLook then
+            Header("Appearance", "How the pin window, the data bar menu, the new pin window and pin names on the maps look. Their settings are on the Appearance tab.")
+            Under(Button("Pin appearance", "Open its tab", function() R:OpenSettings("pinsLook") end,
+                "Opens the Appearance tab: the pin window, its data bar menu, the new pin window and pin names on the maps. Nothing there changes your pins."),
+                pinsToggle, PinsOn)
+        end
+    end,
+})
+
+K.Page({
+    key = "pings", name = "Map pings", nav = "Pings", parent = "pins", order = 71,
+    description = "Ping a spot on the world map to show your group where, and see the pings they send you.",
+    keywords = "ping pings map ping gesture ctrl alt click sound list recent reduced motion hint test party group",
+    when = function() return R.Pins ~= nil and R.PinsLook ~= nil end,
+    build = function()
+        local PL = R.PinsLook
+        if not PL then return end
+        local Header, Toggle, Button, Under = K.Header, K.Toggle, K.Button, K.Under
+        local STRING, NUMBER, BOOL = K.STRING, K.NUMBER, K.BOOL
+        local function PinsOn() return R:Enabled("partyPins") end
+
         do
             local PG, MP = PL.Ping, R.MapPing
             Header("Map pings", "Ping a spot on the world map to show your group where. Everyone sees a marker with your name for a few seconds, and a short list at the top right of the map keeps the latest ones. Pings go to your party, raid or instance group over the hidden addon channel: nothing is written in chat. Group members need TwichUI, with Party pins and Map pings on, to see them; players without it see nothing, and other addons' pings aren't read. They work only while Party pins is on.")
@@ -211,19 +233,11 @@ K.Page({
             Under(K.ResetButton("Reset map pings", pingReset, PG.Reset,
                 "Puts the gesture, hint, sound, how long pings and entries stay, the list and reduced motion back to their defaults. The Map pings, Send and Take in switches, your pins and every other pin choice are not touched."), pingToggle, PingsOn)
         end
-
-        -- The look of the pin window, its menu, the new pin window and pin names: a page of its own, under this one.
-        if K.pages.pinsLook then
-            Header("Appearance", "How the pin window, the data bar menu, the new pin window and pin names on the maps look. Their settings are on a page of their own, under this one.")
-            Under(Button("Pin appearance", "Open its page", function() R:OpenSettings("pinsLook") end,
-                "Opens the Pin appearance page, under this one: the pin window, its data bar menu, the new pin window and pin names on the maps. Nothing there changes your pins."),
-                pinsToggle, PinsOn)
-        end
     end,
 })
 
 K.Page({
-    key = "pinsLook", name = "Pin appearance", nav = "Appearance", parent = "pins", order = 71,
+    key = "pinsLook", name = "Pin appearance", nav = "Appearance", parent = "pins", order = 72,
     description = "How the pin window, its data bar menu, the new pin window and pin names on the maps look. Nothing here changes your pins.",
     keywords = "pins look theme font size outline shadow window menu editor",
     when = function() return R.Pins ~= nil and R.PinsLook ~= nil end,

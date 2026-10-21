@@ -379,12 +379,12 @@ COMMANDS = {
     end },
     { name = "pins", usage = "pins", desc = "your map pins and your party's (Party pins; listed in its options)", hidden = true, fn = function()
         if not R.PinsWindow then Unavailable("Party pins") return end
-        if not R:Enabled("partyPins") then R.Print("Party pins are turned off. Turn them on in /tui options (Party pins).") return end
+        if not R:Enabled("partyPins") then R.Print("Party pins are turned off. Turn them on in /tui options (Party Map).") return end
         R.PinsWindow.Toggle()
     end },
-    { name = "ping", usage = "ping", desc = "ping your group on the world map: the next map click (Map pings; listed in the Party pins options)", hidden = true, fn = function()
+    { name = "ping", usage = "ping", desc = "ping your group on the world map: the next map click (Map pings; listed in the Party Map options)", hidden = true, fn = function()
         if not R.MapPingView then Unavailable("Map pings") return end
-        if not R:Enabled("partyPins") or not R:Enabled("mapPings") then R.Print("Map pings are turned off. Turn them on in /tui options (Party pins).") return end
+        if not R:Enabled("partyPins") or not R:Enabled("mapPings") then R.Print("Map pings are turned off. Turn them on in /tui options (Party Map).") return end
         R.MapPingView.Arm()
     end },
     { name = "bag", usage = "bag", desc = "the Cozy Sleeping Bag guide (listed in its options)", hidden = true, fn = function()

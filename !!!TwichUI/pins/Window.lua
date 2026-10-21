@@ -11,7 +11,7 @@
 --   local one; not a kept one), and Remove for entire party (your own party pins, after you confirm; not
 --   a kept one).
 -- What can be done is asked when the menu opens and again when you pick it, so a pin that changed or
--- went meanwhile is never acted on. Opened with /tui pins, the data bar or the Party pins options; it
+-- went meanwhile is never acted on. Opened with /tui pins, the data bar or the Party Map options; it
 -- never opens by itself. TwichUI's own look (pins/Look.lua), which works without EllesmereUI.
 
 local R = TwichUI
@@ -287,7 +287,7 @@ local function OpenMore(anchor)
           why = scope.kept > 0 and "Every local pin you have is kept." or "You have no local pins.", danger = true,
           tip = "Asks first. Kept pins, party pins and anything shared are not touched; nothing is sent.",
           run = ConfirmDeleteLocal },
-        { label = "Party pins options", run = function()
+        { label = "Party Map options", run = function()
             if not (InCombatLockdown and InCombatLockdown()) then R:OpenSettings("pins") end
         end },
     })
@@ -643,7 +643,7 @@ end
 
 function PW.Show()
     if not R:Enabled("partyPins") then
-        R.Print("Party pins are turned off. Turn them on in /tui options (Party pins).")
+        R.Print("Party pins are turned off. Turn them on in /tui options (Party Map).")
         return false
     end
     Build()

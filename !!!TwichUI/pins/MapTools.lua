@@ -146,8 +146,8 @@ function T.Available(id)
         if PN.SharedCount() >= PN.MAX_SHARED then return false, PN.Reason("session-limit") end
         return true
     elseif id == "ping" then
-        if not R:Enabled("mapPings") then return false, "Map pings are turned off in the Party pins options." end
-        if not R:Enabled("mapPingsSend") then return false, "Sending map pings is turned off in the Party pins options." end
+        if not R:Enabled("mapPings") then return false, "Map pings are turned off in the Party Map options." end
+        if not R:Enabled("mapPingsSend") then return false, "Sending map pings is turned off in the Party Map options." end
         local dist, why = MP.Route()
         if not dist then
             if why == "no-group" then return false, "Join a party or raid to send a group ping." end
@@ -191,7 +191,7 @@ function T.Describe(id)
     if id == "nav" then
         Add("It has no map shortcut: the map's own clicks stay as they are. A pin's menu has Navigate here too.")
     else
-        Add(shortcut and ("Shortcut: " .. shortcut .. ".") or "No shortcut is set. You can choose one in the Party pins options.")
+        Add(shortcut and ("Shortcut: " .. shortcut .. ".") or "No shortcut is set. You can choose one in the Party Map options.")
     end
     local ok, why = T.Available(id)
     if not ok then Add(why, "warn") end
@@ -494,7 +494,7 @@ local function LayoutHelp()
     help.foot:ClearAllPoints()
     help.foot:SetPoint("TOPLEFT", help, "TOPLEFT", pad + 6, y - 2)
     help.foot:SetWidth(width - (pad + 6) * 2)
-    help.foot:SetText("Esc, or the same button again, cancels a tool. The group tools need a party or raid. Shortcuts can be changed in the Party pins options (/tui).")
+    help.foot:SetText("Esc, or the same button again, cancels a tool. The group tools need a party or raid. Shortcuts can be changed in the Party Map options (/tui).")
     Paint(help.foot, Pal().stone)
     help:SetHeight(-y + (help.foot:GetStringHeight() or 30) + pad + 8)
 end

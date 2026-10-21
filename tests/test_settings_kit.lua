@@ -35,7 +35,7 @@ end
 assert(#errors == 1 and errors[1]:find("boom", 1, true), "the failure is reported: " .. table.concat(errors, " | "))
 assert(S.registered() and S.registered().name == "TwichUI", "TwichUI is still added to the AddOns list")
 assert(Page("Broken page") and K.pages.broken.failed, "the broken page's place is kept, and it says so")
-for _, name in ipairs({ "Gear comparison", "Notifications", "Party pins", "Configuration sharing" }) do
+for _, name in ipairs({ "Gear comparison", "Notifications", "Party Map", "Configuration sharing" }) do
   assert(#Page(name).rows > 0, name .. " is built")
 end
 assert(Row("TwichUI", "Reduce window motion") and not Row("TwichUI", "Notifications", "link"), "the overview is built, and lists no features")
@@ -134,12 +134,12 @@ R.Notify.SetPreviewSounds(1)
 assert(c.TwichUIDB.ui.previewSounds == true and S.variables.TWICHUI_previewSounds:GetValue() == true)
 
 -- 5b. Appearance pages sit under the page they belong to, with a pointer there; the switch keeps its page.
-assert(Page("Chronicle appearance").parent == "Journey Chronicle" and Page("Pin appearance").parent == "Party pins")
+assert(Page("Chronicle appearance").parent == "Journey Chronicle" and Page("Pin appearance").parent == "Party Map")
 assert(S.variables.TWICHUI_chronicleAccentColor.page == "Chronicle appearance" and S.variables.TWICHUI_chronicle.page == "Journey Chronicle")
-assert(S.variables.TWICHUI_pinsLookBgColor.page == "Pin appearance" and S.variables.TWICHUI_partyPins.page == "Party pins")
+assert(S.variables.TWICHUI_pinsLookBgColor.page == "Pin appearance" and S.variables.TWICHUI_partyPins.page == "Party Map")
 Row("Journey Chronicle", "Chronicle appearance", "button").click()
 assert(c.opened == "chronicleLook", "the Chronicle's pointer opens its appearance page")
-Row("Party pins", "Pin appearance", "button").click()
+Row("Party Map", "Pin appearance", "button").click()
 assert(c.opened == "pinsLook", "and the pins' theirs")
 c.TwichUIDB.modules.partyPins = false
 assert(not Row("Pin appearance", "Accent color"):Enabled(), "the pins' look is greyed out while Party pins is off")
