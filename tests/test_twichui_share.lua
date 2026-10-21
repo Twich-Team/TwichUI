@@ -100,6 +100,7 @@ local REGISTRY = {
   notifyLook = A.TwichUI.NotifyLook.DEFAULTS, restockPromptStyle = A.TwichUI.RestockPrompt.Style.DEFAULTS,
   classBars = A.TwichUI.ClassBars.DEFAULTS, classBarsLook = A.TwichUI.ClassBars.Look.DEFAULTS,
   markers = A.TwichUI.Markers.DEFAULTS, markerBar = A.TwichUI.MarkerBar.DEFAULTS, markerBarStyle = A.TwichUI.MarkerBar.Style.DEFAULTS,
+  ammo = A.TwichUI.Ammo.DEFAULTS, ammoLook = A.TwichUI.Ammo.Look.DEFAULTS,
 }
 for slot, defaults in pairs(REGISTRY) do
   for key in pairs(defaults) do
@@ -353,7 +354,11 @@ local byId = {}
 for _, g in ipairs(plan.groups) do byId[g.id] = g end
 Check(byId.food and byId.food.state == "changed" and #byId.food.changes >= 5, "Food and drink shows its changes")
 Check(byId.gearWeights and byId.gearWeights.state == "changed" and byId.gearWeights.scope == "account", "stat weights are shown as account-wide")
-Check(#plan.absent == 1 and plan.absent[1] == "Pin appearance", "what the sender left out is said: " .. table.concat(plan.absent, ","))
+do   -- an empty list (Custom ammunition) and an unused look (Pin appearance) are left out, and said
+  local absent = {}
+  for _, name in ipairs(plan.absent) do absent[name] = true end
+  Check(#plan.absent == 2 and absent["Pin appearance"] and absent["Custom ammunition"], "what the sender left out is said: " .. table.concat(plan.absent, ","))
+end
 local beforeApply = Copy(B.TwichUIDB)
 -- a review changes nothing
 Check(Same(beforeApply, B.TwichUIDB), "reviewing changed nothing")

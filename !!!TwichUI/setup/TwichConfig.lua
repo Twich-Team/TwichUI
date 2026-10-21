@@ -67,7 +67,7 @@ TC.LOCAL = {
     -- where things sit
     ["modules.foodDrinkUnlock"] = "place", ["ui.foodDrinkPosition"] = "place", ["ui.trainingPosition"] = "place",
     ["ui.welcomeBackPlace"] = "place", ["ui.friendLoginPlace"] = "place", ["ui.settingsWindow"] = "place",
-    ["ui.markerBarPosition"] = "place", ["ui.refreshments.position"] = "place", ["ui.partyPins.position"] = "place", ["ui.classBarsPosition"] = "place",
+    ["ui.markerBarPosition"] = "place", ["ui.refreshments.position"] = "place", ["ui.partyPins.position"] = "place", ["ui.classBarsPosition"] = "place", ["ui.ammoPosition"] = "place",
     ["ui.navigation.position"] = "place", ["ui.navigation.arrowPosition"] = "place", ["ui.navigation.unlockMode"] = "place",
     -- the rest
     ["modules.restedxpSkin"] = "other", ["modules.qolTwichUISettingsButton"] = "other",
@@ -609,6 +609,140 @@ local function RestockItemsSpending(clean)
     if #changes == 0 then return {} end
     return { ("Vendor restocking: changes %s on your restock list, %d of them on. While restocking is on, merchants that sell them are bought from (asked first unless you confirmed automatic buying)."):format(
         RestockList.label(#changes), enabled) }
+end
+
+---------------------------------------------------------------------------
+-- The ammunition registered for the Hunter warning (ammo/Items.lua): { items = { { id, kind }, ... } }, kind "arrow" or
+-- "bullet". Applying merges by item ID: an item the share names takes the share's kind (a new one goes at the end of your
+-- list); items it doesn't name are left as they are, and nothing is removed. Registering says only what an ID is; it
+-- never says anything is equipped or carried, and nothing about your bags or equipment is part of it.
+---------------------------------------------------------------------------
+local AmmoList = {}
+
+local function AmmoEntries() return R.AmmoItems and R.AmmoItems.List() or {} end
+
+local function AmmoKindText(entry)
+    if not entry then return "not on your list" end
+    return R.AmmoItems.KindLabel(entry.kind):lower()
+end
+
+function AmmoList.usable() return R.AmmoItems ~= nil end
+function AmmoList.count() return #AmmoEntries() end
+function AmmoList.label(n) return n == 1 and "1 item" or (("%d items"):format(n)) end
+
+function AmmoList.export()
+    local list = {}
+    for i, e in ipairs(AmmoEntries()) do list[i] = { id = e.id, kind = e.kind } end
+    if #list == 0 then return nil end
+    return { items = list }
+end
+
+function AmmoList.clean(raw)
+    local AI = R.AmmoItems
+    if not AI then return nil, "feature" end
+    if type(raw) ~= "table" or type(raw.items) ~= "table" then return nil, "shape" end
+    local n = 0
+    for k in pairs(raw.items) do
+        if type(k) ~= "number" then return nil, "shape" end
+        n = n + 1
+        if n > AI.MAX then return nil, "too-large" end
+    end
+    local out, seen = {}, {}
+    for i = 1, n do
+        local entry = AI.CleanEntry(raw.items[i])
+        if not entry or seen[entry.id] then return nil, "invalid" end
+        seen[entry.id] = true
+        out[#out + 1] = entry
+    end
+    if #out == 0 then return nil, "empty" end
+    return { items = out }, #out * 2
+end
+
+-- { { id, old = entry or nil, new = entry } } for each item that would change, in the share's order; items that would not
+-- fit on a full list are counted in .full.
+function AmmoList.plan(clean)
+    local live, byId = AmmoEntries(), {}
+    for _, e in ipairs(live) do byId[e.id] = e end
+    local changes, room = { full = 0 }, R.AmmoItems.MAX - #live
+    for _, e in ipairs(clean.items) do
+        local cur = byId[e.id]
+        if not cur then
+            if room > 0 then
+                room = room - 1
+                changes[#changes + 1] = { id = e.id, new = e }
+            else
+                changes.full = changes.full + 1
+            end
+        elseif cur.kind ~= e.kind then
+            changes[#changes + 1] = { id = e.id, old = cur, new = e }
+        end
+    end
+    return changes
+end
+
+function AmmoList.review(clean)
+    local changes = AmmoList.plan(clean)
+    local rows = {}
+    for _, c in ipairs(changes) do
+        -- keyed by item ID, so a name that loads between the review and the approval doesn't change what was approved
+        rows[#rows + 1] = { label = ItemLabel(c.id), key = "item:" .. c.id, old = AmmoKindText(c.old), new = AmmoKindText(c.new) }
+    end
+    if changes.full > 0 then
+        rows[#rows + 1] = { label = "Items that don't fit", key = "full", old = "your full list", new = ("%d left out"):format(changes.full) }
+    end
+    return rows, #clean.items - #changes - changes.full
+end
+
+local function WriteAmmo(list)
+    if type(TwichUIDB.ui) ~= "table" then TwichUIDB.ui = {} end
+    local ui = TwichUIDB.ui
+    if type(ui.ammoCustom) ~= "table" then ui.ammoCustom = {} end
+    ui.ammoCustom.items = list
+end
+
+-- Plain writes into the list in use. Returns undo records: { id, had, kind, at }.
+function AmmoList.apply(clean, plan)
+    local list = AmmoEntries()
+    local undo = {}
+    for _, c in ipairs(plan) do
+        local at
+        for i, e in ipairs(list) do if e.id == c.id then at = i end end
+        if at then
+            undo[#undo + 1] = { id = c.id, had = true, kind = list[at].kind, at = at }
+            list[at] = { id = c.id, kind = c.new.kind }
+        else
+            undo[#undo + 1] = { id = c.id, had = false }
+            list[#list + 1] = { id = c.id, kind = c.new.kind }
+        end
+    end
+    WriteAmmo(list)
+    return undo
+end
+
+function AmmoList.restore(records)
+    local AI = R.AmmoItems
+    if not AI then return 0 end
+    local list = AmmoEntries()
+    local n = 0
+    for i = #records, 1, -1 do
+        local u = records[i]
+        if type(u) == "table" and type(u.id) == "number" then
+            local at
+            for j, e in ipairs(list) do if e.id == u.id then at = j end end
+            if u.had == true then
+                local entry = AI.CleanEntry({ id = u.id, kind = u.kind })
+                if entry then
+                    if at then list[at] = entry else table.insert(list, math.min(math.max(1, tonumber(u.at) or #list + 1), #list + 1), entry) end
+                    n = n + 1
+                end
+            elseif at then
+                table.remove(list, at)
+                n = n + 1
+            end
+        end
+    end
+    WriteAmmo(list)
+    return n
 end
 
 ---------------------------------------------------------------------------
@@ -1283,6 +1417,27 @@ local function Define()
     g = Group("classBarsOverrides", "Class resource bar overrides", { page = "classBarsLook",
         note = "What one resource of one class does differently from the shared style (its color, text and when it shows). Merged: what the share names is set, every other class's is kept." })
     g.custom = ClassBarOverrides
+
+    g = Group("ammo", "Hunter ammunition warning", { page = "ammo",
+        note = "Whether the warning is on, when it shows, its size, text and sound. Where it sits on your screen stays yours. It only ever shows for a Hunter, and it never equips or moves anything." })
+    Switches(g, { "ammoWarning" })
+    do
+        local AM = R.Ammo
+        local enums = {}
+        if AM then for key in pairs(AM.DEFAULTS) do if AM.ENUM[key] then enums[key] = AM.ENUM[key] end end end
+        Table(g, { "ui", "ammo" }, AM, { "show", "icon", "scale", "opacity", "font", "fontSize", "fontOutline", "textColor",
+            "sound", "soundName", "soundChannel" }, enums, { soundName = "sound" })
+    end
+
+    g = Group("ammoLook", "Hunter ammunition warning background and border", { page = "ammo" })
+    do
+        local AM = R.Ammo
+        Table(g, { "ui", "ammoLook" }, AM and AM.Look, LOOK, LOOK_ENUMS)
+    end
+
+    g = Group("ammoCustom", "Custom ammunition", { page = "ammoCustom",
+        note = "The ammunition you registered, arrows or bullets, by item ID. Merged: what the share names is set, the rest of your list is kept. Registering says only what an item is; it never says anything is equipped or carried." })
+    g.custom = AmmoList
 
     g = Group("chronicle", "Journey Chronicle", { page = "chronicle",
         note = "Which events are written down and how the window reads. The entries and notes themselves are never shared." })

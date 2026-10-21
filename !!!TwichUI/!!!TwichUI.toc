@@ -215,6 +215,16 @@ nav\Arrow.lua
 nav\MapTrail.lua
 nav\MinimapTrail.lua
 
+# Hunter ammunition warning: a line of text near the centre of the screen when a Hunter's ammunition is missing, out or the
+# wrong kind for the ranged weapon (Hunters only, off until turned on; nothing is equipped, moved or bought for you).
+# Config.lua is what it stores, Items.lua what counts as ammunition (and the player's own list), State.lua the judgement
+# (no game calls), Warning.lua the events and the frame. Uses modules\MenuStyle.lua for the font and the optional panel;
+# the settings are in TwichUI_Settings.
+ammo\Config.lua
+ammo\Items.lua
+ammo\State.lua
+ammo\Warning.lua
+
 # Sell from Bags: Auction House posting tab (uses the Chronicle palette)
 auction\Price.lua
 auction\Scan.lua
@@ -265,6 +275,7 @@ diag\Memory.lua
 diag\Pins.lua
 diag\ChatClean.lua
 diag\ClassBars.lua
+diag\Ammo.lua
 diag\Status.lua
 diag\SupportWindow.lua
 diag\Window.lua

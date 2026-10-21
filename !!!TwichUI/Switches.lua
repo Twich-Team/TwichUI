@@ -223,6 +223,9 @@ Define("chatClean", { apply = Refresh("ChatClean") })
 -- Class resource bars
 Define("classBars", { apply = Refresh("ClassBars") })
 
+-- Hunter ammunition warning
+Define("ammoWarning", { apply = Refresh("Ammo") })
+
 -- Addon skins: through EllesmereUI, after a reload
 for _, key in ipairs({ "attuneSkin", "auctionatorSkin", "foreverDungeonJournalSkin", "whatsTrainingSkin" }) do
     Define(key, { reload = true })

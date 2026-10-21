@@ -65,6 +65,7 @@ local DEFAULT_MODULES = {
     restock = false,         -- Vendor restocking: keep chosen items at a target in your bags, bought from merchants (opt-in, explicit true only; asks first unless you confirm otherwise)
     chatClean = false,       -- Chat cleaning: hide unwanted messages in the public channels you choose (opt-in, explicit true only)
     classBars = false,       -- Class resource bars: your class's resources as bars (opt-in; nothing else's bars are hidden or moved)
+    ammoWarning = false,     -- Hunter ammunition warning: a line of text near the centre of the screen when ammunition is missing, out or wrong (Hunters only, opt-in; nothing is equipped or moved for you)
     qolSummons = false,      -- Quality of Life (all opt-in, see qol/QoL.lua): accept summons
     qolResurrect = false,    -- ... accept a resurrection offered to you
     qolResurrectCombat = false, -- ... including a combat resurrection (needs the one above)

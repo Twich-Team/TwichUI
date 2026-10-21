@@ -81,13 +81,13 @@ exposes `Frame()`, built the first time it is shown, which the window shows as a
 Home                      feature statuses (each opens its page), Help, General
 Everyday                  Notifications, Quality of life, Chat cleaning › Channels, Custom rules, Live view, Food and drink, Vendor restocking › Restock items, Auction House
 Journey                   Journey Chronicle › Appearance, Party pins › Appearance
-Gear & class              Gear comparison › Stat weights, Mage (Mages only) › Refreshment shares, Class resource bars › Layout, Appearance, Effects
+Gear & class              Gear comparison › Stat weights, Mage (Mages only) › Refreshment shares, Ammunition warning › Custom ammunition, Class resource bars › Layout, Appearance, Effects
 Other addons              Addon skins › SpeakStone speech frame, RestedXP (map waypoint, guide window look, timer bars)
 Your configuration        Configuration sharing, Profiles, Troubleshooting
 ```
 
 `R:OpenSettings(key)` keys: `overview`, `notifications`, `qol`, `chatClean`, `chatCleanChannels`, `chatCleanRules`, `chatCleanLive`, `food`, `restock`, `restockItems`, `auction`, `chronicle`, `chronicleLook`, `pins`,
-`pinsLook`, `gear`, `statWeights`, `mage`, `refreshmentShares`, `classBars`, `classBarsLayout`, `classBarsLook`, `classBarsEffects`, `skins`, `restedxp`, `speakstone`, `sharing`,
+`pinsLook`, `gear`, `statWeights`, `mage`, `refreshmentShares`, `ammo`, `ammoCustom`, `classBars`, `classBarsLayout`, `classBarsLook`, `classBarsEffects`, `skins`, `restedxp`, `speakstone`, `sharing`,
 `profiles`, `troubleshooting`. A second argument names a setting (`"arrivalHold"` or `"TWICHUI_arrivalHold"`) or a
 row id: the window goes to its page, scrolls to it and marks it for 2.5 seconds (no
 animation). An unknown page opens Home; an unknown setting opens the page at its top. No argument reopens the page
