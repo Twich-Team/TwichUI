@@ -186,6 +186,35 @@ end
 
 function PN.LocalCount() return #PN.LocalPins() end
 
+-- Guide pins: a saved pin a guide made carries `guide`, a tag of its own ("cozybag:litter:1": the guide, the step and
+-- the place), so the guide can find its pin again instead of making a second one, and clean up only its own. It is
+-- an ordinary local pin in every other way: listed, drawn, edited, kept, limited and deleted like any other, and
+-- the tag is never sent (a group copy and a copy for someone else are made from the visible fields only).
+PN.GUIDE_TAG_MAX = 64
+PN.guideNames = {}   -- guide id -> the name its pins' tooltips give ("Cozy Sleeping Bag guide"); a guide sets its own
+function PN.ValidGuideTag(tag)
+    if type(tag) ~= "string" or #tag > PN.GUIDE_TAG_MAX or not tag:match("^[%w_:%-]+$") then return nil end
+    return tag
+end
+
+-- The saved pin that carries exactly this tag, or nil.
+function PN.FindGuide(tag)
+    if not PN.ValidGuideTag(tag) then return nil end
+    for _, p in ipairs(PN.LocalPins()) do
+        if p.guide == tag then return p end
+    end
+end
+
+-- Every usable saved pin whose tag starts with prefix ("cozybag:"), in the order they were made.
+function PN.GuidePins(prefix)
+    local out = {}
+    if type(prefix) ~= "string" or prefix == "" then return out end
+    for _, p in ipairs(PN.LocalPins()) do
+        if type(p.guide) == "string" and p.guide:sub(1, #prefix) == prefix then out[#out + 1] = p end
+    end
+    return out
+end
+
 function PN.FindLocal(id)
     local db = Store()
     if not db then return nil end
@@ -198,7 +227,7 @@ end
 -- an ordinary pin.
 function PN.IsKept(pin) return type(pin) == "table" and pin.kept == true end
 
--- fields: { map, x, y (0..COORD), name, color, copiedFrom, kept }. Returns the pin, or nil and a reason.
+-- fields: { map, x, y (0..COORD), name, color, copiedFrom, kept, guide }. Returns the pin, or nil and a reason.
 function PN.AddLocal(fields)
     local db = Store(true)
     if not db then return nil, "not-ready" end
@@ -211,7 +240,7 @@ function PN.AddLocal(fields)
         id = "L" .. db.nextId, map = fields.map, x = fields.x, y = fields.y, name = name,
         color = PN.ValidColor(fields.color) and fields.color or PN.DEFAULT_COLOR,
         created = time(), copiedFrom = PN.CleanName(fields.copiedFrom),
-        kept = fields.kept == true or nil,
+        kept = fields.kept == true or nil, guide = PN.ValidGuideTag(fields.guide),
     }
     db.nextId = db.nextId + 1
     db.list[#db.list + 1] = pin

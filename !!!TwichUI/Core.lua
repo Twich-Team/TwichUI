@@ -387,6 +387,10 @@ COMMANDS = {
         if not R:Enabled("partyPins") or not R:Enabled("mapPings") then R.Print("Map pings are turned off. Turn them on in /tui options (Party pins).") return end
         R.MapPingView.Arm()
     end },
+    { name = "bag", usage = "bag", desc = "the Cozy Sleeping Bag guide (listed in its options)", hidden = true, fn = function()
+        if R.CozyBagWindow then R.CozyBagWindow.Toggle() else Unavailable("The Cozy Sleeping Bag guide") end
+    end },
+    { name = "cozybag", alias = "bag", hidden = true },
     { name = "nav", usage = "nav [x y|waypoint|stop|recalc]", desc = "walk to a place: coordinates on your map, or the game's waypoint; stop or plan again (Navigation; listed in its options)", hidden = true, fn = function(arg)
         if R.Nav then R.Nav.Command(arg) else Unavailable("Navigation") end
     end },

@@ -33,6 +33,7 @@ pages\AmmoItems.lua
 pages\Chronicle.lua
 pages\Pins.lua
 pages\Navigation.lua
+pages\CozyBag.lua
 pages\Auction.lua
 pages\Skins.lua
 pages\RestedXP.lua

@@ -215,6 +215,14 @@ nav\Arrow.lua
 nav\MapTrail.lua
 nav\MinimapTrail.lua
 
+# Cozy Sleeping Bag guide: a small window that follows the hidden quest chain behind the bag, from the character's own quest
+# history (nothing saved but where the window sits), with optional map pins made through pins\Pins.lua. Never opens by itself;
+# nothing listens while it is closed. Data and State have no frames or game calls; CozyBag.lua reads the game; the window draws.
+guides\CozyBagData.lua
+guides\CozyBagState.lua
+guides\CozyBag.lua
+guides\CozyBagWindow.lua
+
 # Hunter ammunition warning: a line of text near the centre of the screen when a Hunter's ammunition is missing, out or the
 # wrong kind for the ranged weapon (Hunters only, off until turned on; nothing is equipped, moved or bought for you).
 # Config.lua is what it stores, Items.lua what counts as ammunition (and the player's own list), State.lua the judgement
