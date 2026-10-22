@@ -92,6 +92,7 @@ function SettingsClient(opts)
     "pins/Pins.lua", "pins/Sync.lua", "pins/Look.lua", "pins/Map.lua", "pins/Minimap.lua", "pins/Editor.lua", "pins/Window.lua",
     "pins/BrokerMenu.lua", "pins/Broker.lua",
     "nav/Prefs.lua", "nav/Data.lua", "nav/Route.lua", "nav/Journey.lua", "nav/Nav.lua", "nav/Travel.lua", "nav/Paint.lua", "nav/Unlock.lua", "nav/Frame.lua", "nav/Arrow.lua", "nav/MapTrail.lua", "nav/MinimapTrail.lua",
+    "map/Prefs.lua", "map/Data.lua", "map/ViewMath.lua", "map/World.lua", "map/View.lua", "map/Art.lua", "map/Detail.lua", "map/Controls.lua", "map/Caves.lua", "map/Places.lua", "map/DungeonView.lua",
     "guides/CozyBagData.lua", "guides/CozyBagState.lua", "guides/CozyBag.lua", "guides/CozyBagWindow.lua",
     "diag/Diagnostics.lua", "diag/Status.lua", "diag/SupportWindow.lua", "diag/Window.lua" }
   for _, f in ipairs(FILES) do

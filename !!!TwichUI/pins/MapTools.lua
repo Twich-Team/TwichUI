@@ -658,9 +658,9 @@ local function OnCanvasClick(_, button, cx, cy)
     end
     local done, reason
     if id == "nav" then
-        local map = WorldMapFrame:GetMapID()
+        local map, x, y = PM.ClickPlace(cx, cy)
         local why
-        done, why = R.Nav.StartAt(map, cx, cy, nil, "map")
+        done, why = R.Nav.StartAt(map, x, y, nil, "map")
         if done then stats.navigated = (stats.navigated or 0) + 1 else Say(why) reason = "unsupported-map" end
     elseif id == "ping" then
         done, reason = V.PingAt(cx, cy)

@@ -127,6 +127,7 @@ local function OpenMenu(anchor, title, choices)
     menu:Show()
     menu:Raise()
 end
+PW.OpenMenu = OpenMenu   -- the world map's places (map/Places.lua) offer their actions in the same menu
 
 local function Can(action, e)
     local ok, why = PN.Can(action, e)

@@ -1713,6 +1713,18 @@ local function Define()
         Table(g, { "ui", "navigationLook" }, NP and NP.Look, LOOK, LOOK_ENUMS)
     end
 
+    g = Group("worldMap", "World map", { page = "worldMap",
+        note = "Whether map exploration is on, how the zoom behaves, the terrain detail and which places show. Where you looked and the way back are never saved or shared." })
+    Switches(g, { "mapExplore" })
+    do
+        local MXP = R.MapExplorePrefs
+        local keys = {}
+        for _, part in ipairs({ "behavior", "detail", "places" }) do
+            for _, key in ipairs(MXP and MXP.GROUPS[part] or {}) do keys[#keys + 1] = key end
+        end
+        Table(g, { "ui", "mapExplore" }, MXP, keys, { unexplored = MXP and MXP.ENUM.unexplored })
+    end
+
     g = Group("gear", "Gear comparison", { page = "gear" })
     Switches(g, { "gearHints", "gearBagIcons", "gearRollIcons" })
     Table(g, { "gear" }, R.GearPrefs, { "glancePossible", "futureLevels", "reveal", "strictness", "bagStyle" },

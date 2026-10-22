@@ -352,13 +352,14 @@ local function Open(preview)
     end
 end
 
--- A new pin at (map, x, y) in 0..COORD; party: start as a party pin (it can be switched before Save).
-function PE.OpenNew(map, x, y, party)
+-- A new pin at (map, x, y) in 0..COORD; party: start as a party pin (it can be switched before Save). name: the name
+-- it starts with (a place's on the world map), or the usual default.
+function PE.OpenNew(map, x, y, party, name)
     state = { mode = "new", map = map, x = x, y = y, party = party and true or false, color = PN.DEFAULT_COLOR }
     Open()
     f.title:SetText(party and "New party pin" or "New pin")
     f.where:SetText(PN.Describe({ map = map, x = x, y = y }))
-    f.name:SetText(PN.DefaultName())
+    f.name:SetText(PN.CleanName(name) or PN.DefaultName())
     f.kindLocal:Show(); f.kindParty:Show()
     PE.Paint()
 end

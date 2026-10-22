@@ -66,7 +66,12 @@ local function Holder()
     holder = CreateFrame("Frame", nil, canvas)
     holder:SetAllPoints(canvas)
     holder:EnableMouse(false)
-    holder:SetFrameLevel(math.max(1, canvas:GetFrameLevel() + 1))
+    -- over the map's explored-area art (and map exploration's terrain detail and cave maps, map/View.lua's ArtLevel 1
+    -- and 2), under every pin
+    local ok, level = pcall(function()
+        return WorldMapFrame:GetPinFrameLevelsManager():GetValidFrameLevel("PIN_FRAME_LEVEL_MAP_EXPLORATION")
+    end)
+    holder:SetFrameLevel((ok and type(level) == "number") and level + 3 or math.max(1, canvas:GetFrameLevel() + 1))
     painter = NPaint.New(holder)
     return holder
 end

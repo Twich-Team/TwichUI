@@ -536,7 +536,9 @@ function V.Disarm() armed = 0 end
 -- cx, cy: the map's own normalized cursor position on the map being viewed. Says why in one sentence when it can't.
 -- Returns true, or false and a reason code (MP.Reason words it).
 function V.PingAt(cx, cy)
-    local ok, why = MP.Send(WorldMapFrame:GetMapID(), cx, cy)
+    local map
+    map, cx, cy = PM.ClickPlace(cx, cy)
+    local ok, why = MP.Send(map, cx, cy)
     if not ok then
         stats.refused = stats.refused + 1
         Say(MP.Reason(why))

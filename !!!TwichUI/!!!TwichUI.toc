@@ -215,6 +215,24 @@ nav\Arrow.lua
 nav\MapTrail.lua
 nav\MinimapTrail.lua
 
+# World map exploration: one seamless world map. Every continent's and zone's painting (the game's own textures) stitched
+# onto the world map, so the wheel zooms from the whole world into any zone, city or cave and back; the map underneath
+# follows what you look at. Terrain detail up close, caves' maps surfacing, dungeons' maps, and dungeon, cave and boat or
+# zeppelin places that take you where they lead. Off until turned on, and off while OpenMap is loaded. Data.lua (made by
+# tools/mapdata from the game clients) holds texture file IDs and places, no art. Prefs, ViewMath and World have no
+# frames; View.lua owns the view and is the only part moving it; Art.lua draws the stitched painting.
+map\Prefs.lua
+map\Data.lua
+map\ViewMath.lua
+map\World.lua
+map\View.lua
+map\Art.lua
+map\Detail.lua
+map\Controls.lua
+map\Caves.lua
+map\Places.lua
+map\DungeonView.lua
+
 # Cozy Sleeping Bag guide: a small window that follows the hidden quest chain behind the bag, from the character's own quest
 # history (nothing saved but where the window sits), with optional map pins made through pins\Pins.lua. Never opens by itself;
 # nothing listens while it is closed. Data and State have no frames or game calls; CozyBag.lua reads the game; the window draws.
@@ -289,6 +307,7 @@ diag\Sharing.lua
 diag\Saved.lua
 diag\Memory.lua
 diag\Pins.lua
+diag\Map.lua
 diag\ChatClean.lua
 diag\ClassBars.lua
 diag\Ammo.lua

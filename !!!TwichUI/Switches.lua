@@ -212,6 +212,10 @@ Define("navigation", {
 })   -- read when a ping is sent; the tool bar's Group ping follows it
 Define("mapPingsReceive")   -- read when one arrives
 
+-- World map exploration: on adds its zoom, detail and places to the map; off takes them off and brings the view back
+-- within the game's own zoom (map/View.lua). Works at once either way, open map or not.
+Define("mapExplore", { when = function() return R.MapView ~= nil end, apply = Refresh("MapView") })
+
 -- Auction House
 Define("auctionPosting", { apply = Refresh("AuctionWindow") })
 Define("mailGoldSummary", { apply = Refresh("MailGold") })

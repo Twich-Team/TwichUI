@@ -61,6 +61,13 @@ end
 function PM.Position(pin, viewed)
     local x, y = pin.x / PN.COORD, pin.y / PN.COORD
     if pin.map == viewed then return x, y end
+    -- map exploration's seamless map: every stitched map is drawn round the one underneath, so a pin on any of them is
+    -- placed through the world (map/World.lua), even past the edge of the map underneath
+    local MV, MW = R.MapView, R.MapWorld
+    if MV and MV.Ready and MV.Ready() and MW.Stitchable(pin.map) and MW.Stitchable(viewed) then
+        local u, v = MW.ToWorld(pin.map, x, y)
+        return MW.FromWorld(viewed, u, v)
+    end
     if not viewed or not IsAncestor(viewed, pin.map) then return nil end
     local ok, mx, my = pcall(function()
         local continent, world = C_Map.GetWorldPosFromMapPos(pin.map, CreateVector2D(x, y))
@@ -124,6 +131,7 @@ end
 local function OnClick(b, button)
     local e = b.entry
     if not e then return end
+    if R.MapView and R.MapView.WasDrag(b) then return end   -- a drag that began on the pin moved the map (map exploration)
     GameTooltip:Hide()
     if button == "RightButton" then
         if R.PinsWindow then R.PinsWindow.OpenActions(e, b) end
@@ -167,6 +175,8 @@ local function NewPin()
     b:SetScript("OnEnter", OnEnter)
     b:SetScript("OnLeave", OnLeave)
     b:SetScript("OnClick", OnClick)
+    -- with map exploration on, a drag that starts on a pin pans the map and isn't a click (off, nothing changes)
+    if R.MapView then R.MapView.WireButton(b) end
     return b
 end
 
@@ -289,11 +299,20 @@ end
 
 function PM.Disarm() armed = 0 end
 
+-- Where a map click lands: the map shown and the point on it; with map exploration's seamless map (map/View.lua), the
+-- map drawn under the pointer, so a click past the edge of the map underneath is on its neighbour, not on the edge.
+function PM.ClickPlace(cx, cy)
+    local MV = R.MapView
+    if MV and MV.ResolveClick then return MV.ResolveClick(cx, cy) end
+    return WorldMapFrame and WorldMapFrame:GetMapID(), cx, cy
+end
+
 -- Opens the new pin window at a map click's place: the one path the pin clicks and the map tool bar (pins/MapTools.lua)
 -- share. kind: "local" or "party" (the window can still switch it). cx, cy: the map's own normalized cursor position.
 -- Nothing is made or sent here: that waits for Save. Returns true, or false and a reason code (PN.Reason words it).
 function PM.PlacePin(kind, cx, cy)
-    local map = WorldMapFrame and WorldMapFrame:GetMapID()
+    local map
+    map, cx, cy = PM.ClickPlace(cx, cy)
     local x, y = PN.Quantize(cx), PN.Quantize(cy)
     if not (PN.ValidMap(map) and x and y) then
         stats.refused = stats.refused + 1

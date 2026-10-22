@@ -93,6 +93,7 @@ local DEFAULT_MODULES = {
     mapPingsSend = true,     -- ... your gesture sends a ping to your group
     mapPingsReceive = true,  -- ... pings from your group are taken in (shown, listed, with a sound)
     navigation = false,      -- Navigation: walking routes to a place you choose, with a frame, an arrow and trails on the maps (opt-in; nav/)
+    mapExplore = false,      -- World map exploration: deeper zoom and panning, terrain detail, cave and dungeon maps, places and travel links (opt-in; map/)
 }
 R.DEFAULT_MODULES = DEFAULT_MODULES   -- Switches.lua and the settings window (each switch's default)
 

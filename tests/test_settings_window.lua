@@ -213,7 +213,7 @@ do
       assert(inSide[page.key], page.key .. " is in the sidebar")
     end
   end
-  assert(children == 20, "twenty secondary pages: " .. children)
+  assert(children == 21, "twenty-one secondary pages: " .. children)
   assert(#K.Tabs("overview") == 0 and #K.Tabs("auction") == 0, "a feature without pages under it has no tabs")
   do   -- Markers: its own list in Everyday, then the two kinds of marker cycling and the bar, each a tab of its own
     local labels = {}
