@@ -39,7 +39,7 @@ for _, page in ipairs(K.list) do
     ["Class resource bar layout"] = "Class resource bars", ["Class resource bar appearance"] = "Class resource bars",
     ["Class resource bar effects"] = "Class resource bars", ["Custom ammunition"] = "Ammunition warning",
     ["Chat cleaning channels"] = "Chat cleaning", ["Chat cleaning rules"] = "Chat cleaning", ["Chat cleaning live view"] = "Chat cleaning", ["Hazard alert rules"] = "Hazard alerts",
-    ["World map places"] = "World map" }
+    ["World map places"] = "World map", ["Vendors and trainers: your list"] = "Vendors and trainers" }
   assert((page.parent and K.pages[page.parent].name) == under[page.name], page.name .. " is in its place")
 end
 
@@ -49,9 +49,10 @@ for key, default in pairs(defaults) do
   n = n + 1
   assert(default == R.DEFAULT_MODULES[key], key .. " default matches a new install")
 end
-assert(n == 69, "every module has a toggle: " .. n)
+assert(n == 70, "every module has a toggle: " .. n)
 assert(defaults.hazardAlerts == false, "hazard alerts are opt-in")
 assert(defaults.mapExplore == false, "world map exploration is opt-in")
+assert(defaults.npcMap == false, "vendors and trainers is opt-in")
 assert(defaults.restedxpSkin == false, "the RestedXP skin is opt-in")
 assert(defaults.arrival == true and defaults.arrivalSubzones == true and defaults.arrivalReducedMotion == false,
   "arrival card and subzone cards on; reduced motion opt-in")
@@ -247,7 +248,7 @@ assert(attune:GetTooltip():find("after reload"), "toggle change shows it needs a
 
 -- The overview links to one page per feature, in this order; every setting
 -- is on exactly one page (registration above refuses a repeat).
-assert(table.concat(pageOrder, ",") == "Notifications,Notification appearance,Quality of life,Markers,Chat cleaning,Food and drink,Hazard alerts,Vendor restocking,Auction House,Journey Chronicle,Chronicle appearance,Party Map,Map pings,Pin appearance,World map,World map places,Navigation,Cozy Sleeping Bag,Gear comparison,Mage,Ammunition warning,Class resource bars,Class resource bar layout,Class resource bar appearance,Class resource bar effects,Addon skins,SpeakStone speech frame,RestedXP,Configuration sharing,Profiles,Troubleshooting", table.concat(pageOrder, ","))
+assert(table.concat(pageOrder, ",") == "Notifications,Notification appearance,Quality of life,Markers,Chat cleaning,Food and drink,Hazard alerts,Vendor restocking,Auction House,Journey Chronicle,Chronicle appearance,Party Map,Map pings,Pin appearance,World map,World map places,Navigation,Vendors and trainers,Vendors and trainers: your list,Cozy Sleeping Bag,Gear comparison,Mage,Ammunition warning,Class resource bars,Class resource bar layout,Class resource bar appearance,Class resource bar effects,Addon skins,SpeakStone speech frame,RestedXP,Configuration sharing,Profiles,Troubleshooting", table.concat(pageOrder, ","))
 for variable, page in pairs({
   TWICHUI_media = "TwichUI", TWICHUI_quietLogin = "TwichUI", 
   TWICHUI_gearHints = "Gear comparison", TWICHUI_gearTree = "Gear comparison", TWICHUI_gearBagStyle = "Gear comparison",

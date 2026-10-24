@@ -233,6 +233,18 @@ map\Caves.lua
 map\Places.lua
 map\DungeonView.lua
 
+# Vendors and trainers: the NPCs you deal with (merchants by what they sell, trainers, bankers, innkeepers and other
+# services), noted where you stood and shown on the world map by the kinds you choose; your list can be sent to another
+# TwichUI user, your group or your guild when you choose, and theirs taken in as reports (asks first). Off until turned
+# on; nothing listens while it is off. Kinds.lua decides what an NPC is (no game calls), Store.lua keeps the list,
+# Collect.lua reads the game's windows, Map.lua draws (through pins\Map.lua's placing), Share.lua sends and receives.
+npcs\Kinds.lua
+npcs\Store.lua
+npcs\Prefs.lua
+npcs\Collect.lua
+npcs\Map.lua
+npcs\Share.lua
+
 # Cozy Sleeping Bag guide: a small window that follows the hidden quest chain behind the bag, from the character's own quest
 # history (nothing saved but where the window sits), with optional map pins made through pins\Pins.lua. Never opens by itself;
 # nothing listens while it is closed. Data and State have no frames or game calls; CozyBag.lua reads the game; the window draws.
@@ -308,6 +320,7 @@ diag\Saved.lua
 diag\Memory.lua
 diag\Pins.lua
 diag\Map.lua
+diag\Npcs.lua
 diag\ChatClean.lua
 diag\ClassBars.lua
 diag\Ammo.lua

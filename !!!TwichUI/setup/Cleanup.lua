@@ -185,6 +185,7 @@ local TOP_PROTECTED = {
     profiles = "Holds every profile but the one in use. Delete one profile at a time.",
     profileKeys = "Holds each character's profile choice. Forget one character's choice at a time.",
     pins = "Holds your map pins and the party session. Remove one pin at a time.",
+    npcs = "Holds the vendors and trainers you noted or were sent. Forget one on the map (click it) or clear them in the Vendors and trainers options.",
     setup = "Holds the sharing records. Remove received setups and other entries one at a time.",
     storedData = "Holds what the Addon data scan noted. Forget one note at a time.",
 }

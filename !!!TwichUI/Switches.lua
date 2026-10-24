@@ -216,6 +216,17 @@ Define("mapPingsReceive")   -- read when one arrives
 -- within the game's own zoom (map/View.lua). Works at once either way, open map or not.
 Define("mapExplore", { when = function() return R.MapView ~= nil end, apply = Refresh("MapView") })
 
+-- Vendors and trainers: on notes the NPCs you deal with and shows them on the world map; off stops listening, takes the
+-- markers off and lets go of lists others are sending. Your list is kept either way (npcs/).
+Define("npcMap", {
+    when = function() return R.NpcStore ~= nil end,
+    apply = function()
+        for _, module in ipairs({ "NpcCollect", "NpcMap", "NpcShare" }) do
+            if R[module] then R[module].Refresh() end
+        end
+    end,
+})
+
 -- Auction House
 Define("auctionPosting", { apply = Refresh("AuctionWindow") })
 Define("mailGoldSummary", { apply = Refresh("MailGold") })

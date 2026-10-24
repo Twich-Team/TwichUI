@@ -61,15 +61,16 @@ function PN.ColorLabel(id) return COLOR_LABEL[id] or COLOR_LABEL[PN.DEFAULT_COLO
 ---------------------------------------------------------------------------
 -- Checks
 ---------------------------------------------------------------------------
--- Plain text, at most NAME_MAX bytes, or nil when nothing is left.
-function PN.CleanName(text)
+-- Plain text, at most NAME_MAX bytes (or max), or nil when nothing is left.
+function PN.CleanName(text, max)
+    max = max or PN.NAME_MAX
     if type(text) ~= "string" then return nil end
     if issecretvalue and issecretvalue(text) then return nil end
     text = text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("|H.-|h(.-)|h", "%1")
         :gsub("|T.-|t", ""):gsub("|A.-|a", ""):gsub("|K.-|k", ""):gsub("|", "")
     text = text:gsub("%c", " "):gsub("%s+", " "):match("^%s*(.-)%s*$")
-    if #text > PN.NAME_MAX then
-        local cut = PN.NAME_MAX
+    if #text > max then
+        local cut = max
         -- never end inside a character: step back over continuation bytes (10xxxxxx)
         while cut > 0 and text:byte(cut + 1) and text:byte(cut + 1) >= 128 and text:byte(cut + 1) < 192 do cut = cut - 1 end
         text = text:sub(1, cut):match("^(.-)%s*$")

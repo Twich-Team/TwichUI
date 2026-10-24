@@ -45,6 +45,7 @@ RS.OWN_KEYS = { "modules", "ui", "gear", "shareTransport", "profiles", "profileK
 RS.OWN_SETUP = { "selection", "recommend", "trusted", "twichui" }   -- the parts of TwichUIDB.setup that are choices
 RS.OWN_LEFT_OUT = {
     pins = "map pins and the party session: what you placed, not settings. A restore never removes a pin.",
+    npcs = "the vendors and trainers you noted or were sent: records, not settings. A restore never removes one.",
     storedData = "notes from the last saved-data search; searching again makes them",
     whisperProbe = "the result of a check TwichUI makes by itself",
     welcome = "whether the welcome has been shown",

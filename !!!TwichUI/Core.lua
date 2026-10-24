@@ -94,6 +94,7 @@ local DEFAULT_MODULES = {
     mapPingsReceive = true,  -- ... pings from your group are taken in (shown, listed, with a sound)
     navigation = false,      -- Navigation: walking routes to a place you choose, with a frame, an arrow and trails on the maps (opt-in; nav/)
     mapExplore = false,      -- World map exploration: deeper zoom and panning, terrain detail, cave and dungeon maps, places and travel links (opt-in; map/)
+    npcMap = false,          -- Vendors and trainers: note the NPCs you deal with and show the kinds you choose on the world map; share the list with other TwichUI users when you choose (opt-in; npcs/)
 }
 R.DEFAULT_MODULES = DEFAULT_MODULES   -- Switches.lua and the settings window (each switch's default)
 
@@ -395,6 +396,9 @@ COMMANDS = {
     { name = "cozybag", alias = "bag", hidden = true },
     { name = "nav", usage = "nav [x y|waypoint|stop|recalc]", desc = "walk to a place: coordinates on your map, or the game's waypoint; stop or plan again (Navigation; listed in its options)", hidden = true, fn = function(arg)
         if R.Nav then R.Nav.Command(arg) else Unavailable("Navigation") end
+    end },
+    { name = "npcs", usage = "npcs [send party|guild|<name>|probe]", desc = "vendors and trainers on your map: their options; send your list; probe what the game reports (listed in its options)", hidden = true, fn = function(arg)
+        if R.NpcCommand then R.NpcCommand(arg) else Unavailable("Vendors and trainers") end
     end },
     { name = "sell", usage = "sell", desc = "what selling ordinary food and drink would keep and sell (Mages; listed in the Mage options)", hidden = true, fn = function()
         if R.MageSellWindow then R.MageSellWindow.Toggle() else Unavailable("Selling ordinary food and drink") end
