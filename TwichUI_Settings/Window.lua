@@ -306,6 +306,28 @@ local function HostHeight(page)
     return (type(h) == "number" and h > 0) and h or HOST_H
 end
 
+-- A feature's notice (its K.Page def's notice: { tag, text }): a rust card above each of its pages, tabs included.
+-- The tag is a chip, the words sit under it, and a thin rust edge runs down the left. Its height is set in Layout.
+local NOTICE_PAD, NOTICE_EDGE, NOTICE_TAG_H, NOTICE_GAP = 12, 3, 15, 8
+local function Notice(parent, notice)
+    local card = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+    Wg.Surface(card, pal.danger.bg, 0.92, pal.danger.border, 1)
+    card:SetWidth(CONTENT_W)
+    local edge = Wg.Solid(card, "ARTWORK", pal.danger.hotBorder, 1)
+    edge:SetPoint("TOPLEFT")
+    edge:SetPoint("BOTTOMLEFT")
+    edge:SetWidth(NOTICE_EDGE)
+    card.tag = Wg.Tag(card, notice.tag:upper())
+    card.tag:SetPoint("TOPLEFT", NOTICE_PAD + NOTICE_EDGE, -NOTICE_PAD)
+    Wg.Color(card.tag.text, pal.danger.hotText)
+    card.body = Wg.Text(card, "body")
+    card.body:SetPoint("TOPLEFT", NOTICE_PAD + NOTICE_EDGE, -NOTICE_PAD - NOTICE_TAG_H - NOTICE_GAP)
+    card.body:SetWidth(CONTENT_W - NOTICE_PAD * 2 - NOTICE_EDGE)
+    card.body:SetText(notice.text)
+    Wg.Color(card.body, pal.text)
+    return card
+end
+
 -- A feature's tabs: one per page of the family (Look's Tab: the shown one has a faint bronze fill and a bar on
 -- the rule below). Choosing one goes to that page (a stable page key, as search and direct links use); its rows
 -- are made the first time.
@@ -354,6 +376,11 @@ local function BuildView(page)
     view.rule:SetHeight(1)
     view.rule:SetPoint("LEFT", frame, "LEFT", 0, 0)
     view.rule:SetPoint("RIGHT", frame, "RIGHT", 0, 0)
+
+    -- a feature's notice, above every one of its pages (its tabs too)
+    local root = K.Root(page.key)
+    local notice = root and root.def.notice
+    if notice then view.notice = Notice(frame, notice) end
 
     if page.failed then
         view.failed = Wg.Text(frame, "small")
@@ -455,6 +482,7 @@ local function BuildView(page)
     for _, sec in ipairs(view.sections) do body[#body + 1] = sec.card end
     if view.hosted then body[#body + 1] = view.hosted end
     if view.reset then body[#body + 1] = view.reset end
+    if view.notice then body[#body + 1] = view.notice end
     view.fade = Motion.Fader(function(a)
         for i = 1, #body do body[i]:SetAlpha(a) end
     end, 1)
@@ -493,6 +521,13 @@ function Layout(view)
         Desc()
         Rule()
         y = y + 14
+    end
+    if view.notice then
+        view.notice:ClearAllPoints()
+        view.notice:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, -y)
+        local h = NOTICE_PAD * 2 + NOTICE_TAG_H + NOTICE_GAP + (view.notice.body:GetStringHeight() or 14)
+        view.notice:SetHeight(h)
+        y = y + h + 14
     end
     if view.failed then
         view.failed:ClearAllPoints()

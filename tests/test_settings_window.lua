@@ -155,6 +155,26 @@ for _, page in ipairs(K.NavOrder()) do UI.Navigate(page.key) end
 local afterAll = made
 for _ = 1, 3 do for _, page in ipairs(K.NavOrder()) do UI.Navigate(page.key) end end
 assert(made == afterAll, "navigating again makes no frames: " .. (made - afterAll))
+
+-- The World map's notice: a card above its page and its Places tab, drawn only while one of them is shown.
+local function ShownText(frame, out)
+  if frame.shown == false then return out end
+  if type(frame.text) == "string" and frame.text ~= "" then out[#out + 1] = frame.text end
+  for _, ch in ipairs(frame.children or {}) do ShownText(ch, out) end
+  return out
+end
+local function NoticeShown()
+  for _, t in ipairs(ShownText(win, {})) do
+    if t:find("experimental feature and may have problems", 1, true) then return true end
+  end
+  return false
+end
+UI.Navigate("worldMap")
+assert(NoticeShown(), "the World map page shows its experimental notice")
+UI.Navigate("worldMapPlaces")
+assert(NoticeShown(), "and so does its Places tab")
+UI.Navigate("chronicle")
+assert(not NoticeShown(), "no other page shows it")
 UI.Close()
 assert(not win.shown and not UI.IsShown(), "closed")
 R:OpenSettings("chronicle")

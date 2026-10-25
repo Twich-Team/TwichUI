@@ -46,7 +46,8 @@ K.GROUPS = {
 -- host (returns a frame of the feature's own, shown before the page's rows; hostHeight: its height, hostAfter: the
 -- name of the section it follows instead, for a page with rows on both sides of it), keywords (extra words search
 -- finds the page by), onShow (called each time the window goes to the page, before it is drawn: a page that shows
--- a snapshot takes it there), overview = { label, tip, status = function, when = function } (its row on Home) }.
+-- a snapshot takes it there), overview = { label, tip, status = function, when = function } (its row on Home), notice = { tag, text } (a card above each of its pages, tabs included, for a warning such as an
+-- experimental feature) }.
 function K.Page(def)
     assert(type(def.key) == "string" and type(def.name) == "string" and (type(def.build) == "function" or type(def.host) == "function"),
         "a page needs a key, a name and a build or host function")

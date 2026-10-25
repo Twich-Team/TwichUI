@@ -48,6 +48,7 @@ K.Page({
     keywords = "world map seamless stitched zoom pan drag wheel detail minimap terrain unexplored reveal cave caves interior dungeon dungeons raid map floors explore exploration openmap world back",
     when = function() return R.MapView ~= nil and R.MapExplorePrefs ~= nil end,
     overview = { label = "World map", tip = "One seamless world map, from the whole world to street level.", status = function() return K.OnOff(On()) end },
+    notice = { tag = "Experimental", text = "The World map is an experimental feature and may have problems: the map may not always look or behave the way the game's own map does. Its switch is on the Zoom tab. Turning it off puts the game's own map back at once." },
     build = function()
         local MXP = R.MapExplorePrefs
         local Header, Toggle, Under, Proxy, Slider = K.Header, K.Toggle, K.Under, K.Proxy, K.Slider
