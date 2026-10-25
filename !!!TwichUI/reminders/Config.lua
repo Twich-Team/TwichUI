@@ -75,8 +75,9 @@ end
 local ART_PATH = R.PATH .. [[media\reminders\]]
 RM.ART = {
     shield = { label = "Shield", size = 256, width = 182, height = 256, smallSize = 64, smallWidth = 46, smallHeight = 64 },
+    ammo = { label = "Arrows", size = 256, width = 217, height = 256, smallSize = 64, smallWidth = 54, smallHeight = 64 },
 }
-RM.ART_ORDER = { "shield" }
+RM.ART_ORDER = { "shield", "ammo" }
 
 function RM.Art(id) return type(id) == "string" and RM.ART[id] or nil end
 

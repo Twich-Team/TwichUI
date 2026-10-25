@@ -119,7 +119,7 @@ outline in ivory below the picture, no panel, medium layer, no fade, no pulse, n
 Text is plain (no `|`, no control characters, up to 120 characters), wraps at 420 units, and is never read as markup or
 an expression. A missing item icon shows a question mark while the game is asked for it (at most twice).
 
-Artwork gallery: `RM.ART` in `reminders/Config.lua`, files in `media/reminders/`: `shield.tga` (256 px canvas, 180 x 254
+Artwork gallery: `RM.ART` in `reminders/Config.lua`, files in `media/reminders/`: `shield.tga` and `ammo.tga` (a bundle of arrows; 256 px canvas, shield 180 x 254
 used) and `shield-small.tga` (64 px canvas, 44 x 62 used) for 64 units and under. Uncompressed 32-bit TGA, bottom-left
 origin; only the used part is drawn. There is no in-game image import.
 

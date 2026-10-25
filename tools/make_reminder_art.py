@@ -35,6 +35,7 @@ SIZE, SMALL = 256, 64   # texture sides (powers of two); a reminder is drawn at 
 ART = {
     # runtime name   source file
     "shield": "reminder-art-shield-source.png",
+    "ammo": "reminder-art-ammo-source.png",
 }
 
 

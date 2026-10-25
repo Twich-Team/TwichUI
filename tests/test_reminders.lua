@@ -605,12 +605,14 @@ local function TGA(path)
   local b = { h:byte(1, 18) }
   return { type = b[3], w = b[13] + b[14] * 256, h = b[15] + b[16] * 256, bpp = b[17], desc = b[18], size = size }
 end
-for _, name in ipairs({ "shield", "shield-small" }) do
+for _, name in ipairs({ "shield", "shield-small", "ammo", "ammo-small" }) do
   local t = TGA(ROOT .. "media/reminders/" .. name .. ".tga")
   Check(t and t.type == 2 and t.bpp == 32 and t.desc == 8 and t.size == 18 + t.w * t.h * 4, name .. ".tga is an uncompressed 32-bit TGA with alpha")
 end
-local art = RM.ART.shield
-Check(TGA(ROOT .. "media/reminders/shield.tga").w == art.size and TGA(ROOT .. "media/reminders/shield-small.tga").w == art.smallSize, "sizes match the ART table")
+for _, id in ipairs(RM.ART_ORDER) do
+  local art = RM.ART[id]
+  Check(TGA(ROOT .. "media/reminders/" .. id .. ".tga").w == art.size and TGA(ROOT .. "media/reminders/" .. id .. "-small.tga").w == art.smallSize, id .. ": sizes match the ART table")
+end
 for _, icon in ipairs({ "reminders", "reminderShow", "reminderWhen", "reminderPlacement", "reminderPreview", "reminderTest" }) do
   Check(R.Icons.Get(icon) ~= nil, icon .. " is registered")
   for _, suffix in ipairs({ "", "-small" }) do
