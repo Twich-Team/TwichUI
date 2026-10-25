@@ -16,6 +16,8 @@ Kit.lua
 pages\Overview.lua
 pages\Gear.lua
 pages\Notifications.lua
+pages\RemindersEditor.lua
+pages\Reminders.lua
 pages\QoL.lua
 pages\Markers.lua
 pages\MarkerBar.lua

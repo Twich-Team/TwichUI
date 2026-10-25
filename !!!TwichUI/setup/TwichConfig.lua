@@ -44,7 +44,7 @@ TC.STAYS = {
     { code = "acts", text = "Anything that acts for you in the game: selling, whether vendor restocking is on and your confirmation that it may buy without asking, filling trades by itself, accepting summons, resurrections or duels, releasing your spirit, and placing the waypoint. These only turn on by your own choice." },
     { code = "network", text = "What TwichUI sends to or accepts from other players: configuration sharing, accepting setups, the group check, how you send, and whether Party pins and Map pings are on, and whether you send and take in pings. Also Vendors and trainers: whether it is on, which of them your map shows, and how lists others send you are taken in." },
     { code = "place", text = "Where windows, cards and buttons sit: that stays as you placed it on this screen." },
-    { code = "other", text = "RestedXP's on/off switch (it chooses RestedXP's own theme), records of this character, map pins, the vendors and trainers you have noted, the Journey Chronicle, backups, Undo copies and the setups you have received." },
+    { code = "other", text = "RestedXP's on/off switch (it chooses RestedXP's own theme), records of this character, map pins, the vendors and trainers you have noted, your reminders (they can name your characters), the Journey Chronicle, backups, Undo copies and the setups you have received." },
 }
 
 TC.LOCAL = {
@@ -72,6 +72,7 @@ TC.LOCAL = {
     ["ui.navigation.position"] = "place", ["ui.navigation.arrowPosition"] = "place", ["ui.navigation.unlockMode"] = "place",
     -- the rest
     ["modules.restedxpSkin"] = "other", ["modules.qolTwichUISettingsButton"] = "other",
+    ["modules.reminders"] = "other", ["ui.reminders"] = "other",
     ["ui.restedxpSkinState"] = "other", ["ui.showAdvanced"] = "other", ["gear.trees"] = "other",
     ["pins"] = "other", ["npcs"] = "other", ["ui.mapToolsIntro"] = "other", ["ui.navTravel"] = "other", ["setup"] = "other", ["storedData"] = "other", ["whisperProbe"] = "other", ["welcome"] = "other",
     ["schema"] = "other", ["migrated"] = "other", ["heldStored"] = "other",

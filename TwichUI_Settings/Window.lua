@@ -313,9 +313,14 @@ local function SectionId(page, header) return header and header.id or (page.key 
 
 -- A page's own frame (def.host) is HOST_H tall and comes before its rows, unless the page gives def.hostHeight
 -- and def.hostAfter (the name of the section it follows: rows on either side of it, such as a switch above a
--- list and its keys below).
+-- list and its keys below). hostHeight may be a function: the frame's height now, read each time the page is laid
+-- out (a frame whose content grows asks for that with R.SettingsUI.Refresh()).
 local function HostHeight(page)
     local h = page.def.hostHeight
+    if type(h) == "function" then
+        local ok, v = pcall(h)
+        h = ok and v or nil
+    end
     return (type(h) == "number" and h > 0) and h or HOST_H
 end
 
@@ -616,10 +621,12 @@ function Layout(view)
     if view.hero then y = y + view.hero:Layout(y) + GAP end
     local after = view.hosted and page.def.hostAfter or nil
     local function PlaceHost(gap)
+        local h = HostHeight(page)
         view.hosted:ClearAllPoints()
         view.hosted:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, -y)
+        view.hosted:SetHeight(h)
         view.hosted:Show()
-        y = y + HostHeight(page) + gap
+        y = y + h + gap
     end
     if view.hosted and not after then PlaceHost(0) end
     local placed = false

@@ -241,6 +241,9 @@ Define("classBars", { apply = Refresh("ClassBars") })
 -- Hunter ammunition warning
 Define("ammoWarning", { apply = Refresh("Ammo") })
 
+-- Reminders: off hides every one at once and listens for nothing; your reminders are kept either way
+Define("reminders", { apply = Refresh("ReminderController") })
+
 -- Target dragon artwork on EllesmereUI's target frame
 Define("targetArt", { apply = Refresh("TargetArtDisplay") })
 

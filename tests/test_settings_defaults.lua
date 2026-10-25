@@ -49,8 +49,9 @@ for key, default in pairs(defaults) do
   n = n + 1
   assert(default == R.DEFAULT_MODULES[key], key .. " default matches a new install")
 end
-assert(n == 71, "every module has a toggle: " .. n)
+assert(n == 72, "every module has a toggle: " .. n)
 assert(defaults.hazardAlerts == false, "hazard alerts are opt-in")
+assert(defaults.reminders == true, "reminders are on (none exist until made, and each starts turned off)")
 assert(defaults.targetArt == false, "target dragon artwork is opt-in")
 assert(defaults.mapExplore == false, "world map exploration is opt-in")
 assert(defaults.npcMap == true, "vendors and trainers is on by default")

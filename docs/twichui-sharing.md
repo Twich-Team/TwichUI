@@ -74,7 +74,7 @@ registries and every key the settings window can save is either shared or listed
 | Acts for you | `mageSell*` (the switches; not `ui.mageSellMode`), `mageRefreshmentsAutoFill`, `qolSummons`, `qolResurrect*`, `qolReleasePvP`, `qolDuels*`, `qolGuideWaypoint`, `ui.qol`, `ui.mageSell` (the never-sell list and `euiAck`, your confirmation of EllesmereUI marking), `ui.guideWaypoint`, `restock` (whether vendor restocking is on), `ui.restockAck` (your confirmation that it may buy without asking) |
 | Sent to or accepted from others | `setupSharing`, `acceptSetups`, `groupCheck`, `partyPins`, `shareTransport` |
 | Where things sit | `foodDrinkUnlock`, every `*Position`/`*Place`, `ui.settingsWindow`, the refreshments panel's and pin window's place |
-| Other | `restedxpSkin` (turning it on chooses RestedXP's own theme), `restedxpSkinState`, `gear.trees` (per character), pins, `setup`, profiles and their bookkeeping, `welcome`, `schema` |
+| Other | `restedxpSkin` (turning it on chooses RestedXP's own theme), `restedxpSkinState`, `gear.trees` (per character), pins, `reminders` and `ui.reminders` (your reminders: they can name your characters), `setup`, profiles and their bookkeeping, `welcome`, `schema` |
 
 Also never in it: the Journey Chronicle, backups and restore points, Undo copies, received setups, your own saved
 setup, diagnostics and anything transient. The export is built from the schema, so none of that is reachable from it.

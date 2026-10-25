@@ -68,6 +68,7 @@ local DEFAULT_MODULES = {
     ammoWarning = false,     -- Hunter ammunition warning: a line of text near the centre of the screen when ammunition is missing, out or wrong (Hunters only, opt-in; nothing is equipped or moved for you)
     targetArt = false,       -- Target dragon artwork: a dragon on EllesmereUI's target frame by the target's classification (opt-in; needs EllesmereUI's target frame; decoration only)
     hazardAlerts = false,    -- Hazard alerts: the game plays a sound when an aura you list lands on you, grows or fades (opt-in; no combat log is read, nothing is automated)
+    reminders = true,        -- Reminders: artwork, an icon or text when conditions you set are true (none exist until you make one, and each starts turned off; reminders/)
     qolSummons = false,      -- Quality of Life (all opt-in, see qol/QoL.lua): accept summons
     qolResurrect = false,    -- ... accept a resurrection offered to you
     qolResurrectCombat = false, -- ... including a combat resurrection (needs the one above)

@@ -9,7 +9,7 @@ where its runtime file is, how the files were made and what is known to be imper
 | | |
 |---|---|
 | Originals (never changed) | `../assets/Fantasy Medieval Icon Grid.png`, `Fantasy RPG Inventory Icon Set.png`, `Fantasy Duel Ban and Keybind Icons.png`, outside the repository (sheets 1 to 3) |
-| Copy in the repository | `assets/settings-icons-source.png` (byte-identical; sha256 `dcb88def6f297bdc9f756224255dd14c4f854ffb2651aeac35bca87693470d60`) |
+| Copy in the repository | `assets/settings-icons-source.png` (byte-identical; sha256 `dcb88def6f297bdc9f756224255dd14c4f854ffb2651aeac35bca87693470d60`); sheets 2 to 4 are `assets/settings-icons-2-source.png` to `-4-source.png` (below) |
 | Format | PNG, 1254 x 1254, 8-bit RGBA, not interlaced |
 | Layout | 4 columns x 4 rows, row-major in the order below |
 | Background | Already transparent: every corner and gutter pixel is alpha 0. No white background to remove. |
@@ -110,6 +110,24 @@ pale bevels are close to the background in brightness, so their outer edge is sl
 | 18 | `quickKeybind` | gold key on a dark keyboard key | Quality of life: Quick Keybind card |
 
 All five Quality of life cards now have an icon.
+
+Fourth sheet (`assets/settings-icons-4-source.png`, the user's `reminders.png`, byte-identical; sha256
+`cac3ce12e68aa6060c531f9cc736bf4f0920296d8dc7ca17879ab4b3b0f7c3c1`): 1536 x 1024, 8-bit RGBA with real transparency,
+3 columns x 2 rows in 512 px cells. Opened in an image viewer that ignores alpha it looks as though it sits on a brown
+glow; composited on a flat colour every gutter and corner is alpha 0, so no background is removed. Processed the same way
+as sheets 1 and 2. Its icons are balanced against the median of sheets 1 to 3 (`MEDIAN_SHEETS` in the tool), so adding it
+changed no earlier icon (every existing file came out byte-identical).
+
+| # | Registry id | Picture | Used by |
+|---|---|---|---|
+| 19 | `reminders` | bronze bell (its loop is a genuine opening, kept clear) | `reminders`; a words-only reminder's thumbnail |
+| 20 | `reminderShow` | parchment shield in a bronze frame | Reminders editor: Show; an icon a reminder can show |
+| 21 | `reminderWhen` | three connected nodes | Reminders editor: When |
+| 22 | `reminderPlacement` | a panel within four corner marks (five separate pieces) | Reminders editor: Placement |
+| 23 | `reminderPreview` | an eye | Reminders editor: Preview |
+| 24 | `reminderTest` | a checklist with a checkmark | Reminders editor: Test; an icon a reminder can show |
+
+The mapping is exactly the expected one: the sheet holds the six pictures in the order described, nothing more.
 
 **Fallback:** an unknown id, or a file the game refuses (`SetTexture` returns `success`, per Forever's
 `SimpleTextureBaseAPIDocumentation.lua`), draws `media/icon` (the addon's emblem, shown by every TwichUI window's

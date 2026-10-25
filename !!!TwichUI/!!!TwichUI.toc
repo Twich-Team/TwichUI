@@ -279,6 +279,18 @@ hazard\Config.lua
 hazard\Rules.lua
 hazard\Alerts.lua
 
+# Reminders: artwork, an icon or words on screen while conditions you set are true (an empty off hand, a missing item,
+# combat, being mounted ...). Nothing exists until you make one, and each starts turned off. Config.lua is what is stored
+# and checked, Conditions.lua the kinds of condition (pure), Evaluate.lua the decision (pure), State.lua reads the game,
+# Display.lua draws, Controller.lua puts them together. It never equips, uses or casts anything. The settings are in
+# TwichUI_Settings; the artwork is made by tools/make_reminder_art.py.
+reminders\Config.lua
+reminders\Conditions.lua
+reminders\Evaluate.lua
+reminders\State.lua
+reminders\Display.lua
+reminders\Controller.lua
+
 # Target dragon artwork: a dragon of your choosing on EllesmereUI's target frame for bosses, world bosses, rare elites,
 # elites and rares, by the game's own classification (off until turned on; needs EllesmereUI's unit frames with its
 # own target frame; nothing of EllesmereUI's is changed). Config.lua is what it stores and decides (no frames),
@@ -341,6 +353,7 @@ diag\ChatClean.lua
 diag\ClassBars.lua
 diag\Ammo.lua
 diag\Hazard.lua
+diag\Reminders.lua
 diag\Status.lua
 diag\SupportWindow.lua
 diag\Window.lua

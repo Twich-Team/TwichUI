@@ -86,6 +86,7 @@ function SettingsClient(opts)
     "modules/RefreshmentsTrade.lua", "modules/RefreshmentsBroker.lua", "modules/EllesmereJunk.lua", "modules/MageSell.lua", "modules/MageSellWindow.lua", "modules/Restock.lua", "modules/RestockPrompt.lua", "modules/ChatCleanMatch.lua", "modules/ChatClean.lua",
     "classbars/Anim.lua", "classbars/Resources.lua", "classbars/Config.lua", "classbars/Bar.lua", "classbars/Effects.lua", "classbars/Controller.lua",
     "ammo/Config.lua", "ammo/Items.lua", "ammo/State.lua", "ammo/Warning.lua",
+    "reminders/Config.lua", "reminders/Conditions.lua", "reminders/Evaluate.lua", "reminders/State.lua", "reminders/Display.lua", "reminders/Controller.lua",
     "hazard/Config.lua", "hazard/Rules.lua", "hazard/Alerts.lua",
     "targetart/Config.lua", "targetart/Ellesmere.lua", "targetart/Display.lua",
     "modules/RestedXPSkin.lua", "modules/RestedXPTimers.lua", "modules/SpeakStoneSkin.lua", "qol/QoL.lua", "qol/Summons.lua", "qol/Resurrect.lua", "qol/ReleasePvP.lua",

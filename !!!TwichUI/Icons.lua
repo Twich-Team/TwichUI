@@ -10,7 +10,7 @@
 --                                         emblem when the id is unknown or the game refuses the file. Returns the
 --                                         id drawn ("fallback" when it fell back).
 --
--- Every icon comes from one of three sheets (assets/settings-icons-source.png, -2- and -3-source.png),
+-- Every icon comes from one of four sheets (assets/settings-icons-source.png, -2-, -3- and -4-source.png),
 -- cut and cleaned by tools/make_settings_icons.py into media/icons/<id>.tga (64 px, for cards and Home) and
 -- <id>-small.tga (32 px, for list rows). docs/settings-icons.md lists every one and what it is for.
 
@@ -71,6 +71,13 @@ local list = {
     -- the third sheet (assets/settings-icons-3-source.png: an opaque background, removed by the tool)
     declineDuels = Sheet("declineDuels"),         -- crossed swords behind a red prohibition seal (Quality of life)
     quickKeybind = Sheet("quickKeybind"),         -- a gold key on a dark keyboard key (Quality of life)
+    -- the fourth sheet (assets/settings-icons-4-source.png, 3 x 2): Reminders and the parts of its editor
+    reminders = Sheet("reminders"),               -- a bronze bell
+    reminderShow = Sheet("reminderShow"),         -- a parchment shield in a bronze frame (Show)
+    reminderWhen = Sheet("reminderWhen"),         -- three connected nodes (When)
+    reminderPlacement = Sheet("reminderPlacement"), -- a panel within four corner marks (Placement)
+    reminderPreview = Sheet("reminderPreview"),   -- an eye (Preview)
+    reminderTest = Sheet("reminderTest"),         -- a checklist with a checkmark (Test)
 }
 Icons.list = list
 

@@ -1244,7 +1244,8 @@ do
     "vendorRestocking", "auctionHouse", "journeyChronicle", "sleepingBag", "mapsNavigation", "gearComparison",
     "classResources", "addonSkins", "profilesSharing", "targetArt", "mapPins", "mapToolbar", "vendors", "mage", "guide",
     "ammunition", "troubleshooting", "navigation", "profiles", "explore", "appearance", "reviewChanges", "summons",
-    "resurrection", "releaseSpirit", "declineDuels", "quickKeybind" }
+    "resurrection", "releaseSpirit", "declineDuels", "quickKeybind",
+    "reminders", "reminderShow", "reminderWhen", "reminderPlacement", "reminderPreview", "reminderTest" }
   local function TgaSide(path)
     local f = io.open(ROOT .. path:gsub("^Interface\\AddOns\\!!!TwichUI\\", ""):gsub("\\", "/") .. ".tga", "rb")
     if not f then return nil end
@@ -1264,7 +1265,7 @@ do
     local w, h = TgaSide(e.file)
     assert(w == e.size and h == e.size, id .. "'s file is " .. tostring(w) .. " px, the registry says " .. e.size)
   end
-  assert(count == #SHEET and count == 34, "the three sheets' thirty-four icons and no others: " .. count)
+  assert(count == #SHEET and count == 40, "the four sheets' forty icons and no others: " .. count)
   assert(Icons.Path("home", 20):find("%-small$") and not Icons.Path("home", 40):find("%-small$"), "the 32 px file when drawn small")
   local stub = { SetTexCoord = function() end, SetVertexColor = function() end }
   function stub:SetTexture(path) self.path = path; return path == Icons.FALLBACK end   -- refuses everything but the emblem

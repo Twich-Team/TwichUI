@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Builds the feature icons (media/icons/*.tga) from the 4 x 4 icon sheet, assets/settings-icons-source.png.
+"""Builds the feature icons (media/icons/*.tga) from the icon sheets in assets/ (SOURCES below; the first is the 4 x 4
+sheet assets/settings-icons-source.png).
 
 Standard library only, like the other make_*.py tools; the PNG reader and the premultiplied-alpha box filter are
 tools/make_map_tool_icons.py's.
@@ -44,9 +45,13 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from make_map_tool_icons import read_png, resample  # noqa: E402
 
 # file, columns, rows, opaque (True: no alpha channel, the white background is removed here). Sheets 1 and 2 are 4 x 4
-# with real transparency; sheet 3 is two icons side by side on an opaque near-white background.
+# with real transparency; sheet 3 is two icons side by side on an opaque near-white background; sheet 4 (Reminders) is
+# 3 x 2 with real transparency.
 SOURCES = [("settings-icons-source.png", 4, 4, False), ("settings-icons-2-source.png", 4, 4, False),
-           ("settings-icons-3-source.png", 2, 1, True)]
+           ("settings-icons-3-source.png", 2, 1, True), ("settings-icons-4-source.png", 3, 2, False)]
+# The sheets whose icons set the median the optical balance aims for. A sheet added later is balanced against the
+# same median without moving it, so adding one never changes an icon that was already made.
+MEDIAN_SHEETS = 3
 COLS, ROWS = 4, 4
 CORE = 128          # alpha at or above which a pixel is solid artwork
 EDGE = 3            # how far (source px) the antialiased edge is kept beyond the solid artwork
@@ -68,6 +73,10 @@ SHEETS = [
         ("reviewChanges", None), ("summons", None), ("resurrection", None), ("releaseSpirit", None),
     ],
     [("declineDuels", None), ("quickKeybind", None)],
+    [
+        ("reminders", None), ("reminderShow", None), ("reminderWhen", None),
+        ("reminderPlacement", 5), ("reminderPreview", None), ("reminderTest", None),
+    ],
 ]   # expected solid parts per icon; None: not known beforehand (any number, merged into one icon)
 
 # output: suffix, canvas side, content's longer side (the rest is clear margin)
@@ -453,7 +462,8 @@ def main():
     args = ap.parse_args()
 
     prepared = []
-    for (source, ncols, nrows, opaque), icons in zip(SOURCES, SHEETS):
+    in_median = []
+    for sheet, ((source, ncols, nrows, opaque), icons) in enumerate(zip(SOURCES, SHEETS)):
         w, h, pixels, has_alpha = read_png(os.path.join(args.src, source))
         if opaque:
             if has_alpha:
@@ -477,11 +487,12 @@ def main():
             cbox, area = content_and_area(rows, W, H)
             longest = max(cbox[2] - cbox[0], cbox[3] - cbox[1])
             prepared.append((name, rows, cbox, area, longest, box, holes if expect is not None else holes))
+            in_median.append(sheet < MEDIAN_SHEETS)
             if len(ps) > 1 and expect is None:
                 print("note: %s is %d separate pieces (merged into one icon)" % (name, len(ps)))
 
     # optical balance: fill = sqrt(painted area) / longer side at box fit; heavier than the median is shrunk part way
-    fills = sorted((area ** 0.5) / longest for _, _, _, area, longest, _, _ in prepared)
+    fills = sorted((area ** 0.5) / longest for (_, _, _, area, longest, _, _), counted in zip(prepared, in_median) if counted)
     median = fills[len(fills) // 2]
 
     if not args.check:
