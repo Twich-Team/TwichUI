@@ -42,7 +42,7 @@ K.Page({
         local reset = {}
         local Check = Checker(reset)
 
-        Header("Vendors and trainers", "When you deal with an NPC (buy from it, train, use its bank, inn, auction house, stable or flight master), TwichUI notes what it offered and where you stood, and shows it on your world map. Only NPCs you have dealt with yourself, or that another TwichUI user sent you, are known: nothing is downloaded or guessed. Off until you turn it on.")
+        Header("Vendors and trainers", "When you deal with an NPC (buy from it, train, use its bank, inn, auction house, stable or flight master), TwichUI notes what it offered and where you stood, and shows it on your world map. Only NPCs you have dealt with yourself, or that another TwichUI user sent you, are known: nothing is downloaded or guessed.")
         npcToggle = Toggle("npcMap", "Note vendors, trainers and services",
             "Notes each NPC you deal with: its name, what it offered (a merchant by the kinds of item it sold and whether it repairs, a trainer by the client's own trainer type, a service by the window it opened) and where you stood, which is within a few yards of it. Its marker then shows on your world map on its zone and the maps inside it.\n\nIt only reads: it never buys, trains or opens anything for you. Inside dungeons and raids nothing is noted.\n\nOff: nothing is noted, the markers leave the map and lists others are sending you are ignored. Your list is kept for when you turn it on again.")
         Under(K.Status("Your list", Counts, nil, "How many NPCs you have noted yourself, and how many came from other TwichUI users and haven't been seen by you yet."), npcToggle, On)
@@ -108,11 +108,11 @@ K.Page({
         Under(Check("npcMapSendReports", "sendReports", "Also send what others sent you",
             "Off, only NPCs you dealt with yourself are sent, so what you pass on is what you saw. On, what others sent you goes too (it arrives as reports either way)."), Toggle(), On)
         Under(Check("npcMapLiveGroup", "liveGroup", "Tell your group about new NPCs as you find them",
-            "When you deal with an NPC for the first time (or it turns out to offer something new), a small message with just that NPC goes to your party or raid a few seconds later, so others' lists grow without long transfers. Only NPCs you saw yourself go; nothing about you. Each NPC is sent once per session, and at most a dozen messages a minute. Off by default; no question is asked per NPC."), Toggle(), On)
+            "When you deal with an NPC for the first time (or it turns out to offer something new), a small message with just that NPC goes to your party or raid a few seconds later, so others' lists grow without long transfers. Only NPCs you saw yourself go; nothing about you. Each NPC is sent once per session, and at most a dozen messages a minute. On by default; no question is asked per NPC."), Toggle(), On)
         Under(Check("npcMapLiveGuild", "liveGuild", "Tell your guild about new NPCs as you find them",
-            "The same, to your guild. Only guild members who have TwichUI and chose to take them in receive it. Off by default."), Toggle(), On)
+            "The same, to your guild. Only guild members who have TwichUI and have not turned this off receive it. On by default."), Toggle(), On)
         Under(Check("npcMapLiveReceive", "liveReceive", "Take in NPCs your group and guild find",
-            "NPCs your party, raid or guild pass on as they find them are added quietly to your list as reports from others (dimmed on the map until you deal with them yourself). Nothing is asked and nothing is printed; they never change an NPC you saw yourself. Off by default. This is separate from \"Lists sent to you\", which is about whole lists."), Toggle(), On)
+            "NPCs your party, raid or guild pass on as they find them are added quietly to your list as reports from others (dimmed on the map until you deal with them yourself). Nothing is asked and nothing is printed; they never change an NPC you saw yourself. On by default. This is separate from \"Lists sent to you\", which is about whole lists."), Toggle(), On)
         Under(Button("Send to your group", "Send", function() NSH.Offer("party") end,
             "Everyone in your party or raid with TwichUI receives it; each of them chooses whether to add it. You are asked first."), Toggle(), On)
         Under(Button("Send to your guild", "Send", function() NSH.Offer("guild") end,

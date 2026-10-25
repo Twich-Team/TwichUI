@@ -401,7 +401,8 @@ sb.TwichUIDB.modules.npcMap = true
 do
   CLOCK = CLOCK + 120
   local npa, npb, npc = sa.TwichUI.NpcPrefs, sb.TwichUI.NpcPrefs, sc.TwichUI.NpcPrefs
-  assert(npa.Get("liveGroup") == false and npa.Get("liveGuild") == false and npb.Get("liveReceive") == false, "all off by default")
+  assert(npa.Get("liveGroup") and npa.Get("liveGuild") and npb.Get("liveReceive"), "all on by default")
+  for _, np in ipairs({ npa, npb, npc }) do np.Set("liveGroup", false) np.Set("liveGuild", false) np.Set("liveReceive", false) end
   SB.Clear("all"); SC.Clear("all")
   local function Seen(id) return SA.Observe({ id = id, name = "Live " .. id, map = 1453, x = 0.4, y = 0.4, tags = { reagents = true } }) end
   -- nothing chosen: nothing goes
@@ -411,9 +412,10 @@ do
   assert(Sent() == n0, "off: nothing sent")
   -- sending on, receiving off: B drops it and says why
   npa.Set("liveGroup", true)
+  local offBefore = sb.TwichUI.NpcShare.Snapshot().drops["live-off"] or 0
   Seen(5002); RunLongTimers(30); settle()
   assert(Sent() == n0 + 1, "one live message")
-  assert(sb.TwichUI.NpcShare.Snapshot().drops["live-off"] == 1 and select(2, SB.Counts()) == 0, "receiver has not chosen it")
+  assert(sb.TwichUI.NpcShare.Snapshot().drops["live-off"] == offBefore + 1 and select(2, SB.Counts()) == 0, "receiver has not chosen it")
   -- receiving on: added quietly as a report, no question, no print
   npb.Set("liveReceive", true); npc.Set("liveReceive", true)
   local pops = #sb.POPUPS

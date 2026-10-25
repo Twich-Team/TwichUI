@@ -1,6 +1,6 @@
 # Vendors and trainers
 
-**TwichUI settings > Vendors and trainers** (`npcs/`; the switch is `modules.npcMap`, off until turned on; `/tui npcs`).
+**TwichUI settings > Vendors and trainers** (`npcs/`; the switch is `modules.npcMap`, on by default; `/tui npcs`).
 Written against the WoW: Forever UI source (`../wow-ui-source`, branch `forever`). **Nothing here has been run in the
 game yet**: everything below is source-verified and covered by offline tests with stand-ins for the game
 (`tests/test_npcs.lua`, `tests/test_npcs_map.lua`), not seen working in play, alone or in a group.
@@ -101,9 +101,8 @@ Data Explorer's cleanup. Entry: `{ id, n (name), m (map), x, y (0..10000), tags,
 ### Live sharing
 
 Same prefix and protocol, one more message: `live { l = { entry, ... } }`, at most 5 entries, with the same entry form as
-a list. It lets lists grow without long transfers. Three separate choices, all off by default: tell your group, tell your
-guild (each its own), and take in what others tell. No question is asked per NPC, which is why none of it is on until
-chosen.
+a list. It lets lists grow without long transfers. Three separate choices, all on by default (as is the feature itself): tell your group, tell your
+guild (each its own), and take in what others tell. No question is asked per NPC, so each can be turned off.
 
 - **Sending.** `npcs/Store.lua`'s `OnSeen` fires when you deal with an NPC yourself ("new", or "updated": it offered a
   kind it hadn't). It is queued for 6 seconds (a merchant's list can arrive in parts), then sent as it is then, to your

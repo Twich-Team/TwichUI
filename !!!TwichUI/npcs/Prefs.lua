@@ -10,9 +10,9 @@
 --                  time), "auto" (added without asking when it comes from your party or guild; a whisper still asks)
 --                  or "off" (ignored)
 --   sendReports    what you send includes what others sent you, not only what you saw yourself
---   liveGroup      an NPC you deal with for the first time is passed on to your group as you go (npcs/Share.lua; off)
---   liveGuild      the same to your guild (off)
---   liveReceive    NPCs your group or guild pass on as they find them are added quietly, as reports (off)
+--   liveGroup      an NPC you deal with for the first time is passed on to your group as you go (npcs/Share.lua; on)
+--   liveGuild      the same to your guild (on)
+--   liveReceive    NPCs your group or guild pass on as they find them are added quietly, as reports (on)
 -- A saved value that can't be used is read as its default and left as it was. Nothing here is read per frame.
 
 local R = TwichUI
@@ -22,7 +22,7 @@ R.NpcPrefs = NP
 
 local DEFAULTS = {
     trainerClass = "mine", reports = true, labels = false, iconSize = 100, receive = "ask", sendReports = false,
-    liveGroup = false, liveGuild = false, liveReceive = false,
+    liveGroup = true, liveGuild = true, liveReceive = true,
 }
 for _, k in ipairs(NK.LIST) do DEFAULTS["show." .. k.id] = k.on end
 local LIMITS = { iconSize = { 60, 150 } }

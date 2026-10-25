@@ -94,7 +94,7 @@ local DEFAULT_MODULES = {
     mapPingsReceive = true,  -- ... pings from your group are taken in (shown, listed, with a sound)
     navigation = false,      -- Navigation: walking routes to a place you choose, with a frame, an arrow and trails on the maps (opt-in; nav/)
     mapExplore = false,      -- World map exploration: deeper zoom and panning, terrain detail, cave and dungeon maps, places and travel links (opt-in; map/)
-    npcMap = false,          -- Vendors and trainers: note the NPCs you deal with and show the kinds you choose on the world map; share the list with other TwichUI users when you choose (opt-in; npcs/)
+    npcMap = true,           -- Vendors and trainers: note the NPCs you deal with and show the kinds you choose on the world map; pass new finds to your group and guild and take theirs in (on by default, each part can be turned off; npcs/)
 }
 R.DEFAULT_MODULES = DEFAULT_MODULES   -- Switches.lua and the settings window (each switch's default)
 

@@ -52,7 +52,7 @@ end
 assert(n == 70, "every module has a toggle: " .. n)
 assert(defaults.hazardAlerts == false, "hazard alerts are opt-in")
 assert(defaults.mapExplore == false, "world map exploration is opt-in")
-assert(defaults.npcMap == false, "vendors and trainers is opt-in")
+assert(defaults.npcMap == true, "vendors and trainers is on by default")
 assert(defaults.restedxpSkin == false, "the RestedXP skin is opt-in")
 assert(defaults.arrival == true and defaults.arrivalSubzones == true and defaults.arrivalReducedMotion == false,
   "arrival card and subzone cards on; reduced motion opt-in")
