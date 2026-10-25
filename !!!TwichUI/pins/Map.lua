@@ -9,7 +9,7 @@
 --     child map, so it can't land on the wrong map.
 --     Nothing runs per frame: work happens only when the map changes, zooms or a pin changes.
 --   Placing: a canvas click handler (the map's own, which runs addon handlers through securecallfunction)
---     answers only the exact clicks chosen in Party pins options (Alt-click and Alt-Shift-click unless
+--     answers only the exact clicks chosen in Pins and Pings options (Alt-click and Alt-Shift-click unless
 --     changed) or one click after Place a pin; every other click carries on to the map as before. Ctrl-
 --     click stays the game's waypoint, and the player's own waypoint is changed only by clicking a pin
 --     (which selects it and sets the waypoint there) or by Set waypoint. A click opens the pin editor: nothing is made, and nothing sent, until it is saved.

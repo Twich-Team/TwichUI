@@ -95,7 +95,7 @@ end
 ---------------------------------------------------------------------------
 local REASONS = {
     ["off"] = "Map pings are turned off.",
-    ["send-off"] = "Sending map pings is turned off in the Party Map options.",
+    ["send-off"] = "Sending map pings is turned off in the Pins and Pings options.",
     ["no-group"] = "Join a party or raid to ping.",
     ["blocked"] = "The game isn't allowing group messages right now.",
     ["unsupported-map"] = "That map can't be pinged.",

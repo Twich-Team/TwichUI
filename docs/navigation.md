@@ -1,6 +1,6 @@
 # Navigation
 
-**TwichUI settings > Journey > Navigation** (`nav/`; the switch is `modules.navigation`, off by default). Written against
+**TwichUI settings > Map > Navigation** (`nav/`; the switch is `modules.navigation`, off by default). Written against
 the WoW: Forever UI source (`../wow-ui-source`, branch `forever`). **Nothing here has been run in the game yet.** The
 route planning is tested offline on synthetic maps and on the real walking maps (`tests/test_nav_route.lua`), and the
 controller, views and settings with mocked frames (`tests/test_nav.lua`, the settings tests). Movement, drawing, the

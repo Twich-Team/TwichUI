@@ -1,6 +1,6 @@
 # World map exploration
 
-**TwichUI settings > Journey > World map** (`map/`; the switch is `modules.mapExplore`, off by default). Written against
+**TwichUI settings > Map > World map** (`map/`; the switch is `modules.mapExplore`, off by default). Written against
 the WoW: Forever UI source (`../wow-ui-source`, branch `forever`) and the Forever client's own map tables. **Nothing here
 has been run in the game yet.** The view, the stitching geometry, the map underneath following, input routing and every
 part on the map are tested offline on a synthetic world with a scroll container that follows the game's rules

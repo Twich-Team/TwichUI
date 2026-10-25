@@ -1,7 +1,8 @@
--- TwichUI settings: Party Map (pins/). Its Pins tab has the switch, how pins are placed and labelled, the data bar entry
--- and the arrival sound. Its Pings tab (pings, below) has map pings, and its Appearance tab (pinsLook, further down) the
--- look of the pin window, its menu, the new pin window and pin names on the maps. The pins themselves are managed in the
--- pin window, not here; nothing on these pages reads or writes them.
+-- TwichUI settings: Pins and Pings (pins/). Its Pins tab has the switch, how pins are placed and labelled, the data bar
+-- entry and the arrival sound. Its Pings tab (pings, below) has map pings, and its Appearance tab (pinsLook, further
+-- down) the look of the pin window, its menu, the new pin window and pin names on the maps. The map tools bar is on
+-- its own page (MapToolbar.lua). The pins themselves are managed in the pin window, not here; nothing on these pages
+-- reads or writes them.
 
 local R = TwichUI
 local K = R.SettingsKit
@@ -9,9 +10,9 @@ local K = R.SettingsKit
 local pinsToggle   -- the Party pins switch (the Pins tab), which the other tabs' rows are greyed out under
 
 K.Page({
-    key = "pins", name = "Party Map", tab = "Pins", order = 70, group = "journey",
+    key = "pins", name = "Pins and Pings", tab = "Pins", order = 70, group = "map",
     description = "Named pins on your world map: local pins only you see, and party pins shared with party members who have TwichUI.",
-    keywords = "map pin waypoint way tomtom marker minimap party share coordinates ping toolbar map tools bar",
+    keywords = "map pin waypoint way tomtom marker minimap party share coordinates ping",
     when = function() return R.Pins ~= nil end,
     overview = {
         label = "Party pins", tip = "Named pins on your world map, and pins shared with party members who have TwichUI.",
@@ -75,10 +76,6 @@ K.Page({
             "Pin names beside the pins on the minimap. Never leaves the minimap as it is (names are in the tooltip). On hover shows a name when the pointer is on its pin, and for the pin selected in the pin window. Always can crowd a small minimap. Only applies while Show pins on the minimap is on.",
             STRING, PL.PREF_DEFAULTS.minimapLabels, function() return PL.Pref("minimapLabels") end,
             function(value) PL.SetPref("minimapLabels", value) end, PL.MINIMAP_LABELS), pinsToggle, PinsOn)
-        Under(ProxyToggle("pinsToolbar", "Show the map tools bar",
-            "A small bar in the world map's title row, beside the navigation, with buttons for a personal pin, a group pin and a group ping, and a Help button, so none of the clicks above has to be remembered. A button arms the tool; the next plain click on the map uses it once, and Esc cancels. The shortcuts keep working either way. Group tools show as unavailable, with the reason, while you are not in a group.\n\nOff: the bar is gone and nothing else changes.",
-            PL.PREF_DEFAULTS.toolbar, function() return PL.Pref("toolbar") end, function(value) PL.SetPref("toolbar", value and true or false) end),
-            pinsToggle, PinsOn)
 
         local BR = PL.Bar
         Header("Data bar", "\"TwichUI Party Pins\" in a data bar addon that shows LibDataBroker plugins (for example EllesmereUI's Broker Plugin block). Click it for a small menu of your pins, right-click for these options. It is listed once Party pins is on, with no reload. What it says, its icon and its color are yours; the data bar addon still sets its font and size.")

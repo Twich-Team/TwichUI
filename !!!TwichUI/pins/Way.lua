@@ -13,7 +13,7 @@
 -- /way belongs to whoever registered it first. The game moves a command into hash_SlashCmdList the first
 -- time chat parses a command and the last addon imported wins, so TwichUI looks at both tables, takes
 -- /way only when the feature is on and nobody else has it, and never replaces another addon's handler.
--- One opt-in exception (Party Map options, "Also make a pin from /way"): when another addon (WaypointUI,
+-- One opt-in exception (Pins and Pings options, "Also make a pin from /way"): when another addon (WaypointUI,
 -- TomTom) has /way, TwichUI runs after that addon's handler, the way WaypointUI itself follows TomTom's,
 -- and makes a pin from the same text. The other handler is called first, unchanged and with the same
 -- arguments; the pin is skipped for anything that isn't a waypoint (reset, paste, list...) and nothing
@@ -278,7 +278,7 @@ end
 -- One command
 ---------------------------------------------------------------------------
 local function Off()
-    R.Print("Map pins are turned off. Turn them on in /tui options (Party Map).")
+    R.Print("Map pins are turned off. Turn them on in /tui options (Pins and Pings).")
 end
 
 local function Sentence(pin, entry)
@@ -410,7 +410,7 @@ end
 
 ---------------------------------------------------------------------------
 -- The paste window: built the first time it is asked for. It draws with the new pin window's look
--- (Party Map options > New pin window appearance), so it needs nothing of its own to configure.
+-- (Pins and Pings options > Appearance > New pin window appearance), so it needs nothing of its own to configure.
 ---------------------------------------------------------------------------
 local NAME = "TwichUIPinPaste"
 local WIDTH, HEIGHT = 440, 360

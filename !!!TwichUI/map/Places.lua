@@ -380,7 +380,7 @@ end
 function MPL.PinThis(p)
     local PN, PE = R.Pins, R.PinsEditor
     if not (PN and PE and R:Enabled("partyPins")) then
-        MV.Notice("Turn on Party Map to keep pins of your own.")
+        MV.Notice("Turn on Party pins to keep pins of your own.")
         return false
     end
     local map, mx, my = MW.Deepest(p.u, p.v)
@@ -425,7 +425,7 @@ function MPL.Menu(p, anchor)
         end
     end
     local pinsOn = R:Enabled("partyPins")
-    choices[#choices + 1] = { label = "Pin this place", enabled = pinsOn, why = "Party Map is turned off.",
+    choices[#choices + 1] = { label = "Pin this place", enabled = pinsOn, why = "Party pins is turned off.",
         tip = "Opens the new pin window here, named for the place. Nothing is made until you save it.",
         run = function() MPL.PinThis(p) end }
     if R.Nav and R.Nav.Enabled() then

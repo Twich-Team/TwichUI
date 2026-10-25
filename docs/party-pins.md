@@ -1,6 +1,6 @@
 # Party pins
 
-**TwichUI settings > Party pins** (`pins/`, switch `modules.partyPins`, on by default for a new profile; a profile that has already saved it as off keeps it off). Written
+**TwichUI settings > Pins and Pings > Pins** (`pins/`, switch `modules.partyPins`, on by default for a new profile; a profile that has already saved it as off keeps it off). Written
 against the WoW: Forever UI source (`../wow-ui-source`, branch `forever`). **Nothing here has been run in the
 game yet**: everything below is source-verified and covered by offline tests, not seen working in play.
 
@@ -135,7 +135,7 @@ is free:
   shown (an empty or malformed `/twichway`); nothing is printed unprompted.
 * An addon that registers `/way` after TwichUI took it is imported later and wins; TwichUI doesn't fight it
   and `/twichway` keeps working. `/tui diagnostics` says who has it.
-* **Also make a pin from /way (opt in, off by default; Party pins options > Waypoint commands).** When another
+* **Also make a pin from /way (opt in, off by default; Pins and Pings options > Waypoint commands).** When another
   addon has `/way` (WaypointUI, TomTom), TwichUI follows that entry's handler: it keeps the original function,
   calls it first with the same arguments, then makes a pin from the same text. This is the pattern
   WaypointUI itself uses on `TOMTOM_WAY` (`packages/slash-command/index.lua` `HookCommand`), and the one
@@ -169,7 +169,7 @@ is free:
   can't land on the wrong map.
 * Labels show on hover and for the selected pin (the default), or always. The tooltip has the name, local or
   party and who made it, the map and coordinates.
-* **Minimap** (`pins/Minimap.lua`, on by default with the feature; Party pins options > Show pins on the
+* **Minimap** (`pins/Minimap.lua`, on by default with the feature; Pins and Pings options > Show pins on the
   minimap). Pins within range of you are drawn as small buttons that are children of `Minimap`, same shape
   and color, with the party badge. Names are in the tooltip, which also says about how many yards away it is;
   a left click selects the pin and sets the waypoint there (as on the world map), right-click opens the same
@@ -399,12 +399,12 @@ take it back.
 
 ## Window and appearance
 
-`/tui pins` (listed under Party pins options; not in `/tui help`, which is kept short), the data bar, or the
+`/tui pins` (listed under Pins and Pings options; not in `/tui help`, which is kept short), the data bar, or the
 options' **Your pins**. It holds a count, a search box (names and map names), the filters All, Local, Party
 and Removed, and rows with icon, name, map and coordinates, and who made it. Right-click or **...** opens the
 actions. **More** has the bulk actions and the options.
 
-Appearance is under Party pins options > Window appearance:
+Appearance is under Pins and Pings options > Window appearance:
 
 * background and border, as MenuStyle looks: the game's textures, LibSharedMedia's, and EllesmereUI's while
   it is installed;
@@ -415,7 +415,7 @@ pins and the click and label choices stay. It looks complete without EllesmereUI
 
 ### Map text
 
-Party pins options > **Map text** styles the names drawn under pins on the world map and beside them on the
+Pins and Pings options > **Map text** styles the names drawn under pins on the world map and beside them on the
 minimap, one look for both: font (LibSharedMedia), size 8 to 20, color, outline (none, outline, thick) and
 shadow (on or off). Saved in `TwichUIDB.ui.pinsMapText`, only once changed. The defaults are the game's own
 `GameFontHighlightSmallOutline` as this client defines it (`SystemFont_Shadow_Small`: Friz Quadrata 10, white,
@@ -458,7 +458,7 @@ LibDataBroker is not bundled. The object is made only when another addon provide
 TwichUI's other data sources. A data object can't be taken away, so with Party pins off it reads "Off"
 until a reload.
 
-Party pins options > **Data bar**:
+Pins and Pings options > **Data bar**:
 
 * **Text on the data bar**: the count ("5 pins, 2 party", the default, as it always was), the number alone,
   "Map Pins", or none. With none the icon stays, so the entry is never empty.
@@ -508,7 +508,7 @@ Rename and recolor are for local pins and your own party pins only, as in the wi
 checked again when it runs (`PN.Can`). There is nothing secure in the menu, so it works in combat. While a
 name is being typed the list isn't redrawn, so a message from the party doesn't take the text away.
 
-Its **background and border** are its own look (`pinsBrokerMenu`, Party pins options > Data bar menu
+Its **background and border** are its own look (`pinsBrokerMenu`, Pins and Pings options > Data bar menu
 appearance, with a Preview that opens the real menu beside the options). Its defaults are the Mage launchers'
 menu defaults, so they match until one is changed; changing one doesn't change the other. Its text follows
 the pin window's font and size.
@@ -516,7 +516,7 @@ the pin window's font and size.
 ## The new pin window
 
 The editor that opens for a new pin, and to rename or recolor one, has its **background and border** as its
-own look (`pinsEditorLook`, Party pins options > New pin window appearance, with a **Preview** that opens
+own look (`pinsEditorLook`, Pins and Pings options > New pin window appearance, with a **Preview** that opens
 the real window beside the options with a made-up pin; its Save does nothing). The choices are the pin
 window's: background and border texture, color, opacity and border thickness. Its defaults are the pin
 window's, so the two match until one is changed; changing one doesn't change the other, and resetting it

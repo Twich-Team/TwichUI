@@ -9,7 +9,7 @@
 -- everything as it was. Save checks again at that moment (still in a party, still your pin, still under
 -- the limits) and says why when it can't, keeping what you typed.
 -- Drawn with TwichUI's own look (pins/Look.lua): its background and border are the player's own choice
--- (PL.EditorLook, Party pins options > New pin window appearance, with a Preview), its text follows the
+-- (PL.EditorLook, Pins and Pings options > New pin window appearance, with a Preview), its text follows the
 -- pin window's font, size and accent. It doesn't need EllesmereUI.
 
 local R = TwichUI

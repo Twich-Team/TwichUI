@@ -30,6 +30,7 @@ K.GROUPS = {
     { key = "home" },
     { key = "everyday", label = "Everyday" },
     { key = "journey", label = "Journey" },
+    { key = "map", label = "Map" },
     { key = "class", label = "Gear & class" },
     { key = "addons", label = "Other addons" },
     { key = "config", label = "Your configuration" },

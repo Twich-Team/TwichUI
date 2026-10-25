@@ -316,7 +316,7 @@ function NMAP.Menu(e, anchor)
     }
     local PE = R.PinsEditor
     choices[#choices + 1] = { label = "Pin this place", enabled = R:Enabled("partyPins") and PE ~= nil,
-        why = "Party Map is turned off.",
+        why = "Party pins is turned off.",
         tip = "Opens the new pin window here, named for the NPC. Nothing is made until you save it.",
         run = function() PE.OpenNew(e.m, e.x, e.y, false, e.n) end }
     if R.Nav and R.Nav.Enabled() then

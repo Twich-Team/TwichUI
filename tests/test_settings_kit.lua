@@ -35,7 +35,7 @@ end
 assert(#errors == 1 and errors[1]:find("boom", 1, true), "the failure is reported: " .. table.concat(errors, " | "))
 assert(S.registered() and S.registered().name == "TwichUI", "TwichUI is still added to the AddOns list")
 assert(Page("Broken page") and K.pages.broken.failed, "the broken page's place is kept, and it says so")
-for _, name in ipairs({ "Gear comparison", "Notifications", "Party Map", "Configuration sharing" }) do
+for _, name in ipairs({ "Gear comparison", "Notifications", "Pins and Pings", "Configuration sharing" }) do
   assert(#Page(name).rows > 0, name .. " is built")
 end
 assert(Row("TwichUI", "Reduce window motion") and not Row("TwichUI", "Notifications", "link"), "the overview is built, and lists no features")
@@ -134,15 +134,23 @@ R.Notify.SetPreviewSounds(1)
 assert(c.TwichUIDB.ui.previewSounds == true and S.variables.TWICHUI_previewSounds:GetValue() == true)
 
 -- 5b. Appearance pages sit under the page they belong to, with a pointer there; the switch keeps its page.
-assert(Page("Chronicle appearance").parent == "Journey Chronicle" and Page("Pin appearance").parent == "Party Map")
+assert(Page("Chronicle appearance").parent == "Journey Chronicle" and Page("Pin appearance").parent == "Pins and Pings")
 assert(S.variables.TWICHUI_chronicleAccentColor.page == "Chronicle appearance" and S.variables.TWICHUI_chronicle.page == "Journey Chronicle")
-assert(S.variables.TWICHUI_pinsLookBgColor.page == "Pin appearance" and S.variables.TWICHUI_partyPins.page == "Party Map")
+assert(S.variables.TWICHUI_pinsLookBgColor.page == "Pin appearance" and S.variables.TWICHUI_partyPins.page == "Pins and Pings")
 Row("Journey Chronicle", "Chronicle appearance", "button").click()
 assert(c.opened == "chronicleLook", "the Chronicle's pointer opens its appearance page")
-Row("Party Map", "Pin appearance", "button").click()
+Row("Pins and Pings", "Pin appearance", "button").click()
 assert(c.opened == "pinsLook", "and the pins' theirs")
 c.TwichUIDB.modules.partyPins = false
 assert(not Row("Pin appearance", "Accent color"):Enabled(), "the pins' look is greyed out while Party pins is off")
+c.TwichUIDB.modules.partyPins = true
+
+-- The map tools bar is its own page under Map, beside Pins and Pings (not on it), and is greyed out under Party pins.
+assert(Page("Pins and Pings").group == "map" and Page("Map Toolbar").group == "map" and not K.pages.mapToolbar.parent)
+assert(S.variables.TWICHUI_pinsToolbar.page == "Map Toolbar" and not Row("Pins and Pings", "Show the map tools bar"))
+assert(Row("Map Toolbar", "Show the map tools bar", "checkbox"):Enabled(), "the bar is on its page, enabled with Party pins")
+c.TwichUIDB.modules.partyPins = false
+assert(not Row("Map Toolbar", "Show the map tools bar"):Enabled(), "the bar is greyed out while Party pins is off")
 c.TwichUIDB.modules.partyPins = true
 
 -- No Advanced mechanism: the rows that used to be behind it sit in the section of what they belong with.

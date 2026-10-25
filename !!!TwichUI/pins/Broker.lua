@@ -110,7 +110,7 @@ local function OnTooltipShow(tip)
     local K = R.PinsLook.palette
     tip:AddLine("Map pins", 1, 1, 1)   -- local and party pins both
     if not Enabled() then
-        tip:AddLine("Turned off in TwichUI options (Party Map).", K.stone[1], K.stone[2], K.stone[3])
+        tip:AddLine("Turned off in TwichUI options (Pins and Pings).", K.stone[1], K.stone[2], K.stone[3])
         return
     end
     local _, party = R.PinsWindow.Count()

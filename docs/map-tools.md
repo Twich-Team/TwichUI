@@ -1,6 +1,6 @@
 # Map tools
 
-**TwichUI settings > Party pins > Placing and showing > Show the map tools bar** (`pins/MapTools.lua`; the choice is
+**TwichUI settings > Map > Map Toolbar > Show the map tools bar** (`pins/MapTools.lua`; the choice is
 `ui.partyPins.toolbar`, on by default). Written against the WoW: Forever UI source (`../wow-ui-source`, branch
 `forever`). **Nothing here has been run in the game yet**: everything below is source-verified and covered by offline
 tests with mocked frames (`tests/test_map_tools.lua`), not seen working in play, alone or in a group.
@@ -74,7 +74,7 @@ and arms nothing:
 * Group pin alone: "Join a party to place a group pin."; in a raid: "Party pins are paused while you are in a raid."; and the
   existing sentences for the game holding messages, not ready, and the per-owner and per-party limits.
 * Group ping alone: "Join a party or raid to send a group ping."; with Map pings or sending off: "Map pings are turned off
-  in the Party pins options." / "Sending map pings is turned off in the Party pins options."
+  in the Pins and Pings options." / "Sending map pings is turned off in the Pins and Pings options."
 * Pin with the list of local pins full: the same sentence Save gives.
 
 The checks are the features' own (`PN.SendBlocked`, `MP.Route`, the switches). The bar looks again, one tick after

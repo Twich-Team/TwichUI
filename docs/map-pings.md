@@ -1,6 +1,6 @@
 # Map pings
 
-**TwichUI settings > Party pins > Map pings** (`pins/Ping.lua`, `pins/PingMap.lua`, preferences in `pins/Look.lua`
+**TwichUI settings > Pins and Pings > Pings** (`pins/Ping.lua`, `pins/PingMap.lua`, preferences in `pins/Look.lua`
 as `PL.Ping`). Switches `modules.mapPings`, `modules.mapPingsSend`, `modules.mapPingsReceive`, all on for a new
 profile. Written against the WoW: Forever UI source (`../wow-ui-source`, branch `forever`). **Nothing here has been
 run in the game yet**: everything below is source-verified and covered by offline tests with mocked frames and a

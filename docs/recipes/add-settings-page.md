@@ -15,7 +15,8 @@ it; its pages call the core (`R:Enabled`, a feature's `Get`/`Set`).
 | `Restock.lua`, `RestockItems.lua` | `restock` (45), tab `restockItems` (46) | `everyday` |
 | `Auction.lua` | `auction` (80) | `everyday` |
 | `Chronicle.lua` | `chronicle` (60), tab `chronicleLook` (61) | `journey` |
-| `Pins.lua` | `pins` (70), tab `pinsLook` (71) | `journey` |
+| `Pins.lua` | `pins` (70), tabs `pings` (71), `pinsLook` (72) | `map` |
+| `MapToolbar.lua` | `mapToolbar` (71) | `map` |
 | `Gear.lua` | `gear` (10), tab `statWeights` (11) | `class` |
 | `Mage.lua` | `mage` (50), tab `refreshmentShares` (51) | `class` |
 | `Ammo.lua`, `AmmoItems.lua` | `ammo` (52), tab `ammoCustom` (53) | `class` |

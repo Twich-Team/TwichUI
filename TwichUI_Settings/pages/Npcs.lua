@@ -30,7 +30,7 @@ local function Checker(reset)
 end
 
 K.Page({
-    key = "npcs", name = "Vendors and trainers", tab = "On the map", order = 75, group = "journey",
+    key = "npcs", name = "Vendors and trainers", tab = "On the map", order = 75, group = "map",
     description = "The vendors, trainers and services you deal with, noted where they stand and shown on your world map by the kinds you choose.",
     keywords = "npc npcs vendor vendors merchant reagent reagents ammo ammunition arrows bullets food drink trade supplies repair recipes bags trainer trainers class profession pet innkeeper inn banker bank auctioneer auction stable flight master spirit healer guild map markers icons",
     when = function() return R.NpcStore ~= nil and R.NpcPrefs ~= nil end,
