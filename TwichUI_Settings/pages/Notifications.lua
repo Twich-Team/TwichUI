@@ -201,6 +201,16 @@ K.Page({
             function(on) NL.SetOwn(Editing(), on) end)
         if own then own:AddShownPredicate(function() return Editing() ~= "shared" end) end
 
+        Header("Divider", "The line under each card's heading. It is the same on all four cards.")
+        local dividers = {}
+        for i, style in ipairs(NL.DIVIDER_STYLES) do dividers[i] = { style.key, style.label, style.tip } end
+        K.Choice("notifyDivider", "Divider style",
+            "Classic is the thin bronze rule the cards have always had, in the accent color. Illustrated is a bronze ornamental divider with a diamond at its centre; it has its own colors, so the accent color doesn't change it, but the accent opacity still does. Only the line changes, not where or when a card appears. A preview that is up changes at once.",
+            STRING, NL.DIVIDER_DEFAULT,
+            function() return NL.DividerStyle() end,
+            function(value) NL.SetDividerStyle(value) end,
+            dividers)
+
         Header("Preview", "Shows a card as it really looks, with made-up details, so you can see a change without waiting for the real event. A preview stays up while you work, is silent, works even when its card is turned off, reads and changes nothing in the game, and gives way to any real notice. It is put away when you close these settings, enter combat or change profile.")
         for _, kind in ipairs(NL.KINDS) do
             Button(NL.LABELS[kind] .. " card",

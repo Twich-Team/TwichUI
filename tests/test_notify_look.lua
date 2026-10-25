@@ -13,6 +13,7 @@ dofile(TESTS .. "harness.lua")
 local c = MakeClient("Rich", {"!!!TwichUI"})
 
 local groups, frames = {}, 0
+local allTextures = {}   -- every texture made, in order
 local function Fake(o)
   o = o or {}
   o.shown, o.scripts, o.hooks, o.pts = false, {}, {}, {}
@@ -46,7 +47,9 @@ local function Fake(o)
       return function(s) return #(s.text or "") * 8 * ((s.font and s.font.size or 15) / 15) end
     end
     if k == "SetFrameStrata" then return function(s, v) s.strata = v end end
-    if k == "CreateFontString" or k == "CreateTexture" then return function() return Fake() end end
+    if k == "SetTexture" then return function(s, v) s.texture = v end end
+    if k == "CreateTexture" then return function() local t = Fake(); allTextures[#allTextures + 1] = t; return t end end
+    if k == "CreateFontString" then return function() return Fake() end end
     if k == "CreateAnimationGroup" then return function(s)
       local g = Fake({ owner = s, plays = 0, anims = {} })
       g.Play = function(self) self.playing = true; self.plays = self.plays + 1 end
@@ -334,6 +337,50 @@ for _, part in ipairs(arrival.rule.parts) do
 end
 N.ClearPreviews()
 NL.ResetShared()
+
+---------------------------------------------------------------------------
+-- 5b. The divider style: classic by default, the same on every card, nothing made until it is chosen
+---------------------------------------------------------------------------
+do
+  local function Art()
+    local list = {}
+    for _, t in ipairs(allTextures) do
+      local path = rawget(t, "texture")
+      if type(path) == "string" and path:find("media\\notify\\divider.tga", 1, true) then list[#list + 1] = t end
+    end
+    return list
+  end
+  local function LinesShown(card)
+    for _, part in ipairs(card.rule.parts) do if not part.texture.shown then return false end end
+    return true
+  end
+  c.TwichUIDB.ui = c.TwichUIDB.ui or {}
+  assert(NL.DividerStyle() == "classic" and #Art() == 0, "classic by default, no artwork made")
+  c.TwichUIDB.ui.notifyDivider = "bogus"; assert(NL.DividerStyle() == "classic" and c.TwichUIDB.ui.notifyDivider == "bogus", "unknown reads as classic, unerased")
+  c.TwichUIDB.ui.notifyDivider = nil
+  assert(not NL.SetDividerStyle("fancy") and c.TwichUIDB.ui.notifyDivider == nil, "an unknown choice is refused")
+
+  Show("arrival", { pinned = true })
+  local plays = ag.plays
+  assert(NL.SetDividerStyle("illustrated") and c.TwichUIDB.ui.notifyDivider == "illustrated")
+  FlushTimers()
+  local art = Art()
+  assert(#art == 1 and art[1].shown, "a card that is up gets the divider")
+  assert(art[1].width == arrival.rule.width and art[1].height == arrival.rule.width / 8, "as wide as its rule, keeping the picture's shape")
+  assert(art[1].pts[1][1] == "CENTER" and art[1].pts[1][2] == arrival.rule, "centred on the rule")
+  for _, part in ipairs(arrival.rule.parts) do assert(not part.texture.shown, "the pixel rule is put away") end
+  assert(ag.plays == plays, "nothing replayed")
+  for _, kind in ipairs({ "training", "friend", "welcome" }) do Show(kind); N.ClearPreviews() end
+  assert(#Art() == 4, "one texture for each card's rule, made as that card is first drawn")
+  Show("arrival", { pinned = true })
+  for _ = 1, 3 do NL.SetDividerStyle("classic"); NL.SetDividerStyle("illustrated") end
+  FlushTimers()
+  assert(#Art() == 4, "switching again makes nothing new")
+  NL.SetDividerStyle("classic"); FlushTimers()
+  assert(not art[1].shown and LinesShown(arrival), "classic again: the pixel rule is back and the picture put away")
+  N.ClearPreviews()
+  c.TwichUIDB.ui.notifyDivider = nil
+end
 
 ---------------------------------------------------------------------------
 -- 6. A change reaches a card that is up, once, without replaying it

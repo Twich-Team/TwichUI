@@ -1505,6 +1505,9 @@ local function Define()
     do
         local NL = R.NotifyLook
         if NL then
+            local dividers = {}
+            for _, style in ipairs(NL.DIVIDER_STYLES) do dividers[style.key] = true end
+            Scalar(g, { "ui" }, "notifyDivider", "enum", NL.DIVIDER_DEFAULT, { values = dividers })
             for _, scope in ipairs({ "shared", "arrival", "training", "friend", "welcome" }) do
                 local keys = {}
                 for _, key in ipairs(NL.Keys(scope)) do keys[#keys + 1] = key end

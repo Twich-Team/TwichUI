@@ -379,18 +379,84 @@ function L.Style(kind, fs, spec)
     fs:SetAlpha(look.alpha)
 end
 
+-- The divider's style, for every card: "classic" (the thin pixel rule, in the accent color) or "illustrated" (a
+-- bronze ornamental divider, media/notify/divider.tga, made by tools/make_divider_art.py; it is a painting, so it
+-- keeps its own colors and only the accent opacity reaches it). Saved in TwichUIDB.ui.notifyDivider; anything else
+-- saved reads as classic, without being erased.
+L.DIVIDER_STYLES = {
+    { key = "classic", label = "Classic", tip = "The thin bronze rule the cards have always had, in the accent color." },
+    { key = "illustrated", label = "Illustrated", tip = "A bronze ornamental divider with a diamond at its centre. It has its own colors, so the accent color doesn't change it; the accent opacity still does." },
+}
+L.DIVIDER_DEFAULT = "classic"
+local DIVIDER_PATH = R.PATH .. [[media\notify\divider.tga]]   -- 512x64, shown whole at its width / 8 high
+local dividerFailed = false
+local dividerArt = setmetatable({}, { __mode = "k" })   -- [rule] = its divider texture, once made
+
+function L.DividerStyle()
+    local saved = TwichUIDB and TwichUIDB.ui and TwichUIDB.ui.notifyDivider
+    for _, style in ipairs(L.DIVIDER_STYLES) do
+        if style.key == saved then return saved end
+    end
+    return L.DIVIDER_DEFAULT
+end
+
+-- Saves the style (one of DIVIDER_STYLES; anything else is refused). Returns whether it was kept. Cards that are
+-- up are drawn again, once, without replaying their entrance.
+function L.SetDividerStyle(key)
+    for _, style in ipairs(L.DIVIDER_STYLES) do
+        if style.key == key then
+            TwichUIDB.ui = TwichUIDB.ui or {}
+            if TwichUIDB.ui.notifyDivider ~= key then
+                TwichUIDB.ui.notifyDivider = key
+                Request()
+            end
+            return true
+        end
+    end
+    return false
+end
+
+-- A rule's divider texture, made the first time it is wanted (once per rule). nil if it can't be made.
+local function DividerArt(rule)
+    if dividerArt[rule] then return dividerArt[rule] end
+    if dividerFailed then return nil end
+    local ok, art = pcall(function()
+        local t = rule:CreateTexture(nil, "ARTWORK")
+        t:SetTexture(DIVIDER_PATH)
+        return t
+    end)
+    if not (ok and art) then dividerFailed = true return nil end
+    dividerArt[rule] = art
+    return art
+end
+
 -- Colors a rule (Arrival.lua's A.Rule) with the accent, and sets how solid it is. baseAlpha: how solid the
--- card draws it at its own default (a smaller place's card has a quieter one).
+-- card draws it at its own default (a smaller place's card has a quieter one). With the illustrated divider the
+-- rule's own lines are put away and the painting is drawn centred on it, as wide as the rule; the rule's size,
+-- and so the card's layout, is the same either way.
 function L.PaintRule(kind, rule, baseAlpha)
     local look = L.Look(kind)
     local parts = rule.parts
-    if parts then
-        local acc = look.accent
-        local shadow = Tint(K.bronzeLo, acc, K.bronze)
-        local mark = Tint(K.gold, acc, K.bronze)
-        for _, part in ipairs(parts) do
-            local c = part.tone == "shadow" and shadow or (part.tone == "mark" and mark or acc)
-            part.texture:SetColorTexture(c[1], c[2], c[3], part.alpha)
+    local art = L.DividerStyle() == "illustrated" and DividerArt(rule)
+    if art then
+        local width = rule:GetWidth()
+        if type(width) ~= "number" or width ~= width or width <= 0 then width = 160 end
+        art:ClearAllPoints()
+        art:SetPoint("CENTER", rule, "CENTER", 0, 0)
+        art:SetSize(width, width / 8)
+        art:Show()
+        for _, part in ipairs(parts or {}) do part.texture:Hide() end
+    else
+        if dividerArt[rule] then dividerArt[rule]:Hide() end
+        if parts then
+            local acc = look.accent
+            local shadow = Tint(K.bronzeLo, acc, K.bronze)
+            local mark = Tint(K.gold, acc, K.bronze)
+            for _, part in ipairs(parts) do
+                local c = part.tone == "shadow" and shadow or (part.tone == "mark" and mark or acc)
+                part.texture:SetColorTexture(c[1], c[2], c[3], part.alpha)
+                part.texture:Show()
+            end
         end
     end
     rule:SetAlpha((baseAlpha or 1) * look.accentAlpha)
