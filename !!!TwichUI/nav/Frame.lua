@@ -234,7 +234,19 @@ function Frame:Layout()
     local w = f:GetWidth()
     local left = inset
     local attached = self.arrowSlot ~= nil and self.arrowSlot:IsShown()
-    local arrowW = attached and (self.arrowSlot:GetWidth() + 8) or 0
+    local slot = self.arrowSlot
+    local slotScale = attached and slot:GetScale() or 1
+    local arrowW = attached and (slot:GetWidth() * slotScale + 8) or 0
+    -- the arrow's box is taller than what it shows (room for a label); use what is drawn, at its scale
+    local slotH = 0
+    if attached then
+        slotH = slot:GetHeight()
+        if slot.tex and slot.dist then
+            slotH = slot.tex:GetHeight() + 1 + (slot.dist:GetStringHeight() or 0)
+            if slot.label and (slot.label:GetText() or "") ~= "" then slotH = slotH + 1 + (slot.label:GetStringHeight() or 0) end
+        end
+        slotH = slotH * slotScale
+    end
     -- the accent rule across the top; the content starts below it
     f.accent:ClearAllPoints()
     f.accent:SetPoint("TOPLEFT", f, "TOPLEFT", inset, -inset)
@@ -261,7 +273,7 @@ function Frame:Layout()
     local y = top - (f.title:GetStringHeight() or 14) - 4
     if attached then
         self.arrowSlot:ClearAllPoints()
-        self.arrowSlot:SetPoint("TOPLEFT", f, "TOPLEFT", left, y)
+        self.arrowSlot:SetPoint("TOPLEFT", f, "TOPLEFT", left / slotScale, y / slotScale)
     end
     local textW = w - left - inset - arrowW
     for _, fs in ipairs({ f.line, f.meta, f.note }) do
@@ -276,7 +288,7 @@ function Frame:Layout()
         end
     end
     local h = -y + inset
-    if attached then h = math.max(h, -(top - (f.title:GetStringHeight() or 14) - 4) + self.arrowSlot:GetHeight() + inset) end
+    if attached then h = math.max(h, -(top - (f.title:GetStringHeight() or 14) - 4) + slotH + inset) end
     f:SetHeight(math.ceil(h))
     if not self.preview and R.NavUnlock then R.NavUnlock.Sync() end   -- the mover's stand-in is as tall as the frame
 end
