@@ -1639,6 +1639,22 @@ local function Define()
         note = "The ammunition you registered, arrows or bullets, by item ID. Merged: what the share names is set, the rest of your list is kept. Registering says only what an item is; it never says anything is equipped or carried." })
     g.custom = AmmoList
 
+    g = Group("targetArt", "Target dragon artwork", { page = "targetArt",
+        note = "Whether the dragon on EllesmereUI's target frame is on, which artwork each kind of enemy gets, and how it is placed and drawn. It only decorates; it needs EllesmereUI on the receiving side to show." })
+    Switches(g, { "targetArt" })
+    do
+        local TA = R.TargetArt
+        local keys = {}
+        if TA then
+            for _, k in ipairs(TA.KINDS) do keys[#keys + 1] = TA.MapKey(k[1]) end
+            for _, key in ipairs({ "opacity", "scale", "framePoint", "artPoint", "x", "y", "mirror", "layer", "hideEllesmere" }) do keys[#keys + 1] = key end
+            for _, id in ipairs(TA.ART_ORDER) do
+                for _, part in ipairs({ "X", "Y", "Scale" }) do keys[#keys + 1] = TA.TuneKey(id, part) end
+            end
+        end
+        Table(g, { "ui", "targetArt" }, TA, keys, TA and TA.ENUM)
+    end
+
     g = Group("hazard", "Hazard alerts", { page = "hazard",
         note = "Whether the alerts are on, which categories play and the sound each uses. The game plays the sounds when an aura you list is put on you. No combat log is read." })
     Switches(g, { "hazardAlerts" })

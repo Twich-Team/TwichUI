@@ -1,4 +1,4 @@
-## Interface: 16001
+## Interface: 16001, 120105
 ## Title: |cffC9A24ATwich|rUI
 ## Notes: A carefully crafted UI enhancement addon for WoW Forever that makes the game interface feel a little cleaner, more cohesive, and more considered, without making it feel modernized beyond recognition.
 ## Author: twichie
@@ -276,6 +276,14 @@ ammo\Warning.lua
 hazard\Config.lua
 hazard\Rules.lua
 hazard\Alerts.lua
+
+# Target dragon artwork: a dragon of your choosing on EllesmereUI's target frame for bosses, world bosses, rare elites,
+# elites and rares, by the game's own classification (off until turned on; needs EllesmereUI's unit frames with its
+# own target frame; nothing of EllesmereUI's is changed). Config.lua is what it stores and decides (no frames),
+# Ellesmere.lua finds the frame, Display.lua draws. The art is made by tools/make_target_art.py.
+targetart\Config.lua
+targetart\Ellesmere.lua
+targetart\Display.lua
 
 # Sell from Bags: Auction House posting tab (uses the Chronicle palette)
 auction\Price.lua

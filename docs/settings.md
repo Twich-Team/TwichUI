@@ -83,12 +83,12 @@ Everyday                  Notifications, Quality of life, Chat cleaning › Chan
 Journey                   Journey Chronicle › Appearance, Cozy Sleeping Bag
 Map                       Pins and Pings (Pins, Pings, Appearance), Map Toolbar, World map › Places, Navigation › Appearance, Vendors and trainers › Your list and sharing
 Gear & class              Gear comparison › Stat weights, Mage (Mages only) › Refreshment shares, Ammunition warning › Custom ammunition, Class resource bars › Layout, Appearance, Effects
-Other addons              Addon skins › SpeakStone speech frame, RestedXP (map waypoint, guide window look, timer bars)
+Other addons              Addon skins › SpeakStone speech frame, RestedXP (map waypoint, guide window look, timer bars), Target dragon artwork
 Your configuration        Configuration sharing, Profiles, Troubleshooting
 ```
 
 `R:OpenSettings(key)` keys: `overview`, `notifications`, `qol`, `chatClean`, `chatCleanChannels`, `chatCleanRules`, `chatCleanLive`, `food`, `restock`, `restockItems`, `auction`, `chronicle`, `chronicleLook`, `pins`,
-`pinsLook`, `mapToolbar`, `gear`, `statWeights`, `mage`, `refreshmentShares`, `ammo`, `ammoCustom`, `classBars`, `classBarsLayout`, `classBarsLook`, `classBarsEffects`, `skins`, `restedxp`, `speakstone`, `sharing`,
+`pinsLook`, `mapToolbar`, `gear`, `statWeights`, `mage`, `refreshmentShares`, `ammo`, `ammoCustom`, `classBars`, `classBarsLayout`, `classBarsLook`, `classBarsEffects`, `skins`, `restedxp`, `speakstone`, `targetArt`, `sharing`,
 `profiles`, `troubleshooting`. A second argument names a setting (`"arrivalHold"` or `"TWICHUI_arrivalHold"`) or a
 row id: the window goes to its page, scrolls to it and marks it for 2.5 seconds (no
 animation). An unknown page opens Home; an unknown setting opens the page at its top. No argument reopens the page

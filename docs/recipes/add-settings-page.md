@@ -23,6 +23,7 @@ it; its pages call the core (`R:Enabled`, a feature's `Get`/`Set`).
 | `ClassBars.lua` | `classBars` (55), tabs `classBarsLayout` (56), `classBarsLook` (57), `classBarsEffects` (58) | `class` |
 | `Skins.lua`, `SpeakStone.lua` | `skins` (90), tab `speakstone` (96) | `addons` |
 | `RestedXP.lua` | `restedxp` (95) | `restedxp` |
+| `TargetArt.lua` | `targetArt` (97) | `addons` |
 | `Sharing.lua`, `Profiles.lua`, `Troubleshooting.lua` | `sharing` (100), `profiles` (105), `troubleshooting` (110) | `config` |
 
 ## Steps

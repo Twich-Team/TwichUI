@@ -87,6 +87,7 @@ function SettingsClient(opts)
     "classbars/Anim.lua", "classbars/Resources.lua", "classbars/Config.lua", "classbars/Bar.lua", "classbars/Effects.lua", "classbars/Controller.lua",
     "ammo/Config.lua", "ammo/Items.lua", "ammo/State.lua", "ammo/Warning.lua",
     "hazard/Config.lua", "hazard/Rules.lua", "hazard/Alerts.lua",
+    "targetart/Config.lua", "targetart/Ellesmere.lua", "targetart/Display.lua",
     "modules/RestedXPSkin.lua", "modules/RestedXPTimers.lua", "modules/SpeakStoneSkin.lua", "qol/QoL.lua", "qol/Summons.lua", "qol/Resurrect.lua", "qol/ReleasePvP.lua",
     "qol/Duels.lua", "qol/QuickKeybind.lua", "qol/GuideWaypoint.lua", "markers/Markers.lua", "markers/Keys.lua", "markers/Bar.lua",
     "pins/Pins.lua", "pins/Sync.lua", "pins/Look.lua", "pins/Map.lua", "pins/Minimap.lua", "pins/Editor.lua", "pins/Window.lua",

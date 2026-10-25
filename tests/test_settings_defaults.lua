@@ -30,7 +30,7 @@ for _, page in ipairs(K.NavOrder()) do
   if page.key ~= "overview" and not page.def.host then pageOrder[#pageOrder + 1] = page.name end
 end
 c.canvases = {}
-for _, page in ipairs(K.list) do if page.def.host then c.canvases[page.name] = K.pages[page.parent].name end end
+for _, page in ipairs(K.list) do if page.def.host and page.parent then c.canvases[page.name] = K.pages[page.parent].name end end
 -- pages sit directly under TwichUI, except the appearance and addon pages, each under the page it belongs to
 for _, page in ipairs(K.list) do
   local under = { ["SpeakStone speech frame"] = "Addon skins", ["Chronicle appearance"] = "Journey Chronicle",
@@ -49,8 +49,9 @@ for key, default in pairs(defaults) do
   n = n + 1
   assert(default == R.DEFAULT_MODULES[key], key .. " default matches a new install")
 end
-assert(n == 70, "every module has a toggle: " .. n)
+assert(n == 71, "every module has a toggle: " .. n)
 assert(defaults.hazardAlerts == false, "hazard alerts are opt-in")
+assert(defaults.targetArt == false, "target dragon artwork is opt-in")
 assert(defaults.mapExplore == false, "world map exploration is opt-in")
 assert(defaults.npcMap == true, "vendors and trainers is on by default")
 assert(defaults.restedxpSkin == false, "the RestedXP skin is opt-in")

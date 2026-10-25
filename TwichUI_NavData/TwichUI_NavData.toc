@@ -1,4 +1,4 @@
-## Interface: 16001
+## Interface: 16001, 120105
 ## Title: |cffC9A24ATwich|rUI Navigation Data
 ## Notes: The walking maps TwichUI's navigation plans routes on. Loaded only when a route is first planned; keep it turned on alongside TwichUI if you use navigation.
 ## Author: twichie

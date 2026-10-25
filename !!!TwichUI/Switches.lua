@@ -241,6 +241,9 @@ Define("classBars", { apply = Refresh("ClassBars") })
 -- Hunter ammunition warning
 Define("ammoWarning", { apply = Refresh("Ammo") })
 
+-- Target dragon artwork on EllesmereUI's target frame
+Define("targetArt", { apply = Refresh("TargetArtDisplay") })
+
 -- Hazard alerts: aura sounds the game plays; off removes every one TwichUI registered
 Define("hazardAlerts", { apply = Refresh("HazardAlerts") })
 

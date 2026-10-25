@@ -1,4 +1,4 @@
-## Interface: 16001
+## Interface: 16001, 120105
 ## Title: |cffC9A24ATwich|rUI Settings
 ## Notes: The settings window for TwichUI. Loaded only when you open TwichUI's settings; keep it turned on alongside TwichUI.
 ## Author: twichie
@@ -44,6 +44,7 @@ pages\Auction.lua
 pages\Skins.lua
 pages\RestedXP.lua
 pages\SpeakStone.lua
+pages\TargetArt.lua
 pages\Sharing.lua
 pages\Profiles.lua
 pages\Troubleshooting.lua
