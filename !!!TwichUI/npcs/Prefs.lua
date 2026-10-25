@@ -6,6 +6,7 @@
 --   reports        show what other players sent you (dimmed), not only what you saw yourself
 --   labels         names under the markers
 --   iconSize       marker size in percent
+--   minimap        also draw the markers within range on the minimap (npcs/Minimap.lua; off)
 --   receive        what happens when another TwichUI user sends you their list: "ask" (the default; you are asked each
 --                  time), "auto" (added without asking when it comes from your party or guild; a whisper still asks)
 --                  or "off" (ignored)
@@ -21,7 +22,7 @@ local NP = {}
 R.NpcPrefs = NP
 
 local DEFAULTS = {
-    trainerClass = "mine", reports = true, labels = false, iconSize = 100, receive = "ask", sendReports = false,
+    trainerClass = "mine", reports = true, labels = false, minimap = false, iconSize = 100, receive = "ask", sendReports = false,
     liveGroup = true, liveGuild = true, liveReceive = true,
 }
 for _, k in ipairs(NK.LIST) do DEFAULTS["show." .. k.id] = k.on end
@@ -39,7 +40,7 @@ NP.RECEIVE = {
 }
 
 -- What each reset puts back
-NP.GROUPS = { show = {}, look = { "trainerClass", "reports", "labels", "iconSize" }, sharing = { "receive", "sendReports", "liveGroup", "liveGuild", "liveReceive" } }
+NP.GROUPS = { show = {}, look = { "trainerClass", "reports", "labels", "minimap", "iconSize" }, sharing = { "receive", "sendReports", "liveGroup", "liveGuild", "liveReceive" } }
 for _, k in ipairs(NK.LIST) do table.insert(NP.GROUPS.show, "show." .. k.id) end
 
 local function Valid(key, value)

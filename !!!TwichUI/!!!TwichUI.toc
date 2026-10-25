@@ -244,6 +244,7 @@ npcs\Store.lua
 npcs\Prefs.lua
 npcs\Collect.lua
 npcs\Map.lua
+npcs\Minimap.lua
 npcs\Share.lua
 npcs\Knowledge.lua
 npcs\Search.lua

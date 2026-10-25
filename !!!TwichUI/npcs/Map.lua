@@ -452,6 +452,8 @@ function Tooltip(b)
     GameTooltip:Show()
 end
 
+NMAP.Tooltip = Tooltip   -- the minimap's markers (npcs/Minimap.lua) say the same
+
 -- The game's waypoint at the NPC, only when asked; it replaces the waypoint you had, as setting one in the game does.
 function NMAP.SetWaypoint(e)
     local x, y = e.x / NS.COORD, e.y / NS.COORD

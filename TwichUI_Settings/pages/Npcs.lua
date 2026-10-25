@@ -74,10 +74,12 @@ K.Page({
             "NPCs another TwichUI user sent you that you haven't dealt with yourself, drawn dimmed and grey. Once you deal with one yourself it is yours like any other."), npcToggle, On)
         Under(Check("npcMapLabels", "labels", "Names under the markers",
             "Each NPC's name under its marker. Off, the name shows when you point at it."), npcToggle, On)
+        Under(Check("npcMapMinimap", "minimap", "Also show on the minimap",
+            "Draws the markers of the NPCs within range on the minimap too, with the same kinds, class trainer and report choices. Names are in the tooltip, and a click opens the same actions. At most 40 at a time. Off by default."), npcToggle, On)
         local size = Proxy("npcMapIconSize", K.NUMBER, "Marker size", NP.DEFAULTS.iconSize,
             function() return NP.Get("iconSize") end, function(value) NP.Set("iconSize", math.floor(value + 0.5)) end)
         if size then reset[#reset + 1] = { setting = size, default = NP.DEFAULTS.iconSize } end
-        Under(K.Slider(size, NP.LIMITS.iconSize[1], NP.LIMITS.iconSize[2], "In percent. The same size on screen at every zoom."), npcToggle, On)
+        Under(K.Slider(size, NP.LIMITS.iconSize[1], NP.LIMITS.iconSize[2], "In percent. The same size on screen at every zoom. The minimap's markers follow it, a little smaller."), npcToggle, On)
 
         K.ResetButton("Reset what the map shows", reset, function() NP.Reset("show") NP.Reset("look") end,
             "Puts which kinds show, the class trainers choice, reports, names and the marker size back to the defaults. Your list and the switch are not changed.")
