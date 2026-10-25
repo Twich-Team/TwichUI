@@ -136,6 +136,12 @@ guild (each its own), and take in what others tell. No question is asked per NPC
   Entries chosen this way are sent even when "Also send what others sent you" is off, and the question says how many of each
   go. No new channel and no schema change.
 
+## Finding one from the map tools bar
+
+With **Show NPC search** on (Map Toolbar, `docs/map-tools.md`), the bar has a field that searches this list and shows a chosen NPC on
+the map (`NpcMap.Locate`, `npcs/Search.lua`, `npcs/SearchBar.lua`). A marker the kinds above hide is drawn only while it is
+picked out; nothing saved changes and nothing is sent.
+
 ## Settings
 
 `ui.npcMap` (in the profile): `show.<kind>`, `trainerClass` (`mine` / `all`), `reports`, `labels`, `iconSize` (60 to

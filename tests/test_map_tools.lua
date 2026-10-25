@@ -228,7 +228,7 @@ local brokers = {}
 local LDB = c.LibStub:NewLibrary("LibDataBroker-1.1", 1)
 LDB.NewDataObject = function(_, name, o) brokers[name] = o; return o end
 for _, f in ipairs({ "chronicle/Style.lua", "modules/Borders.lua", "modules/MenuStyle.lua", "modules/SpellMenu.lua", "modules/Media.lua",
-  "pins/Pins.lua", "pins/Sync.lua", "pins/Look.lua", "pins/Sound.lua", "pins/Map.lua", "pins/Ping.lua", "pins/PingMap.lua", "pins/MapTools.lua",
+  "pins/Pins.lua", "pins/Sync.lua", "pins/Look.lua", "pins/Sound.lua", "pins/Map.lua", "pins/Ping.lua", "pins/Pulse.lua", "pins/PingMap.lua", "pins/MapTools.lua",
   "diag/Diagnostics.lua", "diag/Pins.lua" }) do
   local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
 end

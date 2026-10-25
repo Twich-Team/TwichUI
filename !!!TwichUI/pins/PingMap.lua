@@ -24,6 +24,7 @@ local PN = R.Pins
 local PL = R.PinsLook
 local PG = PL.Ping
 local PM = R.PinsMap
+local PU = R.MapPulse                           -- the rings (pins/Pulse.lua), shared with the NPC search's highlight
 local MP = R.MapPing
 local SH = R.Share
 local S = R.ChronicleStyle
@@ -39,9 +40,7 @@ local NAV_WAIT = 2               -- how long a click waits for the map it asked 
 local AGE_STEP = 5               -- the list's ages are redrawn this often while it is showing
 local NOTICE_GAP = 3             -- the same sentence is not shown again this soon
 
-local RING_TEXTURE = [[Interface\minimap\UI-Minimap-Ping-Expand]]   -- the game's own, as MapPinPingTemplate uses it
-local MARK, RING_FROM, RING_TO = 18, 26, 104
-local RING_TIME, RING_STAGGER, POP, FADE = 1.2, 0.4, 0.25, 0.5
+local MARK, POP, FADE = 18, 0.25, 0.5
 
 local pal = PL.palette
 local installed = false
@@ -78,22 +77,10 @@ end
 local function NewEffect()
     local canvas = PM.Canvas()
     local f = CreateFrame("Frame", nil, canvas)
-    f:SetSize(RING_TO, RING_TO)
+    f:SetSize(PU.TO, PU.TO)
     f:EnableMouse(false)
     f:Hide()
-    f.rings = {}
-    for i = 1, 2 do
-        -- a dark ring under a bright one, so the ring reads on a pale map and on a dark one
-        local dark = f:CreateTexture(nil, "ARTWORK", nil, 0)
-        dark:SetTexture(RING_TEXTURE)
-        dark:SetVertexColor(0.05, 0.03, 0.02, 1)
-        dark:SetPoint("CENTER")
-        local ring = f:CreateTexture(nil, "ARTWORK", nil, 1)
-        ring:SetTexture(RING_TEXTURE)
-        ring:SetVertexColor(0.96, 0.80, 0.38, 1)
-        ring:SetPoint("CENTER")
-        f.rings[i] = { dark = dark, ring = ring }
-    end
+    f.rings = PU.AddRings(f, 2)
     f.markDark = f:CreateTexture(nil, "ARTWORK", nil, 2)
     f.markDark:SetTexture(PL.PIN_TEXTURE)
     f.markDark:SetVertexColor(0.04, 0.03, 0.02, 1)
@@ -137,21 +124,7 @@ local function Step(e, dt)
     f:SetAlpha(alpha)
     f.mark:SetSize(size, size)
     f.markDark:SetSize(size + 5, size + 5)
-    local ringsEnd = life - FADE
-    for i, r in ipairs(f.rings) do
-        local rt = t - (i - 1) * RING_STAGGER
-        if e.reduced or rt < 0 or t > ringsEnd then
-            if r.shown then r.ring:Hide(); r.dark:Hide(); r.shown = false end
-        else
-            local phase = (rt % RING_TIME) / RING_TIME
-            local grow = 1 - (1 - phase) * (1 - phase)
-            local d = RING_FROM + (RING_TO - RING_FROM) * grow
-            local a = (1 - phase) ^ 1.4
-            r.ring:SetSize(d, d); r.ring:SetAlpha(a * 0.95)
-            r.dark:SetSize(d + 6, d + 6); r.dark:SetAlpha(a * 0.7)
-            if not r.shown then r.ring:Show(); r.dark:Show(); r.shown = true end
-        end
-    end
+    PU.Step(f.rings, t, life - FADE, e.reduced)
     return false
 end
 
@@ -242,7 +215,7 @@ function V.ShowPing(info)
     e.life = PG.Get("seconds")
     e.reduced = PG.Get("reducedMotion")
     e.running = true
-    for _, r in ipairs(e.frame.rings) do r.ring:Hide(); r.dark:Hide(); r.shown = false end
+    PU.Hide(e.frame.rings)
     SizeLabel(e.frame, info.name)
     e.frame:SetFrameLevel(PM.FrameLevel("PIN_FRAME_LEVEL_QUEST_PING") or 1)
     Place(e, viewed)

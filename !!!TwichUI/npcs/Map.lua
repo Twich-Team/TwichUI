@@ -12,6 +12,12 @@
 --   Clicks: a click opens the NPC's actions (Set waypoint, Pin this place, Navigate here, Forget this NPC); nothing is
 --     done without one of them being chosen. Alt, Shift and Ctrl clicks are handed to the map's own click handlers, so
 --     the pin and ping shortcuts work over a marker as anywhere else. A drag on map exploration's map pans it.
+--   Finding one (NMAP.Locate, for the map tools bar's NPC search): the map goes to the NPC's area and its marker is
+--     picked out with a brief ring (pins/Pulse.lua's rings, local only: no message, no sound, no waypoint, no route).
+--     An NPC the chosen kinds hide is drawn for as long as it is picked out, and only that one; the saved choices
+--     are not touched. The pick ends when another is made, when the box is cleared, when the map closes or goes to a
+--     map the NPC isn't on, or when the NPC leaves the list. A choice that has to wait for a map waits for the map's own
+--     change notice, at most NAV_WAIT seconds, and a newer choice cancels it.
 -- TwichUI never opens or closes the world map itself.
 
 local R = TwichUI
@@ -24,11 +30,17 @@ local MAX_DRAWN = 300
 local MAX_PARENTS = 8
 local REPORT_ALPHA = 0.6
 local EDGE = 0.2               -- on the seamless map, markers this far past the map underneath still show
+local NAV_WAIT = 2             -- how long a find waits for the map it asked for
+local PULSE_LIFE, PULSE_FADE = 2.6, 0.5   -- seconds the ring is out, the last of them fading
 
 local provider, canvas
 local installed = false
 local pool, used = {}, 0
-local stats = { layouts = 0, drawn = 0, capped = 0, menus = 0, waypoints = 0, forgotten = 0 }
+local reveal, revealMarker                 -- the entry picked out (shown even if its kind is hidden), and its marker now
+local token = 0                            -- bumped by every find and clear: an older wait does nothing
+local pending                              -- { token, map, entry }: a find waiting for its map
+local pulse                                -- { frame, rings, t, running }: the ring
+local stats = { layouts = 0, drawn = 0, capped = 0, menus = 0, waypoints = 0, forgotten = 0, finds = 0, pulses = 0, stale = 0 }
 
 local function Enabled() return R:Enabled("npcMap") end
 local function MapOpen() return WorldMapFrame and WorldMapFrame:IsShown() end
@@ -166,11 +178,76 @@ local function FrameLevel()
     return ((ok and type(level) == "number") and level or (canvas:GetFrameLevel() + 500)) - 2
 end
 
+---------------------------------------------------------------------------
+-- The ring on a find
+---------------------------------------------------------------------------
+local function StopPulse()
+    if not pulse then return end
+    pulse.running = false
+    pulse.frame:SetScript("OnUpdate", nil)
+    pulse.frame:Hide()
+    pulse.frame:SetAlpha(1)
+    R.MapPulse.Hide(pulse.rings)
+end
+
+local function PulseTick(_, elapsed)
+    if not pulse.running then return end
+    if elapsed > 0.1 then elapsed = 0.1 end
+    pulse.t = pulse.t + elapsed
+    if pulse.t >= PULSE_LIFE then StopPulse() return end
+    if pulse.t > PULSE_LIFE - PULSE_FADE then pulse.frame:SetAlpha((PULSE_LIFE - pulse.t) / PULSE_FADE) end
+    R.MapPulse.Step(pulse.rings, pulse.t, PULSE_LIFE - PULSE_FADE, pulse.reduced, true)
+end
+
+-- Puts the ring over the picked-out marker (again, after a layout or a zoom). Returns whether it could.
+local function PlacePulse()
+    local PM = R.PinsMap
+    if not (pulse and pulse.running and revealMarker and revealMarker.entry == reveal and PM and PM.PlaceAt) then return false end
+    if not PM.PlaceAt(pulse.frame, revealMarker.mx, revealMarker.my) then return false end
+    pulse.frame:SetFrameLevel((PM.FrameLevel and PM.FrameLevel("PIN_FRAME_LEVEL_QUEST_PING")) or (canvas:GetFrameLevel() + 510))
+    return true
+end
+
+-- Starts the ring on the picked-out marker, if it is on the map being viewed. Returns whether it is showing.
+local function StartPulse()
+    local PU = R.MapPulse
+    if not (PU and reveal and revealMarker and revealMarker.entry == reveal) then return false end
+    if not pulse then
+        local f = CreateFrame("Frame", nil, canvas)
+        f:SetSize(PU.TO, PU.TO)
+        f:EnableMouse(false)
+        f:Hide()
+        f.rings = PU.AddRings(f, 2)
+        pulse = { frame = f, rings = f.rings }
+    end
+    StopPulse()
+    pulse.running, pulse.t = true, 0
+    -- the ring's own preference for stillness, since it is the ping's ring (no other feature's is read)
+    local PG = R.PinsLook and R.PinsLook.Ping
+    pulse.reduced = PG and PG.Get("reducedMotion") and true or false
+    if not PlacePulse() then pulse.running = false return false end
+    pulse.frame:Show()
+    R.MapPulse.Step(pulse.rings, 0, PULSE_LIFE - PULSE_FADE, pulse.reduced, true)
+    pulse.frame:SetScript("OnUpdate", PulseTick)
+    stats.pulses = stats.pulses + 1
+    return true
+end
+
+-- Whether an entry is still in the list (the same table: an update changes it in place, a deletion drops it).
+local function Listed(e)
+    for _, x in ipairs(NS.Entries()) do
+        if rawequal(x, e) then return true end
+    end
+    return false
+end
+
 -- Everything on the map now. Runs when the map, the list or the choices change; never per frame.
 function NMAP.Layout()
     if not (installed and MapOpen()) then return end
     stats.layouts = stats.layouts + 1
     used = 0
+    revealMarker = nil
+    local scanned, revealListed = false, false
     local viewed = WorldMapFrame:GetMapID()
     local PM = R.PinsMap
     if viewed and NS.ValidMap(viewed) and PM and PM.Position then
@@ -178,40 +255,133 @@ function NMAP.Layout()
         local level = FrameLevel()
         local low, high = stitched and -EDGE or 0, stitched and 1 + EDGE or 1
         local at = {}   -- one place handed to Position (it reads map, x, y)
+        local capped = false
+        scanned = true
         for _, e in ipairs(NS.Entries()) do
-            if relevant(e.m) then
-                local kind = ShownKind(e)
+            local picked = reveal ~= nil and rawequal(e, reveal)
+            if picked then revealListed = true end
+            if (picked or not capped) and relevant(e.m) then
+                -- the picked-out NPC is drawn whatever the chosen kinds say; every other one follows them
+                local kind = ShownKind(e) or (picked and NK.Primary(e.tags) or nil)
                 if kind then
                     at.map, at.x, at.y = e.m, e.x, e.y
                     local mx, my = PM.Position(at, viewed)
                     if mx and mx >= low and mx <= high and my >= low and my <= high then
-                        if used >= MAX_DRAWN then
+                        if used >= MAX_DRAWN and not picked then
                             stats.capped = stats.capped + 1
-                            break
+                            capped = true
+                        else
+                            used = used + 1
+                            local b = pool[used]
+                            if not b then
+                                b = NewMarker()
+                                pool[used] = b
+                            end
+                            b.mx, b.my = mx, my
+                            b:SetFrameLevel(level)
+                            Dress(b, e, kind)
+                            Place(b)
+                            b:Show()
+                            if picked then revealMarker = b end
                         end
-                        used = used + 1
-                        local b = pool[used]
-                        if not b then
-                            b = NewMarker()
-                            pool[used] = b
-                        end
-                        b.mx, b.my = mx, my
-                        b:SetFrameLevel(level)
-                        Dress(b, e, kind)
-                        Place(b)
-                        b:Show()
                     end
                 end
             end
+            if capped and (reveal == nil or revealListed) then break end
         end
     end
     HideFrom(used + 1)
     stats.drawn = used
+    if reveal and not (scanned and revealListed or (not scanned and Listed(reveal))) then
+        NMAP.ClearReveal(true)   -- it left the list
+    end
+    if pulse and pulse.running and not PlacePulse() then StopPulse() end
 end
 
 local function Rescale()
     if not (installed and MapOpen()) then return end
     for i = 1, used do Place(pool[i]) end
+    PlacePulse()
+end
+
+---------------------------------------------------------------------------
+-- Finding one: the map goes to it and its marker is picked out
+---------------------------------------------------------------------------
+-- Lets go of the picked-out NPC: its ring stops, a marker only the pick was drawing goes, a find still waiting for its map
+-- is cancelled. skipDraw: the caller draws the map next.
+function NMAP.ClearReveal(skipDraw)
+    token = token + 1
+    pending = nil
+    StopPulse()
+    if not reveal then return false end
+    reveal, revealMarker = nil, nil
+    if not skipDraw and installed and MapOpen() then NMAP.Layout() end
+    return true
+end
+
+-- Picks out an entry of the list on the map: the map goes to the NPC's area and a ring shows on its marker. Local only:
+-- no message, no sound, no waypoint, no route, and the chosen kinds are not changed. Asked again at this moment, because
+-- the entry may have been removed since it was listed. Returns true, or false and why: "closed" (the feature is off or
+-- the map isn't open), "gone" (it is no longer in the list) or "map" (the game wouldn't show that map).
+function NMAP.Locate(e)
+    if not (installed and MapOpen()) then return false, "closed" end
+    if type(e) ~= "table" or not Listed(e) then
+        stats.stale = stats.stale + 1
+        return false, "gone"
+    end
+    NMAP.ClearReveal(true)               -- replaces any earlier pick, and its wait
+    local mine = token
+    reveal = e
+    stats.finds = stats.finds + 1
+    if WorldMapFrame:GetMapID() == e.m then
+        NMAP.Layout()
+        StartPulse()
+        return true
+    end
+    pending = { token = mine, map = e.m, entry = e }
+    -- once: the map announces itself (OnMapChanged) and the ring follows; nothing here tries again
+    local ok = pcall(WorldMapFrame.SetMapID, WorldMapFrame, e.m)
+    if not ok then
+        if token == mine then reveal, pending = nil, nil end
+        Notice("That map couldn't be opened.")
+        return false, "map"
+    end
+    if pending and pending.token == mine then
+        C_Timer.After(NAV_WAIT, function()
+            if token == mine and pending and pending.token == mine then
+                NMAP.ClearReveal()
+                Notice("That map didn't open.")
+            end
+        end)
+    end
+    return true
+end
+
+function NMAP.Revealed() return reveal end
+
+-- The map being viewed changed. A find waiting for this map gets it (once the map has finished laying itself out); one
+-- waiting for another is dropped. With nothing waiting, a pick on a map that no longer holds the NPC ends.
+local function MapChanged()
+    local p = pending
+    if p then
+        pending = nil
+        if WorldMapFrame:GetMapID() == p.map then
+            C_Timer.After(0, function()
+                if token ~= p.token or reveal ~= p.entry then stats.stale = stats.stale + 1 return end
+                NMAP.Layout()
+                StartPulse()
+            end)
+        else
+            NMAP.ClearReveal(true)
+        end
+        return
+    end
+    if reveal then
+        local viewed = WorldMapFrame:GetMapID()
+        if viewed ~= reveal.m and not (viewed and NS.ValidMap(viewed) and Relevant(viewed)(reveal.m)) then
+            NMAP.ClearReveal(true)
+        end
+    end
 end
 
 ---------------------------------------------------------------------------
@@ -358,8 +528,9 @@ local function Build()
     provider = CreateFromMixins(MapCanvasDataProviderMixin)
     function provider:RemoveAllData() HideFrom(1); used = 0 end
     function provider:RefreshAllData() NMAP.Layout() end
-    function provider:OnMapChanged() NMAP.Layout() end
+    function provider:OnMapChanged() MapChanged(); NMAP.Layout() end
     function provider:OnCanvasSizeChanged() NMAP.Layout() end
+    function provider:OnHide() NMAP.ClearReveal(true) end   -- nothing is picked out on a closed map
     function provider:OnCanvasScaleChanged() Rescale() end
     return true
 end
@@ -372,6 +543,7 @@ function NMAP.Refresh()
         installed = true
         NMAP.Layout()
     elseif not want and installed then
+        NMAP.ClearReveal(true)
         WorldMapFrame:RemoveDataProvider(provider)   -- hides every marker (RemoveAllData)
         installed = false
     end
@@ -392,7 +564,9 @@ R:On("ADDON_LOADED", function(name) if name == "Blizzard_WorldMap" then NMAP.Ref
 -- Read only, for /tui diagnostics and the tests.
 function NMAP.Snapshot()
     return { installed = installed, open = MapOpen() and true or false, drawn = stats.drawn, capped = stats.capped,
-        layouts = stats.layouts, pool = #pool, menus = stats.menus, waypoints = stats.waypoints, forgotten = stats.forgotten }
+        layouts = stats.layouts, pool = #pool, menus = stats.menus, waypoints = stats.waypoints, forgotten = stats.forgotten,
+        finds = stats.finds, pulses = stats.pulses, stale = stats.stale, picked = reveal ~= nil, waiting = pending ~= nil,
+        ringing = pulse ~= nil and pulse.running == true }
 end
 function NMAP.Marker(i) return pool[i] end
 function NMAP.Used() return used end

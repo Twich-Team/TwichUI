@@ -221,7 +221,7 @@ Define("mapExplore", { when = function() return R.MapView ~= nil end, apply = Re
 Define("npcMap", {
     when = function() return R.NpcStore ~= nil end,
     apply = function()
-        for _, module in ipairs({ "NpcCollect", "NpcMap", "NpcShare" }) do
+        for _, module in ipairs({ "NpcCollect", "NpcMap", "NpcShare", "NpcSearchBar" }) do
             if R[module] then R[module].Refresh() end
         end
     end,

@@ -67,6 +67,7 @@ local function Pal()
     return { text = { 0.94, 0.91, 0.82 }, textDim = { 0.80, 0.78, 0.72 }, stone = { 0.62, 0.60, 0.56 },
         teal = { 0.36, 0.58, 0.57 }, tealHi = { 0.58, 0.78, 0.76 }, tealLo = { 0.18, 0.33, 0.33 }, danger = { text = { 0.90, 0.64, 0.56 } } }
 end
+T.Pal = Pal                                           -- npcs/SearchBar.lua draws its field in the same colors
 local GOLD = { 0.86, 0.69, 0.30 }                     -- as the map's other tooltips say what a click does
 
 local installed = false
@@ -340,6 +341,7 @@ local function Under(f)
 end
 
 local BUTTON_W = 6 + ICON + 6
+local SEARCH_CRUMBS = 220                                 -- room left for the breadcrumbs when the search field is on
 
 -- The buttons in a row, and the bar in the header: its right end at the right end of the navigation bar (the breadcrumbs
 -- fill it from the left), so it takes the empty stretch beside them. Without a navigation bar (this client or another
@@ -349,6 +351,21 @@ local function LayoutBar()
     local pad = bar.pad or Skin(bar)
     local x = pad + 2
     if buttons.nav then buttons.nav:SetShown(NavOn()) end   -- Navigate only while Navigation is on
+    -- the NPC search field (npcs/SearchBar.lua), when it is chosen, to the left of the buttons: it takes what the
+    -- navigation bar has left after the buttons and some room for the breadcrumbs, and is put away when that is too little
+    local S = R.NpcSearchBar
+    if S then
+        local nav = WorldMapFrame.NavBar
+        local room
+        if nav and nav.GetWidth then
+            local count = NavOn() and 5 or 4
+            room = nav:GetWidth() - 6 - (count * (BUTTON_W + GAP) + pad * 2 + 4 + 4) - SEARCH_CRUMBS
+        end
+        -- the search is an extra: a fault in it is reported and the bar is laid out without it
+        local ok, nx = pcall(S.Layout, bar, x, pad, GAP, room)
+        if ok and type(nx) == "number" then x = nx
+        elseif not ok then R.Fault("map tools search", nx) end
+    end
     for _, id in ipairs({ "pin", "group", "ping", "nav", "help" }) do
         local b = buttons[id]
         if b and (id ~= "nav" or NavOn()) then
@@ -600,6 +617,7 @@ function T.Arm(id)
         return false
     end
     T.CloseHelp()
+    if R.NpcSearchBar then R.NpcSearchBar.Close() end   -- the search list and a tool don't share the map's attention
     if PM.Disarm then PM.Disarm() end        -- the older "Place a pin" and "Ping the map" arms: one armed click at a time
     if V and V.Disarm then V.Disarm() end
     armed = id
@@ -626,6 +644,7 @@ function T.ToggleHelp()
     MarkIntroSeen(); HideCallout()
     if helpOpen then T.CloseHelp() return false end
     T.Cancel()
+    if R.NpcSearchBar then R.NpcSearchBar.Close() end
     BuildHelp()
     Evaluate()
     helpOpen = true
@@ -742,6 +761,7 @@ local function Hide()
     T.CloseHelp()
     HideStrip()
     HideCallout()
+    if R.NpcSearchBar then R.NpcSearchBar.Hide() end   -- the search list closes, its focus is let go, what it picked out is let go
     if bar then bar:Hide() end
     UpdateKeys()
 end

@@ -1676,7 +1676,7 @@ local function Define()
     do
         local PL = R.PinsLook
         Table(g, { "ui", "partyPins" }, PL and { DEFAULTS = PL.PREF_DEFAULTS } or nil,
-            { "localClick", "partyClick", "labels", "minimap", "minimapLabels", "wayAlso", "toolbar" },
+            { "localClick", "partyClick", "labels", "minimap", "minimapLabels", "wayAlso", "toolbar", "npcSearch" },
             { localClick = ENUM.clicks, partyClick = ENUM.clicks, labels = ENUM.labels, minimapLabels = ENUM.minimapLabels })
         Table(g, { "ui", "pinsBroker" }, PL and PL.Bar, { "text", "icon", "customColor", "color", "flash", "flashSeconds", "flashColor" },
             { text = ENUM.barText })

@@ -118,6 +118,47 @@ armed tool, the pin window's font and size. No animation of its own (so nothing 
 is drawn through `PL.Surface`, which takes an EllesmereUI textured border's real line into account, and is drawn again when the
 map's size (so scale) or the look changes; the frames are first made when the map is first shown, after every addon has loaded.
 
+## NPC search (optional)
+
+**TwichUI settings > Map > Map Toolbar > Show NPC search** (`npcs/SearchBar.lua`, `npcs/Search.lua`; the choice is
+`ui.partyPins.npcSearch`, **off by default**, so an existing bar keeps its layout; it is greyed out, with the reason, while the bar,
+Party pins or Vendors and trainers is off). A field to the left of the buttons that searches the NPCs in your own list
+(`docs/npc-map.md`: what you dealt with and what others sent you, never the world) and shows one on the map. It adds no
+command, key binding or database.
+
+* **The field.** "Search known NPCs..." Made the first time the bar is laid out with the choice on; the rows only when a result
+  first needs one (at most 8, reused). It never takes the keyboard by itself (not when the map opens, not when the bar is
+  drawn); a click does. It takes what the map's navigation bar has left after the buttons and 220 units for the breadcrumbs,
+  90 to 170 wide, and is left out when that is under 90.
+* **Matching.** Typing waits 0.2 s and then searches once. Every word has to appear in the name, area, role, title or
+  profession, in any case and any order, as plain text (the World Knowledge tab's own filter, `NpcKnowledge.Filter`, so the two
+  agree). An empty field says what it is for rather than listing the list; no match says "No known NPCs match.".
+* **A result is one place.** An NPC with several known places is several results (that is how the list stores it), and two of
+  the same name in one area also show their coordinates. They are told apart by `creature:map:x:y`, never the name. A place on a
+  map this client doesn't know as a zone or smaller is left out, since choosing it could not work.
+* **Nearest first.** Your place is read once per search and both places are turned into continent yards
+  (`C_Map.GetWorldPosFromMapPos`, as Navigation does). Only places on the same continent (or instance) are compared, and the
+  number is the straight line: the footer and the tooltip say so; it is not a walking distance or a time. Order: (1) places with
+  a distance, nearest first; (2) places on the map you are on whose distance can't be told (no position of yours, as in an
+  instance, or no world position), marked "this area"; (3) every other place by area, name, then key. Ties break the same way,
+  so the order never shuffles. Every match is ranked and the nearest 8 kept, so a cap never drops a nearer place for an earlier
+  one. Nothing is given a distance to complete the list. Rows stay put while you choose: no polling. A change to the list
+  while the results are open searches again once, for the place they were made for.
+* **Keys and mouse.** Up/Down (wrapping), Enter, a click on a row; Esc closes the list and lets go of the field (the text
+  stays). A click on a row is not lost when the field loses focus first (the list stays while the pointer is on it); a click on
+  the map, another tool, the help, the map closing or the feature going off closes it. The map click is only noted, never taken
+  (a handler at priority 120, present only while the field is on).
+* **Choosing** (`NpcMap.Locate`): the entry is checked to be still in the list; the map goes to the NPC's area
+  (`SetMapID`, which is synchronous and tells its data providers); once the map has finished laying itself out its marker gets a
+  brief ring (`pins/Pulse.lua`, the ping's ring; 2.6 s; the ping's own "reduced motion" choice makes it a fixed outline). A wait
+  for a map is bounded (2 s), and a newer choice cancels it by token. It sets no waypoint, starts no route, sends nothing,
+  plays no sound and changes no saved choice. A marker the chosen kinds hide is drawn for as long as it is picked out, and only
+  that one; the pick ends when another is made, when the field is emptied or cleared (the x), when the map closes or goes to a map
+  the NPC isn't on, or when the NPC leaves the list.
+* **Limits.** The map supports going to an area, not arbitrary panning or zooming, so "bring into view" means the area's map. Not
+  checked in the game: the field's look and width in the real title row, `OnArrowPressed` and focus behavior, a click on a row
+  while the field has focus, that a map-canvas click handler at priority 120 sees a click first, and the ring on the marker.
+
 ## Saved and not saved
 
 Saved: `ui.partyPins.toolbar` (a boolean, only once changed; it is the profile's and part of a shared setup with the other

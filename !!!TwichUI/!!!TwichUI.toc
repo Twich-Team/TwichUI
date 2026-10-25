@@ -193,6 +193,7 @@ pins\Window.lua
 pins\Way.lua
 pins\Sound.lua
 pins\Ping.lua
+pins\Pulse.lua
 pins\PingMap.lua
 pins\MapTools.lua
 pins\BrokerMenu.lua
@@ -245,6 +246,8 @@ npcs\Collect.lua
 npcs\Map.lua
 npcs\Share.lua
 npcs\Knowledge.lua
+npcs\Search.lua
+npcs\SearchBar.lua
 
 # Cozy Sleeping Bag guide: a small window that follows the hidden quest chain behind the bag, from the character's own quest
 # history (nothing saved but where the window sits), with optional map pins made through pins\Pins.lua. Never opens by itself;
