@@ -164,6 +164,12 @@ Bad({ i = 1, n = "a", m = 1429, x = 1, y = 1, k = { "zz" } }, "unknown-kind")
 Bad({ i = 1, n = "a", m = 1429, x = 1, y = 1, k = { "rg" }, c = { "MAGE" } }, "bad-class")
 Bad({ i = 1, n = "a", m = 1429, x = 1, y = 1, k = { "ct" }, c = { "HACKER" } }, "bad-class")
 Bad({ i = 1, n = "a", m = 1429, x = 1, y = 1, k = { "rg" }, p = "Alchemy" }, "bad-profession")
+-- the title under the name: optional, plain text, travels with the entry
+local tw = assert(NS.ReadWire({ i = 502, n = "Vendor", m = 1429, x = 1, y = 1, k = { "rg" }, t = "|cffff0000Enchanting Reagents|r" }))
+assert(tw.t == "Enchanting Reagents" and NS.Wire({ id = 502, n = "V", m = 1429, x = 1, y = 1, tags = { reagents = true }, t = "Enchanting Reagents" }).t == "Enchanting Reagents")
+assert(NS.ReadWire({ i = 502, n = "Vendor", m = 1429, x = 1, y = 1, k = { "rg" } }).t == nil)
+Bad({ i = 1, n = "a", m = 1429, x = 1, y = 1, k = { "rg" }, t = "|T x|t" }, "bad-title")
+Bad({ i = 1, n = "a", m = 1429, x = 1, y = 1, k = { "rg" }, t = 5 }, "bad-title")
 local long = string.rep("k", 30)
 Bad({ i = 1, n = "a", m = 1429, x = 1, y = 1, k = { long } }, "unknown-kind")
 local yours = NS.ReadWire({ i = 1213, n = "Renamed", m = 1453, x = 5100, y = 5000, k = { "fd" } })
@@ -390,6 +396,89 @@ local rec = sb.TwichUI.NpcShare.Snapshot().received
 recv("TwichUINpc", Raw({ v = 1, o = "offer", t = 9, k = 1, n = 1 }), "PARTY", A)
 assert(sb.TwichUI.NpcShare.Snapshot().received == rec and sb.TwichUI.NpcShare.Snapshot().held == 0)
 sb.TwichUIDB.modules.npcMap = true
+
+-- 4b. Live sharing: one small message per new NPC, all of it opt-in
+do
+  CLOCK = CLOCK + 120
+  local npa, npb, npc = sa.TwichUI.NpcPrefs, sb.TwichUI.NpcPrefs, sc.TwichUI.NpcPrefs
+  assert(npa.Get("liveGroup") == false and npa.Get("liveGuild") == false and npb.Get("liveReceive") == false, "all off by default")
+  SB.Clear("all"); SC.Clear("all")
+  local function Seen(id) return SA.Observe({ id = id, name = "Live " .. id, map = 1453, x = 0.4, y = 0.4, tags = { reagents = true } }) end
+  -- nothing chosen: nothing goes
+  local function Sent() return sa.TwichUI.NpcShare.Snapshot().liveSent end
+  local n0 = Sent()
+  Seen(5001); RunLongTimers(30); settle()
+  assert(Sent() == n0, "off: nothing sent")
+  -- sending on, receiving off: B drops it and says why
+  npa.Set("liveGroup", true)
+  Seen(5002); RunLongTimers(30); settle()
+  assert(Sent() == n0 + 1, "one live message")
+  assert(sb.TwichUI.NpcShare.Snapshot().drops["live-off"] == 1 and select(2, SB.Counts()) == 0, "receiver has not chosen it")
+  -- receiving on: added quietly as a report, no question, no print
+  npb.Set("liveReceive", true); npc.Set("liveReceive", true)
+  local pops = #sb.POPUPS
+  Seen(5003); RunLongTimers(30); settle()
+  local ownB, repB = SB.Counts()
+  assert(ownB == 0 and repB == 1 and #sb.POPUPS == pops, "added as a report without asking")
+  assert(select(2, SC.Counts()) == 1, "the group's other member too")
+  -- a second visit with nothing new is not sent again; something new is
+  local n1 = Sent()
+  Seen(5003); RunLongTimers(30); settle()
+  assert(Sent() == n1, "same NPC, same offer: once")
+  SA.Observe({ id = 5003, name = "Live 5003", map = 1453, x = 0.4, y = 0.4, tags = { bags = true } })
+  RunLongTimers(30); settle()
+  assert(Sent() == n1 + 1, "it offers more now")
+  -- guild only reaches the guild (B), not C
+  npa.Set("liveGroup", false); npa.Set("liveGuild", true)
+  local cBefore = select(2, SC.Counts())
+  Seen(5004); RunLongTimers(30); settle()
+  assert(select(2, SC.Counts()) == cBefore, "C isn't in the guild")
+  assert(select(2, SB.Counts()) == 2, "B is")
+  npa.Set("liveGuild", false)
+  -- a receiver never takes what it should not: whisper, forgery, bad entries, over the size, a burst
+  local recvB = sb._comm["TwichUINpc"]
+  local LS, LD = sb.LibStub("LibSerialize"), sb.LibStub("LibDeflate")
+  local function Live(msg) return LD:EncodeForWoWAddonChannel(LS:Serialize(msg)) end
+  local good = { i = 6001, n = "Good", m = 1453, x = 100, y = 100, k = { "rg" } }
+  local function Drops(code) return sb.TwichUI.NpcShare.Snapshot().drops[code] or 0 end
+  recvB("TwichUINpc", Live({ v = 1, o = "live", l = { good } }), "WHISPER", A)
+  assert(Drops("live-channel") == 1, "never by whisper")
+  recvB("TwichUINpc", Live({ v = 1, o = "live", l = { good } }), "PARTY", "Not Here")
+  assert(Drops("not-member") >= 1, "a stranger in the group channel")
+  recvB("TwichUINpc", Live({ v = 1, o = "live", l = { good, good, good, good, good, good } }), "PARTY", A)
+  assert(Drops("bad-live") == 1, "more than five")
+  recvB("TwichUINpc", Live({ v = 1, o = "live", l = "x" }), "PARTY", A)
+  assert(Drops("bad-live") == 2)
+  local before = select(2, SB.Counts())
+  recvB("TwichUINpc", Live({ v = 1, o = "live", l = { { i = 1, n = "Bad", m = 1415, x = 1, y = 1, k = { "zz" } }, "junk" } }), "PARTY", A)
+  assert(select(2, SB.Counts()) == before, "unreadable entries add nothing")
+  recvB("TwichUINpc", Live({ v = 1, o = "live", l = { good } }), "PARTY", A)
+  assert(select(2, SB.Counts()) == before + 1)
+  -- the per-sender rate for entries
+  local rateBefore = Drops("live-rate")
+  for i = 1, 12 do
+    local l = {}
+    for j = 1, 5 do l[j] = { i = 7000 + i * 10 + j, n = "Flood", m = 1453, x = 100 * j, y = 100 * i, k = { "rg" } } end
+    recvB("TwichUINpc", Live({ v = 1, o = "live", l = l }), "PARTY", A)
+  end
+  assert(Drops("live-rate") > rateBefore, "a flood is held back")
+  -- lists off does not stop live, live off does not stop lists
+  npb.Set("receive", "off")
+  CLOCK = CLOCK + 300
+  recvB("TwichUINpc", Live({ v = 1, o = "offer", t = 1, k = 1, n = 1 }), "PARTY", A)
+  assert(Drops("receive-off") >= 1, "lists are still off")
+  npb.Set("receive", "ask")
+  -- switched off: pending live work goes and nothing more is queued
+  npa.Set("liveGroup", true)
+  Seen(5005)
+  sa.TwichUIDB.modules.npcMap = false
+  sa.TwichUI.NpcShare.Refresh()
+  local n2 = Sent()
+  RunLongTimers(30); settle()
+  assert(Sent() == n2, "switched off: the queued one is not sent")
+  sa.TwichUIDB.modules.npcMap = true
+  npa.Set("liveGroup", false)
+end
 
 ---------------------------------------------------------------------------
 -- 5. What the map shows

@@ -7,6 +7,14 @@
 --   offer { v, o = "offer", t = transfer id, k = parts, n = entries }   comes first
 --   part  { v, o = "part", t, i = 1..k, l = { entry, ... } }            at most PART_SIZE entries each
 -- entry: npcs/Store.lua's wire form { i, n, m, x, y, k, c, p }: no player names, no dates, nothing of the sender's.
+-- Live sharing (opt-in, three separate choices in npcs/Prefs.lua): instead of a list, one small message when you deal with
+-- an NPC for the first time (or it offers a kind it hadn't before), so others' lists grow without long transfers:
+--   live  { v, o = "live", l = { entry, ... } }   at most LIVE_MAX entries, to your group and/or your guild, never a whisper
+-- Only what you saw yourself goes, after LIVE_DELAY seconds (a merchant's list can arrive in parts), each NPC once per
+-- channel and session unless it offers something new, and at most LIVE_SEND_RATE messages a minute. Receiving it is its
+-- own choice (liveReceive); it is checked like a list (channel, group membership, a rate per sender, every field) and
+-- added quietly as reports from others, with no question and no chat line. Live messages are not a list: they never
+-- change the receive choice, and an older TwichUI that doesn't know "live" sets them aside.
 -- Receiving: who sent it is what the game says, never a field of the message. Everything is checked before anything is
 -- kept: the channel, that a group message comes from someone in your group now, the size, the version, the rate per
 -- sender, and every field of every entry (npcs/Store.lua's ReadWire). A transfer is held in memory only (at most
@@ -46,6 +54,16 @@ local questions = {}                -- waiting to be asked: { sender, dist, entr
 local asking = false
 local buckets = {}
 local lastSend = -math.huge
+
+local LIVE_MAX = 5                  -- entries in one live message
+local LIVE_DELAY = 6                -- seconds before a new NPC is passed on
+local LIVE_PENDING = 20
+local LIVE_SEEN = 400               -- (channel, NPC) pairs remembered this session
+local LIVE_SEND_RATE = 12           -- messages a minute
+local LIVE_BUCKET, LIVE_REFILL = 20, 0.1   -- entries taken in from one sender: a burst, then one every ten seconds
+local live = { pending = {}, sent = {}, count = 0, timer = false, out = { at = 0, tokens = LIVE_SEND_RATE } }
+local liveBuckets = {}
+local liveStats = { sent = 0, held = 0, received = 0, added = 0 }
 
 local function Enabled() return R:Enabled("npcMap") end
 local function Now() return GetTime() end
@@ -213,24 +231,101 @@ function NSH.AskName()
 end
 
 ---------------------------------------------------------------------------
+-- Live sending
+---------------------------------------------------------------------------
+local LIVE_CHANNELS = {
+    { pref = "liveGroup", name = "group", dist = function() return IsInGroup() and GroupDist() or nil end },
+    { pref = "liveGuild", name = "guild", dist = function() return IsInGuild() and "GUILD" or nil end },
+}
+
+-- What an NPC offers, as one string: the same NPC is passed on again only when this changes.
+local function Signature(w)
+    return ("%d:%d:%d:%d:%s:%s:%s"):format(w.i, w.m, math.floor(w.x / NS.NEAR), math.floor(w.y / NS.NEAR),
+        table.concat(w.k, ","), w.c and table.concat(w.c, ",") or "", w.p or "")
+end
+
+local function LiveWanted()
+    return Enabled() and (NP.Get("liveGroup") or NP.Get("liveGuild"))
+end
+
+local function FlushLive()
+    live.timer = false
+    local items = live.pending
+    live.pending = {}
+    if not LiveWanted() or SH.Blocked() then return end
+    local wires = {}
+    for _, e in ipairs(items) do
+        -- (forgotten in the meantime, or moved into another entry: nothing to pass on)
+        if e.own and NS.Near(e.id, e.m, e.x, e.y) == e then wires[#wires + 1] = NS.Wire(e) end
+    end
+    if #wires == 0 then return end
+    for _, ch in ipairs(LIVE_CHANNELS) do
+        local dist = NP.Get(ch.pref) and ch.dist() or nil
+        if dist then
+            local l = {}
+            for _, w in ipairs(wires) do
+                local key = ch.name .. "|" .. Signature(w)
+                if not live.sent[key] then l[#l + 1] = { w = w, key = key } end
+            end
+            for from = 1, #l, LIVE_MAX do
+                local now = Now()
+                local o = live.out
+                o.tokens = math.min(LIVE_SEND_RATE, o.tokens + (now - o.at) * LIVE_SEND_RATE / 60)
+                o.at = now
+                if o.tokens < 1 then
+                    liveStats.held = liveStats.held + (#l - from + 1)
+                    break
+                end
+                o.tokens = o.tokens - 1
+                local chunk = {}
+                for i = from, math.min(from + LIVE_MAX - 1, #l) do
+                    chunk[#chunk + 1] = l[i].w
+                    if live.count >= LIVE_SEEN then wipe(live.sent) live.count = 0 end
+                    live.sent[l[i].key] = true
+                    live.count = live.count + 1
+                end
+                AceComm:SendCommMessage(NSH.PREFIX, Encode({ v = NSH.PROTOCOL, o = "live", l = chunk }), dist, nil, "NORMAL")
+                liveStats.sent = liveStats.sent + 1
+                Trace("live-sent", ch.name)
+            end
+        end
+    end
+end
+
+-- npcs/Store.lua tells us when you dealt with an NPC yourself.
+NS.OnSeen(function(entry)
+    if not LiveWanted() then return end
+    for _, e in ipairs(live.pending) do
+        if rawequal(e, entry) then return end
+    end
+    if #live.pending >= LIVE_PENDING then liveStats.held = liveStats.held + 1 return end
+    live.pending[#live.pending + 1] = entry
+    if not live.timer then
+        live.timer = true
+        C_Timer.After(LIVE_DELAY, FlushLive)
+    end
+end)
+
+---------------------------------------------------------------------------
 -- Receiving
 ---------------------------------------------------------------------------
-local function Take(sender)
+local function Draw(pool, size, refill, sender, cost)
     local now = Now()
-    local b = buckets[sender]
+    local b = pool[sender]
     if not b then
         local n = 0
-        for _ in pairs(buckets) do n = n + 1 end
-        if n >= MAX_BUCKETS then wipe(buckets) end
-        b = { tokens = BUCKET_SIZE, at = now }
-        buckets[sender] = b
+        for _ in pairs(pool) do n = n + 1 end
+        if n >= MAX_BUCKETS then wipe(pool) end
+        b = { tokens = size, at = now }
+        pool[sender] = b
     end
-    b.tokens = math.min(BUCKET_SIZE, b.tokens + (now - b.at) * BUCKET_REFILL)
+    b.tokens = math.min(size, b.tokens + (now - b.at) * refill)
     b.at = now
-    if b.tokens < 1 then return false end
-    b.tokens = b.tokens - 1
+    if b.tokens < cost then return false end
+    b.tokens = b.tokens - cost
     return true
 end
+local function Take(sender) return Draw(buckets, BUCKET_SIZE, BUCKET_REFILL, sender, 1) end
 
 local AskNext
 
@@ -330,11 +425,30 @@ local function OnPart(sender, dist, msg)
     if st.got == st.k then Finish(sender, false) end
 end
 
+local LIVE_DIST = { PARTY = true, RAID = true, INSTANCE_CHAT = true, GUILD = true }
+
+local function OnLive(sender, dist, msg)
+    if not NP.Get("liveReceive") then Drop("live-off") return end
+    if not LIVE_DIST[dist] then Drop("live-channel") return end
+    if type(msg.l) ~= "table" or #msg.l == 0 or #msg.l > LIVE_MAX then Drop("bad-live") return end
+    local entries = {}
+    for _, w in ipairs(msg.l) do
+        local f = NS.ReadWire(w)
+        if f then entries[#entries + 1] = f end
+    end
+    if #entries == 0 then return end
+    if not Draw(liveBuckets, LIVE_BUCKET, LIVE_REFILL, sender, #entries) then Drop("live-rate") return end
+    local result = NS.MergeReported(entries)
+    liveStats.received = liveStats.received + #entries
+    liveStats.added = liveStats.added + result.added
+end
+
 local VALID_DIST = { WHISPER = true, PARTY = true, RAID = true, INSTANCE_CHAT = true, GUILD = true }
 
 local function OnMessage(_, text, dist, sender)
     if not Enabled() then return end
-    if NP.Get("receive") == "off" then Drop("receive-off") return end
+    local lists = NP.Get("receive") ~= "off"
+    if not lists and not NP.Get("liveReceive") then Drop("receive-off") return end
     if Secret(text) or Secret(sender) or type(text) ~= "string" or type(sender) ~= "string" then Drop("unreadable") return end
     if not VALID_DIST[dist] then Drop("channel") return end
     sender = SH.FullName(sender)
@@ -350,8 +464,10 @@ local function OnMessage(_, text, dist, sender)
         return
     end
     stats.received = stats.received + 1
-    if msg.o == "offer" then OnOffer(sender, dist, msg)
-    elseif msg.o == "part" then OnPart(sender, dist, msg)
+    if msg.o == "live" then OnLive(sender, dist, msg)
+    elseif msg.o == "offer" or msg.o == "part" then
+        if not lists then Drop("receive-off") return end
+        if msg.o == "offer" then OnOffer(sender, dist, msg) else OnPart(sender, dist, msg) end
     else Drop("unknown-op") return end
     Trace("received", msg.o)
 end
@@ -364,6 +480,10 @@ function NSH.Refresh()
     wipe(staging)
     wipe(questions)
     wipe(buckets)
+    wipe(liveBuckets)
+    wipe(live.pending)
+    wipe(live.sent)
+    live.count = 0
 end
 
 -- /tui npcs: the options; send party|guild|<name> (send with nothing after it asks for a name); probe.
@@ -398,5 +518,7 @@ function NSH.Snapshot()
     end
     return { protocol = NSH.PROTOCOL, prefix = NSH.PREFIX, prefixState = registered, held = held, waiting = #questions,
         sent = stats.sent, refused = stats.refused, received = stats.received, transfers = stats.transfers,
-        added = stats.added, asked = stats.asked, declined = stats.declined, dropped = stats.dropped, drops = d }
+        added = stats.added, asked = stats.asked, declined = stats.declined, dropped = stats.dropped, drops = d,
+        liveSent = liveStats.sent, liveHeld = liveStats.held, liveReceived = liveStats.received, liveAdded = liveStats.added,
+        livePending = #live.pending }
 end

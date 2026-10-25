@@ -98,10 +98,30 @@ Data Explorer's cleanup. Entry: `{ id, n (name), m (map), x, y (0..10000), tags,
   line says what was added), **Don't take any**. A list with nothing new is not asked about.
 - Sent means the game took the message. Nothing claims anyone received it.
 
+### Live sharing
+
+Same prefix and protocol, one more message: `live { l = { entry, ... } }`, at most 5 entries, with the same entry form as
+a list. It lets lists grow without long transfers. Three separate choices, all off by default: tell your group, tell your
+guild (each its own), and take in what others tell. No question is asked per NPC, which is why none of it is on until
+chosen.
+
+- **Sending.** `npcs/Store.lua`'s `OnSeen` fires when you deal with an NPC yourself ("new", or "updated": it offered a
+  kind it hadn't). It is queued for 6 seconds (a merchant's list can arrive in parts), then sent as it is then, to your
+  party/raid/instance group and/or your guild, never a whisper. Only your own sightings go, never reports. Each NPC goes
+  once per channel and session unless what it offers changes; 12 messages a minute at most, 20 waiting, 400 remembered;
+  anything over is not sent (your list still has it).
+- **Receiving** (`liveReceive`) checks what a list does (switch, readable text, channel, group membership now, size,
+  version, every entry through `ReadWire`) and its own rate per sender (a burst of 20 entries, then one every 10
+  seconds). Whisper is not accepted. Accepted entries are added through `MergeReported` quietly: reports from others,
+  never changing an NPC you saw yourself, nothing printed. A TwichUI without live sharing sets the message aside as an
+  unknown op.
+- The "Lists sent to you" choice is about whole lists only; `Don't take any` there does not stop live messages, and the
+  live choice does not stop lists.
+
 ## Settings
 
 `ui.npcMap` (in the profile): `show.<kind>`, `trainerClass` (`mine` / `all`), `reports`, `labels`, `iconSize` (60 to
-150), `receive` (`ask` / `auto` / `off`), `sendReports`. All stay on this computer when a setup is shared (`network`).
+150), `receive` (`ask` / `auto` / `off`), `sendReports`, `liveGroup`, `liveGuild`, `liveReceive`. All stay on this computer when a setup is shared (`network`).
 
 ## The probe
 

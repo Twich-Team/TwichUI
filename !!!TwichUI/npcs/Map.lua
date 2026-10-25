@@ -274,7 +274,8 @@ function Tooltip(b)
     if not e then return end
     GameTooltip:SetOwner(b, "ANCHOR_RIGHT", -4, -4)
     GameTooltip:SetText(e.n, 1, 1, 1, 1, true)
-    for _, line in ipairs(NMAP.KindLines(e)) do GameTooltip:AddLine(line, SOFT[1], SOFT[2], SOFT[3]) end
+    if e.t then GameTooltip:AddLine(e.t, GOLD[1], GOLD[2], GOLD[3], true) end
+    for _, line in ipairs(NMAP.KindLines(e)) do GameTooltip:AddLine("\226\128\162 " .. line, SOFT[1], SOFT[2], SOFT[3]) end
     GameTooltip:AddLine(NMAP.Provenance(e), e.own and GOLD[1] or DIM[1], e.own and GOLD[2] or DIM[2], e.own and GOLD[3] or DIM[3], true)
     if R.Pins then GameTooltip:AddLine(R.Pins.Describe({ map = e.m, x = e.x, y = e.y }), DIM[1], DIM[2], DIM[3]) end
     GameTooltip:AddLine("Click for actions", 0.45, 0.43, 0.38)

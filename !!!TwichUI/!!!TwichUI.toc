@@ -1,4 +1,4 @@
-## Interface: 16001
+## Interface: 16001, 120105
 ## Title: |cffC9A24ATwich|rUI
 ## Notes: A carefully crafted UI enhancement addon for WoW Forever that makes the game interface feel a little cleaner, more cohesive, and more considered, without making it feel modernized beyond recognition.
 ## Author: twichie

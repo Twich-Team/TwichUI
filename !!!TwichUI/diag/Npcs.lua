@@ -36,6 +36,8 @@ local function Snapshot()
     Line("sharing: protocol %s, prefix %s (%s); messages sent %d, refused by the game %d; received %d, transfers %d, held now %d, questions waiting %d, asked %d, declined %d, entries added %d",
         tostring(sh.protocol), tostring(sh.prefix), tostring(sh.prefixState), sh.sent or 0, sh.refused or 0, sh.received or 0,
         sh.transfers or 0, sh.held or 0, sh.waiting or 0, sh.asked or 0, sh.declined or 0, sh.added or 0)
+    Line("live sharing: sent %d, held back %d, waiting %d; taken in %d, added %d", sh.liveSent or 0, sh.liveHeld or 0,
+        sh.livePending or 0, sh.liveReceived or 0, sh.liveAdded or 0)
     Line("messages set aside: %s", Codes(sh.drops))
     return {
         configured = on, initialized = c.listening, status = on and "ready" or "off", lines = lines,

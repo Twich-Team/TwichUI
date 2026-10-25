@@ -3,6 +3,7 @@
 -- not part of a profile, a backup or a shared setup). One entry per NPC and place:
 --   { id = creature id, n = name, m = map, x, y (0..10000 on that map), tags = { [kind] = true },
 --     cls = { [class token] = true } (class trainers), prof = profession name (profession trainers),
+--     t = the line under its name in the game ("Enchanting Reagents"), display text only,
 --     own = true (you dealt with it yourself), seen = how many visits of yours (at most 99),
 --     rep = how many reports of it reached you (at most 99), at = when it was last seen or reported (time()) }
 -- Seen by you or reported by others, never both mixed up: a report never changes an entry you saw yourself (it only
@@ -26,6 +27,7 @@ NS.VERSION = 1
 NS.COORD = 10000
 NS.NAME_MAX = 48
 NS.PROF_MAX = 32
+NS.TITLE_MAX = 48
 NS.MAX_ENTRIES = 3000
 NS.MAX_PER_NPC = 4
 NS.NEAR = 400              -- coordinate steps (4% of the map) within which a sighting is the same spawn
@@ -45,6 +47,7 @@ end
 -- Plain text (escape sequences, links, textures and control characters taken out), cut on a character boundary.
 function NS.CleanName(text) return R.Pins.CleanName(text, NS.NAME_MAX) end
 function NS.CleanProfession(text) return R.Pins.CleanName(text, NS.PROF_MAX) end
+function NS.CleanTitle(text) return R.Pins.CleanName(text, NS.TITLE_MAX) end
 
 -- A map the client knows that is a zone, a dungeon or smaller: a continent or the world is too coarse to say where an
 -- NPC is. Looked up once per map per session.
@@ -86,6 +89,7 @@ local function Valid(e)
     return type(e) == "table" and NS.ValidId(e.id) and type(e.n) == "string" and e.n ~= "" and #e.n <= NS.NAME_MAX
         and Whole(e.m, 1, MAX_ID) and NS.ValidCoord(e.x) and NS.ValidCoord(e.y) and ValidTags(e.tags)
         and ValidClasses(e.cls) and (e.prof == nil or (type(e.prof) == "string" and #e.prof <= NS.PROF_MAX))
+        and (e.t == nil or (type(e.t) == "string" and e.t ~= "" and #e.t <= NS.TITLE_MAX))
         and (e.own == nil or e.own == true) and (e.seen == nil or Whole(e.seen, 0, MAX_COUNT))
         and (e.rep == nil or Whole(e.rep, 0, MAX_COUNT)) and (e.at == nil or Whole(e.at, 0, 2 ^ 40))
 end
@@ -99,6 +103,16 @@ function NS.OnChange(fn) listeners[#listeners + 1] = fn end
 local function Changed()
     for _, fn in ipairs(listeners) do
         local ok, err = pcall(fn)
+        if not ok and R.Fault then R.Fault("vendors and trainers", err) end
+    end
+end
+
+-- Told when you deal with an NPC yourself: fn(entry, status) for "new" and "updated" only. Listeners must not change it.
+local seenListeners = {}
+function NS.OnSeen(fn) seenListeners[#seenListeners + 1] = fn end
+local function Seen(entry, status)
+    for _, fn in ipairs(seenListeners) do
+        local ok, err = pcall(fn, entry, status)
         if not ok and R.Fault then R.Fault("vendors and trainers", err) end
     end
 end
@@ -259,6 +273,7 @@ function NS.Observe(seen)
     if not ValidTags(seen.tags) then return NS.Drop("no-kind") end
     local cls = seen.cls and NK.IS_CLASS[seen.cls] and seen.cls or nil
     local prof = seen.prof and NS.CleanProfession(seen.prof) or nil
+    local title = seen.title and NS.CleanTitle(seen.title) or nil
     local now = time()
     local e = Near(seen.id, seen.map, x, y)
     local status
@@ -284,6 +299,7 @@ function NS.Observe(seen)
         e.n = name
         if cls then e.cls = e.cls or {} e.cls[cls] = true end
         if prof then e.prof = prof end
+        if title then e.t = title end
         e.at = now
     else
         if Spawns(seen.id) >= NS.MAX_PER_NPC then return NS.Drop("too-many-spawns") end
@@ -291,22 +307,24 @@ function NS.Observe(seen)
         e = { id = seen.id, n = name, m = seen.map, x = x, y = y, tags = Copy(seen.tags), own = true, seen = 1, at = now }
         if cls then e.cls = { [cls] = true } end
         if prof then e.prof = prof end
+        if title then e.t = title end
         Add(db, e)
         status = "new"
     end
     Changed()
+    if status ~= "confirmed" then Seen(e, status) end
     return e, status
 end
 
 ---------------------------------------------------------------------------
 -- What others sent: the wire form, read as untrusted
--- wire: { i = id, n = name, m = map, x, y, k = { codes }, c = { class tokens } (optional), p = profession (optional) }
+-- wire: { i = id, n = name, m = map, x, y, k = { codes }, c = { class tokens } (optional), p = profession (optional), t = title (optional) }
 ---------------------------------------------------------------------------
 function NS.Wire(e)
     local codes = {}
     for tag in pairs(e.tags) do codes[#codes + 1] = NK.BY_ID[tag].code end
     table.sort(codes)
-    local w = { i = e.id, n = e.n, m = e.m, x = e.x, y = e.y, k = codes, p = e.prof }
+    local w = { i = e.id, n = e.n, m = e.m, x = e.x, y = e.y, k = codes, p = e.prof, t = e.t }
     if e.cls then
         local c = {}
         for token in pairs(e.cls) do c[#c + 1] = token end
@@ -347,7 +365,12 @@ function NS.ReadWire(w)
         prof = NS.CleanProfession(w.p)
         if not prof or not tags.profTrainer then return NS.Drop("bad-profession") end
     end
-    return { id = w.i, n = name, m = w.m, x = w.x, y = w.y, tags = tags, cls = cls, prof = prof }
+    local title
+    if w.t ~= nil then
+        title = NS.CleanTitle(w.t)
+        if not title then return NS.Drop("bad-title") end
+    end
+    return { id = w.i, n = name, m = w.m, x = w.x, y = w.y, tags = tags, cls = cls, prof = prof, t = title }
 end
 
 -- What merging these (ReadWire results) would do: { new, more (a report of one you know only from reports, adding
@@ -386,12 +409,13 @@ function NS.MergeReported(list)
                     for token in pairs(f.cls) do e.cls[token] = true end
                 end
                 if f.prof and not e.prof then e.prof = f.prof end
+                if f.t and not e.t then e.t = f.t end
                 e.at = now
                 result.more = result.more + 1
             end
         elseif Spawns(f.id) < NS.MAX_PER_NPC and MakeRoom(db, false) then
             Add(db, { id = f.id, n = f.n, m = f.m, x = f.x, y = f.y, tags = Copy(f.tags), cls = Copy(f.cls),
-                prof = f.prof, rep = 1, at = now })
+                prof = f.prof, t = f.t, rep = 1, at = now })
             result.added = result.added + 1
         else
             result.refused = result.refused + 1

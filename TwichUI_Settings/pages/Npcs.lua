@@ -99,7 +99,7 @@ K.Page({
         Header("Your list", "Every NPC in it was either dealt with by you on one of your characters, or sent to you by another TwichUI user. It is the same for all your characters and is not part of a profile, a backup or a shared setup.")
         Under(K.Status("In your list", Counts, nil, "Yours: NPCs you dealt with. From others: what other TwichUI users sent you that you haven't dealt with yourself; those not sent again go after 120 days."), Toggle(), On)
 
-        Header("Sharing", "Send your list to another TwichUI user, your group or your guild, over TwichUI's own hidden addon channel (no chat text). You are told how many NPCs go and asked first. Only NPCs travel: their names, places and what they offer, nothing about you.")
+        Header("Sharing", "Send your list to another TwichUI user, your group or your guild, over TwichUI's own hidden addon channel (no chat text). You are told how many NPCs go and asked first. Or let new finds go out one at a time as you make them (live sharing, below). Only NPCs travel: their names, places and what they offer, nothing about you.")
         local receive = Proxy("npcMapReceive", K.STRING, "Lists sent to you", NP.DEFAULTS.receive,
             function() return NP.Get("receive") end, function(value) NP.Set("receive", value) end)
         if receive then reset[#reset + 1] = { setting = receive, default = NP.DEFAULTS.receive } end
@@ -107,6 +107,12 @@ K.Page({
             "What happens when another TwichUI user sends you their list. Whatever you add is marked as from others until you deal with that NPC yourself, and never changes one you have seen."), Toggle(), On)
         Under(Check("npcMapSendReports", "sendReports", "Also send what others sent you",
             "Off, only NPCs you dealt with yourself are sent, so what you pass on is what you saw. On, what others sent you goes too (it arrives as reports either way)."), Toggle(), On)
+        Under(Check("npcMapLiveGroup", "liveGroup", "Tell your group about new NPCs as you find them",
+            "When you deal with an NPC for the first time (or it turns out to offer something new), a small message with just that NPC goes to your party or raid a few seconds later, so others' lists grow without long transfers. Only NPCs you saw yourself go; nothing about you. Each NPC is sent once per session, and at most a dozen messages a minute. Off by default; no question is asked per NPC."), Toggle(), On)
+        Under(Check("npcMapLiveGuild", "liveGuild", "Tell your guild about new NPCs as you find them",
+            "The same, to your guild. Only guild members who have TwichUI and chose to take them in receive it. Off by default."), Toggle(), On)
+        Under(Check("npcMapLiveReceive", "liveReceive", "Take in NPCs your group and guild find",
+            "NPCs your party, raid or guild pass on as they find them are added quietly to your list as reports from others (dimmed on the map until you deal with them yourself). Nothing is asked and nothing is printed; they never change an NPC you saw yourself. Off by default. This is separate from \"Lists sent to you\", which is about whole lists."), Toggle(), On)
         Under(Button("Send to your group", "Send", function() NSH.Offer("party") end,
             "Everyone in your party or raid with TwichUI receives it; each of them chooses whether to add it. You are asked first."), Toggle(), On)
         Under(Button("Send to your guild", "Send", function() NSH.Offer("guild") end,
@@ -133,6 +139,6 @@ K.Page({
         end, "Empties your list of vendors, trainers and services, for every character. Asks first.")
 
         K.ResetButton("Reset sharing choices", reset, function() NP.Reset("sharing") end,
-            "Puts how lists sent to you are taken in and whether you pass on what others sent you back to the defaults. Your list is not changed.")
+            "Puts how lists sent to you are taken in, whether you pass on what others sent you, and the live sharing choices back to the defaults. Your list is not changed.")
     end,
 })

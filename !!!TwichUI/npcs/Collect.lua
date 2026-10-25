@@ -56,6 +56,19 @@ function NC.CreatureId(guid)
     return nil
 end
 
+-- The line the game shows under the NPC's name ("Enchanting Reagents"), from its tooltip's second line (the third with
+-- colourblind mode on, which adds a line). Display text only; nil when it has none, or the line is the level line.
+local LEVEL_PATTERN = (UNIT_LEVEL_TEMPLATE or "Level %d"):lower():gsub("%%d", "(.+)")
+local function Title()
+    if not (C_TooltipInfo and C_TooltipInfo.GetUnit) then return nil end
+    local ok, data = pcall(C_TooltipInfo.GetUnit, "npc")
+    if not (ok and type(data) == "table" and type(data.lines) == "table") then return nil end
+    local line = data.lines[2 + (tonumber(GetCVar and GetCVar("colorblindMode")) or 0)]
+    local text = type(line) == "table" and Plain(line.leftText) or nil
+    if type(text) ~= "string" or text == "" or text:lower():match(LEVEL_PATTERN) then return nil end
+    return text
+end
+
 -- Where you are: map, x, y (0..1), or nil and a reason code.
 local function Here()
     if IsInInstance then
@@ -99,6 +112,8 @@ local function Note(facts, what)
             x and ("%.1f, %.1f"):format(x * 100, y * 100) or "unknown",
             (ok and type(px) == "number") and ("given (%.0f, %.0f, map %s)"):format(px, py, tostring(pmap)) or "not given")
     end
+    local title = Title()
+    if probe then Say("title under the name: %s", title or "none") end
     if not map then return end
     facts.playerClass = UnitClassBase and Plain(UnitClassBase("player")) or nil
     local kind = NK.Classify(facts)
@@ -113,7 +128,7 @@ local function Note(facts, what)
     -- a merchant's list read again during the same visit adds what it offered; it is not another visit
     local again = facts.merchant and visit ~= nil and visit.noted == id
     local entry, status = NS.Observe({ id = id, name = name, map = map, x = x, y = y, tags = kind.tags, cls = kind.cls,
-        prof = kind.prof, again = again })
+        prof = kind.prof, title = title, again = again })
     if entry and facts.merchant and visit then visit.noted = id end
     if not entry then return Skip(status or "refused") end
     stats.noticed = stats.noticed + 1

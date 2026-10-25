@@ -1,4 +1,4 @@
-## Interface: 16001
+## Interface: 16001, 120105
 ## Title: |cffC9A24ATwich|rUI Settings
 ## Notes: The settings window for TwichUI. Loaded only when you open TwichUI's settings; keep it turned on alongside TwichUI.
 ## Author: twichie
