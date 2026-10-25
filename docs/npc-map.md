@@ -117,6 +117,25 @@ guild (each its own), and take in what others tell. No question is asked per NPC
 - The "Lists sent to you" choice is about whole lists only; `Don't take any` there does not stop live messages, and the
   live choice does not stop lists.
 
+## World Knowledge (the third tab)
+
+`npcs/Knowledge.lua` (no frames) and `TwichUI_Settings/pages/NpcKnowledge.lua` (the tab). Browse the list: a search
+(name, area, role, title, profession; every word has to match), an area, a role and a source filter, a count ("Showing
+28 of 412 records"), and the chosen record's details. The list draws ten row frames however long it is.
+
+- **Source** is only what the entry records: `own` (Seen by you), `rep` (From others, with how many times), or neither
+  (Source not recorded, an older entry). The sender and the channel a report came through are not stored, so they are not
+  shown, and no first-discovery date is kept: the date shown is the last visit (yours) or the last report.
+- **Delete** a record, or **Delete filtered...** (only while a filter is on): the entries are read when the button is
+  clicked and the question holds to them, so later arrivals or a changed filter never widen it. **Clear an area** removes
+  every entry on exactly that map, whatever the filters show; the same NPC in another area stays, and so do maps inside it
+  (a dungeon or district is an area of its own). All go through `NpcStore.ForgetMany`: one pass, one change notice (the map
+  and the tab redraw once).
+- **Send** a record or the shown results to your group, your guild or one player: `NpcShare.Plan/Offer/AskName` take an
+  optional list of entries and a name for it, with the same question, protocol, part size and send gap as the whole list.
+  Entries chosen this way are sent even when "Also send what others sent you" is off, and the question says how many of each
+  go. No new channel and no schema change.
+
 ## Settings
 
 `ui.npcMap` (in the profile): `show.<kind>`, `trainerClass` (`mine` / `all`), `reports`, `labels`, `iconSize` (60 to

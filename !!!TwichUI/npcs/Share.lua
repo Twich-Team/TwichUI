@@ -112,7 +112,10 @@ NSH.AUDIENCE = { party = "your group", guild = "your guild", whisper = nil }
 
 -- What a send would be, exactly: { audience, dist, target, label, wires, own, reported, parts }, or nil and a sentence.
 -- audience: "party", "guild" or "whisper" (target: the character's name).
-function NSH.Plan(audience, target)
+-- entries (optional, with scope: the words for what they are, "this NPC"): send just these, taken from the list as it is
+-- now, instead of the whole list. Choosing them yourself is the choice, so "Also send what others sent you" does not
+-- hold back a record you picked; the question says how many of each go.
+function NSH.Plan(audience, target, entries, scope)
     if not Enabled() then return nil, "Vendors and trainers is turned off." end
     if SH.Blocked() then return nil, "The game isn't letting addons send messages right now. Try again later." end
     local plan = { audience = audience }
@@ -133,17 +136,24 @@ function NSH.Plan(audience, target)
     local withReports = NP.Get("sendReports")
     local wires, own, reported = {}, 0, 0
     local max = NSH.MAX_PARTS * NSH.PART_SIZE
-    for _, e in ipairs(NS.Entries()) do
+    local present
+    if entries then   -- (one forgotten while the question was open is not sent)
+        present = {}
+        for _, e in ipairs(NS.Entries()) do present[e] = true end
+    end
+    for _, e in ipairs(entries or NS.Entries()) do
         if #wires >= max then break end
-        if e.own or withReports then
+        if (not present or present[e]) and (entries or e.own or withReports) then
             wires[#wires + 1] = NS.Wire(e)
             if e.own then own = own + 1 else reported = reported + 1 end
         end
     end
     if #wires == 0 then
+        if entries then return nil, "There is nothing to send." end
         return nil, withReports and "Your list is empty." or "You haven't noted any NPCs yourself yet, so there is nothing to send."
     end
     plan.wires, plan.own, plan.reported = wires, own, reported
+    plan.scope = entries and scope or nil
     plan.parts = math.ceil(#wires / NSH.PART_SIZE)
     return plan
 end
@@ -151,6 +161,7 @@ end
 function NSH.Describe(plan)
     local what = ("%d %s you dealt with yourself"):format(plan.own, plan.own == 1 and "NPC" or "NPCs")
     if plan.reported > 0 then what = what .. (" and %d others sent you"):format(plan.reported) end
+    if plan.scope then what = ("%s (%s)"):format(plan.scope, what) end
     local reach = plan.dist == "WHISPER" and ("Only %s receives it."):format(plan.label)
         or ("Everyone in %s with TwichUI receives it; each of them chooses whether to add it."):format(plan.label)
     return ("Send %s to %s?\n\nEach is its name, its place and what it offers. Nothing about you or your character is in it. %s It takes about %d seconds to send."):format(
@@ -191,8 +202,8 @@ function NSH.Send(plan)
 end
 
 -- The whole path a button or a command takes: plan, the question, then the send.
-function NSH.Offer(audience, target)
-    local plan, why = NSH.Plan(audience, target)
+function NSH.Offer(audience, target, entries, scope)
+    local plan, why = NSH.Plan(audience, target, entries, scope)
     if not plan then R.Print("%s", why) return false end
     R.Interact.Confirm("TWICHUI_NPC_SEND", NSH.Describe(plan), function()
         local ok, err = NSH.Send(plan)
@@ -202,9 +213,10 @@ function NSH.Offer(audience, target)
 end
 
 -- Asks for a character's name (your target's, when it is a player, is filled in), then offers to them.
-function NSH.AskName()
+function NSH.AskName(entries, scope)
     StaticPopupDialogs.TWICHUI_NPC_SEND_TO = {
-        text = "Send your vendors and trainers list to which character? They need TwichUI to receive it.",
+        text = entries and "Send to which character? They need TwichUI to receive it."
+            or "Send your vendors and trainers list to which character? They need TwichUI to receive it.",
         button1 = ACCEPT, button2 = CANCEL, hasEditBox = true, maxLetters = 64,
         OnShow = function(self)
             local box = self.editBox or self.EditBox
@@ -216,13 +228,13 @@ function NSH.AskName()
         OnAccept = function(self)
             local box = self.editBox or self.EditBox
             local name = box and box:GetText()
-            C_Timer.After(0, function() NSH.Offer("whisper", name) end)   -- after this popup has gone
+            C_Timer.After(0, function() NSH.Offer("whisper", name, entries, scope) end)   -- after this popup has gone
         end,
         EditBoxOnEnterPressed = function(box)
             local parent = box:GetParent()
             local name = box:GetText()
             parent:Hide()
-            C_Timer.After(0, function() NSH.Offer("whisper", name) end)
+            C_Timer.After(0, function() NSH.Offer("whisper", name, entries, scope) end)
         end,
         EditBoxOnEscapePressed = function(box) box:GetParent():Hide() end,
         timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3,

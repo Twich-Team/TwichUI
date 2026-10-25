@@ -37,6 +37,7 @@ pages\Pins.lua
 pages\Navigation.lua
 pages\WorldMap.lua
 pages\Npcs.lua
+pages\NpcKnowledge.lua
 pages\CozyBag.lua
 pages\Auction.lua
 pages\Skins.lua

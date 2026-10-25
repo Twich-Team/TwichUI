@@ -436,6 +436,32 @@ function NS.Forget(entry)
     return true
 end
 
+-- Removes exactly these entries (the very tables, as NS.Entries gave them) in one pass and tells the listeners once;
+-- one that is already gone is skipped, and nothing else goes. Returns how many went.
+function NS.ForgetMany(entries)
+    local db = Store()
+    if not (db and Writable(db)) or type(entries) ~= "table" then return 0 end
+    local doomed = {}
+    for _, e in ipairs(entries) do doomed[e] = true end
+    local list, kept, n = db.list, 0, 0
+    local size = #list
+    for i = 1, size do
+        local e = list[i]
+        if doomed[e] then
+            n = n + 1
+        else
+            kept = kept + 1
+            list[kept] = e
+        end
+    end
+    for i = size, kept + 1, -1 do list[i] = nil end
+    if n > 0 then
+        Invalidate()
+        Changed()
+    end
+    return n
+end
+
 -- scope: "reported" (what others sent you and you never saw yourself) or "all". Returns how many went.
 function NS.Clear(scope)
     local db = Store()

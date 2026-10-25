@@ -39,7 +39,7 @@ for _, page in ipairs(K.list) do
     ["Class resource bar layout"] = "Class resource bars", ["Class resource bar appearance"] = "Class resource bars",
     ["Class resource bar effects"] = "Class resource bars", ["Custom ammunition"] = "Ammunition warning",
     ["Chat cleaning channels"] = "Chat cleaning", ["Chat cleaning rules"] = "Chat cleaning", ["Chat cleaning live view"] = "Chat cleaning", ["Hazard alert rules"] = "Hazard alerts",
-    ["World map places"] = "World map", ["Vendors and trainers: your list"] = "Vendors and trainers" }
+    ["World map places"] = "World map", ["Vendors and trainers: your list"] = "Vendors and trainers", ["World Knowledge"] = "Vendors and trainers" }
   assert((page.parent and K.pages[page.parent].name) == under[page.name], page.name .. " is in its place")
 end
 

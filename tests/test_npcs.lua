@@ -65,7 +65,7 @@ local function boot(name, saved, opts)
   c.PRINTED = {}
   c.print = function(s) table.insert(c.PRINTED, tostring(s)) end
   Load(c, { "modules/Interact.lua", "pins/Pins.lua", "npcs/Kinds.lua", "npcs/Store.lua", "npcs/Prefs.lua", "npcs/Collect.lua",
-    "npcs/Map.lua", "npcs/Share.lua", "diag/Diagnostics.lua", "diag/Npcs.lua" })
+    "npcs/Map.lua", "npcs/Share.lua", "npcs/Knowledge.lua", "diag/Diagnostics.lua", "diag/Npcs.lua" })
   c.TwichUIDB = saved or { modules = { npcMap = true } }
   c.LOADED["!!!TwichUI"] = true; c.FireEvent("ADDON_LOADED", "!!!TwichUI")
   c.FireEvent("PLAYER_LOGIN")
