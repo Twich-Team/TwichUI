@@ -4,6 +4,8 @@
 -- personal pin), Group pin, Group ping and Help. Their tooltips name them. The shortcuts stay as they were and stay the
 -- fast path; this is how a player finds them, or does without them. While Navigation is on (nav/Nav.lua) a fifth, Navigate,
 -- plans a walking route to the clicked spot; it has no shortcut of its own, so the map's clicks keep their meanings.
+-- While Vendors and trainers is on, a funnel button (the NPC filter, npcs/FilterMenu.lua) opens a menu of the kinds of NPC
+-- the map shows. It is not a tool: nothing is armed, and the menu is closed by anything that arms or opens something else.
 --   A tool is one-shot. Clicking its button arms it (the button stays lit and a strip under the bar says what the next
 --     click does); the next plain left-click on the map does the action once and puts the tool away. Arming sends and
 --     makes nothing.
@@ -129,6 +131,12 @@ end
 local function NavOn() return R.Nav ~= nil and R.Nav.Enabled() end
 T.NavOn = NavOn
 
+-- The NPC filter button is on the bar while Vendors and trainers and the choice are (npcs/FilterMenu.lua).
+local function FilterOn()
+    local FM = R.NpcFilterMenu
+    return FM ~= nil and FM.Wanted()
+end
+
 -- true, or false and one sentence. Asked when the bar is drawn and again at the moment of a click.
 function T.Available(id)
     if not (R:Enabled("partyPins") and PL.Pref("toolbar")) then return false, PN.Reason("off") end
@@ -183,6 +191,10 @@ function T.Describe(id)
     elseif id == "help" then
         out.title = "Map tools help"
         Add("What each tool does and the shortcut for it.")
+        return out
+    elseif id == "filter" then
+        out.title = "NPC Filters"
+        Add("Choose which kinds of NPC the map shows: vendors, trainers and services. Nothing is deleted; the NPCs you know are kept either way.")
         return out
     else
         return out
@@ -279,9 +291,10 @@ end
 
 -- One button's look from the state: armed (lit, with an outline: not by color alone), unavailable (dim, still hoverable).
 local function PaintButton(b, id)
-    local on = (id == armed) or (id == "help" and helpOpen)
+    local FM = R.NpcFilterMenu
+    local on = (id == armed) or (id == "help" and helpOpen) or (id == "filter" and FM ~= nil and FM.IsOpen())
     local a = avail[id]
-    local usable = id == "help" or not a or a.ok
+    local usable = id == "help" or id == "filter" or not a or a.ok
     b.fill:SetShown(on)
     for _, e in ipairs(b.edge) do e:SetShown(on) end
     b.icon:SetDesaturated(not usable)
@@ -311,6 +324,10 @@ local function BuildBar()
         b:SetScript("OnClick", function() T.Click(t.id) end)
         buttons[t.id] = b
     end
+    local fb = NewButton(bar, "filter")
+    fb.icon:SetTexture(ICON_PATH .. "filter")
+    fb:SetScript("OnClick", function() T.ToggleFilter() end)
+    buttons.filter = fb
     local hb = NewButton(bar, "help")
     hb.icon:SetTexture(ICON_PATH .. HELP.icon)
     hb:SetScript("OnClick", function() T.ToggleHelp() end)
@@ -351,6 +368,9 @@ local function LayoutBar()
     local pad = bar.pad or Skin(bar)
     local x = pad + 2
     if buttons.nav then buttons.nav:SetShown(NavOn()) end   -- Navigate only while Navigation is on
+    local filter = FilterOn()
+    if buttons.filter then buttons.filter:SetShown(filter) end   -- the NPC filter only while Vendors and trainers is on
+    if not filter and R.NpcFilterMenu then R.NpcFilterMenu.Close() end
     -- the NPC search field (npcs/SearchBar.lua), when it is chosen, to the left of the buttons: it takes what the
     -- navigation bar has left after the buttons and some room for the breadcrumbs, and is put away when that is too little
     local S = R.NpcSearchBar
@@ -358,7 +378,7 @@ local function LayoutBar()
         local nav = WorldMapFrame.NavBar
         local room
         if nav and nav.GetWidth then
-            local count = NavOn() and 5 or 4
+            local count = 4 + (NavOn() and 1 or 0) + (filter and 1 or 0)
             room = nav:GetWidth() - 6 - (count * (BUTTON_W + GAP) + pad * 2 + 4 + 4) - SEARCH_CRUMBS
         end
         -- the search is an extra: a fault in it is reported and the bar is laid out without it
@@ -366,9 +386,9 @@ local function LayoutBar()
         if ok and type(nx) == "number" then x = nx
         elseif not ok then R.Fault("map tools search", nx) end
     end
-    for _, id in ipairs({ "pin", "group", "ping", "nav", "help" }) do
+    for _, id in ipairs({ "pin", "group", "ping", "nav", "filter", "help" }) do
         local b = buttons[id]
-        if b and (id ~= "nav" or NavOn()) then
+        if b and (id ~= "nav" or NavOn()) and (id ~= "filter" or filter) then
             b:ClearAllPoints()
             b:SetPoint("LEFT", bar, "LEFT", x, 0)
             b:SetWidth(BUTTON_W)
@@ -617,6 +637,7 @@ function T.Arm(id)
         return false
     end
     T.CloseHelp()
+    if R.NpcFilterMenu then R.NpcFilterMenu.Close() end
     if R.NpcSearchBar then R.NpcSearchBar.Close() end   -- the search list and a tool don't share the map's attention
     if PM.Disarm then PM.Disarm() end        -- the older "Place a pin" and "Ping the map" arms: one armed click at a time
     if V and V.Disarm then V.Disarm() end
@@ -644,6 +665,7 @@ function T.ToggleHelp()
     MarkIntroSeen(); HideCallout()
     if helpOpen then T.CloseHelp() return false end
     T.Cancel()
+    if R.NpcFilterMenu then R.NpcFilterMenu.Close() end
     if R.NpcSearchBar then R.NpcSearchBar.Close() end
     BuildHelp()
     Evaluate()
@@ -654,6 +676,29 @@ function T.ToggleHelp()
     PaintAll()
     UpdateKeys()
     return true
+end
+
+-- The NPC filter button: opens the menu, or closes it. Opening puts away what shouldn't share the map's attention with it
+-- (an armed tool, the help, the search list). Changes no filter by itself.
+function T.ToggleFilter()
+    local FM = R.NpcFilterMenu
+    if not (installed and bar and bar:IsShown() and buttons.filter and FM) then return false end
+    MarkIntroSeen(); HideCallout()
+    if FM.IsOpen() then
+        FM.Close()
+        return false
+    end
+    T.Cancel()
+    T.CloseHelp()
+    if R.NpcSearchBar then R.NpcSearchBar.Close() end
+    local opened = FM.Open(buttons.filter)
+    PaintAll()
+    return opened
+end
+
+-- The buttons painted again (the filter menu closed by itself: the button is lit only while it is open).
+function T.Repaint()
+    if bar then PaintAll() end
 end
 
 ---------------------------------------------------------------------------
@@ -761,6 +806,7 @@ local function Hide()
     T.CloseHelp()
     HideStrip()
     HideCallout()
+    if R.NpcFilterMenu then R.NpcFilterMenu.Close() end
     if R.NpcSearchBar then R.NpcSearchBar.Hide() end   -- the search list closes, its focus is let go, what it picked out is let go
     if bar then bar:Hide() end
     UpdateKeys()

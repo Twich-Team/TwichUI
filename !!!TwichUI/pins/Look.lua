@@ -49,7 +49,9 @@ local MINIMAP_LABEL = { off = true, hover = true, always = true }
 -- toolbar: the world map's tool bar for pins and pings (pins/MapTools.lua): shown or not. An armed tool and the help panel
 -- are never saved.
 -- npcSearch: the NPC search field on that bar (npcs/SearchBar.lua): off until chosen, so an existing bar keeps its layout.
-local PREF_DEFAULTS = { localClick = "alt", partyClick = "altshift", labels = "hover", minimap = true, minimapLabels = "off", wayAlso = false, toolbar = true, npcSearch = false }
+-- npcFilter: the NPC filter button on that bar (npcs/FilterMenu.lua): one small button, and only while Vendors and trainers
+-- is on, so it is on by default; the kinds it toggles are npcs/Prefs.lua's, not saved here.
+local PREF_DEFAULTS = { localClick = "alt", partyClick = "altshift", labels = "hover", minimap = true, minimapLabels = "off", wayAlso = false, toolbar = true, npcSearch = false, npcFilter = true }
 PL.PREF_DEFAULTS = PREF_DEFAULTS
 
 local function Prefs()
@@ -62,7 +64,7 @@ local function ValidPref(key, value)
     if key == "localClick" or key == "partyClick" then return type(value) == "string" and CLICK[value] ~= nil end
     if key == "labels" then return type(value) == "string" and LABEL[value] == true end
     if key == "minimapLabels" then return type(value) == "string" and MINIMAP_LABEL[value] == true end
-    if key == "minimap" or key == "wayAlso" or key == "toolbar" or key == "npcSearch" then return type(value) == "boolean" end
+    if key == "minimap" or key == "wayAlso" or key == "toolbar" or key == "npcSearch" or key == "npcFilter" then return type(value) == "boolean" end
     if key == "position" then
         return type(value) == "table" and type(value.x) == "number" and type(value.y) == "number"
             and value.x == value.x and value.y == value.y and math.abs(value.x) < 10000 and math.abs(value.y) < 10000

@@ -89,6 +89,24 @@ function NP.Set(key, value)
     return true
 end
 
+-- Every kind shown, or every kind hidden, in one change (one notice, so the map is drawn once). Only kinds that differ
+-- are written. Returns whether it was kept.
+function NP.SetAllShown(value)
+    if type(value) ~= "boolean" or type(TwichUIDB) ~= "table" then return false end
+    local changed = false
+    for _, k in ipairs(NK.LIST) do
+        local key = "show." .. k.id
+        if NP.Get(key) ~= value then
+            TwichUIDB.ui = type(TwichUIDB.ui) == "table" and TwichUIDB.ui or {}
+            if type(TwichUIDB.ui.npcMap) ~= "table" then TwichUIDB.ui.npcMap = {} end
+            TwichUIDB.ui.npcMap[key] = value
+            changed = true
+        end
+    end
+    if changed then Notify("show") end
+    return true
+end
+
 -- Puts one scope back ("show", "look", "sharing" or "all"). The list of NPCs and the switch are not touched.
 function NP.Reset(scope)
     local t = Saved()

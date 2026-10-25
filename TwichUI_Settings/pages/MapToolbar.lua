@@ -7,7 +7,7 @@ local K = R.SettingsKit
 K.Page({
     key = "mapToolbar", name = "Map Toolbar", order = 71, group = "map",
     description = "The bar in the world map's title row, with buttons for your pins, group pins, group pings and navigation.",
-    keywords = "toolbar tool bar tools buttons help group pin ping navigate navigation title row",
+    keywords = "toolbar tool bar tools buttons help group pin ping navigate navigation title row npc filter funnel kinds vendors trainers",
     when = function() return R.Pins ~= nil and R.PinsLook ~= nil end,
     build = function()
         local PL = R.PinsLook
@@ -27,6 +27,17 @@ K.Page({
             bar, function() return PinsOn() and PL.Pref("toolbar") and R:Enabled("npcMap") end,
             function()
                 if not R:Enabled("npcMap") then return "Greyed out: needs Vendors and trainers turned on, which holds the NPCs this searches." end
+                if not PinsOn() then return "Greyed out: needs Party pins turned on, which the map tools bar is part of." end
+                return "Greyed out: needs \"Show the map tools bar\" turned on."
+            end)
+
+        Header("NPC filters", "A funnel button on the bar that opens a menu of the kinds of NPC the map shows. It is another way to set the same choices as Vendors and trainers: the two always agree.")
+        Under(ProxyToggle("pinsNpcFilter", "Show NPC filter button",
+            "A funnel button on the map tools bar that opens a small menu of the kinds of NPC the world map shows (vendors, trainers and services), so you can hide or show a kind without leaving the map. Checking and unchecking applies at once and the menu stays open while you choose.\n\nThese are the same choices as on Vendors and trainers, not a second set. An NPC with several roles shows while any one of its kinds is checked. The NPC search can still find an NPC whose kind is hidden, and shows it only while it is picked out. Nothing is deleted or sent.\n\nOff: the button is gone; the kinds you chose stay as they are and keep applying.",
+            PL.PREF_DEFAULTS.npcFilter, function() return PL.Pref("npcFilter") end, function(value) PL.SetPref("npcFilter", value and true or false) end),
+            bar, function() return PinsOn() and PL.Pref("toolbar") and R:Enabled("npcMap") end,
+            function()
+                if not R:Enabled("npcMap") then return "Greyed out: needs Vendors and trainers turned on, which holds the NPCs this filters." end
                 if not PinsOn() then return "Greyed out: needs Party pins turned on, which the map tools bar is part of." end
                 return "Greyed out: needs \"Show the map tools bar\" turned on."
             end)

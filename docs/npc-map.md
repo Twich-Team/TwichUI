@@ -142,6 +142,9 @@ With **Show NPC search** on (Map Toolbar, `docs/map-tools.md`), the bar has a fi
 the map (`NpcMap.Locate`, `npcs/Search.lua`, `npcs/SearchBar.lua`). A marker the kinds above hide is drawn only while it is
 picked out; nothing saved changes and nothing is sent.
 
+With **Show NPC filter button** on (the same page), a funnel button on the bar opens a menu of these kinds (`npcs/FilterMenu.lua`): the
+same `show.<kind>` choices as the settings, so the two always agree. See `docs/map-tools.md` (NPC filter button).
+
 ## Settings
 
 `ui.npcMap` (in the profile): `show.<kind>`, `trainerClass` (`mine` / `all`), `reports`, `labels`, `iconSize` (60 to

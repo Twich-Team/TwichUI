@@ -159,10 +159,51 @@ command, key binding or database.
   checked in the game: the field's look and width in the real title row, `OnArrowPressed` and focus behavior, a click on a row
   while the field has focus, that a map-canvas click handler at priority 120 sees a click first, and the ring on the marker.
 
+## NPC filter button
+
+**TwichUI settings > Map > Map Toolbar > Show NPC filter button** (`npcs/FilterMenu.lua`; the choice is `ui.partyPins.npcFilter`,
+**on by default**; it is greyed out, with the reason, while the bar, Party pins or Vendors and trainers is off). A funnel button
+before Help that opens a menu of the kinds of NPC the world map shows. It is there only while Vendors and trainers is on, as
+Navigate is there only while Navigation is, and it is not a tool: nothing is armed. It adds no command, key binding or database.
+
+* **One set of choices.** The checkboxes are `NpcPrefs`' `show.<kind>` (`npcs/Prefs.lua`), the same ones as Vendors and trainers in the
+  settings: no copy, no key of its own. A change is drawn by the map's existing path (`NpcMap.Layout`, one call per change) and an
+  open settings window is told to redraw; a change made in the settings (or by a profile) shows in an open menu.
+* **The menu.** One row per kind of `NpcKinds.LIST` (18), under Vendors, Trainers and Services as in the settings, each a
+  checkbox, the kind's icon and its name; the whole row is the click target and the kind's own tooltip is on it. All kinds are
+  always listed, whether or not the area has any. It stays open while you check several. **Show all** and **Hide all** change
+  only these kinds, in one write and one drawing (`NpcPrefs.SetAllShown`), and are dim when they would change nothing. They never
+  touch pins, pings, a route or the NPC list, and send nothing. A list taller than the room under the button scrolls (a UIPanelScrollFrameTemplate as the
+  pin menu uses, its bar hidden until needed); it is otherwise one panel at its full height, kept inside the map.
+* **Several roles.** Not new: an NPC shows while any one of its kinds is checked and wears the icon of its first checked kind
+  (`NpcKinds.Primary` through `NpcMap.ShownKind`). A merchant that repairs and sells food stays when only one of the two is hidden.
+  A record with no known kind was never drawn and still isn't; nothing is discarded or invented.
+* **Search.** Filters control normal visibility only. The search still finds an NPC whose kind is unchecked, and Locate draws that
+  one NPC while it is picked out (`docs/npc-map.md`). The pick checks nothing and saves nothing. Changing the filter while an NPC is
+  picked out redraws the rest by the new choices and leaves the pick as it is, **including unchecking the picked NPC's own kind**:
+  it stays drawn until the pick ends (another pick, the box cleared, the map closing, going to a map it isn't on), and then
+  the filtered view is back with no marker left behind.
+* **Closing.** A click anywhere else (`GLOBAL_MOUSE_DOWN`, registered only while it is open; a press on the button is left to the
+  button's own click), Esc (a `UISpecialFrames` entry, never the game menu's handler list), the same button, arming a tool or opening
+  the help or the search list, the map closing, the bar, the button or Vendors and trainers going off. Opening it puts away an
+  armed tool, the help and the search list. The menu takes the clicks on itself and none of the map's.
+* **Cost.** Made the first time it opens (18 rows, 3 headings, one note; memory not measured), then repainted
+  and laid out each time it opens; opening reads nothing from the NPC list. One listener (the prefs' change notice) repaints only an
+  open menu. No timer, no `OnUpdate`.
+* **Icon.** `media/textures/maptool-filter.tga`, 32 x 32 uncompressed RGBA TGA like the other tool icons, built from the supplied
+  funnel artwork `assets/map-tool-filter-source.png` (1254 x 1254, real alpha, visible 737 x 640) by `tools/make_map_tool_icons.py`:
+  cropped to the visible artwork, longer side 30 of 32 with a clear 1-pixel margin, premultiplied area-average downsample, no recolor
+  or sharpening, centred; shown at 18 x 18 like its neighbours with the button's own hover and lit states. The artwork's own brass is
+  kept, so it is a little brighter than the bronze of the other icons.
+* **Not verified in the game:** the funnel's look and weight in the toolbar next to the other icons, the menu's placement under the
+  button at real sizes and UI scales, scrolling on a short map, that Esc closes the menu before the map, that the global mouse event
+  reaches the menu's close, and the look with EllesmereUI's border skins.
+
 ## Saved and not saved
 
-Saved: `ui.partyPins.toolbar` (a boolean, only once changed; it is the profile's and part of a shared setup with the other
-Party pins choices), and `ui.mapToolsIntro`. Never saved: the armed tool, the help being open,
+Saved: `ui.partyPins.toolbar` and `ui.partyPins.npcFilter` (booleans, only once changed; they are the profile's and part of a shared
+setup with the other Party pins choices; the filter menu's own checkboxes are `ui.npcMap["show.<kind>"]`, saved by Vendors and
+trainers whoever changed them), and `ui.mapToolsIntro`. Never saved: the armed tool, the help being open,
 a pending click, the strip. After `/reload`, a profile change, the map closing or the feature going off, all of that is gone.
 
 ## Not verified
@@ -193,3 +234,18 @@ reaches the handler (the map's own code says it can't), and the look with Ellesm
 2. Arm Group ping, then leave the party: it is put away with "Join a party or raid to send a group ping."
 3. In a raid: Group ping works, Group pin says it is paused.
 4. Ping four times quickly: the fourth says it is too quick and the tool stays armed.
+
+**NPC filter** (with Vendors and trainers on and a few NPCs known; none of this needs a group):
+1. The funnel is before Help, the same size as its neighbours and not clipped; its tooltip says "NPC Filters". Compare its brightness and
+   weight with the other icons; hover and click states match theirs.
+2. Click it: the menu opens under it, inside the map. Uncheck Auctioneers: their markers go at once and the others stay. Check three more
+   without the menu closing.
+3. Open the Vendors and trainers page in the settings beside it: the same boxes follow every click, both ways.
+4. Show all, Hide all: the map redraws once; pins, pings and the NPC list are unchanged.
+5. A merchant that repairs and sells food: hide one of the two, it stays; hide both, it goes.
+6. Hide a kind, search for an NPC of it, choose it: it shows and is ringed; the box for the kind stays unchecked. Uncheck/check other kinds:
+   the pick stays. Clear the search: the marker goes.
+7. Close the menu by clicking the map, with Esc (the map must stay open), with the same button, by arming Pin, by opening Help or the
+   search list, and by closing the map.
+8. Shrink the map window until the list can't fit: it scrolls and its last row, and the note, can be reached.
+9. `/reload`: the kinds are as you left them. Turn Show NPC filter button off: the button goes and the filters still apply.

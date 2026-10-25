@@ -30,6 +30,7 @@ ICONS = {
     "maptool-group-pin": "map-tool-group-pin-source.png",
     "maptool-ping": "map-tool-ping-source.png",
     "maptool-help": "map-tool-help-source.png",
+    "maptool-filter": "map-tool-filter-source.png",
 }
 
 
