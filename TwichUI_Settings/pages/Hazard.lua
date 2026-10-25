@@ -19,7 +19,7 @@ local TEST_WORDS = {
 }
 
 K.Page({
-    key = "hazard", name = "Hazard alerts", nav = "Hazard alerts", order = 42, group = "everyday",
+    key = "hazard", icon = "hazardAlerts", name = "Hazard alerts", nav = "Hazard alerts", order = 42, group = "everyday",
     description = "A sound when an aura you listed lands on you, grows or fades. Off until you turn it on.",
     keywords = "gtfo hazard alert alerts sound audio warning danger avoidable fire void ground aura debuff fail failed mechanic friendly fire high low damage move out",
     overview = {

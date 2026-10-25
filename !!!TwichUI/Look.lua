@@ -133,6 +133,8 @@ Motion.TIME = {             -- seconds
     check = 0.09,           -- a checkbox's accent fill
     page = 0.12,            -- the page's content as it arrives
     window = 0.16,          -- the window as it opens
+    disclose = 0.18,        -- a card's rules or details as they open
+    highlight = 0.4,        -- a search result's mark on its row, as it goes
 }
 Motion.MAX_STEP = 0.1       -- a long frame (a hitch) moves an effect no further than this
 

@@ -65,7 +65,7 @@ local TIMER_STATUS = {
 }
 
 K.Page({
-    key = "restedxp", name = "RestedXP", order = 95, group = "addons",
+    key = "restedxp", icon = "guide", name = "RestedXP", order = 95, group = "addons",
     description = "The game's waypoint on RestedXP's destination, hiding the guide in situations you choose, and a TwichUI look for the RestedXP Guides window, its waypoint arrow and its timer bars. Guide content and progress are RestedXP's own.",
     keywords = "restedxp rxp guide leveling map waypoint destination marker arrow timer bar step theme skin data bar broker hide show automatic dungeon raid group resting flight battleground quest tracker ellesmere mouseover fade objective",
     when = function() return R.RestedXPSkin ~= nil end,

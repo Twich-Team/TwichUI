@@ -27,9 +27,17 @@ local ALIASES = {
     pinsMinimap = "minimap",
     foodDrinkUnlock = "move position anchor /unlock",
     navigationUnlockMode = "move position anchor /unlock ellesmere mover",
-    qolQuickKeybind = "keybind bindings hotkey",
-    qolSummons = "summon portal warlock meeting stone",
-    qolResurrect = "res rez",
+    qolQuickKeybind = "keybind bindings hotkey game menu escape",
+    qolSummons = "summon portal warlock meeting stone auto accept teleport",
+    qolSummonsFrom = "trust who friends guild group strangers",
+    qolSummonsWait = "delay how long countdown",
+    qolResurrect = "res rez revive auto accept",
+    qolResurrectCombat = "battle res brez combat rez",
+    qolReleasePvP = "auto release spirit ghost graveyard bg pvp",
+    qolReleaseWait = "delay how long",
+    qolDuels = "block refuse auto decline duel spam",
+    qolDuelsFrom = "exceptions allow friends guild",
+    qolDuelsToDeath = "lethal death duel",
     mageTravel = "teleport portal",
     mageConjure = "water bread conjure",
     mageSell = "vendor merchant junk",
@@ -53,6 +61,19 @@ local function Clean(text)
     return (text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("%s%s+.*$", ""))
 end
 
+-- A result's one line about what it is: a feature card's own sentence for the card and the settings in it, else
+-- the first sentence of the row's description. nil when there is none.
+local function FirstSentence(text)
+    if type(text) ~= "string" or text == "" then return nil end
+    text = text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("\n.*$", "")
+    return text:match("^(.-[%.!?])%s") or text
+end
+local function Describe(row, tip)
+    local card = row.card and row or row.primaryOf or row.ruleOf
+    if card then return card.card.what end
+    return FirstSentence(tip)
+end
+
 local index
 
 -- Builds the index (once). Only ever called after the pages are described.
@@ -73,12 +94,14 @@ function Search.Build()
         local def = page.def
         local parent = page.parent and K.pages[page.parent]
         Add({
-            kind = "page", page = page.key, label = page.name,
+            kind = "page", page = page.key, label = page.name, desc = FirstSentence(def.description),
             context = parent and parent.name or groupLabel[page.group] or "TwichUI",
             words = table.concat({ page.nav or "", def.keywords or "", def.description or "", ALIASES[page.key] or "" }, " "),
         })
         for _, row in ipairs(page.rows) do
-            if row.kind ~= "link" then
+            -- a card whose switch has the card's own name is found through the switch (one result, not two)
+            local duplicate = row.card and row.primary and Clean(row.primary:GetName()) == Clean(row:GetName())
+            if row.kind ~= "link" and not duplicate then
                 local label = Clean(row:GetName())
                 if label ~= "" then
                     local section = row.section and Clean(row.section:GetName()) or nil
@@ -91,7 +114,7 @@ function Search.Build()
                     Add({
                         kind = row.kind == "header" and "section" or "setting", page = page.key, row = row,
                         label = label, context = context, words = ALIASES[row.id] or "",
-                        tip = ok and Plain(tip) or "",
+                        tip = ok and Plain(tip) or "", desc = Describe(row, ok and tip or nil),
                     })
                 end
             end

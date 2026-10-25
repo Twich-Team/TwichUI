@@ -5,7 +5,7 @@ local R = TwichUI
 local K = R.SettingsKit
 
 K.Page({
-    key = "cozyBag", name = "Cozy Sleeping Bag", order = 77, group = "journey",
+    key = "cozyBag", icon = "sleepingBag", name = "Cozy Sleeping Bag", order = 77, group = "journey",
     description = "A small guide to the hidden quest chain behind the Cozy Sleeping Bag, following your own quest history.",
     keywords = "cozy sleeping bag guide quest chain hidden rested experience resting bag pins map steps",
     overview = {

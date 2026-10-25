@@ -121,7 +121,7 @@ end
 local NOT_AFFECTED = "Map pins, the Journey Chronicle, backups, stat weights and other addons' own settings are not affected."
 
 K.Page({
-    key = "profiles", name = "Profiles", order = 105, group = "config",
+    key = "profiles", icon = "profiles", name = "Profiles", order = 105, group = "config",
     description = "Saved sets of TwichUI's options. Each character uses one; characters using the same profile share it.",
     keywords = "profile character alt copy duplicate rename delete reset new",
     overview = {

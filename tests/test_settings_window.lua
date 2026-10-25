@@ -996,8 +996,11 @@ do
   UI.Navigate("overview")
   assert(Has(win, "Show welcome") and Has(win, "View commands"), "Home's buttons say what they do")
   assert(not Has(win, "Show") and not Has(win, "List"), "and the bare words are gone")
+  -- Home opens with its three ways in at the top (its feature list is long enough to scroll below them)
   local homeHeight = scroll.child.h
-  assert(homeHeight > 0 and homeHeight < viewport, "Home fits the window with room to spare: " .. homeHeight)
+  assert(homeHeight > 0, "Home is drawn: " .. homeHeight)
+  assert(Has(win, "Explore features") and Has(win, "Adjust appearance") and Has(win, "Review changed settings"),
+    "Home opens with its three ways in")
   local blurb = false
   for _, t in ipairs(Texts(win)) do
     if t:find("Reset this page's settings to their defaults", 1, true) then blurb = true end
@@ -1198,6 +1201,242 @@ do
 
   UI.Close()
   assert(not W.ReloadPending(), "feedback tests leave nothing pending")
+end
+
+---------------------------------------------------------------------------
+-- 8. Feature cards (Quality of life), sample previews, Home's ways in, icons
+--   * the icon registry's files are there, at the sizes it says, and a missing or refused file falls back;
+--   * Quality of life is five cards, each with its switch in the head and its other settings as rules;
+--   * a card's rules start folded (the combat-resurrection choice never is); opening anything saves nothing;
+--   * the rules line follows the settings at once; a greyed-out rule says which switch to turn on;
+--   * search finds a folded rule, describes it with its card's sentence, opens the card and marks the row once;
+--   * previews play once, call no game action, write nothing, and stop on leaving, closing or reduced motion;
+--   * Home's changed-settings list compares with the defaults and goes to the control; nothing is made twice.
+---------------------------------------------------------------------------
+do
+  local P, Icons, Search, W = R.SettingsPreviews, R.Icons, R.SettingsSearch, R.Switches
+  local function Visible(frame, text, partial)
+    if type(frame.text) == "string" and frame.IsVisible and frame:IsVisible()
+      and (frame.text == text or (partial and frame.text:find(text, 1, true))) then return true end
+    for _, child in ipairs(frame.children or {}) do
+      if Visible(child, text, partial) then return true end
+    end
+    return false
+  end
+  local function Snapshot(v, out, indent)
+    out, indent = out or {}, indent or ""
+    local keys = {}
+    for k in pairs(v) do keys[#keys + 1] = k end
+    table.sort(keys, function(a, b) return tostring(a) < tostring(b) end)
+    for _, k in ipairs(keys) do
+      local val = v[k]
+      if type(val) == "table" then out[#out + 1] = indent .. tostring(k) .. ":"; Snapshot(val, out, indent .. " ")
+      else out[#out + 1] = indent .. tostring(k) .. "=" .. tostring(val) end
+    end
+    return out
+  end
+  local function Saved() return table.concat(Snapshot(c.TwichUIDB), "\n") end
+  local function Click(b) b:GetScript("OnClick")(b) end
+  c.LibStub = nil   -- section 5e leaves a stand-in that isn't callable; pages drawn here call LibStub when it exists
+
+  -- 8a. Icons
+  local SHEET = { "home", "notifications", "qualityOfLife", "markers", "chatCleaning", "foodAndDrink", "hazardAlerts",
+    "vendorRestocking", "auctionHouse", "journeyChronicle", "sleepingBag", "mapsNavigation", "gearComparison",
+    "classResources", "addonSkins", "profilesSharing", "targetArt", "mapPins", "mapToolbar", "vendors", "mage", "guide",
+    "ammunition", "troubleshooting", "navigation", "profiles", "explore", "appearance", "reviewChanges", "summons",
+    "resurrection", "releaseSpirit", "declineDuels", "quickKeybind" }
+  local function TgaSide(path)
+    local f = io.open(ROOT .. path:gsub("^Interface\\AddOns\\!!!TwichUI\\", ""):gsub("\\", "/") .. ".tga", "rb")
+    if not f then return nil end
+    local head = f:read(18)
+    f:close()
+    assert(head:byte(3) == 2 and head:byte(17) == 32, path .. " is an uncompressed 32-bit TGA")
+    return head:byte(13) + head:byte(14) * 256, head:byte(15) + head:byte(16) * 256
+  end
+  for _, id in ipairs(SHEET) do
+    local e = Icons.Get(id)
+    assert(e and e.source == "sheet", id .. " is a sheet icon")
+    assert(TgaSide(e.file) == 64 and TgaSide(e.small) == 32, id .. " has its 64 and 32 px files")
+  end
+  local count = 0
+  for id, e in pairs(Icons.list) do
+    count = count + 1
+    local w, h = TgaSide(e.file)
+    assert(w == e.size and h == e.size, id .. "'s file is " .. tostring(w) .. " px, the registry says " .. e.size)
+  end
+  assert(count == #SHEET and count == 34, "the three sheets' thirty-four icons and no others: " .. count)
+  assert(Icons.Path("home", 20):find("%-small$") and not Icons.Path("home", 40):find("%-small$"), "the 32 px file when drawn small")
+  local stub = { SetTexCoord = function() end, SetVertexColor = function() end }
+  function stub:SetTexture(path) self.path = path; return path == Icons.FALLBACK end   -- refuses everything but the emblem
+  assert(Icons.Apply(stub, "home", 40) == "fallback" and stub.path == Icons.FALLBACK, "a refused file falls back to the emblem")
+  assert(Icons.Apply(stub, "no-such-icon", 40) == "fallback", "and so does an unknown id")
+  local iconed = 0
+  for _, page in ipairs(K.SidebarOrder()) do
+    if page.def.icon then
+      iconed = iconed + 1
+      assert(Icons.Get(page.def.icon), page.key .. "'s icon " .. page.def.icon .. " is in the registry")
+    end
+  end
+  assert(iconed == #K.SidebarOrder(), "every page in the list has an icon: " .. iconed .. " of " .. #K.SidebarOrder())
+  local used = {}
+  for _, page in ipairs(K.SidebarOrder()) do
+    assert(not used[page.def.icon], page.key .. " shares " .. page.def.icon .. " with " .. tostring(used[page.def.icon]))
+    used[page.def.icon] = page.key
+  end
+
+  -- 8b. Quality of life's cards
+  local cards = {}
+  for _, row in ipairs(K.pages.qol.rows) do if row.card then cards[#cards + 1] = row end end
+  assert(#cards == 5, "five cards on Quality of life: " .. #cards)
+  for _, card in ipairs(cards) do assert(Icons.Get(card.card.icon), card:GetName() .. " has an icon") end
+  for _, card in ipairs(cards) do
+    assert(card.primary and card.primary.kind == "checkbox" and card.primary.switch, card:GetName() .. " has its switch")
+    assert(card.card.what ~= "" and card.card.consequence, card:GetName() .. " says what it does and what to know")
+  end
+  assert(K.rowsById.qolSummonsWait.ruleOf == cards[1] and K.rowsById.qolDuelsToDeath.ruleOf == cards[4], "rules belong to their cards")
+  assert(cards[2].card.inline and K.rowsById.qolResurrectCombat.ruleOf == cards[2], "the combat-resurrection rule is inline")
+
+  local calls = {}
+  local function Spy(name) return function() calls[#calls + 1] = name end end
+  c.C_SummonInfo = c.C_SummonInfo or {}
+  c.C_SummonInfo.ConfirmSummon = Spy("ConfirmSummon")
+  c.AcceptResurrect, c.RepopMe, c.CancelDuel = Spy("AcceptResurrect"), Spy("RepopMe"), Spy("CancelDuel")
+  c.SendChatMessage = Spy("SendChatMessage")
+  c.QuickKeybindFrame = { Show = Spy("QuickKeybindFrame:Show") }
+
+  R:OpenSettings("qol")
+  local view = UI.View("qol")
+  local summons, resurrect, duels = view.sectionsById[cards[1].id], view.sectionsById[cards[2].id], view.sectionsById[cards[4].id]
+  assert(summons.isCard and summons.primaryView and summons.rulesButton, "the summons card is drawn with its switch and rules button")
+  assert(view.open[summons.id], "section 1 opened Quality of life at the summon's wait, which unfolded its card for the session")
+  view.open[summons.id] = nil
+  UI.Refresh()
+  assert(Visible(win, "Accept summons") and Visible(win, "Off"), "title and an explicit Off")
+  assert(not Visible(win, "Wait before accepting a summon"), "the summon's rules start folded")
+  assert(Visible(win, "Also accept combat resurrections") and not resurrect.rulesButton, "the combat-resurrection choice is always in view")
+  assert(Visible(win, "In combat: waits for you", true), "and its state is in the rules line")
+  assert(Visible(win, "Friends, guild and group members", true) and Visible(win, "waits 3 seconds", true), "the summon's rules line")
+  assert(Visible(win, "You arrive wherever the summoner stands", true), "what to know is shown, not only in a tooltip")
+  assert(Visible(win, "Saved in the profile", true), "the page says which profile its changes are saved in")
+
+  -- opening rules or details saves nothing
+  local before = Saved()
+  Click(summons.rulesButton)
+  assert(Visible(win, "Wait before accepting a summon") and Visible(win, "Hide rules"), "Adjust rules shows them and says how to fold them")
+  Click(summons.detailsButton)
+  assert(Visible(win, "When does it apply?", true), "More about this answers in the card")
+  assert(Saved() == before, "opening rules and details changes nothing saved")
+  Click(summons.rulesButton); Click(summons.detailsButton)
+  assert(not Visible(win, "Wait before accepting a summon"), "and they fold again")
+
+  -- the rules line follows the setting at once; a greyed-out rule says which switch to turn on
+  K.variables.TWICHUI_qolSummonsFrom:SetValue("group")
+  assert(Visible(win, "Group members only", true), "the rules line follows the setting")
+  K.variables.TWICHUI_qolSummonsFrom:SetValue("known")
+  Click(duels.rulesButton)
+  assert(Visible(win, "Turn on \"Decline duel requests\" to choose exceptions."), "a greyed-out rule says what to turn on")
+  local frames = made
+  Click(duels.primaryView.control)
+  assert(R:Enabled("qolDuels") and duels.state.text == "On" and duels.saved.text == "Saved", "the card's switch turns it on and says so")
+  assert(not Visible(win, "Turn on \"Decline duel requests\" to choose exceptions."), "its rules are usable at once")
+  Click(duels.primaryView.control)
+  assert(not R:Enabled("qolDuels") and duels.state.text == "Off", "and off again")
+  assert(made == frames, "a switch redraws without making frames")
+  Click(duels.rulesButton)
+
+  -- 8c. Search: a folded rule is found, described by its card, opened and marked once
+  before = Saved()   -- (the changes just made were deliberate; from here on nothing may change)
+  UI.Navigate("overview")
+  Search.Reset()
+  local hit
+  for _, r in ipairs(Search.Run("summon delay")) do if r.entry.row and r.entry.row.id == "qolSummonsWait" then hit = r end end
+  assert(hit and hit.entry.desc == cards[1].card.what, "the summon's wait is found by a synonym and described by its card")
+  for _, r in ipairs(Search.Run("accept summons")) do
+    assert(not (r.entry.kind == "section" and r.entry.label == "Accept summons"), "a card and its switch are one result")
+  end
+  assert(not view.open[summons.id], "the card is folded before")
+  UI.Go(hit)
+  assert(UI.Selected() == "qol" and view.open[summons.id] and Visible(win, "Wait before accepting a summon"), "choosing it opens the card")
+  assert(view.rows.qolSummonsWait.highlighted, "and marks the row")
+  FlushTimers()
+  assert(Saved() == before, "searching and opening changed nothing")
+  view.open[summons.id] = false
+
+  -- 8d. Previews: play once, call nothing, write nothing; stop on leaving, closing and reduced motion
+  R:OpenSettings("qol")
+  local played = 0
+  for _, card in ipairs(cards) do
+    local s = view.sectionsById[card.id]
+    assert(s.preview, card:GetName() .. " has a preview")
+    if s.play then
+      Click(s.play)
+      assert(s.preview:IsPlaying() and P.Playing() == 1, card:GetName() .. " plays")
+      for _ = 1, 80 do
+        local step = s.preview.frame:GetScript("OnUpdate")
+        if not step then break end
+        step(s.preview.frame, 0.1)
+      end
+      assert(not s.preview:IsPlaying() and s.preview.done, card:GetName() .. " plays once and stops")
+      played = played + 1
+    else
+      assert(s.preview.def.static, card:GetName() .. "'s preview is a still picture")
+    end
+  end
+  assert(played == 4 and P.Playing() == 0, "four samples played")
+  assert(Visible(win, "Summon accepted.") and Visible(win, "Duel declined."), "each ends on what happened")
+  assert(#calls == 0, "no game action was called: " .. table.concat(calls, ", "))
+  assert(Saved() == before, "and nothing was saved")
+  summons.preview:Play()
+  UI.Navigate("gear")
+  assert(P.Playing() == 0 and not summons.preview.frame:GetScript("OnUpdate"), "leaving the page stops a sample")
+  R:OpenSettings("qol")
+  summons.preview:Play()
+  UI.Close()
+  assert(P.Playing() == 0, "closing the window stops it")
+  for _ = 1, 10 do R:OpenSettings("qol"); summons.preview:Play(); UI.Navigate("gear"); UI.Navigate("qol") end
+  assert(P.Playing() == 0, "quick back and forth leaves nothing playing")
+  c.TwichUIDB.ui.reduceSettingsMotion = true
+  summons.preview:Play()
+  assert(P.Playing() == 0 and summons.preview.done and Visible(win, "Summon accepted."), "reduced motion: the end at once")
+  assert(summons.preview.caption.text:find("Reduce window motion", 1, true), "and the words say so")
+  c.TwichUIDB.ui.reduceSettingsMotion = false
+  K.variables.TWICHUI_qolSummonsWait:SetValue(10)
+  summons.preview:Reset()
+  assert(summons.preview.caption.text:find("10 seconds", 1, true) and summons.preview.caption.text:find("faster", 1, true),
+    "a long wait is said in full, and that it is shown faster")
+  K.variables.TWICHUI_qolSummonsWait:SetValue(3)
+
+  -- 8e. Home: the ways in, the features, and settings that differ from their defaults
+  R:OpenSettings("overview")
+  local home = UI.View("overview").hero
+  assert(home and #home.grid == #K.SidebarOrder() - 1, "Explore lists every feature in the list")
+  Click(home.grid[1])
+  assert(UI.Selected() == home.grid[1].page.key, "a feature opens its page")
+  local wasChanged = #K.Changed()
+  K.variables.TWICHUI_qolSummonsWait:SetValue(5)
+  local found
+  for _, item in ipairs(K.Changed()) do if item.setting.id == "qolSummonsWait" then found = item end end
+  assert(found and #K.Changed() == wasChanged + 1, "a setting off its default is listed")
+  R:OpenSettings("overview")
+  Click(home.views.changed)
+  assert(Visible(win, "Now: 5 seconds") and Visible(win, "Default: 3 seconds"), "with its value and its default")
+  for _, row in ipairs(home.changedRows) do
+    if row:IsShown() and row.item and row.item.setting.id == "qolSummonsWait" then Click(row) break end
+  end
+  assert(UI.Selected() == "qol" and Visible(win, "Wait before accepting a summon"), "choosing it opens its card at the control")
+  K.variables.TWICHUI_qolSummonsWait:SetValue(3)
+  assert(#K.Changed() == wasChanged, "back at its default, it is no longer listed")
+  view.open[summons.id] = false
+
+  -- nothing is made twice by coming back
+  frames = made
+  for _ = 1, 3 do
+    R:OpenSettings("qol"); Click(summons.rulesButton); Click(summons.rulesButton)
+    R:OpenSettings("overview"); Click(home.views.explore); Click(home.views.appearance)
+    UI.Close()
+  end
+  assert(made == frames, "opening, folding and switching Home's views make no new frames: " .. (made - frames))
+  assert(not W.ReloadPending(), "card tests leave nothing pending")
 end
 
 print("PASSED")

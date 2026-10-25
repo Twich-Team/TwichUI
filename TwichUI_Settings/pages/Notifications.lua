@@ -5,7 +5,7 @@ local R = TwichUI
 local K = R.SettingsKit
 
 K.Page({
-    key = "notifications", name = "Notifications", order = 20, group = "everyday",
+    key = "notifications", icon = "notifications", name = "Notifications", order = 20, group = "everyday",
     description = "Small, quiet cards for arriving somewhere new, new training at a level-up, and friends logging in.",
     keywords = "zone text title card banner toast popup friend online chime level up trainer preview font color opacity background appearance",
     overview = {

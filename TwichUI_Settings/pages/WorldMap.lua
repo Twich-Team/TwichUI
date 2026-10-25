@@ -43,7 +43,7 @@ local function Coverage()
 end
 
 K.Page({
-    key = "worldMap", name = "World map", tab = "Zoom", order = 73, group = "map",
+    key = "worldMap", icon = "mapsNavigation", name = "World map", tab = "Zoom", order = 73, group = "map",
     description = "One seamless world map: zoom from the whole world into any zone, with terrain detail, caves' and dungeons' maps.",
     keywords = "world map seamless stitched zoom pan drag wheel detail minimap terrain unexplored reveal cave caves interior dungeon dungeons raid map floors explore exploration openmap world back",
     when = function() return R.MapView ~= nil and R.MapExplorePrefs ~= nil end,

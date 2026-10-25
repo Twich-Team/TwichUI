@@ -559,10 +559,12 @@ end
 do
   local function Row(name) for _, i in ipairs(initializers) do if i:GetName() == name then return i end end end
   local wait, from = Row("Wait before accepting a summon"), Row("Accept summons from")
-  assert(wait.section == from.section and wait.section:GetName() == "Summons and resurrection", "the summon wait is in Summons and resurrection")
+  -- (each convenience is a feature card now: its rules are in its card, under its switch)
+  assert(wait.section == from.section and wait.section:GetName() == "Accept summons" and wait.section.card, "the summon wait is in the Accept summons card")
   assert(wait.parent and wait.parent:GetName() == "Accept summons" and from.parent == wait.parent, "both are under Accept summons")
+  assert(wait.section.primary == wait.parent and wait.ruleOf == wait.section, "the card's switch is Accept summons and the wait is one of its rules")
   local release = Row("Wait before releasing")
-  assert(release.section:GetName() == "Battlegrounds" and release.parent:GetName() == "Release in battlegrounds")
+  assert(release.section:GetName() == "Release in battlegrounds" and release.section.card and release.parent:GetName() == "Release in battlegrounds")
 end
 -- Turning a switch on or off starts and stops its listening, with no reload.
 local summonToggle; for _, i in ipairs(initializers) do if i.setting and i.setting.name == "Accept summons" then summonToggle = i end end

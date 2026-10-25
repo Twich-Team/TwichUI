@@ -49,8 +49,12 @@ pages\Sharing.lua
 pages\Profiles.lua
 pages\Troubleshooting.lua
 
-# Search over the pages' descriptions, the controls the window draws with, and the window (last: it tells
-# TwichUI the settings are ready)
+# Search over the pages' descriptions, the controls the window draws with, sample previews and feature cards,
+# Home's ways in, and the window (last: it tells TwichUI the settings are ready)
 Search.lua
 Widgets.lua
+Previews.lua
+previews\QoL.lua
+Cards.lua
+Home.lua
 Window.lua

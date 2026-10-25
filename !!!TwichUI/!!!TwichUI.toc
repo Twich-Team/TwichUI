@@ -77,6 +77,8 @@ chronicle\Style.lua
 
 # The look TwichUI's own windows share (settings, sharing): palette, depth, motion
 Look.lua
+# Feature icons beside names in TwichUI's own windows (media\icons, cut from assets\settings-icons-source.png)
+Icons.lua
 chronicle\Appearance.lua
 chronicle\Window.lua
 chronicle\Broker.lua

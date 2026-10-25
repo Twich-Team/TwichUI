@@ -5,7 +5,7 @@ local R = TwichUI
 local K = R.SettingsKit
 
 K.Page({
-    key = "mapToolbar", name = "Map Toolbar", order = 71, group = "map",
+    key = "mapToolbar", icon = "mapToolbar", name = "Map Toolbar", order = 71, group = "map",
     description = "The bar in the world map's title row, with buttons for your pins, group pins, group pings and navigation.",
     keywords = "toolbar tool bar tools buttons help group pin ping navigate navigation title row npc filter funnel kinds vendors trainers",
     when = function() return R.Pins ~= nil and R.PinsLook ~= nil end,

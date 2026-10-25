@@ -164,7 +164,7 @@ local STATUS = {
 }
 
 K.Page({
-    key = "targetArt", name = "Target dragon artwork", order = 97, group = "addons",
+    key = "targetArt", icon = "targetArt", name = "Target dragon artwork", order = 97, group = "addons",
     description = "A dragon on EllesmereUI's target frame for bosses, rares and elites, in the artwork you choose for each. Off until you turn it on.",
     keywords = "ellesmereui ellesmere unit frame target frame dragon elite rare boss world boss rare elite classification artwork decoration portrait silver gold wings",
     overview = {

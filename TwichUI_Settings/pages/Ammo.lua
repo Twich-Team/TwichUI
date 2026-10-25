@@ -11,7 +11,7 @@ local function AM() return R.Ammo end
 local function On() return R:Enabled("ammoWarning") end
 
 K.Page({
-    key = "ammo", name = "Ammunition warning", nav = "Ammunition warning", order = 52, group = "class",
+    key = "ammo", icon = "ammunition", name = "Ammunition warning", nav = "Ammunition warning", order = 52, group = "class",
     description = "A line of text near the middle of the screen when the ammunition for your equipped ranged weapon is missing, out or the wrong kind. Off until you turn it on.",
     keywords = "display style rpg notification standard hunter warrior ammo ammunition arrows bullets quiver ranged bow gun crossbow warning alert out of ammo no ammo wrong ammo sound position move preview",
     overview = {

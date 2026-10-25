@@ -41,7 +41,7 @@ local function SkinStatus(skin)
 end
 
 K.Page({
-    key = "skins", name = "Addon skins", order = 90, group = "addons",
+    key = "skins", icon = "addonSkins", name = "Addon skins", order = 90, group = "addons",
     description = "The EllesmereUI look for supported addons, and TwichUI's own look for SpeakStone and the RestedXP guide window (in its own section). The rest of TwichUI works without them.",
     keywords = "skin theme ellesmere attune auctionator dungeon journal whatstraining",
     overview = {

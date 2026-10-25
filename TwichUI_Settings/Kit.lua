@@ -47,7 +47,7 @@ K.GROUPS = {
 -- name of the section it follows instead, for a page with rows on both sides of it), keywords (extra words search
 -- finds the page by), onShow (called each time the window goes to the page, before it is drawn: a page that shows
 -- a snapshot takes it there), overview = { label, tip, status = function, when = function } (its row on Home), notice = { tag, text } (a card above each of its pages, tabs included, for a warning such as an
--- experimental feature) }.
+-- experimental feature), icon (an R.Icons id: beside its name in the list and on Home; a top-level page only) }.
 function K.Page(def)
     assert(type(def.key) == "string" and type(def.name) == "string" and (type(def.build) == "function" or type(def.host) == "function"),
         "a page needs a key, a name and a build or host function")
@@ -178,6 +178,16 @@ local function AddRow(kind, data)
     if kind == "header" then
         K.section = row
         row.section = nil
+    elseif K.section and K.section.card then
+        -- in a feature card: its first checkbox is the card's switch, the rows after it are its rules
+        local card = K.section
+        if not card.primary and kind == "checkbox" then
+            card.primary = row
+            row.primaryOf = card
+        else
+            row.ruleOf = card
+            card.rules[#card.rules + 1] = row
+        end
     end
     local id = data.setting and data.setting.id or (K.key .. ":" .. Slug(data.name))
     if K.rowsById[id] then
@@ -290,6 +300,26 @@ end
 -- A section: its title and, as tooltip, the sentence or two shown under it.
 function K.Header(text, tooltip)
     return AddRow("header", { name = text, tooltip = tooltip })
+end
+
+-- A feature card: a section drawn as a card (Window.lua, Cards.lua) with the feature's icon, its title, one plain
+-- sentence about what it does (shown under the title, and as the section's description everywhere else), its
+-- switch with "On" or "Off" beside it, a short summary of its rules as they are set, and what to know before
+-- turning it on. The first checkbox described after it is the card's switch; the rows after that are its rules,
+-- under "Adjust rules" (opening that changes nothing, and search still finds and opens them). It is a section
+-- like any other: no setting of its own, no saved state, the same rows, ids and resets.
+-- def: { title, icon (an R.Icons id), what (the sentence), summary = function() -> text (optional),
+--   consequence (text or function: always shown, never only in a tooltip), preview (a Previews id, optional),
+--   details = { { question, answer (text or function) }, ... } (optional, under "More about this"),
+--   inline (true: the rules are always shown, for a rule whose state must not be tucked away) }
+function K.Card(def)
+    assert(type(def.title) == "string" and type(def.what) == "string", "a card needs a title and a sentence")
+    local row = AddRow("header", { name = def.title, tooltip = def.what })
+    if row then
+        row.card = def
+        row.rules = {}
+    end
+    return row
 end
 
 -- A switch in TwichUIDB.modules (default: Core.lua's DEFAULT_MODULES). What a change does is Switches.lua's.
@@ -726,6 +756,40 @@ function K.ResetPage(key)
         if not ok then R.Fault("reset " .. s.variable, err) end
     end
     return #list
+end
+
+-- Every setting whose value now differs from its default (the feature's own DEFAULTS, or Core.lua's
+-- DEFAULT_MODULES for a switch), in navigation order: { setting, page, row }. Settings with no default (profile
+-- choices, pins, lists) are never "changed". Reads only; nothing is set, and looking at a page or a preview
+-- changes nothing here.
+function K.Changed()
+    local out, seen = {}, {}
+    for _, page in ipairs(K.NavOrder()) do
+        for _, row in ipairs(page.rows) do
+            local s = row.data.setting
+            if s and s.default ~= nil and s.pageKey == page.key and not seen[s] then
+                seen[s] = true
+                local ok, value = pcall(s.get)
+                if ok and value ~= s.default then out[#out + 1] = { setting = s, page = page, row = row } end
+            end
+        end
+    end
+    return out
+end
+
+-- How a setting's value reads: a choice's label, On or Off, or the value as text.
+function K.ValueText(s, value)
+    if value == nil then
+        local ok, v = pcall(s.get)
+        value = ok and v or nil
+    end
+    if s.varType == K.BOOL then return value and "On" or "Off" end
+    if s.options then
+        for _, choice in ipairs(s.options()) do
+            if choice.value == value then return choice.label end
+        end
+    end
+    return tostring(value)
 end
 
 -- Every setting not kept in TwichUIDB.modules shows its value again (after a profile change). Nothing is set.

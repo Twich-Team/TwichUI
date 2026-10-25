@@ -106,7 +106,7 @@ local function DataStatus()
 end
 
 K.Page({
-    key = "navigation", name = "Navigation", order = 75, group = "map",
+    key = "navigation", icon = "navigation", name = "Navigation", order = 75, group = "map",
     description = "A walking route to a place you choose, with a frame, a direction arrow and the route on your maps.",
     keywords = "navigation navigate route gps directions path walk arrow waypoint trail minimap world map destination travel",
     when = function() return R.Nav ~= nil and R.NavPrefs ~= nil end,

@@ -5,7 +5,7 @@ local R = TwichUI
 local K = R.SettingsKit
 
 K.Page({
-    key = "sharing", name = "Configuration sharing", order = 100, group = "config",
+    key = "sharing", icon = "profilesSharing", name = "Configuration sharing", order = 100, group = "config",
     description = "Share the settings of the addons you choose with friends, keep backups, and look through saved data. The work itself happens in its own windows.",
     keywords = "share export import backup restore undo setup profile string friend send receive version check group check saved data explorer",
     overview = {

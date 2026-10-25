@@ -50,11 +50,16 @@ claimed; see "Measuring".
 |---|---|
 | `Switches.lua` | Every switch's behaviour: the update to run, whether it needs a reload, whether its feature exists this session (`when`). `W.Set` (the one way to flip a switch), `W.Sync` (after a profile change), `W.ReloadPending` |
 | `SettingsLauncher.lua` | `R:OpenSettings(page, setting)`, `R:CloseSettings`, `R:ToggleSettings`, `R.SettingsAnchor()`, `R.OnSettingsClosed(fn)`, the AddOns entry |
-| `TwichUI_Settings/Kit.lua` | `K.Page`, the controls pages describe themselves with (`K.Toggle`, `K.Proxy`, `K.ProxyToggle`, `K.Choice`, `K.Dropdown`, `K.Slider`, `K.Swatch`, `K.Checkbox`, `K.Button`, `K.ResetButton`, `K.Link`, `K.Status` (a read-only line: label, value, a sentence under it), `K.Header`, `K.Appearance`), `K.Under`, `K.Badge`, `K.InSection`, `K.Describe`, `K.NavOrder`, `K.SidebarOrder`, `K.Tabs`, `K.ResetPage` |
+| `TwichUI_Settings/Kit.lua` | `K.Page`, the controls pages describe themselves with (`K.Toggle`, `K.Proxy`, `K.ProxyToggle`, `K.Choice`, `K.Dropdown`, `K.Slider`, `K.Swatch`, `K.Checkbox`, `K.Button`, `K.ResetButton`, `K.Link`, `K.Status` (a read-only line: label, value, a sentence under it), `K.Header`, `K.Card` (a section drawn as a feature card), `K.Appearance`), `K.Under`, `K.Badge`, `K.InSection`, `K.Describe`, `K.NavOrder`, `K.SidebarOrder`, `K.Tabs`, `K.ResetPage`, `K.Changed` (settings that differ from their defaults), `K.ValueText` |
 | `TwichUI_Settings/pages/<Page>.lua` | One page each (some hold a page under it too: Gear + Stat weights, Mage + Refreshment shares, Chronicle + appearance, Pins + appearance) |
 | `TwichUI_Settings/Search.lua` | The index and ranking (descriptions only) |
 | `Look.lua` (core) | The look TwichUI's own windows share: the palette, `Look.Text`, `Look.Surface`, `Look.Button`, `Look.Checkbox`, `Look.EditBox`, and the depth: `Look.Frame` / `Look.Header` (rim, corner brackets, tonal layers), `Look.Raise` (buttons), `Look.Recess` (inputs, checkbox, nav well), `Look.Panel` (section cards), `Look.Tag`, `Look.Fade` (a gradient that falls back to a flat fill), `Look.Motion`. The sharing window (`setup/Window.lua`) draws with it too |
 | `TwichUI_Settings/Widgets.lua` | The shared look as `Wg.*`, plus the controls only this window needs: slider, dropdown and its list, color swatch, the scrolling content area |
+| `TwichUI_Settings/Previews.lua` | Sample previews: `P.Register`, `P.Host` (create, Play, Reset, Stop, Release), `P.StopAll`, and inert drawing pieces (`P.Popup`, `P.FakeButton`, `P.Portrait`) |
+| `TwichUI_Settings/previews/QoL.lua` | Quality of life's samples: summon, resurrection, battleground release, duel request, the Quick Keybind button's place |
+| `TwichUI_Settings/Cards.lua` | Feature cards: the head (icon, title, sentence, switch with On/Off), rules line, what to know, Adjust rules, More about this, Play sample |
+| `TwichUI_Settings/Home.lua` | The top of Home: Explore features, Adjust appearance, Review changed settings |
+| `Icons.lua` (core) | `R.Icons`: every feature icon's file, size and fallback (`docs/settings-icons.md`) |
 | `TwichUI_Settings/Window.lua` | The window, the left-hand list, a feature's tabs, pages, search results, footer, Esc |
 
 The palette lives at the top of `Look.lua` in the core (a copy of the Chronicle's, which is never changed; the sharing window draws with it too), by role:
@@ -66,8 +71,10 @@ brown is `pal.rimLo`. A new control takes its colors from these, not from a lite
 
 Motion is `Look.Motion` (`Wg.Motion`) in `Look.lua`: one table of timings (`TIME`), `Fader` objects that ease a single alpha, and
 one driver frame whose `OnUpdate` exists only while a fader is running (none while idle or shut). The window fades in
-on opening, a page's cards fade in on arrival (the title and tabs do not), and nav rows, tabs, buttons, dropdowns and
-checkbox rows ease a wash under the pointer. Nothing moves or resizes. **Reduce window motion** (Home, saved
+on opening, a page's cards fade in on arrival (the title and tabs do not), nav rows, tabs, buttons, dropdowns and
+checkbox rows ease a wash under the pointer, a card's rules and details fade in as they open (`disclose`, 0.18 s), a
+search result's mark fades after 2.5 s (`highlight`), and "Saved" fades after a change. Samples play once, for about
+three seconds. Nothing moves or resizes, and nothing animates while idle: no moving backgrounds, no animated icons. **Reduce window motion** (Home, saved
 `ui.reduceSettingsMotion`, account-wide) makes every ease immediate; it is separate from Notifications' Reduced
 motion, which is the cards' and is not read here. Closing, leaving a page, and changing the preference call
 `Motion.Settle()` or `fade:Set(1)`, so no alpha is left part-way.
@@ -78,7 +85,7 @@ exposes `Frame()`, built the first time it is shown, which the window shows as a
 ## Pages
 
 ```
-Home                      feature statuses (each opens its page), Help, General
+Home                      Explore features / Adjust appearance / Review changed settings, Help, General
 Everyday                  Notifications, Quality of life, Chat cleaning › Channels, Custom rules, Live view, Food and drink, Vendor restocking › Restock items, Auction House
 Journey                   Journey Chronicle › Appearance, Cozy Sleeping Bag
 Map                       Pins and Pings (Pins, Pings, Appearance), Map Toolbar, World map › Places, Navigation › Appearance, Vendors and trainers › Your list and sharing
@@ -95,7 +102,71 @@ animation). An unknown page opens Home; an unknown setting opens the page at its
 shown last.
 
 Each page has a title, one line saying what it is for, its sections (a heading, a sentence or two, and rows), and,
-when it has settings with defaults, **Reset this page** at the bottom.
+when it has settings with defaults, **Reset this page** at the bottom. A top-level page names an icon
+(`icon = "<R.Icons id>"`) for its row in the list and its tile on Home; the label is always drawn beside it.
+
+**Home** opens with three ways in, side by side; choosing one shows it beneath (kept for the session, never saved):
+**Explore features** (every page in the list with its icon and its `overview.status`, each opening its page),
+**Adjust appearance** (the Appearance tabs, Addon skins and Target dragon artwork) and **Review changed settings**
+(`K.Changed()`: every setting whose value now differs from its default, compared with the feature's own `DEFAULTS` or
+`DEFAULT_MODULES`, each opening its control; opening pages or playing samples never counts). Nothing is turned on from
+Home and there is no wizard. Help and General follow.
+
+## Feature cards
+
+`K.Card` describes a section that is drawn as one feature (Quality of life is the reference page; the other pages
+still use plain sections). It holds no setting and no state of its own: the rows after it are ordinary rows with
+their usual ids, tooltips, greyed-out reasons and resets.
+
+```lua
+local from
+K.Card({
+    title = "Accept summons",                                   -- the feature's name
+    what = "Accepts a summon from the people you choose ...",   -- one plain sentence, under the title and in search
+    summary = function() return K.ValueText(from.data.setting) .. "  \194\183  waits 3 seconds" end,   -- the rules as set
+    consequence = "You arrive wherever the summoner stands. ...",  -- always shown, never only in a tooltip
+    preview = "qol.summons",                                    -- optional: a Previews id
+    details = { { "When does it apply?", "..." } },             -- optional: under "More about this"
+    -- inline = true,                                           -- the rules are always shown (no "Adjust rules")
+    -- icon = "qualityOfLife",                                  -- optional: an R.Icons id
+})
+local summons = K.Toggle("qolSummons", "Accept summons", "...")  -- the first checkbox: the card's switch
+from = K.Under(K.Choice(...), summons, IsOn, "Turn on \"Accept summons\" to choose who and how long.")   -- a rule
+```
+
+The head shows the switch with **On** or **Off** written beside it and, for a moment after a change, **Saved**; under
+the sentence, anything the switch is waiting on (a reload, another addon doing the same, why it is greyed out). The
+rules line and what to know are always visible. **Adjust rules (n)** and **More about this** open in place (the text
+says whether they are open; the chevron agrees); opening changes no setting, and which are open is kept for the
+session in the page's view. A rule found by search or a link opens its card first (`Cards.Reveal`), then is scrolled
+to and marked. A greyed-out rule says which switch to turn on, in the row itself.
+
+## Sample previews
+
+A preview is a drawing of what a feature does, made of the window's own textures and text with sample names, marked
+**SAMPLE**. It never calls a feature's handler or a game action and never writes a setting; it reads the settings it
+illustrates when it is reset or played.
+
+```lua
+local P = R.SettingsPreviews
+P.Register("example.thing", {
+    height = 84,
+    Sample = function() return { wait = R.Example.Get("wait") } end,       -- read only
+    Duration = function(s) return 1.5 + math.min(s.wait, 2) end,            -- or duration = 3
+    Create = function(stage, s) local sc = {}; sc.text = R.SettingsWidgets.Text(stage, "small"); sc.text:SetPoint("TOPLEFT", 12, -12); return sc end,
+    Reset = function(sc, s) sc.text:SetText("Before") end,
+    Update = function(sc, t, s) sc.text:SetText(t < 1 and "Waiting..." or "Done soon") end,
+    Final = function(sc, s) sc.text:SetText("After") end,
+    Caption = function(s) return "The whole sample in words, the current settings included." end,
+})
+```
+
+and name it in a card (`preview = "example.thing"`); list a new previews file in `TwichUI_Settings.toc` after
+`Previews.lua`. `static = true` makes a still picture (no Play button). A play runs once through the host frame's
+`OnUpdate`, set only while it plays; it stops (back to its "before" picture) when the page changes, the window closes
+or its frame hides (`P.StopAll`). With **Reduce window motion** on, Play shows the "after" picture at once and the
+caption says so. The caption is always there, so nothing is shown only as motion. Working previews: Quality of life's
+five cards. Every other page: none yet.
 
 ## Adding a page
 
@@ -189,8 +260,11 @@ label, with a few other words for some (`ALIASES` in `Search.lua`) and the row's
 text split into words; every word must appear. Label matches rank first (exact, then prefix, then all words), then
 page or section matches, then aliases; matches only in a tooltip come last under **Also mentioned in**. At most 60
 results. Results show the label, `Page · Section`, and a note when the setting is greyed out (and why) or
-shown only with other choices. Enter opens the highlighted result, Up/Down move, Esc clears the box first and then
-lets go of it. Choosing a result never changes a value or enables anything.
+shown only with other choices, and a line saying what it is (a card's own sentence for the card and the settings in
+it, else the first sentence of the row's description, or the page's). A card whose switch has the card's name is one
+result, not two. Enter opens the highlighted result, Up/Down move, Esc clears the box first and then
+lets go of it. Choosing a result never changes a value or enables anything; a rule folded in a card is opened to be
+shown. Leaving the results, or clearing the box, returns a page to where it was scrolled.
 
 ## Esc and keyboard
 
@@ -311,3 +385,23 @@ Turn on Display Lua Errors. Test TwichUI alone, then with EllesmereUI. After eac
     profile it changes, "Replaces only the values listed", any features it turns on or off, the reload it needs, what it
     skipped and that Undo keeps the last import. Open the confirmation, then switch profile (or change a listed setting)
     before accepting: it refuses, says to review again, and changes nothing.
+23. **Feature cards (Quality of life).** Each card: icon-free head with title, sentence, the switch and On/Off beside it;
+    "Saved" appears briefly after clicking the box or the On/Off word. Adjust rules opens and folds the rules (text and
+    chevron agree); More about this shows the answers; neither changes a value (Home › Review changed settings stays the
+    same). The resurrection card shows "Also accept combat resurrections" without opening anything. With Decline duel
+    requests off, its rules say "Turn on "Decline duel requests" to choose exceptions." and don't respond; turning it on
+    wakes them at once. Changing Accept summons from updates the Rules line at once.
+24. **Samples.** Play sample on each card: it plays once (about three seconds), ends on what happened, and the caption
+    describes it. Nothing happens in the game (no summon accepted, no release, nothing in chat). Start one and change
+    page or close the window: it stops at once, with no error; coming back shows its "before" picture. With Reduce window motion on: the end at once, with the caption saying so. The portrait is your
+    character's face (or the medallions icon if the game gives none).
+25. **Search into cards.** "summon delay", "battle res", "block duel": the result says what the feature does; choosing it
+    opens the card, scrolls to the setting and marks it once (no mark animation with Reduce window motion on).
+26. **Icons.** In the list at UI scale 0.64, 1.0 and 1.15: every icon sits beside its label, crisp enough to tell
+    apart, no white or green squares, no halo on the dark list; the selected row stays clear. Home's tiles show the
+    64 px art. Rename a file in `media/icons` and reload: the emblem shows instead and the list still works.
+27. **Home.** Explore features lists every feature with its status; each opens its page. Review changed settings
+    lists exactly what differs from TwichUI's defaults (change one, see it; put it back, it goes) and each opens its
+    control. Adjust appearance lists the appearance pages. Switching between them makes no new frames.
+28. **Long text.** With a large UI font or a long profile name, card titles, rules lines and Home's tiles wrap or
+    end with "..." without overlapping the switch.

@@ -15,7 +15,7 @@ local UNLOCK_STATUS = {
 }
 
 K.Page({
-    key = "food", name = "Food and drink", order = 40, group = "everyday",
+    key = "food", icon = "foodAndDrink", name = "Food and drink", order = 40, group = "everyday",
     description = "Two buttons you click to eat or drink the best food or drink in your bags. TwichUI never uses anything for you.",
     keywords = "eat drink water bread buttons edit mode unlock ellesmere conjured mana",
     overview = {

@@ -5,7 +5,7 @@ local R = TwichUI
 local K = R.SettingsKit
 
 K.Page({
-    key = "chronicle", name = "Journey Chronicle", order = 60, group = "journey",
+    key = "chronicle", icon = "journeyChronicle", name = "Journey Chronicle", order = 60, group = "journey",
     description = "A quiet, private journal for this character. It isn't shared, sent or backed up with your configuration.",
     keywords = "journal diary notes log history level death boss gold riding profession welcome back bookmark clock time",
     overview = {

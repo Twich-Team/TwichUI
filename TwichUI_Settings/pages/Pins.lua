@@ -10,7 +10,7 @@ local K = R.SettingsKit
 local pinsToggle   -- the Party pins switch (the Pins tab), which the other tabs' rows are greyed out under
 
 K.Page({
-    key = "pins", name = "Pins and Pings", tab = "Pins", order = 70, group = "map",
+    key = "pins", icon = "mapPins", name = "Pins and Pings", tab = "Pins", order = 70, group = "map",
     description = "Named pins on your world map: local pins only you see, and party pins shared with party members who have TwichUI.",
     keywords = "map pin waypoint way tomtom marker minimap party share coordinates ping",
     when = function() return R.Pins ~= nil end,

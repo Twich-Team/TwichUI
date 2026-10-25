@@ -575,7 +575,7 @@ local KEYWORDS = "marker markers raid target icon mark skull cross square moon t
 local function Marks(key) return R:Enabled(key) and true or false end
 
 K.Page({
-    key = "markers", name = "Markers", order = 31, group = "everyday",
+    key = "markers", icon = "markers", name = "Markers", order = 31, group = "everyday",
     description = "Keys and a bar for marking your target and the ground. Each is off until you turn it on.",
     keywords = KEYWORDS .. " bar",
     when = function() return R.Markers ~= nil and R.MarkerKeys ~= nil end,

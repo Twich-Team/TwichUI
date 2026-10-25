@@ -49,7 +49,7 @@ end
 if R.Restock then R.Restock.OnChange(function() K.RefreshOverview() end) end
 
 K.Page({
-    key = "restock", name = "Vendor restocking", order = 45, group = "everyday",
+    key = "restock", icon = "vendorRestocking", name = "Vendor restocking", order = 45, group = "everyday",
     description = "Keep chosen items, such as reagents and ammunition, at a set number in your bags, bought from merchants that sell them.",
     keywords = "restock restocking reagent reagents buy purchase vendor merchant ammo ammunition arrows shot powder candle rune supplies automatic spend gold",
     when = function() return R.Restock ~= nil end,

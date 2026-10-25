@@ -5,7 +5,7 @@ local R = TwichUI
 local K = R.SettingsKit
 
 K.Page({
-    key = "troubleshooting", name = "Troubleshooting", order = 110, group = "config",
+    key = "troubleshooting", icon = "troubleshooting", name = "Troubleshooting", order = 110, group = "config",
     description = "How TwichUI and its optional addons look right now, support information to copy when something does not work, and optional temporary tracing. Nothing is sent anywhere.",
     keywords = "diagnostics report bug error debug trace log status support version integration ellesmere restedxp copy",
     when = function() return R.Diag ~= nil and R.DiagWindow ~= nil end,

@@ -5,7 +5,7 @@ local R = TwichUI
 local K = R.SettingsKit
 
 K.Page({
-    key = "mage", name = "Mage", order = 50, group = "class",
+    key = "mage", icon = "mage", name = "Mage", order = 50, group = "class",
     description = "Data bar launchers for your teleports, portals and conjuring, a refreshments panel for your group, and selling ordinary food and drink.",
     keywords = "teleport portal conjure water food refreshments trade sell vendor merchant data bar broker menu",
     when = function() return R.MageTravel ~= nil and R.MageTravel.ForPlayer() end,   -- Mages only

@@ -1,13 +1,15 @@
--- TwichUI settings: Home. A row for each feature page with its status and a way to it, where to find help,
--- and the few settings that belong to TwichUI as a whole. Described last, once every page exists (Kit.lua).
+-- TwichUI settings: Home. Three ways in at the top (Home.lua: explore the features, adjust their appearance,
+-- review what differs from the defaults), where to find help, and the few settings that belong to TwichUI as a
+-- whole. Described last, once every page exists (Kit.lua).
 
 local R = TwichUI
 local K = R.SettingsKit
 
 K.Page({
-    key = "overview", name = "TwichUI", nav = "Home", order = 0, group = "home",
+    key = "overview", icon = "home", name = "TwichUI", nav = "Home", order = 0, group = "home",
     description = "A quiet interface companion for WoW: Forever. Every feature has its own page, and every one can be turned off.",
-    keywords = "home start overview help general",
+    keywords = "home start overview help general explore features appearance changed modified defaults",
+    hero = true,
     build = function()
         local Header, Toggle, Button = K.Header, K.Toggle, K.Button
 
@@ -29,7 +31,7 @@ K.Page({
             if Wg and Wg.Motion then Wg.Motion.Settle() end
         end)
         K.Checkbox(motionSetting,
-            "Turns off the fades in TwichUI's own windows, the settings and the sharing window: they open, change page and answer the pointer at once, with no easing. It applies to these windows only; the Reduced motion option under Notifications is separate and is not changed by this. Saved for the account, not per profile.")
+            "Turns off the fades in TwichUI's own windows, the settings and the sharing window: they open, change page and answer the pointer at once, with no easing. A feature card's sample then shows its end at once, with the same words under it. It applies to these windows only; the Reduced motion option under Notifications is separate and is not changed by this. Saved for the account, not per profile.")
         Toggle("media", "Custom fonts and sounds",
             "Adds Alegreya, Alegreya Sans, Barlow, Cinzel and Spectral fonts, plus the bell alert sounds, to the font and sound lists of EllesmereUI and other addons. Nothing changes until you pick them there.")
         Toggle("quietLogin", "Hide addon welcome messages",

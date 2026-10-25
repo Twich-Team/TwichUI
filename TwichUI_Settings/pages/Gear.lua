@@ -5,7 +5,7 @@ local R = TwichUI
 local K = R.SettingsKit
 
 K.Page({
-    key = "gear", name = "Gear comparison", order = 10, group = "class",
+    key = "gear", icon = "gearComparison", name = "Gear comparison", order = 10, group = "class",
     description = "Quiet upgrade hints in item tooltips and bags. A rough guide from item stats, not a simulation.",
     keywords = "upgrade item level ilvl compare tooltip bags",
     overview = {

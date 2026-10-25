@@ -50,7 +50,7 @@ end
 if R.ChatClean then R.ChatClean.OnChange(function() K.RefreshOverview() end) end
 
 K.Page({
-    key = "chatClean", name = "Chat cleaning", order = 35, group = "everyday",
+    key = "chatClean", icon = "chatCleaning", name = "Chat cleaning", order = 35, group = "everyday",
     description = "Hide unwanted messages, such as gold-selling spam, in the public channels you choose.",
     keywords = "chat spam filter clean cleaning hide block trade general channel gold seller advert advertisement recruitment repeat repeated keyword word badboy politics political election party lgbt lgbtq gay trans queer pride topic",
     when = function() return R.ChatClean ~= nil end,

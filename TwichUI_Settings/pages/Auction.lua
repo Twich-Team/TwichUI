@@ -4,7 +4,7 @@ local R = TwichUI
 local K = R.SettingsKit
 
 K.Page({
-    key = "auction", name = "Auction House", order = 80, group = "everyday",
+    key = "auction", icon = "auctionHouse", name = "Auction House", order = 80, group = "everyday",
     description = "A Sell from Bags tab for listing items from your bags, one at a time, and a mailbox gold summary.",
     keywords = "ah auction sell post price listing bags mail mailbox gold collected summary",
     overview = {

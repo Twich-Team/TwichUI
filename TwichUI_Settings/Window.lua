@@ -13,6 +13,7 @@ local Wg = R.SettingsWidgets
 local Search = R.SettingsSearch
 local I = R.Interact
 local S = R.ChronicleStyle
+local Cards, Previews, Home, Icons = R.SettingsCards, R.SettingsPreviews, R.SettingsHome, R.Icons
 local pal = Wg.pal
 local Motion = Wg.Motion
 local T = Motion.TIME   -- every duration used here is in Widgets.lua's table
@@ -25,12 +26,24 @@ local CONTROL_W = 236
 local ROW_MIN, SECTION_PAD, GAP = 30, 14, 14
 local RESET_H, PAGE_BOTTOM = 52, 12   -- the page's own Reset area, and the room under the last thing on a page
 local NAV_ROW, NAV_GROUP = 30, 24
+local NAV_ICON = 20   -- a page's icon beside its name in the list (the 32 px file)
 local TAB_H = 28
 local HOST_H = 540
 local HIGHLIGHT_SECONDS = 2.5
 
 local win, nav, scroll, content, resultsView, footer, searchBox
-local state = { views = {}, results = {}, selected = 1, suspend = 0, navItems = {} }
+local state = { views = {}, results = {}, selected = 1, suspend = 0, navItems = {}, scrollOf = {} }
+
+-- The profile in use and who else uses it, in words: the footer and the top of a page of feature cards say the
+-- same. nil when profiles aren't available.
+local function ProfileShare()
+    local P = R.Profiles
+    local current = P and P.Current and P.Current()
+    if not current then return nil end
+    local others = #P.UsedBy(current, true)
+    return current, others == 0 and "used only by this character"
+        or ("shared with " .. (others == 1 and "1 other character" or (others .. " other characters")))
+end
 
 local function Place()
     local saved = TwichUIDB.ui.settingsWindow
@@ -349,6 +362,38 @@ end
 
 local Layout   -- (below)
 
+-- Places a section's rows from `inner` down, drawing each as it goes; a row not shown with the current choices
+-- is hidden. Returns the new `inner` and how many rows are shown. A feature card places its rules through this too.
+function UI.PlaceRows(sec, rows, inner)
+    local visible = 0
+    for _, v in ipairs(rows) do
+        if v.row:Shown() then
+            v.frame:ClearAllPoints()
+            v.frame:SetPoint("TOPLEFT", sec.card, "TOPLEFT", SECTION_PAD - 4, -inner)
+            v.y = sec.top + inner
+            inner = inner + v.Refresh()
+            v.frame:Show()
+            visible = visible + 1
+        else
+            v.frame:Hide()
+            v.y = nil
+        end
+    end
+    return inner, visible
+end
+
+-- What a feature card (Cards.lua) is given to draw with: the window's own row placing, row notes and tones.
+UI.cardEnv = {
+    PAD = SECTION_PAD,
+    TONE = TONE,
+    Note = Note,
+    PlaceRows = function(sec, rows, inner) return (UI.PlaceRows(sec, rows, inner)) end,
+    Relayout = function()
+        local view = state.views[state.page]
+        if view and not state.searching then Layout(view) end
+    end,
+}
+
 local function BuildView(page)
     local view = { page = page, sections = {}, rows = {} }
     local frame = CreateFrame("Frame", nil, content)
@@ -428,19 +473,44 @@ local function BuildView(page)
                 sec.badge = Wg.Text(sec.card, "meta")
                 sec.badge:SetText(header.badge)
             end
+            if header.card and Cards then
+                Cards.Build(view, sec, CONTENT_W, UI.cardEnv)
+                view.hasCards = true
+            end
         end
         return sec
     end
+    view.sectionsById = byId
     for _, row in ipairs(page.rows) do
         if row.kind == "header" then
             Section(row)
         else
             local sec = Section(row.section)
-            local v = MakeRow(sec.card, row, CONTENT_W - SECTION_PAD * 2 + 8)
+            local v
+            if row.primaryOf and sec.isCard then
+                v = Cards.Primary(sec, row, UI.cardEnv)   -- a card's switch is drawn in its head
+                sec.primaryView = v
+            else
+                v = MakeRow(sec.card, row, CONTENT_W - SECTION_PAD * 2 + 8)
+                v.rule = sec.isCard and row.ruleOf ~= nil
+                sec.rows[#sec.rows + 1] = v
+            end
             v.section = sec
-            sec.rows[#sec.rows + 1] = v
             view.rows[row.id] = v
         end
+    end
+
+    -- Home's three ways in (Home.lua), above its sections
+    if page.def.hero and Home then
+        view.hero = Home.Build(frame, CONTENT_W, {
+            Navigate = function(key, rowId) UI.Navigate(key, rowId) end,
+            Relayout = function() Layout(view) end,
+        })
+    end
+    -- a page of feature cards says which profile its changes are saved in, and who else that profile is for
+    if view.hasCards then
+        view.scope = Wg.Text(frame, "meta")
+        view.scope:SetWidth(CONTENT_W - 8)
     end
 
     -- Reset this page: every setting on it back to its default, after saying exactly what that covers
@@ -480,6 +550,7 @@ local function BuildView(page)
     -- moving between a feature's tabs changes only what is under them. Alpha only; nothing moves.
     local body = {}
     for _, sec in ipairs(view.sections) do body[#body + 1] = sec.card end
+    if view.hero then body[#body + 1] = view.hero.frame end
     if view.hosted then body[#body + 1] = view.hosted end
     if view.reset then body[#body + 1] = view.reset end
     if view.notice then body[#body + 1] = view.notice end
@@ -501,6 +572,14 @@ function Layout(view)
         view.desc:ClearAllPoints()
         view.desc:SetPoint("TOPLEFT", frame, "TOPLEFT", 2, -y)
         if hasDesc then y = y + (view.desc:GetStringHeight() or 12) + 10 else y = y + 4 end
+        if view.scope then
+            local current, shared = ProfileShare()
+            view.scope:SetText(current and ("Saved in the profile \"%s\", %s."):format(current, shared)
+                or "Profiles aren't available right now.")
+            view.scope:ClearAllPoints()
+            view.scope:SetPoint("TOPLEFT", frame, "TOPLEFT", 2, -(y - 4))
+            y = y - 4 + (view.scope:GetStringHeight() or 12) + 10
+        end
     end
     local function Rule()
         view.rule:ClearAllPoints()
@@ -534,6 +613,7 @@ function Layout(view)
         view.failed:SetPoint("TOPLEFT", 2, -y)
         y = y + (view.failed:GetStringHeight() or 12) + 12
     end
+    if view.hero then y = y + view.hero:Layout(y) + GAP end
     local after = view.hosted and page.def.hostAfter or nil
     local function PlaceHost(gap)
         view.hosted:ClearAllPoints()
@@ -546,7 +626,11 @@ function Layout(view)
     for _, sec in ipairs(view.sections) do
         local card, inner = sec.card, SECTION_PAD
         local visible = 0
-        if sec.header and sec.titled then
+        sec.top = y
+        if sec.isCard then
+            inner = Cards.Layout(view, sec, inner, UI.cardEnv)
+            visible = 1
+        elseif sec.header and sec.titled then
             sec.title:SetText(sec.header:GetName() or "")
             sec.title:ClearAllPoints()
             sec.title:SetPoint("TOPLEFT", SECTION_PAD, -inner)
@@ -560,7 +644,7 @@ function Layout(view)
             sec.title:Hide()
             if sec.badge then sec.badge:Hide() end
         end
-        if sec.desc then
+        if sec.desc and not sec.isCard then
             local desc = sec.header:GetTooltip() or ""
             sec.desc:SetText(desc)
             sec.desc:ClearAllPoints()
@@ -568,19 +652,10 @@ function Layout(view)
             sec.desc:SetShown(desc ~= "")
             if desc ~= "" then inner = inner + (sec.desc:GetStringHeight() or 12) + 8 end
         end
-        for _, v in ipairs(sec.rows) do
-            local row = v.row
-            if row:Shown() then
-                v.frame:ClearAllPoints()
-                v.frame:SetPoint("TOPLEFT", card, "TOPLEFT", SECTION_PAD - 4, -inner)
-                v.y = y + inner
-                inner = inner + v.Refresh()
-                v.frame:Show()
-                visible = visible + 1
-            else
-                v.frame:Hide()
-                v.y = nil
-            end
+        if not sec.isCard then
+            local shown
+            inner, shown = UI.PlaceRows(sec, sec.rows, inner)
+            visible = visible + shown
         end
         inner = inner + SECTION_PAD - 6
         local empty = visible == 0 and not sec.header
@@ -625,6 +700,7 @@ local function PaintItem(item, selected)
     item.edge:SetShown(selected)
     item.hoverFade:To((item.hovered and not selected) and 1 or 0, T.hover)
     Wg.Color(item.text, (selected or item.hovered) and pal.text or pal.textDim)
+    item.icon:SetAlpha((selected or item.hovered) and 1 or 0.82)
 end
 
 local function PaintNav()
@@ -639,15 +715,19 @@ local function ScrollTo(offset)
     scroll:SetVerticalScroll(math.max(0, math.min(offset, most)))
 end
 
+-- Marks a row once: a teal band for a few seconds that then fades (at once where motion is reduced). A newer mark
+-- makes an older one's timer stale.
 local function Highlight(v)
     state.token = (state.token or 0) + 1
     local token = state.token
     v.highlighted = true
+    v.markFade = v.markFade or Motion.Fader(function(a) v.frame.bg:SetAlpha(a) end, 1)
+    v.markFade:Set(1)
     v.frame.bg:SetColorTexture(pal.teal[1], pal.teal[2], pal.teal[3], 0.16)
     C_Timer.After(HIGHLIGHT_SECONDS, function()
         if state.token ~= token then return end
         v.highlighted = false
-        v.frame.bg:SetColorTexture(pal.text[1], pal.text[2], pal.text[3], 0)
+        v.markFade:To(0, T.highlight)
     end)
 end
 
@@ -665,14 +745,22 @@ function UI.Navigate(key, rowId)
     Wg.CloseMenu()
     local changed = state.page ~= page.key
     if state.searching then
+        state.leavingSearch = true   -- the scroll offset is the results', not the page's
         state.clearing = true
         searchBox:SetText("")
         state.clearing = false
         ShowResults(false)
         changed = true
     end
-    if changed then Wg.ColorPicker.Cancel() end   -- a color being picked belongs to the page it was opened on
-    if state.page ~= page.key then scroll:SetVerticalScroll(0) end
+    if changed then
+        Wg.ColorPicker.Cancel()   -- a color being picked belongs to the page it was opened on
+        if Previews then Previews.StopAll() end   -- and a sample playing, to the page it plays on
+    end
+    local leavingSearch = state.leavingSearch
+    state.leavingSearch = nil
+    local arriving = state.page ~= page.key or leavingSearch
+    -- (the page's offset was kept when the search began: what is scrolled now is the results)
+    if state.page ~= page.key and state.page and not leavingSearch then state.scrollOf[state.page] = scroll:GetVerticalScroll() end
     state.page = page.key
     local view = state.views[page.key] or BuildView(page)
     for k, other in pairs(state.views) do
@@ -682,12 +770,16 @@ function UI.Navigate(key, rowId)
     end
     local row = rowId and K.rowsById[rowId]
     if row and row.page ~= page.key then row = nil end
+    -- a card's rule asked for by search or a link: its card opens first, so the row can be shown and marked
+    if row and row.ruleOf and Cards then Cards.Reveal(view, view.sectionsById[row.ruleOf.id], row) end
     if page.def.onShow then
         local ok, err = pcall(page.def.onShow)
         if not ok then R.Fault("settings page " .. page.key, err) end
     end
     Layout(view)
     PaintNav()
+    -- a page returned to is where it was left; a row asked for is scrolled to below
+    if arriving and not row then ScrollTo(state.scrollOf[page.key] or 0) end
     -- The new page's content eases in; the page is already there and answering. Not while the window itself
     -- is still opening (one fade, not two), and not for a row on the page already shown.
     if changed and view.fade then
@@ -768,8 +860,14 @@ local function BuildNav()
         item.bar:SetWidth(3)
         item.bar:SetPoint("TOPLEFT", 0, -2)
         item.bar:SetPoint("BOTTOMLEFT", 0, 2)
+        -- the page's icon beside its name (never instead of it); a page without one keeps its name in line
+        item.icon = item:CreateTexture(nil, "ARTWORK")
+        item.icon:SetSize(NAV_ICON, NAV_ICON)
+        item.icon:SetPoint("LEFT", 10, 0)
+        local drawn = Icons and page.def.icon and Icons.Apply(item.icon, page.def.icon, NAV_ICON)
+        item.icon:SetShown(drawn and true or false)
         item.text = Wg.Text(item, "body")
-        item.text:SetPoint("LEFT", 12, 0)
+        item.text:SetPoint("LEFT", 10 + NAV_ICON + 8, 0)
         item.text:SetPoint("RIGHT", -6, 0)
         item.text:SetWordWrap(false)
         item.text:SetText(page.nav)
@@ -816,6 +914,11 @@ local function ResultRow(i)
     row.context:SetPoint("TOPLEFT", row.label, "BOTTOMLEFT", 0, -3)
     row.context:SetWidth(CONTENT_W - 220)
     row.context:SetWordWrap(false)
+    -- what the feature does, in its own sentence (a card's, a section's or a page's), when there is one
+    row.desc = Wg.Text(row, "small")
+    row.desc:SetPoint("TOPLEFT", row.context, "BOTTOMLEFT", 0, -3)
+    row.desc:SetWidth(CONTENT_W - 24)
+    row.desc:SetWordWrap(false)
     row.note = Wg.Text(row, "meta")
     row.note:SetPoint("TOPRIGHT", -10, -8)
     row.note:SetWidth(196)
@@ -862,13 +965,16 @@ local function DrawResults(query)
         row.result = result
         row.label:SetText(e.label)
         row.context:SetText(e.kind == "page" and ("Page" .. Search.SEP .. (e.context or "")) or e.context)
+        row.desc:SetText(e.desc or "")
+        row.desc:SetShown(e.desc ~= nil)
+        row:SetHeight(e.desc and 58 or 42)
         local note = Search.Note(e)
         row.note:SetText(note or "")
         Wg.Color(row.note, note and pal.danger.text or pal.stone)
         row:ClearAllPoints()
         row:SetPoint("TOPLEFT", 0, -y)
         row:Show()
-        y = y + 44
+        y = y + row:GetHeight() + 2
     end
     for i = #results + 1, #resultRows do resultRows[i]:Hide() end
     resultsView:SetHeight(y + 8)
@@ -891,11 +997,17 @@ function UI.SetQuery(text)
         if state.searching then
             ShowResults(false)
             local view = state.views[state.page]
-            if view then Layout(view) end
+            if view then
+                Layout(view)
+                ScrollTo(state.scrollOf[state.page] or 0)
+            end
         end
         return
     end
-    if not state.searching then ShowResults(true) end
+    if not state.searching then
+        if state.page then state.scrollOf[state.page] = scroll:GetVerticalScroll() end
+        ShowResults(true)
+    end
     DrawResults(text)
 end
 
@@ -909,7 +1021,8 @@ local function MoveSelection(delta)
     if top then
         local y, visible = -top, scroll:GetHeight()
         local now = scroll:GetVerticalScroll()
-        if y < now then ScrollTo(y) elseif y + 44 > now + visible then ScrollTo(y + 44 - visible) end
+        local h = row:GetHeight() + 2
+        if y < now then ScrollTo(y) elseif y + h > now + visible then ScrollTo(y + h - visible) end
     end
 end
 
@@ -918,12 +1031,8 @@ end
 ---------------------------------------------------------------------------
 function UI.RefreshFooter()
     if not footer then return end
-    local P = R.Profiles
-    local current = P and P.Current and P.Current()
+    local current, shared = ProfileShare()
     if current then
-        local others = #P.UsedBy(current, true)
-        local shared = others == 0 and "used only by this character"
-            or ("shared with " .. (others == 1 and "1 other character" or (others .. " other characters")))
         footer.profile.text:SetText("Profile: |c" .. Wg.Hex(pal.text[1], pal.text[2], pal.text[3]) .. current .. "|r" .. Search.SEP .. shared)
     else
         footer.profile.text:SetText("Profiles aren't available right now.")
@@ -1123,6 +1232,7 @@ local function BuildWindow()
         -- Closing is immediate; whatever was easing is put where it was going, so a reopened window is never
         -- found dim, and no hover is left lit for a pointer that has gone.
         Motion.Settle()
+        if Previews then Previews.StopAll() end
         for _, item in ipairs(state.navItems) do
             item.hovered = false
             item.hoverFade:Set(0)
@@ -1147,6 +1257,9 @@ function UI.Selected()
     return state.page, root and root.key or nil
 end
 function UI.Frame() return win end
+-- A page as drawn (its sections, rows, cards, Home's ways in), or nil before it is first shown. Read only: for
+-- tests and diagnostics.
+function UI.View(key) return state.views[key] end
 
 -- What has been made so far, for /tui diagnostics: pages described, pages drawn (kept until a reload), and
 -- whether search has its index. Read only; it builds nothing.

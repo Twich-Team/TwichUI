@@ -10,7 +10,7 @@ local K = R.SettingsKit
 local OVERRIDE_TIP = "Set for this resource only: the shared style does not apply to it. Choose \"Same as the shared style\" to stop overriding."
 
 K.Page({
-    key = "classBars", name = "Class resource bars", nav = "Class resource bars", order = 55, group = "class",
+    key = "classBars", icon = "classResources", name = "Class resource bars", nav = "Class resource bars", order = 55, group = "class",
     description = "Your class's resources as bars: mana, rage or energy, and combo points on your target. Off until you turn it on.",
     keywords = "resource bar mana rage energy focus combo points druid rogue warrior mage power class bar secondary position move unlock preview",
     overview = {
