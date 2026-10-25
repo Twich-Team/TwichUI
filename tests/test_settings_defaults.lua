@@ -190,7 +190,7 @@ previewSounds.set(false); assert(c.TwichUIDB.ui.previewSounds == false and not R
 for _, name in ipairs({ "Zone arrival", "Friend login", "Test coordinated sequence", "Clear previews" }) do
   assert(byName[name] and byName[name].click and not byName[name].advanced, name .. " has a visible button")
 end
-assert(not byName["Training available"] and not byName["Chronicle welcome back"], "no button for a display that isn't there")
+assert(byName["Training available"] and byName["Training available"].click and not byName["Chronicle welcome back"], "no button for a display that isn't there")
 assert(byName["Zone arrival"]:GetTooltip():find("made-up", 1, true) and byName["Friend login"]:GetTooltip():find("No friend state", 1, true))
 local ui = c.TwichUIDB.ui
 local savedBefore = ui.arrivalHold .. tostring(ui.friendLoginChannel)

@@ -48,6 +48,17 @@ K.Page({
         Header("New training", "A short card when you level up and there is class training you haven't taken yet.")
         Toggle("trainingNotice", "Show new training when I level up",
             "When you level up and there are class spells or ranks you could train and don't know yet, including ones from earlier levels you haven't trained, a short title card near the top of the screen, below the zone's name, lists them (only the highest rank of each spell), in the zone card's style with no frame. Move it in Edit Mode. They are available to train at your class trainer; nothing is learned for you. Nothing shows when there is nothing to train. It waits until you're out of combat, fades by itself, and makes no sound or chat line. Reduced motion (above) applies.\n\nType /tui training to see the card for your current level. Spell data comes from What's Training?.")
+        local Training = R.Training
+        if Training then
+            local styles = {}
+            for i, style in ipairs(Training.STYLES) do styles[i] = { style.key, style.label, style.tip } end
+            Choice("trainingStyle", "Training notification style",
+                "How the new training card looks. Classic is the card as it has always been. Illustrated adds a small bronze spellbook above the heading and a thin divider beneath it. Only this card changes, and nothing about when it appears or what it lists. A preview that is up changes at once; press Preview under Notification previews to see the card.",
+                STRING, Training.STYLE_DEFAULT,
+                function() return Training.Style() end,
+                function(value) Training.SetStyle(value) end,
+                styles)
+        end
 
         Header("Friend login", "A short card when a Battle.net friend comes online, in place of the game's own pop-up.")
         local friendLogin = Toggle("friendLogin", "Show Battle.net friend logins as a TwichUI card",
@@ -83,7 +94,7 @@ K.Page({
                 Notify.PreviewSounds, Notify.SetPreviewSounds)
             local previewTips = {
                 arrival = "Shows the zone card with a made-up place, where and how it would really appear.",
-                training = "Shows the new training card with made-up spells. Nothing is trained or marked, and it can't be clicked.",
+                training = "Shows the new training card, in the style chosen above, with made-up spells. Nothing is trained or marked, and it can't be clicked.",
                 friend = "Shows the friend login card with a made-up friend. No friend state is read or changed.",
                 welcome = "Shows the Welcome Back card with a made-up entry. Your Chronicle isn't read, and its link does nothing.",
             }

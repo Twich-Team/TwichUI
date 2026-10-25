@@ -1,7 +1,7 @@
 -- TwichUI: media
--- Registers fonts and sounds with LibSharedMedia so EllesmereUI, BigWigs,
+-- Registers fonts, sounds and borders with LibSharedMedia so EllesmereUI, BigWigs,
 -- GTFO-style dropdowns and any other LSM-aware addon can pick them. It never
--- changes a font or plays a sound by itself.
+-- changes a font, border or sound by itself.
 local R = TwichUI
 
 local FONTS = {
@@ -30,7 +30,16 @@ local SOUNDS = {
     ["TwichUI Map Pin"]  = "TwichUI_MapPin.mp3",
     ["TwichUI Drums"]    = "TwichUI_Drums.mp3",
 }
-R.MediaFonts, R.MediaSounds = FONTS, SOUNDS
+-- Border (edge) files: eight 32 px cells in a 256x32 image, the layout Blizzard's backdrop draws. Built from
+-- the paintings in assets/ by tools/make_border_texture.py. The name is ASCII like the rest of the
+-- UI's labels; it is also what a consumer stores in its own settings, so it must not change once released.
+local BORDERS = {
+    ["TwichUI - Aged Bronze"]   = "aged-bronze.tga",
+    ["TwichUI - Rounded Bronze"] = "rounded-bronze.tga",
+    ["TwichUI - Gilt Bronze"]    = "gilt-bronze.tga",
+    ["TwichUI - Dark Umber"]     = "dark-umber.tga",
+}
+R.MediaFonts, R.MediaSounds, R.MediaBorders = FONTS, SOUNDS, BORDERS
 
 -- Handy for GTFO, which takes a file path: /gtfo custom1 <path>
 function R:SoundPath(file) return R.PATH .. [[media\sounds\]] .. file end
@@ -77,6 +86,9 @@ R:OnInit(function()
     end
     for name, file in pairs(SOUNDS) do
         LSM:Register(LSM.MediaType.SOUND, name, R:SoundPath(file))
+    end
+    for name, file in pairs(BORDERS) do
+        LSM:Register(LSM.MediaType.BORDER, name, R.PATH .. [[media\borders\]] .. file)
     end
     R.mediaRegistered = true
 end)

@@ -6,6 +6,7 @@ dofile(TESTS .. "harness.lua")
 local c = MakeClient("Rich", {"!!!TwichUI"})
 
 local fakes = {}
+local textured = {}   -- every texture given a file path, in order
 local function Fake(o)
   o = o or {}
   o.shown, o.scripts, o.hooks, o.events = false, {}, {}, {}
@@ -24,6 +25,8 @@ local function Fake(o)
     if k == "EnableMouse" then return function(s, v) s.mouse = v end end
     if k == "SetPoint" then return function(s, ...) s.point = {...} end end
     if k == "ClearAllPoints" then return function(s) s.point = nil end end
+    if k == "SetTexture" then return function(s, v) s.texture = v; if type(v) == "string" then textured[#textured + 1] = s end end end
+    if k == "SetSize" then return function(s, w, h) s.w, s.h = w, h end end
     if k == "SetColorTexture" then return function(s, ...) s.color = {...} end end
     if k == "SetAlpha" then return function(s, v) s.alpha = v end end
     if k == "CreateFontString" or k == "CreateTexture" then return function() return Fake() end end
@@ -258,6 +261,37 @@ assert(p[1] == "TOP" and p[2] == c.UIParent and p[3] == "TOP" and p[4] == 0 and 
 assert(Listening("PLAYER_REGEN_DISABLED"), "listens for combat while up")
 assert(card.drop.y == -8 and card.rise.y == 8, "settles upward as the zone card does")
 assert(math.abs(card.fadeOut.delay - 4.6) < 1e-9, "a short stay for one spell")
+
+-- The Illustrated style: classic is the default and what drew the card above; a saved value that isn't one of
+-- the two reads as classic and stays as saved.
+do
+  local function Art() local n = 0; for _, t in ipairs(textured) do if t.texture:find("media\\training\\", 1, true) then n = n + 1 end end return n end
+  assert(T.Style() == "classic" and Art() == 0, "classic by default, no artwork made")
+  c.TwichUIDB.ui = c.TwichUIDB.ui or {}
+  c.TwichUIDB.ui.trainingStyle = "bogus"; assert(T.Style() == "classic" and c.TwichUIDB.ui.trainingStyle == "bogus", "unknown reads as classic, unerased")
+  c.TwichUIDB.ui.trainingStyle = 7; assert(T.Style() == "classic")
+  c.TwichUIDB.ui.trainingStyle = nil
+  assert(not T.SetStyle("fancy") and c.TwichUIDB.ui.trainingStyle == nil, "an unknown choice is refused")
+  local plays, classicTitle = card.anim.plays, card.title.point
+  assert(T.SetStyle("illustrated") and c.TwichUIDB.ui.trainingStyle == "illustrated")
+  assert(Art() == 2 and card.height == 84 + 47, "two textures; the card is taller by the artwork: " .. tostring(card.height))
+  local book, divider = textured[#textured - 1], textured[#textured]
+  assert(book.texture:find("book.tga", 1, true) and divider.texture:find("divider.tga", 1, true))
+  assert(book.w == 80 and book.h == 40 and book.shown and divider.shown, "the book keeps its 2:1 shape")
+  assert(math.abs(divider.w / divider.h - 64) < 1e-9, "the divider keeps its shape")
+  assert(card.title.point[5] == -44 and card.rule.shown == false, "the heading sits below the book; no second divider")
+  assert(card.list.point[2] == divider and card.list.point[3] == "BOTTOM", "the spells hang from the divider")
+  assert(card.anim.plays == plays and card.shown, "nothing replayed")
+  for _ = 1, 3 do T.SetStyle("classic"); T.SetStyle("illustrated") end
+  T.Restyle(); T.Restyle()
+  assert(Art() == 2 and card.height == 84 + 47 and card.title.point[5] == -44, "repeated changes add no textures or offsets")
+  T.SetStyle("classic")
+  assert(card.height == 84 and card.title.point[2] == 0 and card.title.point[3] == 0 and card.rule.shown and not book.shown and not divider.shown,
+    "classic again: the original sizes and places, the artwork put away")
+  assert(card.list.point[2] == card.rule and card.list.point[5] == -10, "the spells hang from the rule again")
+  assert(T.Bounds(1) ~= nil)
+  c.TwichUIDB.ui.trainingStyle = nil
+end
 -- it fades and cleans up
 Finish(card.anim)
 assert(not card.shown and not Listening("PLAYER_REGEN_DISABLED") and rawget(card, "rows") == nil, "gone after it fades")

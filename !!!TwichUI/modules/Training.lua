@@ -13,6 +13,10 @@
 -- and for any other TwichUI card in its way (modules/Notify.lua decides that), and fades by itself.
 -- It sits near the top of the screen, below the game's messages and the zone card, and
 -- can be moved in Edit Mode. No sound, no chat.
+--
+-- Style (TwichUIDB.ui.trainingStyle): "classic", the card as described, or "illustrated", which adds a small
+-- spellbook above the heading and swaps the bronze rule for a thin faded divider (media/training/, made by
+-- tools/make_training_art.py). Only this card has it, and the spells, text and entrance are the same.
 
 local R = TwichUI
 local N = R.Notify
@@ -32,6 +36,12 @@ local COLUMNS_FROM = 7      -- this many spells or more: two columns
 local COLUMN_WIDTH = 230
 local MAX_SHOWN = 12        -- more than this: "and N more"
 local TOP_OFFSET = -260     -- default place: upper centre, below the error text, raid warnings and the zone card
+local ART_PATH = R.PATH .. [[media\training\]]   -- book.tga 128x64 (shown whole), divider.tga 512x8 (shown whole)
+local BOOK_W, BOOK_H = 80, 40   -- the spellbook emblem, in screen units
+local BOOK_GAP = 4              -- between the book and the heading
+local DIVIDER_MIN = 240         -- the divider's width at least; it is as wide as the heading plus a little, up to the card
+local DIVIDER_RATIO = 8 / 512   -- its height for a width, as the texture is
+local DIVIDER_EXTRA = 3         -- the divider is a little taller than the one-pixel rule it replaces
 local MOVER_ATLAS = "editmode-actionbar-highlight-NineSlice-Center"   -- Edit Mode's own highlight, when the client has it
 
 local pending = 0           -- bumped to drop a waiting look; a look only runs if it is still current
@@ -40,11 +50,48 @@ local lastLevel             -- the level last seen, so a repeated event adds not
 local card
 local active = {}           -- [event] = handler, while registered
 local ev = CreateFrame("Frame")   -- the card's own short-lived events, apart from the shared bus
+local art              -- { book, divider }, the illustrated style's textures, once made
+local artFailed = false     -- the artwork's textures couldn't be made: the card stays classic, quietly
+
+-- The two looks, kept in TwichUIDB.ui.trainingStyle. Anything else saved reads as classic, without being erased.
+T.STYLES = {
+    { key = "classic", label = "Classic", tip = "The card as it has always been: the heading over a thin bronze rule." },
+    { key = "illustrated", label = "Illustrated", tip = "A small bronze spellbook above the heading and a thin divider beneath it. The spells and text are the same." },
+}
+T.STYLE_DEFAULT = "classic"
 
 local function Plain(text)
     if type(text) ~= "string" or (issecretvalue and issecretvalue(text)) or text == "" then return nil end
     return text
 end
+
+-- The chosen style's key; classic when nothing (or something unknown) is saved.
+function T.Style()
+    local saved = TwichUIDB and TwichUIDB.ui and TwichUIDB.ui.trainingStyle
+    for _, style in ipairs(T.STYLES) do
+        if style.key == saved then return saved end
+    end
+    return T.STYLE_DEFAULT
+end
+
+-- Saves the style (one of STYLES; anything else is refused). Returns whether it was kept. A card that is up is
+-- drawn again in it, defined below; nothing is replayed.
+function T.SetStyle(key)
+    for _, style in ipairs(T.STYLES) do
+        if style.key == key then
+            TwichUIDB.ui = TwichUIDB.ui or {}
+            if TwichUIDB.ui.trainingStyle ~= key then
+                TwichUIDB.ui.trainingStyle = key
+                if T.Restyle then T.Restyle() end
+            end
+            return true
+        end
+    end
+    return false
+end
+
+-- Whether the card is drawn with the artwork now.
+local function Illustrated() return not artFailed and T.Style() == "illustrated" end
 
 local function Escape(text) return (text:gsub("|", "||")) end
 
@@ -351,7 +398,8 @@ end
 
 local function CardHeight(count)
     local _, _, perColumn = Shape(count)
-    return math.ceil(64 * Grow()) + perColumn * RowHeight()
+    local extra = Illustrated() and (BOOK_H + BOOK_GAP + DIVIDER_EXTRA) or 0
+    return math.ceil(64 * Grow()) + perColumn * RowHeight() + extra
 end
 
 -- Lays out the spells: one centred column, or two when there are many. Returns how many are shown, and the
@@ -443,6 +491,49 @@ local function Build()
     return true
 end
 
+-- The illustrated style's two textures, made the first time it is drawn (and once only). False if they can't be.
+local function Artwork()
+    if art then return true end
+    if artFailed then return false end
+    local ok, book, divider = pcall(function()
+        local b, d = card:CreateTexture(nil, "ARTWORK"), card:CreateTexture(nil, "ARTWORK")
+        b:SetTexture(ART_PATH .. "book.tga")
+        d:SetTexture(ART_PATH .. "divider.tga")
+        return b, d
+    end)
+    if not (ok and book and divider) then artFailed = true return false end
+    book:SetSize(BOOK_W, BOOK_H)
+    book:SetPoint("TOP", card, "TOP", 0, 0)
+    art = { book = book, divider = divider }
+    return true
+end
+
+-- Places the heading, the rule or divider and the list for the style, every time the card is drawn: each point is
+-- set outright, so drawing again (or changing style) never adds to an earlier offset. Returns whether the artwork
+-- is on, and the frame or texture at the card's top for the backdrop.
+local function Arrange()
+    local on = Illustrated() and Artwork()
+    card.title:ClearAllPoints()
+    card.list:ClearAllPoints()
+    if on then
+        card.title:SetPoint("TOP", card, "TOP", 0, -(BOOK_H + BOOK_GAP))
+        local width = math.min(CardWidth(), math.max(DIVIDER_MIN, R.Arrival.TextWidth(card.title, CardWidth()) + 80))
+        art.divider:ClearAllPoints()
+        art.divider:SetSize(width, width * DIVIDER_RATIO)
+        art.divider:SetPoint("TOP", card.title, "BOTTOM", 0, -4)
+        card.rule:Hide()
+        art.book:Show()
+        art.divider:Show()
+        card.list:SetPoint("TOP", art.divider, "BOTTOM", 0, -8)
+    else
+        if art then art.book:Hide() art.divider:Hide() end
+        card.title:SetPoint("TOP", 0, 0)
+        card.rule:Show()
+        card.list:SetPoint("TOP", card.rule, "BOTTOM", 0, -10)
+    end
+    return on, on and art.book or card.title
+end
+
 -- Puts the spells and the look on the card, for the look as it is now. The entrance is not touched, so a change
 -- of look can redraw a card that is up (T.Restyle). Returns how many spells are shown.
 local function Fill(rows)
@@ -452,12 +543,13 @@ local function Fill(rows)
     A.Typeset("training", card.title, { role = "title", path = A.FONT_TITLE, size = 18, fallback = "SubZoneTextFont", color = card.K.text })
     card.title:SetText("New Training Available")
     A.PaintRule("training", card.rule, 1)
+    local _, top = Arrange()
     local shown, widest = Layout(rows)
     local more = #rows - shown
     A.Typeset("training", card.foot, { role = "detail", path = A.FONT_LINE, size = 13, fallback = "GameFontHighlightSmall", color = card.K.stone })
     card.foot:SetText(more > 0 and ("and %d more  ·  Visit a class trainer"):format(more) or "Visit a class trainer")
     local width = math.max(widest, A.TextWidth(card.title, CardWidth()), A.TextWidth(card.foot, CardWidth()), 110)
-    A.Backdrop("training", card, { top = card.title, bottom = card.foot, width = width })
+    A.Backdrop("training", card, { top = top, bottom = card.foot, width = width })
     return shown
 end
 

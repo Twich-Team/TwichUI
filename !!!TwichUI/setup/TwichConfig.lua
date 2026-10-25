@@ -1491,6 +1491,10 @@ local function Define()
         local holds = {}
         for _, h in ipairs(A and A.HOLDS or {}) do holds[h.key] = true end
         Scalar(g, { "ui" }, "arrivalHold", "enum", A and A.HOLD_DEFAULT, { values = holds })
+        local T = R.Training
+        local styles = {}
+        for _, style in ipairs(T and T.STYLES or {}) do styles[style.key] = true end
+        Scalar(g, { "ui" }, "trainingStyle", "enum", T and T.STYLE_DEFAULT, { values = styles })
         Scalar(g, { "ui" }, "friendLoginChannel", "enum", F and F.CHANNEL_DEFAULT, { values = ENUM.channel })
         Scalar(g, { "ui" }, "friendLoginChime", "sound", F and F.SOUND_DEFAULT)
         Scalar(g, { "ui" }, "previewSounds", "bool", false)
