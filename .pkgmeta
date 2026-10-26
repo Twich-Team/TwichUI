@@ -1,12 +1,13 @@
 package-as: "!!!TwichUI"
 
-# The repository holds five addons side by side: !!!TwichUI/ (the core addon), TwichUI_Settings/ (the settings
+# The repository holds six addons side by side: !!!TwichUI/ (the core addon), TwichUI_Settings/ (the settings
 # window, load on demand), TwichUI_NavData/ (navigation's walking maps, load on demand), TwichUI_Diagnostics/ (the
-# profiling and support tool, load on demand) and TwichUI_Layouts/ (layout packages, load on demand). The packager
+# profiling and support tool, load on demand), TwichUI_Layouts/ (layout packages, load on demand) and
+# TwichUI_LayoutWizard/ (the layout setup, load on demand, needs TwichUI_Layouts). The packager
 # builds the whole repository as the package folder, so all land one level down: the core addon is moved up over the
 # package folder (repository-level files such as README.md, LICENSE and licenses/ stay in it, as they always have), and
-# the other four are moved out beside it. The release zip holds exactly five folders, !!!TwichUI, TwichUI_Settings,
-# TwichUI_NavData, TwichUI_Diagnostics and TwichUI_Layouts. Keep the !!! folder name: TwichUI must load first,
+# the other five are moved out beside it. The release zip holds exactly six folders, !!!TwichUI, TwichUI_Settings,
+# TwichUI_NavData, TwichUI_Diagnostics, TwichUI_Layouts and TwichUI_LayoutWizard. Keep the !!! folder name: TwichUI must load first,
 # and the game names saved variables files after the folder.
 # (The packager keeps the quotes of a key as part of it, so these keys are not quoted; values may be.)
 move-folders:
@@ -15,6 +16,7 @@ move-folders:
   !!!TwichUI/TwichUI_NavData: TwichUI_NavData
   !!!TwichUI/TwichUI_Diagnostics: TwichUI_Diagnostics
   !!!TwichUI/TwichUI_Layouts: TwichUI_Layouts
+  !!!TwichUI/TwichUI_LayoutWizard: TwichUI_LayoutWizard
 
 enable-nolib-creation: no
 

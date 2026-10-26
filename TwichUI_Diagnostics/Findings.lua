@@ -167,7 +167,7 @@ function F.MemoryStats(rec)
         if f then return { first = f, last = l, peak = pk } end
     end
     out.heap, out.diag, out.settings, out.navdata = Series("heap"), Series("diag"), Series("settings"), Series("navdata")
-    out.layouts = Series("layouts")
+    out.layouts, out.layoutwizard = Series("layouts"), Series("layoutwizard")
     return out
 end
 

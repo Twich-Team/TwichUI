@@ -241,6 +241,7 @@ function LY.Tell(said)
         Say("the restore was checked after the reload, and not everything is back as it was:")
         ShowDiffs(j and j.verify and j.verify.diffs)
     end
+    if said then Line("/tui layout opens the layout setup, which shows this and offers Restore.") end
 end
 
 ---------------------------------------------------------------------------

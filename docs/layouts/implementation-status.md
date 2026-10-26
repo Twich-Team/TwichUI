@@ -11,7 +11,7 @@ and what is still open.
 | 1. Audit and contract | **Done**: documents only, no code | 2026-10-26 |
 | 2. Engine and safe application pipeline | **Done offline**: automated checks pass; nothing run in game | 2026-10-26 |
 | 3. Classic Adventure and the screen-layout resolver | **Done offline**: automated checks pass; nothing run in game | 2026-10-26 |
-| 4. Wizard, preview and install lifecycle UI | Not started (proposed; see the handoff below) | |
+| 4. Wizard, preview and install lifecycle UI | **Done offline**: automated checks pass; nothing run in game (`wizard.md`) | 2026-10-26 |
 | 5. Compact Adventure, UI scale policy | Not started | |
 | 6. Retained overrides and updates | Not started | |
 | 7. Release hardening and in-game validation | Not started | |
@@ -287,16 +287,40 @@ played, and meanwhile on Retail for TwichUI's side (the developer package is all
 12. A Forever EllesmereUI: the Retail-captured blobs load without errors, and its load-time migrations leave the
     positions as planned.
 
-### 4. Wizard, preview and install lifecycle UI (proposed)
+### 4. Wizard, preview and install lifecycle UI (done offline, 2026-10-26)
 
-Build: the wizard window in TwichUI's own look (`Look.lua`, standalone without EllesmereUI): pick a variant, make
-choices, review the plan (from `LY.Plan`; the window shows exactly the plan whose key it passes to `LY.Apply`), confirm,
-reload button (a click, never automatic). The preview: the resolved geometry drawn to scale (from `plan.geometry`, or
-`LY.Geometry.Resolve` directly), with its diagnostics on it. The after-login result card (in place of `LY.Tell`'s chat
-lines), Detach, Restore (its own review), and the entry points: the Welcome dialog (offer only), settings (Home or a
-Layout page through `R:OpenSettings`) and `/tui layout` (the developer subcommands stay hidden).
+**Built** (`wizard.md` has the workflow, the managed choices, the artwork handling, the checks and the manual checklist):
+a load-on-demand sibling addon `TwichUI_LayoutWizard/` (`Art.lua`, `State.lua`, `Model.lua`, `Preview.lua`, `Pages.lua`,
+`Window.lua`; `RequiredDeps: !!!TwichUI, TwichUI_Layouts`), six steps (welcome and compatibility, layout, TwichUI helpers,
+personalize, review and apply, result), a miniature preview drawn from Phase 3's resolved geometry, the result and
+restore flows, and a resume after a reload the player started. Entries: `/tui layout` (bare; the developer commands keep
+their words), Home > Interface layout, Troubleshooting > Layout setup. In the core: `LayoutsLauncher.lua`
+(`L.LoadWizard`, `L.OpenWizard`, `L.WizardResume`, the resume at the check after login). In the engine: package format 3
+with `choices` (a preset of switches turned on, an accent, a size), picks through `LY.Resolve`, the plan key and the record,
+and the accent read back by value (`architecture.md` §13). Artwork: four runtime files built from the four sources
+(`tools/make_layout_wizard_art.py`); Compact Adventure's is reserved. Release and diagnostics wiring as for
+`TwichUI_Layouts`. **Not offered**: the cursor-following or fixed tooltip choice (no adapter backs it: it is an
+account-wide EllesmereUI global that its import resets whole; `wizard.md`, "Choices", D23).
 
-Acceptance:
+**Checks run** (offline Lua 5.1; `./tests/run.sh`: 121 passed, 0 failed): `tests/test_layout_wizard.lua` (new; with
+`tests/layouts_mock.lua`) and `tests/test_layouts.lua` §17 (new), `test_perf_engine.lua`, `test_release_tools.py` and the
+settings contract fixture updated. Eighteen hand mutations each fail a test (`wizard.md`, "Checks"). `luacheck` (no config,
+globals off, no line length): 0 warnings in the wizard's files and the engine files changed.
+
+**Acceptance, as built:**
+- The review names the account-wide EllesmereUI profile change, the TwichUI profile used, the reload, what is left alone,
+  what isn't placed, what doesn't fit, blockers with reasons, and what Restore will do; on a repeat install it says that
+  changes made in the install's profile since are replaced (done).
+- The preview draws from the same resolved geometry the plan is built from (same screen and density), and is redrawn when
+  a pick or the screen changes; a stale plan can't be applied, by three checks (done).
+- Combat refuses Apply, Restore and Reload in the model, the confirmation and the engine; the window's disabled buttons
+  say why (done).
+- Escape, focus and reopening: Escape through `UISpecialFrames`; six reopenings make no frames, listeners or hooks (done;
+  gauges `layoutwizard.events`, `layoutwizard.frames`). Keyboard focus beyond Escape: not built (no text fields).
+- Nothing runs before the player asks: no login event, no Welcome change, no minimap button (done).
+- Choices: `choices` has a package schema and validation, and density is a choice (done).
+
+**Original acceptance list (kept for the record):**
 - The review names: the account-wide EllesmereUI profile change, the TwichUI profile used, the reload, exclusions,
   what isn't applied (objectives), what doesn't fit on this screen, and what Restore will and won't undo.
 - The preview draws from the same resolved geometry the plan was built from, and re-plans when the screen or density
@@ -330,9 +354,14 @@ Acceptance:
 - The release zip holds five folders. `tools/release.py` package checks pass. `CHANGELOG.md` is updated.
 - No performance regression in a `/tui perf` General capture with the layouts addon not loaded.
 
-## Phase 4 handoff
+## Phase 5 handoff
 
-What the wizard and preview can rely on:
+`wizard.md` ("Phase 5 handoff") has what Compact Adventure, the UI scale policy, the tooltip choice and retained overrides
+need from the wizard. The engine facts it relied on (kept, and still true):
+
+## Phase 4 handoff (used)
+
+What the wizard and preview relied on:
 - `LY.Plan(pkg, variant, { screen, density })` returns `plan.geometry`: `{ screen, area, density, factor, narrow,
   order, components = { [id] = { label, managed, rect, ref, dx, dy, notes, applied } }, diagnostics, fits }`. Rects
   are centre offsets in UIParent units (`x, y, w, h, l, r, b, t`), so a preview draws each on a frame the size of the
@@ -344,7 +373,8 @@ What the wizard and preview can rely on:
 - `LY.Geometry.Live()` reads the screen; it returns nil when UIParent can't be read, and planning is then refused.
 
 Open before Phase 4: the in-game checks (Phase 2's 1–12 on Forever, Phase 3's visual checklist), D17–D20, the
-release decision, and where the wizard lives (the Welcome offer, a settings entry, a bare `/tui layout`).
+release decision, and where the wizard lives. Decided in Phase 4: a bare `/tui layout`, a Home section and a
+Troubleshooting row; no Welcome offer (D24). The rest is still open.
 
 ## Open decisions (recommended default first)
 
@@ -370,6 +400,11 @@ release decision, and where the wizard lives (the Welcome offer, a settings entr
 | D18 | Classic's rules (the central block's box, the focus frame, room and narrow arrangements, the readable minimums, the attach map) are a reading of the author's layout | Author to review the rules table and the 1680 × 1050 / 1600 × 1200 screenshots |
 | D19 | 206 TwichUI looks-and-behaviour fields travel in the base (everything non-default except switches) | As chosen; trim to appearance-only groups if behaviour (e.g. mage, restock, navigation) should stay the recipient's |
 | D20 | Classic stays `dev = true` (allowed on Retail) until checked on Forever | Yes |
+| D21 | The TwichUI helper presets: `on-screen` (class resource bars, marker bar, food and drink buttons) and `finding-my-way` (those and Navigation) | As built; the author to confirm the set |
+| D22 | The accent options and their colours (Aged gold is the layout's own; Verdigris, Ember and Dusk blue are proposals) | As built; the author to confirm |
+| D23 | The cursor-following or fixed tooltip choice: not offered (account-wide EllesmereUI global, reset whole by its import, not undone by Restore) | Keep it out until D3 and D5 are built |
+| D24 | A Welcome-dialog offer for the wizard | Not built; add only if wanted |
+| D25 | Re-running with the same choices re-imports the install's EllesmereUI profile and replaces changes made in it | As built, said in the review; a shortcut needs a content fingerprint of the live profile |
 
 ## In-game checks still required (whole project)
 
@@ -391,3 +426,7 @@ release decision, and where the wizard lives (the Welcome offer, a settings entr
 10. The packaged install loads `TwichUI_Layouts` on demand. A missing or disabled copy is reported, and the core is
     unaffected.
 11. The Phase 2 checks above, and the Phase 3 manual visual checklist.
+12. The wizard's manual acceptance checklist (`wizard.md`), including: the pictures draw with transparent backgrounds
+    (the emblem's was keyed out of a painted checkerboard); `ReloadUI()` from the button, and the wizard opening on the
+    result 3 seconds after login; the picked accent reads back from a Forever EllesmereUI profile
+    (`accent:rgb` matches); the window at 1080p, 1440p and ultrawide; `/tui perf` with the window opened ten times.

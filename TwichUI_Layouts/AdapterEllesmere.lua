@@ -90,6 +90,41 @@ A.STRIP = { EllesmereUIDataBars = { "characters" }, EllesmereUIQoL = { "chars" }
 -- (ImportProfile: fonts, darkMode, euiAccent; _migrations so the load-time migrations know the data's vintage).
 -- customColors stays excluded (§11.5). chatBubbles and tooltipFixedPos are not taken by the import, so not managed.
 A.ROOT = LY.Set({ "fonts", "darkMode", "euiAccent", "_migrations" })
+A.ACCENT_UNIT = PREFIX .. "root.euiAccent"
+
+-- EllesmereUI's accent: { useClass = true } or { custom = { r, g, b }, useClass = false } (ImportProfile copies it whole;
+-- EllesmereUI_UICore.lua SetActiveProfileAccent / ResolveProfileAccent read exactly these two keys).
+function A.AccentOk(v)
+    if type(v) ~= "table" then return false end
+    local n = 0
+    for k, val in pairs(v) do
+        n = n + 1
+        if k == "useClass" then
+            if type(val) ~= "boolean" then return false end
+        elseif k == "custom" then
+            if type(val) ~= "table" then return false end
+            for c, x in pairs(val) do
+                if not (c == "r" or c == "g" or c == "b") or type(x) ~= "number" or x ~= x or x < 0 or x > 1 then return false end
+            end
+            if val.r == nil or val.g == nil or val.b == nil then return false end
+        else
+            return false
+        end
+    end
+    return n > 0
+end
+
+-- A signature of an accent that survives EllesmereUI's number round trip (its serializer writes numbers with tostring,
+-- 14 digits, so an exact fingerprint of the floats would not match): "class", or the colour to three places.
+function A.AccentSig(v)
+    if type(v) ~= "table" then return "none" end
+    if v.useClass == true then return "class" end
+    local c = v.custom
+    if type(c) == "table" and type(c.r) == "number" and type(c.g) == "number" and type(c.b) == "number" then
+        return ("rgb:%.3f,%.3f,%.3f"):format(c.r, c.g, c.b)
+    end
+    return "none"
+end
 A.LAYOUT_UNIT = PREFIX .. "layout"
 local LAYOUT_KEYS = LY.Set({ "anchors", "widthMatch", "heightMatch", "phantomBounds", "widthMatchExtra", "heightMatchExtra" })
 
@@ -179,6 +214,7 @@ function A.Label(unit)
     local f = A.BY_UNIT[unit] or A.TEXT_BY_UNIT[unit]
     if f then return f.label end
     local root = unit:match("^ellesmereui:root%.(.+)$")
+    if root == "euiAccent" then return "Accent colour" end
     if root then return "Look: " .. root end
     local pos = unit:match("^ellesmereui:pos%.(.+)$")
     if pos then return A.POSITIONS[pos] and A.POSITIONS[pos].label or pos end
@@ -278,12 +314,14 @@ function A.Normalize(fragment, ctx)
         P.add("no-base", ctx.where .. ".base")
     end
     if data and fragment.root ~= nil then
-        if ctx.layer ~= "base" then P.add("base-only-in-base-layer", ctx.where .. ".root")
+        -- the base layer carries the look; a wizard choice may carry the accent colour and nothing else of it
+        if ctx.layer ~= "base" and ctx.layer ~= "choice" then P.add("base-only-in-base-layer", ctx.where .. ".root")
         elseif type(fragment.root) ~= "table" then P.add("not-table", ctx.where .. ".root")
         else
             for k, v in pairs(fragment.root) do
-                if not A.ROOT[k] then P.add("not-managed", ctx.where .. ".root." .. tostring(k))
+                if not A.ROOT[k] or (ctx.layer == "choice" and k ~= "euiAccent") then P.add("not-managed", ctx.where .. ".root." .. tostring(k))
                 elseif v == nil or type(v) == "function" then P.add("bad-value", ctx.where .. ".root." .. k)
+                elseif k == "euiAccent" and not A.AccentOk(v) then P.add("bad-value", ctx.where .. ".root." .. k)
                 else units[PREFIX .. "root." .. k] = v end
             end
         end
@@ -823,6 +861,11 @@ function A.Verify(expect, snap)
                 end
                 if bad then r.diffs[#r.diffs + 1] = { unit = unit, code = "moved" } end
             end
+        elseif unit == A.ACCENT_UNIT then
+            -- the accent is the one root key read back by value: EllesmereUI doesn't rewrite it as it loads
+            r.checked = r.checked + 1
+            if prof.euiAccent == nil then r.diffs[#r.diffs + 1] = { unit = unit, code = "missing" }
+            elseif "accent:" .. A.AccentSig(prof.euiAccent) ~= expect[unit] then r.diffs[#r.diffs + 1] = { unit = unit, code = "differs" } end
         elseif unit == A.LAYOUT_UNIT or (root and A.ROOT[root]) then
             -- a whole table EllesmereUI rewrites as it loads (defaults merged in): its presence is checked
             r.checked = r.checked + 1
@@ -840,6 +883,7 @@ function A.Expect(composed, part)
     local out = {}
     for _, e in ipairs(composed.list) do
         if A.BY_UNIT[e.unit] then out[e.unit] = LY.Fingerprint(e.value)
+        elseif e.unit == A.ACCENT_UNIT then out[e.unit] = "accent:" .. A.AccentSig(e.value)
         elseif ModuleOf(e.unit) or e.unit == A.LAYOUT_UNIT or e.unit:find("^ellesmereui:root%.") then out[e.unit] = "present" end
     end
     for id, pl in pairs(part and part.placed or {}) do

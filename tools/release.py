@@ -27,10 +27,13 @@ import zipfile
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-CORE, SETTINGS, NAVDATA, DIAGNOSTICS, LAYOUTS = "!!!TwichUI", "TwichUI_Settings", "TwichUI_NavData", "TwichUI_Diagnostics", "TwichUI_Layouts"
-ADDONS = (CORE, SETTINGS, NAVDATA, DIAGNOSTICS, LAYOUTS)
-# each needs CORE and loads only when asked for (the settings window, the first route, /tui perf, a layout install)
-LOAD_ON_DEMAND = (SETTINGS, NAVDATA, DIAGNOSTICS, LAYOUTS)
+CORE, SETTINGS, NAVDATA, DIAGNOSTICS, LAYOUTS, WIZARD = ("!!!TwichUI", "TwichUI_Settings", "TwichUI_NavData", "TwichUI_Diagnostics",
+                                                         "TwichUI_Layouts", "TwichUI_LayoutWizard")
+ADDONS = (CORE, SETTINGS, NAVDATA, DIAGNOSTICS, LAYOUTS, WIZARD)
+# each needs CORE and loads only when asked for (the settings window, the first route, /tui perf, a layout install, the layout setup)
+LOAD_ON_DEMAND = (SETTINGS, NAVDATA, DIAGNOSTICS, LAYOUTS, WIZARD)
+# what each of them requires, when it is more than the core: the layout setup needs the layout engine too
+REQUIRED_DEPS = {WIZARD: (CORE, LAYOUTS)}
 TOCS = {a: f"{a}/{a}.toc" for a in ADDONS}
 PROJECT = "TwichUI"
 CHANNEL_BY_BRANCH = {"main": "alpha", "beta": "beta"}
@@ -356,8 +359,10 @@ def check_archive(zip_path, version, root=None):
                     problems.append(f"{addon}.toc has a different Interface value from {CORE}.toc")
                 if toc_field(other, "LoadOnDemand") != "1":
                     problems.append(f"{addon} is not load on demand")
-                if toc_field(other, "RequiredDeps") != CORE:
-                    problems.append(f"{addon} does not require {CORE}")
+                want = REQUIRED_DEPS.get(addon, (CORE,))
+                have = tuple(d.strip() for d in (toc_field(other, "RequiredDeps") or "").split(",") if d.strip())
+                if have != want:
+                    problems.append(f"{addon} does not require {', '.join(want)}")
             if not (toc_field(core, "X-Curse-Project-ID") or "").isdigit():
                 problems.append(f"{CORE}.toc has no X-Curse-Project-ID")
     return problems

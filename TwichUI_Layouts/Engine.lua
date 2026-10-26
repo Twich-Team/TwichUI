@@ -2,7 +2,8 @@
 --
 --   LY.Plan(pkg, variant, opts)    read only: what an install would do, adapter by adapter, with a key
 --   LY.Apply(pkg, variant, key, opts)  does exactly the plan with that key (re-planned first; refused if it differs)
---   opts = { screen = { w, h } (default: this screen, LY.Geometry.Live()), density = id } for a package with geometry
+--   opts = { screen = { w, h } (default: this screen, LY.Geometry.Live()), density = id, picks = { [choice] = option } }
+--     (screen and density for a package with geometry; picks for a package with choices: what the wizard asked)
 --   LY.Verify(record)              reads live values against what the install expects; record = true writes the result
 --   LY.PlanRestore(), LY.Restore(key), LY.VerifyRestore(record)
 --   LY.Continue()                  after a reload (the core calls it): checks what the install or restore left
@@ -36,7 +37,7 @@ local function Short(key) return "#" .. tostring(LibDeflate:Adler32(key)) .. ":"
 -- Plan
 -- plan = { ok, problems, blocked = { { adapter, code } }, id, revision, variant, title, dev, order = { adapter ids },
 --   parts = { [adapter] = part (each adapter's Plan) }, changes, reload, mode = "new"|"again", key,
---   geometry = the resolved screen (Geometry.lua) | nil, density }
+--   geometry = the resolved screen (Geometry.lua) | nil, density, picks = { [choice id] = option id } (every choice) }
 ---------------------------------------------------------------------------
 local function DoPlan(pkg, variant, opts)
     opts = opts or {}
@@ -46,11 +47,12 @@ local function DoPlan(pkg, variant, opts)
         screen = LY.Geometry.Live()
         if not screen then plan.blocked[1] = { code = "no-screen" } end
     end
-    local ok, resolved = LY.Resolve(pkg, variant, { screen = screen, density = opts.density })
+    local ok, resolved = LY.Resolve(pkg, variant, { screen = screen, density = opts.density, picks = opts.picks })
     if not ok then plan.problems = resolved return plan end
     plan.geometry, plan.density = resolved.geometry, resolved.geometry and resolved.geometry.density or nil
     plan.id, plan.revision, plan.variant, plan.title, plan.dev = resolved.id, resolved.revision, variant, pkg.title, resolved.dev
     plan.targets = resolved.targets
+    plan.picks = resolved.picks
     local function Block(adapter, code) plan.blocked[#plan.blocked + 1] = { adapter = adapter, code = code } end
 
     local journal, why = J.Read()
@@ -85,7 +87,7 @@ local function DoPlan(pkg, variant, opts)
     -- the screen the places were worked out for is part of what was shown
     local screenKey = resolved.geometry and { math.floor(resolved.geometry.screen.w + 0.5), math.floor(resolved.geometry.screen.h + 0.5),
         resolved.geometry.density } or false
-    plan.key = LY.Canon({ plan.id, plan.revision, variant, plan.mode, keys, screenKey })
+    plan.key = LY.Canon({ plan.id, plan.revision, variant, plan.mode, keys, screenKey, resolved.picks })
     plan.ok = #plan.blocked == 0
     return plan
 end
@@ -162,7 +164,7 @@ local function DoApply(pkg, variant, expect, opts)
 
     local record = { v = J.VERSION, package = plan.id, revision = plan.revision, variant = variant, char = Me(),
         state = "applying", at = time(), key = Short(plan.key), reload = false, steps = {}, snapshot = snapshot,
-        expect = {}, inputs = {} }
+        expect = {}, inputs = {}, picks = next(plan.picks) ~= nil and plan.picks or nil }
     for _, id in ipairs(plan.order) do
         record.steps[#record.steps + 1] = { adapter = id, state = "pending" }
         record.expect[id] = LY.ADAPTERS[id].Expect(plan.parts[id].composed, plan.parts[id])

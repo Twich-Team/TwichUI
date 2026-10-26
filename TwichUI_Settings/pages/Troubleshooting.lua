@@ -126,6 +126,13 @@ K.Page({
                 DL.Open()
             end, "Opens the TwichUI Diagnostics window (loading it the first time this session). Same as typing /tui perf. Starting a capture, its presets and what each costs are there; nothing is sent anywhere.")
         end
+        if R.LayoutsLauncher then
+            Header("Layout setup", "If you installed an interface layout and something looks wrong, or you want to put your previous setup back, the setup window shows the result of the last install and offers Restore.")
+            Button("Layout setup", "Open", function()
+                K.CloseOptions()
+                R.LayoutsLauncher.OpenWizard()
+            end, "Opens the layout setup (same as typing /tui layout). With an install recorded it opens on its result: whether it read back as planned after the reload, and Restore. Opening it changes nothing.")
+        end
         Header("Full report", "A report of how TwichUI is set up and what each part says about itself, to copy and share when something does not work. It is built on your computer when you ask for it. Nothing is sent anywhere.")
         Button("Troubleshooting report", "Open", function()
             K.CloseOptions()

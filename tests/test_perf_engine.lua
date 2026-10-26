@@ -703,6 +703,14 @@ do
   assert(Has(DX.Export.Summary(ly, DX.Export.Defaults()), "TwichUI_Layouts"), "and appears in the report")
   assert(not Has(DX.Export.Summary(nd, DX.Export.Defaults()), "TwichUI_Layouts"), "no layouts line when it was never loaded")
   assert(DX.Op("layouts.load").file == "LayoutsLauncher.lua" and DX.Op("layouts.apply").kind == "bulk" and DX.Op("layouts.verify"), "the layouts scopes are in the catalogue")
+  -- and the layout setup's (TwichUI_LayoutWizard), loaded when /tui layout opens it
+  local lw = Rec({ memory = { { t = 0, core = 18000 }, { t = 30, core = 18100, layoutwizard = 400 }, { t = 60, core = 18100, layoutwizard = 420 } } })
+  assert(DX.Findings.Analyze(lw).memory.layoutwizard.last == 420, "the layout setup's series is analysed")
+  assert(Has(DX.Export.Summary(lw, DX.Export.Defaults()), "TwichUI_LayoutWizard"), "and appears in the report")
+  assert(not Has(DX.Export.Summary(ly, DX.Export.Defaults()), "TwichUI_LayoutWizard"), "no line when it was never loaded")
+  assert(DX.Op("layoutwizard.load").file == "LayoutsLauncher.lua" and DX.Op("layoutwizard.build").kind == "init" and DX.Op("layoutwizard.preview").kind == "layout",
+    "the layout setup's scopes are in the catalogue")
+  assert(DX.LAYOUTWIZARD == "TwichUI_LayoutWizard" and DX.Collect.OURS.TwichUI_LayoutWizard, "its load and errors are recognised as ours")
 
   -- a long frame next to an addon of ours loading says which addon, and the markers list shows the load
   local lf = Rec({ markers = { { t = 64, kind = "addon-loaded", label = "TwichUI_NavData" } },

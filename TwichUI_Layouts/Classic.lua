@@ -7,6 +7,10 @@
 -- layout links, and where TwichUI's own HUD pieces sit. Compact Adventure is not built yet; when it is, it gets its
 -- own variant and the base stays shared.
 --
+-- Choices (what the wizard asks; docs/layouts/wizard.md): a TwichUI helpers preset (only turns switches on), the accent
+-- colour (EllesmereUI's `euiAccent`, nothing else of its look) and the size (the geometry's density). Each names
+-- exactly what it writes; the package checks refuse anything else.
+--
 -- Geometry. The author made this on a 3440 × 1440 screen at UI scale 0.64: UIParent is 2866.67 × 1200 units (the
 -- canvas), which the stored positions confirm (the minimap's and the meter's links to the right edge both give it).
 -- Each component below is a box on that canvas, measured from the captured positions and sizes, and an anchor that
@@ -46,7 +50,7 @@ for _, id in ipairs(CENTRAL) do euiAttach[id] = "central" end
 
 LY.CLASSIC_VARIANT = "classic-adventure"
 LY.CLASSIC_PACKAGE = {
-    format = 2, id = "twichui-adventure", revision = 1,
+    format = 3, id = "twichui-adventure", revision = 2,
     -- a developer package until it has been installed and checked on WoW: Forever (Phase 7): the capture is from the
     -- Retail client's saved files, and a developer package may be tried on Retail (architecture.md §11.13)
     dev = true,
@@ -65,6 +69,42 @@ LY.CLASSIC_PACKAGE = {
                 twichui = { places = C.twichui.places },
             },
         },
+    },
+    choices = {
+        { id = "helpers", kind = "preset", label = "TwichUI helpers", default = "as-is",
+            hint = "Which of TwichUI's own features the setup turns on. It only turns things on, never off. None of them shares anything, plays a sound or acts for you.",
+            options = {
+                { id = "as-is", label = "Leave them as they are",
+                    hint = "No TwichUI feature is turned on or off. The layout still styles and places the ones you already use." },
+                { id = "on-screen", label = "On-screen helpers",
+                    hint = "Turns on the class resource bars, the marker bar and the food and drink buttons, in the places the layout leaves for them.",
+                    twichui = { groups = { classBars = { modules = { classBars = true } }, markerBar = { modules = { markersBar = true } },
+                        food = { modules = { foodDrink = true } } } } },
+                { id = "finding-my-way", label = "Helpers and navigation",
+                    hint = "The same, and Navigation: a walking arrow to a place you pick. Its map data loads the first time you ask for a route.",
+                    twichui = { groups = { classBars = { modules = { classBars = true } }, markerBar = { modules = { markersBar = true } },
+                        food = { modules = { foodDrink = true } }, navigation = { modules = { navigation = true } } } } },
+            } },
+        { id = "accent", kind = "enum", label = "Accent colour", default = "gold", sets = { "ellesmereui:root.euiAccent" },
+            hint = "The colour EllesmereUI uses for highlights. Nothing else is recoloured.",
+            options = {
+                { id = "gold", label = "Aged gold", hint = "The layout's own.", swatch = { C.ellesmereui.root.euiAccent.custom.r, C.ellesmereui.root.euiAccent.custom.g, C.ellesmereui.root.euiAccent.custom.b },
+                    ellesmereui = { root = { euiAccent = C.ellesmereui.root.euiAccent } } },
+                { id = "class", label = "Your class colour", hint = "Follows the character you play.",
+                    ellesmereui = { root = { euiAccent = { useClass = true } } } },
+                { id = "verdigris", label = "Verdigris", swatch = { 0.36, 0.58, 0.57 },
+                    ellesmereui = { root = { euiAccent = { useClass = false, custom = { r = 0.36, g = 0.58, b = 0.57 } } } } },
+                { id = "ember", label = "Ember", swatch = { 0.80, 0.45, 0.30 },
+                    ellesmereui = { root = { euiAccent = { useClass = false, custom = { r = 0.80, g = 0.45, b = 0.30 } } } } },
+                { id = "dusk", label = "Dusk blue", swatch = { 0.47, 0.60, 0.80 },
+                    ellesmereui = { root = { euiAccent = { useClass = false, custom = { r = 0.47, g = 0.60, b = 0.80 } } } } },
+            } },
+        { id = "size", kind = "density", label = "Size", default = "standard",
+            hint = "How large chat, the damage meter and the minimap are drawn, and the text in chat and the meter. Positions follow.",
+            options = {
+                { id = "standard", label = "Standard", hint = "The size the layout was made at.", density = "standard" },
+                { id = "larger", label = "Larger", hint = "About 15 percent bigger where there is room. Nothing is made smaller than is readable.", density = "larger" },
+            } },
     },
     geometry = {
         canvas = { w = W, h = H, note = "3440 x 1440 at UI scale 0.64" },

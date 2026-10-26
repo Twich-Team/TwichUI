@@ -14,7 +14,7 @@
 
 local R = TwichUI
 local DX = { ADDON = "TwichUI_Diagnostics", CORE = R.ADDON, SETTINGS = "TwichUI_Settings", NAVDATA = "TwichUI_NavData",
-    LAYOUTS = "TwichUI_Layouts" }
+    LAYOUTS = "TwichUI_Layouts", LAYOUTWIZARD = "TwichUI_LayoutWizard" }
 R.DiagnosticsKit = DX
 
 DX.REPORT_SCHEMA = 1      -- the full report's JSON layout (Export.lua); separate from TwichUI's release version

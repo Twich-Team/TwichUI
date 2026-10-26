@@ -944,5 +944,146 @@ do
   Check(Heard(cn, "unknown: 'wobble'"), "an unknown word is refused")
 end
 
+---------------------------------------------------------------------------
+-- 17. Choices (Phase 4, package format 3): what the wizard may ask, validated; picks resolved into the layers; the
+--     accent read back by value; the picks kept in the record
+---------------------------------------------------------------------------
+do
+  local ck = Boot("Choices")
+  local LC = Load(ck)
+  local BASE = LC.CLASSIC_PACKAGE
+  local SCREEN = { w = 2133.33, h = 1200 }
+  local function WithChoices(choices, format)
+    local p = {}
+    for k, v in pairs(BASE) do p[k] = v end   -- the layers are shared, not copied: nothing here changes them
+    p.choices, p.format = choices, format or 3
+    return p
+  end
+  local function Problem(choices, code, why, format)
+    local ok, problems = LC.Validate(WithChoices(choices, format))
+    local found = false
+    for _, pr in ipairs(problems or {}) do if pr.code == code then found = true end end
+    Check(not ok and found, why .. " (" .. code .. ")")
+  end
+  local opt = function(id, extra) local o = { id = id, label = "Label " .. id } for k, v in pairs(extra or {}) do o[k] = v end return o end
+  local switch = function(group, key, v) return { twichui = { groups = { [group] = { modules = { [key] = v } } } } } end
+  local function Accent(id, r) return { ellesmereui = { root = { euiAccent = { useClass = false, custom = { r = r, g = 0.5, b = 0.5 } } } } } end
+  local function Merge(o, f) for k, v in pairs(f) do o[k] = v end return o end
+
+  Check(LC.Validate(BASE), "Classic Adventure, with its three choices, is valid (format " .. BASE.format .. ")")
+  Check(LC.FORMAT == 3 and select(2, LC.Validate(WithChoices(nil, 4))) ~= nil, "format 4 is newer than this version reads")
+  Problem(BASE.choices, "not-yet", "a format 2 package may not carry choices", 2)
+  Problem({}, "bad-value", "an empty list of choices")
+  Problem({ { id = "x", kind = "magic", label = "L", default = "a", options = { opt("a") } } }, "bad-value", "an unknown kind")
+  local many = {}
+  for i = 1, 7 do many[i] = { id = "c" .. i, kind = "density", label = "L", default = "standard", options = { opt("standard", { density = "standard" }) } } end
+  Problem(many, "bad-value", "more choices than the wizard may ask")
+  local opts9 = {}
+  for i = 1, 9 do opts9[i] = opt("o" .. i, { density = "standard" }) end
+  Problem({ { id = "s", kind = "density", label = "L", default = "o1", options = opts9 } }, "bad-value", "more options than a choice may have")
+  Problem({ { id = "s", kind = "density", label = "L", default = "a", extra = 1, options = { opt("a", { density = "standard" }) } } }, "unknown-field", "an unknown field of a choice")
+  Problem({ { id = "s", kind = "density", label = "L", default = "a", options = { opt("a", { density = "standard", bogus = 1 }) } } }, "unknown-field", "an unknown field of an option")
+  Problem({ { id = "s", kind = "density", label = "L", default = "zzz", options = { opt("a", { density = "standard" }) } } }, "bad-value", "a default that is not an option")
+  Problem({ { id = "s", kind = "density", label = "L", default = "a", options = { opt("a", { density = "standard" }), opt("a", { density = "larger" }) } } }, "duplicate-id", "a repeated option id")
+  Problem({ { id = "s", kind = "density", label = "L", default = "a", options = { opt("a", { density = "standard" }) } },
+    { id = "s", kind = "density", label = "L", default = "a", options = { opt("a", { density = "standard" }) } } }, "duplicate-id", "a repeated choice id")
+  Problem({ { id = "S", kind = "density", label = "L", default = "a", options = { opt("a", { density = "standard" }) } } }, "bad-id", "an id that isn't a stable id")
+  Problem({ { id = "s", kind = "density", label = "L|r", default = "a", options = { opt("a", { density = "standard" }) } } }, "bad-value", "a label with a colour code in it")
+  Problem({ { id = "s", kind = "density", label = "L", default = "a", options = { opt("a", { density = "huge" }) } } }, "density-unknown", "a density the geometry doesn't name")
+  Problem({ { id = "s", kind = "density", label = "L", default = "a", options = { opt("a", Merge({ density = "standard" }, switch("classBars", "classBars", true))) } } }, "not-allowed", "a density option that also writes a setting")
+  Problem({ { id = "p", kind = "preset", label = "L", default = "a", options = { opt("a", { swatch = { 2, 0, 0 } }) } } }, "bad-value", "a swatch outside 0 to 1")
+  -- a preset only turns TwichUI switches on
+  Problem({ { id = "p", kind = "preset", label = "L", default = "a", options = { opt("a", switch("classBars", "classBars", false)) } } }, "not-allowed", "a preset that turns a switch off")
+  Problem({ { id = "p", kind = "preset", label = "L", default = "a", options = { opt("a", { twichui = { groups = { notifications = { ui = { arrivalHold = "long" } } } } }) } } }, "not-allowed", "a preset that sets something that is not a switch")
+  Problem({ { id = "p", kind = "preset", label = "L", default = "a", options = { opt("a", Accent("a", 0.5)) } } }, "base-only-in-base-layer", "a preset that names an EllesmereUI look key")
+  Problem({ { id = "p", kind = "preset", label = "L", default = "a", options = { opt("a", { ellesmereui = { fields = { ["minimap.coordsMode"] = "always" } } }) } } }, "not-allowed", "a preset that names an EllesmereUI setting")
+  Problem({ { id = "p", kind = "preset", label = "L", default = "a", options = { opt("a", switch("classBars", "notASwitch", true)) } } }, "unknown-unit", "a preset naming a setting that doesn't exist")
+  -- an enum writes only what it says it does
+  Problem({ { id = "e", kind = "enum", label = "L", default = "a", options = { opt("a", Accent("a", 0.5)) } } }, "bad-value", "an enum with no list of what it sets")
+  Problem({ { id = "e", kind = "enum", label = "L", default = "a", sets = { "ellesmereui:root.euiAccent" }, options = { opt("a", switch("classBars", "classBars", true)) } } }, "not-in-sets", "an option that writes a unit outside its choice's list")
+  Problem({ { id = "e", kind = "enum", label = "L", default = "a", sets = { "ellesmereui:root.euiAccent" },
+    options = { opt("a", { ellesmereui = { root = { fonts = { global = "X" } } } }) } } }, "not-managed", "a choice naming a look key other than the accent")
+  Problem({ { id = "e", kind = "enum", label = "L", default = "a", sets = { "ellesmereui:root.euiAccent" },
+    options = { opt("a", { ellesmereui = { root = { euiAccent = { custom = { r = 2, g = 0, b = 0 }, useClass = false } } } }) } } }, "bad-value", "an accent that is not a colour")
+  Problem({ { id = "e", kind = "enum", label = "L", default = "a", sets = { "ellesmereui:root.euiAccent" },
+    options = { opt("a", { ellesmereui = { root = { euiAccent = { useClass = "yes" } } } }) } } }, "bad-value", "an accent whose flag isn't a boolean")
+  Problem({ { id = "e1", kind = "enum", label = "L", default = "a", sets = { "ellesmereui:root.euiAccent" }, options = { opt("a", Accent("a", 0.4)) } },
+    { id = "e2", kind = "enum", label = "L", default = "a", sets = { "ellesmereui:root.euiAccent" }, options = { opt("a", Accent("a", 0.6)) } } }, "choice-conflict", "two choices writing one unit")
+  -- the base layer is the only place for the rest of the look
+  local frag = { ellesmereui = { root = { fonts = { global = "X" } } } }
+  local pv = {}
+  for k, v in pairs(BASE) do pv[k] = v end
+  pv.layers = { base = BASE.layers.base, variants = { ["classic-adventure"] = { ellesmereui = { modules = BASE.layers.variants["classic-adventure"].ellesmereui.modules, root = { fonts = { global = "X" } } } } } }
+  local okv, prv = LC.Validate(pv)
+  Check(not okv, "root keys are still only for the base layer")
+
+  -- resolving picks into the layers
+  local ok, res = LC.Resolve(BASE, "classic-adventure", { screen = SCREEN })
+  Check(ok and res.picks.helpers == "as-is" and res.picks.accent == "gold" and res.picks.size == "standard", "no picks: every choice at its default")
+  local tw = res.adapters.twichui
+  Check(tw.units["twichui:modules.classBars"] == nil, "and the 'as is' preset writes no switch")
+  ok, res = LC.Resolve(BASE, "classic-adventure", { screen = SCREEN, picks = { helpers = "on-screen", accent = "dusk", size = "larger" } })
+  Check(ok and res.adapters.twichui.units["twichui:modules.classBars"] == true and res.adapters.twichui.layer["twichui:modules.classBars"] == "preset", "a picked preset is the preset layer")
+  Check(res.adapters.twichui.units["twichui:modules.navigation"] == nil, "and only what that option names")
+  local acc = res.adapters.ellesmereui.units["ellesmereui:root.euiAccent"]
+  Check(acc.custom.r == 0.47 and res.adapters.ellesmereui.layer["ellesmereui:root.euiAccent"] == "choices", "a picked accent wins over the base's, as the choices layer")
+  Check(res.geometry.density == "larger" and res.picks.size == "larger", "a picked size is the density")
+  ok, res = LC.Resolve(BASE, "classic-adventure", { screen = SCREEN, picks = { accent = "class" } })
+  Check(ok and res.adapters.ellesmereui.units["ellesmereui:root.euiAccent"].useClass == true and res.adapters.ellesmereui.units["ellesmereui:root.euiAccent"].custom == nil,
+    "the class colour replaces the whole accent, not just part of it")
+  local bad, pr = LC.Resolve(BASE, "classic-adventure", { screen = SCREEN, picks = { accent = "neon" } })
+  Check(not bad and pr[1].code == "pick-unknown", "an option the package doesn't have is refused")
+  bad, pr = LC.Resolve(BASE, "classic-adventure", { screen = SCREEN, picks = { sparkle = "yes" } })
+  Check(not bad and pr[1].code == "pick-unknown", "and a choice it doesn't have")
+  bad, pr = LC.Resolve(BASE, "classic-adventure", { screen = SCREEN, picks = { size = "larger" }, density = "standard" })
+  Check(not bad and pr[1].code == "density-conflict", "a picked size and a different density named as well are refused")
+  ok, res = LC.Resolve(BASE, "classic-adventure", { screen = SCREEN, density = "larger" })
+  Check(ok and res.geometry.density == "larger" and res.picks.size == "larger", "a density named alone (the developer command) stands in for the size, and the picks say so")
+  Check(not LC.Resolve(BASE, "classic-adventure", { screen = SCREEN, density = "huge" }), "an unknown density is still refused")
+  -- the plan key follows the picks
+  local pa = LC.Plan(BASE, "classic-adventure", { screen = SCREEN })
+  local pb = LC.Plan(BASE, "classic-adventure", { screen = SCREEN, picks = { accent = "ember" } })
+  local pc = LC.Plan(BASE, "classic-adventure", { screen = SCREEN, picks = { accent = "ember" } })
+  Check(pa.ok and pb.ok and pa.key ~= pb.key and pb.key == pc.key, "the plan's key follows the picks, and is the same for the same picks")
+  Check(select(2, LC.Apply(BASE, "classic-adventure", pa.key, { screen = SCREEN, picks = { accent = "ember" } })) == "stale", "a plan shown for other picks is stale")
+
+  -- apply, the reload, and the accent read back by value (EllesmereUI's serializer keeps 14 digits)
+  local before = Copy(ck.TwichUIDB)
+  local okA, resA = LC.Apply(BASE, "classic-adventure", pb.key, { screen = SCREEN, picks = { accent = "ember" } })
+  Check(okA and resA.state == "applied", "applied with a pick")
+  local j = LC.Journal.Read()
+  Check(j.picks.accent == "ember" and j.picks.size == "standard" and j.picks.helpers == "as-is", "the record keeps every choice")
+  Check(j.expect.ellesmereui["ellesmereui:root.euiAccent"] == "accent:rgb:0.800,0.450,0.300", "and expects the accent by value")
+  local sv = Logout(ck)
+  local c2 = Boot("Choices", sv)
+  Check(c2.TwichUI.Layouts.Journal.Read().state == "verified", "verified after the reload")
+  local prof = c2.EllesmereUIDB.profiles["TwichUI Classic"]
+  prof.euiAccent.custom.r = tonumber(("%.14g"):format(0.8 + 1e-15))   -- what a round trip through tostring does
+  prof.euiAccent.custom.g = tonumber(("%.14g"):format(0.45))
+  Check(c2.TwichUI.Layouts.Verify(false).state == "match", "a number that went through EllesmereUI's serializer still matches")
+  prof.euiAccent = { useClass = true }
+  local rep = c2.TwichUI.Layouts.Verify(false)
+  local differs = false
+  for _, d in ipairs(rep.adapters.ellesmereui.diffs) do if d.unit == "ellesmereui:root.euiAccent" and d.code == "differs" then differs = true end end
+  Check(rep.state == "mismatch" and differs, "another accent is reported, by value")
+  prof.euiAccent = nil
+  rep = c2.TwichUI.Layouts.Verify(false)
+  local missing = false
+  for _, d in ipairs(rep.adapters.ellesmereui.diffs) do if d.unit == "ellesmereui:root.euiAccent" and d.code == "missing" then missing = true end end
+  Check(missing, "and a missing one")
+  Check(c2.TwichUI.Layouts.EllesmereAdapter.AccentSig({ useClass = true, custom = { r = 1, g = 1, b = 1 } }) == "class" and
+    c2.TwichUI.Layouts.EllesmereAdapter.AccentSig(nil) == "none", "the accent's signature: the class flag wins; nothing is none")
+
+  -- the record's picks are checked like the rest of it
+  local jj = c2.TwichUI.Layouts.Journal
+  local rec = jj.Read()
+  rec.picks = { accent = 5 }
+  Check(select(2, jj.Clean(rec)) == "damaged", "a record whose picks aren't ids is damaged")
+  rec.picks = { a1 = "b", a2 = "b", a3 = "b", a4 = "b", a5 = "b", a6 = "b", a7 = "b", a8 = "b", a9 = "b" }
+  Check(select(2, jj.Clean(rec)) == "damaged", "and so is one with too many")
+  rec.picks = nil
+  Check(jj.Clean(rec) ~= nil, "a record with no picks (an install from before choices) is fine")
+end
+
 if failures > 0 then print(failures .. " FAILED") os.exit(1) end
 print("LAYOUTS TESTS PASSED")

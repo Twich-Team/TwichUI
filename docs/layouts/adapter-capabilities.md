@@ -105,3 +105,16 @@ it run in game:
 | NaowhForever (`Core/Onboarding/Setup.lua`, `Core/Profiles/Setups.lua`) | Prior art for Forever onboarding: a plan of on/off changes and reload, a one-slot `setupBefore` backup, addon enable states per character | Architecture reference only. License: all rights reserved (`LICENSE.md`). Nothing copied |
 | EllesmereUI Chat, Quest Tracker, Minimap, Damage Meters | The only implementations of these surfaces in the reference set and the installed AddOns | Covered by the `ellesmereui` adapter |
 | RXPGuides, WaypointUI, OpenMap, Attune | Not layout surfaces in the first release | None |
+
+**Phase 4 (2026-10-26).** Read for the wizard's choices, in EllesmereUI 9.6.8; none of it run in game:
+
+| What | Status | Evidence |
+|---|---|---|
+| The accent is a profile-root key `euiAccent = { custom = { r, g, b }, useClass }`; the import copies it whole; EllesmereUI reads exactly those two keys and writes them only from its own accent swatch | S | `EllesmereUI_Profiles.lua:3464` (`merged.euiAccent = DeepCopy(imported.euiAccent)`), `EllesmereUI_UICore.lua:527` (`SetActiveProfileAccent`), `:556` (`ResolveProfileAccent`) |
+| The serializer writes numbers with `tostring` (14 digits), so a colour read back is not bit-equal: TwichUI compares the accent by a three-place signature | S (the existing note on `Serializer`), T | `AdapterEllesmere.lua` `A.AccentSig`; `tests/test_layouts.lua` §17 |
+| **Cursor-following tooltip: not backed.** `tooltipAnchorCursor` (and `tooltipCursorPosition`, `tooltipCursorOffsetX/Y`, `tooltipGrowthDirection`) are root keys of `EllesmereUIDB`, in the Blizzard-skin globals list | S | `EllesmereUI_Profiles.lua:2043` `BLIZZ_SKIN_GLOBAL_KEYS`; `EUI_BlizzardSkin_TooltipAnchor.lua:125, 148, 463` |
+| The only writer is the import's `blizzSkinGlobals` bundle, and it sets **every** key of the list from the payload, nil included | S | `EllesmereUI_Profiles.lua:2157` `ApplyBlizzSkinGlobals`; applied at `:3326`; stripped from a payload by `ImportProfileSilent` when the Blizzard-skin module is disabled (`:5009`) |
+| The fixed tooltip position is per profile (`tooltipFixedPos`) but is not a root key the import takes (`AdapterEllesmere.lua` `ROOT`) | S | `EUI_BlizzardSkin_TooltipAnchor.lua:200-300`; `EllesmereUI_Profiles.lua:2038` (the comment that the account-level key is stale) |
+| TwichUI has no tooltip-anchor setting | S | searched `!!!TwichUI/` and `TwichUI_Settings/` |
+| Registering an installer, importing, switching and deleting profiles: unchanged since Phase 2; the wizard calls only the engine, never EllesmereUI directly | S | `TwichUI_LayoutWizard/*.lua` call nothing of EllesmereUI (the only read of it is `E._firstInstallPending`, as Phase 2's plan does) |
+

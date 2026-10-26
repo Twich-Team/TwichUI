@@ -1,0 +1,24 @@
+## Interface: 16001, 120105
+## Title: |cffC9A24ATwich|rUI Layout Setup
+## Notes: The setup wizard for TwichUI's interface layouts. Loaded only when you open it (/tui layout); keep it turned on alongside TwichUI.
+## Author: twichie
+## Version: 1.0.0
+## RequiredDeps: !!!TwichUI, TwichUI_Layouts
+## LoadOnDemand: 1
+## IconTexture: Interface\AddOns\!!!TwichUI\media\icon
+## X-License: MIT (code); see !!!TwichUI\LICENSE
+## Category: Interface Enhancements
+
+# docs/layouts/wizard.md has what it does. It keeps no saved variables of its own: the choices it remembers are TwichUIDB.layouts.wizard
+# (the core's), and the install record is TwichUIDB.layouts.install, written by TwichUI_Layouts. Nothing here runs until the window is asked for.
+# Artwork (media/*.tga) is made by tools/make_layout_wizard_art.py from the sources in assets/; a missing file never stops the wizard.
+Art.lua
+
+# Remembered choices, then the model (no frames: what each step shows and what its buttons do), then the drawing
+State.lua
+Model.lua
+Preview.lua
+Pages.lua
+
+# The window (last: it tells TwichUI the wizard is ready)
+Window.lua

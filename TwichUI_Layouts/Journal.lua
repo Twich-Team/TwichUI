@@ -5,6 +5,7 @@
 -- anyone's settings, no names of other profiles, no frames, timers or callbacks. Bounded by the units a package may name.
 --
 --   { v = 1, package, revision, variant, char, state, at, key, reload,
+--     picks = { [choice id] = option id },                               -- what the wizard asked (optional; at most MAX_PICKS)
 --     steps = { { adapter, state, code, rollback, reload } },          -- in apply order
 --     snapshot = { [adapter] = part }, expect = { [adapter] = { [unit] = fingerprint } }, inputs = { [adapter] = fingerprint },
 --     verify = { state, at, diffs = { { adapter, unit, code } }, unverifiable },
@@ -25,6 +26,7 @@ J.STATES = LY.Set({ "applying", "applied", "verified", "mismatch", "partial", "i
 J.STEP_STATES = LY.Set({ "pending", "done", "skipped", "failed", "partial", "not-run" })
 J.MAX_DIFFS = 8
 J.MAX_STEPS = 4
+J.MAX_PICKS = 8
 
 local function Root(create)
     if type(TwichUIDB) ~= "table" then return nil end
@@ -62,6 +64,16 @@ local function CleanFingerprints(t)
     return true
 end
 
+local function CleanPicks(t)
+    if type(t) ~= "table" then return false end
+    local n = 0
+    for k, v in pairs(t) do
+        n = n + 1
+        if n > J.MAX_PICKS or not LY.IsId(k) or not LY.IsId(v) then return false end
+    end
+    return true
+end
+
 -- Whether a snapshot can be used to restore from: { [adapter] = part }, each part's own shape (the adapter's check).
 function J.CleanSnapshot(snap)
     if type(snap) ~= "table" or next(snap) == nil then return false, "empty" end
@@ -82,6 +94,7 @@ function J.Clean(j)
     if not (LY.IsId(j.package) and Count(j.revision) and LY.IsId(j.variant) and LY.Plain(j.char, 64)) then return nil, "damaged" end
     if not J.STATES[j.state] or not Count(j.at) or (j.key ~= nil and not LY.Plain(j.key, 96)) then return nil, "damaged" end
     if j.reload ~= nil and type(j.reload) ~= "boolean" then return nil, "damaged" end
+    if j.picks ~= nil and not CleanPicks(j.picks) then return nil, "damaged" end
     if not CleanSteps(j.steps) then return nil, "damaged" end
     if not J.CleanSnapshot(j.snapshot) then return nil, "damaged" end
     if type(j.expect) ~= "table" then return nil, "damaged" end

@@ -22,6 +22,17 @@ K.Page({
             "Prints the /tui commands in your chat window: this window, the Chronicle, the sharing window, the troubleshooting report and card previews.")
 
         -----------------------------------------------------------------------
+        -- The setup wizard is its own addon (TwichUI_LayoutWizard, load on demand): this only opens it. Not a settings page:
+        -- it is a workflow with a review, an apply and a restore, so it has its own window.
+        if R.LayoutsLauncher then
+            Header("Interface layout", "Set up a complete interface: where chat, the minimap, the unit frames and the action bars sit, and how EllesmereUI and TwichUI look, worked out for your screen. Opening the setup changes nothing.")
+            Button("Layout setup", "Open layout setup", function()
+                K.CloseOptions()
+                R.LayoutsLauncher.OpenWizard()
+            end, "Opens the setup window (same as typing /tui layout). You choose a layout and a few personal options, review exactly what it would change, and only then apply it, with a restore point so your previous setup can be put back. Nothing changes until you apply, and nothing reloads by itself.")
+        end
+
+        -----------------------------------------------------------------------
         Header("General", "Settings for TwichUI as a whole.")
         local motionSetting = K.TableSetting("reduceSettingsMotion", "reduceSettingsMotion", function() return TwichUIDB.ui end,
             "Reduce window motion", false, "switch:ui.reduceSettingsMotion")

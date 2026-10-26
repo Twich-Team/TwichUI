@@ -5,8 +5,9 @@ This is the contract for TwichUI's layout packages: two complete interface exper
 (audit, 2026-10-26). Phase 2 (2026-10-26) built the engine and the apply/verify/restore pipeline for a small developer
 test package (`TwichUI_Layouts/`); **§11 lists every place where that implementation revised this contract**, and
 those revisions win over the text above them. Phase 3 (2026-10-26) added the screen layer and the first author layout,
-Classic Adventure; **§12 lists its revisions**, which win over §1–§11. The wizard, the preview, Compact Adventure and
-retained overrides are not built. `adapter-capabilities.md` holds the source evidence for each integration, and
+Classic Adventure; **§12 lists its revisions**, which win over §1–§11. Phase 4 (2026-10-26) added the setup wizard and the
+package `choices`; **§13 lists its revisions**, which win over everything above. Compact Adventure and retained overrides
+are not built. `adapter-capabilities.md` holds the source evidence for each integration, and
 `implementation-status.md` tracks the phases and the open decisions.
 
 Words used here:
@@ -490,4 +491,49 @@ contract:
    read back and compared before the report is written (`capture-classic-adventure.md`).
 9. **Classic Adventure is a developer package (`dev = true`) until Phase 7.** Its data comes from the Retail client's
    saved files (the only ones there are), so it may be tried on Retail (§11.13); a Forever check is still required.
+
+## 13. Revisions made in Phase 4 (2026-10-26)
+
+Phase 4 built the wizard (`TwichUI_LayoutWizard/`, `wizard.md`) and, for it, the `choices` the wizard asks. Where it
+differs from §1–§12, the code and this section are the contract:
+
+1. **Package format 3 (§5).** Adds `choices`: a list (at most `LY.MAX_CHOICES` = 6) of
+   `{ id, kind = "preset" | "enum" | "density", label, hint, default, sets, options }`, each option
+   `{ id, label, hint, swatch = { r, g, b }, density, [adapter] = fragment }` (at most `LY.MAX_OPTIONS` = 8). Ids are stable
+   ids; labels are plain text (no `|`); the default names an option. A format 1 or 2 package carrying `choices` is refused
+   as "not yet". A choice is a closed list that names exactly what it writes, and the validator refuses anything else:
+   a **preset** may only turn TwichUI switches on (`twichui:modules.<key>` with the value `true`: never off, never a
+   non-switch, never another adapter's unit); an **enum** may write only the units in its `sets`; a **density** names a
+   density the package's geometry has and carries no fragment; **two choices never write the same unit**. Problem codes:
+   `not-allowed`, `not-in-sets`, `choice-conflict`, `density-unknown`, `duplicate-id`, `bad-id`, `bad-value`.
+2. **Layers (§1).** A picked preset is a second "preset" layer, above the variant's own preset; a picked enum is the
+   "choices" layer (the composer's `opts.choices` pass-through still follows it). `LY.Resolve(pkg, variant, opts)` takes
+   `opts.picks = { [choiceId] = optionId }`: a choice left out takes its default; an unknown choice or option is refused
+   (`pick-unknown`); `resolved.picks` is every choice with its option. A picked density is the geometry's density;
+   `opts.density` named as well must agree (`density-conflict`), and `opts.density` alone (the developer command) stands in
+   for an unpicked size, with `picks.size` set to the option that has it.
+3. **Plan and record (§8).** `LY.Plan` and `LY.Apply` take `opts.picks`; `plan.picks` is every choice; the picks are part
+   of the plan key; the install record keeps them (`picks`, optional, at most `Journal.MAX_PICKS` = 8 id-to-id entries,
+   checked by `J.Clean`; an install from before choices has none).
+4. **EllesmereUI adapter (§3, §11.4).** `root.euiAccent` is accepted from a choice (the choice layer takes that one root
+   key; the base layer still carries the whole look, and every other layer still refuses `root`). Its value is checked in
+   shape (`A.AccentOk`: `useClass` a boolean, `custom` with `r`, `g`, `b` in 0..1, nothing else). It is **verified by
+   value**, no longer by presence: the plan expects `accent:class` or `accent:rgb:%.3f,%.3f,%.3f`, and Verify computes the
+   same signature from the live profile (`A.AccentSig`); three places, because EllesmereUI's serializer writes numbers with
+   `tostring` and a round trip is not exact (§11). Other root keys remain presence-only.
+5. **Not managed, and why (§2, D5).** The cursor-following tooltip (`EllesmereUIDB.tooltipAnchorCursor`) is an account-wide
+   root key of the saved variable, one of the Blizzard-skin globals, which the only supported writer
+   (`ApplyBlizzSkinGlobals`) sets whole (every key of the bundle, nil included) and which a profile switch and delete
+   cannot put back. It needs the whole-`EllesmereUIDB` restore point (D3) first. See `adapter-capabilities.md`.
+6. **Packaging (§10).** The wizard is its own load-on-demand sibling, `TwichUI_LayoutWizard`, requiring the core and
+   `TwichUI_Layouts`, so the check after a reload loads the engine and not the window's code. `tools/release.py`
+   `REQUIRED_DEPS` states what each load-on-demand addon requires (the core, and for the wizard the engine too). The core
+   adds `L.LoadWizard`, `L.OpenWizard` and `L.WizardResume` to `LayoutsLauncher.lua`, and `/tui layout` (bare) opens the
+   wizard.
+7. **Saved data (§10).** `TwichUIDB.layouts.wizard = { v = 1, picks, resume }` beside `layouts.install`, covered by the same
+   `layouts` entries in `TwichConfig.LOCAL` and `RS.OWN_LEFT_OUT`. `Journal.Clear` removes `layouts` only when it holds
+   nothing else, so the wizard's picks survive a finished restore.
+8. **Resume (§8 step 8).** The check after login (`L.Continue`) opens the wizard on the result only when the wizard left
+   the resume note (the player pressed its Reload now); otherwise it prints its chat line as before, and the line points to
+   `/tui layout`.
 
