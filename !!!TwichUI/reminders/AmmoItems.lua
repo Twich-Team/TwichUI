@@ -1,7 +1,7 @@
--- TwichUI: Ammunition warning, what counts as ammunition
+-- TwichUI: Reminders, what counts as ammunition
 -- Two things, and nothing else: how an item ID is recognized as arrows or bullets, and the list of ammunition the
 -- player registered themselves. Neither says anything about what is equipped or carried; that is read from the
--- game each time (Warning.lua) and judged by State.lua.
+-- game each time (State.lua's "ammo" source) and judged by Ammunition.lua's condition.
 --
 -- Recognizing an item (AI.Kind): the player's own registration first, then the client's classification. An item
 -- of the Projectile class (Enum.ItemClass.Projectile, 6: Interface/AddOns/Blizzard_APIDocumentationGenerated/
@@ -12,14 +12,13 @@
 -- called wrong ammunition and never counted as a supply. C_Item.GetItemInfoInstant answers from the client's own data
 -- without waiting for the item to be cached, so recognizing an item never makes a request.
 --
--- Registering ammunition (the "Custom ammunition" tab in settings): an item ID and what it is, arrows or bullets,
+-- Registering ammunition (Reminders > Known ammunition in settings): an item ID and what it is, arrows or bullets,
 -- kept in TwichUIDB.ui.ammoCustom.items as { { id, kind }, ... }. It exists for a server-specific item the client
 -- does not classify (or classifies differently). Registering an item does not say it is equipped, carried,
 -- compatible or consumed; it only says what that ID is when it turns up. Removing it forgets the registration and
 -- nothing else. The player's registration wins over the client's classification, so a wrong one can be corrected.
 
 local R = TwichUI
-local AM = R.Ammo
 local AI = {}
 R.AmmoItems = AI
 
@@ -139,7 +138,7 @@ local function Tell()
 end
 
 -- The list was written somewhere else (a profile change, an import): drop what was built from it and tell the page.
--- The controller hears about profile changes and imports through its own hooks.
+-- The reminders hear about profile changes through their own hook, and about an import through TwichConfig.lua.
 function AI.Reindex()
     index = nil
     Tell()
@@ -148,7 +147,7 @@ end
 local function Changed()
     index = nil
     Tell()
-    AM.Invalidate()
+    R.Reminders.Invalidate()   -- the running reminders read their ammunition again
 end
 
 local function Write(list)
@@ -237,4 +236,5 @@ function AI.Snapshot()
     return { registered = AI.Count(), cached = cached }
 end
 
-R.Profiles.OnApply("views", "ammo-items", AI.Reindex)
+-- Before the reminders' own hook (Config.lua, loaded after this file), so they read the new profile's list.
+R.Profiles.OnApply("layout", "ammo-items", AI.Reindex)

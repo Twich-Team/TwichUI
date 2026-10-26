@@ -33,7 +33,6 @@ pages\Restock.lua
 pages\RestockItems.lua
 pages\Mage.lua
 pages\ClassBars.lua
-pages\Ammo.lua
 pages\AmmoItems.lua
 pages\Chronicle.lua
 pages\Pins.lua

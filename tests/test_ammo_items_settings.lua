@@ -1,12 +1,10 @@
 dofile(TESTS .. "harness.lua")
 dofile(TESTS .. "settings_mock.lua")
--- The Hunter ammunition warning in the settings window and in the saved settings the window reads:
---   * the page: where it sits, its switch (off by default), rows that read and write through the feature's own
---     Get/Set, rows greyed out under the switch with a reason, the status line for a character that is not a Hunter;
---   * the Custom ammunition tab: typing an ID or pasting a link, dropping an item (it goes back; anything else is
---     refused and left on the cursor), a repeat, what the game says about an item that is loading or unknown,
---     correcting what an item is, Remove, nothing made again on a redraw, nothing listened for while hidden;
---   * Reset: the settings on the page only.
+-- Known ammunition in the settings window (TwichUI_Settings/pages/AmmoItems.lua, a tab of Reminders):
+--   * where it sits: a hosted tab of Reminders;
+--   * typing an ID or pasting a link, dropping an item (it goes back; anything else is refused and left on the cursor),
+--     a repeat, what the game says about an item that is loading or unknown, correcting what an item is, Remove,
+--     nothing made again on a redraw, nothing listened for while hidden.
 -- Stand-in frames keep their scripts, text, focus and shown state; nothing here is the game.
 
 local made = 0
@@ -92,95 +90,17 @@ local function Check(cond, msg) if not cond then failures = failures + 1; print(
 
 local c, S = SettingsClient({ name = "Rich", beforeInit = World })
 local R = c.TwichUI
-local AM, AI, K = R.Ammo, R.AmmoItems, S.K
+local AI, K = R.AmmoItems, S.K
 local function Flush() for _ = 1, 4 do FlushTimers() end end
 
----------------------------------------------------------------------------
--- 1. The page and its rows
----------------------------------------------------------------------------
-local page, tab
-for _, p in ipairs(S.pages) do
-  if p.key == "ammo" then page = p elseif p.key == "ammoCustom" then tab = p end
-end
-Check(page and page.group == "class" and page.kind == "page" and page.name == "Ammunition warning", "a page of its own under Gear & class")
-Check(tab and tab.parent == "Ammunition warning" and tab.kind == "hosted", "the custom list is a tab of it")
-local sw = S.variables.TWICHUI_ammoWarning
-Check(sw and sw:GetValue() == false and sw:GetDefaultValue() == false, "off by default")
-
-local rows = {}
-for _, row in ipairs(K.pages.ammo.rows) do
-  if row.setting and row.setting.variable then rows[row.setting.variable] = row end
-  if row.data and row.data.name then rows[row.data.name] = rows[row.data.name] or row end
-end
-for _, v in ipairs({ "show", "icon", "font", "fontSize", "fontOutline", "textColor", "scale", "opacity", "sound", "soundName", "soundChannel" }) do
-  local name = "TWICHUI_ammo" .. v:sub(1, 1):upper() .. v:sub(2)
-  Check(S.variables[name], v .. " is a setting on the page")
-  if S.variables[name] then Check(S.variables[name]:GetValue() == AM.DEFAULTS[v], v .. " reads its default") end
-end
-for _, suffix in ipairs({ "BgTexture", "BgColor", "BgOpacity", "BorderTexture", "BorderSize", "BorderColor", "BorderOpacity" }) do
-  Check(S.variables["TWICHUI_ammoLook" .. suffix], suffix .. " is on the page")
-end
-Check(S.variables.TWICHUI_ammoLookBgTexture:GetValue() == "none" and S.variables.TWICHUI_ammoLookBorderTexture:GetValue() == "none",
-  "no panel by default")
-
--- rows are greyed out under the switch, with a reason
-local fontSize = rows.TWICHUI_ammoFontSize
-Check(fontSize and not fontSize:Enabled() and fontSize:DisabledReason() ~= nil, "text rows wait for the switch")
-Check(rows["Preview"] and not rows["Preview"]:Enabled() and rows["Move the warning"] and not rows["Move the warning"]:Enabled(), "so do Preview and Move")
-sw:SetValue(true)
-Check(fontSize:Enabled() and rows["Preview"]:Enabled(), "on: they work")
-Check(R:Enabled("ammoWarning"), "the switch is the core's")
-
--- a row writes through the feature
-S.variables.TWICHUI_ammoFontSize:SetValue(36)
-Check(AM.Get("fontSize") == 36 and c.TwichUIDB.ui.ammo.fontSize == 36, "a slider writes through Set")
-S.variables.TWICHUI_ammoShow:SetValue("combat")
-Check(AM.Get("show") == "combat", "a choice")
-S.variables.TWICHUI_ammoTextColor:SetValue("ff00ff00")
-Check(AM.Get("textColor") == "ff00ff00", "a color")
-S.variables.TWICHUI_ammoIcon:SetValue(false)
-Check(AM.Get("icon") == false, "a box")
-S.variables.TWICHUI_ammoLookBgTexture:SetValue("solid")
-Check(AM.Look.Get("bgTexture") == "solid" and c.TwichUIDB.ui.ammoLook.bgTexture == "solid", "the look is saved in its own table")
-
--- the sound rows follow the sound switch
-local soundName = rows.TWICHUI_ammoSoundName
-Check(soundName and not soundName:Enabled() and soundName:DisabledReason():find("sound on", 1, true), "sound choices wait for the sound switch")
-S.variables.TWICHUI_ammoSound:SetValue(true)
-Check(soundName:Enabled() and rows["Play the sound"]:Enabled(), "and work once it is on")
-
--- no class gate: the status describes the equipment, not the class
-local status = rows["On this character"]
-Check(status and not status.value():find("Hunter", 1, true), "the status names no class (" .. tostring(status and status.value()) .. ")")
-
--- the preview works for any class; the position buttons call through
-rows["Preview"].click()
-Check(R.AmmoWarning.PreviewActive() and R.AmmoWarning.PreviewMessage() == "NO AMMO EQUIPPED", "Preview shows a sample on any character")
-rows["Sample message"].click()
-Check(R.AmmoWarning.PreviewMessage() == "OUT OF AMMO", "and the next message")
-rows["Preview"].click()
-Check(not R.AmmoWarning.PreviewActive(), "and hides it")
-rows["Move the warning"].click()
-Check(R.AmmoWarning.PositioningActive(), "Unlock")
-rows["Move the warning"].click()
-Check(not R.AmmoWarning.PositioningActive(), "Lock")
-AM.SetPosition(33, 44)
-rows["Reset position"].click()
-Check(not AM.HasPosition(), "Reset position")
-
--- Reset: the page's own settings only
-AI.Add(90001, "bullet")
-AM.SetPosition(7, 8)
-local reset
-for _, row in ipairs(K.pages.ammo.rows) do if row.reset and row.data.name == "Ammunition warning settings" then reset = row end end
-Check(reset, "a reset for the settings")
-S.ClickReset(reset)
-Check(AM.Get("fontSize") == 28 and AM.Get("show") == "equipped" and AM.Get("icon") == true and AM.Get("sound") == false, "the settings are back")
-Check(AM.Look.Get("bgTexture") == "solid" and AM.HasPosition() and AI.Count() == 1 and R:Enabled("ammoWarning"), "the look, the place, the list and the switch are kept")
+local tab
+for _, p in ipairs(S.pages) do if p.key == "ammoCustom" then tab = p end end
+Check(tab and tab.parent == "Reminders" and tab.kind == "hosted" and tab.name == "Known ammunition", "the list is a tab of Reminders")
+Check(S.variables.TWICHUI_ammoWarning == nil, "the old warning's switch is gone")
 AI.Remove(90001)
 
 ---------------------------------------------------------------------------
--- 2. The Custom ammunition tab
+-- The Known ammunition tab
 ---------------------------------------------------------------------------
 local P = R.AmmoItemsPage
 local f = P.Frame()

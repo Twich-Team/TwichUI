@@ -261,16 +261,6 @@ guides\CozyBagState.lua
 guides\CozyBag.lua
 guides\CozyBagWindow.lua
 
-# Hunter ammunition warning: a line of text near the centre of the screen when a Hunter's ammunition is missing, out or the
-# wrong kind for the ranged weapon (Hunters only, off until turned on; nothing is equipped, moved or bought for you).
-# Config.lua is what it stores, Items.lua what counts as ammunition (and the player's own list), State.lua the judgement
-# (no game calls), Warning.lua the events and the frame. Uses modules\MenuStyle.lua for the font and the optional panel;
-# the settings are in TwichUI_Settings.
-ammo\Config.lua
-ammo\Items.lua
-ammo\State.lua
-ammo\Warning.lua
-
 # Hazard alerts: a sound for each of three alert categories when an aura you list lands on you, grows or fades, played by the
 # game itself through its aura-sound registration (the client gives addons no combat-log payload, so no damage is read).
 # Off until turned on; nothing runs when a hazard happens. Config.lua is what it stores, Rules.lua what is registered (no game
@@ -280,12 +270,15 @@ hazard\Rules.lua
 hazard\Alerts.lua
 
 # Reminders: artwork, an icon or words on screen while conditions you set are true (an empty off hand, a missing item,
-# combat, being mounted ...). Nothing exists until you make one, and each starts turned off. Config.lua is what is stored
-# and checked, Conditions.lua the kinds of condition (pure), Evaluate.lua the decision (pure), State.lua reads the game,
+# combat, being mounted, ammunition missing or used up ...). Nothing exists until you make one, and each starts turned off. Config.lua is what is stored
+# and checked, Conditions.lua and Ammunition.lua the kinds of condition (pure; AmmoItems.lua is what counts as ammunition,
+# loaded first so a profile change reaches it before the reminders), Evaluate.lua the decision (pure), State.lua reads the game,
 # Display.lua draws, Controller.lua puts them together. It never equips, uses or casts anything. The settings are in
 # TwichUI_Settings; the artwork is made by tools/make_reminder_art.py.
+reminders\AmmoItems.lua
 reminders\Config.lua
 reminders\Conditions.lua
+reminders\Ammunition.lua
 reminders\Evaluate.lua
 reminders\State.lua
 reminders\Display.lua
@@ -362,7 +355,6 @@ diag\Map.lua
 diag\Npcs.lua
 diag\ChatClean.lua
 diag\ClassBars.lua
-diag\Ammo.lua
 diag\Hazard.lua
 diag\Reminders.lua
 diag\HealerWatch.lua

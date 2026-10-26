@@ -37,7 +37,7 @@ for _, page in ipairs(K.list) do
     ["Pin appearance"] = "Pins and Pings", ["Map pings"] = "Pins and Pings", ["Navigation appearance"] = "Navigation", ["Notification appearance"] = "Notifications", ["Stat weights"] = "Gear comparison", ["Refreshment shares"] = "Mage",
     ["Restock items"] = "Vendor restocking", ["Target markers"] = "Markers", ["World markers"] = "Markers", ["Marker bar"] = "Markers",
     ["Class resource bar layout"] = "Class resource bars", ["Class resource bar appearance"] = "Class resource bars",
-    ["Class resource bar effects"] = "Class resource bars", ["Custom ammunition"] = "Ammunition warning",
+    ["Class resource bar effects"] = "Class resource bars", ["Known ammunition"] = "Reminders",
     ["Chat cleaning channels"] = "Chat cleaning", ["Chat cleaning rules"] = "Chat cleaning", ["Chat cleaning live view"] = "Chat cleaning", ["Hazard alert rules"] = "Hazard alerts",
     ["World map places"] = "World map", ["Vendors and trainers: your list"] = "Vendors and trainers", ["World Knowledge"] = "Vendors and trainers" }
   assert((page.parent and K.pages[page.parent].name) == under[page.name], page.name .. " is in its place")
@@ -49,7 +49,7 @@ for key, default in pairs(defaults) do
   n = n + 1
   assert(default == R.DEFAULT_MODULES[key], key .. " default matches a new install")
 end
-assert(n == 73, "every module has a toggle: " .. n)
+assert(n == 72, "every module has a toggle: " .. n)
 assert(defaults.hazardAlerts == false, "hazard alerts are opt-in")
 assert(defaults.reminders == true, "reminders are on (none exist until made, and each starts turned off)")
 assert(defaults.targetArt == false, "target dragon artwork is opt-in")
@@ -250,7 +250,7 @@ assert(attune:GetTooltip():find("after reload"), "toggle change shows it needs a
 
 -- The overview links to one page per feature, in this order; every setting
 -- is on exactly one page (registration above refuses a repeat).
-assert(table.concat(pageOrder, ",") == "Notifications,Notification appearance,Quality of life,Markers,Chat cleaning,Food and drink,Hazard alerts,Vendor restocking,Auction House,Journey Chronicle,Chronicle appearance,Cozy Sleeping Bag,Pins and Pings,Map pings,Pin appearance,Map Toolbar,World map,World map places,Navigation,Vendors and trainers,Vendors and trainers: your list,Gear comparison,Mage,Ammunition warning,Class resource bars,Class resource bar layout,Class resource bar appearance,Class resource bar effects,Addon skins,SpeakStone speech frame,RestedXP,Configuration sharing,Profiles,Troubleshooting", table.concat(pageOrder, ","))
+assert(table.concat(pageOrder, ",") == "Notifications,Notification appearance,Quality of life,Markers,Chat cleaning,Food and drink,Hazard alerts,Vendor restocking,Auction House,Journey Chronicle,Chronicle appearance,Cozy Sleeping Bag,Pins and Pings,Map pings,Pin appearance,Map Toolbar,World map,World map places,Navigation,Vendors and trainers,Vendors and trainers: your list,Gear comparison,Mage,Class resource bars,Class resource bar layout,Class resource bar appearance,Class resource bar effects,Addon skins,SpeakStone speech frame,RestedXP,Configuration sharing,Profiles,Troubleshooting", table.concat(pageOrder, ","))
 for variable, page in pairs({
   TWICHUI_media = "TwichUI", TWICHUI_quietLogin = "TwichUI", 
   TWICHUI_gearHints = "Gear comparison", TWICHUI_gearTree = "Gear comparison", TWICHUI_gearBagStyle = "Gear comparison",

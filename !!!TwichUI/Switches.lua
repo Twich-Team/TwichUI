@@ -238,9 +238,6 @@ Define("chatClean", { apply = Refresh("ChatClean") })
 -- Class resource bars
 Define("classBars", { apply = Refresh("ClassBars") })
 
--- Hunter ammunition warning
-Define("ammoWarning", { apply = Refresh("Ammo") })
-
 -- Reminders: off hides every one at once and listens for nothing; your reminders are kept either way
 Define("reminders", { apply = Refresh("ReminderController") })
 

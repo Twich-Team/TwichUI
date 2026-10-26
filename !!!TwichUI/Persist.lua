@@ -310,7 +310,7 @@ end
 
 -- Groups the features write into without checking first.
 local UI_GROUPS = { "qol", "foodDrink", "brokerMenu", "refreshments", "refreshmentsStyle",
-    "restedxpSkin", "restedxpSkinText", "restedxpSkinState", "restedxpTimerLook", "restedxpTimerText", "speakstoneSkin", "speakstoneSkinStyle", "chronicleLook", "chronicleAppearance", "guideWaypoint", "guideAuto", "guideTracker", "mageSell", "restock", "restockPromptStyle", "chatClean", "classBars", "classBarsLook", "classBarsOverrides", "classBarsPosition", "ammo", "ammoLook", "ammoPosition", "ammoCustom", "hazard", "hazardCustom", "hazardBuiltin", "cozyBag", "reminders", "healerWatch", "healerWatchBarLook",
+    "restedxpSkin", "restedxpSkinText", "restedxpSkinState", "restedxpTimerLook", "restedxpTimerText", "speakstoneSkin", "speakstoneSkinStyle", "chronicleLook", "chronicleAppearance", "guideWaypoint", "guideAuto", "guideTracker", "mageSell", "restock", "restockPromptStyle", "chatClean", "classBars", "classBarsLook", "classBarsOverrides", "classBarsPosition", "ammoCustom", "hazard", "hazardCustom", "hazardBuiltin", "cozyBag", "reminders", "healerWatch", "healerWatchBarLook",
     "markers", "markerOrder", "markerBar", "markerBarStyle", "markerBarPosition",
     "partyPins", "pinsLook", "pinsAppearance", "pinsMapText", "pinsBroker", "pinsBrokerMenu", "pinsEditorLook",
     "navigation", "navigationLook", "navTravel", "mapExplore", "npcMap",
@@ -320,8 +320,20 @@ local UI_GROUPS = { "qol", "foodDrink", "brokerMenu", "refreshments", "refreshme
 -- Keys the settings window used to keep and nothing reads any more. "Show advanced options" hid some settings
 -- behind a switch; every setting is shown now, so a stored value (true or false) has no effect. Removed
 -- wherever it is found, once it is, which is repeatable and needs no schema step. "easyFishingClient" was the
--- record Easy Fishing (since removed) kept of the game settings it had changed.
-local OBSOLETE_UI = { "showAdvanced", "easyFishingClient" }
+-- record Easy Fishing (since removed) kept of the game settings it had changed. The Hunter ammunition warning was
+-- replaced by ammunition reminders (reminders/Ammunition.lua): its look, place and options go; the ammunition the
+-- player registered (ammoCustom) is kept, and so is every reminder.
+local OBSOLETE_UI = { "showAdvanced", "easyFishingClient", "ammo", "ammoLook", "ammoPosition" }
+local OBSOLETE_MODULES = { "ammoWarning" }
+
+local function RemoveObsoleteModules(modules)
+    for _, k in ipairs(OBSOLETE_MODULES) do
+        if modules[k] ~= nil then
+            modules[k] = nil
+            P.Repair("legacy-key-removed")
+        end
+    end
+end
 
 local function RemoveObsoleteUi(ui)
     for _, k in ipairs(OBSOLETE_UI) do
@@ -494,6 +506,7 @@ function P.Normalize(db, fresh)
         end
     end
     if added > 0 then P.Repair("defaults-added", added) end
+    RemoveObsoleteModules(db.modules)
     if type(db.ui) == "table" then
         NormalizeUiGroups(db.ui)
         RemoveObsoleteUi(db.ui)

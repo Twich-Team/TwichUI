@@ -253,6 +253,7 @@ local function Subjects()
     local C = R.ReminderConditions
     local out = {}
     for _, slot in ipairs(C.SLOTS) do out[#out + 1] = { value = "slot:" .. slot[1], label = slot[3] } end
+    out[#out + 1] = { value = "ammo", label = "Ranged ammunition" }
     out[#out + 1] = { value = "player", label = "You (the player)" }
     return out
 end
@@ -265,6 +266,8 @@ local function SubjectOf(cond)
         return "slot:" .. tostring(cond.slot), s and s[3] or tostring(cond.slot)
     elseif cond.type == "player" then
         return "player", "You (the player)"
+    elseif cond.type == "ammunition" then
+        return "ammo", "Ranged ammunition"
     end
     return nil, "Unknown kind"
 end
@@ -274,6 +277,8 @@ local function ValueChoices(cond)
     local out = {}
     if cond.type == "equipment" then
         for _, c in ipairs(C.SlotChoices(cond.slot)) do out[#out + 1] = { value = c[1], label = c[2] } end
+    elseif cond.type == "ammunition" then
+        for _, c in ipairs(R.ReminderAmmo.CHOICES) do out[#out + 1] = { value = c[1], label = c[2], tooltip = c[4] } end
     elseif cond.type == "player" then
         for _, st in ipairs(C.STATES) do
             if C.StateSupported(st[1]) or cond.state == st[1] then
@@ -339,9 +344,10 @@ local function WhenSection(parent, env)
         end
         row.subject = Dropdown(s, 170, Subjects, function(value)
             local cur = Cond()
-            if value == "player" then
-                if type(cur) == "table" and cur.type == "player" then return end
-                SetCond(R.ReminderConditions.Get("player").New())
+            if value == "player" or value == "ammo" then
+                local kind = value == "ammo" and "ammunition" or "player"
+                if type(cur) == "table" and cur.type == kind then return end
+                SetCond(R.ReminderConditions.Get(kind).New())
                 return
             end
             local key = value:match("^slot:(.+)$")
@@ -409,12 +415,17 @@ local function WhenSection(parent, env)
         if not ok then env.Say(why, "warn") end
     end)
     R.Interact.Tip(s.addPlayer, "A condition about you", "In combat, alive or dead (a ghost counts as dead), or mounted.")
+    s.addAmmo = Wg().Button(s, "Add an ammunition condition", 210, "secondary", function()
+        local ok, why = RM().AddCondition(env.id(), "ammunition")
+        if not ok then env.Say(why, "warn") end
+    end)
+    R.Interact.Tip(s.addAmmo, "An ammunition condition", "The ammunition for your ranged weapon: none selected, used up, or the wrong kind. It never matches for a weapon that takes no ammunition.")
     s.sentence = Note(s)
     s.scope = Note(s)
     s.note = Note(s)
 
     local parts = { s.whoLabel, s.who, s.chars, s.addMe, s.removeMe, s.classLabel, s.class, s.matchLabel, s.match, s.single,
-        s.addEquip, s.addPlayer, s.sentence, s.scope, s.note }
+        s.addEquip, s.addPlayer, s.addAmmo, s.sentence, s.scope, s.note }
     for _, row in ipairs(s.rows) do
         for _, k in ipairs({ "subject", "op", "value", "item", "remove", "problem", "itemName" }) do parts[#parts + 1] = row[k] end
     end
@@ -461,10 +472,16 @@ local function WhenSection(parent, env)
                 local sv, sl = SubjectOf(cond)
                 row.subject:SetValue(sv, sl)
                 Put(row.subject, self, x, h)
-                row.op:SetValue(cond.negate and "isnot" or "is", cond.negate and "is not" or "is")
-                Put(row.op, self, x + 176, h)
+                -- ammunition reads as a sentence on its own ("Ranged ammunition is used up"): no "is not"
+                local vx = x + 268
+                if cond.type == "ammunition" then
+                    vx = x + 176
+                else
+                    row.op:SetValue(cond.negate and "isnot" or "is", cond.negate and "is not" or "is")
+                    Put(row.op, self, x + 176, h)
+                end
                 row.value:SetValue(cond.what or cond.state, ValueLabel(cond))
-                Put(row.value, self, x + 268, h)
+                Put(row.value, self, vx, h)
                 if cond.type == "equipment" and cond.what == "item" then
                     if not row.item:HasFocus() then row.item:SetText(cond.item and tostring(cond.item) or "") end
                     Put(row.item, self, x + 450, h)
@@ -485,6 +502,8 @@ local function WhenSection(parent, env)
         if n < RM().MAX_CONDITIONS then
             Put(self.addEquip, self, n == 0 and CTRL_X or LABEL_X, h + 2)
             Put(self.addPlayer, self, (n == 0 and CTRL_X or LABEL_X) + 218, h + 2)
+            h = h + ROW
+            Put(self.addAmmo, self, n == 0 and CTRL_X or LABEL_X, h + 2)
             h = h + ROW + 4
         end
         h = h + Text(self.sentence, E.RuleSentence(v), n == 0 and "warn" or "quiet", LABEL_X, h, self) + 4
@@ -869,7 +888,7 @@ local function TestSection(parent, env)
 
         Put(self.manualHead, self, PAD, h)
         h = h + 18
-        h = h + Text(self.manual, "Turn it on, then take off (or put on) the equipment it is about: within a moment it appears or goes, and Right now says why. Your gear is never changed by TwichUI.", "quiet", PAD, h, self) + 10
+        h = h + Text(self.manual, "Turn it on, then change what it is about (take off or put on equipment, move your ammunition): within a moment it appears or goes, and Right now says why. Your gear and bags are never changed by TwichUI.", "quiet", PAD, h, self) + 10
         self:SetHeight(h)
         Put(self, parent, 0, y)
         return h

@@ -1,9 +1,11 @@
 # Reminders
 
 Artwork, an icon or a few words on screen while conditions the player chooses are true, and nothing the rest of the
-time. The first use is a missing-shield reminder; nothing in the design is about a class. Code: `!!!TwichUI/reminders/`;
-settings: `TwichUI_Settings/pages/Reminders.lua` and `RemindersEditor.lua`; tests: `tests/test_reminders.lua`,
-`tests/test_reminders_settings.lua`; art: `tools/make_reminder_art.py`, `tools/make_settings_icons.py` (sheet 4).
+time. The first uses are a missing-shield reminder and an ammunition reminder; nothing in the design is about a class.
+Code: `!!!TwichUI/reminders/`; settings: `TwichUI_Settings/pages/Reminders.lua`, `RemindersEditor.lua` and `AmmoItems.lua`
+(the Known ammunition tab); tests: `tests/test_reminders.lua`, `tests/test_reminders_ammunition.lua`,
+`tests/test_reminders_settings.lua`, `tests/test_ammo_items_settings.lua`; art: `tools/make_reminder_art.py`,
+`tools/make_settings_icons.py` (sheet 4).
 
 A reminder only reads. It never equips, uses, moves or casts anything, prints nothing in chat and sends nothing to
 anyone. None exists until the player makes one, and each starts turned off.
@@ -17,7 +19,12 @@ client are at the end.
 | Fact | Evidence |
 |---|---|
 | Equipment slots `INVSLOT_HEAD` (1) to `INVSLOT_TABARD` (19); off hand 17, main hand 16, ranged 18 | `Blizzard_FrameXMLBase/Constants.lua` |
-| What is equipped: `GetInventoryItemID("player", slot)` (nil when empty) | used the same way by `ammo/` and the character sheet |
+| What is equipped: `GetInventoryItemID("player", slot)` (nil when empty) | used the same way by the character sheet |
+| Ammunition is a slot of its own, `INVSLOT_AMMO` = 0; the ranged weapon is `INVSLOT_RANGED` = 18 | `Blizzard_FrameXMLBase/Constants.lua` |
+| Whether the weapon takes ammunition is the client's own answer, `UnitUsesAmmo("player")`; the character sheet shows or hides the ammo slot with it (`C_PaperDollInfo.AmmoNeeded()` is the same question) | `Blizzard_UIPanels_Game/Camelot/PaperDollFrame.lua` (`CharacterAmmoSlot:SetShown(UnitUsesAmmo("player"))`), `UnitDocumentation.lua`, `PaperDollInfoDocumentation.lua` |
+| What is selected as ammunition and its count: `GetInventoryItemID` / `GetInventoryItemCount("player", INVSLOT_AMMO)`. The sheet prints that count on the slot; an empty slot is shown as the slot's empty background | `PaperDollFrame.lua` (`PaperDollItemSlotButton_Update`) |
+| Projectiles are `Enum.ItemClass.Projectile` (6); weapons `Weapon` (2) with `Bows` 2, `Guns` 3, `Crossbow` 18 (`Thrown` 16 and `Wand` 19 take none) | `ItemConstantsDocumentation.lua` |
+| The carried bags: `C_Container.GetContainerNumSlots` / `GetContainerItemID`, bags 0 to `NUM_TOTAL_EQUIPPED_BAG_SLOTS` (the backpack and the equipped bags, quivers, pouches and the reagent bag included; never the bank, mail or the auction house) | `ContainerDocumentation.lua`, `Blizzard_FrameXMLBase/Constants.lua` |
 | An item's class, subclass and equip location without waiting for the cache: `C_Item.GetItemInfoInstant` (may return nothing) | `ItemDocumentation.lua` |
 | Shield = `Enum.ItemClass.Armor` (4) with `Enum.ItemArmorSubclass.Shield` (6); weapon = `Enum.ItemClass.Weapon` (2); fishing pole = `Enum.ItemWeaponSubclass.Fishingpole` (20) | `ItemConstantsDocumentation.lua` |
 | Two-handed and held-in-off-hand are the equip locations `INVTYPE_2HWEAPON` and `INVTYPE_HOLDABLE` | the game's own `DressUpModelFrameMixin.lua`, `Blizzard_HeirloomCollection.lua` |
@@ -25,10 +32,16 @@ client are at the end.
 | `UnitAffectingCombat`, `PLAYER_REGEN_DISABLED/ENABLED`; `UnitIsDeadOrGhost`, `UnitIsGhost`, `PLAYER_DEAD`, `PLAYER_ALIVE`, `PLAYER_UNGHOST` | `UnitDocumentation.lua`, `DeathInfoDocumentation.lua` |
 | `IsMounted()`; `PLAYER_MOUNT_DISPLAY_CHANGED` | `PlayerScriptDocumentation.lua`, `UnitDocumentation.lua`; the shared action bar code registers the event |
 | `PLAYER_EQUIPMENT_CHANGED` (slot, hasCurrent) | `PaperDollInfoDocumentation.lua` |
+| `BAG_UPDATE_DELAYED`; `UNIT_INVENTORY_CHANGED` (unit) | `ContainerDocumentation.lua`; `UnitDocumentation.lua` |
 
 **Not confirmed in the game:** that `PLAYER_MOUNT_DISPLAY_CHANGED` fires on Forever whenever mounting or dismounting
 (the class resource bars rely on it too), that an empty slot reads nil from the first look in the world, and that
-server-added items answer `GetItemInfoInstant`. Nothing reads localized item names to decide anything; names appear only
+server-added items answer `GetItemInfoInstant`. For ammunition also: the projectile subclasses (arrows = 2, bullets = 3) are
+not in the Forever source, which names the class but has no enumeration for its subclasses; they are the item database's
+values, and the RXP reference addon (`../reference_addons/RXPGuides/InventoryManager.lua`, read for ideas only) uses the same
+ones. Any other projectile subclass is "another kind": never called wrong, never counted as a supply. And that the ammo
+slot's count covers every carried stack of the selected item (taken from `EllesmereUIDataBars/Blocks/Supplies.lua`, not from
+the source): the condition relies on it, and does not add up the bags when ammunition is selected. Nothing reads localized item names to decide anything; names appear only
 as labels in the settings window and never in what is stored.
 
 ## Conditions (first release)
@@ -37,6 +50,7 @@ as labels in the settings window and never in what is stored.
 |---|---|---|
 | `equipment` | `slot` (a stable key: `offHand`, `mainHand`, `ranged`, `head` ... `trinket2`, or `any`), `what`, `negate`, `item` | `empty`; a category the slot can hold (off hand: `shield`, `weapon`, `holdable`; main hand: `weapon`, `twoHand`, `fishingPole`; ranged: `weapon`); `item` (a specific item ID; `any` slot offers only this) |
 | `player` | `state`, `negate` | `combat` (in combat), `dead` (dead **or a ghost**), `ghost` (only the released spirit), `mounted` (offered only while the client has `IsMounted`) |
+| `ammunition` | `what` (no `negate`: it reads as a sentence) | `problem` (any of the next three), `noAmmo` (nothing selected, some carried), `outOfAmmo` (nothing selected and none carried, or the selected stack is empty), `wrong` (arrows for a gun, bullets for a bow). Offered only while the client has `UnitUsesAmmo` |
 
 `negate` is "is not". "Player is not dead or a ghost" reads as "Player is alive". Categories are judged from the item's
 class, subclass and equip location only; an item with no details is **unknown**, never a match. For the shield example:
@@ -55,6 +69,55 @@ match, and a reminder can't be turned on without one. Unknown never shows.
 `waiting` (the game hasn't given enough, or who is playing isn't known yet) · `showing` / `hidden`. The controller adds
 `off` (Reminders switched off), `world` (not in the world yet), `pending` (waiting out its delay) and `holding` (kept up
 for its minimum).
+
+## Ammunition
+
+The `ammunition` condition replaces the Hunter ammunition warning of earlier versions (its settings are removed on load; see
+"What the warning did that reminders do not" below). It reads what the character has and what the client says about it,
+and never equips, moves, buys, uses or destroys anything. Judgement: `reminders/Ammunition.lua` (pure); the reading:
+`reminders/State.lua` (the `ammo` source); what counts as ammunition: `reminders/AmmoItems.lua`.
+
+**The facts** (`obs.ammo`): whether the weapon takes ammunition (`UnitUsesAmmo`), whether there is a ranged weapon, which
+ammunition its type takes (a Bow or Crossbow arrows, a Gun bullets, from `C_Item.GetItemInfoInstant`), what is selected in
+the ammo slot with its kind and count, and, only when nothing is selected, whether the carried bags hold ammunition the
+weapon can use (stopping at the first stack that fits).
+
+| State | Meaning | Matches |
+|---|---|---|
+| inactive | no ranged weapon, or the client says it takes no ammunition | nothing, ever |
+| unknown | the data isn't there (yet): the weapon question unanswered, a count that hasn't arrived, bags unreadable | nothing: the reminder waits |
+| ok | compatible ammunition is selected and some is left | nothing |
+| noAmmo | nothing selected, but compatible ammunition is carried | `problem`, `noAmmo` |
+| outOfAmmo | nothing selected and none that fits is carried, or the selected stack's count is zero | `problem`, `outOfAmmo` |
+| wrong | arrows selected for a gun or bullets for a bow, both known for certain | `problem`, `wrong` |
+
+**Decisions the client's design forced.**
+
+* "Not equipped" and "used up" can't be told apart from the slot: the client shows an empty slot for both and has no
+  separate depleted state. So the split is by what the bags hold, and it is a statement about supplies, not about history.
+* "Compatible" is judged only when the weapon's type is known. For a weapon of any other type, any recognized ammunition
+  counts as compatible and `wrong` is never concluded.
+* "Needs ammunition" is the client's word, not a table of weapons. A bow that `UnitUsesAmmo` says takes none shows nothing.
+* Unknown is not a problem. The look is repeated up to three times, a second apart, when the weapon question or a count
+  isn't answered; then it waits for the next event. A reminder that was showing hides when its data goes missing.
+* "Only in combat" is a second condition ("Player is in combat", all), not an option of this one.
+* Which problem is a choice of the condition: one reminder for any problem, or one per problem with its own words.
+
+**Known ammunition** (Reminders > Known ammunition). An item ID, a pasted link or an item dropped from the bags, registered as
+arrows or bullets, for a server item the client doesn't classify (or classifies differently). Stored as
+`ui.ammoCustom.items = { { id, kind }, ... }` (profile-scoped, at most 40; the key is the old warning's, so a list made
+there is kept). `AI.Kind(itemID)`: your registration first, then the client's classification (class Projectile, subclass
+2 arrows / 3 bullets). Registering says only what an ID is; it doesn't say the item is equipped, carried or compatible.
+Removing it forgets the registration and nothing else. An item the client has no data for is still registered: its details
+are requested at most twice while the tab is open. A change is told to the running reminders at once, and the list follows
+a profile change or an import. It is shared like other lists (merged by item ID; see `docs/twichui-sharing.md`); the
+reminders that use it are not.
+
+**What the warning did that reminders do not.** The sound when a problem began, the "RPG Notification" presentation, a
+different line for each problem within one frame (make one reminder per problem instead), the item's own icon in the frame
+(a reminder shows artwork, a TwichUI icon, or an item you choose), and its own position (each reminder has one). The old
+settings (`modules.ammoWarning`, `ui.ammo`, `ui.ammoLook`, `ui.ammoPosition`) are deleted on load, quietly; nothing is
+migrated into a reminder, so anyone who had the warning on makes one with the **Ammunition** template.
 
 ## Saved data
 
@@ -78,12 +141,15 @@ problem, and the reminder can't be turned on (or, already on, doesn't show) unti
 are checked on the way in and out (`Config.lua`'s `DISPLAY_DEFAULTS`, `LIMITS`, `CHOICES`). Who it is for (`scope`) is
 separate from how it looks (`display`). Nothing about a decision, an observation, a timer or a preview is saved.
 Configuration sharing keeps both keys on this computer (`TwichConfig.LOCAL`, "other": a reminder can name characters).
+The one exception is the ammunition you registered, `ui.ammoCustom` (above), which is a shared list of its own.
 
 ## Making and editing (settings > Everyday > Reminders)
 
 The card holds the switch. Under it: **Your reminders** (thumbnail, name, the rule as a sentence or what is wrong, what it
 is doing now, and its own switch) and **Start a new one**: **Missing shield** (name "Shield reminder", "Off hand is not
 Shield", the shield artwork with "Equip your shield", no sound, no pulse, below the middle, this character only),
+**Ammunition** (name "Ammunition reminder", "Ranged ammunition has a problem", the arrows artwork with "Check your
+ammunition", the same place and scope; it does nothing for a weapon that takes no ammunition),
 **Missing equipment or item** (any slot is not an item you choose; shows that item's icon; unfinished until the item is
 chosen) and **Custom reminder** (your words; needs a condition). Each is an ordinary reminder once made: nothing about
 the template is remembered.
@@ -140,7 +206,8 @@ The Test section's simulations go through the same `Evaluate.Run` on a table bui
 |---|---|
 | Switched off | no event, every frame hidden, every timer stale |
 | On, no reminder turned on for this character | `PLAYER_ENTERING_WORLD` only |
-| On, reminders running | the observation keys their conditions read (`slot:17`, `combat`, `life`, `mounted`), and only those sources' events: `PLAYER_EQUIPMENT_CHANGED` for equipment, the regen events for combat, the three life events, the mount event |
+| On, reminders running | the observation keys their conditions read (`slot:17`, `combat`, `life`, `mounted`, `ammo`), and only those sources' events: `PLAYER_EQUIPMENT_CHANGED` for equipment, the regen events for combat, the three life events, the mount event, and for ammunition `PLAYER_EQUIPMENT_CHANGED`, `BAG_UPDATE_DELAYED` and `UNIT_INVENTORY_CHANGED` |
+| An ammunition reminder, weapon takes none (or none equipped) | only a change of the ranged or ammo slot is acted on; bag and inventory events are dropped before any read. A look is up to six values from the character, and the bags only when nothing is selected |
 | An item without details in a wanted slot | asked for at most twice; `GET_ITEM_INFO_RECEIVED` / `ITEM_DATA_LOAD_RESULT` only while that lasts |
 | An event | marks its key; one 0.1 s timer reads each marked key once; only keys whose facts changed re-decide, and only the reminders that read them (an index by key) |
 | A setting changes | look or place: that frame is drawn again; rules, switch, list or profile: the index is built again |
@@ -161,7 +228,8 @@ label, New, Check, Needs, Evaluate, Summary, Observed, Scenarios }` (the header 
 only the observations table). For each observation key `Needs` names, a source in `State.lua`:
 `ST.Source(kind, { events = { EVENT = handler }, Read = function(arg, obs) ... end })`. Then the editor's subject and
 value choices in `RemindersEditor.lua` (`Subjects`, `ValueChoices`), a test in `tests/test_reminders.lua`, and its
-facts and checks here. Buff, cooldown, health, inventory-count and target conditions are not in this release.
+facts and checks here. The `ammunition` kind (`reminders/Ammunition.lua` and State.lua's `ammo` source) is the worked
+example of a kind with a file of its own. Buff, cooldown, health, inventory-count and target conditions are not in this release.
 
 **A new picture.** Put the PNG (real transparency) in `assets/`, add a line to `ART` in `tools/make_reminder_art.py`, run
 `python3 tools/make_reminder_art.py` (it prints the numbers), and add that line, with a label, to `RM.ART` and
@@ -170,7 +238,14 @@ facts and checks here. Buff, cooldown, health, inventory-count and target condit
 ## Limits
 
 - Mounted, the first look after login and server items: see "Not confirmed" above.
-- `any` slot reads all nineteen slots for an item condition; no bag, bank or inventory count is read.
+- `any` slot reads all nineteen slots for an item condition; no bank or inventory count is read, and the bags only for
+  ammunition (when nothing is selected).
+- Ammunition: the projectile subclasses 2 and 3, the slot's count covering all stacks, the last stack emptying the slot
+  rather than leaving a count of zero, and the events raised when it does are unconfirmed (see "Not confirmed"). If the
+  count did not cover all stacks, a second stack in the bags would be missed only while the selected stack ran low; if the
+  slot did not empty, a count of zero would be `outOfAmmo`, which is also right. A weapon type the source lists for no
+  ammunition (a custom ranged weapon) gets no `wrong` judgement. Reagent bags are scanned with the others (they can't hold
+  ammunition).
 - A character listed by name and realm: a renamed character, or one moved to another realm, has to be added again.
 - Not in this release: nested groups, Lua, dynamic clones, sounds, sharing, buff/cooldown/health/inventory/target
   conditions, automation of any kind.
@@ -195,3 +270,15 @@ facts and checks here. Buff, cooldown, health, inventory-count and target condit
 10. Duplicate, rename, delete (asks; gone at once). Switch profile: the other profile's reminders, nothing stale.
 11. Reminders off: nothing shows, `/tui diagnostics` shows no events registered.
 12. Look for errors with Display Lua Errors on throughout; check the icons in the editor at small UI scales.
+13. **Ammunition**, Hunter with a bow and arrows selected: Test > Right now says "Ammunition selected and some left"; turn it
+    on: nothing shows. Drag the arrows out of the ammo slot with more in the bags: it shows; put them back: gone.
+14. Shoot the selected stack down to nothing with none left anywhere: it shows when the last one goes. Note whether the slot is
+    empty or shows 0. With two stacks in different bags, shoot the first away: does the slot keep showing the total, and does
+    the reminder stay off until the last arrow?
+15. Equip bullets for a bow, then arrows for a gun: a reminder for "the wrong kind" shows each time; swap weapon or ammunition
+    to clear it. Take off the ranged weapon, or equip a wand or thrown weapon: nothing shows.
+16. Add "Player is in combat" (all): unselect the ammunition out of combat (nothing), pull (it appears), leave combat (gone).
+17. `/reload` and log in with a problem present: it appears without a flash of "waiting"; `/tui diagnostics` on another class
+    with no ammunition reminder shows no events registered.
+18. Known ammunition: register a server item as arrows or bullets, check it counts when selected and carried, that changing
+    its kind takes effect without another event, and that `/reload` keeps the list.

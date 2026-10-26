@@ -10,7 +10,7 @@ it; its pages call the core (`R:Enabled`, a feature's `Get`/`Set`).
 |---|---|---|
 | `Overview.lua` | `overview` (0) | `home` |
 | `Notifications.lua` | `notifications` (20), tab `notificationsLook` (21) | `everyday` |
-| `Reminders.lua`, `RemindersEditor.lua` | `reminders` (22), hosted (its editor is a frame of its own) | `everyday` |
+| `Reminders.lua`, `RemindersEditor.lua`, `AmmoItems.lua` | `reminders` (22), hosted (its editor is a frame of its own), tab `ammoCustom` (23) | `everyday` |
 | `HealerWatch.lua` | `healerWatch` (24), hosted (preview, phrases and diagnostics after its last card) | `everyday` |
 | `QoL.lua`, `Markers.lua` | `qol` (30), tabs `markersTarget` (31), `markersWorld` (32), `markersBar` (33) | `everyday` |
 | `FoodDrink.lua` | `food` (40) | `everyday` |
@@ -21,7 +21,6 @@ it; its pages call the core (`R:Enabled`, a feature's `Get`/`Set`).
 | `MapToolbar.lua` | `mapToolbar` (71) | `map` |
 | `Gear.lua` | `gear` (10), tab `statWeights` (11) | `class` |
 | `Mage.lua` | `mage` (50), tab `refreshmentShares` (51) | `class` |
-| `Ammo.lua`, `AmmoItems.lua` | `ammo` (52), tab `ammoCustom` (53) | `class` |
 | `ClassBars.lua` | `classBars` (55), tabs `classBarsLayout` (56), `classBarsLook` (57), `classBarsEffects` (58) | `class` |
 | `Skins.lua`, `SpeakStone.lua` | `skins` (90), tab `speakstone` (96) | `addons` |
 | `RestedXP.lua` | `restedxp` (95) | `restedxp` |

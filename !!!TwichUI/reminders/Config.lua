@@ -473,6 +473,7 @@ end
 -- Templates: editable starting points. Nothing about them is remembered once a reminder is made from one.
 RM.TEMPLATES = {
     { "shield", "Missing shield", "Shows the shield artwork and \"Equip your shield\" whenever your off hand doesn't hold a shield. For this character only, until you change that." },
+    { "ammo", "Ammunition", "Shows the arrows artwork and \"Check your ammunition\" while your ranged weapon takes ammunition and none is selected, none is left or the wrong kind is selected. Does nothing for a weapon that takes none. For this character only, until you change that." },
     { "item", "Missing equipment or item", "Shows an item's icon while that item isn't equipped. Choose the item first." },
     { "custom", "Custom reminder", "Your own words, shown when the conditions you add are true." },
 }
@@ -486,6 +487,13 @@ local function Template(kind)
             name = "Shield reminder", match = "all", scope = mine,
             conditions = { { type = "equipment", slot = "offHand", what = "shield", negate = true } },
             display = { mode = "artworkText", art = "shield", text = "Equip your shield" },
+            place = { preset = "belowCenter" },
+        }
+    elseif kind == "ammo" then
+        return {
+            name = "Ammunition reminder", match = "all", scope = mine,
+            conditions = { { type = "ammunition", what = "problem" } },
+            display = { mode = "artworkText", art = "ammo", text = "Check your ammunition" },
             place = { preset = "belowCenter" },
         }
     elseif kind == "item" then

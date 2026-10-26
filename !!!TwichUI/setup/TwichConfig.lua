@@ -68,7 +68,7 @@ TC.LOCAL = {
     -- where things sit
     ["modules.foodDrinkUnlock"] = "place", ["ui.foodDrinkPosition"] = "place", ["ui.trainingPosition"] = "place",
     ["ui.welcomeBackPlace"] = "place", ["ui.friendLoginPlace"] = "place", ["ui.settingsWindow"] = "place",
-    ["ui.markerBarPosition"] = "place", ["ui.refreshments.position"] = "place", ["ui.partyPins.position"] = "place", ["ui.classBarsPosition"] = "place", ["ui.ammoPosition"] = "place", ["ui.cozyBag"] = "place",
+    ["ui.markerBarPosition"] = "place", ["ui.refreshments.position"] = "place", ["ui.partyPins.position"] = "place", ["ui.classBarsPosition"] = "place", ["ui.cozyBag"] = "place",
     ["ui.navigation.position"] = "place", ["ui.navigation.arrowPosition"] = "place", ["ui.navigation.unlockMode"] = "place",
     ["ui.healerWatch.point"] = "place", ["ui.healerWatch.x"] = "place", ["ui.healerWatch.y"] = "place",
     -- the rest
@@ -615,7 +615,7 @@ local function RestockItemsSpending(clean)
 end
 
 ---------------------------------------------------------------------------
--- The ammunition registered for the Hunter warning (ammo/Items.lua): { items = { { id, kind }, ... } }, kind "arrow" or
+-- The ammunition registered for reminders about ammunition (reminders/AmmoItems.lua): { items = { { id, kind }, ... } }, kind "arrow" or
 -- "bullet". Applying merges by item ID: an item the share names takes the share's kind (a new one goes at the end of your
 -- list); items it doesn't name are left as they are, and nothing is removed. Registering says only what an ID is; it
 -- never says anything is equipped or carried, and nothing about your bags or equipment is part of it.
@@ -701,6 +701,9 @@ local function WriteAmmo(list)
     local ui = TwichUIDB.ui
     if type(ui.ammoCustom) ~= "table" then ui.ammoCustom = {} end
     ui.ammoCustom.items = list
+    -- what was built from the list is dropped, the page redraws, and running reminders read their ammunition again
+    if R.AmmoItems then R.AmmoItems.Reindex() end
+    if R.Reminders then R.Reminders.Invalidate() end
 end
 
 -- Plain writes into the list in use. Returns undo records: { id, had, kind, at }.
@@ -1752,25 +1755,8 @@ local function Define()
         note = "What one resource of one class does differently from the shared style (its color, text and when it shows). Merged: what the share names is set, every other class's is kept." })
     g.custom = ClassBarOverrides
 
-    g = Group("ammo", "Hunter ammunition warning", { page = "ammo",
-        note = "Whether the warning is on, when it shows, its size, text and sound. Where it sits on your screen stays yours. It only ever shows for a Hunter, and it never equips or moves anything." })
-    Switches(g, { "ammoWarning" })
-    do
-        local AM = R.Ammo
-        local enums = {}
-        if AM then for key in pairs(AM.DEFAULTS) do if AM.ENUM[key] then enums[key] = AM.ENUM[key] end end end
-        Table(g, { "ui", "ammo" }, AM, { "style", "show", "icon", "scale", "opacity", "font", "fontSize", "fontOutline", "textColor",
-            "sound", "soundName", "soundChannel" }, enums, { soundName = "sound" })
-    end
-
-    g = Group("ammoLook", "Hunter ammunition warning background and border", { page = "ammo" })
-    do
-        local AM = R.Ammo
-        Table(g, { "ui", "ammoLook" }, AM and AM.Look, LOOK, LOOK_ENUMS)
-    end
-
-    g = Group("ammoCustom", "Custom ammunition", { page = "ammoCustom",
-        note = "The ammunition you registered, arrows or bullets, by item ID. Merged: what the share names is set, the rest of your list is kept. Registering says only what an item is; it never says anything is equipped or carried." })
+    g = Group("ammoCustom", "Known ammunition", { page = "ammoCustom",
+        note = "The ammunition you registered for ammunition reminders, arrows or bullets, by item ID. Merged: what the share names is set, the rest of your list is kept. Registering says only what an item is; it never says anything is equipped or carried." })
     g.custom = AmmoList
 
     g = Group("healerWatch", "Healer Watch", { page = "healerWatch",

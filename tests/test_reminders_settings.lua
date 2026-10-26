@@ -121,7 +121,7 @@ Flush()
 local parts = P.Parts()
 Check(parts.sections and #parts.sections == 5, "the five sections are built")
 Check(f.empty.shown and f.empty.text:find("No reminders yet"), "an empty list says how to start")
-Check(#f.templates == 3 and f.templates[1].shown, "three ways to start")
+Check(#f.templates == 4 and f.templates[1].shown, "four ways to start")
 Check(f.events.PLAYER_EQUIPMENT_CHANGED and f.events.GET_ITEM_INFO_RECEIVED, "while shown it hears what Test reads")
 local createdBefore = made
 
@@ -210,6 +210,27 @@ Check(RM.Get(id).conditions[2].cond.negate == true and when.rows[2].op.text.text
 when.rows[2].remove.scripts.OnClick(when.rows[2].remove)
 Flush()
 Check(#RM.Get(id).conditions == 1 and not when.rows[2].subject.shown, "removed")
+
+-- an ammunition condition: its own subject, choices that read as a sentence, no "is not", an editor tooltip for each choice
+when.addAmmo.scripts.OnClick(when.addAmmo)
+Flush()
+local ar = when.rows[2]
+Check(#RM.Get(id).conditions == 2 and ar.subject.text.text == "Ranged ammunition" and ar.value.text.text == "has a problem", "an ammunition condition: " .. tostring(ar.subject.text.text) .. " / " .. tostring(ar.value.text.text))
+Check(not ar.op.shown, "it reads as a sentence on its own: no \"is not\"")
+local ammoChoices = ar.value.choices()
+Check(#ammoChoices == 4 and ammoChoices[3].value == "outOfAmmo" and ammoChoices[3].label == "is used up" and ammoChoices[3].tooltip, "four choices, each explained")
+ar.value.onPick("outOfAmmo")
+Flush()
+Check(RM.Get(id).conditions[2].cond.what == "outOfAmmo" and when.sentence.text:find("Ranged ammunition is used up"), "the choice is stored and read back: " .. when.sentence.text)
+ar.subject.onPick("player")
+Flush()
+Check(RM.Get(id).conditions[2].cond.type == "player", "the subject changes the kind")
+ar.subject.onPick("ammo")
+Flush()
+Check(RM.Get(id).conditions[2].cond.type == "ammunition", "and back")
+when.rows[2].remove.scripts.OnClick(when.rows[2].remove)
+Flush()
+Check(#RM.Get(id).conditions == 1, "removed")
 
 ---------------------------------------------------------------------------
 -- 5. A missing item: by link, and its icon follows

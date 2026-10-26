@@ -181,6 +181,10 @@ local function LayoutList(list, y)
     f.startLabel:SetPoint("TOPLEFT", card, "TOPLEFT", PAD, -(h + 4))
     local x = PAD + (f.startLabel:GetStringWidth() or 80) + 10
     for _, b in ipairs(f.templates) do
+        if x + b:GetWidth() > W - PAD then   -- the buttons that don't fit go on the next line, from the left
+            x = PAD
+            h = h + 32
+        end
         Put(b, card, x, h)
         x = x + b:GetWidth() + 8
     end
@@ -194,7 +198,7 @@ local function LayoutList(list, y)
         f.newer:Hide()
     end
     if #list == 0 then
-        f.empty:SetText("No reminders yet. Start one from the buttons above: \"Missing shield\" is ready to use once you turn it on; the others are starting points to finish. Each starts turned off, so nothing appears until you say so.")
+        f.empty:SetText("No reminders yet. Start one from the buttons above: \"Missing shield\" and \"Ammunition\" are ready to use once you turn them on; the others are starting points to finish. Each starts turned off, so nothing appears until you say so.")
         Put(f.empty, card, PAD, h)
         h = h + (f.empty:GetStringHeight() or 24) + 10
     else
@@ -402,7 +406,7 @@ end
 -- Only while the page is shown: the game telling of changes the Test section's "Right now" reads (for a reminder that
 -- isn't running it is read when drawn), and answers about items named here.
 local EVENTS = { "PLAYER_EQUIPMENT_CHANGED", "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED", "PLAYER_DEAD", "PLAYER_ALIVE",
-    "PLAYER_UNGHOST", "PLAYER_MOUNT_DISPLAY_CHANGED", "GET_ITEM_INFO_RECEIVED", "ITEM_DATA_LOAD_RESULT" }
+    "PLAYER_UNGHOST", "PLAYER_MOUNT_DISPLAY_CHANGED", "BAG_UPDATE_DELAYED", "GET_ITEM_INFO_RECEIVED", "ITEM_DATA_LOAD_RESULT" }
 
 -- The page's frame (the settings window shows it under the Reminders card). Built the first time it is shown.
 function P.Frame()
@@ -440,7 +444,7 @@ end
 K.Page({
     key = "reminders", icon = "reminders", name = "Reminders", order = 22, group = "everyday",
     description = "Artwork, an icon or a few words on screen while conditions you choose are true, such as an empty off hand. Nothing appears until you make a reminder and turn it on.",
-    keywords = "reminder reminders shield equip equipment gear off hand offhand main hand weapon two-handed fishing pole item missing artwork icon picture words text alert notice condition conditions rule rules when combat dead ghost alive mounted mount preview test simulate simulation position move character class",
+    keywords = "reminder reminders shield equip equipment gear off hand offhand main hand weapon two-handed fishing pole item missing artwork icon picture words text alert notice condition conditions rule rules when combat dead ghost alive mounted mount preview test simulate simulation position move character class ammo ammunition arrows bullets quiver ranged bow gun crossbow hunter out of ammo no ammo wrong ammo",
     overview = {
         label = "Reminders", tip = "Artwork, an icon or words on screen while conditions you choose are true, such as a missing shield.",
         when = function() return R.Reminders ~= nil end,
@@ -461,9 +465,9 @@ K.Page({
                 if n == 0 then return "None made yet." end
                 return ("%d made, %d turned on."):format(n, on)
             end,
-            consequence = "A reminder only reads what is equipped and what you are doing: TwichUI never equips, uses or casts anything for you, says nothing in chat and sends nothing. Each new reminder starts turned off. Turning this off hides every reminder at once and stops listening; your reminders are kept.",
+            consequence = "A reminder only reads what is equipped, what you carry as ammunition and what you are doing: TwichUI never equips, uses or casts anything for you, says nothing in chat and sends nothing. Each new reminder starts turned off. Turning this off hides every reminder at once and stops listening; your reminders are kept.",
             details = {
-                { "What can a reminder watch?", "Your equipment: a slot that is empty or not, a specific item equipped or not, or the kind of item in a slot (a shield, a weapon, a two-handed weapon, an item held in the off hand, a fishing pole). And you: in combat, alive or dead (a ghost counts as dead), mounted." },
+                { "What can a reminder watch?", "Your equipment: a slot that is empty or not, a specific item equipped or not, or the kind of item in a slot (a shield, a weapon, a two-handed weapon, an item held in the off hand, a fishing pole). The ammunition for your ranged weapon: none selected, used up, or the wrong kind. And you: in combat, alive or dead (a ghost counts as dead), mounted." },
                 { "Why would one wait instead of showing?", "Right after logging in, or with an item the game hasn't described yet, a condition can't be checked. The reminder then stays hidden rather than guess, and its Test section says what it is waiting for." },
                 { "Who sees them?", "Only you. Reminders are saved in your profile; each one can be limited to some of your characters, or to a class." },
             },

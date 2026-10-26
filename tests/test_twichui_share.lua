@@ -100,7 +100,6 @@ local REGISTRY = {
   notifyLook = A.TwichUI.NotifyLook.DEFAULTS, restockPromptStyle = A.TwichUI.RestockPrompt.Style.DEFAULTS,
   classBars = A.TwichUI.ClassBars.DEFAULTS, classBarsLook = A.TwichUI.ClassBars.Look.DEFAULTS,
   markers = A.TwichUI.Markers.DEFAULTS, markerBar = A.TwichUI.MarkerBar.DEFAULTS, markerBarStyle = A.TwichUI.MarkerBar.Style.DEFAULTS,
-  ammo = A.TwichUI.Ammo.DEFAULTS, ammoLook = A.TwichUI.Ammo.Look.DEFAULTS,
   healerWatchBarLook = A.TwichUI.HealerWatch.BarLook.DEFAULTS,
 }
 for slot, defaults in pairs(REGISTRY) do
@@ -384,7 +383,7 @@ Check(byId.gearWeights and byId.gearWeights.state == "changed" and byId.gearWeig
 do   -- an empty list (Custom ammunition) and an unused look (Pin appearance) are left out, and said
   local absent = {}
   for _, name in ipairs(plan.absent) do absent[name] = true end
-  Check(#plan.absent == 3 and absent["Pin appearance"] and absent["Custom ammunition"] and absent["Hazard alert rules"], "what the sender left out is said: " .. table.concat(plan.absent, ","))
+  Check(#plan.absent == 3 and absent["Pin appearance"] and absent["Known ammunition"] and absent["Hazard alert rules"], "what the sender left out is said: " .. table.concat(plan.absent, ","))
 end
 local beforeApply = Copy(B.TwichUIDB)
 -- a review changes nothing

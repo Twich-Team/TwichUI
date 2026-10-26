@@ -1,11 +1,11 @@
--- TwichUI settings: Custom ammunition (ammo/Items.lua). The ammunition you registered for the ammunition warning, each with
+-- TwichUI settings: Known ammunition (reminders/AmmoItems.lua). The ammunition you registered for ammunition reminders, each with
 -- what it is (arrows or bullets) and Remove; adding one by dropping it from your bags, pasting its link or typing its
 -- item ID. A frame of this window's own, shown as the tab's page, since a list of items with their own controls doesn't
 -- fit the ordinary rows. Built the first time the tab is shown; list rows are made as they are first needed and reused
 -- on every redraw.
 -- Names and icons are the game's own. An item the game hasn't loaded shows as loading (asked for at most twice); one the
 -- game says doesn't exist says so, and stays registered. Nothing here equips, moves or counts anything: a dropped item
--- goes straight back to where it was picked up from. Every change goes through AmmoItems.lua's own functions.
+-- goes straight back to where it was picked up from. Every change goes through reminders/AmmoItems.lua's own functions.
 
 local R = TwichUI
 local K = R.SettingsKit
@@ -295,7 +295,7 @@ local function Build()
     f.help = G.Text(f, "small")
     f.help:SetPoint("TOPLEFT", 4, -2)
     f.help:SetWidth(W - 8)
-    f.help:SetText("TwichUI already recognizes the game's own arrows and bullets. Register an item here only when the game doesn't classify it the way you need, such as one a server added. This says what an item is; it doesn't equip it, count it or make it fit your weapon. The warning still reads your equipment and bags each time.")
+    f.help:SetText("TwichUI already recognizes the game's own arrows and bullets. Register an item here only when the game doesn't classify it the way you need, such as one a server added. This says what an item is; it doesn't equip it, count it or make it fit your weapon. An ammunition reminder still reads your equipment and bags each time.")
 
     -- the add area: a box to drop an item on, or its item ID or link
     G.Card(f, 0, ADD_TOP, W, ADD_TOP - 60)
@@ -381,7 +381,7 @@ local function Build()
     f.empty:SetText("Nothing registered. The game's own arrows and bullets are recognized without this list.")
 end
 
--- The page's frame (the settings window shows it under Ammunition warning). Built the first time it is shown.
+-- The page's frame (the settings window shows it as Reminders' Known ammunition tab). Built the first time it is shown.
 function P.Frame()
     if f then return f end
     f = CreateFrame("Frame")
@@ -406,9 +406,9 @@ if R.AmmoItems then
 end
 
 K.Page({
-    key = "ammoCustom", name = "Custom ammunition", nav = "Custom ammunition", parent = "ammo", order = 53,
-    description = "Ammunition you register yourself, such as an item a server added, as arrows or bullets.",
-    keywords = "ammo ammunition custom register arrows bullets item id link server hunter quiver list",
+    key = "ammoCustom", name = "Known ammunition", nav = "Known ammunition", parent = "reminders", order = 23,
+    description = "Ammunition you register yourself, such as an item a server added, as arrows or bullets, for reminders about ammunition.",
+    keywords = "ammo ammunition custom known register arrows bullets item id link server hunter quiver list reminder reminders",
     when = function() return R.AmmoItems ~= nil end,
     host = function() return P.Frame() end, hostHeight = LIST_H + 190,
 })

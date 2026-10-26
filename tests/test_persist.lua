@@ -251,6 +251,19 @@ for _, was in ipairs({ true, false }) do
   assert(c.TwichUIDB.ui.reduceSettingsMotion == true and c.TwichUIDB.ui.arrivalHold == "long", tostring(was) .. ": neighbours stay")
   assert(rp.repairs["legacy-key-removed"] == 1 and rp.lost == 0 and not heard(c, "reset or set aside"), tostring(was) .. ": nothing lost, nothing announced")
 end
+-- The Hunter ammunition warning was replaced by ammunition reminders: its switch, look, place and options are dropped
+-- quietly, and the ammunition the player registered and every reminder stay.
+do
+  local c = boot("AmmoGone", { TwichUIDB = { schema = P.SCHEMA, shareTransport = "DIRECT",
+    modules = { ammoWarning = true, reminders = true },
+    ui = { ammo = { show = "combat" }, ammoLook = { bgTexture = "none" }, ammoPosition = { x = 1, y = 2 },
+      ammoCustom = { items = { { id = 90001, kind = "bullet" } } }, reminders = { version = 1, nextId = 2, list = { { id = "r1" } } },
+      arrivalHold = "long" } } })
+  local db, rp = c.TwichUIDB, c.TwichUI.Persist.Report()
+  assert(db.modules.ammoWarning == nil and db.ui.ammo == nil and db.ui.ammoLook == nil and db.ui.ammoPosition == nil, "the warning's keys are removed")
+  assert(db.ui.ammoCustom.items[1].id == 90001 and db.ui.reminders.list[1].id == "r1" and db.ui.arrivalHold == "long", "the registered ammunition, the reminders and the neighbours stay")
+  assert(rp.repairs["legacy-key-removed"] == 4 and rp.lost == 0 and not heard(c, "reset or set aside"), "four leftovers, nothing lost, nothing announced")
+end
 -- Data from a newer TwichUI is never touched, whatever it holds.
 do
   local newer = { schema = P.SCHEMA + 1, modules = {}, ui = { showAdvanced = true } }

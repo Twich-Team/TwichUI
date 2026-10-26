@@ -1,7 +1,8 @@
 -- TwichUI: Reminders, reading the game
 -- The live observations the enabled reminders' conditions read, kept as plain facts (the same shape a simulation
 -- builds): obs.slots[n] = { empty = true } or { id, classID, subClassID, equipLoc } (no details yet: classID nil),
--- obs.combat = true | false, obs.life = "alive" | "dead" | "ghost", obs.mounted = true | false. A key nobody wants
+-- obs.combat = true | false, obs.life = "alive" | "dead" | "ghost", obs.mounted = true | false, obs.ammo = the facts
+-- about the ranged weapon's ammunition (Ammunition.lua says which and judges them). A key nobody wants
 -- is not read and not listened for. Nothing here decides anything, and nothing here ever changes the game: no item is
 -- equipped, used or moved, nothing is cast, nothing is sent.
 --
@@ -19,10 +20,12 @@
 -- If the game answers that there is no such item, it stays unknown and says so.
 --
 -- Game APIs (each documented in the Forever UI source; docs/reminders.md has the list): GetInventoryItemID,
+-- GetInventoryItemCount, UnitUsesAmmo, C_Container.GetContainerNumSlots / GetContainerItemID,
 -- C_Item.GetItemInfoInstant, C_Item.RequestLoadItemDataByID, C_Item.GetItemNameByID, UnitAffectingCombat,
 -- UnitIsDeadOrGhost, UnitIsGhost, IsMounted, UnitClassBase; events PLAYER_ENTERING_WORLD,
--- PLAYER_EQUIPMENT_CHANGED (slot, hasCurrent), PLAYER_REGEN_DISABLED / _ENABLED, PLAYER_DEAD, PLAYER_ALIVE,
--- PLAYER_UNGHOST, PLAYER_MOUNT_DISPLAY_CHANGED, GET_ITEM_INFO_RECEIVED and ITEM_DATA_LOAD_RESULT (itemID, success).
+-- PLAYER_EQUIPMENT_CHANGED (slot, hasCurrent), BAG_UPDATE_DELAYED, UNIT_INVENTORY_CHANGED (unit),
+-- PLAYER_REGEN_DISABLED / _ENABLED, PLAYER_DEAD, PLAYER_ALIVE, PLAYER_UNGHOST, PLAYER_MOUNT_DISPLAY_CHANGED,
+-- GET_ITEM_INFO_RECEIVED and ITEM_DATA_LOAD_RESULT (itemID, success).
 
 local R = TwichUI
 local C = R.ReminderConditions
@@ -235,11 +238,109 @@ local function MarkItem(id, success)
     end
 end
 
+---------------------------------------------------------------------------
+-- Ranged ammunition (key "ammo": obs.ammo, judged by Ammunition.lua)
+---------------------------------------------------------------------------
+-- A read is up to six values from the character, and the bags only when the weapon takes ammunition and nothing is
+-- selected (to tell "carrying some" from "none"), stopping at the first stack that fits. Bag and unit events matter
+-- only while the weapon takes ammunition (or the game hasn't said); with a weapon that takes none, only a change of
+-- the ranged or ammo slot is noticed, which is all it takes to see one that does being equipped.
+local AMMO_RETRY, AMMO_RETRIES = 1.0, 3   -- seconds before looking again at data that wasn't there, and how many times
+local ammoWatch = true
+local ammoRetries = 0
+local ammoFields = { "uses", "ranged", "needs", "id", "kind", "count", "carries" }
+local ammoNew = {}
+
+local function LastBag() return NUM_TOTAL_EQUIPPED_BAG_SLOTS or NUM_BAG_SLOTS or 4 end
+
+-- Whether the carried bags (the backpack and the equipped bags, quivers and pouches included; never the bank, mail or
+-- the auction house) hold ammunition the weapon can use. true / false / nil (unreadable).
+local function Carries(needs)
+    if not (C_Container and C_Container.GetContainerNumSlots and C_Container.GetContainerItemID) then return nil end
+    local AI = R.AmmoItems
+    for bag = 0, LastBag() do
+        local slots = Number(C_Container.GetContainerNumSlots(bag))
+        if slots then
+            for slot = 1, slots do
+                local id = Number(C_Container.GetContainerItemID(bag, slot))
+                if id then
+                    local kind = AI.Kind(id)
+                    if (kind == "arrow" or kind == "bullet") and (needs == nil or kind == needs) then return true end
+                end
+            end
+        end
+    end
+    return false
+end
+
+local function ReadAmmo(into)
+    stats.reads = stats.reads + 1
+    local A, AI = R.ReminderAmmo, R.AmmoItems
+    local n = ammoNew
+    for _, k in ipairs(ammoFields) do n[k] = nil end
+
+    local uses
+    if UnitUsesAmmo then uses = Plain(UnitUsesAmmo("player")) end
+    if type(uses) ~= "boolean" then uses = nil end
+    n.uses = uses
+
+    local rangedId = GetInventoryItemID and Number(GetInventoryItemID("player", A.RANGED_SLOT)) or nil
+    n.ranged = rangedId ~= nil
+    if rangedId and C_Item and C_Item.GetItemInfoInstant then
+        local _, _, _, _, _, class, sub = C_Item.GetItemInfoInstant(rangedId)
+        n.needs = A.NeedsFor(Number(class), Number(sub))
+    end
+
+    local ammoId = GetInventoryItemID and Number(GetInventoryItemID("player", A.AMMO_SLOT)) or nil
+    n.id = ammoId
+    if ammoId then
+        n.kind = AI.Kind(ammoId)
+        if GetInventoryItemCount then n.count = Number(GetInventoryItemCount("player", A.AMMO_SLOT)) end
+    elseif uses and n.ranged then
+        n.carries = Carries(n.needs)
+    end
+
+    local f, differs = into.ammo, false
+    if not f then f = {}; into.ammo = f; differs = true end
+    for _, k in ipairs(ammoFields) do
+        if f[k] ~= n[k] then f[k] = n[k]; differs = true end
+    end
+    if into == obs then ammoWatch = uses ~= false end   -- a settings-window look at a draft doesn't steer the live events
+
+    -- data that wasn't there (just after login): look again shortly, a few times, then give up until the game says more
+    if A.Judge(f) == "unknown" then
+        if into == obs and ammoRetries < AMMO_RETRIES then
+            ammoRetries = ammoRetries + 1
+            local mine = token
+            C_Timer.After(AMMO_RETRY, function()
+                if mine == token then Mark("ammo") end
+            end)
+        end
+    else
+        ammoRetries = 0
+    end
+    return differs
+end
+
+ST.Source("ammo", {
+    events = {
+        PLAYER_EQUIPMENT_CHANGED = function(slot)
+            slot = Number(slot)
+            local A = R.ReminderAmmo
+            if slot == A.AMMO_SLOT or slot == A.RANGED_SLOT then return true end
+        end,
+        BAG_UPDATE_DELAYED = function() if ammoWatch then return true end end,
+        UNIT_INVENTORY_CHANGED = function(unit) if ammoWatch and unit == "player" then return true end end,
+    },
+    Read = function(_, into) return ReadAmmo(into) end,
+})
+
 local function OnEvent(_, event, ...)
     stats.events = stats.events + 1
     if event == "PLAYER_ENTERING_WORLD" then
         worldSeen = true
         combat = nil   -- a loading screen: ask the game again
+        ammoRetries = 0
         if listener then
             local ok, err = pcall(listener, nil)
             if not ok then R.Fault("reminders", err) end
@@ -324,8 +425,8 @@ function ST.Stop()
     for k in pairs(want) do want[k] = nil end
     for k in pairs(dirty) do dirty[k] = nil end
     obs.slots = {}
-    obs.combat, obs.life, obs.mounted = nil, nil, nil
-    combat = nil
+    obs.combat, obs.life, obs.mounted, obs.ammo = nil, nil, nil, nil
+    combat, ammoWatch, ammoRetries = nil, true, 0
     SyncEvents()
 end
 
