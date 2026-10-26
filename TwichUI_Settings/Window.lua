@@ -17,6 +17,7 @@ local Cards, Previews, Home, Icons = R.SettingsCards, R.SettingsPreviews, R.Sett
 local pal = Wg.pal
 local Motion = Wg.Motion
 local T = Motion.TIME   -- every duration used here is in Widgets.lua's table
+local Perf = R.Perf     -- TwichUI Diagnostics' scopes (they do nothing unless it is recording)
 local UI = {}
 
 local WIDTH, HEIGHT = 920, 660
@@ -567,6 +568,7 @@ end
 
 -- Places every visible row, section and the reset area, top to bottom; draws each row as it goes.
 function Layout(view)
+    local pt = Perf.on and Perf.Start("settings.page.layout")
     local frame, page = view.frame, view.page
     local ok, status = true, ""
     if page.def.overview and page.def.overview.status then ok, status = pcall(page.def.overview.status) end
@@ -692,6 +694,7 @@ function Layout(view)
     -- exactly what is drawn, so the scroll range (and its bar) is there only when something is out of view
     frame:SetHeight(y + PAGE_BOTTOM)
     content:SetHeight(y + PAGE_BOTTOM)
+    if pt then Perf.Stop(pt) end
 end
 UI.Layout = Layout
 
@@ -769,7 +772,7 @@ function UI.Navigate(key, rowId)
     -- (the page's offset was kept when the search began: what is scrolled now is the results)
     if state.page ~= page.key and state.page and not leavingSearch then state.scrollOf[state.page] = scroll:GetVerticalScroll() end
     state.page = page.key
-    local view = state.views[page.key] or BuildView(page)
+    local view = state.views[page.key] or Perf.Call("settings.page.build", BuildView, page)
     for k, other in pairs(state.views) do
         other.frame:SetShown(k == page.key)
         -- a page left (or interrupted mid-arrival) goes back to full opacity, so it is never found dim later
@@ -947,6 +950,7 @@ local function PaintSelection()
 end
 
 local function DrawResults(query)
+    local pt = Perf.on and Perf.Start("settings.search")
     local results = Search.Run(query)
     state.results, state.selected = results, 1
     local y = 4
@@ -988,6 +992,7 @@ local function DrawResults(query)
     content:SetHeight(y + 8)
     scroll:SetVerticalScroll(0)
     PaintSelection()
+    if pt then Perf.Stop(pt) end
 end
 
 function UI.Go(result)
@@ -1279,8 +1284,8 @@ end
 -- page: a page key (unknown or nil: the start page, or the page shown last time); setting: a setting's name
 -- (TWICHUI_ prefix optional) or a row id, to go to and mark.
 function UI.Open(page, setting)
-    K.Describe()
-    if not win then BuildWindow() end
+    if not K.described then Perf.Call("settings.describe", K.Describe) end
+    if not win then Perf.Call("settings.window.build", BuildWindow) end
     if type(setting) == "string" then setting = setting:gsub("^TWICHUI_", "") end
     local row = setting and K.rowsById[setting]
     local key

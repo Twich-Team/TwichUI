@@ -7,7 +7,7 @@ local K = R.SettingsKit
 K.Page({
     key = "troubleshooting", icon = "troubleshooting", name = "Troubleshooting", order = 110, group = "config",
     description = "How TwichUI and its optional addons look right now, support information to copy when something does not work, and optional temporary tracing. Nothing is sent anywhere.",
-    keywords = "diagnostics report bug error debug trace log status support version integration ellesmere restedxp copy",
+    keywords = "diagnostics report bug error debug trace log status support version integration ellesmere restedxp copy performance profiler profiling cpu fps lag stutter memory capture",
     when = function() return R.Diag ~= nil and R.DiagWindow ~= nil end,
     overview = {
         label = "Troubleshooting", tip = "Status, support information to copy when something does not work, and optional temporary tracing.",
@@ -112,6 +112,20 @@ K.Page({
             end
         end
 
+        local DL = R.DiagnosticsLauncher
+        if DL then
+            Header("Performance and support", "TwichUI Diagnostics records how TwichUI performs while you play (frame times, the client's CPU figures for TwichUI, its own operations, events and memory), shows it as charts and findings, and makes a report to copy. It is a separate addon, loaded only when you open it, and records nothing until you press Start.")
+            K.Status("TwichUI Diagnostics", function()
+                local snap = DL.Snapshot()
+                if snap.recording then return R.GREEN .. "Recording|r" end
+                if snap.loaded then return "Loaded, stopped" end
+                return snap.armed and "Not loaded; next reload armed" or "Not loaded"
+            end, nil, "Whether TwichUI Diagnostics is loaded this session and recording. Loaded means its code is in memory until a reload; stopped means nothing is collected.")
+            Button("Diagnostics", "Open", function()
+                K.CloseOptions()
+                DL.Open()
+            end, "Opens the TwichUI Diagnostics window (loading it the first time this session). Same as typing /tui perf. Starting a capture, its presets and what each costs are there; nothing is sent anywhere.")
+        end
         Header("Full report", "A report of how TwichUI is set up and what each part says about itself, to copy and share when something does not work. It is built on your computer when you ask for it. Nothing is sent anywhere.")
         Button("Troubleshooting report", "Open", function()
             K.CloseOptions()

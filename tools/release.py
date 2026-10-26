@@ -27,9 +27,10 @@ import zipfile
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-CORE, SETTINGS, NAVDATA = "!!!TwichUI", "TwichUI_Settings", "TwichUI_NavData"
-ADDONS = (CORE, SETTINGS, NAVDATA)
-LOAD_ON_DEMAND = (SETTINGS, NAVDATA)   # each needs CORE and loads only when asked for (the settings window, the first route)
+CORE, SETTINGS, NAVDATA, DIAGNOSTICS = "!!!TwichUI", "TwichUI_Settings", "TwichUI_NavData", "TwichUI_Diagnostics"
+ADDONS = (CORE, SETTINGS, NAVDATA, DIAGNOSTICS)
+# each needs CORE and loads only when asked for (the settings window, the first route, /tui perf)
+LOAD_ON_DEMAND = (SETTINGS, NAVDATA, DIAGNOSTICS)
 TOCS = {a: f"{a}/{a}.toc" for a in ADDONS}
 PROJECT = "TwichUI"
 CHANNEL_BY_BRANCH = {"main": "alpha", "beta": "beta"}

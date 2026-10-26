@@ -9,7 +9,7 @@ where its runtime file is, how the files were made and what is known to be imper
 | | |
 |---|---|
 | Originals (never changed) | `../assets/Fantasy Medieval Icon Grid.png`, `Fantasy RPG Inventory Icon Set.png`, `Fantasy Duel Ban and Keybind Icons.png`, outside the repository (sheets 1 to 3) |
-| Copy in the repository | `assets/settings-icons-source.png` (byte-identical; sha256 `dcb88def6f297bdc9f756224255dd14c4f854ffb2651aeac35bca87693470d60`); sheets 2 to 4 are `assets/settings-icons-2-source.png` to `-4-source.png` (below) |
+| Copy in the repository | `assets/settings-icons-source.png` (byte-identical; sha256 `dcb88def6f297bdc9f756224255dd14c4f854ffb2651aeac35bca87693470d60`); sheets 2 to 5 are `assets/settings-icons-2-source.png` to `-5-source.png` (below) |
 | Format | PNG, 1254 x 1254, 8-bit RGBA, not interlaced |
 | Layout | 4 columns x 4 rows, row-major in the order below |
 | Background | Already transparent: every corner and gutter pixel is alpha 0. No white background to remove. |
@@ -128,6 +128,23 @@ changed no earlier icon (every existing file came out byte-identical).
 | 24 | `reminderTest` | a checklist with a checkmark | Reminders editor: Test; an icon a reminder can show |
 
 The mapping is exactly the expected one: the sheet holds the six pictures in the order described, nothing more.
+
+Fifth sheet (`assets/settings-icons-5-source.png`, the image attached to the TwichUI Diagnostics request on 2026-10-26,
+byte-identical; sha256 `e900befb29aff06791703a3281980e0e679017960e2fcddd97d54c53705fc512`): 1536 x 1024, 8-bit RGBA with
+real transparency, 4 columns x 2 rows. Processed like sheet 4 and balanced against the same median, so no earlier icon
+changed (the run added only the files below). The hourglass's two glass bulbs are clear in the source and stay clear.
+Used by TwichUI Diagnostics' window (`TwichUI_Diagnostics/Window.lua`), beside each view's name.
+
+| # | Registry id | Picture | Used by |
+|---|---|---|---|
+| 25 | `diagOverview` | a magnifying glass over parchment | Diagnostics: Overview |
+| 26 | `diagTimeline` | an hourglass | Diagnostics: Timeline |
+| 27 | `diagMemory` | a parchment with a trend line | Diagnostics: Memory |
+| 28 | `diagOperations` | a bar chart | Diagnostics: Operations |
+| 29 | `diagEvents` | connected nodes (close to `reminderWhen`; they are in different windows) | Diagnostics: Events and lifecycle |
+| 30 | `diagCompare` | a box of filed cards | Diagnostics: Compare |
+| 31 | `diagErrors` | a torn page under a magnifying glass | Diagnostics: Errors |
+| 32 | `diagExport` | a scroll with an outward arrow | Diagnostics: Export |
 
 **Fallback:** an unknown id, or a file the game refuses (`SetTexture` returns `success`, per Forever's
 `SimpleTextureBaseAPIDocumentation.lua`), draws `media/icon` (the addon's emblem, shown by every TwichUI window's

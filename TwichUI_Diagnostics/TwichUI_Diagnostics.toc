@@ -1,0 +1,29 @@
+## Interface: 16001, 120105
+## Title: |cffC9A24ATwich|rUI Diagnostics
+## Notes: Profiling and troubleshooting for TwichUI: record a capture, inspect it and copy a report. Loaded only when you open it (/tui perf); keep it turned on alongside TwichUI.
+## Author: twichie
+## Version: 1.0.0
+## RequiredDeps: !!!TwichUI
+## LoadOnDemand: 1
+## SavedVariables: TwichUIDiagnosticsDB
+## IconTexture: Interface\AddOns\!!!TwichUI\media\icon
+## X-License: MIT (code); see !!!TwichUI\LICENSE
+## Category: Interface Enhancements
+
+# The namespace, preferences, clock, capability matrix and bounded containers (no frames)
+Base.lua
+# What TwichUI's R.Perf calls while a capture records (scopes, events, callbacks, counters)
+Instrument.lua
+Presets.lua
+# What the operations are, and the gauges read from TwichUI's modules' own snapshots
+Gauges.lua
+# The frame sampler and interval readings (one frame, scripted only while recording)
+Collect.lua
+Session.lua
+Findings.lua
+Compare.lua
+Json.lua
+Export.lua
+# The workspace: charts, then the window (last: it tells TwichUI the addon is ready)
+Charts.lua
+Window.lua

@@ -33,6 +33,7 @@
 
 local R = TwichUI
 local HW, HL, HD, D = R.HealerWatch, R.HealerLogic, R.HealerDrinks, R.HealerDisplay
+local Perf = R.Perf
 local W = {}
 R.HealerWatcher = W
 
@@ -269,6 +270,7 @@ local function Update()
         Tell()
         return
     end
+    local pt = Perf.on and Perf.Start("healer.update")
     local now = Now()
     local show, why = false, "off"
     if running then
@@ -286,6 +288,7 @@ local function Update()
     shown = show
     if show and cfg.showElapsed then ScheduleTick() end
     Tell()
+    if pt then Perf.Stop(pt) end
 end
 
 -- A full read of the watched player (a new selection, a new unit, the world, the end of combat).

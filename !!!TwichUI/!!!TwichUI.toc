@@ -27,6 +27,7 @@ Persist.lua
 Profiles.lua
 Switches.lua
 SettingsLauncher.lua
+DiagnosticsLauncher.lua
 modules\Interact.lua
 modules\QuietLogin.lua
 modules\Media.lua
@@ -364,3 +365,5 @@ diag\SupportWindow.lua
 diag\Window.lua
 
 # The settings window is an addon of its own, TwichUI_Settings (load on demand; SettingsLauncher.lua opens it)
+# TwichUI Diagnostics (profiling, captures, exports) is one too, TwichUI_Diagnostics (load on demand; DiagnosticsLauncher.lua
+# opens it; Core.lua's R.Perf holds the instrumentation points it fills in while it records)

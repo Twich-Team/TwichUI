@@ -103,7 +103,7 @@ function SettingsClient(opts)
     "map/Prefs.lua", "map/Data.lua", "map/ViewMath.lua", "map/World.lua", "map/View.lua", "map/Art.lua", "map/Detail.lua", "map/Controls.lua", "map/Caves.lua", "map/Places.lua", "map/DungeonView.lua",
     "npcs/Kinds.lua", "npcs/Store.lua", "npcs/Prefs.lua", "npcs/Collect.lua", "npcs/Map.lua", "npcs/Share.lua", "npcs/Knowledge.lua",
     "guides/CozyBagData.lua", "guides/CozyBagState.lua", "guides/CozyBag.lua", "guides/CozyBagWindow.lua",
-    "diag/Diagnostics.lua", "diag/Status.lua", "diag/SupportWindow.lua", "diag/Window.lua" }
+    "diag/Diagnostics.lua", "diag/Status.lua", "diag/SupportWindow.lua", "diag/Window.lua", "DiagnosticsLauncher.lua" }
   for _, f in ipairs(FILES) do
     local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
   end

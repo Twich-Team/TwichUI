@@ -18,6 +18,7 @@
 
 local R = TwichUI
 local PN = R.Pins
+local Perf = R.Perf
 local PL = R.PinsLook
 local PM = {}
 R.PinsMap = PM
@@ -245,6 +246,7 @@ end
 -- Everything on the map now. Runs when the map, the pins or the choices change; never per frame.
 function PM.Layout()
     if not (installed and MapOpen()) then return end
+    local pt = Perf.on and Perf.Start("pins.map.layout")
     local viewed = WorldMapFrame:GetMapID()
     stats.layouts = stats.layouts + 1
     used = 0
@@ -272,6 +274,7 @@ function PM.Layout()
     end
     HideFrom(used + 1)
     stats.drawn, stats.unplaced = used, unplaced
+    if pt then Perf.Stop(pt) end
 end
 
 local function Rescale()

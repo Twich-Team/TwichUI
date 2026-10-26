@@ -46,9 +46,10 @@ from make_map_tool_icons import read_png, resample  # noqa: E402
 
 # file, columns, rows, opaque (True: no alpha channel, the white background is removed here). Sheets 1 and 2 are 4 x 4
 # with real transparency; sheet 3 is two icons side by side on an opaque near-white background; sheet 4 (Reminders) is
-# 3 x 2 with real transparency.
+# 3 x 2 with real transparency; sheet 5 (TwichUI Diagnostics' views) is 4 x 2 with real transparency.
 SOURCES = [("settings-icons-source.png", 4, 4, False), ("settings-icons-2-source.png", 4, 4, False),
-           ("settings-icons-3-source.png", 2, 1, True), ("settings-icons-4-source.png", 3, 2, False)]
+           ("settings-icons-3-source.png", 2, 1, True), ("settings-icons-4-source.png", 3, 2, False),
+           ("settings-icons-5-source.png", 4, 2, False)]
 # The sheets whose icons set the median the optical balance aims for. A sheet added later is balanced against the
 # same median without moving it, so adding one never changes an icon that was already made.
 MEDIAN_SHEETS = 3
@@ -76,6 +77,10 @@ SHEETS = [
     [
         ("reminders", None), ("reminderShow", None), ("reminderWhen", None),
         ("reminderPlacement", 5), ("reminderPreview", None), ("reminderTest", None),
+    ],
+    [
+        ("diagOverview", None), ("diagTimeline", None), ("diagMemory", None), ("diagOperations", None),
+        ("diagEvents", None), ("diagCompare", None), ("diagErrors", None), ("diagExport", None),
     ],
 ]   # expected solid parts per icon; None: not known beforehand (any number, merged into one icon)
 

@@ -119,10 +119,39 @@ function R:SetEnabled(key, on, alreadyApplied)
     end
 end
 
+---------------------------------------------------------------------------
+-- Instrumentation points for TwichUI_Diagnostics (a load-on-demand addon; docs/diagnostics.md).
+-- Until a capture runs, R.Perf.on is false and every function here does nothing. A call site is
+--     local pt = Perf.on and Perf.Start("npcs.search")  ...  if pt then Perf.Stop(pt) end
+-- which costs one table read and a test while off: no timer, clock read, table, string or stack.
+-- Perf.Call(id, fn, ...) runs fn(...) inside a scope and returns all its results (a tail call while off).
+-- TwichUI_Diagnostics puts its own Start, Stop, Count, ... here while it records and sets `on`; the
+-- core never times anything itself. Ids are stable "area.operation" names; Describe and Gauge only
+-- note a description or a reader (a function returning a number) for the diagnostics window.
+---------------------------------------------------------------------------
+local Perf = { on = false, ops = {}, gauges = {} }
+R.Perf = Perf
+local function Nothing() end
+Perf.Start, Perf.Stop, Perf.Count, Perf.Fault, Perf.Received, Perf.Callback = Nothing, Nothing, Nothing, Nothing, Nothing, Nothing
+function Perf.Finish(_, ...) return ... end
+function Perf.Call(id, fn, ...)
+    if not Perf.on then return fn(...) end
+    return Perf.Finish(Perf.Start(id), fn(...))
+end
+-- spec: { module = "npcs", label = "plain words", kind = "rebuild" | "layout" | "search" | "init" | ..., visible = gaugeId }
+function Perf.Describe(id, spec) Perf.ops[id] = spec end
+-- spec: { label, unit = "count" | "KB" | ..., kind = "pool" | "cache" | "listeners" | "state", read = function() -> number }
+function Perf.Gauge(id, spec)
+    spec.id = id
+    for i, g in ipairs(Perf.gauges) do if g.id == id then Perf.gauges[i] = spec return end end
+    Perf.gauges[#Perf.gauges + 1] = spec
+end
+
 -- An error caught in one of our own handlers: noted for the troubleshooting report (if loaded), then
 -- handed to the game's error handler exactly as before. Nothing is hidden or replaced.
 local function Fault(source, err)
     if R.Diag then R.Diag.Error(source, err) end
+    if Perf.on then Perf.Fault(source, err) end
     geterrorhandler()(err)
 end
 R.Fault = Fault
@@ -202,15 +231,29 @@ function R:Off(event, fn)
     if list.busy == 0 then Tidy(event, list) end
 end
 
+-- Read only, for TwichUI_Diagnostics: how many listeners each event has now, into `into`.
+function R.ListenerCounts(into)
+    for event, list in pairs(listeners) do
+        local n = 0
+        for i = 1, #list do if list[i] then n = n + 1 end end
+        into[event] = n
+    end
+    return into
+end
+
 R.frame = CreateFrame("Frame")
 R.frame:SetScript("OnEvent", function(_, event, ...)
     local list = listeners[event]
     if not list then return end
+    local perf = Perf.on   -- while a capture runs: one received event, then each callback it reaches
+    if perf then Perf.Received(event, list) end
     list.busy = list.busy + 1
     for i = 1, #list do    -- the count as delivery began: listeners added meanwhile wait for the next one
         local fn = list[i]
         if fn then
+            local pt = perf and Perf.Callback(event, fn, i)
             local ok, err = pcall(fn, ...)
+            if pt then Perf.Stop(pt) end
             if not ok then Fault("event " .. event, err) end
         end
     end
@@ -268,8 +311,13 @@ function R:OnInit(fn) table.insert(R.initHooks, fn) end
 R.frame:RegisterEvent("ADDON_LOADED")
 R.frame:HookScript("OnEvent", function(_, event, name)
     if event ~= "ADDON_LOADED" or name ~= ADDON then return end
+    -- A start-up capture armed in TwichUI_Diagnostics begins here (DiagnosticsLauncher.lua): the earliest moment
+    -- TwichUI's own code can watch, after its files ran and its saved data was read. Nothing happens unless armed.
+    if R.DiagnosticsLauncher then R.DiagnosticsLauncher.ArmedBoot() end
     -- Schema, upgrade, defaults and damaged-data repair live in Persist.lua (see docs/persistence.md).
+    local pt = Perf.on and Perf.Start("core.savedData")
     local loaded, loadErr = pcall(R.Persist.LoadMain)
+    if pt then Perf.Stop(pt) end
     Life.savedVariables = loaded and "ready" or "failed"
     if not loaded then Fault("saved data", loadErr) end
     -- Only matters if Persist failed part way: the rest of the addon needs these to be tables.
@@ -287,7 +335,9 @@ R.frame:HookScript("OnEvent", function(_, event, name)
     end
     Life.configReady = true
     for i, fn in ipairs(R.initHooks) do
+        local hpt = Perf.on and Perf.Start("core.startupHook", i)
         local ok, err = pcall(fn)
+        if hpt then Perf.Stop(hpt) end
         Life.hooksRun = Life.hooksRun + 1
         if not ok then
             Life.hookFailures = Life.hookFailures + 1
@@ -428,6 +478,9 @@ COMMANDS = {
     { name = "diagnostics", usage = "diagnostics [start|stop|clear|status]", desc = "troubleshooting report to copy; start or stop tracing", fn = function(arg)
         if R.DiagWindow then R.DiagWindow.Command(arg) else Unavailable("Troubleshooting") end
     end },
+    { name = "perf", usage = "perf [start [preset]|stop|cancel|mark [note]|status|arm]", desc = "TwichUI Diagnostics: record and inspect TwichUI's performance, and export a report (loads only when used; listed on the Troubleshooting page)", hidden = true, fn = function(arg)
+        if R.DiagnosticsLauncher then R.DiagnosticsLauncher.Command(arg) else Unavailable("TwichUI Diagnostics") end
+    end },
     { name = "hidden", usage = "hidden", desc = "welcome messages hidden at login", fn = function()
         if R.Quiet then R.Quiet:ShowHidden() else Unavailable("Quiet login") end
     end },
@@ -446,6 +499,8 @@ COMMANDS = {
         if R.DiagWindow then R.DiagWindow.LegacyFriendDiag(arg) else Unavailable("Troubleshooting") end
     end },
     { name = "troubleshoot", alias = "diagnostics", hidden = true },
+    { name = "performance", alias = "perf", hidden = true },
+    { name = "profiler", alias = "perf", hidden = true },
     { name = "settings", alias = "options", hidden = true },
     { name = "config", alias = "options", hidden = true },
     { name = "journal", alias = "chronicle", hidden = true },

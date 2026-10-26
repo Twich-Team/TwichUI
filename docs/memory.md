@@ -77,6 +77,7 @@ unexplained can only be found with in-game readings.
 | Sharing transfers | the next transfer | counters and the offer only; AceComm holds message pieces |
 | Quiet login: chat wrapped | 10 seconds after the loading screen | held messages kept for `/tui hidden` |
 | `/tui diagnostics memory` | its last reading of the game's count | one number per addon |
+| TwichUI Diagnostics (`TwichUI_Diagnostics`, load on demand) | reload once loaded; a capture's data until it is discarded or pushed out | `docs/diagnostics.md` "Storage bounds" |
 
 ### CPU, by reading the source
 
@@ -127,7 +128,8 @@ Write down the client build (`/run print(GetBuildInfo())`) and which addons are 
 8. **Normal play.** 20 minutes of questing or a dungeon, readings with `collect` at 5 and 20 minutes. A plateau is
    normal; steady growth with nothing new happening is worth a trace.
 9. **CPU.** The game's profiler, as in `docs/release-hardening.md` ("Measuring"): `C_AddOnProfiler` metrics for
-   `!!!TwichUI` around the same steps.
+   `!!!TwichUI` around the same steps. TwichUI Diagnostics (`/tui perf`, `docs/diagnostics.md`) records the same figures per frame,
+   with TwichUI's own operations, and its own cost on a separate addon.
 
 To turn it off: there is nothing to turn off. The command keeps only its last reading and collects only when
 `collect` is typed. If `/console scriptProfile 1` was used for CPU figures, set it back to 0 and reload.

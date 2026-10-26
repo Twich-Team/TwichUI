@@ -20,6 +20,7 @@
 
 local R = TwichUI
 local NK = R.NpcKinds
+local Perf = R.Perf
 local NS = {}
 R.NpcStore = NS
 
@@ -394,6 +395,7 @@ function NS.MergeReported(list)
     local result = { added = 0, more = 0, yours = 0, refused = 0 }
     local db = Store(true)
     if not db or not Writable(db) then result.refused = #list return result end
+    local pt = Perf.on and Perf.Start("npcs.import")
     local now = time()
     for _, f in ipairs(list) do
         local e = Near(f.id, f.m, f.x, f.y)
@@ -422,6 +424,7 @@ function NS.MergeReported(list)
         end
     end
     if result.added + result.more + result.yours > 0 then Changed() end
+    if pt then Perf.Stop(pt) end
     return result
 end
 
@@ -441,6 +444,7 @@ end
 function NS.ForgetMany(entries)
     local db = Store()
     if not (db and Writable(db)) or type(entries) ~= "table" then return 0 end
+    local pt = Perf.on and Perf.Start("npcs.cleanup")
     local doomed = {}
     for _, e in ipairs(entries) do doomed[e] = true end
     local list, kept, n = db.list, 0, 0
@@ -459,6 +463,7 @@ function NS.ForgetMany(entries)
         Invalidate()
         Changed()
     end
+    if pt then Perf.Stop(pt) end
     return n
 end
 

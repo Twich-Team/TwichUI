@@ -22,6 +22,7 @@
 
 local R = TwichUI
 local NK, NS, NP = R.NpcKinds, R.NpcStore, R.NpcPrefs
+local Perf = R.Perf
 local NMAP = {}
 R.NpcMap = NMAP
 
@@ -244,6 +245,7 @@ end
 -- Everything on the map now. Runs when the map, the list or the choices change; never per frame.
 function NMAP.Layout()
     if not (installed and MapOpen()) then return end
+    local pt = Perf.on and Perf.Start("npcs.map.layout")
     stats.layouts = stats.layouts + 1
     used = 0
     revealMarker = nil
@@ -296,6 +298,7 @@ function NMAP.Layout()
         NMAP.ClearReveal(true)   -- it left the list
     end
     if pulse and pulse.running and not PlacePulse() then StopPulse() end
+    if pt then Perf.Stop(pt) end
 end
 
 local function Rescale()

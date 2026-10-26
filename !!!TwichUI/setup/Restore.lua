@@ -49,6 +49,7 @@ RS.OWN_LEFT_OUT = {
     storedData = "notes from the last saved-data search; searching again makes them",
     whisperProbe = "the result of a check TwichUI makes by itself",
     welcome = "whether the welcome has been shown",
+    diagnosticsArm = "a one-shot hand-off between loads (TwichUI Diagnostics' Arm next reload)",
     schema = "kept with the backup as its schema",
     migrated = "an obsolete marker",
     heldStored = "a newer TwichUI's settings, set aside unchanged",

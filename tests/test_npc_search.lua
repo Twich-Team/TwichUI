@@ -930,4 +930,28 @@ do
   assert(R.MapPulse and R.MapPulse.Step, "map pings use the helper")
 end
 
+---------------------------------------------------------------------------
+-- TwichUI Diagnostics' scope around the search (R.Perf, Core.lua) changes nothing: the same results, totals and query
+-- with a capture recording as without, one scope per search that ran, none for an empty query
+---------------------------------------------------------------------------
+do
+  local P = R.Perf
+  local function Same(a, b)
+    if #a ~= #b then return false end
+    for i = 1, #a do if a[i].key ~= b[i].key or a[i].dist ~= b[i].dist or a[i].place ~= b[i].place then return false end end
+    return true
+  end
+  local offList, offTotal, offQuery = Run("farley")
+  local started, stopped = 0, 0
+  local saved = { P.on, P.Start, P.Stop }
+  P.on = true
+  P.Start = function(id) assert(id == "npcs.search"); started = started + 1; return started end
+  P.Stop = function(token) assert(token == started); stopped = stopped + 1 end
+  local onList, onTotal, onQuery = Run("farley")
+  local emptyN = select("#", SR.Run("", SR.Where()))
+  P.on, P.Start, P.Stop = saved[1], saved[2], saved[3]
+  assert(Same(offList, onList) and offTotal == onTotal and offQuery == onQuery, "the same search while recording")
+  assert(started == 1 and stopped == 1 and emptyN == 3, "one scope, started and stopped; an empty query is not a search")
+end
+
 print("NPC SEARCH TESTS PASSED")

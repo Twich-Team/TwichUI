@@ -23,6 +23,7 @@
 
 local R = TwichUI
 local NS, KN = R.NpcStore, R.NpcKnowledge
+local Perf = R.Perf
 local SR = {}
 R.NpcSearch = SR
 
@@ -113,6 +114,7 @@ SR.Before = Before
 function SR.Run(text, spot, limit)
     local q = SR.Clean(text)
     if q == "" then return {}, 0, q end
+    local pt = Perf.on and Perf.Start("npcs.search")
     limit = limit or SR.MAX_RESULTS
     spot = spot or SR.Where()
     local all = {}
@@ -143,5 +145,6 @@ function SR.Run(text, spot, limit)
         r.place = ("%.1f, %.1f"):format(r.e.x / NS.COORD * 100, r.e.y / NS.COORD * 100)
         r.coords = seen[r.lname .. "\0" .. r.e.m] > 1
     end
+    if pt then Perf.Stop(pt) end
     return out, total, q
 end

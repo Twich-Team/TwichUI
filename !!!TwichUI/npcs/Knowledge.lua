@@ -13,6 +13,7 @@
 
 local R = TwichUI
 local NK, NS = R.NpcKinds, R.NpcStore
+local Perf = R.Perf
 local KN = {}
 R.NpcKnowledge = KN
 
@@ -55,6 +56,7 @@ end
 KN.ZoneName = ZoneName
 
 local function Build()
+    local pt = Perf.on and Perf.Start("npcs.knowledge.rebuild")
     local entries = NS.Entries()
     rows, byEntry, built, dirty = {}, {}, entries, false
     local names, zoneCount, kindCount = {}, {}, {}
@@ -91,6 +93,7 @@ local function Build()
     for _, k in ipairs(NK.LIST) do
         if kindCount[k.id] then kinds[#kinds + 1] = { id = k.id, label = k.label, count = kindCount[k.id] } end
     end
+    if pt then Perf.Stop(pt) end
 end
 
 local function Ready()

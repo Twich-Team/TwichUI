@@ -366,7 +366,7 @@ local page = K.pages.troubleshooting
 assert(page and page.def.onShow, "the page takes its snapshot when it opens")
 local statusRows, shown = {}, {}
 for _, row in ipairs(page.rows) do if row.kind == "status" then statusRows[#statusRows + 1] = row end end
-assert(#statusRows == 6 + 2 + (5 + 6 + 1 + 4 + 1),"six summary lines, a folded line for each of the two multi-capability addons, and each capability: " .. #statusRows)
+assert(#statusRows == 6 + 2 + (5 + 6 + 1 + 4 + 1) + 1, "six summary lines, a folded line for each of the two multi-capability addons, each capability, and TwichUI Diagnostics' state: " .. #statusRows)
 local function Value(row) return row.value() end
 St.Invalidate()
 page.def.onShow()

@@ -6,6 +6,7 @@
 
 local R = TwichUI
 local K = R.SettingsKit
+local Perf = R.Perf
 local Search = {}
 R.SettingsSearch = Search
 
@@ -79,6 +80,7 @@ local index
 -- Builds the index (once). Only ever called after the pages are described.
 function Search.Build()
     if index then return index end
+    local pt = Perf.on and Perf.Start("settings.search.index")
     index = {}
     local groupLabel = {}
     for _, group in ipairs(K.GROUPS) do groupLabel[group.key] = group.label end
@@ -120,6 +122,7 @@ function Search.Build()
             end
         end
     end
+    if pt then Perf.Stop(pt) end
     return index
 end
 

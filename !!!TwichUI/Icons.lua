@@ -10,7 +10,7 @@
 --                                         emblem when the id is unknown or the game refuses the file. Returns the
 --                                         id drawn ("fallback" when it fell back).
 --
--- Every icon comes from one of four sheets (assets/settings-icons-source.png, -2-, -3- and -4-source.png),
+-- Every icon comes from one of five sheets (assets/settings-icons-source.png, -2-, -3-, -4- and -5-source.png),
 -- cut and cleaned by tools/make_settings_icons.py into media/icons/<id>.tga (64 px, for cards and Home) and
 -- <id>-small.tga (32 px, for list rows). docs/settings-icons.md lists every one and what it is for.
 
@@ -78,6 +78,15 @@ local list = {
     reminderPlacement = Sheet("reminderPlacement"), -- a panel within four corner marks (Placement)
     reminderPreview = Sheet("reminderPreview"),   -- an eye (Preview)
     reminderTest = Sheet("reminderTest"),         -- a checklist with a checkmark (Test)
+    -- the fifth sheet (assets/settings-icons-5-source.png, 4 x 2): TwichUI Diagnostics' views
+    diagOverview = Sheet("diagOverview"),         -- a magnifying glass over parchment (Overview)
+    diagTimeline = Sheet("diagTimeline"),         -- an hourglass (Timeline)
+    diagMemory = Sheet("diagMemory"),             -- a parchment with a trend line (Memory)
+    diagOperations = Sheet("diagOperations"),     -- a bar chart (Operations)
+    diagEvents = Sheet("diagEvents"),             -- connected nodes (Events and lifecycle)
+    diagCompare = Sheet("diagCompare"),           -- a box of filed cards (Compare)
+    diagErrors = Sheet("diagErrors"),             -- a torn page under a magnifying glass (Errors)
+    diagExport = Sheet("diagExport"),             -- a scroll with an outward arrow (Export)
     -- Healer Watch's own artwork (assets/healer-watch-source.png, cut by tools/make_healer_watch_art.py)
     healerWatch = { file = R.PATH .. [[media\healerwatch\vessel]], small = R.PATH .. [[media\healerwatch\vessel-small]], size = 64, pad = 2, source = "healerWatch" },   -- a mana flask
     healerWatchDrink = { file = R.PATH .. [[media\healerwatch\cup]], small = R.PATH .. [[media\healerwatch\cup-small]], size = 64, pad = 2, source = "healerWatch" },   -- a ceramic cup

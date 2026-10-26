@@ -26,6 +26,7 @@ local C = R.ReminderConditions
 local E = R.ReminderEval
 local ST = R.ReminderState
 local D = R.ReminderDisplay
+local Perf = R.Perf
 local CT = {}
 R.ReminderController = CT
 
@@ -143,16 +144,18 @@ local function Act(v, r)
 end
 
 local function Decide(v, obs, ctx)
+    local pt = Perf.on and Perf.Start("reminders.decide")
     local r = Rec(v.id)
     r.out = E.Run(v, obs, ctx, r.out)
     stats.decisions = stats.decisions + 1
     Act(v, r)
+    if pt then Perf.Stop(pt) end
 end
 
 ---------------------------------------------------------------------------
 -- Refresh: everything, from the top. Safe to call at any time.
 ---------------------------------------------------------------------------
-function CT.Refresh()
+local function Refresh()
     gen = gen + 1
     stats.refreshes = stats.refreshes + 1
     local views = RM.List()
@@ -215,6 +218,8 @@ function CT.Refresh()
     end
     Tell(nil)
 end
+-- (inside a scope while TwichUI Diagnostics records; a plain call otherwise)
+function CT.Refresh() return Perf.Call("reminders.refresh", Refresh) end
 
 -- Observations changed (nil: the world was entered, read everything again).
 ST.OnChange(function(changed)
