@@ -227,7 +227,8 @@ function EX.Summary(rec, opts)
     end
     local manual = {}
     for _, m in ipairs(Markers(rec, opts)) do
-        if m.yours or m.kind == "combat-start" or m.kind == "combat-end" or m.kind == "settings-closed" or m.kind == "loading-start" or m.kind == "map-shown" or m.kind == "map-hidden" then
+        if m.yours or m.kind == "combat-start" or m.kind == "combat-end" or m.kind == "settings-closed" or m.kind == "loading-start" or m.kind == "map-shown" or m.kind == "map-hidden"
+            or m.kind == "addon-loaded" or m.kind == "profile-changed" then
             manual[#manual + 1] = ("%s %s%s"):format(DX.Clock2(m.t), m.kind, m.label and (" (" .. m.label .. ")") or "")
         end
     end
@@ -244,8 +245,11 @@ function EX.Summary(rec, opts)
     else
         A("- TwichUI by the client's count: %s in all; %s per frame; %s per second of capture%s", DX.Ms(cpu.coreMs), DX.Ms(cpu.perFrameMs), DX.Ms(cpu.perSecondMs),
             cpu.shareOfAll and (" (%.1f%% of the client's overall addon-profiler figure, %s)"):format(cpu.shareOfAll * 100, DX.Ms(cpu.overallMs)) or "")
-        A("- Accounted for by instrumented operations: %s (%s of it); outside every scope: %s (%s a second)", DX.Ms(cpu.workMs), cpu.workShare and ("%.0f%%"):format(cpu.workShare * 100) or "n/a",
+        A("- Accounted for by instrumented operations: %s (%s of it); outside every scope: %s (%s a second)", DX.Ms(cpu.workMs), cpu.workRatio and ("%.0f%%"):format(cpu.workRatio * 100) or "n/a",
             DX.Ms(cpu.unattributedMs), DX.Ms(cpu.unattributedPerSecond))
+        if cpu.overCounted then
+            A("- The instrumented operations add up to more than the client counted for TwichUI: read their times as upper bounds (each scope's own clock reads are inside it, or the client's figure leaves some of the work out; this capture cannot say which)")
+        end
         if cpu.activeSeconds then
             A("- Shape: CPU in %d of %d seconds; the busiest tenth of the seconds held %.0f%% of it%s", cpu.activeSeconds, cpu.seconds, (cpu.topTenthShare or 0) * 100,
                 (cpu.busiest and cpu.busiest[1]) and ("; busiest: " .. (function()
@@ -275,6 +279,7 @@ function EX.Summary(rec, opts)
         end
         if mem.heap then A("- Every addon's Lua heap together: %s -> %s, highest %s", KB(mem.heap.first), KB(mem.heap.last), KB(mem.heap.peak)) end
         if mem.settings then A("- TwichUI_Settings: %s -> %s", KB(mem.settings.first), KB(mem.settings.last)) end
+        if mem.navdata then A("- TwichUI_NavData (the baked walking maps, loaded on the first route): %s -> %s (the client's figure for that addon; which addon the loaded data strings count toward is the client's choice)", KB(mem.navdata.first), KB(mem.navdata.last)) end
         if mem.diag then A("- TwichUI Diagnostics itself: %s -> %s (its own captures are in this figure, not TwichUI's)", KB(mem.diag.first), KB(mem.diag.last)) end
     end
     if (mem.scopeAllocKB or 0) > 0 then

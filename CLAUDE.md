@@ -200,9 +200,21 @@ Prefer enhancing or integrating with a well-maintained addon over rebuilding a l
 - Use synthetic data and isolated fixtures. Never destructively test against valuable live data without approval.
 - Settings changes additionally verify: saved config survives; core features work without opening settings; every launcher opens the right window and category; first open works in the packaged install; failed optional loading is handled; search finds settings without building every page and navigation reveals the right control; keyboard focus, Escape, scrolling, tooltips and modals are consistent; long labels, larger fonts and supported sizes stay usable; optional addons absent and present are represented accurately; profile changes refresh controls with no stale references; combat-restricted changes are rejected or deferred as defined; repeated use creates no duplicate callbacks; native AddOns settings keep no competing interface after migration.
 
+## Diagnostics coverage for new features
+
+TwichUI has a built-in measuring tool (`TwichUI_Diagnostics/`, load on demand; `/tui perf`; design and bounds in `docs/diagnostics.md`). A report from it is how performance is judged here, so a feature the tool cannot see is a feature that cannot be judged. When adding or changing a feature, decide whether it belongs in the tool, and say so in the final report.
+
+- **Scope work that can cost time.** Per-frame or throttled updaters, `OnUpdate` scripts, private event frames, hooks into Blizzard or other addons' code, rebuilds, layouts, searches, imports and decoding, and loading a load-on-demand addon. Use the core's `R.Perf` (`Core.lua`): `Perf.Call(id, fn, ...)`, `Perf.Wrap(id, fn)` for a hook or `OnEvent`, or `Perf.on and Perf.Start(id)` ... `Perf.Stop(pt)`. Put the scope after any throttle and early exit so it times real work. Ids are stable `area.operation` names; the work must behave identically with no capture recording.
+- **Register the id** in `DX.OPS` (`TwichUI_Diagnostics/Gauges.lua`: module, label, kind, file, function, how often it is expected), with `visible = "map.open"` or `"settings.shown"` for work that should only happen while that window is shown. Add the row to the table in `docs/diagnostics.md`. A scope that is not in `DX.OPS` cannot be mapped to its file in a report.
+- **Register gauges for what a feature keeps**: listener counts, pools of frames, caches, decoded data, running counts (`Perf.Gauge`, read-only; reading must not build, load or change anything). Growth in these is how a leak is told from a warming cache.
+- **Memory of a new load-on-demand addon**: the report reads per-addon memory only for the addons named in `Collect.lua`'s `ReadMemory` and prints them in `Export.lua`; add the new addon to both (and to `DX` in `Base.lua`, the Memory view's `MEMS` in `Window.lua`, and `OURS` in `Collect.lua` so its load, errors and blocked actions are marked and recognised as ours).
+- **Keep reports honest and bounded**: nothing personal in a report (no names, chat, item links, setting values; the redaction rules in `Export.lua` apply to anything you add), and anything saved by the tool stays plain values with a bound.
+- **When a real capture shows a gap** (a figure that cannot be explained, a hitch with no scope, a finding that fires on normal behaviour), fix the tool in the same change as the code and add a test that fails without the fix (`tests/test_perf_engine.lua`).
+- Not every feature needs a scope: one-off, event-rare and trivially cheap code does not, and a scope on a hot path costs a call. Say which and why.
+
 ## Final report
 
-Report: what changed and why; files changed; API/integration evidence and its limits; checks actually run and results; in-game testing still required; unresolved risks or release blockers. Never present inferred behavior, planned work or unperformed tests as completed.
+Report: what changed and why; files changed; API/integration evidence and its limits; diagnostics coverage added (scopes, gauges, memory) or why none; checks actually run and results; in-game testing still required; unresolved risks or release blockers. Never present inferred behavior, planned work or unperformed tests as completed.
 
 Settings architecture tasks also report: what stays loaded during normal play; what is created or loaded on first open; lazy construction vs true load on demand vs both; migration coverage and anything not yet moved; packaging implications; whether performance claims are measured or not.
 

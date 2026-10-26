@@ -81,6 +81,10 @@ function F.CpuStats(rec)
     out.perSecondMs = dur > 0 and core / dur or nil
     out.unattributedMs = math.max(core - work, 0)
     out.workShare = core > 0 and math.min(work / core, 1) or nil
+    -- the same, not capped: above 1 the scopes added up to more than the client counted (their own clock reads sit inside
+    -- them, or the client's figure leaves some of it out), so instrumented times are upper bounds
+    out.workRatio = core > 0 and work / core or nil
+    out.overCounted = out.workRatio ~= nil and out.workRatio > 1.1
     out.unattributedPerSecond = dur > 0 and out.unattributedMs / dur or nil
     out.overallMs = Sum(rec, "all")
     out.shareOfAll = out.overallMs > 0 and core / out.overallMs or nil
@@ -162,7 +166,7 @@ function F.MemoryStats(rec)
         end
         if f then return { first = f, last = l, peak = pk } end
     end
-    out.heap, out.diag, out.settings = Series("heap"), Series("diag"), Series("settings")
+    out.heap, out.diag, out.settings, out.navdata = Series("heap"), Series("diag"), Series("settings"), Series("navdata")
     return out
 end
 
@@ -234,7 +238,8 @@ function F.LongFrames(rec)
         if ours then out.ours = out.ours + 1 end
         out.kept[#out.kept + 1] = { t = sp.t, dt = sp.dt, coreMs = sp.core, workMs = sp.work, top = sp.top, topMs = sp.topMs, combat = sp.combat,
             diagMs = sp.diag, diagReadMs = sp.diagRead, ours = ours or nil,
-            nearMarker = near and near.kind or nil, nearSeconds = near and (near.t - sp.t) or nil }
+            nearMarker = near and near.kind or nil, nearSeconds = near and (near.t - sp.t) or nil,
+            nearLabel = near and near.kind == "addon-loaded" and near.label or nil }
     end
     return out
 end
@@ -435,6 +440,18 @@ end
 -- Work seen while the window it is for was closed (checked on the slowest calls kept).
 rules[#rules + 1] = function(rec, th, out)
     local FIELD = { ["map.open"] = "mapShown", ["settings.shown"] = "settingsShown" }
+    -- the markers that say a window opened or closed: a call this close to one is the second the window changed, not hidden work
+    local EDGES = { ["map.open"] = { ["map-shown"] = true, ["map-hidden"] = true },
+        ["settings.shown"] = { ["settings-shown"] = true, ["settings-hidden"] = true, ["settings-closed"] = true } }
+    local EDGE_SECONDS = 2
+    local function AtEdge(visible, at)
+        local kinds = EDGES[visible]
+        if not kinds then return false end
+        for _, m in ipairs(rec.markers or {}) do
+            if kinds[m.kind] and math.abs(m.t - at) <= EDGE_SECONDS then return true end
+        end
+        return false
+    end
     local tl = rec.timeline
     if not tl then return end
     for _, op in ipairs(rec.ops or {}) do
@@ -444,7 +461,7 @@ rules[#rules + 1] = function(rec, th, out)
             local hidden = {}
             for _, e in ipairs(op.exemplars or {}) do
                 local i = math.floor(e.at) + 1
-                if tl[field][i] == 0 then hidden[#hidden + 1] = ("%s at %s"):format(Ms(e.ms), DX.Clock2(e.at)) end
+                if tl[field][i] == 0 and not AtEdge(d.visible, e.at) then hidden[#hidden + 1] = ("%s at %s"):format(Ms(e.ms), DX.Clock2(e.at)) end
             end
             if #hidden > 0 then
                 Add(out, {
@@ -453,7 +470,7 @@ rules[#rules + 1] = function(rec, th, out)
                     title = ("%s ran while its window looked closed"):format(d.label),
                     evidence = { table.concat(hidden, "; "), ("checked: the %d slowest calls kept"):format(#(op.exemplars or {})) },
                     window = { 0, rec.duration },
-                    limits = { "Shown or not is read once a second, so a call in the second a window opened or closed can look hidden." },
+                    limits = { "Shown or not is read once a second, so a call in the second a window opened or closed can look hidden; calls within 2 s of that window's own opened or closed marker are left out." },
                     verify = "Mark when you close the window and look at the operation's calls after the marker.",
                     ids = { op.id, d.visible },
                 })
@@ -499,7 +516,7 @@ rules[#rules + 1] = function(rec, th, out)
             local k = LF.kept[i]
             evidence[#evidence + 1] = ("%s: %s frame; TwichUI %s by the client's count, %s instrumented; %s%s"):format(DX.Clock2(k.t), Ms(k.dt), k.coreMs and Ms(k.coreMs) or "n/a", Ms(k.workMs),
                 k.diagMs and ("the diagnostics' previous frame %s"):format(Ms(k.diagMs)) or "no diagnostics figure",
-                k.nearMarker and ("; nearest marker: " .. k.nearMarker .. (" (%+.1f s)"):format(k.nearSeconds)) or "; no marker within 3 s")
+                k.nearMarker and ("; nearest marker: " .. k.nearMarker .. (k.nearLabel and (" " .. k.nearLabel) or "") .. (" (%+.1f s)"):format(k.nearSeconds)) or "; no marker within 3 s")
         end
         Add(out, {
             id = "long-frames-unattributed", category = "frames", severity = "info", confidence = "measured",

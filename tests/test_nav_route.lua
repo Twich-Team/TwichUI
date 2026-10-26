@@ -14,7 +14,7 @@ dofile(TESTS .. "fixtures/nav_fixture.lua")
 local function Env(store, loaded, onLoad)
   local env = setmetatable({}, { __index = _G })
   env._G = env
-  env.TwichUI = { Fault = function(src, err) error(src .. ": " .. tostring(err)) end, NavDataStore = store }
+  env.TwichUI = { Perf = { on = false, Call = function(_, fn, ...) return fn(...) end }, Fault = function(src, err) error(src .. ": " .. tostring(err)) end, NavDataStore = store }
   env.C_EncodingUtil = NAV_CODEC.C_EncodingUtil
   env.Enum = NAV_CODEC.Enum
   env.InCombatLockdown = function() return false end

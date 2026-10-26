@@ -31,6 +31,7 @@ DX.OPS = {
     ["pins.map.layout"] = { module = "pins", label = "Pins placed on the world map", kind = "layout", visible = "map.open", file = "pins/Map.lua", where = "PM.Layout", every = "per map change, zoom or pan" },
     ["pins.minimap.tick"] = { module = "pins", label = "Pins on the minimap, one update", kind = "update", file = "pins/Minimap.lua", where = "Update > Step", every = "10 times a second (25 when rotating) while a pin is eligible" },
     ["pins.ping.tick"] = { module = "pins", label = "A map ping animating, one frame", kind = "update", file = "pins/PingMap.lua", where = "Tick > Step", every = "every frame while a ping shows" },
+    ["nav.load"] = { module = "nav", label = "Navigation data addon loaded (first route)", kind = "init", file = "nav/Data.lua", where = "ND.Load > C_AddOns.LoadAddOn", every = "once per session, when the first route is asked for" },
     ["nav.search"] = { module = "nav", label = "Route search, one slice", kind = "update", file = "nav/Nav.lua", where = "StepJob", every = "every frame while a route is being searched" },
     ["nav.position"] = { module = "nav", label = "Navigation: position read and announced", kind = "update", file = "nav/Nav.lua", where = "OnUpdate > ReadPosition + Emit(position)", every = "POS_EVERY seconds while navigating" },
     ["nav.progress"] = { module = "nav", label = "Navigation: progress along the route", kind = "update", file = "nav/Nav.lua", where = "Progress", every = "PROGRESS_EVERY seconds while navigating" },

@@ -124,6 +124,7 @@ uses an item, sends anything or makes up events. Each states its cost before you
 | `settings.search.index` | `TwichUI_Settings/Search.lua` `Search.Build` | rebuild |
 | `npcs.minimap.tick`, `pins.minimap.tick` (`Perf.Call`, after the throttle) | `npcs/Minimap.lua`, `pins/Minimap.lua` `Update` > `Step` | update |
 | `nav.search`, `nav.position`, `nav.progress`, `nav.ticker` (`Perf.Call`) | `nav/Nav.lua` `OnUpdate` (`nav.ticker`: each trail or arrow updater) | update |
+| `nav.load` (`Perf.Call`) | `nav/Data.lua` `ND.Load`, around `C_AddOns.LoadAddOn` of `TwichUI_NavData` | init |
 | `classbars.anim`, `pins.ping.tick`, `npcs.map.pulse` (`Perf.Call`) | `classbars/Anim.lua`, `pins/PingMap.lua`, `npcs/Map.lua` | update |
 | `map.view.step`, `map.view.follow`, `map.view.notify` (`Perf.Wrap`) | `map/View.lua` OnUpdate scripts | update |
 | `reminders.event`, `healer.event`, `healer.unitEvent`, `targetart.event`, `refreshments.cast` (`Perf.Wrap`) | the private event frames' OnEvent in `reminders/State.lua`, `healer/Watch.lua`, `targetart/Display.lua`, `modules/Refreshments.lua` | event |
@@ -159,13 +160,17 @@ while shown; nothing while the window is closed (except the badge's once-a-secon
 Fixed rules with stated thresholds (`prefs.thresholds`; defaults in `Base.lua`): one operation dominating measured work
 (or a single expensive initialization), a rebuild or layout often per minute, an event's callbacks often per minute,
 listener counts rising across window cycles (never down), a pool growing at every cycle, TwichUI's memory rising with a
-cache (needs 3+ readings rising in 2/3 of intervals), slow calls while their window was sampled closed, long frames with
+cache (needs 3+ readings rising in 2/3 of intervals), slow calls while their window was sampled closed (calls within 2 s of that window's own opened or closed marker are left out: the clock is read once a second), long frames with
 TwichUI time of at least half the frame (or long frames without it, stated as not attributable), the client counting
 ticks over 5/50 ms for TwichUI, diagnostics overhead (with its hitches: long frames the diagnostics' own memory or
 gauge read lifted over the limit), TwichUI CPU outside every scope (`unattributed-cpu`; `prefs.thresholds.unattributedPerSec`,
 default 1 ms a second, medium at five times that), errors, and what limits the capture. The memory finding reports the
 series (lowest, highest, intervals up and down, at least how many KB/s were allocated between readings, the largest
-fall as evidence that the collector ran, the scopes' allocation) and says a pool's size is not measured. A dominant
+fall as evidence that the collector ran, the scopes' allocation) and says a pool's size is not measured. The report's memory section also shows `TwichUI_NavData` (read with the others, a separate
+addon) and its CPU section shows the instrumented total as a true ratio of the client's count: above about 110% it says the
+instrumented times are upper bounds (the first real capture had 877 ms instrumented against 509 ms counted; the cause is
+not established). A long frame next to an addon load names the addon, and the Markers list includes addon loads and
+profile changes. A dominant
 operation is only named when measured work is 20 ms or more. Each has category, severity
 and its basis, evidence numbers, window, confidence (measured, correlated, suspicion), limits, how to verify, and ids.
 
@@ -289,6 +294,9 @@ Perf.Gauge("mymod.pool", { label = "My module's frames made", kind = "pool", uni
 Add the id to `DX.OPS` in `TwichUI_Diagnostics/Gauges.lua` if it should be described without loading your module first,
 and to the table above.
 
+A new feature that does real work or holds memory should join this (see CLAUDE.md, "Diagnostics coverage for new
+features"): scope the work, register gauges for what it keeps, add it to `DX.OPS`, and put a row in the table above.
+
 ## Tests
 
 `tests/test_perf_engine.lua` (synthetic clock): off behaviour and cost; results and errors preserved through scopes;
@@ -302,7 +310,9 @@ arming; no error reaching the handler; the diagnostics' cost counted once (sampl
 that follows our memory read told apart, percentiles never above the maximum, allocation inside a scope (inclusive and
 self), `Perf.Wrap` off and recording, and a synthetic capture shaped like the first real one (small CPU mostly outside
 every scope, memory with a collection in it) for the findings, the "checked and clear" lines, the suggested captures
-and the summary's sections and size. `tests/test_perf_window.lua`: every view without a capture, while recording,
+and the summary's sections and size; the gaps that capture showed (navigation data memory, an addon load named at its long
+frame, the instrumented/client ratio, a window's own opening not read as hidden work, the `nav.load` scope).
+`tests/test_perf_window.lua`: every view without a capture, while recording,
 after; badge on close; exports and comparison prepared; repeated open/close. `tests/test_npc_search.lua`: results
 identical with a capture recording. `tests/test_release_tools.py`: four folders, load on demand.
 

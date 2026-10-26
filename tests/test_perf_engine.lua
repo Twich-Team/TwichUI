@@ -650,6 +650,83 @@ do
   assert(DX.Op("npcs.minimap.tick").file == "npcs/Minimap.lua" and DX.Op("event:BAG_UPDATE").file == "Core.lua", "operation ids map to files")
 end
 
+---------------------------------------------------------------------------
+-- 17. What the first real capture showed was missing: the navigation data's memory, an addon load named at the long
+-- frame, instrumented work above the client's count, and a window's own opening taken for hidden work
+---------------------------------------------------------------------------
+do
+  local function Timeline(n, mapOpenFrom, mapOpenTo)
+    local tl = { n = n, cap = n + 5 }
+    for _, f in ipairs(DX.Collect.FIELDS) do tl[f] = {} end
+    for i = 1, n do
+      tl.t[i] = i - 1; tl.frames[i] = 153; tl.core[i] = 1.7; tl.work[i] = 0.1; tl.all[i] = 6
+      tl.mapShown[i] = (i >= mapOpenFrom and i <= mapOpenTo) and 1 or 0
+      tl.settingsShown[i] = 0; tl.windowShown[i] = 0; tl.combat[i] = 0; tl.group[i] = 1; tl.fps[i] = 140
+    end
+    return tl
+  end
+  local function Rec(over)
+    local base = { uid = "gap", preset = "general", presetName = "General performance", duration = 120, minutes = 2, stopReason = "time-limit",
+      config = { spikeMs = 50, profiler = true, memorySeconds = 30 }, timeline = Timeline(120, 30, 58),
+      frames = { count = 18000, ms = 120000, spikes = {}, spikeCount = 0, gaps = {}, p50 = 6.9, p95 = 8.2, p99 = 11.6, max = 20 },
+      ops = {}, memory = {} }
+    for k, v in pairs(over) do base[k] = v end
+    return Synthetic(base)
+  end
+  local layout = { id = "npcs.map.layout", calls = 3, total = 2, self = 2, mean = 0.6, max = 0.5, first = 10, last = 58,
+    exemplars = { { ms = 0.479, at = 58.4 } } }
+
+  -- a call in the second the map closed is not work done while it was hidden; the same call with no marker near still is
+  local closing = Rec({ ops = { layout }, markers = { { t = 30, kind = "map-shown" }, { t = 59, kind = "map-hidden" } } })
+  assert(not Finding(DX.Findings.Run(closing), "hidden-work"), "a call in the second the window closed is not hidden work")
+  local stray = Rec({ ops = { layout }, markers = { { t = 30, kind = "map-shown" } } })
+  assert(Finding(DX.Findings.Run(stray), "hidden-work"), "without a marker for the closing it is still reported")
+
+  -- the instrumented total beside the client's: not capped at 100%, and said to be an upper bound
+  local over = Rec({ ops = { { id = "nav.ticker", calls = 100, total = 300, self = 300, mean = 3, max = 4, exemplars = {} } } })
+  local an = DX.Findings.Analyze(over)
+  assert(an.cpu.workShare == 1 and an.cpu.workRatio > 1.4 and an.cpu.overCounted, "the ratio is kept above 1 and flagged")
+  local text = DX.Export.Summary(over, DX.Export.Defaults())
+  assert(Has(text, "147%") or Has(text, "14"), "the summary states the real ratio")
+  assert(Has(text, "upper bounds"), "and says what it means")
+  local fine = Rec({ ops = { { id = "nav.ticker", calls = 100, total = 100, self = 100, mean = 1, max = 2, exemplars = {} } } })
+  assert(not DX.Findings.Analyze(fine).cpu.overCounted and not Has(DX.Export.Summary(fine, DX.Export.Defaults()), "upper bounds"), "nothing said when the scopes fit inside the client's count")
+
+  -- the navigation data addon's memory, a separate addon, is read out
+  local nd = Rec({ memory = { { t = 0, core = 18000, navdata = 100 }, { t = 30, core = 20000, navdata = 25000 }, { t = 60, core = 21000, navdata = 25100 } } })
+  assert(DX.Findings.Analyze(nd).memory.navdata.last == 25100, "the series is analysed")
+  assert(Has(DX.Export.Summary(nd, DX.Export.Defaults()), "TwichUI_NavData"), "and appears in the report")
+  assert(not Has(DX.Export.Summary(Rec({ memory = { { t = 0, core = 18000 }, { t = 30, core = 18100 } } }), DX.Export.Defaults()), "TwichUI_NavData"), "no line when it was never loaded")
+
+  -- a long frame next to an addon of ours loading says which addon, and the markers list shows the load
+  local lf = Rec({ markers = { { t = 64, kind = "addon-loaded", label = "TwichUI_NavData" } },
+    frames = { count = 100, spikes = { { t = 64, dt = 97, core = 0.003, work = 3.9 } }, spikeCount = 1, gaps = {}, p50 = 7, p95 = 8, p99 = 11, max = 97 } })
+  local lff = Finding(DX.Findings.Run(lf), "long-frames-unattributed")
+  assert(lff and Has(table.concat(lff.evidence, " "), "addon-loaded TwichUI_NavData"), "the long frame names the addon that loaded")
+  assert(Has(DX.Export.Summary(lf, DX.Export.Defaults()), "addon-loaded (TwichUI_NavData)"), "the Markers list includes addon loads")
+
+  -- the load itself has a scope, so that frame is attributed
+  assert(DX.Op("nav.load").file == "nav/Data.lua" and DX.Op("nav.load").kind == "init", "nav.load is in the catalogue")
+  local C_AddOns = c.C_AddOns
+  local old = { C_AddOns.DoesAddOnExist, C_AddOns.GetAddOnEnableState, C_AddOns.LoadAddOn, C_AddOns.IsAddOnLoaded }
+  C_AddOns.DoesAddOnExist = function() return true end
+  C_AddOns.GetAddOnEnableState = function() return 2 end
+  C_AddOns.IsAddOnLoaded = function() return false end
+  local asked = 0
+  C_AddOns.LoadAddOn = function() asked = asked + 1; return true end
+  local chunk = assert(loadfile(ROOT .. "nav/Data.lua")); setfenv(chunk, c); chunk("!!!TwichUI", {})   -- not part of this client's start-up
+  assert(DX.Start("general"))
+  Frame(16)
+  local okLoad = R.NavData.Load()
+  Frame(16)
+  DX.Stop("manual"); FlushTimers()
+  C_AddOns.DoesAddOnExist, C_AddOns.GetAddOnEnableState, C_AddOns.LoadAddOn, C_AddOns.IsAddOnLoaded = old[1], old[2], old[3], old[4]
+  local lrec = DX.Sessions()[#DX.Sessions()]
+  local loadOp
+  for _, op in ipairs(lrec.ops) do if op.id == "nav.load" then loadOp = op end end
+  assert(okLoad and asked == 1 and loadOp and loadOp.calls == 1, "loading the navigation data runs inside a nav.load scope")
+end
+
 assert(#c.HANDLED == 0, "no error reached the game's handler: " .. tostring(c.HANDLED[1]))
 assert(#armed.HANDLED == 0, "none in the start-up capture either: " .. tostring(armed.HANDLED[1]))
 print("PERF ENGINE TEST PASSED")

@@ -726,6 +726,7 @@ end
 local MEMS = {
     { key = "core", label = "TwichUI (client)", tip = "GetAddOnMemoryUsage for !!!TwichUI: its Lua memory, garbage included." },
     { key = "settings", label = "TwichUI_Settings" },
+    { key = "navdata", label = "TwichUI_NavData" },
     { key = "diag", label = "TwichUI Diagnostics" },
     { key = "heap", label = "Whole UI heap" },
 }

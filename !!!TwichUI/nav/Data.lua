@@ -15,6 +15,7 @@
 -- No frame, no event, no timer. Runtime-only: nothing here is ever saved.
 
 local R = TwichUI
+local Perf = R.Perf
 local ND = {}
 R.NavData = ND
 
@@ -66,7 +67,7 @@ function ND.Load()
     if C_AddOns and C_AddOns.IsAddOnLoaded and C_AddOns.IsAddOnLoaded(ND.ADDON) then
         loaded = true
     else
-        loaded, why = C_AddOns.LoadAddOn(ND.ADDON)
+        loaded, why = Perf.Call("nav.load", C_AddOns.LoadAddOn, ND.ADDON)
     end
     if not loaded then
         loadState = (why == "MISSING" and "missing") or (why == "DISABLED" and "disabled") or "failed"
