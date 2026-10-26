@@ -78,6 +78,9 @@ local list = {
     reminderPlacement = Sheet("reminderPlacement"), -- a panel within four corner marks (Placement)
     reminderPreview = Sheet("reminderPreview"),   -- an eye (Preview)
     reminderTest = Sheet("reminderTest"),         -- a checklist with a checkmark (Test)
+    -- Healer Watch's own artwork (assets/healer-watch-source.png, cut by tools/make_healer_watch_art.py)
+    healerWatch = { file = R.PATH .. [[media\healerwatch\vessel]], small = R.PATH .. [[media\healerwatch\vessel-small]], size = 64, pad = 2, source = "healerWatch" },   -- a mana flask
+    healerWatchDrink = { file = R.PATH .. [[media\healerwatch\cup]], small = R.PATH .. [[media\healerwatch\cup-small]], size = 64, pad = 2, source = "healerWatch" },   -- a ceramic cup
 }
 Icons.list = list
 

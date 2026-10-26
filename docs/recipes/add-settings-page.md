@@ -11,6 +11,7 @@ it; its pages call the core (`R:Enabled`, a feature's `Get`/`Set`).
 | `Overview.lua` | `overview` (0) | `home` |
 | `Notifications.lua` | `notifications` (20), tab `notificationsLook` (21) | `everyday` |
 | `Reminders.lua`, `RemindersEditor.lua` | `reminders` (22), hosted (its editor is a frame of its own) | `everyday` |
+| `HealerWatch.lua` | `healerWatch` (24), hosted (preview, phrases and diagnostics after its last card) | `everyday` |
 | `QoL.lua`, `Markers.lua` | `qol` (30), tabs `markersTarget` (31), `markersWorld` (32), `markersBar` (33) | `everyday` |
 | `FoodDrink.lua` | `food` (40) | `everyday` |
 | `Restock.lua`, `RestockItems.lua` | `restock` (45), tab `restockItems` (46) | `everyday` |

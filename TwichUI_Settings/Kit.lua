@@ -181,7 +181,7 @@ local function AddRow(kind, data)
     elseif K.section and K.section.card then
         -- in a feature card: its first checkbox is the card's switch, the rows after it are its rules
         local card = K.section
-        if not card.primary and kind == "checkbox" then
+        if not card.primary and kind == "checkbox" and card.card.switch ~= false then
             card.primary = row
             row.primaryOf = card
         else
@@ -311,7 +311,9 @@ end
 -- def: { title, icon (an R.Icons id), what (the sentence), summary = function() -> text (optional),
 --   consequence (text or function: always shown, never only in a tooltip), preview (a Previews id, optional),
 --   details = { { question, answer (text or function) }, ... } (optional, under "More about this"),
---   inline (true: the rules are always shown, for a rule whose state must not be tucked away) }
+--   inline (true: the rules are always shown, for a rule whose state must not be tucked away),
+--   switch (false: the card has no switch of its own, and every checkbox in it is a rule; for a part of a feature whose
+--   switch is on another card) }
 function K.Card(def)
     assert(type(def.title) == "string" and type(def.what) == "string", "a card needs a title and a sentence")
     local row = AddRow("header", { name = def.title, tooltip = def.what })

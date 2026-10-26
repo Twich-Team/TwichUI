@@ -244,6 +244,9 @@ Define("ammoWarning", { apply = Refresh("Ammo") })
 -- Reminders: off hides every one at once and listens for nothing; your reminders are kept either way
 Define("reminders", { apply = Refresh("ReminderController") })
 
+-- Healer Watch: off removes the panel and every event at once
+Define("healerWatch", { apply = Refresh("HealerWatcher") })
+
 -- Target dragon artwork on EllesmereUI's target frame
 Define("targetArt", { apply = Refresh("TargetArtDisplay") })
 

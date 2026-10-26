@@ -70,6 +70,7 @@ TC.LOCAL = {
     ["ui.welcomeBackPlace"] = "place", ["ui.friendLoginPlace"] = "place", ["ui.settingsWindow"] = "place",
     ["ui.markerBarPosition"] = "place", ["ui.refreshments.position"] = "place", ["ui.partyPins.position"] = "place", ["ui.classBarsPosition"] = "place", ["ui.ammoPosition"] = "place", ["ui.cozyBag"] = "place",
     ["ui.navigation.position"] = "place", ["ui.navigation.arrowPosition"] = "place", ["ui.navigation.unlockMode"] = "place",
+    ["ui.healerWatch.point"] = "place", ["ui.healerWatch.x"] = "place", ["ui.healerWatch.y"] = "place",
     -- the rest
     ["modules.restedxpSkin"] = "other", ["modules.qolTwichUISettingsButton"] = "other",
     ["modules.reminders"] = "other", ["ui.reminders"] = "other",
@@ -745,6 +746,131 @@ function AmmoList.restore(records)
     end
     WriteAmmo(list)
     return n
+end
+
+---------------------------------------------------------------------------
+-- Healer Watch's chat phrases (healer/Config.lua): { phrases = { { text, mode }, ... } }, mode "word" or "exact", each
+-- checked as the feature checks its own (cleaned text only: a phrase that isn't already clean refuses the group).
+-- Applying merges by the phrase's text: a phrase the share names takes the share's way of matching, or goes at the end of
+-- your list while there is room; nothing is removed. Undo puts your list back exactly as it was (the default three
+-- included, when you had never changed it). A phrase is literal text; it is never run or used as a pattern.
+---------------------------------------------------------------------------
+local HealerPhrases = {}
+
+local function PhraseList() return R.HealerWatch and R.HealerWatch.Phrases() or {} end
+
+local function PhraseMode(entry)
+    if not entry then return "not on your list" end
+    return entry.mode == "exact" and "whole message" or "whole words"
+end
+
+function HealerPhrases.usable() return R.HealerWatch ~= nil end
+function HealerPhrases.count() return #PhraseList() end
+function HealerPhrases.label(n) return n == 1 and "1 phrase" or (("%d phrases"):format(n)) end
+
+function HealerPhrases.export()
+    local list = {}
+    for i, p in ipairs(PhraseList()) do list[i] = { text = p.text, mode = p.mode } end
+    if #list == 0 then return nil end
+    return { phrases = list }
+end
+
+function HealerPhrases.clean(raw)
+    local HW = R.HealerWatch
+    if not HW then return nil, "feature" end
+    if type(raw) ~= "table" or type(raw.phrases) ~= "table" then return nil, "shape" end
+    local n = 0
+    for k in pairs(raw.phrases) do
+        if type(k) ~= "number" then return nil, "shape" end
+        n = n + 1
+        if n > HW.MAX_PHRASES then return nil, "too-large" end
+    end
+    local out, seen = {}, {}
+    for i = 1, n do
+        local p = raw.phrases[i]
+        if type(p) ~= "table" or (p.mode ~= "word" and p.mode ~= "exact") then return nil, "invalid" end
+        local text = HW.CleanPhrase(p.text)
+        if not text or text ~= p.text or seen[text] then return nil, "invalid" end
+        seen[text] = true
+        out[#out + 1] = { text = text, mode = p.mode }
+    end
+    if #out == 0 then return nil, "empty" end
+    return { phrases = out }, #out * 2
+end
+
+-- { { text, old = entry or nil, new = entry } } for each phrase that would change, in the share's order; phrases that
+-- would not fit on a full list are counted in .full.
+function HealerPhrases.plan(clean)
+    local live, byText = PhraseList(), {}
+    for _, p in ipairs(live) do byText[p.text] = byText[p.text] or p end
+    local changes, room = { full = 0 }, R.HealerWatch.MAX_PHRASES - #live
+    for _, p in ipairs(clean.phrases) do
+        local cur = byText[p.text]
+        if not cur then
+            if room > 0 then
+                room = room - 1
+                changes[#changes + 1] = { text = p.text, new = p }
+            else
+                changes.full = changes.full + 1
+            end
+        elseif cur.mode ~= p.mode then
+            changes[#changes + 1] = { text = p.text, old = cur, new = p }
+        end
+    end
+    return changes
+end
+
+function HealerPhrases.review(clean)
+    local changes = HealerPhrases.plan(clean)
+    local rows = {}
+    for _, ch in ipairs(changes) do
+        rows[#rows + 1] = { label = "\"" .. ch.text .. "\"", key = "phrase:" .. ch.text, old = PhraseMode(ch.old), new = PhraseMode(ch.new) }
+    end
+    if changes.full > 0 then
+        rows[#rows + 1] = { label = "Phrases that don't fit", key = "full", old = "your full list", new = ("%d left out"):format(changes.full) }
+    end
+    return rows, #clean.phrases - #changes - changes.full
+end
+
+local function HealerWatchTable()
+    if type(TwichUIDB.ui) ~= "table" then TwichUIDB.ui = {} end
+    local ui = TwichUIDB.ui
+    if type(ui.healerWatch) ~= "table" then ui.healerWatch = {} end
+    return ui.healerWatch
+end
+
+-- Plain writes into the list in use. Returns one undo record: { count, had (whether a list of your own was stored),
+-- list (a copy of it) }.
+function HealerPhrases.apply(clean, plan)
+    local t = HealerWatchTable()
+    local had = type(t.phrases) == "table"
+    local before = {}
+    for i, p in ipairs(had and PhraseList() or {}) do before[i] = { text = p.text, mode = p.mode } end
+    local list = PhraseList()
+    for _, ch in ipairs(plan) do
+        local at
+        for i, p in ipairs(list) do if not at and p.text == ch.text then at = i end end
+        if at then list[at] = { text = ch.text, mode = ch.new.mode } else list[#list + 1] = { text = ch.text, mode = ch.new.mode } end
+    end
+    t.phrases = list
+    return { count = #plan, had = had, list = before }
+end
+
+function HealerPhrases.restore(records)
+    local HW = R.HealerWatch
+    if not HW or type(records) ~= "table" then return 0 end
+    local t = HealerWatchTable()
+    if records.had ~= true then
+        t.phrases = nil
+    else
+        local list = {}
+        for _, p in ipairs(type(records.list) == "table" and records.list or {}) do
+            local text = type(p) == "table" and HW.CleanPhrase(p.text) or nil
+            if text and (p.mode == "word" or p.mode == "exact") and #list < HW.MAX_PHRASES then list[#list + 1] = { text = text, mode = p.mode } end
+        end
+        t.phrases = list
+    end
+    return type(records.count) == "number" and records.count or 1
 end
 
 ---------------------------------------------------------------------------
@@ -1646,6 +1772,32 @@ local function Define()
     g = Group("ammoCustom", "Custom ammunition", { page = "ammoCustom",
         note = "The ammunition you registered, arrows or bullets, by item ID. Merged: what the share names is set, the rest of your list is kept. Registering says only what an item is; it never says anything is equipped or carried." })
     g.custom = AmmoList
+
+    g = Group("healerWatch", "Healer Watch", { page = "healerWatch",
+        note = "Whether Healer Watch is on, where and when it shows, what it shows and how it looks. Where it sits on your screen stays yours, and who you watch is never part of it. It only informs; it never sends anything or acts for you." })
+    Switches(g, { "healerWatch" })
+    do
+        local HW = R.HealerWatch
+        local keys, enums = {}, {}
+        if HW then
+            for key in pairs(HW.DEFAULTS) do
+                if key ~= "point" and key ~= "x" and key ~= "y" then keys[#keys + 1] = key end
+                if HW.ENUM[key] then enums[key] = HW.ENUM[key] end
+            end
+            table.sort(keys)
+        end
+        Table(g, { "ui", "healerWatch" }, HW, keys, enums, { chatSoundName = "sound" })
+    end
+
+    g = Group("healerWatchBar", "Healer Watch mana bar border", { page = "healerWatch" })
+    do
+        local HW = R.HealerWatch
+        Table(g, { "ui", "healerWatchBarLook" }, HW and HW.BarLook, LOOK, LOOK_ENUMS)
+    end
+
+    g = Group("healerWatchPhrases", "Healer Watch chat phrases", { page = "healerWatch",
+        note = "The words that count as a mana message from the healer you watch, and how each matches. Merged: what the share names is added or set, the rest of your list is kept. They are plain text; nothing about who said what is part of it." })
+    g.custom = HealerPhrases
 
     g = Group("targetArt", "Target dragon artwork", { page = "targetArt",
         note = "Whether the dragon on EllesmereUI's target frame is on, which artwork each kind of enemy gets, and how it is placed and drawn. It only decorates; it needs EllesmereUI on the receiving side to show." })

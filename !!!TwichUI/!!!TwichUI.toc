@@ -291,6 +291,17 @@ reminders\State.lua
 reminders\Display.lua
 reminders\Controller.lua
 
+# Healer Watch: one healer's mana, confirmed drinking and recent mana-related chat in a small panel, in five-player
+# dungeons by default (off until turned on). The healer is the one with the Healer role, or the one you choose for the
+# session. It informs only: it never sends a message, never decides whether to pull and never acts for you. Config.lua
+# is what is stored, Logic.lua the decisions (pure), Drinks.lua what drinking looks like, Display.lua draws, Watch.lua
+# reads the game. The settings are in TwichUI_Settings; the artwork is made by tools/make_healer_watch_art.py.
+healer\Config.lua
+healer\Logic.lua
+healer\Drinks.lua
+healer\Display.lua
+healer\Watch.lua
+
 # Target dragon artwork: a dragon of your choosing on EllesmereUI's target frame for bosses, world bosses, rare elites,
 # elites and rares, by the game's own classification (off until turned on; needs EllesmereUI's unit frames with its
 # own target frame; nothing of EllesmereUI's is changed). Config.lua is what it stores and decides (no frames),
@@ -354,6 +365,7 @@ diag\ClassBars.lua
 diag\Ammo.lua
 diag\Hazard.lua
 diag\Reminders.lua
+diag\HealerWatch.lua
 diag\Status.lua
 diag\SupportWindow.lua
 diag\Window.lua

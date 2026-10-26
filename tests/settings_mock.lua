@@ -77,6 +77,12 @@ function SettingsClient(opts)
   c.C_Item = { GetItemInfoInstant = function() return nil end, GetItemInfo = function() return nil end,
     GetItemSpell = function() return nil end, GetItemCount = function() return 0 end }
   c.C_Container = { GetContainerNumSlots = function() return 0 end, GetContainerItemInfo = function() return nil end }
+  -- a unit's state, for Healer Watch when a setting under test makes it watch you: online, alive, no mana pool
+  c.UnitIsConnected = function() return true end
+  c.UnitIsDeadOrGhost = function() return false end
+  c.UnitPower = function() return 0 end
+  c.UnitPowerMax = function() return 0 end
+  c.IsInInstance = function() return false, "none" end
 
   local FILES = { "gear/Weights.lua", "gear/Evaluate.lua", "gear/Prefs.lua", "gear/Data.lua",
     "gear/Hints.lua", "gear/Tooltip.lua", "gear/Bags.lua", "gear/Window.lua", "modules/Notify.lua", "modules/Arrival.lua", "modules/Media.lua",
@@ -87,6 +93,7 @@ function SettingsClient(opts)
     "classbars/Anim.lua", "classbars/Resources.lua", "classbars/Config.lua", "classbars/Bar.lua", "classbars/Effects.lua", "classbars/Controller.lua",
     "ammo/Config.lua", "ammo/Items.lua", "ammo/State.lua", "ammo/Warning.lua",
     "reminders/Config.lua", "reminders/Conditions.lua", "reminders/Evaluate.lua", "reminders/State.lua", "reminders/Display.lua", "reminders/Controller.lua",
+    "healer/Config.lua", "healer/Logic.lua", "healer/Drinks.lua", "healer/Display.lua", "healer/Watch.lua",
     "hazard/Config.lua", "hazard/Rules.lua", "hazard/Alerts.lua",
     "targetart/Config.lua", "targetart/Ellesmere.lua", "targetart/Display.lua",
     "modules/RestedXPSkin.lua", "modules/RestedXPTimers.lua", "modules/SpeakStoneSkin.lua", "qol/QoL.lua", "qol/Summons.lua", "qol/Resurrect.lua", "qol/ReleasePvP.lua",

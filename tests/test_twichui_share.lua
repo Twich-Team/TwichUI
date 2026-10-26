@@ -101,11 +101,38 @@ local REGISTRY = {
   classBars = A.TwichUI.ClassBars.DEFAULTS, classBarsLook = A.TwichUI.ClassBars.Look.DEFAULTS,
   markers = A.TwichUI.Markers.DEFAULTS, markerBar = A.TwichUI.MarkerBar.DEFAULTS, markerBarStyle = A.TwichUI.MarkerBar.Style.DEFAULTS,
   ammo = A.TwichUI.Ammo.DEFAULTS, ammoLook = A.TwichUI.Ammo.Look.DEFAULTS,
+  healerWatchBarLook = A.TwichUI.HealerWatch.BarLook.DEFAULTS,
 }
 for slot, defaults in pairs(REGISTRY) do
   for key in pairs(defaults) do
     Check(SharedKey(slot, key), ("%s.%s is shared (a new default key has to be placed in the schema)"):format(slot, key))
   end
+end
+-- Healer Watch: every setting shared, except where the panel sits
+for key in pairs(A.TwichUI.HealerWatch.DEFAULTS) do
+  local here = TC.LOCAL["ui.healerWatch." .. key]
+  Check(SharedKey("healerWatch", key) ~= (here == "place"), "healerWatch." .. key .. " is shared, or kept local as a place")
+end
+-- and its phrases: a list merged by text, checked as the feature checks it, undone exactly
+do
+  local HP = TC.Group("healerWatchPhrases").custom
+  local HW = A.TwichUI.HealerWatch
+  Check(HP and HP.export().phrases[1].text == "oom" and HP.count() == 3, "the default phrases are exported")
+  Check(HP.clean({ phrases = { { text = "OOM", mode = "word" } } }) == nil, "a phrase that isn't clean is refused")
+  Check(HP.clean({ phrases = { { text = "%d+", mode = "pattern" } } }) == nil and HP.clean({ phrases = { { text = "a|b", mode = "word" } } }) == nil,
+    "an unknown way of matching or markup is refused")
+  local tooMany = {}
+  for i = 1, HW.MAX_PHRASES + 1 do tooMany[i] = { text = "p" .. i, mode = "word" } end
+  Check(HP.clean({ phrases = tooMany }) == nil, "too many phrases are refused")
+  local clean = HP.clean({ phrases = { { text = "oom", mode = "exact" }, { text = "drinking", mode = "word" } } })
+  local plan = HP.plan(clean)
+  Check(#plan == 2 and plan[1].old and plan[1].old.mode == "word" and not plan[2].old, "a mode changed and a phrase added")
+  local rows, same = HP.review(clean)
+  Check(#rows == 2 and same == 0 and rows[1].old == "whole words" and rows[1].new == "whole message", "the review says what changes")
+  local undo = HP.apply(clean, plan)
+  local now = HW.Phrases()
+  Check(#now == 4 and now[1].mode == "exact" and now[4].text == "drinking", "merged: nothing removed")
+  Check(HP.restore(undo) == 2 and A.TwichUIDB.ui.healerWatch.phrases == nil and #HW.Phrases() == 3, "undo: back to the defaults, untouched")
 end
 
 -- every key the settings window can change (the contract fixture's saved layout) is shared or kept local
