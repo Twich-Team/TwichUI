@@ -1,0 +1,28 @@
+## Interface: 16001, 120105
+## Title: |cffC9A24ATwich|rUI Layouts
+## Notes: Layout packages for TwichUI. Loaded only when a layout is installed, checked or restored; keep it turned on alongside TwichUI.
+## Author: twichie
+## Version: 1.0.0
+## RequiredDeps: !!!TwichUI
+## LoadOnDemand: 1
+## IconTexture: Interface\AddOns\!!!TwichUI\media\icon
+## X-License: MIT (code); see !!!TwichUI\LICENSE
+## Category: Interface Enhancements
+
+# docs/layouts/ has the contract. No saved variables of its own: the install record is TwichUIDB.layouts (the core's).
+# Pure parts first (no game calls): the canonical form and fingerprint, the package checks, the composer
+Canon.lua
+Package.lua
+Compose.lua
+
+# The two adapters: TwichUI's own settings, and the EllesmereUI suite through its partner-installer functions
+AdapterTwichUI.lua
+AdapterEllesmere.lua
+
+# The install record (TwichUIDB.layouts.install) and the pipeline: plan, apply, verify, restore, and the check after a reload
+Journal.lua
+Engine.lua
+
+# The developer test package and /tui layout (last: it tells TwichUI the layout tools are ready)
+TestPackage.lua
+Dev.lua

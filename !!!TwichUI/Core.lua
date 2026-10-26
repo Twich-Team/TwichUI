@@ -489,6 +489,9 @@ COMMANDS = {
     { name = "perf", usage = "perf [start [preset]|stop|cancel|mark [note]|status|arm]", desc = "TwichUI Diagnostics: record and inspect TwichUI's performance, and export a report (loads only when used; listed on the Troubleshooting page)", hidden = true, fn = function(arg)
         if R.DiagnosticsLauncher then R.DiagnosticsLauncher.Command(arg) else Unavailable("TwichUI Diagnostics") end
     end },
+    { name = "layout", usage = "layout [validate|plan|apply|verify|restore|status]", desc = "layout packages: the developer test of the install pipeline (loads TwichUI_Layouts; docs/layouts/)", hidden = true, fn = function(arg)
+        if R.LayoutsLauncher then R.LayoutsLauncher.Command(arg) else Unavailable("Layouts") end
+    end },
     { name = "hidden", usage = "hidden", desc = "welcome messages hidden at login", fn = function()
         if R.Quiet then R.Quiet:ShowHidden() else Unavailable("Quiet login") end
     end },

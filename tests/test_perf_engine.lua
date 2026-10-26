@@ -697,6 +697,12 @@ do
   assert(DX.Findings.Analyze(nd).memory.navdata.last == 25100, "the series is analysed")
   assert(Has(DX.Export.Summary(nd, DX.Export.Defaults()), "TwichUI_NavData"), "and appears in the report")
   assert(not Has(DX.Export.Summary(Rec({ memory = { { t = 0, core = 18000 }, { t = 30, core = 18100 } } }), DX.Export.Defaults()), "TwichUI_NavData"), "no line when it was never loaded")
+  -- and the layout tools' (TwichUI_Layouts), loaded for /tui layout or to check an install after a reload
+  local ly = Rec({ memory = { { t = 0, core = 18000 }, { t = 30, core = 18100, layouts = 300 }, { t = 60, core = 18100, layouts = 310 } } })
+  assert(DX.Findings.Analyze(ly).memory.layouts.last == 310, "the layouts series is analysed")
+  assert(Has(DX.Export.Summary(ly, DX.Export.Defaults()), "TwichUI_Layouts"), "and appears in the report")
+  assert(not Has(DX.Export.Summary(nd, DX.Export.Defaults()), "TwichUI_Layouts"), "no layouts line when it was never loaded")
+  assert(DX.Op("layouts.load").file == "LayoutsLauncher.lua" and DX.Op("layouts.apply").kind == "bulk" and DX.Op("layouts.verify"), "the layouts scopes are in the catalogue")
 
   -- a long frame next to an addon of ours loading says which addon, and the markers list shows the load
   local lf = Rec({ markers = { { t = 64, kind = "addon-loaded", label = "TwichUI_NavData" } },

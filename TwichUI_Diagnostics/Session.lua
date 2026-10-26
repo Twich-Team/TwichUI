@@ -54,7 +54,7 @@ function DX.Environment()
         env.client, env.build, env.interface = v and tostring(v) or nil, build and tostring(build) or nil, DX.Num(toc)
     end
     env.locale = GetLocale and GetLocale() or nil
-    for _, name in ipairs({ DX.CORE, DX.SETTINGS, DX.NAVDATA, DX.ADDON }) do
+    for _, name in ipairs({ DX.CORE, DX.SETTINGS, DX.NAVDATA, DX.LAYOUTS, DX.ADDON }) do
         env.addons[#env.addons + 1] = { name = name, version = DX.Metadata(name, "Version"), loaded = DX.IsLoaded(name) }
     end
     local n, loaded = 0, 0

@@ -133,7 +133,7 @@ local function ReadMemory()
         return okk and DX.Num(v) or nil
     end
     Ring.Push(S.memory, { t = Now(), core = Get(DX.CORE), settings = Get(DX.SETTINGS), diag = Get(DX.ADDON),
-        navdata = Get(DX.NAVDATA), heap = collectgarbage and DX.Num(collectgarbage("count")) or nil, cost = cost })
+        navdata = Get(DX.NAVDATA), layouts = Get(DX.LAYOUTS), heap = collectgarbage and DX.Num(collectgarbage("count")) or nil, cost = cost })
 end
 
 local function ProfilerCounts()
@@ -293,7 +293,7 @@ end
 ---------------------------------------------------------------------------
 -- Context events and errors (our frame's own, only while recording)
 ---------------------------------------------------------------------------
-local OURS = { [R.ADDON] = true, TwichUI_Settings = true, TwichUI_NavData = true, TwichUI_Diagnostics = true }
+local OURS = { [R.ADDON] = true, TwichUI_Settings = true, TwichUI_NavData = true, TwichUI_Diagnostics = true, TwichUI_Layouts = true }
 C.OURS = OURS
 
 -- Only text from TwichUI's own files is kept (folder-relative, names replaced, capped); anything else is a note.

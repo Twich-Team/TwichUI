@@ -11,7 +11,7 @@ is keyed by `"Name - Realm"` inside an account-wide variable.
 
 | Variable | Kind | Owner | Version | Holds |
 |---|---|---|---|---|
-| `TwichUIDB` | configuration | `Persist.lua`, `Core.lua`, `Profiles.lua`, each feature | `schema` (integer) | `profiles`, `profileState`, `profileKeys` (TwichUI's profiles; see `docs/profiles.md`), and the profile in use: `modules` (on/off switches), `ui` (places, text choices, `qol`, `foodDrink`, `brokerMenu`, `refreshments`, `refreshmentsStyle`, `chronicleLook`, `chronicleAppearance`, `mageSell`, `partyPins`, `pinsLook`, `pinsAppearance`, `pinsMapText`, `pinsBroker`, `pinsBrokerMenu`, `pinsEditorLook`, `restockPromptStyle`), `gear` (preferences, stat weights, per-character tree choice), `shareTransport`, `whisperProbe`, `storedData` (addon-data scan notes), `pins` (local map pins, and a party session kept for one `/reload`; see `docs/party-pins.md`), `npcs` (the vendors and trainers you noted or were sent; see `docs/npc-map.md`), `setup` (see below) |
+| `TwichUIDB` | configuration | `Persist.lua`, `Core.lua`, `Profiles.lua`, each feature | `schema` (integer) | `profiles`, `profileState`, `profileKeys` (TwichUI's profiles; see `docs/profiles.md`), and the profile in use: `modules` (on/off switches), `ui` (places, text choices, `qol`, `foodDrink`, `brokerMenu`, `refreshments`, `refreshmentsStyle`, `chronicleLook`, `chronicleAppearance`, `mageSell`, `partyPins`, `pinsLook`, `pinsAppearance`, `pinsMapText`, `pinsBroker`, `pinsBrokerMenu`, `pinsEditorLook`, `restockPromptStyle`), `gear` (preferences, stat weights, per-character tree choice), `shareTransport`, `whisperProbe`, `storedData` (addon-data scan notes), `pins` (local map pins, and a party session kept for one `/reload`; see `docs/party-pins.md`), `npcs` (the vendors and trainers you noted or were sent; see `docs/npc-map.md`), `layouts` (the record of a layout install, absent until one is made: `install` = which package, its state and steps, the snapshot it restores from, what it expects to read back; owned by `TwichUI_Layouts/Journal.lua`, see `docs/layouts/`), `setup` (see below) |
 | `TwichUIDB.setup` | sharing records | `setup/Setups.lua`, `Share.lua`, `Ellesmere.lua`, `TwichConfig.lua` | covered by `schema` | `detected`/`selection` (last "find settings" result), `received` (setups friends sent, each possibly with a `twichui` part), `trusted`, `recommend`, `twichui` (which of TwichUI's own settings go into your setup; absent until ticked), `twichUndo` (the values the last import of someone else's TwichUI settings replaced; one slot), and the one-shot hand-offs `pending`, `scanNext`, `restoreNext`, `lastScan`, `eui` |
 | `TwichUIShareDB` | your shareable setup | `setup/Setups.lua` | `pack.format = 2` | `pack` (addon tables, an EllesmereUI profile, and optionally `twichui`: TwichUI's own settings by feature, `schema` 1; see `docs/twichui-sharing.md`) |
 | `TwichUIBackupDB` | undo snapshots | `setup/Setups.lua` | none | one `[character]` snapshot per character that applied a setup |
@@ -30,7 +30,7 @@ A backup (`setup/Restore.lua`) holds `own = { schema, made, addon, keys }`: copi
 settings. `RS.OWN_KEYS`: `modules`, `ui`, `gear`, `shareTransport`, `profiles`, `profileKeys`, `profileState`;
 `RS.OWN_SETUP` (inside `setup`): `selection`, `recommend`, `trusted`, `twichui`. That is every setting, including the
 switches that act for you, places and the profile choices. Everything else is a record or a copy, not a setting, and
-is listed in `RS.OWN_LEFT_OUT` with its reason: `pins` (a restore never removes a pin), `npcs` (nor an NPC), `storedData`, `whisperProbe`,
+is listed in `RS.OWN_LEFT_OUT` with its reason: `pins` (a restore never removes a pin), `npcs` (nor an NPC), `layouts` (a layout install's record), `storedData`, `whisperProbe`,
 `welcome`, `schema`, `migrated`, `heldStored`, and `setup.detected`/`received`/`pending`/`scanNext`/`restoreNext`/
 `lastScan`/`twichUndo`/`eui`. The other saved variables (backups, Undo copies, your saved setup, the Chronicle) are
 never in a backup. `tests/test_backup_own.lua` fails when `TwichUIDB` gains a key that is in neither list.
@@ -128,7 +128,7 @@ and 2, repeat, injected failure). Document the step here. Never reuse or reorder
   stray number or text would switch a feature on; it is put back to its default and counted (`module-not-boolean`).
   Switches TwichUI does not define are left untouched.
 - **Groups** must be tables (`modules`, `ui`, `setup`, `gear`, `storedData`, `whisperProbe`, `profiles`, `profileKeys`,
-  `profileState`, and `ui.qol`,
+  `profileState`, `layouts` (its record is checked by `TwichUI_Layouts` when it loads, and never repaired by itself), and `ui.qol`,
   `ui.foodDrink`, `ui.brokerMenu`, `ui.refreshments`, `ui.refreshmentsStyle`, `ui.restedxpSkin`, `ui.restedxpSkinText`,
   `ui.restedxpSkinState`, `ui.restedxpTimerLook`, `ui.restedxpTimerText`, `ui.speakstoneSkin`, `ui.speakstoneSkinStyle`, `ui.chronicleLook`, `ui.chronicleAppearance`, `ui.guideWaypoint`, `ui.mageSell`, `ui.chatClean`, `ui.classBars`, `ui.classBarsLook`, `ui.classBarsOverrides`, `ui.classBarsPosition`, `ui.ammoCustom`, `ui.reminders`, `ui.partyPins`, `ui.pinsLook`, `ui.pinsAppearance`,
   `ui.pinsMapText`, `ui.pinsBroker`, `ui.pinsBrokerMenu`, `ui.pinsEditorLook`, `ui.restockPromptStyle`, `ui.npcMap`). One that is not is dropped and rebuilt by its owner (`container-not-table`); its
@@ -252,6 +252,7 @@ Nothing is pruned by this pass. Findings:
 | Your shareable setup | one | replace | delete in Saved data | none |
 | `setup.pending` | one slot, **no expiry**: a load-on-demand addon that never loads keeps it queued | cleared when done | none | **needs approval:** an expiry (it would change when a queued apply happens) |
 | `setup.eui.imports`/`ids` | one entry per EllesmereUI profile imported or shared | none | none | small; leave |
+| `layouts.install` | one record, bounded by the units a package may name (96 per adapter; fingerprints, not copies) | removed once a restore checks out; replaced by the next install of another package only after a restore | `/tui layout detach confirm` | none needed |
 | `gear.*`, `ui.*`, positions, `trusted`, `recommend` | bounded by the settings that exist, plus one entry per character/class/sender | none | settings and Defaults | none |
 
 The game itself warns (`SAVED_VARIABLES_TOO_LARGE`, a popup from the client) when a saved file is too large; TwichUI

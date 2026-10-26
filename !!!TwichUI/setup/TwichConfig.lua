@@ -77,7 +77,7 @@ TC.LOCAL = {
     ["ui.restedxpSkinState"] = "other", ["ui.showAdvanced"] = "other", ["gear.trees"] = "other",
     ["pins"] = "other", ["npcs"] = "other", ["ui.mapToolsIntro"] = "other", ["ui.navTravel"] = "other", ["setup"] = "other", ["storedData"] = "other", ["whisperProbe"] = "other", ["welcome"] = "other",
     ["schema"] = "other", ["migrated"] = "other", ["heldStored"] = "other",
-    ["profiles"] = "other", ["profileKeys"] = "other", ["profileState"] = "other",
+    ["profiles"] = "other", ["profileKeys"] = "other", ["profileState"] = "other", ["layouts"] = "other",
 }
 
 ---------------------------------------------------------------------------
@@ -2020,6 +2020,10 @@ local function Effective(f)
     if v ~= nil and KIND[f.kind](f, v) then return v end
     return f.default
 end
+
+-- For TwichUI_Layouts' adapter: the same reading and writing paths an import uses, and the same value checks.
+TC.Container, TC.Raw, TC.Effective = Container, Raw, Effective
+function TC.ValueOk(f, v) return v ~= nil and KIND[f.kind] ~= nil and KIND[f.kind](f, v) == true end
 
 local function Humanize(key)
     local s = key:gsub("(%l)(%u)", "%1 %2"):gsub("(%a)(%d)", "%1 %2"):lower()

@@ -196,7 +196,7 @@ end
 -- Steps are repeatable: running one on data it already upgraded changes nothing.
 ---------------------------------------------------------------------------
 local CONTAINERS = { "modules", "ui", "setup", "gear", "storedData", "whisperProbe", "pins",
-    "profiles", "profileKeys", "profileState" }
+    "profiles", "profileKeys", "profileState", "layouts" }
 local PROFILE_ROOTS = { "profiles", "profileKeys", "profileState" }
 
 local function DeriveTransport(modules)

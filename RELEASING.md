@@ -13,9 +13,9 @@ Nothing else publishes: not other branches, not pull requests, not tags of anoth
 ignored).
 
 ## One-time setup
-1. The repository root holds four addon folders, `!!!TwichUI/` (the core addon, with `!!!TwichUI.toc`),
-   `TwichUI_Settings/` (the settings window), `TwichUI_NavData/` (navigation's walking maps) and `TwichUI_Diagnostics/`
-   (profiling and support), beside the repository-level files: `.pkgmeta`, `.github/`, `tests/`,
+1. The repository root holds five addon folders, `!!!TwichUI/` (the core addon, with `!!!TwichUI.toc`),
+   `TwichUI_Settings/` (the settings window), `TwichUI_NavData/` (navigation's walking maps), `TwichUI_Diagnostics/`
+   (profiling and support) and `TwichUI_Layouts/` (layout packages), beside the repository-level files: `.pkgmeta`, `.github/`, `tests/`,
    `tools/`, `docs/`, `README.md`, `CHANGELOG.md`, `LICENSE` and `licenses/`.
 2. The CurseForge project ID is in `!!!TwichUI/!!!TwichUI.toc` as `## X-Curse-Project-ID:`.
 3. Repository secret `CF_API_KEY`: a CurseForge API token (CurseForge > My API Tokens) that can upload to the
@@ -138,9 +138,10 @@ last stable tag.
   If CurseForge doesn't list it, the newest lower Forever version is used, with a warning in the run.
 - Keep the `!!!` folder name: TwichUI must load before other addons, and the game names saved variables files
   after the folder.
-- The zip holds four folders: `!!!TwichUI`, and `TwichUI_Settings`, `TwichUI_NavData` and `TwichUI_Diagnostics` (each
-  load on demand; `.pkgmeta` `move-folders`: the packager builds the whole repository as the package folder, so the core
-  addon is moved up over it and the others out beside it). The build checks the zip: exactly those four folders,
+- The zip holds five folders: `!!!TwichUI`, and `TwichUI_Settings`, `TwichUI_NavData`, `TwichUI_Diagnostics` and
+  `TwichUI_Layouts` (each load on demand; `.pkgmeta` `move-folders`: the packager builds the whole repository as the
+  package folder, so the core addon is moved up over it and the others out beside it). The build checks the zip: exactly
+  those five folders,
   nothing nested or misspelled, every `.toc` file at the build's version with the committed Interface, every file the
   `.toc` files load present, and no development files, machine paths or secret-like text.
 - The packager (BigWigsMods/packager, pinned in the workflow) only builds; it uploads nothing.

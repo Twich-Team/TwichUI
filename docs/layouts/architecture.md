@@ -2,8 +2,11 @@
 
 This is the contract for TwichUI's layout packages: two complete interface experiences, **Classic Adventure** and
 **Compact Adventure**, built from shared configuration and installed by a TwichUI wizard. It was written in Phase 1
-(audit, 2026-10-26). **None of it is implemented yet.** `adapter-capabilities.md` holds the source evidence for each
-integration, and `implementation-status.md` tracks the phases and the open decisions.
+(audit, 2026-10-26). Phase 2 (2026-10-26) built the engine and the apply/verify/restore pipeline for a small developer
+test package (`TwichUI_Layouts/`); **§11 lists every place where that implementation revised this contract**, and
+those revisions win over the text above them. The wizard, screen adaptation, retained overrides and real package
+content are not built. `adapter-capabilities.md` holds the source evidence for each integration, and
+`implementation-status.md` tracks the phases and the open decisions.
 
 Words used here:
 
@@ -347,3 +350,69 @@ settings. It is not a second first-run system.
   changed by this work.
 - **Licensing**: TwichUI only calls EllesmereUI's runtime API and ships export strings the author made from their own
   install. No EllesmereUI or NaowhForever code is copied. EllesmereUI's reference folder has no license file.
+
+## 11. Revisions made in Phase 2 (2026-10-26)
+
+Phase 2 built `TwichUI_Layouts/` (`Canon.lua`, `Package.lua`, `Compose.lua`, `AdapterTwichUI.lua`,
+`AdapterEllesmere.lua`, `Journal.lua`, `Engine.lua`, `TestPackage.lua`, `Dev.lua`) and the core's
+`LayoutsLauncher.lua`. Where it differs from §1–§10, the code and this section are the contract:
+
+1. **Adapter functions (§4).** Composition and the fingerprint are shared (`Compose.lua`, `Canon.lua`), not per adapter;
+   an adapter supplies `Normalize(fragment, ctx) -> units, parents` and the rest. The implemented set is `Detect`,
+   `TargetName`, `Normalize`, `Capture(composed, target)`, `CleanSnapshot`, `Plan(composed, ctx)`, `Apply(part)`,
+   `Expect(composed)`, `Verify(expect, snapshot)`, `PlanRestore(snapshot)`, `Restore(snapshot)`,
+   `VerifyRestore(snapshot, units)`, `Label`, `Show`. `Plan` returns a part with its own `key`; the engine's plan key is
+   the canonical text of the package, variant, mode and every part's key, and `Apply` and `Restore` refuse a key that
+   differs from a fresh plan's (the `TC.PlanKey` / `expect` pattern).
+2. **Package format 1 (§5) as built.** Top-level fields: `format`, `id`, `revision`, `title`, `dev`, `made`, `requires`,
+   `targets`, `layers`. `targets` (new) names each adapter's target profile, so D9 lives in the package.
+   `requires[adapter] = true | { min, tested }` (the top-level `tested` moved here). `canvas`, `choices`, `positions`
+   and a top-level `tested` are refused as "not yet": this version cannot honour them. Any other field is refused.
+3. **TwichUI fragment.** `{ groups = { [group] = { [slot] = { [key] = value | REMOVE } } } }`. `places` and list
+   groups (custom groups) are refused as "not yet". The managed allowlist is computed from the schema: fields of
+   non-list TwichConfig groups with profile scope and not covered by `TC.LOCAL`. Account-scoped fields (e.g.
+   `general.ui.reduceSettingsMotion`) are not managed, because switching back on Restore would not put them back.
+4. **EllesmereUI fragment.** `{ base, modules, fields }`. `base` only in the base layer: an export string, or, in a
+   package marked `dev = true` only, `{ source = "active-profile" }` (the recipient's own active profile, exported with
+   `ExportProfile(name, nil, true, false, nil, false, false, false)`: no spells, look, overrides or skins).
+   `fields` is new: an explicit allowlist of values inside a module blob (Phase 2: `minimap.coordsMode`,
+   `minimap.coordsPosition`, read in 9.6.8). A field unit's parent is its module unit; a field from a lower layer is
+   dropped when a higher layer replaces the whole blob (§1 rule applied to sub-units). `positions`, `look`, `uiScale`,
+   `disableAddons` and `unlockLayout` are refused as "not yet".
+5. **Exclusions (§3).** `customColors` is also stripped: EllesmereUI profiles can pull colours from one another, so
+   deleting the install's profile would not take an imported palette back. The UI scale is always the recipient's in
+   Phase 2 (`applyUIScale = false`), and no suite module is enabled or disabled.
+6. **Restore (§8 step 9; D3).** Restore uses public operations only and needs no restore-point copy: TwichUI
+   `PF.Switch(previous)` then `PF.Delete(target)`; EllesmereUI `SwitchProfile(previous)` then `DeleteProfile(target)`,
+   then the player's reload. This is complete because Phase 2 changes nothing account-wide (item 5) and installs only
+   into profiles the install itself made. A whole-`EllesmereUIDB` restore point (D3) is needed only once the UI scale,
+   enable states or other account-wide units are managed; it is deferred to that phase.
+7. **Ownership.** An install never writes a profile it did not make: a target name that exists and is not recorded as
+   made by this install (`snapshot.created`) blocks the plan (`target-taken`). Installing again writes into the
+   install's own profiles; on EllesmereUI it first switches back to the recipient's profile, so `cleanSlate` never
+   deletes the active profile (EllesmereUI would fall back to "Default").
+8. **Snapshot and journal (§8).** The snapshot holds identities and fingerprints only: per adapter the profile in use
+   before, the target name, whether the install made it, the EllesmereUI version, and a fingerprint of each managed
+   value before. It is complete and checked before the record is written, and the record is written before the first
+   change. Installing again keeps the first snapshot. States: `applying` (found at a load: `interrupted`), `applied`
+   (waits for the reload), `verified`, `mismatch` (not verified: something differs or could not be read), `partial`,
+   `restoring`, `restore-partial`; the record is removed when a restore checks out. The record belongs to one
+   character (TwichUI profiles are per character): another character can neither install over it nor restore it.
+9. **Partial failure (§8 step 6).** When TwichUI fails after EllesmereUI succeeded, the EllesmereUI restore is **not**
+   queued by itself: the record says `partial` with each step's state, and Restore is offered. Nothing is undone
+   without the player asking. A failure that changed nothing leaves no record (or the previous one, unchanged).
+10. **Verification (§8 step 8).** TwichUI fields and EllesmereUI fields are compared by fingerprint; EllesmereUI module
+    blobs are checked for presence only, because EllesmereUI merges its defaults into a blob as it loads. Verify reads
+    and reports; it never repairs. The check runs 3 s after `PLAYER_LOGIN` (`LayoutsLauncher.lua`), after
+    EllesmereUI's own login work (its picker at +0.5 s). The UIParent size check waits for screen adaptation.
+11. **First-run picker (§8).** `RegisterExternalInstaller("TwichUI")` is called at EllesmereUI's `ADDON_LOADED` while
+    the record says `applying` or `applied`. A plan is refused while `EllesmereUI._firstInstallPending` is true (read
+    only): the picker would end in its own import and reload and replace the install.
+12. **Combat (§9).** Apply and Restore are refused in combat by the engine and by each adapter; Plan and Verify are
+    allowed. Nothing is deferred to the end of combat.
+13. **Testing on another client (added 2026-10-26).** While WoW: Forever can't be played, a package marked `dev = true`
+    may run on an EllesmereUI that isn't the Forever build (`IS_FOREVER` false, e.g. on Retail). The plan says so, the
+    snapshot records `otherClient = true`, and a real package is still refused (`eui-not-forever`). The adapter's
+    before-and-after profile check reads `GetProfilesDB()` itself rather than `setup/Ellesmere.lua`'s, which goes
+    through sharing's Forever-only gate. A run on another client checks TwichUI's side of the pipeline; it is not one
+    of the in-game checks for Forever.

@@ -50,6 +50,7 @@ RS.OWN_LEFT_OUT = {
     whisperProbe = "the result of a check TwichUI makes by itself",
     welcome = "whether the welcome has been shown",
     diagnosticsArm = "a one-shot hand-off between loads (TwichUI Diagnostics' Arm next reload)",
+    layouts = "the record of a layout install (what it changed and what Restore puts back): a record, not a setting",
     schema = "kept with the backup as its schema",
     migrated = "an obsolete marker",
     heldStored = "a newer TwichUI's settings, set aside unchanged",

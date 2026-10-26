@@ -7,6 +7,15 @@ The evidence behind `architecture.md` §2–§4. Paths are relative to the repos
 Labels: **S** = verified in source, **T** = covered by an existing offline test, **G** = still needs an in-game check,
 **—** = not applicable or not offered. Nothing in this table has been checked in game.
 
+**Phase 2 (2026-10-26).** Both adapters are built (`TwichUI_Layouts/AdapterTwichUI.lua`, `AdapterEllesmere.lua`) and
+covered offline by `tests/test_layouts.lua` (EllesmereUI as a stand-in with the real functions' shape). What they use
+is narrower than the tables below: TwichUI's restore is `PF.Switch` + `PF.Delete` (not `RS.ApplyOwnAtLoad` or
+`TC.Undo`), EllesmereUI's is `SwitchProfile` + `DeleteProfile` (no `EllesmereUIDB` copy), and EllesmereUI blobs are
+patched only at the allowlisted fields `minimap.coordsMode` and `minimap.coordsPosition`
+(`EllesmereUIMinimap.lua` defaults, `EUI_Minimap_Info.lua` `GetCoordsModePos`/`MAP_POS_ANCHORS`,
+`EUI_Minimap_Options.lua` "Show Coordinates"). `minimap.showCoords` exists in the defaults but nothing reads it in
+9.6.8, so it is not managed. Still **G** for every row: nothing has run in game. `architecture.md` §11 has the details.
+
 ## `twichui` adapter
 
 | Capability | Status | How | Evidence |

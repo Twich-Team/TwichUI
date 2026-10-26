@@ -125,6 +125,8 @@ uses an item, sends anything or makes up events. Each states its cost before you
 | `npcs.minimap.tick`, `pins.minimap.tick` (`Perf.Call`, after the throttle) | `npcs/Minimap.lua`, `pins/Minimap.lua` `Update` > `Step` | update |
 | `nav.search`, `nav.position`, `nav.progress`, `nav.ticker` (`Perf.Call`) | `nav/Nav.lua` `OnUpdate` (`nav.ticker`: each trail or arrow updater) | update |
 | `nav.load` (`Perf.Call`) | `nav/Data.lua` `ND.Load`, around `C_AddOns.LoadAddOn` of `TwichUI_NavData` | init |
+| `layouts.load` (`Perf.Call`) | `LayoutsLauncher.lua` `L.Load`, around `C_AddOns.LoadAddOn` of `TwichUI_Layouts` | init |
+| `layouts.plan`, `layouts.apply`, `layouts.verify`, `layouts.restore` (`Perf.Call`) | `TwichUI_Layouts/Engine.lua` `LY.Plan`, `LY.Apply`, `LY.Verify` and `LY.VerifyRestore`, `LY.Restore` (on request; `layouts.verify` also once after the reload that finishes an install or restore) | rebuild, bulk, evaluate, bulk |
 | `classbars.anim`, `pins.ping.tick`, `npcs.map.pulse` (`Perf.Call`) | `classbars/Anim.lua`, `pins/PingMap.lua`, `npcs/Map.lua` | update |
 | `map.view.step`, `map.view.follow`, `map.view.notify` (`Perf.Wrap`) | `map/View.lua` OnUpdate scripts | update |
 | `reminders.event`, `healer.event`, `healer.unitEvent`, `targetart.event`, `refreshments.cast` (`Perf.Wrap`) | the private event frames' OnEvent in `reminders/State.lua`, `healer/Watch.lua`, `targetart/Display.lua`, `modules/Refreshments.lua` | event |
@@ -166,8 +168,8 @@ ticks over 5/50 ms for TwichUI, diagnostics overhead (with its hitches: long fra
 gauge read lifted over the limit), TwichUI CPU outside every scope (`unattributed-cpu`; `prefs.thresholds.unattributedPerSec`,
 default 1 ms a second, medium at five times that), errors, and what limits the capture. The memory finding reports the
 series (lowest, highest, intervals up and down, at least how many KB/s were allocated between readings, the largest
-fall as evidence that the collector ran, the scopes' allocation) and says a pool's size is not measured. The report's memory section also shows `TwichUI_NavData` (read with the others, a separate
-addon) and its CPU section shows the instrumented total as a true ratio of the client's count: above about 110% it says the
+fall as evidence that the collector ran, the scopes' allocation) and says a pool's size is not measured. The report's memory section also shows `TwichUI_NavData` and `TwichUI_Layouts` (read with the others, separate
+addons) and its CPU section shows the instrumented total as a true ratio of the client's count: above about 110% it says the
 instrumented times are upper bounds (the first real capture had 877 ms instrumented against 509 ms counted; the cause is
 not established). A long frame next to an addon load names the addon, and the Markers list includes addon loads and
 profile changes. A dominant
