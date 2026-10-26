@@ -1,0 +1,81 @@
+# Layout adapters: capability matrix
+
+The evidence behind `architecture.md` §2–§4. Paths are relative to the repository, or to `../reference_addons/`
+(EllesmereUI **9.6.8**; the author's installed copy is 9.6.6, so the reference is the newer one) and
+`../wow-ui-source/` (`forever` branch, ca8368f2f). Phase 1 audit, 2026-10-26.
+
+Labels: **S** = verified in source, **T** = covered by an existing offline test, **G** = still needs an in-game check,
+**—** = not applicable or not offered. Nothing in this table has been checked in game.
+
+## `twichui` adapter
+
+| Capability | Status | How | Evidence |
+|---|---|---|---|
+| Capture | S, T | Effective values per field from the explicit schema. Restore-point capture covers every setting key | `setup/TwichConfig.lua` `TC.Build` (2104), `Define` (1603); `setup/Restore.lua` `RS.CaptureOwn` (131), `RS.OWN_KEYS`; `tests/test_twichui_share.lua`, `tests/test_backup_own.lua` |
+| Normalize | S, T | Field lookup by schema, never by path. Unknown fields are counted and ignored | `TC.CleanEntry` (2161) |
+| Validate | S, T | `KIND` (bool, int range, enum, `AARRGGBB` colour, plain name), feature `DEFAULTS`/`LIMITS`, 1000-value bound, one bad value refuses its group | `TwichConfig.lua` `KIND`, `ENUM`, `TC.LIMITS` |
+| Apply | S, T | `TC.Plan` → `TC.PlanKey` stale check → plain assignments → `Profiles.Refresh` | `TC.Plan` (2255), `TC.PlanKey` (2238), `TC.Apply` (2379) |
+| Profile activation | S, T | New per-character profile: `PF.Duplicate` then switch. Refused in combat | `Profiles.lua` `PF.Duplicate` (354), `PF.Switch` (327), `Guard` (312) |
+| Live refresh | S, T | `Switches.Sync` + `OnApply` phases (`look`, `layout`, `views`) + open settings window redraw | `Profiles.lua` `Apply` (271), `PF.Refresh` (305) |
+| Reload requirements | S | Only switches marked `reload` (four skins, media, quiet login) | `Switches.lua` `W.NeedsReload` (284), `W.ReloadPending` (365) |
+| Verify | S (partial) | Re-plan against live values: an empty plan means it matches. Positions read through each feature's getter | `TC.Plan`; e.g. `CB.Position` (`classbars/Config.lua` 334), `B.Position` (`markers/Bar.lua` 135) |
+| Restore | S, T | One-slot Undo (`TC.Undo`) for an import. Full restore point at the next load (`RS.ApplyOwnAtLoad`) | `TC.Undo` (2480), `Restore.lua` `RS.ApplyOwnAtLoad` (356) |
+| Known limitations | — | Positions are `place` in `TC.LOCAL`, so a layout needs its own `places` handling. Several positions are not centre offsets (`ui.healerWatch.point/x/y`, Edit Mode–placed cards, `ui.cozyBag`, `ui.partyPins.position`). List groups merge on share import but must replace on layout install. `PF.ACCOUNT` keys are never part of a profile | `TC.LOCAL` (50–89), `Profiles.lua` `PF.ACCOUNT` (32) |
+
+## `ellesmereui` adapter
+
+| Capability | Status | How | Evidence |
+|---|---|---|---|
+| Capture | S | `ExportProfile(name, nil, true, true, nil, true, true, false)` for author strings. A restore point is a copy of live `EllesmereUIDB` (single storage) | `EllesmereUI/EllesmereUI_Profiles.lua` `ExportProfile` (2164), `AutoSaveActiveProfile` no-op (3956); TwichUI `setup/Ellesmere.lua` `ES.Build` (141) |
+| Normalize | S | `DecodeImportString` → `payload.data`; canonical module keys `EllesmereUI<suffix>`; TwichUI strips the excluded keys | `DecodeImportString` (2824), `AddonsToCanon`/`CanonToLocal` (106–125), `ADDON_DB_MAP` (39); TwichUI `ES.Payload`/`Sanitize` (267/243) |
+| Validate | S, T | `payload.type == "full"`, version ≥ 3, `!EUI_` prefix, known modules only, size bounds (`ES.LIMITS`), `ST.CheckData` | `DecodeImportString`; TwichUI `ES.CleanEntry`, `Sanitize`; `tests/test_ellesmere_share.lua` |
+| Apply | S | `ImportProfileSilent{ importString, profileName, cleanSlate, applyUIScale, autoAssignSpecs, disableAddons }`. Refused in combat. Never reloads | `ImportProfileSilent` (4957–5070) |
+| Profile activation | S, G | The import activates the new profile unless the current spec is assigned to another one (`"spec_locked"`: stored, not active). `activeProfile` is **account-wide** | `ImportProfile` (3222; activation 3542–3590), `GetProfilesDB` (670), `EllesmereUI.toc` `SavedVariables: EllesmereUIDB` |
+| Live refresh | S (not used) | `SwitchProfile` only re-points the DBs. EllesmereUI's own UI follows it with `RefreshAllAddons(true)`. The Wago-style `SetProfile` does not refresh. Imports always need a reload, so layouts never use live refresh | `SwitchProfile` (3852), `RefreshAllAddons` (1524), `EUI_Profiles_Options.lua:275-278`, `SetProfile` (4789) |
+| Reload requirements | S | Always after an import ("Reload to finish importing"), after a UI scale change (read at login) and after enable/disable | `ImportReloadMessage` (1912), `EllesmereUI_Startup.lua` `ppUIScale` (65–102), `ImportProfileSilent` header |
+| Verify | S, G | `GetActiveProfileName`, `GetProfileList`, `GetProfilesDB().profiles[target].addons[canon]` positions, `IsModuleAddonLoaded`, `C_AddOns` enable state, `EllesmereUIDB.ppUIScale` | `GetActiveProfileName` (3935), `IsModuleAddonLoaded` (695); TwichUI's `ES.Apply` snapshot verify pattern (`Snapshot` 402, `Verify` 419) |
+| Restore | S, T (path) | The restore point puts the whole `EllesmereUIDB` back at EllesmereUI's `ADDON_LOADED` (TwichUI runs first). `ES.Blocked` allows it for `restore:` sources. Enable states go back through `C_AddOns` | TwichUI `setup/Setups.lua` `ApplyOne` (619), `ProcessOwner` (650), `Replace` (515); `setup/Ellesmere.lua` `ES.Blocked`; `tests/test_persist.lua` |
+| Known limitations | — | (1) The import builds on the recipient's active profile, so modules missing from the payload are inherited. (2) The serializer writes numbers with `tostring`, so a decode→encode round trip is not exact ("a serializer round trip is not identity", 4969). (3) The `uiScale`, window-skin bundle, CDM spells and overrides in a string are applied when present ("presence is consent"), so TwichUI must strip what it does not manage. (4) `activeProfile` is account-wide. (5) The inner module blob shapes are internal and can change between EllesmereUI versions. Only registered position paths are patched, and each needs a version check. (6) The reference folder has no license file. TwichUI calls the API only | `ImportProfile` 3330–3336, `Serializer` 243–281, `ImportProfileSilent` header |
+
+### EllesmereUI facts that shape the contract
+
+- **No AceDB.** Storage is `EllesmereUI.Lite.NewDB`. Every module's data lives in
+  `EllesmereUIDB.profiles[active].addons[folder]`, and each child saved variable is wiped and vestigial
+  (`EllesmereUI_Lite.lua` `EUILite.NewDB` 250).
+- **Profile layout**: `EllesmereUIDB.profiles`, `.activeProfile`, `.profileOrder`, `.specProfiles` (`Profiles.lua`
+  659–676).
+- **Positions**: CENTER/CENTER offsets from UIParent's centre, in UIParent units (`EUI_UnlockMode_Positions.lua` 2200,
+  `ConvertToCenterPos` 2208). Module records are `{point, relPoint, x, y}` (Minimap `m.position`,
+  `EUI_Minimap_Lifecycle.lua` 524; Chat `cfg.toastPosition` and `cfg.chatPosition`, `EUI_Chat_Init.lua` 972 and 1033; Damage Meters `EUI_DamageMeters_State.lua` 308).
+- **UI scale**: `EllesmereUIDB.ppUIScale`, applied with `UIParent:SetScale` at login. On a first install it is seeded
+  from Blizzard's scale, clamped to 0.40–1.15. Pixel-perfect is `768 / physH` (`EllesmereUI_Startup.lua` 125–170,
+  `EllesmereUI_PixelPerfect.lua` 55–68).
+- **First-run picker**: suppressed for a session when `EllesmereUI._externalInstaller` is set before `PLAYER_LOGIN` +
+  0.5 s. Set it with `RegisterExternalInstaller` (5080). Fail-open (`EllesmereUI_FirstInstall.lua` 556–590).
+- **Keybinds and actions**: not in profile strings. Bindings are Blizzard's (`SetBinding` in
+  `EUI_ActionBars_QuickKeybind.lua`). `profileKeybinds` is account-global and not exported (`Profiles.lua` 1598).
+- **Chat history**: `EllesmereUIChatScrollDB`, per character (`EllesmereUIChat.toc`,
+  `EllesmereUIChat_SessionHistory.lua` 27). Excluded.
+- **Full-account export** (`ExportFullAccountData`, 2420) carries the whole store, including keybinds and
+  click-cast. Never used by layouts.
+- **Interactive import** (`ImportProfileInteractive`, 4843) opens EllesmereUI's own dialog flow. Not used, because
+  TwichUI owns the review. Kept as a fallback idea if the silent path is ever withdrawn.
+
+## Client APIs (Forever)
+
+| API | Status | Evidence |
+|---|---|---|
+| `GetPhysicalScreenSize`, `GetScreenWidth`, `GetScreenHeight`, `GetScreenDPIScale`, `GetDefaultScale` | S (documented) | `Blizzard_APIDocumentationGenerated/ScreenDocumentation.lua` |
+| `UI_SCALE_CHANGED`, `DISPLAY_SIZE_CHANGED` events | S (documented) | `UIManagerDocumentation.lua` 91, `VideoDocumentation.lua` 137 |
+| `C_AddOns.EnableAddOn` / `DisableAddOn` / `GetAddOnEnableState` / `LoadAddOn` | S (used by TwichUI and EllesmereUI) | `SettingsLauncher.lua` `L.Load`; `ImportProfileSilent` |
+| `C_EditMode.ConvertStringToLayoutInfo`, `SaveLayouts`, `SetActiveLayout` | S (documented), G (unused) | `EditModeManagerDocumentation.lua`. Not in the first release |
+| `ReloadUI` from a button click | S (TwichUI already does it) | `setup/Setups.lua` `ST:Queue` |
+| Saved variables written after `PLAYER_LOGOUT` | G | `docs/persistence.md`, "Newer data is never touched" |
+
+## Other reference addons looked at
+
+| Addon | Relevance | Use |
+|---|---|---|
+| NaowhForever (`Core/Onboarding/Setup.lua`, `Core/Profiles/Setups.lua`) | Prior art for Forever onboarding: a plan of on/off changes and reload, a one-slot `setupBefore` backup, addon enable states per character | Architecture reference only. License: all rights reserved (`LICENSE.md`). Nothing copied |
+| EllesmereUI Chat, Quest Tracker, Minimap, Damage Meters | The only implementations of these surfaces in the reference set and the installed AddOns | Covered by the `ellesmereui` adapter |
+| RXPGuides, WaypointUI, OpenMap, Attune | Not layout surfaces in the first release | None |
