@@ -552,23 +552,27 @@ end
 -- The group as a list for a picker: { { value = "auto" | guid, label }, ... } and the current value. Shared by the
 -- settings window's dropdown and the quick-select menu on the panel.
 function W.PickerChoices()
-    local list = { { "auto", "Automatic (the one with the Healer role)" } }
+    local list = { { "auto", "Automatic (the one with the Healer role)", name = "Automatic" } }
     local chosen, chosenName = W.Choice()
     local present = chosen == "auto"
     for _, c in ipairs(W.Candidates()) do
-        local label = c.isPlayer and ("You (" .. c.name .. ")") or c.fullName
-        if c.role == "HEALER" then label = label .. " - Healer role" end
-        list[#list + 1] = { c.guid, label }
+        local name = c.isPlayer and ("You (" .. c.name .. ")") or c.fullName
+        local isHealer = c.role == "HEALER"
+        list[#list + 1] = { c.guid, isHealer and (name .. " - Healer role") or name, name = name, role = isHealer }
         if c.guid == chosen then present = true end
     end
     if not present then list[#list + 1] = { chosen, (chosenName or "Your choice") .. " (not in your group)" } end
     return list, chosen
 end
 
--- The quick-select menu, from a click on the panel while it asks you to choose. Choosing changes only who is watched.
+-- The quick-select menu, from a click on the panel while it asks you to choose (healer/Picker.lua draws it; the game's
+-- context menu is the fallback if that is missing). Choosing changes only who is watched.
 function W.OpenPicker(owner)
-    if not (MenuUtil and MenuUtil.CreateContextMenu) then return false end
     local list, chosen = W.PickerChoices()
+    if R.HealerPicker then
+        return R.HealerPicker.Open(owner, list, chosen, function(value) W.Choose(value) end)
+    end
+    if not (MenuUtil and MenuUtil.CreateContextMenu) then return false end
     MenuUtil.CreateContextMenu(owner, function(_, root)
         root:CreateTitle("Watch which healer?")
         for _, entry in ipairs(list) do

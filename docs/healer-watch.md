@@ -156,7 +156,7 @@ Defaults:
 - a thin blackened-bronze frame and a faint inner shadow on the bar;
 - no panel background and no motion.
 
-The panel takes no clicks, with two exceptions: the handle in **Move it**, and a click on the panel while it reads "Choose a healer", which opens a quick-select menu (`MenuUtil.CreateContextMenu`: Automatic, you, and each group member). Choosing only changes who is watched. The moment a healer is watched, it is click-through again. The fade and the three-breath pulse on
+The panel takes no clicks, with two exceptions: the handle in **Move it**, and a click on the panel while it reads "Choose a healer", which opens a quick-select menu drawn in the look of TwichUI's data bar menus (`healer/Picker.lua`, with the background and border set under Menu appearance; the game's `MenuUtil` context menu is only a fallback): Automatic, you, and each group member, the one with the Healer role marked. It closes on a click elsewhere, Esc, or a change of group. Choosing only changes who is watched. The moment a healer is watched, it is click-through again. The fade and the three-breath pulse on
 entering critical are opt-in and are turned off by Notifications' Reduced motion.
 
 ## Preview, scenarios and diagnostics

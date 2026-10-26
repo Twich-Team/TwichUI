@@ -293,6 +293,7 @@ healer\Config.lua
 healer\Logic.lua
 healer\Drinks.lua
 healer\Display.lua
+healer\Picker.lua
 healer\Watch.lua
 
 # Target dragon artwork: a dragon of your choosing on EllesmereUI's target frame for bosses, world bosses, rare elites,

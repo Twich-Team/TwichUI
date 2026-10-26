@@ -607,7 +607,9 @@ function D.Render(v, cfg, mode)
     end
     handle:SetShown(mode == "position")
     handle:EnableMouse(mode == "position")
-    f.pick:EnableMouse(mode == "live" and v.problem ~= nil)
+    local clickable = mode == "live" and v.problem ~= nil
+    f.pick:EnableMouse(clickable)
+    if not clickable and R.HealerPicker then R.HealerPicker.Close() end   -- the menu is for the "Choose a healer" panel only
 
     local was = f:IsShown() and not f.leaving
     f.leaving = false
@@ -670,6 +672,7 @@ function D.SetClickable(on)
     if not frame then return end
     on = on and true or false
     frame.pick:EnableMouse(on)
+    if not on and R.HealerPicker then R.HealerPicker.Close() end   -- the menu is for the "Choose a healer" panel only
     if not on and GameTooltip and GameTooltip:GetOwner() == frame.pick then GameTooltip:Hide() end
 end
 

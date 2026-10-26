@@ -162,8 +162,8 @@ local function Say(event, text, guid, name)
   Settle()
 end
 
-for _, f in ipairs({ "modules/Borders.lua", "modules/MenuStyle.lua", "modules/Media.lua", "Icons.lua",
-  "healer/Config.lua", "healer/Logic.lua", "healer/Drinks.lua", "healer/Display.lua", "healer/Watch.lua", "setup/TwichConfig.lua" }) do
+for _, f in ipairs({ "modules/Borders.lua", "modules/MenuStyle.lua", "modules/Media.lua", "Icons.lua", "modules/SpellMenu.lua",
+  "healer/Config.lua", "healer/Logic.lua", "healer/Drinks.lua", "healer/Display.lua", "healer/Picker.lua", "healer/Watch.lua", "setup/TwichConfig.lua" }) do
   local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
 end
 c.TwichUIDB = { modules = {} }
@@ -612,6 +612,8 @@ do
       CreateRadio = function(_, label, is, pick) m.items[#m.items + 1] = { label = label, pick = pick, is = is } end })
     menus[#menus + 1] = m
   end }
+  local PK = R.HealerPicker
+  local menu = function() for _, f in ipairs(frames) do if f.name == "TwichUIHealerPicker" then return f end end end
   local pick = Panel().pick
   Check(pick.mouse == false, "click-through while it shows a healer")
   G.party[2].role = "NONE"
@@ -619,12 +621,28 @@ do
   Fire("PLAYER_ROLES_ASSIGNED"); Settle()
   Check(Shown() and Status() == "Choose a healer" and pick.mouse == true, "clickable while it asks you to choose")
   pick.scripts.OnClick(pick)
-  local m = menus[1]
-  Check(m and m.owner == pick and m.items[1].label:find("Automatic", 1, true) and #m.items == 5, "the menu: automatic, you, and the group")
-  Check(m.items[1].is() == true, "automatic is marked")
+  Check(#menus == 0, "TwichUI's own menu opens, not the game's context menu")
+  local m = menu()
+  Check(m and m.shown and PK.IsOpen(), "the menu is open")
+  Check(m.template == "BackdropTemplate" and m.backdrop ~= nil, "it wears the shared menu look")
+  local rows = {}
+  for _, f in ipairs(frames) do if f.parent == m and f.kind == "Button" then rows[#rows + 1] = f end end
+  Check(#rows == 5, "five rows: automatic, you, and the group")
+  Check(rows[1].name.text == "Automatic" and rows[1].dot.shown == true and rows[1].accent.shown == true, "automatic is marked")
+  Check(rows[2].dot.shown == false, "the others are not")
+  Check(m.points[1][1] == "TOPLEFT" and m.points[1][2] == pick, "it hangs below the panel")
+  pick.scripts.OnClick(pick)
+  Check(not m.shown and not PK.IsOpen(), "clicking the panel again closes it")
+  pick.scripts.OnClick(pick)
+  Check(m.shown, "and again opens it")
+  Fire("GROUP_ROSTER_UPDATE")
+  Check(not m.shown, "a change of group closes it")
+  pick.scripts.OnClick(pick)
   local heal
-  for _, it in ipairs(m.items) do if it.label == "Elyndra" then heal = it end end
-  heal.pick(); Settle()
+  for _, r in ipairs(rows) do if r.name.text == "Elyndra" then heal = r end end
+  Check(heal and heal.note.text == "", "a member without the Healer role has no mark")
+  heal.scripts.OnClick(heal); Settle()
+  Check(not m.shown, "choosing closes the menu")
   Check(Wt.Snapshot().guid == "Player-1-HEAL" and Wt.Snapshot().source == "manual" and pick.mouse == false, "choosing watches them, and the panel is click-through again")
   Check(#acted == 0, "choosing sends nothing")
   Wt.Choose("auto")
@@ -634,6 +652,19 @@ do
   Wt.PreviewStart(false); Wt.SetScenario("noHealer")
   Check(pick.mouse == false, "a preview is never clickable")
   Wt.PreviewStop()
+  -- the game's menu is the fallback when TwichUI's is missing
+  G.party[2].role = "NONE"
+  HW.Set("showSetup", true)
+  Fire("PLAYER_ROLES_ASSIGNED"); Settle()
+  R.HealerPicker = nil
+  pick.scripts.OnClick(pick)
+  local fm = menus[1]
+  Check(fm and fm.owner == pick and fm.items[1].label:find("Automatic", 1, true) and #fm.items == 5, "fallback: the game's menu lists the same rows")
+  Check(fm.items[1].is() == true, "fallback: automatic is marked")
+  R.HealerPicker = PK
+  G.party[2].role = "HEALER"
+  HW.Set("showSetup", false)
+  Fire("PLAYER_ROLES_ASSIGNED"); Settle()
 end
 
 ---------------------------------------------------------------------------
@@ -729,6 +760,8 @@ do
   local toc = io.open(ROOT .. "!!!TwichUI.toc"):read("*a")
   local a, b, cc, d, e = toc:find("healer\\Config.lua", 1, true), toc:find("healer\\Logic.lua", 1, true), toc:find("healer\\Drinks.lua", 1, true),
     toc:find("healer\\Display.lua", 1, true), toc:find("healer\\Watch.lua", 1, true)
+  local pk = toc:find("healer\\Picker.lua", 1, true)
+  Check(pk and d < pk and pk < e and toc:find("modules\\SpellMenu.lua", 1, true) < pk, "the picker loads after the display and the menu look, before Watch")
   Check(a and b and cc and d and e and a < b and b < cc and cc < d and d < e and toc:find("diag\\HealerWatch.lua", 1, true), "the .toc loads Healer Watch in order")
 end
 
