@@ -1,6 +1,6 @@
 # Layout packages and installer: implementation status
 
-Branch `feature/layout-wizard`. The contract is in `architecture.md` (§11 has the revisions Phase 2 made) and the
+Branch `feature/layout-wizard`. The contract is in `architecture.md` (§11 and §12 have the revisions Phases 2 and 3 made) and the
 evidence in `adapter-capabilities.md`. Update this file at the end of every phase: what was built, what was checked,
 and what is still open.
 
@@ -10,18 +10,20 @@ and what is still open.
 |---|---|---|
 | 1. Audit and contract | **Done**: documents only, no code | 2026-10-26 |
 | 2. Engine and safe application pipeline | **Done offline**: automated checks pass; nothing run in game | 2026-10-26 |
-| 3. Wizard and install lifecycle UI | Not started | |
-| 4. Screen adaptation and positions | Not started | |
-| 5. Package content (Classic, Compact) | Not started | |
+| 3. Classic Adventure and the screen-layout resolver | **Done offline**: automated checks pass; nothing run in game | 2026-10-26 |
+| 4. Wizard, preview and install lifecycle UI | Not started (proposed; see the handoff below) | |
+| 5. Compact Adventure, UI scale policy | Not started | |
 | 6. Retained overrides and updates | Not started | |
 | 7. Release hardening and in-game validation | Not started | |
 
 Phase 2 was re-scoped by the author: instead of scaffolding and a pure composer only, it builds the whole pipeline
 (validation, composing, both adapters, snapshot, apply, verify, restore, the install record) for one small developer
-package. Phase 1's Phases 2–4 are covered as far as that package needs; what they listed and Phase 2 did not build is
-under Phases 4–6 below. The phase numbers after 2 are a proposal for the author to confirm.
+package. Phase 3, as the author set it, is the first real layout and the screen layer (what Phase 1 called screen
+adaptation and part of package content). The phases after 3 are a proposal for the author to confirm.
 
-Nothing in this project has been run in game.
+Nothing in this project has been run on WoW: Forever. The Retail saved files show the Phase 2 developer package was
+applied, verified, restored and its restore checked out on Retail (the record is gone and both install profiles were
+removed); that is a check of TwichUI's side on another client, not one of the in-game checks below.
 
 ## Phases and acceptance criteria
 
@@ -77,8 +79,9 @@ apply or a restore; detach (forget the record, change nothing). Not supported ye
 `{ v = 1, package, revision, variant, char, state, at, key, reload, steps = { { adapter, state, code, rollback,
 reload } }, snapshot = { twichui = { char, profile, target, created, values }, ellesmereui = { active, target, created,
 version, values } }, expect = { [adapter] = { [unit] = fingerprint } }, inputs = { [adapter] = fingerprint }, verify =
-{ state, at, diffs (≤ 8) }, restore = { at, steps } }`. Fingerprints, not copies; bounded by 96 units per adapter (the
-test package's record is under 4 KB of canonical text). Removed once a restore checks out.
+{ state, at, diffs (≤ 8) }, restore = { at, steps } }`. Fingerprints, not copies; bounded by the units per adapter
+(96 in Phase 2; 256 named plus 64 placed since Phase 3: the test package's record is under 4 KB of canonical text,
+Classic Adventure's 25 KB, measured offline). Removed once a restore checks out.
 
 **Checks run** (offline Lua 5.1; `./tests/run.sh`: 119 passed, 0 failed):
 - `tests/test_layouts.lua` (199 checks): the core without the layouts addon (nothing loads at login; a missing addon
@@ -115,7 +118,7 @@ caches; the record is bounded and in saved data.
 
 **Phase 1's acceptance items, now:** core runs with the addon missing (done, with a reason; disabled/erroring
 reasons share `L.Explain`); composer pure and deterministic (done; layer 5, screen adaptation, is not built);
-precedence tests (done for base, variant, preset, choices, retained, reset); coordinate tests (moved to Phase 4);
+precedence tests (done for base, variant, preset, choices, retained, reset); coordinate tests (done in Phase 3);
 fingerprint (done); validator (done); release tools and backup coverage (done); `layouts.load` scope and memory
 (done); TwichUI adapter acceptance (done except list groups and places); EllesmereUI adapter acceptance (done except the
 UI scale, enable states and the restore point, which nothing in Phase 2 needs).
@@ -148,48 +151,168 @@ these: Retail EllesmereUI skips Forever-only import steps, and the Forever clien
 
 **Release decision.** `TwichUI_Layouts` is wired into the release zip. The next release would ship the engine, the
 hidden developer command and the test package (harmless: nothing runs unless typed). If that is not wanted before the
-wizard, add `TwichUI_Layouts` to `.pkgmeta` `ignore` and take it out of `tools/release.py` `ADDONS` until Phase 3.
+wizard, add `TwichUI_Layouts` to `.pkgmeta` `ignore` and take it out of `tools/release.py` `ADDONS` until the wizard. Still open after Phase 3, which adds the Classic data
+(375 KB of source) to what would ship.
 
-### 3. Wizard and install lifecycle UI
+### 3. Classic Adventure and the screen-layout resolver (done offline, 2026-10-26)
+
+**Capture source and fields.** Read from copies of the Retail client's saved files (the only TwichUI and EllesmereUI
+saved data on this machine; `_forever_` has none), never the live files, never written. Candidates reported before
+capturing: EllesmereUI profiles `TwichUI - Classic Adventure`, `TwichUI - Classic Adventure 2` (the one in use),
+`Twich Forever` (the first apart from Cooldown Manager) and `TwichUI - Minimal Adventure`; TwichUI has only `Default`
+(every character). The author chose **`TwichUI - Classic Adventure`** and **`Default`**, positions plus looks and
+behaviour for TwichUI, the look in the base and everything else in the variant, and Retail as the source.
+`capture-classic-adventure.md` is the reviewable result: what was kept (4 root keys, the layout links, 18 module
+blobs, 206 TwichUI fields that differ from TwichUI's defaults in 19 groups, 5 TwichUI places), what was left out and
+why (Group Finder, custom colours, `chatBubbles`, `tooltipFixedPos`, the Cooldown Manager's per-spec `spec` and
+`activeSpecKey`; 48 TwichUI on/off switches; 368 fields at their default; everything outside the allowlists), and the
+personal-data scan (0 names, realms, GUIDs, links, BattleTags). Not captured by construction: keybindings and action
+slots (Blizzard's, not in profiles), click-cast, CDM spells, overrides, character data, knowledge, caches, chat
+history, other profiles, the UI scale. The author's profiles are untouched. A second capture from fresh copies of the
+saved files (after the game had run again) was byte-identical.
+
+**Built.**
+
+| File | What it is |
+|---|---|
+| `TwichUI_Layouts/Geometry.lua` | The resolver: composition area, components, anchors, density, bounds, room, above, narrow rules, clamping, diagnostics; conversions (`Stored`, `Follow`, `Moved`, `Round`); `Live()` reads UIParent's size (read only) |
+| `TwichUI_Layouts/Package.lua` | Format 2: `geometry` and `source`; `LY.Resolve` resolves the geometry for `opts.screen` / `opts.density` |
+| `TwichUI_Layouts/AdapterEllesmere.lua` | Settings as data (`root`, table `modules`, `layout`), `STRIP`, `POSITIONS` (40 registered), `TEXT`, the screen layer (`Adapt`, `ShiftLink`), placed-position plan rows, `Expect` / `Verify` within a unit |
+| `TwichUI_Layouts/AdapterTwichUI.lua` | `PLACES` (7), `places` fragments, `A.Places` (the screen layer), writing and verifying places |
+| `TwichUI_Layouts/Engine.lua` | `opts` through plan and apply; the screen and density in the plan key |
+| `TwichUI_Layouts/ClassicData.lua` | The capture (generated; 375 KB of source, ~0.9 MB once loaded, offline figure) |
+| `TwichUI_Layouts/Classic.lua` | The package `twichui-adventure`, variant `classic-adventure`, targets `TwichUI Classic` / `Classic Adventure`, and its geometry |
+| `TwichUI_Layouts/Dev.lua` | `/tui layout validate|plan|apply|geometry [test|classic] [standard|larger] [WxH] [all]` |
+| `tools/layout_capture.lua` | The offline capture (strict data reader, the adapters' allowlists, scan, deterministic writer, report) |
+
+**Package structure.** Base (shared suite): EllesmereUI `root` (fonts, accent, dark-mode palette, migration stamps)
+and the TwichUI looks. Variant `classic-adventure`: the 18 EllesmereUI module blobs, the layout links, and the TwichUI
+places. Geometry: the canvas, rules and attach maps (`architecture.md` §12.4). The package is `dev = true` until it has
+been checked on Forever.
+
+**Geometry rules (Classic).** Canvas 2866.67 × 1200 units (3440 × 1440 at UI scale 0.64; confirmed by the minimap's and
+the meter's right-edge links). Composition area at most 2.4:1. Densities `standard` (1) and `larger` (1.15). Narrow
+below 1700 units. Margin 0 (the author's minimap is 2.5 units from the edge).
+
+| Component | Anchor | Size and bounds | Rules | Attached |
+|---|---|---|---|---|
+| central | bottom centre of the area | 890 × 525 (unit frames, bars), fixed | — | 21 EllesmereUI positions, 3 TwichUI places |
+| focus | the central block | 225 × 59, fixed | — | focus frame and cast bar |
+| chat | bottom left of the area | 451 × 186, density, min 280 × 120, max 640 × 320 | room right of central (12) | toast, bar 3, XP bar, food and drink, Healer Watch |
+| meter | bottom right of the area | 375 × 150, density, min 240 × 100, max 560 × 300 | room left of central; narrow: under the minimap | — |
+| minimap | top right of the area | 200, density, 140–280 | — | buffs, debuffs, queue status, location text |
+| objectives | under the minimap (−56) | 280 × 420, min 200 × 160 | room down of focus; narrow: under the meter | **not applied** (Edit Mode) |
+| notifications | top centre (−260) | 520 × 96 | above central (12) | training and welcome-back cards |
+| top-edge, top-left | the area's top and top-left | points | — | top data bar, boss frames; extra button, reputation bar |
+
+**Supported viewport cases** (offline resolver, both densities; UIParent units):
+
+| Screen | Units | Result |
+|---|---|---|
+| 3440 × 1440 at 0.64 (the author's) | 2866.67 × 1200 | the captured layout, exactly (positions and link offsets within 0.01) |
+| 1920 × 1080 / 1920 × 1200 at 0.64 | 2133 × 1200 / 1920 × 1200 | fits; edges kept, block unchanged |
+| 1920 × 1080, 2560 × 1440 pixel-perfect | 1920 × 1080 / 2560 × 1440 | fits; block from the bottom, cards from the top |
+| 1680 × 1050 pixel-perfect, 1600 × 1200 at 0.64 | 1680 × 1050 / 1600 × 1200 | fits with the narrow arrangement (chat narrower, meter under the minimap) |
+| 3840 × 2160 at 0.40 | 3413 × 1920 | fits |
+| 5120 × 1440 at 0.64 (32:9) | 4267 × 1200 | fits, in a 2880-wide composition area |
+| 1920 × 1080 at UI scale 1.0, 1024 × 768 | 1365 × 768 / 1024 × 768 | **does not fit**: the overlaps are listed; nothing is shrunk past its minimum. Needs a smaller UI scale (Phase 5) or Compact Adventure |
+
+**Known adapter limits.**
+- Objectives: EllesmereUI's quest tracker has no stored position (Blizzard's Edit Mode places it). Resolved and shown,
+  never applied (D15).
+- EllesmereUI: positions in a format not read are left as captured and noted (`bagsPosition`, `bankPosition`:
+  `TOPLEFT` with no relative point). Raid and party frames are stored from the left edge (`LEFT`) and kept as captured.
+  Links to another element are left to EllesmereUI; point-mode links are not rewritten. Positions are written for the
+  screen planned on: a later resolution change is followed natively only by screen-edge links and edge-relative
+  stores (chat), not by the other centre offsets (install again).
+- EllesmereUI: the blob shapes are 9.6.8's, captured on Retail; Forever's EllesmereUI may migrate them at load (the
+  migration stamps travel so it knows their vintage). Unverified.
+- TwichUI: windows the player moves (party pins, the Cozy Bag guide, refreshments, navigation's frame, settings) are
+  not places; the arrival card has a fixed place; friend-login is not managed.
+- The UI scale is never set (the recipient's own, Phase 2's rule); the resolver adapts to it instead. Density changes
+  component and text sizes only.
+
+**Checks run** (offline Lua 5.1; `./tests/run.sh`: 120 passed, 0 failed):
+- `tests/test_layout_geometry.lua` (new): each rule on a synthetic layout (canvas exact, wider and ultrawide with the
+  composition area, shorter, density with bounds, room down to the minimum, overlap and minimum reported, narrow
+  override, above, offscreen and clamping, unmanaged ignored, determinism); refusals (cycles, unknown targets, bad
+  points, room on the anchored side, standard density ≠ 1, narrow without a width, missing offsets, unknown attach
+  positions, points and adapters, unreal screens); conversions (BOTTOMLEFT, CENTER, TOP, BOTTOM-from-CENTER, follow,
+  rounding); Classic on 9 screens × 2 densities (fits, on screen, no shrinking without a rule, never under the
+  minimum), the narrow arrangement, 32:9, 1440p; 1365 × 768 honestly not fitting; on the canvas, each of the 37
+  attached positions, every link offset and every TwichUI place exactly as captured; EllesmereUI's own link formulas
+  (written out independently) put the minimap, meter and chat where the plan says on four screens; links to elements
+  left alone; the larger density's text sizes; the capture holds only allowlisted parts and no code; retained memory.
+- `tests/test_layouts.lua` §16 (new): Classic through the pipeline on 1920 × 1080 at 0.64: the payload (every module
+  and no other; the look and links travel; colours, scale, spells and per-spec records don't; placed minimap, chat and
+  followers, an unmoved block), 37 placed rows, objectives not applied; a plan for another screen or density is
+  stale; apply into both install profiles with the UI scale and the author's profiles untouched; TwichUI places and
+  looks written; backups, shares and the Chronicle unchanged; verified after the reload; a moved minimap reported, not
+  repaired; the restore checked out after the reload, both profiles and every place back; narrow + larger,
+  1365 × 768 and an unknown density; the developer command end to end (`geometry`, the `plan … all` hint,
+  `apply confirm` of the package last shown, unknown words refused).
+- `tests/test_layouts.lua` §4: format 3 refused as newer; `geometry` in a format 1 package refused. The stand-in
+  EllesmereUI's import now also takes `darkMode`, `euiAccent` and `_migrations`, as the real one does.
+- Mutations (made and reverted): links not rewritten, the room rule off, the room's minimum off, and scaling every x by
+  one screen ratio each fail the new tests. Leaving the screen out of the plan key does not: each part's key already
+  holds every placed position (the screen entry is a second guard).
+- `luacheck` (no config in the repo; globals off): 0 warnings in the changed files.
+- Measured offline (Lua 5.1 on the development machine, not the game): `LY.Validate(Classic)` ~11 ms and ~3 MB
+  allocated per call; `Geometry.Resolve` 0.07 ms and 30 KB; the captured data ~0.9 MB retained once loaded.
+
+**Diagnostics coverage.** No new scope or gauge. Resolving runs inside `layouts.plan` (and `layouts.apply`'s re-plan),
+which already time it; `/tui layout geometry` is a typed developer command costing 0.07 ms offline. The addon's
+memory, which now includes the Classic data, is already read and reported as `TwichUI_Layouts`. Nothing new is kept
+between calls.
+
+**Manual visual checklist** (none done; offline geometry is not visual verification). On Forever when it can be
+played, and meanwhile on Retail for TwichUI's side (the developer package is allowed there):
+1. `/tui layout geometry classic` on your own screen: the line "Your screen … gives … units" matches UIParent
+   (2866.67 × 1200 at 3440 × 1440, 0.64), with no problems listed.
+2. `/tui layout plan classic`, `apply confirm`, `/reload`: verified. Compare with `TwichUI - Classic Adventure` side by
+   side (screenshots): every frame where it was.
+3. EllesmereUI's Unlock Mode after the install: the minimap, meter and XP bar still show their screen-edge links with
+   the offsets the plan gives; nothing jumps when Unlock Mode opens or closes.
+4. The chat box: position and size as planned after the reload, and Blizzard's Edit Mode (opened and cancelled) leaves
+   it there (EllesmereUI writes chat into Edit Mode's store).
+5. TwichUI's marker bar, class bars, navigation arrow, food-and-drink buttons, Healer Watch, training and welcome-back
+   cards where the plan says (`/tui` previews).
+6. Another 16:9 resolution or scale (e.g. 1920 × 1080 at 0.64): `plan classic` again, apply, reload: chat, meter and
+   minimap at the edges, the block centred, nothing overlapping. Screenshots for the author (D18).
+7. A narrow case (1680 × 1050 pixel-perfect): the meter under the minimap, chat narrower, readable.
+8. `larger`: text and boxes larger, chat and meter text as planned, nothing clipped.
+9. UI scale 1.0 on 1080p: the plan says it doesn't fit; if applied anyway, the overlaps are where it said.
+10. The objective tracker stays where Edit Mode had it, as the plan said.
+11. Restore after each: both install profiles gone, the author's profile in use, everything as before.
+12. A Forever EllesmereUI: the Retail-captured blobs load without errors, and its load-time migrations leave the
+    positions as planned.
+
+### 4. Wizard, preview and install lifecycle UI (proposed)
 
 Build: the wizard window in TwichUI's own look (`Look.lua`, standalone without EllesmereUI): pick a variant, make
 choices, review the plan (from `LY.Plan`; the window shows exactly the plan whose key it passes to `LY.Apply`), confirm,
-reload button (a click, never automatic). The after-login result card (in place of `LY.Tell`'s chat lines), Detach,
-Restore (its own review), and the entry points: the Welcome dialog (offer only), settings (Home or a Layout page
-through `R:OpenSettings`) and `/tui layout` (the developer subcommands stay hidden).
+reload button (a click, never automatic). The preview: the resolved geometry drawn to scale (from `plan.geometry`, or
+`LY.Geometry.Resolve` directly), with its diagnostics on it. The after-login result card (in place of `LY.Tell`'s chat
+lines), Detach, Restore (its own review), and the entry points: the Welcome dialog (offer only), settings (Home or a
+Layout page through `R:OpenSettings`) and `/tui layout` (the developer subcommands stay hidden).
 
 Acceptance:
 - The review names: the account-wide EllesmereUI profile change, the TwichUI profile used, the reload, exclusions,
-  and what Restore will and won't undo (changes made in the install's profiles go with them).
-- Combat refuses Apply and Restore centrally (done in Phase 2); the window's disabled controls explain why.
+  what isn't applied (objectives), what doesn't fit on this screen, and what Restore will and won't undo.
+- The preview draws from the same resolved geometry the plan was built from, and re-plans when the screen or density
+  changes; a stale plan can't be applied (done).
+- Combat refuses Apply and Restore centrally (done); the window's disabled controls explain why.
 - Escape, focus and reopening behave as in the settings window. No duplicate frames, hooks or callbacks after
   repeated opens (`R.ListenerCounts` gauge).
 - Nothing in the wizard runs before the recipient asks for it. The Welcome dialog only offers it.
-- Choices: the `choices` layer (`LY.Resolve` `opts.choices`, composed already) gets a package schema and validation.
+- Choices: the `choices` layer (`LY.Resolve` `opts.choices`, composed already) gets a package schema and validation;
+  density becomes a choice.
 
-### 4. Screen adaptation and positions
+### 5. Compact Adventure, UI scale policy
 
-Build: the coordinate transform (§7), the position registry and `canvas`, TwichUI `places` with a converter per
-position key (or left unmanaged with the reason), EllesmereUI `positions`, the UI scale policy (choice `ui-scale`,
-`applyUIScale`), and the whole-`EllesmereUIDB` restore point (D3) once anything account-wide is managed.
-
-Acceptance:
-- Coordinate tests: left, centre and right affinity across 1920×1080, 2560×1440, 3840×2160 and 3440×1440 at several
-  scales. Clamping holds. Anchored entries and non-CENTER entries are left alone.
-- The payload holds `uiScale` only when the plan says so; Verify checks `UIParent:GetSize()` against the plan.
-- Restore puts back the UI scale and any enable state the install changed.
-
-### 5. Package content
-
-Build (needs the author): EllesmereUI export strings for the shared base and each variant from the author's install,
-the TwichUI presets per variant, the position registry with edge affinities, the reference canvas, the choice list
-and the target profile names.
-
-Acceptance:
-- The package passes the validator. Every managed module is present in the base.
-- On the reference canvas, a composed install reproduces the author's layout (positions within 1 unit).
-- Each variant reads as intended on 1080p, 1440p, 4K and ultrawide (screenshots reviewed by the author).
-- Nothing personal is in the strings (names, gold, character lists, chat). A test scans for the known private keys.
+Build: the Compact Adventure variant (D1; a capture with `tools/layout_capture.lua`), with what is truly shared moved
+into the base. The UI scale policy (choice `ui-scale`, `applyUIScale`, D12) and the whole-`EllesmereUIDB` restore
+point (D3) once the scale is managed; Verify then checks `UIParent:GetSize()` against the plan.
 
 ### 6. Retained overrides and updates
 
@@ -200,30 +323,36 @@ review, and updates between package revisions.
 ### 7. Release hardening and in-game validation
 
 Acceptance:
-- Every in-game check below has been run on the packaged artifact, with results recorded here.
+- Every in-game check below has been run on the packaged artifact, with results recorded here. Classic loses
+  `dev = true` only after the Forever checks.
 - A fresh account, an existing EllesmereUI user, an existing TwichUI user, re-applying after manual changes,
   switching variants, Restore and Detach: each gives the documented result.
 - The release zip holds five folders. `tools/release.py` package checks pass. `CHANGELOG.md` is updated.
 - No performance regression in a `/tui perf` General capture with the layouts addon not loaded.
 
-## Phase 3 prerequisites (exact)
+## Phase 4 handoff
 
-1. The Phase 2 in-game checks above, 1–12, run and recorded here. 2, 5, 6 and 7 decide whether the restore path and
-   the after-reload check can be trusted by a wizard.
-2. The author confirms the phase plan above (3 = wizard), and D2, D7 (disclose the account-wide EllesmereUI profile),
-   D8 (a new TwichUI profile), D9 (names; now `targets` in the package) and D14 (the first release's choices).
-3. The release decision above: ship `TwichUI_Layouts` now, or ignore it until the wizard.
-4. A package with at least two variants to choose between: Phase 5 content (D1), or a second developer variant.
-5. Where the wizard lives: the Welcome dialog's offer, the settings entry (Home or a Layout page), and what a bare
-   `/tui layout` does once the wizard exists.
+What the wizard and preview can rely on:
+- `LY.Plan(pkg, variant, { screen, density })` returns `plan.geometry`: `{ screen, area, density, factor, narrow,
+  order, components = { [id] = { label, managed, rect, ref, dx, dy, notes, applied } }, diagnostics, fits }`. Rects
+  are centre offsets in UIParent units (`x, y, w, h, l, r, b, t`), so a preview draws each on a frame the size of the
+  screen with `SetPoint("CENTER", parent, "CENTER", x, y)`.
+- The plan key covers the screen and density. Re-plan before Apply when the screen changes (`DISPLAY_SIZE_CHANGED`,
+  `UI_SCALE_CHANGED` are in Forever's API docs; their timing and payloads are unverified).
+- Each part's rows: `place = true` rows are placed positions (`comp`, `sized`), `text = true` rows are scaled text
+  sizes, `whole = true` rows are module blobs, links and the look. `part.notes` lists positions not placed, and why.
+- `LY.Geometry.Live()` reads the screen; it returns nil when UIParent can't be read, and planning is then refused.
+
+Open before Phase 4: the in-game checks (Phase 2's 1–12 on Forever, Phase 3's visual checklist), D17–D20, the
+release decision, and where the wizard lives (the Welcome offer, a settings entry, a bare `/tui layout`).
 
 ## Open decisions (recommended default first)
 
 | # | Question | Recommended default |
 |---|---|---|
-| D1 | What does the brother's interface ("Compact Adventure") consist of? Which addons and modules, and is an EllesmereUI export string of it available? | Needed before Phase 5. Assume EllesmereUI-based |
+| D1 | What does the brother's interface ("Compact Adventure") consist of? Which addons and modules, and which saved profile is its source (`TwichUI - Minimal Adventure`?) | Needed before Phase 5. Assume EllesmereUI-based |
 | D2 | Is EllesmereUI required for both layouts? | Yes. Without it, only the TwichUI layer is offered, with a clear note |
-| D3 | Restore point for EllesmereUI: copy the live `EllesmereUIDB` (no extra reload) or use today's disk scan (one extra reload)? | Phase 2 needs neither (§11.6). Live copy, when Phase 4 manages account-wide units |
+| D3 | Restore point for EllesmereUI: copy the live `EllesmereUIDB` (no extra reload) or use today's disk scan (one extra reload)? | Phases 2 and 3 need neither (§11.6). Live copy, when Phase 5 manages account-wide units |
 | D4 | Exclude Cooldown Manager spell layouts? | Exclude (built) |
 | D5 | Exclude window and tooltip skins (`blizzSkinGlobals`)? | Exclude in the first release (built); consider as a wizard choice later |
 | D6 | Exclude spec and condition overrides? | Exclude (built) |
@@ -231,12 +360,16 @@ Acceptance:
 | D8 | Install TwichUI settings into a new TwichUI profile (per character) or into the profile in use? | New profile (built) |
 | D9 | Target profile names | EllesmereUI `TwichUI Classic` / `TwichUI Compact`; TwichUI `Classic Adventure` / `Compact Adventure` (the test package uses `TwichUI Layout Test` / `Layout Test`) |
 | D10 | Suppress EllesmereUI's first-run picker every session, or only while a TwichUI install is planned or pending? | Only while one is under way (built), and refuse to plan while the picker is pending |
-| D11 | Reference canvas | 2560×1440 UIParent units (pixel-perfect 1440p) |
+| D11 | Reference canvas | Per package, in `geometry.canvas`: Classic's is the author's 2866.67 × 1200 (built) |
 | D12 | UI scale choice factors (`larger`, `smaller`) | ×1.15 and ×0.87 of pixel-perfect, clamped to 0.40–1.15 |
 | D13 | Without EllesmereUI, should TwichUI ever set the game's `uiScale` CVar? | No |
 | D14 | Wizard choices in the first release | Variant, UI scale, opt-out of Chat, Minimap, Damage Meters, Quest Tracker and Bags modules, and up to five TwichUI feature toggles |
 | D15 | Should Blizzard Edit Mode layouts join a later phase? | Later phase, after an in-game spike |
-| D16 | Strip `customColors` from every payload (Phase 2 does), or manage colours as a look unit with its own restore? | Strip until look units exist (Phase 4 or later) |
+| D16 | Strip `customColors` from every payload (Phase 2 does), or manage colours as a look unit with its own restore? | Strip until look units exist (Phase 5 or later) |
+| D17 | Composition area: 2.4:1 keeps the author's 21:9 layout as it is and narrows only wider screens; 16:9 would pull chat, meter and minimap inward on every 21:9 screen, the author's included | 2.4:1 (built) |
+| D18 | Classic's rules (the central block's box, the focus frame, room and narrow arrangements, the readable minimums, the attach map) are a reading of the author's layout | Author to review the rules table and the 1680 × 1050 / 1600 × 1200 screenshots |
+| D19 | 206 TwichUI looks-and-behaviour fields travel in the base (everything non-default except switches) | As chosen; trim to appearance-only groups if behaviour (e.g. mage, restock, navigation) should stay the recipient's |
+| D20 | Classic stays `dev = true` (allowed on Retail) until checked on Forever | Yes |
 
 ## In-game checks still required (whole project)
 
@@ -257,4 +390,4 @@ Acceptance:
 9. Combat: Apply and Restore are refused. The reload button is not offered in combat.
 10. The packaged install loads `TwichUI_Layouts` on demand. A missing or disabled copy is reported, and the core is
     unaffected.
-11. The Phase 2 checks above.
+11. The Phase 2 checks above, and the Phase 3 manual visual checklist.

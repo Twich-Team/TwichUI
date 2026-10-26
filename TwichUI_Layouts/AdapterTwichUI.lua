@@ -16,6 +16,13 @@
 --
 -- Snapshot part: { char, profile = in use before, target, created = the target was made by this install,
 --   values = { [unit] = fingerprint of the value in use before } }
+--
+-- Places (format 2 packages): where a few of TwichUI's own things sit on screen. They are TC.LOCAL "place" for
+-- sharing (a share never moves another player's windows), but a layout the recipient chose does place them, through
+-- the PLACES registry only: each entry's saved key and how that feature anchors it (read in its source). The screen
+-- layer moves them with the component the package attaches them to; a card the package places from a component's
+-- rect needs no value of its own. Windows the player opens and moves (party pins, the Cozy Bag guide, refreshments,
+-- navigation's frame, settings) are not places a layout sets.
 
 local R = TwichUI
 local LY = R.Layouts
@@ -39,6 +46,63 @@ local function Covered(path)
 end
 
 local function PathOf(f) return table.concat(f.at, ".") .. "." .. f.key end
+
+-- path: from TwichUIDB (the profile in use) or a stored profile's table. kind: how the feature anchors it to the screen:
+--   center: { x, y } from the screen's centre to its centre (classbars/Config.lua CB.Position, markers/Bar.lua,
+--     nav/Arrow.lua PlaceOwn, modules/FoodDrinkUnlock.lua)
+--   top: { x, y } from the screen's top centre to its top edge (modules/Training.lua, modules/WelcomeBack.lua Place)
+--   point: { point, x, y } inside a larger table, from that point of the screen (healer/Display.lua)
+-- fromRect: the package may place it from a component's rect alone (the cards have no stored place by default).
+A.PLACES = {
+    ["class-bars"] = { path = { "ui", "classBarsPosition", "main" }, kind = "center", label = "Class resource bars" },
+    ["marker-bar"] = { path = { "ui", "markerBarPosition" }, kind = "center", label = "Marker bar" },
+    ["nav-arrow"] = { path = { "ui", "navigation", "arrowPosition" }, kind = "center", label = "Navigation arrow" },
+    ["food-drink"] = { path = { "ui", "foodDrinkPosition" }, kind = "center", label = "Food and drink buttons" },
+    ["healer-watch"] = { path = { "ui", "healerWatch" }, kind = "point", label = "Healer Watch" },
+    ["training-card"] = { path = { "ui", "trainingPosition" }, kind = "top", label = "New training card", fromRect = true },
+    ["welcome-back"] = { path = { "ui", "welcomeBackPlace" }, kind = "top", label = "Welcome back card", fromRect = true },
+}
+function A.Positions() return A.PLACES end
+local function PlaceUnit(id) return PREFIX .. "place." .. id end
+local function PlaceOf(unit) local id = type(unit) == "string" and unit:match("^twichui:place%.(.+)$") return id and A.PLACES[id] and id end
+A.PlaceOf = PlaceOf
+
+local function ReadPath(t, path)
+    for _, k in ipairs(path) do
+        if type(t) ~= "table" then return nil end
+        t = t[k]
+    end
+    return t
+end
+
+local function Offset(n) return type(n) == "number" and n == n and n > -10000 and n < 10000 end
+local POINTS = LY.Set({ "TOPLEFT", "TOP", "TOPRIGHT", "LEFT", "CENTER", "RIGHT", "BOTTOMLEFT", "BOTTOM", "BOTTOMRIGHT" })
+
+-- A place's value as a feature reads it from t (a profile's table): { x, y } or { point, x, y }, or nil.
+local function ReadPlace(t, id)
+    local p = A.PLACES[id]
+    local v = ReadPath(t, p.path)
+    if type(v) ~= "table" or not (Offset(v.x) and Offset(v.y)) then return nil end
+    if p.kind == "point" then
+        if not POINTS[v.point] then return nil end
+        return { point = v.point, x = v.x, y = v.y }
+    end
+    return { x = v.x, y = v.y }
+end
+
+local function PlaceValueOk(id, v)
+    local p = A.PLACES[id]
+    if type(v) ~= "table" or not (Offset(v.x) and Offset(v.y)) then return false end
+    for k in pairs(v) do
+        if not (k == "x" or k == "y" or (k == "point" and p.kind == "point")) then return false end
+    end
+    return p.kind ~= "point" or POINTS[v.point] ~= nil
+end
+
+local function PlaceText(v)
+    if type(v) ~= "table" then return nil end
+    return ("@%d,%d%s"):format(math.floor(v.x + 0.5), math.floor(v.y + 0.5), v.point and ("," .. v.point) or "")
+end
 
 local index   -- path -> field, kept once the schema is complete
 -- { [path] = field } of every managed field.
@@ -65,6 +129,8 @@ end
 
 function A.Label(unit)
     if unit == A.PROFILE_UNIT then return "Profile" end
+    local place = PlaceOf(unit)
+    if place then return A.PLACES[place].label end
     local f = A.FieldOf(unit)
     if not f then return unit end
     local g = TC().Group(f.group)
@@ -73,6 +139,9 @@ end
 
 function A.Show(v)
     if v == true then return "on" elseif v == false then return "off" elseif v == nil then return "(not set)" end
+    if type(v) == "table" and type(v.x) == "number" then
+        return ("%d, %d%s"):format(math.floor(v.x + 0.5), math.floor(v.y + 0.5), v.point and (" from " .. v.point:lower()) or "")
+    end
     return tostring(v)
 end
 
@@ -89,8 +158,19 @@ end
 function A.Normalize(fragment, ctx)
     local P, units = ctx.problems, {}
     for k in pairs(fragment) do
-        if k == "places" then P.add("not-yet", ctx.where .. ".places")
+        if k == "places" then
+            if (ctx.format or 1) < 2 then P.add("not-yet", ctx.where .. ".places") end
         elseif k ~= "groups" then P.add("unknown-field", ctx.where .. "." .. tostring(k)) end
+    end
+    if (ctx.format or 1) >= 2 and fragment.places ~= nil then
+        if type(fragment.places) ~= "table" then P.add("not-table", ctx.where .. ".places")
+        else
+            for id, v in pairs(fragment.places) do
+                if not A.PLACES[id] then P.add("unknown-unit", ctx.where .. ".places." .. tostring(id))
+                elseif v == LY.REMOVE or PlaceValueOk(id, v) then units[PlaceUnit(id)] = v
+                else P.add("bad-value", PlaceUnit(id)) end
+            end
+        end
     end
     local groups = fragment.groups
     if groups == nil then return units, {} end
@@ -156,11 +236,15 @@ end
 
 local function Ours(snap, target) return type(snap) == "table" and snap.created == true and snap.target == target end
 
-function A.Capture(composed, target)
+function A.Capture(composed, target, part)
     local snap = { char = PF().Character(), profile = PF().Current(), target = target, created = not PF().Exists(target), values = {} }
     for _, e in ipairs(composed.list) do
         local f = A.FieldOf(e.unit)
         if f then snap.values[e.unit] = LY.Fingerprint(TC().Effective(f)) end
+    end
+    for _, row in ipairs(part and part.rows or {}) do
+        local id = PlaceOf(row.unit)
+        if id then snap.values[row.unit] = LY.Fingerprint(PlaceText(ReadPlace(TwichUIDB, id))) end
     end
     return snap
 end
@@ -190,15 +274,26 @@ function A.Plan(composed, ctx)
     part.profile, part.target = current, target
     part.rows[1] = { unit = A.PROFILE_UNIT, label = "Profile", old = current, new = target, change = part.action ~= "none" }
     for _, e in ipairs(composed.list) do
-        local f = A.FieldOf(e.unit)
-        if not f then part.blocked = "schema-changed" return part end
-        local old
-        if part.action == "switch" then old = StoredValue(target, f) else old = TC().Effective(f) end
-        local change = not LY.Same(old, e.value)
-        local reload = change and f.switch and R.Switches.NeedsReload(f.key) or false
-        part.rows[#part.rows + 1] = { unit = e.unit, label = A.Label(e.unit), old = old, new = e.value, change = change,
-            reload = reload, layer = e.layer }
-        if reload then part.reload = true end
+        if not PlaceOf(e.unit) then
+            local f = A.FieldOf(e.unit)
+            if not f then part.blocked = "schema-changed" return part end
+            local old
+            if part.action == "switch" then old = StoredValue(target, f) else old = TC().Effective(f) end
+            local change = not LY.Same(old, e.value)
+            local reload = change and f.switch and R.Switches.NeedsReload(f.key) or false
+            part.rows[#part.rows + 1] = { unit = e.unit, label = A.Label(e.unit), old = old, new = e.value, change = change,
+                reload = reload, layer = e.layer }
+            if reload then part.reload = true end
+        end
+    end
+    -- Places: each moved for this screen with the component it is attached to (or written as given, with no geometry)
+    local from = part.action == "switch" and type(TwichUIDB.profiles) == "table" and TwichUIDB.profiles[target] or TwichUIDB
+    local placed, notes = A.Places(composed, ctx.geometry, ctx.attach)
+    part.notes = notes
+    for _, id in ipairs(LY.SortedKeys(placed)) do
+        local old, new = ReadPlace(from, id), placed[id].value
+        part.rows[#part.rows + 1] = { unit = PlaceUnit(id), label = A.PLACES[id].label, old = old, new = new,
+            change = PlaceText(old) ~= PlaceText(new), place = true, comp = placed[id].comp }
     end
     local keyRows = {}
     for _, row in ipairs(part.rows) do
@@ -231,7 +326,34 @@ function A.Apply(part)
     local written = {}
     local ok, err = pcall(function()
         for _, row in ipairs(part.rows) do
-            if row.change and row.unit ~= A.PROFILE_UNIT then
+            local place = PlaceOf(row.unit)
+            if row.change and place then
+                -- the place's table (made where missing); a point place keeps the other keys of the table it is in
+                local path = A.PLACES[place].path
+                local c = TwichUIDB
+                for i = 1, #path - 1 do
+                    if type(c[path[i]]) ~= "table" then
+                        written[#written + 1] = { c = c, key = path[i], had = c[path[i]] }
+                        c[path[i]] = {}
+                    end
+                    c = c[path[i]]
+                end
+                local key = path[#path]
+                if A.PLACES[place].kind == "point" then
+                    if type(c[key]) ~= "table" then
+                        written[#written + 1] = { c = c, key = key, had = c[key] }
+                        c[key] = {}
+                    end
+                    local t = c[key]
+                    for _, k in ipairs({ "point", "x", "y" }) do
+                        written[#written + 1] = { c = t, key = k, had = t[k] }
+                        t[k] = row.new[k]
+                    end
+                else
+                    written[#written + 1] = { c = c, key = key, had = c[key] }
+                    c[key] = { x = row.new.x, y = row.new.y }
+                end
+            elseif row.change and row.unit ~= A.PROFILE_UNIT then
                 local f = A.FieldOf(row.unit)
                 local c = TC().Container(f, true)
                 written[#written + 1] = { c = c, key = f.key, had = c[f.key] }
@@ -268,8 +390,17 @@ function A.Verify(expect, snap)
         if not PF().Exists(snap.target) then r.state = "mismatch" return r end
     end
     for _, unit in ipairs(LY.SortedKeys(expect)) do
-        local f = A.FieldOf(unit)
-        if not f then r.unverifiable = r.unverifiable + 1
+        local f, place = A.FieldOf(unit), PlaceOf(unit)
+        if place then
+            -- within a unit of the plan
+            r.checked = r.checked + 1
+            local v = ReadPlace(live and TwichUIDB or (TwichUIDB.profiles or {})[snap.target], place)
+            local want = { expect[unit]:match("^@(%-?%d+),(%-?%d+),?(%u*)$") }
+            if not v or not want[1] or math.abs(v.x - tonumber(want[1])) > 1 or math.abs(v.y - tonumber(want[2])) > 1
+                or (want[3] ~= "" and v.point ~= want[3]) then
+                r.diffs[#r.diffs + 1] = { unit = unit, code = v and "moved" or "missing" }
+            end
+        elseif not f then r.unverifiable = r.unverifiable + 1
         else
             r.checked = r.checked + 1
             local v
@@ -325,8 +456,11 @@ function A.VerifyRestore(snap, units)
         r.diffs[#r.diffs + 1] = { unit = A.PROFILE_UNIT, code = "not-previous" }
     else
         for _, unit in ipairs(units) do
-            local f = A.FieldOf(unit)
-            if not f or snap.values[unit] == nil then r.unverifiable = r.unverifiable + 1
+            local f, place = A.FieldOf(unit), PlaceOf(unit)
+            if place and snap.values[unit] ~= nil then
+                r.checked = r.checked + 1
+                if LY.Fingerprint(PlaceText(ReadPlace(TwichUIDB, place))) ~= snap.values[unit] then r.diffs[#r.diffs + 1] = { unit = unit, code = "differs" } end
+            elseif not f or snap.values[unit] == nil then r.unverifiable = r.unverifiable + 1
             else
                 r.checked = r.checked + 1
                 if LY.Fingerprint(TC().Effective(f)) ~= snap.values[unit] then r.diffs[#r.diffs + 1] = { unit = unit, code = "differs" } end
@@ -337,11 +471,48 @@ function A.VerifyRestore(snap, units)
     return r
 end
 
--- What verification expects to read back for each unit the install writes.
-function A.Expect(composed)
+-- What verification expects to read back for each unit the install writes (places as the plan placed them).
+function A.Expect(composed, part)
     local out = {}
-    for _, e in ipairs(composed.list) do out[e.unit] = LY.Fingerprint(e.value) end
+    for _, e in ipairs(composed.list) do
+        if not PlaceOf(e.unit) then out[e.unit] = LY.Fingerprint(e.value) end
+    end
+    for _, row in ipairs(part and part.rows or {}) do
+        if row.place then out[row.unit] = PlaceText(row.new) end
+    end
     return out
+end
+
+---------------------------------------------------------------------------
+-- The screen layer for places. Pure: composed values and the resolved screen in, places out.
+-- Returns { [id] = { value, comp } }, notes { { code, id } }.
+---------------------------------------------------------------------------
+function A.Places(composed, geo, attach)
+    local out, notes = {}, {}
+    local Gm = LY.Geometry
+    for _, e in ipairs(composed.list) do
+        local id = PlaceOf(e.unit)
+        if id and not (geo and attach and attach[id]) then out[id] = { value = LY.Copy(e.value) } end
+    end
+    if not (geo and attach) then return out, notes end
+    for _, id in ipairs(LY.SortedKeys(attach)) do
+        local p = A.PLACES[id]
+        local compId, pt = attach[id]:match("^([%w%-]+):?(%u*)$")
+        local comp = geo.components[compId]
+        local v = composed.units[PlaceUnit(id)]
+        local point = (p.kind == "top" and "TOP") or (p.kind == "point" and v and v.point) or "CENTER"
+        if v ~= nil then
+            local mv = Gm.Moved(comp, pt ~= "" and pt or nil)
+            local x, y = Gm.Follow({ rel = point, x = v.x, y = v.y }, mv, geo.canvas, geo.screen)
+            out[id] = { value = { x = x, y = y, point = p.kind == "point" and point or nil }, comp = compId }
+        elseif p.fromRect then
+            local x, y = Gm.Stored(comp.rect, point, point, geo.screen)
+            out[id] = { value = { x = x, y = y }, comp = compId }
+        else
+            notes[#notes + 1] = { code = "not-stored", id = id }
+        end
+    end
+    return out, notes
 end
 
 LY.RegisterAdapter(A)

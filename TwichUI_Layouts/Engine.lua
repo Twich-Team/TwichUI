@@ -1,7 +1,8 @@
 -- TwichUI Layouts: the pipeline (architecture.md §8, §9)
 --
---   LY.Plan(pkg, variant)          read only: what an install would do, adapter by adapter, with a key
---   LY.Apply(pkg, variant, key)    does exactly the plan with that key (re-planned first; refused if it differs)
+--   LY.Plan(pkg, variant, opts)    read only: what an install would do, adapter by adapter, with a key
+--   LY.Apply(pkg, variant, key, opts)  does exactly the plan with that key (re-planned first; refused if it differs)
+--   opts = { screen = { w, h } (default: this screen, LY.Geometry.Live()), density = id } for a package with geometry
 --   LY.Verify(record)              reads live values against what the install expects; record = true writes the result
 --   LY.PlanRestore(), LY.Restore(key), LY.VerifyRestore(record)
 --   LY.Continue()                  after a reload (the core calls it): checks what the install or restore left
@@ -34,12 +35,20 @@ local function Short(key) return "#" .. tostring(LibDeflate:Adler32(key)) .. ":"
 ---------------------------------------------------------------------------
 -- Plan
 -- plan = { ok, problems, blocked = { { adapter, code } }, id, revision, variant, title, dev, order = { adapter ids },
---   parts = { [adapter] = part (each adapter's Plan) }, changes, reload, mode = "new"|"again", key }
+--   parts = { [adapter] = part (each adapter's Plan) }, changes, reload, mode = "new"|"again", key,
+--   geometry = the resolved screen (Geometry.lua) | nil, density }
 ---------------------------------------------------------------------------
-local function DoPlan(pkg, variant)
+local function DoPlan(pkg, variant, opts)
+    opts = opts or {}
     local plan = { blocked = {}, parts = {}, order = {}, changes = 0, reload = false }
-    local ok, resolved = LY.Resolve(pkg, variant)
+    local screen = opts.screen
+    if pkg.geometry ~= nil and screen == nil then
+        screen = LY.Geometry.Live()
+        if not screen then plan.blocked[1] = { code = "no-screen" } end
+    end
+    local ok, resolved = LY.Resolve(pkg, variant, { screen = screen, density = opts.density })
     if not ok then plan.problems = resolved return plan end
+    plan.geometry, plan.density = resolved.geometry, resolved.geometry and resolved.geometry.density or nil
     plan.id, plan.revision, plan.variant, plan.title, plan.dev = resolved.id, resolved.revision, variant, pkg.title, resolved.dev
     plan.targets = resolved.targets
     local function Block(adapter, code) plan.blocked[#plan.blocked + 1] = { adapter = adapter, code = code } end
@@ -61,6 +70,7 @@ local function DoPlan(pkg, variant)
                 target = resolved.targets[id], snapshot = journal and journal.snapshot[id],
                 requires = pkg.requires and pkg.requires[id], dev = resolved.dev,
                 lastInputs = journal and journal.inputs and journal.inputs[id],
+                geometry = resolved.geometry, attach = resolved.attach and resolved.attach[id],
             })
             part.composed = composed
             plan.parts[id] = part
@@ -72,12 +82,15 @@ local function DoPlan(pkg, variant)
     end
     local keys = {}
     for _, id in ipairs(plan.order) do keys[id] = plan.parts[id].key or "" end
-    plan.key = LY.Canon({ plan.id, plan.revision, variant, plan.mode, keys })
+    -- the screen the places were worked out for is part of what was shown
+    local screenKey = resolved.geometry and { math.floor(resolved.geometry.screen.w + 0.5), math.floor(resolved.geometry.screen.h + 0.5),
+        resolved.geometry.density } or false
+    plan.key = LY.Canon({ plan.id, plan.revision, variant, plan.mode, keys, screenKey })
     plan.ok = #plan.blocked == 0
     return plan
 end
 
-function LY.Plan(pkg, variant) return Perf.Call("layouts.plan", DoPlan, pkg, variant) end
+function LY.Plan(pkg, variant, opts) return Perf.Call("layouts.plan", DoPlan, pkg, variant, opts) end
 
 ---------------------------------------------------------------------------
 -- Verify
@@ -125,9 +138,9 @@ function LY.Verify(record) return Perf.Call("layouts.verify", DoVerify, record) 
 -- Returns true, result | false, code, plan-or-extra. result = { state, record, verify = report|nil }
 --   codes: combat, blocked, stale, nothing, snapshot (the snapshot could not be made usable)
 ---------------------------------------------------------------------------
-local function DoApply(pkg, variant, expect)
+local function DoApply(pkg, variant, expect, opts)
     if InCombat() then return false, "combat" end
-    local plan = DoPlan(pkg, variant)
+    local plan = DoPlan(pkg, variant, opts)
     if not plan.ok then return false, "blocked", plan end
     if type(expect) ~= "string" or plan.key ~= expect then return false, "stale", plan end
     local allNothing = true
@@ -141,7 +154,7 @@ local function DoApply(pkg, variant, expect)
     else
         snapshot = {}
         for _, id in ipairs(plan.order) do
-            snapshot[id] = LY.ADAPTERS[id].Capture(plan.parts[id].composed, plan.targets[id])
+            snapshot[id] = LY.ADAPTERS[id].Capture(plan.parts[id].composed, plan.targets[id], plan.parts[id])
         end
         local okSnap, why = J.CleanSnapshot(snapshot)
         if not okSnap then return false, "snapshot", why end
@@ -152,7 +165,7 @@ local function DoApply(pkg, variant, expect)
         expect = {}, inputs = {} }
     for _, id in ipairs(plan.order) do
         record.steps[#record.steps + 1] = { adapter = id, state = "pending" }
-        record.expect[id] = LY.ADAPTERS[id].Expect(plan.parts[id].composed)
+        record.expect[id] = LY.ADAPTERS[id].Expect(plan.parts[id].composed, plan.parts[id])
         record.inputs[id] = plan.parts[id].inputs or (previous and previous.inputs and previous.inputs[id])
     end
     J.Write(record)
@@ -201,7 +214,7 @@ local function DoApply(pkg, variant, expect)
     return true, { state = now and now.state or "applied", steps = record.steps, record = now, verify = report, changed = true }
 end
 
-function LY.Apply(pkg, variant, expect) return Perf.Call("layouts.apply", DoApply, pkg, variant, expect) end
+function LY.Apply(pkg, variant, expect, opts) return Perf.Call("layouts.apply", DoApply, pkg, variant, expect, opts) end
 
 ---------------------------------------------------------------------------
 -- Restore

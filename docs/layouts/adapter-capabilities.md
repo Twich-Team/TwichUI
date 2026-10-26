@@ -16,6 +16,23 @@ patched only at the allowlisted fields `minimap.coordsMode` and `minimap.coordsP
 `EUI_Minimap_Options.lua` "Show Coordinates"). `minimap.showCoords` exists in the defaults but nothing reads it in
 9.6.8, so it is not managed. Still **G** for every row: nothing has run in game. `architecture.md` §11 has the details.
 
+**Phase 3 (2026-10-26).** Read for the screen layer, in EllesmereUI 9.6.8 and the author's captured profile; none of
+it run in game:
+
+| What | Status | Evidence |
+|---|---|---|
+| Screen-edge link targets: 1-unit strips just outside each UIParent edge | S | `EUI_UnlockMode.lua` `EDGES` (334) |
+| Link offsets are edge to edge (side LEFT: child right to target left; TOP: child bottom to target top; …); `edge` pins the other axis to a second screen edge | S, T | `EUI_UnlockMode_Positions.lua` `UM.ApplyAnchorPosition` (1055–1240), `edge` (1556–1567); `tests/test_layout_geometry.lua` §5–6 (the captured offsets come back exactly on the canvas) |
+| A link on an element that places itself (`ownsPosition`, main chat) is inert; chat is placed from `chat.chatPosition` (BOTTOMLEFT) and sized from `chat.chatSize`, which EllesmereUI writes into Edit Mode's store itself | S, G | `EUI_UnlockMode_Positions.lua` 1065; `EUI_Chat_Position.lua` 118–175, `EUI_Chat_Init.lua` 1025–1055 |
+| Minimap: `minimap.position` (CENTER), `minimap.mapSize` (square) | S | `EUI_Minimap_Apply.lua` 239–245 |
+| Damage meter window: `dm.windows[1].position` (CENTER), `width`, `height` | S | `EUI_DamageMeters_State.lua` 259, 296–315 |
+| Action bars: `barPositions[key]` `{point, relPoint, x, y}`; DataBars by `bars[i].id` (unlock key `EDB_<id>`) | S | `EUI_ActionBars_Layout.lua` 295; `EllesmereUIDataBars.lua` 2707 |
+| Quest tracker: no stored position. Placement is Blizzard's Edit Mode | S | `EllesmereUIQuestTracker_Visibility.lua` header rule 3 |
+| The import takes `fonts`, `customColors`, `darkMode`, `euiAccent`, `windowSkinLook`, `_migrations` and the merged `unlockLayout` from a payload; `chatBubbles`, `tooltipFixedPos` are inherited from the active profile | S | `ImportProfile` (3330–3470) |
+| Imported layout links replace the base's for every imported module; a link to a screen edge travels with its child | S | `MergeImportedLayout` (586), `FilterLayoutToFolders` (461) |
+| Text sizes scaled by the density: `chat.chatFontSize`, `chat.tabFontSize`, `dm.leftFontSize`, `dm.rightFontSize`, `dm.hdrFontSize`, `dm.barHeight` | S | read by `EllesmereUIChat`, `EllesmereUIDamageMeters` |
+| TwichUI places: centre offsets in UIParent units (class bars, marker bar, navigation arrow, food and drink); Healer Watch from its own point; training and welcome-back cards from the top centre | S, T | `classbars/Config.lua` `CB.Position`, `markers/Bar.lua` 312, `nav/Arrow.lua` `PlaceOwn`, `modules/FoodDrinkUnlock.lua` 109, `healer/Display.lua` 421, `modules/Training.lua` `T.Position`, `modules/WelcomeBack.lua` `B.Position`; each re-placed on a profile refresh (`OnApply("layout"|"views")`) |
+
 ## `twichui` adapter
 
 | Capability | Status | How | Evidence |
@@ -44,7 +61,7 @@ patched only at the allowlisted fields `minimap.coordsMode` and `minimap.coordsP
 | Reload requirements | S | Always after an import ("Reload to finish importing"), after a UI scale change (read at login) and after enable/disable | `ImportReloadMessage` (1912), `EllesmereUI_Startup.lua` `ppUIScale` (65–102), `ImportProfileSilent` header |
 | Verify | S, G | `GetActiveProfileName`, `GetProfileList`, `GetProfilesDB().profiles[target].addons[canon]` positions, `IsModuleAddonLoaded`, `C_AddOns` enable state, `EllesmereUIDB.ppUIScale` | `GetActiveProfileName` (3935), `IsModuleAddonLoaded` (695); TwichUI's `ES.Apply` snapshot verify pattern (`Snapshot` 402, `Verify` 419) |
 | Restore | S, T (path) | The restore point puts the whole `EllesmereUIDB` back at EllesmereUI's `ADDON_LOADED` (TwichUI runs first). `ES.Blocked` allows it for `restore:` sources. Enable states go back through `C_AddOns` | TwichUI `setup/Setups.lua` `ApplyOne` (619), `ProcessOwner` (650), `Replace` (515); `setup/Ellesmere.lua` `ES.Blocked`; `tests/test_persist.lua` |
-| Known limitations | — | (1) The import builds on the recipient's active profile, so modules missing from the payload are inherited. (2) The serializer writes numbers with `tostring`, so a decode→encode round trip is not exact ("a serializer round trip is not identity", 4969). (3) The `uiScale`, window-skin bundle, CDM spells and overrides in a string are applied when present ("presence is consent"), so TwichUI must strip what it does not manage. (4) `activeProfile` is account-wide. (5) The inner module blob shapes are internal and can change between EllesmereUI versions. Only registered position paths are patched, and each needs a version check. (6) The reference folder has no license file. TwichUI calls the API only | `ImportProfile` 3330–3336, `Serializer` 243–281, `ImportProfileSilent` header |
+| Known limitations | — | (1) The import builds on the recipient's active profile, so modules missing from the payload are inherited. (2) The serializer writes numbers with `tostring`, so a decode→encode round trip is not exact ("a serializer round trip is not identity", 4969). (3) The `uiScale`, window-skin bundle, CDM spells and overrides in a string are applied when present ("presence is consent"), so TwichUI must strip what it does not manage. (4) `activeProfile` is account-wide. (5) The inner module blob shapes are internal and can change between EllesmereUI versions. Only registered position paths are patched, and each needs a version check. (6) The reference folder's `license.txt` (found in Phase 3) reserves all rights. TwichUI calls the API only and ships the author's own settings | `ImportProfile` 3330–3336, `Serializer` 243–281, `ImportProfileSilent` header |
 
 ### EllesmereUI facts that shape the contract
 

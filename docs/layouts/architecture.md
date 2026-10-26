@@ -4,8 +4,9 @@ This is the contract for TwichUI's layout packages: two complete interface exper
 **Compact Adventure**, built from shared configuration and installed by a TwichUI wizard. It was written in Phase 1
 (audit, 2026-10-26). Phase 2 (2026-10-26) built the engine and the apply/verify/restore pipeline for a small developer
 test package (`TwichUI_Layouts/`); **§11 lists every place where that implementation revised this contract**, and
-those revisions win over the text above them. The wizard, screen adaptation, retained overrides and real package
-content are not built. `adapter-capabilities.md` holds the source evidence for each integration, and
+those revisions win over the text above them. Phase 3 (2026-10-26) added the screen layer and the first author layout,
+Classic Adventure; **§12 lists its revisions**, which win over §1–§11. The wizard, the preview, Compact Adventure and
+retained overrides are not built. `adapter-capabilities.md` holds the source evidence for each integration, and
 `implementation-status.md` tracks the phases and the open decisions.
 
 Words used here:
@@ -349,7 +350,9 @@ settings. It is not a second first-run system.
 - **Interface**: the client reports `16001` (Forever) in TwichUI's and EllesmereUI's `.toc` files. Metadata is not
   changed by this work.
 - **Licensing**: TwichUI only calls EllesmereUI's runtime API and ships export strings the author made from their own
-  install. No EllesmereUI or NaowhForever code is copied. EllesmereUI's reference folder has no license file.
+  install. No EllesmereUI or NaowhForever code is copied. EllesmereUI's reference folder now has a `license.txt`
+  (all rights reserved; noticed in Phase 3): TwichUI still only calls its runtime API, and the package carries the
+  author's own settings, not EllesmereUI's code or assets.
 
 ## 11. Revisions made in Phase 2 (2026-10-26)
 
@@ -416,3 +419,75 @@ Phase 2 built `TwichUI_Layouts/` (`Canon.lua`, `Package.lua`, `Compose.lua`, `Ad
     before-and-after profile check reads `GetProfilesDB()` itself rather than `setup/Ellesmere.lua`'s, which goes
     through sharing's Forever-only gate. A run on another client checks TwichUI's side of the pipeline; it is not one
     of the in-game checks for Forever.
+
+## 12. Revisions made in Phase 3 (2026-10-26)
+
+Phase 3 built the screen layer (`Geometry.lua`), package format 2, the Classic Adventure package (`Classic.lua`, with
+its captured data in `ClassicData.lua`), the offline capture tool (`tools/layout_capture.lua`) and the developer review
+path (`/tui layout plan|apply|geometry classic`). Where it differs from §1–§11, the code and this section are the
+contract:
+
+1. **Package format 2 (§5).** Adds `geometry` and `source`; format 1 packages (the developer test package) read as
+   before. `choices` is still refused as "not yet". `canvas` and `positions` are not top-level fields: both live in
+   `geometry`. `LY.MAX_UNITS` is 256 per adapter fragment (Classic's TwichUI part names 206 looks), and a record may
+   expect `LY.MAX_UNITS + 64` units per adapter (what the fragment names, plus the places the screen layer adds).
+2. **Settings as data (§5).** An EllesmereUI fragment may give the author's settings as plain tables instead of export
+   strings: `root = { fonts, darkMode, euiAccent, _migrations }` (base layer; the `ROOT` allowlist, the root keys
+   EllesmereUI's `ImportProfile` takes), `modules = { [canon] = table }`, and `layout = <unlockLayout>`. TwichUI builds
+   the full payload itself (`{ version = 3, type = "full", data }`) and encodes it with `EncodePayload`, so import is
+   the same `ImportProfileSilent` path as Phase 2. A package's blob may not hold a `STRIP` key: the per-character
+   `characters`/`chars`, and the Cooldown Manager's `spec`, `activeSpecKey`, `specProfiles` and `barGlows` (which specs
+   the author played; EllesmereUI recreates them on demand). A developer base built on the recipient's own profile
+   loses only the per-character keys. Data is reviewable line by line and diffable, at the cost of size (the Classic
+   data file is 375 KB of source, about 0.9 MB once loaded, offline figure).
+3. **TwichUI places (§3, §7).** A TwichUI fragment may give `places` (format 2), through the adapter's `PLACES`
+   registry only: `class-bars` (`ui.classBarsPosition.main`), `marker-bar`, `nav-arrow`, `food-drink` (centre offsets),
+   `healer-watch` (`ui.healerWatch.point/x/y`, from that point of the screen), `training-card` and `welcome-back` (top
+   edge from the top centre). The cards may be placed from a component's rect with no stored value. Party pins, the
+   Cozy Bag guide, refreshments, navigation's frame and the settings window are windows the player moves: not places
+   a layout sets. Sharing still never moves anything (`TC.LOCAL` is unchanged).
+4. **The screen layer (§1 layer 5, §7).** Replaces the edge-affinity transform of §7 with components:
+   - The **viewport** is UIParent's live size in its own units (`UIParent:GetWidth/GetHeight`; `LY.Geometry.Live`).
+     The UI scale stays the recipient's: Phase 3 sets no scale and no CVar, so the viewport follows from it.
+     The **composition area** is centred, full height, at most `maxAspect` × height wide.
+   - A **component** is a box on the canvas (`ref`, measured from the author's layout) or a box of a given `size`, and
+     an **anchor**: one of its nine points on a point of the area, the screen or another component. Offsets are
+     measured on the canvas, so the author's own screen reproduces the author's layout exactly. Size: the reference,
+     times the density factor if `density`, within `max` and `share`, never under `min` (the readable minimum).
+   - Two rules, each applied once in dependency order: **room** (shrink toward a neighbour along one axis, keeping the
+     anchored edge, never under `min`) and **above** (move up clear of a neighbour). Below the `narrow` width a
+     component's `narrow` anchor and room replace its own. Then clamping on screen (inset by `margin`).
+   - **Diagnostics** for managed components: `overlap` (pairs, with the overlap size), `offscreen`, `clamped`,
+     `minimum` (a minimum won). `fits` is false on any overlap or offscreen. Nothing is shrunk past readable to fit.
+   - **No coordinate is multiplied by a screen ratio.** Positions are kept relative to what they are anchored to.
+   - **Attach maps** (`geometry.attach[adapter][positionId] = "component[:POINT]"`): each registered stored position
+     moves with that point of its component. A position registered with size fields is the component's own frame and
+     is placed and sized from the component.
+5. **Conversions (§7).** `G.Stored(rect, point, rel, screen)` gives the `SetPoint` offsets; `G.Follow` moves a stored
+   place of unknown size with its component. Every stored number is rounded to 1/100 of a unit. EllesmereUI links to a
+   screen edge (`SCREEN_LEFT|RIGHT|TOP|BOTTOM`, with the cross-axis `edge` pin) have their offsets rewritten from how
+   far the child's and the screen's edges moved, by the formulas of `UM.ApplyAnchorPosition`; on the canvas they come
+   out as captured. Links to another element and point-mode links are left alone (EllesmereUI moves the child with its
+   target). A stored position in a format not read (e.g. Bags' `TOPLEFT` with no relative point) is left as it is
+   and noted in the plan. The density also scales the registered text sizes (`TEXT`: chat text and tabs, meter text
+   and bar height), as whole numbers within bounds.
+6. **Plan, record and verify (§8).** `LY.Plan(pkg, variant, opts)` and `LY.Apply(pkg, variant, key, opts)` take
+   `opts = { screen, density }`; the plan key includes the screen and density, and each part's key already includes
+   every placed position, so a plan shown for one screen is stale on another. The record expects placed positions as
+   `"@x,y[,w,h]"` (EllesmereUI) and `"@x,y[,POINT]"` (TwichUI); Verify passes within one unit (EllesmereUI snaps to its
+   pixel grid) and reports `moved`, never repairs. Root keys and the layout links are checked for presence, like blobs.
+   After a restore, everything that existed only in the install's own profile counts as checked once that profile is
+   gone and the previous one is in use.
+7. **Objectives.** EllesmereUI's quest tracker stores no position: its placement is delegated to Blizzard's Edit Mode
+   (`EllesmereUIQuestTracker_Visibility.lua`, rule 3). The objectives component is resolved (for the preview and the
+   plan) and marked `applied = "edit-mode"`; nothing writes it until Edit Mode is managed (D15).
+8. **Capture (Phase 5 content, started).** `tools/layout_capture.lua` reads saved files as data with a strict reader
+   (never runs them, never writes them), runs TwichUI offline as the tests do, and keeps only what the adapters'
+   allowlists keep: for EllesmereUI the `ROOT` keys, the `MODULES` blobs less `STRIP`, and the layout links; for
+   TwichUI the `PLACES` and every managed looks-and-behaviour field that differs from TwichUI's default (no on/off
+   switches). A whole-word scan for the account's character and realm names, player GUIDs, links and BattleTags must
+   find nothing, or nothing is written. The output is deterministic (sorted keys, shortest round-trip numbers) and is
+   read back and compared before the report is written (`capture-classic-adventure.md`).
+9. **Classic Adventure is a developer package (`dev = true`) until Phase 7.** Its data comes from the Retail client's
+   saved files (the only ones there are), so it may be tried on Retail (§11.13); a Forever check is still required.
+

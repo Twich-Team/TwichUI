@@ -1,12 +1,15 @@
 -- TwichUI Layouts: /tui layout, the developer test of the install pipeline (not the wizard)
 --   /tui layout                  what is installed now, and these commands
---   /tui layout validate         checks the test package
---   /tui layout plan             shows what an install would change (nothing changes)
---   /tui layout apply            shows it again; /tui layout apply confirm makes exactly the changes last shown
+--   /tui layout validate [pkg]   checks a package
+--   /tui layout plan [pkg] [density] [all]   shows what an install would change (nothing changes); all: every row
+--   /tui layout apply [pkg] [density]        shows it again; /tui layout apply confirm makes exactly the changes last shown
+--   /tui layout geometry [pkg] [density] [WxH]  where the package's components go on this screen (or a W × H one, in
+--                                UIParent units), and what doesn't fit. Reads nothing but the screen; changes nothing
 --   /tui layout verify           reads every managed value back now
 --   /tui layout restore          shows what Restore would do; /tui layout restore confirm does it
 --   /tui layout status           the install record: state, steps, the last check
 --   /tui layout detach confirm   forgets the record and changes nothing else (for a record that can't be used)
+-- pkg: test (the developer test package, the default) or classic (Classic Adventure). density: standard or larger.
 -- Output stays in your own chat frame. Nothing reloads by itself: when a reload is needed, it says so.
 
 local R = TwichUI
@@ -57,7 +60,27 @@ local EXPLAIN = {
     ["refresh-failed"] = "the values were written, but a feature didn't take them up (the error is in /tui diagnostics).",
     error = "an error stopped it (the error is in /tui diagnostics).",
     ["target-kept"] = "the install's profile couldn't be removed.",
+    ["no-screen"] = "TwichUI couldn't read the size of the screen, so it can't work out where things go.",
+    ["not-allowed"] = "the package's settings hold a per-character record a layout never carries.",
 }
+
+-- The packages the developer command knows: { pkg, variant }.
+local PACKAGES = {
+    test = function() return LY.TEST_PACKAGE, LY.TEST_VARIANT end,
+    classic = function() return LY.CLASSIC_PACKAGE, LY.CLASSIC_VARIANT end,
+}
+
+-- What a screen-layer note means (from the adapters' plans).
+local NOTE = {
+    ["module-absent"] = "its EllesmereUI module isn't in the package",
+    ["not-found"] = "it isn't where this EllesmereUI keeps it",
+    ["not-stored"] = "it has no stored place (the feature's default stands)",
+    format = "it is stored in a form TwichUI doesn't read, so it is left as it is",
+    ["link-kept"] = "its layout link isn't to a screen edge, so EllesmereUI places it from its link",
+}
+local APPLIED = { ["edit-mode"] = "not applied: EllesmereUI leaves it to Blizzard's Edit Mode, which layouts don't manage yet" }
+local DIAG = { overlap = "overlaps", offscreen = "doesn't fit on the screen", clamped = "was moved back onto the screen",
+    minimum = "is at its smallest readable size" }
 
 local function Explain(code)
     if code == nil then return "" end
@@ -78,12 +101,12 @@ local function Adapter(id) return LY.ADAPTERS[id] end
 -- Showing a plan
 ---------------------------------------------------------------------------
 local function ShowProblems(problems)
-    Say("the test package is not valid (%d problem%s); nothing can be installed from it:", problems.n, problems.n == 1 and "" or "s")
+    Say("the package is not valid (%d problem%s); nothing can be installed from it:", problems.n, problems.n == 1 and "" or "s")
     for _, p in ipairs(problems) do Line("%s at %s", p.code, tostring(p.where)) end
     if problems.n > #problems then Line("... and %d more", problems.n - #problems) end
 end
 
-local function ShowPart(id, part)
+local function ShowPart(id, part, all, pkgName)
     local a = Adapter(id)
     if part.blocked then Line("%s: can't: %s", LABEL[id], Explain(part.blocked)) return end
     if part.nothing then Line("%s: already as planned; nothing to do.", LABEL[id]) return end
@@ -107,29 +130,68 @@ local function ShowPart(id, part)
         if part.otherClient then Line("  this EllesmereUI isn't the WoW: Forever build: allowed for this developer test package only, and nothing it shows proves how Forever behaves") end
         if part.untested then Line("  tested with EllesmereUI %s; you have %s", tostring(part.tested), tostring(part.version)) end
     end
+    local shown, whole, follow, hidden = 0, 0, {}, 0
     for i, row in ipairs(part.rows) do
         if i > 1 then
-            if row.change then
-                Line("  %s: %s -> %s%s", row.label, a.Show(row.old), a.Show(row.new), row.reload and " (needs a reload)" or "")
+            if row.whole then whole = whole + 1
+            elseif row.place and not row.sized and row.comp and id == "ellesmereui" then
+                follow[row.comp] = (follow[row.comp] or 0) + 1
+            elseif row.change then
+                if shown < 12 or all then
+                    shown = shown + 1
+                    Line("  %s: %s -> %s%s", row.label, a.Show(row.old), a.Show(row.new), row.reload and " (needs a reload)" or "")
+                else hidden = hidden + 1 end
             else
                 same = same + 1
             end
         end
     end
+    if hidden > 0 then Line("  ... and %d more changes (/tui layout plan %s all lists them)", hidden, pkgName or "") end
+    if whole > 0 then Line("  %d whole parts (modules, layout links, the look) are replaced by the package's", whole) end
+    for _, comp in ipairs(LY.SortedKeys(follow)) do Line("  %d more places move with the %s", follow[comp], comp) end
     if same > 0 then Line("  %d more already as planned", same) end
+    for _, n in ipairs(part.notes or {}) do
+        local label = (a.POSITIONS and a.POSITIONS[n.id] and a.POSITIONS[n.id].label) or (a.PLACES and a.PLACES[n.id] and a.PLACES[n.id].label) or n.id
+        Line("  %s: not placed: %s", label, NOTE[n.code] or n.code)
+    end
 end
 
-local function ShowPlan(plan, confirmHint)
+local function ShowGeometry(geo, header)
+    if not geo then return end
+    if header then
+        Line("Screen: %d × %d units, density %s%s: %s.", math.floor(geo.screen.w + 0.5), math.floor(geo.screen.h + 0.5), geo.density,
+            geo.narrow and ", narrow" or "", geo.fits and "everything fits" or "not everything fits")
+    end
+    for _, id in ipairs(geo.order) do
+        local c = geo.components[id]
+        if c.managed then
+            local r = c.rect
+            local extra = c.applied and ("  (" .. (APPLIED[c.applied] or c.applied) .. ")") or ""
+            Line("  %s: %d, %d, %d × %d%s", c.label or id, math.floor(r.x + 0.5), math.floor(r.y + 0.5), math.floor(r.w + 0.5),
+                math.floor(r.h + 0.5), extra)
+        end
+    end
+    for _, d in ipairs(geo.diagnostics) do
+        local a = geo.components[d.id]
+        local b = d.other and geo.components[d.other]
+        if d.code ~= "clamped" or header then
+            Line("  ! %s %s%s", a and a.label or d.id, DIAG[d.code] or d.code, b and (" " .. (b.label or d.other) .. (" by %d × %d"):format(d.w, d.h)) or "")
+        end
+    end
+end
+
+local function ShowPlan(plan, confirmHint, all, pkgName)
     if plan.problems then ShowProblems(plan.problems) return end
-    Say("test package \"%s\" (revision %d), variant \"%s\": %d change%s%s.", plan.id, plan.revision, plan.variant, plan.changes,
+    Say("package \"%s\" (revision %d), variant \"%s\": %d change%s%s.", plan.id, plan.revision, plan.variant, plan.changes,
         plan.changes == 1 and "" or "s", plan.reload and ", finished by a reload you make" or "")
+    ShowGeometry(plan.geometry, true)
     if plan.mode == "again" then Line("Installed before: Restore still goes back to how things were before the first install.") end
     for _, b in ipairs(plan.blocked) do
         if not b.adapter then Line("Can't install: %s", Explain(b.code)) end
     end
-    for _, id in ipairs(plan.order) do ShowPart(id, plan.parts[id]) end
+    for _, id in ipairs(plan.order) do ShowPart(id, plan.parts[id], all, pkgName) end
     if plan.ok and confirmHint then
-        Line("Type /tui layout apply confirm to make exactly these changes. /tui layout restore takes them back.")
+        Line("Type /tui layout apply confirm to make exactly these changes, for this screen. /tui layout restore takes them back.")
     elseif not plan.ok then
         Line("Nothing can be installed until that is sorted out.")
     end
@@ -201,19 +263,23 @@ end
 
 local function Help()
     Say("the developer test of layout installs (not the wizard). Commands:")
-    Line("/tui layout validate | plan | apply [confirm] | verify | restore [confirm] | status | detach confirm")
+    Line("/tui layout validate | plan | apply [confirm] | geometry | verify | restore [confirm] | status | detach confirm")
+    Line("After validate, plan, apply or geometry: test or classic (the package), standard or larger (the density); geometry also takes WxH.")
 end
 
-local function Apply(confirm)
-    local pkg, variant = LY.TEST_PACKAGE, LY.TEST_VARIANT
-    if not confirm then
-        local plan = LY.Plan(pkg, variant)
-        ShowPlan(plan, true)
-        shown.apply = plan.ok and plan.key or nil
-        return
-    end
+local function Show(o)
+    local pkg, variant = PACKAGES[o.pkg]()
+    local opts = { density = o.density }
+    local plan = LY.Plan(pkg, variant, opts)
+    ShowPlan(plan, true, o.all, o.pkg)
+    shown.apply = plan.ok and { key = plan.key, pkg = o.pkg, opts = opts } or nil
+end
+
+local function Apply(o)
+    if not o.confirm then Show(o) return end
     if not shown.apply then Say("look at what it would do first: /tui layout plan, then /tui layout apply confirm.") return end
-    local ok, result, plan = LY.Apply(pkg, variant, shown.apply)
+    local pkg, variant = PACKAGES[shown.apply.pkg]()
+    local ok, result, plan = LY.Apply(pkg, variant, shown.apply.key, shown.apply.opts)
     shown.apply = nil
     if not ok then
         Say("nothing was changed: %s", Explain(result))
@@ -308,26 +374,55 @@ local function Verify()
     ShowDiffs(ReportDiffs(report))
 end
 
+-- The words after the command: a package name, a density, confirm, all, and W×H. Unknown words are refused.
+local function Options(rest)
+    local o = { pkg = "test" }
+    for w in rest:gmatch("%S+") do
+        local sw, sh = w:match("^(%d+)[x×](%d+)$")
+        if PACKAGES[w] then o.pkg = w
+        elseif w == "confirm" then o.confirm = true
+        elseif w == "all" then o.all = true
+        elseif w == "standard" or w == "larger" then o.density = w
+        elseif sw then o.screen = { w = tonumber(sw), h = tonumber(sh) }
+        else return nil, w end
+    end
+    return o
+end
+
+local function Geometry(o)
+    local pkg = PACKAGES[o.pkg]()
+    if not pkg.geometry then Say("the %s package has no screen rules.", o.pkg) return end
+    local screen = o.screen or LY.Geometry.Live()
+    if not screen then Say("%s", Explain("no-screen")) return end
+    local geo, why = LY.Geometry.Resolve(pkg.geometry, screen, { density = o.density })
+    if not geo then Say("the screen rules can't be worked out (%s).", tostring(why)) return end
+    Say("where %s's components go%s:", o.pkg, o.screen and " on that screen" or " on this screen")
+    if screen.physW and not o.screen then
+        Line("Your screen: %d × %d pixels at UI scale %.3f gives %d × %d units.", screen.physW, screen.physH, screen.scale or 0,
+            math.floor(screen.w + 0.5), math.floor(screen.h + 0.5))
+    end
+    ShowGeometry(geo, true)
+end
+
 function LY.Command(arg)
     local word, rest = (arg or ""):match("^%s*(%S*)%s*(.-)%s*$")
     word, rest = (word or ""):lower(), (rest or ""):lower()
-    local confirm = rest == "confirm"
+    local o, bad = Options(rest)
+    if not o then Say("unknown: '%s'.", bad) Help() return end
+    local confirm = o.confirm
     if word == "" then Status() Help() return end
     if word == "help" then Help() return end
     if word == "status" then Status() return end
     if word == "validate" then
-        local ok, problems = LY.Validate(LY.TEST_PACKAGE)
-        if ok then Say("the test package is valid (format %d, variants: %s).", LY.TEST_PACKAGE.format, LY.TEST_VARIANT)
+        local pkg, variant = PACKAGES[o.pkg]()
+        local ok, problems = LY.Validate(pkg)
+        if ok then Say("the %s package is valid (format %d, variant: %s).", o.pkg, pkg.format, variant)
         else ShowProblems(problems) end
         return
     end
-    if word == "plan" or word == "show" then
-        local plan = LY.Plan(LY.TEST_PACKAGE, LY.TEST_VARIANT)
-        ShowPlan(plan, true)
-        shown.apply = plan.ok and plan.key or nil
-        return
-    end
-    if word == "apply" then Apply(confirm) return end
+    if word == "plan" or word == "show" then Show(o) return end
+    if word == "geometry" then Geometry(o) return end
+    if word == "apply" then Apply(o) return end
     if word == "verify" or word == "check" then Verify() return end
     if word == "restore" then Restore(confirm) return end
     if word == "detach" then

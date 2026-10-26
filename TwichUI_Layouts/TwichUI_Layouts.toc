@@ -10,10 +10,11 @@
 ## Category: Interface Enhancements
 
 # docs/layouts/ has the contract. No saved variables of its own: the install record is TwichUIDB.layouts (the core's).
-# Pure parts first (no game calls): the canonical form and fingerprint, the package checks, the composer
+# Pure parts first (no game calls): the canonical form and fingerprint, the package checks, the composer, the screen layer
 Canon.lua
 Package.lua
 Compose.lua
+Geometry.lua
 
 # The two adapters: TwichUI's own settings, and the EllesmereUI suite through its partner-installer functions
 AdapterTwichUI.lua
@@ -23,6 +24,10 @@ AdapterEllesmere.lua
 Journal.lua
 Engine.lua
 
-# The developer test package and /tui layout (last: it tells TwichUI the layout tools are ready)
+# The packages: the developer test package, and Classic Adventure (its captured data, then the package that uses it)
 TestPackage.lua
+ClassicData.lua
+Classic.lua
+
+# /tui layout (last: it tells TwichUI the layout tools are ready)
 Dev.lua

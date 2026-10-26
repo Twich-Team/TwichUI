@@ -110,7 +110,8 @@ local function InstallEUI(env, db, opts)
     local merged = Copy(db.profiles[db.activeProfile] or {})
     merged.addons = merged.addons or {}
     for k, v in pairs(payload.data.addons or {}) do merged.addons[k] = Copy(v) end
-    for _, k in ipairs({ "fonts", "customColors", "unlockLayout" }) do if payload.data[k] then merged[k] = Copy(payload.data[k]) end end
+    -- the root keys the real import takes from a payload (ImportProfile: fonts, colours, dark mode, accent, migration stamps, layout)
+    for _, k in ipairs({ "fonts", "customColors", "darkMode", "euiAccent", "_migrations", "unlockLayout" }) do if payload.data[k] then merged[k] = Copy(payload.data[k]) end end
     db.profiles[o.profileName] = merged
     table.insert(db.profileOrder, o.profileName)
     if type(payload.data.uiScale) == "number" then db.ppUIScale = payload.data.uiScale end
@@ -312,7 +313,8 @@ do
   Check(LY.Validate(LY.TEST_PACKAGE), "the test package is valid")
   Check(Refused("x", "not-table"), "not a table")
   Check(Refused(Pkg(function(p) p.format = nil end), "format"), "no format")
-  Check(Refused(Pkg(function(p) p.format = 2 end), "format-newer"), "a newer format is refused")
+  Check(Refused(Pkg(function(p) p.format = LY.FORMAT + 1 end), "format-newer"), "a newer format is refused")
+  Check(Refused(Pkg(function(p) p.geometry = {} end), "not-yet", "package.geometry"), "geometry needs format 2")
   Check(Refused(Pkg(function(p) p.wizard = true end), "unknown-field", "package.wizard"), "an unknown field")
   Check(Refused(Pkg(function(p) p.canvas = { w = 2560, h = 1440 } end), "not-yet", "package.canvas"), "geometry is refused as not yet supported")
   Check(Refused(Pkg(function(p) p.id = "Not An Id" end), "bad-id"), "a bad id")
@@ -824,6 +826,122 @@ do
   dv.SlashCmdList.TWICHUI("layout restore confirm")
   Check(Heard(dv, "EllesmereUI finishes at a reload"), "restore, waiting for a reload")
   Check(not dv.reloaded, "nothing reloads by itself")
+end
+
+---------------------------------------------------------------------------
+-- 16. Classic Adventure (Phase 3): the captured package through the Phase 2 pipeline, on a screen that isn't the
+--     author's. Plan, apply, the check after the reload and restore, with the screen layer's places in the payload.
+---------------------------------------------------------------------------
+do
+  local SCREEN = { w = 2133.33, h = 1200 }   -- 1920 x 1080 at the author's UI scale: narrower than the 21:9 canvas
+  local cl = Boot("Classic")
+  local LC = Load(cl)
+  local PKG, VAR = LC.CLASSIC_PACKAGE, LC.CLASSIC_VARIANT
+  local before = { tw = Copy(cl.TwichUIDB), eui = Copy(cl.EllesmereUIDB), restore = Copy(cl.TwichUIRestoreDB),
+    share = Copy(cl.TwichUIShareDB), chron = Copy(cl.TwichUIChronicleDB) }
+  local plan = LC.Plan(PKG, VAR, { screen = SCREEN })
+  Check(plan.ok, "Classic Adventure plans (" .. tostring(plan.blocked[1] and plan.blocked[1].code) .. ")")
+  Check(plan.geometry and plan.geometry.fits and plan.density == "standard", "for this screen, and everything fits")
+  local ep, tp = plan.parts.ellesmereui, plan.parts.twichui
+  Check(ep.target == "TwichUI Classic" and tp.target == "Classic Adventure", "the package's own profile names")
+  local d = ep.payload.data
+  local nMod = 0
+  for _ in pairs(d.addons) do nMod = nMod + 1 end
+  Check(nMod == 18 and d.addons.EllesmereUIGroupFinder == nil, "every captured module, and no other")
+  Check(d.fonts and d.darkMode and d.euiAccent and d._migrations and d.unlockLayout, "the look and the layout links travel")
+  Check(d.customColors == nil and d.uiScale == nil and d.cdmSpells == nil and d.addons.EllesmereUICooldownManager.spec == nil, "colours, UI scale, spells and per-spec records don't")
+  local half = SCREEN.w / 2
+  local mm = d.addons.EllesmereUIMinimap.minimap.position
+  Check(math.abs(mm.x - (half - 2.5 - 100)) < 0.02 and math.abs(mm.y - 473.33) < 0.02, "the minimap keeps its distance from the right edge")
+  local chat = d.addons.EllesmereUIChat.chat.chatPosition
+  Check(chat.point == "BOTTOMLEFT" and math.abs(chat.x - 49.08) < 0.02 and math.abs(chat.y - 62.42) < 0.02, "chat stored from the bottom-left corner, as EllesmereUI keeps it")
+  local buffs = d.addons.EllesmereUIUnitFrames.playerAuraBars.buffsPos
+  local capBuffs = LC.CLASSIC_CAPTURE.ellesmereui.modules.EllesmereUIUnitFrames.playerAuraBars.buffsPos
+  Check(math.abs(buffs.x - (capBuffs.x - (2866.67 - SCREEN.w) / 2)) < 0.02, "the buffs move with the minimap")
+  local player = d.addons.EllesmereUIUnitFrames.positions.player
+  Check(math.abs(player.x + 329.17) < 0.02 and math.abs(player.y + 241.67) < 0.02, "the central block doesn't move at the same height")
+  -- the rows the review shows
+  local placedRows, objectives = 0, plan.geometry.components.objectives
+  for _, row in ipairs(ep.rows) do if row.place then placedRows = placedRows + 1 end end
+  Check(placedRows == 37 and objectives.applied == "edit-mode", "37 placed rows; objectives worked out but not applied")
+
+  -- apply, for this screen only
+  Check(select(2, LC.Apply(PKG, VAR, plan.key, { screen = { w = 2560, h = 1440 } })) == "stale", "a plan for another screen is stale")
+  Check(select(2, LC.Apply(PKG, VAR, plan.key, { screen = SCREEN, density = "larger" })) == "stale", "and so is one for another density")
+  local ok, res = LC.Apply(PKG, VAR, plan.key, { screen = SCREEN })
+  Check(ok and res.state == "applied", "applied, waiting for the reload (" .. tostring(res and res.state) .. ")")
+  local PF = cl.TwichUI.Profiles
+  Check(cl.EllesmereUIDB.activeProfile == "TwichUI Classic" and PF.Current() == "Classic Adventure", "both install profiles in use")
+  Check(cl.EllesmereUIDB.ppUIScale == 0.8 and Same(cl.EllesmereUIDB.profiles.Mine, before.eui.profiles.Mine), "the UI scale and your EllesmereUI profiles untouched")
+  local ui = cl.TwichUIDB.ui
+  Check(ui.markerBarPosition and ui.markerBarPosition.x == -2 and ui.markerBarPosition.y == -92, "TwichUI's marker bar where the author put it (the block didn't move)")
+  Check(ui.trainingPosition and ui.trainingPosition.x == 0 and ui.trainingPosition.y == -260, "the training card placed from the cards' component")
+  Check(type(ui.healerWatch) == "table" and ui.healerWatch.point == "LEFT" and ui.healerWatch.x == 406, "Healer Watch keeps its point and its distance from the left edge")
+  local g = LC.CLASSIC_CAPTURE.twichui.groups
+  local gid = next(g)
+  local slot = next(g[gid])
+  local key, value = next(g[gid][slot])
+  local f = cl.TwichUI.TwichConfig.Group(gid).index[slot][key]
+  Check(LC.Same(cl.TwichUI.TwichConfig.Effective(f), value), "a captured TwichUI look is written (" .. gid .. "." .. key .. ")")
+  Check(Same(cl.TwichUIRestoreDB, before.restore) and Same(cl.TwichUIShareDB, before.share) and Same(cl.TwichUIChronicleDB, before.chron), "backups, shares and the Chronicle unchanged")
+  Check(Same(cl.TwichUIDB.profiles.Default.ui.markerBarPosition, before.tw.ui.markerBarPosition), "your own TwichUI profile is kept as it was")
+  local j = LC.Journal.Read()
+  Check(j and j.expect.ellesmereui["ellesmereui:pos.minimap"] and j.expect.twichui["twichui:place.training-card"] == "@0,-260", "the record expects the placed positions")
+
+  -- the reload: checked, and verified
+  local saved = Logout(cl)
+  local c2 = Boot("Classic", saved)
+  local j2 = c2.TwichUI.Layouts.Journal.Read()
+  Check(j2 and j2.state == "verified", "checked after the reload: verified (" .. tostring(j2 and j2.state) .. ")")
+  -- a place moved after the install is reported, never repaired
+  local L2 = c2.TwichUI.Layouts
+  c2.EllesmereUIDB.profiles["TwichUI Classic"].addons.EllesmereUIMinimap.minimap.position.x = 0
+  local rep = L2.Verify(false)
+  local moved = false
+  for _, dd in ipairs(rep.adapters.ellesmereui.diffs) do if dd.unit == "ellesmereui:pos.minimap" and dd.code == "moved" then moved = true end end
+  Check(rep.state == "mismatch" and moved, "a moved minimap is reported")
+  Check(c2.EllesmereUIDB.profiles["TwichUI Classic"].addons.EllesmereUIMinimap.minimap.position.x == 0, "and left as the player moved it")
+
+  -- restore: back to before, after the reload
+  local rp = L2.PlanRestore()
+  Check(rp.ok, "restore plans")
+  local okR, resR = L2.Restore(rp.key)
+  Check(okR and resR.state == "restoring", "restored as far as it can be before the reload")
+  local c3 = Boot("Classic", Logout(c2))
+  Check(c3.TwichUIDB.layouts == nil, "after the reload the restore checks out and the record is gone")
+  Check(c3.EllesmereUIDB.activeProfile == "Mine" and c3.EllesmereUIDB.profiles["TwichUI Classic"] == nil, "EllesmereUI back on your profile, the install's gone")
+  Check(c3.TwichUI.Profiles.Current() == "Default" and not c3.TwichUI.Profiles.Exists("Classic Adventure"), "TwichUI back on your profile, the install's gone")
+  Check(c3.TwichUIDB.ui.trainingPosition == before.tw.ui.trainingPosition and Same(c3.TwichUIDB.ui.markerBarPosition, before.tw.ui.markerBarPosition), "your places as they were")
+
+  -- other screens: a narrow one rearranges, a small one is planned honestly
+  local cn = Boot("Narrow")
+  local LN = Load(cn)
+  local np = LN.Plan(PKG, VAR, { screen = { w = 1680, h = 1050 }, density = "larger" })
+  Check(np.ok and np.geometry.narrow and np.geometry.fits, "1680 x 1050, larger: narrow arrangement, everything fits")
+  local nd = np.parts.ellesmereui.payload.data
+  Check(nd.addons.EllesmereUIChat.chat.chatFontSize == 17, "larger density: the chat text size goes up")
+  Check(np.parts.ellesmereui.rows and (function()
+    for _, row in ipairs(np.parts.ellesmereui.rows) do if row.text and row.unit:find("chatFontSize") then return true end end end)(), "and the review shows it")
+  local sp = LN.Plan(PKG, VAR, { screen = { w = 1365.33, h = 768 } })
+  Check(sp.ok and not sp.geometry.fits and #sp.geometry.diagnostics > 0, "1365 x 768: the plan says what doesn't fit")
+  Check(LN.Plan(PKG, VAR, { screen = SCREEN, density = "huge" }).problems ~= nil, "an unknown density is refused")
+  -- the developer command: plan, geometry, apply confirm
+  cn.said = {}
+  cn.SlashCmdList.TWICHUI("layout geometry classic 1680x1050")
+  Check(Heard(cn, "Damage meter:") and Heard(cn, "not applied: EllesmereUI leaves it to Blizzard's Edit Mode"), "geometry lists the components and says what isn't applied")
+  cn.said = {}
+  cn.SlashCmdList.TWICHUI("layout geometry classic 1365x768")
+  Check(Heard(cn, "not everything fits") and Heard(cn, "overlaps"), "and what doesn't fit")
+  cn.said = {}
+  cn.SlashCmdList.TWICHUI("layout plan classic")
+  Check(Heard(cn, "Screen: 1024 × 768 units") and Heard(cn, "more places move with the central"), "the plan shows the screen and summarises the places")
+  Check(Heard(cn, "/tui layout plan classic all"), "and how to see every row")
+  cn.SlashCmdList.TWICHUI("layout apply confirm")
+  Check(Heard(cn, "applied; it isn't finished or checked until you reload"), "apply confirm installs the plan last shown")
+  Check(cn.EllesmereUIDB.activeProfile == "TwichUI Classic", "the Classic package, not the test one")
+  cn.said = {}
+  cn.SlashCmdList.TWICHUI("layout plan classic wobble")
+  Check(Heard(cn, "unknown: 'wobble'"), "an unknown word is refused")
 end
 
 if failures > 0 then print(failures .. " FAILED") os.exit(1) end

@@ -56,7 +56,7 @@ local function CleanFingerprints(t)
     local n = 0
     for unit, fp in pairs(t) do
         n = n + 1
-        if n > LY.MAX_UNITS + 2 then return false end
+        if n > LY.MAX_EXPECT then return false end
         if type(unit) ~= "string" or #unit > 128 or type(fp) ~= "string" or #fp > LY.FINGERPRINT_KEEP + 8 then return false end
     end
     return true

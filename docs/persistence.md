@@ -252,7 +252,7 @@ Nothing is pruned by this pass. Findings:
 | Your shareable setup | one | replace | delete in Saved data | none |
 | `setup.pending` | one slot, **no expiry**: a load-on-demand addon that never loads keeps it queued | cleared when done | none | **needs approval:** an expiry (it would change when a queued apply happens) |
 | `setup.eui.imports`/`ids` | one entry per EllesmereUI profile imported or shared | none | none | small; leave |
-| `layouts.install` | one record, bounded by the units a package may name (96 per adapter; fingerprints, not copies) | removed once a restore checks out; replaced by the next install of another package only after a restore | `/tui layout detach confirm` | none needed |
+| `layouts.install` | one record, bounded by the units a package may name (256 per adapter, plus up to 64 placed positions; fingerprints, not copies; 25 KB for Classic Adventure, measured offline) | removed once a restore checks out; replaced by the next install of another package only after a restore | `/tui layout detach confirm` | none needed |
 | `gear.*`, `ui.*`, positions, `trusted`, `recommend` | bounded by the settings that exist, plus one entry per character/class/sender | none | settings and Defaults | none |
 
 The game itself warns (`SAVED_VARIABLES_TOO_LARGE`, a popup from the client) when a saved file is too large; TwichUI
