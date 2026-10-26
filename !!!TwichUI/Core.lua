@@ -138,6 +138,14 @@ function Perf.Call(id, fn, ...)
     if not Perf.on then return fn(...) end
     return Perf.Finish(Perf.Start(id), fn(...))
 end
+-- Perf.Wrap(id, fn) is fn that runs inside a scope while a capture records (for a hook or a frame's OnEvent, where there
+-- is no call site of ours to guard); while off, one test and a tail call.
+function Perf.Wrap(id, fn)
+    return function(...)
+        if not Perf.on then return fn(...) end
+        return Perf.Finish(Perf.Start(id), fn(...))
+    end
+end
 -- spec: { module = "npcs", label = "plain words", kind = "rebuild" | "layout" | "search" | "init" | ..., visible = gaugeId }
 function Perf.Describe(id, spec) Perf.ops[id] = spec end
 -- spec: { label, unit = "count" | "KB" | ..., kind = "pool" | "cache" | "listeners" | "state", read = function() -> number }

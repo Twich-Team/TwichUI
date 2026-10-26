@@ -171,6 +171,11 @@ local ok, err = pcall(Perf.Call, "x.y", function() error(errObj) end)
 assert(not ok and err == errObj, "an error passes through unchanged")
 local pt = Perf.on and Perf.Start("x.y")
 assert(pt == false and starts == 0, "a call site does not call Start while off")
+do
+  local wrapped = Perf.Wrap("x.wrap", function(...) return ... end)
+  local w = { n = select("#", wrapped(1, nil, 3)), wrapped(1, nil, 3) }
+  assert(w.n == 3 and w[1] == 1 and w[2] == nil and w[3] == 3 and starts == 0, "Perf.Wrap while off: every result, no scope")
+end
 Perf.Start = realStart
 
 -- the off cost, offline (Lua 5.1 here, not the game): a guarded call site against a bare one
@@ -454,7 +459,8 @@ assert(Has(summary, "## Findings") and Has(summary, "## What this capture can't 
 local noNotes = DX.Export.Build("summary", first, nil, { notes = false, traces = true, stacks = true }).text
 assert(not Has(noNotes, "What I was doing") and Has(noNotes, "notes left out"), "notes can be left out")
 local prompt = DX.Export.Build("prompt", first, nil, DX.Export.Defaults()).text
-assert(Has(prompt, "untrusted data") and Has(prompt, "measured facts apart from hypotheses") and Has(prompt, "Before recommending a code change"), "the prompt's rules")
+assert(Has(prompt, "untrusted data") and Has(prompt, "Measured facts and hypotheses stay apart") and Has(prompt, "Read the code before recommending a change"), "the prompt's rules")
+assert(Has(prompt, "whether anything here is worth fixing") and Has(prompt, "how to validate it") and Has(prompt, "Constraints on any change"), "the prompt says when to stop, how to validate, and what a fix must keep")
 local cmpText = DX.Export.Build("compare", B, A, DX.Export.Defaults())
 assert(cmpText and Has(cmpText.text, "## Normalised differences"), "a comparison report")
 local pieces = DX.Json.Pieces(built.text, 1000, "test")
@@ -535,6 +541,114 @@ assert(obs, "the report says when observation began")
 local stale = boot("Gamma", { db = { diagnosticsArm = { preset = "startup", at = os.time() - 7200 } } })
 assert(stale.TwichUIDB.diagnosticsArm == nil and stale.TwichUI.Diagnostics == nil, "an old arming is cleared and loads nothing")
 assert(Has(table.concat(stale.printed, "\n"), "was not started"), "and says so")
+
+
+---------------------------------------------------------------------------
+-- 15. The diagnostics' own cost is counted once, a hitch it caused is told from one it only saw, percentiles never
+-- exceed the largest call, a scope's allocation is measured, and Perf.Wrap scopes a hook
+---------------------------------------------------------------------------
+do
+  c.UpdateAddOnMemoryUsage = function() Tick(20) end   -- a 20 ms update, inside the sampler's frame
+  assert(DX.Start("general"))
+  assert(DX.Sessions()[#DX.Sessions()] ~= nil)
+  Frame(16)            -- first frame: the memory and gauge reads happen in it
+  Frame(65)            -- 65 ms, of which 20 ms was our read in the frame before: 45 ms without it
+  for _ = 1, 10 do Frame(16) end
+  local p1 = Perf.Start("t.pct"); Tick(0.385); Perf.Stop(p1)
+  local wrapped = Perf.Wrap("t.wrap", function(...) Tick(1); return ... end)
+  local w = { n = select("#", wrapped("a", nil, "c")), wrapped("a", nil, "c") }
+  assert(w.n == 3 and w[1] == "a" and w[2] == nil and w[3] == "c", "Perf.Wrap while recording: every result")
+  collectgarbage("stop")
+  local outerTok = Perf.Start("t.alloc.outer")
+  local keep = {}
+  for i = 1, 1500 do keep[i] = { i } end
+  local innerTok = Perf.Start("t.alloc.inner")
+  local keep2 = {}
+  for i = 1, 1500 do keep2[i] = { i } end
+  Tick(1); Perf.Stop(innerTok); Perf.Stop(outerTok)
+  collectgarbage("restart")
+  DX.Stop("manual"); FlushTimers()
+  local r15 = DX.Sessions()[#DX.Sessions()]
+  local ov = r15.overhead
+  assert(ov.exclusive == true and ov.memoryMs >= 20 and ov.memoryReads >= 1, "memory updates are timed: " .. tostring(ov.memoryMs))
+  assert(ov.samplerMs < ov.memoryMs and ov.samplerMs < 1, "the sampler's own time does not contain the reads (" .. tostring(ov.samplerMs) .. " vs " .. tostring(ov.memoryMs) .. ")")
+  local dg = DX.Findings.DiagnosticsCost(r15)
+  assert(math.abs(dg.ownMs - (ov.samplerMs + ov.gaugeMs + ov.memoryMs + (ov.estimatedScopeMs or 0))) < 1e-6, "own cost is the four parts, once")
+  local hit
+  for _, sp in ipairs(r15.frames.spikes) do if sp.dt == 65 then hit = sp end end
+  assert(hit and hit.diag >= 20 and hit.diagRead >= 20, "a long frame keeps what the diagnostics did in the frame before it")
+  local ours = Finding(r15.findings, "long-frames-from-diagnostics")
+  assert(ours and ours.severity == "medium" and Has(ours.title, "1 long frame"), "a frame our read lifted over the limit is said to be ours")
+  assert(not Finding(r15.findings, "long-frames-with-twichui"))
+  local pct
+  for _, op in ipairs(r15.ops) do if op.id == "t.pct" then pct = op end end
+  assert(pct and pct.p50 <= pct.max and pct.p95 <= pct.max and pct.p99 <= pct.max, "a percentile is never above the largest call")
+  assert(r15.frames.max == 65 and r15.frames.p99 <= r15.frames.max, "nor a frame percentile")
+  local outer, inner, wr
+  for _, op in ipairs(r15.ops) do if op.id == "t.alloc.outer" then outer = op elseif op.id == "t.alloc.inner" then inner = op elseif op.id == "t.wrap" then wr = op end end
+  assert(wr and wr.calls == 2, "Perf.Wrap records one scope per call (called twice above)")
+  assert(outer.allocKB > 50 and inner.allocKB > 25, "allocation inside a scope: the heap rise")
+  assert(outer.allocSelfKB < outer.allocKB - 20 and math.abs(inner.allocSelfKB - inner.allocKB) < 1e-9, "self allocation takes the instrumented child's off")
+  local text = DX.Export.Build("summary", r15, nil, DX.Export.Defaults()).text
+  for _, h in ipairs({ "## Context", "## Where TwichUI's CPU went", "## Memory", "## Checked and clear", "## Long frames", "## The diagnostics' own cost" }) do
+    assert(Has(text, h), "the summary has " .. h)
+  end
+  local jr = DecodeJson(DX.Export.Build("full", r15, nil, DX.Export.Defaults()).text)
+  assert(jr.analysis and jr.analysis.cpu and jr.analysis.memory and jr.analysis.diagnosticsCost and jr.analysis.checkedAndClear, "the full report carries the analysis")
+  c.UpdateAddOnMemoryUsage = function() end
+end
+
+---------------------------------------------------------------------------
+-- 16. A capture shaped like a real first one: little TwichUI CPU, most of it outside every scope, memory with a collection
+-- in it, the diagnostics larger than TwichUI but small next to a frame
+---------------------------------------------------------------------------
+do
+  local tl = { n = 300, cap = 305 }
+  for _, f in ipairs(DX.Collect.FIELDS) do tl[f] = {} end
+  for i = 1, 300 do
+    tl.t[i] = i - 1; tl.frames[i] = 153; tl.core[i] = (i % 7 == 0) and 4.2 or 0.7; tl.work[i] = 0.04; tl.all[i] = 50
+    tl.mapShown[i] = i > 100 and i <= 160 and 1 or 0; tl.settingsShown[i] = 0; tl.windowShown[i] = 0; tl.combat[i] = 0; tl.group[i] = 1; tl.fps[i] = 140
+  end
+  local mem = {}
+  local series = { 18662, 21000, 24500, 28000, 31500, 35000, 38500, 42000, 45500, 49000, 52500, 56000, 59500, 63000, 66500, 71454, 45485, 46800, 48000, 49000, 45485 }
+  for i, v in ipairs(series) do mem[i] = { t = (i - 1) * 15, core = v, heap = v * 3, diag = 3000 + i, cost = 26 } end
+  local rec16 = Synthetic({ uid = "real", preset = "general", presetName = "General performance", duration = 300, minutes = 5, stopReason = "time-limit",
+    config = { spikeMs = 50, profiler = true, memorySeconds = 15 }, timeline = tl, memory = mem,
+    frames = { count = 45890, ms = 316000, spikes = { { t = 100, dt = 127, core = 0.3, work = 0, diag = 0.1, diagRead = 0 } }, spikeCount = 8, gaps = {}, p50 = 6.9, p95 = 8.2, p99 = 11.6, max = 127 },
+    ops = { { id = "npcs.map.layout", calls = 28, total = 3.4, self = 3.4, mean = 0.122, p95 = 0.3, max = 0.385, allocSelfKB = 0, exemplars = {} },
+            { id = "event:ADDON_LOADED", calls = 90, total = 2.9, self = 2.9, mean = 0.033, p95 = 0.01, max = 2.8, exemplars = {} } },
+    scopeCalls = 235,
+    overhead = { exclusive = true, samplerMs = 785, gaugeMs = 13.6, memoryMs = 559, memoryReads = 21, memoryWorst = 28.4, estimatedScopeMs = 0.643 },
+    profiler = { start = { core = { CountTimeOver1Ms = 100, CountTimeOver5Ms = 10, CountTimeOver10Ms = 5, CountTimeOver50Ms = 0, CountTimeOver100Ms = 0, PeakTime = 12 } },
+      finish = { core = { CountTimeOver1Ms = 130, CountTimeOver5Ms = 10, CountTimeOver10Ms = 5, CountTimeOver50Ms = 0, CountTimeOver100Ms = 0, PeakTime = 12 } } },
+    env = { build = "70575", addons = {}, modulesOn = { "npcMap", "navigation" }, configFingerprint = "a" },
+    gauges = { defs = { { id = "npcs.map.pool", label = "pool", kind = "pool", group = "map" } }, samples = { { t = 1, v = { 0 } }, { t = 299, v = { 7 } } } } })
+  rec16.findings = DX.Findings.Run(rec16)
+  local oh = Finding(rec16.findings, "diagnostics-overhead")
+  assert(oh and oh.severity == "low", "larger than TwichUI but small next to a frame: low, not medium")
+  assert(Has(oh.basis, "380%") and not Has(oh.basis, "540%"), "the four parts counted once: " .. oh.basis)
+  assert(Has(table.concat(oh.evidence, " "), "reported nothing"), "a client figure of 0 for the diagnostics is not shown as measured")
+  local un = Finding(rec16.findings, "unattributed-cpu")
+  assert(un and un.severity == "low" and Has(un.title, "9"), "most CPU outside every scope is a finding of its own (" .. tostring(un and un.title) .. ")")
+  local mf = Finding(rec16.findings, "memory-with-cache") or Finding(rec16.findings, "memory-rose")
+  assert(mf and Has(table.concat(mf.evidence, " "), "the collector ran"), "the memory finding says a collection was seen")
+  assert(mf.title:find("sizes are not measured", 1, true), "a pool of 7 frames is not offered as the explanation")
+  local an = DX.Findings.Analyze(rec16)
+  assert(an.memory.afterFall and an.memory.afterFall.to == 45485 and an.memory.peak.core == 71454, "largest fall found")
+  assert(an.cpu.ticks.CountTimeOver5Ms == 0 and an.cpu.ticks.CountTimeOver1Ms == 30, "the client's tick counts are differences")
+  assert(an.context.mapSeconds == 60 and an.context.fpsMedian == 140, "context from the timeline")
+  local clearText = table.concat(an.clear, " | ")
+  assert(Has(clearText, "no tick over 5 ms") and Has(clearText, "no error reached"), "what was checked and found clear is said")
+  local firstNext = an.next[1]
+  assert(firstNext and firstNext.subsystem == "updaters", "next: the per-frame updaters, when none ran")
+  local text = DX.Export.Summary(rec16, DX.Export.Defaults())
+  assert(Has(text, "outside every scope") and Has(text, "Code with no scope yet") and Has(text, "Suggested next captures") and Has(text, "Checked and clear"), "the summary says what to do next")
+  if os.getenv("PERF_SHOW") then print(DX.Export.Prompt(rec16, DX.Export.Defaults())) end
+  assert(Has(text, "## Where the code is") and Has(text, "npcs/Map.lua"), "operation ids are mapped to their files")
+  assert(not Has(text, "Rich") and #text < 14000, "and stays short enough to paste (" .. #text .. " bytes)")
+  assert(DX.Subsystem("updaters") and DX.Subsystem("hooks"), "focused subsystems for the updaters and the hooks")
+  assert(DX.Op("npcs.minimap.tick").file == "npcs/Minimap.lua" and DX.Op("event:BAG_UPDATE").file == "Core.lua", "operation ids map to files")
+end
 
 assert(#c.HANDLED == 0, "no error reached the game's handler: " .. tostring(c.HANDLED[1]))
 assert(#armed.HANDLED == 0, "none in the start-up capture either: " .. tostring(armed.HANDLED[1]))

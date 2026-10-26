@@ -20,6 +20,7 @@
 -- FoodDrink.CONJURED, which tests/test_refreshments.lua checks them against).
 
 local R = TwichUI
+local Perf = R.Perf
 local SM = R.SpellMenu
 local RF = {}
 R.Refreshments = RF
@@ -669,14 +670,14 @@ function RF.Yield(spell)
 end
 
 local castFrame = CreateFrame("Frame")
-castFrame:SetScript("OnEvent", function(_, _, unit, _, spell)
+castFrame:SetScript("OnEvent", Perf.Wrap("refreshments.cast", function(_, _, unit, _, spell)
     local ok, err = pcall(function()
         if Plain(unit) ~= "player" then return end
         spell = Plain(spell)
         if type(spell) == "number" then OnConjured(spell) end
     end)
     if not ok then R.Fault("refreshments cast watch", err) end
-end)
+end))
 
 local function WatchCasts(on)
     if on then

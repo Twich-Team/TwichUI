@@ -43,6 +43,7 @@
 -- the session.
 
 local R = TwichUI
+local Perf = R.Perf
 local ND, RT, NP = R.NavData, R.NavRoute, R.NavPrefs
 local NV = {}
 R.Nav = NV
@@ -736,22 +737,26 @@ local function StepJob()
     end
 end
 
+local function ReadAndEmit()
+    local _, why = ReadPosition()
+    posWhy = why
+    Emit("position")
+end
+
 local function OnUpdate(_, elapsed)
-    StepJob()
+    if job or legJob then Perf.Call("nav.search", StepJob) end
     acc.pos = acc.pos + elapsed
     if acc.pos >= POS_EVERY then
         acc.pos = 0
-        local _, why = ReadPosition()
-        posWhy = why
-        Emit("position")
+        Perf.Call("nav.position", ReadAndEmit)
     end
     acc.prog = acc.prog + elapsed
     if acc.prog >= PROGRESS_EVERY then
         acc.prog = 0
-        Progress()
+        Perf.Call("nav.progress", Progress)
     end
     for i = 1, #tickers do
-        local ok, err = pcall(tickers[i], elapsed)
+        local ok, err = Perf.Call("nav.ticker", pcall, tickers[i], elapsed)
         if not ok then R.Fault("navigation ticker", err) end
     end
 end

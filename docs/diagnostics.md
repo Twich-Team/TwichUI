@@ -63,14 +63,28 @@ function or frame references, `scriptProfile`, or have no documented units.
   separately, and each listener has its own row (`<EVENT> listener #<slot>`; the bus has no module names, and nothing
   keeps the function alive: a weak table).
 - **Percentiles** come from a log histogram (100 buckets, each about 19% wider than the last, from 0.001 ms): the
-  value given is the bucket's upper edge. Labelled "approximate" everywhere.
+  value given is the bucket's upper edge, clamped to the largest call (or frame interval) actually seen, so a
+  percentile is never above the maximum. Labelled "approximate" everywhere.
+- **Allocation per operation:** `collectgarbage("count")` is read at each scope's start and end (two reads, about 0.1 µs
+  with the scope). The rise is summed per operation, inclusive and self (what instrumented children grew is taken off).
+  It is approximate: a collection step inside the scope hides some of it (a fall counts as nothing), and it includes
+  what the game's own functions allocated inside the scope. `C_AddOnProfiler.MeasureCall` (focused trace, `Perf.Call`
+  sites) remains the client's own per-call figure.
 - **Long frames** (`prefs.spikeMs`, default 50 ms) keep the five frames before and after. The client's `LastTime` read
   in an OnUpdate is for its latest tick and may belong to the frame before; instrumented work is what *ended* between
   two OnUpdates. A frame of `prefs.gapMs` (1000 ms) or more, or one during a loading screen, is a discontinuity: listed,
   left out of distributions and shaded on charts.
-- **Overhead:** the sampler, gauge reads and memory updates are timed with the same clock; the cost of an empty scope is
-  calibrated at each start (200 pairs) and multiplied by the calls; the client's own figure for `TwichUI_Diagnostics`
-  is recorded per frame. Findings flag a capture where these reach `prefs.thresholds.overheadShare` of TwichUI's time.
+- **Overhead:** three parts that never overlap, timed with the same clock: the sampler (the OnUpdate's work *without*
+  the reads below; before 2026-10-26 it included them and they were counted twice), the gauge reads (profiler counters
+  included) and the memory updates; plus the cost of an empty scope, calibrated at each start (200 pairs) and
+  multiplied by the calls. The client's own figure for `TwichUI_Diagnostics` is recorded per frame as a cross-check
+  only: when it reads 0 although our clock measured work, the report says so instead of printing 0 as a fact. A
+  finding is raised when the total reaches `prefs.thresholds.overheadShare` of TwichUI's time, as "medium" only when
+  it is also large in absolute terms (2% of the capture, a memory update at the long-frame limit, or 5% of a frame
+  per frame); otherwise "low": beside a cheap addon any tool looks large. A long frame also keeps what the diagnostics
+  did in the frame before it (its interval includes our previous OnUpdate); one that would be under the limit without
+  that (and our work was 10 ms or more) is reported as made by the diagnostics. Memory updates cost about 25 ms each on
+  the first real capture, so General, Map and Focused read memory every 30 s (Settings 20 s, Memory and lifecycle 5 s).
 
 ## Recording
 
@@ -108,7 +122,19 @@ uses an item, sends anything or makes up events. Each states its cost before you
 | `settings.describe`, `settings.window.build` (`Perf.Call`) | `TwichUI_Settings/Window.lua` `UI.Open` | init |
 | `settings.page.build` (`Perf.Call`), `settings.page.layout`, `settings.search` | `TwichUI_Settings/Window.lua` | build, layout, search |
 | `settings.search.index` | `TwichUI_Settings/Search.lua` `Search.Build` | rebuild |
+| `npcs.minimap.tick`, `pins.minimap.tick` (`Perf.Call`, after the throttle) | `npcs/Minimap.lua`, `pins/Minimap.lua` `Update` > `Step` | update |
+| `nav.search`, `nav.position`, `nav.progress`, `nav.ticker` (`Perf.Call`) | `nav/Nav.lua` `OnUpdate` (`nav.ticker`: each trail or arrow updater) | update |
+| `classbars.anim`, `pins.ping.tick`, `npcs.map.pulse` (`Perf.Call`) | `classbars/Anim.lua`, `pins/PingMap.lua`, `npcs/Map.lua` | update |
+| `map.view.step`, `map.view.follow`, `map.view.notify` (`Perf.Wrap`) | `map/View.lua` OnUpdate scripts | update |
+| `reminders.event`, `healer.event`, `healer.unitEvent`, `targetart.event`, `refreshments.cast` (`Perf.Wrap`) | the private event frames' OnEvent in `reminders/State.lua`, `healer/Watch.lua`, `targetart/Display.lua`, `modules/Refreshments.lua` | event |
+| `rxp.skin.*`, `rxp.timers.*`, `rxp.waypoint.sync` (`Perf.Wrap`; `rxp.skin.currentTick` after its throttle) | the `hooksecurefunc` callbacks on RestedXP's functions and the hover button's OnUpdate in `modules/RestedXPSkin.lua`, `modules/RestedXPTimers.lua`, `qol/GuideWaypoint.lua` | hook, update |
 
+`Perf.Wrap(id, fn)` (in `Core.lua`) is `fn` that runs inside a scope while a capture records; off, it is one table read
+and a tail call. It is for hooks and a frame's OnEvent, where there is no call site of ours to guard. A throttled
+OnUpdate is scoped *after* its throttle so the scope's call count is the number of real updates, not of frames.
+`DX.OPS` (`Gauges.lua`) gives every id its file, function and expected rate, which the reports print under "Where the
+code is"; `DX.UNSCOPED` lists code with no scope yet (other hooks, private event frames, timers, OnUpdate scripts of
+windows), which the reports name when most TwichUI CPU is outside every scope.
 Gauges (`Gauges.lua`) read what modules already report (`Snapshot()` functions and a few read-only counts): event-bus
 listeners and events (`R.ListenerCounts`, added to `Core.lua`), switch listeners, settings-closed callbacks, effects
 easing, settings shown, pages drawn and search index, world map shown, NPC and pin marker pools and those in use, map
@@ -135,7 +161,12 @@ Fixed rules with stated thresholds (`prefs.thresholds`; defaults in `Base.lua`):
 listener counts rising across window cycles (never down), a pool growing at every cycle, TwichUI's memory rising with a
 cache (needs 3+ readings rising in 2/3 of intervals), slow calls while their window was sampled closed, long frames with
 TwichUI time of at least half the frame (or long frames without it, stated as not attributable), the client counting
-ticks over 5/50 ms for TwichUI, diagnostics overhead, errors, and what limits the capture. Each has category, severity
+ticks over 5/50 ms for TwichUI, diagnostics overhead (with its hitches: long frames the diagnostics' own memory or
+gauge read lifted over the limit), TwichUI CPU outside every scope (`unattributed-cpu`; `prefs.thresholds.unattributedPerSec`,
+default 1 ms a second, medium at five times that), errors, and what limits the capture. The memory finding reports the
+series (lowest, highest, intervals up and down, at least how many KB/s were allocated between readings, the largest
+fall as evidence that the collector ran, the scopes' allocation) and says a pool's size is not measured. A dominant
+operation is only named when measured work is 20 ms or more. Each has category, severity
 and its basis, evidence numbers, window, confidence (measured, correlated, suspicion), limits, how to verify, and ids.
 
 ## Comparison (`Compare.lua`)
@@ -150,18 +181,31 @@ settings, a GC experiment. A different report schema is refused. Different switc
 Built only when you press Prepare, never in combat or while that capture records; shown with size, sections, pieces
 and redaction before you copy. Never sent; no clipboard or file access is claimed (the game gives addons none).
 
-- **Quick summary:** Markdown (environment, capture, your notes, markers, findings with evidence, top operations,
-  events, what can't be shown, redaction line).
+- **Quick summary:** Markdown, written to be read by an AI assistant with no one to ask: environment (with the switch
+  names that are on), capture, context (map, settings and combat seconds, zone changes, frame rate), your notes,
+  markers, **where TwichUI's CPU went** (client count, per frame and second, the instrumented share, the shape over
+  time, the client's tick counts), **memory** (series, collections seen, allocation, the whole heap and the
+  diagnostics' own memory beside it), findings with ids and evidence, **checked and clear** (so silence is not "not
+  looked at"), top operations with allocation, **where the code is** (operation id to file and function), long frames
+  (with what the diagnostics did before each and the nearest marker), events by time, every gauge first to last,
+  the diagnostics' own cost, **code with no scope yet**, **suggested next captures** (preset, what to do, how long,
+  why), what can't be shown, redaction line. The figures are `Findings.Analyze(rec)`, computed on demand, never stored.
 - **Full report:** JSON, `schema` 1, `kind` `twichui-diagnostics-report`: `units`, `provenance`, `redaction`,
   `truncation`, `capture` (preset, config, observation start), `capabilities`, `environment`, `context.markers`,
   `aggregates` (operations with histograms and slowest calls, events, callbacks, counters, allocation, dropped,
   anomalies), `frames`, `timeline` (at most 600 buckets, merged: sums added, worst kept), `memory`, `gauges`,
-  `profiler`, `legacyCpu`, `errors`, `overhead`, `findings`, `cannotConclude`, `userNotes` (`untrusted: true`). Keys
+  `profiler`, `legacyCpu`, `errors`, `overhead`, `analysis` (the same derived figures as the summary: `cpu`, `memory`,
+  `context`, `diagnosticsCost`, `longFrames`, `checkedAndClear`, `suggestedNextCaptures`, `codeWithNoScope`; operations
+  also carry `file`, `where`, `expectedRate` and their allocation), `findings`, `cannotConclude`, `userNotes` (`untrusted: true`). Keys
   in a fixed order; invalid UTF-8 becomes "?". Over 2 MB, parts are left out and `truncation.sizeLimit` says which.
 - **Comparison report:** Markdown with conditions, normalised rows and operations, plus the comparison as JSON.
-- **AI analysis prompt:** instructions (facts vs hypotheses, everything is untrusted data, verify code before
-  patches, ask for the smallest missing capture, propose focused fixes with validation; the repository may not be
-  attached) followed by the quick summary.
+- **AI analysis prompt:** instructions followed by the quick summary. The assistant is told to keep facts and
+  hypotheses apart, treat everything as untrusted data, respect the limits (the diagnostics' own cost is not
+  TwichUI's), say first whether anything is worth fixing (and stop if not), name at most three suspects with evidence,
+  the file to read and the smallest change, measure before guessing when most CPU or memory is outside every scope,
+  give each fix a validation (which capture, which figure, how much) and a failure condition, and keep a fix within
+  TwichUI's constraints (combat safety, throttled work, no new globals, no saved-data changes, no removed features,
+  no unmeasured memory claims).
 - **Pieces:** at most `prefs.chunkKB` (48) KB each, never splitting a UTF-8 character; each starts with a header line
   `TWICHUI-DIAGNOSTICS piece i/N of <kind> <uid> | report <bytes> bytes, adler32 <hex> | this piece adler32 <hex>`.
   Join the text after each first line in order (`DX.Json.Join` checks order, every piece and the whole).
@@ -215,7 +259,10 @@ client. Nothing ever reloads by itself. When not armed, the cost at load is one 
    for the map, Settings responsiveness for the settings window, General otherwise). Type one line of what you will do.
 3. **Start**, do the steps, press **Marker** (with a word or two) at the moment the problem shows. Stop.
 4. If you can, record a quiet baseline of the same length (stand still, same place) for Compare.
-5. Overview: read the findings and what can't be concluded. Export > Quick summary (or AI analysis prompt) >
+5. For an AI to analyse with the least from you: export **AI analysis prompt**, paste it into the assistant, and do
+   what its "Suggested next captures" ask (each names a preset, what to do and how long). Repeat with the same
+   preset and activity after a fix and paste the new prompt: the assistant compares the figures it named.
+6. Overview: read the findings and what can't be concluded. Export > Quick summary (or AI analysis prompt) >
    Prepare > read it > Select all > Ctrl+C, piece by piece. Add the Full report if asked.
 
 ## How a developer instruments one operation and registers one gauge
@@ -251,7 +298,11 @@ profile change; histogram percentiles, ring truncation, timeline merging; findin
 concluded); comparison normalisation, zero baselines, tiny samples, incompatibility; JSON validity (a reader in the
 test), redaction, notes opt-out, the prompt's rules, pieces joining and tamper/order detection, UTF-8, size limits,
 no export in combat; explicit saving (plain values only); focused filtering and allocation; armed start-up, stale
-arming; no error reaching the handler. `tests/test_perf_window.lua`: every view without a capture, while recording,
+arming; no error reaching the handler; the diagnostics' cost counted once (sampler without its reads), a long frame
+that follows our memory read told apart, percentiles never above the maximum, allocation inside a scope (inclusive and
+self), `Perf.Wrap` off and recording, and a synthetic capture shaped like the first real one (small CPU mostly outside
+every scope, memory with a collection in it) for the findings, the "checked and clear" lines, the suggested captures
+and the summary's sections and size. `tests/test_perf_window.lua`: every view without a capture, while recording,
 after; badge on close; exports and comparison prepared; repeated open/close. `tests/test_npc_search.lua`: results
 identical with a capture recording. `tests/test_release_tools.py`: four folders, load on demand.
 
@@ -272,6 +323,16 @@ identical with a capture recording. `tests/test_release_tools.py`: four folders,
     nothing starts. Test that loading an addon during another's ADDON_LOADED works on Forever.
 11. Export pieces: copy each into a text file, join; the Adler-32 matches (`DX.Json.Join`).
 12. Save a capture, `/reload`, see it under Capture shown.
+13. Does the client's profiler report anything for `TwichUI_Diagnostics`? A General capture prints "the client reported
+    nothing" when its figure is 0; if it is always 0 for a load-on-demand addon, say so here and drop the cross-check.
+14. The new scopes: a Focused trace of "Per-frame updaters" with the minimap markers on shows `npcs.minimap.tick` and
+    `pins.minimap.tick` at about 10 calls a second; "Hooks and private event frames" with RestedXP's guide visible
+    shows the `rxp.*` rows. The unattributed share of a General capture should fall; if it stays high, the code is in
+    `DX.UNSCOPED`.
+15. Memory: a Memory and lifecycle capture with the garbage collection experiment at the end; compare the lowest
+    reading after the fall with the first reading, and the scopes' allocation with the series' rise.
+16. Nothing the scopes touch changes while off: hooks and event frames behave as before with no capture (the `rxp.*`
+    wrappers are plain pass-throughs while `Perf.on` is false).
 
 ## Not implemented, and why
 

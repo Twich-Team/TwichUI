@@ -32,6 +32,7 @@
 --     change waits for combat to end.
 
 local R = TwichUI
+local Perf = R.Perf
 local Q = R.QoL
 local W = {}
 R.QoLGuideWaypoint = W
@@ -243,9 +244,10 @@ local function Attach()
         if not (Usable(rxp) and ClientReady()) then return end
         hooked = true
         -- hooked once (a hook can't be removed); Sync does nothing while the feature is off
-        hooksecurefunc(rxp, "UpdateMap", W.Sync)
-        hooksecurefunc(rxp, "UpdateGotoSteps", W.Sync)
-        if type(rxp.ResetArrowPosition) == "function" then hooksecurefunc(rxp, "ResetArrowPosition", W.Sync) end
+        local sync = Perf.Wrap("rxp.waypoint.sync", W.Sync)
+        hooksecurefunc(rxp, "UpdateMap", sync)
+        hooksecurefunc(rxp, "UpdateGotoSteps", sync)
+        if type(rxp.ResetArrowPosition) == "function" then hooksecurefunc(rxp, "ResetArrowPosition", sync) end
     end
     W.Sync()
 end

@@ -14,6 +14,9 @@
 -- whether the world map, the settings and this window are shown (sampled then: a change is known to the second).
 -- At intervals (the preset's): per-addon memory (the client's update, timed: it is the costly read), the gauges, the
 -- profiler's cumulative counters (ticks over 1/5/10/50/100 ms), and the legacy CPU totals if the client has them on.
+-- Our own cost is kept in three parts that never overlap: the sampler's (the frame's work without the reads below), the
+-- gauge reads and the memory updates. A long frame also keeps what we cost in the frame before it (the interval it
+-- measures includes our previous OnUpdate), so a hitch we caused can be told from one we only saw.
 -- Gauges are also read when the settings or the world map close: one sample per window cycle.
 -- Context markers: combat, group size, loading screens, entering the world, zone changes, a TwichUI addon loading,
 -- profile changes, your own markers. Errors: TwichUI's own handlers (R.Fault), blocked or forbidden actions
@@ -48,6 +51,7 @@ local ring = { t = {}, dt = {}, core = {}, work = {}, i = 0, n = 0 }
 local pending = {}            -- spikes still waiting for the frames after them
 local bucketEnd, b            -- the open bucket's end (s) and its fields
 local nextMemory, nextGauges = 0, 0
+local readAcc, lastOwn, lastRead = 0, 0, 0   -- ms of reads in this frame; our cost and reads in the previous frame
 local inCombat, loading = false, false
 local visible = { map = false, settings = false, window = false }
 
@@ -57,7 +61,7 @@ local function Now() return (clock() - t0) / 1000 end
 -- The timeline (one bucket per second, as parallel arrays)
 ---------------------------------------------------------------------------
 local FIELDS = { "t", "frames", "dtSum", "dtMax", "long", "core", "coreMax", "diag", "settings", "all", "work", "workMax",
-    "events", "callbacks", "heap", "fps", "combat", "group", "gap", "mapShown", "settingsShown", "windowShown" }
+    "events", "callbacks", "heap", "fps", "combat", "group", "gap", "mapShown", "settingsShown", "windowShown", "own" }
 C.FIELDS = FIELDS
 
 local function NewTimeline(cap)
@@ -68,7 +72,7 @@ end
 
 local function OpenBucket(at)
     b = { t = at, frames = 0, dtSum = 0, dtMax = 0, long = 0, core = 0, coreMax = 0, diag = 0, settings = 0, all = 0,
-        work = 0, workMax = 0, gap = 0 }
+        work = 0, workMax = 0, gap = 0, own = 0 }
     bucketEnd = at + 1
 end
 
@@ -119,6 +123,7 @@ local function ReadMemory()
     local ok = pcall(UpdateAddOnMemoryUsage)
     local cost = clock() - before
     S.overhead.memoryMs = S.overhead.memoryMs + cost
+    readAcc = readAcc + cost
     S.overhead.memoryReads = S.overhead.memoryReads + 1
     if cost > S.overhead.memoryWorst then S.overhead.memoryWorst = cost end
     if not ok then return end
@@ -179,6 +184,7 @@ local function ReadGauges(cycle)
     Ring.Push(S.gauges, sample)
     local cost = clock() - before
     S.overhead.gaugeMs = S.overhead.gaugeMs + cost
+    readAcc = readAcc + cost
     S.overhead.gaugeReads = S.overhead.gaugeReads + 1
 end
 
@@ -203,6 +209,8 @@ end
 local function OnUpdate(_, elapsed)
     local start = clock()
     local now = (start - t0) / 1000
+    local prevOwn, prevRead = lastOwn, lastRead
+    readAcc = 0
     local dt = elapsed * 1000
     local core, diag, set, all = 0, 0, 0, 0
     if prof then
@@ -230,6 +238,7 @@ local function OnUpdate(_, elapsed)
     else
         S.frameCount = S.frameCount + 1
         S.frameMs = S.frameMs + dt
+        if dt > S.frameMaxMs then S.frameMaxMs = dt end
         Hist.Add(S.frameHist, dt)
         local over = S.over
         for i = 1, #C.OVER do if dt >= C.OVER[i] then over[i] = over[i] + 1 end end
@@ -261,7 +270,7 @@ local function OnUpdate(_, elapsed)
             end
         end
         local sp = { t = now, dt = dt, core = prof and core or nil, all = prof and all or nil, work = work, top = top, topMs = topMs,
-            combat = inCombat, before = before, after = {} }
+            combat = inCombat, before = before, after = {}, diag = prevOwn, diagRead = prevRead }
         KeepSpike(sp)
         pending[#pending + 1] = sp
     end
@@ -275,7 +284,10 @@ local function OnUpdate(_, elapsed)
     end
     if S.stopAt and now >= S.stopAt then DX.Stop("time-limit") return end
     if S.full then DX.Stop("storage-limit") return end
-    S.overhead.samplerMs = S.overhead.samplerMs + (clock() - start)
+    local own = clock() - start
+    lastOwn, lastRead = own, readAcc
+    S.overhead.samplerMs = S.overhead.samplerMs + (own - readAcc)
+    b.own = b.own + own
 end
 
 ---------------------------------------------------------------------------
@@ -384,6 +396,7 @@ function C.Begin(session, startAt)
     for k = #pending, 1, -1 do pending[k] = nil end
     OpenBucket(0)
     nextMemory, nextGauges = 0, 0
+    readAcc, lastOwn, lastRead = 0, 0, 0
     S.profilerStart = ProfilerCounts()
     S.legacyStart = LegacyCpu()
     frame = frame or CreateFrame("Frame")

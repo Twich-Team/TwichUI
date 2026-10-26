@@ -103,11 +103,11 @@ local function NewSession(preset, opts)
         filter = sub and sub.filter or preset.filter, stacks = preset.stacks and true or false,
         allocation = (preset.mode == "focused" and opts.allocation) and true or false, mapIds = opts.mapIds and true or false,
         useProfiler = true,
-        frameHist = Hist.New(), frameCount = 0, frameMs = 0, over = {},
+        frameHist = Hist.New(), frameCount = 0, frameMs = 0, frameMaxMs = 0, over = {},
         spikes = {}, spikeCount = 0, gaps = {}, gapsDropped = 0,
         memory = Ring.New(400), gauges = Ring.New(600), cycles = {}, markers = Ring.New(C.MAX_MARKERS),
         errors = {}, errorCount = 0, errorsDropped = 0, warnings = 0, otherBlocked = 0,
-        overhead = { samplerMs = 0, gaugeMs = 0, gaugeReads = 0, memoryMs = 0, memoryReads = 0, memoryWorst = 0 },
+        overhead = { exclusive = true, samplerMs = 0, gaugeMs = 0, gaugeReads = 0, memoryMs = 0, memoryReads = 0, memoryWorst = 0 },
         maxGroup = 0, lastGroup = nil,
     }
     for i = 1, #C.OVER do s.over[i] = 0 end
@@ -180,8 +180,12 @@ Finish = function()
     local s = live
     local res = I.Results()
     local fh = s.frameHist
-    local maxFrame
-    for i = DX.Hist.N, 1, -1 do if fh[i] then maxFrame = DX.Hist.Upper(i) break end end
+    local maxFrame = s.frameCount > 0 and s.frameMaxMs or nil   -- the true largest interval, not a bucket's edge
+    local function FramePct(p)   -- a bucket's upper edge, never above the largest interval seen
+        local v = Hist.Percentile(fh, p)
+        if v and maxFrame and v > maxFrame then v = maxFrame end
+        return v
+    end
     table.sort(s.spikes, function(a, b) return a.t < b.t end)
     local gaugeDefs = {}
     for i, g in ipairs(s.gaugeDefs) do gaugeDefs[i] = { id = g.id, label = g.label, kind = g.kind, unit = g.unit or "count", group = g.group } end
@@ -197,7 +201,7 @@ Finish = function()
             profiler = s.useProfiler and not s.profilerRefused, legacyCpu = s.legacyOn },
         timeline = s.timeline, markers = Ring.List(s.markers), markersDropped = s.markers.dropped,
         frames = { count = s.frameCount, ms = s.frameMs, hist = Hist.Export(fh), over = Copy(s.over), thresholds = Copy(C.OVER),
-            p50 = Hist.Percentile(fh, 0.5), p95 = Hist.Percentile(fh, 0.95), p99 = Hist.Percentile(fh, 0.99), max = maxFrame,
+            p50 = FramePct(0.5), p95 = FramePct(0.95), p99 = FramePct(0.99), max = maxFrame,
             spikes = s.spikes, spikeCount = s.spikeCount, gaps = s.gaps, gapsDropped = s.gapsDropped },
         ops = res.ops, events = res.events, callbacks = res.callbacks, counters = res.counters, measured = res.measured,
         dropped = res.dropped, anomalies = res.anomalies,

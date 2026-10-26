@@ -28,6 +28,7 @@
 -- GET_ITEM_INFO_RECEIVED and ITEM_DATA_LOAD_RESULT (itemID, success).
 
 local R = TwichUI
+local Perf = R.Perf
 local C = R.ReminderConditions
 local ST = {}
 R.ReminderState = ST
@@ -389,7 +390,7 @@ function SyncEvents()
     if not evf then
         if next(events) == nil then return end
         evf = CreateFrame("Frame")
-        evf:SetScript("OnEvent", OnEvent)
+        evf:SetScript("OnEvent", Perf.Wrap("reminders.event", OnEvent))
     end
     for event in pairs(registered) do
         if not events[event] then

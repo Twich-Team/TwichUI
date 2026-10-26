@@ -17,8 +17,12 @@
 --   * Event callbacks (Core.lua's bus) are scopes too, under "event:<EVENT>", so an event's callback time and the
 --     operations inside it are accounted the same way. Received(event) counts the event once, however many callbacks
 --     it reaches; each callback is counted separately, by listener.
--- Per operation: calls, inclusive total, self total, min, max, a log histogram (approximate percentiles), the busiest
--- 10-second window, its callers (up to 6), and the slowest few calls (exemplars) with their time and context. In a
+-- Per operation: calls, inclusive total, self total, min, max, a log histogram (approximate percentiles, never above the
+-- true maximum), the busiest 10-second window, its callers (up to 6), and the slowest few calls (exemplars) with their
+-- time and context. Allocation: the Lua heap (collectgarbage("count")) read at each scope's start and end; the rise
+-- is summed per operation, inclusive and self (what its instrumented children grew is taken off). It is approximate:
+-- a collection step inside the scope hides some of it (a fall is counted as nothing), and it includes what the game's
+-- own functions allocated inside the scope. A scope with no rise adds nothing. In a
 -- focused trace a new slowest call also takes a call path (debugstack), at most one a second, TwichUI's files only.
 -- Hot path: no table is made for a call (only for a new operation, a new callback or a new exemplar), no string is
 -- formatted, nothing is sorted. Everything is bounded (MAX_* below) and what didn't fit is counted.
@@ -38,6 +42,7 @@ I.STACK_EVERY = 1        -- seconds between call paths in a focused trace
 
 local clock = DX.Clock
 local GetTime = GetTime
+local heapCount = collectgarbage
 local active = false
 local cfg                -- the capture's: { t0 (ms), stacks, filter = { prefixes } or nil, allocation }
 local ops, opCount = {}, 0
@@ -52,6 +57,7 @@ local lastStackAt = -math.huge
 -- the stack, as parallel arrays (nothing is made per call)
 local depth, serial = 0, 0
 local sOp, sStart, sChild, sFrame, sSerial, sDetail, sCb = {}, {}, {}, {}, {}, {}, {}
+local sHeap, sChildHeap = {}, {}
 
 -- per frame and per bucket: TwichUI's instrumented work that ended since the last read (outermost scopes only)
 local frameWork, frameTop, frameTopMs, bucketEvents, bucketCallbacks = 0, nil, 0, 0, 0
@@ -71,7 +77,7 @@ local function NewOp(id)
     if opCount >= I.MAX_OPS then dropped.ops = dropped.ops + 1 return nil end
     opCount = opCount + 1
     local op = { id = id, calls = 0, total = 0, self = 0, max = 0, min = math.huge, hist = Hist.New(), aborted = 0,
-        reentered = 0, active = 0, ex = {}, parents = {}, parentN = 0, first = nil, last = nil,
+        reentered = 0, active = 0, ex = {}, parents = {}, parentN = 0, first = nil, last = nil, alloc = 0, allocSelf = 0, allocMax = 0,
         winStart = 0, winCount = 0, peakWin = 0, allowed = Allowed(id) }
     ops[id] = op
     return op
@@ -126,10 +132,12 @@ local function Exemplar(op, ms, at, detail, parent)
     ex[i + 1] = e
 end
 
-local function Record(op, ms, self, detail, parentOp)
+local function Record(op, ms, self, detail, parentOp, alloc, allocSelf)
     op.calls = op.calls + 1
-    if op.active == 0 then op.total = op.total + ms else op.reentered = op.reentered + 1 end
+    if op.active == 0 then op.total = op.total + ms; op.alloc = op.alloc + alloc else op.reentered = op.reentered + 1 end
     op.self = op.self + self
+    op.allocSelf = op.allocSelf + allocSelf
+    if alloc > op.allocMax then op.allocMax = alloc end
     if ms > op.max then op.max = ms end
     if ms < op.min then op.min = ms end
     Hist.Add(op.hist, ms)
@@ -162,7 +170,9 @@ local function Push(op, detail, cb)
     depth = depth + 1
     serial = serial + 1
     sOp[depth], sChild[depth], sFrame[depth], sSerial[depth], sDetail[depth], sCb[depth] = op, 0, ft, serial, detail, cb
+    sChildHeap[depth] = 0
     op.active = op.active + 1
+    sHeap[depth] = heapCount and heapCount("count") or 0
     sStart[depth] = clock()   -- last, so the bookkeeping above is not in the measurement
     return serial
 end
@@ -202,6 +212,7 @@ end
 
 function I.Stop(token)
     local now = clock()
+    local heap = heapCount and heapCount("count") or 0
     if not active or not token then return end
     local d = depth
     while d > 0 and sSerial[d] ~= token do d = d - 1 end
@@ -218,15 +229,20 @@ function I.Stop(token)
     end
     local self = elapsed - sChild[d]
     if self < 0 then self = 0 end
+    local alloc = heap - sHeap[d]
+    if alloc < 0 then alloc = 0 end
+    local allocSelf = alloc - sChildHeap[d]
+    if allocSelf < 0 then allocSelf = 0 end
     local parent = nil
     if depth > 0 then
         sChild[depth] = sChild[depth] + elapsed
+        sChildHeap[depth] = sChildHeap[depth] + alloc
         parent = sOp[depth]
     else
         frameWork = frameWork + elapsed
         if elapsed > frameTopMs then frameTop, frameTopMs = op.id, elapsed end
     end
-    Record(op, elapsed, self, sDetail[d], parent)
+    Record(op, elapsed, self, sDetail[d], parent, alloc, allocSelf)
     sDetail[d] = nil
     if cb then
         cb.calls = cb.calls + 1
@@ -375,10 +391,17 @@ local function OpRow(op)
     table.sort(parents, function(a, b) if a.calls ~= b.calls then return a.calls > b.calls end return a.id < b.id end)
     local ex = {}
     for i, e in ipairs(op.ex) do ex[i] = { ms = e.ms, at = e.at, detail = e.detail, parent = e.parent, combat = e.combat, stack = e.stack } end
+    -- a percentile is a bucket's upper edge: never reported above the largest call actually seen
+    local function Pct(p)
+        local v = Hist.Percentile(op.hist, p)
+        if v and op.calls > 0 and v > op.max then v = op.max end
+        return v
+    end
     return {
         id = op.id, calls = op.calls, total = op.total, self = op.self, max = op.calls > 0 and op.max or nil,
         min = op.calls > 0 and op.min or nil, mean = op.calls > 0 and op.total / op.calls or nil,
-        p50 = Hist.Percentile(op.hist, 0.5), p95 = Hist.Percentile(op.hist, 0.95), p99 = Hist.Percentile(op.hist, 0.99),
+        allocKB = op.alloc, allocSelfKB = op.allocSelf, allocMaxKB = op.allocMax,
+        p50 = Pct(0.5), p95 = Pct(0.95), p99 = Pct(0.99),
         hist = Hist.Export(op.hist), aborted = op.aborted, reentered = op.reentered, first = op.first, last = op.last,
         peak10s = op.peakWin, parents = parents, exemplars = ex,
     }
@@ -413,7 +436,7 @@ end
 function I.Live()
     local list = {}
     for _, op in pairs(ops) do
-        if op.calls > 0 then list[#list + 1] = { id = op.id, calls = op.calls, total = op.total, self = op.self, max = op.max } end
+        if op.calls > 0 then list[#list + 1] = { id = op.id, calls = op.calls, total = op.total, self = op.self, max = op.max, allocKB = op.alloc } end
     end
     return list, eventCount, callbackCount
 end

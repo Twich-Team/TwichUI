@@ -197,7 +197,7 @@ local function PulseTick(_, elapsed)
     pulse.t = pulse.t + elapsed
     if pulse.t >= PULSE_LIFE then StopPulse() return end
     if pulse.t > PULSE_LIFE - PULSE_FADE then pulse.frame:SetAlpha((PULSE_LIFE - pulse.t) / PULSE_FADE) end
-    R.MapPulse.Step(pulse.rings, pulse.t, PULSE_LIFE - PULSE_FADE, pulse.reduced, true)
+    Perf.Call("npcs.map.pulse", R.MapPulse.Step, pulse.rings, pulse.t, PULSE_LIFE - PULSE_FADE, pulse.reduced, true)
 end
 
 -- Puts the ring over the picked-out marker (again, after a layout or a zoom). Returns whether it could.

@@ -20,6 +20,7 @@
 -- Nothing here is saved.
 
 local R = TwichUI
+local Perf = R.Perf
 local PN = R.Pins
 local PL = R.PinsLook
 local PG = PL.Ping
@@ -148,7 +149,7 @@ local function Tick(_, elapsed)
     for i = 1, #active do
         local e = active[i]
         if e.running then
-            local ok, finished = pcall(Step, e, elapsed)
+            local ok, finished = Perf.Call("pins.ping.tick", pcall, Step, e, elapsed)
             if not ok then
                 Retire(e)
                 if R.Fault then R.Fault("map ping", finished) end

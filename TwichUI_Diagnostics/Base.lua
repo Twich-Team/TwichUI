@@ -36,6 +36,7 @@ DX.DEFAULTS = {
         listenerGrowth = 3,      -- listeners added across repeated window cycles
         memoryGrowthKB = 512,    -- TwichUI's sampled memory rising at least this much
         overheadShare = 0.25,    -- the diagnostics' own measured time against TwichUI's
+        unattributedPerSec = 1,  -- ms of TwichUI CPU per second outside every instrumented operation worth a finding
         minSeconds = 60,         -- shorter captures are flagged as short
     },
 }

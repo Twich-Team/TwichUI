@@ -12,6 +12,7 @@
 --     minimap's map is made again only when that map, the list or a choice changes.
 
 local R = TwichUI
+local Perf = R.Perf
 local NK, NS, NP, NMAP = R.NpcKinds, R.NpcStore, R.NpcPrefs, R.NpcMap
 local MM = {}
 R.NpcMinimap = MM
@@ -248,7 +249,7 @@ function Update(_, seconds)
         stats.last = "minimap-hidden"
         return
     end
-    local ok, err = pcall(Step)
+    local ok, err = Perf.Call("npcs.minimap.tick", pcall, Step)
     if not ok then
         stats.errors = stats.errors + 1
         stats.last = "error"

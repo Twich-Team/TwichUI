@@ -56,6 +56,7 @@
 -- Frames and fonts are never saved.
 
 local R = TwichUI
+local Perf = R.Perf
 local Skin = {}
 R.RestedXPSkin = Skin
 
@@ -1614,11 +1615,13 @@ function Current.Tick(button, elapsed)
     button.twichWait = (button.twichWait or 0) + (elapsed or 0)
     if button.twichWait < Current.TICK then return end
     button.twichWait = 0
+    local pt = Perf.on and Perf.Start("rxp.skin.currentTick")
     local panel = button:GetParent()
     local wanted = Active() and want.settingsButton
     if not wanted or not (button:IsMouseOver() or (panel and panel:IsMouseOver()) or Current.MenuOpen()) then
         button:Hide()
     end
+    if pt then Perf.Stop(pt) end
 end
 
 -- Any frame of the panel under the pointer asks for the button. The pointer must really be in the panel
@@ -1928,8 +1931,8 @@ local OnTrayVisuals   -- set below: the hook for a tray's own UpdateVisuals
 local function HookTray(tray)
     if tray and type(tray.UpdateVisuals) == "function" and not hookedFrames[tray] then
         hookedFrames[tray] = true
-        hooksecurefunc(tray, "UpdateVisuals", OnTrayVisuals)
-        if type(tray.SetScale) == "function" then hooksecurefunc(tray, "SetScale", OnScale) end
+        hooksecurefunc(tray, "UpdateVisuals", Perf.Wrap("rxp.skin.tray", OnTrayVisuals))
+        if type(tray.SetScale) == "function" then hooksecurefunc(tray, "SetScale", Perf.Wrap("rxp.skin.scale", OnScale)) end
     end
 end
 
@@ -2403,28 +2406,28 @@ local function InstallHooks()
     if not Usable(RXP) then return false end
     if not hooks.render then
         hooks.render = true
-        hooksecurefunc(RXP, "RenderFrame", OnRender)
+        hooksecurefunc(RXP, "RenderFrame", Perf.Wrap("rxp.skin.render", OnRender))
     end
     local window = _G.RXPFrame
     if not hooks.scale and type(window.SetScale) == "function" then
         hooks.scale = true
-        hooksecurefunc(window, "SetScale", OnScale)
+        hooksecurefunc(window, "SetScale", Perf.Wrap("rxp.skin.scale", OnScale))
     end
     local csf = window.CurrentStepFrame
     if not hooks.stepText and type(csf) == "table" and type(csf.UpdateText) == "function" then
         hooks.stepText = true
-        hooksecurefunc(csf, "UpdateText", OnStepText)
+        hooksecurefunc(csf, "UpdateText", Perf.Wrap("rxp.skin.stepText", OnStepText))
     end
     local arrow = Arrow.Frame()
     if not hooks.arrow and arrow and type(arrow.UpdateVisuals) == "function" then
         hooks.arrow = true
-        hooksecurefunc(arrow, "UpdateVisuals", Arrow.OnVisuals)
-        hooksecurefunc(arrow, "SetSize", Arrow.OnSize)
-        hooksecurefunc(arrow.text, "SetFont", Arrow.OnFont)
+        hooksecurefunc(arrow, "UpdateVisuals", Perf.Wrap("rxp.skin.arrow", Arrow.OnVisuals))
+        hooksecurefunc(arrow, "SetSize", Perf.Wrap("rxp.skin.arrow", Arrow.OnSize))
+        hooksecurefunc(arrow.text, "SetFont", Perf.Wrap("rxp.skin.arrow", Arrow.OnFont))
     end
     if not hooks.fontSize and type(RXP.UpdateGuideFontSize) == "function" then
         hooks.fontSize = true
-        hooksecurefunc(RXP, "UpdateGuideFontSize", OnFontSize)
+        hooksecurefunc(RXP, "UpdateGuideFontSize", Perf.Wrap("rxp.skin.fontSize", OnFontSize))
     end
     Notify("install")
     return true

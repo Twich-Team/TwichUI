@@ -23,6 +23,7 @@
 -- While OpenMap is loaded this stays off (MV.Blocker); nothing of OpenMap's is called or changed.
 
 local R = TwichUI
+local Perf = R.Perf
 local VM, MXP, MW = R.MapViewMath, R.MapExplorePrefs, R.MapWorld
 local MV = {}
 R.MapView = MV
@@ -271,7 +272,7 @@ local function Start(a)
     a.t = 0
     anim = a
     driver = driver or CreateFrame("Frame")
-    driver:SetScript("OnUpdate", Step)
+    driver:SetScript("OnUpdate", Perf.Wrap("map.view.step", Step))
 end
 
 function MV.Animating() return anim ~= nil end
@@ -475,7 +476,7 @@ Follow = function()
     if not follower then
         follower = CreateFrame("Frame")
         follower:Hide()
-        follower:SetScript("OnUpdate", FollowStep)
+        follower:SetScript("OnUpdate", Perf.Wrap("map.view.follow", FollowStep))
     end
     stillFor = 0
     follower:Show()
@@ -564,7 +565,7 @@ local function Dirty()
     if not notifier then
         notifier = CreateFrame("Frame")
         notifier:Hide()
-        notifier:SetScript("OnUpdate", Notified)
+        notifier:SetScript("OnUpdate", Perf.Wrap("map.view.notify", Notified))
     end
     notifier:Show()
 end

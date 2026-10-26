@@ -19,6 +19,7 @@
 -- Pins you removed from your map are not shown here either.
 
 local R = TwichUI
+local Perf = R.Perf
 local PN = R.Pins
 local PL = R.PinsLook
 local PM = R.PinsMap
@@ -399,7 +400,7 @@ function Update(_, seconds)
         stats.last = "minimap-hidden"
         return
     end
-    local ok, err = pcall(Step)
+    local ok, err = Perf.Call("pins.minimap.tick", pcall, Step)
     if not ok then
         stats.errors = stats.errors + 1
         stats.last = "error"

@@ -168,7 +168,7 @@ local function SyncEvents()
     if not evf then
         if next(want) == nil then return end
         evf = CreateFrame("Frame")
-        evf:SetScript("OnEvent", function(_, ...) OnEvent(...) end)
+        evf:SetScript("OnEvent", Perf.Wrap("healer.event", function(_, ...) OnEvent(...) end))
     end
     for e in pairs(registered) do
         if not want[e] then evf:UnregisterEvent(e); registered[e] = nil end
@@ -181,7 +181,7 @@ local function SyncEvents()
     local unit = Watching() and sel.unit or nil
     if unit and not unitf then
         unitf = CreateFrame("Frame")
-        unitf:SetScript("OnEvent", function(_, ...) OnUnitEvent(...) end)
+        unitf:SetScript("OnEvent", Perf.Wrap("healer.unitEvent", function(_, ...) OnUnitEvent(...) end))
     end
     if unitf then
         for _, e in ipairs(UNIT_EVENTS) do

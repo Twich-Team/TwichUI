@@ -19,7 +19,7 @@ end
 ---------------------------------------------------------------------------
 local Plan
 do
-  local env = setmetatable({ TwichUI = { PATH = "", On = function() end, Off = function() end, OnInit = function() end, Profiles = { OnApply = function() end }, OnSettingsClosed = function() end, SettingsAnchor = function() end,
+  local env = setmetatable({ TwichUI = { PATH = "", Perf = { on = false, Wrap = function(_, fn) return fn end }, On = function() end, Off = function() end, OnInit = function() end, Profiles = { OnApply = function() end }, OnSettingsClosed = function() end, SettingsAnchor = function() end,
     Enabled = function() return false end, Life = { Note = function() end } } }, { __index = _G })
   env.CreateFrame = function() return setmetatable({}, { __index = function() return function() end end }) end
   Load(env, { "modules/TrainingData.lua", "modules/Borders.lua", "modules/MenuStyle.lua", "modules/SpellMenu.lua", "modules/MageConjure.lua",

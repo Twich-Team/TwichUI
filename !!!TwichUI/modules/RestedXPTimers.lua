@@ -35,6 +35,7 @@
 -- changed are saved). Frames, fonts and media files are never saved.
 
 local R = TwichUI
+local Perf = R.Perf
 local Skin = R.RestedXPSkin
 if not Skin then return end
 
@@ -607,11 +608,11 @@ function extension.install()
     if not c then return end
     if not hooks.start then
         hooks.start = true
-        hooksecurefunc(rxp, "StartTimer", OnStart)
+        hooksecurefunc(rxp, "StartTimer", Perf.Wrap("rxp.timers.start", OnStart))
     end
     if not hooks.show and type(rxp.ShowTimers) == "function" then
         hooks.show = true
-        hooksecurefunc(rxp, "ShowTimers", OnShow)
+        hooksecurefunc(rxp, "ShowTimers", Perf.Wrap("rxp.timers.show", OnShow))
     end
     if not installed then
         installed = true

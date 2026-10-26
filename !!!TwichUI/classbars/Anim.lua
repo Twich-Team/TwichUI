@@ -13,6 +13,7 @@
 --   A.Count()       how many are running; 0 means the OnUpdate script is not set (A.Running())
 
 local R = TwichUI
+local Perf = R.Perf
 local A = {}
 R.ClassBarAnim = A
 
@@ -46,7 +47,7 @@ local function OnUpdate(_, elapsed)
     for i = 1, count do
         local obj = active[i]
         if obj and obj.animating then
-            local ok, finished = pcall(obj.Step, obj, elapsed)
+            local ok, finished = Perf.Call("classbars.anim", pcall, obj.Step, obj, elapsed)
             if not ok then
                 obj.animating = false
                 R.Fault("class bar animation", finished)

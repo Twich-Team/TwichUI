@@ -18,21 +18,21 @@ DX.MIN_MEMORY_SECONDS = 5
 
 DX.PRESETS = {
     {
-        key = "general", name = "General performance", mode = "standard", minutes = 5, memorySeconds = 15, gaugeSeconds = 5,
+        key = "general", name = "General performance", mode = "standard", minutes = 5, memorySeconds = 30, gaugeSeconds = 5,
         what = "Play normally. Frame intervals, the time the client puts down to TwichUI each frame, TwichUI's own operations and events, and memory.",
-        cost = "Low: four client reads each frame, a little bookkeeping per TwichUI operation, a memory read every 15 seconds (the costly part).",
+        cost = "Low: four client reads each frame, a little bookkeeping per TwichUI operation, a memory read every 30 seconds (the costly part: about 25 ms each on one client, a small hitch).",
     },
     {
-        key = "map", name = "Map and NPC tracking", mode = "standard", minutes = 3, memorySeconds = 15, gaugeSeconds = 2,
+        key = "map", name = "Map and NPC tracking", mode = "standard", minutes = 3, memorySeconds = 30, gaugeSeconds = 2,
         filter = { "npcs.", "pins.", "map.", "nav.", "event:" }, gauges = { "core", "map" },
         what = "Open the world map, move around it, search vendors and trainers, change what is shown, close it; repeat.",
         cost = "Low: as General, with the map's pools and marker counts read every 2 seconds and each map close.",
     },
     {
-        key = "settings", name = "Settings responsiveness", mode = "standard", minutes = 3, memorySeconds = 10, gaugeSeconds = 2,
+        key = "settings", name = "Settings responsiveness", mode = "standard", minutes = 3, memorySeconds = 20, gaugeSeconds = 2,
         filter = { "settings.", "event:", "core." }, gauges = { "core", "settings" },
         what = "Open the settings, move between pages, search, close them; do it several times.",
-        cost = "Low: listener and page counts read every 2 seconds and each time the settings close; memory every 10 seconds.",
+        cost = "Low: listener and page counts read every 2 seconds and each time the settings close; memory every 20 seconds.",
     },
     {
         key = "group", name = "Group combat", mode = "standard", minutes = 10, memorySeconds = 30, gaugeSeconds = 5,
@@ -46,7 +46,7 @@ DX.PRESETS = {
         cost = "Moderate: the client's memory update every 5 seconds, which can show as a small hitch each time.",
     },
     {
-        key = "focused", name = "Focused trace", mode = "focused", minutes = 2, memorySeconds = 15, gaugeSeconds = 5, stacks = true,
+        key = "focused", name = "Focused trace", mode = "focused", minutes = 2, memorySeconds = 30, gaugeSeconds = 5, stacks = true,
         what = "One subsystem in detail: only its operations are timed, and the slowest calls keep the call path that led to them.",
         cost = "Higher for that subsystem: a call path for a new slowest call, at most one a second. Optionally the client's own allocation measurement around each call.",
     },
@@ -65,6 +65,10 @@ DX.SUBSYSTEMS = {
     { key = "healer", label = "Healer Watch", filter = { "healer." }, gauges = { "core", "group" } },
     { key = "settings", label = "Settings window", filter = { "settings." }, gauges = { "core", "settings" } },
     { key = "events", label = "Event bus and start-up", filter = { "event:", "core." }, gauges = { "core" } },
+    { key = "updaters", label = "Per-frame updaters",
+        filter = { "npcs.minimap.", "pins.minimap.", "nav.", "classbars.", "pins.ping.", "npcs.map.pulse", "map.view." }, gauges = { "core", "map" } },
+    { key = "hooks", label = "Hooks and private event frames",
+        filter = { "rxp.", "reminders.event", "healer.event", "healer.unitEvent", "targetart.", "refreshments." }, gauges = { "core", "group" } },
 }
 
 function DX.Preset(key)

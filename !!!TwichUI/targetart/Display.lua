@@ -25,6 +25,7 @@
 --     The holder frame stays (a frame can't be destroyed), hidden, taking nothing.
 
 local R = TwichUI
+local Perf = R.Perf
 local TA = R.TargetArt
 local E = R.TargetArtEllesmere
 local D = {}
@@ -77,7 +78,7 @@ function SyncEvents()
     if not evf then
         if next(want) == nil then return end
         evf = CreateFrame("Frame")
-        evf:SetScript("OnEvent", OnEvent)
+        evf:SetScript("OnEvent", Perf.Wrap("targetart.event", OnEvent))
     end
     for event in pairs(registered) do
         if not want[event] then
