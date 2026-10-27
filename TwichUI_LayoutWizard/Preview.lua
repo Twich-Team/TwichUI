@@ -1,15 +1,18 @@
 -- TwichUI Layout Setup: the miniature preview
--- The package's resolved screen geometry (TwichUI_Layouts' Geometry.Resolve, the resolver the plan itself uses) drawn to
+-- A scene (Scene.lua: the engine's resolved screen geometry for the chosen layout, with the pieces inside it) drawn to
 -- scale on a frame whose proportions are those of this player's game viewport (UIParent's width and height in its own
 -- units). Each managed component is a box at its resolved centre offset and size, with sample shapes inside (text lines,
--- bars, a minimap square): illustrations, not EllesmereUI's real frames, and the preview says so. Boxes are made once and
--- moved on every Set, so drawing again after a pick or a screen change makes nothing new. Nothing here touches the game's
--- state: it reads a geometry and draws.
+-- bars, a minimap square); the pieces inside the unit frames and bars block are drawn at their resolved places and sample
+-- sizes. They are illustrations, not EllesmereUI's real frames, and the preview says so. Boxes and pieces are made once
+-- and moved on every Set, so drawing again after a pick, a layout choice or a scenario makes nothing new (the number of
+-- ids that can ever exist is bounded by the package). Nothing here touches the game's state: it reads a scene and draws.
 --
---   Preview.Build(parent) -> view        view.frame is the viewport, view.caption the line under it
---   view:Set(geometry, accent)           accent = { r, g, b }; re-lays every box out. Records what it drew in view.drawn
---   view:Clear()                         hides the boxes (no geometry to draw)
---   Preview.MAX_W, Preview.MAX_H         the largest the viewport is drawn
+--   Preview.Build(parent, handlers) -> view     view.frame is the viewport, view.caption the line under it
+--     handlers = { scenario = fn(id), overlay = fn() } for the controls under the viewport
+--   view:Set(scene, accent, issues)             accent = { r, g, b }; re-lays every box out. Records what it drew in view.drawn
+--   view:Controls(scenario, blocked)            marks the scenario shown, and enables the full-size button or says why not
+--   view:Clear()                                hides the boxes (no scene to draw)
+--   Preview.MAX_W, Preview.MAX_H                the largest the viewport is drawn
 
 local R = TwichUI
 local WZ = R.LayoutWizard
@@ -19,15 +22,10 @@ WZ.Preview = Pv
 Pv.MAX_W, Pv.MAX_H = 330, 200
 Pv.CAPTION = "An illustration: the layout's places for your screen, to scale, with sample shapes in place of the real frames. The real look is EllesmereUI's and TwichUI's own."
 
--- Sample shapes in a box, as fractions of it: { x, y, w, h, role }. role: "line" (a text line), "bar" (accent), "frame"
--- (a unit frame), "dot" (accent), "quiet" (a plain strip).
+-- Sample shapes in a component's box, as fractions of it: { x, y, w, h, role }. role: "line" (a text line), "bar" (accent),
+-- "dot" (accent), "quiet" (a plain strip). Only for the components whose inside is sample content; the unit frames and
+-- bars block and the focus frame are drawn from their resolved pieces instead.
 local SAMPLES = {
-    central = {
-        { 0.08, 0.30, 0.30, 0.06, "frame" }, { 0.62, 0.30, 0.30, 0.06, "frame" },
-        { 0.32, 0.42, 0.36, 0.025, "bar" },
-        { 0.12, 0.66, 0.76, 0.06, "quiet" }, { 0.12, 0.76, 0.76, 0.06, "quiet" }, { 0.12, 0.86, 0.76, 0.06, "quiet" },
-    },
-    focus = { { 0.06, 0.30, 0.88, 0.25, "frame" }, { 0.06, 0.66, 0.60, 0.12, "bar" } },
     chat = {
         { 0.05, 0.06, 0.30, 0.10, "quiet" },
         { 0.05, 0.26, 0.80, 0.06, "line" }, { 0.05, 0.40, 0.62, 0.06, "line" }, { 0.05, 0.54, 0.74, 0.06, "line" }, { 0.05, 0.68, 0.45, 0.06, "line" },
@@ -46,14 +44,14 @@ local function Rgb(c, fallback)
     return fallback
 end
 
-local function Box(view, id)
+local function Box(view, kind)
     local L, pal = Look(), Look().pal
     local box = CreateFrame("Frame", nil, view.frame, "BackdropTemplate")
     L.Surface(box, pal.surface, 0.9, pal.control, 1)
     box.label = L.Text(box, "meta")
     box.label:SetPoint("TOPLEFT", 3, -2)
     box.pieces = {}
-    for _, s in ipairs(SAMPLES[id] or {}) do
+    for _, s in ipairs(SAMPLES[kind] or {}) do
         local t = box:CreateTexture(nil, "ARTWORK")
         t:SetColorTexture(1, 1, 1, 1)
         box.pieces[#box.pieces + 1] = { tex = t, spec = s }
@@ -62,69 +60,126 @@ local function Box(view, id)
     return box
 end
 
-local function Draw(view, geo, accent)
+-- How a piece of a given kind is tinted: { colour key, alpha }
+local ROLE = { unit = { "bronzeText", 0.55 }, cast = { "accent", 0.75 }, bar = { "stone", 0.45 }, party = { "bronzeText", 0.45 },
+    marker = { "teal", 0.85 } }
+
+local function Draw(view, scene, accent)
     local pal = Look().pal
-    local sw, sh = geo.screen.w, geo.screen.h
+    local sw, sh = scene.screen.w, scene.screen.h
     local sc = math.min(Pv.MAX_W / sw, Pv.MAX_H / sh)
     local pw, ph = sw * sc, sh * sc
     view.frame:SetSize(pw, ph)
     view.frame:Show()
     local acc = Rgb(accent, pal.teal)
-    local troubled = {}
-    for _, d in ipairs(geo.diagnostics or {}) do
-        if d.code == "overlap" or d.code == "offscreen" then troubled[d.id] = true if d.other then troubled[d.other] = true end end
-    end
-    local drawn = { scale = sc, w = pw, h = ph, boxes = {}, aspect = sw / sh }
-    for _, id in ipairs(geo.order) do
-        local c = geo.components[id]
-        if c.managed and c.rect.w > 0 and c.rect.h > 0 then
-            local box = view.boxes[id]
-            if not box then box = Box(view, id); view.boxes[id] = box end
-            local r = c.rect
-            local w, h = math.max(1, r.w * sc), math.max(1, r.h * sc)
-            box:ClearAllPoints()
-            box:SetPoint("CENTER", view.frame, "CENTER", r.x * sc, r.y * sc)
-            box:SetSize(w, h)
-            local edge = troubled[id] and pal.danger.border or acc
-            box:SetBackdropBorderColor(edge[1], edge[2], edge[3], troubled[id] and 1 or 0.9)
-            local name = (c.label or id) .. (troubled[id] and " !" or "") .. (c.applied and " (not applied)" or "")
-            box.label:SetText(name)
-            box.label:SetShown(w >= 46 and h >= 16)
-            box:Show()
-            for _, p in ipairs(box.pieces) do
-                local x, y, fw, fh, role = unpack(p.spec)
-                local col = pal.stone
-                local a = 0.35
-                if role == "bar" or role == "dot" then col, a = acc, 0.75
-                elseif role == "frame" then col, a = pal.bronzeText, 0.45
-                elseif role == "quiet" then col, a = pal.control, 0.55 end
-                p.tex:SetColorTexture(col[1], col[2], col[3], a)
-                p.tex:ClearAllPoints()
-                p.tex:SetPoint("TOPLEFT", box, "TOPLEFT", x * w, -y * h)
-                p.tex:SetSize(math.max(1, fw * w), math.max(1, fh * h))
-            end
-            drawn.boxes[id] = { x = r.x * sc, y = r.y * sc, w = w, h = h, troubled = troubled[id] or nil }
+    local drawn = { scale = sc, w = pw, h = ph, boxes = {}, elements = {}, aspect = sw / sh, scenario = scene.scenario, variant = scene.variant }
+    for _, c in ipairs(scene.components) do
+        local box = view.boxes[c.id]
+        if not box then box = Box(view, c.kind); view.boxes[c.id] = box end
+        local r = c.rect
+        local w, h = math.max(1, r.w * sc), math.max(1, r.h * sc)
+        box:ClearAllPoints()
+        box:SetPoint("CENTER", view.frame, "CENTER", r.x * sc, r.y * sc)
+        box:SetSize(w, h)
+        local edge = c.troubled and pal.danger.border or acc
+        box:SetBackdropBorderColor(edge[1], edge[2], edge[3], c.troubled and 1 or 0.9)
+        box.label:SetText(c.label .. (c.troubled and " !" or "") .. (c.applied and " (not applied)" or ""))
+        box.label:SetShown(w >= 46 and h >= 16)
+        box:Show()
+        for _, p in ipairs(box.pieces) do
+            local x, y, fw, fh, role = unpack(p.spec)
+            local col, a = pal.stone, 0.35
+            if role == "bar" or role == "dot" then col, a = acc, 0.75
+            elseif role == "quiet" then col, a = pal.control, 0.55 end
+            p.tex:SetColorTexture(col[1], col[2], col[3], a)
+            p.tex:ClearAllPoints()
+            p.tex:SetPoint("TOPLEFT", box, "TOPLEFT", x * w, -y * h)
+            p.tex:SetSize(math.max(1, fw * w), math.max(1, fh * h))
         end
+        drawn.boxes[c.id] = { x = r.x * sc, y = r.y * sc, w = w, h = h, troubled = c.troubled }
     end
     for id, box in pairs(view.boxes) do
         if not drawn.boxes[id] then box:Hide() end
     end
+    -- the pieces inside the components, at their resolved places
+    for _, e in ipairs(scene.elements) do
+        local t = view.elems[e.id]
+        if not t then
+            t = view.frame:CreateTexture(nil, "OVERLAY")
+            view.elems[e.id] = t
+            view.made = view.made + 1
+        end
+        local role = ROLE[e.kind] or ROLE.bar
+        local col = role[1] == "accent" and acc or pal[role[1]] or pal.stone
+        t:SetColorTexture(col[1], col[2], col[3], role[2])
+        local w, h = math.max(1, e.rect.w * sc), math.max(1, e.rect.h * sc)
+        t:ClearAllPoints()
+        t:SetPoint("CENTER", view.frame, "CENTER", e.rect.x * sc, e.rect.y * sc)
+        t:SetSize(w, h)
+        t:Show()
+        drawn.elements[e.id] = { x = e.rect.x * sc, y = e.rect.y * sc, w = w, h = h }
+    end
+    for id, t in pairs(view.elems) do
+        if not drawn.elements[id] then t:Hide() end
+    end
+    -- the sample tooltip
+    if scene.tooltip then
+        local tip = view.boxes.tooltip
+        if not tip then tip = Box(view, "tooltip"); view.boxes.tooltip = tip end
+        local r = scene.tooltip.rect
+        local w, h = math.max(1, r.w * sc), math.max(1, r.h * sc)
+        tip:ClearAllPoints()
+        tip:SetPoint("CENTER", view.frame, "CENTER", r.x * sc, r.y * sc)
+        tip:SetSize(w, h)
+        tip:SetBackdropBorderColor(pal.stone[1], pal.stone[2], pal.stone[3], 1)
+        tip.label:SetText("Tooltip")
+        tip.label:SetShown(w >= 30 and h >= 12)
+        tip:Show()
+        drawn.tooltip = { x = r.x * sc, y = r.y * sc, w = w, h = h }
+    elseif view.boxes.tooltip then
+        view.boxes.tooltip:Hide()
+    end
     view.drawn = drawn
 end
 
-function Pv.Build(parent)
+function Pv.Build(parent, handlers)
+    handlers = handlers or {}
     local L, pal = Look(), Look().pal
-    local view = { boxes = {}, made = 0 }
+    local view = { boxes = {}, elems = {}, made = 0, tabs = {} }
     view.frame = CreateFrame("Frame", nil, parent, "BackdropTemplate")
     L.Surface(view.frame, pal.well, 0.95, pal.bronzeLo, 0.9)
     view.frame:SetSize(Pv.MAX_W, Pv.MAX_H)
     view.tag = L.Tag(view.frame, "Illustration")
     view.tag:SetPoint("BOTTOMRIGHT", view.frame, "TOPRIGHT", 0, 3)
+
+    -- the controls: which scenario the sample shows, and the full-size preview
+    view.controls = CreateFrame("Frame", nil, parent)
+    view.controls:SetSize(Pv.MAX_W, 62)
+    view.controls:SetPoint("TOPLEFT", view.frame, "BOTTOMLEFT", 0, -8)
+    local x = 0
+    local WIDTHS = { solo = 52, target = 62, party = 58, objectives = 88, tooltip = 66 }
+    for _, sc in ipairs(WZ.Scene.SCENARIOS) do
+        local w = WIDTHS[sc.id] or 64
+        local tab = L.Tab(view.controls, sc.short, w, function() if handlers.scenario then handlers.scenario(sc.id) end end)
+        tab:SetPoint("TOPLEFT", x, 0)
+        R.Interact.Tip(tab, sc.label, sc.hint)
+        view.tabs[sc.id] = tab
+        x = x + w + 2
+    end
+    view.full = L.Button(view.controls, "See it full size", 150, "secondary", function() if handlers.overlay then handlers.overlay() end end)
+    view.full:SetHeight(24)
+    view.full:SetPoint("TOPLEFT", 0, -34)
+    R.Interact.Tip(view.full, "See it full size", "Shows this layout over your screen at its real size and place, with sample content. Your interface is dimmed behind it, not hidden or moved, and nothing is applied. Needs you out of combat.")
+    view.fullNote = L.Text(view.controls, "small")
+    view.fullNote:SetWidth(Pv.MAX_W - 160)
+    view.fullNote:SetWordWrap(true)
+    view.fullNote:SetPoint("LEFT", view.full, "RIGHT", 8, 0)
+
     view.caption = L.Text(parent, "small")
     view.caption:SetWidth(Pv.MAX_W)
     view.caption:SetWordWrap(true)
     view.caption:SetText(Pv.CAPTION)
-    view.caption:SetPoint("TOPLEFT", view.frame, "BOTTOMLEFT", 0, -6)
+    view.caption:SetPoint("TOPLEFT", view.controls, "BOTTOMLEFT", 0, -2)
     view.issues = L.Text(parent, "small")
     view.issues:SetWidth(Pv.MAX_W)
     view.issues:SetWordWrap(true)
@@ -135,15 +190,20 @@ function Pv.Build(parent)
     view.notes:SetWordWrap(true)
     view.notes:SetPoint("TOPLEFT", view.issues, "BOTTOMLEFT", 0, -6)
 
-    function view:Set(geo, accent, issues)
-        if not geo then self:Clear() return end
-        R.Perf.Call("layoutwizard.preview", Draw, self, geo, accent)
+    function view:Controls(scenario, blocked)
+        for id, tab in pairs(self.tabs) do tab:SetSelected(id == scenario) end
+        self.full:SetEnabled(blocked == nil)
+        self.fullNote:SetText(blocked or "")
+        self.fullNote:SetShown(blocked ~= nil)
+    end
+    function view:Set(scene, accent, issues)
+        if not scene then self:Clear() return end
+        R.Perf.Call("layoutwizard.preview", Draw, self, scene, accent)
         self.issues:SetText(issues and #issues > 0 and ("Doesn't fit: " .. table.concat(issues, " ")) or "")
         self.issues:SetShown(issues ~= nil and #issues > 0)
         local unapplied = {}
-        for _, id in ipairs(geo.order) do
-            local c = geo.components[id]
-            if c.managed and c.applied then unapplied[#unapplied + 1] = c.label or id end
+        for _, c in ipairs(scene.components) do
+            if c.applied then unapplied[#unapplied + 1] = c.label end
         end
         self.notes:SetText(#unapplied > 0 and ("Shown, but not applied: " .. table.concat(unapplied, ", ") .. ". EllesmereUI leaves it to Blizzard's Edit Mode.") or "")
         self.notes:SetShown(#unapplied > 0)
@@ -151,6 +211,7 @@ function Pv.Build(parent)
     end
     function view:Clear()
         for _, box in pairs(self.boxes) do box:Hide() end
+        for _, t in pairs(self.elems) do t:Hide() end
         self.drawn = nil
         self.issues:SetText("")
         self.issues:Hide()

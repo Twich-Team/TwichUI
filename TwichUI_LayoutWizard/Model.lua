@@ -9,13 +9,19 @@
 --   * Applying uses exactly the plan whose key was shown (LY.Apply refuses a stale key), restoring exactly the restore
 --     plan shown. Nothing reloads by itself: Reload is a button, and it leaves a note so the result can be shown after it.
 --
--- Steps: 1 Welcome (what it does, what this client and screen allow), 2 Layout, 3 Helpers, 4 Personalize, 5 Review and
--- apply, 6 Result (waiting for the reload, checked after it, or put back).
+-- Steps: 1 Welcome (what it does, what this client and screen allow), 2 Layout (Classic or Compact Adventure: choosing
+-- re-draws the preview at once and changes nothing else), 3 Helpers, 4 Personalize, 5 Review and apply, 6 Result (waiting
+-- for the reload, checked after it, or put back).
+--
+-- The preview (M.Scene) is the engine's resolved geometry for the chosen layout, this screen and the picked size, with the
+-- pieces inside it (Scene.lua); the scenario (M.SetScenario) changes what the sample shows and nothing else. The full-size
+-- overlay (Overlay.lua) draws the same scene. Neither writes anything: not a profile, not a pick, not the layout choice.
 
 local R = TwichUI
 local LY = R.Layouts
 local WZ = R.LayoutWizard
 local S = WZ.State
+local Scene = WZ.Scene
 local M = {}
 WZ.Model = M
 
@@ -42,22 +48,59 @@ M.Explain = Explain
 ---------------------------------------------------------------------------
 M.TEXT = {
     ["classic-adventure"] = {
-        title = "Classic Adventure",
+        title = "Classic Adventure", short = "Classic",
         blurb = "The unit frames and action bars sit low in the middle, chat at the lower left, the damage meter at the lower right, the minimap and your objectives at the upper right. EllesmereUI's look and TwichUI's own looks are set to match.",
         covers = {
             "EllesmereUI: its modules, their layout links and its look, as a new profile of its own.",
             "TwichUI: its looks, and where its on-screen pieces sit, in a new profile of its own.",
             "Worked out for your screen: each piece keeps its distance from the edge it is nearest to.",
         },
+        art = "classic",
+    },
+    ["compact-adventure"] = {
+        title = "Compact Adventure", short = "Compact",
+        blurb = "The unit frames and action bars lie in one low, wide strip along the bottom edge and leave the middle of the screen open. Chat, the damage meter (with a bar on top of it), the minimap and your objectives are where Classic puts them.",
+        covers = {
+            "The same look, the same choices and the same TwichUI settings as Classic Adventure.",
+            "Only the unit frames, action bars, raid and party frames and the layout links are its own.",
+            "On narrower screens chat rises above the strip instead of squeezing in beside it.",
+        },
+        art = "compact",
     },
 }
+M.ORDER = { "classic-adventure", "compact-adventure" }
+
+-- How many EllesmereUI modules a layout shares with the other one and how many are its own: counted from the package,
+-- so the card says what the data says (the base layer holds what both layouts hold identically).
+local function ModuleCounts(pkg, variant)
+    local function Count(layer)
+        local f = layer and layer.ellesmereui
+        local n = 0
+        for _ in pairs(f and f.modules or {}) do n = n + 1 end
+        return n
+    end
+    return Count(pkg.layers.base), Count(pkg.layers.variants[variant])
+end
 
 function M.Layouts()
-    local pkg = LY.CLASSIC_PACKAGE
+    local pkg = LY.ADVENTURE_PACKAGE
     if not pkg then return {} end
-    local t = M.TEXT[LY.CLASSIC_VARIANT]
-    return { { id = LY.CLASSIC_VARIANT, title = t.title, blurb = t.blurb, covers = t.covers, pkg = pkg, variant = LY.CLASSIC_VARIANT,
-        art = "classic", dev = pkg.dev == true } }
+    local out = {}
+    for _, id in ipairs(M.ORDER) do
+        local t = M.TEXT[id]
+        if pkg.layers.variants[id] then
+            local shared, own = ModuleCounts(pkg, id)
+            out[#out + 1] = { id = id, title = t.title, short = t.short, blurb = t.blurb, covers = t.covers, pkg = pkg, variant = id,
+                art = t.art, dev = pkg.dev == true, sharedModules = shared, ownModules = own }
+        end
+    end
+    return out
+end
+
+function M.LayoutIds()
+    local ids = {}
+    for _, l in ipairs(M.Layouts()) do ids[#ids + 1] = l.id end
+    return ids
 end
 
 local session   -- nil while the window is closed
@@ -72,11 +115,14 @@ function M.Active() return session ~= nil end
 -- narrowly), nothing is changed, and the first step is the result when an install is recorded (there is something to see
 -- or to put back) and the welcome otherwise.
 function M.Begin()
-    local layout = M.Layouts()[1]
+    local layouts = M.Layouts()
+    local layout = layouts[1]
     if not layout then session = nil return nil, "no-layout" end
-    local stored = S.Load(layout.pkg)
-    session = { layout = layout, picks = stored.picks, stored = stored, step = M.WELCOME, reached = M.WELCOME }
-    local resumed = S.TakeResume(layout.pkg, stored.picks)
+    local stored = S.Load(layout.pkg, M.LayoutIds())
+    for _, l in ipairs(layouts) do if l.id == stored.variant then layout = l end end
+    session = { layout = layout, layouts = layouts, picks = stored.picks, stored = stored, step = M.WELCOME, reached = M.WELCOME,
+        scenario = Scene.SCENARIOS[1].id }
+    local resumed = S.TakeResume(layout.pkg, stored.picks, layout.variant)
     local j, why = LY.Journal.Read()
     if j or why then
         session.step, session.reached = M.RESULT, M.RESULT
@@ -134,6 +180,43 @@ end
 
 function M.Layout() return session and session.layout end
 
+-- The layout on offer (Classic or Compact Adventure) and the choice between them. Choosing remembers the layout and drops
+-- what was worked out for the other one; nothing in the game changes (the install is the Review step's, behind its
+-- confirmation, and re-uses the install's own profiles: switching layouts is an install again).
+function M.LayoutList() return session and session.layouts or M.Layouts() end
+
+function M.SetLayout(id)
+    if not session then return false, "closed" end
+    for _, l in ipairs(session.layouts) do
+        if l.id == id then
+            if session.layout.id == id then return true, false end
+            session.layout = l
+            session.plan, session.pv, session.failed = nil, nil, nil
+            S.Save(l.pkg, session.picks, nil, l.variant)
+            return true, true
+        end
+    end
+    return false, "unknown-layout"
+end
+
+function M.OtherLayout()
+    if not session then return nil end
+    for _, l in ipairs(session.layouts) do if l.id ~= session.layout.id then return l end end
+end
+
+-- The scenario the preview shows (how much sample content, which pieces are visible). Not remembered, not a choice.
+function M.Scenario() return session and session.scenario or Scene.SCENARIOS[1].id end
+
+function M.SetScenario(id)
+    if not session then return false, "closed" end
+    local found
+    for _, sc in ipairs(Scene.SCENARIOS) do if sc.id == id then found = true end end
+    if not found then return false, "unknown-scenario" end
+    if session.scenario == id then return true, false end
+    session.scenario = id
+    return true, true
+end
+
 ---------------------------------------------------------------------------
 -- Choices
 ---------------------------------------------------------------------------
@@ -166,7 +249,7 @@ function M.SetPick(choiceId, optionId)
     if session.picks[choiceId] == optionId then return true, false end
     session.picks[choiceId] = optionId
     session.plan, session.pv, session.failed = nil, nil, nil
-    S.Save(session.layout.pkg, session.picks)
+    S.Save(session.layout.pkg, session.picks, nil, session.layout.variant)
     return true, true
 end
 
@@ -181,7 +264,7 @@ function M.ResetPicks()
     if not session then return end
     session.picks = S.Defaults(session.layout.pkg)
     session.plan, session.pv = nil, nil
-    S.Save(session.layout.pkg, session.picks)
+    S.Save(session.layout.pkg, session.picks, nil, session.layout.variant)
 end
 
 -- The density the picks give (the size choice), or "standard".
@@ -272,13 +355,19 @@ function M.Compat()
     if not screen then
         Add("screen", "Your screen", "block", Explain("no-screen"))
     else
-        local geo = LY.Geometry.Resolve(pkg.geometry, screen, { density = "standard" })
         local text = M.ScreenText(screen)
-        if not geo then Add("screen", "Your screen", "warn", text .. ". TwichUI couldn't work out where things would go.")
-        elseif geo.fits then Add("screen", "Your screen", "ok", text .. ". Everything fits.")
+        local failed, notFit, fitting = false, {}, {}
+        for _, l in ipairs(session.layouts) do
+            local geo = LY.Geometry.Resolve(l.pkg.geometry, screen, { density = "standard", variant = l.variant })
+            if not geo then failed = true
+            elseif geo.fits then fitting[#fitting + 1] = l.title
+            else notFit[#notFit + 1] = l.title .. ": " .. table.concat(M.FitLines(geo, 2), " ") end
+        end
+        if failed then Add("screen", "Your screen", "warn", text .. ". TwichUI couldn't work out where things would go.")
+        elseif #notFit == 0 then Add("screen", "Your screen", "ok", text .. ". Everything fits, in either layout.")
         else
-            local lines = M.FitLines(geo, 2)
-            Add("screen", "Your screen", "warn", text .. ". Not everything fits: " .. table.concat(lines, " ")
+            Add("screen", "Your screen", "warn", text .. ". " .. (#fitting > 0 and (table.concat(fitting, " and ") .. " fits. ") or "")
+                .. "Not everything fits: " .. table.concat(notFit, " ")
                 .. " A smaller UI scale gives more room; the layout never shrinks anything below readable.")
         end
     end
@@ -319,20 +408,60 @@ function M.CanContinue()
 end
 
 ---------------------------------------------------------------------------
--- The preview (steps 2 to 5): the package's resolved geometry for this screen and the picked size
+-- The preview (steps 2 to 5): the package's resolved geometry for the chosen layout, this screen and the picked size
 ---------------------------------------------------------------------------
--- Returns geometry, screen | nil, why. Cached by screen and density; dropped by Invalidate and by a pick.
+-- Returns geometry, screen | nil, why. Cached by layout, screen and density; dropped by Invalidate, a pick and a layout choice.
 function M.Preview()
     if not session then return nil, "closed" end
     local screen = M.Screen()
     if not screen then return nil, "no-screen" end
     local density = M.Density()
-    local key = ("%.2f,%.2f,%s"):format(screen.w, screen.h, density)
+    local variant = session.layout.variant
+    local key = ("%s,%.2f,%.2f,%s"):format(variant, screen.w, screen.h, density)
     if session.pv and session.pv.key == key then return session.pv.geo, screen end
-    local ok, geo, why = pcall(LY.Geometry.Resolve, session.layout.pkg.geometry, screen, { density = density })
+    local ok, geo, why = pcall(LY.Geometry.Resolve, session.layout.pkg.geometry, screen, { density = density, variant = variant })
     if not ok or not geo then return nil, tostring(ok and why or geo) end
     session.pv = { key = key, geo = geo }
+    session.scene = nil
     return geo, screen
+end
+
+-- The default tooltip place, read from the game the way Blizzard's own code reads it (GameTooltip_SetDefaultAnchor):
+-- the first point of the default container, when it is placed against the screen. Read only; falls back to Forever's own
+-- default. Returns { point, x, y }.
+function M.TooltipAnchor()
+    local C = rawget(_G, "GameTooltipDefaultContainer")
+    if type(C) == "table" and C.GetPoint then
+        local ok, point, rel, _, x, y = pcall(C.GetPoint, C, 1)
+        if ok and type(point) == "string" and (rel == nil or rel == rawget(_G, "UIParent")) and type(x) == "number" and type(y) == "number"
+            and LY.Geometry.POINTS[point] then
+            return { point = point, x = x, y = y }
+        end
+    end
+    return Scene.TOOLTIP_FALLBACK
+end
+
+-- The scene for the chosen layout, screen, size and scenario (Scene.lua). Cached until any of those changes.
+function M.Scene()
+    if not session then return nil, "closed" end
+    local geo, why = M.Preview()
+    if not geo then return nil, why end
+    local tip = session.scenario == "tooltip" and M.TooltipAnchor() or nil
+    local key = session.scenario .. (tip and ("|%s,%s,%s"):format(tip.point, tip.x, tip.y) or "")
+    if session.scene and session.scene.key == key and session.scene.geo == geo then return session.scene.scene end
+    local scene = Scene.Build(session.layout, geo, { scenario = session.scenario, tooltip = tip })
+    session.scene = { key = key, geo = geo, scene = scene }
+    return scene
+end
+
+-- Whether the full-size preview can open now. nil when it can; otherwise the reason, in a sentence. It needs the player out
+-- of combat (the overlay is drawn over the whole screen, and what is behind it is the live interface, which it does not
+-- hide or move) and a screen it can read.
+function M.OverlayBlock()
+    if not session then return "The setup isn't open." end
+    if InCombat() then return "The full-size preview needs you out of combat." end
+    if not M.Screen() then return Explain("no-screen") end
+    return nil
 end
 
 -- The accent colour the picks give, as { r, g, b } (nil: the player's class colour, which only the game can say).
@@ -346,7 +475,7 @@ end
 ---------------------------------------------------------------------------
 local function PlanSignature()
     local screen = M.Screen()
-    local ids = {}
+    local ids = { session.layout.variant }
     for _, ch in ipairs(session.layout.pkg.choices or {}) do ids[#ids + 1] = ch.id .. "=" .. tostring(session.picks[ch.id]) end
     return table.concat(ids, ",") .. "|" .. (screen and ("%.2f,%.2f"):format(screen.w, screen.h) or "?")
 end
@@ -416,12 +545,19 @@ function M.Review()
         local adapter = b.adapter and LY.ADAPTERS[b.adapter]
         out.blocked[#out.blocked + 1] = (adapter and (adapter.label or b.adapter) .. ": " or "") .. Explain(b.code)
     end
+    out.picks[1] = { choice = "Layout", option = session.layout.title, id = "layout", optionId = session.layout.id }
     for _, ch in ipairs(session.layout.pkg.choices or {}) do
         local o = OptionOf(ch, session.picks[ch.id])
         out.picks[#out.picks + 1] = { choice = ch.label, option = o and o.label or "?", id = ch.id, optionId = o and o.id }
     end
     local geo = plan.geometry
     out.fit = { fits = geo == nil or geo.fits, lines = geo and M.FitLines(geo, 4) or {} }
+    local installed = plan.journal
+    if installed and installed.variant ~= session.layout.variant then
+        local from
+        for _, l in ipairs(session.layouts) do if l.id == installed.variant then from = l.title end end
+        out.switching = ("%s is installed now. This switches to %s in the same two profiles; Restore still goes back to how things were before your first install."):format(from or tostring(installed.variant), session.layout.title)
+    end
 
     -- TwichUI
     local t = plan.parts.twichui
@@ -507,6 +643,10 @@ function M.ConfirmText()
             lines[#lines + 1] = sec.title .. " (" .. sec.when:lower() .. "):"
             for _, l in ipairs(sec.lines) do lines[#lines + 1] = "  " .. l end
         end
+    end
+    if r.switching then
+        lines[#lines + 1] = ""
+        lines[#lines + 1] = r.switching
     end
     lines[#lines + 1] = ""
     lines[#lines + 1] = "Nothing reloads by itself. Until you reload, EllesmereUI's part isn't finished or checked. Restore puts your previous profiles back."
@@ -626,6 +766,9 @@ function M.Result()
     out.kind, out.state, out.title, out.tone = j.state, j.state, st.title, st.tone
     out.at = j.at
     local ch = session.layout.pkg.choices or {}
+    for _, l in ipairs(session.layouts) do
+        if l.id == j.variant then out.picks[#out.picks + 1] = { choice = "Layout", option = l.title } end
+    end
     for _, c in ipairs(ch) do
         local id = j.picks and j.picks[c.id]
         local o = id and OptionOf(c, id)

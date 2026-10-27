@@ -20,13 +20,18 @@ Geometry.lua
 AdapterTwichUI.lua
 AdapterEllesmere.lua
 
+# The pieces inside the components, for the preview (pure: the same position math the install uses, plus sample sizes)
+Elements.lua
+
 # The install record (TwichUIDB.layouts.install) and the pipeline: plan, apply, verify, restore, and the check after a reload
 Journal.lua
 Engine.lua
 
-# The packages: the developer test package, and Classic Adventure (its captured data, then the package that uses it)
+# The packages: the developer test package, and the Adventure package with Classic and Compact Adventure (the captured
+# data of each, then the package that uses them)
 TestPackage.lua
 ClassicData.lua
+CompactData.lua
 Classic.lua
 
 # /tui layout (last: it tells TwichUI the layout tools are ready)

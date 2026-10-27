@@ -12,7 +12,7 @@ and what is still open.
 | 2. Engine and safe application pipeline | **Done offline**: automated checks pass; nothing run in game | 2026-10-26 |
 | 3. Classic Adventure and the screen-layout resolver | **Done offline**: automated checks pass; nothing run in game | 2026-10-26 |
 | 4. Wizard, preview and install lifecycle UI | **Done offline**: automated checks pass; nothing run in game (`wizard.md`) | 2026-10-26 |
-| 5. Compact Adventure, UI scale policy | Not started | |
+| 5. Compact Adventure and richer previews | **Done offline**: automated checks pass; nothing run in game (below, `wizard.md`). The UI scale policy moved to Phase 6 (D12, D3) | 2026-10-26 |
 | 6. Retained overrides and updates | Not started | |
 | 7. Release hardening and in-game validation | Not started | |
 
@@ -332,11 +332,41 @@ globals off, no line length): 0 warnings in the wizard's files and the engine fi
 - Choices: the `choices` layer (`LY.Resolve` `opts.choices`, composed already) gets a package schema and validation;
   density becomes a choice.
 
-### 5. Compact Adventure, UI scale policy
+### 5. Compact Adventure and richer previews (done offline)
 
-Build: the Compact Adventure variant (D1; a capture with `tools/layout_capture.lua`), with what is truly shared moved
-into the base. The UI scale policy (choice `ui-scale`, `applyUIScale`, D12) and the whole-`EllesmereUIDB` restore
-point (D3) once the scale is managed; Verify then checks `UIParent:GetSize()` against the plan.
+Built: the Compact Adventure variant of the same package (capture, shared base, per-variant screen rules), the wizard's
+layout choice, the scenarios, the full-size overlay (record below). The UI scale policy (choice `ui-scale`, `applyUIScale`,
+D12) and the whole-`EllesmereUIDB` restore point (D3) are **not** part of Phase 5 (the request didn't include them); they
+come with the first account-wide unit, in Phase 6 or after.
+
+**Variant differences.** Compact is the author's `TwichUI - Minimal Adventure` EllesmereUI profile (D27). Against Classic it
+differs in 7 of 18 module blobs (Action Bars, the Cooldown Manager's tracked-buff group position, Damage Meters' style slots,
+QoL, Raid Frames, Resource Bars, Unit Frames) and in the layout links: the unit frames and action bars lie in one low, wide
+strip on the bottom edge (bar 1 on bar 2 on the screen's bottom edge, the player and target frames linked to bar 1, bars 4 to 6
+below), taller unit frames (63 + 10 high), a wider cast bar, a bar on top of the damage meter, raid and party frames in from the
+left edge, a different meter bar texture. Geometry: its own managed block (1091 × 157.5, D28), a left-edge component for the
+raid and party frames, bar 7 attached to the meter's top, bars 6 and 7 and the raid and party frames registered as positions,
+and a narrow arrangement (chat above the strip below 1780 units, D29).
+
+**Shared values.** The look (fonts, accent, palette, migration stamps: one, a differing key is refused by the capture tool), 11
+modules (kept once in the base, each proven identical by fingerprint: Aura/Buff Reminders, Bags, Chat, Data Bars, Dragon Riding,
+Friends, Minimap, Mythic Timer, Nameplates, Quest Tracker, Quickdraw), all 206 TwichUI looks and the 5 TwichUI places (D27, D31),
+the chat, meter, minimap, objectives, cards and focus components, the densities, the choices (helpers, accent, size) and the
+target profile names (D26). Promoting a setting between a variant and the base is moving one module between two tables; a test
+shows a base value reaching both layouts and a variant value reaching only its own.
+
+**Preview coverage and limits.** Components: all seven managed ones, from the plan's own geometry. Pieces: 18 EllesmereUI pieces
+(unit frames, cast bars, bars 1–7, stance and pet bars, the party frames) plus 5 TwichUI markers, at the install's own
+positions with sample sizes. Not drawn: pieces with no size in the data (the Cooldown Manager's bars, class power, data bars, raid
+frames) and everything third-party beyond a flat illustration. The limits are in `wizard.md`.
+
+**Tests.** Offline, 121 suites pass (`./tests/run.sh`): new §8–§10 in `test_layout_geometry.lua`, §18 in `test_layouts.lua`,
+§12–§17 in `test_layout_wizard.lua` (listed in `wizard.md`, "Phase 5 checks"); mutations made and reverted, each failing a test.
+Memory, offline Lua 5.1: Classic's data 880 KB, Compact's only-what-differs 739 KB, both together about 1.6 MB once loaded (the
+layouts addon is loaded on demand, so this is paid only when the setup or an install check runs; in-game memory and CPU are not
+measured).
+
+**Manual visual checks** are 16–23 in `wizard.md` ("Phase 5 manual checks"), and the in-game checks below still all apply.
 
 ### 6. Retained overrides and updates
 
@@ -354,10 +384,11 @@ Acceptance:
 - The release zip holds five folders. `tools/release.py` package checks pass. `CHANGELOG.md` is updated.
 - No performance regression in a `/tui perf` General capture with the layouts addon not loaded.
 
-## Phase 5 handoff
+## Phase 6 handoff
 
-`wizard.md` ("Phase 5 handoff") has what Compact Adventure, the UI scale policy, the tooltip choice and retained overrides
-need from the wizard. The engine facts it relied on (kept, and still true):
+`wizard.md` ("Phase 6 handoff") has what retained overrides, per-layout TwichUI settings, the UI scale policy, the tooltip
+choice and the unplaced positions need. The engine facts Phases 4 and 5 relied on (kept, and still true; the geometry is now
+resolved with `opts.variant`, and `plan.geometry.variant` says which layout it is for):
 
 ## Phase 4 handoff (used)
 
@@ -380,7 +411,7 @@ Troubleshooting row; no Welcome offer (D24). The rest is still open.
 
 | # | Question | Recommended default |
 |---|---|---|
-| D1 | What does the brother's interface ("Compact Adventure") consist of? Which addons and modules, and which saved profile is its source (`TwichUI - Minimal Adventure`?) | Needed before Phase 5. Assume EllesmereUI-based |
+| D1 | What does the brother's interface ("Compact Adventure") consist of? Which addons and modules, and which saved profile is its source (`TwichUI - Minimal Adventure`?) | **Answered in Phase 5 (D27)**: EllesmereUI-based, source `TwichUI - Minimal Adventure` |
 | D2 | Is EllesmereUI required for both layouts? | Yes. Without it, only the TwichUI layer is offered, with a clear note |
 | D3 | Restore point for EllesmereUI: copy the live `EllesmereUIDB` (no extra reload) or use today's disk scan (one extra reload)? | Phases 2 and 3 need neither (§11.6). Live copy, when Phase 5 manages account-wide units |
 | D4 | Exclude Cooldown Manager spell layouts? | Exclude (built) |
@@ -406,6 +437,14 @@ Troubleshooting row; no Welcome offer (D24). The rest is still open.
 | D24 | A Welcome-dialog offer for the wizard | Not built; add only if wanted |
 | D25 | Re-running with the same choices re-imports the install's EllesmereUI profile and replaces changes made in it | As built, said in the review; a shortcut needs a content fingerprint of the live profile |
 
+| D26 | One pair of install profiles for both layouts, named `TwichUI Adventure` | As built (`wizard.md`, D26) |
+| D27 | Compact's sources: EllesmereUI `TwichUI - Minimal Adventure`; TwichUI side shared with Classic | Confirmed by the author |
+| D28 | Compact's checked box is the core of the strip (1091 × 157.5); pet and stance pieces follow it outside it | As built; author to confirm |
+| D29 | Compact's narrow width 1780; chat above the strip below it | As built |
+| D30 | The overlay dims the live interface instead of hiding it | As built |
+| D31 | TwichUI's pieces are Classic's captured places in Compact; class bars land inside the strip | Author to look in the overlay and say what moves |
+| D32 | Positions not placed by the screen layer: Battle Res, the Cooldown Manager's other bars, class power | Register when wanted |
+
 ## In-game checks still required (whole project)
 
 1. `ImportProfileSilent` on Forever 9.6.x: the profile is created and active after the reload, `cleanSlate`
@@ -430,3 +469,5 @@ Troubleshooting row; no Welcome offer (D24). The rest is still open.
     (the emblem's was keyed out of a painted checkerboard); `ReloadUI()` from the button, and the wizard opening on the
     result 3 seconds after login; the picked accent reads back from a Forever EllesmereUI profile
     (`accent:rgb` matches); the window at 1080p, 1440p and ultrawide; `/tui perf` with the window opened ten times.
+13. The Phase 5 manual checks (`wizard.md`, 16–23): Compact on the author's screen, the overlay at three resolutions, click-through,
+    combat and profile-change closing, the layout switch and its restore, `/tui perf` with the overlay.

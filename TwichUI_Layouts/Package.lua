@@ -11,7 +11,8 @@
 --     layers   = { base = { [adapter] = fragment },
 --                  variants = { [variantId] = { [adapter] = fragment } },
 --                  presets  = { [variantId] = { [adapter] = fragment } } },     -- presets optional
---     geometry = { ... },    -- format 2 and up: the screen rules (Geometry.lua), resolved for the player's screen
+--     geometry = { ... },    -- format 2 and up: the screen rules (Geometry.lua), resolved for the player's screen;
+--                            -- `variants[id]` adds or replaces components and attachments for that variant only
 --     choices = { { id, kind = "preset" | "enum" | "density", label, hint, default = "<option id>",
 --                   sets = { "<unit>", ... },                          -- enum: the only units its options may name
 --                   options = { { id, label, hint, swatch = { r, g, b },
@@ -306,7 +307,16 @@ function LY.Validate(pkg)
     -- the screen rules: format 2 only, checked against the adapters' position registries
     if pkg.geometry ~= nil then
         if pkg.format < 2 then problems.add("not-yet", "package.geometry")
-        else checked.order = LY.Geometry.Check(pkg.geometry, problems, "geometry") end
+        else
+            checked.order = LY.Geometry.Check(pkg.geometry, problems, "geometry")
+            -- a variant's own rules belong to a variant the package has
+            local gv = type(pkg.geometry) == "table" and pkg.geometry.variants
+            if type(gv) == "table" then
+                for id in pairs(gv) do
+                    if type(id) ~= "string" or checked.layers.variants[id] == nil then problems.add("geometry-variant-unknown", "geometry.variants." .. tostring(id)) end
+                end
+            end
+        end
         checked.geometry = pkg.geometry
     end
     return problems.n == 0, problems, checked
@@ -410,12 +420,12 @@ function LY.Resolve(pkg, variant, opts)
             problems.add("no-screen", "geometry")
             return false, problems
         end
-        local geo, why = LY.Geometry.Resolve(checked.geometry, opts.screen, { density = density })
+        local geo, why = LY.Geometry.Resolve(checked.geometry, opts.screen, { density = density, variant = variant })
         if not geo then
             problems.add(why == "screen" and "bad-screen" or "geometry", "geometry")
             return false, problems
         end
-        resolved.geometry, resolved.attach = geo, checked.geometry.attach or {}
+        resolved.geometry, resolved.attach = geo, LY.Geometry.Attach(checked.geometry, variant) or {}
     end
     return true, resolved
 end

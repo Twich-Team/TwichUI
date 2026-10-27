@@ -5,6 +5,13 @@
 --       --eui-profile "<EllesmereUI profile>" --twichui-profile "<TwichUI profile>" \
 --       --out TwichUI_Layouts/ClassicData.lua --report docs/layouts/capture-classic-adventure.md \
 --       [--name CLASSIC_CAPTURE] [--client retail|forever] [--made YYYY-MM-DD]
+--       [--title "Classic Adventure"] [--shared-with <earlier data file> [--shared-name CLASSIC_CAPTURE]]
+--
+-- A second layout of the same package (Compact Adventure) is captured with --shared-with, naming the first layout's data
+-- file: whatever is identical in both (module blobs, root look keys, the layout links) is not written again. The
+-- output lists the modules it left out with a fingerprint of each, so the package can keep them once in its shared base
+-- and a test can prove the claim; a root look key that differs is refused (the look is shared by every layout). Without
+-- --twichui-profile the TwichUI side is not captured at all (the layout shares the first layout's TwichUI settings).
 --
 -- What it does, and what it never does:
 --   * The saved files are read as data by a strict reader: names = values, tables, strings, numbers, booleans and nil.
@@ -38,11 +45,13 @@ do
         i = i + 2
     end
 end
-for _, k in ipairs({ "eui", "twichui", "eui-profile", "twichui-profile", "out", "report" }) do
+for _, k in ipairs({ "eui", "twichui", "eui-profile", "out", "report" }) do
     if not args[k] then error("missing --" .. k .. " (see the header of tools/layout_capture.lua)") end
 end
 local NAME = args.name or "CLASSIC_CAPTURE"
 assert(NAME:match("^[A-Z][A-Z0-9_]*$"), "--name: an upper-case identifier")
+local TITLE = args.title or "Classic Adventure"
+local SHARED_NAME = args["shared-name"] or "CLASSIC_CAPTURE"
 
 ---------------------------------------------------------------------------
 -- Reading a SavedVariables file as data
@@ -233,10 +242,11 @@ end
 ---------------------------------------------------------------------------
 -- TwichUI: the looks and behaviour fields that differ from the defaults, and the places
 ---------------------------------------------------------------------------
-local twName = args["twichui-profile"]
+local twName = args["twichui-profile"]   -- nil: this layout has no TwichUI settings of its own
 local live = type(TDB.profileState) == "table" and TDB.profileState.live or "Default"
 local slot   -- the profile's table: the live one is TwichUIDB itself (schema 2), a stored one is TwichUIDB.profiles[name]
-if twName == live then slot = c.TwichUIDB
+if twName == nil then slot = nil
+elseif twName == live then slot = c.TwichUIDB
 else
     slot = type(c.TwichUIDB.profiles) == "table" and c.TwichUIDB.profiles[twName]
     assert(type(slot) == "table", "no TwichUI profile with that name")
@@ -249,7 +259,7 @@ local function ReadPath(t, at, key)
     if type(t) == "table" then return t[key] end
 end
 local groups, nFields, nSwitch, nDefault = {}, 0, 0, 0
-for _, f in pairs(TA.Fields()) do
+for _, f in pairs(slot and TA.Fields() or {}) do
     local v = ReadPath(slot, f.at, f.key)
     if v ~= nil and not R.TwichConfig.ValueOk(f, v) then v = nil end
     if f.switch then nSwitch = nSwitch + 1
@@ -262,7 +272,7 @@ for _, f in pairs(TA.Fields()) do
     end
 end
 local places = {}
-for id, p in pairs(TA.PLACES) do
+for id, p in pairs(slot and TA.PLACES or {}) do
     local t = slot
     for _, k in ipairs(p.path) do t = type(t) == "table" and t[k] or nil end
     if type(t) == "table" and type(t.x) == "number" and type(t.y) == "number" then
@@ -270,11 +280,63 @@ for id, p in pairs(TA.PLACES) do
     else report.notes[#report.notes + 1] = "TwichUI place " .. id .. ": not set in the profile (the feature's default)" end
 end
 
+---------------------------------------------------------------------------
+-- A second layout: what is identical to the first is left out, with a fingerprint of it
+---------------------------------------------------------------------------
+local sameAs
+if args["shared-with"] then
+    local ref
+    do
+        local chunk = assert(loadfile(args["shared-with"]))   -- our own generated file in the repository, not a saved file
+        local env = { TwichUI = { Layouts = {} } }
+        setfenv(chunk, env)
+        chunk()
+        ref = env.TwichUI.Layouts[SHARED_NAME]
+    end
+    assert(type(ref) == "table" and type(ref.ellesmereui) == "table", "--shared-with: no " .. SHARED_NAME .. " in that file")
+    sameAs = { root = {}, modules = {} }
+    for k, v in pairs(eui.root) do
+        if ref.ellesmereui.root[k] ~= nil and LY.Canon(v) == LY.Canon(ref.ellesmereui.root[k]) then
+            sameAs.root[k] = true
+            eui.root[k] = nil
+        else
+            io.stderr:write("the profile's look key '" .. tostring(k) .. "' differs from " .. SHARED_NAME .. ": the look (fonts, accent, "
+                .. "palette) is shared by every layout of the package, so nothing is written\n")
+            os.exit(1)
+        end
+    end
+    for k in pairs(ref.ellesmereui.root) do
+        if not sameAs.root[k] then
+            io.stderr:write("the profile has no look key '" .. tostring(k) .. "' but " .. SHARED_NAME .. " does; nothing is written\n")
+            os.exit(1)
+        end
+    end
+    for m, b in pairs(eui.modules) do
+        local r = ref.ellesmereui.modules[m]
+        if r ~= nil and LY.Canon(b) == LY.Canon(r) then
+            sameAs.modules[m] = LY.Fingerprint(b)
+            eui.modules[m] = nil
+        end
+    end
+    local only = {}
+    for m in pairs(ref.ellesmereui.modules) do
+        if eui.modules[m] == nil and not sameAs.modules[m] then only[#only + 1] = m end
+    end
+    table.sort(only)
+    sameAs.firstOnly = #only > 0 and only or nil
+    if eui.layout ~= nil and ref.ellesmereui.layout ~= nil and LY.Canon(eui.layout) == LY.Canon(ref.ellesmereui.layout) then
+        sameAs.layout = true
+        eui.layout = nil
+    end
+    sameAs.of = SHARED_NAME
+end
+
 local capture = {
     source = { client = args.client or "retail", made = args.made or os.date("!%Y-%m-%d"),
         ellesmereui = { version = type(EDB.lastLoginVersion) == "string" and EDB.lastLoginVersion or nil, uiScale = EDB.ppUIScale } },
     ellesmereui = eui,
-    twichui = { groups = groups, places = places },
+    twichui = slot and { groups = groups, places = places } or nil,
+    sameAs = sameAs,
 }
 
 ---------------------------------------------------------------------------
@@ -370,11 +432,11 @@ local body = table.concat(out)
 
 local header = ([[
 -- TwichUI Layouts: captured author settings (%s). Generated by tools/layout_capture.lua: do not edit by hand, run it
--- again (docs/layouts/capture-classic-adventure.md has the command, what was kept and left out, and the scan's result).
+-- again (%s has the command, what was kept and left out, and the scan's result).
 -- Plain data: the package file that uses it (Classic.lua) decides which layer each part goes in.
 
 local LY = TwichUI.Layouts
-LY.%s = ]]):format(capture.source.made, NAME)
+LY.%s = ]]):format(capture.source.made, args.report:gsub("^.*/docs/", "docs/"), NAME)
 local f = assert(io.open(args.out, "wb"))
 f:write(header, body, "\n")
 f:close()
@@ -400,7 +462,7 @@ local function Count(v)
 end
 local lines = {}
 local function L(fmt, ...) lines[#lines + 1] = select("#", ...) > 0 and fmt:format(...) or fmt end
-L("# Layout capture: Classic Adventure")
+L("# Layout capture: %s", TITLE)
 L("")
 L("Generated by `tools/layout_capture.lua` on %s. The data is in `%s` (`LY.%s`), %d bytes of canonical text, %d values.",
     capture.source.made, args.out, NAME, #canon, Count(capture))
@@ -412,7 +474,8 @@ L("|---|---|")
 L("| Game client of the saved files | %s |", capture.source.client)
 L("| EllesmereUI profile | `%s` (EllesmereUI %s; the account's UI scale %s, not captured) |", euiName,
     tostring(capture.source.ellesmereui.version), tostring(EDB.ppUIScale))
-L("| TwichUI profile | `%s`%s |", twName, twName == live and " (the profile in use)" or "")
+if twName then L("| TwichUI profile | `%s`%s |", twName, twName == live and " (the profile in use)" or "")
+else L("| TwichUI profile | none: this layout shares the first layout's TwichUI settings |") end
 L("| Other profiles | not read |")
 L("")
 L("## Kept")
@@ -420,16 +483,34 @@ L("")
 L("| Part | What | Size (canonical bytes) |")
 L("|---|---|---|")
 for _, k in ipairs(Sorted(eui.root)) do L("| EllesmereUI profile root | `%s` | %d |", k, Size(eui.root[k])) end
-L("| EllesmereUI layout links | `unlockLayout` (%s) | %d |", table.concat(Sorted(eui.layout or {}), ", "), Size(eui.layout))
+if eui.layout then L("| EllesmereUI layout links | `unlockLayout` (%s) | %d |", table.concat(Sorted(eui.layout), ", "), Size(eui.layout)) end
 for _, m in ipairs(Sorted(eui.modules)) do L("| EllesmereUI module | `%s` | %d |", m, Size(eui.modules[m])) end
-L("| TwichUI looks and behaviour | %d fields that differ from the defaults, in %d groups | %d |", nFields,
-    #Sorted(groups), Size(groups))
-for _, id in ipairs(Sorted(places)) do L("| TwichUI place | `%s` | %d |", id, Size(places[id])) end
+if slot then
+    L("| TwichUI looks and behaviour | %d fields that differ from the defaults, in %d groups | %d |", nFields,
+        #Sorted(groups), Size(groups))
+    for _, id in ipairs(Sorted(places)) do L("| TwichUI place | `%s` | %d |", id, Size(places[id])) end
+    L("")
+    L("TwichUI fields not captured: %d on/off feature switches (a layout never turns a feature on or off), %d at their "
+        .. "default. Never captured by the adapter's allowlist: anything in `TwichConfig.LOCAL` (acts, network, other, places "
+        .. "outside `PLACES`), account-scoped settings, list groups.", nSwitch, nDefault)
+end
 L("")
-L("TwichUI fields not captured: %d on/off feature switches (a layout never turns a feature on or off), %d at their "
-    .. "default. Never captured by the adapter's allowlist: anything in `TwichConfig.LOCAL` (acts, network, other, places "
-    .. "outside `PLACES`), account-scoped settings, list groups.", nSwitch, nDefault)
-L("")
+if sameAs then
+    L("## Identical to the first layout (kept once, in the package's shared base)")
+    L("")
+    L("Compared with `%s` in `%s`. Nothing here is written again; the fingerprints let a test prove the claim.", sameAs.of, args["shared-with"])
+    L("")
+    L("| What | Fingerprint |")
+    L("|---|---|")
+    for _, k in ipairs(Sorted(sameAs.root)) do L("| EllesmereUI profile root `%s` | (the look is shared) |", k) end
+    for _, m in ipairs(Sorted(sameAs.modules)) do L("| EllesmereUI module `%s` | `%s` |", m, sameAs.modules[m]) end
+    if sameAs.layout then L("| EllesmereUI layout links | identical |") end
+    L("")
+    if sameAs.firstOnly then
+        L("In the first layout only (this profile has no such module): %s.", table.concat(sameAs.firstOnly, ", "))
+        L("")
+    end
+end
 L("## Left out")
 L("")
 table.sort(report.left, function(a, b) return a.where < b.where end)
@@ -450,11 +531,13 @@ L("## Command")
 L("")
 L("```")
 L("lua5.1 tools/layout_capture.lua --eui <copy of EllesmereUI.lua> --twichui <copy of !!!TwichUI.lua> \\")
-L("    --eui-profile %q --twichui-profile %q \\", euiName, twName)
-L("    --out %s --report %s --name %s --client %s --made %s", args.out, args.report, NAME, capture.source.client, capture.source.made)
+L("    --eui-profile %q %s\\", euiName, twName and ("--twichui-profile " .. ("%q"):format(twName) .. " ") or "")
+L("    --out %s --report %s --name %s --title %q --client %s --made %s%s", args.out, args.report, NAME, TITLE,
+    capture.source.client, capture.source.made, sameAs and (" \\\n    --shared-with " .. args["shared-with"] .. " --shared-name " .. SHARED_NAME) or "")
 L("```")
 local rf = assert(io.open(args.report, "wb"))
 rf:write(table.concat(lines, "\n"), "\n")
 rf:close()
-realPrint(("captured: %d EllesmereUI modules, %d root keys, layout links %s; %d TwichUI fields, %d places; %d bytes. Wrote %s and %s.")
-    :format(#Sorted(eui.modules), #Sorted(eui.root), eui.layout and "yes" or "no", nFields, #Sorted(places), #canon, args.out, args.report))
+realPrint(("captured: %d EllesmereUI modules%s, %d root keys, layout links %s; %d TwichUI fields, %d places; %d bytes. Wrote %s and %s.")
+    :format(#Sorted(eui.modules), sameAs and (" (+" .. #Sorted(sameAs.modules) .. " identical to " .. sameAs.of .. ")") or "", #Sorted(eui.root),
+    eui.layout and "yes" or (sameAs and sameAs.layout and "identical" or "no"), nFields, #Sorted(places), #canon, args.out, args.report))

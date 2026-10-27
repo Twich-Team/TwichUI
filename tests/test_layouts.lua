@@ -843,7 +843,7 @@ do
   Check(plan.ok, "Classic Adventure plans (" .. tostring(plan.blocked[1] and plan.blocked[1].code) .. ")")
   Check(plan.geometry and plan.geometry.fits and plan.density == "standard", "for this screen, and everything fits")
   local ep, tp = plan.parts.ellesmereui, plan.parts.twichui
-  Check(ep.target == "TwichUI Classic" and tp.target == "Classic Adventure", "the package's own profile names")
+  Check(ep.target == "TwichUI Adventure" and tp.target == "TwichUI Adventure", "the package's own profile names")
   local d = ep.payload.data
   local nMod = 0
   for _ in pairs(d.addons) do nMod = nMod + 1 end
@@ -871,7 +871,7 @@ do
   local ok, res = LC.Apply(PKG, VAR, plan.key, { screen = SCREEN })
   Check(ok and res.state == "applied", "applied, waiting for the reload (" .. tostring(res and res.state) .. ")")
   local PF = cl.TwichUI.Profiles
-  Check(cl.EllesmereUIDB.activeProfile == "TwichUI Classic" and PF.Current() == "Classic Adventure", "both install profiles in use")
+  Check(cl.EllesmereUIDB.activeProfile == "TwichUI Adventure" and PF.Current() == "TwichUI Adventure", "both install profiles in use")
   Check(cl.EllesmereUIDB.ppUIScale == 0.8 and Same(cl.EllesmereUIDB.profiles.Mine, before.eui.profiles.Mine), "the UI scale and your EllesmereUI profiles untouched")
   local ui = cl.TwichUIDB.ui
   Check(ui.markerBarPosition and ui.markerBarPosition.x == -2 and ui.markerBarPosition.y == -92, "TwichUI's marker bar where the author put it (the block didn't move)")
@@ -895,12 +895,12 @@ do
   Check(j2 and j2.state == "verified", "checked after the reload: verified (" .. tostring(j2 and j2.state) .. ")")
   -- a place moved after the install is reported, never repaired
   local L2 = c2.TwichUI.Layouts
-  c2.EllesmereUIDB.profiles["TwichUI Classic"].addons.EllesmereUIMinimap.minimap.position.x = 0
+  c2.EllesmereUIDB.profiles["TwichUI Adventure"].addons.EllesmereUIMinimap.minimap.position.x = 0
   local rep = L2.Verify(false)
   local moved = false
   for _, dd in ipairs(rep.adapters.ellesmereui.diffs) do if dd.unit == "ellesmereui:pos.minimap" and dd.code == "moved" then moved = true end end
   Check(rep.state == "mismatch" and moved, "a moved minimap is reported")
-  Check(c2.EllesmereUIDB.profiles["TwichUI Classic"].addons.EllesmereUIMinimap.minimap.position.x == 0, "and left as the player moved it")
+  Check(c2.EllesmereUIDB.profiles["TwichUI Adventure"].addons.EllesmereUIMinimap.minimap.position.x == 0, "and left as the player moved it")
 
   -- restore: back to before, after the reload
   local rp = L2.PlanRestore()
@@ -909,8 +909,8 @@ do
   Check(okR and resR.state == "restoring", "restored as far as it can be before the reload")
   local c3 = Boot("Classic", Logout(c2))
   Check(c3.TwichUIDB.layouts == nil, "after the reload the restore checks out and the record is gone")
-  Check(c3.EllesmereUIDB.activeProfile == "Mine" and c3.EllesmereUIDB.profiles["TwichUI Classic"] == nil, "EllesmereUI back on your profile, the install's gone")
-  Check(c3.TwichUI.Profiles.Current() == "Default" and not c3.TwichUI.Profiles.Exists("Classic Adventure"), "TwichUI back on your profile, the install's gone")
+  Check(c3.EllesmereUIDB.activeProfile == "Mine" and c3.EllesmereUIDB.profiles["TwichUI Adventure"] == nil, "EllesmereUI back on your profile, the install's gone")
+  Check(c3.TwichUI.Profiles.Current() == "Default" and not c3.TwichUI.Profiles.Exists("TwichUI Adventure"), "TwichUI back on your profile, the install's gone")
   Check(c3.TwichUIDB.ui.trainingPosition == before.tw.ui.trainingPosition and Same(c3.TwichUIDB.ui.markerBarPosition, before.tw.ui.markerBarPosition), "your places as they were")
 
   -- other screens: a narrow one rearranges, a small one is planned honestly
@@ -938,7 +938,7 @@ do
   Check(Heard(cn, "/tui layout plan classic all"), "and how to see every row")
   cn.SlashCmdList.TWICHUI("layout apply confirm")
   Check(Heard(cn, "applied; it isn't finished or checked until you reload"), "apply confirm installs the plan last shown")
-  Check(cn.EllesmereUIDB.activeProfile == "TwichUI Classic", "the Classic package, not the test one")
+  Check(cn.EllesmereUIDB.activeProfile == "TwichUI Adventure", "the Classic package, not the test one")
   cn.said = {}
   cn.SlashCmdList.TWICHUI("layout plan classic wobble")
   Check(Heard(cn, "unknown: 'wobble'"), "an unknown word is refused")
@@ -1057,7 +1057,7 @@ do
   local sv = Logout(ck)
   local c2 = Boot("Choices", sv)
   Check(c2.TwichUI.Layouts.Journal.Read().state == "verified", "verified after the reload")
-  local prof = c2.EllesmereUIDB.profiles["TwichUI Classic"]
+  local prof = c2.EllesmereUIDB.profiles["TwichUI Adventure"]
   prof.euiAccent.custom.r = tonumber(("%.14g"):format(0.8 + 1e-15))   -- what a round trip through tostring does
   prof.euiAccent.custom.g = tonumber(("%.14g"):format(0.45))
   Check(c2.TwichUI.Layouts.Verify(false).state == "match", "a number that went through EllesmereUI's serializer still matches")
@@ -1083,6 +1083,128 @@ do
   Check(select(2, jj.Clean(rec)) == "damaged", "and so is one with too many")
   rec.picks = nil
   Check(jj.Clean(rec) ~= nil, "a record with no picks (an install from before choices) is fine")
+end
+
+---------------------------------------------------------------------------
+-- 18. Compact Adventure (Phase 5): the second layout of the same package, through the same pipeline; switching between
+--     the two layouts is an install again into the install's own profiles, and Restore still goes back to before the first
+---------------------------------------------------------------------------
+do
+  local SCREEN = { w = 2133.33, h = 1200 }
+  local ck = Boot("Compact")
+  local LC = Load(ck)
+  local PKG, CLASSIC, COMPACT = LC.CLASSIC_PACKAGE, LC.CLASSIC_VARIANT, LC.COMPACT_VARIANT
+  local ok, problems, checked = LC.Validate(PKG)
+  Check(ok and #checked.variants == 2 and checked.variants[1] == CLASSIC and checked.variants[2] == COMPACT, "the package has both layouts")
+  Check(checked.targets.ellesmereui == "TwichUI Adventure" and checked.targets.twichui == "TwichUI Adventure", "one pair of target profiles for the package, named for neither layout")
+  Check(LC.ADVENTURE_PACKAGE == PKG and PKG.id == "twichui-adventure", "the same package")
+  local before = { tw = Copy(ck.TwichUIDB), eui = Copy(ck.EllesmereUIDB), restore = Copy(ck.TwichUIRestoreDB), share = Copy(ck.TwichUIShareDB), chron = Copy(ck.TwichUIChronicleDB) }
+
+  -- the plans: each its own, from the same package
+  local pk = LC.Plan(PKG, COMPACT, { screen = SCREEN })
+  local pc = LC.Plan(PKG, CLASSIC, { screen = SCREEN })
+  Check(pk.ok and pc.ok and pk.variant == COMPACT and pc.variant == CLASSIC, "both plan (" .. tostring(pk.blocked[1] and pk.blocked[1].code) .. ")")
+  Check(pk.key ~= pc.key and pk.parts.ellesmereui.key ~= pc.parts.ellesmereui.key, "each plan has its own key")
+  Check(pk.geometry.variant == COMPACT and pk.geometry.fits and pk.geometry.components.central.rect.w == 1091 and pc.geometry.components.central.rect.w == 890,
+    "Compact's plan is resolved with Compact's rules (a block 1091 wide, not 890), and fits")
+  local dk, dc = pk.parts.ellesmereui.payload.data, pc.parts.ellesmereui.payload.data
+  local nMod = 0
+  for _ in pairs(dk.addons) do nMod = nMod + 1 end
+  Check(nMod == 18 and dk.addons.EllesmereUIGroupFinder == nil, "Compact: every module, shared and its own, and no other")
+  Check(dk.fonts and dk.darkMode and dk.euiAccent and dk._migrations and dk.unlockLayout, "the look and the layout links travel")
+  Check(Same(dk.fonts, dc.fonts) and Same(dk.euiAccent, dc.euiAccent) and Same(dk.addons.EllesmereUIBags, dc.addons.EllesmereUIBags), "the look and the shared modules are the same in both")
+  Check(dk.addons.EllesmereUIActionBars.barPositions.Bar7 ~= nil and dc.addons.EllesmereUIActionBars.barPositions.Bar7 == nil, "Compact's own bars are Compact's alone")
+  Check(not Same(dk.unlockLayout, dc.unlockLayout) and dk.unlockLayout.anchors.Bar7 ~= nil and dc.unlockLayout.anchors.Bar7 == nil, "and so are its layout links")
+  Check(Same(dk.addons.EllesmereUIChat.chat.chatPosition, dc.addons.EllesmereUIChat.chat.chatPosition), "chat is placed alike in both at this width")
+  Check(math.abs(dk.addons.EllesmereUIUnitFrames.player.healthHeight - 63.3333347) < 1e-5 and dc.addons.EllesmereUIUnitFrames.player.healthHeight == 40, "Compact's unit frames are the taller ones")
+  local rows, applied = 0, 0
+  for _, row in ipairs(pk.parts.ellesmereui.rows) do if row.place then rows = rows + 1 end end
+  for _, c in pairs(pk.geometry.components) do if c.applied then applied = applied + 1 end end
+  Check(rows == 41 and applied == 1, "41 placed rows in Compact (Classic's 37, bars 6 and 7, the raid and party frames); objectives still not applied")
+  Check(Same(pk.parts.twichui.composed.units, pc.parts.twichui.composed.units) or #pk.parts.twichui.rows == #pc.parts.twichui.rows,
+    "TwichUI's part is the same size for both")
+
+  -- apply Compact: the key of Classic's plan is stale for it
+  Check(select(2, LC.Apply(PKG, COMPACT, pc.key, { screen = SCREEN })) == "stale", "Classic's plan can't install Compact")
+  local okA, res = LC.Apply(PKG, COMPACT, pk.key, { screen = SCREEN })
+  Check(okA and res.state == "applied", "Compact applied, waiting for the reload")
+  local j = LC.Journal.Read()
+  Check(j and j.variant == COMPACT and j.package == "twichui-adventure" and j.snapshot.ellesmereui.active == "Mine" and j.snapshot.ellesmereui.created == true,
+    "the record names Compact, and what to go back to")
+  local firstSnapshot = Copy(j.snapshot)
+  Check(ck.EllesmereUIDB.activeProfile == "TwichUI Adventure" and ck.EllesmereUIDB.profiles["TwichUI Adventure"].addons.EllesmereUIActionBars.barPositions.Bar7,
+    "EllesmereUI's profile holds Compact's bars")
+  Check(Same(ck.EllesmereUIDB.profiles.Mine, before.eui.profiles.Mine) and ck.EllesmereUIDB.ppUIScale == 0.8, "your EllesmereUI profile and the UI scale are untouched")
+
+  -- after the reload: verified
+  local saved = Logout(ck)
+  local c2 = Boot("Compact", saved)
+  local j2 = c2.TwichUI.Layouts.Journal.Read()
+  Check(j2 and j2.state == "verified" and j2.variant == COMPACT, "checked after the reload: verified")
+  local L2 = c2.TwichUI.Layouts
+
+  -- switching to Classic: an install again, into the same profiles; the first snapshot stays
+  local p2 = L2.Plan(PKG, CLASSIC, { screen = SCREEN })
+  Check(p2.ok and p2.mode == "again" and p2.journal.variant == COMPACT, "Classic over Compact plans as an install again")
+  local ok2, r2 = L2.Apply(PKG, CLASSIC, p2.key, { screen = SCREEN })
+  Check(ok2 and r2.state == "applied", "switched, waiting for the reload")
+  local j3 = L2.Journal.Read()
+  Check(j3.variant == CLASSIC and Same(j3.snapshot, firstSnapshot), "the record names Classic, and the first snapshot is the one it still holds")
+  Check(c2.EllesmereUIDB.profiles["TwichUI Adventure"].addons.EllesmereUIActionBars.barPositions.Bar7 == nil, "EllesmereUI's profile now holds Classic's bars, not Compact's")
+  local names = c2.EllesmereUIDB.profileOrder
+  Check(#names == 3, "no profile was added by switching (" .. #names .. ")")
+  local c3 = Boot("Compact", Logout(c2))
+  Check(c3.TwichUI.Layouts.Journal.Read().state == "verified" and c3.TwichUI.Layouts.Journal.Read().variant == CLASSIC, "Classic checked after its reload")
+
+  -- and back, a few times
+  local cur = c3
+  for i = 1, 4 do
+    local LX = cur.TwichUI.Layouts
+    local want = i % 2 == 1 and COMPACT or CLASSIC
+    local px = LX.Plan(PKG, want, { screen = SCREEN })
+    local okx, rx = LX.Apply(PKG, want, px.key, { screen = SCREEN })
+    Check(px.ok and okx and rx.state == "applied", "switch " .. i .. " to " .. want .. " applies")
+    cur = Boot("Compact", Logout(cur))
+    local jx = cur.TwichUI.Layouts.Journal.Read()
+    Check(jx.state == "verified" and jx.variant == want, "switch " .. i .. ": checked after the reload, as " .. want)
+    Check(Same(jx.snapshot, firstSnapshot) and #cur.EllesmereUIDB.profileOrder == 3, "switch " .. i .. ": still the first snapshot, still two profiles of ours")
+  end
+  -- applying the layout that is already installed changes nothing it can say about TwichUI; it is an install again all the same
+  Check(cur.TwichUI.Layouts.Journal.Read().variant == CLASSIC, "after four switches: Classic")
+
+  -- unrelated data
+  Check(Same(cur.TwichUIRestoreDB, before.restore) and Same(cur.TwichUIShareDB, before.share) and Same(cur.TwichUIChronicleDB, before.chron), "backups, shares and the Chronicle unchanged by any of it")
+  Check(Same(cur.EllesmereUIDB.profiles.Mine, before.eui.profiles.Mine) and Same(cur.EllesmereUIDB.profiles.Raid, before.eui.profiles.Raid) and cur.EllesmereUIDB.ppUIScale == 0.8,
+    "your EllesmereUI profiles and the UI scale as they were")
+  Check(Same(cur.TwichUIDB.profiles.Default.ui.markerBarPosition, before.tw.ui.markerBarPosition), "your own TwichUI profile as it was")
+
+  -- restore from either: back to before the first install
+  local LR = cur.TwichUI.Layouts
+  local rp = LR.PlanRestore()
+  Check(rp.ok, "restore plans")
+  local okR, resR = LR.Restore(rp.key)
+  Check(okR and resR.state == "restoring", "restored as far as it can be before the reload")
+  local cr = Boot("Compact", Logout(cur))
+  Check(cr.TwichUIDB.layouts == nil and cr.EllesmereUIDB.activeProfile == "Mine" and cr.EllesmereUIDB.profiles["TwichUI Adventure"] == nil, "after the reload: back on your profile, the install's gone")
+  Check(cr.TwichUI.Profiles.Current() == "Default" and not cr.TwichUI.Profiles.Exists("TwichUI Adventure"), "TwichUI back on your profile, the install's gone")
+
+  -- the other screens and the developer command
+  local cn = Boot("CompactNarrow")
+  local LN = Load(cn)
+  local np = LN.Plan(PKG, COMPACT, { screen = { w = 1680, h = 1050 }, density = "larger" })
+  Check(np.ok and np.geometry.narrow and np.geometry.fits, "1680 x 1050, larger: Compact's narrow arrangement, everything fits")
+  Check(np.parts.ellesmereui.payload.data.addons.EllesmereUIChat.chat.chatFontSize == 17, "larger density: the chat text goes up in Compact too")
+  local sp = LN.Plan(PKG, COMPACT, { screen = { w = 1365.33, h = 768 } })
+  Check(sp.ok and not sp.geometry.fits and #sp.geometry.diagnostics > 0, "1365 x 768: Compact's plan says what doesn't fit")
+  cn.said = {}
+  cn.SlashCmdList.TWICHUI("layout geometry compact 1680x1050")
+  Check(Heard(cn, "Unit frames and action bars:") and Heard(cn, "Chat:"), "geometry compact lists Compact's components")
+  cn.SlashCmdList.TWICHUI("layout plan compact")
+  cn.SlashCmdList.TWICHUI("layout apply confirm")
+  Check(Heard(cn, "applied; it isn't finished or checked until you reload") and LN.Journal.Read().variant == COMPACT, "apply confirm installs Compact")
+  cn.said = {}
+  cn.SlashCmdList.TWICHUI("layout validate compact")
+  Check(Heard(cn, "the compact package is valid") and Heard(cn, "compact-adventure"), "validate names the layout")
 end
 
 if failures > 0 then print(failures .. " FAILED") os.exit(1) end

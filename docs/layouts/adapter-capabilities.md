@@ -118,3 +118,16 @@ it run in game:
 | TwichUI has no tooltip-anchor setting | S | searched `!!!TwichUI/` and `TwichUI_Settings/` |
 | Registering an installer, importing, switching and deleting profiles: unchanged since Phase 2; the wizard calls only the engine, never EllesmereUI directly | S | `TwichUI_LayoutWizard/*.lua` call nothing of EllesmereUI (the only read of it is `E._firstInstallPending`, as Phase 2's plan does) |
 
+**Phase 5 (2026-10-26).** Read for Compact Adventure and the preview, in EllesmereUI 9.6.8 and the author's captured
+`TwichUI - Minimal Adventure` profile; none of it run in game:
+
+| What | Status | Evidence |
+|---|---|---|
+| Compact differs from Classic only in 7 module blobs (Action Bars, Cooldown Manager's tracked-buff group, Damage Meters' style slots, QoL, Raid Frames, Resource Bars, Unit Frames) and the layout links; the look, fonts, accent and the other 11 modules are identical | S (measured on the saved files) | `capture-compact-adventure.md` (fingerprints) |
+| The block is bottom-edge linked: Bar 2 and Bar 4 to `SCREEN_BOTTOM`, bar 1 on bar 2, the player and target frames on bar 1, bars 5 and 6 on bar 4, bar 7 on the damage meter, `TwichUI_FoodDrink` on bar 3 | S | `unlockLayout.anchors` in the capture; `UM.ApplyAnchorPosition` (existing) |
+| An action bar's size: `overrideNumIcons` or `numIcons` buttons in `overrideNumRows` rows of `buttonWidth` × `buttonHeight` with `buttonPadding` between; a vertical bar swaps rows and columns. Check against the author's own layout: bar 7 = 377 wide, the damage meter = 375 | S | `EUI_ActionBars_Layout.lua` `ComputeBarLayout` (read; formula re-derived, nothing copied), `tests/test_layout_geometry.lua` §9 |
+| A unit frame is `frameWidth` × (`healthHeight` + `powerHeight`); a cast bar `playerCastbarWidth`/`castbarWidth` × `…Height`; the player's own cast bar is hidden when `showPlayerCastbar` is off (the Resource Bars cast bar is used) | S (approximate: EllesmereUI snaps to its pixel grid) | the saved keys; `EllesmereUIUnitFrames` blob |
+| Raid and party frames: `unlockPos` and `partyUnlockPos` `{ point, relPoint, x, y }`; centre offsets in Compact | S | the capture; `partyFrameWidth`, `partyFrameHeight`, `partyHorizontal` |
+| The game's default tooltip place: `GameTooltipDefaultContainer`, `BOTTOMRIGHT` at (-9, 85), read through its first point like `GameTooltip_SetDefaultAnchor` | S | `wow-ui-source` (forever) `Blizzard_GameTooltip/Mainline/GameTooltip.xml`, `Blizzard_SharedXML/SharedTooltipTemplates.lua` 87–112 |
+| Not placed by the screen layer: the Battle Res frame (`EllesmereUIQoL.battleRes.pos`, stored as `centerX`/`centerY`), the CDM's other bars and class power (left at the author's coordinates, which in Compact sit above the block) | S | the capture |
+

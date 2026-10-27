@@ -1,9 +1,9 @@
 -- TwichUI Layout Setup: the wizard's artwork
--- Four pictures, made by tools/make_layout_wizard_art.py from the sources in assets/ (docs/layouts/wizard.md says what
+-- Five pictures, made by tools/make_layout_wizard_art.py from the sources in assets/ (docs/layouts/wizard.md says what
 -- each source needed and what was not built). The three small ones are registered with the icon registry (R.Icons), so
 -- they are drawn the same way every other TwichUI icon is, including the fallback to TwichUI's own emblem when the game
--- refuses a file. The larger one (Classic Adventure's picture) is drawn here with the same rule. A picture is only ever
--- decoration: a missing or refused file leaves the words, and the wizard works without it.
+-- refuses a file. The two larger ones (Classic and Compact Adventure's pictures) are drawn here with the same rule. A
+-- picture is only ever decoration: a missing or refused file leaves the words, and the wizard works without it.
 --
 --   Art.Has(id)            whether a picture is shipped for this id (false for one that is reserved or unknown)
 --   Art.Apply(texture, id) draws it; returns true, or false (the texture is hidden) when there is nothing to draw
@@ -21,14 +21,13 @@ local MEDIA = [[Interface\AddOns\TwichUI_LayoutWizard\media\]]
 Art.FILES = {
     emblem = { file = MEDIA .. "emblem", w = 128, h = 128, icon = "layoutEmblem", what = "the setup emblem: a bound journal and a pocket compass" },
     classic = { file = MEDIA .. "classic", w = 512, h = 256, what = "Classic Adventure: an open journal, a shield and a map" },
+    compact = { file = MEDIA .. "compact", w = 512, h = 256, what = "Compact Adventure: a belt pouch with a scroll and a dagger" },
     personalize = { file = MEDIA .. "personalize", w = 128, h = 128, icon = "layoutPersonalize", what = "colour swatches on a ring" },
     screenFit = { file = MEDIA .. "screenfit", w = 128, h = 128, icon = "layoutScreenFit", what = "a framed screen with a width arrow" },
 }
 
--- Pictures that exist as sources but are not built into the package yet.
-Art.RESERVED = {
-    compact = "Compact Adventure's picture: its source is in assets/ but is built (tools/make_layout_wizard_art.py --phase5) only when that layout is",
-}
+-- Pictures that exist as sources but are not built into the package yet (none since Phase 5 built Compact Adventure's).
+Art.RESERVED = {}
 
 -- Registered with the icon registry once (it is shared by every TwichUI window; an id already there is left alone).
 for _, e in pairs(Art.FILES) do

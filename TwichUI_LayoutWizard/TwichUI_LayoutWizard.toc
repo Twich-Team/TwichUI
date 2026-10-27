@@ -16,9 +16,11 @@ Art.lua
 
 # Remembered choices, then the model (no frames: what each step shows and what its buttons do), then the drawing
 State.lua
+Scene.lua
 Model.lua
 Preview.lua
 Pages.lua
+Overlay.lua
 
 # The window (last: it tells TwichUI the wizard is ready)
 Window.lua

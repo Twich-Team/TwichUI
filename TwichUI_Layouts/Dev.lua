@@ -9,7 +9,8 @@
 --   /tui layout restore          shows what Restore would do; /tui layout restore confirm does it
 --   /tui layout status           the install record: state, steps, the last check
 --   /tui layout detach confirm   forgets the record and changes nothing else (for a record that can't be used)
--- pkg: test (the developer test package, the default) or classic (Classic Adventure). density: standard or larger.
+-- pkg: test (the developer test package, the default), classic (Classic Adventure) or compact (Compact Adventure, the
+-- same package's other layout). density: standard or larger.
 -- Output stays in your own chat frame. Nothing reloads by itself: when a reload is needed, it says so.
 
 local R = TwichUI
@@ -68,6 +69,7 @@ local EXPLAIN = {
 local PACKAGES = {
     test = function() return LY.TEST_PACKAGE, LY.TEST_VARIANT end,
     classic = function() return LY.CLASSIC_PACKAGE, LY.CLASSIC_VARIANT end,
+    compact = function() return LY.CLASSIC_PACKAGE, LY.COMPACT_VARIANT end,   -- the same package, its other variant
 }
 
 -- What a screen-layer note means (from the adapters' plans).
@@ -265,7 +267,7 @@ end
 local function Help()
     Say("the developer test of layout installs (not the wizard). Commands:")
     Line("/tui layout validate | plan | apply [confirm] | geometry | verify | restore [confirm] | status | detach confirm")
-    Line("After validate, plan, apply or geometry: test or classic (the package), standard or larger (the density); geometry also takes WxH.")
+    Line("After validate, plan, apply or geometry: test, classic or compact (the package or layout), standard or larger (the density); geometry also takes WxH.")
 end
 
 local function Show(o)
@@ -391,11 +393,11 @@ local function Options(rest)
 end
 
 local function Geometry(o)
-    local pkg = PACKAGES[o.pkg]()
+    local pkg, variant = PACKAGES[o.pkg]()
     if not pkg.geometry then Say("the %s package has no screen rules.", o.pkg) return end
     local screen = o.screen or LY.Geometry.Live()
     if not screen then Say("%s", Explain("no-screen")) return end
-    local geo, why = LY.Geometry.Resolve(pkg.geometry, screen, { density = o.density })
+    local geo, why = LY.Geometry.Resolve(pkg.geometry, screen, { density = o.density, variant = variant })
     if not geo then Say("the screen rules can't be worked out (%s).", tostring(why)) return end
     Say("where %s's components go%s:", o.pkg, o.screen and " on that screen" or " on this screen")
     if screen.physW and not o.screen then

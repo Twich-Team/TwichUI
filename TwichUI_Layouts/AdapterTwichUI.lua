@@ -487,6 +487,18 @@ end
 -- The screen layer for places. Pure: composed values and the resolved screen in, places out.
 -- Returns { [id] = { value, comp } }, notes { { code, id } }.
 ---------------------------------------------------------------------------
+-- Where one place goes on this screen (the install and the preview both call it). v = the stored value ({ x, y [, point] }),
+-- comp = the resolved component it is attached to, pt = the point of it to follow ("" for its centre).
+-- Returns { x, y, point } as stored (point only for a place that keeps one).
+local function PlaceOne(p, v, comp, pt, geo)
+    local Gm = LY.Geometry
+    local point = (p.kind == "top" and "TOP") or (p.kind == "point" and v and v.point) or "CENTER"
+    local mv = Gm.Moved(comp, pt ~= "" and pt or nil)
+    local x, y = Gm.Follow({ rel = point, x = v.x, y = v.y }, mv, geo.canvas, geo.screen)
+    return { x = x, y = y, point = p.kind == "point" and point or nil }, point
+end
+A.PlaceOne = PlaceOne
+
 function A.Places(composed, geo, attach)
     local out, notes = {}, {}
     local Gm = LY.Geometry
@@ -502,9 +514,7 @@ function A.Places(composed, geo, attach)
         local v = composed.units[PlaceUnit(id)]
         local point = (p.kind == "top" and "TOP") or (p.kind == "point" and v and v.point) or "CENTER"
         if v ~= nil then
-            local mv = Gm.Moved(comp, pt ~= "" and pt or nil)
-            local x, y = Gm.Follow({ rel = point, x = v.x, y = v.y }, mv, geo.canvas, geo.screen)
-            out[id] = { value = { x = x, y = y, point = p.kind == "point" and point or nil }, comp = compId }
+            out[id] = { value = (PlaceOne(p, v, comp, pt, geo)), comp = compId }
         elseif p.fromRect then
             local x, y = Gm.Stored(comp.rect, point, point, geo.screen)
             out[id] = { value = { x = x, y = y }, comp = compId }

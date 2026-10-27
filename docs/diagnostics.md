@@ -127,6 +127,7 @@ uses an item, sends anything or makes up events. Each states its cost before you
 | `nav.load` (`Perf.Call`) | `nav/Data.lua` `ND.Load`, around `C_AddOns.LoadAddOn` of `TwichUI_NavData` | init |
 | `layouts.load` (`Perf.Call`) | `LayoutsLauncher.lua` `L.Load`, around `C_AddOns.LoadAddOn` of `TwichUI_Layouts` | init |
 | `layoutwizard.load` (`Perf.Call`) | `LayoutsLauncher.lua` `L.LoadWizard`, around `C_AddOns.LoadAddOn` of `TwichUI_LayoutWizard` | init |
+| `layoutwizard.overlay.build` (`Perf.Call`), `layoutwizard.overlay` (`Perf.Call`) | `TwichUI_LayoutWizard/Overlay.lua` `Build` (the first time the full-size preview opens), `Draw` (each time it opens, or a layout, scenario or the screen changes in it; never while it is closed) | init, layout |
 | `layoutwizard.build` (`Perf.Call`), `layoutwizard.preview` (`Perf.Call`) | `TwichUI_LayoutWizard/Window.lua` `Build` (the first open only), `TwichUI_LayoutWizard/Preview.lua` `Draw` (each time a step with the preview is shown, a choice or the screen changes) | init, layout |
 | `layouts.plan`, `layouts.apply`, `layouts.verify`, `layouts.restore` (`Perf.Call`) | `TwichUI_Layouts/Engine.lua` `LY.Plan`, `LY.Apply`, `LY.Verify` and `LY.VerifyRestore`, `LY.Restore` (on request; `layouts.verify` also once after the reload that finishes an install or restore) | rebuild, bulk, evaluate, bulk |
 | `classbars.anim`, `pins.ping.tick`, `npcs.map.pulse` (`Perf.Call`) | `classbars/Anim.lua`, `pins/PingMap.lua`, `npcs/Map.lua` | update |
@@ -144,9 +145,13 @@ Gauges (`Gauges.lua`) read what modules already report (`Snapshot()` functions a
 listeners and events (`R.ListenerCounts`, added to `Core.lua`), switch listeners, settings-closed callbacks, effects
 easing, settings shown, pages drawn and search index, world map shown, NPC and pin marker pools and those in use, map
 detail tiles, navigation tiles decoded, reminders running and observation keys, Healer Watch's and class bars' events.
-The layout setup registers two of its own (`TwichUI_LayoutWizard/Window.lua`, only once it is loaded): `layoutwizard.events`
-(events it has registered: 4 while its window is open, 0 closed) and `layoutwizard.frames` (frames and pages it keeps;
-it does not grow when the window is opened again). No global function, `CreateFrame`, timer or event registration is wrapped or replaced.
+The layout setup registers four of its own (`TwichUI_LayoutWizard/Window.lua` and `Overlay.lua`, only once it is loaded):
+`layoutwizard.events` (events it has registered: 4 while its window is open, 0 closed), `layoutwizard.frames` (frames and
+pages it keeps; it does not grow when the window is opened again), and for its full-size preview
+`layoutwizard.overlay.events` (3 while it is shown, 0 closed) and `layoutwizard.overlay.frames` (frames and textures it
+keeps: made as the pieces first appear, bounded by the package, not growing when it is opened again). Not scoped, and
+why: building the scene (`Scene.lua`, `LY.Elements`: a few table reads and arithmetic per redraw, cached until a pick, a
+layout, a scenario or the screen changes). No global function, `CreateFrame`, timer or event registration is wrapped or replaced.
 
 ## Views
 

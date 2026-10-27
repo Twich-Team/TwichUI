@@ -18,6 +18,12 @@
 -- There is no general constraint solving: a layout that can't fit says so, and nothing is shrunk to make it fit.
 --
 -- The author's reference screen (canvas) reproduces the author's layout exactly: every offset is measured from it.
+--
+-- Variants (Phase 5). A package's geometry is the rules the layouts share. `variants[id]` may add components and
+-- attachments to them, or replace ones of the same id, for that variant only (G.Spec): Compact Adventure shares the
+-- minimap, chat, meter and the rest with Classic and gives the unit frames and bars block its own box. A variant is
+-- checked as the whole spec it makes, so each layout is complete by itself; a variant that names nothing here (Classic)
+-- uses the shared rules as they are.
 
 local R = TwichUI
 local LY = R.Layouts
@@ -30,6 +36,7 @@ G.MAX_COMPONENTS = 24
 G.MAX_DIM = 20000        -- no screen, size or offset is larger than this
 
 local FIELDS = LY.Set({ "canvas", "margin", "area", "densities", "narrow", "components", "attach" })
+local VARIANT_FIELDS = LY.Set({ "components", "attach", "narrow", "area" })   -- what a variant may add or replace
 local COMPONENT = LY.Set({ "label", "managed", "ref", "size", "anchor", "min", "max", "share", "density", "room", "above",
     "narrow", "applied" })
 local ANCHOR = LY.Set({ "point", "to", "rel", "x", "y" })
@@ -59,6 +66,8 @@ local function Place(point, px, py, w, h)
     if point:find("TOP") then y = py - h / 2 elseif point:find("BOTTOM") then y = py + h / 2 end
     return G.Rect(x, y, w, h)
 end
+
+G.Place = Place   -- Elements.lua places a piece by one of its points
 
 local function Overlap(a, b)
     return math.min(a.r, b.r) - math.max(a.l, b.l), math.min(a.t, b.t) - math.max(a.b, b.b)
@@ -145,9 +154,8 @@ local function Order(comps, ids)
     return order
 end
 
--- spec: the package's geometry. adapters: { [adapter] = adapter } for the attach maps (each adapter's Positions()).
--- Returns order | nil; problems are added to P.
-function G.Check(spec, P, where)
+-- One whole spec (a variant already merged in). Returns the components' resolve order or nil; problems go to P.
+local function CheckSpec(spec, P, where)
     where = where or "geometry"
     if type(spec) ~= "table" then P.add("not-table", where) return nil end
     for k in pairs(spec) do if not FIELDS[k] then P.add("unknown-field", where .. "." .. tostring(k)) end end
@@ -251,6 +259,94 @@ function G.Check(spec, P, where)
         end
     end
     return order
+end
+
+---------------------------------------------------------------------------
+-- Variants: the shared rules with one variant's own components and attachments
+---------------------------------------------------------------------------
+local specs = setmetatable({}, { __mode = "k" })   -- spec -> { [variant] = merged }; the merge shares the package's tables
+
+-- The whole spec of one variant: the shared rules, with the variant's components and attachments added or replacing
+-- those of the same id (an attachment replaces by position), and its narrow width or area if it gives one. Without
+-- variants, or for a variant that names nothing, it is the spec itself. Never changes its arguments. A malformed
+-- `variants` is left for G.Check to refuse: here it is read as nothing.
+function G.Spec(spec, variant)
+    local v = type(spec) == "table" and type(variant) == "string" and type(spec.variants) == "table" and spec.variants[variant]
+    if type(v) ~= "table" then return spec end
+    local cache = specs[spec]
+    if not cache then cache = {}; specs[spec] = cache end
+    if cache[variant] then return cache[variant] end
+    local out = {}
+    for k, x in pairs(spec) do if k ~= "variants" then out[k] = x end end
+    if type(v.components) == "table" then
+        local comps = {}
+        for id, c in pairs(type(spec.components) == "table" and spec.components or {}) do comps[id] = c end
+        for id, c in pairs(v.components) do comps[id] = c end
+        out.components = comps
+    end
+    if type(v.attach) == "table" then
+        local attach = {}
+        for adapterId, map in pairs(type(spec.attach) == "table" and spec.attach or {}) do attach[adapterId] = map end
+        for adapterId, map in pairs(v.attach) do
+            if type(map) == "table" and type(attach[adapterId]) == "table" then
+                local m = {}
+                for posId, to in pairs(attach[adapterId]) do m[posId] = to end
+                for posId, to in pairs(map) do m[posId] = to end
+                attach[adapterId] = m
+            else attach[adapterId] = map end
+        end
+        out.attach = attach
+    end
+    if v.narrow ~= nil then out.narrow = v.narrow end
+    if v.area ~= nil then out.area = v.area end
+    cache[variant] = out
+    return out
+end
+
+-- spec: the package's geometry (the shared rules and, if it has them, `variants`). The shared rules and every variant's
+-- whole spec are checked, each as complete by itself. Returns the shared rules' resolve order or nil; problems go to P.
+-- (Package.lua also checks that each variant named here is one of the package's.)
+function G.Check(spec, P, where)
+    where = where or "geometry"
+    if type(spec) ~= "table" then P.add("not-table", where) return nil end
+    local shared = spec
+    if spec.variants ~= nil then
+        shared = {}
+        for k, x in pairs(spec) do if k ~= "variants" then shared[k] = x end end
+    end
+    local order = CheckSpec(shared, P, where)
+    local variants = spec.variants
+    if variants ~= nil then
+        if type(variants) ~= "table" then P.add("not-table", where .. ".variants") return order end
+        local n = 0
+        for id, v in pairs(variants) do
+            n = n + 1
+            local at = where .. ".variants." .. tostring(id)
+            if not LY.IsId(id) then P.add("bad-id", at)
+            elseif type(v) ~= "table" then P.add("not-table", at)
+            else
+                local ok = true
+                for k, x in pairs(v) do
+                    if not VARIANT_FIELDS[k] then P.add("unknown-field", at .. "." .. tostring(k)); ok = false
+                    elseif (k == "components" or k == "attach" or k == "area") and type(x) ~= "table" then P.add("not-table", at .. "." .. k); ok = false
+                    elseif k == "attach" then
+                        for adapterId, map in pairs(x) do
+                            if type(map) ~= "table" then P.add("not-table", at .. ".attach." .. tostring(adapterId)); ok = false end
+                        end
+                    end
+                end
+                if ok then CheckSpec(G.Spec(spec, id), P, at) end
+            end
+        end
+        if n > LY.MAX_VARIANTS then P.add("too-many", where .. ".variants") end
+    end
+    return order
+end
+
+-- The attach maps of one variant ({ [adapter] = { [position id] = "component[:POINT]" } }).
+function G.Attach(spec, variant)
+    local s = G.Spec(spec, variant)
+    return type(s) == "table" and s.attach or nil
 end
 
 ---------------------------------------------------------------------------
@@ -380,8 +476,8 @@ local function One(spec, order, screenW, screenH, f, refs)
     return { screen = screen, area = area, narrow = narrow, rects = rects, notes = notes, diags = diags }
 end
 
--- opts: { density = id }. screen: { w, h } in UIParent units.
--- Returns result | nil, why. result = { screen, area, density, factor, narrow, order, components = { [id] = { id, label,
+-- opts: { density = id, variant = id }. screen: { w, h } in UIParent units.
+-- Returns result | nil, why. result = { variant, screen, area, density, factor, narrow, order, components = { [id] = { id, label,
 --   managed, rect, ref (the same component on the canvas), dx, dy (centre moved by), notes, applied } },
 --   diagnostics = { { code, id, other, by, w, h } } (sorted), fits }
 function G.Resolve(spec, screen, opts)
@@ -389,6 +485,10 @@ function G.Resolve(spec, screen, opts)
     local P = LY.Problems()
     local order = G.Check(spec, P)
     if not order or P.n > 0 then return nil, "invalid", P end
+    spec = G.Spec(spec, opts.variant)      -- this variant's whole rules (the shared ones if it has none of its own)
+    local ids = {}
+    for id in pairs(spec.components) do ids[id] = true end
+    order = Order(spec.components, ids)
     if type(screen) ~= "table" or not (Finite(screen.w) and Finite(screen.h) and screen.w >= 200 and screen.h >= 200) then
         return nil, "screen"
     end
@@ -400,7 +500,7 @@ function G.Resolve(spec, screen, opts)
     local canvas = One(spec, order, cv.w, cv.h, 1, nil)
     local refs = { own = canvas.rects, rects = canvas.rects, screen = canvas.screen, area = canvas.area }
     local live = One(spec, order, screen.w, screen.h, f, refs)
-    local out = { screen = live.screen, area = live.area, density = density, factor = f, narrow = live.narrow,
+    local out = { variant = opts.variant, screen = live.screen, area = live.area, density = density, factor = f, narrow = live.narrow,
         order = order, components = {}, diagnostics = live.diags, canvas = canvas.screen }
     local managed = {}
     for _, id in ipairs(order) do

@@ -1,13 +1,17 @@
 -- TwichUI Layout Setup: what the wizard remembers (TwichUIDB.layouts.wizard)
--- The picks the player made (which option of each choice), and a one-word note that the player started a reload from
--- the wizard, so the result can be shown when the game comes back. Nothing else: no frames, callbacks, timers or
--- settings. It lives beside the install record (TwichUIDB.layouts.install, TwichUI_Layouts' own) and never touches it.
+-- The layout the player chose (Classic or Compact Adventure), the picks they made (which option of each choice), and a
+-- one-word note that the player started a reload from the wizard, so the result can be shown when the game comes back.
+-- Nothing else: no frames, callbacks, timers or settings. It lives beside the install record (TwichUIDB.layouts.install,
+-- TwichUI_Layouts' own) and never touches it. The scenario the preview shows and whether the full-size preview is open
+-- are not remembered: they are how the preview looks right now, not a choice.
 --
---   { v = 1, picks = { [choice id] = option id }, resume = "install" | "restore" }
+--   { v = 1, variant = "<variant id>", picks = { [choice id] = option id }, resume = "install" | "restore" }
 --
--- Reading never writes. What is read is checked narrowly: a pick that isn't an option of its choice goes back to that
--- choice's default and the rest is kept; anything that isn't a table is ignored whole. A record from a newer TwichUI
--- (v above this one) is not understood and not overwritten: the defaults are used and nothing is saved over it.
+-- (`variant` was added in Phase 5 without a new version: a record without one reads as the first layout, and an older
+-- TwichUI that saves over it simply forgets the layout.) Reading never writes. What is read is checked narrowly: a
+-- pick that isn't an option of its choice goes back to that choice's default and the rest is kept; a variant that isn't
+-- one of the package's goes back to the first; anything that isn't a table is ignored whole. A record from a newer
+-- TwichUI (v above this one) is not understood and not overwritten: the defaults are used and nothing is saved over it.
 
 local R = TwichUI
 local WZ = R.LayoutWizard
@@ -40,15 +44,25 @@ function S.Defaults(pkg)
     return out
 end
 
--- The saved picks, checked against the package's choices. Returns { picks, resume, repaired, newer }.
-function S.Load(pkg)
-    local out = { picks = S.Defaults(pkg), repaired = false, newer = false }
+local function VariantOk(variants, id)
+    if type(id) ~= "string" then return false end
+    for _, v in ipairs(variants or {}) do if v == id then return true end end
+    return false
+end
+
+-- The saved layout and picks, checked against the package's variants (ids, the first being the default) and choices.
+-- Returns { variant, picks, resume, repaired, newer }.
+function S.Load(pkg, variants)
+    local out = { variant = variants and variants[1] or nil, picks = S.Defaults(pkg), repaired = false, newer = false }
     local root = Root(false)
     local raw = root and root.wizard
     if raw == nil then return out end
     if type(raw) ~= "table" then out.repaired = true return out end
     if type(raw.v) ~= "number" or raw.v ~= raw.v or raw.v % 1 ~= 0 or raw.v < 1 then out.repaired = true return out end
     if raw.v > S.VERSION then out.newer = true return out end
+    if raw.variant ~= nil then
+        if VariantOk(variants, raw.variant) then out.variant = raw.variant else out.repaired = true end
+    end
     if raw.picks ~= nil and type(raw.picks) ~= "table" then out.repaired = true end
     local saved = type(raw.picks) == "table" and raw.picks or {}
     for _, ch in ipairs(pkg and pkg.choices or {}) do
@@ -77,27 +91,30 @@ local function Newer()
     return type(raw) == "table" and type(raw.v) == "number" and raw.v > S.VERSION
 end
 
--- Remembers the picks (and a resume note, if any). Returns false when it must not (a newer record is there).
-function S.Save(pkg, picks, resume)
+-- Remembers the layout, the picks (and a resume note, if any). Returns false when it must not (a newer record is there).
+-- variant nil keeps the layout already remembered (a writer that only has picks to save must not forget it).
+function S.Save(pkg, picks, resume, variant)
     if Newer() then return false end
     local root = Root(true)
     if not root then return false end
+    if variant == nil and type(root.wizard) == "table" then variant = root.wizard.variant end
+    if type(variant) ~= "string" or #variant > 32 or not variant:match("^[%w%-]+$") then variant = nil end
     local saved = {}
     for _, ch in ipairs(pkg and pkg.choices or {}) do
         local pick = picks and picks[ch.id]
         if OptionOf(ch, pick) then saved[ch.id] = pick end
     end
-    root.wizard = { v = S.VERSION, picks = saved, resume = (resume == "install" or resume == "restore") and resume or nil }
+    root.wizard = { v = S.VERSION, variant = variant, picks = saved, resume = (resume == "install" or resume == "restore") and resume or nil }
     return true
 end
 
 -- The note that a reload was started from the wizard (so the result can be shown after it), kept with the picks.
-function S.SetResume(pkg, picks, kind) return S.Save(pkg, picks, kind) end
+function S.SetResume(pkg, picks, kind, variant) return S.Save(pkg, picks, kind, variant) end
 
 -- Reads the resume note and clears it (writes only when there was one). Returns "install", "restore" or nil.
-function S.TakeResume(pkg, picks)
-    local st = S.Load(pkg)
+function S.TakeResume(pkg, picks, variant)
+    local st = S.Load(pkg, variant and { variant } or nil)
     if not st.resume then return nil end
-    S.Save(pkg, picks or st.picks, nil)
+    S.Save(pkg, picks or st.picks, nil, variant)
     return st.resume
 end

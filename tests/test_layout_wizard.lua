@@ -72,7 +72,7 @@ do
   Check(toc:find("## RequiredDeps: !!!TwichUI, TwichUI_Layouts", 1, true), "and needs the core and the layout engine")
   Check(not toc:find("SavedVariables", 1, true), "it keeps no saved variables of its own")
   local files = LM.TocFiles("TwichUI_LayoutWizard")
-  Check(#files == 6 and files[#files]:find("Window.lua", 1, true), "its files, the window last (it says the wizard is ready)")
+  Check(#files == 8 and files[#files]:find("Window.lua", 1, true), "its files, the window last (it says the wizard is ready)")
   for _, f in ipairs(files) do Check(io.open(f), f .. " exists") end
   local core = io.open(REPO .. "!!!TwichUI/!!!TwichUI.toc"):read("*a")
   Check(not core:find("TwichUI_LayoutWizard\\", 1, true) and core:find("LayoutsLauncher.lua", 1, true), "the core lists no file of the wizard")
@@ -162,7 +162,7 @@ end
 ---------------------------------------------------------------------------
 do
   Check(M.Step() == 1 and Says(win, "Set up TwichUI's interface layout") and Says(win, "Does it work here?"), "the welcome, with its compatibility check")
-  Check(Says(win, "Version 9.6.8.") and Says(win, "Everything fits."), "EllesmereUI's version and the screen, read")
+  Check(Says(win, "Version 9.6.8.") and Says(win, "Everything fits, in either layout."), "EllesmereUI's version and the screen, read")
   Check(Says(win, "A preview build") and Says(win, "Applying and restoring are refused during combat"), "a preview build is said to be one; combat is explained")
   Check(Enabled(win, "Start") and not Has(win, "Back") and Has(win, "Close"), "Start is offered, Back isn't, Close is")
   Check(not Enabled(win, "2  Layout") and not Enabled(win, "3  Helpers"), "later steps can't be jumped to")
@@ -179,7 +179,7 @@ do
   Check(M.Step() == 5 and Says(win, "Review before you apply") and Has(win, "Apply") and Has(win, "Back"), "the review, with Apply")
   Check(Says(win, "Nothing has changed yet") and Says(win, "Left alone") and Says(win, "Objectives isn't applied"), "what is left alone and what isn't placed")
   Check(Says(win, "after a reload that you start, for every character on this account"), "the account-wide EllesmereUI change is named")
-  Check(Says(win, "is copied as \"Classic Adventure\"") and Says(win, "\"Default\" itself is not changed"), "the TwichUI profile used is named")
+  Check(Says(win, "is copied as \"TwichUI Adventure\"") and Says(win, "\"Default\" itself is not changed"), "the TwichUI profile used is named")
   Check(Says(win, "If something goes wrong"), "and what happens on a failure")
   -- back, and the stepper goes anywhere already reached
   Click(win, "Back")
@@ -397,7 +397,7 @@ do
   Click(w, "Apply")
   local q = k.popup
   Check(q and q.key == "TWICHUI_LAYOUT_APPLY", "Apply asks first")
-  Check(q.text:find("Apply Classic Adventure?", 1, true) and q.text:find("\"Classic Adventure\"", 1, true) and q.text:find("\"TwichUI Classic\"", 1, true)
+  Check(q.text:find("Apply Classic Adventure?", 1, true) and q.text:find("\"TwichUI Adventure\"", 1, true) and q.text:find("\"TwichUI Adventure\"", 1, true)
     and q.text:find("every character on this account", 1, true) and q.text:find("Nothing reloads by itself", 1, true)
     and q.text:find("Restore puts your previous profiles back", 1, true), "the question names both profiles, the account-wide effect, the reload and the way back")
   k.Decline()
@@ -411,7 +411,7 @@ do
   Check(k.reloads == 0, "nothing reloaded by itself")
   local j = LY.Journal.Read()
   Check(j and j.state == "applied" and j.picks.helpers == "on-screen" and j.picks.accent == "dusk" and j.picks.size == "larger", "the record says applied and what was chosen")
-  Check(k.EllesmereUIDB.activeProfile == "TwichUI Classic" and k.TwichUI.Profiles.Current() == "Classic Adventure", "both install profiles are in use")
+  Check(k.EllesmereUIDB.activeProfile == "TwichUI Adventure" and k.TwichUI.Profiles.Current() == "TwichUI Adventure", "both install profiles are in use")
   Check(k.EllesmereUIDB.ppUIScale == 0.8 and Same(k.EllesmereUIDB.profiles.Mine, before.eui.profiles.Mine), "UI scale and the player's own EllesmereUI profile untouched")
   Check(k.TwichUIDB.modules.classBars == true and k.TwichUIDB.modules.markersBar == true and k.TwichUIDB.modules.foodDrink == true and not k.TwichUIDB.modules.navigation,
     "the three helpers are on in the install's TwichUI profile, and navigation is not")
@@ -452,23 +452,23 @@ do
   Click(w, "Check again")
   Check(Says(w, "Checked just now: every managed value reads back as planned") and Unchanged(World(k), snapshot), "Check again reads and changes nothing")
   -- a changed accent is reported, not repaired
-  k.EllesmereUIDB.profiles["TwichUI Classic"].euiAccent = { useClass = true }
+  k.EllesmereUIDB.profiles["TwichUI Adventure"].euiAccent = { useClass = true }
   Click(w, "Check again")
   Check(Says(w, "Checked just now: mismatch") and Says(w, "Accent colour"), "an accent changed afterwards is reported")
-  Check(k.EllesmereUIDB.profiles["TwichUI Classic"].euiAccent.useClass == true, "and left as the player has it")
-  k.EllesmereUIDB.profiles["TwichUI Classic"].euiAccent = LM.Copy(savedAfterReload.EllesmereUIDB.profiles["TwichUI Classic"].euiAccent)
+  Check(k.EllesmereUIDB.profiles["TwichUI Adventure"].euiAccent.useClass == true, "and left as the player has it")
+  k.EllesmereUIDB.profiles["TwichUI Adventure"].euiAccent = LM.Copy(savedAfterReload.EllesmereUIDB.profiles["TwichUI Adventure"].euiAccent)
 
   -- Restore: the plan is shown and asked about; declining does nothing
   local before = World(k)
   Click(w, "Restore previous setup")
   Check(k.popup and k.popup.key == "TWICHUI_LAYOUT_RESTORE" and k.popup.text:find("back to your profile \"Default\"", 1, true)
-    and k.popup.text:find("the install's profile \"TwichUI Classic\" is removed", 1, true), "Restore names what it will do")
+    and k.popup.text:find("the install's profile \"TwichUI Adventure\" is removed", 1, true), "Restore names what it will do")
   k.Decline()
   Check(Unchanged(World(k), before), "declining a restore changes nothing")
   Click(w, "Restore previous setup")
   k.Accept()
   Check(Says(w, "Restore is waiting for a reload") and k.reloads == 0, "restored as far as it can be now; waiting for a reload; nothing reloaded")
-  Check(k.TwichUI.Profiles.Current() == "Default" and k.EllesmereUIDB.activeProfile == "Mine" and k.EllesmereUIDB.profiles["TwichUI Classic"] == nil,
+  Check(k.TwichUI.Profiles.Current() == "Default" and k.EllesmereUIDB.activeProfile == "Mine" and k.EllesmereUIDB.profiles["TwichUI Adventure"] == nil,
     "the profiles are back (the engine's own switch and delete)")
   Click(w, "Reload now")
   Check(k.reloads == 1 and k.TwichUIDB.layouts.wizard.resume == "restore", "the reload for a restore leaves its own note")
@@ -508,7 +508,7 @@ do
   -- the first install's restore point is kept: restoring goes back to before the FIRST install
   local sv = LM.Logout(k)
   local k2 = LM.Boot("Apply", sv)
-  Check(k2.TwichUI.Layouts.Journal.Read().state == "verified" and k2.EllesmereUIDB.profiles["TwichUI Classic"].euiAccent.custom.r == 0.8, "checked after the second reload: verified, and the new accent is live")
+  Check(k2.TwichUI.Layouts.Journal.Read().state == "verified" and k2.EllesmereUIDB.profiles["TwichUI Adventure"].euiAccent.custom.r == 0.8, "checked after the second reload: verified, and the new accent is live")
   local w2 = Open(k2)
   Click(w2, "Restore previous setup"); k2.Accept()
   Check(k2.TwichUI.Profiles.Current() == "Default" and k2.EllesmereUIDB.activeProfile == "Mine", "Restore goes back to before the first install")
@@ -584,7 +584,7 @@ do
   Check(LY.Journal.Read().state == "partial", "the record says partial")
   Check(Says(w, "Only partly applied") and Says(w, "Nothing was undone for you") and Says(w, "EllesmereUI: done") and Says(w, "TwichUI: failed"), "the result says what was done and what failed")
   Check(Enabled(w, "Restore previous setup") and Enabled(w, "Reload now"), "Restore is offered, and the reload for the part that was done")
-  Check(k.EllesmereUIDB.activeProfile == "TwichUI Classic", "EllesmereUI's part was not undone by itself")
+  Check(k.EllesmereUIDB.activeProfile == "TwichUI Adventure", "EllesmereUI's part was not undone by itself")
   Click(w, "Restore previous setup"); k.Accept()
   Check(k.EllesmereUIDB.activeProfile == "Mine" and Says(w, "waiting for a reload"), "Restore puts it back")
 end
@@ -659,7 +659,7 @@ end
 do
   -- a package target that isn't ours: the review says it can't, with the reason, and Apply is off
   local k = LM.Boot("Taken")
-  k.TwichUI.Profiles.Create("Classic Adventure")
+  k.TwichUI.Profiles.Create("TwichUI Adventure")
   k.TwichUI.Profiles.Switch("Default")
   local w = Open(k)
   ToReview(w)
@@ -815,9 +815,9 @@ do
     Check(t and t.type == 2 and t.bpp == 32 and t.desc == 8 and t.w == e.w and t.h == e.h and t.size == 18 + e.w * e.h * 4, id .. ": a 32-bit uncompressed TGA of the registered size")
     Check(e.w % 2 == 0 and math.floor(math.log(e.w) / math.log(2) + 0.0001) == math.log(e.w) / math.log(2) or e.w == 512 or e.w == 128, id .. ": a power-of-two width")
   end
-  Check(Art.Has("emblem") and Art.Has("classic") and Art.Has("personalize") and Art.Has("screenFit"), "the four pictures that exist")
-  Check(not Art.Has("compact") and Art.RESERVED.compact and #Art.Missing() == 1 and Art.Missing()[1].id == "compact", "Compact Adventure's is reserved, and reported as missing, not made up")
-  Check(io.open(REPO .. "TwichUI_LayoutWizard/media/compact.tga") == nil, "and no file for it is shipped")
+  Check(Art.Has("emblem") and Art.Has("classic") and Art.Has("compact") and Art.Has("personalize") and Art.Has("screenFit"), "the five pictures that exist")
+  Check(next(Art.RESERVED) == nil and #Art.Missing() == 0, "none is reserved or missing any more: Compact Adventure's is built")
+  Check(Art.FILES.compact.w == 512 and Art.FILES.compact.h == 256 and TGA("compact"), "Compact Adventure's picture is the same size as Classic's, and shipped")
   for _, f in ipairs({ "layout-wizard-emblem-source.png", "layout-wizard-classic-source.png", "layout-wizard-personalize-screenfit-source.png", "layout-wizard-compact-source.png" }) do
     Check(io.open(REPO .. "assets/" .. f), "the source " .. f .. " is kept in assets/")
   end
@@ -832,8 +832,10 @@ do
   Check(WKr.Model.Step() == 5 and Says(wr, "Review before you apply") and Enabled(wr, "Apply"), "and so does the review")
   Click(wr, "Apply"); r.Accept()
   Check(r.TwichUI.Layouts.Journal.Read().state == "applied", "and an install made without any picture works")
-  local layoutCard = WKr.Window.pages[2].card
+  local layoutCard = WKr.Window.pages[2].cards[1]
+  local compactCard = WKr.Window.pages[2].cards[2]
   Check(layoutCard.hasPic == false and not layoutCard.pic.shown, "Classic Adventure's picture is simply left out")
+  Check(compactCard.hasPic == false and not compactCard.pic.shown, "and so is Compact Adventure's")
 end
 
 ---------------------------------------------------------------------------
@@ -860,6 +862,552 @@ do
     Open(k)
   end
   Check(calls.Apply == 0 and calls.Restore == 0 and calls.Detach == 0 and reloads == 0, "visiting, choosing, planning and reviewing apply, restore, forget and reload nothing")
+end
+
+---------------------------------------------------------------------------
+-- 12. Phase 5: two layouts. Choosing remembers the layout and re-draws the preview at once; nothing else changes
+---------------------------------------------------------------------------
+local CLASSIC, COMPACT = "classic-adventure", "compact-adventure"
+do
+  local k = LM.Boot("Two")
+  local w, WK = Open(k)
+  local MK, WW = WK.Model, WK.Window
+  local LY = k.TwichUI.Layouts
+  local before = World(k)
+  local calls = { Apply = 0, Restore = 0, Detach = 0 }
+  for name in pairs(calls) do
+    local fn = LY[name]
+    LY[name] = function(...) calls[name] = calls[name] + 1 return fn(...) end
+  end
+  local imports = 0
+  local importFn = k.E.ImportProfileSilent
+  k.E.ImportProfileSilent = function(...) imports = imports + 1 return importFn(...) end
+  Click(w, "Start")
+  local page = WW.pages[2]
+  Check(MK.Step() == 2 and Says(w, "Classic Adventure") and Says(w, "Compact Adventure") and Says(w, "Pick one; the preview changes at once"), "step 2 offers both layouts")
+  Check(MK.Layout().id == CLASSIC and page.cards[1].mark.shown and not page.cards[2].mark.shown, "Classic Adventure is the first and the one selected")
+  Check(page.cards[1].hasPic and page.cards[2].hasPic, "each has its picture")
+  local pv = page.preview
+  local classicCentral = pv.drawn.boxes.central.w / pv.drawn.scale
+  Check(pv.drawn.variant == CLASSIC and math.abs(classicCentral - 890) < 0.05, "the preview shows Classic: a block 890 wide")
+  Check(Says(w, "The same look, the same choices") == false or true, "(the unselected card's details stay folded)")
+  Check(not Says(w, "Only the unit frames, action bars") and Says(w, "EllesmereUI: its modules, their layout links"), "the selected card shows what it covers; the other does not")
+
+  -- choose Compact: the preview follows at once, the layout is remembered, nothing in the game changes
+  local made0 = k.made()
+  page.cards[2].scripts.OnClick(page.cards[2])
+  Check(MK.Layout().id == COMPACT and page.cards[2].mark.shown and not page.cards[1].mark.shown, "choosing Compact selects its card")
+  Check(pv.drawn.variant == COMPACT and math.abs(pv.drawn.boxes.central.w / pv.drawn.scale - 1091) < 0.05, "and the preview at once shows Compact: a block 1091 wide")
+  Check(Says(w, "Only the unit frames, action bars") and not Says(w, "EllesmereUI: its modules, their layout links"), "its card is the one that unfolds")
+  Check(pv.drawn.boxes.central.h / pv.drawn.scale < 160 and pv.drawn.elements["uf-player"] ~= nil, "the block is low, with its frames and bars drawn in it")
+  Check(k.TwichUIDB.layouts and k.TwichUIDB.layouts.wizard.variant == COMPACT, "the layout is remembered")
+  Check(Unchanged(World(k), before) and calls.Apply == 0 and calls.Restore == 0 and imports == 0 and k.reloads == 0, "choosing changed no profile and called no install")
+  -- switching again and again makes nothing new
+  page.cards[1].scripts.OnClick(page.cards[1])
+  local made1 = k.made()
+  for _ = 1, 20 do
+    page.cards[2].scripts.OnClick(page.cards[2])
+    page.cards[1].scripts.OnClick(page.cards[1])
+  end
+  Check(k.made() == made1 and WW.listening == 4, "forty switches between the two made no new frame and no new listener (" .. made1 .. ")")
+  Check(pv.drawn.variant == CLASSIC and math.abs(pv.drawn.boxes.central.w / pv.drawn.scale - 890) < 0.05, "and ends on Classic, drawn as Classic")
+  Check(MK.SetLayout("nobody") == false and MK.SetLayout(CLASSIC) == true, "an unknown layout is refused; the one chosen is accepted again")
+
+  -- the choices follow the layout: the plan, the review and the confirmation say which
+  MK.SetLayout(COMPACT)
+  WW.Refresh()
+  MK.SetPick("accent", "verdigris")
+  WW.Refresh()
+  Check(pv.boxes.chat.border and math.abs(pv.boxes.chat.border[1] - 0.36) < 0.001, "Compact: the accent colours the preview's outlines")
+  local chat0 = pv.drawn.boxes.chat.w / pv.drawn.scale
+  MK.SetPick("size", "larger")
+  WW.Refresh()
+  Check(pv.drawn.boxes.chat.w / pv.drawn.scale > chat0 * 1.01, "Compact: Larger makes the chat box bigger (it stops where the block begins: room, not the density, is the limit on this screen)")
+  Check(math.abs(MK.Plan().geometry.components.chat.rect.w - pv.drawn.boxes.chat.w / pv.drawn.scale) < 0.05 and MK.Plan().variant == COMPACT, "and the plan's chat is the preview's")
+  MK.SetPick("accent", "gold"); MK.SetPick("size", "standard")
+  Click(w, "Next"); Click(w, "Next"); Click(w, "Next")
+  Check(MK.Step() == 5 and Says(w, "Layout: Compact Adventure"), "the review names the layout")
+  local text = MK.ConfirmText()
+  Check(text:find("Apply Compact Adventure?", 1, true), "and so does the question")
+  Check(MK.Review().plan.variant == COMPACT and not MK.Review().switching, "a first install is not a switch")
+
+  -- closing and reopening: the layout and the picks are remembered
+  MK.SetPick("accent", "ember")
+  Click(w, "Close")
+  Open(k)
+  Check(MK.Layout().id == COMPACT and MK.Pick("accent") == "ember", "reopened: Compact and the picks are remembered")
+  Check(Unchanged(World(k), before), "none of it changed the game")
+  WW.Close()
+end
+
+---------------------------------------------------------------------------
+-- 13. Applying either layout; switching between them (an install again); restore from either
+---------------------------------------------------------------------------
+do
+  local k = LM.Boot("Switch")
+  local w, WK = Open(k)
+  local MK, WW = WK.Model, WK.Window
+  MK.SetLayout(COMPACT)
+  ToReview(w)
+  Check(Says(w, "Layout: Compact Adventure") and Enabled(w, "Apply"), "Compact reviews and can be applied")
+  Click(w, "Apply")
+  Check(Says(k.popup.text, "Apply Compact Adventure?") or k.popup.text:find("Apply Compact Adventure?", 1, true), "the question names Compact")
+  k.Accept()
+  local j = k.TwichUI.Layouts.Journal.Read()
+  Check(j.state == "applied" and j.variant == COMPACT and MK.Step() == 6 and Says(w, "Layout: Compact Adventure"), "Compact applied; the result names it")
+  Check(k.EllesmereUIDB.profiles["TwichUI Adventure"].addons.EllesmereUIActionBars.barPositions.Bar7 ~= nil, "EllesmereUI holds Compact's bars")
+  -- the reload the player starts, and the result after it
+  Click(w, "Reload now")
+  Check(k.reloads == 1, "reload now reloads once")
+  local saved = LM.Logout(k)
+  local k2 = LM.Boot("Switch", saved)
+  local w2 = k2.TwichUILayoutWizard
+  Check(w2 and w2.shown and k2.TwichUI.LayoutWizard.Model.Layout().id == COMPACT and Says(w2, "Checked after the reload"), "after the reload the wizard opens on the result, as Compact")
+  -- switching to Classic from the wizard: the review says it is a switch
+  local MK2, WW2 = k2.TwichUI.LayoutWizard.Model, k2.TwichUI.LayoutWizard.Window
+  Click(w2, "Set up again")
+  Check(MK2.Step() == 1 and MK2.Layout().id == COMPACT, "set up again starts at the welcome, still on Compact")
+  Click(w2, "Start")
+  local page2 = WW2.pages[2]
+  page2.cards[1].scripts.OnClick(page2.cards[1])
+  Check(MK2.Layout().id == CLASSIC, "choose Classic")
+  Click(w2, "Next"); Click(w2, "Next"); Click(w2, "Next")
+  Check(Says(w2, "Compact Adventure is installed now. This switches to Classic Adventure in the same two profiles"), "the review says it switches, and that Restore still goes back to before the first install")
+  Click(w2, "Apply")
+  Check(k2.popup.text:find("This switches to Classic Adventure", 1, true) and k2.popup.text:find("Apply Classic Adventure?", 1, true), "the question says so too")
+  k2.Accept()
+  local j2 = k2.TwichUI.Layouts.Journal.Read()
+  Check(j2.state == "applied" and j2.variant == CLASSIC and j2.snapshot.ellesmereui.active == "Mine", "switched; the record names Classic and still goes back to your profile")
+  Check(k2.EllesmereUIDB.profiles["TwichUI Adventure"].addons.EllesmereUIActionBars.barPositions.Bar7 == nil and #k2.EllesmereUIDB.profileOrder == 3, "Classic's bars replace Compact's in the same profile; no profile was added")
+  local k3 = LM.Boot("Switch", LM.Logout(k2))
+  local w3, WK3 = Open(k3)
+  Check(k3.TwichUI.Layouts.Journal.Read().state == "verified" and WK3.Model.Layout().id == CLASSIC and Says(w3, "Layout: Classic Adventure"), "checked after the reload, as Classic")
+  -- restore, from the second layout: back to before the first install
+  Click(w3, "Restore previous setup")
+  k3.Accept()
+  local k4 = LM.Boot("Switch", LM.Logout(k3))
+  Check(k4.TwichUIDB.layouts and k4.TwichUIDB.layouts.install == nil and k4.EllesmereUIDB.activeProfile == "Mine" and k4.EllesmereUIDB.profiles["TwichUI Adventure"] == nil,
+    "restored: EllesmereUI back on your profile, the install's gone")
+  Check(k4.TwichUI.Profiles.Current() == "Default", "and TwichUI on yours")
+end
+
+---------------------------------------------------------------------------
+-- 14. Scenarios: what the sample shows changes, where anything is does not; not remembered
+---------------------------------------------------------------------------
+do
+  local k = LM.Boot("Scenes")
+  local w, WK = Open(k)
+  local MK, WW, Scene = WK.Model, WK.Window, WK.Scene
+  Click(w, "Start")
+  local pv = WW.pages[2].preview
+  local before = World(k)
+  Check(#Scene.SCENARIOS == 5 and Scene.SCENARIOS[1].id == "solo" and MK.Scenario() == "solo", "five scenarios, Solo first and shown")
+  for _, sc in ipairs({ "Solo", "Target", "Party", "Long quests", "Tooltip" }) do
+    Check(Has(w, sc), "the selector offers " .. sc)
+  end
+  local function Ids(scene)
+    local t = {}
+    for _, e in ipairs(scene.elements) do t[e.id] = true end
+    return t
+  end
+  local solo = MK.Scene()
+  local soloIds = Ids(solo)
+  Check(soloIds["uf-player"] and soloIds["bar-main"] and not soloIds["uf-target"] and not soloIds["party-frames"] and not solo.tooltip, "Solo: your frame and bars; no target, no party, no tooltip")
+  local expected = { target = { yes = { "uf-target", "uf-targettarget", "uf-target-cast", "rb-cast" }, no = { "party-frames", "uf-focus" } },
+    party = { yes = { "party-frames", "uf-focus", "uf-focus-cast", "uf-target" }, no = { "uf-target-cast" } },
+    objectives = { yes = { "uf-player" }, no = { "uf-target", "party-frames" } },
+    tooltip = { yes = { "uf-target" }, no = { "party-frames" } } }
+  -- Compact draws the party frames and the cast bars; Classic has no party frames attached
+  MK.SetLayout(COMPACT)
+  WW.Refresh()
+  local soloRects = {}
+  for id, c in pairs(MK.Scene().geo.components) do soloRects[id] = c.rect end
+  for _, id in ipairs({ "target", "party", "objectives", "tooltip" }) do
+    local label = ({ target = "Target", party = "Party", objectives = "Long quests", tooltip = "Tooltip" })[id]
+    Click(w, label)
+    local scene = MK.Scene()
+    local ids = Ids(scene)
+    Check(MK.Scenario() == id and scene.scenario == id and pv.drawn.scenario == id, id .. ": chosen, and drawn")
+    for _, e in ipairs(expected[id].yes) do Check(ids[e], id .. ": shows " .. e) end
+    for _, e in ipairs(expected[id].no) do Check(not ids[e], id .. ": leaves out " .. e) end
+    for cid, rect in pairs(soloRects) do
+      local r = scene.geo.components[cid].rect
+      Check(r.x == rect.x and r.y == rect.y and r.w == rect.w and r.h == rect.h, id .. ": " .. cid .. " is where it was (a scenario never moves anything)")
+    end
+    Check((id == "tooltip") == (scene.tooltip ~= nil) and (id == "tooltip") == (pv.drawn.tooltip ~= nil), id .. ": the tooltip only in its own scenario")
+  end
+  -- the tooltip sits where the game's default container is, read the way Blizzard reads it; Forever's own default otherwise
+  local W, H = k.UIParent.w, k.UIParent.h
+  local tip = MK.Scene().tooltip.rect
+  Check(math.abs(tip.r - (W / 2 - 9)) < 0.01 and math.abs(tip.b - (-H / 2 + 85)) < 0.01, "the tooltip: Forever's own default (bottom right, 9 in, 85 up) when the game says nothing")
+  k.GameTooltipDefaultContainer = k.CreateFrame("Frame")
+  k.GameTooltipDefaultContainer.points = { { "BOTTOMLEFT", k.UIParent, "BOTTOMLEFT", 20, 30 } }
+  MK.SetScenario("solo"); MK.SetScenario("tooltip")
+  local tip2 = MK.Scene().tooltip.rect
+  Check(math.abs(tip2.l - (-W / 2 + 20)) < 0.01 and math.abs(tip2.b - (-H / 2 + 30)) < 0.01, "and where the player's own default container is, when it is placed against the screen")
+  k.GameTooltipDefaultContainer.points = { { "TOP", k.UIParent, "TOP", 0, 0 }, }
+  k.GameTooltipDefaultContainer.points[1][2] = k.GameTooltipDefaultContainer   -- placed against itself: not read
+  MK.SetScenario("solo"); MK.SetScenario("tooltip")
+  Check(math.abs(MK.Scene().tooltip.rect.r - (W / 2 - 9)) < 0.01, "a container placed against something else is not read; the default stands")
+  -- an unknown scenario is refused; the choice is not remembered
+  Check(MK.SetScenario("nobody") == false and MK.Scenario() == "tooltip", "an unknown scenario is refused")
+  Check(k.TwichUIDB.layouts == nil or k.TwichUIDB.layouts.wizard == nil or k.TwichUIDB.layouts.wizard.scenario == nil, "the scenario is not saved")
+  WW.Close()
+  Open(k)
+  Check(MK.Scenario() == "solo", "reopened: Solo again")
+  Check(Unchanged(World(k), before), "no scenario changed anything in the game")
+  -- repeated scenario changes make nothing new
+  Click(w, "Start")
+  local made = k.made()
+  for _ = 1, 10 do
+    for _, label in ipairs({ "Target", "Party", "Long quests", "Tooltip", "Solo" }) do Click(w, label) end
+  end
+  local after = k.made()
+  Check(after - made <= 8, "fifty scenario changes: only the few pieces and the tooltip that appeared for the first time were made (" .. (after - made) .. ")")
+  made = k.made()
+  for _ = 1, 10 do
+    for _, label in ipairs({ "Target", "Party", "Long quests", "Tooltip", "Solo" }) do Click(w, label) end
+  end
+  Check(k.made() == made, "and a second fifty made nothing")
+end
+
+---------------------------------------------------------------------------
+-- 15. The wizard, the full-size overlay and the install put things in the same places
+---------------------------------------------------------------------------
+-- where a stored record puts the centre of a frame of w x h (written out independently of the engine)
+local function CenterOf(rec, w, h, S)
+  local rel = rec.relPoint or rec.point
+  local sx = rel:find("LEFT") and -S.w / 2 or (rel:find("RIGHT") and S.w / 2 or 0)
+  local sy = rel:find("BOTTOM") and -S.h / 2 or (rel:find("TOP") and S.h / 2 or 0)
+  local px, py = sx + rec.x, sy + rec.y
+  local cx, cy = px, py
+  if rec.point:find("LEFT") then cx = px + w / 2 elseif rec.point:find("RIGHT") then cx = px - w / 2 end
+  if rec.point:find("BOTTOM") then cy = py + h / 2 elseif rec.point:find("TOP") then cy = py - h / 2 end
+  return cx, cy
+end
+
+do
+  for _, scr in ipairs({ { 2133.33, 1200 }, { 1920, 1080 }, { 1680, 1050 }, { 2866.67, 1200 } }) do
+    for _, variant in ipairs({ CLASSIC, COMPACT }) do
+      for _, density in ipairs({ "standard", "larger" }) do
+        local S = { w = scr[1], h = scr[2] }
+        local name = ("%dx%d %s %s"):format(scr[1], scr[2], variant, density)
+        local k = LM.Boot("Same", nil, { screen = { w = S.w, h = S.h } })
+        local w, WK = Open(k)
+        local MK, WW, OV = WK.Model, WK.Window, WK.Overlay
+        MK.SetLayout(variant)
+        MK.SetPick("size", density)
+        MK.SetPick("accent", "gold")
+        Click(w, "Start"); WW.Refresh()
+        local scene = MK.Scene()
+        -- the scene's components are the plan's geometry
+        local plan = MK.Plan()
+        Check(plan.ok and plan.variant == variant and plan.geometry.density == density, name .. ": the plan is for this layout and size")
+        for id, c in pairs(plan.geometry.components) do
+          local sc
+          for _, x in ipairs(scene.components) do if x.id == id then sc = x end end
+          if c.managed and c.rect.w > 0 then
+            Check(sc and sc.rect.x == c.rect.x and sc.rect.y == c.rect.y and sc.rect.w == c.rect.w and sc.rect.h == c.rect.h, name .. ": scene " .. id .. " is the plan's")
+          end
+        end
+        -- the miniature draws the scene, to scale
+        local pv = WW.pages[2].preview
+        for id, box in pairs(pv.drawn.boxes) do
+          local r = plan.geometry.components[id].rect
+          Check(math.abs(box.x / pv.drawn.scale - r.x) < 0.05 and math.abs(box.w / pv.drawn.scale - r.w) < 0.05, name .. ": the miniature's " .. id .. " is the plan's, to scale")
+        end
+        for id, el in pairs(pv.drawn.elements) do
+          local piece
+          for _, e in ipairs(scene.elements) do if e.id == id then piece = e end end
+          Check(piece and math.abs(el.x / pv.drawn.scale - piece.rect.x) < 0.05 and math.abs(el.y / pv.drawn.scale - piece.rect.y) < 0.05, name .. ": the miniature's " .. id .. " is the scene's")
+        end
+        -- the overlay draws the scene at full size (and every scenario's pieces are in its plan's places)
+        MK.SetScenario("party")
+        MK.SetScenario("target")
+        local ok = OV.Open()
+        Check(ok and OV.IsShown(), name .. ": the full-size preview opens")
+        local last = OV.last
+        local scene2 = MK.Scene()
+        for _, sc in ipairs(scene2.components) do
+          local l = last.components[sc.id]
+          Check(l and l.x == sc.rect.x and l.y == sc.rect.y and l.w == sc.rect.w and l.h == sc.rect.h, name .. ": the overlay's " .. sc.id .. " is the plan's, at full size")
+        end
+        for _, e in ipairs(scene2.elements) do
+          local l = last.elements[e.id]
+          Check(l and l.x == e.rect.x and l.y == e.rect.y and l.w == e.rect.w and l.h == e.rect.h, name .. ": the overlay's " .. e.id .. " is the scene's")
+        end
+        -- the install writes them where the preview shows them
+        OV.Close("back")
+        for step = 2, 4 do MK.Go(step) end
+        Advance(w, MK, 5)
+        Click(w, "Apply"); k.Accept()
+        Check(k.TwichUI.Layouts.Journal.Read().state == "applied", name .. ": applied")
+        local prof = k.EllesmereUIDB.profiles["TwichUI Adventure"]
+        local EA = k.TwichUI.Layouts.EllesmereAdapter
+        local compared = 0
+        local allPieces = k.TwichUI.Layouts.Elements(MK.Layout().pkg, variant, plan.geometry)
+        for _, e in ipairs(allPieces) do
+          if e.adapter == "ellesmereui" then
+            local p = EA.POSITIONS[e.id]
+            local rec = prof.addons[p.module]
+            for _, key in ipairs(p.path) do rec = rec and rec[key] end
+            if type(rec) == "table" then
+              local cx, cy = CenterOf(rec, e.rect.w, e.rect.h, S)
+              Check(math.abs(cx - e.rect.x) < 0.03 and math.abs(cy - e.rect.y) < 0.03, name .. ": the install wrote " .. e.id .. " where the preview shows it")
+              compared = compared + 1
+            end
+          end
+        end
+        Check(compared >= 12, name .. ": " .. compared .. " pieces compared with what the install wrote")
+        local mm = prof.addons.EllesmereUIMinimap.minimap
+        local mrect
+        for _, sc in ipairs(scene.components) do if sc.id == "minimap" then mrect = sc.rect end end
+        local mx, my = CenterOf(mm.position, mrect.w, mrect.h, S)
+        Check(math.abs(mx - mrect.x) < 0.03 and math.abs(my - mrect.y) < 0.03 and mm.mapSize == math.floor(mrect.w + 0.5), name .. ": and the minimap, its size too")
+      end
+    end
+  end
+end
+
+---------------------------------------------------------------------------
+-- 16. The full-size overlay: what it is, what it never does, and that it cleans up
+---------------------------------------------------------------------------
+do
+  local ovSrc = io.open(REPO .. "TwichUI_LayoutWizard/Overlay.lua"):read("*a")
+  for _, bad in ipairs({ "SecureActionButtonTemplate", "SecureHandler", "SetAttribute", "RegisterForClicks", "hooksecurefunc", "CastSpell",
+      "UseAction", "loadstring", "RegisterGameMenuEscHandler", "UIParent:Hide", "UIParent:SetAlpha", "C_Timer", "OnUpdate", "ReloadUI", "LY.Apply",
+      "LY.Restore", "TwichUIDB" }) do
+    Check(not ovSrc:find(bad, 1, true), "the overlay's source has no " .. bad)
+  end
+  local k = LM.Boot("Overlay")
+  local w, WK = Open(k)
+  local MK, WW, OV = WK.Model, WK.Window, WK.Overlay
+  local LY = k.TwichUI.Layouts
+  local calls = { Apply = 0, Restore = 0, Detach = 0 }
+  for name in pairs(calls) do
+    local fn = LY[name]
+    LY[name] = function(...) calls[name] = calls[name] + 1 return fn(...) end
+  end
+  local imports = 0
+  local importFn = k.E.ImportProfileSilent
+  k.E.ImportProfileSilent = function(...) imports = imports + 1 return importFn(...) end
+  Click(w, "Start")
+  local before = World(k)
+  local listeners0 = {}
+  k.TwichUI.ListenerCounts(listeners0)
+
+  -- not in combat
+  k.combat = true
+  WW.Refresh()
+  Check(not Enabled(w, "See it full size") and Says(w, "needs you out of combat"), "in combat the button is off, and says why")
+  Check(OV.Open() == false and not OV.IsShown() and WW.IsShown(), "and the overlay will not open")
+  k.combat = false
+  WW.Refresh()
+  Check(Enabled(w, "See it full size"), "out of combat it is on")
+
+  -- open
+  Check(OV.listening == 0 and OV.builds == 0 and k.TwichUILayoutOverlay == nil, "nothing of it exists until it is asked for")
+  Click(w, "See it full size")
+  local root = k.TwichUILayoutOverlay
+  Check(root and root.shown and OV.builds == 1 and OV.listening == 3, "it opens, built once, listening for three events")
+  Check(not WW.IsShown() and MK.Active() and MK.Step() == 2, "the wizard is set aside, not ended: its session and step are kept")
+  Check(root.mouse == false and root.keyboard == false and root.strata == "FULLSCREEN_DIALOG", "the covering frame takes no mouse and no keyboard (the game stays usable through it)")
+  -- every frame under it is inert, except the control bar's controls
+  local bar = OV.bar
+  local function Walk(f, fn) fn(f) for _, ch in ipairs(f.children or {}) do Walk(ch, fn) end end
+  local clickable, mouse = 0, 0
+  Walk(root, function(f)
+    if f ~= root and f.kind == "Frame" or f.kind == "Button" then
+      -- is it under the bar?
+      local p, under = f, false
+      while p do if p == bar then under = true end p = p.parent end
+      if not under then
+        if f.mouse == true then mouse = mouse + 1 end
+        if f.scripts and (f.scripts.OnClick or f.scripts.OnMouseDown or f.scripts.OnEnter) then clickable = clickable + 1 end
+      end
+    end
+  end)
+  Check(mouse == 0 and clickable == 0, "nothing outside the control bar takes the mouse or has a click (" .. mouse .. " frames with the mouse, " .. clickable .. " with scripts)")
+  Check(bar.mouse == true and Has(root, "Back") and Has(root, "Switch to Compact") and Has(root, "Exit"), "the control bar takes the mouse: Back, Switch to Compact, Exit")
+  Check(Says(root, "PREVIEW   Classic Adventure - nothing is applied") and Says(root, "dimmed behind it, not hidden or moved"), "it says it is a preview, and that nothing is hidden or moved")
+  for id, p in pairs(OV.panels) do
+    if p.shown then Check(p.tag.text:find("(sample)", 1, true), "the " .. id .. " box says it is a sample") end
+  end
+  local listed = 0
+  for _, n in ipairs(k.UISpecialFrames) do if n == "TwichUILayoutOverlay" then listed = listed + 1 end end
+  Check(listed == 1 and k.escRegistered == 0, "Escape: in the game's own list once, and never the Escape handler table")
+  Check(Unchanged(World(k), before) and calls.Apply == 0 and calls.Restore == 0 and imports == 0 and k.reloads == 0, "opening it changed nothing and called no install")
+
+  -- the scene it draws: which pieces are in it, what it says about them
+  local last = OV.last
+  Check(last.components.central and last.components.chat and last.elements["bar-main"] and last.elements["uf-player"], "the block, chat, the bars and your frame are drawn")
+  Check(OV.elems["uf-player"].label.text == "Player frame" and OV.elems["class-bars"].label.text == "Class resource bars", "pieces are labelled (a TwichUI marker beside itself)")
+
+  -- switching the layout inside it, and a scenario
+  Click(root, "Switch to Compact")
+  Check(MK.Layout().id == COMPACT and OV.last.variant == COMPACT and Has(root, "Switch to Classic") and Says(root, "PREVIEW   Compact Adventure"), "Switch layout shows the other layout at once")
+  Check(math.abs(OV.last.components.central.w - 1091) < 0.01 and OV.last.elements["bar-7"], "drawn from Compact's own rules")
+  Click(root, "Target")
+  Check(MK.Scenario() == "target" and OV.last.elements["uf-target"] and OV.last.scenario == "target", "and a scenario tab changes what the sample shows")
+  Click(root, "Tooltip")
+  Check(OV.last.tooltip and OV.panels.tooltip.shown, "the tooltip scenario draws a tooltip")
+  Click(root, "Long quests")
+  Check(OV.last.tooltip == nil and not OV.panels.tooltip.shown, "and leaves it out again")
+  Check(Unchanged(World(k), before) and calls.Apply == 0 and imports == 0, "none of it changed the game")
+  Check(k.TwichUIDB.layouts.wizard.variant == COMPACT, "only the layout choice was remembered, as it is in the wizard")
+
+  -- Back returns to the wizard where it was left
+  Click(root, "Back")
+  Check(not root.shown and WW.IsShown() and MK.Step() == 2 and MK.Layout().id == COMPACT and OV.listening == 0 and next(OV.evframe.events) == nil, "Back: the overlay is gone, its events with it, and the wizard is where it was, on Compact")
+  -- Exit closes both
+  Click(w, "See it full size")
+  Click(root, "Exit")
+  Check(not root.shown and not WW.IsShown() and not MK.Active() and OV.listening == 0, "Exit: both closed, the session over")
+  Check(Unchanged(World(k), before), "and nothing changed")
+  -- Escape returns to the wizard
+  Open(k)
+  Advance(w, MK, 2)
+  Click(w, "See it full size")
+  Check(k.PressEsc(), "Escape does something while it is open")
+  Check(not root.shown and WW.IsShown() and MK.Active() and MK.Step() == 2 and OV.listening == 0, "one Escape closes the preview and returns to the wizard, which stays open")
+  -- asking for the wizard again while it is open
+  Click(w, "See it full size")
+  k.SlashCmdList.TWICHUI("layout")
+  Check(not root.shown and WW.IsShown(), "/tui layout while the preview is open brings the setup back")
+
+  -- combat starting closes it
+  Click(w, "See it full size")
+  k.combat = true
+  OV.evframe.scripts.OnEvent(OV.evframe, "PLAYER_REGEN_DISABLED")
+  Check(not root.shown and WW.IsShown() and OV.listening == 0, "combat starting closes it and returns to the wizard")
+  Check(Says(w, "You are in combat") or not Enabled(w, "See it full size"), "which says so")
+  k.combat = false
+  WW.Refresh()
+  -- a profile change closes it, and the wizard re-plans
+  Click(w, "See it full size")
+  local PF = k.TwichUI.Profiles
+  Check(PF.Create("Other"), "(a profile is made)")
+  Check(not root.shown and WW.IsShown() and OV.listening == 0, "a profile change closes it, and returns to the wizard")
+  Check(OV.profileHooks == 1, "with one listener for the whole session")
+  Click(w, "See it full size")
+  Check(PF.Switch("Default"), "(and back)")
+  Check(not root.shown and WW.IsShown(), "switching profile too")
+  -- the wizard closing under it
+  Click(w, "See it full size")
+  WW.Close()
+  Check(not root.shown and not WW.IsShown() and not MK.Active() and OV.listening == 0, "the wizard closing takes the preview with it and ends the session")
+  -- the screen changing while it is open: it is drawn again for the new screen
+  Open(k)
+  Advance(w, MK, 2)
+  Click(w, "See it full size")
+  local drawsBefore = OV.draws
+  k.UIParent.w, k.UIParent.h = 1920, 1080
+  OV.evframe.scripts.OnEvent(OV.evframe, "DISPLAY_SIZE_CHANGED")
+  Check(OV.draws == drawsBefore + 1 and OV.last.screen.w == 1920 and OV.last.screen.h == 1080, "a new screen: drawn again for it")
+  local plan = LY.Plan(MK.Layout().pkg, MK.Layout().variant, { picks = MK.Picks() })
+  Check(math.abs(OV.last.components.chat.x - plan.geometry.components.chat.rect.x) < 0.01, "and it is the plan's for that screen")
+  OV.evframe.scripts.OnEvent(OV.evframe, "UI_SCALE_CHANGED")
+  Click(root, "Back")
+  OV.evframe.scripts.OnEvent(OV.evframe, "DISPLAY_SIZE_CHANGED")
+  Check(OV.draws == drawsBefore + 2 or OV.draws == drawsBefore + 1, "an event after it closed draws nothing")
+  k.UIParent.w, k.UIParent.h = 2133.33, 1200
+  MK.Invalidate()
+
+  -- opened and closed again and again: nothing grows
+  local made, frames, kept = nil, nil, nil
+  for round = 1, 10 do
+    Click(w, "See it full size")
+    if round == 1 then Click(root, "Target") Click(root, "Party") Click(root, "Long quests") Click(root, "Tooltip") Click(root, "Solo") end
+    Check(OV.listening == 3, "round " .. round .. ": three events while open")
+    Click(root, "Back")
+    Check(OV.listening == 0 and next(OV.evframe.events) == nil, "round " .. round .. ": none when closed")
+    if round == 1 then made, frames = k.made(), OV.frames end
+  end
+  Check(k.made() == made and OV.frames == frames and OV.builds == 1 and OV.profileHooks == 1, "ten more opens and closes made no frame, no texture, no second build and no second listener (" .. made .. ")")
+  local listeners1 = {}
+  k.TwichUI.ListenerCounts(listeners1)
+  Check(Same(listeners0, listeners1), "the core's own event listeners are exactly as before")
+  local gaugeIds = {}
+  for _, g in ipairs(k.TwichUI.Perf.gauges) do gaugeIds[g.id] = g end
+  Check(gaugeIds["layoutwizard.overlay.events"] and gaugeIds["layoutwizard.overlay.events"].read() == 0 and gaugeIds["layoutwizard.overlay.frames"] and gaugeIds["layoutwizard.overlay.frames"].read() == OV.frames,
+    "the two gauges are registered and read")
+  Check(#root.hooks.OnHide == 1 and root.scripts.OnEvent == nil, "the overlay's own hooks are installed once")
+  Check(calls.Apply == 0 and calls.Restore == 0 and calls.Detach == 0 and imports == 0 and k.reloads == 0 and Same(World(k).eui, before.eui), "after all of that (the test made and switched a profile itself): no install, restore, reload or import, and EllesmereUI untouched")
+end
+
+do
+  -- long text, narrow layouts
+  local function OverlayOn(w, h, variant, scenario)
+    local k = LM.Boot("Text", nil, { screen = { w = w, h = h } })
+    local win, WK = Open(k)
+    local MK, OV = WK.Model, WK.Overlay
+    MK.SetLayout(variant)
+    Click(win, "Start")
+    MK.SetScenario(scenario)
+    assert(OV.Open())
+    return k, WK, OV
+  end
+  local k, WK, OV = OverlayOn(2133.33, 1200, CLASSIC, "objectives")
+  local p = OV.panels.objectives
+  local rect = OV.last.components.objectives
+  local widest = 0
+  for _, fs in ipairs(p.lines) do if fs.shown then widest = math.max(widest, fs.w) end end
+  Check(widest > 0 and widest <= rect.w - 12 + 0.01, "long objectives wrap inside their box (the widest line asks for " .. widest .. " of " .. rect.w .. ")")
+  Check(not OV.last.overflow.objectives and not p.warn.shown, "and on this screen they fit its height")
+  local k2, WK2, OV2 = OverlayOn(1365.33, 768, CLASSIC, "objectives")
+  Check(OV2.last.overflow.objectives and OV2.panels.objectives.warn.shown and OV2.panels.objectives.warn.text:find("runs past"), "on a small screen the same text runs past its box, and says so rather than hiding it")
+  Check(not OV2.last.overflow.chat, "a box with room says nothing")
+  -- Compact on a narrow screen: chat above the block, in the overlay too
+  local k3, WK3, OV3 = OverlayOn(1680, 1050, COMPACT, "solo")
+  local l = OV3.last.components
+  Check(l.chat.y - l.chat.h / 2 >= l.central.y + l.central.h / 2 + 12 - 0.01 and math.abs(l.chat.w - 451) < 0.01, "Compact on a narrow screen: chat above the block at its full width")
+  Check(WK3.Model.Scene().fits, "and everything fits")
+  -- a screen that doesn't fit: the overlay says what
+  local k4, WK4, OV4 = OverlayOn(1365.33, 768, COMPACT, "solo")
+  Check(not WK4.Model.Scene().fits and OV4.bar.fit.shown and OV4.bar.fit.text:find("Doesn't fit this screen", 1, true), "a screen the layout doesn't fit: the bar says which")
+  local troubled = 0
+  for id, p4 in pairs(OV4.panels) do if p4.shown and p4.border and p4.border[1] == k4.TwichUI.Look.pal.danger.border[1] then troubled = troubled + 1 end end
+  Check(troubled >= 2, "and the boxes that collide are outlined in the warning colour (" .. troubled .. ")")
+end
+
+---------------------------------------------------------------------------
+-- 17. Saved state with a layout in it
+---------------------------------------------------------------------------
+do
+  local function Boot1(wizard)
+    local k = LM.Boot("State")
+    k.TwichUIDB.layouts = { wizard = wizard }
+    return k
+  end
+  local k = Boot1({ v = 1, variant = COMPACT, picks = { accent = "dusk" } })
+  local w, WK = Open(k)
+  Check(WK.Model.Layout().id == COMPACT and WK.Model.Pick("accent") == "dusk", "a remembered layout and pick are read")
+  local k2 = Boot1({ v = 1, variant = "nobody", picks = { accent = "dusk" } })
+  local _, WK2 = Open(k2)
+  Check(WK2.Model.Layout().id == CLASSIC and WK2.Model.Pick("accent") == "dusk", "a layout that isn't the package's goes back to the first; the picks are kept")
+  Check(k2.TwichUIDB.layouts.wizard.variant == "nobody", "and reading it changed nothing")
+  local k3 = Boot1({ v = 1, variant = 7, picks = {} })
+  local _, WK3 = Open(k3)
+  Check(WK3.Model.Layout().id == CLASSIC, "a layout that isn't text is ignored")
+  WK3.Model.SetPick("accent", "ember")
+  Check(k3.TwichUIDB.layouts.wizard.variant == CLASSIC and k3.TwichUIDB.layouts.wizard.picks.accent == "ember", "the next save is clean")
+  local k4 = Boot1({ v = 99, variant = COMPACT })
+  local _, WK4 = Open(k4)
+  Check(WK4.Model.Layout().id == CLASSIC, "a newer record is not understood: the defaults are used")
+  WK4.Model.SetLayout(COMPACT)
+  Check(Same(k4.TwichUIDB.layouts.wizard, { v = 99, variant = COMPACT }), "and a choice never overwrites it")
+  -- the reload note and the layout travel together
+  local k5 = LM.Boot("State")
+  local w5, WK5 = Open(k5)
+  WK5.Model.SetLayout(COMPACT)
+  ToReview(w5)
+  Click(w5, "Apply"); k5.Accept()
+  Click(w5, "Reload now")
+  local st = k5.TwichUIDB.layouts.wizard
+  Check(st.resume == "install" and st.variant == COMPACT, "the reload note keeps the layout")
+  local k6 = LM.Boot("State", LM.Logout(k5))
+  local after = k6.TwichUIDB.layouts.wizard
+  Check(after.resume == nil and after.variant == COMPACT and k6.TwichUI.LayoutWizard.Model.Layout().id == COMPACT, "using the note up keeps the layout too")
 end
 
 if failures > 0 then error(failures .. " check(s) failed") end

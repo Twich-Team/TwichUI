@@ -1,11 +1,14 @@
--- TwichUI Layouts: Classic Adventure, the first author layout (package format 2)
--- The data is the author's own, captured by tools/layout_capture.lua into ClassicData.lua (LY.CLASSIC_CAPTURE):
--- docs/layouts/capture-classic-adventure.md says where it came from, what was kept and what was left out.
+-- TwichUI Layouts: the Adventure package, with its two layouts, Classic Adventure and Compact Adventure (format 3)
+-- (The file keeps its Phase 3 name; the package, `twichui-adventure`, has held both layouts since Phase 5.)
+-- The data is the author's own, captured by tools/layout_capture.lua: Classic into ClassicData.lua (LY.CLASSIC_CAPTURE,
+-- docs/layouts/capture-classic-adventure.md) and Compact into CompactData.lua (LY.COMPACT_CAPTURE,
+-- docs/layouts/capture-compact-adventure.md), which says where it came from, what was kept and what was left out.
 --
 -- Layers. Shared suite base: the look (EllesmereUI's fonts, accent, dark-mode palette and migration stamps; TwichUI's
--- looks and behaviour settings that differ from TwichUI's defaults). Classic Adventure: every EllesmereUI module, its
--- layout links, and where TwichUI's own HUD pieces sit. Compact Adventure is not built yet; when it is, it gets its
--- own variant and the base stays shared.
+-- looks and behaviour settings that differ from TwichUI's defaults), every EllesmereUI module the two layouts hold
+-- identically (Compact's capture lists them, with a fingerprint of each, so each is kept once) and where TwichUI's own
+-- HUD pieces sit. Each variant: the modules and layout links that differ. Promoting a setting from a variant to the
+-- base, or demoting one, is moving the module between the two tables below; nothing else changes.
 --
 -- Choices (what the wizard asks; docs/layouts/wizard.md): a TwichUI helpers preset (only turns switches on), the accent
 -- colour (EllesmereUI's `euiAccent`, nothing else of its look) and the size (the geometry's density). Each names
@@ -48,26 +51,35 @@ local euiAttach = {
 }
 for _, id in ipairs(CENTRAL) do euiAttach[id] = "central" end
 
+local K = LY.COMPACT_CAPTURE
+local EC, EK = C.ellesmereui, K.ellesmereui
+
+-- The modules both captures hold identically are kept once, in the base; the rest belong to a variant.
+local sharedModules, classicModules = {}, {}
+for m, blob in pairs(EC.modules) do
+    if K.sameAs.modules[m] then sharedModules[m] = blob else classicModules[m] = blob end
+end
+
 LY.CLASSIC_VARIANT = "classic-adventure"
+LY.COMPACT_VARIANT = "compact-adventure"
 LY.CLASSIC_PACKAGE = {
-    format = 3, id = "twichui-adventure", revision = 2,
+    format = 3, id = "twichui-adventure", revision = 3,
     -- a developer package until it has been installed and checked on WoW: Forever (Phase 7): the capture is from the
     -- Retail client's saved files, and a developer package may be tried on Retail (architecture.md §11.13)
     dev = true,
     title = "TwichUI Adventure", made = C.source.made,
-    source = "Captured from the author's Retail EllesmereUI " .. tostring(C.source.ellesmereui.version) .. " profile",
+    source = "Captured from the author's Retail EllesmereUI " .. tostring(C.source.ellesmereui.version) .. " profiles",
     requires = { ellesmereui = { min = "9.6.6", tested = "9.6.8" } },
-    targets = { twichui = "Classic Adventure", ellesmereui = "TwichUI Classic" },
+    -- one pair of profiles for the package: switching layouts is an install again into them (architecture.md §14)
+    targets = { twichui = "TwichUI Adventure", ellesmereui = "TwichUI Adventure" },
     layers = {
         base = {
-            ellesmereui = { root = C.ellesmereui.root },
-            twichui = { groups = C.twichui.groups },
+            ellesmereui = { root = EC.root, modules = sharedModules },
+            twichui = { groups = C.twichui.groups, places = C.twichui.places },
         },
         variants = {
-            ["classic-adventure"] = {
-                ellesmereui = { modules = C.ellesmereui.modules, layout = C.ellesmereui.layout },
-                twichui = { places = C.twichui.places },
-            },
+            ["classic-adventure"] = { ellesmereui = { modules = classicModules, layout = EC.layout } },
+            ["compact-adventure"] = { ellesmereui = { modules = EK.modules, layout = EK.layout } },
         },
     },
     choices = {
@@ -155,5 +167,39 @@ LY.CLASSIC_PACKAGE = {
                 ["food-drink"] = "chat:TOPRIGHT", ["healer-watch"] = "chat:TOPLEFT",
                 ["training-card"] = "notifications", ["welcome-back"] = "notifications" },
         },
+        -- What Compact Adventure does differently; everything else (chat, meter, minimap, objectives, the cards, the
+        -- focus frame, densities, the narrow width) is Classic's. Its unit frames and action bars are one low, wide block
+        -- along the bottom edge. The managed box is the core of it, measured from the captured positions and sizes: the
+        -- left-hand bar's first button to the right-hand bar's last (1091 wide), and from the target-of-target's top to
+        -- the screen edge (157.5 high). The pet frame and bar and the stance bar sit to its left, low and only for the
+        -- classes that have them: they follow the block (and are drawn in the preview) but are not part of the box, which
+        -- would otherwise push Chat down to its smallest on every 16:9 screen. A damage-meter bar sits on top of the
+        -- meter, and the raid and party frames sit in from the left edge.
+        variants = {
+            ["compact-adventure"] = {
+                components = {
+                    central = { label = "Unit frames and action bars", managed = true,
+                        ref = { x = -0.4, y = -521.25, w = 1091, h = 157.5 },
+                        anchor = { point = "BOTTOM", to = "area", rel = "BOTTOM" } },
+                    ["left-edge"] = { ref = { x = L, y = 0, w = 0, h = 0 }, anchor = { point = "LEFT", to = "area", rel = "LEFT" } },
+                },
+                attach = {
+                    ellesmereui = { ["bar-6"] = "central", ["bar-7"] = "meter:TOP",
+                        ["raid-frames"] = "left-edge", ["party-frames"] = "left-edge" },
+                },
+            },
+        },
     },
 }
+-- Compact's chat is Classic's, and below its narrow width it sits above the low block instead of beside it (the block
+-- is 1091 wide and Chat needs 280 beside it, so beside it stops fitting under about 1780 units; Classic's narrow
+-- arrangement is for 1700). Built from Classic's own chat so the two cannot drift apart.
+do
+    local geo = LY.CLASSIC_PACKAGE.geometry
+    local chat = {}
+    for k, v in pairs(geo.components.chat) do chat[k] = v end
+    chat.narrow = { anchor = { point = "BOTTOMLEFT", to = "area", rel = "BOTTOMLEFT", x = 49.08, y = 157.5 + 12 } }
+    geo.variants["compact-adventure"].components.chat = chat
+    geo.variants["compact-adventure"].narrow = 1780
+end
+LY.ADVENTURE_PACKAGE = LY.CLASSIC_PACKAGE   -- the same package, by the name that says it holds both layouts

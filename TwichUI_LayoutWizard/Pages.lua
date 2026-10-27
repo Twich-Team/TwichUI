@@ -142,19 +142,29 @@ local function Button(parent, label, w, kind, fn, tip)
     return b
 end
 
--- The preview (steps 2 to 5), in the right-hand column, redrawn from the model each time the page is shown.
-local function PreviewColumn(page, parent, y)
-    local view = WZ.Preview.Build(parent)
+-- The preview (steps 2 to 5), in the right-hand column, redrawn from the model each time the page is shown. Under it: the
+-- scenario the sample shows (Solo, Target selected, ...) and the full-size preview. Neither changes anything in the game.
+local function PreviewColumn(page, parent, y, env)
+    local view = WZ.Preview.Build(parent, {
+        scenario = function(id) M.SetScenario(id) env.Relayout() end,
+        overlay = function() env.Overlay() end,
+    })
     view.frame:SetPoint("TOPLEFT", parent, "TOPLEFT", RIGHT_X, -(y or 24))
     page.preview = view
     function page.RefreshPreview()
-        local geo = M.Preview()
-        if not geo then view:Clear() view.caption:SetText("TwichUI couldn't read your screen's size, so there is nothing to draw.") return end
+        local scene = M.Scene()
+        if not scene then
+            view:Clear()
+            view.caption:SetText("TwichUI couldn't read your screen's size, so there is nothing to draw.")
+            view:Controls(M.Scenario(), M.OverlayBlock() or "Nothing to show.")
+            return
+        end
         view.caption:SetText(WZ.Preview.CAPTION)
         local accent, o = M.Accent()
         if not accent and o and o.id == "class" then accent = WZ.ClassColor and WZ.ClassColor() end
-        local issues = geo.fits and nil or M.FitLines(geo, 3)
-        view:Set(geo, accent, issues)
+        local issues = scene.fits and nil or M.FitLines(scene.geo, 3)
+        view:Set(scene, accent, issues)
+        view:Controls(M.Scenario(), M.OverlayBlock())
     end
 end
 
@@ -241,63 +251,75 @@ local function BuildWelcome(parent, env)
 end
 
 ---------------------------------------------------------------------------
--- 2. Layout
+-- 2. Layout: Classic or Compact Adventure. Choosing re-draws the preview at once and changes nothing else.
 ---------------------------------------------------------------------------
-local function BuildLayout(parent)
-    local page = { frame = CreateFrame("Frame", nil, parent) }
+local function BuildLayout(parent, env)
+    local page = { frame = CreateFrame("Frame", nil, parent), cards = {} }
     local f = page.frame
     f:SetSize(CONTENT_W, 10)
     local col = NewColumn(f)
     Put(col, Heading(f, "Choose a layout", LEFT_W), 4)
     local sub = Put(col, Text(f, "small", LEFT_W), 4)
-    sub:SetText("TwichUI ships one layout today. You see it here to scale, for your screen, before anything is applied.")
-    local card = Card(f, LEFT_W, function() end)
-    Put(col, card, 10)
-    card.pic = card:CreateTexture(nil, "ARTWORK")
-    card.pic:SetSize(160, 80)
-    card.name = Text(card, "title", LEFT_W - 190)
-    card.tag = Chip(card)
-    card.covers = Text(card, "small", LEFT_W - 24)
-    page.card = card
-    PreviewColumn(page, f, 24)
+    sub:SetText("Pick one; the preview changes at once, to scale, for your screen. Nothing is applied until the Review step, and you can switch layouts later.")
+    PreviewColumn(page, f, 24, env)
+
+    local function LayoutCard(i)
+        local card = page.cards[i]
+        if card then return card end
+        card = Card(f, LEFT_W, function() end)
+        card.pic = card:CreateTexture(nil, "ARTWORK")
+        card.pic:SetSize(160, 80)
+        card.name = Text(card, "title", LEFT_W - 190)
+        card.tag = Chip(card)
+        card.covers = Text(card, "small", LEFT_W - 24)
+        card.title:Hide()
+        page.cards[i] = card
+        Put(col, card, 10)
+        return card
+    end
 
     function page.Refresh()
-        local layout = M.Layout()
-        card.hasPic = WZ.Art.Apply(card.pic, layout.art)
-        card.name:SetText(layout.title)
-        card.tag:SetTone("warn")
-        card.tag.text:SetText("Preview build")
-        card.tag:SetWidth(math.max(44, card.tag.text:GetStringWidth() + 12))
-        card.tag:SetShown(layout.dev)
-        card.title:Hide()
-        card.hint:SetText(layout.blurb)
-        card.hint:Show()
-        card.covers:SetText(Bullets(layout.covers))
-        card.mark:Show()
-        card.mark:SetText("Selected")
-        card.fill:Show()
-        card.bar:Show()
-        -- picture and name on the first row, then the text
-        card.pic:ClearAllPoints()
-        card.name:ClearAllPoints()
-        card.tag:ClearAllPoints()
-        card.hint:ClearAllPoints()
-        card.covers:ClearAllPoints()
-        local top = 12
-        if card.hasPic then
-            card.pic:SetPoint("TOPLEFT", 12, -top)
-            card.name:SetPoint("TOPLEFT", 12 + 160 + 14, -top - 2)
-            card.tag:SetPoint("TOPLEFT", card.name, "BOTTOMLEFT", 0, -8)
-            top = top + 80 + 10
-        else
-            card.name:SetPoint("TOPLEFT", 12, -top)
-            card.tag:SetPoint("LEFT", card.name, "RIGHT", 10, 0)
-            top = top + Height(card.name) + 8
+        local current = M.Layout()
+        for i, layout in ipairs(M.LayoutList()) do
+            local card = LayoutCard(i)
+            local selected = layout.id == current.id
+            card:SetScript("OnClick", function()
+                M.SetLayout(layout.id)
+                env.Relayout()
+            end)
+            card.hasPic = WZ.Art.Apply(card.pic, layout.art)
+            card.name:SetText(layout.title)
+            card.tag:SetTone("warn")
+            card.tag.text:SetText("Preview build")
+            card.tag:SetWidth(math.max(44, card.tag.text:GetStringWidth() + 12))
+            card.tag:SetShown(layout.dev)
+            card.hint:SetText(layout.blurb)
+            card.hint:Show()
+            card.covers:SetText(Bullets(layout.covers))
+            card.covers:SetShown(selected)
+            card:SetSelected(selected)
+            card.pic:ClearAllPoints()
+            card.name:ClearAllPoints()
+            card.tag:ClearAllPoints()
+            card.hint:ClearAllPoints()
+            card.covers:ClearAllPoints()
+            local top = 12
+            if card.hasPic then
+                card.pic:SetPoint("TOPLEFT", 12, -top)
+                card.name:SetPoint("TOPLEFT", 12 + 160 + 14, -top - 2)
+                card.tag:SetPoint("TOPLEFT", card.name, "BOTTOMLEFT", 0, -8)
+                top = top + 80 + 10
+            else
+                card.name:SetPoint("TOPLEFT", 12, -top)
+                card.tag:SetPoint("LEFT", card.name, "RIGHT", 10, 0)
+                top = top + Height(card.name) + 8
+            end
+            card.hint:SetWidth(LEFT_W - 24)
+            card.hint:SetPoint("TOPLEFT", 12, -top)
+            card.covers:SetPoint("TOPLEFT", card.hint, "BOTTOMLEFT", 0, -8)
+            card:SetHeight(top + Height(card.hint) + 8 + (selected and (Height(card.covers) + 6) or 0) + 12)
+            card:Show()
         end
-        card.hint:SetWidth(LEFT_W - 24)
-        card.hint:SetPoint("TOPLEFT", 12, -top)
-        card.covers:SetPoint("TOPLEFT", card.hint, "BOTTOMLEFT", 0, -8)
-        card:SetHeight(top + Height(card.hint) + 8 + Height(card.covers) + 14)
         local y = Flow(col)
         page.RefreshPreview()
         f:SetHeight(math.max(y, 260) + 8)
@@ -318,7 +340,7 @@ local function BuildHelpers(parent, env)
     local sub = Put(col, Text(f, "small", LEFT_W), 4)
     local note = Text(f, "small", LEFT_W)
     note:SetText("These only turn features on, never off, and you can change any of them later in TwichUI's settings. Features that share, play sounds or act for you are never part of this.")
-    PreviewColumn(page, f, 24)
+    PreviewColumn(page, f, 24, env)
 
     function page.Refresh()
         local ch = M.Choice("helpers")
@@ -381,7 +403,7 @@ local function BuildPersonalize(parent, env)
     local sizeHint = Text(f, "small", LEFT_W)
     local reset = Button(f, "Start over", 100, "secondary", function() M.ResetPicks() env.Relayout() end,
         "Puts every choice back to the layout's own, here and on the Helpers step. Nothing in the game changes.")
-    PreviewColumn(page, f, 24)
+    PreviewColumn(page, f, 24, env)
 
     function page.Refresh()
         local accent, size = M.Choice("accent"), M.Choice("size")
@@ -464,7 +486,7 @@ end
 ---------------------------------------------------------------------------
 -- 5. Review
 ---------------------------------------------------------------------------
-local function BuildReview(parent)
+local function BuildReview(parent, env)
     local pal = Pal()
     local page = { frame = CreateFrame("Frame", nil, parent) }
     local f = page.frame
@@ -473,6 +495,7 @@ local function BuildReview(parent)
     Put(col, Heading(f, "Review before you apply", LEFT_W), 4)
     local lead = Put(col, Text(f, "small", LEFT_W), 4)
     lead:SetText("This is exactly what Apply will do on this screen. Nothing has changed yet.")
+    local switching = Put(col, Text(f, "small", LEFT_W), 6)
     local blocked = Put(col, Text(f, "body", LEFT_W), 8)
     blocked:SetTextColor(pal.danger.text[1], pal.danger.text[2], pal.danger.text[3])
     local fitWarn = Put(col, Text(f, "small", LEFT_W), 8)
@@ -490,11 +513,13 @@ local function BuildReview(parent)
     Put(col, Heading(f, "If something goes wrong", LEFT_W), 10)
     local fail = Put(col, Text(f, "small", LEFT_W), 3)
     fail:SetText("If a step fails part way, TwichUI tells you what changed and what was put back, and Restore (on the Result step) puts your previous profiles back. Nothing is undone behind your back.")
-    PreviewColumn(page, f, 24)
+    PreviewColumn(page, f, 24, env)
     page.tHead, page.eHead = tHead, eHead
 
     function page.Refresh()
         local r = M.Review()
+        switching:SetText(r.switching or "")
+        switching:SetShown(r.switching ~= nil)
         if r.problems then
             blocked:SetText("The layout package can't be used. TwichUI Diagnostics has the details.")
             blocked:Show()

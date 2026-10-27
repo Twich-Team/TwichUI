@@ -155,6 +155,8 @@ A.POSITIONS = {
     ["bar-5"] = Pos(AB, { "barPositions", "Bar5" }, "Action bar 5", { link = "Bar5" }),
     ["bar-stance"] = Pos(AB, { "barPositions", "StanceBar" }, "Stance bar", { link = "StanceBar" }),
     ["bar-pet"] = Pos(AB, { "barPositions", "PetBar" }, "Pet bar", { link = "PetBar" }),
+    ["bar-6"] = Pos(AB, { "barPositions", "Bar6" }, "Action bar 6", { link = "Bar6" }),
+    ["bar-7"] = Pos(AB, { "barPositions", "Bar7" }, "Action bar 7", { link = "Bar7" }),
     ["bar-xp"] = Pos(AB, { "barPositions", "XPBar" }, "Experience bar", { link = "XPBar" }),
     ["bar-rep"] = Pos(AB, { "barPositions", "RepBar" }, "Reputation bar", { link = "RepBar" }),
     ["extra-button"] = Pos(AB, { "barPositions", "ExtraActionButton" }, "Extra action button", { link = "ExtraActionButton" }),
@@ -179,6 +181,8 @@ A.POSITIONS = {
     ["rb-cast"] = Pos("EllesmereUIResourceBars", { "castBar", "unlockPos" }, "Resource cast bar"),
     ["rb-swing"] = Pos("EllesmereUIResourceBars", { "swingTimer", "unlockPos" }, "Swing timer"),
     ["combat-text"] = Pos("EllesmereUIQoL", { "selfCombatText", "pos" }, "Combat text", { link = "EUI_SelfCombatText" }),
+    ["raid-frames"] = Pos("EllesmereUIRaidFrames", { "unlockPos" }, "Raid frames"),            -- EllesmereUI stores them as centre offsets
+    ["party-frames"] = Pos("EllesmereUIRaidFrames", { "partyUnlockPos" }, "Party frames"),
     ["databar-top"] = Pos("EllesmereUIDataBars", { "bars", 1, "savedPos" }, "Top data bar", { link = "EDB_3",
         check = { path = { "bars", 1, "id" }, value = 3 } }),           -- EllesmereUIDataBars.lua: key "EDB_" .. barId
     ["databar-location"] = Pos("EllesmereUIDataBars", { "bars", 2, "savedPos" }, "Minimap location text", { link = "EDB_4",
@@ -509,12 +513,37 @@ local function ShiftLink(info, dChild, canvas, screen)
     return new
 end
 
+-- Where one registered record goes on this screen: the one place the screen layer's position math lives (the install and
+-- the preview both call it). rec = the stored { point, relPoint, x, y }; comp = the resolved component it is attached to
+-- (Geometry.Resolve's), pt = the point of it to follow ("" for its centre). Returns new = { point, relPoint, x, y [, w, h] },
+-- dChild = how far each edge of the thing moved, size = { w, h } for a component's own frame (nil otherwise).
+local function Resolved(p, rec, comp, pt, geo)
+    local Gm = G()
+    local rel = rec.relPoint or rec.point
+    local new = { point = rec.point, relPoint = rel }
+    if p.size then
+        -- the component's own frame: its place and size are the component's
+        local rect = comp.rect
+        new.x, new.y = Gm.Stored(rect, rec.point, rel, geo.screen)
+        local w, h = math.floor(rect.w + 0.5), math.floor(rect.h + 0.5)
+        new.w, new.h = w, p.size.square and w or h
+        local ref = comp.ref
+        local dChild = { l = rect.l - ref.l, r = rect.r - ref.r, b = rect.b - ref.b, t = rect.t - ref.t, x = rect.x - ref.x, y = rect.y - ref.y }
+        return new, dChild, { w = w, h = h }
+    end
+    local mv = Gm.Moved(comp, pt ~= "" and pt or nil)
+    new.x, new.y = Gm.Follow({ rel = rel, x = rec.x, y = rec.y }, mv, geo.canvas, geo.screen)
+    return new, { l = mv.dx, r = mv.dx, x = mv.dx, b = mv.dy, t = mv.dy, y = mv.dy }
+end
+A.Resolved = Resolved
+A.PosOk = PosOk
+A.Read = Read
+
 -- Moves, sizes and relinks the registered positions in the payload's data d, and scales the text sizes.
 -- Returns { [posId] = { rec, comp, label, sized } } and notes { { code, id } }.
 local function Adapt(d, geo, attach)
     local placed, notes = {}, {}
     if not (geo and attach) then return placed, notes end
-    local Gm = G()
     local anchors = type(d.unlockLayout) == "table" and type(d.unlockLayout.anchors) == "table" and d.unlockLayout.anchors or nil
     for _, id in ipairs(LY.SortedKeys(attach)) do
         local p = A.POSITIONS[id]
@@ -526,23 +555,10 @@ local function Adapt(d, geo, attach)
         elseif p.check and Read(blob, p.check.path) ~= p.check.value then notes[#notes + 1] = { code = "not-found", id = id }
         elseif not PosOk(rec) then notes[#notes + 1] = { code = rec == nil and "not-stored" or "format", id = id }
         else
-            local rel = rec.relPoint or rec.point
-            local new = { point = rec.point, relPoint = rel }
-            local dChild
-            if p.size then
-                -- the component's own frame: its place and size are the component's
-                local rect = comp.rect
-                new.x, new.y = Gm.Stored(rect, rec.point, rel, geo.screen)
-                local w, h = math.floor(rect.w + 0.5), math.floor(rect.h + 0.5)
-                Write(blob, p.size.w, w)
-                if p.size.h then Write(blob, p.size.h, h) end
-                new.w, new.h = w, p.size.square and w or h
-                local ref = comp.ref
-                dChild = { l = rect.l - ref.l, r = rect.r - ref.r, b = rect.b - ref.b, t = rect.t - ref.t, x = rect.x - ref.x, y = rect.y - ref.y }
-            else
-                local mv = Gm.Moved(comp, pt ~= "" and pt or nil)
-                new.x, new.y = Gm.Follow({ rel = rel, x = rec.x, y = rec.y }, mv, geo.canvas, geo.screen)
-                dChild = { l = mv.dx, r = mv.dx, x = mv.dx, b = mv.dy, t = mv.dy, y = mv.dy }
+            local new, dChild, size = Resolved(p, rec, comp, pt, geo)
+            if size then
+                Write(blob, p.size.w, size.w)
+                if p.size.h then Write(blob, p.size.h, size.h) end
             end
             local stored = LY.Copy(rec)
             stored.x, stored.y = new.x, new.y

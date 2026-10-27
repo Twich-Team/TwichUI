@@ -6,8 +6,9 @@ This is the contract for TwichUI's layout packages: two complete interface exper
 test package (`TwichUI_Layouts/`); **§11 lists every place where that implementation revised this contract**, and
 those revisions win over the text above them. Phase 3 (2026-10-26) added the screen layer and the first author layout,
 Classic Adventure; **§12 lists its revisions**, which win over §1–§11. Phase 4 (2026-10-26) added the setup wizard and the
-package `choices`; **§13 lists its revisions**, which win over everything above. Compact Adventure and retained overrides
-are not built. `adapter-capabilities.md` holds the source evidence for each integration, and
+package `choices`; **§13 lists its revisions**, which win over §1–§12. Phase 5 (2026-10-26) added Compact Adventure as the
+second variant of the same package, per-variant screen rules and the full-size preview; **§14 lists its revisions**, which
+win over everything above. Retained overrides are not built. `adapter-capabilities.md` holds the source evidence for each integration, and
 `implementation-status.md` tracks the phases and the open decisions.
 
 Words used here:
@@ -536,4 +537,42 @@ differs from §1–§12, the code and this section are the contract:
 8. **Resume (§8 step 8).** The check after login (`L.Continue`) opens the wizard on the result only when the wizard left
    the resume note (the player pressed its Reload now); otherwise it prints its chat line as before, and the line points to
    `/tui layout`.
+
+## 14. Revisions made in Phase 5 (2026-10-26)
+
+Phase 5 added Compact Adventure as the second variant of the package `twichui-adventure`, per-variant screen rules, the
+pieces-inside-components list the preview needs, and the wizard's layout choice, scenarios and full-size overlay
+(`wizard.md`). Where it differs from §1–§13, the code and this section are the contract:
+
+1. **Geometry rules per variant (§12.4).** A package's `geometry` is the rules the layouts share. `geometry.variants[id]`
+   may add components and attachments to them or replace ones of the same id (an attachment replaces by position), and may
+   give its own `narrow` width and `area`; it may not touch the canvas or the densities. `Geometry.Spec(spec, variant)`
+   merges them (sharing the package's tables, cached) and `Geometry.Check` checks the shared rules and every variant's
+   whole spec, each complete by itself. `Geometry.Resolve` takes `opts.variant`, `Geometry.Attach(spec, variant)` gives the
+   attach maps, `LY.Resolve` and so `LY.Plan` pass the variant through, and `resolved.geometry.variant` says which was used.
+   A variant that names nothing (Classic) uses the shared rules as they are. Package problem: `geometry-variant-unknown`.
+2. **One pair of target profiles (§5, D9).** The package's `targets` are not per variant: the install's own profiles are
+   EllesmereUI `TwichUI Adventure` and TwichUI `TwichUI Adventure` (they were `TwichUI Classic` and `Classic Adventure`
+   while only Classic existed; nothing had been installed under the old names). Switching layouts is therefore an ordinary
+   install again (§11.7): the same two profiles are written, the first snapshot is kept (Restore still goes back to before the
+   first install), no profile is added, and the review says it is a switch. This needed no new pipeline.
+3. **Shared base and variant units (§1).** The base holds the look, every EllesmereUI module the two layouts hold identically
+   (11 of 18: the capture tool proves it by fingerprint, `capture-compact-adventure.md`), and the TwichUI looks and places
+   (D27); each variant holds the modules and layout links that differ (7 modules each). Promoting a setting between a
+   variant and the base is moving the module between two tables; nothing else changes. `LY.Compose` is unchanged.
+4. **New registered positions (§11.4 `POSITIONS`).** `bar-6`, `bar-7`, `raid-frames` (`unlockPos`) and `party-frames`
+   (`partyUnlockPos`), each a `{ point, relPoint, x, y }` record read in the author's Compact profile. The screen layer's
+   position math moved into `EllesmereAdapter.Resolved` and `TwichUIAdapter.PlaceOne`, which the install and the preview both
+   call. EllesmereUI stores raid and party frames from the centre in Compact (from the left edge in Classic), so they are
+   attached to a zero-size `left-edge` component.
+5. **`LY.Elements(pkg, variant, geo)` (Elements.lua).** The pieces inside the components for the preview: unit frames, cast
+   bars, action bars, the party frames and TwichUI's own markers, each at the place the install would put it and with a
+   sample size read from the layout's own data. Pure, read only, no validation or copying (it runs on every redraw). A
+   piece with no size in the data is a note, never a guess.
+6. **Capture (§12.8).** `tools/layout_capture.lua --shared-with <data file>` leaves out whatever is identical to an
+   earlier capture and lists it with a fingerprint (`sameAs`); a differing root look key is refused; `--twichui-profile` is
+   optional (a layout with no TwichUI side of its own).
+7. **Saved data (§13.7).** `layouts.wizard.variant` (the chosen layout id) joins `picks` and `resume`. A record without it reads
+   as the first layout; an unknown one is repaired to the first; a newer record is still never overwritten. The scenario
+   and whether the preview is open are not saved.
 

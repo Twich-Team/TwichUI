@@ -13,6 +13,8 @@
 --
 --   Window.Open(step)   opens it (on a step, or where the model says); Window.Close(), Window.Toggle(), Window.IsShown()
 --   Window.Refresh()    draws the current step again from the model
+--   Window.Suspend()    sets the window aside for the full-size preview (Overlay.lua) without ending the session;
+--   Window.Resume()     brings it back where it was. Closing while set aside ends the session as closing always does.
 
 local R = TwichUI
 local WZ = R.LayoutWizard
@@ -26,6 +28,7 @@ local HEADER_H, PAD, STEPPER_H, FOOTER_H = 44, 16, 30, 54
 local EVENTS = { "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED", "DISPLAY_SIZE_CHANGED", "UI_SCALE_CHANGED" }
 
 local win, scroll, content, stepper, footer, evframe
+local suspended = false   -- hidden for the full-size preview: the session goes on
 local pages = {}
 W.pages = pages       -- read by the tests
 W.frames = 0          -- frames made, for the troubleshooting report
@@ -123,6 +126,10 @@ local env = {
     Actions = Actions,
     Relayout = function() W.Refresh() end,
     Go = function(step) M.Go(step) W.Refresh() end,
+    Overlay = function()
+        local ok, why = WZ.Overlay.Open()
+        if not ok and footer then footer.note:SetText(why or "") end
+    end,
 }
 
 local function Page(step)
@@ -297,9 +304,19 @@ local function Build()
     end)
     win:HookScript("OnHide", function()
         Listen(false)
+        if suspended then return end   -- set aside for the full-size preview: the session, and what it worked out, stay
         M.End()
         -- a page's preview and texts stay built (they are cheap); what the model worked out is gone
     end)
+    -- a profile change makes what the plan was worked out against stale: one listener for the session, added once
+    if R.Profiles and R.Profiles.OnChange and not W.profileHooked then
+        W.profileHooked = true
+        R.Profiles.OnChange(function()
+            if not M.Active() then return end
+            M.Invalidate()
+            if win and win:IsShown() then W.Refresh() end
+        end)
+    end
     W.frames = W.frames + 8
 end
 
@@ -307,6 +324,7 @@ end
 -- Opening and closing
 ---------------------------------------------------------------------------
 function W.Open(step)
+    if WZ.Overlay and WZ.Overlay.IsShown() then WZ.Overlay.Close("back") return true end   -- asked for again: back to the setup
     if not win then R.Perf.Call("layoutwizard.build", Build) end
     if not M.Active() then
         local session, why = M.Begin()
@@ -323,7 +341,30 @@ function W.Open(step)
 end
 
 function W.Close()
+    if WZ.Overlay and WZ.Overlay.IsShown() then WZ.Overlay.Close("exit") return end   -- the preview first; its hide ends the session
+    if suspended then
+        -- closed while set aside (the preview's Exit, or the window asked to close): end the session
+        suspended = false
+        if win then win:Hide() end   -- already hidden, so its OnHide won't run: end the session here
+        M.End()
+        return
+    end
     if win then win:Hide() end
+end
+
+-- Hides the window for the full-size preview without ending the session; Resume brings it back where it was.
+function W.Suspend()
+    if not (win and win:IsShown()) then return false end
+    suspended = true
+    win:Hide()
+    return true
+end
+
+function W.Resume()
+    if not suspended then return false end
+    suspended = false
+    if win then win:Show() end   -- OnShow: the session is still there, so it is drawn as it was left
+    return true
 end
 
 function W.Toggle()
