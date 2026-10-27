@@ -103,6 +103,45 @@ function M.LayoutIds()
     return ids
 end
 
+---------------------------------------------------------------------------
+-- Packages: the one included with TwichUI, and the ones other players sent (stored by TwichUI_Layouts' Store, never applied
+-- by receiving). A received package is opened when it is chosen (unpacked a little at a time and checked again), and its
+-- layouts are the variants it names; everything after that (the preview, the choices, the review, apply, restore) is the
+-- same code the included package goes through.
+---------------------------------------------------------------------------
+local function QuoteText(s) return "\"" .. tostring(s) .. "\"" end
+
+local function ReceivedLayouts(env)
+    local pkg = env.package
+    local out = {}
+    for _, v in ipairs(env.meta.variants) do
+        local shared, own = ModuleCounts(pkg, v.id)
+        out[#out + 1] = { id = v.id, title = v.title, short = v.title, pkg = pkg, variant = v.id, dev = false, received = true,
+            blurb = ("A layout in the package %s, revision %d."):format(QuoteText(pkg.title or pkg.id), pkg.revision),
+            covers = {
+                ("EllesmereUI: %d %s shared by every layout in the package, %d its own."):format(shared, shared == 1 and "module" or "modules", own),
+                "TwichUI: the looks and on-screen places the package carries, in a new profile of its own.",
+                "Every change is listed on the Review step before anything is applied.",
+            },
+            sharedModules = shared, ownModules = own }
+    end
+    return out
+end
+
+local function SourceKey(e) return ("received:%s:%s:%s"):format(e.hash, tostring(e.sender), tostring(e.at)) end
+
+-- The packages to choose from: { { key, kind = "bundled" | "received", title, revision, sender, by, entry } }
+function M.Sources()
+    local out = {}
+    local pkg = LY.ADVENTURE_PACKAGE
+    if pkg then out[1] = { key = "bundled", kind = "bundled", title = pkg.title or pkg.id, revision = pkg.revision } end
+    for _, e in ipairs(LY.Store and LY.Store.List("received") or {}) do
+        out[#out + 1] = { key = SourceKey(e), kind = "received", title = e.title or e.id, revision = e.revision, sender = e.sender,
+            by = e.by, entry = e, id = e.id }
+    end
+    return out
+end
+
 local session   -- nil while the window is closed
 
 function M.Session() return session end
@@ -123,7 +162,14 @@ function M.Begin()
     session = { layout = layout, layouts = layouts, picks = stored.picks, stored = stored, step = M.WELCOME, reached = M.WELCOME,
         scenario = Scene.SCENARIOS[1].id }
     local resumed = S.TakeResume(layout.pkg, stored.picks, layout.variant)
+    session.source = "bundled"
     local j, why = LY.Journal.Read()
+    if j and j.package ~= layout.pkg.id then
+        -- the install on record is of a package someone sent: open it again, so Review and Switch know it
+        for _, src in ipairs(M.Sources()) do
+            if src.kind == "received" and src.id == j.package then M.SetSource(src.key, nil, true) break end
+        end
+    end
     if j or why then
         session.step, session.reached = M.RESULT, M.RESULT
     elseif resumed == "restore" then
@@ -197,6 +243,76 @@ function M.SetLayout(id)
         end
     end
     return false, "unknown-layout"
+end
+
+-- The source in use: "bundled", or a received package's key. loading: the key being unpacked, if one is.
+function M.Source() return session and session.source or nil end
+function M.Loading() return session and session.loading or nil end
+function M.SourceError() return session and session.sourceError or nil end
+
+-- What is known of the received package in use: { entry, env, media = { { path, kind, source, status } } } or nil.
+function M.Package() return session and session.package or nil end
+
+-- Chooses the package. "bundled" is immediate. A received package is unpacked over a few frames; done(ok, code) is called
+-- when it is ready (or could not be used). Nothing in the game changes. keepStep: leave the step as it is (Begin opens the
+-- package an install on record came from, and stays on the result). Returns true, changed | false, code.
+function M.SetSource(key, done, keepStep)
+    if not session then return false, "closed" end
+    local s = session
+    if s.source == key and not s.loading then return true, false end
+    local function Adopt(layouts, picksFor)
+        s.layouts = layouts
+        local ids = {}
+        for _, l in ipairs(layouts) do ids[#ids + 1] = l.id end
+        local stored = S.Load(layouts[1].pkg, ids)
+        s.layout = layouts[1]
+        for _, l in ipairs(layouts) do if l.id == stored.variant then s.layout = l end end
+        s.picks = stored.picks
+        s.plan, s.pv, s.scene, s.failed, s.check, s.compat = nil, nil, nil, nil, nil, nil
+        if not keepStep then s.step, s.reached = math.min(s.step, M.LAYOUT), math.min(s.reached, M.LAYOUT) end
+    end
+    if key == "bundled" then
+        s.loading, s.sourceError = nil, nil
+        s.source, s.package = "bundled", nil
+        Adopt(M.Layouts())
+        return true, true
+    end
+    local src
+    for _, c in ipairs(M.Sources()) do if c.key == key and c.kind == "received" then src = c end end
+    if not src then return false, "unknown-source" end
+    s.loading, s.sourceError = key, nil
+    LY.Store.Open(src.entry, function(env, info)
+        if session ~= s or s.loading ~= key then return end   -- closed, or another was asked for meanwhile
+        s.loading = nil
+        local ok, err = pcall(function()
+            s.package = { entry = src.entry, env = env, media = LY.Pub.Resolve(env.meta.media) }
+            Adopt(ReceivedLayouts(env))
+            s.source = key
+        end)
+        if not ok then
+            -- half-adopted state is put back, and the error is the game's to show
+            s.package, s.source = nil, "bundled"
+            s.sourceError = "unreadable"
+            R.Fault("layout setup", err)
+            if done then done(false, "unreadable") end
+            return
+        end
+        if done then done(true) end
+    end, function(code)
+        if session ~= s or s.loading ~= key then return end
+        s.loading, s.sourceError = nil, code
+        if done then done(false, code) end
+    end)
+    return true, true
+end
+
+-- Removes the stored copy of the received package in use (the player confirmed). An install already made from it, its record
+-- and Restore are not touched. Back to the package included with TwichUI.
+function M.RemovePackage()
+    if not session or not session.package then return false end
+    local removed = LY.Store.Remove("received", session.package.entry)
+    M.SetSource("bundled")
+    return removed
 end
 
 function M.OtherLayout()
@@ -345,6 +461,45 @@ function M.Compat()
         end
     end
 
+    -- a package someone sent: who from, what it is, and whether this computer has what it points at
+    local pk = session.package
+    if pk then
+        local m = pk.env.meta
+        local from = pk.entry.sender and (pk.entry.sender .. " sent it to you") or "It was sent to you"
+        local made = m.publisher and ("; its author labelled it " .. QuoteText(m.publisher) .. ", in their own words") or ""
+        Add("package", "This package", "info", ("%s, revision %d. %s%s. TwichUI checked that it is well formed; nobody has tested it for you."):format(
+            QuoteText(pk.env.package.title or m.id), m.version, from, made))
+        local mine = LY.ADVENTURE_PACKAGE
+        if mine and mine.id == m.id then
+            if m.version < mine.revision then
+                Add("package-old", "Older than yours", "warn", ("The layout included with TwichUI is revision %d; this is revision %d."):format(mine.revision, m.version))
+            elseif m.version > mine.revision then
+                Add("package-new", "Newer than yours", "info", ("It replaces the layout included with TwichUI (revision %d)."):format(mine.revision))
+            end
+        end
+        if m.client == "other" then
+            Add("package-client", "Made elsewhere", "warn", "Its author made it on another game client, not WoW: Forever. TwichUI can't tell how it behaves here.")
+        end
+        local missing, unverified = {}, 0
+        for _, r in ipairs(pk.media or {}) do
+            if r.status == "missing" then missing[#missing + 1] = r.path:match("([^\\]+)$") or r.path
+            elseif r.status == "unverified" then unverified = unverified + 1 end
+        end
+        if #missing > 0 then
+            table.sort(missing)
+            Add("package-media", "Files it needs", "block", ("It uses %d %s this computer doesn't have: %s. Update TwichUI or EllesmereUI, or ask its author for a build that doesn't."):format(
+                #missing, #missing == 1 and "file" or "files", table.concat(missing, ", ", 1, math.min(#missing, 3)) .. (#missing > 3 and ", ..." or "")))
+        elseif #(pk.media or {}) > 0 then
+            Add("package-media", "Files it needs", "ok", ("%d %s it points at %s TwichUI's or the suite's own%s."):format(
+                #pk.media, #pk.media == 1 and "file" or "files", #pk.media == 1 and "is" or "are",
+                unverified > 0 and (" (" .. unverified .. " can't be looked up without drawing or playing them, so are taken on trust)") or ""))
+        end
+        if m.notes then Add("package-notes", "Release notes", "info", m.notes) end
+    end
+    if session.sourceError then
+        Add("package-error", "Chosen package", "block", "It couldn't be opened again (" .. tostring(session.sourceError) .. "). It is stored but unreadable; remove it and ask for another copy.")
+    end
+
     -- TwichUI's own profiles
     local td = LY.ADAPTERS.twichui.Detect()
     if td.usable then Add("twichui", "TwichUI profiles", "ok", "This character's profile is copied for the layout; yours is not changed.")
@@ -400,6 +555,7 @@ end
 
 function M.CanContinue()
     if not session then return false end
+    if session.loading then return false end   -- a package is still being opened
     if session.step == M.WELCOME then
         local _, ok = M.Compat()
         return ok
@@ -638,6 +794,12 @@ end
 function M.ConfirmText()
     local r = M.Review()
     local lines = { ("Apply %s?"):format(session.layout.title), "" }
+    local pk = session.package
+    if pk then
+        lines[#lines + 1] = ("From the package %s, revision %d, %s. Your game was told who sent it; the package itself can't say."):format(
+            QuoteText(pk.env.package.title or pk.env.meta.id), pk.env.meta.version, pk.entry.sender and ("sent by " .. pk.entry.sender) or "sent to you")
+        lines[#lines + 1] = ""
+    end
     for _, sec in ipairs({ r.twichui, r.ellesmereui }) do
         if sec then
             lines[#lines + 1] = sec.title .. " (" .. sec.when:lower() .. "):"

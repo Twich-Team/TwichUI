@@ -5,10 +5,12 @@
 -- TwichUI_Layouts' own) and never touches it. The scenario the preview shows and whether the full-size preview is open
 -- are not remembered: they are how the preview looks right now, not a choice.
 --
---   { v = 1, variant = "<variant id>", picks = { [choice id] = option id }, resume = "install" | "restore" }
+--   { v = 1, package = "<package id>", variant = "<variant id>", picks = { [choice id] = option id }, resume = "install" | "restore" }
 --
--- (`variant` was added in Phase 5 without a new version: a record without one reads as the first layout, and an older
--- TwichUI that saves over it simply forgets the layout.) Reading never writes. What is read is checked narrowly: a
+-- (`variant` was added in Phase 5 and `package` in Phase 6, both without a new version: a record without a variant reads as
+-- the first layout, and one without a package belongs to the package included with TwichUI; an older TwichUI that saves over
+-- it simply forgets them. Picks and layout are only read for the package they were made for; another package starts from
+-- its own defaults and its own first layout. The resume note belongs to no package.) Reading never writes. What is read is checked narrowly: a
 -- pick that isn't an option of its choice goes back to that choice's default and the rest is kept; a variant that isn't
 -- one of the package's goes back to the first; anything that isn't a table is ignored whole. A record from a newer
 -- TwichUI (v above this one) is not understood and not overwritten: the defaults are used and nothing is saved over it.
@@ -20,6 +22,7 @@ WZ.State = S
 
 S.VERSION = 1
 S.MAX_PICKS = 8
+S.INCLUDED = "twichui-adventure"   -- the package a record without a package id belongs to (the one included with TwichUI)
 
 local function Root(create)
     if type(TwichUIDB) ~= "table" then return nil end
@@ -60,6 +63,13 @@ function S.Load(pkg, variants)
     if type(raw) ~= "table" then out.repaired = true return out end
     if type(raw.v) ~= "number" or raw.v ~= raw.v or raw.v % 1 ~= 0 or raw.v < 1 then out.repaired = true return out end
     if raw.v > S.VERSION then out.newer = true return out end
+    if raw.resume == "install" or raw.resume == "restore" then out.resume = raw.resume
+    elseif raw.resume ~= nil then out.repaired = true end
+    -- picks and layout were made for one package; another package starts from its own defaults
+    local owner = raw.package
+    if owner == nil then owner = S.INCLUDED end
+    if type(owner) ~= "string" then out.repaired = true owner = S.INCLUDED end
+    if pkg and pkg.id ~= owner then out.other = true return out end
     if raw.variant ~= nil then
         if VariantOk(variants, raw.variant) then out.variant = raw.variant else out.repaired = true end
     end
@@ -79,8 +89,6 @@ function S.Load(pkg, variants)
             if not known then out.repaired = true end
         end
     end
-    if raw.resume == "install" or raw.resume == "restore" then out.resume = raw.resume
-    elseif raw.resume ~= nil then out.repaired = true end
     return out
 end
 
@@ -97,14 +105,15 @@ function S.Save(pkg, picks, resume, variant)
     if Newer() then return false end
     local root = Root(true)
     if not root then return false end
-    if variant == nil and type(root.wizard) == "table" then variant = root.wizard.variant end
+    if variant == nil and type(root.wizard) == "table" and (root.wizard.package or S.INCLUDED) == (pkg and pkg.id) then variant = root.wizard.variant end
     if type(variant) ~= "string" or #variant > 32 or not variant:match("^[%w%-]+$") then variant = nil end
     local saved = {}
     for _, ch in ipairs(pkg and pkg.choices or {}) do
         local pick = picks and picks[ch.id]
         if OptionOf(ch, pick) then saved[ch.id] = pick end
     end
-    root.wizard = { v = S.VERSION, variant = variant, picks = saved, resume = (resume == "install" or resume == "restore") and resume or nil }
+    root.wizard = { v = S.VERSION, package = pkg and pkg.id or nil, variant = variant, picks = saved,
+        resume = (resume == "install" or resume == "restore") and resume or nil }
     return true
 end
 
@@ -114,7 +123,9 @@ function S.SetResume(pkg, picks, kind, variant) return S.Save(pkg, picks, kind, 
 -- Reads the resume note and clears it (writes only when there was one). Returns "install", "restore" or nil.
 function S.TakeResume(pkg, picks, variant)
     local st = S.Load(pkg, variant and { variant } or nil)
-    if not st.resume then return nil end
-    S.Save(pkg, picks or st.picks, nil, variant)
+    if not st.resume or Newer() then return nil end
+    local root = Root(false)
+    -- only the note goes; the picks and the layout stay as they were, whichever package they were made for
+    if root and type(root.wizard) == "table" then root.wizard.resume = nil end
     return st.resume
 end

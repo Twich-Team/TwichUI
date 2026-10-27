@@ -27,6 +27,12 @@ Elements.lua
 Journal.lua
 Engine.lua
 
+# Capturing an author's settings through the adapters' allowlists, publishing a package (an envelope around it that is checked
+# again by whoever reads it), and the short, bounded record of the packages kept for sending and installing
+Capture.lua
+Publish.lua
+Store.lua
+
 # The packages: the developer test package, and the Adventure package with Classic and Compact Adventure (the captured
 # data of each, then the package that uses them)
 TestPackage.lua

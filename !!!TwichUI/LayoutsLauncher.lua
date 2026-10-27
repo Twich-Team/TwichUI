@@ -8,6 +8,7 @@
 --   L.Command(arg)    /tui layout: opens the wizard. /tui layout <word> ...: loads the engine and hands the words over
 --                     (TwichUI_Layouts/Dev.lua says what they do: the developer commands)
 --   L.OpenWizard(step)  loads the wizard if needed and opens it (on a step, or where it says); true, or false and a reason
+--   L.OpenAuthor()    the same for the authoring workspace (/tui layout author): for the person who makes a layout
 --   L.Pending()       read only: the install record's state when it waits for something that happens at a load
 --                     ("applying", "applied", "restoring"), else nil
 --   L.WizardResume()  read only: "install" or "restore" when the wizard started the reload that is just finishing
@@ -132,6 +133,27 @@ function L.OpenWizard(step)
     return opened ~= false
 end
 
+-- Opens the authoring workspace (for the person who makes a layout; /tui layout author), loading the wizard's addon first. It is
+-- not linked from the wizard. Says why in chat when it can't.
+function L.OpenAuthor()
+    local ok, why = L.LoadWizard()
+    if not ok then
+        L.wizardFailed = why
+        R.Print("%s", L.ExplainWizard(why))
+        return false, why
+    end
+    L.wizardFailed = nil
+    local W = R.LayoutWizard.AuthorWindow
+    if not W then R.Print("%s", L.ExplainWizard("INCOMPLETE")) return false, "INCOMPLETE" end
+    local done, opened = pcall(W.Open)
+    if not done then
+        R.Fault("layout publishing", opened)
+        R.Print("%s", L.ExplainWizard("ERROR"))
+        return false, "ERROR"
+    end
+    return opened ~= false
+end
+
 -- The note the wizard leaves when the player starts a reload from it (TwichUIDB.layouts.wizard.resume): read only,
 -- and only its type is checked.
 function L.WizardResume()
@@ -147,6 +169,10 @@ function L.Command(arg)
     word = (word or ""):lower()
     if word == "" or word == "wizard" or word == "setup" or word == "open" then
         L.OpenWizard()
+        return
+    end
+    if word == "author" or word == "publish" then
+        L.OpenAuthor()
         return
     end
     local ok, why = L.Load()

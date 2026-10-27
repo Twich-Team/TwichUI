@@ -129,6 +129,10 @@ uses an item, sends anything or makes up events. Each states its cost before you
 | `layoutwizard.load` (`Perf.Call`) | `LayoutsLauncher.lua` `L.LoadWizard`, around `C_AddOns.LoadAddOn` of `TwichUI_LayoutWizard` | init |
 | `layoutwizard.overlay.build` (`Perf.Call`), `layoutwizard.overlay` (`Perf.Call`) | `TwichUI_LayoutWizard/Overlay.lua` `Build` (the first time the full-size preview opens), `Draw` (each time it opens, or a layout, scenario or the screen changes in it; never while it is closed) | init, layout |
 | `layoutwizard.build` (`Perf.Call`), `layoutwizard.preview` (`Perf.Call`) | `TwichUI_LayoutWizard/Window.lua` `Build` (the first open only), `TwichUI_LayoutWizard/Preview.lua` `Draw` (each time a step with the preview is shown, a choice or the screen changes) | init, layout |
+| `layouts.capture` (`Perf.Start`/`Perf.Stop`) | `TwichUI_LayoutWizard/Author.lua` `A.Capture` (the authoring workspace's Capture button: copies the named profiles through the adapters' allowlists and scans them) | bulk |
+| `layouts.publish.build`, `layouts.publish.check` (`Perf.Call`) | `TwichUI_Layouts/Publish.lua` `Pub.Build` (Publish in the workspace), `Pub.Check` (Check, Publish, a package arriving, a stored one opened) | rebuild, evaluate |
+| `layouts.publish.receive` (`Perf.Call`), `layouts.store.open` (`Perf.Start`/`Perf.Stop`) | `TwichUI_Layouts/Store.lua` `LY.Receive` (once per package a player accepts, a frame after it is unpacked), `Store.Open` (a stored package chosen in the setup or the workspace; the unpacking itself is Share.lua's background job) | bulk, evaluate |
+| `layoutwizard.author.build` (`Perf.Call`) | `TwichUI_LayoutWizard/AuthorWindow.lua` `Build` (the first open of the authoring workspace only) | init |
 | `layouts.plan`, `layouts.apply`, `layouts.verify`, `layouts.restore` (`Perf.Call`) | `TwichUI_Layouts/Engine.lua` `LY.Plan`, `LY.Apply`, `LY.Verify` and `LY.VerifyRestore`, `LY.Restore` (on request; `layouts.verify` also once after the reload that finishes an install or restore) | rebuild, bulk, evaluate, bulk |
 | `classbars.anim`, `pins.ping.tick`, `npcs.map.pulse` (`Perf.Call`) | `classbars/Anim.lua`, `pins/PingMap.lua`, `npcs/Map.lua` | update |
 | `map.view.step`, `map.view.follow`, `map.view.notify` (`Perf.Wrap`) | `map/View.lua` OnUpdate scripts | update |
@@ -149,7 +153,9 @@ The layout setup registers four of its own (`TwichUI_LayoutWizard/Window.lua` an
 `layoutwizard.events` (events it has registered: 4 while its window is open, 0 closed), `layoutwizard.frames` (frames and
 pages it keeps; it does not grow when the window is opened again), and for its full-size preview
 `layoutwizard.overlay.events` (3 while it is shown, 0 closed) and `layoutwizard.overlay.frames` (frames and textures it
-keeps: made as the pieces first appear, bounded by the package, not growing when it is opened again). Not scoped, and
+keeps: made as the pieces first appear, bounded by the package, not growing when it is opened again). The publishing code registers `layouts.store.entries` and `layouts.store.kb` (packages kept for sending and installing, and the
+text they hold in saved data: read without unpacking anything) and, in the authoring workspace, `layoutwizard.author` (changes held:
+0 while it is closed) and `layoutwizard.author.frames` (the frames it keeps). Not scoped, and
 why: building the scene (`Scene.lua`, `LY.Elements`: a few table reads and arithmetic per redraw, cached until a pick, a
 layout, a scenario or the screen changes). No global function, `CreateFrame`, timer or event registration is wrapped or replaced.
 

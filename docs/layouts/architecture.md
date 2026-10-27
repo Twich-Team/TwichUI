@@ -8,7 +8,8 @@ those revisions win over the text above them. Phase 3 (2026-10-26) added the scr
 Classic Adventure; **§12 lists its revisions**, which win over §1–§11. Phase 4 (2026-10-26) added the setup wizard and the
 package `choices`; **§13 lists its revisions**, which win over §1–§12. Phase 5 (2026-10-26) added Compact Adventure as the
 second variant of the same package, per-variant screen rules and the full-size preview; **§14 lists its revisions**, which
-win over everything above. Retained overrides are not built. `adapter-capabilities.md` holds the source evidence for each integration, and
+win over everything above. Phase 6 (2026-10-27) added the authoring workspace, the publication envelope and the transport
+extension; **§15 lists its revisions**, which win over §1–§14. Retained overrides are not built. `adapter-capabilities.md` holds the source evidence for each integration, and
 `implementation-status.md` tracks the phases and the open decisions.
 
 Words used here:
@@ -576,3 +577,30 @@ pieces-inside-components list the preview needs, and the wizard's layout choice,
    as the first layout; an unknown one is repaired to the first; a newer record is still never overwritten. The scenario
    and whether the preview is open are not saved.
 
+
+## 15. Revisions made in Phase 6 (2026-10-27)
+
+Phase 6 added authoring and publishing (`publishing.md` has the workflow, limits, tests and checklists). Where it differs from
+§1–§14, the code and this section are the contract:
+
+1. **Capture is one function (§12.8).** `LY.Capture.Read(euiProfile, twichuiSlot)` (`TwichUI_Layouts/Capture.lua`) decides what a
+   layout may carry out of a profile; `tools/layout_capture.lua` and the in-game workspace both call it. `Capture.Scan` is the
+   personal-data scan (character names whole and by word, realms where the client has them, GUIDs, links, BattleTags);
+   `Capture.Put/Clear/Locate` move one unit between a layer's fragments.
+2. **The envelope (§5).** A publication is `{ kind = "twichui-layout", v = 1, package, meta }` (`Publish.lua`). The package is
+   format 3, unchanged, and `LY.Validate` is still the one validator. `meta` states what the author wants read first; every fact
+   in it is derived again from the package by the reader and a mismatch refuses the publication. The sender is never in it.
+3. **A stricter reading for a package that travels (§3).** `Pub.Strict`: no `dev`, layout rules required, no opaque EllesmereUI
+   export string, no `LY.REMOVE`, bounded plain strings, media references classified (TwichUI's own media checked against
+   `modules/Media.lua`, the suite's, the game's; another addon's or off-disk paths refused).
+4. **Stored packages (§10).** `TwichUIDB.layouts.published` and `.received` (`Store.lua`): bounded lists, each entry a summary and
+   the exact packed block as printable text. A full store refuses. `Journal.Clear` leaves them; the existing `layouts` entries in
+   `TwichConfig.LOCAL` and `RS.OWN_LEFT_OUT` cover them (backups do not hold them).
+5. **Transport (`Share.lua`).** Message type `layoutoffer`; `SH:SendLayout`, `SH.SendLayoutData`, `SH.RespondLayout`,
+   `SH.LayoutReceived`; `SH.DecodeData`; the transfer record carries `kind = "layout"`. It reuses reply, incoming, data lanes, done,
+   routes, watchdogs and progress. It is never auto-accepted, bounded before unpacking, and receiving only stores.
+6. **The wizard (§13).** `layouts.wizard.package` records which package its picks belong to (a record without it belongs to the
+   included package; another package starts from its own defaults); `M.Sources`, `M.SetSource` choose the package; the install
+   record names the package (it always did) and, for a received package with another id, the wizard finds it again after a reload.
+   Pages that ask a choice the package does not have say so instead of failing.
+7. **Core launcher.** `L.OpenAuthor()`; `/tui layout author` (alias `publish`). No settings page, broker entry or Welcome offer.

@@ -9,6 +9,7 @@
 --   /tui layout restore          shows what Restore would do; /tui layout restore confirm does it
 --   /tui layout status           the install record: state, steps, the last check
 --   /tui layout detach confirm   forgets the record and changes nothing else (for a record that can't be used)
+--   /tui layout author           opens the authoring workspace (TwichUI_LayoutWizard; the core's launcher handles it)
 -- pkg: test (the developer test package, the default), classic (Classic Adventure) or compact (Compact Adventure, the
 -- same package's other layout). density: standard or larger.
 -- Output stays in your own chat frame. Nothing reloads by itself: when a reload is needed, it says so.
@@ -268,6 +269,7 @@ local function Help()
     Say("the developer test of layout installs (not the wizard). Commands:")
     Line("/tui layout validate | plan | apply [confirm] | geometry | verify | restore [confirm] | status | detach confirm")
     Line("After validate, plan, apply or geometry: test, classic or compact (the package or layout), standard or larger (the density); geometry also takes WxH.")
+    Line("/tui layout author opens the authoring workspace (for the person who makes a layout: capture, review, publish, send); /tui layout opens the setup.")
 end
 
 local function Show(o)

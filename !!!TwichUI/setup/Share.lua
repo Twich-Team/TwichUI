@@ -34,6 +34,9 @@ local DATA_TIMEOUT = 60        -- seconds of silence before a transfer is called
 -- tables is about 18 KB; the largest legitimate message is an offer, which is checked against this
 -- before it is sent.
 local MAX_CONTROL = 65536
+-- A published layout package, as sent (the packed block: "Z1" and its pieces). Bigger is not offered, not asked about and not
+-- unpacked. At the game's addon-message rate this is several minutes of sending; a real package is far smaller.
+SH.LAYOUT_MAX_WIRE = 786432
 
 SH.outgoing = nil   -- { target, id, stage, sent, total, started, want }
 SH.incoming = {}    -- [sender] = { id, offer, stage, expected, got }
@@ -491,6 +494,9 @@ function SH.EncodeData(payload, done, fail)
     return { Cancel = function() job.cancelled = true end }
 end
 
+-- The other half: a packed block read back a little at a time (done(table) or fail(err); no return value).
+function SH.DecodeData(blob, done, fail) DecodeBig(blob, done, fail) end
+
 -- A control message as it goes out (the recipient's name is added first; see Send).
 function SH.EncodeControl(msg) return Encode(msg) end
 
@@ -566,6 +572,57 @@ function SH:SendToSelf()
     return SH:SendTo(SH.SelfName(), true)
 end
 
+-- Sends a published layout package (a stored entry of TwichUI_Layouts' Store: the exact bytes that were published). The
+-- same checks, route and watchdog as a setup; the message types are its own (see "Layout packages" below), and the
+-- player's recipient has to answer the offer. Returns false, reason if it can't start.
+function SH:SendLayout(name, entry, selfTest)
+    local wire = type(entry) == "table" and type(entry.blob) == "string" and LibDeflate:DecodeForPrint(entry.blob) or nil
+    if not wire or #wire < 3 then return false, "There is no published layout package to send." end
+    if #wire > SH.LAYOUT_MAX_WIRE then return false, "That package is larger than TwichUI sends." end
+    local target = SH.FullName(name)
+    if not target then return false, "Type your friend's name, or target them." end
+    if target:find("#", 1, true) then
+        return false, "That looks like a Battle.net name. Type the character's name instead."
+    end
+    if SH.Realmless() and not target:find(" ", 1, true) then
+        return false, ("Forever needs the full name, first and last (like %s)."):format(SH.SelfName())
+    end
+    if SH.SameName(target, SH.SelfName()) and not selfTest then
+        return false, "That's you. Use \"Test on myself\" to try it out."
+    end
+    if SH.Blocked() then return false, "Sharing is blocked here right now (instance restrictions). Try in a city." end
+    if SH.outgoing and SH.outgoing.stage ~= "done" and SH.outgoing.stage ~= "failed" then
+        return false, "Already sending to " .. SH.Short(SH.outgoing.target) .. "."
+    end
+    if IsInGuild() and C_GuildInfo and C_GuildInfo.GuildRoster then pcall(C_GuildInfo.GuildRoster) end
+    local route, why = SH.Route(target)
+    if not route then return false, why end
+
+    local id = NewId()
+    local offer = { t = "layoutoffer", p = PROTOCOL, id = id, to = target, pkg = entry.id, revision = entry.revision,
+        hash = entry.hash, size = #wire, title = entry.title, by = entry.by, variants = entry.variants }
+    local o = { target = target, id = id, kind = "layout", stage = "offered", sent = 0, total = 0, started = GetTime(), route = route, entry = entry }
+    SH.outgoing = o
+    StartWatchdog()
+    Send(target, offer, "ALERT", route, function()
+        if SH.outgoing == o and o.stage == "offered" then
+            o.stage = "failed"; o.reason = RefusedReason(route, SH.Short(target))
+            Code(o, "offer-refused-by-game", target)
+            Changed()
+        end
+    end)
+    Trace("layout-offer-sent", "route=" .. tostring(route[1]), target, selfTest)
+    Changed()
+    C_Timer.After(OFFER_TIMEOUT, function()
+        if SH.outgoing == o and o.stage == "offered" then
+            o.stage = "failed"; o.reason = ("No answer from %s. They may be offline, may not run a TwichUI that receives layout packages, or may not have answered the question yet."):format(SH.Short(target))
+            Code(o, "offer-no-answer", target)
+            Changed()
+        end
+    end)
+    return true
+end
+
 -- /tui share status: what the transfer code thinks is happening (for bug reports).
 function SH:Status()
     local P = R.Print
@@ -615,7 +672,7 @@ function SH:Settle(reason, incomingOnly)
             R.Life.Note("transfer-settled")
         end
     end
-    if StaticPopup_Hide then StaticPopup_Hide("TWICHUI_OFFER") end
+    if StaticPopup_Hide then StaticPopup_Hide("TWICHUI_LAYOUT_OFFER"); StaticPopup_Hide("TWICHUI_OFFER") end
     Changed()
 end
 
@@ -710,6 +767,7 @@ function SH:Respond(sender, accept, always)
     end
     local inc = sender and SH.incoming[sender]
     if not inc or inc.stage ~= "asking" then return end
+    if inc.kind == "layout" then return SH.RespondLayout(sender, inc, accept) end   -- never "always": see "Layout packages"
     if always then ST.db.trusted[sender] = true end
     if not accept then
         inc.stage = "declined"
@@ -858,7 +916,8 @@ handlers.reply = function(sender, msg)
     Trace("offer-accepted", nil, sender)
     -- Even when nothing is new we still send the (small) list, so addons you
     -- removed from your setup disappear on their side too.
-    local ok, err = pcall(SendData, o, msg.want, msg.wantEM)
+    local ok, err
+    if o.kind == "layout" then ok, err = pcall(SH.SendLayoutData, o) else ok, err = pcall(SendData, o, msg.want, msg.wantEM) end
     if not ok then
         o.stage = "failed"
         o.reason = "Couldn't package your configuration: " .. tostring(err)
@@ -871,6 +930,16 @@ end
 handlers.incoming = function(sender, msg)
     local inc = SH.incoming[sender]
     if not inc or inc.id ~= msg.id then return end
+    if inc.kind == "layout" then
+        -- the announced size is the pieces with their headers; it may not be more than the offer allowed
+        local size = tonumber(msg.size)
+        if not size or size < 1 or size > SH.LAYOUT_MAX_WIRE + 1024 then
+            inc.stage = "failed"; inc.reason = "The package is larger than it said it would be."
+            Code(inc, "layout-size", sender)
+            Changed()
+            return
+        end
+    end
     inc.stage = "receiving"
     inc.expected = tonumber(msg.size) or 0
     inc.got = 0
@@ -903,8 +972,152 @@ handlers.done = function(sender, msg)
         o.stage = "done"
         Trace("delivery-confirmed", "the other side answered done", sender)
         Changed()
-        R.Print("%s has your addon configuration now.", SH.Short(sender))
+        if o.kind == "layout" then R.Print("%s has your layout package now. It is stored, not installed: they install it themselves.", SH.Short(sender))
+        else R.Print("%s has your addon configuration now.", SH.Short(sender)) end
     end
+end
+
+---------------------------------------------------------------------------
+-- Layout packages (docs/layouts/publishing.md)
+-- A published layout package travels on the same routes, lanes, throttling and watchdogs as a setup, with message types of
+-- its own, so a TwichUI that doesn't know them ignores them. What is different, on purpose:
+--   * the player is always asked, whatever else they allowed (no "always accept from this player"), and a size over
+--     SH.LAYOUT_MAX_WIRE is declined before the question;
+--   * receiving only STORES it. The package is checked by TwichUI_Layouts (loaded for that), kept as a copy in the layouts
+--     record and never applied, installed or even composed; installing is the layout setup's, behind its own question;
+--   * who sent it is the game's word (the sender of the message), never a field of the package: the offer's own name,
+--     if any, is ignored, and what the offer says (package, revision, size, fingerprint) must match what arrives;
+--   * the bytes sent are the stored copy exactly.
+---------------------------------------------------------------------------
+local function PlainText(s, max)
+    if type(s) == "string" and #s >= 1 and #s <= max and not s:find("[%c|]") then return s end
+end
+
+handlers.layoutoffer = function(sender, msg, dist)
+    local route = RouteFromArrival(dist, sender)
+    if not R:Enabled("acceptSetups") then
+        Send(sender, { t = "reply", id = msg.id, accept = false, reason = "off" }, "ALERT", route)
+        return
+    end
+    if msg.p ~= PROTOCOL then
+        Send(sender, { t = "reply", id = msg.id, accept = false, reason = "version" }, "ALERT", route)
+        return
+    end
+    local size = tonumber(msg.size)
+    if type(msg.id) ~= "string" or #msg.id > 24 or not size or size % 1 ~= 0 or size < 3
+        or type(msg.hash) ~= "string" or #msg.hash > 48 or type(msg.pkg) ~= "string" or #msg.pkg > 64
+        or tonumber(msg.revision) == nil then
+        SH.lastDropped = ("layout offer from %s was not well formed"):format(tostring(sender))
+        SH.droppedCode = "layout-offer-malformed"
+        Trace("ignored", SH.droppedCode, sender)
+        return
+    end
+    if size > SH.LAYOUT_MAX_WIRE then
+        Send(sender, { t = "reply", id = msg.id, accept = false, reason = "size" }, "ALERT", route)
+        Trace("ignored", "layout-offer-too-large", sender)
+        return
+    end
+    local inc = { id = msg.id, kind = "layout", stage = "asking", got = 0, expected = 0, route = route, parts = {}, started = GetTime(),
+        offer = { pkg = msg.pkg, revision = tonumber(msg.revision), hash = msg.hash, size = size,
+            title = PlainText(msg.title, 80), by = PlainText(msg.by, 40), variants = tonumber(msg.variants) } }
+    SH.incoming[sender] = inc
+    Trace("layout-offer-received", "via " .. tostring(dist), sender)
+    Changed()
+    local o = inc.offer
+    local text = ("%s wants to send you a layout package: \"%s\", revision %d, about %d KB%s.\n\n"
+        .. "Receiving only stores it. Nothing is installed or changed until you open the layout setup (/tui layout) and install "
+        .. "it yourself, and you can restore your previous setup afterwards. The package is checked first, and discarded if it "
+        .. "fails."):format(SH.Short(sender), o.title or o.pkg, o.revision, math.max(1, math.floor(o.size / 1024 + 0.5)),
+        o.by and (" (labelled \"" .. o.by .. "\" by its author)") or "")
+    R.Interact.Confirm("TWICHUI_LAYOUT_OFFER", text, function() SH:Respond(sender, true) end,
+        { accept = "Receive", cancel = "Decline", onCancel = function() SH:Respond(sender, false) end })
+    C_Timer.After(OFFER_TIMEOUT, function()
+        if SH.incoming[sender] == inc and inc.stage == "asking" then
+            if StaticPopup_Hide then StaticPopup_Hide("TWICHUI_LAYOUT_OFFER") end
+            pcall(SH.Respond, SH, sender, false)
+            inc.reason = "You didn't answer in time."
+        end
+    end)
+end
+
+-- Called by Respond for a layout offer. accept: the player's answer.
+function SH.RespondLayout(sender, inc, accept)
+    if not accept then
+        inc.stage = "declined"
+        Send(sender, { t = "reply", id = inc.id, accept = false }, "ALERT", inc.route)
+        Changed()
+        return
+    end
+    inc.stage = "waiting"
+    inc.parts = 0
+    inc.last = GetTime()
+    local okSend, err = pcall(Send, sender, { t = "reply", id = inc.id, accept = true, want = {}, wantEM = false }, "ALERT", inc.route)
+    if not okSend then Fail("sending your answer", err) end
+    Changed()
+    local id = inc.id
+    local function watchdog()
+        local cur = SH.incoming[sender]
+        if not cur or cur.id ~= id or TERMINAL[cur.stage] then return end
+        if GetTime() - (cur.last or 0) > DATA_TIMEOUT then
+            cur.stage = "failed"; cur.reason = "The transfer stopped. Ask them to send again."
+            cur.lanes = nil
+            Code(cur, "receive-stalled", sender)
+            Changed()
+        else
+            C_Timer.After(5, watchdog)
+        end
+    end
+    C_Timer.After(5, watchdog)
+end
+
+-- The sender's side, once the offer was accepted: the stored bytes, exactly, over the lanes.
+function SH.SendLayoutData(o)
+    local wire = LibDeflate:DecodeForPrint(o.entry.blob)
+    if not wire or #wire > SH.LAYOUT_MAX_WIRE then error("the stored package can't be read") end
+    o.parts = 1
+    SH.SendLanes(o, wire)
+end
+
+-- The receiver's side, once the pieces are unpacked: msg = { t = "layoutdata", env }, joined = the bytes as they arrived.
+-- Checks and stores it (TwichUI_Layouts), a frame later, so the work is not done inside the message callback.
+function SH.LayoutReceived(sender, inc, msg, joined)
+    local function Refuse(reason, code)
+        inc.stage = "failed"; inc.reason = reason
+        Code(inc, code, sender)
+        Changed()
+    end
+    if #joined ~= inc.offer.size then return Refuse("The package that arrived wasn't the size it was offered at.", "layout-size-mismatch") end
+    local L = R.LayoutsLauncher
+    local loaded, why = L.Load()
+    if not loaded then return Refuse(L.Explain(why), "layout-tools-unavailable") end
+    inc.stage = "checking"
+    Changed()
+    C_Timer.After(0, function()
+        if SH.incoming[sender] ~= inc or inc.stage ~= "checking" then return end
+        local ok, entry, code, problems = pcall(R.Layouts.Receive, msg, joined, { sender = sender, offer = inc.offer })
+        if SH.incoming[sender] ~= inc or inc.stage ~= "checking" then return end
+        if not ok then
+            Refuse("TwichUI couldn't check the package.", "layout-check-error")
+            Fail("checking the layout package", entry)
+            return
+        end
+        if not entry then
+            -- Receive gives a reason code, and for a package that failed its checks the problems
+            local words = problems and R.Layouts.Pub.Explain(problems, 2) or {}
+            local why = code == "full" and "There is no room to keep it; remove a stored package first"
+                or code == "mismatch" and "It isn't the package that was offered"
+                or ("It isn't a usable layout package" .. (#words > 0 and (": " .. table.concat(words, "; ")) or ""))
+            Refuse(why .. ". It was discarded.", "layout-" .. tostring(code))
+            return
+        end
+        inc.stage = "done"
+        inc.got = inc.expected
+        Trace("layout-stored", nil, sender)
+        Send(sender, { t = "done", id = inc.id }, "ALERT", inc.route)
+        Changed()
+        R.Print("Received the layout package \"%s\" (revision %d) from %s. It is stored, and nothing was installed. /tui layout shows it.",
+            entry.title or entry.id, entry.revision, SH.Short(sender))
+    end)
 end
 
 OnControl = function(_, text, dist, sender)
@@ -959,6 +1172,19 @@ OnLane = function(_, text, dist, sender)
     idx, n = tonumber(idx), tonumber(n)
     if not idx or not n or n < 1 or n > #LANES or idx < 1 or idx > n then return end
     inc.lanes = inc.lanes or {}
+    if inc.kind == "layout" then
+        -- a layout transfer is bounded as it arrives: one count of pieces, and no more bytes than the offer allowed
+        if inc.laneCount and inc.laneCount ~= n then return end
+        inc.laneCount = n
+        local had = inc.lanes[idx] and #inc.lanes[idx] or 0
+        inc.laneBytes = (inc.laneBytes or 0) - had + (#text - rest + 1)
+        if inc.laneBytes > SH.LAYOUT_MAX_WIRE + 1024 then
+            inc.lanes, inc.stage, inc.reason = nil, "failed", "The package is larger than it said it would be."
+            Code(inc, "layout-size", sender)
+            Changed()
+            return
+        end
+    end
     inc.lanes[idx] = text:sub(rest)
     inc.last = GetTime()
     for i = 1, n do if not inc.lanes[i] then return end end
@@ -973,6 +1199,12 @@ OnLane = function(_, text, dist, sender)
     DecodeBig(joined, function(msg)
         if not Current() then R.Life.Note("cancelled-stale-transfer") Trace("ignored", "late-result-after-settle", sender) return end
         inc.last = GetTime()
+        if inc.kind == "layout" then
+            if msg.t ~= "layoutdata" then error("damaged data block") end
+            local okL, errL = pcall(SH.LayoutReceived, sender, inc, msg, joined)
+            if not okL then Fail("storing the layout package", errL) end
+            return
+        end
         if msg.t ~= "data" then error("damaged data block") end
         inc.stage = "receiving"   -- handlers.data expects an active transfer
         local ok, err = pcall(handlers.data, sender, msg)
@@ -982,7 +1214,8 @@ OnLane = function(_, text, dist, sender)
         inc.stage = "failed"; inc.reason = "The configuration arrived damaged. Ask them to send again."
         Code(inc, "unpack-failed", sender)
         Changed()
-        Fail("unpacking the configuration", err)
+        -- a layout package is bounded input from another player: damaged bytes end the transfer and are not raised as an error
+        if inc.kind ~= "layout" then Fail("unpacking the configuration", err) end
     end)
 end
 
@@ -1025,7 +1258,7 @@ function SH.Snapshot()
     table.sort(peers)
     for _, sender in ipairs(peers) do
         local inc = SH.incoming[sender]
-        snap.incoming[#snap.incoming + 1] = { peer = label(sender), stage = inc.stage, route = inc.route and inc.route[1],
+        snap.incoming[#snap.incoming + 1] = { peer = label(sender), kind = inc.kind or "setup", stage = inc.stage, route = inc.route and inc.route[1],
             got = inc.got, expected = inc.expected, age = Age(inc.started), idle = Age(inc.last), code = inc.code }
     end
     return snap

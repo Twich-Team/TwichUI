@@ -374,3 +374,9 @@ shared.
 | D31 | TwichUI's pieces (class bars, marker bar, navigation arrow, food and drink) are Classic's captured places in Compact too; class bars at (−385, −558) land inside Compact's strip | Look at the markers in the overlay on the author's screen and say which should move; capture them from a separate TwichUI profile if so |
 | D32 | Not placed by the screen layer: the Battle Res frame, the Cooldown Manager's other bars, class power (left at the author's coordinates, which in Compact sit above the strip), and the pieces the preview has no size for | Register positions when the author wants them moved |
 
+
+## Phase 6 additions
+
+Packages other players sent: the first step lists the included package and each received one and opens the one chosen; its
+layouts replace the two included ones on the Layout step; choices it does not have are skipped with a note. Authoring is a
+separate workspace (`/tui layout author`) that the wizard does not link to. See `publishing.md`.

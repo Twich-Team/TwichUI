@@ -103,6 +103,15 @@ function Actions.forget()
         function() M.Keep() W.Refresh() end, { accept = "Forget it" })
 end
 
+function Actions.removePackage()
+    local pk = M.Package()
+    if not pk then return end
+    R.Interact.Confirm("TWICHUI_LAYOUT_REMOVE_PACKAGE",
+        ("Remove the stored package %q (revision %d)?\n\nThis deletes only the stored copy. An install already made from it, and Restore, are not touched. Ask the sender again if you want it back."):format(
+            pk.env.package.title or pk.env.meta.id, pk.env.meta.version),
+        function() M.RemovePackage() W.Refresh() end, { accept = "Remove" })
+end
+
 function Actions.reload()
     local ok, why = M.Reload()
     if not ok then footer.note:SetText(M.ApplyReason(why)) W.Refresh() end

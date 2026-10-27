@@ -22,5 +22,10 @@ Preview.lua
 Pages.lua
 Overlay.lua
 
+# The authoring workspace (for the person who makes a layout; /tui layout author): its model, then its window. Nothing is built
+# until it is opened.
+Author.lua
+AuthorWindow.lua
+
 # The window (last: it tells TwichUI the wizard is ready)
 Window.lua

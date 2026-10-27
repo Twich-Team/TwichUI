@@ -9,6 +9,7 @@
 --   env: { Relayout(), Go(step), Actions = { reload, restore, keep, check, forget, again } }
 
 local R = TwichUI
+local LY = R.Layouts
 local WZ = R.LayoutWizard
 local M = WZ.Model
 local Pages = {}
@@ -200,6 +201,19 @@ local function BuildWelcome(parent, env)
     compatNote:SetText("What this game client, your screen and the game's state allow. Each line says what it found; nothing is changed by looking.")
     page.rows = {}
 
+    -- the package to set up from: shown only once someone has sent one (the included package is the only one before that)
+    local pkgHead = Heading(f, "Layout package", CONTENT_W)
+    local pkgNote = Text(f, "small", CONTENT_W - 60)
+    page.srcCards = {}
+    for i = 1, 1 + (LY and LY.Store and LY.Store.LIMITS.received or 3) do
+        local card = Card(f, CONTENT_W - 30, function() end)
+        card:Hide()
+        page.srcCards[i] = card
+    end
+    local removeBtn = Button(f, "Remove this package", 170, "secondary", function() env.Actions.removePackage() end,
+        "Deletes the stored copy of this package. An install already made from it, and Restore, are not touched. Ask the sender again if you want it back.")
+    removeBtn:Hide()
+
     local function Row(i)
         local row = page.rows[i]
         if row then return row end
@@ -231,6 +245,46 @@ local function BuildWelcome(parent, env)
         end
         for i = #items + 1, #page.rows do page.rows[i]:Hide() end
         local y = math.max(112, 10 + 24 + 8 + Height(intro) + 8 + Height(safe) + 22)
+        local sources = M.Sources()
+        local showSources = #sources > 1
+        pkgHead:SetShown(showSources)
+        pkgNote:SetShown(showSources)
+        for i, card in ipairs(page.srcCards) do card:SetShown(showSources and sources[i] ~= nil) end
+        removeBtn:Hide()
+        if showSources then
+            pkgHead:ClearAllPoints()
+            pkgHead:SetPoint("TOPLEFT", 0, -y)
+            pkgNote:ClearAllPoints()
+            pkgNote:SetPoint("TOPLEFT", pkgHead, "BOTTOMLEFT", 0, -3)
+            local loading, failed = M.Loading(), M.SourceError()
+            pkgNote:SetText(loading and "Opening the package: unpacking it and checking it again, a little at a time..."
+                or failed and "That package couldn't be opened. Choose another, or remove it."
+                or "Layouts other players sent you are stored here. Choosing one only changes what this setup shows; nothing is applied until Review.")
+            y = y + Height(pkgHead) + 3 + Height(pkgNote) + 8
+            for i, src in ipairs(sources) do
+                local card = page.srcCards[i]
+                if card then
+                    card:SetScript("OnClick", function()
+                        M.SetSource(src.key, function() env.Relayout() end)
+                        env.Relayout()
+                    end)
+                    local hint = src.kind == "bundled" and ("Included with TwichUI, revision %d."):format(src.revision or 0)
+                        or ("Revision %d, %s."):format(src.revision or 0, src.sender and ("sent by " .. src.sender) or "sent to you")
+                    card:Fill(src.title .. (src.kind == "bundled" and " (included)" or ""), hint)
+                    card:SetSelected(M.Source() == src.key or M.Loading() == src.key)
+                    card:ClearAllPoints()
+                    card:SetPoint("TOPLEFT", 0, -y)
+                    y = y + card:GetHeight() + 6
+                end
+            end
+            if M.Package() then
+                removeBtn:ClearAllPoints()
+                removeBtn:SetPoint("TOPLEFT", 0, -y)
+                removeBtn:Show()
+                y = y + 30
+            end
+            y = y + 10
+        end
         fit:ClearAllPoints()
         fit:SetPoint("TOPLEFT", 0, -y)
         compatHead:ClearAllPoints()
@@ -342,8 +396,25 @@ local function BuildHelpers(parent, env)
     note:SetText("These only turn features on, never off, and you can change any of them later in TwichUI's settings. Features that share, play sounds or act for you are never part of this.")
     PreviewColumn(page, f, 24, env)
 
+    local none = Text(f, "body", LEFT_W)
+    none:SetText("This package doesn't ask which of TwichUI's helpers to turn on. Nothing is chosen here; go on to the next step.")
+    none:SetPoint("TOPLEFT", 0, -60)
+
     function page.Refresh()
         local ch = M.Choice("helpers")
+        if not ch then
+            -- a package from another player may ask nothing here
+            sub:Hide()
+            note:Hide()
+            none:Show()
+            for _, card in ipairs(page.cards) do card:Hide() end
+            page.RefreshPreview()
+            f:SetHeight(260)
+            return 260
+        end
+        none:Hide()
+        sub:Show()
+        note:Show()
         sub:SetText(ch.hint)
         for i, o in ipairs(ch.options) do
             local card = page.cards[i]
@@ -362,6 +433,7 @@ local function BuildHelpers(parent, env)
         end
         for i = #ch.options + 1, #page.cards do page.cards[i]:Hide() end
         if not page.noteAdded then page.noteAdded = true Put(col, note, 12) end
+        sub:Show()
         local y = Flow(col)
         page.RefreshPreview()
         f:SetHeight(math.max(y, 260) + 8)
@@ -405,8 +477,23 @@ local function BuildPersonalize(parent, env)
         "Puts every choice back to the layout's own, here and on the Helpers step. Nothing in the game changes.")
     PreviewColumn(page, f, 24, env)
 
+    local none = Text(f, "body", LEFT_W)
+    none:SetText("This package doesn't ask for an accent colour or a size. Nothing is chosen here; go on to the review.")
+    none:SetPoint("TOPLEFT", 0, -90)
+
     function page.Refresh()
         local accent, size = M.Choice("accent"), M.Choice("size")
+        local shown = accent ~= nil and size ~= nil
+        for _, w in ipairs({ accentHead, accentName, accentHint, sizeHead, sizeHint, reset, sub }) do w:SetShown(shown) end
+        none:SetShown(not shown)
+        if not shown then
+            -- a package from another player may offer neither
+            for _, sw in ipairs(page.swatches) do sw:Hide() end
+            for _, c in ipairs(page.sizes) do c:Hide() end
+            page.RefreshPreview()
+            f:SetHeight(260)
+            return 260
+        end
         accentHead:SetText(accent.label)
         accentHead:ClearAllPoints()
         accentHead:SetPoint("TOPLEFT", 0, -82)
@@ -467,6 +554,7 @@ local function BuildPersonalize(parent, env)
             card:SetSelected(M.Pick("size") == so.id)
             card:ClearAllPoints()
             card:SetPoint("TOPLEFT", f, "TOPLEFT", (i - 1) * ((LEFT_W - 8) / 2 + 8), -y)
+            card:Show()
         end
         local h = 0
         for _, c in ipairs(page.sizes) do h = math.max(h, c:GetHeight()) end

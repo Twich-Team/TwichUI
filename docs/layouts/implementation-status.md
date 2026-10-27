@@ -13,7 +13,8 @@ and what is still open.
 | 3. Classic Adventure and the screen-layout resolver | **Done offline**: automated checks pass; nothing run in game | 2026-10-26 |
 | 4. Wizard, preview and install lifecycle UI | **Done offline**: automated checks pass; nothing run in game (`wizard.md`) | 2026-10-26 |
 | 5. Compact Adventure and richer previews | **Done offline**: automated checks pass; nothing run in game (below, `wizard.md`). The UI scale policy moved to Phase 6 (D12, D3) | 2026-10-26 |
-| 6. Retained overrides and updates | Not started | |
+| 6a. Authoring and publishing (the author's Phase 6; see `publishing.md`) | **Done offline**: automated checks pass; nothing run in game | 2026-10-27 |
+| 6b. Retained overrides and updates | Not started | |
 | 7. Release hardening and in-game validation | Not started | |
 
 Phase 2 was re-scoped by the author: instead of scaffolding and a pure composer only, it builds the whole pipeline
@@ -368,7 +369,23 @@ measured).
 
 **Manual visual checks** are 16–23 in `wizard.md` ("Phase 5 manual checks"), and the in-game checks below still all apply.
 
-### 6. Retained overrides and updates
+### 6a. Authoring and publishing (done offline, 2026-10-27)
+
+The author's Phase 6, built under that number while "Retained overrides and updates" (below, now 6b) stays open. The workflow,
+the envelope, the transport extension, the limits, the tests and the manual send and receive checklist are in `publishing.md`;
+the contract revisions are `architecture.md` §15.
+
+Built: `LY.Capture` (the allowlist capture, now shared with `tools/layout_capture.lua`, whose output was compared before and
+after on a fixture and is identical), `LY.Pub` (envelope, derived metadata, strict checks, media references), `LY.Store`
+(bounded published and received lists, kept as the exact packed bytes), `LY.Receive`; in the core `Share.lua`
+(`layoutoffer`, `SH:SendLayout`, the receive path) and `LayoutsLauncher.lua` (`L.OpenAuthor`); in the wizard addon `Author.lua`
+and `AuthorWindow.lua` (`/tui layout author`), a package source on the wizard's first step, and guards so a package with no
+choices still shows every step.
+
+Left open from this work: text export and import of a package (decision, `publishing.md`), and the bundled package's
+reference to the author's private `MyFonts` folder (found by the new media check; `publishing.md`, Phase 7 handoff).
+
+### 6b. Retained overrides and updates
 
 Build: the baseline (`TwichUIDB.layouts.baseline`, fingerprints of live values after the reload, §6), retained units
 by fingerprint difference (`LY.Compose` already takes `retained` and `reset`), per-unit "reset to the package" in the
@@ -384,7 +401,7 @@ Acceptance:
 - The release zip holds five folders. `tools/release.py` package checks pass. `CHANGELOG.md` is updated.
 - No performance regression in a `/tui perf` General capture with the layouts addon not loaded.
 
-## Phase 6 handoff
+## Phase 6 handoff (retained overrides, 6b)
 
 `wizard.md` ("Phase 6 handoff") has what retained overrides, per-layout TwichUI settings, the UI scale policy, the tooltip
 choice and the unplaced positions need. The engine facts Phases 4 and 5 relied on (kept, and still true; the geometry is now
@@ -444,6 +461,12 @@ Troubleshooting row; no Welcome offer (D24). The rest is still open.
 | D30 | The overlay dims the live interface instead of hiding it | As built |
 | D31 | TwichUI's pieces are Classic's captured places in Compact; class bars land inside the strip | Author to look in the overlay and say what moves |
 | D32 | Positions not placed by the screen layer: Battle Res, the Cooldown Manager's other bars, class power | Register when wanted |
+| D33 | The authoring workspace lives in `TwichUI_LayoutWizard` (about 36 KB more Lua in an addon that loads on demand) rather than in a third load-on-demand addon | As built; a separate addon needs the release, diagnostics-memory and dependency wiring (`CLAUDE.md`) |
+| D34 | A received package may not carry opaque EllesmereUI export strings or the developer flag; settings must be data. The bundled package is unaffected | As built |
+| D35 | Realm names are not scanned for on a client with no realms (WoW: Forever: the "realm" is the word Forever, which appears in settings); character names (whole and by word) are | As built |
+| D36 | No text export or import of a published package | As built; add through the large-paste capture if wanted |
+| D37 | A full store (4 published, 3 received, 3 MB) refuses; it never drops a package to make room | As built |
+| D38 | Offers for a layout are never auto-accepted, even from a sender trusted for setups | As built |
 
 ## In-game checks still required (whole project)
 

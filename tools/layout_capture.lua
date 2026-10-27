@@ -203,45 +203,12 @@ local LY = R.Layouts
 local TA, EA = LY.TwichUIAdapter, LY.EllesmereAdapter
 
 ---------------------------------------------------------------------------
--- EllesmereUI: the one profile, through the adapter's allowlists
+-- The two profiles, through the adapters' allowlists: LY.Capture (TwichUI_Layouts/Capture.lua), the same code the in-game
+-- authoring workspace runs, so the tool and the workspace keep exactly the same things
 ---------------------------------------------------------------------------
-local report = { kept = {}, left = {}, notes = {} }
-local function Left(where, why) report.left[#report.left + 1] = { where = where, why = why } end
-
 local euiName = args["eui-profile"]
 local prof = EDB.profiles[euiName]
 assert(type(prof) == "table", "no EllesmereUI profile with that name")
-local eui = { root = {}, modules = {}, layout = nil }
-for k, v in pairs(prof) do
-    if k == "unlockLayout" then
-        eui.layout = {}
-        for lk, lv in pairs(v) do
-            if type(lv) == "table" and (lk == "anchors" or lk == "widthMatch" or lk == "heightMatch" or lk == "phantomBounds"
-                or lk == "widthMatchExtra" or lk == "heightMatchExtra") then
-                eui.layout[lk] = Copy(lv)
-            else Left("unlockLayout." .. tostring(lk), "not a layout link table") end
-        end
-    elseif EA.ROOT[k] then eui.root[k] = Copy(v)
-    elseif k ~= "addons" then   -- the module blobs are taken below, one by one
-        Left("profile." .. tostring(k), k == "customColors" and "custom colours stay the recipient's (architecture.md §11.5)"
-            or "not a key EllesmereUI's import takes, or not managed (AdapterEllesmere.lua ROOT)")
-    end
-end
-for m, blob in pairs(prof.addons or {}) do
-    if not EA.MODULES[m] then Left("addons." .. tostring(m), "not in EllesmereUI's profile module map (ADDON_DB_MAP)")
-    elseif type(blob) ~= "table" then Left("addons." .. m, "not a table")
-    else
-        local b = Copy(blob)
-        for _, k in ipairs(EA.STRIP[m] or {}) do
-            if b[k] ~= nil then b[k] = nil; Left("addons." .. m .. "." .. k, "per-character or per-spec record (STRIP)") end
-        end
-        eui.modules[m] = b
-    end
-end
-
----------------------------------------------------------------------------
--- TwichUI: the looks and behaviour fields that differ from the defaults, and the places
----------------------------------------------------------------------------
 local twName = args["twichui-profile"]   -- nil: this layout has no TwichUI settings of its own
 local live = type(TDB.profileState) == "table" and TDB.profileState.live or "Default"
 local slot   -- the profile's table: the live one is TwichUIDB itself (schema 2), a stored one is TwichUIDB.profiles[name]
@@ -251,34 +218,12 @@ else
     slot = type(c.TwichUIDB.profiles) == "table" and c.TwichUIDB.profiles[twName]
     assert(type(slot) == "table", "no TwichUI profile with that name")
 end
-local function ReadPath(t, at, key)
-    for _, k in ipairs(at) do
-        if type(t) ~= "table" then return nil end
-        t = t[k]
-    end
-    if type(t) == "table" then return t[key] end
-end
-local groups, nFields, nSwitch, nDefault = {}, 0, 0, 0
-for _, f in pairs(slot and TA.Fields() or {}) do
-    local v = ReadPath(slot, f.at, f.key)
-    if v ~= nil and not R.TwichConfig.ValueOk(f, v) then v = nil end
-    if f.switch then nSwitch = nSwitch + 1
-    elseif v == nil or LY.Same(v, f.default) then nDefault = nDefault + 1
-    else
-        nFields = nFields + 1
-        groups[f.group] = groups[f.group] or {}
-        groups[f.group][f.slot] = groups[f.group][f.slot] or {}
-        groups[f.group][f.slot][f.key] = Copy(v)
-    end
-end
-local places = {}
-for id, p in pairs(slot and TA.PLACES or {}) do
-    local t = slot
-    for _, k in ipairs(p.path) do t = type(t) == "table" and t[k] or nil end
-    if type(t) == "table" and type(t.x) == "number" and type(t.y) == "number" then
-        places[id] = p.kind == "point" and { point = t.point, x = t.x, y = t.y } or { x = t.x, y = t.y }
-    else report.notes[#report.notes + 1] = "TwichUI place " .. id .. ": not set in the profile (the feature's default)" end
-end
+local taken, rep = LY.Capture.Read(prof, slot)
+local report = { kept = {}, left = rep.left, notes = rep.notes }
+local eui = taken.ellesmereui
+local groups = taken.twichui and taken.twichui.groups or {}
+local places = taken.twichui and taken.twichui.places or {}
+local nFields, nSwitch, nDefault = rep.counts.fields, rep.counts.switches, rep.counts.defaults
 
 ---------------------------------------------------------------------------
 -- A second layout: what is identical to the first is left out, with a fingerprint of it
@@ -350,26 +295,7 @@ for key in pairs(type(TDB.profileKeys) == "table" and TDB.profileKeys or {}) do
     local nm, realm = tostring(key):match("^(.-) %- (.+)$")
     if nm then names[nm] = true; realms[realm] = true end
 end
-local found = { name = 0, realm = 0, guid = 0, link = 0, battletag = 0 }
-local where = {}
-local function Word(s, w) return s:find("%f[%w]" .. w:gsub("%p", "%%%0") .. "%f[%W]") ~= nil end
-local function Scan(v, path)
-    if type(v) == "table" then
-        for k, x in pairs(v) do
-            if type(k) == "string" then Scan(k, path .. "[key]") end
-            Scan(x, path .. "." .. tostring(k))
-        end
-    elseif type(v) == "string" then
-        local hit
-        for nm in pairs(names) do if Word(v, nm) then found.name = found.name + 1; hit = "name" end end
-        for rl in pairs(realms) do if Word(v, rl) then found.realm = found.realm + 1; hit = "realm" end end
-        if v:find("Player%-%d+%-%x+") then found.guid = found.guid + 1; hit = "guid" end
-        if v:find("|H", 1, true) then found.link = found.link + 1; hit = "link" end
-        if v:find("[%a]#%d%d%d%d") then found.battletag = found.battletag + 1; hit = "battletag" end
-        if hit and #where < 20 then where[#where + 1] = hit .. " at " .. path end
-    end
-end
-Scan(capture, "capture")
+local found, where = LY.Capture.Scan(capture, names, realms)
 local clean = true
 for _, n in pairs(found) do if n > 0 then clean = false end end
 if not clean then

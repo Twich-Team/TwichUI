@@ -72,7 +72,7 @@ do
   Check(toc:find("## RequiredDeps: !!!TwichUI, TwichUI_Layouts", 1, true), "and needs the core and the layout engine")
   Check(not toc:find("SavedVariables", 1, true), "it keeps no saved variables of its own")
   local files = LM.TocFiles("TwichUI_LayoutWizard")
-  Check(#files == 8 and files[#files]:find("Window.lua", 1, true), "its files, the window last (it says the wizard is ready)")
+  Check(#files == 10 and files[#files]:find("Window.lua", 1, true), "its files, the window last (it says the wizard is ready)")
   for _, f in ipairs(files) do Check(io.open(f), f .. " exists") end
   local core = io.open(REPO .. "!!!TwichUI/!!!TwichUI.toc"):read("*a")
   Check(not core:find("TwichUI_LayoutWizard\\", 1, true) and core:find("LayoutsLauncher.lua", 1, true), "the core lists no file of the wizard")
