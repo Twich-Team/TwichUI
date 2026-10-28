@@ -41,6 +41,7 @@ local function Cap(s) return (tostring(s):gsub("^%l", string.upper)) end
 local function Explain(code) return Cap(LY.Explain(code)) end
 local function Whole(n) return math.floor(n + 0.5) end
 local function Plural(n, one, many) return n == 1 and one or many end
+local function ADAPTER_LABEL(id) return (LY.ADAPTERS[id] and LY.ADAPTERS[id].label) or tostring(id) end
 M.Explain = Explain
 
 ---------------------------------------------------------------------------
@@ -170,7 +171,7 @@ function M.Begin()
             if src.kind == "received" and src.id == j.package then M.SetSource(src.key, nil, true) break end
         end
     end
-    if j or why then
+    if j or why or LY.Journal.ReadManaged() then
         session.step, session.reached = M.RESULT, M.RESULT
     elseif resumed == "restore" then
         session.restored = true   -- a restore finished at the reload the wizard started: its record is gone
@@ -237,7 +238,7 @@ function M.SetLayout(id)
         if l.id == id then
             if session.layout.id == id then return true, false end
             session.layout = l
-            session.plan, session.pv, session.failed = nil, nil, nil
+            session.plan, session.pv, session.failed, session.update = nil, nil, nil, nil
             S.Save(l.pkg, session.picks, nil, l.variant)
             return true, true
         end
@@ -268,7 +269,7 @@ function M.SetSource(key, done, keepStep)
         s.layout = layouts[1]
         for _, l in ipairs(layouts) do if l.id == stored.variant then s.layout = l end end
         s.picks = stored.picks
-        s.plan, s.pv, s.scene, s.failed, s.check, s.compat = nil, nil, nil, nil, nil, nil
+        s.plan, s.pv, s.scene, s.failed, s.check, s.compat, s.update = nil, nil, nil, nil, nil, nil, nil
         if not keepStep then s.step, s.reached = math.min(s.step, M.LAYOUT), math.min(s.reached, M.LAYOUT) end
     end
     if key == "bundled" then
@@ -634,6 +635,18 @@ local function PlanSignature()
     local ids = { session.layout.variant }
     for _, ch in ipairs(session.layout.pkg.choices or {}) do ids[#ids + 1] = ch.id .. "=" .. tostring(session.picks[ch.id]) end
     return table.concat(ids, ",") .. "|" .. (screen and ("%.2f,%.2f"):format(screen.w, screen.h) or "?")
+        .. "|" .. (session.update and session.update.gen or 0)
+end
+
+-- How an update treats what the player changed since the last install (updates.md): the engine's opts.update. Kept for the
+-- session only; a new layout or package starts again from "keep my changes".
+local function UpdateOpts()
+    local u = session.update
+    if not u then
+        u = { policy = "keep", choose = {}, groups = {}, whole = {}, details = false, page = 1, gen = 0 }
+        session.update = u
+    end
+    return u
 end
 
 function M.Plan(force)
@@ -641,9 +654,177 @@ function M.Plan(force)
     local sig = PlanSignature()
     if session.plan and session.plan.sig == sig and not force then return session.plan.plan end
     local layout = session.layout
-    local plan = LY.Plan(layout.pkg, layout.variant, { picks = session.picks })
-    session.plan = { sig = sig, plan = plan }
+    local u = UpdateOpts()
+    local plan = LY.Plan(layout.pkg, layout.variant, { picks = session.picks,
+        update = { policy = u.policy, choose = u.choose, groups = u.groups, whole = u.whole } })
+    session.plan = { sig = PlanSignature(), plan = plan }
     return plan
+end
+
+---------------------------------------------------------------------------
+-- Updating an installed layout: the three ways (keep my changes, the recommended configuration, review each conflict), and
+-- the per-setting choices. Each changes what the plan will do, so the plan is worked out again; nothing in the game changes.
+---------------------------------------------------------------------------
+local function Changed()
+    local u = UpdateOpts()
+    u.gen = u.gen + 1
+    session.plan, session.failed = nil, nil
+end
+
+-- "keep" (update while keeping my customizations), "recommended" (reapply the recommended configuration), "review" (keep,
+-- with every conflict shown to choose). Returns true | false, code.
+function M.SetUpdateMode(mode)
+    if not session then return false, "closed" end
+    local u = UpdateOpts()
+    if mode == "review" then
+        if u.policy ~= "keep" then u.policy = "keep" Changed() end
+        u.details = true
+    elseif mode == "keep" or mode == "recommended" then
+        if u.policy ~= mode then u.policy = mode Changed() end
+        u.details = false
+    else
+        return false, "unknown-mode"
+    end
+    return true
+end
+
+function M.UpdateMode()
+    local u = session and UpdateOpts()
+    if not u then return "keep" end
+    if u.policy == "recommended" then return "recommended" end
+    return u.details and "review" or "keep"
+end
+
+function M.ShowDetails(v)
+    if not session then return end
+    UpdateOpts().details = v and true or false
+end
+
+-- A choice for one setting: "mine" | "package" | "own" | "manage" | nil (back to the way's default).
+function M.Choose(unit, choice)
+    if not session then return false, "closed" end
+    if choice ~= nil and not LY.Merge.CHOICES[choice] then return false, "unknown-choice" end
+    local u = UpdateOpts()
+    if u.choose[unit] == choice then return true, false end
+    u.choose[unit] = choice
+    Changed()
+    return true, true
+end
+
+function M.ChooseGroup(group, choice)
+    if not session then return false, "closed" end
+    if choice ~= nil and choice ~= "mine" and choice ~= "package" then return false, "unknown-choice" end
+    local u = UpdateOpts()
+    u.groups[group] = choice
+    Changed()
+    return true
+end
+
+-- For an addon whose changes can't be carried into the new install: "keep" (this update leaves it as it is) or "replace"
+-- (the layout's, with the player's current profile kept for "Undo this update").
+function M.SetWhole(adapter, choice)
+    if not session then return false, "closed" end
+    if choice ~= "keep" and choice ~= "replace" then return false, "unknown-choice" end
+    UpdateOpts().whole[adapter] = choice
+    Changed()
+    return true
+end
+
+function M.SetDetailPage(n)
+    if not session then return end
+    UpdateOpts().page = math.max(1, n)
+end
+
+local CASE_ORDER = { conflict = 1, unknown = 2, mine = 3, owned = 4, added = 5, package = 6, removed = 7, ["both-same"] = 8, same = 9 }
+local CHOICE_TEXT = { mine = "Keep mine", package = "Use recommended", own = "Stop managing", manage = "Manage again" }
+M.CHOICE_TEXT = CHOICE_TEXT
+
+local function ShowValue(adapter, v, comparable)
+    if not comparable then return nil end
+    local a = LY.ADAPTERS[adapter]
+    if v == LY.Merge.ABSENT then return "(not set)" end
+    return a and a.Show and a.Show(v) or tostring(v)
+end
+
+-- The review's update part, or nil when this is a first install:
+-- { mode, baseline, counts, summary = { lines }, rows = { { adapter, unit, label, case, caseText, decision, current,
+--   recommended, effect, owner, offers = { { choice, label } }, chosen, group } }, groups = { { id, adapter, choice, text } },
+--   whole = { { adapter, choice, text } }, warnings = { lines }, notes = { lines } }
+function M.UpdateReview(plan)
+    plan = plan or M.Plan()
+    local up = plan and plan.update
+    if not up then return nil end
+    local u = UpdateOpts()
+    local out = { mode = M.UpdateMode(), baseline = up.baseline, counts = up.counts, summary = {}, rows = {}, groups = {}, whole = {},
+        warnings = {}, notes = {}, details = u.details, page = u.page }
+    local c = up.counts
+    local apply, keep, conflict, owned = c.apply or 0, c.keep or 0, c.conflict or 0, c.owned or 0
+    if up.resume then out.summary[#out.summary + 1] = "The last update stopped part way. What it already finished is not done again." end
+    if up.baseline ~= "ok" then
+        out.summary[#out.summary + 1] = "TwichUI has no record of what the last install left you with, so it can't tell your changes from the layout's. Anything that differs is treated as yours."
+    end
+    out.summary[#out.summary + 1] = ("%d %s to the layout's recommended values."):format(apply, Plural(apply, "setting changes", "settings change"))
+    if keep > 0 then out.summary[#out.summary + 1] = ("%d of your own %s kept as you have %s."):format(keep, Plural(keep, "changes is", "changes are"), Plural(keep, "it", "them")) end
+    if conflict > 0 then
+        out.summary[#out.summary + 1] = ("%d %s changed both by you and by the layout: %s."):format(conflict, Plural(conflict, "setting was", "settings were"),
+            u.policy == "recommended" and "the layout's value is used" or "yours is kept unless you choose otherwise")
+    end
+    if owned > 0 then out.summary[#out.summary + 1] = ("%d %s yours: updates never change %s."):format(owned, Plural(owned, "setting is", "settings are"), Plural(owned, "it", "them")) end
+    for id in pairs(up.fresh or {}) do
+        out.notes[#out.notes + 1] = ("%s: the install's own profile isn't there any more, so it is made again from the layout and nothing of yours can be compared."):format(ADAPTER_LABEL(id))
+    end
+    local e = plan.parts.ellesmereui
+    if e and e.level == "whole" then
+        out.notes[#out.notes + 1] = "EllesmereUI's part of this layout is one whole profile: TwichUI can keep your changes to the few settings it reads, not inside it."
+    end
+    if e and e.backup then
+        out.notes[#out.notes + 1] = ("EllesmereUI: your current %s is kept as %s, so Undo this update can put it back exactly."):format(QuoteText(e.target), QuoteText(e.backup.name))
+    end
+    for _, w in ipairs(up.warnings or {}) do
+        out.warnings[#out.warnings + 1] = w.code == "offscreen" and ("%s, where you put it, is off this screen. It stays where you put it."):format(w.label)
+            or ("%s, where you put it, is over %s. It stays where you put it."):format(w.label, w.other or "another piece")
+    end
+    for _, part in pairs(plan.parts) do
+        for _, n in ipairs(part.linkNotes or {}) do
+            local p = LY.EllesmereAdapter.POSITIONS[n.id]
+            out.warnings[#out.warnings + 1] = ("%s: its layout link couldn't be moved to match, so EllesmereUI may place it from the link."):format(p and p.label or n.id)
+        end
+    end
+    for g, info in pairs(up.groups or {}) do
+        out.groups[#out.groups + 1] = { id = g, adapter = info.adapter, choice = info.choice,
+            text = info.choice == "mine" and "The layout links and the frames linked to them change together. You changed some and the layout changed others, so they stay as you have them (all of them)."
+                or "The layout links and the frames linked to them change together. They take the layout's (all of them)." }
+    end
+    for id, w in pairs(up.whole or {}) do
+        out.whole[#out.whole + 1] = { adapter = id, choice = w.choice,
+            text = ("%s: some of your changes are inside parts TwichUI can only replace whole, and your %s data is from another version than the layout's, so they can't be carried over one by one."):format(ADAPTER_LABEL(id), ADAPTER_LABEL(id))
+                .. (w.choice == "keep" and " As chosen, this update leaves it exactly as it is." or (" As chosen, it is replaced with the layout's; your current profile is kept so Undo this update can bring it back.")) }
+    end
+    for _, row in ipairs(up.rows) do
+        if row.case ~= "same" and row.case ~= "both-same" then
+            local comparable = row.comparable
+            local offers = {}
+            for _, ch in ipairs(row.offers or {}) do offers[#offers + 1] = { choice = ch, label = CHOICE_TEXT[ch] } end
+            local effect = LY.Merge.EFFECT[row.decision] or ""
+            -- a whole part (a module, the links, the look) is kept or replaced whole: never merged inside, and the row says so
+            if not comparable and row.decision == "apply" then effect = "Replaced whole with the layout's version (TwichUI can't merge inside it)." end
+            if not comparable and row.decision == "keep" then effect = "Your version is carried into the new install whole." end
+            if not comparable and row.case == "conflict" then
+                effect = effect .. " TwichUI can't merge inside this part: keeping yours skips the layout's changes to it, and using the layout's drops your changes in it."
+            end
+            out.rows[#out.rows + 1] = { adapter = row.adapter, unit = row.unit, label = row.label, case = row.case,
+                caseText = LY.Merge.CASE_TEXT[row.case] or row.case, decision = row.decision, how = row.how,
+                current = ShowValue(row.adapter, row.e and row.e.cv, comparable) or (comparable and "(not set)" or "your version"),
+                recommended = row.e and row.e.n ~= nil and (ShowValue(row.adapter, row.e.nv, comparable) or "the layout's version") or "(not in the layout)",
+                effect = effect, owner = LY.Merge.OWNER[row.decision] or "", offers = offers, chosen = u.choose[row.unit], group = row.group }
+        end
+    end
+    table.sort(out.rows, function(a, b)
+        local x, y = CASE_ORDER[a.case] or 99, CASE_ORDER[b.case] or 99
+        if x ~= y then return x < y end
+        return a.label < b.label
+    end)
+    return out
 end
 
 -- Notes a failure for the footer to say (cleared by the next step, pick or apply).
@@ -658,7 +839,7 @@ function M.CanApply()
     local plan = M.Plan()
     if plan.problems then return false, "invalid" end
     if not plan.ok then return false, "blocked", plan.blocked[1] end
-    local nothing = true
+    local nothing = not (plan.update and (plan.update.recordOnly or plan.update.resume))
     for _, id in ipairs(plan.order) do if not plan.parts[id].nothing then nothing = false end end
     if nothing then return false, "nothing" end
     return true
@@ -713,7 +894,11 @@ function M.Review()
         local from
         for _, l in ipairs(session.layouts) do if l.id == installed.variant then from = l.title end end
         out.switching = ("%s is installed now. This switches to %s in the same two profiles; Restore still goes back to how things were before your first install."):format(from or tostring(installed.variant), session.layout.title)
+        if plan.update then
+            out.switching = out.switching .. (" Your changes to settings both layouts share are kept; changes to what %s sets for itself go back to %s's own values unless you keep yours."):format(from or tostring(installed.variant), session.layout.title)
+        end
     end
+    out.update = M.UpdateReview(plan)
 
     -- TwichUI
     local t = plan.parts.twichui
@@ -756,11 +941,15 @@ function M.Review()
     local e = plan.parts.ellesmereui
     if e and not e.blocked then
         local sec = { title = "EllesmereUI", when = "After a reload that you start, for every character on this account", lines = {} }
-        if e.nothing then sec.lines[1] = "Already as planned: nothing to change."
+        if e.kept then sec.lines[1] = "Kept as it is, as you chose: this update doesn't change EllesmereUI."
+        elseif e.nothing then sec.lines[1] = "Already as planned: nothing to change."
         else
             local row = e.rows[1]
             if row and row.made then
                 sec.lines[#sec.lines + 1] = ("A new profile %s is made from the package and becomes the one in use (was %s). EllesmereUI's profile choice belongs to the whole account, so this changes every character's interface."):format(Quote(e.target), Quote(e.active))
+            elseif plan.update then
+                sec.lines[#sec.lines + 1] = ("The profile %s is made again from the package and put in use (was %s), with the changes of yours listed under Updating carried over. It is shared by every character on this account."):format(Quote(e.target), Quote(e.active))
+                if e.backup then sec.lines[#sec.lines + 1] = ("Your current one is kept as %s until you keep the update, so Undo this update can put it back."):format(Quote(e.backup.name)) end
             else
                 sec.lines[#sec.lines + 1] = ("The profile %s is made again from the package and put in use (was %s). It is shared by every character on this account. Anything you changed in it since the last install is replaced."):format(Quote(e.target), Quote(e.active))
             end
@@ -810,8 +999,15 @@ function M.ConfirmText()
         lines[#lines + 1] = ""
         lines[#lines + 1] = r.switching
     end
+    if r.update then
+        lines[#lines + 1] = ""
+        lines[#lines + 1] = "Updating (" .. (r.update.mode == "recommended" and "the recommended configuration" or "keeping your changes") .. "):"
+        for _, l in ipairs(r.update.summary) do lines[#lines + 1] = "  " .. l end
+        for _, w in ipairs(r.update.whole) do lines[#lines + 1] = "  " .. w.text end
+    end
     lines[#lines + 1] = ""
-    lines[#lines + 1] = "Nothing reloads by itself. Until you reload, EllesmereUI's part isn't finished or checked. Restore puts your previous profiles back."
+    lines[#lines + 1] = r.update and "Nothing reloads by itself. Until you reload, EllesmereUI's part isn't finished or checked. Undo this update (on the Result step) puts back how things are now; Restore goes back to before your first install."
+        or "Nothing reloads by itself. Until you reload, EllesmereUI's part isn't finished or checked. Restore puts your previous profiles back."
     if r.fit and not r.fit.fits then
         lines[#lines + 1] = ""
         lines[#lines + 1] = "It doesn't fit this screen: " .. table.concat(r.fit.lines, " ")
@@ -837,7 +1033,9 @@ function M.Apply(expect)
         return false, "stale"
     end
     local layout = session.layout
-    local ok, result, extra = LY.Apply(layout.pkg, layout.variant, plan.key, { picks = session.picks })
+    local u = UpdateOpts()
+    local ok, result, extra = LY.Apply(layout.pkg, layout.variant, plan.key, { picks = session.picks,
+        update = { policy = u.policy, choose = u.choose, groups = u.groups, whole = u.whole } })
     session.plan = nil
     session.check = nil
     if not ok then
@@ -863,6 +1061,8 @@ local STATE_TEXT = {
     applying = { title = "An install was interrupted", tone = "warn" },
     restoring = { title = "Restore is waiting for a reload", tone = "warn" },
     ["restore-partial"] = { title = "Not everything is back as it was", tone = "warn" },
+    undoing = { title = "Undoing the update is waiting for a reload", tone = "warn" },
+    ["undo-partial"] = { title = "Not everything is as it was before the update", tone = "warn" },
 }
 local STEP_TEXT = { pending = "not finished", done = "done", skipped = "already as planned", failed = "failed",
     partial = "partly done", ["not-run"] = "not run" }
@@ -912,6 +1112,15 @@ function M.Result()
             out.kind, out.title, out.tone = "restored", "Restored", "ok"
             out.lines[1] = "Everything the install changed is back as it was, and the install's own profiles are gone."
             out.can.again = true
+        elseif LY.Journal.ReadManaged() then
+            -- the setup was finished: TwichUI still manages the layout (no way back is kept, but updates keep your changes)
+            local m = LY.Journal.ReadManaged()
+            local title = m.variant
+            for _, l in ipairs(session.layouts) do if l.id == m.variant then title = l.title end end
+            out.kind, out.title, out.tone = "managed", "Installed and managed", "ok"
+            out.lines[1] = ("%s, revision %d, is installed. Its setup is finished, so Restore isn't offered; setting it up again updates it and keeps the changes you made since."):format(title, m.revision)
+            if m.char ~= Me() then out.lines[1] = Explain("journal-other-character") end
+            out.can.again, out.can.stop = m.char == Me(), m.char == Me()
         else
             out.kind, out.title, out.tone = "none", "Nothing is installed", "info"
             out.lines[1] = "No layout install is recorded. Choose a layout and review it to set one up."
@@ -936,14 +1145,20 @@ function M.Result()
         local o = id and OptionOf(c, id)
         if o then out.picks[#out.picks + 1] = { choice = c.label, option = o.label } end
     end
-    out.steps = StepLines(j.restore and (j.state == "restoring" or j.state == "restore-partial") and j.restore.steps or j.steps)
+    local undoingNow = j.state == "undoing" or j.state == "undo-partial"
+    out.steps = StepLines(j.restore and (j.state == "restoring" or j.state == "restore-partial" or undoingNow) and j.restore.steps or j.steps)
     if j.state == "applied" then
         out.lines[1] = "The install is written. EllesmereUI's part is finished by a reload, and TwichUI reads every value back after it. Nothing reloads by itself."
         out.can.reload = not combat
         out.can.restore = true
     elseif j.state == "verified" then
-        out.lines[1] = "Every value the install wrote reads back as planned."
-        out.lines[2] = "Restore puts your previous profiles back; keeping this setup forgets the restore point and changes nothing else."
+        out.lines[1] = "Every value TwichUI can read back reads back as planned."
+        local pres = j.verify and j.verify.presence or 0
+        if pres > 0 then
+            out.lines[#out.lines + 1] = ("%d EllesmereUI %s (modules, layout links, look) %s replaced whole: TwichUI checked only that %s there, not what is inside."):format(
+                pres, Plural(pres, "part", "parts"), Plural(pres, "is", "are"), Plural(pres, "it is", "they are"))
+        end
+        out.lines[#out.lines + 1] = "Restore puts your previous profiles back. Keeping this setup finishes it: the restore point is forgotten, nothing installed changes, and TwichUI keeps managing the layout for later updates."
         out.can.restore, out.can.keep, out.can.again, out.can.check = true, true, true, true
     elseif j.state == "mismatch" then
         local unreadable = j.verify and j.verify.state ~= "mismatch"
@@ -964,6 +1179,33 @@ function M.Result()
         out.lines[1] = "The restore was not fully checked. You can try it again."
         out.diffs = DiffLines(j.verify and j.verify.diffs)
         out.can.restore, out.can.check = true, true
+    elseif j.state == "undoing" then
+        out.lines[1] = "Undoing the update is written. EllesmereUI finishes it at a reload, and TwichUI checks that everything is as it was before the update."
+        out.can.reload = not combat
+    elseif j.state == "undo-partial" then
+        out.lines[1] = "Undoing the update was not fully checked. You can try it again, or Restore goes back to before your first install."
+        out.diffs = DiffLines(j.verify and j.verify.diffs)
+        out.can.restore, out.can.check = true, true
+        if j.reload then out.can.reload = not combat end
+    end
+    -- an update: one step back is kept until the update is kept for good
+    if j.update then
+        if j.state == "verified" or j.state == "mismatch" or j.state == "partial" or j.state == "interrupted" or j.state == "applied" or j.state == "undo-partial" then
+            out.can.undo = true
+            out.lines[#out.lines + 1] = "This was an update. Undo this update puts back how things were just before it; Restore previous setup goes back to before your first install."
+        end
+        if j.state == "verified" or j.state == "mismatch" then out.can.keepUpdate = true end
+        if j.state == "partial" then
+            out.can.again = true
+            out.lines[#out.lines + 1] = "Set up again with the same choices finishes it: what was already done isn't done a second time."
+        end
+    end
+    if j.state == "mismatch" and j.verify and j.verify.baseline then
+        local n = 0
+        for _, s in ipairs(j.steps) do if s.state == "done" or s.state == "skipped" then n = n + 1 end end
+        if #j.verify.baseline < n then
+            out.lines[#out.lines + 1] = "What didn't read back isn't taken as the starting point for the next update: TwichUI keeps comparing with the last install that did."
+        end
     end
     if session.check then
         local c = session.check
@@ -980,6 +1222,7 @@ function M.Check()
     local j = LY.Journal.Read()
     local report
     if j and (j.state == "restoring" or j.state == "restore-partial") then report = LY.VerifyRestore(false)
+    elseif j and (j.state == "undoing" or j.state == "undo-partial") then report = LY.VerifyUndo(false)
     else report = LY.Verify(false) end
     if not report then session.check = nil return nil end
     local diffs = {}
@@ -1006,6 +1249,8 @@ function M.RestorePlan()
             for _, act in ipairs(part.actions) do
                 if act.kind == "switch" then
                     out.lines[#out.lines + 1] = ("%s: back to your profile %s."):format(ADAPTER[id] or id, Quote(act.to))
+                elseif act.backup then
+                    out.lines[#out.lines + 1] = ("%s: %s, the copy an update kept, is removed."):format(ADAPTER[id] or id, Quote(act.name))
                 else
                     out.lines[#out.lines + 1] = ("%s: the install's profile %s is removed. Changes you made in it since go with it."):format(ADAPTER[id] or id, Quote(act.name))
                 end
@@ -1038,8 +1283,74 @@ function M.Restore(key)
     return true, result
 end
 
--- Forgets the install record: what was installed stays, and so does everything else. (The package's own Detach.)
+---------------------------------------------------------------------------
+-- Undo this update, and keeping it for good
+---------------------------------------------------------------------------
+function M.UndoPlan()
+    local plan = LY.PlanUndo()
+    local out = { ok = plan.ok == true, key = plan.key, reload = plan.reload, lines = {}, blocked = {}, plan = plan }
+    for _, b in ipairs(plan.blocked or {}) do
+        out.blocked[#out.blocked + 1] = (b.adapter and (ADAPTER[b.adapter] or b.adapter) .. ": " or "") .. Explain(b.code)
+    end
+    for _, id in ipairs(plan.order or {}) do
+        local part = plan.parts[id]
+        for _, act in ipairs(part.blocked and {} or part.actions) do
+            local who = ADAPTER[id] or id
+            if act.kind == "values" then
+                out.lines[#out.lines + 1] = ("%s: the %d %s the update changed in %s go back to what %s before it."):format(who, act.n, Plural(act.n, "setting", "settings"), Quote(act.target), Plural(act.n, "it was", "they were"))
+            elseif act.kind == "switch" then
+                out.lines[#out.lines + 1] = ("%s: %s is in use again."):format(who, Quote(act.to))
+            elseif act.kind == "delete" then
+                out.lines[#out.lines + 1] = ("%s: the profile the update made, %s, is removed. Changes you made in it since go with it."):format(who, Quote(act.name))
+            elseif act.kind == "rename" then
+                out.lines[#out.lines + 1] = ("%s: %s, kept from before the update, gets its name back: %s."):format(who, Quote(act.from), Quote(act.to))
+            end
+        end
+    end
+    if plan.reload then out.lines[#out.lines + 1] = "EllesmereUI finishes it at a reload that you start." end
+    return out
+end
+
+function M.UndoConfirmText()
+    local up = M.UndoPlan()
+    local lines = { "Undo the last update?", "" }
+    for _, l in ipairs(up.lines) do lines[#lines + 1] = l end
+    lines[#lines + 1] = ""
+    lines[#lines + 1] = "This goes back to just before the update, not to before your first install (that is Restore). Nothing reloads by itself."
+    return table.concat(lines, "\n"), up
+end
+
+-- Undoes exactly the plan that was shown. Returns true, result | false, code, extra.
+function M.Undo(key)
+    if not session then return false, "closed" end
+    if InCombat() then return false, "combat" end
+    local ok, result, extra = LY.Undo(key)
+    session.check = nil
+    if not ok then return false, result, extra end
+    session.undoResult = result
+    session.step = M.RESULT
+    return true, result
+end
+
+-- Keeps the update for good: the copy kept for Undo this update is removed. Returns true | false, code.
+function M.ForgetUpdate()
+    if not session then return false, "closed" end
+    local ok, code = LY.ForgetUpdate()
+    session.check = nil
+    return ok, code
+end
+
+-- Finishes the setup (Keep this setup): the way back is forgotten, management goes on (LY.Finish). Returns true | false, code.
 function M.Keep()
+    if not session then return false end
+    local done, code = LY.Finish()
+    if done then session.restored = false end
+    session.check = nil
+    return done, code
+end
+
+-- Stops managing (and forgets an unreadable record): nothing installed changes; later updates compare nothing (LY.Detach).
+function M.StopManaging()
     if not session then return false end
     local done = LY.Detach()
     if done then session.restored = false end

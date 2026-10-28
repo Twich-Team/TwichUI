@@ -491,10 +491,10 @@ do
   Check(WK.Model.Step() == 1, "Set up again starts over")
   Check(WK.Model.Pick("accent") == "dusk" and WK.Model.Pick("size") == "larger" and WK.Model.Pick("helpers") == "on-screen", "with the choices that were remembered")
   Advance(w, WK.Model, 5)
-  -- the install's profile is made again from the package (the package is module blobs, so it is always imported whole):
-  -- the review says what that replaces
-  Check(Enabled(w, "Apply") and Says(w, "is made again from the package and put in use") and Says(w, "Anything you changed in it since the last install is replaced"),
-    "the same choices again: the profile is made again, and the review says that changes made in it since are replaced")
+  -- Phase 7 (D25): the baseline says what the last install left, so the same choices again compare equal unit by unit and
+  -- nothing is imported again
+  Check(not Enabled(w, "Apply") and Says(w, "Updating your layout") and Says(w, "0 settings change to the layout's recommended values"),
+    "the same choices again: nothing to do, and the review says so")
   local before = World(k)
   Click(w, "Back"); Click(w, "Back")
   Check(WK.Model.Step() == 3, "back to the helpers")
@@ -527,14 +527,15 @@ do
   Check(k2.TwichUILayoutWizard == nil and k2.wizardLoads == 0, "the wizard did not open or load")
   local w2 = Open(k2)
   Check(Says(w2, "Checked after the reload"), "asked for, it shows the result")
-  -- keeping the setup forgets the restore point and changes nothing else
+  -- keeping the setup finishes it: the restore point is forgotten, TwichUI keeps managing (Phase 7), nothing else changes
   local before = World(k2)
   Click(w2, "Keep this setup")
   Check(k2.popup.key == "TWICHUI_LAYOUT_KEEP", "keeping asks first")
   k2.Accept()
   local after = World(k2)
-  Check(k2.TwichUI.Layouts.Journal.Read() == nil and Same(after.eui, before.eui) and Same(after.restore, before.restore), "the record is forgotten and nothing else changed")
-  Check(Says(w2, "Nothing is installed") and not Has(w2, "Restore previous setup"), "and Restore is no longer offered")
+  Check(k2.TwichUI.Layouts.Journal.Read() == nil and Same(after.eui, before.eui) and Same(after.restore, before.restore), "the restore point is forgotten and nothing else changed")
+  Check(k2.TwichUI.Layouts.Journal.ReadManaged() and k2.TwichUI.Layouts.Journal.ReadBaseline(), "the layout is still managed: its management record and baseline stay")
+  Check(Says(w2, "Installed and managed") and not Has(w2, "Restore previous setup") and Has(w2, "Set up again"), "and Restore is no longer offered; setting up again is")
 end
 
 ---------------------------------------------------------------------------
@@ -978,7 +979,9 @@ do
   k2.Accept()
   local j2 = k2.TwichUI.Layouts.Journal.Read()
   Check(j2.state == "applied" and j2.variant == CLASSIC and j2.snapshot.ellesmereui.active == "Mine", "switched; the record names Classic and still goes back to your profile")
-  Check(k2.EllesmereUIDB.profiles["TwichUI Adventure"].addons.EllesmereUIActionBars.barPositions.Bar7 == nil and #k2.EllesmereUIDB.profileOrder == 3, "Classic's bars replace Compact's in the same profile; no profile was added")
+  Check(k2.EllesmereUIDB.profiles["TwichUI Adventure"].addons.EllesmereUIActionBars.barPositions.Bar7 == nil and #k2.EllesmereUIDB.profileOrder == 4
+    and k2.EllesmereUIDB.profiles["TwichUI Adventure (previous)"].addons.EllesmereUIActionBars.barPositions.Bar7 ~= nil,
+    "Classic's bars replace Compact's in the same profile; Compact's is kept as the copy Undo this update puts back")
   local k3 = LM.Boot("Switch", LM.Logout(k2))
   local w3, WK3 = Open(k3)
   Check(k3.TwichUI.Layouts.Journal.Read().state == "verified" and WK3.Model.Layout().id == CLASSIC and Says(w3, "Layout: Classic Adventure"), "checked after the reload, as Classic")

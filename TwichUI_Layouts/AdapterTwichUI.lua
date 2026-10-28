@@ -257,8 +257,60 @@ function A.CleanSnapshot(s)
 end
 
 ---------------------------------------------------------------------------
+-- Normalized values, for updates (Merge.lua): what one unit is in a profile's table t (TwichUIDB for the profile in
+-- use, or a stored profile). A setting: the fingerprint of the value the feature uses, and "x" when it is stored or "d"
+-- when nothing is (the default stands). A place: "@x,y[,POINT]" in whole units, or ABSENT (the feature's own default).
+---------------------------------------------------------------------------
+local function RawIn(t, f)
+    for _, k in ipairs(f.at) do
+        if type(t) ~= "table" then return nil end
+        t = t[k]
+    end
+    if type(t) == "table" then return t[f.key] end
+end
+
+function A.Normal(t, unit)
+    local id = PlaceOf(unit)
+    if id then
+        local v = ReadPlace(t, id)
+        if v then return PlaceText(v), "x" end
+        return LY.Merge.ABSENT, "a"
+    end
+    local f = A.FieldOf(unit)
+    if not f then return nil end
+    local raw = RawIn(t, f)
+    if raw ~= nil and TC().ValueOk(f, raw) then return LY.Value(raw), "x" end
+    return LY.Value(f.default), "d"
+end
+
+-- The schema the comparison depends on: a baseline made under another can't be compared, unit by unit (Merge.lua).
+function A.Schema() return ("twichui:%d:%s"):format(LY.Merge.VERSION, tostring(TC().SCHEMA)) end
+
+-- The stored value of a unit as it is (for "Undo this update"): { v = copy } or {} when nothing is stored.
+local function Keep(t, unit)
+    local id = PlaceOf(unit)
+    if id then
+        local v = ReadPlace(t, id)
+        return v and { v = v } or {}
+    end
+    local raw = RawIn(t, A.FieldOf(unit))
+    return raw ~= nil and { v = LY.Copy(raw) } or {}
+end
+
+-- Where a place's anchor point sits on this screen, from the screen's centre (the check of kept places).
+local function PlaceOnScreen(id, v, screen)
+    local p = A.PLACES[id]
+    local rel = (p.kind == "top" and "TOP") or (p.kind == "point" and v.point) or "CENTER"
+    local sx, sy = LY.Geometry.Point(LY.Geometry.Screen(screen.w, screen.h), rel)
+    return sx + v.x, sy + v.y
+end
+
+---------------------------------------------------------------------------
 -- Plan: what Apply would do, read only. part = { adapter, action = "duplicate"|"switch"|"none", profile, target,
---   rows = { { unit, label, old, new, change, reload, layer } }, changes, reload, nothing, blocked, key }
+--   rows = { { unit, label, old, new, change, reload, layer, decision, kept } }, changes, reload, nothing, blocked, key,
+--   merge (an update: Merge.lua's result), track (what the baseline takes once checked), undo (the values an update
+--   replaces), warnings (kept places that are off the screen or over another piece) }
+-- ctx.merge (an update only) = { part = the baseline's part for this adapter | nil, known, policy, choose, groups }
 ---------------------------------------------------------------------------
 function A.Plan(composed, ctx)
     local part = { adapter = A.id, effect = A.effect, rows = {}, changes = 0, reload = false }
@@ -267,7 +319,7 @@ function A.Plan(composed, ctx)
     local target, snap = ctx.target, ctx.snapshot
     if snap and snap.char ~= PF().Character() then part.blocked = "other-character" return part end
     local current, exists = PF().Current(), PF().Exists(target)
-    if exists and not Ours(snap, target) then part.blocked = "target-taken" return part end
+    if exists and not (Ours(snap, target) or ctx.owned) then part.blocked = "target-taken" return part end
     if current == target then part.action = "none"
     elseif exists then part.action = "switch"
     else part.action = "duplicate" end
@@ -280,10 +332,8 @@ function A.Plan(composed, ctx)
             local old
             if part.action == "switch" then old = StoredValue(target, f) else old = TC().Effective(f) end
             local change = not LY.Same(old, e.value)
-            local reload = change and f.switch and R.Switches.NeedsReload(f.key) or false
             part.rows[#part.rows + 1] = { unit = e.unit, label = A.Label(e.unit), old = old, new = e.value, change = change,
-                reload = reload, layer = e.layer }
-            if reload then part.reload = true end
+                layer = e.layer, field = f }
         end
     end
     -- Places: each moved for this screen with the component it is attached to (or written as given, with no geometry)
@@ -295,10 +345,77 @@ function A.Plan(composed, ctx)
         part.rows[#part.rows + 1] = { unit = PlaceUnit(id), label = A.PLACES[id].label, old = old, new = new,
             change = PlaceText(old) ~= PlaceText(new), place = true, comp = placed[id].comp }
     end
+
+    -- What the package says, normalized, for the baseline (and an update's comparison)
+    local n = {}
+    for i, row in ipairs(part.rows) do
+        if i > 1 then n[row.unit] = row.place and PlaceText(row.new) or LY.Value(row.new) end
+    end
+    -- An update into the install's own profile: each unit compared with the baseline and what this profile holds now
+    local M = ctx.merge
+    if M and part.action ~= "duplicate" then
+        -- a baseline part made under another merge contract or TwichUI schema isn't compared (only ownership still stands)
+        local known = M.part ~= nil and M.part.merge == LY.Merge.VERSION and M.part.schema == A.Schema()
+        part.known = known
+        local entries, seen, nv = {}, {}, {}
+        for i, row in ipairs(part.rows) do if i > 1 then nv[row.unit] = row.new end end
+        local function Entry(unit)
+            seen[unit] = true
+            local c, cs = A.Normal(from, unit)
+            if c == nil then return end   -- a setting this TwichUI no longer has: left alone
+            local id, f = PlaceOf(unit), A.FieldOf(unit)
+            local cv
+            if id then cv = ReadPlace(from, id) else cv = part.action == "switch" and StoredValue(target, f) or TC().Effective(f) end
+            local b = M.part and M.part.units[unit] or nil
+            if not known and not (b and b.o) then b = nil end
+            entries[#entries + 1] = { unit = unit, label = A.Label(unit), n = n[unit], c = c, cs = cs, b = b,
+                comparable = true, known = known, keepAbsent = true, cv = cv, nv = nv[unit],
+                variantOwned = composed.layer[unit] == "variant" }
+        end
+        for i, row in ipairs(part.rows) do if i > 1 then Entry(row.unit) end end
+        for _, unit in ipairs(LY.SortedKeys(M.part and M.part.units or {})) do if not seen[unit] then Entry(unit) end end
+        local result = LY.Merge.Run(entries, M)
+        part.merge = result
+        part.track = LY.Merge.Track(result, n)
+        part.undo = { profile = current, target = target, values = {} }
+        part.warnings = {}
+        local kept = {}
+        for i, row in ipairs(part.rows) do
+            local r = i > 1 and result.by[row.unit]
+            if r then
+                row.decision = r.decision
+                if r.decision ~= "apply" then row.change = false end
+                if r.decision == "keep" or r.decision == "owned" then
+                    row.kept = true
+                    row.keptText = PlaceOf(row.unit) and r.e.c or LY.Fingerprint(r.e.cv)
+                    local id = PlaceOf(row.unit)
+                    local v = id and ReadPlace(from, id)
+                    if v and ctx.geometry then
+                        local x, y = PlaceOnScreen(id, v, ctx.geometry.screen)
+                        kept[#kept + 1] = { unit = row.unit, label = row.label, x = x, y = y, comp = row.comp }
+                    end
+                end
+                if row.change then part.undo.values[row.unit] = Keep(from, row.unit) end
+            end
+        end
+        part.warnings = LY.Merge.CheckPlaces(ctx.geometry, kept)
+    else
+        part.track = {}
+        for unit, text in pairs(n) do part.track[unit] = { p = text } end
+        if M then part.fresh = "target-gone" end   -- the install's profile was removed: made again, nothing to compare
+    end
+    for _, row in ipairs(part.rows) do
+        if row.field then
+            row.reload = row.change and row.field.switch and R.Switches.NeedsReload(row.field.key) or false
+            if row.reload then part.reload = true end
+            row.field = nil
+        end
+    end
+
     local keyRows = {}
     for _, row in ipairs(part.rows) do
         if row.change then part.changes = part.changes + 1 end
-        keyRows[row.unit] = { LY.Fingerprint(row.old), LY.Fingerprint(row.new) }
+        keyRows[row.unit] = { LY.Fingerprint(row.old), LY.Fingerprint(row.new), row.decision or false }
     end
     part.nothing = part.changes == 0
     part.key = LY.Canon({ part.action, current, target, keyRows })
@@ -471,7 +588,8 @@ function A.VerifyRestore(snap, units)
     return r
 end
 
--- What verification expects to read back for each unit the install writes (places as the plan placed them).
+-- What verification expects to read back for each unit the install writes (places as the plan placed them), and for each
+-- unit an update kept as the recipient has it (so the check also shows nothing of theirs was overwritten).
 function A.Expect(composed, part)
     local out = {}
     for _, e in ipairs(composed.list) do
@@ -479,8 +597,129 @@ function A.Expect(composed, part)
     end
     for _, row in ipairs(part and part.rows or {}) do
         if row.place then out[row.unit] = PlaceText(row.new) end
+        if row.kept then
+            if row.keptText ~= LY.Merge.ABSENT then out[row.unit] = row.keptText else out[row.unit] = nil end
+        end
     end
     return out
+end
+
+---------------------------------------------------------------------------
+-- The baseline: after the check matched, what each tracked unit reads now in the install's profile (in use)
+-- Returns units = { [unit] = { p, l, s, k, o } }, schema
+---------------------------------------------------------------------------
+function A.Baseline(track, snap)
+    local units = {}
+    if PF().Current() ~= snap.target then return nil, "not-active" end
+    for unit, t in pairs(track or {}) do
+        if t.o then units[unit] = { o = true }
+        else
+            local text, s = A.Normal(TwichUIDB, unit)
+            if text then units[unit] = { p = t.p, a = t.a, l = text ~= (t.a or t.p) and text or nil, s = s, k = t.k } end
+        end
+    end
+    return units, A.Schema()
+end
+
+---------------------------------------------------------------------------
+-- Undo this update: the values the update replaced in the install's profile go back, and this character uses the profile
+-- it used before the update. u = record.update.twichui = { profile, target, values = { [unit] = { v } | {} } }
+---------------------------------------------------------------------------
+local function UndoKey(u)
+    local vals = {}
+    for unit, kv in pairs(u.values) do vals[unit] = LY.Fingerprint(kv.v) end
+    return vals
+end
+
+function A.PlanUndo(u)
+    local out = { adapter = A.id, actions = {} }
+    if not PF().Available() then out.blocked = "profiles" return out end
+    if not PF().Exists(u.target) then out.blocked = "target-missing" return out end
+    local n = 0
+    for _ in pairs(u.values) do n = n + 1 end
+    if n > 0 then out.actions[#out.actions + 1] = { kind = "values", n = n, target = u.target } end
+    if PF().Current() ~= u.profile then
+        if not PF().Exists(u.profile) then out.blocked = "previous-gone" return out end
+        out.actions[#out.actions + 1] = { kind = "switch", from = PF().Current(), to = u.profile }
+    end
+    out.key = LY.Canon({ out.actions, UndoKey(u) })
+    return out
+end
+
+local function Path(t, keys, upto)
+    for i = 1, upto do
+        if type(t[keys[i]]) ~= "table" then t[keys[i]] = {} end
+        t = t[keys[i]]
+    end
+    return t
+end
+
+local function PutBack(t, unit, kv)
+    local id = PlaceOf(unit)
+    if id then
+        local p = A.PLACES[id]
+        local c = Path(t, p.path, #p.path - 1)
+        local key = p.path[#p.path]
+        if p.kind == "point" then
+            if kv.v == nil then
+                if type(c[key]) == "table" then c[key].point, c[key].x, c[key].y = nil, nil, nil end
+            else
+                if type(c[key]) ~= "table" then c[key] = {} end
+                c[key].point, c[key].x, c[key].y = kv.v.point, kv.v.x, kv.v.y
+            end
+        else
+            c[key] = kv.v and { x = kv.v.x, y = kv.v.y } or nil
+        end
+        return
+    end
+    local f = A.FieldOf(unit)
+    if not f then return end
+    local c = Path(t, f.at, #f.at)
+    c[f.key] = LY.Copy(kv.v)
+end
+
+function A.Undo(u)
+    if InCombatLockdown and InCombatLockdown() then return { state = "failed", code = "combat" } end
+    local plan = A.PlanUndo(u)
+    if plan.blocked then return { state = "failed", code = plan.blocked } end
+    local t = PF().Current() == u.target and TwichUIDB or TwichUIDB.profiles[u.target]
+    if type(t) ~= "table" then return { state = "failed", code = "target-missing" } end
+    local ok, err = pcall(function()
+        for _, unit in ipairs(LY.SortedKeys(u.values)) do PutBack(t, unit, u.values[unit]) end
+    end)
+    if not ok then R.Fault("layouts: undo TwichUI settings", err) return { state = "partial", code = "write" } end
+    if PF().Current() ~= u.profile then
+        local okS, code = PF().Switch(u.profile)
+        if not okS then return { state = "partial", code = "profile-" .. tostring(code) } end
+    else
+        PF().Refresh("layout")
+    end
+    return { state = "done", reload = R.Switches.ReloadPending() }
+end
+
+function A.VerifyUndo(u)
+    local r = { adapter = A.id, diffs = {}, checked = 0, unverifiable = 0 }
+    if not PF().Available() then r.state, r.code = "unverifiable", "profiles" return r end
+    if PF().Current() ~= u.profile then r.diffs[#r.diffs + 1] = { unit = A.PROFILE_UNIT, code = "not-previous" } end
+    local t = PF().Current() == u.target and TwichUIDB or (TwichUIDB.profiles or {})[u.target]
+    if type(t) ~= "table" then r.diffs[#r.diffs + 1] = { unit = A.PROFILE_UNIT, code = "target-missing" } r.state = "mismatch" return r end
+    for _, unit in ipairs(LY.SortedKeys(u.values)) do
+        local kv = u.values[unit]
+        local id = PlaceOf(unit)
+        local want
+        if id then want = kv.v and PlaceText(kv.v) or LY.Merge.ABSENT
+        else
+            local f = A.FieldOf(unit)
+            if f then want = LY.Value((kv.v ~= nil and TC().ValueOk(f, kv.v)) and kv.v or f.default) end
+        end
+        if want == nil then r.unverifiable = r.unverifiable + 1
+        else
+            r.checked = r.checked + 1
+            if A.Normal(t, unit) ~= want then r.diffs[#r.diffs + 1] = { unit = unit, code = "differs" } end
+        end
+    end
+    r.state = #r.diffs > 0 and "mismatch" or "match"
+    return r
 end
 
 ---------------------------------------------------------------------------

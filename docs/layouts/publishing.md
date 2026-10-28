@@ -14,6 +14,9 @@ what was left out; tests; the manual send and receive checklist; the Phase 7 han
 
 ## The author's workflow
 
+To change the layouts that ship *inside* TwichUI for everyone, see `updating-the-bundled-layout.md` (`tools/update_bundled_layout.sh`);
+this workspace publishes and sends a package to named players.
+
 `/tui layout author` opens the authoring workspace. It is not linked from the setup wizard (the wizard is for people who
 install a layout) and is built only when asked for. It is in `TwichUI_LayoutWizard/` (`Author.lua`, the model with no frames;
 `AuthorWindow.lua`, the window), because it needs the wizard's styling and the package source; it adds about 36 KB of Lua to
@@ -153,7 +156,7 @@ they say is the game's word, and TwichUI says so in the review.
 | Not built | Why |
 |---|---|
 | Text export / import of a published package | No file or clipboard access can be assumed, and a paste import would be a second way in. The immutable snapshot in the published list is what "export" means here. Decision for the author: add it through the existing large-paste capture if wanted |
-| Retained overrides and updates | Still the open Phase 6 item in `implementation-status.md` (baseline, per-unit "reset to the package") |
+| Retained overrides and updates | Built in Phase 7 (`updates.md`): a received package with a higher revision is an update that keeps the recipient's changes |
 | Editing choices, geometry or the package's own text in the workspace | The workspace moves captured settings between layers. Choices and layout rules stay what the bundled package says; a person who changes them edits the source |
 | Capturing settings that sit in a module's `fields` or a wizard choice | Not capturable (`Capture.Locate`); the accent colour is shown as "set by a choice" |
 | Three-way merging, silent updates, remote control, dependency installation, executable adapters | Out of scope, as asked |
@@ -200,8 +203,8 @@ pass broke 21 safeguards one at a time; the result is in the final report.
 - The package carried by the bundled `ClassicData.lua` still points at the author's private `MyFonts` folder
   (`unitNameFontPath`). The bundled package is a developer package, so nothing breaks, but the same publish check that found it
   refuses to publish it as it is. Before release: replace it in the data, or accept the one-click substitution when publishing.
-- Retained overrides and updates (baseline, "reset to the package") are still to build; a received package is an ordinary
-  package for the engine, so they apply to it unchanged. The new `Store` entries give an update a place to be compared with.
+- Retained overrides and updates: built in Phase 7 (`updates.md`); a received package is an ordinary package for the engine, so
+  they apply to it unchanged.
 - A received package with the included package's id and a higher revision installs over it as an ordinary re-install. There is
   no "update available" notice by design; the sender has to send it.
 - In-game: everything in the checklist above, plus the existing Phase 2 to 5 checks. The sizes and times in the final report are

@@ -5,7 +5,7 @@
 --
 -- LM.Boot(name, sv, opts) -> c, S (S: the settings client's own view of the pages, see settings_mock.lua)
 --   sv: saved variables to load (as LM.Logout(c) returns them: a reload or a later session)
---   opts.noEUI, opts.eui (stand-in options: retail, failImport, encodeFails, specLocked, ...), opts.euiVersion,
+--   opts.noEUI, opts.eui (stand-in options: retail, failImport, encodeFails, specLocked, defaults, ...), opts.euiVersion,
 --   opts.screen = { w, h, physW, physH, scale } (UIParent's size in its own units; default 2133.33 x 1200: 1920 x 1080 at
 --   UI scale 0.64), opts.wizardMissing / opts.layoutsMissing ("MISSING" from LoadAddOn), opts.wizardDisabled,
 --   opts.refuseTextures(path) -> true to have SetTexture say the game refused that file
@@ -86,6 +86,16 @@ function LM.InstallEUI(env, db, opts)
     for spec, n in pairs(db.specProfiles) do if n == name then db.specProfiles[spec] = nil end end
     if db.activeProfile == name then db.activeProfile = "Default" end
   end
+  -- as the real one (EllesmereUI_Profiles.lua RenameProfile): the same table under the new name; order, spec assignments
+  -- and the active profile follow it
+  function E.RenameProfile(old, new)
+    Call("RenameProfile", { old, new })
+    if not db.profiles[old] then return end
+    db.profiles[new], db.profiles[old] = db.profiles[old], nil
+    for i, n in ipairs(db.profileOrder) do if n == old then db.profileOrder[i] = new break end end
+    for spec, n in pairs(db.specProfiles) do if n == old then db.specProfiles[spec] = new end end
+    if db.activeProfile == old then db.activeProfile = new end
+  end
   function E.ImportProfileSilent(o)
     Call("ImportProfileSilent", LM.Copy(o))
     if env.InCombatLockdown() then return false, "in combat" end
@@ -108,6 +118,14 @@ function LM.InstallEUI(env, db, opts)
     return true, nil
   end
   function E.RegisterExternalInstaller(name) E.installer = name end
+  -- opts.defaults: what the real one does as it loads, fill its defaults into every profile's blobs (test_layout_update.lua)
+  function E.Loaded()
+    if not opts.defaults then return end
+    for _, p in pairs(db.profiles or {}) do
+      local m = p.addons and p.addons.EllesmereUIMinimap
+      if m then m.minimap = m.minimap or {}; if m.minimap.loadDefault == nil then m.minimap.loadDefault = 1 end end
+    end
+  end
   function E.called(name) local n = 0 for _, c in ipairs(E.calls) do if c[1] == name then n = n + 1 end end return n end
   env.EllesmereUI = E
   return E
@@ -264,7 +282,7 @@ function LM.Boot(name, sv, opts)
       local fire = c.FireEvent
       c.FireEvent = function(e, a, ...)
         fire(e, a, ...)
-        if e == "ADDON_LOADED" and a == "!!!TwichUI" then c.LOADED.EllesmereUI = true; fire("ADDON_LOADED", "EllesmereUI") end
+        if e == "ADDON_LOADED" and a == "!!!TwichUI" then E.Loaded(); c.LOADED.EllesmereUI = true; fire("ADDON_LOADED", "EllesmereUI") end
       end
     end
   end })

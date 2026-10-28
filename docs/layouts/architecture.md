@@ -9,7 +9,9 @@ Classic Adventure; **§12 lists its revisions**, which win over §1–§11. Phas
 package `choices`; **§13 lists its revisions**, which win over §1–§12. Phase 5 (2026-10-26) added Compact Adventure as the
 second variant of the same package, per-variant screen rules and the full-size preview; **§14 lists its revisions**, which
 win over everything above. Phase 6 (2026-10-27) added the authoring workspace, the publication envelope and the transport
-extension; **§15 lists its revisions**, which win over §1–§14. Retained overrides are not built. `adapter-capabilities.md` holds the source evidence for each integration, and
+extension; **§15 lists its revisions**, which win over §1–§14. Phase 7 (2026-10-27) added updates that keep the recipient's
+changes, the baseline, the management record and Undo this update; **§16 lists its revisions**, which win over everything above
+(`updates.md` is the authoritative description; §6's fingerprint-only baseline and Detach-as-the-way-to-leave are superseded). `adapter-capabilities.md` holds the source evidence for each integration, and
 `implementation-status.md` tracks the phases and the open decisions.
 
 Words used here:
@@ -219,14 +221,15 @@ migration entry):
   package manages.
 - **Baseline**: after the reload that finishes an install, `Verify` takes a fingerprint of each managed unit's
   **live** value, after EllesmereUI's load-time defaults and migrations. These go in `TwichUIDB.layouts.baseline`:
-  `{ [unitId] = hash }`, fingerprints only, no copies. The number of units bounds its size.
+  `{ [unitId] = hash }`, fingerprints only, no copies. The number of units bounds its size. *Superseded by §16.1: comparable
+  units are stored as values, with the recommended, applied and read-back values apart.*
 - **Retained recipient override**: a unit whose live fingerprint differs from its baseline. Re-running the wizard
   (an update or a variant change) keeps those units by default. The plan lists them, and the recipient can tick
   "reset to the package" per unit or for everything. Granularity: TwichUI by key; EllesmereUI by module blob and by
   registered position. A change anywhere inside a module blob retains the whole module.
 - **Reset**: removes retention for the chosen units and applies the composed value. It is a normal install.
 - **Detach** (the default way to leave): stop managing. The journal and baseline are cleared and every value stays
-  as it is.
+  as it is. *Superseded by §16.3: finishing a setup (`LY.Finish`) keeps managing; Detach is "Stop managing".*
 - **Restore**: put back the restore point taken before the install (§8). It is destructive for changes made since,
   and the confirmation says so.
 - **Fingerprint**: a canonical walk with sorted keys, numbers written with `%.17g`, and bounded depth and size like
@@ -604,3 +607,44 @@ Phase 6 added authoring and publishing (`publishing.md` has the workflow, limits
    record names the package (it always did) and, for a received package with another id, the wizard finds it again after a reload.
    Pages that ask a choice the package does not have say so instead of failing.
 7. **Core launcher.** `L.OpenAuthor()`; `/tui layout author` (alias `publish`). No settings page, broker entry or Welcome offer.
+
+## 16. Revisions made in Phase 7 (2026-10-27)
+
+Phase 7 added updating an installed layout while keeping the recipient's changes (`updates.md` is authoritative: the cases, the
+schema, the geometry rules, the switch policy, the checklist). Where it differs from §1–§15, the code and this section are the
+contract:
+
+1. **Baseline (§6).** `TwichUIDB.layouts.baseline` holds, per adapter part, each unit's recommended value (`p`), the value the
+   install left where different (`a`), the read-back (`l`), how it was stored (`s`), retained override (`k`), owned (`o`) and
+   presence-only (`u`). Comparable units are stored as **values** (`LY.Value`, the whole canonical text), not fingerprints;
+   opaque units as fingerprints. A part is committed only after that adapter's check matched (`Engine.lua` `Commit`); never
+   because an install started; a failed, partial or kept step leaves the previous part. Parts carry the merge contract, the
+   schema (TwichUI settings schema; EllesmereUI version and migration stamps), revision, layout, picks and screen; another
+   version is not compared.
+2. **Retained overrides (§1 layer 6, §6).** Decided by `Merge.lua` per unit, three ways (baseline, current, new), with the
+   policy "keep" (default) or "recommended" and per-unit, per-group and per-addon choices (`opts.update`). §6's "a change anywhere
+   inside a module blob retains the whole module" stands, as an explicit fallback: blobs, layout links and look tables are opaque
+   (compared only with their own baseline, never merged inside), and a blob's registered positions, text sizes and fields are
+   comparable units of their own. Carrying a blob needs the same migration vintage; otherwise the addon is kept as it is or
+   replaced whole.
+3. **Two lifecycles (§6 Detach, §8).** The install record is the rollback journal; the new management record
+   (`TwichUIDB.layouts.managed`: package, revision, layout, picks, character, the install's own profiles, the first install's
+   home profiles) and the baseline are management. `LY.Finish` (the wizard's Keep this setup) ends the journal only;
+   `LY.Detach` (Stop managing, Forget the record) ends all three; a restore that checks out ends all three (`Journal.Forget`).
+   With no install record, a management record makes an install again an update into profiles still recognised as the install's
+   own (`ctx.owned`, `ctx.home`).
+4. **Undo this update (§8).** An update from a settled install keeps `record.update` (the record, management record and
+   baseline from before it; TwichUI values it replaces; the EllesmereUI profile renamed, not copied). `LY.PlanUndo`, `LY.Undo`,
+   `LY.VerifyUndo`, states `undoing` and `undo-partial`; `LY.ForgetUpdate` keeps the update for good. One level. Restore is
+   unchanged and also removes the copy.
+5. **EllesmereUI calls (§4).** `RenameProfile` is added, used only to keep the install's own profile under
+   `<target> (previous)` during an update and to put it back; a missing `RenameProfile` blocks an update (`eui-no-rename`), not a
+   first install. `OthersUnchanged` treats the install's own names (target, copy, a transient stash) as its own.
+6. **Verification (§8 step 8, §11.10).** Presence-only checks (blobs, links, look) are counted apart (`verify.presence`) from
+   values read back (`verify.checked`); the result and chat line say so; the baseline marks them `u`.
+7. **Resume and record-only updates.** A `partial` or `interrupted` update with the same package, layout and choices resumes
+   (done steps are neither planned nor applied again). An update with nothing to write is still recorded when it changes the
+   revision, layout or choices, or releases or claims a setting.
+8. **Re-running with the same choices (D25).** Answered: the baseline makes it "nothing to do" unless something differs.
+9. **Switching layouts (§14.2).** Still an install again into the same profiles, now with the switch rules of `updates.md`;
+   it adds the `(previous)` copy, so the account holds the install's profile and one copy until the update is kept.

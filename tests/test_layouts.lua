@@ -97,6 +97,16 @@ local function InstallEUI(env, db, opts)
     for spec, n in pairs(db.specProfiles) do if n == name then db.specProfiles[spec] = nil end end
     if db.activeProfile == name then db.activeProfile = "Default" end
   end
+  -- as the real one (EllesmereUI_Profiles.lua RenameProfile): the same table under the new name; order, spec assignments
+  -- and the active profile follow it
+  function E.RenameProfile(old, new)
+    Call("RenameProfile", { old, new })
+    if not db.profiles[old] then return end
+    db.profiles[new], db.profiles[old] = db.profiles[old], nil
+    for i, n in ipairs(db.profileOrder) do if n == old then db.profileOrder[i] = new break end end
+    for spec, n in pairs(db.specProfiles) do if n == old then db.specProfiles[spec] = new end end
+    if db.activeProfile == old then db.activeProfile = new end
+  end
   function E.ImportProfileSilent(o)
     Call("ImportProfileSilent", Copy(o))
     if env.InCombatLockdown() then return false, "in combat" end
@@ -503,6 +513,7 @@ p2.layers.variants.test.ellesmereui.fields["minimap.coordsPosition"] = "top"
 p2.layers.variants.test.twichui.groups.notifications.ui.arrivalHold = "brief"
 local plan2 = LYb.Plan(p2, "test")
 Check(plan2.ok and plan2.parts.twichui.action == "none" and plan2.parts.ellesmereui.rows[1].made == false, "re-install into the install's own profiles")
+Check(plan2.parts.ellesmereui.level == "whole", "Phase 7: a package whose EllesmereUI part is one base profile is labelled as replaced whole")
 b2.E.calls = {}
 local ok2, res2 = LYb.Apply(p2, "test", plan2.key)
 Check(ok2 and res2.state == "applied", "re-applied")
@@ -515,7 +526,9 @@ Check(Same(LYb.Journal.Read().snapshot, firstSnap), "the first snapshot is kept:
 Check(LYb.Journal.Read().revision == 2, "the record names the new revision")
 local nProfiles = 0
 for _ in pairs(b2.EllesmereUIDB.profiles) do nProfiles = nProfiles + 1 end
-Check(nProfiles == 3, "still exactly one install profile in EllesmereUI")
+-- Phase 7: an update keeps the install's old profile under another name, for "Undo this update" (updates.md)
+Check(nProfiles == 4 and b2.EllesmereUIDB.profiles["TwichUI Layout Test (previous)"] ~= nil, "one install profile in EllesmereUI, and its copy from before this update")
+Check(LYb.Journal.Read().euiBackup == "TwichUI Layout Test (previous)" and LYb.Journal.Read().update ~= nil, "the record owns that copy and the way back")
 
 ---------------------------------------------------------------------------
 -- 9. Verification failure: values changed after the install are reported, never repaired
@@ -775,7 +788,9 @@ do
   Check(d.addons.NotAModule == nil and d.addons.EllesmereUIQoL.chars == nil and d.addons.EllesmereUIQoL.q == 1, "unknown modules and private data are taken out")
   Check(d.addons.EllesmereUIChat.c == 2 and d.addons.EllesmereUIMinimap.minimap.coordsMode == "hover", "whole module blobs from the variant replace the base's")
   local vx = L.Verify(false)
-  Check(vx.state == "match" and vx.adapters.ellesmereui.checked == 2, "module blobs are checked for presence (their contents change as EllesmereUI loads)")
+  -- Phase 7: presence is reported apart from values read back, never as verified by value
+  Check(vx.state == "match" and vx.adapters.ellesmereui.checked == 0 and vx.adapters.ellesmereui.presence == 2,
+    "module blobs are checked only for presence (their contents change as EllesmereUI loads), and counted as such")
   Check(x.EllesmereUIDB.ppUIScale == 0.8, "the UI scale is the recipient's")
 end
 
@@ -1152,7 +1167,7 @@ do
   Check(j3.variant == CLASSIC and Same(j3.snapshot, firstSnapshot), "the record names Classic, and the first snapshot is the one it still holds")
   Check(c2.EllesmereUIDB.profiles["TwichUI Adventure"].addons.EllesmereUIActionBars.barPositions.Bar7 == nil, "EllesmereUI's profile now holds Classic's bars, not Compact's")
   local names = c2.EllesmereUIDB.profileOrder
-  Check(#names == 3, "no profile was added by switching (" .. #names .. ")")
+  Check(#names == 4 and c2.EllesmereUIDB.profiles["TwichUI Adventure (previous)"] ~= nil, "switching adds only the copy of the install's profile from before it (" .. #names .. ")")
   local c3 = Boot("Compact", Logout(c2))
   Check(c3.TwichUI.Layouts.Journal.Read().state == "verified" and c3.TwichUI.Layouts.Journal.Read().variant == CLASSIC, "Classic checked after its reload")
 
@@ -1167,7 +1182,7 @@ do
     cur = Boot("Compact", Logout(cur))
     local jx = cur.TwichUI.Layouts.Journal.Read()
     Check(jx.state == "verified" and jx.variant == want, "switch " .. i .. ": checked after the reload, as " .. want)
-    Check(Same(jx.snapshot, firstSnapshot) and #cur.EllesmereUIDB.profileOrder == 3, "switch " .. i .. ": still the first snapshot, still two profiles of ours")
+    Check(Same(jx.snapshot, firstSnapshot) and #cur.EllesmereUIDB.profileOrder == 4, "switch " .. i .. ": still the first snapshot; the install's profile and one copy from before the last switch")
   end
   -- applying the layout that is already installed changes nothing it can say about TwichUI; it is an install again all the same
   Check(cur.TwichUI.Layouts.Journal.Read().variant == CLASSIC, "after four switches: Classic")
@@ -1186,6 +1201,7 @@ do
   Check(okR and resR.state == "restoring", "restored as far as it can be before the reload")
   local cr = Boot("Compact", Logout(cur))
   Check(cr.TwichUIDB.layouts == nil and cr.EllesmereUIDB.activeProfile == "Mine" and cr.EllesmereUIDB.profiles["TwichUI Adventure"] == nil, "after the reload: back on your profile, the install's gone")
+  Check(cr.EllesmereUIDB.profiles["TwichUI Adventure (previous)"] == nil and #cr.EllesmereUIDB.profileOrder == 2, "and so is the copy an update kept")
   Check(cr.TwichUI.Profiles.Current() == "Default" and not cr.TwichUI.Profiles.Exists("TwichUI Adventure"), "TwichUI back on your profile, the install's gone")
 
   -- the other screens and the developer command

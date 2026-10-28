@@ -6,7 +6,7 @@
 -- it says.
 --
 --   Pages.Build(key, parent, env) -> page { frame, Refresh() }
---   env: { Relayout(), Go(step), Actions = { reload, restore, keep, check, forget, again } }
+--   env: { Relayout(), Go(step), Actions = { reload, restore, undo, keepUpdate, keep, check, forget, again } }
 
 local R = TwichUI
 local LY = R.Layouts
@@ -16,6 +16,7 @@ local Pages = {}
 WZ.Pages = Pages
 
 Pages.CONTENT_W = 718
+Pages.DETAIL_ROWS = 5   -- settings shown at once in an update's details (the rest a page at a time)
 local CONTENT_W = Pages.CONTENT_W
 local LEFT_W, GAP = 372, 16
 local RIGHT_X = LEFT_W + GAP
@@ -590,6 +591,72 @@ local function BuildReview(parent, env)
     fitWarn:SetTextColor(pal.danger.text[1], pal.danger.text[2], pal.danger.text[3])
     Put(col, Heading(f, "Your choices", LEFT_W), 10)
     local picks = Put(col, Text(f, "small", LEFT_W), 3)
+    -- Updating an installed layout (updates.md): three ways, then the details behind a button. Every frame here is made once,
+    -- with the page; the details show one page of DETAIL_ROWS settings at a time.
+    local up = { head = Put(col, Heading(f, "Updating your layout", LEFT_W), 10) }
+    up.body = Put(col, Text(f, "small", LEFT_W), 3)
+    up.modes = {}
+    for i, m in ipairs({
+        { "keep", "Update while keeping my customizations", "Settings you changed since the last install stay as you have them; everything else takes the update." },
+        { "recommended", "Reapply the recommended configuration", "Every setting the layout manages takes its value again. Settings you made yours stay yours." },
+        { "review", "Review conflicts", "Keeps your changes, and lists each setting so you can choose: keep yours, use the layout's, or make it yours for good." },
+    }) do
+        local card = Card(f, LEFT_W, function() M.SetUpdateMode(m[1]) env.Relayout() end)
+        card:Fill(m[2], m[3])
+        up.modes[i] = { card = card, id = m[1] }
+        Put(col, card, i == 1 and 8 or 4)
+    end
+    up.whole = Put(col, Text(f, "small", LEFT_W), 8)
+    up.wholeBar = Put(col, CreateFrame("Frame", nil, f), 4)
+    up.wholeBar:SetSize(LEFT_W, 24)
+    up.wholeKeep = Button(up.wholeBar, "Keep mine as it is", 170, "secondary", function() if up.wholeId then M.SetWhole(up.wholeId, "keep") env.Relayout() end end,
+        "This update leaves that addon exactly as it is. Its parts of the layout don't change.")
+    up.wholeKeep:SetPoint("TOPLEFT", 0, 0)
+    up.wholeReplace = Button(up.wholeBar, "Replace with the layout's", 190, "secondary", function() if up.wholeId then M.SetWhole(up.wholeId, "replace") env.Relayout() end end,
+        "Takes the layout's version whole. Your current profile is kept, so Undo this update can put it back.")
+    up.wholeReplace:SetPoint("LEFT", up.wholeKeep, "RIGHT", 8, 0)
+    up.group = Put(col, Text(f, "small", LEFT_W), 8)
+    up.groupBar = Put(col, CreateFrame("Frame", nil, f), 4)
+    up.groupBar:SetSize(LEFT_W, 24)
+    up.groupMine = Button(up.groupBar, "Keep mine (all)", 150, "secondary", function() if up.groupId then M.ChooseGroup(up.groupId, "mine") env.Relayout() end end,
+        "Keeps the layout links and every frame linked by them as you have them.")
+    up.groupMine:SetPoint("TOPLEFT", 0, 0)
+    up.groupPkg = Button(up.groupBar, "Use the layout's (all)", 170, "secondary", function() if up.groupId then M.ChooseGroup(up.groupId, "package") env.Relayout() end end,
+        "Takes the layout's links and the frames linked by them, all together.")
+    up.groupPkg:SetPoint("LEFT", up.groupMine, "RIGHT", 8, 0)
+    up.warn = Put(col, Text(f, "small", LEFT_W), 8)
+    up.warn:SetTextColor(pal.bronzeText[1], pal.bronzeText[2], pal.bronzeText[3])
+    up.toggle = Put(col, Button(f, "Show each setting", 170, "secondary", function()
+        M.ShowDetails(M.UpdateMode() ~= "review" and not (M.Session() and M.Session().update and M.Session().update.details))
+        env.Relayout()
+    end, "Lists every setting this update changes or keeps, with your value, the layout's, and what each choice means."), 8)
+    up.rows = {}
+    for i = 1, Pages.DETAIL_ROWS do
+        local r = { text = Put(col, Text(f, "small", LEFT_W), i == 1 and 8 or 10) }
+        r.bar = Put(col, CreateFrame("Frame", nil, f), 3)
+        r.bar:SetSize(LEFT_W, 24)
+        r.buttons = {}
+        for k = 1, 3 do
+            local b = Button(r.bar, "", 118, "secondary", function()
+                local d = r.row and r.choices[k]
+                if d then M.Choose(r.row.unit, d) env.Relayout() end
+            end)
+            b:SetPoint("TOPLEFT", (k - 1) * 124, 0)
+            r.buttons[k] = b
+        end
+        r.choices = {}
+        up.rows[i] = r
+    end
+    up.pager = Put(col, CreateFrame("Frame", nil, f), 8)
+    up.pager:SetSize(LEFT_W, 24)
+    up.prev = Button(up.pager, "Previous", 90, "secondary", function() M.SetDetailPage((M.Session().update.page or 1) - 1) env.Relayout() end)
+    up.prev:SetPoint("TOPLEFT", 0, 0)
+    up.next = Button(up.pager, "More", 90, "secondary", function() M.SetDetailPage((M.Session().update.page or 1) + 1) env.Relayout() end)
+    up.next:SetPoint("LEFT", up.prev, "RIGHT", 8, 0)
+    up.pageText = Look().Text(up.pager, "meta")
+    up.pageText:SetPoint("LEFT", up.next, "RIGHT", 10, 0)
+    page.update = up
+
     local tHead = Put(col, Heading(f, "", LEFT_W), 10)
     local tBody = Put(col, Text(f, "small", LEFT_W), 3)
     local eHead = Put(col, Heading(f, "", LEFT_W), 10)
@@ -603,6 +670,69 @@ local function BuildReview(parent, env)
     fail:SetText("If a step fails part way, TwichUI tells you what changed and what was put back, and Restore (on the Result step) puts your previous profiles back. Nothing is undone behind your back.")
     PreviewColumn(page, f, 24, env)
     page.tHead, page.eHead = tHead, eHead
+
+    -- The update block: shown only for an install again. Values the player can't see in the game are never shown as text.
+    local DECIDES = { mine = "keep", package = "apply", own = "owned", manage = "apply" }
+    function page.RefreshUpdate(u)
+        local shown = u ~= nil
+        for _, k in ipairs({ "head", "body", "whole", "wholeBar", "group", "groupBar", "warn", "toggle", "pager" }) do up[k]:SetShown(shown) end
+        for _, m in ipairs(up.modes) do m.card:SetShown(shown) end
+        for _, row in ipairs(up.rows) do row.text:SetShown(false) row.bar:SetShown(false) end
+        if not u then return end
+        up.body:SetText(Bullets(u.summary) .. (#u.notes > 0 and ("\n" .. Bullets(u.notes)) or ""))
+        for _, m in ipairs(up.modes) do m.card:SetSelected(m.id == u.mode) end
+        local w = u.whole[1]
+        up.wholeId = w and w.adapter or nil
+        up.whole:SetText(w and w.text or "")
+        up.whole:SetShown(w ~= nil)
+        up.wholeBar:SetShown(w ~= nil)
+        if w then
+            up.wholeKeep:SetEnabled(w.choice ~= "keep")
+            up.wholeReplace:SetEnabled(w.choice ~= "replace")
+        end
+        local g = u.groups[1]
+        up.groupId = g and g.id or nil
+        up.group:SetText(g and g.text or "")
+        up.group:SetShown(g ~= nil)
+        up.groupBar:SetShown(g ~= nil)
+        if g then
+            up.groupMine:SetEnabled(g.choice ~= "mine")
+            up.groupPkg:SetEnabled(g.choice ~= "package")
+        end
+        up.warn:SetText(Bullets(u.warnings))
+        up.warn:SetShown(#u.warnings > 0)
+        local open = u.details or u.mode == "review"
+        up.toggle.text:SetText(open and "Hide the settings" or ("Show each setting (" .. #u.rows .. ")"))
+        up.toggle:SetShown(#u.rows > 0 and u.mode ~= "review")
+        local per = Pages.DETAIL_ROWS
+        local pages = math.max(1, math.ceil(#u.rows / per))
+        local pg = math.min(math.max(1, u.page or 1), pages)
+        for i, slot in ipairs(up.rows) do
+            local row = open and u.rows[(pg - 1) * per + i] or nil
+            slot.row = row
+            if row then
+                local values = row.current and ("Yours: " .. row.current .. ". The layout's: " .. row.recommended .. ".") or ""
+                slot.text:SetText(("%s (%s)\n%s%s %s"):format(row.label, row.caseText, values ~= "" and (values .. "\n") or "", row.effect, row.owner))
+                slot.text:Show()
+                local any = false
+                for k, b in ipairs(slot.buttons) do
+                    local o = row.offers[k]
+                    slot.choices[k] = o and o.choice or nil
+                    b:SetShown(o ~= nil)
+                    if o then
+                        b.text:SetText(o.label)
+                        b:SetEnabled(DECIDES[o.choice] ~= row.decision)
+                        any = true
+                    end
+                end
+                slot.bar:SetShown(any)
+            end
+        end
+        up.pager:SetShown(open and pages > 1)
+        up.prev:SetEnabled(pg > 1)
+        up.next:SetEnabled(pg < pages)
+        up.pageText:SetText(("%d of %d"):format(pg, pages))
+    end
 
     function page.Refresh()
         local r = M.Review()
@@ -623,6 +753,7 @@ local function BuildReview(parent, env)
         local lines = {}
         for _, p in ipairs(r.picks or {}) do lines[#lines + 1] = p.choice .. ": " .. p.option end
         picks:SetText(Bullets(lines))
+        page.RefreshUpdate(r.update)
         for _, pair in ipairs({ { r.twichui, tHead, tBody }, { r.ellesmereui, eHead, eBody } }) do
             local sec, h, b = pair[1], pair[2], pair[3]
             if sec then
@@ -674,13 +805,19 @@ local function BuildResult(parent, env)
         again = Button(f, "Set up again", 110, "secondary", function() A.again() end,
             "Goes back to the first step. Nothing changes until you apply."),
         keep = Button(f, "Keep this setup", 130, "secondary", function() A.keep() end,
-            "Forgets the restore point and changes nothing else: what was installed stays, but Restore will no longer be offered."),
+            "Finishes the setup: the restore point is forgotten (Restore is no longer offered), and TwichUI keeps managing the layout so a later update keeps your changes."),
+        stop = Button(f, "Stop managing", 130, "secondary", function() A.stop() end,
+            "Forgets which layout is installed and what the last install left. Nothing installed changes."),
+        keepUpdate = Button(f, "Keep the update", 140, "secondary", function() A.keepUpdate() end,
+            "Keeps this update for good: the copy of your setup from just before it is removed, and Undo this update is no longer offered. Restore isn't affected."),
+        undo = Button(f, "Undo this update", 150, "danger", function() A.undo() end,
+            "Puts back how things were just before this update (not before your first install: that is Restore). It shows exactly what it will do and asks first."),
         restore = Button(f, "Restore previous setup", 170, "danger", function() A.restore() end,
             "Puts your previous profiles back and removes the install's own. It shows exactly what it will do and asks first."),
         forget = Button(f, "Forget the record", 140, "danger", function() A.forget() end,
             "Forgets a record that can't be read. Nothing else is changed."),
     }
-    local ORDER = { "reload", "check", "again", "keep", "restore", "forget" }
+    local ORDER = { "reload", "check", "again", "keep", "keepUpdate", "undo", "restore", "stop", "forget" }
     page.buttons = buttons
 
     function page.Refresh()
@@ -711,6 +848,7 @@ local function BuildResult(parent, env)
             if show then
                 b:SetEnabled(r.can[key] == true)
                 b:ClearAllPoints()
+                if x > 0 and x + b:GetWidth() > CONTENT_W then x, y = 0, y + 32 end   -- a second row rather than past the edge
                 b:SetPoint("TOPLEFT", f, "TOPLEFT", x, -y)
                 x = x + b:GetWidth() + 8
             end

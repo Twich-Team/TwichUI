@@ -29,6 +29,10 @@ local function Until(done, limit)
 end
 
 local CLASSIC, COMPACT = "classic-adventure", "compact-adventure"
+-- The revision of the package TwichUI ships (TwichUI_Layouts/Classic.lua): the tests follow it, so updating the bundled layout
+-- (tools/update_bundled_layout.sh raises it) doesn't need these numbers changed by hand.
+local SHIPPED = tonumber(assert(io.open(REPO .. "TwichUI_Layouts/Classic.lua")):read("*a"):match('id = "twichui%-adventure", revision = (%d+)'))
+assert(SHIPPED, "the shipped revision")
 
 -- A client, its layout engine and the authoring model loaded the way the game loads them
 local function Client(name, sv, opts)
@@ -72,6 +76,19 @@ local function TweakedProfile(LY)
   prof.addons.EllesmereUIQuickdraw = nil                                 -- a module the shared base names and this profile lacks
   prof.darkMode = nil                                                    -- and a look key
   return prof
+end
+
+-- An author's private font folder in the starting package and in the profile captured from (the included package pointed at
+-- one until it was fixed; this keeps the media check tested whatever the shipped data holds). Only this client's loaded copy.
+local function Plant(t)
+  for k, v in pairs(t) do
+    if k == "unitNameFontPath" then t[k] = [[Interface\AddOns\MyFonts\fonts\AlegreyaSansSC-Bold.ttf]] return true end
+    if type(v) == "table" and Plant(v) then return true end
+  end
+end
+local function PlantFont(c, LY)
+  assert(Plant(LY.ADVENTURE_PACKAGE.layers), "a font path to plant the private folder in")
+  assert(Plant(c.EllesmereUIDB.profiles.Tweak), "and the same in the profile captured from")
 end
 
 local function Booted(name, sv, opts)
@@ -269,10 +286,15 @@ end
 
 local PUB = {}   -- carried into later sections
 do
-  local c, TW, LY, WZ, A = Setup("Pub Lisher")
+  local c, TW, LY, WZ = Booted("Pub Lisher")
+  PlantFont(c, LY)
+  local A = WZ.Author
+  assert(A.Begin())
+  A.SetSource("eui", "Tweak")
+  A.SetSource("twichui", nil)
   A.Capture()
   local rep = A.Check()
-  Check(not rep.ok, "the included package points at another addon's font, so it can't be published as it is")
+  Check(not rep.ok, "a starting package that points at another addon's font can't be published as it is")
   local foreign
   for _, b in ipairs(rep.blockers) do if b:find("AlegreyaSansSC", 1, true) and b:find("another addon") then foreign = true end end
   Check(foreign, "and the check names the file")
@@ -287,12 +309,12 @@ do
   Check(Same(pkgBefore, LY.ADVENTURE_PACKAGE.layers.base.ellesmereui.root.fonts), "(the included package is untouched)")
 
   -- the version: it has to go up
-  Check(A.Release().revision == 4 and A.Release().id == "twichui-adventure", "the next revision is offered: the included package is revision 3")
-  Check(select(2, A.SetRelease("revision", 3)) == nil and A.Release().revision == 3, "the author may type 3")
+  Check(A.Release().revision == SHIPPED + 1 and A.Release().id == "twichui-adventure", "the next revision is offered: one above the included package's")
+  Check(select(2, A.SetRelease("revision", SHIPPED)) == nil and A.Release().revision == SHIPPED, "the author may type the included one's")
   A.Check()
   Check(not A.Check().ok, "but a revision no higher than the one it starts from is blocked")
-  A.SetRelease("revision", 4)
-  Check(A.Check().ok, "and 4 passes")
+  A.SetRelease("revision", SHIPPED + 1)
+  Check(A.Check().ok, "and the next one passes")
   Check(not A.SetRelease("id", "Bad Id") and not A.SetRelease("notes", ("x"):rep(601)) and not A.SetRelease("notes", "a|b")
     and not A.SetRelease("publisher", "x\ny") and not A.SetRelease("revision", 1.5), "bad ids, notes, labels and revisions are refused where they are typed")
   Check(A.SetRelease("notes", "First published revision.") and A.SetRelease("publisher", "Twich"), "plain notes and a label are taken")
@@ -321,12 +343,12 @@ do
   local world = { eui = Copy(c.EllesmereUIDB), tw = Copy(c.TwichUIDB) }
   world.tw.layouts = nil
   local done, entry = Published(c, A)
-  Check(done and entry.id == "twichui-adventure" and entry.revision == 4 and entry.by == "Twich" and entry.size > 1000, "published: revision 4, labelled, with its size")
+  Check(done and entry.id == "twichui-adventure" and entry.revision == SHIPPED + 1 and entry.by == "Twich" and entry.size > 1000, "published: revision 4, labelled, with its size")
   local now = Copy(c.TwichUIDB); now.layouts = nil
   Check(Same(world.eui, c.EllesmereUIDB) and Same(world.tw, now), "publishing wrote no profile and no setting")
   Check(#TW.Layouts.Store.List("published") == 1, "one published package is kept")
   Check(#TW.Layouts.Store.List("received") == 0, "and nothing was received")
-  Check(A.Release().revision == 5, "the next revision is already the next number")
+  Check(A.Release().revision == SHIPPED + 2, "the next revision is already the next number")
   Check(type(entry.blob) == "string" and not entry.blob:find("[%c]") and #entry.blob <= c.TwichUI.Share.LAYOUT_MAX_WIRE * 2, "it is kept as one printable text")
 
   -- immutable: later edits make a new revision and never change this one
@@ -334,12 +356,12 @@ do
   A.SetInclude("ellesmereui:addons.EllesmereUIActionBars", false)
   A.SetRelease("notes", "Second.")
   local done2, entry2 = Published(c, A)
-  Check(done2 and entry2.revision == 5 and entry2.hash ~= hash, "a second publish is revision 5 with different contents")
-  Check(entry.blob == blob and entry.hash == hash and entry.revision == 4, "and the first snapshot is byte for byte what it was")
+  Check(done2 and entry2.revision == SHIPPED + 2 and entry2.hash ~= hash, "a second publish is revision 5 with different contents")
+  Check(entry.blob == blob and entry.hash == hash and entry.revision == SHIPPED + 1, "and the first snapshot is byte for byte what it was")
   local opened
   TW.Layouts.Store.Open(entry, function(env, info) opened = env end, function(code) opened = code end)
   Check(Until(function() return opened ~= nil end) and type(opened) == "table", "an entry opens again")
-  Check(opened.meta.version == 4 and opened.meta.hash == hash and opened.meta.notes == "First published revision.", "with the notes it was published with")
+  Check(opened.meta.version == SHIPPED + 1 and opened.meta.hash == hash and opened.meta.notes == "First published revision.", "with the notes it was published with")
   local _, _, ck = LY.Validate(opened.package)
   Check(ck.layers.variants[CLASSIC].ellesmereui.units["ellesmereui:addons.EllesmereUIActionBars"].tweaked == true, "and the change that was later left out is still in it")
   Check(opened.package.dev == nil, "no developer flag")
@@ -347,20 +369,20 @@ do
 
   -- deterministic: the same draft and the same time give the same package, however pairs() walked it
   A.SetInclude("ellesmereui:addons.EllesmereUIActionBars", true)
-  A.SetRelease("revision", 9)
-  local e1 = LY.Pub.Build(A.Draft(), { notes = "n", publisher = "p", now = 5000, baseRevision = 3 })
-  local e2 = LY.Pub.Build(Copy(A.Draft()), { notes = "n", publisher = "p", now = 5000, baseRevision = 3 })
+  A.SetRelease("revision", SHIPPED + 6)
+  local e1 = LY.Pub.Build(A.Draft(), { notes = "n", publisher = "p", now = 5000, baseRevision = SHIPPED })
+  local e2 = LY.Pub.Build(Copy(A.Draft()), { notes = "n", publisher = "p", now = 5000, baseRevision = SHIPPED })
   Check(e1 and e2 and LY.Canon(e1) == LY.Canon(e2) and e1.meta.hash == e2.meta.hash, "deterministic: the same inputs give the same canonical package and fingerprint")
-  local e3 = LY.Pub.Build(A.Draft(), { notes = "n", publisher = "p", now = 5001, baseRevision = 3 })
+  local e3 = LY.Pub.Build(A.Draft(), { notes = "n", publisher = "p", now = 5001, baseRevision = SHIPPED })
   Check(e3.meta.hash == e1.meta.hash and LY.Canon(e3) ~= LY.Canon(e1), "only the time differs when the time differs: the package fingerprint doesn't move")
   e1.package.layers.base.ellesmereui.root.fonts.global = "changed after publishing"
   Check(e2.package.layers.base.ellesmereui.root.fonts.global ~= "changed after publishing", "a built package shares nothing with the draft or with another")
-  PUB.env = LY.Pub.Build(A.Draft(), { notes = "n", publisher = "p", now = 5000, baseRevision = 3 })
+  PUB.env = LY.Pub.Build(A.Draft(), { notes = "n", publisher = "p", now = 5000, baseRevision = SHIPPED })
   PUB.c, PUB.LY, PUB.TW, PUB.WZ, PUB.A = c, LY, TW, WZ, A
 
   -- the metadata says what is in it
   local m = PUB.env.meta
-  Check(m.id == "twichui-adventure" and m.version == 9 and m.format == 3 and m.baseRevision == 3 and m.counts.variants == 2, "id, version, schema, base revision, variants")
+  Check(m.id == "twichui-adventure" and m.version == SHIPPED + 6 and m.format == 3 and m.baseRevision == SHIPPED and m.counts.variants == 2, "id, version, schema, base revision, variants")
   Check(m.variants[1].id == CLASSIC and m.variants[2].id == COMPACT and m.variants[1].title == "Classic Adventure", "both variants, with titles")
   Check(m.requires.ellesmereui and m.requires.ellesmereui.min == "9.6.6" and m.adapters[1] == "ellesmereui" and m.adapters[2] == "twichui", "adapter requirements and the adapters used")
   Check(#m.media == 2 and m.media[1].source and m.ownership.base.n > 100 and m.ownership["variant:" .. CLASSIC].n > 0, "media references and who owns how many settings")
@@ -387,7 +409,7 @@ do
   local ok0, p0 = LY.Pub.Check(Copy(env))
   Check(ok0, "the built envelope passes its own checks: " .. (not ok0 and tostring(p0[1] and p0[1].code) or ""))
   -- claims that are the package's own are derived again and compared
-  Bad(function(e) e.meta.version = 10 end, "meta-mismatch", "a version that isn't the package's")
+  Bad(function(e) e.meta.version = SHIPPED + 7 end, "meta-mismatch", "a version that isn't the package's")
   Bad(function(e) e.meta.hash = "#1:1" end, "meta-mismatch", "a fingerprint that isn't the package's")
   Bad(function(e) e.meta.ownership.base.n = e.meta.ownership.base.n + 1 end, "meta-mismatch", "ownership that doesn't add up")
   Bad(function(e) e.meta.variants[1].id = "other-layout" end, "meta-mismatch", "variants that aren't the package's")
@@ -566,7 +588,7 @@ do
   local o = Offer(author, friend, nil, nil)
   Check(o.kind == "layout" and o.stage == "offered", "the offer is out and waiting for an answer")
   Check(friend.popup and friend.popup.key == "TWICHUI_LAYOUT_OFFER", "the friend is asked")
-  Check(friend.popup.text:find("Send Er wants to send you a layout package", 1, true) and friend.popup.text:find("revision 4", 1, true)
+  Check(friend.popup.text:find("Send Er wants to send you a layout package", 1, true) and friend.popup.text:find("revision " .. (SHIPPED + 1), 1, true)
     and friend.popup.text:find("Nothing is installed or changed", 1, true) and friend.popup.text:find("labelled by its author", 1, true) == nil
     and friend.popup.text:find("\"Twich\"", 1, true), "the question names the sender, the package, the revision and what receiving does")
   Check(friend.layoutLoads == 0 and Unchanged(World(friend), before), "asking loaded nothing and changed nothing")
@@ -578,7 +600,7 @@ do
   local got = friend.TwichUIDB.layouts and friend.TwichUIDB.layouts.received
   Check(got and #got == 1, "one package is stored on the friend's side")
   local e = got and got[1]
-  Check(e and e.blob == entry.blob and e.hash == entry.hash and e.revision == 4 and e.size == entry.size, "byte for byte what the author published")
+  Check(e and e.blob == entry.blob and e.hash == entry.hash and e.revision == SHIPPED + 1 and e.size == entry.size, "byte for byte what the author published")
   Check(e and e.sender == "Send Er" and e.by == "Twich", "who sent it is the game's word; the label is the author's own and kept apart")
   Check(Unchanged(World(friend), before), "the friend's profiles, settings, backups and EllesmereUI are exactly as they were")
   Check(friend.reloads == 0 and friend.E:called("ImportProfileSilent") == 0 and friend.TwichUIDB.layouts.install == nil, "nothing was imported, reloaded or recorded as installed")
@@ -935,17 +957,17 @@ do
   Choose(win, WK, "twichui-adventure")
   local byId = {}
   for _, it in ipairs(MK.Compat()) do byId[it.id] = it end
-  Check(byId["package-new"] and byId["package-new"].detail:find("replaces the layout included with TwichUI (revision 3)", 1, true), "a newer revision of the included package says so")
+  Check(byId["package-new"] and byId["package-new"].detail:find("replaces the layout included with TwichUI (revision " .. SHIPPED .. ")", 1, true), "a newer revision of the included package says so")
   local d = {}
   MK.SetLayout(COMPACT)
   local plan = MK.Plan()
-  Check(plan.ok ~= nil and plan.revision == 4 and plan.variant == COMPACT, "the plan is for revision 4, Compact")
+  Check(plan.ok ~= nil and plan.revision == SHIPPED + 1 and plan.variant == COMPACT, "the plan is for the published revision, Compact")
   Check(plan.parts.ellesmereui.payload.data.addons.EllesmereUIMinimap.minimap.coordsMode ~= "tweaked-minimap", "a change kept in Classic only does not reach Compact")
   MK.SetLayout(CLASSIC)
   Check(MK.Plan().parts.ellesmereui.payload.data.addons.EllesmereUIMinimap.minimap.coordsMode == "tweaked-minimap", "and reaches Classic")
   -- the included package is still the included package
   MK.SetSource("bundled")
-  Check(MK.Plan().revision == 3 and MK.Plan().parts.ellesmereui.payload.data.addons.EllesmereUIMinimap.minimap.coordsMode ~= "tweaked-minimap", "going back to the included package: revision 3, as shipped")
+  Check(MK.Plan().revision == SHIPPED and MK.Plan().parts.ellesmereui.payload.data.addons.EllesmereUIMinimap.minimap.coordsMode ~= "tweaked-minimap", "going back to the included package: revision 3, as shipped")
 end
 
 ---------------------------------------------------------------------------
@@ -988,6 +1010,7 @@ end
 ---------------------------------------------------------------------------
 do
   local c, TW, LY, WZ = Booted("Win Dow")
+  PlantFont(c, LY)
   local friend = Client("Win Friend")
   Check(c.TwichUILayoutAuthor == nil and not WZ.Author.Active(), "no window is built and no session started before it is asked for")
   c.SlashCmdList.TWICHUI("layout author")

@@ -14,7 +14,7 @@ and what is still open.
 | 4. Wizard, preview and install lifecycle UI | **Done offline**: automated checks pass; nothing run in game (`wizard.md`) | 2026-10-26 |
 | 5. Compact Adventure and richer previews | **Done offline**: automated checks pass; nothing run in game (below, `wizard.md`). The UI scale policy moved to Phase 6 (D12, D3) | 2026-10-26 |
 | 6a. Authoring and publishing (the author's Phase 6; see `publishing.md`) | **Done offline**: automated checks pass; nothing run in game | 2026-10-27 |
-| 6b. Retained overrides and updates | Not started | |
+| 6b/7. Retained overrides and updates (the author's Phase 7; see `updates.md`) | **Done offline**: automated checks pass; nothing run in game | 2026-10-27 |
 | 7. Release hardening and in-game validation | Not started | |
 
 Phase 2 was re-scoped by the author: instead of scaffolding and a pure composer only, it builds the whole pipeline
@@ -385,11 +385,37 @@ choices still shows every step.
 Left open from this work: text export and import of a package (decision, `publishing.md`), and the bundled package's
 reference to the author's private `MyFonts` folder (found by the new media check; `publishing.md`, Phase 7 handoff).
 
-### 6b. Retained overrides and updates
+### 6b. Retained overrides and updates (the author's Phase 7; done offline, 2026-10-27)
 
-Build: the baseline (`TwichUIDB.layouts.baseline`, fingerprints of live values after the reload, §6), retained units
-by fingerprint difference (`LY.Compose` already takes `retained` and `reset`), per-unit "reset to the package" in the
-review, and updates between package revisions.
+`updates.md` is the authoritative description; `architecture.md` §16 has the contract revisions. Built: `TwichUI_Layouts/Merge.lua`
+(the three-way comparison, groups, the whole-addon decision, tracking, the screen check of kept places), the baseline and the
+management record (`Journal.lua`), both adapters' normalized reads, merge, baseline read-back and undo, the EllesmereUI backup by
+`RenameProfile`, the engine's update plan, commit after a matching check, resume, record-only updates, `LY.Finish`,
+`LY.PlanUndo`/`LY.Undo`/`LY.VerifyUndo`, `LY.ForgetUpdate`; in the wizard the update review (three ways, details with choices),
+Undo this update, Keep the update, Keep this setup as Finish, Stop managing, and the "Installed and managed" result. The core's
+`LayoutsLauncher.lua` also finishes an `undoing` record after the reload. `LY.Compose`'s `retained`/`reset` parameters are not used
+(retention has to carry the player's values into an EllesmereUI payload, which removal can't do).
+
+A mid-implementation review (2026-10-27) required: values not fingerprints for comparable units (done: `LY.Value`, `p`/`a`/`l`/`k`);
+whole-module retention disclosed as a fallback (done: opaque labels and conflict wording); Finish not implemented as Detach (it
+had been: changed to `LY.Finish` with a separate management record); no full verification from module presence (it had been:
+presence is now counted and labelled apart); consecutive updates (a real bug: a kept override read as "unchanged" at the next
+update and lost its mark; fixed in `Merge.Classify`); Finish → reload → reopen → update (tested).
+
+**Checks run** (offline Lua 5.1; `./tests/run.sh`: 123 passed, 0 failed): `tests/test_layout_update.lua` (new). Expectations changed
+in older tests, each for a stated contract change: `test_layouts.lua` §8 and §18 (an update adds the `(previous)` copy; Restore
+removes it; a base-string package is labelled whole; blob checks counted as presence), `test_layout_wizard.lua` (the same choices
+again is now "nothing to do" (D25); a switch keeps the old profile as the copy; Keep this setup finishes and keeps managing).
+Stand-ins: `RenameProfile` in both, and opt-in load-time defaults in `layouts_mock.lua`. Six hand mutations each fail the new tests.
+`luacheck` (globals off): 0 warnings in the files changed (two older warnings in `Model.lua` predate this phase).
+
+**Diagnostics.** No new scope or gauge: the comparison runs inside `layouts.plan`, the baseline commit inside `layouts.verify`, undo
+inside `layouts.restore`; their labels in `DX.OPS` and `docs/diagnostics.md` now say so. The baseline, management record and the way
+back are bounded saved data in `TwichUIDB.layouts` (measured offline: the Classic baseline is under 64 KB of canonical text, checked
+by the tests); in-game memory and CPU are not measured. The comparison copies every EllesmereUI blob twice per plan (normalization);
+offline that is part of the plan's cost, not measured in game.
+
+**In-game checks**: the manual checklist in `updates.md`.
 
 ### 7. Release hardening and in-game validation
 
@@ -452,7 +478,7 @@ Troubleshooting row; no Welcome offer (D24). The rest is still open.
 | D22 | The accent options and their colours (Aged gold is the layout's own; Verdigris, Ember and Dusk blue are proposals) | As built; the author to confirm |
 | D23 | The cursor-following or fixed tooltip choice: not offered (account-wide EllesmereUI global, reset whole by its import, not undone by Restore) | Keep it out until D3 and D5 are built |
 | D24 | A Welcome-dialog offer for the wizard | Not built; add only if wanted |
-| D25 | Re-running with the same choices re-imports the install's EllesmereUI profile and replaces changes made in it | As built, said in the review; a shortcut needs a content fingerprint of the live profile |
+| D25 | Re-running with the same choices re-imports the install's EllesmereUI profile and replaces changes made in it | **Answered in Phase 7**: the baseline makes it "nothing to do" |
 
 | D26 | One pair of install profiles for both layouts, named `TwichUI Adventure` | As built (`wizard.md`, D26) |
 | D27 | Compact's sources: EllesmereUI `TwichUI - Minimal Adventure`; TwichUI side shared with Classic | Confirmed by the author |
@@ -467,6 +493,11 @@ Troubleshooting row; no Welcome offer (D24). The rest is still open.
 | D36 | No text export or import of a published package | As built; add through the large-paste capture if wanted |
 | D37 | A full store (4 published, 3 received, 3 MB) refuses; it never drops a package to make room | As built |
 | D38 | Offers for a layout are never auto-accepted, even from a sender trusted for setups | As built |
+| D39 | An update keeps the install's EllesmereUI profile as `TwichUI Adventure (previous)` (renamed, visible in EllesmereUI's list, account-wide) until the update is kept, undone or restored | As built: exact Undo with public functions only; the alternative (a copy in saved data) is large and lossy |
+| D40 | Conflicts default to the player's value; on a layout switch, layout-specific changes default to the new layout's | As built (`updates.md`, "Switching layouts") |
+| D41 | When EllesmereUI's data is of another vintage than the package, EllesmereUI is kept as it is by default (its update is offered again) | As built; Replace (after the copy) on request |
+| D42 | Keep this setup finishes the setup (no Restore afterwards) but keeps managing; Stop managing is separate | As built (review requirement) |
+| D43 | One level of Undo this update | As built |
 
 ## In-game checks still required (whole project)
 

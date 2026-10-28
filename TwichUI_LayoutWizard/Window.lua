@@ -8,8 +8,9 @@
 -- on one frame of its own, and stops listening when it closes. Nothing here runs while it is closed. Closing drops
 -- everything the model worked out (the plan holds the payload it would import) and changes nothing in the game.
 --
--- The only things that change the game are three buttons, each after a confirmation that names the exact scope, each
--- refused in combat by the model and again by the engine: Apply, Restore, and the reload the player starts.
+-- The only things that change the game are a few buttons, each after a confirmation that names the exact scope, each
+-- refused in combat by the model and again by the engine: Apply, Restore, Undo this update, Keep the update (removes the
+-- copy an update kept), and the reload the player starts.
 --
 --   Window.Open(step)   opens it (on a step, or where the model says); Window.Close(), Window.Toggle(), Window.IsShown()
 --   Window.Refresh()    draws the current step again from the model
@@ -91,16 +92,56 @@ function Actions.restore()
     end, { accept = "Restore", combat = true })
 end
 
+function Actions.undo()
+    local text, up = M.UndoConfirmText()
+    if not up.ok then
+        footer.note:SetText(up.blocked[1] or "It can't be undone right now.")
+        return
+    end
+    R.Interact.Confirm("TWICHUI_LAYOUT_UNDO", text, function()
+        local ok, result = M.Undo(up.key)
+        if not ok then Say("nothing was changed: %s", M.Explain(result)) end
+        W.Refresh()
+    end, { accept = "Undo the update", combat = true })
+end
+
+function Actions.keepUpdate()
+    local j = R.Layouts.Journal.Read()
+    local name = j and j.euiBackup
+    R.Interact.Confirm("TWICHUI_LAYOUT_KEEP_UPDATE",
+        ("Keep this update for good?\n\n%sUndo this update will no longer be offered. Restore (back to before your first install) is not affected, and nothing else changes."):format(
+            name and ("The copy of your EllesmereUI profile from before it, \"" .. name .. "\", is removed; every character on this account shares it. ") or ""),
+        function()
+            local ok, code = M.ForgetUpdate()
+            if not ok then Say("nothing was changed: %s", M.Explain(code)) end
+            W.Refresh()
+        end, { accept = "Keep it", combat = true })
+end
+
 function Actions.keep()
+    local j = R.Layouts.Journal.Read()
+    local name = j and j.euiBackup
     R.Interact.Confirm("TWICHUI_LAYOUT_KEEP",
-        "Keep this setup?\n\nThis forgets the restore point, so Restore will no longer be offered. Everything that was installed stays exactly as it is, and nothing else changes.",
-        function() M.Keep() W.Refresh() end, { accept = "Keep it" })
+        "Keep this setup?\n\nThis finishes the setup: the restore point is forgotten, so Restore (and Undo this update) will no longer be offered"
+            .. (name and (", and the copy of your EllesmereUI profile from before the last update, \"" .. name .. "\", is removed") or "")
+            .. ". TwichUI keeps managing the layout: everything installed stays exactly as it is, and a later update still knows which changes are yours.",
+        function()
+            local ok, code = M.Keep()
+            if not ok then Say("nothing was changed: %s", M.Explain(code)) end
+            W.Refresh()
+        end, { accept = "Keep it", combat = true })
 end
 
 function Actions.forget()
     R.Interact.Confirm("TWICHUI_LAYOUT_FORGET",
         "Forget the install record?\n\nIt can't be read, so it can't be used to restore anything. This forgets it and changes nothing else.",
-        function() M.Keep() W.Refresh() end, { accept = "Forget it" })
+        function() M.StopManaging() W.Refresh() end, { accept = "Forget it" })
+end
+
+function Actions.stop()
+    R.Interact.Confirm("TWICHUI_LAYOUT_STOP",
+        "Stop managing this layout?\n\nEverything installed stays exactly as it is. TwichUI forgets which package is installed and what the last install left, so a later setup can't tell your changes from the layout's.",
+        function() M.StopManaging() W.Refresh() end, { accept = "Stop managing" })
 end
 
 function Actions.removePackage()

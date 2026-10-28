@@ -131,3 +131,14 @@ it run in game:
 | The game's default tooltip place: `GameTooltipDefaultContainer`, `BOTTOMRIGHT` at (-9, 85), read through its first point like `GameTooltip_SetDefaultAnchor` | S | `wow-ui-source` (forever) `Blizzard_GameTooltip/Mainline/GameTooltip.xml`, `Blizzard_SharedXML/SharedTooltipTemplates.lua` 87–112 |
 | Not placed by the screen layer: the Battle Res frame (`EllesmereUIQoL.battleRes.pos`, stored as `centerX`/`centerY`), the CDM's other bars and class power (left at the author's coordinates, which in Compact sit above the block) | S | the capture |
 
+
+**Phase 7 (2026-10-27).** Read for updates, in EllesmereUI 9.6.8; none of it run in game:
+
+| What | Status | Evidence |
+|---|---|---|
+| `RenameProfile(old, new)` moves the same profile table to the new name, with its CDM spell bucket, order, spec assignments, sync groups, colour sources, keybind; renaming the active profile keeps it active | S | `EllesmereUI_Profiles.lua:3808` |
+| `DeleteProfile` drops spec assignments and the spell bucket for that name; deleting the active profile falls back to "Default" (why an update switches away first) | S | `EllesmereUI_Profiles.lua:3758` |
+| `SaveCurrentAsProfile` copies the active profile and switches to it: not used (it would change the active profile and copy unrelated stores) | S | `EllesmereUI_Profiles.lua:3686` |
+| Blobs gain defaults at load, so a blob is compared only with its own read-back; which keys EllesmereUI writes at runtime without the player is unknown | S (defaults), **G** (runtime keys) | §11.10; `updates.md` checklist 10 |
+| `_migrations` decides whether a player's blob can be carried into a package payload (same stamps only) | S (the import takes `_migrations`), G (what a migration rewrites) | `ImportProfile` |
+| Moving a frame in Unlock Mode: whether EllesmereUI rewrites the link offset, the stored position, or both | **G** | the edge-link fix-up assumes the live link and position agree |

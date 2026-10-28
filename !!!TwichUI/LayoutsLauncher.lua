@@ -10,7 +10,7 @@
 --   L.OpenWizard(step)  loads the wizard if needed and opens it (on a step, or where it says); true, or false and a reason
 --   L.OpenAuthor()    the same for the authoring workspace (/tui layout author): for the person who makes a layout
 --   L.Pending()       read only: the install record's state when it waits for something that happens at a load
---                     ("applying", "applied", "restoring"), else nil
+--                     ("applying", "applied", "restoring", "undoing"), else nil
 --   L.WizardResume()  read only: "install" or "restore" when the wizard started the reload that is just finishing
 --
 -- And two things at a load, both only while an install record (TwichUIDB.layouts.install) says one is under way:
@@ -82,7 +82,7 @@ function L.Load()
 end
 
 -- The install record's state when a load has something to finish. Reads one field; checks only its type.
-local WAITS = { applying = true, applied = true, restoring = true }
+local WAITS = { applying = true, applied = true, restoring = true, undoing = true }
 function L.Pending()
     local layouts = type(TwichUIDB) == "table" and TwichUIDB.layouts
     local install = type(layouts) == "table" and layouts.install

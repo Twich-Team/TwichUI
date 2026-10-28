@@ -64,6 +64,21 @@ local EXPLAIN = {
     ["target-kept"] = "the install's profile couldn't be removed.",
     ["no-screen"] = "TwichUI couldn't read the size of the screen, so it can't work out where things go.",
     ["not-allowed"] = "the package's settings hold a per-character record a layout never carries.",
+    -- updates (updates.md)
+    ["baseline-newer"] = "the record of what the last install applied was written by a newer TwichUI. Update TwichUI to update the layout.",
+    ["undo-pending"] = "undoing the last update is waiting for a reload. Type /reload first.",
+    ["no-update"] = "there is no update to undo: the last install wasn't an update, or its way back was already used or forgotten.",
+    ["not-settled"] = "the last update hasn't been checked after a reload yet.",
+    ["backup-taken"] = "a profile with the name TwichUI keeps the install's old profile under already exists, and this install didn't make it. Rename or delete it first.",
+    ["backup-missing"] = "the copy of the install's profile from before the update isn't there any more.",
+    ["backup-in-use"] = "the copy of the install's profile from before the update is the one in use.",
+    ["eui-no-rename"] = "this EllesmereUI can't rename profiles, which keeping your current profile during an update needs. Update EllesmereUI.",
+    ["eui-rename"] = "EllesmereUI didn't rename the profile.",
+    ["kept-whole"] = "kept as it is, as you chose.",
+    ["target-missing"] = "the install's own profile isn't there any more.",
+    ["not-active"] = "the install's own profile isn't the one in use.",
+    ["not-managed"] = "TwichUI has no record of managing this install yet; check it after a reload first.",
+    ["managed-newer"] = "the record of the installed layout was written by a newer TwichUI. Update TwichUI to update the layout.",
 }
 
 -- The packages the developer command knows: { pkg, variant }.
@@ -231,7 +246,9 @@ end
 function LY.Tell(said)
     local j = J.Read()
     if said == "verified" then
-        Say("the layout install was checked after the reload: every managed value reads back as planned.")
+        local pres = j and j.verify and j.verify.presence or 0
+        Say("the layout install was checked after the reload: every managed value reads back as planned%s.",
+            pres > 0 and (" (" .. pres .. " EllesmereUI parts replaced whole were checked only for being there)") or "")
     elseif said == "mismatch" or said == "partial" or said == "unverifiable" then
         Say("the layout install was checked after the reload, and not everything reads back as planned:")
         ShowDiffs(j and j.verify and j.verify.diffs)
@@ -242,6 +259,11 @@ function LY.Tell(said)
         Say("restored: everything the layout install changed is back as it was.")
     elseif said == "restore-partial" then
         Say("the restore was checked after the reload, and not everything is back as it was:")
+        ShowDiffs(j and j.verify and j.verify.diffs)
+    elseif said == "undone" then
+        Say("the last layout update was undone: everything is as it was just before it.")
+    elseif said == "undo-partial" then
+        Say("undoing the last layout update was checked after the reload, and not everything is as it was:")
         ShowDiffs(j and j.verify and j.verify.diffs)
     end
     if said then Line("/tui layout opens the layout setup, which shows this and offers Restore.") end

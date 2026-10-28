@@ -1,4 +1,5 @@
 -- TwichUI layout capture: an author's saved settings, read as data and turned into a layout package's data file.
+-- tools/update_bundled_layout.sh runs both captures for the shipped package (docs/layouts/updating-the-bundled-layout.md).
 -- Runs outside the game with plain Lua 5.1 (+ luabitop), from the repository root:
 --
 --   lua5.1 tools/layout_capture.lua --eui <EllesmereUI.lua> --twichui <!!!TwichUI.lua> \
@@ -210,7 +211,8 @@ local euiName = args["eui-profile"]
 local prof = EDB.profiles[euiName]
 assert(type(prof) == "table", "no EllesmereUI profile with that name")
 local twName = args["twichui-profile"]   -- nil: this layout has no TwichUI settings of its own
-local live = type(TDB.profileState) == "table" and TDB.profileState.live or "Default"
+-- which profile is live in the copy loaded here (it loads as a character of its own, so it may not be the one live in game)
+local live = type(c.TwichUIDB.profileState) == "table" and c.TwichUIDB.profileState.live or "Default"
 local slot   -- the profile's table: the live one is TwichUIDB itself (schema 2), a stored one is TwichUIDB.profiles[name]
 if twName == nil then slot = nil
 elseif twName == live then slot = c.TwichUIDB

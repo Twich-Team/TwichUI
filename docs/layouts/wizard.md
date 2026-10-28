@@ -128,7 +128,7 @@ install record (`layouts.install`, `Journal.lua`), covered by the same `layouts`
 | Snapshot, Apply | `LY.Apply(pkg, variant, key, { picks })`: the snapshot is taken and checked before the record is written; the record keeps the picks |
 | Verify | after the reload (`LY.Continue`), or `LY.Verify(false)` from Check again (read only; nothing is repaired) |
 | Restore | `LY.PlanRestore` → the confirmation → `LY.Restore(key)` → after the reload `LY.VerifyRestore` |
-| Detach | "Keep this setup" and "Forget the record": `LY.Detach` after a confirmation |
+| Finish / Detach | "Keep this setup": `LY.Finish` (Phase 7: ends the restore point, keeps managing). "Forget the record" and "Stop managing": `LY.Detach` after a confirmation |
 
 Engine changes this needed (all in `TwichUI_Layouts`, `architecture.md` §13): package format 3 with `choices`;
 `LY.Resolve` `opts.picks` and `resolved.picks`; the picks in the plan key and in the install record (validated, at most 8);
@@ -380,3 +380,11 @@ shared.
 Packages other players sent: the first step lists the included package and each received one and opens the one chosen; its
 layouts replace the two included ones on the Layout step; choices it does not have are skipped with a note. Authoring is a
 separate workspace (`/tui layout author`) that the wizard does not link to. See `publishing.md`.
+
+## Phase 7 additions
+
+Updates (`updates.md`, authoritative): the Review step's **Updating your layout** block (three ways, details with per-setting
+choices, group and whole-addon questions, screen warnings); the Result step's **Undo this update** and **Keep the update**.
+**Keep this setup** now *finishes* the setup (`LY.Finish`): the restore point is forgotten, TwichUI keeps managing the layout
+(management record and baseline stay) and the wizard shows **Installed and managed** with **Set up again** and **Stop managing**.
+It is no longer Detach; "Forget the record" and Stop managing are. Re-running with the same choices is "nothing to do" (D25).

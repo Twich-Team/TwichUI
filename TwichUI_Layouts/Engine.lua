@@ -39,6 +39,29 @@ local function Short(key) return "#" .. tostring(LibDeflate:Adler32(key)) .. ":"
 --   parts = { [adapter] = part (each adapter's Plan) }, changes, reload, mode = "new"|"again", key,
 --   geometry = the resolved screen (Geometry.lua) | nil, density, picks = { [choice id] = option id } (every choice) }
 ---------------------------------------------------------------------------
+-- opts.update (an install again; updates.md) = { policy = "keep" | "recommended", choose = { [unit] = "mine" | "package" |
+--   "own" | "manage" }, groups = { [group] = "mine" | "package" }, whole = { [adapter] = "keep" | "replace" } }.
+-- plan.update = { baseline = "ok" | "none" | "other" | "damaged", policy, resume, counts, rows = { row }, warnings, whole,
+--   groups, fresh = { [adapter] = why } } (rows: Merge.lua's, each with its adapter), for an install again.
+local UPDATE_STATES = LY.Set({ "verified", "mismatch" })   -- settled: an update from here keeps a way back to here
+local RESUME_STATES = LY.Set({ "partial", "interrupted" })  -- an update that stopped: steps already done are not done again
+
+local function Opts(u)
+    u = type(u) == "table" and u or {}
+    local choose = {}
+    local n = 0
+    for unit, c in pairs(type(u.choose) == "table" and u.choose or {}) do
+        n = n + 1
+        if n > LY.Merge.MAX_CHOICES then break end
+        if type(unit) == "string" and LY.Merge.CHOICES[c] then choose[unit] = c end
+    end
+    local groups = {}
+    for g, c in pairs(type(u.groups) == "table" and u.groups or {}) do if c == "mine" or c == "package" then groups[g] = c end end
+    local whole = {}
+    for id, c in pairs(type(u.whole) == "table" and u.whole or {}) do if c == "keep" or c == "replace" then whole[id] = c end end
+    return { policy = LY.Merge.POLICIES[u.policy] and u.policy or "keep", choose = choose, groups = groups, whole = whole }
+end
+
 local function DoPlan(pkg, variant, opts)
     opts = opts or {}
     local plan = { blocked = {}, parts = {}, order = {}, changes = 0, reload = false }
@@ -59,35 +82,119 @@ local function DoPlan(pkg, variant, opts)
     if why then Block(nil, "journal-" .. why) end
     if journal then
         if journal.package ~= resolved.id then Block(nil, "journal-other-package")
-        elseif journal.state == "restoring" then Block(nil, "restore-pending") end
+        elseif journal.state == "restoring" then Block(nil, "restore-pending")
+        elseif journal.state == "undoing" then Block(nil, "undo-pending") end
         if journal.char ~= Me() then Block(nil, "journal-other-character") end
     end
-    plan.mode = journal and "again" or "new"
-    plan.journal = journal
+    -- With no install record, a layout whose setup was finished is still managed: its management record says which package
+    -- and layout are installed and which profiles are the install's own, and the baseline is still the last checked install.
+    local managed
+    if not journal and not why then
+        local m, mwhy = J.ReadManaged()
+        if mwhy == "newer" then Block(nil, "managed-newer") end
+        if m and m.package == resolved.id then
+            if m.char ~= Me() then Block(nil, "journal-other-character") end
+            managed = m
+        elseif m then
+            Block(nil, "journal-other-package")
+        end
+    end
+    plan.mode = (journal or managed) and "again" or "new"
+    plan.journal, plan.managed = journal, managed
+    local installed = journal or managed
+
+    -- An install again is an update: each unit is compared with the baseline (the last install that checked out) and with
+    -- what the recipient has now (Merge.lua). Without a usable baseline nothing can be told apart, so a unit that differs
+    -- is kept as the recipient has it unless they choose otherwise.
+    local uopts, baseline, upd
+    if installed then
+        uopts = Opts(opts.update)
+        local b, bwhy = J.ReadBaseline()
+        if bwhy == "newer" then Block(nil, "baseline-newer") end
+        local state = b and ((b.package == resolved.id and b.char == Me()) and "ok" or "other") or (bwhy or "none")
+        baseline = state == "ok" and b or nil
+        upd = { baseline = state, policy = uopts.policy, rows = {}, warnings = {}, counts = {}, whole = {}, groups = {}, fresh = {},
+            switching = installed.variant ~= variant and installed.variant or nil }
+        plan.update = upd
+        -- a stopped update whose package, layout, choices and screen are the same as before: its done steps stay done
+        if journal and RESUME_STATES[journal.state] and journal.update and journal.revision == resolved.revision and journal.variant == variant
+            and LY.Same(journal.picks or {}, next(resolved.picks) ~= nil and resolved.picks or {}) then
+            upd.resume = true
+        end
+    end
     for _, id in ipairs(LY.APPLY_ORDER) do
         local composed = resolved.adapters[id]
         if composed then
             local a = LY.ADAPTERS[id]
-            local part = a.Plan(composed, {
-                target = resolved.targets[id], snapshot = journal and journal.snapshot[id],
-                requires = pkg.requires and pkg.requires[id], dev = resolved.dev,
-                lastInputs = journal and journal.inputs and journal.inputs[id],
-                geometry = resolved.geometry, attach = resolved.attach and resolved.attach[id],
-            })
+            local merge
+            if uopts then
+                merge = { part = baseline and baseline.parts[id] or nil, known = baseline ~= nil and baseline.parts[id] ~= nil,
+                    policy = uopts.policy, choose = uopts.choose, groups = uopts.groups, whole = uopts.whole[id],
+                    switching = installed.variant ~= variant }
+            end
+            local done = upd and upd.resume and (function()
+                for _, s in ipairs(journal.steps) do if s.adapter == id then return s.state == "done" end end
+            end)()
+            local part
+            if done then
+                -- done in the attempt that stopped: not planned or applied again
+                part = { adapter = id, rows = {}, changes = 0, nothing = true, resumed = true, key = "resumed", reload = false }
+            else
+                part = a.Plan(composed, {
+                    target = resolved.targets[id], snapshot = journal and journal.snapshot[id],
+                    requires = pkg.requires and pkg.requires[id], dev = resolved.dev,
+                    lastInputs = journal and journal.inputs and journal.inputs[id],
+                    geometry = resolved.geometry, attach = resolved.attach and resolved.attach[id],
+                    merge = merge,
+                    backup = journal and journal.euiBackup,
+                    -- "new": keep the install's profile as it is now (a settled install); "keep": the copy an earlier, stopped
+                    -- attempt kept stands, and the profile is replaced in place; "none": no way back is kept
+                    backupMode = journal and (UPDATE_STATES[journal.state] and "new" or (journal.update and "keep") or "none")
+                        or (managed and "new") or nil,
+                    -- the install's own profile, by the management record, once the setup was finished (no snapshot says so)
+                    owned = managed ~= nil and managed.targets[id] == resolved.targets[id],
+                    home = managed and managed.home[id] or nil,
+                })
+            end
             part.composed = composed
             plan.parts[id] = part
             plan.order[#plan.order + 1] = id
             if part.blocked then Block(id, part.blocked) end
             if part.reload then plan.reload = true end
             plan.changes = plan.changes + (part.changes or 0)
+            if upd and part.merge then
+                for _, row in ipairs(part.merge.rows) do
+                    row.adapter = id
+                    upd.rows[#upd.rows + 1] = row
+                    upd.counts[row.decision] = (upd.counts[row.decision] or 0) + 1
+                    if row.case == "conflict" then upd.counts.conflict = (upd.counts.conflict or 0) + 1 end
+                    if row.case == "added" then upd.counts.added = (upd.counts.added or 0) + 1 end
+                    if row.case == "unknown" then upd.counts.unknown = (upd.counts.unknown or 0) + 1 end
+                end
+                for _, w in ipairs(part.warnings or {}) do w.adapter = id; upd.warnings[#upd.warnings + 1] = w end
+                if part.merge.whole then upd.whole[id] = part.merge.whole end
+                for g, info in pairs(part.merge.groups) do if info.conflict then upd.groups[g] = { adapter = id, choice = info.choice } end end
+            end
+            if upd and part.fresh then upd.fresh[id] = part.fresh end
         end
+    end
+    -- An update with nothing to write is still worth recording when it moves the install to another revision, layout or
+    -- choices, or releases or claims a setting: the record, the management record and the baseline then say so.
+    if upd then
+        local changed = installed.revision ~= resolved.revision or installed.variant ~= variant
+            or not LY.Same(installed.picks or {}, next(resolved.picks) ~= nil and resolved.picks or {})
+        for _, row in ipairs(upd.rows) do
+            if row.decision == "release" or (row.decision == "owned" and row.case ~= "owned") then changed = true end
+        end
+        upd.recordOnly = changed or nil
     end
     local keys = {}
     for _, id in ipairs(plan.order) do keys[id] = plan.parts[id].key or "" end
     -- the screen the places were worked out for is part of what was shown
     local screenKey = resolved.geometry and { math.floor(resolved.geometry.screen.w + 0.5), math.floor(resolved.geometry.screen.h + 0.5),
         resolved.geometry.density } or false
-    plan.key = LY.Canon({ plan.id, plan.revision, variant, plan.mode, keys, screenKey, resolved.picks })
+    plan.key = LY.Canon({ plan.id, plan.revision, variant, plan.mode, keys, screenKey, resolved.picks, uopts and uopts.policy or false,
+        upd and upd.resume or false })
     plan.ok = #plan.blocked == 0
     return plan
 end
@@ -110,6 +217,40 @@ local function Combine(reports)
     return state
 end
 
+-- The baseline takes, for each adapter whose check matched, what its units read now (Journal.lua). An adapter that didn't
+-- match, or was kept as it was, leaves its part of the baseline as it was: an update that didn't check out never replaces
+-- the last one that did.
+local function Commit(j, reports)
+    local committed = {}
+    for _, id in ipairs(LY.SortedKeys(reports)) do
+        local a = LY.ADAPTERS[id]
+        if reports[id].state == "match" and j.track and j.track[id] and a.Baseline then
+            local ok, units, schema = pcall(a.Baseline, j.track[id], j.snapshot[id])
+            if not ok then R.Fault("layouts baseline " .. id, units)
+            elseif units then
+                J.CommitBaseline(j, id, units, schema, j.screen)
+                committed[#committed + 1] = id
+            end
+        end
+    end
+    return committed
+end
+
+-- The management record after a recorded check: the package, layout and choices now installed, and the install's own
+-- profiles (made by it, or already recorded as its own) and the profiles in use before the first install.
+local function Manage(j)
+    local prev = J.ReadManaged()
+    if prev and (prev.package ~= j.package or prev.char ~= j.char) then prev = nil end
+    local m = { v = J.MANAGED_VERSION, package = j.package, revision = j.revision, variant = j.variant,
+        picks = j.picks and LY.Copy(j.picks) or nil, char = j.char, at = time(), targets = {}, home = {} }
+    for id, snap in pairs(j.snapshot) do
+        if snap.created or (prev and prev.targets[id] == snap.target) then m.targets[id] = snap.target end
+        local home = (prev and prev.home[id]) or snap.active or snap.profile
+        if type(home) == "string" then m.home[id] = home end
+    end
+    J.WriteManaged(m)
+end
+
 local function DoVerify(record)
     local j, why = J.Read()
     if not j then return nil, why or "none" end
@@ -126,6 +267,14 @@ local function DoVerify(record)
     if record and (j.state == "applied" or j.state == "verified" or j.state == "mismatch" or j.state == "interrupted") then
         -- "mismatch" is "not verified": verify.state says whether something differs or could not be read
         j.verify = { state = report.state, at = time(), diffs = J.Diffs(reports) }
+        -- what was read back by value, and what only for being there (whole EllesmereUI blobs, links, look): never one count
+        local checked, presence = 0, 0
+        for _, r in pairs(reports) do checked, presence = checked + (r.checked or 0), presence + (r.presence or 0) end
+        j.verify.checked, j.verify.presence = checked, presence
+        report.checked, report.presence = checked, presence
+        j.verify.baseline = Commit(j, reports)
+        Manage(j)
+        report.committed = j.verify.baseline
         j.state = report.state == "match" and "verified" or "mismatch"
         j.reload = false
         J.Write(j)
@@ -140,14 +289,29 @@ function LY.Verify(record) return Perf.Call("layouts.verify", DoVerify, record) 
 -- Returns true, result | false, code, plan-or-extra. result = { state, record, verify = report|nil }
 --   codes: combat, blocked, stale, nothing, snapshot (the snapshot could not be made usable)
 ---------------------------------------------------------------------------
+-- The record as it was before an update, for "Undo this update": everything but its snapshot (an update never replaces
+-- it), its own way back and a restore under way.
+local function From(previous)
+    local out = {}
+    for k, v in pairs(previous) do
+        if k ~= "snapshot" and k ~= "update" and k ~= "restore" then out[k] = LY.Copy(v) end
+    end
+    return out
+end
+
+local function StepOf(record, id)
+    for _, s in ipairs(record and record.steps or {}) do if s.adapter == id then return s end end
+end
+
 local function DoApply(pkg, variant, expect, opts)
     if InCombat() then return false, "combat" end
     local plan = DoPlan(pkg, variant, opts)
     if not plan.ok then return false, "blocked", plan end
     if type(expect) ~= "string" or plan.key ~= expect then return false, "stale", plan end
+    local resume = plan.update and plan.update.resume
     local allNothing = true
     for _, id in ipairs(plan.order) do if not plan.parts[id].nothing then allNothing = false end end
-    if allNothing then return false, "nothing", plan end
+    if allNothing and not resume and not (plan.update and plan.update.recordOnly) then return false, "nothing", plan end
 
     local previous = plan.journal
     local snapshot
@@ -164,28 +328,74 @@ local function DoApply(pkg, variant, expect, opts)
 
     local record = { v = J.VERSION, package = plan.id, revision = plan.revision, variant = variant, char = Me(),
         state = "applying", at = time(), key = Short(plan.key), reload = false, steps = {}, snapshot = snapshot,
-        expect = {}, inputs = {}, picks = next(plan.picks) ~= nil and plan.picks or nil }
+        expect = {}, inputs = {}, track = {}, picks = next(plan.picks) ~= nil and plan.picks or nil }
+    local geo = plan.geometry
+    record.screen = geo and ("%d,%d,%s"):format(math.floor(geo.screen.w + 0.5), math.floor(geo.screen.h + 0.5), tostring(geo.density)) or nil
     for _, id in ipairs(plan.order) do
-        record.steps[#record.steps + 1] = { adapter = id, state = "pending" }
-        record.expect[id] = LY.ADAPTERS[id].Expect(plan.parts[id].composed, plan.parts[id])
-        record.inputs[id] = plan.parts[id].inputs or (previous and previous.inputs and previous.inputs[id])
+        local part = plan.parts[id]
+        local before = part.resumed and StepOf(previous, id)
+        if before then
+            -- done in the attempt that stopped: what it expects and what the baseline takes come from that attempt
+            record.steps[#record.steps + 1] = { adapter = id, state = "done", code = before.code, reload = before.reload }
+            if before.reload then record.reload = true end
+            record.expect[id] = previous.expect[id] or {}
+            record.inputs[id] = previous.inputs and previous.inputs[id]
+            record.track[id] = previous.track and previous.track[id]
+        else
+            record.steps[#record.steps + 1] = { adapter = id, state = "pending" }
+            if part.kept and previous then
+                -- kept as it is (the recipient's choice): nothing is written, nothing new is expected or taken by the baseline
+                record.expect[id] = previous.expect[id] or {}
+            else
+                record.expect[id] = LY.ADAPTERS[id].Expect(part.composed, part)
+                record.track[id] = part.track
+            end
+            record.inputs[id] = part.inputs or (previous and previous.inputs and previous.inputs[id])
+        end
+    end
+    -- An update keeps the way back to how things were just before it ("Undo this update"). From a settled install (checked,
+    -- or checked with differences) it is taken now; from an update that stopped part way the one taken before it stands,
+    -- and only units this attempt writes for the first time are added to it.
+    local managed = plan.managed
+    if previous or managed then
+        local tw, eu = plan.parts.twichui, plan.parts.ellesmereui
+        if not previous or UPDATE_STATES[previous.state] then
+            local b = J.ReadBaseline()
+            local m = J.ReadManaged()
+            record.update = { at = time(), from = previous and From(previous) or nil, managed = m and LY.Copy(m) or nil,
+                baseline = b and LY.Copy(b) or nil,
+                twichui = tw and not tw.resumed and tw.undo or nil, ellesmereui = eu and not eu.resumed and eu.update or nil }
+        elseif previous and previous.update then
+            record.update = LY.Copy(previous.update)
+            local u = record.update
+            if tw and tw.undo and u.twichui then
+                for unit, kv in pairs(tw.undo.values) do if u.twichui.values[unit] == nil then u.twichui.values[unit] = kv end end
+            elseif tw and tw.undo and not tw.resumed then
+                u.twichui = tw.undo
+            end
+        end
+        if record.update and not J.CleanUpdate(record.update) then return false, "snapshot", "update" end
+        -- the name the install's old EllesmereUI profile is kept under belongs to the install from now on (Restore removes it)
+        record.euiBackup = (eu and eu.update and eu.update.backup) or (previous and previous.euiBackup) or nil
     end
     J.Write(record)
 
     local failed = false
     for i, id in ipairs(plan.order) do
         local step = record.steps[i]
-        local ok, res = pcall(LY.ADAPTERS[id].Apply, plan.parts[id])
-        if not ok then
-            R.Fault("layouts apply " .. id, res)
-            res = { state = "failed", code = "error", rollback = "unknown" }
-        end
-        step.state, step.code, step.rollback = res.state, res.code, res.rollback
-        if res.reload then step.reload, record.reload = true, true end
-        if res.state == "failed" then
-            failed = true
-            for k = i + 1, #record.steps do record.steps[k].state = "not-run" end
-            break
+        if not plan.parts[id].resumed then   -- a step the stopped attempt already did is not done twice
+            local ok, res = pcall(LY.ADAPTERS[id].Apply, plan.parts[id])
+            if not ok then
+                R.Fault("layouts apply " .. id, res)
+                res = { state = "failed", code = "error", rollback = "unknown" }
+            end
+            step.state, step.code, step.rollback = res.state, res.code, res.rollback
+            if res.reload then step.reload, record.reload = true, true end
+            if res.state == "failed" then
+                failed = true
+                for k = i + 1, #record.steps do record.steps[k].state = "not-run" end
+                break
+            end
         end
     end
 
@@ -222,7 +432,7 @@ function LY.Apply(pkg, variant, expect, opts) return Perf.Call("layouts.apply", 
 -- Restore
 -- plan = { ok, blocked = { { adapter, code } }, order, parts = { [adapter] = { actions, reload } }, reload, key }
 ---------------------------------------------------------------------------
-local RESTORABLE = LY.Set({ "applied", "verified", "mismatch", "partial", "interrupted", "restore-partial" })
+local RESTORABLE = LY.Set({ "applied", "verified", "mismatch", "partial", "interrupted", "restore-partial", "undo-partial" })
 
 local function RestoreOrder(j)
     local order = {}
@@ -241,7 +451,7 @@ function LY.PlanRestore()
     for _, id in ipairs(RestoreOrder(j)) do
         local snap = j.snapshot[id]
         if snap then
-            local part = LY.ADAPTERS[id].PlanRestore(snap)
+            local part = LY.ADAPTERS[id].PlanRestore(snap, j)
             plan.parts[id] = part
             plan.order[#plan.order + 1] = id
             if part.blocked then plan.blocked[#plan.blocked + 1] = { adapter = id, code = part.blocked } end
@@ -265,7 +475,7 @@ local function DoVerifyRestore(record)
     for _, id in ipairs(RestoreOrder(j)) do
         local snap = j.snapshot[id]
         if snap then
-            local ok, r = pcall(LY.ADAPTERS[id].VerifyRestore, snap, Units(j, id))
+            local ok, r = pcall(LY.ADAPTERS[id].VerifyRestore, snap, Units(j, id), j)
             if not ok then R.Fault("layouts verify restore " .. id, r); r = { state = "unverifiable", code = "error", diffs = {} } end
             reports[id] = r
         end
@@ -273,7 +483,7 @@ local function DoVerifyRestore(record)
     local report = { state = Combine(reports), adapters = reports }
     if record then
         if report.state == "match" then
-            J.Clear()   -- finished with: the record held nothing else worth keeping
+            J.Forget()   -- restored: nothing is installed or managed any more
             report.cleared = true
         else
             j.state = "restore-partial"
@@ -300,7 +510,7 @@ local function DoRestore(expect)
     local reload, bad = false, false
     for i, id in ipairs(plan.order) do
         local step = j.restore.steps[i]
-        local ok, res = pcall(LY.ADAPTERS[id].Restore, j.snapshot[id])
+        local ok, res = pcall(LY.ADAPTERS[id].Restore, j.snapshot[id], j)
         if not ok then R.Fault("layouts restore " .. id, res); res = { state = "failed", code = "error" } end
         step.state, step.code = res.state, res.code
         if res.reload then step.reload, reload = true, true end
@@ -349,13 +559,176 @@ function LY.Continue()
     elseif j.state == "restoring" then
         local report = LY.VerifyRestore(true)
         said = report and (report.cleared and "restored" or "restore-partial") or nil
+    elseif j.state == "undoing" then
+        local report = LY.VerifyUndo(true)
+        said = report and (report.undone and "undone" or "undo-partial") or nil
     end
     if said and LY.Tell then LY.Tell(said) end
     return said
 end
 
+-- Stops managing the layout: the install record, the management record and the baseline are forgotten; every profile and
+-- value stays exactly as it is. (For a record that can't be used, or a recipient who no longer wants updates compared.)
 function LY.Detach()
-    if not J.Exists() then return false end
+    if not J.Exists() and not J.ReadManaged() and not J.ReadBaseline() then return false end
+    J.Forget()
+    return true
+end
+
+-- Finishes the setup (the wizard's "Keep this setup"): the rollback journal ends (Restore and Undo this update are no longer
+-- offered, and the copy an update kept is removed), while management goes on: the management record, the install's own
+-- profiles and the baseline stay, so a later update still knows the package, the choices and the recipient's changes.
+-- Refused in combat and before the install was checked. Returns true | false, code.
+function LY.Finish()
+    if InCombat() then return false, "combat" end
+    local j = J.Read()
+    if not j then return false, "none" end
+    if j.char ~= Me() then return false, "journal-other-character" end
+    if not UPDATE_STATES[j.state] then return false, "not-settled" end
+    if not J.ReadManaged() then return false, "not-managed" end
+    if j.euiBackup then
+        local ok, code = LY.ADAPTERS.ellesmereui.DropBackup(j.euiBackup, j.snapshot.ellesmereui)
+        if not ok then return false, code end
+    end
     J.Clear()
+    return true
+end
+
+---------------------------------------------------------------------------
+-- Undo this update (updates.md): back to how things were just before the last update, which is not the same as Restore
+-- (back to before the first install). TwichUI: the values the update replaced in the install's profile go back, and the
+-- profile in use before it is in use again. EllesmereUI: the install's old profile, kept under another name, gets its name
+-- back and the one the update made goes; a reload finishes it. Once it checks out, the record and the baseline are the
+-- ones from before the update. One level: what came before that is not kept.
+-- plan = { ok, blocked, order, parts = { [adapter] = { actions, reload } }, reload, key }
+---------------------------------------------------------------------------
+local UNDOABLE = LY.Set({ "applied", "verified", "mismatch", "partial", "interrupted", "undo-partial" })
+
+function LY.PlanUndo()
+    local plan = { blocked = {}, parts = {}, order = {}, reload = false }
+    local j, why = J.Read()
+    if not j then plan.blocked[1] = { code = why and ("journal-" .. why) or "none" } return plan end
+    plan.record = j
+    if not j.update then plan.blocked[1] = { code = "no-update" } return plan end
+    if not UNDOABLE[j.state] then plan.blocked[1] = { code = j.state == "undoing" and "undo-pending" or "not-restorable" } return plan end
+    if j.char ~= Me() then plan.blocked[1] = { code = "journal-other-character" } return plan end
+    local keys = {}
+    for _, id in ipairs(RestoreOrder(j)) do
+        local u = j.update[id]
+        local a = LY.ADAPTERS[id]
+        if u and a.PlanUndo then
+            local part = a.PlanUndo(u, j.snapshot[id])
+            plan.parts[id] = part
+            plan.order[#plan.order + 1] = id
+            if part.blocked then plan.blocked[#plan.blocked + 1] = { adapter = id, code = part.blocked } end
+            if part.reload then plan.reload = true end
+            keys[id] = part.key or ""
+        end
+    end
+    if #plan.order == 0 and #plan.blocked == 0 then plan.blocked[1] = { code = "no-update" } end
+    plan.key = LY.Canon({ j.package, j.key, "undo", keys })
+    plan.ok = #plan.blocked == 0
+    return plan
+end
+
+local function DoVerifyUndo(record)
+    local j, why = J.Read()
+    if not j then return nil, why or "none" end
+    if not j.update then return nil, "no-update" end
+    local reports = {}
+    for _, id in ipairs(RestoreOrder(j)) do
+        local u, a = j.update[id], LY.ADAPTERS[id]
+        if u and a.VerifyUndo then
+            local ok, r = pcall(a.VerifyUndo, u, j.snapshot[id])
+            if not ok then R.Fault("layouts verify undo " .. id, r); r = { state = "unverifiable", code = "error", diffs = {} } end
+            reports[id] = r
+        end
+    end
+    local report = { state = Combine(reports), adapters = reports }
+    if record then
+        if report.state == "match" then
+            -- the record and the baseline from before the update stand again (without a way back of their own)
+            local back = j.update.from
+            if back then
+                back.snapshot = j.snapshot
+                back.update, back.restore, back.euiBackup = nil, nil, nil
+                J.Write(back)
+            else
+                -- the update came after the setup was finished: back to managing without an install record
+                J.Clear()
+            end
+            J.WriteManaged(j.update.managed)
+            J.WriteBaseline(j.update.baseline)
+            report.undone = true
+        else
+            j.state = "undo-partial"
+            j.verify = { state = report.state, at = time(), diffs = J.Diffs(reports) }
+            J.Write(j)
+        end
+    end
+    return report
+end
+
+function LY.VerifyUndo(record) return Perf.Call("layouts.verify", DoVerifyUndo, record) end
+
+-- Returns true, result | false, code, plan. result = { state = "undoing" | "undone" | "undo-partial", steps, verify }
+local function DoUndo(expect)
+    if InCombat() then return false, "combat" end
+    local plan = LY.PlanUndo()
+    if not plan.ok then return false, "blocked", plan end
+    if type(expect) ~= "string" or plan.key ~= expect then return false, "stale", plan end
+    local j = plan.record
+    j.restore = { at = time(), steps = {} }
+    for _, id in ipairs(plan.order) do j.restore.steps[#j.restore.steps + 1] = { adapter = id, state = "pending" } end
+    j.state = "undo-partial"   -- what a stop part way through would leave
+    J.Write(j)
+    local reload, bad = false, false
+    for i, id in ipairs(plan.order) do
+        local step = j.restore.steps[i]
+        local ok, res = pcall(LY.ADAPTERS[id].Undo, j.update[id], j.snapshot[id])
+        if not ok then R.Fault("layouts undo " .. id, res); res = { state = "failed", code = "error" } end
+        step.state, step.code = res.state, res.code
+        if res.reload then step.reload, reload = true, true end
+        if res.state ~= "done" then
+            bad = true
+            for k = i + 1, #j.restore.steps do j.restore.steps[k].state = "not-run" end
+            break
+        end
+    end
+    if bad then
+        j.state = "undo-partial"
+        j.reload = reload
+        J.Write(j)
+        return true, { state = "undo-partial", steps = j.restore.steps }
+    end
+    if reload then
+        j.state, j.reload = "undoing", true
+        J.Write(j)
+        return true, { state = "undoing", steps = j.restore.steps }
+    end
+    local steps = j.restore.steps
+    local report = DoVerifyUndo(true)
+    return true, { state = report.undone and "undone" or "undo-partial", steps = steps, verify = report }
+end
+
+function LY.Undo(expect) return Perf.Call("layouts.restore", DoUndo, expect) end
+
+-- Keeps the update for good: the copy of the install's EllesmereUI profile from before it is removed, and "Undo this
+-- update" is no longer offered. Restore (back to before the first install) is unchanged. Refused in combat.
+-- Returns true | false, code.
+function LY.ForgetUpdate()
+    if InCombat() then return false, "combat" end
+    local j = J.Read()
+    if not j or not j.update then return false, "no-update" end
+    if j.char ~= Me() then return false, "journal-other-character" end
+    if not (UPDATE_STATES[j.state]) then return false, "not-settled" end
+    local name = j.euiBackup
+    if name then
+        local EA = LY.ADAPTERS.ellesmereui
+        local ok, code = EA.DropBackup(name, j.snapshot.ellesmereui)
+        if not ok then return false, code end
+    end
+    j.update, j.euiBackup = nil, nil
+    J.Write(j)
     return true
 end

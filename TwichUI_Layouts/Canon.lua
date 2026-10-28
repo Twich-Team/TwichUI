@@ -99,6 +99,17 @@ function LY.Fingerprint(v)
     return "#" .. tostring(LibDeflate:Adler32(c)) .. ":" .. #c
 end
 
+-- The normalized value of a setting the layouts compare unit by unit (updates.md): its whole canonical text, so a baseline
+-- holds the value itself and not a checksum of it. Settings are small (a word, a number, a colour); one whose text is longer
+-- than LY.VALUE_MAX is kept as its fingerprint, which still compares equal values as equal.
+LY.VALUE_MAX = 256
+function LY.Value(v)
+    local c, why = LY.Canon(v)
+    if not c then return nil, why end
+    if #c <= LY.VALUE_MAX then return "=" .. c end
+    return LY.Fingerprint(v)
+end
+
 function LY.Same(a, b)
     local ca, cb = LY.Canon(a), LY.Canon(b)
     return ca ~= nil and ca == cb
