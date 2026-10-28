@@ -15,7 +15,8 @@
 --   Scene.SCENARIOS        { { id, label, short, hint } } in the order the selector lists them
 --   Scene.Scenario(id)     the entry, or the first
 --   Scene.Build(layout, geo, opts) -> scene | nil, why
---     layout = { pkg, variant }; geo = Geometry.Resolve's result; opts = { scenario = id, tooltip = { point, x, y } }
+--     layout = { pkg, variant }; geo = Geometry.Resolve's result (or an update's final plan, Engine plan.final.geometry);
+--     opts = { scenario = id, tooltip = { point, x, y }, moved = { [piece id] = the player's own place } (plan.final.moved) }
 --     scene = { variant, scenario, screen = { w, h }, fits, geo, components = { { id, label, kind, rect, applied, troubled,
 --       sample } }, elements = { { id, adapter, label, kind, comp, rect } }, hidden = n (pieces this scenario leaves out),
 --       notes = { code, id }, tooltip = { rect, lines } | nil }
@@ -109,7 +110,7 @@ function Scene.Build(layout, geo, opts)
         end
     end
 
-    local pieces, notes = LY.Elements(layout.pkg, layout.variant, geo)
+    local pieces, notes = LY.Elements(layout.pkg, layout.variant, geo, opts.moved)   -- moved: the final plan's kept places
     scene.notes = notes
     for _, e in ipairs(pieces) do
         local when = WHEN[e.id]

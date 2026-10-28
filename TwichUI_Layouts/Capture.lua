@@ -54,7 +54,7 @@ function C.Read(prof, slot)
                 end
             elseif EA.ROOT[k] then eui.root[k] = Copy(v)
             elseif k ~= "addons" then   -- the module blobs are taken below, one by one
-                Left("profile." .. tostring(k), k == "customColors" and "custom colours stay the recipient's (architecture.md §11.5)"
+                Left("profile." .. tostring(k), k == "customColors" and "custom colours stay the recipient's (architecture.md §1)"
                     or "not a key EllesmereUI's import takes, or not managed (AdapterEllesmere.lua ROOT)")
             end
         end
@@ -183,11 +183,27 @@ function C.Locate(unit)
     return nil
 end
 
+-- A layer's reset list (format 4): drops the unit from it. true when it was there.
+local function Unreset(frag, unit)
+    local list = type(frag) == "table" and frag.reset
+    if type(list) ~= "table" then return false end
+    for i = #list, 1, -1 do
+        if list[i] == unit then
+            table.remove(list, i)
+            if #list == 0 then frag.reset = nil end
+            return true
+        end
+    end
+    return false
+end
+
 -- Writes a copy of value at the unit's place in the layer (making the tables on the way). false when the unit has no place.
+-- A reset of the same unit in that layer is dropped: the layer now sets a value.
 function C.Put(layer, unit, value)
     local adapter, path = C.Locate(unit)
     if not adapter then return false end
     layer[adapter] = layer[adapter] or {}
+    Unreset(layer[adapter], unit)
     local t = layer[adapter]
     for i = 1, #path - 1 do
         if type(t[path[i]]) ~= "table" then t[path[i]] = {} end
@@ -215,6 +231,28 @@ function C.Clear(layer, unit)
         if next(chain[i]) == nil then chain[i - 1][path[i - 1]] = nil else break end
     end
     return true
+end
+
+-- Puts the unit back to its addon's default in the layer (format 4): any value the layer sets is cleared and the unit goes in
+-- the layer's reset list. Only a unit the adapter can reset (a TwichUI setting); false otherwise.
+function C.Reset(layer, unit)
+    local adapter = C.Locate(unit)
+    if adapter ~= "twichui" or not LY.TwichUIAdapter.FieldOf(unit) then return false end
+    C.Clear(layer, unit)
+    layer[adapter] = layer[adapter] or {}
+    local frag = layer[adapter]
+    Unreset(frag, unit)
+    frag.reset = frag.reset or {}
+    frag.reset[#frag.reset + 1] = unit
+    table.sort(frag.reset)
+    return true
+end
+
+-- Drops the unit from the layer: its value and any reset of it. true when there was either.
+function C.Forget(layer, unit)
+    local adapter = C.Locate(unit)
+    local cleared = C.Clear(layer, unit)
+    return (adapter and Unreset(layer[adapter], unit)) or cleared
 end
 
 -- The value stored for the unit in the layer's fragments (not a copy), or nil.

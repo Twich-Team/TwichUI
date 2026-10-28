@@ -1,4 +1,4 @@
--- TwichUI Layouts: the ellesmereui adapter, the EllesmereUI suite (architecture.md §3, §4, §8; adapter-capabilities.md)
+-- TwichUI Layouts: the ellesmereui adapter, the EllesmereUI suite (architecture.md §1, §4, §6; adapter-capabilities.md)
 -- Only EllesmereUI's public functions are called: DecodeImportString, EncodePayload, ImportProfileSilent (never
 -- reloads; "the caller owns the ReloadUI"), GetProfileList, GetActiveProfileName, GetProfilesDB (read), SwitchProfile,
 -- DeleteProfile, and ExportProfile for a developer package built on the recipient's own profile. EllesmereUIDB is
@@ -69,7 +69,7 @@ for id, f in pairs(A.FIELDS) do
     A.BY_UNIT[f.unit] = f
 end
 
--- Taken out of every payload before it is imported: account-wide or personal (architecture.md §3). The UI scale, the
+-- Taken out of every payload before it is imported: account-wide or personal (architecture.md §1). The UI scale, the
 -- window and tooltip skins, spec assignments, the Cooldown Manager's spell layouts, the spec and condition overrides,
 -- click-cast and the spell store, and the custom colours (a palette other profiles can pull from, so removing the
 -- install's profile would not take it back). EllesmereUI's transport-only keys go too.
@@ -190,6 +190,12 @@ A.POSITIONS = {
 }
 function A.Positions() return A.POSITIONS end
 
+-- Positions a layout's blobs carry that the screen layer doesn't place (stored in a form not read here, or not registered):
+-- left where the author had them, and named in the plan's notes so the review never counts them in the fit (RH-1 D).
+A.UNPLACED = {
+    { id = "battle-res", module = "EllesmereUIQoL", path = { "battleRes", "pos" }, label = "Battle resurrection timer" },   -- centerX/centerY
+}
+
 -- Text sizes the density factor scales (whole numbers, within bounds), each read by its module in 9.6.8.
 A.TEXT = {
     { module = "EllesmereUIChat", path = { "chat", "chatFontSize" }, label = "Chat text size", max = 40 },
@@ -236,6 +242,7 @@ end
 
 function A.Show(v)
     if v == nil then return "(default)" end
+    if v == LY.DEFAULT then return "EllesmereUI's default" end
     if type(v) == "string" and v:sub(1, 5) == "!EUI_" then return "an EllesmereUI export" end
     if type(v) == "table" then return ShowPos(v) or (v.source and "your own profile" or "the package's settings") end
     return tostring(v)
@@ -303,7 +310,7 @@ function A.Normalize(fragment, ctx)
     for k in pairs(fragment) do
         if NOT_YET[k] then P.add("not-yet", ctx.where .. "." .. tostring(k))
         elseif (k == "root" or k == "layout") and not data then P.add("not-yet", ctx.where .. "." .. k)
-        elseif k ~= "base" and k ~= "modules" and k ~= "fields" and k ~= "root" and k ~= "layout" then
+        elseif k ~= "base" and k ~= "modules" and k ~= "fields" and k ~= "root" and k ~= "layout" and k ~= "reset" then
             P.add("unknown-field", ctx.where .. "." .. tostring(k))
         end
     end
@@ -367,6 +374,20 @@ function A.Normalize(fragment, ctx)
                 else P.add("bad-value", f.unit) end
             end
         end
+    end
+    -- reset (format 4): an allowlisted field back to EllesmereUI's own default (its key is left out of the blob, so the
+    -- installed EllesmereUI's default applies; each field's default is read in its source, A.FIELDS). Only those: a
+    -- position, a text size, a blob or the look has no default TwichUI can name, so a reset of one is refused.
+    if fragment.reset ~= nil then
+        LY.ResetList(fragment.reset, ctx, function(unit, where)
+            local f = A.BY_UNIT[unit]
+            if not f then P.add(unit:find("^ellesmereui:") and "reset-unsupported" or "unknown-unit", where)
+            elseif units[unit] ~= nil then P.add("reset-and-set", where)
+            else
+                units[unit] = LY.DEFAULT
+                parents[unit] = f.parent
+            end
+        end)
     end
     return units, parents
 end
@@ -656,7 +677,7 @@ local function BuildPayload(E, composed, home, dev, geo, attach)
                 if type(t[k]) ~= "table" then return nil, "eui-shape" end
                 t = t[k]
             end
-            t[f.path[#f.path]] = e.value
+            if e.value == LY.DEFAULT then t[f.path[#f.path]] = nil else t[f.path[#f.path]] = e.value end
         end
     end
     local placed, notes = Adapt(d, geo, attach)
@@ -796,8 +817,10 @@ local function Normal(src, unit)
     end
     local f = A.BY_UNIT[unit]
     if f then
+        -- by the value EllesmereUI uses: a missing key reads as its default (A.FIELDS), as a TwichUI setting does
         local v = ReadField(src, f)
-        return LY.Value(v), v ~= nil and "x" or "d", true
+        if v == nil then return LY.Value(f.default), "d", true end
+        return LY.Value(v), "x", true
     end
     local t = A.TEXT_BY_UNIT[unit]
     if t then
@@ -818,7 +841,9 @@ end
 A.Normal = Normal
 
 -- The units an install of this payload manages: what the package names (the base and _migrations aside: the base is
--- rebuilt every time, _migrations travels with the package) and the registered positions and text sizes its blobs hold.
+-- rebuilt every time, _migrations travels with the package) and the registered positions, text sizes and allowlisted
+-- fields its blobs hold. A field inside a blob is left out of the blob's fingerprint (Excluded), so it has to be a unit of
+-- its own, or a recipient's change to it would be invisible and replaced with the blob (RH-1 A1).
 local function UnitsOf(composed, d)
     local list, seen = {}, {}
     local function Add(u) if not seen[u] then seen[u] = true list[#list + 1] = u end end
@@ -835,6 +860,10 @@ local function UnitsOf(composed, d)
     for _, t in ipairs(A.TEXT) do
         local blob = d.addons[t.module]
         if type(blob) == "table" and Num(Read(blob, t.path)) then Add(t.unit) end
+    end
+    for _, id in ipairs(LY.SortedKeys(A.FIELDS)) do
+        local f = A.FIELDS[id]
+        if ReadField(d, f) ~= nil then Add(f.unit) end
     end
     return list
 end
@@ -960,7 +989,13 @@ function A.Plan(composed, ctx)
     local payload, placed, notes = BuildPayload(E, composed, home, ctx.dev, ctx.geometry, ctx.attach)
     if not payload then part.blocked = placed return part end
     part.payload, part.target, part.active, part.home = payload, target, active, home
-    part.placed, part.notes = placed, notes
+    part.placed, part.notes = placed, notes or {}
+    for _, u in ipairs(A.UNPLACED) do
+        local blob = payload.data.addons[u.module]
+        if type(blob) == "table" and Read(blob, u.path) ~= nil then
+            part.notes[#part.notes + 1] = { code = "unplaced", id = u.id, label = u.label }
+        end
+    end
     part.inputs = Inputs(composed, home, placed)
     part.level = composed.units[A.BASE_UNIT] ~= nil and "whole" or "units"   -- a base profile string can only be replaced whole
 
@@ -993,8 +1028,10 @@ function A.Plan(composed, ctx)
         if f then
             local old = ReadField(from, f)
             local new = r and (r.decision == "keep" or r.decision == "owned") and old or e.value
+            local change = not LY.Same(old, new)
+            if new == LY.DEFAULT then change = old ~= nil end   -- a reset changes what is stored
             part.rows[#part.rows + 1] = { unit = e.unit, label = f.label, old = old, new = new,
-                change = not LY.Same(old, new), layer = e.layer, decision = r and r.decision }
+                change = change, layer = e.layer, decision = r and r.decision, reset = new == LY.DEFAULT or nil }
         elseif ModuleOf(e.unit) or e.unit == A.LAYOUT_UNIT or e.unit:find("^ellesmereui:root%.") then
             local change = true
             if result then change = r ~= nil and r.decision == "apply" end
@@ -1106,15 +1143,28 @@ function A.Merge(part, composed, d, n, nraw, cur, M, ctx)
         if (a ~= nil and not EdgeLink(a)) or (b ~= nil and not EdgeLink(b)) then return "layout" end
     end
     local entries, cmap, seen = {}, {}, {}
+    -- A baseline made before allowlisted fields inside a blob were units of their own has no entry for them: an untracked
+    -- field is then "can't tell" (kept when it differs), not "newly managed" (which would apply the layout's over a change).
+    local fieldsTracked = false
+    for u in pairs(base and base.units or {}) do if A.BY_UNIT[u] then fieldsTracked = true break end end
     local function Entry(u)
         seen[u] = true
-        local c, cs, comparable = Normal(cur, u)
-        if c == nil then return end
-        cmap[u] = c
         local b = base and base.units[u] or nil
+        local c, cs, comparable = Normal(cur, u)
+        if c == nil then
+            -- read in a form TwichUI doesn't read: not compared. One the recipient made theirs stays theirs, and its value is
+            -- carried into the payload as it is (RH-1 A4)
+            if b and b.o and (PosOf(u) or A.BY_UNIT[u] or A.TEXT_BY_UNIT[u]) then
+                entries[#entries + 1] = { unit = u, label = A.Label(u), n = n[u], c = MG().ABSENT, cs = "a", b = b, comparable = true,
+                    known = known, group = GroupOf(u), keepAbsent = true, canKeep = true, unreadable = true }
+            end
+            return
+        end
+        cmap[u] = c
         if not known and not (b and b.o) then b = nil end   -- another version: only the recipient's ownership still stands
         entries[#entries + 1] = { unit = u, label = A.Label(u), n = n[u], c = c, cs = cs, b = b, comparable = comparable,
-            known = known, group = GroupOf(u), keepAbsent = comparable, canKeep = comparable or vintage,
+            known = known and (b ~= nil or fieldsTracked or not A.BY_UNIT[u]), group = GroupOf(u), keepAbsent = comparable,
+            canKeep = comparable or vintage,
             cv = comparable and A.ShowRaw(RawOf(cur, u)) or nil, nv = comparable and nraw[u] and A.ShowRaw(nraw[u]) or nil,
             variantOwned = LayerOf(composed, u) == "variant" }
     end
@@ -1123,13 +1173,41 @@ function A.Merge(part, composed, d, n, nraw, cur, M, ctx)
     local result = MG().Run(entries, M)
     part.merge, part.cmap = result, cmap
     part.track = MG().Track(result, n)
-    if result.whole and result.whole.choice == "keep" then return result end   -- kept as it is: nothing goes into a payload
+    -- What the final plan leaves where the player has it (RH-1 C): part.retained = { { unit, id, label, rec, frame } } (rec: the
+    -- record when TwichUI can read it; frame: the component this position is the frame of), part.final = { [component] = rect }
+    -- for a component frame whose place and size are the player's, and part.retainedAll when EllesmereUI is kept as it is.
+    part.retained, part.final = {}, {}
+    local screen0 = ctx.geometry and ctx.geometry.screen
+    local function Retain(u, label)
+        local id = PosOf(u)
+        if not id then return end
+        local raw = RawOf(cur, u)
+        local rec = raw and raw.rec and PosOk(raw.rec) and LY.Copy(raw.rec) or nil
+        local frame = ctx.attach and ctx.attach[id] == id and id or nil
+        part.retained[#part.retained + 1] = { adapter = A.id, unit = u, id = id, label = label or A.Label(u), rec = rec, frame = frame }
+        if frame and rec and screen0 and Num(raw.w) then part.final[frame] = RectOf(raw, screen0) end
+    end
+    if result.whole and result.whole.choice == "keep" then
+        -- kept as it is: nothing goes into a payload, and every position stays the player's
+        part.retainedAll = true
+        for _, id in ipairs(LY.SortedKeys(A.POSITIONS)) do
+            local blob = type(cur.addons) == "table" and cur.addons[A.POSITIONS[id].module]
+            if type(blob) == "table" and Read(blob, A.POSITIONS[id].path) ~= nil then Retain(PosUnit(id)) end
+        end
+        return result
+    end
 
     local function Kept(row) return row.decision == "keep" or row.decision == "owned" end
+    -- What the recipient has goes into the payload for a unit kept, owned, or released (the package stopped naming it):
+    -- stopping managing preserves, it never resets. A parent blob the payload replaces would otherwise take a released
+    -- sub-unit with it, and a module the payload leaves out would be inherited from another profile (RH-1 A2).
+    -- On a layout switch, a unit only the old layout named that the recipient didn't change was the old layout's, not
+    -- theirs: it follows the new layout's blob (updates.md, "Switching layouts").
+    local function Carried(row) return Kept(row) or (row.decision == "release" and (row.mine or not M.switching)) end
     -- opaque units first (a kept blob holds sub-units), then every sub-unit as decided
     local layoutMine = false
     for _, row in ipairs(result.rows) do
-        if Kept(row) and not row.comparable and row.e.canKeep ~= false then
+        if Carried(row) and not row.comparable and row.e.canKeep ~= false and (row.decision ~= "release" or row.e.c ~= MG().ABSENT) then
             local u = row.unit
             local m = ModuleOf(u)
             if m then
@@ -1152,11 +1230,22 @@ function A.Merge(part, composed, d, n, nraw, cur, M, ctx)
     part.keptExpect = {}
     for _, row in ipairs(result.rows) do
         if row.comparable then
-            local raw = Kept(row) and RawOf(cur, row.unit) or nraw[row.unit]
+            local raw = Carried(row) and RawOf(cur, row.unit) or nraw[row.unit]
             if raw then PutRaw(d, row.unit, raw) end
-            if Kept(row) and raw then
-                if A.BY_UNIT[row.unit] then part.keptExpect[row.unit] = LY.Fingerprint(raw.v)
-                elseif row.unit == A.ACCENT_UNIT and raw.v ~= nil then part.keptExpect[row.unit] = "accent:" .. A.AccentSig(raw.v) end
+            if Carried(row) and raw and not row.e.unreadable then
+                -- what the check after the reload expects of it: the recipient's value, by value
+                local id = PosOf(row.unit)
+                if A.BY_UNIT[row.unit] then
+                    part.keptExpect[row.unit] = LY.Fingerprint(raw.v == nil and A.BY_UNIT[row.unit].default or raw.v)
+                elseif row.unit == A.ACCENT_UNIT then
+                    if raw.v ~= nil then part.keptExpect[row.unit] = "accent:" .. A.AccentSig(raw.v) end
+                elseif A.TEXT_BY_UNIT[row.unit] then
+                    if Num(raw.v) then part.keptExpect[row.unit] = LY.Fingerprint(raw.v) end
+                elseif id and PosOk(raw.rec) then
+                    local r = { x = raw.rec.x, y = raw.rec.y }
+                    if A.POSITIONS[id].size and Num(raw.w) then r.w, r.h = math.floor(raw.w + 0.5), math.floor((Num(raw.h) and raw.h or raw.w) + 0.5) end
+                    part.keptExpect[PosUnit(id)] = Expected(r)
+                end
             end
         end
     end
@@ -1168,17 +1257,19 @@ function A.Merge(part, composed, d, n, nraw, cur, M, ctx)
         for _, row in ipairs(result.rows) do
             local id = PosOf(row.unit)
             local p = id and A.POSITIONS[id]
-            if p and p.link and not row.group and Kept(row) ~= layoutMine and EdgeLink(anchors[p.link]) then
+            if p and p.link and not row.group and Carried(row) ~= layoutMine and EdgeLink(anchors[p.link]) then
                 local mine, pkg = RawOf(cur, row.unit), nraw[row.unit]
-                local implied, final = layoutMine and mine or pkg, Kept(row) and mine or pkg
+                local implied, final = layoutMine and mine or pkg, Carried(row) and mine or pkg
                 if not FixLink(anchors, p, implied, final, screen) then part.linkNotes[#part.linkNotes + 1] = { code = "link-kept", id = id } end
             end
         end
     end
     -- kept places and text sizes, for the review's rows and what the check after the reload expects; and the screen check
+    -- (a released place is the recipient's too: it is checked on this screen like a kept one)
     local items = {}
     for _, row in ipairs(result.rows) do
-        if Kept(row) then
+        if Carried(row) and PosOf(row.unit) then Retain(row.unit, row.label) end
+        if Carried(row) and not row.e.unreadable then
             local id = PosOf(row.unit)
             if id then
                 local raw = RawOf(cur, row.unit)
@@ -1324,7 +1415,9 @@ function A.Verify(expect, snap)
         local root = unit:match("^ellesmereui:root%.(.+)$")
         if f then
             r.checked = r.checked + 1
-            if LY.Fingerprint(ReadField(prof, f)) ~= expect[unit] then r.diffs[#r.diffs + 1] = { unit = unit, code = "differs" } end
+            local v = ReadField(prof, f)
+            if v == nil and A.BY_UNIT[unit] then v = A.BY_UNIT[unit].default end   -- a missing field is EllesmereUI's default
+            if LY.Fingerprint(v) ~= expect[unit] then r.diffs[#r.diffs + 1] = { unit = unit, code = "differs" } end
         elseif m then
             -- a whole blob EllesmereUI fills its defaults into as it loads: only that it is there can be checked, and the
             -- report says so (presence), apart from the values read back
@@ -1368,13 +1461,21 @@ end
 function A.Expect(composed, part)
     local out = {}
     for _, e in ipairs(composed.list) do
-        if A.BY_UNIT[e.unit] then out[e.unit] = LY.Fingerprint(e.value)
+        if A.BY_UNIT[e.unit] then out[e.unit] = LY.Fingerprint(e.value == LY.DEFAULT and A.BY_UNIT[e.unit].default or e.value)
         elseif e.unit == A.ACCENT_UNIT then out[e.unit] = "accent:" .. A.AccentSig(e.value)
         elseif ModuleOf(e.unit) or e.unit == A.LAYOUT_UNIT or e.unit:find("^ellesmereui:root%.") then out[e.unit] = "present" end
     end
     for id, pl in pairs(part and part.placed or {}) do
         if pl.text then out[id] = LY.Fingerprint(pl.new)
         else out[PosUnit(id)] = Expected(pl.rec) end
+    end
+    -- the allowlisted fields the payload's blobs hold are read back by value too, not only as part of their blob's presence
+    local d = part and part.payload and part.payload.data
+    if type(d) == "table" then
+        for _, f in pairs(A.FIELDS) do
+            local v = ReadField(d, f)
+            if v ~= nil and out[f.unit] == nil then out[f.unit] = LY.Fingerprint(v) end
+        end
     end
     -- an update: a setting kept as the recipient has it is expected as they have it
     for unit, v in pairs(part and part.keptExpect or {}) do out[unit] = v end
@@ -1413,14 +1514,19 @@ function A.PlanUndo(u, snap)
     if not det.usable then out.blocked = "eui-" .. det.why return out end
     if type(E.RenameProfile) ~= "function" then out.blocked = "eui-no-rename" return out end
     local profiles = Profiles(E)
-    if not u.backup or type(profiles[u.backup]) ~= "table" then out.blocked = "backup-missing" return out end
     local active = Active(E)
-    if active == u.target then
-        out.actions[#out.actions + 1] = { kind = "switch", from = u.target, to = u.backup }
-        active = u.backup
+    -- An earlier attempt that stopped after the copy got its name back (u.renamed, written as it happened): the profile under
+    -- the install's name is the one from before the update, so only the switch is left (RH-1 B3).
+    local renamedBack = u.renamed and type(profiles[u.target]) == "table" and type(profiles[u.backup or ""]) ~= "table"
+    if not renamedBack then   -- else: nothing to rename or remove
+        if not u.backup or type(profiles[u.backup]) ~= "table" then out.blocked = "backup-missing" return out end
+        if active == u.target then
+            out.actions[#out.actions + 1] = { kind = "switch", from = u.target, to = u.backup }
+            active = u.backup
+        end
+        if type(profiles[u.target]) == "table" then out.actions[#out.actions + 1] = { kind = "delete", name = u.target } end
+        out.actions[#out.actions + 1] = { kind = "rename", from = u.backup, to = u.target }
     end
-    if type(profiles[u.target]) == "table" then out.actions[#out.actions + 1] = { kind = "delete", name = u.target } end
-    out.actions[#out.actions + 1] = { kind = "rename", from = u.backup, to = u.target }
     if active == u.backup then active = u.target end   -- renaming the profile in use keeps it in use
     local want = u.active
     if want ~= u.target and type(profiles[want]) ~= "table" then want = u.target end
@@ -1447,6 +1553,8 @@ function A.Undo(u, snap)
         else
             pcall(E.RenameProfile, act.from, act.to)
             bad = (type(Profiles(E)[act.to]) ~= "table" or type(Profiles(E)[act.from]) == "table") and "eui-rename"
+            -- u is the record's own table (saved with it): a retry knows the old profile already has its name back
+            if not bad then u.renamed = true end
         end
         if bad then return { state = i == 1 and "failed" or "partial", code = bad, reload = i > 1 } end
     end

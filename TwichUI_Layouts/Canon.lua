@@ -1,4 +1,4 @@
--- TwichUI Layouts: the canonical form of a value, and its fingerprint (architecture.md §6)
+-- TwichUI Layouts: the canonical form of a value, and its fingerprint (architecture.md §2, §8)
 -- One text per value, whatever order pairs() walks a table in: keys sorted by their own canonical text, numbers written
 -- with %.17g, and false, 0, "" and nothing all distinct. Used for plan keys (two plans with the same key do the same
 -- thing), for what an install expects to read back, and for the values a snapshot keeps. Bounded: a cycle, a table
@@ -11,6 +11,10 @@ LY.CONTRACT = 1   -- the adapter contract's version (architecture.md §4)
 
 -- "Inherit the layer below" in a package layer (§1, §6). A table only this file makes, so no real value can be it.
 LY.REMOVE = setmetatable({}, { __tostring = function() return "REMOVE" end, __newindex = function() error("LY.REMOVE is read only", 2) end })
+-- "Reset to the addon's default" (package format 4, RH-1): a managed unit whose value is the installed addon's own default,
+-- so its stored value is cleared. Never data: a package says it with a fragment's `reset` list of unit ids, and the
+-- adapter's Normalize turns each into this. It composes like any value (the highest layer that names the unit wins).
+LY.DEFAULT = setmetatable({}, { __tostring = function() return "DEFAULT" end, __newindex = function() error("LY.DEFAULT is read only", 2) end })
 
 LY.CANON = { depth = 16, nodes = 50000, bytes = 8 * 1048576 }
 LY.FINGERPRINT_KEEP = 64   -- a canonical text up to this long is kept as it is; a longer one as a checksum and its length
@@ -49,6 +53,7 @@ function LY.Canon(v)
         nodes = nodes + 1
         if nodes > L.nodes then Stop("size") end
         if x == LY.REMOVE then Put("R") return end
+        if x == LY.DEFAULT then Put("D") return end
         local t = type(x)
         if t == "nil" then Put("z")
         elseif t == "boolean" then Put(x and "t" or "f")
@@ -142,7 +147,10 @@ function LY.Plain(s, max)
     return type(s) == "string" and #s >= 1 and #s <= max and not s:find("[%c|]")
 end
 
-function LY.Copy(v) return R.Persist.DeepCopy(v) end
+function LY.Copy(v)
+    if v == LY.REMOVE or v == LY.DEFAULT then return v end   -- markers keep their identity
+    return R.Persist.DeepCopy(v)
+end
 
 -- A bounded list of problems: { code, where } (where: a unit, a layer or a field name). Codes are a fixed vocabulary.
 LY.MAX_PROBLEMS = 24

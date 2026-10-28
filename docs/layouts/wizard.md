@@ -1,11 +1,13 @@
-# The layout setup wizard (Phases 4 and 5)
+# The layout setup wizard
 
 `TwichUI_LayoutWizard/` is a load-on-demand sibling addon (`RequiredDeps: !!!TwichUI, TwichUI_Layouts`, no saved variables
 of its own) that lets a recipient review compatibility, pick one of the two bundled layouts (Classic or Compact Adventure; Phase 5), look at it
 to scale and then at full size over their own screen, choose a small TwichUI helper preset, adjust two personal choices, review exactly what would change, apply it with a restore point, see it
 checked after the reload, and put the previous setup back. It adds no engine of its own: everything that changes the game
-is `TwichUI_Layouts`' pipeline (Phase 2), fed by Phase 3's package and resolved screen geometry. Nothing here has been
-run on WoW: Forever (`implementation-status.md`, "In-game checks").
+is `TwichUI_Layouts`' pipeline, fed by the package and its resolved screen geometry. It also lists packages other players sent
+(step 1), updates an installed layout keeping the player's changes (`updates.md`), and finishes or stops managing a setup.
+Authoring is a separate workspace the wizard doesn't link to (`publishing.md`). Nothing here has been run on WoW: Forever
+(`implementation-status.md`, RH-2). `architecture.md` is the contract.
 
 ## Opening it, and what loads when
 
@@ -35,12 +37,12 @@ note says why a button is disabled.
 
 | # | Step | Shows | Changes |
 |---|---|---|---|
-| 1 | Welcome | the emblem, what the setup does, and **Does it work here?**: EllesmereUI (present, usable, version, tested-with, Forever build, its own first-run setup pending), TwichUI profiles, the screen (size, and whether the layout fits at standard size, with the overlaps), whether this is a preview build, combat, and an install already recorded (with a link to its result). Each line has a word (Ready, Check, Blocked, Note), not a colour alone. | nothing |
+| 1 | Welcome | the emblem, what the setup does, and **Does it work here?**: EllesmereUI (present, usable, version, tested-with, Forever build, its own first-run setup pending), TwichUI profiles, the screen (size and UI scale, and for each layout at standard size whether it fits, fits but some pieces may overlap, or doesn't fit, with the problems and the UI scale at which it would), whether this is a preview build, combat, and an install already recorded (with a link to its result). Each line has a word (Ready, Check, Blocked, Note), not a colour alone. | nothing |
 | 2 | Layout | a card for each layout, Classic and Compact Adventure (its picture, what it says, a Preview-build tag; the selected one unfolds what it covers), the preview, its scenario selector and the full-size button. Choosing a card re-draws the preview at once. | the layout choice is remembered |
 | 3 | Helpers | the **TwichUI helpers** choice as three cards and the preview | the pick is remembered |
 | 4 | Personalize | accent colour swatches (with the chosen one named), the size cards (Standard, Larger), Start over, and the preview, which follows each pick at once | the picks are remembered |
-| 5 | Review | the plan: your choices; TwichUI (at once, this character only): the profile copied and switched to, how many settings are set, what is turned on, how many on-screen pieces are placed; EllesmereUI (after a reload you start, every character on the account): the profile made and made active (and, on a repeat, that changes made in it since are replaced), what is replaced, positions and text sizes; **Left alone**; **Not placed** (the objectives, which Blizzard's Edit Mode places); what doesn't fit; blockers with their reasons; what happens if a step fails. Apply is in the footer. | nothing until Apply is confirmed |
-| 6 | Result | what the install record says now, with the actions that make sense: waiting for a reload (Reload now, Restore), checked after the reload (Restore, Keep this setup, Check again, Set up again), not everything reads back (the differences; Restore, Check again), only partly applied (what was done and what failed; Restore, Reload now), interrupted (Restore), restore waiting for a reload, restore not fully checked, restored, nothing changed (a clean failure, with its reason), a damaged, newer or other-character record (said, with only what is safe offered) | only through its confirmed buttons |
+| 5 | Review | the plan: your choices; TwichUI (at once, this character only): the profile copied and switched to, how many settings are set, what is turned on, how many on-screen pieces are placed; EllesmereUI (after a reload you start, every character on the account): the profile made and made active (and, on a repeat, that changes made in it since are replaced), what is replaced, positions and text sizes; **Left alone**; **Not placed** (the objectives, which Blizzard's Edit Mode places; the battle resurrection timer, left where the author had it); for an install again, **Updating your layout** (`updates.md`); the fit of the **final plan** (what Apply leaves, kept placements included) and what is kept where you have it; blockers with their reasons; what happens if a step fails. Apply is in the footer. | nothing until Apply is confirmed |
+| 6 | Result | what the install record says now, with the actions that make sense: waiting for a reload (Reload now, Restore), checked after the reload (Restore, Keep this setup, Check again, Set up again), not everything reads back (the differences; Restore, Check again), only partly applied (what was done and what failed; Restore, Reload now), interrupted (Restore), restore waiting for a reload, restore not fully checked, restored, nothing changed (a clean failure, with its reason), a damaged, newer or other-character record (said, with only what is safe offered); for an update, **Undo this update** and **Keep the update**; a finished setup, **Installed and managed** (or "not verified" when its last check didn't match) with Set up again and Stop managing | only through its confirmed buttons |
 
 ### What never happens by itself
 
@@ -70,7 +72,7 @@ is asked for. A leftover note with nothing waiting opens nothing. Verification i
 
 ## Choices
 
-The package (`Classic.lua`, format 3) declares its `choices`; the schema is in `architecture.md` §13. Each choice names
+The package (`Classic.lua`, format 3) declares its `choices`; the schema is in `architecture.md` §3. Each choice names
 exactly what it writes, and `Package.lua` refuses anything else. The wizard shows nothing the package doesn't declare.
 
 | Choice | Kind | Options (default first) | Writes | Verified after the reload by |
@@ -128,9 +130,9 @@ install record (`layouts.install`, `Journal.lua`), covered by the same `layouts`
 | Snapshot, Apply | `LY.Apply(pkg, variant, key, { picks })`: the snapshot is taken and checked before the record is written; the record keeps the picks |
 | Verify | after the reload (`LY.Continue`), or `LY.Verify(false)` from Check again (read only; nothing is repaired) |
 | Restore | `LY.PlanRestore` → the confirmation → `LY.Restore(key)` → after the reload `LY.VerifyRestore` |
-| Finish / Detach | "Keep this setup": `LY.Finish` (Phase 7: ends the restore point, keeps managing). "Forget the record" and "Stop managing": `LY.Detach` after a confirmation |
+| Finish / Detach | "Keep this setup": `LY.Finish` (ends the restore point and Undo, keeps managing). "Forget the record" and "Stop managing": `LY.Detach` after a confirmation (refused for another character's readable record) |
 
-Engine changes this needed (all in `TwichUI_Layouts`, `architecture.md` §13): package format 3 with `choices`;
+Engine changes this needed (all in `TwichUI_Layouts`, `architecture.md` §3): package format 3 with `choices`;
 `LY.Resolve` `opts.picks` and `resolved.picks`; the picks in the plan key and in the install record (validated, at most 8);
 the EllesmereUI adapter's acceptance of `root.euiAccent` (and only that) from a choice, and its by-value check.
 
@@ -187,10 +189,31 @@ its picks stay, and closing the window while it is set aside ends the session as
 differ by a few units from a sample size; third-party styling (borders, textures, fonts, colours) is not reproduced, only
 illustrated; a piece whose size the layout's data doesn't give (the Cooldown Manager's bars, class power, the data bars, the
 raid frames, the minimap's shape) is not drawn at all; TwichUI's own pieces are 26-unit markers because their size belongs to
-their features; the pet and stance pieces sit outside Compact's checked box (they follow it and are drawn, but an overlap
-with chat there is not diagnosed); the quest tracker is placed by Blizzard's Edit Mode and is shown but not applied; the
-default tooltip position is the game's, not EllesmereUI's. Offline: the geometry takes about 0.12 ms and a miniature draw
+their features; the pet and stance pieces sit outside Compact's checked box (they follow it, are drawn, and since RH-1 their
+overlap with chat is reported as "may overlap", D44); the quest tracker is placed by Blizzard's Edit Mode and is shown but not
+applied or counted; the default tooltip position is the game's, not EllesmereUI's. Offline: the geometry takes about 0.12 ms and a miniature draw
 about 0.14 ms on stand-in frames (the client's `SetPoint` and `SetSize` cost more; not measured).
+
+## Preview and fit (RH-1)
+
+What the preview shows, and what a fit claim means:
+
+| Step | The preview shows | The fit claim is about |
+|---|---|---|
+| Welcome (each layout) | nothing drawn | the recommended placement at standard size: fits; fits but some pieces may overlap; or doesn't fit, with the UI scale at which it would |
+| Layout, Helpers, Personalize | the layout's **recommended** placement, at once, for this screen and size | the recommended placement |
+| Review, first install | the plan's own placement (the same as the recommended one) | that placement |
+| Review, update | the **final plan**: your kept minimap, chat and meter at your own rect and size, the pieces you keep at your places (sample sizes), and the caption says which of your placements it draws and which it can't (a form TwichUI can't read); with EllesmereUI kept as it is, it says so instead of claiming the layout's fit | what Apply leaves |
+
+- **Three levels**: the components (Geometry), the pieces inside them (`LY.Fit`, sample sizes, so "may overlap"), and what is
+  only illustrative (the objective tracker, never applied, never counted). What the same check finds on the author's own canvas is
+  the author's arrangement and is not reported.
+- **Never moved to clear a warning**: a placement you keep stays where you put it; the review says it is off screen or over
+  something.
+- **Scale guidance**: when the components don't fit, the welcome step and the review give the UI scale at which they would (the
+  same resolver on screens of your proportions; never below 0.64), and say the setup never changes the UI scale. The UI scale
+  shown is the setting (768 / UIParent height), not the effective scale.
+- **Nothing is changed to draw it**: the final plan is the read-only plan (`LY.Plan`); a test compares every profile before and after.
 
 ## Artwork
 
@@ -336,55 +359,3 @@ shared.
     Compact's layout links.
 23. `/tui perf`: open the overlay ten times; `layoutwizard.overlay.events` and `.frames` stay flat; the addon's memory with both
     layouts' data loaded (about 1.6 MB of Lua tables offline) is reported.
-
-## Phase 6 handoff
-
-- **Retained overrides**: the wizard keeps the picks and the layout across installs, and switching layouts is an install again, so
-  "kept" and "reset" can be shown in the review without changing the steps (`LY.Compose` already takes `retained` and `reset`).
-  Module blobs differ per layout, so retention is per module blob and per registered position, as §6 says.
-- **Per-layout TwichUI settings**: Compact shares Classic's TwichUI looks and places (D27). If the author wants Compact-specific
-  TwichUI places, capture them from a separate TwichUI profile with `--twichui-profile` and put them in the variant layer: the
-  composer already lets a variant's units win.
-- **UI scale policy** (D12): a `ui-scale` choice would be a fourth choice; the plan, the review, the miniature and the overlay
-  already follow the screen the geometry is resolved for, so they need the target scale's viewport. It needs the
-  whole-`EllesmereUIDB` restore point (D3), and with it the **tooltip choice** can be offered (D5).
-- **Positions not yet placed** (D32): the Battle Res frame (`centerX`/`centerY` storage), the Cooldown Manager's other bars,
-  class power. Each needs a registered position with its own format, then an attach entry per layout.
-- **Choices the schema already allows**: more enums (each names its `sets`), more presets (switches only).
-
-## Open decisions raised in Phase 4
-
-| # | Question | Recommended default |
-|---|---|---|
-| D21 | The TwichUI helper presets: which switches, which names (`on-screen`: class resource bars, marker bar, food and drink buttons; `finding-my-way`: those and Navigation) | As built; the author to confirm or change the set |
-| D22 | The accent options (Aged gold, Class colour, Verdigris, Ember, Dusk blue) and their colours | As built (the three non-captured colours are proposals in TwichUI's palette); the author to confirm |
-| D23 | The tooltip choice (cursor-following or fixed): not offered until account-wide units are managed (above) | Keep it out; build with D3 and D5 |
-| D24 | A Welcome-dialog offer for the wizard | Not built; the wizard is on Home. Add a button only if the author wants it there |
-| D25 | Re-running with the same choices re-imports the install's EllesmereUI profile (a module-blob package is always imported whole), replacing changes made in it since | As built, and the review says so; a "nothing to do" shortcut needs a content fingerprint of the live profile |
-
-## Open decisions raised in Phase 5
-
-| # | Question | Recommended default |
-|---|---|---|
-| D26 | The package has one pair of install profiles, `TwichUI Adventure` (EllesmereUI) and `TwichUI Adventure` (TwichUI), for both layouts (they were `TwichUI Classic` / `Classic Adventure`; nothing was installed under those) | As built: a layout switch is an install again, with no extra profile and one restore point |
-| D27 | Compact's sources: EllesmereUI profile `TwichUI - Minimal Adventure` (confirmed by the author); TwichUI side shared with Classic (confirmed: the only TwichUI profile is `Default`) | As built |
-| D28 | Compact's checked box is the core of the bottom strip (1091 × 157.5); the pet frame and bar and the stance bar follow it but are outside it | As built; the author to confirm, or widen it (which makes chat give way on every 16:9 screen) |
-| D29 | Compact's narrow width is 1780 (Classic 1700) and below it chat rises above the strip at its full width | As built |
-| D30 | The overlay dims the live interface instead of hiding it | As built; hiding UIParent would hide the preview and moving protected frames is not allowed |
-| D31 | TwichUI's pieces (class bars, marker bar, navigation arrow, food and drink) are Classic's captured places in Compact too; class bars at (−385, −558) land inside Compact's strip | Look at the markers in the overlay on the author's screen and say which should move; capture them from a separate TwichUI profile if so |
-| D32 | Not placed by the screen layer: the Battle Res frame, the Cooldown Manager's other bars, class power (left at the author's coordinates, which in Compact sit above the strip), and the pieces the preview has no size for | Register positions when the author wants them moved |
-
-
-## Phase 6 additions
-
-Packages other players sent: the first step lists the included package and each received one and opens the one chosen; its
-layouts replace the two included ones on the Layout step; choices it does not have are skipped with a note. Authoring is a
-separate workspace (`/tui layout author`) that the wizard does not link to. See `publishing.md`.
-
-## Phase 7 additions
-
-Updates (`updates.md`, authoritative): the Review step's **Updating your layout** block (three ways, details with per-setting
-choices, group and whole-addon questions, screen warnings); the Result step's **Undo this update** and **Keep the update**.
-**Keep this setup** now *finishes* the setup (`LY.Finish`): the restore point is forgotten, TwichUI keeps managing the layout
-(management record and baseline stay) and the wizard shows **Installed and managed** with **Set up again** and **Stop managing**.
-It is no longer Detach; "Forget the record" and Stop managing are. Re-running with the same choices is "nothing to do" (D25).

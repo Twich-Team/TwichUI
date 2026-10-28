@@ -1,4 +1,4 @@
--- TwichUI Layouts: the install record, TwichUIDB.layouts.install (architecture.md §8)
+-- TwichUI Layouts: the install record, TwichUIDB.layouts.install (architecture.md §6)
 -- What an install needs to be finished, checked or undone after a reload, and nothing more: which package and variant,
 -- the state, each adapter's step, the snapshot (the profiles in use before, the install's own profile names, and
 -- fingerprints of the values it replaced), and fingerprints of what verification expects to read back. No copies of
@@ -13,17 +13,18 @@
 --
 -- States: applying (written before the first change; found at a load, it means the client stopped mid-way: interrupted)
 --   -> applied (waits for the reload, then is checked) -> verified | mismatch;  partial (a step failed after another
---   changed something);  restoring (waits for the reload) -> the record is removed once the restore checks out, or
+--   changed something; an interrupted record whose check finds a step that never ran becomes partial too, never verified);  restoring (waits for the reload) -> the record is removed once the restore checks out, or
 --   restore-partial. A record whose version is newer than this one is never changed.
 --
--- Updates (updates.md; architecture.md §16) add, all optional:
+-- Updates (updates.md; architecture.md §6) add, all optional:
 --   track = { [adapter] = { [unit] = { p, k, o } } }   what the baseline takes from this install once it checks out:
 --                                                      the package's side (p), kept the recipient's (k), theirs (o)
 --   update = { at, from, baseline, twichui, ellesmereui }   the state before this update, for "Undo this update":
 --     from      the record as it was (without its snapshot, which an update never replaces)
 --     baseline  the baseline as it was (nil: there was none)
 --     twichui   { profile = in use before, target, values = { [unit] = { v = the stored value } | {} (not stored) } }
---     ellesmereui { active = in use before, target, backup = the name the install's old profile was renamed to }
+--     ellesmereui { active = in use before, target, backup = the name the install's old profile was renamed to,
+--                   renamed = true once an Undo gave it its name back (a retried Undo then only switches) }
 --   States undoing (an undo waits for the reload) and undo-partial (it did not fully check out).
 --
 -- The baseline (TwichUIDB.layouts.baseline) is the managed configuration the last install applied and then read back:
@@ -172,7 +173,8 @@ function J.CleanUpdate(u)
     local t = u.twichui
     if t ~= nil and (type(t) ~= "table" or type(t.profile) ~= "string" or type(t.target) ~= "string" or type(t.values) ~= "table") then return false end
     local e = u.ellesmereui
-    if e ~= nil and (type(e) ~= "table" or type(e.active) ~= "string" or type(e.target) ~= "string" or (e.backup ~= nil and type(e.backup) ~= "string")) then return false end
+    if e ~= nil and (type(e) ~= "table" or type(e.active) ~= "string" or type(e.target) ~= "string" or (e.backup ~= nil and type(e.backup) ~= "string")
+        or (e.renamed ~= nil and e.renamed ~= true)) then return false end
     return true
 end
 
@@ -282,8 +284,9 @@ function J.Forget()
 end
 
 ---------------------------------------------------------------------------
--- The management record: TwichUIDB.layouts.managed = { v = 1, package, revision, variant, picks, char, at,
+-- The management record: TwichUIDB.layouts.managed = { v = 1, package, revision, variant, picks, char, at, check,
 --   targets = { [adapter] = the install's own profile name }, home = { [adapter] = the profile in use before the first install } }
+-- check: the result of the check that wrote it ("match", "mismatch", ...; absent in a record written before RH-1).
 -- Written each time an install is checked after its reload; read when there is no install record (the setup was finished).
 ---------------------------------------------------------------------------
 J.MANAGED_VERSION = 1
@@ -292,6 +295,7 @@ function J.CleanManaged(m)
     if type(m) ~= "table" or not Count(m.v) or m.v > J.MANAGED_VERSION then return nil, type(m) == "table" and Count(m.v) and "newer" or "damaged" end
     if not (LY.IsId(m.package) and Count(m.revision) and LY.IsId(m.variant) and LY.Plain(m.char, 64) and Count(m.at)) then return nil, "damaged" end
     if m.picks ~= nil and not CleanPicks(m.picks) then return nil, "damaged" end
+    if not Code(m.check) then return nil, "damaged" end
     for _, k in ipairs({ "targets", "home" }) do
         if type(m[k]) ~= "table" then return nil, "damaged" end
         for id, name in pairs(m[k]) do

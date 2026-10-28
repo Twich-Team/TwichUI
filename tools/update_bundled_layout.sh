@@ -8,8 +8,14 @@
 #      (tools/layout_capture.lua; Compact keeps only what differs from Classic)
 #   3. points any font from another addon's folder at TwichUI's own copy of that font, when TwichUI ships one
 #   4. raises the package revision in TwichUI_Layouts/Classic.lua, so players who have the layout get it as an update
-#   5. runs the offline tests
-# If a capture fails, the files it would have replaced are put back. Nothing is committed, deployed or released.
+#   5. checks the package as players will get it (tools/check_bundled_layout.lua: valid, portable media), then the offline tests
+# Two kinds of stop, never mixed up (RH-1):
+#   * generating failed (a capture, the font fix, the revision, or anything unexpected): every file it touched is put back
+#     exactly as it was, and it exits 1;
+#   * the result failed a check (media players don't have, an invalid package, a failing test): the new files are kept so you
+#     can look at them, the ones from before are saved to a folder it names, and it exits 1 saying the result is NOT ready.
+# Only a run that generated and passed every check ends with "Done" and exit 0 (with --no-tests: "not tested").
+# It never commits, deploys or releases, and touches no file but the five below.
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -24,6 +30,7 @@ COMPACT_PROFILE="TwichUI - Minimal Adventure"
 TWICHUI_PROFILE="Default"
 BUMP=1
 TESTS=1
+RETURNED=""
 
 usage() {
     cat <<EOF
@@ -37,7 +44,11 @@ Usage: tools/update_bundled_layout.sh [options]
   --compact-profile NAME     EllesmereUI profile for Compact Adventure (default: "$COMPACT_PROFILE")
   --twichui-profile NAME     TwichUI profile both layouts share (default: "$TWICHUI_PROFILE")
   --no-bump                  leave the package revision as it is
-  --no-tests                 don't run the offline tests afterwards
+  --no-tests                 don't run the offline tests afterwards (the result is then "not tested")
+  --returned reset|release|keep
+                             what players who have the layout get for a TwichUI setting the last capture named and your
+                             profile no longer has (usually put back to the default). Asked for only when there is one:
+                             docs/layouts/updating-the-bundled-layout.md, "Settings you put back to the default"
   -h, --help                 this text
 
 Log out of the game first: it writes your settings to disk only when you log out or reload.
@@ -55,6 +66,7 @@ while [ $# -gt 0 ]; do
         --twichui-profile) TWICHUI_PROFILE="$2"; shift 2 ;;
         --no-bump) BUMP=0; shift ;;
         --no-tests) TESTS=0; shift ;;
+        --returned) RETURNED="$2"; shift 2 ;;
         -h|--help) usage; exit 0 ;;
         *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
     esac
@@ -65,6 +77,7 @@ warn() { printf '\033[33mWarning:\033[0m %s\n' "$*"; }
 die()  { printf '\033[31mStopped:\033[0m %s\n' "$*" >&2; exit 1; }
 
 case "$CLIENT" in forever|retail) ;; *) die "--client must be forever or retail" ;; esac
+case "$RETURNED" in ""|reset|release|keep) ;; *) die "--returned must be reset, release or keep" ;; esac
 command -v lua5.1 >/dev/null || die "lua5.1 isn't installed (sudo apt install lua5.1 lua-bitop)"
 lua5.1 -e 'require("bit")' 2>/dev/null || die "lua5.1 can't load luabitop (sudo apt install lua-bitop)"
 command -v python3 >/dev/null || die "python3 isn't installed (it fixes font paths and the revision)"
@@ -94,13 +107,15 @@ fi
 WORK="$(mktemp -d)"
 BACKUP="$WORK/backup"
 mkdir -p "$BACKUP"
-cleanup() { rm -rf "$WORK"; }
-trap cleanup EXIT
 cp "$EUI_SV" "$WORK/EllesmereUI.lua"
 cp "$TW_SV" "$WORK/TwichUI.lua"
-say "Reading copies of:"
-echo "  $EUI_SV  (changed $(date -r "$EUI_SV" '+%Y-%m-%d %H:%M'))"
-echo "  $TW_SV  (changed $(date -r "$TW_SV" '+%Y-%m-%d %H:%M'))"
+say "Source"
+echo "  client:            $CLIENT"
+echo "  saved files:       $SV_DIR"
+echo "  EllesmereUI.lua:   changed $(date -r "$EUI_SV" '+%Y-%m-%d %H:%M') (a copy is read; the original is not touched)"
+echo "  !!!TwichUI.lua:    changed $(date -r "$TW_SV" '+%Y-%m-%d %H:%M')"
+echo "  Classic Adventure: EllesmereUI \"$CLASSIC_PROFILE\", TwichUI \"$TWICHUI_PROFILE\""
+echo "  Compact Adventure: EllesmereUI \"$COMPACT_PROFILE\" (TwichUI settings shared with Classic)"
 
 FILES=(TwichUI_Layouts/ClassicData.lua TwichUI_Layouts/CompactData.lua TwichUI_Layouts/Classic.lua
        docs/layouts/capture-classic-adventure.md docs/layouts/capture-compact-adventure.md)
@@ -109,6 +124,25 @@ restore() {
     for f in "${FILES[@]}"; do cp "$BACKUP/$(basename "$f")" "$f"; done
     echo "The files it would have replaced are back as they were."
 }
+# PHASE: "generate" (a failure puts everything back), "check" (a failure keeps the new files for a look), "done"
+PHASE="generate"
+KEPT=""
+on_exit() {
+    local status=$?
+    if [ "$PHASE" = "generate" ] && [ $status -ne 0 ]; then
+        printf '\033[31mStopped while generating.\033[0m ' >&2
+        restore >&2
+    elif [ "$PHASE" = "check" ] && [ $status -ne 0 ]; then
+        KEPT="$(mktemp -d "${TMPDIR:-/tmp}/twichui-bundled-before.XXXXXX")"
+        cp "$BACKUP"/* "$KEPT/"
+        printf '\n\033[31mNOT READY:\033[0m the new files are kept so you can look at them, but they failed a check and must not be committed.\n' >&2
+        echo "The files as they were before this run are saved in $KEPT" >&2
+        echo "To put them back: for f in ${FILES[*]}; do cp \"$KEPT/\$(basename \$f)\" \"\$f\"; done" >&2
+    fi
+    rm -rf "$WORK"
+    exit $status
+}
+trap on_exit EXIT
 
 # --- 2. capture both layouts ----------------------------------------------------------------------------------------
 TODAY="$(date '+%Y-%m-%d')"
@@ -116,9 +150,9 @@ say "Capturing Classic Adventure from \"$CLASSIC_PROFILE\" (TwichUI: \"$TWICHUI_
 if ! lua5.1 tools/layout_capture.lua --eui "$WORK/EllesmereUI.lua" --twichui "$WORK/TwichUI.lua" \
         --eui-profile "$CLASSIC_PROFILE" --twichui-profile "$TWICHUI_PROFILE" \
         --out TwichUI_Layouts/ClassicData.lua --report docs/layouts/capture-classic-adventure.md \
-        --name CLASSIC_CAPTURE --title "Classic Adventure" --client "$CLIENT" --made "$TODAY"; then
-    restore
-    die "the Classic capture failed (its message is above)"
+        --name CLASSIC_CAPTURE --title "Classic Adventure" --client "$CLIENT" --made "$TODAY" \
+        ${RETURNED:+--returned "$RETURNED"}; then
+    die "the Classic capture failed (its message is above). If it lists settings you put back to the default, run again with --returned reset, release or keep"
 fi
 
 say "Capturing Compact Adventure from \"$COMPACT_PROFILE\" (only what differs from Classic)"
@@ -127,13 +161,13 @@ if ! lua5.1 tools/layout_capture.lua --eui "$WORK/EllesmereUI.lua" --twichui "$W
         --out TwichUI_Layouts/CompactData.lua --report docs/layouts/capture-compact-adventure.md \
         --name COMPACT_CAPTURE --title "Compact Adventure" --client "$CLIENT" --made "$TODAY" \
         --shared-with TwichUI_Layouts/ClassicData.lua --shared-name CLASSIC_CAPTURE; then
-    restore
     die "the Compact capture failed (its message is above)"
 fi
 
 # --- 3. fonts from another addon's folder (not TwichUI's, not the EllesmereUI suite's) ------------------------------------------------------------------------------
 say "Checking font paths"
-python3 - <<'PY'
+FONTS_RC=0
+python3 - <<'PY' || FONTS_RC=$?
 import os, re
 fonts = set(os.listdir("!!!TwichUI/media/fonts"))
 pat = re.compile(r'"(Interface\\\\AddOns\\\\([^\\"]+)\\\\[^"]*?\\\\?([^\\"]+\.(?:ttf|otf)))"', re.I)
@@ -160,7 +194,13 @@ for path, old in left:
     print("           Players won't have it. Pick one of TwichUI's fonts for it in EllesmereUI and run this again.")
 if not fixed and not left:
     print("  every font is TwichUI's, EllesmereUI's or the game's own")
+if left:
+    raise SystemExit(3)   # players don't have that file: the result fails its check (step 5)
 PY
+case "$FONTS_RC" in
+    0|3) ;;
+    *) die "fixing the font paths failed (its message is above)" ;;
+esac
 
 # --- 4. the package revision -----------------------------------------------------------------------------------------------
 if [ "$BUMP" -eq 1 ]; then
@@ -181,25 +221,43 @@ else
     say "Leaving the package revision as it is (--no-bump)"
 fi
 
-# --- 5. tests ---------------------------------------------------------------------------------------------------------
+# --- 5. checks: the package as players get it, then the tests ---------------------------------------------------------------
+PHASE="check"
 STATUS=0
+say "Checking the package as players will get it"
+if [ "$FONTS_RC" -eq 3 ]; then
+    STATUS=1
+    warn "a font above is in another addon's folder and TwichUI has no copy of it: players don't have that file"
+fi
+if ! lua5.1 tools/check_bundled_layout.lua; then
+    STATUS=1
+    warn "the package fails the check above (it names files players don't have, or isn't a valid package)"
+fi
+TESTED="not tested (--no-tests)"
 if [ "$TESTS" -eq 1 ]; then
     say "Running the offline tests (a few minutes)"
     if ./tests/run.sh > "$WORK/tests.log" 2>&1; then
         tail -1 "$WORK/tests.log"
+        TESTED="tests passed"
     else
         STATUS=1
+        TESTED="TESTS FAILED"
         grep -A5 '^FAIL' "$WORK/tests.log" || true
         tail -1 "$WORK/tests.log"
-        warn "some tests failed. If you moved things, tests that check the captured layout exactly need updating"
-        warn "(docs/layouts/updating-the-bundled-layout.md, \"When tests fail\"). The new files are kept."
+        warn "some tests failed. If you moved things on purpose, only the tests that check the captured layout exactly may be"
+        warn "updated (docs/layouts/updating-the-bundled-layout.md, \"When tests fail\"); the others guard rules that never change"
+        warn "to accept a capture."
     fi
 fi
 
 # --- what changed, and what is next -------------------------------------------------------------------------------------
 say "What changed"
-git --no-pager diff --stat -- "${FILES[@]}" || true
+git --no-pager diff --stat -- "${FILES[@]}" 2>/dev/null || ls -l "${FILES[@]}"
+if [ $STATUS -ne 0 ]; then exit $STATUS; fi   # NOT READY (on_exit says so and keeps a copy of the files from before)
+PHASE="done"
+say "Done: generated, checked, $TESTED"
 cat <<EOF
+Source: $CLIENT saved files in $SV_DIR; EllesmereUI "$CLASSIC_PROFILE" and "$COMPACT_PROFILE", TwichUI "$TWICHUI_PROFILE".
 
 Next:
   - read docs/layouts/capture-classic-adventure.md and capture-compact-adventure.md (what was kept and left out)
@@ -207,4 +265,4 @@ Next:
   - commit the files above, then release as RELEASING.md says
 To throw this run away: git checkout -- ${FILES[*]}
 EOF
-exit $STATUS
+exit 0

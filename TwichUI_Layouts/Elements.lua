@@ -142,8 +142,12 @@ local function RectAt(geo, point, rel, x, y, w, h)
     return G.Place(point, sx + x, sy + y, w, h)
 end
 
-function LY.Elements(pkg, variant, geo)
+-- moved (optional; the final plan of an update): { [position or place id] = where the player has it } for pieces an update
+-- leaves as they are: an EllesmereUI record { point, relPoint, x, y }, a TwichUI place { x, y [, point] }. Such a piece is
+-- drawn there with its sample size, and marked kept.
+function LY.Elements(pkg, variant, geo, moved)
     local list, notes = {}, {}
+    moved = moved or {}
     if not (type(geo) == "table" and geo.components and geo.screen) then return list, notes end
     local attach = G.Attach(pkg.geometry, variant) or {}
     local eui = attach.ellesmereui or {}
@@ -160,8 +164,10 @@ function LY.Elements(pkg, variant, geo)
                 w, h = size[2](blob)
                 if w then
                     local new = EA.Resolved(p, rec, comp, pt, geo)
+                    local m = moved[id]
+                    if m and EA.PosOk(m) then new = { point = m.point, relPoint = m.relPoint or m.point, x = m.x, y = m.y } end
                     list[#list + 1] = { id = id, adapter = "ellesmereui", label = p.label, kind = size[1], comp = compId,
-                        rect = RectAt(geo, new.point, new.relPoint, new.x, new.y, w, h) }
+                        rect = RectAt(geo, new.point, new.relPoint, new.x, new.y, w, h), kept = m and true or nil }
                 else
                     notes[#notes + 1] = { code = "no-size", id = id }
                 end
@@ -177,13 +183,106 @@ function LY.Elements(pkg, variant, geo)
         local v = MARKERS[id] and p and comp and PlaceValue(pkg, variant, id)
         if v and type(v.x) == "number" and type(v.y) == "number" then
             local new, point = TA.PlaceOne(p, v, comp, pt, geo)
+            local m = moved[id]
+            if type(m) == "table" and type(m.x) == "number" and type(m.y) == "number" then
+                -- the player's own place, as the feature reads it (from the screen's centre, top centre or its point)
+                point = (p.kind == "top" and "TOP") or (p.kind == "point" and m.point) or "CENTER"
+                new = { x = m.x, y = m.y }
+            end
             local sx, sy = G.Point(geo.screen, point)
             list[#list + 1] = { id = id, adapter = "twichui", label = p.label, kind = "marker", comp = compId,
-                rect = G.Rect(sx + new.x, sy + new.y, MARKER, MARKER) }
+                rect = G.Rect(sx + new.x, sy + new.y, MARKER, MARKER), kept = m and true or nil }
         elseif MARKERS[id] and p and comp then
             notes[#notes + 1] = { code = "not-stored", id = id }
         end
     end
     table.sort(list, function(a, b) return a.id < b.id end)
     return list, notes
+end
+
+---------------------------------------------------------------------------
+-- The fit of the pieces (RH-1): the component boxes are what Geometry.Resolve checks, but a piece can reach outside its box
+-- (Compact's pet frame and stance bar sit left of the checked strip) or follow a component into another one. Checked with
+-- the sample sizes above, so it is a warning about what may overlap, never a measurement of the game's own frames.
+--
+--   LY.Fit(pkg, variant, geo, moved) -> { fits (the components, Geometry's answer), clear (components and pieces), issues }
+--     issues = { { code = "piece-offscreen" | "piece-over" | "marker-over", id, label, other, otherLabel, illustrative } }
+--
+-- What is checked: an EllesmereUI piece off the screen; an EllesmereUI piece over a component that is a frame of its own
+-- (chat, the meter, the minimap) or a box with nothing in it (TwichUI's cards; the objectives, which are only illustrative),
+-- or over a piece of another component's block; a TwichUI marker over an EllesmereUI piece of another component. Pieces of
+-- one component overlapping each other are the author's own arrangement and not checked. Anything the same check finds on
+-- the author's own canvas is the author's arrangement too (an intentional overlap) and is left out.
+---------------------------------------------------------------------------
+local function Over(a, b)
+    local ow = math.min(a.r, b.r) - math.max(a.l, b.l)
+    local oh = math.min(a.t, b.t) - math.max(a.b, b.b)
+    return ow > G.TOLERANCE and oh > G.TOLERANCE
+end
+
+local function PieceIssues(pkg, variant, geo, moved)
+    local found = {}
+    local pieces = LY.Elements(pkg, variant, geo, moved)
+    local attach = (G.Attach(pkg.geometry, variant) or {}).ellesmereui or {}
+    local has = {}
+    for _, p in ipairs(pieces) do has[p.comp] = true end
+    -- a component is a frame (checked as its box) when it is the frame of a registered position (chat, meter, minimap) or
+    -- holds no piece; otherwise it is a block, checked by its pieces
+    local frame = {}
+    for id, c in pairs(geo.components) do
+        if c.managed and c.rect.w > 0 and c.rect.h > 0 then frame[id] = attach[id] == id or not has[id] end
+    end
+    local W, H, tol = geo.screen.w / 2, geo.screen.h / 2, G.TOLERANCE
+    for _, p in ipairs(pieces) do
+        local r = p.rect
+        if p.adapter == "ellesmereui" then
+            if r.l < -W - tol or r.r > W + tol or r.b < -H - tol or r.t > H + tol then
+                found["off|" .. p.id] = { code = "piece-offscreen", id = p.id, label = p.label }
+            end
+            for _, id in ipairs(LY.SortedKeys(frame)) do
+                local c = geo.components[id]
+                if frame[id] and id ~= p.comp and Over(r, c.rect) then
+                    found["over|" .. p.id .. "|" .. id] = { code = "piece-over", id = p.id, label = p.label, other = id,
+                        otherLabel = c.label or id, illustrative = c.applied and true or nil }
+                end
+            end
+            for _, q in ipairs(pieces) do
+                if q.adapter == "ellesmereui" and q.comp ~= p.comp and p.id < q.id and frame[q.comp] == false and frame[p.comp] == false
+                    and Over(r, q.rect) then
+                    found["over|" .. p.id .. "|" .. q.id] = { code = "piece-over", id = p.id, label = p.label, other = q.id, otherLabel = q.label }
+                end
+            end
+        else
+            for _, q in ipairs(pieces) do
+                if q.adapter == "ellesmereui" and q.comp ~= p.comp and r.x > q.rect.l and r.x < q.rect.r and r.y > q.rect.b and r.y < q.rect.t then
+                    found["mark|" .. p.id .. "|" .. q.id] = { code = "marker-over", id = p.id, label = p.label, other = q.id, otherLabel = q.label }
+                end
+            end
+        end
+    end
+    return found
+end
+
+-- moved: as for LY.Elements (the final plan of an update: the pieces the player keeps are checked where they are)
+function LY.Fit(pkg, variant, geo, moved)
+    local out = { fits = geo and geo.fits or false, issues = {} }
+    if not (type(geo) == "table" and geo.components and geo.screen and type(pkg) == "table" and pkg.geometry) then return out end
+    local here = PieceIssues(pkg, variant, geo, moved)
+    -- the author's own canvas, at the same density: what is there already is the author's arrangement
+    local mine = {}
+    local cv = geo.canvas
+    if cv and cv.w and cv.h then
+        local canvasGeo = G.Resolve(pkg.geometry, { w = cv.w, h = cv.h }, { variant = variant, density = geo.density })
+        if canvasGeo then mine = PieceIssues(pkg, variant, canvasGeo) end
+    end
+    local clear = out.fits
+    for _, key in ipairs(LY.SortedKeys(here)) do
+        if not mine[key] then
+            local it = here[key]
+            out.issues[#out.issues + 1] = it
+            if not it.illustrative then clear = false end
+        end
+    end
+    out.clear = clear
+    return out
 end

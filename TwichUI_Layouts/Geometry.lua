@@ -1,4 +1,4 @@
--- TwichUI Layouts: screen geometry, the layer that fits a layout to this screen (architecture.md §7, §12)
+-- TwichUI Layouts: screen geometry, the layer that fits a layout to this screen (architecture.md §5)
 -- Pure, like the composer: the same rules and the same screen always give the same places, and nothing here reads
 -- saved variables or calls the game (LY.Screen at the end is the one function that reads the screen, and it only reads).
 --
@@ -523,11 +523,58 @@ function G.Resolve(spec, screen, opts)
         if a.id ~= b.id then return a.id < b.id end
         return (a.other or "") < (b.other or "")
     end)
+    G.Settle(out)
+    return out
+end
+
+-- Whether the managed components fit (out.fits), from out.diagnostics. A component the layout works out but never applies
+-- (`applied`, e.g. the objective tracker, which Blizzard's Edit Mode places) is shown where it would go and is only
+-- illustrative: its overlaps are marked so and kept out of the claim that the layout fits (RH-1).
+function G.Settle(out)
     out.fits = true
     for _, d in ipairs(out.diagnostics) do
-        if d.code == "overlap" or d.code == "offscreen" then out.fits = false end
+        if d.code == "overlap" or d.code == "offscreen" then
+            local a, b = out.components[d.id], d.other and out.components[d.other]
+            d.illustrative = ((a and a.applied) or (b and b.applied)) and true or nil
+            if not d.illustrative then out.fits = false end
+        end
     end
     return out
+end
+
+-- A copy of a resolved screen with some components' rects replaced (what an update leaves where the player put it), its
+-- overlaps and off-screen checks worked out again. rects = { [component id] = rect }. Pure.
+function G.WithRects(geo, rects)
+    local out = {}
+    for k, v in pairs(geo) do out[k] = v end
+    out.components, out.diagnostics = {}, {}
+    for id, c in pairs(geo.components) do
+        local cc = {}
+        for k, v in pairs(c) do cc[k] = v end
+        if rects[id] then cc.rect, cc.kept = rects[id], true end
+        out.components[id] = cc
+    end
+    local W, H = geo.screen.w / 2, geo.screen.h / 2
+    local managed = {}
+    for _, id in ipairs(geo.order) do
+        local c = out.components[id]
+        if c.managed and c.rect.w > 0 and c.rect.h > 0 then
+            managed[#managed + 1] = id
+            local r = c.rect
+            if r.l < -W - G.TOLERANCE or r.r > W + G.TOLERANCE or r.b < -H - G.TOLERANCE or r.t > H + G.TOLERANCE then
+                out.diagnostics[#out.diagnostics + 1] = { code = "offscreen", id = id }
+            end
+        end
+    end
+    for i = 1, #managed do
+        for k = i + 1, #managed do
+            local ow, oh = Overlap(out.components[managed[i]].rect, out.components[managed[k]].rect)
+            if ow > G.TOLERANCE and oh > G.TOLERANCE then
+                out.diagnostics[#out.diagnostics + 1] = { code = "overlap", id = managed[i], other = managed[k], w = ow, h = oh }
+            end
+        end
+    end
+    return G.Settle(out)
 end
 
 ---------------------------------------------------------------------------

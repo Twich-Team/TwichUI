@@ -223,6 +223,93 @@ function P.Layers(pkg)
 end
 
 ---------------------------------------------------------------------------
+-- What a package resolves to, apart from what it is called (RH-1 §9). LY.Resolve is a function of a package's layers, choices,
+-- geometry, targets and requirements only, so two packages that agree on those resolve identically for every layout, every pick
+-- and every screen, whatever their id, revision, title, notes, made, source or developer flag. The bundled package (made by
+-- tools/update_bundled_layout.sh) and one published in game (/tui layout author) are made by different paths and may differ:
+-- Pub.Compare says whether they do, and where.
+--   Pub.Contents(pkg) -> contents | nil, problems. contents = { identity (a fingerprint of all of the below), meta = { id,
+--     revision, format, title, made, source, dev }, parts = { ["layer:<name>"] = { [adapter|unit] = fingerprint },
+--     geometry, choices, targets, requires (each a fingerprint) } }
+--   Pub.Compare(a, b) -> { same (resolves the same), identity = { a, b }, differ = { { part, units = { ids } (≤ 12), n } },
+--     meta = { { field, a, b } } }   a, b: packages
+---------------------------------------------------------------------------
+local function ChoiceShape(checked)
+    -- what a choice resolves to: its kind, default, the options' ids, what each sets, its density; not the words shown
+    local out = {}
+    for _, cid in ipairs(checked.choices and checked.choices.order or {}) do
+        local ch = checked.choices.by[cid]
+        local opts = {}
+        for _, oid in ipairs(ch.order) do
+            local o = ch.options[oid]
+            local frags = {}
+            for adapter, f in pairs(o.frags or {}) do frags[adapter] = f.units end
+            opts[#opts + 1] = { id = oid, density = o.density, frags = frags }
+        end
+        out[#out + 1] = { id = cid, kind = ch.kind, default = ch.default, sets = ch.sets, options = opts }
+    end
+    return out
+end
+
+function P.Contents(pkg)
+    local ok, problems, checked = LY.Validate(pkg)
+    if not ok then return nil, problems end
+    local parts = {}
+    local function Layer(name, frags)
+        local t = {}
+        for adapter, f in pairs(frags) do
+            for unit, value in pairs(f.units) do t[adapter .. "|" .. unit] = LY.Fingerprint(value) end
+        end
+        parts["layer:" .. name] = t
+    end
+    Layer("base", checked.layers.base)
+    for _, id in ipairs(checked.variants) do
+        Layer("variant:" .. id, checked.layers.variants[id])
+        if checked.layers.presets[id] then Layer("preset:" .. id, checked.layers.presets[id]) end
+    end
+    parts.geometry = LY.Fingerprint(pkg.geometry or false)
+    parts.choices = LY.Fingerprint(ChoiceShape(checked))
+    parts.targets = LY.Fingerprint(pkg.targets or false)
+    parts.requires = LY.Fingerprint(pkg.requires or false)
+    return { identity = LY.Fingerprint(parts), parts = parts,
+        meta = { id = pkg.id, revision = pkg.revision, format = pkg.format, title = pkg.title, made = pkg.made, source = pkg.source,
+            dev = pkg.dev == true } }
+end
+
+local function DoCompare(a, b)
+    local ca, pa = P.Contents(a)
+    local cb, pb = P.Contents(b)
+    if not (ca and cb) then return nil, pa or pb end
+    local out = { same = ca.identity == cb.identity, identity = { ca.identity, cb.identity }, differ = {}, meta = {} }
+    local names = {}
+    for k in pairs(ca.parts) do names[k] = true end
+    for k in pairs(cb.parts) do names[k] = true end
+    for _, name in ipairs(LY.SortedKeys(names)) do
+        local x, y = ca.parts[name], cb.parts[name]
+        if type(x) == "table" or type(y) == "table" then
+            x, y = type(x) == "table" and x or {}, type(y) == "table" and y or {}
+            local keys, units = {}, {}
+            for k in pairs(x) do keys[k] = true end
+            for k in pairs(y) do keys[k] = true end
+            for _, k in ipairs(LY.SortedKeys(keys)) do if x[k] ~= y[k] then units[#units + 1] = k end end
+            if #units > 0 then
+                local shown = {}
+                for i = 1, math.min(#units, 12) do shown[i] = units[i] end
+                out.differ[#out.differ + 1] = { part = name, units = shown, n = #units }
+            end
+        elseif x ~= y then
+            out.differ[#out.differ + 1] = { part = name, n = 1 }
+        end
+    end
+    for _, k in ipairs({ "id", "revision", "format", "title", "made", "source", "dev" }) do
+        if ca.meta[k] ~= cb.meta[k] then out.meta[#out.meta + 1] = { field = k, a = ca.meta[k], b = cb.meta[k] } end
+    end
+    return out
+end
+-- two validations and a fingerprint of every unit: a typed developer command (/tui layout compare) or a test, never a frame's work
+function P.Compare(a, b) return Perf.Call("layouts.publish.compare", DoCompare, a, b) end
+
+---------------------------------------------------------------------------
 -- The package, held to more than LY.Validate asks: it is going to strangers
 ---------------------------------------------------------------------------
 local function Strings(pkg, problems)

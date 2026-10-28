@@ -160,7 +160,7 @@ function S.Open(entry, done, fail)
             return
         end
         done(env, info)
-    end, function(err) fail("unreadable", err) end)
+    end, function(err) fail("unreadable", err) end, R.Share.LAYOUT_DECODE)   -- bounded as when it arrived (RH-1)
 end
 
 ---------------------------------------------------------------------------

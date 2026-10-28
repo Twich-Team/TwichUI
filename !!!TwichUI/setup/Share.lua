@@ -158,9 +158,15 @@ local function EncodeBig(t, done, fail, background)
     end, fail, background)
 end
 
-local function DecodeBig(str, done, fail)
+-- limits (optional; a layout package, RH-1): { piece = compressed bytes one piece may hold, out = bytes one piece may unpack
+-- to, total = bytes all pieces may unpack to }. EncodeBig compresses one SLICE per piece, so an honest piece unpacks to at most
+-- SLICE and holds at most a little more than that compressed. A piece over either is refused, and the pieces' total is
+-- counted as they unpack, so what is kept is bounded. LibDeflate has no output limit of its own: one piece is checked after
+-- it unpacks, so a single hostile piece can still expand once, by at most deflate's ratio (about 1:1032) of its bounded size,
+-- before it is refused. That is a bound on the work, not a promise nothing is spent.
+local function DecodeBig(str, done, fail, limits)
     if type(str) ~= "string" or str:sub(1, 2) ~= "Z1" then fail("not a TwichUI data block") return end
-    local pos, parts, handler = 3, {}, nil
+    local pos, parts, handler, total = 3, {}, nil, 0
     AddJob(function()
         if not handler then
             if pos > #str then
@@ -175,8 +181,13 @@ local function DecodeBig(str, done, fail)
             if #piece ~= len then error("damaged data block") end
             pos = from + len
             local d = LibDeflate:DecodeForWoWAddonChannel(piece)
+            if limits and d and #d > limits.piece then error("unpacked data too large") end
             d = d and LibDeflate:DecompressDeflate(d)
             if not d then error("damaged data block") end
+            if limits then
+                total = total + #d
+                if #d > limits.out or total > limits.total then error("unpacked data too large") end
+            end
             parts[#parts + 1] = d
             return false
         end
@@ -495,7 +506,9 @@ function SH.EncodeData(payload, done, fail)
 end
 
 -- The other half: a packed block read back a little at a time (done(table) or fail(err); no return value).
-function SH.DecodeData(blob, done, fail) DecodeBig(blob, done, fail) end
+function SH.DecodeData(blob, done, fail, limits) DecodeBig(blob, done, fail, limits) end
+-- what a layout package may unpack to (DecodeBig's limits): a piece is one SLICE, and the whole is bounded like a package's text
+SH.LAYOUT_DECODE = { piece = SLICE + 1024, out = SLICE, total = 8 * 1048576 }
 
 -- A control message as it goes out (the recipient's name is added first; see Send).
 function SH.EncodeControl(msg) return Encode(msg) end
@@ -1092,8 +1105,16 @@ function SH.LayoutReceived(sender, inc, msg, joined)
     if not loaded then return Refuse(L.Explain(why), "layout-tools-unavailable") end
     inc.stage = "checking"
     Changed()
-    C_Timer.After(0, function()
+    -- The check (a whole package validated, about 0.1 s offline in one frame) waits while the player is in combat: what
+    -- waits is this one unpacked package per sender, already bounded, and nothing is applied either way (RH-1).
+    local function Check()
         if SH.incoming[sender] ~= inc or inc.stage ~= "checking" then return end
+        if InCombatLockdown() then
+            inc.last, inc.waiting = GetTime(), "combat"   -- not stalled: the watchdog leaves it
+            C_Timer.After(2, Check)
+            return
+        end
+        inc.waiting = nil
         local ok, entry, code, problems = pcall(R.Layouts.Receive, msg, joined, { sender = sender, offer = inc.offer })
         if SH.incoming[sender] ~= inc or inc.stage ~= "checking" then return end
         if not ok then
@@ -1117,7 +1138,8 @@ function SH.LayoutReceived(sender, inc, msg, joined)
         Changed()
         R.Print("Received the layout package \"%s\" (revision %d) from %s. It is stored, and nothing was installed. /tui layout shows it.",
             entry.title or entry.id, entry.revision, SH.Short(sender))
-    end)
+    end
+    C_Timer.After(0, Check)
 end
 
 OnControl = function(_, text, dist, sender)
@@ -1212,11 +1234,16 @@ OnLane = function(_, text, dist, sender)
     end, function(err)
         if not Current() then R.Life.Note("cancelled-stale-transfer") return end
         inc.stage = "failed"; inc.reason = "The configuration arrived damaged. Ask them to send again."
-        Code(inc, "unpack-failed", sender)
+        if inc.kind == "layout" and tostring(err):find("too large", 1, true) then
+            inc.reason = "The package unpacked to more than a layout package can be, so it was discarded."
+            Code(inc, "layout-unpack-size", sender)
+        else
+            Code(inc, "unpack-failed", sender)
+        end
         Changed()
         -- a layout package is bounded input from another player: damaged bytes end the transfer and are not raised as an error
         if inc.kind ~= "layout" then Fail("unpacking the configuration", err) end
-    end)
+    end, inc.kind == "layout" and SH.LAYOUT_DECODE or nil)
 end
 
 AceComm:RegisterComm(PREFIX, OnControl)

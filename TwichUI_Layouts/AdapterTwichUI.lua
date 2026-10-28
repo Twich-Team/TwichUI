@@ -1,4 +1,4 @@
--- TwichUI Layouts: the twichui adapter, TwichUI's own settings (architecture.md §3, §4; adapter-capabilities.md)
+-- TwichUI Layouts: the twichui adapter, TwichUI's own settings (architecture.md §1, §4; adapter-capabilities.md)
 -- Reuses what configuration sharing already has: TwichConfig's schema names every field, its value checks
 -- (TC.ValueOk, TC.CleanEntry) decide what a value may be, and the same reading and writing paths (TC.Effective,
 -- TC.Container) are used. Profiles.lua does every profile operation, refuses them in combat, and tells every feature
@@ -138,6 +138,7 @@ function A.Label(unit)
 end
 
 function A.Show(v)
+    if v == LY.DEFAULT then return "TwichUI's default" end
     if v == true then return "on" elseif v == false then return "off" elseif v == nil then return "(not set)" end
     if type(v) == "table" and type(v.x) == "number" then
         return ("%d, %d%s"):format(math.floor(v.x + 0.5), math.floor(v.y + 0.5), v.point and (" from " .. v.point:lower()) or "")
@@ -160,7 +161,7 @@ function A.Normalize(fragment, ctx)
     for k in pairs(fragment) do
         if k == "places" then
             if (ctx.format or 1) < 2 then P.add("not-yet", ctx.where .. ".places") end
-        elseif k ~= "groups" then P.add("unknown-field", ctx.where .. "." .. tostring(k)) end
+        elseif k ~= "groups" and k ~= "reset" then P.add("unknown-field", ctx.where .. "." .. tostring(k)) end
     end
     if (ctx.format or 1) >= 2 and fragment.places ~= nil then
         if type(fragment.places) ~= "table" then P.add("not-table", ctx.where .. ".places")
@@ -205,6 +206,16 @@ function A.Normalize(fragment, ctx)
                 end
             end
         end
+    end
+    -- reset (format 4): a managed setting back to TwichUI's own default (its stored value is cleared, so it follows the
+    -- default of the TwichUI installed). Places can't be reset: a feature's default place isn't a value TwichUI can name.
+    if fragment.reset ~= nil then
+        LY.ResetList(fragment.reset, ctx, function(unit, where)
+            if PlaceOf(unit) then P.add("reset-unsupported", where)
+            elseif not A.FieldOf(unit) then P.add("not-managed", where)
+            elseif units[unit] ~= nil then P.add("reset-and-set", where)
+            else units[unit] = LY.DEFAULT end
+        end)
     end
     -- and TwichConfig's own check of the groups as a whole (bounds, each group's consistency rule)
     if next(plain) then
@@ -331,9 +342,14 @@ function A.Plan(composed, ctx)
             if not f then part.blocked = "schema-changed" return part end
             local old
             if part.action == "switch" then old = StoredValue(target, f) else old = TC().Effective(f) end
-            local change = not LY.Same(old, e.value)
+            local change, reset = not LY.Same(old, e.value), e.value == LY.DEFAULT
+            if reset then
+                -- reset: changes when a value is stored (it is cleared); by effective value it is the default
+                local stored = RawIn(part.action == "switch" and type(TwichUIDB.profiles) == "table" and TwichUIDB.profiles[target] or TwichUIDB, f)
+                change = stored ~= nil
+            end
             part.rows[#part.rows + 1] = { unit = e.unit, label = A.Label(e.unit), old = old, new = e.value, change = change,
-                layer = e.layer, field = f }
+                layer = e.layer, field = f, reset = reset or nil }
         end
     end
     -- Places: each moved for this screen with the component it is attached to (or written as given, with no geometry)
@@ -349,7 +365,10 @@ function A.Plan(composed, ctx)
     -- What the package says, normalized, for the baseline (and an update's comparison)
     local n = {}
     for i, row in ipairs(part.rows) do
-        if i > 1 then n[row.unit] = row.place and PlaceText(row.new) or LY.Value(row.new) end
+        if i > 1 then
+            -- a reset is compared by its effective value: TwichUI's default for that setting
+            n[row.unit] = row.place and PlaceText(row.new) or LY.Value(row.reset and A.FieldOf(row.unit).default or row.new)
+        end
     end
     -- An update into the install's own profile: each unit compared with the baseline and what this profile holds now
     local M = ctx.merge
@@ -358,7 +377,7 @@ function A.Plan(composed, ctx)
         local known = M.part ~= nil and M.part.merge == LY.Merge.VERSION and M.part.schema == A.Schema()
         part.known = known
         local entries, seen, nv = {}, {}, {}
-        for i, row in ipairs(part.rows) do if i > 1 then nv[row.unit] = row.new end end
+        for i, row in ipairs(part.rows) do if i > 1 then nv[row.unit] = row.new end end   -- a reset shows as TwichUI's default
         local function Entry(unit)
             seen[unit] = true
             local c, cs = A.Normal(from, unit)
@@ -396,6 +415,19 @@ function A.Plan(composed, ctx)
                     end
                 end
                 if row.change then part.undo.values[row.unit] = Keep(from, row.unit) end
+            end
+        end
+        -- what the final plan leaves where the player has it (RH-1 C): every place kept, owned or released
+        part.retained = {}
+        for _, r in ipairs(result.rows) do
+            local id = PlaceOf(r.unit)
+            if id and (r.decision == "keep" or r.decision == "owned" or r.decision == "release") then
+                local v = ReadPlace(from, id)
+                part.retained[#part.retained + 1] = { adapter = A.id, unit = r.unit, id = id, label = A.PLACES[id].label, value = v }
+                if v and ctx.geometry and r.decision == "release" then
+                    local x, y = PlaceOnScreen(id, v, ctx.geometry.screen)
+                    kept[#kept + 1] = { unit = r.unit, label = A.PLACES[id].label, x = x, y = y }
+                end
             end
         end
         part.warnings = LY.Merge.CheckPlaces(ctx.geometry, kept)
@@ -474,7 +506,7 @@ function A.Apply(part)
                 local f = A.FieldOf(row.unit)
                 local c = TC().Container(f, true)
                 written[#written + 1] = { c = c, key = f.key, had = c[f.key] }
-                c[f.key] = LY.Copy(row.new)
+                if row.new == LY.DEFAULT then c[f.key] = nil else c[f.key] = LY.Copy(row.new) end   -- a reset clears it
             end
         end
     end)
@@ -593,7 +625,11 @@ end
 function A.Expect(composed, part)
     local out = {}
     for _, e in ipairs(composed.list) do
-        if not PlaceOf(e.unit) then out[e.unit] = LY.Fingerprint(e.value) end
+        if not PlaceOf(e.unit) then
+            -- a reset is checked by what the feature reads: its default (a value stored again would read differently)
+            local f = e.value == LY.DEFAULT and A.FieldOf(e.unit)
+            out[e.unit] = LY.Fingerprint(f and f.default or e.value)
+        end
     end
     for _, row in ipairs(part and part.rows or {}) do
         if row.place then out[row.unit] = PlaceText(row.new) end

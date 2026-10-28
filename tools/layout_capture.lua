@@ -7,6 +7,16 @@
 --       --out TwichUI_Layouts/ClassicData.lua --report docs/layouts/capture-classic-adventure.md \
 --       [--name CLASSIC_CAPTURE] [--client retail|forever] [--made YYYY-MM-DD]
 --       [--title "Classic Adventure"] [--shared-with <earlier data file> [--shared-name CLASSIC_CAPTURE]]
+--       [--previous <data file> | none] [--returned reset|release|keep]
+--
+-- The previous capture of the same layout (--previous; by default the --out file as it is before this run) is compared with
+-- this one (RH-1 A5). A TwichUI setting or place it named that this profile no longer has (usually: put back to TwichUI's
+-- default) is never silently dropped or reset: without --returned the tool lists them, writes nothing and exits with 3.
+--   --returned reset    the settings go in the base's `reset` list (package format 4): players who have the layout go back to
+--                       TwichUI's default. A place can't be reset (its default isn't a value TwichUI can name): released.
+--   --returned release  the layout stops naming them: players keep what they have; new players get TwichUI's default.
+--   --returned keep     the previous value stays in the package (this run's change to them is left out).
+-- A reset the previous capture had stays while the setting is still at its default.
 --
 -- A second layout of the same package (Compact Adventure) is captured with --shared-with, naming the first layout's data
 -- file: whatever is identical in both (module blobs, root look keys, the layout links) is not written again. The
@@ -228,6 +238,82 @@ local places = taken.twichui and taken.twichui.places or {}
 local nFields, nSwitch, nDefault = rep.counts.fields, rep.counts.switches, rep.counts.defaults
 
 ---------------------------------------------------------------------------
+-- What the previous capture of this layout named and this one doesn't (RH-1 A5): a decision, never assumed
+---------------------------------------------------------------------------
+local RETURNED = args.returned
+assert(RETURNED == nil or RETURNED == "reset" or RETURNED == "release" or RETURNED == "keep", "--returned: reset, release or keep")
+local returned = { fields = {}, places = {}, resets = {} }
+local reset   -- the base's reset list, when there is one
+if twName and args.previous ~= "none" then
+    local prevPath = args.previous or args.out
+    local pf = io.open(prevPath, "rb")
+    if pf then
+        pf:close()
+        local chunk = assert(loadfile(prevPath))   -- our own generated file in the repository, not a saved file
+        local env = { TwichUI = { Layouts = {} } }
+        setfenv(chunk, env)
+        chunk()
+        local prev = env.TwichUI.Layouts[args["previous-name"] or NAME]
+        local tw = type(prev) == "table" and prev.twichui
+        if type(tw) == "table" then
+            local TC = R.TwichConfig
+            for _, g in ipairs(LY.SortedKeys(tw.groups or {})) do
+                for _, sl in ipairs(LY.SortedKeys(tw.groups[g])) do
+                    for _, k in ipairs(LY.SortedKeys(tw.groups[g][sl])) do
+                        if not (groups[g] and groups[g][sl] and groups[g][sl][k] ~= nil) then
+                            local grp = TC.Group(g)
+                            local f = grp and grp.index[sl] and grp.index[sl][k]
+                            returned.fields[#returned.fields + 1] = { group = g, slot = sl, key = k, value = tw.groups[g][sl][k],
+                                unit = f and ("twichui:" .. table.concat(f.at, ".") .. "." .. f.key) or nil,
+                                label = f and TA.Label("twichui:" .. table.concat(f.at, ".") .. "." .. f.key) or (g .. "." .. sl .. "." .. k) }
+                        end
+                    end
+                end
+            end
+            for _, id in ipairs(LY.SortedKeys(tw.places or {})) do
+                if places[id] == nil then returned.places[#returned.places + 1] = { id = id, value = tw.places[id], label = TA.PLACES[id] and TA.PLACES[id].label or id } end
+            end
+            -- a reset made before stays while the setting is still at its default here (captured again with a value: dropped)
+            for _, u in ipairs(type(tw.reset) == "table" and tw.reset or {}) do
+                local f = TA.FieldOf(u)
+                local captured = f and groups[f.group] and groups[f.group][f.slot] and groups[f.group][f.slot][f.key] ~= nil
+                if f and not captured then returned.resets[#returned.resets + 1] = u end
+            end
+        end
+    end
+end
+if #returned.fields + #returned.places > 0 then
+    if not RETURNED then
+        io.stderr:write(("The previous capture of this layout named %d TwichUI setting%s and %d place%s this profile no longer has "
+            .. "(usually: put back to TwichUI's default):\n"):format(#returned.fields, #returned.fields == 1 and "" or "s",
+            #returned.places, #returned.places == 1 and "" or "s"))
+        for _, e in ipairs(returned.fields) do io.stderr:write("  setting  " .. e.label .. "\n") end
+        for _, e in ipairs(returned.places) do io.stderr:write("  place    " .. e.label .. "\n") end
+        io.stderr:write("Say what players who have the layout get, and run it again:\n"
+            .. "  --returned reset    back to TwichUI's default (needs package format 4; places can't be reset and are released)\n"
+            .. "  --returned release  the layout stops naming them; players keep what they have\n"
+            .. "  --returned keep     the layout keeps its previous value for them\n"
+            .. "Nothing was written.\n")
+        os.exit(3)
+    end
+    for _, e in ipairs(returned.fields) do
+        if RETURNED == "keep" then
+            groups[e.group] = groups[e.group] or {}
+            groups[e.group][e.slot] = groups[e.group][e.slot] or {}
+            groups[e.group][e.slot][e.key] = e.value
+        elseif RETURNED == "reset" and e.unit then
+            returned.resets[#returned.resets + 1] = e.unit
+        end
+    end
+    if RETURNED == "keep" then for _, e in ipairs(returned.places) do places[e.id] = e.value end end
+end
+if #returned.resets > 0 then
+    table.sort(returned.resets)
+    reset = {}
+    for i, u in ipairs(returned.resets) do if u ~= returned.resets[i - 1] then reset[#reset + 1] = u end end
+end
+
+---------------------------------------------------------------------------
 -- A second layout: what is identical to the first is left out, with a fingerprint of it
 ---------------------------------------------------------------------------
 local sameAs
@@ -282,7 +368,7 @@ local capture = {
     source = { client = args.client or "retail", made = args.made or os.date("!%Y-%m-%d"),
         ellesmereui = { version = type(EDB.lastLoginVersion) == "string" and EDB.lastLoginVersion or nil, uiScale = EDB.ppUIScale } },
     ellesmereui = eui,
-    twichui = slot and { groups = groups, places = places } or nil,
+    twichui = slot and { groups = groups, places = places, reset = reset } or nil,
     sameAs = sameAs,
 }
 
@@ -423,6 +509,25 @@ if slot then
         .. "outside `PLACES`), account-scoped settings, list groups.", nSwitch, nDefault)
 end
 L("")
+if #returned.fields + #returned.places + #returned.resets > 0 then
+    L("## Named before, not in this profile (RH-1)")
+    L("")
+    L("The previous capture of this layout named these; this profile doesn't have them. Decided with `--returned %s`.", tostring(RETURNED or "(none needed)"))
+    L("")
+    L("| Setting or place | What players who have the layout get |")
+    L("|---|---|")
+    local GET = { reset = "TwichUI's default (reset)", release = "what they have (no longer managed)", keep = "the layout's previous value (kept in the package)" }
+    for _, e in ipairs(returned.fields) do L("| %s | %s |", e.label, GET[RETURNED] or "?") end
+    for _, e in ipairs(returned.places) do
+        L("| %s (place) | %s |", e.label, RETURNED == "keep" and GET.keep or "what they have (a place can't be reset; released)")
+    end
+    for _, u in ipairs(reset or {}) do
+        local named = false
+        for _, e in ipairs(returned.fields) do if e.unit == u then named = true end end
+        if not named then L("| %s | TwichUI's default (reset by an earlier capture, still at the default) |", TA.Label(u)) end
+    end
+    L("")
+end
 if sameAs then
     L("## Identical to the first layout (kept once, in the package's shared base)")
     L("")

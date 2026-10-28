@@ -11801,7 +11801,7 @@ LY.CLASSIC_CAPTURE = {
         },
         outlineMode = "shadow",
         unitNameFont = "Alegreya Sans SC Bold",
-        unitNameFontPath = "Interface\\AddOns\\MyFonts\\fonts\\AlegreyaSansSC-Bold.ttf",
+        unitNameFontPath = "Interface\\AddOns\\!!!TwichUI\\media\\fonts\\AlegreyaSansSC-Bold.ttf",
       },
     },
   },

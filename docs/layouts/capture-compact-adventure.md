@@ -54,7 +54,7 @@ Compared with `CLASSIC_CAPTURE` in `TwichUI_Layouts/ClassicData.lua`. Nothing he
 | `addons.EllesmereUICooldownManager.spec` | per-character or per-spec record (STRIP) |
 | `addons.EllesmereUIGroupFinder` | not in EllesmereUI's profile module map (ADDON_DB_MAP) |
 | `profile.chatBubbles` | not a key EllesmereUI's import takes, or not managed (AdapterEllesmere.lua ROOT) |
-| `profile.customColors` | custom colours stay the recipient's (architecture.md §11.5) |
+| `profile.customColors` | custom colours stay the recipient's (architecture.md §1) |
 | `profile.tooltipFixedPos` | not a key EllesmereUI's import takes, or not managed (AdapterEllesmere.lua ROOT) |
 
 

@@ -493,7 +493,7 @@ Check(b.E.installer == "TwichUI", "RegisterExternalInstaller at EllesmereUI's lo
 Check(b.layoutLoads == 1, "the layouts addon is loaded after login to finish the install")
 local jb = b.TwichUI.Layouts.Journal.Read()
 Check(jb.state == "verified" and jb.verify.state == "match", "checked after the reload: verified (" .. tostring(jb.state) .. ")")
-Check(Heard(b, "every managed value reads back as planned"), "and said once")
+Check(Heard(b, "read back by value as planned"), "and said once (by value; presence-only parts apart, RH-1)")
 Check(b.EllesmereUIDB.profiles["TwichUI Layout Test"].addons.EllesmereUIMinimap.minimap.borderSize == 1, "EllesmereUI's defaults went into the blob, and verification still matched")
 local saved2 = Logout(b)
 local b2 = Boot("Rich", saved2)
@@ -789,7 +789,8 @@ do
   Check(d.addons.EllesmereUIChat.c == 2 and d.addons.EllesmereUIMinimap.minimap.coordsMode == "hover", "whole module blobs from the variant replace the base's")
   local vx = L.Verify(false)
   -- Phase 7: presence is reported apart from values read back, never as verified by value
-  Check(vx.state == "match" and vx.adapters.ellesmereui.checked == 0 and vx.adapters.ellesmereui.presence == 2,
+  -- RH-1: the allowlisted minimap fields inside the blob are read back by value; the blobs themselves only for presence
+  Check(vx.state == "match" and vx.adapters.ellesmereui.checked == 1 and vx.adapters.ellesmereui.presence == 2,
     "module blobs are checked only for presence (their contents change as EllesmereUI loads), and counted as such")
   Check(x.EllesmereUIDB.ppUIScale == 0.8, "the UI scale is the recipient's")
 end
@@ -986,7 +987,7 @@ do
   local function Merge(o, f) for k, v in pairs(f) do o[k] = v end return o end
 
   Check(LC.Validate(BASE), "Classic Adventure, with its three choices, is valid (format " .. BASE.format .. ")")
-  Check(LC.FORMAT == 3 and select(2, LC.Validate(WithChoices(nil, 4))) ~= nil, "format 4 is newer than this version reads")
+  Check(LC.FORMAT == 4 and select(2, LC.Validate(WithChoices(nil, 5))) ~= nil, "format 5 is newer than this version reads (format 4, RH-1, adds reset)")
   Problem(BASE.choices, "not-yet", "a format 2 package may not carry choices", 2)
   Problem({}, "bad-value", "an empty list of choices")
   Problem({ { id = "x", kind = "magic", label = "L", default = "a", options = { opt("a") } } }, "bad-value", "an unknown kind")

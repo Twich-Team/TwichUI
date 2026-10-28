@@ -1,4 +1,4 @@
--- TwichUI Layouts: the pipeline (architecture.md §8, §9)
+-- TwichUI Layouts: the pipeline (architecture.md §6, §9)
 --
 --   LY.Plan(pkg, variant, opts)    read only: what an install would do, adapter by adapter, with a key
 --   LY.Apply(pkg, variant, key, opts)  does exactly the plan with that key (re-planned first; refused if it differs)
@@ -83,7 +83,11 @@ local function DoPlan(pkg, variant, opts)
     if journal then
         if journal.package ~= resolved.id then Block(nil, "journal-other-package")
         elseif journal.state == "restoring" then Block(nil, "restore-pending")
-        elseif journal.state == "undoing" then Block(nil, "undo-pending") end
+        elseif journal.state == "undoing" then Block(nil, "undo-pending")
+        -- a Restore or an Undo that stopped part way is finished (or retried) first: an update started from there would
+        -- build on a state that is neither the install nor what came before it (RH-1 B2)
+        elseif journal.state == "restore-partial" then Block(nil, "restore-unfinished")
+        elseif journal.state == "undo-partial" then Block(nil, "undo-unfinished") end
         if journal.char ~= Me() then Block(nil, "journal-other-character") end
     end
     -- With no install record, a layout whose setup was finished is still managed: its management record says which package
@@ -173,10 +177,29 @@ local function DoPlan(pkg, variant, opts)
                 end
                 for _, w in ipairs(part.warnings or {}) do w.adapter = id; upd.warnings[#upd.warnings + 1] = w end
                 if part.merge.whole then upd.whole[id] = part.merge.whole end
-                for g, info in pairs(part.merge.groups) do if info.conflict then upd.groups[g] = { adapter = id, choice = info.choice } end end
+                for g, info in pairs(part.merge.groups) do if info.conflict then upd.groups[g] = { adapter = id, choice = info.choice, owned = info.owned } end end
             end
             if upd and part.fresh then upd.fresh[id] = part.fresh end
         end
+    end
+    -- The final plan (RH-1 C): the recommended geometry with what the update leaves where the player has it. Component
+    -- frames the player placed and sized (the minimap, chat, the meter) take their rect; positions and places they keep are
+    -- listed (and moved in the preview and the fit check); EllesmereUI kept as it is keeps all of its own. exact: the final
+    -- plan is the recommended one (nothing retained).
+    if upd and plan.geometry then
+        local rects, retained, moved, whole = {}, {}, {}, {}
+        for _, id in ipairs(plan.order) do
+            local part = plan.parts[id]
+            for comp, r in pairs(part.final or {}) do rects[comp] = r end
+            for _, it in ipairs(part.retained or {}) do
+                retained[#retained + 1] = it
+                if it.rec then moved[it.id] = it.rec elseif it.value then moved[it.id] = it.value end
+            end
+            if part.retainedAll then whole[#whole + 1] = id end
+        end
+        local geo = next(rects) and LY.Geometry.WithRects(plan.geometry, rects) or plan.geometry
+        plan.final = { geometry = geo, retained = retained, moved = moved, whole = whole, exact = #retained == 0 and #whole == 0,
+            fit = LY.Fit and LY.Fit(pkg, variant, geo, moved) or nil }
     end
     -- An update with nothing to write is still worth recording when it moves the install to another revision, layout or
     -- choices, or releases or claims a setting: the record, the management record and the baseline then say so.
@@ -238,11 +261,13 @@ end
 
 -- The management record after a recorded check: the package, layout and choices now installed, and the install's own
 -- profiles (made by it, or already recorded as its own) and the profiles in use before the first install.
-local function Manage(j)
+-- check: the recorded check's result ("match" | "mismatch" | "partial" | "unverifiable"), kept so a finished setup whose last
+-- check didn't match is never shown as a plain installed one.
+local function Manage(j, check)
     local prev = J.ReadManaged()
     if prev and (prev.package ~= j.package or prev.char ~= j.char) then prev = nil end
     local m = { v = J.MANAGED_VERSION, package = j.package, revision = j.revision, variant = j.variant,
-        picks = j.picks and LY.Copy(j.picks) or nil, char = j.char, at = time(), targets = {}, home = {} }
+        picks = j.picks and LY.Copy(j.picks) or nil, char = j.char, at = time(), targets = {}, home = {}, check = check }
     for id, snap in pairs(j.snapshot) do
         if snap.created or (prev and prev.targets[id] == snap.target) then m.targets[id] = snap.target end
         local home = (prev and prev.home[id]) or snap.active or snap.profile
@@ -264,6 +289,14 @@ local function DoVerify(record)
         end
     end
     local report = { state = Combine(reports), adapters = reports }
+    -- A step that is still pending, failed or wasn't run means the install didn't finish (a client that stopped between two
+    -- steps leaves "applying" with one done): what was done is read, but the record isn't settled, nothing goes in the
+    -- baseline and the management record isn't moved to the new revision. It stays resumable (RH-1 B1).
+    local incomplete = false
+    for _, step in ipairs(j.steps) do
+        if not (step.state == "done" or step.state == "skipped" or step.state == "kept") then incomplete = true end
+    end
+    report.incomplete = incomplete or nil
     if record and (j.state == "applied" or j.state == "verified" or j.state == "mismatch" or j.state == "interrupted") then
         -- "mismatch" is "not verified": verify.state says whether something differs or could not be read
         j.verify = { state = report.state, at = time(), diffs = J.Diffs(reports) }
@@ -272,10 +305,15 @@ local function DoVerify(record)
         for _, r in pairs(reports) do checked, presence = checked + (r.checked or 0), presence + (r.presence or 0) end
         j.verify.checked, j.verify.presence = checked, presence
         report.checked, report.presence = checked, presence
-        j.verify.baseline = Commit(j, reports)
-        Manage(j)
+        if incomplete then
+            j.verify.baseline = {}
+            j.state = "partial"
+        else
+            j.verify.baseline = Commit(j, reports)
+            Manage(j, report.state)
+            j.state = report.state == "match" and "verified" or "mismatch"
+        end
         report.committed = j.verify.baseline
-        j.state = report.state == "match" and "verified" or "mismatch"
         j.reload = false
         J.Write(j)
     end
@@ -569,8 +607,13 @@ end
 
 -- Stops managing the layout: the install record, the management record and the baseline are forgotten; every profile and
 -- value stays exactly as it is. (For a record that can't be used, or a recipient who no longer wants updates compared.)
+-- A readable record of another character's install is theirs to end (TwichUIDB is account-wide; the profiles it names are
+-- that character's): refused. An unreadable one can be forgotten from any character. Returns true | false, code.
 function LY.Detach()
-    if not J.Exists() and not J.ReadManaged() and not J.ReadBaseline() then return false end
+    if not J.Exists() and not J.ReadManaged() and not J.ReadBaseline() then return false, "none" end
+    local j, m, b = J.Read(), J.ReadManaged(), J.ReadBaseline()
+    local me = Me()
+    if (j and j.char ~= me) or (m and m.char ~= me) or (b and b.char ~= me) then return false, "journal-other-character" end
     J.Forget()
     return true
 end

@@ -161,10 +161,11 @@ local function PreviewColumn(page, parent, y, env)
             view:Controls(M.Scenario(), M.OverlayBlock() or "Nothing to show.")
             return
         end
-        view.caption:SetText(WZ.Preview.CAPTION)
+        local note = M.SceneNote()
+        view.caption:SetText(WZ.Preview.CAPTION .. (note and (" " .. note) or ""))
         local accent, o = M.Accent()
         if not accent and o and o.id == "class" then accent = WZ.ClassColor and WZ.ClassColor() end
-        local issues = scene.fits and nil or M.FitLines(scene.geo, 3)
+        local issues = M.SceneIssues(scene)
         view:Set(scene, accent, issues)
         view:Controls(M.Scenario(), M.OverlayBlock())
     end
@@ -697,7 +698,8 @@ local function BuildReview(parent, env)
         up.groupBar:SetShown(g ~= nil)
         if g then
             up.groupMine:SetEnabled(g.choice ~= "mine")
-            up.groupPkg:SetEnabled(g.choice ~= "package")
+            -- a group holding a setting the player made theirs can't take the layout's (the text says how to hand it back)
+            up.groupPkg:SetEnabled(g.choice ~= "package" and not g.owned)
         end
         up.warn:SetText(Bullets(u.warnings))
         up.warn:SetShown(#u.warnings > 0)
@@ -748,8 +750,18 @@ local function BuildReview(parent, env)
             blocked:SetText("")
             blocked:Hide()
         end
-        fitWarn:SetText(r.fit and not r.fit.fits and ("Doesn't fit this screen: " .. table.concat(r.fit.lines, " ") .. " You can still apply it; the pieces are placed as shown.") or "")
-        fitWarn:SetShown(r.fit ~= nil and not r.fit.fits)
+        -- the fit of what Apply leaves: the boxes, then the pieces (sample sizes), what is only illustrative, what is kept as yours
+        local fl = {}
+        if r.fit and not r.fit.fits then
+            fl[#fl + 1] = "Doesn't fit this screen: " .. table.concat(r.fit.lines, " ") .. " You can still apply it; the pieces are placed as shown."
+            if r.fit.scale then fl[#fl + 1] = r.fit.scale end
+        elseif r.fit and not r.fit.clear and #r.fit.pieces > 0 then
+            fl[#fl + 1] = "Fits, but some pieces may overlap (worked out with sample sizes): " .. table.concat(r.fit.pieces, " ")
+        end
+        if r.fit and r.fit.retained then fl[#fl + 1] = r.fit.retained end
+        if r.fit and r.fit.illustrative and #fl > 0 then fl[#fl + 1] = r.fit.illustrative end
+        fitWarn:SetText(table.concat(fl, "\n"))
+        fitWarn:SetShown(#fl > 0)
         local lines = {}
         for _, p in ipairs(r.picks or {}) do lines[#lines + 1] = p.choice .. ": " .. p.option end
         picks:SetText(Bullets(lines))

@@ -67,6 +67,8 @@ local EXPLAIN = {
     -- updates (updates.md)
     ["baseline-newer"] = "the record of what the last install applied was written by a newer TwichUI. Update TwichUI to update the layout.",
     ["undo-pending"] = "undoing the last update is waiting for a reload. Type /reload first.",
+    ["undo-unfinished"] = "undoing the last update stopped part way. Finish it (Undo this update again) or Restore before setting up again.",
+    ["restore-unfinished"] = "the last Restore stopped part way. Finish it (Restore again) before setting up again.",
     ["no-update"] = "there is no update to undo: the last install wasn't an update, or its way back was already used or forgotten.",
     ["not-settled"] = "the last update hasn't been checked after a reload yet.",
     ["backup-taken"] = "a profile with the name TwichUI keeps the install's old profile under already exists, and this install didn't make it. Rename or delete it first.",
@@ -95,6 +97,7 @@ local NOTE = {
     ["not-stored"] = "it has no stored place (the feature's default stands)",
     format = "it is stored in a form TwichUI doesn't read, so it is left as it is",
     ["link-kept"] = "its layout link isn't to a screen edge, so EllesmereUI places it from its link",
+    unplaced = "the screen layer doesn't place it: it stays where the author had it, and isn't part of the fit check",
 }
 local APPLIED = { ["edit-mode"] = "not applied: EllesmereUI leaves it to Blizzard's Edit Mode, which layouts don't manage yet" }
 local DIAG = { overlap = "overlaps", offscreen = "doesn't fit on the screen", clamped = "was moved back onto the screen",
@@ -169,7 +172,7 @@ local function ShowPart(id, part, all, pkgName)
     for _, comp in ipairs(LY.SortedKeys(follow)) do Line("  %d more places move with the %s", follow[comp], comp) end
     if same > 0 then Line("  %d more already as planned", same) end
     for _, n in ipairs(part.notes or {}) do
-        local label = (a.POSITIONS and a.POSITIONS[n.id] and a.POSITIONS[n.id].label) or (a.PLACES and a.PLACES[n.id] and a.PLACES[n.id].label) or n.id
+        local label = (a.POSITIONS and a.POSITIONS[n.id] and a.POSITIONS[n.id].label) or (a.PLACES and a.PLACES[n.id] and a.PLACES[n.id].label) or n.label or n.id
         Line("  %s: not placed: %s", label, NOTE[n.code] or n.code)
     end
 end
@@ -246,9 +249,11 @@ end
 function LY.Tell(said)
     local j = J.Read()
     if said == "verified" then
+        -- the same words as the wizard's result: by value, and apart from it what was only checked for being there
         local pres = j and j.verify and j.verify.presence or 0
-        Say("the layout install was checked after the reload: every managed value reads back as planned%s.",
-            pres > 0 and (" (" .. pres .. " EllesmereUI parts replaced whole were checked only for being there)") or "")
+        local byValue = j and j.verify and j.verify.checked or 0
+        Say("the layout install was checked after the reload: %d settings read back by value as planned%s.", byValue,
+            pres > 0 and ("; " .. pres .. " EllesmereUI parts replaced whole were checked only for being there, not what is inside") or "")
     elseif said == "mismatch" or said == "partial" or said == "unverifiable" then
         Say("the layout install was checked after the reload, and not everything reads back as planned:")
         ShowDiffs(j and j.verify and j.verify.diffs)
@@ -292,6 +297,7 @@ local function Help()
     Line("/tui layout validate | plan | apply [confirm] | geometry | verify | restore [confirm] | status | detach confirm")
     Line("After validate, plan, apply or geometry: test, classic or compact (the package or layout), standard or larger (the density); geometry also takes WxH.")
     Line("/tui layout author opens the authoring workspace (for the person who makes a layout: capture, review, publish, send); /tui layout opens the setup.")
+    Line("/tui layout compare [published|received] [n]: whether a stored package resolves the same as the included one, and where not.")
 end
 
 local function Show(o)
@@ -392,7 +398,7 @@ local function Verify()
     local report, why = LY.Verify(false)
     if not report then Say("%s", Explain(why and ("journal-" .. why) or "none")) return end
     if why == nil and j and j.state == "applied" then Line("(read before the reload that finishes it: EllesmereUI's part may still change at that reload)") end
-    Say("check: %s", report.state == "match" and "every managed value reads back as planned" or report.state)
+    Say("check: %s", report.state == "match" and "what can be read by value reads back as planned (whole EllesmereUI parts only for being there)" or report.state)
     for _, id in ipairs(LY.SortedKeys(report.adapters)) do
         local r = report.adapters[id]
         Line("%s: %s, %d checked%s%s", LABEL[id], r.state, r.checked or 0, (r.unverifiable or 0) > 0 and (", " .. r.unverifiable .. " not readable") or "",
@@ -431,9 +437,38 @@ local function Geometry(o)
     ShowGeometry(geo, true)
 end
 
+-- /tui layout compare [published|received] [n]: whether a stored package (the latest, or the n-th) resolves the same as the
+-- package TwichUI ships, for every layout and choice, and where it doesn't (Pub.Compare). Read only.
+local function Compare(rest)
+    local kind, n = "published", nil
+    for w in rest:gmatch("%S+") do
+        if w == "published" or w == "received" then kind = w
+        elseif tonumber(w) then n = tonumber(w)
+        else Say("unknown: '%s'. /tui layout compare [published|received] [n]", w) return end
+    end
+    local list = LY.Store.List(kind)
+    local entry = list[n or #list]
+    if not entry then Say("there is no %s package%s to compare.", kind, n and (" number " .. n) or "") return end
+    LY.Store.Open(entry, function(env)
+        local r, problems = LY.Pub.Compare(env.package, LY.ADVENTURE_PACKAGE)
+        if not r then ShowProblems(problems) return end
+        Say("%s package %s, revision %d, against the included one (revision %d):", kind, env.meta.id, env.meta.version, LY.ADVENTURE_PACKAGE.revision)
+        if r.same then Line("they resolve the same for every layout, choice and screen (identity %s).", r.identity[1])
+        else
+            Line("they resolve differently (identity %s against %s):", r.identity[1], r.identity[2])
+            for i, d in ipairs(r.differ) do
+                if i > 8 then Line("  ... and %d more parts", #r.differ - 8) break end
+                Line("  %s: %d %s%s", d.part, d.n, d.n == 1 and "difference" or "differences", d.units and (" (" .. table.concat(d.units, ", ") .. ")") or "")
+            end
+        end
+        for _, m in ipairs(r.meta) do Line("  %s: %s here, %s in the included one (doesn't change what it resolves to)", m.field, tostring(m.a), tostring(m.b)) end
+    end, function(why) Say("the stored package can't be opened (%s).", tostring(why)) end)
+end
+
 function LY.Command(arg)
     local word, rest = (arg or ""):match("^%s*(%S*)%s*(.-)%s*$")
     word, rest = (word or ""):lower(), (rest or ""):lower()
+    if word == "compare" then Compare(rest) return end
     local o, bad = Options(rest)
     if not o then Say("unknown: '%s'.", bad) Help() return end
     local confirm = o.confirm
@@ -454,7 +489,9 @@ function LY.Command(arg)
     if word == "restore" then Restore(confirm) return end
     if word == "detach" then
         if not confirm then Say("this forgets the install record without changing anything: what was installed stays. Type /tui layout detach confirm.") return end
-        Say(LY.Detach() and "the install record is forgotten; nothing else was changed." or "there was no install record.")
+        local done, code = LY.Detach()
+        Say(done and "the install record is forgotten; nothing else was changed."
+            or (code == "none" and "there was no install record." or LY.Explain(code)))
         return
     end
     Say("unknown: '%s'.", word)

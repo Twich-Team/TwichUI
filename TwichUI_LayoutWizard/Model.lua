@@ -405,20 +405,58 @@ function M.ScreenText(screen)
     if not screen then return nil end
     local s = ("%d × %d units"):format(Whole(screen.w), Whole(screen.h))
     if screen.physW and screen.physH then
-        s = s .. (" (%d × %d pixels at UI scale %.2f)"):format(screen.physW, screen.physH, screen.scale or 0)
+        -- the UI scale setting (the game's, and EllesmereUI's): the screen is 768 / scale units tall, whatever its pixels
+        s = s .. (" (%d × %d pixels at UI scale %.2f)"):format(screen.physW, screen.physH, M.UIScale(screen))
     end
     return s
+end
+
+-- The UI scale a screen of these units is at: 768 units of height at UI scale 1 (the game's and EllesmereUI's convention;
+-- the author's 1440-pixel screen at 0.64 is 1200 units tall).
+function M.UIScale(screen) return 768 / screen.h end
+
+-- Scale guidance for a layout that doesn't fit (RH-1 D): the largest UI scale at which its components fit on a screen of this
+-- shape, or nil. Worked out with the same resolver, on screens of the same proportions; never applied (the UI scale stays the
+-- player's). Returns scale | nil, why ("readable": it would need less than M.MIN_SCALE).
+M.MIN_SCALE = 0.64   -- below it, text gets small; TwichUI doesn't suggest going lower
+function M.ScaleHint(layout, screen, density)
+    if not (layout and screen and screen.h and screen.h > 0) then return nil end
+    local key = ("%s,%.2f,%.2f,%s"):format(layout.id or layout.variant, screen.w, screen.h, tostring(density))
+    session.scaleHints = session.scaleHints or {}
+    local cached = session.scaleHints[key]
+    if cached then return cached.scale, cached.why end
+    local ratio, found = screen.w / screen.h, nil
+    for h = math.ceil(screen.h), 768 / M.MIN_SCALE + 1, 8 do
+        local geo = LY.Geometry.Resolve(layout.pkg.geometry, { w = h * ratio, h = h }, { density = density, variant = layout.variant })
+        if geo and geo.fits then found = h break end
+    end
+    local scale, why
+    if found then scale = math.floor(768 / found * 100) / 100 else why = "readable" end
+    if scale and scale >= M.UIScale(screen) then scale, why = nil, nil end   -- it fits already
+    session.scaleHints[key] = { scale = scale, why = why }
+    return scale, why
+end
+
+-- The guidance as a sentence, or nil.
+function M.ScaleText(layout, screen, density)
+    local scale, why = M.ScaleHint(layout, screen, density)
+    if scale then
+        return ("It fits at a UI scale of %.2f or smaller (yours is %.2f). The setup never changes your UI scale: it is in the game's settings, or EllesmereUI's if it sets it."):format(scale, M.UIScale(screen))
+    elseif why == "readable" then
+        return ("It would need a UI scale below %.2f, which makes text hard to read. A smaller layout or the Standard size may suit this screen better."):format(M.MIN_SCALE)
+    end
 end
 
 local DIAG = { overlap = "overlaps", offscreen = "doesn't fit on the screen", clamped = "was moved back onto the screen",
     minimum = "is at its smallest readable size" }
 M.DIAG = DIAG
 
--- Plain sentences for a geometry's problems (overlaps and off-screen pieces), at most `max`.
+-- Plain sentences for a geometry's problems (overlaps and off-screen pieces), at most `max`. A component the layout never
+-- applies (the objective tracker) is only illustrative: its overlaps are left to IllustrativeLines, not counted here.
 function M.FitLines(geo, max)
     local out = {}
     for _, d in ipairs(geo and geo.diagnostics or {}) do
-        if d.code == "overlap" or d.code == "offscreen" then
+        if (d.code == "overlap" or d.code == "offscreen") and not d.illustrative then
             local a = geo.components[d.id]
             local b = d.other and geo.components[d.other]
             out[#out + 1] = ("%s %s%s."):format(a and a.label or d.id, DIAG[d.code] or d.code,
@@ -427,6 +465,28 @@ function M.FitLines(geo, max)
         end
     end
     return out
+end
+
+-- The pieces' check (LY.Fit): plain sentences, at most `max`. Sample sizes, so "may".
+local PIECE = { ["piece-offscreen"] = "would be partly off the screen", ["piece-over"] = "may overlap", ["marker-over"] = "may sit on" }
+function M.PieceLines(fit, max)
+    local out = {}
+    for _, it in ipairs(fit and fit.issues or {}) do
+        if not it.illustrative then
+            out[#out + 1] = ("%s %s%s."):format(it.label or it.id, PIECE[it.code] or it.code, it.otherLabel and (" " .. it.otherLabel) or "")
+            if #out >= (max or 4) then break end
+        end
+    end
+    return out
+end
+
+-- What is drawn but never placed by the layout (the objective tracker): one sentence, or nil.
+function M.IllustrativeLines(geo)
+    for id, c in pairs(geo and geo.components or {}) do
+        if c.managed and c.applied then
+            return ("%s is drawn where it would go, but Blizzard's Edit Mode places it, so it isn't part of the fit check."):format(c.label or id)
+        end
+    end
 end
 
 function M.Compat()
@@ -512,19 +572,26 @@ function M.Compat()
         Add("screen", "Your screen", "block", Explain("no-screen"))
     else
         local text = M.ScreenText(screen)
-        local failed, notFit, fitting = false, {}, {}
+        local failed, notFit, fitting, overlaps, hints = false, {}, {}, {}, {}
         for _, l in ipairs(session.layouts) do
             local geo = LY.Geometry.Resolve(l.pkg.geometry, screen, { density = "standard", variant = l.variant })
+            local fit = geo and LY.Fit(l.pkg, l.variant, geo)
             if not geo then failed = true
-            elseif geo.fits then fitting[#fitting + 1] = l.title
-            else notFit[#notFit + 1] = l.title .. ": " .. table.concat(M.FitLines(geo, 2), " ") end
+            elseif not geo.fits then
+                notFit[#notFit + 1] = l.title .. ": " .. table.concat(M.FitLines(geo, 2), " ")
+                hints[#hints + 1] = M.ScaleText(l, screen, "standard")
+            elseif not fit.clear then overlaps[#overlaps + 1] = l.title .. ": " .. table.concat(M.PieceLines(fit, 2), " ")
+            else fitting[#fitting + 1] = l.title end
         end
         if failed then Add("screen", "Your screen", "warn", text .. ". TwichUI couldn't work out where things would go.")
-        elseif #notFit == 0 then Add("screen", "Your screen", "ok", text .. ". Everything fits, in either layout.")
+        elseif #notFit == 0 and #overlaps == 0 then Add("screen", "Your screen", "ok", text .. ". Everything fits, in either layout.")
         else
-            Add("screen", "Your screen", "warn", text .. ". " .. (#fitting > 0 and (table.concat(fitting, " and ") .. " fits. ") or "")
-                .. "Not everything fits: " .. table.concat(notFit, " ")
-                .. " A smaller UI scale gives more room; the layout never shrinks anything below readable.")
+            -- fits the boxes, but a piece reaches past its box (sample sizes); or doesn't fit at all
+            local line = text .. ". " .. (#fitting > 0 and (table.concat(fitting, " and ") .. " fits. ") or "")
+            if #overlaps > 0 then line = line .. "Fits, but some pieces may overlap: " .. table.concat(overlaps, " ") .. " " end
+            if #notFit > 0 then line = line .. "Not everything fits: " .. table.concat(notFit, " ") .. " " end
+            line = line .. (hints[1] and hints[1] or "The layout never shrinks anything below readable.")
+            Add("screen", "Your screen", "warn", line)
         end
     end
 
@@ -599,16 +666,53 @@ function M.TooltipAnchor()
 end
 
 -- The scene for the chosen layout, screen, size and scenario (Scene.lua). Cached until any of those changes.
+-- On the layout and choice steps the preview is the layout's recommended placement, at once. On Review, for an update, it is
+-- the final plan (RH-1 C): what Apply leaves where the player has it is drawn there (plan.final), and M.SceneNote says what
+-- isn't. Planning reads only: no profile is changed to draw it.
+local function Final()
+    local plan = session.step == M.REVIEW and session.plan and session.plan.plan
+    return plan and plan.final or nil
+end
+
 function M.Scene()
     if not session then return nil, "closed" end
     local geo, why = M.Preview()
     if not geo then return nil, why end
+    local final = Final()
+    local moved
+    if final then geo, moved = final.geometry, final.moved end
     local tip = session.scenario == "tooltip" and M.TooltipAnchor() or nil
     local key = session.scenario .. (tip and ("|%s,%s,%s"):format(tip.point, tip.x, tip.y) or "")
     if session.scene and session.scene.key == key and session.scene.geo == geo then return session.scene.scene end
-    local scene = Scene.Build(session.layout, geo, { scenario = session.scenario, tooltip = tip })
+    local scene = Scene.Build(session.layout, geo, { scenario = session.scenario, tooltip = tip, moved = moved })
+    if scene then scene.fit = (final and final.fit) or LY.Fit(session.layout.pkg, session.layout.variant, geo) end
     session.scene = { key = key, geo = geo, scene = scene }
     return scene
+end
+
+-- The preview's problems, as Pages shows them under it: the components', then the pieces'. nil when there are none.
+function M.SceneIssues(scene)
+    if not scene then return nil end
+    local out = scene.fits and {} or M.FitLines(scene.geo, 3)
+    for _, l in ipairs(M.PieceLines(scene.fit, 3 - #out)) do out[#out + 1] = l end
+    return #out > 0 and out or nil
+end
+
+-- What the preview shows, beyond the caption: nil on the layout and choice steps (the recommended placement), and on Review
+-- for an update, which of the player's own placements it draws and which it can't.
+function M.SceneNote()
+    local final = session and Final()
+    if not final then return nil end
+    if final.exact then return "This is the final result: the update leaves nothing of yours elsewhere." end
+    local parts = {}
+    if #final.whole > 0 then parts[#parts + 1] = "EllesmereUI is kept as you have it; its pieces are drawn where you have the ones TwichUI can read." end
+    local drawn, odd = 0, {}
+    for _, it in ipairs(final.retained) do
+        if it.rec or it.value then drawn = drawn + 1 else odd[#odd + 1] = it.label end
+    end
+    if drawn > 0 then parts[#parts + 1] = ("%d of your own placements %s drawn where you have %s."):format(drawn, Plural(drawn, "is", "are"), Plural(drawn, "it", "them")) end
+    if #odd > 0 then parts[#parts + 1] = "Not drawn (kept in a form TwichUI can't read): " .. table.concat(odd, ", ") .. "." end
+    return "Shown as Apply leaves it. " .. table.concat(parts, " ")
 end
 
 -- Whether the full-size preview can open now. nil when it can; otherwise the reason, in a sentence. It needs the player out
@@ -779,6 +883,11 @@ function M.UpdateReview(plan)
     end
     if e and e.backup then
         out.notes[#out.notes + 1] = ("EllesmereUI: your current %s is kept as %s, so Undo this update can put it back exactly."):format(QuoteText(e.target), QuoteText(e.backup.name))
+        if e.backup.replaces then
+            -- the copy an earlier update kept goes once this one works: that earlier update can't be undone any more
+            out.loss = ("The copy %s kept by your last update (from before it) is replaced by this one, so that update can no longer be undone. Restore still goes back to before your first install."):format(QuoteText(e.backup.name))
+            out.notes[#out.notes + 1] = out.loss
+        end
     end
     for _, w in ipairs(up.warnings or {}) do
         out.warnings[#out.warnings + 1] = w.code == "offscreen" and ("%s, where you put it, is off this screen. It stays where you put it."):format(w.label)
@@ -791,8 +900,9 @@ function M.UpdateReview(plan)
         end
     end
     for g, info in pairs(up.groups or {}) do
-        out.groups[#out.groups + 1] = { id = g, adapter = info.adapter, choice = info.choice,
-            text = info.choice == "mine" and "The layout links and the frames linked to them change together. You changed some and the layout changed others, so they stay as you have them (all of them)."
+        out.groups[#out.groups + 1] = { id = g, adapter = info.adapter, choice = info.choice, owned = info.owned,
+            text = info.owned and "The layout links and the frames linked to them change together, and one of them is a setting you made yours (Stop managing), so they all stay as you have them. Use Manage again on it to let the layout's links in."
+                or info.choice == "mine" and "The layout links and the frames linked to them change together. You changed some and the layout changed others, so they stay as you have them (all of them)."
                 or "The layout links and the frames linked to them change together. They take the layout's (all of them)." }
     end
     for id, w in pairs(up.whole or {}) do
@@ -888,7 +998,20 @@ function M.Review()
         out.picks[#out.picks + 1] = { choice = ch.label, option = o and o.label or "?", id = ch.id, optionId = o and o.id }
     end
     local geo = plan.geometry
-    out.fit = { fits = geo == nil or geo.fits, lines = geo and M.FitLines(geo, 4) or {} }
+    -- the fit of what Apply leaves (the final plan, for an update), never only of the recommended placement (RH-1 C, D)
+    local final = plan.final
+    local fgeo = final and final.geometry or geo
+    local fit = (final and final.fit) or (geo and LY.Fit(session.layout.pkg, session.layout.variant, geo)) or nil
+    out.fit = { fits = fgeo == nil or fgeo.fits, clear = fgeo == nil or (fit and fit.clear) or false, lines = fgeo and M.FitLines(fgeo, 4) or {},
+        pieces = M.PieceLines(fit, 4), illustrative = fgeo and M.IllustrativeLines(fgeo) or nil, exact = not final or final.exact,
+        recommendedFits = geo == nil or geo.fits }
+    if final and not final.exact then
+        local labels = {}
+        for _, it in ipairs(final.retained) do labels[#labels + 1] = it.label end
+        out.fit.retained = #final.whole > 0 and "EllesmereUI is kept as you have it, so its placement is yours, not the layout's."
+            or ("Kept where you have %s, and checked there (never moved to clear a warning): %s."):format(Plural(#labels, "it", "them"), table.concat(labels, ", "))
+    end
+    if fgeo and not out.fit.fits then out.fit.scale = M.ScaleText(session.layout, fgeo.screen, plan.density) end
     local installed = plan.journal
     if installed and installed.variant ~= session.layout.variant then
         local from
@@ -967,7 +1090,11 @@ function M.Review()
         end
         for _, n in ipairs(e.notes or {}) do
             local p = LY.EllesmereAdapter.POSITIONS[n.id]
-            out.notes[#out.notes + 1] = (p and p.label or n.id) .. " isn't placed."
+            if n.code == "unplaced" then
+                out.notes[#out.notes + 1] = (n.label or n.id) .. " stays where the layout's author had it (measured from the middle of the screen): it isn't placed for your screen or part of the fit check."
+            else
+                out.notes[#out.notes + 1] = (p and p.label or n.id) .. " isn't placed."
+            end
         end
         if e.untested then sec.lines[#sec.lines + 1] = ("Tested with EllesmereUI %s; you have %s."):format(tostring(e.tested), tostring(e.version)) end
         out.ellesmereui = sec
@@ -1004,6 +1131,7 @@ function M.ConfirmText()
         lines[#lines + 1] = "Updating (" .. (r.update.mode == "recommended" and "the recommended configuration" or "keeping your changes") .. "):"
         for _, l in ipairs(r.update.summary) do lines[#lines + 1] = "  " .. l end
         for _, w in ipairs(r.update.whole) do lines[#lines + 1] = "  " .. w.text end
+        if r.update.loss then lines[#lines + 1] = "  " .. r.update.loss end
     end
     lines[#lines + 1] = ""
     lines[#lines + 1] = r.update and "Nothing reloads by itself. Until you reload, EllesmereUI's part isn't finished or checked. Undo this update (on the Result step) puts back how things are now; Restore goes back to before your first install."
@@ -1011,7 +1139,12 @@ function M.ConfirmText()
     if r.fit and not r.fit.fits then
         lines[#lines + 1] = ""
         lines[#lines + 1] = "It doesn't fit this screen: " .. table.concat(r.fit.lines, " ")
+        if r.fit.scale then lines[#lines + 1] = r.fit.scale end
+    elseif r.fit and not r.fit.clear and #r.fit.pieces > 0 then
+        lines[#lines + 1] = ""
+        lines[#lines + 1] = "Some pieces may overlap on this screen: " .. table.concat(r.fit.pieces, " ")
     end
+    if r.fit and r.fit.retained then lines[#lines + 1] = r.fit.retained end
     return table.concat(lines, "\n"), r.key
 end
 
@@ -1119,6 +1252,12 @@ function M.Result()
             for _, l in ipairs(session.layouts) do if l.id == m.variant then title = l.title end end
             out.kind, out.title, out.tone = "managed", "Installed and managed", "ok"
             out.lines[1] = ("%s, revision %d, is installed. Its setup is finished, so Restore isn't offered; setting it up again updates it and keeps the changes you made since."):format(title, m.revision)
+            -- the last check after a reload didn't match (or couldn't read everything): said, never shown as a plain install
+            if m.check and m.check ~= "match" then
+                out.title, out.tone = "Installed and managed, not verified", "warn"
+                out.lines[#out.lines + 1] = "When it was last checked after a reload, some values didn't read back as planned. What didn't is compared with the last install that did check out when you update."
+                out.can.check = m.char == Me()
+            end
             if m.char ~= Me() then out.lines[1] = Explain("journal-other-character") end
             out.can.again, out.can.stop = m.char == Me(), m.char == Me()
         else
@@ -1152,7 +1291,8 @@ function M.Result()
         out.can.reload = not combat
         out.can.restore = true
     elseif j.state == "verified" then
-        out.lines[1] = "Every value TwichUI can read back reads back as planned."
+        local byValue = j.verify and j.verify.checked or 0
+        out.lines[1] = ("Verified by value: every setting TwichUI can read by value (%d) reads back as planned."):format(byValue)
         local pres = j.verify and j.verify.presence or 0
         if pres > 0 then
             out.lines[#out.lines + 1] = ("%d EllesmereUI %s (modules, layout links, look) %s replaced whole: TwichUI checked only that %s there, not what is inside."):format(
@@ -1166,7 +1306,7 @@ function M.Result()
         out.diffs = DiffLines(j.verify and j.verify.diffs)
         out.can.restore, out.can.check, out.can.again = true, true, true
     elseif j.state == "partial" then
-        out.lines[1] = "A step failed after another had already changed something. Nothing was undone for you."
+        out.lines[1] = "The install didn't finish: a step failed or never ran after another had already changed something, so it isn't treated as installed. Nothing was undone for you."
         out.can.restore = true
         if j.reload then out.can.reload = not combat end
     elseif j.state == "interrupted" or j.state == "applying" then
@@ -1209,7 +1349,7 @@ function M.Result()
     end
     if session.check then
         local c = session.check
-        if c.state == "match" then out.lines[#out.lines + 1] = "Checked just now: every managed value reads back as planned."
+        if c.state == "match" then out.lines[#out.lines + 1] = "Checked just now: what can be read by value reads back as planned (whole EllesmereUI parts only for being there)."
         else out.lines[#out.lines + 1] = "Checked just now: " .. c.state .. "." out.diffs = DiffLines(c.diffs) end
     end
     if combat then out.combat = "Applying, restoring and reloading wait until combat ends." end

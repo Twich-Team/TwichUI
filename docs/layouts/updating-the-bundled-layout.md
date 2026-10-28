@@ -34,8 +34,9 @@ There are two ways to give a layout to other players. They don't affect each oth
    are using in game doesn't matter: the script reads the named profiles, wherever they are.
 
 2. **Use TwichUI's fonts.** A font from your own font folder (an addon like `MyFonts`) isn't on other players' computers.
-   The script swaps one for TwichUI's copy when TwichUI ships the same file, and warns when it can't. Fonts from TwichUI,
-   EllesmereUI and the game itself are fine.
+   The script swaps one for TwichUI's copy when TwichUI ships a file of the same name, and **stops (NOT READY)** when it can't:
+   a file players don't have is never a warning. Fonts from TwichUI, EllesmereUI and the game itself are fine. A swap matches the
+   file name only, so check in game that it is the font you meant (D47).
 
 3. **Log out (or `/reload`).** The game writes your settings to disk only then. The script prints the time each file was
    last written, so you can see it is the change you just made.
@@ -67,8 +68,13 @@ when there is only one.
 4. **Fixes font paths** that point into another addon's folder, when TwichUI has the same font.
 5. **Raises the package revision** in `TwichUI_Layouts/Classic.lua` (for example 3 to 4). This is what makes players who
    already have the layout see the new one as an update.
-6. **Runs the offline tests** (`./tests/run.sh`, a few minutes).
-7. **Shows what changed** and what to do next.
+6. **Checks the package as players will get it** (`tools/check_bundled_layout.lua`: a valid package, both layouts fit your
+   canvas, every file it names is one players have, nothing a published package couldn't hold), then **runs the offline tests**
+   (`./tests/run.sh`, a few minutes; the release workflow runs them too).
+7. **Shows what changed**, the source it read (client, folder, profiles), and either "Done" or NOT READY.
+
+It prints the source first: the client, the saved-files folder, when each file was last written, and the profile each layout is
+read from.
 
 The capture keeps only what a layout may carry: EllesmereUI's look, its modules and layout links, and TwichUI's looks and
 places that differ from TwichUI's defaults. It never takes key bindings, action bar contents, spell layouts, spec overrides,
@@ -84,7 +90,16 @@ links and BattleTags, and writes nothing if it finds any.
 | `TwichUI_Layouts/Classic.lua` | Only the `revision` number |
 | `docs/layouts/capture-classic-adventure.md`, `capture-compact-adventure.md` | The reports: what was kept, what was left out, the scan's result |
 
-If a capture fails, the script puts these files back as they were. Nothing is committed, deployed or released.
+It stops in one of two ways, never mixed up:
+
+| Stop | When | The files | Exit |
+|---|---|---|---|
+| **Stopped while generating** | a capture fails (a profile isn't there, personal data found, a look key differs, a setting back at the default with no decision), the font fix or the revision step fails, or anything unexpected | every one of the five put back exactly as it was | 1 |
+| **NOT READY** | it generated, but a check failed: a file players don't have, an invalid package, a failing test | the new files are **kept so you can look at them**, and must not be committed; the ones from before are saved to a folder it names, with the command that puts them back | 1 |
+
+Only a run that generated and passed every check says **"Done: generated, checked, tests passed"** and exits 0. With `--no-tests`
+it says "Done: generated, checked, not tested". Nothing is committed, deployed or released, and no other file is touched; the
+backup folder is in your temporary directory, so uncommitted work elsewhere in the repository is never involved.
 
 ### Options
 
@@ -96,7 +111,24 @@ If a capture fails, the script puts these files back as they were. Nothing is co
 | `--wow DIR` | Where World of Warcraft is installed |
 | `--classic-profile NAME`, `--compact-profile NAME`, `--twichui-profile NAME` | Other profile names |
 | `--no-bump` | Don't raise the revision (for example when running it a second time before releasing) |
-| `--no-tests` | Skip the tests |
+| `--no-tests` | Skip the tests (the result then says "not tested") |
+| `--returned reset\|release\|keep` | What players who have the layout get for TwichUI settings the last capture named and your profile no longer has (see below). Needed only when there are some |
+
+### Settings you put back to the default
+
+The capture keeps only TwichUI settings that differ from TwichUI's defaults, so a setting you put back to the default simply
+disappears from it. That alone doesn't say what players who already have the layout should get, so the capture compares itself
+with the previous one (the data file as it was), lists such settings and places, writes nothing and stops until you say:
+
+| `--returned` | Players who have the layout get | Notes |
+|---|---|---|
+| `reset` | TwichUI's default (unless they changed it themselves) | The package becomes format 4: an older TwichUI refuses it. A place can't be reset; it is released |
+| `release` | what they have now; new players get the default | The layout stops managing them |
+| `keep` | the layout's previous value | Your change to them is left out |
+
+The capture report has a section "Named before, not in this profile" with what was decided. A reset from an earlier capture
+stays while the setting is still at its default. The in-game authoring workspace asks the same question per setting
+(`publishing.md`).
 
 Run it again as often as you like before you commit. Use `--no-bump` on the second and later runs, or the revision goes up
 each time. A revision that went up more than once does no harm, it just skips numbers.
@@ -138,13 +170,14 @@ git checkout -- TwichUI_Layouts/ClassicData.lua TwichUI_Layouts/CompactData.lua 
 | `no TwichUI profile with that name` | Check the name under TwichUI's settings, Profiles, or pass `--twichui-profile` |
 | The scan found a name, GUID, link or BattleTag | Something in a profile holds personal text (often a custom label). Remove it in game, log out, run again. The report says how many were found, never what |
 | A look key (fonts, accent, colours) differs between the two layouts | Both layouts share one look. Make the two EllesmereUI profiles' fonts, accent and dark-mode colours the same, then run again |
-| `WARNING … is in another addon's folder and TwichUI has no copy of it` | Pick one of TwichUI's fonts (or EllesmereUI's) for that setting in game, log out, run again |
 | `World of Warcraft looks like it is running` | Only a warning: the files are from your last logout or reload |
+| `The previous capture of this layout named … this profile no longer has` | Decide with `--returned reset`, `release` or `keep` (above) |
+| NOT READY: a font, or `media in another addon's folder` | Pick one of TwichUI's fonts (or EllesmereUI's) for that setting in game, log out, run again. Put the old files back first (the command is printed) |
 | `lua5.1 can't load luabitop` | `sudo apt install lua-bitop` |
 
 ### When tests fail
 
-The script keeps the new files and lists the failing checks. Most tests don't depend on what your layout holds, but a few
+The script says NOT READY, keeps the new files for a look (and the ones from before in the folder it names) and lists the failing checks. Most tests don't depend on what your layout holds, but a few
 check the captured layout exactly:
 
 | Test | What it checks | If you changed that on purpose |
@@ -154,6 +187,12 @@ check the captured layout exactly:
 | `test_layout_update.lua` | That a few fonts and modules exist in the package (class bars' and navigation's font, the Bags and Chat modules) | Only if you removed one of those |
 
 The publishing tests follow the shipped revision by themselves, so raising it needs no test changes.
+
+**Never change these to accept a capture**; they hold rules, not your layout: the readable minimums and the fit rules
+(`test_layout_geometry.lua` refusals and minimums), what a layout may carry and what it strips (exclusions, the allowlists, the
+personal-data scan), portable media (`test_layout_hardening.lua` M), preservation and reset (`test_layout_update.lua`,
+`test_layout_hardening.lua` A), restore and undo (`test_layouts.lua`, `test_layout_hardening.lua` B). Change expected
+positions only after the rest passes, and only for what you moved on purpose.
 
 ## Things to know
 

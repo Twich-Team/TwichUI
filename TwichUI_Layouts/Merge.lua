@@ -1,5 +1,5 @@
 -- TwichUI Layouts: updating an installed layout while keeping the recipient's own changes (docs/layouts/updates.md;
--- architecture.md §16). Pure: the adapters read the values, this decides what happens to each one. No saved variables,
+-- architecture.md §7). Pure: the adapters read the values, this decides what happens to each one. No saved variables,
 -- no game calls.
 --
 -- Three sides are compared for every managed unit, each as the adapter's normalized text: for a comparable unit the value
@@ -66,6 +66,18 @@ end
 -- e = { unit, n, c, cs = "x" (stored) | "d" (not stored: the addon's default) | "a" (not there), b = baseline entry | nil,
 --   comparable, known = the adapter has a usable baseline for this install }
 -- Returns the case, or nil for a unit nobody manages (not in the package and not in the baseline).
+-- Whether the recipient changed a unit since the baseline entry b (what the last install left).
+function MG.Changed(e, b)
+    if e.cs == "d" and b.s == "d" then
+        return false   -- never stored on either side: the addon's own default moved, the recipient did nothing
+    elseif b.k then
+        -- a value of the recipient's that an earlier update kept stays theirs (an override), not the layout's new default:
+        -- comparable, while it differs from what the layout recommended then; opaque, until they choose otherwise
+        return not e.comparable or not MG.Near(e.c, b.p)
+    end
+    return not MG.Near(e.c, b.l or b.a or b.p)
+end
+
 function MG.Classify(e)
     local b = e.b
     if b and b.o then return "owned" end
@@ -76,16 +88,7 @@ function MG.Classify(e)
         return e.known and "added" or "unknown"
     end
     local pkg = not MG.Near(e.n, b.p)
-    local mine
-    if e.cs == "d" and b.s == "d" then
-        mine = false   -- never stored on either side: the addon's own default moved, the recipient did nothing
-    elseif b.k then
-        -- a value of the recipient's that an earlier update kept stays theirs (an override), not the layout's new default:
-        -- comparable, while it differs from what the layout recommended then; opaque, until they choose otherwise
-        mine = not e.comparable or not MG.Near(e.c, b.p)
-    else
-        mine = not MG.Near(e.c, b.l or b.a or b.p)
-    end
+    local mine = MG.Changed(e, b)
     if not pkg and not mine then return "same" end
     if pkg and not mine then return "package" end
     if mine and not pkg then return "mine" end
@@ -160,6 +163,8 @@ function MG.Run(entries, opts)
             local d, how = MG.Decide(e, case, policy, opts.choose and opts.choose[e.unit], opts.switching)
             local row = { unit = e.unit, label = e.label, case = case, decision = d, how = how, group = e.group,
                 comparable = e.comparable == true, offers = MG.Offers(case, e.group ~= nil), e = e }
+            -- a unit the package stopped naming: whether the value there now is the recipient's own (what releasing keeps)
+            if case == "removed" and e.b and e.b.p ~= nil then row.mine = MG.Changed(e, e.b) end
             out.rows[#out.rows + 1] = row
             out.by[e.unit] = row
             if e.group then
@@ -171,17 +176,21 @@ function MG.Run(entries, opts)
     end
     -- Atomic groups: kept or replaced together. When one member keeps the recipient's value and another would take the
     -- package's, the whole group goes one way: the recipient's (the default) or the package's, as they choose.
+    -- A member the recipient made theirs ("Stop managing", before it was in the group) can't be handed back by the group: the
+    -- group is theirs while it holds one, whatever the policy or the group's choice ("Manage again" on that member first).
     for _, gid in ipairs(LY.SortedKeys(out.groups)) do
         local g = out.groups[gid]
-        local keep, apply = false, false
+        local keep, apply, owned = false, false, false
         for _, row in ipairs(g.members) do
             if row.decision == "keep" or row.decision == "owned" then keep = true end
+            if row.decision == "owned" then owned = true end
             if row.decision == "apply" then apply = true end
         end
         if keep and apply then
             g.conflict = true
             local choice = opts.groups and opts.groups[gid]
             if choice ~= "mine" and choice ~= "package" then choice = (policy == "recommended" or opts.switching) and "package" or "mine" end
+            if owned then choice, g.owned = "mine", true end
             g.choice = choice
             for _, row in ipairs(g.members) do
                 if choice == "mine" and row.decision == "apply" then row.decision, row.how = "keep", "group"
@@ -193,7 +202,9 @@ function MG.Run(entries, opts)
     -- whole is kept as it is or replaced with the package's (its old state is kept as a backup either way).
     local stuck = {}
     for _, row in ipairs(out.rows) do
-        if (row.decision == "keep" or row.decision == "owned") and row.e.canKeep == false then stuck[#stuck + 1] = row.unit end
+        local carried = row.decision == "keep" or row.decision == "owned"
+            or (row.decision == "release" and row.e.c ~= MG.ABSENT and (row.mine or not opts.switching))
+        if carried and row.e.canKeep == false then stuck[#stuck + 1] = row.unit end
     end
     if #stuck > 0 then
         local choice = opts.whole

@@ -1,4 +1,4 @@
--- TwichUI Layouts: what a package may be, and resolving one variant of it (architecture.md §1, §5)
+-- TwichUI Layouts: what a package may be, and resolving one variant of it (architecture.md §2, §3)
 -- A package is Lua data shipped in this addon. Nothing is ever loaded with loadstring. Checking it changes nothing
 -- and calls no game function: each adapter turns its own fragments into units (Normalize) against its explicit list
 -- of managed fields, and refuses anything else. One problem anywhere refuses the whole package: a partial layout is
@@ -27,13 +27,34 @@
 local R = TwichUI
 local LY = R.Layouts
 
-LY.FORMAT = 3
+LY.FORMAT = 4             -- 4 (RH-1): a fragment may hold `reset`, a list of units to put back to the addon's default
 LY.MAX_UNITS = 256         -- units one adapter fragment may name (Classic Adventure's TwichUI looks are 206)
 LY.MAX_EXPECT = LY.MAX_UNITS + 64   -- and what one adapter's record may expect: those, plus the places the screen layer adds
 LY.MAX_VARIANTS = 8
 LY.MAX_CHOICES = 6         -- what the wizard may ask (a package's `choices`)
 LY.MAX_OPTIONS = 8         -- options in one choice
 LY.ADAPTERS, LY.ADAPTER_ORDER = {}, {}   -- filled by the adapter files
+
+-- A fragment's `reset` list (format 4): unit ids, each a setting the adapter can put back to its addon's default. Only in
+-- the base and a variant (a wizard choice or a preset sets values). Calls add(unit) for each; the adapter checks the unit.
+-- Returns nothing; problems go to ctx.problems.
+function LY.ResetList(list, ctx, add)
+    local P, where = ctx.problems, ctx.where .. ".reset"
+    if (ctx.format or 1) < 4 then P.add("not-yet", where) return end
+    if ctx.layer ~= "base" and ctx.layer ~= "variant" then P.add("reset-not-here", where) return end
+    if type(list) ~= "table" then P.add("not-table", where) return end
+    local n, seen = 0, {}
+    for k in pairs(list) do
+        n = n + 1
+        if type(k) ~= "number" or k < 1 or k % 1 ~= 0 or k > #list then P.add("not-list", where) return end
+    end
+    if n > LY.MAX_UNITS then P.add("too-many-units", where) return end
+    for i, u in ipairs(list) do
+        if type(u) ~= "string" or #u > 128 then P.add("bad-value", where .. "." .. i)
+        elseif seen[u] then P.add("repeated", where .. "." .. i)
+        else seen[u] = true add(u, where .. "." .. i) end
+    end
+end
 
 function LY.RegisterAdapter(a)
     assert(type(a) == "table" and LY.IsId(a.id), "an adapter with an id")

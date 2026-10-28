@@ -235,7 +235,7 @@ end
 local function Plural(n, one, many) return n == 1 and one or many end
 
 -- a value that reads as one line (a number, a word, a position), as opposed to a module's whole settings
-local function Small(v) return v == nil or type(v) ~= "table" or type(v.x) == "number" end
+local function Small(v) return v == nil or v == LY.DEFAULT or type(v) ~= "table" or type(v.x) == "number" end
 
 local function Describe(adapter, unit, old, new)
     local A_ = LY.ADAPTERS[adapter]
@@ -315,13 +315,16 @@ function A.BuildItems()
                 if seen[unit] or view.owned[unit] then return end
                 if Capture.Locate(unit) ~= adapter then return end
                 local cur, lives = Effective(view, s.variant, unit)
-                if cur == nil then return end
+                if cur == nil or cur == LY.DEFAULT then return end   -- not named, or already reset to the default
                 local f = adapter == "twichui" and TA.FieldOf(unit) or nil
                 if f then
-                    -- a TwichUI setting the profile leaves at its default: the layout's value goes back to the default
+                    -- a TwichUI setting the profile leaves at its default. That alone doesn't say what the author wants for
+                    -- the players who have the layout (RH-1 A5): left out unless the author includes it, then "Reset to
+                    -- default" (players' value goes back to TwichUI's default) or "Stop managing" (players keep theirs).
                     if f.default ~= nil and not LY.Same(cur, f.default) then
-                        Add({ id = unit, adapter = adapter, label = LY.ADAPTERS[adapter].Label(unit), kind = "changed", lives = lives,
-                            old = cur, new = f.default, text = Describe(adapter, unit, cur, f.default), toDefault = true })
+                        Add({ id = unit, adapter = adapter, label = LY.ADAPTERS[adapter].Label(unit), kind = "default", lives = lives,
+                            old = cur, new = LY.DEFAULT, how = "reset", canReset = true,
+                            text = Describe(adapter, unit, cur, LY.DEFAULT) })
                     end
                 else
                     Add({ id = unit, adapter = adapter, label = LY.ADAPTERS[adapter].Label(unit), kind = "removed", lives = lives,
@@ -341,13 +344,14 @@ function A.BuildItems()
     for _, it in ipairs(items) do
         it.rootOnly = it.id:find("^ellesmereui:root%.") ~= nil
         -- a layout can only stop naming something the base names by changing the base
-        it.baseOnly = it.rootOnly or (it.kind == "removed" and it.lives == "base")
-        it.include = it.kind ~= "removed"
+        it.baseOnly = it.rootOnly or ((it.kind == "removed" or it.kind == "default") and it.lives == "base")
+        it.include = it.kind ~= "removed" and it.kind ~= "default"
         it.to = it.baseOnly and "base" or "variant"
         local was = previous[it.id]
         if was and LY.Same(was.new, it.new) then
             it.include = was.include
             if not it.baseOnly then it.to = was.to end
+            if it.canReset and (was.how == "reset" or was.how == "release") then it.how = was.how end
         end
     end
     s.items, s.itemBy = items, by
@@ -358,15 +362,27 @@ function A.Items() return session and session.items or nil end
 function A.Skipped() return session and session.skipped or {} end
 
 function A.Counts()
-    local out = { changed = 0, added = 0, removed = 0, included = 0, shared = 0, own = 0 }
+    local out = { changed = 0, added = 0, removed = 0, default = 0, included = 0, shared = 0, own = 0, reset = 0 }
     for _, it in ipairs(session and session.items or {}) do
         out[it.kind] = out[it.kind] + 1
         if it.include then
             out.included = out.included + 1
             if it.to == "base" then out.shared = out.shared + 1 else out.own = out.own + 1 end
+            if it.kind == "default" and it.how == "reset" then out.reset = out.reset + 1 end
         end
     end
     return out
+end
+
+-- For a setting the profile leaves at its default ("default" items): "reset" (players who have the layout get TwichUI's
+-- default) or "release" (the layout stops naming it; players keep what they have). Returns true | false, code.
+function A.SetHow(unit, how)
+    local it = session and session.itemBy and session.itemBy[unit]
+    if not it or not it.canReset then return false, "unknown" end
+    if how ~= "reset" and how ~= "release" then return false, "unknown" end
+    it.how = how
+    session.report = nil
+    return true
 end
 
 function A.SetInclude(unit, on)
@@ -501,10 +517,16 @@ function A.Draft(rough)
     local list = {}
     for _, it in ipairs(s.items or {}) do if it.include then list[#list + 1] = it end end
     table.sort(list, function(a, b) return a.id < b.id end)
+    local resets = false
     for _, it in ipairs(list) do
-        if it.kind == "removed" then
-            if it.to == "base" then Capture.Clear(base, it.id) end
-            Capture.Clear(mine, it.id)
+        if it.kind == "removed" or (it.kind == "default" and it.how == "release") then
+            if it.to == "base" then Capture.Forget(base, it.id) end
+            Capture.Forget(mine, it.id)
+        elseif it.kind == "default" then
+            -- reset to TwichUI's default, in the layer that named it (format 4)
+            if it.to == "base" then Capture.Reset(base, it.id) Capture.Forget(mine, it.id)
+            else Capture.Reset(mine, it.id) end
+            resets = true
         elseif it.to == "base" then
             Capture.Put(base, it.id, it.new)
             Capture.Clear(mine, it.id)   -- this layout takes the shared value
@@ -512,6 +534,7 @@ function A.Draft(rough)
             Capture.Put(mine, it.id, it.new)
         end
     end
+    if resets and (pkg.format or 0) < 4 then pkg.format = 4 end   -- a reset needs format 4 (an older TwichUI refuses it)
     if next(s.fixes) then Replace(pkg, s.fixes) end
     if not rough then
         local r = s.release

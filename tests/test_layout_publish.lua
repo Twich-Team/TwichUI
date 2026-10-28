@@ -436,7 +436,7 @@ do
   Bad(function(e) e.package = nil end, "not-table", "no package")
   -- the package itself
   Bad(function(e) e.package.dev = true end, "dev-not-allowed", "a developer package")
-  Bad(function(e) e.package.format = 4 end, "format-newer", "a newer package format")
+  Bad(function(e) e.package.format = 5 end, "format-newer", "a newer package format")   -- RH-1: format 4 is read now
   Bad(function(e) e.package.geometry = nil end, "no-geometry", "no layout rules")
   Bad(function(e) e.package.surprise = 1 end, "unknown-field", "a package field this version doesn't read")
   Bad(function(e) e.package.layers.base.ellesmereui.modules.EllesmereUIFoo = { x = 1 } end, "unknown-unit", "a module that isn't EllesmereUI's")
@@ -748,7 +748,7 @@ do
   local cases = {
     { "a developer package", function(e) e.package.dev = true end, "developer package" },
     { "a newer envelope", function(e) e.v = 2 end, "newer TwichUI" },
-    { "a newer package format", function(e) e.package.format = 4 end, "newer than this TwichUI reads" },
+    { "a newer package format", function(e) e.package.format = 5 end, "newer than this TwichUI reads" },   -- RH-1: format 4 is read now
     { "an opaque export string", function(e) e.package.layers.base.ellesmereui.modules.EllesmereUIQuickdraw = "!EUI_" .. ("x"):rep(40) end, "export" },
     { "a description that lies", function(e) e.meta.hash = "#1:1" end, "doesn't match" },
     { "a file in another addon", function(e) e.package.layers.base.ellesmereui.modules.EllesmereUIQuickdraw.f = [[Interface\AddOns\Other\a.ttf]] end, "another addon" },
@@ -762,6 +762,37 @@ do
     Check(inc and inc.stage == "failed" and inc.reason and inc.reason:find(case[3], 1, true), case[1] .. ": refused, in plain words (" .. tostring(inc and inc.reason) .. ")")
     Check(f.reloads == 0 and f.E:called("ImportProfileSilent") == 0, case[1] .. ": and nothing applied")
   end
+  -- RH-1: a small block that unpacks to far more than one piece may (a compression bomb): refused by size as it unpacks,
+  -- before it is deserialized, and said as such; a stored package is opened with the same bound
+  local bomb = LibDeflate:EncodeForWoWAddonChannel(LibDeflate:CompressDeflate(("a"):rep(3 * 1048576)))
+  local fb = Client("Bomb Friend")
+  Offer(author, fb, Forge(author, nil, "Z1" .. #bomb .. ":" .. bomb), "accept")
+  Check(Stored(fb) == 0 and Incoming(fb).stage == "failed" and Incoming(fb).reason:find("unpacked to more than", 1, true),
+    "a block that unpacks to 3 MB in one piece: refused by size, nothing stored (" .. tostring(Incoming(fb).reason) .. ")")
+  local opened
+  fb.TwichUI.Share.DecodeData("Z1" .. #bomb .. ":" .. bomb, function() opened = "ok" end, function(e) opened = e end, fb.TwichUI.Share.LAYOUT_DECODE)
+  Until(function() return opened ~= nil end)
+  Check(type(opened) == "string" and opened:find("too large", 1, true), "the decoder's own bound says why")
+  local honest
+  author.c.TwichUI.Share.DecodeData(author.TW.Layouts.Store.Wire(author.entry), function(m) honest = m end, error, author.c.TwichUI.Share.LAYOUT_DECODE)
+  Until(function() return honest ~= nil end)
+  Check(type(honest) == "table" and honest.t == "layoutdata", "a real package unpacks within the bound")
+  -- RH-1: accepted while in combat, the package's check (a whole package validated in one frame) waits for combat to end;
+  -- nothing is stored or applied meanwhile, and the transfer isn't taken for stalled
+  local fc = Client("Combat Friend")
+  Offer(author, fc, nil, nil)
+  fc.combat = true
+  fc.Accept()
+  local from = author.c.TwichUI.Share.SelfName()
+  Until(function() local i = fc.TwichUI.Share.incoming[from] return i and i.waiting == "combat" end, 800)
+  local inc = fc.TwichUI.Share.incoming[from]
+  Check(inc and inc.stage == "checking" and inc.waiting == "combat" and Stored(fc) == 0, "in combat: unpacked, its check waits, nothing stored yet")
+  RunLongTimers(5)
+  Check(inc.stage == "checking" and Stored(fc) == 0, "still in combat: still waiting")
+  fc.combat = false
+  RunLongTimers(5)
+  Until(function() return inc.stage == "done" end)
+  Check(inc.stage == "done" and Stored(fc) == 1 and fc.E:called("ImportProfileSilent") == 0, "after combat: checked and stored, nothing applied")
   -- garbage that is not a package, and a setup's payload where a layout's should be
   local f = Client("Junk Friend")
   Offer(author, f, Forge(author, nil, "Z1" .. ("not a packed block"):rep(30)), "accept")

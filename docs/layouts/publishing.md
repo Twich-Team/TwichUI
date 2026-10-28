@@ -1,13 +1,10 @@
 # Publishing and sharing layout packages
 
-Phase 6 of the layout project (built 2026-10-27, branch `feature/layout-wizard`). It lets the person who makes a layout capture
+Built in Phase 6 (2026-10-27) and hardened in RH-1 (2026-10-28); `architecture.md` §10 is the contract. It lets the person who makes a layout capture
 their own settings, review what changed, decide which changes are shared by every layout and which belong to one, check the
 result the way a recipient's TwichUI will, publish an unchangeable snapshot, and send it through TwichUI's existing sharing
 transport. The recipient stores it, reviews who sent it and whether their game can use it, and installs it with the setup
 wizard they already have. Nothing in this was run on WoW: Forever; the checks that remain are at the end.
-
-Numbering: `implementation-status.md` called Phase 6 "Retained overrides and updates". This work is the authoring and
-publishing phase the author asked for under that number, so that heading stays open (see "Phase 7 handoff").
 
 Contents: the author's workflow; the package's envelope; what travels and how; safety limits; the recipient's workflow;
 what was left out; tests; the manual send and receive checklist; the Phase 7 handoff.
@@ -26,7 +23,7 @@ that addon, which loads on demand anyway. Closing it drops the session. Publishe
 |---|---|---|
 | 1. Start from | The package to build on: the one included with TwichUI, or one this player published earlier. The layout being edited (Classic or Compact Adventure) | |
 | 2. Capture | Reads one EllesmereUI profile and one TwichUI profile, named by the author (the ones in use to start with). The kept parts are decided by `LY.Capture.Read`, the same function the offline tool `tools/layout_capture.lua` now calls | Write, switch, rename or reset any profile. Capture a feature's on/off switch, a per-character record, custom colours, spec overrides or anything the adapters do not manage. Keep anything if a character's name, GUID, link or BattleTag is found in it (counts only are kept) |
-| 3. Review the changes | A structured diff against the starting package: each setting that was **changed**, **added**, or **removed** (named by the layout and absent from the profile), with its old and new value in words (a position or a word, or "N values differ" for a whole module). Each change can be left out and can be kept **in this layout only** or **shared** (promoted to the base). Under each included change the window says what each choice does to **every layout** of the package: "Compact Adventure: unchanged (it has its own value)" or "gets the new value (it uses the shared value)" | Share by default (a change starts in this layout only). Include a removal by default. Offer a setting a wizard choice sets (the accent colour). Let a layout stop naming something only the base names |
+| 3. Review the changes | A structured diff against the starting package: each setting that was **changed**, **added**, **removed** (named by the layout and absent from the profile), or **back at TwichUI's default** (a TwichUI setting the layout sets that the profile leaves at the default), with its old and new value in words (a position or a word, or "N values differ" for a whole module). Each change can be left out and can be kept **in this layout only** or **shared** (promoted to the base). Under each included change the window says what each choice does to **every layout** of the package: "Compact Adventure: unchanged (it has its own value)" or "gets the new value (it uses the shared value)" | Share by default (a change starts in this layout only). Include a removal, or a setting back at the default, by default: the author decides what players who have the layout get (**Reset to default**, package format 4: they go back to TwichUI's default unless they changed it; or **Stop managing**: they keep what they have). Offer a setting a wizard choice sets (the accent colour). Let a layout stop naming something only the base names |
 | 4. Check | Builds the draft from the included changes and checks it the way a recipient's TwichUI will: the package (`Pub.Strict`), both layouts resolved for the package's own canvas and this screen, the media it points at, the personal-data scan, the revision. A path into another addon's folder is offered TwichUI's own copy when TwichUI bundles that file (the included package points at the author's private `MyFonts` folder, so this is the first thing it finds) | Publish anything |
 | 5. Release | The package id (a new id is a new package, revision 1), title, revision (higher than the starting one and than any already published), an optional label and release notes | Put the author's character name in the package |
 | 6. Publish | A confirmation, then the immutable snapshot (see below), kept in the published list | Send anything, write any profile |
@@ -96,7 +93,12 @@ What is different from a setup, on purpose:
 - **Bounded before anything is unpacked.** An offer over `Share.LAYOUT_MAX_WIRE` (768 KB) is declined without a question; the
   announced size is bounded; the pieces are counted as they arrive and one count of pieces is enforced; the joined bytes must be
   exactly the offered size.
-- **Stored, never applied.** After unpacking, TwichUI_Layouts is loaded and, a frame later, `LY.Receive` checks the envelope
+- **Bounded while it is unpacked** (RH-1, `Share.LAYOUT_DECODE`). The sender's encoder compresses one 32 KB slice per piece, so a
+  piece may hold at most a slice (plus 1 KB) compressed and unpack to at most a slice, and all pieces to at most 8 MB; a piece
+  over any of these ends the transfer ("unpacked to more than a layout package can be"), before anything is deserialized. A
+  stored package is opened with the same bound. The sender's claimed size is never trusted as a bound.
+- **Stored, never applied.** After unpacking, TwichUI_Layouts is loaded and, a frame later (or, in combat, once combat ends: the
+  check validates a whole package in one frame), `LY.Receive` checks the envelope
   (`Pub.Check`, the same function the author's Check runs), compares it with the offer (id, revision, fingerprint, size), and
   keeps it in `TwichUIDB.layouts.received`. It is not composed, planned, imported or recorded as an install. A package that
   fails is discarded and the player is told why in plain words.
@@ -129,9 +131,11 @@ visible single-frame pause; nothing in them runs unless the player pressed a but
 `TwichUI_Layouts` (the bundled layout data is about 1.6 MB once loaded) until the next reload. In-game CPU and memory are not measured.
 
 Executable content: the transfer is LibSerialize data only (nothing is ever run), `LY.Canon` refuses a function, a cycle or
-a foreign key type, and no `loadstring`/`load` is involved. Residual risks, stated: a hostile accepted sender can send a
-small, highly compressed block that expands before the size checks can run (LibDeflate has no output limit, and this is true
-of setups already); the question is the control, and the block is limited to 768 KB packed. The fingerprint (Adler-32 and
+a foreign key type, and no `loadstring`/`load` is involved. Residual risks, stated: LibDeflate has no output limit of its own, so
+a piece is checked after it unpacks; one hostile piece (at most 33 KB compressed) can still expand once, by deflate's ratio (about
+1:1032, so tens of MB at worst), before it is refused, and only then is the transfer ended. That bounds the work; it is not "fully
+bounded". Configuration setups on the same transport keep the unbounded unpacking (D48). The question is the control, and a
+package is never applied on arrival. The fingerprint (Adler-32 and
 length) detects accidents and a swapped package, not a determined forger: it is not authentication. Whether a sender is who
 they say is the game's word, and TwichUI says so in the review.
 
@@ -161,9 +165,30 @@ they say is the game's word, and TwichUI says so in the review.
 | Capturing settings that sit in a module's `fields` or a wizard choice | Not capturable (`Capture.Locate`); the accent colour is shown as "set by a choice" |
 | Three-way merging, silent updates, remote control, dependency installation, executable adapters | Out of scope, as asked |
 
+## Two ways to make a package, and comparing them
+
+The package TwichUI ships is recaptured offline from saved files (`updating-the-bundled-layout.md`); a published package is
+captured in game (above). They are different paths and may give different packages (other profiles, font substitutions, a
+setting decided differently). Nothing makes them one artifact; what exists (RH-1) is a deterministic comparison:
+
+- `Pub.Contents(pkg)`: an identity (a fingerprint) of what the package **resolves to**: every layer's units, the choices (ids,
+  kinds, defaults and what each option sets), the geometry, the targets and the requirements. Not its id, revision, title, notes,
+  made, source or developer flag, which don't change what an install resolves to.
+- `Pub.Compare(a, b)`: whether two packages resolve the same for every layout, choice and screen (the same identity proves it:
+  `LY.Resolve` is a function of exactly those parts), and if not, which part differs (a layer, the choices, the geometry) and at
+  which units; the metadata differences are listed apart.
+- `/tui layout compare [published|received] [n]`: a stored package against the included one. Read only (`layouts.publish.compare`).
+
+A unified workflow (publishing in game as the bundled data, or recapturing from a publication) is deferred.
+
 ## Tests
 
-`tests/test_layout_publish.lua` (and the updated counts in `test_layout_wizard.lua`); all 122 suites pass with `tests/run.sh`.
+`tests/test_layout_hardening.lua` (RH-1) adds: the authoring decision for a setting back at the default; comparing a published
+package with the bundled one (the same, a shared change, a Compact-only change, a choice, a title only, determinism); portable
+media in the bundled package. `test_layout_publish.lua` adds: a block that unpacks to 3 MB in one piece refused by size, a real
+package within the bound, and a package accepted in combat whose check waits for combat to end.
+
+`tests/test_layout_publish.lua` (and the updated counts in `test_layout_wizard.lua`), run by `tests/run.sh` (`implementation-status.md` has the latest result).
 It covers: packaging and load order; capture (allowlists, per-character stripping, custom colours, switches, defaults, copies,
 the personal-data scan); the diff (changed, added, removed, choice-owned) and the assignment rules; **base promotion** (the
 effect lines, the draft's layers, both layouts resolved, the starting package untouched); the draft, checks, media fixes and
@@ -197,15 +222,3 @@ pass broke 21 safeguards one at a time; the result is in the final report.
 11. Combat or an instance: sending is refused with a reason (the sharing lockdown check), receiving the question still waits for you.
 12. `/tui perf`: open the workspace ten times and publish and receive once; `layoutwizard.author.frames`, `layoutwizard.events`
     and the store gauges stay flat; the scopes `layouts.publish.*`, `layouts.capture` and `layouts.store.open` appear with their cost.
-
-## Phase 7 handoff
-
-- The package carried by the bundled `ClassicData.lua` still points at the author's private `MyFonts` folder
-  (`unitNameFontPath`). The bundled package is a developer package, so nothing breaks, but the same publish check that found it
-  refuses to publish it as it is. Before release: replace it in the data, or accept the one-click substitution when publishing.
-- Retained overrides and updates: built in Phase 7 (`updates.md`); a received package is an ordinary package for the engine, so
-  they apply to it unchanged.
-- A received package with the included package's id and a higher revision installs over it as an ordinary re-install. There is
-  no "update available" notice by design; the sender has to send it.
-- In-game: everything in the checklist above, plus the existing Phase 2 to 5 checks. The sizes and times in the final report are
-  offline Lua 5.1 figures; in-game CPU and memory are not measured.

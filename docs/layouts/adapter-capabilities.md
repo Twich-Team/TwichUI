@@ -5,7 +5,8 @@ The evidence behind `architecture.md` §2–§4. Paths are relative to the repos
 `../wow-ui-source/` (`forever` branch, ca8368f2f). Phase 1 audit, 2026-10-26.
 
 Labels: **S** = verified in source, **T** = covered by an existing offline test, **G** = still needs an in-game check,
-**—** = not applicable or not offered. Nothing in this table has been checked in game.
+**—** = not applicable or not offered. Nothing in this table has been checked in game. The phase blocks below are the evidence
+as it was gathered; `architecture.md` is the current contract built on it.
 
 **Phase 2 (2026-10-26).** Both adapters are built (`TwichUI_Layouts/AdapterTwichUI.lua`, `AdapterEllesmere.lua`) and
 covered offline by `tests/test_layouts.lua` (EllesmereUI as a stand-in with the real functions' shape). What they use
@@ -14,7 +15,7 @@ is narrower than the tables below: TwichUI's restore is `PF.Switch` + `PF.Delete
 patched only at the allowlisted fields `minimap.coordsMode` and `minimap.coordsPosition`
 (`EllesmereUIMinimap.lua` defaults, `EUI_Minimap_Info.lua` `GetCoordsModePos`/`MAP_POS_ANCHORS`,
 `EUI_Minimap_Options.lua` "Show Coordinates"). `minimap.showCoords` exists in the defaults but nothing reads it in
-9.6.8, so it is not managed. Still **G** for every row: nothing has run in game. `architecture.md` §11 has the details.
+9.6.8, so it is not managed. Still **G** for every row: nothing has run in game. `history.md` (the Phase 2 revisions, §11) has the details.
 
 **Phase 3 (2026-10-26).** Read for the screen layer, in EllesmereUI 9.6.8 and the author's captured profile; none of
 it run in game:
@@ -139,6 +140,21 @@ it run in game:
 | `RenameProfile(old, new)` moves the same profile table to the new name, with its CDM spell bucket, order, spec assignments, sync groups, colour sources, keybind; renaming the active profile keeps it active | S | `EllesmereUI_Profiles.lua:3808` |
 | `DeleteProfile` drops spec assignments and the spell bucket for that name; deleting the active profile falls back to "Default" (why an update switches away first) | S | `EllesmereUI_Profiles.lua:3758` |
 | `SaveCurrentAsProfile` copies the active profile and switches to it: not used (it would change the active profile and copy unrelated stores) | S | `EllesmereUI_Profiles.lua:3686` |
-| Blobs gain defaults at load, so a blob is compared only with its own read-back; which keys EllesmereUI writes at runtime without the player is unknown | S (defaults), **G** (runtime keys) | §11.10; `updates.md` checklist 10 |
+| Blobs gain defaults at load, so a blob is compared only with its own read-back; which keys EllesmereUI writes at runtime without the player is unknown | S (defaults), **G** (runtime keys) | `history.md` §11.10; `updates.md` checklist 10 |
 | `_migrations` decides whether a player's blob can be carried into a package payload (same stamps only) | S (the import takes `_migrations`), G (what a migration rewrites) | `ImportProfile` |
 | Moving a frame in Unlock Mode: whether EllesmereUI rewrites the link offset, the stored position, or both | **G** | the edge-link fix-up assumes the live link and position agree |
+
+**RH-1 (2026-10-28).** Read for the hardening pass, in EllesmereUI 9.6.8, TwichUI and the author's captured profiles; none of it
+run in game:
+
+| What | Status | Evidence |
+|---|---|---|
+| The bundled minimap blob holds `minimap.coordsMode` and `coordsPosition` inside the blob; `Excluded` leaves them out of the blob's fingerprint, so they are only seen as units of their own | S, T | `ClassicData.lua` (`coordsMode = "never"`); `AdapterEllesmere.lua` `Excluded`, `UnitsOf`; `test_layout_hardening.lua` A1 |
+| A missing field reads as EllesmereUI's default (`FIELDS[*].default`, from the module's defaults), so fields are compared and verified by their effective value | S, T | `EllesmereUIMinimap.lua` defaults (Phase 2 reading); `A.Normal`, `A.Verify` |
+| Importing a profile replaces a module blob whole, so a sub-unit is kept only by writing it into the payload's blob | S | `ImportProfile` (Phase 1 reading, `EllesmereUI_Profiles.lua:3330`) |
+| TwichUI fills defaults into its saved data only for feature switches (`modules`), not for looks-and-behaviour fields, so clearing a field's stored value makes the feature read `f.default` | S | `!!!TwichUI/Persist.lua` `P.Normalize`; `TwichConfig.lua` `Effective` |
+| The battle resurrection timer is stored as `EllesmereUIQoL.battleRes.pos = { centerX, centerY }`, a form the screen layer doesn't read | S | `ClassicData.lua`, `CompactData.lua` |
+| UIParent is `768 / UI scale` units tall (the author's 1440-pixel screen at 0.64 is 1200 tall); the effective scale is not the UI scale | S | the author's canvas (Phase 3), `EllesmereUI_PixelPerfect.lua` (Phase 1 reading) |
+| `LibDeflate:DecompressDeflate` has no output limit; TwichUI's encoder compresses one 32 KB slice per piece | S | `Libs/LibDeflate`; `setup/Share.lua` `EncodeBig` (`SLICE`) |
+| The author's `MyFonts` font file and TwichUI's `AlegreyaSansSC-Bold.ttf` share a file name, and TwichUI registers it as "Alegreya Sans SC Bold", the name the profile uses; the files were not byte-compared (the MyFonts copy isn't on this machine) | S (names), **G** (the same font) | `ClassicData.lua` `unitNameFont`; `modules/Media.lua` |
+

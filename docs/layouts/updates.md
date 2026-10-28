@@ -1,10 +1,8 @@
 # Updating an installed layout while keeping the player's changes
 
-Phase 7 of the layout project (the author's numbering; `implementation-status.md` called it 6b, "Retained overrides and
-updates"). Built 2026-10-27 on `feature/layout-wizard`, offline only: nothing here has run on WoW: Forever. **This document is
-the authoritative description of updates, the baseline, finishing a setup and Undo this update.** Where `architecture.md` §6
-(fingerprint-only baseline, Detach as the way to leave) or earlier phase notes say otherwise, this file and `architecture.md`
-§16 win.
+The full description of updates, the baseline, finishing a setup and Undo this update. `architecture.md` §6 and §7 hold the
+contract this follows; this file is consistent with it (RH-1, 2026-10-28). Built in Phase 7 and hardened in RH-1, offline-tested
+only: nothing here has run on WoW: Forever.
 
 What it is: when a layout is installed again (a new revision of the package, other choices, the other layout), TwichUI compares
 three things for every setting it manages and keeps the player's own changes, unit by unit where it can read them and whole
@@ -15,17 +13,19 @@ where it can't. What it is not: a general merge of arbitrary addon profiles. Ell
 | Record | Saved as | What it is for | Ends when |
 |---|---|---|---|
 | Install record (rollback journal) | `TwichUIDB.layouts.install` | Restore (back to before the first install), Undo this update (back to just before the last update), finishing an install or restore after the reload | Restored; or the setup is finished (Keep this setup) |
-| Management record | `TwichUIDB.layouts.managed` | Which package, revision, layout and choices are installed; which profiles are the install's own; where the first install came from | Restored; or Stop managing |
+| Management record | `TwichUIDB.layouts.managed` | Which package, revision, layout and choices are installed; which profiles are the install's own; where the first install came from; the last settled check's result (`check`) | Restored; or Stop managing |
 | Baseline | `TwichUIDB.layouts.baseline` | What the last checked install left, unit by unit: what updates compare against | Restored; or Stop managing |
 
 - **Keep this setup** (`LY.Finish`) finishes the setup: the install record goes (Restore and Undo this update are no longer
   offered; the EllesmereUI copy an update kept is removed), the management record and the baseline stay. Reopening the wizard
   shows "Installed and managed"; setting up again is an update into profiles still recognised as the install's own.
 - **Stop managing** (`LY.Detach`) forgets all three records; nothing installed changes. It is the only way, short of Restore, to
-  end management. "Forget the record" (an unreadable install record) does the same.
-- The management record is written at every recorded check after a reload (match or not), from the record: package, revision,
-  layout, picks, character, the install's own profiles (made by it, or already recorded as its own) and the profiles in use
-  before the first install.
+  end management. "Forget the record" (an unreadable install record) does the same. A readable record of another character's
+  install can't be forgotten from this character (`TwichUIDB` is account-wide).
+- The management record is written at every **settled** check after a reload (match or mismatch, every step run), from the
+  record: package, revision, layout, picks, character, the install's own profiles (made by it, or already recorded as its own),
+  the profiles in use before the first install, and that check's result. A finished setup whose last check didn't match is shown
+  as "Installed and managed, not verified".
 
 ## The baseline
 
@@ -51,10 +51,12 @@ its signature. Only a value longer than 256 bytes of canonical text (none in the
 fingerprint. Opaque units (EllesmereUI module blobs, layout links, look tables) are stored as fingerprints, because they are
 only ever compared with themselves.
 
-**Commit timing.** Nothing goes in the baseline because an install started. Each adapter's part is written only when that
-adapter's check after the reload (or at once, for an install with no reload) matched; an adapter that didn't match, or was
-kept as it is, keeps its previous part. A failed or partial update never touches the baseline. `j.verify.baseline` lists the
-parts committed; the wizard says when one wasn't.
+**Commit timing** (one policy, `architecture.md` §6). Nothing goes in the baseline because an install started. A record is
+committed only once it is **settled**: every step done, skipped or kept, and a check recorded after the reload (or at once, for an
+install with no reload). Then each adapter's part is written only if that adapter's check matched; an adapter that didn't match,
+or was kept as it is, keeps its previous part. A failed or `partial` update, or one with a step that never ran (`interrupted`),
+commits nothing and stays unsettled (`partial`) whatever its check reads. `j.verify.baseline` lists the parts committed; the
+wizard says when one wasn't.
 
 **Versions.** A part made under another merge contract, another TwichUI settings schema, or (EllesmereUI) another EllesmereUI
 version or migration stamps is not compared: its units read as "can't tell" (only ownership still stands). A baseline from a
@@ -84,22 +86,37 @@ this screen, layout and choices).
 - **Inherited and reset.** A setting that was never stored on either side is not the player's change even if its value moved
   (the addon's own default changed). One that was stored and is now not (reset to the addon's default) is the player's change,
   kept by not writing it.
-- **Removed / stop managing.** A package cannot reset a setting to the addon's default; it can only stop naming it. TwichUI
-  settings then keep their value; an EllesmereUI sub-unit follows its blob (gone with the layout's blob, kept in a kept blob).
+- **Removed / stop managing.** A package that stops naming a setting releases it: the recipient keeps what they have. For an
+  EllesmereUI sub-unit (a position, a text size, a field) that means writing their value into the new payload's blob, because
+  importing the layout's blob would otherwise replace it (RH-1). On a layout switch, a sub-unit only the old layout named that the
+  recipient didn't change was the old layout's, not theirs: it follows the new layout's blob.
+- **Reset** (package format 4). A package can put a setting back to the addon's default only where the default is known: a
+  TwichUI setting, or an EllesmereUI allowlisted field. The stored value is cleared, so it follows the **installed** addon's
+  default (and a later default change, since it is never stored). It is compared by its effective value (`p` is the default's
+  value, `s` is "d"), so: a recipient who didn't touch it gets the default; one who changed it keeps theirs (a conflict) unless
+  they choose the layout's; one who already has the default value is left as they are. The check reads the setting back: a value
+  stored again reads differently and is a mismatch. Positions, text sizes, blobs and the look can't be reset; Undo this update
+  puts the earlier value back.
+- **Parent and child.** Whatever the recipient keeps, owns or the package released goes into the payload as they have it,
+  absence included; a value TwichUI can't read is carried as it is (an owned one stays owned). Omitting a write never preserves
+  anything inside a blob the import replaces. EllesmereUI may fill its own defaults into an absent key as it loads: an absent value
+  then reads as that default, which is the same effective value.
 - **Deleted entity.** An EllesmereUI module the player deleted can't stay deleted (EllesmereUI would take another profile's):
   the layout's goes back, and the row says why.
 - Generated profile names, EllesmereUI's load-time defaults, transient keys (`STRIP`, per-character data, `phantomBounds`) and
   serialization order are not changes: the normalization leaves them out or reads them back into `l`.
 
 **Choices per row** (the review's details): Keep mine, Use recommended, Stop managing (make it mine for good), Manage again (for
-an owned one). Reapply recommended never takes back a setting the player made theirs.
+an owned one). They are different on purpose: **Manage again** hands one owned setting back to the layout (from now on it is
+compared and updated like any other; this update applies the layout's value if it differs); **Reapply recommended** is the whole
+update's policy (every managed setting takes the layout's value) and never takes back a setting the player made theirs.
 
 ## What is merged unit by unit, and what only whole
 
 | Adapter | Unit by unit (comparable) | Whole only (opaque, an explicit fallback) |
 |---|---|---|
 | TwichUI | Every managed setting; every TwichUI place | — |
-| EllesmereUI | Registered positions (and sizes), the six density text sizes, the allowlisted fields (`minimap.coordsMode`, `coordsPosition`), the accent | Each module blob (minus its sub-units and private keys), the layout links (minus registered edge-link offsets), the fonts and dark-mode look |
+| EllesmereUI | Registered positions (and sizes), the six density text sizes, the allowlisted fields (`minimap.coordsMode`, `coordsPosition`) wherever the payload's blob holds them (RH-1: before, a field inside the blob was neither in the blob's fingerprint nor tracked), the accent | Each module blob (minus its sub-units and private keys), the layout links (minus registered edge-link offsets), the fonts and dark-mode look |
 
 A whole unit is kept by carrying the player's blob into the new payload, or replaced by the layout's. The review labels it:
 "Replaced whole … TwichUI can't merge inside it", "Your version is carried into the new install whole", and for a conflict that
@@ -119,10 +136,15 @@ string (the developer test package) is labelled as replaced whole.
 - **Atomic group `layout`:** the layout links and every registered position linked to another element (bar 2, bar 5, cast
   bars, boss frames, combat text, a tracked-buff group). Kept or replaced together; a mix (the player moved one, the layout
   changed another) defaults to the player's, all of them, or the layout's on request. Never one link field alone. "Stop
-  managing" is not offered inside the group.
+  managing" is not offered inside the group. A setting the player made theirs before it joined the group (a position the layout
+  now links to another element) keeps the whole group theirs, whatever the policy or the group's choice: the review says so and
+  "Use the layout's (all)" is off until they use Manage again on it.
 - **Density and text:** the density choice changes N for components and text sizes; text sizes are comparable units.
-- **Check after merging:** each kept place is looked at on this screen: off the screen, or over another managed component.
-  Warnings only; a placement is never moved to clear one.
+- **Check after merging:** each kept, owned or released place is looked at on this screen: off the screen, or over another
+  managed component. Warnings only; a placement is never moved to clear one.
+- **The final plan** (`plan.final`, RH-1): the recommended geometry with the component frames the player keeps (the minimap,
+  chat, the meter) at their own rect, the pieces they keep moved to their place, and a whole EllesmereUI kept as it is marked as
+  theirs. The Review preview draws it and the fit check reads it (`wizard.md`, "Preview and fit").
 
 ## Switching layouts
 
@@ -149,16 +171,24 @@ string (the developer test package) is labelled as replaced whole.
   One level only.
 - **Keep the update** (`LY.ForgetUpdate`) removes the copy and the way back; Restore is unchanged.
 - **Restore** still goes back to before the first install, and removes the copy too.
-- **Partial and resumed.** EllesmereUI done and TwichUI failed: `partial`, nothing committed, Undo and Restore offered. Setting up
-  again with the same package, layout and choices resumes: the done step is not planned or applied again (no second import),
-  the way back from before the first attempt stands, and units a stopped attempt already wrote read as "both changed the same
-  way" (not written twice).
+- **Partial and resumed.** EllesmereUI done and TwichUI failed: `partial`, nothing committed, Undo and Restore offered. A client
+  that stopped between the steps leaves `applying`, found at login as `interrupted`; a check of it reports but leaves it `partial`
+  (a step never ran). Setting up again with the same package, revision, layout and choices resumes: the done step is not planned or
+  applied again (no second import), the way back from before the first attempt stands, and units a stopped attempt already wrote
+  read as "both changed the same way" (not written twice). Setting up with other choices from a `partial` record replaces the
+  install's profile in place and keeps the way back from before the first attempt.
+- **Stopped Undo or Restore.** A new update is refused while an Undo or a Restore stopped part way (`undo-unfinished`,
+  `restore-unfinished`): finish it first. An Undo that stopped after the copy got its name back records that (`renamed`), and
+  doing it again only switches the profile.
+- **A second update before the first is kept** replaces the copy the first one kept (the profile from before it), so the first
+  can no longer be undone; the review and the confirmation say so. Restore is unaffected.
 - **Nothing to write** is still recorded when the revision, layout or choices change, or a setting is released or claimed.
 
 ## Verification
 
-Verify reads only, never repairs. TwichUI settings and places, EllesmereUI fields, positions, text sizes and the accent are read
-back by value. Module blobs, the layout links and the look tables are checked only for being there (EllesmereUI rewrites them
+Verify reads only, never repairs. TwichUI settings and places, EllesmereUI fields (by their effective value: a missing key is
+EllesmereUI's default), positions, text sizes and the accent are read back by value; a setting reset to the default is read back
+as its default. Module blobs, the layout links and the look tables are checked only for being there (EllesmereUI rewrites them
 as it loads): `verify.checked` and `verify.presence` are reported apart, the baseline marks those units `u`, and the result says
 "N EllesmereUI parts … TwichUI checked only that they are there, not what is inside."
 
@@ -175,6 +205,9 @@ Set up again and Stop managing.
 
 - Merging inside an EllesmereUI module blob, or any third-party profile. Curated fields beyond the registered positions, text
   sizes, two minimap fields and the accent need EllesmereUI source evidence per field before they are added.
+- Resetting a position, a text size, a blob or the look to EllesmereUI's default (no default TwichUI can name); a TwichUI place.
+- Per-character EllesmereUI data inside the install's own profile (`DataBars.characters`, `QoL.chars`) is never carried into a
+  payload, so an update re-import starts it again (EllesmereUI rebuilds it); whether anything visible is lost is an in-game check.
 - Carrying a player's blob across EllesmereUI migration vintages.
 - Remembering layout-specific personal choices per layout for a later switch back (Undo this update covers the last switch).
 - More than one level of Undo.
@@ -183,7 +216,16 @@ Set up again and Stop managing.
 
 ## Tests
 
-`tests/test_layout_update.lua` (new; 12 sections): every case table-driven (false / 0 / "" / absent, inherited and reset,
+`tests/test_layout_hardening.lua` (RH-1): an owned, kept or released child surviving the replacement of its parent blob and
+EllesmereUI's load-time defaults (value and absence); a field change seen and kept; an owned unit in the layout group and an
+unreadable one; reset versus stop managing end to end (v1 non-default, v2 resets, recipients unchanged / changed / already
+default, a reset that didn't take, Undo), validation of reset, an older reader refusing format 4; the authoring decision; an
+interrupted record never settling; blocked updates after a stopped Undo or Restore; a retried Undo; the management record's
+check; Stop managing from another character; a colliding and a missing copy, a replaced copy disclosed; the final plan and its
+fit; screen coverage; portable media; comparing packages. `tests/test_layout_tools.lua`: the capture tool's decisions and the
+script's stops.
+
+`tests/test_layout_update.lua` (12 sections): every case table-driven (false / 0 / "" / absent, inherited and reset,
 removed, owned, added, unknown, opaque, positions within a unit, a deleted entity), the choices, the switch rules, groups, the
 whole-addon decision, tracking and the screen check; end to end (publish v1 and v2 with the real `Pub.Build`/`Pub.Check`, install
 v1, change a font, a TwichUI place, the minimap and the chat text size, update keeping them, verify, undo, restore); commit timing
@@ -214,3 +256,8 @@ applying without the update choices) each fail the new tests.
 9. Combat: Apply, Undo, Keep the update and Keep this setup are refused.
 10. Find which EllesmereUI blob keys change at runtime without the player (open and close windows, change specs, log in on
     another character), so they can be left out of the comparison.
+11. Change the minimap coordinates in EllesmereUI, install a revision that changes the minimap module: your coordinates stay.
+12. Stop managing the minimap's place, then install a revision that links the minimap to another element: the review says the
+    group stays yours; Manage again, and the layout's links come in.
+13. A revision that resets a TwichUI setting you never touched: after the reload it reads the default and the check says
+    verified; one you changed stays yours.

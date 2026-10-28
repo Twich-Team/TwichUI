@@ -162,7 +162,10 @@ end
 ---------------------------------------------------------------------------
 do
   Check(M.Step() == 1 and Says(win, "Set up TwichUI's interface layout") and Says(win, "Does it work here?"), "the welcome, with its compatibility check")
-  Check(Says(win, "Version 9.6.8.") and Says(win, "Everything fits, in either layout."), "EllesmereUI's version and the screen, read")
+  -- RH-1: on 1920 x 1080 at 0.64 Compact's pet frame and stance bar reach past its checked strip, over Chat (sample sizes):
+  -- said, instead of "Everything fits"
+  Check(Says(win, "Version 9.6.8.") and Says(win, "Classic Adventure fits.") and Says(win, "Fits, but some pieces may overlap: Compact Adventure"),
+    "EllesmereUI's version and the screen, read")
   Check(Says(win, "A preview build") and Says(win, "Applying and restoring are refused during combat"), "a preview build is said to be one; combat is explained")
   Check(Enabled(win, "Start") and not Has(win, "Back") and Has(win, "Close"), "Start is offered, Back isn't, Close is")
   Check(not Enabled(win, "2  Layout") and not Enabled(win, "3  Helpers"), "later steps can't be jumped to")
@@ -450,7 +453,7 @@ do
   -- check again, read only
   local snapshot = World(k)
   Click(w, "Check again")
-  Check(Says(w, "Checked just now: every managed value reads back as planned") and Unchanged(World(k), snapshot), "Check again reads and changes nothing")
+  Check(Says(w, "Checked just now: what can be read by value reads back as planned") and Unchanged(World(k), snapshot), "Check again reads and changes nothing")
   -- a changed accent is reported, not repaired
   k.EllesmereUIDB.profiles["TwichUI Adventure"].euiAccent = { useClass = true }
   Click(w, "Check again")

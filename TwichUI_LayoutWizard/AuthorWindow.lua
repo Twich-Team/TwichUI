@@ -175,8 +175,8 @@ local function Refresh()
     if s.captureError then status = CAPTURE_WHY[s.captureError]
     elseif s.capture then
         local c = A.Counts()
-        status = ("Captured. %d %s differ from the starting package: %d changed, %d added, %d removed.%s"):format(
-            #s.items, #s.items == 1 and "setting" or "settings", c.changed, c.added, c.removed,
+        status = ("Captured. %d %s differ from the starting package: %d changed, %d added, %d removed, %d back at TwichUI's default.%s"):format(
+            #s.items, #s.items == 1 and "setting" or "settings", c.changed, c.added, c.removed, c.default,
             s.capture.client == "other" and " (EllesmereUI here is not the WoW: Forever build.)" or "")
     else status = "Nothing captured yet." end
     w.captureStatus:SetText(status)
@@ -208,6 +208,10 @@ local function Refresh()
             row.detail:SetText(it.text)
             row.target.text:SetText(it.to == "base" and "Shared" or "This layout only")
             row.target:SetEnabled(it.include and not it.baseOnly)
+            -- a setting the profile leaves at its default: what players who have the layout get, chosen, never assumed
+            row.how:SetShown(it.canReset == true)
+            row.how.text:SetText(it.how == "release" and "Stop managing" or "Reset to default")
+            row.how:SetEnabled(it.include and it.canReset == true)
             local lines = {}
             if it.include then
                 for _, e in ipairs(A.Effects(it.id) or {}) do
@@ -215,6 +219,11 @@ local function Refresh()
                 end
             end
             if it.baseOnly then lines[#lines + 1] = it.rootOnly and "This kind of setting only lives in the shared base." or "Only the shared base can stop naming it." end
+            if it.canReset then
+                lines[#lines + 1] = not it.include and "Left out: players keep getting the layout's current value."
+                    or it.how == "release" and "Stop managing: players who have the layout keep what they have; new players get TwichUI's default."
+                    or "Reset to default: players who have the layout go back to TwichUI's default, unless they changed it themselves. Needs a TwichUI that reads package format 4."
+            end
             row.effects:SetText(table.concat(lines, "\n"))
             row.frame:SetHeight(math.max(48, 6 + Height(row.label) + 2 + Height(row.detail) + (#lines > 0 and (2 + Height(row.effects)) or 0) + 4))
             y = y + row.frame:GetHeight() + 4
@@ -508,6 +517,12 @@ local function Build()
             Refresh()
         end, "Where this change lives. 'This layout only' keeps it in the layout being edited. 'Shared' moves it to the base every layout of the package starts from; the lines under it say what that does to each layout.")
         row.target:SetPoint("TOPRIGHT", -4, -2)
+        row.how = Button(f, "Reset to default", 130, "secondary", function()
+            if not row.it then return end
+            A.SetHow(row.it.id, row.it.how == "release" and "reset" or "release")
+            Refresh()
+        end, "This setting is at TwichUI's default in your profile, but the layout sets something else. 'Reset to default' puts players who have the layout back to the default; 'Stop managing' leaves them what they have.")
+        row.how:SetPoint("RIGHT", row.target, "LEFT", -6, 0)
         row.effects = Text(f, "small", 300)
         row.effects:SetPoint("TOPRIGHT", row.target, "BOTTOMRIGHT", 0, -2)
         row.effects:SetJustifyH("RIGHT")

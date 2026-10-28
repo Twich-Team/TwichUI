@@ -1,4 +1,4 @@
--- TwichUI Layouts: composing the layers (architecture.md §1, §6). Pure: the same layers always give the same result,
+-- TwichUI Layouts: composing the layers (architecture.md §2). Pure: the same layers always give the same result,
 -- and nothing here reads saved variables or calls the game.
 --
 -- Precedence is per unit: the highest layer that names a unit decides it, and below the unit nothing is merged (a list
