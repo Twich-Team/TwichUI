@@ -78,13 +78,13 @@ local function ChoicesFormat(choices)
 end
 
 LY.CLASSIC_PACKAGE = {
-    format = ChoicesFormat(LY.ADVENTURE_CHOICES), id = "twichui-adventure", revision = 4,
+    format = ChoicesFormat(LY.ADVENTURE_CHOICES), id = "twichui-adventure", revision = 7,
     -- a developer package until it has been installed and checked on WoW: Forever (Phase 7): the capture is from the
     -- Retail client's saved files, and a developer package may be tried on Retail (architecture.md §3)
     dev = true,
     title = "TwichUI Adventure", made = C.source.made,
     source = "Captured from the author's Retail EllesmereUI " .. tostring(C.source.ellesmereui.version) .. " profiles",
-    requires = { ellesmereui = { min = "9.6.6", tested = "9.6.8" } },
+    requires = { ellesmereui = { min = "9.6.6", tested = "9.6.9" } },
     -- one pair of profiles for the package: switching layouts is an install again into them (architecture.md §3)
     targets = { twichui = "TwichUI Adventure", ellesmereui = "TwichUI Adventure" },
     layers = {

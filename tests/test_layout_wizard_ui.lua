@@ -111,7 +111,7 @@ end
 ---------------------------------------------------------------------------
 -- 1. Welcome: a calm opening, a verdict, the checks behind a button
 ---------------------------------------------------------------------------
-local c = LM.Boot("Ui")
+local c = LM.Boot("Ui", nil, { euiVersion = "9.6.9" })   -- the version the bundled layout was tested with
 local win, WK = Open(c)
 P.origin = win
 local M, W = WK.Model, WK.Window
@@ -126,15 +126,15 @@ do
   Check(Says(win, "backed up when you do") and not Says(win, "restore point is made first"), "the backup is promised for the apply, not as if one exists already")
   Check(Says(win, "every character on this account"), "the account-wide part stays in view")
   Check(Says(win, "Items to review") and Says(win, "A preview build"), "this client's one warning is said at once, with its short explanation")
-  Check(Has(win, "Compatibility details") and not Says(win, "Version 9.6.8.") and not Says(win, "refused during combat"), "and the checks are behind Compatibility details")
+  Check(Has(win, "Compatibility details") and not Says(win, "Version 9.6.9.") and not Says(win, "refused during combat"), "and the checks are behind Compatibility details")
   Check(not Has(win, "Skip setup"), "no first-install buttons outside a first installation")
   Check(welcome.frame.h <= VIEW_H, "the page fits the viewport without scrolling (" .. welcome.frame.h .. " of " .. VIEW_H .. ")")
   local before = World(c)
   Expand(win, "Compatibility details")
-  Check(Says(win, "Version 9.6.8.") and Says(win, "Applying and restoring are refused during combat"), "Compatibility details shows every check")
+  Check(Says(win, "Version 9.6.9.") and Says(win, "Applying and restoring are refused during combat"), "Compatibility details shows every check")
   Check(Says(win, "Classic Adventure fits."), "including the screen, for each layout")
   Collapse(win, "Compatibility details")
-  Check(not Says(win, "Version 9.6.8."), "and folds again")
+  Check(not Says(win, "Version 9.6.9."), "and folds again")
   Check(Unchanged(World(c), before), "opening and folding it changed nothing")
   Check(Enabled(win, "Get started") and not Has(win, "Start"), "Get started is the one primary action")
 end
@@ -262,6 +262,7 @@ do
   local P2 = P
   P2.origin = w   -- measured from this client's window until the next section says otherwise
   local ch = M2.Choice("helpers")
+  local own = #ch.options   -- the bundled options come first; the three below are cards own + 1 .. own + 3
   ch.options[#ch.options + 1] = { id = "quiet", label = "Quiet screen", hint = "Turns the on-screen extras off. Everything else stays as it is, and you can bring any of them back later.",
     twichui = { groups = { classBars = { modules = { classBars = false } }, markerBar = { modules = { markersBar = false } } } } }
   ch.options[#ch.options + 1] = { id = "mine-a", label = "Raid night", hint = "The bars and the markers, no food buttons.",
@@ -269,8 +270,8 @@ do
   ch.options[#ch.options + 1] = { id = "plain", label = "Plain", hint = "", twichui = { groups = { food = { modules = { foodDrink = false } } } } }
   Advance(w, M2, 3)
   local page = W2.pages[3]
-  Check(#page.cards >= 6 and page.cards[6].shown, "six presets are six cards")
-  local last = P2.Rect(page.cards[6])
+  Check(#page.cards == own + 3 and page.cards[own + 3].shown, "every preset is a card")
+  local last = P2.Rect(page.cards[own + 3])
   local _, bottom2, scroll2 = Viewport(w)
   Check(page.frame.h > 428 and last.b > bottom2, "more than fit: the page is taller than the window's viewport and scrolls")
   Check(scroll2.GetVerticalScrollRange(scroll2) > 0, "so the scroll area has something to scroll")
@@ -282,11 +283,11 @@ do
   for i = 1, #ch.options do AuditCard(page.cards[i], "preset card " .. i) end
   Check(Says(w, "Turns the on-screen extras off.") and not Says(w, "Everything else stays as it is, and you can bring"), "a custom preset keeps its author's first sentence, and the rest is behind the button")
   Check(Says(w, "The bars and the markers, no food buttons."), "and a short one whole")
-  Check(page.cards[4].pic.texture:find("qualityOfLife", 1, true) and page.cards[5].pic.texture:find("qualityOfLife", 1, true), "a custom preset with no artwork of its own gets the generic icon")
+  Check(page.cards[own + 1].pic.texture:find("qualityOfLife", 1, true) and page.cards[own + 2].pic.texture:find("qualityOfLife", 1, true), "a custom preset with no artwork of its own gets the generic icon")
   Check(Says(w, "Turns off:") == false, "(no preset's details are built until asked for)")
-  page.cards[4].more.scripts.OnClick(page.cards[4].more)
+  page.cards[own + 1].more.scripts.OnClick(page.cards[own + 1].more)
   Check(Says(w, "Turns off: Class resource bars, Marker bar.") and Says(w, "Everything else stays as it is, and you can bring any of them back later."), "its details say what it turns off, and carry the author's full text")
-  page.cards[6].more.scripts.OnClick(page.cards[6].more)
+  page.cards[own + 3].more.scripts.OnClick(page.cards[own + 3].more)
   Check(Says(w, "Turns off: Food and drink."), "a preset made of one switch says it")
   Check(page.cards[6].h > 70, "(a plain preset with no hint is still a whole card)")
   -- a bundled id the author changed is no longer described as the bundled shape

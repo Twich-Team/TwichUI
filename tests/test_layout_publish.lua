@@ -393,7 +393,7 @@ do
 
   -- the metadata says what is in it
   local m = PUB.env.meta
-  Check(m.id == "twichui-adventure" and m.version == SHIPPED + 6 and m.format == 5 and m.baseRevision == SHIPPED and m.counts.variants == 2, "id, version, schema, base revision, variants")
+  Check(m.id == "twichui-adventure" and m.version == SHIPPED + 6 and m.format == 6 and m.baseRevision == SHIPPED and m.counts.variants == 2, "id, version, schema, base revision, variants")
   Check(m.variants[1].id == CLASSIC and m.variants[2].id == COMPACT and m.variants[1].title == "Classic Adventure", "both variants, with titles")
   Check(m.requires.ellesmereui and m.requires.ellesmereui.min == "9.6.6" and m.adapters[1] == "ellesmereui" and m.adapters[2] == "twichui", "adapter requirements and the adapters used")
   Check(#m.media == 2 and m.media[1].source and m.ownership.base.n > 100 and m.ownership["variant:" .. CLASSIC].n > 0, "media references and who owns how many settings")

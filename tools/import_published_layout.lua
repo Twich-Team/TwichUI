@@ -107,6 +107,9 @@ local env, why = PE.Open(c, entry)
 if not env then Stop("%s: %s", PE.Describe(entry), why) end
 local pkg = env.package
 if pkg.id ~= bundled.id then Stop("it is the package %q; TwichUI bundles %q", tostring(pkg.id), bundled.id) end
+-- a layout's own copy of a shared module that differs only in how its numbers were written is left out (kept once, in the base)
+local droppedCopies, keptCopies
+pkg, droppedCopies, keptCopies = LD.DropSharedCopies(pkg)
 
 ---------------------------------------------------------------------------
 -- 2. Against the package in the repository
@@ -251,6 +254,14 @@ for _, d in ipairs(cmp.differ) do Line("- %s: %d %s%s", d.part, d.n, d.n == 1 an
 if not sameChoices and #cmp.differ == 0 then Line("- the choices' names or descriptions (nothing that changes what an install resolves to)") end
 Line("")
 Line("Files written: %s.", table.concat(order, ", "))
+if #droppedCopies > 0 or #keptCopies > 0 then
+    Line("")
+    Line("Copies of shared modules in a layout's own part (`LD.DropSharedCopies`): a module the shared base holds, written again in a layout, is left out")
+    Line("when the two differ only in how their numbers were written (two decimals, or 15 digits), so a later change to the base still reaches that layout.")
+    Line("A setting a wizard choice always writes (friendly plates' showFriendlyPlayers) is not compared, as the picked option replaces it. A module that differs in any other value stays in the layout.")
+    if #droppedCopies > 0 then Line("- left out (the base's module applies): %s", table.concat(droppedCopies, ", ")) end
+    if #keptCopies > 0 then Line("- kept (it differs): %s", table.concat(keptCopies, ", ")) end
+end
 if layerNote then Line("The layers came from the published package; `docs/layouts/capture-*.md` still describe the last profile recapture.") end
 Line("")
 Line("## The TwichUI presets it holds")
@@ -266,7 +277,7 @@ Line("")
 Line("## Round trip")
 Line("")
 Line("After writing, `tools/check_bundled_layout.lua --published` loads the bundled package from these files in a fresh process, unpacks the")
-Line("published entry again and requires `Pub.Compare` to find them the same, the choices to be identical byte for byte (labels and")
+Line("published entry again (with the same copies left out) and requires `Pub.Compare` to find them the same, the choices to be identical byte for byte (labels and")
 Line("descriptions included), and the revision to be the published one. A failure puts every file back.")
 Put(REPORT, table.concat(lines, "\n") .. "\n")
 

@@ -322,19 +322,19 @@ end
 --     value when the package only stops naming it. Older readers refuse format 4; reset is only for settings with a known default.
 ---------------------------------------------------------------------------
 do
-  Check(L0.FORMAT >= 4, "A5. the package format that can say reset is 4, which this TwichUI reads (it reads up to " .. L0.FORMAT .. "; the shipped one is 5: it also carries tooltip choices)")
+  Check(L0.FORMAT >= 4, "A5. the package format that can say reset is 4, which this TwichUI reads (it reads up to " .. L0.FORMAT .. "; the shipped one is 6: it also carries editable presets)")
   local DEF = NAV_F.default
   Check(PKG.layers.base.twichui.groups.navigation.navigation.font ~= nil and DEF ~= PKG.layers.base.twichui.groups.navigation.navigation.font,
     "    v1 sets the navigation font to something other than TwichUI's default")
   local function ResetNav(p)
-    p.format = 5
+    p.format = 6
     p.layers.base.twichui.groups.navigation.navigation.font = nil
     p.layers.base.twichui.reset = { NAV_U }
     p.layers.base.ellesmereui.reset = { COORDS_U }
     p.layers.base.ellesmereui.modules.EllesmereUIMinimap.minimap.coordsMode = nil
   end
   local V2R = Publish(2, ResetNav)
-  Check(V2R.format == 5 and V2R.layers.base.twichui.reset[1] == NAV_U, "    published as format 5 (the package's own), the reset as a plain list of unit ids")
+  Check(V2R.format == 6 and V2R.layers.base.twichui.reset[1] == NAV_U, "    published as format 6 (the package's own), the reset as a plain list of unit ids")
   -- the recipient didn't touch it: it goes back to TwichUI's default, and nothing is stored
   local NAME = "Resets"
   local c = Install(NAME, LM.Boot(NAME, nil, { eui = EUI }), V1, CLASSIC)
@@ -448,12 +448,12 @@ do
   Check(Base(d0).groups.navigation.navigation.font ~= nil and Base(d0).reset == nil, "    left out: the package keeps its value")
   Check(A.SetInclude(NAV_U, true) and it.how == "reset", "    included: Reset to default unless the author chooses otherwise")
   local d1 = A.Draft()
-  Check(d1.format == 5 and Base(d1).reset and Base(d1).reset[1] == NAV_U and Base(d1).groups.navigation.navigation.font == nil,
-    "    reset: format 5 (the package's own), the unit in the base's reset list, its value gone")
+  Check(d1.format == 6 and Base(d1).reset and Base(d1).reset[1] == NAV_U and Base(d1).groups.navigation.navigation.font == nil,
+    "    reset: format 6 (the package's own), the unit in the base's reset list, its value gone")
   Check(LY.Pub.Strict(d1), "    and the draft passes the strict check a recipient makes")
   Check(A.SetHow(NAV_U, "release"), "    or Stop managing")
   local d2 = A.Draft()
-  Check(d2.format == 5 and Base(d2).reset == nil and Base(d2).groups.navigation.navigation.font == nil, "    release: no longer named, nothing reset, format unchanged")
+  Check(d2.format == 6 and Base(d2).reset == nil and Base(d2).groups.navigation.navigation.font == nil, "    release: no longer named, nothing reset, format unchanged")
   Check(not A.SetHow(FONT_U, "reset"), "    only such a setting offers the choice")
   A.End()
 end

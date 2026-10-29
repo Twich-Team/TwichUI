@@ -461,6 +461,8 @@ local PRESET_WHY = {
     full = ("A choice may offer at most %d options."):format(LY.MAX_OPTIONS),
     last = "A package keeps at least one option.",
     ["needs-default"] = "This is the default. Make another option the default first, then remove this one.",
+    ["bad-id"] = ("An id is lower-case letters, digits and single hyphens, starting with a letter, at most %d characters."):format(40),
+    ["id-taken"] = "That id is in use, or is one this package offered before and keeps retired.",
     ["bad-label"] = "A name is plain text of at most 48 characters.", ["label-taken"] = "Another option already has that name.",
     ["bad-hint"] = "A description is plain text of at most 200 characters.",
     limit = ("A preset may manage at most %d settings."):format(LY.MAX_UNITS),
@@ -575,7 +577,16 @@ function AW.DrawPresets(y)
     if not ws.descEdit:HasFocus() then ws.descEdit:SetText(sel and sel.hint or "") end
     y = y + 28
     ws.idText:SetShown(AW.presetDetails == true)
+    ws.idLabel:SetShown(AW.presetDetails == true and sel ~= nil and not keep)
+    ws.idEdit:SetShown(AW.presetDetails == true and sel ~= nil and not keep)
     if AW.presetDetails then
+        if sel and not keep then
+            ws.idLabel:SetText("Id")
+            Place(ws.idLabel, 0, y + 4)
+            Place(ws.idEdit, 100, y)
+            if not ws.idEdit:HasFocus() then ws.idEdit:SetText(sel.id) end
+            y = y + 28
+        end
         ws.idText:SetText(("Stable id: %s (players' picks are remembered by it; renaming never changes it).%s"):format(sel and sel.id or "?",
             #P.retired > 0 and (" No longer offered: " .. table.concat(P.retired, ", ") .. ".") or ""))
         Place(ws.idText, 0, y)
@@ -787,7 +798,26 @@ function AW.BuildPresets(L)
         Refresh()
     end))
     ws.detailsBtn = St(Button(content, "Show details", 110, "secondary", function() AW.presetDetails = not AW.presetDetails Refresh() end,
-        "Shows the option's stable id (what players' picks are remembered by) and the ids the package no longer offers."))
+        "Shows the option's stable id (what players' picks are remembered by), lets you change it, and lists the ids the package no longer offers."))
+    ws.idLabel = St(Text(content, "body", 90))
+    ws.idEdit = St(Edit(content, 260, function(text)
+        local P = AP.State()
+        local o = P and AP.Find(P.selected)
+        if not o or text == "" or text == o.id then Refresh() return end
+        local function Change()
+            local ok, why = AP.SetId(o.id, text)
+            Why(ok and nil or why, ok and ("The id is now \"" .. text .. "\".") or nil)
+            Refresh()
+        end
+        if P.baseIds[o.id] then
+            R.Interact.Confirm("TWICHUI_LAYOUT_PRESETS_ID",
+                ("Change the id of \"%s\" from %s to %s?\n\nThe starting package already offered it under %s, so that id is retired: no later option can take it, and a player who picked it is told it is no longer offered. Players who have not installed this package are not affected. Only the draft changes."):format(o.label, o.id, text, o.id),
+                Change, { accept = "Change the id" })
+            Refresh()
+        else
+            Change()
+        end
+    end))
     ws.idText = Text(content, "small", CONTENT_W - 20)
     ws.captureBtn = St(Button(content, "Capture current settings into this preset", 260, "primary", function()
         local P = AP.State()

@@ -204,6 +204,41 @@ local rcD, outD = Run(TMP .. "/sv1", "--no-bump")
 Check(rcD == 0 and outD:find("Done: generated, checked, not tested", 1, true), "   a clean run: Done (and says the tests didn't run) (" .. tostring(rcD) .. ")")
 Check(outD:find("TwichUI - Classic Adventure", 1, true) and outD:find(TMP .. "/sv1", 1, true), "   it names the source: the saved files and the profiles")
 
+-- LD.DropSharedCopies (tools/layout_data.lua): a layout's own copy of a shared module is left out when it differs only in how its numbers
+-- were written (two decimals, 15 digits), and stays when any value differs
+do
+  dofile(REPO .. "tools/layout_data.lua")
+  local function Pkg(shared, own, choices)
+    return { revision = 1, choices = choices or {},
+      layers = { base = { ellesmereui = { modules = shared } },
+        variants = { ["a"] = { ellesmereui = { modules = {} } }, ["b"] = { ellesmereui = { layout = { x = 1 }, modules = own } } } } }
+  end
+  local shared = { Pos = { x = 473.33334350586, y = 0.066666666666666667, name = "n", on = true, c = { r = 0.10980392156863 } }, Other = { v = 1 } }
+  local own = { Pos = { x = 473.33, y = 0.066666666666667, name = "n", on = true, c = { r = 0.1098039215686274 } }, Own = { v = 2 } }
+  local pkg = Pkg(shared, own)
+  local out, dropped, kept = LD.DropSharedCopies(pkg)
+  Check(#dropped == 1 and dropped[1] == "b/Pos" and #kept == 0 and out.layers.variants.b.ellesmereui.modules.Pos == nil, "tools: a copy that differs only in rounding is left out")
+  Check(out.layers.variants.b.ellesmereui.modules.Own and out.layers.variants.b.ellesmereui.layout.x == 1, "   a module the base doesn't hold, and the layout's links, stay")
+  Check(pkg.layers.variants.b.ellesmereui.modules.Pos ~= nil and out ~= pkg, "   the package it was given is not changed")
+  local _, d2, k2 = LD.DropSharedCopies(Pkg(shared, { Pos = { x = 473.34, y = 0.066666666666667, name = "n", on = true, c = { r = 0.10980392156863 } } }))
+  Check(#d2 == 0 and #k2 == 1 and k2[1]:find("first difference: Pos.x", 1, true), "   a value a hundredth off is a different value, and is kept (and named)")
+  local _, d3 = LD.DropSharedCopies(Pkg({ Pos = { c = 0.5 } }, { Pos = { c = 0.5 + 1 / 255 } }))
+  Check(#d3 == 0, "   a colour one 8-bit step off is a different colour (two decimals are for positions, not colours)")
+  local _, d4 = LD.DropSharedCopies(Pkg({ Pos = { on = true } }, { Pos = { on = false } }))
+  Check(#d4 == 0, "   a changed switch is kept")
+  local _, d5, k5 = LD.DropSharedCopies(Pkg({ Pos = { on = true, a = 1 } }, { Pos = { a = 1, on = false } }))
+  Check(#d5 == 0 and #k5 == 1, "   (without a choice naming it)")
+  local choices = { { id = "plates", kind = "enum", sets = { "ellesmereui:addons.Pos.on" }, options = {} },
+    { id = "helpers", kind = "preset", sets = { "ellesmereui:addons.Pos.a" }, options = {} } }
+  local _, d6 = LD.DropSharedCopies(Pkg({ Pos = { on = true, a = 1 } }, { Pos = { a = 1, on = false } }, choices))
+  Check(#d6 == 1, "   a setting an enum choice always writes is not compared: whatever the layer holds, the picked option replaces it")
+  local _, d7 = LD.DropSharedCopies(Pkg({ Pos = { on = true, a = 1 } }, { Pos = { a = 2, on = true } }, choices))
+  Check(#d7 == 0, "   but only that one: another value still differs, and a preset's list doesn't count")
+  local _, d8 = LD.DropSharedCopies(Pkg({ Pos = { a = 1 } }, { Pos = { a = 1, extra = 2 } }))
+  local _, d9 = LD.DropSharedCopies(Pkg({ Pos = { a = 1, extra = 2 } }, { Pos = { a = 1 } }))
+  Check(#d8 == 0 and #d9 == 0, "   a setting present on one side only is a difference")
+end
+
 Sh(("rm -rf %q"):format(TMP))
 if failures > 0 then print(failures .. " check(s) FAILED") os.exit(1) end
 print("OK")

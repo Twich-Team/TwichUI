@@ -109,6 +109,15 @@ The package TwichUI ships is built from repository files. To ship exactly what y
    byte for byte (labels and descriptions too) and the revision to match. A failure puts every file back. Then the offline tests
    (`--no-tests` skips them; the result then says "not tested").
 
+**A layout's copy of a shared module is left out when it adds nothing.** The workspace's review compares exactly, so a layout whose
+profile was set up from an install (positions written to two decimals, numbers to 15 digits) can publish its own copy of a module the
+shared base already holds, differing only in how the numbers were written. Bundled as it is, that copy would stop later changes to the
+base from reaching that layout. The import (`LD.DropSharedCopies`, `tools/layout_data.lua`) leaves such a copy out, and the round trip
+leaves it out of the published package too before comparing. It matches a number only to about 12 digits, or a position or size (10 and
+up) to its two-decimal rounding, never a colour or an opacity; and it does not compare a setting an enum choice always writes (the
+friendly-plates choice's `showFriendlyPlayers`), since the picked option replaces whatever the layer holds. Any other difference keeps the
+copy. The report lists what was left out and what was kept, and why.
+
 **Only these may differ** between the bundled and the published package: the title, `made` and `source` (the publication's own
 words), the developer flag (`dev = true` stays until the layouts are checked on WoW: Forever), and the declared format (the
 bundled package declares the lowest its choices need). None of them changes what an install resolves to.

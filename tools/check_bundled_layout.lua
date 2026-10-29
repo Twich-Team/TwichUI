@@ -124,7 +124,8 @@ if args.published then
     if entry and not env then why = select(2, PE.Open(c, entry)) end
     if not env then Problem("the published package can't be read again: %s", tostring(why))
     else
-        local pub = env.package
+        -- the same step the import took: a layout's copy of a shared module that differs only in how its numbers were written is left out
+        local pub = LD.DropSharedCopies(env.package)
         local cmp = Pub.Compare(pkg, pub)
         if not (cmp and cmp.same) then
             for _, d in ipairs(cmp and cmp.differ or {}) do Problem("round trip: %s differs from the published package (%d)", d.part, d.n) end

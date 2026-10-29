@@ -209,4 +209,96 @@ function LD.ReadText(path)
     return s
 end
 
+-- A published package may hold, in a layout's own part, a copy of a module the shared base already holds, where the two differ only
+-- in how their numbers were written down: a position of 473.33 beside 473.33334350586, or the same colour to 14 or 15 digits (an
+-- install writes positions to two decimals, and the transport writes 15 digits). Kept in the layout it would stop later changes to
+-- the base from reaching that layout, so the bundled data keeps such a module once, in the base.
+--   LD.SameToRounding(a, b, path, skip) -> true | false, path     structurally equal; a number counts as equal when it is the other to
+--                        about 12 digits, or (a position or size, from 10 up) the other rounded to two decimals. Nothing coarser: a
+--                        colour or an opacity is never matched by two decimals. skip is a set of "Module.key.key" paths left out
+--   LD.DropSharedCopies(pkg) -> package, dropped, kept    pkg with those copies left out of every layout's own EllesmereUI modules
+--                        (a new table along the changed path; pkg is not touched); dropped and kept are lists of
+--                        "layout/Module" and, for kept ones, "layout/Module (first difference)". A setting a wizard choice always
+--                        writes (an enum choice's `sets`, such as the friendly-plates choice's showFriendlyPlayers) is not compared:
+--                        whatever the layer holds, the picked option replaces it, so a difference there changes nothing an install writes
+local function Round2(x) return math.floor(x * 100 + 0.5) / 100 end
+local function SameNumber(a, b)
+    if a == b then return true end
+    if a ~= a or b ~= b then return false end
+    local scale = math.max(1, math.abs(a), math.abs(b))
+    if math.abs(a - b) <= 1e-12 * scale then return true end
+    if scale < 10 then return false end   -- only a position or a size is written to two decimals; a colour or a scale this small is not rounded
+    return math.abs(Round2(a) - b) <= 1e-9 or math.abs(Round2(b) - a) <= 1e-9
+end
+function LD.SameToRounding(a, b, path, skip)
+    path = path or ""
+    if skip and skip[path] then return true end
+    if type(a) ~= type(b) then return false, path end
+    if type(a) == "number" then
+        if SameNumber(a, b) then return true end
+        return false, path
+    elseif type(a) == "table" then
+        for k, v in pairs(a) do
+            local ok, where = LD.SameToRounding(v, b[k], path .. "." .. tostring(k), skip)
+            if not ok then return false, where end
+        end
+        for k in pairs(b) do
+            local sub = path .. "." .. tostring(k)
+            if a[k] == nil and not (skip and skip[sub]) then return false, sub end
+        end
+        return true
+    end
+    if a == b then return true end
+    return false, path
+end
+
+function LD.DropSharedCopies(pkg)
+    local layers = pkg.layers
+    local shared = layers and layers.base and layers.base.ellesmereui and layers.base.ellesmereui.modules
+    local dropped, kept = {}, {}
+    if type(shared) ~= "table" or type(layers.variants) ~= "table" then return pkg, dropped, kept end
+    local skip = {}
+    for _, ch in ipairs(pkg.choices or {}) do
+        if ch.kind == "enum" then
+            for _, id in ipairs(ch.sets or {}) do
+                local path = type(id) == "string" and id:match("^ellesmereui:addons%.(.+)$")
+                if path then skip[path] = true end
+            end
+        end
+    end
+    local newVariants = {}
+    for id, v in pairs(layers.variants) do
+        local mods = type(v) == "table" and type(v.ellesmereui) == "table" and v.ellesmereui.modules
+        if type(mods) ~= "table" then newVariants[id] = v
+        else
+            local keep = {}
+            for m, blob in pairs(mods) do
+                local ok, where = false, nil
+                if shared[m] ~= nil then ok, where = LD.SameToRounding(shared[m], blob, m, skip) end
+                if ok then dropped[#dropped + 1] = id .. "/" .. m
+                else
+                    keep[m] = blob
+                    if shared[m] ~= nil then kept[#kept + 1] = ("%s/%s (first difference: %s)"):format(id, m, where) end
+                end
+            end
+            local eui = {}
+            for k, x in pairs(v.ellesmereui) do eui[k] = x end
+            eui.modules = keep
+            local nv = {}
+            for k, x in pairs(v) do nv[k] = x end
+            nv.ellesmereui = eui
+            newVariants[id] = nv
+        end
+    end
+    table.sort(dropped)
+    table.sort(kept)
+    local nl = {}
+    for k, x in pairs(layers) do nl[k] = x end
+    nl.variants = newVariants
+    local np = {}
+    for k, x in pairs(pkg) do np[k] = x end
+    np.layers = nl
+    return np, dropped, kept
+end
+
 return LD

@@ -377,6 +377,32 @@ function AP.Rename(id, label)
     return true
 end
 
+AP.ID_MAX = 40
+
+-- Gives an option another id. An option this draft added takes it freely: no package has carried the old id. One the starting package
+-- offered retires its old id, as Remove does, so no later option takes it and a player who picked it is told it is gone (the window
+-- asks first). A new id is a plain id nothing else uses: not an offered, retired or starting id.
+function AP.SetId(id, newId)
+    local P = AP.State()
+    local o = Find(id)
+    if not o then return false, "unknown" end
+    if AP.IsKeep(o) then return false, "keep" end
+    if newId == id then return true end
+    if not LY.IsId(newId, AP.ID_MAX) then return false, "bad-id" end
+    if Taken()[newId] then return false, "id-taken" end
+    if P.baseIds[id] then
+        local seen = false
+        for _, rid in ipairs(P.retired) do if rid == id then seen = true end end
+        if not seen then P.retired[#P.retired + 1] = id end
+    end
+    o.id = newId
+    if P.default == id then P.default = newId end
+    if P.selected == id then P.selected = newId end
+    if P.pending and P.pending.id == id then P.pending.id = newId end
+    Touch()
+    return true
+end
+
 function AP.Describe(id, hint)
     local o = Find(id)
     if not o then return false, "unknown" end
@@ -562,6 +588,10 @@ function AP.SetEditName(label)
     if not LY.Plain(label, AP.LABEL_MAX) then return false, "bad-label" end
     if not LabelFree(label, e.id) then return false, "label-taken" end
     e.label, e.touched = label, true
+    if e.isNew then   -- a preset not yet in the draft: its id follows its name ("New preset" never stays the id)
+        e.id = nil
+        e.id = AP.NewId(label)
+    end
     return true
 end
 

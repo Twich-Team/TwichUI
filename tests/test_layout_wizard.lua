@@ -247,7 +247,7 @@ do
   local wt = Open(t)
   Check(Says(wt, "Items to review") and Enabled(wt, "Get started"), "a newer EllesmereUI is a warning to review, not a block")
   Expand(wt, "Compatibility details")
-  Check(Says(wt, "tested with 9.6.8"), "a newer EllesmereUI is allowed with a note")
+  Check(Says(wt, "tested with 9.6.9"), "a newer EllesmereUI is allowed with a note")
   -- EllesmereUI's own first-run setup waiting
   local f = LM.Boot("Compat")
   f.EllesmereUI._firstInstallPending = true

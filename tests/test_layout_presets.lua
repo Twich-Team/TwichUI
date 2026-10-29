@@ -35,10 +35,39 @@ local CLASSIC = "classic-adventure"
 local SCREEN = { w = 2133.33, h = 1200 }
 local NAV, CB, MB, FD = "twichui:modules.navigation", "twichui:modules.classBars", "twichui:modules.markersBar", "twichui:modules.foodDrink"
 
+-- The TwichUI helpers selector as the package shipped it before an editable (format 6) one was bundled: three switch-on-only presets.
+-- The bundled package now holds the author's editable presets, so the sections below that start from "an older selector" (the
+-- workspace converting it on the first saved change, the wizard and window saying it is the older kind) put this one in place of
+-- the bundled helpers in the booted client's package. Only the package in that client's memory; no file is touched.
+local function Switches(...)
+  local mods = {
+    classBars = { classBars = true }, food = { foodDrink = true }, markerBar = { markersBar = true }, navigation = { navigation = true },
+  }
+  local groups = {}
+  for _, g in ipairs({ ... }) do groups[g] = { modules = Copy(mods[g]) } end
+  return { groups = groups }
+end
+local LEGACY_HELPERS = {
+  id = "helpers", kind = "preset", label = "TwichUI helpers", default = "as-is",
+  hint = "Which of TwichUI's own features the setup turns on. It only turns things on, never off. None of them shares anything, plays a sound or acts for you.",
+  options = {
+    { id = "as-is", label = "Leave them as they are", hint = "No TwichUI feature is turned on or off. The layout still styles and places the ones you already use." },
+    { id = "on-screen", label = "On-screen helpers", twichui = Switches("classBars", "food", "markerBar"),
+      hint = "Turns on the class resource bars, the marker bar and the food and drink buttons, in the places the layout leaves for them." },
+    { id = "finding-my-way", label = "Helpers and navigation", twichui = Switches("classBars", "food", "markerBar", "navigation"),
+      hint = "The same, and Navigation: a walking arrow to a place you pick. Its map data loads the first time you ask for a route." },
+  },
+}
+local function UseOlderHelpers(L)
+  L.ADVENTURE_PACKAGE.choices[1] = Copy(LEGACY_HELPERS)
+  L.ADVENTURE_PACKAGE.format = 5
+end
+
 local function Client(name, sv)
   local c = LM.Boot(name, sv, { eui = EUI })
   CLIENTS[name] = c
   assert(c.C_AddOns.LoadAddOn("TwichUI_LayoutWizard"))
+  UseOlderHelpers(c.TwichUI.Layouts)
   return c, c.TwichUI, c.TwichUI.Layouts, c.TwichUI.LayoutWizard
 end
 
@@ -276,7 +305,7 @@ do
   local kit = AP.Find(e.id)
   Check(ok and kit and kit.label == "Questing kit" and #P.options == 4, "    saved: a fourth option")
   local kitId = kit.id
-  Check(not AP.Find("questing-kit") or kitId == "questing-kit", "    its id comes from its name")
+  Check(kitId == "questing-kit", "    its id comes from the name it was given before it was saved (not from \"New preset\")")
   -- rename keeps the id; a taken name is refused
   Check(AP.Rename(kitId, "Adventuring kit") and AP.Find(kitId).label == "Adventuring kit", "    renaming keeps the id")
   Check(not AP.Rename(kitId, "On-screen helpers"), "    another option's name is refused")
@@ -335,6 +364,40 @@ do
   AP.Discard()
   Check(not AP.SetSource("Nobody"), "    a profile that isn't there can't be the source")
   A.End()
+end
+
+-- changing an option's id: free for one this draft added; the starting package's own retires the old id
+do
+  local c, R, LY, WZ = Client("Id Changer")
+  local A, AP = WZ.Author, WZ.AuthorPresets
+  assert(A.Begin())
+  local P = AP.State()
+  Check(AP.BeginCreate() and AP.Pending().id == "new-preset", "    Create starts with an id from its working name")
+  Check(AP.SetEditName("Raid night") and AP.Pending().id == "raid-night", "    and the id follows the name until it is saved")
+  Check(AP.SetEditName("Questing") and AP.Pending().id == "questing", "    (again)")
+  Check(AP.Save() and AP.Find("questing"), "    saved under the id the name gave")
+  Check(AP.Rename("questing", "Questing kit") and AP.Find("questing"), "    renaming a saved option keeps the id")
+  Check(AP.SetId("questing", "quest-kit") and AP.Find("quest-kit") and not AP.Find("questing") and P.selected == "quest-kit", "    a new option takes another id, and stays selected")
+  Check(#P.retired == 0, "    and retires nothing: no package carried it")
+  local okB, whyB = AP.SetId("quest-kit", "Quest Kit")
+  Check(not okB and whyB == "bad-id", "    an id is lower-case letters, digits and single hyphens")
+  okB, whyB = AP.SetId("quest-kit", "on-screen")
+  Check(not okB and whyB == "id-taken", "    another option's id is refused")
+  okB, whyB = AP.SetId("quest-kit", "as-is")
+  Check(not okB and whyB == "id-taken", "    and the starting package's")
+  Check(not AP.SetId("as-is", "nothing") and AP.Find("as-is"), "    the option that names nothing keeps its id")
+  Check(AP.SetId("quest-kit", "questing") and AP.Find("questing"), "    an id a new option gave up is free again")
+  Check(AP.SetDefault("finding-my-way") and AP.SetId("finding-my-way", "navigation-helpers"), "    an option the starting package offered takes another id")
+  Check(P.default == "navigation-helpers" and not AP.Find("finding-my-way"), "    the default follows it")
+  Check(P.retired[#P.retired] == "finding-my-way", "    and its old id is retired")
+  okB, whyB = AP.SetId("navigation-helpers", "finding-my-way")
+  Check(not okB and whyB == "id-taken", "    which no option can take again")
+  local ch = A.Draft().choices[1]
+  local ids, retired = {}, {}
+  for _, o in ipairs(ch.options) do ids[o.id] = true end
+  for _, rid in ipairs(ch.retired or {}) do retired[rid] = true end
+  Check(ids["navigation-helpers"] and not ids["finding-my-way"] and retired["finding-my-way"] and ch.default == "navigation-helpers", "    the draft package offers the new id, retires the old, and defaults to the new")
+  Check(LY.Validate(A.Draft()), "    and the draft still passes the package checks")
 end
 
 ---------------------------------------------------------------------------
@@ -768,6 +831,10 @@ do
   Check(LM.Says(win, "the profile in use"), "    the source profile by its exact name, marked as the one in use")
   AP.Select("on-screen")
   AW.Refresh()
+  Click(win, "Show details")
+  Check(LM.Says(win, "Stable id: on-screen") and LM.Says(win, "Id"), "    Show details gives the option's id, with a field to change it")
+  Click(win, "Hide details")
+  Check(not LM.Says(win, "Stable id: on-screen"), "    and Hide details takes it away again")
   Click(win, "Capture current settings into this preset")
   Check(AP.Pending() and LM.Says(win, "Captured into \"On-screen helpers\" (not saved to the draft)"), "    Capture opens the editor, unsaved")
   Click(win, "Not managed")

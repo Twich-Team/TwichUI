@@ -1,20 +1,22 @@
 -- TwichUI Layouts: the Adventure package's choices (what the setup wizard asks, the TwichUI helper presets among them), as data.
 -- Generated: do not edit by hand. tools/update_bundled_layout.sh --from-published writes it from a package published in game
 -- (docs/layouts/presets.md); the profile recapture (the same script without --from-published) never touches it.
--- Source: the choices as Classic.lua declared them by hand until 2026-10-28 (no package published in game imported yet)
+-- Source: package twichui-adventure revision 7 (fingerprint #4265506251:429773), published in game on 2026-10-29; imported by tools/import_published_layout.lua
 
 local LY = TwichUI.Layouts
 LY.ADVENTURE_CHOICES = {
   [1] = {
     default = "as-is",
-    hint = "Which of TwichUI's own features the setup turns on. It only turns things on, never off. None of them shares anything, plays a sound or acts for you.",
+    hint = "Which of TwichUI's own features the setup turns on or off, and how they behave and look. Features that act for you or talk to other players are never part of a preset.",
     id = "helpers",
     kind = "preset",
     label = "TwichUI helpers",
+    mode = "settings",
     options = {
       [1] = {
         hint = "No TwichUI feature is turned on or off. The layout still styles and places the ones you already use.",
         id = "as-is",
+        keep = true,
         label = "Leave them as they are",
       },
       [2] = {
@@ -70,6 +72,142 @@ LY.ADVENTURE_CHOICES = {
           },
         },
       },
+      [4] = {
+        hint = "A curated selection of settings designed for the new player.",
+        id = "curated",
+        label = "Curated",
+        twichui = {
+          groups = {
+            auction = {
+              modules = {
+                auctionPosting = true,
+                mailGoldSummary = false,
+              },
+            },
+            chatClean = {
+              modules = {
+                chatClean = true,
+              },
+            },
+            chronicle = {
+              modules = {
+                chronicle = true,
+                chronicleBosses = true,
+                chronicleChat = false,
+                chronicleDeaths = true,
+                chronicleGold = true,
+                chronicleLevels = true,
+                chronicleProfessions = true,
+                chronicleRiding = true,
+                chronicleSound = true,
+                chronicleZones = true,
+                welcomeBack = true,
+              },
+            },
+            classBars = {
+              modules = {
+                classBars = false,
+              },
+            },
+            food = {
+              modules = {
+                foodDrink = true,
+                foodDrinkDrink = true,
+                foodDrinkFood = true,
+              },
+            },
+            gear = {
+              modules = {
+                gearBagIcons = true,
+                gearHints = true,
+                gearRollIcons = true,
+              },
+            },
+            general = {
+              modules = {
+                media = true,
+                quietLogin = true,
+              },
+            },
+            hazard = {
+              modules = {
+                hazardAlerts = true,
+              },
+            },
+            healerWatch = {
+              modules = {
+                healerWatch = true,
+              },
+            },
+            mage = {
+              modules = {
+                mageConjure = true,
+                mageRefreshments = true,
+                mageRefreshmentsTrade = true,
+                mageTravel = true,
+              },
+            },
+            markerBar = {
+              modules = {
+                markersBar = true,
+              },
+            },
+            markers = {
+              modules = {
+                markersTarget = true,
+                markersWorld = true,
+              },
+            },
+            navigation = {
+              modules = {
+                navigation = true,
+              },
+            },
+            notifications = {
+              modules = {
+                arrival = true,
+                arrivalDungeons = true,
+                arrivalReducedMotion = false,
+                arrivalSubzones = true,
+                friendLogin = true,
+                friendLoginSound = true,
+                trainingNotice = true,
+              },
+            },
+            qol = {
+              modules = {
+                qolQuickKeybind = true,
+              },
+            },
+            skins = {
+              modules = {
+                attuneSkin = true,
+                auctionatorSkin = true,
+                foreverDungeonJournalSkin = true,
+                whatsTrainingSkin = true,
+              },
+            },
+            speakstone = {
+              modules = {
+                speakstoneSkin = true,
+              },
+            },
+            targetArt = {
+              modules = {
+                targetArt = true,
+              },
+            },
+            worldMap = {
+              modules = {
+                mapExplore = false,
+              },
+            },
+          },
+        },
+      },
+    },
+    retired = {
+      [1] = "new-preset",
     },
   },
   [2] = {
