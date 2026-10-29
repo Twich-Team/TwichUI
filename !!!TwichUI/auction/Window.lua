@@ -43,7 +43,8 @@ local duration                 -- 1..3, as the game's duration choice
 local post = { state = "idle" } -- idle, posting, confirm, multisell
 local message                  -- last posting outcome line
 local retryScheduled = false
-local filledPrice = 0          -- what we last put in the price box
+local session = 0                -- counts auction house visits; a posting from an earlier one never advances
+local filledPrice = 0         -- what we last put in the price box
 
 local function Money(amount)
     if not amount then return "-" end
@@ -687,6 +688,16 @@ local function Prepare()
              name = selected.name, deposit = deposit }
 end
 
+-- Where "the next item" is once a posting is through: the keys of the rows below the chosen one,
+-- in the order the list shows them. Keys are the list's own identity, so a refresh can't mislead it.
+local function KeysAfterSelected()
+    local after, found = {}, false
+    for _, g in ipairs(groups) do
+        if found then after[#after + 1] = g.key elseif g.key == selected.key then found = true end
+    end
+    return after
+end
+
 function A.UpdatePost()
     if not page then return end
     local g = selected
@@ -788,6 +799,7 @@ function A.Post()
     local p = Prepare()
     if not p then A.UpdatePost() return end
     message = nil
+    p.from, p.after, p.session = selected.key, KeysAfterSelected(), session
     post.current = p
     Sent()   -- before the call: the game may answer while we are still in it
     local needsConfirmation
@@ -831,12 +843,15 @@ local function OnDialogClosed()
     if post.state == "confirm" then EndPost("Not posted.") end
 end
 
+local AdvanceAfterPost   -- below, with the selection code it uses
+
 local function Posted(p)
     local what = p and p.name or "item"
     local text = p and ("Posted %d x %s at %s each."):format(p.quantity, what, Money(p.price)) or "Posted."
     SC.MarkStale()
     EndPost(text)
     if page and page:IsShown() then RefreshMarket() end
+    AdvanceAfterPost(p, text)
 end
 
 ---------------------------------------------------------------------------
@@ -909,6 +924,47 @@ local function RescanBags()
             if page and page:IsShown() then RescanBags() end
         end)
     end
+end
+
+-- Keeps the row in view when the next item has been chosen for the player.
+local function ScrollToGroup(g)
+    local scroll = page.bags.scroll
+    for i, row in ipairs(groups) do
+        if row == g then
+            local top, bottom = (i - 1) * ROW_H, i * ROW_H
+            local from, h = scroll:GetVerticalScroll() or 0, scroll:GetHeight() or 0
+            if top < from then scroll:SetVerticalScroll(top)
+            elseif bottom > from + h then scroll:SetVerticalScroll(bottom - h) end
+            return
+        end
+    end
+end
+
+-- A posting just went through. Choose the next row below it in the list, the way clicking that row
+-- would, so the player can look it over and press Post themselves; nothing is posted here. The row is
+-- found by the keys captured when Post was pressed, so a refresh that reordered or dropped rows can't
+-- point at the wrong one: the first of them still listed (and not still loading) wins, none means the
+-- end of the list. It never wraps. Skipped unless the player is still looking at the item they posted.
+AdvanceAfterPost = function(p, text)
+    if not (p and p.after and p.session == session and page and page:IsShown()
+        and selected and selected.key == p.from and post.state == "idle") then return end
+    selected = nil   -- the posted item may have left the bags; the rescan must not report that
+    RescanBags()
+    local byKey = {}
+    for _, g in ipairs(groups) do byKey[g.key] = g end
+    local target
+    for _, key in ipairs(p.after) do
+        local g = byKey[key]
+        if g and g.kind ~= "loading" then target = g break end
+    end
+    if not target then
+        Deselect(text .. " No more items in this list.")
+        return
+    end
+    A.Select(target)
+    ScrollToGroup(target)
+    message = text   -- keep the outcome of the posting beside the item now ready
+    A.UpdatePost()
 end
 
 -- Search finished or changed: show it, and fill the price if the player hasn't.
@@ -1034,6 +1090,7 @@ function A.Close()
 end
 
 local function Reset()
+    session = session + 1
     A.Close()
     SC.Stop()
     EndPost(nil)
