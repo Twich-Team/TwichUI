@@ -647,10 +647,13 @@ do
   Click("Reapply the recommended configuration")
   Click("Review conflicts")
   Check(c.made() == built, "switching ways and choices makes no frames")
-  Click("Apply")
-  Check(c.popup and c.popup.text:find("Updating", 1, true) and c.popup.text:find("Undo this update", 1, true), "the question names the update and the way back")
-  c.Accept()
-  Check(MK.Step() == 6 and LM.Says(w, "Waiting for a reload") and LM.Says(w, "This was an update") and LM.Visible(LM.Button(w, "Undo this update")), "the result offers Undo this update")
+  Click(LM.Button(w, "Apply & Reload") and "Apply & Reload" or "Apply")
+  Check(c.popup and c.popup.text:find("personal customizations will be kept", 1, true) and c.popup.text:find("undo this update", 1, true) and not c.popup.text:find("Updating", 1, true),
+    "the question is short: it says my changes are kept and the update can be undone")
+  c.AcceptHeld()   -- the reload doesn't start here, so the result can be looked at
+  local d = LM.Button(w, "Details")
+  d.scripts.OnClick(d)
+  Check(MK.Step() == 6 and LM.Says(w, "One more step") and LM.Says(w, "This was an update") and LM.Visible(LM.Button(w, "Undo this update")), "the result offers Undo this update")
   Check(TC.Effective(f) == "Alegreya Sans Bold", "the layout's font, as chosen")
   Click("Undo this update")
   Check(c.popup and c.popup.key == "TWICHUI_LAYOUT_UNDO" and c.popup.text:find("Undo the last update", 1, true), "undo asks first, naming what it does")
@@ -743,6 +746,8 @@ do
   local w, MK = c.TwichUILayoutWizard, c.TwichUI.LayoutWizard.Model
   local mb = LM.Button(w, "Manage layout")
   mb.scripts.OnClick(mb)
+  local db = LM.Button(w, "Details")
+  db.scripts.OnClick(db)
   Check(MK.Step() == 6 and LM.Says(w, "Installed and managed") and LM.Says(w, "Your interface is ready") and LM.Visible(LM.Button(w, "Set up again")) and not LM.Visible(LM.Button(w, "Restore previous setup")),
     "the wizard opens on the managed layout; Set up again, no Restore")
   -- update to v2: an update into profiles still recognised as the install's own, compared against the baseline
@@ -780,7 +785,10 @@ do
   Check(b.parts.ellesmereui.units[BAGS_U].u == true and b.parts.ellesmereui.units[LAYOUT_U].u == true and b.parts.ellesmereui.units[MINIMAP_U].u == nil
     and b.parts.twichui.units[FONT_U].u == nil, "the baseline marks whole parts as checked only for presence; values are not marked")
   c.SlashCmdList.TWICHUI("layout")
-  Check(LM.Says(c.TwichUILayoutWizard, "checked only for being there"), "and the result says so in words")
+  Check(LM.Says(c.TwichUILayoutWizard, "Some addon settings could not be fully verified."), "and the result says so, quietly")
+  local db = LM.Button(c.TwichUILayoutWizard, "Details")
+  db.scripts.OnClick(db)
+  Check(LM.Says(c.TwichUILayoutWizard, "checked only that"), "with exactly what was checked under Details")
 end
 
 if failures > 0 then print(failures .. " FAILED") os.exit(1) end

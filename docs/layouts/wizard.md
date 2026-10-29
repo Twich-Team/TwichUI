@@ -2,8 +2,8 @@
 
 `TwichUI_LayoutWizard/` is a load-on-demand sibling addon (`RequiredDeps: !!!TwichUI, TwichUI_Layouts`, no saved variables
 of its own) that lets a recipient review compatibility, pick one of the two bundled layouts (Classic or Compact Adventure; Phase 5), look at it
-to scale and then at full size over their own screen, choose a small TwichUI helper preset, adjust four personal choices (accent, size, tooltip placement, friendly player nameplates), review exactly what would change, apply it with a restore point, see it
-checked after the reload, and put the previous setup back. It adds no engine of its own: everything that changes the game
+to scale and then at full size over their own screen, choose a small TwichUI helper preset, adjust four personal choices (accent, size, tooltip placement, friendly player nameplates), review exactly what would change, apply it with a restore point (one short question, **Apply & Reload**, applies it and reloads the interface), see it
+checked after the reload in a small result dialog, and put the previous setup back. It adds no engine of its own: everything that changes the game
 is `TwichUI_Layouts`' pipeline, fed by the package and its resolved screen geometry. It also lists packages other players sent
 (step 1), updates an installed layout keeping the player's changes (`updates.md`), and finishes or stops managing a setup. What a page shows
 by default, and what is behind a button, is "Presentation" below.
@@ -37,8 +37,9 @@ Six steps, one window (780 × 590, TwichUI's own look, `Look.Shell`; fitted to s
 with Escape through `UISpecialFrames`, never `RegisterGameMenuEscHandler`). A stepper at the top reaches only steps already
 reached with Next: the step you are on has a heavy bar and a warm wash, a step behind you carries a small check, a step not
 reached is quiet and can't be chosen. The footer holds Close (**Do this later** on a first install: closing it then puts the
-setup off), Back, and one primary action in the same corner on every step: **Get started** on the first step, **Next**, **Apply**
-on the review, **Done** on the review when there is nothing to apply and on a finished result. The footer's note says why a
+setup off), Back, and one primary action in the same corner on every step: **Get started** on the first step, **Next**, **Apply & Reload**
+on the review (**Apply** when the plan needs no reload), **Done** on the review when there is nothing to apply. The sixth step is not a page of this window: it is the compact
+result dialog ("Applying and finishing" below), with no stepper and no footer. The footer's note says why a
 button is disabled. The footer is outside the scrolling page, always. While the window
 is shown the game behind it is dimmed a little by one click-through frame (`docs/onboarding.md`, "The dimming"); the
 full-size preview has its own and the two are never shown together.
@@ -49,8 +50,8 @@ full-size preview has its own and the two are never shown together.
 | 2 | Layout | one card for each layout: its picture, title, one short description, up to three traits, the selected one with a check, an outline and the word Selected (a Preview-build tag on a preview package); both Classic and Compact Adventure are fully in view at the standard window size. The preview, its scenario selector and the full-size button. Behind **Layout details**: what the chosen layout covers. Choosing a card re-draws the preview at once | the layout choice is remembered |
 | 3 | Helpers | the **TwichUI helpers** choice: one full-width card for each preset the package offers, whatever its number (read from the package: its label, a one-sentence description, a picture), the chosen one selected; one line saying the layout's look and places apply whichever is chosen. Behind **View included settings** on each card: the author's full description, what it turns on, what it turns off, how many other settings it changes or resets, what it leaves alone. A preset the player picked before, or the install recorded, that the package no longer offers is named and Next waits for a pick. No layout preview here: it shows nothing of what a helper does | the pick is remembered |
 | 4 | Personalize | the accent swatches (each named, the chosen one checked, the class colour carrying the class's own icon), the size cards (Standard, Larger, each showing "Aa" at its relative size, and what the package says the choice changes), **Tooltip placement** (Layout position, Follow mouse, each with its illustration; "Applies to every character on this account."), **Friendly player nameplates** (Class colors, Standard blue, each showing three synthetic sample players), Start over. The page fits the standard viewport at its defaults. No large layout preview here: the preview follows these picks on the Layout and Review steps | the picks the player makes are remembered (a pick read from the game is not) |
-| 5 | Review | a receipt: **Ready to apply** (a fresh installation), **Ready to update** (an install again), **You're already up to date.** or **Can't apply yet**, the choices in six rows (Layout, Helpers, Accent, Tooltip placement, Friendly nameplates, Size), and short statements of what it means: what is set in TwichUI (this character only) and in EllesmereUI (every character on the account), that tooltip placement is account-wide, the reload and that nothing reloads until you choose, the restore point, what isn't placed (for example "Objectives position isn't changed"), a fit warning or a blocker in words ("Check:", "Blocked:"). An update adds one row, **Update: Keep my customizations** [Change], the counts (recommended changes, personal settings kept, conflicts, parts checked for presence only) and the decisions an update needs (an addon kept or replaced whole, linked frames, warnings). Behind **View changes**: the account of every change, **Left alone**, **Not placed**, **If something goes wrong**, and the update's long summary. Behind **Change**: the three policies and every setting with its choices. Behind **Advanced**: **Force re-apply** (opened for you when a blocked review needs it). Apply is in the footer | nothing until Apply is confirmed |
-| 6 | Result | the outcome as a heading (**Your interface is ready**; **Reload to finish your setup**; **Some settings didn't read back as planned**; **Your setup was only partly applied**; **Your setup was interrupted**; **Reload to finish restoring**; **Your previous setup is back**; **Nothing was changed**; ...), the record's own status under it (**Waiting for a reload**, **Checked after the reload**, **Installed and managed**, ...), a short summary, and the actions. A finished setup that was read back (or one the player finished) is the only one called ready; its summary says how many settings read back by value and how many EllesmereUI parts were checked only for being there. For it: **Done** (the footer) and **Open settings**, with **Details** (what was chosen and the steps) and **Manage layout** folded (the installed revision, Check again, Set up again, Keep this setup, Keep the update, Undo this update, Restore previous setup, Stop managing: each only when it applies). Any other outcome keeps its explanation, its steps and what differs, and every action that applies (Reload now, Restore, Check again, Set up again, ...), in view | only through its confirmed buttons |
+| 5 | Review | a receipt: **Ready to apply** (a fresh installation), **Ready to update** (an install again), **You're already up to date.** or **Can't apply yet**, the choices in six rows (Layout, Helpers, Accent, Tooltip placement, Friendly nameplates, Size), and short statements of what it means: what is set in TwichUI (this character only) and in EllesmereUI (every character on the account), that tooltip placement is account-wide, that **Apply & Reload** applies and then reloads your interface (you are asked first), the restore point, what isn't placed (for example "Objectives position isn't changed"), a fit warning or a blocker in words ("Check:", "Blocked:"). An update adds one row, **Update: Keep my customizations** [Change], the counts (recommended changes, personal settings kept, conflicts, parts checked for presence only) and the decisions an update needs (an addon kept or replaced whole, linked frames, warnings). Behind **View changes**: the account of every change, **Left alone**, **Not placed**, **If something goes wrong**, and the update's long summary. Behind **Change**: the three policies and every setting with its choices. Behind **Advanced**: **Force re-apply** (opened for you when a blocked review needs it). **Apply & Reload** (or **Apply**) is in the footer | nothing until the question is accepted |
+| 6 | Result | the compact result dialog ("Applying and finishing" below), not a page of the six-step window: its own heading for the outcome, the layout's name, one sentence, at most one quiet note, and the actions that make sense. **Details** and **Manage layout** are folded | only through its confirmed buttons |
 
 ### What never happens by itself
 
@@ -62,12 +63,13 @@ full-size preview has its own and the two are never shown together.
 - The full plan (`LY.Plan`, read only) is computed only when the review is shown, again only when a pick or the screen
   changed, and dropped when the player leaves the review or closes the window (it holds the payload it would import:
   about 2 MB on the offline measurement).
-- **Apply** is bound to the plan key the confirmation described: `Model.Apply(key)` refuses a different key ("stale"), the
-  confirmation's `valid` check refuses it before that, and `LY.Apply` refuses it a third time. A screen that changes while
-  the question is open cannot turn into a different install than the one approved.
+- **Apply** is bound to the plan key the confirmation described: `Model.Apply(key)` / `Model.ApplyAndReload(key, announced)` refuse a
+  different key ("stale"), the confirmation's `valid` check refuses it before that, and `LY.Apply` refuses it a third time. A screen
+  that changes while the question is open cannot turn into a different install than the one approved.
 - Apply, Restore, Keep this setup, Forget the record and Reload each sit behind a confirmation that names the exact scope
   (`R.Interact.Confirm`) and are refused in combat by the model, the confirmation (`combat = true`) and the engine.
-- Nothing reloads by itself. **Reload now** is a button; it leaves a note (below) and calls `ReloadUI()`.
+- The only reload that happens without a further click is the one **Apply & Reload** announced (below). Restore and Undo this update
+  still end on **Reload now**, a button; it leaves a note and calls `ReloadUI()`.
 
 ### Force re-apply
 
@@ -102,14 +104,99 @@ Not available as a `/tui layout` developer option; the offline checks are `tests
 
 ### Reload and resume
 
-When the player presses **Reload now**, the wizard writes `layouts.wizard.resume = "install"` (or `"restore"` if the
-record says a restore is waiting) just before `ReloadUI()`. At the next login `LayoutsLauncher.Continue` (3 seconds after
+The reload is either the one **Apply & Reload** started (below) or **Reload now** (a Restore, an Undo, or an apply whose automatic reload
+did not start). Both write `layouts.wizard.resume = "install"` (or `"restore"` if the record says a restore is waiting), read it back, and
+only then call `ReloadUI()`. At the next login `LayoutsLauncher.Continue` (3 seconds after
 `PLAYER_LOGIN`, only while the install record says `applying`, `applied` or `restoring`) checks the install through the
-engine as before and prints its chat line; **then, only if that note is set, it opens the wizard on the result** and the
-wizard uses the note up. A reload the player made themselves gets the chat line only, and the wizard stays closed until it
-is asked for. A leftover note with nothing waiting opens nothing. Verification itself is `LY.Continue`: read only. An install
-made from the first-install setup is followed by `Onboarding.lua` too: it is `done` only once that check says verified (or
-the player kept it), and an unfinished one reopens on its result (`docs/onboarding.md`).
+engine as before and prints its chat line; **then, only if that note is set, it opens the wizard on the result** (the compact dialog)
+and the wizard uses the note up. A reload the player made themselves gets the chat line only, and the wizard stays closed until it
+is asked for. A leftover note with nothing waiting opens nothing. A reload whose call was refused takes its note back. Verification
+itself is `LY.Continue`: read only. An install made from the first-install setup is followed by `Onboarding.lua` too: it is `done`
+only once that check says verified (or the player kept it), and an unfinished one reopens on its result (`docs/onboarding.md`). A
+reload alone never marks onboarding complete.
+
+## Applying and finishing
+
+This is the contract for the end of the wizard (the engine's guarantees are `architecture.md` §8; this is what the player is asked and shown).
+Three levels of information are kept apart: the **Review** (the choices and the meaningful changes, with **View changes**), the
+**question** (consent and the most consequential effects, nothing more) and the **technical detail** (counts, the steps, what was
+checked: **Details** on the result, and the review's own sections).
+
+### The question
+
+`Model.Confirmation()` builds it from the approved plan and its review (never from the adapters' own plan text; `Model.ConfirmText()`
+formats the same thing for the game's dialog): `{ title, intro, rows, warnings, reload, accept, key }`.
+
+> **Apply Compact Adventure?**
+> Your interface will reload to finish setup.
+> - Your current setup will be backed up, so you can put it back.
+> - EllesmereUI layout changes apply to every character on this account.
+> - Your key bindings, action bars and other profiles are left as they are.
+
+Buttons: **Apply & Reload**, **Cancel**, **View details** (back to the review with **View changes** open; nothing is applied; the
+dialog's third button, `Interact.Confirm` `opts.alt`). A plan that needs no reload says "The layout is applied right away. No reload is
+needed." and the button is **Apply** (the footer's label follows the plan too). An update's rows say "Your current setup will be backed
+up, and you can undo this update afterwards." and, when the policy keeps the player's changes, "Your personal customizations will be
+kept." A received package adds one row naming it and who sent it (shown as plain text). Normal confirmations are four to six lines.
+
+Exceptional cases are short sentences added as `warnings` (shown as "Note:"), each with its full explanation still in the review's
+details: a forced re-apply (an earlier install is set aside; Restore goes back to how things are now, not to before it; another
+character's install can no longer be restored from here), a profile taken over (said to be one "this install didn't make", never as
+recognised), the recommended configuration replacing the player's own changes, parts of EllesmereUI replaced whole because their
+changes can't be carried over one by one, a profile that is gone so nothing can be compared, a second update replacing the copy that
+the first kept (the first can no longer be undone), and a layout that doesn't fit or may overlap. A forced apply does not promise the
+ordinary backup.
+
+### Apply & Reload
+
+Accepting the question is the player's authorisation for both the apply and the reload it announced. `Model.ApplyAndReload(key, announced)`:
+
+1. refuses a second call while one is under way (`busy`), a stale key, combat, and everything `CanApply` refuses;
+2. applies exactly the approved plan (`LY.Apply`, unchanged: snapshot first, record before the first change);
+3. reloads **in the same click**, with the same `ReloadUI()` call as Reload now (it is `C_UI.Reload`; the API documentation lists no
+   restriction on it), only when the question announced a reload, the engine says `applied`, the record reads back as this character's
+   with a reload pending and its restore point, it is not combat, and the note for the result was written and read back.
+
+There is no timer, countdown or deferred callback, so nothing can fire after a cancel, a failure or a later operation, and combat ending
+never reloads. If the reload does not start (combat, a note that could not be saved, a record that isn't as expected, a refused call) the
+apply stands, nothing is retried, and the dialog is **One more step** with the reason and the player's own **Reload now**. A failed,
+partial or refused apply never reloads. While the reload is under way the dialog shows **Applying your layout...** and **Your interface will
+reload shortly.** and offers nothing to press twice; there is no spinner, percentage or delay (the apply is synchronous, and the client
+may reload before the text is drawn).
+
+### The result dialog
+
+Step 6 is a compact dialog in the wizard's window (520 wide, as tall as its content up to 600, fitted to small screens by `R.FitToScreen`;
+no stepper, no footer; the same dimming behind it; Escape and the close box close it). It is one `Pages.lua` page over `Model.Result()`
+and the same actions as before; **Set up again** goes back into the six steps. Only a setup that was read back as planned (or one the
+player finished) is the success dialog, with the layout's picture.
+
+| State | Heading | Sentence / note |
+|---|---|---|
+| checked, supported checks passed | **Your interface is ready** | the layout's name; "Your layout has been applied. Make yourself at home." When some parts could only be checked for being there: the quiet note "Some addon settings could not be fully verified." (not an error) |
+| a value differs after the reload, or couldn't be read | **Setup needs attention** | "A few settings did not match after reloading." or "...couldn't be read back, so they aren't confirmed."; up to three differences named, the rest under **Details**. **Check again** finding a difference does the same, without rewriting the record |
+| partly applied / the game stopped | **Setup needs attention** | "Part of the setup didn't finish: <part>." / "The game stopped before the setup finished." |
+| nothing could be applied | **Setup could not be completed** | "Nothing was changed, and your setup is as it was." and the part that failed |
+| reload pending (or not started) | **One more step** | "Reload your interface to finish applying <layout>."; why it did not start, when it did not |
+| the check after a reload is scheduled and has not run | **Setup is still being checked** | only while it is really to come (`LayoutsLauncher.CheckPending()`) |
+| restored / update undone | **Previous setup restored** / **Update undone** | "Everything the setup changed is back as it was." / "Your layout is back to how it was before the update." (an undone update is known in the session that undid it) |
+
+Counts and breakdowns ("N settings read back by value; M EllesmereUI parts were checked only for being there"), the status, what was
+changed and its scope, the revision, the check's time, what was chosen and each step are under **Details**. A step that needs the
+player (reload, check, set up again, undo, restore, forget) has its button in view; **Manage layout** holds the maintenance actions of a
+settled setup (check, set up again, keep this setup, keep the update, undo, restore, stop managing, forget) and, while a setup needs the
+player, the ones that are not recovery (keep, keep the update, stop). An action that does not apply is not shown.
+
+### Done, Keep and recovery
+
+- **Done** (and Open settings, Escape, the close box) only closes the dialog. It does not call `LY.Finish` or `LY.Detach`, discards
+  nothing and changes no record: the layout stays managed, and **Restore previous setup** and **Undo this update** stay offered under
+  **Manage layout** until the player chooses **Keep this setup** (which asks, and says Restore and Undo end) or **Keep the update**.
+- **Stop managing** and **Forget the record** are separate, confirmed, and only offered when they apply.
+- Four things are kept separate: onboarding complete (the install checked out), the dialog dismissed (nothing), the installation managed
+  (until Stop managing), and the restore point (until Keep this setup). The dialog opens by itself only after a reload the wizard started
+  and a first-install setup still under way (bounded, `docs/onboarding.md`); a login after it was dismissed loads and opens nothing, and
+  `/tui layout` brings the same dialog back, recovery included.
 
 ## Presentation
 
@@ -411,6 +498,15 @@ area, reopening making nothing, and the four new pictures (format, real transpar
 changed only where text moved behind a button (they open the disclosure first). Mutations made and reverted, each failing a test: a title
 allowed under the indicator, a selected card without its outline, the second layout card pushed out of the viewport, a partial install
 wearing the success heading.
+`tests/test_layout_complete.lua` covers the end of the flow ("Applying and finishing"): the question's content and length (no profile names, counts or
+adapter text), its exceptional warnings, Cancel, View details and a stale key, the reload (once, after the record, snapshot and note are
+written; never after a failed, partial, refused, unannounced or no-reload apply; not in combat, nor when combat ends; not when the note can't be
+saved; a refused call tried once and its note taken back; no timer; no second apply), each result state's heading, Done leaving management and
+recovery alone, no reopening at later logins, Keep this setup as the explicit act, repeated use making no frames, and small screens.
+`test_layout_wizard_ui.lua` §7b measures the compact dialog (inside the window, no overlapping buttons, no narrow columns, its height).
+Mutations made by hand and reverted, each failing a test: the reload not gated on the question announcing it; no combat check before the
+reload; the note not read back; no duplicate guard; Done calling Keep; a mismatch wearing the success heading; presence-only checks turned into
+an error.
 `tests/test_layouts.lua` §17 covers the engine side: every refusal of a malformed `choices` section, picks resolving into
 the layers, the plan key and the record following the picks, and the accent read back by value (including a number that
 went through EllesmereUI's serializer). `test_release_tools.py`, `test_perf_engine.lua` and the settings contract fixture
@@ -463,15 +559,18 @@ shared.
 5. Picks: each accent recolours the preview's outlines (Layout and Review steps); Larger enlarges chat, the meter and the minimap boxes; every
    card selects with a check, an outline and "Selected" where it fits.
 6. Review matches what the apply then does: profile names, the account-wide note, the reload, "Left alone", "Not placed".
-7. Apply: the question names both profiles; Cancel changes nothing; Apply makes both profiles and nothing reloads.
-8. Reload now: after the reload the wizard opens on "Checked after the reload" (verified). A reload made with `/reload`
-   instead prints the chat line and leaves the wizard closed.
+7. Apply & Reload: the question is short (the layout, the reload, the backup, the account-wide part); Cancel and Escape change nothing and
+   reload nothing; View details returns to the review with the changes open.
+8. Accept: the interface reloads by itself, once, with no second question; after it the compact dialog opens on **Your interface is ready**
+   (verified). A reload made with `/reload` instead of the wizard's prints the chat line and leaves the wizard closed.
 9. The accent shows in EllesmereUI (its accent swatch reads the picked colour); the picked helpers are on in
    `/tui options`; the size you picked is the size you see; positions match the preview on your screen (screenshots).
 10. Restore previous setup: the question lists what it does; after the reload the wizard says "Restored", EllesmereUI is
     back on your profile, the install's profiles are gone, your TwichUI profile is as it was.
 11. Set up again with another accent: applies, reloads, verifies; Restore goes back to before the first install.
-12. In combat: Apply, Restore and Reload now are refused with a reason; they work again after combat.
+12. In combat: Apply, Restore and Reload now are refused with a reason; they work again after combat. Pulling a mob between accepting the
+    question and the reload (hard to time; `/run` a combat flag is not possible) is covered offline only: **One more step**, no reload when
+    combat ends.
 13. Interrupt (`/reload` the moment after Apply, or kill the client): next login says interrupted; Restore works.
 14. Open and close the window ten times in a `/tui perf` capture: the `layoutwizard.events` and `layoutwizard.frames`
     gauges stay flat; `TwichUI_LayoutWizard` memory is reported.
@@ -514,6 +613,10 @@ shared.
     EllesmereUI line, Do this later).
 30. Review for a fresh install, an update (Change opens the three ways and every setting), nothing to do (You're already up to date, Done,
     Advanced > Force re-apply still asks) and a blocked account (Advanced open, Blocked: in words).
-31. Result after a real reload: Your interface is ready with the layout, Done, Open settings; Details and Manage layout open and close; a partial
-    or mismatched install (an edited saved variable) shows its own heading with Restore in view.
+31. Result after a real reload: the small dialog, Your interface is ready with the layout, Done, Open settings; Details and Manage layout open and
+    close and the dialog grows and shrinks with them; a partial or mismatched install (an edited saved variable) shows Setup needs attention
+    with Restore in view and no success picture. Done closes it, and the next `/tui layout` shows the same dialog with Restore still under
+    Manage layout. The dimming goes with it; Escape does the same.
+33. Does `ReloadUI()` work from the question's accept click in the client (it does from the Reload now click)? If a client refuses it, the
+    dialog says One more step and Reload now works: report it.
 32. The window opened and closed ten times with every disclosure open in a `/tui perf` capture: `layoutwizard.frames` and `.events` stay flat.

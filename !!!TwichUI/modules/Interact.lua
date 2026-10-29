@@ -83,13 +83,16 @@ end
 --                the target may be gone or changed while the question was open. Nothing runs if it fails.
 -- opts.combat:   true: also refuses in combat (the action reloads the UI or changes settings).
 -- opts.accept / opts.cancel: button labels. opts.onCancel: runs if the player declines.
+-- opts.alt / opts.onAlt: a third button that does not accept (for "View details"): onAlt runs, the question closes, and
+--                nothing else happens; it is not an answer, so it is not counted as declining either.
 -- Returns the popup, or nil if the game didn't show one.
 function I.Confirm(key, text, onAccept, opts)
     opts = opts or {}
     local armed = true
     StaticPopupDialogs[key] = {
         text = "%s",
-        button1 = opts.accept or ACCEPT, button2 = opts.cancel or CANCEL,
+        button1 = opts.accept or ACCEPT, button2 = opts.cancel or CANCEL, button3 = opts.alt,
+        OnAlt = opts.alt and function() if opts.onAlt then opts.onAlt() end end or nil,
         OnAccept = function()
             if not armed then return end
             armed = false

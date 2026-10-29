@@ -95,9 +95,9 @@ wizard is unchanged (`wizard.md`, "Presentation").
 | Skip setup (asks first) | `skipped` (`user`); nothing applied; EllesmereUI's held first run is handed back at once |
 | Use EllesmereUI's setup instead (asks; refused in combat) | `skipped` (`native`); EllesmereUI's own picker is shown |
 | Apply, then close | `installing`; never "put off" |
-| A reload the player starts from the result | the result reopens after it (the launcher's resume note); `done` once checked |
+| **Apply & Reload** (or Reload now on the result) | the result reopens after the reload as the compact dialog (the launcher's resume note); `done` once checked |
 | Their own `/reload` after Apply | the launcher's chat line; `done` if it checked out, else the result reopens at the next login or reload |
-| A partial, mismatched or interrupted install | the setup opens on its result (Restore, Reload now, Check again), never on the layout choice |
+| A partial, mismatched or interrupted install | the setup opens on its result, the compact "Setup needs attention" dialog (Restore, Reload now, Check again), never on the layout choice |
 | Restore that checks out | `skipped` (`restored`) |
 | Combat while it is open | the window stays (the wizard's policy: Apply, Restore and reloads are refused in combat); the dimming lifts and returns after |
 
@@ -224,7 +224,8 @@ opens by itself.
 2. Its first page reads right at 1080p and with larger fonts; Do this later, Skip setup, EllesmereUI's setup are reachable.
 3. The dimming: readable world behind it, window and its tooltips clear, Apply's question clear and clickable; clicking the
    world, targeting, the camera and keys work through it; it follows a UI scale change and a window resize; it lifts in combat.
-4. Apply, Reload now: no EllesmereUI picker during the reload; the result opens; later logins show nothing.
+4. Apply & Reload: the interface reloads by itself; no EllesmereUI picker during the reload; the small result dialog opens; Done closes it; later
+   logins show nothing.
 5. Do this later on a fresh EllesmereUI: the next login shows EllesmereUI's look picker first (Forever), then the setup.
    **Use EllesmereUI's setup instead** opens EllesmereUI's picker and its Done reloads.
 6. Skip on a fresh EllesmereUI: EllesmereUI's picker appears at once, and works.

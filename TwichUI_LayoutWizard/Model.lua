@@ -1328,8 +1328,9 @@ function M.NoteFailure(code)
 end
 
 -- Whether Apply could be pressed now. Returns true | false, code (combat, invalid, blocked, nothing), blocked item.
-function M.CanApply()
+local function Can(own)
     if not session then return false, "closed" end
+    if not own and (session.busy or session.reloading) then return false, "busy" end
     if InCombat() then return false, "combat" end
     if M.MissingAny() then return false, "choose-preset" end
     local plan = M.Plan()
@@ -1340,6 +1341,7 @@ function M.CanApply()
     if nothing then return false, "nothing" end
     return true
 end
+function M.CanApply() return Can(false) end
 
 function M.ApplyReason(code, blocked)
     if code == "combat" then return "Not during combat. Apply is available again when combat ends." end
@@ -1349,6 +1351,9 @@ function M.ApplyReason(code, blocked)
     if code == "nothing" then return Explain("nothing") end
     if code == "stale" then return "What it would do changed since it was shown. Look at the review again." end
     if code == "closed" then return "The setup isn't open." end
+    if code == "busy" then return "Applying your layout. Please wait." end
+    if code == "note" then return "TwichUI couldn't save where to pick up after the reload, so it didn't reload. Nothing else is needed: reload when you're ready." end
+    if code == "reload" then return "The game wouldn't reload from here. Type /reload to finish." end
     return Explain(code)
 end
 
@@ -1502,6 +1507,7 @@ function M.Review()
     if installed and installed.variant ~= session.layout.variant then
         local from
         for _, l in ipairs(session.layouts) do if l.id == installed.variant then from = l.title end end
+        out.switchFrom = from or tostring(installed.variant)
         out.switching = ("%s is installed now. This switches to %s in the same two profiles; Restore still goes back to how things were before your first install."):format(from or tostring(installed.variant), session.layout.title)
         if plan.update then
             out.switching = out.switching .. (" Your changes to settings both layouts share are kept; changes to what %s sets for itself go back to %s's own values unless you keep yours."):format(from or tostring(installed.variant), session.layout.title)
@@ -1667,7 +1673,7 @@ function M.ReviewReceipt(r)
         if cur and cur.change and cur.decision ~= "keep" and cur.decision ~= "owned" then
             Note("account", "Tooltip placement is an account-wide EllesmereUI setting.")
         end
-        if r.reload then Note("note", "A reload finishes EllesmereUI's part. Nothing reloads until you choose.") end
+        if r.reload then Note("note", "Apply & Reload applies this and reloads your interface to finish EllesmereUI's part. You are asked first.") end
         if not r.forced then
             Note("note", r.update and "A restore point is saved first, and Undo this update is offered afterwards."
                 or "A restore point is saved first, so Restore can put your current setup back.")
@@ -1702,50 +1708,93 @@ function M.ReviewReceipt(r)
     return out
 end
 
--- The text of the confirmation that comes before Apply: the exact scope, once. Returns text, key (the plan it describes).
-function M.ConfirmText()
+-- The question that comes before Apply, in a player's words (the long account of what changes is the Review's, behind "View
+-- changes"; nothing here repeats it). Built from the approved plan and its review, never from the adapters' own plan text:
+--   { title, intro, rows = { text }, warnings = { text }, reload, accept, key }
+-- rows say what is true of an ordinary apply (the way back, who it reaches, what stays yours). warnings are the exceptional things
+-- a player has to agree to knowingly: a forced re-apply, a profile taken over, their changes replaced, an earlier way back lost. `key` is the
+-- plan the question describes: Apply refuses any other (M.Apply, the question's own check, and the engine).
+function M.Confirmation()
     local r = M.Review()
-    local lines = { ("Apply %s?"):format(session.layout.title), "" }
+    local plan = r.plan
+    local reload = r.reload == true
+    local c = { title = ("Apply %s?"):format(session.layout.title), reload = reload, key = r.key, rows = {}, warnings = {},
+        accept = reload and "Apply & Reload" or "Apply" }
+    c.intro = reload and "Your interface will reload to finish setup." or "The layout is applied right away. No reload is needed."
+    local rows, warn = c.rows, c.warnings
+    local t, e = plan.parts and plan.parts.twichui, plan.parts and plan.parts.ellesmereui
+    local function Live(part) return part ~= nil and not part.blocked and not part.nothing and not part.kept end
+
     local pk = session.package
     if pk then
-        lines[#lines + 1] = ("From the package %s, revision %d, %s. Your game was told who sent it; the package itself can't say."):format(
-            QuoteText(pk.env.package.title or pk.env.meta.id), pk.env.meta.version, pk.entry.sender and ("sent by " .. pk.entry.sender) or "sent to you")
-        lines[#lines + 1] = ""
+        -- another player's words: plain text, so a colour or texture escape in them is shown, not obeyed
+        local function Plain(x) return (tostring(x):gsub("|", "||")) end
+        rows[#rows + 1] = ("From the package %s, revision %d, %s."):format(Plain(QuoteText(pk.env.package.title or pk.env.meta.id)), pk.env.meta.version,
+            pk.entry.sender and ("sent by " .. Plain(pk.entry.sender)) or "sent to you")
     end
-    for _, sec in ipairs({ r.twichui, r.ellesmereui }) do
-        if sec then
-            lines[#lines + 1] = sec.title .. " (" .. sec.when:lower() .. "):"
-            for _, l in ipairs(sec.lines) do lines[#lines + 1] = "  " .. l end
+    if r.switching and r.switchFrom then rows[#rows + 1] = ("This switches your installed layout from %s."):format(r.switchFrom) end
+    if not r.forced then
+        rows[#rows + 1] = r.update and "Your current setup will be backed up, and you can undo this update afterwards."
+            or "Your current setup will be backed up, so you can put it back."
+    end
+    if Live(e) then rows[#rows + 1] = "EllesmereUI layout changes apply to every character on this account." end
+    if r.update then
+        if r.update.mode ~= "recommended" then rows[#rows + 1] = "Your personal customizations will be kept." end
+    else
+        rows[#rows + 1] = "Your key bindings, action bars and other profiles are left as they are."
+    end
+
+    -- exceptional: each one a sentence, in ordinary words
+    local f = plan.forced
+    if r.forced and f then
+        warn[#warn + 1] = (f.replaced or f.otherCharacter)
+            and "Forced re-apply: an earlier install is set aside, and Restore will go back to how things are now, not to before it."
+            or "Forced re-apply: the layout is applied as a new install."
+        if f.otherCharacter then warn[#warn + 1] = "That install was made on another character, who can no longer Restore it from TwichUI." end
+        for _, id in ipairs(plan.order) do
+            local part = plan.parts[id]
+            if part.adopted then
+                warn[#warn + 1] = id == "twichui"
+                    and "An existing TwichUI profile with the layout's name isn't recorded as made by this install. The layout's settings are written into it; its other settings stay."
+                    or "An existing EllesmereUI profile with the layout's name isn't recorded as made by this install. It is replaced by the layout's, and changes made inside it may be lost."
+            end
+        end
+        if e and e.forcedHome then warn[#warn + 1] = "EllesmereUI switches to another profile first, and Restore goes back to that." end
+    end
+    local u = r.update
+    if u then
+        if u.mode == "recommended" then
+            warn[#warn + 1] = "Any changes of your own to settings the layout sets are replaced by its recommended values."
+        end
+        if u.loss then warn[#warn + 1] = "Your last update can no longer be undone after this one. Restore still goes back to before your first install." end
+        for _, w in ipairs(u.whole or {}) do
+            if w.choice ~= "keep" then
+                warn[#warn + 1] = ("Some of your %s changes can't be carried over one by one, so those parts are replaced whole with the layout's.%s"):format(
+                    ADAPTER_LABEL(w.adapter), (e and e.backup) and " Undo this update can bring them back." or "")
+            end
+        end
+        for id in pairs(plan.update and plan.update.fresh or {}) do
+            warn[#warn + 1] = ("The install's %s profile is gone, so it is made again from the layout and nothing of yours can be compared."):format(ADAPTER_LABEL(id))
         end
     end
-    if r.switching then
+    if r.fit and not r.fit.fits then warn[#warn + 1] = "It doesn't fit this screen. The review shows where."
+    elseif r.fit and not r.fit.clear and #r.fit.pieces > 0 then warn[#warn + 1] = "Some pieces may overlap on this screen." end
+    return c
+end
+
+-- The same question as the one text the game's dialog shows. Returns text, key (the plan it describes).
+function M.ConfirmText()
+    local c = M.Confirmation()
+    local lines = { c.title, "", c.intro }
+    if #c.rows > 0 then
         lines[#lines + 1] = ""
-        lines[#lines + 1] = r.switching
+        for _, row in ipairs(c.rows) do lines[#lines + 1] = "- " .. row end
     end
-    if r.forced then
+    if #c.warnings > 0 then
         lines[#lines + 1] = ""
-        for _, l in ipairs(r.forced) do lines[#lines + 1] = l end
+        for _, w in ipairs(c.warnings) do lines[#lines + 1] = "Note: " .. w end
     end
-    if r.update then
-        lines[#lines + 1] = ""
-        lines[#lines + 1] = "Updating (" .. (r.update.mode == "recommended" and "the recommended configuration" or "keeping your changes") .. "):"
-        for _, l in ipairs(r.update.summary) do lines[#lines + 1] = "  " .. l end
-        for _, w in ipairs(r.update.whole) do lines[#lines + 1] = "  " .. w.text end
-        if r.update.loss then lines[#lines + 1] = "  " .. r.update.loss end
-    end
-    lines[#lines + 1] = ""
-    lines[#lines + 1] = r.update and "Nothing reloads by itself. Until you reload, EllesmereUI's part isn't finished or checked. Undo this update (on the Result step) puts back how things are now; Restore goes back to before your first install."
-        or "Nothing reloads by itself. Until you reload, EllesmereUI's part isn't finished or checked. Restore puts your previous profiles back."
-    if r.fit and not r.fit.fits then
-        lines[#lines + 1] = ""
-        lines[#lines + 1] = "It doesn't fit this screen: " .. table.concat(r.fit.lines, " ")
-        if r.fit.scale then lines[#lines + 1] = r.fit.scale end
-    elseif r.fit and not r.fit.clear and #r.fit.pieces > 0 then
-        lines[#lines + 1] = ""
-        lines[#lines + 1] = "Some pieces may overlap on this screen: " .. table.concat(r.fit.pieces, " ")
-    end
-    if r.fit and r.fit.retained then lines[#lines + 1] = r.fit.retained end
-    return table.concat(lines, "\n"), r.key
+    return table.concat(lines, "\n"), c.key, c
 end
 
 ---------------------------------------------------------------------------
@@ -1755,9 +1804,8 @@ end
 -- applied if the plan is not that one any more (a pick, the screen or the game's state changed while the question was
 -- open: "stale"). The engine checks the key again. Returns true, result | false, code, extra (see LY.Apply). Goes to the
 -- result step.
-function M.Apply(expect)
-    if not session then return false, "closed" end
-    local can, code, blocked = M.CanApply()
+local function ApplyPlan(expect)
+    local can, code, blocked = Can(true)
     if not can then return false, code, blocked end
     local plan = session.plan.plan
     if type(expect) ~= "string" or plan.key ~= expect then
@@ -1776,10 +1824,71 @@ function M.Apply(expect)
     session.force = nil
     session.failed = nil
     session.result = result
-    session.restored = false
+    session.restored, session.undone, session.reloadHeld = false, false, nil
+    session.appliedHere = true
     session.step, session.reached = M.RESULT, M.RESULT
     return true, result
 end
+
+function M.Apply(expect)
+    if not session then return false, "closed" end
+    return ApplyPlan(expect)
+end
+
+-- Starts the reload, leaving the note that shows the result when the game is back. The note is written and read back first: with no
+-- note the game would come back to nothing, so no reload is started. kind: "install" or "restore". Returns true | false, code
+-- ("combat", "note", "reload"). track: the reload is the one "Apply & Reload" authorised, so the window shows its progress and
+-- the apply stays closed until the game is back; a reload started twice (a second click) is not asked for twice.
+local function StartReload(kind, track)
+    if session.reloading then return true end
+    if InCombat() then return false, "combat" end
+    local layout = session.layout
+    local saved = S.SetResume(layout.pkg, Remembered(), kind, layout.variant)
+    local back = saved and S.Load(layout.pkg, M.LayoutIds())
+    if not (back and back.resume == kind) then return false, "note" end
+    if track then session.reloading = true end
+    local called = pcall(ReloadUI)
+    if not called then
+        -- the call was refused: the game stays as it is, so the note for "after the reload" is taken back
+        session.reloading = nil
+        S.SetResume(layout.pkg, Remembered(), nil, layout.variant)
+        return false, "reload"
+    end
+    return true
+end
+
+-- "Apply & Reload": applies the approved plan and, because the player accepted a question that said so, reloads right away. The
+-- reload is the same call the Reload now button makes, from the same click, not a timer: nothing waits that could fire later.
+-- It happens only when the plan left a reload pending and everything it needs is in place:
+--   * `announced`: the question said it would reload (a plan that needed a reload the question didn't announce waits for the player);
+--   * the apply went through and the record says "applied", a reload pending, this character's, with its restore point;
+--   * not in combat; the note for the result is written and reads back.
+-- Otherwise nothing reloads: the result says why, with Reload now as the player's own button. A failed or partial apply, a
+-- stale plan, a refusal and a plan with no reload never reload. Returns ok, result, extra, why (ok: the apply went through;
+-- why: the reason the reload didn't start, nil when it did; session.reloading says it did).
+function M.ApplyAndReload(expect, announced)
+    if not session then return false, "closed" end
+    if session.busy or session.reloading then return false, "busy" end
+    session.busy = "applying"
+    local ok, result, extra = ApplyPlan(expect)
+    session.busy = nil
+    if not ok then return false, result, extra end
+    if not announced or result.state ~= "applied" then return true, result end
+    local j = LY.Journal.Read()
+    if not (j and j.state == "applied" and j.reload and j.char == Me() and j.snapshot ~= nil) then
+        session.reloadHeld = "record"
+        return true, result, nil, "record"
+    end
+    local started, why = StartReload("install", true)
+    if not started then
+        session.reloadHeld = why
+        return true, result, nil, why
+    end
+    return true, result
+end
+
+-- True while the interface is about to reload (the apply is done and the reload has been asked for), false otherwise.
+function M.Reloading() return session ~= nil and session.reloading == true end
 
 ---------------------------------------------------------------------------
 -- The result (step 6): what the install record says now, in words and with the actions that make sense
@@ -1958,27 +2067,52 @@ local function ResultBase()
     return out
 end
 
--- The outcome in a player's words: what the page's heading says, with M.Result's own title kept as the status under it. Each state
--- keeps its own heading, so a failure never wears the success one: only a setup that was written, read back after the reload and
--- found as planned (or one the player finished) is "ready", and the summary says what was and wasn't checked by value.
+-- The outcome in a player's words (the compact result dialog): a heading, the layout's name, one sentence, at most one secondary note,
+-- and everything technical under `details`. Each state keeps its own heading, so a failure or a mismatch never wears the success
+-- one: only a setup that was written, read back after the reload and found as planned (or one the player finished) is "ready".
+--   heading, summary, note, layout, revision, tone, ready (the success presentation), settled (nothing left to decide: Done is the
+--   primary action), attention (the setup needs the player), affected = { component, ... }, details = { line, ... }, progress
+-- M.Result's own title stays as the status (`title`), and the engine's account (`lines`, `steps`, `diffs`, `picks`) as it was.
 local OUTCOME = {
-    applied = "Reload to finish your setup",
+    applied = "One more step",
     verified = "Your interface is ready",
-    mismatch = "Some settings didn't read back as planned",
-    partial = "Your setup was only partly applied",
-    interrupted = "Your setup was interrupted",
-    applying = "Your setup was interrupted",
-    restoring = "Reload to finish restoring",
-    ["restore-partial"] = "Your previous setup isn't fully back",
-    undoing = "Reload to finish undoing the update",
-    ["undo-partial"] = "The update isn't fully undone",
-    restored = "Your previous setup is back",
-    failed = "Nothing was changed",
+    mismatch = "Setup needs attention",
+    partial = "Setup needs attention",
+    interrupted = "Setup needs attention",
+    applying = "Setup needs attention",
+    restoring = "One more step",
+    ["restore-partial"] = "Setup needs attention",
+    undoing = "One more step",
+    ["undo-partial"] = "Setup needs attention",
+    restored = "Previous setup restored",
+    failed = "Setup could not be completed",
     none = "Nothing is installed",
     damaged = "The install record can't be read",
     newer = "The install record is from a newer TwichUI",
     ["other-character"] = "Installed on another character",
 }
+
+local BAD_STEP = { failed = true, ["not-run"] = true, pending = true, partial = true }
+
+-- "EllesmereUI" / "TwichUI and EllesmereUI": the parts of an install whose steps are in one of the given states
+local function Affected(steps, only)
+    local out = {}
+    for _, st in ipairs(steps or {}) do
+        if (only and st.state == only) or (not only and BAD_STEP[st.state]) then out[#out + 1] = ADAPTER[st.adapter] or tostring(st.adapter) end
+    end
+    return out
+end
+
+local function Join(list)
+    if #list <= 1 then return list[1] or "" end
+    return table.concat(list, ", ", 1, #list - 1) .. " and " .. list[#list]
+end
+
+local function When(t)
+    if type(t) ~= "number" or type(date) ~= "function" then return nil end
+    local ok, text = pcall(date, "%Y-%m-%d %H:%M", t)
+    return ok and text or nil
+end
 
 function M.Result()
     local out = ResultBase()
@@ -1988,32 +2122,112 @@ function M.Result()
     local rec = j or m
     if rec then
         out.revision = rec.revision
-        for _, l in ipairs(session.layouts) do if l.id == rec.variant then out.layout = l.title end end
+        for _, l in ipairs(session.layouts) do if l.id == rec.variant then out.layout, out.art = l.title, l.art end end
     end
     out.layout = out.layout or (out.picks[1] and out.picks[1].option)
+    out.art = out.art or "emblem"   -- a layout from a package someone sent has no picture of its own
     local kind = out.kind
+    local layout = out.layout or "Your layout"
     out.heading = OUTCOME[kind] or out.title
-    out.ready = false
+    out.ready, out.settled, out.attention, out.affected, out.details = false, false, false, {}, {}
+
+    -- "Apply & Reload" has written everything and asked for the reload: the dialog says so until the game goes
+    if session.reloading then
+        out.progress = { heading = "Applying your layout...", text = "Your interface will reload shortly." }
+        out.heading, out.summary = out.progress.heading, out.progress.text
+        return out
+    end
+
+    local function Detail(line) out.details[#out.details + 1] = line end
     if kind == "verified" then
-        out.ready = true
+        out.ready, out.settled, out.tone = true, true, "ok"
+        out.summary = "Your layout has been applied. Make yourself at home."
         local byValue = j.verify and j.verify.checked or 0
         local pres = j.verify and j.verify.presence or 0
-        out.summary = ("%s is installed and checked after the reload."):format(out.layout or "Your layout")
-            .. (byValue > 0 and (" %d %s read back as planned"):format(byValue, Plural(byValue, "setting", "settings")) or "")
-            .. (pres > 0 and ((byValue > 0 and "; " or " ") .. ("%d EllesmereUI %s checked only for being there."):format(pres, Plural(pres, "part was", "parts were"))) or (byValue > 0 and "." or ""))
+        -- an EllesmereUI part replaced whole can only be checked for being there: a supported limit, said quietly, not an error
+        if pres > 0 then out.note = "Some addon settings could not be fully verified." end
+        Detail(("%d %s read back by value as planned."):format(byValue, Plural(byValue, "setting", "settings")))
+        if pres > 0 then
+            Detail(("%d EllesmereUI %s (modules, layout links, look) %s replaced whole, so TwichUI checked only that %s there, not what is inside."):format(
+                pres, Plural(pres, "part", "parts"), Plural(pres, "was", "were"), Plural(pres, "it is", "they are")))
+        end
+        local at = When(j.verify and j.verify.at)
+        if at then Detail("Checked after the reload at " .. at .. ".") end
     elseif kind == "managed" then
         if out.tone == "ok" then
-            out.ready = true
+            out.ready, out.settled = true, true
             out.heading = "Your interface is ready"
-            out.summary = ("%s is installed and its setup is finished."):format(out.layout or "Your layout")
+            out.summary = "Your layout is installed and its setup is finished."
         else
-            out.heading = "Installed, but not fully checked"
-            out.summary = ("%s is installed. Some values didn't read back as planned when it was last checked."):format(out.layout or "Your layout")
+            out.heading, out.attention = "Setup needs attention", true
+            out.summary = "A few settings did not match when your setup was last checked."
+        end
+    elseif kind == "mismatch" then
+        out.attention = true
+        local unreadable = j.verify and j.verify.state ~= "mismatch"
+        out.summary = unreadable and "Some settings couldn't be read back after reloading, so they aren't confirmed."
+            or "A few settings did not match after reloading."
+        for _, d in ipairs(out.diffs) do out.affected[#out.affected + 1] = d end
+    elseif kind == "partial" or kind == "interrupted" or kind == "applying" then
+        out.attention = true
+        local bad = Affected(j.steps)
+        out.summary = kind == "partial" and ("Part of the setup didn't finish" .. (#bad > 0 and (": " .. Join(bad) .. ".") or "."))
+            or "The game stopped before the setup finished."
+        for _, c in ipairs(bad) do out.affected[#out.affected + 1] = c end
+    elseif kind == "restore-partial" or kind == "undo-partial" then
+        out.attention = true
+        out.summary = kind == "restore-partial" and "Your previous setup isn't fully back." or "The update isn't fully undone."
+    elseif kind == "applied" or kind == "restoring" or kind == "undoing" then
+        -- waiting for a reload (or, in the moments after one, for the check)
+        local launcher = R.LayoutsLauncher
+        local checking = kind == "applied" and not session.appliedHere and launcher ~= nil and launcher.CheckPending() == true
+        if checking then
+            out.heading = "Setup is still being checked"
+            out.summary = "TwichUI is reading your settings back after the reload. This takes a moment."
+            out.can.reload, out.checking = false, true
+        else
+            local what = kind == "applied" and ("Reload your interface to finish applying " .. layout .. ".")
+                or kind == "restoring" and "Reload your interface to finish putting your previous setup back."
+                or "Reload your interface to finish undoing the update."
+            local held = session.reloadHeld
+            out.summary = what
+            if held == "combat" then out.note = "You're in combat, so the reload didn't start. Reload when it is safe."
+            elseif held then out.note = "The automatic reload didn't start. Reload now when you're ready; nothing else is needed." end
         end
     elseif kind == "restored" then
-        out.summary = "Everything the install changed is back as it was."
+        out.settled, out.tone = true, "ok"
+        out.summary = "Everything the setup changed is back as it was."
+    elseif kind == "failed" then
+        out.attention = true
+        local bad = Affected(session.result and session.result.steps, "failed")  -- the step that failed; the ones after it never ran
+        out.summary = "Nothing was changed, and your setup is as it was." .. (#bad > 0 and (" " .. Join(bad) .. " couldn't be applied.") or "")
     else
         out.summary = out.lines[1]
+    end
+    -- "Check again" found something that does not read back: the record is not rewritten (it is a read), but the dialog is no longer a
+    -- success. What it found is also said in view (`checked`).
+    local chk = session.check
+    if chk and chk.state ~= "match" and (kind == "verified" or (kind == "managed" and out.tone == "ok")) then
+        out.ready, out.settled, out.attention, out.note = false, false, true, nil
+        out.heading = "Setup needs attention"
+        out.summary = chk.state == "mismatch" and "A few settings did not match when you checked just now."
+            or "Some settings couldn't be read back when you checked just now, so they aren't confirmed."
+        out.affected, out.listAffected = {}, true
+        for _, d in ipairs(out.diffs) do out.affected[#out.affected + 1] = d end
+    end
+    if kind == "mismatch" then out.listAffected = true end
+    if session.undone and (kind == "verified" or kind == "managed" or kind == "none") then
+        out.heading, out.ready, out.settled, out.note, out.tone = "Update undone", false, true, nil, "ok"
+        out.summary = "Your layout is back to how it was before the update."
+    end
+    if rec and rec.variant then
+        -- what changed, and whose it is: the account-wide scope belongs to EllesmereUI
+        local parts = {}
+        for _, st in ipairs(j and j.steps or {}) do
+            if st.state == "done" then parts[#parts + 1] = st.adapter == "ellesmereui" and "EllesmereUI (every character on this account)" or "TwichUI (this character)" end
+        end
+        if #parts > 0 then table.insert(out.details, 1, "Changed: " .. table.concat(parts, "; ") .. ".") end
+        if out.revision then table.insert(out.details, 1, ("%s, revision %d."):format(layout, out.revision)) end
     end
     return out
 end
@@ -2080,6 +2294,7 @@ function M.Restore(key)
     session.check = nil
     if not ok then return false, result, extra end
     session.restoreResult = result
+    session.undone = false
     if result.state == "restored" then session.restored = true end
     session.step = M.RESULT
     return true, result
@@ -2130,6 +2345,7 @@ function M.Undo(key)
     session.check = nil
     if not ok then return false, result, extra end
     session.undoResult = result
+    session.undone = result.state == "undone"
     session.step = M.RESULT
     return true, result
 end
@@ -2146,7 +2362,7 @@ end
 function M.Keep()
     if not session then return false end
     local done, code = LY.Finish()
-    if done then session.restored = false end
+    if done then session.restored, session.undone = false, false end
     session.check = nil
     return done, code
 end
@@ -2155,18 +2371,16 @@ end
 function M.StopManaging()
     if not session then return false end
     local done = LY.Detach()
-    if done then session.restored = false end
+    if done then session.restored, session.undone = false, false end
     session.check = nil
     return done
 end
 
--- Starts the reload the player asked for, leaving a note so the result is shown when the game is back. Refused in combat.
+-- Starts the reload the player asked for (Reload now), leaving a note so the result is shown when the game is back. Refused in combat.
 function M.Reload()
     if not session then return false, "closed" end
-    if InCombat() then return false, "combat" end
     local j = LY.Journal.Read()
-    local kind = (j and (j.state == "restoring")) and "restore" or "install"
-    S.SetResume(session.layout.pkg, Remembered(), kind)
-    ReloadUI()
-    return true
+    local started, why = StartReload((j and j.state == "restoring") and "restore" or "install")
+    if started then session.reloadHeld = nil end
+    return started, why
 end

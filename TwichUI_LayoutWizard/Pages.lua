@@ -1186,47 +1186,54 @@ local function BuildReview(parent, env)
 end
 
 ---------------------------------------------------------------------------
--- 6. Result: the outcome in a player's words, the status under it, and the actions that make sense
+-- 6. Result: a compact dialog. One heading for the outcome, the layout's name, one sentence, at most one quiet note and the buttons
+-- that make sense; everything technical (what was chosen, each step, the counts, what was and wasn't checked) is behind "Details", and
+-- the maintenance actions behind "Manage layout". The window (Window.lua) gives this step its own small shape: no stepper, no footer.
+-- Only a setup that was read back as planned wears the success picture; every other outcome has its own heading and its recovery
+-- actions in view.
 ---------------------------------------------------------------------------
-local MANAGE = { "check", "again", "keep", "keepUpdate", "undo", "restore", "stop", "forget" }
-local ALL = { "reload", "check", "again", "keep", "keepUpdate", "undo", "restore", "stop", "forget" }
+Pages.COMPACT_W = 466   -- the dialog's content width: the window's 520, less its margins and the scroll bar's room
+local CW = Pages.COMPACT_W
+local ART_W, ART_H = 144, 72
+local SETTLED_PRIMARY = { "done", "settings" }
+local SETTLED_MANAGE = { "check", "again", "keep", "keepUpdate", "undo", "restore", "stop", "forget" }
+local OPEN_PRIMARY = { "reload", "check", "again", "undo", "restore", "forget" }   -- in view while the setup needs the player
+local OPEN_MANAGE = { "keep", "keepUpdate", "stop" }
+local VISIBLE_AFFECTED = 3   -- what is named in view; the rest is under Details
 
 local function BuildResult(parent, env)
-    local L = Look()
     local page = { frame = CreateFrame("Frame", nil, parent) }
     local f = page.frame
-    f:SetSize(CONTENT_W, 10)
+    f:SetSize(CW, 10)
     local col = NewColumn(f)
-    local title = Put(col, L.Text(f, "title"), 4)
-    title:SetWidth(CONTENT_W)
-    local statusRow = Put(col, CreateFrame("Frame", nil, f), 8)
-    statusRow:SetSize(CONTENT_W, 22)
-    local chip = Chip(statusRow)
-    chip:SetPoint("LEFT", 0, 0)
-    local status = Text(statusRow, "small", CONTENT_W - 120)
-    status:SetPoint("LEFT", chip, "RIGHT", 10, 0)
-    local summary = Put(col, Text(f, "body", CONTENT_W), 12)
-    local layoutLine = Put(col, Text(f, "body", CONTENT_W), 8)
-    local lines = Put(col, Text(f, "small", CONTENT_W), 10)
-    local checked = Put(col, Text(f, "small", CONTENT_W), 8)   -- what "Check again" just found, in view whatever else is folded
-    local combat = Put(col, Text(f, "small", CONTENT_W), 10)
-    -- the account of it: always shown when something is wrong, behind "Details" when it is ready
-    page.detailsOpen = false
-    local detailsBtn = Put(col, Disclosure(f, "Details", 140, function(open) page.detailsOpen = open env.Relayout() end), 10)
-    local picksHead = Put(col, Heading(f, "What was chosen", CONTENT_W), 12)
-    local picks = Put(col, Text(f, "small", CONTENT_W), 3)
-    local stepsHead = Put(col, Heading(f, "What happened", CONTENT_W), 12)
-    local steps = Put(col, Text(f, "small", CONTENT_W), 3)
-    local diffHead = Put(col, Heading(f, "What doesn't read back as planned", CONTENT_W), 12)
-    local diffs = Put(col, Text(f, "small", CONTENT_W), 3)
+    local function Centered(fs) fs:SetJustifyH("CENTER") return fs end
+
+    local artFrame = Put(col, CreateFrame("Frame", nil, f), 4, math.floor((CW - ART_W) / 2))
+    artFrame:SetSize(ART_W, ART_H)
+    local art = artFrame:CreateTexture(nil, "ARTWORK")
+    art:SetAllPoints(artFrame)
+    local title = Put(col, Centered(Text(f, "title", CW)), 10)
+    local layoutLine = Put(col, Centered(Text(f, "body", CW)), 4)
+    local summary = Put(col, Centered(Text(f, "body", CW)), 10)
+    local note = Put(col, Centered(Text(f, "small", CW)), 8)           -- the one quiet secondary sentence (a limit of the check, why a reload waited)
+    local checked = Put(col, Centered(Text(f, "small", CW)), 8)        -- what "Check again" just found, in view whatever else is folded
+    local affected = Put(col, Centered(Text(f, "small", CW)), 8)
+    local combat = Put(col, Centered(Text(f, "small", CW)), 8)
+    local primaryBox = Put(col, CreateFrame("Frame", nil, f), 14)      -- the buttons that matter now sit in this box, centred in rows
+    primaryBox:SetSize(CW, 1)
+
     local A = env.Actions
     local buttons = {
+        done = Button(f, "Done", 110, "primary", function() A.done() end,
+            "Closes this. Nothing is finished or discarded by closing: your setup stays managed, and Restore and Undo stay offered until you choose Keep this setup."),
+        settings = Button(f, "Open settings", 130, "secondary", function() A.settings() end,
+            "Closes this setup and opens TwichUI's settings."),
         reload = Button(f, "Reload now", 120, "primary", function() A.reload() end,
-            "Reloads the game's interface now, which finishes EllesmereUI's part. After it, TwichUI reads every value back and shows this page. It only happens when you press this."),
+            "Reloads the game's interface now, which finishes EllesmereUI's part. After it, TwichUI reads every value back and shows this. It only happens when you press this."),
         check = Button(f, "Check again", 110, "secondary", function() A.check() end,
             "Reads every managed value back now. It changes and repairs nothing."),
         again = Button(f, "Set up again", 110, "secondary", function() A.again() end,
-            "Goes back to the first step. Nothing changes until you apply."),
+            "Goes back to the first step of the full setup. Nothing changes until you apply."),
         keep = Button(f, "Keep this setup", 130, "secondary", function() A.keep() end,
             "Finishes the setup: the restore point is forgotten (Restore is no longer offered), and TwichUI keeps managing the layout so a later update keeps your changes."),
         stop = Button(f, "Stop managing", 130, "secondary", function() A.stop() end,
@@ -1239,107 +1246,144 @@ local function BuildResult(parent, env)
             "Puts your previous profiles back and removes the install's own. It shows exactly what it will do and asks first."),
         forget = Button(f, "Forget the record", 140, "danger", function() A.forget() end,
             "Forgets a record that can't be read. Nothing else is changed."),
-        settings = Button(f, "Open settings", 130, "secondary", function() A.settings() end,
-            "Closes this setup and opens TwichUI's settings."),
     }
     page.buttons = buttons
-    page.manageOpen = false
-    local manage = Disclosure(f, "Manage layout", 180, function(open) page.manageOpen = open env.Relayout() end)
-    page.manage = manage
-    local manageText = Text(f, "small", CONTENT_W)
 
-    local function Place(keys, y, show, can)
-        local x = 0
+    -- the account of it, behind "Details"
+    page.detailsOpen = false
+    local detailsBtn = Put(col, Disclosure(f, "Details", 120, function(open) page.detailsOpen = open env.Relayout() end), 10, math.floor((CW - 120) / 2))
+    local detailText = Put(col, Text(f, "small", CW), 6)
+    local picksHead = Put(col, Heading(f, "What was chosen", CW), 10)
+    local picks = Put(col, Text(f, "small", CW), 3)
+    local stepsHead = Put(col, Heading(f, "What happened", CW), 10)
+    local steps = Put(col, Text(f, "small", CW), 3)
+    local diffHead = Put(col, Heading(f, "What doesn't read back as planned", CW), 10)
+    local diffs = Put(col, Text(f, "small", CW), 3)
+    local more = Put(col, Text(f, "small", CW), 10)
+    -- the maintenance actions, behind "Manage layout"
+    page.manageOpen = false
+    local manage = Put(col, Disclosure(f, "Manage layout", 160, function(open) page.manageOpen = open env.Relayout() end), 6, math.floor((CW - 160) / 2))
+    page.manage = manage
+    local manageText = Put(col, Text(f, "small", CW), 6)
+    local manageBox = Put(col, CreateFrame("Frame", nil, f), 8)
+    manageBox:SetSize(CW, 1)
+    local pageNote = Put(col, Centered(Text(f, "small", CW)), 10)   -- why a button did nothing
+
+    -- Centres the buttons of `keys` that are to be shown in rows inside `box` (sizing the box to them), and hides the others.
+    local function Place(box, keys, show, can)
+        local rows, row, w = {}, {}, 0
         for _, key in ipairs(keys) do
             local b = buttons[key]
             b:SetShown(show[key] == true)
             if show[key] then
                 b:SetEnabled(can == nil or can[key] == true)   -- shown but disabled: Reload now in combat says why on the page
-                b:ClearAllPoints()
-                if x > 0 and x + b:GetWidth() > CONTENT_W then x, y = 0, y + 32 end   -- a second row rather than past the edge
-                b:SetPoint("TOPLEFT", f, "TOPLEFT", x, -y)
-                x = x + b:GetWidth() + 8
+                if #row > 0 and w + 8 + b:GetWidth() > CW then rows[#rows + 1] = row row, w = {}, 0 end
+                row[#row + 1] = { b = b, x = w }
+                w = w + b:GetWidth() + 8
             end
         end
-        return y, x > 0
+        if #row > 0 then rows[#rows + 1] = row end
+        for i, r in ipairs(rows) do
+            local last = r[#r]
+            local x0 = math.floor((CW - (last.x + last.b:GetWidth())) / 2)
+            for _, e in ipairs(r) do
+                e.b:ClearAllPoints()
+                e.b:SetPoint("TOPLEFT", box, "TOPLEFT", x0 + e.x, -((i - 1) * 32))
+            end
+        end
+        box:SetHeight(math.max(1, #rows * 32 - 8))
+        box:SetShown(#rows > 0)
     end
 
-    function page.Refresh()
+    function page.Refresh(noteText)
         local r = M.Result()
         page.result = r
-        local ready = r.ready == true
+        -- a new outcome starts as a short dialog again
+        if page.kind ~= r.kind then page.kind, page.detailsOpen, page.manageOpen = r.kind, false, false end
+        local ready, settled, progress = r.ready == true, r.settled == true, r.progress
+
+        -- the success picture is for a setup that was read back as planned only (never a mismatch, a partial install or a failure)
+        local drawn = ready and not progress and WZ.Art.Apply(art, r.art or "emblem") or false
+        artFrame:SetShown(drawn)
         title:SetText(r.heading or r.title or "")
-        chip:SetTone(r.tone or "info", ready and "Ready" or (r.tone == "ok" and "Done" or nil))
-        status:SetText(r.title or "")
+        layoutLine:SetText(r.layout or "")
+        layoutLine:SetShown(not progress and r.layout ~= nil and settled)
         summary:SetText(r.summary or "")
         summary:SetShown((r.summary or "") ~= "")
-        layoutLine:SetText(r.layout and ("Installed layout: " .. r.layout) or "")
-        layoutLine:SetShown(ready and r.layout ~= nil)
-        -- anything that isn't a finished, checked setup says all of it, at once; a ready one keeps the account of it under "Details"
-        local full = not ready
-        local more = {}
-        for i, l in ipairs(r.lines) do
-            if l ~= r.checked and (full and i > 1 or (ready and page.detailsOpen)) then more[#more + 1] = l end
-        end
-        lines:SetText(table.concat(more, "\n\n"))
-        lines:SetShown(#more > 0)
-        combat:SetText(r.combat or "")
-        combat:SetShown(r.combat ~= nil)
+        note:SetText(r.note or "")
+        note:SetShown(not progress and r.note ~= nil)
+        local named, all = {}, r.affected or {}
+        for i, a in ipairs(all) do if i <= VISIBLE_AFFECTED then named[#named + 1] = a end end
+        if #all > VISIBLE_AFFECTED then named[#named + 1] = ("and %d more, under Details."):format(#all - VISIBLE_AFFECTED) end
+        if not r.listAffected then named = {} end   -- a partial install names its parts in its sentence
         checked:SetText(r.checked or "")
-        checked:SetShown(r.checked ~= nil)
-        detailsBtn:SetShown(ready)
-        detailsBtn:SetOpen(page.detailsOpen)
-        local showMore = full or page.detailsOpen
+        checked:SetShown(not progress and r.checked ~= nil)
+        affected:SetText(table.concat(named, "\n"))
+        affected:SetShown(not progress and #named > 0)
+        combat:SetText(r.combat or "")
+        combat:SetShown(not progress and r.combat ~= nil)
+        pageNote:SetText(noteText or "")
+        pageNote:SetShown(not progress and noteText ~= nil and noteText ~= "")
+
+        -- Details: status, what changed and what was checked, what was chosen, each step, what differs
+        local d = {}
+        if r.title and r.title ~= "" then d[#d + 1] = "Status: " .. r.title .. "." end
+        for _, l in ipairs(r.details or {}) do d[#d + 1] = l end
+        local extra = {}
+        for i, l in ipairs(r.lines) do
+            if l ~= r.checked and (i > 1 or not ready) then extra[#extra + 1] = l end
+        end
+        detailText:SetText(table.concat(d, "\n"))
+        more:SetText(table.concat(extra, "\n\n"))
         local p = {}
         for _, x in ipairs(r.picks) do p[#p + 1] = x.choice .. ": " .. x.option end
         picks:SetText(Bullets(p))
-        picksHead:SetShown(showMore and #p > 0)
-        picks:SetShown(showMore and #p > 0)
         steps:SetText(Bullets(r.steps))
-        stepsHead:SetShown(showMore and #r.steps > 0)
-        steps:SetShown(showMore and #r.steps > 0)
         diffs:SetText(Bullets(r.diffs))
-        diffHead:SetShown(#r.diffs > 0)   -- what doesn't read back is never folded away
-        diffs:SetShown(#r.diffs > 0)
-        local y = Flow(col) + 16
+        local open = not progress and page.detailsOpen
+        detailsBtn:SetShown(not progress)
+        detailsBtn:SetOpen(page.detailsOpen)
+        detailText:SetShown(open and #d > 0)
+        more:SetShown(open and #extra > 0)
+        picksHead:SetShown(open and #p > 0)
+        picks:SetShown(open and #p > 0)
+        stepsHead:SetShown(open and #r.steps > 0)
+        steps:SetShown(open and #r.steps > 0)
+        diffHead:SetShown(open and #r.diffs > 0)
+        diffs:SetShown(open and #r.diffs > 0)
 
-        -- the actions: while something is unfinished or wrong, each one that applies is in view; when the setup is ready, Done is the
-        -- footer's and the maintenance actions are under "Manage layout"
-        local show = {}
-        for _, key in ipairs(ALL) do
-            show[key] = r.can[key] == true or (key == "reload" and r.state == "applied" and r.can.reload == false)
-        end
-        if ready then
-            local primary = { settings = true }
-            local py, any = Place({ "settings" }, y, primary)
-            if any then y = py + 32 end
-            manage:Show()
-            manage:SetOpen(page.manageOpen)
-            manage:ClearAllPoints()
-            manage:SetPoint("TOPLEFT", f, "TOPLEFT", 0, -y)
-            y = y + 26
-            local mshow = {}
-            for _, key in ipairs(MANAGE) do mshow[key] = page.manageOpen and show[key] end
-            manageText:SetShown(page.manageOpen)
-            if page.manageOpen then
-                local text = r.revision and ("Installed revision %d."):format(r.revision) or ""
-                if r.updateText then text = text .. " " .. r.updateText end
-                manageText:SetText(text)
-                manageText:ClearAllPoints()
-                manageText:SetPoint("TOPLEFT", f, "TOPLEFT", 0, -y)
-                y = y + Height(manageText) + 8
+        -- which actions, and where: a settled setup has Done (and Open settings) and the rest under Manage layout; one that needs the
+        -- player has each recovery action that applies in view
+        local can = r.can
+        local primaryKeys = settled and SETTLED_PRIMARY or OPEN_PRIMARY
+        local manageKeys = settled and SETTLED_MANAGE or OPEN_MANAGE
+        local pshow, mshow, anyManage = {}, {}, false
+        if not progress then
+            for _, key in ipairs(primaryKeys) do
+                pshow[key] = settled or can[key] == true or (key == "reload" and r.state == "applied" and can.reload == false and not r.checking)
             end
-            local my, many = Place(MANAGE, y, mshow, r.can)
-            if many then y = my + 32 end
-            for _, key in ipairs({ "reload" }) do buttons[key]:SetShown(false) end
-        else
-            manage:Hide()
-            manageText:Hide()
-            buttons.settings:Hide()
-            local py, any = Place(ALL, y, show, r.can)
-            if any then y = py + 32 end
+            for _, key in ipairs(manageKeys) do if can[key] == true then anyManage = true end end
         end
-        f:SetHeight(y + 12)
+        local showManage = not progress and (anyManage or (settled and r.revision ~= nil))
+        manage:SetShown(showManage)
+        manage:SetOpen(page.manageOpen)
+        local mopen = showManage and page.manageOpen
+        for _, key in ipairs(manageKeys) do mshow[key] = mopen and can[key] == true end
+        manageText:SetShown(mopen)
+        if mopen then
+            local t = r.revision and ("Installed revision %d."):format(r.revision) or ""
+            if r.updateText then t = t .. " " .. r.updateText end
+            if can.keep then
+                t = t .. " Keep this setup finishes it: the restore point is forgotten, so Restore and Undo are no longer offered. TwichUI keeps managing the layout for later updates."
+            end
+            manageText:SetText((t:gsub("^%s+", "")))
+        end
+        -- every button not in a list for this outcome is hidden
+        for key, b in pairs(buttons) do b:Hide() end
+        Place(primaryBox, primaryKeys, pshow, not settled and can or nil)   -- Done and Open settings are always available
+        Place(manageBox, manageKeys, mshow, can)
+        local y = Flow(col)
+        f:SetHeight(y + 14)
         return f:GetHeight()
     end
     return page

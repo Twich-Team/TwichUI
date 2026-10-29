@@ -27,11 +27,19 @@ local function Find(frame, label)
     if b then return b end
   end
 end
+-- Apply's label says what accepting does: "Apply & Reload" when the plan needs a reload, "Apply" when it doesn't
+local function ApplyLabel(win) return Find(win, "Apply & Reload") and "Apply & Reload" or "Apply" end
 local function Click(win, label)
   local b = Find(win, label)
   assert(b, "no visible button '" .. label .. "'")
   assert(b.enabled ~= false, "button '" .. label .. "' is disabled")
   b.scripts.OnClick(b)
+end
+-- Do this later: the footer's button on the six steps; on the compact result dialog (no footer) the window's own close, which the
+-- first-install record reads the same way
+local function Later(c)
+  local w = c.TwichUILayoutWizard
+  if Find(w, "Do this later") then Click(w, "Do this later") else c.TwichUI.LayoutWizard.Window.Close("later") end
 end
 local function Enabled(win, label) local b = Find(win, label) return b ~= nil and b.enabled ~= false end
 local function Has(win, label) return Find(win, label) ~= nil end
@@ -92,24 +100,23 @@ do
 
   -- through to an install: the plan isn't blocked, the import answers EllesmereUI's first run
   ToReview(w)
-  Check(Enabled(w, "Apply"), "Apply is offered (EllesmereUI's first run held for TwichUI doesn't block the plan)")
-  Click(w, "Apply")
+  Check(Enabled(w, ApplyLabel(w)), "Apply is offered (EllesmereUI's first run held for TwichUI doesn't block the plan)")
+  Click(w, ApplyLabel(w))
   Check(c.popup and c.popup.key == "TWICHUI_LAYOUT_APPLY" and Dimmed(c), "the question is the game's own dialog, over the dimming")
   c.Accept()
   Check(Step(c) == 6 and c.TwichUI.Layouts.Journal.Read().state == "applied", "applied, waiting for the reload")
   Check(E._firstInstallPending == nil and c.EllesmereUIDB.firstInstallPopupShown == true and c.EllesmereUIDB.styleChoicePending == nil,
     "EllesmereUI's import stamped its own first-install state (the supported completion)")
   Check(Ob(c).state == "started", "not done before the reload and its check")
-  Click(w, "Reload now")
-  Check(c.reloads == 1 and Ob(c).state == "started", "the reload the player started")
+  Check(c.reloads == 1 and Ob(c).state == "started", "Apply & Reload reloaded once, and the first install is not done by a reload alone")
 
   -- the reload: EllesmereUI stays held, the check runs, the setup shows its result, and only now is onboarding done
   local r = Again(c, "Fresh", { reload = true })
   Check(r.E._externalInstaller == "TwichUI" and r.E.pickerShown == nil and r.E.styleShown == nil, "no native picker during the setup's own reload")
-  Check(Shown(r) and Step(r) == 6 and Says(Win(r), "Checked after the reload"), "the result is shown after the reload")
+  Check(Shown(r) and Step(r) == 6 and Says(Win(r), "Your interface is ready"), "the result is shown after the reload")
   Check(Ob(r).state == "done" and Ob(r).why == "verified" and Ob(r).held == nil, "done once the install checked out")
   Check(r.wizardLoads == 1, "loaded once")
-  Check(not Has(Win(r), "Do this later") and Has(Win(r), "Close") and not Has(Win(r), "Skip setup"), "no first-run choices once done")
+  Check(not Has(Win(r), "Do this later") and not Has(Win(r), "Skip setup") and Has(Win(r), "Done"), "no first-run choices once done, and Done closes the compact result")
 
   -- later logins: nothing, and the wizard isn't loaded to find that out
   local l = Again(r, "Fresh")
@@ -129,7 +136,7 @@ do
   local c = Boot("Later", nil, { eui = { firstRun = true } })
   Check(Shown(c) and Dimmed(c), "opened, dimmed")
   local said = NewSaid(c)
-  Click(Win(c), "Do this later")
+  Later(c)
   Check(not Shown(c) and not Dimmed(c), "Do this later closes it, and the dimming goes with it")
   Check(Ob(c).state == "deferred" and Ob(c).why == "later", "put off")
   Check(said("layout setup put off") and said("next time you log in") and said("held back for it"), "said once, with when and where, and EllesmereUI's held setup")
@@ -272,7 +279,7 @@ do
   -- a finished, managed install from before onboarding
   local k = LM.Boot("Old")
   k.SlashCmdList.TWICHUI("layout")
-  ToReview(Win(k)); Click(Win(k), "Apply"); k.Accept(); Click(Win(k), "Reload now")
+  ToReview(Win(k)); Click(Win(k), ApplyLabel(Win(k))); k.Accept()
   local k2 = LM.Boot("Old", LM.Logout(k))
   Settle()
   Check(k2.TwichUI.Layouts.Journal.Read().state == "verified", "an install checked out (without onboarding loaded)")
@@ -317,28 +324,28 @@ end
 do
   -- applied and closed without the button's reload: 'installing', not put off; the player's own /reload finishes it
   local c = Boot("Wait", nil, {})
-  ToReview(Win(c)); Click(Win(c), "Apply"); c.Accept()
-  Click(Win(c), "Do this later")
+  ToReview(Win(c)); Click(Win(c), ApplyLabel(Win(c))); c.AcceptHeld()   -- the reload didn't start; the player's own /reload follows
+  Later(c)
   Check(Ob(c).state == "installing" and Ob(c).why == "applied" and not Heard(c, "put off"), "closed after Apply: an install is waiting, not a deferral")
   local r = Again(c, "Wait", { reload = true })
   Check(r.TwichUI.Layouts.Journal.Read().state == "verified" and Ob(r).state == "done" and not Shown(r), "checked after the player's own reload: done, chat only")
 
   -- a clean failure: nothing changed, still the first-install setup
   local f = Boot("Fail", nil, { eui = { failImport = true } })
-  ToReview(Win(f)); Click(Win(f), "Apply"); f.Accept()
+  ToReview(Win(f)); Click(Win(f), ApplyLabel(Win(f))); f.Accept()
   Check(Says(Win(f), "Nothing was changed") and Ob(f).state == "started", "a refused import: still started")
-  Click(Win(f), "Do this later")
+  Later(f)
   Check(Ob(f).state == "deferred", "and closing puts it off as usual")
 
   -- part way: the setup reopens on its result (recovery), never on the layout choice
   local p = Boot("Part", nil, {})
   p.TwichUI.Layouts.ADAPTERS.twichui.Apply = function() return { state = "failed", code = "write", rollback = "clean" } end
-  ToReview(Win(p)); Click(Win(p), "Apply"); p.Accept()
+  ToReview(Win(p)); Click(Win(p), ApplyLabel(Win(p))); p.Accept()
   Check(p.TwichUI.Layouts.Journal.Read().state == "partial", "partial")
-  Click(Win(p), "Do this later")
+  Later(p)
   Check(Ob(p).state == "installing", "closed: an install under way")
   local p2 = Again(p, "Part", { reload = true })
-  Check(Shown(p2) and Step(p2) == 6 and Says(Win(p2), "Only partly applied") and Enabled(Win(p2), "Restore previous setup"),
+  Check(Shown(p2) and Step(p2) == 6 and Says(Win(p2), "Setup needs attention") and Enabled(Win(p2), "Restore previous setup"),
     "after a reload it opens on the result, with Restore (not the first step)")
   Check(not Has(Win(p2), "Skip setup") and Ob(p2).offers == 1, "no Skip over an install under way; one offer counted")
   Click(Win(p2), "Restore previous setup"); p2.Accept(); Click(Win(p2), "Reload now")
@@ -347,11 +354,11 @@ do
 
   -- interrupted (the game stopped part way): opens on the result at the next login
   local i = Boot("Cut", nil, {})
-  ToReview(Win(i)); Click(Win(i), "Apply"); i.Accept()
+  ToReview(Win(i)); Click(Win(i), ApplyLabel(Win(i))); i.Accept()
   local LY = i.TwichUI.Layouts
   local j = LY.Journal.Read(); j.state = "applying"; LY.Journal.Write(j)
   local i2 = Again(i, "Cut")
-  Check(Shown(i2) and Step(i2) == 6 and Says(Win(i2), "An install was interrupted") and Ob(i2).state == "installing", "interrupted: the result, with what to do")
+  Check(Shown(i2) and Step(i2) == 6 and Says(Win(i2), "The game stopped before the setup finished.") and Ob(i2).state == "installing", "interrupted: the result, with what to do")
 end
 
 ---------------------------------------------------------------------------
@@ -413,13 +420,13 @@ end
 do
   -- the check after a layout reload runs first, and a result it opens is this session's offer
   local c = Boot("Order", nil, {})
-  ToReview(Win(c)); Click(Win(c), "Apply"); c.Accept(); Click(Win(c), "Reload now")
+  ToReview(Win(c)); Click(Win(c), ApplyLabel(Win(c))); c.Accept()
   local r = Again(c, "Order", { reload = true })
   Check(Shown(r) and r.wizardLoads == 1 and Ob(r).state == "done", "one window: the result, opened by the check; onboarding then done")
   -- even when the check is late: the setup waits for it rather than open on a record that is about to change
   local d = Boot("Late", nil, {})
-  ToReview(Win(d)); Click(Win(d), "Apply"); d.Accept()
-  Click(Win(d), "Do this later")   -- closed after Apply: installing
+  ToReview(Win(d)); Click(Win(d), ApplyLabel(Win(d))); d.AcceptHeld()   -- the wizard's own reload didn't start: no note
+  Later(d)   -- closed after Apply: installing
   local late = Again(d, "Late", { reload = true, setup = function(x) x.TwichUI.LayoutsLauncher.CONTINUE_AFTER = 60 end })
   Check(not Shown(late) and late.TwichUI.Onboarding.Snapshot().lastWait == "layouts" and Ob(late).state == "installing", "it waits for the check after the reload")
   RunLongTimers(60); Settle()

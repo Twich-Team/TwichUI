@@ -17,8 +17,12 @@
 -- the window hides (Escape, Close, the full-size preview, which has its own, an error while opening), and is made once.
 --
 -- The only things that change the game are a few buttons, each after a confirmation that names the exact scope, each
--- refused in combat by the model and again by the engine: Apply, Restore, Undo this update, Keep the update (removes the
--- copy an update kept), and the reload the player starts.
+-- refused in combat by the model and again by the engine: Apply (labelled Apply & Reload when the plan needs a reload: the
+-- question says so, and accepting it authorises the apply and the reload that finishes it), Restore, Undo this update, Keep the
+-- update (removes the copy an update kept), and the reload the player starts for those.
+--
+-- The result step is not a step of the wizard: it is a compact, content-sized dialog (no stepper, no footer) in the same window,
+-- made by Pages.lua from the same M.Result, and "Set up again" is the way back into the full six steps. Done only closes it.
 --
 --   Window.Open(step)   opens it (on a step, or where the model says); Window.Close(), Window.Toggle(), Window.IsShown()
 --   Window.Refresh()    draws the current step again from the model
@@ -34,6 +38,7 @@ WZ.Window = W
 local FRAME_NAME = "TwichUILayoutWizard"
 local WIDTH, HEIGHT = 780, 590
 local HEADER_H, PAD, STEPPER_H, FOOTER_H = 44, 16, 30, 54
+local COMPACT_W, COMPACT_MIN_H, COMPACT_MAX_H = 520, 240, 600   -- the result dialog: a width of its own, a height that follows its content
 local EVENTS = { "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED", "DISPLAY_SIZE_CHANGED", "UI_SCALE_CHANGED" }
 local SCRIM_NAME = "TwichUILayoutWizardScrim"
 W.SCRIM_ALPHA = 0.40                          -- how dark the dimming is (the game stays plainly visible)
@@ -44,6 +49,8 @@ local suspended = false   -- hidden for the full-size preview: the session goes 
 local closeWhy            -- what closed it (Do this later, Skip, ...), for the first-install record
 local aborting = false    -- an error while opening is being cleaned up: the close is not an answer
 local resuming = false    -- shown again after the full-size preview: no fade-in for the dimming
+local compact = false     -- the result step: a small content-sized dialog instead of the six-step window
+local pageNote            -- a sentence for the compact dialog (why a button did nothing), until the next redraw
 local complete = false    -- Build ran to its end (an error part way builds again at the next open)
 local pages = {}
 W.pages = pages       -- read by the tests
@@ -56,6 +63,17 @@ local function Look() return R.Look end
 local function Say(fmt, ...) R.Print("layout setup: " .. fmt, ...) end
 
 function W.IsShown() return win ~= nil and win:IsShown() end
+function W.IsCompact() return compact end
+
+-- Says why a button did nothing: in the footer's note (the six steps) or on the compact dialog, until it is next drawn.
+function W.Note(text)
+    if compact then
+        pageNote = text
+        W.Refresh(true)
+    elseif footer then
+        footer.note:SetText(text or "")
+    end
+end
 
 ---------------------------------------------------------------------------
 -- The dimming behind the window (made once, with the window)
@@ -112,15 +130,17 @@ function Actions.apply()
         footer.note:SetText(M.ApplyReason(code, blocked))
         return
     end
-    local text, shown = M.ConfirmText()
+    local text, shown, c = M.ConfirmText()
     R.Interact.Confirm("TWICHUI_LAYOUT_APPLY", text, function()
-        local ok, result, extra = M.Apply(shown)
+        -- one authorised action: the apply and, when the question said so, the reload that finishes it (Model.ApplyAndReload says
+        -- when it will not reload: a failed or partial apply, a stale plan, combat, a note that could not be saved)
+        local ok, result, extra = M.ApplyAndReload(shown, c.reload)
         if not ok then
             Fail(result, extra)
             if result == "stale" then M.Invalidate() end
         end
         W.Refresh()
-    end, { accept = "Apply", combat = true, valid = function()
+    end, { accept = c.accept, alt = "View details", onAlt = function() W.ShowDetails() end, combat = true, valid = function()
         local ok, why = M.CanApply()
         if not ok then M.NoteFailure(why) W.Refresh() return false, M.ApplyReason(why) end
         if M.Plan().key ~= shown then
@@ -133,11 +153,19 @@ function Actions.apply()
     end })
 end
 
+-- "View details" on the question: back to the review with its account of every change open. Applies nothing.
+function W.ShowDetails()
+    if not (win and M.Active() and M.Step() == M.REVIEW) then return end
+    local p = pages[M.REVIEW]
+    if p then p.changesOpen = true end
+    W.Refresh()
+end
+
 function Actions.restore()
     local text, rp = M.RestoreConfirmText()
     if not rp.ok then
         local why = rp.blocked[1] or "It can't be restored right now."
-        footer.note:SetText(why)
+        W.Note(why)
         return
     end
     R.Interact.Confirm("TWICHUI_LAYOUT_RESTORE", text, function()
@@ -150,7 +178,7 @@ end
 function Actions.undo()
     local text, up = M.UndoConfirmText()
     if not up.ok then
-        footer.note:SetText(up.blocked[1] or "It can't be undone right now.")
+        W.Note(up.blocked[1] or "It can't be undone right now.")
         return
     end
     R.Interact.Confirm("TWICHUI_LAYOUT_UNDO", text, function()
@@ -210,7 +238,7 @@ end
 
 function Actions.reload()
     local ok, why = M.Reload()
-    if not ok then footer.note:SetText(M.ApplyReason(why)) W.Refresh() end
+    if not ok then W.Note(M.ApplyReason(why)) end
 end
 
 function Actions.check()
@@ -249,6 +277,12 @@ function Actions.native()
         end, { accept = "Open EllesmereUI's setup", combat = true })
 end
 
+-- The result's Done: closes the dialog. It is an acknowledgment and nothing else: the install stays managed, and Restore and
+-- Undo stay offered until the player chooses Keep this setup (Manage layout).
+function Actions.done()
+    W.Close("later")
+end
+
 -- The result's "Open settings": closes the setup (as Close does) and opens TwichUI's settings window
 function Actions.settings()
     W.Close("later")
@@ -270,7 +304,7 @@ local env = {
     Go = function(step) M.Go(step) W.Refresh() end,
     Overlay = function()
         local ok, why = WZ.Overlay.Open()
-        if not ok and footer then footer.note:SetText(why or "") end
+        if not ok then W.Note(why or "") end
     end,
 }
 
@@ -312,6 +346,7 @@ local function PaintFooter(step)
     footer.back:SetShown(step > M.WELCOME and step < M.RESULT)
     footer.next:SetShown(step < M.RESULT)
     footer.next:SetEnabled(true)
+    footer.next:SetWidth(110)
     footer.done = false   -- whether the primary button closes the setup (Done) instead of going on or applying
     if step < M.REVIEW then
         footer.next.text:SetText(step == M.WELCOME and "Get started" or "Next")
@@ -325,7 +360,11 @@ local function PaintFooter(step)
             footer.next.text:SetText("Done")
             footer.done = true
         else
-            footer.next.text:SetText("Apply")
+            -- the label says what accepting does: a plan that needs a reload applies and reloads in one action
+            local plan = M.Plan()
+            local reload = not plan.problems and plan.ok == true and plan.reload == true   -- also while disabled (combat): the label doesn't flip
+            footer.next.text:SetText(reload and "Apply & Reload" or "Apply")
+            footer.next:SetWidth(reload and 150 or 110)
             footer.next:SetEnabled(can)
             if not can then note = M.ApplyReason(code, blocked) end
         end
@@ -346,22 +385,54 @@ local function PaintFooter(step)
     footer.note:SetText(note)
 end
 
-function W.Refresh()
+-- The window is one of two shapes: the six steps (stepper, scrolling page, footer), or the compact result dialog (the page alone,
+-- as tall as it needs to be). Switching only moves and sizes what already exists.
+local function SetCompact(on)
+    if compact == on then return end
+    compact = on
+    stepper:SetShown(not on)
+    footer:SetShown(not on)
+    scroll:ClearAllPoints()
+    if on then
+        scroll:SetPoint("TOPLEFT", PAD, -(HEADER_H + PAD))
+        scroll:SetPoint("BOTTOMRIGHT", -PAD - 22, PAD)
+        win:SetWidth(COMPACT_W)
+        content:SetWidth(WZ.Pages.COMPACT_W)
+    else
+        scroll:SetPoint("TOPLEFT", PAD, -(HEADER_H + 10 + STEPPER_H + 8))
+        scroll:SetPoint("BOTTOMRIGHT", -PAD - 22, FOOTER_H + PAD)
+        win:SetSize(WIDTH, HEIGHT)
+        content:SetWidth(WZ.Pages.CONTENT_W)
+        R.FitToScreen(win)
+    end
+end
+
+-- keep: the redraw is only to show pageNote (a sentence about a button that did nothing)
+function W.Refresh(keep)
     if not win or not M.Active() then return end
+    if not keep then pageNote = nil end
     local step = M.Step()
+    SetCompact(step == M.RESULT)
     for k, p in pairs(pages) do p.frame:SetShown(k == step) end
     local p = Page(step)
     p.frame:Show()
-    local ok, h = pcall(p.Refresh)
+    local ok, h = pcall(p.Refresh, pageNote)
     if not ok then
         R.Fault("layout setup", h)
         h = 200
     end
     content:SetHeight(math.max(h or 200, 200))
+    if compact then
+        -- as tall as the content (a scroll bar only if it does not fit the screen), never a mostly empty window
+        win:SetHeight(math.max(COMPACT_MIN_H, math.min(COMPACT_MAX_H, HEADER_H + 2 * PAD + (h or 200))))
+        R.FitToScreen(win)
+    end
     if scroll.SetVerticalScroll and W.lastStep ~= step then scroll:SetVerticalScroll(0) end
     W.lastStep = step
-    PaintStepper(step)
-    PaintFooter(step)
+    if not compact then
+        PaintStepper(step)
+        PaintFooter(step)
+    end
 end
 
 ---------------------------------------------------------------------------

@@ -233,6 +233,10 @@ end
 -- True once the check after a reload has run this session (or there was none to run).
 function L.Continued() return L.continued == true or not L.Pending() end
 
+-- True from the moment this login scheduled the check after a reload until it has run: the result is not final yet (the wizard says
+-- the setup is still being checked, rather than that a reload is waiting).
+function L.CheckPending() return L.scheduled == true and L.continued ~= true end
+
 ---------------------------------------------------------------------------
 -- At a load, only while an install is under way
 ---------------------------------------------------------------------------
@@ -269,5 +273,6 @@ R:OnInit(function()
 end)
 R:On("PLAYER_LOGIN", function()
     if not L.Pending() then return end
+    L.scheduled = true
     C_Timer.After(L.CONTINUE_AFTER, Continue)
 end)

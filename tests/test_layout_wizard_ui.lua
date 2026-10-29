@@ -30,6 +30,8 @@ local function Find(frame, label)
     if b then return b end
   end
 end
+-- Apply's label says what accepting does: "Apply & Reload" when the plan needs a reload, "Apply" when it doesn't
+local function ApplyLabel(win) return Find(win, "Apply & Reload") and "Apply & Reload" or "Apply" end
 local function Click(win, label)
   local b = Find(win, label)
   assert(b, "no visible button '" .. label .. "'")
@@ -369,7 +371,7 @@ do
   for _, row in ipairs(page.rows) do if row.shown then labels[#labels + 1] = row.label.text end end
   Check(table.concat(labels, "|") == "Layout|Helpers|Accent|Tooltip placement|Friendly nameplates|Size", "the choices, in rows, in order: " .. table.concat(labels, "|"))
   Check(Says(win, "Classic Adventure") and Says(win, "Larger"), "with their values")
-  Check(Says(win, "every character on this account") and Says(win, "A restore point is saved first") and Says(win, "A reload finishes EllesmereUI's part"),
+  Check(Says(win, "every character on this account") and Says(win, "A restore point is saved first") and Says(win, "Apply & Reload applies this and reloads your interface"),
     "and the consequences: what is account-wide, the way back, the reload")
   Check(Says(win, "Objectives position isn't changed"), "a limit that stays in view: what isn't placed")
   Check(not Says(win, "fully verified") and not Says(win, "Verified"), "no claim of verification before there is anything to verify")
@@ -381,7 +383,7 @@ do
   Check(Says(win, "Left alone") and Says(win, "If something goes wrong") and Says(win, "TwichUI: at once"), "View changes shows the account, section by section")
   Collapse(win, "View changes")
   Check(M.Pick("size") == "larger" and Says(win, "Larger"), "folding it kept the choices")
-  Check(Has(win, "Apply") and not Has(win, "Force re-apply") and not Has(win, "Stop forcing"), "Apply is the footer's primary action; Force re-apply is not offered on a clean installation")
+  Check(Has(win, ApplyLabel(win)) and not Has(win, "Force re-apply") and not Has(win, "Stop forcing"), "Apply is the footer's primary action; Force re-apply is not offered on a clean installation")
   for _, ch in ipairs(P.Descendants(FooterOf(win))) do
     Check(not (ch.text == "Force re-apply" or ch.text == "Stop forcing"), "no Force button in the footer")
   end
@@ -412,15 +414,15 @@ do
   local f = FooterOf(win)
   local function Primary()
     for _, ch in ipairs(f.children) do if ch.scripts.OnClick and ch.text == nil then end end
-    return Find(win, "Apply") or Find(win, "Next") or Find(win, "Get started") or Find(win, "Done")
+    return Find(win, ApplyLabel(win)) or Find(win, "Next") or Find(win, "Get started") or Find(win, "Done")
   end
   M.Go(1) W.Refresh()
   Check(Has(win, "Get started") and not Has(win, "Back"), "welcome: Get started, no Back")
   M.Go(3) W.Refresh()
   Check(Has(win, "Next") and Has(win, "Back") and Has(win, "Close"), "the choices: Next, Back, Close")
   M.Go(5) W.Refresh()
-  Check(Has(win, "Apply") and Has(win, "Back") and Has(win, "Close"), "the review: Apply, Back, Close")
-  local nb, bb, cb = Find(win, "Apply"), Find(win, "Back"), Find(win, "Close")
+  Check(Has(win, ApplyLabel(win)) and Has(win, "Back") and Has(win, "Close"), "the review: Apply, Back, Close")
+  local nb, bb, cb = Find(win, ApplyLabel(win)), Find(win, "Back"), Find(win, "Close")
   local rn, rb, rc = P.Rect(nb), P.Rect(bb), P.Rect(cb)
   Check(rn.t == rb.t and rn.t == rc.t and rn.r > rb.r and rb.r < rn.l and rc.r < rb.l, "one row: Close at the left, Back and the primary action at the right")
   Check(rn.r == win.w - 16 and rn.b == win.h - 16, "the primary action is in the corner, at the same place on every step")
@@ -437,21 +439,22 @@ do
   P.origin = w
   Advance(w, M2, 5)
   local before = World(k)
-  Click(w, "Apply"); k.Accept()
-  Check(M2.Step() == 6 and Says(w, "Reload to finish your setup") and not Says(w, "Your interface is ready"), "applied, waiting for a reload: not the success heading")
+  -- the reload could not start: the dialog is "One more step", not the success heading, with its actions in view
+  Click(w, ApplyLabel(w)); k.AcceptHeld()
+  Check(M2.Step() == 6 and Says(w, "One more step") and not Says(w, "Your interface is ready"), "applied, waiting for a reload: not the success heading")
   Check(Enabled(w, "Reload now") and Enabled(w, "Restore previous setup") and not Has(w, "Done") and not Has(w, "Manage layout"), "Reload now and Restore are in view; no Done, nothing folded away")
   Check(not Has(w, "Stop managing") and not Has(w, "Open settings"), "and no Stop managing or Open settings while it is unfinished")
-  Click(w, "Reload now")
   local k2 = LM.Boot("Out", LM.Logout(k))
+  k2.TwichUI.LayoutsLauncher.Command("")   -- the player reloaded themselves: no note, so the wizard is asked for
   local w2 = k2.TwichUILayoutWizard
   P.origin = w2
-  Check(w2.shown and Says(w2, "Your interface is ready") and Says(w2, "Installed layout: Classic Adventure"), "checked after the reload: Your interface is ready, with the installed layout")
-  Check(Says(w2, "checked only for being there"), "the summary says what was only checked for being there")
+  Check(w2.shown and Says(w2, "Your interface is ready") and Says(w2, "Classic Adventure"), "checked after the reload: Your interface is ready, with the installed layout")
+  Check(Says(w2, "Some addon settings could not be fully verified.") and not Says(w2, "checked only for being there"), "what was only checked for being there is a quiet note; the account is under Details")
   Check(Has(w2, "Done") and Has(w2, "Open settings") and Has(w2, "Manage layout") and Has(w2, "Details"), "Done and Open settings in view; Manage layout and Details folded")
   Check(not Has(w2, "Stop managing") and not Has(w2, "Run setup again") and not Has(w2, "Restore previous setup"), "no maintenance action is offered as a way to finish")
   Check(not Says(w2, "What was chosen"), "the receipt of choices is under Details")
   Expand(w2, "Details")
-  Check(Says(w2, "What was chosen") and Says(w2, "Accent colour"), "Details has what was chosen")
+  Check(Says(w2, "What was chosen") and Says(w2, "Accent colour") and Says(w2, "checked only that"), "Details has what was chosen and exactly what was checked")
   Expand(w2, "Manage layout")
   Check(Says(w2, "Installed revision") and Has(w2, "Set up again") and Has(w2, "Restore previous setup") and Has(w2, "Keep this setup") and Has(w2, "Check again"),
     "Manage layout: the revision, set up again, restore, keep, check")
@@ -473,19 +476,86 @@ do
   M2.Go(6)
   k2.TwichUI.LayoutWizard.Window.Refresh()
   local w2b = k2.TwichUILayoutWizard
-  Check(Says(w2b, "Some settings didn't read back as planned") and not Says(w2b, "Your interface is ready"), "a mismatch: its own heading, never the success one")
-  Check(Says(w2b, "doesn't read back as planned") or Says(w2b, "What doesn't read back"), "and what differs is in view")
+  Check(Says(w2b, "Setup needs attention") and Says(w2b, "A few settings did not match after reloading.") and not Says(w2b, "Your interface is ready"), "a mismatch: its own heading, never the success one")
+  Check(Says(w2b, "Accent colour"), "and what differs is in view")
   Check(Enabled(w2b, "Restore previous setup") and Enabled(w2b, "Check again") and not Has(w2b, "Manage layout"), "with Restore and Check again in view")
   -- partial
   j.state = "partial"
   LY2.Journal.Write(j)
   k2.TwichUI.LayoutWizard.Window.Refresh()
-  Check(Says(w2b, "Your setup was only partly applied") and not Says(w2b, "Your interface is ready") and Enabled(w2b, "Restore previous setup"), "only partly applied: said, Restore in view")
+  Check(Says(w2b, "Setup needs attention") and Says(w2b, "Part of the setup didn't finish") and not Says(w2b, "Your interface is ready") and Enabled(w2b, "Restore previous setup"), "only partly applied: said, Restore in view")
   -- interrupted
   j.state = "interrupted"
   LY2.Journal.Write(j)
   k2.TwichUI.LayoutWizard.Window.Refresh()
-  Check(Says(w2b, "Your setup was interrupted") and Enabled(w2b, "Restore previous setup"), "interrupted: said, Restore in view")
+  Check(Says(w2b, "The game stopped before the setup finished.") and Enabled(w2b, "Restore previous setup"), "interrupted: said, Restore in view")
+end
+
+---------------------------------------------------------------------------
+-- 7b. The compact result: where everything ends up, for a success, a mismatch and a step with many actions
+---------------------------------------------------------------------------
+do
+  local function Measure(name, win, WK3, mayScroll)
+    P.origin = win
+    local WW3 = WK3.Window
+    local things = {}
+    for _, o in ipairs(P.Descendants(win)) do
+      if P.Shown(o) and (o.kind == "FontString" or (o.scripts and o.scripts.OnClick)) and o ~= win then
+        local r = P.Rect(o)
+        if r then things[#things + 1] = { o = o, r = r } end
+      end
+    end
+    local inside, overlap, narrow = true, nil, nil
+    local buttons = {}
+    for _, t in ipairs(things) do
+      -- everything is inside the window (the close box included), nothing hangs past its edge
+      if t.r.l < -0.5 or t.r.r > win.w + 0.5 or t.r.t < -0.5 or t.r.b > win.h + 0.5 then inside = false end
+      if t.o.scripts and t.o.scripts.OnClick and t.o.text and t.o.text ~= "x" and t.r.w > 40 then buttons[#buttons + 1] = t end
+      -- text in the dialog's body wraps across the dialog, never a tall narrow column
+      if t.o.kind == "FontString" and t.o.wrap ~= false and #(t.o.text or "") > 60 and t.r.w < 300 then narrow = t.o.text end
+    end
+    for i = 1, #buttons do
+      for j = i + 1, #buttons do
+        local a, b = buttons[i].r, buttons[j].r
+        if a.l < b.r - 0.5 and b.l < a.r - 0.5 and a.t < b.b - 0.5 and b.t < a.b - 0.5 then overlap = buttons[i].o.text .. " / " .. buttons[j].o.text end
+      end
+    end
+    -- a dialog at its height limit scrolls (the template's own bar, shown only then): what is below the fold is reached by scrolling
+    Check(inside or (mayScroll and win.h >= 600), name .. ": everything is inside the window" .. (mayScroll and ", or the dialog is at its height limit and scrolls" or ""))
+    Check(not overlap, name .. ": no two buttons overlap" .. (overlap and (" (" .. overlap .. ")") or ""))
+    Check(not narrow, name .. ": long text is not squeezed into a narrow column" .. (narrow and (": " .. narrow:sub(1, 30)) or ""))
+    Check(win.w == 520 and win.h >= 240 and win.h <= 600, name .. ": the window is the compact one (" .. win.w .. " x " .. win.h .. ")")
+    return things
+  end
+  local k = LM.Boot("Compact")
+  local w, WK3 = Open(k)
+  Advance(w, WK3.Model, 5)
+  Click(w, ApplyLabel(w)); k.Accept()
+  local k2 = LM.Boot("Compact", LM.Logout(k))
+  local w2, WK4 = k2.TwichUILayoutWizard, k2.TwichUI.LayoutWizard
+  local things = Measure("ready, folded", w2, WK4)
+  local primary = Find(w2, "Done")
+  Check(primary and primary.kind and P.Rect(primary).w >= 100, "Done is a full-size primary button")
+  local hRead = w2.h
+  Expand(w2, "Details") Expand(w2, "Manage layout")
+  Measure("ready, Details and Manage layout open", w2, WK4, true)
+  Check(w2.h > hRead and w2.h <= 600, "opening both grows the dialog, within its bound")
+  -- a mismatch with its recovery actions in view
+  local LY2 = k2.TwichUI.Layouts
+  local j = LY2.Journal.Read()
+  j.state = "mismatch"
+  j.verify = { state = "mismatch", checked = 3, presence = 2, diffs = {
+    { adapter = "ellesmereui", unit = "ellesmereui:root.euiAccent", code = "changed" }, { adapter = "twichui", unit = "twichui:modules.classBars", code = "changed" },
+    { adapter = "twichui", unit = "twichui:modules.markersBar", code = "changed" }, { adapter = "twichui", unit = "twichui:modules.foodDrink", code = "changed" } } }
+  LY2.Journal.Write(j)
+  WK4.Model.Invalidate() WK4.Model.Go(6) WK4.Window.Refresh()
+  Measure("mismatch", w2, WK4)
+  Check(Has(w2, "Check again") and Has(w2, "Restore previous setup") and Says(w2, "and 1 more"), "its actions are in view and the extra differences are counted, not listed")
+  -- waiting for a reload: Reload now, Restore, Set up again, in one centred row or two
+  j.state = "applied"
+  LY2.Journal.Write(j)
+  WK4.Model.Invalidate() WK4.Window.Refresh()
+  Measure("one more step", w2, WK4)
 end
 
 ---------------------------------------------------------------------------
@@ -496,8 +566,7 @@ do
   local w, WK2 = Open(k)
   P.origin = w
   Advance(w, WK2.Model, 5)
-  Click(w, "Apply"); k.Accept()
-  Click(w, "Reload now")
+  Click(w, ApplyLabel(w)); k.Accept()
   local k2 = LM.Boot("Stuck", LM.Logout(k))
   local w2, WK3 = k2.TwichUILayoutWizard, k2.TwichUI.LayoutWizard
   P.origin = w2
@@ -506,11 +575,11 @@ do
   Advance(w2, WK3.Model, 5)
   Check(Says(w2, "Can't apply yet") and Says(w2, "Blocked: "), "a blocked review says so in words, with the reason")
   Check(Has(w2, "Advanced") and Enabled(w2, "Force re-apply"), "and the way out is under Advanced, opened for it")
-  Check(not Enabled(w2, "Apply"), "Apply waits")
+  Check(not Enabled(w2, ApplyLabel(w2)), "Apply waits")
   local before = World(k2)
   Click(w2, "Force re-apply")
   Check(WK3.Model.Forced() and Says(w2, "Forced re-apply") and Has(w2, "Stop forcing") and Unchanged(World(k2), before), "turning it on changes nothing and the review says what it does")
-  Click(w2, "Apply")
+  Click(w2, ApplyLabel(w2))
   Check(k2.popup and k2.popup.key == "TWICHUI_LAYOUT_APPLY" and k2.popup.text:find("Forced re-apply", 1, true), "Apply still asks, and the question says it is forced")
   k2.Decline()
   Check(Unchanged(World(k2), before), "declining changes nothing")

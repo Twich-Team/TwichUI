@@ -882,6 +882,8 @@ local function Find(frame, label)
     if b then return b end
   end
 end
+-- Apply's label says what accepting does: "Apply & Reload" when the plan needs a reload, "Apply" when it doesn't
+local function ApplyLabel(win) return Find(win, "Apply & Reload") and "Apply & Reload" or "Apply" end
 local function Click(win, label)
   local b = Find(win, label)
   assert(b, "no visible button '" .. label .. "'")
@@ -935,7 +937,7 @@ do
   -- through to the review and apply
   while MK.Step() < 5 do Click(win, MK.Step() == 1 and "Get started" or "Next") end
   Check(MK.Step() == 5, "to the review")
-  Click(win, "Apply")
+  Click(win, ApplyLabel(win))
   local q = f.popup
   Check(q and q.key == "TWICHUI_LAYOUT_APPLY" and q.text:find("From the package \"An Alternative Layout\", revision 1, sent by Mal Lory", 1, true),
     "the question names the package, its revision and who sent it")
@@ -1043,7 +1045,7 @@ do
   Check(MK.Density() == "standard", "the size is the standard one")
   MK.Go(5)
   WK.Window.Refresh()
-  Click(win, "Apply")
+  Click(win, ApplyLabel(win))
   f.Accept()
   Check(MK.Step() == 6 and f.TwichUI.Layouts.Journal.Read().picks == nil, "and it applies, with no picks to record")
 end

@@ -361,6 +361,23 @@ function LM.Boot(name, sv, opts)
     c.popup = nil
     c.StaticPopupDialogs[p.key].OnAccept()
   end
+  -- Accept with the game unable to reload (as in combat, or a refused call): the apply goes through and the reload does not start,
+  -- so the result shows the waiting state a player would see ("One more step"). The reload count is unchanged.
+  function c.AcceptHeld()
+    local real = c.ReloadUI
+    c.ReloadUI = function() error("test: the reload is held") end
+    local ok, err = pcall(c.Accept)
+    c.ReloadUI = real
+    if not ok then error(err, 0) end
+  end
+  -- the question's third button ("View details"): runs its handler and closes the question, answering nothing
+  function c.Alt()
+    local p = assert(c.popup, "no question was asked")
+    c.popup = nil
+    local d = c.StaticPopupDialogs[p.key]
+    assert(d.button3 and d.OnAlt, "the question has no third button")
+    d.OnAlt()
+  end
   function c.Decline()
     local p = assert(c.popup, "no question was asked")
     c.popup = nil

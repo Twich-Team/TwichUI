@@ -30,6 +30,8 @@ local function Find(frame, label)
     if b then return b end
   end
 end
+-- Apply's label says what accepting does: "Apply & Reload" when the plan needs a reload, "Apply" when it doesn't
+local function ApplyLabel(win) return Find(win, "Apply & Reload") and "Apply & Reload" or "Apply" end
 local function Click(win, label)
   local b = Find(win, label)
   assert(b, "no visible button '" .. label .. "'")
@@ -187,7 +189,7 @@ do
   Click(win, "Next")
   Check(M.Step() == 4 and Says(win, "Make it yours") and Says(win, "Accent colour") and Says(win, "Larger"), "personalize")
   Click(win, "Next")
-  Check(M.Step() == 5 and Says(win, "Ready to apply") and Has(win, "Apply") and Has(win, "Back"), "the review, with Apply")
+  Check(M.Step() == 5 and Says(win, "Ready to apply") and Has(win, ApplyLabel(win)) and Has(win, "Back"), "the review, with Apply")
   Check(Says(win, "Nothing has changed yet") and Says(win, "Objectives position isn't changed"), "a short receipt, and what isn't placed")
   Expand(win, "View changes")
   Check(Says(win, "Left alone") and Says(win, "Objectives isn't applied"), "what is left alone and what isn't placed")
@@ -409,47 +411,75 @@ do
   MK.SetPick("helpers", "on-screen"); MK.SetPick("accent", "dusk"); MK.SetPick("size", "larger")
   ToReview(w)
   local before = World(k)
-  Check(Enabled(w, "Apply") and Says(w, "Accent") and Says(w, "Dusk blue"), "the review names the choices")
+  Check(Enabled(w, ApplyLabel(w)) and Says(w, "Accent") and Says(w, "Dusk blue"), "the review names the choices")
   Expand(w, "View changes")
   Check(Says(w, "Turned on: Class resource bars, Marker bar, Food and drink buttons"), "and, under View changes, what is turned on")
 
-  -- the confirmation names the exact scope; declining changes nothing
-  Click(w, "Apply")
+  -- the question is short and in a player's words: the layout, the reload, the way back, who it reaches. It carries no profile name,
+  -- count or adapter text (those are the review's, behind View changes), and Apply & Reload is what accepting does
+  Check(Enabled(w, "Apply & Reload"), "the footer's action says it reloads")
+  Click(w, ApplyLabel(w))
   local q = k.popup
   Check(q and q.key == "TWICHUI_LAYOUT_APPLY", "Apply asks first")
-  Check(q.text:find("Apply Classic Adventure?", 1, true) and q.text:find("\"TwichUI Adventure\"", 1, true) and q.text:find("\"TwichUI Adventure\"", 1, true)
-    and q.text:find("every character on this account", 1, true) and q.text:find("Nothing reloads by itself", 1, true)
-    and q.text:find("Restore puts your previous profiles back", 1, true), "the question names both profiles, the account-wide effect, the reload and the way back")
+  Check(q.text:find("Apply Classic Adventure?", 1, true) and q.text:find("Your interface will reload to finish setup.", 1, true)
+    and q.text:find("backed up", 1, true) and q.text:find("every character on this account", 1, true), "the question names the layout, the reload, the backup and the account-wide effect")
+  Check(not q.text:find("TwichUI Adventure", 1, true) and not q.text:find("\"", 1, true) and not q.text:find("%d+ %a+ settings?"), "and no profile name, count or adapter text")
+  Check(#q.text < 520 and select(2, q.text:gsub("\n", "")) <= 9, "it is short enough to fit a dialog without scrolling")
+  local dlg = k.StaticPopupDialogs[q.key]
+  Check(dlg.button1 == "Apply & Reload" and dlg.button3 == "View details" and dlg.OnCancel, "its buttons: Apply & Reload, Cancel, View details")
+  -- View details goes back to the review's account of every change and applies nothing
+  local viewBefore = World(k)
+  k.Alt()
+  Check(MK.Step() == 5 and Says(w, "Turned on: Class resource bars") and Unchanged(World(k), viewBefore) and k.reloads == 0 and k.E:called("ImportProfileSilent") == 0,
+    "View details shows the review's changes and applies and reloads nothing")
+  Click(w, ApplyLabel(w))
   k.Decline()
-  Check(Unchanged(World(k), before) and M.Active() and MK.Step() == 5, "declining changes nothing and stays on the review")
+  Check(Unchanged(World(k), before) and M.Active() and MK.Step() == 5 and k.reloads == 0, "declining changes nothing, reloads nothing and stays on the review")
   Check(k.E:called("ImportProfileSilent") == 0, "EllesmereUI was not asked to import")
 
-  -- accepting
-  Click(w, "Apply")
+  -- accepting is one authorised action: applied, then reloaded (the question said it would), once
+  Click(w, ApplyLabel(w))
   k.Accept()
-  Check(MK.Step() == 6 and Says(w, "Waiting for a reload"), "applied: the result step, waiting for a reload")
-  Check(k.reloads == 0, "nothing reloaded by itself")
   local j = LY.Journal.Read()
   Check(j and j.state == "applied" and j.picks.helpers == "on-screen" and j.picks.accent == "dusk" and j.picks.size == "larger", "the record says applied and what was chosen")
+  Check(k.reloads == 1 and MK.Reloading(), "the interface was reloaded once, by the same click")
+  Check(k.TwichUIDB.layouts.wizard.resume == "install", "after the note that shows the result was saved")
+  Check(MK.Step() == 6 and Says(w, "Applying your layout") and Says(w, "Your interface will reload shortly.") and not Has(w, "Reload now") and not Has(w, "Done"),
+    "until it goes the window says so, in a small dialog with no old result page and no second Reload button")
+  Check(not Has(w, "Details") and not Has(w, "Manage layout") and not Enabled(w, "Apply") , "and nothing else can be pressed")
   Check(k.EllesmereUIDB.activeProfile == "TwichUI Adventure" and k.TwichUI.Profiles.Current() == "TwichUI Adventure", "both install profiles are in use")
   Check(k.EllesmereUIDB.ppUIScale == 0.8 and Same(k.EllesmereUIDB.profiles.Mine, before.eui.profiles.Mine), "UI scale and the player's own EllesmereUI profile untouched")
   Check(k.TwichUIDB.modules.classBars == true and k.TwichUIDB.modules.markersBar == true and k.TwichUIDB.modules.foodDrink == true and not k.TwichUIDB.modules.navigation,
     "the three helpers are on in the install's TwichUI profile, and navigation is not")
-  Check(Says(w, "Accent colour: Dusk blue") and Says(w, "TwichUI: done") and Says(w, "EllesmereUI: done"), "the result lists the choices and each step")
-  Check(Enabled(w, "Reload now") and Enabled(w, "Restore previous setup") and not Has(w, "Keep this setup"), "Reload now and Restore, and not 'keep' until it is checked")
   Check(k.E.imported.data.euiAccent.custom.r == 0.47, "the payload carried the picked accent")
   Check(k.E.called("ImportProfileSilent") == 1, "EllesmereUI imported once")
+  savedAfterReload = LM.Logout(k)
+end
 
+do
+  -- the reload could not start (here the call is refused): the apply stands, nothing reloads, and the dialog says what is left
+  local k = LM.Boot("ApplyHeld")
+  local w, WK = Open(k)
+  local MK = WK.Model
+  local LY = k.TwichUI.Layouts
+  MK.SetPick("helpers", "on-screen"); MK.SetPick("accent", "dusk"); MK.SetPick("size", "larger")
+  ToReview(w)
+  Click(w, ApplyLabel(w))
+  k.AcceptHeld()
+  local j = LY.Journal.Read()
+  Check(j and j.state == "applied" and k.reloads == 0 and not MK.Reloading(), "applied, and nothing reloaded")
+  Check(MK.Step() == 6 and Says(w, "One more step") and Says(w, "Reload your interface to finish applying Classic Adventure."), "the dialog says one more step")
+  Check(Says(w, "didn't start") and Enabled(w, "Reload now") and Has(w, "Restore previous setup") and not Has(w, "Keep this setup"), "with Reload now as the player's own button, and Restore")
+  Expand(w, "Details")
+  Check(Says(w, "Accent colour: Dusk blue") and Says(w, "TwichUI: done") and Says(w, "EllesmereUI: done") and Says(w, "Waiting for a reload"), "Details has the choices, each step and the status")
   -- reopening while it waits shows where things are
-  WW.Close()
+  WK.Window.Close()
   Open(k)
-  Check(MK.Step() == 6 and Says(w, "Waiting for a reload"), "reopened on the result while it waits")
-
-  -- the reload, from the button: it leaves a note, and the result is shown when the game is back
+  Check(MK.Step() == 6 and Says(w, "One more step"), "reopened on the result while it waits")
+  -- the button: it leaves a note, and the result is shown when the game is back
   Click(w, "Reload now")
   Check(k.reloads == 1, "the reload happened once, from the click")
   Check(k.TwichUIDB.layouts.wizard.resume == "install", "and left the note")
-  savedAfterReload = LM.Logout(k)
 end
 
 do
@@ -460,7 +490,11 @@ do
   local w = k.TwichUILayoutWizard
   Check(w and w.shown, "the wizard opens on its own, because the player started this reload from it")
   local WK = k.TwichUI.LayoutWizard
-  Check(WK.Model.Step() == 6 and Says(w, "Your interface is ready") and Says(w, "Checked after the reload") and Says(w, "read back as planned"), "showing the result")
+  Check(WK.Model.Step() == 6 and Says(w, "Your interface is ready") and Says(w, "Make yourself at home") and Says(w, "Classic Adventure"), "showing the result: a compact, plain success")
+  Check(not Says(w, "settings checked") and not Says(w, "read back") and not Has(w, "1  Welcome"), "with no counts on the face of it and no six-step navigation")
+  Check(Says(w, "Some addon settings could not be fully verified."), "the parts only checked for being there are said quietly")
+  Expand(w, "Details")
+  Check(Says(w, "Checked after the reload") and Says(w, "read back by value as planned") and Says(w, "checked only that"), "Details has the status and exactly what was and wasn't checked")
   Check(not Has(w, "Restore previous setup") and Has(w, "Manage layout") and Has(w, "Done") and Has(w, "Open settings"), "Done and Open settings are in view; the maintenance actions are under Manage layout")
   Expand(w, "Manage layout")
   Check(Enabled(w, "Restore previous setup") and Enabled(w, "Keep this setup") and Enabled(w, "Check again") and Has(w, "Set up again"), "the actions that make sense now")
@@ -489,7 +523,7 @@ do
   Check(Unchanged(World(k), before), "declining a restore changes nothing")
   Click(w, "Restore previous setup")
   k.Accept()
-  Check(Says(w, "Restore is waiting for a reload") and k.reloads == 0, "restored as far as it can be now; waiting for a reload; nothing reloaded")
+  Check(Says(w, "One more step") and Says(w, "finish putting your previous setup back") and k.reloads == 0, "restored as far as it can be now; waiting for a reload; nothing reloaded")
   Check(k.TwichUI.Profiles.Current() == "Default" and k.EllesmereUIDB.activeProfile == "Mine" and k.EllesmereUIDB.profiles["TwichUI Adventure"] == nil,
     "the profiles are back (the engine's own switch and delete)")
   Click(w, "Reload now")
@@ -497,8 +531,9 @@ do
   local sv = LM.Logout(k)
   local k2 = LM.Boot("Apply", sv)
   local w2 = k2.TwichUILayoutWizard
-  Check(w2 and w2.shown and Says(w2, "Restored") and Says(w2, "back as it was"), "after the reload: restored, shown")
+  Check(w2 and w2.shown and Says(w2, "Previous setup restored") and Says(w2, "back as it was"), "after the reload: restored, shown")
   Check(k2.TwichUIDB.layouts == nil or k2.TwichUIDB.layouts.install == nil, "the record is gone once the restore checked out")
+  Expand(w2, "Manage layout")
   Check(Has(w2, "Set up again") and not Has(w2, "Restore previous setup"), "and there is nothing left to restore")
   Check(k2.EllesmereUIDB.activeProfile == "Mine" and Same(k2.EllesmereUIDB.profiles.Mine, savedAfterReload.EllesmereUIDB.profiles.Mine), "the player's EllesmereUI profile is as it was")
   Check(k2.TwichUIDB.modules.classBars == nil or k2.TwichUIDB.modules.classBars == false, "and the helpers are off again in the profile in use")
@@ -516,16 +551,16 @@ do
   Advance(w, WK.Model, 5)
   -- Phase 7 (D25): the baseline says what the last install left, so the same choices again compare equal unit by unit and
   -- nothing is imported again
-  Check(not Has(w, "Apply") and Enabled(w, "Done") and Says(w, "You're already up to date.") and Says(w, "Recommended changes: 0"),
+  Check(not Has(w, ApplyLabel(w)) and Enabled(w, "Done") and Says(w, "You're already up to date.") and Says(w, "Recommended changes: 0"),
     "the same choices again: nothing to do, and the review says so, with Done instead of Apply")
   local before = World(k)
   Click(w, "Back"); Click(w, "Back")
   Check(WK.Model.Step() == 3, "back to the helpers")
   WK.Model.SetPick("accent", "ember")
   Advance(w, WK.Model, 5)
-  Check(Enabled(w, "Apply") and Says(w, "Ember"), "a new accent can be applied")
-  Click(w, "Apply"); k.Accept()
-  Check(WK.Model.Step() == 6 and Says(w, "Waiting for a reload") and Says(w, "Accent colour: Ember"), "applied again, waiting for a reload")
+  Check(Enabled(w, ApplyLabel(w)) and Says(w, "Ember"), "a new accent can be applied")
+  Click(w, ApplyLabel(w)); k.Accept()
+  Check(WK.Model.Step() == 6 and k.reloads == 1 and WK.Model.Reloading(), "applied again, and reloading")
   Check(k.TwichUI.Layouts.Journal.Read().picks.accent == "ember", "the record has the new accent")
   Check(Same(k.EllesmereUIDB.profiles.Mine, before.eui.profiles.Mine), "the player's own EllesmereUI profile is still untouched")
   -- the first install's restore point is kept: restoring goes back to before the FIRST install
@@ -543,14 +578,14 @@ do
   local k = LM.Boot("Own")
   local w, WK = Open(k)
   ToReview(w)
-  Click(w, "Apply"); k.Accept()
-  Check(WK.Model.Step() == 6 and k.reloads == 0, "applied")
+  Click(w, ApplyLabel(w)); k.AcceptHeld()   -- the automatic reload does not start, so the player reloads the game themselves
+  Check(WK.Model.Step() == 6 and k.reloads == 0 and k.TwichUIDB.layouts.wizard.resume == nil, "applied, nothing reloaded, and no note left for the wizard")
   local sv = LM.Logout(k)
   local k2 = LM.Boot("Own", sv)
   Check(k2.TwichUI.Layouts.Journal.Read().state == "verified" and Heard(k2, "checked after the reload"), "checked, and said in chat")
   Check(k2.TwichUILayoutWizard == nil and k2.wizardLoads == 0, "the wizard did not open or load")
   local w2 = Open(k2)
-  Check(Says(w2, "Checked after the reload"), "asked for, it shows the result")
+  Check(Says(w2, "Your interface is ready"), "asked for, it shows the result")
   Expand(w2, "Manage layout")
   -- keeping the setup finishes it: the restore point is forgotten, TwichUI keeps managing (Phase 7), nothing else changes
   local before = World(k2)
@@ -560,7 +595,10 @@ do
   local after = World(k2)
   Check(k2.TwichUI.Layouts.Journal.Read() == nil and Same(after.eui, before.eui) and Same(after.restore, before.restore), "the restore point is forgotten and nothing else changed")
   Check(k2.TwichUI.Layouts.Journal.ReadManaged() and k2.TwichUI.Layouts.Journal.ReadBaseline(), "the layout is still managed: its management record and baseline stay")
-  Check(Says(w2, "Installed and managed") and not Has(w2, "Restore previous setup") and Has(w2, "Set up again"), "and Restore is no longer offered; setting up again is")
+  Expand(w2, "Manage layout")
+  Check(Says(w2, "Your interface is ready") and not Has(w2, "Restore previous setup") and Has(w2, "Set up again"), "and Restore is no longer offered; setting up again is")
+  Expand(w2, "Details")
+  Check(Says(w2, "Installed and managed"), "the status says it is managed")
 end
 
 ---------------------------------------------------------------------------
@@ -571,7 +609,7 @@ do
   local k = LM.Boot("Cut")
   local w = Open(k)
   ToReview(w)
-  Click(w, "Apply"); k.Accept()
+  Click(w, ApplyLabel(w)); k.Accept()
   local LY = k.TwichUI.Layouts
   local j = LY.Journal.Read()
   j.state = "applying"
@@ -580,9 +618,9 @@ do
   local k2 = LM.Boot("Cut", sv)
   Check(k2.TwichUI.Layouts.Journal.Read().state == "interrupted", "found at the next load: interrupted")
   local w2, WK2 = Open(k2)
-  Check(WK2.Model.Step() == 6 and Says(w2, "An install was interrupted") and Enabled(w2, "Restore previous setup"), "the wizard says so and offers Restore")
+  Check(WK2.Model.Step() == 6 and Says(w2, "Setup needs attention") and Says(w2, "The game stopped before the setup finished.") and Enabled(w2, "Restore previous setup"), "the wizard says so and offers Restore")
   Click(w2, "Restore previous setup"); k2.Accept()
-  Check(k2.TwichUI.Profiles.Current() == "Default" and Says(w2, "Restore is waiting for a reload"), "and Restore works")
+  Check(k2.TwichUI.Profiles.Current() == "Default" and Says(w2, "One more step"), "and Restore works")
 end
 
 do
@@ -591,8 +629,11 @@ do
   local w, WK = Open(k)
   ToReview(w)
   local before = World(k)
-  Click(w, "Apply"); k.Accept()
-  Check(WK.Model.Step() == 6 and Says(w, "Nothing was changed") and Says(w, "EllesmereUI refused the import"), "a refused import: said, with the reason")
+  Click(w, ApplyLabel(w)); k.Accept()
+  Check(WK.Model.Step() == 6 and Says(w, "Setup could not be completed") and Says(w, "Nothing was changed") and Says(w, "EllesmereUI couldn't be applied."), "a refused import: said, naming the part")
+  Check(k.reloads == 0, "and nothing reloaded")
+  Expand(w, "Details")
+  Check(Says(w, "EllesmereUI refused the import"), "with the reason under Details")
   Check(Unchanged(World(k), before) and k.TwichUI.Layouts.Journal.Read() == nil, "and nothing changed, with no record left behind")
   Check(Has(w, "Set up again") and not Has(w, "Restore previous setup"), "nothing to restore; it can be tried again")
   Click(w, "Set up again")
@@ -606,13 +647,17 @@ do
   local LY = k.TwichUI.Layouts
   LY.ADAPTERS.twichui.Apply = function() return { state = "failed", code = "write", rollback = "clean" } end
   ToReview(w)
-  Click(w, "Apply"); k.Accept()
+  Click(w, ApplyLabel(w)); k.Accept()
   Check(LY.Journal.Read().state == "partial", "the record says partial")
-  Check(Says(w, "Only partly applied") and Says(w, "Nothing was undone for you") and Says(w, "EllesmereUI: done") and Says(w, "TwichUI: failed"), "the result says what was done and what failed")
+  Check(k.reloads == 0, "a partial apply is never followed by a reload")
+  Check(Says(w, "Setup needs attention") and Says(w, "Part of the setup didn't finish: TwichUI."), "the dialog names the part that didn't finish")
+  Check(not Has(w, "Done") and not Says(w, "Your interface is ready"), "and is not the success dialog")
+  Expand(w, "Details")
+  Check(Says(w, "Nothing was undone for you") and Says(w, "EllesmereUI: done") and Says(w, "TwichUI: failed"), "Details says what was done and what failed")
   Check(Enabled(w, "Restore previous setup") and Enabled(w, "Reload now"), "Restore is offered, and the reload for the part that was done")
   Check(k.EllesmereUIDB.activeProfile == "TwichUI Adventure", "EllesmereUI's part was not undone by itself")
   Click(w, "Restore previous setup"); k.Accept()
-  Check(k.EllesmereUIDB.activeProfile == "Mine" and Says(w, "waiting for a reload"), "Restore puts it back")
+  Check(k.EllesmereUIDB.activeProfile == "Mine" and Says(w, "One more step"), "Restore puts it back")
 end
 
 do
@@ -622,10 +667,10 @@ do
   local MK, WW = WK.Model, WK.Window
   local LY = k.TwichUI.Layouts
   ToReview(w)
-  Check(Enabled(w, "Apply"), "Apply is available out of combat")
+  Check(Enabled(w, ApplyLabel(w)), "Apply is available out of combat")
   k.combat = true
   WW.evframe.scripts.OnEvent(WW.evframe, "PLAYER_REGEN_DISABLED")
-  Check(not Enabled(w, "Apply") and Says(w, "Not during combat"), "in combat Apply is disabled and says why")
+  Check(not Enabled(w, ApplyLabel(w)) and Says(w, "Not during combat"), "in combat Apply is disabled and says why")
   local before = World(k)
   WW.Actions.apply()
   Check(k.popup == nil, "pressing it anyway asks nothing")
@@ -635,9 +680,9 @@ do
   Check(Unchanged(World(k), before), "nothing changed")
   k.combat = false
   WW.evframe.scripts.OnEvent(WW.evframe, "PLAYER_REGEN_ENABLED")
-  Check(Enabled(w, "Apply"), "out of combat again, Apply is back")
+  Check(Enabled(w, ApplyLabel(w)), "out of combat again, Apply is back")
   -- a reload and a restore are refused in combat too
-  Click(w, "Apply"); k.Accept()
+  Click(w, ApplyLabel(w)); k.AcceptHeld()
   k.combat = true
   WW.evframe.scripts.OnEvent(WW.evframe, "PLAYER_REGEN_DISABLED")
   Check(not Enabled(w, "Reload now") and Says(w, "wait until combat ends"), "the reload isn't offered in combat")
@@ -648,7 +693,7 @@ do
   local k2 = LM.Boot("Combat2")
   local w2 = Open(k2)
   ToReview(w2)
-  Click(w2, "Apply")
+  Click(w2, ApplyLabel(w2))
   k2.combat = true
   local b2 = World(k2)
   k2.Accept()
@@ -669,13 +714,13 @@ do
   k.UIParent.w = 2133.33
   WK.Model.Invalidate()
   Check(Unchanged(World(k), before) and k.E:called("ImportProfileSilent") == 0, "and nothing was applied")
-  Click(w, "Apply")
+  Click(w, ApplyLabel(w))
   k.UIParent.w = 1920
   k.Accept()
   Check(Unchanged(World(k), before) and k.E:called("ImportProfileSilent") == 0, "nothing was applied")
   Check(WK.Model.Step() == 5 and Says(w, "changed since it was shown"), "and it says why, staying on the review")
-  Check(Enabled(w, "Apply"), "the new review can be applied")
-  Click(w, "Apply")
+  Check(Enabled(w, ApplyLabel(w)), "the new review can be applied")
+  Click(w, ApplyLabel(w))
   local fresh = k.popup.text
   Check(fresh ~= nil, "a fresh question")
   k.Accept()
@@ -689,7 +734,7 @@ do
   k.TwichUI.Profiles.Switch("Default")
   local w = Open(k)
   ToReview(w)
-  Check(Says(w, "Can't apply yet") and Says(w, "profile with the package's name already exists") and not Enabled(w, "Apply"), "a profile of the package's name that isn't ours blocks Apply, with the reason")
+  Check(Says(w, "Can't apply yet") and Says(w, "profile with the package's name already exists") and not Enabled(w, ApplyLabel(w)), "a profile of the package's name that isn't ours blocks Apply, with the reason")
 end
 
 ---------------------------------------------------------------------------
@@ -712,7 +757,7 @@ do
   local gaugeIds = {}
   for _, g in ipairs(Perf.gauges) do gaugeIds[g.id] = g end
   Check(gaugeIds["layoutwizard.events"] and gaugeIds["layoutwizard.events"].read() == 4 and gaugeIds["layoutwizard.frames"], "the gauges are registered and read")
-  Click(w, "Apply")
+  Click(w, ApplyLabel(w))
   k.Decline()
   MK.Go(1); WW.Refresh()
   local made, frames, previewBoxes = k.made(), WW.frames, 0
@@ -791,7 +836,7 @@ do
   local r = Boot1()
   r.TwichUIDB.layouts = { wizard = { v = 1, picks = {}, resume = "restore" } }
   local wr, WKr = Open(r)
-  Check(WKr.Model.Step() == 6 and Says(wr, "Restored"), "a restore note with no record shows the restored result")
+  Check(WKr.Model.Step() == 6 and Says(wr, "Previous setup restored"), "a restore note with no record shows the restored result")
   Check(r.TwichUIDB.layouts.wizard.resume == nil, "and uses the note up")
 
   -- a damaged install record
@@ -814,7 +859,7 @@ do
   local oc = LM.Boot("Mine")
   local wo0 = Open(oc)
   ToReview(wo0)
-  Click(wo0, "Apply"); oc.Accept()
+  Click(wo0, ApplyLabel(wo0)); oc.Accept()
   local sv = LM.Logout(oc)
   local other = LM.Boot("Someone", sv)
   local wother = Open(other)
@@ -857,8 +902,8 @@ do
   local wr, WKr = Open(r)
   Check(wr.shown and Says(wr, "Make yourself at home"), "with every picture refused, the welcome still draws")
   ToReview(wr)
-  Check(WKr.Model.Step() == 5 and Says(wr, "Ready to apply") and Enabled(wr, "Apply"), "and so does the review")
-  Click(wr, "Apply"); r.Accept()
+  Check(WKr.Model.Step() == 5 and Says(wr, "Ready to apply") and Enabled(wr, ApplyLabel(wr)), "and so does the review")
+  Click(wr, ApplyLabel(wr)); r.Accept()
   Check(r.TwichUI.Layouts.Journal.Read().state == "applied", "and an install made without any picture works")
   local layoutCard = WKr.Window.pages[2].cards[1]
   local compactCard = WKr.Window.pages[2].cards[2]
@@ -979,20 +1024,18 @@ do
   local MK, WW = WK.Model, WK.Window
   MK.SetLayout(COMPACT)
   ToReview(w)
-  Check(Says(w, "Compact Adventure") and Enabled(w, "Apply"), "Compact reviews and can be applied")
-  Click(w, "Apply")
+  Check(Says(w, "Compact Adventure") and Enabled(w, ApplyLabel(w)), "Compact reviews and can be applied")
+  Click(w, ApplyLabel(w))
   Check(Says(k.popup.text, "Apply Compact Adventure?") or k.popup.text:find("Apply Compact Adventure?", 1, true), "the question names Compact")
   k.Accept()
   local j = k.TwichUI.Layouts.Journal.Read()
-  Check(j.state == "applied" and j.variant == COMPACT and MK.Step() == 6 and Says(w, "Layout: Compact Adventure"), "Compact applied; the result names it")
+  Check(j.state == "applied" and j.variant == COMPACT and MK.Step() == 6 and k.reloads == 1, "Compact applied, and the interface reloaded")
   Check(k.EllesmereUIDB.profiles["TwichUI Adventure"].addons.EllesmereUIActionBars.barPositions.Bar7 ~= nil, "EllesmereUI holds Compact's bars")
-  -- the reload the player starts, and the result after it
-  Click(w, "Reload now")
-  Check(k.reloads == 1, "reload now reloads once")
+  -- the result after the reload
   local saved = LM.Logout(k)
   local k2 = LM.Boot("Switch", saved)
   local w2 = k2.TwichUILayoutWizard
-  Check(w2 and w2.shown and k2.TwichUI.LayoutWizard.Model.Layout().id == COMPACT and Says(w2, "Checked after the reload"), "after the reload the wizard opens on the result, as Compact")
+  Check(w2 and w2.shown and k2.TwichUI.LayoutWizard.Model.Layout().id == COMPACT and Says(w2, "Your interface is ready") and Says(w2, "Compact Adventure"), "after the reload the wizard opens on the result, as Compact")
   -- switching to Classic from the wizard: the review says it is a switch
   local MK2, WW2 = k2.TwichUI.LayoutWizard.Model, k2.TwichUI.LayoutWizard.Window
   Expand(w2, "Manage layout")
@@ -1004,8 +1047,8 @@ do
   Check(MK2.Layout().id == CLASSIC, "choose Classic")
   Click(w2, "Next"); Click(w2, "Next"); Click(w2, "Next")
   Check(Says(w2, "Compact Adventure is installed now. This switches to Classic Adventure in the same two profiles"), "the review says it switches, and that Restore still goes back to before the first install")
-  Click(w2, "Apply")
-  Check(k2.popup.text:find("This switches to Classic Adventure", 1, true) and k2.popup.text:find("Apply Classic Adventure?", 1, true), "the question says so too")
+  Click(w2, ApplyLabel(w2))
+  Check(k2.popup.text:find("This switches your installed layout from Compact Adventure.", 1, true) and k2.popup.text:find("Apply Classic Adventure?", 1, true), "the question says so too")
   k2.Accept()
   local j2 = k2.TwichUI.Layouts.Journal.Read()
   Check(j2.state == "applied" and j2.variant == CLASSIC and j2.snapshot.ellesmereui.active == "Mine", "switched; the record names Classic and still goes back to your profile")
@@ -1014,7 +1057,7 @@ do
     "Classic's bars replace Compact's in the same profile; Compact's is kept as the copy Undo this update puts back")
   local k3 = LM.Boot("Switch", LM.Logout(k2))
   local w3, WK3 = Open(k3)
-  Check(k3.TwichUI.Layouts.Journal.Read().state == "verified" and WK3.Model.Layout().id == CLASSIC and Says(w3, "Installed layout: Classic Adventure"), "checked after the reload, as Classic")
+  Check(k3.TwichUI.Layouts.Journal.Read().state == "verified" and WK3.Model.Layout().id == CLASSIC and Says(w3, "Your interface is ready") and Says(w3, "Classic Adventure"), "checked after the reload, as Classic")
   -- restore, from the second layout: back to before the first install
   Expand(w3, "Manage layout")
   Click(w3, "Restore previous setup")
@@ -1182,7 +1225,7 @@ do
         OV.Close("back")
         for step = 2, 4 do MK.Go(step) end
         Advance(w, MK, 5)
-        Click(w, "Apply"); k.Accept()
+        Click(w, ApplyLabel(w)); k.Accept()
         Check(k.TwichUI.Layouts.Journal.Read().state == "applied", name .. ": applied")
         local prof = k.EllesmereUIDB.profiles["TwichUI Adventure"]
         local EA = k.TwichUI.Layouts.EllesmereAdapter
@@ -1443,8 +1486,7 @@ do
   local w5, WK5 = Open(k5)
   WK5.Model.SetLayout(COMPACT)
   ToReview(w5)
-  Click(w5, "Apply"); k5.Accept()
-  Click(w5, "Reload now")
+  Click(w5, ApplyLabel(w5)); k5.Accept()
   local st = k5.TwichUIDB.layouts.wizard
   Check(st.resume == "install" and st.variant == COMPACT, "the reload note keeps the layout")
   local k6 = LM.Boot("State", LM.Logout(k5))
@@ -1459,9 +1501,8 @@ do
   local w, WK = Open(k)
   local MK = WK.Model
   ToReview(w)
-  Check(MK.Step() == 5 and Enabled(w, "Apply") and not Has(w, "Force re-apply"), "Force: a first install on a clean account isn't offered it")
-  Click(w, "Apply"); k.Accept()
-  Click(w, "Reload now")
+  Check(MK.Step() == 5 and Enabled(w, ApplyLabel(w)) and not Has(w, "Force re-apply"), "Force: a first install on a clean account isn't offered it")
+  Click(w, ApplyLabel(w)); k.Accept()
   local k2 = LM.Boot("Force", LM.Logout(k))
   local w2, WK2 = k2.TwichUILayoutWizard, k2.TwichUI.LayoutWizard
   local M2 = WK2.Model
@@ -1471,27 +1512,28 @@ do
   Check(Has(w2, "Advanced") and not Has(w2, "Force re-apply"), "   an earlier install is recorded: Advanced is offered on the review, folded")
   Expand(w2, "Advanced")
   Check(Has(w2, "Force re-apply"), "   and Force re-apply is in it")
-  Check(not Has(w2, "Apply") and Enabled(w2, "Done"), "   and with the same choices Apply has nothing to do: Done closes")
+  Check(not Has(w2, ApplyLabel(w2)) and Enabled(w2, "Done"), "   and with the same choices Apply has nothing to do: Done closes")
   -- the install's record is half done, and a Restore that never finished blocks Apply
   k2.TwichUIDB.layouts.install.state = "restore-partial"
   M2.Invalidate()
   WK2.Window.Refresh()
-  Check(not Enabled(w2, "Apply") and Has(w2, "Force re-apply"), "   a Restore that didn't finish blocks Apply; Force re-apply is offered")
+  Check(not Enabled(w2, ApplyLabel(w2)) and Has(w2, "Force re-apply"), "   a Restore that didn't finish blocks Apply; Force re-apply is offered")
   local before = World(k2)
   Click(w2, "Force re-apply")
-  Check(M2.Forced() and Has(w2, "Stop forcing") and Enabled(w2, "Apply"), "   turning it on enables Apply and the button turns it off again")
+  Check(M2.Forced() and Has(w2, "Stop forcing") and Enabled(w2, ApplyLabel(w2)), "   turning it on enables Apply and the button turns it off again")
   Check(Unchanged(World(k2), before), "   and changes nothing in the game")
   Check(M2.Review().forced ~= nil and Says(w2, "Forced re-apply"), "   the review says what it does")
   local text = M2.ConfirmText()
-  Check(text:find("Forced re-apply", 1, true) and text:find("Restore will go back to how things are when you press Apply", 1, true),
-    "   and so does the question, including what Restore then goes back to")
+  Check(text:find("Forced re-apply", 1, true) and text:find("Restore will go back to how things are now, not to before it", 1, true),
+    "   and so does the question, in one sentence, including what Restore then goes back to")
+  Check(not text:find("backed up", 1, true), "   a forced apply doesn't promise the ordinary backup")
   Click(w2, "Stop forcing")
-  Check(not M2.Forced() and not Enabled(w2, "Apply"), "   Stop forcing is back to the blocked review")
+  Check(not M2.Forced() and not Enabled(w2, ApplyLabel(w2)), "   Stop forcing is back to the blocked review")
   Click(w2, "Force re-apply")
   Click(w2, "Back"); Click(w2, "Next")
   Check(not M2.Forced() and Has(w2, "Force re-apply") and not Has(w2, "Stop forcing"), "   leaving the review drops it: it is asked for again each time")
   Click(w2, "Force re-apply")
-  Click(w2, "Apply"); k2.Accept()
+  Click(w2, ApplyLabel(w2)); k2.Accept()
   Check(not M2.Forced() and k2.TwichUIDB.layouts.install.state == "applied", "   applying it installs again, with a record that can be read, and forgets the request")
 end
 
@@ -1501,8 +1543,7 @@ do
   local k = LM.Boot("ForceStuck")
   local w, WK = Open(k)
   ToReview(w)
-  Click(w, "Apply"); k.Accept()
-  Click(w, "Reload now")
+  Click(w, ApplyLabel(w)); k.Accept()
   local k2 = LM.Boot("ForceStuck", LM.Logout(k))
   local j = k2.TwichUIDB.layouts.install
   j.char, j.state = "Someone-Else", "restore-partial"
@@ -1512,10 +1553,10 @@ do
   Advance(w2, WK2.Model, 5)
   local r = WK2.Model.Review()
   Check(not r.ok and #r.blocked >= 3, "Force: the review is blocked for several reasons at once")
-  Check(not Enabled(w2, "Apply") and Has(w2, "Force re-apply"), "   Apply is off and Force re-apply is offered")
+  Check(not Enabled(w2, ApplyLabel(w2)) and Has(w2, "Force re-apply"), "   Apply is off and Force re-apply is offered")
   Click(w2, "Force re-apply")
-  Check(WK2.Model.Review().ok and Enabled(w2, "Apply") and Says(w2, "another character"), "   forced, nothing blocks, and the review says the record was another character's")
-  Click(w2, "Apply"); k2.Accept()
+  Check(WK2.Model.Review().ok and Enabled(w2, ApplyLabel(w2)) and Says(w2, "another character"), "   forced, nothing blocks, and the review says the record was another character's")
+  Click(w2, ApplyLabel(w2)); k2.Accept()
   local jj = k2.TwichUIDB.layouts.install
   Check(jj and jj.char ~= "Someone-Else" and jj.state == "applied", "   Apply installs, with this character's own record")
 end

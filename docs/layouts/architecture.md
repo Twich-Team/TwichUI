@@ -169,8 +169,9 @@ Three saved records in `TwichUIDB.layouts` (account-wide; each names the charact
 
 The policy, in one place:
 
-1. **Nothing changes without the key of a plan the player was shown**, out of combat, after one confirmation that names the reload,
-   the account-wide EllesmereUI change, and any loss of a way back (a second update replaces the copy kept by the first).
+1. **Nothing changes without the key of a plan the player was shown**, out of combat, after one short confirmation that says whether it
+   reloads, the account-wide EllesmereUI change, the way back, and any loss of a way back (a second update replaces the copy kept by the
+   first). Accepting a question that announced a reload authorises that reload too (`wizard.md`, "Applying and finishing").
 2. **The snapshot is complete and checked before the record is written; the record is written before the first change.**
    Installing again keeps the first snapshot: Restore always goes back to before the first install.
 3. **Steps run EllesmereUI first, then TwichUI, and stop at the first failure.** Across addons this is not atomic. A failure that
@@ -234,7 +235,8 @@ acceptance is a separate, in-game check.
 | Full-size preview | refused; closes when combat starts | no |
 | A received package's check | waits until combat ends | no |
 
-Nothing reloads by itself; the reload button is not offered in combat. No secure frame, binding or action slot is touched.
+Nothing reloads except the one the player accepted ("Apply & Reload") or asked for ("Reload now"); neither starts in combat, and neither is
+retried. No secure frame, binding or action slot is touched.
 
 ## 10. Publishing and transport
 

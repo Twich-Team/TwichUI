@@ -200,9 +200,10 @@ the choices. **Change** opens the three ways (**Update while keeping my customiz
 configuration**; **Review conflicts**) and the details behind a button: each setting with its current and recommended value, the case, the
 plain-language effect, the ownership consequence and its choices, five at a time. The whole-addon and group questions, screen warnings and
 a baseline that can't be trusted stay in view when they arise. When nothing differs the heading is **You're already up to date.** and the
-footer's primary action is **Done**. The confirmation names the update; the Result step offers Undo this update and Keep the update (under
-**Manage layout** once the update is checked and ready, in view while it isn't); a finished setup shows **Your interface is ready**, with the
-status "Installed and managed", and **Manage layout** holds Set up again and Stop managing.
+footer's primary action is **Done**. The confirmation is short ("Your current setup will be backed up, and you can undo this update afterwards", "Your personal customizations will be kept"), with a
+sentence for anything exceptional; the result dialog offers Undo this update and Keep the update (under **Manage layout** once the update is
+checked and ready, in view while it isn't); a finished setup shows **Your interface is ready**, with the status "Installed and managed" under
+**Details**, and **Manage layout** holds Set up again and Stop managing.
 
 ## Tooltip placement and friendly plates in an update
 
