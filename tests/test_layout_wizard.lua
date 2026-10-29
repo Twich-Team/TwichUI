@@ -72,7 +72,7 @@ do
   Check(toc:find("## RequiredDeps: !!!TwichUI, TwichUI_Layouts", 1, true), "and needs the core and the layout engine")
   Check(not toc:find("SavedVariables", 1, true), "it keeps no saved variables of its own")
   local files = LM.TocFiles("TwichUI_LayoutWizard")
-  Check(#files == 10 and files[#files]:find("Window.lua", 1, true), "its files, the window last (it says the wizard is ready)")
+  Check(#files == 11 and files[#files]:find("Window.lua", 1, true), "its files, the window last (it says the wizard is ready)")
   for _, f in ipairs(files) do Check(io.open(f), f .. " exists") end
   local core = io.open(REPO .. "!!!TwichUI/!!!TwichUI.toc"):read("*a")
   Check(not core:find("TwichUI_LayoutWizard\\", 1, true) and core:find("LayoutsLauncher.lua", 1, true), "the core lists no file of the wizard")
@@ -1422,6 +1422,71 @@ do
   local k6 = LM.Boot("State", LM.Logout(k5))
   local after = k6.TwichUIDB.layouts.wizard
   Check(after.resume == nil and after.variant == COMPACT and k6.TwichUI.LayoutWizard.Model.Layout().id == COMPACT, "using the note up keeps the layout too")
+end
+
+-- Force re-apply: offered on the review only when an earlier install is recorded or everything that blocks Apply is something it can
+-- lift; turning it on changes nothing in the game; the question names what it replaces; Apply then installs as a new install
+do
+  local k = LM.Boot("Force")
+  local w, WK = Open(k)
+  local MK = WK.Model
+  ToReview(w)
+  Check(MK.Step() == 5 and Enabled(w, "Apply") and not Has(w, "Force re-apply"), "Force: a first install on a clean account isn't offered it")
+  Click(w, "Apply"); k.Accept()
+  Click(w, "Reload now")
+  local k2 = LM.Boot("Force", LM.Logout(k))
+  local w2, WK2 = k2.TwichUILayoutWizard, k2.TwichUI.LayoutWizard
+  local M2 = WK2.Model
+  Click(w2, "Set up again")
+  Advance(w2, M2, 5)
+  Check(Has(w2, "Force re-apply"), "   an earlier install is recorded: offered on the review")
+  Check(not Enabled(w2, "Apply"), "   and with the same choices Apply has nothing to do")
+  -- the install's record is half done, and a Restore that never finished blocks Apply
+  k2.TwichUIDB.layouts.install.state = "restore-partial"
+  M2.Invalidate()
+  WK2.Window.Refresh()
+  Check(not Enabled(w2, "Apply") and Has(w2, "Force re-apply"), "   a Restore that didn't finish blocks Apply; Force re-apply is offered")
+  local before = World(k2)
+  Click(w2, "Force re-apply")
+  Check(M2.Forced() and Has(w2, "Stop forcing") and Enabled(w2, "Apply"), "   turning it on enables Apply and the button turns it off again")
+  Check(Unchanged(World(k2), before), "   and changes nothing in the game")
+  Check(M2.Review().forced ~= nil and Says(w2, "Forced re-apply"), "   the review says what it does")
+  local text = M2.ConfirmText()
+  Check(text:find("Forced re-apply", 1, true) and text:find("Restore will go back to how things are when you press Apply", 1, true),
+    "   and so does the question, including what Restore then goes back to")
+  Click(w2, "Stop forcing")
+  Check(not M2.Forced() and not Enabled(w2, "Apply"), "   Stop forcing is back to the blocked review")
+  Click(w2, "Force re-apply")
+  Click(w2, "Back"); Click(w2, "Next")
+  Check(not M2.Forced() and Has(w2, "Force re-apply") and not Has(w2, "Stop forcing"), "   leaving the review drops it: it is asked for again each time")
+  Click(w2, "Force re-apply")
+  Click(w2, "Apply"); k2.Accept()
+  Check(not M2.Forced() and k2.TwichUIDB.layouts.install.state == "applied", "   applying it installs again, with a record that can be read, and forgets the request")
+end
+
+-- Force re-apply for what a stuck account really shows: another character's record, its Restore never finished, and the
+-- profile it would go back to gone
+do
+  local k = LM.Boot("ForceStuck")
+  local w, WK = Open(k)
+  ToReview(w)
+  Click(w, "Apply"); k.Accept()
+  Click(w, "Reload now")
+  local k2 = LM.Boot("ForceStuck", LM.Logout(k))
+  local j = k2.TwichUIDB.layouts.install
+  j.char, j.state = "Someone-Else", "restore-partial"
+  j.snapshot.ellesmereui.active = "Gone"
+  local w2, WK2 = k2.TwichUILayoutWizard, k2.TwichUI.LayoutWizard
+  Click(w2, "Set up again")
+  Advance(w2, WK2.Model, 5)
+  local r = WK2.Model.Review()
+  Check(not r.ok and #r.blocked >= 3, "Force: the review is blocked for several reasons at once")
+  Check(not Enabled(w2, "Apply") and Has(w2, "Force re-apply"), "   Apply is off and Force re-apply is offered")
+  Click(w2, "Force re-apply")
+  Check(WK2.Model.Review().ok and Enabled(w2, "Apply") and Says(w2, "another character"), "   forced, nothing blocks, and the review says the record was another character's")
+  Click(w2, "Apply"); k2.Accept()
+  local jj = k2.TwichUIDB.layouts.install
+  Check(jj and jj.char ~= "Someone-Else" and jj.state == "applied", "   Apply installs, with this character's own record")
 end
 
 if failures > 0 then error(failures .. " check(s) failed") end

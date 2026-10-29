@@ -41,6 +41,11 @@ local function Short(key) return "#" .. tostring(LibDeflate:Adler32(key)) .. ":"
 ---------------------------------------------------------------------------
 -- opts.update (an install again; updates.md) = { policy = "keep" | "recommended", choose = { [unit] = "mine" | "package" |
 --   "own" | "manage" }, groups = { [group] = "mine" | "package" }, whole = { [adapter] = "keep" | "replace" } }.
+-- opts.force = true (the wizard's "Force re-apply"): plan as a new install over whatever an earlier one left: this character's own
+--   install and management records (or a damaged one) are set aside, a profile already named for the install is taken over, and an
+--   install that matches is made again. Only the plan says so: plan.forced = { replaced = state of the record set aside | nil,
+--   journal = that record, otherCharacter = it was another character's }. Not lifted: a record from a newer TwichUI, combat, a missing or unusable
+--   EllesmereUI, EllesmereUI's first-run picker, a package that can't be used.
 -- plan.update = { baseline = "ok" | "none" | "other" | "damaged", policy, resume, counts, rows = { row }, warnings, whole,
 --   groups, fresh = { [adapter] = why } } (rows: Merge.lua's, each with its adapter), for an install again.
 local UPDATE_STATES = LY.Set({ "verified", "mismatch" })   -- settled: an update from here keeps a way back to here
@@ -79,6 +84,20 @@ local function DoPlan(pkg, variant, opts)
     local function Block(adapter, code) plan.blocked[#plan.blocked + 1] = { adapter = adapter, code = code } end
 
     local journal, why = J.Read()
+    -- Forced (opts.force, "Force re-apply"): an earlier install's record that is damaged, or this character's own, is set aside and
+    -- this install is planned as a new one, so a stopped restore, a failed install or another package's record can't hold it.
+    -- A record from a newer TwichUI is still respected: it can't be read. Another character's is set aside too (there is one
+    -- install record for the account), and the plan says whose it was (forced.otherCharacter) so the player is told it is gone.
+    local forced
+    if opts.force == true then
+        forced = {}
+        if why == "damaged" or journal then
+            forced.replaced = journal and journal.state or why
+            forced.otherCharacter = journal and journal.char ~= Me() or nil
+            forced.journal = journal   -- kept to be written back if the install then changes nothing
+            journal, why = nil, nil
+        end
+    end
     if why then Block(nil, "journal-" .. why) end
     if journal then
         if journal.package ~= resolved.id then Block(nil, "journal-other-package")
@@ -96,6 +115,11 @@ local function DoPlan(pkg, variant, opts)
     if not journal and not why then
         local m, mwhy = J.ReadManaged()
         if mwhy == "newer" then Block(nil, "managed-newer") end
+        if m and forced then
+            forced.replaced = forced.replaced or "managed"
+            forced.otherCharacter = forced.otherCharacter or m.char ~= Me() or nil
+            m = nil
+        end
         if m and m.package == resolved.id then
             if m.char ~= Me() then Block(nil, "journal-other-character") end
             managed = m
@@ -104,7 +128,7 @@ local function DoPlan(pkg, variant, opts)
         end
     end
     plan.mode = (journal or managed) and "again" or "new"
-    plan.journal, plan.managed = journal, managed
+    plan.journal, plan.managed, plan.forced = journal, managed, forced
     local installed = journal or managed
 
     -- An install again is an update: each unit is compared with the baseline (the last install that checked out) and with
@@ -156,7 +180,8 @@ local function DoPlan(pkg, variant, opts)
                     backupMode = journal and (UPDATE_STATES[journal.state] and "new" or (journal.update and "keep") or "none")
                         or (managed and "new") or nil,
                     -- the install's own profile, by the management record, once the setup was finished (no snapshot says so)
-                    owned = managed ~= nil and managed.targets[id] == resolved.targets[id],
+                    owned = forced ~= nil or (managed ~= nil and managed.targets[id] == resolved.targets[id]),
+                    force = forced ~= nil,
                     home = managed and managed.home[id] or nil,
                 })
             end
@@ -217,7 +242,7 @@ local function DoPlan(pkg, variant, opts)
     local screenKey = resolved.geometry and { math.floor(resolved.geometry.screen.w + 0.5), math.floor(resolved.geometry.screen.h + 0.5),
         resolved.geometry.density } or false
     plan.key = LY.Canon({ plan.id, plan.revision, variant, plan.mode, keys, screenKey, resolved.picks, uopts and uopts.policy or false,
-        upd and upd.resume or false })
+        upd and upd.resume or false, forced ~= nil })
     plan.ok = #plan.blocked == 0
     return plan
 end
@@ -381,7 +406,7 @@ local function DoApply(pkg, variant, expect, opts)
     local resume = plan.update and plan.update.resume
     local allNothing = true
     for _, id in ipairs(plan.order) do if not plan.parts[id].nothing then allNothing = false end end
-    if allNothing and not resume and not (plan.update and plan.update.recordOnly) then return false, "nothing", plan end
+    if allNothing and not resume and not plan.forced and not (plan.update and plan.update.recordOnly) then return false, "nothing", plan end
 
     local previous = plan.journal
     local snapshot
@@ -485,7 +510,9 @@ local function DoApply(pkg, variant, expect, opts)
         end
         if not changed then
             -- Nothing was changed: the previous record (or none) stands as it was.
-            if previous then J.Write(previous) else J.Clear() end
+            if previous then J.Write(previous)
+            elseif plan.forced and plan.forced.journal then J.Write(plan.forced.journal)   -- the record set aside stands as it was
+            else J.Clear() end
             return true, { state = "failed", steps = record.steps, record = nil, changed = false }
         end
         record.state = "partial"

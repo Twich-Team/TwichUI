@@ -16,6 +16,7 @@ when something is built, checked or decided.
 | 6. Authoring and publishing | Offline-tested | 2026-10-27 |
 | 7. Retained overrides and updates | Offline-tested | 2026-10-27 |
 | **RH-1. Release hardening (correctness)** | Offline-tested (record below) | 2026-10-28 |
+| Editable TwichUI presets and bundling a published package | Offline-tested (record below) | 2026-10-28 |
 | RH-2. In-game validation on WoW: Forever, packaged artifact | **Not started** (checklist below) | |
 
 **Nothing in this project has been run on WoW: Forever.** (The Phase 2 developer package was once applied, verified and restored
@@ -30,7 +31,8 @@ production release is blocked, until RH-2 is done.
 | Updates | three-way merge, preservation, reset, ownership, groups, whole-addon, switching, resume, Undo, Finish | runtime-written blob keys, Unlock Mode link behaviour | merging inside a blob, carrying blobs across EllesmereUI vintages | more than one level of Undo |
 | Screen and preview | components, pieces (sample sizes), final plan, scale guidance | visual acceptance at every resolution and scale | Edit Mode (objectives), UI scale changes | placing the battle res timer and other unplaced positions (D32), Compact pet/stance (D44) |
 | Publishing and transport | envelope, store, two-client transport, bounds, combat wait | two real clients | text export/import (D36) | the same unpack bound for setups (D48) |
-| Bundled package | portable media (release-gated), capture decisions, comparison with a published package | the recaptured data on Forever's EllesmereUI | | |
+| Bundled package | portable media (release-gated), capture decisions, comparison with a published package, importing a published package (round trip, determinism, refusals) | the recaptured data on Forever's EllesmereUI | | |
+| TwichUI presets | format 6, the authoring editor, the wizard's cards and review, switching, removed options, Undo/Restore | the editor's layout at real sizes, the Export window's copy, a real install with an editable preset | lists, positions, account-wide and `LOCAL` settings in a preset | editing the other wizard questions in game |
 
 ## RH-1: release hardening (2026-10-28)
 
@@ -117,6 +119,33 @@ CVars from the adapter (with their own snapshot, Undo and Restore) is a possible
 updated once (its fingerprint leaves the two switches out now). Diagnostics: scope and gauge `layoutwizard.preview.follow`; the adapter's writes run inside
 `layouts.apply`, its reads inside `layouts.plan` and `layouts.verify`.
 
+## Editable TwichUI presets and bundling (2026-10-28)
+
+The helper presets are maintained in game (`presets.md`): package **format 6** (`mode = "settings"`, `keep`, `retired`), the
+authoring workspace's section 4 (`AuthorPresets.lua`, the model; `AuthorWindow.lua`), the wizard reading options dynamically
+(`Model.lua` `PresetSummary`, `PresetCoverage`, `ReviewPreset`, `Missing`; `Pages.lua` cards; `State.lua` `dropped`), and
+`tools/update_bundled_layout.sh --from-published` (`tools/import_published_layout.lua`, `tools/published_entry.lua`,
+`tools/layout_data.lua`, `check_bundled_layout.lua --published`). The choices are data now (`TwichUI_Layouts/ChoicesData.lua`,
+generated from what `Classic.lua` declared, so the bundled package's content and identity are unchanged: `#466738159:15197`).
+The bundled package stays **format 5**, its presets switch-on-only, until the author publishes edited presets and imports them.
+Offline-tested: `tests/test_layout_presets.lua` (new, 6 sections), with format-number and file-count expectations moved in
+`test_layouts.lua`, `test_layout_wizard.lua`, `test_layout_publish.lua`, `test_layout_tooltip.lua`, `test_layout_hardening.lua`.
+`./tests/run.sh`: 127 suites, all passed.
+
+| What | State |
+|---|---|
+| Format 6 validation: values incl. `false`/`0`, resets, keep, retired, refusals (places, other addons, `LOCAL`, account-wide, lists, conflicts, bounds), legacy presets unchanged | offline-tested |
+| Authoring: capture into a preset (scope kept, effective values), create, duplicate, rename, describe, reorder, default, remove, include/leave out, values, reset, search, categories, limits; nothing live changed; publish immutable | offline-tested; **in game**: the section and editor at 1080p, larger fonts, a real profile |
+| Wizard: more than three cards, what each does, review words, apply, verify by value, deliberate switch, kept/owned settings said, update to the same preset, removed option, keep, Undo, Restore, Finish | offline-tested; **in game**: a real install and reload with an editable preset |
+| Export for bundling (the entry's bytes as text) and the import's round trip, no-op, determinism, refusals, failure rollback, the recapture keeping the presets | offline-tested; **in game**: copying an 80 KB line out of the Export window |
+
+Fixed on the way (both pre-existing since RH-1's format 4, neither reachable by the bundled package): a TwichUI fragment holding only a
+`reset` list (no `groups`) was read as empty; and a reset of a setting whose TwichUI default is `false` was expected and baselined as the
+reset marker (an `and/or` that dropped the `false`), so its check could never match. Both have tests that failed before the fix.
+Diagnostics: scope `layoutwizard.presets.capture` (`AP.ReadAll`), gauge `layoutwizard.author.presets` (settings held by the presets'
+draft and edit; 0 while closed); registered in `DX.OPS` and `docs/diagnostics.md`. The wizard's added work (normalizing at most eight
+preset options for the cards and review, cached per option table) is event-rare and not scoped.
+
 ## Open decisions (recommended default first)
 
 | # | Question | Recommended default |
@@ -170,6 +199,14 @@ updated once (its fingerprint leaves the two switches out now). Diagnostics: sco
 | D46 | Scale guidance is given down to UI scale 0.64 | As built |
 | D47 | The bundled unit-name font: the author's private `MyFonts` copy replaced by TwichUI's `AlegreyaSansSC-Bold.ttf` (same file name and registered name; not byte-compared) | As built; the author to confirm in game |
 | D48 | The unpack bound covers layout packages only; configuration setups on the same transport keep LibDeflate's unbounded unpacking | Separate change, with its own tests |
+| D49 | "Leave them as they are" and the layout's own TwichUI looks: genuinely preserve every setting the presets cover (the base's value skipped for those), or explain? | As built: **explain**. It writes nothing of the presets'; the layout's own looks (never feature switches) still apply, and the review says how many of the presets' settings they also set. Established behaviour unchanged |
+| D50 | Picking another preset than the one installed: take the preset's values ("use recommended") or keep the player's changes? | As built: the preset's values, each still offered as "keep mine"; owned settings stay theirs; the review says when it isn't fully in effect. The same preset updated follows the normal keep-mine rules |
+| D51 | Convert the shipped presets to format 6 now? | As built: no. They stay switch-on-only (format 5) until the author saves a change in game and imports the published package |
+| D52 | The accent's "Aged gold" option holds its own colour in `ChoicesData.lua`, no longer the look's accent from the capture | As built; `check_bundled_layout.lua` notes a mismatch after a recapture. Alternative: keep generating that option from the capture |
+| D53 | A new preset's starting scope | As built: every feature switch a preset may manage (on/off), with the source profile's values; looks are added by the author |
+| D54 | Bounds | As built: 8 options, 256 settings per preset, 32 retired ids; `MAX_EXPECT` 320 to 832 (an older TwichUI would read a newer record holding more than 320 entries as damaged) |
+| D55 | A removed preset the player had picked | As built: named, and Next/Apply wait for a pick (nothing applied in its place) |
+| D56 | Closing the workspace with preset work not saved or published | As built: Close asks; Escape keeps the session until the reload and says so |
 
 
 ## Production release blockers
@@ -207,6 +244,9 @@ Run on the zip the release workflow builds, installed fresh. Record results here
    the HUD change and can't restore or stop managing the first character's install.
 10. **Diagnostics**: `/tui perf` capture while opening the wizard ten times, reviewing, applying, checking and opening the
     overlay; the `layouts.*` scopes appear, the wizard gauges stay flat, and nothing loads when the setup isn't used.
+11. **TwichUI presets** (`presets.md`): capture into On-screen helpers from a real profile with a feature switched off; create a
+    preset; publish; Export for bundling (copy the line out, import it with `--from-published --text`); install the result on a
+    character, reload, check; switch preset; Undo; Restore. Look at the presets section and editor at 1080p and with larger fonts.
 
 Also from the earlier phases (still required; detail in `history.md` and the topic documents): `ImportProfileSilent` and
 `RegisterExternalInstaller` on Forever, `spec_locked`, the checklists of `updates.md`, `wizard.md` and `publishing.md` (two

@@ -436,7 +436,7 @@ do
   Bad(function(e) e.package = nil end, "not-table", "no package")
   -- the package itself
   Bad(function(e) e.package.dev = true end, "dev-not-allowed", "a developer package")
-  Bad(function(e) e.package.format = 6 end, "format-newer", "a newer package format")   -- format 5 is read now
+  Bad(function(e) e.package.format = 7 end, "format-newer", "a newer package format")   -- format 6 is read now
   Bad(function(e) e.package.geometry = nil end, "no-geometry", "no layout rules")
   Bad(function(e) e.package.surprise = 1 end, "unknown-field", "a package field this version doesn't read")
   Bad(function(e) e.package.layers.base.ellesmereui.modules.EllesmereUIFoo = { x = 1 } end, "unknown-unit", "a module that isn't EllesmereUI's")
@@ -748,7 +748,7 @@ do
   local cases = {
     { "a developer package", function(e) e.package.dev = true end, "developer package" },
     { "a newer envelope", function(e) e.v = 2 end, "newer TwichUI" },
-    { "a newer package format", function(e) e.package.format = 6 end, "newer than this TwichUI reads" },   -- format 5 is read now
+    { "a newer package format", function(e) e.package.format = 7 end, "newer than this TwichUI reads" },   -- format 6 is read now
     { "an opaque export string", function(e) e.package.layers.base.ellesmereui.modules.EllesmereUIQuickdraw = "!EUI_" .. ("x"):rep(40) end, "export" },
     { "a description that lies", function(e) e.meta.hash = "#1:1" end, "doesn't match" },
     { "a file in another addon", function(e) e.package.layers.base.ellesmereui.modules.EllesmereUIQuickdraw.f = [[Interface\AddOns\Other\a.ttf]] end, "another addon" },
@@ -1049,7 +1049,7 @@ do
   Check(win and win:IsShown(), "/tui layout author opens the workspace")
   Check(c.TwichUILayoutWizard == nil and not WZ.Window.IsShown(), "and not the setup wizard")
   Check(WZ.Author.Active() and WZ.Author.Session().eui == "Mine" and WZ.Author.Session().twichui == "Default", "the sources start as the profiles in use, and are only read")
-  Check(LM.Says(win, "1. Start from") and LM.Says(win, "2. Capture") and LM.Says(win, "3. Review the changes") and LM.Says(win, "6. Send a published package"), "the sections are there")
+  Check(LM.Says(win, "1. Start from") and LM.Says(win, "2. Capture") and LM.Says(win, "3. Review the changes") and LM.Says(win, "4. TwichUI presets") and LM.Says(win, "7. Send a published package"), "the sections are there")
   Check(LM.Says(win, "Classic Adventure") and LM.Says(win, "Compact Adventure"), "both layouts can be picked")
   local escListed = false
   for _, n in ipairs(c.UISpecialFrames) do if n == "TwichUILayoutAuthor" then escListed = true end end

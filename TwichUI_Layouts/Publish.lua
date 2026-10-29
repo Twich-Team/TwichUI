@@ -494,6 +494,13 @@ P.EXPLAIN = {
     ["bad-value"] = "a value isn't one a setting can have",
     ["too-many-units"] = "it changes more settings than a layout may",
     ["not-allowed"] = "it changes something a layout may not",
+    ["preset-empty"] = "a helper preset manages no settings (only the \"leave them as they are\" option may)",
+    ["keep-names-settings"] = "its \"leave them as they are\" option names settings",
+    ["keep-repeated"] = "a choice has more than one \"leave them as they are\" option",
+    ["retired-id"] = "an option reuses the id of one the package no longer offers",
+    ["reset-not-here"] = "it resets a setting where a reset isn't allowed",
+    ["choice-conflict"] = "two choices set the same setting",
+    ["not-in-sets"] = "a choice sets something it doesn't declare",
 }
 
 function P.Explain(problems, max)

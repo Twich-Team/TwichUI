@@ -36,10 +36,11 @@ Publish.lua
 Store.lua
 
 # The packages: the developer test package, and the Adventure package with Classic and Compact Adventure (the captured
-# data of each, then the package that uses them)
+# data of each, the choices published in game, then the package that uses them)
 TestPackage.lua
 ClassicData.lua
 CompactData.lua
+ChoicesData.lua
 Classic.lua
 
 # /tui layout (last: it tells TwichUI the layout tools are ready)

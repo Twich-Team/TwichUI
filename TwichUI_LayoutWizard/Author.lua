@@ -17,6 +17,8 @@
 --                           points at, the personal-data scan, the version
 --   6. Publish(done)        makes the immutable snapshot (Pub.Build, Store.Seal) and keeps it in the published list
 --   7. Send(name)           through the same sharing transport as a setup (Share.lua SendLayout)
+-- Beside steps 2 to 4, the package's TwichUI helper presets are edited as a draft of their own (AuthorPresets.lua), written into
+-- the package by Draft(). ExportText(entry) gives a published package as text to copy out for bundling it with TwichUI.
 -- Nothing is published or sent without the caller asking, nothing is sent to anyone but the name given, and the draft is
 -- rebuilt from the items every time: editing afterwards cannot change what was already published.
 
@@ -73,6 +75,7 @@ local function UseBase(s, pkg, key)
     s.variants, s.variant = variants, variants[1]
     s.release = Release(pkg)
     s.capture, s.items, s.itemBy, s.report, s.fixes, s.captureError, s.fixList = nil, nil, nil, nil, {}, nil, nil
+    WZ.AuthorPresets.Init(s)   -- the package's TwichUI presets, as a draft of their own (AuthorPresets.lua)
 end
 
 function A.Begin()
@@ -167,12 +170,14 @@ local function EuiProfile(name)
     return type(p) == "table" and p or nil
 end
 
+-- A TwichUI profile's table, to read: the one in use is TwichUIDB itself, a stored one TwichUIDB.profiles[name]. Never written.
 local function TwichSlot(name)
     if not R.Profiles or type(TwichUIDB) ~= "table" then return nil end
     if name == R.Profiles.Current() then return TwichUIDB end
     local p = type(TwichUIDB.profiles) == "table" and TwichUIDB.profiles[name]
     return type(p) == "table" and p or nil
 end
+A.TwichSlot = TwichSlot
 
 -- Reads the named profiles. Returns true | false, code ("no-source", "no-eui-profile", "no-twichui-profile", "personal").
 function A.Capture()
@@ -535,6 +540,7 @@ function A.Draft(rough)
         end
     end
     if resets and (pkg.format or 0) < 4 then pkg.format = 4 end   -- a reset needs format 4 (an older TwichUI refuses it)
+    WZ.AuthorPresets.Apply(pkg)   -- the TwichUI presets as the draft has them (format 6 once they were edited)
     if next(s.fixes) then Replace(pkg, s.fixes) end
     if not rough then
         local r = s.release
@@ -562,7 +568,11 @@ function A.Check()
     local function Warn(t) rep.warnings[#rep.warnings + 1] = t end
     s.report = rep
     local pkg = A.Draft()
-    if rep.changes.included == 0 and not s.capture then Warn("Nothing has been captured, so this republishes the starting package as it is.") end
+    local presets = WZ.AuthorPresets.CheckLines()
+    local P = s.presets
+    if rep.changes.included == 0 and not s.capture and not (P and P.changed) then Warn("Nothing has been captured or changed, so this republishes the starting package as it is.") end
+    for _, t in ipairs(presets.blockers) do Block(t) end
+    for _, t in ipairs(presets.notes) do Warn(t) end
     -- the package, held to what a recipient holds it to
     local ok, problems, checked = Pub.Strict(pkg)
     if not ok then
@@ -655,6 +665,7 @@ function A.Publish(done)
         local added, why = Store.Add("published", entry)
         if not added then if done then done(false, why) end return end
         s.published = entry
+        if s.presets then s.presets.publishedGen = s.presets.gen end   -- the presets' draft is in a publication now
         r.revision = r.revision + 1   -- the next one is already the next number
         s.report = nil
         if done then done(true, entry) end
@@ -666,6 +677,20 @@ function A.Publish(done)
 end
 
 function A.Published() return Store.List("published") end
+
+-- A published package as one line of text to copy out of the game, for the developer's bundling import
+-- (tools/update_bundled_layout.sh --from-published --text FILE; docs/layouts/presets.md). It is the stored entry's own bytes (the
+-- packed block, printable), with its id, revision, fingerprint and size in front so the import can check it is what was approved:
+--   !TwichUI-layout!1!<id>!<revision>!<fingerprint>!<size>!<printable block>
+-- Nothing is packed again: what is copied is exactly what was published.
+A.EXPORT_TAG = "!TwichUI-layout!1!"
+function A.ExportText(entry)
+    if type(entry) ~= "table" or type(entry.blob) ~= "string" then return nil end
+    return ("%s%s!%d!%s!%d!%s"):format(A.EXPORT_TAG, entry.id, entry.revision, entry.hash, entry.size, entry.blob)
+end
+
+-- Whether closing the workspace would lose work: a TwichUI preset edit not saved to the draft, or a preset draft not published.
+function A.Dirty() return session ~= nil and WZ.AuthorPresets.Dirty() end
 
 function A.RemovePublished(entry)
     local s = session

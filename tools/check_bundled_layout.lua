@@ -10,12 +10,27 @@
 --     the game's. A path into another addon's folder (an author's private font folder) or outside the game is a failure, not a
 --     warning: players don't have that file;
 --   * it carries no developer export string and nothing a published package couldn't (the strict string rules).
+-- With --published (--sv <copy of !!!TwichUI.lua> | --text <export file>) [--published-revision N] [--published-hash H], it also checks
+-- the round trip of an import (tools/import_published_layout.lua): the published entry is unpacked and checked again, and the
+-- bundled package must resolve exactly as it does (Pub.Compare), hold its choices byte for byte (labels and descriptions too) and
+-- have its revision. Only the documented metadata may differ (title, made, source, the developer flag, the declared format).
 -- Prints one line per problem and exits 1 when there is any; prints "ok" and exits 0 otherwise. Writes nothing.
 
 ROOT = "!!!TwichUI/"
 REPO = "./"
 TESTS = "tests/"
 require("bit")
+
+local args = {}
+do
+    local i = 1
+    while i <= #arg do
+        local k = arg[i]:match("^%-%-(.+)$")
+        if k == "published" then args.published = arg[i + 1] args.source = arg[i + 2] i = i + 3
+        elseif k then args[k] = arg[i + 1] i = i + 2
+        else io.stderr:write("unexpected argument: " .. arg[i] .. "\n") os.exit(2) end
+    end
+end
 
 local realPrint = print
 print = function() end   -- the harness's client chatter
@@ -71,8 +86,61 @@ if ok then
     end
 end
 
+-- a note, not a failure: the accent choice's default option holds its own colour (ChoicesData.lua), so a profile recapture that
+-- changes the look's accent doesn't change what "Aged gold" applies
+local notes = {}
+if ok then
+    for _, ch in ipairs(pkg.choices or {}) do
+        if ch.id == "accent" then
+            for _, o in ipairs(ch.options) do
+                local a = o.id == ch.default and o.ellesmereui and o.ellesmereui.root and o.ellesmereui.root.euiAccent
+                local b = pkg.layers.base.ellesmereui and pkg.layers.base.ellesmereui.root and pkg.layers.base.ellesmereui.root.euiAccent
+                if a and b and LY.Canon(a) ~= LY.Canon(b) then
+                    notes[#notes + 1] = "note: the look's accent (the base) differs from the accent choice's default option, which is what an install applies; change that option in game and publish if the new accent is meant"
+                end
+            end
+        end
+    end
+end
+
+-- the round trip of an import: the bundled package is the published one, apart from the documented metadata
+local matched
+if args.published then
+    dofile(REPO .. "tools/layout_data.lua")
+    dofile(REPO .. "tools/published_entry.lua")
+    local entry, why
+    if args.published == "--text" then
+        entry, why = PE.Parse(LD.ReadText(args.source) or "")
+    elseif args.published == "--sv" then
+        local entries
+        entries, why = PE.FromSaved(args.source)
+        if entries then entry, why = PE.Pick(entries, tonumber(args["published-revision"] or ""), args["published-hash"]) end
+    else
+        why = "--published takes --sv FILE or --text FILE"
+    end
+    if entry and args["published-revision"] and entry.revision ~= tonumber(args["published-revision"]) then entry, why = nil, "the entry isn't the revision named" end
+    if entry and args["published-hash"] and entry.hash ~= args["published-hash"] then entry, why = nil, "the entry isn't the fingerprint named" end
+    local env = entry and select(1, PE.Open(c, entry))
+    if entry and not env then why = select(2, PE.Open(c, entry)) end
+    if not env then Problem("the published package can't be read again: %s", tostring(why))
+    else
+        local pub = env.package
+        local cmp = Pub.Compare(pkg, pub)
+        if not (cmp and cmp.same) then
+            for _, d in ipairs(cmp and cmp.differ or {}) do Problem("round trip: %s differs from the published package (%d)", d.part, d.n) end
+            if not cmp then Problem("round trip: the two packages can't be compared") end
+        end
+        if LY.Canon(pkg.choices or false) ~= LY.Canon(pub.choices or false) then Problem("round trip: the choices aren't the published ones byte for byte") end
+        if pkg.revision ~= pub.revision then Problem("round trip: the bundled revision is %d, the published one %d", pkg.revision, pub.revision) end
+        if pkg.id ~= pub.id then Problem("round trip: the bundled package is %s, the published one %s", tostring(pkg.id), tostring(pub.id)) end
+        matched = ("round trip: the bundled package resolves exactly as %s (%s)"):format(PE.Describe(entry), Pub.Contents(pub).identity)
+    end
+end
+
 if #problems > 0 then
     for _, l in ipairs(problems) do io.stderr:write("  " .. l .. "\n") end
     os.exit(1)
 end
+for _, l in ipairs(notes) do realPrint(l) end
+if matched then realPrint(matched) end
 realPrint(("ok: package %s revision %d, format %d; %d media references, all portable"):format(pkg.id, pkg.revision, pkg.format, #Pub.Refs(pkg)))

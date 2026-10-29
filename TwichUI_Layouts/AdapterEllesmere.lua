@@ -487,10 +487,10 @@ end
 
 local function Ours(snap, target) return type(snap) == "table" and snap.created == true and snap.target == target end
 
-function A.Capture(composed, target)
+function A.Capture(composed, target, part)
     local _, E = A.Detect(nil, true)   -- only after a plan that passed, so the client was already allowed
     local snap = { target = target, values = {}, version = ES().Version(), otherClient = E.IS_FOREVER ~= true or nil }
-    snap.active = Active(E)
+    snap.active = part and part.forcedHome or Active(E)
     local profiles = Profiles(E)
     snap.created = type(profiles[target]) ~= "table"
     for _, e in ipairs(composed.list) do
@@ -1182,8 +1182,19 @@ function A.Plan(composed, ctx)
     if type(active) ~= "string" then part.blocked = "eui-no-active" return part end
     local exists = type(profiles[target]) == "table"
     if exists and not (Ours(snap, target) or ctx.owned) then part.blocked = "target-taken" return part end
+    part.adopted = exists and ctx.force == true and not Ours(snap, target) or nil   -- forced: a profile that was already there
     -- where Restore goes back to: the snapshot's; once the setup was finished, the management record's
     local home = snap and snap.active or (ctx.home and type(profiles[ctx.home]) == "table" and ctx.home) or active
+    if ctx.force and not snap and home == target then
+        -- forced, with the install's own profile in use and nothing recorded of what came before it: the install leaves it for
+        -- another profile before replacing it (EllesmereUI would fall back to "Default" if the one in use were deleted), and
+        -- that one is what Restore goes back to
+        home = nil
+        if type(profiles.Default) == "table" and target ~= "Default" then home = "Default"
+        else for _, name in ipairs(LY.SortedKeys(profiles)) do if name ~= target and type(profiles[name]) == "table" then home = name break end end end
+        if not home then part.blocked = "previous-gone" return part end
+        part.forcedHome = home
+    end
     if type(profiles[home]) ~= "table" then part.blocked = "previous-gone" return part end
     local payload, placed, notes = BuildPayload(E, composed, home, ctx.dev, ctx.geometry, ctx.attach)
     if not payload then part.blocked = placed return part end
@@ -1309,7 +1320,7 @@ function A.Plan(composed, ctx)
     else
         -- Nothing to import: the install's profile is in use, every field reads as planned, and it was made from these
         -- same inputs (for a developer base, from the same profile name; that profile's later edits are not compared).
-        part.nothing = part.changes == 0 and modules == 0 and ctx.lastInputs == part.inputs
+        part.nothing = part.changes == 0 and modules == 0 and ctx.lastInputs == part.inputs and not ctx.force
     end
     if not part.nothing and part.changes == 0 then
         part.changes = 1

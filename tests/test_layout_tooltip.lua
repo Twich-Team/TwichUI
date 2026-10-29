@@ -77,7 +77,7 @@ do
   u = resolved.adapters.ellesmereui.units
   Check(u[CURSOR_U] == false and Same(u[FIXED_U], { point = "CENTER", relPoint = "CENTER", x = 900.83, y = -496.67 }), "    the defaults: the author's tooltip place, not following the mouse")
   Check(u[CLASS_U] == true and u[SHOW_U] == true, "    and Class colors: EllesmereUI manages them, with class colours")
-  Check(PKG.format == 5 and L0.FORMAT == 5, "    the package is format 5")
+  Check(PKG.format == 5 and L0.FORMAT == 6, "    the package is format 5 (its presets are the older kind; this TwichUI reads format 6)")
   -- an older reader (format 4) refuses the fragment instead of misreading it
   local old = Copy(PKG); old.format = 4
   local okOld, problems = L0.Validate(old)

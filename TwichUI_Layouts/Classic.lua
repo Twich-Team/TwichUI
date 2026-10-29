@@ -1,4 +1,4 @@
--- TwichUI Layouts: the Adventure package, with its two layouts, Classic Adventure and Compact Adventure (format 3)
+-- TwichUI Layouts: the Adventure package, with its two layouts, Classic Adventure and Compact Adventure
 -- (The file keeps its Phase 3 name; the package, `twichui-adventure`, has held both layouts since Phase 5.)
 -- The data is the author's own, captured by tools/layout_capture.lua: Classic into ClassicData.lua (LY.CLASSIC_CAPTURE,
 -- docs/layouts/capture-classic-adventure.md) and Compact into CompactData.lua (LY.COMPACT_CAPTURE,
@@ -10,9 +10,11 @@
 -- HUD pieces sit. Each variant: the modules and layout links that differ. Promoting a setting from a variant to the
 -- base, or demoting one, is moving the module between the two tables below; nothing else changes.
 --
--- Choices (what the wizard asks; docs/layouts/wizard.md): a TwichUI helpers preset (only turns switches on), the accent
--- colour (EllesmereUI's `euiAccent`, nothing else of its look) and the size (the geometry's density). Each names
--- exactly what it writes; the package checks refuse anything else.
+-- Choices (what the wizard asks; docs/layouts/wizard.md): the TwichUI helper presets, the accent colour (EllesmereUI's
+-- `euiAccent`, nothing else of its look), tooltip placement, friendly player nameplates and the size (the geometry's density).
+-- They are data in ChoicesData.lua (LY.ADVENTURE_CHOICES), written from a package the author published in game; each names
+-- exactly what it writes, and the package checks refuse anything else. The accent's "Aged gold" option holds its own colour
+-- there: a profile recapture that changes the look's accent doesn't change that option (check_bundled_layout.lua says so).
 --
 -- Geometry. The author made this on a 3440 × 1440 screen at UI scale 0.64: UIParent is 2866.67 × 1200 units (the
 -- canvas), which the stored positions confirm (the minimap's and the meter's links to the right edge both give it).
@@ -65,10 +67,18 @@ end
 
 LY.CLASSIC_VARIANT = "classic-adventure"
 LY.COMPACT_VARIANT = "compact-adventure"
+-- The lowest package format the choices need: 6 for editable TwichUI presets (a preset's mode, retired ids, a "keep" option),
+-- else 5 (the tooltip and friendly-plate choices). An older TwichUI then refuses the package as newer instead of misreading it.
+local function ChoicesFormat(choices)
+    for _, ch in ipairs(choices or {}) do
+        if ch.mode ~= nil or ch.retired ~= nil then return 6 end
+        for _, o in ipairs(ch.options or {}) do if o.keep ~= nil then return 6 end end
+    end
+    return 5
+end
+
 LY.CLASSIC_PACKAGE = {
-    -- format 4 only when the capture holds a reset (tools/layout_capture.lua --returned reset): an older TwichUI then refuses
-    -- the package as newer instead of misreading it; without one the package stays readable by format 3
-    format = 5, id = "twichui-adventure", revision = 4,
+    format = ChoicesFormat(LY.ADVENTURE_CHOICES), id = "twichui-adventure", revision = 4,
     -- a developer package until it has been installed and checked on WoW: Forever (Phase 7): the capture is from the
     -- Retail client's saved files, and a developer package may be tried on Retail (architecture.md §3)
     dev = true,
@@ -87,65 +97,10 @@ LY.CLASSIC_PACKAGE = {
             ["compact-adventure"] = { ellesmereui = { modules = EK.modules, layout = EK.layout } },
         },
     },
-    choices = {
-        { id = "helpers", kind = "preset", label = "TwichUI helpers", default = "as-is",
-            hint = "Which of TwichUI's own features the setup turns on. It only turns things on, never off. None of them shares anything, plays a sound or acts for you.",
-            options = {
-                { id = "as-is", label = "Leave them as they are",
-                    hint = "No TwichUI feature is turned on or off. The layout still styles and places the ones you already use." },
-                { id = "on-screen", label = "On-screen helpers",
-                    hint = "Turns on the class resource bars, the marker bar and the food and drink buttons, in the places the layout leaves for them.",
-                    twichui = { groups = { classBars = { modules = { classBars = true } }, markerBar = { modules = { markersBar = true } },
-                        food = { modules = { foodDrink = true } } } } },
-                { id = "finding-my-way", label = "Helpers and navigation",
-                    hint = "The same, and Navigation: a walking arrow to a place you pick. Its map data loads the first time you ask for a route.",
-                    twichui = { groups = { classBars = { modules = { classBars = true } }, markerBar = { modules = { markersBar = true } },
-                        food = { modules = { foodDrink = true } }, navigation = { modules = { navigation = true } } } } },
-            } },
-        { id = "accent", kind = "enum", label = "Accent colour", default = "gold", sets = { "ellesmereui:root.euiAccent" },
-            hint = "The colour EllesmereUI uses for highlights. Nothing else is recoloured.",
-            options = {
-                { id = "gold", label = "Aged gold", hint = "The layout's own.", swatch = { C.ellesmereui.root.euiAccent.custom.r, C.ellesmereui.root.euiAccent.custom.g, C.ellesmereui.root.euiAccent.custom.b },
-                    ellesmereui = { root = { euiAccent = C.ellesmereui.root.euiAccent } } },
-                { id = "class", label = "Your class colour", hint = "Follows the character you play.",
-                    ellesmereui = { root = { euiAccent = { useClass = true } } } },
-                { id = "verdigris", label = "Verdigris", swatch = { 0.36, 0.58, 0.57 },
-                    ellesmereui = { root = { euiAccent = { useClass = false, custom = { r = 0.36, g = 0.58, b = 0.57 } } } } },
-                { id = "ember", label = "Ember", swatch = { 0.80, 0.45, 0.30 },
-                    ellesmereui = { root = { euiAccent = { useClass = false, custom = { r = 0.80, g = 0.45, b = 0.30 } } } } },
-                { id = "dusk", label = "Dusk blue", swatch = { 0.47, 0.60, 0.80 },
-                    ellesmereui = { root = { euiAccent = { useClass = false, custom = { r = 0.47, g = 0.60, b = 0.80 } } } } },
-            } },
-        -- The author's own: tooltipAnchorCursor = false and tooltipFixedPos = (900.83, -496.67) on the 2866.67 x 1200 canvas, the same in every
-        -- one of the saved profiles read (the capture leaves profile.tooltipFixedPos out because the import can't carry it).
-        { id = "tooltip", kind = "enum", label = "Tooltip placement", default = "layout",
-            sets = { "ellesmereui:tooltip.cursor", "ellesmereui:tooltip.fixedPos" },
-            hint = "Where the game's default tooltips appear. Follow mouse is an EllesmereUI setting shared by every character on this account.",
-            options = {
-                { id = "layout", label = "Layout position", hint = "Show tooltips at this layout's configured location.",
-                    ellesmereui = { tooltip = { cursor = false, fixed = { x = 900.83, y = -496.67 } } } },
-                { id = "cursor", label = "Follow mouse", hint = "Keep tooltips near your cursor.",
-                    ellesmereui = { tooltip = { cursor = true } } },
-            } },
-        -- "Class colors" is EllesmereUI managing friendly player nameplates with its class colour (showFriendlyPlayers and classColorFriendly
-        -- on: the layout's own state). "Standard blue" turns EllesmereUI's friendly player nameplates off (EllesmereUI > Nameplates > General >
-        -- "Show EUI Friendly Player Nameplates"), which hands them to Blizzard's own nameplates and their settings; nothing else is written.
-        { id = "friendly-plates", kind = "enum", label = "Friendly player nameplates", default = "class",
-            sets = { "ellesmereui:addons.EllesmereUINameplates.showFriendlyPlayers", "ellesmereui:addons.EllesmereUINameplates.classColorFriendly" },
-            hint = "How friendly players' nameplates look. Enemy plates, friendly NPCs and your other frames are not touched.",
-            options = {
-                { id = "class", label = "Class colors", hint = "Use each friendly player's class color.",
-                    ellesmereui = { fields = { ["nameplates.showFriendlyPlayers"] = true, ["nameplates.classColorFriendly"] = true } } },
-                { id = "blue", label = "Standard blue", hint = "Use the standard blue appearance for friendly players.", swatch = { 0.667, 0.667, 1 },
-                    ellesmereui = { fields = { ["nameplates.showFriendlyPlayers"] = false } } },
-            } },
-        { id = "size", kind = "density", label = "Size", default = "standard",
-            hint = "How large chat, the damage meter and the minimap are drawn, and the text in chat and the meter. Positions follow.",
-            options = {
-                { id = "standard", label = "Standard", hint = "The size the layout was made at.", density = "standard" },
-                { id = "larger", label = "Larger", hint = "About 15 percent bigger where there is room. Nothing is made smaller than is readable.", density = "larger" },
-            } },
-    },
+    -- the wizard's choices (the TwichUI helper presets, the accent, tooltip placement, friendly plates, the size): data in
+    -- ChoicesData.lua, written from a package published in game (tools/update_bundled_layout.sh --from-published) and never by
+    -- the profile recapture, so a recapture keeps the presets the author approved (docs/layouts/presets.md)
+    choices = LY.ADVENTURE_CHOICES,
     geometry = {
         canvas = { w = W, h = H, note = "3440 x 1440 at UI scale 0.64" },
         margin = 0,                         -- the author's minimap sits 2.5 units from the edge: a margin would move it

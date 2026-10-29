@@ -11,7 +11,8 @@
 -- the first layout, and one without a package belongs to the package included with TwichUI; an older TwichUI that saves over
 -- it simply forgets them. Picks and layout are only read for the package they were made for; another package starts from
 -- its own defaults and its own first layout. The resume note belongs to no package.) Reading never writes. What is read is checked narrowly: a
--- pick that isn't an option of its choice goes back to that choice's default and the rest is kept; a variant that isn't
+-- pick that isn't an option of its choice goes back to that choice's default (and is reported, so the wizard can say the option is
+-- gone and ask) and the rest is kept; a variant that isn't
 -- one of the package's goes back to the first; anything that isn't a table is ignored whole. A record from a newer
 -- TwichUI (v above this one) is not understood and not overwritten: the defaults are used and nothing is saved over it.
 
@@ -54,9 +55,11 @@ local function VariantOk(variants, id)
 end
 
 -- The saved layout and picks, checked against the package's variants (ids, the first being the default) and choices.
--- Returns { variant, picks, resume, repaired, newer }.
+-- Returns { variant, picks, resume, repaired, newer, saved, dropped }. dropped = { [choice id] = option id }: a pick of an option
+-- the package no longer offers (an author removed it). The default is used in its place, and the wizard says so and asks the
+-- player to choose (Model.lua): it never quietly applies another option, whatever its name.
 function S.Load(pkg, variants)
-    local out = { variant = variants and variants[1] or nil, picks = S.Defaults(pkg), repaired = false, newer = false, saved = {} }
+    local out = { variant = variants and variants[1] or nil, picks = S.Defaults(pkg), repaired = false, newer = false, saved = {}, dropped = {} }
     local root = Root(false)
     local raw = root and root.wizard
     if raw == nil then return out end
@@ -79,7 +82,11 @@ function S.Load(pkg, variants)
     for _, ch in ipairs(pkg and pkg.choices or {}) do
         local pick = saved[ch.id]
         if pick ~= nil then
-            if OptionOf(ch, pick) then out.picks[ch.id] = pick out.saved[ch.id] = true else out.repaired = true end
+            if OptionOf(ch, pick) then out.picks[ch.id] = pick out.saved[ch.id] = true
+            else
+                out.repaired = true
+                if type(pick) == "string" and #pick <= 64 then out.dropped[ch.id] = pick end
+            end
         end
     end
     for id in pairs(saved) do

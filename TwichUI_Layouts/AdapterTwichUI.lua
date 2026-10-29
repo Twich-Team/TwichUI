@@ -137,6 +137,36 @@ function A.Label(unit)
     return (g and g.label or f.group) .. " > " .. (f.label or TC().Humanize(f.key))
 end
 
+-- A feature switch's name for a sentence ("Class resource bars", "Journey Chronicle: Chronicle bosses"): its group's label when it
+-- is the group's own switch (the group's first field), else the group and the switch. nil for a unit that isn't a switch.
+function A.FeatureLabel(unit)
+    local f = A.FieldOf(unit)
+    if not (f and f.switch) then return nil end
+    local g = TC().Group(f.group)
+    if f.label then return f.label end
+    if g and g.fields[1] == f then return g.label end
+    return (g and (g.label .. ": ") or "") .. TC().Humanize(f.key)
+end
+
+-- What a set of TwichUI units does, in words a review can use: units = { [unit] = value | LY.DEFAULT }.
+-- Returns { on = { feature labels }, off = { feature labels }, set = n (other settings given a value), reset = n (put back to
+-- TwichUI's default), total = n }. Labels sorted; a unit this TwichUI doesn't manage is counted in `unknown`. Read only.
+function A.Summarize(units)
+    local out = { on = {}, off = {}, set = 0, reset = 0, total = 0, unknown = 0 }
+    for unit, v in pairs(units or {}) do
+        out.total = out.total + 1
+        local f = A.FieldOf(unit)
+        if not f then out.unknown = out.unknown + 1
+        elseif v == LY.DEFAULT then out.reset = out.reset + 1
+        elseif f.switch and v == true then out.on[#out.on + 1] = A.FeatureLabel(unit)
+        elseif f.switch and v == false then out.off[#out.off + 1] = A.FeatureLabel(unit)
+        else out.set = out.set + 1 end
+    end
+    table.sort(out.on)
+    table.sort(out.off)
+    return out
+end
+
 function A.Show(v)
     if v == LY.DEFAULT then return "TwichUI's default" end
     if v == true then return "on" elseif v == false then return "off" elseif v == nil then return "(not set)" end
@@ -173,12 +203,12 @@ function A.Normalize(fragment, ctx)
             end
         end
     end
+    -- (a fragment may hold only a reset list: the groups are read when there are some, and the reset list always)
     local groups = fragment.groups
-    if groups == nil then return units, {} end
-    if type(groups) ~= "table" then P.add("not-table", ctx.where .. ".groups") return units, {} end
+    if groups ~= nil and type(groups) ~= "table" then P.add("not-table", ctx.where .. ".groups") return units, {} end
     local fields = A.Fields()
     local plain = {}   -- what TwichConfig's own check sees: every value but REMOVE
-    for gid, slots in pairs(groups) do
+    for gid, slots in pairs(groups or {}) do
         local where = ctx.where .. ".groups." .. tostring(gid)
         local g = type(gid) == "string" and TC().Group(gid)
         if not g then P.add("unknown-group", where)
@@ -331,6 +361,7 @@ function A.Plan(composed, ctx)
     if snap and snap.char ~= PF().Character() then part.blocked = "other-character" return part end
     local current, exists = PF().Current(), PF().Exists(target)
     if exists and not (Ours(snap, target) or ctx.owned) then part.blocked = "target-taken" return part end
+    part.adopted = exists and ctx.force == true and not Ours(snap, target) or nil   -- forced: a profile that was already there
     if current == target then part.action = "none"
     elseif exists then part.action = "switch"
     else part.action = "duplicate" end
@@ -367,7 +398,10 @@ function A.Plan(composed, ctx)
     for i, row in ipairs(part.rows) do
         if i > 1 then
             -- a reset is compared by its effective value: TwichUI's default for that setting
-            n[row.unit] = row.place and PlaceText(row.new) or LY.Value(row.reset and A.FieldOf(row.unit).default or row.new)
+            -- (written out: a default of false must not fall through an `and/or` to the reset marker)
+            if row.place then n[row.unit] = PlaceText(row.new)
+            elseif row.reset then n[row.unit] = LY.Value(A.FieldOf(row.unit).default)
+            else n[row.unit] = LY.Value(row.new) end
         end
     end
     -- An update into the install's own profile: each unit compared with the baseline and what this profile holds now
@@ -628,7 +662,8 @@ function A.Expect(composed, part)
         if not PlaceOf(e.unit) then
             -- a reset is checked by what the feature reads: its default (a value stored again would read differently)
             local f = e.value == LY.DEFAULT and A.FieldOf(e.unit)
-            out[e.unit] = LY.Fingerprint(f and f.default or e.value)
+            if f then out[e.unit] = LY.Fingerprint(f.default)   -- (a default of false is a value, not "no default")
+            else out[e.unit] = LY.Fingerprint(e.value) end
         end
     end
     for _, row in ipairs(part and part.rows or {}) do

@@ -223,6 +223,22 @@ points:
   (applied unless the player changed it, then the usual conflict rules); the new units have no entry in an older baseline and read as
   newly managed.
 
+## TwichUI presets in an update
+
+A preset's settings are ordinary TwichUI units (`presets.md`): compared by value, kept, owned, released and reset like any other,
+snapshotted before the first change, verified after it, part of the baseline, put back by Undo this update and by Restore. What is
+particular to them (`Model.lua` `PlanOpts`, `ReviewPreset`):
+
+| The player | What happens to the preset's settings |
+|---|---|
+| keeps the preset installed, and the package changed it | the usual rules: the package's changes apply where the player didn't change the setting; a setting both changed keeps theirs (keep my customizations) unless they choose the recommended value |
+| picks another preset on purpose | its settings take the preset's values (each is planned as "use recommended" unless the player answered for it), so the preset does what it says; a setting the player owns stays theirs. The review says it is another preset than the one installed, and says plainly when kept or owned settings mean it won't be fully in effect |
+| picks "Leave them as they are" | none of the presets' settings is named: those the earlier preset set are released (they stay as they are); the layout's own looks still apply |
+| had picked a preset the package no longer offers | the wizard names it and waits for a pick; nothing is applied in its place |
+
+A setting only the earlier preset named is **released** by a switch (absence never means reset): it keeps the value it has. An
+author who wants a preset to turn something off says so in that preset (an editable preset can set off, `presets.md`).
+
 ## Unsupported, by design or for now
 
 - Merging inside an EllesmereUI module blob, or any third-party profile. Curated fields beyond the registered positions, text

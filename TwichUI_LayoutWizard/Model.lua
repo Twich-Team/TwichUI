@@ -164,11 +164,21 @@ end
 -- the player's value for each setting of the choice (the update's "keep mine") until they pick for themselves. A choice an earlier
 -- install recorded keeps that pick. Read only.
 local function Seed(s)
-    s.derived = {}
+    s.derived, s.missing = {}, {}
     local pkg = s.layout.pkg
     local j = LY.Journal.Read()
     local m = not (j and j.package == pkg.id) and LY.Journal.ReadManaged() or nil
     local rec = (j and j.package == pkg.id and j) or (m and m.package == pkg.id and m) or nil
+    -- a preset the player picked, or the install recorded, that this package no longer offers: said, and a choice is asked for
+    -- (s.missing), never another option applied in its place (Remembered keeps no pick for it until the player picks)
+    for _, ch in ipairs(pkg.choices or {}) do
+        if ch.kind == "preset" then
+            local gone = s.stored.dropped and s.stored.dropped[ch.id]
+            local was = rec and rec.picks and rec.picks[ch.id]
+            if not gone and was ~= nil and not s.stored.saved[ch.id] and not OptionOf(ch, was) then gone = was end
+            if gone then s.missing[ch.id] = tostring(gone) end
+        end
+    end
     if not rec then return end
     for _, ch in ipairs(pkg.choices or {}) do
         if ch.kind == "enum" and not s.stored.saved[ch.id] then
@@ -187,7 +197,9 @@ end
 -- The picks to remember: the ones the player made (not the ones read from the game).
 local function Remembered()
     local out = {}
-    for k, v in pairs(session.picks) do if not (session.derived and session.derived[k]) then out[k] = v end end
+    for k, v in pairs(session.picks) do
+        if not (session.derived and session.derived[k]) and not (session.missing and session.missing[k]) then out[k] = v end
+    end
     return out
 end
 
@@ -242,7 +254,7 @@ function M.Go(step)
     if step > session.reached then step = session.reached end
     session.step = step
     session.failed = nil
-    if step ~= M.REVIEW then session.plan = nil end   -- the plan holds the payload it would import: kept only while shown
+    if step ~= M.REVIEW then session.plan, session.force = nil, nil end   -- the plan holds the payload it would import: kept only while shown
     return step
 end
 
@@ -253,7 +265,7 @@ function M.Next()
     if session.step >= M.REVIEW then return session.step end   -- the review ends in Apply, not Next
     session.step = session.step + 1
     session.failed = nil
-    if session.step ~= M.REVIEW then session.plan = nil end
+    if session.step ~= M.REVIEW then session.plan, session.force = nil, nil end
     if session.step > session.reached then session.reached = session.step end
     return session.step
 end
@@ -262,7 +274,7 @@ function M.Back()
     if not session then return nil end
     if session.step > 1 then session.step = session.step - 1 end
     session.failed = nil
-    if session.step ~= M.REVIEW then session.plan = nil end
+    if session.step ~= M.REVIEW then session.plan, session.force = nil, nil end
     return session.step
 end
 
@@ -279,7 +291,7 @@ function M.SetLayout(id)
         if l.id == id then
             if session.layout.id == id then return true, false end
             session.layout = l
-            session.plan, session.pv, session.failed, session.update = nil, nil, nil, nil
+            session.plan, session.pv, session.failed, session.update, session.force = nil, nil, nil, nil, nil
             S.Save(l.pkg, Remembered(), nil, l.variant)
             return true, true
         end
@@ -389,6 +401,14 @@ end
 function M.Pick(id) return session and session.picks[id] end
 -- Whether a pick is what the game has now (a choice added after the player set up, not yet picked by them), not their own choice.
 function M.Derived(id) return session ~= nil and session.derived ~= nil and session.derived[id] == true end
+-- The id of the preset the player picked (or the install recorded) that this package no longer offers, while they haven't picked
+-- another: the Helpers step says so and Next and Apply wait for a pick. nil otherwise.
+function M.Missing(id) return session and session.missing and session.missing[id] or nil end
+function M.MissingAny()
+    for _, ch in ipairs(session and session.layout.pkg.choices or {}) do
+        if session.missing and session.missing[ch.id] then return ch.id, session.missing[ch.id] end
+    end
+end
 function M.PickedOption(id)
     local ch = session and ChoiceOf(session.layout.pkg, id)
     return ch and OptionOf(ch, session.picks[id]) or nil, ch
@@ -401,8 +421,9 @@ function M.SetPick(choiceId, optionId)
     local ch = ChoiceOf(session.layout.pkg, choiceId)
     if not ch then return false, "unknown-choice" end
     if not OptionOf(ch, optionId) then return false, "unknown-option" end
-    local was = session.derived and session.derived[choiceId]
+    local was = (session.derived and session.derived[choiceId]) or (session.missing and session.missing[choiceId])
     if session.derived then session.derived[choiceId] = nil end   -- picked by the player now: theirs, and remembered
+    if session.missing then session.missing[choiceId] = nil end
     if session.picks[choiceId] == optionId and not was then return true, false end
     session.picks[choiceId] = optionId
     session.plan, session.pv, session.failed = nil, nil, nil
@@ -420,7 +441,7 @@ end
 function M.ResetPicks()
     if not session then return end
     session.picks = S.Defaults(session.layout.pkg)
-    session.derived = {}   -- the layout's own, asked for
+    session.derived, session.missing = {}, {}   -- the layout's own, asked for
     session.plan, session.pv = nil, nil
     S.Save(session.layout.pkg, Remembered(), nil, session.layout.variant)
 end
@@ -439,6 +460,64 @@ function M.PlatesMode()
     local b = Blob(pkg.layers and pkg.layers.variants and pkg.layers.variants[variant]) or Blob(pkg.layers and pkg.layers.base)
     if not b then return nil end
     return { nameOnly = b.friendlyNameOnly ~= false }
+end
+
+---------------------------------------------------------------------------
+-- TwichUI helper presets: what an option sets, read from the package (the TwichUI adapter's own reading of a fragment)
+---------------------------------------------------------------------------
+local unitsCache = setmetatable({}, { __mode = "k" })   -- option table -> its units (the package's tables never change)
+
+-- { [unit] = value | LY.DEFAULT } an option of a preset choice sets (nothing for "leave them as they are"). Read only.
+function M.PresetUnits(choiceId, optionId)
+    local ch = session and ChoiceOf(session.layout.pkg, choiceId)
+    local o = ch and OptionOf(ch, optionId)
+    if not o then return {} end
+    if unitsCache[o] then return unitsCache[o] end
+    local units = {}
+    if type(o.twichui) == "table" then
+        local ctx = { problems = LY.Problems(), where = "preset", format = session.layout.pkg.format, layer = "preset",
+            settings = ch.mode == "settings" or nil }
+        units = LY.TwichUIAdapter.Normalize(o.twichui, ctx) or {}
+    end
+    unitsCache[o] = units
+    return units
+end
+
+-- What a preset option does, for its card and the review: { keep, units, summary = TwichUIAdapter.Summarize, n }.
+function M.PresetSummary(choiceId, optionId)
+    local ch = session and ChoiceOf(session.layout.pkg, choiceId)
+    local o = ch and OptionOf(ch, optionId)
+    if not o then return nil end
+    local units = M.PresetUnits(choiceId, optionId)
+    local n = 0
+    for _ in pairs(units) do n = n + 1 end
+    return { keep = o.keep == true or n == 0, units = units, n = n, summary = LY.TwichUIAdapter.Summarize(units) }
+end
+
+-- Every setting any option of the preset choice manages: { [unit] = true }, and how many of them the layout's own layers (base or
+-- this layout) also set: those apply whichever option is picked, "leave them as they are" included.
+function M.PresetCoverage(choiceId)
+    local ch = session and ChoiceOf(session.layout.pkg, choiceId)
+    local cover, n = {}, 0
+    for _, o in ipairs(ch and ch.options or {}) do
+        for unit in pairs(M.PresetUnits(choiceId, o.id)) do if not cover[unit] then cover[unit] = true n = n + 1 end end
+    end
+    local pkg = session and session.layout.pkg
+    local layered = 0
+    local function Layer(frag)
+        if not (frag and frag.twichui) then return {} end
+        if unitsCache[frag.twichui] then return unitsCache[frag.twichui] end   -- the layer's own reading, once per package table
+        local ctx = { problems = LY.Problems(), where = "layer", format = pkg.format, layer = "base" }
+        local units = LY.TwichUIAdapter.Normalize(frag.twichui, ctx) or {}
+        unitsCache[frag.twichui] = units
+        return units
+    end
+    if n > 0 and pkg then
+        local base = Layer(pkg.layers.base)
+        local own = Layer(pkg.layers.variants[session.layout.variant])
+        for unit in pairs(cover) do if base[unit] ~= nil or own[unit] ~= nil then layered = layered + 1 end end
+    end
+    return cover, n, layered
 end
 
 -- The density the picks give (the size choice), or "standard".
@@ -668,7 +747,7 @@ function M.Compat()
     elseif why == "newer" then
         Add("record", "A previous install", "block", Explain("journal-newer"))
     elseif j then
-        if j.char ~= Me() then Add("record", "A previous install", "block", Explain("journal-other-character"))
+        if j.char ~= Me() then Add("record", "A previous install", "warn", Explain("journal-other-character") .. " Force re-apply, on the review, can set it aside.", { go = M.RESULT })
         else Add("record", "A previous install", "info", "An install made earlier is recorded (" .. j.state .. "). Its result, and Restore, are on the last step.", { go = M.RESULT }) end
     end
 
@@ -685,6 +764,8 @@ function M.CanContinue()
         local _, ok = M.Compat()
         return ok
     end
+    -- a preset that is no longer offered: the player chooses one before going on (never another applied in its place)
+    if session.step == M.HELPERS and M.MissingAny() then return false, "choose-preset" end
     return session.step < M.REVIEW
 end
 
@@ -828,7 +909,7 @@ local function PlanSignature()
         ids[#ids + 1] = ch.id .. "=" .. tostring(session.picks[ch.id]) .. (session.derived and session.derived[ch.id] and "~" or "")
     end
     return table.concat(ids, ",") .. "|" .. (screen and ("%.2f,%.2f"):format(screen.w, screen.h) or "?")
-        .. "|" .. (session.update and session.update.gen or 0)
+        .. "|" .. (session.update and session.update.gen or 0) .. (session.force and "|force" or "")
 end
 
 -- How an update treats what the player changed since the last install (updates.md): the engine's opts.update. Kept for the
@@ -862,10 +943,15 @@ local function PlanOpts()
             local was = rec.picks[ch.id]
             if ch.kind == "enum" and was ~= nil and not (session.derived and session.derived[ch.id]) and session.picks[ch.id] ~= was then
                 for _, unit in ipairs(ch.sets or {}) do if choose[unit] == nil then choose[unit] = "package" end end
+            elseif ch.kind == "preset" and was ~= nil and session.picks[ch.id] ~= was then
+                -- another preset than the one installed, picked on purpose: its settings take the preset's values, so it does what it
+                -- says (the review still offers "keep mine" for each, and says when a kept one stops it being fully in effect).
+                -- The same preset as installed, updated by the package, follows the update's own rules instead.
+                for unit in pairs(M.PresetUnits(ch.id, session.picks[ch.id])) do if choose[unit] == nil then choose[unit] = "package" end end
             end
         end
     end
-    return { picks = session.picks, update = { policy = u.policy, choose = choose, groups = u.groups, whole = u.whole } }
+    return { picks = session.picks, force = session.force or nil, update = { policy = u.policy, choose = choose, groups = u.groups, whole = u.whole } }
 end
 
 function M.Plan(force)
@@ -877,6 +963,76 @@ function M.Plan(force)
     local plan = LY.Plan(layout.pkg, layout.variant, PlanOpts())
     session.plan = { sig = PlanSignature(), plan = plan }
     return plan
+end
+
+---------------------------------------------------------------------------
+-- Force re-apply: for an account an earlier install left stuck (a failed or stopped install, a restore that never finished, a
+-- record that can't be read, a profile with the install's name that no record claims). It only changes how the plan is made
+-- (LY.Plan opts.force), so the review shows exactly what it does, and Apply still asks. Nothing in the game changes here.
+---------------------------------------------------------------------------
+-- What a forced plan can lift; anything else that blocks stays (EllesmereUI missing, another character's record, ...).
+local FORCEABLE = LY.Set({ "journal-damaged", "journal-other-package", "journal-other-character", "other-character", "previous-gone", "restore-pending", "undo-pending", "restore-unfinished",
+    "undo-unfinished", "target-taken" })
+
+-- Whether the Review step offers it: true, on (on: already forcing, so the button stops it) | false. Offered when an earlier
+-- install is recorded, or when a reason that blocks Apply is something it can lift.
+function M.CanForce()
+    if not session or session.step ~= M.REVIEW then return false end
+    if session.force then return true, true end
+    if InCombat() then return false end
+    local plan = M.Plan()
+    if plan.problems then return false end
+    if #plan.blocked == 0 then return plan.mode == "again", false end
+    -- Offered when any reason is one it can lift or an earlier install is recorded; if something else still blocks, the forced
+    -- review lists it (and Stop forcing is there), rather than leaving the player without the way out
+    for _, b in ipairs(plan.blocked) do if FORCEABLE[b.code] then return true, false end end
+    return LY.Journal.Exists() or LY.Journal.ReadManaged() ~= nil, false
+end
+
+-- Turns it on or off for the review in front of the player; the plan is worked out again. Returns true | false, code.
+function M.SetForce(on)
+    if not session then return false, "closed" end
+    on = on == true
+    if on and not M.CanForce() then return false, "not-forceable" end
+    if (session.force or false) ~= on then
+        session.force = on or nil
+        session.plan, session.failed = nil, nil
+    end
+    return true
+end
+
+function M.Forced() return session ~= nil and session.force == true end
+
+local REPLACED = { damaged = "one that can't be read", managed = "TwichUI's record of the installed layout" }
+
+-- The sentences a forced plan owes the player (review and confirmation), or nil.
+local function ForcedLines(plan)
+    local f = plan.forced
+    if not f then return nil end
+    local out = { "Forced re-apply: TwichUI sets aside what an earlier install left and applies this layout as a new install." }
+    if f.otherCharacter then
+        out[#out + 1] = "The earlier install was made on another character. Its record, and the way back to before it, are replaced: that character can no longer Restore it from TwichUI. Its profiles are not deleted."
+    end
+    if f.replaced then
+        out[#out + 1] = ("The record of the earlier install (%s) is replaced by this one's. Restore will go back to how things are when you press Apply, not to before the earlier install."):format(
+            REPLACED[f.replaced] or ("it was " .. tostring(f.replaced)))
+    end
+    for _, id in ipairs(plan.order) do
+        local part = plan.parts[id]
+        if part.adopted then
+            if id == "twichui" then
+                out[#out + 1] = ("TwichUI: a profile named %s already exists and isn't recorded as this install's. It is taken over: the layout's settings are written into it, and its other settings stay."):format(QuoteText(part.target))
+            else
+                out[#out + 1] = ("EllesmereUI: a profile named %s already exists and isn't recorded as this install's. It is replaced by the layout's profile; what it holds now is not kept."):format(QuoteText(part.target))
+            end
+        end
+    end
+    local eui = plan.parts.ellesmereui
+    if eui and eui.forcedHome then
+        out[#out + 1] = ("EllesmereUI: its profile %s is in use and nothing records what came before it, so it switches to %s first, and Restore goes back to that."):format(QuoteText(eui.target), QuoteText(eui.forcedHome))
+    end
+    out[#out + 1] = "EllesmereUI's profile is made again even if it already matches. Profiles other than the install's own are not touched."
+    return out
 end
 
 ---------------------------------------------------------------------------
@@ -1060,6 +1216,7 @@ end
 function M.CanApply()
     if not session then return false, "closed" end
     if InCombat() then return false, "combat" end
+    if M.MissingAny() then return false, "choose-preset" end
     local plan = M.Plan()
     if plan.problems then return false, "invalid" end
     if not plan.ok then return false, "blocked", plan.blocked[1] end
@@ -1071,6 +1228,7 @@ end
 
 function M.ApplyReason(code, blocked)
     if code == "combat" then return "Not during combat. Apply is available again when combat ends." end
+    if code == "choose-preset" then return "The helper preset you chose before is no longer offered. Choose one on the Helpers step." end
     if code == "invalid" then return "The layout package can't be used. TwichUI Diagnostics has the details." end
     if code == "blocked" then return Explain(blocked and blocked.code or "blocked") end
     if code == "nothing" then return Explain("nothing") end
@@ -1144,6 +1302,55 @@ function M.ReviewPersonal(e, sec, plan)
     return cur or fix or cls or show
 end
 
+-- The helper preset's part of the TwichUI section: which preset, whether it is the one installed (an update to it follows the update's
+-- rules) or one the player chose instead (its settings take the preset's values), what it leaves alone, and, plainly, when settings
+-- the player keeps stop it being fully in effect. Plain words from the plan's rows and the package; nothing is read from the game.
+function M.ReviewPreset(sec, out, plan)
+    local ch
+    for _, c in ipairs(session.layout.pkg.choices or {}) do if c.kind == "preset" then ch = c break end end
+    if not ch then return end
+    local pick = session.picks[ch.id]
+    local o = OptionOf(ch, pick)
+    if not o then return end
+    local lines = sec.lines
+    local pre = out.preset or { kept = {}, off = {}, same = 0 }
+    local installed = plan.journal or plan.managed
+    local was = installed and installed.picks and installed.picks[ch.id]
+    local sum = M.PresetSummary(ch.id, pick)
+    local cover, covered, layered = M.PresetCoverage(ch.id)
+    local switched = was ~= nil and was ~= pick
+    local head = ("%s: %s."):format(ch.label or "TwichUI helpers", Quote(o.label))
+    if switched then
+        local wo = OptionOf(ch, was)
+        head = head .. (" You chose it instead of %s, which is installed now: its settings take the preset's values, unless you keep yours below."):format(wo and Quote(wo.label) or "an option this package no longer offers")
+    elseif was ~= nil and plan.update then
+        head = head .. " The same preset as installed: what this revision changes in it follows the update's rules (your own changes are kept unless you choose otherwise)."
+    end
+    lines[#lines + 1] = head
+    if sum and sum.keep then
+        lines[#lines + 1] = covered > 0 and ("It changes none of the %d %s the helper presets manage."):format(covered, Plural(covered, "setting", "settings"))
+            or "It changes none of TwichUI's features."
+    else
+        local left = 0
+        for unit in pairs(cover) do if not (sum and sum.units[unit] ~= nil) then left = left + 1 end end
+        if pre.same > 0 then lines[#lines + 1] = ("%d of its settings %s already as it sets %s."):format(pre.same, Plural(pre.same, "is", "are"), Plural(pre.same, "it", "them")) end
+        if left > 0 then lines[#lines + 1] = ("Left alone: %d %s only other presets manage."):format(left, Plural(left, "setting", "settings")) end
+    end
+    if #pre.kept > 0 then
+        local shown = {}
+        for i = 1, math.min(#pre.kept, 4) do shown[i] = pre.kept[i] end
+        lines[#lines + 1] = ("%d of its %s as you have %s (kept or yours): %s%s."):format(#pre.kept, Plural(#pre.kept, "settings stays", "settings stay"),
+            Plural(#pre.kept, "it", "them"), table.concat(shown, ", "), #pre.kept > 4 and ", ..." or "")
+        if switched then
+            lines[#lines + 1] = ("So %s won't be fully in effect. Use the recommended value for those settings under Updating if you want all of it."):format(Quote(o.label))
+            out.presetPartial = true
+        end
+    end
+    if layered > 0 then
+        lines[#lines + 1] = ("The layout's own TwichUI looks also set %d of the settings the presets manage: whichever option you pick, those take the layout's value unless the picked preset sets them."):format(layered)
+    end
+end
+
 -- Returns the review: { ok, blocked = { text }, problems, picks = { { choice, option } }, twichui, ellesmereui (each a
 -- section { title, when, lines }), helpers = { labels turned on }, preserved, notes, fit = { fits, lines }, reload,
 -- changes, mode, key }.
@@ -1186,6 +1393,8 @@ function M.Review()
         end
     end
     out.update = M.UpdateReview(plan)
+    out.forced = ForcedLines(plan)
+    for i, l in ipairs(out.forced or {}) do table.insert(out.notes, i, l) end
 
     -- TwichUI
     local t = plan.parts.twichui
@@ -1201,22 +1410,38 @@ function M.Review()
                 sec.lines[#sec.lines + 1] = ("The install's own profile %s is updated."):format(Quote(t.target))
             end
             local looks, places, on = 0, 0, {}
+            local pre = { off = {}, set = 0, reset = 0, kept = {}, same = 0 }
+            local TA = LY.TwichUIAdapter
             for i, row in ipairs(t.rows) do
-                if i > 1 and row.change then
-                    if row.place then places = places + 1
-                    elseif row.unit:find("^twichui:modules%.") and row.new == true and row.layer == "preset" then
-                        on[row.unit:match("^twichui:modules%.(.+)$")] = row.label
-                    else looks = looks + 1 end
+                if i > 1 and row.layer == "preset" and not row.place then
+                    -- the helper preset's own settings: what it turns on, off, changes, resets, finds already so, and leaves as the
+                    -- player has it (kept or theirs)
+                    local f = TA.FieldOf(row.unit)
+                    local key = row.unit:match("^twichui:modules%.(.+)$")
+                    if row.kept then pre.kept[#pre.kept + 1] = TA.FeatureLabel(row.unit) or row.label
+                    elseif not row.change then pre.same = pre.same + 1
+                    elseif row.reset then pre.reset = pre.reset + 1
+                    elseif f and f.switch and row.new == true then on[key] = TA.FeatureLabel(row.unit) or row.label
+                    elseif f and f.switch and row.new == false then pre.off[#pre.off + 1] = HELPER[key] or TA.FeatureLabel(row.unit) or row.label
+                    else pre.set = pre.set + 1 end
+                elseif i > 1 and row.change then
+                    if row.place then places = places + 1 else looks = looks + 1 end
                 end
             end
             for _, key in ipairs(HELPER_ORDER) do
                 if on[key] then out.helpers[#out.helpers + 1] = HELPER[key] on[key] = nil end
             end
             for _, key in ipairs(LY.SortedKeys(on)) do out.helpers[#out.helpers + 1] = HELPER[key] or on[key] end
+            table.sort(pre.off)
+            out.preset = pre
             if looks > 0 then sec.lines[#sec.lines + 1] = ("%d TwichUI %s set in the copy: looks and how a few features behave."):format(looks, Plural(looks, "setting is", "settings are")) end
             if #out.helpers > 0 then sec.lines[#sec.lines + 1] = "Turned on: " .. table.concat(out.helpers, ", ") .. "." end
+            if #pre.off > 0 then sec.lines[#sec.lines + 1] = "Turned off: " .. table.concat(pre.off, ", ") .. "." end
+            if pre.set > 0 then sec.lines[#sec.lines + 1] = ("%d other %s of the helper preset changed."):format(pre.set, Plural(pre.set, "setting", "settings")) end
+            if pre.reset > 0 then sec.lines[#sec.lines + 1] = ("%d %s back to TwichUI's default."):format(pre.reset, Plural(pre.reset, "setting goes", "settings go")) end
             if places > 0 then sec.lines[#sec.lines + 1] = ("%d on-screen %s placed for your screen."):format(places, Plural(places, "piece is", "pieces are")) end
         end
+        M.ReviewPreset(sec, out, plan)
         for _, n in ipairs(t.notes or {}) do
             local label = LY.TwichUIAdapter.PLACES[n.id] and LY.TwichUIAdapter.PLACES[n.id].label or n.id
             out.notes[#out.notes + 1] = label .. " isn't placed."
@@ -1295,6 +1520,10 @@ function M.ConfirmText()
         lines[#lines + 1] = ""
         lines[#lines + 1] = r.switching
     end
+    if r.forced then
+        lines[#lines + 1] = ""
+        for _, l in ipairs(r.forced) do lines[#lines + 1] = l end
+    end
     if r.update then
         lines[#lines + 1] = ""
         lines[#lines + 1] = "Updating (" .. (r.update.mode == "recommended" and "the recommended configuration" or "keeping your changes") .. "):"
@@ -1342,6 +1571,7 @@ function M.Apply(expect)
         session.failed = { code = result }
         return false, result, extra
     end
+    session.force = nil
     session.failed = nil
     session.result = result
     session.restored = false

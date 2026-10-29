@@ -24,6 +24,7 @@ that addon, which loads on demand anyway. Closing it drops the session. Publishe
 | 1. Start from | The package to build on: the one included with TwichUI, or one this player published earlier. The layout being edited (Classic or Compact Adventure) | |
 | 2. Capture | Reads one EllesmereUI profile and one TwichUI profile, named by the author (the ones in use to start with). The kept parts are decided by `LY.Capture.Read`, the same function the offline tool `tools/layout_capture.lua` now calls | Write, switch, rename or reset any profile. Capture a feature's on/off switch, a per-character record, custom colours, spec overrides or anything the adapters do not manage. Keep anything if a character's name, GUID, link or BattleTag is found in it (counts only are kept) |
 | 3. Review the changes | A structured diff against the starting package: each setting that was **changed**, **added**, **removed** (named by the layout and absent from the profile), or **back at TwichUI's default** (a TwichUI setting the layout sets that the profile leaves at the default), with its old and new value in words (a position or a word, or "N values differ" for a whole module). Each change can be left out and can be kept **in this layout only** or **shared** (promoted to the base). Under each included change the window says what each choice does to **every layout** of the package: "Compact Adventure: unchanged (it has its own value)" or "gets the new value (it uses the shared value)" | Share by default (a change starts in this layout only). Include a removal, or a setting back at the default, by default: the author decides what players who have the layout get (**Reset to default**, package format 4: they go back to TwichUI's default unless they changed it; or **Stop managing**: they keep what they have). Offer a setting a wizard choice sets (the accent colour; tooltip placement and friendly plates are the bundled package's own). Let a layout stop naming something only the base names |
+| 3b. TwichUI presets | The package's helper presets as a draft of their own (`presets.md`): capture a profile's settings into a preset (its scope kept), create, duplicate, rename, describe, reorder, make default, remove (its id retired), choose what each manages; a pending edit reaches the draft only through Save to draft | Write, switch or rename a profile. Name a place, another addon's setting, anything in `TwichConfig.LOCAL`, an account-wide setting or a list. Reuse a removed option's id |
 | 4. Check | Builds the draft from the included changes and checks it the way a recipient's TwichUI will: the package (`Pub.Strict`), both layouts resolved for the package's own canvas and this screen, the media it points at, the personal-data scan, the revision. A path into another addon's folder is offered TwichUI's own copy when TwichUI bundles that file (the included package points at the author's private `MyFonts` folder, so this is the first thing it finds) | Publish anything |
 | 5. Release | The package id (a new id is a new package, revision 1), title, revision (higher than the starting one and than any already published), an optional label and release notes | Put the author's character name in the package |
 | 6. Publish | A confirmation, then the immutable snapshot (see below), kept in the published list | Send anything, write any profile |
@@ -159,9 +160,9 @@ they say is the game's word, and TwichUI says so in the review.
 
 | Not built | Why |
 |---|---|
-| Text export / import of a published package | No file or clipboard access can be assumed, and a paste import would be a second way in. The immutable snapshot in the published list is what "export" means here. Decision for the author: add it through the existing large-paste capture if wanted |
+| Text import of a published package in game | A paste import would be a second way in. **Export** is built for bundling only: "Export for bundling" shows a published entry's own bytes as text to copy out (`Author.ExportText`), and the developer tool imports it (`presets.md`); nothing in game reads that text back |
 | Retained overrides and updates | Built in Phase 7 (`updates.md`): a received package with a higher revision is an update that keeps the recipient's changes |
-| Editing choices, geometry or the package's own text in the workspace | The workspace moves captured settings between layers. Choices and layout rules stay what the bundled package says; a person who changes them edits the source |
+| Editing geometry, the other choices or the package's own text in the workspace | The workspace moves captured settings between layers and edits the TwichUI presets (`presets.md`). The other choices (accent, tooltip, plates, size) and the layout rules stay what the package says |
 | Capturing settings that sit in a module's `fields` or a wizard choice | Not capturable (`Capture.Locate`); the accent colour is shown as "set by a choice" |
 | Three-way merging, silent updates, remote control, dependency installation, executable adapters | Out of scope, as asked |
 
@@ -179,7 +180,9 @@ setting decided differently). Nothing makes them one artifact; what exists (RH-1
   which units; the metadata differences are listed apart.
 - `/tui layout compare [published|received] [n]`: a stored package against the included one. Read only (`layouts.publish.compare`).
 
-A unified workflow (publishing in game as the bundled data, or recapturing from a publication) is deferred.
+Publishing in game as the bundled data is built: `tools/update_bundled_layout.sh --from-published` imports a published package
+into the repository and checks the round trip (`presets.md`, `architecture.md` §10). The profile recapture stays the other,
+separate way in, and never writes the choices.
 
 ## Tests
 

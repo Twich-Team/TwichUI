@@ -16,7 +16,7 @@ There are two ways to give a layout to other players. They don't affect each oth
 
 | | Ship it in the addon (this page) | Send it from the game |
 |---|---|---|
-| How | `tools/update_bundled_layout.sh`, then a release | `/tui layout author`: Capture, Publish, Send (`publishing.md`) |
+| How | `tools/update_bundled_layout.sh` (a profile recapture), or `tools/update_bundled_layout.sh --from-published` (what you published in game, exactly: `presets.md`), then a release | `/tui layout author`: Capture, Publish, Send (`publishing.md`) |
 | Who gets it | Everyone who installs or updates TwichUI | Only the players you send it to, after they accept |
 | Where it ends up | `TwichUI_Layouts/ClassicData.lua` and `CompactData.lua` in the repository | Your saved settings, and theirs |
 | Good for | The real release | Trying a change with a friend first |
@@ -200,7 +200,10 @@ positions only after the rest passes, and only for what you moved on purpose.
   and the setup tells players so. Removing it is a separate decision (D20 in `implementation-status.md`).
 - **Compact shares Classic's TwichUI settings.** To give Compact TwichUI places of its own, it needs its own TwichUI profile
   and a change to how the package is put together (`wizard.md`, "Phase 6 handoff").
-- **Choices stay as they are.** The wizard's choices (helpers, accent colours, size) and the screen rules are written in
-  `Classic.lua`, not captured. Changing those is an edit to that file.
+- **Choices stay as they are.** The wizard's choices (the TwichUI helper presets, accent colours, tooltip, plates, size) are data in
+  `TwichUI_Layouts/ChoicesData.lua`. This recapture never writes that file, so presets approved in game and imported
+  (`--from-published`, `presets.md`) are kept by every later recapture. The accent's "Aged gold" option holds its own colour there: a
+  recapture that changes the look's accent doesn't change it (the check prints a note). The screen rules, targets and requirements
+  are written in `Classic.lua` by hand.
 - **Running the capture by hand** works too: the header of `tools/layout_capture.lua` has the commands. The script only adds
   copying the saved files, the font fix, the revision and the test run around them.

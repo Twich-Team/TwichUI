@@ -9,7 +9,11 @@
 -- drops the session: the capture and the changes. The published packages are kept (Store.lua), and nothing is sent unless the
 -- Send button is pressed and the question it asks is answered.
 --
---   AuthorWindow.Open(), Close(), Toggle(), IsShown(), Refresh()
+-- The TwichUI presets section edits the package's helper presets (AuthorPresets.lua): a draft of their own, with a pending edit
+-- that reaches the draft only through Save to draft. Closing with preset work that isn't saved or published asks first (the Close
+-- button), or keeps the session until the reload (Escape): nothing the author made is dropped without being asked.
+--
+--   AuthorWindow.Open(), Close(), Toggle(), IsShown(), Refresh(), ShowExport(entry)
 
 local R = TwichUI
 local LY = R.Layouts
@@ -30,6 +34,9 @@ AW.frames = 0
 AW.builds = 0
 AW.page = 1
 AW.pool = w
+
+local AP = WZ.AuthorPresets
+local EDIT_ROWS = 10               -- settings shown at a time in the preset editor
 
 local function Look() return R.Look end
 local function Say(fmt, ...) R.Print("layout publishing: " .. fmt, ...) end
@@ -124,8 +131,16 @@ local function Refresh()
             tab.text:SetText(("%s, rev %d"):format(b.kind == "bundled" and "Included" or b.title, b.revision))
             tab:SetSelected(b.key == s.baseKey)
             tab:SetScript("OnClick", function()
-                local ok = A.SetBase(b.key, function() AW.Refresh() end)
-                if ok then AW.Refresh() end
+                if b.key == s.baseKey then return end
+                local function Go()
+                    local ok = A.SetBase(b.key, function() AW.Refresh() end)
+                    if ok then AW.Refresh() end
+                end
+                if A.Dirty() then
+                    R.Interact.Confirm("TWICHUI_LAYOUT_PRESETS_BASE",
+                        "Start from another package?\n\nYour TwichUI preset changes (the draft, and any edit not saved to it) are not published, and starting from another package drops them. Published packages are kept.",
+                        Go, { accept = "Start from it" })
+                else Go() end
             end)
             Place(tab, (i - 1) * 150, y)
         end
@@ -251,8 +266,11 @@ local function Refresh()
     end
     y = y + 6
 
-    -- 4. check
-    y = Section("h4", "4. Check it as a recipient will", y)
+    -- 4. TwichUI presets
+    y = AW.DrawPresets(y)
+
+    -- 5. check
+    y = Section("h4", "5. Check it as a recipient will", y)
     Place(w.checkBtn, 0, y)
     local rep = s.report
     local lines = {}
@@ -282,8 +300,8 @@ local function Refresh()
     end
     y = y + 8
 
-    -- 5. release
-    y = Section("h5", "5. Release", y)
+    -- 6. release
+    y = Section("h5", "6. Release", y)
     local r = s.release
     local function Row(label, edit, value)
         label:Show()
@@ -318,8 +336,8 @@ local function Refresh()
     Place(w.publishStatus, 150, y + 4)
     y = y + 34
 
-    -- 6. published, and sending
-    y = Section("h6", "6. Send a published package", y)
+    -- 7. published, and sending
+    y = Section("h6", "7. Send a published package", y)
     local pub = A.Published()
     for i, row in ipairs(w.pubRows) do
         local e = pub[i]
@@ -331,6 +349,7 @@ local function Refresh()
             row.pick.text:SetText(("%s, revision %d"):format(e.title or e.id, e.revision))
             row.pick:SetSelected(s.published == e)
             row.info:SetText(("about %d KB"):format(math.max(1, math.floor(e.size / 1024 + 0.5))))
+            row.export:SetScript("OnClick", function() AW.ShowExport(e) end)
             y = y + 30
         end
     end
@@ -434,6 +453,564 @@ local function Commit(field)
 end
 
 ---------------------------------------------------------------------------
+-- 4. TwichUI presets: the helper presets' draft, and the editor of one preset (AuthorPresets.lua)
+---------------------------------------------------------------------------
+local PRESET_WHY = {
+    keep = "\"Leave them as they are\" is the option that changes nothing: it can't hold settings. Duplicate a preset or create one instead.",
+    ["no-twichui-profile"] = "That TwichUI profile isn't there now. Choose another one to read from.",
+    full = ("A choice may offer at most %d options."):format(LY.MAX_OPTIONS),
+    last = "A package keeps at least one option.",
+    ["needs-default"] = "This is the default. Make another option the default first, then remove this one.",
+    ["bad-label"] = "A name is plain text of at most 48 characters.", ["label-taken"] = "Another option already has that name.",
+    ["bad-hint"] = "A description is plain text of at most 200 characters.",
+    limit = ("A preset may manage at most %d settings."):format(LY.MAX_UNITS),
+    owned = "Another wizard choice sets that, so a preset can't.", ["bad-value"] = "That isn't a value this setting can have.",
+    closed = "The workspace isn't open.", unknown = "That option isn't there any more.",
+}
+local function PresetNote(text) local s = A.Session() if s then s.presetNote = (text ~= "" and text) or nil end end
+local function Why(code, text) PresetNote(text or PRESET_WHY[code] or tostring(code)) end
+
+-- Runs fn now, or after asking when an edit that isn't saved to the draft would be dropped.
+local function AfterPending(fn)
+    if AP.Unsaved() then
+        local e = AP.Pending()
+        R.Interact.Confirm("TWICHUI_LAYOUT_PRESETS_DISCARD",
+            ("Discard your edit of \"%s\"?\n\nIt isn't saved to the draft. Nothing in your profiles or the published packages changes either way."):format(e.label),
+            function() AP.Discard() fn() Refresh() end, { accept = "Discard it" })
+    else
+        AP.Discard()
+        fn()
+    end
+end
+
+local function Plural(n, one, many) return n == 1 and one or many end
+
+local function SummaryText(o)
+    local sm, parts = o.summary, {}
+    if o.keep then return "Changes nothing: every setting the presets manage stays as the player has it." end
+    parts[#parts + 1] = ("%d %s"):format(o.n, Plural(o.n, "setting", "settings"))
+    if #sm.on > 0 then parts[#parts + 1] = "turns on " .. table.concat(sm.on, ", ") end
+    if #sm.off > 0 then parts[#parts + 1] = "turns off " .. table.concat(sm.off, ", ") end
+    if sm.set > 0 then parts[#parts + 1] = ("%d other %s"):format(sm.set, Plural(sm.set, "setting", "settings")) end
+    if sm.reset > 0 then parts[#parts + 1] = ("%d back to TwichUI's default"):format(sm.reset) end
+    local text = table.concat(parts, "; ")
+    if o.overlap > 0 then text = text .. (" (%d also set by the layout's own looks: the preset's value wins)"):format(o.overlap) end
+    return text
+end
+
+local function ValueEditable(r) return r.op and not r.op.reset and (r.kind == "int" or r.kind == "color" or r.kind == "name" or r.kind == "sound") end
+
+function AW.DrawPresets(y)
+    local s = A.Session()
+    local P = s.presets
+    y = Section("hP", "4. TwichUI presets", y)
+    local ws = w.presets
+    local hideAll = not P or P.none
+    for _, o in pairs(ws.static) do o:SetShown(not hideAll) end
+    for _, row in ipairs(ws.rows) do row.frame:SetShown(false) end
+    ws.editor:SetShown(false)
+    if hideAll then
+        ws.none:Show()
+        ws.none:SetText(P and P.none == "invalid" and "The starting package doesn't pass its checks, so its presets can't be edited."
+            or "This package has no TwichUI presets selector. (Adding a new wizard question isn't part of this workspace.)")
+        Place(ws.none, 0, y)
+        return y + Height(ws.none) + 12
+    end
+    ws.none:Hide()
+    local legacy = P.mode ~= "settings"
+    ws.intro:SetText(("The setup's \"%s\" question offers these options. Capturing reads the TwichUI profile below without changing or switching to it; nothing reaches the package until you Save to draft, and nothing reaches players until you Publish (and they install it).%s"):format(
+        P.label, legacy and "\nThese presets are in the older switch-on-only form. Saving a change makes them editable presets (package format 6, which older TwichUI versions can't read); each keeps exactly the settings and values it has." or ""))
+    Place(ws.intro, 0, y)
+    y = y + Height(ws.intro) + 8
+    -- the source profile, by its exact name
+    local sources = AP.Sources()
+    ws.srcLabel:SetText("Read settings from")
+    Place(ws.srcLabel, 0, y + 4)
+    Place(ws.srcPrev, 170, y)
+    ws.srcName:SetText(#sources > 0 and (("\"%s\"%s"):format(tostring(P.source), AP.SourceInUse() and " (the profile in use)" or "")) or "No TwichUI profiles available")
+    Place(ws.srcName, 200, y + 4)
+    Place(ws.srcNext, 470, y)
+    y = y + 30
+    ws.hintLabel:SetText("Question's description")
+    Place(ws.hintLabel, 0, y + 4)
+    Place(ws.hintEdit, 170, y)
+    if not ws.hintEdit:HasFocus() then ws.hintEdit:SetText(P.hint or "") end
+    y = y + 30
+    -- the options
+    for i, o in ipairs(AP.Options()) do
+        local row = ws.rows[i]
+        if row then
+            row.o = o
+            row.frame:Show()
+            row.frame:ClearAllPoints()
+            row.frame:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -y)
+            row.pick.text:SetText(o.label)
+            row.pick:SetSelected(o.selected)
+            local tags = {}
+            if o.default then tags[#tags + 1] = "Default" end
+            if o.new then tags[#tags + 1] = "New" elseif o.changed then tags[#tags + 1] = "Changed" end
+            row.info:SetText((#tags > 0 and ("[" .. table.concat(tags, ", ") .. "] ") or "") .. SummaryText(o)
+                .. (#o.issues > 0 and ("\nNeeds attention: " .. table.concat(o.issues, " ")) or ""))
+            row.up:SetEnabled(i > 1)
+            row.down:SetEnabled(i < #P.options)
+            local h = math.max(28, Height(row.info) + 8)
+            row.frame:SetHeight(h)
+            y = y + h + 2
+        end
+    end
+    y = y + 6
+    -- the selected option
+    local sel = AP.Find(P.selected)
+    local keep = AP.IsKeep(sel)
+    ws.nameLabel:SetText("Name")
+    Place(ws.nameLabel, 0, y + 4)
+    Place(ws.nameEdit, 100, y)
+    if not ws.nameEdit:HasFocus() then ws.nameEdit:SetText(sel and sel.label or "") end
+    Place(ws.detailsBtn, 380, y)
+    ws.detailsBtn.text:SetText(AW.presetDetails and "Hide details" or "Show details")
+    y = y + 28
+    ws.descLabel:SetText("Description")
+    Place(ws.descLabel, 0, y + 4)
+    Place(ws.descEdit, 100, y)
+    if not ws.descEdit:HasFocus() then ws.descEdit:SetText(sel and sel.hint or "") end
+    y = y + 28
+    ws.idText:SetShown(AW.presetDetails == true)
+    if AW.presetDetails then
+        ws.idText:SetText(("Stable id: %s (players' picks are remembered by it; renaming never changes it).%s"):format(sel and sel.id or "?",
+            #P.retired > 0 and (" No longer offered: " .. table.concat(P.retired, ", ") .. ".") or ""))
+        Place(ws.idText, 0, y)
+        y = y + Height(ws.idText) + 6
+    end
+    Place(ws.captureBtn, 0, y)
+    Place(ws.editBtn, 270, y)
+    ws.captureBtn:SetEnabled(sel ~= nil and not keep)
+    ws.editBtn:SetEnabled(sel ~= nil and not keep)
+    y = y + 28
+    Place(ws.dupBtn, 0, y)
+    Place(ws.defaultBtn, 100, y)
+    Place(ws.removeBtn, 220, y)
+    Place(ws.createBtn, 330, y)
+    ws.dupBtn:SetEnabled(sel ~= nil and not keep and #P.options < LY.MAX_OPTIONS)
+    ws.defaultBtn:SetEnabled(sel ~= nil and P.default ~= sel.id)
+    ws.removeBtn:SetEnabled(sel ~= nil and not keep and #P.options > 1)
+    ws.createBtn:SetEnabled(#P.options < LY.MAX_OPTIONS)
+    y = y + 30
+    local note = s.presetNote or (keep and "\"Leave them as they are\" changes nothing of what the presets manage. The layout's own TwichUI looks and places still apply whichever option a player picks."
+        or (P.changed and ("The draft's presets differ from the starting package%s."):format(P.gen ~= P.publishedGen and " and aren't published yet" or "")) or "")
+    ws.status:SetText(note)
+    Place(ws.status, 0, y)
+    y = y + (note ~= "" and (Height(ws.status) + 8) or 4)
+    -- the editor
+    local e = AP.Pending()
+    if e then y = AW.DrawEditor(e, y) end
+    return y + 8
+end
+
+function AW.DrawEditor(e, y)
+    local ed = w.presets.ed
+    local P = AP.State()
+    w.presets.editor:Show()
+    local d = AP.Diff(e)
+    ed.head:SetText(("%s \"%s\" (not saved to the draft)"):format(e.isNew and "New preset" or (e.kind == "capture" and "Captured into" or "Reviewing"), e.label))
+    Place(ed.head, 0, y)
+    y = y + Height(ed.head) + 4
+    local src = e.source and ("Values read from \"" .. e.source .. "\" when you pressed the button.") or ("A setting you add takes its value from \"" .. tostring(P.source) .. "\".")
+    ed.summary:SetText(("%d %s managed%s. %s A setting it doesn't manage is never changed by it, and nothing is added unless you tick it.%s"):format(
+        d.managed, Plural(d.managed, "setting", "settings"),
+        e.isNew and "" or (": %d changed, %d added, %d no longer managed, against the draft"):format(d.changed, d.added, d.removed), src,
+        e.isNew and " It starts by managing whether each feature is on or off; add looks and behaviour settings under Not managed." or ""))
+    Place(ed.summary, 0, y)
+    y = y + Height(ed.summary) + 6
+    if e.isNew then
+        ed.nameLabel:Show()
+        ed.nameLabel:SetText("Name")
+        Place(ed.nameLabel, 0, y + 4)
+        ed.nameEdit:Show()
+        Place(ed.nameEdit, 100, y)
+        if not ed.nameEdit:HasFocus() then ed.nameEdit:SetText(e.label) end
+        y = y + 28
+    else
+        ed.nameLabel:Hide()
+        ed.nameEdit:Hide()
+    end
+    for i, v in ipairs(AP.VIEWS) do
+        local tab = ed.views[i]
+        tab:SetSelected(e.view == v.id)
+        Place(tab, (i - 1) * 150, y)
+    end
+    y = y + 30
+    if e.view == "excluded" then
+        for _, o in ipairs(ed.listParts) do o:Hide() end
+        for _, row in ipairs(ed.rows) do row.frame:Hide() end
+        local lines = {}
+        for _, x in ipairs(AP.Excluded()) do
+            lines[#lines + 1] = ("%s (%d): %s%s"):format(x.title, x.n, x.why,
+                x.examples and #x.examples > 0 and (" " .. table.concat(x.examples, ", ", 1, math.min(#x.examples, 8)) .. (#x.examples > 8 and ", ..." or "") .. ".") or "")
+        end
+        lines[#lines + 1] = "Also left to their own settings: anything another wizard choice sets (the accent, tooltip placement, friendly plates, the size)."
+        ed.excluded:Show()
+        ed.excluded:SetText(table.concat(lines, "\n\n"))
+        Place(ed.excluded, 0, y)
+        y = y + Height(ed.excluded) + 8
+    else
+        ed.excluded:Hide()
+        for _, o in ipairs(ed.listParts) do o:Show() end
+        local groups = AP.Eligible().groups
+        local gl = "All categories"
+        for _, g in ipairs(groups) do if g.id == e.group then gl = g.label end end
+        Place(ed.catPrev, 0, y)
+        ed.catName:SetText(gl)
+        Place(ed.catName, 30, y + 4)
+        Place(ed.catNext, 250, y)
+        ed.searchLabel:SetText("Search")
+        Place(ed.searchLabel, 290, y + 4)
+        Place(ed.search, 345, y)
+        if not ed.search:HasFocus() then ed.search:SetText(e.query or "") end
+        y = y + 28
+        Place(ed.addAll, 0, y)
+        Place(ed.dropAll, 180, y)
+        y = y + 28
+        local rows = AP.Rows()
+        local pages = math.max(1, math.ceil(#rows / EDIT_ROWS))
+        e.page = math.min(math.max(1, e.page or 1), pages)
+        for i, row in ipairs(ed.rows) do
+            local r = rows[(e.page - 1) * EDIT_ROWS + i]
+            row.frame:SetShown(r ~= nil)
+            row.r = r
+            if r then
+                row.frame:ClearAllPoints()
+                row.frame:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -y)
+                row.check:SetChecked(r.op ~= nil)
+                row.check:SetActive(not r.owned)
+                row.label:SetText(("%s  |  %s"):format(r.label, r.groupLabel))
+                local bits = {}
+                if r.op then bits[#bits + 1] = "Sets: " .. r.text end
+                if r.status == "added" then bits[#bits + 1] = "newly managed"
+                elseif r.status == "removed" then bits[#bits + 1] = "no longer managed (was: " .. r.wasText .. ")"
+                elseif r.status == "changed" then bits[#bits + 1] = "was: " .. r.wasText end
+                if not r.op then
+                    local now = r.captured ~= nil and r.captured or AP.ReadOne(r.unit)
+                    if now ~= nil then bits[#bits + 1] = "your profile: " .. LY.TwichUIAdapter.Show(now) end
+                end
+                if r.customised and not r.op then bits[#bits + 1] = "changed from TwichUI's default" end
+                if r.layer then bits[#bits + 1] = "the layout's own looks set it too (the preset's value wins)" end
+                if r.owned then bits[#bits + 1] = "set by the " .. r.owned .. " choice: never in a preset" end
+                row.detail:SetText(table.concat(bits, "; "))
+                local cycle = r.op and not r.op.reset and (r.kind == "bool" or r.kind == "enum")
+                row.value:SetShown(cycle == true)
+                if cycle then row.value.text:SetText(r.kind == "bool" and (r.op.v and "On" or "Off") or tostring(r.op.v)) end
+                row.edit:SetShown(ValueEditable(r) == true)
+                if ValueEditable(r) and not row.edit:HasFocus() then row.edit:SetText(tostring(r.op.v)) end
+                row.reset:SetShown(r.op ~= nil)
+                row.reset.text:SetText(r.op and r.op.reset and "Give a value" or "Reset")
+                y = y + 44
+            end
+        end
+        ed.empty:SetShown(#rows == 0)
+        if #rows == 0 then
+            ed.empty:SetText(e.view == "managed" and "This preset manages nothing here yet. Tick settings under Not managed."
+                or e.view == "changed" and "Nothing changed against the draft." or "Nothing to show for this category and search.")
+            Place(ed.empty, 0, y)
+            y = y + 22
+        end
+        ed.pageText:SetText(("Page %d of %d (%d %s)"):format(e.page, pages, #rows, Plural(#rows, "setting", "settings")))
+        Place(ed.pagePrev, 0, y)
+        Place(ed.pageNext, 100, y)
+        Place(ed.pageText, 210, y + 4)
+        ed.pagePrev:SetEnabled(e.page > 1)
+        ed.pageNext:SetEnabled(e.page < pages)
+        y = y + 30
+    end
+    Place(ed.save, 0, y)
+    Place(ed.discard, 140, y)
+    return y + 32
+end
+
+local function Cycle2(list, current, step)
+    if #list == 0 then return nil end
+    local at = 0
+    for i, n in ipairs(list) do if n == current then at = i end end
+    if at == 0 then return list[step > 0 and 1 or #list] end
+    local nxt = at + step
+    if nxt < 1 or nxt > #list then return nil end
+    return list[nxt]
+end
+
+function AW.BuildPresets(L)
+    local ws = { static = {}, rows = {} }
+    w.presets = ws
+    w.hP = Text(content, "heading", CONTENT_W)
+    local function St(o) ws.static[#ws.static + 1] = o return o end
+    ws.none = Text(content, "small", CONTENT_W - 20)
+    ws.intro = St(Text(content, "small", CONTENT_W - 20))
+    ws.srcLabel = St(Text(content, "body", 160))
+    ws.srcName = St(Text(content, "body", 260))
+    local function Arrow(dir, fn) return Button(content, dir == "left" and "‹" or "›", 26, "secondary", fn) end
+    ws.srcPrev = St(Arrow("left", function() AP.SetSource(Cycle(AP.Sources(), AP.Source(), -1)) PresetNote(nil) Refresh() end))
+    ws.srcNext = St(Arrow("right", function() AP.SetSource(Cycle(AP.Sources(), AP.Source(), 1)) PresetNote(nil) Refresh() end))
+    ws.hintLabel = St(Text(content, "body", 160))
+    ws.hintEdit = St(Edit(content, 540, function(text)
+        if not A.Active() then return end
+        local ok, why = AP.SetChoiceHint(text)
+        Why(ok and nil or why, ok and "" or nil)
+        Refresh()
+    end))
+    for i = 1, LY.MAX_OPTIONS do
+        local f = CreateFrame("Frame", nil, content)
+        f:SetSize(CONTENT_W - 10, 28)
+        local row = { frame = f }
+        row.pick = L.Tab(f, "", 210, function() if row.o then AP.Select(row.o.id) PresetNote(nil) Refresh() end end)
+        row.pick:SetPoint("TOPLEFT", 0, 0)
+        row.info = Text(f, "small", CONTENT_W - 300)
+        row.info:SetPoint("TOPLEFT", 220, -4)
+        row.up = Button(f, "↑", 26, "secondary", function() if row.o then AP.Move(row.o.id, -1) Refresh() end end, "Moves this option up in the setup's list.")
+        row.up:SetPoint("TOPRIGHT", -32, -2)
+        row.down = Button(f, "↓", 26, "secondary", function() if row.o then AP.Move(row.o.id, 1) Refresh() end end, "Moves this option down in the setup's list.")
+        row.down:SetPoint("TOPRIGHT", -2, -2)
+        ws.rows[i] = row
+        AW.frames = AW.frames + 5
+    end
+    ws.nameLabel = St(Text(content, "body", 90))
+    ws.nameEdit = St(Edit(content, 260, function(text)
+        local P = AP.State()
+        if not (P and P.selected) or text == "" then Refresh() return end
+        local ok, why = AP.Rename(P.selected, text)
+        Why(ok and nil or why, ok and "" or nil)
+        Refresh()
+    end))
+    ws.descLabel = St(Text(content, "body", 90))
+    ws.descEdit = St(Edit(content, 600, function(text)
+        local P = AP.State()
+        if not (P and P.selected) then return end
+        local ok, why = AP.Describe(P.selected, text)
+        Why(ok and nil or why, ok and "" or nil)
+        Refresh()
+    end))
+    ws.detailsBtn = St(Button(content, "Show details", 110, "secondary", function() AW.presetDetails = not AW.presetDetails Refresh() end,
+        "Shows the option's stable id (what players' picks are remembered by) and the ids the package no longer offers."))
+    ws.idText = Text(content, "small", CONTENT_W - 20)
+    ws.captureBtn = St(Button(content, "Capture current settings into this preset", 260, "primary", function()
+        local P = AP.State()
+        AfterPending(function()
+            local ok, why = AP.BeginCapture(P.selected)
+            Why(ok and nil or why, ok and "" or nil)
+        end)
+        Refresh()
+    end, "Reads the settings this preset manages from the TwichUI profile named above, with the values that profile uses (a setting left at TwichUI's default is captured as that value, so off stays off). Its scope stays as it is: settings it doesn't manage are listed apart. Nothing is saved to the draft until you press Save to draft."))
+    ws.editBtn = St(Button(content, "Review settings", 140, "secondary", function()
+        local P = AP.State()
+        AfterPending(function()
+            local ok, why = AP.BeginEdit(P.selected)
+            Why(ok and nil or why, ok and "" or nil)
+        end)
+        Refresh()
+    end, "Shows the settings this preset manages and lets you add, leave out or adjust them, without capturing again."))
+    ws.dupBtn = St(Button(content, "Duplicate", 90, "secondary", function()
+        local P = AP.State()
+        AfterPending(function()
+            local ok, why = AP.Duplicate(P.selected)
+            Why(ok and nil or why, ok and "Duplicated: a new option with its own id. Rename it and adjust its settings." or nil)
+        end)
+        Refresh()
+    end, "Adds a copy of this preset with a new id, next to it."))
+    ws.defaultBtn = St(Button(content, "Make default", 110, "secondary", function()
+        local P = AP.State()
+        AP.SetDefault(P.selected)
+        PresetNote("")
+        Refresh()
+    end, "The option the setup starts on for a player who hasn't picked."))
+    ws.removeBtn = St(Button(content, "Remove", 100, "danger", function()
+        local P = AP.State()
+        local o = AP.Find(P.selected)
+        if not o then return end
+        if P.default == o.id then Why("needs-default") Refresh() return end
+        R.Interact.Confirm("TWICHUI_LAYOUT_PRESETS_REMOVE",
+            ("Remove the preset \"%s\" from the draft?\n\nOnly the draft changes: published packages and players' installs are not touched. When a player who picked it updates to a package without it, the setup tells them it is no longer offered and asks them to choose another; its id (%s) is never given to another option."):format(o.label, o.id),
+            function()
+                local ok, why = AP.Remove(o.id)
+                Why(ok and nil or why, ok and ("Removed \"" .. o.label .. "\" from the draft.") or nil)
+                Refresh()
+            end, { accept = "Remove" })
+    end, "Removes this option from the draft, after a question. The default can't be removed until another option is the default."))
+    ws.createBtn = St(Button(content, "Create preset from current settings", 250, "secondary", function()
+        AfterPending(function()
+            local ok, why = AP.BeginCreate()
+            Why(ok and nil or why, ok and "" or nil)
+        end)
+        Refresh()
+    end, "Starts a new preset from the TwichUI profile named above, managing whether each feature is on or off. Review it, then Save to draft."))
+    ws.status = St(Text(content, "small", CONTENT_W - 20))
+    AW.frames = AW.frames + 18
+
+    -- the editor
+    local editor = CreateFrame("Frame", nil, content)
+    editor:SetSize(1, 1)
+    ws.editor = editor
+    local ed = { views = {}, rows = {}, listParts = {} }
+    ws.ed = ed
+    ed.head = Text(editor, "heading", CONTENT_W - 20)
+    ed.summary = Text(editor, "small", CONTENT_W - 20)
+    ed.nameLabel = Text(editor, "body", 90)
+    ed.nameEdit = Edit(editor, 260, function(text)
+        local ok, why = AP.SetEditName(text)
+        Why(ok and nil or why, ok and "" or nil)
+        Refresh()
+    end)
+    for i, v in ipairs(AP.VIEWS) do
+        ed.views[i] = L.Tab(editor, v.label, 145, function()
+            local e = AP.Pending()
+            AP.SetView(v.id)
+            if e then e.page = 1 end
+            Refresh()
+        end)
+    end
+    local function LP(o) ed.listParts[#ed.listParts + 1] = o return o end
+    local function CatStep(step)
+        local e = AP.Pending()
+        if not e then return end
+        local ids = {}
+        for _, g in ipairs(AP.Eligible().groups) do ids[#ids + 1] = g.id end
+        AP.SetGroup(Cycle2(ids, e.group, step))
+        e.page = 1
+        Refresh()
+    end
+    ed.catPrev = LP(Button(editor, "‹", 26, "secondary", function() CatStep(-1) end, "The previous category (or all of them)."))
+    ed.catNext = LP(Button(editor, "›", 26, "secondary", function() CatStep(1) end, "The next category (or all of them)."))
+    ed.catName = LP(Text(editor, "body", 215))
+    ed.searchLabel = LP(Text(editor, "body", 55))
+    ed.search = LP(Edit(editor, 200, function(text)
+        local e = AP.Pending()
+        if not e then return end
+        AP.SetQuery(text)
+        e.page = 1
+        Refresh()
+    end))
+    ed.addAll = LP(Button(editor, "Include all shown", 170, "secondary", function()
+        local ok, why = AP.IncludeShown(true)
+        Why(ok and nil or why, ok and "" or nil)
+        Refresh()
+    end, "Includes every setting the list shows now (this view, category and search), with your profile's values. Nothing past the limit of 256 is added."))
+    ed.dropAll = LP(Button(editor, "Leave out all shown", 170, "secondary", function()
+        AP.IncludeShown(false)
+        PresetNote("")
+        Refresh()
+    end, "Stops this preset managing every setting the list shows now. They stay as each player has them."))
+    for i = 1, EDIT_ROWS do
+        local f = CreateFrame("Frame", nil, editor)
+        f:SetSize(CONTENT_W - 10, 42)
+        local row = { frame = f }
+        row.check = L.Checkbox(f, function(on)
+            if not row.r then return end
+            local ok, why = AP.SetIncluded(row.r.unit, on)
+            Why(ok and nil or why, ok and "" or nil)
+            Refresh()
+        end)
+        row.check:SetPoint("TOPLEFT", 0, -4)
+        row.label = Text(f, "body", 420)
+        row.label:SetPoint("TOPLEFT", 28, -3)
+        row.detail = Text(f, "small", 420)
+        row.detail:SetPoint("TOPLEFT", row.label, "BOTTOMLEFT", 0, -2)
+        row.value = Button(f, "", 130, "secondary", function()
+            if not row.r then return end
+            local v = AP.NextValue(row.r.unit)
+            if v ~= nil then AP.SetValue(row.r.unit, v) end
+            Refresh()
+        end, "Changes this preset's value for the setting (on and off, or the next of its choices). Your profile isn't changed.")
+        row.value:SetPoint("TOPRIGHT", -84, -2)
+        row.edit = Edit(f, 130, function(text)
+            local r = row.r
+            if not (r and r.op) then return end
+            local v = text
+            if r.kind == "int" then v = tonumber(text) elseif r.kind == "color" then v = tostring(text):upper() end
+            local ok, why = AP.SetValue(r.unit, v)
+            local f2 = r.field
+            Why(ok and nil or why, ok and "" or (r.kind == "int" and f2 and f2.min and ("That isn't a value this setting can have (a whole number from %d to %d)."):format(f2.min, f2.max))
+                or (r.kind == "color" and "A colour is eight hexadecimal digits: red, green, blue and opacity (for example C9A24AFF).") or nil)
+            Refresh()
+        end)
+        row.edit:SetPoint("TOPRIGHT", -84, -2)
+        row.reset = Button(f, "Reset", 76, "secondary", function()
+            if not (row.r and row.r.op) then return end
+            AP.SetReset(row.r.unit, not row.r.op.reset)
+            Refresh()
+        end, "Reset: players who pick this preset get TwichUI's default for the setting (their stored value is cleared). Give a value: the preset sets a value again.")
+        row.reset:SetPoint("TOPRIGHT", -2, -2)
+        ed.rows[i] = row
+        AW.frames = AW.frames + 6
+    end
+    ed.empty = LP(Text(editor, "small", CONTENT_W - 20))
+    ed.excluded = Text(editor, "small", CONTENT_W - 20)
+    ed.pagePrev = LP(Button(editor, "Previous", 90, "secondary", function() local e = AP.Pending() if e then e.page = (e.page or 1) - 1 end Refresh() end))
+    ed.pageNext = LP(Button(editor, "Next", 90, "secondary", function() local e = AP.Pending() if e then e.page = (e.page or 1) + 1 end Refresh() end))
+    ed.pageText = LP(Text(editor, "small", 300))
+    ed.save = Button(editor, "Save to draft", 130, "primary", function()
+        local ok, why, text = AP.Save()
+        Why(ok and nil or why, ok and "Saved to the draft. Check, then Publish, to make it part of a package." or text)
+        Refresh()
+    end, "Puts this preset, as it stands here, in the draft. The draft becomes part of a package only when you Publish.")
+    ed.discard = Button(editor, "Discard", 100, "secondary", function()
+        AfterPending(function() PresetNote("") end)
+        Refresh()
+    end, "Drops this edit. The draft stays as it was.")
+    AW.frames = AW.frames + 20
+end
+
+---------------------------------------------------------------------------
+-- Export for bundling: a published package as text to copy (the game gives an addon no clipboard and no files)
+---------------------------------------------------------------------------
+function AW.ShowExport(entry)
+    local L = Look()
+    local ex = AW.exportFrame
+    if not ex then
+        ex = CreateFrame("Frame", "TwichUILayoutExport", UIParent, "BackdropTemplate")
+        AW.exportFrame = ex
+        ex:SetSize(620, 360)
+        ex:SetPoint("CENTER", 0, 40)
+        ex:SetFrameStrata("DIALOG")
+        ex:SetToplevel(true)
+        ex:SetClampedToScreen(true)
+        ex:EnableMouse(true)
+        ex:Hide()
+        local listed = false
+        for _, n in ipairs(UISpecialFrames) do if n == "TwichUILayoutExport" then listed = true end end
+        if not listed then tinsert(UISpecialFrames, "TwichUILayoutExport") end
+        L.Shell(ex, 40)
+        local title = L.Text(ex, "title")
+        title:SetPoint("TOPLEFT", 18, -11)
+        title:SetText("Export for bundling")
+        L.CloseBox(ex)
+        ex.note = Text(ex, "small", 580)
+        ex.note:SetPoint("TOPLEFT", 20, -50)
+        local sf = CreateFrame("ScrollFrame", nil, ex, "UIPanelScrollFrameTemplate")
+        sf:SetPoint("TOPLEFT", 20, -120)
+        sf:SetPoint("BOTTOMRIGHT", -40, 50)
+        L.ScrollBar(sf)
+        ex.edit = CreateFrame("EditBox", nil, sf)
+        ex.edit:SetMultiLine(true)
+        ex.edit:SetAutoFocus(false)
+        ex.edit:SetFontObject("ChatFontNormal")
+        ex.edit:SetWidth(540)
+        ex.edit:SetScript("OnEscapePressed", function() ex:Hide() end)
+        ex.edit:SetScript("OnEditFocusGained", function(e) e:HighlightText() end)
+        -- read only: put the text back if someone types in it
+        ex.edit:SetScript("OnTextChanged", function(e, user) if user and ex.text and e:GetText() ~= ex.text then e:SetText(ex.text) e:HighlightText() end end)
+        sf:SetScrollChild(ex.edit)
+        ex.select = Button(ex, "Select all", 110, "primary", function() ex.edit:SetFocus() ex.edit:HighlightText() end, "Selects the whole text. Then press Ctrl+C.")
+        ex.select:SetPoint("BOTTOMRIGHT", -20, 14)
+        ex.done = Button(ex, "Close", 90, "secondary", function() ex:Hide() end)
+        ex.done:SetPoint("RIGHT", ex.select, "LEFT", -8, 0)
+        AW.frames = AW.frames + 8
+    end
+    ex.text = A.ExportText(entry)
+    ex.note:SetText(("\"%s\", revision %d (%d KB), exactly as it was published. Select all, press Ctrl+C, paste it into a text file, and run:\n  tools/update_bundled_layout.sh --from-published --text <that file>\nThe tool checks it again and puts exactly this package's presets and settings in TwichUI's bundled layouts. Nothing here is sent or changed."):format(
+        entry.title or entry.id, entry.revision, math.max(1, math.floor(entry.size / 1024 + 0.5))))
+    ex.edit:SetText(ex.text or "")
+    ex:Show()
+    ex.edit:SetFocus()
+    ex.edit:HighlightText()
+end
+
+---------------------------------------------------------------------------
 -- Building (once)
 ---------------------------------------------------------------------------
 local function Build()
@@ -477,7 +1054,7 @@ local function Build()
     footer:SetPoint("BOTTOMLEFT", PAD, PAD)
     footer:SetPoint("BOTTOMRIGHT", -PAD, PAD)
     footer:SetHeight(FOOTER_H - 10)
-    footer.close = Button(footer, "Close", 90, "secondary", function() AW.Close() end, "Closes the workspace and drops the capture and the changes. Published packages are kept.")
+    footer.close = Button(footer, "Close", 90, "secondary", function() AW.Close(true) end, "Closes the workspace and drops the capture and the changes (it asks first when TwichUI preset work isn't saved or published). Published packages are kept.")
     footer.close:SetPoint("BOTTOMLEFT", 0, 0)
     footer.note = Text(footer, "small", CONTENT_W - 110)
     footer.note:SetPoint("BOTTOMLEFT", footer.close, "BOTTOMRIGHT", 14, 2)
@@ -529,6 +1106,7 @@ local function Build()
         w.rows[i] = row
         AW.frames = AW.frames + 4
     end
+    AW.BuildPresets(L)
     w.pagePrev = Button(content, "Previous", 90, "secondary", function() AW.page = math.max(1, AW.page - 1) Refresh() end)
     w.pageNext = Button(content, "Next", 90, "secondary", function() AW.page = AW.page + 1 Refresh() end)
     w.pageLabel = Text(content, "small", 120)
@@ -560,8 +1138,11 @@ local function Build()
         row.info:SetPoint("LEFT", row.pick, "RIGHT", 10, 0)
         row.remove = Button(f, "Remove", 80, "secondary", function() if row.entry then DoRemove(row.entry) end end, "Deletes this stored snapshot.")
         row.remove:SetPoint("TOPRIGHT", -4, -2)
+        row.export = Button(f, "Export for bundling", 150, "secondary", function() end,
+            "Shows this published package as text to copy out of the game, so the developer tool can put exactly it in TwichUI's bundled layouts (docs/layouts/presets.md). Nothing is packed again, sent or changed.")
+        row.export:SetPoint("RIGHT", row.remove, "LEFT", -6, 0)
         w.pubRows[i] = row
-        AW.frames = AW.frames + 3
+        AW.frames = AW.frames + 4
     end
     w.pubNone = Text(content, "small", CONTENT_W - 20)
     w.pubNone:SetText("Nothing published yet.")
@@ -576,7 +1157,16 @@ local function Build()
         if not A.Active() then A.Begin() end
         Refresh()
     end)
-    win:HookScript("OnHide", function() A.End() end)
+    win:HookScript("OnHide", function()
+        if AW.exportFrame then AW.exportFrame:Hide() end
+        -- preset work that isn't saved or published is never dropped without asking: hidden (Escape), the session stays until the
+        -- reload, and opening the workspace again goes on with it
+        if A.Dirty() then
+            Say("your TwichUI preset changes are kept until you reload. /tui layout author opens them again.")
+        else
+            A.End()
+        end
+    end)
     -- sharing progress: one listener for the session, added once; it does nothing while the window is closed
     if R.Share and R.Share.OnChange and not AW.listening then
         AW.listening = true
@@ -599,7 +1189,18 @@ function AW.Open()
     return true
 end
 
-function AW.Close() if win then win:Hide() end end
+-- ask: the Close button (asks before dropping preset work that isn't saved or published; Escape keeps it instead)
+function AW.Close(ask)
+    if not win then return end
+    if ask and A.Dirty() then
+        R.Interact.Confirm("TWICHUI_LAYOUT_PRESETS_CLOSE",
+            "Close and discard your TwichUI preset changes?\n\nThe draft of the presets (and any edit not saved to it) hasn't been published. Closing drops it; nothing in your profiles or the published packages changes. Escape instead keeps it until you reload.",
+            function() A.End() win:Hide() end, { accept = "Discard and close" })
+        return
+    end
+    if ask then A.End() end
+    win:Hide()
+end
 function AW.Toggle() if AW.IsShown() then AW.Close() else AW.Open() end end
 
 R.Perf.Gauge("layoutwizard.author.frames", { label = "Layout authoring window: frames and widgets kept", unit = "count", kind = "pool",

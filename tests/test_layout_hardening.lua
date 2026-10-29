@@ -322,7 +322,7 @@ end
 --     value when the package only stops naming it. Older readers refuse format 4; reset is only for settings with a known default.
 ---------------------------------------------------------------------------
 do
-  Check(L0.FORMAT == 5, "A5. the package format that can say reset is 4 (the shipped one is 5: it also carries tooltip choices)")
+  Check(L0.FORMAT >= 4, "A5. the package format that can say reset is 4, which this TwichUI reads (it reads up to " .. L0.FORMAT .. "; the shipped one is 5: it also carries tooltip choices)")
   local DEF = NAV_F.default
   Check(PKG.layers.base.twichui.groups.navigation.navigation.font ~= nil and DEF ~= PKG.layers.base.twichui.groups.navigation.navigation.font,
     "    v1 sets the navigation font to something other than TwichUI's default")

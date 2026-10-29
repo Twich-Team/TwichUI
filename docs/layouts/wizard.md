@@ -39,7 +39,7 @@ note says why a button is disabled.
 |---|---|---|---|
 | 1 | Welcome | the emblem, what the setup does, and **Does it work here?**: EllesmereUI (present, usable, version, tested-with, Forever build, its own first-run setup pending), TwichUI profiles, the screen (size and UI scale, and for each layout at standard size whether it fits, fits but some pieces may overlap, or doesn't fit, with the problems and the UI scale at which it would), whether this is a preview build, combat, and an install already recorded (with a link to its result). Each line has a word (Ready, Check, Blocked, Note), not a colour alone. | nothing |
 | 2 | Layout | a card for each layout, Classic and Compact Adventure (its picture, what it says, a Preview-build tag; the selected one unfolds what it covers), the preview, its scenario selector and the full-size button. Choosing a card re-draws the preview at once. | the layout choice is remembered |
-| 3 | Helpers | the **TwichUI helpers** choice as three cards and the preview | the pick is remembered |
+| 3 | Helpers | the **TwichUI helpers** choice: one card per option the package offers (read from the package: its name, description and what it turns on and off and how many other settings it sets; the page scrolls, there is no fixed row), and the preview. A preset the player picked before, or the install recorded, that the package no longer offers is named and Next waits for a pick | the pick is remembered |
 | 4 | Personalize | accent colour swatches (with the chosen one named), the size cards (Standard, Larger), **Tooltip placement** (Layout position, Follow mouse), **Friendly player nameplates** (Class colors, Standard blue, with a synthetic sample), Start over, and the preview, which follows each pick at once | the picks the player makes are remembered (a pick read from the game is not) |
 | 5 | Review | the plan: your choices; TwichUI (at once, this character only): the profile copied and switched to, how many settings are set, what is turned on, how many on-screen pieces are placed; EllesmereUI (after a reload you start, every character on the account): the profile made and made active (and, on a repeat, that changes made in it since are replaced), what is replaced, positions and text sizes; **Left alone**; **Not placed** (the objectives, which Blizzard's Edit Mode places; the battle resurrection timer, left where the author had it); for an install again, **Updating your layout** (`updates.md`); the fit of the **final plan** (what Apply leaves, kept placements included) and what is kept where you have it; blockers with their reasons; what happens if a step fails. Apply is in the footer. | nothing until Apply is confirmed |
 | 6 | Result | what the install record says now, with the actions that make sense: waiting for a reload (Reload now, Restore), checked after the reload (Restore, Keep this setup, Check again, Set up again), not everything reads back (the differences; Restore, Check again), only partly applied (what was done and what failed; Restore, Reload now), interrupted (Restore), restore waiting for a reload, restore not fully checked, restored, nothing changed (a clean failure, with its reason), a damaged, newer or other-character record (said, with only what is safe offered); for an update, **Undo this update** and **Keep the update**; a finished setup, **Installed and managed** (or "not verified" when its last check didn't match) with Set up again and Stop managing | only through its confirmed buttons |
@@ -61,6 +61,35 @@ note says why a button is disabled.
   (`R.Interact.Confirm`) and are refused in combat by the model, the confirmation (`combat = true`) and the engine.
 - Nothing reloads by itself. **Reload now** is a button; it leaves a note (below) and calls `ReloadUI()`.
 
+### Force re-apply
+
+For an account an earlier install left stuck: a failed or stopped install, a Restore or Undo that never finished, another
+package's record, a record that can't be read, or a profile with the install's name that no record claims. On the review, **Force
+re-apply** (footer) is offered when an earlier install is recorded, or when every reason Apply is refused is one it can lift
+(`Model.CanForce`); it is not offered on a clean first install. Pressing it changes nothing in the game: it makes the plan again
+with `LY.Plan` `opts.force = true` (`session.force`, part of the plan signature and of the plan key, so a plain plan's key can't
+apply a forced one), the review lists what it replaces, and **Apply** still asks, with the same lines in the question.
+**Stop forcing**, leaving the review, changing layout and a successful Apply all drop the request; a refused Apply keeps it.
+
+What a forced plan does (`Engine.lua` `DoPlan`/`DoApply`):
+
+- This character's own install record, or one that can't be read, is set aside and the install is planned as a **new** install
+  (no update comparison, no baseline); the management record of this character is set aside too. The new record has a new snapshot,
+  so **Restore goes back to how things are when Apply is pressed, not to before the earlier install**; the review says so.
+- A profile named for the install that no record claims (`target-taken`) is taken over: TwichUI's is written into (its other settings
+  stay), EllesmereUI's is replaced by the layout's profile (EllesmereUI's `cleanSlate` import; what it held is not kept). It is
+  recorded as not made by the install, so Restore never deletes it. If EllesmereUI's profile of that name is in use and nothing records
+  what came before it, the install first switches to another profile (`Default` when there is one), which Restore goes back to.
+- EllesmereUI's profile is imported again even when it already matches, and an install that matches is made again instead of being
+  refused as "nothing to do".
+- A forced install that then changes nothing puts the record it set aside back as it was.
+- Another character's record (there is one install record for the account) is set aside the same way; the review and the question say it was theirs and that they can no longer Restore it from TwichUI. Their profiles are not deleted.
+- **Not lifted:** a record from a newer TwichUI, combat, a missing or unusable EllesmereUI,
+  EllesmereUI's first-run picker, a profile service that isn't available, a package that can't be used. Those still block, with their reasons.
+
+Not available as a `/tui layout` developer option; the offline checks are `tests/test_layout_force.lua` and the Force section of
+`tests/test_layout_wizard.lua`.
+
 ### Reload and resume
 
 When the player presses **Reload now**, the wizard writes `layouts.wizard.resume = "install"` (or `"restore"` if the
@@ -72,19 +101,33 @@ is asked for. A leftover note with nothing waiting opens nothing. Verification i
 
 ## Choices
 
-The package (`Classic.lua`, format 3) declares its `choices`; the schema is in `architecture.md` §3. Each choice names
-exactly what it writes, and `Package.lua` refuses anything else. The wizard shows nothing the package doesn't declare.
+The package declares its `choices` (data in `TwichUI_Layouts/ChoicesData.lua`, written from a package published in game;
+`presets.md`); the schema is in `architecture.md` §3. Each choice names exactly what it writes, and `Package.lua` refuses anything
+else. The wizard shows nothing the package doesn't declare, and assumes no number of options.
 
 | Choice | Kind | Options (default first) | Writes | Verified after the reload by |
 |---|---|---|---|---|
-| `helpers`: TwichUI helpers | preset (layer "preset") | **Leave them as they are** (nothing); **On-screen helpers** (`modules.classBars`, `modules.markersBar`, `modules.foodDrink` on); **Helpers and navigation** (the same, and `modules.navigation`) | TwichUI switches, turned on only (a preset naming a switch off, a non-switch or an EllesmereUI setting is refused) | the TwichUI adapter's fingerprints |
+| `helpers`: TwichUI helpers | preset (layer "preset") | as the package says. The bundled package today: **Leave them as they are** (nothing); **On-screen helpers** (`modules.classBars`, `modules.markersBar`, `modules.foodDrink` on); **Helpers and navigation** (the same, and `modules.navigation`) | a switch-on-only preset: TwichUI switches, turned on only. An editable preset (format 6, `presets.md`): any TwichUI setting the adapter manages, set to a value (off, 0 included) or reset; never a place, an EllesmereUI setting or another choice's setting. "Leave them as they are" (`keep`) writes none of them | the TwichUI adapter, by value |
 | `accent`: Accent colour | enum (layer "choices"), `sets = { "ellesmereui:root.euiAccent" }` | **Aged gold** (the layout's own, `r .788 g .635 b .290`), **Your class colour** (`useClass = true`), **Verdigris** (`.36 .58 .57`, TwichUI's own teal), **Ember** (`.80 .45 .30`), **Dusk blue** (`.47 .60 .80`) | EllesmereUI's profile-root `euiAccent` and nothing else of its look (`EllesmereUI_Profiles.lua:3464`: `merged.euiAccent = DeepCopy(imported.euiAccent)`; `EllesmereUI_UICore.lua:527` `SetActiveProfileAccent` shows the shape `{ custom = { r, g, b }, useClass }`) | **by value**: `accent:class` or `accent:rgb:r,g,b` to three places (EllesmereUI's serializer keeps 14 digits, so an exact fingerprint of the floats would not match after the round trip) |
 | `size`: Size | density | **Standard**, **Larger** | the geometry's density: component sizes (chat, damage meter, minimap, objectives) and the registered text sizes (chat text and tabs, meter text and bar height) | the placed positions and text sizes (Phase 3's checks) |
 
-The three feature switches in the preset are the author-proposed set (D21 below): quiet, local, on-screen pieces that the
-layout already has a place for (`class-bars`, `marker-bar`, `food-drink`, `nav-arrow`). None of them is a key in
-`TwichConfig.LOCAL`: nothing that shares, accepts setups, plays a sound, acts for you or talks to other players is ever in
-a preset (`test_layout_wizard.lua` §5 checks each key against `LOCAL`).
+The bundled presets' three feature switches are the author-proposed set (D21): quiet, local, on-screen pieces that the layout
+already has a place for (`class-bars`, `marker-bar`, `food-drink`, `nav-arrow`). No preset can name a key in `TwichConfig.LOCAL`
+(nothing that shares, accepts setups, acts for you or talks to other players), an account-wide setting or a list: the adapter's
+allowlist decides, for both kinds (`test_layout_wizard.lua` §5, `test_layout_presets.lua` §1).
+
+**Presets on the Review step and on an update** (`Model.lua` `ReviewPreset`). The TwichUI section names the preset and lists what
+it turns on, turns off, changes, resets and finds already set; what it leaves alone (settings only other presets manage); and which
+of its settings stay as the player has them (kept or owned). With "Leave them as they are" it says it changes none of the settings
+the presets manage, and how many of those the layout's own looks still set. On an install that already exists:
+
+- **The same preset as installed**, updated by the package: its settings follow the update's rules (keep my customizations by
+  default; `updates.md`), and the review says so.
+- **Another preset, picked on purpose**: its settings take the preset's values (`PlanOpts`: "use recommended" for each of its
+  settings the player hasn't answered themselves), so it does what it says. The review still offers "keep mine" for each; when a
+  setting stays as the player has it (kept, or theirs: owned), the review says the preset won't be fully in effect.
+- **A preset that is no longer offered** (an author removed it; its id is `retired`): the Helpers step says so with its id, the
+  default is not applied in its place without a pick, and Next and Apply wait (`M.Missing`, `choose-preset`).
 
 ### Tooltip placement and friendly player nameplates (two choices of format 5)
 
@@ -145,7 +188,8 @@ install record (`layouts.install`, `Journal.lua`), covered by the same `layouts`
 
 - not a table, or `v` not a whole number ≥ 1: defaults; nothing is written by reading;
 - `v` newer than this version: defaults are used and **a pick never overwrites it** (`test_layout_wizard.lua` §9);
-- a pick that isn't an option of its choice goes back to that choice's default and the others are kept; unknown choices
+- a pick that isn't an option of its choice goes back to that choice's default and the others are kept, and is reported
+  (`dropped`): for a preset, the wizard says the option is gone and waits for a pick; unknown choices
   and a bad `resume` are ignored; a `variant` that isn't one of the package's goes back to the first (Classic); a record
   with no `variant` (from Phase 4) reads as Classic; the next save writes a clean record. Every writer (a pick, the layout
   choice, the reload note, using the note up) saves the chosen layout with the picks, so none forgets it;

@@ -16,6 +16,12 @@
 #     can look at them, the ones from before are saved to a folder it names, and it exits 1 saying the result is NOT ready.
 # Only a run that generated and passed every check ends with "Done" and exit 0 (with --no-tests: "not tested").
 # It never commits, deploys or releases, and touches no file but the five below.
+#
+# --from-published is the other way in (docs/layouts/presets.md): instead of recapturing profiles, it imports a package the author
+# published in game, exactly (tools/import_published_layout.lua): its choices (the TwichUI presets) into ChoicesData.lua, its layers
+# into the two data files when they differ, its revision into Classic.lua, and a report; then the same checks, with the round trip
+# (the bundled package must resolve exactly as the published one). The profile recapture never writes ChoicesData.lua, so the
+# presets an author approved in game are kept by every later recapture.
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -31,6 +37,11 @@ TWICHUI_PROFILE="Default"
 BUMP=1
 TESTS=1
 RETURNED=""
+FROM_PUBLISHED=0
+TEXT=""
+PUB_REVISION=""
+PUB_HASH=""
+LIST=0
 
 usage() {
     cat <<EOF
@@ -49,6 +60,13 @@ Usage: tools/update_bundled_layout.sh [options]
                              what players who have the layout get for a TwichUI setting the last capture named and your
                              profile no longer has (usually put back to the default). Asked for only when there is one:
                              docs/layouts/updating-the-bundled-layout.md, "Settings you put back to the default"
+
+  --from-published           import a package published in game instead of recapturing profiles (docs/layouts/presets.md):
+                             from the published list in your saved !!!TwichUI.lua (found as above, or --sv DIR), or --text
+    --text FILE              a file holding the text the workspace's "Export for bundling" shows
+    --revision N             which published revision (needed when more than one is saved)
+    --hash FINGERPRINT       and which one, when two share a revision
+    --list                   list the published packages in the saved file and stop
   -h, --help                 this text
 
 Log out of the game first: it writes your settings to disk only when you log out or reload.
@@ -67,6 +85,11 @@ while [ $# -gt 0 ]; do
         --no-bump) BUMP=0; shift ;;
         --no-tests) TESTS=0; shift ;;
         --returned) RETURNED="$2"; shift 2 ;;
+        --from-published) FROM_PUBLISHED=1; shift ;;
+        --text) TEXT="$2"; shift 2 ;;
+        --revision) PUB_REVISION="$2"; shift 2 ;;
+        --hash) PUB_HASH="$2"; shift 2 ;;
+        --list) LIST=1; shift ;;
         -h|--help) usage; exit 0 ;;
         *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
     esac
@@ -81,6 +104,118 @@ case "$RETURNED" in ""|reset|release|keep) ;; *) die "--returned must be reset, 
 command -v lua5.1 >/dev/null || die "lua5.1 isn't installed (sudo apt install lua5.1 lua-bitop)"
 lua5.1 -e 'require("bit")' 2>/dev/null || die "lua5.1 can't load luabitop (sudo apt install lua-bitop)"
 command -v python3 >/dev/null || die "python3 isn't installed (it fixes font paths and the revision)"
+if [ $FROM_PUBLISHED -eq 0 ] && { [ -n "$TEXT" ] || [ -n "$PUB_REVISION" ] || [ -n "$PUB_HASH" ] || [ $LIST -eq 1 ]; }; then
+    die "--text, --revision, --hash and --list go with --from-published"
+fi
+if [ $FROM_PUBLISHED -eq 1 ] && [ -n "$RETURNED" ]; then die "--returned is for a profile recapture, not --from-published"; fi
+case "$PUB_REVISION" in ""|*[!0-9]*) [ -z "$PUB_REVISION" ] || die "--revision is a whole number" ;; esac
+
+# --- the other way in: a package published in game ------------------------------------------------------------------
+if [ $FROM_PUBLISHED -eq 1 ]; then
+    WORK="$(mktemp -d)"
+    ARGS=()
+    if [ -n "$TEXT" ]; then
+        [ -f "$TEXT" ] || die "no file $TEXT"
+        cp "$TEXT" "$WORK/export.txt"
+        ARGS=(--text "$WORK/export.txt")
+        SRC_DESC="the exported text in $TEXT (a copy is read)"
+    else
+        if [ -z "$SV_DIR" ]; then
+            ACCOUNTS="$WOW/_${CLIENT}_/WTF/Account"
+            [ -d "$ACCOUNTS" ] || { rm -rf "$WORK"; die "no saved settings for $CLIENT at $ACCOUNTS (use --wow, --client, --sv or --text)"; }
+            if [ -z "$ACCOUNT" ]; then
+                mapfile -t found < <(find "$ACCOUNTS" -mindepth 1 -maxdepth 1 -type d ! -name SavedVariables -printf '%f\n')
+                [ "${#found[@]}" -eq 1 ] || { rm -rf "$WORK"; die "more than one account folder in $ACCOUNTS (${found[*]}): pick one with --account"; }
+                ACCOUNT="${found[0]}"
+            fi
+            SV_DIR="$ACCOUNTS/$ACCOUNT/SavedVariables"
+        fi
+        [ -f "$SV_DIR/!!!TwichUI.lua" ] || { rm -rf "$WORK"; die "no !!!TwichUI.lua in $SV_DIR"; }
+        cp "$SV_DIR/!!!TwichUI.lua" "$WORK/TwichUI.lua"
+        ARGS=(--sv "$WORK/TwichUI.lua")
+        SRC_DESC="the published list in $SV_DIR/!!!TwichUI.lua (changed $(date -r "$SV_DIR/!!!TwichUI.lua" '+%Y-%m-%d %H:%M'); a copy is read)"
+    fi
+    [ -n "$PUB_REVISION" ] && ARGS+=(--revision "$PUB_REVISION")
+    [ -n "$PUB_HASH" ] && ARGS+=(--hash "$PUB_HASH")
+    say "Source"
+    echo "  $SRC_DESC"
+    if [ $LIST -eq 1 ]; then
+        lua5.1 tools/import_published_layout.lua "${ARGS[@]}" --list; rc=$?
+        rm -rf "$WORK"; exit $rc
+    fi
+    FILES=(TwichUI_Layouts/ChoicesData.lua TwichUI_Layouts/ClassicData.lua TwichUI_Layouts/CompactData.lua TwichUI_Layouts/Classic.lua
+           docs/layouts/import-published.md)
+    BACKUP="$WORK/backup"
+    mkdir -p "$BACKUP"
+    for f in "${FILES[@]}"; do if [ -f "$f" ]; then cp "$f" "$BACKUP/$(basename "$f")"; fi; done
+    restore() {
+        for f in "${FILES[@]}"; do
+            if [ -f "$BACKUP/$(basename "$f")" ]; then cp "$BACKUP/$(basename "$f")" "$f"; else rm -f "$f"; fi
+        done
+        echo "The files it would have replaced are back as they were."
+    }
+    PHASE="generate"
+    on_exit_pub() {
+        local status=$?
+        if [ "$PHASE" = "generate" ] && [ $status -ne 0 ]; then
+            printf '\033[31mStopped while importing.\033[0m ' >&2
+            restore >&2
+        elif [ "$PHASE" = "check" ] && [ $status -ne 0 ]; then
+            KEPT="$(mktemp -d "${TMPDIR:-/tmp}/twichui-bundled-before.XXXXXX")"
+            cp "$BACKUP"/* "$KEPT/" 2>/dev/null || true
+            printf '\n\033[31mNOT READY:\033[0m the new files are kept so you can look at them, but they failed a check and must not be committed.\n' >&2
+            echo "The files as they were before this run are saved in $KEPT" >&2
+            echo "To put them back: git checkout -- ${FILES[*]} (or copy them from that folder)" >&2
+        fi
+        rm -rf "$WORK"
+        exit $status
+    }
+    trap on_exit_pub EXIT
+    say "Importing the published package"
+    OUT="$WORK/import.log"
+    if ! lua5.1 tools/import_published_layout.lua "${ARGS[@]}" 2>&1 | tee "$OUT"; then die "the import failed (its message is above)"; fi
+    if grep -q "^Not imported" "$OUT"; then exit 1; fi
+    if grep -q "^Already bundled" "$OUT"; then
+        PHASE="done"
+        say "Done: already bundled, nothing changed"
+        exit 0
+    fi
+    PHASE="check"
+    STATUS=0
+    say "Checking the package as players will get it, and that it is the published one"
+    if ! lua5.1 tools/check_bundled_layout.lua --published "${ARGS[@]:0:2}" ${PUB_REVISION:+--published-revision "$PUB_REVISION"} ${PUB_HASH:+--published-hash "$PUB_HASH"}; then
+        STATUS=1
+        warn "the package fails the check above"
+    fi
+    TESTED="not tested (--no-tests)"
+    if [ "$TESTS" -eq 1 ]; then
+        say "Running the offline tests (a few minutes)"
+        if ./tests/run.sh > "$WORK/tests.log" 2>&1; then
+            tail -1 "$WORK/tests.log"
+            TESTED="tests passed"
+        else
+            STATUS=1
+            TESTED="TESTS FAILED"
+            grep -A5 '^FAIL' "$WORK/tests.log" || true
+            tail -1 "$WORK/tests.log"
+            warn "some tests failed (docs/layouts/updating-the-bundled-layout.md, \"When tests fail\")"
+        fi
+    fi
+    say "What changed"
+    git --no-pager diff --stat -- "${FILES[@]}" 2>/dev/null || ls -l "${FILES[@]}"
+    if [ $STATUS -ne 0 ]; then exit $STATUS; fi
+    PHASE="done"
+    say "Done: imported, checked, $TESTED"
+    cat <<EOF
+Next:
+  - read docs/layouts/import-published.md (where it came from, what changed, the presets it holds)
+  - look at the diff: git diff -- ${FILES[*]}
+  - try it in game: tools/deploy.sh, then /tui layout
+  - commit the files above, then release as RELEASING.md says
+To throw this run away: git checkout -- ${FILES[*]} (and remove docs/layouts/import-published.md if git doesn't know it yet)
+EOF
+    exit 0
+fi
 
 # --- 1. find the saved files and copy them ------------------------------------------------------------------------
 if [ -z "$SV_DIR" ]; then

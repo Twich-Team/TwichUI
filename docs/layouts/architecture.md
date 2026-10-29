@@ -13,6 +13,7 @@ Where to find the rest:
 | `wizard.md` | The setup wizard: steps, choices, preview, overlay, fit, result |
 | `publishing.md` | Authoring, the envelope, the transport, receiving |
 | `updating-the-bundled-layout.md` | Recapturing the package TwichUI ships (`tools/update_bundled_layout.sh`) |
+| `presets.md` | The TwichUI helper presets: editing them in game, publishing them, bundling the published package (`--from-published`) |
 | `adapter-capabilities.md` | Source evidence for each integration |
 | `implementation-status.md` | What is built, tested offline, waiting for in-game checks, unsupported or deferred; open decisions; release blockers |
 
@@ -28,7 +29,7 @@ composed layout, reloading, checking it), **update** (installing again over an i
 
 | Adapter | Covers | Not covered |
 |---|---|---|
-| `twichui` | Every looks-and-behaviour field of TwichUI's shared-field-by-field groups that is profile-scoped and not in `TwichConfig.LOCAL`; the seven registered places (`PLACES`); preset choices may turn feature switches **on** | List groups; anything that acts for the player, talks to other players or is a record; account-scoped settings; windows the player moves |
+| `twichui` | Every looks-and-behaviour field of TwichUI's shared-field-by-field groups that is profile-scoped and not in `TwichConfig.LOCAL`; the seven registered places (`PLACES`); a preset choice may set those fields (an older switch-on-only preset: feature switches **on** only; an editable preset, format 6: any of them, on or off, any valid value, or reset), never a place | List groups; anything that acts for the player, talks to other players or is a record; account-scoped settings; windows the player moves |
 | `ellesmereui` | The suite's 18 module blobs, the layout links (`unlockLayout`), the look (`fonts`, `darkMode`, `euiAccent`, `_migrations`), through EllesmereUI's public partner-installer API; two allowlisted friendly-plate switches (`showFriendlyPlayers`, `classColorFriendly`) inside the nameplate blob; and, outside the import, the **tooltip placement** (the account-wide `tooltipAnchorCursor` flag and the install's profile's `tooltipFixedPos`, written by the adapter and read back) | UI scale, window skins and every other tooltip-skin setting (cursor offsets, growth direction, skin), spec and condition overrides, Cooldown Manager spells, click-cast, custom colours, other profiles, module enable states (all stripped from every payload) |
 
 Unsupported in this release, each with its reason (`adapter-capabilities.md` has the evidence): Blizzard Edit Mode layouts (never
@@ -59,6 +60,10 @@ shared base → layout variant → preset (and a picked preset) → picked choic
 
   Absence never means reset. On an update, a unit the package stops naming is *released*: the recipient keeps what they have
   (`updates.md`).
+- **Presets** (`presets.md`): the picked TwichUI preset is above the base and the variant, so for a setting both name the
+  preset's value wins; a setting the preset doesn't name keeps the layers' value (and "Leave them as they are" names nothing, so the
+  layout's own looks still apply with it). The other choices are above the preset, but never name what it names (two choices may
+  not write one unit: `choice-conflict`); a preset never names a place, so the screen layer never adapts a preset's value.
 - **The screen layer is a function, not stored values**: it moves registered positions with their components for this screen and
   scales the registered text sizes by the density (§5). A value the recipient keeps is never adapted.
 - **Unmanaged units are never written.** Everything outside §1 keeps the recipient's value.
@@ -75,13 +80,16 @@ a draft and a received one; `Pub.Strict` adds what a package that travels must a
 | 3 | `choices`: presets (switches on only), enums (only their `sets`), density | Phase 4 on |
 | 4 | a fragment's `reset` list (TwichUI settings, EllesmereUI allowlisted fields; base and variant layers only) | RH-1 on |
 | 5 | an EllesmereUI choice fragment's `tooltip` (`cursor`, `fixed`; a wizard choice only) and boolean allowlisted fields | tooltip and friendly-plate choices on |
+| 6 | editable TwichUI presets: a preset choice's `mode = "settings"` (its options set any managed TwichUI field to any valid value, `false`, `0` included, or reset it through their fragment's `reset` list; no place, no other adapter), `retired = { option ids }` (never reused), an option's `keep = true` (names nothing; at most one) | the presets editor on |
 
-A package newer than the reader is refused as `format-newer` (an older TwichUI refuses a format 5 package rather than misread it).
-The bundled package is format 5 since it carries the tooltip and friendly-plate choices; a package without them and without a reset
-stays readable at its own lower format.
+A package newer than the reader is refused as `format-newer` (an older TwichUI refuses a format 6 package rather than misread it).
+The bundled package declares the lowest format its choices need (`Classic.lua` `ChoicesFormat`): 5 with the switch-on-only presets
+it has now, 6 once editable presets are bundled. A switch-on-only preset is never reread as an editable one (it still can't turn
+anything off); an omitted setting is never a reset in either kind.
 
-Bounds: canonical text ≤ 8 MB, ≤ 50,000 values, depth ≤ 16, ≤ 256 units per adapter fragment, ≤ 8 variants, ≤ 6 choices of ≤ 8
-options. Stable ids: lower-kebab variant, choice and option ids; units `<adapter>:<path>` (`twichui:ui.markerBarPosition`,
+Bounds: canonical text ≤ 8 MB, ≤ 50,000 values, depth ≤ 16, ≤ 256 units per adapter fragment (one preset option included), ≤ 8
+variants, ≤ 6 choices of ≤ 8 options, ≤ 32 retired option ids; a composed layout per adapter ≤ `LY.MAX_EXPECT` - 16 units
+(`MAX_EXPECT` = 3 × 256 + 64: base, variant and a preset, plus the screen layer's places; the install record and baseline hold as many). Stable ids: lower-kebab variant, choice and option ids; units `<adapter>:<path>` (`twichui:ui.markerBarPosition`,
 `ellesmereui:addons.EllesmereUIMinimap`, `ellesmereui:pos.minimap`, `ellesmereui:addons.EllesmereUIMinimap.minimap.coordsMode`).
 The install's own profiles are one pair for both layouts: EllesmereUI and TwichUI `TwichUI Adventure` (D26).
 
@@ -235,8 +243,12 @@ out, 8 MB in all; a hostile piece can still expand once by deflate's ratio befor
 waits for combat to end. The fingerprint detects accidents, not forgery; the sender is the game's word. Media must be portable
 for every package: published, received and bundled (the release runs the check that refuses another addon's file).
 
-The bundled package (recaptured offline) and a package published in game are made by different paths and may differ;
-`Pub.Compare` (and `/tui layout compare`) says whether two packages resolve the same for every layout and choice, and where not.
+The bundled package is made one of two explicit ways (`presets.md`, `updating-the-bundled-layout.md`): **recaptured** offline from
+saved profiles (the layers only; it never writes the choices), or **imported** from a package published in game
+(`tools/update_bundled_layout.sh --from-published`: the choices exactly, the layers when they differ, the revision; refused when the
+hand-written screen rules, targets or requirements differ). An import is verified as a round trip: the bundled package must resolve
+as the published one (`Pub.Compare`), with identical choices and the published revision; only the title, made, source, the developer
+flag and the declared format may differ. `Pub.Compare` (and `/tui layout compare`) says whether any two packages resolve the same.
 
 ## 11. Packaging, saved data and diagnostics
 
@@ -246,4 +258,5 @@ The bundled package (recaptured offline) and a package published in game are mad
 - `TwichUIDB.layouts` holds `install`, `managed`, `baseline`, `wizard`, `published`, `received`: records, not settings
   (`TwichConfig.LOCAL`, `RS.OWN_LEFT_OUT`); bounded; never in backups or shares.
 - Diagnostics scopes `layouts.load`, `.plan`, `.apply`, `.verify`, `.restore`, `layouts.capture`, `layouts.publish.build`,
-  `.check`, `.compare`, `.receive`, `layouts.store.open`; wizard gauges for frames and listeners (`docs/diagnostics.md`).
+  `.check`, `.compare`, `.receive`, `layouts.store.open`, `layoutwizard.presets.capture`; wizard gauges for frames and listeners,
+  and `layoutwizard.author.presets` for the presets' draft (`docs/diagnostics.md`).

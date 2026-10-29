@@ -21,16 +21,26 @@
 --   format 3 only: what the wizard may ask. A choice is a closed list of options and names exactly what it writes:
 --   a preset only turns TwichUI switches (`twichui:modules.*`) on; an enum may write only the units in its `sets`;
 --   a density picks one of the geometry's densities. Two choices never write the same unit. Nothing else.
+--   format 6: a preset choice with `mode = "settings"` (an editable TwichUI preset) may name any TwichUI setting the
+--   adapter manages, with any value that setting can have (false, 0 and "" included) or a reset to TwichUI's default (its
+--   fragment's `reset` list); never a place, never another addon's setting. `retired = { option ids }` lists options a
+--   package no longer offers (so an id is never reused for something else), and an option with `keep = true` names nothing:
+--   the structural "leave them as they are" option (at most one per choice). A preset without a mode is read as before
+--   (switches turned on only), never as a preset of the new kind.
 -- Fields of the contract's package that later phases add (canvas and positions became geometry) are refused as
 -- "not yet": this version cannot honour them, so it does not pretend to.
 
 local R = TwichUI
 local LY = R.Layouts
 
-LY.FORMAT = 5             -- 4 (RH-1): a fragment may hold `reset`, a list of units to put back to the addon's default;
-                           -- 5: an EllesmereUI choice fragment may hold `tooltip` (an account-wide setting and a place), and fields of other kinds
-LY.MAX_UNITS = 256         -- units one adapter fragment may name (Classic Adventure's TwichUI looks are 206)
-LY.MAX_EXPECT = LY.MAX_UNITS + 64   -- and what one adapter's record may expect: those, plus the places the screen layer adds
+LY.FORMAT = 6             -- 4 (RH-1): a fragment may hold `reset`, a list of units to put back to the addon's default;
+                           -- 5: an EllesmereUI choice fragment may hold `tooltip` (an account-wide setting and a place), and fields of other kinds;
+                           -- 6: editable TwichUI presets (a preset choice's `mode = "settings"`, `retired`, an option's `keep`)
+LY.MAX_UNITS = 256         -- units one adapter fragment may name (Classic Adventure's TwichUI looks are 206; one preset option)
+-- What one adapter's record may expect: the units a composed layout can name (base, variant and a preset, each bounded by
+-- MAX_UNITS), plus the places the screen layer adds. A composed layout past it is refused by LY.Resolve.
+LY.MAX_EXPECT = 3 * LY.MAX_UNITS + 64
+LY.MAX_RETIRED = 32        -- option ids a choice may list as no longer offered
 LY.MAX_VARIANTS = 8
 LY.MAX_CHOICES = 6         -- what the wizard may ask (a package's `choices`)
 LY.MAX_OPTIONS = 8         -- options in one choice
@@ -42,7 +52,8 @@ LY.ADAPTERS, LY.ADAPTER_ORDER = {}, {}   -- filled by the adapter files
 function LY.ResetList(list, ctx, add)
     local P, where = ctx.problems, ctx.where .. ".reset"
     if (ctx.format or 1) < 4 then P.add("not-yet", where) return end
-    if ctx.layer ~= "base" and ctx.layer ~= "variant" then P.add("reset-not-here", where) return end
+    -- a reset is a layer's own value: the base's, a variant's, or (format 6) an editable preset's; never an enum choice's
+    if ctx.layer ~= "base" and ctx.layer ~= "variant" and not (ctx.layer == "preset" and ctx.settings) then P.add("reset-not-here", where) return end
     if type(list) ~= "table" then P.add("not-table", where) return end
     local n, seen = 0, {}
     for k in pairs(list) do
@@ -96,8 +107,8 @@ end
 -- Choices (format 3): what the wizard may ask, as closed lists
 ---------------------------------------------------------------------------
 local CHOICE_KINDS = LY.Set({ "preset", "enum", "density" })
-local CHOICE_FIELDS = LY.Set({ "id", "kind", "label", "hint", "default", "options", "sets" })
-local OPTION_FIELDS = LY.Set({ "id", "label", "hint", "swatch", "density" })
+local CHOICE_FIELDS = LY.Set({ "id", "kind", "label", "hint", "default", "options", "sets", "mode", "retired" })
+local OPTION_FIELDS = LY.Set({ "id", "label", "hint", "swatch", "density", "keep" })
 
 local function Rgb(c)
     if type(c) ~= "table" or #c ~= 3 then return false end
@@ -113,6 +124,13 @@ end
 -- and never writes a setting that isn't a switch. (Switches that act for you or talk to others are not managed at all.)
 local function PresetUnitOk(adapterId, unit, value)
     return adapterId == "twichui" and type(unit) == "string" and unit:match("^twichui:modules%.[%w_]+$") ~= nil and value == true
+end
+
+-- An editable preset (format 6, mode "settings") names TwichUI settings the adapter manages (its own allowlist: profile-scoped,
+-- not kept local, not a list), with any value the setting can have or a reset; never a place (where things sit is the
+-- layout's) and never another addon's setting. The value itself was checked by the adapter's Normalize.
+local function PresetSettingOk(adapterId, unit)
+    return adapterId == "twichui" and LY.TwichUIAdapter ~= nil and LY.TwichUIAdapter.FieldOf(unit) ~= nil
 end
 
 -- Fills checked.choices = { order = { ids }, by = { [id] = { kind, default, order = { option ids },
@@ -149,7 +167,30 @@ local function Choices(pkg, ctx, checked)
             elseif ch.sets ~= nil then
                 P.add("unknown-field", where .. ".sets")
             end
-            local entry = { kind = ch.kind, default = ch.default, order = {}, options = {} }
+            -- format 6: an editable preset, and the ids it no longer offers
+            local settings = false
+            if ch.mode ~= nil then
+                if ch.kind ~= "preset" then P.add("unknown-field", where .. ".mode")
+                elseif (pkg.format or 1) < 6 then P.add("not-yet", where .. ".mode")
+                elseif ch.mode ~= "settings" then P.add("bad-value", where .. ".mode")
+                else settings = true end
+            end
+            local retired = {}
+            if ch.retired ~= nil then
+                if (pkg.format or 1) < 6 then P.add("not-yet", where .. ".retired")
+                elseif type(ch.retired) ~= "table" or #ch.retired > LY.MAX_RETIRED then P.add("bad-value", where .. ".retired")
+                else
+                    for k in pairs(ch.retired) do
+                        if type(k) ~= "number" or k < 1 or k > #ch.retired or k % 1 ~= 0 then P.add("bad-value", where .. ".retired") break end
+                    end
+                    for _, rid in ipairs(ch.retired) do
+                        if not LY.IsId(rid) or retired[rid] then P.add("bad-value", where .. ".retired") else retired[rid] = true end
+                    end
+                end
+            end
+            local entry = { kind = ch.kind, default = ch.default, order = {}, options = {}, mode = settings and "settings" or nil,
+                retired = retired }
+            local keeps = 0
             local options = ch.options
             if type(options) ~= "table" or #options == 0 or #options > LY.MAX_OPTIONS then P.add("bad-value", where .. ".options")
             else
@@ -167,7 +208,16 @@ local function Choices(pkg, ctx, checked)
                         if not LY.Plain(opt.label, 48) then P.add("bad-value", at .. ".label") end
                         if opt.hint ~= nil and not LY.Plain(opt.hint, 200) then P.add("bad-value", at .. ".hint") end
                         if opt.swatch ~= nil and not Rgb(opt.swatch) then P.add("bad-value", at .. ".swatch") end
+                        if LY.IsId(opt.id) and retired[opt.id] then P.add("retired-id", at .. ".id") end
                         local o = { frags = {} }
+                        -- the structural "leave them as they are" option (format 6): names nothing, and says so
+                        if opt.keep ~= nil then
+                            if ch.kind ~= "preset" then P.add("unknown-field", at .. ".keep")
+                            elseif (pkg.format or 1) < 6 then P.add("not-yet", at .. ".keep")
+                            elseif opt.keep ~= true then P.add("bad-value", at .. ".keep")
+                            elseif next(layer) ~= nil then P.add("keep-names-settings", at)
+                            else o.keep = true keeps = keeps + 1 end
+                        end
                         if ch.kind == "density" then
                             local densities = pkg.geometry and pkg.geometry.densities
                             if next(layer) ~= nil then P.add("not-allowed", at)
@@ -176,11 +226,17 @@ local function Choices(pkg, ctx, checked)
                         else
                             if opt.density ~= nil then P.add("unknown-field", at .. ".density") end
                             ctx.layer = ch.kind == "preset" and "preset" or "choice"
+                            ctx.settings = settings or nil
                             Fragments(layer, ctx, o.frags, at)
+                            ctx.settings = nil
+                            local named = 0
                             for adapterId, f in pairs(o.frags) do
                                 for unit, value in pairs(f.units) do
+                                    named = named + 1
                                     if ch.kind == "preset" then
-                                        if not PresetUnitOk(adapterId, unit, value) then P.add("not-allowed", unit) end
+                                        if settings then
+                                            if not PresetSettingOk(adapterId, unit) then P.add("not-allowed", unit) end
+                                        elseif not PresetUnitOk(adapterId, unit, value) then P.add("not-allowed", unit) end
                                     elseif not (sets and sets[unit]) then
                                         P.add("not-in-sets", unit)
                                     end
@@ -189,6 +245,8 @@ local function Choices(pkg, ctx, checked)
                                     owner[unit] = id
                                 end
                             end
+                            -- an editable preset that names nothing is the "leave them as they are" option, and has to say so
+                            if settings and named == 0 and not o.keep then P.add("preset-empty", at) end
                         end
                         if LY.IsId(opt.id) and not entry.options[opt.id] then
                             entry.options[opt.id] = o
@@ -198,6 +256,7 @@ local function Choices(pkg, ctx, checked)
                     end
                 end
             end
+            if keeps > 1 then P.add("keep-repeated", where .. ".options") end
             if type(ch.default) ~= "string" or entry.options[ch.default] == nil then P.add("bad-value", where .. ".default") end
             if LY.IsId(id) and not checked.choices.by[id] then
                 checked.choices.by[id] = entry
@@ -426,6 +485,11 @@ function LY.Resolve(pkg, variant, opts)
             Push("choices", fromChoices)
             Push("choices", opts.choices)
             resolved.adapters[id] = LY.Compose(stack, parents, opts.retained and opts.retained[id], opts.reset and opts.reset[id])
+            -- what one install of this adapter may record (the places the screen layer adds come on top)
+            if #resolved.adapters[id].list > LY.MAX_EXPECT - 16 then
+                problems.add("too-many-units", id)
+                return false, problems
+            end
         end
     end
     if checked.geometry then

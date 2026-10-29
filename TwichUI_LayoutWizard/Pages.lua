@@ -394,8 +394,10 @@ local function BuildHelpers(parent, env)
     local col = NewColumn(f)
     Put(col, Heading(f, "Choose TwichUI's helpers", LEFT_W), 4)
     local sub = Put(col, Text(f, "small", LEFT_W), 4)
+    -- a preset picked before (or installed) that this package no longer offers: said first, and a choice is asked for
+    local gone = Put(col, Text(f, "small", LEFT_W), 6)
+    gone:SetTextColor(Pal().bronzeText[1], Pal().bronzeText[2], Pal().bronzeText[3])   -- the warning tone, and the words say it
     local note = Text(f, "small", LEFT_W)
-    note:SetText("These only turn features on, never off, and you can change any of them later in TwichUI's settings. Features that share, play sounds or act for you are never part of this.")
     PreviewColumn(page, f, 24, env)
 
     local none = Text(f, "body", LEFT_W)
@@ -418,6 +420,14 @@ local function BuildHelpers(parent, env)
         sub:Show()
         note:Show()
         sub:SetText(ch.hint)
+        note:SetText(ch.mode == "settings"
+            and "A preset can turn features on or off and set how they look and behave; the Review step lists exactly what it changes before anything is applied. You can change any of it later in TwichUI's settings. Features that act for you or talk to other players are never part of a preset."
+            or "These only turn features on, never off, and you can change any of them later in TwichUI's settings. Features that share, play sounds or act for you are never part of this.")
+        local missing = M.Missing("helpers")
+        gone:SetShown(missing ~= nil)
+        if missing then
+            gone:SetText(("The helper preset you chose before (\"%s\") is no longer offered by this package. Choose one of these; nothing is picked for you."):format(missing))
+        else gone:SetText("") end
         for i, o in ipairs(ch.options) do
             local card = page.cards[i]
             if not card then
@@ -429,8 +439,20 @@ local function BuildHelpers(parent, env)
                 M.SetPick("helpers", o.id)
                 env.Relayout()
             end)
-            card:Fill(o.label, o.hint)
-            card:SetSelected(M.Pick("helpers") == o.id)
+            -- what it does, read from the package: the features it turns on and off, and how many other settings it sets
+            local sm = M.PresetSummary("helpers", o.id)
+            local what
+            if sm and sm.keep then what = "Changes nothing of what the presets manage."
+            elseif sm then
+                local parts = {}
+                if #sm.summary.on > 0 then parts[#parts + 1] = "On: " .. table.concat(sm.summary.on, ", ") end
+                if #sm.summary.off > 0 then parts[#parts + 1] = "Off: " .. table.concat(sm.summary.off, ", ") end
+                local other = sm.summary.set + sm.summary.reset
+                if other > 0 then parts[#parts + 1] = ("%d other %s"):format(other, other == 1 and "setting" or "settings") end
+                what = #parts > 0 and (table.concat(parts, ". ") .. ".") or nil
+            end
+            card:Fill(o.label, (o.hint or "") .. (what and ((o.hint and "\n" or "") .. what) or ""))
+            card:SetSelected(M.Pick("helpers") == o.id and not missing)
             card:Show()
         end
         for i = #ch.options + 1, #page.cards do page.cards[i]:Hide() end
