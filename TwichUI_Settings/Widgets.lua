@@ -119,6 +119,7 @@ end
 ---------------------------------------------------------------------------
 -- Dropdown: a button showing the chosen label; a click opens one shared list beneath it.
 -- choices(): { { value, label, tooltip }, ... }; onPick(value). SetValue(v, label), SetActive(on).
+-- A button may set .menuWidth (its list's width, when wider than itself) and .menuAlignRight (the list hangs from its right edge).
 ---------------------------------------------------------------------------
 local menu   -- the one open list
 local MENU_ROWS, MENU_ROW_H = 12, 20
@@ -234,9 +235,14 @@ local function OpenMenu(owner)
         end
     end
     local shown = math.max(1, math.min(MENU_ROWS, #choices))
-    menu:SetSize(math.max(owner:GetWidth(), 160), shown * MENU_ROW_H + 8)
+    menu:SetSize(math.max(owner.menuWidth or owner:GetWidth(), 160), shown * MENU_ROW_H + 8)
     menu:ClearAllPoints()
-    menu:SetPoint("TOPLEFT", owner, "BOTTOMLEFT", 0, -2)
+    -- a small button near the right edge (owner.menuWidth wider than itself) opens its list leftwards, so it isn't clipped
+    if owner.menuAlignRight then
+        menu:SetPoint("TOPRIGHT", owner, "BOTTOMRIGHT", 0, -2)
+    else
+        menu:SetPoint("TOPLEFT", owner, "BOTTOMLEFT", 0, -2)
+    end
     menu:SetScale(owner:GetEffectiveScale() / UIParent:GetEffectiveScale())
     Wg.PaintMenu()
     menu:Show()

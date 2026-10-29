@@ -118,6 +118,7 @@ uses an item, sends anything or makes up events. Each states its cost before you
 | `npcs.import`, `npcs.cleanup` | `npcs/Store.lua` `NS.MergeReported`, `NS.ForgetMany` | bulk |
 | `pins.map.layout` | `pins/Map.lua` `PM.Layout` | layout |
 | `reminders.refresh` (`Perf.Call`), `reminders.decide` | `reminders/Controller.lua` | rebuild, evaluate |
+| `reminders.designer.layout` (`Perf.Call`) | `TwichUI_Settings/pages/RemindersDesigner.lua` `s:Layout` (visible while the settings window is shown) | layout |
 | `healer.update` | `healer/Watch.lua` `Update` (live path; previews not timed) | update |
 | `settings.describe`, `settings.window.build` (`Perf.Call`) | `TwichUI_Settings/Window.lua` `UI.Open` | init |
 | `settings.page.build` (`Perf.Call`), `settings.page.layout`, `settings.search` | `TwichUI_Settings/Window.lua` | build, layout, search |
@@ -152,7 +153,7 @@ windows), which the reports name when most TwichUI CPU is outside every scope.
 Gauges (`Gauges.lua`) read what modules already report (`Snapshot()` functions and a few read-only counts): event-bus
 listeners and events (`R.ListenerCounts`, added to `Core.lua`), switch listeners, settings-closed callbacks, effects
 easing, settings shown, pages drawn and search index, world map shown, NPC and pin marker pools and those in use, map
-detail tiles, navigation tiles decoded, reminders running and observation keys, Healer Watch's and class bars' events, and the
+detail tiles, navigation tiles decoded, reminders running and observation keys, the Reminders condition designer's card and picker-row pools (`reminders.designer.cards`, `reminders.designer.pickerRows`; they grow once, to the sizes a reminder is limited to, and then stay) and whether one of its editors is open, Healer Watch's and class bars' events, and the
 Cozy Sleeping Bag offer's events (`bag.offer.events`: 0 to 3) and looks so far, with whether its button frame is made and shown
 (`bag.button.built`, `bag.button.shown`).
 The layout setup registers four of its own (`TwichUI_LayoutWizard/Window.lua` and `Overlay.lua`, only once it is loaded):

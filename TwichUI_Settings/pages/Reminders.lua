@@ -1,6 +1,7 @@
 -- TwichUI settings: Reminders (reminders/). A feature card with the switch, then a frame of this window's own: your
 -- reminders as a list (each with a thumbnail, its rule as a sentence, what it is doing now and its own switch), ways to
--- start one, and the chosen reminder's editor (RemindersEditor.lua: Show, When, Placement, Preview, Test). Built the
+-- start one, and the chosen reminder's editor (RemindersEditor.lua: Show, When (RemindersDesigner.lua, in RemindersPlain.lua's
+-- words), Placement, Preview appearance, Test). Built the
 -- first time the page is shown; list rows are made as they are first needed and reused on every redraw. Which reminder
 -- is open, and which situations the Test section tries, are kept for the session only.
 -- Every change goes through reminders/Config.lua's own functions, which check it. Nothing here is needed for reminders
@@ -95,6 +96,22 @@ function P.Create(kind)
     local v = RM().Get(id)
     P.Say(("Made \"%s\". It stays off until you turn it on%s."):format(v.name, v.valid and "" or ", once what is listed below is done"), "ok")
     return true, id
+end
+
+-- A problem as the player reads it: one that is only a limit of this client ("Condition 2: this game client doesn't say
+-- whether...") is said in its short form ("Cannot check ammunition on this client."), the rest as Config.lua words them.
+local function Friendly(v, problem)
+    local label = problem:match("^Condition ([%d%.]+): ")
+    local Pl = R.RemindersPlain
+    if label and Pl then
+        for _, e in ipairs(v.leaves) do
+            if table.concat(e.path, ".") == label then
+                local short = Pl.Capability(e)
+                if short then return short end
+            end
+        end
+    end
+    return problem
 end
 
 ---------------------------------------------------------------------------
@@ -214,7 +231,7 @@ local function LayoutList(list, y)
             row.rule:SetText(E.RuleSentence(v))
             Tone(row.rule, "quiet")
         else
-            row.rule:SetText(v.problems[1] or "")
+            row.rule:SetText(v.problems[1] and Friendly(v, v.problems[1]) or "")
             Tone(row.rule, "warn")
         end
         row.state:SetText(SHORT[status] or "")
@@ -276,7 +293,7 @@ local function LayoutHead(v, y)
     h = h + 32
     if #v.problems > 0 then
         local lines = {}
-        for i, p in ipairs(v.problems) do lines[i] = "-  " .. p end
+        for i, p in ipairs(v.problems) do lines[i] = "-  " .. Friendly(v, p) end
         f.problems:SetText((v.enabled and "It is turned on but can't show until this is fixed:\n" or "Before it can be turned on:\n") .. table.concat(lines, "\n"))
         Tone(f.problems, "warn")
         Put(f.problems, head, PAD, h)
@@ -422,6 +439,7 @@ function P.Frame()
     f:SetScript("OnHide", function(self)
         for _, e in ipairs(EVENTS) do self:UnregisterEvent(e) end
         if f.nameBox then f.nameBox:ClearFocus() end
+        if R.RemindersDesigner then R.RemindersDesigner.Reset() end   -- an open editor, picker or undo is put away
     end)
     f:SetScript("OnEvent", function() P.QueueRefresh(0.2) end)
     return f
@@ -455,7 +473,7 @@ K.Page({
             return K.OnOff(on > 0, ("%d of %d on"):format(on, n), ("%d, none on"):format(n))
         end,
     },
-    when = function() return R.Reminders ~= nil and R.ReminderController ~= nil and R.RemindersEditor ~= nil end,
+    when = function() return R.Reminders ~= nil and R.ReminderController ~= nil and R.RemindersEditor ~= nil and R.RemindersDesigner ~= nil and R.RemindersPlain ~= nil end,
     build = function()
         K.Card({
             title = "Reminders", icon = "reminders",

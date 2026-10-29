@@ -713,8 +713,10 @@ function RM.SetMatch(id, match, groupPath)
     return true
 end
 
--- Adds a new condition of a kind at the end of the group at groupPath (the top level when nil).
-function RM.AddCondition(id, kind, groupPath)
+-- Adds a new condition of a kind at the end of the group at groupPath (the top level when nil). `cond` (optional) is a
+-- condition of that kind already made (the designer's picker asks for its values first); the provider checks it, and one
+-- it can't use at all is refused. Without it the kind's own starting condition is added.
+function RM.AddCondition(id, kind, groupPath, cond)
     local C = R.ReminderConditions
     local raw, why, _, _, v = Locate(id)
     if not raw then return false, why end
@@ -724,21 +726,31 @@ function RM.AddCondition(id, kind, groupPath)
     if #path + 1 > RM.MAX_DEPTH then return false, REFUSE.tooDeep end
     if #path > 0 and not (RM.Node(v, path) or {}).group then return false, REFUSE.value end
     if v.counts.conditions >= RM.MAX_CONDITIONS then return false, REFUSE.conditionsFull end
+    local node
+    if cond ~= nil then
+        local clean = C.Check(cond)
+        if not (clean and clean.type == kind) then return false, REFUSE.value end
+        node = clean
+    else
+        node = p.New()
+    end
     local list = ListAt(raw, path)
     if not list then return false, REFUSE.value end
-    list[#list + 1] = p.New()
+    list[#list + 1] = node
     Tell(id, "rule")
     return true, #list
 end
 
 -- Adds an empty group at the end of the group at groupPath (the top level when nil). It starts with the opposite
 -- operator of the group it is in, so a group in an "all" list reads as "any"; an empty group is reported as a problem
--- until a condition is put in it. Returns true and the new group's path.
-function RM.AddGroup(id, groupPath)
+-- until a condition is put in it. `match` ("all" | "any", optional) says which it starts as instead. Returns true and the
+-- new group's path.
+function RM.AddGroup(id, groupPath, match)
     local raw, why, _, _, v = Locate(id)
     if not raw then return false, why end
     local path = ReadPath(groupPath)
     if not path then return false, REFUSE.value end
+    if match ~= nil and match ~= "all" and match ~= "any" then return false, REFUSE.value end
     if #path + 2 > RM.MAX_DEPTH then return false, REFUSE.tooDeep end
     local parentMatch = v.match
     if #path > 0 then
@@ -749,7 +761,7 @@ function RM.AddGroup(id, groupPath)
     if v.counts.groups >= RM.MAX_GROUPS then return false, REFUSE.groupsFull end
     local list = ListAt(raw, path)
     if not list then return false, REFUSE.value end
-    list[#list + 1] = { type = "group", match = parentMatch == "any" and "all" or "any", conditions = {} }
+    list[#list + 1] = { type = "group", match = match or (parentMatch == "any" and "all" or "any"), conditions = {} }
     local at = { unpack(path) }
     at[#at + 1] = #list
     Tell(id, "rule")
@@ -789,6 +801,153 @@ function RM.RemoveCondition(id, path)
     return true
 end
 RM.RemoveNode = RM.RemoveCondition
+
+---------------------------------------------------------------------------
+-- Moving, copying and putting back nodes. A node is a condition or a group (with what is in it). None of these changes
+-- what a node says, only where it sits, so the limits that matter are the ones about place: how deep a group may go, and
+-- (for a copy or a node put back) how many conditions and groups the reminder may hold. Each checks everything first and
+-- changes the stored table only once it is sure, so a refusal leaves the reminder exactly as it was.
+---------------------------------------------------------------------------
+
+-- What a stored node holds: { conditions, groups (itself counted when it is one), levels }. levels is how many levels of
+-- lists it needs from the one it sits in: 0 for a condition, 1 for a group with only conditions, one more for each group
+-- inside the deepest one. nil when it isn't a table, or goes deeper than a reminder can (or loops).
+local function NodeStats(node, depth, seen)
+    depth, seen = depth or 0, seen or {}
+    if type(node) ~= "table" or depth > 8 or seen[node] then return nil end
+    if node.type ~= "group" then return { conditions = 1, groups = 0, levels = 0 } end
+    seen[node] = true
+    local st = { conditions = 0, groups = 1, levels = 1 }
+    if type(node.conditions) == "table" then
+        for _, child in ipairs(node.conditions) do
+            local c = NodeStats(child, depth + 1, seen)
+            if not c then seen[node] = nil return nil end
+            st.conditions, st.groups = st.conditions + c.conditions, st.groups + c.groups
+            if c.levels + 1 > st.levels then st.levels = c.levels + 1 end
+        end
+    end
+    seen[node] = nil
+    return st
+end
+
+-- The entry of a view whose stored table is `rawNode`: how a screen keeps hold of "this condition" or "this group"
+-- through moves and edits of the others (the stored table is the same one wherever it sits now; its path is not).
+function RM.NodeByRaw(v, rawNode)
+    if not (v and rawNode) then return nil end
+    for _, entry in ipairs(v.flat) do
+        if entry.raw == rawNode then return entry end
+    end
+end
+
+local function SamePrefix(path, prefix)
+    if #path < #prefix then return false end
+    for i, n in ipairs(prefix) do if path[i] ~= n then return false end end
+    return true
+end
+
+-- Checks a place for a node: the group at groupPath exists, the node fits the depth, and `extra` more conditions and
+-- groups (a copy, a node put back; 0 for a move) fit the limits. Returns the path read, or false and a sentence.
+local function CheckPlace(v, groupPath, stats, extraConditions, extraGroups)
+    local path = ReadPath(groupPath)
+    if not path then return false, REFUSE.value end
+    if #path > 0 and not (RM.Node(v, path) or {}).group then return false, REFUSE.value end
+    if #path + 1 + stats.levels > RM.MAX_DEPTH then return false, REFUSE.tooDeep end
+    if v.counts.conditions + extraConditions > RM.MAX_CONDITIONS then return false, REFUSE.conditionsFull end
+    if v.counts.groups + extraGroups > RM.MAX_GROUPS then return false, REFUSE.groupsFull end
+    return path
+end
+
+local function Clamp(index, list)
+    index = Whole(index) and index or #list + 1
+    if index < 1 then return 1 end
+    if index > #list + 1 then return #list + 1 end
+    return index
+end
+
+-- Moves the node at `path` into the group at toGroup (the top level when nil or {}), so that it is the toIndex-th of its
+-- list afterwards (the end when nil). Within a list that is a reorder and never changes what the rule says; into another
+-- group it changes what the node is combined with, and the caller says so. A group can't go into itself or what is in it.
+-- Returns true and the node's new path.
+function RM.MoveNode(id, path, toGroup, toIndex)
+    local raw, why, _, _, v = Locate(id)
+    if not raw then return false, why end
+    path, toGroup = ReadPath(path), ReadPath(toGroup)
+    if not path or #path == 0 or not toGroup then return false, REFUSE.value end
+    local node = RM.Node(v, path)
+    if not node then return false, REFUSE.value end
+    local stats = NodeStats(node.raw)
+    if not stats then return false, REFUSE.value end
+    if node.group and SamePrefix(toGroup, path) then return false, "A group can't be moved into itself." end
+    -- where it sits now, and where the destination list is once it has left
+    local last = path[#path]
+    local from = { unpack(path, 1, #path - 1) }
+    local sameList = #from == #toGroup and SamePrefix(from, toGroup)
+    -- the destination as it is read after the node leaves: removing it can shift a path that runs through its list
+    local dest = { unpack(toGroup) }
+    if #from < #dest and SamePrefix(dest, from) and dest[#from + 1] > last then dest[#from + 1] = dest[#from + 1] - 1 end
+    local ok, reason = CheckPlace(v, toGroup, stats, 0, 0)
+    if not ok then return false, reason end
+    local source = ListAt(raw, from)
+    if not (source and source[last] == node.raw) then return false, REFUSE.value end
+    local target = ListAt(raw, toGroup)
+    if not target then return false, REFUSE.value end
+    local want = Clamp(toIndex, target)
+    if sameList then
+        if want > #source then want = #source end
+        if want == last then return true, path end
+    end
+    table.remove(source, last)
+    target = ListAt(raw, dest)
+    if not target then table.insert(source, last, node.raw) return false, REFUSE.value end   -- can't happen: checked above
+    if not sameList then want = Clamp(toIndex, target) else want = math.min(want, #target + 1) end
+    table.insert(target, want, node.raw)
+    Tell(id, "rule")
+    local at = { unpack(dest) }
+    at[#at + 1] = want
+    return true, at
+end
+
+-- A copy of the condition or group at `path`, right after it. Returns true and the copy's path.
+function RM.DuplicateNode(id, path)
+    local raw, why, _, _, v = Locate(id)
+    if not raw then return false, why end
+    path = ReadPath(path)
+    if not path or #path == 0 then return false, REFUSE.value end
+    local node = RM.Node(v, path)
+    local stats = node and NodeStats(node.raw)
+    if not stats then return false, REFUSE.value end
+    local from = { unpack(path, 1, #path - 1) }
+    local ok, reason = CheckPlace(v, from, stats, stats.conditions, stats.groups)
+    if not ok then return false, reason end
+    local list = ListAt(raw, from)
+    local copy = DeepCopy(node.raw)
+    if not (list and copy) then return false, REFUSE.value end
+    local at = path[#path] + 1
+    table.insert(list, at, copy)
+    Tell(id, "rule")
+    local out = { unpack(from) }
+    out[#out + 1] = at
+    return true, out
+end
+
+-- Puts a node (one RemoveNode took out: the very table that was removed, so a screen's hold on it stays good) back as the
+-- index-th of the group at groupPath. Returns true and its path.
+function RM.InsertNode(id, groupPath, index, node)
+    local raw, why, _, _, v = Locate(id)
+    if not raw then return false, why end
+    local stats = NodeStats(node)
+    if not stats then return false, REFUSE.value end
+    local path, reason = CheckPlace(v, groupPath, stats, stats.conditions, stats.groups)
+    if not path then return false, reason end
+    local list = ListAt(raw, path)
+    if not list then return false, REFUSE.value end
+    local at = Clamp(index, list)
+    table.insert(list, at, node)
+    Tell(id, "rule")
+    local out = { unpack(path) }
+    out[#out + 1] = at
+    return true, out
+end
 
 ---------------------------------------------------------------------------
 -- Display, place and scope

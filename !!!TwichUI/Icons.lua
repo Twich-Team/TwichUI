@@ -87,6 +87,9 @@ local list = {
     diagCompare = Sheet("diagCompare"),           -- a box of filed cards (Compare)
     diagErrors = Sheet("diagErrors"),             -- a torn page under a magnifying glass (Errors)
     diagExport = Sheet("diagExport"),             -- a scroll with an outward arrow (Export)
+    -- the Reminders condition designer's emblem (assets/reminder-designer-source.png, cut by tools/make_reminder_designer_art.py);
+    -- the editor's When section uses it where it exists and `reminderWhen` where it doesn't
+    reminderDesigner = { file = R.PATH .. [[media\reminders\designer]], small = R.PATH .. [[media\reminders\designer-small]], size = 64, pad = 2, source = "reminderDesigner" },   -- a bronze ring with a check mark, joined to two smaller rings
     -- Healer Watch's own artwork (assets/healer-watch-source.png, cut by tools/make_healer_watch_art.py)
     healerWatch = { file = R.PATH .. [[media\healerwatch\vessel]], small = R.PATH .. [[media\healerwatch\vessel-small]], size = 64, pad = 2, source = "healerWatch" },   -- a mana flask
     healerWatchDrink = { file = R.PATH .. [[media\healerwatch\cup]], small = R.PATH .. [[media\healerwatch\cup-small]], size = 64, pad = 2, source = "healerWatch" },   -- a ceramic cup

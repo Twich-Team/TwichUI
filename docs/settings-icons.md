@@ -172,3 +172,9 @@ A card names an icon with `icon = "<id>"`; a card without one keeps its text in 
 `assets/healer-watch-source.png` by `tools/make_healer_watch_art.py` into `!!!TwichUI/media/healerwatch/<name>.tga`
 (64 px) and `<name>-small.tga` (32 px), with a 256 px `-large` file for the panel's Artwork layout. Their registry entries
 say `source = "healerWatch"`. `docs/healer-watch.md` "Adding artwork" has how they are made.
+
+`reminderDesigner` (a bronze ring with a check mark, joined by two rods to two smaller rings) is the Reminders condition
+designer's emblem, cut from `assets/reminder-designer-source.png` by `tools/make_reminder_designer_art.py` into
+`!!!TwichUI/media/reminders/designer.tga` (64 px) and `designer-small.tga` (32 px). It heads the When section of the
+Reminders editor; where its files are missing the editor draws `reminderWhen` (three connected nodes) instead, so
+nothing depends on it.
