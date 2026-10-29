@@ -23,7 +23,7 @@ that addon, which loads on demand anyway. Closing it drops the session. Publishe
 |---|---|---|
 | 1. Start from | The package to build on: the one included with TwichUI, or one this player published earlier. The layout being edited (Classic or Compact Adventure) | |
 | 2. Capture | Reads one EllesmereUI profile and one TwichUI profile, named by the author (the ones in use to start with). The kept parts are decided by `LY.Capture.Read`, the same function the offline tool `tools/layout_capture.lua` now calls | Write, switch, rename or reset any profile. Capture a feature's on/off switch, a per-character record, custom colours, spec overrides or anything the adapters do not manage. Keep anything if a character's name, GUID, link or BattleTag is found in it (counts only are kept) |
-| 3. Review the changes | A structured diff against the starting package: each setting that was **changed**, **added**, **removed** (named by the layout and absent from the profile), or **back at TwichUI's default** (a TwichUI setting the layout sets that the profile leaves at the default), with its old and new value in words (a position or a word, or "N values differ" for a whole module). Each change can be left out and can be kept **in this layout only** or **shared** (promoted to the base). Under each included change the window says what each choice does to **every layout** of the package: "Compact Adventure: unchanged (it has its own value)" or "gets the new value (it uses the shared value)" | Share by default (a change starts in this layout only). Include a removal, or a setting back at the default, by default: the author decides what players who have the layout get (**Reset to default**, package format 4: they go back to TwichUI's default unless they changed it; or **Stop managing**: they keep what they have). Offer a setting a wizard choice sets (the accent colour; tooltip placement and friendly plates are the bundled package's own). Let a layout stop naming something only the base names |
+| 3. Review the changes | A table of the structured diff against the starting package (see **The review table** below): each setting that was **changed**, **added**, **removed** (named by the layout and absent from the profile), or **back at TwichUI's default** (a TwichUI setting the layout sets that the profile leaves at the default). Each change can be left out and can be kept **in this layout only** or **shared** (promoted to the base); the table says which layouts that really changes | Share by default (a change starts in this layout only). Include a removal, or a setting back at the default, by default: the author decides what players who have the layout get (**Reset to default**, package format 4: they go back to TwichUI's default unless they changed it; or **Stop managing**: they keep what they have). Offer a setting a wizard choice sets (the accent colour; tooltip placement and friendly plates are the bundled package's own). Let a layout stop naming something only the base names. Include one value of a module on its own (a module is one unit) |
 | 3b. TwichUI presets | The package's helper presets as a draft of their own (`presets.md`): capture a profile's settings into a preset (its scope kept), create, duplicate, rename, describe, reorder, make default, remove (its id retired), choose what each manages; a pending edit reaches the draft only through Save to draft | Write, switch or rename a profile. Name a place, another addon's setting, anything in `TwichConfig.LOCAL`, an account-wide setting or a list. Reuse a removed option's id |
 | 4. Check | Builds the draft from the included changes and checks it the way a recipient's TwichUI will: the package (`Pub.Strict`), both layouts resolved for the package's own canvas and this screen, the media it points at, the personal-data scan, the revision. A path into another addon's folder is offered TwichUI's own copy when TwichUI bundles that file (the included package points at the author's private `MyFonts` folder, so this is the first thing it finds) | Publish anything |
 | 5. Release | The package id (a new id is a new package, revision 1), title, revision (higher than the starting one and than any already published), an optional label and release notes | Put the author's character name in the package |
@@ -40,6 +40,59 @@ Files, not images: a package never contains a file. It names paths, and the reci
 every path: TwichUI's own media folder (fonts, sounds and borders are checked against the lists in `modules/Media.lua`),
 EllesmereUI's, the game's own, or "another addon's" (refused: it cannot be sent), or "outside the game's folders" (a drive
 letter, a web address, `..`; refused).
+
+## The review table
+
+Step 3 is one table, not pages of blocks. `AuthorReview.lua` is its model (no frames); `AuthorReviewWindow.lua` draws it. A **change** is a
+proposed publishing unit (a module, a TwichUI setting, a place, a look key); a **detail** is a leaf-level difference inside it;
+**needs review** is an explainable flag; **reviewed** is the author's own acknowledgment; **blocked** is a failure of the last Check.
+
+- **Summary and toolbar.** `8 changes · 6 included · 2 need review · 0 blocked` (plus `· N reviewed`), then "Changes stay in this draft until
+  you publish." Search (Enter to apply), Status (All, Included, Excluded, Needs review, Blocked, Reviewed), Type (Added, Changed, Removed, Reset),
+  Affects (a layout), Sort (Attention, Name, Change, Details, Destination), Clear filters. "Showing 8 of 38 changes. Filters are on." is shown
+  whenever a filter hides anything. Needs review counts only included changes; a change left out is not "reviewed" and needs no review.
+- **Columns.** Include (the box changes inclusion only), Setting (friendly name: Chat, Bags, Unit frames ...; the canonical id is in the
+  tooltip and the details), Change, Details ("25 fields"), Destination (**This layout** or **Shared base**: where the change will be written;
+  the details also say where it is stored now), Affects (**Classic**, **Compact**, **Both**, **None**, **Unknown**: the effective result),
+  Attention (**Blocked**, **Review**, **Review again**, **Reviewed**, **Note**, **Excluded**, or a dash; a coloured left-edge marker only for
+  Blocked and unreviewed Review). Clicking a row opens its details; the box and the destination button are their own controls and never
+  select the row. Sharing a change that would newly change another layout asks first.
+- **Order.** Default: blocked, then included changes with an unreviewed Review flag, then other included, then left out; ties by name then id.
+  The order is frozen when a filter or the sort changes, after a capture, and when the author clears filters; including, leaving out,
+  marking or moving a change does not reorder it. Paging keeps everything. Rows are identified by the unit id, never by position. Page sizes
+  10, 15, 20; the page is clamped after any filter or capture.
+- **Bulk.** "Include / Leave out N filtered changes" (or "all N changes" with no filter) acts on exactly the changes in the current order, on every
+  page, never on anything hidden by a filter. Including removals or resets asks first. There is no bulk destination change and no bulk "reviewed".
+- **Details** open under the table (the window is too narrow for a side pane): name, id, kind and field counts, storage and destination, a line
+  per layout ("Compact Adventure: unchanged: its own value wins"), the attention reasons with evidence, and a **Setting / Before / After** table
+  (8 rows a page, "Show raw paths" for the stored path, swatches for colours, file names for media with the whole path in the tooltip, text
+  escaped so a pipe is never a colour code, values cut at 80 characters and the list at 400 rows with "only the first 400 are listed").
+  Missing, default, false, zero and empty text read differently. A module says it is **included and replaced as a whole**: the leaf list is
+  for inspection and there is no way to include one value of it.
+- **Impact** is `LY.Compose` run over that unit's layers (with its parent blob) before and after the change as `A.Draft` would write it, once per
+  layout, cached on the change by destination. A test checks it against `LY.Resolve` on the real draft for every layout. It describes the
+  authored package; it says nothing about a recipient's own overrides (that is the update flow, `updates.md`).
+- **Attention** (`RV.Flags`) has levels blocked, review, info, none; each reason has a code, a sentence, evidence and sometimes an action:
+  `media-blocked` (the last Check refused a file this included change holds), `removed`, `reset`/`release`, `feature-toggled` (an `enabled`
+  key flipped inside a module: matched by that exact key name, and the flag says so), `media-external` (another addon's file, before any check),
+  `account-wide` (the tooltip-follows-cursor setting), `unrecognized`, `structure` (10 or more settings added or removed inside a module),
+  `too-large`, `no-effect` (no layout would change), and the notes `whole-module`, `geometry`, `shared`. The number of changed values is never
+  a reason: a module with 80 changed numbers is a note. Not covered, deliberately: a screen-fit warning and a different game client are global
+  (Check's lines), not attributable to one row; there is no metadata for EllesmereUI module fields beyond the key name; nothing says a small
+  diff is safe. Blocked is only ever a failed check and only for an included change; marking a change reviewed never clears it, and flags alone
+  never block Publish. Publish's confirmation mentions how many included changes are flagged and not reviewed.
+- **Reviewed** is tied to the change as proposed: the before and after values, the destination (and how a reset reaches players) and which
+  layouts it affects. Any of them changing makes the mark stale ("Review again", with the reason). It lives in the session only and is gone when
+  the workspace closes; it is not approval and not "verified in game".
+
+Performance: the table is a pool of 20 rows and 8 leaf rows built once; paging and details write texts. Flags, impact and keywords are cached on
+the change (flags by revision and Check report), the leaf rows only for the open change. Putting 217 changes in order took 0.2 ms offline once
+cached. Scopes `layoutwizard.author.review` and `layoutwizard.author.review.detail`, gauge `layoutwizard.author.review.leaves`
+(`diagnostics.md`). In game cost and memory are not measured.
+
+In-game visual checklist: the table at the window's width with long names and a large font; the row states side by side (selected, included,
+excluded, reviewed, blocked, review) read apart without colour; hover and tooltips; the details' columns with a colour, a media path and a long
+text; scrolling while a row is selected; Escape with the search box focused; the amber marker only on the rows that earn it.
 
 ## The package and its envelope
 
@@ -185,6 +238,10 @@ into the repository and checks the round trip (`presets.md`, `architecture.md` �
 separate way in, and never writes the choices.
 
 ## Tests
+
+`tests/test_layout_review.lua` covers the review table (names, order, impact against `LY.Resolve`, values and leaves, bounds, flags and
+the large-diff rule, reviewed, bulk scope, publication, the window from its builders, repeated use). A mutation pass broke three safeguards
+(an override ignored, a big diff treated as risk, a mark ignoring the destination); each is caught.
 
 `tests/test_layout_hardening.lua` (RH-1) adds: the authoring decision for a setting back at the default; comparing a published
 package with the bundled one (the same, a shared change, a Compact-only change, a choice, a title only, determinism); portable

@@ -135,6 +135,7 @@ uses an item, sends anything or makes up events. Each states its cost before you
 | `layouts.publish.compare` (`Perf.Call`) | `TwichUI_Layouts/Publish.lua` `Pub.Compare` (`/tui layout compare`, typed: a stored package against the included one) | evaluate |
 | `layouts.publish.receive` (`Perf.Call`), `layouts.store.open` (`Perf.Start`/`Perf.Stop`) | `TwichUI_Layouts/Store.lua` `LY.Receive` (once per package a player accepts, a frame after it is unpacked), `Store.Open` (a stored package chosen in the setup or the workspace; the unpacking itself is Share.lua's background job) | bulk, evaluate |
 | `layoutwizard.author.build` (`Perf.Call`) | `TwichUI_LayoutWizard/AuthorWindow.lua` `Build` (the first open of the authoring workspace only) | init |
+| `layoutwizard.author.review`, `layoutwizard.author.review.detail` (`Perf.Start`/`Perf.Stop`) | `TwichUI_LayoutWizard/AuthorReview.lua` `RV.Rebuild` (the review table put in order: when a filter or the sort changes, after a capture, the first time it is shown; paging and clicks do not), `RV.Detail` (the leaf differences of the change whose details are open) | rebuild, evaluate |
 | `layoutwizard.presets.capture` (`Perf.Start`/`Perf.Stop`) | `TwichUI_LayoutWizard/AuthorPresets.lua` `AP.ReadAll` (the workspace's "Capture current settings into this preset" and "Create preset from current settings": reads every setting a preset may manage from one TwichUI profile) | bulk |
 | `layouts.plan`, `layouts.apply`, `layouts.verify`, `layouts.restore` (`Perf.Call`) | `TwichUI_Layouts/Engine.lua` `LY.Plan` (with an update's comparison), `LY.Apply`, `LY.Verify`, `LY.VerifyRestore` and `LY.VerifyUndo` (with the baseline commit), `LY.Restore` and `LY.Undo` (on request; `layouts.verify` also once after the reload that finishes an install, restore or undo) | rebuild, bulk, evaluate, bulk |
 | `classbars.anim`, `pins.ping.tick`, `npcs.map.pulse` (`Perf.Call`) | `classbars/Anim.lua`, `pins/PingMap.lua`, `npcs/Map.lua` | update |
@@ -159,7 +160,7 @@ pages it keeps; it does not grow when the window is opened again), and for its f
 keeps: made as the pieces first appear, bounded by the package, not growing when it is opened again). The publishing code registers `layouts.store.entries` and `layouts.store.kb` (packages kept for sending and installing, and the
 text they hold in saved data: read without unpacking anything) and, in the authoring workspace, `layoutwizard.author` (changes held:
 0 while it is closed), `layoutwizard.author.presets` (TwichUI preset settings held by the presets' draft and an edit: 0 while it is
-closed) and `layoutwizard.author.frames` (the frames it keeps). Not scoped, and
+closed) and `layoutwizard.author.frames` (the frames it keeps) and `layoutwizard.author.review.leaves` (leaf rows built for the open details: 0 when none). Not scoped, and
 why: building the scene (`Scene.lua`, `LY.Elements`: a few table reads and arithmetic per redraw, cached until a pick, a
 layout, a scenario or the screen changes). No global function, `CreateFrame`, timer or event registration is wrapped or replaced.
 

@@ -1074,23 +1074,32 @@ do
   WZ.Author.SetSource("eui", "Tweak")
   Click(win, "Capture")
   Check(LM.Says(win, "Captured.") and LM.Says(win, "differ from the starting package"), "Capture reads the two profiles")
-  Check(P.rows[1].frame:IsShown() and P.rows[1].detail.text ~= "", "the changes are listed, each with its old and new value")
+  local RW = P.rv.rows
+  Check(RW[1].frame:IsShown() and RW[1].name.text ~= "" and RW[1].affects.text ~= "" and RW[1].dest.text.text ~= "", "the changes are listed as table rows: name, change, destination, effect")
   local firstRows = 0
-  for _, row in ipairs(P.rows) do if row.frame:IsShown() then firstRows = firstRows + 1 end end
-  Check(firstRows == 8 and LM.Says(win, "Page 1 of"), "a page of rows, with page buttons")
-  Click(win, "Next")
-  Check(LM.Says(win, "Page 2 of"), "the next page")
-  Click(win, "Previous")
-  -- toggling a change: the checkbox and the layout/shared button
-  local row = P.rows[1]
+  for _, row in ipairs(RW) do if row.frame:IsShown() then firstRows = firstRows + 1 end end
+  local nItems = #WZ.Author.Items()
+  Check(firstRows == math.min(10, nItems) and LM.Says(win, "Page 1 of"), "a page of rows, with a pager")
+  if nItems > 10 then
+    Click(win, "Next")
+    Check(LM.Says(win, "Page 2 of"), "the next page")
+    Click(win, "Previous")
+  end
+  -- toggling a change: the checkbox and the destination button, which change inclusion and destination and do not pick the row
+  local row = RW[1]
   local was = row.it.include
   row.check.scripts.OnClick(row.check)
   Check(row.it.include == not was, "the checkbox includes or leaves out a change")
+  Check(WZ.AuthorReview.Selected() == nil, "and does not pick the row")
   row.check.scripts.OnClick(row.check)
+  row.frame.scripts.OnClick(row.frame)
+  Check(WZ.AuthorReview.Selected() == row.it, "clicking the row picks it and opens its details")
+  Check(LM.Says(win, "Compact Adventure:"), "the details name both layouts")
   if not row.it.baseOnly and row.it.include then
     local t0 = row.it.to
-    row.target.scripts.OnClick(row.target)
-    Check(row.it.to ~= t0 and row.effects.text:find("Compact Adventure", 1, true), "the layout/shared button moves it, and the lines under it name both layouts")
+    row.dest.scripts.OnClick(row.dest)
+    if c.popup and c.popup.key == "TWICHUI_LAYOUT_SHARE" then c.Accept() end
+    Check(row.it.to ~= t0, "the destination button moves it (asking first when another layout would change)")
   end
   Check(Same(before.eui, c.EllesmereUIDB) and Same(before.tw, c.TwichUIDB), "none of it changed a profile or a setting")
   -- check, fix the font, check

@@ -26,14 +26,13 @@ local FRAME_NAME = "TwichUILayoutAuthor"
 local WIDTH, HEIGHT = 780, 640
 local HEADER_H, PAD, FOOTER_H = 44, 16, 40
 local CONTENT_W = WIDTH - 2 * PAD - 22
-local ROWS = 8
 
 local win, scroll, content, footer
 local w = {}                       -- the widgets, by name
 AW.frames = 0
 AW.builds = 0
-AW.page = 1
 AW.pool = w
+AW.CONTENT_W = CONTENT_W
 
 local AP = WZ.AuthorPresets
 local EDIT_ROWS = 10               -- settings shown at a time in the preset editor
@@ -198,73 +197,8 @@ local function Refresh()
     Place(w.captureStatus, 110, y + 4)
     y = y + 34
 
-    -- 3. changes
-    y = Section("h3", "3. Review the changes", y)
-    local items = s.items
-    if not items then
-        w.summary:SetText("Capture first. The changes appear here, each one with its old and new value, and you choose which to include and where each one lives.")
-    else
-        local c = A.Counts()
-        w.summary:SetText(("%d included: %d only in this layout, %d shared by every layout in the package. A change you leave out is not published. Removed settings start out left out."):format(c.included, c.own, c.shared))
-    end
-    Place(w.summary, 0, y)
-    y = y + Height(w.summary) + 6
-    local pages = items and math.max(1, math.ceil(#items / ROWS)) or 1
-    if AW.page > pages then AW.page = pages end
-    for i, row in ipairs(w.rows) do
-        local it = items and items[(AW.page - 1) * ROWS + i]
-        row.frame:SetShown(it ~= nil)
-        if it then
-            row.it = it
-            row.frame:ClearAllPoints()
-            row.frame:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -y)
-            row.check:SetChecked(it.include)
-            row.label:SetText(("%s  [%s%s]"):format(it.label, it.kind, it.lives and (", now in " .. (it.lives == "base" and "the shared base" or "this layout")) or ""))
-            row.detail:SetText(it.text)
-            row.target.text:SetText(it.to == "base" and "Shared" or "This layout only")
-            row.target:SetEnabled(it.include and not it.baseOnly)
-            -- a setting the profile leaves at its default: what players who have the layout get, chosen, never assumed
-            row.how:SetShown(it.canReset == true)
-            row.how.text:SetText(it.how == "release" and "Stop managing" or "Reset to default")
-            row.how:SetEnabled(it.include and it.canReset == true)
-            local lines = {}
-            if it.include then
-                for _, e in ipairs(A.Effects(it.id) or {}) do
-                    lines[#lines + 1] = ("%s: %s (%s)"):format(e.title, e.change == "gets" and "gets the new value" or "unchanged", e.why)
-                end
-            end
-            if it.baseOnly then lines[#lines + 1] = it.rootOnly and "This kind of setting only lives in the shared base." or "Only the shared base can stop naming it." end
-            if it.canReset then
-                lines[#lines + 1] = not it.include and "Left out: players keep getting the layout's current value."
-                    or it.how == "release" and "Stop managing: players who have the layout keep what they have; new players get TwichUI's default."
-                    or "Reset to default: players who have the layout go back to TwichUI's default, unless they changed it themselves. Needs a TwichUI that reads package format 4."
-            end
-            row.effects:SetText(table.concat(lines, "\n"))
-            row.frame:SetHeight(math.max(48, 6 + Height(row.label) + 2 + Height(row.detail) + (#lines > 0 and (2 + Height(row.effects)) or 0) + 4))
-            y = y + row.frame:GetHeight() + 4
-        end
-    end
-    w.pageLabel:SetText(("Page %d of %d"):format(AW.page, pages))
-    w.pagePrev:SetEnabled(AW.page > 1)
-    w.pageNext:SetEnabled(AW.page < pages)
-    w.pagePrev:SetShown(items ~= nil and pages > 1)
-    w.pageNext:SetShown(items ~= nil and pages > 1)
-    w.pageLabel:SetShown(items ~= nil and pages > 1)
-    Place(w.pagePrev, 0, y)
-    Place(w.pageNext, 100, y)
-    Place(w.pageLabel, 210, y + 4)
-    if items and pages > 1 then y = y + 30 end
-    local skipped = A.Skipped()
-    if #skipped > 0 then
-        w.skipped:SetText(("%d %s left alone because a wizard choice (such as the accent colour) sets %s."):format(
-            #skipped, #skipped == 1 and "setting is" or "settings are", #skipped == 1 and "it" or "them"))
-        w.skipped:Show()
-        Place(w.skipped, 0, y)
-        y = y + Height(w.skipped) + 6
-    else
-        w.skipped:Hide()
-    end
-    y = y + 6
+    -- 3. changes: the review table and its details (AuthorReviewWindow.lua)
+    y = AW.DrawReview(y)
 
     -- 4. TwichUI presets
     y = AW.DrawPresets(y)
@@ -398,7 +332,6 @@ end
 local function DoCapture()
     local ok, why = A.Capture()
     if not ok then A.Session().captureError = why end
-    AW.page = 1
     Refresh()
 end
 
@@ -407,8 +340,10 @@ local function DoPublish()
     local rep = A.Check()
     if not rep.ok then Refresh() return end
     local r = s.release
+    local open = WZ.AuthorReview.Counts().review
+    local flagged = open > 0 and ("\n\n%d included %s flagged for a look and not marked reviewed. That does not stop publishing."):format(open, open == 1 and "change is" or "changes are") or ""
     R.Interact.Confirm("TWICHUI_LAYOUT_PUBLISH",
-        ("Publish %q, revision %d?\n\nThis keeps an unchangeable snapshot of the package as it is now, and the checks have passed. Nothing is sent, and no profile is changed. You can send it afterwards, and later edits make a new revision instead of changing this one."):format(r.title, r.revision),
+        ("Publish %q, revision %d?\n\nThis keeps an unchangeable snapshot of the package as it is now, and the checks have passed. Nothing is sent, and no profile is changed. You can send it afterwards, and later edits make a new revision instead of changing this one.%s"):format(r.title, r.revision, flagged),
         function()
             local ok, why = A.Publish(function(done, result)
                 s.publishNote = done and "Published. Choose it below to send it." or ("Not published: " .. (PUBLISH_WHY[result] or tostring(result)))
@@ -1040,6 +975,10 @@ function AW.ShowExport(entry)
     ex.edit:HighlightText()
 end
 
+-- What the review table's window (AuthorReviewWindow.lua) draws with: this window's own helpers, so both look the same.
+AW.kit = { Text = Text, Button = Button, Edit = Edit, Height = Height, Place = Place, Section = Section, Look = Look }
+function AW.Content() return content end
+
 ---------------------------------------------------------------------------
 -- Building (once)
 ---------------------------------------------------------------------------
@@ -1105,41 +1044,8 @@ local function Build()
     w.twNext = Arrow("right", function() local s = A.Session() A.SetSource("twichui", Cycle(A.TwichProfiles(), s.twichui, 1)) Refresh() end)
     w.captureBtn = Button(content, "Capture", 100, "primary", DoCapture, "Reads the two profiles named above. They are not changed.")
     w.captureStatus = Text(content, "small", CONTENT_W - 120)
-    w.summary = Text(content, "small", CONTENT_W - 20)
-    w.skipped = Text(content, "small", CONTENT_W - 20)
-    w.rows = {}
-    for i = 1, ROWS do
-        local f = CreateFrame("Frame", nil, content)
-        f:SetSize(CONTENT_W - 10, 48)
-        local row = { frame = f }
-        row.check = L.Checkbox(f, function(on) if row.it then A.SetInclude(row.it.id, on) end Refresh() end)
-        row.check:SetPoint("TOPLEFT", 0, -4)
-        row.label = Text(f, "body", 360)
-        row.label:SetPoint("TOPLEFT", 28, -3)
-        row.detail = Text(f, "small", 360)
-        row.detail:SetPoint("TOPLEFT", row.label, "BOTTOMLEFT", 0, -2)
-        row.target = Button(f, "This layout only", 150, "secondary", function()
-            if not row.it then return end
-            A.SetTarget(row.it.id, row.it.to == "base" and "variant" or "base")
-            Refresh()
-        end, "Where this change lives. 'This layout only' keeps it in the layout being edited. 'Shared' moves it to the base every layout of the package starts from; the lines under it say what that does to each layout.")
-        row.target:SetPoint("TOPRIGHT", -4, -2)
-        row.how = Button(f, "Reset to default", 130, "secondary", function()
-            if not row.it then return end
-            A.SetHow(row.it.id, row.it.how == "release" and "reset" or "release")
-            Refresh()
-        end, "This setting is at TwichUI's default in your profile, but the layout sets something else. 'Reset to default' puts players who have the layout back to the default; 'Stop managing' leaves them what they have.")
-        row.how:SetPoint("RIGHT", row.target, "LEFT", -6, 0)
-        row.effects = Text(f, "small", 300)
-        row.effects:SetPoint("TOPRIGHT", row.target, "BOTTOMRIGHT", 0, -2)
-        row.effects:SetJustifyH("RIGHT")
-        w.rows[i] = row
-        AW.frames = AW.frames + 4
-    end
+    AW.BuildReview(L)
     AW.BuildPresets(L)
-    w.pagePrev = Button(content, "Previous", 90, "secondary", function() AW.page = math.max(1, AW.page - 1) Refresh() end)
-    w.pageNext = Button(content, "Next", 90, "secondary", function() AW.page = AW.page + 1 Refresh() end)
-    w.pageLabel = Text(content, "small", 120)
     w.checkBtn = Button(content, "Check", 100, "primary", function() A.Session().report = nil A.Check() Refresh() end,
         "Builds the package as it would be published and checks it the way a recipient's TwichUI will: both layouts resolved, the files it points at, anything personal, the version.")
     w.checkText = Text(content, "small", CONTENT_W - 120)

@@ -75,6 +75,7 @@ local function UseBase(s, pkg, key)
     s.variants, s.variant = variants, variants[1]
     s.release = Release(pkg)
     s.capture, s.items, s.itemBy, s.report, s.fixes, s.captureError, s.fixList = nil, nil, nil, nil, {}, nil, nil
+    s.reviewed, s.review, s.rev = {}, nil, 0   -- the review table's state is kept in AuthorReview.lua; a new starting package starts it afresh
     WZ.AuthorPresets.Init(s)   -- the package's TwichUI presets, as a draft of their own (AuthorPresets.lua)
 end
 
@@ -237,6 +238,53 @@ local function Differ(a, b, depth)
     return n
 end
 
+-- A colour ({ r, g, b[, a] }, numbers) reads and changes as one value, not as three or four.
+local function IsColor(v)
+    return type(v) == "table" and type(v.r) == "number" and type(v.g) == "number" and type(v.b) == "number"
+end
+A.IsColor = IsColor
+
+-- A value that reads and changes as one: a colour, or a position ({ x, y[, w, h] }).
+local function IsAtom(v) return IsColor(v) or (type(v) == "table" and type(v.x) == "number" and type(v.y) == "number") end
+A.IsAtom = IsAtom
+
+-- How a value differs from another, counted in leaves: { changed, added, removed, total, capped }. A table is walked (a colour is
+-- one leaf), a value that is not in one of them is added or removed leaf by leaf, and a leaf that is in both and differs is
+-- changed. Bounded in depth (14) and in leaves visited (A.MAX_LEAVES), so a hostile or enormous blob costs a fixed amount;
+-- `capped` says the count stopped there. Read only; nothing is allocated per leaf.
+A.MAX_LEAVES = 5000
+function A.Tally(old, new)
+    local t = { changed = 0, added = 0, removed = 0, total = 0, capped = false }
+    local seen = 0
+    local function Count(v, field, depth)
+        if seen >= A.MAX_LEAVES then t.capped = true return end
+        if type(v) == "table" and v ~= LY.DEFAULT and v ~= LY.REMOVE and not IsAtom(v) and depth <= 14 and next(v) ~= nil then
+            for _, x in pairs(v) do Count(x, field, depth + 1) end
+        else
+            seen = seen + 1
+            t[field] = t[field] + 1
+        end
+    end
+    local function Walk(a, b, depth)
+        if seen >= A.MAX_LEAVES then t.capped = true return end
+        local ta = type(a) == "table" and a ~= LY.DEFAULT and a ~= LY.REMOVE and not IsAtom(a) and next(a) ~= nil
+        local tb = type(b) == "table" and b ~= LY.DEFAULT and b ~= LY.REMOVE and not IsAtom(b) and next(b) ~= nil
+        if a == nil and b == nil then return end
+        if a == nil then Count(b, "added", depth) return end
+        if b == nil then Count(a, "removed", depth) return end
+        if ta and tb and depth <= 14 then
+            for k, v in pairs(a) do Walk(v, b[k], depth + 1) end
+            for k, v in pairs(b) do if a[k] == nil then Count(v, "added", depth + 1) end end
+        else
+            seen = seen + 1
+            if not LY.Same(a, b) then t.changed = t.changed + 1 end
+        end
+    end
+    Walk(old, new, 0)
+    t.total = t.changed + t.added + t.removed
+    return t
+end
+
 local function Plural(n, one, many) return n == 1 and one or many end
 
 -- a value that reads as one line (a number, a word, a position), as opposed to a module's whole settings
@@ -262,11 +310,18 @@ end
 local function View(pkg)
     local ok, problems, checked = LY.Validate(pkg)
     if not ok then return nil, problems end
-    local v = { checked = checked, base = {}, variants = {}, owned = {} }
-    for adapter, f in pairs(checked.layers.base) do for u, val in pairs(f.units) do v.base[u] = { adapter = adapter, value = val } end end
+    local v = { checked = checked, base = {}, variants = {}, owned = {}, parents = {} }
+    local function Parents(f) for u, p in pairs(f.parents or {}) do v.parents[u] = p end end
+    for adapter, f in pairs(checked.layers.base) do
+        Parents(f)
+        for u, val in pairs(f.units) do v.base[u] = { adapter = adapter, value = val } end
+    end
     for _, id in ipairs(checked.variants) do
         v.variants[id] = {}
-        for adapter, f in pairs(checked.layers.variants[id]) do for u, val in pairs(f.units) do v.variants[id][u] = { adapter = adapter, value = val } end end
+        for adapter, f in pairs(checked.layers.variants[id]) do
+            Parents(f)
+            for u, val in pairs(f.units) do v.variants[id][u] = { adapter = adapter, value = val } end
+        end
     end
     -- what a wizard choice writes is the player's to pick, not something a capture can change
     for cid, ch in pairs(checked.choices and checked.choices.by or {}) do
@@ -347,6 +402,8 @@ function A.BuildItems()
         return a.id < b.id
     end)
     for _, it in ipairs(items) do
+        it.n = A.Tally(it.old, it.new == LY.DEFAULT and it.old or it.new)
+        if it.kind == "default" then it.n = { changed = 1, added = 0, removed = 0, total = 1, capped = false } end
         it.rootOnly = it.id:find("^ellesmereui:root%.") ~= nil
         -- a layout can only stop naming something the base names by changing the base
         it.baseOnly = it.rootOnly or ((it.kind == "removed" or it.kind == "default") and it.lives == "base")
@@ -361,6 +418,8 @@ function A.BuildItems()
     end
     s.items, s.itemBy = items, by
     s.report = nil
+    s.rev = (s.rev or 0) + 1
+    if s.review then s.review.stale = true end   -- the table's frozen order is worked out again, filters kept (AuthorReview.lua)
 end
 
 function A.Items() return session and session.items or nil end
@@ -387,6 +446,7 @@ function A.SetHow(unit, how)
     if how ~= "reset" and how ~= "release" then return false, "unknown" end
     it.how = how
     session.report = nil
+    session.rev = (session.rev or 0) + 1
     return true
 end
 
@@ -395,6 +455,7 @@ function A.SetInclude(unit, on)
     if not it then return false end
     it.include = on and true or false
     session.report = nil
+    session.rev = (session.rev or 0) + 1
     return true
 end
 
@@ -405,6 +466,7 @@ function A.SetTarget(unit, to)
     if to == "variant" and it.baseOnly then return false, "base-only" end
     it.to = to
     session.report = nil
+    session.rev = (session.rev or 0) + 1
     return true
 end
 
@@ -496,6 +558,7 @@ function A.FixMedia(path)
     if not rep then return false end
     s.fixes[path] = rep
     s.report = nil
+    s.rev = (s.rev or 0) + 1
     for i = #(s.fixList or {}), 1, -1 do if s.fixList[i].path == path then table.remove(s.fixList, i) end end
     return true
 end
