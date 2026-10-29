@@ -2,16 +2,23 @@
 -- Each page is built the first time it is shown and kept; showing it again only re-reads the model (Model.lua) and
 -- re-writes its texts, so opening, going back and forth, and re-opening make nothing new. A page never decides anything:
 -- it draws what the model says, and its buttons call the model (or the window's confirmed actions) and then ask the
--- window to draw again. Text blocks are one wrapped string per section, so a page's frame count does not depend on what
--- it says.
+-- window to draw again.
+--
+-- What a page shows by default is its heading, at most one short line, and the choices or the result. Everything that
+-- explains how (what a layout covers, what a preset sets, every compatibility check, every change a review lists, the update
+-- policy, the maintenance actions) is behind a labelled disclosure built the first time it is opened; what a player must
+-- know (a blocker, a warning, an account-wide effect, a limit of the preview) is a short statement that stays in view.
+-- Every choice is a Controls.Choice card, so a selection looks the same wherever it is made.
 --
 --   Pages.Build(key, parent, env) -> page { frame, Refresh() }
---   env: { Relayout(), Go(step), Actions = { reload, restore, undo, keepUpdate, keep, check, forget, again } }
+--   env: { Relayout(), Go(step), Overlay(), Actions = { reload, restore, undo, keepUpdate, keep, check, forget, again, ... } }
 
 local R = TwichUI
 local LY = R.Layouts
 local WZ = R.LayoutWizard
 local M = WZ.Model
+local Controls = WZ.Controls
+local Choice, Disclosure = Controls.Choice, Controls.Disclosure
 local Pages = {}
 WZ.Pages = Pages
 
@@ -20,6 +27,7 @@ Pages.DETAIL_ROWS = 5   -- settings shown at once in an update's details (the re
 local CONTENT_W = Pages.CONTENT_W
 local LEFT_W, GAP = 372, 16
 local RIGHT_X = LEFT_W + GAP
+local HALF_W = math.floor((CONTENT_W - 16) / 2)
 
 local function Look() return R.Look end
 local function Pal() return R.Look.pal end
@@ -27,11 +35,7 @@ local function Pal() return R.Look.pal end
 ---------------------------------------------------------------------------
 -- A column of items stacked top to bottom (the visible ones), and small pieces
 ---------------------------------------------------------------------------
-local function Height(obj)
-    local h
-    if obj.GetStringHeight then h = obj:GetStringHeight() else h = obj:GetHeight() end
-    return (type(h) == "number" and h > 0) and h or 14
-end
+local Height = Controls.Height
 
 local function NewColumn(frame, x, y)
     return { frame = frame, x = x or 0, y0 = y or 0, items = {} }
@@ -77,12 +81,14 @@ local function Bullets(list, prefix)
     return table.concat(out, "\n")
 end
 
--- A flat chip with a word in it (a status is never colour alone).
+local function Tone(fs, c) fs:SetTextColor(c[1], c[2], c[3]) end
+
+-- A flat chip with a word in it (a status is never colour alone). SetTone(tone [, word]): the word defaults to the tone's own.
 local TONE = { ok = "Ready", warn = "Check", block = "Blocked", info = "Note" }
 local function Chip(parent)
     local L, pal = Look(), Pal()
     local chip = L.Tag(parent, "Ready")
-    function chip:SetTone(tone)
+    function chip:SetTone(tone, word)
         local fill, text = pal.ink, pal.stone
         local a = 0.30
         if tone == "ok" then fill, text, a = pal.tealLo, pal.tealHi, 0.9
@@ -90,52 +96,12 @@ local function Chip(parent)
         elseif tone == "block" then fill, text, a = pal.danger.bg, pal.danger.text, 1 end
         self.bg:SetColorTexture(fill[1], fill[2], fill[3], a)
         self.text:SetTextColor(text[1], text[2], text[3])
-        self.text:SetText(TONE[tone] or TONE.info)
+        self.text:SetText(word or TONE[tone] or TONE.info)
         self:SetWidth(math.max(44, self.text:GetStringWidth() + 12))
     end
     return chip
 end
 Pages.Chip = Chip
-
--- A selectable card: a title, a wrapped hint, "Selected" at the right when chosen, a bar along its foot.
-local function Card(parent, width, onClick)
-    local L, pal = Look(), Pal()
-    local b = CreateFrame("Button", nil, parent, "BackdropTemplate")
-    b:SetWidth(width)
-    L.Panel(b)
-    L.Hover(b, pal.text, 0.05)
-    b.fill = L.Solid(b, "BACKGROUND", pal.bronzeText, 0.10)
-    b.fill:SetPoint("TOPLEFT", 1, -1)
-    b.fill:SetPoint("BOTTOMRIGHT", -1, 1)
-    b.fill:Hide()
-    b.bar = L.Solid(b, "ARTWORK", pal.bronzeText, 1)
-    b.bar:SetHeight(2)
-    b.bar:SetPoint("BOTTOMLEFT", 1, 1)
-    b.bar:SetPoint("BOTTOMRIGHT", -1, 1)
-    b.bar:Hide()
-    b.title = Text(b, "body", width - 100)
-    b.title:SetPoint("TOPLEFT", 12, -10)
-    b.mark = L.Text(b, "meta")
-    b.mark:SetPoint("TOPRIGHT", -10, -11)
-    b.mark:SetText("Selected")
-    b.mark:Hide()
-    b.hint = Text(b, "small", width - 24)
-    b.hint:SetPoint("TOPLEFT", b.title, "BOTTOMLEFT", 0, -4)
-    b:SetScript("OnClick", onClick)
-    function b:Fill(title, hint)
-        self.title:SetText(title)
-        self.hint:SetText(hint or "")
-        self.hint:SetShown(hint ~= nil and hint ~= "")
-        local h = 10 + Height(self.title) + (hint and hint ~= "" and (4 + Height(self.hint)) or 0) + 12
-        self:SetHeight(h)
-    end
-    function b:SetSelected(v)
-        self.fill:SetShown(v)
-        self.bar:SetShown(v)
-        self.mark:SetShown(v)
-    end
-    return b
-end
 
 local function Button(parent, label, w, kind, fn, tip)
     local b = Look().Button(parent, label, w, kind, fn)
@@ -144,7 +110,19 @@ local function Button(parent, label, w, kind, fn, tip)
     return b
 end
 
--- The preview (steps 2 to 5), in the right-hand column, redrawn from the model each time the page is shown. Under it: the
+-- Draws a picture for a card: a wizard picture by its Art id, or one of TwichUI's own icons ("icon:<id>"); false when there is none
+local function DrawPic(tex, id)
+    if not id then tex:Hide() return false end
+    local icon = id:match("^icon:(.+)$")
+    if icon then
+        tex:Show()
+        R.Icons.Apply(tex, icon, 64)
+        return true
+    end
+    return WZ.Art.Apply(tex, id)
+end
+
+-- The preview (steps 2 and 5), in the right-hand column, redrawn from the model each time the page is shown. Under it: the
 -- scenario the sample shows (Solo, Target selected, ...) and the full-size preview. Neither changes anything in the game.
 local function PreviewColumn(page, parent, y, env)
     local view = WZ.Preview.Build(parent, {
@@ -162,7 +140,7 @@ local function PreviewColumn(page, parent, y, env)
             return
         end
         local note = M.SceneNote()
-        view.caption:SetText(WZ.Preview.CAPTION .. (note and (" " .. note) or ""))
+        view.caption:SetText(WZ.Preview.CAPTION .. (note and ("\n" .. note) or ""))
         local accent, o = M.Accent()
         if not accent and o and o.id == "class" then accent = WZ.ClassColor and WZ.ClassColor() end
         local issues = M.SceneIssues(scene)
@@ -174,48 +152,100 @@ end
 ---------------------------------------------------------------------------
 -- 1. Welcome and compatibility
 ---------------------------------------------------------------------------
--- What the first page says. On a first install (Onboarding.lua) it greets, says in a few lines what the setup does and
--- doesn't do, and offers Skip setup (and EllesmereUI's own setup, when that was held back for this one); otherwise it is
--- the setup's own introduction.
+-- What the first page says. One calm opening for everyone; a first installation adds the ways out (Do this later, Skip setup,
+-- and EllesmereUI's own setup when it was held back for this one).
 Pages.WELCOME = {
-    head = "Set up TwichUI's interface layout",
-    intro = "This walks you through a complete interface: where chat, the damage meter, the minimap, the unit frames and the action bars sit, and how EllesmereUI and TwichUI look, worked out for your screen.",
-    safe = "Nothing changes until you press Apply on the Review step, and Restore puts your previous setup back afterwards. Nothing reloads by itself, and nothing here runs unless you open it.",
+    head = "Make yourself at home",
+    intro = "Choose a layout, pick your conveniences, and make it yours.",
+    account = "Part of the layout (EllesmereUI's) applies to every character on this account.",
+    tiles = {
+        { "Choose your layout", "Classic or Compact, drawn for your screen." },
+        { "Add your preferences", "Helpers, accent, size and more." },
+        { "Review, then apply", "Nothing changes until you apply. Your current setup is backed up when you do." },
+    },
+    status = {
+        ok = "Everything the setup needs is in place.",
+        warn = "A few things are worth a look before you continue.",
+        block = "Fix what is marked Blocked before you continue.",
+    },
 }
 Pages.FIRST = {
-    head = "Welcome to TwichUI",
-    intro = "A short setup arranges your interface for your screen: chat, the damage meter, the minimap, the unit frames and the action bars, and how EllesmereUI and TwichUI look. You pick the layout, a few helpers and personal touches as you go.",
-    safe = "Nothing changes until you review it and press Apply, and a restore point is made first, so Restore can put your current setup back. EllesmereUI's part applies to every character on this account; TwichUI's, to this character.",
-    later = "Not now? Do this later (bottom left) closes this, and TwichUI offers it again the next time you log in. Skip setup closes it for good. Either way it stays under /tui layout and Home > Interface layout in the settings.",
-    held = "EllesmereUI's own first-run setup is waiting for this one. Applying a layout here answers it, or you can use EllesmereUI's setup instead.",
+    later = "Not now? Do this later (bottom left) offers it again the next time you log in; Skip setup closes it for good. It stays under /tui layout.",
+    held = "EllesmereUI's first-run setup is waiting for this one. Applying a layout here answers it.",
 }
 
+local function MakeRow(f)
+    local row = CreateFrame("Frame", nil, f)
+    row:SetSize(CONTENT_W, 30)
+    row.chip = Chip(row)
+    row.chip:SetPoint("TOPLEFT", 0, -2)
+    row.label = Text(row, "body", 150)
+    row.label:SetPoint("TOPLEFT", 72, -2)
+    row.detail = Text(row, "small", CONTENT_W - 72 - 160 - 90)
+    row.detail:SetPoint("TOPLEFT", 232, -3)
+    row.link = Button(row, "See it", 70, "secondary", function() end)
+    row.link:SetPoint("TOPRIGHT", 0, -2)
+    return row
+end
+
+local function FillRow(row, it, text, env)
+    row.chip:SetTone(it.state)
+    row.label:SetText(it.label)
+    row.detail:SetText(text)
+    row.link:SetShown(it.go ~= nil)
+    if it.go then row.link:SetScript("OnClick", function() env.Go(it.go) end) end
+    row:SetHeight(math.max(26, Height(row.detail) + 6))
+    row:Show()
+end
+
 local function BuildWelcome(parent, env)
-    local L = Look()
-    local page = { frame = CreateFrame("Frame", nil, parent) }
+    local L, pal = Look(), Pal()
+    local page = { frame = CreateFrame("Frame", nil, parent), attn = {}, rows = {}, tiles = {} }
     local f = page.frame
     f:SetSize(CONTENT_W, 10)
 
     local emblem = f:CreateTexture(nil, "ARTWORK")
-    emblem:SetSize(96, 96)
-    emblem:SetPoint("TOPLEFT", 0, -6)
+    emblem:SetSize(72, 72)
+    emblem:SetPoint("TOPLEFT", 0, -4)
     WZ.Art.Apply(emblem, "emblem")
     local head = L.Text(f, "title")
-    head:SetPoint("TOPLEFT", 116, -10)
+    head:SetPoint("TOPLEFT", 92, -10)
     head:SetText(Pages.WELCOME.head)
-    local intro = Text(f, "body", CONTENT_W - 116)
+    local intro = Text(f, "body", CONTENT_W - 92)
     intro:SetPoint("TOPLEFT", head, "BOTTOMLEFT", 0, -8)
     intro:SetText(Pages.WELCOME.intro)
-    local safe = Text(f, "small", CONTENT_W - 116)
-    safe:SetPoint("TOPLEFT", intro, "BOTTOMLEFT", 0, -8)
-    safe:SetText(Pages.WELCOME.safe)
-    page.safe = safe
 
-    -- first install only: when to do it, and the ways out (they change nothing; each asks first)
-    local later = Text(f, "small", CONTENT_W - 116)
-    later:SetPoint("TOPLEFT", safe, "BOTTOMLEFT", 0, -8)
+    -- the three points: drawn, not an essay
+    local TILE_W = math.floor((CONTENT_W - 20) / 3)
+    for i, t in ipairs(Pages.WELCOME.tiles) do
+        local tile = CreateFrame("Frame", nil, f, "BackdropTemplate")
+        tile:SetSize(TILE_W, 74)
+        L.Panel(tile)
+        tile:SetPoint("TOPLEFT", (i - 1) * (TILE_W + 10), -86)
+        tile.num = L.Text(tile, "title")
+        tile.num:SetPoint("TOPLEFT", 12, -8)
+        tile.num:SetText(tostring(i))
+        tile.num:SetTextColor(pal.bronzeText[1], pal.bronzeText[2], pal.bronzeText[3])
+        tile.head = Text(tile, "body", TILE_W - 48)
+        tile.head:SetPoint("TOPLEFT", 36, -10)
+        tile.head:SetText(t[1])
+        tile.sub = Text(tile, "small", TILE_W - 24)
+        tile.sub:SetPoint("TOPLEFT", 12, -34)
+        tile.sub:SetText(t[2])
+        page.tiles[i] = tile
+    end
+    local account = Text(f, "small", CONTENT_W)
+    account:SetText(Pages.WELCOME.account)
+    account:SetPoint("TOPLEFT", 0, -168)
+
+    -- the verdict, in a word, and what needs a look
+    local chip = Chip(f)
+    local status = Text(f, "body", CONTENT_W - 140)
+
+    -- first installation only: the ways out (each changes nothing and asks first)
+    local later = Text(f, "small", CONTENT_W)
     later:SetText(Pages.FIRST.later)
-    local held = Text(f, "small", CONTENT_W - 116)
+    local held = Text(f, "small", CONTENT_W)
     held:SetText(Pages.FIRST.held)
     local skipBtn = Button(f, "Skip setup", 110, "secondary", function() env.Actions.skip() end,
         "Closes the setup without applying anything, and doesn't offer it again by itself. It stays under /tui layout and Home > Interface layout. It asks first.")
@@ -223,20 +253,12 @@ local function BuildWelcome(parent, env)
         "Closes this setup without applying anything and opens EllesmereUI's own first-run setup, where you choose which of its addons stay on. EllesmereUI reloads when you press its button. It asks first.")
     page.later, page.held, page.skip, page.native = later, held, skipBtn, nativeBtn
 
-    local fit = f:CreateTexture(nil, "ARTWORK")
-    fit:SetSize(44, 44)
-    WZ.Art.Apply(fit, "screenFit")
-    local compatHead = Heading(f, "Does it work here?", CONTENT_W - 60)
-    local compatNote = Text(f, "small", CONTENT_W - 60)
-    compatNote:SetText("What this game client, your screen and the game's state allow. Each line says what it found; nothing is changed by looking.")
-    page.rows = {}
-
     -- the package to set up from: shown only once someone has sent one (the included package is the only one before that)
     local pkgHead = Heading(f, "Layout package", CONTENT_W)
-    local pkgNote = Text(f, "small", CONTENT_W - 60)
+    local pkgNote = Text(f, "small", CONTENT_W)
     page.srcCards = {}
     for i = 1, 1 + (LY and LY.Store and LY.Store.LIMITS.received or 3) do
-        local card = Card(f, CONTENT_W - 30, function() end)
+        local card = Choice(f, CONTENT_W, function() end, { label = true })
         card:Hide()
         page.srcCards[i] = card
     end
@@ -244,62 +266,58 @@ local function BuildWelcome(parent, env)
         "Deletes the stored copy of this package. An install already made from it, and Restore, are not touched. Ask the sender again if you want it back.")
     removeBtn:Hide()
 
-    local function Row(i)
-        local row = page.rows[i]
-        if row then return row end
-        row = CreateFrame("Frame", nil, f)
-        row:SetSize(CONTENT_W, 30)
-        row.chip = Chip(row)
-        row.chip:SetPoint("TOPLEFT", 0, -2)
-        row.label = Text(row, "body", 150)
-        row.label:SetPoint("TOPLEFT", 72, -2)
-        row.detail = Text(row, "small", CONTENT_W - 72 - 160 - 90)
-        row.detail:SetPoint("TOPLEFT", 232, -3)
-        row.link = Button(row, "See it", 70, "secondary", function() end)
-        row.link:SetPoint("TOPRIGHT", 0, -2)
-        page.rows[i] = row
-        return row
-    end
+    -- every check, behind its own button (built when first opened)
+    page.detailsOpen = false
+    local details = Disclosure(f, "Compatibility details", 220, function(open)
+        page.detailsOpen = open
+        env.Relayout()
+    end)
+    page.disclosure = details
 
     function page.Refresh()
         local first = M.FirstRun()
-        local words = first and Pages.FIRST or Pages.WELCOME
-        head:SetText(words.head)
-        intro:SetText(words.intro)
-        safe:SetText(words.safe)
+        local sum = M.CompatSummary()
+        chip:SetTone(sum.state, sum.word)
+        status:SetText(Pages.WELCOME.status[sum.state])
+        chip:ClearAllPoints()
+        chip:SetPoint("TOPLEFT", f, "TOPLEFT", 0, -196)
+        status:ClearAllPoints()
+        status:SetPoint("LEFT", chip, "RIGHT", 10, 0)
+        local y = 196 + 26
+
+        -- what needs a look, with its short explanation, at once
+        for i, it in ipairs(sum.attention) do
+            local row = page.attn[i]
+            if not row then row = MakeRow(f) page.attn[i] = row end
+            FillRow(row, it, it.short, env)
+            row:ClearAllPoints()
+            row:SetPoint("TOPLEFT", 0, -y)
+            y = y + row:GetHeight() + 4
+        end
+        for i = #sum.attention + 1, #page.attn do page.attn[i]:Hide() end
+        y = y + 6
+
         local native = first and M.NativeAvailable()
         later:SetShown(first)
         skipBtn:SetShown(first)
         held:SetShown(native)
         nativeBtn:SetShown(native)
-        local items = M.Compat()
-        for i, it in ipairs(items) do
-            local row = Row(i)
-            row.chip:SetTone(it.state)
-            row.label:SetText(it.label)
-            row.detail:SetText(it.detail)
-            row.link:SetShown(it.go ~= nil)
-            if it.go then row.link:SetScript("OnClick", function() env.Go(it.go) end) end
-            row:SetHeight(math.max(26, Height(row.detail) + 6))
-            row:Show()
-        end
-        for i = #items + 1, #page.rows do page.rows[i]:Hide() end
-        local y = math.max(112, 10 + 24 + 8 + Height(intro) + 8 + Height(safe) + 22)
         if first then
-            y = 10 + 24 + 8 + Height(intro) + 8 + Height(safe) + 8 + Height(later) + 10
+            later:ClearAllPoints()
+            later:SetPoint("TOPLEFT", 0, -y)
+            y = y + Height(later) + 8
             skipBtn:ClearAllPoints()
-            skipBtn:SetPoint("TOPLEFT", 116, -y)
+            skipBtn:SetPoint("TOPLEFT", 0, -y)
             if native then
-                held:ClearAllPoints()
-                held:SetPoint("TOPLEFT", 116, -(y + 32))
                 nativeBtn:ClearAllPoints()
                 nativeBtn:SetPoint("TOPLEFT", skipBtn, "TOPRIGHT", 10, 0)
-                y = y + 32 + Height(held)
-            else
-                y = y + 24
+                held:ClearAllPoints()
+                held:SetPoint("TOPLEFT", 0, -(y + 30))
+                y = y + 30 + Height(held)
             end
-            y = math.max(112, y + 18)
+            y = y + 32
         end
+
         local sources = M.Sources()
         local showSources = #sources > 1
         pkgHead:SetShown(showSources)
@@ -314,7 +332,7 @@ local function BuildWelcome(parent, env)
             local loading, failed = M.Loading(), M.SourceError()
             pkgNote:SetText(loading and "Opening the package: unpacking it and checking it again, a little at a time..."
                 or failed and "That package couldn't be opened. Choose another, or remove it."
-                or "Layouts other players sent you are stored here. Choosing one only changes what this setup shows; nothing is applied until Review.")
+                or "Layouts other players sent you. Choosing one only changes what this setup shows; nothing is applied until you review it.")
             y = y + Height(pkgHead) + 3 + Height(pkgNote) + 8
             for i, src in ipairs(sources) do
                 local card = page.srcCards[i]
@@ -340,18 +358,21 @@ local function BuildWelcome(parent, env)
             end
             y = y + 10
         end
-        fit:ClearAllPoints()
-        fit:SetPoint("TOPLEFT", 0, -y)
-        compatHead:ClearAllPoints()
-        compatHead:SetPoint("TOPLEFT", 56, -y)
-        compatNote:ClearAllPoints()
-        compatNote:SetPoint("TOPLEFT", compatHead, "BOTTOMLEFT", 0, -3)
-        y = y + 56
-        for i = 1, #items do
-            local row = page.rows[i]
-            row:ClearAllPoints()
-            row:SetPoint("TOPLEFT", 0, -y)
-            y = y + row:GetHeight() + 4
+
+        details:SetOpen(page.detailsOpen)
+        details:ClearAllPoints()
+        details:SetPoint("TOPLEFT", 0, -y)
+        y = y + 26
+        for i, row in ipairs(page.rows) do row:SetShown(page.detailsOpen and i <= #sum.items) end
+        if page.detailsOpen then
+            for i, it in ipairs(sum.items) do
+                local row = page.rows[i]
+                if not row then row = MakeRow(f) page.rows[i] = row end
+                FillRow(row, it, it.detail, env)
+                row:ClearAllPoints()
+                row:SetPoint("TOPLEFT", 0, -y)
+                y = y + row:GetHeight() + 4
+            end
         end
         f:SetHeight(y + 8)
         return y + 8
@@ -362,165 +383,197 @@ end
 ---------------------------------------------------------------------------
 -- 2. Layout: Classic or Compact Adventure. Choosing re-draws the preview at once and changes nothing else.
 ---------------------------------------------------------------------------
+local LAYOUT_PIC = { 128, 64 }
+
 local function BuildLayout(parent, env)
     local page = { frame = CreateFrame("Frame", nil, parent), cards = {} }
     local f = page.frame
     f:SetSize(CONTENT_W, 10)
-    local col = NewColumn(f)
-    Put(col, Heading(f, "Choose a layout", LEFT_W), 4)
-    local sub = Put(col, Text(f, "small", LEFT_W), 4)
-    sub:SetText("Pick one; the preview changes at once, to scale, for your screen. Nothing is applied until the Review step, and you can switch layouts later.")
+    local head = Heading(f, "Choose a layout", LEFT_W)
+    head:SetPoint("TOPLEFT", 0, -4)
+    local sub = Text(f, "small", LEFT_W)
+    sub:SetText("The preview updates as you choose.")
+    sub:SetPoint("TOPLEFT", head, "BOTTOMLEFT", 0, -4)
     PreviewColumn(page, f, 24, env)
+
+    local more = Disclosure(f, "Layout details", 180, function(open)
+        page.detailsOpen = open
+        env.Relayout()
+    end)
+    page.detailsOpen = false
+    page.disclosure = more
 
     local function LayoutCard(i)
         local card = page.cards[i]
         if card then return card end
-        card = Card(f, LEFT_W, function() end)
-        card.pic = card:CreateTexture(nil, "ARTWORK")
-        card.pic:SetSize(160, 80)
-        card.name = Text(card, "title", LEFT_W - 190)
+        card = Choice(f, LEFT_W, function() end, { pic = LAYOUT_PIC, label = true, titleKind = "body" })
+        card.traits = Look().Text(card, "meta")
+        card.traits:SetJustifyH("LEFT")
+        card.traits:SetWordWrap(true)
         card.tag = Chip(card)
-        card.covers = Text(card, "small", LEFT_W - 24)
-        card.title:Hide()
         page.cards[i] = card
-        Put(col, card, 10)
         return card
     end
 
     function page.Refresh()
         local current = M.Layout()
+        local y = 24 + Height(head) + 4 + Height(sub) + 8
         for i, layout in ipairs(M.LayoutList()) do
             local card = LayoutCard(i)
-            local selected = layout.id == current.id
             card:SetScript("OnClick", function()
                 M.SetLayout(layout.id)
                 env.Relayout()
             end)
-            card.hasPic = WZ.Art.Apply(card.pic, layout.art)
-            card.name:SetText(layout.title)
-            card.tag:SetTone("warn")
-            card.tag.text:SetText("Preview build")
-            card.tag:SetWidth(math.max(44, card.tag.text:GetStringWidth() + 12))
-            card.tag:SetShown(layout.dev)
-            card.hint:SetText(layout.blurb)
-            card.hint:Show()
-            card.covers:SetText(Bullets(layout.covers))
-            card.covers:SetShown(selected)
-            card:SetSelected(selected)
-            card.pic:ClearAllPoints()
-            card.name:ClearAllPoints()
+            card.hasPic = DrawPic(card.pic, layout.art)
+            local traits = layout.traits and #layout.traits > 0 and table.concat(layout.traits, "  \194\183  ") or nil
+            card.traits:SetWidth(LEFT_W - card.textX - 12)
+            card.traits:SetText(traits or "")
+            card.traits:SetShown(traits ~= nil)
+            local extra = traits and (6 + Height(card.traits)) or 0
+            local h, bottom = card:Fill(layout.title, layout.desc or layout.blurb, extra)
+            card.traits:ClearAllPoints()
+            card.traits:SetPoint("TOPLEFT", card.textX, -(bottom + 6))
+            card.tag:SetTone("warn", "Preview build")
             card.tag:ClearAllPoints()
-            card.hint:ClearAllPoints()
-            card.covers:ClearAllPoints()
-            local top = 12
-            if card.hasPic then
-                card.pic:SetPoint("TOPLEFT", 12, -top)
-                card.name:SetPoint("TOPLEFT", 12 + 160 + 14, -top - 2)
-                card.tag:SetPoint("TOPLEFT", card.name, "BOTTOMLEFT", 0, -8)
-                top = top + 80 + 10
-            else
-                card.name:SetPoint("TOPLEFT", 12, -top)
-                card.tag:SetPoint("LEFT", card.name, "RIGHT", 10, 0)
-                top = top + Height(card.name) + 8
-            end
-            card.hint:SetWidth(LEFT_W - 24)
-            card.hint:SetPoint("TOPLEFT", 12, -top)
-            card.covers:SetPoint("TOPLEFT", card.hint, "BOTTOMLEFT", 0, -8)
-            card:SetHeight(top + Height(card.hint) + 8 + (selected and (Height(card.covers) + 6) or 0) + 12)
+            card.tag:SetPoint("TOPLEFT", 10, -(10 + LAYOUT_PIC[2] + 6))
+            card.tag:SetShown(layout.dev)
+            if layout.dev then card:SetHeight(math.max(h, 10 + LAYOUT_PIC[2] + 6 + 15 + 10)) end
+            card:SetSelected(layout.id == current.id)
+            card:ClearAllPoints()
+            card:SetPoint("TOPLEFT", 0, -y)
             card:Show()
+            y = y + card:GetHeight() + 8
         end
-        local y = Flow(col)
+        for i = #M.LayoutList() + 1, #page.cards do page.cards[i]:Hide() end
+
+        -- what the chosen layout covers: behind its own button, built when first opened
+        more:SetOpen(page.detailsOpen)
+        more:ClearAllPoints()
+        more:SetPoint("TOPLEFT", 0, -y)
+        y = y + 26
+        if page.detailsOpen then
+            page.detail = page.detail or Text(f, "small", LEFT_W)
+            page.detail:SetText(current.blurb .. "\n\n" .. Bullets(current.covers))
+            page.detail:ClearAllPoints()
+            page.detail:SetPoint("TOPLEFT", 0, -y)
+            page.detail:Show()
+            y = y + Height(page.detail) + 6
+        elseif page.detail then
+            page.detail:Hide()
+        end
         page.RefreshPreview()
-        f:SetHeight(math.max(y, 260) + 8)
+        f:SetHeight(math.max(y, 280) + 8)
         return f:GetHeight()
     end
     return page
 end
 
 ---------------------------------------------------------------------------
--- A page that asks one choice: its cards (3. Helpers)
+-- 3. Helpers: one card for each preset the package offers, whatever its number and whatever it sets
 ---------------------------------------------------------------------------
+-- The card's picture: the preset's own shape decides (Model.PresetCard.art), a preset with none gets TwichUI's generic icon.
+local PRESET_ART = { keep = "keep", helpers = "helpers", navigation = "icon:navigation" }
+local GENERIC_ART = "icon:qualityOfLife"
+local HELP_PIC = { 56, 56 }
+
 local function BuildHelpers(parent, env)
-    local page = { frame = CreateFrame("Frame", nil, parent), cards = {} }
+    local page = { frame = CreateFrame("Frame", nil, parent), cards = {}, open = {} }
     local f = page.frame
     f:SetSize(CONTENT_W, 10)
-    local col = NewColumn(f)
-    Put(col, Heading(f, "Choose TwichUI's helpers", LEFT_W), 4)
-    local sub = Put(col, Text(f, "small", LEFT_W), 4)
+    local head = Heading(f, "Choose TwichUI's helpers", CONTENT_W)
+    head:SetPoint("TOPLEFT", 0, -4)
+    local sub = Text(f, "small", CONTENT_W)
+    sub:SetText("Pick a set of TwichUI helpers. You can change any of them later in TwichUI's settings.")
     -- a preset picked before (or installed) that this package no longer offers: said first, and a choice is asked for
-    local gone = Put(col, Text(f, "small", LEFT_W), 6)
-    gone:SetTextColor(Pal().bronzeText[1], Pal().bronzeText[2], Pal().bronzeText[3])   -- the warning tone, and the words say it
-    local note = Text(f, "small", LEFT_W)
-    PreviewColumn(page, f, 24, env)
-
-    local none = Text(f, "body", LEFT_W)
+    local gone = Text(f, "small", CONTENT_W)
+    Tone(gone, Pal().bronzeText)   -- the warning tone, and the words say it
+    local foot = Text(f, "small", CONTENT_W)
+    foot:SetText("The layout's own look and places apply whichever you choose.")
+    local none = Text(f, "body", CONTENT_W)
     none:SetText("This package doesn't ask which of TwichUI's helpers to turn on. Nothing is chosen here; go on to the next step.")
-    none:SetPoint("TOPLEFT", 0, -60)
+    none:SetPoint("TOPLEFT", 0, -40)
+
+    local function HelperCard(i)
+        local card = page.cards[i]
+        if card then return card end
+        card = Choice(f, CONTENT_W, function() end, { pic = HELP_PIC, label = true })
+        card.more = Disclosure(card, "View included settings", 200, function(open)
+            if card.optionId then page.open[card.optionId] = open or nil end
+            env.Relayout()
+        end)
+        page.cards[i] = card
+        return card
+    end
 
     function page.Refresh()
         local ch = M.Choice("helpers")
         if not ch then
-            -- a package from another player may ask nothing here
-            sub:Hide()
-            note:Hide()
+            sub:Hide() gone:Hide() foot:Hide()
             none:Show()
             for _, card in ipairs(page.cards) do card:Hide() end
-            page.RefreshPreview()
-            f:SetHeight(260)
-            return 260
+            f:SetHeight(120)
+            return 120
         end
         none:Hide()
         sub:Show()
-        note:Show()
-        sub:SetText(ch.hint)
-        note:SetText(ch.mode == "settings"
-            and "A preset can turn features on or off and set how they look and behave; the Review step lists exactly what it changes before anything is applied. You can change any of it later in TwichUI's settings. Features that act for you or talk to other players are never part of a preset."
-            or "These only turn features on, never off, and you can change any of them later in TwichUI's settings. Features that share, play sounds or act for you are never part of this.")
         local missing = M.Missing("helpers")
         gone:SetShown(missing ~= nil)
+        head:ClearAllPoints()
+        head:SetPoint("TOPLEFT", 0, -4)
+        sub:ClearAllPoints()
+        sub:SetPoint("TOPLEFT", head, "BOTTOMLEFT", 0, -4)
+        local y = 4 + Height(head) + 4 + Height(sub) + 10
         if missing then
             gone:SetText(("The helper preset you chose before (\"%s\") is no longer offered by this package. Choose one of these; nothing is picked for you."):format(missing))
+            gone:ClearAllPoints()
+            gone:SetPoint("TOPLEFT", 0, -y)
+            y = y + Height(gone) + 8
         else gone:SetText("") end
         for i, o in ipairs(ch.options) do
-            local card = page.cards[i]
-            if not card then
-                card = Card(f, LEFT_W, function() end)
-                page.cards[i] = card
-                Put(col, card, 8)
-            end
+            local card = HelperCard(i)
+            card.optionId = o.id
             card:SetScript("OnClick", function()
                 M.SetPick("helpers", o.id)
                 env.Relayout()
             end)
-            -- what it does, read from the package: the features it turns on and off, and how many other settings it sets
-            local sm = M.PresetSummary("helpers", o.id)
-            local what
-            if sm and sm.keep then what = "Changes nothing of what the presets manage."
-            elseif sm then
-                local parts = {}
-                if #sm.summary.on > 0 then parts[#parts + 1] = "On: " .. table.concat(sm.summary.on, ", ") end
-                if #sm.summary.off > 0 then parts[#parts + 1] = "Off: " .. table.concat(sm.summary.off, ", ") end
-                local other = sm.summary.set + sm.summary.reset
-                if other > 0 then parts[#parts + 1] = ("%d other %s"):format(other, other == 1 and "setting" or "settings") end
-                what = #parts > 0 and (table.concat(parts, ". ") .. ".") or nil
+            local pc = M.PresetCard("helpers", o.id)
+            local art = pc and pc.art and PRESET_ART[pc.art] or GENERIC_ART
+            DrawPic(card.pic, art)
+            local open = page.open[o.id] == true
+            card.more:SetOpen(open)
+            -- the included settings, built the first time a card is opened
+            if open then
+                card.detail = card.detail or Text(card, "small", CONTENT_W - card.textX - 12)
+                card.detail:SetText(Bullets(pc and pc.details))
+                card.detail:Show()
+            elseif card.detail then card.detail:Hide() end
+            local detailH = open and (Height(card.detail) + 6) or 0
+            local _, bottom = card:Fill(o.label, pc and pc.short or o.hint, 26 + detailH)
+            card.more:ClearAllPoints()
+            card.more:SetPoint("TOPLEFT", card.textX - 8, -(bottom + 2))
+            if open then
+                card.detail:ClearAllPoints()
+                card.detail:SetPoint("TOPLEFT", card.textX, -(bottom + 30))
             end
-            card:Fill(o.label, (o.hint or "") .. (what and ((o.hint and "\n" or "") .. what) or ""))
             card:SetSelected(M.Pick("helpers") == o.id and not missing)
+            card:ClearAllPoints()
+            card:SetPoint("TOPLEFT", 0, -y)
             card:Show()
+            y = y + card:GetHeight() + 8
         end
         for i = #ch.options + 1, #page.cards do page.cards[i]:Hide() end
-        if not page.noteAdded then page.noteAdded = true Put(col, note, 12) end
-        sub:Show()
-        local y = Flow(col)
-        page.RefreshPreview()
-        f:SetHeight(math.max(y, 260) + 8)
+        foot:Show()
+        foot:ClearAllPoints()
+        foot:SetPoint("TOPLEFT", 0, -(y + 2))
+        y = y + 2 + Height(foot)
+        f:SetHeight(y + 8)
         return f:GetHeight()
     end
     return page
 end
 
 ---------------------------------------------------------------------------
--- 4. Personalize
+-- 4. Personalize: compact choices, each with its own small sample
 ---------------------------------------------------------------------------
 local function ClassColor()
     local class = UnitClass and select(2, UnitClass("player"))
@@ -530,258 +583,349 @@ local function ClassColor()
 end
 WZ.ClassColor = ClassColor
 
+-- Three synthetic friendly players: nothing of the game's, coloured by the game's own class colours.
+local SAMPLE_PLATES = { { "Warrior", "WARRIOR", { 0.78, 0.61, 0.43 } }, { "Priest", "PRIEST", { 1, 1, 1 } }, { "Mage", "MAGE", { 0.25, 0.78, 0.92 } } }
+local BLUE = { 0.667, 0.667, 1 }
+-- Pictures for the options a package's tooltip choice has by these ids (an option with another id simply has none)
+local TIP_ART = { layout = "tipFixed", cursor = "tipCursor" }
+local SCOPE = { tooltip = "Applies to every character on this account." }
+local SWATCH_W = 70
+
 local function BuildPersonalize(parent, env)
     local L, pal = Look(), Pal()
     local page = { frame = CreateFrame("Frame", nil, parent), swatches = {}, sizes = {}, groups = {} }
     local f = page.frame
     f:SetSize(CONTENT_W, 10)
-    local art = f:CreateTexture(nil, "ARTWORK")
-    art:SetSize(52, 52)
-    art:SetPoint("TOPLEFT", 0, -4)
-    WZ.Art.Apply(art, "personalize")
-    local head = Heading(f, "Make it yours", LEFT_W - 64)
-    head:SetPoint("TOPLEFT", 64, -8)
-    local sub = Text(f, "small", LEFT_W - 64)
-    sub:SetPoint("TOPLEFT", head, "BOTTOMLEFT", 0, -3)
-    sub:SetText("Each choice changes the preview at once and nothing else until you apply.")
-
-    local accentHead = Heading(f, "", LEFT_W)
-    local accentName = Text(f, "body", LEFT_W)
-    local accentHint = Text(f, "small", LEFT_W)
-    local sizeHead = Heading(f, "", LEFT_W)
-    local sizeHint = Text(f, "small", LEFT_W)
+    local head = Heading(f, "Make it yours", CONTENT_W - 120)
+    head:SetPoint("TOPLEFT", 0, -4)
+    local sub = Text(f, "small", CONTENT_W - 120)
+    sub:SetText("Nothing changes until you apply.")
+    sub:SetPoint("TOPLEFT", head, "BOTTOMLEFT", 0, -4)
     local reset = Button(f, "Start over", 100, "secondary", function() M.ResetPicks() env.Relayout() end,
         "Puts every choice back to the layout's own, here and on the Helpers step. Nothing in the game changes.")
-    PreviewColumn(page, f, 24, env)
+    reset:SetPoint("TOPRIGHT", f, "TOPRIGHT", 0, -4)
+    local none = Text(f, "body", CONTENT_W)
+    none:SetText("This package doesn't ask for an accent colour or a size. Nothing is chosen here; go on to the review.")
+    none:SetPoint("TOPLEFT", 0, -70)
 
-    -- Two more groups of two cards (tooltip placement, friendly player nameplates): each made once, then only re-written.
-    local SAMPLE_PLATES = { { "Sample warrior", "WARRIOR", { 0.78, 0.61, 0.43 } }, { "Sample priest", "PRIEST", { 1, 1, 1 } },
-        { "Sample mage", "MAGE", { 0.25, 0.78, 0.92 } } }
-    local BLUE = { 0.667, 0.667, 1 }
+    local accentHead = Heading(f, "", HALF_W)
+    local sizeHead = Heading(f, "", HALF_W)
+    local sizeHint = Text(f, "small", HALF_W)
+
+    -- one accent: a swatch, its name under it, a check when it is the one
+    local function Swatch(i)
+        local sw = page.swatches[i]
+        if sw then return sw end
+        sw = CreateFrame("Button", nil, f, "BackdropTemplate")
+        sw:SetSize(SWATCH_W, 66)
+        sw.chip = CreateFrame("Frame", nil, sw, "BackdropTemplate")
+        sw.chip:SetSize(34, 34)
+        sw.chip:SetPoint("TOP", 0, 0)
+        L.Surface(sw.chip, pal.well, 1, pal.control, 1)
+        sw.fill = L.Solid(sw.chip, "ARTWORK", pal.stone, 1)
+        sw.fill:SetPoint("TOPLEFT", 4, -4)
+        sw.fill:SetPoint("BOTTOMRIGHT", -4, 4)
+        sw.rim = {}
+        for k, spec in ipairs({ { "TOPLEFT", "TOPRIGHT", nil, 2 }, { "BOTTOMLEFT", "BOTTOMRIGHT", nil, 2 }, { "TOPLEFT", "BOTTOMLEFT", 2, nil }, { "TOPRIGHT", "BOTTOMRIGHT", 2, nil } }) do
+            local t = L.Solid(sw.chip, "OVERLAY", pal.text, 1)
+            t:SetPoint(spec[1], 0, 0)
+            t:SetPoint(spec[2], 0, 0)
+            if spec[3] then t:SetWidth(spec[3]) else t:SetHeight(spec[4]) end
+            t:Hide()
+            sw.rim[k] = t
+        end
+        sw.icon = sw.chip:CreateTexture(nil, "OVERLAY")
+        sw.icon:SetSize(18, 18)
+        sw.icon:SetPoint("CENTER", 0, 0)
+        sw.icon:Hide()
+        sw.mark = Controls.Mark(sw)
+        sw.mark:SetPoint("CENTER", sw.chip, "BOTTOMRIGHT", -2, 2)
+        sw.mark:Hide()
+        sw.name = Text(sw, "small", SWATCH_W - 4)
+        sw.name:SetJustifyH("CENTER")
+        sw.name:SetPoint("TOP", sw.chip, "BOTTOM", 0, -4)
+        L.Hover(sw, pal.text, 0.06)
+        page.swatches[i] = sw
+        return sw
+    end
+
+    -- a group: its heading, a scope note at the right, two cards
     local function Group(id)
         local g = page.groups[id]
         if g then return g end
-        g = { head = Heading(f, "", LEFT_W), hint = Text(f, "small", LEFT_W), note = Text(f, "small", LEFT_W), cards = {} }
+        g = { head = Heading(f, "", 300), scope = L.Text(f, "meta"), note = Text(f, "small", CONTENT_W), cards = {} }
+        g.scope:SetJustifyH("RIGHT")
+        g.scope:SetWidth(CONTENT_W - 300)
+        g.scope:SetTextColor(pal.bronzeText[1], pal.bronzeText[2], pal.bronzeText[3])
         if id == "friendly-plates" then
-            g.sample, g.caption = {}, Text(f, "small", LEFT_W)
-            for i = 1, #SAMPLE_PLATES do
-                local row = { bar = f:CreateTexture(nil, "ARTWORK"), name = L.Text(f, "small") }
-                row.bar:SetSize(70, 7)
-                g.sample[i] = row
-            end
+            g.limit = Text(f, "small", CONTENT_W)
+            g.samples = {}
         end
         page.groups[id] = g
         return g
     end
     local function HideGroup(g)
-        g.head:Hide() g.hint:Hide() g.note:Hide()
+        g.head:Hide() g.scope:Hide() g.note:Hide()
+        if g.limit then g.limit:Hide() end
         for _, c in ipairs(g.cards) do c:Hide() end
-        for _, r in ipairs(g.sample or {}) do r.bar:Hide() r.name:Hide() end
-        if g.caption then g.caption:Hide() end
     end
+
+    -- three sample nameplates drawn inside a card: names with a bar under each (or the name alone in a name-only layout)
+    local function Samples(card)
+        if not card.samples then
+            card.samples = {}
+            for i = 1, #SAMPLE_PLATES do
+                card.samples[i] = { bar = card:CreateTexture(nil, "ARTWORK"), name = L.Text(card, "small") }
+                card.samples[i].bar:SetSize(80, 7)
+            end
+        end
+        return card.samples
+    end
+
     local function DrawGroup(id, y)
         local ch = M.Choice(id)
         local g = Group(id)
         if not ch then HideGroup(g) return y end
         g.head:Show()
-        g.hint:Show()
         g.head:SetText(ch.label)
         g.head:ClearAllPoints()
         g.head:SetPoint("TOPLEFT", f, "TOPLEFT", 0, -y)
-        g.hint:SetText(ch.hint or "")
-        g.hint:ClearAllPoints()
-        g.hint:SetPoint("TOPLEFT", g.head, "BOTTOMLEFT", 0, -3)
-        y = y + Height(g.head) + 3 + Height(g.hint) + 8
+        local scope = SCOPE[id]
+        g.scope:SetText(scope or "")
+        g.scope:SetShown(scope ~= nil)
+        g.scope:ClearAllPoints()
+        g.scope:SetPoint("TOPRIGHT", f, "TOPRIGHT", 0, -(y + 2))
+        y = y + 22
+        local mode = id == "friendly-plates" and (M.PlatesMode() or { nameOnly = false }) or nil
+        local h = 0
         for i, o in ipairs(ch.options) do
             local card = g.cards[i]
-            if not card then card = Card(f, (LEFT_W - 8) / 2, function() end) g.cards[i] = card end
+            if not card then
+                local pic = id == "tooltip" and { 88, 70 } or nil
+                card = Choice(f, HALF_W, function() end, { pic = pic, label = true })
+                g.cards[i] = card
+            end
             card:SetScript("OnClick", function() M.SetPick(id, o.id) env.Relayout() end)
-            card:Fill(o.label, o.hint)
-            card:SetSelected(M.Pick(id) == o.id)
+            local chosen = M.Pick(id) == o.id
+            if id == "tooltip" then DrawPic(card.pic, TIP_ART[o.id]) end
+            local extra = 0
+            if id == "friendly-plates" then extra = 34 end
+            local _, bottom = card:Fill(o.label, o.hint, extra)
+            if id == "friendly-plates" then
+                -- the sample: each player's plate as this option would draw it. Class colors: the player's class color (EllesmereUI's
+                -- own plate; names only in a name-only layout). Standard blue: Blizzard's plate, which EllesmereUI no longer manages,
+                -- drawn as a plain blue bar since how it looks is Blizzard's setting.
+                local blue = o.id == "blue"
+                local samples = Samples(card)
+                for k, sp in ipairs(SAMPLE_PLATES) do
+                    local s = samples[k]
+                    local class = RAID_CLASS_COLORS and RAID_CLASS_COLORS[sp[2]]
+                    local cc = class and { class.r, class.g, class.b } or sp[3]
+                    local x = 12 + (k - 1) * 104
+                    s.name:SetText(sp[1])
+                    s.name:ClearAllPoints()
+                    s.bar:ClearAllPoints()
+                    if mode.nameOnly and not blue then
+                        s.bar:Hide()
+                        s.name:SetTextColor(cc[1], cc[2], cc[3])
+                        s.name:SetPoint("TOPLEFT", card, "TOPLEFT", x, -(bottom + 12))
+                    else
+                        local col = blue and BLUE or cc
+                        s.bar:SetColorTexture(col[1], col[2], col[3], 1)
+                        s.bar:SetPoint("TOPLEFT", card, "TOPLEFT", x, -(bottom + 8))
+                        s.bar:Show()
+                        s.name:SetTextColor(1, 1, 1)
+                        s.name:SetPoint("TOPLEFT", s.bar, "BOTTOMLEFT", 0, -3)
+                    end
+                    s.name:Show()
+                end
+            end
+            card:SetSelected(chosen)
             card:ClearAllPoints()
-            card:SetPoint("TOPLEFT", f, "TOPLEFT", (i - 1) * ((LEFT_W - 8) / 2 + 8), -y)
+            card:SetPoint("TOPLEFT", f, "TOPLEFT", (i - 1) * (HALF_W + 16), -y)
             card:Show()
+            h = math.max(h, card:GetHeight())
         end
         for i = #ch.options + 1, #g.cards do g.cards[i]:Hide() end
-        local h = 0
-        for i = 1, #ch.options do h = math.max(h, g.cards[i]:GetHeight()) end
         for i = 1, #ch.options do g.cards[i]:SetHeight(h) end
         y = y + h + 6
         local derived = M.Derived(id)
-        g.note:SetText(derived and "Shown as your game has it now. Pick one to choose for yourself." or "")
+        g.note:SetText("Shown as your game has it now. Pick one to choose for yourself.")
         g.note:SetShown(derived)
-        g.note:ClearAllPoints()
-        g.note:SetPoint("TOPLEFT", f, "TOPLEFT", 0, -y)
-        if derived then y = y + Height(g.note) + 4 end
-        if g.sample then
-            -- synthetic friendly players (never a real nameplate). Class colors is EllesmereUI's own plate (names only in a name-only
-            -- layout); Standard blue is Blizzard's plate, which EllesmereUI no longer manages: drawn as a plain blue bar, since how it
-            -- looks is Blizzard's setting.
-            local mode = M.PlatesMode() or { nameOnly = false }
-            local blue = M.Pick(id) == "blue"
-            for i, sp in ipairs(SAMPLE_PLATES) do
-                local row = g.sample[i]
-                local class = RAID_CLASS_COLORS and RAID_CLASS_COLORS[sp[2]]
-                local cc = class and { class.r, class.g, class.b } or sp[3]
-                row.name:SetText(sp[1])
-                row.bar:ClearAllPoints()
-                row.name:ClearAllPoints()
-                if mode.nameOnly and not blue then
-                    row.name:SetTextColor(cc[1], cc[2], cc[3])
-                    row.bar:Hide()
-                    row.name:SetPoint("TOPLEFT", f, "TOPLEFT", (i - 1) * 120, -y)
-                else
-                    local col = blue and BLUE or cc
-                    row.bar:SetColorTexture(col[1], col[2], col[3], 1)
-                    row.bar:SetPoint("TOPLEFT", f, "TOPLEFT", (i - 1) * 120, -y)
-                    row.bar:Show()
-                    row.name:SetTextColor(1, 1, 1)
-                    row.name:SetPoint("TOPLEFT", row.bar, "BOTTOMLEFT", 0, -2)
-                end
-                row.name:Show()
-            end
-            y = y + ((mode.nameOnly and not blue) and 16 or 26)
-            local cap = "A sample, not your nameplates."
-            if blue then
-                cap = cap .. " EllesmereUI stops managing friendly player nameplates and Blizzard's draw them, by Blizzard's own settings (Esc > Options > Nameplates); what EllesmereUI last set for them stays until you change it there."
-            end
-            g.caption:SetText(cap)
-            g.caption:ClearAllPoints()
-            g.caption:SetPoint("TOPLEFT", f, "TOPLEFT", 0, -y)
-            g.caption:Show()
-            y = y + Height(g.caption) + 4
+        if derived then
+            g.note:ClearAllPoints()
+            g.note:SetPoint("TOPLEFT", f, "TOPLEFT", 0, -y)
+            y = y + Height(g.note) + 4
         end
-        return y + 12
+        if g.limit then
+            -- what Standard blue leaves as it is: stated while it is the pick (not a caption on every page)
+            local blue = M.Pick(id) == "blue"
+            g.limit:SetText("Blizzard's nameplates draw friendly players, by Blizzard's own settings (Esc > Options > Nameplates). What EllesmereUI last set for them stays until you change it there.")
+            g.limit:SetShown(blue)
+            if blue then
+                g.limit:ClearAllPoints()
+                g.limit:SetPoint("TOPLEFT", f, "TOPLEFT", 0, -y)
+                y = y + Height(g.limit) + 4
+            end
+        end
+        return y + 8
     end
-
-    local none = Text(f, "body", LEFT_W)
-    none:SetText("This package doesn't ask for an accent colour or a size. Nothing is chosen here; go on to the review.")
-    none:SetPoint("TOPLEFT", 0, -90)
 
     function page.Refresh()
         local accent, size = M.Choice("accent"), M.Choice("size")
         local shown = accent ~= nil and size ~= nil
-        for _, w in ipairs({ accentHead, accentName, accentHint, sizeHead, sizeHint, reset, sub }) do w:SetShown(shown) end
+        for _, w in ipairs({ accentHead, sizeHead, sizeHint, reset, sub }) do w:SetShown(shown) end
         none:SetShown(not shown)
         if not shown then
             -- a package from another player may offer neither
             for _, sw in ipairs(page.swatches) do sw:Hide() end
             for _, c in ipairs(page.sizes) do c:Hide() end
             for _, g in pairs(page.groups) do HideGroup(g) end
-            page.RefreshPreview()
-            f:SetHeight(260)
-            return 260
+            f:SetHeight(200)
+            return 200
         end
+        local top = 4 + Height(head) + 4 + Height(sub) + 12
+
+        -- accent (left): swatches with their names
         accentHead:SetText(accent.label)
         accentHead:ClearAllPoints()
-        accentHead:SetPoint("TOPLEFT", 0, -82)
-        accentHint:SetText(accent.hint)
-        accentHint:ClearAllPoints()
-        accentHint:SetPoint("TOPLEFT", accentHead, "BOTTOMLEFT", 0, -3)
-        local y = 82 + Height(accentHead) + 3 + Height(accentHint) + 10
-        local x = 0
+        accentHead:SetPoint("TOPLEFT", f, "TOPLEFT", 0, -top)
+        local ay = top + 22
+        local per = math.max(1, math.floor(HALF_W / SWATCH_W))
         for i, o in ipairs(accent.options) do
-            local sw = page.swatches[i]
-            if not sw then
-                sw = CreateFrame("Button", nil, f, "BackdropTemplate")
-                sw:SetSize(36, 36)
-                L.Surface(sw, pal.well, 1, pal.control, 1)
-                sw.fill = L.Solid(sw, "ARTWORK", pal.stone, 1)
-                sw.fill:SetPoint("TOPLEFT", 4, -4)
-                sw.fill:SetPoint("BOTTOMRIGHT", -4, 4)
-                sw.under = L.Solid(sw, "OVERLAY", pal.bronzeText, 1)
-                sw.under:SetHeight(3)
-                sw.under:SetPoint("TOPLEFT", sw, "BOTTOMLEFT", 0, -3)
-                sw.under:SetPoint("TOPRIGHT", sw, "BOTTOMRIGHT", 0, -3)
-                L.Hover(sw, pal.text, 0.12, 4)
-                page.swatches[i] = sw
-            end
+            local sw = Swatch(i)
             local col = o.swatch or (o.id == "class" and ClassColor()) or pal.stone
             sw.fill:SetColorTexture(col[1], col[2], col[3], 1)
-            sw:ClearAllPoints()
-            sw:SetPoint("TOPLEFT", f, "TOPLEFT", x, -y)
-            x = x + 44
+            -- the class option carries the class's own icon, so it is never an unexplained swatch
+            local token = o.id == "class" and UnitClass and select(2, UnitClass("player")) or nil
+            local coords = token and CLASS_ICON_TCOORDS and CLASS_ICON_TCOORDS[token]
+            if coords then
+                sw.icon:SetTexture([[Interface\WorldStateFrame\Icons-Classes]])
+                sw.icon:SetTexCoord(unpack(coords))
+                sw.icon:Show()
+            else sw.icon:Hide() end
+            sw.name:SetText(o.label)
             local chosen = M.Pick("accent") == o.id
-            sw.under:SetShown(chosen)
+            for _, t in ipairs(sw.rim) do t:SetShown(chosen) end
+            sw.mark:SetShown(chosen)
+            sw.mark:SetOn(chosen)
             local edge = chosen and pal.text or pal.control
-            sw:SetBackdropBorderColor(edge[1], edge[2], edge[3], 1)
+            sw.chip:SetBackdropBorderColor(edge[1], edge[2], edge[3], 1)
+            sw:ClearAllPoints()
+            sw:SetPoint("TOPLEFT", f, "TOPLEFT", ((i - 1) % per) * SWATCH_W, -(ay + math.floor((i - 1) / per) * 68))
             sw:SetScript("OnClick", function() M.SetPick("accent", o.id) env.Relayout() end)
             R.Interact.Tip(sw, o.label, o.hint or (o.id == "class" and "Follows the character you play." or nil))
             sw:Show()
         end
         for i = #accent.options + 1, #page.swatches do page.swatches[i]:Hide() end
-        y = y + 36 + 8
-        local o = M.PickedOption("accent")
-        accentName:SetText(o and ("Chosen: " .. o.label) or "")
-        accentName:ClearAllPoints()
-        accentName:SetPoint("TOPLEFT", f, "TOPLEFT", 0, -y)
-        y = y + Height(accentName) + 18
+        local accentBottom = ay + math.ceil(#accent.options / per) * 68
 
+        -- size (right): two cards that show their own relative size, and what the package says they change
+        local rx = HALF_W + 16
         sizeHead:SetText(size.label)
         sizeHead:ClearAllPoints()
-        sizeHead:SetPoint("TOPLEFT", f, "TOPLEFT", 0, -y)
-        sizeHint:SetText(size.hint)
-        sizeHint:ClearAllPoints()
-        sizeHint:SetPoint("TOPLEFT", sizeHead, "BOTTOMLEFT", 0, -3)
-        y = y + Height(sizeHead) + 3 + Height(sizeHint) + 8
+        sizeHead:SetPoint("TOPLEFT", f, "TOPLEFT", rx, -top)
+        local cw = math.floor((HALF_W - 8) / 2)
+        local sy = top + 22
+        local fontFile = (GameFontHighlight and GameFontHighlight.GetFont and GameFontHighlight:GetFont()) or "Fonts\\FRIZQT__.TTF"
         for i, so in ipairs(size.options) do
             local card = page.sizes[i]
-            if not card then card = Card(f, (LEFT_W - 8) / 2, function() end) page.sizes[i] = card end
+            if not card then
+                card = Choice(f, cw, function() end, { pic = { 40, 32 } })
+                card.pic:Hide()
+                card.sample = L.Text(card, "title")
+                card.sample:SetPoint("TOPLEFT", 12, -12)
+                card.sample:SetText("Aa")
+                page.sizes[i] = card
+            end
             card:SetScript("OnClick", function() M.SetPick("size", so.id) env.Relayout() end)
-            card:Fill(so.label, so.hint)
+            -- "Aa" at the size each option gives: the standard text, and about a seventh larger for Larger (the density's own ratio is 1.15)
+            local px = so.density == "larger" and 18 or 15
+            if card.sample.SetFont then card.sample:SetFont(fontFile, px, "") end
+            card:Fill(so.label, nil)
+            card:SetHeight(56)
             card:SetSelected(M.Pick("size") == so.id)
             card:ClearAllPoints()
-            card:SetPoint("TOPLEFT", f, "TOPLEFT", (i - 1) * ((LEFT_W - 8) / 2 + 8), -y)
+            card:SetPoint("TOPLEFT", f, "TOPLEFT", rx + (i - 1) * (cw + 8), -sy)
             card:Show()
         end
-        local h = 0
-        for _, c in ipairs(page.sizes) do h = math.max(h, c:GetHeight()) end
-        for _, c in ipairs(page.sizes) do c:SetHeight(h) end
-        y = y + h + 18
+        for i = #size.options + 1, #page.sizes do page.sizes[i]:Hide() end
+        sizeHint:SetText(M.Brief(size.hint, 140))
+        sizeHint:ClearAllPoints()
+        sizeHint:SetPoint("TOPLEFT", f, "TOPLEFT", rx, -(sy + 56 + 6))
+        local sizeBottom = sy + 56 + 6 + Height(sizeHint)
+
+        local y = math.max(accentBottom, sizeBottom) + 14
         y = DrawGroup("tooltip", y)
         y = DrawGroup("friendly-plates", y)
-        y = y + 2
-        reset:ClearAllPoints()
-        reset:SetPoint("TOPLEFT", f, "TOPLEFT", 0, -y)
         reset:SetEnabled(not M.IsDefault())
-        y = y + 24
-        page.RefreshPreview()
-        f:SetHeight(math.max(y, 260) + 8)
+        f:SetHeight(math.max(y, 200) + 4)
         return f:GetHeight()
     end
     return page
 end
 
 ---------------------------------------------------------------------------
--- 5. Review
+-- 5. Review: a short receipt, with what changes and the update controls behind buttons
 ---------------------------------------------------------------------------
+local HEADINGS = {
+    fresh = { "Ready to apply", "Nothing has changed yet. Apply makes the changes below." },
+    update = { "Ready to update", "Nothing has changed yet. Apply makes the changes below." },
+    nothing = { "You're already up to date.", "Your installed layout already matches these choices." },
+    blocked = { "Can't apply yet", "Nothing has changed." },
+}
+local MODE_NAME = { keep = "Keep my customizations", recommended = "Reapply the recommended configuration", review = "Review conflicts" }
+local NOTE_PREFIX = { warn = "Check: ", block = "Blocked: ", account = "Account-wide: " }
+local NOTE_SLOTS = 12
+local ROW_SLOTS = 1 + (LY and LY.MAX_CHOICES or 6)
+
 local function BuildReview(parent, env)
     local pal = Pal()
-    local page = { frame = CreateFrame("Frame", nil, parent) }
+    local page = { frame = CreateFrame("Frame", nil, parent), rows = {}, notes = {} }
     local f = page.frame
     f:SetSize(CONTENT_W, 10)
     local col = NewColumn(f)
-    Put(col, Heading(f, "Review before you apply", LEFT_W), 4)
+    local head = Put(col, Heading(f, HEADINGS.fresh[1], LEFT_W), 4)
     local lead = Put(col, Text(f, "small", LEFT_W), 4)
-    lead:SetText("This is exactly what Apply will do on this screen. Nothing has changed yet.")
     local switching = Put(col, Text(f, "small", LEFT_W), 6)
-    local blocked = Put(col, Text(f, "body", LEFT_W), 8)
-    blocked:SetTextColor(pal.danger.text[1], pal.danger.text[2], pal.danger.text[3])
-    local fitWarn = Put(col, Text(f, "small", LEFT_W), 8)
-    fitWarn:SetTextColor(pal.danger.text[1], pal.danger.text[2], pal.danger.text[3])
-    Put(col, Heading(f, "Your choices", LEFT_W), 10)
-    local picks = Put(col, Text(f, "small", LEFT_W), 3)
-    -- Updating an installed layout (updates.md): three ways, then the details behind a button. Every frame here is made once,
-    -- with the page; the details show one page of DETAIL_ROWS settings at a time.
-    local up = { head = Put(col, Heading(f, "Updating your layout", LEFT_W), 10) }
-    up.body = Put(col, Text(f, "small", LEFT_W), 3)
+
+    -- the choices, as compact rows
+    for i = 1, ROW_SLOTS do
+        local row = CreateFrame("Frame", nil, f)
+        row:SetSize(LEFT_W, 18)
+        row.label = Look().Text(row, "small")
+        row.label:SetWidth(150)
+        row.label:SetPoint("TOPLEFT", 0, -2)
+        row.value = Text(row, "body", LEFT_W - 158)
+        row.value:SetPoint("TOPLEFT", 158, -1)
+        page.rows[i] = row
+        Put(col, row, i == 1 and 10 or 2)
+    end
+    -- the consequences, one short statement each (a warning or a blocker says so in words, not only in colour)
+    for i = 1, NOTE_SLOTS do page.notes[i] = Put(col, Text(f, "small", LEFT_W), i == 1 and 10 or 3) end
+    local forcedText = Put(col, Text(f, "small", LEFT_W), 8)
+    Tone(forcedText, pal.bronzeText)
+    local counts = Put(col, Text(f, "small", LEFT_W), 8)
+
+    -- an update: one row for the policy, and the controls behind "Change". Every frame is made once, with the page; the
+    -- details show one page of DETAIL_ROWS settings at a time.
+    local up = { policyRow = Put(col, CreateFrame("Frame", nil, f), 10) }
+    up.policyRow:SetSize(LEFT_W, 24)
+    up.policyText = Text(up.policyRow, "body", LEFT_W - 100)
+    up.policyText:SetPoint("LEFT", 0, 0)
+    page.policyOpen = false
+    up.change = Button(up.policyRow, "Change", 80, "secondary", function()
+        page.policyOpen = not page.policyOpen
+        env.Relayout()
+    end, "Choose how this update treats your own changes, and decide setting by setting.")
+    up.change:SetPoint("RIGHT", 0, 0)
     up.modes = {}
     for i, m in ipairs({
         { "keep", "Update while keeping my customizations", "Settings you changed since the last install stay as you have them; everything else takes the update." },
         { "recommended", "Reapply the recommended configuration", "Every setting the layout manages takes its value again. Settings you made yours stay yours." },
         { "review", "Review conflicts", "Keeps your changes, and lists each setting so you can choose: keep yours, use the layout's, or make it yours for good." },
     }) do
-        local card = Card(f, LEFT_W, function() M.SetUpdateMode(m[1]) env.Relayout() end)
+        local card = Choice(f, LEFT_W, function() M.SetUpdateMode(m[1]) env.Relayout() end, { label = true })
         card:Fill(m[2], m[3])
         up.modes[i] = { card = card, id = m[1] }
         Put(col, card, i == 1 and 8 or 4)
@@ -805,7 +949,7 @@ local function BuildReview(parent, env)
         "Takes the layout's links and the frames linked by them, all together.")
     up.groupPkg:SetPoint("LEFT", up.groupMine, "RIGHT", 8, 0)
     up.warn = Put(col, Text(f, "small", LEFT_W), 8)
-    up.warn:SetTextColor(pal.bronzeText[1], pal.bronzeText[2], pal.bronzeText[3])
+    Tone(up.warn, pal.bronzeText)
     up.toggle = Put(col, Button(f, "Show each setting", 170, "secondary", function()
         M.ShowDetails(M.UpdateMode() ~= "review" and not (M.Session() and M.Session().update and M.Session().update.details))
         env.Relayout()
@@ -837,29 +981,61 @@ local function BuildReview(parent, env)
     up.pageText:SetPoint("LEFT", up.next, "RIGHT", 10, 0)
     page.update = up
 
-    local tHead = Put(col, Heading(f, "", LEFT_W), 10)
+    -- every change, behind "View changes" (the account of what Apply does, section by section)
+    page.changesOpen = false
+    local changes = Put(col, Disclosure(f, "View changes", 200, function(open)
+        page.changesOpen = open
+        env.Relayout()
+    end), 12)
+    page.changes = changes
+    local tHead = Put(col, Heading(f, "", LEFT_W), 8)
     local tBody = Put(col, Text(f, "small", LEFT_W), 3)
     local eHead = Put(col, Heading(f, "", LEFT_W), 10)
     local eBody = Put(col, Text(f, "small", LEFT_W), 3)
-    Put(col, Heading(f, "Left alone", LEFT_W), 10)
+    local upHead = Put(col, Heading(f, "Update", LEFT_W), 10)
+    local upBody = Put(col, Text(f, "small", LEFT_W), 3)
+    local keepHead = Put(col, Heading(f, "Left alone", LEFT_W), 10)
     local keep = Put(col, Text(f, "small", LEFT_W), 3)
     local notesHead = Put(col, Heading(f, "Not placed", LEFT_W), 10)
     local notes = Put(col, Text(f, "small", LEFT_W), 3)
-    Put(col, Heading(f, "If something goes wrong", LEFT_W), 10)
+    local failHead = Put(col, Heading(f, "If something goes wrong", LEFT_W), 10)
     local fail = Put(col, Text(f, "small", LEFT_W), 3)
     fail:SetText("If a step fails part way, TwichUI tells you what changed and what was put back, and Restore (on the Result step) puts your previous profiles back. Nothing is undone behind your back.")
-    PreviewColumn(page, f, 24, env)
     page.tHead, page.eHead = tHead, eHead
+
+    -- Force re-apply: for an account an earlier install left stuck. Not a normal step, so it lives under Advanced (opened for you when
+    -- it is what a blocked review needs)
+    page.advancedOpen = false
+    local advanced = Put(col, Disclosure(f, "Advanced", 200, function(open)
+        page.advancedOpen = open
+        env.Relayout()
+    end), 12)
+    page.advanced = advanced
+    local forceText = Put(col, Text(f, "small", LEFT_W), 6)
+    forceText:SetText("For an account an earlier install left stuck. It changes nothing by itself: it plans a new install over what is there and lists what it would replace, and Apply still asks.")
+    page.forceBar = Put(col, CreateFrame("Frame", nil, f), 6)
+    page.forceBar:SetSize(LEFT_W, 24)
+    page.force = Button(page.forceBar, "Force re-apply", 150, "secondary", function()
+        M.SetForce(not M.Forced())
+        env.Relayout()
+    end, "For when an earlier install left things stuck: a failed or stopped install, a restore that never finished, a record that can't be read, or a profile with the install's name. It plans a new install over them and shows exactly what it would replace in the review. Nothing changes until you press Apply and confirm.")
+    page.force:SetPoint("TOPLEFT", 0, 0)
+    PreviewColumn(page, f, 24, env)
 
     -- The update block: shown only for an install again. Values the player can't see in the game are never shown as text.
     local DECIDES = { mine = "keep", package = "apply", own = "owned", manage = "apply" }
     function page.RefreshUpdate(u)
         local shown = u ~= nil
-        for _, k in ipairs({ "head", "body", "whole", "wholeBar", "group", "groupBar", "warn", "toggle", "pager" }) do up[k]:SetShown(shown) end
-        for _, m in ipairs(up.modes) do m.card:SetShown(shown) end
+        up.policyRow:SetShown(shown)
+        local open = shown and (page.policyOpen or u.mode == "review" or u.details == true)
+        for _, m in ipairs(up.modes) do m.card:SetShown(open) end
+        for _, k in ipairs({ "whole", "wholeBar", "group", "groupBar", "warn" }) do up[k]:SetShown(shown) end
+        up.toggle:SetShown(open)
+        up.pager:SetShown(false)
         for _, row in ipairs(up.rows) do row.text:SetShown(false) row.bar:SetShown(false) end
         if not u then return end
-        up.body:SetText(Bullets(u.summary) .. (#u.notes > 0 and ("\n" .. Bullets(u.notes)) or ""))
+        up.policyText:SetText("Update: " .. (MODE_NAME[u.mode] or u.mode))
+        up.change.text:SetText(open and "Hide" or "Change")
         for _, m in ipairs(up.modes) do m.card:SetSelected(m.id == u.mode) end
         local w = u.whole[1]
         up.wholeId = w and w.adapter or nil
@@ -882,14 +1058,14 @@ local function BuildReview(parent, env)
         end
         up.warn:SetText(Bullets(u.warnings))
         up.warn:SetShown(#u.warnings > 0)
-        local open = u.details or u.mode == "review"
-        up.toggle.text:SetText(open and "Hide the settings" or ("Show each setting (" .. #u.rows .. ")"))
-        up.toggle:SetShown(#u.rows > 0 and u.mode ~= "review")
+        local list = u.details or u.mode == "review"
+        up.toggle.text:SetText(list and "Hide the settings" or ("Show each setting (" .. #u.rows .. ")"))
+        up.toggle:SetShown(open and #u.rows > 0 and u.mode ~= "review")
         local per = Pages.DETAIL_ROWS
         local pages = math.max(1, math.ceil(#u.rows / per))
         local pg = math.min(math.max(1, u.page or 1), pages)
         for i, slot in ipairs(up.rows) do
-            local row = open and u.rows[(pg - 1) * per + i] or nil
+            local row = list and u.rows[(pg - 1) * per + i] or nil
             slot.row = row
             if row then
                 local values = row.current and ("Yours: " .. row.current .. ". The layout's: " .. row.recommended .. ".") or ""
@@ -909,7 +1085,7 @@ local function BuildReview(parent, env)
                 slot.bar:SetShown(any)
             end
         end
-        up.pager:SetShown(open and pages > 1)
+        up.pager:SetShown(list and pages > 1)
         up.prev:SetEnabled(pg > 1)
         up.next:SetEnabled(pg < pages)
         up.pageText:SetText(("%d of %d"):format(pg, pages))
@@ -917,47 +1093,90 @@ local function BuildReview(parent, env)
 
     function page.Refresh()
         local r = M.Review()
+        local rc = M.ReviewReceipt(r)
+        page.receipt = rc
+        local words = HEADINGS[rc.kind]
+        head:SetText(words[1])
+        lead:SetText(words[2])
         switching:SetText(r.switching or "")
         switching:SetShown(r.switching ~= nil)
-        if r.problems then
-            blocked:SetText("The layout package can't be used. TwichUI Diagnostics has the details.")
-            blocked:Show()
-        elseif #r.blocked > 0 then
-            blocked:SetText("Can't apply yet:\n" .. Bullets(r.blocked))
-            blocked:Show()
-        else
-            blocked:SetText("")
-            blocked:Hide()
-        end
-        -- the fit of what Apply leaves: the boxes, then the pieces (sample sizes), what is only illustrative, what is kept as yours
-        local fl = {}
-        if r.fit and not r.fit.fits then
-            fl[#fl + 1] = "Doesn't fit this screen: " .. table.concat(r.fit.lines, " ") .. " You can still apply it; the pieces are placed as shown."
-            if r.fit.scale then fl[#fl + 1] = r.fit.scale end
-        elseif r.fit and not r.fit.clear and #r.fit.pieces > 0 then
-            fl[#fl + 1] = "Fits, but some pieces may overlap (worked out with sample sizes): " .. table.concat(r.fit.pieces, " ")
-        end
-        if r.fit and r.fit.retained then fl[#fl + 1] = r.fit.retained end
-        if r.fit and r.fit.illustrative and #fl > 0 then fl[#fl + 1] = r.fit.illustrative end
-        fitWarn:SetText(table.concat(fl, "\n"))
-        fitWarn:SetShown(#fl > 0)
-        local lines = {}
-        for _, p in ipairs(r.picks or {}) do lines[#lines + 1] = p.choice .. ": " .. p.option end
-        picks:SetText(Bullets(lines))
-        page.RefreshUpdate(r.update)
-        for _, pair in ipairs({ { r.twichui, tHead, tBody }, { r.ellesmereui, eHead, eBody } }) do
-            local sec, h, b = pair[1], pair[2], pair[3]
-            if sec then
-                h:SetText(sec.title .. ": " .. sec.when:lower())
-                b:SetText(Bullets(sec.lines))
+        for i, row in ipairs(page.rows) do
+            local it = rc.rows[i]
+            row:SetShown(it ~= nil)
+            if it then
+                row.label:SetText(it.label)
+                row.value:SetText(it.value)
+                row:SetHeight(math.max(18, Height(row.value) + 4))
             end
-            h:SetShown(sec ~= nil)
-            b:SetShown(sec ~= nil)
         end
-        keep:SetText(Bullets(r.preserved))
-        notes:SetText(Bullets(r.notes))
-        notesHead:SetShown(#r.notes > 0)
-        notes:SetShown(#r.notes > 0)
+        -- the consequences: blockers first, then what a warning says, then the plain facts
+        local order = {}
+        for _, tone in ipairs({ "block", "warn", "account", "note" }) do
+            for _, n in ipairs(rc.notes) do if n.tone == tone then order[#order + 1] = n end end
+        end
+        for i, fs in ipairs(page.notes) do
+            local n = order[i]
+            if n and i == #page.notes and #order > i then   -- more than there are slots: the rest are joined, never dropped
+                local rest = {}
+                for k = i, #order do rest[#rest + 1] = order[k].text end
+                n = { tone = n.tone, text = table.concat(rest, " ") }
+            end
+            fs:SetShown(n ~= nil)
+            if n then
+                fs:SetText((NOTE_PREFIX[n.tone] or "- ") .. n.text)
+                local c = n.tone == "block" and pal.danger.text or n.tone == "warn" and pal.bronzeText or pal.textDim
+                Tone(fs, c)
+            end
+        end
+        forcedText:SetText(r.forced and table.concat(r.forced, "\n") or "")
+        forcedText:SetShown(r.forced ~= nil)
+        local c = rc.counts
+        counts:SetShown(c ~= nil)
+        if c then
+            counts:SetText(("Recommended changes: %d  \194\183  Personal settings kept: %d  \194\183  Conflicts: %d  \194\183  Checked for presence only: %d"):format(
+                c.recommended, c.kept, c.conflicts, c.presence))
+        end
+        page.RefreshUpdate(r.update)
+
+        -- every change, when asked for
+        local open = page.changesOpen
+        changes:SetOpen(open)
+        for _, w in ipairs({ tHead, tBody, eHead, eBody, upHead, upBody, keepHead, keep, notesHead, notes, failHead, fail }) do w:SetShown(false) end
+        if open then
+            for _, pair in ipairs({ { r.twichui, tHead, tBody }, { r.ellesmereui, eHead, eBody } }) do
+                local sec, h, b = pair[1], pair[2], pair[3]
+                if sec then
+                    h:SetText(sec.title .. ": " .. sec.when:lower())
+                    b:SetText(Bullets(sec.lines))
+                end
+                h:SetShown(sec ~= nil)
+                b:SetShown(sec ~= nil)
+            end
+            local u = r.update
+            if u then
+                upBody:SetText(Bullets(u.summary) .. (#u.notes > 0 and ("\n" .. Bullets(u.notes)) or ""))
+            end
+            upHead:SetShown(u ~= nil)
+            upBody:SetShown(u ~= nil)
+            keepHead:SetShown(true)
+            keep:SetShown(true)
+            keep:SetText(Bullets(r.preserved))
+            notes:SetText(Bullets(r.notes))
+            notesHead:SetShown(#r.notes > 0)
+            notes:SetShown(#r.notes > 0)
+            failHead:SetShown(true)
+            fail:SetShown(true)
+        end
+
+        -- Advanced: Force re-apply. Opened for you when a blocked review needs it, and while it is on.
+        local canForce, forcing = M.CanForce()
+        local needs = canForce == true and (rc.kind == "blocked" or forcing == true)
+        advanced:SetShown(canForce == true)
+        local aopen = canForce == true and (page.advancedOpen or needs)
+        advanced:SetOpen(aopen)
+        forceText:SetShown(aopen)
+        page.forceBar:SetShown(aopen)
+        page.force.text:SetText(forcing and "Stop forcing" or "Force re-apply")
         local y = Flow(col)
         page.RefreshPreview()
         f:SetHeight(math.max(y, 260) + 8)
@@ -967,26 +1186,39 @@ local function BuildReview(parent, env)
 end
 
 ---------------------------------------------------------------------------
--- 6. Result
+-- 6. Result: the outcome in a player's words, the status under it, and the actions that make sense
 ---------------------------------------------------------------------------
+local MANAGE = { "check", "again", "keep", "keepUpdate", "undo", "restore", "stop", "forget" }
+local ALL = { "reload", "check", "again", "keep", "keepUpdate", "undo", "restore", "stop", "forget" }
+
 local function BuildResult(parent, env)
     local L = Look()
     local page = { frame = CreateFrame("Frame", nil, parent) }
     local f = page.frame
     f:SetSize(CONTENT_W, 10)
     local col = NewColumn(f)
-    local chip = Chip(f)
-    chip:SetPoint("TOPLEFT", 0, -10)
-    local title = L.Text(f, "title")
-    title:SetPoint("LEFT", chip, "RIGHT", 10, 0)
-    local lines = Put(col, Text(f, "body", CONTENT_W), 40)
+    local title = Put(col, L.Text(f, "title"), 4)
+    title:SetWidth(CONTENT_W)
+    local statusRow = Put(col, CreateFrame("Frame", nil, f), 8)
+    statusRow:SetSize(CONTENT_W, 22)
+    local chip = Chip(statusRow)
+    chip:SetPoint("LEFT", 0, 0)
+    local status = Text(statusRow, "small", CONTENT_W - 120)
+    status:SetPoint("LEFT", chip, "RIGHT", 10, 0)
+    local summary = Put(col, Text(f, "body", CONTENT_W), 12)
+    local layoutLine = Put(col, Text(f, "body", CONTENT_W), 8)
+    local lines = Put(col, Text(f, "small", CONTENT_W), 10)
+    local checked = Put(col, Text(f, "small", CONTENT_W), 8)   -- what "Check again" just found, in view whatever else is folded
+    local combat = Put(col, Text(f, "small", CONTENT_W), 10)
+    -- the account of it: always shown when something is wrong, behind "Details" when it is ready
+    page.detailsOpen = false
+    local detailsBtn = Put(col, Disclosure(f, "Details", 140, function(open) page.detailsOpen = open env.Relayout() end), 10)
     local picksHead = Put(col, Heading(f, "What was chosen", CONTENT_W), 12)
     local picks = Put(col, Text(f, "small", CONTENT_W), 3)
     local stepsHead = Put(col, Heading(f, "What happened", CONTENT_W), 12)
     local steps = Put(col, Text(f, "small", CONTENT_W), 3)
     local diffHead = Put(col, Heading(f, "What doesn't read back as planned", CONTENT_W), 12)
     local diffs = Put(col, Text(f, "small", CONTENT_W), 3)
-    local combat = Put(col, Text(f, "small", CONTENT_W), 10)
     local A = env.Actions
     local buttons = {
         reload = Button(f, "Reload now", 120, "primary", function() A.reload() end,
@@ -1007,45 +1239,107 @@ local function BuildResult(parent, env)
             "Puts your previous profiles back and removes the install's own. It shows exactly what it will do and asks first."),
         forget = Button(f, "Forget the record", 140, "danger", function() A.forget() end,
             "Forgets a record that can't be read. Nothing else is changed."),
+        settings = Button(f, "Open settings", 130, "secondary", function() A.settings() end,
+            "Closes this setup and opens TwichUI's settings."),
     }
-    local ORDER = { "reload", "check", "again", "keep", "keepUpdate", "undo", "restore", "stop", "forget" }
     page.buttons = buttons
+    page.manageOpen = false
+    local manage = Disclosure(f, "Manage layout", 180, function(open) page.manageOpen = open env.Relayout() end)
+    page.manage = manage
+    local manageText = Text(f, "small", CONTENT_W)
 
-    function page.Refresh()
-        local r = M.Result()
-        chip:SetTone(r.tone or "info")
-        title:SetText(r.title or "")
-        lines:SetText(table.concat(r.lines, "\n\n"))
-        local p = {}
-        for _, x in ipairs(r.picks) do p[#p + 1] = x.choice .. ": " .. x.option end
-        picks:SetText(Bullets(p))
-        picksHead:SetShown(#p > 0)
-        picks:SetShown(#p > 0)
-        steps:SetText(Bullets(r.steps))
-        stepsHead:SetShown(#r.steps > 0)
-        steps:SetShown(#r.steps > 0)
-        diffs:SetText(Bullets(r.diffs))
-        diffHead:SetShown(#r.diffs > 0)
-        diffs:SetShown(#r.diffs > 0)
-        combat:SetText(r.combat or "")
-        combat:SetShown(r.combat ~= nil)
-        local y = Flow(col)
+    local function Place(keys, y, show, can)
         local x = 0
-        y = y + 16
-        for _, key in ipairs(ORDER) do
+        for _, key in ipairs(keys) do
             local b = buttons[key]
-            local show = r.can[key] == true or (key == "reload" and r.state == "applied" and r.can.reload == false)
-            b:SetShown(show)
-            if show then
-                b:SetEnabled(r.can[key] == true)
+            b:SetShown(show[key] == true)
+            if show[key] then
+                b:SetEnabled(can == nil or can[key] == true)   -- shown but disabled: Reload now in combat says why on the page
                 b:ClearAllPoints()
                 if x > 0 and x + b:GetWidth() > CONTENT_W then x, y = 0, y + 32 end   -- a second row rather than past the edge
                 b:SetPoint("TOPLEFT", f, "TOPLEFT", x, -y)
                 x = x + b:GetWidth() + 8
             end
         end
-        f:SetHeight(y + 40)
+        return y, x > 0
+    end
+
+    function page.Refresh()
+        local r = M.Result()
         page.result = r
+        local ready = r.ready == true
+        title:SetText(r.heading or r.title or "")
+        chip:SetTone(r.tone or "info", ready and "Ready" or (r.tone == "ok" and "Done" or nil))
+        status:SetText(r.title or "")
+        summary:SetText(r.summary or "")
+        summary:SetShown((r.summary or "") ~= "")
+        layoutLine:SetText(r.layout and ("Installed layout: " .. r.layout) or "")
+        layoutLine:SetShown(ready and r.layout ~= nil)
+        -- anything that isn't a finished, checked setup says all of it, at once; a ready one keeps the account of it under "Details"
+        local full = not ready
+        local more = {}
+        for i, l in ipairs(r.lines) do
+            if l ~= r.checked and (full and i > 1 or (ready and page.detailsOpen)) then more[#more + 1] = l end
+        end
+        lines:SetText(table.concat(more, "\n\n"))
+        lines:SetShown(#more > 0)
+        combat:SetText(r.combat or "")
+        combat:SetShown(r.combat ~= nil)
+        checked:SetText(r.checked or "")
+        checked:SetShown(r.checked ~= nil)
+        detailsBtn:SetShown(ready)
+        detailsBtn:SetOpen(page.detailsOpen)
+        local showMore = full or page.detailsOpen
+        local p = {}
+        for _, x in ipairs(r.picks) do p[#p + 1] = x.choice .. ": " .. x.option end
+        picks:SetText(Bullets(p))
+        picksHead:SetShown(showMore and #p > 0)
+        picks:SetShown(showMore and #p > 0)
+        steps:SetText(Bullets(r.steps))
+        stepsHead:SetShown(showMore and #r.steps > 0)
+        steps:SetShown(showMore and #r.steps > 0)
+        diffs:SetText(Bullets(r.diffs))
+        diffHead:SetShown(#r.diffs > 0)   -- what doesn't read back is never folded away
+        diffs:SetShown(#r.diffs > 0)
+        local y = Flow(col) + 16
+
+        -- the actions: while something is unfinished or wrong, each one that applies is in view; when the setup is ready, Done is the
+        -- footer's and the maintenance actions are under "Manage layout"
+        local show = {}
+        for _, key in ipairs(ALL) do
+            show[key] = r.can[key] == true or (key == "reload" and r.state == "applied" and r.can.reload == false)
+        end
+        if ready then
+            local primary = { settings = true }
+            local py, any = Place({ "settings" }, y, primary)
+            if any then y = py + 32 end
+            manage:Show()
+            manage:SetOpen(page.manageOpen)
+            manage:ClearAllPoints()
+            manage:SetPoint("TOPLEFT", f, "TOPLEFT", 0, -y)
+            y = y + 26
+            local mshow = {}
+            for _, key in ipairs(MANAGE) do mshow[key] = page.manageOpen and show[key] end
+            manageText:SetShown(page.manageOpen)
+            if page.manageOpen then
+                local text = r.revision and ("Installed revision %d."):format(r.revision) or ""
+                if r.updateText then text = text .. " " .. r.updateText end
+                manageText:SetText(text)
+                manageText:ClearAllPoints()
+                manageText:SetPoint("TOPLEFT", f, "TOPLEFT", 0, -y)
+                y = y + Height(manageText) + 8
+            end
+            local my, many = Place(MANAGE, y, mshow, r.can)
+            if many then y = my + 32 end
+            for _, key in ipairs({ "reload" }) do buttons[key]:SetShown(false) end
+        else
+            manage:Hide()
+            manageText:Hide()
+            buttons.settings:Hide()
+            local py, any = Place(ALL, y, show, r.can)
+            if any then y = py + 32 end
+        end
+        f:SetHeight(y + 12)
         return f:GetHeight()
     end
     return page

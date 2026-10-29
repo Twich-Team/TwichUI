@@ -50,6 +50,8 @@ M.Explain = Explain
 M.TEXT = {
     ["classic-adventure"] = {
         title = "Classic Adventure", short = "Classic",
+        desc = "Unit frames and action bars low in the middle, with chat and the damage meter at the lower corners.",
+        traits = { "Frames low and centred", "Chat lower left", "Meter lower right" },
         blurb = "The unit frames and action bars sit low in the middle, chat at the lower left, the damage meter at the lower right, the minimap and your objectives at the upper right. EllesmereUI's look and TwichUI's own looks are set to match.",
         covers = {
             "EllesmereUI: its modules, their layout links and its look, as a new profile of its own.",
@@ -60,6 +62,8 @@ M.TEXT = {
     },
     ["compact-adventure"] = {
         title = "Compact Adventure", short = "Compact",
+        desc = "A low, wide strip along the bottom edge that keeps the middle of the screen open.",
+        traits = { "One bottom strip", "Open screen centre", "Chat rises on narrow screens" },
         blurb = "The unit frames and action bars lie in one low, wide strip along the bottom edge and leave the middle of the screen open. Chat, the damage meter (with a bar on top of it), the minimap and your objectives are where Classic puts them.",
         covers = {
             "The same look, the same choices and the same TwichUI settings as Classic Adventure.",
@@ -91,7 +95,7 @@ function M.Layouts()
         local t = M.TEXT[id]
         if pkg.layers.variants[id] then
             local shared, own = ModuleCounts(pkg, id)
-            out[#out + 1] = { id = id, title = t.title, short = t.short, blurb = t.blurb, covers = t.covers, pkg = pkg, variant = id,
+            out[#out + 1] = { id = id, title = t.title, short = t.short, blurb = t.blurb, desc = t.desc, traits = t.traits, covers = t.covers, pkg = pkg, variant = id,
                 art = t.art, dev = pkg.dev == true, sharedModules = shared, ownModules = own }
         end
     end
@@ -119,6 +123,7 @@ local function ReceivedLayouts(env)
         local shared, own = ModuleCounts(pkg, v.id)
         out[#out + 1] = { id = v.id, title = v.title, short = v.title, pkg = pkg, variant = v.id, dev = false, received = true,
             blurb = ("A layout in the package %s, revision %d."):format(QuoteText(pkg.title or pkg.id), pkg.revision),
+            desc = ("A layout in the package %s, revision %d."):format(QuoteText(pkg.title or pkg.id), pkg.revision),
             covers = {
                 ("EllesmereUI: %d %s shared by every layout in the package, %d its own."):format(shared, shared == 1 and "module" or "modules", own),
                 "TwichUI: the looks and on-screen places the package carries, in a new profile of its own.",
@@ -520,6 +525,75 @@ function M.PresetCoverage(choiceId)
     return cover, n, layered
 end
 
+-- A sentence of `s` no longer than `max` characters (cut at a word, with "..."), for a card that has room for one line or two.
+local function Brief(s, max)
+    s = tostring(s or ""):gsub("%s+", " "):gsub("^ ", ""):gsub(" $", "")
+    local first = s:match("^(.-[%.%!%?])%s") or s
+    if #first > max then first = first:sub(1, max - 3):gsub("%s+%S*$", "") .. "..." end
+    return first
+end
+M.Brief = Brief
+
+local ONSCREEN_UNITS = { ["twichui:modules.classBars"] = true, ["twichui:modules.markersBar"] = true, ["twichui:modules.foodDrink"] = true }
+local NAVIGATION_UNIT = "twichui:modules.navigation"
+
+-- What a helper preset's card shows, read from the preset itself (its package units), never from its name:
+-- { id, label, short, art, keep, details = { lines }, more }. `art` is "keep", "helpers", "navigation" or nil (a preset with no
+-- artwork of its own gets the generic picture). The short sentence is the author's own (first sentence of the preset's hint) unless the
+-- preset is exactly one of the bundled shapes, when it is the shorter wording; the full hint and what the preset does are in `details`.
+function M.PresetCard(choiceId, optionId)
+    local ch = session and ChoiceOf(session.layout.pkg, choiceId)
+    local o = ch and OptionOf(ch, optionId)
+    if not o then return nil end
+    local sm = M.PresetSummary(choiceId, optionId)
+    local card = { id = o.id, label = o.label, keep = sm.keep }
+    -- the bundled shapes, exactly: the three on-screen helpers on (and navigation too); anything else is the author's own preset
+    local n, allOn, nav, onscreen = 0, true, false, 0
+    for unit, v in pairs(sm.units) do
+        n = n + 1
+        if unit == NAVIGATION_UNIT then nav = true elseif ONSCREEN_UNITS[unit] then onscreen = onscreen + 1 end
+        if v ~= true or not (ONSCREEN_UNITS[unit] or unit == NAVIGATION_UNIT) then allOn = false end
+    end
+    local exact = allOn and onscreen == 3 and n == (nav and 4 or 3)
+    if sm.keep then
+        card.short, card.art = "Keep my current helper preferences.", "keep"
+    elseif exact and nav then
+        card.short, card.art = "On-screen helpers, plus navigation.", "navigation"
+    elseif exact then
+        card.short, card.art = "Useful resource and utility displays.", "helpers"
+    else
+        card.art = nav and "navigation" or nil
+        local sum = sm.summary
+        local gen = {}
+        if #sum.on > 0 then gen[#gen + 1] = "Turns on " .. table.concat(sum.on, ", ") end
+        if #sum.off > 0 then gen[#gen + 1] = "turns off " .. table.concat(sum.off, ", ") end
+        card.short = (o.hint and o.hint ~= "") and Brief(o.hint, 110) or (#gen > 0 and (Cap(table.concat(gen, "; ")) .. ".") or "A set of helper settings.")
+    end
+    local lines = {}
+    if o.hint and o.hint ~= "" and o.hint ~= card.short then lines[#lines + 1] = o.hint end   -- the author's own words, whole
+    local cover, covered, layered = M.PresetCoverage(choiceId)
+    if sm.keep then
+        lines[#lines + 1] = covered > 0 and ("Changes none of the %d %s the helper presets manage."):format(covered, Plural(covered, "setting", "settings"))
+            or "Turns no TwichUI feature on or off."
+    else
+        local sum = sm.summary
+        if #sum.on > 0 then lines[#lines + 1] = "Turns on: " .. table.concat(sum.on, ", ") .. "." end
+        if #sum.off > 0 then lines[#lines + 1] = "Turns off: " .. table.concat(sum.off, ", ") .. "." end
+        if sum.set > 0 then lines[#lines + 1] = ("Changes %d other %s."):format(sum.set, Plural(sum.set, "setting", "settings")) end
+        if sum.reset > 0 then lines[#lines + 1] = ("Puts %d %s back to TwichUI's default."):format(sum.reset, Plural(sum.reset, "setting", "settings")) end
+        local left = 0
+        for unit in pairs(cover) do if sm.units[unit] == nil then left = left + 1 end end
+        if left > 0 then lines[#lines + 1] = ("Leaves alone: %d %s that only other presets manage."):format(left, Plural(left, "setting", "settings")) end
+    end
+    if layered > 0 then
+        lines[#lines + 1] = ("The layout's own looks still set %d of those settings, whichever you pick."):format(layered)
+    else
+        lines[#lines + 1] = "The layout's look and places apply whichever you pick."
+    end
+    card.details = lines
+    return card
+end
+
 -- The density the picks give (the size choice), or "standard".
 function M.Density()
     local o = session and M.PickedOption("size")
@@ -763,6 +837,25 @@ function M.Compat()
     return items, ok
 end
 
+-- The compatibility checks in one word and what needs a look: { state = "ok" | "warn" | "block", word, attention = { { id, label,
+-- state, short, go } }, items } for the Welcome page. Everything it says is M.Compat's own; the page keeps the full lines behind
+-- "Compatibility details".
+function M.CompatSummary()
+    local items = M.Compat()
+    local out = { state = "ok", attention = {}, items = items }
+    for _, it in ipairs(items) do
+        if it.state == "block" then out.state = "block"
+        elseif it.state == "warn" and out.state ~= "block" then out.state = "warn" end
+    end
+    for _, tone in ipairs({ "block", "warn" }) do
+        for _, it in ipairs(items) do
+            if it.state == tone then out.attention[#out.attention + 1] = { id = it.id, label = it.label, state = it.state, short = Brief(it.detail, 170), go = it.go } end
+        end
+    end
+    out.word = out.state == "block" and "Setup blocked" or out.state == "warn" and "Items to review" or "Ready"
+    return out
+end
+
 ---------------------------------------------------------------------------
 -- The first-install setup (Onboarding.lua, in the core): whether this is it, and what it can offer
 ---------------------------------------------------------------------------
@@ -887,7 +980,12 @@ end
 -- for an update, which of the player's own placements it draws and which it can't.
 function M.SceneNote()
     local final = session and Final()
-    if not final then return nil end
+    if not final then
+        -- an update whose final result can't be drawn: said plainly, not left to look like the exact result
+        local plan = session and session.step == M.REVIEW and session.plan and session.plan.plan
+        if plan and plan.update then return "This shows the recommended layout, not your exact final result." end
+        return nil
+    end
     if final.exact then return "This is the final result: the update leaves nothing of yours elsewhere." end
     local parts = {}
     if #final.whole > 0 then parts[#parts + 1] = "EllesmereUI is kept as you have it; its pieces are drawn where you have the ones TwichUI can read." end
@@ -1517,6 +1615,93 @@ function M.Review()
     return out
 end
 
+-- The review as a short receipt, for the Review page's default view (the long account of it stays in M.Review's sections, behind
+-- "View changes"). Everything is read from the review and its plan, nothing from the game:
+--   { kind = "blocked" | "nothing" | "update" | "fresh", rows = { { label, value } },
+--     notes = { { tone = "note" | "account" | "warn" | "block", text } },
+--     counts = { recommended, kept, conflicts, presence } (an update only), forced = { lines } | nil }
+local PICK_SHORT = { helpers = "Helpers", accent = "Accent", tooltip = "Tooltip placement", ["friendly-plates"] = "Friendly nameplates", size = "Size" }
+local PICK_ORDER = { "helpers", "accent", "tooltip", "friendly-plates", "size" }
+
+function M.ReviewReceipt(r)
+    r = r or M.Review()
+    local out = { rows = {}, notes = {}, forced = r.forced }
+    local plan = r.plan
+    local byId = {}
+    for _, p in ipairs(r.picks or {}) do byId[p.id] = p end
+    local function Row(label, p)
+        if not p then return end
+        local value = p.option
+        if p.id and M.Derived(p.id) then value = value .. " (as your game has it)" end
+        out.rows[#out.rows + 1] = { label = label, value = value, id = p.id }
+    end
+    Row("Layout", byId.layout)
+    for _, id in ipairs(PICK_ORDER) do Row(PICK_SHORT[id], byId[id]) end
+    for _, p in ipairs(r.picks or {}) do   -- a choice another package asks, after the known ones
+        if p.id ~= "layout" and not PICK_SHORT[p.id] then Row(p.choice, p) end
+    end
+
+    local function Note(tone, text) out.notes[#out.notes + 1] = { tone = tone, text = text } end
+    local can, code = M.CanApply()
+    if r.problems then
+        out.kind = "blocked"
+        Note("block", "The layout package can't be used. TwichUI Diagnostics has the details.")
+        return out
+    end
+    for _, b in ipairs(r.blocked or {}) do Note("block", b) end
+    if not r.ok then out.kind = "blocked"
+    elseif not can and code == "nothing" then out.kind = "nothing"
+    elseif r.update then out.kind = "update"
+    else out.kind = "fresh" end
+    if M.MissingAny() then out.kind = "blocked" Note("block", M.ApplyReason("choose-preset")) end
+
+    local EA = LY.EllesmereAdapter
+    local t, e = plan.parts and plan.parts.twichui, plan.parts and plan.parts.ellesmereui
+    if out.kind ~= "nothing" and out.kind ~= "blocked" then
+        local function Count(part) return part and not part.blocked and not part.nothing and not part.kept and (part.changes or 0) or 0 end
+        local tn, en = Count(t), Count(e)
+        if tn > 0 then Note("note", ("TwichUI: %d %s, this character only."):format(tn, Plural(tn, "change", "changes"))) end
+        if en > 0 then Note("account", ("EllesmereUI: %d %s, every character on this account."):format(en, Plural(en, "change", "changes"))) end
+        local cur
+        for _, row in ipairs(e and e.rows or {}) do if row.unit == EA.CURSOR_UNIT then cur = row end end
+        if cur and cur.change and cur.decision ~= "keep" and cur.decision ~= "owned" then
+            Note("account", "Tooltip placement is an account-wide EllesmereUI setting.")
+        end
+        if r.reload then Note("note", "A reload finishes EllesmereUI's part. Nothing reloads until you choose.") end
+        if not r.forced then
+            Note("note", r.update and "A restore point is saved first, and Undo this update is offered afterwards."
+                or "A restore point is saved first, so Restore can put your current setup back.")
+        end
+    end
+    if r.presetPartial then Note("warn", "The helper preset won't be fully in effect: some of its settings stay as you have them.") end
+    if r.fit and not r.fit.fits then
+        Note("warn", "Doesn't fit this screen: " .. (r.fit.lines[1] or "") .. (r.fit.scale and (" " .. r.fit.scale) or ""))
+    elseif r.fit and not r.fit.clear and #r.fit.pieces > 0 then
+        Note("warn", "Some pieces may overlap on this screen: " .. r.fit.pieces[1])
+    end
+    if r.fit and r.fit.retained then Note("note", r.fit.retained) end
+    for id, c in pairs(plan.geometry and plan.geometry.components or {}) do
+        if c.managed and c.applied then Note("note", ("%s position isn't changed: Blizzard's Edit Mode places it."):format(c.label or id)) end
+    end
+    for _, n in ipairs(e and e.notes or {}) do
+        if n.code == "tooltip-skin-off" then Note("warn", "Tooltip placement has no effect while EllesmereUI's tooltip reskin is off.") end
+    end
+
+    local u = r.update
+    if u and plan.update then
+        if plan.update.baseline ~= "ok" then
+            Note("warn", "TwichUI has no record of what the last install left you with, so anything that differs is treated as yours.")
+        end
+        if plan.update.resume then Note("note", "The last update stopped part way. What it already finished is not done again.") end
+        if u.loss then Note("warn", u.loss) end
+        local c = plan.update.counts or {}
+        local presence = 0
+        for i, row in ipairs(e and e.rows or {}) do if i > 1 and row.whole then presence = presence + 1 end end
+        out.counts = { recommended = c.apply or 0, kept = (c.keep or 0) + (c.owned or 0), conflicts = c.conflict or 0, presence = presence }
+    end
+    return out
+end
+
 -- The text of the confirmation that comes before Apply: the exact scope, once. Returns text, key (the plan it describes).
 function M.ConfirmText()
     local r = M.Review()
@@ -1637,7 +1822,8 @@ local function DiffLines(diffs)
 end
 
 -- { kind, title, tone, lines, steps, diffs, picks = { { choice, option } }, can = { restore, reload, again, keep, check, forget } }
-function M.Result()
+-- (M.Result, below, adds the user-facing outcome: heading, summary, ready, layout, revision)
+local function ResultBase()
     local out = { lines = {}, steps = {}, diffs = {}, picks = {}, can = {} }
     if not session then out.kind, out.title = "closed", "" return out end
     local j, why = LY.Journal.Read()
@@ -1746,7 +1932,8 @@ function M.Result()
     if j.update then
         if j.state == "verified" or j.state == "mismatch" or j.state == "partial" or j.state == "interrupted" or j.state == "applied" or j.state == "undo-partial" then
             out.can.undo = true
-            out.lines[#out.lines + 1] = "This was an update. Undo this update puts back how things were just before it; Restore previous setup goes back to before your first install."
+            out.updateText = "This was an update. Undo this update puts back how things were just before it; Restore previous setup goes back to before your first install."
+            out.lines[#out.lines + 1] = out.updateText
         end
         if j.state == "verified" or j.state == "mismatch" then out.can.keepUpdate = true end
         if j.state == "partial" then
@@ -1763,10 +1950,71 @@ function M.Result()
     end
     if session.check then
         local c = session.check
-        if c.state == "match" then out.lines[#out.lines + 1] = "Checked just now: what can be read by value reads back as planned (whole EllesmereUI parts only for being there)."
-        else out.lines[#out.lines + 1] = "Checked just now: " .. c.state .. "." out.diffs = DiffLines(c.diffs) end
+        if c.state == "match" then out.checked = "Checked just now: what can be read by value reads back as planned (whole EllesmereUI parts only for being there)."
+        else out.checked = "Checked just now: " .. c.state .. "." out.diffs = DiffLines(c.diffs) end
+        out.lines[#out.lines + 1] = out.checked
     end
     if combat then out.combat = "Applying, restoring and reloading wait until combat ends." end
+    return out
+end
+
+-- The outcome in a player's words: what the page's heading says, with M.Result's own title kept as the status under it. Each state
+-- keeps its own heading, so a failure never wears the success one: only a setup that was written, read back after the reload and
+-- found as planned (or one the player finished) is "ready", and the summary says what was and wasn't checked by value.
+local OUTCOME = {
+    applied = "Reload to finish your setup",
+    verified = "Your interface is ready",
+    mismatch = "Some settings didn't read back as planned",
+    partial = "Your setup was only partly applied",
+    interrupted = "Your setup was interrupted",
+    applying = "Your setup was interrupted",
+    restoring = "Reload to finish restoring",
+    ["restore-partial"] = "Your previous setup isn't fully back",
+    undoing = "Reload to finish undoing the update",
+    ["undo-partial"] = "The update isn't fully undone",
+    restored = "Your previous setup is back",
+    failed = "Nothing was changed",
+    none = "Nothing is installed",
+    damaged = "The install record can't be read",
+    newer = "The install record is from a newer TwichUI",
+    ["other-character"] = "Installed on another character",
+}
+
+function M.Result()
+    local out = ResultBase()
+    if not session then return out end
+    local j = LY.Journal.Read()
+    local m = not j and LY.Journal.ReadManaged() or nil
+    local rec = j or m
+    if rec then
+        out.revision = rec.revision
+        for _, l in ipairs(session.layouts) do if l.id == rec.variant then out.layout = l.title end end
+    end
+    out.layout = out.layout or (out.picks[1] and out.picks[1].option)
+    local kind = out.kind
+    out.heading = OUTCOME[kind] or out.title
+    out.ready = false
+    if kind == "verified" then
+        out.ready = true
+        local byValue = j.verify and j.verify.checked or 0
+        local pres = j.verify and j.verify.presence or 0
+        out.summary = ("%s is installed and checked after the reload."):format(out.layout or "Your layout")
+            .. (byValue > 0 and (" %d %s read back as planned"):format(byValue, Plural(byValue, "setting", "settings")) or "")
+            .. (pres > 0 and ((byValue > 0 and "; " or " ") .. ("%d EllesmereUI %s checked only for being there."):format(pres, Plural(pres, "part was", "parts were"))) or (byValue > 0 and "." or ""))
+    elseif kind == "managed" then
+        if out.tone == "ok" then
+            out.ready = true
+            out.heading = "Your interface is ready"
+            out.summary = ("%s is installed and its setup is finished."):format(out.layout or "Your layout")
+        else
+            out.heading = "Installed, but not fully checked"
+            out.summary = ("%s is installed. Some values didn't read back as planned when it was last checked."):format(out.layout or "Your layout")
+        end
+    elseif kind == "restored" then
+        out.summary = "Everything the install changed is back as it was."
+    else
+        out.summary = out.lines[1]
+    end
     return out
 end
 

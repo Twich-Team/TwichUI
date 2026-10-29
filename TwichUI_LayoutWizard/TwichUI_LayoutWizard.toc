@@ -12,7 +12,9 @@
 # docs/layouts/wizard.md has what it does. It keeps no saved variables of its own: the choices it remembers are TwichUIDB.layouts.wizard
 # (the core's), and the install record is TwichUIDB.layouts.install, written by TwichUI_Layouts. Nothing here runs until the window is asked for.
 # Artwork (media/*.tga) is made by tools/make_layout_wizard_art.py from the sources in assets/; a missing file never stops the wizard.
+# Controls.lua is the shared choice card (selected, hover, the check) and the disclosure and info buttons every page uses.
 Art.lua
+Controls.lua
 
 # Remembered choices, then the model (no frames: what each step shows and what its buttons do), then the drawing
 State.lua

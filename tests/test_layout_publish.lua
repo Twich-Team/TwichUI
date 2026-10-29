@@ -922,7 +922,7 @@ do
   Check(MK.SetLayout(COMPACT) and MK.Layout().id == COMPACT and MK.SetLayout(CLASSIC), "both layouts can be picked")
   Check(Unchanged(World(f), before), "(still nothing)")
   -- through to the review and apply
-  while MK.Step() < 5 do Click(win, MK.Step() == 1 and "Start" or "Next") end
+  while MK.Step() < 5 do Click(win, MK.Step() == 1 and "Get started" or "Next") end
   Check(MK.Step() == 5, "to the review")
   Click(win, "Apply")
   local q = f.popup
@@ -945,6 +945,7 @@ do
   Until(function() return WK2.Model.Package() ~= nil end, 200)
   Check(WK2.Model.Package() and WK2.Model.Package().env.meta.id == "mal-lorys-layout" and WK2.Model.Step() == 6, "reopened on the result, with the package it came from")
   Check(#f2.TwichUIDB.layouts.received == 1, "the received package survived the reload")
+  do local mb = LM.Button(win2, "Manage layout"); if mb and not mb.open then mb.scripts.OnClick(mb) end end   -- the maintenance actions are under it
   Click(win2, "Restore previous setup"); f2.Accept()
   Check(f2.TwichUI.Profiles.Current() == "Default" and f2.EllesmereUIDB.activeProfile == "Mine", "Restore goes back to before the install")
   Check(#f2.TwichUIDB.layouts.received == 1, "and keeps the stored package")
@@ -1022,7 +1023,7 @@ do
   Choose(win, WK, "plain-layout")
   Check(MK.Choice("helpers") == nil and MK.Choice("accent") == nil, "it has no choices")
   local ok, err = pcall(function()
-    while MK.Step() < 5 do Click(win, MK.Step() == 1 and "Start" or "Next") end
+    while MK.Step() < 5 do Click(win, MK.Step() == 1 and "Get started" or "Next") end
   end)
   Check(ok, "every step can be shown without them: " .. tostring(err))
   Check(MK.Step() == 5 and MK.Review().ok, "to a review that works")

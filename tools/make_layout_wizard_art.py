@@ -20,12 +20,21 @@ What each source needed (read from the files, not assumed):
                                        to its content and shrunk: personalize.tga and screenfit.tga, 128 x 128.
   layout-wizard-compact-source.png     1536 x 1024 RGBA, built the same way. Reserved for Phase 5: not built unless --phase5
                                        is given (compact.tga), so it adds nothing to the package until it is used.
+  layout-wizard-icons-source.png       1312 x 1199 RGBA ("Fantasy UI Icon Sheet.png", copied here), genuine transparency (about
+                                       59% alpha 0; the painted parts sit at alpha 249-254, so a pixel at 240 or more is made fully
+                                       opaque and the soft rim, which is a few pixels wide, is kept). Four pictures on a clear
+                                       sheet in two rows of two, found by measurement (the rows and then the columns that hold any
+                                       alpha, not assumed): a closed journal with a ribbon (keep.tga: "Keep my settings"), a
+                                       resource bar, a pin and a cup (helpers.tga: "On-screen helpers"), a tooltip pinned in a
+                                       screen's corner (tipfixed.tga: "Layout position") and a tooltip beside a cursor
+                                       (tipcursor.tga: "Follow mouse"). Each is cut to its content and shrunk to fit 128 x 128
+                                       (its longer side fills the same share of the file, so they look the same size).
 
     python3 tools/make_layout_wizard_art.py [--src assets] [--out TwichUI_LayoutWizard/media] [--check] [--phase5]
                                             [--preview DIR]
 
---check builds nothing and prints each source's findings. --preview DIR also writes PNGs (the emblem on dark and light
-backgrounds, to look at the rim) there. Output TGAs are uncompressed 32-bit, bottom-left origin, 8 alpha bits: the format
+--check builds nothing and prints each source's findings. --preview DIR also writes PNGs (the emblem and the four icons on dark and
+light backgrounds, to look at the rim) there. Output TGAs are uncompressed 32-bit, bottom-left origin, 8 alpha bits: the format
 of every other media file in the project.
 """
 import argparse
@@ -43,7 +52,10 @@ SOURCES = {
     "classic": "layout-wizard-classic-source.png",
     "sheet": "layout-wizard-personalize-screenfit-source.png",
     "compact": "layout-wizard-compact-source.png",
+    "icons": "layout-wizard-icons-source.png",
 }
+ICON_NAMES = ("keep", "helpers", "tipfixed", "tipcursor")   # the sheet's pictures, row by row
+ICON_OPAQUE = 240    # painted pixels at or above this alpha are made fully opaque (the source's interiors sit at 249-254)
 
 # Neutral light grey: the checkerboard's two greys (about 234 and 254, with a little noise) and nothing the object has.
 NEUTRAL_SPREAD = 7      # max(r, g, b) - min(r, g, b) at most
@@ -161,6 +173,30 @@ def fit(pixels, w, h, box, cw, ch, margin):
     return canvas, (ow, oh)
 
 
+def row_runs(w, h, pixels, floor=8):
+    """Runs of rows that hold any alpha above the floor (the bands a sheet's pictures sit in)."""
+    runs, start = [], None
+    for y in range(h):
+        row = pixels[y]
+        has = any(row[x * 4 + 3] > floor for x in range(w))
+        if has and start is None:
+            start = y
+        if not has and start is not None:
+            runs.append((start, y))
+            start = None
+    if start is not None:
+        runs.append((start, h))
+    return [r for r in runs if r[1] - r[0] >= 40]
+
+
+def solid_interior(rows):
+    """Painted pixels a hair under opaque (alpha 240+) become opaque; the soft rim below that is left as it is."""
+    for row in rows:
+        for x in range(len(row) // 4):
+            if row[x * 4 + 3] >= ICON_OPAQUE:
+                row[x * 4 + 3] = 255
+
+
 def column_runs(w, h, pixels, floor=8):
     cols = [0] * w
     for y in range(h):
@@ -271,6 +307,34 @@ def main():
         canvas, size = fit(part, x1 - x0, h, box, 128, 128, 4)
         print("         %-11s content %s -> %dx%d in 128x128" % (name, box, size[0], size[1]))
         built[name] = (canvas, 128, 128)
+
+    # The icon sheet: two rows of two pictures, found by measurement
+    w, h, px, has_alpha = read_png(os.path.join(args.src, SOURCES["icons"]))
+    bands = row_runs(w, h, px)
+    print("icons    source %dx%d alpha=%s, rows at %s" % (w, h, has_alpha, bands))
+    if not has_alpha or len(bands) != 2:
+        raise SystemExit("the icon sheet is not two rows of pictures on a clear background: refusing to guess")
+    cells = []
+    for (y0, y1) in bands:
+        band = [row for row in px[y0:y1]]
+        runs = column_runs(w, y1 - y0, band)
+        print("         row %d-%d: pictures at columns %s" % (y0, y1, runs))
+        if len(runs) != 2:
+            raise SystemExit("a row of the icon sheet does not hold two pictures: refusing to guess")
+        for (x0, x1) in runs:
+            cells.append([bytearray(r[x0 * 4:x1 * 4]) for r in band])
+    # a solid interior (the sheet's painted pixels are a hair under opaque) before the shrink
+    for name, cell in zip(ICON_NAMES, cells):
+        solid_interior(cell)
+        cw_, ch_ = len(cell[0]) // 4, len(cell)
+        box = content_box(cw_, ch_, cell)
+        canvas, size = fit(cell, cw_, ch_, box, 128, 128, 4)
+        print("         %-9s content %s -> %dx%d in 128x128" % (name, box, size[0], size[1]))
+        built[name] = (canvas, 128, 128)
+        if args.preview:
+            os.makedirs(args.preview, exist_ok=True)
+            for tone, color in (("dark", (36, 34, 32)), ("light", (236, 232, 222))):
+                write_png(os.path.join(args.preview, "%s-on-%s.png" % (name, tone)), 128, 128, over(canvas, color))
 
     if args.phase5:
         built["compact"] = picture("compact")

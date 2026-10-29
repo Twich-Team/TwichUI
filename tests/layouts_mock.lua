@@ -267,6 +267,8 @@ local function MakeFake(c)
     local backdrop = type(template) == "string" and template:find("BackdropTemplate", 1, true) ~= nil
     return setmetatable(f, { __index = function(_, k)
       if BACKDROP[k] and not backdrop then return nil end
+      -- the game gives only a font string GetStringHeight (a frame is sized by GetHeight): a layout that asks a frame for it reads a stand-in height
+      if k == "GetStringHeight" and kind ~= "FontString" then return nil end
       if methods[k] then return methods[k] end
       if type(k) == "string" and k:find("^%u") then return function() end end
     end })

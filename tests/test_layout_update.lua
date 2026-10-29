@@ -614,15 +614,23 @@ do
     assert(b.enabled, "button '" .. label .. "' is disabled")
     b.scripts.OnClick(b)
   end
+  local function Manage()   -- the maintenance actions are under "Manage layout"
+    local b = LM.Button(w, "Manage layout")
+    if b and not b.open then b.scripts.OnClick(b) end
+  end
   Check(MK.Step() == 6, "the wizard opens on the result")
+  Manage()
   Click("Set up again")
-  while MK.Step() < 5 do Click(MK.Step() == 1 and "Start" or "Next") end
+  while MK.Step() < 5 do Click(MK.Step() == 1 and "Get started" or "Next") end
   -- the bundled package with a different accent: an update in which my font change is kept
   MK.SetPick("accent", "ember")
   WK.Window.Refresh()
-  Check(LM.Says(w, "Updating your layout") and LM.Says(w, "Update while keeping my customizations") and LM.Says(w, "Reapply the recommended configuration")
+  Check(LM.Says(w, "Ready to update") and LM.Says(w, "Update: Keep my customizations") and LM.Visible(LM.Button(w, "Change")), "the review is a receipt with one update-policy row")
+  Check(not LM.Visible(LM.Button(w, "Review conflicts")), "the three ways are behind Change")
+  Click("Change")
+  Check(LM.Says(w, "Update while keeping my customizations") and LM.Says(w, "Reapply the recommended configuration")
     and LM.Says(w, "Review conflicts"), "the review offers the three ways")
-  Check(LM.Says(w, "of your own changes is kept as you have it"), "and says what is kept")
+  Check(LM.Says(w, "Personal settings kept: 1") and LM.Says(w, "Recommended changes:"), "and counts what is kept and what changes")
   Check(MK.UpdateMode() == "keep" and not LM.Visible(LM.Button(w, "Keep mine")), "keeping my changes, with the details folded away")
   local built = c.made()
   Click("Review conflicts")
@@ -642,7 +650,7 @@ do
   Click("Apply")
   Check(c.popup and c.popup.text:find("Updating", 1, true) and c.popup.text:find("Undo this update", 1, true), "the question names the update and the way back")
   c.Accept()
-  Check(MK.Step() == 6 and LM.Says(w, "This was an update") and LM.Visible(LM.Button(w, "Undo this update")), "the result offers Undo this update")
+  Check(MK.Step() == 6 and LM.Says(w, "Waiting for a reload") and LM.Says(w, "This was an update") and LM.Visible(LM.Button(w, "Undo this update")), "the result offers Undo this update")
   Check(TC.Effective(f) == "Alegreya Sans Bold", "the layout's font, as chosen")
   Click("Undo this update")
   Check(c.popup and c.popup.key == "TWICHUI_LAYOUT_UNDO" and c.popup.text:find("Undo the last update", 1, true), "undo asks first, naming what it does")
@@ -659,6 +667,7 @@ do
   c = Reload(NAME, c)
   c.SlashCmdList.TWICHUI("layout")
   w = c.TwichUILayoutWizard
+  Manage()
   Check(LM.Visible(LM.Button(w, "Keep the update")) and c.EllesmereUIDB.profiles[BACKUP] ~= nil, "a checked update can be kept")
   local b = LM.Button(w, "Keep the update")
   b.scripts.OnClick(b)
@@ -732,7 +741,9 @@ do
   -- reopen the wizard: it shows the managed layout
   c.SlashCmdList.TWICHUI("layout")
   local w, MK = c.TwichUILayoutWizard, c.TwichUI.LayoutWizard.Model
-  Check(MK.Step() == 6 and LM.Says(w, "Installed and managed") and LM.Visible(LM.Button(w, "Set up again")) and not LM.Visible(LM.Button(w, "Restore previous setup")),
+  local mb = LM.Button(w, "Manage layout")
+  mb.scripts.OnClick(mb)
+  Check(MK.Step() == 6 and LM.Says(w, "Installed and managed") and LM.Says(w, "Your interface is ready") and LM.Visible(LM.Button(w, "Set up again")) and not LM.Visible(LM.Button(w, "Restore previous setup")),
     "the wizard opens on the managed layout; Set up again, no Restore")
   -- update to v2: an update into profiles still recognised as the install's own, compared against the baseline
   local plan = L.Plan(V2, CLASSIC)
@@ -769,7 +780,7 @@ do
   Check(b.parts.ellesmereui.units[BAGS_U].u == true and b.parts.ellesmereui.units[LAYOUT_U].u == true and b.parts.ellesmereui.units[MINIMAP_U].u == nil
     and b.parts.twichui.units[FONT_U].u == nil, "the baseline marks whole parts as checked only for presence; values are not marked")
   c.SlashCmdList.TWICHUI("layout")
-  Check(LM.Says(c.TwichUILayoutWizard, "checked only that they are there"), "and the result says so in words")
+  Check(LM.Says(c.TwichUILayoutWizard, "checked only for being there"), "and the result says so in words")
 end
 
 if failures > 0 then print(failures .. " FAILED") os.exit(1) end

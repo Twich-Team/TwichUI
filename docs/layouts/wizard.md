@@ -5,7 +5,8 @@ of its own) that lets a recipient review compatibility, pick one of the two bund
 to scale and then at full size over their own screen, choose a small TwichUI helper preset, adjust four personal choices (accent, size, tooltip placement, friendly player nameplates), review exactly what would change, apply it with a restore point, see it
 checked after the reload, and put the previous setup back. It adds no engine of its own: everything that changes the game
 is `TwichUI_Layouts`' pipeline, fed by the package and its resolved screen geometry. It also lists packages other players sent
-(step 1), updates an installed layout keeping the player's changes (`updates.md`), and finishes or stops managing a setup.
+(step 1), updates an installed layout keeping the player's changes (`updates.md`), and finishes or stops managing a setup. What a page shows
+by default, and what is behind a button, is "Presentation" below.
 Authoring is a separate workspace the wizard doesn't link to (`publishing.md`). Nothing here has been run on WoW: Forever
 (`implementation-status.md`, RH-2). `architecture.md` is the contract.
 
@@ -34,19 +35,22 @@ untouched. The window is built the first time it opens and kept; its pages are b
 
 Six steps, one window (780 × 590, TwichUI's own look, `Look.Shell`; fitted to small screens by `R.FitToScreen`; closes
 with Escape through `UISpecialFrames`, never `RegisterGameMenuEscHandler`). A stepper at the top reaches only steps already
-reached with Next; the footer holds Close (**Do this later** on a first install: closing it then puts the setup off), Back,
-and Next (Start on the first step, Apply on the review). The footer's note says why a button is disabled. While the window
+reached with Next: the step you are on has a heavy bar and a warm wash, a step behind you carries a small check, a step not
+reached is quiet and can't be chosen. The footer holds Close (**Do this later** on a first install: closing it then puts the
+setup off), Back, and one primary action in the same corner on every step: **Get started** on the first step, **Next**, **Apply**
+on the review, **Done** on the review when there is nothing to apply and on a finished result. The footer's note says why a
+button is disabled. The footer is outside the scrolling page, always. While the window
 is shown the game behind it is dimmed a little by one click-through frame (`docs/onboarding.md`, "The dimming"); the
 full-size preview has its own and the two are never shown together.
 
-| # | Step | Shows | Changes |
+| # | Step | Shows by default (the rest is behind a button) | Changes |
 |---|---|---|---|
-| 1 | Welcome | the emblem, what the setup does (on a first install, `Pages.FIRST`: a greeting, that nothing applies until Apply, the restore point, the account-wide EllesmereUI part, and **Skip setup** and, when EllesmereUI's first run was held for it, **Use EllesmereUI's setup instead**), and **Does it work here?**: EllesmereUI (present, usable, version, tested-with, Forever build, its own first-run setup pending), TwichUI profiles, the screen (size and UI scale, and for each layout at standard size whether it fits, fits but some pieces may overlap, or doesn't fit, with the problems and the UI scale at which it would), whether this is a preview build, combat, and an install already recorded (with a link to its result). Each line has a word (Ready, Check, Blocked, Note), not a colour alone. | nothing |
-| 2 | Layout | a card for each layout, Classic and Compact Adventure (its picture, what it says, a Preview-build tag; the selected one unfolds what it covers), the preview, its scenario selector and the full-size button. Choosing a card re-draws the preview at once. | the layout choice is remembered |
-| 3 | Helpers | the **TwichUI helpers** choice: one card per option the package offers (read from the package: its name, description and what it turns on and off and how many other settings it sets; the page scrolls, there is no fixed row), and the preview. A preset the player picked before, or the install recorded, that the package no longer offers is named and Next waits for a pick | the pick is remembered |
-| 4 | Personalize | accent colour swatches (with the chosen one named), the size cards (Standard, Larger), **Tooltip placement** (Layout position, Follow mouse), **Friendly player nameplates** (Class colors, Standard blue, with a synthetic sample), Start over, and the preview, which follows each pick at once | the picks the player makes are remembered (a pick read from the game is not) |
-| 5 | Review | the plan: your choices; TwichUI (at once, this character only): the profile copied and switched to, how many settings are set, what is turned on, how many on-screen pieces are placed; EllesmereUI (after a reload you start, every character on the account): the profile made and made active (and, on a repeat, that changes made in it since are replaced), what is replaced, positions and text sizes; **Left alone**; **Not placed** (the objectives, which Blizzard's Edit Mode places; the battle resurrection timer, left where the author had it); for an install again, **Updating your layout** (`updates.md`); the fit of the **final plan** (what Apply leaves, kept placements included) and what is kept where you have it; blockers with their reasons; what happens if a step fails. Apply is in the footer. | nothing until Apply is confirmed |
-| 6 | Result | what the install record says now, with the actions that make sense: waiting for a reload (Reload now, Restore), checked after the reload (Restore, Keep this setup, Check again, Set up again), not everything reads back (the differences; Restore, Check again), only partly applied (what was done and what failed; Restore, Reload now), interrupted (Restore), restore waiting for a reload, restore not fully checked, restored, nothing changed (a clean failure, with its reason), a damaged, newer or other-character record (said, with only what is safe offered); for an update, **Undo this update** and **Keep the update**; a finished setup, **Installed and managed** (or "not verified" when its last check didn't match) with Set up again and Stop managing | only through its confirmed buttons |
+| 1 | Welcome | the emblem, **Make yourself at home** and one line, three points (choose a layout, add your preferences, review then apply: nothing changes until you apply, and the current setup is backed up when you do), that EllesmereUI's part applies to every character on the account, and a verdict: **Ready**, **Items to review** or **Setup blocked**, with every warning and blocker and its short explanation at once. On a first install (`Pages.FIRST`): **Skip setup** and, when EllesmereUI's first run was held for it, **Use EllesmereUI's setup instead**. Behind **Compatibility details**: every check (EllesmereUI present, usable, version, tested-with, Forever build, its own first-run setup pending; TwichUI profiles; the screen's size and UI scale, and for each layout at standard size whether it fits, fits but some pieces may overlap, or doesn't fit, with the problems and the UI scale at which it would; a preview build; combat; an install already recorded, with a link to its result), each with a word (Ready, Check, Blocked, Note), not a colour alone | nothing |
+| 2 | Layout | one card for each layout: its picture, title, one short description, up to three traits, the selected one with a check, an outline and the word Selected (a Preview-build tag on a preview package); both Classic and Compact Adventure are fully in view at the standard window size. The preview, its scenario selector and the full-size button. Behind **Layout details**: what the chosen layout covers. Choosing a card re-draws the preview at once | the layout choice is remembered |
+| 3 | Helpers | the **TwichUI helpers** choice: one full-width card for each preset the package offers, whatever its number (read from the package: its label, a one-sentence description, a picture), the chosen one selected; one line saying the layout's look and places apply whichever is chosen. Behind **View included settings** on each card: the author's full description, what it turns on, what it turns off, how many other settings it changes or resets, what it leaves alone. A preset the player picked before, or the install recorded, that the package no longer offers is named and Next waits for a pick. No layout preview here: it shows nothing of what a helper does | the pick is remembered |
+| 4 | Personalize | the accent swatches (each named, the chosen one checked, the class colour carrying the class's own icon), the size cards (Standard, Larger, each showing "Aa" at its relative size, and what the package says the choice changes), **Tooltip placement** (Layout position, Follow mouse, each with its illustration; "Applies to every character on this account."), **Friendly player nameplates** (Class colors, Standard blue, each showing three synthetic sample players), Start over. The page fits the standard viewport at its defaults. No large layout preview here: the preview follows these picks on the Layout and Review steps | the picks the player makes are remembered (a pick read from the game is not) |
+| 5 | Review | a receipt: **Ready to apply** (a fresh installation), **Ready to update** (an install again), **You're already up to date.** or **Can't apply yet**, the choices in six rows (Layout, Helpers, Accent, Tooltip placement, Friendly nameplates, Size), and short statements of what it means: what is set in TwichUI (this character only) and in EllesmereUI (every character on the account), that tooltip placement is account-wide, the reload and that nothing reloads until you choose, the restore point, what isn't placed (for example "Objectives position isn't changed"), a fit warning or a blocker in words ("Check:", "Blocked:"). An update adds one row, **Update: Keep my customizations** [Change], the counts (recommended changes, personal settings kept, conflicts, parts checked for presence only) and the decisions an update needs (an addon kept or replaced whole, linked frames, warnings). Behind **View changes**: the account of every change, **Left alone**, **Not placed**, **If something goes wrong**, and the update's long summary. Behind **Change**: the three policies and every setting with its choices. Behind **Advanced**: **Force re-apply** (opened for you when a blocked review needs it). Apply is in the footer | nothing until Apply is confirmed |
+| 6 | Result | the outcome as a heading (**Your interface is ready**; **Reload to finish your setup**; **Some settings didn't read back as planned**; **Your setup was only partly applied**; **Your setup was interrupted**; **Reload to finish restoring**; **Your previous setup is back**; **Nothing was changed**; ...), the record's own status under it (**Waiting for a reload**, **Checked after the reload**, **Installed and managed**, ...), a short summary, and the actions. A finished setup that was read back (or one the player finished) is the only one called ready; its summary says how many settings read back by value and how many EllesmereUI parts were checked only for being there. For it: **Done** (the footer) and **Open settings**, with **Details** (what was chosen and the steps) and **Manage layout** folded (the installed revision, Check again, Set up again, Keep this setup, Keep the update, Undo this update, Restore previous setup, Stop managing: each only when it applies). Any other outcome keeps its explanation, its steps and what differs, and every action that applies (Reload now, Restore, Check again, Set up again, ...), in view | only through its confirmed buttons |
 
 ### What never happens by itself
 
@@ -68,9 +72,11 @@ full-size preview has its own and the two are never shown together.
 ### Force re-apply
 
 For an account an earlier install left stuck: a failed or stopped install, a Restore or Undo that never finished, another
-package's record, a record that can't be read, or a profile with the install's name that no record claims. On the review, **Force
-re-apply** (footer) is offered when an earlier install is recorded, or when every reason Apply is refused is one it can lift
-(`Model.CanForce`); it is not offered on a clean first install. Pressing it changes nothing in the game: it makes the plan again
+package's record, a record that can't be read, or a profile with the install's name that no record claims. On the review,
+**Force re-apply** is under **Advanced** (not a normal step): offered when an earlier install is recorded, or when every reason Apply is
+refused is one it can lift (`Model.CanForce`); it is not offered on a clean first install. **Advanced** is folded unless a blocked review
+needs it or a forced plan is on, when it is open and the blocker is in view beside it. When there is nothing to apply (already up to
+date) the page says so and the footer's primary action is **Done**; Force re-apply is still there under Advanced. Pressing it changes nothing in the game: it makes the plan again
 with `LY.Plan` `opts.force = true` (`session.force`, part of the plan signature and of the plan key, so a plain plan's key can't
 apply a forced one), the review lists what it replaces, and **Apply** still asks, with the same lines in the question.
 **Stop forcing**, leaving the review, changing layout and a successful Apply all drop the request; a refused Apply keeps it.
@@ -105,6 +111,38 @@ is asked for. A leftover note with nothing waiting opens nothing. Verification i
 made from the first-install setup is followed by `Onboarding.lua` too: it is `done` only once that check says verified (or
 the player kept it), and an unfinished one reopens on its result (`docs/onboarding.md`).
 
+## Presentation
+
+The pages are for scanning: a heading, at most one short line, and the choices or the result as the main content. Detail is behind a
+labelled button, built the first time it is opened; what a player must know stays in view as a short statement.
+
+- **One selection grammar** (`Controls.lua`, `Controls.Choice`): layouts, helper presets, size, tooltip placement, friendly nameplates, the update
+  policy and the layout packages are the same card. Selected: a check in a fixed 18-unit square at the top right, a 2-unit bronze outline
+  all round, a warm fill and, where there is room, the word **Selected** beside the check. Hover: a lighter 1-unit edge and a quiet wash,
+  never the check or the outline. A card keeps its size when its state changes, and its title is given only the width left of the
+  indicator and the word, so they cannot meet (`tests/test_layout_wizard_ui.lua` measures this on every card). The check, the outline and
+  the swatches are drawn from flat textures, never from artwork. The accent swatches use the same check, an outline, and a name under each, so
+  no choice is colour alone. Buttons are the same controls as before, so focus and Escape are unchanged.
+- **Behind a button** (`Controls.Disclosure`, a chevron and a label): Compatibility details, Layout details, View included settings,
+  View changes, Change (the update policy), Details and Manage layout (the result), Advanced. Each builds its text the first time it is
+  opened and is kept; opening and closing them changes no pick and makes no frame. Their open state is the page's, kept while the window is
+  built. The small **i** beside the preview's caption (`Controls.Info`) holds what the preview is and isn't.
+- **Stays in view**: a blocker or a warning and its short reason (Welcome, Review); that EllesmereUI's part and tooltip placement are
+  account-wide; the reload; the restore point; what isn't placed; what a result checked only for being there; a failed or partial outcome
+  with its recovery actions; the nameplate limit while Standard blue is picked; "The layout's own look and places apply whichever you choose" on Helpers.
+- **Presets are read, not named** (`Model.PresetCard`): a card's short sentence is the author's first sentence, unless the preset is exactly
+  one of the bundled shapes (the three on-screen helpers; and navigation too), when it is the shorter wording ("Keep my current helper
+  preferences.", "Useful resource and utility displays.", "On-screen helpers, plus navigation."). A preset the author changed is not given
+  those. Its picture follows its shape (the journal for one that changes nothing, the bar, pin and cup for the on-screen shape, TwichUI's
+  compass when it turns navigation on, TwichUI's generic icon otherwise); its details are the author's whole text, what it turns on and off,
+  how many other settings it changes or resets, what it leaves alone, and that the layout's look still applies. Nothing in a card says a
+  preset only turns things on.
+- **Scrolling**: the page scrolls inside the window; the scroll bar is the template's own hideable one (`scrollBarHideable`, as Blizzard's
+  `ScrollFrame_OnScrollRangeChanged` reads it), so it shows only while a page overflows. The footer is outside the scrolling area. At the
+  standard window every page fits at its defaults except when there are more presets than fit.
+- **Cost**: no new `OnUpdate`, event or timer; every frame is made once with its page; a hover is a texture wash through the shared motion
+  (which respects "Reduce window motion"); no plan is worked out for a hover or an expand.
+
 ## Choices
 
 The package declares its `choices` (data in `TwichUI_Layouts/ChoicesData.lua`, written from a package published in game;
@@ -113,7 +151,7 @@ else. The wizard shows nothing the package doesn't declare, and assumes no numbe
 
 | Choice | Kind | Options (default first) | Writes | Verified after the reload by |
 |---|---|---|---|---|
-| `helpers`: TwichUI helpers | preset (layer "preset") | as the package says. The bundled package today: **Leave them as they are** (nothing); **On-screen helpers** (`modules.classBars`, `modules.markersBar`, `modules.foodDrink` on); **Helpers and navigation** (the same, and `modules.navigation`) | a switch-on-only preset: TwichUI switches, turned on only. An editable preset (format 6, `presets.md`): any TwichUI setting the adapter manages, set to a value (off, 0 included) or reset; never a place, an EllesmereUI setting or another choice's setting. "Leave them as they are" (`keep`) writes none of them | the TwichUI adapter, by value |
+| `helpers`: TwichUI helpers | preset (layer "preset") | as the package says, any number. The bundled package today: **Leave them as they are** (nothing); **On-screen helpers** (`modules.classBars`, `modules.markersBar`, `modules.foodDrink` on); **Helpers and navigation** (the same, and `modules.navigation`). The wizard's cards describe each from its own settings (Presentation) | a switch-on-only preset: TwichUI switches, turned on only. An editable preset (format 6, `presets.md`): any TwichUI setting the adapter manages, set to a value (off, 0 included) or reset; never a place, an EllesmereUI setting or another choice's setting. "Leave them as they are" (`keep`) writes none of them | the TwichUI adapter, by value |
 | `accent`: Accent colour | enum (layer "choices"), `sets = { "ellesmereui:root.euiAccent" }` | **Aged gold** (the layout's own, `r .788 g .635 b .290`), **Your class colour** (`useClass = true`), **Verdigris** (`.36 .58 .57`, TwichUI's own teal), **Ember** (`.80 .45 .30`), **Dusk blue** (`.47 .60 .80`) | EllesmereUI's profile-root `euiAccent` and nothing else of its look (`EllesmereUI_Profiles.lua:3464`: `merged.euiAccent = DeepCopy(imported.euiAccent)`; `EllesmereUI_UICore.lua:527` `SetActiveProfileAccent` shows the shape `{ custom = { r, g, b }, useClass }`) | **by value**: `accent:class` or `accent:rgb:r,g,b` to three places (EllesmereUI's serializer keeps 14 digits, so an exact fingerprint of the floats would not match after the round trip) |
 | `size`: Size | density | **Standard**, **Larger** | the geometry's density: component sizes (chat, damage meter, minimap, objectives) and the registered text sizes (chat text and tabs, meter text and bar height) | the placed positions and text sizes (Phase 3's checks) |
 
@@ -283,9 +321,13 @@ What the preview shows, and what a fit claim means:
 | Step | The preview shows | The fit claim is about |
 |---|---|---|
 | Welcome (each layout) | nothing drawn | the recommended placement at standard size: fits; fits but some pieces may overlap; or doesn't fit, with the UI scale at which it would |
-| Layout, Helpers, Personalize | the layout's **recommended** placement, at once, for this screen and size | the recommended placement |
+| Layout | the layout's **recommended** placement, at once, for this screen and size | the recommended placement |
 | Review, first install | the plan's own placement (the same as the recommended one) | that placement |
-| Review, update | the **final plan**: your kept minimap, chat and meter at your own rect and size, the pieces you keep at your places (sample sizes), and the caption says which of your placements it draws and which it can't (a form TwichUI can't read); with EllesmereUI kept as it is, it says so instead of claiming the layout's fit | what Apply leaves |
+| Review, update | the **final plan**: your kept minimap, chat and meter at your own rect and size, the pieces you keep at your places (sample sizes), and the caption says which of your placements it draws and which it can't (a form TwichUI can't read); with EllesmereUI kept as it is, it says so instead of claiming the layout's fit. Where the final result can't be drawn, it says "This shows the recommended layout, not your exact final result." | what Apply leaves |
+
+The caption under every preview is one line, "Layout preview · Sample content". What a preview is and isn't (sample shapes in place of the real frames, to scale; the
+real look is EllesmereUI's and TwichUI's own) is behind the small **i** beside it, not repeated on each page. A limit of the
+preview that matters (what isn't applied, the update's kept placements, a fit problem) is a short statement under it.
 
 - **Three levels**: the components (Geometry), the pieces inside them (`LY.Fit`, sample sizes, so "may overlap"), and what is
   only illustrative (the objective tracker, never applied, never counted). What the same check finds on the author's own canvas is
@@ -299,10 +341,10 @@ What the preview shows, and what a fit claim means:
 
 ## Artwork
 
-Four sources existed in `../assets/` (names are the author's: `wizard_suite_emblem.png`, `wizard_classic_adventure.png`,
-`wizard_personalize_screenfit.png`, `wizard_compact_adventure.png`). Their contents and geometry were read from the files,
+Five sources exist in `../assets/` (names are the author's: `wizard_suite_emblem.png`, `wizard_classic_adventure.png`,
+`wizard_personalize_screenfit.png`, `wizard_compact_adventure.png`, `Fantasy UI Icon Sheet.png`). Their contents and geometry were read from the files,
 not assumed, by `tools/make_layout_wizard_art.py` (standard library only, like the other `tools/make_*.py`; `--check`
-builds nothing and prints the findings). Copies are kept in `assets/layout-wizard-*-source.png` (not packaged).
+builds nothing and prints the findings; `tests/test_wizard_art.py` rebuilds and compares). Copies are kept in `assets/layout-wizard-*-source.png` (not packaged).
 
 | Source | Found | Runtime file | How it was made |
 |---|---|---|---|
@@ -310,13 +352,16 @@ builds nothing and prints the findings). Copies are kept in `assets/layout-wizar
 | Classic Adventure | 1536 × 1024 RGBA, genuine transparency (about three quarters alpha 0, a soft aura kept as painted) | `media/classic.tga`, 512 × 256 | cropped to content (938 × 659) and shrunk to fit, centred |
 | Personalize and Screen Fit | one 1774 × 887 RGBA sheet; the two pictures are separate runs of columns holding any alpha (126–811 and 925–1629), found by measurement | `media/personalize.tga`, `media/screenfit.tga`, 128 × 128 each | split at the clear gap; each cut to content and shrunk to fit |
 | Compact Adventure | 1536 × 1024 RGBA, same kind as Classic's (a belt pouch with a scroll and a dagger) | `media/compact.tga`, 512 × 256 | built in Phase 5 with `--phase5`: cropped to content (a 226 × 252 picture centred in the 512 × 256 file, like Classic's) |
+| Icon sheet | 1312 × 1199 RGBA, genuine transparency (59% alpha 0, the painted parts at alpha 249–254; no baked-in checkerboard or matte). Two rows of two pictures, found by measurement (the rows that hold alpha, then the columns in each): a closed journal with a ribbon, a resource bar with a pin and a cup, a tooltip pinned in a screen's corner, a tooltip beside a cursor | `media/keep.tga`, `media/helpers.tga`, `media/tipfixed.tga`, `media/tipcursor.tga`, 128 × 128 each | each cell cut to its content and shrunk to fit with a 4 px margin (the longer side of every picture fills the same share of the file, so the four look the same size); painted pixels at alpha 240 or more are made fully opaque first (the interiors sit at 249–254), the soft rim is kept; premultiplied resampling and colour carried 2 px into the clear pixels leave no halo. Inspected on dark and light backgrounds and at 44 px: the journal, the bar, pin and cup and both tooltip diagrams read |
+
+The icon sheet supplies supporting illustrations only: the selection check, the outline, the swatches, the "Aa" samples and the nameplate samples are drawn in code. Navigation's preset reuses TwichUI's existing compass icon (`R.Icons` `navigation`); a preset with no artwork of its own gets `qualityOfLife`.
 
 All TGAs are uncompressed 32-bit, bottom-left origin, 8 alpha bits (the format of every other `media/` file), power-of-two
-sizes, with colour carried 2 px into the clear pixels so bilinear filtering shows no dark matte. Total shipped: about 1.2 MB (Compact's picture is 524 KB).
+sizes, with colour carried 2 px into the clear pixels so bilinear filtering shows no dark matte. Total shipped: about 1.5 MB (Compact's picture is 524 KB).
 Nothing was recoloured, sharpened or generated; no replacement was made for anything missing.
 
-Runtime: the three small pictures are registered in the icon registry (`Art.lua` adds `layoutEmblem`, `layoutPersonalize`
-and `layoutScreenFit` to `R.Icons.list`) and drawn with `R.Icons.Apply`, so a file the game refuses falls back to
+Runtime: every square picture is registered in the icon registry (`Art.lua` adds `layoutEmblem`, `layoutPersonalize`,
+`layoutScreenFit`, `layoutKeep`, `layoutHelpers`, `layoutTipFixed` and `layoutTipCursor` to `R.Icons.list`) and drawn with `R.Icons.Apply`, so a file the game refuses falls back to
 TwichUI's own emblem. Classic's and Compact's pictures are drawn by `Art.Apply` with the same rule (refused: hidden). A picture is
 decoration only: with every file refused the whole wizard, an install included, still works (`test_layout_wizard.lua`
 §10). Nothing is reserved or missing any more (`Art.Missing()` is empty). The sources' dimensions and what each needed are in the tool's header.
@@ -356,6 +401,16 @@ again and restoring to before the first install; an interrupted install; a clean
 with no new frames, listeners or hooks; the gauges and scopes; saved wizard state that is junk, partly invalid, newer, or
 a leftover note; a damaged, newer or other-character install record; the artwork (TGA headers, sizes, the reserved file
 absent, every picture refused).
+`tests/test_layout_wizard_ui.lua` (with `tests/wizard_probe.lua`, which works out where each stand-in frame and text ends up from its
+anchors) measures the presentation on the real page builders: the viewport, a card's title against its indicator and hint, selected, hover
+and unselected states, both layouts in view, a third layout, six presets with custom ones and the generic icon, no switch-on-only claim, every
+personalize choice reachable and changing nothing, the review's receipt (fresh, update, nothing to do, blocked) with Force under Advanced,
+each result outcome's heading and the actions kept in view, the stepper's checks, the footer's corner, the footer outside the scrolling
+area, reopening making nothing, and the four new pictures (format, real transparency, nothing touching the file's edge, registered).
+`tests/test_wizard_art.py` rebuilds the pictures from the sources and compares them with the shipped files. The existing tests were
+changed only where text moved behind a button (they open the disclosure first). Mutations made and reverted, each failing a test: a title
+allowed under the indicator, a selected card without its outline, the second layout card pushed out of the viewport, a partial install
+wearing the success heading.
 `tests/test_layouts.lua` §17 covers the engine side: every refusal of a malformed `choices` section, picks resolving into
 the layers, the plan key and the record following the picks, and the accent read back by value (including a number that
 went through EllesmereUI's serializer). `test_release_tools.py`, `test_perf_engine.lua` and the settings contract fixture
@@ -399,14 +454,14 @@ shared.
 1. `/tui layout` opens the window; it is complete without EllesmereUI's skins; Escape closes it; the Home and
    Troubleshooting buttons open it; no minimap or broker button exists; a new character on a set-up account gets no prompt
    (a new installation's first-install offer is `docs/onboarding.md`'s checklist).
-2. The pictures draw (emblem, Classic, Personalize, Screen Fit) with no green or white square, with transparent
-   backgrounds, at 1080p, 1440p and an ultrawide.
-3. Welcome: the EllesmereUI line reads right (version, Forever build); with EllesmereUI disabled, Start is blocked with
+2. The pictures draw (emblem, Classic, Compact, the journal, the bar, pin and cup, both tooltip diagrams) with no green or white square, with
+   transparent backgrounds, at 1080p, 1440p and an ultrawide.
+3. Welcome: the EllesmereUI line reads right (version, Forever build); with EllesmereUI disabled, Get started is blocked with
    the reason; in combat, the line says so.
 4. Each step; Back; the stepper; Close at each step changes nothing (compare `/tui` settings and EllesmereUI's profile list
    before and after).
-5. Picks: each accent recolours the preview's outlines; Larger enlarges chat, the meter and the minimap boxes; the
-   helpers cards select with a bar and "Selected".
+5. Picks: each accent recolours the preview's outlines (Layout and Review steps); Larger enlarges chat, the meter and the minimap boxes; every
+   card selects with a check, an outline and "Selected" where it fits.
 6. Review matches what the apply then does: profile names, the account-wide note, the reload, "Left alone", "Not placed".
 7. Apply: the question names both profiles; Cancel changes nothing; Apply makes both profiles and nothing reloads.
 8. Reload now: after the reload the wizard opens on "Checked after the reload" (verified). A reload made with `/reload`
@@ -442,3 +497,23 @@ shared.
     Compact's layout links.
 23. `/tui perf`: open the overlay ten times; `layoutwizard.overlay.events` and `.frames` stay flat; the addon's memory with both
     layouts' data loaded (about 1.6 MB of Lua tables offline) is reported.
+
+## Presentation manual checks (none done; on WoW: Forever)
+
+24. Each page at the standard window, 1080p and 1440p: Welcome, Layout (both cards whole), Helpers, Personalize and Review need no scrolling at their
+    defaults; nothing is clipped; no scroll bar is visible until a page overflows (add presets or raise the UI's font size to see one).
+25. Selected and hover on a layout card, a helper card, a size card, a tooltip card, a nameplate card and an accent swatch: the check, the
+    outline and "Selected" are clear on the real fonts; a title never touches the check; hover is quieter than selected and distinct from it.
+26. The pixel-drawn check and the stepper's small check read at your UI scale (the 2-unit squares are not blurred or uneven); the heavy bar on the
+    current step is visible; a step not reached looks quiet.
+27. The four new pictures at their drawn sizes (56 for presets, 88 × 70 for tooltips, 128 × 64 beside a layout): readable, no halo on the dark
+    card, the same optical size.
+28. "Aa" for Larger is plainly larger than Standard's; the class swatch shows the class icon; the nameplate samples' class colours differ from
+    each other and Standard blue's are one colour.
+29. Welcome in a normal session, with EllesmereUI missing (Setup blocked, the reason at once), and on a first installation (Skip setup, the
+    EllesmereUI line, Do this later).
+30. Review for a fresh install, an update (Change opens the three ways and every setting), nothing to do (You're already up to date, Done,
+    Advanced > Force re-apply still asks) and a blocked account (Advanced open, Blocked: in words).
+31. Result after a real reload: Your interface is ready with the layout, Done, Open settings; Details and Manage layout open and close; a partial
+    or mismatched install (an edited saved variable) shows its own heading with Restore in view.
+32. The window opened and closed ten times with every disclosure open in a `/tui perf` capture: `layoutwizard.frames` and `.events` stay flat.

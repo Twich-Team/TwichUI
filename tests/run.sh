@@ -21,8 +21,11 @@ if command -v python3 >/dev/null; then
   # tools/release.py (versions, release notes, package checks, publishing) needs git too.
   if python3 -B -m unittest -q test_release_tools >/dev/null 2>&1; then pass=$((pass+1)); echo "ok   test_release_tools.py"
   else fail=$((fail+1)); echo "FAIL test_release_tools.py"; python3 -B -m unittest test_release_tools 2>&1 | tail -5; fi
+  # the layout wizard's artwork is a reproducible build of the sources in assets/
+  if python3 -B -m unittest -q test_wizard_art >/dev/null 2>&1; then pass=$((pass+1)); echo "ok   test_wizard_art.py"
+  else fail=$((fail+1)); echo "FAIL test_wizard_art.py"; python3 -B -m unittest test_wizard_art 2>&1 | tail -5; fi
 else
-  echo "skip test_sv_inspect.py, test_release_tools.py (no python3)"
+  echo "skip test_sv_inspect.py, test_release_tools.py, test_wizard_art.py (no python3)"
 fi
 echo "$pass passed, $fail failed"
 [ $fail -eq 0 ]

@@ -470,7 +470,7 @@ do
   local c = Boot("Page", true)
   local win, WZ = OpenWizard(c)
   local MK, WW = WZ.Model, WZ.Window
-  while MK.Step() < MK.PERSONALIZE do Click(win, MK.Step() == 1 and "Start" or "Next") end
+  while MK.Step() < MK.PERSONALIZE do Click(win, MK.Step() == 1 and "Get started" or "Next") end
   local before = Copy(c.EllesmereUIDB)
   for _, label in ipairs({ "Tooltip placement", "Layout position", "Follow mouse", "Friendly player nameplates", "Class colors", "Standard blue" }) do
     Check(LM.Says(win, label), "11. the page says \"" .. label .. "\"")
@@ -478,32 +478,35 @@ do
   Check(LM.Says(win, "Show tooltips at this layout's configured location.") and LM.Says(win, "Use each friendly player's class color."), "    with their explanations")
   local page = WW.pages[MK.PERSONALIZE]
   local g = page.groups.tooltip
-  Check(g.cards[1].mark.shown and not g.cards[2].mark.shown, "    Layout position is shown selected (a mark with a word, not colour alone)")
+  Check(g.cards[1].selected and not g.cards[2].selected and g.cards[1].selText.shown, "    Layout position is shown selected (a check, an outline and the word Selected, not colour alone)")
   Click(win, "Follow mouse")
-  Check(MK.Pick("tooltip") == "cursor" and g.cards[2].mark.shown and not g.cards[1].mark.shown, "    choosing Follow mouse selects it")
+  Check(MK.Pick("tooltip") == "cursor" and g.cards[2].selected and not g.cards[1].selected, "    choosing Follow mouse selects it")
   Click(win, "Standard blue")
-  Check(MK.Pick("friendly-plates") == "blue" and page.groups["friendly-plates"].cards[2].mark.shown, "    and Standard blue")
+  Check(MK.Pick("friendly-plates") == "blue" and page.groups["friendly-plates"].cards[2].selected, "    and Standard blue")
   Check(Same(c.EllesmereUIDB, before) and c.EllesmereUIDB.profiles[TARGET] == nil, "    and selecting changed nothing in the game")
   Check(c.TwichUIDB.layouts.wizard.picks.tooltip == "cursor" and c.TwichUIDB.layouts.wizard.picks["friendly-plates"] == "blue", "    the picks are remembered")
   -- the friendly player sample: synthetic; Standard blue is Blizzard's own plate (blue bars), Class colors is EllesmereUI's (names only here)
-  local samp = page.groups["friendly-plates"].sample
+  local classCard, blueCard = page.groups["friendly-plates"].cards[1], page.groups["friendly-plates"].cards[2]
   Check(MK.PlatesMode() and MK.PlatesMode().nameOnly == true, "    this layout shows friendly players as names only")
-  Check(samp[1].bar.shown and samp[1].bar.color and math.abs(samp[1].bar.color[3] - 1) < 0.001 and samp[1].bar.color[1] < 0.7, "    Standard blue: a blue bar")
-  Check(LM.Says(win, "EllesmereUI stops managing friendly player nameplates"), "    and the page says EllesmereUI stops managing them")
+  local bs = blueCard.samples
+  Check(#bs == 3 and bs[1].bar.shown and bs[1].bar.color and math.abs(bs[1].bar.color[3] - 1) < 0.001 and bs[1].bar.color[1] < 0.7, "    Standard blue: a blue bar for each sample")
+  Check(LM.Says(win, "Blizzard's nameplates draw friendly players") and LM.Says(win, "stays until you change it there"), "    and, while it is the pick, the page says Blizzard's draw them and what EllesmereUI left stays")
   local text = table.concat(MK.Review().ellesmereui.lines, "\n")
   Check(text:find("Show EUI Friendly Player Nameplates", 1, true) and text:find("Blizzard's own nameplates", 1, true) and text:find("stays until you change it there", 1, true),
     "    the review names the EllesmereUI toggle, hands the look to Blizzard's settings, and says what stays")
   Click(win, "Class colors")
-  local classNames = samp[1].name.textColor
-  Check(not samp[1].bar.shown and classNames and not (classNames[1] == 1 and classNames[2] == 1 and classNames[3] == 1), "    Class colors: the sample names are class coloured")
-  Check(not LM.Says(win, "EllesmereUI stops managing friendly player nameplates"), "    and the note goes")
+  local cs = classCard.samples
+  local classNames = cs[1].name.textColor
+  Check(not cs[1].bar.shown and classNames and not (classNames[1] == 1 and classNames[2] == 1 and classNames[3] == 1), "    Class colors: the sample names are class coloured")
+  Check(cs[1].name.text ~= cs[3].name.text and #cs == 3, "    with more than one sample, so the class colours can be compared")
+  Check(not LM.Says(win, "Blizzard's nameplates draw friendly players"), "    and the note goes")
   -- sizing: the page grows with its content and is laid out inside the window's scroll area; the controls don't overlap the preview
   local h = page.frame:GetHeight()
-  Check(h > 560 and h < 1100, "    the page is " .. h .. " tall, scrolled by the window")
+  Check(h > 300 and h < 560, "    the page is " .. h .. " tall: compact, with every choice reachable")
   for _, id in ipairs({ "tooltip", "friendly-plates" }) do
     local gr = page.groups[id]
     for _, card in ipairs(gr.cards) do
-      Check(card.w == 182 and card.points[1][2] == page.frame, "    a " .. id .. " card is as wide as a size card and placed in the page")
+      Check(card.w == 351 and card.points[1][2] == page.frame, "    a " .. id .. " card is half the page wide and placed in the page")
     end
   end
   -- repeated showing makes nothing new
@@ -516,8 +519,8 @@ do
   local c = Boot("Follow", false)
   local win, WZ = OpenWizard(c)
   local MK, WW = WZ.Model, WZ.Window
-  while MK.Step() < MK.PERSONALIZE do Click(win, MK.Step() == 1 and "Start" or "Next") end
-  local pv = WW.pages[MK.PERSONALIZE].preview
+  while MK.Step() < MK.LAYOUT do Click(win, MK.Step() == 1 and "Get started" or "Next") end
+  local pv = WW.pages[MK.LAYOUT].preview
   Click(win, "Tooltip")                                       -- the scenario tab
   local scene = MK.Scene()
   Check(scene.tooltip.mode == "layout" and not scene.tooltip.follow, "11. Layout position: the sample sits at the layout's place")
@@ -575,7 +578,7 @@ do
   local c = Boot("Overlay", false)
   local win, WZ = OpenWizard(c)
   local MK, WW, OV = WZ.Model, WZ.Window, WZ.Overlay
-  Click(win, "Start")
+  Click(win, "Get started")
   MK.SetPick("tooltip", "cursor")
   MK.SetScenario("tooltip")
   WW.Refresh()

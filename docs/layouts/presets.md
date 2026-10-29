@@ -128,8 +128,9 @@ from saved profiles and never writes `ChoicesData.lua` (`updating-the-bundled-la
 
 ## 7. Test it, and undo it
 
-- **In the wizard**: `/tui layout` on a character. The Helpers step shows each option with what it turns on and off and how many
-  other settings it sets. The Review step says which preset, what it turns on and off, changes, resets, finds already set, leaves
+- **In the wizard**: `/tui layout` on a character. The Helpers step shows one card for each option, whatever their number, with a one-sentence
+  description; **View included settings** on a card lists what it turns on and off, how many other settings it sets or resets, and what it
+  leaves alone (and the author's full description). The Review step says which preset, what it turns on and off, changes, resets, finds already set, leaves
   alone (settings only other presets manage), and which of its settings stay as you have them.
 - **On an installed setup**: picking a *different* preset than the one installed is a deliberate switch: its settings take the
   preset's values (the review still offers "keep mine" for each, and says plainly when a kept or owned setting means the preset

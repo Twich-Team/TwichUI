@@ -51,7 +51,7 @@ local function Scrim(c) return c.TwichUILayoutWizardScrim end
 local function Dimmed(c) return Scrim(c) ~= nil and Scrim(c).shown == true end
 local function WZ(c) return c.TwichUI.LayoutWizard end
 local function Step(c) return WZ(c).Model.Step() end
-local function ToReview(w) for i = 1, 4 do Click(w, i == 1 and "Start" or "Next") end end
+local function ToReview(w) for i = 1, 4 do Click(w, i == 1 and "Get started" or "Next") end end
 -- the saved variables as a later session finds them (a reload when reload = true, else a login)
 local function Again(c, name, opts)
   local sv = LM.Logout(c)
@@ -79,13 +79,13 @@ do
   Check(E.styleShown == nil and E.styleStamped == nil and c.EllesmereUIDB.styleChoicePending == true,
     "its look picker waits for its first run by its own rule: not shown, and not stamped as answered")
   local w = Win(c)
-  Check(Says(w, "Welcome to TwichUI") and Says(w, "a restore point is made first") and Says(w, "every character on this account"),
-    "the first page greets and says what it does, the restore point and the account-wide part")
-  Check(Says(w, "Nothing changes until you review it and press Apply"), "and that nothing applies until confirmed")
+  Check(Says(w, "Make yourself at home") and Says(w, "backed up when you do") and Says(w, "every character on this account"),
+    "the first page greets and says what it does, the backup made when you apply and the account-wide part")
+  Check(Says(w, "Nothing changes until you apply"), "and that nothing applies until confirmed")
   Check(Has(w, "Do this later") and not Has(w, "Close") and Has(w, "Skip setup") and Has(w, "Use EllesmereUI's setup instead"),
     "Do this later, Skip setup and EllesmereUI's own setup are offered")
   Check(Says(w, "EllesmereUI's first-run setup is waiting for this one") and not Says(w, "Blocked"), "EllesmereUI's pending first run is said, not a block")
-  Check(Enabled(w, "Start"), "so setup can start: no deadlock on EllesmereUI's pending flag")
+  Check(Enabled(w, "Get started"), "so setup can start: no deadlock on EllesmereUI's pending flag")
   -- once a session: more world entries and time open nothing more
   c.FireEvent("PLAYER_ENTERING_WORLD", false, false); Settle()
   Check(Ob(c).offers == 1 and c.wizardLoads == 1, "a loading screen doesn't offer it again")
@@ -262,7 +262,7 @@ do
   Check(o.E._externalInstaller == "Someone" and o.TwichUI.Onboarding.Snapshot().reasons[1] == "hold-other-installer", "another installer's registration is not taken over")
   Check(not Shown(o), "and the setup doesn't open over its first run")
   o.SlashCmdList.TWICHUI("layout")
-  Check(Says(Win(o), "first-run setup is still waiting") and not Enabled(Win(o), "Start"), "opened by hand: the other installer's pending first run still blocks, with its reason")
+  Check(Says(Win(o), "first-run setup is still waiting") and not Enabled(Win(o), "Get started"), "opened by hand: the other installer's pending first run still blocks, with its reason")
 end
 
 ---------------------------------------------------------------------------
@@ -439,7 +439,7 @@ do
   Check(sc.mouse ~= true and sc.keyboard ~= true, "click-through and keyboard-through")
   local tex = sc.tex
   Check(tex.color and math.abs(tex.color[4] - 0.40) < 1e-9 and tex.color[1] < 0.06 and tex.color[1] >= tex.color[3], "a warm charcoal at 40%")
-  Check(not Find(sc, "Start") and #sc.children == 1, "nothing on it but its texture: no ornament, no controls")
+  Check(not Find(sc, "Get started") and #sc.children == 1, "nothing on it but its texture: no ornament, no controls")
   -- the fade: from clear, to full, through the shared motion (no animation of its own)
   local Motion = c.TwichUI.Look.Motion
   W.Close("later")
@@ -455,7 +455,7 @@ do
   c.TwichUIDB.ui.reduceSettingsMotion = nil
   -- the screen changing: still anchored, nothing rebuilt (the full-size preview is built once first, below it is reused)
   local Ov = WZ(c).Overlay
-  Click(w, "Start"); Click(w, "Next")
+  Click(w, "Get started"); Click(w, "Next")
   Ov.Open(); Ov.Close("back")
   local made = c.made()
   c.UIParent.w, c.UIParent.h = 1600, 900

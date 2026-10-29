@@ -249,6 +249,12 @@ function Actions.native()
         end, { accept = "Open EllesmereUI's setup", combat = true })
 end
 
+-- The result's "Open settings": closes the setup (as Close does) and opens TwichUI's settings window
+function Actions.settings()
+    W.Close("later")
+    if R.OpenSettings then R:OpenSettings("overview") end
+end
+
 function Actions.again()
     M.Go(M.WELCOME)
     W.Refresh()
@@ -286,6 +292,9 @@ local function PaintStepper(step)
         local reachable = session ~= nil and i <= session.reached
         tab:SetEnabled(reachable)
         tab:SetAlpha(reachable and 1 or 0.45)
+        -- done: a step before this one that was reached (a small check, so it isn't colour alone); a step ahead is quiet and, until
+        -- it is reached, can't be chosen
+        tab.tick:SetShown(reachable and i < step)
     end
 end
 
@@ -303,21 +312,36 @@ local function PaintFooter(step)
     footer.back:SetShown(step > M.WELCOME and step < M.RESULT)
     footer.next:SetShown(step < M.RESULT)
     footer.next:SetEnabled(true)
-    local canForce, forcing = M.CanForce()
-    footer.force:SetShown(step == M.REVIEW and canForce == true)
-    footer.force.text:SetText(forcing and "Stop forcing" or "Force re-apply")
-    footer.note:SetPoint("BOTTOMRIGHT", footer.force:IsShown() and footer.force or footer.back, "BOTTOMLEFT", -14, 2)
+    footer.done = false   -- whether the primary button closes the setup (Done) instead of going on or applying
     if step < M.REVIEW then
-        footer.next.text:SetText(step == M.WELCOME and "Start" or "Next")
+        footer.next.text:SetText(step == M.WELCOME and "Get started" or "Next")
         local ok = M.CanContinue()
         footer.next:SetEnabled(ok)
         if not ok then note = "Fix what is marked Blocked first. Nothing has changed." end
     elseif step == M.REVIEW then
-        footer.next.text:SetText("Apply")
         local can, code, blocked = M.CanApply()
-        footer.next:SetEnabled(can)
-        if not can then note = M.ApplyReason(code, blocked) end
+        if not can and code == "nothing" then
+            -- already up to date: nothing to apply, so the way out is the primary action
+            footer.next.text:SetText("Done")
+            footer.done = true
+        else
+            footer.next.text:SetText("Apply")
+            footer.next:SetEnabled(can)
+            if not can then note = M.ApplyReason(code, blocked) end
+        end
+    elseif step == M.RESULT then
+        -- a finished, checked setup: Done. Anything unfinished or wrong keeps its own actions on the page
+        local p = pages[M.RESULT]
+        local ready = p and p.result and p.result.ready
+        footer.next:SetShown(ready == true)
+        footer.next.text:SetText("Done")
+        footer.done = true
     end
+    footer.note:ClearAllPoints()
+    footer.note:SetPoint("BOTTOMLEFT", footer.close, "BOTTOMRIGHT", 14, 2)
+    if footer.back:IsShown() then footer.note:SetPoint("BOTTOMRIGHT", footer.back, "BOTTOMLEFT", -14, 2)
+    elseif footer.next:IsShown() then footer.note:SetPoint("BOTTOMRIGHT", footer.next, "BOTTOMLEFT", -14, 2)
+    else footer.note:SetPoint("BOTTOMRIGHT", footer, "BOTTOMRIGHT", 0, 2) end
     if M.Session() and M.Session().failed then note = "Nothing was changed: " .. M.ApplyReason(M.Session().failed.code) end
     footer.note:SetText(note)
 end
@@ -411,11 +435,16 @@ local function Build()
     for i, s in ipairs(M.STEPS) do
         local tab = L.Tab(stepper, i .. "  " .. s.label, w, function() M.Go(i) W.Refresh() end)
         tab:SetPoint("TOPLEFT", (i - 1) * w, 0)
+        tab.bar:SetHeight(3)                                                      -- the step you are on: a heavier bar and a warmer wash
+        tab.fill:SetColorTexture(pal.bronzeText[1], pal.bronzeText[2], pal.bronzeText[3], 0.20)
+        tab.tick = WZ.Controls.Tick(tab, pal.bronzeText)
+        tab.tick:SetPoint("LEFT", 9, 0)
         stepper.tabs[i] = tab
     end
 
     -- the page, in a scroll area (the footer is outside it: its buttons are never hidden by scrolling)
     scroll = CreateFrame("ScrollFrame", nil, win, "UIPanelScrollFrameTemplate")
+    scroll.scrollBarHideable = 1   -- the template's own flag (SecureScrollTemplates.lua): the bar and its arrows show only while the page overflows
     scroll:SetPoint("TOPLEFT", PAD, -(HEADER_H + 10 + STEPPER_H + 8))
     scroll:SetPoint("BOTTOMRIGHT", -PAD - 22, FOOTER_H + PAD)
     L.ScrollBar(scroll)
@@ -435,19 +464,14 @@ local function Build()
     footer.close = L.Button(footer, "Close", 90, "secondary", function() W.Close("later") end)
     footer.close:SetPoint("BOTTOMLEFT", 0, 0)
     footer.next = L.Button(footer, "Next", 110, "primary", function()
-        if M.Step() == M.REVIEW then Actions.apply() else M.Next() W.Refresh() end
+        local step = M.Step()
+        if footer.done then W.Close("later")
+        elseif step == M.REVIEW then Actions.apply()
+        else M.Next() W.Refresh() end
     end)
     footer.next:SetPoint("BOTTOMRIGHT", 0, 0)
     footer.back = L.Button(footer, "Back", 90, "secondary", function() M.Back() W.Refresh() end)
     footer.back:SetPoint("RIGHT", footer.next, "LEFT", -8, 0)
-    -- Force re-apply (Review only): plans as a new install over what an earlier one left. It changes nothing by itself; Apply asks.
-    footer.force = L.Button(footer, "Force re-apply", 130, "secondary", function()
-        M.SetForce(not M.Forced())
-        W.Refresh()
-    end)
-    footer.force:SetPoint("RIGHT", footer.back, "LEFT", -8, 0)
-    R.Interact.Tip(footer.force, "Force re-apply",
-        "For when an earlier install left things stuck: a failed or stopped install, a restore that never finished, a record that can't be read, or a profile with the install's name. It plans a new install over them and shows exactly what it would replace in the review. Nothing changes until you press Apply and confirm.")
     footer.note = L.Text(footer, "small")
     footer.note:SetPoint("BOTTOMLEFT", footer.close, "BOTTOMRIGHT", 14, 2)
     footer.note:SetPoint("BOTTOMRIGHT", footer.back, "BOTTOMLEFT", -14, 2)

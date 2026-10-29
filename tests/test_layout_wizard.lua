@@ -41,17 +41,24 @@ local function Enabled(win, label)
   return b ~= nil and b.enabled ~= false
 end
 local function Has(win, label) return Find(win, label) ~= nil end
+-- opens a disclosure by its label (and leaves one that is open alone); returns it
+local function Expand(win, label)
+  local b = Find(win, label)
+  assert(b, "no visible disclosure '" .. label .. "'")
+  if not b.open then b.scripts.OnClick(b) end
+  return b
+end
 
 local function Open(c)
   c.SlashCmdList.TWICHUI("layout")
   return c.TwichUILayoutWizard, c.TwichUI.LayoutWizard
 end
 local function ToReview(win)
-  for i = 1, 4 do Click(win, i == 1 and "Start" or "Next") end
+  for i = 1, 4 do Click(win, i == 1 and "Get started" or "Next") end
 end
 -- Forward with the Start and Next buttons until the wizard is on `step` (a reopened session has reached only the first)
 local function Advance(win, MK, step)
-  while MK.Step() < step do Click(win, MK.Step() == 1 and "Start" or "Next") end
+  while MK.Step() < step do Click(win, MK.Step() == 1 and "Get started" or "Next") end
 end
 
 -- what a test may not see change: everything the game or another addon would keep (the wizard's own remembered picks aside)
@@ -72,7 +79,7 @@ do
   Check(toc:find("## RequiredDeps: !!!TwichUI, TwichUI_Layouts", 1, true), "and needs the core and the layout engine")
   Check(not toc:find("SavedVariables", 1, true), "it keeps no saved variables of its own")
   local files = LM.TocFiles("TwichUI_LayoutWizard")
-  Check(#files == 11 and files[#files]:find("Window.lua", 1, true), "its files, the window last (it says the wizard is ready)")
+  Check(#files == 12 and files[#files]:find("Window.lua", 1, true), "its files, the window last (it says the wizard is ready)")
   for _, f in ipairs(files) do Check(io.open(f), f .. " exists") end
   local core = io.open(REPO .. "!!!TwichUI/!!!TwichUI.toc"):read("*a")
   Check(not core:find("TwichUI_LayoutWizard\\", 1, true) and core:find("LayoutsLauncher.lua", 1, true), "the core lists no file of the wizard")
@@ -161,26 +168,29 @@ end
 -- 3. The steps: compatibility, forward and back, cancelling, reopening
 ---------------------------------------------------------------------------
 do
-  Check(M.Step() == 1 and Says(win, "Set up TwichUI's interface layout") and Says(win, "Does it work here?"), "the welcome, with its compatibility check")
+  Check(M.Step() == 1 and Says(win, "Make yourself at home") and Has(win, "Compatibility details"), "the welcome, with its compatibility check behind a button")
+  Expand(win, "Compatibility details")
   -- RH-1: on 1920 x 1080 at 0.64 Compact's pet frame and stance bar reach past its checked strip, over Chat (sample sizes):
   -- said, instead of "Everything fits"
   Check(Says(win, "Version 9.6.8.") and Says(win, "Classic Adventure fits.") and Says(win, "Fits, but some pieces may overlap: Compact Adventure"),
     "EllesmereUI's version and the screen, read")
   Check(Says(win, "A preview build") and Says(win, "Applying and restoring are refused during combat"), "a preview build is said to be one; combat is explained")
-  Check(Enabled(win, "Start") and not Has(win, "Back") and Has(win, "Close"), "Start is offered, Back isn't, Close is")
+  Check(Enabled(win, "Get started") and not Has(win, "Back") and Has(win, "Close"), "Get started is offered, Back isn't, Close is")
   Check(not Enabled(win, "2  Layout") and not Enabled(win, "3  Helpers"), "later steps can't be jumped to")
   local before = World(c)
 
   -- forward, one step at a time, with what each one shows
-  Click(win, "Start")
+  Click(win, "Get started")
   Check(M.Step() == 2 and Says(win, "Choose a layout") and Says(win, "Classic Adventure") and Says(win, "Preview build"), "the layout")
   Click(win, "Next")
   Check(M.Step() == 3 and Says(win, "Choose TwichUI's helpers") and Says(win, "On-screen helpers") and Says(win, "Helpers and navigation"), "the helpers")
   Click(win, "Next")
   Check(M.Step() == 4 and Says(win, "Make it yours") and Says(win, "Accent colour") and Says(win, "Larger"), "personalize")
   Click(win, "Next")
-  Check(M.Step() == 5 and Says(win, "Review before you apply") and Has(win, "Apply") and Has(win, "Back"), "the review, with Apply")
-  Check(Says(win, "Nothing has changed yet") and Says(win, "Left alone") and Says(win, "Objectives isn't applied"), "what is left alone and what isn't placed")
+  Check(M.Step() == 5 and Says(win, "Ready to apply") and Has(win, "Apply") and Has(win, "Back"), "the review, with Apply")
+  Check(Says(win, "Nothing has changed yet") and Says(win, "Objectives position isn't changed"), "a short receipt, and what isn't placed")
+  Expand(win, "View changes")
+  Check(Says(win, "Left alone") and Says(win, "Objectives isn't applied"), "what is left alone and what isn't placed")
   Check(Says(win, "after a reload that you start, for every character on this account"), "the account-wide EllesmereUI change is named")
   Check(Says(win, "is copied as \"TwichUI Adventure\"") and Says(win, "\"Default\" itself is not changed"), "the TwichUI profile used is named")
   Check(Says(win, "If something goes wrong"), "and what happens on a failure")
@@ -223,7 +233,7 @@ do
     local k = LM.Boot("Compat", nil, case[2])
     local w = Open(k)
     Check(Says(w, case[3]) and Says(w, "Blocked"), case[1] .. ": said, and marked Blocked")
-    Check(not Enabled(w, "Start"), case[1] .. ": Start is not offered")
+    Check(not Enabled(w, "Get started"), case[1] .. ": Get started is not offered")
     local MK = k.TwichUI.LayoutWizard.Model
     Check(MK.Next() == 1 and MK.Go(5) == 1, case[1] .. ": the steps can't be entered")
     Check(not k.EllesmereUI or k.EllesmereUI.calls == nil or #k.EllesmereUI.calls == 0, case[1] .. ": EllesmereUI was not called")
@@ -231,27 +241,32 @@ do
   -- an EllesmereUI that isn't the Forever build: a preview package may be tried, and is told it proves nothing
   local k = LM.Boot("Compat", nil, { eui = { retail = true } })
   local w = Open(k)
-  Check(Says(w, "isn't the WoW: Forever build") and Enabled(w, "Start"), "another client's EllesmereUI: a warning, not a block, for a preview build")
+  Check(Says(w, "isn't the WoW: Forever build") and Enabled(w, "Get started"), "another client's EllesmereUI: a warning, not a block, for a preview build")
   -- tested with another version
   local t = LM.Boot("Compat", nil, { euiVersion = "9.7.0" })
-  Check(Says(Open(t), "tested with 9.6.8"), "a newer EllesmereUI is allowed with a note")
+  local wt = Open(t)
+  Check(Says(wt, "Items to review") and Enabled(wt, "Get started"), "a newer EllesmereUI is a warning to review, not a block")
+  Expand(wt, "Compatibility details")
+  Check(Says(wt, "tested with 9.6.8"), "a newer EllesmereUI is allowed with a note")
   -- EllesmereUI's own first-run setup waiting
   local f = LM.Boot("Compat")
   f.EllesmereUI._firstInstallPending = true
-  Check(Says(Open(f), "first-run setup is still waiting") and not Enabled(f.TwichUILayoutWizard, "Start"), "EllesmereUI's own setup waiting blocks it, with the reason")
+  Check(Says(Open(f), "first-run setup is still waiting") and not Enabled(f.TwichUILayoutWizard, "Get started"), "EllesmereUI's own setup waiting blocks it, with the reason")
   -- a screen that can't be read
   local s = LM.Boot("Compat")
   local ws = Open(s)
   s.UIParent.w = nil
   s.TwichUI.LayoutWizard.Window.Refresh()
-  Check(Says(ws, "couldn't read the size of the screen") and not Enabled(ws, "Start"), "an unreadable screen blocks it")
+  Check(Says(ws, "couldn't read the size of the screen") and not Enabled(ws, "Get started"), "an unreadable screen blocks it")
   s.UIParent.w = 100
   s.TwichUI.LayoutWizard.Window.Refresh()
-  Check(Says(ws, "couldn't work out where things would go") and Enabled(ws, "Start"), "a screen too small to work with is said, and the review will explain")
+  Expand(ws, "Compatibility details")
+  Check(Says(ws, "couldn't work out where things would go") and Enabled(ws, "Get started"), "a screen too small to work with is said, and the review will explain")
   -- a screen it does not fit (1024 x 768 units): a warning that says which, never a block
   local n = LM.Boot("Narrow", nil, { screen = { w = 1365, h = 768, scale = 1 } })
   local wn = Open(n)
-  Check(Says(wn, "Not everything fits") and Enabled(wn, "Start"), "a screen the layout doesn't fit: said, with the overlaps, and not blocked")
+  Expand(wn, "Compatibility details")
+  Check(Says(wn, "Not everything fits") and Enabled(wn, "Get started"), "a screen the layout doesn't fit: said, with the overlaps, and not blocked")
   -- combat: said at the welcome
   local b = LM.Boot("Compat")
   b.combat = true
@@ -275,7 +290,7 @@ do
   for _, scr in ipairs({ { 2133.33, 1200 }, { 2866.67, 1200 }, { 1920, 1080 }, { 1600, 1200 }, { 4266.67, 1200 } }) do
     k.UIParent.w, k.UIParent.h = scr[1], scr[2]
     MK.Invalidate()
-    Click(w, "Start")
+    Click(w, "Get started")
     local pv = WW.pages[2].preview
     local d = pv.drawn
     Check(d and math.abs(d.w / d.h - scr[1] / scr[2]) < 0.001, ("the preview of %dx%d has the viewport's proportions"):format(scr[1], scr[2]))
@@ -285,7 +300,7 @@ do
   end
   k.UIParent.w, k.UIParent.h = 2133.33, 1200
   MK.Invalidate()
-  Click(w, "Start")
+  Click(w, "Get started")
   local pv = WW.pages[2].preview
   local geo = MK.Preview()
   for id, box in pairs(pv.drawn.boxes) do
@@ -295,7 +310,7 @@ do
   end
   Check(pv.drawn.boxes.central and pv.drawn.boxes.chat and pv.drawn.boxes.meter and pv.drawn.boxes.minimap, "the managed components are drawn")
   Check(pv.boxes.objectives and Says(w, "Shown, but not applied: Objectives"), "the preview says the objectives are shown but not applied")
-  Check(Says(w, "An illustration"), "and the preview says what it is")
+  Check(Says(w, "Layout preview") and Says(w, "Sample content"), "and the preview is captioned as a sample")
 
   -- size: the preview and the plan agree, and the density reaches the text sizes
   local standardChat = pv.drawn.boxes.chat.w / pv.drawn.scale
@@ -394,7 +409,9 @@ do
   MK.SetPick("helpers", "on-screen"); MK.SetPick("accent", "dusk"); MK.SetPick("size", "larger")
   ToReview(w)
   local before = World(k)
-  Check(Enabled(w, "Apply") and Says(w, "Accent colour: Dusk blue") and Says(w, "Turned on: Class resource bars, Marker bar, Food and drink buttons"), "the review names the choices and what is turned on")
+  Check(Enabled(w, "Apply") and Says(w, "Accent") and Says(w, "Dusk blue"), "the review names the choices")
+  Expand(w, "View changes")
+  Check(Says(w, "Turned on: Class resource bars, Marker bar, Food and drink buttons"), "and, under View changes, what is turned on")
 
   -- the confirmation names the exact scope; declining changes nothing
   Click(w, "Apply")
@@ -443,7 +460,9 @@ do
   local w = k.TwichUILayoutWizard
   Check(w and w.shown, "the wizard opens on its own, because the player started this reload from it")
   local WK = k.TwichUI.LayoutWizard
-  Check(WK.Model.Step() == 6 and Says(w, "Checked after the reload") and Says(w, "reads back as planned"), "showing the result")
+  Check(WK.Model.Step() == 6 and Says(w, "Your interface is ready") and Says(w, "Checked after the reload") and Says(w, "read back as planned"), "showing the result")
+  Check(not Has(w, "Restore previous setup") and Has(w, "Manage layout") and Has(w, "Done") and Has(w, "Open settings"), "Done and Open settings are in view; the maintenance actions are under Manage layout")
+  Expand(w, "Manage layout")
   Check(Enabled(w, "Restore previous setup") and Enabled(w, "Keep this setup") and Enabled(w, "Check again") and Has(w, "Set up again"), "the actions that make sense now")
   Check(k.TwichUIDB.layouts.wizard.resume == nil, "the note is used up")
   Check(k.reloads == 0, "and nothing reloaded")
@@ -489,21 +508,22 @@ do
   -- setting up again on a verified install: with the same choices there is nothing to do; a new accent installs again
   local k = LM.Boot("Apply", savedAfterReload)
   local w, WK = k.TwichUILayoutWizard, k.TwichUI.LayoutWizard
-  Check(WK.Model.Step() == 6 and Has(w, "Set up again"), "a verified install, back at the result")
+  Check(WK.Model.Step() == 6 and Has(w, "Manage layout"), "a verified install, back at the result")
+  Expand(w, "Manage layout")
   Click(w, "Set up again")
   Check(WK.Model.Step() == 1, "Set up again starts over")
   Check(WK.Model.Pick("accent") == "dusk" and WK.Model.Pick("size") == "larger" and WK.Model.Pick("helpers") == "on-screen", "with the choices that were remembered")
   Advance(w, WK.Model, 5)
   -- Phase 7 (D25): the baseline says what the last install left, so the same choices again compare equal unit by unit and
   -- nothing is imported again
-  Check(not Enabled(w, "Apply") and Says(w, "Updating your layout") and Says(w, "0 settings change to the layout's recommended values"),
-    "the same choices again: nothing to do, and the review says so")
+  Check(not Has(w, "Apply") and Enabled(w, "Done") and Says(w, "You're already up to date.") and Says(w, "Recommended changes: 0"),
+    "the same choices again: nothing to do, and the review says so, with Done instead of Apply")
   local before = World(k)
   Click(w, "Back"); Click(w, "Back")
   Check(WK.Model.Step() == 3, "back to the helpers")
   WK.Model.SetPick("accent", "ember")
   Advance(w, WK.Model, 5)
-  Check(Enabled(w, "Apply") and Says(w, "Accent colour: Ember"), "a new accent can be applied")
+  Check(Enabled(w, "Apply") and Says(w, "Ember"), "a new accent can be applied")
   Click(w, "Apply"); k.Accept()
   Check(WK.Model.Step() == 6 and Says(w, "Waiting for a reload") and Says(w, "Accent colour: Ember"), "applied again, waiting for a reload")
   Check(k.TwichUI.Layouts.Journal.Read().picks.accent == "ember", "the record has the new accent")
@@ -513,6 +533,7 @@ do
   local k2 = LM.Boot("Apply", sv)
   Check(k2.TwichUI.Layouts.Journal.Read().state == "verified" and k2.EllesmereUIDB.profiles["TwichUI Adventure"].euiAccent.custom.r == 0.8, "checked after the second reload: verified, and the new accent is live")
   local w2 = Open(k2)
+  Expand(w2, "Manage layout")
   Click(w2, "Restore previous setup"); k2.Accept()
   Check(k2.TwichUI.Profiles.Current() == "Default" and k2.EllesmereUIDB.activeProfile == "Mine", "Restore goes back to before the first install")
 end
@@ -530,6 +551,7 @@ do
   Check(k2.TwichUILayoutWizard == nil and k2.wizardLoads == 0, "the wizard did not open or load")
   local w2 = Open(k2)
   Check(Says(w2, "Checked after the reload"), "asked for, it shows the result")
+  Expand(w2, "Manage layout")
   -- keeping the setup finishes it: the restore point is forgotten, TwichUI keeps managing (Phase 7), nothing else changes
   local before = World(k2)
   Click(w2, "Keep this setup")
@@ -686,7 +708,7 @@ do
   Check(spy["layoutwizard.load"] == 1 and spy["layoutwizard.build"] == 1, "the load and the build were each scoped once")
   Check(WW.listening == 4 and w.scripts and WW.evframe.events.PLAYER_REGEN_DISABLED and WW.evframe.events.DISPLAY_SIZE_CHANGED, "four events are registered while it is open")
   -- every page once
-  for step = 1, 4 do Click(w, step == 1 and "Start" or "Next") end
+  for step = 1, 4 do Click(w, step == 1 and "Get started" or "Next") end
   local gaugeIds = {}
   for _, g in ipairs(Perf.gauges) do gaugeIds[g.id] = g end
   Check(gaugeIds["layoutwizard.events"] and gaugeIds["layoutwizard.events"].read() == 4 and gaugeIds["layoutwizard.frames"], "the gauges are registered and read")
@@ -821,9 +843,10 @@ do
     Check(e.w % 2 == 0 and math.floor(math.log(e.w) / math.log(2) + 0.0001) == math.log(e.w) / math.log(2) or e.w == 512 or e.w == 128, id .. ": a power-of-two width")
   end
   Check(Art.Has("emblem") and Art.Has("classic") and Art.Has("compact") and Art.Has("personalize") and Art.Has("screenFit"), "the five pictures that exist")
+  Check(Art.Has("keep") and Art.Has("helpers") and Art.Has("tipFixed") and Art.Has("tipCursor"), "and the four from the icon sheet (the journal, the bar, pin and cup, the two tooltip diagrams)")
   Check(next(Art.RESERVED) == nil and #Art.Missing() == 0, "none is reserved or missing any more: Compact Adventure's is built")
   Check(Art.FILES.compact.w == 512 and Art.FILES.compact.h == 256 and TGA("compact"), "Compact Adventure's picture is the same size as Classic's, and shipped")
-  for _, f in ipairs({ "layout-wizard-emblem-source.png", "layout-wizard-classic-source.png", "layout-wizard-personalize-screenfit-source.png", "layout-wizard-compact-source.png" }) do
+  for _, f in ipairs({ "layout-wizard-emblem-source.png", "layout-wizard-classic-source.png", "layout-wizard-personalize-screenfit-source.png", "layout-wizard-compact-source.png", "layout-wizard-icons-source.png" }) do
     Check(io.open(REPO .. "assets/" .. f), "the source " .. f .. " is kept in assets/")
   end
   local dummy = k.CreateFrame("Frame"):CreateTexture()
@@ -832,9 +855,9 @@ do
   -- the game refusing every file (or the files missing): the wizard still works, start to finish
   local r = LM.Boot("NoArt", nil, { refuseTextures = function(path) return tostring(path):find("TwichUI_LayoutWizard", 1, true) ~= nil end })
   local wr, WKr = Open(r)
-  Check(wr.shown and Says(wr, "Set up TwichUI's interface layout"), "with every picture refused, the welcome still draws")
+  Check(wr.shown and Says(wr, "Make yourself at home"), "with every picture refused, the welcome still draws")
   ToReview(wr)
-  Check(WKr.Model.Step() == 5 and Says(wr, "Review before you apply") and Enabled(wr, "Apply"), "and so does the review")
+  Check(WKr.Model.Step() == 5 and Says(wr, "Ready to apply") and Enabled(wr, "Apply"), "and so does the review")
   Click(wr, "Apply"); r.Accept()
   Check(r.TwichUI.Layouts.Journal.Read().state == "applied", "and an install made without any picture works")
   local layoutCard = WKr.Window.pages[2].cards[1]
@@ -887,23 +910,25 @@ do
   local imports = 0
   local importFn = k.E.ImportProfileSilent
   k.E.ImportProfileSilent = function(...) imports = imports + 1 return importFn(...) end
-  Click(w, "Start")
+  Click(w, "Get started")
   local page = WW.pages[2]
-  Check(MK.Step() == 2 and Says(w, "Classic Adventure") and Says(w, "Compact Adventure") and Says(w, "Pick one; the preview changes at once"), "step 2 offers both layouts")
-  Check(MK.Layout().id == CLASSIC and page.cards[1].mark.shown and not page.cards[2].mark.shown, "Classic Adventure is the first and the one selected")
+  Check(MK.Step() == 2 and Says(w, "Classic Adventure") and Says(w, "Compact Adventure") and Says(w, "The preview updates as you choose"), "step 2 offers both layouts")
+  Check(MK.Layout().id == CLASSIC and page.cards[1].selected and not page.cards[2].selected, "Classic Adventure is the first and the one selected")
   Check(page.cards[1].hasPic and page.cards[2].hasPic, "each has its picture")
   local pv = page.preview
   local classicCentral = pv.drawn.boxes.central.w / pv.drawn.scale
   Check(pv.drawn.variant == CLASSIC and math.abs(classicCentral - 890) < 0.05, "the preview shows Classic: a block 890 wide")
   Check(Says(w, "The same look, the same choices") == false or true, "(the unselected card's details stay folded)")
-  Check(not Says(w, "Only the unit frames, action bars") and Says(w, "EllesmereUI: its modules, their layout links"), "the selected card shows what it covers; the other does not")
+  Check(not Says(w, "EllesmereUI: its modules, their layout links"), "what a layout covers is behind its button, not in the cards")
+  Expand(w, "Layout details")
+  Check(not Says(w, "Only the unit frames, action bars") and Says(w, "EllesmereUI: its modules, their layout links"), "Layout details shows what the selected layout covers; the other's stays out")
 
   -- choose Compact: the preview follows at once, the layout is remembered, nothing in the game changes
   local made0 = k.made()
   page.cards[2].scripts.OnClick(page.cards[2])
-  Check(MK.Layout().id == COMPACT and page.cards[2].mark.shown and not page.cards[1].mark.shown, "choosing Compact selects its card")
+  Check(MK.Layout().id == COMPACT and page.cards[2].selected and not page.cards[1].selected, "choosing Compact selects its card")
   Check(pv.drawn.variant == COMPACT and math.abs(pv.drawn.boxes.central.w / pv.drawn.scale - 1091) < 0.05, "and the preview at once shows Compact: a block 1091 wide")
-  Check(Says(w, "Only the unit frames, action bars") and not Says(w, "EllesmereUI: its modules, their layout links"), "its card is the one that unfolds")
+  Check(Says(w, "Only the unit frames, action bars") and not Says(w, "EllesmereUI: its modules, their layout links"), "and the details are the chosen layout's")
   Check(pv.drawn.boxes.central.h / pv.drawn.scale < 160 and pv.drawn.elements["uf-player"] ~= nil, "the block is low, with its frames and bars drawn in it")
   Check(k.TwichUIDB.layouts and k.TwichUIDB.layouts.wizard.variant == COMPACT, "the layout is remembered")
   Check(Unchanged(World(k), before) and calls.Apply == 0 and calls.Restore == 0 and imports == 0 and k.reloads == 0, "choosing changed no profile and called no install")
@@ -931,7 +956,7 @@ do
   Check(math.abs(MK.Plan().geometry.components.chat.rect.w - pv.drawn.boxes.chat.w / pv.drawn.scale) < 0.05 and MK.Plan().variant == COMPACT, "and the plan's chat is the preview's")
   MK.SetPick("accent", "gold"); MK.SetPick("size", "standard")
   Click(w, "Next"); Click(w, "Next"); Click(w, "Next")
-  Check(MK.Step() == 5 and Says(w, "Layout: Compact Adventure"), "the review names the layout")
+  Check(MK.Step() == 5 and Says(w, "Layout") and Says(w, "Compact Adventure"), "the review names the layout")
   local text = MK.ConfirmText()
   Check(text:find("Apply Compact Adventure?", 1, true), "and so does the question")
   Check(MK.Review().plan.variant == COMPACT and not MK.Review().switching, "a first install is not a switch")
@@ -954,7 +979,7 @@ do
   local MK, WW = WK.Model, WK.Window
   MK.SetLayout(COMPACT)
   ToReview(w)
-  Check(Says(w, "Layout: Compact Adventure") and Enabled(w, "Apply"), "Compact reviews and can be applied")
+  Check(Says(w, "Compact Adventure") and Enabled(w, "Apply"), "Compact reviews and can be applied")
   Click(w, "Apply")
   Check(Says(k.popup.text, "Apply Compact Adventure?") or k.popup.text:find("Apply Compact Adventure?", 1, true), "the question names Compact")
   k.Accept()
@@ -970,9 +995,10 @@ do
   Check(w2 and w2.shown and k2.TwichUI.LayoutWizard.Model.Layout().id == COMPACT and Says(w2, "Checked after the reload"), "after the reload the wizard opens on the result, as Compact")
   -- switching to Classic from the wizard: the review says it is a switch
   local MK2, WW2 = k2.TwichUI.LayoutWizard.Model, k2.TwichUI.LayoutWizard.Window
+  Expand(w2, "Manage layout")
   Click(w2, "Set up again")
   Check(MK2.Step() == 1 and MK2.Layout().id == COMPACT, "set up again starts at the welcome, still on Compact")
-  Click(w2, "Start")
+  Click(w2, "Get started")
   local page2 = WW2.pages[2]
   page2.cards[1].scripts.OnClick(page2.cards[1])
   Check(MK2.Layout().id == CLASSIC, "choose Classic")
@@ -988,8 +1014,9 @@ do
     "Classic's bars replace Compact's in the same profile; Compact's is kept as the copy Undo this update puts back")
   local k3 = LM.Boot("Switch", LM.Logout(k2))
   local w3, WK3 = Open(k3)
-  Check(k3.TwichUI.Layouts.Journal.Read().state == "verified" and WK3.Model.Layout().id == CLASSIC and Says(w3, "Layout: Classic Adventure"), "checked after the reload, as Classic")
+  Check(k3.TwichUI.Layouts.Journal.Read().state == "verified" and WK3.Model.Layout().id == CLASSIC and Says(w3, "Installed layout: Classic Adventure"), "checked after the reload, as Classic")
   -- restore, from the second layout: back to before the first install
+  Expand(w3, "Manage layout")
   Click(w3, "Restore previous setup")
   k3.Accept()
   local k4 = LM.Boot("Switch", LM.Logout(k3))
@@ -1005,7 +1032,7 @@ do
   local k = LM.Boot("Scenes")
   local w, WK = Open(k)
   local MK, WW, Scene = WK.Model, WK.Window, WK.Scene
-  Click(w, "Start")
+  Click(w, "Get started")
   local pv = WW.pages[2].preview
   local before = World(k)
   Check(#Scene.SCENARIOS == 5 and Scene.SCENARIOS[1].id == "solo" and MK.Scenario() == "solo", "five scenarios, Solo first and shown")
@@ -1072,7 +1099,7 @@ do
   Check(MK.Scenario() == "solo", "reopened: Solo again")
   Check(Unchanged(World(k), before), "no scenario changed anything in the game")
   -- repeated scenario changes make nothing new
-  Click(w, "Start")
+  Click(w, "Get started")
   local made = k.made()
   for _ = 1, 10 do
     for _, label in ipairs({ "Target", "Party", "Long quests", "Tooltip", "Solo" }) do Click(w, label) end
@@ -1113,7 +1140,7 @@ do
         MK.SetLayout(variant)
         MK.SetPick("size", density)
         MK.SetPick("accent", "gold")
-        Click(w, "Start"); WW.Refresh()
+        Click(w, "Get started"); WW.Refresh()
         local scene = MK.Scene()
         -- the scene's components are the plan's geometry
         local plan = MK.Plan()
@@ -1206,7 +1233,7 @@ do
   local imports = 0
   local importFn = k.E.ImportProfileSilent
   k.E.ImportProfileSilent = function(...) imports = imports + 1 return importFn(...) end
-  Click(w, "Start")
+  Click(w, "Get started")
   local before = World(k)
   local listeners0 = {}
   k.TwichUI.ListenerCounts(listeners0)
@@ -1357,7 +1384,7 @@ do
     local win, WK = Open(k)
     local MK, OV = WK.Model, WK.Overlay
     MK.SetLayout(variant)
-    Click(win, "Start")
+    Click(win, "Get started")
     MK.SetScenario(scenario)
     assert(OV.Open())
     return k, WK, OV
@@ -1438,10 +1465,13 @@ do
   local k2 = LM.Boot("Force", LM.Logout(k))
   local w2, WK2 = k2.TwichUILayoutWizard, k2.TwichUI.LayoutWizard
   local M2 = WK2.Model
+  Expand(w2, "Manage layout")
   Click(w2, "Set up again")
   Advance(w2, M2, 5)
-  Check(Has(w2, "Force re-apply"), "   an earlier install is recorded: offered on the review")
-  Check(not Enabled(w2, "Apply"), "   and with the same choices Apply has nothing to do")
+  Check(Has(w2, "Advanced") and not Has(w2, "Force re-apply"), "   an earlier install is recorded: Advanced is offered on the review, folded")
+  Expand(w2, "Advanced")
+  Check(Has(w2, "Force re-apply"), "   and Force re-apply is in it")
+  Check(not Has(w2, "Apply") and Enabled(w2, "Done"), "   and with the same choices Apply has nothing to do: Done closes")
   -- the install's record is half done, and a Restore that never finished blocks Apply
   k2.TwichUIDB.layouts.install.state = "restore-partial"
   M2.Invalidate()
@@ -1478,7 +1508,7 @@ do
   j.char, j.state = "Someone-Else", "restore-partial"
   j.snapshot.ellesmereui.active = "Gone"
   local w2, WK2 = k2.TwichUILayoutWizard, k2.TwichUI.LayoutWizard
-  Click(w2, "Set up again")
+  WK2.Window.Actions.again()   -- the record was changed behind the page's back, so the button the page drew is not offered now
   Advance(w2, WK2.Model, 5)
   local r = WK2.Model.Review()
   Check(not r.ok and #r.blocked >= 3, "Force: the review is blocked for several reasons at once")

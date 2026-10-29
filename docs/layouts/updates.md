@@ -194,12 +194,15 @@ as it loads): `verify.checked` and `verify.presence` are reported apart, the bas
 
 ## The wizard
 
-The Review step adds **Updating your layout** for an install again: a summary, three ways (**Update while keeping my
-customizations**, the default; **Reapply the recommended configuration**; **Review conflicts**), the whole-addon and group
-questions when they arise, screen warnings, and the details behind a button: each setting with its current and recommended
-value, the case, the plain-language effect, the ownership consequence and its choices, five at a time. The confirmation names
-the update; the Result step offers Undo this update and Keep the update; a finished setup shows "Installed and managed" with
-Set up again and Stop managing.
+The Review step for an install again is headed **Ready to update** and keeps the update's policy to one row, **Update: Keep my
+customizations** [Change], with the counts (recommended changes, personal settings kept, conflicts, parts checked for presence only) under
+the choices. **Change** opens the three ways (**Update while keeping my customizations**, the default; **Reapply the recommended
+configuration**; **Review conflicts**) and the details behind a button: each setting with its current and recommended value, the case, the
+plain-language effect, the ownership consequence and its choices, five at a time. The whole-addon and group questions, screen warnings and
+a baseline that can't be trusted stay in view when they arise. When nothing differs the heading is **You're already up to date.** and the
+footer's primary action is **Done**. The confirmation names the update; the Result step offers Undo this update and Keep the update (under
+**Manage layout** once the update is checked and ready, in view while it isn't); a finished setup shows **Your interface is ready**, with the
+status "Installed and managed", and **Manage layout** holds Set up again and Stop managing.
 
 ## Tooltip placement and friendly plates in an update
 

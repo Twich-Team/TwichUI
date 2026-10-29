@@ -82,11 +82,12 @@ in chat by the launcher, counted (`onboarding-load-failed`) and, if EllesmereUI'
 
 ## The window on a first install
 
-The first page (`Pages.FIRST`) greets, says what the setup arranges, that you pick the layout, helpers and personal touches,
-that nothing changes until you review it and press Apply, that a restore point is made first, and that EllesmereUI's part
-applies to every character on the account (TwichUI's to this character). Below it: **Skip setup**, and **Use EllesmereUI's
-setup instead** when that was held back for this one. The footer's **Close** reads **Do this later**. Start is "continue
-setup"; the rest of the wizard is unchanged.
+The first page is the wizard's calm opening for everyone (**Make yourself at home**, the three points: choose a layout, add your
+preferences, review then apply with the current setup backed up when you do; that EllesmereUI's part applies to every character on
+the account; the compatibility verdict). On a first installation (`Pages.FIRST`) it adds one line about doing it later, **Skip
+setup**, and **Use EllesmereUI's setup instead** when that was held back for this one (with a line saying EllesmereUI's first-run setup is
+waiting and that applying a layout answers it). The footer's **Close** reads **Do this later**. **Get started** is "continue setup"; the rest of the
+wizard is unchanged (`wizard.md`, "Presentation").
 
 | The player | Outcome |
 |---|---|
@@ -204,7 +205,7 @@ texture (`0.035, 0.030, 0.025`) at 40% (`W.SCRIM_ALPHA`), no vignette, glow, blu
 
 `tests/test_onboarding.lua` (through the real core, engine and wizard; stand-in frames; a stand-in EllesmereUI with both
 first-run loaders as 9.6.8 has them, `tests/layouts_mock.lua`): a new installation with EllesmereUI's first run (held, no
-picker, look picker neither shown nor stamped, the setup opens once, no welcome dialog, Start and Apply not blocked, the
+picker, look picker neither shown nor stamped, the setup opens once, no welcome dialog, Get started and Apply not blocked, the
 import answers EllesmereUI, the reload keeps it held, the result after it, `done` only then, later logins load nothing);
 Do this later, Escape, the close box, a reload and a login, the bound; Skip (declined, accepted, handed back), EllesmereUI's
 setup (combat refused), Skip with nothing held, no exported picker; EllesmereUI loading first, a look-picker-only session,

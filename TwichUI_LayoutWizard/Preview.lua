@@ -25,7 +25,9 @@ Pv.MAX_W, Pv.MAX_H = 330, 200
 Pv.tracking = 0   -- miniatures whose sample tooltip is following the pointer now (0 or 1)
 R.Perf.Gauge("layoutwizard.preview.follow", { label = "Layout setup preview: pointer tracking running (0 unless the pointer is over the sample)", unit = "count", kind = "listeners",
     group = "layouts", read = function() return Pv.tracking end })
-Pv.CAPTION = "An illustration: the layout's places for your screen, to scale, with sample shapes in place of the real frames. The real look is EllesmereUI's and TwichUI's own."
+Pv.CAPTION = "Layout preview \194\183 Sample content"   -- the line under the preview (U+00B7 as UTF-8)
+-- What the preview is and isn't: behind the "i" beside the caption, not repeated on every page.
+Pv.DETAIL = "An illustration: the layout's places for your screen, to scale, with sample shapes in place of the real frames. The real look is EllesmereUI's and TwichUI's own, and the sample content is never taken from your game."
 
 -- Sample shapes in a component's box, as fractions of it: { x, y, w, h, role }. role: "line" (a text line), "bar" (accent),
 -- "dot" (accent), "quiet" (a plain strip). Only for the components whose inside is sample content; the unit frames and
@@ -198,15 +200,17 @@ function Pv.Build(parent, handlers)
     view.fullNote:SetWordWrap(true)
     view.fullNote:SetPoint("LEFT", view.full, "RIGHT", 8, 0)
 
+    view.info = WZ.Controls.Info(parent, "About this preview", Pv.DETAIL)
+    view.info:SetPoint("TOPLEFT", view.controls, "BOTTOMLEFT", 0, -2)
     view.caption = L.Text(parent, "small")
-    view.caption:SetWidth(Pv.MAX_W)
+    view.caption:SetWidth(Pv.MAX_W - 26)
     view.caption:SetWordWrap(true)
     view.caption:SetText(Pv.CAPTION)
-    view.caption:SetPoint("TOPLEFT", view.controls, "BOTTOMLEFT", 0, -2)
+    view.caption:SetPoint("TOPLEFT", view.info, "TOPRIGHT", 8, -3)
     view.issues = L.Text(parent, "small")
     view.issues:SetWidth(Pv.MAX_W)
     view.issues:SetWordWrap(true)
-    view.issues:SetPoint("TOPLEFT", view.caption, "BOTTOMLEFT", 0, -6)
+    view.issues:SetPoint("TOPLEFT", view.info, "BOTTOMLEFT", 0, -6)
     view.issues:SetTextColor(pal.danger.text[1], pal.danger.text[2], pal.danger.text[3])
     view.notes = L.Text(parent, "small")
     view.notes:SetWidth(Pv.MAX_W)
