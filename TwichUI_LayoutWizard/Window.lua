@@ -354,6 +354,8 @@ local function Build()
     end)
     win:HookScript("OnHide", function()
         Listen(false)
+        -- the sample tooltip's pointer tracking (Preview.lua) runs only while the pointer is over a miniature of a shown window
+        for _, page in pairs(pages) do if page.preview and page.preview.Track then page.preview:Track(false) end end
         if suspended then return end   -- set aside for the full-size preview: the session, and what it worked out, stay
         M.End()
         -- a page's preview and texts stay built (they are cheap); what the model worked out is gone

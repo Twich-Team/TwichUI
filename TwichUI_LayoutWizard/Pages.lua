@@ -457,7 +457,7 @@ WZ.ClassColor = ClassColor
 
 local function BuildPersonalize(parent, env)
     local L, pal = Look(), Pal()
-    local page = { frame = CreateFrame("Frame", nil, parent), swatches = {}, sizes = {} }
+    local page = { frame = CreateFrame("Frame", nil, parent), swatches = {}, sizes = {}, groups = {} }
     local f = page.frame
     f:SetSize(CONTENT_W, 10)
     local art = f:CreateTexture(nil, "ARTWORK")
@@ -479,6 +479,106 @@ local function BuildPersonalize(parent, env)
         "Puts every choice back to the layout's own, here and on the Helpers step. Nothing in the game changes.")
     PreviewColumn(page, f, 24, env)
 
+    -- Two more groups of two cards (tooltip placement, friendly player nameplates): each made once, then only re-written.
+    local SAMPLE_PLATES = { { "Sample warrior", "WARRIOR", { 0.78, 0.61, 0.43 } }, { "Sample priest", "PRIEST", { 1, 1, 1 } },
+        { "Sample mage", "MAGE", { 0.25, 0.78, 0.92 } } }
+    local BLUE = { 0.667, 0.667, 1 }
+    local function Group(id)
+        local g = page.groups[id]
+        if g then return g end
+        g = { head = Heading(f, "", LEFT_W), hint = Text(f, "small", LEFT_W), note = Text(f, "small", LEFT_W), cards = {} }
+        if id == "friendly-plates" then
+            g.sample, g.caption = {}, Text(f, "small", LEFT_W)
+            for i = 1, #SAMPLE_PLATES do
+                local row = { bar = f:CreateTexture(nil, "ARTWORK"), name = L.Text(f, "small") }
+                row.bar:SetSize(70, 7)
+                g.sample[i] = row
+            end
+        end
+        page.groups[id] = g
+        return g
+    end
+    local function HideGroup(g)
+        g.head:Hide() g.hint:Hide() g.note:Hide()
+        for _, c in ipairs(g.cards) do c:Hide() end
+        for _, r in ipairs(g.sample or {}) do r.bar:Hide() r.name:Hide() end
+        if g.caption then g.caption:Hide() end
+    end
+    local function DrawGroup(id, y)
+        local ch = M.Choice(id)
+        local g = Group(id)
+        if not ch then HideGroup(g) return y end
+        g.head:Show()
+        g.hint:Show()
+        g.head:SetText(ch.label)
+        g.head:ClearAllPoints()
+        g.head:SetPoint("TOPLEFT", f, "TOPLEFT", 0, -y)
+        g.hint:SetText(ch.hint or "")
+        g.hint:ClearAllPoints()
+        g.hint:SetPoint("TOPLEFT", g.head, "BOTTOMLEFT", 0, -3)
+        y = y + Height(g.head) + 3 + Height(g.hint) + 8
+        for i, o in ipairs(ch.options) do
+            local card = g.cards[i]
+            if not card then card = Card(f, (LEFT_W - 8) / 2, function() end) g.cards[i] = card end
+            card:SetScript("OnClick", function() M.SetPick(id, o.id) env.Relayout() end)
+            card:Fill(o.label, o.hint)
+            card:SetSelected(M.Pick(id) == o.id)
+            card:ClearAllPoints()
+            card:SetPoint("TOPLEFT", f, "TOPLEFT", (i - 1) * ((LEFT_W - 8) / 2 + 8), -y)
+            card:Show()
+        end
+        for i = #ch.options + 1, #g.cards do g.cards[i]:Hide() end
+        local h = 0
+        for i = 1, #ch.options do h = math.max(h, g.cards[i]:GetHeight()) end
+        for i = 1, #ch.options do g.cards[i]:SetHeight(h) end
+        y = y + h + 6
+        local derived = M.Derived(id)
+        g.note:SetText(derived and "Shown as your game has it now. Pick one to choose for yourself." or "")
+        g.note:SetShown(derived)
+        g.note:ClearAllPoints()
+        g.note:SetPoint("TOPLEFT", f, "TOPLEFT", 0, -y)
+        if derived then y = y + Height(g.note) + 4 end
+        if g.sample then
+            -- synthetic friendly players (never a real nameplate). Class colors is EllesmereUI's own plate (names only in a name-only
+            -- layout); Standard blue is Blizzard's plate, which EllesmereUI no longer manages: drawn as a plain blue bar, since how it
+            -- looks is Blizzard's setting.
+            local mode = M.PlatesMode() or { nameOnly = false }
+            local blue = M.Pick(id) == "blue"
+            for i, sp in ipairs(SAMPLE_PLATES) do
+                local row = g.sample[i]
+                local class = RAID_CLASS_COLORS and RAID_CLASS_COLORS[sp[2]]
+                local cc = class and { class.r, class.g, class.b } or sp[3]
+                row.name:SetText(sp[1])
+                row.bar:ClearAllPoints()
+                row.name:ClearAllPoints()
+                if mode.nameOnly and not blue then
+                    row.name:SetTextColor(cc[1], cc[2], cc[3])
+                    row.bar:Hide()
+                    row.name:SetPoint("TOPLEFT", f, "TOPLEFT", (i - 1) * 120, -y)
+                else
+                    local col = blue and BLUE or cc
+                    row.bar:SetColorTexture(col[1], col[2], col[3], 1)
+                    row.bar:SetPoint("TOPLEFT", f, "TOPLEFT", (i - 1) * 120, -y)
+                    row.bar:Show()
+                    row.name:SetTextColor(1, 1, 1)
+                    row.name:SetPoint("TOPLEFT", row.bar, "BOTTOMLEFT", 0, -2)
+                end
+                row.name:Show()
+            end
+            y = y + ((mode.nameOnly and not blue) and 16 or 26)
+            local cap = "A sample, not your nameplates."
+            if blue then
+                cap = cap .. " EllesmereUI stops managing friendly player nameplates and Blizzard's draw them, by Blizzard's own settings (Esc > Options > Nameplates); what EllesmereUI last set for them stays until you change it there."
+            end
+            g.caption:SetText(cap)
+            g.caption:ClearAllPoints()
+            g.caption:SetPoint("TOPLEFT", f, "TOPLEFT", 0, -y)
+            g.caption:Show()
+            y = y + Height(g.caption) + 4
+        end
+        return y + 12
+    end
+
     local none = Text(f, "body", LEFT_W)
     none:SetText("This package doesn't ask for an accent colour or a size. Nothing is chosen here; go on to the review.")
     none:SetPoint("TOPLEFT", 0, -90)
@@ -492,6 +592,7 @@ local function BuildPersonalize(parent, env)
             -- a package from another player may offer neither
             for _, sw in ipairs(page.swatches) do sw:Hide() end
             for _, c in ipairs(page.sizes) do c:Hide() end
+            for _, g in pairs(page.groups) do HideGroup(g) end
             page.RefreshPreview()
             f:SetHeight(260)
             return 260
@@ -561,7 +662,10 @@ local function BuildPersonalize(parent, env)
         local h = 0
         for _, c in ipairs(page.sizes) do h = math.max(h, c:GetHeight()) end
         for _, c in ipairs(page.sizes) do c:SetHeight(h) end
-        y = y + h + 14
+        y = y + h + 18
+        y = DrawGroup("tooltip", y)
+        y = DrawGroup("friendly-plates", y)
+        y = y + 2
         reset:ClearAllPoints()
         reset:SetPoint("TOPLEFT", f, "TOPLEFT", 0, -y)
         reset:SetEnabled(not M.IsDefault())

@@ -107,13 +107,28 @@ it run in game:
 | EllesmereUI Chat, Quest Tracker, Minimap, Damage Meters | The only implementations of these surfaces in the reference set and the installed AddOns | Covered by the `ellesmereui` adapter |
 | RXPGuides, WaypointUI, OpenMap, Attune | Not layout surfaces in the first release | None |
 
+**Tooltip placement and friendly plates (2026-10-28).** Read in EllesmereUI 9.6.8 (`reference_addons`); the installed Forever copy is 9.6.9
+and its tooltip, nameplate and profile files are byte-identical to these. Supersedes the "Cursor-following tooltip: not backed" row below.
+
+| What | Status | Evidence |
+|---|---|---|
+| Follow mouse is the account-wide root key `EllesmereUIDB.tooltipAnchorCursor`; cursor position, offsets and growth direction are `tooltipCursorPosition`, `tooltipCursorOffsetX/Y`, `tooltipGrowthDirection` | S | `EUI_BlizzardSkin_TooltipAnchor.lua` 125–181 (`ApplyCursorAnchor`, `_repointTooltipAtCursor`), `EUI_BlizzardSkin_Options.lua` 335–405 |
+| The options toggle is a direct write of that one key; there is no public narrow setter | S | `EUI_BlizzardSkin_Options.lua` 335–345 |
+| The only public writer, `EllesmereUI.ApplyBlizzSkinGlobals`, sets every key of `BLIZZ_SKIN_GLOBAL_KEYS`, nil included, and runs inside the import | S | `EllesmereUI_Profiles.lua` 2043–2160, 3325 |
+| Fixed mode is the baseline whenever the flag is off and `customTooltips ~= false`; the place is the per-profile `profiles[name].tooltipFixedPos = { centerX, centerY }` (centre offsets from UIParent's centre), seeded once from Blizzard's container if absent; the tooltip's nearest corner is pinned to a 280 × 165 box | S | `EUI_BlizzardSkin_TooltipAnchor.lua` 200–330, 400–420 |
+| The import builds the new profile from the active one and takes only `fonts`, `darkMode`, `euiAccent`, `windowSkinLook`, `_migrations`, `unlockLayout` and the modules from a payload: `tooltipFixedPos` is inherited from the active profile, never carried | S | `EllesmereUI_Profiles.lua` `ImportProfile` 3338–3470 |
+| `showFriendlyPlayers` (default true) is "Show EUI Friendly Player Nameplates": off, EllesmereUI relinquishes friendly player plates to Blizzard's own settings and, at load, stops writing the friendly CVars. `classColorFriendly` (default true) is "Class Colored Health Bar"; `friendlyNameOnly` defaults to true. All are fields of the nameplate module's profile blob | S | `GeneralPage_Options.lua` 59–90, 143–150; `EUI_Nameplates_CastState.lua` 240–315; `EllesmereUINameplates.lua` 258–284 |
+| Flipping the toggle in EllesmereUI's window resets `nameplateShowOnlyNameForFriendlyPlayerUnits`, `ShowClassColorInFriendlyNameplate` and `nameplateUseClassColorForFriendlyPlayerUnitNames` to their defaults at once; a saved value read at load does not (the load path skips them while it is off). EllesmereUI has no blue of its own: the blue is Blizzard's plate | S | `GeneralPage_Options.lua` 80–90; `EUI_Nameplates_CastState.lua` 266–315 |
+| The author's saved profiles all hold `tooltipFixedPos = (900.83, -496.67)` and `tooltipAnchorCursor = false`: the tooltip's bottom level with the damage meter's, 5 units left of it | S (read from the saved files) | Retail `EllesmereUI.lua` saved variables; `Classic.lua` geometry (meter at 1233.33, −504.17, 375 × 150) |
+| The nameplate fields' effect on screen, the place on real screens, Unlock Mode keeping a written place, and that EllesmereUI reads the flag at load | **G** | in-game checks |
+
 **Phase 4 (2026-10-26).** Read for the wizard's choices, in EllesmereUI 9.6.8; none of it run in game:
 
 | What | Status | Evidence |
 |---|---|---|
 | The accent is a profile-root key `euiAccent = { custom = { r, g, b }, useClass }`; the import copies it whole; EllesmereUI reads exactly those two keys and writes them only from its own accent swatch | S | `EllesmereUI_Profiles.lua:3464` (`merged.euiAccent = DeepCopy(imported.euiAccent)`), `EllesmereUI_UICore.lua:527` (`SetActiveProfileAccent`), `:556` (`ResolveProfileAccent`) |
 | The serializer writes numbers with `tostring` (14 digits), so a colour read back is not bit-equal: TwichUI compares the accent by a three-place signature | S (the existing note on `Serializer`), T | `AdapterEllesmere.lua` `A.AccentSig`; `tests/test_layouts.lua` §17 |
-| **Cursor-following tooltip: not backed.** `tooltipAnchorCursor` (and `tooltipCursorPosition`, `tooltipCursorOffsetX/Y`, `tooltipGrowthDirection`) are root keys of `EllesmereUIDB`, in the Blizzard-skin globals list | S | `EllesmereUI_Profiles.lua:2043` `BLIZZ_SKIN_GLOBAL_KEYS`; `EUI_BlizzardSkin_TooltipAnchor.lua:125, 148, 463` |
+| **Cursor-following tooltip: not backed** (superseded 2026-10-28: managed narrowly, see the block above). `tooltipAnchorCursor` (and `tooltipCursorPosition`, `tooltipCursorOffsetX/Y`, `tooltipGrowthDirection`) are root keys of `EllesmereUIDB`, in the Blizzard-skin globals list | S | `EllesmereUI_Profiles.lua:2043` `BLIZZ_SKIN_GLOBAL_KEYS`; `EUI_BlizzardSkin_TooltipAnchor.lua:125, 148, 463` |
 | The only writer is the import's `blizzSkinGlobals` bundle, and it sets **every** key of the list from the payload, nil included | S | `EllesmereUI_Profiles.lua:2157` `ApplyBlizzSkinGlobals`; applied at `:3326`; stripped from a payload by `ImportProfileSilent` when the Blizzard-skin module is disabled (`:5009`) |
 | The fixed tooltip position is per profile (`tooltipFixedPos`) but is not a root key the import takes (`AdapterEllesmere.lua` `ROOT`) | S | `EUI_BlizzardSkin_TooltipAnchor.lua:200-300`; `EllesmereUI_Profiles.lua:2038` (the comment that the account-level key is stale) |
 | TwichUI has no tooltip-anchor setting | S | searched `!!!TwichUI/` and `TwichUI_Settings/` |

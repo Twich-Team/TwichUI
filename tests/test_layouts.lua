@@ -987,7 +987,7 @@ do
   local function Merge(o, f) for k, v in pairs(f) do o[k] = v end return o end
 
   Check(LC.Validate(BASE), "Classic Adventure, with its three choices, is valid (format " .. BASE.format .. ")")
-  Check(LC.FORMAT == 4 and select(2, LC.Validate(WithChoices(nil, 5))) ~= nil, "format 5 is newer than this version reads (format 4, RH-1, adds reset)")
+  Check(LC.FORMAT == 5 and select(2, LC.Validate(WithChoices(nil, 6))) ~= nil, "format 6 is newer than this version reads (format 5 adds tooltip choices and more field kinds)")
   Problem(BASE.choices, "not-yet", "a format 2 package may not carry choices", 2)
   Problem({}, "bad-value", "an empty list of choices")
   Problem({ { id = "x", kind = "magic", label = "L", default = "a", options = { opt("a") } } }, "bad-value", "an unknown kind")

@@ -183,6 +183,7 @@ local function MakeFake(c)
       GetVerticalScrollRange = function(s) return math.max(0, (s.child and s.child.h or 0) - s.h) end,
       IsMouseOver = function() return false end,
       GetEffectiveScale = function(s) return s.effectiveScale or 1 end,
+      GetCenter = function(s) return s.centerX or 0, s.centerY or 0 end,
       SetScale = function(s, v) s.scale = v end, GetScale = function(s) return s.scale end,
       EnableMouse = function(s, v) s.mouse = v and true or false end,
       IsMouseEnabled = function(s) return s.mouse == true end,

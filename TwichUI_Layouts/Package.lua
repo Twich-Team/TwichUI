@@ -27,7 +27,8 @@
 local R = TwichUI
 local LY = R.Layouts
 
-LY.FORMAT = 4             -- 4 (RH-1): a fragment may hold `reset`, a list of units to put back to the addon's default
+LY.FORMAT = 5             -- 4 (RH-1): a fragment may hold `reset`, a list of units to put back to the addon's default;
+                           -- 5: an EllesmereUI choice fragment may hold `tooltip` (an account-wide setting and a place), and fields of other kinds
 LY.MAX_UNITS = 256         -- units one adapter fragment may name (Classic Adventure's TwichUI looks are 206)
 LY.MAX_EXPECT = LY.MAX_UNITS + 64   -- and what one adapter's record may expect: those, plus the places the screen layer adds
 LY.MAX_VARIANTS = 8

@@ -126,6 +126,7 @@ uses an item, sends anything or makes up events. Each states its cost before you
 | `nav.search`, `nav.position`, `nav.progress`, `nav.ticker` (`Perf.Call`) | `nav/Nav.lua` `OnUpdate` (`nav.ticker`: each trail or arrow updater) | update |
 | `nav.load` (`Perf.Call`) | `nav/Data.lua` `ND.Load`, around `C_AddOns.LoadAddOn` of `TwichUI_NavData` | init |
 | `layouts.load` (`Perf.Call`) | `LayoutsLauncher.lua` `L.Load`, around `C_AddOns.LoadAddOn` of `TwichUI_Layouts` | init |
+| `layoutwizard.preview.follow` (`Perf.Start`/`Stop`) | `TwichUI_LayoutWizard/Preview.lua` `view:Track`'s throttled OnUpdate (about 30 a second, only while the pointer is over the miniature in the tooltip scenario with Follow mouse picked; removed on leaving, hiding, another scenario or closing) | layout |
 | `layoutwizard.load` (`Perf.Call`) | `LayoutsLauncher.lua` `L.LoadWizard`, around `C_AddOns.LoadAddOn` of `TwichUI_LayoutWizard` | init |
 | `layoutwizard.overlay.build` (`Perf.Call`), `layoutwizard.overlay` (`Perf.Call`) | `TwichUI_LayoutWizard/Overlay.lua` `Build` (the first time the full-size preview opens), `Draw` (each time it opens, or a layout, scenario or the screen changes in it; never while it is closed) | init, layout |
 | `layoutwizard.build` (`Perf.Call`), `layoutwizard.preview` (`Perf.Call`) | `TwichUI_LayoutWizard/Window.lua` `Build` (the first open only), `TwichUI_LayoutWizard/Preview.lua` `Draw` (each time a step with the preview is shown, a choice or the screen changes) | init, layout |
@@ -151,7 +152,7 @@ listeners and events (`R.ListenerCounts`, added to `Core.lua`), switch listeners
 easing, settings shown, pages drawn and search index, world map shown, NPC and pin marker pools and those in use, map
 detail tiles, navigation tiles decoded, reminders running and observation keys, Healer Watch's and class bars' events.
 The layout setup registers four of its own (`TwichUI_LayoutWizard/Window.lua` and `Overlay.lua`, only once it is loaded):
-`layoutwizard.events` (events it has registered: 4 while its window is open, 0 closed), `layoutwizard.frames` (frames and
+`layoutwizard.events` (events it has registered: 4 while its window is open, 0 closed), `layoutwizard.preview.follow` (1 only while the pointer is over the miniature in the Follow mouse tooltip sample, otherwise 0), `layoutwizard.frames` (frames and
 pages it keeps; it does not grow when the window is opened again), and for its full-size preview
 `layoutwizard.overlay.events` (3 while it is shown, 0 closed) and `layoutwizard.overlay.frames` (frames and textures it
 keeps: made as the pieces first appear, bounded by the package, not growing when it is opened again). The publishing code registers `layouts.store.entries` and `layouts.store.kb` (packages kept for sending and installing, and the

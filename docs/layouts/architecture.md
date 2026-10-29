@@ -29,12 +29,12 @@ composed layout, reloading, checking it), **update** (installing again over an i
 | Adapter | Covers | Not covered |
 |---|---|---|
 | `twichui` | Every looks-and-behaviour field of TwichUI's shared-field-by-field groups that is profile-scoped and not in `TwichConfig.LOCAL`; the seven registered places (`PLACES`); preset choices may turn feature switches **on** | List groups; anything that acts for the player, talks to other players or is a record; account-scoped settings; windows the player moves |
-| `ellesmereui` | The suite's 18 module blobs, the layout links (`unlockLayout`), the look (`fonts`, `darkMode`, `euiAccent`, `_migrations`), through EllesmereUI's public partner-installer API | UI scale, window and tooltip skins, spec and condition overrides, Cooldown Manager spells, click-cast, custom colours, other profiles, module enable states (all stripped from every payload) |
+| `ellesmereui` | The suite's 18 module blobs, the layout links (`unlockLayout`), the look (`fonts`, `darkMode`, `euiAccent`, `_migrations`), through EllesmereUI's public partner-installer API; two allowlisted friendly-plate switches (`showFriendlyPlayers`, `classColorFriendly`) inside the nameplate blob; and, outside the import, the **tooltip placement** (the account-wide `tooltipAnchorCursor` flag and the install's profile's `tooltipFixedPos`, written by the adapter and read back) | UI scale, window skins and every other tooltip-skin setting (cursor offsets, growth direction, skin), spec and condition overrides, Cooldown Manager spells, click-cast, custom colours, other profiles, module enable states (all stripped from every payload) |
 
 Unsupported in this release, each with its reason (`adapter-capabilities.md` has the evidence): Blizzard Edit Mode layouts (never
 exercised; the objective tracker is placed by it, so it is illustrative only); chat windows and channels; game CVars and the UI
-scale (EllesmereUI owns `UIParent:SetScale`; TwichUI never changes the scale, it only gives guidance); the cursor-following or fixed
-tooltip (account-wide EllesmereUI globals its import resets whole; needs a whole-`EllesmereUIDB` restore point first, D3/D5/D23);
+scale (EllesmereUI owns `UIParent:SetScale`; TwichUI never changes the scale, it only gives guidance); the tooltip skin as a whole
+(its import resets a whole bundle of account-wide keys; only the placement is managed, narrowly, §4);
 merging inside an EllesmereUI module blob; any third-party profile. EllesmereUI is required for the HUD; without it only TwichUI's
 part can be planned.
 
@@ -74,9 +74,11 @@ a draft and a received one; `Pub.Strict` adds what a package that travels must a
 | 2 | `geometry`, `source`; settings as data (EllesmereUI `root`, table `modules`, `layout`; TwichUI `places`) | Phase 3 on |
 | 3 | `choices`: presets (switches on only), enums (only their `sets`), density | Phase 4 on |
 | 4 | a fragment's `reset` list (TwichUI settings, EllesmereUI allowlisted fields; base and variant layers only) | RH-1 on |
+| 5 | an EllesmereUI choice fragment's `tooltip` (`cursor`, `fixed`; a wizard choice only) and boolean allowlisted fields | tooltip and friendly-plate choices on |
 
-A package newer than the reader is refused as `format-newer` (an older TwichUI refuses a format 4 package rather than misread it).
-A package uses the lowest format its content needs: the bundled package is format 3 unless it holds a reset.
+A package newer than the reader is refused as `format-newer` (an older TwichUI refuses a format 5 package rather than misread it).
+The bundled package is format 5 since it carries the tooltip and friendly-plate choices; a package without them and without a reset
+stays readable at its own lower format.
 
 Bounds: canonical text ≤ 8 MB, ≤ 50,000 values, depth ≤ 16, ≤ 256 units per adapter fragment, ≤ 8 variants, ≤ 6 choices of ≤ 8
 options. Stable ids: lower-kebab variant, choice and option ids; units `<adapter>:<path>` (`twichui:ui.markerBarPosition`,
@@ -105,8 +107,17 @@ the update functions `Normal`/`Schema`/`Baseline`, `PlanUndo`/`Undo`/`VerifyUndo
   character's HUD unless a spec is assigned to another profile (`spec_locked`, reported).
 - **Inside an EllesmereUI blob**, only these are units of their own (comparable, carried, verified by value): the registered
   positions and sizes (`POSITIONS`, 40), the six density text sizes (`TEXT`), the allowlisted fields (`FIELDS`:
-  `minimap.coordsMode`, `minimap.coordsPosition`) wherever the payload holds them, and the accent. Everything else in a blob is
+  `minimap.coordsMode`, `minimap.coordsPosition`, `nameplates.showFriendlyPlayers`, `nameplates.classColorFriendly`; a word or a boolean) wherever the payload holds them, and the accent. Everything else in a blob is
   opaque. Adding a field needs EllesmereUI source evidence for its path, values and default.
+- **Outside the import**, two units of EllesmereUI's tooltip placement (a wizard choice's `tooltip` fragment only; `A.CURSOR_UNIT`,
+  `A.FIXED_UNIT`), because no import can carry them without resetting a bundle: `ellesmereui:tooltip.cursor` is the **account-wide**
+  `EllesmereUIDB.tooltipAnchorCursor` (written alone, as EllesmereUI's own option does, then read back), and
+  `ellesmereui:tooltip.fixedPos` is the install's own profile's `tooltipFixedPos`, written after the import (the import copies the
+  active profile's, never the payload's) and read back. Nothing else of the tooltip skin is read or written. Compared by value like any
+  comparable unit; an update carries the player's own place into the new profile unless the decision is to apply the layout's. The flag
+  is snapshotted before the first change that touches it (`snapshot.account`, extended by an update that newly manages it), recorded for
+  Undo (`update.ellesmereui.account`), and put back by Undo and Restore **unless the player has changed it since** (then it is left, and
+  the plan says so). A write that cannot be read back fails the step and puts the profiles back.
 
 ## 5. The screen layer and fit
 

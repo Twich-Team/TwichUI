@@ -151,6 +151,46 @@ function M.Active() return session ~= nil end
 ---------------------------------------------------------------------------
 -- Opening and closing
 ---------------------------------------------------------------------------
+local function ChoiceOf(pkg, id)
+    for _, ch in ipairs(pkg.choices or {}) do if ch.id == id then return ch end end
+end
+local function OptionOf(ch, id)
+    for _, o in ipairs(ch.options or {}) do if o.id == id then return o end end
+end
+
+-- A choice the player never made, on a setup that already exists (a choice added after they set it up), starts from what the game
+-- has now rather than from the layout's own, so adding the choice never changes a personal setting by itself: the option that every
+-- readable setting of it matches (LY.LivePick), else the default. Such a pick is `derived`: it is not remembered, and the plan keeps
+-- the player's value for each setting of the choice (the update's "keep mine") until they pick for themselves. A choice an earlier
+-- install recorded keeps that pick. Read only.
+local function Seed(s)
+    s.derived = {}
+    local pkg = s.layout.pkg
+    local j = LY.Journal.Read()
+    local m = not (j and j.package == pkg.id) and LY.Journal.ReadManaged() or nil
+    local rec = (j and j.package == pkg.id and j) or (m and m.package == pkg.id and m) or nil
+    if not rec then return end
+    for _, ch in ipairs(pkg.choices or {}) do
+        if ch.kind == "enum" and not s.stored.saved[ch.id] then
+            local was = rec.picks and rec.picks[ch.id]
+            if was and OptionOf(ch, was) then
+                s.picks[ch.id] = was
+            else
+                local ok, live = pcall(LY.LivePick, pkg, ch.id)
+                if ok and live and OptionOf(ch, live) then s.picks[ch.id] = live end
+                s.derived[ch.id] = true
+            end
+        end
+    end
+end
+
+-- The picks to remember: the ones the player made (not the ones read from the game).
+local function Remembered()
+    local out = {}
+    for k, v in pairs(session.picks) do if not (session.derived and session.derived[k]) then out[k] = v end end
+    return out
+end
+
 -- A session starts when the window opens and ends when it closes: the picks are read from what was remembered (checked
 -- narrowly), nothing is changed, and the first step is the result when an install is recorded (there is something to see
 -- or to put back) and the welcome otherwise.
@@ -163,6 +203,7 @@ function M.Begin()
     session = { layout = layout, layouts = layouts, picks = stored.picks, stored = stored, step = M.WELCOME, reached = M.WELCOME,
         scenario = Scene.SCENARIOS[1].id }
     local resumed = S.TakeResume(layout.pkg, stored.picks, layout.variant)
+    Seed(session)
     session.source = "bundled"
     local j, why = LY.Journal.Read()
     if j and j.package ~= layout.pkg.id then
@@ -239,7 +280,7 @@ function M.SetLayout(id)
             if session.layout.id == id then return true, false end
             session.layout = l
             session.plan, session.pv, session.failed, session.update = nil, nil, nil, nil
-            S.Save(l.pkg, session.picks, nil, l.variant)
+            S.Save(l.pkg, Remembered(), nil, l.variant)
             return true, true
         end
     end
@@ -268,7 +309,8 @@ function M.SetSource(key, done, keepStep)
         local stored = S.Load(layouts[1].pkg, ids)
         s.layout = layouts[1]
         for _, l in ipairs(layouts) do if l.id == stored.variant then s.layout = l end end
-        s.picks = stored.picks
+        s.picks, s.stored = stored.picks, stored
+        Seed(s)
         s.plan, s.pv, s.scene, s.failed, s.check, s.compat, s.update = nil, nil, nil, nil, nil, nil, nil
         if not keepStep then s.step, s.reached = math.min(s.step, M.LAYOUT), math.min(s.reached, M.LAYOUT) end
     end
@@ -337,12 +379,6 @@ end
 ---------------------------------------------------------------------------
 -- Choices
 ---------------------------------------------------------------------------
-local function ChoiceOf(pkg, id)
-    for _, ch in ipairs(pkg.choices or {}) do if ch.id == id then return ch end end
-end
-local function OptionOf(ch, id)
-    for _, o in ipairs(ch.options or {}) do if o.id == id then return o end end
-end
 
 function M.Choice(id) return session and ChoiceOf(session.layout.pkg, id) end
 function M.Picks()
@@ -351,6 +387,8 @@ function M.Picks()
     return out
 end
 function M.Pick(id) return session and session.picks[id] end
+-- Whether a pick is what the game has now (a choice added after the player set up, not yet picked by them), not their own choice.
+function M.Derived(id) return session ~= nil and session.derived ~= nil and session.derived[id] == true end
 function M.PickedOption(id)
     local ch = session and ChoiceOf(session.layout.pkg, id)
     return ch and OptionOf(ch, session.picks[id]) or nil, ch
@@ -363,10 +401,12 @@ function M.SetPick(choiceId, optionId)
     local ch = ChoiceOf(session.layout.pkg, choiceId)
     if not ch then return false, "unknown-choice" end
     if not OptionOf(ch, optionId) then return false, "unknown-option" end
-    if session.picks[choiceId] == optionId then return true, false end
+    local was = session.derived and session.derived[choiceId]
+    if session.derived then session.derived[choiceId] = nil end   -- picked by the player now: theirs, and remembered
+    if session.picks[choiceId] == optionId and not was then return true, false end
     session.picks[choiceId] = optionId
     session.plan, session.pv, session.failed = nil, nil, nil
-    S.Save(session.layout.pkg, session.picks, nil, session.layout.variant)
+    S.Save(session.layout.pkg, Remembered(), nil, session.layout.variant)
     return true, true
 end
 
@@ -380,8 +420,25 @@ end
 function M.ResetPicks()
     if not session then return end
     session.picks = S.Defaults(session.layout.pkg)
+    session.derived = {}   -- the layout's own, asked for
     session.plan, session.pv = nil, nil
-    S.Save(session.layout.pkg, session.picks, nil, session.layout.variant)
+    S.Save(session.layout.pkg, Remembered(), nil, session.layout.variant)
+end
+
+-- How this layout draws friendly player nameplates when EllesmereUI manages them, for the Personalize sample: { nameOnly } read from the
+-- layout's own EllesmereUI nameplate settings in the package (a module blob given as data), nil when it can't be read. Read only.
+function M.PlatesMode()
+    if not session then return nil end
+    local pkg, variant = session.layout.pkg, session.layout.variant
+    local function Blob(layer)
+        local f = type(layer) == "table" and layer.ellesmereui
+        local m = type(f) == "table" and f.modules
+        local b = type(m) == "table" and m.EllesmereUINameplates
+        return type(b) == "table" and b or nil
+    end
+    local b = Blob(pkg.layers and pkg.layers.variants and pkg.layers.variants[variant]) or Blob(pkg.layers and pkg.layers.base)
+    if not b then return nil end
+    return { nameOnly = b.friendlyNameOnly ~= false }
 end
 
 -- The density the picks give (the size choice), or "standard".
@@ -674,6 +731,34 @@ local function Final()
     return plan and plan.final or nil
 end
 
+-- What the "Tooltip placement" pick shows in the tooltip scenario: { mode = "layout", place = { x, y } } | { mode = "cursor" } | nil
+-- (a package with no such choice: the game's own default place is drawn). On Review the plan's own rows decide (what Apply leaves, with
+-- anything the player keeps as theirs); before that it is the layout's recommendation, placed with the same call the install makes.
+function M.TooltipView(geo)
+    local o = session and M.PickedOption("tooltip")
+    local t = o and o.ellesmereui and o.ellesmereui.tooltip
+    if type(t) ~= "table" then return nil end
+    local EA = LY.EllesmereAdapter
+    local plan = session.step == M.REVIEW and session.plan and session.plan.plan
+    local part = plan and plan.parts and plan.parts.ellesmereui
+    if part and part.rows then
+        local cur, fix
+        for _, r in ipairs(part.rows) do
+            if r.unit == EA.CURSOR_UNIT then cur = r elseif r.unit == EA.FIXED_UNIT then fix = r end
+        end
+        if cur and cur.new == true then return { mode = "cursor" } end
+        if fix and fix.new then return { mode = "layout", place = { x = fix.new.x, y = fix.new.y } } end
+        if cur then return nil end
+    end
+    if t.cursor == true then return { mode = "cursor" } end
+    if type(t.fixed) == "table" then
+        local at = LY.Geometry.Attach(session.layout.pkg.geometry, session.layout.variant)
+        local rec = EA.TipPlace({ point = "CENTER", relPoint = "CENTER", x = t.fixed.x, y = t.fixed.y }, geo, at and at.ellesmereui)
+        return { mode = "layout", place = { x = rec.x, y = rec.y } }
+    end
+    return nil
+end
+
 function M.Scene()
     if not session then return nil, "closed" end
     local geo, why = M.Preview()
@@ -681,10 +766,12 @@ function M.Scene()
     local final = Final()
     local moved
     if final then geo, moved = final.geometry, final.moved end
-    local tip = session.scenario == "tooltip" and M.TooltipAnchor() or nil
+    local view = session.scenario == "tooltip" and M.TooltipView(geo) or nil
+    local tip = session.scenario == "tooltip" and not view and M.TooltipAnchor() or nil
     local key = session.scenario .. (tip and ("|%s,%s,%s"):format(tip.point, tip.x, tip.y) or "")
+        .. (view and ("|%s,%s,%s"):format(view.mode, view.place and view.place.x or "", view.place and view.place.y or "") or "")
     if session.scene and session.scene.key == key and session.scene.geo == geo then return session.scene.scene end
-    local scene = Scene.Build(session.layout, geo, { scenario = session.scenario, tooltip = tip, moved = moved })
+    local scene = Scene.Build(session.layout, geo, { scenario = session.scenario, tooltip = tip, tooltipView = view, moved = moved })
     if scene then scene.fit = (final and final.fit) or LY.Fit(session.layout.pkg, session.layout.variant, geo) end
     session.scene = { key = key, geo = geo, scene = scene }
     return scene
@@ -737,7 +824,9 @@ end
 local function PlanSignature()
     local screen = M.Screen()
     local ids = { session.layout.variant }
-    for _, ch in ipairs(session.layout.pkg.choices or {}) do ids[#ids + 1] = ch.id .. "=" .. tostring(session.picks[ch.id]) end
+    for _, ch in ipairs(session.layout.pkg.choices or {}) do
+        ids[#ids + 1] = ch.id .. "=" .. tostring(session.picks[ch.id]) .. (session.derived and session.derived[ch.id] and "~" or "")
+    end
     return table.concat(ids, ",") .. "|" .. (screen and ("%.2f,%.2f"):format(screen.w, screen.h) or "?")
         .. "|" .. (session.update and session.update.gen or 0)
 end
@@ -753,14 +842,39 @@ local function UpdateOpts()
     return u
 end
 
+-- The options the plan and Apply both take (one place, so what was shown is what is applied).
+local function PlanOpts()
+    local layout = session.layout
+    local u = UpdateOpts()
+    -- a pick the player never made keeps what they have for each setting of its choice (their own per-setting answer still wins)
+    local choose = {}
+    for unit, c in pairs(u.choose) do choose[unit] = c end
+    for id in pairs(session.derived or {}) do
+        local ch = ChoiceOf(layout.pkg, id)
+        for _, unit in ipairs(ch and ch.sets or {}) do if choose[unit] == nil then choose[unit] = "mine" end end
+    end
+    -- a choice the player changed from what the install has recorded is what they asked for: its settings take the layout's value
+    -- (the review still offers "keep mine" for each); one they left as it was keeps their own changes since, as an update does
+    local j = LY.Journal.Read()
+    local rec = (j and j.package == layout.pkg.id and j) or (not j and LY.Journal.ReadManaged()) or nil
+    if rec and rec.package == layout.pkg.id and rec.picks then
+        for _, ch in ipairs(layout.pkg.choices or {}) do
+            local was = rec.picks[ch.id]
+            if ch.kind == "enum" and was ~= nil and not (session.derived and session.derived[ch.id]) and session.picks[ch.id] ~= was then
+                for _, unit in ipairs(ch.sets or {}) do if choose[unit] == nil then choose[unit] = "package" end end
+            end
+        end
+    end
+    return { picks = session.picks, update = { policy = u.policy, choose = choose, groups = u.groups, whole = u.whole } }
+end
+
 function M.Plan(force)
     if not session then return nil end
     local sig = PlanSignature()
     if session.plan and session.plan.sig == sig and not force then return session.plan.plan end
     local layout = session.layout
-    local u = UpdateOpts()
-    local plan = LY.Plan(layout.pkg, layout.variant, { picks = session.picks,
-        update = { policy = u.policy, choose = u.choose, groups = u.groups, whole = u.whole } })
+    UpdateOpts()
+    local plan = LY.Plan(layout.pkg, layout.variant, PlanOpts())
     session.plan = { sig = PlanSignature(), plan = plan }
     return plan
 end
@@ -975,10 +1089,60 @@ local function Quote(s) return "\"" .. tostring(s) .. "\"" end
 
 M.PRESERVED = {
     "Your key bindings and what is on your action bars' buttons",
-    "Your UI scale, window and tooltip skins and spec assignments",
+    "Your UI scale, window skins, spec assignments, and every tooltip setting other than the placement you pick (the tooltip skin, cursor offsets and growth direction)",
     "Your Cooldown Manager spell lists and your other EllesmereUI profiles",
     "Your TwichUI profile as it is now (the layout uses a copy), your backups, shared setups, pins and Chronicle",
 }
+
+-- The lines for the two personal choices that EllesmereUI's part carries (tooltip placement, friendly player nameplates): what is set,
+-- what it replaces, what is account-wide, and what stays. Plain words, from the plan's own rows; nothing is read from the game here.
+local function Pos(p) return p and ("%d, %d"):format(math.floor(p.x + 0.5), math.floor(p.y + 0.5)) or nil end
+function M.ReviewPersonal(e, sec, plan)
+    local EA = LY.EllesmereAdapter
+    local rows = {}
+    for _, r in ipairs(e.rows) do rows[r.unit] = r end
+    local cur, fix = rows[EA.CURSOR_UNIT], rows[EA.FIXED_UNIT]
+    local lines = sec.lines
+    if cur then
+        local follows = cur.new == true
+        if cur.decision == "keep" or cur.decision == "owned" then
+            lines[#lines + 1] = "Tooltip placement stays as you have it: " .. (cur.old and "following the mouse" or "at a fixed place") .. "."
+        elseif follows then
+            lines[#lines + 1] = cur.change
+                and "Tooltips will follow the mouse. This is EllesmereUI's setting for every character on this account (it was a fixed place)."
+                or "Tooltips already follow the mouse: nothing to change."
+            lines[#lines + 1] = "The cursor position, offsets and growth direction you set for it are left as they are."
+        else
+            lines[#lines + 1] = cur.change
+                and "Tooltips will use the layout's fixed place, so \"follow the mouse\" is turned off. That is EllesmereUI's setting for every character on this account."
+                or "Tooltips already use a fixed place, not the mouse: the account-wide setting stays."
+        end
+    end
+    if fix and not (cur and cur.new == true) then
+        if fix.decision == "keep" or fix.decision == "owned" then
+            lines[#lines + 1] = "The tooltip's fixed place stays where you have it" .. (fix.old and (" (" .. Pos(fix.old) .. ")") or "") .. "."
+        else
+            lines[#lines + 1] = ("The tooltip's fixed place is set to %s for your screen, in the install's own profile%s."):format(
+                Pos(fix.new) or "?", fix.old and (", replacing " .. Pos(fix.old)) or "")
+        end
+    end
+    local show, cls = rows["ellesmereui:addons.EllesmereUINameplates.showFriendlyPlayers"], rows["ellesmereui:addons.EllesmereUINameplates.classColorFriendly"]
+    if show then
+        if show.decision == "keep" or show.decision == "owned" then
+            lines[#lines + 1] = "Friendly player nameplates stay as you have them."
+        elseif show.new == false then
+            lines[#lines + 1] = show.change
+                and "EllesmereUI stops managing friendly player nameplates (Nameplates > General > \"Show EUI Friendly Player Nameplates\" is turned off)."
+                or "EllesmereUI already leaves friendly player nameplates to Blizzard."
+            lines[#lines + 1] = "Blizzard's own nameplates, and their settings (Esc > Options > Nameplates), then draw them: the standard blue, unless you set them otherwise there. What EllesmereUI last set for them (name only, class colours) stays until you change it there."
+            lines[#lines + 1] = "Enemy plates, friendly NPCs and your other frames are not touched."
+        else
+            lines[#lines + 1] = (show.change and "EllesmereUI manages friendly player nameplates again (they were left to Blizzard). " or "")
+                .. "Friendly player nameplates use each player's class color. Enemy plates, friendly NPCs and your other frames are not touched."
+        end
+    end
+    return cur or fix or cls or show
+end
 
 -- Returns the review: { ok, blocked = { text }, problems, picks = { { choice, option } }, twichui, ellesmereui (each a
 -- section { title, when, lines }), helpers = { labels turned on }, preserved, notes, fit = { fits, lines }, reload,
@@ -1084,13 +1248,18 @@ function M.Review()
                     elseif r.place then if r.sized then sized = sized + 1 else placed = placed + 1 end end
                 end
             end
+            M.ReviewPersonal(e, sec, plan)
             if whole > 0 then sec.lines[#sec.lines + 1] = ("%d %s replaced in it: modules, layout links and the look."):format(whole, Plural(whole, "part is", "parts are")) end
             if sized + placed > 0 then sec.lines[#sec.lines + 1] = ("%d positions and sizes are worked out for your screen."):format(sized + placed) end
             if text > 0 then sec.lines[#sec.lines + 1] = ("%d text %s scaled for the size you picked."):format(text, Plural(text, "size is", "sizes are")) end
         end
         for _, n in ipairs(e.notes or {}) do
             local p = LY.EllesmereAdapter.POSITIONS[n.id]
-            if n.code == "unplaced" then
+            if n.code == "tooltip-skin-off" then
+                out.notes[#out.notes + 1] = n.off == "module"
+                    and "EllesmereUI's Blizzard UI module isn't loaded, so tooltip placement has no effect until it is: the setting is still recorded."
+                    or "EllesmereUI's tooltip reskin is switched off, so tooltip placement has no effect until you switch it on: the setting is still recorded."
+            elseif n.code == "unplaced" then
                 out.notes[#out.notes + 1] = (n.label or n.id) .. " stays where the layout's author had it (measured from the middle of the screen): it isn't placed for your screen or part of the fit check."
             else
                 out.notes[#out.notes + 1] = (p and p.label or n.id) .. " isn't placed."
@@ -1166,9 +1335,7 @@ function M.Apply(expect)
         return false, "stale"
     end
     local layout = session.layout
-    local u = UpdateOpts()
-    local ok, result, extra = LY.Apply(layout.pkg, layout.variant, plan.key, { picks = session.picks,
-        update = { policy = u.policy, choose = u.choose, groups = u.groups, whole = u.whole } })
+    local ok, result, extra = LY.Apply(layout.pkg, layout.variant, plan.key, PlanOpts())
     session.plan = nil
     session.check = nil
     if not ok then
@@ -1504,7 +1671,7 @@ function M.Reload()
     if InCombat() then return false, "combat" end
     local j = LY.Journal.Read()
     local kind = (j and (j.state == "restoring")) and "restore" or "install"
-    S.SetResume(session.layout.pkg, session.picks, kind)
+    S.SetResume(session.layout.pkg, Remembered(), kind)
     ReloadUI()
     return true
 end

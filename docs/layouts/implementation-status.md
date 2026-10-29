@@ -89,6 +89,34 @@ piece check and the final plan inside `layouts.plan`, the field checks inside `l
 transport's existing job, the receipt check inside `layouts.publish.receive`. No new gauges: nothing new is kept between calls
 except the wizard's per-session scale-guidance cache (a few entries, dropped with the session).
 
+## Tooltip placement and friendly player nameplates (2026-10-28)
+
+Two personal choices on the wizard's Personalize step (`wizard.md`, "Tooltip placement and friendly player nameplates"), package
+**format 5**, revision 4. Offline-tested: `tests/test_layout_tooltip.lua` (new, 12 sections), with changed expectations in
+`test_layouts.lua`, `test_layout_publish.lua`, `test_layout_hardening.lua`, `test_layout_geometry.lua` (format 5; the tooltip attach is
+not a position in a blob) and `test_layout_wizard.lua` (the game-default tooltip is now the fallback for a package without the choice).
+`./tests/run.sh`: 126 suites passed, 0 failed.
+
+| What | State |
+|---|---|
+| The two choices, their ids, defaults and stable wording | offline-tested |
+| `tooltipAnchorCursor` written alone, verified, snapshotted, undone, restored (absent stays absent; a flag the player changed since is left) | offline-tested; **in game**: that EllesmereUI reads it at load as the source says |
+| `tooltipFixedPos` placed with the damage meter, written into the install's own profile, carried through updates | offline-tested; **in game**: the place on real screens, and that Unlock Mode keeps it |
+| Friendly-plate switches by value; nothing else of the nameplate blob differs from the layout's | offline-tested; **in game**: that EllesmereUI really lets go, and what the client's friendly plates look like afterwards |
+| A choice added after a setup: starts from the game, keeps the player's value until they pick | offline-tested |
+| Preview: layout place, follow-the-pointer over the miniature only, friendly-plate sample, inert overlay | offline-tested; **in game**: the pointer maths on real frames and scales |
+
+Also fixed on the way: a kept `false` in an EllesmereUI field showed as the layout's value in the plan's row (an `and/or` that dropped a
+`false`; not reachable before, when every field was a word).
+
+Unresolved, for the author: **Standard blue** turns EllesmereUI's friendly player nameplates off (as asked), which hands them to
+Blizzard's own nameplates. EllesmereUI's own switch also resets three client CVars to Blizzard's defaults when flipped in its window; at
+load it only stops writing them, and the adapter writes no CVars, so the plates keep EllesmereUI's last name-only and class-colour
+settings until the player changes them in Esc > Options > Nameplates (said on the page, the review and the sample). Resetting those three
+CVars from the adapter (with their own snapshot, Undo and Restore) is a possible follow-up. An older baseline reads the nameplate blob as
+updated once (its fingerprint leaves the two switches out now). Diagnostics: scope and gauge `layoutwizard.preview.follow`; the adapter's writes run inside
+`layouts.apply`, its reads inside `layouts.plan` and `layouts.verify`.
+
 ## Open decisions (recommended default first)
 
 | # | Question | Recommended default |
@@ -115,7 +143,7 @@ except the wizard's per-session scale-guidance cache (a few entries, dropped wit
 | D20 | Classic stays `dev = true` (allowed on Retail) until checked on Forever | Yes |
 | D21 | The TwichUI helper presets: `on-screen` (class resource bars, marker bar, food and drink buttons) and `finding-my-way` (those and Navigation) | As built; the author to confirm the set |
 | D22 | The accent options and their colours (Aged gold is the layout's own; Verdigris, Ember and Dusk blue are proposals) | As built; the author to confirm |
-| D23 | The cursor-following or fixed tooltip choice: not offered (account-wide EllesmereUI global, reset whole by its import, not undone by Restore) | Keep it out until D3 and D5 are built |
+| D23 | The cursor-following or fixed tooltip choice | **Answered 2026-10-28** (the section above): offered as "Tooltip placement", managed narrowly (the flag alone, written and read back, with its own snapshot, Undo and Restore), not through the import |
 | D24 | A Welcome-dialog offer for the wizard | Not built; add only if wanted |
 | D25 | Re-running with the same choices re-imports the install's EllesmereUI profile and replaces changes made in it | **Answered in Phase 7**: the baseline makes it "nothing to do" |
 

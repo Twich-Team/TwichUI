@@ -175,6 +175,7 @@ function J.CleanUpdate(u)
     local e = u.ellesmereui
     if e ~= nil and (type(e) ~= "table" or type(e.active) ~= "string" or type(e.target) ~= "string" or (e.backup ~= nil and type(e.backup) ~= "string")
         or (e.renamed ~= nil and e.renamed ~= true)) then return false end
+    if e ~= nil and e.account ~= nil and not (LY.EllesmereAdapter and LY.EllesmereAdapter.AccountOk(e.account)) then return false end
     return true
 end
 

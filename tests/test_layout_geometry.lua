@@ -279,9 +279,10 @@ do
   Check(#notes == 0, "every attached EllesmereUI position was found and placed (" .. #notes .. " notes)")
   local n = 0
   for id in pairs(spec.attach.ellesmereui) do
-    local p = EA.POSITIONS[id]
+    local p = EA.POSITIONS[id]   -- the tooltip's fixed place is not a position in a module blob (TipPlace; test_layout_tooltip.lua)
     local function Read(t) for _, k in ipairs(p.path) do t = t and t[k] end return t end
-    local before, after = Read(CAP.ellesmereui.modules[p.module]), Read(data.addons[p.module])
+    local before, after
+    if p then before, after = Read(CAP.ellesmereui.modules[p.module]), Read(data.addons[p.module]) end
     if before then
       n = n + 1
       Check(Near(before.x, after.x, 0.006) and Near(before.y, after.y, 0.006) and before.point == after.point and before.relPoint == after.relPoint,
@@ -556,10 +557,11 @@ do
   Check(#notes == 0, "Compact: every attached EllesmereUI position was found and placed (" .. #notes .. " notes)")
   local n, total = 0, 0
   for id in pairs(attach.ellesmereui) do
-    total = total + 1
-    local p = EA.POSITIONS[id]
+    local p = EA.POSITIONS[id]   -- "tooltip" is the fixed tooltip place, not a position in a module blob
+    if p then total = total + 1 end
     local function Read(t) for _, key in ipairs(p.path) do t = t and t[key] end return t end
-    local b, a = Read(before.addons[p.module]), Read(data.addons[p.module])
+    local b, a
+    if p then b, a = Read(before.addons[p.module]), Read(data.addons[p.module]) end
     if b then
       n = n + 1
       Check(Near(b.x, a.x, 0.006) and Near(b.y, a.y, 0.006) and b.point == a.point and b.relPoint == a.relPoint, "Compact, the author's screen: " .. id .. " stays where the author put it")

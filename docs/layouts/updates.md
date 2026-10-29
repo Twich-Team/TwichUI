@@ -201,6 +201,28 @@ value, the case, the plain-language effect, the ownership consequence and its ch
 the update; the Result step offers Undo this update and Keep the update; a finished setup shows "Installed and managed" with
 Set up again and Stop managing.
 
+## Tooltip placement and friendly plates in an update
+
+The two personal choices of format 5 (`wizard.md`) are ordinary comparable units: `ellesmereui:tooltip.cursor` (read live from
+`EllesmereUIDB.tooltipAnchorCursor`, an absent key reading as off), `ellesmereui:tooltip.fixedPos` (the install's profile's
+`tooltipFixedPos`, "@x,y,CENTER", the same within a unit), and the two nameplate switches. The same cases and policies apply, with these
+points:
+
+- **The place travels with the profile, not the payload.** The new profile is built on the profile in use, which has its own
+  `tooltipFixedPos`; the adapter writes the decided one after the import: the layout's when the decision is to apply it, otherwise
+  the install's old profile's value (or nothing, when it held none). A place the player set in Unlock Mode is therefore kept like any
+  of their changes.
+- **The flag is account-wide.** It is written alone, only when it differs from what is there, and read back. The first snapshot keeps
+  its value from before the first install; an update that newly manages it adds it once (`snapshot.account`, via the adapter's
+  `Extend`). Undo this update puts it back as it was just before the update, and Restore as it was before the first install, **unless the
+  player has changed it since** (the plan lists it as left, not written).
+- **A choice added after a setup** starts from the game's own settings (`LY.LivePick`) and keeps the player's value until they pick for
+  themselves (the wizard asks the update to "keep mine" for each setting of such a choice). A choice the player changes from what the install
+  recorded takes the layout's value (each row still offers "keep mine"); one they leave as it was keeps their changes since.
+- **Baselines**: the nameplate blob's fingerprint leaves the two fields out now, so an older baseline reads that blob as updated once
+  (applied unless the player changed it, then the usual conflict rules); the new units have no entry in an older baseline and read as
+  newly managed.
+
 ## Unsupported, by design or for now
 
 - Merging inside an EllesmereUI module blob, or any third-party profile. Curated fields beyond the registered positions, text
@@ -261,3 +283,15 @@ applying without the update choices) each fail the new tests.
     group stays yours; Manage again, and the layout's links come in.
 13. A revision that resets a TwichUI setting you never touched: after the reload it reads the default and the check says
     verified; one you changed stays yours.
+
+14. Tooltip placement. Pick Layout position, apply, reload: tooltips appear at the damage meter's left, bottom level with it, on every
+    character; in Unlock Mode the "Tooltip" mover is there. Pick Follow mouse on an update: tooltips follow the cursor on every character;
+    your cursor offsets and growth direction are as you left them. With the tooltip reskin off in EllesmereUI, neither does anything and
+    the review said so.
+15. Move the tooltip in Unlock Mode, then install again with the same picks: your place stays. Undo this update, reload: the flag and
+    your profile are as before the update. Restore, reload: the flag is as before your first install (turn it on by hand first: Restore
+    leaves it).
+16. Friendly player nameplates, in a group with another player: Class colors shows class-coloured names (this layout is name-only).
+    Standard blue: EllesmereUI > Nameplates > General > "Show EUI Friendly Player Nameplates" reads off after the reload, and the
+    friendly plates are Blizzard's. Check what they look like (they may still be name only or class coloured from what EllesmereUI last
+    set, until changed in Esc > Options > Nameplates). Enemy plates, NPCs, party and raid frames and your custom colours are as they were.

@@ -2,7 +2,7 @@
 
 `TwichUI_LayoutWizard/` is a load-on-demand sibling addon (`RequiredDeps: !!!TwichUI, TwichUI_Layouts`, no saved variables
 of its own) that lets a recipient review compatibility, pick one of the two bundled layouts (Classic or Compact Adventure; Phase 5), look at it
-to scale and then at full size over their own screen, choose a small TwichUI helper preset, adjust two personal choices, review exactly what would change, apply it with a restore point, see it
+to scale and then at full size over their own screen, choose a small TwichUI helper preset, adjust four personal choices (accent, size, tooltip placement, friendly player nameplates), review exactly what would change, apply it with a restore point, see it
 checked after the reload, and put the previous setup back. It adds no engine of its own: everything that changes the game
 is `TwichUI_Layouts`' pipeline, fed by the package and its resolved screen geometry. It also lists packages other players sent
 (step 1), updates an installed layout keeping the player's changes (`updates.md`), and finishes or stops managing a setup.
@@ -40,7 +40,7 @@ note says why a button is disabled.
 | 1 | Welcome | the emblem, what the setup does, and **Does it work here?**: EllesmereUI (present, usable, version, tested-with, Forever build, its own first-run setup pending), TwichUI profiles, the screen (size and UI scale, and for each layout at standard size whether it fits, fits but some pieces may overlap, or doesn't fit, with the problems and the UI scale at which it would), whether this is a preview build, combat, and an install already recorded (with a link to its result). Each line has a word (Ready, Check, Blocked, Note), not a colour alone. | nothing |
 | 2 | Layout | a card for each layout, Classic and Compact Adventure (its picture, what it says, a Preview-build tag; the selected one unfolds what it covers), the preview, its scenario selector and the full-size button. Choosing a card re-draws the preview at once. | the layout choice is remembered |
 | 3 | Helpers | the **TwichUI helpers** choice as three cards and the preview | the pick is remembered |
-| 4 | Personalize | accent colour swatches (with the chosen one named), the size cards (Standard, Larger), Start over, and the preview, which follows each pick at once | the picks are remembered |
+| 4 | Personalize | accent colour swatches (with the chosen one named), the size cards (Standard, Larger), **Tooltip placement** (Layout position, Follow mouse), **Friendly player nameplates** (Class colors, Standard blue, with a synthetic sample), Start over, and the preview, which follows each pick at once | the picks the player makes are remembered (a pick read from the game is not) |
 | 5 | Review | the plan: your choices; TwichUI (at once, this character only): the profile copied and switched to, how many settings are set, what is turned on, how many on-screen pieces are placed; EllesmereUI (after a reload you start, every character on the account): the profile made and made active (and, on a repeat, that changes made in it since are replaced), what is replaced, positions and text sizes; **Left alone**; **Not placed** (the objectives, which Blizzard's Edit Mode places; the battle resurrection timer, left where the author had it); for an install again, **Updating your layout** (`updates.md`); the fit of the **final plan** (what Apply leaves, kept placements included) and what is kept where you have it; blockers with their reasons; what happens if a step fails. Apply is in the footer. | nothing until Apply is confirmed |
 | 6 | Result | what the install record says now, with the actions that make sense: waiting for a reload (Reload now, Restore), checked after the reload (Restore, Keep this setup, Check again, Set up again), not everything reads back (the differences; Restore, Check again), only partly applied (what was done and what failed; Restore, Reload now), interrupted (Restore), restore waiting for a reload, restore not fully checked, restored, nothing changed (a clean failure, with its reason), a damaged, newer or other-character record (said, with only what is safe offered); for an update, **Undo this update** and **Keep the update**; a finished setup, **Installed and managed** (or "not verified" when its last check didn't match) with Set up again and Stop managing | only through its confirmed buttons |
 
@@ -86,23 +86,55 @@ layout already has a place for (`class-bars`, `marker-bar`, `food-drink`, `nav-a
 `TwichConfig.LOCAL`: nothing that shares, accepts setups, plays a sound, acts for you or talks to other players is ever in
 a preset (`test_layout_wizard.lua` §5 checks each key against `LOCAL`).
 
-**Not offered: cursor-following or fixed tooltip.** It is one of the three personal choices that were asked for, and it
-has no adapter that can honestly back it today:
+### Tooltip placement and friendly player nameplates (two choices of format 5)
 
-- Whether a tooltip follows the cursor is `EllesmereUIDB.tooltipAnchorCursor`, a **root key of the account-wide saved
-  variable**, not a profile field (`EUI_BlizzardSkin_TooltipAnchor.lua:125, 148, 463`). It is one of the "Window & Tooltip
-  Skins" account globals (`EllesmereUI_Profiles.lua:2043` `BLIZZ_SKIN_GLOBAL_KEYS`).
-- The only supported way to write it is `ImportProfile`'s `blizzSkinGlobals` bundle (`:3326`), and
-  `EllesmereUI.ApplyBlizzSkinGlobals` (`:2157`) sets **every** key of that bundle, "INCLUDING nil", from the payload: a
-  one-key choice would reset the recipient's whole window-and-tooltip skin to defaults, for every character, and Restore
-  (`SwitchProfile` + `DeleteProfile`) would not put it back. That is the whole-`EllesmereUIDB` restore point Phase 2
-  deferred (D3, D5), which has not been built.
-- The fixed position (`tooltipFixedPos`) is per profile but is not among the root keys the import takes (`ROOT` in
-  `AdapterEllesmere.lua`), so a layout could not place it either.
-- TwichUI has no tooltip-anchor setting of its own.
+Two more `enum` choices, asked on the Personalize step under the accent and size. Stable ids, labels and wording:
 
-So the wizard shows two personal choices (accent, size) and says nothing about the third. Offering it needs D3 (a restore
-point for account-wide EllesmereUI units) and D5 (window and tooltip skins as a managed unit); until then it stays out.
+| Choice id | Label | Options (default first) | Writes | Verified after the reload by |
+|---|---|---|---|---|
+| `tooltip` | Tooltip placement | `layout` **Layout position** ("Show tooltips at this layout's configured location."); `cursor` **Follow mouse** ("Keep tooltips near your cursor.") | `layout`: the account-wide flag `EllesmereUIDB.tooltipAnchorCursor` off, and the install's profile's `tooltipFixedPos` at the layout's place. `cursor`: the flag on, and nothing else (the cursor position, offsets and growth direction, and the place the install's profile starts from, are left as they are) | **by value**: the flag as stored (an absent key reads as off), and the place within a unit |
+| `friendly-plates` | Friendly player nameplates | `class` **Class colors** ("Use each friendly player's class color."); `blue` **Standard blue** ("Use the standard blue appearance for friendly players.") | `class`: `showFriendlyPlayers = true` and `classColorFriendly = true`. `blue`: `showFriendlyPlayers = false` (EllesmereUI > Nameplates > General > "Show EUI Friendly Player Nameplates" off), nothing else. Fields of the EllesmereUI nameplate blob | **by value** (booleans) |
+
+What each one is, from source (EllesmereUI 9.6.8; `adapter-capabilities.md`, "Tooltip placement and friendly plates"):
+
+- **The flag is account-wide.** `tooltipAnchorCursor` is a root key of `EllesmereUIDB`, shared by every character and every profile;
+  switching profiles does not change it. The place is per profile (`profiles[name].tooltipFixedPos = { centerX, centerY }`). The
+  wizard's Review and confirmation say so, and say that the cursor settings, the tooltip skin and the growth direction are not
+  touched. Nothing EllesmereUI's import offers can carry either key without resetting a whole bundle of skin settings, so the
+  adapter writes them itself, after the import, and reads each back (`AdapterEllesmere.lua` `A.WriteTip`).
+- **Layout position** is the author's own place (`tooltipFixedPos = (900.83, -496.67)` on the 2866.67 × 1200 canvas, the same in every
+  profile read), attached to the damage meter's bottom-left corner (the author's tooltip sits against it, bottoms level, 5 units
+  short): `attach.ellesmereui.tooltip = "meter:BOTTOMLEFT"`, placed with the same call as every other position (`A.TipPlace`) and
+  kept on the screen. It is in both layouts' package. A layout whose tooltip should sit elsewhere gives its own attach in its
+  geometry variant.
+- **Both tooltip modes only work while EllesmereUI's tooltip reskin is on** (`customTooltips ~= false`, and the Blizzard UI module
+  loaded): off, the game's own place stands. The plan says so in a note; the settings are still recorded.
+- **Standard blue is EllesmereUI letting go.** With "Show EUI Friendly Player Nameplates" off, EllesmereUI relinquishes friendly player
+  nameplates to Blizzard's own nameplates and their settings (the toggle's own tooltip says so; `GeneralPage_Options.lua` 59–90). There is
+  no blue in EllesmereUI to set; the blue is Blizzard's. Nothing else is written: not name-only mode, class colours, the bar colour,
+  friendly NPC colours, enemy plates, party or raid frames, custom colours or any CVar. **Limit:** EllesmereUI's own switch also resets
+  three CVars it manages (`nameplateShowOnlyNameForFriendlyPlayerUnits`, `ShowClassColorInFriendlyNameplate`,
+  `nameplateUseClassColorForFriendlyPlayerUnitNames`) to Blizzard's defaults, but only when the player flips it in its own window; at load
+  it merely stops writing them. The adapter does not touch CVars, so after an install the client keeps whatever EllesmereUI last set until the
+  player changes it in Esc > Options > Nameplates. The page, the review and the sample say so. **Class colors** turns EllesmereUI's
+  friendly plates back on if they were off (the layout's own state).
+
+**Defaults.** A new setup: the layout's own recommendation (Layout position; Class colors, the author's `classColorFriendly = true`),
+whatever the game has now. A setup that already exists whose player never made the choice (it was added after): the option the game's
+own settings match (`LY.LivePick`, read only: the flag, the two plate switches), else the default, shown as "Shown as your game has it now"
+and **not remembered** until they pick. Until then the plan keeps what they have for every setting of that choice (the update's
+"keep mine"). A choice they changed from what the install recorded takes the layout's value for its settings (the review still offers
+"keep mine" for each); one they left as it was keeps their own changes since, as an update does. A choice an earlier install
+recorded keeps that pick. Plan and Apply take the same options (`Model.lua` `PlanOpts`).
+
+**Previews.** *Tooltip visible* draws, for Layout position, the sample at EllesmereUI's box (280 × 165, corner nearest the screen
+corner) at the layout's place for this screen, or on Review the plan's own row (so a place the player keeps is drawn where they
+have it). For Follow mouse it draws the sample at rest (bottom at the middle of the screen, the cursor marked) and moves it with the
+pointer **only while the pointer is over the miniature**: one throttled `OnUpdate` (about 30 a second) set on entering and removed on
+leaving, hiding, another scenario or closing, clamped inside the miniature, never reading or moving the game's tooltip
+(`Preview.lua` `view:Track`; scope `layoutwizard.preview.follow`, gauge of the same name). The full-size overlay draws it at rest
+and never follows. A package with no tooltip choice still draws the game's own default place. The friendly-plate sample is three
+synthetic players on the page (EllesmereUI's class colours, names only in a name-only layout; a plain blue bar for Standard blue, Blizzard's plate) and a caption; it is never a real nameplate.
 
 ## Saved state
 
@@ -117,7 +149,7 @@ install record (`layouts.install`, `Journal.lua`), covered by the same `layouts`
   and a bad `resume` are ignored; a `variant` that isn't one of the package's goes back to the first (Classic); a record
   with no `variant` (from Phase 4) reads as Classic; the next save writes a clean record. Every writer (a pick, the layout
   choice, the reload note, using the note up) saves the chosen layout with the picks, so none forgets it;
-- bounded: one layout id and at most one entry per choice the package declares (3). The scenario and the open state of the
+- bounded: one layout id and at most one entry per choice the package declares (5 in the Adventure package; the bound is 6, `LY.MAX_CHOICES`, and a record holds at most `S.MAX_PICKS` = 8). The scenario and the open state of the
   full-size preview are never saved.
 
 ## How it uses the pipeline
@@ -158,9 +190,9 @@ where anything is (a test compares every component's rect across all five). Solo
 target, its target, its cast bar and yours. Party: the party frames (five members in a column, or a row with `partyHorizontal`,
 the arrangement being a sample), the focus frame and its cast bar, five meter rows, six chat lines. Long objectives: two long
 quests that wrap, drawn at the box's width; if they need more height than the box has, the overlay says "The text runs past this
-box" instead of hiding it. Tooltip: a sample tooltip at `GameTooltipDefaultContainer`'s first point, read the way Blizzard's
-`GameTooltip_SetDefaultAnchor` reads it (only when it is placed against the screen), else Forever's own default (bottom right,
-9 in, 85 up); EllesmereUI can move or follow-the-cursor tooltips, which the preview does not show. A scenario is not remembered.
+box" instead of hiding it. Tooltip: a sample tooltip where the "Tooltip placement" pick puts it (above); for a package with no such choice, at
+`GameTooltipDefaultContainer`'s first point, read the way Blizzard's `GameTooltip_SetDefaultAnchor` reads it (only when it is
+placed against the screen), else Forever's own default (bottom right, 9 in, 85 up). A scenario is not remembered.
 
 **The miniature** (`Preview.lua`) draws the scene to scale on a frame with the viewport's proportions (330 × 200 at most): each
 managed component a box with sample shapes, each piece a flat rectangle, accent outlines, overlapping or off-screen components
@@ -191,7 +223,7 @@ illustrated; a piece whose size the layout's data doesn't give (the Cooldown Man
 raid frames, the minimap's shape) is not drawn at all; TwichUI's own pieces are 26-unit markers because their size belongs to
 their features; the pet and stance pieces sit outside Compact's checked box (they follow it, are drawn, and since RH-1 their
 overlap with chat is reported as "may overlap", D44); the quest tracker is placed by Blizzard's Edit Mode and is shown but not
-applied or counted; the default tooltip position is the game's, not EllesmereUI's. Offline: the geometry takes about 0.12 ms and a miniature draw
+applied or counted; the sample tooltip's size is a sample, and EllesmereUI's real tooltip pins its own corner to the box. Offline: the geometry takes about 0.12 ms and a miniature draw
 about 0.14 ms on stand-in frames (the client's `SetPoint` and `SetSize` cost more; not measured).
 
 ## Preview and fit (RH-1)

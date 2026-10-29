@@ -21,7 +21,7 @@ local S = {}
 WZ.State = S
 
 S.VERSION = 1
-S.MAX_PICKS = 8
+S.MAX_PICKS = 8             -- a package may ask up to LY.MAX_CHOICES (6) choices: the Adventure package asks five
 S.INCLUDED = "twichui-adventure"   -- the package a record without a package id belongs to (the one included with TwichUI)
 
 local function Root(create)
@@ -56,7 +56,7 @@ end
 -- The saved layout and picks, checked against the package's variants (ids, the first being the default) and choices.
 -- Returns { variant, picks, resume, repaired, newer }.
 function S.Load(pkg, variants)
-    local out = { variant = variants and variants[1] or nil, picks = S.Defaults(pkg), repaired = false, newer = false }
+    local out = { variant = variants and variants[1] or nil, picks = S.Defaults(pkg), repaired = false, newer = false, saved = {} }
     local root = Root(false)
     local raw = root and root.wizard
     if raw == nil then return out end
@@ -75,10 +75,11 @@ function S.Load(pkg, variants)
     end
     if raw.picks ~= nil and type(raw.picks) ~= "table" then out.repaired = true end
     local saved = type(raw.picks) == "table" and raw.picks or {}
+    out.saved = {}   -- the choices the player made (not left at their default), for a choice added after they set up
     for _, ch in ipairs(pkg and pkg.choices or {}) do
         local pick = saved[ch.id]
         if pick ~= nil then
-            if OptionOf(ch, pick) then out.picks[ch.id] = pick else out.repaired = true end
+            if OptionOf(ch, pick) then out.picks[ch.id] = pick out.saved[ch.id] = true else out.repaired = true end
         end
     end
     for id in pairs(saved) do

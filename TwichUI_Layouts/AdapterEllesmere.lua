@@ -15,6 +15,14 @@
 -- after a reload only they are compared (EllesmereUI fills its defaults into a blob as it loads, so a whole blob never
 -- reads back as it was imported; its presence is checked).
 --
+-- Tooltip placement (the wizard's "Tooltip placement"): two units outside the import's payload, because EllesmereUI's import
+-- cannot carry them without resetting a whole bundle of account-wide skin settings (EllesmereUI_Profiles.lua
+-- ApplyBlizzSkinGlobals sets every key of its list, nil included). "ellesmereui:tooltip.cursor" is the account-wide root key
+-- EllesmereUIDB.tooltipAnchorCursor (written alone, as EllesmereUI's own option does, EUI_BlizzardSkin_Options.lua), and
+-- "ellesmereui:tooltip.fixedPos" is the profile key tooltipFixedPos { centerX, centerY } of the install's own profile (written after the
+-- import, which copies the active profile's value instead of the payload's). Everything else of the tooltip skin, including the
+-- cursor offsets and the growth direction, is never read or written here. See `TipPlan` and `docs/layouts/adapter-capabilities.md`.
+--
 -- Not done in this phase, and refused by name when a package asks: the UI scale (it stays the recipient's:
 -- applyUIScale = false), suite module enable states (disableAddons), positions and look units. Everything account-wide
 -- that a profile string can carry is taken out first (EXCLUDED), so deleting the install's profile undoes the install.
@@ -60,6 +68,13 @@ A.FIELDS = {
     ["minimap.coordsPosition"] = { module = "EllesmereUIMinimap", path = { "minimap", "coordsPosition" }, label = "Minimap > Coordinates position",
         values = LY.Set({ "belowMap", "aboveMap", "topLeft", "top", "topRight", "left", "right", "bottomLeft", "bottom", "bottomRight" }),
         default = "topLeft" },
+    -- Friendly player nameplates (EllesmereUINameplates.lua defaults; GeneralPage_Options.lua "Show EUI Friendly Player Nameplates" and
+    -- "Class Colored Health Bar"). showFriendlyPlayers off hands friendly player plates to Blizzard's own settings; classColorFriendly is
+    -- EllesmereUI's class colour for them while it manages them. Both are profile fields of the module blob; nothing else is named.
+    ["nameplates.showFriendlyPlayers"] = { module = "EllesmereUINameplates", path = { "showFriendlyPlayers" },
+        label = "Nameplates > Friendly players: managed by EllesmereUI", kind = "bool", default = true },
+    ["nameplates.classColorFriendly"] = { module = "EllesmereUINameplates", path = { "classColorFriendly" },
+        label = "Nameplates > Friendly players: class colours", kind = "bool", default = true },
 }
 A.BY_UNIT = {}
 for id, f in pairs(A.FIELDS) do
@@ -67,6 +82,12 @@ for id, f in pairs(A.FIELDS) do
     f.parent = PREFIX .. "addons." .. f.module
     f.unit = f.parent .. "." .. table.concat(f.path, ".")
     A.BY_UNIT[f.unit] = f
+end
+
+-- A field's kind: a word from a list (the default) or a boolean.
+local function FieldOk(f, v)
+    if f.kind == "bool" then return type(v) == "boolean" end
+    return type(v) == "string" and f.values[v] == true
 end
 
 -- Taken out of every payload before it is imported: account-wide or personal (architecture.md §1). The UI scale, the
@@ -91,6 +112,27 @@ A.STRIP = { EllesmereUIDataBars = { "characters" }, EllesmereUIQoL = { "chars" }
 -- customColors stays excluded (§11.5). chatBubbles and tooltipFixedPos are not taken by the import, so not managed.
 A.ROOT = LY.Set({ "fonts", "darkMode", "euiAccent", "_migrations" })
 A.ACCENT_UNIT = PREFIX .. "root.euiAccent"
+A.CURSOR_UNIT = PREFIX .. "tooltip.cursor"      -- account-wide: EllesmereUIDB.tooltipAnchorCursor (true: the tooltip follows the cursor)
+A.FIXED_UNIT = PREFIX .. "tooltip.fixedPos"     -- the install's profile: tooltipFixedPos = { centerX, centerY } (centre offsets in UIParent units)
+local function IsTip(u) return u == A.CURSOR_UNIT or u == A.FIXED_UNIT end
+A.IsTipUnit = IsTip
+local function Fin(n) return type(n) == "number" and n == n and n > -20000 and n < 20000 end
+
+-- The stored tooltip position of a profile as a position record, nil when it holds none, false when it holds something unreadable.
+local function TipRec(profile)
+    local p = type(profile) == "table" and profile.tooltipFixedPos
+    if p == nil or p == false then return nil end
+    if type(p) == "table" and Fin(p.centerX) and Fin(p.centerY) then return { point = "CENTER", relPoint = "CENTER", x = p.centerX, y = p.centerY } end
+    return false
+end
+-- EllesmereUIDB.tooltipAnchorCursor as stored: nil (never set), or a boolean. Anything else reads as off.
+local function CursorRaw()
+    local db = rawget(_G, "EllesmereUIDB")
+    local v = type(db) == "table" and db.tooltipAnchorCursor
+    if v == nil then return nil end
+    return v == true
+end
+A.CursorRaw = CursorRaw
 
 -- EllesmereUI's accent: { useClass = true } or { custom = { r, g, b }, useClass = false } (ImportProfile copies it whole;
 -- EllesmereUI_UICore.lua SetActiveProfileAccent / ResolveProfileAccent read exactly these two keys).
@@ -188,7 +230,10 @@ A.POSITIONS = {
     ["databar-location"] = Pos("EllesmereUIDataBars", { "bars", 2, "savedPos" }, "Minimap location text", { link = "EDB_4",
         check = { path = { "bars", 2, "id" }, value = 4 } }),
 }
-function A.Positions() return A.POSITIONS end
+-- The registry geometry checks an attach map against: the registered positions, and the tooltip's fixed place (not a position in a
+-- module blob: Adapt skips it, TipPlace places it).
+local ATTACHABLE = setmetatable({ tooltip = { label = "Tooltip (fixed position)", special = true } }, { __index = A.POSITIONS })
+function A.Positions() return ATTACHABLE end
 
 -- Positions a layout's blobs carry that the screen layer doesn't place (stored in a form not read here, or not registered):
 -- left where the author had them, and named in the plan's notes so the review never counts them in the fit (RH-1 D).
@@ -223,6 +268,8 @@ function A.Label(unit)
     if unit == A.LAYOUT_UNIT then return "Layout links" end
     local f = A.BY_UNIT[unit] or A.TEXT_BY_UNIT[unit]
     if f then return f.label end
+    if unit == A.CURSOR_UNIT then return "Tooltip follows the mouse (every character)" end
+    if unit == A.FIXED_UNIT then return "Tooltip layout position" end
     local root = unit:match("^ellesmereui:root%.(.+)$")
     if root == "euiAccent" then return "Accent colour" end
     if root then return "Look: " .. root end
@@ -310,7 +357,7 @@ function A.Normalize(fragment, ctx)
     for k in pairs(fragment) do
         if NOT_YET[k] then P.add("not-yet", ctx.where .. "." .. tostring(k))
         elseif (k == "root" or k == "layout") and not data then P.add("not-yet", ctx.where .. "." .. k)
-        elseif k ~= "base" and k ~= "modules" and k ~= "fields" and k ~= "root" and k ~= "layout" and k ~= "reset" then
+        elseif k ~= "base" and k ~= "modules" and k ~= "fields" and k ~= "root" and k ~= "layout" and k ~= "reset" and k ~= "tooltip" then
             P.add("unknown-field", ctx.where .. "." .. tostring(k))
         end
     end
@@ -349,6 +396,28 @@ function A.Normalize(fragment, ctx)
             if ok then units[A.LAYOUT_UNIT] = ul end
         end
     end
+    -- tooltip (a wizard choice only): { cursor = true | false, fixed = { x, y } }. fixed is the author's centre offset on the
+    -- package's canvas; the screen layer moves it with the component the geometry attaches "tooltip" to.
+    if fragment.tooltip ~= nil then
+        local t = fragment.tooltip
+        if (ctx.format or 1) < 5 then P.add("not-yet", ctx.where .. ".tooltip")
+        elseif ctx.layer ~= "choice" then P.add("not-managed", ctx.where .. ".tooltip")
+        elseif type(t) ~= "table" then P.add("not-table", ctx.where .. ".tooltip")
+        else
+            for k, v in pairs(t) do
+                if k == "cursor" then
+                    if type(v) == "boolean" then units[A.CURSOR_UNIT] = v else P.add("bad-value", ctx.where .. ".tooltip.cursor") end
+                elseif k == "fixed" then
+                    local ok = type(v) == "table" and Fin(v.x) and Fin(v.y)
+                    if ok then for kk in pairs(v) do if kk ~= "x" and kk ~= "y" then ok = false end end end
+                    if ok then units[A.FIXED_UNIT] = { point = "CENTER", relPoint = "CENTER", x = v.x, y = v.y }
+                    else P.add("bad-value", ctx.where .. ".tooltip.fixed") end
+                else
+                    P.add("unknown-field", ctx.where .. ".tooltip." .. tostring(k))
+                end
+            end
+        end
+    end
     if fragment.modules ~= nil then
         if type(fragment.modules) ~= "table" then P.add("not-table", ctx.where .. ".modules")
         else
@@ -368,7 +437,7 @@ function A.Normalize(fragment, ctx)
             for id, v in pairs(fragment.fields) do
                 local f = A.FIELDS[id]
                 if not f then P.add("unknown-unit", ctx.where .. ".fields." .. tostring(id))
-                elseif v == LY.REMOVE or (type(v) == "string" and f.values[v]) then
+                elseif v == LY.REMOVE or FieldOk(f, v) then
                     units[f.unit] = v
                     parents[f.unit] = f.parent
                 else P.add("bad-value", f.unit) end
@@ -425,6 +494,11 @@ function A.Capture(composed, target)
     local profiles = Profiles(E)
     snap.created = type(profiles[target]) ~= "table"
     for _, e in ipairs(composed.list) do
+        if e.unit == A.CURSOR_UNIT then
+            -- the account-wide flag, as it is before the first install changes it (Restore puts it back; an absent key stays absent)
+            local raw = CursorRaw()
+            snap.account = { cursor = { had = raw ~= nil, v = raw == true } }
+        end
         local f = A.BY_UNIT[e.unit]
         if f then snap.values[e.unit] = LY.Fingerprint(ReadField(profiles[snap.active], f)) end
     end
@@ -437,7 +511,48 @@ function A.CleanSnapshot(s)
     if type(s.created) ~= "boolean" or type(s.values) ~= "table" then return false end
     if s.version ~= nil and not LY.Plain(s.version, 40) then return false end
     if s.otherClient ~= nil and type(s.otherClient) ~= "boolean" then return false end
+    if s.account ~= nil and not A.AccountOk(s.account) then return false end
     return true
+end
+
+-- What a unit reads now, for a choice's default on an install that already exists (Engine LivePick): a setting the choice sets whose
+-- value is a discrete word TwichUI can read (the cursor flag, a friendly-plate field), read where the install keeps it (its own
+-- profile, else the one in use). nil: not readable this way (a position, a blob), so it does not decide the pick.
+function A.Live(unit, target)
+    local _, E = A.Detect(nil, true)
+    if not E then return nil end
+    if unit == A.CURSOR_UNIT then return CursorRaw() == true end
+    local f = A.BY_UNIT[unit]
+    if not f then return nil end
+    local profiles = Profiles(E)
+    local prof = profiles[target] or profiles[Active(E)]
+    if type(prof) ~= "table" then return nil end
+    local v = ReadField(prof, f)
+    if v == nil then v = f.default end
+    return v
+end
+function A.LiveValue(unit, value) return value end
+
+-- The account-wide values the install changed, as they were before: { cursor = { had = the key was set, v = its value } }.
+function A.AccountOk(a)
+    if type(a) ~= "table" then return false end
+    for k, v in pairs(a) do
+        if k ~= "cursor" or type(v) ~= "table" or type(v.had) ~= "boolean" or type(v.v) ~= "boolean" then return false end
+        for kk in pairs(v) do if kk ~= "had" and kk ~= "v" and kk ~= "want" then return false end end
+        if v.want ~= nil and type(v.want) ~= "boolean" then return false end
+    end
+    return true
+end
+
+-- An update that newly manages the account-wide flag keeps what it was before this update, once, for Restore: the first install's
+-- snapshot never changes, so a unit managed from a later update is added to it here (Engine calls it before the record is written).
+function A.Extend(snap, part)
+    if type(snap) ~= "table" or type(part) ~= "table" or not (part.acct and part.acct.cursor) then return end
+    snap.account = snap.account or {}
+    if snap.account.cursor == nil then
+        local c = part.acct.cursor
+        snap.account.cursor = { had = c.had, v = c.v }
+    end
 end
 
 ---------------------------------------------------------------------------
@@ -560,6 +675,30 @@ A.Resolved = Resolved
 A.PosOk = PosOk
 A.Read = Read
 
+-- Where the layout's fixed tooltip place goes on this screen: the author's centre offset (rec, on the package's canvas) moved with
+-- the component the geometry attaches "tooltip" to (the author's tooltip sits against the damage meter's bottom-left corner), and
+-- kept on the screen. Without geometry the offset is used as given. Returns a position record { point = "CENTER", relPoint =
+-- "CENTER", x, y }; pure.
+local function TipPlace(rec, geo, attach)
+    local new = { point = "CENTER", relPoint = "CENTER", x = rec.x, y = rec.y }
+    local to = type(attach) == "table" and attach.tooltip
+    local compId, pt
+    if type(to) == "string" then compId, pt = to:match("^([%w%-]+):?(%u*)$") end
+    local comp = compId and geo and geo.components and geo.components[compId]
+    if comp then
+        local at = Resolved({}, rec, comp, pt, geo)
+        new.x, new.y = at.x, at.y
+    end
+    if geo and geo.screen then
+        local W, H = geo.screen.w / 2, geo.screen.h / 2
+        new.x = math.max(-W, math.min(W, new.x))
+        new.y = math.max(-H, math.min(H, new.y))
+        new.x, new.y = G().Round(new.x), G().Round(new.y)
+    end
+    return new
+end
+A.TipPlace = TipPlace
+
 -- Moves, sizes and relinks the registered positions in the payload's data d, and scales the text sizes.
 -- Returns { [posId] = { rec, comp, label, sized } } and notes { { code, id } }.
 local function Adapt(d, geo, attach)
@@ -570,9 +709,11 @@ local function Adapt(d, geo, attach)
         local p = A.POSITIONS[id]
         local compId, pt = attach[id]:match("^([%w%-]+):?(%u*)$")
         local comp = geo.components[compId]
-        local blob = d.addons[p.module]
+        local blob = p and d.addons[p.module]
         local rec = type(blob) == "table" and Read(blob, p.path) or nil
-        if type(blob) ~= "table" then notes[#notes + 1] = { code = "module-absent", id = id }
+        if not p then
+            -- not a position in a module blob (the tooltip's fixed place is placed by TipPlace)
+        elseif type(blob) ~= "table" then notes[#notes + 1] = { code = "module-absent", id = id }
         elseif p.check and Read(blob, p.check.path) ~= p.check.value then notes[#notes + 1] = { code = "not-found", id = id }
         elseif not PosOk(rec) then notes[#notes + 1] = { code = rec == nil and "not-stored" or "format", id = id }
         else
@@ -677,7 +818,7 @@ local function BuildPayload(E, composed, home, dev, geo, attach)
                 if type(t[k]) ~= "table" then return nil, "eui-shape" end
                 t = t[k]
             end
-            if e.value == LY.DEFAULT then t[f.path[#f.path]] = nil else t[f.path[#f.path]] = e.value end
+            if e.value == LY.DEFAULT then t[f.path[#f.path]] = nil else t[f.path[#f.path]] = LY.Copy(e.value) end
         end
     end
     local placed, notes = Adapt(d, geo, attach)
@@ -801,7 +942,19 @@ local function PosOf(unit) local id = unit:match("^ellesmereui:pos%.(.+)$") retu
 
 -- text, stored ("x" | "d" | "a"), comparable. nil: this unit can't be read here (not compared).
 local function Normal(src, unit)
+    -- the account-wide cursor flag is read live whatever the source (it is not in any profile); never stored reads as the default
+    if unit == A.CURSOR_UNIT then
+        local v = CursorRaw()
+        if v == nil then return LY.Value(false), "d", true end
+        return LY.Value(v), "x", true
+    end
     if type(src) ~= "table" then return MG().ABSENT, "a", true end
+    if unit == A.FIXED_UNIT then
+        local rec = TipRec(src)
+        if rec == nil then return MG().ABSENT, "a", true end
+        if rec == false then return nil end   -- stored in a form not read here: not compared, left as it is
+        return Expected(rec) .. ",CENTER", "x", true
+    end
     local addons = type(src.addons) == "table" and src.addons or {}
     local m = ModuleOf(unit)
     if m then return NormBlob(m, addons[m]), addons[m] ~= nil and "x" or "a", false end
@@ -849,7 +1002,7 @@ local function UnitsOf(composed, d)
     local function Add(u) if not seen[u] then seen[u] = true list[#list + 1] = u end end
     for _, e in ipairs(composed.list) do
         local u = e.unit
-        if ModuleOf(u) or u == A.LAYOUT_UNIT or A.BY_UNIT[u] then Add(u)
+        if ModuleOf(u) or u == A.LAYOUT_UNIT or A.BY_UNIT[u] or IsTip(u) then Add(u)
         elseif u:find("^ellesmereui:root%.") and u ~= PREFIX .. "root._migrations" then Add(u) end
     end
     for _, id in ipairs(LY.SortedKeys(A.POSITIONS)) do
@@ -871,6 +1024,8 @@ end
 -- A sub-unit's stored value, for carrying it from one source to another: a position's record and size, a text size, a
 -- field's value, the accent.
 local function RawOf(src, unit)
+    if unit == A.CURSOR_UNIT then return { v = CursorRaw() } end
+    if unit == A.FIXED_UNIT then return { rec = TipRec(src) or nil } end
     local addons = type(src) == "table" and type(src.addons) == "table" and src.addons or {}
     local id = PosOf(unit)
     if id then
@@ -904,7 +1059,7 @@ function A.ShowRaw(raw)
 end
 
 local function PutRaw(d, unit, raw)
-    if not raw then return end
+    if not raw or IsTip(unit) then return end   -- the tooltip units never ride in the payload (see TipPlan)
     local id = PosOf(unit)
     if id then
         local p = A.POSITIONS[id]
@@ -967,6 +1122,50 @@ end
 local function StashName(backup) return backup:sub(1, 28) .. "~1" end
 
 ---------------------------------------------------------------------------
+-- The tooltip units (outside the payload). What is written, decided here from the plan and an update's comparison:
+--   cursor  the account-wide flag, written alone and only when it differs from what is there; kept as the player has it when the
+--           update decision says so
+--   fixed   the install's own profile's tooltipFixedPos, written after the import. The import builds the new profile on the active
+--           one, so its value is the active profile's, never the install's old one: the layout's place when the decision is to apply
+--           it, otherwise what the install's profile held before (or nothing, when it held nothing), so nothing the player set is lost
+-- Returns tip = { cursor = { want, was }, fixed = { write = { centerX, centerY } | false } } and the review rows.
+---------------------------------------------------------------------------
+local function TipPlan(composed, cur, from, result, tipRec)
+    local cv, fv = composed.units[A.CURSOR_UNIT], composed.units[A.FIXED_UNIT]
+    local tip, rows = {}, {}
+    local function Dec(u) local r = result and result.by[u] return r and r.decision end
+    local function Kept(d) return d == "keep" or d == "owned" end
+    local now = CursorRaw() == true
+    if cv ~= nil then
+        local d = Dec(A.CURSOR_UNIT)
+        local want = Kept(d) and now or (cv == true)
+        if want ~= now then tip.cursor = { want = want, was = CursorRaw() } end
+        rows[#rows + 1] = { unit = A.CURSOR_UNIT, label = A.Label(A.CURSOR_UNIT), old = now, new = want, change = want ~= now,
+            account = true, layer = "choices", decision = d }
+    end
+    local old = TipRec(from) or nil
+    local mine = cur and type(cur.tooltipFixedPos) == "table" and LY.Copy(cur.tooltipFixedPos) or nil
+    if fv ~= nil then
+        local d = Dec(A.FIXED_UNIT)
+        local apply = d == nil or d == "apply"
+        local new, write = tipRec, { centerX = tipRec.x, centerY = tipRec.y }
+        if not apply then
+            new = old
+            write = cur and (mine or false) or nil
+        end
+        if write ~= nil then tip.fixed = { write = write } end
+        local same = old ~= nil and new ~= nil and Expected(old) == Expected(new)
+        rows[#rows + 1] = { unit = A.FIXED_UNIT, label = A.Label(A.FIXED_UNIT), old = old and { x = old.x, y = old.y } or nil,
+            new = new and { x = new.x, y = new.y } or nil, change = not same, tip = true, layer = "choices", decision = d }
+    elseif cur then
+        -- named by nothing this time (the Follow-the-mouse pick, or a package that has no tooltip choice): what the install's profile
+        -- held is carried into the new one as it is
+        tip.fixed = { write = mine or false }
+    end
+    return tip, rows
+end
+
+---------------------------------------------------------------------------
 -- Plan: read only. part = { adapter, target, active, home, rows, changes, nothing, reload, blocked, key, payload,
 --   inputs, untested, version }. The payload is kept in memory only, for Apply.
 ---------------------------------------------------------------------------
@@ -996,15 +1195,31 @@ function A.Plan(composed, ctx)
             part.notes[#part.notes + 1] = { code = "unplaced", id = u.id, label = u.label }
         end
     end
+    -- what the review needs to say about the tooltip and friendly plates (read only)
+    if composed.units[A.CURSOR_UNIT] ~= nil or composed.units[A.FIXED_UNIT] ~= nil then
+        local db = rawget(_G, "EllesmereUIDB")
+        local loaded = rawget(_G, "C_AddOns") and C_AddOns.IsAddOnLoaded and C_AddOns.IsAddOnLoaded("EllesmereUIBlizzardSkin")
+        if (type(db) == "table" and db.customTooltips == false) or loaded == false then
+            part.notes[#part.notes + 1] = { code = "tooltip-skin-off", id = "tooltip", off = loaded == false and "module" or "switch" }
+        end
+    end
     part.inputs = Inputs(composed, home, placed)
     part.level = composed.units[A.BASE_UNIT] ~= nil and "whole" or "units"   -- a base profile string can only be replaced whole
 
     -- The package's side of every unit this install manages (for the baseline, and an update's comparison)
     local d = payload.data
     local n, nraw = {}, {}
+    local tipRec   -- where the layout's fixed tooltip place lands on this screen (nil: the layout names none)
     for _, u in ipairs(UnitsOf(composed, d)) do
-        local text = Normal(d, u)
-        if text then n[u] = text; nraw[u] = RawOf(d, u) end
+        if u == A.CURSOR_UNIT then
+            n[u], nraw[u] = LY.Value(composed.units[u] == true), { v = composed.units[u] == true }
+        elseif u == A.FIXED_UNIT then
+            tipRec = TipPlace(composed.units[u], ctx.geometry, ctx.attach)
+            n[u], nraw[u] = Expected(tipRec) .. ",CENTER", { rec = tipRec }
+        else
+            local text = Normal(d, u)
+            if text then n[u] = text; nraw[u] = RawOf(d, u) end
+        end
     end
     local M, cur = ctx.merge, exists and profiles[target] or nil
     local result
@@ -1027,7 +1242,8 @@ function A.Plan(composed, ctx)
         local r = result and result.by[e.unit]
         if f then
             local old = ReadField(from, f)
-            local new = r and (r.decision == "keep" or r.decision == "owned") and old or e.value
+            local new = e.value
+            if r and (r.decision == "keep" or r.decision == "owned") then new = old end   -- (not `and/or`: a kept false must stay false)
             local change = not LY.Same(old, new)
             if new == LY.DEFAULT then change = old ~= nil end   -- a reset changes what is stored
             part.rows[#part.rows + 1] = { unit = e.unit, label = f.label, old = old, new = new,
@@ -1069,6 +1285,14 @@ function A.Plan(composed, ctx)
                 place = true, comp = pl.comp, sized = pl.sized, decision = r and r.decision, kept = pl.kept }
         end
     end
+    -- the tooltip units: rows for the review and the key, and what Apply writes outside the import
+    if composed.units[A.CURSOR_UNIT] ~= nil or composed.units[A.FIXED_UNIT] ~= nil or cur then
+        local tip, rows = TipPlan(composed, cur, from, result, tipRec)
+        part.tip = next(tip) ~= nil and tip or nil
+        for _, row in ipairs(rows) do part.rows[#part.rows + 1] = row end
+        if tip.cursor then part.acct = { cursor = { had = tip.cursor.was ~= nil, v = tip.cursor.was == true, want = tip.cursor.want } } end
+        part.tipRec = tipRec
+    end
     local keyRows = {}
     for _, row in ipairs(part.rows) do
         if row.change then part.changes = part.changes + 1 end
@@ -1098,7 +1322,7 @@ function A.Plan(composed, ctx)
         if type(profiles[name]) == "table" and ctx.backup ~= name then part.blocked = "backup-taken" return part end
         if type(E.RenameProfile) ~= "function" then part.blocked = "eui-no-rename" return part end
         part.backup = { name = name, replaces = type(profiles[name]) == "table" }
-        part.update = { active = active, target = target, backup = name, c = part.cmap }
+        part.update = { active = active, target = target, backup = name, c = part.cmap, account = part.acct }
     end
     part.reload = not part.nothing
     part.key = LY.Canon({ target, active, home, part.inputs, keyRows, part.nothing, result and result.whole and result.whole.choice or false,
@@ -1236,11 +1460,18 @@ function A.Merge(part, composed, d, n, nraw, cur, M, ctx)
                 -- what the check after the reload expects of it: the recipient's value, by value
                 local id = PosOf(row.unit)
                 if A.BY_UNIT[row.unit] then
-                    part.keptExpect[row.unit] = LY.Fingerprint(raw.v == nil and A.BY_UNIT[row.unit].default or raw.v)
+                    local f = A.BY_UNIT[row.unit]
+                    local v = raw.v
+                    if v == nil then v = f.default end   -- (not `and/or`: a false default must stay false)
+                    part.keptExpect[row.unit] = LY.Fingerprint(v)
                 elseif row.unit == A.ACCENT_UNIT then
                     if raw.v ~= nil then part.keptExpect[row.unit] = "accent:" .. A.AccentSig(raw.v) end
                 elseif A.TEXT_BY_UNIT[row.unit] then
                     if Num(raw.v) then part.keptExpect[row.unit] = LY.Fingerprint(raw.v) end
+                elseif row.unit == A.CURSOR_UNIT then
+                    part.keptExpect[row.unit] = LY.Fingerprint(raw.v == true)
+                elseif row.unit == A.FIXED_UNIT then
+                    if raw.rec then part.keptExpect[row.unit] = Expected(raw.rec) end
                 elseif id and PosOk(raw.rec) then
                     local r = { x = raw.rec.x, y = raw.rec.y }
                     if A.POSITIONS[id].size and Num(raw.w) then r.w, r.h = math.floor(raw.w + 0.5), math.floor((Num(raw.h) and raw.h or raw.w) + 0.5) end
@@ -1327,6 +1558,30 @@ local function OthersUnchanged(E, before, ours)
     return n == 0, n, true
 end
 
+-- Writes what TipPlan decided and reads each value back. EllesmereUI's own option writes tooltipAnchorCursor the same way (one
+-- key of EllesmereUIDB), and EllesmereUI reads both keys when it loads, so the reload that finishes the install is what applies them.
+function A.WriteTip(E, part, target)
+    local tip = part.tip
+    if not tip then return true end
+    if tip.fixed then
+        local prof = Profiles(E)[target]
+        if type(prof) ~= "table" then return false, "tooltip-write" end
+        local w = tip.fixed.write
+        prof.tooltipFixedPos = w and { centerX = w.centerX, centerY = w.centerY } or nil
+        local rec = TipRec(prof)
+        if w then
+            if not rec or math.abs(rec.x - w.centerX) > 0.01 or math.abs(rec.y - w.centerY) > 0.01 then return false, "tooltip-write" end
+        elseif prof.tooltipFixedPos ~= nil then return false, "tooltip-write" end
+    end
+    if tip.cursor then
+        local db = rawget(_G, "EllesmereUIDB")
+        if type(db) ~= "table" then return false, "tooltip-write" end
+        db.tooltipAnchorCursor = tip.cursor.want
+        if CursorRaw() ~= tip.cursor.want then return false, "tooltip-write" end
+    end
+    return true
+end
+
 function A.Apply(part)
     if InCombatLockdown and InCombatLockdown() then return { state = "failed", code = "combat", rollback = "clean" } end
     if part.nothing then return { state = part.kept and "kept" or "skipped", code = part.kept and "kept-whole" or "matches" } end
@@ -1388,6 +1643,10 @@ function A.Apply(part)
     if not ok or done ~= true then
         return { state = "failed", code = (ok and err == "in combat") and "combat" or "eui-import", rollback = Rollback() }
     end
+    -- The tooltip units, which no import can carry: the install's own profile first, then the account-wide flag (a failed write
+    -- here puts the profiles back as the import's own failure does).
+    local okTip, codeTip = A.WriteTip(E, part, target)
+    if not okTip then return { state = "failed", code = codeTip, rollback = Rollback() } end
     if stashed then pcall(E.DeleteProfile, stashed) end   -- the copy from before an earlier update: superseded now
     -- nothing else about the recipient's profiles changed (the install's own profiles aside)
     local fine, changed = OthersUnchanged(E, before, ours)
@@ -1440,6 +1699,18 @@ function A.Verify(expect, snap)
                 end
                 if bad then r.diffs[#r.diffs + 1] = { unit = unit, code = "moved" } end
             end
+        elseif unit == A.CURSOR_UNIT then
+            -- the account-wide flag as stored now: what the cursor hook reads (an absent key reads as off)
+            r.checked = r.checked + 1
+            if LY.Fingerprint(CursorRaw() == true) ~= expect[unit] then r.diffs[#r.diffs + 1] = { unit = unit, code = "differs" } end
+        elseif unit == A.FIXED_UNIT then
+            r.checked = r.checked + 1
+            local rec = TipRec(prof)
+            local want = { expect[unit]:match("^@(%-?%d+),(%-?%d+)$") }
+            if not rec or not want[1] then r.diffs[#r.diffs + 1] = { unit = unit, code = "missing" }
+            elseif math.abs(rec.x - tonumber(want[1])) > 1 or math.abs(rec.y - tonumber(want[2])) > 1 then
+                r.diffs[#r.diffs + 1] = { unit = unit, code = "moved" }
+            end
         elseif unit == A.ACCENT_UNIT then
             -- the accent is the one root key read back by value: EllesmereUI doesn't rewrite it as it loads
             r.checked = r.checked + 1
@@ -1461,8 +1732,17 @@ end
 function A.Expect(composed, part)
     local out = {}
     for _, e in ipairs(composed.list) do
-        if A.BY_UNIT[e.unit] then out[e.unit] = LY.Fingerprint(e.value == LY.DEFAULT and A.BY_UNIT[e.unit].default or e.value)
+        if A.BY_UNIT[e.unit] then
+            local f = A.BY_UNIT[e.unit]
+            local v = e.value
+            if v == LY.DEFAULT then v = f.default end
+            out[e.unit] = LY.Fingerprint(v)
         elseif e.unit == A.ACCENT_UNIT then out[e.unit] = "accent:" .. A.AccentSig(e.value)
+        elseif e.unit == A.CURSOR_UNIT then out[e.unit] = LY.Fingerprint(e.value == true)
+        elseif e.unit == A.FIXED_UNIT then
+            -- what Apply writes into the install's profile (the layout's place, or the player's own carried over)
+            local w = part and part.tip and part.tip.fixed and part.tip.fixed.write
+            if type(w) == "table" and Fin(w.centerX) and Fin(w.centerY) then out[e.unit] = Expected({ x = w.centerX, y = w.centerY }) end
         elseif ModuleOf(e.unit) or e.unit == A.LAYOUT_UNIT or e.unit:find("^ellesmereui:root%.") then out[e.unit] = "present" end
     end
     for id, pl in pairs(part and part.placed or {}) do
@@ -1504,6 +1784,28 @@ function A.Baseline(track, snap)
 end
 
 ---------------------------------------------------------------------------
+-- The account-wide flag put back (Undo and Restore). raw = { had, v }: an absent key stays absent. Returns true or false, code.
+local function PutCursor(raw)
+    local db = rawget(_G, "EllesmereUIDB")
+    if type(db) ~= "table" then return false, "tooltip-write" end
+    local want            -- nil when the key was absent: it is removed again, not set to false
+    if raw.had then want = raw.v == true end
+    db.tooltipAnchorCursor = want
+    if CursorRaw() ~= want then return false, "tooltip-write" end
+    return true
+end
+
+-- What putting the flag back does: write it, or leave it because the player changed it since (never undone behind their back), or
+-- nothing when it already reads as it did. `wrote` is the value the install or update left there.
+local function CursorAction(raw, wrote)
+    local live = CursorRaw() == true
+    local target = raw.had and raw.v == true
+    if live == target then return nil end
+    if wrote ~= nil and live ~= wrote then return { kind = "account-kept" } end
+    return { kind = "account", to = { had = raw.had, v = raw.v } }
+end
+
+---------------------------------------------------------------------------
 -- Undo this update: the install's profile from before the update gets its name back (it was renamed, not copied, so it is
 -- exactly what it was), the one the update made goes, and the profile in use before the update is in use again. A reload
 -- finishes it. u = record.update.ellesmereui = { active, target, backup, c = { [unit] = text before the update } }
@@ -1531,6 +1833,11 @@ function A.PlanUndo(u, snap)
     local want = u.active
     if want ~= u.target and type(profiles[want]) ~= "table" then want = u.target end
     if active ~= want then out.actions[#out.actions + 1] = { kind = "switch", from = active, to = want } end
+    local acct = u.account and u.account.cursor
+    if acct then
+        local act = CursorAction(acct, acct.want)
+        if act then out.actions[#out.actions + 1] = act end
+    end
     out.want = want
     out.reload = true
     out.key = LY.Canon(out.actions)
@@ -1550,6 +1857,11 @@ function A.Undo(u, snap)
         elseif act.kind == "delete" then
             pcall(E.DeleteProfile, act.name)
             bad = type(Profiles(E)[act.name]) == "table" and "target-kept"
+        elseif act.kind == "account" then
+            local okA, codeA = PutCursor(act.to)
+            bad = not okA and codeA
+        elseif act.kind == "account-kept" then
+            bad = false
         else
             pcall(E.RenameProfile, act.from, act.to)
             bad = (type(Profiles(E)[act.to]) ~= "table" or type(Profiles(E)[act.from]) == "table") and "eui-rename"
@@ -1616,6 +1928,15 @@ function A.PlanRestore(snap, record)
     if snap.created and type(profiles[snap.target]) == "table" then out.actions[#out.actions + 1] = { kind = "delete", name = snap.target } end
     local backup = BackupOf(record)
     if backup and type(profiles[backup]) == "table" then out.actions[#out.actions + 1] = { kind = "delete", name = backup, backup = true } end
+    -- the account-wide flag, back as it was before the install: unless the player has changed it since (then it is left, and said)
+    local acct = snap.account and snap.account.cursor
+    if acct then
+        local wrote = record and record.expect and record.expect.ellesmereui and record.expect.ellesmereui[A.CURSOR_UNIT]
+        local wroteOn                       -- what the install left: nil when the record doesn't say
+        if wrote ~= nil then wroteOn = wrote == LY.Fingerprint(true) end
+        local act = CursorAction(acct, wroteOn)
+        if act then out.actions[#out.actions + 1] = act end
+    end
     out.reload = #out.actions > 0
     out.key = LY.Canon(out.actions)
     return out
@@ -1631,6 +1952,11 @@ function A.Restore(snap, record)
         if act.kind == "switch" then
             pcall(E.SwitchProfile, act.to)
             if Active(E) ~= act.to then return { state = "failed", code = "eui-switch" } end
+        elseif act.kind == "account" then
+            local okA, codeA = PutCursor(act.to)
+            if not okA then return { state = "partial", code = codeA, reload = true } end
+        elseif act.kind == "account-kept" then
+            -- the player changed it after the install: left as they have it
         else
             pcall(E.DeleteProfile, act.name)
             if type(Profiles(E)[act.name]) == "table" then return { state = "partial", code = "target-kept", reload = true } end
@@ -1648,6 +1974,17 @@ function A.VerifyRestore(snap, units, record)
     if snap.created and type(profiles[snap.target]) == "table" then r.diffs[#r.diffs + 1] = { unit = A.PROFILE_UNIT, code = "target-still-there" } end
     local backup = BackupOf(record)
     if backup and type(profiles[backup]) == "table" then r.diffs[#r.diffs + 1] = { unit = A.PROFILE_UNIT, code = "backup-still-there" } end
+    local acct = snap.account and snap.account.cursor
+    if acct then
+        -- back as before, or left as the player has it when they changed it after the install (the install's own value still
+        -- there, or the one from before, are the only two states that mean the restore did not take, or did)
+        r.checked = r.checked + 1
+        local wrote = record and record.expect and record.expect.ellesmereui and record.expect.ellesmereui[A.CURSOR_UNIT]
+        local liveFp = LY.Fingerprint(CursorRaw() == true)
+        if liveFp ~= LY.Fingerprint(acct.had and acct.v == true) and (wrote == nil or liveFp == wrote) then
+            r.diffs[#r.diffs + 1] = { unit = A.CURSOR_UNIT, code = "differs" }
+        end
+    end
     if Active(E) ~= snap.active then
         r.diffs[#r.diffs + 1] = { unit = A.PROFILE_UNIT, code = "not-previous" }
     else
@@ -1656,8 +1993,10 @@ function A.VerifyRestore(snap, units, record)
             -- Blobs, links, root keys, placed positions and text sizes exist only in the install's own profile, which
             -- the check above saw removed: nothing of them is left to read in the profile in use.
             local inTarget = snap.created and not f and (ModuleOf(unit) or unit == A.LAYOUT_UNIT or A.TEXT_BY_UNIT[unit]
-                or unit:find("^ellesmereui:root%.") or unit:find("^ellesmereui:pos%."))
-            if inTarget then
+                or unit:find("^ellesmereui:root%.") or unit:find("^ellesmereui:pos%.") or unit == A.FIXED_UNIT)
+            if unit == A.CURSOR_UNIT then
+                -- checked above, against the account-wide snapshot
+            elseif inTarget then
                 r.checked = r.checked + 1
             elseif not f or snap.values[unit] == nil then r.unverifiable = r.unverifiable + 1
             else

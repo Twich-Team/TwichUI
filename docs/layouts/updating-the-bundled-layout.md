@@ -122,7 +122,7 @@ with the previous one (the data file as it was), lists such settings and places,
 
 | `--returned` | Players who have the layout get | Notes |
 |---|---|---|
-| `reset` | TwichUI's default (unless they changed it themselves) | The package becomes format 4: an older TwichUI refuses it. A place can't be reset; it is released |
+| `reset` | TwichUI's default (unless they changed it themselves) | The package becomes at least format 4 (the bundled one is 5): an older TwichUI refuses it. A place can't be reset; it is released |
 | `release` | what they have now; new players get the default | The layout stops managing them |
 | `keep` | the layout's previous value | Your change to them is left out |
 

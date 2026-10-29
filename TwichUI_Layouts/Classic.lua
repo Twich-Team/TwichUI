@@ -48,6 +48,9 @@ local euiAttach = {
     ["databar-location"] = "minimap:BOTTOM",
     ["extra-button"] = "top-left", ["bar-rep"] = "top-left",
     ["databar-top"] = "top-edge", ["uf-boss"] = "top-edge",
+    -- the layout's fixed tooltip place: the author's tooltip sits against the damage meter's bottom-left corner (its bottom level
+    -- with the meter's, 5 units short of its left edge), so it keeps that company on every screen
+    tooltip = "meter:BOTTOMLEFT",
 }
 for _, id in ipairs(CENTRAL) do euiAttach[id] = "central" end
 
@@ -65,7 +68,7 @@ LY.COMPACT_VARIANT = "compact-adventure"
 LY.CLASSIC_PACKAGE = {
     -- format 4 only when the capture holds a reset (tools/layout_capture.lua --returned reset): an older TwichUI then refuses
     -- the package as newer instead of misreading it; without one the package stays readable by format 3
-    format = C.twichui.reset and 4 or 3, id = "twichui-adventure", revision = 3,
+    format = 5, id = "twichui-adventure", revision = 4,
     -- a developer package until it has been installed and checked on WoW: Forever (Phase 7): the capture is from the
     -- Retail client's saved files, and a developer package may be tried on Retail (architecture.md §3)
     dev = true,
@@ -112,6 +115,29 @@ LY.CLASSIC_PACKAGE = {
                     ellesmereui = { root = { euiAccent = { useClass = false, custom = { r = 0.80, g = 0.45, b = 0.30 } } } } },
                 { id = "dusk", label = "Dusk blue", swatch = { 0.47, 0.60, 0.80 },
                     ellesmereui = { root = { euiAccent = { useClass = false, custom = { r = 0.47, g = 0.60, b = 0.80 } } } } },
+            } },
+        -- The author's own: tooltipAnchorCursor = false and tooltipFixedPos = (900.83, -496.67) on the 2866.67 x 1200 canvas, the same in every
+        -- one of the saved profiles read (the capture leaves profile.tooltipFixedPos out because the import can't carry it).
+        { id = "tooltip", kind = "enum", label = "Tooltip placement", default = "layout",
+            sets = { "ellesmereui:tooltip.cursor", "ellesmereui:tooltip.fixedPos" },
+            hint = "Where the game's default tooltips appear. Follow mouse is an EllesmereUI setting shared by every character on this account.",
+            options = {
+                { id = "layout", label = "Layout position", hint = "Show tooltips at this layout's configured location.",
+                    ellesmereui = { tooltip = { cursor = false, fixed = { x = 900.83, y = -496.67 } } } },
+                { id = "cursor", label = "Follow mouse", hint = "Keep tooltips near your cursor.",
+                    ellesmereui = { tooltip = { cursor = true } } },
+            } },
+        -- "Class colors" is EllesmereUI managing friendly player nameplates with its class colour (showFriendlyPlayers and classColorFriendly
+        -- on: the layout's own state). "Standard blue" turns EllesmereUI's friendly player nameplates off (EllesmereUI > Nameplates > General >
+        -- "Show EUI Friendly Player Nameplates"), which hands them to Blizzard's own nameplates and their settings; nothing else is written.
+        { id = "friendly-plates", kind = "enum", label = "Friendly player nameplates", default = "class",
+            sets = { "ellesmereui:addons.EllesmereUINameplates.showFriendlyPlayers", "ellesmereui:addons.EllesmereUINameplates.classColorFriendly" },
+            hint = "How friendly players' nameplates look. Enemy plates, friendly NPCs and your other frames are not touched.",
+            options = {
+                { id = "class", label = "Class colors", hint = "Use each friendly player's class color.",
+                    ellesmereui = { fields = { ["nameplates.showFriendlyPlayers"] = true, ["nameplates.classColorFriendly"] = true } } },
+                { id = "blue", label = "Standard blue", hint = "Use the standard blue appearance for friendly players.", swatch = { 0.667, 0.667, 1 },
+                    ellesmereui = { fields = { ["nameplates.showFriendlyPlayers"] = false } } },
             } },
         { id = "size", kind = "density", label = "Size", default = "standard",
             hint = "How large chat, the damage meter and the minimap are drawn, and the text in chat and the meter. Positions follow.",

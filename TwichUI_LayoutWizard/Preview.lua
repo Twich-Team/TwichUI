@@ -12,6 +12,8 @@
 --   view:Set(scene, accent, issues)             accent = { r, g, b }; re-lays every box out. Records what it drew in view.drawn
 --   view:Controls(scenario, blocked)            marks the scenario shown, and enables the full-size button or says why not
 --   view:Clear()                                hides the boxes (no scene to draw)
+--   view:Track(on)                              the sample tooltip of "Follow mouse" follows the pointer while it is over the miniature
+--                                               (a throttled OnUpdate that exists only then; off, the sample sits at rest)
 --   Preview.MAX_W, Preview.MAX_H                the largest the viewport is drawn
 
 local R = TwichUI
@@ -20,6 +22,9 @@ local Pv = {}
 WZ.Preview = Pv
 
 Pv.MAX_W, Pv.MAX_H = 330, 200
+Pv.tracking = 0   -- miniatures whose sample tooltip is following the pointer now (0 or 1)
+R.Perf.Gauge("layoutwizard.preview.follow", { label = "Layout setup preview: pointer tracking running (0 unless the pointer is over the sample)", unit = "count", kind = "listeners",
+    group = "layouts", read = function() return Pv.tracking end })
 Pv.CAPTION = "An illustration: the layout's places for your screen, to scale, with sample shapes in place of the real frames. The real look is EllesmereUI's and TwichUI's own."
 
 -- Sample shapes in a component's box, as fractions of it: { x, y, w, h, role }. role: "line" (a text line), "bar" (accent),
@@ -132,12 +137,30 @@ local function Draw(view, scene, accent)
         tip:SetPoint("CENTER", view.frame, "CENTER", r.x * sc, r.y * sc)
         tip:SetSize(w, h)
         tip:SetBackdropBorderColor(pal.stone[1], pal.stone[2], pal.stone[3], 1)
-        tip.label:SetText("Tooltip")
+        tip.label:SetText(scene.tooltip.follow and "Follows mouse" or "Tooltip")
         tip.label:SetShown(w >= 30 and h >= 12)
         tip:Show()
-        drawn.tooltip = { x = r.x * sc, y = r.y * sc, w = w, h = h }
+        drawn.tooltip = { x = r.x * sc, y = r.y * sc, w = w, h = h, follow = scene.tooltip.follow }
+        if scene.tooltip.follow then
+            local cur = scene.tooltip.cursor
+            view.follow = { rest = { x = r.x * sc, y = r.y * sc }, w = w, h = h, cursor = { x = cur.x * sc, y = cur.y * sc }, pw = pw, ph = ph }
+            if not view.mark then
+                view.mark = view.frame:CreateTexture(nil, "OVERLAY")
+                view.mark:SetSize(5, 5)
+                view.mark:SetColorTexture(pal.text[1], pal.text[2], pal.text[3], 1)
+                view.made = view.made + 1
+            end
+            view.mark:ClearAllPoints()
+            view.mark:SetPoint("CENTER", view.frame, "CENTER", cur.x * sc, cur.y * sc)
+            view.mark:Show()
+        end
     elseif view.boxes.tooltip then
         view.boxes.tooltip:Hide()
+    end
+    if not (scene.tooltip and scene.tooltip.follow) then
+        view.follow = nil
+        if view.mark then view.mark:Hide() end
+        view:Track(false)
     end
     view.drawn = drawn
 end
@@ -190,6 +213,63 @@ function Pv.Build(parent, handlers)
     view.notes:SetWordWrap(true)
     view.notes:SetPoint("TOPLEFT", view.issues, "BOTTOMLEFT", 0, -6)
 
+    -- The pointer sample of Follow mouse. Isolated: it moves only this miniature's own sample box and never reads or changes the
+    -- game's tooltip. While the pointer is outside the miniature (or the page is hidden) the sample sits at its rest place.
+    function view:RestTip()
+        local f, tip = self.follow, self.boxes.tooltip
+        if not (f and tip) then return end
+        tip:ClearAllPoints()
+        tip:SetPoint("CENTER", self.frame, "CENTER", f.rest.x, f.rest.y)
+        if self.mark then
+            self.mark:ClearAllPoints()
+            self.mark:SetPoint("CENTER", self.frame, "CENTER", f.cursor.x, f.cursor.y)
+        end
+    end
+    function view:MoveTip()
+        local f, tip = self.follow, self.boxes.tooltip
+        if not (f and tip) then return end
+        local frame = self.frame
+        local px, py = GetCursorPosition()
+        local es = frame:GetEffectiveScale()
+        local cx, cy = frame:GetCenter()
+        if not (px and es and es > 0 and cx and cy) then return end
+        local dx, dy = px / es - cx, py / es - cy
+        dx = math.max(-f.pw / 2, math.min(f.pw / 2, dx))
+        dy = math.max(-f.ph / 2, math.min(f.ph / 2 - f.h, dy))
+        tip:ClearAllPoints()
+        tip:SetPoint("BOTTOM", frame, "CENTER", dx, dy)
+        if self.mark then
+            self.mark:ClearAllPoints()
+            self.mark:SetPoint("CENTER", frame, "CENTER", dx, dy)
+        end
+    end
+    function view:Track(on)
+        local frame = self.frame
+        if on and self.follow and self.boxes.tooltip and frame:IsShown() then
+            if self.tracking then return end
+            self.tracking = true
+            Pv.tracking = Pv.tracking + 1
+            local acc = 0
+            frame:SetScript("OnUpdate", function(_, dt)
+                acc = acc + (dt or 0)
+                if acc < 0.03 then return end   -- about 30 moves a second, only while the pointer is over the miniature
+                acc = 0
+                local pt = R.Perf.on and R.Perf.Start("layoutwizard.preview.follow")
+                self:MoveTip()
+                if pt then R.Perf.Stop(pt) end
+            end)
+        elseif self.tracking then
+            self.tracking = false
+            Pv.tracking = Pv.tracking - 1
+            frame:SetScript("OnUpdate", nil)
+            self:RestTip()
+        end
+    end
+    view.frame:EnableMouse(true)
+    view.frame:SetScript("OnEnter", function() view:Track(true) end)
+    view.frame:SetScript("OnLeave", function() view:Track(false) end)
+    view.frame:SetScript("OnHide", function() view:Track(false) end)
+
     function view:Controls(scenario, blocked)
         for id, tab in pairs(self.tabs) do tab:SetSelected(id == scenario) end
         self.full:SetEnabled(blocked == nil)
@@ -210,6 +290,9 @@ function Pv.Build(parent, handlers)
         self.caption:Show()
     end
     function view:Clear()
+        self.follow = nil
+        if self.mark then self.mark:Hide() end
+        self:Track(false)
         for _, box in pairs(self.boxes) do box:Hide() end
         for _, t in pairs(self.elems) do t:Hide() end
         self.drawn = nil

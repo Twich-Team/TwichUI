@@ -16,10 +16,14 @@
 --   Scene.Scenario(id)     the entry, or the first
 --   Scene.Build(layout, geo, opts) -> scene | nil, why
 --     layout = { pkg, variant }; geo = Geometry.Resolve's result (or an update's final plan, Engine plan.final.geometry);
---     opts = { scenario = id, tooltip = { point, x, y }, moved = { [piece id] = the player's own place } (plan.final.moved) }
+--     opts = { scenario = id, tooltip = { point, x, y }, tooltipView = { mode = "layout" | "cursor", place = { x, y } },
+--       moved = { [piece id] = the player's own place } (plan.final.moved) }
+--       tooltip: the game's own default place (a package with no tooltip choice); tooltipView: what the "Tooltip placement" choice
+--       gives: the layout's fixed place (the middle of the box EllesmereUI parks the tooltip against, in screen-centre offsets), or
+--       following the mouse, drawn at rest here and moved by the miniature only while the pointer is over it (Preview.lua)
 --     scene = { variant, scenario, screen = { w, h }, fits, geo, components = { { id, label, kind, rect, applied, troubled,
 --       sample } }, elements = { { id, adapter, label, kind, comp, rect } }, hidden = n (pieces this scenario leaves out),
---       notes = { code, id }, tooltip = { rect, lines } | nil }
+--       notes = { code, id }, tooltip = { rect, lines, mode, follow, cursor } | nil }
 
 local R = TwichUI
 local LY = R.Layouts
@@ -72,6 +76,9 @@ local KIND = { central = "central", focus = "focus", chat = "chat", meter = "met
     objectives = "objectives", notifications = "notifications" }
 local TIP_W, TIP_H = 230, 96
 Scene.TOOLTIP_FALLBACK = { point = "BOTTOMRIGHT", x = -9, y = 85 }   -- Forever's GameTooltipDefaultContainer (GameTooltip.xml)
+-- EllesmereUI parks the default tooltip against a 280 x 165 box, by the box's corner nearest the screen's nearest corner
+-- (EUI_BlizzardSkin_TooltipAnchor.lua FIXED_W, FIXED_H and CornerFor); the sample does the same so it lands where the real one would.
+Scene.FIXED_BOX = { w = 280, h = 165 }
 
 local function Sample(kind, scenario)
     if kind == "chat" then
@@ -117,7 +124,20 @@ function Scene.Build(layout, geo, opts)
         if not when or when[scenario] then scene.elements[#scene.elements + 1] = e else scene.hidden = scene.hidden + 1 end
     end
 
-    if scenario == "tooltip" then
+    local view = opts.tooltipView
+    if scenario == "tooltip" and view and view.mode == "layout" and type(view.place) == "table" then
+        local cx, cy = tonumber(view.place.x) or 0, tonumber(view.place.y) or 0
+        local top, right = cy >= 0, cx >= 0
+        local point = (top and "TOP" or "BOTTOM") .. (right and "RIGHT" or "LEFT")
+        local bx = cx + (right and 1 or -1) * Scene.FIXED_BOX.w / 2
+        local by = cy + (top and 1 or -1) * Scene.FIXED_BOX.h / 2
+        scene.tooltip = { rect = LY.Geometry.Place(point, bx, by, TIP_W, TIP_H), lines = TIP, mode = "layout" }
+    elseif scenario == "tooltip" and view and view.mode == "cursor" then
+        -- EllesmereUI pins the tooltip's bottom to the cursor by default: the sample is drawn with the cursor at the middle of the screen
+        local rect = LY.Geometry.Place("BOTTOM", 0, 0, TIP_W, TIP_H)
+        local lines = { TIP[1], TIP[2], TIP[3], "Follows your mouse in the game; shown at rest here." }
+        scene.tooltip = { rect = rect, lines = lines, mode = "cursor", follow = true, cursor = { x = 0, y = 0 }, w = TIP_W, h = TIP_H }
+    elseif scenario == "tooltip" then
         local a = opts.tooltip or Scene.TOOLTIP_FALLBACK
         local P = LY.Geometry.POINTS[a.point] and a.point or Scene.TOOLTIP_FALLBACK.point
         local sx, sy = LY.Geometry.Point(geo.screen, P)

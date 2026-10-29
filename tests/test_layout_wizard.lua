@@ -1042,7 +1042,13 @@ do
     end
     Check((id == "tooltip") == (scene.tooltip ~= nil) and (id == "tooltip") == (pv.drawn.tooltip ~= nil), id .. ": the tooltip only in its own scenario")
   end
-  -- the tooltip sits where the game's default container is, read the way Blizzard reads it; Forever's own default otherwise
+  -- A package with no "Tooltip placement" choice: the tooltip sits where the game's default container is, read the way Blizzard
+  -- reads it; Forever's own default otherwise. (The bundled package has the choice, tested below and in test_layout_tooltip.lua; its
+  -- entry is taken out of the package for these checks and put back.)
+  local pkgChoices, tooltipAt = MK.Layouts()[1].pkg.choices
+  for i, ch in ipairs(pkgChoices) do if ch.id == "tooltip" then tooltipAt = i end end
+  local tooltipChoice = table.remove(pkgChoices, tooltipAt)
+  MK.SetScenario("solo"); MK.SetScenario("tooltip")
   local W, H = k.UIParent.w, k.UIParent.h
   local tip = MK.Scene().tooltip.rect
   Check(math.abs(tip.r - (W / 2 - 9)) < 0.01 and math.abs(tip.b - (-H / 2 + 85)) < 0.01, "the tooltip: Forever's own default (bottom right, 9 in, 85 up) when the game says nothing")
@@ -1055,6 +1061,8 @@ do
   k.GameTooltipDefaultContainer.points[1][2] = k.GameTooltipDefaultContainer   -- placed against itself: not read
   MK.SetScenario("solo"); MK.SetScenario("tooltip")
   Check(math.abs(MK.Scene().tooltip.rect.r - (W / 2 - 9)) < 0.01, "a container placed against something else is not read; the default stands")
+  table.insert(pkgChoices, tooltipAt, tooltipChoice)
+  MK.SetScenario("solo"); MK.SetScenario("tooltip")
   -- an unknown scenario is refused; the choice is not remembered
   Check(MK.SetScenario("nobody") == false and MK.Scenario() == "tooltip", "an unknown scenario is refused")
   Check(k.TwichUIDB.layouts == nil or k.TwichUIDB.layouts.wizard == nil or k.TwichUIDB.layouts.wizard.scenario == nil, "the scenario is not saved")

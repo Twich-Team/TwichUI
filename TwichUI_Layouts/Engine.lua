@@ -225,6 +225,38 @@ end
 function LY.Plan(pkg, variant, opts) return Perf.Call("layouts.plan", DoPlan, pkg, variant, opts) end
 
 ---------------------------------------------------------------------------
+-- The option of an enum choice that matches what the game has now, for an install that already exists whose player never made that
+-- choice (a choice added after they set up): the one option every readable setting of which reads as the option says. Read only.
+-- Settings that can't be read as a value (a place, a blob) don't decide it. nil when no option matches or more than one does, so the
+-- choice keeps its default and the plan says what picking it would change.
+---------------------------------------------------------------------------
+function LY.LivePick(pkg, choiceId)
+    local ok, _, checked = LY.Validate(pkg)
+    local ch = ok and checked.choices and checked.choices.by[choiceId]
+    if not ch or ch.kind ~= "enum" then return nil end
+    local match
+    for _, oid in ipairs(ch.order) do
+        local all, any = true, false
+        for adapterId, frag in pairs(ch.options[oid].frags) do
+            local a = LY.ADAPTERS[adapterId]
+            for unit, value in pairs(frag.units) do
+                local okLive, live = pcall(a.Live or function() end, unit, pkg.targets and pkg.targets[adapterId])
+                if okLive and live ~= nil then
+                    any = true
+                    local want = a.LiveValue and a.LiveValue(unit, value) or value
+                    if not LY.Same(live, want) then all = false end
+                end
+            end
+        end
+        if any and all then
+            if match then return nil end
+            match = oid
+        end
+    end
+    return match
+end
+
+---------------------------------------------------------------------------
 -- Verify
 ---------------------------------------------------------------------------
 -- report = { state = "match"|"mismatch"|"unverifiable"|"partial", adapters = { [adapter] = adapter report } }
@@ -364,6 +396,15 @@ local function DoApply(pkg, variant, expect, opts)
         if not okSnap then return false, "snapshot", why end
     end
 
+    -- An update that newly manages an account-wide setting keeps its value from before, once, in the snapshot (an adapter's `Extend`).
+    if previous then
+        for _, id in ipairs(plan.order) do
+            local a = LY.ADAPTERS[id]
+            if a.Extend and snapshot[id] then pcall(a.Extend, snapshot[id], plan.parts[id]) end
+        end
+        local okSnap, why = J.CleanSnapshot(snapshot)
+        if not okSnap then return false, "snapshot", why end
+    end
     local record = { v = J.VERSION, package = plan.id, revision = plan.revision, variant = variant, char = Me(),
         state = "applying", at = time(), key = Short(plan.key), reload = false, steps = {}, snapshot = snapshot,
         expect = {}, inputs = {}, track = {}, picks = next(plan.picks) ~= nil and plan.picks or nil }

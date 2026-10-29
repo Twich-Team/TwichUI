@@ -382,7 +382,7 @@ do
 
   -- the metadata says what is in it
   local m = PUB.env.meta
-  Check(m.id == "twichui-adventure" and m.version == SHIPPED + 6 and m.format == 3 and m.baseRevision == SHIPPED and m.counts.variants == 2, "id, version, schema, base revision, variants")
+  Check(m.id == "twichui-adventure" and m.version == SHIPPED + 6 and m.format == 5 and m.baseRevision == SHIPPED and m.counts.variants == 2, "id, version, schema, base revision, variants")
   Check(m.variants[1].id == CLASSIC and m.variants[2].id == COMPACT and m.variants[1].title == "Classic Adventure", "both variants, with titles")
   Check(m.requires.ellesmereui and m.requires.ellesmereui.min == "9.6.6" and m.adapters[1] == "ellesmereui" and m.adapters[2] == "twichui", "adapter requirements and the adapters used")
   Check(#m.media == 2 and m.media[1].source and m.ownership.base.n > 100 and m.ownership["variant:" .. CLASSIC].n > 0, "media references and who owns how many settings")
@@ -436,7 +436,7 @@ do
   Bad(function(e) e.package = nil end, "not-table", "no package")
   -- the package itself
   Bad(function(e) e.package.dev = true end, "dev-not-allowed", "a developer package")
-  Bad(function(e) e.package.format = 5 end, "format-newer", "a newer package format")   -- RH-1: format 4 is read now
+  Bad(function(e) e.package.format = 6 end, "format-newer", "a newer package format")   -- format 5 is read now
   Bad(function(e) e.package.geometry = nil end, "no-geometry", "no layout rules")
   Bad(function(e) e.package.surprise = 1 end, "unknown-field", "a package field this version doesn't read")
   Bad(function(e) e.package.layers.base.ellesmereui.modules.EllesmereUIFoo = { x = 1 } end, "unknown-unit", "a module that isn't EllesmereUI's")
@@ -748,7 +748,7 @@ do
   local cases = {
     { "a developer package", function(e) e.package.dev = true end, "developer package" },
     { "a newer envelope", function(e) e.v = 2 end, "newer TwichUI" },
-    { "a newer package format", function(e) e.package.format = 5 end, "newer than this TwichUI reads" },   -- RH-1: format 4 is read now
+    { "a newer package format", function(e) e.package.format = 6 end, "newer than this TwichUI reads" },   -- format 5 is read now
     { "an opaque export string", function(e) e.package.layers.base.ellesmereui.modules.EllesmereUIQuickdraw = "!EUI_" .. ("x"):rep(40) end, "export" },
     { "a description that lies", function(e) e.meta.hash = "#1:1" end, "doesn't match" },
     { "a file in another addon", function(e) e.package.layers.base.ellesmereui.modules.EllesmereUIQuickdraw.f = [[Interface\AddOns\Other\a.ttf]] end, "another addon" },
