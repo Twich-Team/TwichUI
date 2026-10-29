@@ -174,7 +174,7 @@ Check(test.simResult.text:find("Waiting for information"), "simulated no details
 P.Create("custom")
 Flush()
 local tid = P.Selected()
-when.addEquip.scripts.OnClick(when.addEquip)
+when.adds[0].cond.onPick("equipment")
 Flush()
 Check(test.live[1].text:find("^Off hand is empty  %-  Match"), "a draft's live line: " .. test.live[1].text)
 EQUIP[17] = 1201
@@ -197,9 +197,9 @@ Check(when.rows[1].value.text.text == "Empty", "its value")
 cr.subject.onPick("slot:offHand")
 cr.value.onPick("shield")
 Flush()
-when.addPlayer.scripts.OnClick(when.addPlayer)
+when.adds[0].cond.onPick("player")
 Flush()
-Check(#RM.Get(id).conditions == 2 and when.match.shown and when.match.text.text == "All conditions match", "two conditions: all or any")
+Check(#RM.Get(id).conditions == 2 and when.match.shown and when.match.text.text == "Match all - AND", "two conditions: all or any")
 Check(when.rows[2].subject.text.text == "You (the player)" and when.rows[2].value.text.text == "In combat", "the player's condition")
 when.match.onPick("any")
 Flush()
@@ -212,7 +212,7 @@ Flush()
 Check(#RM.Get(id).conditions == 1 and not when.rows[2].subject.shown, "removed")
 
 -- an ammunition condition: its own subject, choices that read as a sentence, no "is not", an editor tooltip for each choice
-when.addAmmo.scripts.OnClick(when.addAmmo)
+when.adds[0].cond.onPick("ammunition")
 Flush()
 local ar = when.rows[2]
 Check(#RM.Get(id).conditions == 2 and ar.subject.text.text == "Ranged ammunition" and ar.value.text.text == "has a problem", "an ammunition condition: " .. tostring(ar.subject.text.text) .. " / " .. tostring(ar.value.text.text))
@@ -259,6 +259,125 @@ ir.item.scripts.OnEnterPressed(ir.item)
 Flush()
 Check(RM.Get(iid).conditions[1].cond.item == 6948 and f.say.text:find("isn't an item ID"), "a bad item is refused, nothing changes")
 Check(show.src.shown and show.src.text.text == "An item's icon" and show.itemInfo.text:find("Hearthstone"), "Show: an item's icon, named")
+
+---------------------------------------------------------------------------
+-- 5b. Groups: Player class, a group that matches any, which group receives what
+---------------------------------------------------------------------------
+P.Create("custom")
+Flush()
+local gid = P.Selected()
+local function X(frame) return frame.points[1] and frame.points[1][4] end
+Check(not when.groups[1].match.shown and not when.rows[1].subject.shown and when.adds[0].cond.shown and when.adds[0].cond.text.text == "Add a condition", "a new custom reminder: one add menu, no groups yet")
+Check(not when.adds[0].label.shown, "and no \"add to\" label while there are no groups to choose between")
+local kinds = {}
+for _, ch in ipairs(when.adds[0].cond.choices()) do kinds[#kinds + 1] = ch.value end
+Check(table.concat(kinds, ",") == "equipment,player,class,ammunition", "the add menu offers every kind, Player class among them: " .. table.concat(kinds, ","))
+when.adds[0].cond.onPick("class")
+Flush()
+local r1 = when.rows[1]
+Check(r1.subject.text.text == "Player class" and r1.op.text.text == "is" and r1.value.text.text == "Choose a class", "a class condition starts unfinished: " .. tostring(r1.value.text.text))
+Check(f.problems.shown and f.problems.text:find("class"), "and the reminder says what is missing: " .. f.problems.text)
+local classChoices = r1.value.choices()
+Check(#classChoices == 9 and classChoices[1].value == "WARRIOR" and classChoices[1].label == "Warrior", "nine classes, stored as tokens and shown as names")
+r1.value.onPick("WARRIOR")
+Flush()
+Check(RM.Get(gid).conditions[1].cond.class == "WARRIOR" and r1.value.text.text == "Warrior" and RM.Get(gid).valid, "chosen: Warrior")
+Check(when.single.shown and not when.match.shown, "one condition: still the simple layout")
+Check(when.adds[0].group.shown, "Add a group is offered")
+-- a group
+when.adds[0].group.scripts.OnClick(when.adds[0].group)
+Flush()
+local g1 = when.groups[1]
+Check(RM.Get(gid).conditions[2].group and g1.match.shown and g1.match.text.text == "Match any - OR", "a group, matching any (the top level matches all): " .. tostring(g1.match.text.text))
+Check(when.match.shown and when.match.text.text == "Match all - AND", "the top level now chooses between all and any")
+Check(g1.problem.shown and g1.problem.text:find("No conditions") or g1.problem.text:find("no conditions"), "an empty group says so: " .. g1.problem.text)
+Check(f.problems.text:find("Group 2"), "and the reminder lists it")
+Check(when.adds[1].cond.shown and when.adds[1].label.text == "Add to this group:" and when.adds[0].label.text == "Add to the whole rule:", "each add area says where it adds")
+-- the new condition goes where it was asked for
+when.adds[1].cond.onPick("class")
+Flush()
+local raw = RM.Get(gid).raw
+Check(#raw.conditions == 2 and #raw.conditions[2].conditions == 1, "added to the group, not the top level")
+when.adds[1].cond.onPick("class")
+Flush()
+when.adds[1].cond.onPick("class")
+Flush()
+local c2, c3, c4 = when.rows[2], when.rows[3], when.rows[4]
+Check(X(c2.subject) > X(r1.subject), "a group's conditions are indented under it")
+Check(c3.conn.shown and c3.conn.text == "OR" and c4.conn.shown and c4.conn.text == "OR" and not c2.conn.shown, "joined by OR inside a group that matches any, nothing before the first")
+Check(g1.conn.shown and g1.conn.text == "AND", "and the group is joined to the first condition by AND")
+c2.value.onPick("WARRIOR"); c3.value.onPick("HUNTER"); c4.value.onPick("ROGUE")
+Flush()
+Check(RM.Get(gid).valid and when.sentence.text == "Shows when all of these are true: Player class is Warrior; and Player class is Warrior, Hunter or Rogue.", "the sentence follows the tree: " .. when.sentence.text)
+-- change the first to combat, then it reads as the example
+r1.subject.onPick("player")
+Flush()
+Check(RM.Get(gid).conditions[1].cond.type == "player" and r1.value.text.text == "In combat", "the first is now \"You: in combat\"")
+Check(when.sentence.text == "Shows when all of these are true: Player is in combat; and Player class is Warrior, Hunter or Rogue.", "(Warrior or Hunter or Rogue) and in combat: " .. when.sentence.text)
+-- is not, in the group
+c3.op.onPick("isnot")
+Flush()
+Check(RM.Get(gid).raw.conditions[2].conditions[2].negate == true and when.sentence.text:find("Player class is not Hunter"), "is not inside a group: " .. when.sentence.text)
+c3.op.onPick("is")
+Flush()
+-- the Test section: one choice for the three classes, a line for the group and for each condition
+Check(test.picks[1].shown and test.picks[2].shown and not test.picks[3].shown, "Test: one choice for combat and one for the three classes")
+Check(test.pickLabels[2].text:find("Player class") and test.pickLabels[2].text:find("3 conditions"), "labelled as shared: " .. test.pickLabels[2].text)
+Check(test.live[1].shown and test.live[2].text:find("^Match any %- OR  %-  "), "Right now has a line for the group: " .. tostring(test.live[2].text))
+Check(X(test.live[3]) > X(test.live[2]) and X(test.live[3]) > X(test.live[1]), "its conditions a step in")
+Check(test.live[2].text:find("No match") or test.live[2].text:find("Match") or test.live[2].text:find("Unavailable"), "with its result in words")
+test.picks[2].onPick("ROGUE")
+test.picks[1].onPick("on")
+Flush()
+Check(test.simResult.text:find("^Simulated result: Showing"), "simulated Rogue in combat: " .. test.simResult.text)
+Check(test.sim[2].text:find("^Match any %- OR  %-  Match"), "the group's simulated result: " .. test.sim[2].text)
+test.picks[2].onPick("MAGE")
+Flush()
+Check(test.simResult.text:find("^Simulated result: Hidden") and test.sim[2].text:find("No match"), "simulated Mage: hidden")
+Check(RM.Get(gid).enabled == false and CT.Status(gid) == "disabled", "simulating changed nothing")
+-- the depth limit is explained, not just missing
+when.adds[1].group.scripts.OnClick(when.adds[1].group)
+Flush()
+Check(RM.Get(gid).raw.conditions[2].conditions[4].type == "group", "a group in the group")
+Check(when.groups[2].match.shown and when.groups[2].match.text.text == "Match all - AND", "it matches all (the opposite of the one around it)")
+Check(not when.adds[2].group.shown and when.adds[2].note.shown and when.adds[2].note.text:find("levels deep"), "no third level: " .. tostring(when.adds[2].note.text))
+Check(when.adds[1].group.shown and when.adds[1].cond.shown, "the level above can still take things")
+-- an empty group goes without asking; a full one asks
+S.popup = nil
+when.groups[2].remove.scripts.OnClick(when.groups[2].remove)
+Flush()
+Check(S.popup == nil and #RM.Get(gid).raw.conditions[2].conditions == 3, "an empty group is removed without asking")
+S.popup = nil
+g1.remove.scripts.OnClick(g1.remove)
+Check(S.popup and S.popup.key == "TWICHUI_REMINDER_GROUP_DELETE" and S.popup.text:find("3 conditions") and RM.Get(gid).raw.conditions[2], "a group with conditions asks first, and says how many")
+c.StaticPopupDialogs[S.popup.key].OnAccept()
+Flush()
+Check(#RM.Get(gid).raw.conditions == 1 and RM.Get(gid).valid and not when.groups[1].match.shown, "removed with what was in it; the rest stays")
+Check(when.single.shown and not when.match.shown, "back to the simple layout")
+-- a group that was already removed in the meantime is not removed again
+when.adds[0].group.scripts.OnClick(when.adds[0].group)
+Flush()
+RM.AddCondition(gid, "class", { 2 })
+Flush()
+S.popup = nil
+when.groups[1].remove.scripts.OnClick(when.groups[1].remove)
+local popup = S.popup
+RM.RemoveCondition(gid, { 2 })
+Flush()
+local before = #RM.Get(gid).raw.conditions
+c.StaticPopupDialogs[popup.key].OnAccept()
+Flush()
+Check(#RM.Get(gid).raw.conditions == before, "confirming for a group that is already gone changes nothing")
+-- a profile of groups redrawn many times makes nothing new
+RM.AddGroup(gid)
+RM.AddCondition(gid, "class", { 2 })
+Flush()
+local builtBefore = made
+for _ = 1, 5 do P.Refresh(); Flush() end
+Check(made == builtBefore, "redrawing a rule with groups makes nothing new: " .. (made - builtBefore))
+RM.Delete(gid)
+P.Select(iid)
+Flush()
 
 ---------------------------------------------------------------------------
 -- 6. Name, duplicate, delete

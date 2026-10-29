@@ -585,6 +585,7 @@ local section
 for _, e in ipairs(summary) do if e.key == "reminders" then section = e end end
 Check(section and section.status == "ready", "a Reminders section, ready: " .. tostring(section and section.status))
 Check(report:find("reminders: 1 %(turned on 1, valid 1, running here 1%)") and report:find("showing: 1"), "with counts")
+Check(report:find("conditions in the running reminders: 1, in 0 groups", 1, true), "and how many conditions and groups run")
 Check(not report:find("Shield reminder", 1, true) and not report:find("Rich - Forever", 1, true) and not report:find("Equip your shield", 1, true),
   "and no names, characters or words")
 

@@ -1,7 +1,8 @@
 -- TwichUI: Reminders, reading the game
 -- The live observations the enabled reminders' conditions read, kept as plain facts (the same shape a simulation
 -- builds): obs.slots[n] = { empty = true } or { id, classID, subClassID, equipLoc } (no details yet: classID nil),
--- obs.combat = true | false, obs.life = "alive" | "dead" | "ghost", obs.mounted = true | false, obs.ammo = the facts
+-- obs.combat = true | false, obs.life = "alive" | "dead" | "ghost", obs.mounted = true | false, obs.class = the class
+-- token ("WARRIOR"; UnitClassBase), obs.ammo = the facts
 -- about the ranged weapon's ammunition (Ammunition.lua says which and judges them). A key nobody wants
 -- is not read and not listened for. Nothing here decides anything, and nothing here ever changes the game: no item is
 -- equipped, used or moved, nothing is cast, nothing is sent.
@@ -166,6 +167,17 @@ ST.Source("mounted", {
         local v
         if IsMounted then v = Plain(IsMounted()) == true end
         return Set(into, "mounted", v)
+    end,
+})
+
+-- The character's class never changes while playing, so there is nothing to listen for: it is read when wanted and again
+-- on entering the world (ST.ReadAll), and only a different answer is a change.
+ST.Source("class", {
+    Read = function(_, into)
+        local v
+        if UnitClassBase then v = Plain(UnitClassBase("player")) end
+        if type(v) ~= "string" or v == "" then v = nil end
+        return Set(into, "class", v)
     end,
 })
 
@@ -426,7 +438,7 @@ function ST.Stop()
     for k in pairs(want) do want[k] = nil end
     for k in pairs(dirty) do dirty[k] = nil end
     obs.slots = {}
-    obs.combat, obs.life, obs.mounted, obs.ammo = nil, nil, nil, nil
+    obs.combat, obs.life, obs.mounted, obs.ammo, obs.class = nil, nil, nil, nil, nil
     combat, ammoWatch, ammoRetries = nil, true, 0
     SyncEvents()
 end
@@ -440,6 +452,8 @@ function ST.Want(keys)
             dirty[key] = nil
             local kind, arg = Split(key)
             if kind == "slot" then obs.slots[tonumber(arg)] = nil else obs[kind] = nil end
+            -- the combat events are no longer heard, so what they last said can't be trusted when it is wanted again
+            if kind == "combat" then combat = nil end
         end
     end
     for key in pairs(keys) do want[key] = true end
@@ -463,7 +477,7 @@ function ST.Observations() return obs end
 function ST.Peek(view)
     local into = { slots = {} }
     if not ST.InWorld() then return into end
-    for _, entry in ipairs(view.conditions) do
+    for _, entry in ipairs(view.leaves) do
         if entry.provider and entry.cond then
             entry.provider.Needs(entry.cond, function(key) Read(key, into) end)
         end

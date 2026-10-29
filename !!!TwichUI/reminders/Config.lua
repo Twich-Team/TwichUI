@@ -11,12 +11,20 @@
 --   reminder = { id = "r<n>", name, enabled (true only when the player turned it on),
 --     scope = { who = "all" | "characters", characters = { "Name - Realm", ... }, class = nil | a class token },
 --     match = "all" | "any",
---     conditions = { { type = "<provider>", ... }, ... }    each kind's fields are its provider's (Conditions.lua)
+--     conditions = { { type = "<provider>", ... } | { type = "group", match = "all" | "any", conditions = { ... } }, ... }
+--         each kind's fields are its provider's (Conditions.lua). `match` + `conditions` are the top level of a tree; a
+--         group is a condition of type "group" holding a list of the same shape, so (A or B or C) and D is
+--         match "all", conditions { { type = "group", match = "any", conditions = { A, B, C } }, D }.
 --     display = { mode, art, iconSource, icon, item, text, size, keepAspect, width, height, opacity, textSize,
 --                 textPlace, font, outline, textColor, panel, strata, fade, pulse, delay, minShow },
 --     place = { preset, point, x, y } }
 -- Nothing else: no result, no observation, no preview state, no frame. Who a reminder is for (scope) is kept apart
 -- from how it looks (display) and where it sits (place).
+--
+-- Groups need no migration: a list of conditions that has none is read exactly as it always was, and `version` stays 1.
+-- A build from before groups reads a group as a condition of an unknown kind (it is kept, listed as a problem, and the
+-- reminder can't run until it is removed); it never rewrites it. Limits: RM.MAX_DEPTH levels of group counting the top
+-- level as the first, RM.MAX_GROUPS groups and RM.MAX_CONDITIONS conditions (groups not counted) in one reminder.
 --
 -- Reading never writes. A stored value that is not usable reads as its default and is left as it is; a condition of a
 -- kind this version doesn't know, or one not finished (no item chosen yet), is kept and flagged, and the reminder can't
@@ -30,7 +38,9 @@ R.Reminders = RM
 
 RM.VERSION = 1
 RM.MAX = 24               -- reminders in one profile
-RM.MAX_CONDITIONS = 8     -- conditions in one reminder
+RM.MAX_CONDITIONS = 16    -- conditions in one reminder, in all its groups together (a group is not a condition)
+RM.MAX_GROUPS = 6         -- groups in one reminder, at any depth (the top level is not one)
+RM.MAX_DEPTH = 3          -- levels of conditions: the top level is 1, a group in it 2, a group in that 3
 RM.MAX_CHARACTERS = 20    -- characters one reminder can be limited to
 RM.NAME_MAX, RM.TEXT_MAX = 40, 120   -- characters
 RM.POSITION_LIMIT = 4096
@@ -200,6 +210,7 @@ local function UsableOffset(v) return Finite(v) and math.abs(v) <= RM.POSITION_L
 RM.CLASSES = { "WARRIOR", "PALADIN", "HUNTER", "ROGUE", "PRIEST", "SHAMAN", "MAGE", "WARLOCK", "DRUID" }
 local CLASS = {}
 for _, c in ipairs(RM.CLASSES) do CLASS[c] = true end
+function RM.ValidClass(token) return type(token) == "string" and CLASS[token] == true end
 
 -- A class token in words: the game's own name for it where it has one.
 function RM.ClassName(token)
@@ -294,6 +305,7 @@ local PROBLEM = {
     newer = "These reminders were made by a newer version of TwichUI. They are kept as they are, and are not shown or changed here.",
     noConditions = "Add a condition first: a reminder with none would never know when to show.",
     tooMany = "Only the first " .. RM.MAX_CONDITIONS .. " conditions are used.",
+    tooManyGroups = "Only the first " .. RM.MAX_GROUPS .. " groups are used.",
     noArt = "The artwork it uses isn't in this version of TwichUI. Choose another, or another kind of display.",
     noIcon = "The icon it uses isn't in this version of TwichUI. Choose another.",
     noItem = "Choose the item whose icon it shows, or another kind of display.",
@@ -355,9 +367,73 @@ local function DisplayProblems(d, problems)
     if (m == "text" or m == "artworkText" or m == "iconText") and d.text == "" then problems[#problems + 1] = PROBLEM.noText end
 end
 
-local function MakeView(raw, index, t, newer)
+-- One list of stored conditions (the top level's, or a group's) read into entries. depth is the level of this list (the
+-- top level is 1); path the indexes that lead to it. A leaf is { raw, cond, provider, why, path, depth }; a group is
+-- { raw, group = true, match, children, why, path, depth }. Reading is bounded by the limits and never follows a table
+-- already being read (a loop in memory is a problem, not a hang). Problems are added to v.problems.
+local function ReadList(v, list, depth, path, seen, counts)
     local C = R.ReminderConditions
-    local v = { raw = raw, index = index, problems = {}, conditions = {} }
+    local out = {}
+    for i, c in ipairs(list) do
+        local at = { unpack(path) }
+        at[#at + 1] = i
+        local label = table.concat(at, ".")
+        local entry
+        if type(c) == "table" and c.type == "group" then
+            if counts.groups >= RM.MAX_GROUPS then
+                v.problems[#v.problems + 1] = PROBLEM.tooManyGroups
+                counts.stop = true
+                break
+            end
+            counts.groups = counts.groups + 1
+            entry = { raw = c, group = true, path = at, depth = depth, children = {} }
+            entry.match = (c.match == "all" or c.match == "any") and c.match or "all"
+            local why
+            if seen[c] then
+                why = "it contains itself, so it can't be read."
+            elseif depth + 1 > RM.MAX_DEPTH then
+                why = ("groups can go only %d levels deep, counting the top level. Remove it."):format(RM.MAX_DEPTH)
+            elseif c.match ~= "all" and c.match ~= "any" then
+                why = "whether all or any of its conditions must match can't be read. Choose one."
+            end
+            v.flat[#v.flat + 1] = entry
+            v.groups[#v.groups + 1] = entry
+            if seen[c] == nil and depth + 1 <= RM.MAX_DEPTH then
+                seen[c] = true
+                entry.children = ReadList(v, type(c.conditions) == "table" and c.conditions or {}, depth + 1, at, seen, counts)
+                seen[c] = nil
+                if #entry.children == 0 and not counts.stop and not why then
+                    why = "it has no conditions in it. Add one, or remove the group."
+                end
+            end
+            entry.why = why
+            if why then v.problems[#v.problems + 1] = ("Group %s: %s"):format(label, why) end
+        else
+            if counts.conditions >= RM.MAX_CONDITIONS then
+                v.problems[#v.problems + 1] = PROBLEM.tooMany
+                counts.stop = true
+                break
+            end
+            counts.conditions = counts.conditions + 1
+            entry = { raw = c, path = at, depth = depth }
+            local clean, why, provider
+            if C then clean, why, provider = C.Check(c) end
+            entry.cond, entry.provider = clean, provider
+            if why then
+                entry.why = why
+                v.problems[#v.problems + 1] = ("Condition %s: %s"):format(label, why)
+            end
+            v.flat[#v.flat + 1] = entry
+            v.leaves[#v.leaves + 1] = entry
+        end
+        out[#out + 1] = entry
+        if counts.stop then break end
+    end
+    return out
+end
+
+local function MakeView(raw, index, t, newer)
+    local v = { raw = raw, index = index, problems = {} }
     v.id = (type(raw.id) == "string" and raw.id:match("^r%d+$")) and raw.id or nil
     local name = RM.PlainText(raw.name, RM.NAME_MAX)
     v.name = name or "Unnamed reminder"
@@ -368,22 +444,10 @@ local function MakeView(raw, index, t, newer)
     v.place = ReadPlace(raw.place)
     if newer then v.problems[#v.problems + 1] = PROBLEM.newer end
 
-    local list = type(raw.conditions) == "table" and raw.conditions or {}
-    for i, c in ipairs(list) do
-        if i > RM.MAX_CONDITIONS then
-            v.problems[#v.problems + 1] = PROBLEM.tooMany
-            break
-        end
-        local entry = { raw = c }
-        local clean, why, provider
-        if C then clean, why, provider = C.Check(c) end
-        entry.cond, entry.provider = clean, provider
-        if why then
-            entry.why = why
-            v.problems[#v.problems + 1] = ("Condition %d: %s"):format(i, why)
-        end
-        v.conditions[#v.conditions + 1] = entry
-    end
+    -- the tree: v.conditions are the top level's entries (leaf or group); v.flat every entry in reading order (a group
+    -- before what is in it), v.leaves the conditions alone and v.groups the groups alone, each in that order
+    v.flat, v.leaves, v.groups, v.counts = {}, {}, {}, { conditions = 0, groups = 0 }
+    v.conditions = ReadList(v, type(raw.conditions) == "table" and raw.conditions or {}, 1, {}, {}, v.counts)
     if #v.conditions == 0 then v.problems[#v.problems + 1] = PROBLEM.noConditions end
     DisplayProblems(v.display, v.problems)
     if v.scope.who == "characters" and #v.scope.characters == 0 then v.problems[#v.problems + 1] = PROBLEM.noCharacters end
@@ -433,7 +497,9 @@ local REFUSE = {
     newer = PROBLEM.newer,
     missing = "That reminder doesn't exist any more.",
     full = ("A profile can hold %d reminders. Delete one first."):format(RM.MAX),
-    conditionsFull = ("A reminder can have %d conditions."):format(RM.MAX_CONDITIONS),
+    conditionsFull = ("A reminder can have %d conditions, counting those in its groups."):format(RM.MAX_CONDITIONS),
+    groupsFull = ("A reminder can have %d groups."):format(RM.MAX_GROUPS),
+    tooDeep = ("Groups can go %d levels deep, counting the top level. Put this condition in a group above, or in this one."):format(RM.MAX_DEPTH),
     charactersFull = ("A reminder can be limited to %d characters."):format(RM.MAX_CHARACTERS),
     name = ("A name can be 1 to %d characters, without | or control characters."):format(RM.NAME_MAX),
     text = ("The words can be up to %d characters, without | or control characters."):format(RM.TEXT_MAX),
@@ -584,56 +650,145 @@ function RM.SetName(id, text)
     return true
 end
 
-function RM.SetMatch(id, match)
-    local raw, why = Locate(id)
+---------------------------------------------------------------------------
+-- Conditions and groups. A node is addressed by its path: the indexes from the top level down ({ 2, 1 } is the first
+-- item of the second item, which is a group). nil or {} is the top level itself where a group is wanted. A plain number
+-- is a path of one. The fields of a condition are its provider's: Conditions.lua checks them.
+---------------------------------------------------------------------------
+local function ReadPath(path)
+    if path == nil then return {} end
+    if Whole(path) then path = { path } end
+    if type(path) ~= "table" or #path > RM.MAX_DEPTH then return nil end
+    local out = {}
+    for i, n in ipairs(path) do
+        if not (Whole(n) and n >= 1) then return nil end
+        out[i] = n
+    end
+    return out
+end
+
+-- The stored list of the group at `groupPath` (the top level's for {}). nil when the path doesn't lead to a group.
+local function ListAt(raw, groupPath)
+    local list = Sub(raw, "conditions")
+    for _, i in ipairs(groupPath) do
+        local g = list[i]
+        if type(g) ~= "table" or g.type ~= "group" then return nil end
+        if type(g.conditions) ~= "table" then g.conditions = {} end
+        list = g.conditions
+    end
+    return list
+end
+
+-- The entry of a view at a path (nil for the top level, or a path that leads nowhere).
+function RM.Node(v, path)
+    path = ReadPath(path)
+    if not (v and path) or #path == 0 then return nil end
+    local list, entry = v.conditions, nil
+    for _, i in ipairs(path) do
+        entry = list and list[i]
+        if not entry then return nil end
+        list = entry.children
+    end
+    return entry
+end
+
+-- Whether the top level (no path) or the group at the path matches on all or on any of what it holds.
+function RM.SetMatch(id, match, groupPath)
+    local raw, why, _, _, v = Locate(id)
     if not raw then return false, why end
     if match ~= "all" and match ~= "any" then return false, REFUSE.value end
-    if (raw.match == "any" and "any" or "all") == match then return true end
-    raw.match = match
+    local path = ReadPath(groupPath)
+    if not path then return false, REFUSE.value end
+    local target = raw
+    if #path > 0 then
+        local node = RM.Node(v, path)
+        if not (node and node.group) then return false, REFUSE.value end
+        target = node.raw
+    end
+    local current = target.match
+    if #path == 0 then current = current == "any" and "any" or "all" end   -- the top level reads anything else as all
+    if current == match then return true end
+    target.match = match
     Tell(id, "rule")
     return true
 end
 
----------------------------------------------------------------------------
--- Conditions (their fields are the provider's: Conditions.lua checks them)
----------------------------------------------------------------------------
-function RM.AddCondition(id, kind)
+-- Adds a new condition of a kind at the end of the group at groupPath (the top level when nil).
+function RM.AddCondition(id, kind, groupPath)
     local C = R.ReminderConditions
-    local raw, why = Locate(id)
+    local raw, why, _, _, v = Locate(id)
     if not raw then return false, why end
     local p = C and C.Get(kind)
-    if not p then return false, REFUSE.value end
-    local list = Sub(raw, "conditions")
-    if #list >= RM.MAX_CONDITIONS then return false, REFUSE.conditionsFull end
+    local path = ReadPath(groupPath)
+    if not (p and path) then return false, REFUSE.value end
+    if #path + 1 > RM.MAX_DEPTH then return false, REFUSE.tooDeep end
+    if #path > 0 and not (RM.Node(v, path) or {}).group then return false, REFUSE.value end
+    if v.counts.conditions >= RM.MAX_CONDITIONS then return false, REFUSE.conditionsFull end
+    local list = ListAt(raw, path)
+    if not list then return false, REFUSE.value end
     list[#list + 1] = p.New()
     Tell(id, "rule")
     return true, #list
 end
 
--- Replaces condition i with cond, checked by its provider. An unfinished one (no item yet) is kept; the view says
--- what it still needs. One that isn't a condition of a known kind is refused.
-function RM.SetCondition(id, i, cond)
+-- Adds an empty group at the end of the group at groupPath (the top level when nil). It starts with the opposite
+-- operator of the group it is in, so a group in an "all" list reads as "any"; an empty group is reported as a problem
+-- until a condition is put in it. Returns true and the new group's path.
+function RM.AddGroup(id, groupPath)
+    local raw, why, _, _, v = Locate(id)
+    if not raw then return false, why end
+    local path = ReadPath(groupPath)
+    if not path then return false, REFUSE.value end
+    if #path + 2 > RM.MAX_DEPTH then return false, REFUSE.tooDeep end
+    local parentMatch = v.match
+    if #path > 0 then
+        local node = RM.Node(v, path)
+        if not (node and node.group) then return false, REFUSE.value end
+        parentMatch = node.match
+    end
+    if v.counts.groups >= RM.MAX_GROUPS then return false, REFUSE.groupsFull end
+    local list = ListAt(raw, path)
+    if not list then return false, REFUSE.value end
+    list[#list + 1] = { type = "group", match = parentMatch == "any" and "all" or "any", conditions = {} }
+    local at = { unpack(path) }
+    at[#at + 1] = #list
+    Tell(id, "rule")
+    return true, at
+end
+
+-- Replaces the condition at a path with cond, checked by its provider. An unfinished one (no item yet) is kept; the
+-- view says what it still needs. One that isn't a condition of a known kind, or a path that leads to a group, is refused.
+function RM.SetCondition(id, path, cond)
     local C = R.ReminderConditions
     local raw, why = Locate(id)
     if not raw then return false, why end
-    local list = Sub(raw, "conditions")
-    if not (Whole(i) and list[i] ~= nil) then return false, REFUSE.value end
+    path = ReadPath(path)
+    if not path or #path == 0 then return false, REFUSE.value end
+    local last = table.remove(path)
+    local list = ListAt(raw, path)
+    local old = list and list[last]
+    if not old or (type(old) == "table" and old.type == "group") then return false, REFUSE.value end
     local clean, problem = C.Check(cond)
     if not clean then return false, problem or REFUSE.value end
-    list[i] = clean
+    list[last] = clean
     Tell(id, "rule")
     return true, problem
 end
 
-function RM.RemoveCondition(id, i)
+-- Removes the condition or the group (with everything in it) at a path.
+function RM.RemoveCondition(id, path)
     local raw, why = Locate(id)
     if not raw then return false, why end
-    local list = Sub(raw, "conditions")
-    if not (Whole(i) and list[i] ~= nil) then return false, REFUSE.value end
-    table.remove(list, i)
+    path = ReadPath(path)
+    if not path or #path == 0 then return false, REFUSE.value end
+    local last = table.remove(path)
+    local list = ListAt(raw, path)
+    if not (list and list[last] ~= nil) then return false, REFUSE.value end
+    table.remove(list, last)
     Tell(id, "rule")
     return true
 end
+RM.RemoveNode = RM.RemoveCondition
 
 ---------------------------------------------------------------------------
 -- Display, place and scope

@@ -14,6 +14,13 @@
 --   Summary(cond)         -> "Off hand is not Shield"
 --   Observed(cond, obs)   -> "Empty", "Out of combat", "Not read yet"
 --   Scenarios(cond)       -> { { key, label, Apply = function(obs) end }, ... } for the Test section, first one default
+-- Optional:
+--   Subject(cond)         -> key, label of what in the world it asks about, when several conditions in one rule can ask
+--                            the same thing ("class"): a simulation offers one choice for all of them, so the made-up
+--                            facts can't contradict each other. Their Scenarios must not depend on the condition's value.
+--   Merge(match, conds)   -> words, used: for the rule's sentence. conds are this kind's conditions that sit directly in
+--                            one group matching on `match` ("all" | "any"); words say a run of them in one phrase and
+--                            used lists the indexes of conds it covers (nil: nothing to merge).
 -- Adding a kind: register it here (or in a file of its own loaded after this one), give State.lua a source for each
 -- observation key it names, and give the editor (TwichUI_Settings/pages/RemindersEditor.lua) its fields.
 --
@@ -342,6 +349,12 @@ C.Register({
 
     Needs = function(cond, add) add(STATE[cond.state][2]) end,
 
+    -- combat, being dead, being a ghost and being mounted are each one fact about the player
+    Subject = function(cond)
+        local key = STATE[cond.state][2]
+        return key, ({ combat = "Combat", life = "Alive or dead", mounted = "Mounted" })[key]
+    end,
+
     Evaluate = function(cond, obs)
         local s = STATE[cond.state]
         local v = obs and obs[s[2]]
@@ -383,5 +396,103 @@ C.Register({
         end
         Put("unread", "Not read yet", nil)
         return list
+    end,
+})
+
+---------------------------------------------------------------------------
+-- The player's class: a condition like any other. Who a reminder is *for* (RM.SetScope's class) is a separate setting:
+-- that decides whether the reminder runs at all, this decides whether it matches. Class tokens are the game's own
+-- (UnitClassBase's classFilename, "WARRIOR"), never a translated name.
+---------------------------------------------------------------------------
+-- { { token, label }, ... } of the classes this client has, in the game's own order when it gives one
+-- (CLASS_SORT_ORDER, Blizzard_FrameXMLBase/Camelot/Constants.lua) and the order TwichUI lists them in otherwise.
+function C.ClassChoices()
+    local RM = R.Reminders
+    local out, have = {}, {}
+    local order = rawget(_G, "CLASS_SORT_ORDER")
+    if type(order) == "table" then
+        for _, token in ipairs(order) do
+            if RM.ValidClass(token) and not have[token] then
+                have[token] = true
+                out[#out + 1] = { token, RM.ClassName(token) }
+            end
+        end
+    end
+    if #out == 0 then
+        for _, token in ipairs(RM.CLASSES) do out[#out + 1] = { token, RM.ClassName(token) } end
+    end
+    return out
+end
+
+-- "A", "A or B", "A, B or C"
+local function OrList(names)
+    if #names <= 1 then return names[1] or "" end
+    return table.concat(names, ", ", 1, #names - 1) .. " or " .. names[#names]
+end
+
+C.Register({
+    type = "class", label = "Player class",
+    New = function() return { type = "class", negate = false } end,
+
+    Check = function(raw)
+        local clean = { type = "class", negate = raw.negate == true }
+        if raw.class == nil then return clean, "choose the class it looks for." end
+        if not R.Reminders.ValidClass(raw.class) then return nil, "it names a class this version of TwichUI doesn't know." end
+        clean.class = raw.class
+        return clean
+    end,
+
+    Needs = function(_, add) add("class") end,
+
+    Evaluate = function(cond, obs)
+        local v = obs and obs.class
+        if v == nil then return UNKNOWN, "The game hasn't said which class you are yet." end
+        return Negate(Yes(v == cond.class), cond.negate)
+    end,
+
+    Summary = function(cond)
+        local name = cond.class and R.Reminders.ClassName(cond.class) or "(none chosen)"
+        return ("Player class %s %s"):format(cond.negate and "is not" or "is", name)
+    end,
+
+    Observed = function(_, obs)
+        local v = obs and obs.class
+        if v == nil then return "Not read yet" end
+        return R.Reminders.ClassName(v)
+    end,
+
+    Subject = function() return "class", "Player class" end,
+
+    -- Every class this client has, the one the condition names first; a simulation sets the one class the character is.
+    Scenarios = function(cond)
+        local list = {}
+        local function Put(key, label)
+            list[#list + 1] = { key = key, label = label, Apply = function(obs) obs.class = key end }
+        end
+        local RM = R.Reminders
+        if RM.ValidClass(cond.class) then Put(cond.class, RM.ClassName(cond.class)) end
+        for _, ch in ipairs(C.ClassChoices()) do
+            if ch[1] ~= cond.class then Put(ch[1], ch[2]) end
+        end
+        list[#list + 1] = { key = "unread", label = "Class not read yet", Apply = function(obs) obs.class = nil end }
+        return list
+    end,
+
+    -- (Warrior or Hunter) in a group matching any, none of (Warrior, Hunter) in a group matching all: said once.
+    Merge = function(match, conds)
+        local negated = match == "all"
+        local names, used, seen = {}, {}, {}
+        for i, cond in ipairs(conds) do
+            if cond.class and (cond.negate == true) == negated then
+                used[#used + 1] = i
+                if not seen[cond.class] then
+                    seen[cond.class] = true
+                    names[#names + 1] = R.Reminders.ClassName(cond.class)
+                end
+            end
+        end
+        if #used < 2 then return nil end
+        if negated then return "Player class is none of " .. OrList(names), used end
+        return "Player class is " .. OrList(names), used
     end,
 })

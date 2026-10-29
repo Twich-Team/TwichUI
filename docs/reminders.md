@@ -50,6 +50,7 @@ as labels in the settings window and never in what is stored.
 |---|---|---|
 | `equipment` | `slot` (a stable key: `offHand`, `mainHand`, `ranged`, `head` ... `trinket2`, or `any`), `what`, `negate`, `item` | `empty`; a category the slot can hold (off hand: `shield`, `weapon`, `holdable`; main hand: `weapon`, `twoHand`, `fishingPole`; ranged: `weapon`); `item` (a specific item ID; `any` slot offers only this) |
 | `player` | `state`, `negate` | `combat` (in combat), `dead` (dead **or a ghost**), `ghost` (only the released spirit), `mounted` (offered only while the client has `IsMounted`) |
+| `class` | `class` (a class token: `WARRIOR`, `PALADIN`, ... never a translated name), `negate` | the classes this client lists (`CLASS_SORT_ORDER`, nine in `Blizzard_FrameXMLBase/Camelot/Constants.lua`; TwichUI's own list of the same nine when the client gives none). New ones start with no class chosen: unfinished until one is |
 | `ammunition` | `what` (no `negate`: it reads as a sentence) | `problem` (any of the next three), `noAmmo` (nothing selected, some carried), `outOfAmmo` (nothing selected and none carried, or the selected stack is empty), `wrong` (arrows for a gun, bullets for a bow). Offered only while the client has `UnitUsesAmmo` |
 
 `negate` is "is not". "Player is not dead or a ghost" reads as "Player is alive". Categories are judged from the item's
@@ -57,15 +58,33 @@ class, subclass and equip location only; an item with no details is **unknown**,
 shield in the off hand, "Off hand is not Shield" is no match; empty, a match; an off-hand weapon, a match; no details,
 unknown.
 
-### Three answers and composition
+### Three answers, groups and composition
 
-Each condition is Match, No match or Unknown. **All**: any no match is no match, otherwise any unknown is unknown,
-otherwise match. **Any**: any match is match, otherwise any unknown is unknown, otherwise no match. No conditions is no
-match, and a reminder can't be turned on without one. Unknown never shows.
+Each condition is Match, No match or Unknown. A list of them is combined by **All** (AND): any no match is no match,
+otherwise any unknown is unknown, otherwise match; or **Any** (OR): any match is match, otherwise any unknown is unknown,
+otherwise no match. Unknown never shows.
+
+The rule is a tree. The reminder's own list (`match` + `conditions`) is the top level; a **group** is a condition that
+holds such a list and its own All / Any, and counts as one Match, No match or Unknown in the list around it. So
+"(Warrior OR Hunter OR Rogue) AND in combat AND no shield" is an All list of: a group matching Any (three class
+conditions), "Player is in combat" and "Off hand is not Shield". Every condition is read, none is skipped because another
+settled the answer, so Test can show them all.
+
+* **Limits.** Three levels of list, the top level counting as the first (a group, and a group inside it). At most 6 groups and
+  16 conditions in a reminder, the conditions counted across all its groups (a group is not a condition). Reading stops at the
+  limit and says so; the editor stops offering "Add" and gives the reason.
+* **Not accepted, and never ignored.** An empty group, a group whose All / Any is missing or unknown, a group nested deeper
+  than allowed, a group that contains itself, and an unfinished or unknown condition anywhere in the tree are problems. The
+  reminder is *invalid*: it can't be turned on, and one already on stops showing, rather than the rest being evaluated
+  without the part that is wrong. A group with one condition is that condition. The top level with no conditions is no match
+  and, like before, can't be turned on.
+* **Words.** The rule's sentence is made from the same tree (`Evaluate.RuleSentence`): a group inside another is in
+  parentheses, and several conditions of a kind that can say them together do (`Player class is Warrior, Hunter or Rogue`;
+  in a group matching All, `Player class is none of ...`). "is not" is kept: it is never merged with "is".
 
 ### Status, most important first
 
-`invalid` (its problems are listed; it never shows) · `disabled` · `notApplicable` (another character or class) ·
+`invalid` (its problems are listed, a group's or condition's place given as "Condition 1.2"; it never shows) · `disabled` · `notApplicable` (another character or class) ·
 `waiting` (the game hasn't given enough, or who is playing isn't known yet) · `showing` / `hidden`. The controller adds
 `off` (Reminders switched off), `world` (not in the world yet), `pending` (waiting out its delay) and `holding` (kept up
 for its minimum).
@@ -130,9 +149,19 @@ on nothing is listened for).
     scope = { who = "all" | "characters", characters = { "Name - Realm", ... }, class = nil | "WARRIOR" ... },
     match = "all" | "any",
     conditions = { { type = "equipment", slot = "offHand", what = "shield", negate = true } },
+    -- or, with a group (a condition of type "group" holding the same two fields):
+    -- conditions = { { type = "group", match = "any", conditions = { { type = "class", class = "WARRIOR", negate = false }, ... } },
+    --                { type = "player", state = "combat", negate = false } },
     display = { mode = "artworkText", art = "shield", text = "Equip your shield", ... },
     place = { preset = "belowCenter" } } } }
 ```
+
+**Groups need no migration.** A list with no group is read exactly as it always was, and the stored `version` stays 1: the
+top level was already "a list and how it matches", and a group is one more kind of entry in it. Nothing is rewritten when
+a reminder is read, so there is nothing to repeat or to undo. The compatibility rule: a build from before groups reads a group as a
+condition of a kind it doesn't know. It keeps it, lists it as a problem and doesn't run the reminder (it never rewrites it);
+turning such a reminder on again needs the group removed or a build that knows groups. Anything that renames fields
+of conditions or groups, or changes what an existing value means, is a new `version`.
 
 Ids are never reused within a profile (`nextId`). `version` is this table's own shape: a table from a newer TwichUI is
 read but never written or shown. Reading never writes: an unusable stored value reads as its default and is left as it
@@ -160,9 +189,15 @@ turned off, right after it; the original is untouched) and **Delete** (asks, nam
 - **Show**: Display (artwork with text, artwork, icon with text, icon, text only); Artwork (the gallery); Icon from (a
   TwichUI icon, or an item's icon by ID, link or a drop from the bags: the item needn't be equipped); Words.
 - **When**: For (every character, this character only, characters I choose: added from each character); Class (any, or
-  one: independent of the equipment conditions); "Show when [All conditions match]" with two or more; one row per
-  condition, `[Off hand] [is not] [Shield]`, where the subject decides the choices offered; Add an equipment condition /
-  a condition about you; the rule and the scope as sentences; the shield template's note, "This reminder appears whenever
+  one: who the reminder runs for, independent of its conditions; its tooltip says to use Player class conditions to show for
+  several classes or only in some situations); "Show when [Match all - AND]" with two or more; one row per
+  condition, `[Off hand] [is not] [Shield]`, where the subject decides the choices offered (Player class offers the
+  nine classes and starts with none chosen); **Add a condition** (a menu: equipment, you, player class, ranged ammunition) and
+  **Add a group**, both at the end of the list they add to; a group is a header with its own `[Match any - OR]` and Remove group, its conditions indented under a thin line, joined by
+  AND / OR words at the left; with more than one group each add area says "Add to the whole rule:" or "Add to this group:";
+  removing a group that holds conditions asks first, naming how many (an empty one goes at once); a new group matches
+  the opposite of the list it is in and is empty (a problem, said in words) until something is put in it; the rule and
+  the scope as sentences; the shield template's note, "This reminder appears whenever
   you are not using a shield. Add a condition to limit when it appears.", while its condition is the template's.
 - **Placement**: Position (below the middle, above the middle, middle, top, bottom, where I put it); Move on screen /
   Done; Size; Opacity; Text size; Words go (below, above, right, left). **More placement and appearance options**
@@ -170,9 +205,11 @@ turned off, right after it; the original is untouched) and **Delete** (asks, nam
   (none, soft shade, framed panel); anchor point and x / y offsets (typed values follow drags and the reverse); layer
   (low, medium, high); fade in and out; pulse; wait before showing; keep up at least.
 - **Preview**: the reminder drawn in the page by its own layout code, scaled to fit, marked PREVIEW; **Show on screen**.
-- **Test**: **Right now** (each condition: summary, Match / No match / Unavailable / Invalid, what was observed, and
-  why when unavailable; then the result and why). **Try a situation** (SIMULATED): a choice per condition, generated by
-  its provider (for the shield: Shield equipped, Empty off hand, Off-hand weapon equipped, Equipment information
+- **Test**: **Right now** (each group and condition, a group before what is in it and what is in it a step in: summary,
+  Match / No match / Unavailable / Invalid, what was observed, and why when unavailable; then the result and why; every one
+  is read, so none says "not evaluated"). **Try a situation** (SIMULATED): a choice per thing asked about, generated by
+  its provider; conditions that ask about the same thing share one choice ("Player class (3 conditions)"), so made-up facts
+  can't contradict each other (for the shield: Shield equipped, Empty off hand, Off-hand weapon equipped, Equipment information
   unavailable; for combat: In combat, Out of combat, Not read yet), and the simulated decision. **Check it in the game**.
 
 Words carry every state; colour only agrees.
@@ -206,7 +243,7 @@ The Test section's simulations go through the same `Evaluate.Run` on a table bui
 |---|---|
 | Switched off | no event, every frame hidden, every timer stale |
 | On, no reminder turned on for this character | `PLAYER_ENTERING_WORLD` only |
-| On, reminders running | the observation keys their conditions read (`slot:17`, `combat`, `life`, `mounted`, `ammo`), and only those sources' events: `PLAYER_EQUIPMENT_CHANGED` for equipment, the regen events for combat, the three life events, the mount event, and for ammunition `PLAYER_EQUIPMENT_CHANGED`, `BAG_UPDATE_DELAYED` and `UNIT_INVENTORY_CHANGED` |
+| On, reminders running | the observation keys their conditions read, in every branch of every group, once each (`slot:17`, `combat`, `life`, `mounted`, `class`, `ammo`), and only those sources' events (`class` has none: it is read when wanted and on entering the world): `PLAYER_EQUIPMENT_CHANGED` for equipment, the regen events for combat, the three life events, the mount event, and for ammunition `PLAYER_EQUIPMENT_CHANGED`, `BAG_UPDATE_DELAYED` and `UNIT_INVENTORY_CHANGED` |
 | An ammunition reminder, weapon takes none (or none equipped) | only a change of the ranged or ammo slot is acted on; bag and inventory events are dropped before any read. A look is up to six values from the character, and the bags only when nothing is selected |
 | An item without details in a wanted slot | asked for at most twice; `GET_ITEM_INFO_RECEIVED` / `ITEM_DATA_LOAD_RESULT` only while that lasts |
 | An event | marks its key; one 0.1 s timer reads each marked key once; only keys whose facts changed re-decide, and only the reminders that read them (an index by key) |
@@ -225,7 +262,8 @@ Turning it off, deleting it, a different character or class, Reminders switched 
 
 **A new kind of condition.** In `reminders/Conditions.lua` (or a file of its own listed after it), `C.Register{ type,
 label, New, Check, Needs, Evaluate, Summary, Observed, Scenarios }` (the header says what each does; `Evaluate` reads
-only the observations table). For each observation key `Needs` names, a source in `State.lua`:
+only the observations table). Optional: `Subject(cond)` (conditions that ask about the same thing share one simulation
+choice) and `Merge(match, conds)` (say a run of them in one phrase in the rule's sentence). `class` is the worked example. For each observation key `Needs` names, a source in `State.lua`:
 `ST.Source(kind, { events = { EVENT = handler }, Read = function(arg, obs) ... end })`. Then the editor's subject and
 value choices in `RemindersEditor.lua` (`Subjects`, `ValueChoices`), a test in `tests/test_reminders.lua`, and its
 facts and checks here. The `ammunition` kind (`reminders/Ammunition.lua` and State.lua's `ammo` source) is the worked
@@ -247,7 +285,9 @@ example of a kind with a file of its own. Buff, cooldown, health, inventory-coun
   ammunition (a custom ranged weapon) gets no `wrong` judgement. Reagent bags are scanned with the others (they can't hold
   ammunition).
 - A character listed by name and realm: a renamed character, or one moved to another realm, has to be added again.
-- Not in this release: nested groups, Lua, dynamic clones, sounds, sharing, buff/cooldown/health/inventory/target
+- Groups: three levels, 6 groups, 16 conditions (see "Three answers, groups and composition"). No drag and drop, no
+  moving a condition between groups (remove and add again), no typed expressions.
+- Not in this release: Lua, dynamic clones, sounds, sharing, buff/cooldown/health/inventory/target
   conditions, automation of any kind.
 
 ## In-game checklist
@@ -282,3 +322,16 @@ example of a kind with a file of its own. Buff, cooldown, health, inventory-coun
     with no ammunition reminder shows no events registered.
 18. Known ammunition: register a server item as arrows or bullets, check it counts when selected and carried, that changing
     its kind takes effect without another event, and that `/reload` keeps the list.
+19. **Groups and class.** Add a **Player class** condition, choose Warrior; Add a group (it matches Any, and says it is empty);
+    "Add to this group" three times: Warrior, Hunter, Rogue. The sentence reads "Player class is Warrior, Hunter or Rogue".
+    Turn it on: it shows on those classes only, not on a Mage. Check Test > Right now shows the group and each class
+    condition, and Try a situation offers one choice for the three classes.
+20. Put that group with "Player is in combat" (All): it shows for those classes in combat only; leaving combat hides it. Add
+    "Off hand is not Shield": a shield hides it. Reload with the reminder on: it appears without a flash of "waiting".
+21. Edit during a delay: set "wait before showing" to 5, start matching, then change the rule in the editor before it ends:
+    it still shows five seconds after the edit (or not at all, if the rule no longer matches), never stuck on "waiting out
+    its delay". The same for a minimum: edit while it is kept up and it still goes when the minimum ends.
+22. Remove a group that holds conditions (it asks, naming how many), a group inside a group, then try a group inside that
+    (refused with a reason). Open the settings with a large UI scale and a long list: the rows and buttons stay inside the page.
+23. `/tui diagnostics`: the Reminders section lists how many conditions and groups run; with no reminder turned on nothing is
+    listened for.

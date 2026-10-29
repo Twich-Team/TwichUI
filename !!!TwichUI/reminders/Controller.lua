@@ -195,7 +195,8 @@ local function Refresh()
     for _, v in ipairs(views) do
         if v.valid and v.enabled and E.Applies(v, ctx) ~= NOMATCH then
             active[v.id] = true
-            for _, entry in ipairs(v.conditions) do
+            -- every condition of every branch: which one matched last decides nothing about what must be heard
+            for _, entry in ipairs(v.leaves) do
                 entry.provider.Needs(entry.cond, function(key)
                     want[key] = true
                     local ids = index[key]
@@ -209,6 +210,9 @@ local function Refresh()
     local obs = ST.Observations()
     for _, v in ipairs(views) do
         if active[v.id] then
+            -- the gen bump above already killed any wait's timer; its phase must not outlive it, or the wait is never
+            -- started again (a reminder stuck "pending", or held up past its minimum)
+            Cancel(Rec(v.id))
             Decide(v, obs, ctx)
         else
             local r = Rec(v.id)
@@ -308,11 +312,15 @@ function CT.Visible(id) local r = rt[id] return r ~= nil and r.visible end
 -- For /tui diagnostics and the tests: counts only (no names, items or places).
 function CT.Snapshot()
     local n, on, valid, act, visible, pending, holding = 0, 0, 0, 0, 0, 0, 0
+    local conditions, groups = 0, 0   -- of the reminders running here
     for _, v in ipairs(RM.List()) do
         n = n + 1
         if v.enabled then on = on + 1 end
         if v.valid then valid = valid + 1 end
-        if active[v.id] then act = act + 1 end
+        if active[v.id] then
+            act = act + 1
+            conditions, groups = conditions + v.counts.conditions, groups + v.counts.groups
+        end
         local r = rt[v.id]
         if r and r.visible then visible = visible + 1 end
         if r and r.phase == "pending" then pending = pending + 1 end
@@ -321,7 +329,7 @@ function CT.Snapshot()
     local keys = 0
     for _ in pairs(index) do keys = keys + 1 end
     return { enabled = R:Enabled("reminders"), running = running, reminders = n, turnedOn = on, valid = valid,
-        active = act, visible = visible, pending = pending, holding = holding, keys = keys,
+        active = act, visible = visible, pending = pending, holding = holding, keys = keys, conditions = conditions, groups = groups,
         refreshes = stats.refreshes, decisions = stats.decisions, shows = stats.shows, hides = stats.hides }
 end
 

@@ -3,7 +3,7 @@
 -- behind "More placement and appearance options" the rest), Preview (drawn here by the reminder's own layout code, or on
 -- the screen where it sits) and Test (what it sees right now, and the same decision for situations you pick). Each
 -- section's widgets are made once, the first time the page is shown, and only placed and filled after that; condition
--- rows and test lines come from pools of RM.MAX_CONDITIONS. Every change goes through Config.lua's functions, which
+-- rows, group headers and test lines come from pools bounded by RM.MAX_CONDITIONS and RM.MAX_GROUPS. Every change goes through Config.lua's functions, which
 -- check it; nothing here writes saved data, reads the game's equipment for itself or changes it.
 --
 --   Ed.Build(parent, env) -> sections    env: { id() (the reminder shown), view(), Say(text, tone), Changed() }
@@ -255,8 +255,12 @@ local function Subjects()
     for _, slot in ipairs(C.SLOTS) do out[#out + 1] = { value = "slot:" .. slot[1], label = slot[3] } end
     out[#out + 1] = { value = "ammo", label = "Ranged ammunition" }
     out[#out + 1] = { value = "player", label = "You (the player)" }
+    out[#out + 1] = { value = "class", label = "Player class" }
     return out
 end
+
+-- The subject choice that makes a condition of a kind of its own (the others are equipment slots).
+local SUBJECT_KIND = { player = "player", ammo = "ammunition", class = "class" }
 
 local function SubjectOf(cond)
     if type(cond) ~= "table" then return nil, "?" end
@@ -268,6 +272,8 @@ local function SubjectOf(cond)
         return "player", "You (the player)"
     elseif cond.type == "ammunition" then
         return "ammo", "Ranged ammunition"
+    elseif cond.type == "class" then
+        return "class", "Player class"
     end
     return nil, "Unknown kind"
 end
@@ -279,6 +285,8 @@ local function ValueChoices(cond)
         for _, c in ipairs(C.SlotChoices(cond.slot)) do out[#out + 1] = { value = c[1], label = c[2] } end
     elseif cond.type == "ammunition" then
         for _, c in ipairs(R.ReminderAmmo.CHOICES) do out[#out + 1] = { value = c[1], label = c[2], tooltip = c[4] } end
+    elseif cond.type == "class" then
+        for _, c in ipairs(C.ClassChoices()) do out[#out + 1] = { value = c[1], label = c[2] } end
     elseif cond.type == "player" then
         for _, st in ipairs(C.STATES) do
             if C.StateSupported(st[1]) or cond.state == st[1] then
@@ -290,8 +298,31 @@ local function ValueChoices(cond)
 end
 
 local function ValueLabel(cond)
-    for _, c in ipairs(ValueChoices(cond)) do if c.value == (cond.what or cond.state) then return c.label end end
-    return tostring(cond.what or cond.state)
+    if cond.type == "class" and not cond.class then return "Choose a class" end
+    for _, c in ipairs(ValueChoices(cond)) do if c.value == (cond.what or cond.state or cond.class) then return c.label end end
+    return tostring(cond.what or cond.state or cond.class)
+end
+
+-- What "Add a condition" offers: the kind (a provider's `type`), its words, and what it is for.
+local ADD_KINDS = {
+    { "equipment", "Equipment", "What is in a slot: empty, a shield, a weapon, or a specific item." },
+    { "player", "You: combat, alive, mounted", "In combat, alive or dead (a ghost counts as dead), or mounted." },
+    { "class", "Player class", "Your class. To show for several classes, add one of these for each and put them in a group that matches any." },
+    { "ammunition", "Ranged ammunition", "The ammunition for your ranged weapon: none selected, used up, or the wrong kind. It never matches for a weapon that takes no ammunition." },
+}
+
+local MATCH_CHOICES = {
+    { "all", "Match all - AND", "Every item in this list must match." },
+    { "any", "Match any - OR", "One matching item is enough." },
+}
+
+-- How many conditions are in a group, those in groups inside it included.
+local function CountIn(entry)
+    local n = 0
+    for _, child in ipairs(entry.children or {}) do
+        n = n + (child.group and CountIn(child) or 1)
+    end
+    return n
 end
 
 local WHO = {
@@ -300,9 +331,13 @@ local WHO = {
     { "chosen", "Characters I choose", "Only the characters you add here: log in on each one and press Add this character." },
 }
 
+local INDENT, GUTTER = 22, 40   -- how far a group's contents move in, and the room kept for "AND" / "OR" in a list of several
+
 local function WhenSection(parent, env)
     local s = Section(parent, "reminderWhen", "When", "Shown while its conditions are true, for the characters it is for; hidden the rest of the time.")
     local function Did(ok, why) if not ok then env.Say(why, "warn") end end
+    local function Leaf(i) local v = env.view() return v and v.leaves[i] end
+    local function GroupOf(j) local v = env.view() return v and v.groups[j] end
 
     s.whoLabel = Label(s, "For")
     s.who = Dropdown(s, 220, function() return Choices(WHO) end, function(v)
@@ -325,27 +360,30 @@ local function WhenSection(parent, env)
         for _, c in ipairs(RM().CLASSES) do out[#out + 1] = { value = c, label = RM().ClassName(c) } end
         return out
     end, function(v) Did(RM().SetScope(env.id(), "class", v ~= "" and v or nil)) end,
-        "Class", "Limits it to one class, whatever its conditions. Separate from its equipment conditions: a Warrior isn't assumed to carry a shield.")
+        "Class", "Limits which characters this reminder runs for, whatever its conditions: a reminder for another class never looks at anything. To show for several classes, or for a class only in some situations, add Player class conditions below instead. A Warrior isn't assumed to carry a shield either: equipment is only ever a condition.")
 
     s.matchLabel = Label(s, "Show when")
-    s.match = Dropdown(s, 220, function()
-        return { { value = "all", label = "All conditions match" }, { value = "any", label = "Any condition matches" } }
-    end, function(v) Did(RM().SetMatch(env.id(), v)) end, "Show when", "All: every condition below must be true. Any: one is enough.")
+    s.match = Dropdown(s, 220, function() return Choices(MATCH_CHOICES) end, function(v) Did(RM().SetMatch(env.id(), v)) end,
+        "Show when", "All (AND): every item below must be true. Any (OR): one is enough. A group below is one item, decided the same way inside.")
     s.single = Label(s, "Show when")
 
+    -- one row for each condition in the rule, whichever group it is in (the n-th condition in reading order)
     s.rows = {}
     for i = 1, RM().MAX_CONDITIONS do
         local row = {}
-        local function Cond() local v = env.view() local e = v and v.conditions[i] return e and (e.cond or e.raw) end
+        local function Cond() local e = Leaf(i) return e and (e.cond or e.raw) end
         local function SetCond(new)
-            local ok, why = RM().SetCondition(env.id(), i, new)
+            local e = Leaf(i)
+            if not e then return false end
+            local ok, why = RM().SetCondition(env.id(), e.path, new)
             if not ok then env.Say(why, "warn") end
             return ok
         end
+        row.conn = Wg().Text(s, "small")
         row.subject = Dropdown(s, 170, Subjects, function(value)
             local cur = Cond()
-            if value == "player" or value == "ammo" then
-                local kind = value == "ammo" and "ammunition" or "player"
+            local kind = SUBJECT_KIND[value]
+            if kind then
                 if type(cur) == "table" and cur.type == kind then return end
                 SetCond(R.ReminderConditions.Get(kind).New())
                 return
@@ -370,7 +408,9 @@ local function WhenSection(parent, env)
             local cur = Cond()
             if type(cur) ~= "table" then return end
             local new = RM().DeepCopy(cur)
-            if new.type == "player" then new.state = value else new.what = value end
+            if new.type == "player" then new.state = value
+            elseif new.type == "class" then new.class = value
+            else new.what = value end
             SetCond(new)
         end)
         row.item = Wg().EditBox(s, 88, 22)
@@ -398,36 +438,184 @@ local function WhenSection(parent, env)
         end)
         R.Interact.Tip(row.item, "Item", "Its item ID, its link pasted here, or the item dropped here from your bags (it goes straight back). Press Enter.")
         row.remove = Wg().Button(s, "Remove", 70, "secondary", function()
-            local ok, why = RM().RemoveCondition(env.id(), i)
-            if not ok then env.Say(why, "warn") end
+            local e = Leaf(i)
+            if not e then return end
+            Did(RM().RemoveCondition(env.id(), e.path))
         end)
         R.Interact.Tip(row.remove, "Remove", "Removes this condition from the reminder. Nothing else changes.")
         row.problem = Note(s)
         row.itemName = Note(s, W - CTRL_X - PAD)
         s.rows[i] = row
     end
-    s.addEquip = Wg().Button(s, "Add an equipment condition", 210, "secondary", function()
-        local ok, why = RM().AddCondition(env.id(), "equipment")
-        if not ok then env.Say(why, "warn") end
-    end)
-    s.addPlayer = Wg().Button(s, "Add a condition about you", 200, "secondary", function()
-        local ok, why = RM().AddCondition(env.id(), "player")
-        if not ok then env.Say(why, "warn") end
-    end)
-    R.Interact.Tip(s.addPlayer, "A condition about you", "In combat, alive or dead (a ghost counts as dead), or mounted.")
-    s.addAmmo = Wg().Button(s, "Add an ammunition condition", 210, "secondary", function()
-        local ok, why = RM().AddCondition(env.id(), "ammunition")
-        if not ok then env.Say(why, "warn") end
-    end)
-    R.Interact.Tip(s.addAmmo, "An ammunition condition", "The ammunition for your ranged weapon: none selected, used up, or the wrong kind. It never matches for a weapon that takes no ammunition.")
+
+    -- one header for each group, in reading order, with the line that bounds what is in it
+    s.groups = {}
+    for j = 1, RM().MAX_GROUPS do
+        local g = {}
+        g.conn = Wg().Text(s, "small")
+        g.bar = Wg().Solid(s, "ARTWORK", Wg().pal.bronzeLo, 0.9)
+        g.bar:SetWidth(2)
+        g.match = Dropdown(s, 170, function() return Choices(MATCH_CHOICES) end, function(value)
+            local e = GroupOf(j)
+            if e then Did(RM().SetMatch(env.id(), value, e.path)) end
+        end, "This group", "All (AND): every item in this group must be true. Any (OR): one is enough. The group counts as one item in the list around it.")
+        g.hint = Wg().Text(s, "small")
+        g.remove = Wg().Button(s, "Remove group", 110, "secondary", function()
+            local e = GroupOf(j)
+            if not e then return end
+            local id, path, raw = env.id(), e.path, e.raw
+            local n = CountIn(e)
+            if n == 0 then Did(RM().RemoveCondition(id, path)) return end
+            local text = ("Remove this group and the %d condition%s in it?\n\nOnly this group is removed; the rest of the reminder stays as it is. This can't be undone."):format(n, n == 1 and "" or "s")
+            R.Interact.Confirm("TWICHUI_REMINDER_GROUP_DELETE", text, function() Did(RM().RemoveCondition(id, path)) end, { accept = "Remove", valid = function()
+                local node = RM().Node(env.view(), path)
+                if node and node.raw == raw then return true end
+                return false, "That group is already gone, so nothing was removed."
+            end })
+        end)
+        R.Interact.Tip(g.remove, "Remove group", "Removes this group and everything in it, after asking if it holds conditions. The rest of the reminder is not changed.")
+        g.problem = Note(s)
+        s.groups[j] = g
+    end
+
+    -- where new things go: the end of the top level (0) or of a group (its number); one add area for each
+    s.adds = {}
+    for j = 0, RM().MAX_GROUPS do
+        local a = {}
+        a.label = Wg().Text(s, "small")
+        a.cond = Wg().Dropdown(s, 190, function(kind)
+            local path
+            if j > 0 then
+                local e = GroupOf(j)
+                if not e then return end
+                path = e.path
+            end
+            Did(RM().AddCondition(env.id(), kind, path))
+        end)
+        a.cond:SetChoices(function()
+            local out = {}
+            for i, k in ipairs(ADD_KINDS) do out[i] = { value = k[1], label = k[2], tooltip = k[3] } end
+            return out
+        end)
+        a.cond:SetValue(nil, "Add a condition")
+        R.Interact.Tip(a.cond, "Add a condition", j == 0 and "Adds a condition to the rule." or "Adds a condition to this group.")
+        a.group = Wg().Button(s, "Add a group", 120, "secondary", function()
+            local path
+            if j > 0 then
+                local e = GroupOf(j)
+                if not e then return end
+                path = e.path
+            end
+            Did(RM().AddGroup(env.id(), path))
+        end)
+        R.Interact.Tip(a.group, "Add a group", "A group is a set of conditions that counts as one item: for \"Warrior or Hunter or Rogue, and in combat\", put the three classes in a group that matches any.")
+        a.note = Note(s)
+        s.adds[j] = a
+    end
     s.sentence = Note(s)
     s.scope = Note(s)
     s.note = Note(s)
 
     local parts = { s.whoLabel, s.who, s.chars, s.addMe, s.removeMe, s.classLabel, s.class, s.matchLabel, s.match, s.single,
-        s.addEquip, s.addPlayer, s.addAmmo, s.sentence, s.scope, s.note }
+        s.sentence, s.scope, s.note }
     for _, row in ipairs(s.rows) do
-        for _, k in ipairs({ "subject", "op", "value", "item", "remove", "problem", "itemName" }) do parts[#parts + 1] = row[k] end
+        for _, k in ipairs({ "conn", "subject", "op", "value", "item", "remove", "problem", "itemName" }) do parts[#parts + 1] = row[k] end
+    end
+    for _, g in ipairs(s.groups) do
+        for _, k in ipairs({ "conn", "bar", "match", "hint", "remove", "problem" }) do parts[#parts + 1] = g[k] end
+    end
+    for j = 0, RM().MAX_GROUPS do
+        for _, k in ipairs({ "label", "cond", "group", "note" }) do parts[#parts + 1] = s.adds[j][k] end
+    end
+
+    -- A list of conditions and groups (the top level's, or one group's) placed from y; returns the next y.
+    -- `owner` is the group entry (nil for the top level), `gj` its number among the groups.
+    local function LayoutList(self, v, entries, owner, gj, depth, h, used)
+        local count = #entries
+        local x = LABEL_X + INDENT * (depth - 1)
+        local cx = x + (count >= 2 and GUTTER or 0)
+        local match = owner and owner.match or v.match
+        for i, entry in ipairs(entries) do
+            local word = i > 1 and (match == "any" and "OR" or "AND") or nil
+            if entry.group then
+                used.group = used.group + 1
+                local j = used.group
+                local g = self.groups[j]
+                if not g then break end
+                if word then Text(g.conn, word, "quiet", x, h + 6, self) end
+                g.match:SetValue(entry.match, R.ReminderEval.GroupWords(entry.match))
+                Put(g.match, self, cx, h)
+                Text(g.hint, "of the items in this group", "quiet", cx + 178, h + 8, self)
+                Put(g.remove, self, W - PAD - 110, h)
+                h = h + ROW
+                local top = h
+                if entry.why then h = h + Text(g.problem, entry.why:gsub("^%l", string.upper), "warn", cx + 4, h - 2, self) + 4 end
+                h = LayoutList(self, v, entry.children, entry, j, depth + 1, h, used)
+                g.bar:ClearAllPoints()
+                g.bar:SetPoint("TOPLEFT", self, "TOPLEFT", x + INDENT - 8, -(top - 2))
+                g.bar:SetHeight(math.max(2, h - top - 2))
+                g.bar:Show()
+            else
+                used.leaf = used.leaf + 1
+                local row = self.rows[used.leaf]
+                if not row then break end
+                local cond = entry.cond or entry.raw
+                if word then Text(row.conn, word, "quiet", x, h + 6, self) end
+                if type(cond) == "table" and entry.provider then
+                    local sv, sl = SubjectOf(cond)
+                    row.subject:SetValue(sv, sl)
+                    Put(row.subject, self, cx, h)
+                    -- ammunition reads as a sentence on its own ("Ranged ammunition is used up"): no "is not"
+                    local vx = cx + 268
+                    if cond.type == "ammunition" then
+                        vx = cx + 176
+                    else
+                        row.op:SetValue(cond.negate and "isnot" or "is", cond.negate and "is not" or "is")
+                        Put(row.op, self, cx + 176, h)
+                    end
+                    row.value:SetValue(cond.what or cond.state or cond.class, ValueLabel(cond))
+                    Put(row.value, self, vx, h)
+                else
+                    Text(row.problem, "A condition TwichUI can't read.", "warn", cx, h + 4, self)
+                end
+                Put(row.remove, self, W - PAD - 70, h)
+                h = h + ROW
+                if type(cond) == "table" and cond.type == "equipment" and cond.what == "item" then
+                    if not row.item:HasFocus() then row.item:SetText(cond.item and tostring(cond.item) or "") end
+                    Put(row.item, self, cx, h - 4)
+                    if cond.item then
+                        local text, tone = ItemLine(cond.item)
+                        Text(row.itemName, text, tone, cx + 96, h, self)
+                    end
+                    h = h + ROW - 4
+                end
+                if entry.why then
+                    h = h + Text(row.problem, entry.why:gsub("^%l", string.upper), "warn", cx + 4, h - 2, self) + 4
+                end
+            end
+        end
+        -- where the next thing goes
+        local a = self.adds[gj]
+        if v.counts.groups > 0 then
+            Text(a.label, owner and "Add to this group:" or "Add to the whole rule:", "quiet", x, h + 8, self)
+        end
+        local ax = v.counts.groups > 0 and (x + 150) or cx
+        local limit
+        if v.counts.conditions >= RM().MAX_CONDITIONS then limit = RM().REFUSE.conditionsFull end
+        if not limit then
+            a.cond:SetValue(nil, "Add a condition")
+            Put(a.cond, self, ax, h)
+        end
+        if depth + 1 > RM().MAX_DEPTH then
+            limit = limit or RM().REFUSE.tooDeep
+        elseif v.counts.groups >= RM().MAX_GROUPS then
+            limit = limit or RM().REFUSE.groupsFull
+        else
+            Put(a.group, self, ax + (limit and 0 or 198), h)
+        end
+        h = h + ROW
+        if limit then h = h + Text(a.note, limit, "quiet", x, h - 2, self) + 4 end
+        return h
     end
 
     function s:Layout(v, y)
@@ -453,59 +641,18 @@ local function WhenSection(parent, env)
         self.class:SetValue(sc.class or "", sc.class and RM().ClassName(sc.class) or "Any class")
         h = Line(self, self.classLabel, self.class, h) + 4
 
-        -- "Show when" (and, with two or more, all or any), then one row per condition read as a sentence:
+        -- "Show when" (and, with two or more, all or any), then the rule as rows, a group indented under its header:
         -- [Off hand] [is not] [Shield]
         local n = #v.conditions
         if n >= 2 then
-            self.match:SetValue(v.match, v.match == "any" and "Any condition matches" or "All conditions match")
+            self.match:SetValue(v.match, LabelOf(MATCH_CHOICES, v.match))
             h = Line(self, self.matchLabel, self.match, h)
         elseif n == 1 then
             Put(self.single, self, LABEL_X, h)
             h = h + 20
         end
-        for i, entry in ipairs(v.conditions) do
-            local row = self.rows[i]
-            if not row then break end
-            local cond = entry.cond or entry.raw
-            local x = LABEL_X
-            if type(cond) == "table" and entry.provider then
-                local sv, sl = SubjectOf(cond)
-                row.subject:SetValue(sv, sl)
-                Put(row.subject, self, x, h)
-                -- ammunition reads as a sentence on its own ("Ranged ammunition is used up"): no "is not"
-                local vx = x + 268
-                if cond.type == "ammunition" then
-                    vx = x + 176
-                else
-                    row.op:SetValue(cond.negate and "isnot" or "is", cond.negate and "is not" or "is")
-                    Put(row.op, self, x + 176, h)
-                end
-                row.value:SetValue(cond.what or cond.state, ValueLabel(cond))
-                Put(row.value, self, vx, h)
-                if cond.type == "equipment" and cond.what == "item" then
-                    if not row.item:HasFocus() then row.item:SetText(cond.item and tostring(cond.item) or "") end
-                    Put(row.item, self, x + 450, h)
-                end
-            else
-                Text(row.problem, "A condition TwichUI can't read.", "warn", x, h + 4, self)
-            end
-            Put(row.remove, self, W - PAD - 70, h)
-            h = h + ROW
-            if type(cond) == "table" and cond.type == "equipment" and cond.what == "item" and cond.item then
-                local text, tone = ItemLine(cond.item)
-                h = h + Text(row.itemName, text, tone, x + 4, h - 4, self) + 2
-            end
-            if entry.why then
-                h = h + Text(row.problem, entry.why:gsub("^%l", string.upper), "warn", x + 4, h - 2, self) + 4
-            end
-        end
-        if n < RM().MAX_CONDITIONS then
-            Put(self.addEquip, self, n == 0 and CTRL_X or LABEL_X, h + 2)
-            Put(self.addPlayer, self, (n == 0 and CTRL_X or LABEL_X) + 218, h + 2)
-            h = h + ROW
-            Put(self.addAmmo, self, n == 0 and CTRL_X or LABEL_X, h + 2)
-            h = h + ROW + 4
-        end
+        h = LayoutList(self, v, v.conditions, nil, 0, 1, h, { leaf = 0, group = 0 })
+        h = h + 4
         h = h + Text(self.sentence, E.RuleSentence(v), n == 0 and "warn" or "quiet", LABEL_X, h, self) + 4
         h = h + Text(self.scope, "For: " .. E.ScopeSentence(v, me) .. ".", "quiet", LABEL_X, h, self) + 4
         -- the shield template's own explanation, while its one condition is what the template made
@@ -797,13 +944,30 @@ end
 
 local function ConditionLine(c, observedWord)
     local E = R.ReminderEval
-    local text = ("%s  -  %s  -  %s: %s"):format(c.summary, E.RESULT_WORDS[c.result] or c.result, observedWord, c.observed ~= "" and c.observed or "nothing")
+    local text
+    if c.group then
+        text = ("%s  -  %s"):format(c.summary, E.RESULT_WORDS[c.result] or c.result)
+    else
+        text = ("%s  -  %s  -  %s: %s"):format(c.summary, E.RESULT_WORDS[c.result] or c.result, observedWord, c.observed ~= "" and c.observed or "nothing")
+    end
     if c.reason then text = text .. ". " .. c.reason end
     return text
 end
 
+-- A line for each condition and group of a decision, a group before what is in it and what is in it a step in.
+local function NodeLines(self, pool, out, observedWord, h)
+    for i, c in ipairs(out and out.nodes or {}) do
+        local fs = pool[i]
+        if not fs then break end
+        local x = PAD + 10 + 16 * ((c.depth or 1) - 1)
+        h = h + Text(fs, ConditionLine(c, observedWord), ResultTone(c.result), x, h, self) + 4
+    end
+    return h
+end
+
 local function TestSection(parent, env)
     local s = Section(parent, "reminderTest", "Test", "What it decides right now and why, and the same decision for situations you choose, without changing your equipment.")
+    local NODES = RM().MAX_CONDITIONS + RM().MAX_GROUPS
     s.liveHead = Wg().Text(s, "body")
     s.liveHead:SetText("Right now")
     s.liveResult = Note(s)
@@ -813,16 +977,18 @@ local function TestSection(parent, env)
     s.simTag = Wg().Tag(s, "SIMULATED")
     s.simIntro = Note(s)
     s.picks, s.pickLabels, s.sim = {}, {}, {}
-    for i = 1, RM().MAX_CONDITIONS do
+    for i = 1, NODES do
         s.live[i] = Note(s, W - PAD * 2 - 10)
         s.sim[i] = Note(s, W - PAD * 2 - 10)
+    end
+    for i = 1, RM().MAX_CONDITIONS do
         s.pickLabels[i] = Note(s, 300)
         s.pickLabels[i]:SetWordWrap(false)
         s.picks[i] = Dropdown(s, 240, function()
             local v = env.view()
-            local entry = v and v.conditions[i]
+            local input = v and R.ReminderEval.SimInputs(v)[i]
             local out = {}
-            for j, sc in ipairs(entry and R.ReminderEval.Scenarios(entry) or {}) do out[j] = { value = sc.key, label = sc.label } end
+            for j, sc in ipairs(input and input.scenarios or {}) do out[j] = { value = sc.key, label = sc.label } end
             return out
         end, function(value)
             local id = env.id()
@@ -837,9 +1003,8 @@ local function TestSection(parent, env)
     s.manualHead:SetText("Check it in the game")
     s.manual = Note(s)
     local parts = { s.liveHead, s.liveResult, s.simHead, s.simTag, s.simIntro, s.simResult, s.manualHead, s.manual }
-    for i = 1, RM().MAX_CONDITIONS do
-        parts[#parts + 1] = s.live[i]; parts[#parts + 1] = s.sim[i]; parts[#parts + 1] = s.picks[i]; parts[#parts + 1] = s.pickLabels[i]
-    end
+    for i = 1, NODES do parts[#parts + 1] = s.live[i]; parts[#parts + 1] = s.sim[i] end
+    for i = 1, RM().MAX_CONDITIONS do parts[#parts + 1] = s.picks[i]; parts[#parts + 1] = s.pickLabels[i] end
 
     function s:Layout(v, y)
         HideAll(parts)
@@ -848,9 +1013,7 @@ local function TestSection(parent, env)
         Put(self.liveHead, self, PAD, h)
         h = h + 18
         local out, status = CT.Inspect(v.id)
-        for i, c in ipairs(out and out.conditions or {}) do
-            if self.live[i] then h = h + Text(self.live[i], ConditionLine(c, "Observed"), ResultTone(c.result), PAD + 10, h, self) + 4 end
-        end
+        h = NodeLines(self, self.live, out, "Observed", h)
         local words = E.STATUS_WORDS[status] or tostring(status)
         local why = out and (out.reason or out.explain) or ""
         if status == "disabled" then why = "Turn it on to use it. " .. (out and out.explain or "")
@@ -864,14 +1027,15 @@ local function TestSection(parent, env)
         if #v.conditions == 0 then
             h = h + Text(self.simIntro, "Add a condition first; then you can try situations here.", "quiet", PAD, h, self) + 8
         else
-            h = h + Text(self.simIntro, "Choose what each condition would see. The decision below is made by the same rules as the live one, from these made-up facts only: your equipment, the live result and your settings are not touched.", "quiet", PAD, h, self) + 8
+            h = h + Text(self.simIntro, "Choose what each condition would see. The decision below is made by the same rules as the live one, from these made-up facts only: your equipment, the live result and your settings are not touched. Conditions that ask about the same thing (several classes) share one choice.", "quiet", PAD, h, self) + 8
             local picks = Ed.picks and Ed.picks[v.id] or {}
-            for i, entry in ipairs(v.conditions) do
+            for i, input in ipairs(E.SimInputs(v)) do
                 if not self.picks[i] then break end
-                local list = E.Scenarios(entry)
+                local list = input.scenarios
                 local chosen = list[1]
                 for _, sc in ipairs(list) do if sc.key == picks[i] then chosen = sc end end
-                Text(self.pickLabels[i], ("%d. %s"):format(i, E.Summary(entry)), nil, PAD + 10, h + 4, self)
+                local label = #input.leaves > 1 and ("%s (%d conditions)"):format(input.label or "Shared", #input.leaves) or E.Summary(input.entry)
+                Text(self.pickLabels[i], ("%d. %s"):format(i, label), nil, PAD + 10, h + 4, self)
                 if chosen then
                     self.picks[i]:SetValue(chosen.key, chosen.label)
                     Put(self.picks[i], self, W - PAD - 240, h)
@@ -879,16 +1043,14 @@ local function TestSection(parent, env)
                 h = h + ROW
             end
             local sim = E.Simulate(v, picks)
-            for i, c in ipairs(sim.conditions) do
-                if self.sim[i] then h = h + Text(self.sim[i], ConditionLine(c, "Simulated"), ResultTone(c.result), PAD + 10, h, self) + 4 end
-            end
+            h = NodeLines(self, self.sim, sim, "Simulated", h)
             local simWords = E.STATUS_WORDS[sim.status] or sim.status
             h = h + 2 + Text(self.simResult, ("Simulated result: %s. %s"):format(simWords, sim.reason or sim.explain), StatusTone(sim.status), PAD, h + 2, self) + 12
         end
 
         Put(self.manualHead, self, PAD, h)
         h = h + 18
-        h = h + Text(self.manual, "Turn it on, then change what it is about (take off or put on equipment, move your ammunition): within a moment it appears or goes, and Right now says why. Your gear and bags are never changed by TwichUI.", "quiet", PAD, h, self) + 10
+        h = h + Text(self.manual, "Turn it on, then change what it is about (take off or put on equipment, move your ammunition): within a moment it appears or goes, and Right now says why. Every condition is checked each time, even when an earlier one has already settled the answer, so each line shows its own result. Your gear and bags are never changed by TwichUI.", "quiet", PAD, h, self) + 10
         self:SetHeight(h)
         Put(self, parent, 0, y)
         return h
