@@ -358,7 +358,7 @@ end
 
 -- Groups the features write into without checking first.
 local UI_GROUPS = { "qol", "foodDrink", "brokerMenu", "refreshments", "refreshmentsStyle",
-    "restedxpSkin", "restedxpSkinText", "restedxpSkinState", "restedxpTimerLook", "restedxpTimerText", "speakstoneSkin", "speakstoneSkinStyle", "chronicleLook", "chronicleAppearance", "guideWaypoint", "guideAuto", "guideTracker", "mageSell", "restock", "restockPromptStyle", "chatClean", "classBars", "classBarsLook", "classBarsOverrides", "classBarsPosition", "ammoCustom", "hazard", "hazardCustom", "hazardBuiltin", "cozyBag", "reminders", "healerWatch", "healerWatchBarLook",
+    "restedxpSkin", "restedxpSkinText", "restedxpSkinState", "restedxpTimerLook", "restedxpTimerText", "speakstoneSkin", "speakstoneSkinStyle", "chronicleLook", "chronicleAppearance", "guideWaypoint", "guideAuto", "guideTracker", "mageSell", "restock", "restockPromptStyle", "chatClean", "classBars", "classBarsLook", "classBarsOverrides", "classBarsPosition", "ammoCustom", "hazard", "hazardCustom", "hazardBuiltin", "cozyBag", "cozyBagButton", "cozyBagOffer", "reminders", "healerWatch", "healerWatchBarLook",
     "markers", "markerOrder", "markerBar", "markerBarStyle", "markerBarPosition",
     "partyPins", "pinsLook", "pinsAppearance", "pinsMapText", "pinsBroker", "pinsBrokerMenu", "pinsEditorLook",
     "navigation", "navigationLook", "navTravel", "mapExplore", "npcMap",

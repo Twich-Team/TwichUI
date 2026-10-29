@@ -175,6 +175,10 @@ local G = {
     { "reminders.decisions", "Reminders: decisions so far (module count)", "work", "group", Field("ReminderController", "decisions") },
     { "healer.events", "Healer Watch: events registered", "listeners", "group", Field("HealerWatcher", "events") },
     { "classbars.events", "Class bars: events registered", "listeners", "group", Field("ClassBars", "events") },
+    { "bag.offer.events", "Cozy Bag offer: events registered", "listeners", "core", Field("CozyBagOffer", "events") },
+    { "bag.offer.looks", "Cozy Bag offer: looks so far (module count)", "work", "core", Field("CozyBagOffer", "looks") },
+    { "bag.button.built", "Cozy Bag button frame made", "pool", "core", function() local s = Snap("CozyBagButton") return s and Flag(s.built) or nil end },
+    { "bag.button.shown", "Cozy Bag button shown", "state", "core", function() local s = Snap("CozyBagButton") return s and Flag(s.shown) or nil end },
 }
 for _, g in ipairs(G) do
     Perf.Gauge(g[1], { label = g[2], kind = g[3], group = g[4], unit = "count", read = g[5], builtin = true })

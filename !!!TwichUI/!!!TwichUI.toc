@@ -260,9 +260,14 @@ npcs\FilterMenu.lua
 # Cozy Sleeping Bag guide: a small window that follows the hidden quest chain behind the bag, from the character's own quest
 # history (nothing saved but where the window sits), with optional map pins made through pins\Pins.lua. Never opens by itself;
 # nothing listens while it is closed. Data and State have no frames or game calls; CozyBag.lua reads the game; the window draws.
+# Offer decides when the bag is available to the character and keeps a per-character record; Notice is the one-time card (a
+# notification kind); Button is the small movable launcher. All three are quiet and open nothing by themselves.
 guides\CozyBagData.lua
 guides\CozyBagState.lua
 guides\CozyBag.lua
+guides\CozyBagOffer.lua
+guides\CozyBagNotice.lua
+guides\CozyBagButton.lua
 guides\CozyBagWindow.lua
 
 # Hazard alerts: a sound for each of three alert categories when an aura you list lands on you, grows or fades, played by the

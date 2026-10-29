@@ -429,7 +429,7 @@ do
   Check(saved and saved.locked == true, "the lock is saved")
   for k in pairs(saved) do Check(k == "locked" or k == "x" or k == "y", "only the lock and the place are saved: " .. k) end
   local dump = {}
-  local function Walk(t, path) for k, v in pairs(t) do if type(v) == "table" then Walk(v, path .. "." .. tostring(k)) elseif tostring(k):lower():find("cozy") or tostring(v):lower():find("79008") then dump[#dump + 1] = path .. "." .. tostring(k) end end end
+  local function Walk(t, path) for k, v in pairs(t) do if type(v) == "table" then Walk(v, path .. "." .. tostring(k)) elseif (tostring(k):lower():find("cozy") and not (path == "db.modules" and (k == "cozyBagNotice" or k == "cozyBagButton"))) or tostring(v):lower():find("79008") then dump[#dump + 1] = path .. "." .. tostring(k) end end end
   Walk(a.TwichUIDB, "db")
   Check(#dump == 0, "no quest, step or progress in the saved data: " .. table.concat(dump, ","))
   -- a profile change or import does not carry progress: progress is not in the profile

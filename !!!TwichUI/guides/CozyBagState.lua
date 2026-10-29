@@ -103,6 +103,27 @@ function S.Evaluate(guide, faction, reader)
     return result
 end
 
+-- Whether the guide's launcher and unlock notice may be offered (guides/CozyBagOffer.lua asks; the guide itself opens at any
+-- level and for anyone). facts = {
+--   level         the character's level (nil: unknown),
+--   historyReady  the quest history can be trusted (see CozyBag.lua),
+--   complete      Evaluate's `complete` for this character, or nil when it could not conclude (loading, faction unknown),
+--   owned         the reward item is in the bags or bank now (true is proof; false and nil prove nothing),
+--   acquired      this character's own record that the bag was got before (guides/CozyBagOffer.lua keeps it) }
+-- Returns whether to offer it, and a reason code: "available", or why not: "acquired", "owned", "level", "loading",
+-- "complete", "unknown". Having the bag, or the record of having had it, outranks everything, so selling or banking the
+-- item never makes a finished chain look new. Missing information is never read as "not done": it is "loading"/"unknown".
+function S.Offer(guide, facts)
+    if facts.acquired == true then return false, "acquired" end
+    if facts.owned == true then return false, "owned" end
+    local level = facts.level
+    if type(level) ~= "number" or level ~= level or level < guide.level then return false, "level" end
+    if not facts.historyReady then return false, "loading" end
+    if facts.complete == true then return false, "complete" end
+    if facts.complete ~= false then return false, "unknown" end
+    return true, "available"
+end
+
 -- Index of the step with this id in result.steps, or nil.
 function S.IndexOf(result, id)
     for i, entry in ipairs(result.steps) do

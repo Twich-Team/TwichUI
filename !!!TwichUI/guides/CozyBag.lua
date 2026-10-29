@@ -105,6 +105,28 @@ end
 
 function C.View() return view end
 
+-- A fresh reading of the chain that leaves what the window is looking at alone (no view, no signature, no Tell). The offer
+-- (guides/CozyBagOffer.lua) asks this while the guide is closed, when `result` is not kept current. Same rules as Look.
+function C.Progress() return ST.Evaluate(D, Faction(), Reader()) end
+
+-- Whether a quest ID belongs to the chain (either side, optional step included): lets a listener drop every other turn-in
+-- without reading anything.
+local chainQuests = {}
+for _, step in ipairs(D.steps) do chainQuests[step.quest] = true end
+function C.IsChainQuest(id) return chainQuests[id] == true end
+
+-- Told once the history can be trusted (Trust), and when the window opens or closes. Nothing polls.
+local readyWatchers, openWatchers = {}, {}
+function C.OnReady(fn) readyWatchers[#readyWatchers + 1] = fn end
+function C.OnOpenChange(fn) openWatchers[#openWatchers + 1] = fn end
+
+local function Call(list)
+    for _, fn in ipairs(list) do
+        local ok, err = pcall(fn)
+        if not ok and R.Fault then R.Fault("cozy bag guide", err) end
+    end
+end
+
 function C.SelectedStep()
     local r = C.Result()
     local at = view.id and ST.IndexOf(r, view.id)
@@ -145,6 +167,7 @@ local function Trust()
     R:Off("PLAYER_ENTERING_WORLD", C.OnWorld)
     R:Off("QUEST_LOG_UPDATE", C.OnLog)
     if open and Look() then Tell() end    -- a closed guide reads the history when it opens
+    Call(readyWatchers)
 end
 
 function C.OnLog()
@@ -173,6 +196,7 @@ function C.Opened()
     queued = false
     for _, e in ipairs(EVENTS) do R:On(e, OnQuestEvent) end
     if Look() then Tell() end
+    Call(openWatchers)
 end
 
 function C.Closed()
@@ -184,6 +208,7 @@ function C.Closed()
     -- the next opening starts by following the detected step
     view = { following = true }
     signature = nil
+    Call(openWatchers)
 end
 
 function C.IsOpen() return open end

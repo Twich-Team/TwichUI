@@ -21,8 +21,8 @@
 -- sharing (a share never moves another player's windows), but a layout the recipient chose does place them, through
 -- the PLACES registry only: each entry's saved key and how that feature anchors it (read in its source). The screen
 -- layer moves them with the component the package attaches them to; a card the package places from a component's
--- rect needs no value of its own. Windows the player opens and moves (party pins, the Cozy Bag guide, refreshments,
--- navigation's frame, settings) are not places a layout sets.
+-- rect needs no value of its own. Windows the player opens and moves (party pins, the Cozy Bag guide and its launcher
+-- button, refreshments, navigation's frame, settings) are not places a layout sets.
 
 local R = TwichUI
 local LY = R.Layouts

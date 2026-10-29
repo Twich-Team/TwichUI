@@ -152,7 +152,9 @@ windows), which the reports name when most TwichUI CPU is outside every scope.
 Gauges (`Gauges.lua`) read what modules already report (`Snapshot()` functions and a few read-only counts): event-bus
 listeners and events (`R.ListenerCounts`, added to `Core.lua`), switch listeners, settings-closed callbacks, effects
 easing, settings shown, pages drawn and search index, world map shown, NPC and pin marker pools and those in use, map
-detail tiles, navigation tiles decoded, reminders running and observation keys, Healer Watch's and class bars' events.
+detail tiles, navigation tiles decoded, reminders running and observation keys, Healer Watch's and class bars' events, and the
+Cozy Sleeping Bag offer's events (`bag.offer.events`: 0 to 3) and looks so far, with whether its button frame is made and shown
+(`bag.button.built`, `bag.button.shown`).
 The layout setup registers four of its own (`TwichUI_LayoutWizard/Window.lua` and `Overlay.lua`, only once it is loaded):
 `layoutwizard.events` (events it has registered: 4 while its window is open, 0 closed), `layoutwizard.preview.follow` (1 only while the pointer is over the miniature in the Follow mouse tooltip sample, otherwise 0), `layoutwizard.frames` (frames and
 pages it keeps; it does not grow when the window is opened again), and for its full-size preview

@@ -68,14 +68,14 @@ TC.LOCAL = {
     -- where things sit
     ["modules.foodDrinkUnlock"] = "place", ["ui.foodDrinkPosition"] = "place", ["ui.trainingPosition"] = "place",
     ["ui.welcomeBackPlace"] = "place", ["ui.friendLoginPlace"] = "place", ["ui.settingsWindow"] = "place",
-    ["ui.markerBarPosition"] = "place", ["ui.refreshments.position"] = "place", ["ui.partyPins.position"] = "place", ["ui.classBarsPosition"] = "place", ["ui.cozyBag"] = "place",
+    ["ui.markerBarPosition"] = "place", ["ui.refreshments.position"] = "place", ["ui.partyPins.position"] = "place", ["ui.classBarsPosition"] = "place", ["ui.cozyBag"] = "place", ["ui.cozyBagButton.x"] = "place", ["ui.cozyBagButton.y"] = "place",
     ["ui.navigation.position"] = "place", ["ui.navigation.arrowPosition"] = "place", ["ui.navigation.unlockMode"] = "place",
     ["ui.healerWatch.point"] = "place", ["ui.healerWatch.x"] = "place", ["ui.healerWatch.y"] = "place",
     -- the rest
     ["modules.restedxpSkin"] = "other", ["modules.qolTwichUISettingsButton"] = "other",
     ["modules.reminders"] = "other", ["ui.reminders"] = "other",
     ["ui.restedxpSkinState"] = "other", ["ui.showAdvanced"] = "other", ["gear.trees"] = "other",
-    ["pins"] = "other", ["npcs"] = "other", ["ui.mapToolsIntro"] = "other", ["ui.navTravel"] = "other", ["setup"] = "other", ["storedData"] = "other", ["whisperProbe"] = "other", ["welcome"] = "other", ["onboarding"] = "other",
+    ["pins"] = "other", ["npcs"] = "other", ["ui.mapToolsIntro"] = "other", ["ui.navTravel"] = "other", ["ui.cozyBagOffer"] = "other", ["setup"] = "other", ["storedData"] = "other", ["whisperProbe"] = "other", ["welcome"] = "other", ["onboarding"] = "other",
     ["schema"] = "other", ["migrated"] = "other", ["heldStored"] = "other",
     ["profiles"] = "other", ["profileKeys"] = "other", ["profileState"] = "other", ["layouts"] = "other",
 }
@@ -1815,6 +1815,14 @@ local function Define()
     g = Group("hazardRules", "Hazard alert rules", { page = "hazardRules",
         note = "The auras you listed, by spell ID, and the built-in rules you turned off. Merged: what the share names is set, the rest of your list is kept. A rule only names an aura; nothing plays until the alerts are on." })
     g.custom = HazardRules
+
+    g = Group("cozyBag", "Cozy Sleeping Bag guide", { page = "cozyBag",
+        note = "Whether the unlock card and the guide button are on, and how the button looks. Where the button sits, and whether this character has hidden it or been told, stay on this computer." })
+    Switches(g, { "cozyBagNotice", "cozyBagButton" })
+    do
+        local CB = R.CozyBagButton
+        Table(g, { "ui", "cozyBagButton" }, CB, { "label", "size", "opacity" }, CB and CB.ENUM or nil)
+    end
 
     g = Group("chronicle", "Journey Chronicle", { page = "chronicle",
         note = "Which events are written down and how the window reads. The entries and notes themselves are never shared." })

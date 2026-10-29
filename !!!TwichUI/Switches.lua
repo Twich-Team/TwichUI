@@ -70,6 +70,8 @@ Define("arrival", { apply = Refresh("Arrival") })
 Define("arrivalSubzones", { apply = Refresh("Arrival") })
 Define("arrivalDungeons", { apply = Refresh("Arrival") })
 Define("trainingNotice", { apply = Refresh("Training") })
+Define("cozyBagNotice", { apply = Refresh("CozyBagOffer") })
+Define("cozyBagButton", { apply = Refresh("CozyBagOffer") })
 Define("friendLogin", { apply = Refresh("FriendLogin") })
 Define("friendLoginSound")
 

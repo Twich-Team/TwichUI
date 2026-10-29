@@ -31,7 +31,8 @@ R.CozyBagData = D
 D.id = "cozybag"
 D.title = "Cozy Sleeping Bag"
 D.item = 211527        -- the Cozy Sleeping Bag
-D.level = 14           -- the level the reference says the chain needs; shown, never enforced
+D.level = 14           -- the level the reference says the chain needs. The guide shows it and never enforces it; the launcher and
+                       -- the unlock notice (CozyBagOffer.lua, through CozyBagState.Offer) wait for it, and nothing else reads it
 
 D.intro = "A hidden chain of quests across Azeroth. Each step is a thing in the world to click; the last one holds the Cozy Sleeping Bag."
 
