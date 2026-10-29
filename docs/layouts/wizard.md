@@ -17,11 +17,13 @@ Authoring is a separate workspace the wizard doesn't link to (`publishing.md`). 
 | Settings > Home > **Interface layout** > Layout setup | closes the settings window and calls `L.OpenWizard()` |
 | Settings > Troubleshooting > **Layout setup** > Open | the same; with an install recorded it opens on the result (and Restore) |
 | After a reload the player started from the wizard | `L.Continue` (the check after login) opens it once on the result; see "Reload and resume" |
+| A new installation | `Onboarding.lua` (core) opens it once the game is ready, as TwichUI's first-install setup, and holds EllesmereUI's own first-run picker for it: `docs/onboarding.md` is that policy (when, how often, Do this later, Skip, EllesmereUI) |
 
 Not offered, deliberately: a Welcome-dialog button (the dialog's wrapped button row and its tests are a different
 feature's, and the wizard is reachable from Home), a permanent minimap or broker button (nothing in the wizard's source
-mentions a minimap or a broker; the test scans for it), and any first-run or login prompt. A new installation, a login
-with a stale note and a login with nothing waiting all load and open nothing (`test_layout_wizard.lua` §2).
+mentions a minimap or a broker; the test scans for it), and any login prompt other than the first-install offer. The
+wizard's own files register no login event; a login with a stale note, or with nothing waiting, loads and opens nothing
+(`test_layout_wizard.lua` §2, without the first-install offer loaded; the offer is `tests/test_onboarding.lua`).
 
 Loading: `L.LoadWizard()` loads `TwichUI_LayoutWizard`, and the game loads `TwichUI_Layouts` first (its dependency). A
 missing folder, a disabled addon, a missing dependency and an addon that loaded but never said it was ready are each said
@@ -32,12 +34,14 @@ untouched. The window is built the first time it opens and kept; its pages are b
 
 Six steps, one window (780 × 590, TwichUI's own look, `Look.Shell`; fitted to small screens by `R.FitToScreen`; closes
 with Escape through `UISpecialFrames`, never `RegisterGameMenuEscHandler`). A stepper at the top reaches only steps already
-reached with Next; the footer holds Close, Back, and Next (Start on the first step, Apply on the review). The footer's
-note says why a button is disabled.
+reached with Next; the footer holds Close (**Do this later** on a first install: closing it then puts the setup off), Back,
+and Next (Start on the first step, Apply on the review). The footer's note says why a button is disabled. While the window
+is shown the game behind it is dimmed a little by one click-through frame (`docs/onboarding.md`, "The dimming"); the
+full-size preview has its own and the two are never shown together.
 
 | # | Step | Shows | Changes |
 |---|---|---|---|
-| 1 | Welcome | the emblem, what the setup does, and **Does it work here?**: EllesmereUI (present, usable, version, tested-with, Forever build, its own first-run setup pending), TwichUI profiles, the screen (size and UI scale, and for each layout at standard size whether it fits, fits but some pieces may overlap, or doesn't fit, with the problems and the UI scale at which it would), whether this is a preview build, combat, and an install already recorded (with a link to its result). Each line has a word (Ready, Check, Blocked, Note), not a colour alone. | nothing |
+| 1 | Welcome | the emblem, what the setup does (on a first install, `Pages.FIRST`: a greeting, that nothing applies until Apply, the restore point, the account-wide EllesmereUI part, and **Skip setup** and, when EllesmereUI's first run was held for it, **Use EllesmereUI's setup instead**), and **Does it work here?**: EllesmereUI (present, usable, version, tested-with, Forever build, its own first-run setup pending), TwichUI profiles, the screen (size and UI scale, and for each layout at standard size whether it fits, fits but some pieces may overlap, or doesn't fit, with the problems and the UI scale at which it would), whether this is a preview build, combat, and an install already recorded (with a link to its result). Each line has a word (Ready, Check, Blocked, Note), not a colour alone. | nothing |
 | 2 | Layout | a card for each layout, Classic and Compact Adventure (its picture, what it says, a Preview-build tag; the selected one unfolds what it covers), the preview, its scenario selector and the full-size button. Choosing a card re-draws the preview at once. | the layout choice is remembered |
 | 3 | Helpers | the **TwichUI helpers** choice: one card per option the package offers (read from the package: its name, description and what it turns on and off and how many other settings it sets; the page scrolls, there is no fixed row), and the preview. A preset the player picked before, or the install recorded, that the package no longer offers is named and Next waits for a pick | the pick is remembered |
 | 4 | Personalize | accent colour swatches (with the chosen one named), the size cards (Standard, Larger), **Tooltip placement** (Layout position, Follow mouse), **Friendly player nameplates** (Class colors, Standard blue, with a synthetic sample), Start over, and the preview, which follows each pick at once | the picks the player makes are remembered (a pick read from the game is not) |
@@ -85,7 +89,7 @@ What a forced plan does (`Engine.lua` `DoPlan`/`DoApply`):
 - A forced install that then changes nothing puts the record it set aside back as it was.
 - Another character's record (there is one install record for the account) is set aside the same way; the review and the question say it was theirs and that they can no longer Restore it from TwichUI. Their profiles are not deleted.
 - **Not lifted:** a record from a newer TwichUI, combat, a missing or unusable EllesmereUI,
-  EllesmereUI's first-run picker, a profile service that isn't available, a package that can't be used. Those still block, with their reasons.
+  EllesmereUI's first-run picker (unless it is held for TwichUI's own setup, when it never blocked), a profile service that isn't available, a package that can't be used. Those still block, with their reasons.
 
 Not available as a `/tui layout` developer option; the offline checks are `tests/test_layout_force.lua` and the Force section of
 `tests/test_layout_wizard.lua`.
@@ -97,7 +101,9 @@ record says a restore is waiting) just before `ReloadUI()`. At the next login `L
 `PLAYER_LOGIN`, only while the install record says `applying`, `applied` or `restoring`) checks the install through the
 engine as before and prints its chat line; **then, only if that note is set, it opens the wizard on the result** and the
 wizard uses the note up. A reload the player made themselves gets the chat line only, and the wizard stays closed until it
-is asked for. A leftover note with nothing waiting opens nothing. Verification itself is `LY.Continue`: read only.
+is asked for. A leftover note with nothing waiting opens nothing. Verification itself is `LY.Continue`: read only. An install
+made from the first-install setup is followed by `Onboarding.lua` too: it is `done` only once that check says verified (or
+the player kept it), and an unfinished one reopens on its result (`docs/onboarding.md`).
 
 ## Choices
 
@@ -324,7 +330,7 @@ decoration only: with every file refused the whole wizard, an install included, 
   `layoutwizard.build` (the first open) and `layoutwizard.preview` (each draw), and from Phase 5
   `layoutwizard.overlay.build` (the first time the full-size preview opens) and `layoutwizard.overlay` (each draw of it),
   registered in `DX.OPS` and `docs/diagnostics.md`; gauges `layoutwizard.events` (4 while open, 0 closed),
-  `layoutwizard.frames` (does not grow when reopened), `layoutwizard.overlay.events` (3 while the preview is shown, 0
+  `layoutwizard.frames` (does not grow when reopened; it counts the dimming's frame and texture), `layoutwizard.overlay.events` (3 while the preview is shown, 0
   closed) and `layoutwizard.overlay.frames` (frames and textures it keeps, bounded by the package); the addon's memory is read and reported (`Base.lua`, `Collect.lua` `ReadMemory` and `OURS`, `Export.lua`,
   `Findings.lua`, `Session.lua`, `Window.lua`). The plan, apply, verify and restore scopes are `layouts.*` (Phase 2),
   already around the engine calls the wizard makes. Nothing personal is in a report: the wizard stores picks (option ids)
@@ -391,7 +397,8 @@ shared.
 ## Manual acceptance checklist (none done; on WoW: Forever)
 
 1. `/tui layout` opens the window; it is complete without EllesmereUI's skins; Escape closes it; the Home and
-   Troubleshooting buttons open it; no minimap or broker button exists; a new character gets no prompt.
+   Troubleshooting buttons open it; no minimap or broker button exists; a new character on a set-up account gets no prompt
+   (a new installation's first-install offer is `docs/onboarding.md`'s checklist).
 2. The pictures draw (emblem, Classic, Personalize, Screen Fit) with no green or white square, with transparent
    backgrounds, at 1080p, 1440p and an ultrawide.
 3. Welcome: the EllesmereUI line reads right (version, Forever build); with EllesmereUI disabled, Start is blocked with

@@ -17,7 +17,7 @@ K.Page({
         Button("Welcome", "Show welcome", function()
             K.CloseOptions()
             if R.Welcome then R.Welcome.Show() end
-        end, "Shows the short introduction again (same as typing /tui about). It changes nothing.")
+        end, "Shows a short introduction to TwichUI and what can act for you (same as typing /tui about). It changes nothing. Setting up your interface is Layout setup, below.")
         Button("Chat commands", "View commands", function() R.RunCommand("help") end,
             "Prints the /tui commands in your chat window: this window, the Chronicle, the sharing window, the troubleshooting report and card previews.")
 

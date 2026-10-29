@@ -712,7 +712,8 @@ do
   local listeners1 = {}
   k.TwichUI.ListenerCounts(listeners1)
   Check(Same(listeners0, listeners1), "the core's event listeners are exactly as before")
-  Check(#w.hooks.OnShow == 3 and #w.hooks.OnHide == 2, "the window's hooks are installed once: OnShow " .. #w.hooks.OnShow .. ", OnHide " .. #w.hooks.OnHide)
+  -- OnShow: fit to the screen, the shell's fade, the session; OnHide: the dimming (first), the shell's fade, the session
+  Check(#w.hooks.OnShow == 3 and #w.hooks.OnHide == 3, "the window's hooks are installed once: OnShow " .. #w.hooks.OnShow .. ", OnHide " .. #w.hooks.OnHide)
   -- the screen changing while open: what was worked out is dropped, the plan follows the new screen
   MK.Go(5); WW.Refresh()
   local key1 = MK.Plan().key

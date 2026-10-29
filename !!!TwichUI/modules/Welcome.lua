@@ -1,23 +1,13 @@
 -- TwichUI: welcome dialog
 -- One compact page that says what TwichUI is, shows a few of its features, says which features act for the player
--- (and which of those are on), and opens the settings or a preview of the notification cards. It is shown once,
--- automatically, for a new installation, and any time the player asks (/tui about, or Welcome in the settings'
--- Home page). It changes no setting and enables nothing: its buttons close it, open TwichUI's settings (at Home or
--- at the page of something it lists) or show a sample card.
+-- (and which of those are on), and opens the settings or a preview of the notification cards. It is shown when the
+-- player asks (/tui about, or Welcome in the settings' Home page), never by itself: a new installation is offered the
+-- layout setup instead (Onboarding.lua, docs/onboarding.md). It changes no setting and enables nothing: its buttons
+-- close it, open TwichUI's settings (at Home or at the page of something it lists) or show a sample card.
 --
--- When it appears on its own. Persist.lua writes TwichUIDB.welcome.state = "pending" only when a load
--- found no saved TwichUI data at all; every other load leaves it "seen" (see "First run" there). Here:
---   * nothing happens unless the state is "pending";
---   * the dialog waits for the world, and for combat, a flight path, a game banner, a cinematic, a hidden
---     interface and any TwichUI card (Welcome Back, zone, training, friend) to be out of the way. It looks
---     again on world entry and at the end of combat, and on a short timer a bounded number of times;
---     none of that is saved, and a session that gave up simply tries again at the next world entry;
---   * the state becomes "seen" only once the dialog is really on screen. Closing it, or showing it by
---     hand first, never brings it back by itself.
--- It never holds back or removes a real notice: cards in the coordinator (modules/Notify.lua) go on as
--- before, and the dialog only waits for them. A profile change, a reload, a new character or resetting a feature
--- does not bring it back. "Hide addon welcome messages" (Home) is a different thing: it hides other addons' lines
--- in chat and has no say over this dialog.
+-- The older first-run marker, TwichUIDB.welcome.state ("pending" for a new installation, else "seen"; Persist.lua), is
+-- moved to "seen" when the dialog is shown, and is otherwise only read as evidence of an existing user. "Hide addon welcome
+-- messages" (Home) is a different thing: it hides other addons' lines in chat and has no say over this dialog.
 --
 -- What it says about automation comes from modules/WelcomeAutomation.lua, read each time the dialog is shown, so it
 -- matches the switches of the moment. The settings window (TwichUI_Settings) is not loaded to draw the dialog or to
@@ -38,9 +28,6 @@ local FRAME_NAME = "TwichUIWelcome"
 local WIDTH = 460
 local PAD = 22                -- space inside the frame's sides
 local BAND = 44               -- title band height
-local SETTLE = 3              -- seconds after entering the world before the first look
-local RETRY = 2               -- seconds between looks while something is in the way
-local MAX_TRIES = 15          -- looks per world entry; after that it waits for the next event
 local PREVIEW_KINDS = { "arrival", "friend" }   -- the sample cards the Preview button shows (different places, so together)
 
 -- What the dialog says. Plain text; a point is a label and a sentence.
@@ -60,23 +47,16 @@ W.LINKS_LABEL = "Review in settings:"
 W.FOOTER = "Type /tui for all commands. Troubleshooting in the settings builds a report if something goes wrong."
 
 local frame
-local token = 0               -- bumped to drop a waiting timer; a timer only acts if it is still current
-local waiting = false         -- one timer is waiting (a second is never started)
-local tries = 0
 local shownCount = 0          -- for the troubleshooting report
 local previewing = false      -- this dialog started previews that are still up
-local active = {}             -- [event] = handler, while registered
 
 ---------------------------------------------------------------------------
--- First-run state
+-- The older first-run marker
 ---------------------------------------------------------------------------
 local function State()
     local w = TwichUIDB and TwichUIDB.welcome
     return type(w) == "table" and w.state or nil
 end
-
--- True while the automatic welcome is still owed: a new installation that has not yet seen it.
-function W.Owed() return State() == "pending" end
 
 local function MarkSeen()
     local w = TwichUIDB and TwichUIDB.welcome
@@ -414,11 +394,10 @@ end
 ---------------------------------------------------------------------------
 -- Showing it
 ---------------------------------------------------------------------------
--- Shows the dialog now, whatever the state. Returns true, or false and a reason. Used by /tui about and
--- the options; the automatic path calls it (auto) once everything is clear, and says nothing if it can't.
-function W.Show(auto)
+-- Shows the dialog now. Returns true, or false and a reason. Used by /tui about and the options.
+function W.Show()
     if not frame and not Build() then
-        if not auto then R.Print("the welcome isn't available right now.") end
+        R.Print("the welcome isn't available right now.")
         return false, "unavailable"
     end
     Populate()
@@ -429,121 +408,14 @@ function W.Show(auto)
     frame:Show()
     if not frame:IsVisible() then return false, "hidden" end   -- e.g. the interface is hidden: nothing was seen
     shownCount = shownCount + 1
-    if W.Owed() then
-        MarkSeen()
-        W.Refresh()   -- nothing is owed any more: stop listening and drop any waiting look
-    end
+    MarkSeen()
     return true
 end
 
 function W.Hide() if frame then frame:Hide() end end
 function W.IsShown() return frame ~= nil and frame:IsShown() end
 
----------------------------------------------------------------------------
--- When it may appear on its own
----------------------------------------------------------------------------
-local function Toasting()
-    local toast = EventToastManagerFrame
-    return toast and toast.IsCurrentlyToasting and toast:IsCurrentlyToasting() and true or false
-end
-
-local function Cinematic()
-    for _, f in ipairs({ CinematicFrame, MovieFrame }) do
-        if f and f.IsShown and f:IsShown() then return true end
-    end
-    return false
-end
-
--- A TwichUI card waiting or showing (Welcome Back, zone, training, friend, or a preview). Read only: the
--- coordinator is never asked to hold anything back for the dialog.
-local function CardsUp()
-    local N = R.Notify
-    if not (N and N.Snapshot) then return false end
-    local s = N.Snapshot()
-    return s.queued > 0 or next(s.active) ~= nil
-end
-
--- A short reason code for what is in the way, or nil when it is clear.
-function W.InTheWay()
-    if not (R.Life and R.Life.configReady) then return "settings" end
-    if not R.Life.InWorld() then return "world" end
-    if InCombatLockdown() then return "combat" end
-    if UnitOnTaxi and UnitOnTaxi("player") then return "flight" end
-    if UIParent and UIParent.IsShown and not UIParent:IsShown() then return "interface-hidden" end
-    if Toasting() or Cinematic() then return "banner" end
-    if CardsUp() then return "cards" end
-    return nil
-end
-
-local Schedule
-
-local function Attempt(mine)
-    if mine ~= token then return end
-    waiting = false
-    if not W.Owed() then return end
-    if W.InTheWay() then
-        R.Life.Note("welcome-deferred")
-        tries = tries + 1
-        if tries < MAX_TRIES then Schedule(RETRY) end   -- then it waits for the next world entry or end of combat
-        return
-    end
-    if not W.Show(true) then   -- not shown, or shown but not visible (the interface was hidden meanwhile): still owed
-        tries = tries + 1
-        if tries < MAX_TRIES then Schedule(RETRY) end
-    end
-end
-
--- Waits `delay` seconds for one look. Never more than one waiting.
-function Schedule(delay)
-    if waiting or not W.Owed() then return end
-    waiting = true
-    local mine = token
-    C_Timer.After(delay, function() Attempt(mine) end)
-end
-
-local function Cancel()
-    token = token + 1
-    waiting = false
-end
-
-local function OnEnteringWorld()
-    Cancel()
-    tries = 0
-    Schedule(SETTLE)
-end
-
-local function OnLeavingWorld() Cancel() end
-
-local function OnCombatEnded()
-    if tries >= MAX_TRIES then tries = 0 end   -- the fight is over: a fresh set of looks
-    Schedule(1)
-end
-
-local function Want(event, handler, wanted)
-    if wanted and not active[event] then
-        active[event] = handler
-        R:On(event, handler)
-    elseif not wanted and active[event] then
-        R:Off(event, active[event])
-        active[event] = nil
-    end
-end
-
--- Listens only while the automatic welcome is owed. Safe to call any time.
-function W.Refresh()
-    local owed = W.Owed()
-    Want("PLAYER_ENTERING_WORLD", OnEnteringWorld, owed)
-    Want("PLAYER_LEAVING_WORLD", OnLeavingWorld, owed)
-    Want("PLAYER_REGEN_ENABLED", OnCombatEnded, owed)
-    if not owed then Cancel() end
-end
-
 -- For the troubleshooting report: states and counts only.
 function W.Snapshot()
-    return { state = State() or "none", listening = next(active) ~= nil, waiting = waiting, tries = tries, shown = shownCount }
+    return { state = State() or "none", shown = shownCount }
 end
-
-R:OnInit(function()
-    W.Refresh()
-    if W.Owed() and R.Life.InWorld() then Schedule(SETTLE) end
-end)

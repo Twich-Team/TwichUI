@@ -10,7 +10,9 @@
 --   friend-bnet-baseline      Battle.net reconnected: logins right after it are treated as the baseline
 --   friend-bnet-disconnected  Battle.net disconnected: waiting friend logins were let go
 --   init-failed               a start-up hook raised an error (the error itself is under Recent errors)
---   welcome-deferred          the welcome dialog for a new installation waited (combat, a flight, a banner, a card, a loading screen)
+--   onboarding-waited         the first-install layout setup waited to open (combat, a flight, a banner, a card, a loading
+--                             screen, the check after a layout reload, EllesmereUI's own first-run or look picker)
+--   onboarding-load-failed    the first-install layout setup couldn't be loaded or opened (the reason is under Layouts)
 
 local R = TwichUI
 local D = R.Diag
@@ -30,7 +32,15 @@ local function Lifecycle()
     Line("held back, set aside or cancelled since the game started: %s", #list > 0 and table.concat(list, ", ") or "none")
     if s.notesDropped > 0 then Line("(%d further occurrences of other codes were not counted)", s.notesDropped) end
     local welcome = R.Welcome and R.Welcome.Snapshot and R.Welcome.Snapshot()
-    if welcome then Line("welcome dialog: %s (pending = a new installation has not seen it yet); shown this session: %d", welcome.state, welcome.shown) end
+    if welcome then Line("welcome dialog (shown only when asked): marker %s; shown this session: %d", welcome.state, welcome.shown) end
+    local ob = R.Onboarding and R.Onboarding.Snapshot and R.Onboarding.Snapshot()
+    if ob then
+        Line("first-install setup: %s (%s); automatic offers %d; EllesmereUI's first run held for it: %s (this session: %s)",
+            tostring(ob.state), tostring(ob.why or "-"), ob.offers, D.Flag(ob.held), D.Flag(ob.holding))
+        Line("first-install setup this session: offered %s, answered %s, waiting %s (last in the way: %s); %s",
+            D.Flag(ob.offered), D.Flag(ob.answered), D.Flag(ob.waiting), tostring(ob.lastWait or "-"),
+            #ob.reasons > 0 and table.concat(ob.reasons, ", ") or "nothing done")
+    end
     local N = R.Notify and R.Notify.Snapshot and R.Notify.Snapshot()
     if N then Line("notices waiting: %d; cards showing: %s", N.queued, next(N.active) and "yes" or "no") end
     local status, reason = "ready", nil

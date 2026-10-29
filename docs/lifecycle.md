@@ -60,7 +60,7 @@ Mocked tests cannot show combat lockdown, protected-frame errors or taint. Those
 ## Reason codes (`/tui diagnostics` → "Start-up and lifecycle")
 
 `waiting-for-world`, `deferred-combat`, `cancelled-stale-baseline`, `cancelled-stale-transfer`, `transfer-settled`,
-`friend-bnet-baseline`, `friend-bnet-disconnected`, `init-failed`, `welcome-deferred`, `cancelled-stale-refreshments`,
+`friend-bnet-baseline`, `friend-bnet-disconnected`, `init-failed`, `onboarding-waited`, `onboarding-load-failed`, `cancelled-stale-refreshments`,
 `refreshments-reset-manual`, `refreshments-reset-left-group`, `trade-place-not-shown`, `trade-split-not-seen`,
 `trade-not-completed`, `trade-move-blocked`, `trade-auto-blocked`, `trade-auto-limit`, `trade-auto-stopped-by-you`,
 `trade-place-refused`, `cancelled-stale-mage-sell`, `unlock-deferred-combat`, `unlock-save-ignored`,
@@ -107,39 +107,35 @@ Test TwichUI alone first, then with EllesmereUI. After each step, check `/tui di
 
 ## Welcome dialog (`modules/Welcome.lua`): manual acceptance test
 
-Nothing here has been verified in the game yet. Test TwichUI alone first, then with EllesmereUI. A new installation
-means moving `!!!TwichUI.lua` (and `.bak`) out of `SavedVariables` with the game closed; put it back afterwards.
+Nothing here has been verified in the game yet. Test TwichUI alone first, then with EllesmereUI. The dialog opens only when
+asked: a new installation is offered the layout setup instead (`docs/onboarding.md` has its own checklist). A new
+installation means moving `!!!TwichUI.lua` (and `.bak`) out of `SavedVariables` with the game closed; put it back afterwards.
 
-1. **Fresh install.** *Expect:* a few seconds after the world loads, once, **Welcome to TwichUI**, centred a little above
-   the middle, over the world (no zone card, no Welcome Back card, no sound), in the settings window's look. It holds a
-   short intro, three features (cards, Journey Chronicle, gear hints), **What can act for you** and the buttons
-   **Close**, **Preview notifications** and **Open Settings**. Under **On now** only the background features that are
-   on by default (Group version check, Party pins, Hide addon welcome messages); everything else is under **Off until
-   you turn them on**, and a Mage sees the Mage items too. `/tui diagnostics` → "welcome dialog: seen". The settings
+1. **Fresh install.** *Expect:* no welcome dialog by itself (the layout setup opens instead). `/tui about` shows
+   **Welcome to TwichUI**, centred a little above the middle, in the settings window's look. It holds a short intro, three
+   features (cards, Journey Chronicle, gear hints), **What can act for you** and the buttons **Close**, **Preview
+   notifications** and **Open Settings**. Under **On now** only the background features that are on by default (Group
+   version check, Party pins, Hide addon welcome messages); everything else is under **Off until you turn them on**, and a
+   Mage sees the Mage items too. `/tui diagnostics` → "welcome dialog (shown only when asked): marker seen". The settings
    window has not been loaded (`/tui diagnostics` → settings window: not loaded) until a button or link asks.
    Also open **Preview notifications** (a sample zone card and a friend card appear, silent, nothing in the
    Chronicle), press it again (it restarts, nothing piles up), then close the dialog: the sample cards go.
    In combat the button says previews wait. A link under **Review in settings** opens that page.
-2. **Existing installation.** Install this build over a save from the previous one. *Expect:* no dialog, ever, on this
-   or any character; "welcome dialog: seen". The same if only the Chronicle (or backups) of an earlier install remains
-   and the settings were lost. Turn on Accept summons (Quality of life) and open `/tui about`: it is under **On now**
-   with the people and wait you chose.
+2. **Existing installation.** Install this build over a save from the previous one. *Expect:* no dialog by itself, on this
+   or any character. Turn on Accept summons (Quality of life) and open `/tui about`: it is under **On now** with the people
+   and wait you chose.
 3. **Closing.** Close button, the **x** in the title area, and Escape each close it. None brings it back (reload, relog,
    change characters, enter and leave instances).
 4. **Open Settings.** *Expect:* the dialog closes and TwichUI's settings window opens at Home. With the
    settings window unable to load (TwichUI_Settings turned off or missing), the dialog stays and chat says why.
 5. **Manual reopening.** `/tui about`, and Help > Welcome > Show on the settings window's Home page (which closes the settings
    first). It opens any number of times as one frame and changes no setting.
-6. **Reload, relog, characters.** `/reload` before it appears (move fast): it still appears next time. After it was shown:
-   never again, on any character.
+6. **Reload, relog, characters, combat.** None of them ever shows it by itself.
 7. **Profiles and resets.** Switch an EllesmereUI profile; press the options' Defaults button; use Appearance > Reset on
-   Food and Drink. The dialog does not return.
-8. **Combat and loading.** Log in already in combat (or pull right after the world loads), on a flight path, at a
-   cinematic, with the interface hidden (Alt+Z): it waits, then appears once, after the fight / flight / cinematic, or
-   when the interface returns. `/tui diagnostics` shows "welcome-deferred" with a count.
-9. **Chronicle Welcome Back.** On a character with Chronicle history use a new installation (or `/tui welcome` to
-   show the bookmark while the dialog is owed). *Expect:* the bookmark and zone cards are neither dropped nor
-   shortened; the dialog waits until no card is showing or waiting.
+   Food and Drink. The dialog does not appear.
+8. (Waiting for combat, flights, cinematics and cards is the first-install setup's now: `docs/onboarding.md`.)
+9. **Chronicle Welcome Back.** On a character with Chronicle history, `/tui welcome` shows the bookmark; with the dialog
+   open by hand, the bookmark and zone cards are neither dropped nor shortened.
 10. **TwichUI alone, and with EllesmereUI.** The dialog looks the same either way: warm umber, bronze rim, no
     EllesmereUI window style.
 11. **UI scale, window size, long text.** At the smallest and largest UI scale, a small window, and a font with taller

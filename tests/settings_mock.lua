@@ -8,6 +8,7 @@
 --   opts.name: the character ("Rich" when left out)
 --   opts.beforeInit(c): runs after the features are loaded and before the saved variables "arrive"
 --   opts.beforeDescribe(c): runs after the settings window's files are loaded and before the pages are described
+--   opts.reload: the world is entered as after a reload (PLAYER_ENTERING_WORLD false, true), not a login
 --   S.pages: the pages in their order, each { key, name, parent (its name), kind ("page" or "hosted"), rows }
 --   S.variables[name] = setting; S.list: settings in the order made; S.registered(): the AddOns entry's category
 --   S.popups: how many times the reload question was asked; S.popup: the last question asked ({ key, text });
@@ -110,7 +111,7 @@ function SettingsClient(opts)
   if opts.beforeInit then opts.beforeInit(c) end
   c.LOADED["!!!TwichUI"] = true; c.FireEvent("ADDON_LOADED", "!!!TwichUI")
   c.FireEvent("PLAYER_LOGIN")
-  c.FireEvent("PLAYER_ENTERING_WORLD", true, false)
+  c.FireEvent("PLAYER_ENTERING_WORLD", not opts.reload, opts.reload == true)   -- opts.reload: a reload, not a login
 
   -- The settings window's addon, as the game loads it on demand.
   local function LoadCompanion()

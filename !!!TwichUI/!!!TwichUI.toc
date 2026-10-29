@@ -29,6 +29,8 @@ Switches.lua
 SettingsLauncher.lua
 DiagnosticsLauncher.lua
 LayoutsLauncher.lua
+# First-install setup: offers the layout setup on a new installation and coordinates EllesmereUI's own first run (docs/onboarding.md)
+Onboarding.lua
 modules\Interact.lua
 modules\QuietLogin.lua
 modules\Media.lua
@@ -97,7 +99,7 @@ modules\Arrival.lua
 # Welcome Back bookmark (reads the Chronicle, shows once at login)
 modules\WelcomeBack.lua
 
-# Welcome dialog: one compact page for a new installation, and /tui about (TwichUI's window look; the automation summary it reads is in WelcomeAutomation.lua)
+# Welcome dialog: one compact page about TwichUI, shown when asked (/tui about, Home > Welcome) (TwichUI's window look; the automation summary it reads is in WelcomeAutomation.lua)
 modules\WelcomeAutomation.lua
 modules\Welcome.lua
 

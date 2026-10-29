@@ -654,7 +654,13 @@ function M.Compat()
         Add("ellesmereui", "EllesmereUI", state, detail)
         local E = rawget(_G, "EllesmereUI")
         if type(E) == "table" and E._firstInstallPending == true then
-            Add("eui-first-run", "EllesmereUI's own setup", "block", Explain("eui-first-run"))
+            if EA.HeldForUs(E) then
+                -- held back for this setup (Onboarding.lua): EllesmereUI's flag is the handshake its import answers, not a block
+                Add("eui-first-run", "EllesmereUI's own setup", "info", "EllesmereUI's first-run setup is waiting for this one: applying a layout answers it."
+                    .. (M.NativeAvailable() and " If you'd rather make EllesmereUI's own choices, use its setup instead (above)." or ""))
+            else
+                Add("eui-first-run", "EllesmereUI's own setup", "block", Explain("eui-first-run"))
+            end
         end
     end
 
@@ -755,6 +761,17 @@ function M.Compat()
     for _, it in ipairs(items) do if it.state == "block" then ok = false end end
     session.compat = ok
     return items, ok
+end
+
+---------------------------------------------------------------------------
+-- The first-install setup (Onboarding.lua, in the core): whether this is it, and what it can offer
+---------------------------------------------------------------------------
+function M.FirstRun() return R.Onboarding ~= nil and R.Onboarding.FirstRun() == true end
+-- EllesmereUI's own first run was held back for this setup and can still be shown instead (its exported picker).
+function M.NativeAvailable()
+    if not (M.FirstRun() and R.Onboarding.Held()) then return false end
+    local E = rawget(_G, "EllesmereUI")
+    return type(E) == "table" and type(E.ShowFirstInstallPopup) == "function"
 end
 
 function M.CanContinue()

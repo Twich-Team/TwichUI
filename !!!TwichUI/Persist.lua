@@ -19,11 +19,13 @@
 --   * A failed upgrade leaves the saved data exactly as it was and is tried again next load.
 --   * Nothing here plays a sound, shows a card, registers a game event for a feature or touches the game.
 --
--- First run: TwichUIDB.welcome.state is "pending" only when this very load found no saved settings at all and no
--- other TwichUI saved variable (Chronicle, backups, received setups) holding anything: the reliable signs of a new
--- installation. Every other load, whatever its schema, leaves a missing or
--- unreadable marker as "seen", so an upgrade can never start onboarding. modules/Welcome.lua owns what the
--- marker means and moves it from "pending" to "seen" once the dialog has actually been shown.
+-- First run: this very load found no saved settings at all and no other TwichUI saved variable (Chronicle, backups,
+-- received setups) holding anything: the reliable signs of a new installation. Only then is the onboarding record
+-- (TwichUIDB.onboarding, owned by Onboarding.lua: the layout setup offered as TwichUI's first-install experience) made
+-- "new". An installation from before the record existed gets one from what it already has (NormalizeOnboarding), never
+-- "new" unless it was itself a new installation still owed its welcome; so an upgrade can never start onboarding.
+-- TwichUIDB.welcome.state, the older marker, is still "pending" or "seen" by the same rule; the welcome dialog no longer
+-- opens by itself, and the marker is read only as evidence of an existing user.
 
 local R = TwichUI
 local P = {}
@@ -73,6 +75,7 @@ P.CODES = {
     ["chronicle-entry-dropped"] = true,  -- a Chronicle entry with nothing readable in it
     ["migration-failed"] = true,
     ["future-schema"] = true,
+    ["onboarding-repaired"] = false,     -- the onboarding record was unreadable; kept as an existing installation's
 }
 
 local report = {
@@ -308,6 +311,51 @@ local function NormalizeWelcome(db, fresh)
     end
 end
 
+-- The onboarding record (Onboarding.lua owns what each state means; docs/onboarding.md). Made once, here:
+--   a new installation: "new" (the layout setup is offered once the game is ready);
+--   an installation from before the record: "done" when a layout install is managed and nothing is left unfinished, "new"
+--   when it was a new installation still owed the old welcome, else "existing" (never offered by itself). An old "welcome
+--   seen" says only that TwichUI was used before, not that a layout was set up.
+-- An unreadable record becomes "existing" (never a fresh offer); a record from a newer TwichUI is left exactly as it is.
+local ONBOARDING_VERSION = 1
+local ONBOARDING_STATES = { new = true, started = true, deferred = true, installing = true, done = true, skipped = true, existing = true }
+P.ONBOARDING_VERSION = ONBOARDING_VERSION
+P.ONBOARDING_STATES = ONBOARDING_STATES
+
+local function Migrated(db)
+    local layouts = type(db.layouts) == "table" and db.layouts or nil
+    local install = layouts and layouts.install
+    local managed = layouts and type(layouts.managed) == "table"
+    if managed and (install == nil or (type(install) == "table" and install.state == "verified")) then return "done", "migrated-managed" end
+    if install ~= nil or managed then return "existing", "migrated-layout" end
+    if type(db.welcome) == "table" and db.welcome.state == "pending" then return "new", "migrated-new" end
+    return "existing", "migrated"
+end
+
+local function NormalizeOnboarding(db, fresh)
+    local o = db.onboarding
+    if o == nil then
+        local state, why = "new", "fresh"
+        if not fresh then state, why = Migrated(db) end
+        db.onboarding = { v = ONBOARDING_VERSION, state = state, offers = 0, why = why }
+        return
+    end
+    if type(o) ~= "table" then
+        db.onboarding = { v = ONBOARDING_VERSION, state = "existing", offers = 0, why = "repaired" }
+        P.Repair("onboarding-repaired")
+        return
+    end
+    if P.IsCount(o.v) and o.v > ONBOARDING_VERSION then return end   -- a newer TwichUI's: left as it is
+    if o.v ~= ONBOARDING_VERSION then o.v = ONBOARDING_VERSION end
+    if not ONBOARDING_STATES[o.state] then
+        o.state, o.why = "existing", "repaired"
+        P.Repair("onboarding-repaired")
+    end
+    if not P.IsCount(o.offers) then o.offers = 0 end
+    if o.held ~= nil and o.held ~= true then o.held = nil end
+    if o.why ~= nil and not (type(o.why) == "string" and #o.why <= 32 and o.why:match("^[%w%-]+$")) then o.why = nil end
+end
+
 -- Groups the features write into without checking first.
 local UI_GROUPS = { "qol", "foodDrink", "brokerMenu", "refreshments", "refreshmentsStyle",
     "restedxpSkin", "restedxpSkinText", "restedxpSkinState", "restedxpTimerLook", "restedxpTimerText", "speakstoneSkin", "speakstoneSkinStyle", "chronicleLook", "chronicleAppearance", "guideWaypoint", "guideAuto", "guideTracker", "mageSell", "restock", "restockPromptStyle", "chatClean", "classBars", "classBarsLook", "classBarsOverrides", "classBarsPosition", "ammoCustom", "hazard", "hazardCustom", "hazardBuiltin", "cozyBag", "reminders", "healerWatch", "healerWatchBarLook",
@@ -513,6 +561,7 @@ function P.Normalize(db, fresh)
     end
     if not VALID_TRANSPORT[db.shareTransport] then db.shareTransport = DeriveTransport(db.modules) end
     NormalizeWelcome(db, fresh)
+    NormalizeOnboarding(db, fresh)
     -- Profiles exist from schema 2 on. Data still at an older schema (an upgrade that failed this load) is
     -- left without them until its upgrade succeeds.
     if fresh or (P.IsCount(db.schema) and db.schema >= 2) then NormalizeProfiles(db, fresh) end

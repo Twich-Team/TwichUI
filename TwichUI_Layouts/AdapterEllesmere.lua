@@ -46,6 +46,10 @@ local PREFIX = "ellesmereui:"
 A.BASE_UNIT = PREFIX .. "base"
 A.PROFILE_UNIT = PREFIX .. "profile"
 A.DEV_SOURCE = "active-profile"
+-- The name TwichUI registers with EllesmereUI.RegisterExternalInstaller (LayoutsLauncher.lua); read back to tell
+-- EllesmereUI's first run held for TwichUI from one held for another installer.
+A.INSTALLER = "TwichUI"
+function A.HeldForUs(E) return type(E) == "table" and E._externalInstaller == A.INSTALLER end
 
 local function ES() return R.Ellesmere end
 local function ST() return R.Setups end
@@ -1176,8 +1180,11 @@ function A.Plan(composed, ctx)
     part.tested = type(ctx.requires) == "table" and ctx.requires.tested or nil
     if not det.usable then part.blocked = "eui-" .. det.why return part end
     -- EllesmereUI's own first-run picker is waiting to be answered this session: it ends in its own import and
-    -- reload, which would replace an install made now. The flag is EllesmereUI's (read only).
-    if E._firstInstallPending == true then part.blocked = "eui-first-run" return part end
+    -- reload, which would replace an install made now. The flag is EllesmereUI's (read only). Not when TwichUI is the
+    -- installer EllesmereUI holds its first run for (RegisterExternalInstaller, EllesmereUI_Profiles.lua 5070-5083): its
+    -- picker then stays silent, and the flag is the handshake EllesmereUI clears when this install's import lands
+    -- (ImportProfile, 3666-3672), so refusing here would wait forever (A.HeldForUs).
+    if E._firstInstallPending == true and not A.HeldForUs(E) then part.blocked = "eui-first-run" return part end
     local profiles, active, target, snap = Profiles(E), Active(E), ctx.target, ctx.snapshot
     if type(active) ~= "string" then part.blocked = "eui-no-active" return part end
     local exists = type(profiles[target]) == "table"

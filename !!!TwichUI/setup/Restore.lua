@@ -49,6 +49,7 @@ RS.OWN_LEFT_OUT = {
     storedData = "notes from the last saved-data search; searching again makes them",
     whisperProbe = "the result of a check TwichUI makes by itself",
     welcome = "whether the welcome has been shown",
+    onboarding = "where the first-install layout setup has got to (offered, put off, skipped, done): a record, not a setting",
     diagnosticsArm = "a one-shot hand-off between loads (TwichUI Diagnostics' Arm next reload)",
     layouts = "the record of a layout install (what it changed and what Restore puts back) and the layout setup's remembered choices: records, not settings",
     schema = "kept with the backup as its schema",

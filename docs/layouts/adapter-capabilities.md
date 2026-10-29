@@ -78,8 +78,16 @@ it run in game:
 - **UI scale**: `EllesmereUIDB.ppUIScale`, applied with `UIParent:SetScale` at login. On a first install it is seeded
   from Blizzard's scale, clamped to 0.40–1.15. Pixel-perfect is `768 / physH` (`EllesmereUI_Startup.lua` 125–170,
   `EllesmereUI_PixelPerfect.lua` 55–68).
-- **First-run picker**: suppressed for a session when `EllesmereUI._externalInstaller` is set before `PLAYER_LOGIN` +
-  0.5 s. Set it with `RegisterExternalInstaller` (5080). Fail-open (`EllesmereUI_FirstInstall.lua` 556–590).
+- **First-run module picker**: suppressed for a session when `EllesmereUI._externalInstaller` is set before `PLAYER_LOGIN` +
+  0.5 s (`EllesmereUI_FirstInstall.lua` 556–590). Set it with `RegisterExternalInstaller` (5080); there is no way to unset it.
+  `_firstInstallPending` stays up until an import stamps the first-install state (`ImportProfile` 3666–3673). The comment
+  at 5070 calls this fail-open ("the picker returns on a later login"); the source doesn't do that: the first session's
+  module data (`EllesmereUI_Lite.lua` `NewDB` 267–269) makes the next load's `ComputeShowOnLogin` (534) treat it as an upgrade.
+  `ShowFirstInstallPopup` (exported at 517, not a documented partner API) shows the picker by hand.
+- **First-run look picker** (`EllesmereUI_StyleChoicePopup.lua`): at `PLAYER_LOGIN`, when `styleChoicePending` is set and
+  `_firstInstallPending` isn't (217); a registered installer makes it stamp the choice for good (219). So a registration in
+  EllesmereUI's first session never touches it, and one in a later session would answer it permanently.
+  `docs/onboarding.md` has how TwichUI uses both.
 - **Keybinds and actions**: not in profile strings. Bindings are Blizzard's (`SetBinding` in
   `EUI_ActionBars_QuickKeybind.lua`). `profileKeybinds` is account-global and not exported (`Profiles.lua` 1598).
 - **Chat history**: `EllesmereUIChatScrollDB`, per character (`EllesmereUIChat.toc`,
@@ -133,7 +141,7 @@ and its tooltip, nameplate and profile files are byte-identical to these. Supers
 | The only writer is the import's `blizzSkinGlobals` bundle, and it sets **every** key of the list from the payload, nil included | S | `EllesmereUI_Profiles.lua:2157` `ApplyBlizzSkinGlobals`; applied at `:3326`; stripped from a payload by `ImportProfileSilent` when the Blizzard-skin module is disabled (`:5009`) |
 | The fixed tooltip position is per profile (`tooltipFixedPos`) but is not a root key the import takes (`AdapterEllesmere.lua` `ROOT`) | S | `EUI_BlizzardSkin_TooltipAnchor.lua:200-300`; `EllesmereUI_Profiles.lua:2038` (the comment that the account-level key is stale) |
 | TwichUI has no tooltip-anchor setting | S | searched `!!!TwichUI/` and `TwichUI_Settings/` |
-| Registering an installer, importing, switching and deleting profiles: unchanged since Phase 2; the wizard calls only the engine, never EllesmereUI directly | S | `TwichUI_LayoutWizard/*.lua` call nothing of EllesmereUI (the only read of it is `E._firstInstallPending`, as Phase 2's plan does) |
+| Registering an installer, importing, switching and deleting profiles: unchanged since Phase 2 (registration now also at login for a first install, `docs/onboarding.md`); the wizard calls only the engine, never EllesmereUI directly | S | `TwichUI_LayoutWizard/*.lua` call nothing of EllesmereUI (the only read of it is `E._firstInstallPending`, as Phase 2's plan does) |
 
 **Phase 5 (2026-10-26).** Read for Compact Adventure and the preview, in EllesmereUI 9.6.8 and the author's captured
 `TwichUI - Minimal Adventure` profile; none of it run in game:

@@ -19,7 +19,9 @@
 --     being finished;
 --   * after login, TwichUI_Layouts is loaded and finishes it: it checks what an install or a restore left after the
 --     reload (TwichUILayouts' Continue). Nothing is applied or restored then; it only reads and reports.
--- With no record, or one that is finished, the only work here is reading one field at login.
+-- With no record, or one that is finished, the only work here is reading one field at login. The first-install offer of
+-- the wizard, and holding EllesmereUI's first run for it, are Onboarding.lua's (it uses L.RegisterInstaller and
+-- L.Continued from here).
 
 local R = TwichUI
 local L = { attempts = 0 }
@@ -127,6 +129,11 @@ function L.OpenWizard(step)
     local done, opened = pcall(R.LayoutWizard.Window.Open, step)
     if not done then
         R.Fault("layout setup", opened)
+        -- an error part way through building or opening: put away whatever got shown (the window and its dimming), so
+        -- nothing is left on screen that the player can't close
+        local W = R.LayoutWizard.Window
+        if W and W.Abort then pcall(W.Abort) end
+        L.wizardFailed = "ERROR"
         R.Print("%s", L.ExplainWizard("ERROR"))
         return false, "ERROR"
     end
@@ -165,10 +172,16 @@ function L.WizardResume()
 end
 
 function L.Command(arg)
-    local word = (arg or ""):match("^%s*(%S*)")
+    local word, rest = (arg or ""):match("^%s*(%S*)%s*(.-)%s*$")
     word = (word or ""):lower()
     if word == "" or word == "wizard" or word == "setup" or word == "open" then
         L.OpenWizard()
+        return
+    end
+    -- /tui layout firstrun [reset]: the first-install offer's state, or set it back to a new installation's (for testing;
+    -- nothing else is touched: no install record, profile or EllesmereUI data)
+    if word == "firstrun" and R.Onboarding then
+        R.Onboarding.Command(rest)
         return
     end
     if word == "author" or word == "publish" then
@@ -192,24 +205,52 @@ end
 -- Read only, for /tui diagnostics.
 function L.Snapshot()
     return { loaded = L.Loaded(), attempts = L.attempts, failed = L.failed, pending = L.Pending(),
-        wizardLoaded = L.WizardLoaded(), wizardAttempts = L.wizardAttempts or 0, wizardFailed = L.wizardFailed }
+        wizardLoaded = L.WizardLoaded(), wizardAttempts = L.wizardAttempts or 0, wizardFailed = L.wizardFailed,
+        registered = L.registered == true }
 end
+
+---------------------------------------------------------------------------
+-- EllesmereUI's partner-installer registration (EllesmereUI_Profiles.lua RegisterExternalInstaller, 9.6.8): while it
+-- is set, EllesmereUI's own first-install picker stays silent this session, and its pending flag stays up until an
+-- install's import lands (ImportProfile stamps EllesmereUI's first-install state). There is no way to take it back
+-- within a session: it lasts until the next reload. Calls the public function only; never writes EllesmereUI's data.
+-- Returns true | false, code ("no-eui", "no-api", "other-installer", "error").
+---------------------------------------------------------------------------
+L.INSTALLER = "TwichUI"
+function L.RegisterInstaller()
+    local E = rawget(_G, "EllesmereUI")
+    if type(E) ~= "table" then return false, "no-eui" end
+    if type(E.RegisterExternalInstaller) ~= "function" then return false, "no-api" end
+    local other = rawget(E, "_externalInstaller")
+    if other ~= nil and other ~= L.INSTALLER then return false, "other-installer" end
+    if L.registered then return true end
+    local ok, err = pcall(E.RegisterExternalInstaller, L.INSTALLER)
+    if not ok then R.Fault("layouts EllesmereUI installer", err) return false, "error" end
+    L.registered = true
+    return true
+end
+
+-- True once the check after a reload has run this session (or there was none to run).
+function L.Continued() return L.continued == true or not L.Pending() end
 
 ---------------------------------------------------------------------------
 -- At a load, only while an install is under way
 ---------------------------------------------------------------------------
 local function Continue()
-    if not L.Pending() then return end
+    if not L.Pending() then L.continued = true return end
     local ok, why = L.Load()
     if not ok then
+        L.continued = true
         L.failed = why
         R.Print("a layout install waits to be checked, but %s", L.Explain(why))
         return
     end
     local done, err = pcall(R.Layouts.Continue)
+    L.continued = true
     if not done then R.Fault("layouts continue", err) return end
     -- The player started this reload from the wizard: show the result (once). A reload the player made themselves
-    -- gets the chat line only, and the wizard stays closed until it is asked for.
+    -- gets the chat line only, and the wizard stays closed until it is asked for (a first-install setup still under
+    -- way is Onboarding.lua's to reopen).
     if L.WizardResume() then L.OpenWizard() end
 end
 
@@ -217,15 +258,15 @@ local function KeepPickerAway(name)
     if name ~= "EllesmereUI" then return end
     local state = L.Pending()
     if state ~= "applying" and state ~= "applied" then return end
-    local E = rawget(_G, "EllesmereUI")
-    if type(E) == "table" and type(E.RegisterExternalInstaller) == "function" then
-        local ok, err = pcall(E.RegisterExternalInstaller, "TwichUI")
-        if not ok then R.Fault("layouts EllesmereUI installer", err) end
-        L.registered = ok
-    end
+    L.RegisterInstaller()
 end
 
 R:On("ADDON_LOADED", KeepPickerAway)
+-- EllesmereUI loads after TwichUI (the folder name sorts first), so the line above sees it. Should it ever have loaded
+-- first, its ADDON_LOADED came before TwichUI's saved data: look once, now.
+R:OnInit(function()
+    if C_AddOns and C_AddOns.IsAddOnLoaded and C_AddOns.IsAddOnLoaded("EllesmereUI") then KeepPickerAway("EllesmereUI") end
+end)
 R:On("PLAYER_LOGIN", function()
     if not L.Pending() then return end
     C_Timer.After(L.CONTINUE_AFTER, Continue)

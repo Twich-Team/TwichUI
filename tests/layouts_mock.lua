@@ -9,6 +9,14 @@
 --   opts.screen = { w, h, physW, physH, scale } (UIParent's size in its own units; default 2133.33 x 1200: 1920 x 1080 at
 --   UI scale 0.64), opts.wizardMissing / opts.layoutsMissing ("MISSING" from LoadAddOn), opts.wizardDisabled,
 --   opts.refuseTextures(path) -> true to have SetTexture say the game refused that file
+--   opts.onboarding: load the first-install setup (Onboarding.lua) and the welcome dialog, as the game does; without it the
+--   wizard's tests see no first-install offer. opts.reload: the world is entered as after a reload, not a login.
+--   EllesmereUI's own first run (opts.eui): firstRun (this is its first session: _firstInstallPending at its ADDON_LOADED,
+--   and on Forever its look picker armed), stylePending (its look picker is due), noInstallerApi, noNative (no
+--   ShowFirstInstallPopup), installer = "<name>" (another installer registered first), euiFirst (it loads before TwichUI).
+--   At PLAYER_LOGIN it behaves as its two loaders do (EllesmereUI_FirstInstall.lua, EllesmereUI_StyleChoicePopup.lua):
+--   E.styleShown / E.styleStamped and, 0.5 s later, E.pickerShown count what it would have shown.
+--   opts.setup(c): runs just before the saved variables arrive (to start a session in combat, on a flight, ...).
 --   c.said (chat), c.combat, c.reloads (ReloadUI calls), c.popup / c.Accept() / c.Decline() (the last question asked),
 --   c.PressEsc(), c.escRegistered, c.made (frames and regions made), c.E (the stand-in EllesmereUI), c.layoutLoads, c.wizardLoads
 -- LM.Logout(c) -> the saved variables, as the game would write them.
@@ -112,12 +120,45 @@ function LM.InstallEUI(env, db, opts)
     for _, k in ipairs({ "fonts", "customColors", "darkMode", "euiAccent", "_migrations", "unlockLayout" }) do if payload.data[k] then merged[k] = LM.Copy(payload.data[k]) end end
     db.profiles[o.profileName] = merged
     table.insert(db.profileOrder, o.profileName)
+    -- ImportProfile (EllesmereUI_Profiles.lua 3666-3672) stamps EllesmereUI's first-install state. The stand-in's accounts
+    -- are existing ones, which already carry the stamp, unless a test made this EllesmereUI's first run.
+    if E._firstInstallPending or db.styleChoicePending then
+      db.firstInstallPopupShown = true
+      E._firstInstallPending = nil
+      if E.IS_FOREVER then db.styleChoicePending = nil end
+    end
     if type(payload.data.uiScale) == "number" then db.ppUIScale = payload.data.uiScale end
     if opts.specLocked then return true, nil, "spec_locked" end
     db.activeProfile = o.profileName
     return true, nil
   end
-  function E.RegisterExternalInstaller(name) E.installer = name end
+  -- as the real one: the name is kept where EllesmereUI's pickers read it (and in E.installer for the older checks)
+  function E.RegisterExternalInstaller(name) E.installer = name; E._externalInstaller = name end
+  if opts.noInstallerApi then E.RegisterExternalInstaller = nil end
+  if opts.installer then E._externalInstaller = opts.installer end
+  -- EllesmereUI_FirstInstall.lua exports its picker; shown by hand, it ends in its own reload
+  if not opts.noNative then function E.ShowFirstInstallPopup() E.nativeShown = (E.nativeShown or 0) + 1 end end
+  -- its two first-run loaders: at its ADDON_LOADED and at PLAYER_LOGIN
+  function E.OnLoaded()
+    if opts.firstRun then
+      E._firstInstallPending = true
+      if E.IS_FOREVER then db.styleChoicePending = true end
+    end
+    if opts.stylePending then db.styleChoicePending = true end
+  end
+  function E.OnLogin()
+    -- the look picker: only when its first run isn't due; a registered installer stamps it as answered
+    if db.styleChoicePending and not E._firstInstallPending then
+      if E._externalInstaller then db.styleChoicePending = nil; E.styleStamped = (E.styleStamped or 0) + 1
+      else E.styleShown = (E.styleShown or 0) + 1 end
+    end
+    if E._firstInstallPending then
+      env.C_Timer.After(0.5, function()
+        if db.firstInstallPopupShown or E._externalInstaller then return end
+        E.pickerShown = (E.pickerShown or 0) + 1
+      end)
+    end
+  end
   -- opts.defaults: what the real one does as it loads, fill its defaults into every profile's blobs (test_layout_update.lua)
   function E.Loaded()
     if not opts.defaults then return end
@@ -190,10 +231,11 @@ local function MakeFake(c)
       EnableKeyboard = function(s, v) s.keyboard = v and true or false end,
       SetFrameStrata = function(s, v) s.strata = v end, GetFrameStrata = function(s) return s.strata end,
       SetAllPoints = function(s, to) s.allPoints = to or true end,
-      GetFrameLevel = function() return 1 end,
+      GetFrameLevel = function(s) return s.level or 1 end,
       GetFont = function() return "Fonts\\FRIZQT__.TTF", 12, "" end,
       SetFont = function() return true end,
       SetAlpha = function(s, a) s.alpha = a end, GetAlpha = function(s) return s.alpha end,
+      SetFrameLevel = function(s, v) s.level = v end,
       CreateTexture = function(s) return Fake("Texture", s) end,
       CreateLine = function(s) return Fake("Line", s) end,
       CreateFontString = function(s) return Fake("FontString", s) end,
@@ -250,7 +292,7 @@ function LM.Boot(name, sv, opts)
   META = META or {}
   META.EllesmereUI = { Version = opts.euiVersion or "9.6.8" }   -- every boot, so one test's version doesn't leak into the next
   local E, fake, made
-  local c, S = SettingsClient({ name = name, beforeInit = function(c)
+  local c, S = SettingsClient({ name = name, reload = opts.reload, beforeInit = function(c)
     c.said = {}
     c.print = function(s) c.said[#c.said + 1] = tostring(s) end
     c.combat = false
@@ -281,11 +323,33 @@ function LM.Boot(name, sv, opts)
     if not opts.noEUI then
       E = LM.InstallEUI(c, c.EllesmereUIDB or LM.EUIDB(), opts.eui)
       local fire = c.FireEvent
+      local euiFirst = opts.eui and opts.eui.euiFirst
       c.FireEvent = function(e, a, ...)
+        if e == "ADDON_LOADED" and a == "!!!TwichUI" and euiFirst then
+          E.Loaded(); E.OnLoaded(); c.LOADED.EllesmereUI = true; fire("ADDON_LOADED", "EllesmereUI")
+        end
         fire(e, a, ...)
-        if e == "ADDON_LOADED" and a == "!!!TwichUI" then E.Loaded(); c.LOADED.EllesmereUI = true; fire("ADDON_LOADED", "EllesmereUI") end
+        if e == "ADDON_LOADED" and a == "!!!TwichUI" and not euiFirst then E.Loaded(); E.OnLoaded(); c.LOADED.EllesmereUI = true; fire("ADDON_LOADED", "EllesmereUI") end
+        if e == "PLAYER_LOGIN" then E.OnLogin() end
       end
     end
+    -- the two layout addons are in the AddOns list (unless a test removed or turned one off)
+    local exists, state = c.C_AddOns.DoesAddOnExist, c.C_AddOns.GetAddOnEnableState
+    c.C_AddOns.DoesAddOnExist = function(n)
+      if n == "TwichUI_LayoutWizard" then return not opts.wizardMissing end
+      if n == "TwichUI_Layouts" then return not opts.layoutsMissing end
+      return exists(n)
+    end
+    c.C_AddOns.GetAddOnEnableState = function(n, who)
+      if n == "TwichUI_LayoutWizard" and opts.wizardDisabled then return 0 end
+      return state(n, who)
+    end
+    if opts.onboarding then
+      for _, f in ipairs({ "Onboarding.lua", "modules/WelcomeAutomation.lua", "modules/Welcome.lua" }) do
+        local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
+      end
+    end
+    if opts.setup then opts.setup(c) end   -- the game's state before the saved variables arrive (combat, a flight, ...)
   end })
   -- a question asked of the player (R.Interact.Confirm): kept, and answered by Accept / Decline
   c.popup = nil

@@ -463,7 +463,7 @@ COMMANDS = {
     { name = "sell", usage = "sell", desc = "what selling ordinary food and drink would keep and sell (Mages; listed in the Mage options)", hidden = true, fn = function()
         if R.MageSellWindow then R.MageSellWindow.Toggle() else Unavailable("Selling ordinary food and drink") end
     end },
-    { name = "about", usage = "about", desc = "show the TwichUI welcome again", fn = function()
+    { name = "about", usage = "about", desc = "show a short introduction to TwichUI", fn = function()
         if R.Welcome then R.Welcome.Show() else Unavailable("The welcome") end
     end },
     { name = "welcome", usage = "welcome", desc = "preview the Chronicle's Welcome Back bookmark now", fn = function()

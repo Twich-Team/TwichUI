@@ -14,7 +14,7 @@
 --
 -- Never part of a profile, and never changed by anything here: the account-wide entries in ACCOUNT below, the
 -- gear entries not in GEAR, and the rest of TwichUIDB (map pins and kept pins, the party pin session, sharing
--- records and the sending method, the welcome marker), and the other saved variables (the Journey Chronicle,
+-- records and the sending method, the welcome marker, the first-install setup record), and the other saved variables (the Journey Chronicle,
 -- backups, Undo copies, your saved setup). Other addons' settings, RestedXP's and SpeakStone's included, are
 -- never touched by a profile change: TwichUI's own options for them are.
 --

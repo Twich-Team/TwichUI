@@ -178,7 +178,8 @@ local SETTINGS_NOTE = "These are the options of the profile this character uses.
 
 local TOP_PROTECTED = {
     schema = "The saved data's layout number. TwichUI reads it at every load to decide how to upgrade; without it the data would be treated as unversioned.",
-    welcome = "The first-run marker. It decides whether the welcome dialog is shown.",
+    welcome = "The older first-run marker. TwichUI reads it to tell an existing installation from a new one.",
+    onboarding = "Where the first-install layout setup has got to. It decides whether the setup is offered by itself; /tui layout firstrun reset starts it again.",
     profileState = "Says which profile is in use and which one new characters start with. Required by the profiles code.",
     modules = SETTINGS_NOTE, ui = SETTINGS_NOTE, gear = SETTINGS_NOTE,
     shareTransport = "The chosen sending method, a live setting. Change it in Share setup.",

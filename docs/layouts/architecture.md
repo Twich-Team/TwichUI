@@ -111,7 +111,9 @@ the update functions `Normal`/`Schema`/`Baseline`, `PlanUndo`/`Undo`/`VerifyUndo
 - **EllesmereUI** calls only public functions: `DecodeImportString`, `EncodePayload`, `ImportProfileSilent` (`cleanSlate`,
   `applyUIScale = false`, `autoAssignSpecs = false`; it never reloads), `GetProfileList`, `GetActiveProfileName`, `GetProfilesDB`
   (read), `SwitchProfile`, `DeleteProfile`, `RenameProfile` (updates only), `RegisterExternalInstaller`, and `ExportProfile` for a
-  developer base. It never writes `EllesmereUIDB` directly. Its active profile is **account-wide**: an install changes every
+  developer base. EllesmereUI's `_firstInstallPending` blocks a plan unless TwichUI is the registered installer
+  (`A.HeldForUs`: then it is the handshake the install's import answers). The core's first-install offer
+  (`docs/onboarding.md`) also calls the exported `ShowFirstInstallPopup` to hand EllesmereUI's first run back. It never writes `EllesmereUIDB` directly. Its active profile is **account-wide**: an install changes every
   character's HUD unless a spec is assigned to another profile (`spec_locked`, reported).
 - **Inside an EllesmereUI blob**, only these are units of their own (comparable, carried, verified by value): the registered
   positions and sizes (`POSITIONS`, 40), the six density text sizes (`TEXT`), the allowlisted fields (`FIELDS`:
@@ -256,7 +258,8 @@ flag and the declared format may differ. `Pub.Compare` (and `/tui layout compare
   siblings; the core keeps only `LayoutsLauncher.lua`. Core operation never depends on either. Release wiring as for the other
   siblings (`.pkgmeta`, `tools/release.py`, diagnostics memory).
 - `TwichUIDB.layouts` holds `install`, `managed`, `baseline`, `wizard`, `published`, `received`: records, not settings
-  (`TwichConfig.LOCAL`, `RS.OWN_LEFT_OUT`); bounded; never in backups or shares.
+  (`TwichConfig.LOCAL`, `RS.OWN_LEFT_OUT`); bounded; never in backups or shares. Where the first-install offer has got to is
+  `TwichUIDB.onboarding` (core; `docs/onboarding.md`), which reads `install` and `managed` and never writes them.
 - Diagnostics scopes `layouts.load`, `.plan`, `.apply`, `.verify`, `.restore`, `layouts.capture`, `layouts.publish.build`,
   `.check`, `.compare`, `.receive`, `layouts.store.open`, `layoutwizard.presets.capture`; wizard gauges for frames and listeners,
   and `layoutwizard.author.presets` for the presets' draft (`docs/diagnostics.md`).

@@ -7,6 +7,14 @@
 -- While it is open it listens for four events (combat starting and ending, the screen's size and the UI scale changing),
 -- on one frame of its own, and stops listening when it closes. Nothing here runs while it is closed. Closing drops
 -- everything the model worked out (the plan holds the payload it would import) and changes nothing in the game.
+-- Closing a first-install setup (Onboarding.lua) without an answer puts it off, as "Do this later" does.
+--
+-- The dimming: while the window is shown, one full-screen frame behind it (the scrim) darkens the game a little, so the
+-- setup is plainly what is in front. It is a texture on a frame that takes no mouse and no keyboard (clicks go through to
+-- the world), anchored to UIParent (so it follows the screen size and UI scale by itself), at the bottom of the window's
+-- strata: the window, its tooltips, the game's dialogs (Apply's question included) and everything above that strata stay
+-- clear and usable. It fades in briefly unless "Reduce window motion" is on, lifts during combat, is put away the moment
+-- the window hides (Escape, Close, the full-size preview, which has its own, an error while opening), and is made once.
 --
 -- The only things that change the game are a few buttons, each after a confirmation that names the exact scope, each
 -- refused in combat by the model and again by the engine: Apply, Restore, Undo this update, Keep the update (removes the
@@ -27,9 +35,16 @@ local FRAME_NAME = "TwichUILayoutWizard"
 local WIDTH, HEIGHT = 780, 590
 local HEADER_H, PAD, STEPPER_H, FOOTER_H = 44, 16, 30, 54
 local EVENTS = { "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED", "DISPLAY_SIZE_CHANGED", "UI_SCALE_CHANGED" }
+local SCRIM_NAME = "TwichUILayoutWizardScrim"
+W.SCRIM_ALPHA = 0.40                          -- how dark the dimming is (the game stays plainly visible)
+W.SCRIM_COLOR = { 0.035, 0.030, 0.025 }        -- warm charcoal, not black
 
-local win, scroll, content, stepper, footer, evframe
+local win, scroll, content, stepper, footer, evframe, scrim, scrimFade
 local suspended = false   -- hidden for the full-size preview: the session goes on
+local closeWhy            -- what closed it (Do this later, Skip, ...), for the first-install record
+local aborting = false    -- an error while opening is being cleaned up: the close is not an answer
+local resuming = false    -- shown again after the full-size preview: no fade-in for the dimming
+local complete = false    -- Build ran to its end (an error part way builds again at the next open)
 local pages = {}
 W.pages = pages       -- read by the tests
 W.frames = 0          -- frames made, for the troubleshooting report
@@ -41,6 +56,46 @@ local function Look() return R.Look end
 local function Say(fmt, ...) R.Print("layout setup: " .. fmt, ...) end
 
 function W.IsShown() return win ~= nil and win:IsShown() end
+
+---------------------------------------------------------------------------
+-- The dimming behind the window (made once, with the window)
+---------------------------------------------------------------------------
+local function BuildScrim()
+    if scrim then return end
+    scrim = CreateFrame("Frame", SCRIM_NAME, UIParent)
+    scrim:SetAllPoints(UIParent)
+    scrim:SetFrameStrata("HIGH")
+    scrim:SetFrameLevel(0)
+    scrim:EnableMouse(false)
+    if scrim.EnableKeyboard then scrim:EnableKeyboard(false) end
+    scrim:Hide()
+    local c = W.SCRIM_COLOR
+    local tex = scrim:CreateTexture(nil, "BACKGROUND")
+    tex:SetAllPoints(scrim)
+    tex:SetColorTexture(c[1], c[2], c[3], W.SCRIM_ALPHA)
+    scrim.tex = tex
+    scrimFade = Look().Motion.Fader(function(a) scrim:SetAlpha(a) end, 0)
+    W.frames = W.frames + 2
+end
+
+-- Shown while the window is (not set aside, not in combat); hidden otherwise, at once. fade: ease it in (an opening).
+local function Dim(fade)
+    if not scrim then return end
+    local want = win ~= nil and win:IsShown() and not suspended and not aborting and not InCombatLockdown()
+    if want then
+        if not scrim:IsShown() then
+            scrim:Show()
+            if fade then scrimFade:Set(0) scrimFade:To(1, Look().Motion.TIME.window) else scrimFade:Set(1) end
+        end
+    elseif scrim:IsShown() then
+        scrimFade:Set(0)
+        scrim:Hide()
+    end
+end
+function W.Scrim() return scrim end   -- read by the tests
+
+-- The first-install record (Onboarding.lua, in the core) is told when the window opens and closes.
+local function Onboarding() return R.Onboarding end
 
 ---------------------------------------------------------------------------
 -- Confirmed actions (the only changes the wizard can make to the game)
@@ -163,6 +218,37 @@ function Actions.check()
     W.Refresh()
 end
 
+-- First install only: Skip setup (nothing is applied; EllesmereUI's own first run, if it was held back for this, is handed back)
+function Actions.skip()
+    local O = Onboarding()
+    if not (O and O.FirstRun()) then return end
+    local held = O.Held()
+    R.Interact.Confirm("TWICHUI_LAYOUT_SKIP",
+        "Skip the guided setup?\n\nNothing is applied and nothing changes. You can run it any time: type /tui layout, or use Home > Interface layout in TwichUI's settings."
+            .. (held and "\n\nEllesmereUI's own first-run setup was held back for this one. It opens next, so you can make its choices." or ""),
+        function()
+            local ok, wasHeld = O.Skip("user")
+            if not ok then return end
+            W.Close("skip")
+            if wasHeld then Say("%s", O.HandBackText(O.HandBack()))
+            else Say("skipped. Type /tui layout to open it any time.") end
+        end, { accept = "Skip setup" })
+end
+
+-- First install, with EllesmereUI's own first run held back for this setup: use EllesmereUI's instead
+function Actions.native()
+    local O = Onboarding()
+    if not (O and O.FirstRun()) then return end
+    R.Interact.Confirm("TWICHUI_LAYOUT_NATIVE",
+        "Use EllesmereUI's own first-run setup instead?\n\nThis closes TwichUI's layout setup without applying anything and opens EllesmereUI's, where you choose which of its addons stay on. EllesmereUI reloads your interface when you press its button. TwichUI's setup stays under /tui layout.",
+        function()
+            if not O.Skip("native") then return end
+            W.Close("native")
+            local shown, code = O.HandBack()
+            if not shown then Say("%s", O.HandBackText(shown, code)) end
+        end, { accept = "Open EllesmereUI's setup", combat = true })
+end
+
 function Actions.again()
     M.Go(M.WELCOME)
     W.Refresh()
@@ -205,6 +291,15 @@ end
 
 local function PaintFooter(step)
     local note = ""
+    local first = M.FirstRun()
+    if footer.first ~= first then
+        footer.first = first
+        footer.close.text:SetText(first and "Do this later" or "Close")
+        footer.close:SetWidth(first and 120 or 90)
+        R.Interact.Tip(footer.close, first and "Do this later" or "Close", first
+            and "Closes the setup for now. Nothing is changed, your choices are remembered, and TwichUI offers it again the next time you log in. Escape and the close box do the same."
+            or "Closes the setup. Nothing is changed by closing; your choices are remembered.")
+    end
     footer.back:SetShown(step > M.WELCOME and step < M.RESULT)
     footer.next:SetShown(step < M.RESULT)
     footer.next:SetEnabled(true)
@@ -264,6 +359,7 @@ end
 local function OnEvent(_, event)
     if not (win and win:IsShown() and M.Active()) then return end
     if event == "DISPLAY_SIZE_CHANGED" or event == "UI_SCALE_CHANGED" then M.Invalidate() end
+    if event == "PLAYER_REGEN_DISABLED" or event == "PLAYER_REGEN_ENABLED" then Dim(event == "PLAYER_REGEN_ENABLED") end
     W.Refresh()
 end
 
@@ -271,10 +367,14 @@ local function Build()
     local L = Look()
     local pal = L.pal
     W.builds = W.builds + 1
+    BuildScrim()
     win = CreateFrame("Frame", FRAME_NAME, UIParent, "BackdropTemplate")
+    -- the dimming goes the moment the window hides, before anything else its hiding runs (so nothing can leave it up)
+    win:HookScript("OnHide", function() Dim(false) end)
     win:SetSize(WIDTH, HEIGHT)
     win:SetPoint("CENTER")
     win:SetFrameStrata("HIGH")
+    if win:GetFrameLevel() <= scrim:GetFrameLevel() then win:SetFrameLevel(scrim:GetFrameLevel() + 1) end
     win:SetToplevel(true)
     win:SetClampedToScreen(true)
     win:SetMovable(true)
@@ -332,9 +432,8 @@ local function Build()
     line:SetHeight(1)
     line:SetPoint("TOPLEFT", 0, 0)
     line:SetPoint("TOPRIGHT", 0, 0)
-    footer.close = L.Button(footer, "Close", 90, "secondary", function() W.Close() end)
+    footer.close = L.Button(footer, "Close", 90, "secondary", function() W.Close("later") end)
     footer.close:SetPoint("BOTTOMLEFT", 0, 0)
-    R.Interact.Tip(footer.close, "Close", "Closes the setup. Nothing is changed by closing; your choices are remembered.")
     footer.next = L.Button(footer, "Next", 110, "primary", function()
         if M.Step() == M.REVIEW then Actions.apply() else M.Next() W.Refresh() end
     end)
@@ -361,8 +460,11 @@ local function Build()
     W.evframe = evframe   -- read by the tests
     win:HookScript("OnShow", function()
         if not M.Active() then M.Begin() end
+        local O = Onboarding()
+        if O then O.Opened() end
         Listen(true)
         W.Refresh()
+        Dim(not resuming)   -- last, so an error above leaves the screen as it was
     end)
     win:HookScript("OnHide", function()
         Listen(false)
@@ -371,6 +473,10 @@ local function Build()
         if suspended then return end   -- set aside for the full-size preview: the session, and what it worked out, stay
         M.End()
         -- a page's preview and texts stay built (they are cheap); what the model worked out is gone
+        local why = closeWhy or "closed"
+        closeWhy = nil
+        local O = Onboarding()
+        if O and not aborting then O.WizardClosed(why) end
     end)
     -- a profile change makes what the plan was worked out against stale: one listener for the session, added once
     if R.Profiles and R.Profiles.OnChange and not W.profileHooked then
@@ -382,6 +488,7 @@ local function Build()
         end)
     end
     W.frames = W.frames + 8
+    complete = true
 end
 
 ---------------------------------------------------------------------------
@@ -389,7 +496,7 @@ end
 ---------------------------------------------------------------------------
 function W.Open(step)
     if WZ.Overlay and WZ.Overlay.IsShown() then WZ.Overlay.Close("back") return true end   -- asked for again: back to the setup
-    if not win then R.Perf.Call("layoutwizard.build", Build) end
+    if not (win and complete) then R.Perf.Call("layoutwizard.build", Build) end
     if not M.Active() then
         local session, why = M.Begin()
         if not session then Say("there is no layout to set up (%s).", tostring(why)) return false end
@@ -404,16 +511,39 @@ function W.Open(step)
     return true
 end
 
-function W.Close()
+-- why: what closed it ("later": Do this later or Close; "skip", "native"; nil: anything else), for the first-install record.
+function W.Close(why)
+    closeWhy = why
     if WZ.Overlay and WZ.Overlay.IsShown() then WZ.Overlay.Close("exit") return end   -- the preview first; its hide ends the session
     if suspended then
         -- closed while set aside (the preview's Exit, or the window asked to close): end the session
         suspended = false
         if win then win:Hide() end   -- already hidden, so its OnHide won't run: end the session here
         M.End()
+        Dim(false)
+        local O = Onboarding()
+        closeWhy = nil
+        if O then O.WizardClosed(why or "closed") end
         return
     end
     if win then win:Hide() end
+    closeWhy = nil
+end
+
+-- After an error while building or opening (LayoutsLauncher.OpenWizard): the window and its dimming are put away and the
+-- session ends, so nothing the player can't close is left on screen. Not an answer to a first-install setup.
+function W.Abort()
+    aborting = true
+    suspended, resuming = false, false
+    closeWhy = nil
+    if scrim then scrimFade:Set(0) scrim:Hide() end
+    local ok, err = true, nil
+    if win and win:IsShown() then ok, err = pcall(win.Hide, win) end
+    if win and not complete then win = nil end   -- built only part way: made again at the next open
+    Listen(false)
+    M.End()
+    aborting = false
+    if not ok then R.Fault("layout setup", err) end
 end
 
 -- Hides the window for the full-size preview without ending the session; Resume brings it back where it was.
@@ -427,7 +557,9 @@ end
 function W.Resume()
     if not suspended then return false end
     suspended = false
-    if win then win:Show() end   -- OnShow: the session is still there, so it is drawn as it was left
+    resuming = true
+    if win then win:Show() end   -- OnShow: the session is still there, so it is drawn as it was left (and dimmed again)
+    resuming = false
     return true
 end
 

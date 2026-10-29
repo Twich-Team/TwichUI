@@ -31,7 +31,7 @@ settings. `RS.OWN_KEYS`: `modules`, `ui`, `gear`, `shareTransport`, `profiles`, 
 `RS.OWN_SETUP` (inside `setup`): `selection`, `recommend`, `trusted`, `twichui`. That is every setting, including the
 switches that act for you, places and the profile choices. Everything else is a record or a copy, not a setting, and
 is listed in `RS.OWN_LEFT_OUT` with its reason: `pins` (a restore never removes a pin), `npcs` (nor an NPC), `layouts` (a layout install's record), `storedData`, `whisperProbe`,
-`welcome`, `schema`, `migrated`, `heldStored`, and `setup.detected`/`received`/`pending`/`scanNext`/`restoreNext`/
+`welcome`, `onboarding` (where the first-install setup has got to), `schema`, `migrated`, `heldStored`, and `setup.detected`/`received`/`pending`/`scanNext`/`restoreNext`/
 `lastScan`/`twichUndo`/`eui`. The other saved variables (backups, Undo copies, your saved setup, the Chronicle) are
 never in a backup. `tests/test_backup_own.lua` fails when `TwichUIDB` gains a key that is in neither list.
 
@@ -141,9 +141,17 @@ and 2, repeat, injected failure). Document the step here. Never reuse or reorder
   hand edit does not lose a newer version's data.
 - One bad value never resets a whole table or profile.
 
-## First run: the welcome marker
+## First run: the onboarding record and the welcome marker
 
-`TwichUIDB.welcome = { state = "pending" | "seen" }`, written by `Persist.Normalize`.
+`TwichUIDB.onboarding = { v = 1, state, offers, why, held }`, made and repaired by `Persist.Normalize`
+(`NormalizeOnboarding`): `new` on a new installation (the rule below), and for a save from before it, `done` when a layout
+install is managed and finished, `new` when the welcome marker below is still `pending` with nothing installed, else
+`existing`. An unreadable record becomes `existing` (`onboarding-repaired`, not a loss); one with `v` above 1 is left as it
+is. What the states mean, and when the layout setup opens by itself, is `docs/onboarding.md` (`Onboarding.lua` owns it).
+
+`TwichUIDB.welcome = { state = "pending" | "seen" }`, the older marker, written by `Persist.Normalize`. The welcome dialog
+no longer opens by itself; the marker is read as evidence of an existing user (above) and settles to `seen` when the dialog is
+shown by hand.
 
 - A load that finds **no saved settings at all** (`next(TwichUIDB) == nil`, the same test that says `outcome = "fresh"`)
   **and nothing in the other TwichUI saved variables** (`TwichUIChronicleDB`, `TwichUIBackupDB`, `TwichUIShareDB`,
@@ -151,13 +159,12 @@ and 2, repeat, injected failure). Document the step here. Never reuse or reorder
   player whose settings were lost but whose Chronicle, backups or received setups remain has used TwichUI before and gets
   `seen` (the settings are still fresh defaults). Nothing else ever writes `pending`: not a missing marker, not a schema upgrade, not a failed upgrade, not a
   damaged marker, not a newer save's stand-in. Those write or leave `seen`, so an upgrade can never start onboarding.
-- `modules/Welcome.lua` changes `pending` to `seen` once the dialog is really on screen. A `/reload` before that keeps
-  `pending`; the dialog is tried again. Showing it by hand (`/tui about`) while `pending` also counts as seen.
+- `modules/Welcome.lua` changes `pending` to `seen` when the dialog is shown (`/tui about`, Home > Welcome).
 - The marker is account-wide, like the rest of `TwichUIDB`: other characters, other addons' profiles, the options'
   **Defaults** button and the feature-level **Reset** buttons never touch it (it is not one of `modules`).
 - **Full reset:** TwichUI has no "reset everything" command. Deleting `!!!TwichUI.lua` from `SavedVariables` (see the
-  manual test) is a new installation again and shows the dialog once more. Restoring an older copy of that file brings
-  its marker back with it.
+  manual test) is a new installation again and offers the layout setup once more (`/tui layout firstrun reset` does that
+  for the setup alone). Restoring an older copy of that file brings its markers back with it.
 - An unreadable marker is quietly `seen`, and is not counted as a loss (`Report().lost` stays 0): nothing the player
   stored is gone.
 

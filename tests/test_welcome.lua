@@ -1,7 +1,7 @@
 dofile(TESTS .. "harness.lua")
--- Welcome dialog: owed only to a new installation, shown once when the game is ready for it, never
--- scheduled twice, never discarding a real notice, routing "Open Settings" to the real options, and
--- changing no setting. Synthetic data only. See modules/Welcome.lua and docs/persistence.md.
+-- Welcome dialog: shown only when asked (never by itself: a new installation gets the layout setup, see
+-- tests/test_onboarding.lua), routing "Open Settings" to the real options, and changing no setting.
+-- Synthetic data only. See modules/Welcome.lua and docs/persistence.md.
 
 ---------------------------------------------------------------------------
 -- A session: the client with the files the dialog uses, a stand-in for frames, and the saved variables
@@ -81,66 +81,59 @@ end
 local function D(c) return c.holder.dialog end
 local function State(c) return c.TwichUIDB.welcome and c.TwichUIDB.welcome.state end
 local function W(c) return c.TwichUI.Welcome end
-local function Listening(c) return W(c).Snapshot().listening end
 
 ---------------------------------------------------------------------------
--- 1. A new installation: owed, quiet until the world is ready, then shown once
+-- 1. A new installation: the dialog no longer opens by itself (the layout setup is the first-install
+--    experience, Onboarding.lua, tests/test_onboarding.lua); the older marker is kept as evidence
 ---------------------------------------------------------------------------
 local c = Boot()
-assert(State(c) == "pending" and W(c).Owed(), "a new installation is owed the welcome")
-assert(Listening(c), "and listens for the world")
+assert(State(c) == "pending", "a new installation's older marker is still written")
 assert(not D(c), "nothing is built before it is needed")
 assert(c.TwichUI.DEFAULT_MODULES.welcome == nil and c.TwichUIDB.modules.welcome == nil, "the marker is not a feature switch")
+assert(W(c).Owed == nil and W(c).Refresh == nil and W(c).InTheWay == nil, "no automatic path is left in the dialog")
 local modulesBefore = copy(c.TwichUIDB.modules)
 local uiBefore = copy(c.TwichUIDB.ui or {})
-local giveUp = W(c).Snapshot()
-assert(giveUp.shown == 0 and giveUp.waiting == false)
+Enter(c); Settle(); Enter(c, false); Settle(); Enter(c, true); Settle()
+c.FireEvent("PLAYER_REGEN_ENABLED"); Settle()
+assert(not D(c), "entering the world, loading screens and the end of combat never show it")
+assert(W(c).Snapshot().shown == 0 and State(c) == "pending")
 
-Enter(c)
-assert(not D(c), "not at once: the world settles first")
-assert(W(c).Snapshot().waiting, "one look is waiting")
--- Entering the world again and again (a loading screen, a zone) never stacks looks.
-Enter(c, false); Enter(c, false); Enter(c, false)
-assert(W(c).Snapshot().waiting)
-Settle()
+-- Asked for: shown, and only then is the older marker settled.
+c.TwichUI.RunCommand("about")
 local f = D(c)
-assert(f and f.shown, "shown once the world has settled")
-assert(State(c) == "seen" and not W(c).Owed(), "marked seen only now that it is on screen")
-assert(not Listening(c), "and no longer listening for anything")
-assert(W(c).Snapshot().shown == 1, "exactly once, however many world entries")
+assert(f and f.shown, "/tui about shows it")
+assert(State(c) == "seen", "the older marker is settled once it is on screen")
+assert(W(c).Snapshot().shown == 1)
 assert(c.UISpecialFrames[#c.UISpecialFrames] == "TwichUIWelcome", "Escape closes it through the game's own list")
 assert(f.title.text == "Welcome to TwichUI" and f.intro.text == W(c).INTRO)
 assert(#f.points == 3 and f.open.text.text == "Open Settings" and f.dismiss.text.text == "Close", "title, three points, two buttons")
 assert(f.footer.text:find("/tui", 1, true), "a /tui reminder in the footer")
 assert(f.h and f.h > 150 and f.w == 460, "sized from its content")
 -- It changes nothing the player set.
-assert(copy(c.TwichUIDB.modules) ~= nil)
 for k, v in pairs(modulesBefore) do assert(c.TwichUIDB.modules[k] == v, "setting unchanged: " .. k) end
 for k, v in pairs(uiBefore) do assert(c.TwichUIDB.ui and c.TwichUIDB.ui[k] == v, "ui unchanged: " .. k) end
 
--- Closing it (its Close button) leaves it closed: later world entries and a new login never bring it back.
+-- Closing it (its Close button, the close control, Escape) leaves it closed: later world entries never bring it back.
 f.dismiss.scripts.OnClick(f.dismiss)
 assert(not f.shown)
 Enter(c, false); Settle(); Enter(c, true); Settle()
 assert(not f.shown and W(c).Snapshot().shown == 1, "never reopens by itself")
--- The title-area close control and Escape (which hides the frame) do the same.
 W(c).Show(); assert(f.shown)
 f.close.scripts.OnClick(f.close); assert(not f.shown, "close control")
 W(c).Show(); f:Hide(); assert(not f.shown, "Escape hides the frame")
--- A new session from what was saved: no welcome.
+-- A new session from what was saved: nothing.
 local saved = copy(c.TwichUIDB)
 local again = Boot({ TwichUIDB = saved })
-assert(State(again) == "seen" and not Listening(again), "a later login")
+assert(State(again) == "seen", "a later login")
 Enter(again); Settle()
 assert(not D(again), "and nothing is built or shown")
--- Switching characters is the same account-wide data; a feature-level reset or the options' Defaults button
--- only touch the switches, never the marker.
+-- Resetting the switches never touches the marker.
 again.TwichUIDB.modules = {}
 for k, v in pairs(again.TwichUI.DEFAULT_MODULES) do again.TwichUIDB.modules[k] = v end
-assert(State(again) == "seen", "resetting the switches does not reset the welcome")
+assert(State(again) == "seen", "resetting the switches does not reset the marker")
 
 ---------------------------------------------------------------------------
--- 2. Existing installations are never put through it
+-- 2. Existing installations: the marker reads "seen", and nothing is shown
 ---------------------------------------------------------------------------
 for name, sv in pairs({
   current = { schema = 1, modules = {} },
@@ -150,108 +143,16 @@ for name, sv in pairs({
   junkState = { schema = 1, modules = {}, welcome = { state = "pending-ish" } },
 }) do
   local e = Boot({ TwichUIDB = copy(sv) })
-  assert(State(e) == "seen" and not W(e).Owed() and not Listening(e), name .. ": not owed")
+  assert(State(e) == "seen", name .. ": seen")
   Enter(e); Settle()
   assert(not D(e), name .. ": nothing shown after upgrading")
 end
 
 ---------------------------------------------------------------------------
--- 3. Deferral: combat, flight, a banner, a hidden interface, a loading screen, a TwichUI card
----------------------------------------------------------------------------
-local function Fresh() return Boot() end
-local function Showing(e) return D(e) and D(e).shown end
-
-local e = Fresh()
-e.COMBAT = true
-Enter(e); Settle()
-assert(not Showing(e) and State(e) == "pending", "combat holds it back, and it is still owed")
-assert(e.TwichUI.Life.Snapshot().notes["welcome-deferred"], "counted for the troubleshooting report (a code, no text)")
-e.COMBAT = false
-e.FireEvent("PLAYER_REGEN_ENABLED"); Settle()
-assert(Showing(e) and State(e) == "seen", "shown when the fight ends")
-
-for name, set in pairs({
-  flight = function(x, on) x.TAXI = on end,
-  banner = function(x, on) x.TOAST = on end,
-  interface = function(x, on) x.UIParent.shown = not on end,
-}) do
-  local x = Fresh()
-  set(x, true)
-  Enter(x); Settle()
-  assert(not Showing(x) and State(x) == "pending", name .. ": held back")
-  set(x, false)
-  Enter(x); Settle()
-  assert(Showing(x), name .. ": shown afterwards")
-end
-
--- A loading screen drops the look that was waiting; the next world entry makes a new one.
-local x = Fresh()
-Enter(x)
-x.FireEvent("PLAYER_LEAVING_WORLD")
-Settle()
-assert(not Showing(x) and State(x) == "pending", "nothing is shown while the world is not entered")
-Enter(x); Settle()
-assert(Showing(x) and W(x).Snapshot().shown == 1)
-
--- Shown but not actually visible (nothing was seen): still owed, tried again.
-x = Fresh()
-local blocked = true
-local origCreate = x.CreateFrame
-x.CreateFrame = function(...) local fr = origCreate(...); fr.blocked = blocked; return fr end
-Enter(x); Settle()
-assert(State(x) == "pending" and W(x).Snapshot().shown == 0, "not marked seen when it was not visible")
-blocked = false; D(x).blocked = false
-Enter(x); Settle()
-assert(State(x) == "seen" and Showing(x), "marked seen when it finally is")
-
--- The tries are bounded: constant combat makes a fixed number of looks, not an endless loop.
-x = Fresh()
-x.COMBAT = true
-Enter(x)
-for _ = 1, 60 do
-  if not W(x).Snapshot().waiting then break end
-  FlushTimers(); RunLongTimers(10)
-end
-local give = W(x).Snapshot()
-assert(not give.waiting and give.tries == 15, "stops looking by itself after a fixed number of looks (" .. tostring(give.tries) .. ")")
-assert(State(x) == "pending", "and the welcome is still owed for the next time")
-x.COMBAT = false; x.FireEvent("PLAYER_REGEN_ENABLED"); Settle()
-assert(Showing(x), "the end of the fight starts it again")
-
--- A TwichUI card up: the dialog waits; the card is neither dropped nor delayed by it.
-x = Fresh()
-Enter(x)
-local N = x.TwichUI.Notify
-local cardShown, cardDismissed = 0, 0
-N.Register("welcometest", { label = "test", show = function() cardShown = cardShown + 1 return true end,
-  dismiss = function() cardDismissed = cardDismissed + 1 end, bounds = function() return 0, 0, 10, 10 end, hold = function() return 100 end })
-assert(N.Submit({ kind = "welcometest", id = "one", payload = {} }) and cardShown == 1, "a real card is up")
-FlushTimers(); RunLongTimers(3)   -- the dialog's first look
-assert(not Showing(x) and State(x) == "pending", "the dialog waits for the card")
-assert(cardDismissed == 0 and next(N.Snapshot().active), "the card was not dismissed, replaced or hurried for it")
-assert(next(N.Snapshot().dropped) == nil and next(N.Snapshot().refused) == nil, "nothing was discarded or refused")
-N.Finished("welcometest")
-Settle()
-assert(Showing(x) and State(x) == "seen", "it appears once the card is gone")
--- The other way round: a notice that arrives while the dialog is open is shown as always.
-assert(N.Submit({ kind = "welcometest", id = "two", payload = {} }) and cardShown == 2, "notices are not held back by an open dialog")
-
--- Missing pieces are neutral: no coordinator, no Chronicle look.
-local bare = Fresh()
-bare.TwichUI.Notify = nil
-Enter(bare); Settle()
-assert(Showing(bare), "without the coordinator it still shows")
-local noLook = Fresh()
-noLook.TwichUI.Look = nil
-Enter(noLook); Settle()
-assert(not Showing(noLook) and State(noLook) == "pending", "without its look it does not show, and stays owed")
-local said = false
-for _, line in ipairs(noLook.said) do if line:find("TwichUI", 1, true) then said = true end end
-assert(not said, "and says nothing about it")
-
----------------------------------------------------------------------------
+-- 3. (When a first-install window may appear by itself is Onboarding.lua's now: tests/test_onboarding.lua.)
 -- 4. Manual opening
 ---------------------------------------------------------------------------
+local function Showing(e) return D(e) and D(e).shown end
 local m = Boot({ TwichUIDB = { schema = 1, modules = {}, welcome = { state = "seen" } } })
 local mods = copy(m.TwichUIDB.modules)
 m.TwichUI.RunCommand("about")
@@ -261,14 +162,13 @@ for k, v in pairs(mods) do assert(m.TwichUIDB.modules[k] == v, "no setting chang
 D(m):Hide()
 m.TwichUI.RunCommand("about"); m.TwichUI.RunCommand("about")
 assert(Showing(m) and W(m).Snapshot().shown == 3, "can be shown any number of times, one frame")
--- Before the automatic one: showing it by hand counts as seen and stops the waiting look.
-local p = Fresh()
-Enter(p)
-p.TwichUI.RunCommand("about")
-assert(Showing(p) and State(p) == "seen" and not Listening(p))
-D(p):Hide()
-Settle()
-assert(not Showing(p) and W(p).Snapshot().shown == 1, "the waiting look did not show it a second time")
+-- Without its look it can't be shown, and says so (it was asked for).
+local noLook = Boot()
+noLook.TwichUI.Look = nil
+assert(not noLook.TwichUI.Welcome.Show() and not D(noLook), "without its look it does not show")
+local said = false
+for _, line in ipairs(noLook.said) do if line:find("isn't available", 1, true) then said = true end end
+assert(said, "and says so, because it was asked for")
 
 ---------------------------------------------------------------------------
 -- 5. Actions
@@ -281,6 +181,7 @@ a.C_AddOns.LoadAddOn = function(name)
   return true
 end
 Enter(a); Settle()
+a.TwichUI.RunCommand("about")
 local dlg = D(a)
 assert(dlg.shown)
 dlg.open.scripts.OnClick(dlg.open)
@@ -393,6 +294,7 @@ g.C_AddOns.LoadAddOn = function(name)
   return true
 end
 Enter(g); Settle()
+g.TwichUI.RunCommand("about")
 local gd = D(g)
 assert(gd.shown and loads == 0 and g.TwichUI.SettingsUI == nil, "showing the welcome does not load the settings addon")
 g.TwichUI.RunCommand("about")

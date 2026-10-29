@@ -17,6 +17,7 @@ when something is built, checked or decided.
 | 7. Retained overrides and updates | Offline-tested | 2026-10-27 |
 | **RH-1. Release hardening (correctness)** | Offline-tested (record below) | 2026-10-28 |
 | Editable TwichUI presets and bundling a published package | Offline-tested (record below) | 2026-10-28 |
+| First-install setup (the wizard as TwichUI's first-run experience, EllesmereUI coordination, the dimming) | Offline-tested (`docs/onboarding.md`) | 2026-10-29 |
 | RH-2. In-game validation on WoW: Forever, packaged artifact | **Not started** (checklist below) | |
 
 **Nothing in this project has been run on WoW: Forever.** (The Phase 2 developer package was once applied, verified and restored
@@ -159,7 +160,7 @@ preset options for the cards and review, cached per option table) is event-rare 
 | D7 | The EllesmereUI active profile is account-wide, so an install changes every character's HUD. Accept and disclose, or offer to assign it per spec? | Accept and disclose; no spec assignment (built: `autoAssignSpecs = false`; the plan says it) |
 | D8 | Install TwichUI settings into a new TwichUI profile (per character) or into the profile in use? | New profile (built) |
 | D9 | Target profile names | EllesmereUI `TwichUI Classic` / `TwichUI Compact`; TwichUI `Classic Adventure` / `Compact Adventure` (the test package uses `TwichUI Layout Test` / `Layout Test`) |
-| D10 | Suppress EllesmereUI's first-run picker every session, or only while a TwichUI install is planned or pending? | Only while one is under way (built), and refuse to plan while the picker is pending |
+| D10 | Suppress EllesmereUI's first-run picker every session, or only while a TwichUI install is planned or pending? | While an install is under way, and (2026-10-29) in EllesmereUI's first session when TwichUI's own first-install setup is new and can load (`docs/onboarding.md`); planning is refused while the picker is pending unless it is held for TwichUI |
 | D11 | Reference canvas | Per package, in `geometry.canvas`: Classic's is the author's 2866.67 × 1200 (built) |
 | D12 | UI scale choice factors (`larger`, `smaller`) | ×1.15 and ×0.87 of pixel-perfect, clamped to 0.40–1.15 |
 | D13 | Without EllesmereUI, should TwichUI ever set the game's `uiScale` CVar? | No |
@@ -207,6 +208,11 @@ preset options for the cards and review, cached per option table) is event-rare 
 | D54 | Bounds | As built: 8 options, 256 settings per preset, 32 retired ids; `MAX_EXPECT` 320 to 832 (an older TwichUI would read a newer record holding more than 320 entries as damaged) |
 | D55 | A removed preset the player had picked | As built: named, and Next/Apply wait for a pick (nothing applied in its place) |
 | D56 | Closing the workspace with preset work not saved or published | As built: Close asks; Escape keeps the session until the reload and says so |
+| D57 | First-install offers after Do this later | As built: again at each real login (never a reload), three automatic offers per phase, then only when asked. Alternatives: one offer only; a reminder line instead |
+| D58 | Skip setup while EllesmereUI's first run is held for TwichUI | As built: EllesmereUI's own picker is shown at once (its Done reloads). Alternative: say where it is and show nothing |
+| D59 | Do this later while EllesmereUI's first run is held | As built: it stays held this session (no unregister exists); EllesmereUI's picker then doesn't return by itself (its source), so the setup's first page offers it while `held`. Alternative: hand it back on every deferral |
+| D60 | The dimming: 40% warm charcoal, lifted during combat, shown for every opening of the wizard (not only the first install) | As built; tune the strength after the in-game look (check 3 in `docs/onboarding.md`) |
+| D61 | First-install state scope | As built: account-wide (one offer per account, like EllesmereUI's active profile). Alternative: per character |
 
 
 ## Production release blockers
@@ -240,7 +246,8 @@ Run on the zip the release workflow builds, installed fresh. Record results here
    at the scale it gives; 1680 × 1050; an ultrawide. Compare the Review preview with the result.
 8. **EllesmereUI versions**: the version the package says it was tested with, and the newest available; the review says
    "tested with"; positions and links survive EllesmereUI's load-time migrations.
-9. **First run and account**: a fresh EllesmereUI (its picker pending: planning refused); a second character on the account sees
+9. **First run and account**: the first-install checklist in `docs/onboarding.md`; a fresh EllesmereUI without TwichUI's
+   first-install setup (its picker pending: planning refused); a second character on the account sees
    the HUD change and can't restore or stop managing the first character's install.
 10. **Diagnostics**: `/tui perf` capture while opening the wizard ten times, reviewing, applying, checking and opening the
     overlay; the `layouts.*` scopes appear, the wizard gauges stay flat, and nothing loads when the setup isn't used.
@@ -271,8 +278,9 @@ clients).
    documented.
 3. `uiScale` in the payload sets `ppUIScale`, `UIParent:GetSize()` matches the computed `W×H`, and `keep` leaves the
    scale alone.
-4. `RegisterExternalInstaller` called after EllesmereUI's `ADDON_LOADED` keeps the picker away on a fresh account.
-   Without the call, the picker returns.
+4. `RegisterExternalInstaller` called after EllesmereUI's `ADDON_LOADED` (and, for a first install, at `PLAYER_LOGIN`) keeps
+   the picker away on a fresh account. Without the call, the picker shows. (Source: after a session with module data the
+   picker does not return by itself, `docs/onboarding.md`.)
 5. `"spec_locked"`: with the current spec assigned to another profile, the import is stored and not activated.
 6. Restore at EllesmereUI's `ADDON_LOADED` puts the old `EllesmereUIDB` back before EllesmereUI reads it, with no
    "profile corrupted" warning from `NewDB` (only when D3's restore point is built).

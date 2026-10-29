@@ -75,7 +75,7 @@ TC.LOCAL = {
     ["modules.restedxpSkin"] = "other", ["modules.qolTwichUISettingsButton"] = "other",
     ["modules.reminders"] = "other", ["ui.reminders"] = "other",
     ["ui.restedxpSkinState"] = "other", ["ui.showAdvanced"] = "other", ["gear.trees"] = "other",
-    ["pins"] = "other", ["npcs"] = "other", ["ui.mapToolsIntro"] = "other", ["ui.navTravel"] = "other", ["setup"] = "other", ["storedData"] = "other", ["whisperProbe"] = "other", ["welcome"] = "other",
+    ["pins"] = "other", ["npcs"] = "other", ["ui.mapToolsIntro"] = "other", ["ui.navTravel"] = "other", ["setup"] = "other", ["storedData"] = "other", ["whisperProbe"] = "other", ["welcome"] = "other", ["onboarding"] = "other",
     ["schema"] = "other", ["migrated"] = "other", ["heldStored"] = "other",
     ["profiles"] = "other", ["profileKeys"] = "other", ["profileState"] = "other", ["layouts"] = "other",
 }

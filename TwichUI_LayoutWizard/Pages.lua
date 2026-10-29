@@ -174,6 +174,22 @@ end
 ---------------------------------------------------------------------------
 -- 1. Welcome and compatibility
 ---------------------------------------------------------------------------
+-- What the first page says. On a first install (Onboarding.lua) it greets, says in a few lines what the setup does and
+-- doesn't do, and offers Skip setup (and EllesmereUI's own setup, when that was held back for this one); otherwise it is
+-- the setup's own introduction.
+Pages.WELCOME = {
+    head = "Set up TwichUI's interface layout",
+    intro = "This walks you through a complete interface: where chat, the damage meter, the minimap, the unit frames and the action bars sit, and how EllesmereUI and TwichUI look, worked out for your screen.",
+    safe = "Nothing changes until you press Apply on the Review step, and Restore puts your previous setup back afterwards. Nothing reloads by itself, and nothing here runs unless you open it.",
+}
+Pages.FIRST = {
+    head = "Welcome to TwichUI",
+    intro = "A short setup arranges your interface for your screen: chat, the damage meter, the minimap, the unit frames and the action bars, and how EllesmereUI and TwichUI look. You pick the layout, a few helpers and personal touches as you go.",
+    safe = "Nothing changes until you review it and press Apply, and a restore point is made first, so Restore can put your current setup back. EllesmereUI's part applies to every character on this account; TwichUI's, to this character.",
+    later = "Not now? Do this later (bottom left) closes this, and TwichUI offers it again the next time you log in. Skip setup closes it for good. Either way it stays under /tui layout and Home > Interface layout in the settings.",
+    held = "EllesmereUI's own first-run setup is waiting for this one. Applying a layout here answers it, or you can use EllesmereUI's setup instead.",
+}
+
 local function BuildWelcome(parent, env)
     local L = Look()
     local page = { frame = CreateFrame("Frame", nil, parent) }
@@ -186,14 +202,26 @@ local function BuildWelcome(parent, env)
     WZ.Art.Apply(emblem, "emblem")
     local head = L.Text(f, "title")
     head:SetPoint("TOPLEFT", 116, -10)
-    head:SetText("Set up TwichUI's interface layout")
+    head:SetText(Pages.WELCOME.head)
     local intro = Text(f, "body", CONTENT_W - 116)
     intro:SetPoint("TOPLEFT", head, "BOTTOMLEFT", 0, -8)
-    intro:SetText("This walks you through a complete interface: where chat, the damage meter, the minimap, the unit frames and the action bars sit, and how EllesmereUI and TwichUI look, worked out for your screen.")
+    intro:SetText(Pages.WELCOME.intro)
     local safe = Text(f, "small", CONTENT_W - 116)
     safe:SetPoint("TOPLEFT", intro, "BOTTOMLEFT", 0, -8)
-    safe:SetText("Nothing changes until you press Apply on the Review step, and Restore puts your previous setup back afterwards. Nothing reloads by itself, and nothing here runs unless you open it.")
+    safe:SetText(Pages.WELCOME.safe)
     page.safe = safe
+
+    -- first install only: when to do it, and the ways out (they change nothing; each asks first)
+    local later = Text(f, "small", CONTENT_W - 116)
+    later:SetPoint("TOPLEFT", safe, "BOTTOMLEFT", 0, -8)
+    later:SetText(Pages.FIRST.later)
+    local held = Text(f, "small", CONTENT_W - 116)
+    held:SetText(Pages.FIRST.held)
+    local skipBtn = Button(f, "Skip setup", 110, "secondary", function() env.Actions.skip() end,
+        "Closes the setup without applying anything, and doesn't offer it again by itself. It stays under /tui layout and Home > Interface layout. It asks first.")
+    local nativeBtn = Button(f, "Use EllesmereUI's setup instead", 230, "secondary", function() env.Actions.native() end,
+        "Closes this setup without applying anything and opens EllesmereUI's own first-run setup, where you choose which of its addons stay on. EllesmereUI reloads when you press its button. It asks first.")
+    page.later, page.held, page.skip, page.native = later, held, skipBtn, nativeBtn
 
     local fit = f:CreateTexture(nil, "ARTWORK")
     fit:SetSize(44, 44)
@@ -234,6 +262,16 @@ local function BuildWelcome(parent, env)
     end
 
     function page.Refresh()
+        local first = M.FirstRun()
+        local words = first and Pages.FIRST or Pages.WELCOME
+        head:SetText(words.head)
+        intro:SetText(words.intro)
+        safe:SetText(words.safe)
+        local native = first and M.NativeAvailable()
+        later:SetShown(first)
+        skipBtn:SetShown(first)
+        held:SetShown(native)
+        nativeBtn:SetShown(native)
         local items = M.Compat()
         for i, it in ipairs(items) do
             local row = Row(i)
@@ -247,6 +285,21 @@ local function BuildWelcome(parent, env)
         end
         for i = #items + 1, #page.rows do page.rows[i]:Hide() end
         local y = math.max(112, 10 + 24 + 8 + Height(intro) + 8 + Height(safe) + 22)
+        if first then
+            y = 10 + 24 + 8 + Height(intro) + 8 + Height(safe) + 8 + Height(later) + 10
+            skipBtn:ClearAllPoints()
+            skipBtn:SetPoint("TOPLEFT", 116, -y)
+            if native then
+                held:ClearAllPoints()
+                held:SetPoint("TOPLEFT", 116, -(y + 32))
+                nativeBtn:ClearAllPoints()
+                nativeBtn:SetPoint("TOPLEFT", skipBtn, "TOPRIGHT", 10, 0)
+                y = y + 32 + Height(held)
+            else
+                y = y + 24
+            end
+            y = math.max(112, y + 18)
+        end
         local sources = M.Sources()
         local showSources = #sources > 1
         pkgHead:SetShown(showSources)
