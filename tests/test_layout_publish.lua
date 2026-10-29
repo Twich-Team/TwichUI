@@ -305,6 +305,17 @@ do
   rep = A.Check()
   Check(rep.ok, "then the draft passes: " .. table.concat(rep.blockers, " | "))
   Check(#rep.variants == 2 and rep.variants[1].ok and rep.variants[2].ok and rep.variants[1].units > 100, "both layouts resolve")
+  -- the game refusing an EllesmereUI font (SetFont says false) is a note, not a block: the file is EllesmereUI's own
+  local probe = LY.Pub.probe.font
+  LY.Pub.probe.font = function() return false end
+  A.Session().report = nil
+  rep = A.Check()
+  local note
+  for _, w in ipairs(rep.warnings) do if w:find("EllesmereUI font", 1, true) and w:find("taken on trust", 1, true) then note = true end end
+  Check(rep.ok and note, "an EllesmereUI font the game won't load is noted, not blocking: " .. table.concat(rep.blockers, " | "))
+  LY.Pub.probe.font = probe
+  A.Session().report = nil
+  Check(A.Check().ok, "(and with the probe back, still fine)")
   local pkgBefore = Copy(LY.ADVENTURE_PACKAGE.layers.base.ellesmereui.root.fonts)
   Check(Same(pkgBefore, LY.ADVENTURE_PACKAGE.layers.base.ellesmereui.root.fonts), "(the included package is untouched)")
 

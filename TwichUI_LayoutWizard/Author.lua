@@ -545,7 +545,7 @@ function A.Draft(rough)
     if not rough then
         local r = s.release
         pkg.id, pkg.revision, pkg.title = r.id, r.revision, r.title
-        pkg.made = os.date and os.date("%Y-%m-%d") or pkg.made
+        pkg.made = date and date("%Y-%m-%d") or pkg.made   -- (WoW has no os library; its global date is the same call)
         pkg.source = "Captured in game" .. (s.capture and s.capture.euiVersion and (" with EllesmereUI " .. s.capture.euiVersion) or "")
         if s.capture and s.capture.euiVersion and type(pkg.requires) == "table" and type(pkg.requires.ellesmereui) == "table" then
             pkg.requires.ellesmereui.tested = s.capture.euiVersion
@@ -559,10 +559,7 @@ end
 ---------------------------------------------------------------------------
 -- Returns the report: { ok, blockers = { text }, warnings = { text }, variants = { { id, title, ok, units, fits, lines } },
 --   media = { { path, kind, source, status } }, changes = Counts() }. Cached until something changes.
-function A.Check()
-    local s = session
-    if not s then return nil end
-    if s.report then return s.report end
+local function RunCheck(s)
     local rep = { blockers = {}, warnings = {}, variants = {}, media = {}, changes = A.Counts() }
     local function Block(t) rep.blockers[#rep.blockers + 1] = t end
     local function Warn(t) rep.warnings[#rep.warnings + 1] = t end
@@ -599,14 +596,20 @@ function A.Check()
             if r.source == "foreign" then s.fixList[#s.fixList + 1] = { path = r.path, replacement = Pub.Substitute(r.path) } end
         end
         rep.media = Pub.Resolve(refs)
-        local unverified = 0
+        local unverified, eui = 0, 0
         for _, m in ipairs(rep.media) do
             local file = m.path:match("([^\\/]+)$") or m.path
             if m.status == "foreign" then Block(("It points at %s, which belongs to another addon and can't be sent."):format(file))
             elseif m.status == "unsafe" then Block(("It points at %s, which is outside the game's folders."):format(file))
+            elseif m.status == "missing" and m.source == "ellesmereui" and m.kind == "font" and type(rawget(_G, "EllesmereUI")) == "table" then
+                -- the game's answer to SetFont is the only evidence, and it has refused a file that is in EllesmereUI's folder:
+                -- a note, not a block (the file is EllesmereUI's own, which a recipient needs anyway)
+                eui = eui + 1
             elseif m.status == "missing" then Block(("It points at %s, which is not installed here."):format(file))
             elseif m.status == "unverified" then unverified = unverified + 1 end
         end
+        if eui > 0 then Warn(("%d EllesmereUI %s couldn't be loaded here to check, so %s taken on trust."):format(
+            eui, Plural(eui, "font", "fonts"), Plural(eui, "it is", "they are"))) end
         if unverified > 0 then Warn(("%d %s can't be looked up without drawing or playing them, so %s taken on trust."):format(
             unverified, Plural(unverified, "file", "files"), Plural(unverified, "it is", "they are"))) end
     end
@@ -643,6 +646,23 @@ function A.Check()
     end
     rep.ok = #rep.blockers == 0
     return rep
+end
+
+-- The check, kept. If the check itself fails part-way, the window says so (and the game's error handler hears of it, so a
+-- script-error display shows where) instead of staying as it was: a half-built report would never read as ready.
+function A.Check()
+    local s = session
+    if not s then return nil end
+    if s.report then return s.report end
+    local ok, err = pcall(RunCheck, s)
+    if not ok then
+        local rep = s.report
+        rep.blockers[#rep.blockers + 1] = "The check stopped before it finished: " .. tostring(err)
+        rep.ok = false
+        local handler = geterrorhandler and geterrorhandler()
+        if handler then handler(err) end
+    end
+    return s.report
 end
 
 ---------------------------------------------------------------------------
