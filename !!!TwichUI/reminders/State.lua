@@ -35,6 +35,7 @@ local ST = {}
 R.ReminderState = ST
 
 local COALESCE = 0.1
+local SETTLE = { 1, 3 }   -- seconds after entering the world when everything wanted is read once more (see OnEvent)
 local MAX_ASK = 2
 
 local obs = { slots = {} }   -- the live observations
@@ -45,6 +46,7 @@ local dirty = {}             -- [key] = true: due to be read
 local changed = {}           -- reused for each telling; the listener must not keep it
 local queued = false
 local token = 0              -- bumped by Stop: a timer from before does nothing
+local settleToken = 0        -- bumped by each world entry (and Stop): an older settle look does nothing
 local started = false        -- the controller wants the world event (Reminders on)
 local listener               -- fn(changed or nil): nil means "everything" (the world was entered)
 local combat                 -- what the combat events last said (nil until one is seen in this world)
@@ -348,12 +350,29 @@ ST.Source("ammo", {
     Read = function(_, into) return ReadAmmo(into) end,
 })
 
+-- Everything wanted is looked at again, asking the game rather than trusting what its events last said; only what
+-- differs is told on (through the usual Mark / Flush).
+local function Settle(mine)
+    if mine ~= settleToken then return end
+    if R.Life and not R.Life.InWorld() then return end   -- another loading screen: its own world entry looks again
+    combat = nil
+    for key in pairs(want) do Mark(key) end
+end
+
 local function OnEvent(_, event, ...)
     stats.events = stats.events + 1
     if event == "PLAYER_ENTERING_WORLD" then
         worldSeen = true
         combat = nil   -- a loading screen: ask the game again
         ammoRetries = 0
+        -- The game does not finish settling inside this event (gear, mount, life and combat can still be changing just
+        -- after a login, a reload or a dungeon door), and not every change comes with an event of its own: look again
+        -- shortly, twice, so what is shown never rests on the first look alone.
+        settleToken = settleToken + 1
+        local mine = settleToken
+        for _, seconds in ipairs(SETTLE) do
+            C_Timer.After(seconds, function() Settle(mine) end)
+        end
         if listener then
             local ok, err = pcall(listener, nil)
             if not ok then R.Fault("reminders", err) end
@@ -433,6 +452,7 @@ end
 -- Off: nothing is wanted, listened for or kept. A timer from before finds itself stale.
 function ST.Stop()
     token = token + 1
+    settleToken = settleToken + 1
     queued = false
     started = false
     for k in pairs(want) do want[k] = nil end

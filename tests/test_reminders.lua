@@ -415,6 +415,18 @@ RM.SetCondition(lid, 1, { type = "player", state = "mounted", negate = false })
 Check(ST.Registered("PLAYER_MOUNT_DISPLAY_CHANGED") and not ST.Registered("PLAYER_DEAD"), "the mount event replaces the life events")
 W.mounted = true; Fire("PLAYER_MOUNT_DISPLAY_CHANGED"); Settle()
 Check(Shown(lid), "mounted: shows")
+-- entering the world (login, reload, a dungeon door) looks again shortly after: a change with no event of its own is caught
+Fire("PLAYER_ENTERING_WORLD")
+W.mounted = false   -- the game settled after the first look; no event says so
+Check(Shown(lid), "the first look at the world still says mounted")
+Settle()
+Check(not Shown(lid), "the settle look after entering the world sees it is no longer mounted")
+W.mounted = true
+RunLongTimers(3); Settle()
+Check(Shown(lid), "and the second one, a few seconds on, sees a later change")
+W.mounted = false
+Fire("PLAYER_ENTERING_WORLD"); Fire("PLAYER_ENTERING_WORLD"); Settle(); RunLongTimers(3); Settle()
+Check(not Shown(lid), "two world entries in a row: older settle looks do no harm")
 RM.Delete(lid)
 Check(D.Frame(lid) == nil and not ST.Registered("PLAYER_MOUNT_DISPLAY_CHANGED"), "deleted: its frame is put away and its event dropped")
 local reuse = select(2, RM.Create("custom"))

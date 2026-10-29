@@ -247,6 +247,7 @@ The Test section's simulations go through the same `Evaluate.Run` on a table bui
 | An ammunition reminder, weapon takes none (or none equipped) | only a change of the ranged or ammo slot is acted on; bag and inventory events are dropped before any read. A look is up to six values from the character, and the bags only when nothing is selected |
 | An item without details in a wanted slot | asked for at most twice; `GET_ITEM_INFO_RECEIVED` / `ITEM_DATA_LOAD_RESULT` only while that lasts |
 | An event | marks its key; one 0.1 s timer reads each marked key once; only keys whose facts changed re-decide, and only the reminders that read them (an index by key) |
+| Entering the world (login, reload, any loading screen: dungeon doors too) | everything wanted is read and decided at once, then read again 1 s and 3 s later through the usual marking (`State.lua` `SETTLE`), because the game is still settling just after the event and not every change has an event; only what differs re-decides. A newer entry or switching Reminders off makes older looks do nothing |
 | A setting changes | look or place: that frame is drawn again; rules, switch, list or profile: the index is built again |
 | Delay / minimum | one `C_Timer.After` per waiting reminder, with a token: cancelled by anything that changes its course |
 
