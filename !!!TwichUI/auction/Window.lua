@@ -4,6 +4,8 @@
 -- item only and suggests matching the lowest comparable one, saying what that
 -- is based on. You set quantity, price and duration; nothing is posted until
 -- you press Post, and the game's own confirmation is used when it asks for one.
+-- A price under what a vendor would pay for the item is flagged beside the price, and Post then asks first
+-- (auction/Price.lua has the comparison; nothing is ever corrected or posted for the player).
 --
 -- Everything here is TwichUI's own frames: the tab and the page are children of
 -- a holder frame on Blizzard's Auction House window. Blizzard's tables are only
@@ -27,6 +29,11 @@ local POST_TIMEOUT = 10
 -- 350 and favourite stars in HIGH strata; the page sits above both, and below
 -- the game's own confirmation dialog (DIALOG strata).
 local PAGE_STRATA, PAGE_LEVEL = "HIGH", 500
+-- The below-vendor-value warning's picture (tools/make_vendor_warning_art.py, drawn at 22 so the 32 px file),
+-- and the game's own alert icon for when the game refuses it.
+local WARN_ICON = R.PATH .. [[media\auction\vendor-warning-small]]
+local WARN_ICON_FALLBACK = [[Interface\DialogFrame\UI-Dialog-Icon-AlertNew]]
+local ASK = "TWICHUI_AUCTION_BELOW_VENDOR"
 
 local AH                       -- AuctionHouseFrame, once Blizzard_AuctionHouseUI has loaded
 local holder, tab, page        -- our frames on it
@@ -45,6 +52,10 @@ local message                  -- last posting outcome line
 local retryScheduled = false
 local session = 0                -- counts auction house visits; a posting from an earlier one never advances
 local filledPrice = 0         -- what we last put in the price box
+local vendorSeen                 -- { id, each }: the chosen item's vendor value once the game has given it
+local vendorAsked = {}           -- [itemID] = true: its data was requested this visit (once, not again and again)
+local asking                     -- the posting the player is being asked about (see Ask), nil when none
+local askToken = 0               -- a question that is answered, cancelled or replaced loses its token
 
 local function Money(amount)
     if not amount then return "-" end
@@ -73,6 +84,7 @@ local function ChooseLook()
     else
         C.title, C.text, C.dim, C.faint, C.accent = K.gold, K.text, K.textDim, K.stone, K.gold
     end
+    C.warn = { 0.96, 0.72, 0.26 }   -- amber: a caution, not an error
 end
 
 local function Text(parent, template, color)
@@ -281,7 +293,7 @@ local function Build()
     page.searched:SetPoint("TOPRIGHT", -12, -8)
     page.searched:SetJustifyH("RIGHT")
 
-    local MARKET_H = 214
+    local MARKET_H = 194   -- the Post box below keeps a strip for the below-vendor-value warning
     local market = CreateFrame("Frame", nil, page, "BackdropTemplate")
     market:SetPoint("TOPLEFT", RIGHT_X, -24)
     market:SetSize(RIGHT_W, MARKET_H)
@@ -337,7 +349,7 @@ local function Build()
     page.use = Btn(box, "Use this", 80, function() A.UseSuggestion() end)
     page.use:SetPoint("TOPRIGHT", -10, -48)
 
-    local y = -92
+    local y = -86
     local qLabel = Text(box, "GameFontHighlightSmall", C.dim)
     qLabel:SetPoint("TOPLEFT", 12, y)
     qLabel:SetText("Quantity")
@@ -374,7 +386,7 @@ local function Build()
     end)
     Skin("Dropdown", page.duration)
 
-    y = y - 32
+    y = y - 27
     local pLabel = Text(box, "GameFontHighlightSmall", C.dim)
     pLabel:SetPoint("TOPLEFT", 12, y)
     pLabel:SetText("Price each")
@@ -416,6 +428,29 @@ local function Build()
     end
     page.deposit = Line("Deposit", 8)
     page.total = Line("Total", -8)
+
+    -- Below the price: a fixed strip, so nothing moves when the warning comes and goes. The picture is
+    -- decoration; the words say it all.
+    local warn = CreateFrame("Frame", nil, box)
+    warn:SetPoint("TOPLEFT", 12, -139)
+    warn:SetPoint("RIGHT", box, "RIGHT", -10, 0)
+    warn:SetHeight(24)
+    warn:EnableMouse(true)
+    warn.icon = warn:CreateTexture(nil, "ARTWORK")
+    warn.icon:SetSize(22, 22)
+    warn.icon:SetPoint("LEFT", 0, 0)
+    if warn.icon:SetTexture(WARN_ICON) == false then warn.icon:SetTexture(WARN_ICON_FALLBACK) end
+    warn.title = Text(warn, "GameFontNormalSmall", C.warn)
+    warn.title:SetPoint("TOPLEFT", warn.icon, "TOPRIGHT", 8, 0)
+    warn.title:SetPoint("RIGHT", warn, "RIGHT", 0, 0)
+    warn.title:SetWordWrap(false)
+    warn.detail = Text(warn, "GameFontHighlightSmall", C.dim)
+    warn.detail:SetPoint("TOPLEFT", warn.title, "BOTTOMLEFT", 0, -1)
+    warn.detail:SetPoint("RIGHT", warn, "RIGHT", 0, 0)
+    warn.detail:SetWordWrap(false)
+    warn:Hide()
+    Tip(warn, nil, function() return warn.tip end)
+    page.vendorWarn = warn
 
     page.postButton = Btn(box, "Post", 120, function() A.Post() end)
     page.postButton:SetPoint("BOTTOMRIGHT", -10, 10)
@@ -668,6 +703,30 @@ local function Deposit(loc, qty)
     return d
 end
 
+-- What a vendor pays for one of the chosen item (its sell price, C_Item.GetItemInfo's 11th value, the way
+-- Blizzard's own sell frame reads it), in copper: a number (0 = a vendor takes none), or nil while the
+-- game hasn't said. Unknown is never 0. Its data is requested once; GET_ITEM_INFO_RECEIVED and
+-- ITEM_DATA_LOAD_RESULT (watched while the page is open) bring the answer, so nothing polls.
+local function VendorEach(g)
+    if not (g and g.itemID) then return nil end
+    if vendorSeen and vendorSeen.id == g.itemID then return vendorSeen.each end
+    local sell = C_Item.GetItemInfo and select(11, C_Item.GetItemInfo(g.itemID))
+    if type(sell) == "number" and not (issecretvalue and issecretvalue(sell)) then
+        vendorSeen = { id = g.itemID, each = sell }
+        return sell
+    end
+    if not vendorAsked[g.itemID] and C_Item.RequestLoadItemDataByID then
+        vendorAsked[g.itemID] = true
+        C_Item.RequestLoadItemDataByID(g.itemID)
+    end
+    return nil
+end
+
+-- The comparison for a posting (Prepare's, or the fields of one): nil, or auction/Price.lua's VendorCheck.
+local function Assess(kind, quantity, price, vendor)
+    return P.VendorCheck(P.VendorPlan(kind, quantity, price, vendor))
+end
+
 -- Everything Post needs, checked. Returns the posting, or nil and a reason.
 local function Prepare()
     if not selected or selected.kind == "loading" then return nil, "Pick an item first." end
@@ -685,7 +744,15 @@ local function Prepare()
     if reason then return nil, reason end
     if not C_AuctionHouse.IsThrottledMessageSystemReady() then return nil, "The auction house is busy; a moment." end
     return { kind = selected.kind, loc = loc, duration = duration, quantity = qty, price = price,
-             name = selected.name, deposit = deposit }
+             name = selected.name, deposit = deposit, key = selected.key, itemID = selected.itemID,
+             link = selected.link, vendor = VendorEach(selected) }
+end
+
+-- What a "post anyway" answer is bound to: the same list, item, quantity, price, duration and vendor value
+-- it was asked about. Anything else is a different posting and needs its own answer.
+local function Same(a, b)
+    return a.key == b.key and a.itemID == b.itemID and a.kind == b.kind and a.quantity == b.quantity
+        and a.price == b.price and a.duration == b.duration and a.vendor == b.vendor
 end
 
 -- Where "the next item" is once a posting is through: the keys of the rows below the chosen one,
@@ -732,7 +799,13 @@ function A.UpdatePost()
     page.total:SetText(show and price > 0 and Money(price * qty) or "-")
 
     local p, reason = Prepare()
-    page.postButton:SetEnabled(p ~= nil)
+    if asking and not (p and Same(asking, p)) then
+        A.CancelAsk(p and "That posting changed, so nothing was posted. Check it and press Post again." or reason)
+        return   -- CancelAsk has drawn the page again
+    end
+    A.ShowVendorNote(ready and Assess(g.kind, qty, price, VendorEach(g)))
+    page.postButton:SetEnabled(p ~= nil and not asking)
+    reason = asking and "Answer the question about posting below vendor value first." or reason
     page.postButton.reason = reason
     if post.state ~= "idle" then
         page.postStatus:SetText(message or "")
@@ -794,10 +867,8 @@ local function Sent()
     A.UpdatePost()
 end
 
--- Explicit click on our Post button: exactly the values on screen.
-function A.Post()
-    local p = Prepare()
-    if not p then A.UpdatePost() return end
+-- Sends a prepared posting to the game.
+local function Submit(p)
     message = nil
     p.from, p.after, p.session = selected.key, KeysAfterSelected(), session
     post.current = p
@@ -823,6 +894,98 @@ function A.Post()
         end)
         A.UpdatePost()
     end
+end
+
+-- The warning beside the price: what is under the vendor value, or that the value isn't known yet.
+function A.ShowVendorNote(check)
+    local w = page.vendorWarn
+    if check and check.status == "below" then
+        local words = P.VendorWords(check, Money)
+        w.icon:Show()
+        w.title:SetText(words.title)
+        w.title:SetTextColor(C.warn[1], C.warn[2], C.warn[3])
+        w.detail:SetText(words.detail)
+        w.tip = words.tip
+        w:Show()
+    elseif check and check.status == "unknown" then
+        w.icon:Hide()
+        w.title:SetText("Vendor value unavailable")
+        w.title:SetTextColor(C.faint[1], C.faint[2], C.faint[3])
+        w.detail:SetText("")
+        w.tip = "The game hasn't given this item's vendor value yet, so your price can't be compared with it. You can still post."
+        w:Show()
+    else
+        w.tip = nil
+        w:Hide()
+    end
+end
+
+-- The question is over (answered, cancelled, or no longer about the posting on the page). Nothing is
+-- posted by this; text, if given, is shown beside the Post button.
+function A.CancelAsk(text)
+    if not asking then return end
+    asking = nil
+    askToken = askToken + 1
+    if StaticPopup_Hide then StaticPopup_Hide(ASK) end
+    if text then message = text end
+    if page then A.UpdatePost() end
+end
+
+-- The answer "Post anyway": the posting is prepared again from what is on the page now and goes only if it is
+-- still exactly the one that was asked about, in the same visit to the auction house.
+local function Approved(snap)
+    if snap.session ~= session or not (page and page:IsShown() and AH and AH:IsShown()) then return end
+    local p, reason = Prepare()
+    if not p then message = reason; A.UpdatePost() return end
+    local check = Assess(p.kind, p.quantity, p.price, p.vendor)
+    if not (Same(snap, p) and check and check.status == "below") then
+        message = "That posting changed while you decided, so nothing was posted. Check it and press Post again."
+        A.UpdatePost()
+        return
+    end
+    Submit(p)
+end
+
+-- Asks before a posting that lists under the vendor value. The question has no "always" and remembers
+-- nothing: each press of Post on such a posting asks again. Accept is held for a second (Interact.Confirm).
+local function Ask(p, check)
+    askToken = askToken + 1
+    local mine = askToken
+    local snap = { key = p.key, itemID = p.itemID, kind = p.kind, quantity = p.quantity, price = p.price,
+                   duration = p.duration, vendor = p.vendor, session = session }
+    asking = snap
+    message = nil
+    local shown = R.Interact.Confirm(ASK, P.VendorQuestion(check, p.link or p.name or "item", Money), function()
+        if mine ~= askToken or asking ~= snap then return end   -- an old question: ignored
+        asking = nil
+        askToken = askToken + 1
+        Approved(snap)
+    end, { accept = "Post anyway", hold = 1, onCancel = function()
+        if mine ~= askToken or asking ~= snap then return end
+        asking = nil
+        askToken = askToken + 1
+        message = nil
+        A.UpdatePost()
+    end })
+    if not shown and asking == snap then
+        asking = nil
+        askToken = askToken + 1
+        message = "The game didn't show the question, so nothing was posted."
+    end
+    A.UpdatePost()
+end
+
+-- Explicit click on our Post button: exactly the values on screen.
+function A.Post()
+    if asking then return end
+    local p = Prepare()
+    if not p then A.UpdatePost() return end
+    local check = Assess(p.kind, p.quantity, p.price, p.vendor)
+    if check and check.status == "below" then
+        Ask(p, check)
+        return
+    end
+    Submit(p)
 end
 
 -- Followed after Blizzard's confirmation dialog runs its Accept (a click).
@@ -889,7 +1052,9 @@ end
 function A.Select(g)
     if not g or g.kind == "loading" then return end
     if post.state ~= "idle" then return end
+    A.CancelAsk()
     selected = g
+    vendorSeen = nil
     message = nil
     priceEdited = false
     FillPrice(0)
@@ -901,7 +1066,8 @@ function A.Select(g)
 end
 
 local function Deselect(text)
-    selected = nil
+    A.CancelAsk()
+    selected, vendorSeen = nil, nil
     SC.Stop()
     message = text
     RefreshMarket()
@@ -984,11 +1150,14 @@ end
 local PAGE_EVENTS = {
     "BAG_UPDATE_DELAYED", "PLAYER_MONEY", "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED",
     "AUCTION_HOUSE_THROTTLED_SYSTEM_READY", "AUCTION_HOUSE_THROTTLED_MESSAGE_SENT",
+    "GET_ITEM_INFO_RECEIVED", "ITEM_DATA_LOAD_RESULT",   -- the chosen item's vendor value arriving
 }
 
 ev:SetScript("OnEvent", function(_, event, a1, a2)
     if event == "BAG_UPDATE_DELAYED" then
         if post.state == "idle" then RescanBags() end
+    elseif event == "GET_ITEM_INFO_RECEIVED" or event == "ITEM_DATA_LOAD_RESULT" then
+        if selected and a1 == selected.itemID and not vendorSeen then A.UpdatePost() end
     elseif event == "AUCTION_HOUSE_AUCTION_CREATED" then
         -- Several of one item are posted one auction at a time; the multisell
         -- events below say when that run is finished.
@@ -1034,6 +1203,7 @@ function A.OnPageHidden()
     if SC.Busy() then SC.Stop() end
     if post.state == "multisell" then C_AuctionHouse.CancelSell() end   -- as Blizzard's sell frame does
     if post.state == "confirm" then EndPost(nil) end
+    A.CancelAsk()
 end
 
 ---------------------------------------------------------------------------
@@ -1091,6 +1261,8 @@ end
 
 local function Reset()
     session = session + 1
+    A.CancelAsk()
+    vendorSeen, vendorAsked = nil, {}
     A.Close()
     SC.Stop()
     EndPost(nil)

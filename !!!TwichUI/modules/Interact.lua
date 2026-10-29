@@ -85,15 +85,20 @@ end
 -- opts.accept / opts.cancel: button labels. opts.onCancel: runs if the player declines.
 -- opts.alt / opts.onAlt: a third button that does not accept (for "View details"): onAlt runs, the question closes, and
 --                nothing else happens; it is not an answer, so it is not counted as declining either.
+-- opts.hold:     seconds after the question opens during which Accept does nothing (the button is greyed and a
+--                press that still reaches it leaves the question open), so a key held down while it appeared
+--                can't answer it.
 -- Returns the popup, or nil if the game didn't show one.
 function I.Confirm(key, text, onAccept, opts)
     opts = opts or {}
     local armed = true
+    local shownAt = opts.hold and GetTime() or 0
     StaticPopupDialogs[key] = {
         text = "%s",
         button1 = opts.accept or ACCEPT, button2 = opts.cancel or CANCEL, button3 = opts.alt,
         OnAlt = opts.alt and function() if opts.onAlt then opts.onAlt() end end or nil,
         OnAccept = function()
+            if opts.hold and GetTime() < shownAt + opts.hold then return true end   -- too soon: it stays open
             if not armed then return end
             armed = false
             if opts.combat and InCombatLockdown() then
@@ -116,5 +121,13 @@ function I.Confirm(key, text, onAccept, opts)
         end,
         timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3,
     }
-    return StaticPopup_Show(key, text)
+    local popup = StaticPopup_Show(key, text)
+    if popup and opts.hold and popup.GetButton1 then
+        local accept = popup:GetButton1()
+        accept:Disable()
+        C_Timer.After(opts.hold, function()
+            if popup.which == key and popup:IsShown() then accept:Enable() end
+        end)
+    end
+    return popup
 end

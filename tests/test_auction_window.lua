@@ -2,7 +2,8 @@
 -- house: the tab attaches without touching Blizzard's tab list, opening it
 -- searches nothing, picking an item searches that item once, the suggested
 -- price fills in but nothing is posted until Post is clicked, and the game's
--- own confirmation is followed.
+-- own confirmation is followed. A posting under the item's vendor value is flagged beside the price and
+-- asks before it goes (Post anyway / Cancel), bound to the exact posting asked about.
 for _, WITH_SKIN in ipairs({ false, true }) do
 local env = setmetatable({}, {__index = _G})
 env._G = env
@@ -100,11 +101,28 @@ env.GameTooltip, env.GameTooltip_Hide, env.EditBox_ClearFocus = Obj(), function(
 env.GetCVar = function() return "2" end
 env.GetMoney = function() return 1000000 end
 env.InCombatLockdown = function() return false end
-env.GetTime = function() return 100 end
+local now = 100
+env.GetTime = function() return now end
 env.time = function() return 1790000000 end
 env.date = function() return "14:32" end
 local popupVisible = false
 env.StaticPopup_Visible = function() return popupVisible end
+-- The game's popups: what was asked, and whether it is still open.
+env.ACCEPT, env.CANCEL = "Accept", "Cancel"
+env.StaticPopupDialogs = {}
+local asked, askedCount = nil, 0
+env.StaticPopup_Show = function(key, text)
+  local acceptButton = Obj()
+  local popup = { which = key, open = true, accept = acceptButton }
+  function popup:IsShown() return self.open end
+  function popup:GetButton1() return acceptButton end
+  asked = { key = key, text = text, dialog = env.StaticPopupDialogs[key], popup = popup }
+  askedCount = askedCount + 1
+  return popup
+end
+env.StaticPopup_Hide = function(key) if asked and asked.key == key then asked.popup.open = false end end
+-- Vendor values (copper per item) the game has given; an item not listed has not been loaded.
+local VENDOR, REQUESTS = {}, {}
 env.Enum = {
   ItemCommodityStatus = { Unknown = 0, Item = 1, Commodity = 2 },
   AuctionHouseSortOrder = { Price = 0, Name = 1, Level = 2, Bid = 3, Buyout = 4, TimeRemaining = 5 },
@@ -132,6 +150,11 @@ env.C_Item = {
   GetStackCount = function(loc) local i = At(loc); return i and i.stackCount end,
   GetItemInfoInstant = function(id) return id, nil, nil, nil, nil, id == 6097 and 2 or 7 end,
   GetCurrentItemLevel = function() return 25 end,
+  GetItemInfo = function(id)
+    if VENDOR[id] == nil then return end
+    return "name", "link", 1, 1, 1, "Tradeskill", "Cloth", 20, "", 1, VENDOR[id]
+  end,
+  RequestLoadItemDataByID = function(id) REQUESTS[#REQUESTS + 1] = id end,
 }
 
 local AH = { sent = {}, posts = {}, confirms = {}, results = {}, needsConfirmation = false }
@@ -169,6 +192,8 @@ env.C_AuctionHouse = {
 local listeners = {}
 local skinCalls, tabSel = {}, {}
 env.TwichUI = {
+  PATH = "Interface\\AddOns\\!!!TwichUI\\",
+  Print = function() end,
   S = WITH_SKIN and setmetatable({
     SetTabSelection = function(t, v) tabSel[t] = v end,
   }, { __index = function(_, k) return function(obj) skinCalls[k] = (skinCalls[k] or 0) + 1 end end }) or nil,
@@ -462,6 +487,194 @@ do
   tab.scripts.OnClick(tab)
   assert(Chosen() == "Runecloth", "no advance while the page isn't showing: " .. Chosen())
   assert(#AH.posts == posts + 3)
+end
+
+-- A posting under the item's vendor value: flagged beside the price, and Post asks first.
+do
+  local warn = page.vendorWarn
+  assert(warn, "the warning strip exists")
+  local function Stack(id, name, n) return { itemID = id, itemName = name, stackCount = n, quality = 1, iconFileID = 1, hyperlink = "|H" .. name .. "|h" } end
+  BAGS[0] = { Stack(4338, "Mageweave Cloth", 15), Stack(4306, "Silk Cloth", 10), Stack(7000, "Axe", 3) }
+  env.C_AuctionHouse.GetAvailablePostCount = function(loc) return At(loc).stackCount end
+  Fire("BAG_UPDATE_DELAYED")
+  local function Row(name)
+    for _, o in ipairs(created) do
+      if o.kind == "Button" and rawget(o, "group") and o.shown and o.group.name == name then return o end
+    end
+    error("no row " .. name)
+  end
+  local function Chosen()
+    for _, o in ipairs(created) do
+      if o.kind == "Button" and rawget(o, "group") and o.shown and o.sel.shown then return o.group.name end
+    end
+    return ""
+  end
+  local function Pick(name, id, results)
+    AH.results = results
+    local r = Row(name); r.scripts.OnClick(r); Settle()
+    if id then Fire(id > 9000 and "ITEM_SEARCH_RESULTS_UPDATED" or "COMMODITY_SEARCH_RESULTS_UPDATED",
+      id > 9000 and { itemID = id, itemLevel = 0, itemSuffix = 0, battlePetSpeciesID = 0 } or id) end
+    Settle()
+  end
+  local function Press() postButton.scripts.OnClick(postButton) end
+  local function Price(v) priceBox:SetAmount(v); Settle() end
+  local base = #AH.posts
+  local function Posts() return #AH.posts - base end
+  local function Said(text)
+    for _, f in ipairs(FONTS) do local t = rawget(f, "text"); if type(t) == "string" and t:find(text, 1, true) then return true end end
+    return false
+  end
+
+  -- Vendor value not arrived yet: a restrained note, nothing is blocked, and it is asked for once.
+  local cheap = { { unitPrice = 80, quantity = 10, numOwnerItems = 0 } }
+  local n = #REQUESTS
+  Pick("Mageweave Cloth", 4338, cheap)
+  assert(priceBox.amount == 80 and qtyBox:GetNumber() == 15)
+  assert(warn.shown and warn.title.text == "Vendor value unavailable" and not warn.icon.shown, "unknown is not 'safe' and not zero")
+  assert(#REQUESTS == n + 1 and REQUESTS[#REQUESTS] == 4338, "its data was requested")
+  A.UpdatePost(); A.UpdatePost()
+  assert(#REQUESTS == n + 1, "requested once, not again and again")
+  assert(postButton.enabled, "unknown vendor value never blocks posting")
+  -- It arrives (an event, no polling): 100 each, so 80 each is below.
+  VENDOR[4338] = 100
+  Fire("GET_ITEM_INFO_RECEIVED", 4338, true)
+  assert(warn.shown and warn.icon.shown and warn.title.text == "Below vendor value", tostring(warn.title.text))
+  assert(warn.detail.text == "Buyout: 1200c per stack · Vendor: 1500c per stack",
+    "detail: " .. tostring(warn.detail.text))
+  assert(Posts() == 0)
+  Fire("GET_ITEM_INFO_RECEIVED", 9999, true)   -- some other item: nothing to do
+
+  -- Exactly the vendor value is not below; one copper less is. Empty and invalid prices say nothing about vendors.
+  Price(100); assert(not warn.shown, "100 each is not below 100")
+  Price(101); assert(not warn.shown)
+  Price(99); assert(warn.shown and warn.detail.text:find("1485c", 1, true), "per stack: 99 x 15")
+  Price(0); assert(not warn.shown, "no price: the usual check speaks, not a vendor warning")
+  Price(80)
+
+  -- Post asks; nothing is posted, the choice stays, and Post is off while the question is open.
+  Press()
+  assert(Posts() == 0 and asked and asked.key == "TWICHUI_AUCTION_BELOW_VENDOR" and askedCount == 1)
+  assert(asked.text:find("Post below vendor value?", 1, true) and asked.text:find("|HMageweave Cloth|h ×15", 1, true), asked.text)
+  assert(asked.text:find("Buyout: 1200c per stack", 1, true) and asked.text:find("Vendor value: 1500c per stack", 1, true))
+  assert(asked.dialog.button1 == "Post anyway" and asked.dialog.button2 == "Cancel" and asked.dialog.hideOnEscape == true)
+  assert(Chosen() == "Mageweave Cloth" and not postButton.enabled, "no advance, no second post while asked")
+  Press()
+  assert(askedCount == 1 and Posts() == 0, "pressing again opens no second question")
+
+  -- Cancel: nothing is posted, nothing advances, the prices are still there to edit.
+  asked.dialog.OnCancel(nil, nil, "clicked")
+  assert(Posts() == 0 and Chosen() == "Mageweave Cloth" and priceBox.amount == 80 and postButton.enabled)
+  asked.dialog.OnAccept()
+  assert(Posts() == 0, "the cancelled question can no longer be accepted")
+
+  -- A key held down as the question opens can't accept it: the button is held, and a press that gets through is refused.
+  Press()
+  local q = asked
+  assert(askedCount == 2 and q.popup.accept.enabled == false, "Accept greyed for a moment")
+  assert(q.dialog.OnAccept() == true and Posts() == 0, "an early accept leaves the question open and posts nothing")
+  now = now + 2; RunTimers(1)
+  assert(q.popup.accept.enabled == true, "Accept comes back")
+
+  -- Terms changed while asking: the question is withdrawn, and the old answer posts nothing.
+  Price(70)
+  assert(not q.popup.open and postButton.enabled and Posts() == 0 and Said("That posting changed"))
+  q.dialog.OnAccept()
+  assert(Posts() == 0, "an answer to an old question posts nothing")
+  Price(80)
+  Press(); q = asked
+  qtyBox:SetNumber(14)
+  assert(not q.popup.open and Posts() == 0, "a new quantity withdraws it too")
+  qtyBox:SetNumber(15)
+
+  -- The window closing withdraws it and an answer afterwards does nothing.
+  Press(); q = asked
+  now = now + 2
+  Emit("AUCTION_HOUSE_CLOSED")
+  assert(not q.popup.open)
+  q.dialog.OnAccept()
+  assert(Posts() == 0, "closed auction house: nothing posted")
+  tab.scripts.OnClick(tab)
+  Fire("BAG_UPDATE_DELAYED")
+  Pick("Mageweave Cloth", 4338, cheap)
+  assert(Chosen() == "Mageweave Cloth" and priceBox.amount == 80)
+
+  -- The posting changing without the page noticing (revalidated when the answer comes): refused, nothing posted.
+  Press(); q = asked
+  now = now + 2
+  priceBox.amount = 90   -- no change callback
+  q.dialog.OnAccept()
+  assert(Posts() == 0 and Said("changed while you decided"), "a different price is never posted on old consent")
+  priceBox.amount = 80; A.UpdatePost()
+
+  -- Approved: exactly the posting asked about is sent, once, and only then does the next item come up.
+  Press(); q = asked
+  now = now + 2
+  q.dialog.OnAccept(); q.dialog.OnAccept()
+  assert(Posts() == 1, "one answer, one post")
+  local sent = AH.posts[base + 1]
+  assert(sent[1] == "commodity" and sent[4] == 15 and sent[5] == 80, "15 at 80 each, as asked")
+  assert(Chosen() == "Mageweave Cloth", "nothing advances before the posting is through")
+  Press()
+  assert(Posts() == 1, "no new post while this one is under way")
+  -- It goes through: the next item is chosen with its own warning, and carries nothing over.
+  Fire("AUCTION_HOUSE_AUCTION_CREATED", 1)
+  assert(Chosen() == "Silk Cloth", "next item: " .. Chosen())
+  assert(not warn.shown, "no price yet for it, so the last item's warning is gone")
+  assert(REQUESTS[#REQUESTS] == 4306, "its own vendor value is asked for")
+  Fire("COMMODITY_SEARCH_RESULTS_UPDATED", 4306); Settle()
+  assert(priceBox.amount == 80 and warn.title.text == "Vendor value unavailable", "unknown, not the last item's value")
+  VENDOR[4306] = 500
+  Fire("ITEM_DATA_LOAD_RESULT", 4306, true)
+  assert(warn.title.text == "Below vendor value" and warn.detail.text:find("Vendor: 5000c per stack", 1, true), warn.detail.text)
+  assert(Posts() == 1)
+  Press()
+  assert(Posts() == 1 and asked.text:find("Silk Cloth", 1, true), "Silk asks for itself; the last answer doesn't carry over")
+
+  -- A refused posting keeps the choice, and the next press asks again.
+  now = now + 2
+  asked.dialog.OnAccept()
+  assert(Posts() == 2)
+  Fire("AUCTION_HOUSE_POST_ERROR")
+  assert(Chosen() == "Silk Cloth" and postButton.enabled and warn.shown)
+  Press()
+  assert(Posts() == 2, "asks again after a failed post")
+  asked.dialog.OnCancel(nil, nil, "clicked")
+
+  -- Choosing another item withdraws the question.
+  Press(); q = asked
+  Row("Axe").scripts.OnClick(Row("Axe")); Settle()
+  assert(not q.popup.open and Posts() == 2 and Chosen() == "Axe")
+
+  -- A known zero (the vendor pays nothing) says nothing; an item posts several auctions of one.
+  VENDOR[7000] = 0
+  Price(5)
+  assert(not warn.shown, "no vendor value: nothing to compare")
+  Press()
+  assert(Posts() == 3, "a known zero posts without asking")
+  Fire("AUCTION_HOUSE_POST_ERROR")
+  -- Three auctions of one axe each, 900 each against a vendor value of 1000 each: asked as three auctions.
+  VENDOR[7000] = 1000   -- (a vendor value never really changes: picking the row again reads it afresh)
+  Row("Axe").scripts.OnClick(Row("Axe")); Settle()
+  qtyBox:SetNumber(3)
+  Price(900)
+  assert(warn.shown and warn.detail.text == "Buyout: 900c per item · Vendor: 1000c per item", warn.detail.text)
+  local before = askedCount
+  Press()
+  assert(askedCount == before + 1 and Posts() == 3)
+  assert(asked.text:find("3 auctions of 1 item each", 1, true), asked.text)
+  assert(asked.text:find("All 3 auctions: Buyout 2700c · Vendor value 3000c", 1, true), asked.text)
+  assert(asked.text:find("These auctions could sell for less", 1, true))
+  now = now + 2
+  asked.dialog.OnAccept()
+  assert(Posts() == 4, "one answer covers the whole batch")
+  local sentItem = AH.posts[#AH.posts]
+  assert(sentItem[1] == "item" and sentItem[4] == 3 and sentItem[5] == nil and sentItem[6] == 900, "3 auctions at 900, as asked")
+  Fire("AUCTION_HOUSE_POST_ERROR")
+  Price(1000)
+  assert(not warn.shown, "the vendor value exactly: no warning")
+  Press()
+  assert(Posts() == 5 and askedCount == before + 1, "at the vendor value it posts without asking")
+  Fire("AUCTION_HOUSE_POST_ERROR")
 end
 
 -- Going back to a Blizzard tab hides our page; closing the auction house clears everything.

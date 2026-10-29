@@ -96,3 +96,106 @@ function P.Check(p)
     if p.deposit and p.money and p.deposit > p.money then return "Not enough money for the deposit." end
     return nil
 end
+
+---------------------------------------------------------------------------
+-- Listed price against vendor value
+---------------------------------------------------------------------------
+-- Both sides are whole copper for ONE auction, with the same number of items on each side. The vendor
+-- value is what a vendor pays for the item (its sell price), per item; it is not the auction house's
+-- own figures: no cut, no deposit, nothing about profit.
+
+local function IsPrice(v) return type(v) == "number" and v > 0 and v == math.floor(v) and v <= P.MAX_PRICE end
+
+-- What one Post press lists, in the terms the comparison needs. The page has one price, "each":
+--   a commodity is one auction of `quantity` items, priced each x quantity;
+--   an item (equipment, pets...) is `quantity` auctions of one item each, at the price.
+-- The page sets no starting bid (the game then starts it at the buyout), so none is made here; a plan
+-- may carry one for VendorCheck all the same. vendorEach: copper per item, nil when not known yet.
+-- Returns nil when the quantity or price isn't one the game could take, so the usual checks speak instead.
+function P.VendorPlan(kind, quantity, price, vendorEach)
+    if type(quantity) ~= "number" or quantity < 1 or quantity ~= math.floor(quantity) or not IsPrice(price) then
+        return nil
+    end
+    if kind == "commodity" then
+        if not IsPrice(price * quantity) then return nil end
+        return { auctions = 1, items = quantity, buyout = price * quantity, vendorEach = vendorEach }
+    end
+    return { auctions = quantity, items = 1, buyout = price, vendorEach = vendorEach }
+end
+
+-- plan: { auctions, items (in each auction), bid, buyout (per auction, copper, either may be nil), vendorEach }.
+-- Returns nil when there is no valid price to look at, else a table:
+--   status "below"   a price is under the vendor value of that auction (strictly; equal is not below)
+--          "ok"      a vendor value is known and every price is at or above it
+--          "none"    the item has no vendor value (0): nothing to compare with, nothing to say
+--          "unknown" the vendor value hasn't arrived yet; never treated as 0 or as "safe"
+--   vendor, vendorTotal   the vendor value of one auction and of all of them (nil unless known)
+--   low   { { kind = "bid" | "buyout", price, total } ... } the prices under it, bid first
+--   auctions, items
+function P.VendorCheck(plan)
+    if not plan then return nil end
+    local bid, buyout = IsPrice(plan.bid) and plan.bid or nil, IsPrice(plan.buyout) and plan.buyout or nil
+    if not (bid or buyout) then return nil end
+    local auctions, items = plan.auctions or 1, plan.items or 1
+    local r = { status = "unknown", auctions = auctions, items = items, low = {} }
+    local each = plan.vendorEach
+    if type(each) ~= "number" or each < 0 or each ~= each then return r end
+    if each == 0 then r.status = "none"; return r end
+    r.vendor = each * items
+    r.vendorTotal = r.vendor * auctions
+    r.status = "ok"
+    for _, e in ipairs({ { "bid", bid }, { "buyout", buyout } }) do
+        if e[2] and e[2] < r.vendor then
+            r.low[#r.low + 1] = { kind = e[1], price = e[2], total = e[2] * auctions }
+            r.status = "below"
+        end
+    end
+    return r
+end
+
+local LABEL = { bid = "Starting bid", buyout = "Buyout" }
+local function PerWord(items) return items > 1 and "stack" or "item" end
+local function Count(n, one, many) return n == 1 and one or many end
+
+-- The words for a "below" check. money: formats copper. Returns { title, detail, tip }.
+function P.VendorWords(check, money)
+    local per = PerWord(check.items)
+    local low, parts = check.low, {}
+    for _, l in ipairs(low) do parts[#parts + 1] = ("%s: %s"):format(LABEL[l.kind], money(l.price)) end
+    local title, detail
+    if #low == 2 then
+        title = "Bid and buyout are below vendor value"
+        detail = ("%s · Vendor: %s (all per %s)"):format(table.concat(parts, " · "), money(check.vendor), per)
+    else
+        title = low[1].kind == "bid" and "Starting bid is below vendor value." or "Below vendor value"
+        detail = ("%s per %s · Vendor: %s per %s"):format(parts[1], per, money(check.vendor), per)
+    end
+    return { title = title, detail = detail,
+             tip = "This auction could sell for less than you would receive from a vendor." }
+end
+
+-- The confirmation's text. item: the item link or name. Says what is listed and at what, as the page does.
+function P.VendorQuestion(check, item, money)
+    local per = PerWord(check.items)
+    local out = { "Post below vendor value?", "" }
+    if check.auctions == 1 then
+        out[#out + 1] = ("%s ×%d"):format(item, check.items)
+    else
+        out[#out + 1] = ("%s - %d auctions of %d %s each"):format(item, check.auctions, check.items,
+            Count(check.items, "item", "items"))
+    end
+    for _, l in ipairs(check.low) do
+        out[#out + 1] = ("%s: %s per %s"):format(LABEL[l.kind], money(l.price), per)
+    end
+    out[#out + 1] = ("Vendor value: %s per %s"):format(money(check.vendor), per)
+    if check.auctions > 1 then
+        local totals = {}
+        for _, l in ipairs(check.low) do totals[#totals + 1] = ("%s %s"):format(LABEL[l.kind], money(l.total)) end
+        out[#out + 1] = ("All %d auctions: %s · Vendor value %s"):format(check.auctions, table.concat(totals, " · "),
+            money(check.vendorTotal))
+    end
+    out[#out + 1] = ""
+    out[#out + 1] = (check.auctions == 1 and "This auction could" or "These auctions could")
+        .. " sell for less than selling the items to a vendor."
+    return table.concat(out, "\n")
+end

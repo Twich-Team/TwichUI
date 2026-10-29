@@ -57,6 +57,36 @@ assert(cancelled == 1, "being replaced is not a cancel")
 c.StaticPopupDialogs.T_REPLACE.OnAccept()
 assert(ran == 1 and first == 0, "the latest question is the one that applies")
 
+-- hold: for a moment after it opens, Accept is greyed and a press that still arrives leaves it open, posting nothing.
+c.GetTime = function() return c.clock or 100 end
+local afterwards = {}
+c.C_Timer = { After = function(d, fn) afterwards[#afterwards + 1] = { d = d, fn = fn } end }
+local enabled = true
+c.StaticPopup_Show = function(key, text)
+  asked = { key = key, shown = string.format(c.StaticPopupDialogs[key].text, text), dialog = c.StaticPopupDialogs[key] }
+  local popup = { which = key }
+  function popup:IsShown() return true end
+  function popup:GetButton1() return { Disable = function() enabled = false end, Enable = function() enabled = true end } end
+  return popup
+end
+c.clock = 100
+ran = 0
+I.Confirm("T_HOLD", "Do it?", function() ran = ran + 1 end, { hold = 1 })
+assert(enabled == false and #afterwards == 1 and afterwards[1].d == 1, "Accept is greyed, and comes back after the hold")
+assert(asked.dialog.OnAccept() == true and ran == 0, "an early press does nothing and the question stays open")
+c.clock = 100.5
+assert(asked.dialog.OnAccept() == true and ran == 0)
+c.clock = 101
+afterwards[1].fn()
+assert(enabled == true)
+assert(asked.dialog.OnAccept() == nil and ran == 1, "after the hold it applies, once")
+asked.dialog.OnAccept()
+assert(ran == 1)
+ran = 0
+I.Confirm("T_NOHOLD", "Do it?", function() ran = ran + 1 end)
+asked.dialog.OnAccept()
+assert(ran == 1, "no hold unless asked for")
+
 -- The target is checked at the moment of accepting.
 ran = 0
 local exists = true

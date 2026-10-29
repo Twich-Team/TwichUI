@@ -61,6 +61,71 @@ assert(P.Check(cp) == nil, "copper fine where allowed")
 assert(P.Check(With("money", 299)), "deposit must be affordable")
 
 ---------------------------------------------------------------------------
+-- Listed price against vendor value: both in copper for one auction, on the same number of items.
+local function Money(v) return v .. "c" end
+-- A commodity is one auction of `quantity` items priced each x quantity; an item is `quantity` auctions of one.
+local plan = P.VendorPlan("commodity", 5, 8, 10)
+assert(plan.auctions == 1 and plan.items == 5 and plan.buyout == 40 and plan.vendorEach == 10)
+local c = P.VendorCheck(plan)
+assert(c.status == "below" and c.vendor == 50 and c.vendorTotal == 50 and #c.low == 1 and c.low[1].kind == "buyout" and c.low[1].price == 40,
+  "5 at 8 each is 40, against 5 x 10 = 50, not against one item's 10")
+plan = P.VendorPlan("item", 3, 8, 10)
+assert(plan.auctions == 3 and plan.items == 1 and plan.buyout == 8)
+c = P.VendorCheck(plan)
+assert(c.status == "below" and c.vendor == 10 and c.vendorTotal == 30 and c.low[1].total == 24, "three auctions, each judged on its own")
+-- exactly the vendor value is not below; above is fine
+assert(P.VendorCheck(P.VendorPlan("commodity", 5, 10, 10)).status == "ok")
+assert(P.VendorCheck(P.VendorPlan("commodity", 5, 11, 10)).status == "ok")
+assert(P.VendorCheck(P.VendorPlan("commodity", 5, 9, 10)).status == "below")
+assert(P.VendorCheck(P.VendorPlan("commodity", 1, 9, 10)).vendor == 10)
+-- not known yet is neither zero nor safe; known zero is nothing to compare
+assert(P.VendorCheck(P.VendorPlan("commodity", 5, 8, nil)).status == "unknown")
+assert(P.VendorCheck(P.VendorPlan("commodity", 5, 8, nil)).vendor == nil)
+assert(P.VendorCheck(P.VendorPlan("commodity", 5, 8, 0)).status == "none")
+assert(P.VendorCheck(P.VendorPlan("commodity", 5, 8, -1)).status == "unknown", "nonsense is not a value")
+assert(P.VendorCheck(P.VendorPlan("commodity", 5, 8, "10")).status == "unknown")
+-- empty or invalid input is for the usual checks, not a vendor message
+assert(P.VendorPlan("commodity", 5, 0, 10) == nil and P.VendorPlan("commodity", 5, nil, 10) == nil)
+assert(P.VendorPlan("commodity", 0, 8, 10) == nil and P.VendorPlan("commodity", 1.5, 8, 10) == nil)
+assert(P.VendorPlan("item", 2, -4, 10) == nil and P.VendorPlan("item", 2, 8.5, 10) == nil)
+assert(P.VendorCheck(nil) == nil and P.VendorCheck({ auctions = 1, items = 1, vendorEach = 10 }) == nil)
+-- bid and buyout: either low, or both; an absent buyout is not a zero buyout
+local two = { auctions = 1, items = 5, vendorEach = 10 }
+two.bid, two.buyout = 40, 90
+c = P.VendorCheck(two)
+assert(c.status == "below" and #c.low == 1 and c.low[1].kind == "bid", "low bid with a higher buyout")
+two.bid, two.buyout = 40, nil
+c = P.VendorCheck(two)
+assert(c.status == "below" and #c.low == 1 and c.low[1].kind == "bid", "low bid, no buyout")
+two.bid, two.buyout = nil, 40
+assert(P.VendorCheck(two).low[1].kind == "buyout")
+two.bid, two.buyout = 40, 45
+c = P.VendorCheck(two)
+assert(#c.low == 2 and c.low[1].kind == "bid" and c.low[2].kind == "buyout", "both, bid first")
+two.bid, two.buyout = 50, 50
+assert(P.VendorCheck(two).status == "ok", "equal is not below, for either")
+two.bid, two.buyout = 0, nil
+assert(P.VendorCheck(two) == nil, "a zero bid is not a price")
+-- words: the page's and the question's
+c = P.VendorCheck(P.VendorPlan("commodity", 5, 8, 10))
+local w = P.VendorWords(c, Money)
+assert(w.title == "Below vendor value" and w.detail == "Buyout: 40c per stack · Vendor: 50c per stack", w.detail)
+assert(w.tip == "This auction could sell for less than you would receive from a vendor.")
+two.bid, two.buyout = 40, nil
+w = P.VendorWords(P.VendorCheck(two), Money)
+assert(w.title == "Starting bid is below vendor value." and w.detail == "Starting bid: 40c per stack · Vendor: 50c per stack", w.detail)
+two.bid, two.buyout = 40, 45
+w = P.VendorWords(P.VendorCheck(two), Money)
+assert(w.title == "Bid and buyout are below vendor value" and w.detail:find("Starting bid: 40c · Buyout: 45c", 1, true), w.detail)
+local text = P.VendorQuestion(c, "[Linen]", Money)
+assert(text == "Post below vendor value?\n\n[Linen] ×5\nBuyout: 40c per stack\nVendor value: 50c per stack\n\n"
+  .. "This auction could sell for less than selling the items to a vendor.", text)
+text = P.VendorQuestion(P.VendorCheck(P.VendorPlan("item", 3, 8, 10)), "[Axe]", Money)
+assert(text:find("[Axe] - 3 auctions of 1 item each", 1, true) and text:find("Buyout: 8c per item", 1, true)
+  and text:find("All 3 auctions: Buyout 24c · Vendor value 30c", 1, true) and text:find("These auctions could", 1, true), text)
+two.bid, two.buyout = 40, nil
+assert(P.VendorQuestion(P.VendorCheck(two), "[Linen]", Money):find("Starting bid: 40c per stack", 1, true))
+
 -- The search, against a stand-in auction house.
 ---------------------------------------------------------------------------
 local frames = {}
