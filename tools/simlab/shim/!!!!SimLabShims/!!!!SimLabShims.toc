@@ -1,0 +1,4 @@
+## Interface: 16001
+## Title: SimLab Shims
+## Notes: Simulator lab only (docs/simulator-lab.md). Never packaged, never deployed, never loaded by the game. Fills API the simulator lacks and the game has. The four exclamation marks make it load before !!!TwichUI.
+ChatInfoPrefixes.lua
