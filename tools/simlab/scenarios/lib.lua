@@ -34,20 +34,121 @@ function Lab.Check(layer, name, expected, actual)
 end
 
 -- The simulator's manual clock lets the window's fades finish, in frame-sized steps. A control's change itself is
--- synchronous and needs none. Time is budgeted: the simulator's sample character is in a party, so TwichUI sets its
--- own 3 second "hello" timer at startup, and when the clock passes it the hello goes out through the simulator's
--- addon-message path and fails ("string at argument 2 is not valid UTF-8" in Blizzard_ScriptErrors, cause unverified).
--- Other Blizzard timers then fail on API the simulator does not supply (C_VoiceChat.CanAccessSettings). Those are
--- gaps in the lab, not in the page; the budget keeps the scenario clear of them, and exceeding it fails the scenario.
-Lab.simSeconds, Lab.BUDGET = 0, 2.5
-function Lab.Settle(seconds)
-    seconds = seconds or 0.1
+-- synchronous and needs none. Simulated time has a resource limit (BUDGET) and nothing else: it is not a way to stay
+-- clear of errors. Two things are known to fail once the clock passes a few seconds, and both are classified, not
+-- avoided (tools/simlab/known_failures.py, docs/simulator-lab.md "Delayed failures"):
+--   - the group hello (setup/Group.lua) is sent about 3 s after the sample party appears, and the simulator's
+--     SendAddonMessage refuses its bytes. Only a grouped character reaches it, so scenarios that do not need a
+--     party call Lab.Solo() and the grouped diagnostic keeps the party on purpose.
+--   - Blizzard's own audio-settings ticker calls C_VoiceChat.CanAccessSettings every 5 s, which the simulator
+--     deliberately refuses to answer. It happens with no addon loaded.
+Lab.simSeconds, Lab.BUDGET = 0, 30
+local function Advance(seconds)
     Lab.simSeconds = Lab.simSeconds + seconds
     if Lab.simSeconds > Lab.BUDGET then
-        error(("simulated-time budget of %.1f s exceeded (see lib.lua): the lab's own timers would start to fail"):format(Lab.BUDGET))
+        error(("simulated-time limit of %d s exceeded (a resource limit, see lib.lua)"):format(Lab.BUDGET))
     end
     for _ = 1, math.ceil(seconds / 0.05) do A_Admin.AdvanceTime(0.05) end
 end
+function Lab.Settle(seconds) Advance(seconds or 0.1) end
+
+-- Runs the clock on until `total` simulated seconds have passed since the script began, printing a "tick" marker
+-- every `every` seconds so the runner can say when in the window each error appeared. Errors raised by timers do not
+-- stop it; they are read from the log afterwards.
+function Lab.RunUntil(total, every)
+    every = every or 0.5
+    local steps = 0
+    while Lab.simSeconds < total - 1e-9 do
+        local chunk = math.min(every, total - Lab.simSeconds)
+        Advance(chunk)
+        steps = steps + math.ceil(chunk / 0.05)
+        Say("tick", ("t=%.2f"):format(Lab.simSeconds), "steps=" .. steps)
+    end
+    return steps
+end
+
+-- Strict UTF-8 (what Rust's str::from_utf8 accepts): no overlong forms, no surrogates, nothing above U+10FFFF.
+-- The sim's Lua has no utf8 library. tools/simlab/scenarios/message_contract.lua checks this against the simulator's
+-- own verdict on a table of strings, so it is not taken on trust.
+function Lab.Utf8Valid(s)
+    local i, n = 1, #s
+    while i <= n do
+        local c = s:byte(i)
+        if c < 0x80 then i = i + 1
+        else
+            local len, min
+            if c >= 0xC2 and c <= 0xDF then len, min = 2, 0x80
+            elseif c >= 0xE0 and c <= 0xEF then len, min = 3, 0x800
+            elseif c >= 0xF0 and c <= 0xF4 then len, min = 4, 0x10000
+            else return false, i end
+            if i + len - 1 > n then return false, i end
+            local cp = c % (len == 2 and 0x20 or len == 3 and 0x10 or 0x08)
+            for k = 1, len - 1 do
+                local b = s:byte(i + k)
+                if b < 0x80 or b > 0xBF then return false, i end
+                cp = cp * 64 + (b - 0x80)
+            end
+            if cp < min or cp > 0x10FFFF or (cp >= 0xD800 and cp <= 0xDFFF) then return false, i end
+            i = i + len
+        end
+    end
+    return true
+end
+
+-- Bytes as hex, for diagnostics. Only ever given synthetic payloads (a version number and a protocol number).
+function Lab.Hex(s, limit)
+    limit = limit or 96
+    local out = {}
+    for i = 1, math.min(#s, limit) do out[i] = ("%02x"):format(s:byte(i)) end
+    return table.concat(out) .. (#s > limit and ("..(+" .. (#s - limit) .. " bytes)") or "")
+end
+
+-- The character's group, as the game's API and TwichUI's own view of it report it.
+function Lab.GroupState()
+    local members = 0
+    for i = 1, 4 do if UnitExists("party" .. i) then members = members + 1 end end
+    local twich = TwichUI and TwichUI.Group and TwichUI.Group.Members and #TwichUI.Group.Members() or "n/a"
+    return { inGroup = IsInGroup(), inRaid = IsInRaid(), count = GetNumGroupMembers(), partyUnits = members, twichMembers = twich }
+end
+
+-- Leaves the simulator's sample party and says what the state is afterwards (A_Admin.SetPartySize(0), which fires
+-- GROUP_ROSTER_UPDATE like a real departure). The simulator is solo while addons load and adds its party after
+-- PLAYER_ENTERING_WORLD, so TwichUI has already seen the party arrive: this is "left the party", not "never grouped".
+function Lab.Solo()
+    A_Admin.SetPartySize(0)
+    return Lab.GroupState()
+end
+
+-- A pass-through observer on C_ChatInfo.SendAddonMessage: it records each call (argument types, the prefix, chat type,
+-- target, byte count, whether the message is valid UTF-8, its hex) and then calls the simulator's own function and
+-- returns or raises exactly what that did. It changes no behaviour and swallows nothing. Instrumentation only.
+-- ChatThrottleLib reads C_ChatInfo.SendAddonMessage when it sends, so installing this after load is enough.
+Lab.sends = {}
+function Lab.WatchSends()
+    if Lab.watching then return end
+    Lab.watching = true
+    local original = C_ChatInfo.SendAddonMessage
+    C_ChatInfo.SendAddonMessage = function(...)
+        local n = select("#", ...)
+        local prefix, message, chatType, target = ...
+        local entry = {
+            argc = n, types = {}, prefix = prefix, chatType = chatType, target = target,
+            len = type(message) == "string" and #message or nil,
+            message = type(message) == "string" and message or nil,
+        }
+        for i = 1, n do entry.types[i] = type((select(i, ...))) end
+        if entry.message then entry.valid = Lab.Utf8Valid(entry.message) end
+        entry.at = Lab.simSeconds
+        Lab.sends[#Lab.sends + 1] = entry
+        local function Done(ok, ...)
+            entry.ok, entry.result = ok, (...)
+            if not ok then error((...), 0) end
+            return ...
+        end
+        return Done(pcall(original, ...))
+    end
+end
+
 
 -- Runs fn(); a Lua error is a failed check and ends the scenario (later steps would be judged on a broken state).
 function Lab.Step(name, fn)

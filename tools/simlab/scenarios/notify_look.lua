@@ -21,6 +21,12 @@ local function Box(v) return v.control.box:GetText() end
 
 A_Admin.SetManualClock(GetTime())
 
+-- This page has nothing to do with a party, so the character is solo, and the scenario says so and checks it (the
+-- simulator's sample party would otherwise bring TwichUI's group hello into a settings test). The group case is not
+-- avoided: diagnose.sh runs it on purpose. WatchSends only records; it calls the simulator's own function.
+local group = Lab.Solo()
+Lab.WatchSends()
+
 local scope, own, scale, outline, view, rowCount
 
 Step("initial", function()
@@ -28,6 +34,8 @@ Step("initial", function()
     Check("init", "saved variables ready", "ready", life.savedVariables)
     Check("init", "config ready", true, life.configReady)
     Check("init", "no failed hook", 0, life.hookFailures)
+    Check("init", "solo: the game reports no group", false, group.inGroup)
+    Check("init", "solo: no members counted, none seen by TwichUI", "0/0", group.count .. "/" .. group.twichMembers)
     -- a clean synthetic start: nothing of this page is saved yet
     for _, key in ipairs({ "notifyLook", "notifyLookArrival", "notifyLookTraining", "notifyLookFriend", "notifyLookWelcome" }) do
         Check("init", "clean start: ui." .. key, nil, Saved(key))
@@ -138,6 +146,20 @@ Step("close and reopen", function()
     Lab.Say("digest", Lab.Digest(t))
     Lab.Say("digest-shared", tostring(Saved("notifyLook")))
     Lab.Reveal(PAGE, "notifyLookTextScale")
+end)
+
+-- The window crosses the timers that used to be kept out of reach (see lib.lua): TwichUI's group hello (about 3 s) and
+-- Blizzard's voice-settings ticker (about 4.5 s and 9.5 s). Solo, the hello's timer still runs and sends nothing; the
+-- ticker's error is classified by the runner (known_failures.py). The page must be exactly as the last step left it.
+Step("time passes", function()
+    local saved = Lab.Digest(Saved("notifyLookArrival") or {})
+    local steps = Lab.RunUntil((P and P.window) or 12, 0.5)
+    Lab.Say("clock", "simSeconds=" .. Lab.simSeconds, "advanceSteps=" .. steps)
+    Check("state", "time passes: no addon message was attempted while solo", 0, #Lab.sends)
+    Check("state", "time passes: the saved look is unchanged", saved, Lab.Digest(Saved("notifyLookArrival") or {}))
+    Check("state", "time passes: the window is still shown", true, UI().IsShown())
+    Check("state", "time passes: the text size box still shows 90", "90", Box(scale))
+    Check("state", "time passes: the group is still solo", false, IsInGroup())
 end)
 
 Lab.Finish()

@@ -27,6 +27,7 @@ wants Ubuntu 24.04's ICU 74 and ALSA, so `setup.sh` unpacks those two packages i
 tools/simlab/setup.sh            # once: downloads and builds the lab
 tools/simlab/smoke.sh            # copies the working tree in, opens a page, constructs every page, judges the result
 tools/simlab/interact.sh         # drives one real settings page through its controls, from a clean profile (below)
+tools/simlab/diagnose.sh         # the clock over a 12 s window: baseline, solo, grouped, and the addon-message contract (below)
 ```
 
 ## What a result is evidence of
@@ -42,6 +43,17 @@ Every line a lab command prints is one of these, and nothing more. A pass at one
 | Persistence | no | **no** | nothing is reloaded or read back from disk. Closing and reopening the window is not persistence |
 | Screenshot | taken | taken | a file exists and is not blank. Whether it looks right is a person's call, and fonts are not the game's |
 | Real client | no | **no** | nothing here has run in WoW: Forever |
+
+`diagnose.sh` is not a test of a page. It measures how the clock, a party and the simulator's addon-message call behave (see
+"Delayed failures"), and it reports what it found by kind rather than as one pass:
+
+| Kind | Means | Example here |
+|---|---|---|
+| Passed behavior | a check's expectation held | solo: no group, nothing sent in 12 s |
+| Unsupported behavior | the simulator does not answer an API the game does | `C_VoiceChat.CanAccessSettings` |
+| Known delayed failure | an error that happens later in the window, classified by what it is | the simulator refusing the group hello's bytes |
+| Shimmed behavior | a lab stand-in answered | the two prefix-registration functions (names only) |
+| Excluded subsystem | not run or not modelled, so nothing is claimed | message delivery and receipt, voice chat, secure actions |
 
 Both commands also print what the result must be read with (the shim, the UI-version mismatch, the fonts, the client
 behaviour that is not covered) before they judge.
@@ -97,12 +109,13 @@ pointer coordinates, focus, keyboard navigation, Tab order and a control hidden 
 
 **What it does,** from a new empty install (`--no-saved-vars`, an empty lab WTF folder; nothing of this page saved):
 
-1. *initial*: the page opens; the scope drop-down, text size (100, range 80–140) and outline show their defaults; the "own look" row is hidden.
+1. *initial*: the character leaves the simulator's sample party and the solo state is checked; the page opens; the scope drop-down, text size (100, range 80–140) and outline show their defaults; the "own look" row is hidden.
 2. *choose a card*: pick "Zone arrival" in the drop-down. Choosing saves nothing; the row appears; the card's controls are locked, and typing 120 into the locked box is refused.
 3. *toggle own look*: click the checkbox. The card gets a complete saved look; the shared look is not written; the controls unlock.
 4. *slider and number box*: typing 500 saves 140 and 10 saves 80; dragging to 120 saves 120; typing `abc` leaves 120; the model itself refuses 500; the shared look stays at 100.
 5. *dropdown*: pick "Thick outline"; it is saved for the card only.
 6. *close and reopen*: close the window, change a value behind its back, reopen. The same drawn page is reused (no second copy, same rows) and shows what is in memory.
+7. *time passes*: the clock runs to the 12 s window (below). No send was attempted, the saved look and the page are unchanged.
 
 Expected values are typed from the page's source, not read from the code under test. Controls are found by their
 setting ids, never by their text or position. It adds no production code.
@@ -118,13 +131,99 @@ exits 0 only if all of that holds and the repository's `git status --ignored` is
 preview buttons and the cards they show, the other 48 pages' controls, drafts (this page has none), search reveal and
 a packaged install.
 
-**Simulated time is budgeted (2.5 s).** The sample character is in a party, so TwichUI sets its 3 second "hello"
-timer (`setup/Group.lua`) at startup. When the manual clock passes it, the hello goes out through the simulator's
-addon-message path and raises `string at argument 2 is not valid UTF-8` inside `Blizzard_ScriptErrors`' error-data code,
-reached from `ChatThrottleLib`'s protected send. It looks like the error handler failing on an error from the send; the
-original error was not seen, and whether the fault is the simulator's or in a payload TwichUI sends is unknown. Other Blizzard timers then fail on `C_VoiceChat.CanAccessSettings`, which the simulator does not
-supply. These are lab gaps, so the scenario stays under the first timer and fails loudly if it ever goes over, rather
-than ignoring Lua errors. Changes in the page are synchronous and need no simulated time; only the window's fade does.
+**Simulated time.** The last step, "time passes", runs the clock to a declared window (12 s, `SIMLAB_WINDOW`), solo, and
+checks that nothing was sent and the page is unchanged. The scenario used to stop at 2.5 s to stay clear of two errors; both
+are now classified instead (next section), and the only limit left is a 30 s resource guard in `scenarios/lib.lua`. Changes
+in the page are synchronous and need no simulated time; only the window's fade does.
+
+## Delayed failures
+
+Two errors appear once the simulated clock passes a few seconds. Neither is hidden: the log keeps both, and
+`known_failures.py` judges every `Lua error` in it by **what it is** (message, and stack where the message is too general),
+never by when it happened. A run permits only the rules it names. An error that matches no rule fails the run, a classified
+error the run does not permit fails it, and a classified error a run requires but never sees fails it too (the rule is stale).
+`diagnose_verdict.py` also feeds the classifier four synthetic logs to show it can fail for each reason, and applies the
+settings scenario's permit set to the real grouped log to show that going solo there hides nothing (the hello is rejected).
+
+```sh
+tools/simlab/diagnose.sh                  # four launches, about 15 s: contract, baseline, solo, grouped (SIMLAB_WINDOW=12)
+tools/simlab/interact.sh                  # the settings scenario, solo, over the same window
+tools/simlab/sim.sh --no-saved-vars --no-addons --exec-lua '@<fixture>' dump-tree --visible-only   # a single launch, by hand
+```
+
+### Group state
+
+The simulator is solo while addons load, then adds its sample party (a level 70 paladin with four others) after
+`PLAYER_ENTERING_WORLD` (`GROUP_ROSTER_UPDATE`, 5 members, about 0.1 s after the login event). So `A_Admin.SetPartySize(0)`
+cannot make the start solo: TwichUI sees the party arrive, and the scenario then calls `Lab.Solo()`, which leaves it and checks
+`IsInGroup()`, `IsInRaid()`, `GetNumGroupMembers()`, the `party1..4` units and TwichUI's own `Group.Members()`. That is "left the
+party before the timer", not "never grouped". The 3 s hello timer then still runs out and sends nothing, because
+`Group.lua`'s `Broadcast` asks `IsInGroup()` when it fires; the observer counts zero attempts. The grouped diagnostic keeps the
+party on purpose.
+
+### The group hello (`addon-message-invalid-utf8`)
+
+Call path, read from source and confirmed by the observer: `Group.lua:293` timer (3 s after the party arrives) →
+`G:SayHello` → `Broadcast` → `SH.SendControl` → `Share.lua` `Send`: `Encode` = `LibSerialize:Serialize` →
+`LibDeflate:CompressDeflate` (level 5) → `EncodeForWoWAddonChannel`, then
+`AceComm:SendCommMessage("TwichUISetup", text, "PARTY", nil, "NORMAL")` → `ChatThrottleLib` `PerformSend`, which calls
+`xpcall(C_ChatInfo.SendAddonMessage, CallErrorHandler, prefix, text, "PARTY", nil)`.
+
+| Observed (grouped run) | |
+|---|---|
+| Arguments | `string, string, string, nil`; prefix `TwichUISetup`, chat type `PARTY`, target none |
+| Payload | 29 bytes, the message `{t="hello", v=<version>, p=2, to="*"}`: a version and a protocol number, nothing about the player |
+| Bytes | `6374132a60152a09ca48cdc9c9572ac917d2122a0b32d433d0330102fc`; the first invalid UTF-8 byte is the 9th (`ca 48`) |
+| Stages | Serialize: 26 bytes, valid UTF-8. CompressDeflate: 28 bytes, not UTF-8, contains NUL. EncodeForWoWAddonChannel: 29 bytes, not UTF-8, no NUL |
+| Result | `string at argument 2 is not valid UTF-8`, raised by the call itself (the same bytes under a direct `pcall` fail identically) |
+| Same library path, ASCII `hello` | accepted. The refusal is about the bytes, not ChatThrottleLib or AceComm |
+| Same run, `TwichUIPins` message | 12 bytes, all below 0x80, so valid UTF-8 and accepted. Whether a payload passes depends on its bytes |
+
+**Not a handler failure.** The earlier note put the error "inside `Blizzard_ScriptErrors`". That is only where the stack is
+printed: `ChatThrottleLib` sends under `xpcall` and hands the error to the error handler, whose `GetErrorData` writes the
+trace. The message comes from `SendAddonMessage`.
+
+**The simulator's rule** (`scenarios/message_contract.lua`, no addon loaded, 22 checks): for 12 byte strings (ASCII, 2- and
+4-byte sequences, U+10FFFF, embedded NUL, a lone continuation byte, `0xFF`, a truncated sequence, two overlong forms, a
+surrogate, a value above U+10FFFF) the simulator accepts exactly the ones that are strict UTF-8, and names the argument
+(1, 2, 3 or 4). `SendAddonMessageLogged` does the same. That is the host binding's string-parameter rule, not a check of
+addon messaging. The simulator is a binary (no source here), so this is measured, not read.
+
+**The game's rule is not established.** The Forever API document types `message` as `cstring` and calls it a "text payload"
+(`SendAddonMessageLogged` adds "intended for plain text payloads"); no local file defines `cstring`'s encoding. `LibDeflate`
+documents `EncodeForWoWAddonChannel` as guaranteeing only "no NUL" and contrasts it with its chat-channel codec, which
+encodes every byte above 127 because `SendChatMessage` errors on incomplete UTF-8: so the library's author treats the addon
+channel as taking arbitrary non-NUL bytes. A reference addon (`NaowhForever_Utilities/InstanceTracker`) sends that encoding.
+That is the ecosystem's convention, not proof for WoW: Forever.
+
+**Classification: simulator string-rule difference; real-client contract unverified (insufficient evidence for a
+production defect).** TwichUI builds the payload the way its encoder documents. No TwichUI code changed, and nothing was
+stripped, re-encoded or turned into a no-op. If you want it settled, the decisive test is one line in the game, in a party,
+which says what the game does with a non-UTF-8 message (it shows the call is accepted or refused, not that anyone receives it):
+`/run print(pcall(C_ChatInfo.SendAddonMessage, "TwichUIProbe", "a\200b", "PARTY"))`.
+
+### The voice-settings call (`voice-settings-unsupplied`)
+
+Scheduled by Blizzard's own `Blizzard_SettingsDefinitions_Shared/Audio.lua:657-669`: `C_Timer.NewTicker(5, TryInitVoiceSettings)`
+calls `C_VoiceChat.CanAccessSettings()` until it returns true, "no timeout", because the voice proxy process may not be up yet.
+It happens with no addon loaded (the baseline launch, `--no-addons`), at about 4.5 s and 9.5 s after the script starts. The
+Forever UI source calls it and the API document lists it returning a non-nil bool, so the profile should have it; the
+simulator has the function but raises `settings access has not been supplied`, and `A_Admin` has no setter for it. The UI
+revision is not a factor: the simulator's cached `Audio.lua` is byte-identical to `wow-ui-source` at `ca8368f2f` (the 70707
+client's file cannot be compared here). **Classification: unsupported API in the simulator, Blizzard-owned timer, no addon
+involved.**
+
+It is deliberately **not shimmed**. The function exists, so a stand-in would override a native implementation (the lab's rule
+is that a shim never does), and the classification already keeps both the error and the evidence. By Blizzard's comment the
+real function answers `false` until the proxy is up; if a silent run is ever wanted, an opt-in shim returning `false` that
+first asserts the native refusal, with this unshimmed run kept as the control, is the way. That is a decision, not made here.
+
+### What the 12 s window exercises
+
+The clock runs 240 steps of 0.05 s over 12 simulated seconds, with a marker every 0.5 s. It crosses the group hello (the 3 s
+timer) and two voice ticks. It does **not** reach the 20 s direct-message probe timeout or the 60 s transfer timeout in
+`setup/`, does not exercise the login hello (6 s; the character is not grouped at login), and the other
+timers in the addons were not enumerated. It is a longer window, not exhaustive timer coverage.
 
 ## How it is isolated
 
@@ -173,7 +272,8 @@ removes TwichUI's solid fills, and the fallback font wraps text differently.
   needs a crop or a mask; a few text pixels inside the window differed between otherwise identical runs too.
 - **The simulator patches Blizzard's UI as it starts** (the `[Workarounds]` lines in the log), and models secret values and
   much of the API by inference. Its own documents say this is not native conformance.
-- **Not covered:** combat lockdown, taint and secure actions, sending or receiving addon messages, saved data surviving a
+- **Not covered:** combat lockdown, taint and secure actions, delivering or receiving addon messages (`diagnose.sh` observes the
+  simulator accepting or refusing a call, nothing more), saved data surviving a
   reload, EllesmereUI and other optional addons, real pointer and keyboard input, and a packaged install. Controls are
   exercised for one page only, at handler level; the all-pages test proves each page constructs, not that its controls work.
 - **The sample character is upstream's:** a level 70 paladin with a Retail-era fixture, not Forever gameplay data.
@@ -206,6 +306,24 @@ Screenshots from the final run (`before.png`, `after.png`) were looked at: the p
 has no main text). That says the structure and the changed values drew; with the fonts not drawn (below) and Blizzard's
 "Issue Report" button over the window, it says nothing about how the page looks in the game.
 
+## Baseline, delayed-failure pass, 2026-10-30
+
+Run against the final files, after the first baseline above (whose `interact.sh` row, 67 checks in 1.8 s, is superseded by
+the one below). Production code unchanged.
+
+| Command | Exit | Result |
+|---|---|---|
+| `tools/simlab/smoke.sh` | 0 | `PASS (initialization and construction only)`, unchanged: 49 of 49 pages, no Lua error |
+| `tools/simlab/diagnose.sh` | 0 | contract 22 checks; baseline 3 (no addon: voice error present, nothing sent); solo 10 (state verified solo, no send in 12 s); grouped 18 (hello attempted at about 3 s, refused, the one classified error besides voice); the permit-set and four classifier controls pass; about 15 s |
+| `tools/simlab/interact.sh` | 0 | `PASS`: 74 checks (10 init, 9 construct, 5 interact, 50 state), 12.1 s simulated, solo; only the classified voice error in the log; second run identical; the wrong-on-purpose run failed on exactly its check; about 23 s |
+| `SIMLAB_SHIM=0 tools/simlab/interact.sh` (negative control) | 1 | FAIL on the unclassified AceComm load error, as before |
+| `SIMLAB_SHIM=0 tools/simlab/diagnose.sh` (negative control) | 1 | FAIL: solo and grouped hit the same unclassified load error |
+| `tests/run.sh` | 0 | 141 passed, 0 failed |
+| `python3 -I` parse of the three verdict scripts and `known_failures.py`; `bash -n` on the runners | 0 | syntax only; `shellcheck` is still not installed |
+
+Window: 12 simulated seconds in 0.05 s steps. Classified errors seen: `voice-settings-unsupplied` in every long run (first
+printed after t=4.3 to 4.5 s), `addon-message-invalid-utf8` only in the grouped run (after t=2.5 s).
+
 ## Remaining blockers
 
 - **In-game, still required:** that the page's controls can be reached and used by pointer and keyboard; that the
@@ -214,8 +332,12 @@ has no main text). That says the structure and the changed values drew; with the
 - **Two APIs are shimmed** (`C_ChatInfo.RegisterAddonMessagePrefix`, `IsAddonMessagePrefixRegistered`). Filing them
   upstream is not done (it is outward-facing and needs your approval).
 - **TwichUI's own fonts are not drawn** by v0.1.37, so text measurements and wrapping here are not the game's.
-- **Simulated time is capped at 2.5 s** by the group-hello failure above; a scenario that needs the clock past 3 s needs
-  that cause understood first (simulator or TwichUI payload).
+- **Two delayed errors are classified, not fixed** ("Delayed failures"). The voice-settings one is the simulator's and
+  Blizzard's timer; the group hello's refusal is the simulator's string rule, and whether the game would accept the same
+  bytes is **unverified**: it needs the one-line in-game check given there. A scenario can now run the clock over a window,
+  but only with those two rules permitted; any third error fails the run.
+- **A grouped start cannot be solo from the beginning:** the simulator adds its party after `PLAYER_ENTERING_WORLD`, so a
+  "solo" scenario is "left the party", and the login hello (6 s) is never exercised.
 - **Only one page's controls are exercised.** Reload persistence, the swatches, previews and other pages' controls are not.
 - **UI source and client differ** (70532 against 70707), and the simulator patches Blizzard's UI as it starts.
 

@@ -9,6 +9,7 @@
 #   before the first step only, then a screenshot (the page as it opens)
 #   wrong  the whole scenario with one expectation made deliberately wrong: it must FAIL on that check and no other
 #
+#   SIMLAB_WINDOW=12 simulated seconds the clock runs (default 12: past the group hello and two voice-settings ticks)
 #   SIMLAB_SHIM=0   leave the shim out (the page does not need it; a run without it shows what the shim changes)
 #   SIMLAB_ASSETS=0 hide the game install (logic only; no screenshot is worth looking at)
 #
@@ -22,6 +23,7 @@ RUN="$LAB/artifacts/interact-$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$RUN"
 WRONG_AT="slider-clamp-max: typed 500 saved as"
 
+WINDOW="${SIMLAB_WINDOW:-12}"   # simulated seconds the clock runs in the scenario (its last step); see docs/simulator-lab.md
 export SIMLAB_ASSETS="${SIMLAB_ASSETS:-1}"
 export SIMLAB_FORWARD="WOW_SIM_SOFTWARE_RENDER=1"
 
@@ -30,10 +32,10 @@ fixture() {  # name params
   { printf 'SIMLAB_PARAMS = %s\n' "$2"; cat "$SIMLAB_DIR/scenarios/lib.lua" "$SIMLAB_DIR/scenarios/notify_look.lua"; } \
     > "$LAB/fixtures/interact-$1.lua"
 }
-fixture a '{}'
-fixture a2 '{}'
+fixture a "{ window = $WINDOW }"
+fixture a2 "{ window = $WINDOW }"
 fixture before '{ stopAfter = "initial" }'
-fixture wrong "{ wrongAt = \"$WRONG_AT\" }"
+fixture wrong "{ wrongAt = \"$WRONG_AT\", window = $WINDOW }"
 
 repo_before="$(git -C "$REPO" status --porcelain --ignored)"
 status=0
@@ -61,5 +63,5 @@ leak=0
 find "$ROOT" -name '*.png' -o -name '*.stderr' -o -name '*.stdout' | grep -q . && { echo "simlab: artifacts found inside the addon root" >&2; leak=1; }
 simlab_disclose
 [ "$status" -eq 0 ] || exit "$status"
-python3 -I "$SIMLAB_DIR/interact_verdict.py" "$RUN" "$WRONG_AT" "$SIMLAB_ASSETS" || exit 1
+python3 -I "$SIMLAB_DIR/interact_verdict.py" "$RUN" "$WRONG_AT" "$SIMLAB_ASSETS" "$WINDOW" || exit 1
 [ "$leak" -eq 0 ] || exit 1

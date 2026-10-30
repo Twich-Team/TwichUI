@@ -11,7 +11,11 @@ The scenario prints one "SIMLAB check PASS|FAIL [layer] name | expected=.. | act
          control: the scenario can fail, and fails for the reason it was given)
 and both screenshots are real images of the size asked for.
 
-Usage: interact_verdict.py RUN_DIR WRONG_CHECK_NAME ASSETS(0|1). Exit status 0 is PASS, 1 is FAIL.
+Errors are classified (known_failures.py), not avoided: the clock runs over the declared window, and an error that matches no
+rule fails the run. This scenario is solo, so only Blizzard's voice-settings error (present with no addon loaded) is permitted;
+a group hello error would fail it.
+
+Usage: interact_verdict.py RUN_DIR WRONG_CHECK_NAME ASSETS(0|1) WINDOW_SECONDS. Exit status 0 is PASS, 1 is FAIL.
 """
 import re
 import sys
@@ -20,8 +24,10 @@ from pathlib import Path
 sys.dont_write_bytecode = True   # nothing is written beside the scripts
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from verdict import distinct_colours, read_rgba  # noqa: E402  (the smoke test's PNG reader)
+import known_failures as kf  # noqa: E402
 
-STEPS = ["initial", "choose a card", "toggle own look", "slider and number box", "dropdown", "close and reopen"]
+STEPS = ["initial", "choose a card", "toggle own look", "slider and number box", "dropdown", "close and reopen", "time passes"]
+VOICE = "voice-settings-unsupplied"
 CHECK = re.compile(r"^SIMLAB check (PASS|FAIL) \[(\w+)\] (.*?) \| expected=(.*?) \| actual=(.*)$", re.M)
 
 
@@ -33,12 +39,14 @@ def load(run, name):
     steps = re.findall(r"^SIMLAB step (.*)$", text, re.M)
     done = re.search(r"^SIMLAB done steps=(\d+) simSeconds=([\d.]+) passed=(\d+) failed=(\d+) aborted=(\w+) stopped=(\w+)$", text, re.M)
     digest = re.findall(r"^SIMLAB digest(?:-shared)? (.*)$", text, re.M)
-    errors = re.findall(r"^Lua error: .*$", text, re.M)
-    return {"text": text, "checks": checks, "steps": steps, "done": done, "digest": digest, "errors": errors}
+    # classified, not counted: an error is fine only if it matches a rule this solo scenario permits
+    cls = kf.classify(text, allow=(VOICE,))
+    errors = [m for _, m in cls["unknown"]] + [f"{rid} (not permitted here)" for rid in cls["unexpected"]]
+    return {"text": text, "checks": checks, "steps": steps, "done": done, "digest": digest, "errors": errors, "cls": cls}
 
 
 def main():
-    run, wrong_name, assets = Path(sys.argv[1]), sys.argv[2], sys.argv[3] == "1"
+    run, wrong_name, assets, window = Path(sys.argv[1]), sys.argv[2], sys.argv[3] == "1", float(sys.argv[4])
     results = []
 
     def check(name, passed, detail=""):
@@ -57,7 +65,9 @@ def main():
           and int(a["done"].group(4)) == len(failed))
     layers = {c[1] for c in a["checks"]}
     check("a: every layer was exercised", {"init", "construct", "interact", "state"} <= layers, ", ".join(sorted(layers)))
-    check("a: no Lua error", not a["errors"], a["errors"][0][:150] if a["errors"] else "")
+    check("a: no Lua error outside the classified rules", not a["errors"], a["errors"][0][:150] if a["errors"] else "")
+    sim_a = float(a["done"].group(2)) if a["done"] else 0
+    check("a: the clock ran the whole declared window", sim_a >= window, f"{sim_a} s simulated, window {window:g} s")
 
     print("Reproducibility, from a new empty install:")
     check("a2: reached its end with no failed check and no Lua error",
@@ -113,7 +123,13 @@ def main():
           "(a script cannot inspect them; look at them, and remember custom fonts are not drawn)")
     print("  Real-client tested ........... NO")
     sim = a["done"].group(2) if a["done"] else "?"
-    print(f"{n} checks in the full run; {sim} s of simulated time (budget 2.5 s, see scenarios/lib.lua).")
+    print(f"{n} checks in the full run; {sim} s of simulated time over a declared window of {window:g} s "
+          "(0.05 s clock steps; it crosses the group hello timer and two voice-settings ticks; it does not exercise every timer).")
+    known = kf.describe(a["cls"])
+    print("Classified errors in the full run (kept in the log, not hidden):" if known else "Classified errors in the full run: none")
+    for line in known:
+        print(line)
+    print("  The character was solo (state verified) and no addon message was attempted; the grouped case is tools/simlab/diagnose.sh.")
     print("PASS (handler-level interaction and in-memory state only)" if ok else "FAIL")
     return 0 if ok else 1
 
