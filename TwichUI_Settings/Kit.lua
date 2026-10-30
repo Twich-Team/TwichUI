@@ -285,7 +285,7 @@ local function Escape(c)
 end
 function K.OnOff(on, onText, offText)
     local pal = R.SettingsWidgets and R.SettingsWidgets.pal
-    if on then return (pal and Escape(pal.tealHi) or R.GREEN) .. (onText or "On") .. "|r" end
+    if on then return (pal and Escape(pal.sage) or R.GREEN) .. (onText or "On") .. "|r" end
     return (pal and Escape(pal.stone) or R.GREY) .. (offText or "Off") .. "|r"
 end
 

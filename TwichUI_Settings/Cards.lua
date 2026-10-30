@@ -185,7 +185,7 @@ function Cards.Primary(sec, row, env)
         v.control:SetChecked(on)
         v.control:SetActive(enabled)
         sec.state:SetText(on and "On" or "Off")
-        Wg.Color(sec.state, (on and enabled) and pal.tealHi or pal.stone)
+        Wg.Color(sec.state, (on and enabled) and pal.sage or pal.stone)
         return enabled
     end
     function v.Refresh() return v.RefreshValue() end

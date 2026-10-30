@@ -130,7 +130,7 @@ function P.Test(text)
     P.lastResult = say
     if f and f.result then
         f.result:SetText(say)
-        G.Color(f.result, tone == "hidden" and pal.danger.text or (tone == "shown" and pal.tealHi or pal.textDim))
+        G.Color(f.result, tone == "hidden" and pal.danger.text or (tone == "shown" and pal.sage or pal.textDim))
     end
     return result, say
 end

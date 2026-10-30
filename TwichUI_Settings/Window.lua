@@ -262,7 +262,7 @@ local function MakeRow(parent, row, width)
             local toneOk, tone = true, nil
             if row.tone then toneOk, tone = pcall(row.tone) end
             local c = pal.text
-            if toneOk and tone == "ok" then c = pal.tealHi
+            if toneOk and tone == "ok" then c = pal.sage
             elseif toneOk and tone == "warn" then c = pal.danger.text
             elseif toneOk and tone == "quiet" then c = pal.stone end
             Wg.Color(v.status, c)
@@ -725,7 +725,7 @@ local function ScrollTo(offset)
     scroll:SetVerticalScroll(math.max(0, math.min(offset, most)))
 end
 
--- Marks a row once: a teal band for a few seconds that then fades (at once where motion is reduced). A newer mark
+-- Marks a row once: a gold band for a few seconds that then fades (at once where motion is reduced). A newer mark
 -- makes an older one's timer stale.
 local function Highlight(v)
     state.token = (state.token or 0) + 1
@@ -853,17 +853,17 @@ local function BuildNav()
         item:SetPoint("TOPLEFT", 0, -y)
         item:SetPoint("TOPRIGHT", 0, -y)
         item.page = page
-        -- shown: a teal wash fading to the right over the band, a crisp bronze bar at the left and a lit top edge
-        item.fill = Wg.Solid(item, "BACKGROUND", pal.band, 1)
+        -- shown: a gold wash fading to the right over the band, a crisp bronze bar at the left and a lit top edge
+        item.fill = Wg.Solid(item, "BACKGROUND", pal.selectedFill, 1)
         item.fill:SetAllPoints()
         item.wash = item:CreateTexture(nil, "BORDER")
         item.wash:SetAllPoints()
-        Wg.Fade(item.wash, pal.teal, 0.30, 0, "HORIZONTAL")
+        Wg.Fade(item.wash, pal.teal, 0.16, 0, "HORIZONTAL")
         item.edge = Wg.Solid(item, "ARTWORK", pal.tealHi, 0.14)
         item.edge:SetHeight(1)
         item.edge:SetPoint("TOPLEFT", 0, 0)
         item.edge:SetPoint("TOPRIGHT", 0, 0)
-        item.hover = Wg.Solid(item, "BORDER", pal.text, 0.05)
+        item.hover = Wg.Solid(item, "BORDER", pal.hoverFill, 1)
         item.hover:SetAllPoints()
         item.hoverFade = Motion.Fader(function(x) item.hover:SetAlpha(x) end, 0)
         item.bar = Wg.Solid(item, "ARTWORK", pal.bronzeText, 1)
@@ -1084,6 +1084,10 @@ local function BuildFooter()
     rule:SetHeight(1)
     rule:SetPoint("BOTTOMLEFT", footer, "TOPLEFT", 0, 4)
     rule:SetPoint("BOTTOMRIGHT", footer, "TOPRIGHT", 0, 4)
+    local base = Wg.Solid(win, "BACKGROUND", pal.band, 1)   -- the footer sits on the header's dark base
+    base:SetPoint("BOTTOMLEFT", 4, 4)
+    base:SetPoint("BOTTOMRIGHT", -4, 4)
+    base:SetHeight(FOOTER_H - 4)
     footer.profile = CreateFrame("Button", nil, footer)
     footer.profile:SetHeight(20)
     footer.profile:SetPoint("LEFT", 0, 0)

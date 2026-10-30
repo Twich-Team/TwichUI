@@ -64,7 +64,7 @@ end
 -- The color of a state (a word beside it always says the same thing): met teal, not met amber, can't tell grey, needs attention red.
 local function StateColor(state)
     local pal = Wg().pal
-    if state == "met" then return pal.tealHi
+    if state == "met" then return pal.sage
     elseif state == "unmet" then return pal.bronzeText
     elseif state == "invalid" then return pal.danger.text end
     return pal.stone

@@ -36,7 +36,7 @@ local function RM() return R.Reminders end
 local function Tone(fs, tone)
     local G = Wg()
     local pal = G.pal
-    G.Color(fs, tone == "warn" and pal.danger.text or (tone == "ok" and pal.tealHi or (tone == "quiet" and pal.stone or pal.textDim)))
+    G.Color(fs, tone == "warn" and pal.danger.text or (tone == "ok" and pal.sage or (tone == "quiet" and pal.stone or pal.textDim)))
 end
 
 local function Put(item, parent, x, y)

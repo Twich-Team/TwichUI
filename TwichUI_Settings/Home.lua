@@ -37,14 +37,14 @@ local function Icon(parent, id, size)
     return t
 end
 
--- A flat, clickable panel with a wash under the pointer (Look's Hover) and, when chosen, a bronze bar along its
--- foot and a faint warm fill, like a tab: the title's color and the bar say it is chosen, not color alone.
+-- A flat, clickable panel with a wash under the pointer (Look's Hover) and, when chosen, a gold bar along its
+-- foot and a golden-brown fill, like a tab: the title's color and the bar say it is chosen, not color alone.
 local function Panel(parent, w, h, onClick)
     local b = CreateFrame("Button", nil, parent, "BackdropTemplate")
     b:SetSize(w, h)
     Wg.Panel(b)
-    Wg.Hover(b, pal.text, 0.05)
-    b.fill = Wg.Solid(b, "BACKGROUND", pal.bronzeText, 0.10)
+    Wg.Hover(b, pal.hoverFill, 0.9)
+    b.fill = Wg.Solid(b, "BACKGROUND", pal.selectedFill, 1)
     b.fill:SetPoint("TOPLEFT", 1, -1)
     b.fill:SetPoint("BOTTOMRIGHT", -1, 1)
     b.fill:Hide()

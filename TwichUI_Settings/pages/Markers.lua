@@ -286,7 +286,7 @@ function Refresh(kind)
         note, noteTone = "The game says world markers aren't available here, so these keys can't place any.", "warn"
     end
     ed.note:SetText(note or "")
-    G.Color(ed.note, noteTone == "warn" and pal.danger.text or (noteTone == "ok" and pal.tealHi) or pal.textDim)
+    G.Color(ed.note, noteTone == "warn" and pal.danger.text or (noteTone == "ok" and pal.sage) or pal.textDim)
     local canRestart = R:Enabled(M.SWITCH[kind]) and MK.Active(kind) ~= nil and #M.Sequence(kind) > 0 and not InCombat()
     ed.restart:SetEnabled(canRestart and true or false)
     ed.default:SetEnabled(not M.IsDefault(kind))

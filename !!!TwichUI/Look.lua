@@ -5,8 +5,8 @@
 -- (setup/Window.lua, in the core) both draw with this, so they are one family. It sits in the core so neither
 -- needs the other loaded.
 --
---   Look.pal                    the palette, by role: bronze (structure), charcoal (list, header), stone (page,
---                               cards, fields), ivory (text), teal (what is active), rust (danger)
+--   Look.pal                    the palette, by role: bronze (the reddish-brown frame), espresso (list, header), walnut
+--                               (page, cards, fields), ivory (text), teal (gold: what is chosen), sage, rust (danger)
 --   Look.Text(parent, kind)     a font string: "brand", "title", "heading", "body", "small", "meta"
 --   Look.Surface(frame, ...)    a flat fill with a 1px edge
 --   Look.Button(parent, label, w, kind, onClick)    kind: "primary", "secondary" or "danger"; a raised face
@@ -39,38 +39,48 @@ local pal = S.NewPalette()
 --   charcoal (nav, band)                    the list and the header
 --   stone (bg, surface, well)               the page, the section cards on it, the fields pressed into them
 --   ivory (text, textDim, stone)            text, from primary to quiet
---   teal (teal, tealHi, tealLo)             one muted accent for what is active: selected, checked, focused
+--   teal (teal, tealHi, tealLo)             one muted gold accent for what is chosen: selected, checked, focused
+--   sage                                    what is switched on or done
 --   rust (danger)                           putting things back
-pal.bg = { 0.137, 0.135, 0.130 }          -- the page: neutral dark stone
-pal.nav = { 0.090, 0.087, 0.084 }         -- the left-hand list: deep charcoal
-pal.band = { 0.108, 0.103, 0.097 }        -- the header (and a selected row's base): charcoal, a touch warmer
-pal.well = { 0.072, 0.071, 0.069 }        -- fields, the checkbox, slider tracks: pressed in, not black
-pal.surface = { 0.178, 0.170, 0.158 }     -- a section's card: desaturated taupe stone, a gentle step above the page
-pal.text = { 0.94, 0.91, 0.82 }           -- warm ivory
-pal.textDim = { 0.80, 0.78, 0.72 }        -- descriptions: gray-beige, quieter than a label but easy to read
-pal.stone = { 0.62, 0.60, 0.56 }          -- category labels, hints, disabled
-pal.bronzeText = { 0.76, 0.63, 0.38 }     -- a bronze readable as text: section headings and the selection marker
-pal.bronzeLo = { 0.34, 0.33, 0.31 }       -- quiet interior edges and dividers (neutral; the rim has rimLo)
-pal.rimLo = { 0.30, 0.23, 0.13 }          -- the old bronzeLo: the window rim's shaded side
-pal.control = { 0.47, 0.46, 0.43 }        -- a button's or field's boundary: clearer than a container's edge
-pal.divider = { 0.34, 0.33, 0.31 }
-pal.thumb = { 0.46, 0.45, 0.42 }          -- scroll bar
-pal.teal = { 0.36, 0.58, 0.57 }           -- the accent: muted, slightly gray
-pal.tealHi = { 0.58, 0.78, 0.76 }         -- the accent as text, and under the pointer
-pal.tealLo = { 0.18, 0.33, 0.33 }         -- the accent as a fill: a checked box, a slider's filled run
-pal.ink = { 0.03, 0.02, 0.015 }           -- the outermost line, and the darkest shade
-pal.bronzeHi = { 0.70, 0.56, 0.30 }       -- the lit edge of the window's rim
-pal.primary = {                           -- the one affirming action (Reload now): teal, not bronze
-    border = { 0.40, 0.64, 0.62 }, bg = { 0.17, 0.30, 0.30 }, text = { 0.96, 0.94, 0.88 },
-    hotBorder = { 0.58, 0.78, 0.76 }, hotBg = { 0.17, 0.30, 0.30 }, hotText = { 1, 0.98, 0.92 },
+pal.bg = { 0.133, 0.114, 0.094 }          -- the page: dark walnut (#221D18)
+pal.nav = { 0.106, 0.090, 0.075 }         -- the left-hand list: a recess darker than the page (#1B1713)
+pal.band = { 0.141, 0.118, 0.094 }        -- the header and footer fill (#241E18); their trim is divider/bronzeLo
+pal.well = { 0.118, 0.082, 0.059 }        -- fields, the checkbox, slider tracks: pressed in, dark brown
+pal.surface = { 0.180, 0.153, 0.125 }     -- a section's card: raised above the page (#2E2720)
+pal.hoverFill = { 0.231, 0.192, 0.149 }   -- a row under the pointer (#3B3126)
+pal.selectedFill = { 0.263, 0.188, 0.098 } -- the chosen row: muted brown, warmer than hover (#433019)
+pal.text = { 0.910, 0.875, 0.816 }        -- ivory (#E8DFD0)
+pal.textDim = { 0.749, 0.702, 0.635 }     -- descriptions and secondary text (#BFB3A2)
+pal.stone = { 0.604, 0.565, 0.510 }       -- category labels, hints, disabled: still 4:1 on a card
+pal.bronzeText = { 0.804, 0.651, 0.365 }  -- antique gold as text: section headings and the selection marker (#CDA65D)
+pal.bronzeLo = { 0.349, 0.251, 0.200 }    -- quiet interior edges and dividers (#594033; the rim has rimLo)
+pal.rimLo = { 0.224, 0.137, 0.110 }       -- the window frame's body (#39231C)
+pal.control = { 0.435, 0.322, 0.247 }     -- a button's or field's boundary: muted brown, clearer than a container's edge
+pal.divider = { 0.349, 0.251, 0.200 }
+pal.thumb = { 0.490, 0.370, 0.270 }       -- scroll bar thumb: bronze brown, visible on its dark track
+pal.thumbHi = { 0.630, 0.480, 0.350 }     -- ... under the pointer
+pal.track = { 0.106, 0.067, 0.055 }       -- scroll bar track
+-- The accent for what is selected, checked or focused. The names are the window's old ones: it is now antique
+-- gold, kept small (a marker, a check, a focus edge). What is switched on or done is pal.sage, not this.
+pal.teal = { 0.72, 0.58, 0.32 }           -- the accent: a gold edge, a mark
+pal.tealHi = { 0.84, 0.70, 0.42 }         -- the accent as text, and under the pointer
+pal.tealLo = { 0.318, 0.251, 0.153 }      -- the accent as a fill: a checked box, a slider's filled run
+pal.gold = { 0.804, 0.651, 0.365 }         -- the brand and small headings
+pal.sage = { 0.60, 0.74, 0.55 }           -- enabled, active, done: subdued sage (text; always beside a word)
+pal.ink = { 0.106, 0.067, 0.055 }         -- the outermost line, and the darkest shade (#1B110E)
+pal.bronze = { 0.439, 0.278, 0.208 }      -- the window frame's edge (#704735)
+pal.bronzeHi = { 0.569, 0.392, 0.282 }    -- the frame's narrow lit edge (#916448)
+pal.primary = {                           -- the one affirming action (Reload now): a gold-brown face
+    border = { 0.72, 0.58, 0.32 }, bg = { 0.34, 0.26, 0.14 }, text = { 0.96, 0.92, 0.82 },
+    hotBorder = { 0.84, 0.70, 0.42 }, hotBg = { 0.40, 0.31, 0.17 }, hotText = { 1, 0.97, 0.88 },
 }
-pal.quiet = {                             -- an ordinary button: a darker stone face, a soft edge, a bronze lift on hover
-    border = { 0.38, 0.36, 0.32 }, bg = { 0.200, 0.191, 0.177 }, text = { 0.90, 0.87, 0.79 },
-    hotBorder = { 0.58, 0.52, 0.42 }, hotBg = { 0.200, 0.191, 0.177 }, hotText = { 0.98, 0.95, 0.88 },
+pal.quiet = {                             -- an ordinary button: a raised brown face, a soft edge, a lift on hover
+    border = { 0.435, 0.322, 0.247 }, bg = { 0.275, 0.208, 0.157 }, text = { 0.910, 0.863, 0.773 },
+    hotBorder = { 0.64, 0.50, 0.32 }, hotBg = { 0.330, 0.250, 0.180 }, hotText = { 0.98, 0.95, 0.88 },
 }
 pal.danger = {                            -- Reset and other actions that put things back: subdued rust
-    border = { 0.50, 0.28, 0.23 }, bg = { 0.18, 0.125, 0.11 }, text = { 0.90, 0.64, 0.56 },
-    hotBorder = { 0.72, 0.40, 0.32 }, hotBg = { 0.18, 0.125, 0.11 }, hotText = { 1, 0.78, 0.68 },
+    border = { 0.58, 0.28, 0.23 }, bg = { 0.22, 0.12, 0.10 }, text = { 0.93, 0.64, 0.56 },
+    hotBorder = { 0.76, 0.40, 0.32 }, hotBg = { 0.26, 0.14, 0.115 }, hotText = { 1, 0.78, 0.68 },
 }
 Wg.pal = pal
 
@@ -317,7 +327,7 @@ end
 
 -- A section's card: a surface a step lighter than the window, gently pressed in at its edge.
 function Wg.Panel(frame)
-    Wg.Surface(frame, pal.surface, 0.85, pal.bronzeLo, 0.20)
+    Wg.Surface(frame, pal.surface, 1, pal.bronzeLo, 0.10)
     return Wg.Recess(frame, 0.4)
 end
 
@@ -540,8 +550,8 @@ function Wg.EditBox(parent, w, h)
 end
 
 ---------------------------------------------------------------------------
--- The window's own frame: a two-pixel bronze rim, lit along the top and left and shaded along the bottom and
--- right, a dark line and a faint lit line inside it, small L-shaped brackets in the corners, and tonal layers
+-- The window's own frame: a reddish-brown rim (a narrow lit edge along the top and left, a body, a recessed
+-- shadow inside it), small L-shaped brackets in the corners, and tonal layers
 -- (a warm light at the top, a settling shade at the bottom) over a very light speckle. Textures only; nothing
 -- here runs per frame or takes the mouse. (chronicle/Style.lua's S.Frame is the Chronicle's and stays as it is.)
 ---------------------------------------------------------------------------
@@ -565,12 +575,14 @@ function Wg.Frame(f, w, h, headerH)
     -- the pieces are kept (f.twichShell) so a window whose look the player sets can hide the rim, or the grain
     local rim, tone = {}, {}
     local function Keep(into, lines) for _, t in pairs(lines) do into[#into + 1] = t end end
-    Keep(rim, Wg.Shade(f, { pal.bronzeHi, 0.95 }, { pal.bronzeHi, 0.80 }, { pal.bronze, 0.90 }, { pal.bronze, 0.90 }, 1))
-    Keep(rim, Wg.Shade(f, { pal.bronze, 0.90 }, { pal.bronze, 0.80 }, { pal.rimLo, 0.95 }, { pal.rimLo, 0.95 }, 2))
-    Keep(rim, Wg.Shade(f, { pal.ink, 0.60 }, { pal.ink, 0.50 }, { pal.ink, 0.40 }, { pal.ink, 0.45 }, 3))
-    Keep(rim, Wg.Shade(f, { pal.gold, 0.12 }, { pal.gold, 0.05 }, { pal.ink, 0.22 }, { pal.ink, 0.22 }, 4))
+    -- four pixels in from the dark outer line: the frame's edge (lit along the top and left only), its body, and the
+    -- recessed shadow where the window's contents begin; then a faint last line
+    Keep(rim, Wg.Shade(f, { pal.bronzeHi, 0.85 }, { pal.bronzeHi, 0.50 }, { pal.bronze, 0.90 }, { pal.bronze, 0.90 }, 1))
+    Keep(rim, Wg.Shade(f, { pal.rimLo, 1 }, { pal.rimLo, 1 }, { pal.rimLo, 1 }, { pal.rimLo, 1 }, 2))
+    Keep(rim, Wg.Shade(f, { pal.ink, 0.85 }, { pal.ink, 0.75 }, { pal.ink, 0.55 }, { pal.ink, 0.60 }, 3))
+    Keep(rim, Wg.Shade(f, { pal.bronzeHi, 0.10 }, { pal.bronzeHi, 0.04 }, { pal.ink, 0.22 }, { pal.ink, 0.22 }, 4))
     for _, corner in ipairs({ "TOPLEFT", "TOPRIGHT", "BOTTOMLEFT", "BOTTOMRIGHT" }) do
-        local a, b = Bracket(f, corner, 6, 8, pal.gold, 0.5)
+        local a, b = Bracket(f, corner, 6, 8, pal.bronzeHi, 0.45)
         rim[#rim + 1], rim[#rim + 2] = a, b
     end
     -- tonal layers: light falls from the top, the bottom settles
@@ -614,7 +626,7 @@ function Wg.Header(f, height)
     sheen:SetHeight(1)
     sheen:SetPoint("TOPLEFT", band, "TOPLEFT", 0, 0)
     sheen:SetPoint("TOPRIGHT", band, "TOPRIGHT", 0, 0)
-    local line = Wg.Solid(f, "BORDER", pal.bronze, 0.85)
+    local line = Wg.Solid(f, "BORDER", pal.divider, 0.95)
     line:SetHeight(1)
     line:SetPoint("TOPLEFT", band, "BOTTOMLEFT", 0, 0)
     line:SetPoint("TOPRIGHT", band, "BOTTOMRIGHT", 0, 0)
@@ -662,14 +674,15 @@ function Wg.Card(parent, x1, y1, x2, y2)
         t:SetPoint("BOTTOMRIGHT", parent, "TOPLEFT", bx, by)
         return t
     end
-    Piece("BACKGROUND", pal.surface, 0.85, x1, y1, x2, y2)
-    Piece("BORDER", pal.bronzeLo, 0.20, x1, y1, x2, y1 - 1)       -- edge
-    Piece("BORDER", pal.bronzeLo, 0.20, x1, y2 + 1, x2, y2)
-    Piece("BORDER", pal.bronzeLo, 0.20, x1, y1, x1 + 1, y2)
-    Piece("BORDER", pal.bronzeLo, 0.20, x2 - 1, y1, x2, y2)
+    Piece("BACKGROUND", pal.surface, 1, x1, y1, x2, y2)
+    Piece("BORDER", pal.bronzeLo, 0.10, x1, y1, x2, y1 - 1)       -- edge: faint on the sides, a lit top below
+    Piece("BORDER", pal.bronzeLo, 0.10, x1, y2 + 1, x2, y2)
+    Piece("BORDER", pal.bronzeLo, 0.10, x1, y1, x1 + 1, y2)
+    Piece("BORDER", pal.bronzeLo, 0.10, x2 - 1, y1, x2, y2)
     Piece("BORDER", pal.ink, 0.21, x1 + 1, y1 - 1, x2 - 1, y1 - 2)   -- pressed in: shadow above and left,
     Piece("BORDER", pal.ink, 0.12, x1 + 1, y1 - 2, x1 + 2, y2 + 2)  -- a faint lip below
-    Piece("BORDER", pal.text, 0.035, x1 + 1, y2 + 2, x2 - 1, y2 + 1)
+    Piece("BORDER", pal.ink, 0.12, x1 + 1, y2 + 2, x2 - 1, y2 + 1)
+    Piece("BORDER", pal.text, 0.05, x1, y1, x2, y1 - 1)           -- the faint upper-edge highlight
 end
 
 -- A window or popup's shell: the rim, brackets and tonal layers, an optional title band of headerH pixels, and
@@ -747,7 +760,7 @@ function Wg.ScrollBar(scroll)
         local over, drag = false, false
         local function Paint()
             local c, a = pal.thumb, 0.85
-            if drag then c, a = pal.teal, 0.95 elseif over then c, a = pal.control, 0.95 end
+            if drag then c, a = pal.teal, 0.95 elseif over then c, a = pal.thumbHi, 0.95 end
             thumb:SetColorTexture(c[1], c[2], c[3], a)
         end
         bar:HookScript("OnEnter", function() over = true; Paint() end)

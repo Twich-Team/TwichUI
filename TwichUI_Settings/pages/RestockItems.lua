@@ -72,7 +72,7 @@ function P.Say(text, tone)
     if not (f and f.note) then return end
     local pal = Wg().pal
     f.note:SetText(text or "")
-    Wg().Color(f.note, tone == "warn" and pal.danger.text or (tone == "ok" and pal.tealHi or pal.textDim))
+    Wg().Color(f.note, tone == "warn" and pal.danger.text or (tone == "ok" and pal.sage or pal.textDim))
 end
 
 ---------------------------------------------------------------------------
@@ -310,7 +310,7 @@ function P.Refresh()
         G.Color(row.name, rule.enabled and pal.text or pal.stone)
         local text, tone = Status(rule, not scan.unknown[rule.id] and scan.counts[rule.id] or nil, state)
         row.status:SetText(text)
-        G.Color(row.status, tone == "warn" and pal.danger.text or (tone == "ok" and pal.tealHi or pal.stone))
+        G.Color(row.status, tone == "warn" and pal.danger.text or (tone == "ok" and pal.sage or pal.stone))
         if not row.target:HasFocus() then row.target:SetText(tostring(rule.target)) end
         row.check:SetChecked(rule.enabled)
         row.up:SetEnabled(i > 1)

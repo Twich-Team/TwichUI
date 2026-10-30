@@ -63,7 +63,7 @@ function P.Say(text, tone)
     if not (f and f.note) then return end
     local pal = Wg().pal
     f.note:SetText(text or "")
-    Wg().Color(f.note, tone == "warn" and pal.danger.text or (tone == "ok" and pal.tealHi or pal.textDim))
+    Wg().Color(f.note, tone == "warn" and pal.danger.text or (tone == "ok" and pal.sage or pal.textDim))
 end
 
 -- The game's name for a spell, when it has one cached. Never waits for one.

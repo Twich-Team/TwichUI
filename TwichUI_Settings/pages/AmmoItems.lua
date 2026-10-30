@@ -100,7 +100,7 @@ function P.Say(text, tone)
     if not (f and f.note) then return end
     local pal = Wg().pal
     f.note:SetText(text or "")
-    Wg().Color(f.note, tone == "warn" and pal.danger.text or (tone == "ok" and pal.tealHi or pal.textDim))
+    Wg().Color(f.note, tone == "warn" and pal.danger.text or (tone == "ok" and pal.sage or pal.textDim))
 end
 
 ---------------------------------------------------------------------------
@@ -236,7 +236,7 @@ function P.Refresh()
         G.Color(row.name, pal.text)
         local text, tone = StatusText(entry, state)
         row.status:SetText(text)
-        G.Color(row.status, tone == "warn" and pal.danger.text or (tone == "ok" and pal.tealHi or pal.stone))
+        G.Color(row.status, tone == "warn" and pal.danger.text or (tone == "ok" and pal.sage or pal.stone))
         row.kind:SetValue(entry.kind, AI.KindLabel(entry.kind))
         row:Show()
     end
