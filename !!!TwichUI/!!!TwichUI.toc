@@ -27,6 +27,8 @@ Persist.lua
 Profiles.lua
 Switches.lua
 SettingsLauncher.lua
+# TwichUI on a data bar: a launcher that opens the settings (needs a data bar addon that provides LibDataBroker)
+SettingsBroker.lua
 DiagnosticsLauncher.lua
 LayoutsLauncher.lua
 # First-install setup: offers the layout setup on a new installation and coordinates EllesmereUI's own first run (docs/onboarding.md)
