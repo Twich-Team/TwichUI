@@ -347,7 +347,7 @@ function LM.Boot(name, sv, opts)
       return state(n, who)
     end
     if opts.onboarding then
-      for _, f in ipairs({ "Onboarding.lua", "modules/WelcomeAutomation.lua", "modules/Welcome.lua" }) do
+      for _, f in ipairs({ "Onboarding.lua", "FirstRunWelcome.lua", "modules/WelcomeAutomation.lua", "modules/Welcome.lua" }) do
         local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
       end
     end

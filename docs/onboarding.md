@@ -187,6 +187,12 @@ texture (`0.035, 0.030, 0.025`) at 40% (`W.SCRIM_ALPHA`), no vignette, glow, blu
   ended, listeners off, not counted as a deferral; a window built only part way is built again at the next open. A reload
   takes everything down; nothing is saved.
 
+## The welcome
+
+`FirstRunWelcome.lua` fills the wait before the setup is ready. At the session's first world entry, `Onboarding.lua` shows it only when the state is "new", the setup could open (its addons load) and neither combat nor EllesmereUI's own setup or look picker has the player; later world entries never show it again. It is presentation only: it writes no record, applies nothing and starts no reload, and every call into it is protected, so the setup does not depend on it.
+
+It ends by the real events, never by a timer of its own: the setup's window opened (a 0.2 s fade, none under reduced motion, then every frame hidden and every animation stopped), the setup could not open or was already up, a way-in reason appeared (combat, EllesmereUI's dialogs), the setup's bounded looks ran out, Dismiss (shown after 6 s, the only part that takes the mouse), or a 36 s cap. A welcome that ends without the setup leaves the record "new". Reduced motion is the settings window's "Reduce settings motion" or the notifications' Reduced motion. Diagnostics: the session's reason codes ("welcome", "welcome-error") and `FirstRunWelcome.Snapshot()`; there is no gauge, since it runs once and holds nothing between sessions. The existing 4 s settle before the first look at opening is untouched.
+
 ## Performance and diagnostics
 
 - Login with setup finished: Persist's normalization of one small table, `O.Sync` (a few field reads), one `PLAYER_LOGIN`

@@ -33,6 +33,8 @@ DiagnosticsLauncher.lua
 LayoutsLauncher.lua
 # First-install setup: offers the layout setup on a new installation and coordinates EllesmereUI's own first run (docs/onboarding.md)
 Onboarding.lua
+# The welcome shown while that setup gets ready (presentation only; Onboarding.lua calls it)
+FirstRunWelcome.lua
 modules\Interact.lua
 modules\QuietLogin.lua
 modules\Media.lua

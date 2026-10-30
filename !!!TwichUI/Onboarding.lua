@@ -295,6 +295,31 @@ local function Due()
 end
 O.Due = Due
 
+-- The welcome (FirstRunWelcome.lua) is decoration: a failure in it is only noted, and the setup does not wait for it.
+local function Welcome(fn, ...)
+    local W = R.FirstRunWelcome
+    if not (W and W[fn]) then return end
+    local ok, err = pcall(W[fn], ...)
+    if not ok then
+        R.Fault("first-run welcome", err)
+        Note("welcome-error")
+        pcall(W.Release, "error")
+    end
+end
+
+-- Reasons that end the welcome rather than let it wait: another dialog has the player (EllesmereUI's own setup) or combat began.
+local WELCOME_YIELDS = { ["ellesmereui-setup"] = true, ["ellesmereui-style"] = true, combat = true }
+
+-- Whether the welcome should show now: only for the very opening this session would make by itself on a new installation, and
+-- not when the setup could not open or EllesmereUI's own setup has the player.
+local function WelcomeWanted()
+    local W = R.FirstRunWelcome
+    if not (W and W.Snapshot().phase == "idle") then return false end   -- once per session
+    if session.offered or session.answered or not Due() or O.State() ~= "new" then return false end
+    if not WizardLoadable() then return false end
+    return not WELCOME_YIELDS[O.InTheWay() or ""]
+end
+
 -- Opens the setup now, as the first-install offer. Returns true | false, reason.
 function O.OpenNow()
     local L = R.LayoutsLauncher
@@ -303,10 +328,11 @@ function O.OpenNow()
     session.offered = true
     Refresh()
     -- already up (the result after the setup's own reload opens it): that is this session's offer
-    if L.WizardLoaded() and R.LayoutWizard.Window.IsShown() then Note("open-already") return true end
+    if L.WizardLoaded() and R.LayoutWizard.Window.IsShown() then Note("open-already") Welcome("Release", "already") return true end
     o.offers = o.offers + 1
     local ok, why = L.OpenWizard()   -- says why in chat when it can't
-    if ok then Note("open") return true end
+    if ok then Note("open") Welcome("Handoff") return true end   -- the window is up: the welcome fades out under it
+    Welcome("Release", "failed")
     Note("load-failed")
     if R.Life then R.Life.Note("onboarding-load-failed") end
     if session.holding then
@@ -324,10 +350,12 @@ local function Attempt(mine)
     if not Due() then Refresh() return end
     local why = O.InTheWay()
     if why then
+        if WELCOME_YIELDS[why] then Welcome("Release", why) end
         session.lastWait = why
         if R.Life then R.Life.Note("onboarding-waited") end
         session.tries = session.tries + 1
-        if session.tries < O.MAX_TRIES then Schedule(RETRY) end   -- then it waits for the next world entry or end of combat
+        if session.tries < O.MAX_TRIES then Schedule(RETRY)   -- then it waits for the next world entry or end of combat
+        else Welcome("Release", "gave-up") end
         return
     end
     O.OpenNow()
@@ -350,6 +378,8 @@ local function OnEnteringWorld(isLogin)
     if session.login == nil then session.login = isLogin == true end
     Cancel()
     session.tries = 0
+    -- at once, not after the settle: this is what fills the wait (once per session; it ends itself on any way out)
+    if WelcomeWanted() then Note("welcome") Welcome("Show") end
     Schedule(SETTLE)
 end
 
