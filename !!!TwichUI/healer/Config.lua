@@ -66,7 +66,12 @@ HW.DEFAULTS = {
     scale = 100, opacity = 100, width = 190, barHeight = 8, artSize = 34, font = "default", textSize = 13,
     outline = "shadow", colorMana = "ff4a78ad", colorLow = "ffc29a48", colorCritical = "ffb85a4a",
     colorText = "fff0e8d2", colorDim = "ffaaa192", barTexture = "solid", barBorder = true, panelBg = 0, panelBorder = false,
-    fade = false, pulse = false, flashChat = false, flashCritical = false, flashDrinking = false,
+    fade = false, pulse = false,
+    -- the attention effect for each trigger: "none", "flash" or "particles". The three flash* settings are the older
+    -- form of the first two choices; they are read only while an effect* setting has never been saved (HW.Get).
+    effectChat = "none", effectCritical = "none", effectDrinking = "none",
+    particleColor = "ff3fc9bd", particleIntensity = "standard",
+    flashChat = false, flashCritical = false, flashDrinking = false,
     -- where it sits: a point of the screen and an offset from it, in screen units
     point = "CENTER", x = -300, y = -140,
 }
@@ -77,7 +82,19 @@ HW.LIMITS = {
     textSize = { 8, 24 }, panelBg = { 0, 90 }, x = { -HW.POSITION_LIMIT, HW.POSITION_LIMIT }, y = { -HW.POSITION_LIMIT, HW.POSITION_LIMIT },
 }
 
+local EFFECTS = {
+    { "none", "None", "Nothing is drawn for this." },
+    { "flash", "Flash", "A short bright flash of the panel, twice." },
+    { "particles", "Magical particles", "A few soft motes drift off the panel's edges and fade. The panel itself is not flashed." },
+}
+
 HW.CHOICES = {
+    effectChat = EFFECTS, effectCritical = EFFECTS, effectDrinking = EFFECTS,
+    particleIntensity = {
+        { "subtle", "Subtle", "A few small motes." },
+        { "standard", "Standard", "A small handful of motes." },
+        { "strong", "Strong", "More motes and a clearer edge glow; still brief." },
+    },
     preset = {
         { "compact", "Compact", "A small flask, the healer's name and mana, a mana bar and one line of status." },
         { "minimal", "Minimal", "The mana value with small drinking and chat marks; the name if you want it. No bar or artwork unless you turn them on." },
@@ -189,11 +206,18 @@ local function Saved(create)
     return db.ui.healerWatch
 end
 
+-- Each effect* setting and the flash* setting it replaced.
+HW.LEGACY_FLASH = { effectChat = "flashChat", effectCritical = "flashCritical", effectDrinking = "flashDrinking" }
+
 function HW.Get(key)
     local t = Saved(false)
     local value
     if t then value = t[key] end   -- not "and ... or": a saved false is a value
     if HW.Valid(key, value) then return value end
+    -- Moving from the flash checkboxes: an effect never saved reads as the checkbox did (ticked: Flash, else None).
+    -- Nothing is written; a saved effect, even an unusable one, is never second-guessed by the old value.
+    local legacy = HW.LEGACY_FLASH[key]
+    if legacy and value == nil and t and t[legacy] == true then return "flash" end
     return HW.DEFAULTS[key]
 end
 

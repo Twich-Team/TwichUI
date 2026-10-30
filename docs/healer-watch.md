@@ -227,12 +227,52 @@ their visual weight, and writes 256, 64 and 32 px uncompressed 32-bit TGAs. Runt
    click outside Move it.
 10. The artwork at each size on the real UI, and the faded cup's legibility.
 
-## Attention flash
+## Attention effect
 
-Optional, off by default, one checkbox per trigger: they say something (a mana message begins), mana becomes critical
-(a measured reading entering critical, never a restricted one), drinking is confirmed (an aura appears after "no" or
-"can't be seen", not at the first look at a player). The flash is a wash and outline over the panel in that trigger's
-color (text, critical, mana), twice, about 1.3 s in all, with at least two seconds between flashes. It is alpha animation
-only (no OnUpdate), and never with Notifications' Reduced motion. It plays on the live panel only; "Try the flash" in the
-settings plays it once in the on-screen preview whether or not the triggers are on. It is separate from the critical
-"pulse".
+Off by default. Each trigger has its own setting, None, Flash or Magical particles, and the three triggers are: they say
+something (a mana message begins), mana becomes critical (a measured reading entering critical, never a restricted one),
+drinking is confirmed (an aura appears after "no" or "can't be seen", not at the first look at a player). One effect per
+trigger, never both. Neither plays with Notifications' Reduced motion, and neither is a substitute for the other under it:
+the panel's words and numbers say the same thing.
+
+**Flash.** A wash and outline over the panel in that trigger's color (text, critical, mana), twice, about 1.3 s in all,
+with at least two seconds between flashes. Alpha animation only (no OnUpdate). "Try the flash" in the settings plays it once
+in the on-screen preview whether or not the triggers are on. It is separate from the critical "pulse".
+
+**Magical particles** (`healer/Particles.lua`). A haze of up to forty soft puffs (`media\classbars\venom-puff.tga`, tinted, drawn
+with normal blending so it reads on dark and bright scenery; no new artwork; Blizzard's `star4` was tried and dropped because it
+has no transparency and draws a black box). Puffs start near the middle of the panel (within its central fifth), swell from 0.7x to 1.5x, travel outward along their own
+direction until they are past the panel's edge, and fade over 2.2 s, started over 3 s so the haze keeps coming for about five
+seconds. A faint one-pixel glow along the border rises and falls with it (at most 0.16, 0.26 or 0.38 opacity for Subtle,
+Standard and Strong). Subtle plays 16 puffs at up to 30% opacity, Standard 26 at 45%, Strong 40 at 60%. Because they start over the readings, the puffs are thin;
+nothing takes the mouse, and there is no sound. The color is one setting (`particleColor`, arcane teal by default) and tints only
+the particles.
+- Motion is animation groups the game runs (`Translation` and `Alpha`); there is no OnUpdate, idle or playing.
+- One pool per display, made the first time it plays and reused; at most 40 textures and one glow frame per display.
+- The haze is drawn behind the panel's art, text and bar (its frame is one level below the panel's own parts, not above them).
+- Drinking is the one trigger that lasts: with it set to particles, a confirmed drinking aura plays a burst, rests 1.5 s, and plays
+  the next, for as long as the healer is confirmed drinking and the panel is shown (one timer at a time, guarded by the
+  watched healer's life). It ends when drinking stops or cannot be seen, the panel is hidden, the effect is changed or another
+  healer is watched. A flash for drinking, and the other triggers, still play once.
+- A trigger while a burst (about 5.3 s) is still running is coalesced, not queued. The triggers themselves fire on a state
+  entering, as the flash does, so a changing reading or a repeated look at the same state starts nothing.
+- It ends at once when: the effect settings change (a trigger's effect, the color, the strength), a profile changes, the panel
+  is hidden or Healer Watch is switched off, or another healer is watched.
+- "Preview particles" plays one burst on the sample in the settings (not the live panel), in the chosen color and strength,
+  whatever the triggers are set to. It reads nothing from the group and starts no trigger; playing it again restarts it. It
+  ends when the settings close or any setting changes.
+
+**Moving from the old checkboxes.** The three `flash*` checkboxes became the three `effect*` settings. An `effect*` setting
+that was never saved reads as its old checkbox (ticked: Flash, otherwise None); nothing is rewritten, a saved `effect*` is
+never overridden by the old value, and an unusable saved one reads as None. A layout or share made before the change, which
+carries only the old checkboxes, therefore still reads as Flash for anyone who has not chosen an effect yet; it does not
+override an effect someone has already chosen.
+
+In-game checks for the particles:
+1. Each trigger set to Magical particles: the burst is gentle, stays near the panel, and leaves the name, mana, bar and
+   status readable at 50%, 100% and 200% scale, on a dark and on a bright background.
+2. The default teal and a few other colors, Subtle, Standard and Strong; the border glow never reads as a flash.
+3. Switching Flash, Particles and None while a burst plays leaves nothing behind; a profile change, a different healer, leaving
+   the instance and hiding the panel all end it.
+4. Reduced motion on: nothing plays; the preview says so.
+5. Preview particles in the settings: one burst on the sample, no overlap on repeated clicks, gone when the window closes.

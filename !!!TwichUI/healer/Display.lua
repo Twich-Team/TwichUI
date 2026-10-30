@@ -12,7 +12,9 @@
 -- The panel takes no clicks (EnableMouse false) so it never gets in the way of the world; only the move handle does,
 -- and only while you are moving it. Motion is optional and short: a 0.2 s fade in and 0.25 s fade out, and a pulse of
 -- three slow breaths when mana becomes critical, each only when chosen and neither with Notifications' Reduced motion
--- on. Both are animation groups the game runs; nothing here has an OnUpdate.
+-- on. Both are animation groups the game runs; nothing here has an OnUpdate. The same goes for the attention effect
+-- of each trigger (chat, critical mana, drinking): None, a Flash (D.Flash) or Magical particles (Particles.lua), one of
+-- them for a trigger, never both. D.Attention picks by the setting.
 -- The decorative flask is the emblem only: its painted liquid never moves and is not a gauge. The bar and the number
 -- carry the measured mana.
 
@@ -28,7 +30,7 @@ local FADE_IN, FADE_OUT = 0.2, 0.25
 local PULSE_HALF, PULSE_BREATHS = 0.7, 3
 local FLASH_UP, FLASH_DOWN, FLASHES, FLASH_GAP = 0.12, 0.55, 2, 2   -- seconds; how many times; least gap between two
 local FLASH_COLOR = { chat = "colorText", critical = "colorCritical", drinking = "colorMana" }
-local FLASH_KEY = { chat = "flashChat", critical = "flashCritical", drinking = "flashDrinking" }
+local EFFECT_KEY = { chat = "effectChat", critical = "effectCritical", drinking = "effectDrinking" }
 local GAP = 8
 local EDGE = { 0.20, 0.155, 0.09 }          -- blackened bronze: the bar's frame
 local TRACK = { 0.055, 0.047, 0.04 }        -- the empty part of the bar: warm near-black
@@ -41,6 +43,8 @@ local layoutRev = 1
 local drawnSig
 local shownMode
 local curve, secretFailed
+local fxSig                                 -- the effect settings the running effects were started under
+local surfaceFx = setmetatable({}, { __mode = "k" })   -- the sample surfaces that have played particles
 local stats = { draws = 0, secretDraws = 0, secretRefused = 0, built = false }
 
 local function Reduced() return R:Enabled("arrivalReducedMotion") end
@@ -435,12 +439,28 @@ local function OffsetFor(f, point)
 end
 D.OffsetFor = OffsetFor
 
+-- The particle pool a panel or sample surface has, if it has made one.
+local function PoolIfAny(owner)
+    local pool = owner.particles
+    return type(pool) == "table" and pool or nil
+end
+
+-- Whatever an attention effect has put on the panel: the flash's wash and the particles, both gone.
+local function StopEffects()
+    if not frame then return end
+    frame.flash.group:Stop()
+    frame.flash:SetAlpha(0)
+    local pool = PoolIfAny(frame)
+    if pool then pool:Stop() end
+end
+
+D.StopEffects = StopEffects
+
 local function StopMotion()
     frame.fadeIn:Stop()
     frame.fadeOut:Stop()
     frame.pulse:Stop()
-    frame.flash.group:Stop()
-    frame.flash:SetAlpha(0)
+    StopEffects()
     frame.leaving = false
     frame.body:SetAlpha(1)   -- a stopped fade must not leave the panel half-transparent for its next showing
 end
@@ -590,9 +610,20 @@ local function Signature(v, cfg, mode)
 end
 
 -- Shows view v (made by Logic.Present) in the panel. mode: "live", "preview" or "position".
+-- A change to the effect settings (a trigger's effect, the color, the strength, a profile) ends what is playing, so
+-- a flash is never left over after switching to particles, nor particles in the old color after a new one is chosen.
+local function EffectSig(cfg)
+    return table.concat({ cfg.effectChat, cfg.effectCritical, cfg.effectDrinking, cfg.particleColor, cfg.particleIntensity }, "\31")
+end
+
 function D.Render(v, cfg, mode)
     Build()
     local f = frame
+    local fsig = EffectSig(cfg)
+    if fsig ~= fxSig then
+        fxSig = fsig
+        StopEffects()
+    end
     local sig = Signature(v, cfg, mode)
     if sig ~= drawnSig then
         Place(f, cfg)   -- the scale first, then the layout
@@ -636,6 +667,7 @@ function D.Hide(immediate, cfg)
     if frame.leaving then return end
     frame.fadeIn:Stop()
     frame.pulse:Stop()
+    StopEffects()
     if not immediate and cfg and cfg.fade and not Reduced() then
         frame.leaving = true
         frame.body:SetAlpha(1)
@@ -647,12 +679,12 @@ function D.Hide(immediate, cfg)
 end
 
 -- An attention flash for `kind` ("chat", "critical" or "drinking"): twice, short, in that kind's color, over the live panel,
--- and only if that kind's flash is switched on (force: the settings' "Try the flash", on a preview too). Never with
+-- and only if that kind's effect is Flash (force: the settings' "Try the flash", on a preview too). Never with
 -- Notifications' Reduced motion, and never twice within FLASH_GAP seconds. Returns whether it flashed.
 local lastFlash = -math.huge
 function D.Flash(kind, cfg, force)
-    if not (frame and frame:IsShown() and FLASH_KEY[kind]) or Reduced() then return false end
-    if not force and (shownMode ~= "live" or not cfg[FLASH_KEY[kind]]) then return false end
+    if not (frame and frame:IsShown() and EFFECT_KEY[kind]) or Reduced() then return false end
+    if not force and (shownMode ~= "live" or cfg[EFFECT_KEY[kind]] ~= "flash") then return false end
     local now = GetTime()
     if not force and now - lastFlash < FLASH_GAP then return false end
     lastFlash = now
@@ -666,6 +698,56 @@ function D.Flash(kind, cfg, force)
     fl.group:Play()
     return true
 end
+
+---------------------------------------------------------------------------
+-- Magical particles (Particles.lua): one pool on the live panel and one on each sample surface, made when first played
+---------------------------------------------------------------------------
+local function PoolOf(owner)
+    local pool = PoolIfAny(owner)
+    if not pool then
+        pool = R.HealerParticles.New(owner)
+        owner.particles = pool
+    end
+    return pool
+end
+
+local function PlayParticles(owner, cfg, force)
+    local r, g, b = Color(cfg.particleColor, { 0.25, 0.79, 0.74 })
+    return PoolOf(owner):Play(r, g, b, cfg.particleIntensity, force)
+end
+
+-- The attention effect for `kind` ("chat", "critical" or "drinking") as that trigger's setting says: nothing, the
+-- flash or the particles. The live panel only, never under Reduced motion. Returns whether anything played.
+function D.Attention(kind, cfg)
+    local effect = EFFECT_KEY[kind] and cfg[EFFECT_KEY[kind]]
+    if effect == "flash" then return D.Flash(kind, cfg) end
+    if effect ~= "particles" then return false end
+    if not (frame and frame:IsShown()) or shownMode ~= "live" or Reduced() then return false end
+    return PlayParticles(frame, cfg)
+end
+
+-- "Preview effect" in the settings: one burst on a sample surface (D.NewSurface) in the chosen color and strength,
+-- whatever the triggers are set to. It touches no healer state and starts no trigger; playing it again restarts it, never
+-- layers it. Returns whether it played (false, "motion" under Reduced motion).
+function D.PreviewParticles(surface, cfg)
+    if Reduced() then return false, "motion" end
+    surfaceFx[surface] = true
+    return PlayParticles(surface, cfg, true)
+end
+
+-- Stops the sample surface's particles (the settings closed, or the effect settings changed under them).
+function D.StopSurfaceEffects(surface)
+    local pool = PoolIfAny(surface)
+    if pool then pool:Stop() end
+end
+
+local function StopAllSurfaces()
+    for s in pairs(surfaceFx) do D.StopSurfaceEffects(s) end
+end
+R.OnSettingsClosed(StopAllSurfaces)
+HW.Subscribe(function(what)
+    if what == "settings" or what == "profile" then StopAllSurfaces() end
+end)
 
 -- Whether a click on the panel opens the picker. Only for the "Choose a healer" state, live; otherwise it takes none.
 function D.SetClickable(on)
@@ -749,6 +831,7 @@ function D.DrawSurface(s, v, cfg, maxW, maxH)
 end
 
 function D.Snapshot()
-    return { built = stats.built, shown = frame ~= nil and frame:IsShown() or false, mode = shownMode, draws = stats.draws,
+    local fx = R.HealerParticles and R.HealerParticles.Stats() or {}
+    return { built = stats.built, fxPools = fx.pools, fxMotes = fx.motes, fxBursts = fx.bursts, fxCoalesced = fx.coalesced, shown = frame ~= nil and frame:IsShown() or false, mode = shownMode, draws = stats.draws,
         secretDraws = stats.secretDraws, secretRefused = stats.secretRefused }
 end

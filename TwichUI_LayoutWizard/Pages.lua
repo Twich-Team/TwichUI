@@ -472,7 +472,7 @@ end
 -- 3. Helpers: one card for each preset the package offers, whatever its number and whatever it sets
 ---------------------------------------------------------------------------
 -- The card's picture: the preset's own shape decides (Model.PresetCard.art), a preset with none gets TwichUI's generic icon.
-local PRESET_ART = { keep = "keep", helpers = "helpers", navigation = "icon:navigation" }
+local PRESET_ART = { keep = "keep", helpers = "helpers", curated = "curated", navigation = "icon:navigation" }
 local GENERIC_ART = "icon:qualityOfLife"
 local HELP_PIC = { 56, 56 }
 

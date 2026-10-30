@@ -49,7 +49,7 @@ from make_map_tool_icons import read_png, resample  # noqa: E402
 # 3 x 2 with real transparency; sheet 5 (TwichUI Diagnostics' views) is 4 x 2 with real transparency.
 SOURCES = [("settings-icons-source.png", 4, 4, False), ("settings-icons-2-source.png", 4, 4, False),
            ("settings-icons-3-source.png", 2, 1, True), ("settings-icons-4-source.png", 3, 2, False),
-           ("settings-icons-5-source.png", 4, 2, False)]
+           ("settings-icons-5-source.png", 4, 2, False), ("settings-icons-6-source.png", 1, 1, False)]
 # The sheets whose icons set the median the optical balance aims for. A sheet added later is balanced against the
 # same median without moving it, so adding one never changes an icon that was already made.
 MEDIAN_SHEETS = 3
@@ -75,13 +75,14 @@ SHEETS = [
     ],
     [("declineDuels", None), ("quickKeybind", None)],
     [
-        ("reminders", None), ("reminderShow", None), ("reminderWhen", None),
+        (None, None), ("reminderShow", None), ("reminderWhen", None),   # cell 1 was the bell; Reminders is now sheet 6's scroll
         ("reminderPlacement", 5), ("reminderPreview", None), ("reminderTest", None),
     ],
     [
         ("diagOverview", None), ("diagTimeline", None), ("diagMemory", None), ("diagOperations", None),
         ("diagEvents", None), ("diagCompare", None), ("diagErrors", None), ("diagExport", None),
     ],
+    [("reminders", None)],   # sheet 6: a rolled parchment scroll with a bronze ribbon
 ]   # expected solid parts per icon; None: not known beforehand (any number, merged into one icon)
 
 # output: suffix, canvas side, content's longer side (the rest is clear margin)
@@ -483,6 +484,8 @@ def main():
             col, row = min(ncols - 1, int(p[2] * ncols // w)), min(nrows - 1, int(p[3] * nrows // h))
             cells.setdefault(row * ncols + col, []).append(p)
         for i, (name, expect) in enumerate(icons):
+            if name is None:
+                continue
             ps = cells.get(i, [])
             if not ps or (expect is not None and len(ps) != expect):
                 raise SystemExit("%s: %s: expected %s solid part(s) in cell %d, found %d" % (source, name, expect or "some", i + 1, len(ps)))

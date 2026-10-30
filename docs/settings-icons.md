@@ -120,7 +120,7 @@ changed no earlier icon (every existing file came out byte-identical).
 
 | # | Registry id | Picture | Used by |
 |---|---|---|---|
-| 19 | `reminders` | bronze bell (its loop is a genuine opening, kept clear) | `reminders`; a words-only reminder's thumbnail |
+| 19 | `reminders` | rolled parchment scroll with a bronze ribbon (from `assets/settings-icons-6-source.png`, a single-icon sheet; replaced the bell) | `reminders`; a words-only reminder's thumbnail |
 | 20 | `reminderShow` | parchment shield in a bronze frame | Reminders editor: Show; an icon a reminder can show |
 | 21 | `reminderWhen` | three connected nodes | Reminders editor: When |
 | 22 | `reminderPlacement` | a panel within four corner marks (five separate pieces) | Reminders editor: Placement |

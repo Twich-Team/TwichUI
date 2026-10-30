@@ -45,6 +45,9 @@ Methods = {
   SetFont = function(s, path, size, flags) s.font = { path, size, flags }; s.fontSize = size; return true end,
   SetValue = function(s, v) s.value = v end, SetStatusBarColor = function(s, r, g, b) s.barColor = { r, g, b } end,
   SetDesaturated = function(s, v) s.desaturated = v end,
+  SetFrameLevel = function(s, l) s.level = l end, GetFrameLevel = function(s) return s.level end,
+  SetVertexColor = function(s, r, g, b) s.vertex = { r, g, b } end,
+  SetColorTexture = function(s, r, g, b, a) s.color = { r, g, b, a } end,
   RegisterForClicks = function() end,
   SetStatusBarTexture = function(s, t) s.texture = t end, SetBackdrop = function(s, info) s.backdrop = info end,
   StartMoving = function(s) s.moving = true end, StopMovingOrSizing = function(s) s.moving = false end,
@@ -55,13 +58,23 @@ Methods = {
     g.owner, g.plays = s, 0
     g.Play = function(self) self.plays = self.plays + 1; self.playing = true end
     g.Stop = function(self) self.playing = false end
-    g.CreateAnimation = function() return Fake("anim") end
+    g.CreateAnimation = function(_, kind)
+      local a = Fake("anim")
+      a.animKind = kind
+      a.SetOffset = function(self, x, y) self.offset = { x, y } end
+      a.SetToAlpha = function(self, v) self.toAlpha = v end
+      a.SetFromAlpha = function(self, v) self.fromAlpha = v end
+      a.SetStartDelay = function(self, v) self.delay = v end
+      a.SetDuration = function(self, v) self.duration = v end
+      return a
+    end
     return g
   end,
 }
 c.CreateFrame = function(kind, name, parent, template)
   local f = Fake(kind)
   f.name, f.parent, f.template = name, parent, template
+  f.level = ((parent and parent.level) or 0) + 1   -- a child is one level above its parent, as in the game
   return f
 end
 c.UIParent = Fake("UIParent")
@@ -163,7 +176,7 @@ local function Say(event, text, guid, name)
 end
 
 for _, f in ipairs({ "modules/Borders.lua", "modules/MenuStyle.lua", "modules/Media.lua", "Icons.lua", "modules/SpellMenu.lua",
-  "healer/Config.lua", "healer/Logic.lua", "healer/Drinks.lua", "healer/Display.lua", "healer/Picker.lua", "healer/Watch.lua", "setup/TwichConfig.lua" }) do
+  "healer/Config.lua", "healer/Logic.lua", "healer/Drinks.lua", "healer/Particles.lua", "healer/Display.lua", "healer/Picker.lua", "healer/Watch.lua", "setup/TwichConfig.lua" }) do
   local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
 end
 c.TwichUIDB = { modules = {} }
@@ -679,7 +692,7 @@ do
   NOW = NOW + 5
   Mana(2, 300)
   Check(Plays() == base, "off by default: no flash when mana turns critical")
-  HW.Set("flashCritical", true); HW.Set("flashChat", true); HW.Set("flashDrinking", true); Settle()
+  HW.Set("effectCritical", "flash"); HW.Set("effectChat", "flash"); HW.Set("effectDrinking", "flash"); Settle()
   NOW = NOW + 5
   Mana(2, 3000); NOW = NOW + 5
   Mana(2, 300)
@@ -710,7 +723,222 @@ do
   Wt.PreviewStop()
   G.party[2].auras = {}
   Fire("UNIT_AURA", "party2", { isFullUpdate = true }); Settle()
-  HW.Set("flashCritical", false); HW.Set("flashChat", false); HW.Set("flashDrinking", false)
+  HW.Set("effectCritical", "none"); HW.Set("effectChat", "none"); HW.Set("effectDrinking", "none")
+  Mana(2, 3000)
+end
+
+---------------------------------------------------------------------------
+-- 9e. The attention effect: a setting per trigger (None, Flash, Magical particles), read from the old flash checkboxes
+-- until it is chosen, and the particles themselves
+---------------------------------------------------------------------------
+do
+  local saved = c.TwichUIDB.ui.healerWatch
+  local function Raw(t) c.TwichUIDB.ui.healerWatch = t end
+  -- the migration reads, and never writes
+  Raw({ flashChat = true, flashCritical = false })
+  Check(HW.Get("effectChat") == "flash" and HW.Get("effectCritical") == "none" and HW.Get("effectDrinking") == "none",
+    "an old ticked flash reads as Flash; unticked or never set as None")
+  Check(c.TwichUIDB.ui.healerWatch.effectChat == nil and c.TwichUIDB.ui.healerWatch.flashChat == true, "reading the old checkbox writes nothing")
+  Raw({ flashChat = true, effectChat = "none" })
+  Check(HW.Get("effectChat") == "none", "a saved effect is never second-guessed by the old checkbox")
+  Raw({ flashChat = true, effectChat = "sparkles" })
+  Check(HW.Get("effectChat") == "none" and c.TwichUIDB.ui.healerWatch.effectChat == "sparkles", "an unknown effect reads as None and is left as it is")
+  Raw({ particleColor = "zzz", particleIntensity = "huge" })
+  Check(HW.Get("particleColor") == HW.DEFAULTS.particleColor and HW.Get("particleIntensity") == "standard", "an unusable color or strength reads as its default")
+  Check(not HW.Set("particleColor", "ff00") and not HW.Set("particleIntensity", "loud") and not HW.Set("effectChat", "sparkles"), "unusable values are refused")
+  Raw({ flashCritical = true })
+  HW.ResetSettings()
+  Check(HW.Get("effectCritical") == "none", "Reset puts the effect back to None, the old checkbox too")
+  Raw(saved)
+  -- the layout the Classic preset publishes still reads as Flash
+  Raw({ flashChat = true, flashCritical = true, flashDrinking = true })
+  Check(HW.Get("effectChat") == "flash" and HW.Get("effectCritical") == "flash" and HW.Get("effectDrinking") == "flash", "a published layout with the old checkboxes reads as Flash")
+  Raw(saved)
+
+  Wt.PreviewStop(); Settle()
+  G.party[2].mana = 3000; Fire("UNIT_POWER_UPDATE", "party2", "MANA"); Settle()
+  local fl = Panel().flash
+  Check(Panel().particles == nil, "no particle texture exists until particles are played")
+  local LV = R.HealerParticles.LEVELS
+  local function Pool() return Panel().particles end
+  local function Playing()
+    local n = 0
+    if Pool() and Pool().built then for _, m in ipairs(Pool().motes) do if m.group.playing then n = n + 1 end end end
+    return n
+  end
+  local function EdgePlaying() return Pool() and Pool().built and Pool().edge.group.playing end
+  local function Bursts() return R.HealerParticles.Stats().bursts end
+  local function Trigger()   -- mana down into critical, from fine
+    NOW = NOW + 5; Mana(2, 3000)
+    NOW = NOW + 5; Mana(2, 300)
+  end
+
+  -- None: nothing plays
+  Trigger()
+  Check(Pool() == nil and not fl.group.playing, "None: no particles, no flash")
+
+  -- Particles use the same trigger, once
+  HW.Set("effectCritical", "particles"); Settle()
+  local flashPlays = fl.group.plays
+  local b0, frames0 = Bursts(), #frames
+  Trigger()
+  Check(Pool() and Playing() == LV.standard.motes and EdgePlaying() and Bursts() == b0 + 1, "critical mana plays one burst of the Standard motes and the edge glow")
+  Check(fl.group.plays == flashPlays and fl:GetAlpha() == 0, "particles do not flash the panel")
+  local nFrames = #frames
+  Mana(2, 200); Mana(2, 250)
+  Check(Bursts() == b0 + 1, "mana moving while it stays critical starts no new burst")
+  Fire("UNIT_POWER_UPDATE", "party2", "MANA"); Settle()
+  Check(Bursts() == b0 + 1, "an unchanged update starts none either")
+  Mana(2, 3000); Mana(2, 300)   -- out and in again at once: folded into the burst that is playing
+  Check(Bursts() == b0 + 1 and R.HealerParticles.Stats().coalesced >= 1, "a repeat trigger during a burst is coalesced")
+  NOW = NOW + R.HealerParticles.DURATION + 1
+  Mana(2, 3000); Mana(2, 300)
+  Check(Bursts() == b0 + 2 and Playing() == LV.standard.motes, "after the burst is over the next trigger plays a new one, not a second one on top")
+  for _ = 1, 6 do NOW = NOW + 4; Mana(2, 3000); Mana(2, 300) end
+  Check(Playing() <= R.HealerParticles.MOTES and #Pool().motes == R.HealerParticles.MOTES and #frames == nFrames,
+    "repeated triggers never grow the pool: no new texture or frame")
+  Check(OnUpdates() == 0, "no OnUpdate script anywhere, playing or idle")
+  for _, m in ipairs(Pool().motes) do
+    Check(m.group.plays == 0 or m.move.offset ~= nil, "every mote that played has a drift")
+  end
+  local m1 = Pool().motes[1]
+  do   -- from the middle: each puff starts within the central fifth of the panel and ends outside the panel
+    local w, h = Panel():GetWidth(), Panel():GetHeight()
+    local ok = true
+    for i = 1, LV.standard.motes do
+      local m = Pool().motes[i]
+      local pt = m.tex.points[#m.tex.points]
+      local x, y = pt[4], pt[5]
+      local ex, ey = x + m.move.offset[1], y + m.move.offset[2]
+      if math.abs(x - w / 2) > w * 0.1 + 0.01 or math.abs(y - h / 2) > h * 0.1 + 0.01 then ok = false end
+      if ex > 0 and ex < w and ey > 0 and ey < h then ok = false end
+    end
+    Check(ok, "puffs start near the middle and finish outside the panel")
+  end
+  Check(math.abs(m1.move.offset[1]) + math.abs(m1.move.offset[2]) > 0 and math.abs(m1.move.offset[1]) < 400 and math.abs(m1.move.offset[2]) < 400, "every puff travels outward, a bounded distance")
+
+  -- color and strength: the effect only
+  local barColor = Panel().bar.sb.barColor
+  local statusText, valueText = Status(), Value()
+  HW.Set("particleColor", "ffff0000"); Settle()
+  Check(Playing() == 0 and not EdgePlaying(), "a new color ends the burst in the old one")
+  Check(Panel().bar.sb.barColor == barColor or (barColor and Panel().bar.sb.barColor[1] == barColor[1]), "the color does not touch the mana bar")
+  Check(Status() == statusText and Value() == valueText, "or the words and numbers")
+  HW.Set("particleIntensity", "strong"); Settle()
+  NOW = NOW + 10; Mana(2, 3000); Mana(2, 300)
+  local mote = Pool().motes[1]
+  Check(Playing() == LV.strong.motes and mote.tex.vertex and mote.tex.vertex[1] == 1 and mote.tex.vertex[2] == 0, "Strong plays the Strong count of motes in the chosen color")
+  HW.Set("particleIntensity", "subtle"); Settle()
+  NOW = NOW + 10; Mana(2, 3000); Mana(2, 300)
+  Check(Playing() == LV.subtle.motes, "Subtle plays its count")
+
+  -- switching modes
+  HW.Set("effectCritical", "flash"); Settle()
+  Check(Playing() == 0 and not EdgePlaying(), "Particles to Flash: the particles stop at once")
+  NOW = NOW + 10; Mana(2, 3000); Mana(2, 300)
+  Check(fl.group.playing and Playing() == 0, "Flash plays only the flash")
+  HW.Set("effectCritical", "particles"); Settle()
+  Check(not fl.group.playing and fl:GetAlpha() == 0 and Panel().body:GetAlpha() == 1, "Flash to Particles: the flash stops and the panel's look is restored")
+  NOW = NOW + 10; Mana(2, 3000); Mana(2, 300)
+  Check(Playing() == LV.subtle.motes and not fl.group.playing, "then only the particles play")
+  HW.Set("effectCritical", "none"); Settle()
+  Check(Playing() == 0 and not EdgePlaying() and not fl.group.playing and fl:GetAlpha() == 0, "None leaves nothing running or altered")
+  NOW = NOW + 10; Mana(2, 3000); Mana(2, 300)
+  Check(Playing() == 0 and not fl.group.playing, "and nothing starts")
+
+  -- the other triggers use the same effect, with their own setting
+  HW.Set("effectChat", "particles"); HW.Set("effectDrinking", "particles"); Settle()
+  NOW = NOW + 10; RunLongTimers(30); Settle()
+  Say("CHAT_MSG_PARTY", "oom", G.party[2].guid, "Elyndra")
+  Check(Playing() == LV.subtle.motes, "a mana message plays the particles when that trigger is set to them")
+  NOW = NOW + R.HealerParticles.DURATION + 1; RunLongTimers(30); Settle()
+  G.party[2].auras = { { id = 430, name = "Drink", inst = 78 } }
+  Fire("UNIT_AURA", "party2", { isFullUpdate = true }); Settle()
+  Check(Playing() == LV.subtle.motes and Bursts() >= 1, "confirmed drinking plays them too")
+  Fire("UNIT_AURA", "party2", { isFullUpdate = true }); Settle()
+  local after = Bursts()
+  Fire("UNIT_AURA", "party2", { isFullUpdate = true }); Settle()
+  Check(Bursts() == after, "a repeated look at the same drinking aura starts nothing")
+  -- while they keep drinking: a burst, a rest, the next burst; never two at once and never a pile of timers
+  local gap = R.HealerParticles.DURATION + 2
+  NOW = NOW + gap; RunLongTimers(10); Settle()
+  Check(Bursts() == after + 1 and Playing() == LV.subtle.motes, "still drinking: another burst follows")
+  NOW = NOW + gap; RunLongTimers(10); Settle()
+  Check(Bursts() == after + 2, "and another")
+  G.party[2].auras = {}   -- drinking ends while the next burst's timer is waiting
+  Fire("UNIT_AURA", "party2", { isFullUpdate = true }); Settle()
+  NOW = NOW + gap; RunLongTimers(10); Settle()
+  NOW = NOW + gap; RunLongTimers(10); Settle()
+  Check(Bursts() == after + 2, "drinking over: the bursts stop")
+  -- another healer, or a different effect, ends the repetition too
+  G.party[2].auras = { { id = 430, name = "Drink", inst = 79 } }
+  Fire("UNIT_AURA", "party2", { isFullUpdate = true }); Settle()
+  local again = Bursts()
+  Check(again == after + 3, "drinking again begins a new run")
+  RunLongTimers(10); Settle()
+  Check(Bursts() == again, "a rest timer that fires early starts nothing while a burst is still running")
+  HW.Set("effectDrinking", "flash"); Settle()
+  NOW = NOW + gap; RunLongTimers(10); Settle()
+  Check(Bursts() == again and Playing() == 0, "changing the effect ends the repetition")
+  HW.Set("effectDrinking", "particles"); Settle()
+  G.party[2].auras = {}
+  Fire("UNIT_AURA", "party2", { isFullUpdate = true }); Settle()
+  -- behind the art, the text and the bar
+  Check(Pool().frame.level < Panel().body.level, "the haze is drawn behind the panel's own parts")
+
+  -- reduced motion: nothing, and no flash in its place
+  HW.Set("effectCritical", "particles"); Settle()
+  c.TwichUIDB.modules.arrivalReducedMotion = true
+  local before = Bursts()
+  NOW = NOW + 10; Mana(2, 3000); Mana(2, 300)
+  Check(Bursts() == before and Playing() == 0 and not fl.group.playing, "Reduced motion: no particles and no flash instead")
+  Check(select(2, D.PreviewParticles(D.NewSurface(Panel()), { particleColor = "ff3fc9bd", particleIntensity = "standard" })) == "motion", "the preview says so under Reduced motion")
+  c.TwichUIDB.modules.arrivalReducedMotion = false
+
+  -- a different healer: nothing carried over
+  NOW = NOW + 10; Mana(2, 3000); Mana(2, 300)
+  Check(Playing() == LV.subtle.motes, "particles playing for the first healer")
+  G.party[2].role, G.party[3].role = "NONE", "HEALER"
+  Fire("PLAYER_ROLES_ASSIGNED"); Settle()
+  Check(Playing() == 0 and not EdgePlaying(), "watching someone else ends the first healer's particles")
+  G.party[2].role, G.party[3].role = "HEALER", "NONE"
+  Fire("PLAYER_ROLES_ASSIGNED"); Settle()
+  Mana(2, 3000)
+
+  -- hidden, switched off, profile change
+  NOW = NOW + 10; Mana(2, 3000); Mana(2, 300)
+  Check(Playing() == LV.subtle.motes, "particles playing again")
+  HW.Invalidate("profile"); Settle()
+  Check(Playing() == 0 and not EdgePlaying(), "a profile change ends them")
+  Mana(2, 3000); NOW = NOW + 10; Mana(2, 300)
+  Off()
+  Check(Playing() == 0 and not EdgePlaying(), "switching off ends them")
+  On()
+  Mana(2, 3000)
+
+  -- the preview: a sample surface, no healer, no trigger
+  local surface = D.NewSurface(Panel())
+  local snap = Wt.Snapshot()
+  local liveBursts = Bursts()
+  local cfgv = { particleColor = "ff3fc9bd", particleIntensity = "standard" }
+  Check(D.PreviewParticles(surface, cfgv) == true and surface.particles and surface.particles.motes[LV.standard.motes].group.playing, "the sample plays a burst")
+  local n1 = #frames
+  local firstPlays = surface.particles.motes[1].group.plays
+  D.PreviewParticles(surface, cfgv)
+  local playing = 0
+  for _, m in ipairs(surface.particles.motes) do if m.group.playing then playing = playing + 1 end end
+  Check(playing == LV.standard.motes and #frames == n1 and surface.particles.motes[1].group.plays == firstPlays + 1, "playing it again restarts it, never layers it")
+  Check(Playing() == 0 and Bursts() == liveBursts + 2 and Wt.Snapshot().chatSeen == snap.chatSeen
+    and Wt.Snapshot().renders == snap.renders and #acted == 0, "the preview does not touch the live panel, its state or the group")
+  R.SettingsLauncher.Closed()
+  playing = 0
+  for _, m in ipairs(surface.particles.motes) do if m.group.playing then playing = playing + 1 end end
+  Check(playing == 0 and not surface.particles.edge.group.playing, "closing the settings ends it")
+  D.PreviewParticles(surface, cfgv)
+  HW.Set("particleColor", "ff112233"); Settle()
+  Check(not surface.particles.motes[1].group.playing, "changing the color ends a running preview rather than recoloring half of it")
+  HW.Set("particleColor", HW.DEFAULTS.particleColor)
+  HW.Set("effectChat", "none"); HW.Set("effectCritical", "none"); HW.Set("effectDrinking", "none"); Settle()
   Mana(2, 3000)
 end
 

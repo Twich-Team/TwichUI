@@ -16,8 +16,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 MEDIA = ROOT / "TwichUI_LayoutWizard" / "media"
 TOOL = ROOT / "tools" / "make_layout_wizard_art.py"
-BUILT = ("emblem", "classic", "personalize", "screenfit", "keep", "helpers", "tipfixed", "tipcursor")
-ICONS = ("keep", "helpers", "tipfixed", "tipcursor")
+BUILT = ("emblem", "classic", "personalize", "screenfit", "keep", "helpers", "tipfixed", "tipcursor", "curated")
+ICONS = ("keep", "helpers", "tipfixed", "tipcursor", "curated")
 
 
 def read_tga(path):

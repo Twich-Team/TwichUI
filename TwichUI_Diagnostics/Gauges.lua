@@ -178,6 +178,8 @@ local G = {
     { "reminders.designer.pickerRows", "Reminders designer: picker rows made (pool)", "pool", "settings", Field("RemindersDesigner", "pickerRows") },
     { "reminders.designer.open", "Reminders designer: an editor or picker open", "state", "settings", Field("RemindersDesigner", "open") },
     { "healer.events", "Healer Watch: events registered", "listeners", "group", Field("HealerWatcher", "events") },
+    { "healer.fx.motes", "Healer Watch: particle textures made (pool)", "pool", "group", Field("HealerDisplay", "fxMotes") },
+    { "healer.fx.bursts", "Healer Watch: particle bursts so far (module count)", "work", "group", Field("HealerDisplay", "fxBursts") },
     { "classbars.events", "Class bars: events registered", "listeners", "group", Field("ClassBars", "events") },
     { "bag.offer.events", "Cozy Bag offer: events registered", "listeners", "core", Field("CozyBagOffer", "events") },
     { "bag.offer.looks", "Cozy Bag offer: looks so far (module count)", "work", "core", Field("CozyBagOffer", "looks") },

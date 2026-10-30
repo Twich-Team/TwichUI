@@ -409,6 +409,17 @@ function P.Refresh()
     end
 end
 
+-- "Preview particles": one burst in the chosen color and strength on the sample surface here and, while the on-screen
+-- preview is showing, on that panel too (the preview's own state; never the live panel). Returns whether one played.
+function P.PlayParticles()
+    if not (f and built and f.surface) then return false, "page" end
+    local D = R.HealerDisplay
+    local cfg = { particleColor = HW().Get("particleColor"), particleIntensity = HW().Get("particleIntensity") }
+    local ok, why = D.PreviewParticles(f.surface, cfg)
+    if ok and Watch().PreviewActive() and D.Frame() and D.Frame():IsShown() then D.PreviewParticles(D.Frame(), cfg) end
+    return ok, why
+end
+
 function P.Frame()
     if f then return f end
     f = CreateFrame("Frame")
@@ -421,6 +432,7 @@ function P.Frame()
     f:SetScript("OnHide", function()
         if f.addBox then f.addBox:ClearFocus() end
         if f.testBox then f.testBox:ClearFocus() end
+        if f.surface then R.HealerDisplay.StopSurfaceEffects(f.surface) end
         said = nil
     end)
     return f
@@ -659,9 +671,25 @@ K.Page({
         Range("panelBg", "Background (%)", "A dark wash behind the whole panel, for reading over bright scenery. 0 for none (the default).")
         Check("panelBorder", "Border round the panel", "A thin bronze line round the whole panel.")
         Check("fade", "Fade in and out", "A short fade when the panel appears and goes. Off with Notifications' Reduced motion.")
-        Check("flashChat", "Flash when they say something", "A short bright flash of the panel, twice, when a mana message from the healer begins. Off by default, and never with Notifications' Reduced motion. At least two seconds pass between flashes.")
-        Check("flashCritical", "Flash when mana becomes critical", "A short flash in the critical color, twice, when measured mana drops into critical. Never from mana the game keeps from addons.")
-        Check("flashDrinking", "Flash when drinking is confirmed", "A short flash in the mana color, twice, when a drinking aura appears on the healer.")
+        local NOTE = " None by default. Neither effect plays with Notifications' Reduced motion. The panel's words and numbers say the same thing with or without it."
+        Pick("effectChat", "Attention effect: they say something", "What draws the eye when a mana message from the healer begins. Flash: a short bright flash of the panel, twice (at least two seconds apart). Magical particles: a few soft motes drift off the panel's edges and fade, without flashing it." .. NOTE)
+        Pick("effectCritical", "Attention effect: mana becomes critical", "What draws the eye when measured mana drops into critical (a flash is in the critical color). Never from mana the game keeps from addons." .. NOTE)
+        Pick("effectDrinking", "Attention effect: drinking is confirmed", "What draws the eye when a drinking aura appears on the healer (a flash is in the mana color). Magical particles keep coming, a burst and a short rest at a time, for as long as they are confirmed drinking; a flash plays once." .. NOTE)
+        local function Particles()
+            return On() and (hw.Get("effectChat") == "particles" or hw.Get("effectCritical") == "particles" or hw.Get("effectDrinking") == "particles")
+        end
+        local particlesWhy = "Greyed out: choose Magical particles for one of the attention effects above."
+        Under(K.Swatch(Setting("particleColor", STRING, "Particle color"),
+            "The color of the motes and the faint glow along the panel's edge. It tints only the particles, never the bar, the name or the status. Arcane teal by default."), main, Particles, particlesWhy)
+        Pick("particleIntensity", "Particle strength", "How many motes and how clear the edge glow is. Each burst is brief and repeated triggers are folded into one.", nil, Particles, particlesWhy)
+        Under(K.Button("Preview particles", "Preview", function()
+            local ok, why = P.PlayParticles()
+            if not ok then
+                local text = why == "motion" and "Nothing played: Reduced motion is on in Notifications." or "Open the sample below first."
+                Say(text, "warn")
+                R.Print("%s", text)
+            end
+        end, "Plays one burst on the sample below, in the chosen color and strength, whatever the effects above are set to. It reads nothing from your group and changes nothing. It never plays with Notifications' Reduced motion."), main, On)
         Check("pulse", "Pulse once when mana becomes critical", "Three slow breaths, then still; never a pulse that keeps going. Off with Notifications' Reduced motion.")
         Pick("point", "Anchor", "The point of the screen the panel is placed from. Moving the panel keeps this anchor.")
         Range("x", "Horizontal offset", "Screen units from the anchor, to the right (negative: to the left).")

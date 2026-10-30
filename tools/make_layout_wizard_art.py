@@ -30,6 +30,10 @@ What each source needed (read from the files, not assumed):
                                        (tipcursor.tga: "Follow mouse"). Each is cut to its content and shrunk to fit 128 x 128
                                        (its longer side fills the same share of the file, so they look the same size).
 
+  layout-wizard-curated-source.png     1254 x 1254 RGBA with genuine transparency: a brown leather satchel holding a scroll and a
+                                       bottle (curated.tga: the "Curated" helper preset). Cut to its content and shrunk to fit
+                                       128 x 128 like the icon sheet's pictures.
+
     python3 tools/make_layout_wizard_art.py [--src assets] [--out TwichUI_LayoutWizard/media] [--check] [--phase5]
                                             [--preview DIR]
 
@@ -53,6 +57,7 @@ SOURCES = {
     "sheet": "layout-wizard-personalize-screenfit-source.png",
     "compact": "layout-wizard-compact-source.png",
     "icons": "layout-wizard-icons-source.png",
+    "curated": "layout-wizard-curated-source.png",
 }
 ICON_NAMES = ("keep", "helpers", "tipfixed", "tipcursor")   # the sheet's pictures, row by row
 ICON_OPAQUE = 240    # painted pixels at or above this alpha are made fully opaque (the source's interiors sit at 249-254)
@@ -335,6 +340,20 @@ def main():
             os.makedirs(args.preview, exist_ok=True)
             for tone, color in (("dark", (36, 34, 32)), ("light", (236, 232, 222))):
                 write_png(os.path.join(args.preview, "%s-on-%s.png" % (name, tone)), 128, 128, over(canvas, color))
+
+    # The Curated preset's picture: one picture, genuine alpha
+    w, h, px, has_alpha = read_png(os.path.join(args.src, SOURCES["curated"]))
+    if not has_alpha:
+        raise SystemExit("%s has no alpha channel: refusing to guess where its picture ends" % SOURCES["curated"])
+    solid_interior(px)
+    box = content_box(w, h, px)
+    canvas, size = fit(px, w, h, box, 128, 128, 4)
+    print("curated  source %dx%d alpha=%s content %s -> %dx%d in 128x128" % (w, h, has_alpha, box, size[0], size[1]))
+    built["curated"] = (canvas, 128, 128)
+    if args.preview:
+        os.makedirs(args.preview, exist_ok=True)
+        for tone, color in (("dark", (36, 34, 32)), ("light", (236, 232, 222))):
+            write_png(os.path.join(args.preview, "curated-on-%s.png" % tone), 128, 128, over(canvas, color))
 
     if args.phase5:
         built["compact"] = picture("compact")

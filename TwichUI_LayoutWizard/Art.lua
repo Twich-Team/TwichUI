@@ -1,5 +1,5 @@
 -- TwichUI Layout Setup: the wizard's artwork
--- Nine pictures, made by tools/make_layout_wizard_art.py from the sources in assets/ (docs/layouts/wizard.md says what
+-- Ten pictures, made by tools/make_layout_wizard_art.py from the sources in assets/ (docs/layouts/wizard.md says what
 -- each source needed and what was not built). The small ones (every square one) are registered with the icon registry (R.Icons), so
 -- they are drawn the same way every other TwichUI icon is, including the fallback to TwichUI's own emblem when the game
 -- refuses a file. The two larger ones (Classic and Compact Adventure's pictures) are drawn here with the same rule. A
@@ -27,6 +27,7 @@ Art.FILES = {
     -- the icon sheet's four pictures (the helper presets and the two tooltip placements)
     keep = { file = MEDIA .. "keep", w = 128, h = 128, icon = "layoutKeep", what = "a closed journal with a ribbon: keep my settings" },
     helpers = { file = MEDIA .. "helpers", w = 128, h = 128, icon = "layoutHelpers", what = "a resource bar, a pin and a cup: on-screen helpers" },
+    curated = { file = MEDIA .. "curated", w = 128, h = 128, icon = "layoutCurated", what = "a leather satchel with a scroll and a bottle: the Curated helper preset" },
     tipFixed = { file = MEDIA .. "tipfixed", w = 128, h = 128, icon = "layoutTipFixed", what = "a tooltip pinned in a screen's corner: layout position" },
     tipCursor = { file = MEDIA .. "tipcursor", w = 128, h = 128, icon = "layoutTipCursor", what = "a tooltip beside a cursor: follow mouse" },
 }

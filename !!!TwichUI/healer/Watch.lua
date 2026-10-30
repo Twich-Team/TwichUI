@@ -37,6 +37,7 @@ local Perf = R.Perf
 local W = {}
 R.HealerWatcher = W
 
+local DRINK_GAP = 1.5     -- seconds between one drinking burst of particles ending and the next beginning
 local COALESCE = 0.1      -- seconds a burst of roster or aura events waits, so it is one read
 local DUP_WINDOW = 4      -- seconds: the same message again from the same healer is the same signal
 local SOUND_GAP = 15      -- seconds between two chat sounds, at least
@@ -50,7 +51,7 @@ local cfg
 local choice              -- { guid, name }: the player's own choice, for this session only
 local sel, obs            -- who is watched, and what is known of them (keyed by GUID, never by unit token)
 local shown, reason = false, "off"
-local rosterQueued, auraQueued, expiryQueued, tickQueued = false, false, false, false
+local rosterQueued, auraQueued, expiryQueued, tickQueued, drinkQueued = false, false, false, false, false
 local lastMsg = { guid = nil, norm = nil, at = -math.huge }
 local lastSound
 local preview = { active = false, position = false, scenario = "normal" }
@@ -321,6 +322,19 @@ local function RosterSoon()
     end)
 end
 
+-- While the healer is confirmed drinking and drinking is set to Magical particles: one burst after another, a short rest
+-- between, never two at once and never a timer more than one deep. It ends when drinking stops, the panel is hidden, the
+-- effect is changed or switched off, or another healer is watched (the timer is guarded by the life it was made in).
+local function DrinkAgain()
+    if drinkQueued then return end
+    drinkQueued = true
+    After(R.HealerParticles.DURATION + DRINK_GAP, function()
+        drinkQueued = false
+        if not (Watching() and shown and obs and obs.drink.state == "yes" and cfg.effectDrinking == "particles") then return end
+        if D.Attention("drinking", cfg) then DrinkAgain() end
+    end)
+end
+
 local function AuraSoon()
     if auraQueued then return end
     auraQueued = true
@@ -329,7 +343,7 @@ local function AuraSoon()
         if ScanDrink() then
             local began = drinkBegan
             Update()
-            if began then D.Flash("drinking", cfg) end
+            if began and D.Attention("drinking", cfg) and cfg.effectDrinking == "particles" then DrinkAgain() end
         end
     end)
 end
@@ -373,7 +387,8 @@ local function Resolve()
     local new = HL.Resolve(list, choice)
     if not obs or obs.guid ~= new.guid then
         token = token + 1
-        rosterQueued, auraQueued, expiryQueued, tickQueued = false, false, false, false
+        rosterQueued, auraQueued, expiryQueued, tickQueued, drinkQueued = false, false, false, false, false
+        D.StopEffects()   -- an effect begun for the last healer is not carried over to the next
         obs = new.guid and NewObs(new.guid) or nil
     end
     local unitChanged = (sel and sel.unit) ~= new.unit
@@ -423,7 +438,7 @@ local function OnChat(event, text, guid)
     obs.chat = { phrase = phrase.text, mode = phrase.mode, excerpt = HL.Excerpt(text, EXCERPT), channel = CHANNEL[event], at = now }
     ScheduleExpiry()
     Update()
-    if began then D.Flash("chat", cfg) end
+    if began then D.Attention("chat", cfg) end
     if began and shown and cfg.chatSound then
         if lastSound and now - lastSound < SOUND_GAP then
             stats.soundsHeld = stats.soundsHeld + 1
@@ -469,7 +484,7 @@ function OnUnitEvent(event, unit, arg)
         local changed, critical = ReadMana()
         if changed then
             Update()
-            if critical then D.Pulse(cfg); D.Flash("critical", cfg) end
+            if critical then D.Pulse(cfg); D.Attention("critical", cfg) end
         end
     elseif event == "UNIT_DISPLAYPOWER" then
         if ReadMana() then Update() end
@@ -489,7 +504,7 @@ end
 local function Teardown()
     token = token + 1
     running, scopeActive = false, false
-    rosterQueued, auraQueued, expiryQueued, tickQueued = false, false, false, false
+    rosterQueued, auraQueued, expiryQueued, tickQueued, drinkQueued = false, false, false, false, false
     preview.active, preview.position = false, false
     sel, obs, shown, reason = nil, nil, false, "off"
     lastMsg.guid, lastMsg.norm, lastMsg.at = nil, nil, -math.huge
@@ -526,7 +541,10 @@ local function Reconfigure(what)
         D.Place(cfg)
         return
     end
-    if what == "profile" then preview.active, preview.position = false, false end
+    if what == "profile" then
+        preview.active, preview.position = false, false
+        D.StopEffects()   -- nothing begun under the other profile's settings plays on
+    end
     if not running or before ~= cfg.scope or what == "profile" then W.Refresh() return end
     D.Invalidate()
     if Watching() and obs.mana.state == "ok" then obs.band = HL.NextBand(obs.band, obs.mana.pct, cfg.thresholds) end

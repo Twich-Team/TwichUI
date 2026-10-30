@@ -173,6 +173,27 @@ Check(Wt.PositioningActive() and f.move.text.text == "Lock", "moving")
 Wt.PreviewStop()
 Flush()
 
+-- the particle preview: on the sample here, without the live panel or any trigger
+do
+  local live = R.HealerDisplay.Frame()
+  Check(K.rowsById.healerWatchParticleColor and K.rowsById.healerWatchParticleIntensity and K.rowsById.healerWatchEffectChat, "the effect, color and strength rows")
+  Check(P.PlayParticles() == true and f.surface.particles and f.surface.particles.motes[1].group.playing, "Preview plays a burst on the sample")
+  Check(not (live.particles and live.particles.built), "and none on the live panel")
+  P.PlayParticles()
+  local playing = 0
+  for _, m in ipairs(f.surface.particles.motes) do if m.group.playing then playing = playing + 1 end end
+  Check(playing == R.HealerParticles.LEVELS.standard.motes, "again restarts it: still one burst")
+  R:SetEnabled("healerWatch", true); Flush()
+  f.show.scripts.OnClick(f.show); Flush()
+  Check(Wt.PreviewActive() and P.PlayParticles() and live.particles and live.particles.motes[1].group.playing, "with the on-screen preview showing, it plays there too")
+  Wt.PreviewStop(); Flush()
+  Check(not live.particles.motes[1].group.playing, "and ends with that preview")
+  f:Hide()
+  Check(not f.surface.particles.motes[1].group.playing and not f.surface.particles.edge.group.playing, "closing the page ends it")
+  f:Show()
+  Flush()
+end
+
 -- phrases
 local rows = P.Parts().phraseRows
 Check(#rows == 3 and rows[1].text.text == "oom" and rows[1].mode.text.text == "Whole words", "the default three phrases")

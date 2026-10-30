@@ -538,7 +538,7 @@ local ONSCREEN_UNITS = { ["twichui:modules.classBars"] = true, ["twichui:modules
 local NAVIGATION_UNIT = "twichui:modules.navigation"
 
 -- What a helper preset's card shows, read from the preset itself (its package units), never from its name:
--- { id, label, short, art, keep, details = { lines }, more }. `art` is "keep", "helpers", "navigation" or nil (a preset with no
+-- { id, label, short, art, keep, details = { lines }, more }. `art` is "keep", "helpers", "navigation", "curated" or nil (a preset with no
 -- artwork of its own gets the generic picture). The short sentence is the author's own (first sentence of the preset's hint) unless the
 -- preset is exactly one of the bundled shapes, when it is the shorter wording; the full hint and what the preset does are in `details`.
 function M.PresetCard(choiceId, optionId)
@@ -562,7 +562,7 @@ function M.PresetCard(choiceId, optionId)
     elseif exact then
         card.short, card.art = "Useful resource and utility displays.", "helpers"
     else
-        card.art = nav and "navigation" or nil
+        card.art = nav and "navigation" or (o.id == "curated" and "curated") or nil   -- the bundled Curated preset's own picture
         local sum = sm.summary
         local gen = {}
         if #sum.on > 0 then gen[#gen + 1] = "Turns on " .. table.concat(sum.on, ", ") end

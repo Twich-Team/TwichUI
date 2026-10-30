@@ -301,6 +301,7 @@ reminders\Controller.lua
 healer\Config.lua
 healer\Logic.lua
 healer\Drinks.lua
+healer\Particles.lua
 healer\Display.lua
 healer\Picker.lua
 healer\Watch.lua
