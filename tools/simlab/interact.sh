@@ -25,7 +25,9 @@ WRONG_AT="slider-clamp-max: typed 500 saved as"
 
 WINDOW="${SIMLAB_WINDOW:-12}"   # simulated seconds the clock runs in the scenario (its last step); see docs/simulator-lab.md
 export SIMLAB_ASSETS="${SIMLAB_ASSETS:-1}"
-export SIMLAB_FORWARD="WOW_SIM_SOFTWARE_RENDER=1"
+# The simulator's own switch for a character that is never in a party (it otherwise adds one after PLAYER_ENTERING_WORLD).
+# The scenario still calls Lab.Solo(), which then checks the state (and does nothing, having nothing to leave).
+export SIMLAB_FORWARD="WOW_SIM_SOFTWARE_RENDER=1 WOW_SIM_NO_PARTY=1"
 
 # The scenario is read by the simulator from the lab's fixtures folder (read-only inside the sandbox).
 fixture() {  # name params

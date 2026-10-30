@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # The delayed-failure diagnostics (docs/simulator-lab.md "Delayed failures"). Runs the simulated clock over a declared
-# window (SIMLAB_WINDOW, default 12 simulated seconds) in four launches and judges each one's whole log. Writes to
+# window (SIMLAB_WINDOW, default 12 simulated seconds) in five launches and judges each one's whole log. Writes to
 # $WOWSIM_LAB/artifacts/diagnose-<time>/.
 #
 #   contract  NO addons    what C_ChatInfo.SendAddonMessage accepts (scenarios/message_contract.lua). Minimal reproduction.
 #   baseline  NO addons    the clock over the window with only the simulator and Blizzard's UI (scenarios/group_timers.lua)
 #   solo      TwichUI      the character leaves the sample party; the hello timer runs out; nothing may be sent
 #   grouped   TwichUI      the sample party kept on purpose: the clock crosses the hello timer and the send is observed
+#   login     TwichUI      as grouped, then the lab fires PLAYER_ENTERING_WORLD itself (synthetic) to reach the 6 s login hello
 #
 # Each launch is a new process from an emptied addon root, with no game assets mounted (logic only; nothing is drawn).
 # Known errors are classified by what they are (known_failures.py), never by when they happen and never by hiding them.
@@ -35,6 +36,7 @@ fixture contract '{}' message_contract
 fixture baseline "{ mode = \"baseline\", window = $WINDOW }" group_timers
 fixture solo "{ mode = \"solo\", window = $WINDOW }" group_timers
 fixture grouped "{ mode = \"grouped\", window = $WINDOW }" group_timers
+fixture login "{ mode = \"login\", window = $WINDOW }" group_timers
 
 repo_before="$(git -C "$REPO" status --porcelain --ignored)"
 status=0
@@ -54,6 +56,7 @@ launch contract 0
 launch baseline 0
 launch solo 1
 launch grouped 1
+launch login 1
 
 echo "artifacts: $RUN"
 repo_after="$(git -C "$REPO" status --porcelain --ignored)"

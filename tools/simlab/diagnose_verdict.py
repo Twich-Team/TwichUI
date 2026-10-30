@@ -7,9 +7,14 @@ A clean exit proves nothing, so each launch is judged on its whole log:
             anyway (so it is not TwichUI's)
   solo      the group state was verified solo, the clock covered the window, nothing was sent, no unclassified error
   grouped   the party was verified, the clock covered the window, the hello was attempted and the simulator refused its
-            bytes, and that refusal is the one classified error (known_failures.py) besides the voice one
+            bytes, and that refusal is the one classified error (known_failures.py) besides the voice one; and exactly one
+            hello came (the 6 s login hello was never scheduled: see the docs, "Event paths, not elapsed time")
+  login     as grouped, after the lab fires PLAYER_ENTERING_WORLD itself (synthetic): the 6 s login hello is scheduled, runs
+            and attempts a send about 6 s later
 Errors are classified by what they are, not by when they happen. An error that matches no rule fails the run; so does a
-classified error the run does not permit, and so does a required one that never came. Four synthetic logs prove the
+classified error the run does not permit. A required rule that never shows is reported separately, as REVIEW NEEDED: it is
+not a functional failure but a sign the simulator changed, so the classification should be looked at. Only these diagnostic
+launches require a known error; the ordinary scenarios (interact.sh) permit one and never depend on it. Four synthetic logs prove the
 classifier can fail for each of those reasons.
 
 Usage: diagnose_verdict.py RUN_DIR WINDOW_SECONDS. Exit status 0 is PASS, 1 is FAIL.
@@ -39,10 +44,12 @@ def load(run, name):
 
 def main():
     run, window = Path(sys.argv[1]), float(sys.argv[2])
-    results = []
+    results, stale = [], []
 
     def check(name, passed, detail=""):
         results.append(bool(passed))
+        if not passed and name.endswith("(else the rule is stale)"):
+            stale.append(name)
         print(f"  {'pass' if passed else 'FAIL'}  {name}" + (f"  ({detail})" if detail else ""))
 
     def scenario(label, d, expect_window):
@@ -63,7 +70,7 @@ def main():
             check(f"{label}: {name}", passed, detail)
         return r
 
-    contract, baseline, solo, grouped = (load(run, n) for n in ("contract", "baseline", "solo", "grouped"))
+    contract, baseline, solo, grouped, login = (load(run, n) for n in ("contract", "baseline", "solo", "grouped", "login"))
     voice_due = window >= 6   # the ticker's first call comes about 4.5 s after the script starts, its second about 9.5 s
 
     print("Minimal reproduction, no addon loaded (what the simulator's SendAddonMessage accepts):")
@@ -91,6 +98,14 @@ def main():
           and "not valid UTF-8" in hello_sends[0][7], f"{len(sends)} attempt(s); first: {hello_sends[0][2:8] if hello_sends else None}")
     check("grouped: the refused payload is not UTF-8 and the accepted ones are", all((s[5] == "true") == (s[6] == "true") for s in sends),
           ", ".join(f"{s[2]} len={s[4]} utf8={s[5]} accepted={s[6]}" for s in sends))
+
+    print("TwichUI, grouped, then a SYNTHETIC PLAYER_ENTERING_WORLD fired by the lab (reaches the 6 s login hello):")
+    scenario("login", login, True)
+    rl = classified("login", login, (VOICE, HELLO), (HELLO,))
+    lsends = re.findall(r"^SIMLAB attempt n=(\d+) at=([\d.]+) prefix=(\S+) ", login["text"], re.M)
+    check("login: the lab's event was labelled synthetic in the log", "SIMLAB synthetic firing PLAYER_ENTERING_WORLD" in login["text"])
+    check("login: two hello attempts (3 s and 6 s); the simulator's own startup gave one", sum(1 for x in lsends if x[2] == "TwichUISetup") == 2,
+          ", ".join(f"{x[2]}@{x[1]}" for x in lsends))
 
     # The settings scenario permits only the voice error. Applied to the real grouped log, that permit set must reject the
     # hello: going solo there is a fixture choice that the checks would catch if it were hiding anything.
@@ -123,7 +138,16 @@ def main():
     print("  Shimmed behavior .......... C_ChatInfo.RegisterAddonMessagePrefix and IsAddonMessagePrefixRegistered remember names only. "
           "No other API is shimmed; nothing was added for C_VoiceChat, and no error is hidden.")
     print("  Excluded subsystems ....... addon-message delivery and receipt, voice chat, secure actions, real input, reload persistence, the real client.")
-    print("PASS (diagnostic: known failures reproduced and classified; this is not a clean run of the grouped case)" if ok else "FAIL")
+    print("  Login hello (6 s) ......... NOT reached by the simulator's own startup: PLAYER_ENTERING_WORLD(true, false) did occur, "
+          "IsInGroup() was false at that moment, so the timer was never scheduled. Reached only by the lab's synthetic event ('login' launch).")
+    if ok:
+        print("PASS WITH KNOWN SIMULATOR LIMITATIONS (diagnostic: the known errors above were reproduced and classified; "
+              "this is not a run without runtime errors)")
+    elif stale and len(stale) == len([r for r in results if not r]):
+        print("REVIEW NEEDED: a classified simulator behavior did not occur. The simulator may have changed; check "
+              "known_failures.py and docs/simulator-lab.md before relying on those rules. (Nothing else failed.)")
+    else:
+        print("FAIL")
     return 0 if ok else 1
 
 

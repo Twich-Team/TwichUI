@@ -21,8 +21,9 @@ local function Box(v) return v.control.box:GetText() end
 
 A_Admin.SetManualClock(GetTime())
 
--- This page has nothing to do with a party, so the character is solo, and the scenario says so and checks it (the
--- simulator's sample party would otherwise bring TwichUI's group hello into a settings test). The group case is not
+-- This page has nothing to do with a party, so the character is solo (interact.sh starts the simulator with
+-- WOW_SIM_NO_PARTY=1), and the scenario checks it (the sample party would otherwise bring TwichUI's group hello into a
+-- settings test). Lab.Solo() leaves a party if there is one and is a no-op otherwise. The group case is not
 -- avoided: diagnose.sh runs it on purpose. WatchSends only records; it calls the simulator's own function.
 local group = Lab.Solo()
 Lab.WatchSends()

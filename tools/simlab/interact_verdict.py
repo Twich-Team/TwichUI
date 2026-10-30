@@ -130,7 +130,13 @@ def main():
     for line in known:
         print(line)
     print("  The character was solo (state verified) and no addon message was attempted; the grouped case is tools/simlab/diagnose.sh.")
-    print("PASS (handler-level interaction and in-memory state only)" if ok else "FAIL")
+    if not ok:
+        print("FAIL")
+    elif a["cls"]["known"]:
+        print("PASS WITH KNOWN SIMULATOR LIMITATIONS (handler-level interaction and in-memory state only; every assertion held, "
+              "but the log holds the classified simulator errors listed above: this is not a run without runtime errors)")
+    else:
+        print("PASS (handler-level interaction and in-memory state only; no runtime errors in the log)")
     return 0 if ok else 1
 
 

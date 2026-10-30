@@ -109,7 +109,7 @@ pointer coordinates, focus, keyboard navigation, Tab order and a control hidden 
 
 **What it does,** from a new empty install (`--no-saved-vars`, an empty lab WTF folder; nothing of this page saved):
 
-1. *initial*: the character leaves the simulator's sample party and the solo state is checked; the page opens; the scope drop-down, text size (100, range 80–140) and outline show their defaults; the "own look" row is hidden.
+1. *initial*: the character is solo (`WOW_SIM_NO_PARTY=1`) and that state is checked; the page opens; the scope drop-down, text size (100, range 80–140) and outline show their defaults; the "own look" row is hidden.
 2. *choose a card*: pick "Zone arrival" in the drop-down. Choosing saves nothing; the row appears; the card's controls are locked, and typing 120 into the locked box is refused.
 3. *toggle own look*: click the checkbox. The card gets a complete saved look; the shared look is not written; the controls unlock.
 4. *slider and number box*: typing 500 saves 140 and 10 saves 80; dragging to 120 saves 120; typing `abc` leaves 120; the model itself refuses 500; the shared look stays at 100.
@@ -146,20 +146,26 @@ error the run does not permit fails it, and a classified error a run requires bu
 settings scenario's permit set to the real grouped log to show that going solo there hides nothing (the hello is rejected).
 
 ```sh
-tools/simlab/diagnose.sh                  # four launches, about 15 s: contract, baseline, solo, grouped (SIMLAB_WINDOW=12)
+tools/simlab/diagnose.sh                  # five launches, about 20 s: contract, baseline, solo, grouped, login (SIMLAB_WINDOW=12)
 tools/simlab/interact.sh                  # the settings scenario, solo, over the same window
 tools/simlab/sim.sh --no-saved-vars --no-addons --exec-lua '@<fixture>' dump-tree --visible-only   # a single launch, by hand
 ```
 
 ### Group state
 
-The simulator is solo while addons load, then adds its sample party (a level 70 paladin with four others) after
-`PLAYER_ENTERING_WORLD` (`GROUP_ROSTER_UPDATE`, 5 members, about 0.1 s after the login event). So `A_Admin.SetPartySize(0)`
-cannot make the start solo: TwichUI sees the party arrive, and the scenario then calls `Lab.Solo()`, which leaves it and checks
-`IsInGroup()`, `IsInRaid()`, `GetNumGroupMembers()`, the `party1..4` units and TwichUI's own `Group.Members()`. That is "left the
-party before the timer", not "never grouped". The 3 s hello timer then still runs out and sends nothing, because
-`Group.lua`'s `Broadcast` asks `IsInGroup()` when it fires; the observer counts zero attempts. The grouped diagnostic keeps the
-party on purpose.
+By default the simulator is solo while addons load, then adds its sample party (a level 70 paladin with four others) after
+`PLAYER_ENTERING_WORLD` (`GROUP_ROSTER_UPDATE`, 5 members, about 0.1 s after the login event). Two ways to a solo character,
+and they test different things:
+
+- **Never grouped:** `WOW_SIM_NO_PARTY=1` (an option the binary names; `interact.sh` sets it). Observed with the timer
+  probe: `n=0` at `PLAYER_LOGIN`, `PLAYER_ENTERING_WORLD` and the roster update after it, no hello timer scheduled, no send.
+- **Left the party:** the `solo` launch of `diagnose.sh` keeps the default party and calls `Lab.Solo()`, which leaves it
+  (`A_Admin.SetPartySize(0)`, which fires `GROUP_ROSTER_UPDATE`). TwichUI saw the party arrive, its 3 s hello timer then
+  still runs out, and nothing is sent because `Group.lua`'s `Broadcast` asks `IsInGroup()` when it fires. That exercises
+  TwichUI's own check.
+
+Either way `Lab.Solo()` checks `IsInGroup()`, `IsInRaid()`, `GetNumGroupMembers()`, the `party1..4` units and TwichUI's own
+`Group.Members()`. The grouped diagnostic keeps the party on purpose.
 
 ### The group hello (`addon-message-invalid-utf8`)
 
@@ -198,9 +204,23 @@ That is the ecosystem's convention, not proof for WoW: Forever.
 
 **Classification: simulator string-rule difference; real-client contract unverified (insufficient evidence for a
 production defect).** TwichUI builds the payload the way its encoder documents. No TwichUI code changed, and nothing was
-stripped, re-encoded or turned into a no-op. If you want it settled, the decisive test is one line in the game, in a party,
-which says what the game does with a non-UTF-8 message (it shows the call is accepted or refused, not that anyone receives it):
-`/run print(pcall(C_ChatInfo.SendAddonMessage, "TwichUIProbe", "a\200b", "PARTY"))`.
+stripped, re-encoded, replaced or stubbed. Nothing in this lab sends a message to anyone or receives one.
+
+**What a real-client probe could and could not show.** These are four different claims, and one `pcall` supports only the first:
+
+| # | Claim | What shows it |
+|---|---|---|
+| 1 | The API call was accepted or refused | the call's return value or error, on one client. This is all `pcall(C_ChatInfo.SendAddonMessage, …)` shows, and "accepted" means the client took the call, not that anything left the machine |
+| 2 | The message was actually transmitted | not visible from the sender; needs a receiver, or the server's view |
+| 3 | The message was actually received, byte for byte | a second listener (another client, with the prefix registered by `C_ChatInfo.RegisterAddonMessagePrefix`) reading the payload from `CHAT_MSG_ADDON` and comparing the bytes |
+| 4 | TwichUI decoded it (a round trip) | that receiver running TwichUI's own decode on the received text. TwichUI's built-in self-test route (`LOOP`) never goes through the game, so it does not count |
+
+A probe for claim 1 alone, **proposed and not run, waiting for approval**: prefix `TwichUIProbe` (registered by no addon, so
+no addon reads it), payload the three bytes `61 c8 62` (`"a\200b"`, not valid UTF-8), chat type `PARTY` (so it needs a
+group), one call, nothing else. Expected side effects: none in TwichUI; the message goes to the server and counts toward the
+addon-message throttle; the other party members' clients receive an addon message nobody handles, and an addon that logs all
+addon traffic would show it. The result is the call's return value or error text. Claims 2 to 4 need two clients and a
+separate, approved plan, which is worth designing only if claim 1 shows the game accepts the bytes.
 
 ### The voice-settings call (`voice-settings-unsupplied`)
 
@@ -218,12 +238,84 @@ is that a shim never does), and the classification already keeps both the error 
 real function answers `false` until the proxy is up; if a silent run is ever wanted, an opt-in shim returning `false` that
 first asserts the native refusal, with this unshimmed run kept as the control, is the way. That is a decision, not made here.
 
-### What the 12 s window exercises
+### What the 12 s window exercises, and event paths, not elapsed time
 
-The clock runs 240 steps of 0.05 s over 12 simulated seconds, with a marker every 0.5 s. It crosses the group hello (the 3 s
-timer) and two voice ticks. It does **not** reach the 20 s direct-message probe timeout or the 60 s transfer timeout in
-`setup/`, does not exercise the login hello (6 s; the character is not grouped at login), and the other
-timers in the addons were not enumerated. It is a longer window, not exhaustive timer coverage.
+The clock runs 240 steps of 0.05 s over 12 simulated seconds, with a marker every 0.5 s. A longer clock does not reach a
+timer whose scheduling event never happened, so coverage is stated per path, not per second. For the 6 s login hello
+(`setup/Group.lua:301-306`, a `PLAYER_ENTERING_WORLD` handler that schedules `C_Timer.After(6, …)` only when `isLogin or
+isReload` **and** `IsInGroup()`), observed with a throwaway observer addon loaded before TwichUI (not kept in the repository):
+
+| Question | Answer in the simulator's own startup |
+|---|---|
+| Scheduling event | `PLAYER_ENTERING_WORLD(true, false)` |
+| Did it occur? | yes, about 0.1 s before the party appears |
+| Was the timer scheduled? | **no.** `IsInGroup()` was false when the handler ran (the simulator adds its party after this event), so the condition failed and `Group.lua:303` never ran |
+| Cancelled or suppressed? | neither; there was nothing to cancel. The rate limit in `SayHello` was not involved |
+| Did its callback run? | no |
+| Was a send attempted? | not from this path. The grouped run shows exactly one hello in the window (a check), from the 3 s timer that `GROUP_ROSTER_UPDATE` schedules (`Group.lua:293`) |
+
+So the path is unreached because of the order of the simulator's fixture, not because the window was too short. The `login`
+launch of `diagnose.sh` reaches it on purpose: after startup, while grouped, the **lab** fires `PLAYER_ENTERING_WORLD(true,
+false)` (the log says SYNTHETIC). The 6 s timer is then scheduled, its callback runs, and a second hello is attempted about
+6 s later and refused like the first. That shows the handler's logic when the event arrives with those arguments and a
+group; it does not show that the game delivers that event in that state at a real login.
+
+What the window does cover: the 3 s group hello and two voice-settings ticks (about 4.5 s and 9.5 s). Because the lab starts
+from an empty profile, TwichUI also treats it as a **first install** and, a few seconds in (`Onboarding.lua` schedules it,
+`LayoutsLauncher.lua` waits `CONTINUE_AFTER = 3`), tries to open the layout wizard. The wizard's companion addon is not in
+the lab root, so TwichUI prints "couldn't open the layout setup: its folder, TwichUI_LayoutWizard, is missing" in chat (visible
+in `after.png`, absent from the 0.7 s `before.png`). That is a chat notice, not a Lua error, so the classifier does not see
+it; the wizard itself is untested here. It is a path the earlier 1.8 s runs never reached. It does **not** reach
+the 20 s direct-message probe timeout or the 60 s transfer timeout in `setup/`, and the other timers in the addons were not
+enumerated. It is a longer window with two named paths, not exhaustive timer coverage.
+
+### Reading a PASS
+
+The scenarios end in one of two different sentences, and they are not interchangeable:
+
+- `PASS (… no runtime errors in the log)`: every assertion held and the log holds no Lua error.
+- `PASS WITH KNOWN SIMULATOR LIMITATIONS (…)`: every assertion held, and the log still holds the classified simulator errors
+  printed above it. This is what `interact.sh` and `diagnose.sh` print today.
+
+An ordinary scenario (`interact.sh`) **permits** the voice error and never requires it, so it does not break if the simulator
+starts answering that call; it still fails on any other error, and on the hello error, which it does not permit. Only a
+dedicated compatibility diagnostic (`diagnose.sh`) **requires** a known error. When one never shows, the run ends
+`REVIEW NEEDED` (exit 1, "nothing else failed"): the simulator changed, so look at `known_failures.py` and these notes
+and remove or amend the rule. That is a prompt to review, not a functional failure.
+
+## Fonts
+
+TwichUI ships 12 TrueType fonts in `!!!TwichUI/media/fonts/` (Alegreya, Alegreya Sans, Barlow Semi Condensed, Cinzel, Spectral)
+and names them by `Interface\\AddOns\\!!!TwichUI\\media\\fonts\\…`. In the simulator **none of them is ever loaded.** `SetFont`
+returns `true` and `GetFont` returns the path, but the text is measured and drawn in Friz Quadrata.
+
+| Checked | Result |
+|---|---|
+| Files in the sandbox | present, readable, byte-identical to the repository (SHA-256 compared), first bytes `00 01 00 00` |
+| Format | all 12 are sfnt `0x00010000` with `cmap`, `glyf`, `loca`, `head`, `hhea`, `hmtx`, `maxp`, `name` and every table inside the file |
+| Path, case, slashes, extension case | no effect: exact, lower-case, `/`, `.TTF` and a file that does not exist all measure **identically** (595.12 px for the probe sentence at size 20, Friz Quadrata's width) |
+| Game fonts as a control | `Fonts\\ARIALN.TTF` 460.28 px and `Fonts\\FRIZQT___CYR.TTF` 570.24 px differ, so the measuring path works and sees different fonts; `ARIALN` resolves in lower case and with `/` too |
+| Mists-only game fonts | `MORPHEUS`, `SKURRI` fall back to Friz: they are gated behind upstream's `client-mists` feature, which the Forever build lacks |
+
+**Root cause (source, upstream `v0.1.37`, `src/render/font.rs`):** `WowFontSystem` builds a fixed map from a table of game
+font files (read from the game's CASC data) to `fontdb` families. `family_name` normalises the requested path (upper case,
+`/` to `\\`), looks it up, and **falls back to Friz Quadrata when it is not there**. Nothing reads an addon font file or
+calls `load_font_data` for one, and `SetFont` does not report the miss. `master` has the same function. The binary has no
+option for it: its `WOW_SIM_*` names cover CASC, addon and WTF paths, not fonts. The source matches the binary by behaviour (all
+five predictions from it held, listed above) and by the crates named in its strings (`cosmic-text`, `fontdb`, a `WowFontSystem`);
+the binary itself cannot be diffed against the source here.
+
+**What it affects.** Of the 133 text regions with a font in the settings window's tree (counted in the last interaction run), 130 use game fonts and are right; 3 use Cinzel (the "TwichUI"
+header, the page title, a hidden title). From the font file's own advance widths (no kerning, so an estimate): "TwichUI" at
+20 is about 90 px in Cinzel against the 74 px the simulator measured, and "Notifications" at 17 about 132 px against 101.
+Anything that wraps, truncates or aligns around those strings, and any page using the other 11 fonts, is not validated here.
+The old note that the title "shows lowercase letters Cinzel does not have" was not verified (every glyph for those strings
+is in the font) and is withdrawn.
+
+**Not done, and why.** No similar game font is substituted: it would look plausible and be wrong. The two ways to fix it are
+a change to the simulator's `font.rs` (resolve `Interface\\AddOns\\<addon>\\…` against the addon roots, `load_font_data`, register
+an alias), built from source with a Rust toolchain and the project's dependencies (a substantial download and build), or asking
+upstream. Both wait for approval; the original binary stays as it is.
 
 ## How it is isolated
 
@@ -263,9 +355,8 @@ removes TwichUI's solid fills, and the fallback font wraps text differently.
 - **The UI is behind the client.** The simulator pins `70532`. The game moved to `1.60.1.70707`, and its own sync then
   stops with `Gethe version mismatch`, which is why `setup.sh` builds the cache as upstream's Dockerfile does. So Blizzard's
   UI code is `70532` while the art comes from the installed `70707`, and this release carries no `wow-cli` to sync with.
-- **TwichUI's own fonts are not drawn.** `font.rs` registers only the game's fonts and draws any other path in Friz
-  Quadrata. `Cinzel-SemiBold.ttf` is named in the frame tree but not on screen, which is why the title shows lowercase
-  letters Cinzel does not have. Text measured in addon fonts is not what the game would measure.
+- **Addon fonts are not loaded, so text in them is not what the game would draw or measure.** Root cause and numbers in
+  "Fonts" below. Screenshots are structural.
 - **Text rendering differs.** Screenshots are for structure, layout and missing pieces, not fine visual judgement. A
   Blizzard "Issue Report" button draws over the window; whether the game stacks them the same way is unverified.
 - **Runs are not pixel-identical.** Upstream's sample character gets a varying set of buffs, so comparing two screenshots
@@ -324,6 +415,25 @@ the one below). Production code unchanged.
 Window: 12 simulated seconds in 0.05 s steps. Classified errors seen: `voice-settings-unsupplied` in every long run (first
 printed after t=4.3 to 4.5 s), `addon-message-invalid-utf8` only in the grouped run (after t=2.5 s).
 
+## Baseline, closeout and font pass, 2026-10-30
+
+Run against the final files. No production code changed.
+
+| Command | Exit | Result |
+|---|---|---|
+| `bash -n` on every runner; `python3 -I` parse of the four Python scripts | 0 | syntax only; `shellcheck` still not installed |
+| `tools/simlab/smoke.sh` | 0 | `PASS (initialization and construction only)`: 49 of 49 pages, no Lua error |
+| `tools/simlab/interact.sh` | 0 | `PASS WITH KNOWN SIMULATOR LIMITATIONS`: 74 checks, 12.1 s, started solo with `WOW_SIM_NO_PARTY=1`, only the classified voice error in the log, replay identical, wrong-on-purpose run failed on exactly its check |
+| `tools/simlab/diagnose.sh` | 0 | `PASS WITH KNOWN SIMULATOR LIMITATIONS`: contract 22, baseline 3, solo 10, grouped 19, login 20 checks; login hello reached only by the synthetic event; permit-set control and four classifier controls pass |
+| stale-rule control (voice errors stripped from a copy of the baseline log) | 1 | `REVIEW NEEDED`, "nothing else failed" |
+| `SIMLAB_SHIM=0 tools/simlab/interact.sh` (negative control) | 1 | FAIL on the unclassified AceComm load error, as before |
+| `tests/run.sh` | 0 | 141 passed, 0 failed |
+
+Screenshots looked at: `interact-…/after.png` and `before.png` (the settings page, structural: values, rows and the greyed
+state as the checks say; header and titles in Friz Quadrata), and `font-probe/probe.png` (16 lines in different font paths:
+the game's `ARIALN` and `FRIZQT___CYR` rows differ, every addon-font row is Friz Quadrata). None is evidence of how the page
+looks in the game.
+
 ## Remaining blockers
 
 - **In-game, still required:** that the page's controls can be reached and used by pointer and keyboard; that the
@@ -331,13 +441,14 @@ printed after t=4.3 to 4.5 s), `addon-message-invalid-utf8` only in the grouped 
   "Not covered" above. Nothing in this lab replaces those.
 - **Two APIs are shimmed** (`C_ChatInfo.RegisterAddonMessagePrefix`, `IsAddonMessagePrefixRegistered`). Filing them
   upstream is not done (it is outward-facing and needs your approval).
-- **TwichUI's own fonts are not drawn** by v0.1.37, so text measurements and wrapping here are not the game's.
+- **Addon fonts are not loaded by v0.1.37** (root cause in "Fonts"): the settings window's 3 Cinzel strings are measured and
+  drawn in Friz Quadrata, about 20 to 30% narrower than Cinzel would be. Fixing it needs a simulator change, which is not done.
 - **Two delayed errors are classified, not fixed** ("Delayed failures"). The voice-settings one is the simulator's and
   Blizzard's timer; the group hello's refusal is the simulator's string rule, and whether the game would accept the same
-  bytes is **unverified**: it needs the one-line in-game check given there. A scenario can now run the clock over a window,
-  but only with those two rules permitted; any third error fails the run.
-- **A grouped start cannot be solo from the beginning:** the simulator adds its party after `PLAYER_ENTERING_WORLD`, so a
-  "solo" scenario is "left the party", and the login hello (6 s) is never exercised.
+  bytes is **unverified**; the proposed one-call probe (claim 1 of 4 there) is waiting for approval. A scenario can run the clock over a window, but
+  only with those two rules permitted; any third error fails the run.
+- **The 6 s login hello is reached only by a synthetic event** in the simulator's default startup ("Delayed failures"). A real
+  login in a group, and the game's event order, are not tested.
 - **Only one page's controls are exercised.** Reload persistence, the swatches, previews and other pages' controls are not.
 - **UI source and client differ** (70532 against 70707), and the simulator patches Blizzard's UI as it starts.
 

@@ -1,9 +1,12 @@
 -- Simulator lab diagnostic (docs/simulator-lab.md "Delayed failures"): what happens when the simulated clock runs
--- past TwichUI's group hello timer and Blizzard's own timers, with and without a party. diagnose.sh runs it three
+-- past TwichUI's group hello timer and Blizzard's own timers, with and without a party. diagnose.sh runs it four
 -- times, selected by SIMLAB_PARAMS.mode:
 --   baseline  no addon at all (--no-addons): the simulator and Blizzard's UI alone. Whatever fails here is not TwichUI's.
 --   solo      TwichUI loaded, then the character leaves the simulator's sample party (Lab.Solo, state verified)
 --   grouped   TwichUI loaded, the sample party kept on purpose: this is the run that crosses the hello boundary
+--   login     as grouped, then the lab fires PLAYER_ENTERING_WORLD(true, false) itself (a SYNTHETIC event, not the
+--             simulator's): the one way to reach setup/Group.lua's 6 s login hello, which the simulator's own login
+--             never schedules (it adds the party after that event, and the handler asks IsInGroup() when it runs)
 -- All three run the same clock window (SIMLAB_PARAMS.window, in simulated seconds from the script's start).
 --
 -- Every send the addon attempts goes through Lab.WatchSends, a pass-through observer (records, then calls the
@@ -30,7 +33,7 @@ if mode == "solo" then
     Check("init", "solo: TwichUI's own member list is empty", 0, state.twichMembers)
 else
     state = Lab.GroupState()
-    if mode == "grouped" then
+    if mode == "grouped" or mode == "login" then
         Check("init", "grouped: the game reports a group", true, state.inGroup)
         Check("init", "grouped: not a raid", false, state.inRaid)
         Check("init", "grouped: party units exist", true, state.partyUnits > 0)
@@ -45,6 +48,10 @@ end
 
 A_Admin.SetManualClock(GetTime())
 Lab.WatchSends()
+if mode == "login" then
+    Say("synthetic", "firing PLAYER_ENTERING_WORLD(true, false) from the lab while grouped; the simulator did not send this one")
+    A_Admin.FireEvent("PLAYER_ENTERING_WORLD", true, false)
+end
 local steps = Lab.RunUntil(window, 0.5)
 Say("clock", "simSeconds=" .. Lab.simSeconds, "advanceSteps=" .. steps, "window=" .. window)
 Check("state", "the clock covered the declared window", true, Lab.simSeconds >= window - 1e-6)
@@ -65,6 +72,18 @@ else
         Say("attempt", "n=" .. i, "at=" .. ("%.2f"):format(e.at), "prefix=" .. tostring(e.prefix), "chatType=" .. tostring(e.chatType),
             "len=" .. tostring(e.len), "strictUtf8=" .. tostring(e.valid), "ok=" .. tostring(e.ok), "result=" .. tostring(e.result),
             "hex=" .. Lab.Hex(e.message or "", 48))
+    end
+    local hellos = {}
+    for i = 1, attempted do if sends[i].prefix == "TwichUISetup" then hellos[#hellos + 1] = sends[i] end end
+    if mode == "grouped" then
+        -- Event-path coverage, not elapsed time: no 6 s login hello is scheduled in the simulator's own startup, because
+        -- PLAYER_ENTERING_WORLD arrives while IsInGroup() is still false (the party is added about 0.1 s later). Had one
+        -- been scheduled it would fire inside this window and show as a second hello.
+        Check("state", "grouped: exactly one hello in the window (the login hello was never scheduled)", 1, #hellos)
+    else
+        Check("state", "login (synthetic event): two hellos, the 3 s one and the 6 s login one", 2, #hellos)
+        Check("state", "login (synthetic event): the second hello came 5.5 to 6.5 s after the event", true,
+            hellos[2] ~= nil and hellos[2].at >= 5.5 and hellos[2].at <= 6.5)
     end
     local first = sends[1]
     if first then

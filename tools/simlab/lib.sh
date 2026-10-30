@@ -4,6 +4,9 @@
 #   simlab_stage       empties the lab's addon root and copies the working tree in again, so the simulator never sees
 #                      the repository and a file left by an earlier run (the shim, a test) can't change the result
 #   simlab_disclose    what any result from this lab must be read with
+# Under zsh BASH_SOURCE is empty and every path below would resolve against the current directory, which once created a
+# lab folder in the wrong place. Refuse instead of guessing.
+[ -n "${BASH_SOURCE[0]:-}" ] || { echo "simlab: lib.sh must be sourced from bash (BASH_SOURCE is empty here); run the scripts with bash" >&2; return 2 2>/dev/null || exit 2; }
 SIMLAB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$SIMLAB_DIR/../.." && pwd)"
 LAB="${WOWSIM_LAB:-$(dirname "$REPO")/wow-ui-sim-lab}"
@@ -37,6 +40,6 @@ simlab_disclose() {
     echo "  - NO SHIM: this run is the unshimmed control; the two messaging APIs are missing, as in the simulator's own Forever profile."
   fi
   echo "  - VERSION MISMATCH: the simulator's Blizzard UI is Forever 1.60.1.70532; the installed game is newer (art comes from it). Not the client's real UI code."
-  echo "  - FONTS: TwichUI's own fonts (Cinzel and others) are not drawn; text is Friz Quadrata. No screenshot here is evidence of how text looks or wraps in the game."
+  echo "  - FONTS: the simulator (v0.1.37) loads only the game's own fonts; every addon font path, TwichUI's Cinzel included, is measured and drawn in Friz Quadrata (docs/simulator-lab.md \"Fonts\"). Screenshots are STRUCTURAL, not a visual or wrapping validation."
   echo "  - NOT THE CLIENT: combat lockdown, taint, secure actions, addon messages, saved data surviving a reload and other addons are not covered. Real-client testing is still required."
 }
