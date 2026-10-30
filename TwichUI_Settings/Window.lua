@@ -4,6 +4,11 @@
 -- for. A page's rows are made the first time the page is shown and kept for the session; a page is drawn again
 -- (values, what is greyed out and why) each time it is shown and after a change. Nothing runs while it is shut.
 --
+-- Size: the window is 920 x 660 until the player drags the grip in its bottom right corner. The width and height are
+-- the window's own (never its scale); the header, the pages' list and the footer keep their size and the page area
+-- takes the difference. The page shown is laid out again at the new width as it is dragged (nothing is rebuilt);
+-- other pages are fitted when they are next shown. The size is saved once, when the drag ends.
+--
 -- Esc: the dropdown list first, then the window (the search box, while typing, clears itself first). The window
 -- never takes keys while no box has focus, so play keys keep working with it open.
 
@@ -23,6 +28,11 @@ local UI = {}
 local WIDTH, HEIGHT = 920, 660
 local HEADER_H, FOOTER_H, NAV_W, PAD = 54, 38, 212, 14
 local CONTENT_W = WIDTH - PAD - NAV_W - 12 - 24 - PAD
+-- Narrower than the first size would crowd the rows (a label and its 236 px control) and the pages' own frames, which
+-- are laid out for that width; shorter than this leaves the page area too small to read a card. Larger: the screen.
+local MIN_W, MIN_H = WIDTH, 480
+local SCREEN_MARGIN = 24
+local GRIP = 16
 local CONTROL_W = 236
 local ROW_MIN, SECTION_PAD, GAP = 30, 14, 14
 local RESET_H, PAGE_BOTTOM = 52, 12   -- the page's own Reset area, and the room under the last thing on a page
@@ -33,7 +43,7 @@ local HOST_H = 540
 local HIGHLIGHT_SECONDS = 2.5
 
 local win, nav, scroll, content, resultsView, footer, searchBox
-local state = { views = {}, results = {}, selected = 1, suspend = 0, navItems = {}, scrollOf = {} }
+local state = { views = {}, results = {}, selected = 1, suspend = 0, navItems = {}, scrollOf = {}, w = CONTENT_W }
 
 -- The profile in use and who else uses it, in words: the footer and the top of a page of feature cards say the
 -- same. nil when profiles aren't available.
@@ -57,10 +67,48 @@ local function Place()
     end
 end
 
+-- The sizes the window can take on a screen (UIParent's units) at a scale, in the window's own units:
+-- minimum width and height, then maximum width and height. The maximum leaves a margin; the minimum wins on a
+-- screen too small for it (FitScale then shrinks the window as it always has).
+function UI.SizeBounds(screenW, screenH, scale)
+    local function Usable(n) return type(n) == "number" and n == n and n > 0 and n < math.huge end
+    if not Usable(scale) then scale = 1 end
+    local maxW = Usable(screenW) and math.max(MIN_W, math.floor(screenW / scale) - SCREEN_MARGIN * 2) or math.huge
+    local maxH = Usable(screenH) and math.max(MIN_H, math.floor(screenH / scale) - SCREEN_MARGIN * 2) or math.huge
+    return MIN_W, MIN_H, maxW, maxH
+end
+
+-- A width and height (saved, or dragged to) brought inside those bounds, whole numbers. Not a number (or not
+-- finite): the first size, for that side only.
+function UI.ClampSize(w, h, screenW, screenH, scale)
+    local function Finite(n) return type(n) == "number" and n == n and n > -math.huge and n < math.huge end
+    local minW, minH, maxW, maxH = UI.SizeBounds(screenW, screenH, scale)
+    if not Finite(w) then w = WIDTH end
+    if not Finite(h) then h = HEIGHT end
+    w = math.max(minW, math.min(maxW, w))
+    h = math.max(minH, math.min(maxH, h))
+    return math.floor(w + 0.5), math.floor(h + 0.5)
+end
+
+-- The scale the first size fits the screen at (1 unless the screen is small): from the first size, not the
+-- current one, so a larger window never shrinks itself.
+local function WindowScale()
+    return R.FitScale(WIDTH, HEIGHT, UIParent:GetWidth(), UIParent:GetHeight())
+end
+
+local function SavedSize()
+    local saved = TwichUIDB.ui.settingsWindow
+    if type(saved) == "table" and type(saved.w) == "number" and type(saved.h) == "number" then return saved.w, saved.h end
+end
+
+-- Where the window is, and (once the player has sized it) how large. The size is only written when there is one,
+-- so a window never sized keeps following the first size.
 local function SavePlace()
     local point, _, relativePoint, x, y = win:GetPoint(1)
     if not point then return end
-    TwichUIDB.ui.settingsWindow = { point = point, relativePoint = relativePoint, x = x, y = y }
+    local record = { point = point, relativePoint = relativePoint, x = x, y = y }
+    if state.sized then record.w, record.h = math.floor(win:GetWidth() + 0.5), math.floor(win:GetHeight() + 0.5) end
+    TwichUIDB.ui.settingsWindow = record
 end
 
 ---------------------------------------------------------------------------
@@ -154,6 +202,12 @@ local function MakeRow(parent, row, width)
     local setting = row.data.setting
     local controlX = width - CONTROL_W
     local kind = row.kind
+    -- the controls sit in a column at the right: put again when the row's width changes (Resize below)
+    local placed = {}
+    local function Put(frame, dy)
+        frame:SetPoint("TOPLEFT", f, "TOPLEFT", controlX, dy)
+        placed[#placed + 1] = { frame = frame, dy = dy }
+    end
 
     -- The tooltip first (a script set later would drop hooks added before it), then each kind's own hover.
     I.Tip(f, nil, function()
@@ -182,7 +236,7 @@ local function MakeRow(parent, row, width)
     f:HookScript("OnHide", function() v.wash:Set(0) end)
     if kind == "checkbox" then
         v.control = Wg.Checkbox(f, function(on) setting:SetValue(on) end)
-        v.control:SetPoint("TOPLEFT", f, "TOPLEFT", controlX, -6)
+        Put(v.control, -6)
         -- the whole row is the checkbox's label
         f:SetScript("OnClick", function()
             if row:Enabled() then setting:SetValue(not setting:GetValue()) end
@@ -192,27 +246,27 @@ local function MakeRow(parent, row, width)
     elseif kind == "dropdown" then
         v.control = Wg.Dropdown(f, CONTROL_W - 8, function(value) setting:SetValue(value) end)
         v.control:SetChoices(row.choices)
-        v.control:SetPoint("TOPLEFT", f, "TOPLEFT", controlX, -4)
+        Put(v.control, -4)
     elseif kind == "slider" then
         v.control = Wg.Slider(f, CONTROL_W - 8, function(value) setting:SetValue(value) end)
         v.control:SetRange(row.options.min, row.options.max, row.options.step)
-        v.control:SetPoint("TOPLEFT", f, "TOPLEFT", controlX, -4)
+        Put(v.control, -4)
     elseif kind == "swatch" then
         v.control = Wg.Swatch(f, function(hex) setting:SetValue(hex) end)
-        v.control:SetPoint("TOPLEFT", f, "TOPLEFT", controlX, -6)
+        Put(v.control, -6)
     elseif kind == "button" then
         v.control = Wg.Button(f, ButtonText(row), 110, row.reset and "danger" or "secondary", function()
             if row:Enabled() and row.click then row.click() end
         end)
-        v.control:SetPoint("TOPLEFT", f, "TOPLEFT", controlX, -4)
+        Put(v.control, -4)
     elseif kind == "status" then
         v.status = Wg.Text(f, "small")
-        v.status:SetPoint("TOPLEFT", f, "TOPLEFT", controlX, -9)
+        Put(v.status, -9)
         v.status:SetWidth(CONTROL_W - 8)
         v.status:SetWordWrap(true)
     elseif kind == "link" then
         v.status = Wg.Text(f, "small")
-        v.status:SetPoint("TOPLEFT", f, "TOPLEFT", controlX, -9)
+        Put(v.status, -9)
         v.status:SetWidth(CONTROL_W - 30)
         v.status:SetWordWrap(false)
         v.chevron = Wg.Text(f, "meta")
@@ -230,6 +284,21 @@ local function MakeRow(parent, row, width)
     if v.control then
         LinkTip(f, v.control)
         if v.control.slider then LinkTip(f, v.control.slider) end
+    end
+
+    -- The row's width changed (the window was resized): the label takes the room the controls leave, and the
+    -- controls keep their column at the right. Heights follow in Refresh.
+    function v.Resize(newWidth)
+        width = newWidth
+        f:SetWidth(width)
+        labelW = width - CONTROL_W - indent - 16
+        v.label:SetWidth(labelW)
+        v.reason:SetWidth(labelW)
+        controlX = width - CONTROL_W
+        for _, p in ipairs(placed) do
+            p.frame:ClearAllPoints()
+            p.frame:SetPoint("TOPLEFT", f, "TOPLEFT", controlX, p.dy)
+        end
     end
 
     -- What it shows now. Cheap: values and states only.
@@ -368,6 +437,35 @@ end
 
 local Layout   -- (below)
 
+-- The window's width changed: a page made already takes the new content width (state.w). Widths only; Layout, which
+-- calls this, places everything again. A hosted frame is given the width and keeps its own layout inside it.
+local function ApplyWidth(view)
+    local w = state.w
+    view.w = w
+    view.frame:SetWidth(w)
+    view.desc:SetWidth(w - 8)
+    if view.failed then view.failed:SetWidth(w - 8) end
+    if view.tabs then view.tabs:SetWidth(w) end
+    if view.notice then
+        view.notice:SetWidth(w)
+        view.notice.body:SetWidth(w - NOTICE_PAD * 2 - NOTICE_EDGE)
+    end
+    if view.hosted then view.hosted:SetWidth(w) end
+    for _, sec in ipairs(view.sections) do
+        sec.card:SetWidth(w)
+        if sec.title then sec.title:SetWidth(w - SECTION_PAD * 2 - 90) end
+        if sec.desc and not sec.isCard then sec.desc:SetWidth(w - SECTION_PAD * 2) end
+        if sec.isCard then Cards.Resize(sec, w, UI.cardEnv) end
+        for _, v in ipairs(sec.rows) do v.Resize(w - SECTION_PAD * 2 + 8) end
+    end
+    if view.hero then view.hero:Resize(w) end
+    if view.scope then view.scope:SetWidth(w - 8) end
+    if view.reset then
+        view.reset:SetWidth(w)
+        view.reset.text:SetWidth(w - 170)
+    end
+end
+
 -- Places a section's rows from `inner` down, drawing each as it goes; a row not shown with the current choices
 -- is hidden. Returns the new `inner` and how many rows are shown. A feature card places its rules through this too.
 function UI.PlaceRows(sec, rows, inner)
@@ -401,7 +499,7 @@ UI.cardEnv = {
 }
 
 local function BuildView(page)
-    local view = { page = page, sections = {}, rows = {} }
+    local view = { page = page, sections = {}, rows = {}, w = CONTENT_W }
     local frame = CreateFrame("Frame", nil, content)
     frame:SetPoint("TOPLEFT", 0, 0)
     frame:SetWidth(CONTENT_W)
@@ -529,6 +627,7 @@ local function BuildView(page)
         rule:SetPoint("TOPLEFT", 0, 0)
         rule:SetPoint("TOPRIGHT", 0, 0)
         local text = Wg.Text(view.reset, "small")
+        view.reset.text = text
         text:SetPoint("TOPLEFT", 2, -17)
         text:SetWidth(CONTENT_W - 170)
         text:SetText("Reset this page's settings to their defaults. It asks first and lists what would change. Other pages and saved data are unchanged.")
@@ -569,6 +668,7 @@ end
 -- Places every visible row, section and the reset area, top to bottom; draws each row as it goes.
 function Layout(view)
     local pt = Perf.on and Perf.Start("settings.page.layout")
+    if view.w ~= state.w then ApplyWidth(view) end
     local frame, page = view.frame, view.page
     local ok, status = true, ""
     if page.def.overview and page.def.overview.status then ok, status = pcall(page.def.overview.status) end
@@ -905,6 +1005,13 @@ end
 ---------------------------------------------------------------------------
 local resultRows = {}
 
+local function ResultWidth(row)
+    row:SetWidth(state.w)
+    row.label:SetWidth(state.w - 220)
+    row.context:SetWidth(state.w - 220)
+    row.desc:SetWidth(state.w - 24)
+end
+
 local function ResultRow(i)
     local row = resultRows[i]
     if row then return row end
@@ -936,6 +1043,7 @@ local function ResultRow(i)
     row:SetScript("OnEnter", function(self) if not self.selected then self.bg:SetColorTexture(pal.text[1], pal.text[2], pal.text[3], 0.05) end end)
     row:SetScript("OnLeave", function(self) if not self.selected then self.bg:SetColorTexture(pal.text[1], pal.text[2], pal.text[3], 0) end end)
     row:SetScript("OnClick", function(self) UI.Go(self.result) end)
+    ResultWidth(row)
     resultRows[i] = row
     return row
 end
@@ -1078,7 +1186,7 @@ function UI.ReloadNotice() UI.RefreshFooter() end
 local function BuildFooter()
     footer = CreateFrame("Frame", nil, win)
     footer:SetPoint("BOTTOMLEFT", PAD, 8)
-    footer:SetPoint("BOTTOMRIGHT", -PAD, 8)
+    footer:SetPoint("BOTTOMRIGHT", -(PAD + 4), 8)   -- ends before the resize grip
     footer:SetHeight(FOOTER_H - 12)
     local rule = Wg.Solid(win, "BORDER", pal.bronzeLo, 0.6)
     rule:SetHeight(1)
@@ -1161,6 +1269,130 @@ local function BuildSearch(header)
     Hints()
 end
 
+---------------------------------------------------------------------------
+-- Size
+---------------------------------------------------------------------------
+-- Sets the window's size and, when the width changed, the page area's: the page shown is laid out again at the new
+-- width (its frames are kept, nothing is rebuilt), and the other pages when they are next shown (Layout notices).
+-- A change of height alone needs no layout: the page area is anchored to the window and the scroll frame follows.
+local function ApplySize(w, h)
+    win:SetSize(w, h)
+    local cw = w - (WIDTH - CONTENT_W)
+    if cw == state.w then return end
+    state.w = cw
+    content:SetWidth(cw)
+    resultsView:SetWidth(cw)
+    resultsView.help:SetWidth(cw - 8)
+    for _, row in ipairs(resultRows) do ResultWidth(row) end
+    if not state.searching then
+        local view = state.views[state.page]
+        if view then Layout(view) end
+    end
+end
+
+-- The window's scale and size brought in line with the screen as it is now: the saved size (when it is a size
+-- at all) or the first size, kept inside the bounds. `current`: keep the size it has (the screen changed while
+-- it was open) instead of reading the saved one. Saves nothing.
+local function Fit(current)
+    local scale = WindowScale()
+    if math.abs((win:GetScale() or 1) - scale) > 0.001 then win:SetScale(scale) end
+    local w, h
+    if current then
+        w, h = win:GetWidth(), win:GetHeight()
+    else
+        w, h = SavedSize()
+        state.sized = w ~= nil
+    end
+    ApplySize(UI.ClampSize(w, h, UIParent:GetWidth(), UIParent:GetHeight(), scale))
+end
+
+-- The drag. The window's top left corner stays where it is and the bottom right follows the pointer, the grip
+-- under it. Every frame only the window's size is set; the page is laid out again a few times a second, and
+-- once more at the end, when the size is saved (not while dragging).
+local DRAG_LAYOUT = 0.05
+
+local function StopSizing(grip, keep)
+    local drag = state.sizing
+    if not drag then return end
+    state.sizing = nil
+    grip:SetScript("OnUpdate", nil)
+    grip.Paint(false)
+    if keep and drag.w then   -- (a click that never moved changes and saves nothing)
+        ApplySize(drag.w, drag.h)
+        state.sized = true
+        SavePlace()
+    end
+end
+
+local function StartSizing(grip)
+    if state.sizing then return end
+    Wg.CloseMenu()
+    I.HideTip(grip)
+    local scale = win:GetEffectiveScale()
+    local cx, cy = GetCursorPosition()
+    -- anchored by its top left from here on, so growing moves the right and bottom edges only
+    local left, top = win:GetLeft(), win:GetTop()
+    if left and top then
+        win:ClearAllPoints()
+        win:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", left, top)
+    end
+    local drag = { x = cx / scale, y = cy / scale, w0 = win:GetWidth(), h0 = win:GetHeight(), since = 0 }
+    state.sizing = drag
+    grip.Paint(true)
+    grip:SetScript("OnUpdate", function(self, elapsed)
+        if not IsMouseButtonDown("LeftButton") then   -- the release went elsewhere (focus lost): end it
+            StopSizing(self, true)
+            return
+        end
+        local s = win:GetEffectiveScale()
+        local px, py = GetCursorPosition()
+        local screenW, screenH = UIParent:GetWidth(), UIParent:GetHeight()
+        local w, h = UI.ClampSize(drag.w0 + (px / s - drag.x), drag.h0 + (drag.y - py / s), screenW, screenH, win:GetScale())
+        -- and not past the screen's right and bottom edges from where the window sits
+        local ui = UIParent:GetEffectiveScale()
+        local l, t = win:GetLeft(), win:GetTop()
+        if l and t then
+            w = math.max(MIN_W, math.min(w, screenW * ui / s - l))
+            h = math.max(MIN_H, math.min(h, t))
+        end
+        drag.w, drag.h = w, h
+        win:SetSize(w, h)
+        drag.since = drag.since + elapsed
+        if drag.since >= DRAG_LAYOUT then
+            drag.since = 0
+            ApplySize(w, h)
+        end
+    end)
+end
+
+-- The grip in the bottom right corner: a small triangle of dots in the frame's bronze. It is the only thing
+-- there; the footer ends before it.
+local function BuildGrip()
+    local grip = CreateFrame("Button", nil, win)
+    grip:SetSize(GRIP, GRIP)
+    grip:SetPoint("BOTTOMRIGHT", win, "BOTTOMRIGHT", -3, 3)
+    grip:SetFrameLevel(win:GetFrameLevel() + 20)
+    grip:EnableMouse(true)
+    local dots = {}
+    for c = 0, 2 do
+        for r = 0, 2 - c do
+            local d = Wg.Solid(grip, "OVERLAY", pal.bronzeText, 0.5)
+            d:SetSize(2, 2)
+            d:SetPoint("BOTTOMRIGHT", grip, "BOTTOMRIGHT", -(2 + c * 4), 2 + r * 4)
+            dots[#dots + 1] = d
+        end
+    end
+    function grip.Paint(lit) for _, d in ipairs(dots) do d:SetAlpha(lit and 1 or 0.5) end end
+    grip:SetScript("OnMouseDown", function(self, button)
+        if button == "LeftButton" then StartSizing(self) end
+    end)
+    grip:SetScript("OnMouseUp", function(self) StopSizing(self, true) end)
+    I.Tip(grip, nil, "Drag to resize")
+    grip:HookScript("OnEnter", function(self) self.Paint(true) end)
+    grip:HookScript("OnLeave", function(self) if not state.sizing then self.Paint(false) end end)
+    win.grip = grip
+end
+
 local function BuildWindow()
     win = CreateFrame("Frame", "TwichUISettingsWindow", UIParent, "BackdropTemplate")
     win:SetSize(WIDTH, HEIGHT)
@@ -1230,12 +1462,13 @@ local function BuildWindow()
 
     BuildNav()
     BuildFooter()
+    BuildGrip()
 
     -- The window fades in as it opens (opacity only: its position, anchors and scale are the game's and the
     -- player's). Opening is not delayed: the content is built and answering from the first frame.
     state.winFade = Motion.Fader(function(a) win:SetAlpha(a) end, 1)
-    win:SetScript("OnShow", function(self)
-        R.FitToScreen(self)
+    win:SetScript("OnShow", function()
+        Fit(false)
         UI.RefreshFooter()
         if Motion.Enabled() then
             state.winFade:Set(0)
@@ -1248,6 +1481,7 @@ local function BuildWindow()
         -- Closing is immediate; whatever was easing is put where it was going, so a reopened window is never
         -- found dim, and no hover is left lit for a pointer that has gone.
         Motion.Settle()
+        StopSizing(win.grip, true)   -- a drag in progress ends where it is, so the window is never found sizing
         if Previews then Previews.StopAll() end
         for _, item in ipairs(state.navItems) do
             item.hovered = false
@@ -1343,6 +1577,12 @@ K.onRefresh = UI.Refresh
 -- Rows greyed out for combat (profile changes, key bindings) follow it: redrawn as it starts and ends. Nothing
 -- runs for this while the window is shut.
 local function OnCombatChange() if UI.IsShown() then UI.Refresh() end end
+-- The screen changed while the window is open (resolution, UI scale): the size it has is brought inside the new bounds.
+local function OnScreenChange()
+    if win and win:IsShown() and not state.sizing then Fit(true) end
+end
+R:On("DISPLAY_SIZE_CHANGED", OnScreenChange)
+R:On("UI_SCALE_CHANGED", OnScreenChange)
 R:On("PLAYER_REGEN_DISABLED", OnCombatChange)
 R:On("PLAYER_REGEN_ENABLED", OnCombatChange)
 R.Switches.OnChange(function()

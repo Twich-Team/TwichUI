@@ -84,6 +84,22 @@ exposes `Frame()`, built the first time it is shown, which the window shows as a
 grows (Reminders' list and editor) gives `hostHeight` as a function and calls `R.SettingsUI.Refresh()`, on the next
 frame, when its height changes; the window reads the height each time it lays the page out.
 
+## Window size
+
+The window is 920 x 660 until the player drags the grip in its bottom right corner (tooltip "Drag to resize"). The
+width and height change, never the scale. Bounds: at least 920 x 480 (narrower than 920 would crowd a row's label and
+its 236 px control and the hosted pages, which are laid out for that width), at most the screen minus a 24 px margin
+each side, in the window's own units (`UI.SizeBounds`, `UI.ClampSize`). The size is saved once, when the drag ends, as
+`w` and `h` in `ui.settingsWindow` beside the place; a value that is not a usable number falls back to the first size
+for that side, and a size outside the bounds is clamped each time the window opens and when the resolution or UI
+scale changes. The window's scale is fitted from the first size, not the current one.
+
+The page shown is laid out again at the new width as it is dragged (a few times a second); other pages are fitted
+when next shown (`view.w` against `state.w`, `ApplyWidth` in Window.lua). Widths come from `state.w`: a row's controls
+keep their column at the right (`v.Resize`), a card's text follows (`Cards.Resize`), Home's tiles and grid follow
+(`Home:Resize`; the grid takes 3 to 5 columns). A hosted frame is given the width and keeps its own layout, and a
+card's sample preview keeps the width it was made at.
+
 ## Pages
 
 ```

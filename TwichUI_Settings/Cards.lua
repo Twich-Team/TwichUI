@@ -8,6 +8,7 @@
 -- ordinary rows (same controls, tooltips, greyed-out reasons), so nothing about a setting is drawn twice.
 --
 --   Cards.Build(view, sec, width, env)        makes the card's own pieces once, when its page is first shown
+--   Cards.Resize(sec, width, env)             the window changed width: the text takes it
 --   Cards.Primary(sec, row, env)              the card's switch, as a row view (RefreshValue, Refresh, frame, y)
 --   Cards.Layout(view, sec, inner, env) -> inner   places and draws it; rows go through env.PlaceRows
 --   Cards.Reveal(view, sec)                   opens the part that holds a row search or a link asked for
@@ -59,6 +60,20 @@ local function Disclosure(parent, onClick)
     b:HookScript("OnEnter", function(self) Wg.Color(self.text, pal.text) end)
     b:HookScript("OnLeave", function(self) Wg.Color(self.text, pal.tealHi) end)
     return b
+end
+
+-- The window was made wider or narrower: the card's text takes the new width (Build's sums again). Nothing is
+-- rebuilt; Layout places the pieces. A preview keeps the width it was made at.
+function Cards.Resize(sec, width, env)
+    local pad = env.PAD
+    sec.head:SetWidth(width - pad * 2 + 8)
+    local textW = width - pad * 2 - sec.textX - 120
+    sec.title:SetWidth(textW)
+    sec.desc:SetWidth(textW)
+    sec.note:SetWidth(textW)
+    sec.summary:SetWidth(width - pad * 2 - 8)
+    sec.consequence:SetWidth(width - pad * 2 - 8)
+    if sec.detailText then sec.detailText:SetWidth(width - pad * 2 - 8) end
 end
 
 function Cards.Build(view, sec, width, env)

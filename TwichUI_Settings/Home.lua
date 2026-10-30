@@ -7,6 +7,7 @@
 --
 --   Home.Build(parent, width, env) -> hero     env: { Navigate(pageKey, rowId), Relayout() }
 --   hero:Layout(y) -> height                   places it y below the top of parent and draws what is shown now
+--   hero:Resize(width)                         the window was resized: every piece takes the new width (nothing is rebuilt)
 
 local R = TwichUI
 local K = R.SettingsKit
@@ -17,7 +18,13 @@ local Home = {}
 R.SettingsHome = Home
 
 local TILE_H, TILE_GAP = 66, 10
-local GRID_H, GRID_GAP, GRID_COLS = 48, 8, 3
+local GRID_H, GRID_GAP = 48, 8
+local GRID_MIN_COLS, GRID_MAX_COLS, GRID_CELL = 3, 5, 210   -- a cell is about GRID_CELL wide or more; the columns follow the width
+
+-- How many feature cells fit side by side in a row this wide.
+local function Columns(width)
+    return math.max(GRID_MIN_COLS, math.min(GRID_MAX_COLS, math.floor((width + GRID_GAP) / (GRID_CELL + GRID_GAP))))
+end
 local LIST_H = 42
 local CHANGED_SHOWN = 50
 
@@ -84,6 +91,7 @@ function Home.Build(parent, width, env)
         tile.line:SetWidth(tileW - 66)
         tile.line:SetWordWrap(true)
         tile.view = view
+        tile.index = i
         hero.views[view.key] = tile
     end
 
@@ -93,7 +101,8 @@ function Home.Build(parent, width, env)
     hero.help:SetWordWrap(true)
 
     -- Explore: every feature in the list, with its status
-    local cellW = math.floor((width - GRID_GAP * (GRID_COLS - 1)) / GRID_COLS)
+    local cols = Columns(width)
+    local cellW = math.floor((width - GRID_GAP * (cols - 1)) / cols)
     for _, page in ipairs(K.SidebarOrder()) do
         if page.key ~= "overview" then
             local cell = Panel(frame, cellW, GRID_H, function() env.Navigate(page.key) end)
@@ -101,6 +110,7 @@ function Home.Build(parent, width, env)
             cell.icon = Icon(cell, page.def.icon, 28)
             cell.icon:SetPoint("LEFT", 9, 0)
             local textX = page.def.icon and 46 or 12
+            cell.textX = textX
             cell.name = Wg.Text(cell, "body")
             cell.name:SetPoint("TOPLEFT", textX, -9)
             cell.name:SetWidth(cellW - textX - 8)
@@ -178,6 +188,34 @@ local function ChangedRow(hero, i, width, env)
     return row
 end
 
+-- The window was made wider or narrower: the pieces made already take the new width. Everything here is anchored to
+-- the top left of the frame, so only widths (and the tiles' places) change; Layout places the rest, and sizes the
+-- cells of the grid to the columns it now has.
+function Home:Resize(width)
+    local frame = self.frame
+    frame:SetWidth(width)
+    local tileW = math.floor((width - TILE_GAP * 2) / 3)
+    for _, tile in pairs(self.views) do
+        tile:SetWidth(tileW)
+        tile:ClearAllPoints()
+        tile:SetPoint("TOPLEFT", (tile.index - 1) * (tileW + TILE_GAP), 0)
+        tile.title:SetWidth(tileW - 66)
+        tile.line:SetWidth(tileW - 66)
+    end
+    self.help:SetWidth(width - 4)
+    self.empty:SetWidth(width - 4)
+    for _, row in ipairs(self.looks) do
+        row:SetWidth(width)
+        row.label:SetWidth(width - 120)
+        row.desc:SetWidth(width - 120)
+    end
+    for _, row in ipairs(self.changedRows) do
+        row:SetWidth(width)
+        row.label:SetWidth(width - 260)
+        row.context:SetWidth(width - 260)
+    end
+end
+
 local function Plain(text) return (tostring(text or ""):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")) end
 
 function Home:Layout(y)
@@ -219,13 +257,16 @@ function Home:Layout(y)
     h = h + (self.help:GetStringHeight() or 12) + 10
 
     -- explore grid
-    local cols = GRID_COLS
+    local cols = Columns(width)
     local cellW = math.floor((width - GRID_GAP * (cols - 1)) / cols)
     for i, cell in ipairs(self.grid) do
         local show = self.shown == "explore"
         cell:SetShown(show)
         if show then
             local col, row = (i - 1) % cols, math.floor((i - 1) / cols)
+            cell:SetWidth(cellW)
+            cell.name:SetWidth(cellW - cell.textX - 8)
+            cell.status:SetWidth(cellW - cell.textX - 8)
             cell:ClearAllPoints()
             cell:SetPoint("TOPLEFT", frame, "TOPLEFT", col * (cellW + GRID_GAP), -(h + row * (GRID_H + GRID_GAP)))
             local status = cell.page.def.overview and cell.page.def.overview.status
