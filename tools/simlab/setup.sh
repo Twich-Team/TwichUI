@@ -4,10 +4,13 @@
 #
 #   WOWSIM_LAB          where to build it (default: wow-ui-sim-lab beside the repository)
 #   SIMLAB_UI_SOURCE    a clone of Gethe/wow-ui-source (default: wow-ui-source beside the repository); only read
+[ -n "${BASH_VERSION:-}" ] || { echo "simlab: run this with bash" >&2; exit 2; }
 set -euo pipefail
 
-REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-LAB="${WOWSIM_LAB:-$(dirname "$REPO")/wow-ui-sim-lab}"
+SIMLAB_LIB_DEFER=1
+# shellcheck source=lib.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+simlab_check_lab adopt   # REPO and LAB come from lib.sh; the folder is new, empty, already a lab, or holds only setup's folders
 UI_SOURCE="${SIMLAB_UI_SOURCE:-$(dirname "$REPO")/wow-ui-source}"
 
 TAG="v0.1.37"
@@ -32,6 +35,7 @@ fetch() {  # url file sha256
 
 mkdir -p "$LAB"/{downloads,release,deps/extracted,deps/lib,home,artifacts,fixtures,roots,wtf}
 mkdir -p "$LAB"/xdg/{cache,data,config,state}
+printf '%s\n' "$SIMLAB_MARKER_TEXT" > "$LAB/$SIMLAB_MARKER"
 
 echo "simulator: $PACKAGE"
 archive="$LAB/downloads/$PACKAGE.tar.gz"

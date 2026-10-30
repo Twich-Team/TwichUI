@@ -29,6 +29,59 @@ tools/simlab/smoke.sh            # copies the working tree in, opens a page, con
 tools/simlab/interact.sh         # drives one real settings page through its controls, from a clean profile (below)
 tools/simlab/diagnose.sh         # the clock over a 12 s window: baseline, solo, grouped, and the addon-message contract (below)
 ```
+bash tools/simlab/tests/lab_guard.sh   # the lab-path safety check's rejection paths, in disposable folders (below)
+```
+
+Run the scripts with bash (`tools/simlab/x.sh` or `bash tools/simlab/x.sh`). Under zsh they stop before creating anything.
+
+## Coverage summary (milestone closed 2026-10-30)
+
+**What works.** The real `!!!TwichUI` and `TwichUI_Settings` code loads in the simulator from a clean install; all 49 described
+settings pages *construct* without a captured Lua error; one page (`notificationsLook`) is driven through its controls at
+handler level with state checks, solo, over a 12 s simulated window; the group clock, the addon-message contract and the
+login path are observed (`diagnose.sh`); two known simulator errors are classified, and any third fails the run.
+
+**49 of 49 pages is construction, not 49 tested pages.** Only one page's controls are exercised. The other 48 are known to
+build and show their rows, nothing more.
+
+**Commands, and when to run them**
+
+| Command | Use it for |
+|---|---|
+| `tools/simlab/smoke.sh` | After touching settings pages, Kit/widgets, the TOC or load order: does everything still load and construct (about 12 s) |
+| `tools/simlab/interact.sh` | After touching `NotifyLook`, the settings Kit or the controls it uses: handler-level behaviour and in-memory state (about 23 s) |
+| `tools/simlab/diagnose.sh` | Only for group/share/timer work: the clock window and message contract (about 15 s) |
+| `tests/run.sh` | The project's offline suite; still the main check, and the only one for most logic |
+| `bash tools/simlab/tests/lab_guard.sh` | After touching `lib.sh`, `setup.sh` or `sim.sh` |
+
+For ordinary feature work, `smoke.sh` is the useful one (it catches load-order and construction errors the mocked suite
+cannot), plus `tests/run.sh`. `interact.sh` and `diagnose.sh` matter only for the areas above.
+
+**Accepted limitations.** Addon fonts fall back to a game font ("Fonts" below, with the investigation). Addon-message and
+voice APIs behave as documented under "Delayed failures". Interaction coverage is handler-level. The setup wizard, reload
+persistence and real pointer/keyboard input are untested here.
+
+**Still requires the real client:** combat lockdown, taint and secure actions, addon-message delivery, saved data across a
+reload, how anything looks (fonts, wrapping, art), real input, EllesmereUI and other addons, the packaged install.
+
+## Cleanup safety
+
+The only deletion in the tooling is `simlab_stage`'s `rm -rf` of the addon root (`$LAB/roots/twichui`); `setup.sh` also removes
+its own `mktemp` staging folder. Since 2026-10-30 `lib.sh` (`simlab_check_lab`) runs before anything is created or deleted:
+
+- `LAB` must be absolute, non-empty, and is resolved with `realpath -m` (so `..` and symlinks cannot disguise it).
+- Refused: `/`, the home folder, the repository (or anything inside it), the game install (`SIMLAB_WOW`), and any folder
+  that contains home, the repository or the game install.
+- Runners (`smoke`, `interact`, `diagnose`, `sim`) additionally need the marker `$LAB/.simlab-lab` (text
+  `twichui-simlab-lab 1`, a regular file, not a link). `setup.sh` writes it and may adopt a folder only if it is new, empty,
+  already marked, or holds nothing but the folders setup makes (`downloads release deps home artifacts fixtures roots wtf xdg`,
+  and `env.sh` from an early lab). A lab built before the marker existed needs `setup.sh` run once (or the marker written).
+- The root's deletion also requires `ROOT` to be exactly `$LAB/roots/twichui`, with `roots` and the root real folders, not links.
+- The scripts refuse to start under zsh or another shell (`BASH_SOURCE`/`BASH_VERSION` empty): the earlier wrong-folder
+  incident was zsh resolving `BASH_SOURCE` to nothing.
+
+`tests/lab_guard.sh` checks 28 accept/refuse paths and the zsh refusal, using only `mktemp` folders (home and the game
+install are replaced by temporary stand-ins; the real protected places are never deleted from or written to).
 
 ## What a result is evidence of
 
@@ -434,6 +487,20 @@ state as the checks say; header and titles in Friz Quadrata), and `font-probe/pr
 the game's `ARIALN` and `FRIZQT___CYR` rows differ, every addon-font row is Friz Quadrata). None is evidence of how the page
 looks in the game.
 
+## Baseline, cleanup-safety closeout, 2026-10-30
+
+Run against the final files after the lab check was added to `lib.sh`, `setup.sh` and `sim.sh`.
+
+| Command | Exit | Result |
+|---|---|---|
+| `bash -n` on every runner and `tests/lab_guard.sh`; `python3 -I` parse of the Python scripts | 0 | syntax only; `shellcheck` still not installed |
+| `bash tools/simlab/tests/lab_guard.sh` | 0 | 28 passed, 0 failed |
+| `zsh tools/simlab/smoke.sh` | 127 | refused before creating anything |
+| `tools/simlab/smoke.sh` | 0 | `PASS (initialization and construction only)`: 49 of 49 pages constructed |
+| `tools/simlab/interact.sh` | 0 | `PASS WITH KNOWN SIMULATOR LIMITATIONS` |
+| `tools/simlab/diagnose.sh` | 0 | `PASS WITH KNOWN SIMULATOR LIMITATIONS` |
+| `tests/run.sh` | 0 | 141 passed, 0 failed |
+
 ## Remaining blockers
 
 - **In-game, still required:** that the page's controls can be reached and used by pointer and keyboard; that the
@@ -460,7 +527,7 @@ Change `TAG`, `PACKAGE_SHA256`, `UI_REVISION` and `UI_VERSION` in `setup.sh` and
 ## Remove it
 
 ```sh
-rm -rf ../wow-ui-sim-lab   # everything the lab made, including its copies of Blizzard's art
+rm -rf ../wow-ui-sim-lab   # (check the path first) everything the lab made, including its copies of Blizzard's art
 rm -rf tools/simlab docs/simulator-lab.md
 ```
 

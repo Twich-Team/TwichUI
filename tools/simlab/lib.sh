@@ -11,8 +11,58 @@ SIMLAB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$SIMLAB_DIR/../.." && pwd)"
 LAB="${WOWSIM_LAB:-$(dirname "$REPO")/wow-ui-sim-lab}"
 ROOT="$LAB/roots/twichui"
+SIMLAB_MARKER=".simlab-lab"                       # setup.sh writes it; its presence is what says a folder is a lab
+SIMLAB_MARKER_TEXT="twichui-simlab-lab 1"
+SIMLAB_KNOWN="downloads release deps home artifacts fixtures roots wtf xdg env.sh"   # what setup.sh makes (env.sh: an early lab had one)
+
+_simlab_within() { [ "$1" = "$2" ] || case "$1" in "$2"/*) return 0 ;; *) return 1 ;; esac; }
+
+# simlab_check_lab use|adopt: refuses (status 2) unless LAB is a folder this tooling may touch, then sets LAB and ROOT to
+# its resolved path. "use" (every runner) needs the marker. "adopt" (setup.sh only) also accepts a folder that does not
+# exist, is empty, or holds nothing but the folders setup.sh makes. Nothing is created or deleted here.
+simlab_check_lab() {
+  local mode="${1:-use}" canon wow home entry
+  wow="$(realpath -m -- "${SIMLAB_WOW:-/mnt/c/Program Files (x86)/World of Warcraft}")" || return 2
+  home=""
+  [ -z "${HOME:-}" ] || home="$(realpath -m -- "$HOME")" || return 2
+  [ -n "${LAB:-}" ] || { echo "simlab: the lab path is empty" >&2; return 2; }
+  case "$LAB" in /*) ;; *) echo "simlab: the lab path must be absolute: $LAB" >&2; return 2 ;; esac
+  canon="$(realpath -m -- "$LAB")" || return 2
+  if [ "$canon" = "/" ] || [ "$canon" = "$home" ] || _simlab_within "$canon" "$REPO" || _simlab_within "$REPO" "$canon" \
+     || { [ -z "$home" ] || _simlab_within "$home" "$canon"; } || _simlab_within "$canon" "$wow" || _simlab_within "$wow" "$canon"; then
+    echo "simlab: refusing $canon (filesystem root, home, the repository or the game install, or a folder holding one)" >&2
+    return 2
+  fi
+  if [ -f "$canon/$SIMLAB_MARKER" ] && [ ! -L "$canon/$SIMLAB_MARKER" ] && [ "$(cat -- "$canon/$SIMLAB_MARKER")" = "$SIMLAB_MARKER_TEXT" ]; then
+    :
+  elif [ "$mode" = "adopt" ]; then
+    if [ -e "$canon" ]; then
+      [ -d "$canon" ] || { echo "simlab: $canon is not a folder" >&2; return 2; }
+      for entry in "$canon"/* "$canon"/.[!.]* "$canon"/..?*; do
+        [ -e "$entry" ] || [ -L "$entry" ] || continue
+        case " $SIMLAB_KNOWN " in *" $(basename -- "$entry") "*) ;; *)
+          echo "simlab: $canon holds $(basename -- "$entry") and no $SIMLAB_MARKER, so it is not a lab; use another WOWSIM_LAB" >&2; return 2 ;;
+        esac
+      done
+    fi
+  else
+    echo "simlab: $canon has no $SIMLAB_MARKER; it is not a lab (run tools/simlab/setup.sh, or check WOWSIM_LAB)" >&2
+    return 2
+  fi
+  LAB="$canon"
+  ROOT="$LAB/roots/twichui"
+}
+
+# setup.sh sets SIMLAB_LIB_DEFER=1 and adopts the folder itself; everything else is checked before it can create anything.
+if [ "${SIMLAB_LIB_DEFER:-0}" != "1" ]; then
+  simlab_check_lab use || { return 2 2>/dev/null || exit 2; }
+fi
 
 simlab_stage() {
+  simlab_check_lab use || return 2
+  # The one deletion below: only the root's own folder, a real folder inside the lab's own roots folder.
+  [ "$ROOT" = "$LAB/roots/twichui" ] && [ -d "$LAB/roots" ] && [ ! -L "$LAB/roots" ] && [ ! -L "$ROOT" ] \
+    || { echo "simlab: $ROOT is not the lab's own root folder" >&2; return 2; }
   mkdir -p "$ROOT" "$LAB/fixtures" "$LAB/wtf"
   # Every run passes --no-saved-vars; an empty lab WTF folder means nothing else could be read either.
   if [ -n "$(find "$LAB/wtf" -type f -print -quit)" ]; then

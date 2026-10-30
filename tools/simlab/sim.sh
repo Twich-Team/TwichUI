@@ -13,10 +13,11 @@
 #   SIMLAB_WOW        the game install SIMLAB_ASSETS shows
 #   SIMLAB_FORWARD    extra NAME=VALUE pairs for the simulator, separated by spaces
 #   SIMLAB_BIN        run this inside the sandbox instead of the simulator (to check what the sandbox allows)
+[ -n "${BASH_VERSION:-}" ] || { echo "simlab: run this with bash" >&2; exit 2; }
 set -euo pipefail
 
-REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-LAB="${WOWSIM_LAB:-$(dirname "$REPO")/wow-ui-sim-lab}"
+# shellcheck source=lib.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib.sh"   # sets REPO and LAB, and refuses a folder that is not a lab
 RELEASE="wow-ui-sim-v0.1.37-forever-linux-x86_64"
 BIN="${SIMLAB_BIN:-$LAB/release/$RELEASE/wow-sim}"
 WOW="${SIMLAB_WOW:-/mnt/c/Program Files (x86)/World of Warcraft}"
