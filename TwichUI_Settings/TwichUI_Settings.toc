@@ -33,6 +33,7 @@ pages\HazardRules.lua
 pages\FoodDrink.lua
 pages\Restock.lua
 pages\RestockItems.lua
+pages\MagicInventory.lua
 pages\Mage.lua
 pages\ClassBars.lua
 pages\AmmoItems.lua

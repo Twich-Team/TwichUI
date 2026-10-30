@@ -21,6 +21,8 @@ local Perf = R.Perf
 DX.OPS = {
     ["core.savedData"] = { module = "core", label = "Saved data check at load (Persist.LoadMain)", kind = "init", file = "Core.lua", where = "ADDON_LOADED handler > Persist.LoadMain", every = "once per load" },
     ["core.startupHook"] = { module = "core", label = "Start-up hooks (each module's OnInit)", kind = "init", file = "Core.lua", where = "R.initHooks loop", every = "once per load, per module" },
+    ["inventory.plan"] = { module = "inventory", label = "Magic Inventory plan (bags read, rules matched)", kind = "rebuild", file = "inventory/Plan.lua", where = "MI.CurrentPlan", every = "when a mailbox, bank or guild bank opens or its bags change (coalesced), and per review drawn" },
+    ["inventory.step"] = { module = "inventory", label = "Magic Inventory: one stack picked up and attached or deposited", kind = "bulk", file = "inventory/Run.lua", where = "AttachNext, DepositNext", every = "per stack, only while the player's transfer runs" },
     ["npcs.search"] = { module = "npcs", label = "NPC search (map toolbar)", kind = "search", file = "npcs/Search.lua", where = "SR.Run", every = "per search typed" },
     ["npcs.knowledge.rebuild"] = { module = "npcs", label = "NPC knowledge rows rebuilt", kind = "rebuild", file = "npcs/Knowledge.lua", where = "Build", every = "when the NPC list changes" },
     ["npcs.map.layout"] = { module = "npcs", label = "NPC markers placed on the world map", kind = "layout", visible = "map.open", file = "npcs/Map.lua", where = "NMAP.Layout", every = "per map change, zoom or pan" },

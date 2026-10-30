@@ -65,6 +65,7 @@ local DEFAULT_MODULES = {
     auctionPosting = true,   -- "Sell from Bags" tab in the Auction House (searches only when you pick an item)
     mailGoldSummary = true,  -- one chat line when you close the mailbox: the money you took from mail during that visit (nothing is saved)
     restock = false,         -- Vendor restocking: keep chosen items at a target in your bags, bought from merchants (opt-in, explicit true only; asks first unless you confirm otherwise)
+    magicInventory = false,  -- Magic Inventory: rules that prepare items to mail or deposit; moves them only when you review and click at a mailbox, bank or guild bank (opt-in, explicit true only; inventory/)
     chatClean = false,       -- Chat cleaning: hide unwanted messages in the public channels you choose (opt-in, explicit true only)
     classBars = false,       -- Class resource bars: your class's resources as bars (opt-in; nothing else's bars are hidden or moved)
     targetArt = false,       -- Target dragon artwork: a dragon on EllesmereUI's target frame by the target's classification (opt-in; needs EllesmereUI's target frame; decoration only)

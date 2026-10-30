@@ -323,6 +323,18 @@ auction\Window.lua
 # Mailbox gold summary: one chat line per mailbox visit (auction\Mail.lua)
 auction\Mail.lua
 
+# Magic Inventory: rules that pick out items to mail to a character you name or deposit in your bank or a guild bank tab.
+# Off until turned on. Nothing moves by itself: at a mailbox, bank or guild bank a small button opens a review, and each
+# mail or deposit is the player's own click. Rules.lua is what is stored (no frames, no game actions), Items.lua reads
+# items, Plan.lua decides (pure), Run.lua moves things when asked, Window.lua is the review and the buttons, Picker.lua
+# chooses items from the bags (it never moves them). The settings are in TwichUI_Settings (docs/magic-inventory.md).
+inventory\Rules.lua
+inventory\Items.lua
+inventory\Plan.lua
+inventory\Run.lua
+inventory\Window.lua
+inventory\Picker.lua
+
 # Quality of Life: small opt-in conveniences (summons, resurrection, release in battlegrounds, duels)
 qol\QoL.lua
 qol\Summons.lua

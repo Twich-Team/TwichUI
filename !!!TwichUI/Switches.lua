@@ -233,6 +233,7 @@ Define("npcMap", {
 Define("auctionPosting", { apply = Refresh("AuctionWindow") })
 Define("mailGoldSummary", { apply = Refresh("MailGold") })
 Define("restock", { apply = Refresh("Restock") })
+Define("magicInventory", { apply = Refresh("MagicInventory") })
 
 -- Chat cleaning
 Define("chatClean", { apply = Refresh("ChatClean") })

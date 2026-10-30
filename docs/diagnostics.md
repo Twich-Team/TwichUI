@@ -112,6 +112,8 @@ uses an item, sends anything or makes up events. Each states its cost before you
 |---|---|---|
 | `event:<EVENT>` | `Core.lua` event bus dispatch | event |
 | `core.savedData`, `core.startupHook` (detail: hook index) | `Core.lua` ADDON_LOADED | init |
+| `inventory.plan` | `inventory/Plan.lua` `MI.CurrentPlan` (an interface opening with the feature on, its bags changing, coalesced; the review) | rebuild |
+| `inventory.step` | `inventory/Run.lua` `AttachNext`, `DepositNext` (one stack, only during a transfer the player started) | bulk |
 | `npcs.search` | `npcs/Search.lua` `SR.Run` (not for an empty query) | search |
 | `npcs.knowledge.rebuild` | `npcs/Knowledge.lua` `Build` | rebuild |
 | `npcs.map.layout` | `npcs/Map.lua` `NMAP.Layout` | layout |
