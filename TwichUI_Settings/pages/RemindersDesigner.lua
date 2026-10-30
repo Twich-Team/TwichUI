@@ -741,7 +741,7 @@ function Dz.Build(parent, env)
             K.Put(ep.op, ep, cx, h)
             cx = cx + 94
         end
-        ep.value:SetValue(draft.what or draft.state or draft.class, Pl().ValueLabel(draft))
+        ep.value:SetValue(Pl().ValueKey(draft), Pl().ValueLabel(draft))
         K.Put(ep.value, ep, cx, h)
         h = h + 32
         if Pl().NeedsItem(draft) then

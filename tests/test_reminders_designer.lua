@@ -326,7 +326,29 @@ Check(Deep(cond) == keep, "none of them touched the condition they were given")
 Check(not Pl.HasOperator({ type = "ammunition" }) and Pl.HasOperator(cond), "ammunition has no \"is not\"")
 Check(Pl.NeedsItem({ type = "equipment", what = "item" }) and not Pl.NeedsItem(cond), "an item asks for the item")
 Check(Pl.ValueLabel({ type = "class" }) == "Choose a class" and Pl.ValueLabel(cond) == "Shield", "labels")
-Check(#Pl.Subjects() == #C.SLOTS + 3, "subjects: every slot, ammunition, the player, the class")
+-- Talent specialization in the editor: one value choice names a tree (with its class) or a state
+do
+  local t = Pl.WithSubject(cond, "talent")
+  Check(t.type == "talent" and t.negate == false, "the talent subject makes a talent condition")
+  local before = Deep(t)
+  local picked = Pl.WithValue(t, "SHAMAN:374")
+  Check(picked.class == "SHAMAN" and picked.tree == 374 and picked.state == nil and Deep(t) == before, "a tree choice sets class and tree, and copies")
+  local state = Pl.WithValue(picked, "tied")
+  Check(state.state == "tied" and state.class == nil and state.tree == nil, "a state choice clears the tree")
+  Check(Pl.WithValue(state, "WARRIOR:257").state == nil, "and a tree clears the state")
+  Check(Pl.ValueKey(picked) == "SHAMAN:374" and Pl.ValueKey(state) == "tied" and Pl.ValueKey(Pl.WithSubject(cond, "talent")) ~= "tied", "the selected key")
+  Check(Pl.ValueLabel(picked) == "Restoration (Shaman)" and Pl.ValueLabel(state) == "Tied talent trees", "labels: " .. Pl.ValueLabel(picked))
+  Check(Pl.ValueLabel({ type = "talent" }) == "Choose a specialization", "nothing chosen yet")
+  Check(Pl.CondSentence(picked) == "Talent specialization is Restoration (Shaman)" and Pl.CondSentence(Pl.WithNegate(state, true)) == "Talent specialization is not Tied talent trees", "sentences")
+  Check(#Pl.ValueChoices(picked) == 2 + 3 * 9 and Pl.HasOperator(picked), "every tree and both states, with is / is not")
+  Check(Pl.Help(picked) == "Uses the talent tree with the most spent points. Equal highest totals count as tied.", "help")
+  local sv = Pl.SubjectOf(picked)
+  Check(sv == "talent", "its subject")
+  local found
+  for _, e in ipairs(Pl.Entries()) do if e.kind == "talent" then found = e end end
+  Check(found and found.category == "Character" and found.make().type == "talent", "the picker offers it")
+end
+Check(#Pl.Subjects() == #C.SLOTS + 4, "subjects: every slot, ammunition, the player, the class, the talent specialization")
 Check(Pl.Help({ type = "ammunition", what = "outOfAmmo" }):find("none your weapon can use"), "help for a choice comes from the choice")
 
 ---------------------------------------------------------------------------

@@ -78,6 +78,15 @@ KIND.class = {
     end,
 }
 
+KIND.talent = {
+    sentence = function(cond)
+        local key = C().TalentValueKey(cond)
+        local words = key and C().TalentWords(key)
+        if not words then return "Talent specialization (none chosen yet)" end
+        return ("Talent specialization %s %s"):format(cond.negate and "is not" or "is", words)
+    end,
+}
+
 KIND.ammunition = {
     sentence = function(cond)
         local A = R.ReminderAmmo
@@ -149,7 +158,7 @@ end
 Pl.CATEGORIES = { "Combat", "Character", "Equipment", "Other" }
 
 -- an icon (R.Icons id) for a kind of condition, drawn small beside it
-local ICON = { equipment = "gearComparison", ammunition = "ammunition", class = "profiles" }
+local ICON = { equipment = "gearComparison", ammunition = "ammunition", class = "profiles", talent = "profiles" }
 local PLAYER_ICON = { combat = "hazardAlerts", dead = "resurrection", ghost = "resurrection", mounted = "navigation" }
 function Pl.Icon(cond)
     if type(cond) ~= "table" then return "reminderTest" end
@@ -184,6 +193,10 @@ function Pl.Entries()
             out[#out + 1] = { key = "class", kind = "class", category = "Character", name = "Your class",
                 blurb = "Which class you are. For several classes, add one for each in a group where at least one must be true.",
                 icon = Pl.Icon({ type = "class" }), make = function() return p.New() end }
+        elseif p.type == "talent" then
+            out[#out + 1] = { key = "talent", kind = "talent", category = "Character", name = "Your talent specialization",
+                blurb = "The talent tree with the most points spent. Equal highest totals count as tied.",
+                icon = Pl.Icon({ type = "talent" }), make = function() return p.New() end }
         elseif p.type == "ammunition" then
             local A = R.ReminderAmmo
             out[#out + 1] = { key = "ammunition", kind = "ammunition", category = "Equipment", name = "Your ranged ammunition",
@@ -217,11 +230,12 @@ function Pl.Subjects()
     out[#out + 1] = { value = "ammo", label = "Ranged ammunition" }
     out[#out + 1] = { value = "player", label = "You (the player)" }
     out[#out + 1] = { value = "class", label = "Player class" }
+    out[#out + 1] = { value = "talent", label = "Talent specialization" }
     return out
 end
 
 -- the subject choice that makes a condition of a kind of its own (the others are equipment slots)
-local SUBJECT_KIND = { player = "player", ammo = "ammunition", class = "class" }
+local SUBJECT_KIND = { player = "player", ammo = "ammunition", class = "class", talent = "talent" }
 
 function Pl.SubjectOf(cond)
     if type(cond) ~= "table" then return nil, "?" end
@@ -235,6 +249,8 @@ function Pl.SubjectOf(cond)
         return "ammo", "Ranged ammunition"
     elseif cond.type == "class" then
         return "class", "Player class"
+    elseif cond.type == "talent" then
+        return "talent", "Talent specialization"
     end
     return nil, "Unknown kind"
 end
@@ -248,6 +264,8 @@ function Pl.ValueChoices(cond)
         for _, c in ipairs(R.ReminderAmmo.CHOICES) do out[#out + 1] = { value = c[1], label = c[2], tooltip = c[4] } end
     elseif cond.type == "class" then
         for _, c in ipairs(CT.ClassChoices()) do out[#out + 1] = { value = c[1], label = c[2] } end
+    elseif cond.type == "talent" then
+        for _, c in ipairs(CT.TalentChoices()) do out[#out + 1] = { value = c[1], label = c[2] } end
     elseif cond.type == "player" then
         for _, st in ipairs(CT.STATES) do
             if CT.StateSupported(st[1]) or cond.state == st[1] then
@@ -258,10 +276,18 @@ function Pl.ValueChoices(cond)
     return out
 end
 
+-- The key of the value a condition has chosen (what the value dropdown shows as selected).
+function Pl.ValueKey(cond)
+    if cond.type == "talent" then return C().TalentValueKey(cond) end
+    return cond.what or cond.state or cond.class
+end
+
 function Pl.ValueLabel(cond)
     if cond.type == "class" and not cond.class then return "Choose a class" end
-    for _, c in ipairs(Pl.ValueChoices(cond)) do if c.value == (cond.what or cond.state or cond.class) then return c.label end end
-    return tostring(cond.what or cond.state or cond.class)
+    if cond.type == "talent" and not Pl.ValueKey(cond) then return "Choose a specialization" end
+    local key = Pl.ValueKey(cond)
+    for _, c in ipairs(Pl.ValueChoices(cond)) do if c.value == key then return c.label end end
+    return tostring(key)
 end
 
 -- Whether the operator ("is" / "is not") is a choice for this condition (ammunition reads as a sentence on its own).
@@ -298,6 +324,11 @@ function Pl.WithValue(cond, value)
     local new = RM().DeepCopy(cond)
     if new.type == "player" then new.state = value
     elseif new.type == "class" then new.class = value
+    elseif new.type == "talent" then
+        -- a tree ("SHAMAN:374") names its class and tree; a state ("tied", "none") names neither
+        local class, line = tostring(value):match("^(%u+):(%d+)$")
+        if class then new.class, new.tree, new.state = class, tonumber(line), nil
+        else new.class, new.tree, new.state = nil, nil, value end
     else new.what = value end
     return new
 end
@@ -318,6 +349,8 @@ function Pl.Help(cond)
         return "Looks at your own state: in combat, dead, a ghost or mounted."
     elseif cond.type == "class" then
         return "Your own class. For several classes, add one of these for each, in a group where at least one must be true."
+    elseif cond.type == "talent" then
+        return "Uses the talent tree with the most spent points. Equal highest totals count as tied."
     elseif cond.type == "ammunition" then
         local c = R.ReminderAmmo and R.ReminderAmmo.Choice(cond.what)
         return c and c[4] or "The ammunition for your ranged weapon."

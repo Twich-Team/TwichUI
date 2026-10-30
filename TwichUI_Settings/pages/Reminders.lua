@@ -462,7 +462,7 @@ end
 K.Page({
     key = "reminders", icon = "reminders", name = "Reminders", order = 22, group = "everyday",
     description = "Artwork, an icon or a few words on screen while conditions you choose are true, such as an empty off hand. Nothing appears until you make a reminder and turn it on.",
-    keywords = "reminder reminders shield equip equipment gear off hand offhand main hand weapon two-handed fishing pole item missing artwork icon picture words text alert notice condition conditions rule rules when combat dead ghost alive mounted mount preview test simulate simulation position move character class ammo ammunition arrows bullets quiver ranged bow gun crossbow hunter out of ammo no ammo wrong ammo",
+    keywords = "reminder reminders shield equip equipment gear off hand offhand main hand weapon two-handed fishing pole item missing artwork icon picture words text alert notice condition conditions rule rules when combat dead ghost alive mounted mount preview test simulate simulation position move character class ammo ammunition arrows bullets quiver ranged bow gun crossbow hunter out of ammo no ammo wrong ammo talent talents specialization spec tree",
     overview = {
         label = "Reminders", tip = "Artwork, an icon or words on screen while conditions you choose are true, such as a missing shield.",
         when = function() return R.Reminders ~= nil end,

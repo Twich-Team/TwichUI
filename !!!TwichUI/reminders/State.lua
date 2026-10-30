@@ -2,7 +2,7 @@
 -- The live observations the enabled reminders' conditions read, kept as plain facts (the same shape a simulation
 -- builds): obs.slots[n] = { empty = true } or { id, classID, subClassID, equipLoc } (no details yet: classID nil),
 -- obs.combat = true | false, obs.life = "alive" | "dead" | "ghost", obs.mounted = true | false, obs.class = the class
--- token ("WARRIOR"; UnitClassBase), obs.ammo = the facts
+-- token ("WARRIOR"; UnitClassBase), obs.talent = the leading talent tree ("WARRIOR:257", "tied", "none"), obs.ammo = the facts
 -- about the ranged weapon's ammunition (Ammunition.lua says which and judges them). A key nobody wants
 -- is not read and not listened for. Nothing here decides anything, and nothing here ever changes the game: no item is
 -- equipped, used or moved, nothing is cast, nothing is sent.
@@ -180,6 +180,30 @@ ST.Source("class", {
         if UnitClassBase then v = Plain(UnitClassBase("player")) end
         if type(v) ~= "string" or v == "" then v = nil end
         return Set(into, "class", v)
+    end,
+})
+
+-- Where the talent points are (obs.talent: "<CLASS>:<skillLine>", "tied", "none" or nil; Conditions.lua's TalentLeader says
+-- which). Read once per talent event, never polled; when the game can't say yet it stays nil (unknown). Events as the
+-- upgrade hints listen to (gear/Hints.lua): spending or resetting points, changing the active talent group.
+ST.Source("talent", {
+    events = {
+        PLAYER_TALENT_UPDATE = true, CHARACTER_POINTS_CHANGED = true, ACTIVE_TALENT_GROUP_CHANGED = true,
+        TRAIT_CONFIG_UPDATED = true,
+    },
+    Read = function(_, into)
+        local v
+        local data = R.GearData
+        local class = UnitClassBase and Plain(UnitClassBase("player")) or nil
+        if data and data.TalentSpent and type(class) == "string" then
+            local ok, spent = pcall(data.TalentSpent, class)
+            if ok and type(spent) == "table" then
+                local rows = {}
+                for i, row in ipairs(spent) do rows[i] = { row[1], Number(row[2]) } end
+                v = C.TalentLeader(class, rows)
+            end
+        end
+        return Set(into, "talent", v)
     end,
 })
 
@@ -458,7 +482,7 @@ function ST.Stop()
     for k in pairs(want) do want[k] = nil end
     for k in pairs(dirty) do dirty[k] = nil end
     obs.slots = {}
-    obs.combat, obs.life, obs.mounted, obs.ammo, obs.class = nil, nil, nil, nil, nil
+    obs.combat, obs.life, obs.mounted, obs.ammo, obs.class, obs.talent = nil, nil, nil, nil, nil, nil
     combat, ammoWatch, ammoRetries = nil, true, 0
     SyncEvents()
 end

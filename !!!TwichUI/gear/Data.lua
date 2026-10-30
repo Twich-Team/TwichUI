@@ -197,6 +197,29 @@ function D.Trees()
     return trees, classFile, (Leading(trees))
 end
 
+-- Points spent in each tree of the given class, as { { skillLine, spent }, ... } in talent frame order, for the
+-- reminders' "Talent specialization". nil when the game has not said (talent data not initialized, or unreadable):
+-- an unread tree is not the same as a tree with no points.
+function D.TalentSpent(classFile)
+    local classInfo = classFile and W.CLASSES[classFile]
+    if not classInfo then return nil end
+    local info = C_SpecializationInfo
+    if not info then return nil end
+    if info.IsInitialized and not info.IsInitialized() then return nil end
+    local ok, trees = pcall(TalentTrees)
+    if not ok or not trees then return nil end
+    local out = {}
+    for i, def in ipairs(classInfo.trees) do
+        local game
+        for _, tree in ipairs(trees) do
+            if tree.skillLine == def.skillLine then game = tree end
+        end
+        if not game then return nil end
+        out[i] = { def.skillLine, game.spent }
+    end
+    return out
+end
+
 -- Counts of "Use:" and "Chance on hit:" lines in item tooltip data. Those
 -- effects never show up as stats, so the estimate can't weigh them.
 function D.Effects(lines)

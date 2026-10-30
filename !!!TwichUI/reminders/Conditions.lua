@@ -496,3 +496,135 @@ C.Register({
         return "Player class is " .. OrList(names), used
     end,
 })
+
+---------------------------------------------------------------------------
+-- Talent specialization. Forever has no chosen specialization: it is the talent tree with the most points spent (the
+-- same reading the upgrade hints use, gear/Data.lua). Trees are identified by class token + skillLine (gear/Weights.lua's
+-- W.CLASSES, the same ids the game's talent frame reports), never by a translated name. The observation obs.talent is
+-- "<CLASS>:<skillLine>" for a unique leader, "tied" for equal highest positive totals, "none" when nothing is spent, and
+-- nil when the game hasn't said. Unspent points never count: only points spent in a tree are read.
+---------------------------------------------------------------------------
+C.TALENT_TIED, C.TALENT_NONE = "tied", "none"
+local TALENT_STATES = {
+    tied = "Tied talent trees",
+    none = "No talent points spent",
+}
+
+local function TalentTrees(class)
+    local W = R.GearWeights
+    local info = type(class) == "string" and W and W.CLASSES[class]
+    return info and info.trees or nil
+end
+
+-- The tree of a class by skillLine: { skillLine, name, ... } or nil.
+function C.TalentTree(class, skillLine)
+    for _, tree in ipairs(TalentTrees(class) or {}) do
+        if tree.skillLine == skillLine then return tree end
+    end
+    return nil
+end
+
+function C.TalentKey(class, skillLine) return ("%s:%d"):format(class, skillLine) end
+
+-- The key of the choice a stored condition makes ("SHAMAN:374", "tied", "none"), nil when it has made none.
+function C.TalentValueKey(cond)
+    if cond.state then return cond.state end
+    if cond.class and cond.tree then return C.TalentKey(cond.class, cond.tree) end
+    return nil
+end
+
+-- Words for a key: "Restoration (Shaman)", "Tied talent trees".
+function C.TalentWords(key)
+    if TALENT_STATES[key] then return TALENT_STATES[key] end
+    local class, line = tostring(key):match("^(%u+):(%d+)$")
+    local tree = class and C.TalentTree(class, tonumber(line))
+    if not tree then return nil end
+    return ("%s (%s)"):format(tree.name, R.Reminders.ClassName(class))
+end
+
+-- { { key, label }, ... }: the two states, then every tree of every class this client has (the class order of Player class).
+function C.TalentChoices()
+    local out = { { "tied", TALENT_STATES.tied }, { "none", TALENT_STATES.none } }
+    for _, ch in ipairs(C.ClassChoices()) do
+        for _, tree in ipairs(TalentTrees(ch[1]) or {}) do
+            out[#out + 1] = { C.TalentKey(ch[1], tree.skillLine), C.TalentWords(C.TalentKey(ch[1], tree.skillLine)) }
+        end
+    end
+    return out
+end
+
+-- What the points say. spent = { { skillLine, points }, ... } for the class's trees (State.lua reads them from the game);
+-- anything that isn't a clean list of numbers is unknown, never "no points".
+function C.TalentLeader(class, spent)
+    if type(class) ~= "string" or type(spent) ~= "table" or #spent == 0 then return nil end
+    local best, bestLine, ties = 0, nil, 0
+    for _, row in ipairs(spent) do
+        local line, points = row[1], row[2]
+        if type(line) ~= "number" or type(points) ~= "number" or points ~= points or points < 0 then return nil end
+        if points > best then best, bestLine, ties = points, line, 1
+        elseif points == best and points > 0 then ties = ties + 1 end
+    end
+    if best <= 0 then return "none" end
+    if ties > 1 then return "tied" end
+    return C.TalentKey(class, bestLine)
+end
+
+C.Register({
+    type = "talent", label = "Talent specialization",
+
+    -- A new one names the current player's class (its first tree); nothing else is ever changed by who edits it later.
+    New = function()
+        local class = rawget(_G, "UnitClassBase") and UnitClassBase("player")
+        if type(class) == "string" and issecretvalue and issecretvalue(class) then class = nil end
+        local trees = TalentTrees(class)
+        local cond = { type = "talent", negate = false }
+        if trees and trees[1] then cond.class, cond.tree = class, trees[1].skillLine end
+        return cond
+    end,
+
+    Check = function(raw)
+        local clean = { type = "talent", negate = raw.negate == true }
+        if raw.state ~= nil then
+            if not TALENT_STATES[raw.state] or raw.class ~= nil or raw.tree ~= nil then
+                return nil, "it names a talent state this version of TwichUI doesn't know."
+            end
+            clean.state = raw.state
+            return clean
+        end
+        if raw.class == nil and raw.tree == nil then return clean, "choose the talent specialization it looks for." end
+        if not C.TalentTree(raw.class, raw.tree) then return nil, "it names a talent tree this version of TwichUI doesn't know." end
+        clean.class, clean.tree = raw.class, raw.tree
+        return clean
+    end,
+
+    Needs = function(_, add) add("talent") end,
+
+    Evaluate = function(cond, obs)
+        local v = obs and obs.talent
+        if v == nil then return UNKNOWN, "The game hasn't said where your talent points are yet." end
+        return Negate(Yes(v == C.TalentValueKey(cond)), cond.negate)
+    end,
+
+    Summary = function(cond)
+        local words = C.TalentValueKey(cond) and C.TalentWords(C.TalentValueKey(cond)) or "(none chosen)"
+        return ("Talent specialization %s %s"):format(cond.negate and "is not" or "is", words)
+    end,
+
+    Observed = function(_, obs)
+        local v = obs and obs.talent
+        if v == nil then return "Not read yet" end
+        return C.TalentWords(v) or "Unknown"
+    end,
+
+    Subject = function() return "talent", "Talent specialization" end,
+
+    Scenarios = function()
+        local list = {}
+        for _, ch in ipairs(C.TalentChoices()) do
+            local key = ch[1]
+            list[#list + 1] = { key = key, label = ch[2], Apply = function(obs) obs.talent = key end }
+        end
+        list[#list + 1] = { key = "unread", label = "Talents not read yet", Apply = function(obs) obs.talent = nil end }
+        return list
+    end,
+})
