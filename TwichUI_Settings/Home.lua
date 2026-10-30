@@ -31,7 +31,8 @@ local VIEWS = {
 }
 
 local function Icon(parent, id, size)
-    local t = parent:CreateTexture(nil, "ARTWORK")
+    -- above the hover wash (ARTWORK sublevel 1), which must tint only the background
+    local t = parent:CreateTexture(nil, "ARTWORK", nil, 2)
     t:SetSize(size, size)
     if R.Icons then R.Icons.Apply(t, id, size) else t:Hide() end
     return t
@@ -49,6 +50,7 @@ local function Panel(parent, w, h, onClick)
     b.fill:SetPoint("BOTTOMRIGHT", -1, 1)
     b.fill:Hide()
     b.bar = Wg.Solid(b, "ARTWORK", pal.bronzeText, 1)
+    b.bar:SetDrawLayer("ARTWORK", 2)
     b.bar:SetHeight(2)
     b.bar:SetPoint("BOTTOMLEFT", 1, 1)
     b.bar:SetPoint("BOTTOMRIGHT", -1, 1)
