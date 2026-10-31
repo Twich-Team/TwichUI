@@ -204,6 +204,7 @@ function F.Show()
     local token = state.token + 1
     state.token = token
     ui.root:Show()
+    if R.PlayWelcomeSound then pcall(R.PlayWelcomeSound, R) end   -- with the first frame; a sound that can't play changes nothing
     if Still() then
         ui.fade:Set(1)
     else

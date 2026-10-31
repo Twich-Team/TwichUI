@@ -152,4 +152,23 @@ do
   Check(not Up(c) and Wizard(c), "and it goes at once with the setup")
 end
 
+-- 10. The welcome's sound: played once, as the welcome appears; none for a second ask, and a client that can't play it is fine
+do
+  local sounds = {}
+  local c = Boot("Sound", nil, { eui = { firstRun = true }, setup = function(c)
+    c.taxi = true; c.UnitOnTaxi = function() return c.taxi end
+    c.PlaySoundFile = function(path, channel) sounds[#sounds + 1] = { path = path, channel = channel }; return true end
+  end })
+  Check(Up(c) and #sounds == 1, "the welcome played one sound (" .. #sounds .. ")")
+  Check(sounds[1] and sounds[1].path:find("TwichUI_Welcome.mp3", 1, true) and sounds[1].channel == "SFX", "it is the welcome sound, on the effects channel")
+  c.TwichUI.FirstRunWelcome.Show()
+  c.FireEvent("PLAYER_ENTERING_WORLD", false, false); Settle()
+  Check(#sounds == 1, "asking again plays nothing more")
+  local q = Boot("NoSound", nil, { eui = { firstRun = true }, setup = function(c)
+    c.taxi = true; c.UnitOnTaxi = function() return c.taxi end
+    c.PlaySoundFile = function() error("boom") end
+  end })
+  Check(Up(q), "a sound that errors does not stop the welcome")
+end
+
 if failures == 0 then print("PASSED") else print(failures .. " failure(s)"); os.exit(1) end

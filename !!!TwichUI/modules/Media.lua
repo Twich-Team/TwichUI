@@ -56,6 +56,12 @@ function R:PlayMenuSound()
     return PlaySoundFile(R:SoundPath("TwichUI_Menu.ogg"), "SFX") and true or false
 end
 
+-- The first-run welcome's sound, played once as the welcome appears. Not in the sound lists either.
+function R:PlayWelcomeSound()
+    if not PlaySoundFile then return false end
+    return PlaySoundFile(R:SoundPath("TwichUI_Welcome.mp3"), "SFX") and true or false
+end
+
 -- What to hand PlaySoundFile for a sound name: TwichUI's own by its file (found without LibSharedMedia,
 -- and whether or not the module below registered them), then LibSharedMedia's list. nil when it isn't there.
 function R:ResolveSound(name)
