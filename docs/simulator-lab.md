@@ -228,6 +228,11 @@ other read stand-ins; `reading` never answers, `partial` never answers for tab 3
 stand-ins as the run stages above. The scenario prints the panel's texts and its placement against the window's edges. Not shown, because
 nothing in this lab moves an item or keeps a cursor: a completed run, a move between tabs actually carried out, the cursor across a tab
 switch, a stale confirmation. Screenshots of these states were reviewed once at 1300 x 800; the stand-in window is not what Forever draws.
+`fixture = "completed" | "partial" | "unavailable" | "short"` (with `panel = "ready"`; `details = true` opens Details) feeds the panel's drawing a
+**made-up** result or summary by replacing what `GuildRun.Last` / `GuildPrep.Summary` return, so a completed run, a partial one with a long
+message and an unavailable action can be looked at. Nothing is executed. Use a 1300 x 1200 screenshot to see the block joined under the
+strip (shorter screens put it beside the window). The lab's screenshots draw dark colors much lighter than the game does, so judge shape,
+order and spacing from them, not color.
 
 ## Delayed failures
 

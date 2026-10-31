@@ -32,6 +32,7 @@
 -- carried out, and the cursor across a tab switch are NOT shown here: nothing in this lab moves an item (tests/mi_guildsim.lua stands
 -- in for that in the unit tests only).
 --
+-- fixture = "completed" | "partial" | "unavailable" | "short" (panel stages only: presentation-only, see the code), details = true.
 -- Parameters (SIMLAB_PARAMS): view = "design" | "current" | "preview", size = "default" (920x660) | "min" (920x480),
 -- script = a comma list of stages run in order before the screenshot:
 --   assign   Linen to tab 2 (automatic), Silk pinned to tab 2 slot 5, Linen pinned in slots 3, 4 and 10 (5, 5 and 10 by splitting)
@@ -255,6 +256,49 @@ if params.panel then
                 Check("state", "a refused call outside a click asks for a click", true, prog and prog.needClick == true)
             end
         end
+    end
+    -- Presentation-only fixtures (params.fixture): the panel's own drawing fed a made-up result or summary, because this lab cannot
+    -- complete a run. They replace what GuildRun.Last / GuildPrep.Summary RETURN; nothing is executed and nothing moves.
+    --   completed    "Completed", 58 of 58 stacks, eleven distinct items (the strip's overflow tile)
+    --   partial      "Partially completed" with a long reason, an uncertain item, an unread tab and a cursor note
+    --   unavailable  ready with Organize bank unavailable (nothing for it to do)
+    --   short        a short summary: one stack ready, Organize bank unavailable
+    -- params.details = true opens Details afterwards.
+    if params.fixture then
+        local GRM, GP = MI.GuildRun, MI.GuildPrep
+        local icons = { "INV_Misc_Food_15", "INV_Drink_05", "INV_Misc_Herb_01", "INV_Scroll_03", "INV_Misc_Gem_01", "INV_Ore_Iron_01", "INV_Misc_Bone_01" }
+        local extra = { 2453, 3355, 3818, 8153, 4234, 2776, 765 }
+        for i, id in ipairs(extra) do
+            ITEMS[id] = ITEMS[id] or { name = "Sample item " .. i, class = 7, sub = 5, stack = 20, icon = "Interface\\Icons\\" .. icons[i] }
+        end
+        local ids = { 6948, 2589, 4306, 2592, 2447, 2770, 2453, 3355, 3818, 8153, 4234 }
+        local function Result(outcome, uncertainAt)
+            local r = { outcome = outcome, confirmed = 58, total = 58, ops = {}, lines = {} }
+            for i, id in ipairs(ids) do
+                local n = i == 5 and 436 or (i == 6 and 208 or (i * 3 + 1))
+                r.ops[#r.ops + 1] = { id = id, count = n, status = (uncertainAt and i == uncertainAt) and "uncertain" or "confirmed" }
+                r.lines[#r.lines + 1] = ("%s x%d: tab 1 slot %d -> tab 2 slot %d: %s"):format(ITEMS[id].name, n, i, i + 10, (uncertainAt and i == uncertainAt) and "uncertain" or "confirmed")
+            end
+            return r
+        end
+        local fake
+        if params.fixture == "completed" then fake = Result("completed")
+        elseif params.fixture == "partial" then
+            fake = Result("partial", 4)
+            fake.confirmed, fake.total = 41, 58
+            fake.reason = "the bank stopped answering after tab 2 changed while the run was waiting for it to settle"
+            fake.unreadTabs = { 3, 5 }
+            fake.cursor = { id = 2589, where = { kind = "bag", bag = 0, slot = 3 } }
+        end
+        if fake then GRM.Last = function() return fake end end
+        if params.fixture == "unavailable" or params.fixture == "short" then
+            local sum = params.fixture == "short" and { deposit = { moves = 1 }, organize = { code = "nothing" } }
+                or { deposit = { moves = 3 }, organize = { code = "nothing" } }
+            GP.Summary = function() return sum end
+        end
+        MI.GuildPanel.Refresh()
+        Lab.Settle(0.4)
+        if params.details then PanelClick("^Details") end
     end
     for _, t in ipairs(Texts()) do Lab.Say("panel", t) end
     local x1, y1, x2, y2 = panel:GetLeft(), panel:GetTop(), panel:GetRight(), panel:GetBottom()
