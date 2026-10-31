@@ -13,6 +13,9 @@
 --                                        { recipient = "Name" } or { guild = "Guild", tab = 2, tabName = "Mats" }
 --                                    shared[destId] = { recipient }    a recipient the player chose to use on all
 --                                                                      their characters (mail only, explicit)
+--                                    guilds[guild] = { tabs = { [n] = { name, icon } } }   the tabs of a guild bank as
+--                                                                      last seen (names for choosing a tab with the bank
+--                                                                      closed; never used to plan anything)
 -- So a rule copied to another character (or another profile, or a backup restored) never sends to a recipient that
 -- character didn't choose: until one is set there, the rule says it needs one and stays off.
 --
@@ -20,7 +23,14 @@
 --         cats = { "7:5", "7", ... } (an item class, or class:subclass, as the game files it),
 --         qualities = { [0..5] = true } (none: any), equip = "any" | "equipment" | "other",
 --         bind = "any" | "boe" | "nobind", include = { [itemID] = true }, exclude = { [itemID] = true },
---         keep = 0..9999 (how many of EACH matching item stays in the bags; 0: none) }
+--         keep = 0..9999 (how many of EACH matching item stays in the bags; 0: none),
+--         stack = 0..9999 (a guild bank rule's target stack size: the size each stack of a matching item should end up,
+--         one smaller stack holding the rest; 0: no target),
+--         and, only on a rule the guild bank arrangement editor made (design = true, guild rules only; docs/magic-inventory.md,
+--         "The arrangement editor"):
+--         design = true, place = { { slot = 1..98, id = itemID, count = 1..9999 }, ... } (the stacks reserved in the rule's
+--         tab, one entry per slot; every id is also in include), rest = { [itemID] = true } (the items whose extras beyond
+--         their reserved stacks go to this tab's free slots) }
 -- Reading never writes; an entry that can't be read is left out of the next write. Nothing of a visit is saved.
 
 local R = TwichUI
@@ -32,6 +42,10 @@ MI.MAX_DESTS = 12
 MI.MAX_IDS = 100        -- items in a rule's "Also include" or "Never include" list
 MI.MAX_NEVER = 200
 MI.MAX_KEEP = 9999
+MI.MAX_STACK = 9999        -- a guild bank rule's target stack size (each item's own limit is checked when planning)
+MI.MAX_GUILDS = 8         -- guilds whose tab names are remembered
+MI.MAX_GUILD_TABS = 8     -- MAX_GUILDBANK_TABS in the Forever Constants.lua
+MI.GUILD_SLOTS = 98       -- MAX_GUILDBANK_SLOTS_PER_TAB (GuildBank.SLOTS says the same; this file loads first)
 MI.MAX_NAME = 48
 MI.MAX_CATS = 24
 
@@ -172,9 +186,31 @@ local function CleanRule(r)
         exclude = CleanSet(r.exclude, MI.MAX_IDS, ValidID),
         qualities = CleanSet(r.qualities, 8, function(q) return Whole(q, 0, 7) end),
         keep = Whole(r.keep, 0, MI.MAX_KEEP) and r.keep or 0,
+        stack = kind == "guild" and Whole(r.stack, 0, MI.MAX_STACK) and r.stack or 0,
         cats = {},
     }
     if MI.NEEDS_DEST[kind] and IdText(r.dest) then out.dest = r.dest end
+    if kind == "guild" and r.design == true then
+        -- the arrangement editor's rule: reserved stacks (one per slot, in slot order) and the items that take extras
+        out.design = true
+        local used, place = {}, {}
+        if type(r.place) == "table" then
+            for _, e in ipairs(r.place) do
+                if type(e) == "table" and Whole(e.slot, 1, MI.GUILD_SLOTS) and ValidID(e.id) and Whole(e.count, 1, MI.MAX_STACK) and not used[e.slot] then
+                    local n = 0
+                    for _ in pairs(out.include) do n = n + 1 end
+                    if out.include[e.id] or n < MI.MAX_IDS then
+                        used[e.slot] = true
+                        out.include[e.id] = true
+                        place[#place + 1] = { slot = e.slot, id = e.id, count = e.count }
+                    end
+                end
+            end
+        end
+        table.sort(place, function(a, b) return a.slot < b.slot end)
+        out.place = place
+        out.rest = CleanSet(r.rest, MI.MAX_IDS, function(id) return ValidID(id) and out.include[id] == true end)
+    end
     local seen = {}
     if type(r.cats) == "table" then
         for _, c in ipairs(r.cats) do
@@ -295,6 +331,7 @@ function MI.Resolve(destId)
     end
     if type(mine) == "table" and type(mine.guild) == "string" and mine.guild ~= "" and Whole(mine.tab, 1, 16) then
         return { kind = "guild", guild = mine.guild, tab = mine.tab, tabName = type(mine.tabName) == "string" and mine.tabName or nil,
+            tabIcon = (type(mine.tabIcon) == "number" or type(mine.tabIcon) == "string") and mine.tabIcon or nil,
             label = d.label, id = d.id }
     end
     return nil
@@ -336,8 +373,9 @@ function MI.SetRecipient(destId, text, allChars)
 end
 
 -- Sets this character's guild bank tab for a guild destination: what the guild bank shows now, chosen by the player
--- with the guild bank open. tab: the tab's number; guild and tabName as the game names them.
-function MI.SetGuildTab(destId, guild, tab, tabName)
+-- with the guild bank open (or from the tabs last seen). tab: the tab's number; guild, tabName and the icon as the
+-- game names them.
+function MI.SetGuildTab(destId, guild, tab, tabName, tabIcon)
     local d = MI.Dest(destId)
     if not (d and d.kind == "guild") then return false, "That destination isn't there any more." end
     local mine = CharDests(guild ~= nil)
@@ -348,9 +386,53 @@ function MI.SetGuildTab(destId, guild, tab, tabName)
     end
     if type(guild) ~= "string" or guild == "" or not Whole(tab, 1, 16) then return false, "Open the guild bank on the tab you want first." end
     if not mine then return false, "Your settings aren't available right now." end
-    mine[destId] = { guild = guild, tab = tab, tabName = CleanName(tabName, 64) }
+    if type(tabIcon) ~= "number" and type(tabIcon) ~= "string" then tabIcon = nil end
+    mine[destId] = { guild = guild, tab = tab, tabName = CleanName(tabName, 64), tabIcon = tabIcon }
     MI.Changed()
     return true
+end
+
+-- The tabs of a guild's bank as last seen, { [n] = { name, icon } }: written when the guild bank shows them (only when
+-- something differs) so a tab can be chosen with the bank closed. Names for choosing only: nothing is planned from it.
+function MI.NoteGuildTabs(guild, tabs)
+    if type(guild) ~= "string" or guild == "" or type(tabs) ~= "table" then return end
+    local acct = AccountStore(true)
+    local guilds = Sub(acct, "guilds", true)
+    if not guilds then return end
+    local n = 0
+    for _ in pairs(guilds) do n = n + 1 end
+    if guilds[guild] == nil and n >= MI.MAX_GUILDS then return end
+    local clean = {}
+    for i = 1, MI.MAX_GUILD_TABS do
+        local t = tabs[i]
+        local name = type(t) == "table" and CleanName(t.name, 64)
+        if name then
+            clean[i] = { name = name, icon = (type(t.icon) == "number" or type(t.icon) == "string") and t.icon or nil }
+        end
+    end
+    local old = type(guilds[guild]) == "table" and guilds[guild].tabs
+    if next(clean) == nil and old == nil then return end   -- nothing named yet: nothing to remember
+    local same = type(old) == "table"
+    for i = 1, MI.MAX_GUILD_TABS do
+        local a, b = clean[i], type(old) == "table" and old[i]
+        if (a == nil) ~= (not b) or (a and b and (a.name ~= b.name or a.icon ~= b.icon)) then same = false end
+    end
+    if same then return end
+    guilds[guild] = { tabs = clean }
+end
+
+-- { [n] = { name, icon } } for a guild, or an empty list.
+function MI.GuildTabsSeen(guild)
+    local guilds = Sub(AccountStore(false), "guilds", false)
+    local g = type(guild) == "string" and guilds and guilds[guild]
+    local out = {}
+    if type(g) == "table" and type(g.tabs) == "table" then
+        for i = 1, MI.MAX_GUILD_TABS do
+            local t = g.tabs[i]
+            if type(t) == "table" and type(t.name) == "string" then out[i] = { name = t.name, icon = t.icon } end
+        end
+    end
+    return out
 end
 
 ---------------------------------------------------------------------------
@@ -454,6 +536,25 @@ function MI.DeleteDest(id)
         t.rules = outRules
     end
     return WriteDests(out)
+end
+
+-- Replaces the whole rule list in one write (the arrangement editor's save: its own rules changed, every other rule as it
+-- was). An entry without an id gets a new one. Returns true, or false and a sentence; nothing is written on failure.
+function MI.ReplaceRules(list)
+    if type(list) ~= "table" then return false, "Nothing to save." end
+    if #list > MI.MAX_RULES then return false, ("You can keep %d rules; remove one first."):format(MI.MAX_RULES) end
+    local taken = {}
+    for _, r in ipairs(list) do if type(r) == "table" and r.id then taken[r.id] = true end end
+    local out = {}
+    for i, r in ipairs(list) do
+        local copy = {}
+        for k, v in pairs(r) do copy[k] = v end
+        if not copy.id then copy.id = NewId("r", taken); taken[copy.id] = true end
+        out[i] = CleanRule(copy)
+        if not out[i] then return false, "A rule can't be saved." end
+    end
+    if not WriteRules(out) then return false, "Your settings aren't available right now." end
+    return true
 end
 
 -- Saves a rule (new when its id isn't in the list; at the end). A rule that can't run yet is saved turned off.
@@ -603,7 +704,7 @@ end
 function MI.FromTemplate(key)
     local t = MI.Template(key)
     if not t then return nil end
-    local rule = { kind = t.kind, enabled = false, keep = t.keep or 0, equip = t.equip or "any", bind = t.bind or "any",
+    local rule = { kind = t.kind, enabled = false, keep = t.keep or 0, stack = 0, equip = t.equip or "any", bind = t.bind or "any",
         qualities = {}, include = {}, exclude = {}, cats = {} }
     for q in pairs(t.qualities or {}) do rule.qualities[q] = true end
     local name = t.fallback or t.name

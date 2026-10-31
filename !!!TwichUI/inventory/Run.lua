@@ -884,6 +884,7 @@ function MI.Refresh()
         open.mail, open.bank, open.guild = false, false, false
         if run then Finish(run, "off") end
     end
+    if MI.GuildBank then MI.GuildBank.Sync() end
     Notify("refresh")
 end
 

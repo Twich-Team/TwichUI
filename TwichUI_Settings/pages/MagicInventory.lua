@@ -136,6 +136,10 @@ end
 
 function P.Height() return height end
 
+-- The page's own drawing helpers, for MagicInventoryGuild.lua (the guild bank placement preview, drawn in this frame).
+P.Kit = { Get = Get, Text = Text, Button = Button, Icon = Icon, At = At, Wide = Wide, Tone = Tone, H = H, W = W, PAD = PAD,
+    Frame = function() return f end, Relayout = function() QueueRelayout() end }
+
 local function Say(text, tone) said, saidTone = text, tone; P.QueueRefresh() end
 P.Say = Say
 
@@ -193,6 +197,7 @@ function P.Sentence(rule)
     if rule.kind == "keep" then return ("Keep in your bags: %s, %s. Other rules move only what is above that."):format(P.KeepText(rule):lower(), items) end
     local dest = P.DestText(rule)
     local keep = rule.keep > 0 and (" Keep %d of each in your bags."):format(rule.keep) or ""
+    if rule.kind == "guild" and (rule.stack or 0) > 0 then keep = keep .. (" Stacks end at %d, and one smaller stack holds the rest."):format(rule.stack) end
     return ("%s: %s.%s It only moves when you open the %s, review it and press the action yourself."):format(dest, items, keep,
         rule.kind == "mail" and "mailbox" or (rule.kind == "bank" and "bank" or "guild bank"))
         .. (rule.kind == "mail" and " Whether a player can receive these, or who plays that character, isn't something TwichUI can check." or "")
@@ -352,14 +357,24 @@ local function DrawDests(y)
             At(pool[key .. "set"], PAD + 370, y)
             R.Interact.Tip(pool[key .. "set"], "Save recipient", "Saves exactly this name for this destination. An empty box clears it. Mail always shows the recipient before anything is sent.")
         else
+            -- the tab's own icon beside its name (a texture, so it shows wherever a texture does)
+            local ic = Icon(key .. "tabIcon")
+            ic:SetSize(20, 20)
+            At(ic, PAD + 156, y + 2)
+            ic.itemID = nil
+            ic.tex:SetTexture(where and where.tabIcon or QUESTION)
+            ic:SetShown(where ~= nil)
+            Wide(value, PAD + (where and 180 or 156), y + 5, where and 186 or 210)
+            value:SetWordWrap(where == nil)   -- one line beside the icon: a long tab name is cut, not wrapped into the next row
             value:SetText(where and ("<%s>, tab %d \"%s\""):format(where.guild, where.tab, where.tabName or "?") or "No guild bank tab on this character")
             Tone(value, where and "dim" or "warn")
             local open = mi.Run.IsOpen("guild")
             local b = Button(key .. "use", "Use the tab shown now", 170, "secondary", open and function()
                 local guild = MI().Plain((GetGuildInfo("player")))
                 local tab = MI().Plain(GetCurrentGuildBankTab and GetCurrentGuildBankTab())
-                local tabName = tab and MI().Plain((GetGuildBankTabInfo(tab)))
-                local ok, why = mi.SetGuildTab(dest.id, guild, tab, tabName)
+                local tabName, tabIcon
+                if tab then tabName, tabIcon = GetGuildBankTabInfo(tab); tabName, tabIcon = MI().Plain(tabName), MI().Plain(tabIcon) end
+                local ok, why = mi.SetGuildTab(dest.id, guild, tab, tabName, tabIcon)
                 if ok then Say(("\"%s\" is now <%s>, tab %d \"%s\" on this character."):format(dest.label, guild, tab, tabName or "?"))
                 else Say(why, "warn") end
             end or nil)
@@ -381,6 +396,32 @@ local function DrawDests(y)
             Say(("\"%s\" has nothing chosen on this character now."):format(dest.label))
         end or nil)
         At(pool[key .. "clear"], PAD + 232, y)
+        if dest.kind == "guild" then
+            -- a tab of this character's guild, from what the guild bank showed (now, or when it was last open)
+            local dd = Get(key .. "tabs", function() return Wg().Dropdown(f, 200, function(v) pool[key .. "tabs"].onPick(v) end) end)
+            local guildName = mi.Plain((IsInGuild and IsInGuild() and GetGuildInfo and (GetGuildInfo("player"))) or nil)
+            dd:SetChoices(function()
+                local out = {}
+                local tabs = type(guildName) == "string" and mi.GuildTabsSeen(guildName) or {}
+                for i = 1, mi.MAX_GUILD_TABS do
+                    local t = tabs[i]
+                    if t then
+                        out[#out + 1] = { value = i, label = ("%d  %s"):format(i, t.name),
+                            tooltip = "Tab names as the guild bank last showed them." }
+                    end
+                end
+                return out
+            end)
+            dd.onPick = function(i)
+                local t = type(guildName) == "string" and mi.GuildTabsSeen(guildName)[i]
+                if not t then Say("Open the guild bank once so its tabs are known.", "warn") return end
+                local ok, why = mi.SetGuildTab(dest.id, guildName, i, t.name, t.icon)
+                if ok then Say(("\"%s\" is now <%s>, tab %d \"%s\" on this character."):format(dest.label, guildName, i, t.name))
+                else Say(why, "warn") end
+            end
+            dd:SetValue(nil, type(guildName) ~= "string" and "Not in a guild" or (next(mi.GuildTabsSeen(guildName)) and "Choose a tab..." or "Open the guild bank once"))
+            At(dd, PAD + 330, y)
+        end
         Button(key .. "delete", "Remove", 80, "danger", function()
             R.Interact.Confirm("TWICHUI_MI_DEST_DELETE", ("Remove the destination \"%s\"?\n\nRules that send to it stay in your list, turned off, until you choose another destination for them. Other characters' choices for it are left in your saved data."):format(dest.label),
                 function() mi.DeleteDest(dest.id) end, { accept = "Remove" })
@@ -436,7 +477,8 @@ local function DrawList(y)
         Wide(lines, PAD + 28, y + 21, 360)
         local dest, tone = P.DestText(rule)
         local problem = select(2, mi.Problem(rule, false))
-        lines:SetText(("Items: %s\nDestination: %s\nKeep: %s%s"):format(P.ItemsText(rule), dest, P.KeepText(rule),
+        local stack = rule.kind == "guild" and (rule.stack or 0) > 0 and ("\nTarget stack size: " .. rule.stack) or ""
+        lines:SetText(("Items: %s\nDestination: %s\nKeep: %s%s%s"):format(P.ItemsText(rule), dest, P.KeepText(rule), stack,
             problem and ("\n|cffedb861" .. problem .. "|r") or ""))
         Tone(lines, "dim")
         local _ = tone
@@ -627,7 +669,15 @@ local function DrawDestStep(y)
         elseif r.kind == "mail" then s:SetText(("On this character \"%s\" is |cffffffff%s|r%s."):format(cur.label, where.recipient, where.shared and " (all your characters)" or ""))
         else s:SetText(("On this character \"%s\" is <%s>, tab %d \"%s\"."):format(cur.label, where.guild, where.tab, where.tabName or "?")) end
         Tone(s, where and "dim" or "warn")
-        y = y + H(s) + 8
+        if where and where.kind == "guild" then
+            local ic = Icon("e2tabIcon")
+            ic:SetSize(20, 20)
+            At(ic, PAD, y - 2)
+            ic.itemID = nil
+            ic.tex:SetTexture(where.tabIcon or QUESTION)
+            Wide(s, PAD + 26, y)
+        end
+        y = y + math.max(H(s), 20) + 8
     end
     return y
 end
@@ -702,6 +752,55 @@ local function DrawKeepStep(y)
     local note = Text("e3keepNote", "small")
     Wide(note, PAD, y)
     note:SetText("Counted for each kind of item over every stack you carry (not one amount shared by the whole category), and never in your bank or mail. Only whole stacks move, so sometimes a few more than this stay.")
+    Tone(note, "dim")
+    y = y + H(note) + 8
+    if r.kind == "guild" then y = P.DrawStackSize(y) end
+    return y
+end
+
+-- A guild bank rule's target stack size (the guild bank previews place stacks of this size and one smaller one).
+function P.DrawStackSize(y)
+    local mi, r = MI(), editing
+    local t = Text("e3stack", "heading")
+    Wide(t, PAD, y + 4)
+    t:SetText("Target stack size")
+    Tone(t, "head")
+    y = y + 26
+    local on = Check("e3stackOn", function(v)
+        editing.stack = v and ((editing.stack or 0) > 0 and editing.stack or 20) or 0
+        P.QueueRefresh()
+    end)
+    on:SetChecked((r.stack or 0) > 0)
+    At(on, PAD, y + 2)
+    local st = Text("e3stackT", "body")
+    Wide(st, PAD + 24, y + 4, 140)
+    st:SetText("Stacks of")
+    local sb = Edit("e3stackN", 60)
+    sb:SetMaxLetters(4)
+    At(sb, PAD + 90, y + 1)
+    if not sb:HasFocus() then sb:SetText((r.stack or 0) > 0 and tostring(r.stack) or "") end
+    local function Read()
+        if not editing then return end
+        local n = tonumber(sb:GetText() or "")
+        if n and n >= 0 and n <= mi.MAX_STACK and math.floor(n) == n then editing.stack = n
+        else Say(("Type a whole number from 0 to %d."):format(mi.MAX_STACK), "warn") end
+        sb:ClearFocus()
+        P.QueueRefresh()
+    end
+    sb:SetScript("OnEnterPressed", Read)
+    if not sb.hooked then
+        sb.hooked = true
+        sb:HookScript("OnEditFocusLost", function(self)
+            if editing and editing.kind == "guild" and self:IsVisible() and (self:GetText() or "") ~= ((editing.stack or 0) > 0 and tostring(editing.stack) or "") then Read() end
+        end)
+    end
+    local st2 = Text("e3stackT2", "body")
+    Wide(st2, PAD + 160, y + 4, 300)
+    st2:SetText("each, and one smaller stack for the rest")
+    y = y + 28
+    local note = Text("e3stackNote", "small")
+    Wide(note, PAD, y)
+    note:SetText("The size every stack of a matching item should end at. It can't be above what an item stacks to (that item is then left alone and the preview says so); unstackable items stay one to a slot. Only the previews use it for now: nothing is moved.")
     Tone(note, "dim")
     return y + H(note) + 8
 end
@@ -805,6 +904,7 @@ function P.Refresh()
         y = DrawEditor(y)
     else
         y = DrawList(y)
+        if P.DrawGuildPreview then y = P.DrawGuildPreview(y + 10) end
         y = DrawDests(y + 10)
         y = DrawNever(y + 10)
     end
@@ -822,7 +922,7 @@ local function Build()
 end
 
 -- Only while the page is shown: answers about items named here, and the bags and guild bank for the destinations.
-local EVENTS = { "GET_ITEM_INFO_RECEIVED", "GUILDBANKFRAME_OPENED", "GUILDBANKFRAME_CLOSED", "GUILDBANK_UPDATE_TABS" }
+local EVENTS = { "GET_ITEM_INFO_RECEIVED", "GUILDBANKFRAME_OPENED", "GUILDBANKFRAME_CLOSED", "GUILDBANK_UPDATE_TABS", "GUILDBANKBAGSLOTS_CHANGED", "BAG_UPDATE_DELAYED" }
 
 function P.Frame()
     if f then return f end
@@ -834,14 +934,19 @@ function P.Frame()
         for _, e in ipairs(EVENTS) do self:RegisterEvent(e) end
         P.Refresh()
     end)
+    f:SetScript("OnSizeChanged", function() if built then P.QueueRefresh() end end)
     f:SetScript("OnHide", function(self)
+        if P.GuildHidden then P.GuildHidden() end
         for _, e in ipairs(EVENTS) do self:UnregisterEvent(e) end
         for _, c in pairs(pool) do if c.ClearFocus then c:ClearFocus() end end
         said = nil
         local mi = MI()
         if mi and mi.Picker and mi.Picker.IsShown() then mi.Picker.Cancel() end
     end)
-    f:SetScript("OnEvent", function() P.QueueRefresh() end)
+    f:SetScript("OnEvent", function(_, event)
+        if P.OnEvent then P.OnEvent(event) end
+        P.QueueRefresh()
+    end)
     return f
 end
 
@@ -856,6 +961,7 @@ if R.MagicInventory then R.MagicInventory.OnChange(function() P.QueueRefresh() e
 if R.Profiles and R.Profiles.OnApply then
     R.Profiles.OnApply("views", "magic-inventory-page", function()
         editing = nil
+        if P.GuildProfileChanged then P.GuildProfileChanged() end
         P.QueueRefresh()
     end)
 end

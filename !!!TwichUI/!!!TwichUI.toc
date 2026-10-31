@@ -328,11 +328,15 @@ auction\Mail.lua
 # Magic Inventory: rules that pick out items to mail to a character you name or deposit in your bank or a guild bank tab.
 # Off until turned on. Nothing moves by itself: at a mailbox, bank or guild bank a small button opens a review, and each
 # mail or deposit is the player's own click. Rules.lua is what is stored (no frames, no game actions), Items.lua reads
-# items, Plan.lua decides (pure), Run.lua moves things when asked, Window.lua is the review and the buttons, Picker.lua
+# items, Plan.lua decides (pure), GuildBank.lua and GuildPlan.lua read the guild bank and preview where items would go in
+# it (read-only), Design.lua is the guild bank arrangement drafted in the settings and saved as rules (it moves nothing), Run.lua moves things when asked, Window.lua is the review and the buttons, Picker.lua
 # chooses items from the bags (it never moves them). The settings are in TwichUI_Settings (docs/magic-inventory.md).
 inventory\Rules.lua
 inventory\Items.lua
 inventory\Plan.lua
+inventory\Design.lua
+inventory\GuildBank.lua
+inventory\GuildPlan.lua
 inventory\Run.lua
 inventory\Window.lua
 inventory\Picker.lua

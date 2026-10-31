@@ -34,6 +34,8 @@ pages\FoodDrink.lua
 pages\Restock.lua
 pages\RestockItems.lua
 pages\MagicInventory.lua
+pages\MagicInventoryDrag.lua
+pages\MagicInventoryGuild.lua
 pages\Mage.lua
 pages\ClassBars.lua
 pages\AmmoItems.lua

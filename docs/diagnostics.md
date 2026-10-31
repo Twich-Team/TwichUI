@@ -113,6 +113,9 @@ uses an item, sends anything or makes up events. Each states its cost before you
 | `event:<EVENT>` | `Core.lua` event bus dispatch | event |
 | `core.savedData`, `core.startupHook` (detail: hook index) | `Core.lua` ADDON_LOADED | init |
 | `inventory.plan` | `inventory/Plan.lua` `MI.CurrentPlan` (an interface opening with the feature on, its bags changing, coalesced; the review) | rebuild |
+| `inventory.guildRead` | `inventory/GuildBank.lua` `GB.Capture` (the guild bank opening, showing a tab or changing; only with the feature on) | rebuild |
+| `inventory.guildPlan` | `inventory/GuildPlan.lua` `MI.CurrentGuildPlan` (a guild bank preview or refresh, asked for in the settings) | rebuild |
+| `inventory.designTray` | `TwichUI_Settings/pages/MagicInventoryGuild.lua` `Known` (the arrangement editor drawn after the bags or the guild bank changed; only while the settings are shown) | rebuild |
 | `inventory.step` | `inventory/Run.lua` `AttachNext`, `DepositNext` (one stack, only during a transfer the player started) | bulk |
 | `npcs.search` | `npcs/Search.lua` `SR.Run` (not for an empty query) | search |
 | `npcs.knowledge.rebuild` | `npcs/Knowledge.lua` `Build` | rebuild |

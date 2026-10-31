@@ -189,6 +189,29 @@ checks that nothing was sent and the page is unchanged. The scenario used to sto
 are now classified instead (next section), and the only limit left is a 30 s resource guard in `scenarios/lib.lua`. Changes
 in the page are synchronous and need no simulated time; only the window's fade does.
 
+## The Magic Inventory guild bank arrangement scenario
+
+`tools/simlab/guild_bank_preview.sh <name> '<lua parameter table>' [width height]` runs `scenarios/guild_bank_preview.lua` once
+from a clean synthetic profile and takes a screenshot (default 1600 x 1200; 1000 x 700 shows the 920 x 660 window large enough
+to read; `SIMLAB_RUN` picks the artifacts folder). Parameters (the file's header has them all): `view` (`design`, `current`,
+`preview`), `script` (a comma list of stages: `assign`, `cancel`, `merge`, `refuse`, `save`, `short`, `stale`, `conflict`),
+`existing = true` (three category guild rules above the arrangement), `source`, `tab`, `details`, `size = "min"` (920 x 480, the
+window's minimum) or `"default"` (920 x 660), `bank = "closed"`, `stale = "bank"`, `focus` (the key of the page control to scroll
+to) and `scroll`. The simulator knows no items and has no guild bank, so the scenario stands in for the game's **read** calls
+only (item lookups for six made-up ids, the carried bags, and `IsInGuild`, `GetGuildInfo`, `GetNumGuildBankTabs`,
+`GetCurrentGuildBankTab`, `GetGuildBankTabInfo`, `GetGuildBankItemInfo`, `GetGuildBankItemLink`); it defines nothing that moves an
+item, so a mutating call would be a Lua error in the log. Everything drawn is example data ("Night Owls", five tabs, two of them
+unread, one full, one that takes no deposits, one the rank can't see) and says nothing about the real guild bank.
+
+The addon's reader, planner, draft model and page are the real code, driven at handler level: `Button:Click()` on the page's own
+controls, the split dialog typed into and its buttons clicked, and a drop made by calling the page's own `P.ApplyDesign` (the
+function the drag handler calls) with the arguments a drop would pass. **Not exercised: real pointer dragging (`OnDragStart`,
+the pointer over a target, `OnDragStop`), Shift-click, right-click menus opening, keyboard focus, and Esc.** Those are covered
+only at handler level by `tests/test_magic_inventory_editor.lua` and need the real client (docs/magic-inventory.md, checklist
+17). The window's scroll position is set by the scenario. Inline `|T...|t` textures in text aren't drawn by the simulator (the
+page shows icons as real textures, which it does draw). A run that lets the clock pass about 5 s shows the two known, classified
+`C_VoiceChat.CanAccessSettings` errors.
+
 ## Delayed failures
 
 Two errors appear once the simulated clock passes a few seconds. Neither is hidden: the log keeps both, and

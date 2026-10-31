@@ -9,14 +9,15 @@
 --   c.CURSOR: what is on the cursor ({ bag, slot, id, count } from a bag, or { other = true })
 --   c.MAIL: the send-mail state { open, sendShown, name, subject, body, money, cod, attach = { [i] = {id,count,bag,slot} } }
 --   c.BANK: { open, bags = { [bagID] = size } } (bank tabs are ordinary bag IDs in c.BAGS)
---   c.GUILD: { name, open, current, tabs = { [tab] = { name, canDeposit, slots = { [slot] = { id, count } } } } }
+--   c.GUILD: { name, open, current, tabs = { [tab] = { name, icon, viewable, canDeposit, withdraw (0: none, -1: unlimited), remaining,
+--            slots = { [slot] = { id, count, locked } } } } }
 --   c.SENT: mails the "server" took: { to, subject, items = { {id, count} } }
 --   c.DEPOSITS: moves into the bank or guild bank
 --   c.Settle(): the "server" answers: queued bag/mail/guild events fire (BAG_UPDATE_DELAYED etc.)
 
 dofile(TESTS .. "harness.lua")
 
-local INVENTORY = { "inventory/Rules.lua", "inventory/Items.lua", "inventory/Plan.lua", "inventory/Run.lua", "inventory/Window.lua", "inventory/Picker.lua" }
+local INVENTORY = { "inventory/Rules.lua", "inventory/Items.lua", "inventory/Plan.lua", "inventory/Design.lua", "inventory/GuildBank.lua", "inventory/GuildPlan.lua", "inventory/Run.lua", "inventory/Window.lua", "inventory/Picker.lua" }
 
 function MIClient(name, opts)
   opts = opts or {}
@@ -279,12 +280,12 @@ function MIClient(name, opts)
   c.GetGuildBankTabInfo = function(tab)
     local t = c.GUILD.tabs[tab]
     if not t then return nil end
-    return t.name, 1, true, t.canDeposit ~= false, 0, 0
+    return t.name, t.icon or 1, t.viewable ~= false, t.canDeposit ~= false, t.withdraw or 0, t.remaining or 0
   end
   c.GetGuildBankItemInfo = function(tab, slot)
     local s = c.GUILD.tabs[tab] and c.GUILD.tabs[tab].slots[slot]
     if not s then return nil, 0, false end
-    return 1, s.count, false
+    return s.icon or 1, s.count, s.locked or false
   end
   c.GetGuildBankItemLink = function(tab, slot)
     local s = c.GUILD.tabs[tab] and c.GUILD.tabs[tab].slots[slot]
@@ -311,7 +312,7 @@ function MIClient(name, opts)
   c.GameTooltip = setmetatable({}, { __index = function() return function() end end })
 
   if opts.beforeFiles then opts.beforeFiles(c) end
-  local files = opts.files or { "inventory/Rules.lua", "inventory/Items.lua", "inventory/Plan.lua", "inventory/Run.lua" }
+  local files = opts.files or { "inventory/Rules.lua", "inventory/Items.lua", "inventory/Plan.lua", "inventory/Design.lua", "inventory/GuildBank.lua", "inventory/GuildPlan.lua", "inventory/Run.lua" }
   for _, f in ipairs(files) do
     local chunk = assert(loadfile(ROOT .. f))
     setfenv(chunk, c)

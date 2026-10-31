@@ -75,6 +75,31 @@ function MI.StackProblem(stack, kind, rule)
     return nil
 end
 
+-- Who decides what happens to an item: the first enabled rule that moves items and matches it (the owner), the later
+-- matching transfer rules (shadowed), the first enabled "Never transfer" rule that matches it, and the most any
+-- matching rule keeps in the bags (and the rule that says so). Pure; shared by the guild bank planner (GuildPlan.lua).
+function MI.Owner(rules, facts)
+    local owner, shadow, protectedBy = nil, {}, nil
+    local keep, keepFrom = 0, nil
+    for _, rule in ipairs(rules) do
+        if rule.enabled then
+            local m = MI.Match(rule, facts)
+            if m == "matched" or m == "included" then
+                if rule.kind == "never" then
+                    protectedBy = protectedBy or rule
+                elseif rule.kind == "keep" then
+                    if rule.keep > keep then keep, keepFrom = rule.keep, rule end
+                elseif not owner then
+                    owner = rule
+                else
+                    shadow[#shadow + 1] = rule
+                end
+            end
+        end
+    end
+    return owner, shadow, protectedBy, keep, keepFrom
+end
+
 local function GroupKey(kind, where, rule)
     if kind == "bank" then return "bank" end
     return kind .. ":" .. (rule.dest or "?")
@@ -142,24 +167,7 @@ function MI.BuildPlan(opts)
             Skip(id, nil, "pending", total, #list)
         else
             -- who matches: transfer rules in priority order, protections and keep amounts from every rule
-            local owner, shadow, protectedBy = nil, {}, nil
-            local keep, keepFrom = 0, nil
-            for _, rule in ipairs(rules) do
-                if rule.enabled then
-                    local m = MI.Match(rule, facts)
-                    if m == "matched" or m == "included" then
-                        if rule.kind == "never" then
-                            protectedBy = protectedBy or rule
-                        elseif rule.kind == "keep" then
-                            if rule.keep > keep then keep, keepFrom = rule.keep, rule end
-                        elseif not owner then
-                            owner = rule
-                        else
-                            shadow[#shadow + 1] = rule
-                        end
-                    end
-                end
-            end
+            local owner, shadow, protectedBy, keep, keepFrom = MI.Owner(rules, facts)
             if owner then
                 if owner.keep > keep then keep, keepFrom = owner.keep, owner end
                 local extra = opts.keepExtra and tonumber(opts.keepExtra(id)) or 0
@@ -299,7 +307,12 @@ function MI.CurrentPlan(context, leftOut)
     local RS = R.Restock
     local plan = MI.BuildPlan({
         stacks = bags.stacks, rules = MI.Rules(), never = MI.IsNever, resolve = MI.Resolve,
-        problem = function(rule) return MI.Problem(rule, guildNow) end,
+        problem = function(rule)
+            -- an arrangement rule says where items belong in a guild bank, slot by slot; nothing here carries that out, so it
+            -- never deposits anything: its items are listed as needing attention (and, as everywhere, no lower rule takes them)
+            if rule.design then return "design-only", "It belongs to your guild bank arrangement, which is design only: nothing is moved from it." end
+            return MI.Problem(rule, guildNow)
+        end,
         keepExtra = function(id)
             if not (RS and RS.Protects and RS.Protects(id) and RS.Rule) then return 0 end
             local rule = RS.Rule(id)

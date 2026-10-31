@@ -23,7 +23,7 @@ local c = MIClient("Rich", {
 })
 c.StaticPopupDialogs = {}
 c.StaticPopup_Show = function(name, text) c.POPUP = { name = name, text = text }; return {} end
-for _, file in ipairs({ "../TwichUI_Settings/Kit.lua", "../TwichUI_Settings/Widgets.lua", "../TwichUI_Settings/pages/MagicInventory.lua" }) do
+for _, file in ipairs({ "../TwichUI_Settings/Kit.lua", "../TwichUI_Settings/Widgets.lua", "../TwichUI_Settings/pages/MagicInventory.lua", "../TwichUI_Settings/pages/MagicInventoryDrag.lua", "../TwichUI_Settings/pages/MagicInventoryGuild.lua" }) do
   local chunk = assert(loadfile(ROOT .. file)); setfenv(chunk, c); chunk("TwichUI_Settings", {})
 end
 local R = c.TwichUI
@@ -116,5 +116,67 @@ Check(#MI.Rules() == 1, "nothing deleted before the answer")
 c.StaticPopupDialogs.TWICHUI_MI_RULE_DELETE.OnAccept()
 Flush()
 Check(#MI.Rules() == 0, "deleted after the answer")
+
+---------------------------------------------------------------------------
+-- The guild bank: a tab chosen from what the bank showed, a target stack size, and the read-only placement previews
+---------------------------------------------------------------------------
+c.GUILD.name = "Night Owls"
+c.GUILD.tabs = {
+  [1] = { name = "Gear", icon = 5, withdraw = -1, slots = {} },
+  [2] = { name = "Cloth", icon = 133, withdraw = -1, slots = { [2] = { id = 2589, count = 8 } } },
+}
+c.Bags({ [0] = { size = 16, slots = { [1] = { 2589, 20 }, [2] = { 2589, 15 } } } })
+c.OpenGuildBank()
+c.GUILD.current = 2
+c.FireEvent("GUILDBANKBAGSLOTS_CHANGED")
+local gdest = MI.AddDest("guild", "Cloth tab")
+Flush()
+local di
+for i, d in ipairs(MI.Dests()) do if d.id == gdest then di = i end end
+local tabsKey = "dest" .. di .. "tabs"
+Check(P.Control(tabsKey) ~= nil, "a guild destination offers a tab chooser")
+P.Control(tabsKey).onPick(2)
+Flush()
+local gw = MI.Resolve(gdest)
+Check(gw and gw.tab == 2 and gw.tabName == "Cloth" and gw.tabIcon == 133 and gw.guild == "Night Owls", "a tab chosen from the tabs the bank showed: its guild, number, name and icon are kept")
+Check(Has(f, "tab 2 .*Cloth"), "and shown with its name")
+c.CloseGuildBank()
+Flush()
+P.Control(tabsKey).onPick(1)
+Flush()
+Check(MI.Resolve(gdest).tab == 1 and MI.Resolve(gdest).tabName == "Gear", "with the bank closed a tab can still be chosen by name (from when it was last open)")
+P.Control(tabsKey).onPick(2)
+Flush()
+-- the target stack size in the editor
+P.NewFromTemplate("custom")
+Flush()
+Click("eTab2"); Click("e2kguild")
+Click("eTab3")
+Check(P.Control("e3stackN") ~= nil and Has(f, "^Target stack size$"), "a guild bank rule has a Target stack size")
+local sb = P.Control("e3stackN")
+sb:SetText("25"); sb.scripts.OnEnterPressed(sb); Flush()
+Check(P.Editing().stack == 25, "a typed size is kept")
+sb = P.Control("e3stackN"); sb:SetText("abc"); sb.scripts.OnEnterPressed(sb); Flush()
+Check(P.Editing().stack == 25 and Has(f, "whole number from 0 to"), "text that isn't a number is refused and the size kept")
+sb = P.Control("e3stackN"); sb:SetText("99999"); sb.scripts.OnEnterPressed(sb); Flush()
+Check(P.Editing().stack == 25, "a size above the largest is refused")
+Click("e3stackOn")
+Check(P.Editing().stack == 0, "unticking it means no target")
+Click("e3stackOn")
+Check(P.Editing().stack == 20, "ticking it starts at 20")
+Click("eCancel")
+
+-- a rule to preview
+local cloth = MI.SaveRule({ kind = "guild", name = "Cloth to tab 2", enabled = true, dest = gdest, cats = { "7:5" }, stack = 20 })
+Flush()
+Check(MI.Rule(cloth).enabled, "the guild rule is on")
+Check(Has(f, "Target stack size: 20"), "the list shows the target")
+-- the guild bank arrangement editor has its own test (test_magic_inventory_editor.lua)
+Check(Has(f, "Guild bank arrangement") and Has(f, "Design only"), "the page leads with the arrangement and says it is design only")
+Check(P.Control("gPreview") ~= nil, "and has one primary action, Preview changes")
+n = P.ControlCount()
+for _ = 1, 5 do P.QueueRefresh(); Flush(); f:Hide(); f:Show(); Flush() end
+Check(P.ControlCount() == n, "redrawing the page makes no new controls: " .. n .. " -> " .. P.ControlCount())
+Check(#c.PICKUPS == 0 and c.CURSOR == nil, "and nothing was picked up")
 
 if failures == 0 then print("PASSED test_magic_inventory_settings") else print(failures .. " failures") os.exit(1) end
