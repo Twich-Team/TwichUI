@@ -62,6 +62,8 @@ local function Panel(parent, w, h, onClick)
     b.bar:SetPoint("BOTTOMLEFT", 1, 1)
     b.bar:SetPoint("BOTTOMRIGHT", -1, 1)
     b.bar:Hide()
+    -- the sound goes with the press, not the release, so it is not heard after the page has changed
+    b:SetScript("OnMouseDown", function() R:PlayMenuSound() end)
     b:SetScript("OnClick", onClick)
     return b
 end

@@ -45,6 +45,17 @@ R.MediaFonts, R.MediaSounds, R.MediaBorders = FONTS, SOUNDS, BORDERS
 -- Handy for GTFO, which takes a file path: /gtfo custom1 <path>
 function R:SoundPath(file) return R.PATH .. [[media\sounds\]] .. file end
 
+-- The settings window's click sound. Not in the sound lists: it is the window's, not a choice. A second click inside
+-- a moment shares the first one's sound.
+local menuSoundUntil = 0
+function R:PlayMenuSound()
+    if not PlaySoundFile or not GetTime then return false end
+    local now = GetTime()
+    if now < menuSoundUntil then return false end
+    menuSoundUntil = now + 0.1
+    return PlaySoundFile(R:SoundPath("TwichUI_Menu.ogg"), "SFX") and true or false
+end
+
 -- What to hand PlaySoundFile for a sound name: TwichUI's own by its file (found without LibSharedMedia,
 -- and whether or not the module below registered them), then LibSharedMedia's list. nil when it isn't there.
 function R:ResolveSound(name)

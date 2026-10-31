@@ -995,6 +995,7 @@ local function BuildNav()
             self.hovered = false
             PaintNav()
         end)
+        item:SetScript("OnMouseDown", function() R:PlayMenuSound() end)   -- with the press, before the page changes
         item:SetScript("OnClick", function(self) UI.Navigate(self.page.key) end)
         state.navItems[#state.navItems + 1] = item
         y = y + NAV_ROW
@@ -1533,6 +1534,7 @@ function UI.Open(page, setting)
     if row then key = row.page
     elseif page ~= nil then key = K.pages[page] and page or "overview"   -- an unknown page: the start page
     else key = state.page or "overview" end                              -- none named: where it was left
+    if not win:IsShown() then R:PlayMenuSound() end
     win:Show()
     win:Raise()
     UI.Navigate(key, row and row.id or nil)
