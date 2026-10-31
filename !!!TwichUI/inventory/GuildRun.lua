@@ -716,6 +716,11 @@ local function Conclude(r, code, detail)
     last = res
     run = nil
     Listen(false)
+    -- only a run that did the whole approved plan and passed the final check sounds like success
+    if outcome == "completed" and PlaySoundFile then
+        local path = R.ResolveSound and R:ResolveSound("TwichUI Success")
+        if path then PlaySoundFile(path, "SFX") end
+    end
     Notify("done")
 end
 

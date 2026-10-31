@@ -29,6 +29,7 @@ local SOUNDS = {
     ["TwichUI Notification"] = "TwichUI_Notification.mp3",
     ["TwichUI Map Pin"]  = "TwichUI_MapPin.mp3",
     ["TwichUI Drums"]    = "TwichUI_Drums.mp3",
+    ["TwichUI Success"]  = "TwichUI_Success.mp3",
 }
 -- Border (edge) files: eight 32 px cells in a 256x32 image, the layout Blizzard's backdrop draws. Built from
 -- the paintings in assets/ by tools/make_border_texture.py. The name is ASCII like the rest of the
