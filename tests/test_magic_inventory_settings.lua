@@ -172,7 +172,7 @@ Flush()
 Check(MI.Rule(cloth).enabled, "the guild rule is on")
 Check(Has(f, "Target stack size: 20"), "the list shows the target")
 -- the guild bank arrangement editor has its own test (test_magic_inventory_editor.lua)
-Check(Has(f, "Guild bank arrangement") and Has(f, "Design only"), "the page leads with the arrangement and says it is design only")
+Check(Has(f, "Guild bank arrangement") and Has(f, "Editing is design only"), "the page leads with the arrangement and says editing is design only")
 Check(P.Control("gPreview") ~= nil, "and has one primary action, Preview changes")
 n = P.ControlCount()
 for _ = 1, 5 do P.QueueRefresh(); Flush(); f:Hide(); f:Show(); Flush() end

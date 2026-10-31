@@ -327,5 +327,7 @@ function MI.CurrentPlan(context, leftOut)
 end
 
 -- Partial stacks: off everywhere until splitting is checked on this client (C_Container.SplitContainerItem is
--- documented, but how the mail, bank and guild bank take a split stack isn't verified on Forever).
+-- documented, but how the mail, bank and guild bank take a split stack isn't verified on Forever). The reviews above and Run.lua
+-- move whole stacks only. The guild bank arrangement (GuildPlan.lua, run by GuildRun.lua) splits on its own switch,
+-- GuildRun.CAN_SPLIT.
 MI.SPLIT = { mail = false, bank = false, guild = false }

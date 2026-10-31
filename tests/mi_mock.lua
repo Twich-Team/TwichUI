@@ -17,7 +17,7 @@
 
 dofile(TESTS .. "harness.lua")
 
-local INVENTORY = { "inventory/Rules.lua", "inventory/Items.lua", "inventory/Plan.lua", "inventory/Design.lua", "inventory/GuildBank.lua", "inventory/GuildPlan.lua", "inventory/Run.lua", "inventory/Window.lua", "inventory/Picker.lua" }
+local INVENTORY = { "inventory/Rules.lua", "inventory/Items.lua", "inventory/Plan.lua", "inventory/Design.lua", "inventory/GuildBank.lua", "inventory/GuildPlan.lua", "inventory/Run.lua", "inventory/GuildRun.lua", "inventory/GuildPrep.lua", "inventory/GuildPanel.lua", "inventory/Window.lua", "inventory/Picker.lua" }
 
 function MIClient(name, opts)
   opts = opts or {}
@@ -312,7 +312,7 @@ function MIClient(name, opts)
   c.GameTooltip = setmetatable({}, { __index = function() return function() end end })
 
   if opts.beforeFiles then opts.beforeFiles(c) end
-  local files = opts.files or { "inventory/Rules.lua", "inventory/Items.lua", "inventory/Plan.lua", "inventory/Design.lua", "inventory/GuildBank.lua", "inventory/GuildPlan.lua", "inventory/Run.lua" }
+  local files = opts.files or { "inventory/Rules.lua", "inventory/Items.lua", "inventory/Plan.lua", "inventory/Design.lua", "inventory/GuildBank.lua", "inventory/GuildPlan.lua", "inventory/Run.lua", "inventory/GuildRun.lua", "inventory/GuildPrep.lua" }
   for _, f in ipairs(files) do
     local chunk = assert(loadfile(ROOT .. f))
     setfenv(chunk, c)

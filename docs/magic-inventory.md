@@ -4,10 +4,12 @@ For anyone changing the feature. Code: `inventory/Rules.lua` (rules, destination
 list, templates), `inventory/Items.lua` (item facts, categories, matching, reading the bags), `inventory/Plan.lua` (the
 dry run: precedence, keep amounts, allocation, batches), `inventory/Design.lua` (the guild bank arrangement as a draft and its
 translation to rules), `inventory/GuildBank.lua` and `inventory/GuildPlan.lua` (reading and previewing the guild bank), `inventory/Run.lua` (moving items when asked: mail, bank, guild
-bank), `inventory/Window.lua` (the review and the interface buttons), `inventory/Picker.lua` (choosing items from the
+bank), `inventory/GuildRun.lua` (reviewing and carrying out a guild bank arrangement: Deposit and Organize bank), `inventory/Window.lua` (the review and the interface buttons), `inventory/Picker.lua` (choosing items from the
 bags), and the settings page `TwichUI_Settings/pages/MagicInventory.lua`. Tests: `tests/test_magic_inventory.lua`
 (rules and plan), `tests/test_magic_inventory_run.lua` (moving), `tests/test_magic_inventory_ui.lua` (review, buttons,
-chooser), `tests/test_magic_inventory_settings.lua` (the page), with the stand-ins in `tests/mi_mock.lua`.
+chooser), `tests/test_magic_inventory_settings.lua` (the page), `tests/test_magic_inventory_guildrun.lua` and
+`tests/test_magic_inventory_guildrun_ui.lua` (the guild bank run and its panel), with the stand-ins in `tests/mi_mock.lua` and
+`tests/mi_guildsim.lua`.
 
 **Nothing here has been tried in the game.** No mail has been sent and no item moved by it. See "In-game checklist".
 
@@ -16,12 +18,13 @@ chooser), `tests/test_magic_inventory_settings.lua` (the page), with the stand-i
 The player makes rules: which items (categories as the game files them, quality, equipment or not, binding, and lists
 of items to include or never include), what happens to them (Send by mail, Deposit in bank, Deposit in guild bank, Keep
 in bags, Never transfer), and how many of each to keep in the bags. With the feature on, opening a mailbox, the bank or
-a guild bank shows a small **Magic Inventory · N stacks** button just above that window's top right corner. Clicking it
-opens the review. Nothing moves until the player presses an action in the review:
+a guild bank shows a small **Magic Inventory · N stacks** button just above that window's top right corner (the guild bank has its
+own panel instead: "The guild bank at the bank window"). Clicking it opens the review. Nothing moves until the player presses an action in the review:
 
 - **Mail:** "Prepare mail 1 of 2 to Bankalt" attaches up to 12 stacks in the game's Send Mail window (where the player
   can see them); "Send mail 1 of 2 to Bankalt" sends exactly that mail. Each mail is two clicks; one recipient per mail.
-- **Bank / guild bank:** "Deposit 8 stacks" moves them one at a time, each confirmed by the game before the next.
+- **Bank:** "Deposit 8 stacks" moves them one at a time, each confirmed by the game before the next.
+- **Guild bank:** the panel at the bank window (Deposit, Organize bank, Arrangement...), below.
 
 Off by default (`modules.magicInventory`, only an explicit `true` is on). Opening an interface never opens the review,
 never prints anything, and never moves anything.
@@ -151,7 +154,9 @@ confirmed, and why it stopped.
 - Empty state: says why nothing is listed and offers **Manage rules**.
 - The interface button: shown only while that interface is open and the feature is on; counted when it opens and when
   the bags change (coalesced), never on a timer; anchored above the game's window, or at the top of the screen when
-  another addon draws that interface (a bag addon's bank).
+  another addon draws that interface (a bag addon's bank). The guild bank no longer gets this button: its panel
+  (`inventory/GuildPanel.lua`, "The guild bank at the bank window") replaces it, so two guild deposit paths never compete. The
+  older whole-stack guild deposit in `Run.lua` stays in the code and refuses while a guild run is under way.
 
 ## Settings (`TwichUI_Settings/pages/MagicInventory.lua`, Everyday > Magic Inventory)
 
@@ -220,12 +225,8 @@ switch, and whether the game allows it, is unchecked); whether a move between ta
 daily withdrawal allowance; swapping two stacks; parking an item in the bags. Each operation carries its source (bag slot
 or tab/slot), destination, count, rule and what it needs (`split`, `withdraw:<tab>`, `deposit:<tab>`).
 
-**For the executor milestone** (not built): `plan.ops` and `plan.tabs[i].current/proposed` plus `plan.guild`, `plan.seq`,
-`plan.generation` and each tab's name and reading are what an approval would bind to; execution must run one operation at a
-time, recheck guild, tab names, rights, source and destination contents and an empty cursor before each, confirm the source
-and destination counts from a fresh read (an event only says to read again), wait with a bound and stop on a timeout, an
-unexpected change, lost access, a cursor the player used, or the bank closing, with no retry, no clearing of the cursor, no
-rollback and no new plan after a partial run, and report confirmed / blocked / remaining / uncertain exactly.
+**The executor** is "Carrying out an arrangement" below (`inventory/GuildRun.lua`). Everything in this section is still read-only: the
+preview never moves anything; only the run does, and only when the player confirms a review.
 
 Tests: `tests/test_magic_inventory_guild.lua` (rules, precedence, stack sizes, deposit vs reorganize, capacity, rights,
 unread / stale / guild identity, read-only, 150 random arrangements replayed one operation at a time) and the guild part of
@@ -237,13 +238,14 @@ the game's answers.
 ## The arrangement editor (`inventory/Design.lua`, `pages/MagicInventoryGuild.lua`, `pages/MagicInventoryDrag.lua`)
 
 Milestone 2 of guild-bank organization: the player arranges a mock guild bank and the addon translates that into ordinary guild
-bank rules. **Design only: nothing here moves, picks up, splits, deposits or withdraws an item, switches a tab, or touches the
-game's cursor, and no executor exists.** The existing review's Deposit never acts on these rules either (see "Existing
+bank rules. **Editing is design only: dragging, splitting and placing in the editor never moves, picks up, splits, deposits or withdraws an
+item, switches a tab, or touches the game's cursor.** Items move only from the Preview's Deposit and Organize bank, after a review
+and a confirmation (see "Carrying out an arrangement"). The existing review's Deposit never acts on these rules (see "Existing
 deposit" below).
 
 **What the player sees.** The tabs' own names and icons across the top, one slot grid for the selected tab, "Arrange items
-here to choose where they belong.", "Design only: your items will not move.", a Current / Design / Preview switch and one
-primary button, Preview changes. Beside the grid in Design: a searchable tray of item references (what the bags and the
+here to choose where they belong.", "Editing is design only: items move only when you review and confirm Deposit or Organize bank in the Preview.", a Current /
+Design / Preview switch and one primary button, Preview changes. Beside the grid in Design: a searchable tray of item references (what the bags and the
 guild bank snapshot hold, plus what the draft already names), "Placed automatically in this tab" (the tab's shelf), Add a
 category (the existing category list) and the selected item's actions. Details (closed) holds the reading, operations,
 shortages, extras, conflicts, held-back items, the rules the editor left alone, constraints and the legend. One contextual line
@@ -313,13 +315,165 @@ unread tabs, reorganize including a stack that must leave first, 320 random plan
 cancel and Esc, combine, the menu's actions, preview labels and the one-line stale messages, Save/Revert/leaving, a held item,
 nothing picked up). Simulator: see `docs/simulator-lab.md`.
 
+
+### Stack sizes and layouts (the usual way to arrange a tab)
+
+A tab lists the items it takes (drop an item on the tab, or on any slot of it: a plain drop never pins a slot). Each automatic item has a
+**stack size** (menu: *Stack size...*; default a full stack, never above the item's own limit) and each tab a **layout**:
+*Packed* (from slot 1, no gaps), *One empty slot between items*, or *Each item starts a new column* (the bank draws 7 columns of 14). The
+slots are the addon's business: items are laid out by name, then item ID, and the grid shows exactly where they will go. Saved in the tab's
+rule as `sizes` and `layout` (`Rules.lua`); `Design.lua` `D.Layout` / `D.Pieces` / `D.Theory` are the pure functions the editor's picture and the
+planner share.
+
+**What the planner does** (`GuildPlan.lua` `CompileLayouts`): for each automatic item the stacks its quantity makes at its size (`D.Pieces`;
+quantity is what is in every tab read, plus the bags for a deposit, less what is pinned) get slots from the layout, stepping over pinned
+slots and over slots holding an item no arrangement rule claims (never moved out of the way). Those stacks are then treated exactly like
+pinned ones (merged, split and moved by the same machinery, never swapped; a stack nothing can fill is not drawn). Pinned stacks are filled
+first. The reports count the laid-out stacks as "extras placed", not as reserved stacks. Consequences to know: **Organize** moves the
+stacks already in the bank to the layout's slots (a stack in slot 9 goes to slot 1 when the layout says so), and a quantity that
+changes can move what follows it in Packed and Spaced layouts (Columns keeps each item's column fixed). Over a deposit the quantity is the
+raw count in the bags, so keep amounts can leave a stack unfilled; it is simply not drawn.
+
+**Tidying (Organize only).** Items already in an arrangement tab that no arrangement rule names are tidied too: merged into stacks of at
+most the item's limit, sorted by name, and moved to the far end of the tab (the highest free slots), away from the arrangement's items at
+the front. Only an item **all of whose copies are in that tab** is tidied (the planner gathers every copy of an item it owns into one tab, and
+tidying must not pull items out of other tabs); an item another rule owns, one on the Never transfer list, a locked stack, an item the game
+hasn't described, and tabs the arrangement doesn't manage are left exactly where they are, and are stepped over by the layout. Moves go
+through the same machinery (no swaps; an item that has to leave first does; what can't be done is reported as blocked). A deposit never
+touches what is already in the bank. Implemented as a hidden rule per tab ("Other items in tab N, tidied", `GuildPlan.lua`
+`CompileLayouts`), appended last, in Organize plans only.
+
+**Pinning** an exact slot is still there but out of the way: the item's menu has *Pin to a slot...* (list items) or *Place...* (tray items),
+then a click on the slot. Existing pinned stacks keep working unchanged.
+
+## The guild bank at the bank window (`inventory/GuildPrep.lua`, `inventory/GuildPanel.lua`, `inventory/GuildRun.lua`)
+
+Milestone 4: the arrangement is used from the guild bank window itself. The editor is unchanged and still edits a draft only.
+
+**The player's workflow.** Open the guild bank. If this character has a saved arrangement for the guild, a small strip appears just
+outside the bank window (below it, else above it, else at the top of the screen): "Reading bank..." while the tabs are read, then
+"12 stacks ready to deposit . 8 stacks to organize" with **Deposit**, **Organize bank** and **Arrangement...**. With no arrangement
+it says so and offers **Set up arrangement** (opens the editor's page). Deposit or Organize bank makes sure every tab is current,
+then puts up ONE review: the tabs it touches, the quantities, splits, how many moves cross tabs, what is not included and why, and
+what is not read. **Start** is the approval of exactly that review. The block under the strip is deliberately short: a big word (Deposit, Organize, then
+Depositing with a **progress bar** of confirmed stacks and the stack being moved, then the result), one short line, the items involved as icons
+with their quantities (hover for names), and in amber only what needs a look ("2 between tabs", "1 left out", "tab 3 not read"). **Stop**
+(and **Continue** when the game wants a click) are on the strip. The result (Completed, Partially completed, Stopped, Needs review) stays until
+dismissed; **Details** (closed unless asked for) has the evidence, including that the bank window will show each tab in turn. Nothing moves because the bank opened, a tab was read or an event
+arrived; the only things the panel does by itself are reading, and showing a tab to read it.
+
+### What the Forever client shows, and what it does not (Forever UI source, `forever` branch)
+
+Checked 2026-10-31 in `Blizzard_GuildBankUI.lua` and `Blizzard_APIDocumentationGenerated/GuildBankDocumentation.lua`:
+
+| Question | Source | Finding |
+|---|---|---|
+| How is another tab requested, and when is it trustworthy? | `GuildBankTabMixin:OnClick`: `SetCurrentGuildBankTab(n)`, `UpdateTabs`, `Update`, then `QueryGuildBankTab(n)` (the log or the tab text instead when those pages are up). `GUILDBANKBAGSLOTS_CHANGED` is documented with **no payload** | A tab's items are requested by showing it (or asking again with `QueryGuildBankTab` for the shown tab) and are trustworthy only when that event arrived while it is shown. The event does not say which tab: an answer to an earlier request arriving after a switch cannot be told apart (not established; stated as a residual risk, and every move is also checked from reads) |
+| Can code (not a click) show a tab? | `GuildBankFrameMixin:OnShow` runs `Tabs[1]:OnClick()`; `SelectAvailableTab` runs `BankTabs[n]:OnClick("LeftButton")` from an event handler | **Yes for the frame's own code.** `GuildBank.lua` `GB.Show(tab)` calls exactly that handler (never `SetCurrentGuildBankTab` alone, which would leave the frame out of step). Whether it also works for an addon is a real-client check |
+| Do reads need the displayed tab to change? | `GetGuildBankItemInfo(tab, slot)` and `QueryGuildBankTab(tab)` take a tab, but the Blizzard UI only ever uses the shown one and the generated documentation has nothing on either | **No, in practice.** GuildBankSort (in `reference_addons`, no licence: only the call pattern was read) queries every tab with `QueryGuildBankTab(tab)` and reads them all, and the player reports it working on this client. So background reads use `GB.Query`: one tab at a time, the player's tab untouched (they can use the bank meanwhile). The event that answers still carries no tab, so an answer is taken only after the event AND a quiet `GB.QUERY_DWELL` (0.5 s); the residual risk is that an unanswered tab looks like an empty one. Only when a tab does not answer, and only when the player pressed Deposit, Organize bank or Read again, is it shown to read it (`GB.Show`, then their own tab again) |
+| Cross-tab pickup / place / split with explicit tabs? | `PickupGuildBankItem(tab, slot)`, `SplitGuildBankItem(tab, slot, n)`: the UI passes `GetCurrentGuildBankTab()` every time; not in the API documentation | **Not used.** Every call names the tab that is shown at that moment. A move between tabs is: pick up in the source tab, show the destination tab (the cursor is not touched by the tab handler in the source), read it, place, then show the source tab again and read it |
+| Acknowledgments and slot locks | `GetGuildBankItemInfo` -> texture, count, locked; `GUILDBANK_ITEM_LOCK_CHANGED`, `GUILDBANKBAGSLOTS_CHANGED`, `CURSOR_CHANGED` | a move counts only when a fresh read of a shown, read tab shows the expected count, unlocked, and the cursor empty. Between tabs: the destination right after placing, the source after its tab is shown and read again, before the next move |
+| Hardware input / continuation | nowhere (no protection flag, no hardware-event flag for these calls); `ADDON_ACTION_BLOCKED` / `_FORBIDDEN` | **Unknown.** The first move starts inside the confirming click; if the game blocks a call with nothing done, the run asks for **Continue** (one move per click: the next known-safe operation, never a replay of an uncertain one). A call the game merely ignores is a timeout, not a claimed click restriction |
+| Allowance | `GetGuildBankTabInfo` -> remaining | only current for the tab being shown, so it is checked at each pickup (the source tab is shown then); whether a move between tabs counts against it is unknown |
+| Split | `SplitGuildBankItem` | the part must land on the cursor (inferred); its count is not readable, so a split is verified only after it is placed |
+
+**How the guild bank opens and closes on this client.** `Blizzard_GuildBankUI_Bootstrap.lua` registers the frame with the player
+interaction manager (`Enum.PlayerInteractionType.GuildBanker`, 10): `PLAYER_INTERACTION_MANAGER_FRAME_SHOW` / `_HIDE` carry it.
+`GUILDBANKFRAME_OPENED` / `_CLOSED` are only routed on the Burning Crusade client (`Blizzard_Game/TBC/EventRouting.lua`), so the first
+real-client run never saw the bank close (the panel stayed) or open (no automatic read). `GuildBank.lua` listens to both pairs, and a bank
+that only sends its items is treated as open; opening or closing twice is one. The panel also hides whenever `GuildBankFrame` is hidden.
+
+### Preparation (`inventory/GuildPrep.lua`, reads in `inventory/GuildBank.lua`)
+
+Opening the bank, a tab list change, a saved rule, a finished run and a player's request each ask for a **cycle** (any number of
+asks is one, a short timer later). A cycle reads every tab the rank can see whose items are missing, from another visit, or older than
+`GB.MAX_AGE` (120 s), without showing any of them (`GB.Query`; the tab shown is asked again where it is): one at a time, a wait of `READ_WAIT`
+(3 s) each, at most `TRIES` (2) asks per tab per cycle (a third, showing the tab, only for a cycle the player started), at most
+`MAX_AUTO` (6) cycles a visit by themselves, `GAP` (1.5 s) between cycles. A tab that does not answer is **not read**, never empty,
+is not asked again by itself, and is named in the panel (**Read again** asks again). A tab the rank cannot see is never asked for. The
+summary (two reviews) is rebuilt only when idle, coalesced (0.4 s), and not during a run. A tab's state is `live` (shown, read after
+the game's last word), `earlier` (read in this visit), `closed` (an earlier visit) or `unread`; a visit that ended never counts.
+
+Because nothing is shown, the player's own tab clicks, cursor, other pages and combat do not matter to a read; only a run starting
+(`run`), the bank closing or leaving the guild stop it. If a cycle does have to show a tab (the last resort above) it ends at once, and waits `QUIET`
+(4 s), when the shown tab is not the one it asked for, when something is on the cursor, in combat, or when the bank shows its log or tab text, and it
+shows the player's tab again when it finishes. While it reads, the panel shows a progress bar ("2 of 5 tabs").
+
+### Review and approval (`GR.Review`, `GR.Start`)
+
+`GR.Review(mode)` builds the plan from the **saved** rules (`MI.CurrentGuildPlan`, no draft) and every tab that is read and current,
+then replays it on those cells: a move whose source or destination is not what the plan assumed, or that depends on an excluded one,
+is left out with its reason; a move that needs an unread or forbidden tab is left out (`tab-unread`, `tab-rights`) and its
+dependents with it. It refuses when the bank is closed or shows another page, the guild isn't the character's, combat, something is on
+the cursor, or a run or an older deposit is under way. The review lists the action, every tab it touches, the quantities, splits, moves
+**between tabs**, what is not included, which tabs are **not read** (the bank is then never called organized), and says the run does
+only the listed moves. Its **fingerprint** binds the guild, each touched tab's name and rights, the saved-rules generation, every move
+with the identity and count in each source and destination, the excluded work and the unread tabs.
+
+**Start** makes the review again. When every touched tab is shown or was read within `GR.START_AGE` (15 s) the fingerprints are
+compared at once; otherwise the run's first step shows and reads those tabs again and compares then. If anything changed the run ends
+with **Stopped** (`stale`), nothing was moved, and the result carries the NEW review, which the panel puts up to read and approve: a
+changed plan is never substituted and never started. A review is good for 120 s and one use. A page event, a rules change or closing
+withdraws a waiting review. Unsaved design edits are never used.
+
+### The run (`GR.Start` onward)
+
+One run at a time. Before a move: bank open on its item page, same guild, the tab shown is the one this run asked for (any other tab
+is the player's: the run stops), names and rights as reviewed, allowance (source tab), rules unchanged, cursor empty, the source (and a
+destination in the same tab) exactly as reviewed, the protections again for a bag source. The run shows the source tab (or, for a bag
+source, the destination tab), waits until its items arrived, then `split`/`pickup`; the cursor must hold exactly that item. A
+destination in another tab: that tab is shown (item on the cursor), read, **judged the same way** (a placing onto a changed slot would
+swap, so it is never done unchecked), then `place`. Then the destination is confirmed, and for a move between tabs the source tab is
+shown and read again and must show the expected count, unlocked, before the move counts and the next starts.
+
+Events only cause a read (coalesced); waits are bounded (`GR.WAIT` 4 s, reads at 0.5 and 1.5 s, a late tab is asked for once more);
+there is no polling. Moves are **paced**: the next starts `GR.GAP` (1 s) after the last was confirmed (the game dropped placements made
+right after the previous one in the first real-client run; GuildBankSort does one move a second). A move is handed to the game at most
+twice (`GR.TRIES`), and the second time only when a fresh read after `GR.SETTLE` (1.5 s) shows the first did **not** start (cursor empty,
+source and destination exactly as reviewed, unlocked, both readable) and the full revalidation passes again; the result says "confirmed on
+the second try". Anything else is never repeated: a move that may have happened is **uncertain**. Items are never taken to the
+bags, swapped, parked, sold, destroyed or mailed. After the last move every touched cell is read again (each tab shown in turn) against
+the approved result, then the player's tab is shown again; **Completed** needs that verification.
+
+**Cursor.** Something else on the cursor stops the run and is never touched. An item the run holds that cannot be placed (the destination
+did not take it, or its tab could not be shown or read) is put back only in its source (that tab is shown again first) and the put-back is
+confirmed (Stopped, "put back where it came from"); if that cannot be confirmed the item stays on the cursor and the result says exactly
+where it belongs (Needs review). `ClearCursor` is never called.
+
+**Interruption.** Stop ends the run at the next move boundary (a move in flight is finished and confirmed, not undone). The bank closing,
+combat, leaving the world, a rules change, another guild, rights or allowance changes, a tab the run did not ask for, the bank's log page,
+a surprise at the source or destination, a timeout, a cursor change and an error all stop it; reads that cannot be trusted (a tab not shown,
+a closed bank) make a move in flight **uncertain**, never "done" or "not moved". Nothing is saved: a close, a reload or a reopened bank
+resumes nothing.
+
+**Outcomes:** **Completed** (every move confirmed, the approved result verified, nothing left out of the plan), **Partially completed**
+(every included move confirmed and verified, work was not included), **Stopped** (clean stop: N of M confirmed, the rest not started, with
+the reason), **Needs review** (anything uncertain, an unresolved cursor, a mismatch, a timeout, a final check that did not match). Unread tabs
+are always listed; they do not turn a verified plan into "partial" unless a rule needed them.
+
+### Supported and not supported
+
+Supported: deposit into several tabs in one approval; organize inside a tab and between tabs, including a move that must wait for another
+(a stack leaving a reserved slot first), with splits and merges; independent work goes on when another tab is unread, hidden or refuses
+deposits. Not supported (reported as blocked, never improvised): swaps, taking items to the bags and back, temporary parking, a slot holding
+another item, moving past a withdrawal allowance, resuming, rolling back, reading a tab without showing it.
+
+Tests: `tests/test_magic_inventory_guildprep.lua` (preparation: one tab at a time, delayed/missing/unread tabs, rights, the player's navigation,
+cursor, log page, duplicate events, close/reopen, coalescing; the plan across tabs: dependencies, unavailable tabs, stale and changed approvals;
+cross-tab acknowledgments: delayed, duplicate, missing, uncertain, a tab that never answers with the item held, navigation, closing, cursor,
+Stop, refused calls and Continue), `tests/test_magic_inventory_guildpanel.lua` (the panel), `tests/test_magic_inventory_guildrun.lua` (the
+review, confirmation and a run on one tab, preserved) and `_guildrun_ui.lua` (the settings page's Preview, which uses the same review and run),
+over the scripted stand-in server `tests/mi_guildsim.lua` (`S.Tabs()` gives it the frame's own tab buttons). A stand-in that does what the test
+says proves the addon's decisions, not what Forever does. Simulator: `tools/simlab/guild_bank_preview.sh` stages the panel (see
+`docs/simulator-lab.md`).
+
 ## Diagnostics
 
 Scopes `inventory.plan` (`MI.CurrentPlan`), `inventory.step` (one stack attached or deposited), `inventory.guildRead`
-(`GB.Capture`, the guild bank read on its events) and `inventory.guildPlan` (a guild bank preview, asked for in the settings), `inventory.designTray` (the arrangement editor's item
+(`GB.Capture`, the guild bank read on its events) and `inventory.guildPlan` (a guild bank preview, asked for in the settings), `inventory.guildReview` (the review before a confirmation), `inventory.guildPrep` (the bank panel's summary, coalesced, never during a run), `inventory.guildRun` (one move handed to the game, only during a confirmed run), `inventory.designTray` (the arrangement editor's item
 references, rebuilt when the bags or the bank changed while the settings are shown),
 in `DX.OPS` and `docs/diagnostics.md`. Gauges `inventory.frames` (review rows and buttons), `inventory.listeners`,
-`inventory.itemCache` (bounded at 512), `inventory.guildBank` (slots held by the snapshot, at most 784), `inventory.design` (the arrangement draft and tray references held). No new load-on-demand addon. Reports hold no names, recipients or items.
+`inventory.itemCache` (bounded at 512), `inventory.guildBank` (slots held by the snapshot, at most 784), `inventory.design` (the arrangement draft and tray references held), `inventory.guildRunState` (moves held for the run and the last result), `inventory.guildPrepState` (summary, problems and waiting callbacks held), `inventory.guildPanel` (the panel's frames). No new load-on-demand addon. Reports hold no names, recipients or items.
 
 ## Known limits
 
@@ -336,7 +490,11 @@ in `DX.OPS` and `docs/diagnostics.md`. Gauges `inventory.frames` (review rows an
 - A recipient is checked for its form only. Whether it exists, accepts mail, or who plays it isn't known.
 - Disenchantability isn't checked: the template says "Uncommon BoE equipment", nothing more.
 - Rules aren't exported or shared.
-- The arrangement editor is design only. Real pointer dragging, Shift-click and how the editor looks are not verified (the
+- The guild bank run (Deposit and Organize bank) has been run only against stand-ins. Whether Forever accepts `PickupGuildBankItem`,
+  `SplitGuildBankItem` and `SplitContainerItem` from an addon, outside a click, for a split stack, and what it does with a locked
+  slot or a merge are unverified, and so are showing a tab from addon code, a cursor held across a tab switch, and whether a move between
+  tabs counts against the allowance (see "The guild bank at the bank window").
+- The arrangement editor edits a draft only. Real pointer dragging, Shift-click and how the editor looks are not verified (the
   tests and the simulator drive handlers, not a pointer). An arrangement is tied to this character's choice of guild bank tabs
   (as every guild rule is); a second character in the guild chooses the tabs on the destinations list before the rules run
   there. A reserved slot that holds another item is never cleared, so a full bank rearranges only as far as free slots allow.
@@ -386,3 +544,24 @@ in `DX.OPS` and `docs/diagnostics.md`. Gauges `inventory.frames` (review rows an
     a dimmed `~` ghost; a slot holding another item shows `!`; switch to another tab in the bank then back: "Bank contents
     changed. Refresh preview."; edit the design: "Design changed. Refresh preview." Make a broader rule above the arrangement
     (cloth to another tab): the Details list says that rule decides.
+20. Guild bank panel (separately authorized; low-value items, tabs you chose, a guild bank you may use). Save a small arrangement (Linen
+    to tab 2, Herbs to tab 3, a reserved stack of 10 Linen in tab 2 slot 5). Open the guild bank on tab 1: no click needed: the strip
+    appears outside the window with a bar "N of M tabs" while it reads, and the bank window does NOT change tab (the tabs are read with
+    `QueryGuildBankTab`); then "N stacks ready to deposit". Use the bank (click tabs, move items) while it reads: nothing should interfere.
+    Note whether every tab's contents in the summary match the game's own view of that tab, and whether any tab ends as "not read" (that
+    would mean the query did not work for it on this client).
+21. Deposit: one review naming both tabs, nothing moved by Cancel. Start: watch each move land (a lock on the slot, then the item), the
+    count rises only after each landing, the bank shows tab 3 for the herbs and your own tab at the end. Check both tabs slot by slot.
+    **Open question:** does the first call inside the click work and the later ones outside it? If the strip shows "the game wants a
+    click for the next move" with Continue, that answers it; note which call was refused.
+22. Organize bank with a move **between tabs** (put Wool in tab 1 that belongs in tab 2): the review says "1 of them between tabs". Start:
+    pick up in tab 1, tab 2 shows, the item is placed, tab 1 shows again to confirm. **Open questions:** does the cursor still hold the
+    item after the tab switch; does the destination read show the slot as expected; does the move count against the daily allowance?
+    If the item is not on the cursor after the switch the run must stop (Needs review) with nothing lost; report what the strip said.
+23. Splits: a reserved stack of 10 taken from a stack of 20 must end as 10 in the slot and 10 left; any other amount must say **Needs
+    review**, not Completed.
+24. Stop during a run: it finishes the move in progress, then says Stopped with the counts. Close the guild bank mid-run, `/reload`, reopen:
+    nothing resumes; the strip reads the bank again and needs a new review. Click another tab yourself mid-run: it stops at once.
+25. With your own item on the cursor the review refuses. Change the bank between the review and Start (another member deposits, or you do
+    from a second character) and wait over 15 seconds before Start: the run reads the tabs again and, if the plan differs, shows a NEW review
+    and moves nothing. A rank with a daily withdrawal allowance: the run stops when it is spent and does not work around it.

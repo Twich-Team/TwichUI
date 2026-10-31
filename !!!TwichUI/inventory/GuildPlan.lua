@@ -17,8 +17,8 @@
 -- own limit blocks that item (it is never cut down silently); an unstackable item stays 1.
 --
 -- What it does not assume (each is a constraint on an operation, not a promise):
---   * splitting a stack: opts.split (Plan.lua's MI.SPLIT.guild, off until the client is checked). An operation that
---     needs a split is listed, and is "blocked" while splitting is not supported.
+--   * splitting a stack: opts.split (GuildRun.CAN_SPLIT for the arrangement's run: SplitGuildBankItem / SplitContainerItem, which
+--     the run verifies after placing). An operation that needs a split is listed, and is "blocked" when splitting is off.
 --   * swapping two stacks, taking an item out to the bags and back, or parking one in the bags: never used. A
 --     placement needs a free slot (or a stack with room) at that moment; items that must leave a full tab first are
 --     ordered so, and a loop of full tabs is reported as needing temporary space.
@@ -188,6 +188,171 @@ end
 --   keepExtra(id) another feature's keep amount
 --   split        true where a partial stack can be moved (off until checked)
 --   made, generation
+
+---------------------------------------------------------------------------
+-- The arrangement's automatic items, laid out. A design rule lists items its tab takes "automatically" (rest) with the size each is
+-- spread in (sizes, else a full stack) and a layout (Design.lua D.Layout). Here that becomes reserved stacks, in the slots the
+-- layout gives them, and from then on the planner treats them exactly like stacks the player pinned: they are targets, merged,
+-- split and moved by the same machinery, never swapped in. The rules handed in are not changed; a rule that gets stacks is copied.
+--   quantity: what the player has of an item = every tab read, plus the carried bags for a deposit
+--   blocked slots: a pinned stack's, and one that holds an item no arrangement rule claims (it is never moved out of the way)
+-- A stack nothing can fill is not drawn or reported (a tab with no Linen shows no Linen slot); the picture of the arrangement itself
+-- is Design.lua D.Theory.
+---------------------------------------------------------------------------
+local function CompileLayouts(rules, opts, bank, mode)
+    local D = MI.Design
+    if not D then return rules end
+    local claimed = {}
+    for _, r in ipairs(rules) do
+        if r.enabled and r.kind == "guild" and r.design then for id in pairs(r.include or {}) do claimed[id] = true end end
+    end
+    local function Quantity(id)
+        local n = 0
+        for _, t in pairs(bank.tabs) do
+            if t.slots then for _, c in pairs(t.slots) do if c.id == id then n = n + (c.count or 0) end end end
+        end
+        if mode == "deposit" then
+            for _, st in ipairs(opts.stacks or {}) do if st.id == id then n = n + (st.count or 0) end end
+        end
+        return n
+    end
+    local function Name(id) local f = opts.facts and opts.facts(id); return f and f.name end
+    local out, extra = {}, {}
+    local tidied = {}        -- tidied[id] = tab: an item the arrangement doesn't name is tidied in one tab only
+    for i, rule in ipairs(rules) do
+        out[i] = rule
+        if rule.enabled and rule.kind == "guild" and rule.design and opts.resolve and rule.dest then
+            local where = opts.resolve(rule.dest)
+            local tab = where and where.tab
+            local bt = tab and bank.tabs[tab]
+            if bt and bt.slots then
+                local pinned, pinnedTotal = {}, {}
+                for _, p in ipairs(rule.place or {}) do
+                    pinned[p.slot] = true
+                    pinnedTotal[p.id] = (pinnedTotal[p.id] or 0) + p.count
+                end
+
+                -- Organize also tidies the tab: the other items in it (named by no arrangement rule, and left to no other rule or the
+                -- Never list) are merged into full stacks and sorted at the far end, away from the arrangement. Never in a deposit.
+                local movable, foreign = {}, {}
+                if mode == "reorganize" then
+                    for slot, c in pairs(bt.slots) do
+                        if c.id and not claimed[c.id] and not c.locked and c.count and c.count > 0 and (tidied[c.id] == nil or tidied[c.id] == tab) then
+                            local facts = opts.facts and opts.facts(c.id)
+                            if facts and not (opts.never and opts.never(c.id)) then
+                                local owner, _, protectedBy = MI.Owner(rules, facts)
+                                if not owner and not protectedBy then
+                                    movable[slot] = true
+                                    foreign[c.id] = (foreign[c.id] or 0) + c.count
+                                end
+                            end
+                        end
+                    end
+                end
+
+                -- an item is tidied only when all of it is in this tab: the planner gathers every copy of an owned item into its tab,
+                -- and tidying must not pull items out of other tabs
+                if next(foreign) then
+                    local bankTotal = {}
+                    for _, t in pairs(bank.tabs) do
+                        if t.slots then for _, c in pairs(t.slots) do if foreign[c.id] then bankTotal[c.id] = (bankTotal[c.id] or 0) + (c.count or 0) end end end
+                    end
+                    for id, n in pairs(foreign) do
+                        if bankTotal[id] ~= n then
+                            foreign[id] = nil
+                            for slot, c in pairs(bt.slots) do if c.id == id then movable[slot] = nil end end
+                        end
+                    end
+                end
+
+                -- the arrangement's own automatic items
+                local laid = {}
+                if rule.rest and next(rule.rest) then
+                    local ids = {}
+                    for id in pairs(rule.rest) do if rule.include[id] then ids[#ids + 1] = id end end
+                    D.SortAuto(ids, Name)
+                    local list = {}
+                    for _, id in ipairs(ids) do
+                        local facts = opts.facts and opts.facts(id)
+                        if facts then
+                            local limit = math.max(1, facts.maxStack or 1)
+                            local size = math.min((rule.sizes and rule.sizes[id]) or limit, limit)
+                            local pieces = D.Pieces(math.max(0, Quantity(id) - (pinnedTotal[id] or 0)), size)
+                            if #pieces > 0 then list[#list + 1] = { id = id, pieces = pieces } end
+                        end
+                    end
+                    if #list > 0 then
+                        laid = D.Layout(list, rule.layout or "packed", function(slot)
+                            if pinned[slot] then return true end
+                            local c = bt.slots[slot]
+                            return c ~= nil and not (c.id and claimed[c.id]) and not movable[slot]
+                        end)
+                    end
+                end
+
+                -- the tidied items: stacks of at most the item's limit, sorted by name, in the highest free slots
+                local tail = {}
+                if next(foreign) then
+                    local used = {}
+                    for slot in pairs(pinned) do used[slot] = true end
+                    for _, c in ipairs(laid) do used[c.slot] = true end
+                    local avail = {}
+                    for slot = MI.GUILD_SLOTS, 1, -1 do
+                        local c = bt.slots[slot]
+                        local obstacle = c ~= nil and not (c.id and claimed[c.id]) and not movable[slot]
+                        if not used[slot] and not obstacle then avail[#avail + 1] = slot end
+                    end
+                    local ids = {}
+                    for id in pairs(foreign) do ids[#ids + 1] = id end
+                    D.SortAuto(ids, Name)
+                    local chosen, count = {}, 0
+                    for _, id in ipairs(ids) do
+                        local facts = opts.facts(id)
+                        local pieces = D.Pieces(foreign[id], math.max(1, facts.maxStack or 1))
+                        if count + #pieces <= #avail then
+                            chosen[#chosen + 1] = { id = id, pieces = pieces }
+                            count = count + #pieces
+                            tidied[id] = tab
+                        end
+                    end
+                    if count > 0 then
+                        local slots = {}
+                        for k = 1, count do slots[k] = avail[k] end
+                        table.sort(slots)
+                        local k = 0
+                        for _, it in ipairs(chosen) do
+                            for _, n in ipairs(it.pieces) do
+                                k = k + 1
+                                tail[#tail + 1] = { slot = slots[k], id = it.id, count = n, auto = true }
+                            end
+                        end
+                    end
+                end
+
+                if #laid > 0 then
+                    local copy = {}
+                    for k, v in pairs(rule) do copy[k] = v end
+                    local place = {}
+                    for _, p in ipairs(rule.place or {}) do place[#place + 1] = p end
+                    for _, c in ipairs(laid) do place[#place + 1] = { slot = c.slot, id = c.id, count = c.count, auto = true } end
+                    table.sort(place, function(a, b) return a.slot < b.slot end)
+                    copy.place = place
+                    out[i] = copy
+                end
+                if #tail > 0 then
+                    local include, rest = {}, {}
+                    for _, p in ipairs(tail) do include[p.id], rest[p.id] = true, true end
+                    extra[#extra + 1] = { id = "tidy:" .. tostring(rule.id), name = ("Other items in tab %d, tidied"):format(tab), kind = "guild", enabled = true,
+                        design = true, synthetic = true, dest = rule.dest, include = include, exclude = {}, qualities = {}, cats = {}, equip = "any", bind = "any",
+                        keep = 0, stack = 0, place = tail, rest = rest, sizes = {}, layout = "packed" }
+                end
+            end
+        end
+    end
+    for _, r in ipairs(extra) do out[#out + 1] = r end
+    return out
+end
+
 function MI.BuildGuildPlan(opts)
     local mode = opts.mode == "reorganize" and "reorganize" or "deposit"
     local rules = opts.rules or {}
@@ -201,6 +366,7 @@ function MI.BuildGuildPlan(opts)
     if mismatch then bank = { tabs = {}, open = false, numTabs = nil, seq = bank.seq } end
     plan.guild = bank.guild or (type(opts.guildNow) == "string" and opts.guildNow) or nil
     plan.open = bank.open == true
+    rules = CompileLayouts(rules, opts, bank, mode)
 
     local sim = NewSim(bank)
     local why = {}       -- why[tab][slot] = { text, ... } what happens to that slot
@@ -291,12 +457,14 @@ function MI.BuildGuildPlan(opts)
             local st = state[rule.id]
             if st then
                 for _, p in ipairs(rule.place or {}) do
-                    if p.id == id then allocs[#allocs + 1] = { tab = st.tab or 0, slot = p.slot, count = p.count, rule = rule, st = st } end
+                    if p.id == id then allocs[#allocs + 1] = { tab = st.tab or 0, slot = p.slot, count = p.count, rule = rule, st = st, auto = p.auto } end
                 end
                 ov[#ov + 1] = { rule = rule, tab = st.tab, st = st, rest = rule.rest ~= nil and rule.rest[id] == true }
             end
         end
+        -- pinned stacks are filled first (an automatic stack only gets what they leave), each in tab and slot order
         table.sort(allocs, function(a, b)
+            if (a.auto == true) ~= (b.auto == true) then return not a.auto end
             if a.tab ~= b.tab then return a.tab < b.tab end
             return a.slot < b.slot
         end)
@@ -318,9 +486,12 @@ function MI.BuildGuildPlan(opts)
     end
 
     local function Result(a, id, facts, have, status, code, why)
+        -- an automatic stack is where the layout wants it, not a quantity the player asked for: short is not a shortfall
+        if a.auto and status == "short" then status = "ok" end
         local r = { tab = a.tab, slot = a.slot, id = id, want = a.count, have = have or 0, state = status, code = code, why = why,
-            rule = a.rule.name, ruleId = a.rule.id, icon = facts and facts.icon }
-        r.short = math.max(0, a.count - r.have)
+            rule = a.rule.name, ruleId = a.rule.id, icon = facts and facts.icon, auto = a.auto }
+        r.short = a.auto and 0 or math.max(0, a.count - r.have)
+        if a.auto and status == "ok" and r.have == 0 then return r end   -- nothing filled it: it is not drawn
         design.allocs[#design.allocs + 1] = r
         designAt[a.tab] = designAt[a.tab] or {}
         designAt[a.tab][a.slot] = r
@@ -1201,10 +1372,25 @@ function MI.BuildGuildPlan(opts)
     summary.scope = scope
     summary.unchanged = math.max(0, scope - summary.moved - summary.blocked - summary.unknown)
     -- the arrangement: reserved stacks filled, short, blocked or unknown; extras placed or left; rules that don't win
-    local dsum = { reserved = #design.allocs, filled = 0, short = 0, shortQty = 0, blocked = 0, unknown = 0, extrasPlaced = 0, extrasLeft = 0,
+    -- the stacks an automatic layout made are reported as extras placed (per item and tab), not as stacks the player reserved
+    local autoPlaced, autoOrder = {}, {}
+    local reservedN = 0
+    for _, a in ipairs(design.allocs) do
+        if a.auto then
+            if a.state == "ok" and a.have > 0 then
+                local k = a.tab .. ":" .. a.id
+                if not autoPlaced[k] then autoPlaced[k] = { id = a.id, tab = a.tab, qty = 0, state = "placed", auto = true }; autoOrder[#autoOrder + 1] = k end
+                autoPlaced[k].qty = autoPlaced[k].qty + a.have
+            end
+        else
+            reservedN = reservedN + 1
+        end
+    end
+    for _, k in ipairs(autoOrder) do design.overflow[#design.overflow + 1] = autoPlaced[k] end
+    local dsum = { reserved = reservedN, filled = 0, short = 0, shortQty = 0, blocked = 0, unknown = 0, extrasPlaced = 0, extrasLeft = 0,
         conflicts = #design.conflicts }
     for _, a in ipairs(design.allocs) do
-        if a.state == "ok" then dsum.filled = dsum.filled + 1
+        if a.state == "ok" then if not a.auto then dsum.filled = dsum.filled + 1 end
         elseif a.state == "short" then dsum.short, dsum.shortQty = dsum.short + 1, dsum.shortQty + a.short
         elseif a.state == "blocked" then dsum.blocked = dsum.blocked + 1
         else dsum.unknown = dsum.unknown + 1 end
@@ -1370,7 +1556,7 @@ function MI.CurrentGuildPlan(mode, override)
             local rule = RS.Rule(id)
             return rule and rule.target or 0
         end,
-        split = MI.SPLIT and MI.SPLIT.guild == true,
+        split = MI.GuildRun ~= nil and MI.GuildRun.CAN_SPLIT == true,   -- the arrangement's own run splits (GuildRun.lua); the older whole-stack review does not
         generation = MI.Generation(), made = GetTime and GetTime() or 0,
     })
     plan.draft = override ~= nil

@@ -8,8 +8,12 @@
 --   rest   { [id] = true }              the items whose extras (beyond their reserved stacks) go to this tab's free slots:
 --                                       "automatic placement". An item has at most one tab that takes its extras
 --   cats   { "7:5", ... }               categories (the game's own) that belong in the tab, placed automatically
+--   sizes  { [id] = n }                 the size each automatically placed item is spread in (absent: a full stack)
+--   layout "packed" | "spaced" | "columns"   how the automatic items are laid out in the tab (D.Layout): from the first slot with
+--                                       no gaps, one empty slot between different items, or each different item starting a new
+--                                       column of 14. Which exact slot each stack gets is the planner's business, not the drawing's
 -- Saved as ONE guild bank rule per tab, the rule the arrangement editor owns: { design = true, kind = "guild", dest = the
--- tab's destination, include = items, cats = cats, place = { { slot, id, count } ... }, rest = rest } (Rules.lua). The planner
+-- tab's destination, include = items, cats = cats, place = { { slot, id, count } ... }, rest = rest, sizes = sizes, layout = layout } (Rules.lua). The planner
 -- (GuildPlan.lua) reads exactly those fields, so there is no second rule engine and no lossy step between the drawing and the
 -- rules: Load(Commit(draft)) gives the draft back.
 --
@@ -40,7 +44,7 @@ end
 ---------------------------------------------------------------------------
 -- The draft
 ---------------------------------------------------------------------------
-local function NewTab() return { slots = {}, items = {}, rest = {}, cats = {} } end
+local function NewTab() return { slots = {}, items = {}, rest = {}, cats = {}, sizes = {}, layout = "packed" } end
 
 -- names: { [tab] = { name, icon } } (as the guild bank names them), numTabs: how many tabs there are (nil: not known)
 function D.New(guild, names, numTabs)
@@ -80,7 +84,7 @@ end
 
 -- an item stays in a tab only while it has a reserved stack there or that tab takes its extras
 local function Tidy(tab, id)
-    if not HasStack(tab, id) and not tab.rest[id] then tab.items[id] = nil end
+    if not HasStack(tab, id) and not tab.rest[id] then tab.items[id], tab.sizes[id] = nil, nil end
 end
 
 local function RestTab(draft, id)
@@ -89,7 +93,7 @@ end
 
 local function SetRest(draft, id, tab)
     for n, t in pairs(draft.tabs) do
-        if n ~= tab and t.rest[id] then t.rest[id] = nil; Tidy(t, id) end
+        if n ~= tab and t.rest[id] then t.rest[id] = nil; t.sizes[id] = nil; Tidy(t, id) end
     end
     TabOf(draft, tab, true).rest[id] = true
 end
@@ -239,7 +243,7 @@ function D.RemoveItem(draft, ctx, tab, id)
     local t = TabOf(draft, tab, false)
     if not (t and t.items[id]) then return false, "That item isn't in this tab." end
     for s, v in pairs(t.slots) do if v.id == id then t.slots[s] = nil end end
-    t.items[id], t.rest[id] = nil, nil
+    t.items[id], t.rest[id], t.sizes[id] = nil, nil, nil
     return true, ("%s was taken out of %s. It is left alone by this design."):format(ItemName(ctx, id), TabName(draft, tab))
 end
 
@@ -274,6 +278,106 @@ function D.RemoveCategory(draft, ctx, tab, key)
     return false, "That category isn't in this tab."
 end
 
+-- The size an automatically placed item is spread in: n stacks of that size, the last one with what is left. A full stack is the
+-- default (no entry). n is capped at the item's own limit.
+function D.SetSize(draft, ctx, tab, id, n)
+    local t = TabOf(draft, tab, false)
+    if not (t and t.items[id] and t.rest[id]) then return false, "That item isn't placed automatically in this tab." end
+    local limit = Limit(ctx, id)
+    if not limit then return false, "The game is still loading this item. Try again in a moment." end
+    if type(n) ~= "number" or n ~= math.floor(n) or n < 1 then return false, "A stack needs at least one item." end
+    if n >= limit then
+        t.sizes[id] = nil
+        return true, ("%s is spread in full stacks (%d)."):format(ItemName(ctx, id), limit)
+    end
+    t.sizes[id] = n
+    return true, ("%s is spread in stacks of %d."):format(ItemName(ctx, id), n)
+end
+
+-- How a tab lays out its automatic items.
+function D.SetLayout(draft, tab, layout)
+    if not ValidTab(draft, tab) then return false, "That tab isn't there." end
+    if not MI.LAYOUTS[layout] then return false, "That isn't a layout." end
+    TabOf(draft, tab, true).layout = layout
+    return true, ("%s: %s."):format(TabName(draft, tab), MI.LAYOUTS[layout])
+end
+
+---------------------------------------------------------------------------
+-- The layout: which slot each automatically placed stack of a tab gets. Pure.
+---------------------------------------------------------------------------
+-- The stacks an item's total makes at a size: { size, size, ..., rest }. A total of 0 makes none.
+function D.Pieces(total, size)
+    local out = {}
+    if type(total) ~= "number" or type(size) ~= "number" or size < 1 then return out end
+    while total > 0 do
+        local n = math.min(size, total)
+        out[#out + 1] = n
+        total = total - n
+    end
+    return out
+end
+
+-- ids in the order they are laid out: by name, then by item ID (the same every time, readable in the bank window)
+function D.SortAuto(ids, name)
+    table.sort(ids, function(a, b)
+        local na, nb = name(a) or "", name(b) or ""
+        if na ~= nb then return na < nb end
+        return a < b
+    end)
+    return ids
+end
+
+-- list: { { id, pieces = { count, ... } } } in layout order. style: "packed" | "spaced" | "columns". blocked(slot): a slot that can't be
+-- used (a pinned stack, an item that is not part of the arrangement). Returns { { id, piece, slot, count } } and how many stacks
+-- did not fit in the 98 slots.
+function D.Layout(list, style, blocked)
+    local out, s, unfit = {}, 1, 0
+    local COL = MI.GUILD_COLUMN
+    for idx, it in ipairs(list) do
+        if style == "columns" and (s - 1) % COL ~= 0 then s = s + (COL - (s - 1) % COL) end
+        for piece, count in ipairs(it.pieces) do
+            while s <= SLOTS and blocked and blocked(s) do s = s + 1 end
+            if s > SLOTS then
+                unfit = unfit + 1
+            else
+                out[#out + 1] = { id = it.id, piece = piece, slot = s, count = count }
+                s = s + 1
+            end
+        end
+        if style == "spaced" and idx < #list then s = s + 1 end
+    end
+    return out, unfit
+end
+
+-- What the editor draws for a tab: its pinned stacks, and its automatic items laid out as the planner will lay them out. qty(id)
+-- says how many the player has (nil: one stack of each, the picture of the arrangement itself).
+-- Returns { [slot] = { id, count, auto = true | nil } }
+function D.Theory(draft, tab, ctx, qty)
+    local t = TabOf(draft, tab, false)
+    local cells = {}
+    if not t then return cells end
+    for slot, s in pairs(t.slots) do cells[slot] = { id = s.id, count = s.count } end
+    local ids = {}
+    for id in pairs(t.rest) do if t.items[id] then ids[#ids + 1] = id end end
+    D.SortAuto(ids, function(id) local f = ctx and ctx.facts and ctx.facts(id); return f and f.name end)
+    local list = {}
+    for _, id in ipairs(ids) do
+        local limit = Limit(ctx, id)
+        -- with no quantity the picture is the arrangement itself: an item that already has a pinned stack is that stack
+        if limit and (qty or not HasStack(t, id)) then
+            local size = math.min(t.sizes[id] or limit, limit)
+            local total = qty and qty(id) or size
+            local pieces = D.Pieces(total, size)
+            if #pieces == 0 and not qty then pieces = { size } end
+            if #pieces > 0 then list[#list + 1] = { id = id, pieces = pieces } end
+        end
+    end
+    for _, c in ipairs((D.Layout(list, t.layout or "packed", function(slot) return t.slots[slot] ~= nil end))) do
+        cells[c.slot] = { id = c.id, count = c.count, auto = true }
+    end
+    return cells
+end
+
 ---------------------------------------------------------------------------
 -- Reading a draft
 ---------------------------------------------------------------------------
@@ -290,7 +394,9 @@ function D.Digest(draft)
             local cats = {}
             for _, k in ipairs(t.cats) do cats[#cats + 1] = k end
             table.sort(cats)
-            out[#out + 1] = ("%d|%s|%s|%s|%s"):format(n, table.concat(s, ","), table.concat(SortedKeys(t.items), ","), table.concat(SortedKeys(t.rest), ","), table.concat(cats, ","))
+            local sz = {}
+            for _, id in ipairs(SortedKeys(t.sizes)) do sz[#sz + 1] = id .. "x" .. t.sizes[id] end
+            out[#out + 1] = ("%d|%s|%s|%s|%s|%s|%s"):format(n, table.concat(s, ","), table.concat(SortedKeys(t.items), ","), table.concat(SortedKeys(t.rest), ","), table.concat(cats, ","), table.concat(sz, ","), t.layout or "packed")
         end
     end
     return table.concat(out, ";")
@@ -367,6 +473,8 @@ function D.Load(rules, ctx)
                 for id in pairs(rule.rest or {}) do t.rest[id] = true end
                 for _, key in ipairs(rule.cats) do t.cats[#t.cats + 1] = key end
                 for _, e in ipairs(rule.place or {}) do t.slots[e.slot] = { id = e.id, count = e.count } end
+                for id, n in pairs(rule.sizes or {}) do if t.rest[id] then t.sizes[id] = n end end
+                t.layout = MI.LAYOUTS[rule.layout] and rule.layout or "packed"
                 draft.managed[tab] = { id = rule.id, dest = rule.dest, name = rule.name }
             end
         end
@@ -391,6 +499,9 @@ local function RuleFor(draft, tab, base, ctx)
     for id in pairs(t.rest) do rule.rest[id] = true end
     for _, slot in ipairs(SortedKeys(t.slots)) do rule.place[#rule.place + 1] = { slot = slot, id = t.slots[slot].id, count = t.slots[slot].count } end
     for _, k in ipairs(t.cats) do rule.cats[#rule.cats + 1] = k end
+    rule.sizes = {}
+    for id, n in pairs(t.sizes) do if t.rest[id] then rule.sizes[id] = n end end
+    rule.layout = t.layout or "packed"
     return rule
 end
 

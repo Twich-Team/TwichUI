@@ -563,8 +563,8 @@ do
   local bank = Bank({ [1] = Tab("Gear", { [5] = { 2589, 20 } }), [2] = Tab("Cloth", { [9] = { 2589, 10 } }) })
   local plan = Plan("reorganize", { rule }, bank, {}, { split = true })
   Check(Proposed(plan, 2, 3).count == 20, "a stack is gathered into its reserved slot")
-  Check(Proposed(plan, 1, 5) == nil and Proposed(plan, 2, 9).count == 10, "the stack already in the tab stays where it is")
-  Check(Total(plan, 2589) == 30 and #plan.ops == 1 and not plan.ops[1].split, "one whole stack moved: nothing lost, no split")
+  Check(Proposed(plan, 1, 5) == nil and Proposed(plan, 2, 9) == nil and Proposed(plan, 2, 1).count == 10, "the extra stack is laid out from the first slot (packed), leaving the reserved slot alone")
+  Check(Total(plan, 2589) == 30 and #plan.ops == 2 and not plan.ops[1].split and not plan.ops[2].split, "two whole stacks moved: nothing lost, no split")
 
   -- not enough
   local short = Plan("reorganize", { ARule("f2", 2, { place = { { slot = 3, id = 2589, count = 20 }, { slot = 4, id = 2589, count = 20 } }, rest = { [2589] = true } }) },
@@ -574,8 +574,11 @@ do
 
   -- the item in the slot is another's
   local occupied = Plan("reorganize", { rule }, Bank({ [1] = Tab("Gear", { [5] = { 2589, 20 } }), [2] = Tab("Cloth", { [3] = { 2447, 4 } }) }), {}, { split = true })
-  Check(Alloc(occupied, 2, 3).state == "blocked" and Alloc(occupied, 2, 3).code == "slot-taken" and Proposed(occupied, 2, 3).id == 2447, "an unmanaged item in a reserved slot is left, and the reservation is blocked")
-  Check(Total(occupied, 2589) == 20 and Proposed(occupied, 1, 5).count == 20, "the stack that wanted the slot stays put")
+  Check(Alloc(occupied, 2, 3).state == "ok" and Proposed(occupied, 2, 3).id == 2589 and Proposed(occupied, 2, 98).id == 2447, "an item the arrangement doesn't name is moved away to the far end, and the reserved slot is filled")
+  Check(Total(occupied, 2589) == 20 and Total(occupied, 2447) == 4, "nothing is lost")
+  local kept = Plan("reorganize", { rule }, Bank({ [1] = Tab("Gear", { [5] = { 2589, 20 } }), [2] = Tab("Cloth", { [3] = { 2447, 4 } }) }), {}, { split = true, never = function(id) return id == 2447 end })
+  Check(Alloc(kept, 2, 3).state == "blocked" and Alloc(kept, 2, 3).code == "slot-taken" and Proposed(kept, 2, 3).id == 2447, "an item on the Never transfer list is left where it is, and the reservation is blocked")
+  Check(Total(kept, 2589) == 20 and Proposed(kept, 1, 5).count == 20, "the stack that wanted the slot stays put")
 
   -- an arrangement item that has to leave first does, then the slot is filled
   local linenRule = ARule("f3", 2, { place = { { slot = 3, id = 2589, count = 20 } }, rest = { [2589] = true } })
@@ -686,6 +689,155 @@ do
   for _, a in ipairs(plan.attention) do if a.rule == "Arrangement: Cloth" then attention = a end end
   Check(attention and attention.code == "design-only", "it is listed as needing attention, with the reason")
   Check(moves[2592], "an ordinary rule below it is not affected")
+end
+
+
+---------------------------------------------------------------------------
+-- Stack sizes and layouts: the player lists the items a tab takes and the size to spread them in; the slots are the addon's business
+---------------------------------------------------------------------------
+do
+  -- the pure parts
+  Check(table.concat(D.Pieces(45, 20), ",") == "20,20,5" and #D.Pieces(0, 20) == 0 and table.concat(D.Pieces(7, 20), ",") == "7", "a total is spread in stacks of the size, the last one smaller")
+  local list = { { id = 1, pieces = { 5, 5, 5 } }, { id = 2, pieces = { 5 } }, { id = 3, pieces = { 5, 5 } } }
+  local function Slots(style, blocked)
+    local out = {}
+    for _, c in ipairs((D.Layout(list, style, blocked))) do out[#out + 1] = c.id .. "@" .. c.slot end
+    return table.concat(out, " ")
+  end
+  Check(Slots("packed") == "1@1 1@2 1@3 2@4 3@5 3@6", "packed: from the first slot, no gaps: " .. Slots("packed"))
+  Check(Slots("spaced") == "1@1 1@2 1@3 2@5 3@7 3@8", "spaced: one empty slot between different items: " .. Slots("spaced"))
+  Check(Slots("columns") == "1@1 1@2 1@3 2@15 3@29 3@30", "columns: each item starts a new column of 14: " .. Slots("columns"))
+  Check(Slots("packed", function(s) return s == 2 end) == "1@1 1@3 1@4 2@5 3@6 3@7", "a blocked slot is stepped over")
+  local many = {}
+  for i = 1, 100 do many[i] = 5 end
+  local _, unfit = D.Layout({ { id = 1, pieces = many } }, "packed")
+  Check(unfit == 2, "stacks beyond the 98 slots are counted, not placed")
+
+  -- the draft: a size, a layout, and saving and loading them
+  local d = Draft()
+  D.AssignTab(d, ctx, 2589, 2)
+  Check(D.SetSize(d, ctx, 2, 2589, 5) and d.tabs[2].sizes[2589] == 5, "a size is set for an automatic item")
+  Check(D.SetSize(d, ctx, 2, 2589, 500) and d.tabs[2].sizes[2589] == nil, "a size at or above the stack limit is the default (a full stack)")
+  Check(not D.SetSize(d, ctx, 2, 2589, 0) and not D.SetSize(d, ctx, 2, 2592, 5), "no size of 0, and none for an item the tab doesn't take")
+  D.SetSize(d, ctx, 2, 2589, 5)
+  Check(D.SetLayout(d, 2, "spaced") and d.tabs[2].layout == "spaced" and not D.SetLayout(d, 2, "diagonal"), "a layout is chosen; an unknown one is refused")
+  local before = D.Digest(d)
+  d.saved = ""
+  Check(D.Dirty(d), "a size or layout change is an unsaved edit")
+  local rules = D.Commit(d, {}, { destFor = function(tab) return "dest" .. tab end })
+  local rule = rules[1]
+  rule.id = "r1"
+  Check(rule.sizes[2589] == 5 and rule.layout == "spaced", "they are written into the rule")
+  local clean = MI.CleanRule(rule)
+  Check(clean.sizes[2589] == 5 and clean.layout == "spaced", "and survive the rule's own checking")
+  local bad = {}
+  for k, v in pairs(rule) do bad[k] = v end
+  bad.sizes, bad.layout = { [2589] = 0, [99999999] = 5, [2592] = 5 }, "diagonal"
+  local cleaned = MI.CleanRule(bad)
+  Check(next(cleaned.sizes) == nil and cleaned.layout == "packed", "a bad size, an item not in the rule, or an unknown layout is dropped, never trusted")
+  local back = D.Load(rules, { guild = "Night Owls", names = d.names, numTabs = 4, resolve = function() return { guild = "Night Owls", tab = 2, tabName = "Cloth" } end, facts = ctx.facts })
+  Check(back.tabs[2].sizes[2589] == 5 and back.tabs[2].layout == "spaced" and D.Digest(back) == before, "loading gives the same draft back")
+  D.RemoveItem(d, ctx, 2, 2589)
+  Check(d.tabs[2].sizes[2589] == nil, "taking the item out forgets its size")
+
+  -- the picture the editor draws: pinned stacks and the automatic items where the layout puts them
+  local t = Draft()
+  D.AssignTab(t, ctx, 2589, 2); D.AssignTab(t, ctx, 2592, 2)
+  D.SetSize(t, ctx, 2, 2589, 5)
+  D.PlaceSlot(t, ctx, 2447, 2, 1, 7)
+  local cells = D.Theory(t, 2, ctx)
+  Check(cells[1] and cells[1].id == 2447 and not cells[1].auto, "a pinned stack stays where it was pinned")
+  Check(cells[2] and cells[2].id == 2589 and cells[2].count == 5 and cells[2].auto and cells[3] and cells[3].id == 2592 and cells[3].count == 20, "the automatic items follow, Linen in stacks of 5 and Wool as a full stack")
+  local more = D.Theory(t, 2, ctx, function(id) return id == 2589 and 12 or nil end)
+  Check(more[2].count == 5 and more[3].count == 5 and more[4].count == 2, "with a quantity: 5, 5 and 2")
+end
+
+-- the planner: sizes and layouts decide the slots; nothing is swapped, invented or moved out of the way
+do
+  local function Rule(layout, sizes)
+    return ARule("L1", 2, { rest = { [2589] = true, [2592] = true }, include = { [2589] = true, [2592] = true }, sizes = sizes or {}, layout = layout })
+  end
+  local bags = { Bag(0, 1, 2589, 20), Bag(0, 2, 2592, 20) }
+  local function Slots(plan)
+    local out = {}
+    for slot, c in pairs(plan.tabs[2].proposed) do if c.change == "added" then out[#out + 1] = ("%d:%d@%d"):format(c.id, c.count, slot) end end
+    table.sort(out)
+    return table.concat(out, " ")
+  end
+  local bank = function() return Bank({ [1] = Tab("Gear"), [2] = Tab("Cloth", { [1] = { 2447, 1 } }), [3] = Tab("Herbs") }) end
+  local packed = Plan("deposit", { Rule("packed", { [2589] = 5 }) }, bank(), bags, { split = true })
+  Check(Slots(packed) == "2589:5@2 2589:5@3 2589:5@4 2589:5@5 2592:20@6", "packed, Linen in stacks of 5: a foreign item in slot 1 is stepped over (never moved), Wool follows: " .. Slots(packed))
+  Check(#packed.ops == 5, "five placements: four split off the Linen stack, one Wool")
+  local spaced = Plan("deposit", { Rule("spaced", { [2589] = 10 }) }, bank(), bags, { split = true })
+  Check(Slots(spaced) == "2589:10@2 2589:10@3 2592:20@5", "spaced: a free slot between Linen and Wool: " .. Slots(spaced))
+  local cols = Plan("deposit", { Rule("columns", { [2589] = 10 }) }, bank(), bags, { split = true })
+  Check(Slots(cols) == "2589:10@2 2589:10@3 2592:20@15", "columns: Wool starts the next column of 14: " .. Slots(cols))
+  Check(packed.summary.design.reserved == 0 and packed.summary.design.extrasPlaced == 40, "the stacks the layout made are 'extras placed', not stacks the player reserved")
+  Check(#packed.design.allocs > 0 and packed.design.allocs[1].auto == true, "and they are marked automatic")
+  local def = Plan("deposit", { Rule(nil, nil) }, Bank({ [1] = Tab("Gear"), [2] = Tab("Cloth"), [3] = Tab("Herbs") }), bags, { split = true })
+  Check(Slots(def) == "2589:20@1 2592:20@2", "no size and no layout: full stacks, packed from the first slot")
+
+  -- Organize: what is in the bank is brought to the layout (merged, split, moved), nothing is lost
+  local org = Plan("reorganize", { Rule("packed", { [2589] = 10 }) },
+    Bank({ [1] = Tab("Gear", { [5] = { 2589, 14 } }), [2] = Tab("Cloth", { [7] = { 2589, 6 }, [9] = { 2592, 8 } }) }), {}, { split = true })
+  Check(Total(org, 2589) == 20 and Total(org, 2592) == 8, "organize loses nothing")
+  Check(Proposed(org, 2, 1) and Proposed(org, 2, 1).id == 2589 and Proposed(org, 2, 1).count == 10 and Proposed(org, 2, 2).count == 10 and Proposed(org, 2, 3).id == 2592,
+    "20 Linen are two stacks of 10 in slots 1 and 2, the Wool after them in slot 3")
+
+  -- a pinned stack is filled first and its slot is left to it
+  local pin = ARule("L2", 2, { place = { { slot = 2, id = 2589, count = 7 } }, rest = { [2589] = true }, sizes = { [2589] = 10 }, layout = "packed" })
+  local pp = Plan("deposit", { pin }, Bank({ [1] = Tab("Gear"), [2] = Tab("Cloth"), [3] = Tab("Herbs") }), { Bag(0, 1, 2589, 20) }, { split = true })
+  Check(Proposed(pp, 2, 2) and Proposed(pp, 2, 2).count == 7 and Proposed(pp, 2, 1) and Proposed(pp, 2, 1).count == 10 and Proposed(pp, 2, 3) and Proposed(pp, 2, 3).count == 3,
+    "the pinned 7 is filled first, the rest (13) is spread in 10 and 3 around it")
+end
+
+
+---------------------------------------------------------------------------
+-- The other items in an arrangement tab: merged, sorted, and moved to the far end, away from the arrangement
+---------------------------------------------------------------------------
+do
+  local rule = ARule("T1", 2, { rest = { [2589] = true }, include = { [2589] = true }, layout = "packed" })
+  local function Cloth(slots) return Bank({ [1] = Tab("Gear", { [3] = { 2770, 5 } }), [2] = Tab("Cloth", slots), [3] = Tab("Herbs") }) end
+  Item(2770, "Copper Ore", 20, 7, 7)
+  local function Where(plan, id)
+    local out = {}
+    for slot, c in pairs(plan.tabs[2].proposed) do if c.id == id then out[#out + 1] = ("%d:%d"):format(slot, c.count) end end
+    table.sort(out)
+    return table.concat(out, " ")
+  end
+  local bank = Cloth({ [1] = { 2447, 8 }, [2] = { 2770, 7 }, [4] = { 2447, 9 }, [6] = { 2770, 6 }, [9] = { 2589, 20 } })
+  bank.tabs[1].slots[3] = nil                          -- (no Ore in another tab: an item is tidied only when all of it is in this tab)
+  local plan = Plan("reorganize", { rule }, bank, {}, { split = true })
+  Check(Where(plan, 2589) == "1:20", "the arrangement's Linen goes to the first slot: " .. Where(plan, 2589))
+  Check(Where(plan, 2770) == "97:13" and Where(plan, 2447) == "98:17", "the others are merged into stacks (Ore 7+6, Peacebloom 8+9) and sorted at the far end: Ore " .. Where(plan, 2770) .. ", Peacebloom " .. Where(plan, 2447))
+  Check(Total(plan, 2770) == 13 and Total(plan, 2447) == 17, "nothing is lost or invented")
+  local elsewhere = Plan("reorganize", { rule }, Bank({ [1] = Tab("Gear", { [3] = { 2770, 5 } }), [2] = Tab("Cloth", { [2] = { 2770, 7 } }), [3] = Tab("Herbs") }), {}, { split = true })
+  Check(Proposed(elsewhere, 1, 3) and Proposed(elsewhere, 1, 3).count == 5 and Proposed(elsewhere, 2, 2) and Proposed(elsewhere, 2, 2).count == 7,
+    "an item that is also in another tab is not pulled together: both stay, and the other tab is left alone")
+
+  -- a deposit never touches what is already in the bank
+  local dep = Plan("deposit", { rule }, bank, { Bag(0, 1, 2589, 20) }, { split = true })
+  Check(dep.tabs[2].proposed[2].id == 2770 and dep.tabs[2].proposed[4].id == 2447, "a deposit leaves the other items where they are")
+
+  -- more than the tab can hold: whole items that fit, the rest stays (and is stepped over)
+  local many = {}
+  for slot = 1, 95 do many[slot] = { 2447, 1 } end
+  local crowded = Plan("reorganize", { rule }, Cloth(many), {}, { split = true })
+  Check(Total(crowded, 2447) == 95, "a crowded tab loses nothing")
+
+  -- protected or owned elsewhere: left in place
+  local plain = Plain("P1", 2, { include = { [2770] = true } })
+  local owned = Plan("reorganize", { plain, rule }, bank, {}, { split = true })
+  Check(Where(owned, 2770) == "2:7 6:6", "an item another rule owns is not tidied by this one (that rule decides): " .. Where(owned, 2770))
+  local prot = Plan("reorganize", { rule }, bank, {}, { split = true, never = function(id) return id == 2770 end })
+  Check(Where(prot, 2770) == "2:7 6:6", "an item on the Never transfer list is not moved")
+  -- the same item in two arrangement tabs is tidied in one
+  local rule3 = ARule("T3", 3, { rest = { [2592] = true }, include = { [2592] = true } })
+  local two = Plan("reorganize", { rule, rule3 }, Bank({ [1] = Tab("Gear"), [2] = Tab("Cloth", { [4] = { 2770, 5 } }), [3] = Tab("Herbs", { [5] = { 2770, 6 } }) }), {}, { split = true })
+  local at2, at3 = 0, 0
+  for _, c in pairs(two.tabs[2].proposed) do if c.id == 2770 then at2 = at2 + c.count end end
+  for _, c in pairs(two.tabs[3].proposed) do if c.id == 2770 then at3 = at3 + c.count end end
+  Check(at2 == 5 and at3 == 6, "an item in two arrangement tabs is never gathered across them: " .. at2 .. "/" .. at3)
 end
 
 if failures == 0 then print("PASSED test_magic_inventory_design") else print(failures .. " FAILED") os.exit(1) end

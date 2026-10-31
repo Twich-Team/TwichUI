@@ -66,6 +66,18 @@ local function DragTo(srcKey, targetKey)
   t.IsMouseOver = nil
   Flush()
 end
+-- the explicit way to reserve an exact slot: the item's menu "Pin to a slot" (list items) or "Place" (tray items), then a click on the slot
+local function PinTo(srcKey, slotKey)
+  local s = Ctl(srcKey)
+  Check(s ~= nil, "pin " .. srcKey .. ": the control exists")
+  if not s then return end
+  local act
+  for _, a in ipairs(P.ActionsFor(s.src, nil)) do
+    if a.label:find("Pin to a slot", 1, true) or a.label:find("Place", 1, true) then act = a end
+  end
+  Check(act ~= nil, "pin " .. srcKey .. ": the menu has the action")
+  if act then act.fn(); Flush(); Click(slotKey) end
+end
 local function DragNowhere(srcKey)
   local s = Ctl(srcKey)
   s.scripts.OnDragStart(s)
@@ -99,7 +111,7 @@ Flush()
 ---------------------------------------------------------------------------
 Check(Has(f, "^Guild bank arrangement$"), "the page is the arrangement")
 Check(Has(f, "^Arrange items here to choose where they belong%.$"), "with the one instruction")
-Check(Has(f, "^Design only \226\128\148 your items will not move%.$"), "and the label that nothing moves")
+Check(Has(f, "^Editing is design only \226\128\148 items move only when you review and confirm Deposit or Organize bank in the Preview%.$"), "and the label that editing moves nothing")
 Check(Ctl("gPreview") and Ctl("gPreview").text.text == nil or true, "(the primary action exists)")
 Check(Ctl("gPreview") ~= nil and Ctl("gPreview").enabled, "Preview changes is the primary action")
 Check(Ctl("gTab1") and Ctl("gTab2") and Ctl("gTab3") and not Ctl("gTab4"), "the tabs are the bank's three")
@@ -153,14 +165,27 @@ Check(Has(f, "^Nothing changed%.$"), "and says so")
 ---------------------------------------------------------------------------
 -- Dropping an item on a slot: an exact reservation
 ---------------------------------------------------------------------------
+-- a plain drop on a slot does NOT pin it: the tab takes the item and the addon decides where (stack size and layout)
 DragTo("gShelf1", "gSlot5")
 d = P.GuildDraft()
-Check(d.tabs[2].slots[5] and d.tabs[2].slots[5].id == 2589 and d.tabs[2].slots[5].count == 20, "an item dropped on a slot reserves a full stack there")
+Check(next(d.tabs[2].slots) == nil, "an item dropped on a slot is not pinned there: the tab takes it")
+Check(Ctl("gSlot5").mark.text == "" and Ctl("gSlot1").autoId == 2589 and Ctl("gSlot1").count.text == "20", "the picture draws it where the layout puts it (the first slot, a full stack), not where it was dropped")
+Check(Ctl("gSlot1").stack == nil, "(it is not a pinned stack)")
+-- the explicit way: "Pin to a slot", then click the slot
+do
+  local pin
+  for _, a in ipairs(P.ActionsFor({ kind = "shelf", id = 2589, tab = 2 }, nil)) do if a.label:find("Pin to a slot", 1, true) then pin = a end end
+  Check(pin ~= nil, "the list item's menu offers Pin to a slot")
+  pin.fn(); Flush()
+  Click("gSlot5")
+end
+d = P.GuildDraft()
+Check(d.tabs[2].slots[5] and d.tabs[2].slots[5].id == 2589 and d.tabs[2].slots[5].count == 20, "pinning reserves a full stack in exactly that slot")
 Check(Ctl("gSlot5").mark.text == "R" and Ctl("gSlot5").count.text == "20", "the slot shows R and its target quantity")
 Check(Ctl("gSlot6").mark.text == "", "a slot nobody reserved shows no mark")
 Check(Ctl("gSlot5").stack ~= nil, "(the slot knows its stack)")
 Check(Has(f, "Linen Cloth \195\1510? ?20") or Has(f, "reserved"), "(the selection says it is reserved)")
-DragTo("gTray2", "gSlot5")
+PinTo("gTray2", "gSlot5")
 Check(d.tabs[2].slots[5].id == 2589 and Has(f, "Nothing changed%. That slot is already reserved"), "a reserved slot refuses another item, and says why")
 
 ---------------------------------------------------------------------------
@@ -209,7 +234,7 @@ Click("gTab3")
 Check(d.tabs[3] and d.tabs[3].slots[1] and d.tabs[3].slots[1].count == 3 and d.tabs[2].slots[5].count == 12, "a split onto a tab takes its first free slot")
 
 -- a single stack can't be split
-DragTo("gTray2", "gSlot30")
+PinTo("gTray2", "gSlot30")
 Check(P.GuildDraft().tabs[3] ~= nil, "(tab 3 is selected)")
 
 ---------------------------------------------------------------------------
@@ -223,12 +248,12 @@ DragTo("gSlot9", "gSlot5")
 Check(d.tabs[2].slots[5].count == 17 and d.tabs[2].slots[9] == nil, "dragging a stack onto a compatible one combines them")
 Check(total(2589) == linen, "and no quantity changed")
 -- fill past the limit: overflow stays where it was
-DragTo("gTray1", "gSlot12")                       -- Linen full stack of 20 in slot 12
+PinTo("gTray1", "gSlot12")                       -- Linen full stack of 20 in slot 12
 DragTo("gSlot12", "gSlot5")                       -- 17 + 20: 3 fit, 17 stay
 Check(d.tabs[2].slots[5].count == 20 and d.tabs[2].slots[12].count == 17, "combining stops at the item's stack limit and the rest stays in its slot")
 Check(total(2589) == linen + 20, "no quantity lost in the overflow")
 -- incompatible
-DragTo("gTray2", "gSlot20")
+PinTo("gTray2", "gSlot20")
 Check(d.tabs[2].slots[20] and d.tabs[2].slots[20].id == 2447, "(Peacebloom reserved in slot 20)")
 before = D.Digest(d)
 DragTo("gSlot20", "gSlot5")
@@ -288,9 +313,9 @@ Check(#c.PICKUPS == picks and c.CLEARED == cleared and c.CURSOR == nil, "making 
 local before2 = #D.Digest(d)
 Click("gVDes")
 Click("gTab2")
-DragTo("gTray1", "gSlot50")
-DragTo("gTray1", "gSlot51")
-DragTo("gTray1", "gSlot52")
+PinTo("gTray1", "gSlot50")
+PinTo("gTray1", "gSlot51")
+PinTo("gTray1", "gSlot52")
 Click("gPreview")
 plan = P.GuildPreview()
 Check(plan.summary.design.short >= 1, "reserved stacks the bags can't fill are counted short")
@@ -304,7 +329,7 @@ if ghost then
 end
 -- stale: the design changes
 Click("gVDes")
-DragTo("gTray2", "gSlot60")
+PinTo("gTray2", "gSlot60")
 Click("gVPre")
 Check(Has(f, "^Design changed%. Refresh preview%.$"), "a preview older than the design says one short thing")
 Check(Ctl("gRefresh") ~= nil, "with a Refresh preview button")
@@ -354,14 +379,14 @@ Check(#saved >= 1 and reservedStacks >= 3, "the rules hold the reserved stacks (
 Check(#c.PICKUPS == picks and c.CLEARED == cleared and c.CURSOR == nil, "saving picked nothing up")
 -- revert
 d = P.GuildDraft()
-DragTo("gTray2", "gSlot70")
+PinTo("gTray2", "gSlot70")
 Check(D.Dirty(P.GuildDraft()), "(edited)")
 local mid = D.Digest(P.GuildDraft())
 Click("gRevert")
 Check(D.Digest(P.GuildDraft()) == digest and not D.Dirty(P.GuildDraft()) and mid ~= digest, "Revert discards the edit")
 Check(Has(f, "Unsaved changes discarded%."), "and says so")
 -- leaving with unsaved edits: neither saves nor discards
-DragTo("gTray2", "gSlot71")
+PinTo("gTray2", "gSlot71")
 local edited = D.Digest(P.GuildDraft())
 local rulesNow = #MI.Rules()
 f:Hide(); Flush()
@@ -402,6 +427,58 @@ Check(P.ControlCount() == n, "redrawing makes no new controls: " .. n .. " -> " 
 Check(#c.PICKUPS == picks and c.CLEARED == cleared and #(c.DEPOSITS or {}) == 0, "through all of it: no pickup, no clear, no deposit")
 for _, t in ipairs(Texts(f)) do
   Check(not t:find("^Deposit %d") and not t:find("^Start") and not t:find("^Apply") and not t:find("^Execute"), "no button that moves anything: " .. t)
+end
+
+
+---------------------------------------------------------------------------
+-- Stack sizes and layouts: the items a tab takes, the size each is spread in, and the picture of where they will be
+---------------------------------------------------------------------------
+do
+  -- a fresh tab (tab 1) takes two items automatically
+  P.SetView("design"); Flush()
+  local sbox = Ctl("gSearch")
+  if sbox then sbox:SetText(""); sbox.scripts.OnTextChanged(sbox, true) end
+  Flush()
+  Click("gTab1")
+  local d3 = P.GuildDraft()
+  local fx = { facts = function(id) return (MI.ItemFacts(id)) end }
+  d3.tabs[1] = nil                                   -- (an empty tab: the earlier sections left stacks in it)
+  D.AssignTab(d3, fx, 2589, 1)
+  D.AssignTab(d3, fx, 2447, 1)
+  P.QueueRefresh(); Flush()
+  Check(d3.tabs[1] and d3.tabs[1].rest[2589] and d3.tabs[1].rest[2447], "two items placed automatically in a tab")
+  Check(Ctl("gSlot1").autoId ~= nil and Ctl("gSlot2").autoId ~= nil and Ctl("gSlot1").stack == nil, "the grid pictures them from the first slot, as the layout will place them")
+  local first = Ctl("gSlot1").autoId
+  -- selecting a drawn item selects it in the tab's list and offers the size
+  Click("gSlot1")
+  local acts = P.ActionsFor({ kind = "shelf", id = first, tab = 1 }, nil)
+  local size
+  for _, a in ipairs(acts) do if a.label:find("Stack size", 1, true) then size = a end end
+  Check(size ~= nil, "the item's menu offers Stack size")
+  size.fn(); Flush()
+  local dlg = P.Split.Dialog()
+  Check(P.Split.IsShown() and dlg.title.text == "Stack size" and dlg.ok.text.text == "Set size", "it opens the size dialog")
+  for _, bad in ipairs({ "0", "21", "x", "", "2.5" }) do
+    dlg.qty:SetText(bad); dlg.qty.scripts.OnTextChanged(dlg.qty)
+    Check(not dlg.ok.enabled, "'" .. bad .. "' is not a size for an item that stacks to 20")
+  end
+  dlg.qty:SetText("5"); dlg.qty.scripts.OnTextChanged(dlg.qty)
+  Check(dlg.ok.enabled and dlg.hint.text:find("Stacks of 5"), "a valid size is accepted and says what it does")
+  dlg.ok.scripts.OnClick(dlg.ok); Flush()
+  Check(d3.tabs[1].sizes[first] == 5 and not P.Split.IsShown(), "the size is in the draft and the dialog is closed")
+  Check(Has(f, "stacks of 5"), "and the selection says so")
+  Check(Ctl("gSlot1").count.text == "5" and D.Dirty(d3), "the picture shows stacks of 5, and the design is unsaved")
+  -- a layout: spaced, then columns
+  Check(D.SetLayout(d3, 1, "spaced"), "a layout is chosen for the tab")
+  P.QueueRefresh(); Flush()
+  Check(Ctl("gSlot1").autoId == first and Ctl("gSlot2").autoId == nil and Ctl("gSlot3").autoId ~= nil, "spaced: an empty slot between the two items")
+  D.SetLayout(d3, 1, "columns")
+  P.QueueRefresh(); Flush()
+  Check(Ctl("gSlot1").autoId == first and Ctl("gSlot15").autoId ~= nil, "columns: the next item starts a new column of 14")
+  Check(Ctl("gLayout") ~= nil, "the tab has a layout control")
+  -- nothing here moved anything
+  Check(#c.PICKUPS == #c.PICKUPS and c.CLEARED == c.CLEARED, "(no game call was involved)")
+  Click("gTab2")
 end
 
 if failures == 0 then print("PASSED test_magic_inventory_editor") else print(failures .. " failures") os.exit(1) end

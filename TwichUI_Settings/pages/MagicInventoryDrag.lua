@@ -93,6 +93,13 @@ end
 local function Check()
     if not def then return false end
     local n = Qty()
+    if def.size then
+        local ok = n ~= nil and n >= 1 and n <= def.limit
+        dlg.hint:SetText(ok and (n >= def.limit and "A full stack." or ("Stacks of %d."):format(n)) or ("Choose a whole number from 1 to %d."):format(def.limit))
+        Wg().Color(dlg.hint, ok and Wg().pal.textDim or { 0.93, 0.72, 0.38 })
+        dlg.ok:SetEnabled(ok)
+        return ok
+    end
     local ok = n ~= nil and n >= 1 and n < def.count
     dlg.hint:SetText(ok and ("%d go to the new stack, %d stay."):format(n, def.count - n) or ("Choose a whole number from 1 to %d."):format(def.count - 1))
     Wg().Color(dlg.hint, ok and Wg().pal.textDim or { 0.93, 0.72, 0.38 })
@@ -139,7 +146,7 @@ local function Build()
     dlg.minus:SetPoint("RIGHT", dlg.qty, "LEFT", -4, 0)
     dlg.plus = G.Button(dlg, "+", 24, "secondary", function()
         local n = Qty() or 0
-        dlg.qty:SetText(tostring(math.min(def and (def.count - 1) or n + 1, n + 1)))
+        dlg.qty:SetText(tostring(math.min(def and (def.size and def.limit or (def.count - 1)) or n + 1, n + 1)))
         Check()
     end)
     dlg.plus:SetPoint("LEFT", dlg.qty, "RIGHT", 4, 0)
@@ -158,13 +165,16 @@ local function Build()
 end
 
 -- d: { id, name, icon, count (at least 2), anchor (a frame to open under), onConfirm(qty) }
+-- or, to choose the size an item is spread in: { size = true, limit (the item's stack limit, at least 2), current, id, name, icon, anchor, onConfirm(n) }
 function Split.Open(d)
     if not dlg then Build() end
-    if not (d and d.count and d.count >= 2) then return false end
+    if not (d and ((d.size and d.limit and d.limit >= 2) or (d.count and d.count >= 2))) then return false end
     def = d
     dlg.icon:SetTexture(d.icon)
-    dlg.item:SetText(("%s \195\151%d"):format(d.name or "Item", d.count))
-    dlg.qty:SetText(tostring(math.max(1, math.floor(d.count / 2))))
+    dlg.title:SetText(d.size and "Stack size" or "Split stack")
+    dlg.ok.text:SetText(d.size and "Set size" or "Split")
+    dlg.item:SetText(d.size and (d.name or "Item") or ("%s \195\151%d"):format(d.name or "Item", d.count))
+    dlg.qty:SetText(tostring(d.size and (d.current or d.limit) or math.max(1, math.floor(d.count / 2))))
     dlg:ClearAllPoints()
     if d.anchor then dlg:SetPoint("TOPLEFT", d.anchor, "BOTTOMLEFT", 0, -6) else dlg:SetPoint("CENTER", UIParent, "CENTER", 0, 0) end
     dlg:Show()

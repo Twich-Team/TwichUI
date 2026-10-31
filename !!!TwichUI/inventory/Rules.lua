@@ -29,7 +29,7 @@
 --         and, only on a rule the guild bank arrangement editor made (design = true, guild rules only; docs/magic-inventory.md,
 --         "The arrangement editor"):
 --         design = true, place = { { slot = 1..98, id = itemID, count = 1..9999 }, ... } (the stacks reserved in the rule's
---         tab, one entry per slot; every id is also in include), rest = { [itemID] = true } (the items whose extras beyond
+--         tab, one entry per slot; every id is also in include), sizes = { [itemID] = n } and layout ("packed" | "spaced" | "columns") for how the automatic items are spread, rest = { [itemID] = true } (the items whose extras beyond
 --         their reserved stacks go to this tab's free slots) }
 -- Reading never writes; an entry that can't be read is left out of the next write. Nothing of a visit is saved.
 
@@ -48,6 +48,11 @@ MI.MAX_GUILD_TABS = 8     -- MAX_GUILDBANK_TABS in the Forever Constants.lua
 MI.GUILD_SLOTS = 98       -- MAX_GUILDBANK_SLOTS_PER_TAB (GuildBank.SLOTS says the same; this file loads first)
 MI.MAX_NAME = 48
 MI.MAX_CATS = 24
+-- how an arrangement tab spreads its automatically placed items (Design.lua D.Layout): from slot 1 without gaps, with one empty
+-- slot between different items, or with each different item starting a new column of 14 (the bank draws 7 columns of 14)
+MI.LAYOUTS = { packed = "Packed from the first slot", spaced = "One empty slot between items", columns = "Each item starts a new column" }
+MI.LAYOUT_ORDER = { "packed", "spaced", "columns" }
+MI.GUILD_COLUMN = 14
 
 MI.KIND_ORDER = { "mail", "bank", "guild", "keep", "never" }
 MI.KIND_LABEL = {
@@ -210,6 +215,15 @@ local function CleanRule(r)
         table.sort(place, function(a, b) return a.slot < b.slot end)
         out.place = place
         out.rest = CleanSet(r.rest, MI.MAX_IDS, function(id) return ValidID(id) and out.include[id] == true end)
+        -- the size each automatically placed item is spread in (absent: a full stack) and how the tab is laid out
+        local sizes = {}
+        if type(r.sizes) == "table" then
+            for id, n in pairs(r.sizes) do
+                if ValidID(id) and out.include[id] and Whole(n, 1, MI.MAX_STACK) then sizes[id] = n end
+            end
+        end
+        out.sizes = sizes
+        out.layout = MI.LAYOUTS[r.layout] and r.layout or "packed"
     end
     local seen = {}
     if type(r.cats) == "table" then

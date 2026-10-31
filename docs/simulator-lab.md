@@ -212,6 +212,23 @@ only at handler level by `tests/test_magic_inventory_editor.lua` and need the re
 page shows icons as real textures, which it does draw). A run that lets the clock pass about 5 s shows the two known, classified
 `C_VoiceChat.CanAccessSettings` errors.
 
+The same scenario has a `layout` stage (a tab given four items automatically, stack sizes, a layout from `layout = "packed"|"spaced"|"columns"`, the grid showing where they would go; reviewed once at 1000 x 700) and four **run stages** for the guild bank executor (`review`, `run`, `timeout`, `blocked`; `existing = true`
+gives it saved rules to work from). They replace `PickupGuildBankItem`, `SplitGuildBankItem` and `C_Container.PickupContainerItem` /
+`SplitContainerItem` with **inert** stand-ins that record the call and change nothing (and, for `blocked`, raise
+`ADDON_ACTION_BLOCKED`), only when a run stage is asked for. They show what the page shows for the review to confirm, "0 of N moves
+confirmed" with "Waiting for the bank...", the pause that asks for **Continue**, and "Needs review" after the wait with one uncertain
+move, handed to the game twice (the retry) and no more. They cannot show a completed run: that needs a guild bank that moves items, which the lab does not
+emulate (`tests/mi_guildsim.lua` does that for the unit tests only). Screenshots of these states were reviewed once, at 1000 x 700.
+
+The same scenario also has **panel stages** (`panel = "reading" | "ready" | "review" | "run" | "blocked" | "timeout" | "partial" | "setup"`)
+for the panel at the guild bank window (`inventory/GuildPanel.lua`) and the preparation behind it (`inventory/GuildPrep.lua`), drawn without
+the settings page. The bank window is a plain stand-in frame named `GuildBankFrame`, a box where the real window is so the screenshot shows
+where the panel sits; its tab buttons only set the shown tab and, 0.1 s later, send `GUILDBANKBAGSLOTS_CHANGED`, and `QueryGuildBankTab(tab)` does the same for any tab (the read path, like the
+other read stand-ins; `reading` never answers, `partial` never answers for tab 3). `review`, `run`, `blocked`, `timeout` use the same inert
+stand-ins as the run stages above. The scenario prints the panel's texts and its placement against the window's edges. Not shown, because
+nothing in this lab moves an item or keeps a cursor: a completed run, a move between tabs actually carried out, the cursor across a tab
+switch, a stale confirmation. Screenshots of these states were reviewed once at 1300 x 800; the stand-in window is not what Forever draws.
+
 ## Delayed failures
 
 Two errors appear once the simulated clock passes a few seconds. Neither is hidden: the log keeps both, and

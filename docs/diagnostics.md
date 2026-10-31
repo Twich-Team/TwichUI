@@ -116,6 +116,9 @@ uses an item, sends anything or makes up events. Each states its cost before you
 | `inventory.guildRead` | `inventory/GuildBank.lua` `GB.Capture` (the guild bank opening, showing a tab or changing; only with the feature on) | rebuild |
 | `inventory.guildPlan` | `inventory/GuildPlan.lua` `MI.CurrentGuildPlan` (a guild bank preview or refresh, asked for in the settings) | rebuild |
 | `inventory.designTray` | `TwichUI_Settings/pages/MagicInventoryGuild.lua` `Known` (the arrangement editor drawn after the bags or the guild bank changed; only while the settings are shown) | rebuild |
+| `inventory.guildReview` | `inventory/GuildRun.lua` `BuildReview` (Deposit or Organize bank pressed, when a review is confirmed, and in each summary rebuild at the guild bank) | rebuild |
+| `inventory.guildPrep` | `inventory/GuildPrep.lua` `Replan` (the guild bank panel's summary; guild bank open with a saved arrangement, coalesced, never during a run) | rebuild |
+| `inventory.guildRun` | `inventory/GuildRun.lua` `Dispatch` (one move handed to the game, only during a run the player confirmed) | bulk |
 | `inventory.step` | `inventory/Run.lua` `AttachNext`, `DepositNext` (one stack, only during a transfer the player started) | bulk |
 | `npcs.search` | `npcs/Search.lua` `SR.Run` (not for an empty query) | search |
 | `npcs.knowledge.rebuild` | `npcs/Knowledge.lua` `Build` | rebuild |

@@ -550,6 +550,7 @@ local UpdateButtons   -- (below) shows, places and hides the buttons
 local function Count(kind)
     countQueued[kind] = false
     UpdateButtons()
+    if kind == "guild" and MI.GuildPanel then return end   -- the guild bank has its own panel (GuildPanel.lua)
     if not (MI.Enabled() and Run.IsOpen(kind)) then return end
     local p = MI.CurrentPlan(kind)
     local groups = {}
@@ -586,7 +587,7 @@ end
 UpdateButtons = function()
     local anyOpen = false
     for kind in pairs(HOSTS) do
-        local isOpen = MI.Enabled() and Run.IsOpen(kind)
+        local isOpen = MI.Enabled() and Run.IsOpen(kind) and not (kind == "guild" and MI.GuildPanel)
         anyOpen = anyOpen or isOpen
         if isOpen then
             local b = InterfaceButton(kind)

@@ -800,7 +800,7 @@ function Run.CanDeposit(plan, group)
     if not MI.Enabled() then return false, "Magic Inventory is off." end
     if InCombat() then return false, "Wait until combat ends." end
     if not Run.IsOpen(group.kind) then return false, group.kind == "bank" and "Open your bank first." or "Open the guild bank first." end
-    if run then return false, "Another transfer is in progress." end
+    if run or (MI.GuildRun and MI.GuildRun.Busy()) then return false, "Another transfer is in progress." end
     if plan.generation ~= MI.Generation() then return false, "Your rules changed since this review. Review again." end
     if #(group.steps or {}) == 0 then return false, "Nothing to deposit." end
     if group.kind == "bank" and #BankBags() == 0 then return false, "The game shows no bank tabs to deposit in." end
@@ -863,6 +863,13 @@ local HANDLERS = {
     MAIL_SHOW = Opened("mail"), MAIL_CLOSED = Closed("mail"),
     BANKFRAME_OPENED = Opened("bank"), BANKFRAME_CLOSED = Closed("bank"),
     GUILDBANKFRAME_OPENED = Opened("guild"), GUILDBANKFRAME_CLOSED = Closed("guild"),
+    -- this client opens and closes the guild bank through the player interaction manager (type 10: GuildBanker)
+    PLAYER_INTERACTION_MANAGER_FRAME_SHOW = function(kind)
+        if kind == (_G.Enum and _G.Enum.PlayerInteractionType and _G.Enum.PlayerInteractionType.GuildBanker or 10) then Opened("guild")() end
+    end,
+    PLAYER_INTERACTION_MANAGER_FRAME_HIDE = function(kind)
+        if kind == (_G.Enum and _G.Enum.PlayerInteractionType and _G.Enum.PlayerInteractionType.GuildBanker or 10) then Closed("guild")() end
+    end,
 }
 local listening = {}
 local function OnLeaving()
@@ -883,8 +890,10 @@ function MI.Refresh()
     if not on then
         open.mail, open.bank, open.guild = false, false, false
         if run then Finish(run, "off") end
+        if MI.GuildRun then MI.GuildRun.Disable() end
     end
     if MI.GuildBank then MI.GuildBank.Sync() end
+    if MI.GuildPrep then MI.GuildPrep.Sync() end
     Notify("refresh")
 end
 

@@ -8,9 +8,13 @@
 --             a tab (placed automatically) or onto a slot (reserved); drag a reserved stack to another slot or tab; Shift-click
 --             a stack, or use its menu, to split it; Save arrangement turns the draft into guild bank rules
 --   Preview   where the saved (or draft) rules would put things, from your bags or from what is already in the bank
--- "Design only: your items will not move." Nothing here moves, picks up, splits, deposits or withdraws an item, switches a tab
--- or touches the game's cursor: every drag is virtual (MagicInventoryDrag.lua). The draft is kept in memory until Save
--- arrangement or Revert; leaving the page neither saves nor discards it. Opening the editor writes nothing.
+-- Editing is design only: dragging, splitting and placing here never moves, picks up, splits, deposits or withdraws an item,
+-- switches a tab or touches the game's cursor (every drag is virtual, MagicInventoryDrag.lua). The draft is kept in memory
+-- until Save arrangement or Revert; leaving the page neither saves nor discards it. Opening the editor writes nothing.
+-- Items move only from the Preview: Deposit or Organize bank is reviewed, confirmed here, and carried out by
+-- inventory/GuildRun.lua, which works from the SAVED arrangement across every tab it can read (the guild bank's own panel,
+-- inventory/GuildPanel.lua, offers the same two actions beside the bank window). While it runs, the editor,
+-- Save and the preview buttons are off.
 -- Controls are kept by name and reused on every redraw (MagicInventory.lua's pool).
 
 local R = TwichUI
@@ -40,6 +44,8 @@ local bagsChanged, knownDirty = false, true
 local picked                             -- the item selected: { kind = "tray" | "shelf" | "slot", id, tab, slot, count }
 local armed                              -- waiting for a destination: { op = "move" | "split", src, qty }
 local msg, msgTone                       -- the one contextual line
+local review                             -- the reviewed plan waiting for the player's confirmation (GuildRun.Review)
+local runStale = false                   -- a run started or ended since the preview was made: the preview no longer describes the bank
 local details = false                    -- the Details disclosure
 local search = ""                        -- the tray's filter text
 local known, knownByName                 -- the item references of the tray
@@ -53,13 +59,25 @@ local MARK = {
     unknown = { glyph = "?", color = { 0.62, 0.66, 0.90 }, word = "Can't tell" },
     short   = { glyph = "~", color = { 0.90, 0.80, 0.45 }, word = "Short of its target" },
     reserved = { glyph = "R", color = TEAL, word = "Reserved slot" },
+    active  = { glyph = "\226\128\166", color = AMBER, word = "In progress" },
+    done    = { glyph = "=", color = { 0.55, 0.78, 0.52 }, word = "Confirmed" },
 }
-local LEGEND = "R reserved slot    A placed automatically    + new stack    * stack changes    - leaves    ~ short of its target    ! blocked    ? can't tell"
+local OUTCOME = { completed = "Completed", partial = "Partially completed", stopped = "Stopped", review = "Needs review" }
+local LEGEND = "R reserved slot    A placed automatically    + new stack    * stack changes    - leaves    ~ short of its target    ! blocked    ? can't tell    \226\128\166 in progress    = confirmed"
 
 local function Plural(n, one, many) return ("%d %s"):format(n, n == 1 and one or (many or one .. "s")) end
 
 local function Say(text, tone) msg, msgTone = text, tone; P.QueueRefresh() end
 local function Touch() designRev = designRev + 1; P.QueueRefresh() end
+local function RunBusy() local g = MI().GuildRun; return g ~= nil and g.Busy() end
+-- editing, saving and previewing are paused while a run is going
+local function Locked()
+    if not RunBusy() then return false end
+    Say("A guild bank run is in progress. Editing and previews resume when it ends.", "warn")
+    return true
+end
+local function Unless(busy, fn) if busy then return nil end return fn end
+local RUN = { Busy = RunBusy, Locked = Locked, Unless = Unless }   -- one upvalue for the big draw function (Lua allows 60)
 
 ---------------------------------------------------------------------------
 -- Items
@@ -196,10 +214,12 @@ local function StaleReasons()
     if planMode == "deposit" and bagsChanged then out[#out + 1] = "your bags changed" end
     if plan.open and not mi.GuildBank.IsOpen() then out[#out + 1] = "the guild bank was closed" end
     if draft and planDigest ~= mi.Design.Digest(draft) then out[#out + 1] = "your design changed" end
+    if runStale then out[#out + 1] = "a guild bank run started or ended since" end
     return out
 end
 
 local function Build()
+    if Locked() then return end
     local mi = MI()
     local mode = source == "bags" and "deposit" or "reorganize"
     local override
@@ -213,6 +233,7 @@ local function Build()
         Say("The preview couldn't be made.", "warn")
         return
     end
+    review, runStale = nil, false
     plan, planMode, bagsChanged = res, mode, false
     planDigest, planDraft = draft and mi.Design.Digest(draft) or "", override ~= nil
     view = "preview"
@@ -223,7 +244,16 @@ function P.GuildPreview() return plan, planMode end
 function P.GuildDraft() return draft end
 function P.GuildView() return view end
 
+-- A review waiting for confirmation is withdrawn when what it was made from may have changed (the confirmation itself is
+-- checked again against the game when it is pressed, so this only keeps the screen honest).
+local function Withdraw()
+    if not review then return end
+    review = nil
+    Say("Your bags, the bank or your rules changed, so that review was withdrawn. Review again.", "warn")
+end
+
 function P.OnEvent(event)
+    if event ~= "GET_ITEM_INFO_RECEIVED" then Withdraw() end
     if event == "BAG_UPDATE_DELAYED" then
         knownDirty = true
         if plan and planMode == "deposit" then bagsChanged = true end
@@ -335,14 +365,16 @@ end
 ---------------------------------------------------------------------------
 -- Editing: one place applies a drop, a menu choice or an armed click
 ---------------------------------------------------------------------------
-local function Apply(src, tab, slot, qty)
+-- pin: the player chose "pin to a slot" (an armed click) for an item from the tray or the tab's list. A plain drop on a slot does not
+-- pin it: the tab takes the item, and the addon decides the slots (stack size and layout).
+local function Apply(src, tab, slot, qty, pin)
     local D, cx = MI().Design, Ctx()
     local ok, text
     if src.kind == "slot" then
         if qty then ok, text = D.Split(draft, cx, src.tab, src.slot, qty, tab, slot)
         elseif slot then ok, text = D.MoveStack(draft, cx, src.tab, src.slot, tab, slot)
         else ok, text = D.MoveToTab(draft, cx, src.tab, src.slot, tab) end
-    elseif slot then ok, text = D.PlaceSlot(draft, cx, src.id, tab, slot)
+    elseif slot and pin then ok, text = D.PlaceSlot(draft, cx, src.id, tab, slot)
     else ok, text = D.AssignTab(draft, cx, src.id, tab) end
     armed = nil
     if ok then picked = nil end
@@ -366,6 +398,29 @@ local function OpenSplit(src, anchor)
     if s.count < 2 then Say("A stack of one can't be split.", "warn") return end
     P.Split.Open({ id = s.id, name = ItemName(s.id), icon = IconOfId(s.id), count = s.count, anchor = anchor,
         onConfirm = function(qty) Arm("split", src, qty) end })
+end
+
+local function SizeText(src)
+    local t = draft and draft.tabs[src.tab]
+    local n = t and t.sizes[src.id]
+    return n and (" \194\183 stacks of %d"):format(n) or " \194\183 full stacks"
+end
+
+-- The size an automatically placed item is spread in: a small dialog with the item's own limit as the most.
+local function OpenSize(src, anchor)
+    if not (draft and src and src.kind == "shelf") then return end
+    local D, cx = MI().Design, Ctx()
+    local f = cx.facts and cx.facts(src.id)
+    local limit = f and f.maxStack
+    if not limit then Say("The game is still loading this item. Try again in a moment.", "warn") return end
+    if limit < 2 then Say("This item doesn't stack.", "warn") return end
+    local t = draft.tabs[src.tab]
+    P.Split.Open({ size = true, limit = limit, current = t and t.sizes[src.id] or limit, id = src.id, name = ItemName(src.id), icon = IconOfId(src.id), anchor = anchor,
+        onConfirm = function(n)
+            local ok, text = D.SetSize(draft, cx, src.tab, src.id, n)
+            Say(ok and text or ("Nothing changed. " .. text), (not ok) and "warn" or nil)
+            Touch()
+        end })
 end
 
 -- The things that can be done with a selected item: the panel's buttons and the item menu are the same list.
@@ -398,7 +453,8 @@ local function ActionsFor(src, anchor)
             Touch()
         end)
     elseif src.kind == "shelf" then
-        Add("Place in a slot\226\128\166", "Then click the slot to reserve a full stack there.", function() Arm("move", src) end)
+        Add("Stack size\226\128\166", "Choose the size this item is spread in. Without one it is spread in full stacks.", function() OpenSize(src, anchor) end)
+        Add("Pin to a slot\226\128\166", "Then click the slot to reserve a full stack in exactly that slot. Usually the layout is better left to the addon.", function() Arm("move", src) end)
         Add("Take out of this tab", "The item is left alone by this design.", function()
             local ok, text = D.RemoveItem(draft, cx, src.tab, src.id)
             picked = nil
@@ -528,7 +584,15 @@ function P.SlotClick(b, button)
         return
     end
     local st = b.stack
-    if armed then Apply(armed.src, selTab, b.slot, armed.op == "split" and armed.qty or nil) return end
+    if armed then Apply(armed.src, selTab, b.slot, armed.op == "split" and armed.qty or nil, true) return end
+    if not st and b.autoId then
+        -- an automatically placed item drawn by the layout: select it like the item in the tab's list
+        local src = { kind = "shelf", id = b.autoId, tab = selTab }
+        picked = src
+        if button == "RightButton" then OpenItemMenu(src, b) end
+        P.QueueRefresh()
+        return
+    end
     if not st then picked = nil; P.QueueRefresh() return end
     local src = { kind = "slot", id = st.id, tab = selTab, slot = b.slot, count = st.count }
     if button == "RightButton" then picked = src; OpenItemMenu(src, b) P.QueueRefresh() return end
@@ -672,19 +736,25 @@ local function DrawGrid(x, y)
     local t = snap.tabs[selTab]
     local pv = plan and plan.tabs[selTab]
     local dt = draft and draft.tabs[selTab]
+    -- the picture of the arrangement: pinned stacks, and the automatic items where the layout will put them
+    local theory = (view == "design" and draft) and MI().Design.Theory(draft, selTab, Ctx()) or nil
     for slot = 1, 98 do
         local col, row = math.floor((slot - 1) / ROWS), (slot - 1) % ROWS
         local b = SlotButton(slot)
         At(b, x + col * STEP, y + row * STEP)
-        b.stack = nil
+        b.stack, b.autoId = nil, nil
         local hot = hoverTarget and hoverTarget.tab == selTab and hoverTarget.slot == slot
         local isPicked = picked and picked.tab == selTab and picked.slot == slot and (picked.kind == "slot" or picked.kind == "cell")
         if view == "design" then
             local st = dt and dt.slots[slot]
-            b.stack = st
-            local edge = (hot or isPicked) and pal.tealHi or (st and TEAL) or nil
-            PaintSlot(b, st and { id = st.id }, st and "reserved" or nil, edge, st and tostring(st.count) or "", false)
-            if st then b.count:SetTextColor(TEAL[1], TEAL[2], TEAL[3]) end
+            local th = theory and theory[slot]
+            local auto = th and th.auto and th or nil
+            b.stack, b.autoId = st, auto and auto.id or nil
+            local autoPicked = auto and picked and picked.kind == "shelf" and picked.id == auto.id and picked.tab == selTab
+            local edge = (hot or isPicked or autoPicked) and pal.tealHi or (st and TEAL) or nil
+            local shown = st or auto
+            PaintSlot(b, shown and { id = shown.id }, st and "reserved" or nil, edge, shown and tostring(shown.count) or "", false)
+            if st then b.count:SetTextColor(TEAL[1], TEAL[2], TEAL[3]) elseif auto then b.count:SetTextColor(1, 1, 1) end
         elseif view == "current" then
             local c = t and t.slots and t.slots[slot]
             PaintSlot(b, c, nil, isPicked and pal.tealHi or nil, c and c.count and c.count > 1 and tostring(c.count) or "", false)
@@ -700,6 +770,9 @@ local function DrawGrid(x, y)
                 elseif c.ghost or (c.short and c.short > 0) then key = "short"
                 else key = c.change end
             end
+            local GR = MI().GuildRun
+            local runMark = GR and GR.SlotMark(selTab, slot)
+            if runMark == "active" then key = "active" elseif runMark == "done" then key = "done" elseif runMark == "uncertain" then key = "unknown" end
             PaintSlot(b, c, key, isPicked and pal.tealHi or nil, CountText(c), c and c.ghost)
             if c then b.count:SetTextColor(c.short and AMBER[1] or 1, c.short and AMBER[2] or 1, c.short and AMBER[3] or 1) end
         end
@@ -717,6 +790,7 @@ local function ViewButton(key, label, v, x, y)
 end
 
 function P.SetView(v)
+    if v == "design" and RunBusy() then Locked() return end
     if v == "preview" and not plan then Build() return end
     view, armed = v, nil
     if v ~= "design" then P.Split.Close() end
@@ -796,6 +870,12 @@ local function DetailsBlock(y, x, w)
     local lines = {}
     local function Add(text, tone) lines[#lines + 1] = { text = text, tone = tone } end
     Add(P.BankStateText(), "dim")
+    local runRes = mi.GuildRun and mi.GuildRun.Last()
+    if runRes then
+        Add(("Last run: %s \226\128\148 tab %d, %d of %d moves confirmed%s."):format(OUTCOME[runRes.outcome] or runRes.outcome, runRes.tab or 0, runRes.confirmed, runRes.total,
+            runRes.reason and (", " .. runRes.reason) or ""), runRes.outcome == "completed" and "dim" or "warn")
+        for i, l in ipairs(runRes.lines) do if i <= 30 then Add("  " .. l, "quiet") end end
+    end
     if plan then
         local fresh = #StaleReasons() > 0 and "stale" or plan.freshness
         local words = { live = "current: the tabs involved were read from what the guild bank shows now",
@@ -855,6 +935,7 @@ local function DetailsBlock(y, x, w)
 end
 
 local function SaveDraft()
+    if Locked() then return end
     local mi = MI()
     local ok, why = mi.Design.Save(draft)
     if not ok then Say("Not saved: " .. tostring(why), "warn") return end
@@ -867,6 +948,7 @@ local function SaveDraft()
 end
 
 local function RevertDraft()
+    if Locked() then return end
     local keep = draft.guild
     draft, armed, picked = nil, nil, nil
     P.Split.Close()
@@ -875,6 +957,125 @@ local function RevertDraft()
     Say("Unsaved changes discarded.")
     Touch()
 end
+
+---------------------------------------------------------------------------
+-- Carrying out the saved arrangement (inventory/GuildRun.lua): Deposit and Organize bank, each reviewed and confirmed here
+---------------------------------------------------------------------------
+local function StartReview(mode)
+    local mi = MI()
+    if not mi.GuildRun then return end
+    local rv = mi.GuildRun.Review(mode)
+    if rv.ok then
+        review = rv
+        Say(nil)
+    else
+        review = nil
+        Say(rv.refuse.text, "warn")
+    end
+    P.QueueRefresh()
+end
+
+local function ConfirmStart()
+    local mi = MI()
+    local rv = review
+    if not rv then return end
+    local ok, code, text, fresh = mi.GuildRun.Start(rv)
+    if ok then
+        review = nil
+        view, selTab = "preview", rv.tabs[1] or selTab
+        Say(nil)
+        return
+    end
+    -- never a different plan under the same confirmation: a changed state gives a new review to read and confirm
+    Build()   -- the preview is made again too (it clears any review), then the new review is put up for reading
+    review = (fresh and fresh.ok) and fresh or nil
+    Say(text .. (review and " The new review is below." or ""), "warn")
+end
+
+-- The panel under the preview summary: the actions, the confirmation, the progress and the result.
+local function DrawRun(px, py, pw)
+    local mi = MI()
+    local GR = mi.GuildRun
+    if not GR then return py end
+    local prog = GR.Progress()
+    local result = GR.Last()
+    local function Line(key, text, tone, style)
+        local t = Text(key, style or "small")
+        Wide(t, px, py, pw)
+        t:SetText(text)
+        Tone(t, tone)
+        py = py + H(t) + 3
+        return t
+    end
+    local head = Text("gRunTitle", "heading")
+    Wide(head, px, py + 2, pw)
+    head:SetText("Carry out the saved arrangement")
+    Tone(head, "head")
+    py = py + 24
+    if prog then
+        Line("gRunProg", ("%s %s: %d of %d moves confirmed."):format(prog.mode == "deposit" and "Depositing in" or "Organizing", prog.tabsText or "the guild bank", prog.confirmed, prog.total), nil, "body")
+        local waiting = prog.needClick and "The game needs your click for the next move. Press Continue."
+            or (prog.stopping and "Stopping after the move in progress. A move already handed to the game is not undone.")
+            or (prog.reading and ("Reading tab %d\226\128\166"):format(prog.reading))
+            or (prog.waiting and "Waiting for the bank\226\128\166") or ""
+        Line("gRunWait", waiting, "dim")
+        local stop = Button("gRunStop", prog.stopping and "Stopping\226\128\166" or "Stop", 90, "secondary", (not prog.stopping) and function() GR.Stop() end or nil)
+        At(stop, px, py)
+        R.Interact.Tip(stop, "Stop", "Ends the run after the move in progress. Nothing already moved is undone.")
+        if prog.needClick then At(Button("gRunGo", "Continue", 100, "primary", function() GR.Continue() end), px + 94, py) end
+        return py + 32
+    end
+    if review then
+        Line("gRevHead", review.headline, nil, "body")
+        for i, l in ipairs(review.lines) do Line("gRevL" .. i, l, (l:find("^Not included") or l:find("^Blocked") or l:find("^Can't")) and "warn" or "dim") end
+        local label = review.complete and (review.mode == "deposit" and "Start deposit" or "Start organizing") or ("Do these " .. review.moves .. " moves")
+        At(Button("gRevGo", label, math.max(130, #label * 7 + 24), "primary", ConfirmStart), px, py)
+        At(Button("gRevNo", "Cancel", 80, "secondary", function() review = nil; Say("Nothing was moved."); end), px + math.max(130, #label * 7 + 24) + 4, py)
+        return py + 34
+    end
+    if result then
+        local word = OUTCOME[result.outcome] or result.outcome
+        local bits = { ("%d of %d moves confirmed"):format(result.confirmed, result.total) }
+        if result.notStarted > 0 then bits[#bits + 1] = ("%d not started"):format(result.notStarted) end
+        if result.uncertain > 0 then bits[#bits + 1] = ("%d uncertain"):format(result.uncertain) end
+        if result.notIncluded > 0 then bits[#bits + 1] = ("%d not included"):format(result.notIncluded) end
+        if result.unreadTabs and #result.unreadTabs > 0 then bits[#bits + 1] = ("%d %s not read"):format(#result.unreadTabs, #result.unreadTabs == 1 and "tab" or "tabs") end
+        if (result.blockedStacks or 0) > 0 then bits[#bits + 1] = ("%d stacks blocked"):format(result.blockedStacks) end
+        Line("gResHead", ("%s: %s."):format(word, table.concat(bits, " \194\183 ")), (result.outcome == "completed") and nil or "warn", "body")
+        if result.reason and result.outcome ~= "completed" then Line("gResWhy", "Why: " .. result.reason .. ".", "dim") end
+        if result.cursor then
+            Line("gResCur", ("Your cursor holds %s from this run. Put it back in %s."):format(
+                (MI().ItemFacts(result.cursor.id) or {}).name or "an item", result.cursor.where.kind == "bag" and ("bag %d slot %d"):format(result.cursor.where.bag, result.cursor.where.slot) or ("tab %d slot %d"):format(result.cursor.where.tab, result.cursor.where.slot)), "warn")
+        end
+        if result.outcome == "review" or result.outcome == "stopped" or result.outcome == "partial" then
+            Line("gResNext", "Nothing resumes by itself. Refresh the preview to review what is left.", "quiet")
+        end
+    end
+    -- the actions
+    local mode = source == "bags" and "deposit" or "reorganize"
+    local dirty = draft ~= nil and Dirty()
+    local fresh = plan and planMode == mode and #StaleReasons() == 0 and not planDraft
+    if dirty then
+        Line("gRunDirty", "Your design has unsaved changes. Deposit and Organize bank use the saved arrangement only.", "warn")
+        At(Button("gRunSave", "Save and preview", 140, "primary", function() SaveDraft(); if not Locked() then Build() end end), px, py)
+        return py + 34
+    end
+    local label = mode == "deposit" and "Deposit\226\128\166" or "Organize bank\226\128\166"
+    local b = Button("gRunAct", label, 140, "primary", fresh and function() StartReview(mode) end or nil)
+    At(b, px, py)
+    R.Interact.Tip(b, mode == "deposit" and "Deposit" or "Organize bank",
+        mode == "deposit" and "Moves eligible items from your bags into the tabs the saved arrangement names. The guild bank shows each tab in turn. You review and confirm first."
+        or "Rearranges what is already in the guild bank as the saved arrangement says, between tabs too. Nothing is taken to your bags. You review and confirm first.")
+    if not fresh then
+        local t = Text("gRunHint", "small")
+        Wide(t, px + 146, py + 6, pw - 146)
+        t:SetText(plan and (planMode ~= mode and "Press Preview changes for this source first." or "Refresh the preview first.") or "Press Preview changes first.")
+        Tone(t, "quiet")
+    end
+    return py + 34
+end
+
+RUN.Draw = DrawRun
 
 function P.DrawGuildPreview(y)
     local mi = MI()
@@ -886,15 +1087,16 @@ function P.DrawGuildPreview(y)
     Tone(head, "head")
     local d = EnsureDraft()
     local dirty = d and Dirty()
+    if RUN.Busy() and view == "design" then view = "preview" end
     if dirty then
         local u = Text("gUnsaved", "small")
         Wide(u, PAD + 190, y + 3, 120)
         u:SetText("Unsaved changes")
         Tone(u, "warn")
-        local save = Button("gSave", "Save arrangement", 140, "secondary", SaveDraft)
+        local save = Button("gSave", "Save arrangement", 140, "secondary", RUN.Unless(RUN.Busy(), SaveDraft))
         At(save, pageW - PAD - 140 - 4 - 80, y - 4)
         R.Interact.Tip(save, "Save arrangement", "Writes this design as guild bank rules at the end of your rules list; the rules above them keep their order. Nothing is moved.")
-        local revert = Button("gRevert", "Revert", 80, "secondary", RevertDraft)
+        local revert = Button("gRevert", "Revert", 80, "secondary", RUN.Unless(RUN.Busy(), RevertDraft))
         At(revert, pageW - PAD - 80, y - 4)
         R.Interact.Tip(revert, "Revert", "Throws away the changes you haven't saved.")
         y = y + 6
@@ -925,7 +1127,7 @@ function P.DrawGuildPreview(y)
     y = y + H(what) + 2
     local only = Text("gOnly", "small")
     Wide(only, PAD, y)
-    only:SetText("Design only \226\128\148 your items will not move.")
+    only:SetText("Editing is design only \226\128\148 items move only when you review and confirm Deposit or Organize bank in the Preview.")
     Tone(only, "warn")
     y = y + H(only) + 6
 
@@ -933,7 +1135,7 @@ function P.DrawGuildPreview(y)
     ViewButton("gVCur", "Current", "current", PAD, y)
     ViewButton("gVDes", "Design", "design", PAD + 92, y)
     ViewButton("gVPre", "Preview", "preview", PAD + 184, y)
-    At(Button("gPreview", "Preview changes", 130, "primary", function() Build() end), pageW - PAD - 130, y - 2)
+    At(Button("gPreview", "Preview changes", 130, "primary", RUN.Unless(RUN.Busy(), function() Build() end)), pageW - PAD - 130, y - 2)
     y = y + 34
 
     -- the tabs
@@ -1029,6 +1231,21 @@ function P.DrawGuildPreview(y)
         Wide(ah, px, py + 4, pw)
         ah:SetText("Placed automatically in this tab")
         Tone(ah, "head")
+        local ld = Get("gLayout", function()
+            return Wg().Dropdown(Kit.Frame(), 230, function(value)
+                local ok, text = mi.Design.SetLayout(draft, selTab, value)
+                Say(ok and text or ("Nothing changed. " .. text), (not ok) and "warn" or nil)
+                Touch()
+            end)
+        end)
+        ld:SetChoices(function()
+            local out = {}
+            for _, key in ipairs(mi.LAYOUT_ORDER) do out[#out + 1] = { value = key, label = mi.LAYOUTS[key] } end
+            return out
+        end)
+        local layout = (dt and dt.layout) or "packed"
+        ld:SetValue(layout, mi.LAYOUTS[layout])
+        At(ld, px + pw - 230, py)
         py = py + 26
         local n = 0
         if dt then
@@ -1094,7 +1311,7 @@ function P.DrawGuildPreview(y)
             Wide(sel, px, py, pw)
             local st = picked.kind == "slot" and draft.tabs[picked.tab] and draft.tabs[picked.tab].slots[picked.slot]
             sel:SetText(st and ("%s \195\151%d \194\183 tab %d, slot %d \194\183 reserved"):format(ItemName(picked.id), st.count, picked.tab, picked.slot)
-                or (ItemName(picked.id) .. (picked.kind == "shelf" and " \194\183 placed automatically" or "")))
+                or (ItemName(picked.id) .. (picked.kind == "shelf" and (" \194\183 placed automatically" .. SizeText(picked)) or "")))
             Tone(sel, nil)
             py = py + H(sel) + 2
             if picked.kind ~= "tray" then
@@ -1144,7 +1361,7 @@ function P.DrawGuildPreview(y)
         -- Preview: the source, one summary, and the one message when it is out of date
         local function SrcButton(key, label, v, x)
             local b = Get(key, function() return Wg().Tab(Kit.Frame(), label, 130, function()
-                if source ~= v then source = v; if plan then plan = nil end; Build() end
+                if source ~= v and not RUN.Locked() then source = v; if plan then plan = nil end; Build() end
             end) end)
             b:SetSelected(source == v)
             At(b, x, py)
@@ -1161,7 +1378,7 @@ function P.DrawGuildPreview(y)
                 Wide(st, px, py + 4, pw - 130)
                 st:SetText(bank and "Bank contents changed. Refresh preview." or "Design changed. Refresh preview.")
                 Tone(st, "warn")
-                At(Button("gRefresh", "Refresh preview", 120, "primary", function() Build() end), px + pw - 120, py)
+                At(Button("gRefresh", "Refresh preview", 120, "primary", RUN.Unless(RUN.Busy(), function() Build() end)), px + pw - 120, py)
                 py = py + 30
             end
             local sum = Text("gSum", "body")
@@ -1194,6 +1411,7 @@ function P.DrawGuildPreview(y)
                     py = py + H(tx) + 2
                 end
             end
+            py = RUN.Draw(px, py + 6, pw)
         else
             local none = Text("gNoPlan", "small")
             Wide(none, px, py, pw)
@@ -1229,6 +1447,7 @@ end
 
 -- the page was hidden: a drag in progress is dropped (nothing changes), the split dialog is put away; the draft stays
 function P.GuildHidden()
+    review = nil
     if P.Drag and P.Drag.Active() then P.Drag.Cancel() end
     if P.Split then P.Split.Close() end
     armed, hoverTarget = nil, nil
@@ -1237,7 +1456,7 @@ end
 -- a profile was applied: the rules are another profile's now. A draft with no edits is rebuilt from them; one with edits stays.
 function P.GuildProfileChanged()
     if draft and not Dirty() then draft = nil end
-    plan = nil
+    plan, review = nil, nil
     if draft then msg, msgTone = "Your profile changed. Saving writes this arrangement into the new profile's rules.", "warn" end
 end
 
@@ -1252,4 +1471,14 @@ if R.Perf and R.Perf.Gauge then
             end
             return n
         end })
+end
+
+-- the rules changed anywhere: a review waiting for confirmation no longer describes them
+if R.MagicInventory then R.MagicInventory.OnChange(function() Withdraw() end) end
+-- the run's progress redraws the page (registered once)
+if R.MagicInventory and R.MagicInventory.GuildRun then
+    R.MagicInventory.GuildRun.OnUpdate(function(what)
+        if what == "start" or what == "done" then runStale = true end
+        P.QueueRefresh()
+    end)
 end
