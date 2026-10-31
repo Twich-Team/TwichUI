@@ -688,6 +688,7 @@ do
   pc.TwichUI.LayoutWizard.AuthorWindow.ShowExport(entry)
   local ex = pc.TwichUILayoutExport
   Check(ex and ex:IsShown() and ex.edit:GetText() == text and LM.Says(ex, "--from-published --text"), "    the Export window shows the text and the command")
+  Check(ex.shell and ex.shell.corner and ex.closeBox and ex.closeBox.twichLook and ex.select.twichLook and not ex.select.twichBevel, "    ... drawn with the framed look (FrameLook.lua)")
   Check(Same(pc.TwichUIDB.layouts.published, before), "    showing it changed nothing that is stored")
   ex:Hide()
   pc.TwichUI.LayoutWizard.AuthorWindow.Close(true)

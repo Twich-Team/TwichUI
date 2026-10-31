@@ -136,16 +136,20 @@ panel and the pin windows (`K.Appearance` over `MenuStyle.New("restockPromptStyl
 changes only the frame: what is asked, the rows, the total and the Purchase and Cancel answers are untouched. The
 section is not tied to the "Restock from merchants" switch, so the look can be set before restocking is on.
 
-* **Default:** exactly what the window had: the TwichUI rim (`Look.Shell`'s bronze edge, corner brackets, grain and
-  shade) over `ff232221` at 98 %. The rim is a border id of the look's own (`RestockPrompt.LEDGER`, "TwichUI rim
-  (default)"); `MenuStyle.Apply` draws no edge for it and says `"custom"`, and the window then shows the rim.
+* **Default:** the framed look's frame (`FrameLook.lua`, compact: its illustrated rails, no interior of its own) over the
+  look's espresso (`FrameLook.PANEL_BG`) at 98 %, with the framed look's buttons. The frame is a border id of the
+  look's own (`RestockPrompt.FRAMED`, "TwichUI frame (default)"); `MenuStyle.Apply` draws no edge for it and says
+  `"custom"`, and `FrameLook.Frame(frame, look)` then shows the frame, once built, over the player's own background.
+  The older TwichUI rim (`Look.Shell`'s bronze edge, corner brackets, grain and shade over `ff232221`) is still in the
+  border list as `RestockPrompt.LEDGER` ("TwichUI rim"); a profile that saved it, or any other value, is drawn as it
+  always was. Only keys the player never saved read the new defaults (read lazily, never written).
 * **Any other border** (none, a solid line, the game's, EllesmereUI's, LibSharedMedia's) hides the rim, the corner
   brackets, the grain and the shade (`Look.ShellParts`, which uses the pieces `Look.Frame` now keeps in
   `frame.twichShell`). The title band moves in to the border's reach (`frame.twichBand`), and a border thicker than the
   rim (4 px) pushes the content in by the difference and grows the window by twice it, so nothing is covered. A thinner
   border leaves the content where it was. A textured background also drops the rim's grain and shade.
-* **Greyed out with a reason:** thickness, color and opacity while the rim is chosen (its width and colors are fixed) or
-  no border is.
+* **Greyed out with a reason:** thickness, color and opacity while the frame or the rim is chosen (their width and colors
+  are fixed) or no border is.
 * **Not covered:** the title band, the list and the total panel keep their own tint (only the window behind them
   fades); text fonts, sizes and colors, the rim's color, and the Purchase and Cancel buttons are the shared look's.
 * **Redraws:** a change while the window is open redraws it once, in place, with the same plan (`Redraw`; no frame,

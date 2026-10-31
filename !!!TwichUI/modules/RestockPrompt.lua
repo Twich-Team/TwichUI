@@ -13,10 +13,11 @@
 -- list of frames Esc closes (never RegisterGameMenuEscHandler: see docs about the Esc handler taint).
 --
 -- Its background and border are the player's to set (P.Style, a MenuStyle look saved in TwichUIDB.ui.restockPromptStyle;
--- Vendor restocking settings > Question window appearance). The default is the look it always had: the TwichUI rim
--- ("ledger", drawn by Look.Shell) over the page color. Any other border replaces the rim, and the window grows by the
--- difference so the border never covers the rows or the buttons. Only the look changes: what is asked, the rows and
--- the Purchase and Cancel buttons are the same. P.TogglePreview shows the real window with made-up items.
+-- Vendor restocking settings > Question window appearance). The default is the framed look (FrameLook.lua: its frame over
+-- an espresso page); the TwichUI rim it had before ("ledger", drawn by Look.Shell) is still a choice, and one the player
+-- saved is drawn as it always was. Any other border replaces either, and the window grows by the difference so the border
+-- never covers the rows or the buttons. Only the look changes: what is asked and the rows are the same, and Purchase and
+-- Cancel are the framed look's buttons. P.TogglePreview shows the real window with made-up items.
 
 
 local R = TwichUI
@@ -41,11 +42,13 @@ local rows = {}
 
 -- The player's background and border. The defaults are what the window had before it was a setting.
 P.LEDGER = "ledger"
+local F = R.FrameLook
+P.FRAMED = F.BORDER
 if R.MenuStyle and R.MenuStyle.New then
     P.Style = R.MenuStyle.New("restockPromptStyle", {
-        bgTexture = "solid", bgColor = "ff232221", bgOpacity = 98,
-        borderTexture = P.LEDGER, borderColor = "ff8c6e38", borderOpacity = 90, borderSize = 1,
-    }, { extraBorders = { { P.LEDGER, "TwichUI rim (default)" } }, sources = true })
+        bgTexture = "solid", bgColor = F.PANEL_BG, bgOpacity = 98,
+        borderTexture = P.FRAMED, borderColor = F.PANEL_BORDER, borderOpacity = 90, borderSize = 1,
+    }, { extraBorders = { { P.FRAMED, F.BORDER_LABEL }, { P.LEDGER, "TwichUI rim" } }, sources = true })
 end
 
 local function Plain(v)
@@ -179,7 +182,7 @@ local function Build()
     f.edgeInk = L.Shade(f, ink, ink, ink, ink, 0)
     f.title = L.Text(f, "title")
     f.title:SetText("Restock from this merchant?")
-    f.close = L.CloseBox(f)
+    f.close = F.Close(f, function() f:Hide() end)
 
     f.lead = L.Text(f, "small")
     f.lead:SetWidth(W - PAD * 2)
@@ -208,8 +211,8 @@ local function Build()
     f.promise = L.Text(f, "meta")
     f.promise:SetWidth(W - PAD * 2 - 260)
     f.promise:SetText("Nothing is bought unless you press Purchase.")
-    f.purchase = L.Button(f, "Purchase", 124, "primary", function() Settle(true) end)
-    f.cancel = L.Button(f, "Cancel", 100, "secondary", function() Settle(false) end)
+    f.purchase = F.Button(f, "Purchase", 124, "primary", function() Settle(true) end)
+    f.cancel = F.Button(f, "Cancel", 100, "secondary", function() Settle(false) end)
 
     -- Esc, the close box and anything else that hides it without Purchase is a Cancel
     f:SetScript("OnHide", function()
@@ -320,18 +323,19 @@ local function Layout(plan, lead)
 end
 
 -- Draws the player's background and border and works out where the content sits. Changes only the frame's own
--- pieces (its backdrop, the rim and grain textures, the title band's place); no frame, texture or hook is made.
+-- pieces (its backdrop, the rim and grain textures, the title band's place, and the default frame's, made once the first time it is wanted).
 local function Restyle()
     local L = R.Look
     reach, ox = RIM, 0
     local style = P.Style
     if not (f and style) then return end
     local edge, drawn = style.Apply(f)
-    local ledger = drawn == "custom"
+    local framed = F.Frame(f, style)             -- the default frame, after Apply: never over a border the player chose
+    local ledger = drawn == "custom" and framed == 0
     if drawn == "eui" and R.Borders.Inside then edge = math.min(edge, R.Borders.Inside(style.Get("borderTexture"), edge)) end
     L.ShellParts(f, ledger, ledger and style.Get("bgTexture") == "solid")
     if f.edgeInk then for _, line in pairs(f.edgeInk) do line:SetShown(ledger) end end
-    reach = ledger and RIM or math.ceil(edge)
+    reach = ledger and RIM or (framed > 0 and framed or math.ceil(edge))
     ox = math.max(0, reach - RIM)
     local band = f.twichBand
     if band then

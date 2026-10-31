@@ -465,14 +465,20 @@ w.FireEvent("PLAYER_LOGIN")
 -- the look helpers, as recording stand-ins (Look.lua needs the full frame API)
 WR.Look = {
   pal = {},
-  Shell = function(f) return f end, Text = function() return Rec() end, CloseBox = function() return Rec() end,
-  Button = function(_, label, _, _, onClick) local b = Rec(label); b.click = onClick; b.label = label; return b end,
+  Text = function() return Rec() end,
   Well = function() end, ScrollBar = function() end,
 }
-local SW = WR.SupportWindow
+-- ... and the framed look's (FrameLook.lua), which the window's shell, close box and buttons are drawn with
 local button = {}
-local lookButton = WR.Look.Button
-WR.Look.Button = function(...) local b = lookButton(...); button[b.label] = b; return b end
+WR.FrameLook = {
+  Ready = function() return true end,
+  ContentInsets = function() return 12, 12, 12, 13 end,
+  Shell = function() return { Header = function() return Rec() end } end,
+  FadeIn = function() end,
+  Close = function() return Rec() end,
+  Button = function(_, label, _, _, onClick) local b = Rec(label); b.click = onClick; b.label = label; button[label] = b; return b end,
+}
+local SW = WR.SupportWindow
 WR.Print = function(...) end
 assert(not SW.IsShown() and SW.Text() == nil, "nothing is built or held while the window has never been opened")
 assert(SW.Show() == true)

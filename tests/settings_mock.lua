@@ -44,7 +44,7 @@ function SettingsClient(opts)
   local BACKDROP = { SetBackdrop = true, SetBackdropColor = true, SetBackdropBorderColor = true, GetBackdrop = true }
   local function Obj(backdrop)
     return setmetatable({}, { __index = function(t, k)
-      if k == "twichBevel" or k == "twichBorders" then return nil end
+      if k == "twichBevel" or k == "twichBorders" or k == "sheenPiece" or k == "recessPiece" or k == "groovePiece" or k == "twichFade" or k == "twichFrame" then return nil end   -- fields, never methods (FrameLook.lua's)
       if BACKDROP[k] and not backdrop then return nil end
       if k == "GetFrameLevel" or k == "GetEffectiveScale" or k == "GetScale" then return function() return 1 end end
       if k == "GetStringWidth" then return function() return 100 end end
@@ -89,7 +89,7 @@ function SettingsClient(opts)
     "gear/Hints.lua", "gear/Tooltip.lua", "gear/Bags.lua", "gear/Window.lua", "modules/Notify.lua", "modules/Arrival.lua", "modules/Media.lua",
     "modules/FriendLogin.lua", "modules/Borders.lua", "modules/FoodDrink.lua", "modules/FoodDrinkUnlock.lua",
     "modules/TrainingData.lua", "modules/Training.lua", "modules/MenuStyle.lua", "modules/SpellMenu.lua", "modules/MageTravel.lua", "modules/MageConjure.lua",
-    "chronicle/Style.lua", "Look.lua", "Icons.lua", "chronicle/Appearance.lua", "modules/NotifyLook.lua", "modules/Refreshments.lua", "modules/RefreshmentsPanel.lua", "modules/RefreshmentsShares.lua",
+    "chronicle/Style.lua", "Look.lua", "FrameLook.lua", "Icons.lua", "chronicle/Appearance.lua", "modules/NotifyLook.lua", "modules/Refreshments.lua", "modules/RefreshmentsPanel.lua", "modules/RefreshmentsShares.lua",
     "modules/RefreshmentsTrade.lua", "modules/RefreshmentsBroker.lua", "modules/EllesmereJunk.lua", "modules/MageSell.lua", "modules/MageSellWindow.lua", "modules/Restock.lua", "modules/RestockPrompt.lua", "inventory/Rules.lua", "inventory/Items.lua", "inventory/Plan.lua", "inventory/Design.lua", "inventory/GuildBank.lua", "inventory/GuildPlan.lua", "inventory/Run.lua", "inventory/Window.lua", "inventory/Picker.lua", "modules/ChatCleanMatch.lua", "modules/ChatClean.lua",
     "classbars/Anim.lua", "classbars/Resources.lua", "classbars/Config.lua", "classbars/Bar.lua", "classbars/Effects.lua", "classbars/Controller.lua",
     "reminders/AmmoItems.lua", "reminders/Config.lua", "reminders/Conditions.lua", "reminders/Ammunition.lua", "reminders/Evaluate.lua", "reminders/State.lua", "reminders/Display.lua", "reminders/Controller.lua",

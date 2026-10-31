@@ -155,7 +155,7 @@ end
 ---------------------------------------------------------------------------
 -- The addon: the navigation views (their data and routes are not needed to place a frame)
 ---------------------------------------------------------------------------
-local EXTRA = { "modules/Borders.lua", "modules/MenuStyle.lua", "nav/Prefs.lua", "nav/Data.lua", "nav/Route.lua",
+local EXTRA = { "FrameLook.lua", "modules/Borders.lua", "modules/MenuStyle.lua", "nav/Prefs.lua", "nav/Data.lua", "nav/Route.lua",
   "nav/Journey.lua", "nav/Nav.lua", "nav/Travel.lua", "nav/Paint.lua", "nav/Unlock.lua", "nav/Frame.lua", "nav/Arrow.lua" }
 for _, f in ipairs(EXTRA) do
   local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})

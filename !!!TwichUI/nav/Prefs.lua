@@ -128,9 +128,10 @@ function NP.Reset(scope)
 end
 
 -- The frame's background and border
+-- A small heads-up frame, not a window: the framed look's espresso and aged bronze as a plain line, without its artwork.
 NP.Look = R.MenuStyle.New("navigationLook", {
-    bgTexture = "solid", bgColor = "ff1e1b18", bgOpacity = 92,
-    borderTexture = "solid", borderColor = "ff8c6e38", borderOpacity = 80, borderSize = 1,
+    bgTexture = "solid", bgColor = R.FrameLook.PANEL_BG, bgOpacity = 92,
+    borderTexture = "solid", borderColor = R.FrameLook.PANEL_BORDER, borderOpacity = 80, borderSize = 1,
 }, { sources = true })
 NP.Look.Subscribe(function() Notify("look") end)
 

@@ -18,6 +18,15 @@ for k, v in pairs(Look) do Wg[k] = v end
 local WHITE = "Interface\\Buttons\\WHITE8x8"
 local pal, Motion, fieldPal = Look.pal, Look.Motion, Look.fieldPal
 
+-- Every button the settings window draws (Wg.Button, which the window, its cards and its pages call) is the framed look's
+-- (FrameLook.lua): one bevel, one owner. Look.Button itself is unchanged, so the windows that are not the settings window keep theirs.
+local LookButton = Look.Button
+function Wg.Button(parent, label, w, kind, onClick)
+    local F = R.FrameLook
+    if F and F.Ready() then return F.Button(parent, label, w, kind, onClick) end
+    return LookButton(parent, label, w, kind, onClick)
+end
+
 ---------------------------------------------------------------------------
 -- Slider: a thin track with a bronze fill, a gold thumb, and the value in a box beside it that can be typed in.
 -- onChange(value) runs for the player's own changes only. SetRange(min, max, step), SetValue(v), SetActive(on).

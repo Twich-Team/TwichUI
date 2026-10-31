@@ -512,6 +512,8 @@ local function Restyle()
     if not strip then return end
     local style = R.RefreshmentsPanel and R.RefreshmentsPanel.Style
     local edge = style and math.ceil(style.Apply(strip)) or 0
+    local framed = style and R.FrameLook.Frame(strip, style) or 0     -- the default frame (FrameLook.lua), never over the player's own border
+    if framed > 0 then edge = framed end
     strip:SetSize(STRIP_W + edge * 2, STRIP_H + edge * 2)
 end
 
@@ -536,7 +538,7 @@ local function BuildStrip()
     strip.line:SetJustifyH("LEFT")
     strip.line:SetJustifyV("TOP")
     strip.line:SetTextColor(K.textDim[1], K.textDim[2], K.textDim[3])
-    strip.fill = S.Button(body, "Fill trade", 84, "primary", function() T.Fill() end)
+    strip.fill = R.FrameLook.Button(body, "Fill trade", 84, "primary", function() T.Fill() end)
     strip.fill:SetPoint("RIGHT", -10, 0)
     R.Interact.Tip(strip.fill, "Fill trade", function()
         local _, line, can = Describe(View())

@@ -1062,6 +1062,10 @@ do
   local win = c.TwichUILayoutAuthor
   Check(win and win:IsShown(), "/tui layout author opens the workspace")
   Check(c.TwichUILayoutWizard == nil and not WZ.Window.IsShown(), "and not the setup wizard")
+  Check(win.shell and win.shell.corner and win.closeBox and win.closeBox.twichLook, "the workspace is drawn with the framed look (FrameLook.lua): a shell and its close box")
+  local closeBtn
+  for _, ch in ipairs(win.children) do if ch.kind == "Frame" then for _, b in ipairs(ch.children or {}) do if b.kind == "Button" and b.twichLook then closeBtn = b end end end end
+  Check(closeBtn and not closeBtn.twichBevel, "its buttons carry the framed look's bevel, not Look's as well")
   Check(WZ.Author.Active() and WZ.Author.Session().eui == "Mine" and WZ.Author.Session().twichui == "Default", "the sources start as the profiles in use, and are only read")
   Check(LM.Says(win, "1. Start from") and LM.Says(win, "2. Capture") and LM.Says(win, "3. Review the changes") and LM.Says(win, "4. TwichUI presets") and LM.Says(win, "7. Send a published package"), "the sections are there")
   Check(LM.Says(win, "Classic Adventure") and LM.Says(win, "Compact Adventure"), "both layouts can be picked")

@@ -104,7 +104,7 @@ end
 Pages.Chip = Chip
 
 local function Button(parent, label, w, kind, fn, tip)
-    local b = Look().Button(parent, label, w, kind, fn)
+    local b = R.FrameLook.Button(parent, label, w, kind, fn)   -- the framed look's beveled button (FrameLook.lua)
     b:SetHeight(24)
     if tip then R.Interact.Tip(b, label, tip) end
     return b

@@ -2,7 +2,8 @@
 -- A small movable window: what the guide is, how far along the chain you are, the steps in order with a mark and a word for
 -- each state, and the chosen step's instructions, places and pin buttons. It draws what guides/CozyBag.lua says and asks
 -- it to do everything else (it reads no quests, makes no pins). Built on first open; while closed it holds nothing and the
--- controller listens to nothing. Drawn with TwichUI's own look (Look.lua), so it looks finished without any other addon.
+-- controller listens to nothing. Drawn with the shared framed look (FrameLook.lua, on Look.lua), so it looks finished without any
+-- other addon.
 --
 -- State is shown by a word as well as a mark and a color: Done (a check), Current (an arrow), In progress, Later, Optional.
 -- Opened with /tui bag, the settings page "Cozy Sleeping Bag", or R.CozyBagWindow.Toggle(). Never opens by itself.
@@ -14,10 +15,14 @@ local W = {}
 R.CozyBagWindow = W
 
 local WIDTH, HEIGHT = 400, 568
-local COMPACT_WIDTH, COMPACT_PAD = 320, 10
+local COMPACT_WIDTH, COMPACT_PAD = 320, 14
 local COMPACT_MAX_DETAIL = 230   -- the most the chosen step takes in the compact view before it scrolls
 local DIM = 0.45                 -- the compact view's opacity when the pointer is elsewhere
 local PAD = 14
+-- The frame's rails (FrameLook.lua) take the window's edge: the title strip is this high in the full and the compact view, and
+-- what sits under it or above the bottom edge is this much lower or higher than it was without them.
+local HEAD_FULL, HEAD_COMPACT = 40, 30
+local DT, DB = 6, 4
 local ROW_H, MAX_ROWS = 24, 8
 local PLACE_H = 24
 local BUTTON_H = 24
@@ -101,13 +106,13 @@ local function NewPlaceRow()
     row.label:SetPoint("LEFT", 0, 0)
     row.label:SetJustifyH("LEFT")
     row.label:SetWordWrap(false)
-    row.go = L.Button(row, "Go", 40, "secondary", function() W.Act("go", row.place) end)
+    row.go = R.FrameLook.Button(row, "Go", 40, "secondary", function() W.Act("go", row.place) end)
     row.go:SetPoint("RIGHT", 0, 0)
     row.go:SetHeight(BUTTON_H - 4)
-    row.show = L.Button(row, "Show", 46, "secondary", function() W.Act("show", row.place) end)
+    row.show = R.FrameLook.Button(row, "Show", 46, "secondary", function() W.Act("show", row.place) end)
     row.show:SetPoint("RIGHT", row.go, "LEFT", -4, 0)
     row.show:SetHeight(BUTTON_H - 4)
-    row.pin = L.Button(row, "Pin", 40, "secondary", function() W.Act("pin", row.place) end)
+    row.pin = R.FrameLook.Button(row, "Pin", 40, "secondary", function() W.Act("pin", row.place) end)
     row.pin:SetPoint("RIGHT", row.show, "LEFT", -4, 0)
     row.pin:SetHeight(BUTTON_H - 4)
     Tip(row.pin, "Pin this place", "Saves a pin of your own on the world map here. It is one of your saved pins: you can rename, keep or delete it like any other. Nothing is sent.")
@@ -255,12 +260,12 @@ local function Layout()
     local w, pad = compact and COMPACT_WIDTH or WIDTH, compact and COMPACT_PAD or PAD
     local inner = w - pad * 2
     f:SetWidth(w)
-    f.twichBand:SetHeight(compact and 22 or 34)
+    f.head:SetHeight(compact and HEAD_COMPACT or HEAD_FULL)
     f.title:SetShown(not compact)
     f.titleSmall:SetShown(compact)
     f.close:SetSize(compact and 16 or 20, compact and 16 or 20)
     f.close:ClearAllPoints()
-    f.close:SetPoint("TOPRIGHT", compact and -6 or -10, compact and -7 or -11)
+    f.close:SetPoint("TOPRIGHT", compact and -(f.closeRight - 1) or -(f.closeRight + 2), compact and -11 or -13)
     f.lock:SetHeight(compact and 16 or BUTTON_H - 2)
     f.size:SetHeight(compact and 16 or BUTTON_H - 2)
     f.lock:ClearAllPoints()
@@ -280,21 +285,21 @@ local function Layout()
     f.pinStep:ClearAllPoints()
     f.note:ClearAllPoints()
     if compact then
-        f.progress:SetPoint("TOPLEFT", pad, -32)
-        f.barBack:SetPoint("TOPLEFT", pad, -48)
+        f.progress:SetPoint("TOPLEFT", pad, -(32 + DT))
+        f.barBack:SetPoint("TOPLEFT", pad, -(48 + DT))
         f.barBack:SetSize(inner, 4)
-        f.scroll:SetPoint("TOPLEFT", pad, -56)
-        f.scroll:SetPoint("TOPRIGHT", -pad - 18, -56)
-        f.pinStep:SetPoint("BOTTOMLEFT", pad, 8)
+        f.scroll:SetPoint("TOPLEFT", pad, -(56 + DT))
+        f.scroll:SetPoint("TOPRIGHT", -pad - 18, -(56 + DT))
+        f.pinStep:SetPoint("BOTTOMLEFT", pad, 8 + DB)
         f.note:SetPoint("BOTTOMLEFT", f.pinStep, "TOPLEFT", 0, 4)
         f.note:SetPoint("RIGHT", f, "RIGHT", -pad, 0)
     else
-        f.progress:SetPoint("TOPLEFT", pad, -98)
-        f.barBack:SetPoint("TOPLEFT", pad, -118)
+        f.progress:SetPoint("TOPLEFT", pad, -(98 + DT))
+        f.barBack:SetPoint("TOPLEFT", pad, -(118 + DT))
         f.barBack:SetSize(inner, 6)
-        f.scroll:SetPoint("TOPLEFT", pad, -134 - (MAX_ROWS * ROW_H + 8) - 10)
-        f.scroll:SetPoint("BOTTOMRIGHT", -pad - 18, 92)
-        f.pinStep:SetPoint("BOTTOMLEFT", pad, 56)
+        f.scroll:SetPoint("TOPLEFT", pad, -(134 + DT) - (MAX_ROWS * ROW_H + 8) - 10)
+        f.scroll:SetPoint("BOTTOMRIGHT", -pad - 18, 92 + DB)
+        f.pinStep:SetPoint("BOTTOMLEFT", pad, 56 + DB)
         f.note:SetPoint("BOTTOMLEFT", f.reset, "BOTTOMRIGHT", 10, 6)
         f.note:SetPoint("RIGHT", f, "RIGHT", -pad, 0)
     end
@@ -323,7 +328,7 @@ local function SizeCompact()
     f.scroll:SetHeight(math.max(want, 20))
     local noteH = (note and note ~= "") and 16 or 0
     f.note:SetShown(noteH > 0)
-    f:SetHeight(56 + math.max(want, 20) + 6 + noteH + BUTTON_H + 8)
+    f:SetHeight(56 + DT + math.max(want, 20) + 6 + noteH + BUTTON_H + 8 + DB)
     UpdateBar()
 end
 
@@ -406,7 +411,9 @@ end
 local function Build()
     L = R.Look
     K = L.pal
-    f = CreateFrame("Frame", "TwichUICozyBagGuide", UIParent, "BackdropTemplate")
+    local F = R.FrameLook
+    local _, _, CR = F.ContentInsets()
+    f = CreateFrame("Frame", "TwichUICozyBagGuide", UIParent)
     f:Hide()
     f:SetSize(WIDTH, HEIGHT)
     f:SetFrameStrata("MEDIUM")
@@ -450,29 +457,32 @@ local function Build()
         W.Render()
     end)
     f:HookScript("OnHide", function() note = nil C.Closed() end)
-    L.Shell(f, 34)
+    f.shell = F.Shell(f, { below = true, follow = true })   -- the shared frame and interior (FrameLook.lua), under everything below
+    F.FadeIn(f)
+    f.head = f.shell:Header(HEAD_FULL)   -- the title strip: its height follows the full or compact view (Layout)
+    f.closeRight = CR
 
     local title = L.Text(f, "title")
-    title:SetPoint("TOPLEFT", PAD, -9)
+    title:SetPoint("TOPLEFT", PAD, -13)
     title:SetText(D.title)
     f.title = title
     f.titleSmall = L.Text(f, "heading")   -- the compact view's thinner title bar
-    f.titleSmall:SetPoint("TOPLEFT", COMPACT_PAD, -9)
+    f.titleSmall:SetPoint("TOPLEFT", COMPACT_PAD, -13)
     f.titleSmall:SetText(D.title)
-    local close = L.CloseBox(f)
+    local close = F.Close(f, function() f:Hide() end)
     f.close = close
-    f.lock = L.Button(f, "Lock", 56, "secondary", function() C.SetLocked(not C.Locked()) W.Render() end)
+    f.lock = F.Button(f, "Lock", 56, "secondary", function() C.SetLocked(not C.Locked()) W.Render() end)
     f.lock:SetHeight(BUTTON_H - 2)
     f.lock:SetPoint("RIGHT", close, "LEFT", -8, 0)
     Tip(f.lock, "Lock or unlock", "Locked, the window stays where it is. Unlocked, drag it by any empty part.")
-    f.size = L.Button(f, "Compact", 66, "secondary", function() C.SetCompact(not C.Compact()) W.Render() end)
+    f.size = F.Button(f, "Compact", 66, "secondary", function() C.SetCompact(not C.Compact()) W.Render() end)
     f.size:SetHeight(BUTTON_H - 2)
     f.size:SetPoint("RIGHT", f.lock, "LEFT", -6, 0)
     Tip(f.size, "Compact or full view", "Compact keeps just your progress and the chosen step, to sit beside the game while you work. Full shows the step list and the other buttons.")
 
     -- Intro and progress
     f.intro = L.Text(f, "small")
-    f.intro:SetPoint("TOPLEFT", PAD, -46)
+    f.intro:SetPoint("TOPLEFT", PAD, -(46 + DT))
     f.intro:SetWidth(WIDTH - PAD * 2)
     f.intro:SetWordWrap(true)
     f.intro:SetText(D.intro)
@@ -480,9 +490,9 @@ local function Build()
     f.intro2:SetPoint("TOPLEFT", f.intro, "BOTTOMLEFT", 0, -2)
     f.intro2:SetWidth(WIDTH - PAD * 2)
     f.progress = L.Text(f, "heading")
-    f.progress:SetPoint("TOPLEFT", PAD, -98)
+    f.progress:SetPoint("TOPLEFT", PAD, -(98 + DT))
     f.barBack = CreateFrame("Frame", nil, f)
-    f.barBack:SetPoint("TOPLEFT", PAD, -118)
+    f.barBack:SetPoint("TOPLEFT", PAD, -(118 + DT))
     f.barBack:SetSize(WIDTH - PAD * 2, 6)
     L.Solid(f.barBack, "BACKGROUND", K.well, 1):SetAllPoints()
     f.barFill = L.Solid(f.barBack, "ARTWORK", K.teal, 1)
@@ -491,7 +501,7 @@ local function Build()
 
     -- The steps
     f.list = CreateFrame("Frame", nil, f, "BackdropTemplate")
-    f.list:SetPoint("TOPLEFT", PAD, -134)
+    f.list:SetPoint("TOPLEFT", PAD, -(134 + DT))
     f.list:SetSize(WIDTH - PAD * 2, MAX_ROWS * ROW_H + 8)
     L.Well(f.list, 0.9)
     f.listNote = L.Text(f.list, "small")
@@ -500,10 +510,10 @@ local function Build()
     f.listNote:SetWordWrap(true)
 
     -- The chosen step, in a scroll so long text or a large font never hides the buttons below
-    local detailTop = -134 - (MAX_ROWS * ROW_H + 8) - 10
+    local detailTop = -(134 + DT) - (MAX_ROWS * ROW_H + 8) - 10
     f.scroll = CreateFrame("ScrollFrame", nil, f, "UIPanelScrollFrameTemplate")
     f.scroll:SetPoint("TOPLEFT", PAD, detailTop)
-    f.scroll:SetPoint("BOTTOMRIGHT", -PAD - 18, 92)
+    f.scroll:SetPoint("BOTTOMRIGHT", -PAD - 18, 92 + DB)
     L.ScrollBar(f.scroll)
     f.content = CreateFrame("Frame", nil, f.scroll)
     f.content:SetSize(WIDTH - PAD * 2 - 22, 200)
@@ -520,17 +530,17 @@ local function Build()
     f.dText:SetWordWrap(true)
 
     -- Buttons and the line an action answers on
-    f.pinStep = L.Button(f, "Pin this step", 130, "primary", function() W.Act("pinStep") end)
-    f.pinStep:SetPoint("BOTTOMLEFT", PAD, 56)
+    f.pinStep = F.Button(f, "Pin this step", 130, "primary", function() W.Act("pinStep") end)
+    f.pinStep:SetPoint("BOTTOMLEFT", PAD, 56 + DB)
     Tip(f.pinStep, "Pin this step", "Saves a pin of your own on the world map for each place in this step. Pressing it again does not make another. Nothing is sent and no route starts.")
-    f.current = L.Button(f, "Back to current step", 122, "secondary", function() C.Follow() end)
+    f.current = F.Button(f, "Back to current step", 122, "secondary", function() C.Follow() end)
     f.current:SetPoint("LEFT", f.pinStep, "RIGHT", 8, 0)
     Tip(f.current, "Back to current step", "Goes back to the step your quests say is next. Looking at another step never changes your progress.")
-    f.remove = L.Button(f, "Remove pins...", 100, "danger", ConfirmRemove)
-    f.remove:SetPoint("BOTTOMRIGHT", -PAD, 56)
+    f.remove = F.Button(f, "Remove pins...", 100, "danger", ConfirmRemove)
+    f.remove:SetPoint("BOTTOMRIGHT", -PAD, 56 + DB)
     Tip(f.remove, "Remove this guide's pins", "Asks first. Removes only the pins this guide made. Pins you made yourself, and kept pins, stay.")
-    f.reset = L.Button(f, "Reset position", 110, "secondary", function() C.ResetPosition() W.Render() end)
-    f.reset:SetPoint("BOTTOMLEFT", PAD, 24)
+    f.reset = F.Button(f, "Reset position", 110, "secondary", function() C.ResetPosition() W.Render() end)
+    f.reset:SetPoint("BOTTOMLEFT", PAD, 24 + DB)
     Tip(f.reset, "Reset position", "Puts the window back where it starts.")
     f.note = L.Text(f, "meta")
     f.note:SetPoint("BOTTOMLEFT", f.reset, "BOTTOMRIGHT", 10, 6)

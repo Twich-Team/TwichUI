@@ -176,7 +176,7 @@ local function refreshMap() for p in pairs(WMF.providers) do p:RefreshAllData() 
 local brokers = {}
 local LDB = c.LibStub:NewLibrary("LibDataBroker-1.1", 1)
 LDB.NewDataObject = function(_, name, o) brokers[name] = o; return o end
-for _, f in ipairs({ "chronicle/Style.lua", "modules/Borders.lua", "modules/MenuStyle.lua", "modules/SpellMenu.lua", "modules/Media.lua",
+for _, f in ipairs({ "chronicle/Style.lua", "FrameLook.lua", "modules/Borders.lua", "modules/MenuStyle.lua", "modules/SpellMenu.lua", "modules/Media.lua",
   "pins/Pins.lua", "pins/Sync.lua", "pins/Look.lua", "pins/Sound.lua", "pins/Map.lua", "pins/Minimap.lua", "pins/Editor.lua", "pins/Window.lua",
   "pins/BrokerMenu.lua", "pins/Broker.lua",
   "diag/Diagnostics.lua", "diag/Pins.lua" }) do
@@ -273,8 +273,12 @@ do
 
   keys(true, false, false)
   assert(click("LeftButton", 0.4, 0.5) and PE.IsOpen())
-  assert(drawn.bg and math.abs(drawn.bg[4] - 0.98) < 1e-9 and drawn.w == 300 + 2 and drawn.h == 242 + 2,
-    "drawn with the look's background, a 1 pixel border making the window 2 larger")
+  assert(drawn.bg and math.abs(drawn.bg[4] - 0.98) < 1e-9 and drawn.w == 300 + 26 and drawn.h == 242 + 26,
+    "drawn with the look's background, the default frame making the window 26 larger")
+  assert(ed.twichFrame and ed.twichFrame.shown and not ed.twichFrame.interior, "the frame is the default border, and has no interior over the look's background")
+  assert(EL.Get("borderTexture") == R.FrameLook.BORDER and PL.MenuLook.Get("borderTexture") == "solid" and PL.MenuLook.Get("bgColor") == R.MenuStyle.Get("bgColor"),
+    "the data bar menu keeps the launchers' look: no frame, the menus' colors")
+  assert(EL.Set("borderTexture", "solid") and not ed.twichFrame.shown and drawn.w == 300 + 2, "another border: the frame is put away, a 1 pixel line makes it 2 larger")
   -- a change redraws the open window at once
   assert(EL.Set("bgOpacity", 40) and EL.Set("borderSize", 6))
   assert(math.abs(drawn.bg[4] - 0.40) < 1e-9 and drawn.w == 300 + 12 and drawn.h == 242 + 12, "a thicker border makes it larger")
@@ -295,7 +299,7 @@ do
 
   EL.Reset()
   assert(c.TwichUIDB.ui.pinsEditorLook == nil, "reset: nothing saved")
-  assert(PL.Snapshot().editorBg == "solid" and PL.Snapshot().editorBorder == "solid")
+  assert(PL.Snapshot().editorBg == "solid" and PL.Snapshot().editorBorder == R.FrameLook.BORDER)
 
   -- Preview: the real window with a made-up pin; Save does nothing; pressing again closes it
   local before = PN.LocalCount()

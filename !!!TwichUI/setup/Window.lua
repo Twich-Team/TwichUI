@@ -1,7 +1,7 @@
 -- TwichUI: setup sharing window (/tui share)
 -- Three pages: "Share setup" (choose, save, send; recommendations and the party
 -- check open from it), "Received setups" (review, apply, undo) and "Backups".
--- Styled by EllesmereUI's skin toolkit when it's available.
+-- Drawn with the shared framed look (FrameLook.lua, on Look.lua).
 
 local R = TwichUI
 local ST, SH, ES = R.Setups, R.Share, R.Ellesmere
@@ -11,7 +11,11 @@ R.Window = W
 local GOLD, GREY, RED, GREEN = R.GOLD, R.GREY, R.RED, R.GREEN
 local WIDTH, HEIGHT = 720, 580
 local ROW_H = 24
-local POPUP_HEADER = 32       -- the title band of a popup
+local MAIN_HEADER = 66        -- the main window's strip: the name and the tabs, whose lower line is the tabs' rule
+local POPUP_HEADER = 34       -- the title strip of a popup, inside the frame's rails (FrameLook.lua)
+-- The frame's rails take the window's edge: what lies under the title strip is DT lower than it was without them, and what lies over the
+-- bottom edge is DB higher. A popup is made that much taller, so the room inside it is what it always was.
+local DT, DB = 4, 5
 local f                         -- main frame
 local page = "share"
 local expanded = {}             -- [owner] = true in the Choose addons popup
@@ -20,8 +24,8 @@ local sourceIndex = 1
 local toast                      -- transfer toast (built on first use)
 
 ---------------------------------------------------------------------------
--- The look: TwichUI's own (Look.lua), the same family as the settings window, whether or not EllesmereUI is
--- installed. It is looked up when something is first built (this file loads before it).
+-- The look: TwichUI's own (Look.lua, with the framed windows and buttons of FrameLook.lua), the same family as the settings window,
+-- whether or not EllesmereUI is installed. It is looked up when something is first built (this file loads before it).
 ---------------------------------------------------------------------------
 local function Look() return R.Look end
 
@@ -58,11 +62,11 @@ local function Text(parent, template, size)
     return fs
 end
 
--- A button. kind: nil for an ordinary one, "danger" for one that puts things back. It is Look's raised button;
+-- A button. kind: nil for an ordinary one, "danger" for one that puts things back. It is the framed look's beveled button;
 -- SetText and GetText are the window's (the old buttons were the game's template and had them).
 local function Btn(parent, label, w, onClick, tooltip, kind)
     -- (Delete is the one action here that can't be taken back: the rust button, as Reset is in the settings)
-    local b = Look().Button(parent, label, w, kind or (label == "Delete" and "danger") or "secondary", onClick)
+    local b = R.FrameLook.Button(parent, label, w, kind or (label == "Delete" and "danger") or "secondary", onClick)
     function b:SetText(t) self.text:SetText(t) end
     function b:GetText() return self.text:GetText() end
     -- tooltip: text, or a function giving the text and, when the button can't be used now, the reason
@@ -194,9 +198,23 @@ local function When(t) return t and date("%b %d, %H:%M", t) or "?" end
 ---------------------------------------------------------------------------
 -- Popups share one frame builder
 ---------------------------------------------------------------------------
+-- The frame, interior, title strip, opening fade and close box of a window (FrameLook.lua), on a frame that is already made and
+-- placed. The shell sits one level under `p`, so the title and everything else the window draws is over it. Returns the strip's frame,
+-- for textures of the window's own.
+local function Framed(p, headerH)
+    local F = R.FrameLook
+    local _, _, CR = F.ContentInsets()
+    p.shell = F.Shell(p, { below = true })
+    F.FadeIn(p)
+    local head = p.shell:Header(headerH)
+    p.closeBox = F.Close(p, function() p:Hide() end)
+    p.closeBox:SetPoint("TOPRIGHT", -(CR + 2), -12)
+    return head
+end
+
 local function MakePopup(name, w, h, title, dx, dy)
-    local p = CreateFrame("Frame", name, UIParent, "BackdropTemplate")
-    p:SetSize(w, h)
+    local p = CreateFrame("Frame", name, UIParent)
+    p:SetSize(w, h + DT + DB)
     p:SetPoint("CENTER", dx or 0, dy or 0)
     p:SetFrameStrata("DIALOG")
     p:SetToplevel(true)
@@ -208,11 +226,10 @@ local function MakePopup(name, w, h, title, dx, dy)
     p:SetClampedToScreen(true)
     p:HookScript("OnShow", R.FitToScreen)
     tinsert(UISpecialFrames, name)
-    Look().Shell(p, POPUP_HEADER)
+    Framed(p, POPUP_HEADER)
     p.title = Text(p, "GameFontNormalLarge")
-    p.title:SetPoint("TOPLEFT", 16, -12)
+    p.title:SetPoint("TOPLEFT", 16, -14)
     p.title:SetText(title)
-    Look().CloseBox(p)
     return p
 end
 
@@ -247,12 +264,12 @@ local search = ""
 local function BuildChoose()
     cp = MakePopup("TwichUIChooseAddons", POPUP_W, 520, "Choose addons", 0, 0)
     cp.help = Text(cp, "GameFontHighlightSmall")
-    cp.help:SetPoint("TOPLEFT", 16, -40)
+    cp.help:SetPoint("TOPLEFT", 16, -(40 + DT))
     cp.help:SetWidth(POPUP_LIST_W)
 
     cp.search = Look().EditBox(cp, 100, 24)
     cp.search:SetSize(260, 24)
-    cp.search:SetPoint("TOPLEFT", 22, -74)
+    cp.search:SetPoint("TOPLEFT", 22, -(74 + DT))
     cp.search:SetAutoFocus(false)
     cp.search:SetScript("OnEscapePressed", cp.search.ClearFocus)
     cp.search:SetScript("OnTextChanged", function(e)
@@ -268,7 +285,7 @@ local function BuildChoose()
 
     cp.suggest = Btn(cp, "Recommended", 110, function() ST:SelectSuggested(); W:Refresh() end,
         "Tick the settings most people want to share, and skip big data like price history, caches and logs.")
-    cp.suggest:SetPoint("TOPRIGHT", -16, -72)
+    cp.suggest:SetPoint("TOPRIGHT", -16, -(72 + DT))
 
     cp.all = Btn(cp, "Select all", 90, function()
         ST:SelectAll()
@@ -284,15 +301,15 @@ local function BuildChoose()
     cp.all:SetPoint("RIGHT", cp.suggest, "LEFT", -8, 0)
 
     cp.list = ListBox(cp, 340, POPUP_LIST_W)
-    cp.list:SetPoint("TOPLEFT", 16, -106)
+    cp.list:SetPoint("TOPLEFT", 16, -(106 + DT))
     cp.summary = Text(cp, "GameFontDisableSmall")
     cp.summary:SetPoint("TOPLEFT", cp.list, "BOTTOMLEFT", 2, -6)
 
     cp.scan = Btn(cp, "Scan installed addons", 170, AskScan,
         "Reloads your UI once and lists every addon that has saved settings, exactly as they're saved right now. Scanning never saves or sends anything.")
-    cp.scan:SetPoint("BOTTOMLEFT", 16, 14)
+    cp.scan:SetPoint("BOTTOMLEFT", 16, 14 + DB)
     cp.done = Btn(cp, "Done", 90, function() cp:Hide() end)
-    cp.done:SetPoint("BOTTOMRIGHT", -16, 14)
+    cp.done:SetPoint("BOTTOMRIGHT", -16, 14 + DB)
 end
 
 local TWICHUI_KEY = "TwichUI settings"
@@ -437,12 +454,12 @@ local rc
 local function BuildRecommend()
     rc = MakePopup("TwichUIRecommend", POPUP_W, 520, "Recommend addons to friends", 10, -10)
     rc.help = Text(rc, "GameFontHighlightSmall")
-    rc.help:SetPoint("TOPLEFT", 16, -40)
+    rc.help:SetPoint("TOPLEFT", 16, -(40 + DT))
     rc.help:SetWidth(POPUP_LIST_W)
     rc.help:SetText("Tick the addons you'd suggest your friends install. They get this list with your setup, with a download link for each one they're missing. Recommendations only name addons: their settings aren't included unless you chose them in Choose addons. Addons you've turned off start unticked.")
 
     rc.list = ListBox(rc, 290, POPUP_LIST_W)
-    rc.list:SetPoint("TOPLEFT", 16, -102)
+    rc.list:SetPoint("TOPLEFT", 16, -(102 + DT))
     rc.summary = Text(rc, "GameFontDisableSmall")
     rc.summary:SetPoint("TOPLEFT", rc.list, "BOTTOMLEFT", 2, -6)
     rc.none = Btn(rc, "None", 60, function()
@@ -470,11 +487,11 @@ local function BuildRecommend()
     rc.status:SetPoint("LEFT", rc.update, "RIGHT", 12, 0)
     rc.status:SetWidth(POPUP_LIST_W - 210)
     rc.legend = Text(rc, "GameFontDisableSmall")
-    rc.legend:SetPoint("BOTTOMLEFT", 16, 14)
+    rc.legend:SetPoint("BOTTOMLEFT", 16, 14 + DB)
     rc.legend:SetWidth(POPUP_LIST_W - 100)
     rc.legend:SetText("Where it comes from: CurseForge, Wago or WoWInterface when the addon says so; otherwise friends get a CurseForge search link.")
     rc.done = Btn(rc, "Done", 80, function() rc:Hide() end)
-    rc.done:SetPoint("BOTTOMRIGHT", -16, 12)
+    rc.done:SetPoint("BOTTOMRIGHT", -16, 12 + DB)
 end
 
 local function RefreshRecommend()
@@ -538,7 +555,7 @@ local GROUP_STATE = {
 local function BuildParty()
     gp = MakePopup("TwichUIPartyCheck", POPUP_W, 540, "Party compatibility check", -10, 10)
     gp.help = Text(gp, "GameFontHighlightSmall")
-    gp.help:SetPoint("TOPLEFT", 16, -40)
+    gp.help:SetPoint("TOPLEFT", 16, -(40 + DT))
     gp.help:SetWidth(POPUP_LIST_W)
     gp.help:SetSpacing(2)
     gp.help:SetText(Head() .. "What it does|r\nShows which TwichUI version each person in your party or raid runs, and which of the addons you recommend they're missing. It only runs when you press Check this party.\n\n"
@@ -550,15 +567,15 @@ local function BuildParty()
         elseif not IsInGroup() then why = "Join a group first." end
         return "Asks the other TwichUI users in your group for their version, over the group channel only. Nobody else sees it.", why
     end)
-    gp.run:SetPoint("TOPLEFT", 16, -222)
+    gp.run:SetPoint("TOPLEFT", 16, -(222 + DT))
     gp.enable = Btn(gp, "Turn on group check", 170, function()
         R:SetEnabled("groupCheck", true, true)
         R.Group:SayHello()
         W:Refresh()
     end, "Lets TwichUI trade version numbers with other TwichUI users in your group (a few bytes, group channel only). Everyone who wants to show up here needs it on too. You can turn it off again in TwichUI's settings, on the Configuration sharing page.")
-    gp.enable:SetPoint("TOPLEFT", 16, -222)
+    gp.enable:SetPoint("TOPLEFT", 16, -(222 + DT))
     gp.list = ListBox(gp, 210, POPUP_LIST_W)
-    gp.list:SetPoint("TOPLEFT", 16, -254)
+    gp.list:SetPoint("TOPLEFT", 16, -(254 + DT))
     gp.you = Text(gp, "GameFontHighlightSmall")
     gp.you:SetPoint("TOPLEFT", gp.list, "BOTTOMLEFT", 2, -8)
     gp.you:SetWidth(POPUP_LIST_W)
@@ -566,7 +583,7 @@ local function BuildParty()
     gp.dm:SetPoint("TOPLEFT", gp.you, "BOTTOMLEFT", 0, -4)
     gp.dm:SetWidth(POPUP_LIST_W - 100)
     gp.done = Btn(gp, "Done", 80, function() gp:Hide() end)
-    gp.done:SetPoint("BOTTOMRIGHT", -16, 12)
+    gp.done:SetPoint("BOTTOMRIGHT", -16, 12 + DB)
 end
 
 local function RefreshParty()
@@ -855,8 +872,8 @@ local ap
 local STATE_LABEL = { missing = RED .. "Not installed|r", off = GOLD .. "Turned off|r", installed = GREEN .. "Installed|r" }
 
 local function BuildAddonPopup()
-    ap = CreateFrame("Frame", "TwichUIAddonList", UIParent, "BackdropTemplate")
-    ap:SetSize(560, 500)
+    ap = CreateFrame("Frame", "TwichUIAddonList", UIParent)
+    ap:SetSize(560, 500 + DT + DB)
     ap:SetPoint("CENTER", 40, -20)
     ap:SetFrameStrata("DIALOG")
     ap:SetToplevel(true)
@@ -868,17 +885,16 @@ local function BuildAddonPopup()
     ap:SetClampedToScreen(true)
     ap:HookScript("OnShow", R.FitToScreen)
     tinsert(UISpecialFrames, "TwichUIAddonList")
-    Look().Shell(ap, POPUP_HEADER)
+    Framed(ap, POPUP_HEADER)
     ap.title = Text(ap, "GameFontNormalLarge")
-    ap.title:SetPoint("TOPLEFT", 16, -12)
-    Look().CloseBox(ap)
+    ap.title:SetPoint("TOPLEFT", 16, -14)
     ap.sub = Text(ap, "GameFontHighlightSmall")
-    ap.sub:SetPoint("TOPLEFT", 16, -38)
+    ap.sub:SetPoint("TOPLEFT", 16, -(38 + DT))
     ap.sub:SetWidth(528)
 
     -- list (own scroll box; rows get a Link button)
     local box = CreateFrame("Frame", nil, ap, "BackdropTemplate")
-    box:SetPoint("TOPLEFT", 16, -64)
+    box:SetPoint("TOPLEFT", 16, -(64 + DT))
     box:SetSize(528, 250)
     Look().Well(box, 0.9)
     local scroll = CreateFrame("ScrollFrame", nil, box, "UIPanelScrollFrameTemplate")
@@ -923,7 +939,7 @@ local function BuildAddonPopup()
         ap.edit:SetFocus()
         ap.edit:HighlightText()
     end)
-    ap.copyAll:SetPoint("BOTTOMLEFT", 16, 12)
+    ap.copyAll:SetPoint("BOTTOMLEFT", 16, 12 + DB)
     ap.recheck = Btn(ap, "Check again", 110, function() W:ShowAddonList(ap.sourceKey) end,
         "Installed something? The game only notices new addons after you restart it; then check again.")
     ap.recheck:SetPoint("LEFT", ap.copyAll, "RIGHT", 8, 0)
@@ -994,19 +1010,19 @@ local ep
 local function BuildEuiShare()
     ep = MakePopup("TwichUIEuiShare", POPUP_W, 440, "Share an EllesmereUI profile", 20, 0)
     ep.help = Text(ep, "GameFontHighlightSmall")
-    ep.help:SetPoint("TOPLEFT", 16, -40)
+    ep.help:SetPoint("TOPLEFT", 16, -(40 + DT))
     ep.help:SetWidth(POPUP_LIST_W)
     ep.help:SetSpacing(2)
     ep.help:SetText("Pick one of your EllesmereUI profiles to include when you press Save setup. TwichUI asks EllesmereUI to export it, so your friend's EllesmereUI reads it like any of its own exports. It reaches them as a new profile; nothing of theirs is replaced.\n\n"
         .. Head() .. "Included|r  The profile's module settings, look (fonts, custom colours, dark mode, accent), layout links, Cooldown Manager spells and overrides.\n"
         .. Head() .. "Left out|r  UI scale, window and tooltip skins, which specs use a profile, click-cast, your other profiles, and your characters' names and gold.")
     ep.list = ListBox(ep, 190, POPUP_LIST_W)
-    ep.list:SetPoint("TOPLEFT", 16, -176)
+    ep.list:SetPoint("TOPLEFT", 16, -(176 + DT))
     ep.note = Text(ep, "GameFontDisableSmall")
     ep.note:SetPoint("TOPLEFT", ep.list, "BOTTOMLEFT", 2, -8)
     ep.note:SetWidth(POPUP_LIST_W - 100)
     ep.done = Btn(ep, "Done", 80, function() ep:Hide() end)
-    ep.done:SetPoint("BOTTOMRIGHT", -16, 12)
+    ep.done:SetPoint("BOTTOMRIGHT", -16, 12 + DB)
 end
 
 local function RefreshEuiShare()
@@ -1085,12 +1101,12 @@ end
 local function BuildEuiImport()
     ip = MakePopup("TwichUIEuiImport", POPUP_W, 540, "Import an EllesmereUI profile", -20, 0)
     ip.body = Text(ip, "GameFontHighlightSmall")
-    ip.body:SetPoint("TOPLEFT", 16, -40)
+    ip.body:SetPoint("TOPLEFT", 16, -(40 + DT))
     ip.body:SetWidth(POPUP_LIST_W)
     ip.body:SetJustifyV("TOP")
     ip.body:SetSpacing(2)
     ip.result = Text(ip, "GameFontHighlightSmall")
-    ip.result:SetPoint("BOTTOMLEFT", 16, 50)
+    ip.result:SetPoint("BOTTOMLEFT", 16, 50 + DB)
     ip.result:SetWidth(POPUP_LIST_W)
     ip.go = Btn(ip, "Import as a new profile", 200, function()
         local plan, pack = ip.plan, ST.SourcePack(ip.sourceKey)
@@ -1114,9 +1130,9 @@ local function BuildEuiImport()
             end,
         })
     end, "Adds the profile to EllesmereUI under the name shown, then reloads. Nothing you have is replaced.")
-    ip.go:SetPoint("BOTTOMLEFT", 16, 12)
+    ip.go:SetPoint("BOTTOMLEFT", 16, 12 + DB)
     ip.close = Btn(ip, "Close", 80, function() ip:Hide() end)
-    ip.close:SetPoint("BOTTOMRIGHT", -16, 12)
+    ip.close:SetPoint("BOTTOMRIGHT", -16, 12 + DB)
     ip:SetScript("OnHide", function() ip.failed = false; ES.ReleaseCache() end)
 end
 
@@ -1260,18 +1276,18 @@ end
 local function BuildTwichImport()
     tw = MakePopup("TwichUITwichImport", POPUP_W, 600, "TwichUI settings from a friend", 0, 0)
     tw.body = Text(tw, "GameFontHighlightSmall")
-    tw.body:SetPoint("TOPLEFT", 16, -40)
+    tw.body:SetPoint("TOPLEFT", 16, -(40 + DT))
     tw.body:SetWidth(POPUP_LIST_W)
     tw.body:SetJustifyV("TOP")
     tw.body:SetSpacing(2)
     tw.list = ListBox(tw, 150, POPUP_LIST_W)
-    tw.list:SetPoint("BOTTOMLEFT", 16, 92)
+    tw.list:SetPoint("BOTTOMLEFT", 16, 92 + DB)
     tw.result = Text(tw, "GameFontHighlightSmall")
-    tw.result:SetPoint("BOTTOMLEFT", 16, 66)
+    tw.result:SetPoint("BOTTOMLEFT", 16, 66 + DB)
     tw.result:SetWidth(POPUP_LIST_W)
     tw.go = Btn(tw, "Apply to this profile", 190, function() TwichApply(false) end,
         "Changes the profile you are using now: the ticked features take the shared values. Asks first; Undo puts them back.")
-    tw.go:SetPoint("BOTTOMLEFT", 16, 12)
+    tw.go:SetPoint("BOTTOMLEFT", 16, 12 + DB)
     tw.copy = Btn(tw, "Apply to a new profile", 190, function() TwichApply(true) end,
         "Makes a copy of your profile, switches this character to it, and applies the shared values there. Your current profile stays exactly as it is.")
     tw.copy:SetPoint("LEFT", tw.go, "RIGHT", 8, 0)
@@ -1298,7 +1314,7 @@ local function BuildTwichImport()
     end, "Puts back what the last import of TwichUI settings replaced.")
     tw.undo:SetPoint("LEFT", tw.copy, "RIGHT", 8, 0)
     tw.close = Btn(tw, "Close", 80, function() tw:Hide() end)
-    tw.close:SetPoint("BOTTOMRIGHT", -16, 12)
+    tw.close:SetPoint("BOTTOMRIGHT", -16, 12 + DB)
     tw:SetScript("OnHide", function() tw.failed, tw.report = false, nil end)
 end
 
@@ -1800,13 +1816,13 @@ local function PlaceTransferStatus()
     if tp.detailsText:IsShown() then
         tp.status:SetPoint("BOTTOMLEFT", tp.detailsText, "TOPLEFT", 0, 6)
     else
-        tp.status:SetPoint("BOTTOMLEFT", 18, 44)
+        tp.status:SetPoint("BOTTOMLEFT", 18, 44 + DB)
     end
 end
 
 local function BuildTransfer()
-    tp = CreateFrame("Frame", "TwichUIBackupTransfer", UIParent, "BackdropTemplate")
-    tp:SetSize(560, 470)
+    tp = CreateFrame("Frame", "TwichUIBackupTransfer", UIParent)
+    tp:SetSize(560, 470 + DT + DB)
     tp:SetPoint("CENTER", 40, -20)
     tp:SetFrameStrata("DIALOG")
     tp:SetToplevel(true)
@@ -1818,30 +1834,29 @@ local function BuildTransfer()
     tp:SetClampedToScreen(true)
     tp:HookScript("OnShow", R.FitToScreen)
     tinsert(UISpecialFrames, "TwichUIBackupTransfer")
-    Look().Shell(tp, POPUP_HEADER)
+    Framed(tp, POPUP_HEADER)
     tp.title = Text(tp, "GameFontNormalLarge")
-    tp.title:SetPoint("TOPLEFT", 16, -12)
-    Look().CloseBox(tp)
+    tp.title:SetPoint("TOPLEFT", 16, -14)
     tp.sub = Text(tp, "GameFontHighlightSmall")
-    tp.sub:SetPoint("TOPLEFT", 16, -38)
+    tp.sub:SetPoint("TOPLEFT", 16, -(38 + DT))
     tp.sub:SetWidth(528)
 
     -- Stacked from the bottom so the string box takes whatever height is left:
     -- buttons, then the Details text (when shown), then the status line, then the box.
     tp.status = Text(tp, "GameFontHighlightSmall")
-    tp.status:SetPoint("BOTTOMLEFT", 18, 44)
+    tp.status:SetPoint("BOTTOMLEFT", 18, 44 + DB)
     tp.status:SetWidth(524)
     tp.status:SetHeight(110)
     tp.status:SetJustifyV("TOP")
     tp.detailsText = Text(tp, "GameFontDisableSmall")
-    tp.detailsText:SetPoint("BOTTOMLEFT", 18, 44)
+    tp.detailsText:SetPoint("BOTTOMLEFT", 18, 44 + DB)
     tp.detailsText:SetWidth(524)
     tp.detailsText:SetJustifyV("TOP")
     tp.detailsText:SetText(DETAILS)
     tp.detailsText:Hide()
 
     local box = CreateFrame("Frame", nil, tp, "BackdropTemplate")
-    box:SetPoint("TOPLEFT", 16, -88)
+    box:SetPoint("TOPLEFT", 16, -(88 + DT))
     box:SetPoint("BOTTOMRIGHT", tp.status, "TOPRIGHT", 2, 10)
     Look().Well(box, 0.9)
     local sf = CreateFrame("ScrollFrame", nil, box, "UIPanelScrollFrameTemplate")
@@ -1923,14 +1938,14 @@ local function BuildTransfer()
         tp.detailsText:SetShown(not tp.detailsText:IsShown())
         PlaceTransferStatus()
     end)
-    tp.details:SetPoint("BOTTOMLEFT", 16, 12)
+    tp.details:SetPoint("BOTTOMLEFT", 16, 12 + DB)
 
     tp.copy = Btn(tp, "Copy export string", 160, function()
         tp.edit:SetFocus()
         tp.edit:HighlightText()
         SetTransferStatus(EXPORT_HELP)
     end, "Selects the whole string. Then press Ctrl+C.")
-    tp.copy:SetPoint("BOTTOMRIGHT", -16, 12)
+    tp.copy:SetPoint("BOTTOMRIGHT", -16, 12 + DB)
 
     tp.check = Btn(tp, "Check backup", 120, function()
         local text = tp.PastedText()
@@ -1952,7 +1967,7 @@ local function BuildTransfer()
             SetTransferStatus(RED .. msg .. "|r Nothing was changed.")
         end)
     end, "Reads the pasted string and shows what's in it. Nothing is saved yet.")
-    tp.check:SetPoint("BOTTOMRIGHT", -16, 12)
+    tp.check:SetPoint("BOTTOMRIGHT", -16, 12 + DB)
     tp.importBtn = Btn(tp, "Import as backup", 150, function()
         local point, why = R.Portable.Commit(tp.result)
         if not point then SetTransferStatus(RED .. (why or "That couldn't be imported.") .. "|r") return end
@@ -2187,7 +2202,7 @@ local function SetPage(which)
 end
 
 local function Build()
-    f = CreateFrame("Frame", "TwichUISetupWindow", UIParent, "BackdropTemplate")
+    f = CreateFrame("Frame", "TwichUISetupWindow", UIParent)
     f:SetSize(WIDTH, HEIGHT)
     f:SetPoint("CENTER")
     f:SetFrameStrata("HIGH")
@@ -2201,12 +2216,12 @@ local function Build()
     f:HookScript("OnShow", R.FitToScreen)
     tinsert(UISpecialFrames, "TwichUISetupWindow")
 
-    -- the rim, and a title band that holds the name and the tabs (its lower line is the tabs' rule)
-    Look().Shell(f, 62)
+    -- the frame, and a title strip that holds the name and the tabs (its lower line is the tabs' rule)
+    local head = Framed(f, MAIN_HEADER)
 
-    local logo = f:CreateTexture(nil, "ARTWORK")
+    local logo = head:CreateTexture(nil, "ARTWORK")
     logo:SetSize(26, 26)
-    logo:SetPoint("TOPLEFT", 12, -8)
+    logo:SetPoint("TOPLEFT", 16, -(8 + DT))
     logo:SetTexture(R.ICON)
     local title = Look().Text(f, "brand")   -- the name, as the settings window shows it
     title:SetPoint("LEFT", logo, "RIGHT", 8, 0)
@@ -2215,10 +2230,9 @@ local function Build()
     sub:SetPoint("LEFT", title, "RIGHT", 10, -1)
     sub:SetText("share and back up your addon setup")
 
-    Look().CloseBox(f)
     local storage = Btn(f, "Saved data", 100, function() W:ShowStorage() end,
         "See and delete what TwichUI keeps: your saved setup, setups friends sent you, backups, and Undo copies.")
-    storage:SetPoint("TOPRIGHT", -36, -9)
+    storage:SetPoint("TOPRIGHT", f.closeBox, "TOPLEFT", -6, 0)
 
     -- Tabs are plain buttons with no Blizzard template (Look.Tab): UIPanelButtonTemplate repaints its own art
     -- on every mouse down and up.
@@ -2226,21 +2240,21 @@ local function Build()
         return Look().Tab(f, label, width, onClick)
     end
     f.tabShare = TabBtn("Share setup", function() SetPage("share") end, 160)
-    f.tabShare:SetPoint("TOPLEFT", 14, -38)
+    f.tabShare:SetPoint("TOPLEFT", 16, -(38 + DT))
     f.tabReceived = TabBtn("Received setups", function() SetPage("received") end, 170)
     f.tabReceived:SetPoint("LEFT", f.tabShare, "RIGHT", 4, 0)
     f.tabBackups = TabBtn("Backups", function() SetPage("backups") end, 130)
     f.tabBackups:SetPoint("LEFT", f.tabReceived, "RIGHT", 4, 0)
 
     f.pageShare = CreateFrame("Frame", nil, f)
-    f.pageShare:SetPoint("TOPLEFT", 0, -74)
-    f.pageShare:SetPoint("BOTTOMRIGHT")
+    f.pageShare:SetPoint("TOPLEFT", 0, -(74 + DT))
+    f.pageShare:SetPoint("BOTTOMRIGHT", 0, DB)
     f.pageReceived = CreateFrame("Frame", nil, f)
-    f.pageReceived:SetPoint("TOPLEFT", 0, -74)
-    f.pageReceived:SetPoint("BOTTOMRIGHT")
+    f.pageReceived:SetPoint("TOPLEFT", 0, -(74 + DT))
+    f.pageReceived:SetPoint("BOTTOMRIGHT", 0, DB)
     f.pageBackups = CreateFrame("Frame", nil, f)
-    f.pageBackups:SetPoint("TOPLEFT", 0, -74)
-    f.pageBackups:SetPoint("BOTTOMRIGHT")
+    f.pageBackups:SetPoint("TOPLEFT", 0, -(74 + DT))
+    f.pageBackups:SetPoint("BOTTOMRIGHT", 0, DB)
     BuildShare(f.pageShare)
     BuildGet(f.pageReceived)
     BuildBackups(f.pageBackups)
@@ -2410,8 +2424,8 @@ SH:OnChange(function() W:UpdateToast() end)
 local sp
 
 local function BuildStorage()
-    sp = CreateFrame("Frame", "TwichUIStorage", UIParent, "BackdropTemplate")
-    sp:SetSize(560, 420)
+    sp = CreateFrame("Frame", "TwichUIStorage", UIParent)
+    sp:SetSize(560, 420 + DT + DB)
     sp:SetPoint("CENTER", 30, -10)
     sp:SetFrameStrata("DIALOG")
     sp:SetToplevel(true)
@@ -2423,18 +2437,17 @@ local function BuildStorage()
     sp:SetClampedToScreen(true)
     sp:HookScript("OnShow", R.FitToScreen)
     tinsert(UISpecialFrames, "TwichUIStorage")
-    Look().Shell(sp, POPUP_HEADER)
+    Framed(sp, POPUP_HEADER)
     local title = Text(sp, "GameFontNormalLarge")
-    title:SetPoint("TOPLEFT", 16, -12)
+    title:SetPoint("TOPLEFT", 16, -14)
     title:SetText("Saved data")
-    Look().CloseBox(sp)
     sp.sub = Text(sp, "GameFontHighlightSmall")
-    sp.sub:SetPoint("TOPLEFT", 16, -38)
+    sp.sub:SetPoint("TOPLEFT", 16, -(38 + DT))
     sp.sub:SetWidth(528)
     sp.sub:SetText("Everything setup sharing keeps between sessions. The game loads all of it each time you log in, so delete what you no longer need.")
 
     local box = CreateFrame("Frame", nil, sp, "BackdropTemplate")
-    box:SetPoint("TOPLEFT", 16, -76)
+    box:SetPoint("TOPLEFT", 16, -(76 + DT))
     box:SetSize(528, 280)
     Look().Well(box, 0.9)
     local scroll = CreateFrame("ScrollFrame", nil, box, "UIPanelScrollFrameTemplate")
@@ -2449,15 +2462,15 @@ local function BuildStorage()
     sp.rows = {}
 
     sp.total = Text(sp, "GameFontHighlightSmall")
-    sp.total:SetPoint("BOTTOMLEFT", 18, 20)
+    sp.total:SetPoint("BOTTOMLEFT", 18, 20 + DB)
     sp.total:SetWidth(360)
     sp.note = Text(sp, "GameFontDisableSmall")
-    sp.note:SetPoint("BOTTOMLEFT", 18, 6)
+    sp.note:SetPoint("BOTTOMLEFT", 18, 6 + DB)
     sp.note:SetText("Deleted data leaves the saved file the next time you reload or log out.")
     local explore = Btn(sp, "Look inside", 100, function()
         if R.ExplorerWindow then R.ExplorerWindow.Show() end
     end, "Opens the Saved Data Explorer: a read-only look at everything listed here and the rest of what TwichUI keeps. Advanced cleanup there is off until you turn it on.")
-    explore:SetPoint("BOTTOMRIGHT", -16, 12)
+    explore:SetPoint("BOTTOMRIGHT", -16, 12 + DB)
 end
 
 local function StorageRow(i)
@@ -2518,8 +2531,8 @@ end
 local sop
 
 local function BuildChannels()
-    sop = CreateFrame("Frame", "TwichUISendingOptions", UIParent, "BackdropTemplate")
-    sop:SetSize(540, 430)
+    sop = CreateFrame("Frame", "TwichUISendingOptions", UIParent)
+    sop:SetSize(540, 430 + DT + DB)
     sop:SetPoint("CENTER", 20, 0)
     sop:SetFrameStrata("DIALOG")
     sop:SetToplevel(true)
@@ -2531,19 +2544,18 @@ local function BuildChannels()
     sop:SetClampedToScreen(true)
     sop:HookScript("OnShow", R.FitToScreen)
     tinsert(UISpecialFrames, "TwichUISendingOptions")
-    Look().Shell(sop, POPUP_HEADER)
+    Framed(sop, POPUP_HEADER)
     local title = Text(sop, "GameFontNormalLarge")
-    title:SetPoint("TOPLEFT", 16, -12)
+    title:SetPoint("TOPLEFT", 16, -14)
     title:SetText("Sending options")
-    Look().CloseBox(sop)
 
     local why = Text(sop, "GameFontHighlightSmall")
-    why:SetPoint("TOPLEFT", 16, -42)
+    why:SetPoint("TOPLEFT", 16, -(42 + DT))
     why:SetWidth(508)
     why:SetSpacing(2)
     why:SetText(Head() .. "How to send|r\n" .. SH.TRANSPORT_EXPLAIN)
 
-    local y = -150
+    local y = -(150 + DT)
     sop.opts = {}
     local function Refresh()
         for _, c in ipairs(sop.opts) do c:SetChecked(SH.Transport() == c.key) end
@@ -2568,10 +2580,10 @@ local function BuildChannels()
     end
     sop.refreshChecks = Refresh
     sop.status = Text(sop, "GameFontHighlightSmall")
-    sop.status:SetPoint("BOTTOMLEFT", 16, 44)
+    sop.status:SetPoint("BOTTOMLEFT", 16, 44 + DB)
     sop.status:SetWidth(508)
     local note = Text(sop, "GameFontDisableSmall")
-    note:SetPoint("BOTTOMLEFT", 16, 12)
+    note:SetPoint("BOTTOMLEFT", 16, 12 + DB)
     note:SetWidth(508)
     note:SetText("This only controls how you send. A friend's configuration reaches you over any of the three, and you're always asked before anything is accepted or applied. If a send fails, nothing else is tried.")
 end
@@ -2592,23 +2604,24 @@ function W:ShowEditMode()
     local pack = src and src.pack
     if not (pack and pack.editMode) then return end
     if not em then
-        em = CreateFrame("Frame", "TwichUIEditModeText", UIParent, "BackdropTemplate")
-        em:SetSize(480, 140)
+        em = CreateFrame("Frame", "TwichUIEditModeText", UIParent)
+        em:SetSize(480, 140 + DT + DB)
         em:SetPoint("CENTER", 0, 140)
         em:SetFrameStrata("DIALOG")
         em:HookScript("OnShow", R.FitToScreen)
-        Look().Shell(em, 0)
+        em.shell = R.FrameLook.Shell(em, { below = true })   -- a compact dialog: the frame and interior, no title strip
+        R.FrameLook.FadeIn(em)
         em.text = Text(em, "GameFontHighlightSmall")
-        em.text:SetPoint("TOPLEFT", 14, -12)
-        em.text:SetPoint("TOPRIGHT", -14, -12)
+        em.text:SetPoint("TOPLEFT", 16, -(14 + DT))
+        em.text:SetPoint("TOPRIGHT", -16, -(14 + DT))
         em.box = Look().EditBox(em, 100, 24)
         em.box:SetSize(440, 24)
-        em.box:SetPoint("TOP", 0, -66)
+        em.box:SetPoint("TOP", 0, -(66 + DT))
         em.box:SetAutoFocus(false)
         em.box:SetScript("OnEditFocusGained", function(b) b:HighlightText() end)
         em.box:SetScript("OnEscapePressed", function() em:Hide() end)
         local done = Btn(em, "Done", 90, function() em:Hide() end)
-        done:SetPoint("BOTTOM", 0, 12)
+        done:SetPoint("BOTTOM", 0, 12 + DB)
     end
     em.text:SetText(("Layout: %s%s|r\nClick the box and press Ctrl+C. Then open Edit Mode, open the layout menu, choose Import, and paste."):format(Head(), pack.editModeName or "shared layout"))
     em.box:SetText(pack.editMode)

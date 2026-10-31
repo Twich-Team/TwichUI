@@ -137,7 +137,7 @@ to the destination). With no route only the straight line is given, and called a
 
 ## On screen
 
-- **Frame** (`nav/Frame.lua`): destination, instruction, distances, state, Stop and Recalculate. A MenuStyle look
+- **Frame** (`nav/Frame.lua`): destination, instruction, distances, state, Stop and Recalculate. Its look starts from the framed look's espresso and aged bronze as a plain line (no artwork: it is a heads-up frame, not a window; a saved color is read as saved). A MenuStyle look
   (`ui.navigationLook`), so it looks complete without EllesmereUI; a teal rule across the top. Locked, only its two buttons
   take the mouse; unlocked, drag it. Text is set only when it changes; updated on events, never per frame.
 - **Arrow** (`nav/Arrow.lua`, `media/textures/arrow-bronze.tga`, the picture RestedXP's guide skin uses for its arrow; white by default, no tint): points at the route's next corner, turned

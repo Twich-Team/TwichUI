@@ -17,7 +17,7 @@ local c = MIClient("Rich", {
     cl.CreateFrame = function(kind, name, parent) local fr = MIFake(kind, parent); if name then cl[name] = fr end return fr end
     cl.UIParent = MIFake("Frame"); cl.UIParent.w, cl.UIParent.h = 1920, 1080
     cl.GameTooltip = MIFake("GameTooltip")
-    for _, file in ipairs({ "chronicle/Style.lua", "Look.lua" }) do
+    for _, file in ipairs({ "chronicle/Style.lua", "Look.lua", "FrameLook.lua" }) do
       local chunk = assert(loadfile(ROOT .. file)); setfenv(chunk, cl); chunk("!!!TwichUI", {})
     end
   end,
@@ -223,5 +223,23 @@ c.TwichUIMagicInventoryPicker:Hide()   -- Esc
 Check(got == nil and not Pick.IsShown(), "Esc changes nothing")
 for _ = 1, 4 do Pick.Open({ selected = {}, onDone = function() end }); Pick.Cancel() end
 Check(Pick.CellCount() == 2, "reopening reuses the squares")
+
+-- the shared framed look: opening, redrawing and closing again make no frame, texture or hook
+local function Weight(fr)
+  local n = 1
+  for _, list in pairs(fr.hooks or {}) do n = n + #list end
+  for _, ch in ipairs(fr.children or {}) do n = n + Weight(ch) end
+  return n
+end
+local pw, ww = c.TwichUIMagicInventoryPicker, c.TwichUIMagicInventory
+Check(pw and pw.shell and ww and ww.shell, "the window and the picker are drawn on the shared shell")
+Win.Show(true); Flush()
+local pBefore, wBefore = Weight(pw), Weight(ww)
+for _ = 1, 4 do
+  Pick.Open({ selected = {}, onDone = function() end }); Pick.Cancel()
+  Win.Hide(); Win.Show(true); Flush(); Win.Refresh(); Flush()
+end
+Check(Weight(pw) == pBefore, "reopening the picker adds no frame, texture or hook")
+Check(Weight(ww) == wBefore, "reopening and redrawing the review adds no frame, texture or hook")
 
 if failures == 0 then print("PASSED test_magic_inventory_ui") else print(failures .. " failures") os.exit(1) end

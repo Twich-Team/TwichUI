@@ -536,9 +536,19 @@ end
 function K.Appearance(style, prefix, noun, previewTip, preview, resetLabel, resetTip, parent, isOn, options)
     local STRING, NUMBER = K.STRING, K.NUMBER
     local resettable = {}
+    local BORDER_DETAIL = { BorderSize = true, BorderColor = true, BorderOpacity = true }
     local function Add(row, suffix)
         if parent and row then K.Under(row, parent, isOn) end
         if row and options and options.decorate then options.decorate(suffix, row) end
+        -- a border the window draws itself (the TwichUI frame) has a fixed width and its own colors: say so rather than leave a
+        -- control that looks live and does nothing (the value stays saved, for the next border chosen)
+        if row and BORDER_DETAIL[suffix] and style.IsCustomBorder and not (options and options.decorate) then
+            K.Note(row, function()
+                if style.IsCustomBorder(style.Get("borderTexture")) then
+                    return "Not used by the TwichUI frame: it has a fixed width and its own colors. Pick another border to use this."
+                end
+            end)
+        end
         return row
     end
     local function Remember(suffix, varType, label, key)

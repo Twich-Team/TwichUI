@@ -50,7 +50,8 @@ local function Obj(parent)
   function api:GetStringWidth() return 100 end
   function api:IsEnabled() return true end
   function api:Click() if self.scripts.OnClick then self.scripts.OnClick(self, "LeftButton") end end
-  return setmetatable(o, { __index = function(_, k) return api[k] or function() end end })
+  -- a method the game has is a no-op here; a field never set is nil, as on a real frame
+  return setmetatable(o, { __index = function(_, k) return api[k] or (type(k) == "string" and k:find("^%u") and function() end or nil) end })
 end
 c.CreateFrame = function(_, _, parent) local f = Obj(parent); f.shown = true; return f end
 local loads = 0

@@ -36,9 +36,12 @@ local W = {}
 WZ.Window = W
 
 local FRAME_NAME = "TwichUILayoutWizard"
-local WIDTH, HEIGHT = 780, 590
-local HEADER_H, PAD, STEPPER_H, FOOTER_H = 44, 16, 30, 54
-local COMPACT_W, COMPACT_MIN_H, COMPACT_MAX_H = 520, 240, 600   -- the result dialog: a width of its own, a height that follows its content
+-- The frame's rails (FrameLook.lua) take the window's edge: the title strip and what lies under it is DT lower than it was without
+-- them, and what lies over the bottom edge is DB higher. The window is that much taller, so the page's viewport is what it always was.
+local DT, DB = 4, 5
+local WIDTH, HEIGHT = 780, 590 + DT + DB
+local HEADER_H, PAD, STEPPER_H, FOOTER_H = 44 + DT, 16, 30, 54
+local COMPACT_W, COMPACT_MIN_H, COMPACT_MAX_H = 520, 240 + DT + DB, 600 + DT + DB   -- the result dialog: a width of its own, a height that follows its content
 local EVENTS = { "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED", "DISPLAY_SIZE_CHANGED", "UI_SCALE_CHANGED" }
 local SCRIM_NAME = "TwichUILayoutWizardScrim"
 W.SCRIM_ALPHA = 0.40                          -- how dark the dimming is (the game stays plainly visible)
@@ -395,12 +398,12 @@ local function SetCompact(on)
     scroll:ClearAllPoints()
     if on then
         scroll:SetPoint("TOPLEFT", PAD, -(HEADER_H + PAD))
-        scroll:SetPoint("BOTTOMRIGHT", -PAD - 22, PAD)
+        scroll:SetPoint("BOTTOMRIGHT", -PAD - 22, PAD + DB)
         win:SetWidth(COMPACT_W)
         content:SetWidth(WZ.Pages.COMPACT_W)
     else
         scroll:SetPoint("TOPLEFT", PAD, -(HEADER_H + 10 + STEPPER_H + 8))
-        scroll:SetPoint("BOTTOMRIGHT", -PAD - 22, FOOTER_H + PAD)
+        scroll:SetPoint("BOTTOMRIGHT", -PAD - 22, FOOTER_H + PAD + DB)
         win:SetSize(WIDTH, HEIGHT)
         content:SetWidth(WZ.Pages.CONTENT_W)
         R.FitToScreen(win)
@@ -424,7 +427,7 @@ function W.Refresh(keep)
     content:SetHeight(math.max(h or 200, 200))
     if compact then
         -- as tall as the content (a scroll bar only if it does not fit the screen), never a mostly empty window
-        win:SetHeight(math.max(COMPACT_MIN_H, math.min(COMPACT_MAX_H, HEADER_H + 2 * PAD + (h or 200))))
+        win:SetHeight(math.max(COMPACT_MIN_H, math.min(COMPACT_MAX_H, HEADER_H + 2 * PAD + DB + (h or 200))))
         R.FitToScreen(win)
     end
     if scroll.SetVerticalScroll and W.lastStep ~= step then scroll:SetVerticalScroll(0) end
@@ -459,17 +462,19 @@ local function OnEvent(_, event)
 end
 
 local function Build()
-    local L = Look()
+    local L, F = Look(), R.FrameLook
     local pal = L.pal
+    local _, _, CR = F.ContentInsets()
     W.builds = W.builds + 1
     BuildScrim()
-    win = CreateFrame("Frame", FRAME_NAME, UIParent, "BackdropTemplate")
+    win = CreateFrame("Frame", FRAME_NAME, UIParent)
     -- the dimming goes the moment the window hides, before anything else its hiding runs (so nothing can leave it up)
     win:HookScript("OnHide", function() Dim(false) end)
     win:SetSize(WIDTH, HEIGHT)
     win:SetPoint("CENTER")
     win:SetFrameStrata("HIGH")
-    if win:GetFrameLevel() <= scrim:GetFrameLevel() then win:SetFrameLevel(scrim:GetFrameLevel() + 1) end
+    -- (two above the dimming: the frame's shell sits one level under the window and must still draw over it)
+    if win:GetFrameLevel() < scrim:GetFrameLevel() + 2 then win:SetFrameLevel(scrim:GetFrameLevel() + 2) end
     win:SetToplevel(true)
     win:SetClampedToScreen(true)
     win:SetMovable(true)
@@ -483,10 +488,13 @@ local function Build()
     local listed = false
     for _, n in ipairs(UISpecialFrames) do if n == FRAME_NAME then listed = true end end
     if not listed then tinsert(UISpecialFrames, FRAME_NAME) end
-    L.Shell(win, HEADER_H)
-    local crest = win:CreateTexture(nil, "ARTWORK")
+    -- the shared frame and interior (FrameLook.lua), under everything below; it follows the window's height (the result dialog is shorter)
+    win.shell = F.Shell(win, { below = true, follow = true })
+    F.FadeIn(win)
+    local head = win.shell:Header(HEADER_H)
+    local crest = head:CreateTexture(nil, "ARTWORK")
     crest:SetSize(30, 30)
-    crest:SetPoint("TOPLEFT", 14, -7)
+    crest:SetPoint("TOPLEFT", 16, -(7 + DT))
     WZ.Art.Apply(crest, "emblem")
     local title = L.Text(win, "title")
     title:SetPoint("LEFT", crest, "RIGHT", 8, 0)
@@ -494,7 +502,8 @@ local function Build()
     local sub = L.Text(win, "meta")
     sub:SetPoint("BOTTOMLEFT", title, "BOTTOMRIGHT", 10, 2)
     sub:SetText("interface layouts")
-    L.CloseBox(win)
+    win.closeBox = F.Close(win, function() win:Hide() end)
+    win.closeBox:SetPoint("TOPRIGHT", -(CR + 2), -12)
 
     -- the six steps
     stepper = CreateFrame("Frame", nil, win)
@@ -517,7 +526,7 @@ local function Build()
     scroll = CreateFrame("ScrollFrame", nil, win, "UIPanelScrollFrameTemplate")
     scroll.scrollBarHideable = 1   -- the template's own flag (SecureScrollTemplates.lua): the bar and its arrows show only while the page overflows
     scroll:SetPoint("TOPLEFT", PAD, -(HEADER_H + 10 + STEPPER_H + 8))
-    scroll:SetPoint("BOTTOMRIGHT", -PAD - 22, FOOTER_H + PAD)
+    scroll:SetPoint("BOTTOMRIGHT", -PAD - 22, FOOTER_H + PAD + DB)
     L.ScrollBar(scroll)
     content = CreateFrame("Frame", nil, scroll)
     content:SetSize(WZ.Pages.CONTENT_W, 200)
@@ -525,23 +534,23 @@ local function Build()
 
     -- the footer
     footer = CreateFrame("Frame", nil, win)
-    footer:SetPoint("BOTTOMLEFT", PAD, PAD)
-    footer:SetPoint("BOTTOMRIGHT", -PAD, PAD)
+    footer:SetPoint("BOTTOMLEFT", PAD, PAD + DB)
+    footer:SetPoint("BOTTOMRIGHT", -PAD, PAD + DB)
     footer:SetHeight(FOOTER_H - 10)
     local line = L.Solid(footer, "BORDER", pal.bronzeLo, 0.6)
     line:SetHeight(1)
     line:SetPoint("TOPLEFT", 0, 0)
     line:SetPoint("TOPRIGHT", 0, 0)
-    footer.close = L.Button(footer, "Close", 90, "secondary", function() W.Close("later") end)
+    footer.close = F.Button(footer, "Close", 90, "secondary", function() W.Close("later") end)
     footer.close:SetPoint("BOTTOMLEFT", 0, 0)
-    footer.next = L.Button(footer, "Next", 110, "primary", function()
+    footer.next = F.Button(footer, "Next", 110, "primary", function()
         local step = M.Step()
         if footer.done then W.Close("later")
         elseif step == M.REVIEW then Actions.apply()
         else M.Next() W.Refresh() end
     end)
     footer.next:SetPoint("BOTTOMRIGHT", 0, 0)
-    footer.back = L.Button(footer, "Back", 90, "secondary", function() M.Back() W.Refresh() end)
+    footer.back = F.Button(footer, "Back", 90, "secondary", function() M.Back() W.Refresh() end)
     footer.back:SetPoint("RIGHT", footer.next, "LEFT", -8, 0)
     footer.note = L.Text(footer, "small")
     footer.note:SetPoint("BOTTOMLEFT", footer.close, "BOTTOMRIGHT", 14, 2)
@@ -582,7 +591,7 @@ local function Build()
             if win and win:IsShown() then W.Refresh() end
         end)
     end
-    W.frames = W.frames + 8
+    W.frames = W.frames + 10   -- (the shell and the title strip are two of them)
     complete = true
 end
 

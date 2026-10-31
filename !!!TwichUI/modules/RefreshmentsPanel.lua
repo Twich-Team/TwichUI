@@ -23,11 +23,13 @@ local P = {}
 R.RefreshmentsPanel = P
 
 -- The panel's look, the player's to set on the Mage options page (the trade strip shares it). Its own
--- saved settings, TwichUIDB.ui.refreshmentsStyle; the defaults are the Chronicle's umber with a bronze line.
+-- saved settings, TwichUIDB.ui.refreshmentsStyle; the defaults are the framed look's espresso with its frame (FrameLook.lua),
+-- drawn for as long as the border is that one: any other border the player picks replaces it. Only a value the player saved is saved.
+local F = R.FrameLook
 P.Style = R.MenuStyle.New("refreshmentsStyle", {
-    bgTexture = "solid", bgColor = "ff261d15", bgOpacity = 98,
-    borderTexture = "solid", borderColor = "ff8c6e38", borderOpacity = 90, borderSize = 1,
-})
+    bgTexture = "solid", bgColor = F.PANEL_BG, bgOpacity = 98,
+    borderTexture = F.BORDER, borderColor = F.PANEL_BORDER, borderOpacity = 90, borderSize = 1,
+}, { extraBorders = { { F.BORDER, F.BORDER_LABEL } } })
 
 local NAME = "TwichUIRefreshments"
 local BUTTON_NAME = { water = "TwichUIRefreshmentsWater", food = "TwichUIRefreshmentsFood" }
@@ -366,7 +368,7 @@ local function BuildStrip(parent)
     strip.name:SetPoint("TOPLEFT", 2, -4)
     strip.name:SetPoint("RIGHT", -140, 0)
     -- With a trade TwichUI couldn't confirm waiting for them, these two confirm or dismiss it instead.
-    strip.supplied = S.Button(strip, "Supplied", 70, "primary", function()
+    strip.supplied = F.Button(strip, "Supplied", 70, "primary", function()
         if not selected then return end
         if RF.Unconfirmed(selected) then RF.ConfirmOffered(selected) else RF.MarkSupplied(selected) end
     end)
@@ -375,7 +377,7 @@ local function BuildStrip(parent)
         if selected and RF.Unconfirmed(selected) then return "Confirm: the trade went through, so what was offered counts as handed over." end
         return "Supplied: marks everything their share asks for as handed over."
     end)
-    strip.clear = S.Button(strip, "Clear", 56, "secondary", function()
+    strip.clear = F.Button(strip, "Clear", 56, "secondary", function()
         if not selected then return end
         if RF.Unconfirmed(selected) then RF.DismissOffered(selected) else RF.ClearGiven(selected) end
     end)
@@ -393,7 +395,7 @@ local function BuildStrip(parent)
         k.label:SetPoint("LEFT", 2, 0)
         k.label:SetText(RF.KIND_LABEL[kind])
         Color(k.label, K.textDim)
-        k.minus = S.Button(k, "-", 22, "secondary", function()
+        k.minus = F.Button(k, "-", 22, "secondary", function()
             if selected then RF.Adjust(selected, kind, -(k.step or 20)) end
         end)
         k.minus:SetPoint("LEFT", 40, 0)
@@ -401,7 +403,7 @@ local function BuildStrip(parent)
         k.value:SetPoint("LEFT", k.minus, "RIGHT", 4, 0)
         k.value:SetWidth(62)
         k.value:SetJustifyH("CENTER")
-        k.plus = S.Button(k, "+", 22, "secondary", function()
+        k.plus = F.Button(k, "+", 22, "secondary", function()
             if selected then RF.Adjust(selected, kind, k.step or 20) end
         end)
         k.plus:SetPoint("LEFT", k.value, "RIGHT", 4, 0)
@@ -444,7 +446,7 @@ local function Build()
     title:SetPoint("TOPLEFT", 18, -13)
     title:SetText("Refreshments")
     Color(title, K.text)
-    local close = S.Close(body, function() P.Close() end)
+    local close = F.Close(body, function() P.Close() end)
     close:SetPoint("TOPRIGHT", -9, -9)
 
     panel.context = Text(body, FONT_NOTE, 12, "GameFontNormalSmall")
@@ -498,7 +500,7 @@ local function Build()
     strip:SetPoint("TOPLEFT", PAD, -232 - listH - 8)
 
     footer = {}
-    footer.reset = S.Button(body, "Reset session", 110, "secondary", function()
+    footer.reset = F.Button(body, "Reset session", 110, "secondary", function()
         R.Interact.Confirm("TWICHUI_REFRESHMENTS_RESET",
             "Forget what you've marked as handed out this session? Your shares stay as they are.",
             function() RF.ResetSession("manual") end)
@@ -527,6 +529,8 @@ function Restyle()
     end
     restyle = false
     local edge = math.ceil(P.Style.Apply(panel))
+    local framed = F.Frame(panel, P.Style)        -- the frame, while the border is the default one (after Apply: it never covers the player's own)
+    if framed > 0 then edge = framed end
     panel:SetSize(WIDTH + edge * 2, HEIGHT + edge * 2)
 end
 P.Restyle = Restyle

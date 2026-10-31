@@ -134,7 +134,7 @@ K.Page({
         if PR and PR.Style then
             local Style = PR.Style
             local rowsBy = {}
-            local function Rim() return Style.Get("borderTexture") == PR.LEDGER end
+            local function Rim() return Style.IsCustomBorder(Style.Get("borderTexture")) end   -- the TwichUI frame or rim: fixed width and colors
             local function Decorate(suffix, row)
                 rowsBy[suffix] = row
                 if suffix == "BorderSize" then
@@ -142,18 +142,18 @@ K.Page({
                         return Style.Get("borderTexture") ~= "none" and not Rim()
                     end, function()
                         if Style.Get("borderTexture") == "none" then return "Greyed out: no border is drawn." end
-                        return "Greyed out: the TwichUI rim has a fixed width. Pick another border to set a thickness."
+                        return "Greyed out: the TwichUI frame and rim have a fixed width. Pick another border to set a thickness."
                     end)
                 elseif suffix == "BorderColor" or suffix == "BorderOpacity" then
                     Under(row, rowsBy.BorderTexture, function()
                         return Style.Get("borderTexture") ~= "none" and not Rim()
                     end, function()
                         if Style.Get("borderTexture") == "none" then return "Greyed out: no border is drawn." end
-                        return "Greyed out: the TwichUI rim keeps its own colors. Pick another border to set a color."
+                        return "Greyed out: the TwichUI frame and rim keep their own colors. Pick another border to set a color."
                     end)
                 end
             end
-            Header("Question window appearance", "How the window that asks \"Restock from this merchant?\" looks: its background and border. Only the look changes; what it asks, the rows, the total and the Purchase and Cancel buttons are the same, and nothing is bought unless you press Purchase. The default is the TwichUI rim over a dark page; any other border replaces the rim and the window grows to give it room. The title band, the list and the total panel keep their own tint.")
+            Header("Question window appearance", "How the window that asks \"Restock from this merchant?\" looks: its background and border. Only the look changes; what it asks, the rows, the total and the Purchase and Cancel buttons are the same, and nothing is bought unless you press Purchase. The default is the TwichUI frame over a dark page; the older TwichUI rim is still in the border list, and any other border replaces either and the window grows to give it room. The title band, the list and the total panel keep their own tint.")
             K.Appearance(Style, "restockPrompt", "window",
                 "Shows the real window beside these settings with made-up items, to see these changes as you make them. Purchase and Cancel in it only close it: nothing is bought, and no merchant is involved. Esc closes it too.",
                 function() PR.TogglePreview() end,

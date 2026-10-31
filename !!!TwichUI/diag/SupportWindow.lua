@@ -10,6 +10,7 @@ R.SupportWindow = W
 
 local FRAME_NAME = "TwichUISupportWindow"
 local WIDTH, HEIGHT = 620, 500
+local HEADER = 40      -- the title strip, inside the frame's rails
 
 local f          -- the window, built on first use
 local fixed      -- the report as shown: typing in the box puts it back
@@ -17,9 +18,10 @@ local fixed      -- the report as shown: typing in the box puts it back
 local function Say(fmt, ...) R.Print("support information: " .. fmt, ...) end
 
 local function Build()
-    local L = R.Look
-    if not (L and L.Shell and L.Text) then return nil end
-    f = CreateFrame("Frame", FRAME_NAME, UIParent, "BackdropTemplate")
+    local L, F = R.Look, R.FrameLook
+    if not (L and L.Text and L.Well and L.ScrollBar and F and F.Ready()) then return nil end
+    local _, _, CR = F.ContentInsets()
+    f = CreateFrame("Frame", FRAME_NAME, UIParent)
     f:Hide()
     f:SetSize(WIDTH, HEIGHT)
     f:SetPoint("CENTER")
@@ -33,30 +35,33 @@ local function Build()
     f:SetClampedToScreen(true)
     f:HookScript("OnShow", R.FitToScreen)
     tinsert(UISpecialFrames, FRAME_NAME)
-    L.Shell(f, 34)
+    f.shell = F.Shell(f, { below = true, follow = true })   -- the shared frame and interior (FrameLook.lua), under everything below
+    F.FadeIn(f)
+    local head = f.shell:Header(HEADER)
 
-    local logo = f:CreateTexture(nil, "ARTWORK")
+    local logo = head:CreateTexture(nil, "ARTWORK")
     logo:SetSize(22, 22)
-    logo:SetPoint("TOPLEFT", 12, -10)
+    logo:SetPoint("TOPLEFT", 16, -14)
     logo:SetTexture(R.ICON)
     local title = L.Text(f, "title")
     title:SetPoint("LEFT", logo, "RIGHT", 8, 0)
     title:SetText("Support information")
-    L.CloseBox(f)
+    local close = F.Close(f, function() f:Hide() end)
+    close:SetPoint("TOPRIGHT", -(CR + 2), -12)
 
     local intro = L.Text(f, "small")
-    intro:SetPoint("TOPLEFT", 16, -48)
+    intro:SetPoint("TOPLEFT", 16, -(HEADER + 10))
     intro:SetWidth(WIDTH - 32)
     intro:SetText("This is exactly what would be shared. It is built on your computer when this window opens or you press Refresh, "
         .. "and nothing is sent anywhere. It lists versions, the state of TwichUI's optional integrations and which features are on. "
         .. "It has no character, realm, guild or friend names, chat, records, saved data or file paths. Read it first; then press "
         .. "Ctrl+C (the text is selected for you) and paste it where you were asked to.")
 
-    local refresh = L.Button(f, "Refresh", 90, "secondary", function() W.Refresh() end)
+    local refresh = F.Button(f, "Refresh", 90, "secondary", function() W.Refresh() end)
     refresh:SetHeight(22)
-    local selectAll = L.Button(f, "Select all", 90, "secondary", function() W.Select() end)
+    local selectAll = F.Button(f, "Select all", 90, "secondary", function() W.Select() end)
     selectAll:SetHeight(22)
-    selectAll:SetPoint("BOTTOMLEFT", 16, 14)
+    selectAll:SetPoint("BOTTOMLEFT", 16, 18)
     refresh:SetPoint("LEFT", selectAll, "RIGHT", 8, 0)
     f.note = L.Text(f, "meta")
     f.note:SetPoint("LEFT", refresh, "RIGHT", 12, 0)
@@ -65,7 +70,7 @@ local function Build()
 
     local box = CreateFrame("Frame", nil, f, "BackdropTemplate")
     box:SetPoint("TOPLEFT", intro, "BOTTOMLEFT", 0, -12)
-    box:SetPoint("BOTTOMRIGHT", -16, 46)
+    box:SetPoint("BOTTOMRIGHT", -16, 50)
     L.Well(box, 0.9)
     local scroll = CreateFrame("ScrollFrame", nil, box, "UIPanelScrollFrameTemplate")
     scroll:SetPoint("TOPLEFT", 6, -6)

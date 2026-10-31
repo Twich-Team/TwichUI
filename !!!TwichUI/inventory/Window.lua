@@ -6,8 +6,9 @@
 --   mail:        "Prepare mail 1 of 2 to Bankalt" attaches; "Send mail 1 of 2 to Bankalt" sends (one recipient a mail);
 --   bank, guild: "Deposit 8 stacks" moves them one after another.
 -- Opening an interface only builds the count; nothing moves, nothing is announced, and the review never opens by
--- itself. The window is built the first time it is shown and reuses its rows. Drawn with the shared look (Look.lua):
--- charcoal and stone, ivory text, bronze structure, the one teal action, and amber for what needs a look.
+-- itself. The window is built the first time it is shown and reuses its rows. Drawn with the shared framed look (FrameLook.lua):
+-- the illustrated frame, an espresso interior, ivory text, beveled buttons with chestnut for the one primary action, and amber for
+-- what needs a look.
 
 local R = TwichUI
 local MI = R.MagicInventory
@@ -122,10 +123,6 @@ local function Row(i)
     row.meta = L.Text(row, "small")
     row.meta:SetJustifyH("LEFT")
     row.meta:SetWordWrap(true)
-    row.toggle = L.Button(row, "Leave out", 96, "secondary", function(b) if b.onClick then b.onClick() end end)
-    row.toggle:SetPoint("TOPRIGHT", -4, -6)
-    row.action = L.Button(row, "", 240, "primary", function(b) if b.onClick then b.onClick() end end)
-    row.action:SetPoint("TOPRIGHT", -4, -6)
     row:SetScript("OnEnter", function(self)
         if self.link or self.itemID then
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
@@ -139,6 +136,17 @@ local function Row(i)
     return row
 end
 
+-- A row's buttons are made the first time the row needs one (an item row has a toggle, a heading an action), and kept.
+local function RowButton(row, key, label, w, kind)
+    local b = row[key]
+    if not b then
+        b = R.FrameLook.Button(row, label, w, kind, function(self) if self.onClick then self.onClick() end end)
+        b:SetPoint("TOPRIGHT", -4, -6)
+        row[key] = b
+    end
+    return b
+end
+
 local y
 local function Place(row, h)
     row:SetHeight(h)
@@ -148,8 +156,8 @@ end
 local function Reset(row)
     row.link, row.itemID = nil, nil
     row.icon:Hide()
-    row.toggle:Hide(); row.toggle.onClick = nil
-    row.action:Hide(); row.action.onClick = nil
+    if row.toggle then row.toggle:Hide(); row.toggle.onClick = nil end
+    if row.action then row.action:Hide(); row.action.onClick = nil end
     row.title:ClearAllPoints(); row.meta:ClearAllPoints()
     row.title:SetText(""); row.meta:SetText("")
     Look().Color(row.title, Look().pal.text)
@@ -186,15 +194,16 @@ local function Heading(text, sentence, actionLabel, enabled, why, onClick)
         h = h + math.max(14, row.meta:GetStringHeight() or 14) + 4
     end
     if actionLabel then
-        row.action.text:SetText(actionLabel)
-        row.action:SetEnabled(enabled and true or false)
-        row.action.onClick = enabled and onClick or nil
-        row.action:Show()
+        local action = RowButton(row, "action", "", 240, "primary")
+        action.text:SetText(actionLabel)
+        action:SetEnabled(enabled and true or false)
+        action.onClick = enabled and onClick or nil
+        action:Show()
         if why then
-            R.Interact.Tip(row.action, actionLabel, why)
+            R.Interact.Tip(action, actionLabel, why)
             h = math.max(h, 36)
         else
-            R.Interact.Tip(row.action, actionLabel, nil)
+            R.Interact.Tip(action, actionLabel, nil)
         end
         if not enabled and why then
             row.meta:SetText((sentence and sentence ~= "" and (sentence .. "\n") or "") .. why)
@@ -223,10 +232,11 @@ local function ItemRow(id, facts, count, detail, tone, toggle)
     row.meta:SetText(detail or "")
     if tone == "warn" then L.Color(row.meta, AMBER) elseif tone == "quiet" then L.Color(row.meta, L.pal.stone) end
     if toggle then
-        row.toggle.text:SetText(toggle.label)
-        row.toggle.onClick = toggle.onClick
-        row.toggle:SetEnabled(toggle.enabled ~= false)
-        row.toggle:Show()
+        local b = RowButton(row, "toggle", "Leave out", 96, "secondary")
+        b.text:SetText(toggle.label)
+        b.onClick = toggle.onClick
+        b:SetEnabled(toggle.enabled ~= false)
+        b:Show()
     end
     Place(row, math.max(ICON + 10, (row.title:GetStringHeight() or 14) + (row.meta:GetStringHeight() or 12) + 12))
     return row
@@ -406,9 +416,11 @@ function W.Say(text, tone)
 end
 
 local function Build()
-    local L = Look()
-    if not (L and L.Shell and R.ChronicleStyle) then return false end
-    f = CreateFrame("Frame", NAME, UIParent, "BackdropTemplate")
+    local L, F = Look(), R.FrameLook
+    if not (L and L.Text and L.ScrollBar and F and F.Ready()) then return false end
+    local _, _, CR = F.ContentInsets()
+    local RL, RT, RR = F.RailInsets()
+    f = CreateFrame("Frame", NAME, UIParent)
     f:SetSize(WIDTH, HEIGHT)
     f:SetPoint("CENTER", UIParent, "CENTER", 260, 40)
     f:SetFrameStrata("HIGH")
@@ -421,21 +433,29 @@ local function Build()
     f:SetScript("OnDragStop", f.StopMovingOrSizing)
     f:Hide()
     tinsert(UISpecialFrames, NAME)   -- Esc closes it (a run in progress goes on; Stop stops it)
-    L.Shell(f, HEADER)
+    f.shell = F.Shell(f, { below = true, follow = true })        -- the shared frame and interior (FrameLook.lua), under everything below
+    F.FadeIn(f)
     f:HookScript("OnShow", R.FitToScreen)
-    f.title = L.Text(f, "title")
+    local head = CreateFrame("Frame", nil, f)      -- the header: title and close box over the shell's sheen and groove
+    head:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
+    head:SetPoint("TOPRIGHT", f, "TOPRIGHT", 0, 0)
+    head:SetHeight(HEADER)
+    f.shell:Sheen():Place(head, RL, RT, RR, 0)
+    f.shell:Groove():Place(head, "BOTTOM", 0, RL, RR)
+    f.title = L.Text(head, "title")
     f.title:SetPoint("TOPLEFT", PAD, -14)
     f.title:SetText("Magic Inventory")
-    L.CloseBox(f, function() f:Hide() end)
+    f.close = F.Close(f, function() f:Hide() end)
+    f.close:SetPoint("TOPRIGHT", -(CR + 2), -12)
     f.sub = L.Text(f, "small")
     f.sub:SetPoint("TOPLEFT", PAD, -(HEADER + 10))
     f.sub:SetPoint("RIGHT", f, "RIGHT", -PAD, 0)
     f.sub:SetJustifyH("LEFT")
 
-    local box = CreateFrame("Frame", nil, f, "BackdropTemplate")
+    local box = CreateFrame("Frame", nil, f)
     box:SetPoint("TOPLEFT", PAD, -(HEADER + 30))
     box:SetPoint("BOTTOMRIGHT", -PAD, FOOT)
-    L.Well(box)
+    f.shell:Recess():Place(box, 0, 0, 0, 0)        -- the list sits in a recess, a step deeper than the interior
     local scroll = CreateFrame("ScrollFrame", nil, box, "UIPanelScrollFrameTemplate")
     scroll:SetPoint("TOPLEFT", 6, -6)
     scroll:SetPoint("BOTTOMRIGHT", -26, 6)
@@ -445,19 +465,19 @@ local function Build()
     scroll:SetScrollChild(f.content)
 
     f.status = L.Text(f, "small")
-    f.status:SetPoint("BOTTOMLEFT", PAD, 44)
+    f.status:SetPoint("BOTTOMLEFT", PAD, 46)
     f.status:SetPoint("RIGHT", f, "RIGHT", -PAD, 0)
     f.status:SetJustifyH("LEFT")
-    f.stop = L.Button(f, "Stop", 90, "danger", function()
+    f.stop = F.Button(f, "Stop", 90, "danger", function()
         Run.Stop("stopped")
     end)
-    f.stop:SetPoint("BOTTOMLEFT", PAD, 12)
+    f.stop:SetPoint("BOTTOMLEFT", PAD, 16)
     R.Interact.Tip(f.stop, "Stop", "Stops before the next step. What was already sent or deposited stays where it went: mail and deposits can't be undone.")
-    f.manage = L.Button(f, "Manage rules", 120, "secondary", function()
+    f.manage = F.Button(f, "Manage rules", 120, "secondary", function()
         if R.OpenSettings then R:OpenSettings("magicInventory") end
     end)
-    f.manage:SetPoint("BOTTOMRIGHT", -PAD, 12)
-    f.again = L.Button(f, "Review again", 120, "secondary", function()
+    f.manage:SetPoint("BOTTOMRIGHT", -PAD, 16)
+    f.again = F.Button(f, "Review again", 120, "secondary", function()
         W.said = nil
         if not Run.Current() then leftOut = {} end
         W.Refresh()

@@ -191,7 +191,7 @@ function Pv.Build(parent, handlers)
         view.tabs[sc.id] = tab
         x = x + w + 2
     end
-    view.full = L.Button(view.controls, "See it full size", 150, "secondary", function() if handlers.overlay then handlers.overlay() end end)
+    view.full = R.FrameLook.Button(view.controls, "See it full size", 150, "secondary", function() if handlers.overlay then handlers.overlay() end end)
     view.full:SetHeight(24)
     view.full:SetPoint("TOPLEFT", 0, -34)
     R.Interact.Tip(view.full, "See it full size", "Shows this layout over your screen at its real size and place, with sample content. Your interface is dimmed behind it, not hidden or moved, and nothing is applied. Needs you out of combat.")

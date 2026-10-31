@@ -388,7 +388,7 @@ do
   Check(not Says(w, "settings checked") and not Says(w, "read back by value") and not Says(w, "What was chosen"), "no counts or breakdowns on its face")
   Check(Says(w, "Some addon settings could not be fully verified."), "a limited check is a quiet note, not an error")
   Check(not Has(w, "Get started") and not Has(w, "Back") and not Has(w, "Close") and not Find(w, "1  Welcome"), "no stepper and no footer")
-  Check(w.w == 520 and w.h < 590 and w.h >= 240, "a window of its own size (" .. w.w .. " x " .. w.h .. "), not the six-step one")
+  Check(w.w == 520 and w.h < 599 and w.h >= 240, "a window of its own size (" .. w.w .. " x " .. w.h .. "), not the six-step one")
   Check(WW.Scrim() and WW.Scrim():IsShown(), "the screen is dimmed once, as for the wizard")
   -- sized by content: expanding Details grows it, collapsing shrinks it back
   local h0 = w.h
@@ -439,7 +439,7 @@ do
     Open(k)
     Expand(w, "Manage layout")
     Click(w, "Set up again")   -- into the six steps and back out
-    Check(not WW.IsCompact() and w.w == 780 and w.h == 590, "Set up again is the full six-step window")
+    Check(not WW.IsCompact() and w.w == 780 and w.h == 599, "Set up again is the full six-step window")
     WW.Close()
   end
   Check(k.made() == made and WW.frames == frames and WW.listening == 0, "eight more open-and-close cycles made no frames and left no listeners")

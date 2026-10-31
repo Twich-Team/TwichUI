@@ -40,7 +40,12 @@ same textures. Backgrounds: the game's own, the textures EllesmereUI offers for 
 EllesmereUI draws them. Borders: the game's own, EllesmereUI's own border textures (drawn by its `ApplyBorderStyle` on a
 frame of TwichUI's), and LibSharedMedia's. Nothing of EllesmereUI's is copied. Saved apart from
 the menus' look, in `TwichUIDB.ui.refreshmentsStyle`, only the values changed; checked on every read. The defaults are
-the Chronicle's umber with a 1-pixel bronze line.
+the framed look's (`FrameLook.lua`): its espresso and its compact frame, drawn while the border is `FrameLook.BORDER`
+("TwichUI frame (default)", a border id of this look's own that `MenuStyle.Apply` draws no edge for; `FrameLook.Frame`
+shows the frame over the player's own background and puts it away for any other border). A value the player saved,
+the old `ff261d15` and the 1-pixel line included, is read as saved and drawn as it was; the broker menus' look
+(`R.MenuStyle`, the Mage launchers') keeps the Chronicle's umber and its line, and is not the panel's. The panel's and
+strip's buttons are the framed look's.
 
 The look is drawn on the outer frame; the content sits in a fixed-size frame inside it, and the outer frame grows by
 the border's thickness on each side, so a thick border never covers anything. The panel holds secure buttons, so it

@@ -27,6 +27,12 @@ local UI = {}
 
 local WIDTH, HEIGHT = 920, 660
 local HEADER_H, FOOTER_H, NAV_W, PAD = 54, 38, 212, 14
+-- The frame (FrameLook.lua) takes a few units at each edge for its rails: the header and footer sit inside them, and the page area
+-- begins this far from the top and bottom of the window.
+local F = R.FrameLook
+local _, _, CR, CB = F.ContentInsets()
+local RL, RT, RR = F.RailInsets()
+local PAGE_TOP, PAGE_BOTTOM_Y = HEADER_H + 12, FOOTER_H + CB
 local CONTENT_W = WIDTH - PAD - NAV_W - 12 - 24 - PAD
 -- Narrower than the first size would crowd the rows (a label and its 236 px control) and the pages' own frames, which
 -- are laid out for that width; shorter than this leaves the page area too small to read a card. Larger: the screen.
@@ -1185,17 +1191,13 @@ function UI.ReloadNotice() UI.RefreshFooter() end
 
 local function BuildFooter()
     footer = CreateFrame("Frame", nil, win)
-    footer:SetPoint("BOTTOMLEFT", PAD, 8)
-    footer:SetPoint("BOTTOMRIGHT", -(PAD + 4), 8)   -- ends before the resize grip
+    footer:SetPoint("BOTTOMLEFT", PAD, CB)
+    footer:SetPoint("BOTTOMRIGHT", -(PAD + 4), CB)   -- ends before the resize grip
     footer:SetHeight(FOOTER_H - 12)
-    local rule = Wg.Solid(win, "BORDER", pal.bronzeLo, 0.6)
+    local rule = Wg.Solid(win, "BORDER", pal.bronzeLo, 0.6)   -- the footer sits on the frame's interior, under a quiet line
     rule:SetHeight(1)
     rule:SetPoint("BOTTOMLEFT", footer, "TOPLEFT", 0, 4)
     rule:SetPoint("BOTTOMRIGHT", footer, "TOPRIGHT", 0, 4)
-    local base = Wg.Solid(win, "BACKGROUND", pal.band, 1)   -- the footer sits on the header's dark base
-    base:SetPoint("BOTTOMLEFT", 4, 4)
-    base:SetPoint("BOTTOMRIGHT", -4, 4)
-    base:SetHeight(FOOTER_H - 4)
     footer.profile = CreateFrame("Button", nil, footer)
     footer.profile:SetHeight(20)
     footer.profile:SetPoint("LEFT", 0, 0)
@@ -1370,7 +1372,7 @@ end
 local function BuildGrip()
     local grip = CreateFrame("Button", nil, win)
     grip:SetSize(GRIP, GRIP)
-    grip:SetPoint("BOTTOMRIGHT", win, "BOTTOMRIGHT", -3, 3)
+    grip:SetPoint("BOTTOMRIGHT", win, "BOTTOMRIGHT", -CR, CB)
     grip:SetFrameLevel(win:GetFrameLevel() + 20)
     grip:EnableMouse(true)
     local dots = {}
@@ -1394,7 +1396,7 @@ local function BuildGrip()
 end
 
 local function BuildWindow()
-    win = CreateFrame("Frame", "TwichUISettingsWindow", UIParent, "BackdropTemplate")
+    win = CreateFrame("Frame", "TwichUISettingsWindow", UIParent)
     win:SetSize(WIDTH, HEIGHT)
     win:SetFrameStrata("HIGH")
     win:SetToplevel(true)
@@ -1403,13 +1405,15 @@ local function BuildWindow()
     win:EnableMouse(true)
     if win.SetDontSavePosition then win:SetDontSavePosition(true) end
     win:Hide()
-    Wg.Frame(win, WIDTH, HEIGHT, HEADER_H - 4)
-    Wg.Header(win, HEADER_H - 4)
+    -- the shared frame and interior (FrameLook.lua), one level under the window so the window's own text is drawn over it
+    win.shell = F.Shell(win, { below = true, follow = true })
 
     local header = CreateFrame("Frame", nil, win)
-    header:SetPoint("TOPLEFT", 4, -4)
-    header:SetPoint("TOPRIGHT", -4, -4)
+    header:SetPoint("TOPLEFT", RL, -RT)
+    header:SetPoint("TOPRIGHT", -RR, -RT)
     header:SetHeight(HEADER_H - 4)
+    win.shell:Sheen():Place(header, 0, 0, 0, 0)
+    win.shell:Groove():Place(header, "BOTTOM", 0, 0, 0)
     header:EnableMouse(true)
     header:RegisterForDrag("LeftButton")
     header:SetScript("OnDragStart", function() win:StartMoving() end)
@@ -1428,22 +1432,21 @@ local function BuildWindow()
     local sub = Wg.Text(header, "meta")
     sub:SetPoint("BOTTOMLEFT", brand, "BOTTOMRIGHT", 10, 2)
     sub:SetText("Settings")
-    local close = S.Close(header, function() UI.Close() end, pal)
+    local close = F.Close(header, function() UI.Close() end)
     close:SetPoint("RIGHT", header, "RIGHT", -10, 0)
-    Wg.Raise(close)
     I.Tip(close, "Close", "Closes the settings. Your changes are already saved.")
     BuildSearch(header)
 
     nav = CreateFrame("Frame", nil, win, "BackdropTemplate")
-    nav:SetPoint("TOPLEFT", PAD, -(HEADER_H + 10))
-    nav:SetPoint("BOTTOMLEFT", PAD, FOOTER_H + 8)
+    nav:SetPoint("TOPLEFT", PAD, -PAGE_TOP)
+    nav:SetPoint("BOTTOMLEFT", PAD, PAGE_BOTTOM_Y)
     nav:SetWidth(NAV_W)
     Wg.Surface(nav, pal.nav, 0.97, pal.bronzeLo, 0.5)
     Wg.Recess(nav, 1.3)   -- the list sits pressed into the window
 
     local area = CreateFrame("Frame", nil, win)
     area:SetPoint("TOPLEFT", nav, "TOPRIGHT", 12, 0)
-    area:SetPoint("BOTTOMRIGHT", -PAD, FOOTER_H + 8)
+    area:SetPoint("BOTTOMRIGHT", -PAD, PAGE_BOTTOM_Y)
     scroll, content = Wg.Scroll(area, CONTENT_W)
     scroll:SetPoint("TOPLEFT", 0, 0)
     scroll:SetPoint("BOTTOMRIGHT", -24, 0)

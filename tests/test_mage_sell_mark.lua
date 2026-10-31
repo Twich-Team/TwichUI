@@ -127,7 +127,7 @@ local function Bags(list)
   end
 end
 
-for _, f in ipairs({ "chronicle/Style.lua", "modules/Interact.lua", "modules/Borders.lua", "modules/FoodDrink.lua",
+for _, f in ipairs({ "chronicle/Style.lua", "FrameLook.lua", "modules/Interact.lua", "modules/Borders.lua", "modules/FoodDrink.lua",
   "modules/EllesmereJunk.lua", "modules/MageSell.lua", "modules/MageSellWindow.lua"}) do
   local chunk = loadfile(ROOT .. f)
   if chunk then setfenv(chunk, c); chunk("!!!TwichUI", {}) end

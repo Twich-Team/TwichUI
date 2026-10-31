@@ -15,6 +15,7 @@ local function Obj()
     if k == "HasFocus" then return function() return false end end
     if k == "CreateFontString" or k == "CreateTexture" then return function() return Obj() end end
     if k == "ScrollBar" or k == "ThumbTexture" or k == "ScrollUpButton" or k == "ScrollDownButton" then local sb = Obj(); rawset(t, k, sb); return sb end
+    if type(k) == "string" and k:find("^%l") then return nil end   -- a field never set is nil, as on a real frame
     return function() end
   end})
 end
@@ -28,7 +29,7 @@ c.UnitIsPlayer = function() return false end
 c.InCombatLockdown = function() return false end
 c.ACCEPT, c.CANCEL = "Accept", "Cancel"
 c.Settings = nil
-for _, f in ipairs({"chronicle/Style.lua", "Look.lua", "setup/Window.lua"}) do
+for _, f in ipairs({"chronicle/Style.lua", "Look.lua", "FrameLook.lua", "setup/Window.lua"}) do
   local chunk = assert(loadfile(ROOT..f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
 end
 c.LOADED["!!!TwichUI"] = true; c.FireEvent("ADDON_LOADED", "!!!TwichUI")
@@ -41,6 +42,25 @@ W:Show("received"); W:ShowEditMode()
 W:AskAccept("Pal-Forever", {addons=3, bytes=50000})
 W:Received("Pal-Forever")
 W:Show("addons"); W:ShowChoose(); W:ShowRecommend(); W:ShowParty(); c.TwichUIDB.setup.received["Pal-Forever"].addons = {["cf:1"]={title="Foo", folders={"Foo"}}, ["x"]={title="Bar", folders={"Bar"}}}; W:Show("received"); W:ShowAddonList("recv:Pal-Forever"); W:ShowStorage(); W:ShowChannels(); W:Show("group"); W:Show("backups"); W:Show("mine"); W:Toggle(); W:Toggle()
+-- The window and its popups are drawn with the framed look (FrameLook.lua): a shell under the content, the close box and every button in
+-- its bevel (never Look's as well), and the sizes padded for the rails
+do
+  local named, framed = {"TwichUISetupWindow", "TwichUIChooseAddons", "TwichUIRecommend", "TwichUIPartyCheck", "TwichUIAddonList", "TwichUIEuiShare",
+    "TwichUIEuiImport", "TwichUITwichImport", "TwichUIBackupTransfer", "TwichUIStorage", "TwichUISendingOptions", "TwichUIEditModeText"}, 0
+  for _, name in ipairs(named) do
+    local fr = rawget(c, name)
+    if fr then
+      framed = framed + 1
+      assert(fr.shell and fr.shell.corner and fr.shell.interior, name .. " has the framed look's shell")
+      assert(fr.twichFade, name .. " fades in, once, through the shared fade")
+      if name ~= "TwichUIEditModeText" then assert(fr.closeBox and fr.closeBox.twichLook, name .. " has the framed close box") end
+    end
+  end
+  assert(framed >= 8, "the main window and the popups opened here are all framed (" .. framed .. ")")
+  local both = 0
+  for _, o in ipairs(made) do if rawget(o, "twichLook") and rawget(o, "twichBevel") then both = both + 1 end end
+  assert(both == 0, "no button carries both Look's bevel and the framed look's (" .. both .. ")")
+end
 -- Import preview: what applying each addon would do.
 local ST = c.TwichUI.Setups
 local g = ST.PackByAddon(c.TwichUIDB.setup.received["Pal-Forever"])[1]

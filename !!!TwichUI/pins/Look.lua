@@ -149,10 +149,14 @@ end
 ---------------------------------------------------------------------------
 -- The window's appearance
 ---------------------------------------------------------------------------
+-- The window's defaults are the framed look's (FrameLook.lua): its espresso and its frame, drawn while the border is that one. The
+-- data bar menu below keeps the launchers' (it is a menu, not a window), and the new pin window starts as a copy of this.
+local FL = R.FrameLook
+local FRAMED = { { FL.BORDER, FL.BORDER_LABEL } }
 PL.Look = R.MenuStyle.New("pinsLook", {
-    bgTexture = "solid", bgColor = "ff261d15", bgOpacity = 98,
-    borderTexture = "solid", borderColor = "ff8c6e38", borderOpacity = 90, borderSize = 1,
-}, { sources = true })
+    bgTexture = "solid", bgColor = FL.PANEL_BG, bgOpacity = 98,
+    borderTexture = FL.BORDER, borderColor = FL.PANEL_BORDER, borderOpacity = 90, borderSize = 1,
+}, { sources = true, extraBorders = FRAMED })
 
 local DEFAULTS = { font = "default", textSize = 12, accentColor = "ffc9a34a", density = "comfortable" }
 local LIMITS = { textSize = { 9, 16 } }
@@ -201,11 +205,15 @@ end
 
 -- Draws `look` (a MenuStyle look: PL.Look, PL.MenuLook or PL.EditorLook) on a BackdropTemplate frame and
 -- returns how far content must sit in from the frame's edge, in UI units. MenuStyle's own answer is the
--- border's thickness; an EllesmereUI texture's visible line is only a part of that (see Borders.Inside), so
+-- border's thickness (the default frame's reach while that is the border); an EllesmereUI texture's visible line is only a part of that (see Borders.Inside), so
 -- for one the content is brought out to the line instead of leaving the whole thickness empty.
 function PL.Surface(look, frame)
     local edge, drawn = look.Apply(frame)
     if drawn == "eui" then edge = math.min(edge, R.Borders.Inside(look.Get("borderTexture"), edge)) end
+    if drawn == "custom" or frame.twichFrame then   -- the window's default frame (FrameLook.lua): drawn only while it is the chosen border, put away after
+        local framed = R.FrameLook.Frame(frame, look)
+        if framed > 0 then edge = framed end
+    end
     return edge
 end
 
@@ -245,7 +253,7 @@ function PL.Sync()
         pal.gold[1], pal.gold[2], pal.gold[3] = Rgb(hex)
     end
     local bg = PL.Look.Get("bgColor")
-    if bg == "ff261d15" then
+    if bg == "ff261d15" then   -- the old default, saved by the player: exactly the palette's own bg, as it always was; an unsaved bg reads the look's new default
         pal.bg[1], pal.bg[2], pal.bg[3] = D.bg[1], D.bg[2], D.bg[3]
     else
         pal.bg[1], pal.bg[2], pal.bg[3] = Rgb(bg)
@@ -662,7 +670,7 @@ PL.MenuLook = R.MenuStyle.New("pinsBrokerMenu", menuDefaults, { sources = true }
 ---------------------------------------------------------------------------
 local editorDefaults = {}
 for k, v in pairs(PL.Look.DEFAULTS) do editorDefaults[k] = v end
-PL.EditorLook = R.MenuStyle.New("pinsEditorLook", editorDefaults, { sources = true })
+PL.EditorLook = R.MenuStyle.New("pinsEditorLook", editorDefaults, { sources = true, extraBorders = FRAMED })
 
 -- Read only, for /tui diagnostics.
 function PL.Snapshot()

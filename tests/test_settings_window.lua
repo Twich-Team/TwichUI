@@ -541,6 +541,26 @@ local function FindButton(frame, label)
 end
 resetButton = FindButton(win, "Reset this page")
 assert(resetButton, "the page has a reset")
+-- The window is drawn with the framed look (FrameLook.lua): its shell under its own text, and one bevel on every button.
+local function Textures(frame)
+  local n = 0
+  for _, ch in ipairs(frame.children or {}) do if ch.kind == "Texture" then n = n + 1 end end
+  return n
+end
+assert(win.shell and win.shell.corner and win.shell.edge and win.shell.parent == win, "the window's frame is the shared shell, on a frame of its own")
+assert(not win.twichShell and not win.twichBand, "...and not the older rim and band as well")
+assert(resetButton.twichLook and resetButton.twichLook.bevel.lit, "the settings' buttons are the framed look's")
+assert(Textures(resetButton) == 10, "...with one bevel (ten textures), not two: " .. Textures(resetButton))
+local function FindText(frame, label)
+  for _, ch in ipairs(frame.children or {}) do
+    if type(ch.text) == "table" and ch.text.text == label and ch.kind == "Button" then return ch end
+    local found = FindText(ch, label)
+    if found then return found end
+  end
+end
+local reloadButton = FindText(win, "Reload now")
+assert(reloadButton, "the footer has its reload button")
+assert(reloadButton.twichLook and Textures(reloadButton) == 10, "the footer's button too: " .. tostring(reloadButton.twichLook) .. " " .. Textures(reloadButton))
 resetButton.scripts.OnClick(resetButton)
 assert(asked and asked.text:find("Food and drink", 1, true) and asked.text:find("map pins", 1, true), "it names the page and what it leaves alone")
 assert(R.FoodDrink.Get("size") == 44, "nothing happens before it is accepted")

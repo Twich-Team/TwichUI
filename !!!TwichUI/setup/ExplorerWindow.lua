@@ -16,6 +16,9 @@ R.ExplorerWindow = XW
 -- looked up when the window is first built.
 local S, K, L
 local WIDTH, HEIGHT = 1000, 640
+-- The frame's rails (FrameLook.lua) take the window's edge: the title strip is HEAD high, and what lies under it or over the bottom edge
+-- is DT lower or DB higher than it was without them.
+local FRAME = { HEAD = 40, DT = 4, DB = 5 }
 local LEFT_W, RIGHT_W = 240, 290
 local MID_X = 16 + LEFT_W + 12
 local MID_W = WIDTH - MID_X - 12 - RIGHT_W - 16
@@ -981,7 +984,7 @@ end
 -- Window
 ---------------------------------------------------------------------------
 local function ToolButton(parent, label, w, onClick, tip)
-    local b = L.Button(parent, label, w, "secondary", onClick)
+    local b = R.FrameLook.Button(parent, label, w, "secondary", onClick)
     b:SetHeight(22)
     if tip then
         b:HookScript("OnEnter", function(self)
@@ -1052,7 +1055,9 @@ local function RefreshDialog()
 end
 
 local function BuildDialog()
-    dlg = CreateFrame("Frame", "TwichUIExplorerCleanupDialog", f, "BackdropTemplate")
+    local F = R.FrameLook
+    local HEAD, DT, DB = FRAME.HEAD, FRAME.DT, FRAME.DB
+    dlg = CreateFrame("Frame", "TwichUIExplorerCleanupDialog", f)
     dlg:Hide()
     dlg:SetSize(DLG_W, DLG_H)
     dlg:SetPoint("CENTER", f, "CENTER", 0, 0)
@@ -1060,7 +1065,9 @@ local function BuildDialog()
     dlg:SetToplevel(true)
     dlg:EnableMouse(true)
     dlg:EnableKeyboard(true)
-    L.Shell(dlg, 34)
+    dlg.shell = F.Shell(dlg, { below = true })    -- the shared frame and interior (FrameLook.lua), under everything below
+    F.FadeIn(dlg)
+    dlg.shell:Header(HEAD)
 
     -- A dim layer over the explorer, so nothing behind is clicked by accident.
     dlg.dim = CreateFrame("Frame", nil, f)
@@ -1073,39 +1080,39 @@ local function BuildDialog()
     wash:SetColorTexture(0, 0, 0, 0.6)
 
     dlg.title = Text(dlg, "GameFontNormalLarge")
-    dlg.title:SetPoint("TOPLEFT", 16, -9)
+    dlg.title:SetPoint("TOPLEFT", 16, -13)
     dlg.body = TextBox(dlg, DLG_W - 32, DLG_H - 44 - 128)
-    dlg.body:SetPoint("TOPLEFT", 16, -44)
+    dlg.body:SetPoint("TOPLEFT", 16, -(44 + DT))
 
-    dlg.ack = S.Toggle(dlg, "", DLG_W - 32, function()
+    dlg.ack = F.Toggle(dlg, "", DLG_W - 32, function()
         if dialog then
             dialog.ackOn = not dialog.ackOn
             RefreshDialog()
         end
-    end, K)
-    dlg.ack:SetPoint("BOTTOMLEFT", 16, 56)
+    end)
+    dlg.ack:SetPoint("BOTTOMLEFT", 16, 56 + DB)
     dlg.ack:SetHeight(24)
 
     dlg.status = Text(dlg, "GameFontDisableSmall")
-    dlg.status:SetPoint("BOTTOMLEFT", 16, 40)
+    dlg.status:SetPoint("BOTTOMLEFT", 16, 40 + DB)
     dlg.status:SetWidth(DLG_W - 32)
     dlg.status:SetWordWrap(false)
     Color(dlg.status, K.stone)
 
-    dlg.cancel = L.Button(dlg, "Cancel", 110, "secondary", function() CloseDialog() end)
-    dlg.cancel:SetPoint("BOTTOMRIGHT", -16, 12)
-    dlg.confirmPlain = L.Button(dlg, "Confirm", 230, "primary", function()
+    dlg.cancel = F.Button(dlg, "Cancel", 110, "secondary", function() CloseDialog() end)
+    dlg.cancel:SetPoint("BOTTOMRIGHT", -16, 12 + DB)
+    dlg.confirmPlain = F.Button(dlg, "Confirm", 230, "primary", function()
         if dialog and dialog.onConfirm and CanConfirm(dialog) then dialog.onConfirm() end
     end)
     dlg.confirmPlain:SetPoint("RIGHT", dlg.cancel, "LEFT", -10, 0)
-    dlg.confirmDanger = L.Button(dlg, "Delete", 230, "danger", function()
+    dlg.confirmDanger = F.Button(dlg, "Delete", 230, "danger", function()
         if dialog and dialog.onConfirm and CanConfirm(dialog) then dialog.onConfirm() end
     end)
     dlg.confirmDanger:SetPoint("RIGHT", dlg.cancel, "LEFT", -10, 0)
-    dlg.again = L.Button(dlg, "Review again", 120, "secondary", function()
+    dlg.again = F.Button(dlg, "Review again", 120, "secondary", function()
         if dialog and dialog.again then dialog.again.run() end
     end)
-    dlg.again:SetPoint("BOTTOMLEFT", 16, 12)
+    dlg.again:SetPoint("BOTTOMLEFT", 16, 12 + DB)
 
     -- Escape closes only this dialog (it is a cancel, never a confirm); no key confirms anything.
     dlg:SetScript("OnKeyDown", function(self, key)
@@ -1580,7 +1587,11 @@ local function Build()
     L = R.Look
     K = L.pal
     KEY_COLOR, NUM_COLOR, GOLD = Hex(K.bronzeText), Hex(K.tealHi), Hex(K.bronzeText)
-    f = CreateFrame("Frame", "TwichUISavedDataExplorer", UIParent, "BackdropTemplate")
+    local F = R.FrameLook
+    local RL, _, RR = F.RailInsets()
+    local _, _, CR = F.ContentInsets()
+    local HEAD, DT = FRAME.HEAD, FRAME.DT
+    f = CreateFrame("Frame", "TwichUISavedDataExplorer", UIParent)
     f:Hide()                     -- so the first Show runs OnShow
     f:SetSize(WIDTH, HEIGHT)
     f:SetPoint("CENTER")
@@ -1594,11 +1605,13 @@ local function Build()
     f:SetClampedToScreen(true)
     f:HookScript("OnShow", R.FitToScreen)
     tinsert(UISpecialFrames, "TwichUISavedDataExplorer")
-    L.Shell(f, 34)   -- the rim, a title band, and a fade-in
+    f.shell = F.Shell(f, { below = true })   -- the shared frame and interior (FrameLook.lua), under everything below
+    F.FadeIn(f)
+    local head = f.shell:Header(HEAD)
 
-    local logo = f:CreateTexture(nil, "ARTWORK")
+    local logo = head:CreateTexture(nil, "ARTWORK")
     logo:SetSize(22, 22)
-    logo:SetPoint("TOPLEFT", 12, -10)
+    logo:SetPoint("TOPLEFT", 16, -14)
     logo:SetTexture(R.ICON)
     local title = Text(f, "GameFontNormalLarge")
     title:SetPoint("LEFT", logo, "RIGHT", 8, 0)
@@ -1620,22 +1633,22 @@ local function Build()
     chipText:SetText("ADVANCED CLEANUP ENABLED · deleting is on")
     Color(chipText, K.danger.text)
     f.chip:Hide()
-    f.advLine = f:CreateTexture(nil, "OVERLAY")
-    f.advLine:SetPoint("TOPLEFT", 1, -34)
-    f.advLine:SetPoint("TOPRIGHT", -1, -34)
+    f.advLine = head:CreateTexture(nil, "OVERLAY")
+    f.advLine:SetPoint("BOTTOMLEFT", head, "BOTTOMLEFT", RL, 0)
+    f.advLine:SetPoint("BOTTOMRIGHT", head, "BOTTOMRIGHT", -RR, 0)
     f.advLine:SetHeight(2)
     f.advLine:SetColorTexture(K.danger.border[1], K.danger.border[2], K.danger.border[3], 1)
     f.advLine:Hide()
-    local close = L.CloseBox(f)
+    local close = F.Close(f, function() f:Hide() end)
+    close:SetPoint("TOPRIGHT", -(CR + 2), -12)
     f.refresh = ToolButton(f, "Refresh", 76, function() XW.Refresh(true) end,
         "Reads the chosen source again (and rebuilds the share preview). Nothing is saved or reloaded.")
     f.refresh:SetPoint("RIGHT", close, "LEFT", -10, 0)
-    f.reveal = S.Toggle(f, "Reveal personal values", 160, function()
+    f.reveal = F.Toggle(f, "Reveal personal values", 160, function()
         reveal = not reveal
         f.reveal:SetOn(reveal)
         XW.Render(true)
-    end, K)
-    L.Raise(f.reveal)
+    end)
     f.reveal:SetPoint("RIGHT", f.refresh, "LEFT", -8, 0)
     f.reveal:HookScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_TOP")
@@ -1648,7 +1661,7 @@ local function Build()
     -- Left
     local listH = HEIGHT - 48 - 40 - 74
     f.sources = List(f, LEFT_W, listH, SOURCE_H, InitSource)
-    f.sources:SetPoint("TOPLEFT", 16, -48)
+    f.sources:SetPoint("TOPLEFT", 16, -(48 + DT))
     -- Finding candidates only looks; it works in read-only mode, and picking or deleting needs the mode.
     f.find = ToolButton(f, "Find cleanup candidates", LEFT_W, FindCandidates,
         "Looks through TwichUI's saved data for entries its own code can't use, and for records worth a look. It only suggests: nothing is selected for you and nothing is changed.")
@@ -1656,7 +1669,7 @@ local function Build()
     f.advOn = ToolButton(f, "Enable advanced cleanup...", LEFT_W, AskEnable,
         "Opens a warning first. Turning it on deletes nothing; it adds a reviewed, confirmed Delete for entries TwichUI can remove safely.")
     f.advOn:SetPoint("TOPLEFT", f.find, "BOTTOMLEFT", 0, -6)
-    f.advOff = L.Button(f, "Return to read-only", LEFT_W, "primary", function() CL.Disable() end)
+    f.advOff = F.Button(f, "Return to read-only", LEFT_W, "primary", function() CL.Disable() end)
     f.advOff:SetHeight(22)
     f.advOff:SetPoint("TOPLEFT", f.find, "BOTTOMLEFT", 0, -6)
     f.advOff:Hide()
@@ -1668,7 +1681,7 @@ local function Build()
 
     -- Middle
     f.head = Text(f, "GameFontNormalLarge")
-    f.head:SetPoint("TOPLEFT", MID_X, -50)
+    f.head:SetPoint("TOPLEFT", MID_X, -(50 + DT))
     f.head:SetWidth(MID_W)
     f.head:SetWordWrap(false)
     Color(f.head, K.text)
@@ -1685,13 +1698,13 @@ local function Build()
     f.summary:SetHeight(64)
     Color(f.summary, K.textDim)
     f.banner = Text(f, "GameFontHighlightSmall")
-    f.banner:SetPoint("TOPLEFT", MID_X, -168)
+    f.banner:SetPoint("TOPLEFT", MID_X, -(168 + DT))
     f.banner:SetWidth(MID_W)
     f.banner:SetHeight(26)
     f.banner:SetJustifyV("TOP")
 
     f.search = L.EditBox(f, 170, 22)   -- a recessed field with a teal focus edge
-    f.search:SetPoint("TOPLEFT", MID_X, -198)
+    f.search:SetPoint("TOPLEFT", MID_X, -(198 + DT))
     f.search:SetAutoFocus(false)
     f.search:SetMaxLetters(100)
     f.search:SetScript("OnEscapePressed", f.search.ClearFocus)
@@ -1731,7 +1744,7 @@ local function Build()
     f.showResults:SetPoint("LEFT", collapse, "RIGHT", 4, 0)
     -- The same row while suggestions are shown.
     f.cBack = ToolButton(f, "Back to tree", 100, BackToTree, "Leaves the suggestions and shows the saved data as a tree.")
-    f.cBack:SetPoint("TOPLEFT", MID_X, -198)
+    f.cBack:SetPoint("TOPLEFT", MID_X, -(198 + DT))
     f.cClear = ToolButton(f, "Clear picks", 90, function()
         CL.picks = {}
         RenderTree(true)
@@ -1747,7 +1760,7 @@ local function Build()
     for _, b in ipairs({ f.cBack, f.cClear, f.cReview }) do b:Hide() end
 
     f.tree = List(f, MID_W, HEIGHT - 228 - 40, TREE_H, InitTree)
-    f.tree:SetPoint("TOPLEFT", MID_X, -228)
+    f.tree:SetPoint("TOPLEFT", MID_X, -(228 + DT))
     f.status = Text(f, "GameFontDisableSmall")
     f.status:SetPoint("TOPLEFT", f.tree, "BOTTOMLEFT", 2, -8)
     f.status:SetWidth(MID_W)
@@ -1757,15 +1770,15 @@ local function Build()
     -- Right
     local rx = WIDTH - 16 - RIGHT_W
     local dl = Text(f, "GameFontNormalSmall")
-    dl:SetPoint("TOPLEFT", rx, -50)
+    dl:SetPoint("TOPLEFT", rx, -(50 + DT))
     dl:SetText("DETAILS")
     Color(dl, K.bronzeText)
     f.details = TextBox(f, RIGHT_W, 300)
-    f.details:SetPoint("TOPLEFT", rx, -66)
+    f.details:SetPoint("TOPLEFT", rx, -(66 + DT))
     -- Destructive and recovery actions sit under the details, only while advanced cleanup is on.
-    f.delete = L.Button(f, "Delete...", 130, "danger", DeleteChosen)
+    f.delete = F.Button(f, "Delete...", 130, "danger", DeleteChosen)
     f.delete:SetHeight(22)
-    f.delete:SetPoint("TOPLEFT", rx, -336)
+    f.delete:SetPoint("TOPLEFT", rx, -(336 + DT))
     f.delete:HookScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_TOP")
         local plan, why = PlanAt(selected)
@@ -1783,15 +1796,15 @@ local function Build()
         "Puts back what the last cleanup removed, where nothing new has taken its place. Kept in memory only, until you reload or log out.")
     f.undo:SetPoint("LEFT", f.delete, "RIGHT", 8, 0)
     f.inspect = ToolButton(f, "Inspect in explorer", 150, InspectCandidate, "Shows the suggested entry in the tree. Changes nothing.")
-    f.inspect:SetPoint("TOPLEFT", rx, -336)
+    f.inspect:SetPoint("TOPLEFT", rx, -(336 + DT))
     for _, b in ipairs({ f.delete, f.undo, f.inspect }) do b:Hide() end
     local cl = Text(f, "GameFontNormalSmall")
-    cl:SetPoint("TOPLEFT", rx, -378)
+    cl:SetPoint("TOPLEFT", rx, -(378 + DT))
     cl:SetText("COPY")
     Color(cl, K.bronzeText)
     local bw = math.floor((RIGHT_W - 12) / 4)
     local cpath = ToolButton(f, "Path", bw, function() Copy("path") end, "The chosen entry's full path.")
-    cpath:SetPoint("TOPLEFT", rx, -394)
+    cpath:SetPoint("TOPLEFT", rx, -(394 + DT))
     local cvalue = ToolButton(f, "Value", bw, function() Copy("value") end, "The chosen entry's value, in full.")
     cvalue:SetPoint("LEFT", cpath, "RIGHT", 4, 0)
     local cread = ToolButton(f, "Readable", bw, function() Copy("readable") end,
@@ -1801,7 +1814,7 @@ local function Build()
         "A sanitized copy for asking for help: personal-looking values are always left out, and the copy says so. Not the exact data.")
     csupport:SetPoint("LEFT", cread, "RIGHT", 4, 0)
     f.copy = TextBox(f, RIGHT_W, HEIGHT - 424 - 52)
-    f.copy:SetPoint("TOPLEFT", rx, -424)
+    f.copy:SetPoint("TOPLEFT", rx, -(424 + DT))
     f.copyNote = Text(f, "GameFontDisableSmall")
     f.copyNote:SetPoint("TOPLEFT", f.copy, "BOTTOMLEFT", 2, -6)
     f.copyNote:SetWidth(RIGHT_W)

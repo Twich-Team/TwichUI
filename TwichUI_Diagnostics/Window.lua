@@ -5,7 +5,7 @@
 -- (a once-a-second text update). Charts are drawn when their view is shown or the capture changes, never per frame;
 -- while recording, the Timeline redraws at most every LIVE_REDRAW seconds and only while it is the view shown.
 -- Closing the window does not stop a capture (the badge says it is still recording; Stop is there and in /tui perf).
--- Drawn with TwichUI's own look (R.Look), so it is complete without EllesmereUI or any other addon.
+-- Drawn with the shared framed look (R.FrameLook, on R.Look), so it is complete without EllesmereUI or any other addon.
 
 local R = TwichUI
 local DX = R.DiagnosticsKit
@@ -15,7 +15,7 @@ DX.Window = W
 
 local FRAME_NAME = "TwichUIDiagnosticsWorkspace"
 local WIDTH, HEIGHT = 1000, 660
-local HEADER_H, NAV_W, PAD, STRIP_H = 40, 186, 14, 70
+local HEADER_H, NAV_W, PAD, STRIP_H = 46, 186, 14, 70   -- (the header is inside the frame's rails: FrameLook.lua)
 local CONTENT_W = WIDTH - PAD - NAV_W - 12 - 24 - PAD
 local LIVE_REDRAW = 5
 
@@ -115,7 +115,7 @@ local function Chips(p, items, current, onPick, width)
 end
 
 local function Button(p, label, w, kind, fn, tip)
-    local b = Look().Button(p, label, w, kind, fn)
+    local b = R.FrameLook.Button(p, label, w, kind, fn)
     b:SetHeight(22)
     if tip then R.Interact.Tip(b, label, tip) end
     return b
@@ -1110,8 +1110,9 @@ function W.Go(tab)
 end
 
 local function Build()
-    local L = Look()
-    win = CreateFrame("Frame", FRAME_NAME, UIParent, "BackdropTemplate")
+    local L, FL = Look(), R.FrameLook
+    local _, _, CR = FL.ContentInsets()
+    win = CreateFrame("Frame", FRAME_NAME, UIParent)
     win:SetSize(WIDTH, HEIGHT)
     win:SetPoint("CENTER")
     win:SetFrameStrata("HIGH")
@@ -1125,19 +1126,22 @@ local function Build()
     win:Hide()
     win:HookScript("OnShow", R.FitToScreen)
     tinsert(UISpecialFrames, FRAME_NAME)
-    L.Shell(win, HEADER_H)
-    local crest = win:CreateTexture(nil, "ARTWORK")
-    crest:SetSize(24, 24); crest:SetPoint("TOPLEFT", 14, -9); crest:SetTexture(R.ICON)
+    win.shell = FL.Shell(win, { below = true })   -- the shared frame and interior (FrameLook.lua), under everything below
+    FL.FadeIn(win)
+    local head = win.shell:Header(HEADER_H)
+    local crest = head:CreateTexture(nil, "ARTWORK")
+    crest:SetSize(24, 24); crest:SetPoint("TOPLEFT", 16, -13); crest:SetTexture(R.ICON)
     local title = L.Text(win, "title")
     title:SetPoint("LEFT", crest, "RIGHT", 8, 0); title:SetText("TwichUI Diagnostics")
     local sub = L.Text(win, "meta")
     sub:SetPoint("BOTTOMLEFT", title, "BOTTOMRIGHT", 10, 2); sub:SetText("performance and support")
     win.chip = L.Text(win, "small")
-    win.chip:SetPoint("TOPRIGHT", -44, -15)
-    L.CloseBox(win)
+    win.chip:SetPoint("TOPRIGHT", -(CR + 32), -18)
+    local close = FL.Close(win, function() win:Hide() end)
+    close:SetPoint("TOPRIGHT", -(CR + 2), -14)
 
     nav = CreateFrame("Frame", nil, win, "BackdropTemplate")
-    nav:SetPoint("TOPLEFT", PAD, -(HEADER_H + 10))
+    nav:SetPoint("TOPLEFT", PAD, -(HEADER_H + 8))
     nav:SetPoint("BOTTOMLEFT", PAD, PAD)
     nav:SetWidth(NAV_W)
     L.Surface(nav, Pal().nav, 0.97, Pal().bronzeLo, 0.5)

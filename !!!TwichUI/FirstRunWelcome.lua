@@ -10,8 +10,8 @@
 --   F.Release(why)    end it at once and release everything (the setup can't open, it is in the way, dismissed, timed out).
 --   F.Snapshot()      read only: state, counts, the reason it ended.
 --
--- What is drawn: a compact panel in the setup window's look (Look.Frame, the brand icon, "Welcome to TwichUI", "Preparing your
--- setup") over a gentle dimming, at strata HIGH, level 0, where the setup's own dimming and window sit above it (they are
+-- What is drawn: a compact panel in the framed look (FrameLook.lua: the narrow frame and espresso interior, the brand icon, "Welcome
+-- to TwichUI", "Preparing your setup") over a gentle dimming, at strata HIGH, level 0, where the setup's own dimming and window sit above it (they are
 -- made later, and the window is on a higher level). Nothing takes the mouse except the small Dismiss, which appears only after
 -- the welcome has waited a while. The motion is a fade-in (Look.Motion, the shared driver), one warm sweep across the title,
 -- and MOTES gold motes that each drift up once; all of it is run by animation groups the game runs, so there is no per-frame
@@ -95,35 +95,32 @@ local function Build()
     panel:SetSize(WIDTH, HEIGHT)
     panel:SetPoint("CENTER", root, "CENTER", 0, 0)
     panel:EnableMouse(false)
-    -- an espresso plate with a chestnut edge (plain textures, so it does not depend on a backdrop), and a gold hairline inside it
-    local edge = L.Solid(panel, "BACKGROUND", pal.bronze, 1)
-    edge:SetDrawLayer("BACKGROUND", -1)
-    edge:SetAllPoints(panel)
-    local plate = L.Solid(panel, "BACKGROUND", pal.band, 0.97)
-    plate:SetPoint("TOPLEFT", panel, "TOPLEFT", 1, -1)
-    plate:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -1, 1)
-    local trim = L.Solid(panel, "BORDER", pal.teal, 0.55)
-    trim:SetPoint("TOPLEFT", panel, "TOPLEFT", 4, -4)
-    trim:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -4, -4)
-    trim:SetHeight(1)
+    -- the frame and interior, made once on a frame of their own under the panel's content (textures only, nothing takes the mouse). The
+    -- panel keeps no fade of its own: the root's alpha, which F.Show and F.Handoff drive, is the only one.
+    local shell = R.FrameLook.Shell(panel, { below = true })
+    panel.shell = shell
+    -- the panel's textures are on a frame above the shell
+    local art = CreateFrame("Frame", nil, panel)
+    art:SetAllPoints(panel)
+    art:EnableMouse(false)
 
-    local icon = panel:CreateTexture(nil, "ARTWORK")
+    local icon = art:CreateTexture(nil, "ARTWORK")
     icon:SetSize(56, 56)
     icon:SetPoint("TOP", panel, "TOP", 0, -24)
     icon:SetTexture(R.ICON)
 
-    local title = L.Text(panel, "brand")
+    local title = L.Text(art, "brand")
     title:SetJustifyH("CENTER")
     title:SetPoint("TOP", icon, "BOTTOM", 0, -12)
     title:SetText("Welcome to TwichUI")
 
-    local sub = L.Text(panel, "small")
+    local sub = L.Text(art, "small")
     sub:SetJustifyH("CENTER")
     sub:SetPoint("TOP", title, "BOTTOM", 0, -8)
     sub:SetText("Preparing your setup")
 
     -- the waiting accent: one thin gold line, breathing slowly
-    local line = panel:CreateTexture(nil, "ARTWORK")
+    local line = art:CreateTexture(nil, "ARTWORK")
     line:SetSize(96, 1)
     line:SetPoint("TOP", sub, "BOTTOM", 0, -12)
     line:SetColorTexture(pal.tealHi[1], pal.tealHi[2], pal.tealHi[3], 1)
@@ -163,7 +160,7 @@ local function Build()
     local motes = {}
     for i = 1, F.MOTES do
         local def = MOTES[i]
-        local tex = panel:CreateTexture(nil, "OVERLAY")
+        local tex = art:CreateTexture(nil, "OVERLAY")
         tex:SetTexture(PUFF)
         tex:SetSize(def[4], def[4])
         tex:SetPoint("CENTER", panel, "CENTER", def[1], def[2])
@@ -185,7 +182,7 @@ local function Build()
     -- a quiet way out, shown only after a wait; it ends the welcome and nothing else
     local dismiss = CreateFrame("Button", nil, panel)
     dismiss:SetSize(64, 18)
-    dismiss:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -12, 8)
+    dismiss:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -16, 14)   -- inside the frame's rails
     local label = L.Text(dismiss, "meta")
     label:SetPoint("CENTER")
     label:SetJustifyH("CENTER")
@@ -195,12 +192,12 @@ local function Build()
     dismiss:Hide()
 
     local fade = L.Motion.Fader(function(a) root:SetAlpha(a) end, 0)
-    ui = { root = root, panel = panel, line = line, pulseGroup = pulseGroup, sweep = sweep, sweepGroup = sweepGroup,
-        motes = motes, dismiss = dismiss, fade = fade, frames = 5 }
+    ui = { root = root, panel = panel, shell = shell, line = line, pulseGroup = pulseGroup, sweep = sweep, sweepGroup = sweepGroup,
+        motes = motes, dismiss = dismiss, fade = fade, frames = 6 }
 end
 
 function F.Show()
-    if state.phase ~= "idle" or not (R.Look and R.Look.Motion) then return false end
+    if state.phase ~= "idle" or not (R.Look and R.Look.Motion and R.FrameLook and R.FrameLook.Ready()) then return false end
     if not ui then Build() end
     state.phase = "showing"
     state.shown = state.shown + 1

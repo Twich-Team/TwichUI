@@ -14,6 +14,7 @@ local function Fake(name)
   if name then byName[name] = o end
   table.insert(frames, o)
   return setmetatable(o, { __index = function(_, k)
+    if k == "twichBevel" or k == "twichBorders" or k == "sheenPiece" or k == "recessPiece" or k == "groovePiece" or k == "twichFade" or k == "twichFrame" then return nil end   -- fields of FrameLook.lua, never methods
     if k == "Show" then return function(s) s.shown = true; if s.scripts.OnShow then s.scripts.OnShow(s) end end end
     if k == "Hide" then return function(s) s.shown = false; if s.scripts.OnHide then s.scripts.OnHide(s) end end end
     if k == "IsShown" then return function(s) return s.shown end end
@@ -131,7 +132,7 @@ local function Settle()
 end
 local function Flush() FlushTimers() end
 
-for _, f in ipairs({ "chronicle/Style.lua", "modules/Interact.lua", "modules/Borders.lua", "modules/FoodDrink.lua",
+for _, f in ipairs({ "chronicle/Style.lua", "Look.lua", "FrameLook.lua", "modules/Interact.lua", "modules/Borders.lua", "modules/FoodDrink.lua",
   "modules/EllesmereJunk.lua", "modules/MageSell.lua", "modules/MageSellWindow.lua" }) do
   local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
 end
@@ -531,7 +532,7 @@ do
     ITEM_CONJURED = "Conjured Item", ITEM_BIND_QUEST = "Quest Item", ITEM_STARTS_QUEST = "x", BUYBACK_ITEMS_PER_PAGE = 12, NUM_BAG_SLOTS = 4,
     MerchantFrame = c.MerchantFrame, C_Container = c.C_Container, C_Item = c.C_Item, C_Spell = c.C_Spell, C_TooltipInfo = c.C_TooltipInfo,
     CreateFrame = c.CreateFrame, UIParent = c.UIParent, UISpecialFrames = {}, GameTooltip = c.GameTooltip }) do d[k] = v end
-  for _, f in ipairs({ "chronicle/Style.lua", "modules/Interact.lua", "modules/Borders.lua", "modules/FoodDrink.lua", "modules/MageSell.lua" }) do
+  for _, f in ipairs({ "chronicle/Style.lua", "FrameLook.lua", "modules/Interact.lua", "modules/Borders.lua", "modules/FoodDrink.lua", "modules/MageSell.lua" }) do
     local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, d); chunk("!!!TwichUI", {})
   end
   d.TwichUIDB = { modules = { mageSell = true, mageSellDryRun = false } }
@@ -584,6 +585,8 @@ do
   W.Show()
   local win = byName.TwichUIMageSellWindow
   assert(win and win.shown, "the window is made and shown")
+  assert(win.shell and win.shell.corner and win.close.twichLook and win.sell.twichLook and win.refresh.twichLook and win.add.twichLook,
+    "it is drawn in the framed look: a shell, its close box and its buttons in the bevel")
   assert(#c.USED == 0 and c.CURSOR_CLEARED == nil, "opening it sells and holds nothing")
   assert(win.sell.enabled == false, "Sell now is off in dry run")
   M.mageSellDryRun = false

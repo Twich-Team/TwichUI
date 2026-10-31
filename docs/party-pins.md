@@ -65,7 +65,7 @@ stable ids: gold, ember, moss, river, violet, rose, parchment, slate.
 
 The pin window's choices live in `TwichUIDB.ui`: `partyPins` (clicks, labels, window position), `pinsLook`
 `pinsAppearance` and `pinsMapText` (the names on the maps), `pinsBroker` (the data bar entry) and
-`pinsBrokerMenu` (the data bar menu's look) and `pinsEditorLook` (the new pin window's look). Only changed values are stored. An unusable value reads as its default and is kept.
+`pinsBrokerMenu` (the data bar menu's look) and `pinsEditorLook` (the new pin window's look). Only changed values are stored. The pin window's and the new pin window's defaults are the framed look's (`FrameLook.lua`): its espresso, and its frame as the default border (`FrameLook.BORDER`, offered in their border lists; any other border replaces it); the /way paste window shares the new pin window's look. The data bar menu keeps the launchers' look (it is a menu, so no frame) and nothing a player saved, old default or not, is changed. An unusable value reads as its default and is kept.
 
 **Session only** (in memory): party pins keyed by *owner + id*. The owner is the sender's name as the game
 reported it, never a field of the message. Ids are a random six-character word per session plus a running

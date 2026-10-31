@@ -50,6 +50,17 @@ do
   Check(Ob(c).state == "new" and Ob(c).offers == 0 and c.reloads == 0, "it changed no record and started no reload")
   Check(Root(c):GetFrameStrata() == "HIGH" and not Root(c).mouse, "it takes no mouse and sits at the setup's strata")
   Check(c.E._externalInstaller == "TwichUI" and c.E.pickerShown == nil, "EllesmereUI's picker stays held while it is up")
+  -- drawn with the framed look (FrameLook.lua): a shell on the panel, once; the root's alpha stays the only fade, and nothing new takes the mouse
+  local panel, shell
+  Each(Root(c), function(f) if f.shell and f.shell.corner then panel, shell = f, f.shell end end)
+  Check(shell ~= nil and shell.interior ~= nil, "the panel is drawn with the framed look's shell")
+  Check(panel and not panel.twichFade and not Root(c).twichFade and not shell.twichFade, "the shell adds no fade of its own: the welcome's own fade is the only one")
+  local mouse = 0   -- (Dismiss, once its wait has passed, is the one part that takes it)
+  Each(Root(c), function(f) if f.mouse and f.kind ~= "Button" then mouse = mouse + 1 end end)
+  Check(mouse == 0, "no frame of it but Dismiss takes the mouse (" .. mouse .. ")")
+  local frames = c.made()
+  c.TwichUI.FirstRunWelcome.Show()
+  Check(c.made() == frames, "asking again builds nothing")
   c.FireEvent("PLAYER_ENTERING_WORLD", false, false); Settle()
   Check(Snap(c).shown == 1 and c.TwichUI.FirstRunWelcome.Show() == false, "one welcome per session, however often it is asked")
   -- the player leaves the flight: the setup opens exactly once, the welcome goes and leaves nothing running

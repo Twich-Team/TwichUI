@@ -131,208 +131,26 @@ local function ReviewDetails(rv)
 end
 
 ---------------------------------------------------------------------------
--- The look: an art-direction PILOT for this one panel (provisional; nothing here is shared or a theme)
--- A continuous illustrated frame (four fixed corners and four rails, cut from one painting by tools/make_guild_frame_art.py) over a
--- dark espresso interior with a faint rock grain, an action strip over a deeper recessed result area, and walnut buttons with a
--- bevel (gold only on the primary one). Textures only: nothing here takes the mouse, animates or runs per frame. Every value to
--- adjust after review is in STYLE and the frame constants.
+-- The look: the shared framed look (FrameLook.lua), the treatment approved on this panel
+-- The frame, the espresso interior, the action strip's sheen, the deeper recessed result area and the groove where they meet are
+-- the shell's; the buttons are the look's. Nothing here takes the mouse, animates or runs per frame, and nothing is saved.
 ---------------------------------------------------------------------------
--- the frame's rails, in UI units from the panel's outer edge to the rail's inner edge (the files' pixels / 2): top, bottom, left, right
-local FT, FB, FL, FR = 12, 13, 12, 12
-local FRAME_DIR = R.PATH .. [[media\guildbank\frame-]]
--- how much darker each rail is at its far end than at the end it was sampled at (printed by tools/make_guild_frame_art.py): the painting
--- is lit unevenly, so a rail is tinted by this along its length to meet the corner at both ends (top and bottom run left to right, the
--- sides top to bottom)
-local RAIL_END = { top = 0.80, bottom = 0.82, left = 0.96, right = 0.95 }
--- The frame is drawn at SCALE of the files' own size (a pixel of a file is half a unit at 1): the corners, the rails and the margin
--- under them shrink together, so their cross sections still match. The content's placement (FT.. above, PAD, BAR_H) does not move.
-local SCALE = 0.75
-local CORNER_UNITS = 32 * SCALE           -- a corner file is 64 px: 32 units at full size (the block and a stub of both rails)
-local EDGE_UNITS = 16 * SCALE             -- a rail file's width across: 32 px
-local AT, AB, AL, AR = FT * SCALE, FB * SCALE, FL * SCALE, FR * SCALE   -- where the rails end, inside
-local UNDER = 2 * SCALE                         -- the interior is filled to this far from the edge, so nothing is clear beneath the rails
-local ROCK = [[Interface\FrameGeneral\UI-Background-Rock]]   -- a client texture (the Forever UI source uses it too), tinted warm
-local STYLE = {
-    ink = { 0.106, 0.067, 0.055 },          -- the structural outer line and the shadows
-    bronzeHi = { 0.66, 0.50, 0.29 },        -- aged bronze: the lit edge and the studs
-    bronzeLo = { 0.42, 0.31, 0.19 },        -- ... its shaded side
-    interior = { 0.105, 0.088, 0.073 },     -- the espresso inside the frame (neutral, not red)
-    gold = { 0.84, 0.70, 0.42 },            -- antique gold: the primary action's lit edge only
-    grain = { 0.95, 0.80, 0.60 },           -- the rock texture's tint, and how much of it shows
-    grainInterior = 0.07,
-    quiet = {                               -- an ordinary button: a dark espresso face, a narrow muted bronze rim; hover lifts both
-        border = { 0.40, 0.30, 0.20 }, bg = { 0.150, 0.112, 0.086 }, text = { 0.94, 0.90, 0.80 },
-        hotBorder = { 0.56, 0.42, 0.27 }, hotBg = { 0.205, 0.154, 0.115 }, hotText = { 0.99, 0.96, 0.89 },
-    },
-    primary = {                             -- the one primary action: a richer chestnut face and an antique gold rim, no gold fill
-        border = { 0.66, 0.52, 0.29 }, bg = { 0.255, 0.168, 0.108 }, text = { 0.98, 0.94, 0.84 },
-        hotBorder = { 0.80, 0.65, 0.38 }, hotBg = { 0.315, 0.210, 0.135 }, hotText = { 1, 0.97, 0.89 },
-    },
-    off = { border = { 0.25, 0.19, 0.135 }, bg = { 0.115, 0.092, 0.075 }, text = { 0.52, 0.47, 0.40 } },   -- unavailable: subdued, still legible
-}
+local F = R.FrameLook
+local _, FT, FR, FB = F.ContentInsets()     -- where content begins inside the frame (top, right, bottom)
+local AL, AT, AR, AB = F.RailInsets()       -- where the rails end, inside
 
-local function Solid(host, layer, sub, c, a)
-    local t = host:CreateTexture(nil, layer, nil, sub)
-    t:SetColorTexture(c[1], c[2], c[3], a or 1)
-    return t
-end
-
--- a texture's corners placed `l, t, r, b` pixels inside `host`'s
-local function Inset(tex, host, l, t, r, b)
-    tex:ClearAllPoints()
-    tex:SetPoint("TOPLEFT", host, "TOPLEFT", l, -t)
-    tex:SetPoint("BOTTOMRIGHT", host, "BOTTOMRIGHT", -r, b)
-end
-
-local function Grain(host, sub, a)
-    local t = host:CreateTexture(nil, "BACKGROUND", nil, sub)
-    t:SetTexture(ROCK, "REPEAT", "REPEAT")
-    t:SetHorizTile(true)
-    t:SetVertTile(true)
-    t:SetVertexColor(STYLE.grain[1], STYLE.grain[2], STYLE.grain[3], a)
-    return t
-end
-
--- The frame and its interior, drawn on a frame of their own that sits under the content (same level as the panel, so the strip and the
--- block draw over it). The interior is filled to just under the rails; the four corners are fixed size and the four rails are
--- stretched along their sides (a rail's cross section does not change along it).
-local function MakeShell(parent)
-    local L, ST = Look(), STYLE
-    local s = CreateFrame("Frame", nil, parent)
-    s:SetFrameLevel(parent:GetFrameLevel())
-    Inset(Solid(s, "BACKGROUND", -5, ST.interior), s, UNDER, UNDER, UNDER, UNDER)
-    Inset(Grain(s, -4, ST.grainInterior), s, UNDER, UNDER, UNDER, UNDER)
-    -- what the shell draws inside itself so it sits under the content AND under the frame: the strip's sheen, and the result
-    -- area's recess (a step deeper than the strip), its top shadow and the quiet groove where the strip and the block meet
-    s.sheen = s:CreateTexture(nil, "BACKGROUND", nil, -3)
-    L.Fade(s.sheen, L.pal.text, 0.05, 0)
-    s.recess = Solid(s, "BACKGROUND", -2, ST.ink, 0.30)
-    s.shadow = s:CreateTexture(nil, "BACKGROUND", nil, -1)
-    L.Fade(s.shadow, ST.ink, 0.40, 0)
-    s.shadow:SetHeight(12)
-    s.groove = Solid(s, "BACKGROUND", 0, ST.ink, 0.75)           -- a dark line over a faint lit one
-    s.groove:SetHeight(1)
-    s.lit = Solid(s, "BACKGROUND", 0, ST.bronzeHi, 0.22)
-    s.lit:SetHeight(1)
-    local function Art(name)
-        local t = s:CreateTexture(nil, "ARTWORK", nil, 2)
-        t:SetTexture(FRAME_DIR .. name .. ".tga")
-        return t
-    end
-    s.corner = { tl = Art("corner-tl"), tr = Art("corner-tr"), bl = Art("corner-bl"), br = Art("corner-br") }
-    s.edge = { top = Art("edge-top"), bottom = Art("edge-bottom"), left = Art("edge-left"), right = Art("edge-right") }
-    for side, t in pairs(s.edge) do
-        local k = RAIL_END[side]
-        if t.SetGradient and CreateColor then       -- (where the client refuses a gradient the rail is simply untinted)
-            local near, far = CreateColor(1, 1, 1, 1), CreateColor(k, k, k, 1)
-            if side == "top" or side == "bottom" then pcall(t.SetGradient, t, "HORIZONTAL", near, far)
-            else pcall(t.SetGradient, t, "VERTICAL", far, near) end     -- (a vertical gradient runs from the bottom color to the top one)
-        end
-    end
-    -- Fits the frame to a shell `h` units high. A corner's stub is only rail, so when two corners would meet on a short side
-    -- the stubs are cut (not squeezed) to half the height each.
-    function s:Fit(h)
-        local v = math.max(0, math.min(CORNER_UNITS, math.floor(h / 2)))
-        local frac = v / CORNER_UNITS
-        for name, t in pairs(self.corner) do
-            local top, left = name:sub(1, 1) == "t", name:sub(2, 2) == "l"
-            t:ClearAllPoints()
-            t:SetPoint((top and "TOP" or "BOTTOM") .. (left and "LEFT" or "RIGHT"), self, (top and "TOP" or "BOTTOM") .. (left and "LEFT" or "RIGHT"), 0, 0)
-            t:SetSize(CORNER_UNITS, v)
-            t:SetTexCoord(0, 1, top and 0 or 1 - frac, top and frac or 1)
-        end
-        local e = self.edge
-        e.top:ClearAllPoints(); e.top:SetHeight(EDGE_UNITS)
-        e.top:SetPoint("TOPLEFT", self, "TOPLEFT", CORNER_UNITS, 0); e.top:SetPoint("TOPRIGHT", self, "TOPRIGHT", -CORNER_UNITS, 0)
-        e.bottom:ClearAllPoints(); e.bottom:SetHeight(EDGE_UNITS)
-        e.bottom:SetPoint("BOTTOMLEFT", self, "BOTTOMLEFT", CORNER_UNITS, 0); e.bottom:SetPoint("BOTTOMRIGHT", self, "BOTTOMRIGHT", -CORNER_UNITS, 0)
-        e.left:ClearAllPoints(); e.left:SetWidth(EDGE_UNITS)
-        e.left:SetPoint("TOPLEFT", self, "TOPLEFT", 0, -v); e.left:SetPoint("BOTTOMLEFT", self, "BOTTOMLEFT", 0, v)
-        e.right:ClearAllPoints(); e.right:SetWidth(EDGE_UNITS)
-        e.right:SetPoint("TOPRIGHT", self, "TOPRIGHT", 0, -v); e.right:SetPoint("BOTTOMRIGHT", self, "BOTTOMRIGHT", 0, v)
-        e.left:SetShown(h > 2 * v); e.right:SetShown(h > 2 * v)
-    end
+-- The frame and its interior on a frame of its own that sits under the content (same level as the panel, so the strip and the block
+-- draw over it). The strip's shell has the sheen and the groove; every shell has the recess.
+local function MakeShell(parent, strip)
+    local s = F.Shell(parent)
+    if strip then s:Sheen() end
+    s:Recess()
+    if strip then s:Groove() end
     s:Fit(BAR_H)
     return s
 end
 
--- The raised face of a button here: a lit upper edge and a soft sheen, a darker lower edge, and the four corner pixels clipped. It
--- follows the button's own states (the shared button repaints its face and rim; this paints only the layers on top): a little brighter
--- under the pointer, sunk (the lit edge goes dark, the sheen goes, an inset shade comes in) while pressed, and subdued when disabled.
-local function Raise(b, tone)
-    local ST = STYLE
-    local sheen = b:CreateTexture(nil, "ARTWORK")
-    sheen:SetPoint("TOPLEFT", 1, -2)
-    sheen:SetPoint("TOPRIGHT", -1, -2)
-    sheen:SetHeight(9)
-    Look().Fade(sheen, { 1, 0.93, 0.8 }, 0.07, 0)
-    local lit = Solid(b, "ARTWORK", 1, tone, 0.30)
-    lit:SetHeight(1)
-    lit:SetPoint("TOPLEFT", 1, -1)
-    lit:SetPoint("TOPRIGHT", -1, -1)
-    local dark = Solid(b, "ARTWORK", 1, ST.ink, 0.50)
-    dark:SetHeight(1)
-    dark:SetPoint("BOTTOMLEFT", 1, 1)
-    dark:SetPoint("BOTTOMRIGHT", -1, 1)
-    local inset = Solid(b, "ARTWORK", 0, ST.ink, 0.30)      -- the pressed state's shade, down the top and left
-    inset:SetPoint("TOPLEFT", 1, -1)
-    inset:SetPoint("BOTTOMRIGHT", -1, 1)
-    local clip = {}
-    for i, p in ipairs({ "TOPLEFT", "TOPRIGHT", "BOTTOMLEFT", "BOTTOMRIGHT" }) do
-        local c = Solid(b, "BORDER", 7, ST.ink, 0.85)
-        c:SetSize(1, 1)
-        c:SetPoint(p, 0, 0)
-        clip[i] = c
-    end
-    local over, down = false, false
-    local function Paint()
-        local on = b:IsEnabled()
-        inset:SetShown(on and down)
-        if not on then
-            sheen:Hide()
-            lit:SetColorTexture(tone[1], tone[2], tone[3], 0.07)
-            dark:SetColorTexture(ST.ink[1], ST.ink[2], ST.ink[3], 0.25)
-        elseif down then
-            sheen:Hide()
-            lit:SetColorTexture(ST.ink[1], ST.ink[2], ST.ink[3], 0.55)
-            dark:SetColorTexture(tone[1], tone[2], tone[3], 0.10)
-        else
-            sheen:Show()
-            lit:SetColorTexture(tone[1], tone[2], tone[3], over and 0.46 or 0.32)
-            dark:SetColorTexture(ST.ink[1], ST.ink[2], ST.ink[3], 0.50)
-        end
-    end
-    b:HookScript("OnEnter", function() over = true; Paint() end)
-    b:HookScript("OnLeave", function() over, down = false, false; Paint() end)
-    b:HookScript("OnMouseDown", function() down = true; Paint() end)
-    b:HookScript("OnMouseUp", function() down = false; Paint() end)
-    b:HookScript("OnEnable", Paint)
-    b:HookScript("OnDisable", Paint)
-    b:HookScript("OnHide", function() over, down = false, false; Paint() end)
-    Paint()
-end
-
--- A button of this panel: the shared button (its states, label, hit area) with this panel's espresso/chestnut colors, the raised
--- face above, and a dark socket with a lit lip under it so it sits in the strip. Danger keeps the shared rust. A button here takes
--- no keyboard focus, so there is no focused state.
-local function Button(parent, label, w, kind, onClick)
-    local L, ST = Look(), STYLE
-    local pal = setmetatable({
-        primary = ST.primary, quiet = kind == "danger" and L.pal.danger or ST.quiet,
-        bronzeLo = ST.off.border, well = ST.off.bg, stone = ST.off.text,
-    }, { __index = L.pal })
-    local b = R.ChronicleStyle.Button(parent, label, w, kind == "primary" and "primary" or "secondary", onClick, pal)
-    b:SetMotionScriptsWhileDisabled(true)
-    Raise(b, kind == "primary" and ST.gold or ST.bronzeHi)
-    local socket = Solid(b, "BACKGROUND", -8, ST.ink, 0.55)
-    socket:SetPoint("TOPLEFT", -1, 1)
-    socket:SetPoint("BOTTOMRIGHT", 1, -1)
-    local lip = Solid(b, "BACKGROUND", -8, ST.bronzeHi, 0.12)
-    lip:SetHeight(1)
-    lip:SetPoint("TOPLEFT", b, "BOTTOMLEFT", 0, -1)
-    lip:SetPoint("TOPRIGHT", b, "BOTTOMRIGHT", 0, -1)
-    return b
-end
+local Button = F.Button
 
 ---------------------------------------------------------------------------
 -- The frames (built once)
@@ -340,12 +158,12 @@ end
 local function Build()
     if f then return true end
     local L = Look()
-    if not (L and L.Button and L.Surface and L.Text and L.Shade and L.Fade and R.ChronicleStyle) then return false end
+    if not (L and L.Surface and L.Text and L.Recess and F.Ready()) then return false end
     f = CreateFrame("Frame", NAME, UIParent)
     f:SetFrameStrata("HIGH")
     f:SetSize(MIN_W, BAR_H)
     f:Hide()
-    f.shell = MakeShell(f)                  -- the frame around the strip (and the block, when it is joined to the strip)
+    f.shell = MakeShell(f, true)            -- the frame around the strip (and the block, when it is joined to the strip)
     f.shellB = MakeShell(f)                 -- the block's own frame, when it sits apart from the strip
     f.shellB:Hide()
     f.bar = CreateFrame("Frame", nil, f)    -- the action strip's inside; Dress() fits it to the shell
@@ -541,29 +359,15 @@ local function Dress(joined)
     f.bar:ClearAllPoints()
     f.bar:SetPoint("TOPLEFT", f, "TOPLEFT", 0, -((joined and above) and 0 or FT))
     f.bar:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 0, (joined and not above) and 0 or FB)
-    Inset(f.shell.sheen, f.bar, AL, 0, AR, 0)
-    f.shellB.sheen:Hide()
+    f.shell:Sheen():Place(f.bar, AL, 0, AR, 0)
     -- the block's inside is drawn by the shell that holds it
     local s = joined and f.shell or f.shellB
-    f.shell.recess:SetShown(joined); f.shell.shadow:SetShown(joined)
-    f.shellB.recess:SetShown(shown and not joined); f.shellB.shadow:SetShown(shown and not joined)
-    f.shell.groove:SetShown(joined); f.shell.lit:SetShown(joined)
-    f.shellB.groove:Hide(); f.shellB.lit:Hide()
+    f.shell:Recess():SetShown(joined)
+    f.shellB:Recess():SetShown(shown and not joined)
+    f.shell:Groove():SetShown(joined)
     if not shown then return end
-    Inset(s.recess, d, AL, (joined and not above) and 2 or AT, AR, (joined and above) and 2 or AB)
-    s.shadow:ClearAllPoints()
-    s.shadow:SetPoint("TOPLEFT", s.recess, "TOPLEFT", 0, 0)
-    s.shadow:SetPoint("TOPRIGHT", s.recess, "TOPRIGHT", 0, 0)
-    if joined then
-        s.groove:ClearAllPoints(); s.lit:ClearAllPoints()
-        if above then          -- the dark line is the upper of the two
-            s.lit:SetPoint("BOTTOMLEFT", d, "BOTTOMLEFT", AL, 0); s.lit:SetPoint("BOTTOMRIGHT", d, "BOTTOMRIGHT", -AR, 0)
-            s.groove:SetPoint("BOTTOMLEFT", d, "BOTTOMLEFT", AL, 1); s.groove:SetPoint("BOTTOMRIGHT", d, "BOTTOMRIGHT", -AR, 1)
-        else
-            s.groove:SetPoint("TOPLEFT", d, "TOPLEFT", AL, 0); s.groove:SetPoint("TOPRIGHT", d, "TOPRIGHT", -AR, 0)
-            s.lit:SetPoint("TOPLEFT", d, "TOPLEFT", AL, -1); s.lit:SetPoint("TOPRIGHT", d, "TOPRIGHT", -AR, -1)
-        end
-    end
+    s:Recess():Place(d, AL, (joined and not above) and 2 or AT, AR, (joined and above) and 2 or AB)
+    if joined then s:Groove():Place(d, above and "BOTTOM" or "TOP", 0, AL, AR) end
 end
 
 

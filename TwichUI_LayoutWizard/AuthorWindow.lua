@@ -23,8 +23,11 @@ local AW = {}
 WZ.AuthorWindow = AW
 
 local FRAME_NAME = "TwichUILayoutAuthor"
-local WIDTH, HEIGHT = 780, 640
-local HEADER_H, PAD, FOOTER_H = 44, 16, 40
+-- The frame's rails (FrameLook.lua) take the window's edge: the title strip and what lies under it is DT lower than it was without them,
+-- and what lies over the bottom edge is DB higher. The windows are that much taller, so the room inside them is what it was.
+local DT, DB = 4, 5
+local WIDTH, HEIGHT = 780, 640 + DT + DB
+local HEADER_H, PAD, FOOTER_H = 44 + DT, 16, 40
 local CONTENT_W = WIDTH - 2 * PAD - 22
 
 local win, scroll, content, footer
@@ -56,7 +59,7 @@ local function Text(parent, kind, width)
 end
 
 local function Button(parent, label, width, kind, fn, tip)
-    local b = Look().Button(parent, label, width, kind, fn)
+    local b = R.FrameLook.Button(parent, label, width, kind, fn)   -- the framed look's beveled button (FrameLook.lua)
     b:SetHeight(22)
     if tip then R.Interact.Tip(b, label, tip) end
     AW.frames = AW.frames + 1
@@ -924,12 +927,13 @@ end
 -- Export for bundling: a published package as text to copy (the game gives an addon no clipboard and no files)
 ---------------------------------------------------------------------------
 function AW.ShowExport(entry)
-    local L = Look()
+    local L, F = Look(), R.FrameLook
     local ex = AW.exportFrame
     if not ex then
-        ex = CreateFrame("Frame", "TwichUILayoutExport", UIParent, "BackdropTemplate")
+        local _, _, CR = F.ContentInsets()
+        ex = CreateFrame("Frame", "TwichUILayoutExport", UIParent)
         AW.exportFrame = ex
-        ex:SetSize(620, 360)
+        ex:SetSize(620, 360 + DT + DB)
         ex:SetPoint("CENTER", 0, 40)
         ex:SetFrameStrata("DIALOG")
         ex:SetToplevel(true)
@@ -939,16 +943,19 @@ function AW.ShowExport(entry)
         local listed = false
         for _, n in ipairs(UISpecialFrames) do if n == "TwichUILayoutExport" then listed = true end end
         if not listed then tinsert(UISpecialFrames, "TwichUILayoutExport") end
-        L.Shell(ex, 40)
+        ex.shell = F.Shell(ex, { below = true })   -- the shared frame and interior (FrameLook.lua), under everything below
+        F.FadeIn(ex)
+        ex.shell:Header(40 + DT)
         local title = L.Text(ex, "title")
-        title:SetPoint("TOPLEFT", 18, -11)
+        title:SetPoint("TOPLEFT", 18, -(11 + DT))
         title:SetText("Export for bundling")
-        L.CloseBox(ex)
+        ex.closeBox = F.Close(ex, function() ex:Hide() end)
+        ex.closeBox:SetPoint("TOPRIGHT", -(CR + 2), -12)
         ex.note = Text(ex, "small", 580)
-        ex.note:SetPoint("TOPLEFT", 20, -50)
+        ex.note:SetPoint("TOPLEFT", 20, -(50 + DT))
         local sf = CreateFrame("ScrollFrame", nil, ex, "UIPanelScrollFrameTemplate")
-        sf:SetPoint("TOPLEFT", 20, -120)
-        sf:SetPoint("BOTTOMRIGHT", -40, 50)
+        sf:SetPoint("TOPLEFT", 20, -(120 + DT))
+        sf:SetPoint("BOTTOMRIGHT", -40, 50 + DB)
         L.ScrollBar(sf)
         ex.edit = CreateFrame("EditBox", nil, sf)
         ex.edit:SetMultiLine(true)
@@ -961,10 +968,10 @@ function AW.ShowExport(entry)
         ex.edit:SetScript("OnTextChanged", function(e, user) if user and ex.text and e:GetText() ~= ex.text then e:SetText(ex.text) e:HighlightText() end end)
         sf:SetScrollChild(ex.edit)
         ex.select = Button(ex, "Select all", 110, "primary", function() ex.edit:SetFocus() ex.edit:HighlightText() end, "Selects the whole text. Then press Ctrl+C.")
-        ex.select:SetPoint("BOTTOMRIGHT", -20, 14)
+        ex.select:SetPoint("BOTTOMRIGHT", -20, 14 + DB)
         ex.done = Button(ex, "Close", 90, "secondary", function() ex:Hide() end)
         ex.done:SetPoint("RIGHT", ex.select, "LEFT", -8, 0)
-        AW.frames = AW.frames + 8
+        AW.frames = AW.frames + 10
     end
     ex.text = A.ExportText(entry)
     ex.note:SetText(("\"%s\", revision %d (%d KB), exactly as it was published. Select all, press Ctrl+C, paste it into a text file, and run:\n  tools/update_bundled_layout.sh --from-published --text <that file>\nThe tool checks it again and puts exactly this package's presets and settings in TwichUI's bundled layouts. Nothing here is sent or changed."):format(
@@ -983,10 +990,11 @@ function AW.Content() return content end
 -- Building (once)
 ---------------------------------------------------------------------------
 local function Build()
-    local L = Look()
+    local L, F = Look(), R.FrameLook
     local pal = L.pal
+    local _, _, CR = F.ContentInsets()
     AW.builds = AW.builds + 1
-    win = CreateFrame("Frame", FRAME_NAME, UIParent, "BackdropTemplate")
+    win = CreateFrame("Frame", FRAME_NAME, UIParent)
     win:SetSize(WIDTH, HEIGHT)
     win:SetPoint("CENTER")
     win:SetFrameStrata("HIGH")
@@ -1002,26 +1010,29 @@ local function Build()
     local listed = false
     for _, n in ipairs(UISpecialFrames) do if n == FRAME_NAME then listed = true end end
     if not listed then tinsert(UISpecialFrames, FRAME_NAME) end
-    L.Shell(win, HEADER_H)
+    win.shell = F.Shell(win, { below = true })   -- the shared frame and interior (FrameLook.lua), under everything below
+    F.FadeIn(win)
+    win.shell:Header(HEADER_H)
     local title = L.Text(win, "title")
-    title:SetPoint("TOPLEFT", 18, -12)
+    title:SetPoint("TOPLEFT", 18, -(12 + DT))
     title:SetText("Layout publishing")
     local sub = L.Text(win, "meta")
     sub:SetPoint("BOTTOMLEFT", title, "BOTTOMRIGHT", 10, 2)
     sub:SetText("for the person who makes a layout")
-    L.CloseBox(win)
+    win.closeBox = F.Close(win, function() win:Hide() end)
+    win.closeBox:SetPoint("TOPRIGHT", -(CR + 2), -12)
 
     scroll = CreateFrame("ScrollFrame", nil, win, "UIPanelScrollFrameTemplate")
     scroll:SetPoint("TOPLEFT", PAD, -(HEADER_H + 8))
-    scroll:SetPoint("BOTTOMRIGHT", -PAD - 22, FOOTER_H + PAD)
+    scroll:SetPoint("BOTTOMRIGHT", -PAD - 22, FOOTER_H + PAD + DB)
     L.ScrollBar(scroll)
     content = CreateFrame("Frame", nil, scroll)
     content:SetSize(CONTENT_W, 200)
     scroll:SetScrollChild(content)
 
     footer = CreateFrame("Frame", nil, win)
-    footer:SetPoint("BOTTOMLEFT", PAD, PAD)
-    footer:SetPoint("BOTTOMRIGHT", -PAD, PAD)
+    footer:SetPoint("BOTTOMLEFT", PAD, PAD + DB)
+    footer:SetPoint("BOTTOMRIGHT", -PAD, PAD + DB)
     footer:SetHeight(FOOTER_H - 10)
     footer.close = Button(footer, "Close", 90, "secondary", function() AW.Close(true) end, "Closes the workspace and drops the capture and the changes (it asks first when TwichUI preset work isn't saved or published). Published packages are kept.")
     footer.close:SetPoint("BOTTOMLEFT", 0, 0)

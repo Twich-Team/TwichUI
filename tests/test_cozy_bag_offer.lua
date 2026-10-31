@@ -55,7 +55,7 @@ end
 local MAPS = { [1436] = "Westfall", [1413] = "The Barrens", [1442] = "Stonetalon Mountains", [1432] = "Loch Modan",
   [1417] = "Arathi Highlands", [1424] = "Hillsbrad Foothills" }
 
-local FILES = { "Onboarding.lua", "chronicle/Style.lua", "Look.lua", "Icons.lua", "modules/Interact.lua", "pins/Pins.lua", "modules/Notify.lua",
+local FILES = { "Onboarding.lua", "chronicle/Style.lua", "Look.lua", "FrameLook.lua", "Icons.lua", "modules/Interact.lua", "pins/Pins.lua", "modules/Notify.lua",
   "modules/NotifyLook.lua", "modules/Arrival.lua", "guides/CozyBagData.lua", "guides/CozyBagState.lua", "guides/CozyBag.lua",
   "guides/CozyBagOffer.lua", "guides/CozyBagNotice.lua", "guides/CozyBagButton.lua", "guides/CozyBagWindow.lua" }
 

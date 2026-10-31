@@ -33,7 +33,7 @@ untouched. The window is built the first time it opens and kept; its pages are b
 
 ## The workflow
 
-Six steps, one window (780 × 590, TwichUI's own look, `Look.Shell`; fitted to small screens by `R.FitToScreen`; closes
+Six steps, one window (780 × 599, the framed look of `FrameLook.lua`: its shell is 9 units taller than the 590 the viewport needs, for the frame's rails; fitted to small screens by `R.FitToScreen`; closes
 with Escape through `UISpecialFrames`, never `RegisterGameMenuEscHandler`). A stepper at the top reaches only steps already
 reached with Next: the step you are on has a heavy bar and a warm wash, a step behind you carries a small check, a step not
 reached is quiet and can't be chosen. The footer holds Close (**Do this later** on a first install: closing it then puts the

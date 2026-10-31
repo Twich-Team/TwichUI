@@ -565,3 +565,9 @@ in `DX.OPS` and `docs/diagnostics.md`. Gauges `inventory.frames` (review rows an
 25. With your own item on the cursor the review refuses. Change the bank between the review and Start (another member deposits, or you do
     from a second character) and wait over 15 seconds before Start: the run reads the tabs again and, if the plan differs, shows a NEW review
     and moves nothing. A rank with a daily withdrawal allowance: the run stops when it is spent and does not work around it.
+26. The shared framed look (`FrameLook.lua`; the simulator's screenshots are structural, not colour or font review): the guild bank panel, the
+    review window (**Magic Inventory** button at a mailbox or bank, or Preview) and the bag chooser share one frame and button style. Check at
+    your UI scale and with EllesmereUI on and off: the frame's corners and rails join with no gap or overlap on every side; the header groove,
+    close box, scroll bar and list recess sit inside the frame and nothing is clipped by the rails; buttons lift under the pointer, sink while
+    pressed, go flat when unavailable, and never stay lit or sunk after the pointer leaves, after Start or Cancel hides them, or after
+    they are disabled mid-click; tooltips and the whole button are clickable; dragging a window still moves it and Esc still closes it.

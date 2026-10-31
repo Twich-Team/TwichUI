@@ -98,7 +98,7 @@ local function Client(name, faction, quests, opts)
   c.C_Map = { GetMapInfo = function(id) return MAPS[id] and { mapID = id, name = MAPS[id], parentMapID = 0 } or nil end }
   c.issecretvalue = nil
   c.FitToScreenCalls = 0
-  for _, f in ipairs({ "chronicle/Style.lua", "Look.lua", "modules/Interact.lua", "pins/Pins.lua",
+  for _, f in ipairs({ "chronicle/Style.lua", "Look.lua", "FrameLook.lua", "modules/Interact.lua", "pins/Pins.lua",
     "guides/CozyBagData.lua", "guides/CozyBagState.lua", "guides/CozyBag.lua", "guides/CozyBagWindow.lua" }) do
     local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
   end
@@ -294,6 +294,11 @@ do
   Win.Show()
   local f = Win.Frame()
   Check(f:IsShown(), "the window opened")
+  Check(f.shell and f.head and f.close.twichLook and f.lock.twichLook and f.size.twichLook and f.pinStep.twichLook and f.remove.twichLook,
+    "the window is drawn with the framed look (FrameLook.lua): its shell and title strip, and its buttons")
+  local made = #FRAMES
+  for _ = 1, 3 do Win.Hide(); Win.Show(); Win.Render() end
+  Check(#FRAMES == made, "closing, opening and drawing again make no frame: " .. (#FRAMES - made))
   Check(Cz.Result().status == "loading", "still checking while the history has not come")
   Check(c.CALLS.done == reads, "no quest is read while the history is unknown")
   Check(f.progress.text:find("Checking quest progress"), "the window says so: " .. tostring(f.progress.text))

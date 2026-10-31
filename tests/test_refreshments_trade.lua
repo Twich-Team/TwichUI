@@ -23,7 +23,7 @@ do
     Enabled = function() return false end, Life = { Note = function() end } } }, { __index = _G })
   env.CreateFrame = function() return setmetatable({}, { __index = function() return function() end end }) end
   Load(env, { "modules/TrainingData.lua", "modules/Borders.lua", "modules/MenuStyle.lua", "modules/SpellMenu.lua", "modules/MageConjure.lua",
-    "chronicle/Style.lua", "modules/Refreshments.lua", "modules/RefreshmentsTrade.lua" })
+    "chronicle/Style.lua", "FrameLook.lua", "modules/Refreshments.lua", "modules/RefreshmentsTrade.lua" })
   Plan = env.TwichUI.RefreshmentsTrade.PlanMoves
 end
 
@@ -184,7 +184,7 @@ local function Client(name)
     c.FireEvent("BAG_UPDATE_DELAYED")
   end
 
-  Load(c, { "chronicle/Style.lua", "modules/TrainingData.lua", "modules/Borders.lua", "modules/MenuStyle.lua", "modules/SpellMenu.lua",
+  Load(c, { "chronicle/Style.lua", "Look.lua", "FrameLook.lua", "modules/TrainingData.lua", "modules/Borders.lua", "modules/MenuStyle.lua", "modules/SpellMenu.lua",
     "modules/MageTravel.lua", "modules/MageConjure.lua", "modules/Refreshments.lua", "modules/RefreshmentsPanel.lua",
     "modules/RefreshmentsShares.lua", "modules/RefreshmentsTrade.lua", "diag/Diagnostics.lua", "diag/Refreshments.lua" })
   c.TwichUIDB = { modules = { mageRefreshments = true } }
@@ -217,10 +217,13 @@ local strip = c.TwichUIRefreshmentsTrade
 assert(strip and strip.shown, "the strip shows under the trade window")
 assert(#c.calls == 0, "nothing moves when a trade opens")
 assert(strip.head.text:find("Thrall", 1, true) and strip.fill.enabled, "who, and Fill can be clicked")
-assert(strip.w == 340, "the panel's look: a 1-pixel line round it")
+assert(strip.w == 338 + 26 and strip.twichFrame and strip.twichFrame.shown, "the panel's look: the default frame round it")
+R.RefreshmentsPanel.Style.Set("borderTexture", "solid")
+assert(strip.w == 340 and not strip.twichFrame.shown, "another border: a 1-pixel line, and the frame is put away")
 R.RefreshmentsPanel.Style.Set("borderSize", 3)
 assert(strip.w == 344, "and it follows a change of look while shown")
 R.RefreshmentsPanel.Style.Reset()
+assert(strip.w == 364 and strip.twichFrame.shown, "reset: the frame again")
 
 -- A busy cursor: nothing is dropped or moved.
 c.CURSOR = { item = 9999, count = 1 }

@@ -513,11 +513,11 @@ local function Build()
         bar.tabs[sc.id] = tab
         x = x + w + 2
     end
-    bar.exit = L.Button(bar, "Exit", 64, "secondary", function() Ov.Close("exit") end)
+    bar.exit = R.FrameLook.Button(bar, "Exit", 64, "secondary", function() Ov.Close("exit") end)
     bar.exit:SetHeight(24)
     bar.exit:SetPoint("BOTTOMRIGHT", -12, 10)
     R.Interact.Tip(bar.exit, "Exit", "Closes the preview and the setup. Nothing was changed; your choices are remembered.")
-    bar.switch = L.Button(bar, "Switch layout", 140, "secondary", function()
+    bar.switch = R.FrameLook.Button(bar, "Switch layout", 140, "secondary", function()
         local other = M.OtherLayout()
         if other then M.SetLayout(other.id) end
         Ov.Refresh()
@@ -525,7 +525,7 @@ local function Build()
     bar.switch:SetHeight(24)
     bar.switch:SetPoint("RIGHT", bar.exit, "LEFT", -6, 0)
     R.Interact.Tip(bar.switch, "Switch layout", "Shows the other layout here. This only changes what you are looking at (and which one the setup will offer to apply); nothing is applied.")
-    bar.back = L.Button(bar, "Back", 64, "primary", function() Ov.Close("back") end)
+    bar.back = R.FrameLook.Button(bar, "Back", 64, "primary", function() Ov.Close("back") end)
     bar.back:SetHeight(24)
     bar.back:SetPoint("RIGHT", bar.switch, "LEFT", -6, 0)
     R.Interact.Tip(bar.back, "Back", "Returns to the setup, where you left it.")

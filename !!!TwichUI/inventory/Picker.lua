@@ -127,9 +127,11 @@ local function Close(done)
 end
 
 local function Build()
-    local L = Look()
-    if not (L and L.Shell and R.ChronicleStyle) then return false end
-    f = CreateFrame("Frame", NAME, UIParent, "BackdropTemplate")
+    local L, F = Look(), R.FrameLook
+    if not (L and L.Text and L.EditBox and L.ScrollBar and F and F.Ready()) then return false end
+    local _, _, CR = F.ContentInsets()
+    local RL, RT, RR = F.RailInsets()
+    f = CreateFrame("Frame", NAME, UIParent)
     f:SetSize(WIDTH, HEIGHT)
     f:SetPoint("CENTER", UIParent, "CENTER", -240, 30)
     f:SetFrameStrata("DIALOG")
@@ -142,12 +144,20 @@ local function Build()
     f:SetScript("OnDragStop", f.StopMovingOrSizing)
     f:Hide()
     tinsert(UISpecialFrames, NAME)   -- Esc is Cancel
-    L.Shell(f, HEADER)
+    f.shell = F.Shell(f, { below = true, follow = true })        -- the shared frame and interior (FrameLook.lua), under everything below
+    F.FadeIn(f)
     f:HookScript("OnShow", R.FitToScreen)
-    f.title = L.Text(f, "title")
+    local head = CreateFrame("Frame", nil, f)      -- the header: title and close box over the shell's sheen and groove
+    head:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
+    head:SetPoint("TOPRIGHT", f, "TOPRIGHT", 0, 0)
+    head:SetHeight(HEADER)
+    f.shell:Sheen():Place(head, RL, RT, RR, 0)
+    f.shell:Groove():Place(head, "BOTTOM", 0, RL, RR)
+    f.title = L.Text(head, "title")
     f.title:SetPoint("TOPLEFT", PAD, -14)
     f.title:SetText("Choose from your bags")
-    L.CloseBox(f, function() Close(false) end)
+    f.close = F.Close(f, function() Close(false) end)
+    f.close:SetPoint("TOPRIGHT", -(CR + 2), -12)
     f.sub = L.Text(f, "small")
     f.sub:SetPoint("TOPLEFT", PAD, -(HEADER + 8))
     f.sub:SetPoint("RIGHT", f, "RIGHT", -PAD, 0)
@@ -163,10 +173,10 @@ local function Build()
     f.searchHint:SetText("Search what you carry")
     f.search:HookScript("OnTextChanged", function(self) f.searchHint:SetShown((self:GetText() or "") == "") end)
 
-    local box = CreateFrame("Frame", nil, f, "BackdropTemplate")
+    local box = CreateFrame("Frame", nil, f)
     box:SetPoint("TOPLEFT", PAD, -(HEADER + 88))
     box:SetPoint("BOTTOMRIGHT", -PAD, 56)
-    L.Well(box)
+    f.shell:Recess():Place(box, 0, 0, 0, 0)        -- the grid sits in a recess, a step deeper than the interior
     local scroll = CreateFrame("ScrollFrame", nil, box, "UIPanelScrollFrameTemplate")
     scroll:SetPoint("TOPLEFT", 8, -8)
     scroll:SetPoint("BOTTOMRIGHT", -26, 8)
@@ -178,15 +188,15 @@ local function Build()
     f.empty:SetPoint("CENTER", 0, 0)
 
     f.count = L.Text(f, "small")
-    f.count:SetPoint("BOTTOMLEFT", PAD, 20)
-    f.clear = L.Button(f, "Clear chosen", 110, "secondary", function()
+    f.count:SetPoint("BOTTOMLEFT", PAD, 24)
+    f.clear = F.Button(f, "Clear chosen", 110, "secondary", function()
         chosen = {}
         P.Draw()
     end)
-    f.clear:SetPoint("BOTTOMLEFT", PAD + 80, 14)
-    f.done = L.Button(f, "Done", 90, "primary", function() Close(true) end)
-    f.done:SetPoint("BOTTOMRIGHT", -PAD, 14)
-    f.cancel = L.Button(f, "Cancel", 90, "secondary", function() Close(false) end)
+    f.clear:SetPoint("BOTTOMLEFT", PAD + 80, 18)
+    f.done = F.Button(f, "Done", 90, "primary", function() Close(true) end)
+    f.done:SetPoint("BOTTOMRIGHT", -PAD, 18)
+    f.cancel = F.Button(f, "Cancel", 90, "secondary", function() Close(false) end)
     f.cancel:SetPoint("RIGHT", f.done, "LEFT", -8, 0)
     f:HookScript("OnHide", function()   -- hooked: the shell's fade is a hook of the same script
         -- Cancel, Esc and the close box: nothing changes

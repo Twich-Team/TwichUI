@@ -128,7 +128,7 @@ c.C_Container = {
 c.StaticPopupDialogs = {}
 c.StaticPopup_Show = function(key) local d = c.StaticPopupDialogs[key]; c.popup = d; return d end
 
-Load(c, { "chronicle/Style.lua", "modules/TrainingData.lua", "modules/Borders.lua", "modules/MenuStyle.lua", "modules/SpellMenu.lua",
+Load(c, { "chronicle/Style.lua", "Look.lua", "FrameLook.lua", "modules/TrainingData.lua", "modules/Borders.lua", "modules/MenuStyle.lua", "modules/SpellMenu.lua",
   "modules/MageTravel.lua", "modules/MageConjure.lua", "modules/Refreshments.lua" })
 local castFrame = made[#made]   -- the only frame Refreshments.lua makes at load: its watch on your own casts
 assert(castFrame.kind == "Frame" and castFrame.scripts.OnEvent, "a frame of its own for the player's casts")
@@ -375,8 +375,15 @@ assert(not P.IsOpen(), "and closes when combat ends")
 do
   local PS = P.Style
   local frame = c.TwichUIRefreshments
-  assert(PS ~= R.MenuStyle and PS.Get("bgOpacity") == 98 and PS.Get("borderTexture") == "solid", "its own look, its own defaults")
+  local FL = R.FrameLook
+  assert(PS ~= R.MenuStyle and PS.Get("bgOpacity") == 98 and PS.Get("borderTexture") == FL.BORDER, "its own look, its own defaults: the framed look's frame")
+  assert(PS.Get("bgColor") == FL.PANEL_BG and PS.Get("borderColor") == FL.PANEL_BORDER, "...in the framed look's espresso and bronze")
+  assert(R.MenuStyle.Get("borderTexture") == "solid" and R.MenuStyle.Get("bgColor") == "ff2b2117", "the menus' defaults are not the panel's")
   assert(P.Open())
+  assert(frame.backdrop and frame.backdrop.bgFile and not frame.backdrop.edgeFile and frame.twichFrame and frame.twichFrame.shown
+    and frame.w == 380 + 26 and frame.h == 548 + 26, "the default: the player's background under the frame, the content plus its reach each side")
+  assert(not frame.twichFrame.interior, "the frame has no interior of its own: the background is the look's")
+  assert(PS.Set("borderTexture", "solid") and not frame.twichFrame.shown, "another border puts the frame away")
   assert(frame.backdrop and frame.backdrop.bgFile and frame.w == 382 and frame.h == 550, "a 1-pixel line: the content plus one each side")
   assert(PS.Set("bgOpacity", 40) and math.abs(frame.bgColor[4] - 0.4) < 1e-9, "an open panel follows at once")
   assert(c.TwichUIDB.ui.refreshmentsStyle.bgOpacity == 40 and c.TwichUIDB.ui.brokerMenu == nil, "saved apart from the menus' look")
@@ -401,7 +408,7 @@ do
   c.FireEvent("PLAYER_REGEN_ENABLED")
   assert(frame.w == 388, "redrawn when combat ends")
   PS.Reset()
-  assert(c.TwichUIDB.ui.refreshmentsStyle == nil and frame.w == 382, "reset: the defaults, and nothing saved")
+  assert(c.TwichUIDB.ui.refreshmentsStyle == nil and frame.w == 406 and frame.twichFrame.shown, "reset: the defaults (the frame again), and nothing saved")
   c.EllesmereUI = nil
   P.Close()
 end
@@ -473,7 +480,7 @@ do
   local wbrokers = {}
   local wLDB = w.LibStub:NewLibrary("LibDataBroker-1.1", 1)
   wLDB.NewDataObject = function(_, name, o) wbrokers[name] = o; return o end
-  Load(w, { "chronicle/Style.lua", "modules/TrainingData.lua", "modules/Borders.lua", "modules/MenuStyle.lua", "modules/SpellMenu.lua",
+  Load(w, { "chronicle/Style.lua", "Look.lua", "FrameLook.lua", "modules/TrainingData.lua", "modules/Borders.lua", "modules/MenuStyle.lua", "modules/SpellMenu.lua",
     "modules/MageTravel.lua", "modules/MageConjure.lua", "modules/Refreshments.lua", "modules/RefreshmentsPanel.lua", "modules/RefreshmentsBroker.lua" })
   w.TwichUIDB = { modules = { mageRefreshments = true } }
   w.LOADED["!!!TwichUI"] = true; w.FireEvent("ADDON_LOADED", "!!!TwichUI"); w.FireEvent("PLAYER_LOGIN"); FlushTimers()
@@ -493,7 +500,7 @@ do
   m.UISpecialFrames = {}
   m.InCombatLockdown = function() return COMBAT end
   c.ROSTER = {}
-  Load(m, { "chronicle/Style.lua", "modules/TrainingData.lua", "modules/Borders.lua", "modules/MenuStyle.lua", "modules/SpellMenu.lua",
+  Load(m, { "chronicle/Style.lua", "Look.lua", "FrameLook.lua", "modules/TrainingData.lua", "modules/Borders.lua", "modules/MenuStyle.lua", "modules/SpellMenu.lua",
     "modules/MageTravel.lua", "modules/MageConjure.lua", "modules/Refreshments.lua", "modules/RefreshmentsPanel.lua" })
   m.TwichUIDB = { modules = { mageRefreshments = true } }
   c.TwichUIRefreshmentsWater = nil

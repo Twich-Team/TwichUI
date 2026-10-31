@@ -233,7 +233,7 @@ end
 local function closeMap() WMF.shown = false; for p in pairs(WMF.providers) do p:OnHide() end end
 local function handlers() local n = 0 for _ in pairs(WMF.clicks) do n = n + 1 end return n end
 
-for _, f in ipairs({ "chronicle/Style.lua", "modules/Borders.lua", "modules/MenuStyle.lua", "modules/SpellMenu.lua", "modules/Media.lua",
+for _, f in ipairs({ "chronicle/Style.lua", "FrameLook.lua", "modules/Borders.lua", "modules/MenuStyle.lua", "modules/SpellMenu.lua", "modules/Media.lua",
   "pins/Pins.lua", "pins/Sync.lua", "pins/Look.lua", "pins/Sound.lua", "pins/Map.lua", "pins/Ping.lua", "pins/Pulse.lua", "pins/PingMap.lua",
   "pins/MapTools.lua", "npcs/Kinds.lua", "npcs/Store.lua", "npcs/Prefs.lua", "npcs/Collect.lua", "npcs/Map.lua", "npcs/Share.lua",
   "npcs/Knowledge.lua", "npcs/Search.lua", "npcs/SearchBar.lua", "npcs/FilterMenu.lua" }) do

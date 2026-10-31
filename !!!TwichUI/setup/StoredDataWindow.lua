@@ -4,7 +4,7 @@
 -- right, opened a level at a time. Nothing can be changed here. TwichUI's own
 -- data can be deleted from its Saved data list, which this window links to.
 -- Lists are ScrollBoxes, so only the rows on screen exist however big the
--- data is. Drawn with TwichUI's own look (Look.lua), the same as the settings and sharing windows.
+-- data is. Drawn with the shared framed look (FrameLook.lua, on Look.lua).
 
 local R = TwichUI
 local SD = R.StoredData
@@ -16,6 +16,7 @@ local WIDTH, HEIGHT = 900, 580
 local LEFT_W = 330
 local ADDON_H, TREE_H = 22, 18
 local PAGE = 200                 -- entries shown per table before "Show more"
+local HEAD = 44                  -- the title strip, inside the frame's rails (FrameLook.lua)
 
 local f                          -- main frame
 local open = {}                  -- [addon] = true: its data is listed under it
@@ -58,7 +59,7 @@ local function Text(parent, template)
 end
 
 local function Btn(parent, label, w, onClick, tooltip)
-    local b = Look().Button(parent, label, w, "secondary", onClick)
+    local b = R.FrameLook.Button(parent, label, w, "secondary", onClick)
     function b:SetText(t) self.text:SetText(t) end
     function b:GetText() return self.text:GetText() end
     if tooltip then R.Interact.Tip(b, label, tooltip) end
@@ -469,7 +470,9 @@ local function AskScan()
 end
 
 local function Build()
-    f = CreateFrame("Frame", "TwichUIAddonData", UIParent, "BackdropTemplate")
+    local F = R.FrameLook
+    local _, _, CR = F.ContentInsets()
+    f = CreateFrame("Frame", "TwichUIAddonData", UIParent)
     f:Hide()                     -- so the first Show runs OnShow (frames start shown)
     f:SetSize(WIDTH, HEIGHT)
     f:SetPoint("CENTER")
@@ -483,11 +486,13 @@ local function Build()
     f:SetClampedToScreen(true)
     f:HookScript("OnShow", R.FitToScreen)
     tinsert(UISpecialFrames, "TwichUIAddonData")
-    Look().Shell(f, 38)   -- the rim, and a title band for the name and the close box
+    f.shell = F.Shell(f, { below = true })   -- the shared frame and interior (FrameLook.lua), under everything below
+    F.FadeIn(f)
+    local head = f.shell:Header(HEAD)        -- a title strip for the name and the close box
 
-    local logo = f:CreateTexture(nil, "ARTWORK")
+    local logo = head:CreateTexture(nil, "ARTWORK")
     logo:SetSize(26, 26)
-    logo:SetPoint("TOPLEFT", 12, -8)
+    logo:SetPoint("TOPLEFT", 16, -13)
     logo:SetTexture(R.ICON)
     local title = Text(f, "GameFontNormalLarge")
     title:SetPoint("LEFT", logo, "RIGHT", 8, 0)
@@ -495,11 +500,12 @@ local function Build()
     local sub = Text(f, "GameFontDisableSmall")
     sub:SetPoint("LEFT", title, "RIGHT", 10, -1)
     sub:SetText("what your addons keep between sessions · read-only")
-    Look().CloseBox(f)
+    local close = F.Close(f, function() f:Hide() end)
+    close:SetPoint("TOPRIGHT", -(CR + 2), -14)
 
-    local listH = HEIGHT - 48 - 96
+    local listH = HEIGHT - (HEAD + 8) - 96
     f.left = List(f, LEFT_W, listH, ADDON_H, InitLeft)
-    f.left:SetPoint("TOPLEFT", 14, -48)
+    f.left:SetPoint("TOPLEFT", 14, -(HEAD + 8))
 
     f.head = Text(f, "GameFontNormal")
     f.head:SetPoint("TOPLEFT", f.left, "TOPRIGHT", 14, -2)
@@ -523,7 +529,7 @@ local function Build()
 
     local scan = Btn(f, "Find addon data", 150, AskScan,
         "Reloads your UI once and notes which data appears as each addon loads. Nothing is changed, copied or sent.")
-    scan:SetPoint("BOTTOMRIGHT", -16, 14)
+    scan:SetPoint("BOTTOMRIGHT", -16, 18)
     local mine = Btn(f, "TwichUI's saved data", 170, function()
         if R.Window then R.Window:ShowStorage() end
     end, "TwichUI's own saved setups, backups and Undo copies, where you can delete what you no longer need.")

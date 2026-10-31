@@ -120,7 +120,16 @@ local M, W = WK.Model, WK.Window
 local top, bottom, scroll = Viewport(win)
 local VIEW_H = bottom - top
 do
-  Check(top == 92 and bottom == 520 and VIEW_H == 428, "the scroll area is the window's standard viewport (92 to 520: " .. tostring(top) .. " to " .. tostring(bottom) .. ")")
+  Check(top == 96 and bottom == 524 and VIEW_H == 428, "the scroll area is the window's standard viewport (96 to 524, 428 high as ever: " .. tostring(top) .. " to " .. tostring(bottom) .. ")")
+  -- drawn with the framed look (FrameLook.lua): its shell (following the window's height), its close box and its footer buttons in its bevel;
+  -- the choice cards are not framed
+  Check(win.shell and win.shell.corner and win.closeBox and win.closeBox.twichLook, "the window is drawn with the framed look: a shell and its close box")
+  local buttons, bevelled = 0, 0
+  for _, ch in ipairs(FooterOf(win).children) do
+    if ch.kind == "Button" then buttons = buttons + 1; if ch.twichLook and not ch.twichBevel then bevelled = bevelled + 1 end end
+  end
+  Check(buttons == 3 and bevelled == 3, "the footer's three buttons carry the framed look's bevel, not Look's as well (" .. bevelled .. " of " .. buttons .. ")")
+  Check(win:GetFrameLevel() >= WK.Window.Scrim():GetFrameLevel() + 2, "the window is two levels over the dimming, so its shell (one under it) still draws over it")
   Check(scroll.scrollBarHideable == 1, "the scroll bar is the template's hideable one: it shows only while a page overflows")
   local welcome = W.pages[1]
   Check(Says(win, "Make yourself at home") and Says(win, "Choose a layout, pick your conveniences, and make it yours."), "one heading and one short line")
@@ -425,7 +434,7 @@ do
   local nb, bb, cb = Find(win, ApplyLabel(win)), Find(win, "Back"), Find(win, "Close")
   local rn, rb, rc = P.Rect(nb), P.Rect(bb), P.Rect(cb)
   Check(rn.t == rb.t and rn.t == rc.t and rn.r > rb.r and rb.r < rn.l and rc.r < rb.l, "one row: Close at the left, Back and the primary action at the right")
-  Check(rn.r == win.w - 16 and rn.b == win.h - 16, "the primary action is in the corner, at the same place on every step")
+  Check(rn.r == win.w - 16 and rn.b == win.h - 21, "the primary action is in the corner, at the same place on every step")
   Check(rn.w >= 110 and #("Get started") * 6 < 110, "its labels fit its button")
 end
 
@@ -524,7 +533,7 @@ do
     Check(inside or (mayScroll and win.h >= 600), name .. ": everything is inside the window" .. (mayScroll and ", or the dialog is at its height limit and scrolls" or ""))
     Check(not overlap, name .. ": no two buttons overlap" .. (overlap and (" (" .. overlap .. ")") or ""))
     Check(not narrow, name .. ": long text is not squeezed into a narrow column" .. (narrow and (": " .. narrow:sub(1, 30)) or ""))
-    Check(win.w == 520 and win.h >= 240 and win.h <= 600, name .. ": the window is the compact one (" .. win.w .. " x " .. win.h .. ")")
+    Check(win.w == 520 and win.h >= 240 and win.h <= 609, name .. ": the window is the compact one (" .. win.w .. " x " .. win.h .. ")")
     return things
   end
   local k = LM.Boot("Compact")
@@ -539,7 +548,7 @@ do
   local hRead = w2.h
   Expand(w2, "Details") Expand(w2, "Manage layout")
   Measure("ready, Details and Manage layout open", w2, WK4, true)
-  Check(w2.h > hRead and w2.h <= 600, "opening both grows the dialog, within its bound")
+  Check(w2.h > hRead and w2.h <= 609, "opening both grows the dialog, within its bound")
   -- a mismatch with its recovery actions in view
   local LY2 = k2.TwichUI.Layouts
   local j = LY2.Journal.Read()

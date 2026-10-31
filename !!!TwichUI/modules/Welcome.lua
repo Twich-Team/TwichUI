@@ -17,7 +17,7 @@
 -- (Notify.Preview): made-up details, no sound unless the player allowed preview sounds, nothing recorded, no game
 -- state touched, reduced motion honoured by the cards. Closing the dialog takes back the previews it started.
 --
--- Look: TwichUI's own window look (Look.lua), the same family as the settings window, with or without
+-- Look: the shared framed look (FrameLook.lua, on Look.lua), the same family as the settings window, with or without
 -- EllesmereUI; it is never skinned by it. Its fade follows "Reduce window motion" on Home.
 
 local R = TwichUI
@@ -27,7 +27,7 @@ R.Welcome = W
 local FRAME_NAME = "TwichUIWelcome"
 local WIDTH = 460
 local PAD = 22                -- space inside the frame's sides
-local BAND = 44               -- title band height
+local BAND = 48               -- title strip height, inside the frame's rails (FrameLook.lua)
 local PREVIEW_KINDS = { "arrival", "friend" }   -- the sample cards the Preview button shows (different places, so together)
 
 -- What the dialog says. Plain text; a point is a label and a sentence.
@@ -300,12 +300,13 @@ local function Layout()
 end
 
 local function Build()
-    local L = Look()
-    if not (L and L.Shell and L.Text and L.Button and L.Solid and L.CloseBox and R.ChronicleStyle and R.ChronicleStyle.Link) then
+    local L, F = Look(), R.FrameLook
+    if not (L and L.Text and L.Solid and F and F.Ready() and R.ChronicleStyle and R.ChronicleStyle.Link) then
         return false
     end
     local pal = L.pal
-    local f = CreateFrame("Frame", FRAME_NAME, UIParent, "BackdropTemplate")
+    local _, _, CR = F.ContentInsets()
+    local f = CreateFrame("Frame", FRAME_NAME, UIParent)
     f:SetSize(WIDTH, 300)   -- replaced by Layout() from the real text below
     f:SetPoint("CENTER", UIParent, "CENTER", 0, 60)
     f:SetFrameStrata("DIALOG")
@@ -320,14 +321,17 @@ local function Build()
     tinsert(UISpecialFrames, FRAME_NAME)   -- Escape closes it
     frame = f
 
+    -- the bullets and rules are textures: they go on a frame of their own over the shell (FrameLook.lua), which is under the window
+    f.art = CreateFrame("Frame", nil, f)
+    f.art:SetAllPoints(f)
     f.intro = Text(f, "body", true)
     f.intro:SetText(W.INTRO)
-    f.ruleTop = Rule(f)
+    f.ruleTop = Rule(f.art)
 
     f.points = {}
     for i, p in ipairs(W.POINTS) do
         local point = {}
-        point.mark = L.Solid(f, "ARTWORK", pal.bronzeText, 0.9)   -- a small bronze square, as a ledger's bullet
+        point.mark = L.Solid(f.art, "ARTWORK", pal.bronzeText, 0.9)   -- a small bronze square, as a ledger's bullet
         point.mark:SetSize(5, 5)
         point.label = Text(f, "heading", false)
         point.label:SetText(p[1])
@@ -335,7 +339,7 @@ local function Build()
         point.body:SetText(p[2])
         f.points[i] = point
     end
-    f.ruleMid = Rule(f)
+    f.ruleMid = Rule(f.art)
 
     f.autoHead = Text(f, "heading", false)
     f.autoHead:SetText(W.AUTO_HEAD)
@@ -354,13 +358,13 @@ local function Build()
     f.linksLabel:SetText(W.LINKS_LABEL)
     f.links = {}
     f.summary = { on = {}, off = {}, pages = {} }
-    f.ruleBottom = Rule(f)
+    f.ruleBottom = Rule(f.art)
 
     f.footer = Text(f, "meta", true)
     f.footer:SetText(W.FOOTER)
-    f.open = L.Button(f, "Open Settings", 110, "primary", function() OpenSettings() end)
-    f.preview = L.Button(f, "Preview notifications", 150, "secondary", function() W.Preview() end)
-    f.dismiss = L.Button(f, "Close", 80, "secondary", function() f:Hide() end)
+    f.open = F.Button(f, "Open Settings", 110, "primary", function() OpenSettings() end)
+    f.preview = F.Button(f, "Preview notifications", 150, "secondary", function() W.Preview() end)
+    f.dismiss = F.Button(f, "Close", 80, "secondary", function() f:Hide() end)
     WideEnough(f.open, 110)
     WideEnough(f.preview, 150)
     WideEnough(f.dismiss, 80)
@@ -380,14 +384,18 @@ local function Build()
     Populate()
     Layout()   -- the frame's height now follows its text, and its art is drawn for that height
 
-    -- The rim and title band, and a short fade in unless "Reduce window motion" is on (Look.Shell).
-    L.Shell(f, BAND)
+    -- The frame and interior (the height follows the text, so the frame follows the height), the title strip, and a short fade in
+    -- unless "Reduce window motion" is on.
+    f.shell = F.Shell(f, { below = true, follow = true })
+    F.FadeIn(f)
+    f.shell:Header(BAND)
     f.title = L.Text(f, "title")
     f.title:SetWordWrap(false)
     f.title:SetWidth(WIDTH - PAD - 48)
-    f.title:SetPoint("LEFT", f, "TOPLEFT", PAD, -(BAND / 2))
+    f.title:SetPoint("LEFT", f, "TOPLEFT", PAD, -(BAND / 2 + 4))
     f.title:SetText(W.TITLE)
-    f.close = L.CloseBox(f, function() f:Hide() end)
+    f.close = F.Close(f, function() f:Hide() end)
+    f.close:SetPoint("TOPRIGHT", -(CR + 2), -(BAND / 2 - 4))
     return true
 end
 

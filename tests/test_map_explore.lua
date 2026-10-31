@@ -402,7 +402,7 @@ EXPLORED[1429] = { { textureWidth = 200, textureHeight = 150, offsetX = 100, off
 ---------------------------------------------------------------------------
 -- Load
 ---------------------------------------------------------------------------
-for _, f in ipairs({ "chronicle/Style.lua", "modules/Borders.lua", "modules/MenuStyle.lua", "modules/SpellMenu.lua", "modules/Media.lua",
+for _, f in ipairs({ "chronicle/Style.lua", "FrameLook.lua", "modules/Borders.lua", "modules/MenuStyle.lua", "modules/SpellMenu.lua", "modules/Media.lua",
   "pins/Pins.lua", "pins/Sync.lua", "pins/Look.lua", "pins/Map.lua", "pins/Ping.lua", "pins/Pulse.lua", "pins/PingMap.lua", "pins/MapTools.lua",
   "nav/Prefs.lua", "nav/Data.lua", "nav/Route.lua", "nav/Journey.lua", "nav/Nav.lua", "nav/Paint.lua", "nav/MapTrail.lua",
   "map/Prefs.lua", "map/Data.lua", "map/ViewMath.lua", "map/World.lua", "map/View.lua", "map/Art.lua", "map/Detail.lua",

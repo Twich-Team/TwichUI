@@ -155,7 +155,7 @@ c.issecretvalue = nil
   c.IsAltKeyDown, c.IsShiftKeyDown, c.IsControlKeyDown = function() return false end, function() return false end, function() return false end
 
   if opts.before then opts.before(c) end   -- another addon's commands, registered before TwichUI's login
-  for _, f in ipairs({ "chronicle/Style.lua", "modules/Borders.lua", "modules/MenuStyle.lua",
+  for _, f in ipairs({ "chronicle/Style.lua", "FrameLook.lua", "modules/Borders.lua", "modules/MenuStyle.lua",
     "pins/Pins.lua", "pins/Sync.lua", "pins/Look.lua", "pins/Map.lua", "pins/Editor.lua", "pins/Way.lua" }) do
     local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
   end

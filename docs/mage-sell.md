@@ -193,7 +193,7 @@ skipped. Both use the one buyback list.
 help list like `saved`; Options > Mage) lists what would be sold (grouped by item, with quantity, why it is ordinary,
 and value from sell prices), what is kept and why (only Food & Drink items; never a dump of the bags), and the
 never-sell list. While open it listens to bag, item-data, merchant and combat events and redraws once per burst; closed,
-it listens to nothing. Drawn with the Chronicle palette. Sell now is enabled only at an open merchant, out of
+it listens to nothing. Drawn in the framed look (`FrameLook.lua`: its frame, interior, close box and buttons; the list wells and scroll bar stay the Chronicle's), with no appearance setting of its own. Sell now is enabled only at an open merchant, out of
 combat, with the feature on and Dry run off.
 
 ## Saved and not saved

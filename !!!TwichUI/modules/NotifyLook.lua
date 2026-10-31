@@ -13,7 +13,9 @@
 --                                    it is what it says and later changes to the shared look don't reach
 --                                    it. Turning it off keeps the values for next time; Reset forgets them.
 -- A value that can't be used is read as its default without being erased, and nothing is saved that the
--- player did not change. The defaults are exactly the look the cards had before this file existed.
+-- player did not change. The defaults are the framed look's colors (ivory text, an aged bronze rule, an espresso backdrop that
+-- stays off until its opacity is raised); every other setting is what the cards have always had. A color the player has saved is
+-- drawn exactly as it always was, whether or not it equals what was the default: see LEGACY below.
 -- Frames, fonts, media paths and previews are never saved.
 --
 -- Nothing runs per frame. A change redraws a card that is showing, once, in a short coalesced pass and
@@ -56,16 +58,35 @@ local K = S and S.color or FALLBACK
 local function Byte(v) return math.floor(math.max(0, math.min(1, v)) * 255 + 0.5) end
 local function HexOf(c) return ("ff%02x%02x%02x"):format(Byte(c[1]), Byte(c[2]), Byte(c[3])) end
 
+-- What the cards' colors were before the framed look, and still the reference a saved color is measured against: a color the player
+-- chose is applied as a ratio to these, so changing what is DEFAULT never changes how a saved color is drawn. A saved color equal to
+-- one of these (the player's own choice, which happens to be the old default) is drawn with these exact numbers, as it always was.
+local LEGACY = { titleColor = K.text, bodyColor = K.text, detailColor = K.stone, accentColor = K.bronze, bgColor = K.bg }
+local LEGACY_HEX = {}
+for key, c in pairs(LEGACY) do LEGACY_HEX[key] = HexOf(c) end
+
+-- What a card starts from when a color is not saved: ivory title and text, a quieter warm detail, the frame's aged bronze for the rule and
+-- its espresso for the backdrop (FrameLook's own numbers; the old colors where it is not loaded).
+local FL = R.FrameLook
+local ST = FL and FL.Style()
+local NEW = {
+    titleColor = ST and ST.primary.text or LEGACY.titleColor,
+    bodyColor = ST and ST.quiet.text or LEGACY.bodyColor,
+    detailColor = ST and { 0.72, 0.67, 0.58 } or LEGACY.detailColor,
+    accentColor = ST and ST.bronzeHi or LEGACY.accentColor,
+    bgColor = ST and ST.interior or LEGACY.bgColor,
+}
+
 local DEFAULTS = {
     titleFont = "default", textFont = "default",
     textScale = 100, outline = "shadow",
-    titleColor = HexOf(K.text), bodyColor = HexOf(K.text), detailColor = HexOf(K.stone),
+    titleColor = HexOf(NEW.titleColor), bodyColor = HexOf(NEW.bodyColor), detailColor = HexOf(NEW.detailColor),
     textOpacity = 100,
-    accentColor = HexOf(K.bronze), accentOpacity = 100,
-    bgColor = HexOf(K.bg), bgOpacity = 0, padding = 10,
+    accentColor = HexOf(NEW.accentColor), accentOpacity = 100,
+    bgColor = HexOf(NEW.bgColor), bgOpacity = 0, padding = 10,
 }
--- The role colors the defaults stand for: a changed color is applied as a ratio to these, so a card's dimmer
--- text (a smaller place's name) stays dimmer than its title.
+-- The role colors a changed color is applied as a ratio to (the old defaults, see LEGACY): a card's dimmer text (a smaller place's name)
+-- stays dimmer than its title.
 local ROLE_COLOR = { title = K.text, body = K.text, detail = K.stone }
 local ROLE_KEY = { title = "titleColor", body = "bodyColor", detail = "detailColor" }
 
@@ -271,9 +292,10 @@ local function Rgb(hex)
     return tonumber(hex:sub(3, 4), 16) / 255, tonumber(hex:sub(5, 6), 16) / 255, tonumber(hex:sub(7, 8), 16) / 255
 end
 
--- A saved color as numbers; the default's own hex gives the default's own numbers exactly.
-local function Channels(hex, defaultHex, defaultColor)
-    if hex == defaultHex then return { defaultColor[1], defaultColor[2], defaultColor[3] } end
+-- A color setting as numbers: the exact numbers for the default's own hex, and for the old default's (see LEGACY); any other hex as it reads.
+local function Channels(hex, key)
+    local exact = hex == DEFAULTS[key] and NEW[key] or (hex == LEGACY_HEX[key] and LEGACY[key])
+    if exact then return { exact[1], exact[2], exact[3] } end
     local r, g, b = Rgb(hex)
     return { r, g, b }
 end
@@ -310,10 +332,10 @@ function L.Look(kind)
         pad = Get("padding"),
     }
     for role, key in pairs(ROLE_KEY) do
-        look.color[role] = Channels(Get(key), DEFAULTS[key], ROLE_COLOR[role])
+        look.color[role] = Channels(Get(key), key)
     end
-    look.accent = Channels(Get("accentColor"), DEFAULTS.accentColor, K.bronze)
-    look.bg = Channels(Get("bgColor"), DEFAULTS.bgColor, K.bg)
+    look.accent = Channels(Get("accentColor"), "accentColor")
+    look.bg = Channels(Get("bgColor"), "bgColor")
     cache[kind] = { rev = rev, look = look }
     return look
 end

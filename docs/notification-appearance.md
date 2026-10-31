@@ -23,19 +23,32 @@ So there are three text **roles**: *title*, *body* (the spells; the place on Wel
 quieter). Zone and friend cards have no body, so a body color is neither offered nor accepted for them.
 
 None of the cards had a frame or backdrop. A backdrop is new, drawn behind the text only, and its opacity defaults to
-0, which is exactly the old look.
+0: no backdrop, as the cards have always been.
+
+**Default colors (the framed look's).** A color that is not saved is ivory for the title and main text, a quieter warm
+tone for the detail, the frame's aged bronze for the rule and its espresso for the backdrop (`FrameLook.Style()`'s
+numbers; the old colors where `FrameLook.lua` is not loaded). Everything else is as it was. The Chronicle's palette is
+not touched, so the Chronicle and every other window that shares `chronicle/Style.lua` keep theirs. Lightweight on
+purpose: no frame, no artwork, no new weight, the backdrop stays off.
+
+**A saved color is a choice, and is drawn as it always was.** A color the player saved is applied as a ratio to the
+*old* role color (`LEGACY` in `NotifyLook.lua`), not to the new default, so changing the default never changes how a
+saved color is drawn. A saved value equal to an old default (`ffede0c2` and the rest) is the player's own choice
+too: it is drawn with the old numbers exactly (`Channels`), and is never rewritten, compared or migrated. A card's
+complete own copy (made when "Give this card its own look" was turned on) holds its values and keeps them; one that
+is short of a key reads the new default for that key and is not completed behind the player's back.
 
 ## Settings
 
-| Setting | Values | Default (= the old look) |
+| Setting | Values | Default |
 | --- | --- | --- |
 | Title font, Text font | LibSharedMedia name or `default` | `default`: each card's own face |
 | Text size | 80-140 (% of each card's own sizes) | 100 |
 | Text outline | shadow, none, outline, thick | shadow (the soft dark edge) |
-| Title / Main text / Detail color | AARRGGBB | the cards' parchment, parchment, stone |
+| Title / Main text / Detail color | AARRGGBB | ivory, ivory, a quieter warm tone |
 | Text opacity | 30-100 | 100 (text only) |
-| Accent color, Accent opacity | AARRGGBB, 0-100 | bronze, 100 (the rule and its gold mark) |
-| Backdrop color, opacity, padding | AARRGGBB, 0-100, 4-20 | umber, **0**, 10 |
+| Accent color, Accent opacity | AARRGGBB, 0-100 | aged bronze, 100 (the rule and its gold mark) |
+| Backdrop color, opacity, padding | AARRGGBB, 0-100, 4-20 | espresso, **0**, 10 |
 
 Why a text *scale* and not a point size: the cards' sizes differ (30, 20, 18, 17, 15, 13). A percentage keeps their
 proportions and keeps the default exactly the old look. Width and padding of the cards themselves are not offered:

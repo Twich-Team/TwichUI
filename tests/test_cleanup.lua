@@ -61,7 +61,7 @@ a.C_Map = {GetMapInfo = function(id) return {mapID = id, name = "Map " .. id} en
 -- counting and scanning are visibly sliced, and can be cancelled between frames.
 local clockMs = 0
 a.debugprofilestop = function() clockMs = clockMs + 5; return clockMs end
-for _, f in ipairs({"setup/StoredData.lua", "setup/Explorer.lua", "setup/Cleanup.lua", "chronicle/Style.lua", "Look.lua",
+for _, f in ipairs({"setup/StoredData.lua", "setup/Explorer.lua", "setup/Cleanup.lua", "chronicle/Style.lua", "Look.lua", "FrameLook.lua",
     "setup/ExplorerWindow.lua", "pins/Pins.lua"}) do
   local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, a); chunk("!!!TwichUI", {})
 end
@@ -183,11 +183,18 @@ assert(f and f.shown and not CL.Enabled(), "opening the explorer does not turn i
 f.delete.scripts.OnClick(f.delete)
 assert(not a.TwichUIExplorerCleanupDialog, "the delete control does nothing while off")
 assert(f.chip.shown == false and f.advOn.shown == true and f.advOff.shown == false, "read-only controls")
+-- the explorer is drawn with the framed look (FrameLook.lua): its shell, and one bevel on each button (the toggle too)
+assert(f.shell and f.shell.corner, "the explorer has the shared shell")
+for _, name in ipairs({ "refresh", "reveal", "find", "advOn", "advOff", "delete", "undo", "inspect" }) do
+  assert(f[name] and f[name].twichLook and f[name].twichLook.bevel.lit, "the explorer's " .. name .. " button is the framed look's")
+end
 
 -- The warning, then the acknowledgment, then the confirmation.
 f.advOn.scripts.OnClick(f.advOn)
 local d = a.TwichUIExplorerCleanupDialog
 assert(d and d.shown and not CL.Enabled(), "the warning opens; nothing is on yet")
+assert(d.shell and d.ack.twichLook and d.cancel.twichLook and d.confirmPlain.twichLook and d.confirmDanger.twichLook and d.again.twichLook,
+  "the dialog is drawn with the framed look too, its acknowledgment included")
 local text = d.body.edit.text
 assert(text:find("can remove saved data and affect settings or features", 1, true)
   and text:find("not proof that data is unused", 1, true), "the warning's wording")

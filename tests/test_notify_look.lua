@@ -88,7 +88,7 @@ c.PlaySoundFile = function() c.sounds = c.sounds + 1; return true end
 c.PlaySound = function() c.sounds = c.sounds + 1; return true end
 c.C_Texture = { GetAtlasInfo = function() return nil end }
 
-for _, f in ipairs({ "chronicle/Style.lua", "modules/Notify.lua", "modules/NotifyLook.lua", "modules/Arrival.lua",
+for _, f in ipairs({ "chronicle/Style.lua", "FrameLook.lua", "modules/Notify.lua", "modules/NotifyLook.lua", "modules/Arrival.lua",
   "modules/WelcomeBack.lua", "modules/Training.lua", "modules/FriendLogin.lua", "modules/Borders.lua", "modules/MenuStyle.lua" }) do
   local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
 end
@@ -98,6 +98,11 @@ local R = c.TwichUI
 local N, NL, A = R.Notify, R.NotifyLook, R.Arrival
 local K = R.ChronicleStyle.color
 assert(NL and NL.Look, "the look is loaded")
+-- What an unsaved color is now: the framed look's ivory, a quieter detail, its aged bronze (FrameLook.lua's own numbers).
+local ST = R.FrameLook.Style()
+local NEW = { title = ST.primary.text, body = ST.quiet.text, detail = { 0.72, 0.67, 0.58 }, accent = ST.bronzeHi }
+-- a tone a card draws in, moved the way the default moved from the old one (a ratio to the old color, as a saved color is)
+local function Moved(base, new, old) return { math.min(1, base[1] * new[1] / old[1]), math.min(1, base[2] * new[2] / old[2]), math.min(1, base[3] * new[3] / old[3]) } end
 c.TwichUIDB.ui = c.TwichUIDB.ui or {}   -- the settings window makes it when it opens; nothing else here does
 
 local function Eq(a, b) return math.abs(a - b) < 1e-9 end
@@ -141,16 +146,16 @@ Show("arrival")
 local arrival, ag = CardOf("sub")
 assert(arrival and arrival.shown and ag.playing, "the zone card is up")
 assert(arrival.title.font.path == A.FONT_TITLE and arrival.title.font.size == 30 and arrival.title.font.flags == nil, "zone title: Cinzel 30, plain")
-Color(arrival.title, K.text[1], K.text[2], K.text[3], 1, "zone title color")
+Color(arrival.title, NEW.title[1], NEW.title[2], NEW.title[3], 1, "zone title color (ivory)")
 assert(arrival.sub.font.path == A.FONT_LINE and arrival.sub.font.size == 17, "zone's smaller place: Alegreya 17")
-Color(arrival.sub, K.stone[1], K.stone[2], K.stone[3], 1, "smaller place color")
+Color(arrival.sub, NEW.detail[1], NEW.detail[2], NEW.detail[3], 1, "smaller place color")
 assert(arrival.title.shadow[4] == 0.85 and arrival.sub.shadow[4] == 0.85, "the soft shadow")
 assert(arrival.title.alpha == 1 and arrival.sub.alpha == 1, "text fully solid")
 assert(arrival.width == 600 and arrival.height == 120, "the card is 600 by 120")
 local rule = arrival.rule
 assert(rule.alpha == 1, "rule at full strength")
 for _, part in ipairs(rule.parts) do
-  local want = part.tone == "mark" and K.gold or (part.tone == "shadow" and K.bronzeLo or K.bronze)
+  local want = Moved(part.tone == "mark" and K.gold or (part.tone == "shadow" and K.bronzeLo or K.bronze), NEW.accent, K.bronze)
   assert(Eq(part.texture.ctex[1], want[1]) and Eq(part.texture.ctex[2], want[2]) and Eq(part.texture.ctex[3], want[3]), "rule parts keep their bronze and gold")
   assert(Eq(part.texture.ctex[4], part.alpha), "rule parts keep their strength")
 end
@@ -166,9 +171,9 @@ assert(training.title.font.size == 18 and training.title.font.path == A.FONT_TIT
 assert(training.foot.font.size == 13 and training.foot.font.path == A.FONT_LINE, "training line: Alegreya 13")
 local row1 = training.rowFrames[1]
 assert(row1.text.font.size == 15 and row1.text.font.path:find("AlegreyaSans%-Bold"), "spell lines: Alegreya Sans Bold 15")
-Color(row1.text, K.text[1], K.text[2], K.text[3], 1, "spell color")
+Color(row1.text, NEW.body[1], NEW.body[2], NEW.body[3], 1, "spell color")
 assert(row1.text.text:find("|cff", 1, true), "rank in its own tone")
-assert(row1.text.text:find(("|cff%02x%02x%02x"):format(K.stone[1] * 255, K.stone[2] * 255, K.stone[3] * 255), 1, true), "rank tone is the stone color")
+assert(row1.text.text:find(("|cff%02x%02x%02x"):format(math.floor(NEW.detail[1] * 255 + 0.0001), math.floor(NEW.detail[2] * 255 + 0.0001), math.floor(NEW.detail[3] * 255 + 0.0001)), 1, true), "rank tone is the detail color")
 assert(training.rowFrames[1].height == 20 and training.width == 520, "rows 20, card 520 wide")
 
 Show("friend")
@@ -176,7 +181,7 @@ local friend = CardOf("sub") and (function()
   for _, g in ipairs(groups) do if rawget(g.owner, "flow") ~= nil then return g.owner end end
 end)()
 assert(friend and friend.title.font.size == 20 and friend.sub.font.size == 15, "friend card: 20 and 15")
-Color(friend.sub, K.stone[1], K.stone[2], K.stone[3], 1, "friend sub color")
+Color(friend.sub, NEW.detail[1], NEW.detail[2], NEW.detail[3], 1, "friend sub color")
 assert(friend.width == 360 and friend.height == 64, "friend card 360 by 64")
 
 Show("welcome")
@@ -411,7 +416,7 @@ Color(training.title, 0, 1, 0, 1, "with the new color")
 NL.ResetShared(); FlushTimers()
 Show("training")
 assert(training.title.font.size == 18 and training.title.font.flags == nil, "the pooled card was restyled, nothing leaked")
-Color(training.title, K.text[1], K.text[2], K.text[3], 1, "default title color again")
+Color(training.title, NEW.title[1], NEW.title[2], NEW.title[3], 1, "default title color again")
 
 ---------------------------------------------------------------------------
 -- 7. Previews are isolated, silent and allowed with the feature off

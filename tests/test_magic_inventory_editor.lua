@@ -19,7 +19,7 @@ local c = MIClient("Rich", {
     cl.CreateFrame = function(kind, name, parent) local fr = MIFake(kind, parent); if name then cl[name] = fr end return fr end
     cl.UIParent = MIFake("Frame"); cl.UIParent.w, cl.UIParent.h = 1920, 1080
     cl.GameTooltip = MIFake("GameTooltip")
-    for _, file in ipairs({ "chronicle/Style.lua", "Look.lua" }) do
+    for _, file in ipairs({ "chronicle/Style.lua", "Look.lua", "FrameLook.lua" }) do
       local chunk = assert(loadfile(ROOT .. file)); setfenv(chunk, cl); chunk("!!!TwichUI", {})
     end
   end,

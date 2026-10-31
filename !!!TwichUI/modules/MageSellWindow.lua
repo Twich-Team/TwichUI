@@ -3,8 +3,10 @@
 -- list is read through the same classifier selling uses (modules/MageSell.lua), so it can't say one
 -- thing and sell another. Opening or refreshing it sells, moves and splits nothing and holds nothing
 -- on the cursor; the only actions are Never sell and Remove (the list), Refresh, and Sell now, which
--- is your click and works only at an open merchant with Dry run off. Drawn with the Chronicle's
--- palette (chronicle/Style.lua). Built when first opened; while closed it listens to nothing.
+-- is your click and works only at an open merchant with Dry run off. Drawn in the framed look
+-- (FrameLook.lua: its frame, interior and buttons; the list wells and scroll bar are the Chronicle's,
+-- chronicle/Style.lua). It has no appearance setting of its own. Built when first opened; while closed
+-- it listens to nothing.
 
 local R = TwichUI
 local MS = R.MageSell
@@ -12,7 +14,7 @@ local W = {}
 R.MageSellWindow = W
 
 local FRAME_NAME = "TwichUIMageSellWindow"
-local WIDTH, HEIGHT = 580, 580
+local WIDTH, HEIGHT = 580, 590
 local PAD = 16
 local HEADER = 40
 local ROW_H = 28
@@ -329,8 +331,10 @@ end
 
 local function Build()
     S = R.ChronicleStyle
-    if not (S and S.Frame and MS) then return false end
-    f = CreateFrame("Frame", FRAME_NAME, UIParent, "BackdropTemplate")
+    local F = R.FrameLook
+    if not (S and S.Well and S.ScrollBar and F and F.Ready() and MS) then return false end
+    local _, _, CR = F.ContentInsets()
+    f = CreateFrame("Frame", FRAME_NAME, UIParent)
     f:SetSize(WIDTH, HEIGHT)
     f:SetPoint("CENTER", UIParent, "CENTER", 0, 20)
     f:SetFrameStrata("DIALOG")
@@ -344,15 +348,16 @@ local function Build()
     f:HookScript("OnShow", R.FitToScreen)
     f:Hide()
     tinsert(UISpecialFrames, FRAME_NAME)   -- Escape closes it
-    S.Frame(f, WIDTH, HEIGHT)
-    S.Header(f, HEADER)
+    f.shell = F.Shell(f, { below = true, follow = true })   -- the shared frame and interior, under everything below
+    F.FadeIn(f)
+    f.shell:Header(HEADER)
 
     f.title = f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     f.title:SetPoint("LEFT", f, "TOPLEFT", PAD, -(HEADER / 2 + 4))
     f.title:SetTextColor(Color(S.color.text))
     f.title:SetText("Ordinary food and drink")
-    f.close = S.Close(f, function() f:Hide() end)
-    f.close:SetPoint("TOPRIGHT", -10, -(HEADER / 2 - 6))
+    f.close = F.Close(f, function() f:Hide() end)
+    f.close:SetPoint("TOPRIGHT", -(CR + 2), -12)
 
     f.mode = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     f.mode:SetPoint("TOPLEFT", PAD, -(HEADER + 16))
@@ -394,7 +399,7 @@ local function Build()
     f.box:SetMaxLetters(256)
     f.box:SetScript("OnEnterPressed", AddFromBox)
     f.box:SetScript("OnEscapePressed", f.box.ClearFocus)
-    f.add = S.Button(f.drop, "Add", 70, "secondary", AddFromBox)
+    f.add = F.Button(f.drop, "Add", 70, "secondary", AddFromBox)
     f.add:SetPoint("RIGHT", -8, 0)
     f.note = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     f.note:SetPoint("TOPLEFT", PAD, -(addTop + 56))
@@ -403,21 +408,21 @@ local function Build()
     f.note:SetTextColor(Color(S.color.emberHi))
 
     f.result = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    f.result:SetPoint("BOTTOMLEFT", PAD, 18)
+    f.result:SetPoint("BOTTOMLEFT", PAD, 24)
     f.result:SetWidth(WIDTH - PAD * 2 - 220)
     f.result:SetJustifyH("LEFT")
     f.result:SetTextColor(Color(S.color.textDim))
 
-    f.refresh = S.Button(f, "Refresh", 80, "secondary", function() W.Refresh() end)
-    f.refresh:SetPoint("BOTTOMRIGHT", -PAD - 130, 14)
+    f.refresh = F.Button(f, "Refresh", 80, "secondary", function() W.Refresh() end)
+    f.refresh:SetPoint("BOTTOMRIGHT", -PAD - 130, 20)
     R.Interact.Tip(f.refresh, "Refresh", "Looks at your bags again. Nothing is sold or moved.")
-    f.sell = S.Button(f, "Sell now", 120, "primary", function()
+    f.sell = F.Button(f, "Sell now", 120, "primary", function()
         local why = SellBlock(scanned)
         if why then R.Print("%s", why) return end
         MS.Begin(true)
         W.Refresh()
     end)
-    f.sell:SetPoint("BOTTOMRIGHT", -PAD, 14)
+    f.sell:SetPoint("BOTTOMRIGHT", -PAD, 20)
     R.Interact.Tip(f.sell, "Sell now", function()
         local why = SellBlock(scanned)
         if why then return "Sells the stacks listed under \"Would be sold\" at the open merchant, one at a time.", why end

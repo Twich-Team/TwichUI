@@ -53,7 +53,7 @@ c.GameTooltip = Obj(); c.GameTooltip_Hide = function() end
 c.StaticPopupDialogs = {}; c.StaticPopup_Show = function(k) c.popup = k end
 c.ACCEPT, c.CANCEL = "Accept", "Cancel"
 c.UnitGUID = function() return "Player-1-0ABC" end
-for _, f in ipairs({"setup/StoredData.lua", "chronicle/Style.lua", "Look.lua", "setup/StoredDataWindow.lua"}) do
+for _, f in ipairs({"setup/StoredData.lua", "chronicle/Style.lua", "Look.lua", "FrameLook.lua", "setup/StoredDataWindow.lua"}) do
   local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
 end
 local R = c.TwichUI
@@ -174,6 +174,7 @@ assert(keys[1] == 1 and keys[2] == 2 and keys[3] == "A" and keys[4] == "b" and k
 FlushTimers()                                 -- the scan opens the window
 local f = c.TwichUIAddonData
 assert(f, "window built after a scan from it")
+assert(f.shell and f.shell.corner, "it is drawn with the framed look (FrameLook.lua)")
 f.scripts.OnShow(f)
 for _ = 1, 20 do FlushTimers() end
 local function Row(box, pred)

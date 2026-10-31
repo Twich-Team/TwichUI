@@ -35,7 +35,7 @@ local function Fake(o)
       return math.ceil(#(s.text or "") / perLine) * (LINE or 14)
     end end
     if k == "CreateFontString" or k == "CreateTexture" then return function() return Fake() end end
-    return function() end
+    if type(k) == "string" and k:find("^%u") then return function() end end   -- a method the game has; a field never set is nil, as on a real frame
   end})
 end
 
@@ -69,7 +69,7 @@ local function Boot(sv, opts)
   c.opened = nil
   c.Settings = nil   -- (the settings window is TwichUI's own; no AddOns entry in these tests)
   for k, v in pairs(sv or {}) do c[k] = v end
-  for _, f in ipairs(opts.files or {"chronicle/Style.lua", "Look.lua", "modules/Notify.lua", "modules/Arrival.lua", "modules/WelcomeBack.lua", "modules/WelcomeAutomation.lua", "modules/Welcome.lua"}) do
+  for _, f in ipairs(opts.files or {"chronicle/Style.lua", "Look.lua", "FrameLook.lua", "modules/Notify.lua", "modules/Arrival.lua", "modules/WelcomeBack.lua", "modules/WelcomeAutomation.lua", "modules/Welcome.lua"}) do
     local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
   end
   c.LOADED["!!!TwichUI"] = true
@@ -107,6 +107,8 @@ assert(W(c).Snapshot().shown == 1)
 assert(c.UISpecialFrames[#c.UISpecialFrames] == "TwichUIWelcome", "Escape closes it through the game's own list")
 assert(f.title.text == "Welcome to TwichUI" and f.intro.text == W(c).INTRO)
 assert(#f.points == 3 and f.open.text.text == "Open Settings" and f.dismiss.text.text == "Close", "title, three points, two buttons")
+assert(f.shell and f.shell.corner and f.open.twichLook and f.preview.twichLook and f.dismiss.twichLook and f.close.twichLook,
+  "it is drawn with the framed look (FrameLook.lua): its shell, and one bevel on each button")
 assert(f.footer.text:find("/tui", 1, true), "a /tui reminder in the footer")
 assert(f.h and f.h > 150 and f.w == 460, "sized from its content")
 -- It changes nothing the player set.
@@ -326,7 +328,7 @@ assert(D(quiet).onNone.shown and D(quiet).rows[1] == nil, "nothing on: says so")
 -- 9. Preview: the coordinator's own, isolated, silent, bounded, taken back on close
 ---------------------------------------------------------------------------
 local v = Boot({ TwichUIDB = { schema = 2, modules = {}, welcome = { state = "seen" } } },
-  { files = { "chronicle/Style.lua", "Look.lua", "modules/Notify.lua", "modules/WelcomeAutomation.lua", "modules/Welcome.lua" } })
+  { files = { "chronicle/Style.lua", "Look.lua", "FrameLook.lua", "modules/Notify.lua", "modules/WelcomeAutomation.lua", "modules/Welcome.lua" } })
 Stubs(v)
 -- Stand-ins for the zone and friend cards (their real renderers need animation frames this fake lacks): what
 -- matters here is how the welcome asks for them. Each records what it was shown with.
@@ -383,7 +385,7 @@ for _, line in ipairs(v.said) do if line:find("out of combat", 1, true) then tol
 assert(toldCombat, "and it says why")
 -- Without the coordinator the button is left out and the rest still works.
 local nn = Boot({ TwichUIDB = { schema = 2, modules = {}, welcome = { state = "seen" } } },
-  { files = { "chronicle/Style.lua", "Look.lua", "modules/WelcomeAutomation.lua", "modules/Welcome.lua" } })
+  { files = { "chronicle/Style.lua", "Look.lua", "FrameLook.lua", "modules/WelcomeAutomation.lua", "modules/Welcome.lua" } })
 nn.TwichUI.RunCommand("about")
 assert(D(nn).shown and not D(nn).preview.shown, "no coordinator: no Preview button, dialog still works")
 assert(select(2, nn.TwichUI.Welcome.Preview()) == "unavailable")
