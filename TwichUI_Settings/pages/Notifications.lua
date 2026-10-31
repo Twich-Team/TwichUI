@@ -85,17 +85,25 @@ K.Page({
                 "Plays the chosen chime now, at the volume you have chosen."), friendLogin, FriendLoginOn)
         end
 
+        Header("Party deaths", "A short card when another player in your party dies.")
+        local partyDeath = Toggle("partyDeath", "Show a card when a party member dies",
+            "When another player in your party dies, a short card near the top of the screen says who, in the zone card's style with no frame. It is for a normal party, including a dungeon party, not a raid group, and not for yourself, pets or NPCs. It is shown once for each death; a member who is already dead when you join, log in or reload is not announced, and a resurrection followed by another death is. It uses the party's own health information, not the combat log, so it works at any distance. It shows during combat and makes no chat line. Reduced motion (above) applies.")
+        Under(Toggle("partyDeathSound", "Play a lament with it",
+            "A short lament plays once as the card appears, on the Sound Effects volume in the game's Audio options (silent when sound effects are off). Deaths close together each get a card, but the lament is not played over itself. Off: the card is silent."),
+            partyDeath, function() return R:Enabled("partyDeath") end)
+
         local Notify = R.Notify
         if Notify then
             Header("Notification previews", "Try the cards without waiting for the real thing. A preview tests how a card looks and sounds, not whether the game event is noticed: it uses made-up details, records and changes nothing, and works even when that card is turned off.")
             ProxyToggle("previewSounds", "Play notification sounds in previews",
-                "Previews are silent unless this is on. The friend login chime then plays with its preview, on the volume you chose above, but only while \"Play a soft chime with it\" is on, as it is for a real login. The other cards have no sound.",
+                "Previews are silent unless this is on. The friend login chime then plays with its preview, on the volume you chose above, but only while \"Play a soft chime with it\" is on, as it is for a real login. The party death card's lament plays the same way, while \"Play a lament with it\" is on. The other cards have no sound.",
                 false,
                 Notify.PreviewSounds, Notify.SetPreviewSounds)
             local previewTips = {
                 arrival = "Shows the zone card with a made-up place, where and how it would really appear.",
                 training = "Shows the new training card, in the style chosen above, with made-up spells. Nothing is trained or marked, and it can't be clicked.",
                 friend = "Shows the friend login card with a made-up friend. No friend state is read or changed.",
+                partydeath = "Shows the party member fallen card with a made-up name. No party is read, and nothing is announced.",
                 welcome = "Shows the Welcome Back card with a made-up entry. Your Chronicle isn't read, and its link does nothing.",
             }
             local labels = {}
@@ -107,7 +115,7 @@ K.Page({
                 local ok, why = Notify.Preview(kind)
                 if ok == false then R.Print("couldn't show that preview: %s", previewWhy[why] or "it's already showing.") end
             end
-            for _, kind in ipairs({ "arrival", "training", "friend", "welcome" }) do
+            for _, kind in ipairs({ "arrival", "training", "friend", "partydeath", "welcome" }) do
                 if labels[kind] then
                     Button(labels[kind], "Preview", function() Preview(kind) end,
                         previewTips[kind] .. " It appears above this window and fades by itself. Real notices always come first.")

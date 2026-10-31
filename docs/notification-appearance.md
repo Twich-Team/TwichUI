@@ -141,3 +141,31 @@ these swatches.
     with long BattleTags; long spell names in two columns at 140%.
 12. Real notices: each of the four, with a changed look, then reload: look persists. Export a share and import it on
     another character or profile: the look arrives, previews do not.
+
+## Party member fallen (`modules/PartyDeath.lua`)
+
+A fifth notification kind (`partydeath`) that has no appearance scope of its own: it borrows the Zone arrival look
+(`NotifyLook` scope `arrival`) and sits at the zone card's place, so the two take turns. Switches `partyDeath` and
+`partyDeathSound` (both on by default, shared with the other notification switches); nothing else is stored.
+
+- **Detection:** `UNIT_HEALTH`, `UNIT_FLAGS`, `UNIT_CONNECTION` for `party1`-`party4` (`RegisterUnitEvent`) plus the roster
+  events, on a private frame (`partyDeath.event` in the diagnostics). These are the events Blizzard's `CompactUnitFrame`
+  uses for party frames, not the combat log. No timers, no `OnUpdate`.
+- **Rule:** one notice per seen alive-to-dead change of a GUID. First sight, unknown health, an offline member and a loading
+  screen only record a baseline. A feigning Hunter counts as alive. Raid groups, yourself, pets and NPCs are skipped.
+- **Name:** its own piece of the line, in `AlegreyaSans-Bold` and the class color (`UnitClass` token through
+  `CUSTOM_CLASS_COLORS` or `RAID_CLASS_COLORS`) when the class is known; otherwise bold in the card's detail color. The
+  realm and "has died." follow in the regular face. A typeface chosen in the appearance settings replaces the bold face, as
+  it does on every card.
+- **Artwork:** a tombstone (`media/partydeath/tombstone.tga`, 128 px, drawn at 64) above the title, cut from
+  `assets/party-death-tombstone-source.png` by `tools/make_party_death_art.py` (stdlib only, like the other art tools).
+- **Sound:** `media/sounds/LAMENT.mp3` (copied unchanged from `assets/LAMENT.mp3`; MPEG-1 layer III, 48 kHz stereo, 6.05 s,
+  the same format as the other bundled `.mp3` files) through `PlaySoundFile(path, "SFX")` as the card starts. A death
+  while the previous lament is still inside its 6.1 s is shown but not given a second, overlapping copy. Previews play it
+  only when "Play notification sounds in previews" and "Play a lament with it" are both on.
+- **Not in the game yet:** see the checks below.
+
+In-game checks: a real party death out of combat-log range (another zone section, behind a wall) gives one card and one
+lament; the same death while you are in combat; resurrect and die again; join a party with a dead member; reload with one;
+a Hunter's Feign Death; a cross-realm member's name; whether the game reports `UnitIsDeadOrGhost` correctly the moment a
+party member's data first arrives at login; the lament is audible on the Sound Effects channel and silent with it muted.

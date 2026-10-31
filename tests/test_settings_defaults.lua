@@ -49,7 +49,7 @@ for key, default in pairs(defaults) do
   n = n + 1
   assert(default == R.DEFAULT_MODULES[key], key .. " default matches a new install")
 end
-assert(n == 75, "every module has a toggle: " .. n)
+assert(n == 77, "every module has a toggle: " .. n)
 assert(defaults.hazardAlerts == false, "hazard alerts are opt-in")
 assert(defaults.reminders == true, "reminders are on (none exist until made, and each starts turned off)")
 assert(defaults.targetArt == false, "target dragon artwork is opt-in")
@@ -79,6 +79,7 @@ assert(defaults.mailGoldSummary == true, "the mailbox gold summary is on by defa
 assert(defaults.trainingNotice == true, "new training card is on by default")
 assert(defaults.friendLogin == true, "Battle.net friend login card is on by default")
 assert(defaults.friendLoginSound == true, "the friend login chime is on by default")
+assert(defaults.partyDeath == true and defaults.partyDeathSound == true, "the party death card and its sound are on by default")
 
 -- No setting sits behind an "advanced" flag: every row is drawn whenever its own feature conditions hold.
 local visible = {}
@@ -255,7 +256,7 @@ for variable, page in pairs({
   TWICHUI_media = "TwichUI", TWICHUI_quietLogin = "TwichUI", 
   TWICHUI_gearHints = "Gear comparison", TWICHUI_gearTree = "Gear comparison", TWICHUI_gearBagStyle = "Gear comparison",
   TWICHUI_arrival = "Notifications", TWICHUI_arrivalHold = "Notifications", TWICHUI_arrivalReducedMotion = "Notifications",
-  TWICHUI_previewSounds = "Notifications", TWICHUI_trainingNotice = "Notifications", TWICHUI_friendLogin = "Notifications", TWICHUI_friendLoginSound = "Notifications", TWICHUI_friendLoginChannel = "Notifications",
+  TWICHUI_previewSounds = "Notifications", TWICHUI_trainingNotice = "Notifications", TWICHUI_friendLogin = "Notifications", TWICHUI_friendLoginSound = "Notifications", TWICHUI_friendLoginChannel = "Notifications", TWICHUI_partyDeath = "Notifications", TWICHUI_partyDeathSound = "Notifications",
   TWICHUI_chronicle = "Journey Chronicle", TWICHUI_chronicleClock = "Journey Chronicle", TWICHUI_chronicleSound = "Journey Chronicle", TWICHUI_welcomeBack = "Journey Chronicle",
   TWICHUI_auctionPosting = "Auction House", TWICHUI_mailGoldSummary = "Auction House",
   TWICHUI_qolSummons = "Quality of life", TWICHUI_qolSummonsFrom = "Quality of life", TWICHUI_qolSummonsWait = "Quality of life",

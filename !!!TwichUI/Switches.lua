@@ -74,6 +74,8 @@ Define("cozyBagNotice", { apply = Refresh("CozyBagOffer") })
 Define("cozyBagButton", { apply = Refresh("CozyBagOffer") })
 Define("friendLogin", { apply = Refresh("FriendLogin") })
 Define("friendLoginSound")
+Define("partyDeath", { apply = Refresh("PartyDeath") })
+Define("partyDeathSound")
 
 -- Quality of life: each runs its own feature's Apply
 local function QoL(module)

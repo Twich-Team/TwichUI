@@ -1617,7 +1617,7 @@ local function Define()
 
     g = Group("notifications", "Notifications", { page = "notifications" })
     Switches(g, { "arrival", "arrivalSubzones", "arrivalDungeons", "arrivalReducedMotion", "trainingNotice",
-        "friendLogin", "friendLoginSound" })
+        "friendLogin", "friendLoginSound", "partyDeath", "partyDeathSound" })
     do
         local A, F = R.Arrival, R.FriendLogin
         local holds = {}

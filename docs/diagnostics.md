@@ -149,7 +149,7 @@ uses an item, sends anything or makes up events. Each states its cost before you
 | `layouts.plan`, `layouts.apply`, `layouts.verify`, `layouts.restore` (`Perf.Call`) | `TwichUI_Layouts/Engine.lua` `LY.Plan` (with an update's comparison), `LY.Apply`, `LY.Verify`, `LY.VerifyRestore` and `LY.VerifyUndo` (with the baseline commit), `LY.Restore` and `LY.Undo` (on request; `layouts.verify` also once after the reload that finishes an install, restore or undo) | rebuild, bulk, evaluate, bulk |
 | `classbars.anim`, `pins.ping.tick`, `npcs.map.pulse` (`Perf.Call`) | `classbars/Anim.lua`, `pins/PingMap.lua`, `npcs/Map.lua` | update |
 | `map.view.step`, `map.view.follow`, `map.view.notify` (`Perf.Wrap`) | `map/View.lua` OnUpdate scripts | update |
-| `reminders.event`, `healer.event`, `healer.unitEvent`, `targetart.event`, `refreshments.cast` (`Perf.Wrap`) | the private event frames' OnEvent in `reminders/State.lua`, `healer/Watch.lua`, `targetart/Display.lua`, `modules/Refreshments.lua` | event |
+| `partyDeath.event`, `reminders.event`, `healer.event`, `healer.unitEvent`, `targetart.event`, `refreshments.cast` (`Perf.Wrap`) | the private event frames' OnEvent in `reminders/State.lua`, `healer/Watch.lua`, `modules/PartyDeath.lua`, `targetart/Display.lua`, `modules/Refreshments.lua` | event |
 | `rxp.skin.*`, `rxp.timers.*`, `rxp.waypoint.sync` (`Perf.Wrap`; `rxp.skin.currentTick` after its throttle) | the `hooksecurefunc` callbacks on RestedXP's functions and the hover button's OnUpdate in `modules/RestedXPSkin.lua`, `modules/RestedXPTimers.lua`, `qol/GuideWaypoint.lua` | hook, update |
 
 `Perf.Wrap(id, fn)` (in `Core.lua`) is `fn` that runs inside a scope while a capture records; off, it is one table read
