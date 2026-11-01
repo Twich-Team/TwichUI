@@ -11,7 +11,7 @@ markers, toolbar control, search or artwork exist yet; the sections below that d
 |---|---|
 | M0 policy | **Done.** `CLAUDE.md`, `docs/dev-rules.md` and `.clinerules` carry the narrow exception (wording below). |
 | M1 core | **Built, unit-tested** (`tests/test_guild_locations.lua`, 531 checks; mocked network, clock and map; the bundled AceComm and ChatThrottleLib are the real ones). **Not real-client-tested; not simulator-tested.** |
-| M2 controls | **Built** (2026-11-01, uncommitted on `feature/guild-map`): settings page `guildLocations` and the launcher right-click menu. **Unit-tested** (`tests/test_guild_locations_settings.lua`, `tests/test_settings_broker.lua`, the contract fixture); the simulator's `smoke.sh` constructed the page (**construction only**). Not real-client-tested. See "What M2 built". |
+| M2 controls | **Built** (2026-11-01, uncommitted on `feature/guild-map`): settings page `guildLocations` and the launcher right-click menu. **Unit-tested** (`tests/test_guild_locations_settings.lua`, `tests/test_settings_broker.lua`, the contract fixture); the simulator's `smoke.sh` constructed the page (**construction only**; that run **preceded** the final icon change to `explore` and was not repeated). Final `./tests/run.sh` after the last M2 edit: **154 passed, 2 failed**, the same two pre-existing friend-chime files (no new failure). Not real-client-tested. See "What M2 built". |
 | Behavior today | A character in a guild **sends its position by default** (state Sharing) and shows nothing (no markers yet). The player can change the state from the settings page or the launcher menu, both through `R.GuildLoc.SetState`. |
 | Pending | M3 markers, M4 toolbar/search, M5 artwork, M6 real-client checks. |
 | M1 suite result | `./tests/run.sh` twice: **153 passed, 2 failed**, both times. The two failures (`test_settings_contract.lua`, `test_settings_defaults.lua`) are the friend-login chime default (`"TwichUI Friend"` where the tests expect `"TwichUI Notification"`) and reproduce on unchanged HEAD; they are not M1. The contract test also shows older border-texture drift (`"Steel & Bronze"` vs the fixture's `"Rounded Bronze"`) that the same two files already carried. Left unchanged. |
@@ -125,6 +125,42 @@ or protocol unless the task is about it. Party pins and map pings share places t
   regenerated and then reduced to the Guild Locations lines only (pages, keys, settings, rows, changed, changedDB, defaulted,
   defaultedDB); the unrelated friend-chime and border-texture drift in the generated file was not kept.
 - Not done by design: map markers, toolbar, search, protocol changes.
+
+### Real-client communications checklist (gate before M3)
+
+Two accounts, A and B, in the same guild, both on this build, ideally the only TwichUI users online (the report holds counts, not
+names, so a third sharing guildmate inflates the numbers; read changes, not totals). Stand still in the open world (not an
+instance, not loading: `no-position` / `loading` skips mean no position). Read each client with `/tui diagnostics` (the
+**Guild Locations** block; reopen it for each reading, do not use `clear`). Counters live in memory and **restart at 0 on every
+reload**. "sent" means the game accepted the message, not that anyone received it.
+
+Timing: a session's first send comes 5 to 20 s after it starts (login, reload, or choosing Sharing); then ticks every 15 s
+(+/-10%) and, standing still, one position per 4 ticks, so the longest healthy gap is 66 s. Wait **30 s** for a first
+position and **90 s** for any "next update" claim. A withdrawal goes out at once (retries at +15 s, +45 s); wait 10 s.
+
+| # | Do | Expect on A (B for the mirror) |
+|---|---|---|
+| 0 | Both `/reload`. Open the report. | `state: sharing`, `transport: unchecked` until the first send, then `ok` (never `ctl-incompatible`, `no-acecomm`, `ctl-unreadable`), `roster` > 0 (open the guild panel once if 0), counters 0. |
+| 1 | Both Sharing. Wait 90 s. | `session: yes`, `sent` >= 1, `refused 0`. On the other client `taken in` positions >= 1 and `held: 1 live`. `messages set aside` has no `not-in-roster`, `unknown-map`, `unreadable`, `channel`, `too-long`. **Passes steps "valid position accepted" and "sender name matches the roster"**: a record is only created after the roster lookup and the strict parse. |
+| 2 | B chooses Invisible (settings or right-click). Wait 10 s, then 90 s. | B: `session: no`, withdrawals sent >= 1 and accepted by the game >= 1, `sent` stops rising. A: `taken in` withdrawals +1, `held: 0 live, 1 withdrawn`; A's positions-in stops rising over the 90 s. |
+| 3 | A chooses Invisible. Then B chooses Sharing. Wait 90 s. | A: `session: no`, A's `sent` unchanged; **A still receives**: `held: 1 live`, positions-in rises, no `old-epoch` / `closed-epoch` / `old-number`. B: `sent` rises. **Passes "Invisible still receives" and "returning to Sharing gives a fresh accepted update"** (a new epoch above the closed one). |
+| 4 | A chooses Off. Wait 90 s (B stays Sharing, so B's `sent` rises). | A: `state: off`, `held: 0 live, 0 withdrawn`, `roster` 0, `events` 0, positions-in **unchanged**. **Passes "Off stops recording".** |
+| 5 | `/reload` A. Read before touching anything. | `state: off`, `session: no`, nothing held, owed withdrawal `no`. Then A chooses Invisible, `/reload` again: `state: invisible`, `session: no`; after 90 s `sent` is still 0 and `held` shows B's position (receiving after reload). **Passes "reload preserves Invisible/Off".** |
+| 6 | A chooses Sharing. Wait 30 s, then 90 s. | A: `session: yes`, `sent` >= 1 within 30 s. B: positions-in +1, `held: 1 live`. Covers a new session after a reload (epoch above every earlier one). |
+
+Failure reading: `not-in-roster` rising while `roster` > 0 and no record is the sender-name-form mismatch (check 2 of the
+list below); `roster` 0 means the roster had not arrived yet, so open the guild panel and repeat. `blocked` / `outstanding` /
+`refused` skips are transport; `no-position` / `loading` mean the sender could not read a position.
+
+**Gaps in what the existing report can show (nothing added, by design: no names, places or payloads):**
+1. A message discarded because the receiver is **Off** is not counted, so Off cannot be told apart from "never delivered"
+   from the Off client alone. The other client's `sent` and step 6 (delivery works with the same pair) cover it.
+2. The report cannot say **whose** record is held, or show the sender string next to the roster's form. A mismatch shows only
+   as `not-in-roster`; finding out how the strings differ would need a local, temporary probe, which does not exist.
+3. It cannot show the coordinates, so **a valid position** means it passed the strict parse and a known map, not that the point
+   is right. That is for M3 (markers) to show.
+4. A message from yourself echoed back is ignored without a count (expected; it just never appears).
+5. Counters reset on reload, so reload persistence is read from the `state:` line, not from counts.
 
 ### Release gate
 
