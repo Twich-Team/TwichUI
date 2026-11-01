@@ -155,7 +155,7 @@ local channels = dropdowns.TWICHUI_friendLoginChannel()
 assert(#channels == 4 and channels[1].value == "SFX" and channels[4].value == "Master" and channels[2].tooltip:find("Dialog"), "four channels, each explained")
 local chimeSound = proxies.TWICHUI_friendLoginChime
 assert(chimeSound and variables.TWICHUI_friendLoginChime == "Notifications", "a sound choice on the Notifications page")
-assert(chimeSound.default == "TwichUI Notification" and chimeSound.get() == "TwichUI Notification", "the notification chime by default")
+assert(chimeSound.default == "TwichUI Friend" and chimeSound.get() == "TwichUI Friend", "the notification chime by default")
 local chimeChoices = dropdowns.TWICHUI_friendLoginChime()
 local chimeAt = {}
 for i, choice in ipairs(chimeChoices) do chimeAt[choice.value] = i end
