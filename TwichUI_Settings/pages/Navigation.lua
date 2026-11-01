@@ -255,6 +255,10 @@ K.Page({
         Under(K.Slider(Remember("navigationAntSpeed", NUMBER, "Ant speed", "antSpeed"), NP.LIMITS.antSpeed[1], NP.LIMITS.antSpeed[2],
             "From slow (1) to brisk (4)."), toggle, On2)
 
+        Header("Frame theme", "Classic is the frame's background and border below. Wayfarer draws a leather panel with a bronze frame instead.")
+        Under(K.Dropdown(Remember("navigationTheme", STRING, "Theme", "theme"), function() return NP.THEMES end,
+            "Wayfarer replaces the background and border below with its own artwork; only their two opacities still apply. The text, arrow and buttons are the same, and a route being followed is not changed."), toggle, On2)
+
         Header("Frame background and border", "The frame's background and border. It looks complete without EllesmereUI; EllesmereUI's and LibSharedMedia's textures are listed when they are there.")
         local lookReset = K.Appearance(NP.Look, "navigationLook", "frame",
             "Shows the frame beside this window with sample values.", function()

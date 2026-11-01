@@ -366,6 +366,50 @@ NV.Stop("test")
 print("11 preview ok")
 
 ---------------------------------------------------------------------------
+-- 11b. The Wayfarer theme: an appearance choice on the same frame, nothing about the route
+---------------------------------------------------------------------------
+assert(NP.Get("theme") == "classic" and NP.DEFAULTS.theme == "classic", "Classic is the default")
+assert(NP.Valid("theme", "wayfarer") and not NP.Valid("theme", "gold") and not NP.Valid("theme", 1), "only the two themes are kept")
+assert(not NP.Set("theme", "gold") and NP.Get("theme") == "classic", "an unknown theme is refused")
+local main = NF.Main()
+assert(main and main.f.wayfarer == nil, "Classic draws no shell")
+local frameBefore = main.f
+local made, cleared, backdrops = 0, 0, {}
+local mk = main.f.CreateTexture
+main.f.CreateTexture = function(...) made = made + 1; return mk(...) end
+main.f.ClearBackdrop = function() cleared = cleared + 1 end
+main.f.SetBackdrop = function(_, info) backdrops[#backdrops + 1] = info end
+local routeBefore, destBefore, stateBefore = S().route, S().dest, S().state
+NF.ShowPreview(nil)
+assert(NP.Set("theme", "wayfarer"))
+local shell = main.f.wayfarer
+assert(shell and made == 9 and #shell.frame == 8, "one centre and eight frame pieces, made once: " .. made)
+assert(cleared >= 1, "Classic's background and border are cleared")
+assert(shell.center.shown and shell.frame[1].shown and shell.frame[8].shown, "the shell shows")
+assert(main.inset == 10 and main.f.wayfarer == shell and NF.Main() == main and main.f == frameBefore, "the same frame, with Wayfarer's padding")
+local withShell = 0
+for _, fr in ipairs(FRAMES) do if fr.wayfarer then withShell = withShell + 1 end end
+assert(withShell == 2, "the settings preview takes the theme at once: " .. withShell)
+for _ = 1, 4 do
+  assert(NP.Set("theme", "classic"))
+  assert(not shell.center.shown and not shell.frame[1].shown and not shell.frame[8].shown, "Classic hides the shell")
+  assert(main.inset == 8 and backdrops[#backdrops] and backdrops[#backdrops].edgeSize, "and draws its own background and border again")
+  assert(NP.Set("theme", "wayfarer"))
+  assert(shell.center.shown and shell.frame[5].shown, "Wayfarer shows it again")
+end
+assert(made == 9 and main.f.wayfarer == shell, "switching again and again makes nothing new: " .. made)
+local s2 = S()
+assert(s2.route == routeBefore and s2.dest == destBefore and s2.state == stateBefore, "the route and destination are untouched")
+shell.center.SetAlpha = function(self, a) self.alpha = a end
+shell.frame[1].SetAlpha = function(self, a) self.alpha = a end
+NP.Look.Set("bgOpacity", 50); NP.Look.Set("borderOpacity", 60)
+assert(shell.center.alpha == 0.5 and shell.frame[1].alpha == 0.6, "the look's two opacities still apply")
+NP.Look.Reset()
+NP.Reset("appearance")
+assert(NP.Get("theme") == "classic" and not shell.center.shown, "resetting the appearance puts Classic back")
+NF.HidePreview()
+
+---------------------------------------------------------------------------
 -- 12. /tui nav
 ---------------------------------------------------------------------------
 local said = {}

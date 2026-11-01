@@ -140,6 +140,13 @@ to the destination). With no route only the straight line is given, and called a
 - **Frame** (`nav/Frame.lua`): destination, instruction, distances, state, Stop and Recalculate. Its look starts from the framed look's espresso and aged bronze as a plain line (no artwork: it is a heads-up frame, not a window; a saved color is read as saved). A MenuStyle look
   (`ui.navigationLook`), so it looks complete without EllesmereUI; a teal rule across the top. Locked, only its two buttons
   take the mouse; unlocked, drag it. Text is set only when it changes; updated on events, never per frame.
+  **Theme** (`ui.navigation.theme`, Appearance > Frame theme): `classic` (the default, as above) or `wayfarer`, a leather panel in a
+  bronze frame (`media/nav/wayfarer.tga`: four corners and four rails in one 256 x 32 atlas; `wayfarer-leather.tga`: the centre, a
+  seamless mirrored tile; built by `tools/make_nav_wayfarer_art.py` from `assets/nav-wayfarer-source.png`, which is wider than the
+  frame and so is cut into a nine-slice, never stretched whole). Nine textures on the same frame, made the first time Wayfarer is used and
+  shown only while it is chosen; Classic's background and border are cleared then and drawn again on switching back. Content sits 10
+  units in instead of 8. Only the look's two opacities still apply (background: the leather; border: the frame). Appearance only: the
+  route, the destination and every other behaviour are untouched.
 - **Arrow** (`nav/Arrow.lua`, `media/textures/nav-arrow-bronze.tga`, built by `tools/make_nav_arrow_art.py` from `assets/nav-arrow-source.png`; white by default, no tint): points at the route's next corner, turned
   by the bearing less your facing (`GetPlayerFacing`), at most 30 times a second while shown. A direct bearing is grey and
   labelled "Direct bearing, not a route". With no position, no facing, while calculating or on arrival: a word, no arrow.
@@ -261,6 +268,12 @@ Turn on Display Lua Errors. Test alone, then with EllesmereUI.
 19. **Faction.** An Alliance character is never sent by a Horde zeppelin or flight, and the other way round.
 14. **Pins and pings unchanged.** Party pins, map pings and the other map tools work as before; Ctrl-click still sets the
     game's waypoint.
+19b. **Wayfarer theme** (nothing here has been seen in the game). Appearance > Frame theme > Wayfarer, with the preview shown, then
+    while following a route: the frame turns to leather and bronze with no second border or Classic background behind it; the
+    route, destination and arrow are unchanged. At actual size the corners keep their shape and the rails one thickness; check at
+    Frame size 60, 100 and 160, with a long destination name and a wrapping instruction, that no text touches the frame or the Stop and
+    Recalculate buttons, and that no white fringe or seam shows. Switch to Classic and back several times: the Classic frame returns
+    exactly, with no leftover edge. Drag it (unlocked), `/reload`: the theme is kept.
 20. **EllesmereUI Unlock Mode** (needs EllesmereUI; nothing here has been seen in the game). Turn on Appearance > Move them in
     EllesmereUI's Unlock Mode: the frame and arrow do not move. `/unlock` lists "TwichUI Navigation" and "TwichUI Navigation
     Arrow" (with the arrow in the frame, only the first) even when no route is being followed. Drag both, nudge with the arrow

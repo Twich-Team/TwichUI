@@ -11,6 +11,10 @@
 --     is anchored to the mover's stand-in, the same saved place, and dragging it here is off.
 --   Look: the frame's background and border are a MenuStyle look (ui.navigationLook: works without EllesmereUI); text in
 --     the chosen font, size and colours; a teal accent rule across the top. Nothing flashes; state changes are words.
+--   Theme: "classic" is the look above. "wayfarer" draws a leather panel with a bronze frame instead (media/nav/, cut by
+--     tools/make_nav_wayfarer_art.py from assets/nav-wayfarer-source.png): nine textures on this same frame, behind the text,
+--     made the first time the theme is used and only shown while it is chosen. The Classic background and border are cleared
+--     then and drawn again when it is switched back. Only the look's two opacities still apply. Appearance only.
 --   Text is set only when it changed, and the layout redone only when the look or a line's height changed. Updated on
 --     Nav.lua's events (four times a second at most while moving), never per frame.
 -- The settings preview is a second frame from the same code (NF.New(true)): it shows sample values, says "Preview", and
@@ -23,6 +27,75 @@ R.NavFrame = NF
 
 local WIDTH = 250
 local PAD = 8
+
+-- The Wayfarer theme's pieces (tools/make_nav_wayfarer_art.py): the art's texels are two to a UI unit, so a 30 texel corner
+-- is 15 units and a 16 texel rail is 8; the leather tiles at its own size, one texel to a unit.
+local ATLAS = R.PATH .. [[media\nav\wayfarer.tga]]
+local LEATHER = R.PATH .. [[media\nav\wayfarer-leather.tga]]
+local CORNER, RAIL, WAY_INSET = 15, 8, 10      -- content sits WAY_INSET in (Classic's is PAD): the rail, then a little leather
+local CELL, ATLAS_W = 32, 256                  -- eight cells in a row: tl tr bl br, top bottom, left right
+
+local function Piece(f, cell, ox, oy, w, h, sub)
+    local t = f:CreateTexture(nil, "BACKGROUND", nil, sub)
+    t:SetTexture(ATLAS)
+    t:SetTexCoord((cell * CELL + ox) / ATLAS_W, (cell * CELL + ox + w) / ATLAS_W, oy / CELL, (oy + h) / CELL)
+    return t
+end
+
+-- The nine textures, made once for a frame. Under the text (they are this frame's own background layer).
+local function Shell(f)
+    local s = f.wayfarer
+    if s then return s end
+    s = { frame = {} }
+    f.wayfarer = s
+    s.center = f:CreateTexture(nil, "BACKGROUND", nil, -8)
+    s.center:SetTexture(LEATHER, "REPEAT", "REPEAT")
+    s.center:SetHorizTile(true)
+    s.center:SetVertTile(true)
+    s.center:SetPoint("TOPLEFT", f, "TOPLEFT", RAIL - 1, -(RAIL - 1))       -- a unit under the rails: no gap at any scale
+    s.center:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -(RAIL - 1), RAIL - 1)
+    local list = s.frame
+    local function Add(t) list[#list + 1] = t return t end
+    local top = Add(Piece(f, 4, 12, 8, 8, 16, -7))
+    top:SetHeight(RAIL)
+    top:SetPoint("TOPLEFT", f, "TOPLEFT", CORNER, 0)
+    top:SetPoint("TOPRIGHT", f, "TOPRIGHT", -CORNER, 0)
+    local bottom = Add(Piece(f, 5, 12, 8, 8, 16, -7))
+    bottom:SetHeight(RAIL)
+    bottom:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", CORNER, 0)
+    bottom:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -CORNER, 0)
+    local left = Add(Piece(f, 6, 8, 12, 16, 8, -7))
+    left:SetWidth(RAIL)
+    left:SetPoint("TOPLEFT", f, "TOPLEFT", 0, -CORNER)
+    left:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 0, CORNER)
+    local right = Add(Piece(f, 7, 8, 12, 16, 8, -7))
+    right:SetWidth(RAIL)
+    right:SetPoint("TOPRIGHT", f, "TOPRIGHT", 0, -CORNER)
+    right:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 0, CORNER)
+    for cell, where in ipairs({ "TOPLEFT", "TOPRIGHT", "BOTTOMLEFT", "BOTTOMRIGHT" }) do
+        local c = Add(Piece(f, cell - 1, 1, 1, 30, 30, -6))
+        c:SetSize(CORNER, CORNER)
+        c:SetPoint(where, f, where, 0, 0)
+    end
+    return s
+end
+
+-- Draws the theme's shell (or hides it). Classic's background and border are cleared while it shows; the look draws them again
+-- on the next Style when the theme is Classic. Opacity is the look's own: the background's for the leather, the border's for the frame.
+local function ApplyShell(f, on)
+    local s = on and Shell(f) or f.wayfarer
+    if not s then return end
+    if on then
+        if f.twichBorders then R.Borders.Hide(f.twichBorders) end
+        if f.ClearBackdrop then f:ClearBackdrop() end
+        local bevel = f.twichBevel
+        if bevel then bevel.top:Hide(); bevel.bottom:Hide() end
+        s.center:SetAlpha(NP.Look.Get("bgOpacity") / 100)
+        for _, t in ipairs(s.frame) do t:SetAlpha(NP.Look.Get("borderOpacity") / 100) end
+    end
+    s.center:SetShown(on)
+    for _, t in ipairs(s.frame) do t:SetShown(on) end
+end
 
 local function Width() return math.floor(WIDTH * NP.Get("textSize") / 12 + 0.5) end
 
@@ -107,7 +180,14 @@ end
 function Frame:Style()
     local f = self.f
     f:SetScale(NP.Get("frameScale") / 100)          -- before the border: it is drawn for the frame's scale
-    local inset = math.max(PAD, math.ceil(NP.Look.ApplyInset(f) + 4))
+    local inset
+    if NP.Get("theme") == "wayfarer" then
+        ApplyShell(f, true)
+        inset = WAY_INSET
+    else
+        ApplyShell(f, false)
+        inset = math.max(PAD, math.ceil(NP.Look.ApplyInset(f) + 4))
+    end
     self.inset = inset
     local font, size = NP.Font(), NP.Get("textSize")
     f.title:SetFont(font, size + 1, "")
@@ -300,7 +380,7 @@ function Frame:IsShown() return self.f:IsShown() end
 ---------------------------------------------------------------------------
 -- The real frame
 ---------------------------------------------------------------------------
-local main
+local main, preview
 
 local function Wanted()
     return NV.Enabled() and NP.Get("frame") and NV.Active()
@@ -334,6 +414,7 @@ end
 NV.Subscribe(function(event)
     if event == "prefs" then
         if main then main:Style() end
+        if preview and preview:IsShown() then preview:Style(); preview:Update(NF.SAMPLE) end   -- a chosen theme shows at once
         NF.Refresh()
     elseif event == "position" then
         return
@@ -347,7 +428,6 @@ end)
 ---------------------------------------------------------------------------
 -- The preview (settings): sample values from the real renderer, labelled, never navigating
 ---------------------------------------------------------------------------
-local preview
 NF.SAMPLE = {
     state = "navigating", dest = { name = "Sample destination" }, instruction = "In 40 yd, turn left",
     remaining = 820, toNext = 40, straight = 610, seg = 1,
