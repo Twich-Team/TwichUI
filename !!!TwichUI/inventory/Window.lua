@@ -544,9 +544,9 @@ end
 local function InterfaceButton(kind)
     local b = buttons[kind]
     if b then return b end
-    local L = Look()
-    if not (L and L.Button) then return nil end
-    b = L.Button(UIParent, "Magic Inventory", 190, "secondary", function() W.Toggle() end)
+    local F = R.FrameLook
+    if not (F and F.Button) then return nil end
+    b = F.Button(UIParent, "Magic Inventory", 190, "secondary", function() W.Toggle() end)
     b:SetFrameStrata("HIGH")
     b:Hide()
     R.Interact.Tip(b, "Magic Inventory", function()
@@ -604,8 +604,19 @@ local function ListenBags(on)
     elseif not on and bagListening then bagListening = false; R:Off("BAG_UPDATE_DELAYED", OnBags) end
 end
 
+local hooked = {}
+-- The game's window can close without the event that says so being the last word (or be another addon's window), so
+-- the button also follows the window itself.
+local function HookHost(kind)
+    local host = _G[HOSTS[kind]]
+    if hooked[kind] or type(host) ~= "table" or not host.HookScript then return end
+    hooked[kind] = true
+    host:HookScript("OnHide", function() UpdateButtons() end)
+end
+
 UpdateButtons = function()
     local anyOpen = false
+    for kind in pairs(HOSTS) do HookHost(kind) end
     for kind in pairs(HOSTS) do
         local isOpen = MI.Enabled() and Run.IsOpen(kind) and not (kind == "guild" and MI.GuildPanel)
         anyOpen = anyOpen or isOpen
