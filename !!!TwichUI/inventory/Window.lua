@@ -530,6 +530,13 @@ local function ButtonText(kind)
     return "Magic Inventory"
 end
 
+-- Sets the label and sizes the button to it (the icon, the text and an even margin).
+local function SetLabel(b, kind)
+    b.text:SetText(ButtonText(kind))
+    local pad = b.icon and 34 or 24
+    b:SetWidth(math.ceil((b.text:GetStringWidth() or 120) + pad))
+end
+
 local function Anchor(b, kind)
     b:ClearAllPoints()
     local host = _G[HOSTS[kind]]
@@ -549,6 +556,20 @@ local function InterfaceButton(kind)
     b = F.Button(UIParent, "Magic Inventory", 190, "secondary", function() W.Toggle() end)
     b:SetFrameStrata("HIGH")
     b:Hide()
+    if R.Icons and R.Icons.Apply then
+        -- the feature's own icon (the settings page's), left of the label
+        b.icon = b:CreateTexture(nil, "OVERLAY")
+        b.icon:SetSize(18, 18)
+        b.icon:SetPoint("LEFT", 8, 0)
+        R.Icons.Apply(b.icon, "diagCompare", 18)
+        -- the shared button puts its label back to the centre on every hover and press, so the offset is set again after
+        local function Nudge(y) b.text:SetPoint("CENTER", 13, y) end
+        Nudge(0)
+        for _, script in ipairs({ "OnEnter", "OnLeave", "OnMouseUp", "OnEnable", "OnDisable" }) do
+            b:HookScript(script, function() Nudge(0) end)
+        end
+        b:HookScript("OnMouseDown", function() if b:IsEnabled() then Nudge(-1) end end)
+    end
     R.Interact.Tip(b, "Magic Inventory", function()
         local n = counts[kind]
         local lines = "Opens the review of what your rules would move here. Nothing moves until you press an action there."
@@ -580,7 +601,7 @@ local function Count(kind)
     end
     counts[kind] = { stacks = p.stacks, attention = #p.attention, groups = groups }
     local b = buttons[kind]
-    if b then b.text:SetText(ButtonText(kind)) end
+    if b then SetLabel(b, kind) end
 end
 
 local function QueueCount(kind, delay)
@@ -624,7 +645,7 @@ UpdateButtons = function()
             local b = InterfaceButton(kind)
             if b then
                 Anchor(b, kind)
-                b.text:SetText(ButtonText(kind))
+                SetLabel(b, kind)
                 b:Show()
             end
         elseif buttons[kind] then
