@@ -140,7 +140,7 @@ to the destination). With no route only the straight line is given, and called a
 - **Frame** (`nav/Frame.lua`): destination, instruction, distances, state, Stop and Recalculate. Its look starts from the framed look's espresso and aged bronze as a plain line (no artwork: it is a heads-up frame, not a window; a saved color is read as saved). A MenuStyle look
   (`ui.navigationLook`), so it looks complete without EllesmereUI; a teal rule across the top. Locked, only its two buttons
   take the mouse; unlocked, drag it. Text is set only when it changes; updated on events, never per frame.
-- **Arrow** (`nav/Arrow.lua`, `media/textures/arrow-bronze.tga`, the picture RestedXP's guide skin uses for its arrow; white by default, no tint): points at the route's next corner, turned
+- **Arrow** (`nav/Arrow.lua`, `media/textures/nav-arrow-bronze.tga`, built by `tools/make_nav_arrow_art.py` from `assets/nav-arrow-source.png`; white by default, no tint): points at the route's next corner, turned
   by the bearing less your facing (`GetPlayerFacing`), at most 30 times a second while shown. A direct bearing is grey and
   labelled "Direct bearing, not a route". With no position, no facing, while calculating or on arrival: a word, no arrow.
   On its own or in the frame.

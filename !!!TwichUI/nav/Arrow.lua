@@ -8,16 +8,16 @@
 --     Scaled by Arrow size. Takes no mouse input when locked. With "Use EllesmereUI Unlock Mode" on and EllesmereUI there
 --     (nav/Unlock.lua), that mover places it instead: it is centred on the mover's stand-in, and dragging it here is off.
 --   Turned at most 30 times a second, only while shown; the distance under it is set only when it changes by a yard.
--- The picture is the one RestedXP's guide skin uses for its arrow (its "bronze" shape, RestedXPSkin.lua: Arrow.BRONZE, which
--- is media/textures/arrow-bronze.tga, TwichUI's own, 128 x 128, pointing up). Its colour is the chosen one, white by default
--- (no tint), as the skin's; a direct bearing is still drawn grey.
+-- The picture is media/textures/nav-arrow-bronze.tga, TwichUI's own (128 x 128, pointing up; tools/make_nav_arrow_art.py,
+-- source assets/nav-arrow-source.png). Its colour is the chosen one, white by default
+-- (no tint); a direct bearing is still drawn grey.
 
 local R = TwichUI
 local NV, NP = R.Nav, R.NavPrefs
 local NA = {}
 R.NavArrow = NA
 
-local TEXTURE = R.PATH .. [[media\textures\arrow-bronze]]   -- as RestedXPSkin.lua's Arrow.BRONZE
+local TEXTURE = R.PATH .. [[media\textures\nav-arrow-bronze]]   -- 128 x 128, pointing up
 local SIZE = 40
 local EVERY = 1 / 30
 local STONE = { 0.62, 0.60, 0.56 }

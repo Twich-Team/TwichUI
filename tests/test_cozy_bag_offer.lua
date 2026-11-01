@@ -572,7 +572,43 @@ do
   Check(B.Get("size") == 36, "a damaged saved size reads as the default")
   Check(c.TwichUIDB.ui.cozyBagButton.size == 9999, "...and is not erased")
   B.Refresh()
-  Check(Button(c).width > 36 and Button(c).height == 36, "a name widens the button, and the size drawn is the default for a damaged saved one")
+  Check(Button(c).width > 36 and Button(c).height == 25, "a name widens the button, and the size drawn is the default for a damaged saved one")
+
+  -- presentation: the artwork alone, resting at 70%, full under the pointer, darker while pressed, nothing left after hiding
+  local b = Button(c)
+  Check(b.ground == nil and b.edges == nil, "no backing or border")
+  local M = c.R.Look.Motion
+  local function Hook(o, ev, ...) for _, h in ipairs((o.hooks or {})[ev] or {}) do h(o, ...) end end
+  rawset(b, "SetAlpha", function(self, a) self.alpha = a end)
+  rawset(b.icon, "SetVertexColor", function(self, r, g, bl) self.vertex = { r, g, bl } end)
+  local over = false
+  rawset(b, "IsMouseOver", function() return over end)
+  B.Set("opacity", 100); B.Set("label", "icon"); B.Refresh(); M.Settle()
+  Check(math.abs(b.alpha - 0.7) < 1e-6, "rests at 70% of the chosen opacity: " .. tostring(b.alpha))
+  over = true
+  Hook(b, "OnEnter")
+  M.Advance(0.05)
+  Check(b.alpha > 0.7 and b.alpha < 1, "hover eases up rather than jumping")
+  M.Advance(0.3)
+  Check(math.abs(b.alpha - 1) < 1e-6 and M.Count() == 0, "full strength under the pointer, and the easing has ended")
+  Hook(b, "OnMouseDown", "LeftButton")
+  Check(b.icon.vertex and b.icon.vertex[1] < 1, "darker while pressed")
+  Hook(b, "OnMouseUp", "LeftButton")
+  Check(b.icon.vertex[1] == 1, "restored on release")
+  over = false
+  Hook(b, "OnMouseDown", "LeftButton")
+  Hook(b, "OnLeave")
+  Check(b.icon.vertex[1] == 1, "leaving while pressed restores the colour")
+  M.Advance(0.3)
+  Check(math.abs(b.alpha - 0.7) < 1e-6, "returns to rest on leave")
+  over = true; Hook(b, "OnEnter"); M.Advance(0.05)
+  b:Hide()
+  Check(M.Count() == 0 and math.abs(b.alpha - 0.7) < 1e-6, "hiding stops the easing and resets the strength")
+  over = false
+  B.Set("opacity", 50)
+  Check(math.abs(b.alpha - 0.35) < 1e-6, "the chosen opacity scales the resting strength")
+  b.dragging = nil
+  B.Set("opacity", 100)
 end
 
 print("COZY BAG OFFER PASSED")

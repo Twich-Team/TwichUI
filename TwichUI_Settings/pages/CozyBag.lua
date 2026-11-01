@@ -79,8 +79,8 @@ K.Page({
         local function On() return R:Enabled("cozyBagButton") end
         Under(Choice("cozyBagButtonLabel", "Button shows", "An icon alone, or the icon with the words \"Sleeping Bag\" beside it.",
             K.STRING, B.DEFAULTS.label, function() return B.Get("label") end, function(value) B.Set("label", value) end, B.CHOICES), show, On)
-        Under(Number("size", "Button size", "The button's height and, with the icon only, its width, in screen pixels."), show, On)
-        Under(Number("opacity", "Button opacity", "How solid the button is, in percent. It stays at this strength; it does not pulse or fade by itself."), show, On)
+        Under(Number("size", "Button size", "The button's width in screen pixels (with the words, the icon's width); its height follows the artwork."), show, On)
+        Under(Number("opacity", "Button opacity", "How solid the button is under the pointer, in percent. At rest it sits at 70% of this; it does not pulse or glow."), show, On)
 
         local move = Button_("Button place", function() return B.Moving() and "Done" or "Move" end, function()
             if B.Moving() then B.StopMove() else

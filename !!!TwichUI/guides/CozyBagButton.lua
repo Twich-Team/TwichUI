@@ -1,7 +1,8 @@
 -- TwichUI: Cozy Sleeping Bag guide, the launcher button
 -- A small button that opens the guide while the bag is available to this character and not yet got (guides/CozyBagOffer.lua
--- decides that). The sleeping-bag artwork on a dark ground with a thin bronze outline, optionally with a short name; it does
--- not glow, pulse or move. Left-click opens the guide (CozyBagOffer.OpenGuide); right-click offers Open guide, Move and
+-- decides that). The sleeping-bag artwork itself is the button (no frame, backing or slot), optionally with a short name. It
+-- rests at 70% of the chosen opacity, eases to the full value under the pointer (0.18 s; at once when "Reduce settings motion"
+-- is on) and darkens a little while pressed; it does not glow, pulse or move. Left-click opens the guide (CozyBagOffer.OpenGuide); right-click offers Open guide, Move and
 -- Hide button. Opening the guide neither completes nor dismisses anything: the button steps aside while the guide is open and
 -- returns when it closes.
 --
@@ -26,7 +27,14 @@ B.ENUM = { label = { icon = true, name = true } }
 B.CHOICES = { { "icon", "Icon only" }, { "name", "Icon and name" } }
 
 local NAME = "Sleeping Bag"
-local EDGE_PAD = 3                   -- ground between the outline and the artwork
+local ART = R.PATH .. [[media\guides\cozy-bag]]   -- tools/make_cozy_bag_art.py: the painting centred in a square canvas
+local ART_SMALL = R.PATH .. [[media\guides\cozy-bag-small]]
+local ART_SMALL_MAX = 26             -- sizes up to this use the 32 px copy
+local ART_TOP, ART_BOTTOM, ART_ROWS = 10, 54, 64   -- the canvas rows the painting occupies (of 64): the button hugs them
+local ASPECT = (ART_BOTTOM - ART_TOP) / ART_ROWS
+local REST = 0.7                     -- resting strength, of the chosen opacity
+local EASE = 0.18                    -- seconds to full strength and back
+local PRESSED = 0.75                 -- colour strength while pressed
 local PREVIEW_SECONDS = 30
 local POSITION_LIMIT = 8192
 local FALLBACK = {
@@ -135,19 +143,24 @@ function B.ResetPosition() return B.SetPosition(nil, nil) end
 ---------------------------------------------------------------------------
 -- The frame
 ---------------------------------------------------------------------------
-local function SetEdge(color)
-    for _, e in ipairs(f.edges) do e:SetColorTexture(color[1], color[2], color[3], 0.9) end
+local fade                           -- eases the resting-to-full strength (0..1); nil where Look is not loaded
+
+local function Strength(v) return B.Get("opacity") / 100 * (REST + (1 - REST) * v) end
+
+-- Where the strength stands: full while moving or previewing and under the pointer, resting otherwise.
+local function Rest()
+    local up = moving or previewing or f:IsMouseOver()
+    if fade then fade:To(up and 1 or 0, EASE) else f:SetAlpha(Strength(up and 1 or 0)) end
 end
 
-local function Rest()
-    local K = Palette()
-    SetEdge(moving and K.gold or K.bronze)
+local function Unpress()
+    f.icon:SetVertexColor(1, 1, 1)
 end
 
 local function Tooltip()
     if previewing then return "A preview of the button. Clicking it does nothing." end
     if moving then return "Drag to move the button. Right-click for Done." end
-    return "Opens the Cozy Sleeping Bag guide. Right-click for more."
+    return "Find out how to get your Cozy Sleeping Bag.\nClick to open the guide. Right-click for more."
 end
 
 local function MenuItems(owner, root)
@@ -184,23 +197,10 @@ local function Build()
     f:RegisterForDrag("LeftButton")
     if f.SetDontSavePosition then f:SetDontSavePosition(true) end   -- TwichUI keeps the place, not the game's layout cache
 
-    f.ground = f:CreateTexture(nil, "BACKGROUND")
-    f.ground:SetAllPoints()
-    f.ground:SetColorTexture(K.bg[1], K.bg[2], K.bg[3], 0.88)
-    f.edges = {}
-    for i, anchors in ipairs({
-        { "TOPLEFT", "TOPRIGHT", height = 1 }, { "BOTTOMLEFT", "BOTTOMRIGHT", height = 1 },
-        { "TOPLEFT", "BOTTOMLEFT", width = 1 }, { "TOPRIGHT", "BOTTOMRIGHT", width = 1 },
-    }) do
-        local e = f:CreateTexture(nil, "BORDER")
-        e:SetPoint(anchors[1])
-        e:SetPoint(anchors[2])
-        if anchors.height then e:SetHeight(anchors.height) end
-        if anchors.width then e:SetWidth(anchors.width) end
-        f.edges[i] = e
-    end
     f.icon = f:CreateTexture(nil, "ARTWORK")
-    if R.Icons and R.Icons.Apply then R.Icons.Apply(f.icon, "sleepingBag", B.Get("size")) end
+    f.icon:SetAllPoints()
+    local M = R.Look and R.Look.Motion
+    if M then fade = M.Fader(function(v) f:SetAlpha(Strength(v)) end, 0) end
     f.label = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     f.label:SetText(NAME)
     f.label:SetTextColor(K.text[1], K.text[2], K.text[3])
@@ -208,15 +208,23 @@ local function Build()
     f.label:SetWordWrap(false)
     f.move = f:CreateTexture(nil, "OVERLAY")        -- the quiet tint that says it can be dragged
     f.move:SetAllPoints()
-    f.move:SetColorTexture(K.bronze[1], K.bronze[2], K.bronze[3], 0.30)
+    f.move:SetColorTexture(K.bronze[1], K.bronze[2], K.bronze[3], 0.22)
     f.move:Hide()
 
-    R.Interact.Tip(f, NAME, Tooltip, "ANCHOR_RIGHT")
-    f:HookScript("OnEnter", function() SetEdge(Palette().gold) end)
-    f:HookScript("OnLeave", Rest)
+    R.Interact.Tip(f, "Cozy Sleeping Bag", Tooltip, "ANCHOR_RIGHT")
+    f:HookScript("OnEnter", Rest)
+    f:HookScript("OnLeave", function() Unpress() Rest() end)
+    f:HookScript("OnMouseDown", function(_, button)
+        if button == "LeftButton" and not (moving or previewing) then f.icon:SetVertexColor(PRESSED, PRESSED, PRESSED) end
+    end)
+    f:HookScript("OnMouseUp", Unpress)
     f:SetScript("OnClick", OnClick)
     f:SetScript("OnDragStart", function(self)
-        if moving and not InCombat() then self.dragging = true self:StartMoving() end
+        if moving and not InCombat() then
+            self.dragging = true
+            R.Interact.HideTip(self)
+            self:StartMoving()
+        end
     end)
     f:SetScript("OnDragStop", function(self)
         if not self.dragging then return end
@@ -228,6 +236,8 @@ local function Build()
     end)
     f:HookScript("OnHide", function(self)
         if self.dragging then self.dragging = nil self:StopMovingOrSizing() end
+        if fade then fade:Set(0) end   -- stops the easing; the next show starts from rest
+        Unpress()
     end)
     return f
 end
@@ -236,20 +246,23 @@ end
 local function Apply()
     local size = B.Get("size")
     local named = B.Get("label") == "name"
+    local height = math.max(1, math.floor(size * ASPECT + 0.5))
+    f.icon:SetTexture(size <= ART_SMALL_MAX and ART_SMALL or ART)
+    f.icon:SetTexCoord(0, 1, ART_TOP / ART_ROWS, ART_BOTTOM / ART_ROWS)
     f.icon:ClearAllPoints()
-    f.icon:SetSize(size - EDGE_PAD * 2, size - EDGE_PAD * 2)
-    f.icon:SetPoint("LEFT", EDGE_PAD, 0)
+    f.icon:SetPoint("LEFT")
+    f.icon:SetSize(size, height)
     f.label:SetShown(named)
     local width = size
     if named then
         f.label:ClearAllPoints()
         f.label:SetPoint("LEFT", f.icon, "RIGHT", 6, 0)
         local text = f.label:GetStringWidth()
-        width = size + 6 + math.ceil(type(text) == "number" and text or 64) + 8
+        width = size + 6 + math.ceil(type(text) == "number" and text or 64)
     end
-    f:SetSize(width, size)
-    f:SetAlpha(B.Get("opacity") / 100)
+    f:SetSize(width, height)
     f.move:SetShown(moving)
+    if fade then fade:Set(fade.value) else f:SetAlpha(Strength(0)) end   -- the strength for the opacity now chosen
     Rest()
 end
 
