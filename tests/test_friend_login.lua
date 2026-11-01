@@ -152,7 +152,7 @@ assert(card.title.point[1] == "TOPLEFT" and card.rule.point[1] == "TOPLEFT" and 
 assert(card.title.point[2] == 51 and card.rule.point[4] == -51, "the name sits beside the mark; the rule starts level with the mark")
 assert(card.fadeOut.delay and card.fadeOut.delay > 0)
 assert(#c.SOUNDS == 1, "one chime with the card")
-assert(c.SOUNDS[1].path == [[Interface\AddOns\!!!TwichUI\media\sounds\TwichUI_Notification.mp3]], c.SOUNDS[1].path)
+assert(c.SOUNDS[1].path == [[Interface\AddOns\!!!TwichUI\media\sounds\TwichUI_Friend.ogg]], c.SOUNDS[1].path)
 assert(c.SOUNDS[1].channel == "SFX", "follows the Sound Effects volume by default")
 Sounds()
 Finish(card.anim)
@@ -267,13 +267,13 @@ c.TwichUIDB.ui.friendLoginChannel = nil
 assert(#F.CHANNELS == 4 and F.CHANNELS[1].key == F.CHANNEL_DEFAULT)
 -- Which sound: TwichUI's default, another TwichUI sound, LibSharedMedia's; a gone one keeps its name and plays the default.
 do
-  local DEFAULT = [[Interface\AddOns\!!!TwichUI\media\sounds\TwichUI_Notification.mp3]]
+  local DEFAULT = [[Interface\AddOns\!!!TwichUI\media\sounds\TwichUI_Friend.ogg]]
   local DRUMS = [[Interface\AddOns\!!!TwichUI\media\sounds\TwichUI_Drums.mp3]]
-  assert(F.Sound() == "TwichUI Notification" and F.SOUND_DEFAULT == "TwichUI Notification", "the notification chime by default")
+  assert(F.Sound() == "TwichUI Friend" and F.SOUND_DEFAULT == "TwichUI Friend", "the notification chime by default")
   assert(R.MediaSounds["TwichUI Drums"] == "TwichUI_Drums.mp3", "the drums are in the sound registry")
   assert(c.TwichUIDB.ui.friendLoginChime == nil, "nothing is saved until a choice is made")
   assert(not F.SetSound("") and not F.SetSound(5) and not F.SetSound(("x"):rep(65)) and not F.SetSound(nil), "an unusable name is refused")
-  assert(F.Sound() == "TwichUI Notification" and c.TwichUIDB.ui.friendLoginChime == nil)
+  assert(F.Sound() == "TwichUI Friend" and c.TwichUIDB.ui.friendLoginChime == nil)
   assert(F.SetSound("TwichUI Drums") and c.TwichUIDB.ui.friendLoginChime == "TwichUI Drums")
   Sounds()
   Online(1); Settle()
@@ -281,7 +281,7 @@ do
   Sounds(); Finish(card.anim)
   for _, bad in ipairs({ "", 3, true, ("x"):rep(65) }) do
     c.TwichUIDB.ui.friendLoginChime = bad
-    assert(F.Sound() == "TwichUI Notification", "an unusable saved name falls back to the default")
+    assert(F.Sound() == "TwichUI Friend", "an unusable saved name falls back to the default")
   end
   local LSM = c.LibStub("LibSharedMedia-3.0")
   LSM:Register("sound", "Other Addon Ding", [[Interface\AddOns\OtherAddon\ding.ogg]])

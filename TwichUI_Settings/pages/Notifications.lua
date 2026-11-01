@@ -71,7 +71,7 @@ K.Page({
             local chime = K.Proxy("friendLoginChime", STRING, "Chime sound", FriendLogin.SOUND_DEFAULT,
                 function() return FriendLogin.Sound() end, function(value) FriendLogin.SetSound(value) end)
             Under(K.Dropdown(chime, FriendLogin.SoundChoices,
-                "The sound to play. TwichUI's own are listed first, then every sound other addons have added to LibSharedMedia. Press Hear the chime to try it. A sound that has gone (its addon isn't loaded) stays chosen, and TwichUI Notification plays in its place until it returns."),
+                "The sound to play. TwichUI's own are listed first, then every sound other addons have added to LibSharedMedia. Press Hear the chime to try it. A sound that has gone (its addon isn't loaded) stays chosen, and TwichUI Friend plays in its place until it returns."),
                 friendLogin, FriendLoginOn)
             local channels = {}
             for i, channel in ipairs(FriendLogin.CHANNELS) do channels[i] = { channel.key, channel.label, channel.tooltip } end

@@ -12,7 +12,7 @@
 -- which sit at the top, and waits only for another card in its own place (modules/Notify.lua decides that). Several friends
 -- arriving together give one card. Only the name, character and faction the game gives are
 -- shown; nothing is stored but the card's place (if moved in Edit Mode) and the chime's channel and sound. No chat,
--- nothing sent, and it takes no clicks. It plays one soft chime (media/sounds/TwichUI_Notification.mp3
+-- nothing sent, and it takes no clicks. It plays one soft chime (media/sounds/TwichUI_Friend.ogg
 -- by default; one of TwichUI's other bundled sounds can be chosen in the options) unless that is
 -- switched off. A sound file can't be given its own volume, so the chime follows one of
 -- the game's own volume channels, chosen in the options (Sound Effects by default).
@@ -38,7 +38,7 @@ local WIDTH, HEIGHT = 360, 64
 local ICON = 22             -- the faction mark's height
 local ICON_GAP = 7
 local DEFAULT_X, DEFAULT_Y = 16, 300   -- default place: near the left edge, above the lower-left where the game's pop-up sits by default
-local SOUND_FILE = "TwichUI_Notification.mp3"   -- the chime when nothing (or something unknown) is chosen
+local SOUND_FILE = "TwichUI_Friend.ogg"   -- the chime when nothing (or something unknown) is chosen
 local MOVER_ATLAS = "editmode-actionbar-highlight-NineSlice-Center"   -- Edit Mode's own highlight, when the client has it
 
 -- Faction names are the game's English tokens, as UnitFactionGroup gives them. The mark is the
@@ -173,7 +173,7 @@ end
 -- Which sound it is: a LibSharedMedia sound name (TwichUI's own are registered by modules/Media.lua), saved as
 -- TwichUIDB.ui.friendLoginChime. One that has gone (its addon isn't loaded) stays chosen and the default plays
 -- in its place, so the choice is back when the addon is.
-F.SOUND_DEFAULT = "TwichUI Notification"
+F.SOUND_DEFAULT = "TwichUI Friend"
 
 function F.Sound()
     local saved = TwichUIDB and TwichUIDB.ui and TwichUIDB.ui.friendLoginChime

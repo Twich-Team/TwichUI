@@ -27,6 +27,7 @@ local SOUNDS = {
     ["GTFO Low Damage"]  = "GTFO_Low.ogg",
     ["GTFO Fail"]        = "GTFO_Fail.ogg",
     ["TwichUI Notification"] = "TwichUI_Notification.mp3",
+    ["TwichUI Friend"]   = "TwichUI_Friend.ogg",
     ["TwichUI Map Pin"]  = "TwichUI_MapPin.mp3",
     ["TwichUI Drums"]    = "TwichUI_Drums.mp3",
     ["TwichUI Success"]  = "TwichUI_Success.mp3",
