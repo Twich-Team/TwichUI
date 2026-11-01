@@ -160,11 +160,27 @@ local records, nLive, nTomb = {}, 0, 0   -- [lower full name] = { e, n, closed, 
 local buckets, nBuckets = {}, 0          -- [lower full name] = { tokens, at }
 local born = 0
 
-local function Forget(key)
+-- fn() runs when what the map shows may have changed: a live position was stored, replaced, withdrawn, expired, cleared as
+-- offline or wiped. Nothing is passed (the map asks for what it needs); a listener must be cheap and may not call back in.
+local recListeners = {}
+function GL.OnRecords(fn)
+    for _, f in ipairs(recListeners) do if f == fn then return end end
+    recListeners[#recListeners + 1] = fn
+end
+local function Changed()
+    for _, fn in ipairs(recListeners) do
+        local ok, err = pcall(fn)
+        if not ok and R.Fault then R.Fault("guild locations", err) end
+    end
+end
+
+-- quiet: the caller tells the listeners once after a batch
+local function Forget(key, quiet)
     local rec = records[key]
     if not rec then return end
     if rec.closed then nTomb = nTomb - 1 else nLive = nLive - 1 end
     records[key] = nil
+    if not rec.closed and not quiet then Changed() end
 end
 
 local function Store(key, rec)
@@ -174,14 +190,20 @@ local function Store(key, rec)
     end
     records[key] = rec
     if rec.closed then nTomb = nTomb + 1 else nLive = nLive + 1 end
+    if not rec.closed or (old and not old.closed) then Changed() end
 end
 
 local function SweepRecords(now)
-    local n = 0
+    local n, live = 0, false
     for key, rec in pairs(records) do
-        if now - rec.at >= L.expiry then Forget(key); n = n + 1 end
+        if now - rec.at >= L.expiry then
+            if not rec.closed then live = true end
+            Forget(key, true)
+            n = n + 1
+        end
     end
     stats.expired = stats.expired + n
+    if live then Changed() end
     return n
 end
 
@@ -199,9 +221,11 @@ local function ArmSweep()
 end
 
 local function WipeHeld()
+    local had = nLive > 0
     records, buckets = {}, {}
     nLive, nTomb, nBuckets = 0, 0, 0
     if sweepT then sweepT.Cancel() end
+    if had then Changed() end
 end
 
 -- A live record whose roster entry shows the member offline in a pass that came after the record's last message: they are not
@@ -209,12 +233,14 @@ end
 local function ClearOffline()
     local stamp = RS.Stamp()
     if not stamp then return end
+    local any = false
     for key, rec in pairs(records) do
         if not rec.closed and rec.at < stamp then
             local entry = RS.Entry(key)
-            if entry and entry.online == false then Forget(key); stats.offlineCleared = stats.offlineCleared + 1 end
+            if entry and entry.online == false then Forget(key, true); any = true; stats.offlineCleared = stats.offlineCleared + 1 end
         end
     end
+    if any then Changed() end
 end
 RS.OnRefresh(function() if GL.State() ~= "off" then ClearOffline() end end)
 
@@ -281,6 +307,30 @@ function GL.Peek(name)
     local rec = full and records[full:lower()]
     if not rec or Now() - rec.at >= L.expiry then return nil end
     return { epoch = rec.e, number = rec.n, closed = rec.closed, age = Now() - rec.at, map = rec.map, x = rec.x, y = rec.y }
+end
+
+-- What the map draws: copies of the live, unexpired positions, ordered by when the sender was first held (`born`, a counter)
+-- and then by key, so the same records always come first. { key, name, born, map, x, y, at } with `at` the receipt time
+-- (GetTime). Withdrawn and expired records are not listed. At most `records` (400) long.
+function GL.Live()
+    local list, now = {}, Now()
+    for key, rec in pairs(records) do
+        if not rec.closed and rec.map and now - rec.at < L.expiry then
+            list[#list + 1] = { key = key, name = rec.name, born = rec.born, map = rec.map, x = rec.x, y = rec.y, at = rec.at }
+        end
+    end
+    table.sort(list, function(a, b)
+        if a.born ~= b.born then return a.born < b.born end
+        return a.key < b.key
+    end)
+    return list
+end
+
+-- The same copy for one key, asked again at the moment of use; nil when it is withdrawn, expired or gone.
+function GL.Fresh(key)
+    local rec = type(key) == "string" and records[key]
+    if not rec or rec.closed or not rec.map or Now() - rec.at >= L.expiry then return nil end
+    return { key = key, name = rec.name, born = rec.born, map = rec.map, x = rec.x, y = rec.y, at = rec.at }
 end
 
 ---------------------------------------------------------------------------
@@ -687,14 +737,16 @@ end
 
 function GL.Snapshot()
     local state, why = GL.State()
-    local timers = tickT.Engines() + wT.Engines() + sweepT.Engines() + (RS.Snapshot().timers or 0)
-    local armed = (tickT.Armed() and 1 or 0) + (wT.Armed() and 1 or 0) + (sweepT.Armed() and 1 or 0)
-    local events = (eventsOn.world and 1 or 0) + (eventsOn.guild and 1 or 0) + (RS.Started() and 1 or 0)
+    local m = GL.Map and GL.Map.Snapshot() or {}
+    local timers = tickT.Engines() + wT.Engines() + sweepT.Engines() + (RS.Snapshot().timers or 0) + (m.timers or 0)
+    local armed = (tickT.Armed() and 1 or 0) + (wT.Armed() and 1 or 0) + (sweepT.Armed() and 1 or 0) + (m.armed or 0)
+    local events = (eventsOn.world and 1 or 0) + (eventsOn.guild and 1 or 0) + (RS.Started() and 1 or 0) + (m.events or 0)
     return {
         state = state, reason = why, interval = GL.Interval(), session = session ~= nil, noSend = noSend,
         transport = transportStatus, lastSkip = lastSkip, pending = GL.Pending(), withdrawing = wd ~= nil,
         records = nLive, tombstones = nTomb, buckets = nBuckets, outstanding = outstanding,
         roster = RS.Count(), timers = timers, armed = armed, events = events,
+        mapPool = m.pool, mapDrawn = m.drawn, mapLayouts = m.layouts, mapSkipped = m.skipped,
         stats = Copy(stats), drops = Copy(drops), skips = Copy(skips),
     }
 end

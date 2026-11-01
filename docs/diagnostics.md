@@ -126,6 +126,7 @@ uses an item, sends anything or makes up events. Each states its cost before you
 | `guildloc.tick` (`Perf.Call`, after the throttle and the early exits) | `guildloc/Comm.lua` `TickWork` | update |
 | `guildloc.receive` (`Perf.Call`, after the off test) | `guildloc/Comm.lua` `Receive` | bulk |
 | `guildloc.roster` (`Perf.Call`) | `guildloc/Roster.lua` `Rebuild` | rebuild |
+| `guildloc.map.layout` (`Perf.Start`, only with the map open) | `guildloc/Map.lua` `GM.Layout` | layout |
 | `npcs.import`, `npcs.cleanup` | `npcs/Store.lua` `NS.MergeReported`, `NS.ForgetMany` | bulk |
 | `pins.map.layout` | `pins/Map.lua` `PM.Layout` | layout |
 | `reminders.refresh` (`Perf.Call`), `reminders.decide` | `reminders/Controller.lua` | rebuild, evaluate |

@@ -103,6 +103,7 @@ local function Relevant(viewed)
         return r
     end, stitched
 end
+NMAP.Relevant = Relevant   -- Guild Locations' markers (guildloc/Map.lua) are placed on the same maps by the same rule
 
 ---------------------------------------------------------------------------
 -- The markers

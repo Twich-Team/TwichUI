@@ -1,9 +1,9 @@
 # Guild Locations
 
 Guild members using TwichUI share their own current map position over the guild's hidden addon channel and (from M3) see one
-another on the world map as class badges. **Only M0 to M2 exist: the policy wording, the core in `guildloc/`
-(`State.lua`, `Roster.lua`, `Comm.lua`) with its tests, the settings page and the launcher's right-click menu.** No map
-markers, toolbar control or search exist yet (the artwork is prepared, see "Artwork status"); the sections below that describe them are the plan, not the code.
+another on the world map as class badges. **M0 to M3 exist: the policy wording, the core in `guildloc/`
+(`State.lua`, `Roster.lua`, `Comm.lua`) with its tests, the settings page, the launcher's right-click menu and the map markers
+(`Map.lua`).** No toolbar control or search exist yet (M4); the sections below that describe them are the plan, not the code.
 
 ## Current state (2026-11-01)
 
@@ -12,10 +12,48 @@ markers, toolbar control or search exist yet (the artwork is prepared, see "Artw
 | M0 policy | **Done.** `CLAUDE.md`, `docs/dev-rules.md` and `.clinerules` carry the narrow exception (wording below). |
 | M1 core | **Built, unit-tested** (`tests/test_guild_locations.lua`, 531 checks; mocked network, clock and map; the bundled AceComm and ChatThrottleLib are the real ones). **Not real-client-tested; not simulator-tested.** |
 | M2 controls | **Built** (2026-11-01, uncommitted on `feature/guild-map`): settings page `guildLocations` and the launcher right-click menu. **Unit-tested** (`tests/test_guild_locations_settings.lua`, `tests/test_settings_broker.lua`, the contract fixture); the simulator's `smoke.sh` constructed the page (**construction only**; that run **preceded** the final icon change to `explore` and was not repeated). Final `./tests/run.sh` after the last M2 edit: **154 passed, 2 failed**, the same two pre-existing friend-chime files (no new failure). Not real-client-tested. See "What M2 built". |
-| Behavior today | A character in a guild **sends its position by default** (state Sharing) and shows nothing (no markers yet). The player can change the state from the settings page or the launcher menu, both through `R.GuildLoc.SetState`. |
-| M5 artwork | **Prepared** (2026-11-01, uncommitted): see "Artwork status". Not wired to markers or a toolbar. |
-| Pending | M3 markers, M4 toolbar/search, M6 real-client checks. |
+| Behavior today | A character in a guild **sends its position by default** (state Sharing) and, from M3, draws guildmates' class badges on the world map. The player can change the state from the settings page or the launcher menu, both through `R.GuildLoc.SetState`. |
+| M5 artwork | **Prepared and the settings illustration integrated** (2026-11-01, uncommitted): see "Artwork status". The class and eye assets are prepared but **not connected** to markers or a toolbar. Final `./tests/run.sh`: **154 passed, 2 failed** (`test_settings_contract.lua`, `test_settings_defaults.lua`), the documented baseline friend-chime failures; no new failure (`test_settings_window.lua`, with the icon checks, passes). Real-client communications checks and all visual checks (in-game appearance, actual-size readability) are **unverified**. |
+| M3 markers | **Built** (2026-11-01, uncommitted on `feature/guild-map`): see "What M3 built". **Unit-tested** (`tests/test_guild_locations_map.lua`, 129 checks). Badge artwork **screenshot-reviewed** at 20, 26 and 32 px (a script-made contact sheet, not the game). **Not simulator-tested, not real-client-tested.** |
+| Real-client checks | **User-confirmed in game (reported by the user, not re-run here):** GUILD delivery between two TwichUI clients and the sender name matching the roster (checklist items 1 and 2). **Not confirmed:** roster class and level return values, coordinates and placement, and how anything looks. |
+| Pending | M4 toolbar/search, M6 remaining real-client checks. |
 | M1 suite result | `./tests/run.sh` twice: **153 passed, 2 failed**, both times. The two failures (`test_settings_contract.lua`, `test_settings_defaults.lua`) are the friend-login chime default (`"TwichUI Friend"` where the tests expect `"TwichUI Notification"`) and reproduce on unchanged HEAD; they are not M1. The contract test also shows older border-texture drift (`"Steel & Bronze"` vs the fixture's `"Rounded Bronze"`) that the same two files already carried. Left unchanged. |
+
+### What M3 built
+
+- `guildloc/Map.lua` (TOC after `Comm.lua`): a map data provider and a pool of buttons on the world map canvas.
+  - **Which:** `GL.Live()` (live, unexpired, ordered by `born` then key; never withdrawn records). Never the local player; never a
+    guildmate in your party or raid (`GroupSet`, read at each layout and at each action; `GROUP_ROSTER_UPDATE` is listened for
+    only while installed). Their record stays held and keeps updating. At most **150** drawn per viewed map, deterministic;
+    undrawn records stay held. The "searched record is always drawn" exemption belongs to M4 and does not exist.
+  - **Where:** same map, ancestor maps and the stitched map, through `NpcMap.Relevant` (now exported, one line in `npcs/Map.lua`) and
+    `PinsMap.Position`. Unlike NPC plaques, guild badges are also drawn on continent and world views (the cap bounds them).
+  - **Look:** `media/guildloc/class-<TOKEN>-small` for the nine classes; any other or unknown class token wears `R.ICON`. The
+    class comes from the roster only. 20 units wide, growing to 26 at the closest zoom. Label (name) on hover, or always when the
+    pins' label preference says so.
+  - **Tooltip** (reads the record when shown, and again after a layout while hovered): name; "Level N Class", the part the roster
+    knows, or "Class and level not known"; "Updated N s/min ago" from the receipt time; "Last known location. Their phase or
+    layer may differ."; "Click for actions".
+  - **Menu** (`PinsWindow.OpenMenu`): Set waypoint, Navigate to this spot (`Nav.StartAt`, source `"guild"`, disabled with Navigation's
+    reason when off), Invite to party (`C_PartyInfo.InviteUnit`, greyed when `CanInvite` is false, the member is offline or already
+    in the group). Each action asks again at the click: the record must still be held and unexpired and the roster must still
+    list the member, and it uses the **current** position of that record (not the one when the menu opened). Otherwise it says
+    "That guildmate's location is no longer shared." and does nothing. Alt/Shift/Ctrl clicks go to the map's handlers. Invite
+    has no combat check of its own: it relies on `CanInvite` and the game (`InviteUnit` is called by Blizzard's own insecure
+    code; not verified under combat in game).
+  - **Lifecycle:** `Comm.lua` gained `GL.OnRecords` (told on any live change: store, withdrawal, expiry sweep, offline clear, wipe),
+    `GL.Live`, `GL.Fresh`. Record changes ask for a layout through one timer, at most one pass per 0.5 s; a map change draws at
+    once unless a pass ran in the last 0.5 s. While the map is hidden nothing is laid out (the change is remembered, the opening
+    refreshes); closing releases every marker. Withdrawal, expiry (a layout also skips an expired record before the sweep), confirmed
+    offline, guild change and leaving all reach the map through `OnRecords`. Off removes the provider, its timer and its event.
+    Released markers lose key, texture, name, place and hover state and their tooltip is hidden; a marker stays bound to its record
+    across layouts.
+  - Diagnostics: scope `guildloc.map.layout`, gauges `guildloc.map.pool/.drawn/.layouts`, and the map's timer and event counted in
+    the existing gauges (`docs/diagnostics.md`, `Gauges.lua`). Counts only.
+  - Communications, privacy and protocol: unchanged.
+- Test notes: the map, roster, clock and party are mocks; the core is real, fed through its receive path.
+
+**M3 checks still to make in the game** are the checklist at the end of "Known limitations".
 
 ### Policy wording as applied (M0)
 
@@ -139,6 +177,16 @@ and `-small` 32 px.
 | `guild-locations-badges-source.png` (3 x 3) | `class-WARRIOR`, `-PALADIN`, `-HUNTER` (top), `-ROGUE`, `-PRIEST`, `-SHAMAN` (middle), `-MAGE`, `-WARLOCK`, `-DRUID` (bottom) | Assigned by grid cell of each part's centre, not discovery order. One shared canvas and scale (no per-badge balancing), so frames match. Map markers should use `-small`. |
 | `guild-locations-eyes-source.png` | `eye-open` (Sharing), `eye-hidden` (Invisible) | Left and right half. Shared scale. For the M4 toolbar control. |
 | `guild-locations-settings-source.png` | `settings` | Registered as Icons `guildLocations`; the Guild Locations page uses it. Replaces the borrowed `explore` spyglass. |
+
+Final test outcome (2026-11-01): `./tests/run.sh` gave 154 passed, 2 failed: `test_settings_contract.lua` and
+`test_settings_defaults.lua`, the same two as the M1/M2 baseline above. The error text of that final run was not kept (its
+output was filtered to the FAIL lines); earlier runs of the same session printed the baseline cause for both:
+`TWICHUI_friendLoginChime` expected `"TwichUI Notification"`, got `"TwichUI Friend"` (contract, `defaultedDB`), and an assert at
+`test_settings_defaults.lua:158`. No failure mentions icons or Guild Locations. Still unverified: the real-client
+communications checklist (M6) and every in-game visual check of this artwork.
+
+To keep failure details next time without rerunning, save the whole output: `./tests/run.sh > <scratch>/suite.log 2>&1`
+(`run.sh` itself prints each failing test's last five lines; it has no log convention of its own, so none was added).
 
 Checked: contact sheet (64 and 32 px, and a further downscale) on dark and light surfaces showed full frames, pale details
 (feather, helmet, blade) and clean edges with no matte. **Screenshot-reviewed, not real-client-tested.** Readability limit (from the contact sheet at 64, 32 and smaller sizes; not seen in game): at 32 px the badges separate by frame and colour (blue flame, orange leaf, red-brown ground); interior detail (totem bolt, crossed blades, bow) is small and below about 24 px is only suggested, so do not rely on it to tell classes apart. The open and hidden eyes differ mainly by the slash and the missing iris; at toolbar size they read as an eye against a crossed-out eye, no more.
@@ -379,9 +427,9 @@ Safe behind guards (degrade rather than break; still confirm in game): `ChatThro
 class and level return types (class unknown falls back to the emblem); nil position in instances; `InviteUnit` failure
 (shows a notice); `MenuUtil` and `SetTooltip` presence; `GUILD_ROSTER_UPDATE` cadence; chat-lockdown results.
 
-**Must be confirmed in the real client before claiming readiness (none verified):**
-1. GUILD addon messages deliver between two TwichUI clients on Forever.
-2. The `CHAT_MSG_ADDON` sender string matches the roster name form (otherwise every packet is dropped as unverified).
+**Must be confirmed in the real client before claiming readiness:**
+1. GUILD addon messages deliver between two TwichUI clients on Forever. **User-confirmed (2026-11-01).**
+2. The `CHAT_MSG_ADDON` sender string matches the roster name form (otherwise every packet is dropped as unverified). **User-confirmed (2026-11-01).** Items 3 to 5 are not.
 3. The roster class token at return 11, level at 4 (GUID at 17 is optional). These come from two reference addons, not from Blizzard's source or API docs.
 4. Whether messages sent during a receiver's reload are lost (timeline 5 assumes yes).
 5. Large-guild server fan-out, and how often the immediate-send gate skips right after zooming.
@@ -393,3 +441,14 @@ Tests planned for M1: each timeline (and with a receiver reset), epoch strictnes
 bound, the gate against the real bundled library with `C_ChatInfo` mocked, worst-case jitter gap at all four intervals, the
 3-lost and 4-lost expiry boundary, the movement paths, cap admission order, timer ownership after rapid state toggling, and
 key placement. The simulator can show page construction and load order only, never delivery or appearance.
+
+### M3 in-game checklist
+
+1. **Placement:** with a guildmate sharing nearby, a badge appears on the world map where they stand, on the zone map and on the continent map; it moves after they move (up to about a minute standing still).
+2. **Class and level:** the badge matches their class; the tooltip shows "Level N Class", localized, and "Updated … ago"; a class without a badge shows the TwichUI emblem.
+3. **Group deduplication:** after you invite them, their badge disappears and the game's own group marker is the only one; after they leave the group it returns.
+4. **Withdrawal and removal:** they choose Invisible or Off and the badge goes within seconds; logging off removes it within about a minute (a roster refresh); a long silence expires it after 5 minutes.
+5. **Waypoint:** the menu's Set waypoint places the game's waypoint at the spot, also after they have moved on the menu being open.
+6. **Navigation:** Navigate to this spot starts a route to that fixed point (Navigation on); greyed with a reason when it is off.
+7. **Invite:** Invite to party sends the game's invitation; it is greyed for an offline member or one in your group.
+8. **Also:** the badges' size, position over the exact spot, readability at 20 to 26 units, hover label, layering against pins and NPC plaques, opening and closing the map repeatedly, and combat behaviour of the menu and invite.
