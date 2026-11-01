@@ -68,7 +68,9 @@ Data Explorer's cleanup. Entry: `{ id, n (name), m (map), x, y (0..10000), tags,
 - Shown on the map the NPC was noted on and on the maps it is inside down to a zone (a Stormwind NPC on Elwynn Forest),
   never on a continent or the world, and never on a sibling zone. Placed through the game's world-position conversion
   (`PinsMap.Position`), which also handles map exploration's seamless map.
-- Square plaques (`media/textures/npc-<kind>.tga`, drawn by `tools/make_npc_icons.py`): pins are diamonds and the map's
+- Painted icons (`media/npcs/<name>-small.tga`, cut by `tools/make_npc_art.py` from `assets/npc-art-source.png`; the kind-to-art
+  table is `NK.ART` in `npcs/Kinds.lua`) for every kind; the square plaques
+  (`media/textures/npc-<kind>.tga`, drawn by `tools/make_npc_icons.py`) remain as the fallback. Pins are diamonds and the map's
   places are round, so they differ by shape. Reports are dimmed (60%) and greyed, and their tooltip says "not seen by you
   yet". At most 300 at once.
 - A click opens the NPC's actions: **Set waypoint** (the game's own; replaces yours), **Pin this place** (the new pin

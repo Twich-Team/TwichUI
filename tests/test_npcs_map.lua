@@ -23,6 +23,7 @@ local function Obj()
     if k == "SetDesaturated" then return function(s, v) s.desaturated = v end end
     if k == "SetTexture" then return function(s, v) s.texture = v end end
     if k == "SetSize" then return function(s, w) s.size = w end end
+    if k == "SetScale" then return function(s, v) s.scale = v end end
     if k == "SetEnabled" then return function(s, v) s.enabled = v and true or false end end
     if k == "IsEnabled" then return function(s) return s.enabled ~= false end end
     if k == "HasFocus" or k == "IsMouseOver" or k == "IsTruncated" then return function() return false end end
@@ -158,8 +159,18 @@ local d = drawn()
 assert(d[1] and d[2] and d[4] and d[7], "its own map, a map inside it, your class's trainer, a report")
 assert(not d[3] and not d[5] and not d[6], "not a sibling zone, another class's trainer, a hidden kind")
 assert(d[1].entry.x == 5000 and math.abs(d[2].mx - (1100 + 50 - 1000) / 400) < 1e-6, "Stormwind's NPC placed on Elwynn by the world position")
-assert(d[1].kind.id == "reagents" and d[1].icon.texture:find("npc%-reagents") and d[2].icon.texture:find("npc%-banker"))
+assert(d[1].kind.id == "reagents" and d[1].icon.texture:find("npcs\\reagent%-pouch%-small", 1) and d[2].icon.texture:find("npcs\\coins%-small", 1))
 assert(d[7].alpha == 0.6 and d[7].icon.desaturated == true and d[1].icon.desaturated == false, "a report is dimmed and greyed")
+-- zoomed in, a marker grows (1.6 times at the closest zoom), and goes back at the widest view
+assert(math.abs(d[1].scale - 1) < 1e-6 and d[1].size == 20.7, "at the widest view: the plain size")
+rawset(WMF, "GetCanvasZoomPercent", function() return 1 end)
+for p in pairs(WMF.providers) do p:OnCanvasScaleChanged() end
+d = drawn()
+assert(math.abs(d[1].scale - 1.6) < 1e-6 and d[1].size == 20.7, "at the closest zoom: 1.6 times, the size setting untouched")
+rawset(WMF, "GetCanvasZoomPercent", function() return 0 end)
+for p in pairs(WMF.providers) do p:OnCanvasScaleChanged() end
+d = drawn()
+assert(math.abs(d[1].scale - 1) < 1e-6)
 -- a continent shows none; Stormwind itself shows its own
 WMF:SetMapID(1415)
 assert(NMAP.Used() == 0, "never on a continent")

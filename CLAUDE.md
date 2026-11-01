@@ -70,6 +70,8 @@ Settings live in the dedicated TwichUI window (`TwichUI_Settings/`, opened with 
 
 **Guide status icons** (reusable, native artwork colors, `R.PATH .. [[media\guides\<name>]]`, 64 px; `-small` is 32 px for sizes of 26 and under): `status-done` (success check, done), `status-failed` (cross, only an explicit failed/error state, never merely unfinished), `status-current` (arrow, the active step). Reuse them instead of generating duplicates; source `assets/guide-status-source.png`, built by `tools/make_guide_status_art.py`.
 
+**Vendor/trainer artwork** (18 painted icons, 64 px and `-small` 32 px): `!!!TwichUI/media/npcs/`, cut by `tools/make_npc_art.py` from `assets/npc-art-source.png`. Kind-to-art mapping: `NK.ART` in `!!!TwichUI/npcs/Kinds.lua` (all 18 assigned). Reuse these; do not generate duplicates.
+
 ## Persistence
 
 Schema version is separate from release version. Defaults fill only missing values (preserve valid `false`, `0`, `""`, empty collections); never share mutable default tables. Repair narrowly, never reset a profile for one bad field. Migrations are ordered, deterministic, repeatable and do not leave half-mutated state; never downgrade or overwrite newer-schema data. No frames, callbacks or timers in SavedVariables. Do not change retention policies that delete user-authored data without approval. Keep configuration separate from gameplay records (pins, Chronicle). Enforce combat restrictions and protections in central APIs, not only disabled controls. Do not claim TwichUI can reconstruct missing data.

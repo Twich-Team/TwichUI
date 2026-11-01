@@ -54,11 +54,19 @@ NK.SECTIONS = {
     { id = "trainers", label = "Trainers" },
     { id = "services", label = "Services" },
 }
+-- The painted artwork a kind wears (media/npcs/<name>-small.tga, cut by tools/make_npc_art.py from assets/npc-art-source.png).
+-- A kind not listed keeps its plaque (media/textures/npc-<id>.tga). Every one of the 18 is used.
+NK.ART = {
+    classTrainer = "sword-and-shield", profTrainer = "hammer-and-chisel", petTrainer = "paw",
+    banker = "coins", auctioneer = "gavel", flight = "wing", stable = "horse-head", guild = "tabard", spirit = "hooded-winged-figure",
+    reagents = "reagent-pouch", ammo = "arrow-and-cartridge", repair = "hammer", trade = "cloth-bolts", food = "bread-and-tankard",
+    recipes = "sealed-scroll", bags = "leather-backpack", vendor = "balance-scales", innkeeper = "inscribed-stone",
+}
 NK.BY_ID, NK.BY_CODE = {}, {}
 for _, k in ipairs(NK.LIST) do
     NK.BY_ID[k.id] = k
     NK.BY_CODE[k.code] = k
-    k.icon = R.PATH .. [[media\textures\npc-]] .. k.id
+    k.icon = R.PATH .. (NK.ART[k.id] and ([[media\npcs\]] .. NK.ART[k.id] .. "-small") or ([[media\textures\npc-]] .. k.id))
 end
 
 -- The class tokens a class trainer can carry (UnitClassBase); anything else is not stored or accepted.

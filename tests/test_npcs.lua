@@ -109,10 +109,23 @@ local codes, ids = {}, {}
 for _, k in ipairs(NK.LIST) do
   assert(not codes[k.code] and not ids[k.id], "kinds and codes are unique")
   codes[k.code], ids[k.id] = true, true
-  assert(#k.code == 2 and k.label and k.noun and k.section and k.icon:find("npc%-" .. k.id, 1, false))
-  local f = io.open(ROOT .. "media/textures/npc-" .. k.id .. ".tga", "rb")
-  assert(f, "an icon for " .. k.id); f:close()
+  local art = NK.ART[k.id]
+  assert(#k.code == 2 and k.label and k.noun and k.section)
+  assert(k.icon:find(art and ("npcs\\" .. art .. "-small") or ("textures\\npc-" .. k.id), 1, true), "the icon is its art, else its plaque: " .. k.id)
+  local f = io.open(ROOT .. "media/textures/npc-" .. k.id .. ".tga", "rb")   -- the plaque stays as the fallback
+  assert(f, "a plaque for " .. k.id); f:close()
+  if art then
+    for _, suffix in ipairs({ "", "-small" }) do
+      local g = io.open(ROOT .. "media/npcs/" .. art .. suffix .. ".tga", "rb")
+      assert(g, "art file for " .. k.id .. ": " .. art .. suffix); g:close()
+    end
+  end
 end
+for id in pairs(NK.ART) do assert(NK.BY_ID[id], "NK.ART names a kind that exists: " .. id) end
+assert(NK.BY_ID.innkeeper.icon:find("npcs\\inscribed-stone-small", 1, true) and NK.BY_ID.vendor.icon:find("npcs\\balance-scales-small", 1, true))
+local used = 0
+for _ in pairs(NK.ART) do used = used + 1 end
+assert(used == #NK.LIST, "every kind has art; the plaque is only the fallback")
 
 -- creature ids from GUIDs; nothing else is an NPC
 assert(NC.CreatureId("Creature-0-3137-0-47-1213-0000123456") == 1213)

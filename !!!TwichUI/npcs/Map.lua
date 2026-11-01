@@ -26,7 +26,8 @@ local Perf = R.Perf
 local NMAP = {}
 R.NpcMap = NMAP
 
-local SIZE = 18                -- a marker's side on screen before the size choice
+local ZOOM_GROWTH = 1.6          -- how much larger a marker is at the closest zoom than at the widest
+local SIZE = 20.7              -- a marker's side on screen before the size choice
 local MAX_DRAWN = 300
 local MAX_PARENTS = 8
 local REPORT_ALPHA = 0.6
@@ -151,12 +152,14 @@ local function Dress(b, e, kind)
     b.entry = e
 end
 
--- Puts a frame's middle at a place on the viewed map (0..1), the same size on screen at every zoom (as pins are).
+-- Puts a frame's middle at a place on the viewed map (0..1). On screen it is the same size at the map's widest view and
+-- grows with the zoom to ZOOM_GROWTH times that at the closest (the map's own zoom percent, 0 to 1, as Blizzard's pins use).
 local function Place(b)
     local scale = WorldMapFrame:GetCanvasScale()
     if not scale or scale <= 0 then return false end
     local global = WorldMapFrame.GetGlobalPinScale and WorldMapFrame:GetGlobalPinScale() or 1
-    local s = global / scale
+    local zoom = WorldMapFrame.GetCanvasZoomPercent and WorldMapFrame:GetCanvasZoomPercent() or 0
+    local s = global / scale * (1 + (ZOOM_GROWTH - 1) * math.min(1, math.max(0, zoom)))
     b:SetScale(s)
     b:ClearAllPoints()
     b:SetPoint("CENTER", canvas, "TOPLEFT", canvas:GetWidth() * b.mx / s, -canvas:GetHeight() * b.my / s)
