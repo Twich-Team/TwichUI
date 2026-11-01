@@ -120,8 +120,8 @@ assert(proxies.TWICHUI_gearTree.get() == 0, "automatic by default")
 proxies.TWICHUI_gearTree.set(8); assert(P.TreeChoice() == 8)
 proxies.TWICHUI_gearTree.set(0); assert(P.TreeChoice() == nil, "0 puts it back to automatic")
 -- The Profiles page's choices have no default on purpose: the panel's Defaults button must never switch,
--- copy into or delete a profile.
-local NO_DEFAULT = { TWICHUI_gearTree = true, TWICHUI_profileCurrent = true, TWICHUI_profileCopyFrom = true, TWICHUI_profileDelete = true }
+-- copy into or delete a profile. Neither may it restore Guild Locations' Sharing: that choice is a privacy record.
+local NO_DEFAULT = { TWICHUI_guildLocationsState = true, TWICHUI_gearTree = true, TWICHUI_profileCurrent = true, TWICHUI_profileCopyFrom = true, TWICHUI_profileDelete = true }
 -- So do the notification appearance settings: each one reads and writes whichever card (or the shared look) is
 -- being edited, so a page-wide "Reset this page" would reset the wrong place. That page's own two Reset buttons
 -- say exactly what they cover instead.
@@ -251,7 +251,7 @@ assert(attune:GetTooltip():find("after reload"), "toggle change shows it needs a
 
 -- The overview links to one page per feature, in this order; every setting
 -- is on exactly one page (registration above refuses a repeat).
-assert(table.concat(pageOrder, ",") == "Notifications,Notification appearance,Quality of life,Markers,Chat cleaning,Food and drink,Hazard alerts,Vendor restocking,Auction House,Journey Chronicle,Chronicle appearance,Cozy Sleeping Bag,Pins and Pings,Map pings,Pin appearance,Map Toolbar,World map,World map places,Navigation,Vendors and trainers,Vendors and trainers: your list,Gear comparison,Mage,Class resource bars,Class resource bar layout,Class resource bar appearance,Class resource bar effects,Addon skins,SpeakStone speech frame,RestedXP,Configuration sharing,Profiles,Troubleshooting", table.concat(pageOrder, ","))
+assert(table.concat(pageOrder, ",") == "Notifications,Notification appearance,Quality of life,Markers,Chat cleaning,Food and drink,Hazard alerts,Vendor restocking,Auction House,Journey Chronicle,Chronicle appearance,Cozy Sleeping Bag,Pins and Pings,Map pings,Pin appearance,Map Toolbar,World map,World map places,Navigation,Vendors and trainers,Vendors and trainers: your list,Guild Locations,Gear comparison,Mage,Class resource bars,Class resource bar layout,Class resource bar appearance,Class resource bar effects,Addon skins,SpeakStone speech frame,RestedXP,Configuration sharing,Profiles,Troubleshooting", table.concat(pageOrder, ","))
 for variable, page in pairs({
   TWICHUI_media = "TwichUI", TWICHUI_quietLogin = "TwichUI", 
   TWICHUI_gearHints = "Gear comparison", TWICHUI_gearTree = "Gear comparison", TWICHUI_gearBagStyle = "Gear comparison",

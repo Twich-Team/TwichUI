@@ -1,7 +1,9 @@
 -- TwichUI on a data bar (SettingsBroker.lua): one "TwichUI" launcher, made only when a data bar's LibDataBroker exists
 -- (at login or later), once; a left click goes through R:OpenSettings (the one way to open the settings), opens the window
--- or brings an open one forward without closing it or changing its page; other buttons do nothing; the tooltip says only
--- what the click does; no update loop; nothing breaks without LibDataBroker.
+-- or brings an open one forward without closing it or changing its page; a right click opens the Guild Locations menu
+-- (Sharing / Invisible through R.GuildLoc.SetState, a shortcut to its page; never turns sharing on from Off; the page
+-- instead when the game has no MenuUtil); other buttons do nothing; the tooltip says what the clicks do; no update loop;
+-- nothing breaks without LibDataBroker.
 dofile(TESTS .. "harness.lua")
 
 local OURS = "TwichUI"
@@ -53,7 +55,7 @@ do
   Obj(c).OnClick("frame", "LeftButton")
   assert(#calls == 1 and calls[1] == 0, "a left click calls R:OpenSettings() with no page")
   Obj(c).OnClick("frame", "RightButton"); Obj(c).OnClick("frame", "MiddleButton")
-  assert(#calls == 1, "other buttons do nothing")
+  assert(#calls == 1, "without Guild Locations, other buttons do nothing")
 end
 
 -- 3. Through the real opener: the window opens; a second click while it is open brings it forward and neither closes it nor
@@ -77,6 +79,109 @@ do
   local lines = {}
   Obj(c).OnTooltipShow({ AddLine = function(_, t) lines[#lines + 1] = t end, AddDoubleLine = function() error("no extra rows") end })
   assert(#lines == 2 and lines[1] == "TwichUI" and lines[2] == "Left-click to open settings.", "title and the one action")
+end
+
+---------------------------------------------------------------------------
+-- Guild Locations: the right-click menu
+---------------------------------------------------------------------------
+-- A client with the real guildloc/State.lua (the one authority) and a recording stand-in for the game's menu.
+local function GLClient(db)
+  local c = Client(true)
+  c.TwichUIDB = db or {}
+  local chunk = assert(loadfile(ROOT .. "guildloc/State.lua")); setfenv(chunk, c); chunk("!!!TwichUI", {})
+  c.FireEvent("ADDON_LOADED", "!!!TwichUI"); c.FireEvent("PLAYER_LOGIN")
+  c.menus = {}
+  c.MenuUtil = { CreateContextMenu = function(owner, gen)
+    local m = { owner = owner, items = {} }
+    local root = {}
+    local function Add(kind, text, a, b)
+      local item = { kind = kind, text = text, a = a, b = b, enabled = true }
+      function item:SetEnabled(on) self.enabled = on end
+      m.items[#m.items + 1] = item
+      return item
+    end
+    function root:CreateTitle(t) return Add("title", t) end
+    function root:CreateButton(t, fn) return Add("button", t, fn, fn) end
+    function root:CreateRadio(t, sel, fn) return Add("radio", t, sel, fn) end
+    gen(owner, root)
+    c.menus[#c.menus + 1] = m
+  end }
+  return c
+end
+local function Find(m, text) for _, i in ipairs(m.items) do if i.text == text then return i end end end
+
+-- 7. Right-click: the menu, built from the core's state; Sharing and Invisible go through GL.SetState.
+do
+  local c = GLClient()
+  local GL = c.TwichUI.GuildLoc
+  local opened = {}
+  c.TwichUI.OpenSettings = function(self, page) opened[#opened + 1] = page or "none" end
+  Obj(c).OnClick("bar", "LeftButton")
+  assert(#c.menus == 0 and opened[1] == "none", "left click is unchanged: settings, no menu")
+  Obj(c).OnClick("bar", "RightButton")
+  local m = c.menus[1]
+  assert(m and m.owner == "bar" and #opened == 1, "right click opens a menu on the bar, not the settings")
+  assert(m.items[1].kind == "title" and m.items[1].text == "Guild Locations")
+  local sharing, invisible = Find(m, "Sharing my location"), Find(m, "Invisible (still see others)")
+  assert(sharing and invisible and sharing.a() and not invisible.a(), "Sharing is shown selected by default")
+  invisible.b()
+  assert(GL.State() == "invisible" and c.TwichUIDB.guildLoc.state == "invisible", "Invisible is saved through the core")
+  assert(invisible.a() and not sharing.a(), "the radios read the core's state")
+  sharing.b()
+  assert(GL.State() == "sharing", "and back")
+  Find(m, "Guild Locations settings...").b()
+  assert(opened[2] == "guildLocations", "the settings entry opens the page")
+  Obj(c).OnClick("bar", "MiddleButton")
+  assert(#c.menus == 1, "other buttons still do nothing")
+  assert(GL.Interval() == 15 and c.TwichUIDB.guildLoc.interval == nil, "the menu never touches the interval")
+end
+
+-- 8. Off, held and unusable: the menu never starts sharing from Off; privacy choices stay selectable outside a guild.
+do
+  local c = GLClient({ guildLoc = { state = "off", interval = 30 } })
+  local GL = c.TwichUI.GuildLoc
+  local opened = {}
+  c.TwichUI.OpenSettings = function(self, page) opened[#opened + 1] = page end
+  Obj(c).OnClick("bar", "RightButton")
+  local m = c.menus[1]
+  assert(not Find(m, "Sharing my location") and not Find(m, "Invisible (still see others)"), "no radios while Off")
+  assert(Find(m, "Off") and Find(m, "Off").enabled == false, "Off is stated, greyed")
+  Find(m, "Turn on in settings...").b()
+  assert(opened[1] == "guildLocations" and GL.State() == "off" and c.TwichUIDB.guildLoc.state == "off", "the shortcut opens settings and changes nothing")
+  assert(c.TwichUIDB.guildLoc.interval == 30, "the interval is untouched")
+  c.IsInGuild = function() return false end
+  GL.SetState("invisible")
+  Obj(c).OnClick("bar", "RightButton")
+  local m2 = c.menus[2]
+  assert(Find(m2, "Sharing my location").enabled and Find(m2, "Invisible (still see others)").a(), "outside a guild the choices are selectable")
+  Find(m2, "Sharing my location").b()
+  assert(GL.State() == "sharing", "a privacy preference can be set outside a guild")
+end
+do
+  local c = GLClient({ guildLoc = { state = "sharing" } })
+  c.TwichUI.Persist = { IsHeld = function(key) return key == "TwichUIDB" end }
+  Obj(c).OnClick("bar", "RightButton")
+  local m = c.menus[1]
+  assert(Find(m, "Unavailable right now") and not Find(m, "Turn on in settings...") and not Find(m, "Sharing my location"), "held: unavailable, nothing to choose")
+  assert(Find(m, "Guild Locations settings..."), "the settings page still opens, to explain")
+  assert(c.TwichUIDB.guildLoc.state == "sharing" and not c.TwichUI.GuildLoc.SetState("off"), "held: nothing is written")
+end
+
+-- 9. Without the game's menu, right-click opens the settings page; the tooltip names the clicks and the state.
+do
+  local c = GLClient()
+  c.MenuUtil = nil
+  local opened = {}
+  c.TwichUI.OpenSettings = function(self, page) opened[#opened + 1] = page or "none" end
+  Obj(c).OnClick("bar", "RightButton")
+  assert(#opened == 1 and opened[1] == "guildLocations", "the fallback opens the Guild Locations page")
+  local lines = {}
+  Obj(c).OnTooltipShow({ AddLine = function(_, t) lines[#lines + 1] = t end })
+  assert(#lines == 3 and lines[3] == "Right-click for Guild Locations (Sharing).", lines[3])
+  c.TwichUI.GuildLoc.SetState("off")
+  lines = {}
+  Obj(c).OnTooltipShow({ AddLine = function(_, t) lines[#lines + 1] = t end })
+  assert(lines[3] == "Right-click for Guild Locations (Off).", lines[3])
 end
 
 -- 5. Without a data bar's LibDataBroker nothing is made and nothing breaks; a data bar addon that loads later brings the

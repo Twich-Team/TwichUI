@@ -1,9 +1,9 @@
 # Guild Locations
 
 Guild members using TwichUI share their own current map position over the guild's hidden addon channel and (from M3) see one
-another on the world map as class badges. **Only M0 and M1 exist: the policy wording, and the core in `guildloc/`
-(`State.lua`, `Roster.lua`, `Comm.lua`) with its tests.** No settings page, launcher menu, map markers, toolbar control, search
-or artwork exist yet; the sections below that describe them are the plan, not the code.
+another on the world map as class badges. **Only M0 to M2 exist: the policy wording, the core in `guildloc/`
+(`State.lua`, `Roster.lua`, `Comm.lua`) with its tests, the settings page and the launcher's right-click menu.** No map
+markers, toolbar control, search or artwork exist yet; the sections below that describe them are the plan, not the code.
 
 ## Current state (2026-11-01)
 
@@ -11,8 +11,10 @@ or artwork exist yet; the sections below that describe them are the plan, not th
 |---|---|
 | M0 policy | **Done.** `CLAUDE.md`, `docs/dev-rules.md` and `.clinerules` carry the narrow exception (wording below). |
 | M1 core | **Built, unit-tested** (`tests/test_guild_locations.lua`, 531 checks; mocked network, clock and map; the bundled AceComm and ChatThrottleLib are the real ones). **Not real-client-tested; not simulator-tested.** |
-| Behavior today | With the core loaded, a character in a guild **sends its position by default** (state Sharing), shows nothing (no UI), and can only change state through `R.GuildLoc.SetState` (there is no control yet). See "M2 gate" below. |
-| Pending | M2 settings page + launcher menu, M3 markers, M4 toolbar/search, M5 artwork, M6 real-client checks. |
+| M2 controls | **Built** (2026-11-01, uncommitted on `feature/guild-map`): settings page `guildLocations` and the launcher right-click menu. **Unit-tested** (`tests/test_guild_locations_settings.lua`, `tests/test_settings_broker.lua`, the contract fixture); the simulator's `smoke.sh` constructed the page (**construction only**). Not real-client-tested. See "What M2 built". |
+| Behavior today | A character in a guild **sends its position by default** (state Sharing) and shows nothing (no markers yet). The player can change the state from the settings page or the launcher menu, both through `R.GuildLoc.SetState`. |
+| Pending | M3 markers, M4 toolbar/search, M5 artwork, M6 real-client checks. |
+| M1 suite result | `./tests/run.sh` twice: **153 passed, 2 failed**, both times. The two failures (`test_settings_contract.lua`, `test_settings_defaults.lua`) are the friend-login chime default (`"TwichUI Friend"` where the tests expect `"TwichUI Notification"`) and reproduce on unchanged HEAD; they are not M1. The contract test also shows older border-texture drift (`"Steel & Bronze"` vs the fixture's `"Rounded Bronze"`) that the same two files already carried. Left unchanged. |
 
 ### Policy wording as applied (M0)
 
@@ -95,11 +97,42 @@ or protocol unless the task is about it. Party pins and map pings share places t
   for held senders are still taken; unexpired tombstones and live records are never evicted; expired ones free room.
 - Not covered: a logout without a withdrawal (receivers expire it in 300 s); a crash.
 
-### M2 gate
+### What M2 built
 
-The core is **not yet user-controllable**. M2 (settings page and launcher menu) must land before this is released, because the
-default is Sharing and there is no control. Do not ship a build containing M1 without M2, and do not begin M3 before the
-real-client checks 1 to 4 below show that delivery and the sender name form work.
+- `TwichUI_Settings/pages/GuildLocations.lua` (TOC line after `WorldMap.lua`; top-level page, group `map`, order 77, `icon = "explore"` (the Home spyglass), **borrowed** because `tests/test_settings_window.lua` requires every sidebar page to have a distinct registered icon and no prepared `guildLocations` art exists; M5 adds the registry entry and switches this). Two dropdowns and two status rows:
+  - "Guild Locations": Sharing / Invisible (still see others) / Off. `TWICHUI_guildLocationsState`, **no default on purpose**, so
+    "Reset this page" cannot restore Sharing (`tests/test_settings_defaults.lua` lists it in `NO_DEFAULT`). Reads `GL.State()`,
+    writes only `GL.SetState`.
+  - "Update interval while moving": 10 / 15 / 30 / 60 s, default 15, `GL.SetInterval`. The only thing a page reset changes.
+  - Both are greyed with a reason while the saved data is held (or not loaded). Outside a guild both stay usable.
+  - "Your choice" and "Status" rows: the saved choice, and whether anything can be sent now (Off, Invisible, Not in a guild,
+    Sending, Waiting, Inactive). Counts and states only. The page subscribes once with `GL.OnChange` so a change made from
+    the launcher menu redraws an open window.
+- `SettingsBroker.lua`: right-click on the existing `TwichUI` launcher opens a `MenuUtil.CreateContextMenu` with a title, radios
+  "Sharing my location" / "Invisible (still see others)" (`GL.SetState`) and "Guild Locations settings...". While **Off** there are
+  no radios: a greyed "Off" line and "Turn on in settings..." (opens the page; never enables). While held: a greyed
+  "Unavailable right now" and the settings entry. Without `MenuUtil`, right-click opens the page. The tooltip gains a third line,
+  "Right-click for Guild Locations (<state>).", only when the core is loaded. Left-click is unchanged. No second Broker object.
+- Combat: the launcher had no combat restriction (left-click calls `R:OpenSettings()` directly) and the menu's settings
+  entry calls the same function, so it behaves the same. The earlier plan text "skipped in combat" was not implemented;
+  say so if you want it added.
+- Artwork: no prepared `guildLocations` settings icon exists in `media/icons` (the only related file in `assets/` is
+  `guild-frame-source.png`, which is not this illustration), so nothing was processed. M5 adds the registry entry and the
+  `tests/test_settings_window.lua` icon list.
+- Tests changed deliberately: `tests/settings_mock.lua` now loads `guildloc/State.lua`, `Roster.lua`, `Comm.lua` (so the page
+  exists in the contract); `tests/test_settings_defaults.lua` (page order, `NO_DEFAULT`); `tests/test_settings_broker.lua`
+  (right-click and tooltip assertions, cases 7 to 9); new `tests/test_guild_locations_settings.lua`. The contract fixture was
+  regenerated and then reduced to the Guild Locations lines only (pages, keys, settings, rows, changed, changedDB, defaulted,
+  defaultedDB); the unrelated friend-chime and border-texture drift in the generated file was not kept.
+- Not done by design: map markers, toolbar, search, protocol changes.
+
+### Release gate
+
+Do not ship a build containing M1/M2 before the real-client checks 1 and 2 below, because the default is Sharing. Do not begin
+M3 before checks 1 to 4 show that delivery and the sender name form work. In-game checks for M2: the page opens and a choice
+persists across a reload; the launcher right-click menu opens on a real data bar (and what the fallback does without one);
+choosing Invisible from the menu updates an open settings window; Invisible and Off while not in a guild; the status row
+reads "Sending" with a guildmate, and "Waiting" shows when expected.
 
 ## Requested behavior and approved defaults
 
@@ -144,7 +177,7 @@ The Chronicle prohibition stays intact and is not narrowed to chat. Keep `.cline
 |---|---|
 | **M0** | Done. |
 | **M1** | Built (see above; key placement as listed there). Planned scope: `guildloc/State.lua`, `Roster.lua`, `Comm.lua`: account record, fail-closed behavior, epochs, transport gate, `wpending`, caps, timers, diagnostics scopes, key placement (Restore `OWN_LEFT_OUT`, TwichConfig `TC.LOCAL` as "network"), `tests/test_guild_locations.lua`, TOC entries after the `npcs\` block. Update this page with what was built and verified. |
-| M2 | Settings page `guildLocations` (group `map`; the settings-contract fixture regenerated with a reviewed diff) and the TwichUI launcher right-click menu. |
+| M2 | **Built** (see "What M2 built"). Settings page `guildLocations` (group `map`; the settings-contract fixture regenerated with a reviewed diff) and the TwichUI launcher right-click menu. |
 | M3 | Map markers (own provider and pool), marker menu, group dedupe, fallback emblem `R.ICON`. |
 | M4 | Map toolbar toggle (hidden while Off) and search integration. |
 | M5 | Artwork (can run alongside M1 to M4 once source PNGs are copied into `assets/`). |
@@ -233,7 +266,7 @@ up to the expiry. Roster checks establish membership, not that a claimed positio
   drawn, roster entries, pending timers, drop counters) in `DX.OPS` and `docs/diagnostics.md`; counts only, no names,
   places or payloads.
 
-## Launcher menu (M2)
+## Launcher menu (M2; built, with the differences listed under "What M2 built")
 
 Right-click on the existing `TwichUI` launcher ([SettingsBroker.lua](../!!!TwichUI/SettingsBroker.lua)); left click still
 opens settings. No separate data object. Use `MenuUtil.CreateContextMenu` (as `guides/CozyBagButton.lua` and
