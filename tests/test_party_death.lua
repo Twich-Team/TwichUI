@@ -29,13 +29,24 @@ local function Obj()
     if k == "SetWidth" then return function(s, w) s.width = w end end
     if k == "SetHeight" then return function(s, h) s.height = h end end
     if k == "CreateFontString" then return function() local f = Obj(); f.isText = true; t.texts = t.texts or {}; t.texts[#t.texts + 1] = f; return f end end
-    if k == "CreateTexture" or k == "CreateAnimationGroup" or k == "CreateAnimation" then return function() return Obj() end end
+    if k == "SetTexture" then return function(s, v) s.texture = v end end
+    if k == "SetAlpha" then return function(s, v) s.alpha = v end end
+    if k == "ClearAllPoints" then return function(s) s.points = {} end end
+    if k == "SetPoint" then return function(s, ...) s.points = s.points or {}; s.points[#s.points + 1] = { ... } end end
+    if k == "SetOffset" then return function(s, x, y) s.offset = { x, y } end end
+    if k == "SetStartDelay" then return function(s, v) s.delay = v end end
+    if k == "SetDuration" then return function(s, v) s.duration = v end end
+    if k == "Play" then return function(s) s.plays = (s.plays or 0) + 1; s.playing = true end end
+    if k == "Stop" then return function(s) s.playing = false end end
+    if k == "CreateTexture" then return function() local f = Obj(); t.textures = t.textures or {}; t.textures[#t.textures + 1] = f; return f end end
+    if k == "CreateAnimationGroup" then return function() local g = Obj(); t.groups = t.groups or {}; t.groups[#t.groups + 1] = g; return g end end
+    if k == "CreateAnimation" then return function(s, kind) local a = Obj(); a.kind = kind; s.anims = s.anims or {}; s.anims[#s.anims + 1] = a; return a end end
     if type(k) == "string" and k:match("^%l") then return nil end
     return function() end
   end })
 end
 
-local FILES = { "chronicle/Style.lua", "modules/Notify.lua", "modules/NotifyLook.lua", "modules/Arrival.lua", "modules/PartyDeath.lua" }
+local FILES = { "chronicle/Style.lua", "modules/Notify.lua", "modules/NotifyLook.lua", "modules/Arrival.lua", "modules/PartyDeathMist.lua", "modules/PartyDeath.lua" }
 
 -- A client with the card and the coordinator loaded, in the world, with an empty party.
 local function Client(db)
@@ -63,6 +74,7 @@ local function Client(db)
   local baseName = c.UnitName
   c.RAID_CLASS_COLORS = { MAGE = { r = 0.25, g = 0.78, b = 0.92 }, PALADIN = { r = 0.96, g = 0.55, b = 0.73 } }
   c.UnitClass = function(u) local p = c.PARTY[u]; if not p or not p.class then return nil end return p.class:sub(1, 1) .. p.class:sub(2):lower(), p.class end
+  c.UnitGroupRolesAssigned = function(u) local p = c.PARTY[u]; return p and p.role or "NONE" end
   c.UnitName = function(u) local p = c.PARTY[u]; if not p then return baseName(u) end return p.name, p.realm end
   c.SUBMITS = 0
   for _, f in ipairs(FILES) do
@@ -330,6 +342,193 @@ do
   Check(#c.SOUNDS == 1, "the card's sound off: a preview is silent too")
   N.ClearPreviews()
   Check(c.SUBMITS == 0, "a preview announces no death")
+end
+
+---------------------------------------------------------------------------
+-- Role icon and the mist scene
+---------------------------------------------------------------------------
+-- The card's frame (the one with text pieces), its role icon (the second texture: the tombstone is the first) and the mist.
+local function CardFrame(c) for _, f in ipairs(c.FRAMES) do if f.texts and f.textures then return f end end end
+local function RoleIcon(c) return CardFrame(c).textures[2] end
+local function Die(c, unit) c.PARTY[unit].dead = true; Fire(c, "UNIT_HEALTH", unit) end
+local function Next(c) c.NOW = c.NOW + 7; c.R.Notify.Finished("partydeath") end
+local ART = [[Interface\AddOns\!!!TwichUI\media\partydeath\]]
+
+do   -- each role has its own art; the name line stays centred with it; unknown roles give the text-only line
+  local c = Client()
+  local roles = { { "TANK", "role-tank" }, { "HEALER", "role-healer" }, { "DAMAGER", "role-dps" } }
+  Member(c, "party1", "Player-1-A", "Alice", { class = "MAGE" })
+  Fire(c, "GROUP_ROSTER_UPDATE")
+  for _, r in ipairs(roles) do
+    c.PARTY.party1.dead = false; Fire(c, "UNIT_HEALTH", "party1")
+    c.PARTY.party1.role = r[1]
+    Die(c, "party1")
+    local line, name = Body(c)
+    local icon = RoleIcon(c)
+    Check(line == "Alice has died.", "the wording is unchanged with a role: " .. tostring(line))
+    Check(icon.shown and icon.texture == ART .. r[2], r[1] .. " -> " .. r[2] .. ": " .. tostring(icon.texture))
+    -- icon + gap + name + rest are one centred group: its left edge is -total/2
+    local total = 25 + 40 + 80
+    local x = name.points[1][4]
+    Check(math.abs(x - (-total / 2 + 25)) < 1e-6, "the name makes room for the icon: " .. tostring(x))
+    Check(icon.points[1][1] == "RIGHT" and icon.points[1][2] == name and icon.points[1][3] == "LEFT" and icon.points[1][4] == -5, "the icon sits just before the name")
+    Check(icon.alpha == nil and not icon.color, "the icon is not tinted")
+    Next(c)
+  end
+  for _, role in ipairs({ "NONE", "", "GURU", false }) do
+    c.PARTY.party1.dead = false; Fire(c, "UNIT_HEALTH", "party1")
+    c.PARTY.party1.role = role
+    Die(c, "party1")
+    local line, name = Body(c)
+    Check(not RoleIcon(c).shown and RoleIcon(c).texture == nil, "role " .. tostring(role) .. ": no icon, no placeholder")
+    Check(math.abs(name.points[1][4] - (-(40 + 80) / 2)) < 1e-6, "and the original centring: " .. tostring(name.points[1][4]))
+    Next(c)
+  end
+end
+
+do   -- frame reuse: a known role, then an unknown one; queued players keep their own role
+  local c = Client()
+  Member(c, "party1", "Player-1-A", "Alice", { role = "HEALER" })
+  Member(c, "party2", "Player-1-B", "Bobby", { role = "TANK" })
+  Member(c, "party3", "Player-1-C", "Carol")
+  Fire(c, "GROUP_ROSTER_UPDATE")
+  Die(c, "party1"); Die(c, "party2"); Die(c, "party3")
+  Check(c.SUBMITS == 3, "three deaths queued")
+  -- the roster changes while two of them wait: the tokens now hold other players, with other roles
+  Member(c, "party2", "Player-1-Z", "Zed", { role = "DAMAGER" })
+  Member(c, "party3", "Player-1-Y", "Yara", { role = "HEALER" })
+  Check(RoleIcon(c).texture == ART .. "role-healer", "the first card: its own healer")
+  Next(c)
+  local line = Body(c)
+  Check(line == "Bobby has died." and RoleIcon(c).texture == ART .. "role-tank" and RoleIcon(c).shown, "Bobby keeps his tank role, not the token's new player: " .. tostring(line))
+  Next(c)
+  line = Body(c)
+  Check(line == "Carol has died." and not RoleIcon(c).shown and RoleIcon(c).texture == nil, "Carol had none: the icon is cleared, not Bobby's: " .. tostring(line))
+  Next(c)
+end
+
+do   -- the role is the exact player's: a token that has changed hands since is not read
+  local c = Client()
+  Member(c, "party1", "Player-1-A", "Alice", { role = "TANK" })
+  Fire(c, "GROUP_ROSTER_UPDATE")
+  local guids = 0
+  local real = c.UnitGUID
+  c.UnitGUID = function(u) guids = guids + 1; if guids > 6 then return "Player-1-OTHER" end return real(u) end
+  local before = c.SUBMITS
+  Die(c, "party1")
+  Check(c.SUBMITS == before + 1, "a death is still announced")
+  Check(Shown(c) == 1, "and shown without waiting on role data")
+end
+
+do   -- a long name and realm with a role icon stay inside the card
+  local c = Client()
+  Member(c, "party1", "Player-1-A", "Averyveryveryveryveryverylongcharactername", { realm = "Argentdawnonthesecondrealmofthreerealms", role = "DAMAGER" })
+  Fire(c, "GROUP_ROSTER_UPDATE")
+  Die(c, "party1")
+  local _, name = Body(c)
+  Check(RoleIcon(c).shown, "the icon shows")
+  local rest = 8 * #" (Argentdawnonthesecondrealmofthreerealms) has died."
+  Check(name.width and name.width + rest + 25 <= 560 + 1e-6, "icon, name and the rest fit the card: " .. tostring(name.width))
+  Next(c)
+end
+
+do   -- the mist: a fixed pool, started with the card, recycled in separate lives, gone with it, never growing
+  local c = Client()
+  Member(c, "party1", "Player-1-A", "Alice", { role = "TANK" })
+  Fire(c, "GROUP_ROSTER_UPDATE")
+  local M = c.R.PartyDeathMist
+  local seed = 7
+  M.SetRandom(function() seed = (seed * 16807) % 2147483647; return seed / 2147483647 end)   -- reproducible
+  Check(M.Snapshot().built == 0 and not M.Snapshot().playing, "nothing is built before the first death")
+  Die(c, "party1")
+  local frame = CardFrame(c)
+  Check(#frame.textures == 2 + M.PIECES, "the mist is a fixed set of textures: " .. #frame.textures)
+  local snap = M.Snapshot()
+  Check(snap.built == M.PIECES and snap.shown == M.PIECES and snap.playing, "all pieces shown and playing")
+  local delays, last = {}, 0
+  for i = 3, #frame.textures do
+    local tex = frame.textures[i]
+    local g = tex.groups[1]
+    Check(tex.alpha == 0 and tex.points[1][2] == frame and tex.points[1][3] == "TOP", "piece " .. i .. " starts clear and is anchored to the card")
+    Check(tex.scripts.OnMouseDown == nil and tex.scripts.OnEnter == nil, "and takes no clicks")
+    delays[tostring(g.anims[4].delay)] = true
+    local out = g.anims[5]
+    last = math.max(last, out.delay + out.duration)
+    Check(g.anims[4].delay + g.anims[4].duration < out.delay + out.duration, "piece " .. i .. " fades in before it fades out")
+    Check(not g.scripts.OnUpdate and g.scripts.OnFinished, "piece " .. i .. " recycles from its group's finish, not an OnUpdate")
+  end
+  local n = 0; for _ in pairs(delays) do n = n + 1 end
+  Check(n >= 8, "entrances are staggered: " .. n .. " distinct starts")
+  Check(last <= 8.1 + 1e-6, "the first lives all end before the card's exit ends: " .. last)
+
+  -- lives recycle with fresh values, never past the end, and stop being started when they could not finish
+  local tex3, g3 = frame.textures[6], frame.textures[6].groups[1]     -- a wisp slot
+  local before = { x = tex3.points[#tex3.points][4], y = tex3.points[#tex3.points][5], tex = tex3.texture, plays = g3.plays }
+  c.NOW = c.NOW + 3.5; g3.scripts.OnFinished(g3)
+  Check(g3.plays == before.plays + 1, "a finished life starts the next one")
+  Check(tex3.texture ~= before.tex, "the next life has a different shape")
+  local p = tex3.points[#tex3.points]
+  Check(p[4] ~= before.x or p[5] ~= before.y, "and a different place")
+  Check(#frame.textures == 2 + M.PIECES, "no texture was created for it")
+  local worst = 0
+  for i = 3, #frame.textures do
+    local g = frame.textures[i].groups[1]
+    local now = c.NOW - 1000
+    for _, a in ipairs({ g.anims[4], g.anims[5], g.anims[3] }) do worst = math.max(worst, now + a.delay + a.duration) end
+  end
+  c.NOW = c.NOW + 4.2; g3.scripts.OnFinished(g3)     -- 7.7 s in: too late for a life
+  Check(not tex3.shown, "no life is begun that could not finish: the slot is put away")
+  Check(worst <= 8.1 + 1e-6 + 3.5, "recycled lives still end in time")
+
+  -- dismissal puts everything away
+  c.R.Notify.Cancel("partydeath")
+  snap = M.Snapshot()
+  Check(snap.shown == 0 and not snap.playing, "dismissed: nothing shown, nothing playing")
+  for i = 3, #frame.textures do Check(frame.textures[i].alpha == 0 and not frame.textures[i].shown, "piece " .. i .. " is reset") end
+  Check(not frame.groups[1].playing, "the card's own animation is stopped")
+  for i = 3, #frame.textures do Check(not frame.textures[i].groups[1].playing, "no mist animation left running") end
+  Check(not frame.scripts.OnUpdate, "no OnUpdate anywhere on the card")
+  -- a stale callback after dismissal starts nothing
+  local plays = g3.plays
+  g3.scripts.OnFinished(g3)
+  Check(g3.plays == plays and not tex3.shown, "a finish arriving after dismissal does nothing")
+  -- repeated triggers: no new textures, groups restarted, not stacked
+  for round = 1, 3 do
+    c.PARTY.party1.dead = false; Fire(c, "UNIT_HEALTH", "party1")
+    Die(c, "party1")
+    Check(#frame.textures == 2 + M.PIECES and #frame.groups == 1, "round " .. round .. ": the same objects, no growth: " .. #frame.textures .. "/" .. #frame.groups)
+    Next(c)
+  end
+  c.PARTY.party1.dead = false; Fire(c, "UNIT_HEALTH", "party1")
+  Die(c, "party1")
+  Check(M.Snapshot().shown == M.PIECES, "one more death: the scene plays again")
+  c.R.Notify.Cancel("partydeath")
+  Check(M.Snapshot().shown == 0 and not M.Snapshot().playing, "a dismissed card takes the mist with it")
+  M.SetRandom(nil)
+end
+
+do   -- reduced motion: the pieces only fade, with no drift, growth, staggering or later lives
+  local c = Client()
+  c.R:SetEnabled("arrivalReducedMotion", true)
+  Member(c, "party1", "Player-1-A", "Alice")
+  Fire(c, "GROUP_ROSTER_UPDATE")
+  Die(c, "party1")
+  local frame = CardFrame(c)
+  local shown = 0
+  for i = 3, #frame.textures do
+    local tex = frame.textures[i]
+    if tex.shown then
+      shown = shown + 1
+      local g = tex.groups[1]
+      Check(g.anims[1].offset[1] == 0 and g.anims[1].offset[2] == 0, "no drift")
+      Check(g.anims[4].delay == 0, "no staggering")
+      local plays = g.plays
+      g.scripts.OnFinished(g)
+      Check(g.plays == plays, "no second life")
+    end
+  end
+  Check(shown > 0 and shown < c.R.PartyDeathMist.PIECES, "a quiet subset (no motes) fades in and out: " .. shown)
+  Next(c)
 end
 
 print("PASSED test_party_death")

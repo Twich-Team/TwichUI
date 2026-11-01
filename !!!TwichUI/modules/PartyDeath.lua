@@ -1,7 +1,7 @@
 -- TwichUI: party member fallen
 -- When another player in your party dies, a short title card in the zone card's manner, with no frame: "Party member
 -- fallen", a small tombstone above it, a bronze rule and "<name> has died.": the name in bold and in the player's class
--- color when the game gives the class, and the realm in brackets when it gives one (a player from another realm). It plays media/sounds/LAMENT.mp3 once as the card appears, unless that is switched off. No chat,
+-- color when the game gives the class, a small role icon before it when the player's group role is known, and the realm in brackets when it gives one (a player from another realm). It plays media/sounds/LAMENT.mp3 once as the card appears, unless that is switched off. No chat,
 -- nothing sent, and it takes no clicks.
 --
 -- What counts. Other players in a normal party (an instance party too): party1 to party4. Never yourself, a pet, an NPC
@@ -17,6 +17,11 @@
 -- Showing. The card is a notification kind (modules/Notify.lua): it queues, takes turns with the zone card where they
 -- overlap, shows one death at a time and keeps each death's card. It borrows the zone card's appearance (modules/NotifyLook.lua
 -- scope "arrival"). It shows during combat, as deaths happen there, and waits only for a game banner.
+--
+-- The scene. Behind the card hangs a brief spectral mist (modules/PartyDeathMist.lua), started and stopped with the card.
+-- The role icon (tank, healer or damage, media/partydeath/role-*.tga) is the game's own group role for that exact player,
+-- read from UnitGroupRolesAssigned when the death is announced and kept with the card's entry; never guessed from class or
+-- gear. No role (none set, not readable) gives the text-only line with nothing reserved for an icon.
 --
 -- Sound. One file, on the Sound Effects channel (the game's own volume and mute apply; nothing is forced on). A second
 -- death while LAMENT is still playing gets its card but not a second, overlapping copy of the sound.
@@ -41,6 +46,17 @@ local NAME_FONT = R.PATH .. [[media\fonts\AlegreyaSans-Bold.ttf]]   -- the name'
 local SOUND_FILE = "LAMENT.mp3"
 local SOUND_CHANNEL = "SFX"
 local SOUND_SECONDS = 6.1           -- the file is 6.05 s long: a copy is not started over one still playing
+
+local ROLE_ICON = 20                -- the role icon's side, beside the 18 pt name
+local ROLE_GAP = 5
+-- The game's group role names, mapped to our art explicitly (the damage role is "DAMAGER"; "NONE" and anything else: no icon).
+local ROLE_ART = {
+    TANK = R.PATH .. [[media\partydeath\role-tank]],
+    HEALER = R.PATH .. [[media\partydeath\role-healer]],
+    DAMAGER = R.PATH .. [[media\partydeath\role-dps]],
+}
+local ROLE_KEY = { TANK = "tank", HEALER = "healer", DAMAGER = "dps" }
+local ROLE_FILE = { tank = ROLE_ART.TANK, healer = ROLE_ART.HEALER, dps = ROLE_ART.DAMAGER }
 
 local UNIT_LIST = { "party1", "party2", "party3", "party4" }
 local UNITS = { party1 = true, party2 = true, party3 = true, party4 = true }
@@ -87,6 +103,7 @@ local function CardHeight() return math.ceil(HEIGHT * Grow()) end
 
 local function Stop()
     card.anim:Stop()
+    if R.PartyDeathMist then R.PartyDeathMist.Stop() end
     card:Hide()
     card.payload = nil
 end
@@ -122,6 +139,9 @@ local function Build()
     card.icon:SetSize(ICON, ICON)
     card.icon:SetPoint("TOP", 0, 0)
     card.icon:SetTexture(ICON_FILE)
+    card.role = card:CreateTexture(nil, "ARTWORK")   -- informational only: a region of the card, which takes no clicks
+    card.role:SetSize(ROLE_ICON, ROLE_ICON)
+    card.role:Hide()
     card.title = Line(A.FONT_TITLE, 26, "ZoneTextFont")
     card.title:SetPoint("TOP", card.icon, "BOTTOM", 0, -4)
     card.rule = A.Rule(card, K)
@@ -186,10 +206,23 @@ local function Fill(payload)
     card.body:SetWidth(0)
     local nameWidth, restWidth = payload.name and A.TextWidth(card.name, WIDTH) or 0, A.TextWidth(card.body, WIDTH)
     if nameWidth + restWidth > WIDTH then nameWidth = math.max(1, WIDTH - restWidth) end
+    -- A known role puts its icon first in the same centred line; otherwise the icon is hidden and takes no room.
+    local roleFile = payload.name and ROLE_FILE[payload.role]
+    local lead = roleFile and (ROLE_ICON + ROLE_GAP) or 0
+    if lead > 0 and nameWidth + restWidth + lead > WIDTH then nameWidth = math.max(1, WIDTH - restWidth - lead) end
     if payload.name then card.name:SetWidth(nameWidth) end
-    local total = nameWidth + restWidth
+    local total = lead + nameWidth + restWidth
     card.name:ClearAllPoints()
-    card.name:SetPoint("TOPLEFT", card.rule, "BOTTOM", -total / 2, -8)
+    card.name:SetPoint("TOPLEFT", card.rule, "BOTTOM", -total / 2 + lead, -8)
+    card.role:ClearAllPoints()
+    if roleFile then
+        card.role:SetTexture(roleFile)
+        card.role:SetPoint("RIGHT", card.name, "LEFT", -ROLE_GAP, 0)
+        card.role:Show()
+    else
+        card.role:Hide()
+        card.role:SetTexture(nil)
+    end
     local width = math.max(A.TextWidth(card.title, WIDTH), total, 140)
     A.Backdrop(LOOK, card, { top = card.icon, bottom = card.name, width = width })
 end
@@ -210,6 +243,7 @@ local function Show(payload, preview)
     card:SetAlpha(0)
     card:Show()
     card.anim:Play()
+    if R.PartyDeathMist then R.PartyDeathMist.Play(card, CardHeight(), R:Enabled("arrivalReducedMotion")) end
     -- Only now, as the card starts: not on a redraw, a duplicate or a settings change.
     if N.SoundWanted(preview, R:Enabled("partyDeathSound")) then P.PlaySound() end
     return true
@@ -236,7 +270,7 @@ N.Register(KIND, {
     restyle = P.Restyle,
     hold = function() return FADE_IN + HOLD + FADE_OUT end,
     ready = Ready,
-    sample = function() return { name = "Aldric Stormveil", class = "PALADIN" } end,
+    sample = function() return { name = "Aldric Stormveil", class = "PALADIN", role = "tank" } end,
 })
 
 ---------------------------------------------------------------------------
@@ -274,12 +308,21 @@ local function Who(unit)
     return { name = name, realm = realm, class = type(class) == "string" and class or nil }
 end
 
+-- The player's group role as "tank", "healer" or "dps", or nil. Read for this exact player: the unit must still be the GUID that
+-- was just seen (a token is reused as the party changes), and only the game's own assignment counts.
+local function Role(unit, guid)
+    if not UnitGroupRolesAssigned or Plain(UnitGUID(unit)) ~= guid then return nil end
+    return ROLE_KEY[Plain(UnitGroupRolesAssigned(unit))]
+end
+
 local function Announce(unit, guid)
     deaths = deaths + 1
+    local who = Who(unit)
+    who.role = who.name and Role(unit, guid) or nil   -- snapshotted now, with the card's entry: a queued card keeps its own player's role
     N.Submit({
         kind = KIND, id = guid .. ":" .. deaths, ttl = TTL,
         valid = function() return R:Enabled("partyDeath") end,
-        payload = Who(unit),
+        payload = who,
     })
 end
 
@@ -353,6 +396,7 @@ function P.Snapshot()
         enabled = R:Enabled("partyDeath"), sound = R:Enabled("partyDeathSound"),
         events = registered and (#UNIT_EVENTS + #ROSTER_EVENTS) or 0, tracked = count,
         cardShowing = card ~= nil and card:IsShown(), soundPlaying = GetTime() < soundUntil,
+        mist = R.PartyDeathMist and R.PartyDeathMist.Snapshot() or nil,
     }
 end
 

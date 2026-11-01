@@ -117,6 +117,7 @@ modules\Training.lua
 modules\FriendLogin.lua
 
 # Party member fallen card (another party player dies; plays media/sounds/LAMENT.mp3; uses the arrival card's look)
+modules\PartyDeathMist.lua
 modules\PartyDeath.lua
 
 # Border textures for TwichUI's own frames (plain, LibSharedMedia, EllesmereUI's)

@@ -159,6 +159,29 @@ A fifth notification kind (`partydeath`) that has no appearance scope of its own
   it does on every card.
 - **Artwork:** a tombstone (`media/partydeath/tombstone.tga`, 128 px, drawn at 64) above the title, cut from
   `assets/party-death-tombstone-source.png` by `tools/make_party_death_art.py` (stdlib only, like the other art tools).
+- **Role icon:** when the player's group role is known, a 20-unit icon (crossed swords, an open hand with a glowing mote,
+  a shield) leads the name line, and the icon, name and "has died." are centred together as one line. The role is the game's
+  own assignment (`UnitGroupRolesAssigned`: `TANK`, `HEALER`, `DAMAGER`, mapped explicitly to `role-tank`, `role-healer`,
+  `role-dps`), read once when the death is announced, after checking the unit token still holds the GUID just seen, and kept
+  in the card's entry, so a queued card never takes another player's role. Never inferred from class or gear; `NONE`,
+  unreadable or unknown gives the text-only line with no gap. Not tinted by class. Artwork: `media/partydeath/role-*.tga`
+  (32 px), cut from `assets/party-death-roles-source.png` (an opaque white-background sheet; the background is removed
+  by edge-connected flood fill with a matte on the edge band, so pale highlights and the mote are kept) by
+  `tools/make_party_death_roles_art.py`.
+- **Mist scene:** `modules/PartyDeathMist.lua`, a fixed pool of 12 soft textures on the card in the background layer
+  (above the optional backdrop, below the art, text and role icon), moved only by animation groups: three low fog patches
+  at the outer edges and along the bottom, four thin wisps, five sparse vapor motes. Each slot lives a series of separate
+  lives (its group's finish starts the next): a texture picked from its set (3 fog, 6 wisp shapes, never the same twice in a
+  row), a place, size, strength, lifetime and drift drawn fresh inside its own narrow ranges, a bent path (a straight leg
+  plus a later sideways leg), a slight scale change, fade in and out. Slots start at different times, so nothing moves as one
+  sheet. No life is begun that could not end by 8.1 s (the card is 8.2 s), so the scene has thinned away as the exit ends.
+  "Reduce motion" (the zone card's setting) leaves one quiet fade of the fog and wisps, without motes, drift or later
+  lives. Stopped and hidden with the card (a late callback from an older scene does nothing); no `OnUpdate`, no timers, no
+  textures made after the first card. Textures `media/partydeath/mist-*.tga` are original, drawn by
+  `tools/make_party_death_mist.py` (seeded procedural noise, alpha only, feathered to zero inside the border; no source
+  image). The central area, where the title and name are, is left clear. `PartyDeathMist.SetRandom` makes a scene
+  reproducible for tests. Diagnostics: no gauge of its own, as it adds no events, timers or recurring work (the card's
+  `cardShowing` and the snapshot's `mist` counts cover it).
 - **Sound:** `media/sounds/LAMENT.mp3` (copied unchanged from `assets/LAMENT.mp3`; MPEG-1 layer III, 48 kHz stereo, 6.05 s,
   the same format as the other bundled `.mp3` files) through `PlaySoundFile(path, "SFX")` as the card starts. A death
   while the previous lament is still inside its 6.1 s is shown but not given a second, overlapping copy. Previews play it
@@ -168,4 +191,6 @@ A fifth notification kind (`partydeath`) that has no appearance scope of its own
 In-game checks: a real party death out of combat-log range (another zone section, behind a wall) gives one card and one
 lament; the same death while you are in combat; resurrect and die again; join a party with a dead member; reload with one;
 a Hunter's Feign Death; a cross-realm member's name; whether the game reports `UnitIsDeadOrGhost` correctly the moment a
-party member's data first arrives at login; the lament is audible on the Sound Effects channel and silent with it muted.
+party member's data first arrives at login; the mist's motion (independent fog, wisps and motes rising and dissipating, no sliding sheet) and its look against light
+and dark scenery, with and without a card backdrop and at other interface scales; each role's icon on a real party death, and
+no icon for a member with no role set; that `UnitGroupRolesAssigned` is readable for a dead member; the lament is audible on the Sound Effects channel and silent with it muted.
