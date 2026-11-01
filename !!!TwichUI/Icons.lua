@@ -93,6 +93,8 @@ local list = {
     -- Healer Watch's own artwork (assets/healer-watch-source.png, cut by tools/make_healer_watch_art.py)
     healerWatch = { file = R.PATH .. [[media\healerwatch\vessel]], small = R.PATH .. [[media\healerwatch\vessel-small]], size = 64, pad = 2, source = "healerWatch" },   -- a mana flask
     healerWatchDrink = { file = R.PATH .. [[media\healerwatch\cup]], small = R.PATH .. [[media\healerwatch\cup-small]], size = 64, pad = 2, source = "healerWatch" },   -- a ceramic cup
+    -- Guild Locations' settings illustration (assets/guild-locations-settings-source.png, cut by tools/make_guild_locations_art.py)
+    guildLocations = { file = R.PATH .. [[media\guildloc\settings]], small = R.PATH .. [[media\guildloc\settings-small]], size = 64, pad = 3, source = "guildLocations" },   -- a parchment map with three pins and a pennant
 }
 Icons.list = list
 

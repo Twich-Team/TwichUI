@@ -6,7 +6,7 @@
 local R = TwichUI
 local K = R.SettingsKit
 
--- icon: a brass spyglass, borrowed from Home until the Guild Locations illustration is cut (M5).
+-- icon: Guild Locations' own illustration (a parchment map with pins and a pennant), media/guildloc/settings.
 local NAMES = { sharing = "Sharing", invisible = "Invisible", off = "Off" }
 
 -- Why the saved choice can't be changed or is not simply what was saved, in plain words (nil when it is).
@@ -39,7 +39,7 @@ end
 local function Redraw() K.RefreshOverview() end
 
 K.Page({
-    key = "guildLocations", icon = "explore", name = "Guild Locations", order = 77, group = "map",
+    key = "guildLocations", icon = "guildLocations", name = "Guild Locations", order = 77, group = "map",
     description = "Share your own map position with guildmates who use TwichUI, and see theirs.",
     keywords = "guild locations location position share sharing invisible hidden privacy guildmates members map addon channel heartbeat",
     when = function() return R.GuildLoc ~= nil end,

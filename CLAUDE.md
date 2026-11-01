@@ -72,6 +72,8 @@ Settings live in the dedicated TwichUI window (`TwichUI_Settings/`, opened with 
 
 **Vendor/trainer artwork** (18 painted icons, 64 px and `-small` 32 px): `!!!TwichUI/media/npcs/`, cut by `tools/make_npc_art.py` from `assets/npc-art-source.png`. Kind-to-art mapping: `NK.ART` in `!!!TwichUI/npcs/Kinds.lua` (all 18 assigned). Reuse these; do not generate duplicates.
 
+**Guild Locations artwork** (64 px and `-small` 32 px TGAs in `!!!TwichUI/media/guildloc/`, cut by `tools/make_guild_locations_art.py` from `assets/guild-locations-*-source.png`): `class-<TOKEN>` for the nine classes WARRIOR PALADIN HUNTER ROGUE PRIEST SHAMAN MAGE WARLOCK DRUID (shield badges, one shared scale; later map markers use `-small`), `eye-open` (Sharing) and `eye-hidden` (Invisible) for the later toolbar control, `settings` (registered as Icons `guildLocations`). Not wired to markers or a toolbar yet. Reuse these; do not generate duplicates.
+
 ## Persistence
 
 Schema version is separate from release version. Defaults fill only missing values (preserve valid `false`, `0`, `""`, empty collections); never share mutable default tables. Repair narrowly, never reset a profile for one bad field. Migrations are ordered, deterministic, repeatable and do not leave half-mutated state; never downgrade or overwrite newer-schema data. No frames, callbacks or timers in SavedVariables. Do not change retention policies that delete user-authored data without approval. Keep configuration separate from gameplay records (pins, Chronicle). Enforce combat restrictions and protections in central APIs, not only disabled controls. Do not claim TwichUI can reconstruct missing data.

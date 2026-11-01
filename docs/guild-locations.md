@@ -3,7 +3,7 @@
 Guild members using TwichUI share their own current map position over the guild's hidden addon channel and (from M3) see one
 another on the world map as class badges. **Only M0 to M2 exist: the policy wording, the core in `guildloc/`
 (`State.lua`, `Roster.lua`, `Comm.lua`) with its tests, the settings page and the launcher's right-click menu.** No map
-markers, toolbar control, search or artwork exist yet; the sections below that describe them are the plan, not the code.
+markers, toolbar control or search exist yet (the artwork is prepared, see "Artwork status"); the sections below that describe them are the plan, not the code.
 
 ## Current state (2026-11-01)
 
@@ -13,7 +13,8 @@ markers, toolbar control, search or artwork exist yet; the sections below that d
 | M1 core | **Built, unit-tested** (`tests/test_guild_locations.lua`, 531 checks; mocked network, clock and map; the bundled AceComm and ChatThrottleLib are the real ones). **Not real-client-tested; not simulator-tested.** |
 | M2 controls | **Built** (2026-11-01, uncommitted on `feature/guild-map`): settings page `guildLocations` and the launcher right-click menu. **Unit-tested** (`tests/test_guild_locations_settings.lua`, `tests/test_settings_broker.lua`, the contract fixture); the simulator's `smoke.sh` constructed the page (**construction only**; that run **preceded** the final icon change to `explore` and was not repeated). Final `./tests/run.sh` after the last M2 edit: **154 passed, 2 failed**, the same two pre-existing friend-chime files (no new failure). Not real-client-tested. See "What M2 built". |
 | Behavior today | A character in a guild **sends its position by default** (state Sharing) and shows nothing (no markers yet). The player can change the state from the settings page or the launcher menu, both through `R.GuildLoc.SetState`. |
-| Pending | M3 markers, M4 toolbar/search, M5 artwork, M6 real-client checks. |
+| M5 artwork | **Prepared** (2026-11-01, uncommitted): see "Artwork status". Not wired to markers or a toolbar. |
+| Pending | M3 markers, M4 toolbar/search, M6 real-client checks. |
 | M1 suite result | `./tests/run.sh` twice: **153 passed, 2 failed**, both times. The two failures (`test_settings_contract.lua`, `test_settings_defaults.lua`) are the friend-login chime default (`"TwichUI Friend"` where the tests expect `"TwichUI Notification"`) and reproduce on unchanged HEAD; they are not M1. The contract test also shows older border-texture drift (`"Steel & Bronze"` vs the fixture's `"Rounded Bronze"`) that the same two files already carried. Left unchanged. |
 
 ### Policy wording as applied (M0)
@@ -99,7 +100,7 @@ or protocol unless the task is about it. Party pins and map pings share places t
 
 ### What M2 built
 
-- `TwichUI_Settings/pages/GuildLocations.lua` (TOC line after `WorldMap.lua`; top-level page, group `map`, order 77, `icon = "explore"` (the Home spyglass), **borrowed** because `tests/test_settings_window.lua` requires every sidebar page to have a distinct registered icon and no prepared `guildLocations` art exists; M5 adds the registry entry and switches this). Two dropdowns and two status rows:
+- `TwichUI_Settings/pages/GuildLocations.lua` (TOC line after `WorldMap.lua`; top-level page, group `map`, order 77, `icon = "guildLocations"` (its own illustration since M5; it used the borrowed Home spyglass `explore` before). Two dropdowns and two status rows:
   - "Guild Locations": Sharing / Invisible (still see others) / Off. `TWICHUI_guildLocationsState`, **no default on purpose**, so
     "Reset this page" cannot restore Sharing (`tests/test_settings_defaults.lua` lists it in `NO_DEFAULT`). Reads `GL.State()`,
     writes only `GL.SetState`.
@@ -125,6 +126,22 @@ or protocol unless the task is about it. Party pins and map pings share places t
   regenerated and then reduced to the Guild Locations lines only (pages, keys, settings, rows, changed, changedDB, defaulted,
   defaultedDB); the unrelated friend-chime and border-texture drift in the generated file was not kept.
 - Not done by design: map markers, toolbar, search, protocol changes.
+
+### Artwork status
+
+All three supplied images were available (attached to the session, 8-bit RGBA with transparency) and were copied unchanged to
+`assets/`. Nothing was generated, downloaded or substituted. Tool: `tools/make_guild_locations_art.py` (standard library; same
+shape-based cleaning as the other art tools; `--check`, `--contact-sheet`). Output: `!!!TwichUI/media/guildloc/`, each at 64 px
+and `-small` 32 px.
+
+| Source (`assets/`) | Runtime files | Notes |
+|---|---|---|
+| `guild-locations-badges-source.png` (3 x 3) | `class-WARRIOR`, `-PALADIN`, `-HUNTER` (top), `-ROGUE`, `-PRIEST`, `-SHAMAN` (middle), `-MAGE`, `-WARLOCK`, `-DRUID` (bottom) | Assigned by grid cell of each part's centre, not discovery order. One shared canvas and scale (no per-badge balancing), so frames match. Map markers should use `-small`. |
+| `guild-locations-eyes-source.png` | `eye-open` (Sharing), `eye-hidden` (Invisible) | Left and right half. Shared scale. For the M4 toolbar control. |
+| `guild-locations-settings-source.png` | `settings` | Registered as Icons `guildLocations`; the Guild Locations page uses it. Replaces the borrowed `explore` spyglass. |
+
+Checked: contact sheet (64 and 32 px, and a further downscale) on dark and light surfaces showed full frames, pale details
+(feather, helmet, blade) and clean edges with no matte. **Screenshot-reviewed, not real-client-tested.** Readability limit (from the contact sheet at 64, 32 and smaller sizes; not seen in game): at 32 px the badges separate by frame and colour (blue flame, orange leaf, red-brown ground); interior detail (totem bolt, crossed blades, bow) is small and below about 24 px is only suggested, so do not rely on it to tell classes apart. The open and hidden eyes differ mainly by the slash and the missing iris; at toolbar size they read as an eye against a crossed-out eye, no more.
 
 ### Real-client communications checklist (gate before M3)
 
@@ -216,7 +233,7 @@ The Chronicle prohibition stays intact and is not narrowed to chat. Keep `.cline
 | M2 | **Built** (see "What M2 built"). Settings page `guildLocations` (group `map`; the settings-contract fixture regenerated with a reviewed diff) and the TwichUI launcher right-click menu. |
 | M3 | Map markers (own provider and pool), marker menu, group dedupe, fallback emblem `R.ICON`. |
 | M4 | Map toolbar toggle (hidden while Off) and search integration. |
-| M5 | Artwork (can run alongside M1 to M4 once source PNGs are copied into `assets/`). |
+| M5 | Artwork: **prepared** (see "Artwork status"). |
 | M6 | Real-client multi-account checks, then a readiness statement. |
 
 ## Protocol (version 1, plain text, no LibSerialize/LibDeflate, never deserialize Lua)

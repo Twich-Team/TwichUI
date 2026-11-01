@@ -168,6 +168,10 @@ A card names an icon with `icon = "<id>"`; a card without one keeps its text in 
 
 ## Icons outside the sheets
 
+`guildLocations` (a parchment map with three pins and a pennant) is Guild Locations' own illustration, cut by
+`tools/make_guild_locations_art.py` into `!!!TwichUI/media/guildloc/settings.tga` (64 px) and `settings-small.tga` (32 px);
+its registry entry says `source = "guildLocations"`. It replaced the borrowed `explore` spyglass on the Guild Locations page.
+
 `healerWatch` (the mana flask) and `healerWatchDrink` (the cup) are Healer Watch's own artwork, cut from
 `assets/healer-watch-source.png` by `tools/make_healer_watch_art.py` into `!!!TwichUI/media/healerwatch/<name>.tga`
 (64 px) and `<name>-small.tga` (32 px), with a 256 px `-large` file for the panel's Artwork layout. Their registry entries
