@@ -267,6 +267,14 @@ npcs\Search.lua
 npcs\SearchBar.lua
 npcs\FilterMenu.lua
 
+# Guild Locations (docs/guild-locations.md): guild members running TwichUI share their own current map position over the guild's
+# hidden addon channel, on by default with Sharing / Invisible / Off. State.lua is the one authority on the choice and keeps the account-wide
+# record (outside profiles, sharing and backups); Roster.lua verifies who is in the guild; Comm.lua is the protocol, the send schedule and
+# the bounded, memory-only records. No frames or art yet.
+guildloc\State.lua
+guildloc\Roster.lua
+guildloc\Comm.lua
+
 # Cozy Sleeping Bag guide: a small window that follows the hidden quest chain behind the bag, from the character's own quest
 # history (nothing saved but where the window sits), with optional map pins made through pins\Pins.lua. Never opens by itself;
 # nothing listens while it is closed. Data and State have no frames or game calls; CozyBag.lua reads the game; the window draws.
@@ -393,6 +401,7 @@ diag\Memory.lua
 diag\Pins.lua
 diag\Map.lua
 diag\Npcs.lua
+diag\GuildLoc.lua
 diag\ChatClean.lua
 diag\ClassBars.lua
 diag\Hazard.lua

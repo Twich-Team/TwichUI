@@ -24,7 +24,7 @@ DX.PRESETS = {
     },
     {
         key = "map", name = "Map and NPC tracking", mode = "standard", minutes = 3, memorySeconds = 30, gaugeSeconds = 2,
-        filter = { "npcs.", "pins.", "map.", "nav.", "event:" }, gauges = { "core", "map" },
+        filter = { "npcs.", "pins.", "map.", "nav.", "guildloc.", "event:" }, gauges = { "core", "map" },
         what = "Open the world map, move around it, search vendors and trainers, change what is shown, close it; repeat.",
         cost = "Low: as General, with the map's pools and marker counts read every 2 seconds and each map close.",
     },

@@ -1,7 +1,7 @@
 # TwichUI: rules for every task
 
 ## Project
-TwichUI is a World of Warcraft addon for WoW: Forever (Lua 5.1): a small, curated interface companion, not a UI replacement. Features are quiet and opt-in: no unasked-for chat, pop-ups or reminders, and never automated casting, item use, trading or selling. `CLAUDE.md` has the full rules; read only the section a task needs.
+TwichUI is a World of Warcraft addon for WoW: Forever (Lua 5.1): a small, curated interface companion, not a UI replacement. Features are quiet and opt-in: no unasked-for chat, pop-ups or reminders, and never automated casting, item use, trading or selling. Never send the player's own live position or Chronicle data to others. The only exception is Guild Locations (`guildloc/`, `docs/guild-locations.md`), which has its own authorized design: do not change its default, privacy state or protocol unless the task is about it. Party pins and map pings share places the player chooses and keep their own rules. `CLAUDE.md` has the full rules; read only the section a task needs.
 
 ## Layout (verified; use it instead of searching)
 Spelling: TwichUI (T-w-i-c-h, never "Twitch"). The core addon folder is `!!!TwichUI/` (three `!`).

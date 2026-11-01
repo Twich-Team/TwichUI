@@ -100,7 +100,7 @@ uses an item, sends anything or makes up events. Each states its cost before you
 | Preset | Length | Memory | Gauges | Timed |
 |---|---|---|---|---|
 | General performance | 5 min | 15 s | 5 s | everything |
-| Map and NPC tracking | 3 min | 15 s | 2 s + each map close | `npcs.`, `pins.`, `map.`, `nav.`, events |
+| Map and NPC tracking | 3 min | 15 s | 2 s + each map close | `npcs.`, `pins.`, `map.`, `nav.`, `guildloc.`, events |
 | Settings responsiveness | 3 min | 10 s | 2 s + each settings close | `settings.`, `core.`, events |
 | Group combat | 10 min | 30 s | 5 s | everything (memory rarely, to disturb combat least) |
 | Memory and lifecycle | 10 min | 5 s | 5 s + window cycles | everything |
@@ -123,6 +123,9 @@ uses an item, sends anything or makes up events. Each states its cost before you
 | `npcs.search` | `npcs/Search.lua` `SR.Run` (not for an empty query) | search |
 | `npcs.knowledge.rebuild` | `npcs/Knowledge.lua` `Build` | rebuild |
 | `npcs.map.layout` | `npcs/Map.lua` `NMAP.Layout` | layout |
+| `guildloc.tick` (`Perf.Call`, after the throttle and the early exits) | `guildloc/Comm.lua` `TickWork` | update |
+| `guildloc.receive` (`Perf.Call`, after the off test) | `guildloc/Comm.lua` `Receive` | bulk |
+| `guildloc.roster` (`Perf.Call`) | `guildloc/Roster.lua` `Rebuild` | rebuild |
 | `npcs.import`, `npcs.cleanup` | `npcs/Store.lua` `NS.MergeReported`, `NS.ForgetMany` | bulk |
 | `pins.map.layout` | `pins/Map.lua` `PM.Layout` | layout |
 | `reminders.refresh` (`Perf.Call`), `reminders.decide` | `reminders/Controller.lua` | rebuild, evaluate |

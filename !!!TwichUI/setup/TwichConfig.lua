@@ -65,7 +65,7 @@ TC.LOCAL = {
     ["modules.setupSharing"] = "network", ["modules.acceptSetups"] = "network", ["modules.groupCheck"] = "network",
     ["modules.partyPins"] = "network", ["shareTransport"] = "network",
     ["modules.mapPings"] = "network", ["modules.mapPingsSend"] = "network", ["modules.mapPingsReceive"] = "network",
-    ["modules.npcMap"] = "network", ["ui.npcMap"] = "network",
+    ["modules.npcMap"] = "network", ["ui.npcMap"] = "network", ["guildLoc"] = "network",
     -- where things sit
     ["modules.foodDrinkUnlock"] = "place", ["ui.foodDrinkPosition"] = "place", ["ui.trainingPosition"] = "place",
     ["ui.welcomeBackPlace"] = "place", ["ui.friendLoginPlace"] = "place", ["ui.settingsWindow"] = "place",

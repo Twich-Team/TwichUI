@@ -40,6 +40,8 @@ function MakeClient(charName, addons)
     end
   end
   env.hooksecurefunc = function() end
+  -- WoW's xpcall passes the extra arguments on (stock Lua 5.1's does not); ChatThrottleLib sends through it
+  env.xpcall = function(f, handler, ...) local n, args = select("#", ...), {...}; return xpcall(function() return f(unpack(args, 1, n)) end, handler) end
   env.GetTime = os.clock
   env.time = os.time
   env.date = os.date
@@ -105,6 +107,7 @@ function MakeClient(charName, addons)
     if f == "setup/Share.lua" then
       local AceComm = env.LibStub("AceComm-3.0")
       env._comm = {}
+      if not REAL_COMM then   -- REAL_COMM: keep the bundled AceComm and ChatThrottleLib (a test that drives them with C_ChatInfo)
       AceComm.RegisterComm = function(self, prefix, fn) env._comm[prefix] = fn end
       AceComm.SendCommMessage = function(self, prefix, text, dist, target, prio, cb, arg)
         -- FAIL_SEND(dist, target) = true: the game refuses the message (nothing is delivered).
@@ -115,6 +118,7 @@ function MakeClient(charName, addons)
           table.insert(NET, {dist = dist, to = target, prefix = prefix, text = text, sender = SENDER_FMT and SENDER_FMT(charName) or charName.."-Forever", from = env})
         end
         if cb then cb(arg, #text, #text, not refused) end
+      end
       end
     end
     local chunk = assert(loadfile(ROOT..f))
