@@ -328,10 +328,6 @@ local function BuildBar()
     fb.icon:SetTexture(ICON_PATH .. "filter")
     fb:SetScript("OnClick", function() T.ToggleFilter() end)
     buttons.filter = fb
-    local hb = NewButton(bar, "help")
-    hb.icon:SetTexture(ICON_PATH .. HELP.icon)
-    hb:SetScript("OnClick", function() T.ToggleHelp() end)
-    buttons.help = hb
     -- keyboard: only while a tool or the help is up (see UpdateKeys); every key but Esc goes on to the game
     keys = CreateFrame("Frame", nil, bar)
     keys:SetSize(1, 1)
@@ -378,7 +374,7 @@ local function LayoutBar()
         local nav = WorldMapFrame.NavBar
         local room
         if nav and nav.GetWidth then
-            local count = 4 + (NavOn() and 1 or 0) + (filter and 1 or 0)
+            local count = 3 + (NavOn() and 1 or 0) + (filter and 1 or 0)
             room = nav:GetWidth() - 6 - (count * (BUTTON_W + GAP) + pad * 2 + 4 + 4) - SEARCH_CRUMBS
         end
         -- the search is an extra: a fault in it is reported and the bar is laid out without it
@@ -386,7 +382,7 @@ local function LayoutBar()
         if ok and type(nx) == "number" then x = nx
         elseif not ok then R.Fault("map tools search", nx) end
     end
-    for _, id in ipairs({ "pin", "group", "ping", "nav", "filter", "help" }) do
+    for _, id in ipairs({ "pin", "group", "ping", "nav", "filter" }) do
         local b = buttons[id]
         if b and (id ~= "nav" or NavOn()) and (id ~= "filter" or filter) then
             b:ClearAllPoints()

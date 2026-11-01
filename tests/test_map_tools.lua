@@ -326,10 +326,10 @@ local bar = c.TwichUIMapTools
 local B = buttons()
 do
   assert(bar and bar:IsShown() and T.Snapshot().built, "the bar is made when the map is first shown")
-  for _, id in ipairs({ "pin", "group", "ping", "help" }) do assert(B[id], "a button for " .. id) end
-  assert(not B.handle, "just the four buttons: no handle to fold it")
+  for _, id in ipairs({ "pin", "group", "ping" }) do assert(B[id], "a button for " .. id) end
+  assert(not B.help and not B.handle, "no help button, no handle: no handle to fold it")
   assert(B.pin.icon.tex == T.ICON_PATH .. "pin" and B.group.icon.tex == T.ICON_PATH .. "group-pin"
-    and B.ping.icon.tex == T.ICON_PATH .. "ping" and B.help.icon.tex == T.ICON_PATH .. "help", "the supplied icons")
+    and B.ping.icon.tex == T.ICON_PATH .. "ping", "the supplied icons")
   assert(T.ICON_PATH == [[Interface\AddOns\!!!TwichUI\media\textures\maptool-]], "an installed-addon path, not the workspace's")
   local p = bar.lastPoint
   assert(p[1] == "RIGHT" and p[2] == NAV and p[3] == "RIGHT" and p[4] == -6 and p[5] == 0,
@@ -602,8 +602,6 @@ do
   assert(lastNotice() == "Join a party to place a group pin." and T.Armed() == nil, "and a click says why instead of arming")
   T.Click("ping")
   assert(lastNotice() == "Join a party or raid to send a group ping.", "the ping's sentence")
-  B.help.scripts.OnEnter(B.help)
-  assert(TIP.text == "Map tools help")
 
   -- the help panel
   T.ToggleHelp()
