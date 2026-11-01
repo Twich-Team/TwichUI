@@ -40,8 +40,26 @@ local BORDERS = {
     ["TwichUI - Rounded Bronze"] = "rounded-bronze.tga",
     ["TwichUI - Gilt Bronze"]    = "gilt-bronze.tga",
     ["TwichUI - Dark Umber"]     = "dark-umber.tga",
+    ["TwichUI - Leather & Bronze"] = "leather-bronze.tga",
+    ["TwichUI - Steel & Bronze"]   = "steel-bronze.tga",
 }
 R.MediaFonts, R.MediaSounds, R.MediaBorders = FONTS, SOUNDS, BORDERS
+
+-- Action-button fit for the Leather & Bronze border. EllesmereUI draws a LibSharedMedia edge file exactly on the button,
+-- inside its bounds, so the whole band would lie over the ability art. Its per-size registry (the table behind
+-- RegisterBorderDefaults("actionbars")) moves this one style outward instead, by 40% of each step's edge (12/16/24/32),
+-- leaving about a pixel and a half of the band over the icon's rim at the thin step (the band is about half of the edge). Nothing else in the table is touched; a style absent from it
+-- gets EllesmereUI's own defaults, so every other border keeps its geometry.
+local LEATHER_KEY = "sm:TwichUI - Leather & Bronze"
+local function Off(o) return { offsetX = o, offsetY = o, shiftX = 0, shiftY = 0 } end
+function R:FitLeatherBorder()
+    local t = type(EllesmereUI) == "table" and EllesmereUI.BORDER_DEFAULTS_BUTTONS
+    if type(t) ~= "table" or t[LEATHER_KEY] then return end
+    t[LEATHER_KEY] = {
+        defaultSize = "thin",
+        sizes = { none = Off(0), thin = Off(5), normal = Off(6), heavy = Off(10), strong = Off(13) },
+    }
+end
 
 -- Handy for GTFO, which takes a file path: /gtfo custom1 <path>
 function R:SoundPath(file) return R.PATH .. [[media\sounds\]] .. file end
@@ -111,3 +129,6 @@ R:OnInit(function()
     end
     R.mediaRegistered = true
 end)
+
+-- EllesmereUI loads after TwichUI; by login its tables exist whichever order its modules came in.
+R:On("PLAYER_LOGIN", function() R:FitLeatherBorder() end)

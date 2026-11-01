@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Builds TwichUI's shared-media borders (media/borders/<style>.tga) from the paintings in assets/ (STYLES below:
-"TwichUI - Aged Bronze", "Rounded Bronze", "Gilt Bronze" and "Dark Umber").
+"TwichUI - Aged Bronze", "Rounded Bronze", "Gilt Bronze", "Dark Umber", "Leather Bronze" and "Steel Bronze").
 
 Standard library only, like tools/make_target_art.py, whose PNG reader and premultiplied-alpha box filter this reuses.
 
@@ -59,7 +59,17 @@ STYLES = {   # style -> source painting in assets/; the runtime file is media/bo
     "rounded-bronze": "border-rounded-bronze-source.png",
     "gilt-bronze": "border-gilt-bronze-source.png",
     "dark-umber": "border-umber-source.png",
+    "leather-bronze": "border-leather-bronze-source.png",
+    "steel-bronze": "border-steel-bronze-source.png",
 }
+
+# A painting with a deep band (the leather frame: about 80 px of leather plus its lip) needs a larger piece than the
+# 64 px the thin bronze lines fit in; these replace the three constants above for that style only.
+TUNING = {
+    "leather-bronze": {"PIECE": 130, "ARM_FREE": 112, "SPAN_SKIP": 170},
+    "steel-bronze": {"PIECE": 160, "ARM_FREE": 130, "SPAN_SKIP": 200},
+}
+DEFAULTS = {"PIECE": PIECE, "ARM_FREE": ARM_FREE, "SPAN_SKIP": SPAN_SKIP}
 
 LEFT, RIGHT, TOP, BOTTOM, TL, TR, BL, BR = range(8)
 
@@ -339,6 +349,8 @@ def main():
     for style in ([args.style] if args.style else sorted(STYLES)):
         src = os.path.join(root, "assets", STYLES[style])
         out = os.path.join(root, "!!!TwichUI", "media", "borders", style + ".tga")
+        globals().update(DEFAULTS)
+        globals().update(TUNING.get(style, {}))
         canvas, (w, h, box, prof, worst) = build(src)
         print("%s: source %dx%d, border box %s (%dx%d)" % (style, w, h, box, box[2] - box[0], box[3] - box[1]))
         for name, side in (("left", LEFT), ("right", RIGHT), ("top", TOP), ("bottom", BOTTOM)):

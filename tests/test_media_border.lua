@@ -75,5 +75,19 @@ check("TwichUI - Aged Bronze", "aged-bronze", true)
 check("TwichUI - Rounded Bronze", "rounded-bronze", false)
 check("TwichUI - Gilt Bronze", "gilt-bronze", false)
 check("TwichUI - Dark Umber", "dark-umber", false)
+check("TwichUI - Leather & Bronze", "leather-bronze", false)
+check("TwichUI - Steel & Bronze", "steel-bronze", false)
+
+-- action-button fit: only this style gains a row in EllesmereUI's button table, once, and absent EllesmereUI is harmless
+c.TwichUI:FitLeatherBorder()
+local key = "sm:TwichUI - Leather & Bronze"
+local other = { defaultSize = "normal" }
+c.EllesmereUI = { BORDER_DEFAULTS_BUTTONS = { glow = other } }
+c.TwichUI:FitLeatherBorder(); c.TwichUI:FitLeatherBorder()
+local t = c.EllesmereUI.BORDER_DEFAULTS_BUTTONS
+assert(t.glow == other and t.glow.defaultSize == "normal", "other styles untouched")
+assert(t[key] and t[key].defaultSize == "thin" and t[key].sizes.thin.offsetX == 5 and t[key].sizes.strong.offsetY == 13, "fit row")
+local row = t[key]; c.TwichUI:FitLeatherBorder(); assert(t[key] == row, "registered once")
+c.EllesmereUI = nil
 
 print("MEDIA BORDER TEST PASSED")
