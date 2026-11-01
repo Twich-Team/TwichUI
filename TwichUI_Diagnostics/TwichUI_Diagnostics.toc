@@ -1,4 +1,4 @@
-## Interface: 16001, 120105
+## Interface: 16001
 ## Title: |cffC9A24ATwich|rUI Diagnostics
 ## Notes: Profiling and troubleshooting for TwichUI: record a capture, inspect it and copy a report. Loaded only when you open it (/tui perf); keep it turned on alongside TwichUI.
 ## Author: twichie

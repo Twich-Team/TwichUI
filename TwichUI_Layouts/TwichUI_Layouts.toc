@@ -1,4 +1,4 @@
-## Interface: 16001, 120105
+## Interface: 16001
 ## Title: |cffC9A24ATwich|rUI Layouts
 ## Notes: Layout packages for TwichUI. Loaded only when a layout is installed, checked or restored; keep it turned on alongside TwichUI.
 ## Author: twichie

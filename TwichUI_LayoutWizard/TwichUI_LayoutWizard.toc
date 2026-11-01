@@ -1,4 +1,4 @@
-## Interface: 16001, 120105
+## Interface: 16001
 ## Title: |cffC9A24ATwich|rUI Layout Setup
 ## Notes: The setup wizard for TwichUI's interface layouts. Loaded only when you open it (/tui layout); keep it turned on alongside TwichUI.
 ## Author: twichie
