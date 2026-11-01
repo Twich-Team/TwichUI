@@ -72,7 +72,7 @@ Settings live in the dedicated TwichUI window (`TwichUI_Settings/`, opened with 
 
 **Vendor/trainer artwork** (18 painted icons, 64 px and `-small` 32 px): `!!!TwichUI/media/npcs/`, cut by `tools/make_npc_art.py` from `assets/npc-art-source.png`. Kind-to-art mapping: `NK.ART` in `!!!TwichUI/npcs/Kinds.lua` (all 18 assigned). Reuse these; do not generate duplicates.
 
-**Guild Locations artwork** (64 px and `-small` 32 px TGAs in `!!!TwichUI/media/guildloc/`, cut by `tools/make_guild_locations_art.py` from `assets/guild-locations-*-source.png`): `class-<TOKEN>` for the nine classes WARRIOR PALADIN HUNTER ROGUE PRIEST SHAMAN MAGE WARLOCK DRUID (shield badges, one shared scale; later map markers use `-small`), `eye-open` (Sharing) and `eye-hidden` (Invisible) for the later toolbar control, `settings` (registered as Icons `guildLocations`). Not wired to markers or a toolbar yet. Reuse these; do not generate duplicates.
+**Guild Locations artwork** (64 px and `-small` 32 px TGAs in `!!!TwichUI/media/guildloc/`, cut by `tools/make_guild_locations_art.py` from `assets/guild-locations-*-source.png`): `class-<TOKEN>` for the nine classes WARRIOR PALADIN HUNTER ROGUE PRIEST SHAMAN MAGE WARLOCK DRUID (shield badges, one shared scale; the map markers use `-small`), `eye-open` (Sharing) and `eye-hidden` (Invisible) for the map toolbar's eye (`-small`), `settings` (registered as Icons `guildLocations`). All wired (markers in `guildloc/Map.lua`, the eye in `pins/MapTools.lua`). Reuse these; do not generate duplicates.
 
 ## Persistence
 

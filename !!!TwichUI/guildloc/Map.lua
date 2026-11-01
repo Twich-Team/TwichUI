@@ -17,6 +17,12 @@
 --   Clicks: the marker's menu (Set waypoint, Navigate to this spot, Invite to party). Each asks again at the moment of the
 --     click: the record must still be held and fresh and the roster must still list the member; nothing is automatic.
 --     Alt, Shift and Ctrl clicks go to the map's own handlers, as over the NPC markers.
+--   Search: GM.Search finds guildmates among the live records already held (memory only, nothing is asked of anyone) for the
+--     map tools bar's search field (npcs/SearchBar.lua); group members are found too and labelled. GM.Locate picks one: the
+--     map goes to its last known place, its marker is drawn whatever the cap says (displacing the last ordinary one, never
+--     adding to the cap) and a ring shows on it for a moment. The pick is let go by another pick (either kind), clearing the
+--     search, the map closing, the record expiring or being withdrawn, and the feature going off. It sends, invites and changes
+--     nothing.
 -- The position is the last one received. It says nothing about shared phase or layer.
 -- TwichUI never opens or closes the world map itself.
 
@@ -33,6 +39,8 @@ local SIZE = 20                -- a marker's side on screen at the map's widest 
 local ZOOM_GROWTH = 1.3        -- 26 at the closest zoom
 local MAX_DRAWN = 150
 local COALESCE = 0.5           -- seconds between layouts caused by record changes
+local PULSE_LIFE, PULSE_FADE = 2.6, 0.5   -- seconds the ring is out, the last of them fading
+local RING_WAIT = 2            -- seconds a pick waits for its marker to be drawn (the map is changing) before the ring is dropped
 local EDGE = 0.2               -- on the seamless map, markers this far past the map underneath still show
 
 -- the nine badges that exist; any other class token wears the emblem
@@ -48,7 +56,10 @@ local used = 0
 local lastLayout
 local dirty = false             -- the records or the roster changed while the map was hidden
 local layoutT
-local stats = { layouts = 0, skipped = 0, capped = 0, menus = 0, waypoints = 0, navs = 0, invites = 0, stale = 0 }
+local picked                    -- key of the searched record: drawn whatever the cap says
+local ringUntil                 -- GetTime() until which a ring is wanted on the picked marker, or nil
+local pulse                     -- { frame, rings, t, running }: the ring
+local stats = { finds = 0, pulses = 0, layouts = 0, skipped = 0, capped = 0, menus = 0, waypoints = 0, navs = 0, invites = 0, stale = 0 }
 
 local function Enabled() return GL.State() ~= "off" end
 local function MapOpen() return WorldMapFrame and WorldMapFrame:IsShown() end
@@ -141,7 +152,9 @@ local function Release(b)
     b.label:SetShown(false)
 end
 
+local StopPulse
 local function ReleaseAll()
+    StopPulse()   -- the places it was drawn for mean nothing now
     for i = 1, #pool do
         if pool[i].key then Release(pool[i]) end
     end
@@ -196,6 +209,59 @@ local function FrameLevel()
 end
 
 ---------------------------------------------------------------------------
+-- The ring on a find
+---------------------------------------------------------------------------
+function StopPulse()
+    if not pulse or not pulse.running then return end
+    pulse.running = false
+    pulse.frame:SetScript("OnUpdate", nil)
+    pulse.frame:Hide()
+    pulse.frame:SetAlpha(1)
+    R.MapPulse.Hide(pulse.rings)
+end
+
+local function PulseTick(_, elapsed)
+    if not pulse.running then return end
+    if elapsed > 0.1 then elapsed = 0.1 end
+    pulse.t = pulse.t + elapsed
+    if pulse.t >= PULSE_LIFE then StopPulse() return end
+    if pulse.t > PULSE_LIFE - PULSE_FADE then pulse.frame:SetAlpha((PULSE_LIFE - pulse.t) / PULSE_FADE) end
+    R.MapPulse.Step(pulse.rings, pulse.t, PULSE_LIFE - PULSE_FADE, pulse.reduced, true)
+end
+
+-- Over the picked marker (again after a layout or a zoom). Returns whether it could.
+local function PlacePulse()
+    local PM = R.PinsMap
+    local b = picked and byKey[picked]
+    if not (pulse and pulse.running and b and PM and PM.PlaceAt) then return false end
+    if not PM.PlaceAt(pulse.frame, b.mx, b.my) then return false end
+    pulse.frame:SetFrameLevel((PM.FrameLevel and PM.FrameLevel("PIN_FRAME_LEVEL_QUEST_PING")) or (canvas:GetFrameLevel() + 510))
+    return true
+end
+
+local function StartPulse()
+    local PU = R.MapPulse
+    if not (PU and picked and byKey[picked]) then return false end
+    if not pulse then
+        local f = CreateFrame("Frame", nil, canvas)
+        f:SetSize(PU.TO, PU.TO)
+        f:EnableMouse(false)
+        f:Hide()
+        pulse = { frame = f, rings = PU.AddRings(f, 2) }
+    end
+    StopPulse()
+    pulse.running, pulse.t = true, 0
+    local PG = R.PinsLook and R.PinsLook.Ping
+    pulse.reduced = PG and PG.Get("reducedMotion") and true or false
+    if not PlacePulse() then pulse.running = false return false end
+    pulse.frame:Show()
+    PU.Step(pulse.rings, 0, PULSE_LIFE - PULSE_FADE, pulse.reduced, true)
+    pulse.frame:SetScript("OnUpdate", PulseTick)
+    stats.pulses = stats.pulses + 1
+    return true
+end
+
+---------------------------------------------------------------------------
 -- Everything on the map now
 ---------------------------------------------------------------------------
 -- Runs when the map, the records or the roster change, never per frame and never while the map is hidden.
@@ -211,6 +277,7 @@ function GM.Layout()
     lastLayout = GetTime()
     layoutT.Cancel()
     stats.layouts = stats.layouts + 1
+    if picked and not GL.Fresh(picked) then GM.ClearPick(true) end   -- withdrawn, expired or gone: the exemption goes with it
     local want = {}
     local viewed = WorldMapFrame:GetMapID()
     local PM = R.PinsMap
@@ -223,18 +290,25 @@ function GM.Layout()
             local low, high = stitched and -EDGE or 0, stitched and 1 + EDGE or 1
             local group, me = GroupSet(), SelfKey()
             local at = {}   -- one place handed to Position (it reads map, x, y)
+            local pickW
             for _, rec in ipairs(list) do
                 if rec.key ~= me and not group[rec.key] and (not relevant or relevant(rec.map)) then
                     at.map, at.x, at.y = rec.map, rec.x, rec.y
                     local mx, my = PM.Position(at, viewed)
                     if mx and mx >= low and mx <= high and my >= low and my <= high then
-                        if #want >= MAX_DRAWN then
-                            stats.capped = stats.capped + 1
-                            break
-                        end
-                        want[#want + 1] = { rec = rec, mx = mx, my = my }
+                        local w = { rec = rec, mx = mx, my = my, i = #want + 1 }
+                        want[w.i] = w
+                        if rec.key == picked then pickW = w end
+                        -- past the cap: only the searched record is still wanted
+                        if #want > MAX_DRAWN and (not picked or pickW) then break end
                     end
                 end
+            end
+            if #want > MAX_DRAWN then
+                stats.capped = stats.capped + 1
+                -- the searched record takes the place of the last ordinary one, so the total stays at the cap
+                for i = #want, MAX_DRAWN + 1, -1 do want[i] = nil end
+                if pickW and pickW.i > MAX_DRAWN then want[MAX_DRAWN] = pickW end
             end
         end
     end
@@ -271,13 +345,36 @@ function GM.Layout()
     end
     byKey = keep
     used = #want
+    if ringUntil then
+        -- a find waits for its marker (the map may still be changing); it is dropped when that takes too long
+        if picked and byKey[picked] then ringUntil = nil; StartPulse()
+        elseif GetTime() >= ringUntil then ringUntil = nil end
+    elseif pulse and pulse.running and not PlacePulse() then
+        StopPulse()
+    end
     if pt then Perf.Stop(pt) end
 end
 
 local function Rescale()
     if not (installed and MapOpen()) then return end
     for _, b in pairs(byKey) do Place(b) end
+    PlacePulse()
 end
+
+---------------------------------------------------------------------------
+-- Finding one: the search field's pick
+---------------------------------------------------------------------------
+-- Lets go of the picked record: its ring stops and, if it was drawn only because of the pick, its marker goes with the next
+-- layout (made now unless the caller is about to draw). Returns whether there was one.
+function GM.ClearPick(skipDraw)
+    ringUntil = nil
+    StopPulse()
+    if not picked then return false end
+    picked = nil
+    if not skipDraw and installed and MapOpen() then GM.Layout() end
+    return true
+end
+function GM.Picked() return picked end
 
 -- Asks for a layout. deferred: a change to the records (never inside the caller; one pass per COALESCE); otherwise a
 -- change of map, which draws at once unless a pass ran less than COALESCE ago.
@@ -310,6 +407,8 @@ local function ClassName(token)
     end
     return CLASS_NAME[token]
 end
+
+GM.ClassName = ClassName
 
 -- "Updated 12 s ago", "Updated 3 min ago": from the receiver's own clock, never from the sender.
 function GM.Ago(seconds)
@@ -449,6 +548,96 @@ function Click(b, button)
 end
 
 ---------------------------------------------------------------------------
+-- Search (the map tools bar's field; npcs/SearchBar.lua draws it)
+---------------------------------------------------------------------------
+local function ZoneName(map)
+    local ok, info = pcall(C_Map.GetMapInfo, map)
+    local name = ok and type(info) == "table" and info.name
+    return type(name) == "string" and name or ""
+end
+
+-- Whether the search covers guildmates now: the feature is not Off. (Off holds no records; this keeps the field's words
+-- the old ones then.)
+function GM.SearchOn() return GL.State() ~= "off" end
+
+-- The live records whose name, class or area holds every word of the text, ranked like the NPC results (the same Before: a
+-- distance first, then the map you are on, then the rest; ties by name and key). Memory only. Returns results, total.
+-- A result: { kind = "guild", key = "g:<record key>", gkey, name, lname, class, level, map, zone, lzone, at, group, dist, tier, art }
+-- where `at` is the receipt time (the row says how long ago from it) and `class`/`level` come from the roster only.
+function GM.Search(text, spot, limit)
+    local SR = R.NpcSearch
+    if not (SR and GM.SearchOn()) then return {}, 0 end
+    local q = SR.Clean(text)
+    if q == "" then return {}, 0 end
+    local pt = Perf.on and Perf.Start("guildloc.search")
+    local words = {}
+    for w in q:lower():gmatch("%S+") do words[#words + 1] = w end
+    spot = spot or SR.Where()
+    local group, me = GroupSet(), SelfKey()
+    local all = {}
+    for _, rec in ipairs(GL.Live()) do
+        if rec.key ~= me then
+            local entry = RS.Entry(rec.key)
+            local name = SH.Short(rec.name)
+            local zone = ZoneName(rec.map)
+            local hay = (name .. "\0" .. (entry and entry.class and ClassName(entry.class) or "") .. "\0" .. zone):lower()
+            local hit = true
+            for _, w in ipairs(words) do
+                if not hay:find(w, 1, true) then hit = false break end
+            end
+            if hit then
+                local r = { kind = "guild", key = "g:" .. rec.key, gkey = rec.key, name = name, lname = name:lower(),
+                    class = entry and entry.class, level = entry and entry.level, map = rec.map, zone = zone,
+                    lzone = zone:lower(), at = rec.at, group = group[rec.key] == true, tier = 3, art = ArtFor(entry) }
+                local d = SR.Distance(spot, rec.map, rec.x / PN.COORD, rec.y / PN.COORD)
+                if d then
+                    r.dist, r.tier = d, 1
+                elseif spot.map and rec.map == spot.map then
+                    r.tier = 2
+                end
+                all[#all + 1] = r
+            end
+        end
+    end
+    table.sort(all, SR.Before)
+    local out = {}
+    for i = 1, math.min(#all, limit or SR.MAX_RESULTS) do out[i] = all[i] end
+    if pt then Perf.Stop(pt) end
+    return out, #all
+end
+
+-- Picks a record out: the map goes to where it was last seen and, unless the member is in your group (the game draws
+-- those), its marker is drawn whatever the cap says, with a ring. Asks again now: the record may have been withdrawn or
+-- expired since it was listed. Sends nothing, plans no route, invites no one. Returns true (and "group" for a group
+-- member), or false and why: "closed" (the map isn't open or the feature is off), "gone", or "map".
+function GM.Locate(key)
+    if not (installed and MapOpen()) then return false, "closed" end
+    local rec = GL.Fresh(key)
+    if not rec then
+        stats.stale = stats.stale + 1
+        GM.Request(true)
+        return false, "gone"
+    end
+    GM.ClearPick(true)                                  -- replaces any earlier pick
+    local grouped = GroupSet()[key] == true
+    if not grouped then
+        picked = key
+        ringUntil = GetTime() + RING_WAIT
+    end
+    if WorldMapFrame:GetMapID() ~= rec.map then
+        local ok = pcall(WorldMapFrame.SetMapID, WorldMapFrame, rec.map)
+        if not ok then
+            GM.ClearPick(true)
+            Notice("That map couldn't be opened.")
+            return false, "map"
+        end
+    end
+    stats.finds = stats.finds + 1
+    GM.Layout()
+    return true, grouped and "group" or nil
+end
+
+---------------------------------------------------------------------------
 -- On the map or off it
 ---------------------------------------------------------------------------
 layoutT = GL.NewTimer(function() GM.Layout() end)
@@ -464,7 +653,7 @@ local function Build()
     function provider:RefreshAllData() GM.Request(false) end
     function provider:OnMapChanged() ReleaseAll(); GM.Request(false) end   -- the old places mean nothing on the new map
     function provider:OnCanvasSizeChanged() GM.Request(false) end
-    function provider:OnHide() layoutT.Cancel(); ReleaseAll(); dirty = true end   -- no work for a closed map
+    function provider:OnHide() layoutT.Cancel(); GM.ClearPick(true); ReleaseAll(); dirty = true end   -- no work for a closed map
     function provider:OnCanvasScaleChanged() Rescale() end
     return true
 end
@@ -481,6 +670,7 @@ function GM.Refresh()
         GM.Request(false)
     elseif not want and installed then
         layoutT.Cancel()
+        GM.ClearPick(true)
         WorldMapFrame:RemoveDataProvider(provider)   -- releases every marker (RemoveAllData)
         installed = false
         R:Off("GROUP_ROSTER_UPDATE", OnGroup)
@@ -489,9 +679,18 @@ function GM.Refresh()
     end
 end
 
-GL.OnRecords(function() GM.Request(true) end)
+GL.OnRecords(function()
+    GM.Request(true)
+    local SB = R.NpcSearchBar
+    if SB and SB.RecordsChanged then SB.RecordsChanged() end   -- results open on a guildmate who has gone
+end)
 RS.OnRefresh(function() GM.Request(true) end)   -- class and level come from the roster
-GL.OnChange(function(kind) if kind == "state" then GM.Refresh() end end)
+GL.OnChange(function(kind)
+    if kind ~= "state" then return end
+    GM.Refresh()
+    local T = R.MapTools
+    if T and T.GuildChanged then T.GuildChanged() end   -- the toolbar's eye follows the choice, whoever made it
+end)
 if R.PinsLook and R.PinsLook.OnPrefChange then
     R.PinsLook.OnPrefChange(function()
         for _, b in ipairs(pool) do
@@ -509,7 +708,8 @@ R:On("ADDON_LOADED", function(name) if name == "Blizzard_WorldMap" then GM.Refre
 function GM.Snapshot()
     return { installed = installed, open = MapOpen() and true or false, drawn = used, pool = #pool, layouts = stats.layouts,
         skipped = stats.skipped, capped = stats.capped, menus = stats.menus, waypoints = stats.waypoints, navs = stats.navs,
-        invites = stats.invites, stale = stats.stale, dirty = dirty, timers = layoutT.Engines(), armed = layoutT.Armed() and 1 or 0,
+        invites = stats.invites, stale = stats.stale, finds = stats.finds, pulses = stats.pulses, picked = picked ~= nil,
+        ringing = pulse ~= nil and pulse.running == true, dirty = dirty, timers = layoutT.Engines(), armed = layoutT.Armed() and 1 or 0,
         events = groupOn and 1 or 0 }
 end
 function GM.Marker(i) return pool[i] end

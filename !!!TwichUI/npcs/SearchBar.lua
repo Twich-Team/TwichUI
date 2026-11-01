@@ -17,6 +17,12 @@
 --   Choosing one goes to NMAP.Locate: the map shows the NPC's area and rings its marker for a moment. It makes no waypoint,
 --     route or ping, sends nothing and leaves the chosen kinds alone. An NPC removed meanwhile is said so and the list is
 --     searched again.
+--   Guildmates (guildloc/Map.lua GM.Search/GM.Locate) are searched in the same field and list while Guild Locations is not Off:
+--     the live records already held in memory, nothing asked of anyone and no roster list. Rows say "Guildmate" with the
+--     class badge, and "In your group" for a member of your group (found, but the game's own marker is the only one drawn).
+--     They rank with the NPCs by the same rule. Choosing one goes to its last known place and rings its marker; it never
+--     routes, invites or changes the privacy choice. A guildmate who goes while the results are open is dropped by one new
+--     search; a guildmate who only moves does not reshuffle the rows.
 --   Closes with: the map, the bar, the choice going off, choosing, Esc, a click on the map, another tool on the bar.
 -- Saved: nothing here (the choice is PL.Pref("npcSearch")). Held in memory only while open: the results.
 
@@ -34,6 +40,8 @@ local CLICK_PRIORITY = 120                          -- above the tool bar's (110
 local MAX_TEXT = 48
 local PLACEHOLDER = "Search known NPCs\226\128\166"
 local HINT = "Type a name or a role, like innkeeper. Only NPCs in your list are searched."
+local PLACEHOLDER_G = "Search NPCs and guildmates\226\128\166"
+local HINT_G = "Type a name, a role like innkeeper, or a guildmate. Only NPCs in your list and guildmates sharing a position are searched."
 
 local installed = false
 local box, edit, list, rows
@@ -61,6 +69,13 @@ local function Say(text)
     if text == lastSay and lastSayAt and now >= lastSayAt and now - lastSayAt < 3 then return end
     lastSay, lastSayAt = text, now
     if R.PinsMap and R.PinsMap.Notice then R.PinsMap.Notice(text) end
+end
+
+-- Guild Locations' map module while it searches (not Off), else nil: the field's words are then the NPC ones.
+local function Guild()
+    local GL = R.GuildLoc
+    local GM = GL and GL.Map
+    return GM and GM.Search and GM.SearchOn() and GM or nil
 end
 
 function SB.Active()
@@ -91,6 +106,8 @@ local function PutAway()
     CloseList(false)
     if edit and (edit:GetText() or "") ~= "" then edit:SetText("") end
     if NMAP and NMAP.ClearReveal then NMAP.ClearReveal() end
+    local GL = R.GuildLoc
+    if GL and GL.Map then GL.Map.ClearPick() end
 end
 function SB.PutAway() PutAway() end
 
@@ -110,9 +127,28 @@ local function SetSel(i)
     for n, row in ipairs(rows or {}) do row.on:SetShown(n == sel and row:IsShown()) end
 end
 
+local function GuildTip(row, r)
+    local GM = Guild()
+    GameTooltip:SetOwner(row, "ANCHOR_LEFT", -2, 0)
+    GameTooltip:SetText(r.name, 1, 1, 1, 1, true)
+    GameTooltip:AddLine("Guildmate", 0.86, 0.69, 0.30)
+    local who = GM and GM.Identity({ class = r.class, level = r.level })
+    GameTooltip:AddLine(who or "Class and level not known", 0.78, 0.74, 0.66)
+    if r.group then GameTooltip:AddLine("In your group. The game's own marker shows them.", 0.78, 0.74, 0.66, true) end
+    GameTooltip:AddLine(r.zone ~= "" and r.zone or "Unknown area", 0.62, 0.58, 0.51)
+    if r.dist then
+        GameTooltip:AddLine(("About %s away, in a straight line. Not a walking distance."):format(SR.DistanceText(r.dist)), 0.78, 0.74, 0.66, true)
+    end
+    if GM then GameTooltip:AddLine(GM.Ago(GetTime() - r.at), 0.86, 0.69, 0.30) end
+    GameTooltip:AddLine("Last known location, not live tracking. Their phase or layer may differ.", 0.62, 0.58, 0.51, true)
+    GameTooltip:AddLine("Click to show it on the map", 0.45, 0.43, 0.38)
+    GameTooltip:Show()
+end
+
 local function Tip(row)
     local r = results[row.index]
     if not r then return end
+    if r.kind == "guild" then return GuildTip(row, r) end
     local e = r.e
     GameTooltip:SetOwner(row, "ANCHOR_LEFT", -2, 0)
     GameTooltip:SetText(e.n, 1, 1, 1, 1, true)
@@ -127,11 +163,36 @@ local function Tip(row)
     GameTooltip:Show()
 end
 
+local function ChooseGuild(r)
+    local GM = Guild()
+    local ok, why
+    if GM then
+        if NMAP and NMAP.ClearReveal then NMAP.ClearReveal() end   -- one pick at a time
+        ok, why = GM.Locate(r.gkey)
+    else
+        ok, why = false, "gone"
+    end
+    if ok then
+        CloseList(false)
+        return true
+    end
+    if why == "gone" then
+        Say("That guildmate's location is no longer shared.")
+        SB.Search(true)
+    elseif why == "closed" then
+        CloseList(false)
+    end
+    return false
+end
+
 local function Choose(i)
     local r = results[i]
     if not r then return false end
+    if r.kind == "guild" then return ChooseGuild(r) end
     local ok, why = NMAP.Locate(r.e)
     if ok then
+        local GM = Guild()
+        if GM then GM.ClearPick() end   -- one pick at a time
         CloseList(false)
         return true
     end
@@ -279,8 +340,11 @@ local function Build(bar)
     edit:SetScript("OnEnter", function(self)
         if open then return end
         GameTooltip:SetOwner(self, "ANCHOR_BOTTOMLEFT", 0, -2)
-        GameTooltip:SetText("Search known NPCs", 1, 1, 1)
+        GameTooltip:SetText(Guild() and "Search NPCs and guildmates" or "Search known NPCs", 1, 1, 1)
         GameTooltip:AddLine("Finds the vendors, trainers and services in your list, nearest first, and shows one on the map. Only NPCs you have noted or been sent are searched; nothing is looked up.", 0.78, 0.74, 0.66, true)
+        if Guild() then
+            GameTooltip:AddLine("Guildmates who are sharing a position are found too, at the place they were last seen. That is not live tracking.", 0.78, 0.74, 0.66, true)
+        end
         GameTooltip:Show()
     end)
     edit:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -307,8 +371,9 @@ function SB.Show()
     local y = -(pad + 3)
     local n = #results
     local text
-    if query == "" then text = HINT
-    elseif n == 0 then text = "No known NPCs match." end
+    local GM = Guild()
+    if query == "" then text = GM and HINT_G or HINT
+    elseif n == 0 then text = GM and "No known NPCs or guildmates match." or "No known NPCs match." end
     list.status:SetShown(text ~= nil)
     if text then
         list.status:ClearAllPoints()
@@ -325,8 +390,8 @@ function SB.Show()
             row:ClearAllPoints()
             row:SetPoint("TOPLEFT", list, "TOPLEFT", pad + 2, y)
             row:SetSize(width - (pad + 2) * 2, rowH)
-            local kind = R.NpcKinds.Primary(r.e.tags)
-            row.icon:SetTexture(kind and kind.icon or nil)
+            local kind = r.kind ~= "guild" and R.NpcKinds.Primary(r.e.tags) or nil
+            row.icon:SetTexture(r.kind == "guild" and r.art or (kind and kind.icon or nil))
             row.icon:ClearAllPoints()
             row.icon:SetPoint("LEFT", row, "LEFT", 6, 0)
             row.dist:ClearAllPoints()
@@ -341,8 +406,18 @@ function SB.Show()
             row.meta:ClearAllPoints()
             row.meta:SetPoint("TOPLEFT", row.name, "BOTTOMLEFT", 0, -1)
             row.meta:SetPoint("RIGHT", row, "RIGHT", -6, 0)
-            local role = r.more > 0 and ("%s +%d"):format(r.role, r.more) or r.role
-            row.meta:SetText(r.coords and ("%s \194\183 %s (%s)"):format(role, r.zone, r.place) or ("%s \194\183 %s"):format(role, r.zone))
+            if r.kind == "guild" then
+                local parts = { "Guildmate" }
+                if r.group then parts[#parts + 1] = "In your group" end
+                local class = r.class and GM and GM.ClassName(r.class)
+                if class then parts[#parts + 1] = class end
+                if r.zone ~= "" then parts[#parts + 1] = r.zone end
+                if GM then parts[#parts + 1] = (GM.Ago(GetTime() - r.at):gsub("^Updated ", "")) end
+                row.meta:SetText(table.concat(parts, " \194\183 "))
+            else
+                local role = r.more > 0 and ("%s +%d"):format(r.role, r.more) or r.role
+                row.meta:SetText(r.coords and ("%s \194\183 %s (%s)"):format(role, r.zone, r.place) or ("%s \194\183 %s"):format(role, r.zone))
+            end
             Paint(row.meta, pal.textDim)
             row.accent:SetShown(i == sel)
             row.on:SetShown(i == sel)
@@ -389,6 +464,17 @@ function SB.Search(keepSpot)
     local keep = results[sel] and results[sel].key
     if not (keepSpot and spot) then spot = SR.Where() end
     results, total, query = SR.Run(text, spot, SR.MAX_RESULTS)
+    local GM = Guild()
+    if GM then
+        local found, gTotal = GM.Search(text, spot, SR.MAX_RESULTS)
+        if #found > 0 then
+            -- each side's best SR.MAX_RESULTS hold the best SR.MAX_RESULTS of both
+            for _, r in ipairs(found) do results[#results + 1] = r end
+            table.sort(results, SR.Before)
+            for i = #results, SR.MAX_RESULTS + 1, -1 do results[i] = nil end
+            total = total + gTotal
+        end
+    end
     sel = #results > 0 and 1 or 0
     if keep then
         for i, r in ipairs(results) do if r.key == keep then sel = i break end end
@@ -405,6 +491,8 @@ function SB.Schedule()
         -- nothing to search for: the hint stands in, and nothing stays picked out
         query, results, total, sel = "", {}, 0, 0
         if NMAP.Revealed() then NMAP.ClearReveal() end
+        local GL = R.GuildLoc
+        if GL and GL.Map then GL.Map.ClearPick() end
         SB.Show()
         return
     end
@@ -415,14 +503,25 @@ function SB.Schedule()
 end
 
 -- The list changed (a record arrived, was updated or removed): while the results are open they are made again, once.
-NS.OnChange(function()
+local function Again()
     if not (open and edit and SB.Active()) then return end
     token = token + 1
     local mine = token
     C_Timer.After(DEBOUNCE, function()
         if token == mine and open and edit and SB.Active() then SB.Search(true) end
     end)
-end)
+end
+NS.OnChange(Again)
+
+-- The guild records changed (guildloc/Map.lua): only a guildmate shown in the results who is no longer shared makes a new
+-- search; one who merely moved or arrived does not, so the rows stay where they are while one is chosen.
+function SB.RecordsChanged()
+    if not open then return end
+    local GL = R.GuildLoc
+    for _, r in ipairs(results) do
+        if r.kind == "guild" and not (GL and GL.Fresh(r.gkey)) then return Again() end
+    end
+end
 
 ---------------------------------------------------------------------------
 -- On the bar
@@ -465,6 +564,7 @@ function SB.Layout(bar, x, pad, gap, room)
     box:ClearAllPoints()
     box:SetPoint("LEFT", bar, "LEFT", x, 0)
     box:SetWidth(width)
+    box.hint:SetText(Guild() and PLACEHOLDER_G or PLACEHOLDER)
     box:Show()
     local stone = Pal().stone
     for _, e in ipairs(box.line) do e:SetColorTexture(stone[1], stone[2], stone[3], 0.55) end

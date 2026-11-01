@@ -1,9 +1,10 @@
 # Guild Locations
 
 Guild members using TwichUI share their own current map position over the guild's hidden addon channel and (from M3) see one
-another on the world map as class badges. **M0 to M3 exist: the policy wording, the core in `guildloc/`
-(`State.lua`, `Roster.lua`, `Comm.lua`) with its tests, the settings page, the launcher's right-click menu and the map markers
-(`Map.lua`).** No toolbar control or search exist yet (M4); the sections below that describe them are the plan, not the code.
+another on the world map as class badges. **M0 to M4 exist: the policy wording, the core in `guildloc/`
+(`State.lua`, `Roster.lua`, `Comm.lua`) with its tests, the settings page, the launcher's right-click menu, the map markers
+(`Map.lua`), the map toolbar's eye and guildmates in the map search field (M4).** Nothing has been run in the game yet beyond
+the two communications checks below.
 
 ## Current state (2026-11-01)
 
@@ -16,7 +17,8 @@ another on the world map as class badges. **M0 to M3 exist: the policy wording, 
 | M5 artwork | **Prepared and the settings illustration integrated** (2026-11-01, uncommitted): see "Artwork status". The class and eye assets are prepared but **not connected** to markers or a toolbar. Final `./tests/run.sh`: **154 passed, 2 failed** (`test_settings_contract.lua`, `test_settings_defaults.lua`), the documented baseline friend-chime failures; no new failure (`test_settings_window.lua`, with the icon checks, passes). Real-client communications checks and all visual checks (in-game appearance, actual-size readability) are **unverified**. |
 | M3 markers | **Built** (2026-11-01, uncommitted on `feature/guild-map`): see "What M3 built". **Unit-tested** (`tests/test_guild_locations_map.lua`, 129 checks). Badge artwork **screenshot-reviewed** at 20, 26 and 32 px (a script-made contact sheet, not the game). **Not simulator-tested, not real-client-tested.** |
 | Real-client checks | **User-confirmed in game (reported by the user, not re-run here):** GUILD delivery between two TwichUI clients and the sender name matching the roster (checklist items 1 and 2). **Not confirmed:** roster class and level return values, coordinates and placement, and how anything looks. |
-| Pending | M4 toolbar/search, M6 remaining real-client checks. |
+| M4 toolbar and search | **Built** (2026-11-01, uncommitted on `feature/guild-map`): see "What M4 built". **Unit-tested** (`tests/test_guild_locations_search.lua`, 101 checks). **Not simulator-tested, not real-client-tested, not screenshot-reviewed.** |
+| Pending | M6 remaining real-client checks (M3 and M4 checklists at the end). |
 | M1 suite result | `./tests/run.sh` twice: **153 passed, 2 failed**, both times. The two failures (`test_settings_contract.lua`, `test_settings_defaults.lua`) are the friend-login chime default (`"TwichUI Friend"` where the tests expect `"TwichUI Notification"`) and reproduce on unchanged HEAD; they are not M1. The contract test also shows older border-texture drift (`"Steel & Bronze"` vs the fixture's `"Rounded Bronze"`) that the same two files already carried. Left unchanged. |
 
 ### What M3 built
@@ -25,7 +27,7 @@ another on the world map as class badges. **M0 to M3 exist: the policy wording, 
   - **Which:** `GL.Live()` (live, unexpired, ordered by `born` then key; never withdrawn records). Never the local player; never a
     guildmate in your party or raid (`GroupSet`, read at each layout and at each action; `GROUP_ROSTER_UPDATE` is listened for
     only while installed). Their record stays held and keeps updating. At most **150** drawn per viewed map, deterministic;
-    undrawn records stay held. The "searched record is always drawn" exemption belongs to M4 and does not exist.
+    undrawn records stay held. The searched record's exemption from this cap is M4 (below).
   - **Where:** same map, ancestor maps and the stitched map, through `NpcMap.Relevant` (now exported, one line in `npcs/Map.lua`) and
     `PinsMap.Position`. Unlike NPC plaques, guild badges are also drawn on continent and world views (the cap bounds them).
   - **Look:** `media/guildloc/class-<TOKEN>-small` for the nine classes; any other or unknown class token wears `R.ICON`. The
@@ -55,6 +57,44 @@ another on the world map as class badges. **M0 to M3 exist: the policy wording, 
 
 **M3 checks still to make in the game** are the checklist at the end of "Known limitations".
 
+### What M4 built
+
+- **Toolbar eye** (`pins/MapTools.lua`): a button after the NPC filter on the map tools bar. Sharing shows `eye-open-small`,
+  Invisible `eye-hidden-small` (the state is carried by the shape, not a color), drawn at 22 units. A click calls
+  `R.GuildLoc.Toggle()`, the same authority the settings page and the launcher menu use; `guildloc/Map.lua`'s `GL.OnChange`
+  listener calls `MapTools.GuildChanged`, so a change made anywhere redraws the eye, an open tooltip and the bar's layout.
+  Tooltip: "Guild Locations: Sharing" / "Invisible", what that means, what a click does, that only this feature is affected,
+  and a warning line outside a guild ("nothing is sent or shown yet"). The choice can be made outside a guild.
+  - **Off: hidden-button policy.** While Off (or held, which reads as Off) the button is not on the bar and `T.ToggleGuild`
+    does nothing from Off, so the toolbar never turns sharing on. Turn it on in settings or from the launcher's "Turn on in
+    settings...".
+  - **Ownership unchanged.** The bar still exists only with Party pins and the toolbar choice. With Party pins off there is no
+    eye; the settings page and the launcher menu remain. Making it independent of Party pins was not done.
+  - **Layout.** The room calculation counts the eye (`count`, 33 units a button), so the NPC search field gets 33 units less
+    while the eye is shown and is put away (the eye stays) when too little is left.
+- **Search** (`npcs/SearchBar.lua`, `guildloc/Map.lua` `GM.Search`): while Guild Locations is not Off, the existing field also
+  searches guildmates among the live records held in memory (name, class name or area; every word, plain text). No request, no
+  roster-only list, nothing saved. A guildmate row has the class badge (the emblem when the roster gave no class), name,
+  "Guildmate", "In your group" for a group member, class, area, and "N s/min ago"; the tooltip adds level when known, the
+  distance, "Last known location, not live tracking. Their phase or layer may differ." Guild and NPC results share one list,
+  ranked by the NPC rule (distance, then this map, then the rest), capped at 8; the footer total counts both. Records past
+  the 150 drawing cap are searchable. While Off the field's words and behavior are the old NPC ones.
+  - **Group members** are found and labelled; choosing one only shows their last known map. No marker is added, nothing is picked.
+  - **Choosing** (`GM.Locate`) asks again (`GL.Fresh`); the map goes to the record's map, the marker is drawn and rung
+    (`R.MapPulse`, the NPC search's ring and timing). Nothing is routed, invited, sent, or changed in the privacy state. A
+    withdrawn or expired record says "That guildmate's location is no longer shared." and the list is searched again.
+  - **Open results** are searched again (once, after the usual pause) only when a *listed* guildmate stops being shared; a
+    guildmate who merely moves or arrives does not reshuffle the rows.
+- **Drawing exemption.** The picked record is drawn even past the 150 cap, taking the place of the last ordinary one; the total
+  never exceeds 150. At most one pick, shared with the NPC search (picking either kind lets the other go). It ends on another
+  pick, clearing the search (empty text or the x button), the map closing, the record expiring or being withdrawn (checked at
+  every layout), and the feature going Off. A non-group, non-self record only.
+- Diagnostics: scope `guildloc.search` (`Gauges.lua`, `docs/diagnostics.md`). The ring is a transient `OnUpdate` for 2.6 s,
+  as the NPC ring is, and stops with the map or the pick. No new gauge: the pick and the ring appear in `GM.Snapshot()` only.
+- Tests: new `tests/test_guild_locations_search.lua`. `tests/test_guild_locations_map.lua` (the corrected M3 test) is unchanged
+  and passes with the new layout.
+- Not done by design: protocol, artwork, settings redesign, a toolbar independent of Party pins, any roster browser.
+
 ### Policy wording as applied (M0)
 
 `CLAUDE.md` (Critical safety rules): "Never broadcast Chronicle feedback or Chronicle data. Never send the player's own live
@@ -82,7 +122,7 @@ or protocol unless the task is about it. Party pins and map pings share places t
 - `guildloc/Comm.lua`: the protocol, receiver records, the send schedule, the transport gate, withdrawals, lifecycle,
   `GL.Snapshot`.
 - `diag/GuildLoc.lua` plus scopes `guildloc.tick / .receive / .roster` and six gauges (`TwichUI_Diagnostics/Gauges.lua`,
-  `docs/diagnostics.md`). The `.map.layout` and `.search` scopes come with M3/M4.
+  `docs/diagnostics.md`). The `.map.layout` scope came with M3 and `.search` with M4.
 - Placement of the record: `setup/Restore.lua` `OWN_LEFT_OUT.guildLoc`, `setup/TwichConfig.lua` `TC.LOCAL.guildLoc = "network"`,
   `setup/Cleanup.lua` `TOP_PROTECTED.guildLoc` (deleting it would silently turn sharing back on). It is a top-level key, so
   profiles never contain it.
@@ -279,8 +319,8 @@ The Chronicle prohibition stays intact and is not narrowed to chat. Keep `.cline
 | **M0** | Done. |
 | **M1** | Built (see above; key placement as listed there). Planned scope: `guildloc/State.lua`, `Roster.lua`, `Comm.lua`: account record, fail-closed behavior, epochs, transport gate, `wpending`, caps, timers, diagnostics scopes, key placement (Restore `OWN_LEFT_OUT`, TwichConfig `TC.LOCAL` as "network"), `tests/test_guild_locations.lua`, TOC entries after the `npcs\` block. Update this page with what was built and verified. |
 | M2 | **Built** (see "What M2 built"). Settings page `guildLocations` (group `map`; the settings-contract fixture regenerated with a reviewed diff) and the TwichUI launcher right-click menu. |
-| M3 | Map markers (own provider and pool), marker menu, group dedupe, fallback emblem `R.ICON`. |
-| M4 | Map toolbar toggle (hidden while Off) and search integration. |
+| M3 | **Built** (committed). Map markers (own provider and pool), marker menu, group dedupe, fallback emblem `R.ICON`. |
+| M4 | **Built** (see "What M4 built"). Map toolbar toggle (hidden while Off) and search integration. |
 | M5 | Artwork: **prepared** (see "Artwork status"). |
 | M6 | Real-client multi-account checks, then a readiness statement. |
 
@@ -444,11 +484,20 @@ key placement. The simulator can show page construction and load order only, nev
 
 ### M3 in-game checklist
 
-1. **Placement:** with a guildmate sharing nearby, a badge appears on the world map where they stand, on the zone map and on the continent map; it moves after they move (up to about a minute standing still).
+1. **Placement:** with a guildmate sharing nearby, a badge appears on the world map where they stand, on the zone map and on the continent map; it moves after they move (standing still, about once a minute).
 2. **Class and level:** the badge matches their class; the tooltip shows "Level N Class", localized, and "Updated … ago"; a class without a badge shows the TwichUI emblem.
 3. **Group deduplication:** after you invite them, their badge disappears and the game's own group marker is the only one; after they leave the group it returns.
-4. **Withdrawal and removal:** they choose Invisible or Off and the badge goes within seconds; logging off removes it within about a minute (a roster refresh); a long silence expires it after 5 minutes.
+4. **Withdrawal and removal:** they choose Invisible or Off and the badge goes within seconds; logging off removes it only when a roster refresh newer than their last position confirms them offline; otherwise it stays until the 300-second stale timeout (so it can be up to 5 minutes, not one minute).
 5. **Waypoint:** the menu's Set waypoint places the game's waypoint at the spot, also after they have moved on the menu being open.
 6. **Navigation:** Navigate to this spot starts a route to that fixed point (Navigation on); greyed with a reason when it is off.
 7. **Invite:** Invite to party sends the game's invitation; it is greyed for an offline member or one in your group.
 8. **Also:** the badges' size, position over the exact spot, readability at 20 to 26 units, hover label, layering against pins and NPC plaques, opening and closing the map repeatedly, and combat behaviour of the menu and invite.
+
+### M4 in-game checklist
+
+1. **Toolbar state:** with Party pins and the map toolbar on, the open eye shows while Sharing and the slashed eye while Invisible; a click swaps them and the tooltip reads "Guild Locations: Sharing/Invisible". Change the state in settings and from the launcher's right-click menu: the eye follows at once (map open). Choose Off: the eye leaves the bar and the search field widens; choosing Sharing in settings brings it back. The eye does not turn sharing on from Off.
+2. **Outside a guild:** the eye still toggles; the tooltip adds the "not in a guild" line.
+3. **Bar layout:** at a narrow window the search field shrinks or goes away before the eye or the other buttons overlap; the eye reads at its size (open eye against crossed-out eye).
+4. **Mixed search:** with the NPC search on and a guildmate sharing nearby, a name both types match shows both with different icons and the "Guildmate" line; class badge, area and "N s ago" read correctly; unknown class shows the emblem; a group member reads "In your group" and gets no second marker.
+5. **Selected marker:** choosing a guildmate moves the map to their last known place, rings their marker once, and keeps it drawn when many guildmates crowd the map (try with more than 150 only if a test guild allows it). Picking another result, clearing the search, closing the map, or their going Invisible lets it go. Nothing is invited, routed or sent.
+6. **Existing NPC search regressions:** NPC rows, the NPC ring, "No known NPCs match." (when Guild Locations is Off), the hint, Esc, arrow keys, click-away close and the filter button behave as before.

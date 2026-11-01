@@ -23,6 +23,10 @@
 --     a click says it again. They are never disabled, so the reason can always be read.
 --   Everything said about shortcuts is read from the saved choices when shown (Look.lua: localClick, partyClick, the ping
 --     gesture); no shortcut is written into this file.
+-- While Guild Locations (guildloc/) is not Off, an eye button toggles it between Sharing (open eye) and Invisible (slashed eye)
+-- through R.GuildLoc.Toggle, the one authority the settings page and the launcher menu use too, and follows a change made
+-- there. Not a tool: nothing is armed. While Off the button is not on the bar (it never turns sharing on); it needs no guild.
+-- Like every button here it exists only with Party pins and the toolbar choice.
 -- Saved: ui.partyPins.toolbar (Look.lua; shared and in the profile), and ui.mapToolsIntro, the
 -- once-only note's "seen" (account-wide, never shared, never part of a profile). Nothing else: no armed tool, no help.
 -- The bar is made when the map is first shown. It has no OnUpdate and no timer; it listens for GROUP_ROSTER_UPDATE
@@ -137,6 +141,19 @@ local function FilterOn()
     return FM ~= nil and FM.Wanted()
 end
 
+-- The Guild Locations eye is on the bar while the feature is loaded and not Off (a held save reads as Off).
+local function GuildOn()
+    local GL = R.GuildLoc
+    return GL ~= nil and GL.State() ~= "off"
+end
+T.GuildOn = GuildOn
+local EYE = R.PATH .. [[media\guildloc\eye-]]
+local EYE_SIZE = 22                                    -- a little wider than the other icons: an eye is a flat shape
+function T.GuildArt()
+    local GL = R.GuildLoc
+    return EYE .. ((GL and GL.State() == "sharing") and "open" or "hidden") .. "-small"
+end
+
 -- true, or false and one sentence. Asked when the bar is drawn and again at the moment of a click.
 function T.Available(id)
     if not (R:Enabled("partyPins") and PL.Pref("toolbar")) then return false, PN.Reason("off") end
@@ -191,6 +208,22 @@ function T.Describe(id)
     elseif id == "help" then
         out.title = "Map tools help"
         Add("What each tool does and the shortcut for it.")
+        return out
+    elseif id == "guild" then
+        local GL = R.GuildLoc
+        local state = GL and GL.State() or "off"
+        out.title = state == "sharing" and "Guild Locations: Sharing" or (state == "invisible" and "Guild Locations: Invisible" or "Guild Locations: Off")
+        if state == "sharing" then
+            Add("Guildmates who use TwichUI can see your position on their world maps, and you see theirs.")
+        elseif state == "invisible" then
+            Add("Your position is not shared. You still see guildmates who are sharing.")
+        else
+            Add("Off. Turn it on in TwichUI's settings (Guild Locations).")
+            return out
+        end
+        Add("Only Guild Locations: party pins, pings and the game's group markers are not affected.")
+        Add(state == "sharing" and "Click to become Invisible." or "Click to share your position again.", "gold")
+        if IsInGuild and not IsInGuild() then Add("You are not in a guild, so nothing is sent or shown yet.", "warn") end
         return out
     elseif id == "filter" then
         out.title = "NPC Filters"
@@ -299,6 +332,7 @@ local function PaintButton(b, id)
     for _, e in ipairs(b.edge) do e:SetShown(on) end
     b.icon:SetDesaturated(not usable)
     b.icon:SetAlpha(usable and 1 or 0.4)
+    if id == "guild" then b.icon:SetTexture(T.GuildArt()) end   -- the state in the shape, not in a color
 end
 
 local function PaintAll()
@@ -328,6 +362,11 @@ local function BuildBar()
     fb.icon:SetTexture(ICON_PATH .. "filter")
     fb:SetScript("OnClick", function() T.ToggleFilter() end)
     buttons.filter = fb
+    local gb = NewButton(bar, "guild")
+    gb.icon:SetSize(EYE_SIZE, EYE_SIZE)
+    gb.icon:SetTexture(T.GuildArt())
+    gb:SetScript("OnClick", function() T.ToggleGuild() end)
+    buttons.guild = gb
     -- keyboard: only while a tool or the help is up (see UpdateKeys); every key but Esc goes on to the game
     keys = CreateFrame("Frame", nil, bar)
     keys:SetSize(1, 1)
@@ -367,6 +406,8 @@ local function LayoutBar()
     local filter = FilterOn()
     if buttons.filter then buttons.filter:SetShown(filter) end   -- the NPC filter only while Vendors and trainers is on
     if not filter and R.NpcFilterMenu then R.NpcFilterMenu.Close() end
+    local guild = GuildOn()
+    if buttons.guild then buttons.guild:SetShown(guild) end   -- the eye only while Guild Locations is not Off
     -- the NPC search field (npcs/SearchBar.lua), when it is chosen, to the left of the buttons: it takes what the
     -- navigation bar has left after the buttons and some room for the breadcrumbs, and is put away when that is too little
     local S = R.NpcSearchBar
@@ -374,7 +415,7 @@ local function LayoutBar()
         local nav = WorldMapFrame.NavBar
         local room
         if nav and nav.GetWidth then
-            local count = 3 + (NavOn() and 1 or 0) + (filter and 1 or 0)
+            local count = 3 + (NavOn() and 1 or 0) + (filter and 1 or 0) + (guild and 1 or 0)
             room = nav:GetWidth() - 6 - (count * (BUTTON_W + GAP) + pad * 2 + 4 + 4) - SEARCH_CRUMBS
         end
         -- the search is an extra: a fault in it is reported and the bar is laid out without it
@@ -382,9 +423,9 @@ local function LayoutBar()
         if ok and type(nx) == "number" then x = nx
         elseif not ok then R.Fault("map tools search", nx) end
     end
-    for _, id in ipairs({ "pin", "group", "ping", "nav", "filter" }) do
+    for _, id in ipairs({ "pin", "group", "ping", "nav", "filter", "guild" }) do
         local b = buttons[id]
-        if b and (id ~= "nav" or NavOn()) and (id ~= "filter" or filter) then
+        if b and (id ~= "nav" or NavOn()) and (id ~= "filter" or filter) and (id ~= "guild" or guild) then
             b:ClearAllPoints()
             b:SetPoint("LEFT", bar, "LEFT", x, 0)
             b:SetWidth(BUTTON_W)
@@ -692,6 +733,16 @@ function T.ToggleFilter()
     return opened
 end
 
+-- The Guild Locations eye: Sharing and Invisible swap through the one authority. Nothing is armed or closed. From Off it does
+-- nothing (the button is not on the bar then, and a quick switch never starts sharing). Returns whether the choice changed.
+function T.ToggleGuild()
+    local GL = R.GuildLoc
+    if not (installed and bar and bar:IsShown() and buttons.guild and GL) then return false end
+    MarkIntroSeen(); HideCallout()
+    if GL.State() == "off" then return false end
+    return GL.Toggle() == true
+end
+
 -- The buttons painted again (the filter menu closed by itself: the button is lit only while it is open).
 function T.Repaint()
     if bar then PaintAll() end
@@ -794,6 +845,15 @@ local function Show()
     PaintAll()
     UpdateKeys()
     MaybeShowCallout()
+end
+
+-- The choice changed, here or in the settings or the launcher menu: the eye, its tooltip and the room the search field gets
+-- are drawn again. Called by guildloc/Map.lua.
+function T.GuildChanged()
+    if installed and bar and bar:IsShown() then
+        Show()
+        T.Update()
+    end
 end
 
 local function Hide()
