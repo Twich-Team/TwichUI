@@ -27,6 +27,7 @@ local function Obj()
       s.shown = false
       if was then for _, h in ipairs((s.hooks or {}).OnHide or {}) do h(s) end end
     end end
+    if k == "SetTexture" then return function(s, v) s.texture = v end end
     if k == "SetShown" then return function(s, v) if v then s:Show() else s:Hide() end end end
     if k == "SetEnabled" then return function(s, v) s.enabled = v and true or false end end
     if k == "Enable" then return function(s) s.enabled = true end end
@@ -637,7 +638,12 @@ do
   local words = {}
   for _, row in ipairs(seen) do words[#words + 1] = row.status.text end
   Check(words[1] == "Done" and words[2] == "Done" and words[3] == "Turn in" and words[4] == "Later" and words[8] == "Optional", "a word for each state: " .. table.concat(words, ","))
-  Check(seen[1].check.shown and not seen[3].check.shown and seen[3].mark.text == ">", "a check for done, an arrow for current")
+  Check(seen[1].check.shown and not seen[3].check.shown and seen[3].arrow.shown and not seen[1].arrow.shown, "a check for done, an arrow for current")
+  Check(seen[1].check.texture:find("status%-done") and seen[3].arrow.texture:find("status%-current"), "the guide status icons: " .. tostring(seen[1].check.texture) .. " " .. tostring(seen[3].arrow.texture))
+  for i, row in ipairs(seen) do
+    if i > 3 then Check(not row.check.shown and not row.arrow.shown, "a later or optional step shows neither icon: " .. i) end
+    Check(not tostring(row.check.texture):find("failed") and not tostring(row.arrow.texture):find("failed"), "no failure cross anywhere in the list")
+  end
   Check(f.dStatus.text:find("objectives are complete but the quest is not turned in"), "objectives complete is told apart from turned in: " .. f.dStatus.text)
   -- reopening does not make a second set of widgets or handlers
   local frames = #FRAMES

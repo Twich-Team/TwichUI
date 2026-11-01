@@ -26,7 +26,9 @@ local DT, DB = 6, 4
 local ROW_H, MAX_ROWS = 24, 8
 local PLACE_H = 24
 local BUTTON_H = 24
-local CHECK = [[Interface\Buttons\UI-CheckBox-Check]]
+local CHECK = R.PATH .. [[media\guides\status-done-small]]       -- guide status icons (CLAUDE.md); status-failed has no state here
+local ARROW = R.PATH .. [[media\guides\status-current-small]]
+local MARK = 16                                                  -- the icons' size beside a step
 
 local L, K          -- Look and its palette: looked up when first built
 local f                -- the window
@@ -83,8 +85,12 @@ local function NewRow(i)
     row.mark:SetJustifyH("CENTER")
     row.check = row:CreateTexture(nil, "ARTWORK")
     row.check:SetTexture(CHECK)
-    row.check:SetSize(16, 16)
+    row.check:SetSize(MARK, MARK)
     row.check:SetPoint("CENTER", row.mark, "CENTER", 0, 0)
+    row.arrow = row:CreateTexture(nil, "ARTWORK")
+    row.arrow:SetTexture(ARROW)
+    row.arrow:SetSize(MARK, MARK)
+    row.arrow:SetPoint("CENTER", row.mark, "CENTER", 0, 0)
     row.status = L.Text(row, "meta")
     row.status:SetPoint("RIGHT", -8, 0)
     row.status:SetJustifyH("RIGHT")
@@ -160,8 +166,8 @@ local function RenderList(r)
             row.status:SetText(word)
             local done, current = entry.state == "done", entry.state == "current"
             row.check:SetShown(done)
-            if done then row.mark:SetText("")
-            elseif current then row.mark:SetText(">")
+            row.arrow:SetShown(current and not done)
+            if done or current then row.mark:SetText("")
             elseif entry.step.optional then row.mark:SetText("+")
             else row.mark:SetText(tostring(i)) end
             local chosen = entry.step.id == selectedId
