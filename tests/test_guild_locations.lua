@@ -899,4 +899,70 @@ do
   Check(not blob:find("Alice") and not blob:find("Bob") and not blob:find("1429") and not blob:find(tostring(T0)), "the snapshot holds counts and codes only")
 end
 
+---------------------------------------------------------------------------
+Section("13 roster validation and refresh bookkeeping (offline semantics)")
+do
+  Fresh({ A, B })
+  local c = Boot(A)
+  local RS = c.GL.Roster
+  local refreshedAt
+  RS.OnRefresh(function() refreshedAt = CLOCK end)
+  local function Pass()
+    local serial = RS.Serial()
+    refreshedAt = nil
+    c.FireEvent("GUILD_ROSTER_UPDATE")
+    Advance(RS.REBUILD_GAP + RS.COALESCE)
+    Check(refreshedAt ~= nil, "the requested roster pass actually ran")
+    Check(RS.Serial() == serial + 1, "one requested refresh makes one pass")
+    Check(RS.Stamp() == refreshedAt, "stamp is the actual refresh callback time")
+    return serial, refreshedAt
+  end
+  -- valid levels and classes are kept
+  c.EXTRA[A] = { level = 1, class = "MAGE" }
+  c.EXTRA[B] = { level = 60, class = "WARRIOR" }
+  local s0, t0 = Pass()
+  local ea, ka = RS.Lookup(A)
+  local eb, kb = RS.Lookup(B)
+  Check(ea and ea.level == 1 and ea.class == "MAGE", "level 1 and MAGE kept")
+  Check(eb and eb.level == 60 and eb.class == "WARRIOR", "level 60 and WARRIOR kept")
+  Check(RS.Serial() == s0 + 1 and RS.Stamp() == t0, "serial advances once; stamp is the pass time")
+  c.EXTRA[A] = { level = 255, class = "MAGE" }
+  s0, t0 = Pass()
+  Check(RS.Lookup(A).level == 255, "level 255 kept")
+  Check(RS.Serial() == s0 + 1 and RS.Stamp() == t0, "second pass: serial once, stamp at the pass")
+  -- invalid levels stay nil, the class is not lost
+  for _, lv in ipairs({ "7", 1.5, 0, -3, 256, false, {}, 0 / 0, math.huge, -math.huge }) do
+    c.EXTRA[A] = { level = lv, class = "MAGE" }
+    s0, t0 = Pass()
+    local e = RS.Lookup(A)
+    Check(e and e.level == nil and e.class == "MAGE", "level " .. tostring(lv) .. " is nil, class kept")
+    Check(RS.Serial() == s0 + 1 and RS.Stamp() == t0, "pass bookkeeping holds for " .. tostring(lv))
+  end
+  -- invalid classes stay nil, the level is not lost
+  for _, cl in ipairs({ "", "mage", "MaGe", "MAGE2", ("M"):rep(21), 42, false, {} }) do
+    c.EXTRA[A] = { level = 60, class = cl }
+    s0, t0 = Pass()
+    local e = RS.Lookup(A)
+    Check(e and e.class == nil and e.level == 60, "class " .. tostring(cl) .. " is nil, level kept")
+    Check(RS.Serial() == s0 + 1 and RS.Stamp() == t0, "pass bookkeeping holds for class " .. tostring(cl))
+  end
+  -- equivalent sender spellings resolve to the same entry and key
+  c.EXTRA[A] = { level = 60, class = "WARRIOR" }
+  s0, t0 = Pass()
+  local eA, kA = RS.Lookup(A)
+  local eR, kR = RS.Lookup("Alice Stone-Forever")
+  local eC, kC = RS.Lookup("alice stone")
+  local eU, kU = RS.Lookup("ALICE STONE")
+  local eW, kW = RS.Lookup("  alice   stone  ")
+  Check(eA == eR and eA == eC and eA == eW and eA == eU, "full-name, realm, case and whitespace spellings share one entry")
+  Check(kA == kR and kA == kC and kA == kW and kA == kU, "...and the same normalized key")
+  Check(eA.level == 60 and eA.class == "WARRIOR", "the shared entry holds the roster values")
+  Check(RS.Serial() == s0 + 1 and RS.Stamp() == t0, "identity pass bookkeeping")
+  -- an unchanged roster still passes: serial once, stamp at the pass, data intact
+  s0, t0 = Pass()
+  local e2, k2 = RS.Lookup(A)
+  Check(e2 and k2 == kA and e2.level == 60 and e2.class == "WARRIOR", "unchanged data survives a pass")
+  Check(RS.Serial() == s0 + 1 and RS.Stamp() == t0, "unchanged pass: serial once, stamp at the pass")
+end
+
 print(("guild locations: %d checks PASSED"):format(checks))
