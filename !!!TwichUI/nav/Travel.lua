@@ -1,9 +1,11 @@
 -- TwichUI: Navigation, what this character can use to get there
 -- Read when a journey is planned (nav/Journey.lua), never polled. Everything but the Hearthstone's bind point is the game's to
 -- say at that moment:
---   Flights    the flight points the character has learned: C_TaxiMap.GetTaxiNodesForMap's `isUndiscovered` is false. It needs
---              no flight master. Asked of the continents' maps and of the player's own map and its parents, whichever the
---              game gives nodes for.
+--   Flights    the flight points this character is known to have learned. The game does not say outside a flight master
+--              (GetTaxiNodesForMap's `isUndiscovered` gave every point as learned, as the player saw), so TwichUI keeps a record:
+--              each time a flight master's map opens, the points it offers (C_TaxiMap.GetAllTaxiNodes: state Current or
+--              Reachable) are added. A learned point is never forgotten; one never seen on a flight map is not used. The
+--              record is this character's (TwichUIDB.ui.navTravel[guid].flights, account-wide, never in a profile or shared).
 --   Teleports  the Mage's teleports Forever teaches (modules/MageTravel.lua's list): the spell is known, and a Rune of
 --              Teleportation is in the bags. The spell is never cast by TwichUI; the journey says to.
 --   Hearthstone  the item is in the bags; its cooldown (what is left of it counts as time); and the bind point.
@@ -11,7 +13,8 @@
 -- The bind point: the game tells an addon only the bind place's name (GetBindLocation), so TwichUI keeps where the player
 -- stood when the HEARTHSTONE_BOUND event fired (at the innkeeper), or where a Hearthstone journey landed. It is a record
 -- of this character (TwichUIDB.ui.navTravel[guid].bind, account-wide, never in a profile or shared). Without one the
--- Hearthstone is not offered, and the settings say so. One listener, for that event, exists only while Navigation is on.
+-- Hearthstone is not offered, and the settings say so. The listeners (that event and the flight map's) exist
+-- only while Navigation is on, so flight points are learned only while it is.
 -- In combat the last answer is used: cooldowns and spell reads may be secret then.
 
 local R = TwichUI
@@ -27,6 +30,7 @@ local SPEEDS = { foot = 7, mount = 7 * 1.6, fast = 7 * 2 }
 TV.SPEEDS = SPEEDS
 
 local cache
+local Record     -- defined with the Hearthstone's record below
 
 local function Plain(v)
     if v == nil or (issecretvalue and issecretvalue(v)) then return nil end
@@ -45,9 +49,52 @@ function TV.Speed() return SPEEDS[NP.Get("speed")] or SPEEDS.foot end
 ---------------------------------------------------------------------------
 -- Flights
 ---------------------------------------------------------------------------
--- { [taxi node ID] = true } for the learned flight points, or nil when the game gives none.
+local MAX_FLIGHTS = 500       -- a bound on the record; the network has under a hundred
+
+-- { [taxi node ID] = true } (a copy) for the flight points learned so far, or nil when none has been seen yet.
 function TV.Flights()
-    if not (C_TaxiMap and C_TaxiMap.GetTaxiNodesForMap) then return nil end
+    local r = Record(false)
+    local known = r and r.flights
+    if type(known) ~= "table" then return nil end
+    local set, any = {}, false
+    for node, v in pairs(known) do
+        if v == true and type(node) == "number" then set[node] = true any = true end
+    end
+    return any and set or nil
+end
+
+-- How many flight points are known (for the settings).
+function TV.FlightCount()
+    local n = 0
+    local set = TV.Flights()
+    if set then for _ in pairs(set) do n = n + 1 end end
+    return n
+end
+
+-- Adds node IDs to the record; returns how many were new.
+function TV.LearnFlights(nodes)
+    if type(nodes) ~= "table" then return 0 end
+    local r = Record(true)
+    if not r then return 0 end
+    if type(r.flights) ~= "table" then r.flights = {} end
+    local have = 0
+    for _ in pairs(r.flights) do have = have + 1 end
+    local new = 0
+    for node in pairs(nodes) do
+        if type(node) == "number" and node > 0 and not r.flights[node] and have < MAX_FLIGHTS then
+            r.flights[node] = true
+            have, new = have + 1, new + 1
+        end
+    end
+    if new > 0 then cache = nil end
+    return new
+end
+
+-- The points an open flight map offers: the maps the game may list them under (the continents, the player's own map and its
+-- parents). A point you can fly to (Reachable) or stand at (Current) is learned. Unreachable is not counted: the game's
+-- meaning of it for a point never learned is not known here.
+local function NodesNow()
+    if not (C_TaxiMap and C_TaxiMap.GetAllTaxiNodes) then return nil end
     local maps, seen = {}, {}
     local function Add(id)
         id = Plain(id)
@@ -61,17 +108,24 @@ function TV.Flights()
         local ok, info = pcall(C_Map.GetMapInfo, id)
         id = ok and type(info) == "table" and Plain(info.parentMapID) or nil
     end
+    local states = Enum and Enum.FlightPathState
+    local CURRENT, REACHABLE = states and states.Current or 0, states and states.Reachable or 1
     local set, any = {}, false
     for _, map in ipairs(maps) do
-        local ok, nodes = pcall(C_TaxiMap.GetTaxiNodesForMap, map)
+        local ok, nodes = pcall(C_TaxiMap.GetAllTaxiNodes, map)
         if ok and type(nodes) == "table" then
             for _, n in ipairs(nodes) do
-                local node = Plain(n.nodeID)
-                if node and n.isUndiscovered == false then set[node] = true any = true end
+                local node, state = Plain(n.nodeID), Plain(n.state)
+                if type(node) == "number" and (state == CURRENT or state == REACHABLE) then set[node] = true any = true end
             end
         end
     end
     return any and set or nil
+end
+
+-- A flight master's map opened (or a point's status changed while it is open).
+local function OnTaxiMap()
+    TV.LearnFlights(NodesNow())
 end
 
 ---------------------------------------------------------------------------
@@ -112,7 +166,7 @@ end
 ---------------------------------------------------------------------------
 -- The Hearthstone and its bind point
 ---------------------------------------------------------------------------
-local function Record(create)
+function Record(create)
     if type(TwichUIDB) ~= "table" then return nil end
     local guid = UnitGUID and Plain(UnitGUID("player"))
     if not guid then return nil end
@@ -203,9 +257,13 @@ function TV.Refresh()
     local want = NV.Enabled()
     if want and not listening then
         R:On("HEARTHSTONE_BOUND", OnBound)
+        R:On("TAXIMAP_OPENED", OnTaxiMap)
+        R:On("TAXI_NODE_STATUS_CHANGED", OnTaxiMap)
         listening = true
     elseif not want and listening then
         R:Off("HEARTHSTONE_BOUND", OnBound)
+        R:Off("TAXIMAP_OPENED", OnTaxiMap)
+        R:Off("TAXI_NODE_STATUS_CHANGED", OnTaxiMap)
         listening = false
         cache = nil
     end
@@ -215,5 +273,5 @@ R:On("PLAYER_LOGIN", TV.Refresh)
 
 function TV.Diagnostics()
     local b = TV.Bind()
-    return { listening = listening, bindKnown = b ~= nil, hearthWhy = TV.HearthWhy() ~= nil }
+    return { listening = listening, bindKnown = b ~= nil, flightPoints = TV.FlightCount(), hearthWhy = TV.HearthWhy() ~= nil }
 end

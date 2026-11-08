@@ -74,7 +74,7 @@ tile and to every other place within reach (so planning between places needs no 
 
 | Mode | When it is offered | Cost in the plan |
 |---|---|---|
-| Flights | both ends are flight points the character has learned (`C_TaxiMap.GetTaxiNodesForMap`, `isUndiscovered` false; no flight master needed) and your faction's | the path's length at 32 yd/s, plus 12 s to board |
+| Flights | both ends are flight points TwichUI has seen the character can fly to and your faction's. It records them each time a flight master's map opens (`C_TaxiMap.GetAllTaxiNodes`, state Current or Reachable), per character, and never forgets one; `GetTaxiNodesForMap`'s `isUndiscovered` gave every point as learned in play, so it is not used. Learned only while Navigation is on | the path's length at 32 yd/s, plus 12 s to board |
 | Boats and zeppelins | both docks allow your faction | the ride (16 yd/s for a boat, 20 for a zeppelin), plus the expected wait (a transport visits a dock once a cycle and stays 60 s: someone arriving at random waits (cycle − stay)² / (2 · cycle) on average), plus 12 s to board |
 | Mage teleports | the spell is known and a Rune of Teleportation is in the bags | the cast (10 s) plus a 20 s bias, because it uses a rune; it lands at the city's flight point (Darnassus: the middle of its map region) |
 | Hearthstone | in the bags, and the bind point is known to TwichUI | the cast (10 s) plus what is left of the cooldown |
@@ -255,6 +255,8 @@ Turn on Display Lua Errors. Test alone, then with EllesmereUI.
 15. **Journeys: a zeppelin and a flight.** Horde in Orgrimmar to a pin in Undercity (the zeppelin), and a trip that includes a
     flight between flight points you have learned: the step says who to talk to and where to fly. Take the flight: "In
     flight". Land: a new plan from where you land. A flight point you haven't learned is never used.
+    TwichUI learns flight points from the flight master's map: open one and Navigation's settings count the points learned;
+    open another later and any new points are added. A point it has never seen on a flight map is never used.
 16. **Journeys: a teleport and the Hearthstone** (a Mage with a Rune of Teleportation; anyone with a Hearthstone). Navigate
     somewhere far where a teleport or the Hearthstone saves time: the step says "Cast Teleport: ..." or "Use your
     Hearthstone" and nothing is cast for you. Do it: a new plan from where you land. The Hearthstone is offered only once

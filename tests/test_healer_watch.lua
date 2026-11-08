@@ -394,6 +394,15 @@ do
   local scans = Wt.Snapshot().auraScans
   Fire("UNIT_AURA", "party2", { addedAuras = { { spellId = 1243, name = "Power Word: Fortitude" } } }); Settle()
   Check(Wt.Snapshot().auraScans == scans and Wt.Snapshot().auraSkipped >= 1, "an update that can't be a drink is skipped")
+  -- secret update info (combat / encounter): nothing in it may be tested, so the answer is "look in full", never an error
+  local ok1, r1 = pcall(HD.MayChange, { isFullUpdate = SecretValue(), addedAuras = SecretValue() }, nil)
+  Check(ok1 and r1 == true, "a secret isFullUpdate / addedAuras says 'may have changed' without testing them")
+  local ok2, r2 = pcall(HD.MayChange, { isFullUpdate = false, addedAuras = {}, removedAuraInstanceIDs = SecretValue() }, 12)
+  Check(ok2 and r2 == true, "a secret removed-ID list says 'may have changed'")
+  local ok3, r3 = pcall(HD.MayChange, SecretValue(), nil)
+  Check(ok3 and r3 == true, "secret update info as a whole says 'may have changed'")
+  local ok4, r4 = pcall(HD.MayChange, { isFullUpdate = false, addedAuras = { SecretValue() } }, nil)
+  Check(ok4 and r4 == true, "a secret aura entry says 'may have changed'")
   G.aurasSecret = true
   Aura({ { id = 430, name = "Drink", inst = 16 } })
   Check(Wt.Snapshot().drink == "hidden" and not Status():find("Drinking", 1, true), "hidden auras: drinking unseen, not confirmed")

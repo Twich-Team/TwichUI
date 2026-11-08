@@ -556,4 +556,37 @@ NP.Reset("behavior")
 assert(NP.Get("useShips") == true and NP.Get("speed") == "foot", "reset puts the travel choices back")
 print("13c hearth ok")
 
+-- flight points are learned from the flight master's map, per character, and only those are offered
+assert(NV.Enabled(), "navigation is on")
+assert(TV.Flights() == nil and TV.FlightCount() == 0, "nothing seen yet: no flight point is assumed")
+assert(TV.Request().flights == nil, "so none is offered to the planner")
+c.C_TaxiMap = { GetTaxiNodesForMap = function() return { { nodeID = 11, isUndiscovered = false } } end }   -- reads "learned" for all: ignored
+assert(TV.Flights() == nil, "GetTaxiNodesForMap is not trusted")
+local OPEN = { { nodeID = 11, state = 0 }, { nodeID = 12, state = 1 }, { nodeID = 13, state = 2 } }
+c.C_TaxiMap.GetAllTaxiNodes = function(map) if map == 1415 then return OPEN end return {} end
+c.FireEvent("TAXIMAP_OPENED", 1)
+local known = TV.Flights()
+assert(known and known[11] and known[12] and not known[13] and TV.FlightCount() == 2, "current and reachable are learned, unreachable is not")
+assert(TV.Request().flights[12] and not TV.Request().flights[13], "the planner is offered exactly those")
+OPEN = { { nodeID = 14, state = 1 } }                       -- a later master: a new point; the old ones stay
+c.FireEvent("TAXIMAP_OPENED", 1)
+known = TV.Flights()
+assert(known[11] and known[12] and known[14] and TV.FlightCount() == 3, "new points are added, none forgotten")
+known[99] = true
+assert(not TV.Flights()[99], "the answer is a copy")
+assert(c.TwichUIDB.ui.navTravel[c.UnitGUID("player")].flights[14] == true, "kept on this character's record")
+local realGUID = c.UnitGUID
+c.UnitGUID = function() return "Player-2-OTHER" end          -- another character has learned none
+assert(TV.Flights() == nil, "the record belongs to one character")
+c.UnitGUID = realGUID
+R:SetEnabled("navigation", false)
+TV.Refresh()                                                -- (this file reloads Nav, so the view subscribers are not wired here)
+OPEN = { { nodeID = 15, state = 1 } }
+c.FireEvent("TAXIMAP_OPENED", 1)
+R:SetEnabled("navigation", true)
+TV.Refresh()
+assert(not TV.Flights()[15], "nothing is listened for while navigation is off")
+c.C_TaxiMap = nil
+print("13d learned flights ok")
+
 print("PASSED")

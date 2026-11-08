@@ -144,7 +144,14 @@ K.Page({
 
         Header("Getting there", "What a journey may use. A trip to another continent, or a long one, is planned in steps: walk, boat, zeppelin, flight, a Mage teleport, your Hearthstone. TwichUI never casts, rides or interacts for you: it says what to do and where.")
         Under(Check("navigationShips", "useShips", "Use boats and zeppelins", "Transports between docks, from the game's own data. How long you wait is an average: where a boat is right now isn't known."), toggle, On)
-        Under(Check("navigationFlights", "useFlights", "Use flights you have learned", "Only flight points your character has learned (the game says which, with no flight master needed), and only your faction's."), toggle, On)
+        local flights = Under(Check("navigationFlights", "useFlights", "Use flights you have learned", "Only flight points TwichUI has seen your character can fly to: it adds them each time you open a flight master's map, and never forgets one. A point you haven't opened a map for isn't used. Only your faction's."), toggle, On)
+        K.Note(flights, function()
+            local TV = R.NavTravel
+            if not (TV and NP.Get("useFlights")) then return end
+            local n = TV.FlightCount()
+            if n == 0 then return "No flight points learned yet. Open a flight master's map and TwichUI learns the ones it offers.", "warn" end
+            return ("%d flight point%s learned. Opening a flight master's map adds any new ones."):format(n, n == 1 and "" or "s")
+        end)
         Under(Check("navigationTeleports", "useTeleports", "Use Mage teleports", "Only the teleports you know, and only while you carry a Rune of Teleportation. It lands at the city's flight point, give or take some yards. TwichUI never casts it."), toggle, On)
         local hearth = Under(Check("navigationHearth", "useHearth", "Use the Hearthstone", "Only with a Hearthstone in your bags and your bind point known to TwichUI (it learns it when you bind, or when a journey uses the stone). What is left of its cooldown counts as time."), toggle, On)
         K.Note(hearth, function()

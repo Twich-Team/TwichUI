@@ -87,16 +87,20 @@ end
 -- event's updateInfo; known: the drink aura's instance ID while drinking. A full update, or any aura added that might
 -- be a drink (or can't be read), or the drink aura changing or going, says yes.
 function HD.MayChange(info, known)
-    if type(info) ~= "table" or info.isFullUpdate then return true end
-    for _, aura in ipairs(info.addedAuras or {}) do
-        if HD.Classify(aura) ~= false then return true end
+    if type(info) ~= "table" or Secret(info) then return true end
+    -- in restricted situations the client hands over secret fields; none of them can be tested, so look in full
+    local full, added = info.isFullUpdate, info.addedAuras
+    if Secret(full) or Secret(added) or full then return true end
+    for _, aura in ipairs(added or {}) do
+        if Secret(aura) or HD.Classify(aura) ~= false then return true end
     end
     if known then
-        for _, id in ipairs(info.removedAuraInstanceIDs or {}) do
-            if Secret(id) or id == known then return true end
-        end
-        for _, id in ipairs(info.updatedAuraInstanceIDs or {}) do
-            if Secret(id) or id == known then return true end
+        for _, key in ipairs({ "removedAuraInstanceIDs", "updatedAuraInstanceIDs" }) do
+            local ids = info[key]
+            if Secret(ids) then return true end
+            for _, id in ipairs(ids or {}) do
+                if Secret(id) or id == known then return true end
+            end
         end
     end
     return false

@@ -1305,7 +1305,7 @@ return {
     "Navigation #9 checkbox \"Draw the route on the minimap\" in:\"What it shows\" under:\"Turn on navigation\" TWICHUI_navigationMinimapTrail tip:9207feee",
     "Navigation #10 header \"Getting there\" tip:eb958307",
     "Navigation #11 checkbox \"Use boats and zeppelins\" in:\"Getting there\" under:\"Turn on navigation\" TWICHUI_navigationShips tip:b6f44ee0",
-    "Navigation #12 checkbox \"Use flights you have learned\" in:\"Getting there\" under:\"Turn on navigation\" TWICHUI_navigationFlights tip:4fab6ef0",
+    "Navigation #12 checkbox \"Use flights you have learned\" in:\"Getting there\" under:\"Turn on navigation\" TWICHUI_navigationFlights tip:188d8b21",
     "Navigation #13 checkbox \"Use Mage teleports\" in:\"Getting there\" under:\"Turn on navigation\" TWICHUI_navigationTeleports tip:5a18029a",
     "Navigation #14 checkbox \"Use the Hearthstone\" in:\"Getting there\" under:\"Turn on navigation\" TWICHUI_navigationHearth tip:1b872860",
     "Navigation #15 dropdown \"How you travel on the ground\" in:\"Getting there\" under:\"Turn on navigation\" TWICHUI_navigationSpeed tip:2b9b9ae2",
