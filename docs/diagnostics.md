@@ -133,6 +133,8 @@ uses an item, sends anything or makes up events. Each states its cost before you
 | `reminders.refresh` (`Perf.Call`), `reminders.decide` | `reminders/Controller.lua` | rebuild, evaluate |
 | `reminders.designer.layout` (`Perf.Call`) | `TwichUI_Settings/pages/RemindersDesigner.lua` `s:Layout` (visible while the settings window is shown) | layout |
 | `healer.update` | `healer/Watch.lua` `Update` (live path; previews not timed) | update |
+| `buffback.render` (`Perf.Start`, after the combat check) | `buffback/List.lua` `Render` (the list or a setting changed, out of combat only) | layout |
+| `buffback.aura`, `buffback.event` (`Perf.Wrap`) | `buffback/Watch.lua`'s two private event frames (your own UNIT_AURA and UNIT_SPELLCAST_SUCCEEDED; zone, resting, combat, target, group and spell changes), only while it is on | event |
 | `settings.describe`, `settings.window.build` (`Perf.Call`) | `TwichUI_Settings/Window.lua` `UI.Open` | init |
 | `settings.page.build` (`Perf.Call`), `settings.page.layout`, `settings.search` | `TwichUI_Settings/Window.lua` | build, layout, search |
 | `settings.search.index` | `TwichUI_Settings/Search.lua` `Search.Build` | rebuild |

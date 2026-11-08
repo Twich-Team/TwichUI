@@ -100,7 +100,7 @@ local REGISTRY = {
   notifyLook = A.TwichUI.NotifyLook.DEFAULTS, restockPromptStyle = A.TwichUI.RestockPrompt.Style.DEFAULTS,
   classBars = A.TwichUI.ClassBars.DEFAULTS, classBarsLook = A.TwichUI.ClassBars.Look.DEFAULTS,
   markers = A.TwichUI.Markers.DEFAULTS, markerBar = A.TwichUI.MarkerBar.DEFAULTS, markerBarStyle = A.TwichUI.MarkerBar.Style.DEFAULTS,
-  healerWatchBarLook = A.TwichUI.HealerWatch.BarLook.DEFAULTS,
+  healerWatchBarLook = A.TwichUI.HealerWatch.BarLook.DEFAULTS, buffBackLook = A.TwichUI.BuffBack.Look.DEFAULTS,
 }
 for slot, defaults in pairs(REGISTRY) do
   for key in pairs(defaults) do
@@ -112,6 +112,12 @@ for key in pairs(A.TwichUI.HealerWatch.DEFAULTS) do
   local here = TC.LOCAL["ui.healerWatch." .. key]
   Check(SharedKey("healerWatch", key) ~= (here == "place"), "healerWatch." .. key .. " is shared, or kept local as a place")
 end
+-- Return the Favor: every setting shared, except its place and the thank-you emote (it would speak for the receiver)
+for key in pairs(A.TwichUI.BuffBack.DEFAULTS) do
+  local here = TC.LOCAL["ui.buffBack." .. key]
+  Check(SharedKey("buffBack", key) ~= (here == "place" or here == "network"), "buffBack." .. key .. " is shared, or kept local")
+end
+Check(TC.LOCAL["ui.buffBack.thank"] == "network" and not SharedKey("buffBack", "thank"), "the thank-you emote is never in a share")
 -- and its phrases: a list merged by text, checked as the feature checks it, undone exactly
 do
   local HP = TC.Group("healerWatchPhrases").custom

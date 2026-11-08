@@ -34,6 +34,7 @@ local function Snapshot()
         st.wSent, st.wAccepted, st.wRefused, st.wGaveUp, st.wNoEpoch, st.wStale)
     Line("taken in: %d positions, %d withdrawals; expired %d, cleared as offline %d; guild changes %d",
         st.received, st.withdrawn, st.expired, st.offlineCleared, st.guildChanges)
+    Line("messages reaching this prefix: %d (own echoes ignored %d)", st.heard, st.echoes)
     Line("skipped ticks: %s", Codes(s.skips))
     Line("messages set aside: %s", Codes(s.drops))
     local ready = s.state ~= "off" or s.pending

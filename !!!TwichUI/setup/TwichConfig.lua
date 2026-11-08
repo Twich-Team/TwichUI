@@ -66,12 +66,14 @@ TC.LOCAL = {
     ["modules.partyPins"] = "network", ["shareTransport"] = "network",
     ["modules.mapPings"] = "network", ["modules.mapPingsSend"] = "network", ["modules.mapPingsReceive"] = "network",
     ["modules.npcMap"] = "network", ["ui.npcMap"] = "network", ["guildLoc"] = "network",
+    ["ui.buffBack.thank"] = "network", ["ui.buffBack.thankEmote"] = "network", ["ui.buffBack.thankDelay"] = "network", ["ui.buffBack.thankAfterReturn"] = "network",
     -- where things sit
     ["modules.foodDrinkUnlock"] = "place", ["ui.foodDrinkPosition"] = "place", ["ui.trainingPosition"] = "place",
     ["ui.welcomeBackPlace"] = "place", ["ui.friendLoginPlace"] = "place", ["ui.settingsWindow"] = "place",
     ["ui.markerBarPosition"] = "place", ["ui.refreshments.position"] = "place", ["ui.partyPins.position"] = "place", ["ui.classBarsPosition"] = "place", ["ui.cozyBag"] = "place", ["ui.cozyBagButton.x"] = "place", ["ui.cozyBagButton.y"] = "place",
     ["ui.navigation.position"] = "place", ["ui.navigation.arrowPosition"] = "place", ["ui.navigation.unlockMode"] = "place",
     ["ui.healerWatch.point"] = "place", ["ui.healerWatch.x"] = "place", ["ui.healerWatch.y"] = "place",
+    ["ui.buffBack.x"] = "place", ["ui.buffBack.y"] = "place", ["ui.buffBack.unlockMode"] = "place",
     -- the rest
     ["modules.restedxpSkin"] = "other", ["modules.qolTwichUISettingsButton"] = "other",
     ["modules.reminders"] = "other", ["ui.reminders"] = "other",
@@ -1786,6 +1788,29 @@ local function Define()
     g = Group("healerWatchPhrases", "Healer Watch chat phrases", { page = "healerWatch",
         note = "The words that count as a mana message from the healer you watch, and how each matches. Merged: what the share names is added or set, the rest of your list is kept. They are plain text; nothing about who said what is part of it." })
     g.custom = HealerPhrases
+
+    g = Group("buffBack", "Return the Favor", { page = "buffBack",
+        note = "Whether Return the Favor is on, how long a name stays, where it pauses and how the list looks. Where it sits on your screen and whether you thank people with an emote stay yours. Who buffed you is never part of it." })
+    Switches(g, { "buffBack" })
+    do
+        local BB = R.BuffBack
+        local keys, enums = {}, {}
+        local mine = { x = true, y = true, unlockMode = true, thank = true, thankEmote = true, thankDelay = true, thankAfterReturn = true }
+        if BB then
+            for key in pairs(BB.DEFAULTS) do
+                if not mine[key] then keys[#keys + 1] = key end
+                if BB.ENUM[key] then enums[key] = BB.ENUM[key] end
+            end
+            table.sort(keys)
+        end
+        Table(g, { "ui", "buffBack" }, BB, keys, enums)
+    end
+
+    g = Group("buffBackLook", "Return the Favor rows", { page = "buffBack" })
+    do
+        local BB = R.BuffBack
+        Table(g, { "ui", "buffBackLook" }, BB and BB.Look, LOOK, LOOK_ENUMS)
+    end
 
     g = Group("targetArt", "Target dragon artwork", { page = "targetArt",
         note = "Whether the dragon on EllesmereUI's target frame is on, which artwork each kind of enemy gets, and how it is placed and drawn. It only decorates; it needs EllesmereUI on the receiving side to show." })

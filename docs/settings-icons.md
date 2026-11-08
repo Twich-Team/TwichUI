@@ -91,10 +91,10 @@ transparency; processed the same way, same two sizes):
 | 12 | `appearance` | painter's palette and brush | Home: Adjust appearance |
 | 13 | `reviewChanges` | ledger with a gold checkmark and quill | Home: Review changed settings |
 | 14 | `summons` | stone portal | Quality of life: Accept summons card |
-| 15 | `resurrection` | angelic wings around a gold ankh | Quality of life: Accept resurrection card |
+| 15 | `resurrection` | angelic wings around a gold ankh | Quality of life: Accept resurrection card; `buffBack` (Return the Favor: the page and its first card, until it has artwork of its own) |
 | 16 | `releaseSpirit` | crossed banners and a teal wisp | Quality of life: Release in battlegrounds card |
 
-Every page in the list now has its own icon.
+Every page in the list has its own icon except Return the Favor (`buffBack`), which borrows `resurrection` until it has artwork of its own.
 
 Third sheet (`assets/settings-icons-3-source.png`, "Fantasy Duel Ban and Keybind Icons.png"): 1774 x 887, two icons side by
 side, **no alpha channel** (an opaque background that is a checker of about 241 and 253). The tool removes it

@@ -21,6 +21,7 @@ pages\RemindersEditor.lua
 pages\RemindersDesigner.lua
 pages\Reminders.lua
 pages\HealerWatch.lua
+pages\ReturnTheFavor.lua
 pages\QoL.lua
 pages\Markers.lua
 pages\MarkerBar.lua

@@ -428,7 +428,9 @@ do
   Msg(v, C, P(E + 30, 1)); Msg(v, C, W(E + 31))
   GUILD[A] = false
   v.FireEvent("GUILD_ROSTER_UPDATE"); Advance(6)
-  Check(GL.Peek(A) == nil and GL.Snapshot().stats.offlineCleared == 1, "an offline member's marker goes")
+  Check(GL.Peek(A) and GL.Snapshot().stats.offlineCleared == 0, "a stale 'offline' for a sender heard seconds ago removes nothing")
+  Advance(90); v.FireEvent("GUILD_ROSTER_UPDATE"); Advance(6)
+  Check(GL.Peek(A) == nil and GL.Snapshot().stats.offlineCleared == 1, "an offline member silent for 90 s: the marker goes")
   Check(GL.Peek(C) and GL.Peek(C).closed, "tombstones stay")
   GUILD[A] = true
   Msg(v, A, P(E + 20, 20)); Advance(6)

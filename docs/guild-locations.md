@@ -264,7 +264,7 @@ list below); `roster` 0 means the roster had not arrived yet, so open the guild 
    as `not-in-roster`; finding out how the strings differ would need a local, temporary probe, which does not exist.
 3. It cannot show the coordinates, so **a valid position** means it passed the strict parse and a known map, not that the point
    is right. That is for M3 (markers) to show.
-4. A message from yourself echoed back is ignored without a count (expected; it just never appears).
+4. A message from yourself echoed back is counted as "own echoes ignored". Every message the game hands to the prefix is counted as "messages reaching this prefix" (added 2026-11-01, to tell "never delivered" from "ignored").
 5. Counters reset on reload, so reload persistence is read from the `state:` line, not from counts.
 
 ### Release gate
@@ -402,7 +402,9 @@ up to the expiry. Roster checks establish membership, not that a claimed positio
 - Events (`GUILD_ROSTER_UPDATE`, `PLAYER_GUILD_UPDATE` with unit `player`, entering/leaving world) are registered only while
   the state is not Off. Off wipes records and buckets at once.
 - Guild change or leaving the guild clears every record and starts a new epoch. Offline removal needs a roster snapshot newer
-  than the record showing `online == false`; absence from the roster means unknown, never offline or left.
+  than the record, taken at least 90 s after the record's last message (`offlineQuiet`), showing `online == false`; absence from the
+  roster means unknown, never offline or left. (The 90 s was added 2026-11-01: the roster is the client's cache and showed a sender
+  who was sending as offline, so a bare newer snapshot removed live markers; found in a two-client test, `cleared as offline 1`.)
 - Diagnostics: scopes `guildloc.tick`, `.receive`, `.roster`, `.map.layout`, `.search` and gauges (records, tombstones, pool,
   drawn, roster entries, pending timers, drop counters) in `DX.OPS` and `docs/diagnostics.md`; counts only, no names,
   places or payloads.

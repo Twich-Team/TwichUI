@@ -248,6 +248,7 @@ Define("reminders", { apply = Refresh("ReminderController") })
 
 -- Healer Watch: off removes the panel and every event at once
 Define("healerWatch", { apply = Refresh("HealerWatcher") })
+Define("buffBack", { apply = Refresh("BuffBackWatch") })
 
 -- Target dragon artwork on EllesmereUI's target frame
 Define("targetArt", { apply = Refresh("TargetArtDisplay") })

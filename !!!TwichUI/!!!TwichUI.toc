@@ -325,6 +325,15 @@ healer\Display.lua
 healer\Picker.lua
 healer\Watch.lua
 
+# Return the Favor: a short list of the players who just buffed you; click one to buff them back (off until turned on).
+# Config.lua stores, Spells.lua knows the buffs (pure), Watch.lua reads your auras, List.lua draws the secure rows,
+# Unlock.lua is the optional EllesmereUI Unlock Mode mover. The settings are in TwichUI_Settings.
+buffback\Config.lua
+buffback\Spells.lua
+buffback\Watch.lua
+buffback\List.lua
+buffback\Unlock.lua
+
 # Target dragon artwork: a dragon of your choosing on EllesmereUI's target frame for bosses, world bosses, rare elites,
 # elites and rares, by the game's own classification (off until turned on; needs EllesmereUI's unit frames with its
 # own target frame; nothing of EllesmereUI's is changed). Config.lua is what it stores and decides (no frames),

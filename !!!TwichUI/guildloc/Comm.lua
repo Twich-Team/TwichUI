@@ -73,6 +73,7 @@ GL.LIMITS = {
     maxSeq = 1048576,                     -- 2^20: the number within an epoch (a new epoch follows)
     coord = 10000,
     expiry = 300,                         -- seconds, from the receipt of the last accepted message, for positions and tombstones
+    offlineQuiet = 90,                    -- seconds a sender must have been silent before a roster showing them offline removes them
     records = 400,                        -- live records and tombstones together
     buckets = 400,
     inBurst = 5, inRefill = 0.25,         -- per sender: five in a burst, then one every four seconds
@@ -93,7 +94,7 @@ local function Secret(v) return issecretvalue ~= nil and issecretvalue(v) end
 
 local stats = { ticks = 0, sent = 0, refused = 0, queued = 0, queuedSent = 0, errors = 0, received = 0, withdrawn = 0,
     wSent = 0, wAccepted = 0, wRefused = 0, wGaveUp = 0, wStale = 0, wNoEpoch = 0, sessions = 0, guildChanges = 0,
-    outstandingReset = 0, offlineCleared = 0, expired = 0 }
+    outstandingReset = 0, offlineCleared = 0, expired = 0, heard = 0, echoes = 0 }
 local drops = {}      -- reason -> count; codes only, never names, places or text
 local skips = {}      -- reason a tick sent nothing -> count
 local lastSkip, transportStatus = nil, "unchecked"
@@ -228,14 +229,16 @@ local function WipeHeld()
     if had then Changed() end
 end
 
--- A live record whose roster entry shows the member offline in a pass that came after the record's last message: they are not
--- sending. Only a roster that lists them counts; absence proves nothing. Tombstones stay (they only guard against old traffic).
+-- A live record whose roster entry shows the member offline in a pass that came after the record's last message, and at least
+-- offlineQuiet seconds after it: they are not sending. The roster is the client's cache and can still say offline for someone
+-- who has just logged in, so a sender whose messages keep arriving (a healthy gap is at most 66 s) is never removed by it.
+-- Only a roster that lists them counts; absence proves nothing. Tombstones stay (they only guard against old traffic).
 local function ClearOffline()
     local stamp = RS.Stamp()
     if not stamp then return end
     local any = false
     for key, rec in pairs(records) do
-        if not rec.closed and rec.at < stamp then
+        if not rec.closed and rec.at < stamp and stamp - rec.at >= L.offlineQuiet then
             local entry = RS.Entry(key)
             if entry and entry.online == false then Forget(key, true); any = true; stats.offlineCleared = stats.offlineCleared + 1 end
         end
@@ -339,7 +342,7 @@ end
 local function Receive(text, dist, sender)
     if Secret(text) or Secret(sender) or Secret(dist) or type(text) ~= "string" or type(sender) ~= "string" then return Drop("unreadable") end
     if dist ~= "GUILD" or not IsInGuild() then return Drop("channel") end
-    if SH.SameName(sender, SH.SelfName()) then return end   -- our own, echoed back
+    if SH.SameName(sender, SH.SelfName()) then stats.echoes = stats.echoes + 1 return end   -- our own, echoed back
     if #text > L.maxText then return Drop("too-long") end
     local entry, key, full = RS.Lookup(sender)
     if not entry then
@@ -354,6 +357,7 @@ local function Receive(text, dist, sender)
 end
 
 local function OnMessage(_, text, dist, sender)
+    stats.heard = stats.heard + 1   -- anything the game handed to this prefix, before any check (a count only)
     if GL.State() == "off" then return end   -- first thing: off keeps and shows nothing
     Perf.Call("guildloc.receive", Receive, text, dist, sender)
 end

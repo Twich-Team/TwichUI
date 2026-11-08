@@ -399,7 +399,9 @@ do
   Send(A, 1429, 5000, 5000); Settle()
   Check(Mk(A), "(drawn before the roster says offline)")
   GUILD[A] = false; Roster()
-  Check(Mk(A) == nil, "offline in a newer roster: the marker is gone")
+  Check(Mk(A), "a stale offline seen seconds after a message removes nothing")
+  Advance(90); Roster()
+  Check(Mk(A) == nil, "offline in a newer roster, after 90 s of silence: the marker is gone")
   GUILD[A] = true; Roster(); E = E + 10; Send(A, 1429, 5000, 5000); Settle()
   ma = Mk(A)
   GROUP = { [ME] = true, [A] = true }
@@ -453,8 +455,8 @@ do
   -- confirmed offline
   E = E + 100
   Send(B, 1429, 4000, 4000); Settle()
-  GUILD[B] = false; Roster()
-  Check(Mk(B) == nil, "a roster pass showing them offline removes the marker")
+  GUILD[B] = false; Advance(90); Roster()
+  Check(Mk(B) == nil, "a roster pass showing them offline, after 90 s of silence, removes the marker")
   GUILD[B] = true; Roster()
   -- guild change
   E = E + 100

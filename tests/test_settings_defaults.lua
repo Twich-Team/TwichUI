@@ -49,7 +49,7 @@ for key, default in pairs(defaults) do
   n = n + 1
   assert(default == R.DEFAULT_MODULES[key], key .. " default matches a new install")
 end
-assert(n == 77, "every module has a toggle: " .. n)
+assert(n == 78, "every module has a toggle: " .. n)
 assert(defaults.hazardAlerts == false, "hazard alerts are opt-in")
 assert(defaults.reminders == true, "reminders are on (none exist until made, and each starts turned off)")
 assert(defaults.targetArt == false, "target dragon artwork is opt-in")
@@ -251,7 +251,7 @@ assert(attune:GetTooltip():find("after reload"), "toggle change shows it needs a
 
 -- The overview links to one page per feature, in this order; every setting
 -- is on exactly one page (registration above refuses a repeat).
-assert(table.concat(pageOrder, ",") == "Notifications,Notification appearance,Quality of life,Markers,Chat cleaning,Food and drink,Hazard alerts,Vendor restocking,Auction House,Journey Chronicle,Chronicle appearance,Cozy Sleeping Bag,Pins and Pings,Map pings,Pin appearance,Map Toolbar,World map,World map places,Navigation,Vendors and trainers,Vendors and trainers: your list,Guild Locations,Gear comparison,Mage,Class resource bars,Class resource bar layout,Class resource bar appearance,Class resource bar effects,Addon skins,SpeakStone speech frame,RestedXP,Configuration sharing,Profiles,Troubleshooting", table.concat(pageOrder, ","))
+assert(table.concat(pageOrder, ",") == "Notifications,Notification appearance,Return the Favor,Quality of life,Markers,Chat cleaning,Food and drink,Hazard alerts,Vendor restocking,Auction House,Journey Chronicle,Chronicle appearance,Cozy Sleeping Bag,Pins and Pings,Map pings,Pin appearance,Map Toolbar,World map,World map places,Navigation,Vendors and trainers,Vendors and trainers: your list,Guild Locations,Gear comparison,Mage,Class resource bars,Class resource bar layout,Class resource bar appearance,Class resource bar effects,Addon skins,SpeakStone speech frame,RestedXP,Configuration sharing,Profiles,Troubleshooting", table.concat(pageOrder, ","))
 for variable, page in pairs({
   TWICHUI_media = "TwichUI", TWICHUI_quietLogin = "TwichUI", 
   TWICHUI_gearHints = "Gear comparison", TWICHUI_gearTree = "Gear comparison", TWICHUI_gearBagStyle = "Gear comparison",
