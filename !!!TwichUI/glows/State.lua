@@ -163,12 +163,15 @@ end
 
 ---------------------------------------------------------------------------
 -- Auras: the lower-case names of the helpful auras on a unit, or nil when any of it is secret
+-- While auras are restricted (combat, some instances) the call does not return a secret to addon code, it raises an
+-- error ("Auras cannot be accessed when secret while tainted"); so it is called protected, and an error is unknown.
 ---------------------------------------------------------------------------
 function ST.AuraNames(unit)
     if not (C_UnitAuras and C_UnitAuras.GetAuraDataByIndex) then return nil end
     local set = {}
     for i = 1, MAX_AURAS do
-        local a = C_UnitAuras.GetAuraDataByIndex(unit, i, "HELPFUL")
+        local ok, a = pcall(C_UnitAuras.GetAuraDataByIndex, unit, i, "HELPFUL")
+        if not ok then return nil end
         if a == nil then break end
         if issecretvalue and issecretvalue(a) then return nil end
         local name = Plain(a.name)

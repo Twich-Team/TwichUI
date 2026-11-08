@@ -467,6 +467,8 @@ local function OnEvent(event, a1, a2, a3, a4)
         BT.Dirty()
     elseif CONTEXT[event] then
         -- the context is read at every look; the group check starts or stops with combat
+        -- (auras could not be read during the fight: read them again as it ends)
+        if event == "PLAYER_REGEN_ENABLED" then stale.auras = true end
         UpdateGroupWatch()
     elseif event == "BAG_UPDATE_DELAYED" then
         stale.bags = true
