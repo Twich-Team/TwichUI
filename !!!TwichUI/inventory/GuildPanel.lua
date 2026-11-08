@@ -1,6 +1,7 @@
 -- TwichUI: Magic Inventory, the panel at the guild bank window
--- A small strip attached to the guild bank window while it is open (and Magic Inventory is on): what is ready, and three
--- buttons, Deposit, Organize bank and Arrangement. Nothing in it moves an item by itself:
+-- A small strip attached to the guild bank window while it is open (and Magic Inventory is on): what is ready, and the
+-- buttons Deposit, Organize bank and Arrangement (with an arrangement for this guild), and Withdraw (with a rule that withdraws
+-- from a tab of this guild). Nothing in it moves an item by itself:
 --   * opening the bank only makes GuildPrep.lua read the tabs and keep the summary ("Reading bank...", then "12 stacks ready to
 --     deposit · 8 stacks to organize");
 --   * Deposit or Organize bank makes sure every tab is current, then puts up ONE review (every tab it touches, quantities,
@@ -29,7 +30,7 @@ local MAX_DETAIL = 14
 
 local f
 local review                 -- the review waiting for the player's approval
-local awaiting               -- "deposit" | "reorganize" while the tabs are being made current for a review
+local awaiting               -- "deposit" | "reorganize" | "withdraw" while the tabs are being made current for a review
 local said                   -- one line of explanation (a refused action, a changed plan)
 local detailsOpen = false
 local dismissed              -- the result the player has dismissed
@@ -39,6 +40,9 @@ local function Look() return R.Look end
 local function Plural(n, one, many) return ("%d %s"):format(n, n == 1 and one or (many or one .. "s")) end
 
 local OUTCOME = { completed = "Completed", partial = "Partially completed", stopped = "Stopped", review = "Needs review" }
+local DOING = { deposit = "Depositing", reorganize = "Organizing", withdraw = "Withdrawing" }
+local TITLE = { deposit = "Deposit", reorganize = "Organize", withdraw = "Withdraw" }
+local START = { deposit = "Start deposit", reorganize = "Start organizing", withdraw = "Start withdrawal" }
 
 -- the words for why preparation is waiting; every one is something the player is doing or the game is, not a failure
 local HOLD = {
@@ -61,7 +65,7 @@ local function Guild() return MI.Plain((IsInGuild and IsInGuild() and GetGuildIn
 local function Compute()
     local prog = GR.Progress()
     if prog then
-        local what = prog.mode == "deposit" and "Depositing" or "Organizing"
+        local what = DOING[prog.mode] or "Organizing"
         local text = what .. "\226\128\166"
         if prog.stage == "refresh" then text = "Checking the bank\226\128\166"
         elseif prog.stage == "final" then text = "Checking the result\226\128\166" end
@@ -71,7 +75,7 @@ local function Compute()
     end
     if review then return { kind = "review", text = "Ready when you are" } end
     local status = P.Status()
-    if not status.arrangement then
+    if not status.arrangement and not status.withdraw then
         return { kind = "setup", text = ("No arrangement for %s yet"):format((Guild() and ("<" .. Guild() .. ">")) or "this guild") }
     end
     if awaiting or status.reading then
@@ -81,14 +85,17 @@ local function Compute()
     end
     local sum = P.Summary()
     if not sum then return { kind = "reading", text = "Reading bank\226\128\166", tone = "dim" } end
-    local d, o = sum.deposit or {}, sum.organize or {}
+    local d, o, w = sum.deposit or {}, sum.organize or {}, sum.withdraw or {}
     local bits = {}
     if (d.moves or 0) > 0 then bits[#bits + 1] = ("%s ready to deposit"):format(Plural(d.moves, "stack")) end
     if (o.moves or 0) > 0 then bits[#bits + 1] = ("%s to organize"):format(Plural(o.moves, "stack")) end
+    if (w.moves or 0) > 0 then bits[#bits + 1] = ("%s to withdraw"):format(Plural(w.moves, "stack")) end
     local text
+    local lead = status.arrangement and d or w
     if #bits > 0 then text = table.concat(bits, " \194\183 ")
-    elseif d.code == "cursor" or d.code == "combat" or d.code == "closed" or d.code == "mode" then text = d.text or "Not ready"
-    else text = "Nothing to move for your arrangement right now" end
+    elseif lead.code == "cursor" or lead.code == "combat" or lead.code == "closed" or lead.code == "mode" then text = lead.text or "Not ready"
+    elseif status.arrangement then text = "Nothing to move for your arrangement right now"
+    else text = "Nothing to withdraw right now" end
     local missing = {}
     for tab in pairs(status.problems or {}) do missing[#missing + 1] = tab end
     table.sort(missing)
@@ -110,8 +117,9 @@ local function Compute()
     end
     local de, dw = Why(d, "Deposit")
     local oe, ow = Why(o, "Organize bank")
-    return { kind = "ready", text = text, tone = tone, read = read,
-        deposit = { enabled = de, why = dw }, organize = { enabled = oe, why = ow } }
+    local we, ww = Why(w, "Withdraw")
+    return { kind = "ready", text = text, tone = tone, read = read, arrangement = status.arrangement, withdrawing = status.withdraw,
+        deposit = { enabled = de, why = dw }, organize = { enabled = oe, why = ow }, withdraw = { enabled = we, why = ww } }
 end
 
 -- the evidence under Details: one line a move, every tab named (a review), or what the result recorded
@@ -126,6 +134,10 @@ local function ReviewDetails(rv)
     end
     for _, b in ipairs(rv.blockedItems or {}) do
         out[#out + 1] = ("%s \195\151%d \226\128\148 %s"):format(Name(b.id), b.count or 0, b.text or "")
+    end
+    for _, w in ipairs(rv.ruleNotes or {}) do out[#out + 1] = ("\"%s\" \226\128\148 %s"):format(w.rule, w.why or "") end
+    for _, it in ipairs(rv.shortItems or {}) do
+        out[#out + 1] = it.short and ("%s: %d short \226\128\148 %s"):format(Name(it.id), it.short, it.text or "") or ("%s \226\128\148 %s"):format(Name(it.id), it.text or "")
     end
     return out
 end
@@ -186,8 +198,12 @@ local function Build()
         if R.OpenSettings then R:OpenSettings("magicInventory") end
     end)
     f.setup:SetPoint("RIGHT", f.bar, "RIGHT", -(FR + 9), 0)
+    f.withdraw = Button(f.bar, "Withdraw", 90, "secondary", function() Panel.Act("withdraw") end)
+    R.Interact.Tip(f.withdraw, "Withdraw", function()
+        if f.withdraw.why then return f.withdraw.why end
+        return "Takes whole stacks out of the tabs your withdrawing rules name, into your bags, up to each rule's target and never past it. You review, then approve."
+    end)
     f.read = Button(f.bar, "Read again", 90, "secondary", function() Panel.ReadAgain() end)
-    f.read:SetPoint("RIGHT", f.deposit, "LEFT", -8, 0)
     R.Interact.Tip(f.read, "Read again", "Reads the tabs that were not read, one at a time. Nothing moves.")
     f.stop = Button(f.bar, "Stop", 80, "danger", function() GR.Stop() end)
     f.stop:SetPoint("RIGHT", f.bar, "RIGHT", -(FR + 9), 0)
@@ -392,7 +408,7 @@ local function Content(state, result)
     if state.kind == "run" then
         local prog = state.prog
         c.run = true
-        c.title = prog.mode == "deposit" and "Depositing" or "Organizing"
+        c.title = DOING[prog.mode] or "Organizing"
         if prog.stage == "refresh" then c.title = "Checking the bank" elseif prog.stage == "final" then c.title = "Checking the result" end
         c.frac = prog.stage == "final" and 1 or (prog.total > 0 and prog.confirmed / prog.total or 0)
         c.barText = prog.stage == "refresh" and "\226\128\166" or ("%d of %d"):format(prog.confirmed, prog.total)
@@ -412,18 +428,19 @@ local function Content(state, result)
     elseif state.kind == "review" and review then
         local rv = review
         c.review, c.hasDetails = true, true
-        c.title = rv.mode == "deposit" and "Deposit" or "Organize"
-        c.sub = (rv.mode == "deposit" and "%s into %s" or "%s in %s"):format(Plural(rv.moves, "stack"), TabNames(rv))
+        c.title = TITLE[rv.mode] or "Organize"
+        c.sub = (rv.mode == "deposit" and "%s into %s" or (rv.mode == "withdraw" and "%s from %s into your bags" or "%s in %s")):format(Plural(rv.moves, "stack"), TabNames(rv))
         for _, it in ipairs(rv.items) do c.icons[#c.icons + 1] = { id = it.id, qty = it.qty } end
         c.more = #rv.itemsMore
         local bits = {}
         if rv.crossTab > 0 then bits[#bits + 1] = ("%d between tabs"):format(rv.crossTab) end
         if #rv.dropped > 0 then bits[#bits + 1] = ("%d left out"):format(#rv.dropped) end
         if rv.planBlocked > 0 then bits[#bits + 1] = ("%d blocked"):format(rv.planBlocked) end
+        if #(rv.shortItems or {}) > 0 then bits[#bits + 1] = ("%s short of %s"):format(Plural(#rv.shortItems, "item"), #rv.shortItems == 1 and "its target" or "their targets") end
         if #rv.unread > 0 then bits[#bits + 1] = ("tab%s %s not read"):format(#rv.unread == 1 and "" or "s", table.concat(rv.unread, ", ")) end
         if #bits > 0 then c.note = table.concat(bits, " \194\183 ") end
         c.warn = said
-        c.start = rv.mode == "deposit" and "Start deposit" or "Start organizing"   -- a partial plan says so in the line above (what is left out)
+        c.start = START[rv.mode] or "Start organizing"   -- a partial plan says so in the line above (what is left out)
     elseif state.kind ~= "run" and result then
         c.result, c.hasDetails = true, #result.lines > 0
         c.title = OUTCOME[result.outcome] or result.outcome
@@ -604,7 +621,7 @@ local function Draw()
     f:Show()
     f.status:SetText(st.text)
     Tone(f.status, st.tone)
-    for _, key in ipairs({ "deposit", "organize", "arrange", "setup", "read", "stop", "go" }) do f[key]:Hide() end
+    for _, key in ipairs({ "deposit", "organize", "withdraw", "arrange", "setup", "read", "stop", "go" }) do f[key]:Hide() end
     local busy = st.kind == "run"
     if st.kind == "run" then
         f.stop:Show(); f.stop.text:SetText(st.prog.stopping and "Stopping\226\128\166" or "Stop"); f.stop:SetEnabled(not st.prog.stopping)
@@ -612,19 +629,42 @@ local function Draw()
     elseif st.kind == "setup" then
         f.setup:Show()
     else
-        f.arrange:Show()
-        f.deposit:Show(); f.organize:Show()
+        local status = P.Status()
+        local arranged, withdrawing = status.arrangement, status.withdraw
         local locked = st.kind == "reading" or st.kind == "review"
-        local d, o = st.deposit or {}, st.organize or {}
-        f.deposit:SetEnabled(not locked and d.enabled == true)
-        f.organize:SetEnabled(not locked and o.enabled == true)
-        f.deposit.why = locked and (st.kind == "review" and "Finish or cancel the review first." or "Reading the bank first.") or d.why
-        f.organize.why = locked and (st.kind == "review" and "Finish or cancel the review first." or "Reading the bank first.") or o.why
-        if st.read and not locked then f.read:Show() end
+        local lockedWhy = locked and (st.kind == "review" and "Finish or cancel the review first." or "Reading the bank first.") or nil
+        -- with an arrangement: Arrangement, Organize bank, Deposit; without one: Set up arrangement. Withdraw to their left.
+        local leftmost
+        if arranged then
+            f.arrange:Show()
+            f.deposit:Show(); f.organize:Show()
+            local d, o = st.deposit or {}, st.organize or {}
+            f.deposit:SetEnabled(not locked and d.enabled == true)
+            f.organize:SetEnabled(not locked and o.enabled == true)
+            f.deposit.why = lockedWhy or d.why
+            f.organize.why = lockedWhy or o.why
+            leftmost = f.deposit
+        else
+            f.setup:Show()
+            leftmost = f.setup
+        end
+        if withdrawing then
+            local w = st.withdraw or {}
+            f.withdraw:Show()
+            f.withdraw:ClearAllPoints()
+            f.withdraw:SetPoint("RIGHT", leftmost, "LEFT", -8, 0)
+            f.withdraw:SetEnabled(not locked and w.enabled == true)
+            f.withdraw.why = lockedWhy or w.why
+            leftmost = f.withdraw
+        end
+        f.read:ClearAllPoints()
+        f.read:SetPoint("RIGHT", leftmost, "LEFT", -8, 0)
+        if st.read and not locked then f.read:Show(); leftmost = f.read end
+        st.leftmost = leftmost
     end
     f.status:ClearAllPoints()
     f.status:SetPoint("LEFT", f.bar, "LEFT", PAD, 0)
-    local rightmost = busy and (st.prog.needClick and f.go or f.stop) or (st.kind == "setup" and f.setup) or (st.read and f.read:IsShown() and f.read) or f.deposit
+    local rightmost = busy and (st.prog.needClick and f.go or f.stop) or (st.kind == "setup" and f.setup) or st.leftmost or f.deposit
     f.status:SetPoint("RIGHT", rightmost, "LEFT", -8, 0)
     Layout(st)
 end

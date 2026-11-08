@@ -372,6 +372,43 @@ do
 end
 
 ---------------------------------------------------------------------------
+-- A rule that withdraws: the Withdraw button, one review, the player's Start
+---------------------------------------------------------------------------
+do
+  Panel.Cancel(); Panel.Dismiss(); Spin(0.5)
+  local host = c.GuildBankFrame
+  host.GetLeft, host.GetRight = nil, nil
+  host.GetTop = function() return 900 end
+  host.GetBottom = function() return 300 end
+  c.GUILD.current = 3
+  c.GUILD.tabs[3].slots[30] = { id = 2770, count = 20 }
+  c.GUILD.tabs[3].slots[31] = { id = 2770, count = 10 }
+  local dest = MI.AddDest("guild", "Ore tab")
+  MI.SetGuildTab(dest, "Night Owls", 3, "Herbs")
+  local id = MI.SaveRule({ kind = "guild", name = "Keep 10 ore", enabled = true, dest = dest, cats = { "7:7" }, flow = "withdraw", keep = 10,
+    qualities = {}, include = {}, exclude = {}, equip = "any", bind = "any" })
+  Check(MI.Rule(id).enabled, "the withdrawing rule is on")
+  S.Show(3)
+  Spin(10)
+  local wb = Button("^Withdraw")
+  Check(wb ~= nil and wb.enabled == true and Has("1 stack to withdraw"), "a Withdraw button, and the strip counts it: " .. table.concat(Texts(c.TwichUIGuildBankPanel), " | "))
+  Click("^Withdraw")
+  local rv = Panel.Review()
+  Check(rv and rv.ok and rv.mode == "withdraw" and rv.moves == 1, "Withdraw makes one review")
+  Check(Panel.Texts().title == "Withdraw" and Button("^Start withdrawal") ~= nil, "it says Withdraw, and offers Start withdrawal")
+  local calls = #S.calls
+  Check(not GR.Busy() and #S.calls == calls, "the review moves nothing")
+  Click("^Start withdrawal")
+  S.Pump(); Spin(2)
+  local res = GR.Last()
+  Check(res and res.outcome == "completed" and res.mode == "withdraw", "withdrawn, confirmed: " .. tostring(res and res.outcome) .. " " .. tostring(res and res.reason))
+  local ore = 0
+  for _, b in pairs(c.BAGS) do for _, st in pairs(b.slots) do if st.id == 2770 then ore = ore + st.count end end end
+  Check(ore == 10 and c.GUILD.tabs[3].slots[31] == nil, "the 10 are in the bags, the 20 stayed")
+  Panel.Dismiss(); Spin(0.5)
+end
+
+---------------------------------------------------------------------------
 -- Off: nothing is shown
 ---------------------------------------------------------------------------
 do

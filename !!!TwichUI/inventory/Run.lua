@@ -12,7 +12,8 @@
 --     which only the player can answer (SECURE_TRANSFER_CANCEL if declined). MAIL_SEND_SUCCESS makes Blizzard's frame
 --     clear the recipient, subject and body (SendMailFrame_Reset), so a mail is never prepared over the player's draft.
 --   Bank (Camelot BankFrame.lua): the character bank's tabs are bags (C_Bank.FetchPurchasedBankTabIDs); an item is
---     moved with C_Container.PickupContainerItem from the bag slot, then onto a bank slot.
+--     moved with C_Container.PickupContainerItem from the bag slot, then onto a bank slot. A withdrawal is the same two
+--     calls the other way: from the bank slot, then onto a bag slot (a stack of the same item with room, else an empty slot).
 --   Guild bank (Mainline Blizzard_GuildBankUI.lua): GetCurrentGuildBankTab, GetGuildBankTabInfo -> name, icon,
 --     isViewable, canDeposit; 98 slots a tab; PickupGuildBankItem(tab, slot) drops the cursor's item there;
 --     GUILDBANKBAGSLOTS_CHANGED. Whether Forever's realms have guild vaults at all isn't known.
@@ -62,6 +63,7 @@ MI.STOP_TEXT = {
     ["send-failed"] = "the game didn't send the mail",
     uncertain = "the game didn't confirm the last step",
     full = "there is no room left",
+    ["bags-full"] = "your bags are full",
     ["no-deposit"] = "you can't deposit in that tab",
     ["tab-changed"] = "the guild bank shows another tab",
     ["guild-changed"] = "this isn't the guild or tab you chose",
@@ -154,6 +156,7 @@ local function Summary(r, reason)
     local done = #res.confirmed
     local where
     if r.kind == "mail" then where = ("sent %d %s to %s"):format(r.mailsSent or 0, Plural(r.mailsSent or 0, "mail"), r.recipient or "?")
+    elseif r.kind == "bank" and r.dir == "withdraw" then where = "withdrew from your bank"
     elseif r.kind == "bank" then where = "deposited in your bank"
     else where = ("deposited in %s"):format(r.where and r.where.tabName and ("the guild bank tab \"" .. r.where.tabName .. "\"") or "the guild bank") end
     local parts = {}
@@ -624,11 +627,11 @@ local function FamilyFits(bag, id)
     return bit and bit.band and bit.band(family, itemFamily or 0) ~= 0 or false
 end
 
--- A bank slot for this stack: a stack of the same item with room for all of it, else an empty slot in a bag that
--- can hold it. Never a slot this run is already waiting on. Returns bag, slot, countBefore.
-local function BankTarget(r, s)
+-- A slot for this stack in `bags` (the bank's, by default): a stack of the same item with room for all of it, else an
+-- empty slot in a bag that can hold it. Never a slot this run is already waiting on. Returns bag, slot, countBefore.
+local function BankTarget(r, s, bags)
     local maxStack = s.facts and s.facts.maxStack or 1
-    local bags = BankBags()
+    bags = bags or BankBags()
     for _, bag in ipairs(bags) do
         for slot = 1, C_Container.GetContainerNumSlots(bag) or 0 do
             local info = C_Container.GetContainerItemInfo(bag, slot)
@@ -646,6 +649,55 @@ local function BankTarget(r, s)
         end
     end
 end
+
+-- The carried bags, for a withdrawal's destination.
+local function CarriedBags()
+    local bags = {}
+    for bag = 0, MI.LastBag() do bags[#bags + 1] = bag end
+    return bags
+end
+local function BagTarget(r, s) return BankTarget(r, s, CarriedBags()) end
+
+-- How many of an item the bags hold now (a light count: no item details).
+local function CarriedCount(id)
+    local n = 0
+    for bag = 0, MI.LastBag() do
+        for slot = 1, C_Container.GetContainerNumSlots(bag) or 0 do
+            local info = C_Container.GetContainerItemInfo(bag, slot)
+            if info and Plain(info.itemID) == id then n = n + (Plain(info.stackCount) or 0) end
+        end
+    end
+    return n
+end
+Run.CarriedCount = CarriedCount
+
+-- A planned withdrawal's bank stack, found again: its old slot first, then any bank stack of the same item and count this
+-- run hasn't used. Taking it must not take the bags past the rule's target (the bags may have changed since the review).
+local function ResolveWithdraw(r, step)
+    local rule = step.entry and MI.Rule(step.entry.ruleId)
+    if not rule or not MI.Withdraws(rule) or rule.keep ~= step.target then return nil, "stale" end
+    local function Usable(x)
+        return x ~= nil and x.id == step.id and x.count == step.count and not r.used[SlotKey(x.bag, x.slot)]
+    end
+    local s = MI.ReadSlot(step.bag, step.slot)
+    if not Usable(s) then
+        s = nil
+        for _, bag in ipairs(BankBags()) do
+            for slot = 1, C_Container.GetContainerNumSlots(bag) or 0 do
+                local c = MI.ReadSlot(bag, slot)
+                if Usable(c) then s = c break end
+            end
+            if s then break end
+        end
+    end
+    if not s then return nil, "stale" end
+    if MI.IsNever(s.id) then return nil, "never" end
+    if s.locked == true then return nil, "locked", s end
+    if s.locked == nil then return nil, "lock-unknown", s end
+    if CarriedCount(s.id) + s.count > step.target then return nil, "w-over", s end
+    return s
+end
+MI.REASON["w-over"] = "You carry enough now: taking it would go over the target"
 
 local function GuildTabInfo(tab)
     if not GetGuildBankTabInfo then return nil end
@@ -695,6 +747,13 @@ end
 -- per stack as it is moved). For the review's "room for" line.
 function Run.FreeSlots(kind, where)
     local n = 0
+    if kind == "bags" then
+        for bag = 0, MI.LastBag() do
+            local free, family = C_Container.GetContainerNumFreeSlots(bag)
+            if (Plain(family) or 0) == 0 then n = n + (Plain(free) or 0) end
+        end
+        return n
+    end
     if kind == "bank" then
         for _, bag in ipairs(BankBags()) do n = n + (Plain(C_Container.GetContainerNumFreeSlots(bag)) or 0) end
         return n
@@ -730,7 +789,7 @@ local function MoveSettled(r, timedOut)
     if not timedOut then return end   -- the game hasn't finished: bag events before then change nothing
     r.waiting = nil
     if srcGone then
-        Record(r, "uncertain", w.step, "It left your bags, but the game didn't show where")
+        Record(r, "uncertain", w.step, r.dir == "withdraw" and "It left your bank, but the game didn't show where" or "It left your bags, but the game didn't show where")
         Finish(r, "uncertain")
     else
         Record(r, "failed", w.step, r.error or MI.STOP_TEXT["move-failed"])
@@ -752,7 +811,9 @@ DepositNext = function(r)
     end
     local step = r.steps[r.index]
     if not step then Finish(r, "done") return end
-    local s, problem = Resolve(r, step)
+    local withdraw = r.dir == "withdraw"
+    local s, problem
+    if withdraw then s, problem = ResolveWithdraw(r, step) else s, problem = Resolve(r, step) end
     if not s then
         if problem == "locked" and LockedRetry(r, step, DepositNext) then return end
         Record(r, "skipped", step, MI.ReasonText(problem))
@@ -760,11 +821,12 @@ DepositNext = function(r)
         return DepositNext(r)
     end
     local bag, slot, before
-    if r.kind == "bank" then bag, slot, before = BankTarget(r, s)
+    if withdraw then bag, slot, before = BagTarget(r, s)
+    elseif r.kind == "bank" then bag, slot, before = BankTarget(r, s)
     else bag, slot, before = GuildTarget(r, r.where.tab) end
     if not bag then
-        for i = r.index, #r.steps do Record(r, "skipped", r.steps[i], "No room left") end
-        Finish(r, "full")
+        for i = r.index, #r.steps do Record(r, "skipped", r.steps[i], withdraw and "No room left in your bags" or "No room left") end
+        Finish(r, withdraw and "bags-full" or "full")
         return
     end
     if not CursorFree() then Finish(r, "cursor") return end
@@ -802,8 +864,9 @@ function Run.CanDeposit(plan, group)
     if not Run.IsOpen(group.kind) then return false, group.kind == "bank" and "Open your bank first." or "Open the guild bank first." end
     if run or (MI.GuildRun and MI.GuildRun.Busy()) then return false, "Another transfer is in progress." end
     if plan.generation ~= MI.Generation() then return false, "Your rules changed since this review. Review again." end
-    if #(group.steps or {}) == 0 then return false, "Nothing to deposit." end
+    if #(group.steps or {}) == 0 then return false, group.dir == "withdraw" and "Nothing to withdraw." or "Nothing to deposit." end
     if group.kind == "bank" and #BankBags() == 0 then return false, "The game shows no bank tabs to deposit in." end
+    if group.dir == "withdraw" and group.kind ~= "bank" then return false, "Withdrawing from a guild bank is done from its panel." end
     if group.kind == "guild" then
         local ok, _, why = Run.GuildReady(group.where)
         if not ok then return false, why end
@@ -817,8 +880,9 @@ end
 function Run.Deposit(plan, group)
     local ok, why = Run.CanDeposit(plan, group)
     if not ok then return false, why end
-    local r = { kind = group.kind, plan = plan, group = group, generation = plan.generation, where = group.where,
-        steps = group.steps, index = 1, results = NewResults(), used = {}, targets = {}, state = "depositing" }
+    local r = { kind = group.kind, dir = group.dir == "withdraw" and "withdraw" or "deposit", plan = plan, group = group,
+        generation = plan.generation, where = group.where,
+        steps = group.steps, index = 1, results = NewResults(), used = {}, targets = {}, state = group.dir == "withdraw" and "withdrawing" or "depositing" }
     run = r
     Want("BAG_UPDATE_DELAYED", OnMoveEvent, true)
     if group.kind == "guild" then Want("GUILDBANKBAGSLOTS_CHANGED", OnMoveEvent, true) end
@@ -826,7 +890,7 @@ function Run.Deposit(plan, group)
     Want("PLAYER_REGEN_DISABLED", function() if run then Run.Stop("combat") end end, true)
     Want("ADDON_ACTION_BLOCKED", Run.OnBlocked, true)
     Want("ADDON_ACTION_FORBIDDEN", Run.OnBlocked, true)
-    Notify("depositing")
+    Notify(r.state)
     DepositNext(r)
     return true
 end

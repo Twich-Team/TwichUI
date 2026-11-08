@@ -23,7 +23,11 @@
 --         cats = { "7:5", "7", ... } (an item class, or class:subclass, as the game files it),
 --         qualities = { [0..5] = true } (none: any), equip = "any" | "equipment" | "other",
 --         bind = "any" | "boe" | "nobind", include = { [itemID] = true }, exclude = { [itemID] = true },
---         keep = 0..9999 (how many of EACH matching item stays in the bags; 0: none),
+--         keep = 0..9999 (how many of EACH matching item stays in the bags; 0: none; for a rule that withdraws, the
+--         amount it tops the bags up to),
+--         flow = "deposit" | "withdraw" | "balance" (bank and guild bank rules only: deposit what is above keep, take out
+--         of that bank up to keep, or both; absent on an older save: "deposit", so an older TwichUI reads a withdrawing
+--         rule as a depositing one and keeps it),
 --         stack = 0..9999 (a guild bank rule's target stack size: the size each stack of a matching item should end up,
 --         one smaller stack holding the rest; 0: no target),
 --         and, only on a rule the guild bank arrangement editor made (design = true, guild rules only; docs/magic-inventory.md,
@@ -61,6 +65,15 @@ MI.KIND_LABEL = {
 }
 MI.TRANSFER = { mail = true, bank = true, guild = true }   -- kinds that move items (keep and never only protect)
 MI.NEEDS_DEST = { mail = true, guild = true }
+
+-- Which way a bank or guild bank rule moves items. Withdrawing takes whole stacks only and never goes over the rule's
+-- keep amount (its target); the item has to be in that bank.
+MI.HAS_FLOW = { bank = true, guild = true }
+MI.FLOW_ORDER = { "deposit", "withdraw", "balance" }
+MI.FLOW_LABEL = { deposit = "Deposit extras", withdraw = "Withdraw to top up", balance = "Balance both ways" }
+-- deposits: moves items out of the bags (every transfer kind, unless it only withdraws); withdraws: takes items out of a bank
+function MI.Deposits(rule) return MI.TRANSFER[rule.kind] == true and rule.flow ~= "withdraw" end
+function MI.Withdraws(rule) return MI.HAS_FLOW[rule.kind] == true and (rule.flow == "withdraw" or rule.flow == "balance") end
 
 MI.EQUIP = { any = true, equipment = true, other = true }
 MI.BIND = { any = true, boe = true, nobind = true }
@@ -195,7 +208,9 @@ local function CleanRule(r)
         cats = {},
     }
     if MI.NEEDS_DEST[kind] and IdText(r.dest) then out.dest = r.dest end
+    if MI.HAS_FLOW[kind] then out.flow = MI.FLOW_LABEL[r.flow] and r.flow or "deposit" end
     if kind == "guild" and r.design == true then
+        out.flow = "deposit"   -- an arrangement says where items belong in the bank; it never takes them out
         -- the arrangement editor's rule: reserved stacks (one per slot, in slot order) and the items that take extras
         out.design = true
         local used, place = {}, {}
@@ -459,6 +474,7 @@ end
 
 function MI.Problem(rule, guildNow)
     if not MI.HasItems(rule) then return "no-items", "Choose which items it is for." end
+    if MI.Withdraws(rule) and (rule.keep or 0) <= 0 then return "no-target", "Choose how many to keep in your bags: that is what it withdraws up to." end
     if not MI.NEEDS_DEST[rule.kind] then return nil end
     local d = rule.dest and MI.Dest(rule.dest)
     if not d or d.kind ~= rule.kind then

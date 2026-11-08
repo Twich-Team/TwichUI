@@ -4,6 +4,9 @@
 --                except that a compatible stack with room may receive items.
 --   reorganize   the items already in the guild bank that a guild bank rule claims, gathered into the rule's tab and
 --                re-stacked to its target size. Nothing is taken from the bags.
+--   withdraw     what guild bank rules that withdraw (flow "withdraw" or "balance") would take out of their tab into the bags
+--                to top them up to the rule's target: whole stacks only, never past the target (Plan.lua MI.BuildWithdraw). The
+--                bag slot each goes to is chosen by the review (GuildRun.lua), from the bags as they are then.
 -- Pure: it reads only the tables it is given (nothing is changed in them, nothing in the game is called), so the tests can
 -- hand it anything. MI.CurrentGuildPlan is the one place the game is read for a plan (GuildBank.lua, Items.lua).
 --
@@ -54,6 +57,7 @@ MI.GREASON = {
     ["no-withdraw"] = "Your rank can't take items out of tab %d",
     ["withdraw-unknown"] = "Whether your rank can take items out of tab %d isn't known",
     ["needs-split"] = "Needs a stack split, which hasn't been checked on this client",
+    ["w-tab"] = "\"%s\" can't withdraw: %s",
     ["needs-space"] = "Needs room that isn't there: swaps and temporary parking in your bags aren't used",
     ["item-pending"] = "The game is still loading this item",
     ["item-unknown"] = "The game didn't say which item this is",
@@ -353,7 +357,93 @@ local function CompileLayouts(rules, opts, bank, mode)
     return out
 end
 
+-- The withdraw mode: one move per whole stack, from the rule's tab to the bags. A rule whose tab can't be read, seen or withdrawn
+-- from is reported (plan.withdrawRules), never redirected; the rank's allowance, where the game said it for the tab, caps the moves.
+local function BuildGuildWithdraw(opts)
+    local bank = opts.bank or { tabs = {} }
+    local plan = { mode = "withdraw", ops = {}, items = {}, untouched = {}, rules = {}, tabs = {}, constraints = {}, notes = {},
+        made = opts.made, generation = opts.generation, seq = bank.seq, readOnly = true, design = { allocs = {}, overflow = {}, conflicts = {}, items = 0 },
+        withdrawRules = {} }
+    if bank.guild and type(opts.guildNow) == "string" and opts.guildNow ~= bank.guild then bank = { tabs = {}, seq = bank.seq } end
+    plan.guild = bank.guild or (type(opts.guildNow) == "string" and opts.guildNow) or nil
+    plan.open = bank.open == true
+    local blocked, unknown = 0, 0
+    -- each rule that withdraws: can it, from its tab, now?
+    local tabProblem = {}
+    for _, rule in ipairs(opts.rules or {}) do
+        if rule.enabled and rule.kind == "guild" and MI.Withdraws(rule) then
+            local code, why
+            if opts.problem then code, why = opts.problem(rule) end
+            local where = not code and rule.dest and opts.resolve and opts.resolve(rule.dest)
+            local t = where and bank.tabs[where.tab]
+            local class = "blocked"
+            if code then -- the rule's own problem
+            elseif not where then code, why = "no-guild-tab", "Choose the guild bank tab for this rule on this character."
+            elseif not t then code, why, class = "tab-unseen", "Open the guild bank to read the tab.", "unknown"
+            elseif where.tabName and t.name and t.name ~= where.tabName then code, why = "tab-renamed", ("Tab %d is called \"%s\" now, not \"%s\"."):format(where.tab, t.name, where.tabName)
+            elseif t.viewable == false then code, why = "tab-hidden", "Your rank can't see this tab."
+            elseif t.canWithdraw == false then code, why = "no-withdraw", Text("no-withdraw", where.tab)
+            elseif t.canWithdraw == nil then code, why, class = "withdraw-unknown", Text("withdraw-unknown", where.tab), "unknown"
+            elseif not t.slots then code, why, class = "tab-unread", Text("tab-unread", where.tab), "unknown" end
+            plan.rules[#plan.rules + 1] = { ruleId = rule.id, rule = rule.name, status = code and class or "ready", code = code, why = why, tab = where and where.tab,
+                tabName = where and where.tabName, flow = rule.flow }
+            if code then
+                tabProblem[rule.id] = { code = code, why = why }
+                plan.withdrawRules[#plan.withdrawRules + 1] = { ruleId = rule.id, rule = rule.name, code = code, why = why, class = class }
+                if class == "unknown" then unknown = unknown + 1 else blocked = blocked + 1 end
+            end
+        end
+    end
+    -- the read tabs' stacks
+    local source = {}
+    for tab, t in pairs(bank.tabs) do
+        if t.slots then
+            for slot, cell in pairs(t.slots) do
+                if cell.id and cell.count then
+                    local facts = opts.facts and opts.facts(cell.id)
+                    source[#source + 1] = { id = cell.id, count = cell.count, facts = facts, locked = cell.locked == true, tab = tab, slot = slot, link = cell.link }
+                end
+            end
+        end
+    end
+    table.sort(source, function(a, b) if a.tab ~= b.tab then return a.tab < b.tab end return a.slot < b.slot end)
+    local w = MI.BuildWithdraw({ kind = "guild", source = source, carried = opts.stacks, rules = opts.rules, never = opts.never, resolve = opts.resolve,
+        problem = function(rule)
+            local tp = tabProblem[rule.id]
+            if tp then return tp.code, tp.why end
+        end })
+    -- the allowance the game said for a tab (-1: no limit) caps the stacks taken from it
+    local taken = {}
+    for _, e in ipairs(w.entries) do
+        local item = { id = e.id, facts = e.facts, rule = e.rule, ruleId = e.ruleId, tab = e.tab, qty = 0, source = "bank", ops = 0, target = e.target,
+            carried = e.carried, short = e.short, shortWhy = e.shortWhy }
+        for _, t in ipairs(e.take) do
+            local tab = t.stack.tab
+            local view = bank.tabs[tab]
+            local left = view and view.remaining
+            local o = { kind = "withdraw", id = e.id, count = t.count, from = { kind = "bank", tab = tab, slot = t.stack.slot, link = t.stack.link },
+                to = { kind = "bag" }, rule = e.rule, ruleId = e.ruleId, needs = { "withdraw:" .. tab }, link = t.stack.link, target = e.target, status = "ok" }
+            taken[tab] = (taken[tab] or 0) + 1
+            if type(left) == "number" and left >= 0 and taken[tab] > left then
+                o.status, o.code, o.why = "blocked", "limit", Text("limit", tab, left)
+                blocked = blocked + 1
+            end
+            o.n = #plan.ops + 1
+            plan.ops[#plan.ops + 1] = o
+            item.ops, item.qty = item.ops + 1, item.qty + t.count
+        end
+        plan.items[#plan.items + 1] = item
+    end
+    for _, u in ipairs(w.skipped) do
+        u.class = "left"
+        plan.untouched[#plan.untouched + 1] = u
+    end
+    plan.summary = { blocked = blocked, unknown = unknown, design = {} }
+    return plan
+end
+
 function MI.BuildGuildPlan(opts)
+    if opts.mode == "withdraw" then return BuildGuildWithdraw(opts) end
     local mode = opts.mode == "reorganize" and "reorganize" or "deposit"
     local rules = opts.rules or {}
     local bank = opts.bank or { tabs = {} }
@@ -386,7 +476,7 @@ function MI.BuildGuildPlan(opts)
     ---------------------------------------------------------------- rules
     local state, stateByIndex = {}, {}
     for i, rule in ipairs(rules) do
-        if rule.enabled and rule.kind == "guild" then
+        if rule.enabled and rule.kind == "guild" and MI.Deposits(rule) then
             local st = RuleState(rule, i, opts, bank)
             state[rule.id] = st
             stateByIndex[#stateByIndex + 1] = st

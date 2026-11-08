@@ -170,9 +170,19 @@ function P.ItemsText(rule)
     return text ~= "" and text or "Nothing chosen yet"
 end
 
+-- What a rule does, as a label: "Send by mail", "Deposit in bank", "Withdraw from bank", "Balance with guild bank" ...
+local FLOW_KIND = {
+    bank = { deposit = "Deposit in bank", withdraw = "Withdraw from bank", balance = "Balance with bank" },
+    guild = { deposit = "Deposit in guild bank", withdraw = "Withdraw from guild bank", balance = "Balance with guild bank" },
+}
+function P.KindLabel(rule)
+    local byFlow = FLOW_KIND[rule.kind]
+    return byFlow and byFlow[rule.flow or "deposit"] or MI().KIND_LABEL[rule.kind]
+end
+
 function P.DestText(rule)
     local mi = MI()
-    local kind = mi.KIND_LABEL[rule.kind]
+    local kind = P.KindLabel(rule)
     if not mi.NEEDS_DEST[rule.kind] then return kind end
     local d = rule.dest and mi.Dest(rule.dest)
     if not d then return kind .. " \226\134\146 (choose one)", "warn" end
@@ -186,8 +196,13 @@ end
 
 function P.KeepText(rule)
     if rule.kind == "never" then return "Never moved by any rule" end
-    if rule.keep and rule.keep > 0 then return ("%d of each matching item"):format(rule.keep) end
-    return rule.kind == "keep" and "Choose how many" or "None"
+    local withdraws = MI().Withdraws(rule)
+    if rule.keep and rule.keep > 0 then
+        if rule.flow == "withdraw" then return ("Topped up to %d of each matching item"):format(rule.keep) end
+        if rule.flow == "balance" then return ("Kept at %d of each matching item, both ways"):format(rule.keep) end
+        return ("%d of each matching item"):format(rule.keep)
+    end
+    return (rule.kind == "keep" or withdraws) and "Choose how many" or "None"
 end
 
 -- The whole rule as one plain sentence (the editor's Review step).
@@ -197,7 +212,12 @@ function P.Sentence(rule)
     if rule.kind == "keep" then return ("Keep in your bags: %s, %s. Other rules move only what is above that."):format(P.KeepText(rule):lower(), items) end
     local dest = P.DestText(rule)
     local keep = rule.keep > 0 and (" Keep %d of each in your bags."):format(rule.keep) or ""
-    if rule.kind == "guild" and (rule.stack or 0) > 0 then keep = keep .. (" Stacks end at %d, and one smaller stack holds the rest."):format(rule.stack) end
+    if rule.flow == "withdraw" then
+        keep = rule.keep > 0 and (" Take out whole stacks until you carry %d of each, never more; what isn't there stays missing."):format(rule.keep) or ""
+    elseif rule.flow == "balance" then
+        keep = rule.keep > 0 and (" Keep %d of each in your bags: deposit what is above it, and take out whole stacks to reach it, never more."):format(rule.keep) or ""
+    end
+    if rule.kind == "guild" and rule.flow ~= "withdraw" and (rule.stack or 0) > 0 then keep = keep .. (" Stacks end at %d, and one smaller stack holds the rest."):format(rule.stack) end
     return ("%s: %s.%s It only moves when you open the %s, review it and press the action yourself."):format(dest, items, keep,
         rule.kind == "mail" and "mailbox" or (rule.kind == "bank" and "bank" or "guild bank"))
         .. (rule.kind == "mail" and " Whether a player can receive these, or who plays that character, isn't something TwichUI can check." or "")
@@ -441,13 +461,14 @@ local COL = {                    -- x, width (left edge of the page frame); the 
     action = { 288, 54 }, to = { 346, 76 }, keep = { 426, 26 },
 }
 local BTN_X = 456
-local ACTION_SHORT = { mail = "Mail", bank = "Bank", guild = "Guild bank", keep = "Keep", never = "Never" }
+local ACTION_SHORT = { mail = "Mail", keep = "Keep", never = "Never" }
+local FLOW_SHORT = { deposit = "Deposit", withdraw = "Withdraw", balance = "Balance" }
 local dropAt                     -- the row a drag would put the rule in, or nil
 
 -- Short cells for the table; the row's tooltip has the full words (P.ItemsText, P.DestText, P.KeepText).
 function P.RowCells(rule)
     local mi = MI()
-    local to, tone = "-", nil
+    local to, tone = rule.kind == "bank" and "Bank" or "-", nil
     if mi.NEEDS_DEST[rule.kind] then
         local d = rule.dest and mi.Dest(rule.dest)
         local where = d and mi.Resolve(d.id)
@@ -459,8 +480,9 @@ function P.RowCells(rule)
     local keep = "-"
     if rule.kind == "never" then keep = "All"
     elseif rule.keep and rule.keep > 0 then keep = tostring(rule.keep)
-    elseif rule.kind == "keep" then keep, tone = "?", tone or "warn" end
-    return ACTION_SHORT[rule.kind] or rule.kind, to, keep, tone
+    elseif rule.kind == "keep" or mi.Withdraws(rule) then keep, tone = "?", tone or "warn" end
+    local action = mi.HAS_FLOW[rule.kind] and FLOW_SHORT[rule.flow or "deposit"] or ACTION_SHORT[rule.kind] or rule.kind
+    return action, to, keep, tone
 end
 
 local function RowTip(self)
@@ -615,7 +637,7 @@ local function DrawTable(y, rules)
     hd:ClearAllPoints()
     hd:SetPoint("TOPLEFT", f, "TOPLEFT", PAD, -y)
     hd:SetPoint("TOPRIGHT", f, "TOPRIGHT", -PAD, -y)
-    local titles = { { "num", "#" }, { "on", "On" }, { "name", "Name" }, { "items", "Items" }, { "action", "Action" }, { "to", "Goes to" }, { "keep", "Keep" } }
+    local titles = { { "num", "#" }, { "on", "On" }, { "name", "Name" }, { "items", "Items" }, { "action", "Action" }, { "to", "Where" }, { "keep", "Keep" } }
     for _, t in ipairs(titles) do
         local c = Text("trH" .. t[1], "small")
         c:SetParent(hd)
@@ -834,14 +856,15 @@ local function DrawDestStep(y)
     y = y + 22
     local ABOUT = {
         mail = "Mailed to a recipient you name, at a mailbox, one recipient per mail.",
-        bank = "Deposited in your own bank (never taken out, and no bank space is bought).",
-        guild = "Deposited in a guild bank tab you choose (never taken out). Not yet checked on Forever's realms.",
+        bank = "Your own bank: deposit, withdraw, or both (no bank space is bought).",
+        guild = "A guild bank tab you choose: deposit, withdraw, or both. Not yet checked on Forever's realms.",
         keep = "Kept in your bags: other rules move only what is above the amount you set.",
         never = "Never moved by any rule.",
     }
     for _, kind in ipairs(mi.KIND_ORDER) do
-        Radio("e2k" .. kind, PAD, y, mi.KIND_LABEL[kind], r.kind == kind, function()
+        Radio("e2k" .. kind, PAD, y, kind == "bank" and "Your bank" or (kind == "guild" and "A guild bank" or mi.KIND_LABEL[kind]), r.kind == kind, function()
             r.kind = kind
+            if mi.HAS_FLOW[kind] then r.flow = r.flow or "deposit" end
             if not mi.NEEDS_DEST[kind] then r.dest = nil
             elseif r.dest then local d = mi.Dest(r.dest); if not d or d.kind ~= kind then r.dest = nil end end
             P.QueueRefresh()
@@ -851,6 +874,31 @@ local function DrawDestStep(y)
         a:SetText(ABOUT[kind])
         Tone(a, "dim")
         y = y + math.max(24, H(a) + 8)
+    end
+    if mi.HAS_FLOW[r.kind] and not r.design then
+        y = y + 6
+        local ft = Text("e2flow", "heading")
+        Wide(ft, PAD, y)
+        ft:SetText("Which way")
+        Tone(ft, "head")
+        y = y + 22
+        local FLOW_ABOUT = {
+            deposit = "Moves what is above your keep amount from your bags into it.",
+            withdraw = "Takes whole stacks out of it until you carry your target, never more. What isn't there stays missing.",
+            balance = "Both: deposits what is above the target and takes out whole stacks to reach it, never more.",
+        }
+        for _, flow in ipairs(mi.FLOW_ORDER) do
+            Radio("e2f" .. flow, PAD, y, mi.FLOW_LABEL[flow], (r.flow or "deposit") == flow, function()
+                r.flow = flow
+                if flow ~= "deposit" and (r.keep or 0) <= 0 then r.keep = 20 end
+                P.QueueRefresh()
+            end, 170)
+            local a = Text("e2fa" .. flow, "small")
+            Wide(a, PAD + 200, y + 2, W - PAD * 2 - 200)
+            a:SetText(FLOW_ABOUT[flow])
+            Tone(a, "dim")
+            y = y + math.max(24, H(a) + 8)
+        end
     end
     if mi.NEEDS_DEST[r.kind] then
         y = y + 6
@@ -934,9 +982,10 @@ local function DrawKeepStep(y)
     At(pool.e3excAdd, PAD + 320, y)
     y = y + 40
     if r.kind == "never" then return y end
+    local withdraws = mi.Withdraws(r)
     t = Text("e3keep", "heading")
     Wide(t, PAD, y)
-    t:SetText("Keep in bags")
+    t:SetText(withdraws and "Target in bags" or "Keep in bags")
     Tone(t, "head")
     y = y + 22
     local on = Check("e3keepOn", function(v)
@@ -976,10 +1025,14 @@ local function DrawKeepStep(y)
     y = y + 28
     local note = Text("e3keepNote", "small")
     Wide(note, PAD, y)
-    note:SetText("Counted for each kind of item over every stack you carry (not one amount shared by the whole category), and never in your bank or mail. Only whole stacks move, so sometimes a few more than this stay.")
+    if withdraws then
+        note:SetText("Counted for each kind of item over every stack you carry. Withdrawing takes whole stacks only and never goes over this amount, so you may end a little under it; the review says by how much. Other rules never send away what this rule keeps.")
+    else
+        note:SetText("Counted for each kind of item over every stack you carry (not one amount shared by the whole category), and never in your bank or mail. Only whole stacks move, so sometimes a few more than this stay.")
+    end
     Tone(note, "dim")
     y = y + H(note) + 8
-    if r.kind == "guild" then y = P.DrawStackSize(y) end
+    if r.kind == "guild" and r.flow ~= "withdraw" then y = P.DrawStackSize(y) end
     return y
 end
 
@@ -1226,7 +1279,7 @@ K.Page({
                 if n == 0 then return "No rules yet." end
                 return ("%d %s, %d turned on."):format(n, n == 1 and "rule" or "rules", on)
             end,
-            consequence = "Nothing moves by itself. At the mailbox, bank or guild bank a small Magic Inventory button opens a review of exactly what would move and where; you prepare and send each mail, or deposit, with your own click. Sent mail and deposits can't be undone. No money is sent, C.O.D. is never used, and nothing is taken out of a bank.",
+            consequence = "Nothing moves by itself. At the mailbox, bank or guild bank a small Magic Inventory button opens a review of exactly what would move and where; you prepare and send each mail, or deposit, with your own click. Sent mail and deposits can't be undone. No money is sent and C.O.D. is never used. Nothing is taken out of a bank unless a rule says to withdraw, and then only whole stacks, never past its target.",
             details = {
                 { "Which items are never moved?", "Quest items, conjured items, items in an equipment set, locked items, anything on the Never transfer list, and soulbound items by mail or to a guild bank (your own bank can take them). An item the game hasn't fully described yet is left where it is." },
                 { "Who gets my recipients?", "Only the character you set them on, unless you tick \"All my characters\". Recipients are kept out of shared settings and backups. TwichUI checks a name's form, not whether the character exists or who plays it." },

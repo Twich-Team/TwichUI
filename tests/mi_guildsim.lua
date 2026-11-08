@@ -108,7 +108,7 @@ function GuildSim(c)
       c.FireEvent("CURSOR_CHANGED")
       return
     end
-    if kind ~= "guild" or S.destRefuses then return end   -- the item stays on the cursor
+    if (kind ~= "guild" and f[1] ~= "guild") or S.destRefuses then return end   -- the item stays on the cursor (a guild item may go to a bag: a withdrawal)
     if S.bounce and S.bounce > 0 then
       S.bounce = S.bounce - 1
       local from = Cell(f[1], f[2], f[3])
@@ -167,7 +167,7 @@ function GuildSim(c)
         local dst = Cell(r.to[1], r.to[2], r.to[3])
         if src then src.locked = false end
         if dst then dst.locked = false end
-        if r.from[1] == "bag" then bags = true end
+        if r.from[1] == "bag" or r.to[1] == "bag" then bags = true end
         if not (opts.drop and opts.drop[i]) and not (S.reject and S.reject(r)) and src and not r.swap then
           local maxStack = c.ITEMS[r.id].maxStack or 20
           local take = src and math.min(r.count, src.count) or r.count

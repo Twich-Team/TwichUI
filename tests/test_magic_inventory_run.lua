@@ -417,6 +417,119 @@ c.GUILD.current = 2
 c.CloseGuildBank()
 
 ---------------------------------------------------------------------------
+-- Withdrawing from the bank: whole stacks, never past the target, only at the player's click
+---------------------------------------------------------------------------
+local function Group(p, dir)
+  for _, g in ipairs(p.groups) do if (g.dir or "deposit") == dir then return g end end
+end
+Reset()
+c.OpenBank()
+-- carrying 25 Peacebloom; the bank holds stacks of 20, 20, 10 and 5; the target is 40
+c.Bags({ [0] = { size = 16, slots = { [1] = { 2447, 20 }, [2] = { 2447, 5 } } },
+  [6] = { size = 8, slots = { [1] = { 2447, 20 }, [2] = { 2447, 20 }, [3] = { 2447, 10 }, [4] = { 2447, 5 } } } })
+local wr = Rule({ name = "Keep 40 Peacebloom", cats = { "7:9" }, flow = "withdraw", keep = 40 })
+Check(MI.Rule(wr).flow == "withdraw", "the rule withdraws")
+plan = MI.CurrentPlan("bank")
+Check(Group(plan, "deposit") == nil, "a rule that only withdraws deposits nothing")
+g = Group(plan, "withdraw")
+Check(g and #g.steps == 2 and g.items == 15, "15 to reach 40: the 10 and the 5, never a stack of 20")
+Check(#c.PICKUPS == 0, "planning picked nothing up")
+Check(MI.CurrentPlan(nil).groups[1] == nil, "the preview with the bank unread lists no withdrawal")
+ok = Run.Deposit(plan, g)
+Check(ok and Run.Current() and Run.Current().dir == "withdraw", "Withdraw starts at the player's click")
+c.Settle(); c.Settle()
+last = Run.Last()
+Check(last and last.stopReason == "done" and #last.results.confirmed == 2, "both stacks withdrawn, each confirmed")
+Check(Run.CarriedCount(2447) == 40, "the bags hold exactly 40 now: " .. Run.CarriedCount(2447))
+Check(Said("withdrew from your bank"), "one summary line says so")
+plan = MI.CurrentPlan("bank")
+Check(Group(plan, "withdraw") == nil and Group(plan, "deposit") == nil, "at the target: nothing either way")
+
+-- the next stack would go over: nothing is taken, and the review says why
+Reset()
+c.OpenBank()
+c.Bags({ [0] = { size = 16, slots = { [1] = { 2447, 20 }, [2] = { 2447, 10 } } }, [6] = { size = 8, slots = { [1] = { 2447, 20 } } } })
+Rule({ name = "Keep 40 Peacebloom", cats = { "7:9" }, flow = "withdraw", keep = 40 })
+plan = MI.CurrentPlan("bank")
+Check(Group(plan, "withdraw") == nil, "a stack of 20 would make 50: not taken")
+local why
+for _, e in ipairs(plan.skipped) do if e.withdraw then why = e.text end end
+Check(why and why:find("Short by 10") and why:find("go over 40"), "it says so: " .. tostring(why))
+
+-- not enough in the bank: takes what there is
+Reset()
+c.OpenBank()
+c.Bags({ [0] = { size = 16, slots = { [1] = { 2447, 5 } } }, [6] = { size = 8, slots = { [1] = { 2447, 20 } } } })
+Rule({ name = "Keep 40 Peacebloom", cats = { "7:9" }, flow = "withdraw", keep = 40 })
+plan = MI.CurrentPlan("bank")
+g = Group(plan, "withdraw")
+Check(g and g.items == 20 and g.entries[1].short == 15 and g.entries[1].shortWhy:find("Your bank holds only"), "takes the 20 there is, 15 short")
+
+-- balance: above the target deposits, below withdraws; the same rule never does both at once
+Reset()
+c.OpenBank()
+c.Bags({ [0] = { size = 16, slots = { [1] = { 2447, 20 }, [2] = { 2447, 20 }, [3] = { 2447, 5 } } }, [6] = { size = 8 } })
+Rule({ name = "Balance Peacebloom", cats = { "7:9" }, flow = "balance", keep = 20 })
+plan = MI.CurrentPlan("bank")
+Check(Group(plan, "deposit") and Group(plan, "deposit").items == 25 and Group(plan, "withdraw") == nil, "45 carried, target 20: 25 deposited, nothing withdrawn")
+Reset()
+c.OpenBank()
+c.Bags({ [0] = { size = 16, slots = { [1] = { 2447, 5 } } }, [6] = { size = 8, slots = { [1] = { 2447, 15 }, [2] = { 2447, 20 } } } })
+Rule({ name = "Balance Peacebloom", cats = { "7:9" }, flow = "balance", keep = 20 })
+plan = MI.CurrentPlan("bank")
+Check(Group(plan, "deposit") == nil and Group(plan, "withdraw") and Group(plan, "withdraw").items == 15, "5 carried, target 20: 15 withdrawn, nothing deposited")
+
+-- a deposit rule above a withdrawing rule leaves the withdrawing rule's target in the bags
+Reset()
+c.OpenBank()
+c.Bags({ [0] = { size = 16, slots = { [1] = { 2447, 20 }, [2] = { 2447, 20 }, [3] = { 2447, 20 } } }, [6] = { size = 8 } })
+Rule({ name = "Herbs to bank", cats = { "7:9" } })
+Rule({ name = "Keep 40 Peacebloom", cats = { "7:9" }, flow = "withdraw", keep = 40 })
+plan = MI.CurrentPlan("bank")
+Check(Group(plan, "deposit") and Group(plan, "deposit").items == 20, "only the 20 above the withdrawing rule's 40 are deposited")
+
+-- the Never transfer list stops withdrawals too
+Reset()
+c.OpenBank()
+c.Bags({ [0] = { size = 16 }, [6] = { size = 8, slots = { [1] = { 2447, 10 } } } })
+Rule({ name = "Keep 40 Peacebloom", cats = { "7:9" }, flow = "withdraw", keep = 40 })
+MI.SetNever(2447, true)
+plan = MI.CurrentPlan("bank")
+Check(Group(plan, "withdraw") == nil and plan.skipped[1] and plan.skipped[1].reason == "never", "on the Never transfer list: not withdrawn")
+
+-- a rule that withdraws needs a target
+Reset()
+local noTarget = MI.SaveRule({ kind = "bank", name = "No target", enabled = true, cats = { "7:9" }, flow = "withdraw", keep = 0 })
+Check(not MI.Rule(noTarget).enabled and select(1, MI.Problem(MI.Rule(noTarget), false)) == "no-target", "saved turned off: it needs a target")
+
+-- the bags changed after the review: a stack that would now go over is skipped, never taken
+Reset()
+c.OpenBank()
+c.Bags({ [0] = { size = 16, slots = { [1] = { 2447, 20 } } }, [6] = { size = 8, slots = { [1] = { 2447, 10 }, [2] = { 2447, 10 } } } })
+Rule({ name = "Keep 40 Peacebloom", cats = { "7:9" }, flow = "withdraw", keep = 40 })
+plan = MI.CurrentPlan("bank")
+g = Group(plan, "withdraw")
+Check(g and #g.steps == 2, "two stacks of 10 planned")
+c.BAGS[0].slots[2] = { id = 2447, count = 15, bound = false, locked = false }   -- the player picked up 15 more meanwhile
+Run.Deposit(plan, g)
+c.Settle(); c.Settle()
+last = Run.Last()
+Check(last and #last.results.skipped >= 1 and Run.CarriedCount(2447) <= 40, "never past 40: " .. Run.CarriedCount(2447))
+
+-- full bags stop it
+Reset()
+c.OpenBank()
+local full = {}
+for i = 1, 16 do full[i] = { 2589, 20 } end
+c.Bags({ [0] = { size = 16, slots = full }, [6] = { size = 8, slots = { [1] = { 2447, 10 } } } })
+Rule({ name = "Keep 40 Peacebloom", cats = { "7:9" }, flow = "withdraw", keep = 40 })
+plan = MI.CurrentPlan("bank")
+Run.Deposit(plan, Group(plan, "withdraw"))
+last = Run.Last()
+Check(last and last.stopReason == "bags-full" and #c.PICKUPS == 0, "no room in the bags: stopped before picking anything up")
+c.CloseBank()
+
+---------------------------------------------------------------------------
 -- Turning it off; reloading
 ---------------------------------------------------------------------------
 Reset()

@@ -67,7 +67,7 @@ Click("eSave")
 Check(P.Editing() == nil, "saved")
 local rule = MI.Rules()[1]
 Check(rule and rule.name == "Cloth to bank alt" and rule.enabled == false and rule.keep == 20, "saved turned off, keeping 20 of each")
-Check(Has(f, "^Name$") and Has(f, "^Items$") and Has(f, "^Action$") and Has(f, "^Goes to$") and Has(f, "^Keep$"), "the list is a table with column headings")
+Check(Has(f, "^Name$") and Has(f, "^Items$") and Has(f, "^Action$") and Has(f, "^Where$") and Has(f, "^Keep$"), "the list is a table with column headings")
 Check(Has(f, "^Cloth") and Has(f, "^Mail$") and Has(f, "^20$"), "a row says what it matches, what it does and what it keeps")
 Check(Has(f, "^Bank alt$"), "and where it goes, until a recipient is chosen")
 local row1 = P.Control("tr1")
@@ -174,6 +174,26 @@ Check(P.Editing().stack == 0, "unticking it means no target")
 Click("e3stackOn")
 Check(P.Editing().stack == 20, "ticking it starts at 20")
 Click("eCancel")
+
+-- a rule that withdraws: the editor asks which way, the keep amount becomes the target, and the words say it never goes over
+P.NewFromTemplate("custom")
+Flush()
+Click("eTab2"); Click("e2kbank")
+Check(Has(f, "^Which way$") and P.Control("e2fwithdraw") ~= nil and P.Control("e2fbalance") ~= nil, "a bank rule asks which way")
+Click("e2fwithdraw")
+Check(P.Editing().flow == "withdraw" and P.Editing().keep == 20, "withdrawing starts with a target of 20")
+Click("eTab3")
+Check(Has(f, "^Target in bags$") and Has(f, "never goes over"), "the keep amount is the target, and it says it never goes over")
+Click("eTab4")
+Check(Has(f, "^Withdraw from bank") and Has(f, "never more"), "the review sentence says what it does")
+Click("eCancel")
+do
+  local wid = MI.SaveRule({ kind = "bank", name = "Keep 40 milk", enabled = false, cats = { "0:5" }, flow = "balance", keep = 40 })
+  Flush()
+  Check(Has(f, "^Balance$") and Has(f, "^Bank$") and Has(f, "^40$"), "the table shows Balance, Bank and the target")
+  MI.DeleteRule(wid)
+  Flush()
+end
 
 -- a rule to preview
 local cloth = MI.SaveRule({ kind = "guild", name = "Cloth to tab 2", enabled = true, dest = gdest, cats = { "7:5" }, stack = 20 })

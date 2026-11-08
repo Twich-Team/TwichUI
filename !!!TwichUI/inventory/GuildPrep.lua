@@ -87,6 +87,22 @@ function P.HasArrangement()
     return false
 end
 
+-- Does this character have an enabled guild bank rule that withdraws, with a tab in the guild whose bank is open?
+function P.HasWithdraw()
+    local guild = GuildNow()
+    if not guild then return false end
+    for _, rule in ipairs(MI.Rules()) do
+        if rule.enabled and rule.kind == "guild" and MI.Withdraws(rule) and rule.dest then
+            local where = MI.Resolve(rule.dest)
+            if where and where.kind == "guild" and where.guild == guild then return true end
+        end
+    end
+    return false
+end
+
+-- Is there anything for the panel to prepare: an arrangement, or a rule that withdraws?
+function P.HasWork() return P.HasArrangement() or P.HasWithdraw() end
+
 ---------------------------------------------------------------------------
 -- What is wanted: every tab the rank can see whose items are missing or too old
 ---------------------------------------------------------------------------
@@ -131,11 +147,12 @@ local function Replan()
     if cycle or RunBusy() then replanWanted = true; return end
     replanWanted = false
     local pt = R.Perf and R.Perf.on and R.Perf.Start("inventory.guildPrep")
-    local has = P.HasArrangement()
-    local sum = { arrangement = has, at = Now(), seq = GB.Seq() }
+    local has, out = P.HasArrangement(), P.HasWithdraw()
+    local sum = { arrangement = has, withdrawing = out, at = Now(), seq = GB.Seq() }
     if has then
         sum.deposit, sum.organize = Summarize("deposit"), Summarize("reorganize")
     end
+    if out then sum.withdraw = Summarize("withdraw") end
     summary = sum
     if pt then R.Perf.Stop(pt) end
     Notify("summary")
@@ -161,7 +178,7 @@ function P.Status()
     local total, fresh = Counts()
     return { state = st.state, reason = st.reason, tab = cycle and cycle.waiting and cycle.waiting.tab or nil,
         done = fresh, total = total, problems = st.problems, cycles = st.cycles, auto = st.auto,
-        reading = cycle ~= nil, arrangement = P.HasArrangement() }
+        reading = cycle ~= nil, arrangement = P.HasArrangement(), withdraw = P.HasWithdraw() }
 end
 function P.Reading() return cycle ~= nil end
 function P.Cycles() return st.cycles end
@@ -419,7 +436,7 @@ local function Recheck()
     local mine = recheckToken
     C_Timer.After(P.RECHECK, function()
         if mine ~= recheckToken or not Open() then return end
-        if not cycle and not RunBusy() and P.HasArrangement() then
+        if not cycle and not RunBusy() and P.HasWork() then
             local list = Wanted()
             if #list > 0 then P.Request("age", false) end
         end
@@ -447,7 +464,7 @@ GB.Watch(function(what)
         st.auto = 0
         st.problems = {}
         gaveUp = {}
-        if P.HasArrangement() then P.Request("open", false) end
+        if P.HasWork() then P.Request("open", false) end
         Recheck()
         P.QueueReplan()
         Notify("open")
@@ -455,14 +472,14 @@ GB.Watch(function(what)
     end
     if not GB.IsOpen() then return end
     if what == "tabs" then
-        if P.HasArrangement() and not cycle then P.Request("tabs", false) end
+        if P.HasWork() and not cycle then P.Request("tabs", false) end
         P.QueueReplan()
     elseif what == "items" then
         -- the shown tab's items changed (or a tab we asked for arrived): the cycle looks, the summary follows
         if cycle then Advance(cycle) end
         if not cycle then
             Settled()
-            if st.state == "blocked" and (st.reason == "mode" or st.reason == "navigated") and P.HasArrangement() then P.Request("items", false) end
+            if st.state == "blocked" and (st.reason == "mode" or st.reason == "navigated") and P.HasWork() then P.Request("items", false) end
         end
         P.QueueReplan()
     end
@@ -475,7 +492,7 @@ local function Poke()
 end
 MI.OnChange(function()
     if not Open() then return end
-    if P.HasArrangement() and not cycle then P.Request("rules", false) end
+    if P.HasWork() and not cycle then P.Request("rules", false) end
     Poke()
 end)
 
@@ -487,14 +504,14 @@ local EVENTS = {
     -- (only then, and not more than every 2 seconds: this event is frequent)
     GET_ITEM_INFO_RECEIVED = function()
         if not (Open() and summary) or Now() - lastItemPoke < 2 then return end
-        local d, o = summary.deposit, summary.organize
-        if (d and (d.unknown or 0) > 0) or (o and (o.unknown or 0) > 0) then lastItemPoke = Now(); P.QueueReplan() end
+        local d, o, w = summary.deposit, summary.organize, summary.withdraw
+        if (d and (d.unknown or 0) > 0) or (o and (o.unknown or 0) > 0) or (w and (w.unknown or 0) > 0) then lastItemPoke = Now(); P.QueueReplan() end
     end,
     PLAYER_REGEN_ENABLED = function()
-        if st.state == "blocked" and st.reason == "combat" and Open() and P.HasArrangement() then P.Request("combat", false) end
+        if st.state == "blocked" and st.reason == "combat" and Open() and P.HasWork() then P.Request("combat", false) end
     end,
     CURSOR_CHANGED = function()
-        if st.state == "blocked" and st.reason == "cursor" and Open() and P.HasArrangement() then P.Request("cursor", false) end
+        if st.state == "blocked" and st.reason == "cursor" and Open() and P.HasWork() then P.Request("cursor", false) end
     end,
 }
 function P.Sync()
@@ -512,7 +529,7 @@ if gr then
     gr.OnUpdate(function(what)
         if what == "done" or what == "clear" then
             if Open() then
-                if P.HasArrangement() then P.Request("run", true) end
+                if P.HasWork() then P.Request("run", true) end
                 P.QueueReplan()
                 Settled()
             end

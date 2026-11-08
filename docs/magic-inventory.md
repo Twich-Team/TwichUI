@@ -16,15 +16,18 @@ chooser), `tests/test_magic_inventory_settings.lua` (the page), `tests/test_magi
 ## What it does
 
 The player makes rules: which items (categories as the game files them, quality, equipment or not, binding, and lists
-of items to include or never include), what happens to them (Send by mail, Deposit in bank, Deposit in guild bank, Keep
-in bags, Never transfer), and how many of each to keep in the bags. With the feature on, opening a mailbox, the bank or
+of items to include or never include), what happens to them (Send by mail, your bank, a guild bank tab, Keep in bags,
+Never transfer), and how many of each to keep in the bags. A bank or guild bank rule also says which way: **Deposit extras**
+(above the keep amount), **Withdraw to top up** (take whole stacks out until the bags hold the keep amount, never more) or
+**Balance both ways** ("Withdrawing", below). With the feature on, opening a mailbox, the bank or
 a guild bank shows a small **Magic Inventory · N stacks** button just above that window's top right corner (the guild bank has its
 own panel instead: "The guild bank at the bank window"). Clicking it opens the review. Nothing moves until the player presses an action in the review:
 
 - **Mail:** "Prepare mail 1 of 2 to Bankalt" attaches up to 12 stacks in the game's Send Mail window (where the player
   can see them); "Send mail 1 of 2 to Bankalt" sends exactly that mail. Each mail is two clicks; one recipient per mail.
-- **Bank:** "Deposit 8 stacks" moves them one at a time, each confirmed by the game before the next.
-- **Guild bank:** the panel at the bank window (Deposit, Organize bank, Arrangement...), below.
+- **Bank:** "Deposit 8 stacks" moves them one at a time, each confirmed by the game before the next; "Withdraw 2 stacks"
+  takes what withdrawing rules top the bags up with, the same way.
+- **Guild bank:** the panel at the bank window (Deposit, Organize bank, Arrangement..., and Withdraw with a withdrawing rule), below.
 
 Off by default (`modules.magicInventory`, only an explicit `true` is on). Opening an interface never opens the review,
 never prints anything, and never moves anything.
@@ -62,7 +65,9 @@ never prints anything, and never moves anything.
 | `TwichUIDB.magicInventory.shared[destId]` | account | `{ recipient }`, only when the player ticked **All my characters** |
 | `TwichUIDB.magicInventory.never` | account | `{ [itemID] = true }`, the Never transfer list (at most 200) |
 
-A rule: `{ id, name, enabled, kind, dest, cats, qualities, equip, bind, include, exclude, keep }`, plus `stack` on guild
+A rule: `{ id, name, enabled, kind, dest, cats, qualities, equip, bind, include, exclude, keep }`, plus `flow` on bank and
+guild bank rules (`"deposit"` | `"withdraw"` | `"balance"`; absent or unknown reads as `"deposit"`, so an older TwichUI reads a
+withdrawing rule as a depositing one and keeps it rather than dropping it; an arrangement rule is always `"deposit"`), `stack` on guild
 bank rules and `design`, `place`, `rest` on the arrangement editor's guild rules ("The arrangement editor") (`inventory/Rules.lua`
 has the exact shape and limits). Reading never writes; an entry that can't be read is left out of the next write.
 Nothing of a visit (plans, runs, results, what was left out) is saved, so nothing resumes after a reload, a logout,
@@ -79,15 +84,52 @@ imported rule need its recipient).
 
 ## The rules table (settings page)
 
-"Your rules" is a table, one row a rule in priority order: grip, number, on/off, Name, Items, Action, Goes to, Keep, then Up, Dn,
+"Your rules" is a table, one row a rule in priority order: grip, number, on/off, Name, Items, Action, Where, Keep, then Up, Dn,
 Edit, Copy and Delete. Rows are banded; a cell is one line cut off with "..." (the row's tooltip has the full Items,
-Destination, Keep, target stack size and any problem); "Goes to" turns amber when a destination is missing. A row is dragged
+Destination, Keep, target stack size and any problem); "Where" turns amber when a destination is missing. A row is dragged
 by pressing on it away from its controls: a virtual drag (`MagicInventoryDrag.lua`, a label follows the pointer, nothing
 real is picked up) with a line showing where the rule will land, and the page scrolls near the view's top and bottom
 edges. Letting go on a row calls `MI.MoveRuleTo(id, place)`; letting go anywhere else changes nothing, and hiding the
 page ends the drag. Up and Dn stay for one-step moves. Tests: `tests/test_magic_inventory_settings.lua`,
 `MoveRuleTo` in `tests/test_magic_inventory.lua`. Not tried in the game: how the rows look at the real font sizes, and
 the edge scrolling.
+
+## Withdrawing (`MI.BuildWithdraw` in `inventory/Plan.lua`; the guild bank's in `inventory/GuildPlan.lua` and `inventory/GuildRun.lua`)
+
+A bank or guild bank rule with `flow` **withdraw** or **balance** tops the bags up to its keep amount (its **target**, which it
+needs: without one it can't be turned on, "no-target"). Decided per item, for the bank that is open:
+
+- **Which rule:** the first enabled rule of that kind that withdraws and matches the item (a guild bank rule only from its own tab).
+  Rules that deposit or mail don't decide withdrawals.
+- **Protections:** the Never transfer list and an enabled Never transfer rule block withdrawals too (nothing on them moves either way);
+  the rule's own Never include list; a locked stack or one whose lock the game didn't say. A soulbound item may come out of your
+  own bank (it is going to you).
+- **How much:** target minus what the bags carry now. **Whole stacks only, never past the target:** the bank's stacks are taken
+  largest first while each still fits. With 25 carried, a target of 40 and stacks of 20, 20, 10 and 5, the 10 and the 5 come out
+  (40). With 30 carried and only stacks of 20, nothing comes out (50 would pass 40), and the review says "Short by 10: only whole
+  stacks are taken, and the next stack would go over 40". What isn't in the bank stays missing.
+- **No ping-pong:** every enabled rule that withdraws counts its target as a keep amount for the item (Precedence, step 4), so a
+  deposit or mail rule never sends away what a withdrawing rule tops up. A rule that only withdraws never owns an item for deposits
+  or mail; a balance rule owns it as a depositing rule does.
+- **Balance:** above the target it deposits (as Deposit extras), below it withdraws; never both for one item at once.
+
+**At your bank** (`Run.lua`, the review's "Withdraw from your bank" group): only while the bank is open (its bags are read then:
+`C_Bank.FetchPurchasedBankTabIDs`, `C_Container`); the settings' Preview lists no withdrawals. Each stack: found again in the bank
+by item and count, judged again, and **skipped** when the bags now carry so much that it would pass the target (the bags may change
+after the review); then picked up and put on a bag stack of the same item with room, else an empty slot in a bag that can hold it.
+Confirmed when the bank slot no longer holds it and the bag slot shows the right count. No room: "your bags are full", it stops.
+
+**At a guild bank** (the panel's **Withdraw**, shown with an enabled withdrawing rule whose tab is in this guild; GuildPrep reads the
+bank for it as it does for an arrangement): `MI.CurrentGuildPlan("withdraw")` plans one move a stack from the rule's tab to the bags;
+a rule whose tab is unread, hidden, renamed or can't be withdrawn from is reported, never redirected; the rank's remaining withdrawals,
+where the game says them (the shown tab), cap the moves ("limit"). The review gives each move an empty slot of an ordinary bag (no
+profession bags), as the bags are then; none left: "bags-full", left out. The run is the guild bank run (source tab shown, pickup,
+place in the bag, both sides confirmed), and before each move checks the rule still withdraws, the item isn't on the Never transfer
+list, and that the bags as they are now plus the stack stay within the target (otherwise it stops: "over").
+
+Tests: `tests/test_magic_inventory_run.lua` (the bank), `tests/test_magic_inventory_guildwithdraw.lua` (the guild bank plan, review,
+rights, allowance, full bags, a change mid-run), the Withdraw button in `tests/test_magic_inventory_guildpanel.lua`, the editor in
+`tests/test_magic_inventory_settings.lua`. **Not tried in the game.**
 
 ## Precedence (`inventory/Plan.lua`, tested in `tests/test_magic_inventory.lua`)
 
@@ -102,7 +144,7 @@ the edge scrolling.
 3. **A rule's "Also include" list, or its filters** (all set filters must hold; categories are any-of): the rule matches.
    A rule with no filters matches only what it lists.
 4. **Keep amounts:** for each item ID, the most of: the owning rule's "keep N of each", every enabled matching **Keep in
-   bags** rule, and an enabled vendor restocking target for it. Counted over every carried stack of that item (protected
+   bags** rule, the target of every enabled matching rule that withdraws, and an enabled vendor restocking target for it. Counted over every carried stack of that item (protected
    stacks stay, so they count), never the bank or mail. Only what is above it may move.
 5. **The destination must take each stack** (step 1's per-stack checks for that kind).
 6. **Priority:** the first enabled rule in the list that moves items (mail, bank, guild) owns the item, wherever it
@@ -142,7 +184,7 @@ the cursor is never touched and refuses the action.
 **Bank:** a stack goes onto a bank stack of the same item with room for all of it, else an empty slot in a bank bag
 that can hold it (bag family). Confirmed when the bag slot no longer holds it and the bank slot shows exactly the right
 count; uncertain when it left the bag but didn't show up within 4 s; failed when it never left. No room stops the run.
-Nothing is withdrawn, no bank tab is bought, nothing else in the bank is moved.
+Nothing is withdrawn by a deposit (withdrawals are their own action: "Withdrawing"), no bank tab is bought, nothing else in the bank is moved.
 
 **Guild bank:** only into the chosen tab, in the guild it was chosen in, with that tab shown in the guild bank window
 and its name unchanged, and only when `canDeposit` is true; empty slots only. Another guild, a renamed tab or no deposit
@@ -178,7 +220,10 @@ ore, bars and stone together), Uncommon BoE equipment to a friend, Custom items;
 recipient), **Preview** (the review from your bags, no actions), **Destinations on this character** (recipient for this
 character, **All my characters** only when ticked, **Use the tab shown now** with the guild bank open, Rename, Clear here,
 Remove), **Never transfer** (Choose from bags, Add by ID or link). The editor: Name, then 1 Items, 2 Destination, 3
-Exceptions and keep, 4 Review (the rule in one sentence, why it can't be turned on yet, Turn this rule on), Save, Cancel.
+Exceptions and keep, 4 Review (the rule in one sentence, why it can't be turned on yet, Turn this rule on), Save, Cancel. Step 2
+asks **Which way** for a bank or guild bank rule (Deposit extras, Withdraw to top up, Balance both ways; choosing a withdrawing way
+with no keep amount sets 20), and step 3 then calls the keep amount **Target in bags** (a withdraw-only guild rule has no target
+stack size). The table's Action column says Deposit, Withdraw or Balance for those rules, and Where says Bank or the tab.
 
 ## Guild bank previews (`inventory/GuildBank.lua`, `inventory/GuildPlan.lua`, `pages/MagicInventoryGuild.lua`)
 
@@ -498,7 +543,11 @@ in `DX.OPS` and `docs/diagnostics.md`. Gauges `inventory.frames` (review rows an
   `magicInventory` is a value and isn't one of those. Read a report before sharing it.
 - Stopping a mail run doesn't take prepared items back out of the game's Send Mail window: the player removes them or
   closes the mailbox (the game hands them back). The summary says so.
-- Whole stacks only; the account bank isn't a destination.
+- Whole stacks only, both ways: a withdrawal may end under its target rather than split a stack. The account bank isn't a
+  destination or a source, and nothing is withdrawn from mail.
+- Withdrawing from a bank or guild bank has been run only against stand-ins: whether `PickupContainerItem` from a bank slot onto a
+  bag slot, and `PickupGuildBankItem` then `PickupContainerItem` onto an empty bag slot, work from an addon outside a click is
+  unverified, as is how many stacks a withdrawal counts against a rank's daily allowance.
 - A recipient is checked for its form only. Whether it exists, accepts mail, or who plays it isn't known.
 - Disenchantability isn't checked: the template says "Uncommon BoE equipment", nothing more.
 - Rules aren't exported or shared.
@@ -583,3 +632,13 @@ in `DX.OPS` and `docs/diagnostics.md`. Gauges `inventory.frames` (review rows an
     close box, scroll bar and list recess sit inside the frame and nothing is clipped by the rails; buttons lift under the pointer, sink while
     pressed, go flat when unavailable, and never stay lit or sunk after the pointer leaves, after Start or Cancel hides them, or after
     they are disabled mid-click; tooltips and the whole button are clickable; dragging a window still moves it and Esc still closes it.
+27. Withdrawing at your bank (low-value items): a rule **Withdraw to top up**, target 40, for a food; carry 25, put stacks of 20, 20,
+    10 and 5 in the bank. Open the bank: the review has "Withdraw from your bank" with 2 stacks (the 10 and the 5). Withdraw: you
+    carry exactly 40, and the stacks of 20 stay. With only stacks of 20 in the bank and 30 carried, nothing is offered and "Not
+    withdrawn" says "Short by 10". Put the food on the Never transfer list: nothing is offered. Fill your bags: it stops, "your bags
+    are full". **Open question:** do the pickups after the first work outside the click (the run stops if the game blocks them)?
+28. Withdrawing at a guild bank (separately authorized; a tab your rank may withdraw from): the strip says "N stacks to withdraw" and
+    shows **Withdraw**. Start: the source tab shows, each stack lands in an empty bag slot, both sides confirmed. A rank with an
+    allowance of 1: one stack is offered and the other is "left out". Pick up more of the item yourself during the run: it stops
+    ("over") rather than pass the target. **Open questions:** does a withdrawal count one per stack against the allowance, and does
+    the panel fit its buttons at your UI scale (Read again, Withdraw, Deposit, Organize bank, Arrangement)?

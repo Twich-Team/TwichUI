@@ -4,7 +4,8 @@
 -- move, to which recipient or tab, the rule, the keep amount, what stays and why, what another rule has reserved, and
 -- what needs attention. Entries can be left out of this one operation (the rule is unchanged). Then the player acts:
 --   mail:        "Prepare mail 1 of 2 to Bankalt" attaches; "Send mail 1 of 2 to Bankalt" sends (one recipient a mail);
---   bank, guild: "Deposit 8 stacks" moves them one after another.
+--   bank, guild: "Deposit 8 stacks" moves them one after another;
+--   bank:        "Withdraw 3 stacks" takes what rules that withdraw top your bags up with (never past their targets).
 -- Opening an interface only builds the count; nothing moves, nothing is announced, and the review never opens by
 -- itself. The window is built the first time it is shown and reuses its rows. Drawn with the shared framed look (FrameLook.lua):
 -- the illustrated frame, an espresso interior, ivory text, beveled buttons with chestnut for the one primary action, and amber for
@@ -56,6 +57,7 @@ end
 
 local function DestText(g)
     if g.kind == "mail" then return ("Send by mail to %s"):format(g.where and g.where.recipient or "?") end
+    if g.kind == "bank" and g.dir == "withdraw" then return "Withdraw from your bank" end
     if g.kind == "bank" then return "Deposit in your bank" end
     local w = g.where
     return w and ("Deposit in the guild bank of <%s>, tab %d \"%s\""):format(w.guild, w.tab, w.tabName or "?") or "Deposit in the guild bank"
@@ -95,11 +97,12 @@ local function Action(g, forPlan)
             if not done and err then W.Say(err, "warn") end
         end
     end
+    local out = g.dir == "withdraw"
     if cur and cur.group == g then
-        return ("Depositing stack %d of %d..."):format(math.min(cur.index, #g.steps), #g.steps), false
+        return ("%s stack %d of %d..."):format(out and "Withdrawing" or "Depositing", math.min(cur.index, #g.steps), #g.steps), false
     end
     local ok, why = Run.CanDeposit(forPlan, g)
-    return ("Deposit %s"):format(Plural(#g.steps, "stack")), ok, why, function()
+    return ("%s %s"):format(out and "Withdraw" or "Deposit", Plural(#g.steps, "stack")), ok, why, function()
         local done, err = Run.Deposit(forPlan, g)
         if not done and err then W.Say(err, "warn") end
     end
@@ -260,6 +263,12 @@ local function Gap(h) y = y + (h or 8) end
 local CONTEXT_TITLE = { mail = "At the mailbox", bank = "At your bank", guild = "At the guild bank" }
 
 local function EntryDetail(e)
+    if e.target then
+        -- a withdrawal: what it tops up to, and what it can't reach
+        local text = ("%s  \194\183  rule \"%s\"  \194\183  you carry %d, target %d"):format(Plural(e.stacks, "stack"), e.rule, e.carried, e.target)
+        if e.short then text = text .. ("\n%d short after this: %s."):format(e.short, e.shortWhy or "") end
+        return text
+    end
     local parts = { Plural(e.stacks, "stack"), ("rule \"%s\""):format(e.rule) }
     if e.keep > 0 then parts[#parts + 1] = ("keeps %d of %d carried"):format(e.keep, e.carried) end
     local text = table.concat(parts, "  \194\183  ")
@@ -272,7 +281,7 @@ local function DrawResults(r)
     local total = #res.confirmed + #res.failed + #res.skipped + #res.uncertain
     if total == 0 and r.stopReason == "done" then return end
     Gap(6)
-    local verb = r.kind == "mail" and "sent" or "deposited"
+    local verb = r.kind == "mail" and "sent" or (r.dir == "withdraw" and "withdrawn" or "deposited")
     Heading("Last transfer", ("%d %s and confirmed by the game  \194\183  %d didn't move  \194\183  %d skipped  \194\183  %d not confirmed"):format(
         #res.confirmed, verb, #res.failed, #res.skipped, #res.uncertain))
     if r.stopReason and r.stopReason ~= "done" then
@@ -329,8 +338,10 @@ local function Draw()
             end
             if cur and cur.group == g and cur.note then sentence = sentence .. "\n" .. cur.note end
         else
-            local free = Run.IsOpen(g.kind) and Run.FreeSlots(g.kind, g.where)
-            sentence = Plural(g.stacks, "stack") .. (free and ("  \194\183  %d free %s there"):format(free, free == 1 and "slot" or "slots") or "")
+            local out = g.dir == "withdraw"
+            local free = Run.IsOpen(g.kind) and Run.FreeSlots(out and "bags" or g.kind, g.where)
+            sentence = Plural(g.stacks, "stack") .. (free and ("  \194\183  %d free %s %s"):format(free, free == 1 and "slot" or "slots", out and "in your bags" or "there") or "")
+            if out then sentence = sentence .. "\nWhole stacks only, never past a rule's target." end
             if free and free < g.stacks then sentence = sentence .. "\nNot all of these fit: it stops when the room runs out." end
         end
         Heading(DestText(g), sentence, label, enabled, why, onClick)
@@ -350,7 +361,7 @@ local function Draw()
 
     if not any then
         Gap(4)
-        local where = context and ({ mail = "to mail from here", bank = "to deposit in your bank", guild = "to deposit in this guild bank" })[context] or "to move"
+        local where = context and ({ mail = "to mail from here", bank = "to deposit in or withdraw from your bank", guild = "to deposit in this guild bank" })[context] or "to move"
         Heading("Nothing " .. where, #MI.Rules() == 0 and "You haven't made any rules yet. Manage rules opens them in the settings."
             or "None of your rules that are on match what you carry, or what they match stays for the reasons below.")
     end
@@ -362,12 +373,17 @@ local function Draw()
         end
         Gap()
     end
-    if plan and #plan.skipped > 0 then
-        Heading("Staying in your bags", "Matched by a rule, but kept: the reason is beside each.")
-        for _, e in ipairs(plan.skipped) do
-            ItemRow(e.id, e.facts, e.count, e.text .. (e.rule and ("  \194\183  rule \"" .. e.rule .. "\"") or ""), (e.reason == "attention" or e.reason == "pending") and "warn" or "quiet")
+    for _, out in ipairs({ false, true }) do
+        local list = {}
+        for _, e in ipairs(plan and plan.skipped or {}) do if (e.withdraw == true) == out then list[#list + 1] = e end end
+        if #list > 0 then
+            if out then Heading("Not withdrawn", "A rule would top these up from your bank, but they stay there: the reason is beside each.")
+            else Heading("Staying in your bags", "Matched by a rule, but kept: the reason is beside each.") end
+            for _, e in ipairs(list) do
+                ItemRow(e.id, e.facts, (e.count or 0) > 0 and e.count or nil, e.text .. (e.rule and ("  \194\183  rule \"" .. e.rule .. "\"") or ""), (e.reason == "attention" or e.reason == "pending") and "warn" or "quiet")
+            end
+            Gap()
         end
-        Gap()
     end
     if plan and #plan.shadowed > 0 then
         Heading("Shadowed rules", "Also match these items, but a rule above them in your list goes first.")
@@ -389,7 +405,7 @@ local function Draw()
                 sending = "Sending: waiting for the game.", confirming = "The game asks you to confirm. Answer it there.",
                 between = ("Mail %d of %d sent. Prepare the next when you are ready."):format(cur.batchIndex - 1, #cur.group.batches) })[cur.state] or ""
         else
-            status = ("Depositing stack %d of %d. Stop ends it before the next stack."):format(math.min(cur.index, #cur.steps), #cur.steps)
+            status = ("%s stack %d of %d. Stop ends it before the next stack."):format(cur.dir == "withdraw" and "Withdrawing" or "Depositing", math.min(cur.index, #cur.steps), #cur.steps)
         end
     elseif plan then
         status = plan.stacks > 0 and ("%s reviewed. Nothing moves until you press an action above."):format(Plural(plan.stacks, "stack")) or ""
@@ -472,7 +488,7 @@ local function Build()
         Run.Stop("stopped")
     end)
     f.stop:SetPoint("BOTTOMLEFT", PAD, 16)
-    R.Interact.Tip(f.stop, "Stop", "Stops before the next step. What was already sent or deposited stays where it went: mail and deposits can't be undone.")
+    R.Interact.Tip(f.stop, "Stop", "Stops before the next step. What was already sent, deposited or withdrawn stays where it went: none of it is undone.")
     f.manage = F.Button(f, "Manage rules", 120, "secondary", function()
         if R.OpenSettings then R:OpenSettings("magicInventory") end
     end)
@@ -597,7 +613,7 @@ local function Count(kind)
     local groups = {}
     for _, g in ipairs(p.groups) do
         if g.kind == "mail" then groups[#groups + 1] = ("%s: %s"):format(g.where.recipient, Plural(g.stacks, "stack"))
-        else groups[#groups + 1] = ("%s: %s"):format(g.kind == "bank" and "Bank" or ("Guild tab \"" .. (g.where and g.where.tabName or "?") .. "\""), Plural(g.stacks, "stack")) end
+        else groups[#groups + 1] = ("%s: %s"):format(g.kind == "bank" and (g.dir == "withdraw" and "From the bank" or "Bank") or ("Guild tab \"" .. (g.where and g.where.tabName or "?") .. "\""), Plural(g.stacks, "stack")) end
     end
     counts[kind] = { stacks = p.stacks, attention = #p.attention, groups = groups }
     local b = buttons[kind]

@@ -1,6 +1,7 @@
 -- TwichUI: Magic Inventory, carrying out a reviewed guild bank arrangement
--- Two actions, both the player's own click on a reviewed plan: DEPOSIT (carried items into the arrangement's tabs) and ORGANIZE
--- (items already in the guild bank moved to where the arrangement wants them, inside a tab and between tabs). The plan is the one
+-- Three actions, each the player's own click on a reviewed plan: DEPOSIT (carried items into the arrangement's tabs), ORGANIZE
+-- (items already in the guild bank moved to where the arrangement wants them, inside a tab and between tabs) and WITHDRAW (whole
+-- stacks from a withdrawing rule's tab into an empty slot of the bags, never past the rule's target). The plan is the one
 -- GuildPlan.lua makes from the SAVED rules; this file adds the review (what can really be done now, what cannot, and why), the
 -- confirmation (bound to the exact plan and the state it was made from) and the run (one move at a time, each confirmed by reading
 -- the game back). One review and one confirmation cover every tab the plan touches.
@@ -191,7 +192,7 @@ end
 
 local function Key(w) return w.kind == "bag" and ("b%d:%d"):format(w.bag, w.slot) or ("g%d:%d"):format(w.tab, w.slot) end
 
-local function Cross(op) return op.src.kind == "guild" and op.src.tab ~= op.dst.tab end
+local function Cross(op) return op.src.kind == "guild" and op.dst.kind == "guild" and op.src.tab ~= op.dst.tab end
 
 ---------------------------------------------------------------------------
 -- Words
@@ -222,6 +223,7 @@ GR.WHY = {
     ["not-accepted"] = "the destination didn't take the item, so it was put back where it came from",
     mismatch = "the bank doesn't show what was expected",
     error = "something went wrong inside TwichUI",
+    over = "you carry enough of an item now: the next stack would go over its target",
     verify = "the final check didn't match the approved result",
 }
 
@@ -238,6 +240,8 @@ GR.NOT_INCLUDED = {
     more = "Too many moves for one run",
     ["tab-unread"] = "A tab it needs hasn't been read",
     ["tab-rights"] = "Your rank can't do this in a tab it needs",
+    ["bags-full"] = "Your bags have no free slot for it",
+    limit = "Your rank's withdrawals from that tab for today would run out",
 }
 
 ---------------------------------------------------------------------------
@@ -278,7 +282,9 @@ local function Describe(rv)
     local names = {}
     for tab, t in pairs(rv.tabInfo) do names[tab] = t.name end
     rv.tabsText = TabsText(rv.tabs, names)
-    if rv.mode == "deposit" then
+    if rv.mode == "withdraw" then
+        rv.headline = ("Withdraw %s from %s into your bags."):format(Plural(rv.moves, "stack"), rv.tabsText)
+    elseif rv.mode == "deposit" then
         rv.headline = ("Deposit %s from your bags into %s."):format(Plural(rv.moves, "move"), rv.tabsText)
     else
         rv.headline = ("Organize %s: %s."):format(rv.tabsText, Plural(rv.moves, "move"))
@@ -290,6 +296,9 @@ local function Describe(rv)
         #extra > 0 and (", " .. table.concat(extra, ", ")) or "", table.concat(items, ", "))
     for _, d in ipairs(rv.dropped) do
         lines[#lines + 1] = ("Not included: %s \195\151%d \226\128\148 %s."):format(Name(d.id), d.count, d.text)
+    end
+    for _, w in ipairs(rv.ruleNotes or {}) do
+        lines[#lines + 1] = ("Not done: \"%s\" \226\128\148 %s"):format(w.rule, w.why or "")
     end
     if #rv.unread > 0 then
         local un = {}
@@ -314,7 +323,7 @@ GR.Describe = Describe
 -- shows now, across every tab that has been read. opts.allowRun: made from inside a run (its refresh before the first move).
 -- Returns the review: ok, or ok = false with refuse = { code, text }. Reads the bags and the snapshot; changes nothing.
 local function BuildReview(mode, opts)
-    mode = (mode == "reorganize" or mode == "organize") and "reorganize" or "deposit"
+    mode = (mode == "reorganize" or mode == "organize") and "reorganize" or (mode == "withdraw" and "withdraw" or "deposit")
     local pt = R.Perf and R.Perf.on and R.Perf.Start("inventory.guildReview")
     local rv = { mode = mode, made = Now(), ops = {}, dropped = {}, items = {}, itemsMore = {}, tabs = {}, tabInfo = {}, unread = {},
         moves = 0, quantity = 0, splits = 0, crossTab = 0, planBlocked = 0, planUnknown = 0, home = ShownTab() }
@@ -362,6 +371,28 @@ local function BuildReview(mode, opts)
             rv.blockedItems[#rv.blockedItems + 1] = { id = u.id, count = u.count, text = u.text, unknown = u.class == "unknown" }
         end
     end
+    rv.ruleNotes = plan.withdrawRules
+    rv.shortItems = {}
+    for _, it in ipairs(plan.items) do
+        if it.short and #rv.shortItems < 12 then rv.shortItems[#rv.shortItems + 1] = { id = it.id, short = it.short, text = it.shortWhy } end
+    end
+    for _, u in ipairs(mode == "withdraw" and plan.untouched or {}) do
+        if #rv.shortItems < 12 then rv.shortItems[#rv.shortItems + 1] = { id = u.id, text = u.text } end
+    end
+
+    -- a withdrawal's destination: an empty slot of an ordinary bag (no profession bags), as the bags are now, one per move
+    local bagFree = {}
+    if mode == "withdraw" then
+        for bag = 0, MI.LastBag() do
+            local _, family = C_Container.GetContainerNumFreeSlots(bag)
+            if (Num(family) or 0) == 0 then
+                for slot = 1, C_Container.GetContainerNumSlots(bag) or 0 do
+                    if not BagCell(bag, slot) then bagFree[#bagFree + 1] = { kind = "bag", bag = bag, slot = slot } end
+                end
+            end
+        end
+    end
+    local bagNext = 0
 
     -- the model: the cells the moves touch, as the game shows them, changed by each move that can be done
     local cells = {}
@@ -410,11 +441,21 @@ local function BuildReview(mode, opts)
     local candidates = {}
     for _, o in ipairs(plan.ops) do
         local src = o.from.kind == "bag" and { kind = "bag", bag = o.from.bag, slot = o.from.slot } or { kind = "guild", tab = o.from.tab, slot = o.from.slot }
-        local dst = { kind = "guild", tab = o.to.tab, slot = o.to.slot }
+        local dst, noRoom
+        if o.to.kind == "bag" then
+            if o.status == "ok" then bagNext = bagNext + 1 end
+            dst = o.status == "ok" and bagFree[bagNext] or nil
+            if not dst then dst, noRoom = { kind = "bag", bag = -1, slot = o.n }, o.status == "ok" end
+        else
+            dst = { kind = "guild", tab = o.to.tab, slot = o.to.slot }
+        end
         local code, text
         if o.status ~= "ok" then
             code, text = o.code or "blocked", o.why
-        elseif (mode == "deposit" and src.kind ~= "bag") or (mode == "reorganize" and src.kind ~= "guild") then
+        elseif noRoom then
+            code, text = "bags-full", GR.NOT_INCLUDED["bags-full"]
+        elseif (mode == "deposit" and src.kind ~= "bag") or (mode == "reorganize" and src.kind ~= "guild")
+            or (mode == "withdraw" and not (src.kind == "guild" and dst.kind == "bag")) or (mode ~= "withdraw" and dst.kind ~= "guild") then
             code, text = "scope", GR.NOT_INCLUDED.scope
         else
             code, text = TabProblem(dst, true, false)
@@ -452,7 +493,7 @@ local function BuildReview(mode, opts)
             Exclude(o, c.src, c.dst, code, GR.NOT_INCLUDED[code])
         else
             local op = { n = #rv.ops + 1, planN = o.n, kind = o.kind, id = o.id, count = o.count, src = c.src, dst = c.dst, ruleId = o.ruleId,
-                srcBefore = { id = srcC.id, count = srcC.count }, dstBefore = dstC and { id = dstC.id, count = dstC.count } or nil }
+                srcBefore = { id = srcC.id, count = srcC.count }, dstBefore = dstC and { id = dstC.id, count = dstC.count } or nil, target = o.target }
             op.whole = o.count == srcC.count
             op.cross = Cross(op)
             if not op.whole then rv.splits = rv.splits + 1 end
@@ -566,7 +607,7 @@ function GR.Progress()
     return { confirmed = c.confirmed, total = c.total, waiting = (op ~= nil and op.phase ~= nil and not r.needClick) or r.nav ~= nil,
         stopping = r.stop ~= nil, needClick = r.needClick == true, mode = r.mode, tabs = r.review.tabs, tabsText = r.review.tabsText,
         stage = r.stage, reading = r.nav and r.nav.tab or nil,
-        current = op and { id = op.id, count = op.count, tab = op.dst.tab } or nil }
+        current = op and { id = op.id, count = op.count, tab = op.dst.tab or op.src.tab } or nil }
 end
 
 local function OpLine(o)
@@ -772,7 +813,7 @@ local function Boundary(r, op)
     local mode = GB.Mode()
     if mode ~= nil and mode ~= "bank" then return "mode" end
     if ShownTab() ~= PickTab(op) then return "tab" end
-    if RightsProblem(r, op.dst, true, false) then return "rights" end
+    if op.dst.kind == "guild" and RightsProblem(r, op.dst, true, false) then return "rights" end
     if op.src.kind == "guild" then
         local bad, info = RightsProblem(r, op.src, false, true)
         if bad then return "rights" end
@@ -790,6 +831,12 @@ local function Boundary(r, op)
         if not rule or not stack or MI.IsNever(op.id) then return "protected", "never" end
         local problem = MI.StackProblem(stack, "guild", rule)
         if problem then return "protected", problem end
+    end
+    if op.dst.kind == "bag" then
+        -- a withdrawal: still the rule's, never on the Never transfer list, and never past the target with the bags as they are now
+        local rule = MI.Rule(op.ruleId)
+        if not rule or not MI.Withdraws(rule) or MI.IsNever(op.id) then return "protected", "never" end
+        if op.target and MI.Run and MI.Run.CarriedCount(op.id) + op.count > op.target then return "over" end
     end
     return nil
 end
@@ -986,15 +1033,17 @@ local function StepOps(r, op)
     elseif op.phase == "holding" then
         local cur, cid = Cursor()
         if not (cur == "item" and cid == op.id) then return Halt(r, "cursor-changed") end
-        -- the destination's tab: shown (the item stays on the cursor) and read before anything is placed
-        local ok, why = Need(r, op.dst.tab)
-        if ok == nil then
-            if Restore(r, op, why) then return end
-            op.status, op.note = "uncertain", "it is on your cursor"
-            return Halt(r, why)
+        -- the destination's tab: shown (the item stays on the cursor) and read before anything is placed (a bag needs nothing shown)
+        if op.dst.kind == "guild" then
+            local ok, why = Need(r, op.dst.tab)
+            if ok == nil then
+                if Restore(r, op, why) then return end
+                op.status, op.note = "uncertain", "it is on your cursor"
+                return Halt(r, why)
+            end
+            if ok == false then return "wait" end
         end
-        if ok == false then return "wait" end
-        local bad = RightsProblem(r, op.dst, true, false)
+        local bad = op.dst.kind == "guild" and RightsProblem(r, op.dst, true, false) or nil
         local d = Read(op.dst)
         if bad or not Is(d, op.dstBefore) or (d and d.locked) then
             if Restore(r, op, bad or "dest") then return end
@@ -1242,7 +1291,7 @@ function GR.Start(rv)
     for tab, t in pairs(rv.tabInfo) do r.tabNames[tab] = t.name end
     for i, o in ipairs(rv.ops) do
         r.ops[i] = { n = i, kind = o.kind, id = o.id, count = o.count, src = o.src, dst = o.dst, ruleId = o.ruleId, whole = o.whole, cross = o.cross,
-            srcBefore = o.srcBefore, dstBefore = o.dstBefore, srcAfter = o.srcAfter, dstAfter = o.dstAfter, status = "pending" }
+            srcBefore = o.srcBefore, dstBefore = o.dstBefore, srcAfter = o.srcAfter, dstAfter = o.dstAfter, target = o.target, status = "pending" }
     end
     last = nil
     run = r
