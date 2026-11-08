@@ -5,8 +5,12 @@
 -- yourself; what others sent you only if you chose to pass that on), and confirm. What is sent is that list.
 -- Messages, version 1 (serialized, not compressed, so nothing grows on arrival):
 --   offer { v, o = "offer", t = transfer id, k = parts, n = entries }   comes first
---   part  { v, o = "part", t, i = 1..k, l = { entry, ... } }            at most PART_SIZE entries each
--- entry: npcs/Store.lua's wire form { i, n, m, x, y, k, c, p }: no player names, no dates, nothing of the sender's.
+--   part  { v, o = "part", t, i = 1..k, l = { entry, ... } }            at most PART_SIZE entries and PART_ITEMS items each
+-- entry: npcs/Store.lua's wire form { i, n, m, x, y, k, c, p, t, f, s }: no player names, no dates, nothing of the sender's.
+--   f is the side that can deal with the NPC ("A", "H" or "N") and s a merchant's items for sale, as item numbers only (names,
+--   links and icons are each player's own game's). Both are optional, so version 1 stays version 1: an older TwichUI sets
+--   them aside and a list from one has neither. A part holds at most PART_SIZE entries and PART_ITEMS item numbers, so a
+--   list with stock in it is more parts, and it takes longer to send (the question says how long).
 -- Live sharing (opt-in, three separate choices in npcs/Prefs.lua): instead of a list, one small message when you deal with
 -- an NPC for the first time (or it offers a kind it hadn't before), so others' lists grow without long transfers:
 --   live  { v, o = "live", l = { entry, ... } }   at most LIVE_MAX entries, to your group and/or your guild, never a whisper
@@ -38,7 +42,9 @@ local LibDeflate = LibStub("LibDeflate")
 NSH.PREFIX = "TwichUINpc"
 NSH.PROTOCOL = 1
 NSH.PART_SIZE = 150
-NSH.MAX_PARTS = 20                  -- 3000 entries, the size of a whole list
+NSH.PART_ITEMS = 1000               -- item numbers in one part
+NSH.MAX_PARTS = 60                  -- a whole list: 3000 entries, with their stock
+local MAX_STAGE_ITEMS = 60000       -- item numbers taken in from one sender's list
 local MAX_TEXT = 40000              -- one encoded message, after AceComm has joined its pieces
 local STAGE_SECONDS = 180
 local MAX_STAGES = 3
@@ -135,6 +141,7 @@ function NSH.Plan(audience, target, entries, scope)
     end
     local withReports = NP.Get("sendReports")
     local wires, own, reported = {}, 0, 0
+    local isOwn = {}
     local max = NSH.MAX_PARTS * NSH.PART_SIZE
     local present
     if entries then   -- (one forgotten while the question was open is not sent)
@@ -144,17 +151,42 @@ function NSH.Plan(audience, target, entries, scope)
     for _, e in ipairs(entries or NS.Entries()) do
         if #wires >= max then break end
         if (not present or present[e]) and (entries or e.own or withReports) then
-            wires[#wires + 1] = NS.Wire(e)
-            if e.own then own = own + 1 else reported = reported + 1 end
+            local w = NS.Wire(e)
+            wires[#wires + 1] = w
+            isOwn[w] = e.own and true or false
         end
     end
     if #wires == 0 then
         if entries then return nil, "There is nothing to send." end
         return nil, withReports and "Your list is empty." or "You haven't noted any NPCs yourself yet, so there is nothing to send."
     end
-    plan.wires, plan.own, plan.reported = wires, own, reported
+    -- parts of at most PART_SIZE entries and PART_ITEMS item numbers; a list too long for MAX_PARTS ends there, and the
+    -- counts the question gives are of what goes
+    local parts, cur, curItems = {}, {}, 0
+    for _, w in ipairs(wires) do
+        local n = w.s and #w.s or 0
+        if #cur > 0 and (#cur >= NSH.PART_SIZE or curItems + n > NSH.PART_ITEMS) then
+            if #parts >= NSH.MAX_PARTS then cur = nil break end
+            parts[#parts + 1] = cur
+            cur, curItems = {}, 0
+        end
+        cur[#cur + 1] = w
+        curItems = curItems + n
+    end
+    if cur and #cur > 0 then parts[#parts + 1] = cur end
+    local kept, items = 0, 0
+    wires = {}
+    for _, part in ipairs(parts) do
+        for _, w in ipairs(part) do
+            kept = kept + 1
+            wires[kept] = w
+            items = items + (w.s and #w.s or 0)
+            if isOwn[w] then own = own + 1 else reported = reported + 1 end
+        end
+    end
+    plan.wires, plan.parts, plan.partList, plan.count, plan.items = wires, #parts, parts, kept, items
+    plan.own, plan.reported = own, reported
     plan.scope = entries and scope or nil
-    plan.parts = math.ceil(#wires / NSH.PART_SIZE)
     return plan
 end
 
@@ -164,8 +196,11 @@ function NSH.Describe(plan)
     if plan.scope then what = ("%s (%s)"):format(plan.scope, what) end
     local reach = plan.dist == "WHISPER" and ("Only %s receives it."):format(plan.label)
         or ("Everyone in %s with TwichUI receives it; each of them chooses whether to add it."):format(plan.label)
-    return ("Send %s to %s?\n\nEach is its name, its place and what it offers. Nothing about you or your character is in it. %s It takes about %d seconds to send."):format(
-        what, plan.label, reach, math.max(2, math.ceil(#plan.wires / 12)))
+    local stock = plan.items > 0 and (" That includes %d items merchants had for sale (item numbers only)."):format(plan.items) or ""
+    -- the game lets an addon send about 800 characters a second: roughly 66 for an entry and 5 for an item
+    local seconds = math.max(2, math.ceil((plan.count * 66 + plan.items * 5) / 800))
+    return ("Send %s to %s?\n\nEach is its name, its place, which side it serves and what it offers.%s Nothing about you or your character is in it. %s It takes about %s to send."):format(
+        what, plan.label, stock, reach, seconds >= 90 and ("%d minutes"):format(math.ceil(seconds / 60)) or ("%d seconds"):format(seconds))
 end
 
 -- Sends exactly the plan. Returns true when the game took the first message (not that anyone got it), or false and a
@@ -176,11 +211,9 @@ function NSH.Send(plan)
     if SH.Blocked() then return false, "The game isn't letting addons send messages right now. Try again later." end
     lastSend = Now()
     local t = math.random(1, 2 ^ 30)
-    local msgs = { { v = NSH.PROTOCOL, o = "offer", t = t, k = plan.parts, n = #plan.wires } }
+    local msgs = { { v = NSH.PROTOCOL, o = "offer", t = t, k = plan.parts, n = plan.count } }
     for i = 1, plan.parts do
-        local l = {}
-        for j = (i - 1) * NSH.PART_SIZE + 1, math.min(i * NSH.PART_SIZE, #plan.wires) do l[#l + 1] = plan.wires[j] end
-        msgs[#msgs + 1] = { v = NSH.PROTOCOL, o = "part", t = t, i = i, l = l }
+        msgs[#msgs + 1] = { v = NSH.PROTOCOL, o = "part", t = t, i = i, l = plan.partList[i] }
     end
     local refused = false
     for n, msg in ipairs(msgs) do
@@ -197,7 +230,7 @@ function NSH.Send(plan)
         stats.sent = stats.sent + 1
     end
     Trace("sent", plan.dist)
-    R.Print("sending %s from your vendors and trainers list to %s.", Npcs(#plan.wires), plan.label)
+    R.Print("sending %s from your vendors and trainers list to %s.", Npcs(plan.count), plan.label)
     return true
 end
 
@@ -252,8 +285,10 @@ local LIVE_CHANNELS = {
 
 -- What an NPC offers, as one string: the same NPC is passed on again only when this changes.
 local function Signature(w)
-    return ("%d:%d:%d:%d:%s:%s:%s"):format(w.i, w.m, math.floor(w.x / NS.NEAR), math.floor(w.y / NS.NEAR),
-        table.concat(w.k, ","), w.c and table.concat(w.c, ",") or "", w.p or "")
+    local items, sum = w.s and #w.s or 0, 0
+    for i = 1, items do sum = (sum + w.s[i]) % 1000000007 end
+    return ("%d:%d:%d:%d:%s:%s:%s:%s:%d:%d"):format(w.i, w.m, math.floor(w.x / NS.NEAR), math.floor(w.y / NS.NEAR),
+        table.concat(w.k, ","), w.c and table.concat(w.c, ",") or "", w.p or "", w.f or "", items, sum)
 end
 
 local function LiveWanted()
@@ -412,7 +447,7 @@ local function OnOffer(sender, dist, msg)
         for _ in pairs(staging) do n = n + 1 end
         if n >= MAX_STAGES then Drop("too-many-transfers") return end
     end
-    local st = { t = msg.t, k = msg.k, n = msg.n, dist = dist, got = 0, parts = {}, entries = {}, bad = 0 }
+    local st = { t = msg.t, k = msg.k, n = msg.n, dist = dist, got = 0, parts = {}, entries = {}, bad = 0, items = 0 }
     staging[sender] = st
     C_Timer.After(STAGE_SECONDS, function()
         if staging[sender] == st then
@@ -432,7 +467,15 @@ local function OnPart(sender, dist, msg)
     for _, w in ipairs(msg.l) do
         if #st.entries >= st.n then break end
         local f = NS.ReadWire(w)
-        if f then st.entries[#st.entries + 1] = f else st.bad = st.bad + 1 end
+        if f then
+            if f.s then
+                -- (a sender's whole stock is held in memory until the list is in: it is bounded)
+                if st.items + #f.s > MAX_STAGE_ITEMS then f.s = nil else st.items = st.items + #f.s end
+            end
+            st.entries[#st.entries + 1] = f
+        else
+            st.bad = st.bad + 1
+        end
     end
     if st.got == st.k then Finish(sender, false) end
 end

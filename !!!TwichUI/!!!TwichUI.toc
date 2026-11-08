@@ -263,6 +263,8 @@ npcs\Map.lua
 npcs\Minimap.lua
 npcs\Share.lua
 npcs\Knowledge.lua
+npcs\Items.lua
+npcs\Stock.lua
 npcs\Search.lua
 npcs\SearchBar.lua
 npcs\FilterMenu.lua

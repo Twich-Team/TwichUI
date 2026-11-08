@@ -4,6 +4,10 @@
 --   { id = creature id, n = name, m = map, x, y (0..10000 on that map), tags = { [kind] = true },
 --     cls = { [class token] = true } (class trainers), prof = profession name (profession trainers),
 --     t = the line under its name in the game ("Enchanting Reagents"), display text only,
+--     f = which side can deal with it: "A" Alliance, "H" Horde, "N" neutral (either); absent when it was never recorded
+--         (a list from before this was noted, or one sent by an older TwichUI), which reads as either,
+--     s = the items a merchant had for sale, as item ids in ascending order (at most MAX_ITEMS); names, links and icons
+--         are the game's own, looked up by id when they are shown (npcs/Items.lua),
 --     own = true (you dealt with it yourself), seen = how many visits of yours (at most 99),
 --     rep = how many reports of it reached you (at most 99), at = when it was last seen or reported (time()) }
 -- Seen by you or reported by others, never both mixed up: a report never changes an entry you saw yourself (it only
@@ -33,6 +37,10 @@ NS.MAX_ENTRIES = 3000
 NS.MAX_PER_NPC = 4
 NS.NEAR = 400              -- coordinate steps (4% of the map) within which a sighting is the same spawn
 NS.REPORT_DAYS = 120
+NS.MAX_ITEMS = 150         -- the most a merchant's list holds (the game's own limit for one merchant)
+NS.MAX_ITEM_SLOTS = 40000  -- items held in all; past it, what others sent adds no more stock (what you saw always does)
+NS.FACTIONS = { A = "Alliance", H = "Horde", N = "Neutral" }
+local GROUP_CODE = { Alliance = "A", Horde = "H", Neutral = "N" }
 local MAX_COUNT = 99
 local MAX_ID = 2 ^ 31
 local DAY = 86400
@@ -67,6 +75,61 @@ end
 function NS.ValidCoord(n) return Whole(n, 0, NS.COORD) end
 function NS.ValidId(id) return Whole(id, 1, MAX_ID) end
 
+-- The game's faction group word ("Alliance", "Horde", "Neutral") as a code, or nil for anything else.
+function NS.FactionCode(group) return type(group) == "string" and GROUP_CODE[group] or nil end
+
+-- Your own side as a code, or nil when the game doesn't say (nothing is hidden then). Read each time: it is one call, and a
+-- character can choose a side after the game has started (a neutral Pandaren).
+function NS.MyFaction()
+    if not UnitFactionGroup then return nil end
+    local ok, group = pcall(UnitFactionGroup, "player")
+    if not ok or (issecretvalue and issecretvalue(group)) then return nil end
+    return NS.FactionCode(group)
+end
+
+-- Whether a character of side `mine` (NS.MyFaction) can deal with this NPC. An NPC of neither side, or whose side was never
+-- recorded, is for everyone; an NPC of one side is not for the other, and not for a character who has none yet.
+function NS.Usable(e, mine)
+    local f = e.f
+    if f == nil or f == "N" or mine == nil then return true end
+    return f == mine
+end
+
+local function ValidItems(s)
+    if type(s) ~= "table" then return false end
+    local n = 0
+    for _, id in pairs(s) do
+        n = n + 1
+        if n > NS.MAX_ITEMS or not Whole(id, 1, MAX_ID) then return false end
+    end
+    return n == #s
+end
+
+-- Item ids from anywhere (the merchant window, a saved list, a message), as a new list: whole numbers only, once each,
+-- ascending, at most MAX_ITEMS. nil when none are left.
+function NS.CleanItems(list)
+    if type(list) ~= "table" then return nil end
+    local seen, out = {}, {}
+    for _, id in ipairs(list) do
+        if Whole(id, 1, MAX_ID) and not seen[id] then
+            seen[id] = true
+            out[#out + 1] = id
+        end
+    end
+    if #out == 0 then return nil end
+    table.sort(out)
+    for i = #out, NS.MAX_ITEMS + 1, -1 do out[i] = nil end
+    return out
+end
+
+-- Two item lists as one new list (see CleanItems).
+local function UnionItems(a, b)
+    local all = {}
+    for _, id in ipairs(a or {}) do all[#all + 1] = id end
+    for _, id in ipairs(b or {}) do all[#all + 1] = id end
+    return NS.CleanItems(all)
+end
+
 local function ValidTags(tags)
     if type(tags) ~= "table" then return false end
     local any = false
@@ -91,6 +154,7 @@ local function Valid(e)
         and Whole(e.m, 1, MAX_ID) and NS.ValidCoord(e.x) and NS.ValidCoord(e.y) and ValidTags(e.tags)
         and ValidClasses(e.cls) and (e.prof == nil or (type(e.prof) == "string" and #e.prof <= NS.PROF_MAX))
         and (e.t == nil or (type(e.t) == "string" and e.t ~= "" and #e.t <= NS.TITLE_MAX))
+        and (e.f == nil or NS.FACTIONS[e.f] ~= nil) and (e.s == nil or ValidItems(e.s))
         and (e.own == nil or e.own == true) and (e.seen == nil or Whole(e.seen, 0, MAX_COUNT))
         and (e.rep == nil or Whole(e.rep, 0, MAX_COUNT)) and (e.at == nil or Whole(e.at, 0, 2 ^ 40))
 end
@@ -237,6 +301,18 @@ end
 
 local function Spawns(id) return #(Index().byNpc[id] or {}) end
 
+-- How many items the list holds in all, and how many merchants have a stock noted.
+function NS.ItemSlots()
+    local slots, stocked = 0, 0
+    for _, e in ipairs(Index().entries) do
+        if e.s then
+            slots = slots + #e.s
+            stocked = stocked + 1
+        end
+    end
+    return slots, stocked
+end
+
 local function Copy(t)
     if not t then return nil end
     local out = {}
@@ -257,8 +333,9 @@ local function Settle(tags)
 end
 NS.Settle = Settle
 
--- seen: { id, name, map, x, y (0..1 on the map), tags, cls (a token), prof, again (another read during the same visit:
--- what it offered is added, but it is not another visit and the place doesn't move) }. Returns the entry and "new",
+-- seen: { id, name, map, x, y (0..1 on the map), tags, cls (a token), prof, faction ("A", "H" or "N"), items (merchant item
+-- ids as read: a new visit's list replaces the last one, another read of the same visit adds to it), again (another read
+-- during the same visit: what it offered is added, but it is not another visit and the place doesn't move) }. Returns the entry and "new",
 -- "updated" or "confirmed" (a report you have now seen yourself), or nil and a reason code.
 function NS.Observe(seen)
     local db = Store(true)
@@ -275,6 +352,8 @@ function NS.Observe(seen)
     local cls = seen.cls and NK.IS_CLASS[seen.cls] and seen.cls or nil
     local prof = seen.prof and NS.CleanProfession(seen.prof) or nil
     local title = seen.title and NS.CleanTitle(seen.title) or nil
+    local faction = seen.faction and NS.FACTIONS[seen.faction] and seen.faction or nil
+    local items = NS.CleanItems(seen.items)
     local now = time()
     local e = Near(seen.id, seen.map, x, y)
     local status
@@ -289,11 +368,12 @@ function NS.Observe(seen)
             end
             for tag in pairs(seen.tags) do e.tags[tag] = true end
             Settle(e.tags)
+            if items then e.s = seen.again and UnionItems(e.s, items) or items end
             status = "updated"
         else
             -- a report you have now seen for yourself: what you saw replaces what was said
             e.own, e.seen, e.x, e.y = true, 1, x, y
-            e.tags, e.cls = Copy(seen.tags), nil
+            e.tags, e.cls, e.s = Copy(seen.tags), nil, items
             status = "confirmed"
             Invalidate()   -- (its count moves from reported to yours)
         end
@@ -301,11 +381,13 @@ function NS.Observe(seen)
         if cls then e.cls = e.cls or {} e.cls[cls] = true end
         if prof then e.prof = prof end
         if title then e.t = title end
+        if faction then e.f = faction end
         e.at = now
     else
         if Spawns(seen.id) >= NS.MAX_PER_NPC then return NS.Drop("too-many-spawns") end
         if not MakeRoom(db, true) then return NS.Drop("full") end
-        e = { id = seen.id, n = name, m = seen.map, x = x, y = y, tags = Copy(seen.tags), own = true, seen = 1, at = now }
+        e = { id = seen.id, n = name, m = seen.map, x = x, y = y, tags = Copy(seen.tags), own = true, seen = 1, at = now,
+            f = faction, s = items }
         if cls then e.cls = { [cls] = true } end
         if prof then e.prof = prof end
         if title then e.t = title end
@@ -319,13 +401,14 @@ end
 
 ---------------------------------------------------------------------------
 -- What others sent: the wire form, read as untrusted
--- wire: { i = id, n = name, m = map, x, y, k = { codes }, c = { class tokens } (optional), p = profession (optional), t = title (optional) }
+-- wire: { i = id, n = name, m = map, x, y, k = { codes }, c = { class tokens } (optional), p = profession (optional),
+--         t = title (optional), f = "A", "H" or "N" (optional), s = { item ids } (optional, merchants) }
 ---------------------------------------------------------------------------
 function NS.Wire(e)
     local codes = {}
     for tag in pairs(e.tags) do codes[#codes + 1] = NK.BY_ID[tag].code end
     table.sort(codes)
-    local w = { i = e.id, n = e.n, m = e.m, x = e.x, y = e.y, k = codes, p = e.prof, t = e.t }
+    local w = { i = e.id, n = e.n, m = e.m, x = e.x, y = e.y, k = codes, p = e.prof, t = e.t, f = e.f, s = e.s }
     if e.cls then
         local c = {}
         for token in pairs(e.cls) do c[#c + 1] = token end
@@ -371,7 +454,26 @@ function NS.ReadWire(w)
         title = NS.CleanTitle(w.t)
         if not title then return NS.Drop("bad-title") end
     end
-    return { id = w.i, n = name, m = w.m, x = w.x, y = w.y, tags = tags, cls = cls, prof = prof, t = title }
+    local faction
+    if w.f ~= nil then
+        if type(w.f) ~= "string" or not NS.FACTIONS[w.f] then return NS.Drop("bad-faction") end
+        faction = w.f
+    end
+    local items
+    if w.s ~= nil then
+        -- a stock belongs to a merchant: whole numbers only, in range, and no more than a merchant holds
+        if type(w.s) ~= "table" or #w.s > NS.MAX_ITEMS then return NS.Drop("bad-items") end
+        local hasStock = false
+        for id in pairs(tags) do
+            if NK.BY_ID[id].section == "vendors" then hasStock = true end
+        end
+        if not hasStock then return NS.Drop("bad-items") end
+        for i = 1, #w.s do
+            if not Whole(w.s[i], 1, MAX_ID) then return NS.Drop("bad-items") end
+        end
+        items = NS.CleanItems(w.s)
+    end
+    return { id = w.i, n = name, m = w.m, x = w.x, y = w.y, tags = tags, cls = cls, prof = prof, t = title, f = faction, s = items }
 end
 
 -- What merging these (ReadWire results) would do: { new, more (a report of one you know only from reports, adding
@@ -397,6 +499,7 @@ function NS.MergeReported(list)
     if not db or not Writable(db) then result.refused = #list return result end
     local pt = Perf.on and Perf.Start("npcs.import")
     local now = time()
+    local slots = NS.ItemSlots()
     for _, f in ipairs(list) do
         local e = Near(f.id, f.m, f.x, f.y)
         if e then
@@ -406,6 +509,15 @@ function NS.MergeReported(list)
             else
                 for tag in pairs(f.tags) do e.tags[tag] = true end
                 Settle(e.tags)
+                if f.f and not e.f then e.f = f.f end
+                if f.s then
+                    local merged = UnionItems(e.s, f.s)
+                    local gain = #merged - #(e.s or {})
+                    if gain <= 0 or slots + gain <= NS.MAX_ITEM_SLOTS then
+                        e.s = merged
+                        slots = slots + gain
+                    end
+                end
                 if f.cls then
                     e.cls = e.cls or {}
                     for token in pairs(f.cls) do e.cls[token] = true end
@@ -416,8 +528,11 @@ function NS.MergeReported(list)
                 result.more = result.more + 1
             end
         elseif Spawns(f.id) < NS.MAX_PER_NPC and MakeRoom(db, false) then
+            local stock = f.s
+            if stock and slots + #stock > NS.MAX_ITEM_SLOTS then stock = nil end
+            slots = slots + (stock and #stock or 0)
             Add(db, { id = f.id, n = f.n, m = f.m, x = f.x, y = f.y, tags = Copy(f.tags), cls = Copy(f.cls),
-                prof = f.prof, t = f.t, rep = 1, at = now })
+                prof = f.prof, t = f.t, f = f.f, s = stock, rep = 1, at = now })
             result.added = result.added + 1
         else
             result.refused = result.refused + 1
@@ -510,5 +625,11 @@ function NS.Snapshot()
     local stored = db and #db.list or 0
     local drops = {}
     for k, v in pairs(NS.drops) do drops[k] = v end
-    return { own = own, reported = reported, unreadable = stored - own - reported, newer = NS.Newer(), drops = drops }
+    local slots, stocked = NS.ItemSlots()
+    local sided, either = 0, 0
+    for _, e in ipairs(NS.Entries()) do
+        if e.f == "A" or e.f == "H" then sided = sided + 1 else either = either + 1 end
+    end
+    return { own = own, reported = reported, unreadable = stored - own - reported, newer = NS.Newer(), drops = drops,
+        itemSlots = slots, stocked = stocked, oneSide = sided, forEveryone = either }
 end

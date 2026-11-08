@@ -10,6 +10,10 @@
 --     so the rows are the nearest ones (npcs/Search.lua says how, and what is not compared). Nothing moves the rows
 --     afterwards: no polling, no reordering while you choose. A change to the list while the results are open searches
 --     again once, with the place read for those results, so the order only changes where the list did.
+--   Items. A merchant is also found by something it sells ("acorn"): the row then says "Sells Acorn" where the role would
+--     be, its tooltip names the matching items, and choosing it shows the merchant on the map as any other result does.
+--     An item this client hasn't met has no name to search yet; while the list is open those are asked for from the game
+--     a few at a time (npcs/Items.lua), and the list searches again once, when some arrive. Closing the list stops it.
 --   The results are a capped list under the bar (at most SR.MAX_RESULTS rows, made when first needed and reused): the name, the role, the area and,
 --     only when it can be told, how far in a straight line. A row is one place; two of the same name in one area also
 --     show their coordinates. Mouse, Up/Down, Enter; Esc closes the list and lets go of the field. An empty field says
@@ -39,9 +43,9 @@ local ICON = 18
 local CLICK_PRIORITY = 120                          -- above the tool bar's (110); never takes a click, only notes it
 local MAX_TEXT = 48
 local PLACEHOLDER = "Search known NPCs\226\128\166"
-local HINT = "Type a name or a role, like innkeeper. Only NPCs in your list are searched."
+local HINT = "Type a name, a role like innkeeper, or an item a merchant sells. Only NPCs in your list are searched."
 local PLACEHOLDER_G = "Search NPCs and guildmates\226\128\166"
-local HINT_G = "Type a name, a role like innkeeper, or a guildmate. Only NPCs in your list and guildmates sharing a position are searched."
+local HINT_G = "Type a name, a role like innkeeper, an item a merchant sells, or a guildmate. Only NPCs in your list and guildmates sharing a position are searched."
 
 local installed = false
 local box, edit, list, rows
@@ -91,6 +95,7 @@ function SB.Open() return open end
 local function CloseList(keepFocus)
     token = token + 1
     open = false
+    if R.NpcItems then R.NpcItems.Release() end
     results, total, sel, spot = {}, 0, 0, nil
     if list and list:IsShown() then list:Hide() end
     if GameTooltip and GameTooltip.Hide and rows then
@@ -154,6 +159,17 @@ local function Tip(row)
     GameTooltip:SetText(e.n, 1, 1, 1, 1, true)
     if e.t then GameTooltip:AddLine(e.t, 0.86, 0.69, 0.30, true) end
     for _, line in ipairs(NMAP.KindLines(e)) do GameTooltip:AddLine("\226\128\162 " .. line, 0.78, 0.74, 0.66) end
+    if r.items then
+        local NI = R.NpcItems
+        GameTooltip:AddLine("Sells:", 0.86, 0.69, 0.30)
+        for _, id in ipairs(r.items) do
+            local cr, cg, cb = NI.Color(id)
+            GameTooltip:AddLine(NI.Name(id) or ("Item " .. id), cr or 1, cg or 1, cb or 1)
+        end
+        if (r.itemCount or 0) > #r.items then
+            GameTooltip:AddLine(("and %d more that match"):format(r.itemCount - #r.items), 0.62, 0.58, 0.51)
+        end
+    end
     GameTooltip:AddLine(("%s (%s)"):format(r.zone, r.place), 0.62, 0.58, 0.51)
     if r.dist then
         GameTooltip:AddLine(("About %s away, in a straight line. Not a walking distance."):format(SR.DistanceText(r.dist)), 0.78, 0.74, 0.66, true)
@@ -341,13 +357,23 @@ local function Build(bar)
         if open then return end
         GameTooltip:SetOwner(self, "ANCHOR_BOTTOMLEFT", 0, -2)
         GameTooltip:SetText(Guild() and "Search NPCs and guildmates" or "Search known NPCs", 1, 1, 1)
-        GameTooltip:AddLine("Finds the vendors, trainers and services in your list, nearest first, and shows one on the map. Only NPCs you have noted or been sent are searched; nothing is looked up.", 0.78, 0.74, 0.66, true)
+        GameTooltip:AddLine("Finds the vendors, trainers and services in your list, nearest first, and shows one on the map. Merchants are found by what they sell too, like an item's name. Only NPCs you have noted or been sent are searched; no NPC is looked up.", 0.78, 0.74, 0.66, true)
         if Guild() then
             GameTooltip:AddLine("Guildmates who are sharing a position are found too, at the place they were last seen. That is not live tracking.", 0.78, 0.74, 0.66, true)
         end
         GameTooltip:Show()
     end)
     edit:SetScript("OnLeave", function() GameTooltip:Hide() end)
+end
+
+-- "Sells Acorn", "Sells Acorn, Oak Acorn +2": what a merchant was found by, in place of its role.
+function SB.ItemsText(r)
+    local NI = R.NpcItems
+    local names = {}
+    for i, id in ipairs(r.items) do names[i] = NI.Name(id) or ("Item " .. id) end
+    local text = "Sells " .. table.concat(names, ", ")
+    if (r.itemCount or 0) > #r.items then text = text .. (" +%d"):format(r.itemCount - #r.items) end
+    return text
 end
 
 -- Draws the list for the current results (or the one line that stands in for them).
@@ -416,6 +442,7 @@ function SB.Show()
                 row.meta:SetText(table.concat(parts, " \194\183 "))
             else
                 local role = r.more > 0 and ("%s +%d"):format(r.role, r.more) or r.role
+                if r.items then role = SB.ItemsText(r) end
                 row.meta:SetText(r.coords and ("%s \194\183 %s (%s)"):format(role, r.zone, r.place) or ("%s \194\183 %s"):format(role, r.zone))
             end
             Paint(row.meta, pal.textDim)
@@ -512,6 +539,7 @@ local function Again()
     end)
 end
 NS.OnChange(Again)
+if R.NpcItems then R.NpcItems.OnNames(function() Again() end) end   -- names arrived: a merchant may now match
 
 -- The guild records changed (guildloc/Map.lua): only a guildmate shown in the results who is no longer shared makes a new
 -- search; one who merely moved or arrived does not, so the rows stay where they are while one is chosen.

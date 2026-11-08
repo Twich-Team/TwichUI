@@ -7,12 +7,17 @@
 --   Where:  your own place on the map the game says you are on (C_Map.GetBestMapForUnit, GetPlayerMapPosition): the
 --           client tells addons where the player is, not where the NPC is, so the mark is a few yards out. Nothing is
 --           noted inside an instance or anywhere the game gives no position.
+--   Side:   UnitFactionGroup("npc"): "Alliance" or "Horde" for an NPC of one side; none, or "Neutral", for one that deals
+--           with everybody. Recorded so a character of the other side is not shown an NPC it cannot talk to. A reading the
+--           game doesn't give leaves the NPC's side unrecorded (it then shows for everyone, as before).
 --   What:   npcs/Kinds.lua decides from the facts read here:
 --             PLAYER_INTERACTION_MANAGER_FRAME_SHOW (type)  a service (bank, inn, auction house, stable, flight master,
 --                                                           spirit healer, guild registrar)
 --             MERCHANT_SHOW, MERCHANT_UPDATE                the items for sale (their item class) and CanMerchantRepair;
 --                                                           read when the window opens and again a moment later and on
---                                                           an update (the list can arrive in parts), at most once a second
+--                                                           an update (the list can arrive in parts), at most once a second;
+--                                                           the items' ids are kept too (npcs/Store.lua's stock), nothing else
+--                                                           about them
 --             TRAINER_SHOW                                  C_Trainer.GetTrainerType, and the profession's name from the
 --                                                           first service's skill line (GetTrainerServiceSkillLine)
 -- The probe (/tui npcs probe, for this session only): prints what the game reported at each such window to your own chat
@@ -69,6 +74,17 @@ local function Title()
     return text
 end
 
+-- The side of the NPC whose window is open: "A", "H" or "N", or nil when the game gave nothing readable.
+local function Faction()
+    if not UnitFactionGroup then return nil end
+    local ok, group = pcall(UnitFactionGroup, "npc")
+    if not ok then return nil end
+    if group ~= nil and issecretvalue and issecretvalue(group) then return nil end
+    if group == nil then return "N" end   -- (a creature of neither side has no faction group)
+    return NS.FactionCode(group)
+end
+NC.Faction = Faction
+
 -- Where you are: map, x, y (0..1), or nil and a reason code.
 local function Here()
     if IsInInstance then
@@ -113,7 +129,8 @@ local function Note(facts, what)
             (ok and type(px) == "number") and ("given (%.0f, %.0f, map %s)"):format(px, py, tostring(pmap)) or "not given")
     end
     local title = Title()
-    if probe then Say("title under the name: %s", title or "none") end
+    local faction = Faction()
+    if probe then Say("title under the name: %s; side: %s", title or "none", faction and NS.FACTIONS[faction] or "not given") end
     if not map then return end
     facts.playerClass = UnitClassBase and Plain(UnitClassBase("player")) or nil
     local kind = NK.Classify(facts)
@@ -128,7 +145,7 @@ local function Note(facts, what)
     -- a merchant's list read again during the same visit adds what it offered; it is not another visit
     local again = facts.merchant and visit ~= nil and visit.noted == id
     local entry, status = NS.Observe({ id = id, name = name, map = map, x = x, y = y, tags = kind.tags, cls = kind.cls,
-        prof = kind.prof, title = title, again = again })
+        prof = kind.prof, title = title, faction = faction, items = facts.itemIds, again = again })
     if entry and facts.merchant and visit then visit.noted = id end
     if not entry then return Skip(status or "refused") end
     stats.noticed = stats.noticed + 1
@@ -154,9 +171,10 @@ local function ReadMerchant()
     stats.reads = stats.reads + 1
     local n = GetMerchantNumItems and Plain(GetMerchantNumItems())
     if type(n) ~= "number" then return Skip("merchant-unreadable") end
-    local items, counts = {}, {}
+    local items, counts, ids = {}, {}, {}
     for i = 1, math.min(n, 200) do
         local id = GetMerchantItemID and Plain(GetMerchantItemID(i))
+        if NS.ValidId(id) then ids[#ids + 1] = id end
         if id and C_Item and C_Item.GetItemInfoInstant then
             local ok, _, _, _, _, _, classID, subClassID = pcall(C_Item.GetItemInfoInstant, id)
             classID, subClassID = ok and Plain(classID) or nil, ok and Plain(subClassID) or nil
@@ -181,10 +199,10 @@ local function ReadMerchant()
         local list = {}
         for key, c in pairs(counts) do list[#list + 1] = key .. " x" .. c end
         table.sort(list)
-        Say("merchant: %d listings, item class.subclass: %s; repairs: %s", n, #list > 0 and table.concat(list, ", ") or "none",
-            repair and "yes" or "no")
+        Say("merchant: %d listings, item class.subclass: %s; repairs: %s; %d item ids kept", n, #list > 0 and table.concat(list, ", ") or "none",
+            repair and "yes" or "no", #ids)
     end
-    Note({ merchant = true, items = items, repair = repair }, "merchant")
+    Note({ merchant = true, items = items, itemIds = ids, repair = repair }, "merchant")
 end
 
 local function OnMerchantShow()

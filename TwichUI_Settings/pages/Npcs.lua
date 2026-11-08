@@ -32,7 +32,7 @@ end
 K.Page({
     key = "npcs", icon = "vendors", name = "Vendors and trainers", tab = "On the map", order = 75, group = "map",
     description = "The vendors, trainers and services you deal with, noted where they stand and shown on your world map by the kinds you choose.",
-    keywords = "npc npcs vendor vendors merchant reagent reagents ammo ammunition arrows bullets food drink trade supplies repair recipes bags trainer trainers class profession pet innkeeper inn banker bank auctioneer auction stable flight master spirit healer guild map markers icons",
+    keywords = "npc npcs vendor vendors merchant items sold sells stock alliance horde faction reagent reagents ammo ammunition arrows bullets food drink trade supplies repair recipes bags trainer trainers class profession pet innkeeper inn banker bank auctioneer auction stable flight master spirit healer guild map markers icons",
     when = function() return R.NpcStore ~= nil and R.NpcPrefs ~= nil end,
     overview = { label = "Vendors and trainers", tip = "The vendors, trainers and services you have dealt with, on your world map.",
         status = function() return K.OnOff(On()) end },

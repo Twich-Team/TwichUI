@@ -129,9 +129,10 @@ local function Collect(map)
     nearFor = map
     wipe(near)
     Relate(map)
+    local mine = NS.MyFaction()
     for _, e in ipairs(NS.Entries()) do
         if relate[e.m] then
-            local kind = NMAP.ShownKind(e)
+            local kind = NMAP.ShownKind(e, mine)
             if kind then near[#near + 1] = { e = e, kind = kind } end
         end
     end

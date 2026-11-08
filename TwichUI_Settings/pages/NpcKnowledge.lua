@@ -181,6 +181,7 @@ local function PaintDetails()
     if d.title then text[#text + 1] = '"' .. d.title .. '"' end
     text[#text + 1] = table.concat(d.roles, ", ")
     text[#text + 1] = d.place
+    text[#text + 1] = d.stock and (d.faction .. " \194\183 " .. d.stock) or d.faction
     text[#text + 1] = table.concat(d.sources, " ")
     f.dBody:SetText(table.concat(text, "\n"))
     G.Color(f.dBody, pal.textDim)

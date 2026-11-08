@@ -21,6 +21,9 @@ you theirs when they choose.
 | Profession name | `GetTrainerServiceSkillLine(1)` at a Tradeskills trainer | `Blizzard_TrainerUI/Mainline/Blizzard_TrainerUI.lua` |
 | Item classes | Consumable 0 (Fooddrink subclass 5), Container 1, Reagent 5, Projectile 6, Tradegoods 7, Recipe 9, Quiver 11 | `ItemConstantsDocumentation.lua` |
 | The NPC | the creature id from `UnitGUID("npc")` (`Creature-0-…-<id>-<spawn>`), its name from `UnitName("npc")` | `UnitDocumentation.lua`; `modules/RefreshmentsTrade.lua` reads `UnitGUID("NPC")` |
+| The NPC's side | `UnitFactionGroup("npc")` while its window is open: `Alliance`, `Horde`, `Neutral`, or nothing for a creature of neither side (recorded as neutral). A value the game won't give leaves the side unrecorded. Your own side is `UnitFactionGroup("player")`, read each time it is needed | `UnitDocumentation.lua` (documented, not shown to work on NPCs: the probe prints it); `Blizzard_UnitFrame/Shared/UnitFrameUtil.lua` uses the same call and treats `Neutral` as no side |
+| The items a merchant sells | the ids from `GetMerchantItemID(i)` (item ids only, up to 150) | `MerchantFrameDocumentation.lua` |
+| An item's name, icon, colour, link, tooltip | looked up from the id when shown: `C_Item.GetItemNameByID`, `GetItemIconByID`, `GetItemQualityByID`, `GetItemQualityColor`, `GetItemInfo`; `GameTooltip:SetItemByID`; for an item the client hasn't met `C_Item.RequestLoadItemDataByID` and `GET_ITEM_INFO_RECEIVED` | `ItemDocumentation.lua`; `Blizzard_ItemButton/Mainline/ItemButtonTemplate.lua` (`HandleModifiedItemClick`) |
 | Where | `C_Map.GetBestMapForUnit("player")` and `C_Map.GetPlayerMapPosition(map, "player")`: **your** place, not the NPC's | `MapDocumentation.lua` |
 
 `Enum` values are used when the client has them, the documented numbers otherwise.
@@ -42,7 +45,20 @@ innkeeper who also sells food shows as an innkeeper unless innkeepers are hidden
 
 `TwichUIDB.npcs = { v = 1, list = { entry } }`, account-wide (like map pins): not part of a profile, a backup, a restore
 or a shared setup (`setup/Restore.lua`'s `OWN_LEFT_OUT`, `setup/TwichConfig.lua`'s `LOCAL`), and protected from the Saved
-Data Explorer's cleanup. Entry: `{ id, n (name), m (map), x, y (0..10000), tags, cls, prof, own, seen, rep, at }`.
+Data Explorer's cleanup. Entry: `{ id, n (name), m (map), x, y (0..10000), tags, cls, prof, t (title), f (side), s (stock), own, seen, rep, at }`.
+
+- **Side.** `f` is `"A"` (Alliance), `"H"` (Horde) or `"N"` (neutral, deals with both), from `UnitFactionGroup("npc")` at the
+  window. An NPC of the other side is never drawn on the map or the minimap and never a search result for a character
+  (`NpcStore.Usable`); the World Knowledge tab still lists it, with its side. **An entry with no `f` shows for everyone**:
+  that is every NPC noted before sides were recorded, and any sent by a TwichUI that doesn't send one. It gets its side the
+  next time you deal with it (a visit never loses a side it knew), or from a report that has one. A report never flips a
+  side that is known, and never changes an NPC you saw. If the game gives no side for your own character, nothing is hidden.
+  A neutral character (a Pandaren who hasn't chosen) is shown the neutral NPCs only.
+- **Stock.** `s` is the merchant's item ids, ascending, at most 150: ids only, no names, prices or counts (names and icons
+  are the game's own for each player, and an id is the same in every language). A new visit replaces the list; another read
+  in the same visit (the list can arrive in parts) adds to it. A report adds to a reported merchant's stock and never changes
+  one you saw. Past 40,000 item ids held in all, what others send adds no more stock (the NPC is still noted); your own
+  visits always do.
 
 - **Yours or reported.** `own = true` is an NPC you dealt with yourself. Anything another player sent you is a report
   (`own` absent, `rep` counts the reports). A report never changes an entry of yours (it only counts as one more report);
@@ -74,10 +90,21 @@ Data Explorer's cleanup. Entry: `{ id, n (name), m (map), x, y (0..10000), tags,
   places are round, so they differ by shape. Reports are dimmed (60%) and greyed, and their tooltip says "not seen by you
   yet". At most 300 at once.
 - A click opens the NPC's actions: **Set waypoint** (the game's own; replaces yours), **Pin this place** (the new pin
-  window; needs Party pins), **Navigate here** (while Navigation is on), **Forget this NPC**. Nothing happens until one
+  window; needs Party pins), **Navigate here** (while Navigation is on), **Forget this NPC**; a merchant also has
+  **Show items for sale** (first), greyed with its reason until some stock is noted. Nothing happens until one
   is chosen. Alt, Shift and Ctrl clicks go to the map's own click handlers, so the pin and ping shortcuts work over a
   marker.
 - Redrawn when the map, the list or a choice changes; nothing runs per frame.
+
+## What a merchant sells
+
+**Show items for sale** (`npcs/Stock.lua`) opens one small window, reused, over the map: the merchant's name, area and how it
+became known (seen by you, or reported), then its items, each with its icon, its full name in its quality colour and the game's own
+tooltip on hover. Shift-click links the item in your chat box (the game's usual item click, `HandleModifiedItemClick`). A filter
+box narrows a long list. Items are sorted by name; one the client hasn't met yet shows as "Item 1234" and is asked for from the
+game, a few at a time (once each per session), and the list settles as names arrive. It shows what was seen the **last time the
+merchant's window was open**, not a promise: a merchant's stock can differ by level, reputation or season. No prices, no purchases,
+nothing is sent. It closes with Esc, when the merchant leaves the list, and when the feature goes off.
 
 ## Sharing
 
@@ -85,11 +112,14 @@ Data Explorer's cleanup. Entry: `{ id, n (name), m (map), x, y (0..10000), tags,
 `/tui npcs send party|guild|<name>`; `send` alone asks for a name, filling in your target if it is a player).
 
 - **What goes.** Only NPCs you dealt with yourself, unless "Also send what others sent you" is on. Each entry is
-  `{ i, n, m, x, y, k (kind codes), c (class tokens), p (profession) }`: nothing about the sender, no dates. The question
-  before sending states the count; what is sent is exactly that list.
-- **Messages.** `offer { t, k (parts), n (entries) }` then `part { t, i, l }` of at most 150 entries each, at most 20
-  parts. Serialized, not compressed (nothing grows on arrival). Sent at BULK priority through AceComm and
-  ChatThrottleLib. One send every 20 seconds.
+  `{ i, n, m, x, y, k (kind codes), c (class tokens), p (profession), t (title), f (side), s (item ids) }`: nothing about the
+  sender, no dates. `f` and `s` are optional, so protocol 1 is unchanged: an older TwichUI sets them aside, and a list from one
+  has neither. The question before sending states the count and the number of items; what is sent is exactly that list.
+- **Messages.** `offer { t, k (parts), n (entries) }` then `part { t, i, l }` of at most 150 entries and 1,000 item ids each, at most
+  60 parts (an older TwichUI refuses an offer of more than 20 parts, so it never reads a long list wrongly). Serialized, not
+  compressed (nothing grows on arrival). Sent at BULK priority through AceComm and ChatThrottleLib, which lets about 800
+  characters through a second, so **a list with stock in it takes longer** (a full one, minutes); the question says how long.
+  One send every 20 seconds.
 - **Receiving** checks, before anything is kept: the switch, the receive choice, readable text, the channel (whisper,
   party, raid, instance, guild), that a group message comes from someone in your group now, a per-sender rate
   (a burst of 25, then one a second), the size (40,000 characters), the version, the offer's numbers, each part once,
@@ -115,7 +145,7 @@ guild (each its own), and take in what others tell. No question is asked per NPC
   version, every entry through `ReadWire`) and its own rate per sender (a burst of 20 entries, then one every 10
   seconds). Whisper is not accepted. Accepted entries are added through `MergeReported` quietly: reports from others,
   never changing an NPC you saw yourself, nothing printed. A TwichUI without live sharing sets the message aside as an
-  unknown op.
+  unknown op. A live message carries the side and the stock too; an NPC is sent again when either changes.
 - The "Lists sent to you" choice is about whole lists only; `Don't take any` there does not stop live messages, and the
   live choice does not stop lists.
 
@@ -144,6 +174,13 @@ With **Show NPC search** on (Map Toolbar, `docs/map-tools.md`), the bar has a fi
 the map (`NpcMap.Locate`, `npcs/Search.lua`, `npcs/SearchBar.lua`). A marker the kinds above hide is drawn only while it is
 picked out; nothing saved changes and nothing is sent.
 
+The same field finds a **merchant by what it sells**: type an item's name ("acorn") and the merchants that sell it appear like any
+other result, nearest first, the row saying "Sells Tough Acorn" in place of the role (`npcs/Items.lua`, `Search.lua`). The words an
+item's name lacks are looked for in the NPC's own text, so "acorn goldshire" works; an NPC that matches by its own text is not
+also described by items. Searching only matches items whose names this client has, so for the rest the search asks the game for
+names while the list is open (at most 20 every half second, 1,500 in a session, nothing once the list closes) and searches again
+once when some arrive. An NPC of the other side is never a result.
+
 With **Show NPC filter button** on (the same page), a funnel button on the bar opens a menu of these kinds (`npcs/FilterMenu.lua`): the
 same `show.<kind>` choices as the settings, so the two always agree. See `docs/map-tools.md` (NPC filter button).
 
@@ -157,7 +194,7 @@ same `show.<kind>` choices as the settings, so the two always agree. See `docs/m
 `/tui npcs probe` (or the Probe button) prints, for this session only, what the game reported at each merchant, trainer
 or service window: the interaction type, the NPC's creature id and name, your map and place, whether the client gives
 the NPC's own position (`UnitPosition("npc")`), the merchant's items by class and subclass, repairs, the trainer type and
-skill line, and what would be noted. Nothing is saved or sent. With the switch off it only prints.
+skill line, the NPC's side, how many item ids were kept, and what would be noted. Nothing is saved or sent. With the switch off it only prints.
 
 ## Still to check in the game
 
@@ -172,3 +209,12 @@ skill line, and what would be noted. Nothing is saved or sent. With the switch o
 7. Markers on the world map and on map exploration's seamless map: placement, the click menu, dimmed reports.
 8. Sharing between two or more clients over whisper, party and guild: the question, auto from guild, a whisper asking
    on auto, and how long a full list takes to arrive.
+9. `UnitFactionGroup("npc")` returns `Alliance` or `Horde` for faction NPCs and nothing (or `Neutral`) for neutral ones such as
+   Booty Bay's (the probe prints "side"). Until this is seen, a wrong or missing answer shows an NPC to both sides, as before.
+10. `GetMerchantItemID` is filled for every listing once the merchant's list is in, and stock lists look right for a merchant
+    with more than one page.
+11. For an item this client has never met: `C_Item.RequestLoadItemDataByID` brings in its name, `GET_ITEM_INFO_RECEIVED` fires,
+    and a search for it then finds the merchant. Items other players' lists mention are the case that matters.
+12. **Show items for sale** over the world map: the window sits above it, rows have the right icon, name colour and tooltip,
+    Shift-click links the item into chat, and Esc closes it.
+13. How long a list with stock takes to arrive, and that live messages with stock don't hold up the other addon traffic.

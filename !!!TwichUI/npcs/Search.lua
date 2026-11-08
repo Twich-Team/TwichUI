@@ -4,7 +4,11 @@
 -- (npcs/SearchBar.lua draws it).
 --   What matches. Every word of the query has to appear in the NPC's name, area, role, title or profession, in any order,
 --     without regard to case, as plain text (never a pattern): the World Knowledge tab's own filter, so the two agree.
---     An empty query matches nothing (the list is not shown whole).
+--     Or the name of an item a merchant is known to sell (npcs/Items.lua): "acorn" finds the merchants that sell one, and
+--     the words an item's name lacks are looked for in the NPC's own text ("acorn goldshire"). An NPC that matches by its
+--     own text is not also described by items. An empty query matches nothing (the list is not shown whole).
+--   Only NPCs your character can deal with. One of the other side (Alliance or Horde, npcs/Store.lua's Usable) is never a
+--     result; one whose side was never recorded counts as for everyone.
 --   A result is one place. An NPC with several known places is several entries (npcs/Store.lua), and each is its own
 --     result, named by its area and, where two results would read the same, its coordinates. Results are told apart by
 --     `key` ("<creature>:<map>:<x>:<y>"), never by name. An entry whose map this client doesn't know as a zone or
@@ -29,6 +33,7 @@ R.NpcSearch = SR
 
 SR.MAX_RESULTS = 8
 SR.MAX_TEXT = 48
+SR.MAX_ITEMS_SHOWN = 3     -- the matching items a result names
 
 local sqrt = math.sqrt
 
@@ -108,9 +113,10 @@ SR.Before = Before
 
 -- text: what was typed. spot: SR.Where() (read now when left out). limit: how many to keep.
 -- Returns results, total, query: results nearest first (at most `limit`), how many places matched in all, and the query as
--- it was matched. A result: { e, key, name, role, more, zone, place, dist, tier, coords } where `dist` is yards or nil,
--- tier 1, 2 or 3 as above, and `coords` is true when another kept result has the same name in the same area (so the row
--- should say which one). `e` is the list's own entry: read it, never change it.
+-- it was matched. A result: { e, key, name, role, more, zone, place, dist, tier, coords, items, itemCount } where `dist` is
+-- yards or nil, tier 1, 2 or 3 as above, and `coords` is true when another kept result has the same name in the same area
+-- (so the row should say which one). `items` (item ids, by name, at most SR.MAX_ITEMS_SHOWN) and `itemCount` are there when
+-- the NPC was found by something it sells. `e` is the list's own entry: read it, never change it.
 function SR.Run(text, spot, limit)
     local q = SR.Clean(text)
     if q == "" then return {}, 0, q end
@@ -118,11 +124,12 @@ function SR.Run(text, spot, limit)
     limit = limit or SR.MAX_RESULTS
     spot = spot or SR.Where()
     local all = {}
-    for _, row in ipairs(KN.Filter({ text = q })) do
+    local mine = NS.MyFaction()
+    local function Consider(row, items)
         local e = row.e
-        if NS.ValidMap(e.m) then
+        if NS.ValidMap(e.m) and NS.Usable(e, mine) then
             local r = { e = e, key = SR.Key(e), name = e.n, lname = row.lname, zone = row.zone, lzone = row.lzone,
-                role = row.role, more = row.more, tier = 3 }
+                role = row.role, more = row.more, tier = 3, items = items }
             local d = SR.Distance(spot, e.m, e.x / NS.COORD, e.y / NS.COORD)
             if d then
                 r.dist, r.tier = d, 1
@@ -130,6 +137,19 @@ function SR.Run(text, spot, limit)
                 r.tier = 2
             end
             all[#all + 1] = r
+        end
+    end
+    local byText = {}
+    for _, row in ipairs(KN.Filter({ text = q })) do
+        byText[row] = true
+        Consider(row)
+    end
+    local NI = R.NpcItems
+    if NI then
+        local words = {}
+        for w in q:lower():gmatch("%S+") do words[#words + 1] = w end
+        for row, ids in pairs(NI.Find(words)) do
+            if not byText[row] then Consider(row, ids) end
         end
     end
     table.sort(all, Before)
@@ -144,6 +164,16 @@ function SR.Run(text, spot, limit)
     for _, r in ipairs(out) do
         r.place = ("%.1f, %.1f"):format(r.e.x / NS.COORD * 100, r.e.y / NS.COORD * 100)
         r.coords = seen[r.lname .. "\0" .. r.e.m] > 1
+        if r.items then
+            local ids = r.items
+            r.itemCount = #ids
+            table.sort(ids, function(a, b)
+                local x, y = NI.LowerName(a) or "", NI.LowerName(b) or ""
+                if x ~= y then return x < y end
+                return a < b
+            end)
+            for i = #ids, SR.MAX_ITEMS_SHOWN + 1, -1 do ids[i] = nil end
+        end
     end
     if pt then Perf.Stop(pt) end
     return out, total, q

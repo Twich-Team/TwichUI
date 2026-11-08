@@ -2,14 +2,16 @@
 -- Small square plaques on the game's world map for the NPCs in your list (npcs/Store.lua), one icon per kind
 -- (npcs/Kinds.lua), so they read apart from TwichUI's pins (diamonds) and the map's places (round badges) by shape.
 --   Which: the kinds you chose (npcs/Prefs.lua), class trainers for your class only unless you chose every class, and
---     what others sent you only while that is chosen. An NPC of several kinds wears the icon of its first shown kind.
+--     what others sent you only while that is chosen. An NPC of the other side (Alliance or Horde) is never drawn: a
+--     character can't deal with it (npcs/Store.lua's Usable; one whose side was never recorded shows for everyone). An NPC of several kinds wears the icon of its first shown kind.
 --     What others sent you is drawn dimmed and greyed, and its tooltip says it hasn't been seen by you.
 --   Where: on the map an NPC was noted on and on that map's parents down to a zone (never on a continent or the world,
 --     where hundreds would cover it), placed through the game's own world-position conversion as pins are
 --     (pins/Map.lua's Position, which also places them on map exploration's seamless map). At most MAX_DRAWN at once.
 --   Drawing: a map data provider (MapCanvasDataProviderMixin), told when the map, its zoom or its size changes, the list
 --     changes or a choice changes. Nothing runs per frame.
---   Clicks: a click opens the NPC's actions (Set waypoint, Pin this place, Navigate here, Forget this NPC); nothing is
+--   Clicks: a click opens the NPC's actions (Show items for sale, for a merchant; Set waypoint, Pin this place, Navigate
+--     here, Forget this NPC); nothing is
 --     done without one of them being chosen. Alt, Shift and Ctrl clicks are handed to the map's own click handlers, so
 --     the pin and ping shortcuts work over a marker as anywhere else. A drag on map exploration's map pans it.
 --   Finding one (NMAP.Locate, for the map tools bar's NPC search): the map goes to the NPC's area and its marker is
@@ -62,9 +64,12 @@ local function MyClass()
     return myClass
 end
 
--- The kind an entry shows as now, or nil when it is hidden.
-local function ShownKind(e)
+-- The kind an entry shows as now, or nil when it is hidden. mine: your side (NS.MyFaction), read here when left out; a
+-- pass over the whole list reads it once and hands it in.
+local function ShownKind(e, mine)
     if not e.own and not NP.Get("reports") then return nil end
+    if mine == nil then mine = NS.MyFaction() end
+    if not NS.Usable(e, mine) then return nil end
     local all = NP.Get("trainerClass") == "all"
     return NK.Primary(e.tags, function(kind)
         if not NP.Shown(kind) then return false end
@@ -261,6 +266,7 @@ function NMAP.Layout()
         local level = FrameLevel()
         local low, high = stitched and -EDGE or 0, stitched and 1 + EDGE or 1
         local at = {}   -- one place handed to Position (it reads map, x, y)
+        local mine = NS.MyFaction()
         local capped = false
         scanned = true
         for _, e in ipairs(NS.Entries()) do
@@ -268,7 +274,7 @@ function NMAP.Layout()
             if picked then revealListed = true end
             if (picked or not capped) and relevant(e.m) then
                 -- the picked-out NPC is drawn whatever the chosen kinds say; every other one follows them
-                local kind = ShownKind(e) or (picked and NK.Primary(e.tags) or nil)
+                local kind = ShownKind(e, mine) or (picked and NK.Primary(e.tags) or nil)
                 if kind then
                     at.map, at.x, at.y = e.m, e.x, e.y
                     local mx, my = PM.Position(at, viewed)
@@ -489,10 +495,16 @@ function NMAP.Menu(e, anchor)
     local OpenMenu = R.PinsWindow and R.PinsWindow.OpenMenu
     if not OpenMenu then return false end
     stats.menus = stats.menus + 1
-    local choices = {
-        { label = "Set waypoint", tip = "Sets the game's waypoint at this NPC. It replaces the waypoint you had.",
-            run = function() NMAP.SetWaypoint(e) end },
-    }
+    local choices = {}
+    local ST = R.NpcStock
+    if ST and ST.IsMerchant(e) then
+        choices[#choices + 1] = { label = "Show items for sale", enabled = ST.HasStock(e),
+            why = "No stock has been noted for this merchant yet. It is noted when you open its window, or when someone sends it.",
+            tip = "Lists what this merchant was seen to sell, with each item's own tooltip. Nothing is bought.",
+            run = function() ST.Show(e) end }
+    end
+    choices[#choices + 1] = { label = "Set waypoint", tip = "Sets the game's waypoint at this NPC. It replaces the waypoint you had.",
+        run = function() NMAP.SetWaypoint(e) end }
     local PE = R.PinsEditor
     choices[#choices + 1] = { label = "Pin this place", enabled = R:Enabled("partyPins") and PE ~= nil,
         why = "Party pins is turned off.",

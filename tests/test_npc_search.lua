@@ -228,7 +228,7 @@ local function handlers() local n = 0 for _ in pairs(WMF.clicks) do n = n + 1 en
 for _, f in ipairs({ "chronicle/Style.lua", "FrameLook.lua", "modules/Borders.lua", "modules/MenuStyle.lua", "modules/SpellMenu.lua", "modules/Media.lua",
   "pins/Pins.lua", "pins/Sync.lua", "pins/Look.lua", "pins/Sound.lua", "pins/Map.lua", "pins/Ping.lua", "pins/Pulse.lua", "pins/PingMap.lua",
   "pins/MapTools.lua", "npcs/Kinds.lua", "npcs/Store.lua", "npcs/Prefs.lua", "npcs/Collect.lua", "npcs/Map.lua", "npcs/Share.lua",
-  "npcs/Knowledge.lua", "npcs/Search.lua", "npcs/SearchBar.lua" }) do
+  "npcs/Knowledge.lua", "npcs/Items.lua", "npcs/Search.lua", "npcs/SearchBar.lua" }) do
   local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
 end
 c.TwichUIDB = { modules = { partyPins = true, npcMap = true } }
@@ -928,6 +928,54 @@ do
   openMap()
   -- the ping's own rings are drawn through the same helper
   assert(R.MapPulse and R.MapPulse.Step, "map pings use the helper")
+end
+
+---------------------------------------------------------------------------
+-- 16. Merchants found by what they sell: the row says so, the tooltip names the items, names that arrive late are searched
+-- again once, and closing the list lets go of the index
+---------------------------------------------------------------------------
+do
+  local NI = R.NpcItems
+  local NAMES, ASKED = {}, {}
+  c.C_Item = { GetItemNameByID = function(id) return NAMES[id] end, RequestLoadItemDataByID = function(id) ASKED[#ASKED + 1] = id end,
+    GetItemQualityByID = function() return 2 end, GetItemQualityColor = function() return 0.12, 1, 0 end }
+  NS.Observe({ id = 70, name = "Gwen Marsh", map = 1429, x = 0.55, y = 0.55, tags = { vendor = true }, items = { 1100, 1101 } })
+  NS.Observe({ id = 71, name = "Hidden Seller", map = 1429, x = 0.60, y = 0.60, tags = { vendor = true }, items = { 1102 } })
+  NAMES[1100], NAMES[1101] = "Tough Acorn", "Oak Acorn Cap"
+  stand(1429, 0.5, 0.5)
+  openMap()
+  edit():SetFocus()
+  typeInto("acorn"); FlushTimers()
+  local rows = rowsShown()
+  assert(#rows == 1, "one merchant sells an acorn: " .. #rows)
+  local n, m = rowText(rows[1])
+  assert(n == "Gwen Marsh" and m:find("Sells Oak Acorn Cap, Tough Acorn", 1, true) and m:find("Elwynn Forest", 1, true), "the row says what it was found by: " .. m)
+  rows[1].scripts.OnEnter(rows[1])
+  local tipText = table.concat(TIP.lines, "|")
+  assert(tipText:find("Sells:", 1, true) and tipText:find("Oak Acorn Cap", 1, true) and tipText:find("Tough Acorn", 1, true), tipText)
+  assert(NI.Snapshot().indexed, "the index is held while the list is open")
+  -- a name the client doesn't have yet: nothing now; asked for; found once it arrives, by one new search
+  typeInto("lantern"); FlushTimers()
+  assert(#rowsShown() == 0)
+  FlushTimers()
+  local asked = false
+  for _, id in ipairs(ASKED) do if id == 1102 then asked = true end end
+  assert(asked, "the missing name is asked for")
+  local searches = 0
+  local realRun = SR.Run
+  SR.Run = function(...) searches = searches + 1; return realRun(...) end
+  NAMES[1102] = "Glowing Lantern"
+  c.FireEvent("GET_ITEM_INFO_RECEIVED", 1102, true)
+  for _ = 1, 4 do FlushTimers() end
+  SR.Run = realRun
+  assert(searches == 1, "searched again once when the name arrived: " .. searches)
+  rows = rowsShown()
+  assert(#rows == 1 and rowText(rows[1]) == "Hidden Seller", "and now it is found")
+  -- closing the list lets go of the index
+  edit():ClearFocus()
+  assert(not NI.Snapshot().indexed, "closed: the index is let go")
+  tidy()
+  closeMap()
 end
 
 ---------------------------------------------------------------------------

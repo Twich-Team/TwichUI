@@ -181,6 +181,17 @@ function KN.Details(row)
     lines.place = PN and PN.Describe({ map = e.m, x = e.x, y = e.y }) or row.zone
     lines.title = e.t
     lines.roles = row.lines
+    -- which side it serves: the list keeps every NPC it was told of, but the map and the search show only the ones this
+    -- character can deal with
+    if e.f == "A" or e.f == "H" then
+        lines.faction = NS.FACTIONS[e.f]
+        if not NS.Usable(e, NS.MyFaction()) then lines.faction = lines.faction .. " (not shown for this character)" end
+    elseif e.f == "N" then
+        lines.faction = "Neutral"
+    else
+        lines.faction = "Side not recorded"
+    end
+    if e.s then lines.stock = ("%d %s for sale"):format(#e.s, #e.s == 1 and "item" or "items") end
     local sources = {}
     if e.own then
         sources[#sources + 1] = (e.seen or 1) > 1 and ("Seen by you on %d visits."):format(e.seen) or "Seen by you."

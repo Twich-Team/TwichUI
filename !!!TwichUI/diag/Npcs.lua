@@ -1,6 +1,7 @@
 -- TwichUI: troubleshooting report, Vendors and trainers
--- Reads npcs/Store.lua's, Collect.lua's, Map.lua's and Share.lua's snapshots: whether it is on, how many NPCs are in the
--- list (yours and reported), what was noted and skipped and why, what the map drew, and what was sent, received, held,
+-- Reads npcs/Store.lua's, Collect.lua's, Map.lua's, Items.lua's, Stock.lua's and Share.lua's snapshots: whether it is on, how many
+-- NPCs are in the list (yours and reported), how many are for one side only, how many merchants have a stock noted, what was
+-- noted and skipped and why, what the map drew, and what was sent, received, held,
 -- asked and dropped. Counts and reason codes only: no NPC names, places, player names or payloads. Nothing is asked of
 -- the game.
 
@@ -30,6 +31,12 @@ local function Snapshot()
         D.Flag(c.listening), D.Flag(c.probe), s.own, s.reported, s.unreadable, s.newer and "; written by a newer TwichUI (read only)" or "")
     Line("noted: %d (new %d, again %d, reports confirmed %d); merchant reads: %d; skipped: %s", c.noticed or 0, c.new or 0,
         c.updated or 0, c.confirmed or 0, c.reads or 0, Codes(c.skipped))
+    Line("sides: %d for one side only, %d for everyone or not recorded; stock: %d merchants, %d items held (limit %d)",
+        s.oneSide or 0, s.forEveryone or 0, s.stocked or 0, s.itemSlots or 0, R.NpcStore.MAX_ITEM_SLOTS)
+    local ni = R.NpcItems and R.NpcItems.Snapshot() or {}
+    local sk = R.NpcStock and R.NpcStock.Snapshot() or {}
+    Line("item names: asked the game for %d this session, %d waiting, %d queued; search index %s; stock window built %s, open %s",
+        ni.asked or 0, ni.waiting or 0, ni.queued or 0, D.Flag(ni.indexed), D.Flag(sk.built), D.Flag(sk.shown))
     Line("store refused: %s", Codes(s.drops))
     Line("map: on it %s, open %s, drawn %d, over the limit %d times, layouts %d, markers made %d; menus %d, waypoints %d, forgotten %d",
         D.Flag(m.installed), D.Flag(m.open), m.drawn or 0, m.capped or 0, m.layouts or 0, m.pool or 0, m.menus or 0, m.waypoints or 0, m.forgotten or 0)
