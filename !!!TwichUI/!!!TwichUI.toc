@@ -27,7 +27,7 @@ Persist.lua
 Profiles.lua
 Switches.lua
 SettingsLauncher.lua
-# TwichUI on a data bar: a launcher that opens the settings (needs a data bar addon that provides LibDataBroker)
+# TwichUI on a data bar: a launcher whose left click opens a menu and right click the settings (needs a data bar addon that provides LibDataBroker)
 SettingsBroker.lua
 DiagnosticsLauncher.lua
 LayoutsLauncher.lua
@@ -189,6 +189,10 @@ modules\RestedXPTimers.lua
 # the menu is drawn like the Mage launchers', so it follows modules\SpellMenu.lua and modules\MenuStyle.lua)
 modules\RestedXPBrokerMenu.lua
 modules\RestedXPBroker.lua
+
+# The TwichUI data bar entry's menu (SettingsBroker.lua): open settings, Leave me alone, Guild Locations; drawn like the
+# menus above (modules\SpellMenu.lua and modules\MenuStyle.lua)
+modules\SettingsBrokerMenu.lua
 
 # SpeakStone skin: a TwichUI look for SpeakStone's speech frame (off until turned on; uses
 # modules\MenuStyle.lua; needs SpeakStone, and works without EllesmereUI)

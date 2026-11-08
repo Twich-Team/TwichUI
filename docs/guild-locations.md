@@ -187,11 +187,10 @@ or protocol unless the task is about it. Party pins and map pings share places t
   - "Your choice" and "Status" rows: the saved choice, and whether anything can be sent now (Off, Invisible, Not in a guild,
     Sending, Waiting, Inactive). Counts and states only. The page subscribes once with `GL.OnChange` so a change made from
     the launcher menu redraws an open window.
-- `SettingsBroker.lua`: right-click on the existing `TwichUI` launcher opens a `MenuUtil.CreateContextMenu` with a title, radios
-  "Sharing my location" / "Invisible (still see others)" (`GL.SetState`) and "Guild Locations settings...". While **Off** there are
-  no radios: a greyed "Off" line and "Turn on in settings..." (opens the page; never enables). While held: a greyed
-  "Unavailable right now" and the settings entry. Without `MenuUtil`, right-click opens the page. The tooltip gains a third line,
-  "Right-click for Guild Locations (<state>).", only when the core is loaded. Left-click is unchanged. No second Broker object.
+- `SettingsBroker.lua` (**as first built; superseded, see "Launcher menu" below**): right-click on the existing `TwichUI` launcher
+  opened a `MenuUtil.CreateContextMenu` with a title, radios "Sharing my location" / "Invisible (still see others)"
+  (`GL.SetState`) and "Guild Locations settings...". While **Off** there were no radios: a greyed "Off" line and "Turn on in
+  settings..." (opened the page; never enabled). While held: a greyed "Unavailable right now" and the settings entry.
 - Combat: the launcher had no combat restriction (left-click calls `R:OpenSettings()` directly) and the menu's settings
   entry calls the same function, so it behaves the same. The earlier plan text "skipped in combat" was not implemented;
   say so if you want it added.
@@ -411,13 +410,14 @@ up to the expiry. Roster checks establish membership, not that a claimed positio
 
 ## Launcher menu (M2; built, with the differences listed under "What M2 built")
 
-Right-click on the existing `TwichUI` launcher ([SettingsBroker.lua](../!!!TwichUI/SettingsBroker.lua)); left click still
-opens settings. No separate data object. Use `MenuUtil.CreateContextMenu` (as `guides/CozyBagButton.lua` and
-`healer/Watch.lua` do): title "Guild Locations"; radios "Sharing my location" and "Invisible (still see others)"; "Guild
-Locations settings..." (`R:OpenSettings("guildLocations")`, skipped in combat). While Off, not in a guild or held, the radios
-are greyed with a reason and the settings entry stays enabled; a menu click never starts broadcasting from Off. Without
-`MenuUtil`, right-click opens the settings page. `SetTooltip` only if present. Update the file header and
-`tests/test_settings_broker.lua` (it currently asserts right-click does nothing and the tooltip has one line).
+**Changed after M2:** a left click on the existing `TwichUI` launcher ([SettingsBroker.lua](../!!!TwichUI/SettingsBroker.lua))
+now opens a menu drawn like the other data bar menus ([modules/SettingsBrokerMenu.lua](../!!!TwichUI/modules/SettingsBrokerMenu.lua):
+Open settings..., a **Leave me alone** switch for Decline duels + Decline group invitations, and a Guild Locations section); a
+right click opens the settings window directly. No separate data object, and no `MenuUtil` any more. The Guild Locations section
+keeps the rules below: "Sharing my location" and "Invisible (still see others)" go through `GL.SetState`, are greyed with the
+reason in the row ("Off", "Unavailable" while held) and never start broadcasting from Off, "Guild Locations settings..." opens the
+page, and the whole section is absent without the Guild Locations code. The tooltip's lines are "Left-click for the menu.",
+"Right-click to open settings." and the states of Leave me alone and Guild Locations.
 
 ## Current-code paths already investigated
 
@@ -497,7 +497,7 @@ key placement. The simulator can show page construction and load order only, nev
 
 ### M4 in-game checklist
 
-1. **Toolbar state:** with Party pins and the map toolbar on, the open eye shows while Sharing and the slashed eye while Invisible; a click swaps them and the tooltip reads "Guild Locations: Sharing/Invisible". Change the state in settings and from the launcher's right-click menu: the eye follows at once (map open). Choose Off: the eye leaves the bar and the search field widens; choosing Sharing in settings brings it back. The eye does not turn sharing on from Off.
+1. **Toolbar state:** with Party pins and the map toolbar on, the open eye shows while Sharing and the slashed eye while Invisible; a click swaps them and the tooltip reads "Guild Locations: Sharing/Invisible". Change the state in settings and from the launcher's left-click menu: the eye follows at once (map open). Choose Off: the eye leaves the bar and the search field widens; choosing Sharing in settings brings it back. The eye does not turn sharing on from Off.
 2. **Outside a guild:** the eye still toggles; the tooltip adds the "not in a guild" line.
 3. **Bar layout:** at a narrow window the search field shrinks or goes away before the eye or the other buttons overlap; the eye reads at its size (open eye against crossed-out eye).
 4. **Mixed search:** with the NPC search on and a guildmate sharing nearby, a name both types match shows both with different icons and the "Guildmate" line; class badge, area and "N s ago" read correctly; unknown class shows the emblem; a group member reads "In your group" and gets no second marker.

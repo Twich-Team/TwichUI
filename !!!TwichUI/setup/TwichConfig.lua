@@ -1655,7 +1655,7 @@ local function Define()
     end
 
     g = Group("qol", "Quality of life", { page = "qol",
-        note = "Only the Quick Keybind button is shared. The automatic ones (summons, resurrection, release, duels, the waypoint) stay yours." })
+        note = "Only the Quick Keybind button is shared. The automatic ones (summons, resurrection, release, duels, group invitations, the waypoint) stay yours." })
     Switches(g, { "qolQuickKeybind" })
 
     g = Group("markers", "Marker cycling", { page = "markersTarget",

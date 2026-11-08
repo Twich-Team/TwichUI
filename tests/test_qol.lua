@@ -362,6 +362,52 @@ Invite("Eve"); On("qolDeclineInvites", false); Apply(Dec.feature); FlushTimers()
 assert(Declined() == 7 and not Listening("PARTY_INVITE_REQUEST"), "turned off: cancelled and unregistered")
 
 ---------------------------------------------------------------------------
+-- Leave me alone: Decline duels and Decline group invitations together
+---------------------------------------------------------------------------
+do
+  local function Kept() return DB.ui and DB.ui.qol and DB.ui.qol.leaveKept end
+  Reset(); On("qolDuels", false); On("qolDeclineInvites", false); Apply(D.feature); Apply(Dec.feature)
+  assert(not Q.LeaveAloneOn(), "off when neither is on")
+  assert(Q.SetLeaveAlone(true) and Q.LeaveAloneOn(), "turning it on turns both on")
+  assert(R:Enabled("qolDuels") and R:Enabled("qolDeclineInvites"))
+  assert(Listening("DUEL_REQUESTED") and Listening("PARTY_INVITE_REQUEST"), "and their features listen at once (no reload)")
+  assert(Kept().qolDuels == false and Kept().qolDeclineInvites == false, "it remembers neither was on")
+  Q.SetLeaveAlone(false)
+  assert(not Q.LeaveAloneOn() and not R:Enabled("qolDuels") and not R:Enabled("qolDeclineInvites") and Kept() == nil, "off again, nothing remembered")
+  assert(not Listening("DUEL_REQUESTED") and not Listening("PARTY_INVITE_REQUEST"), "and they stop listening")
+
+  -- one was already on by the player's own choice: turning it off leaves that one alone
+  On("qolDuels", true); Apply(D.feature)
+  assert(not Q.LeaveAloneOn(), "only one on is not the mode")
+  Q.SetLeaveAlone(true)
+  assert(Q.LeaveAloneOn() and Kept().qolDuels == true and Kept().qolDeclineInvites == false)
+  Q.SetLeaveAlone(false)
+  assert(R:Enabled("qolDuels") and not R:Enabled("qolDeclineInvites"), "the one that was already on stays on")
+  assert(Listening("DUEL_REQUESTED") and not Listening("PARTY_INVITE_REQUEST"))
+  On("qolDuels", false); Apply(D.feature)
+
+  -- both turned on in the settings: nothing remembered, so turning it off turns both off
+  On("qolDuels", true); On("qolDeclineInvites", true); Apply(D.feature); Apply(Dec.feature)
+  assert(Q.LeaveAloneOn())
+  Q.SetLeaveAlone(false)
+  assert(not R:Enabled("qolDuels") and not R:Enabled("qolDeclineInvites"))
+
+  -- what is remembered is overwritten each time it is turned on, and a damaged record is ignored
+  DB.ui.qol.leaveKept = "junk"; Q.SetLeaveAlone(false)
+  assert(not Q.LeaveAloneOn() and Kept() == "junk", "a damaged record is not trusted")
+  On("qolDuels", true); Q.SetLeaveAlone(true)
+  assert(Kept().qolDuels == true and Kept().qolDeclineInvites == false, "turning it on writes a fresh record")
+  Q.SetLeaveAlone(false); On("qolDuels", false); On("qolDeclineInvites", false); Apply(D.feature); Apply(Dec.feature)
+
+  -- the choices stay: Leave me alone changes only the two switches
+  Q.Set("duelsFrom", "friends"); Q.Set("declineInvitesFrom", "guild")
+  Q.SetLeaveAlone(true); Q.SetLeaveAlone(false)
+  assert(Q.Get("duelsFrom") == "friends" and Q.Get("declineInvitesFrom") == "guild", "exceptions are untouched")
+  Q.Set("duelsFrom", "known"); Q.Set("declineInvitesFrom", "friendsGuild")
+  DB.ui.qol.leaveKept = nil
+end
+
+---------------------------------------------------------------------------
 -- Quick Keybind button: a stand-in Game Menu with the game's pool, layout indices and callback.
 ---------------------------------------------------------------------------
 local K = R.QoLQuickKeybind

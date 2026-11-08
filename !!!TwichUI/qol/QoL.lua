@@ -171,6 +171,50 @@ function Q.LeatrixOverlap(key)
 end
 
 ---------------------------------------------------------------------------
+-- Leave me alone: one switch for "decline duels" and "decline group invitations" together (the data bar menu,
+-- SettingsBrokerMenu.lua). It is the two ordinary switches, nothing more: it is on when both are on, whoever
+-- turned them on, and the settings page shows the same two. Turning it on remembers which of the two were
+-- already on (TwichUIDB.ui.qol.leaveKept), so turning it off again leaves those alone; with nothing
+-- remembered (both were turned on in the settings) turning it off turns both off. The exceptions you chose
+-- for each (friends, guild members) apply as always.
+---------------------------------------------------------------------------
+Q.LEAVE_ALONE = { "qolDuels", "qolDeclineInvites" }
+
+function Q.LeaveAloneOn()
+    for _, key in ipairs(Q.LEAVE_ALONE) do
+        if not R:Enabled(key) then return false end
+    end
+    return true
+end
+
+local function SavedKept()
+    local saved = TwichUIDB and TwichUIDB.ui and TwichUIDB.ui.qol
+    local kept = type(saved) == "table" and saved.leaveKept or nil
+    return type(kept) == "table" and kept or nil
+end
+
+function Q.SetLeaveAlone(on)
+    if not (TwichUIDB and type(TwichUIDB.modules) == "table") then return false end
+    if on then
+        local kept = {}
+        for _, key in ipairs(Q.LEAVE_ALONE) do kept[key] = R:Enabled(key) and true or false end
+        TwichUIDB.ui = type(TwichUIDB.ui) == "table" and TwichUIDB.ui or {}
+        TwichUIDB.ui.qol = type(TwichUIDB.ui.qol) == "table" and TwichUIDB.ui.qol or {}
+        TwichUIDB.ui.qol.leaveKept = kept
+        for _, key in ipairs(Q.LEAVE_ALONE) do
+            if not kept[key] then R:SetEnabled(key, true) end
+        end
+    else
+        local kept = SavedKept()
+        for _, key in ipairs(Q.LEAVE_ALONE) do
+            if not (kept and kept[key] == true) then R:SetEnabled(key, false) end
+        end
+        if kept then TwichUIDB.ui.qol.leaveKept = nil end
+    end
+    return true
+end
+
+---------------------------------------------------------------------------
 -- Turning features on and off
 ---------------------------------------------------------------------------
 function Q.Add(feature)
