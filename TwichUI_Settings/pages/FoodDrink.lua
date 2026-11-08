@@ -17,7 +17,7 @@ local UNLOCK_STATUS = {
 K.Page({
     key = "food", icon = "foodAndDrink", name = "Food and drink", order = 40, group = "everyday",
     description = "Two buttons you click to eat or drink the best food or drink in your bags. TwichUI never uses anything for you.",
-    keywords = "eat drink water bread buttons edit mode unlock ellesmere conjured mana",
+    keywords = "eat drink water bread buttons edit mode unlock ellesmere conjured mana buff well fed stamina agility",
     overview = {
         label = "Food and drink", tip = "Two buttons you click to eat or drink the best food or drink in your bags.",
         status = function() return K.OnOff(R:Enabled("foodDrink")) end,
@@ -28,7 +28,7 @@ K.Page({
 
         Header("Food and Drink buttons", "Two small buttons you click to eat or drink. TwichUI never uses anything for you.")
         local foodDrink = Toggle("foodDrink", "Show Food and Drink buttons",
-            "Adds a Food button and a Drink button. Each holds the food or drink in your bags that restores the most (by the amount the item's own text states) among what you can use, and eats or drinks it only when you click it. It chooses only plain food and drink, judged from the item's own text: buff food, feasts and anything it can't read are never picked. An empty button means there is nothing it can tell is plain food or drink in your bags.\n\nThe choice updates when your bags change; if they change during combat, it updates when combat ends. Move the buttons in Edit Mode. Nothing is saved but where you put them and the look you choose below.")
+            "Adds a Food button and a Drink button. Each holds the food or drink in your bags that restores the most (by the amount the item's own text states) among what you can use, and eats or drinks it only when you click it. It chooses only plain food and drink, judged from the item's own text: buff food (unless you turn on Use buff food), feasts and anything it can't read are never picked. An empty button means there is nothing it can tell is plain food or drink in your bags.\n\nThe choice updates when your bags change; if they change during combat, it updates when combat ends. Move the buttons in Edit Mode. Nothing is saved but where you put them and the look you choose below.")
         local function FoodDrinkOn() return R:Enabled("foodDrink") end
         Under(Toggle("foodDrinkFood", "Show the Food button",
             "Off: only the Drink button is shown."), foodDrink, FoodDrinkOn)
@@ -37,6 +37,10 @@ K.Page({
 
         local FD = R.FoodDrink
         if not FD then return end
+        Under(ProxyToggle("foodDrinkUseBuffFood", "Use buff food",
+            "Off, the buttons choose only plain food and drink, and food that also gives you a buff (Well Fed: Stamina, Agility and the like) is skipped. On, such food is allowed, and when you carry any the Food button holds it instead of plain food, even when plain food restores more health. The Drink button does the same for any drink that gives a buff. Among buff items the one that restores the most is chosen. Buff food is recognised from the item's own text (a restore sentence followed by a buff), never from a list, and text the buttons can't read is still skipped. If you also prefer Mage-conjured items, buff food is considered first and conjured items only break the choice among buff food. Nothing is eaten for you: you still click.",
+            FD.DEFAULTS.useBuffFood, function() return FD.Get("useBuffFood") end,
+            function(value) FD.Set("useBuffFood", value and true or false) end), foodDrink, FoodDrinkOn)
         Under(ProxyToggle("foodDrinkPreferConjured", "Prefer Mage-conjured food and water",
             "When you carry Mage-conjured food or water you can use, the buttons choose it over ordinary food or drink, even when an ordinary item restores more health or mana. Food and water are chosen separately: with conjured food but no conjured water, the Food button holds the conjured food and the Drink button holds the best ordinary drink. With none of a kind, that button chooses as it always does. Among conjured items, the one that restores the most is chosen. It works for any character carrying conjured items, not only Mages, and never lets in an item the buttons would otherwise skip. Off, the choice is the one that restores the most.",
             FD.DEFAULTS.preferConjured, function() return FD.Get("preferConjured") end,

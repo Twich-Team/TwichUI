@@ -22,7 +22,7 @@ D.RegisterTracer("food", {
 })
 
 local function Describe(c)
-    return ("item %s: count %s, restores %s%s"):format(c.id, tostring(c.count), tostring(c.amount), c.conjured and ", Mage-conjured" or "")
+    return ("item %s: count %s, restores %s%s"):format(c.id, tostring(c.count), tostring(c.amount), (c.conjured and ", Mage-conjured" or "") .. (c.buff and ", buff food" or ""))
 end
 
 local function Food()
@@ -37,6 +37,7 @@ local function Food()
     Line("listening for: %s", #s.events > 0 and table.concat(s.events, ", ") or "nothing")
     Line("deferred update waiting for combat to end: %s; look scheduled: %s; waiting for item or spell data: %s; in combat now: %s",
         D.Flag(s.deferred), D.Flag(s.scheduled), D.Flag(s.loading), D.Flag(s.inCombat))
+    Line("use buff food: %s", s.useBuffFood and "on" or "off")
     Line("prefer Mage-conjured: %s; conjured item IDs the rules know: %d (from the Classic-era game; not read from the Forever client)",
         s.preferConjured and "on" or "off", s.conjuredKnown)
 

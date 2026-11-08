@@ -466,6 +466,91 @@ do
   assert(f == "Red-speckled Mushroom" and dr == "Melon Juice", "back to the normal choice")
 end
 
+-- Use buff food: food and drink whose text goes on to a buff are allowed and preferred, only when asked.
+do
+  local WELL_FED = " If you spend at least 10 seconds eating you will become Well Fed and gain 8 Stamina for 15 min."
+  local names, words = { food = "Food", drink = "Drink" }, { health = "Health", mana = "Mana" }
+  assert(F.Get("useBuffFood") == false and F.DEFAULTS.useBuffFood == false, "off by default")
+  assert(F.Set("useBuffFood", "yes") == false and F.Set("useBuffFood", 1) == false, "only a boolean")
+
+  -- Classify
+  local text = EAT:format(234) .. WELL_FED
+  assert(F.Classify("Food", text, names, words) == nil and F.Classify("Food", text, names, words, false) == nil, "off: left out")
+  local kinds, amount, buff = F.Classify("Food", text, names, words, true)
+  assert(kinds and kinds.food and not kinds.drink and amount == 234 and buff == true, "on: food, amount is the restore")
+  kinds, amount, buff = F.Classify("Drink", "Restores 420 mana over 21 sec. Gain 8 Agility for 15 min. Lasts 10 min.", names, words, true)
+  assert(kinds and kinds.drink and amount == 420 and buff == true, "on: a buff drink")
+  kinds, amount, buff = F.Classify("Food", EAT:format(234), names, words, true)
+  assert(kinds and amount == 234 and not buff, "on: plain food is still plain")
+  kinds, amount, buff = F.Classify("Food", "Restores 282 health and 282 mana over 21 sec.", names, words, true)
+  assert(kinds and kinds.food and kinds.drink and not buff, "on: health and mana is not a buff")
+  assert(F.Classify("Food", EAT:format(234) .. " Gain 8 Stamina.", names, words, true) == nil, "one extra number is not enough to call it a buff")
+  assert(F.Classify("Food", text .. "\n\nAnd more.", names, words, true) == nil, "a second paragraph is still left out")
+  -- buff food's use-spell needn't be the plain one: the game's word for health or mana in the restore clause decides
+  local SMALLFISH = "Restores 58 health over 18 sec.  Must remain seated while eating. If you spend at least 10 sec eating, you will become well fed and gain 2 Attack Power for 15 min. Additionally, experience gained from kills is increased by 5%."
+  kinds, amount, buff = F.Classify("Brilliant Smallfish", SMALLFISH, names, words, true)
+  assert(kinds and kinds.food and not kinds.drink and amount == 58 and buff == true, "another spell name: food from the word health")
+  assert(F.Classify("Brilliant Smallfish", SMALLFISH, names, words) == nil, "off: only the plain spells")
+  kinds, amount, buff = F.Classify("Mystic Tea", "Restores 300 mana over 18 sec. Must remain seated while drinking. If you spend at least 10 sec drinking, you will gain 8 Spirit for 15 min.", names, words, true)
+  assert(kinds and kinds.drink and not kinds.food and amount == 300 and buff == true, "another spell name: drink from the word mana")
+  kinds = F.Classify("Mystic Tea", "Restores 300 mana over 18 sec. If you spend at least 10 sec drinking, you gain 8 Spirit and 10 mana per 5 sec.", names, words, true)
+  assert(kinds and kinds.drink and not kinds.food, "a resource word after the clause doesn't count")
+  assert(F.Classify("Mystic Tea", SMALLFISH, names, {}, true) == nil, "no words and not the plain spell: can't tell")
+  assert(F.Classify("Mystic Tea", "Increases your strength by 20 for 15 min after 10 sec of eating 5 times.", names, words, true) == nil, "no health or mana restore: left out")
+
+  -- Pick
+  local plain = { id = 1, amount = 900, count = 5 }
+  local stew = { id = 2, amount = 100, count = 5, buff = true }
+  local conj = { id = 3, amount = 50, count = 5, conjured = true }
+  local conjStew = { id = 4, amount = 20, count = 5, buff = true, conjured = true }
+  assert(F.Pick({ plain, stew }).id == 1 and F.Pick({ plain, stew }, true, false).id == 1, "off: the flag is ignored")
+  assert(F.Pick({ plain, stew }, false, true).id == 2, "on: buff beats stronger plain")
+  assert(F.Pick({ plain }, false, true).id == 1 and F.Pick({}, false, true) == nil, "on, none buffed: as before")
+  assert(F.Pick({ plain, conj, stew }, true, true).id == 2, "buff is considered before conjured")
+  assert(F.Pick({ plain, conj, stew, conjStew }, true, true).id == 4, "conjured breaks the choice among buff food")
+  assert(F.Pick({ plain, conj, stew }, true, false).id == 3, "buff off: conjured as before")
+
+  -- on the buttons
+  Item(16, "Stamina Stew", 5, 5, { spellName = "Stamina Stew", text = EAT:format(100) .. WELL_FED })
+  Item(17, "Agility Tea", 5, 5, { spellName = "Agility Tea", text = DRINK:format(50) .. " Gain 8 Agility for 15 min. Lasts 10 min." })
+  Item(18, "Odd Soup", 5, 5, { text = EAT:format(900) .. "\n\nSomething else." })
+  local function BagsNow(...)
+    local list = { 2287, 4605, 1179, 1205 }
+    for _, id in ipairs({ ... }) do table.insert(list, id) end
+    Bags(list)
+    c.FireEvent("BAG_UPDATE_DELAYED"); Look()
+  end
+  BagsNow(16, 17, 18)
+  assert(food.attrs.item == "Red-speckled Mushroom" and drink.attrs.item == "Melon Juice", "off: buff items are not chosen")
+  assert(F.Set("useBuffFood", true) == true); Look()
+  assert(food.attrs.item == "Stamina Stew" and food.itemID == 16 and food.buffed == true, "on: the buff food, and the tooltip can say why")
+  assert(drink.attrs.item == "Agility Tea" and drink.buffed == true, "on: the buff drink")
+  BagsNow(18)
+  assert(food.attrs.item == "Red-speckled Mushroom" and drink.attrs.item == "Melon Juice" and rawget(food, "buffed") == nil,
+    "no buff items (a second paragraph stays out): the normal choice")
+  BagsNow(16)
+  assert(food.attrs.item == "Stamina Stew" and drink.attrs.item == "Melon Juice", "kinds are chosen apart")
+
+  -- changed in combat: nothing is touched until combat ends
+  assert(F.Set("useBuffFood", false)); Look()
+  assert(food.attrs.item == "Red-speckled Mushroom")
+  c.COMBAT = true
+  assert(F.Set("useBuffFood", true)); Look()
+  assert(food.attrs.item == "Red-speckled Mushroom" and food.itemID == 4605, "untouched in combat")
+  c.COMBAT = false
+  c.FireEvent("PLAYER_REGEN_ENABLED"); Look()
+  assert(food.attrs.item == "Stamina Stew", "applied when combat ends")
+
+  -- Reset keeps the choice; the saved value is validated
+  F.ResetLook()
+  assert(F.Get("useBuffFood") == true, "the look reset keeps it")
+  c.TwichUIDB.ui.foodDrink.useBuffFood = "yes"
+  assert(F.Get("useBuffFood") == false, "an invalid saved value is off")
+  c.TwichUIDB.ui.foodDrink = nil
+  F.Refresh(); BagsNow()
+  assert(F.Snapshot().useBuffFood == false)
+end
+
 -- Appearance: ranges, refusing bad values, and each setting reaching the buttons.
 do
   local D = F.DEFAULTS

@@ -10,6 +10,9 @@
 -- the description states it; ties go to the smaller stack, so a part stack is finished first.
 -- An empty button says so. Whether an item can be used at this moment (dead, a ghost) is not
 -- part of choosing: the game decides that when the button is clicked.
+-- Optionally (Use buff food, off by default) food whose text says more than the restore, the kind that
+-- makes you Well Fed, is let in and preferred over plain food; see F.Classify. It is read the same
+-- way, from the item's own text, never from a list.
 -- Optionally (Prefer Mage-conjured food and water, off by default) a Mage-conjured item beats an
 -- ordinary one even when the ordinary one restores more; see F.CONJURED. It is a preference
 -- among items already eligible: it never lets in an item the rules above leave out.
@@ -72,20 +75,28 @@ local function InCombat() return InCombatLockdown and InCombatLockdown() end
 -- Choosing. Pure, so it can be checked on its own.
 ---------------------------------------------------------------------------
 
--- candidates: { { id, amount, count, conjured }, ... }. The most restored wins; then the smaller
--- stack; then the lower item ID, so the answer doesn't depend on bag order. With preferConjured,
--- only the conjured candidates compete when there are any; with none, all of them do. Without
--- it, `conjured` is not looked at.
-function F.Pick(candidates, preferConjured)
-    local only = false
-    if preferConjured then
-        for _, c in ipairs(candidates) do
-            if c.conjured then only = true break end
+-- candidates: { { id, amount, count, conjured, buff }, ... }. The most restored wins; then the smaller
+-- stack; then the lower item ID, so the answer doesn't depend on bag order. With preferBuff, only the
+-- buff candidates compete when there are any; then, with preferConjured, only the conjured ones among
+-- those when there are any. With none, all of them do. Without an option, its flag is not looked at.
+function F.Pick(candidates, preferConjured, preferBuff)
+    local function Narrow(list, flag)
+        for _, c in ipairs(list) do
+            if c[flag] then
+                local only = {}
+                for _, d in ipairs(list) do
+                    if d[flag] then only[#only + 1] = d end
+                end
+                return only
+            end
         end
+        return list
     end
+    if preferBuff then candidates = Narrow(candidates, "buff") end
+    if preferConjured then candidates = Narrow(candidates, "conjured") end
     local best
     for _, c in ipairs(candidates) do
-        if (c.conjured or not only) and (not best or c.amount > best.amount
+        if (not best or c.amount > best.amount
             or (c.amount == best.amount and (c.count < best.count or (c.count == best.count and c.id < best.id)))) then
             best = c
         end
@@ -99,21 +110,43 @@ end
 -- mana } the game's words for the resources. Two numbers (amount, seconds) is a plain item;
 -- three, with both words, restores health and mana. Any other number or a second paragraph
 -- means more than a restore (a buff, a feast), so it is left out.
-function F.Classify(spellName, text, names, words)
+-- allowBuff: an item whose text opens with the restore and then goes on with at least two more
+-- numbers (the 10 seconds of eating, the buff's size, its duration: "... become Well Fed and gain 8
+-- Stamina for 15 min") is let in as well, and the third result is true for it. Its amount is still
+-- the first number. Buff food's use-spell is not assumed to be the plain Food or Drink spell, so this
+-- path reads the item alone: the game's word for health or mana in the restore clause (the text up to
+-- the second number, "Restores 58 health over 18") says which button it is for. It needs that word,
+-- unless the spell is the plain one. Text with a second paragraph, or with only one extra number, is
+-- still left out.
+function F.Classify(spellName, text, names, words, allowBuff)
     if not (spellName and text) or text == "" or text:find("\n", 1, true) then return nil end
     local plain = (spellName == names.food and "food") or (spellName == names.drink and "drink") or nil
-    if not plain then return nil end
-    local first, count = nil, 0
-    for n in text:gmatch("%d+") do
+    if not plain and not allowBuff then return nil end
+    local first, count, clauseEnd = nil, 0, nil
+    local at = 1
+    while true do
+        local s, e = text:find("%d+", at)
+        if not s then break end
         count = count + 1
-        first = first or tonumber(n)
+        first = first or tonumber(text:sub(s, e))
+        if count == 2 then clauseEnd = e end
+        at = e + 1
     end
-    if count == 2 then return { [plain] = true }, first end
-    if count == 3 and words.health and words.mana then
+    if plain and count == 2 then return { [plain] = true }, first end
+    if plain and count == 3 and words.health and words.mana then
         local lower = text:lower()
         if lower:find(words.health:lower(), 1, true) and lower:find(words.mana:lower(), 1, true) then
             return { food = true, drink = true }, first
         end
+    end
+    if allowBuff and count >= 4 then
+        local clause = text:sub(1, clauseEnd):lower()
+        local health = words.health and clause:find(words.health:lower(), 1, true) ~= nil
+        local mana = words.mana and clause:find(words.mana:lower(), 1, true) ~= nil
+        if health or mana then
+            return { food = health or nil, drink = mana or nil }, first, true
+        end
+        if plain then return { [plain] = true }, first, true end
     end
     return nil
 end
@@ -138,7 +171,8 @@ end
 -- there is no item, as a code, for /tui diagnostics.
 -- maxLevel: when given, an item that needs more than that level is left out ("level-too-high").
 -- readOnly: ask the game for nothing (a report must not change what the game loads).
-function F.Inspect(id, names, words, readOnly, maxLevel)
+-- allowBuff: also food with a buff (F.Classify); the item then has `buff = true`.
+function F.Inspect(id, names, words, readOnly, maxLevel, allowBuff)
     local _, _, _, _, icon, classID, subClassID = C_Item.GetItemInfoInstant(id)
     if classID ~= CONSUMABLE or subClassID ~= FOOD_AND_DRINK then return nil, false, "not-food-and-drink" end
     local name, _, quality, _, minLevel, _, _, _, _, _, sellPrice = C_Item.GetItemInfo(id)
@@ -156,10 +190,10 @@ function F.Inspect(id, names, words, readOnly, maxLevel)
         if not readOnly and C_Spell.RequestLoadSpellData then C_Spell.RequestLoadSpellData(spellID) end
         return nil, true, "spell-text-pending"
     end
-    local kinds, amount = F.Classify(spellName, text, names, words)
+    local kinds, amount, buff = F.Classify(spellName, text, names, words, allowBuff)
     if not kinds then return nil, false, "not-plain-food-or-drink" end
     return { id = id, name = name, icon = icon, kinds = kinds, amount = amount, minLevel = minLevel or 0,
-        quality = Plain(quality), sellPrice = Plain(sellPrice) }
+        quality = Plain(quality), sellPrice = Plain(sellPrice), buff = buff or false }
 end
 
 -- One item in the bags as a candidate, or nil when it can't be offered: not food and drink as
@@ -168,7 +202,7 @@ end
 -- asked for). The third says why there is no candidate, as a code, for /tui diagnostics.
 -- readOnly: ask the game for nothing (a report must not change what the game loads).
 local function Candidate(id, names, words, readOnly)
-    local item, still, why = F.Inspect(id, names, words, readOnly, UnitLevel("player") or 0)
+    local item, still, why = F.Inspect(id, names, words, readOnly, UnitLevel("player") or 0, F.Get("useBuffFood"))
     if not item then return nil, still, why end
     -- Not C_Item.IsUsableItem: it is false while dead or a ghost, which would drop every item from
     -- the choice and leave it empty after resurrection (no bag event follows). Whether the item
@@ -176,7 +210,7 @@ local function Candidate(id, names, words, readOnly)
     local count = C_Item.GetItemCount(id) or 0
     if count < 1 then return nil, false, "none-left" end
     return { id = id, name = item.name, icon = item.icon, kinds = item.kinds, amount = item.amount, count = count,
-        conjured = F.CONJURED[id] ~= nil }
+        conjured = F.CONJURED[id] ~= nil, buff = item.buff }
 end
 
 -- Mage only, and only when the player turned it on (Show conjure food/water ...): for a button with
@@ -228,9 +262,12 @@ local function Scan(summary)
             end
         end
     end
-    local prefer = F.Get("preferConjured")
-    local chosen = { food = F.Pick(byKind.food, prefer), drink = F.Pick(byKind.drink, prefer) }
-    for _, c in pairs(chosen) do c.preferred = prefer and c.conjured end   -- so the tooltip can say why
+    local prefer, buffs = F.Get("preferConjured"), F.Get("useBuffFood")
+    local chosen = { food = F.Pick(byKind.food, prefer, buffs), drink = F.Pick(byKind.drink, prefer, buffs) }
+    for _, c in pairs(chosen) do   -- so the tooltip can say why
+        c.preferred = prefer and c.conjured and not c.buff
+        c.buffed = buffs and c.buff
+    end
     for _, kind in ipairs(KINDS) do
         if not chosen[kind.key] then
             local spell, still = ConjureChoice(kind)
@@ -257,6 +294,7 @@ F.DEFAULTS = {
     buttonOpacity = 100,
     mouseover = false, idleOpacity = 30,   -- fade to idleOpacity while the mouse is away
     preferConjured = false,   -- not a look: which item is chosen
+    useBuffFood = false,      -- not a look: which item is chosen
 }
 F.LIMITS = { size = { 24, 64 }, spacing = { 0, 24 }, borderSize = { 0, 64 }, borderOpacity = { 0, 100 }, zoom = { 0, 20 },
     buttonOpacity = { 0, 100 }, idleOpacity = { 0, 100 } }
@@ -274,7 +312,8 @@ local function Valid(key, value)
     elseif key == "layout" then return F.LAYOUTS[value] == true
     elseif key == "borderTexture" then return Borders.ValidName(value)
     elseif key == "borderColor" then return type(value) == "string" and value:match("^%x%x%x%x%x%x%x%x$") ~= nil
-    elseif key == "borderClass" or key == "showCount" or key == "mouseover" or key == "preferConjured" then return type(value) == "boolean" end
+    elseif key == "borderClass" or key == "showCount" or key == "mouseover" or key == "preferConjured"
+        or key == "useBuffFood" then return type(value) == "boolean" end
     return false
 end
 
@@ -306,13 +345,13 @@ function F.Set(key, value)
 end
 
 -- Puts the look back to its defaults: size, spacing, layout, border, zoom, opacity and the count. The place
--- and the conjured preference are not the look and are kept.
+-- and the item choices (conjured, buff food) are not the look and are kept.
 function F.ResetLook()
     local saved = TwichUIDB and TwichUIDB.ui and TwichUIDB.ui.foodDrink
     if type(saved) ~= "table" then return end
     local any = false
     for key in pairs(F.DEFAULTS) do
-        if key ~= "preferConjured" and saved[key] ~= nil then saved[key] = nil; any = true end
+        if key ~= "preferConjured" and key ~= "useBuffFood" and saved[key] ~= nil then saved[key] = nil; any = true end
     end
     if any then F.Refresh() end
 end
@@ -406,6 +445,9 @@ local function ShowTooltip(button)
         else GameTooltip:SetHyperlink("item:" .. button.itemID) end
         GameTooltip:AddLine(" ")
         GameTooltip:AddLine(button.rule, 0.69, 0.66, 0.6, true)
+        if button.buffed then
+            GameTooltip:AddLine("Buff food, which your options prefer over plain " .. button.label:lower() .. ".", 0.69, 0.66, 0.6, true)
+        end
         if button.preferred then
             GameTooltip:AddLine("Mage-conjured, which your options prefer over ordinary " .. button.label:lower() .. ".", 0.69, 0.66, 0.6, true)
         end
@@ -565,6 +607,7 @@ local function Fill(button, choice)
     button.spellID = casts and choice.spell or nil
     button.choice = choice
     button.preferred = filled and choice.preferred or nil
+    button.buffed = filled and choice.buffed or nil
     if filled then button.icon:SetTexture(choice.icon) end
     button.icon:SetShown(filled)
     button.name:SetShown(not filled)
@@ -602,7 +645,8 @@ local function Update()
             local count = old and old.id and C_Item.GetItemCount(old.id) or 0
             if not best[kind.key] and count > 0 then
                 best[kind.key] = { id = old.id, name = old.name, icon = old.icon, kinds = old.kinds,
-                    amount = old.amount, count = count, conjured = old.conjured, preferred = old.preferred }
+                    amount = old.amount, count = count, conjured = old.conjured, preferred = old.preferred,
+                    buff = old.buff, buffed = old.buffed }
             end
         end
     end
@@ -711,7 +755,7 @@ function F.Snapshot()
         enabled = R:Enabled("foodDrink"), built = container ~= nil, shown = container ~= nil and container:IsShown() or false,
         deferred = dirty, scheduled = scheduled, loading = loading, inCombat = InCombat() and true or false,
         moveWaiting = moveWaiting,
-        preferConjured = F.Get("preferConjured"), conjuredKnown = 0, buttons = {}, apiMissing = nil,
+        preferConjured = F.Get("preferConjured"), useBuffFood = F.Get("useBuffFood"), conjuredKnown = 0, buttons = {}, apiMissing = nil,
     }
     for _ in pairs(F.CONJURED) do out.conjuredKnown = out.conjuredKnown + 1 end
     local events = {}

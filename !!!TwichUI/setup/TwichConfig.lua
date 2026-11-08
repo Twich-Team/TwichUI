@@ -1696,7 +1696,7 @@ local function Define()
     g = Group("food", "Food and drink", { page = "food" })
     Switches(g, { "foodDrink", "foodDrinkFood", "foodDrinkDrink" })
     Table(g, { "ui", "foodDrink" }, R.FoodDrink, { "size", "spacing", "layout", "borderTexture", "borderSize", "borderColor",
-        "borderClass", "borderOpacity", "zoom", "showCount", "buttonOpacity", "mouseover", "idleOpacity", "preferConjured" },
+        "borderClass", "borderOpacity", "zoom", "showCount", "buttonOpacity", "mouseover", "idleOpacity", "preferConjured", "useBuffFood" },
         { layout = ENUM.layout })
 
     g = Group("auction", "Auction House", { page = "auction" })
