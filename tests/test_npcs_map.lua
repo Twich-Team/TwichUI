@@ -196,7 +196,18 @@ assert(drawn()[7].alpha == 1 and drawn()[7].icon.desaturated == false, "a report
 NP.Set("reportAlpha", 30)
 assert(math.abs(drawn()[7].alpha - 0.3) < 1e-9 and drawn()[7].icon.desaturated == true and drawn()[1].alpha == 1, "the opacity choice dims reports only")
 assert(not NP.Set("reportAlpha", 10) and not NP.Set("reportAlpha", 101) and NP.Get("reportAlpha") == 30, "an unusable opacity is refused")
+assert(NP.Get("backdrop") == "none" and not drawn()[1].back, "no backdrop by default")
+NP.Set("backdrop", "shadow")
+local m = drawn()[1]
+assert(m.back and m.back.shown and m.back.texture == m.kind.icon, "a shadow is a copy of the icon's shape")
+NP.Set("backdrop", "plate")
+assert(drawn()[1].back.shown and drawn()[1].back.texture ~= m.kind.icon, "a plate is a flat square")
+assert(not NP.Set("backdrop", "glow") and NP.Get("backdrop") == "plate", "an unknown backdrop is refused")
+NP.Set("backdrop", "none")
+assert(drawn()[1].back.shown == false, "none hides it again")
+NP.Set("backdrop", "shadow")
 NP.Reset("all")
+assert(NP.Get("backdrop") == "none" and drawn()[1].back.shown == false, "reset puts the backdrop back")
 assert(NP.Get("reportAlpha") == 60 and drawn()[7].alpha == 0.6, "reset puts the opacity back")
 -- a new NPC appears at once
 Npc(8, 1429, 0.6, 0.6, { innkeeper = true, food = true })

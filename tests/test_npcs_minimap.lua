@@ -223,6 +223,12 @@ NP.Set("iconSize", 150)
 tick()
 assert(shown()[1].size > before, "the size choice follows")
 NP.Set("iconSize", 100)
+NP.Set("backdrop", "plate")
+tick()
+assert(shown()[1].backdrop and shown()[1].backdrop:find("plate", 1, true), "the backdrop choice follows")
+NP.Set("backdrop", "none")
+tick()
+assert(shown()[1].backdrop == nil, "and goes away again")
 MINI.visible = false
 tick()
 MINI.visible = true

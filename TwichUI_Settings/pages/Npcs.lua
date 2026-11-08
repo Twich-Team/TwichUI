@@ -72,6 +72,11 @@ K.Page({
         Header("How they show", "Square markers, apart from your pins (diamonds) and the map's places (round). Click one for its actions: set a waypoint there, pin it, navigate to it or forget it.")
         Under(Check("npcMapReports", "reports", "Show NPCs others sent you",
             "NPCs another TwichUI user sent you that you haven't dealt with yourself, drawn dimmed and grey (the opacity is set below). Once you deal with one yourself it is yours like any other."), npcToggle, On)
+        local backdrop = Proxy("npcMapBackdrop", K.STRING, "Behind the markers", NP.DEFAULTS.backdrop,
+            function() return NP.Get("backdrop") end, function(value) NP.Set("backdrop", value) end)
+        if backdrop then reset[#reset + 1] = { setting = backdrop, default = NP.DEFAULTS.backdrop } end
+        Under(K.Dropdown(backdrop, function() return NP.BACKDROP end,
+            "To read the markers over busy map art: a shadow of the icon's shape, or a dark square. None by default. The minimap's markers follow it."), npcToggle, On)
         local alpha = Proxy("npcMapReportAlpha", K.NUMBER, "Opacity of NPCs others sent you", NP.DEFAULTS.reportAlpha,
             function() return NP.Get("reportAlpha") end, function(value) NP.Set("reportAlpha", math.floor(value + 0.5)) end)
         if alpha then reset[#reset + 1] = { setting = alpha, default = NP.DEFAULTS.reportAlpha } end

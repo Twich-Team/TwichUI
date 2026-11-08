@@ -114,6 +114,36 @@ NMAP.Relevant = Relevant   -- Guild Locations' markers (guildloc/Map.lua) are pl
 ---------------------------------------------------------------------------
 local Tooltip, Click
 
+-- The optional backdrop (ui.npcMap.backdrop) behind a marker, here and on the minimap (npcs/Minimap.lua): "shadow" is a
+-- dark copy of the icon's own shape, "plate" a dark square. One texture per marker, made the first time one is wanted.
+local PLATE = "Interface\\Buttons\\WHITE8x8"
+function NMAP.Backdrop(b, icon)
+    local mode = NP.Get("backdrop")
+    if mode == "none" then
+        if b.back then b.back:Hide() end
+        b.backKey = nil
+        return
+    end
+    local key = mode .. "|" .. tostring(icon)
+    if b.backKey == key then return end
+    b.backKey = key
+    if not b.back then b.back = b:CreateTexture(nil, "BACKGROUND") end
+    local t = b.back
+    t:ClearAllPoints()
+    if mode == "shadow" then
+        t:SetTexture(icon)
+        t:SetVertexColor(0, 0, 0, 0.85)
+        t:SetPoint("TOPLEFT", b, "TOPLEFT", -1, 1)
+        t:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", 3, -3)
+    else
+        t:SetTexture(PLATE)
+        t:SetVertexColor(0, 0, 0, 0.6)
+        t:SetPoint("TOPLEFT", b, "TOPLEFT", -2, 2)
+        t:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", 2, -2)
+    end
+    t:Show()
+end
+
 local function NewMarker()
     local b = CreateFrame("Button", nil, canvas)
     b:RegisterForClicks("LeftButtonUp", "RightButtonUp")
@@ -141,6 +171,7 @@ local function Dress(b, e, kind)
         b.icon:SetTexture(kind.icon)
         b.hl:SetTexture(kind.icon)
     end
+    NMAP.Backdrop(b, kind.icon)
     local reported = not e.own
     local alpha = reported and NP.Get("reportAlpha") / 100 or 1
     if b.reported ~= reported or b.alpha ~= alpha then

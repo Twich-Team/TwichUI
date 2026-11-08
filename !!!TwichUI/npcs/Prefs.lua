@@ -5,6 +5,8 @@
 --   trainerClass   "mine": class trainers for your class only; "all": every class's
 --   reports        show what other players sent you (dimmed), not only what you saw yourself
 --   reportAlpha    how opaque the NPCs others sent you are, in percent (60; 100 draws them like your own, in colour)
+--   backdrop       behind each marker, to read it over busy map art: "none" (the default), "shadow" (a dark copy of the
+--                  icon's shape, offset down and right) or "plate" (a dark square)
 --   labels         names under the markers
 --   iconSize       marker size in percent
 --   minimap        also draw the markers within range on the minimap (npcs/Minimap.lua; off)
@@ -23,17 +25,23 @@ local NP = {}
 R.NpcPrefs = NP
 
 local DEFAULTS = {
-    trainerClass = "mine", reports = true, reportAlpha = 60, labels = false, minimap = false, iconSize = 100, receive = "ask", sendReports = false,
+    trainerClass = "mine", reports = true, reportAlpha = 60, backdrop = "none", labels = false, minimap = false, iconSize = 100, receive = "ask", sendReports = false,
     liveGroup = true, liveGuild = true, liveReceive = true,
 }
 for _, k in ipairs(NK.LIST) do DEFAULTS["show." .. k.id] = k.on end
 local LIMITS = { iconSize = { 60, 150 }, reportAlpha = { 20, 100 } }
 local ENUM = {
     trainerClass = { mine = true, all = true },
+    backdrop = { none = true, shadow = true, plate = true },
     receive = { ask = true, auto = true, off = true },
 }
 NP.DEFAULTS, NP.LIMITS, NP.ENUM = DEFAULTS, LIMITS, ENUM
 NP.TRAINER_CLASS = { { "mine", "My class only" }, { "all", "Every class" } }
+NP.BACKDROP = {
+    { "none", "None", "The icon alone, as drawn by default." },
+    { "shadow", "Shadow", "A dark copy of the icon's shape behind it, a little larger and set down and to the right." },
+    { "plate", "Dark plate", "A dark, partly see-through square behind the icon." },
+}
 NP.RECEIVE = {
     { "ask", "Ask each time", "A short question names who sent it and how many are new to you. Nothing is added until you accept." },
     { "auto", "Add from party and guild", "Lists from your party or guild are added without asking, as reports from others. A list whispered to you still asks." },
@@ -41,7 +49,7 @@ NP.RECEIVE = {
 }
 
 -- What each reset puts back
-NP.GROUPS = { show = {}, look = { "trainerClass", "reports", "reportAlpha", "labels", "minimap", "iconSize" }, sharing = { "receive", "sendReports", "liveGroup", "liveGuild", "liveReceive" } }
+NP.GROUPS = { show = {}, look = { "trainerClass", "reports", "reportAlpha", "backdrop", "labels", "minimap", "iconSize" }, sharing = { "receive", "sendReports", "liveGroup", "liveGuild", "liveReceive" } }
 for _, k in ipairs(NK.LIST) do table.insert(NP.GROUPS.show, "show." .. k.id) end
 
 local function Valid(key, value)

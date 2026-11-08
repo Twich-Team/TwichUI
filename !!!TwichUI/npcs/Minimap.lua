@@ -80,6 +80,7 @@ local function Dress(b, e, kind)
         b.icon:SetTexture(kind.icon)
         b.hl:SetTexture(kind.icon)
     end
+    NMAP.Backdrop(b, kind.icon)
     local reported = not e.own
     local alpha = reported and NP.Get("reportAlpha") / 100 or 1
     if b.reported ~= reported or b.alpha ~= alpha then
@@ -293,7 +294,7 @@ R:On("PLAYER_LOGIN", MM.Refresh)
 function MM.State()
     local out = {}
     for i, b in ipairs(slots) do
-        if b.on then out[#out + 1] = { id = b.entry and b.entry.id, x = b.px, y = b.py, size = b.size } end
+        if b.on then out[#out + 1] = { id = b.entry and b.entry.id, x = b.px, y = b.py, size = b.size, backdrop = b.backKey } end
     end
     return out
 end
