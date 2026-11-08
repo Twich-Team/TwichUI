@@ -79,6 +79,9 @@ local function Boot(opts)
     end
     function rxp.settings:RefreshProfile() self.profile = rxp.nextProfile end
     function rxp.GetGuideName(guide) return guide.displayname end
+    -- RestedXP's quest log button for its orphaned quest cleanup (QuestLog.lua: addon.cleanupBtn), made once the quest
+    -- log is loaded; a click runs its own cleanup, which asks before abandoning.
+    rxp.cleanupBtn = { clicks = 0, Click = function(self) self.clicks = self.clicks + 1 end }
     rxp.guideImporter = { opens = 0, Open = function(self) self.opens = self.opens + 1 end }
     -- RestedXP's menu table: a title, groups with guides (and a sub-group), a guide with chapters, a disabled
     -- guide, then the empty title where its own entries start (which must not be read).
@@ -172,7 +175,7 @@ do
     assert(menu and menu.shown, "a click opens the menu")
     local rows = {}
     for _, f in ipairs(c.frames) do if f.kind == "Button" and f.parent == menu then rows[#rows + 1] = f end end
-    assert(#rows == 7, "seven rows: " .. #rows)
+    assert(#rows == 8, "eight rows: " .. #rows)
     local function Click(row) if row.enabled then row.scripts.OnClick(row) end end
     return menu, rows, Click
   end
@@ -181,8 +184,8 @@ do
   assert(not bus.events.GLOBAL_MOUSE_DOWN and not bus.events.PLAYER_REGEN_DISABLED, "listens to nothing while closed")
   local menu, rows, Click = Open("LeftButton")
   assert(bus.events.GLOBAL_MOUSE_DOWN and bus.events.PLAYER_REGEN_DISABLED, "listens while open")
-  local choose, guide, lock, quests, flight, discard, import =
-    rows[1], rows[2], rows[3], rows[4], rows[5], rows[6], rows[7]
+  local choose, guide, lock, quests, flight, discard, import, orphans =
+    rows[1], rows[2], rows[3], rows[4], rows[5], rows[6], rows[7], rows[8]
   assert(choose.name.text == "Choose guide" and choose.chev.shown and choose.enabled, "Choose guide leads the menu, with an arrow")
   assert(menu.template == "BackdropTemplate", "a backdrop frame, as the Mage menus are")
   assert(c.rxp.toggles == 0, "opening the menu changes nothing")
@@ -191,6 +194,10 @@ do
   assert(lock.name.text == "Lock windows" and lock.note.text == "Unlocked" and lock.fill.shown == false, "Lock windows: unlocked")
   assert(import.name.text == "Import guides..." and import.enabled and import.note.text == "", "import is available out of combat")
   assert(c.UISpecialFrames[1] == "TwichUIRestedXPMenu", "Esc closes it")
+  assert(orphans.name.text == "Orphaned quests..." and not orphans.enabled and orphans.note.text == "No guide",
+    "orphaned quests is greyed out until a guide is loaded")
+  Click(orphans)
+  assert(c.rxp.cleanupBtn.clicks == 0, "and does nothing then")
 
   Click(guide)
   assert(c.rxp.toggles == 1 and c.rxp.settings.profile.showEnabled == false and obj.text == "Guide off", "Show guide turns it off")
@@ -281,6 +288,26 @@ do
   c.FireEvent("PLAYER_REGEN_ENABLED")
   assert(import.enabled and import.note.text == "", "back out of combat")
   menu:Hide()
+
+  -- Orphaned quests: a click on RestedXP's own button (it lists and asks before abandoning); the menu closes.
+  c.rxp.currentGuide = { group = "Alliance", name = "6-10 Westfall", key = "Alliance6-10 Westfall", displayname = "6-10 Westfall" }
+  obj.OnClick(obj, "LeftButton")
+  assert(orphans.enabled and orphans.note.text == "", "orphaned quests is available with a guide loaded")
+  c.inCombat = true
+  c.FireEvent("PLAYER_REGEN_DISABLED")
+  assert(not orphans.enabled and orphans.note.text == "In combat", "greyed out in combat")
+  Click(orphans)
+  assert(c.rxp.cleanupBtn.clicks == 0, "and does nothing in combat")
+  c.inCombat = false
+  c.FireEvent("PLAYER_REGEN_ENABLED")
+  Click(orphans)
+  assert(c.rxp.cleanupBtn.clicks == 1 and not menu.shown, "it clicks RestedXP's cleanup button and closes the menu")
+  local button = c.rxp.cleanupBtn
+  c.rxp.cleanupBtn = nil   -- the quest log hasn't been loaded, so RestedXP has no button yet
+  obj.OnClick(obj, "LeftButton")
+  assert(not orphans.enabled and orphans.note.text == "Unavailable", "greyed out without RestedXP's button")
+  menu:Hide()
+  c.rxp.cleanupBtn = button
 
   -- RestedXP's own minimap button or /rxp toggle: the text follows.
   c.rxp.settings.ToggleActive()
@@ -418,20 +445,20 @@ do
   for _, f in ipairs(c.frames) do if f.name == "TwichUIRestedXPMenu" then menu = f end end
   local rows = {}
   for _, f in ipairs(c.frames) do if f.kind == "Button" and f.parent == menu then rows[#rows + 1] = f end end
-  assert(#rows == 8 and rows[8].name.text == "Guide rebinder..." and rows[8].enabled, "an eighth, enabled row")
-  rows[8].scripts.OnClick(rows[8])
+  assert(#rows == 9 and rows[9].name.text == "Guide rebinder..." and rows[9].enabled, "a ninth, enabled row")
+  rows[9].scripts.OnClick(rows[9])
   assert(opened == 1 and not menu.shown, "its action runs and the menu closes")
   -- Added while the menu already exists.
   assert(M.AddRow({ key = "Late", label = "Late", act = function() end, enabled = function() return false end, why = "Not now" }))
   c.obj.OnClick(c.obj, "LeftButton")
   rows = {}
   for _, f in ipairs(c.frames) do if f.kind == "Button" and f.parent == menu then rows[#rows + 1] = f end end
-  assert(#rows == 9 and not rows[9].enabled and rows[9].note.text == "Not now",
+  assert(#rows == 10 and not rows[10].enabled and rows[10].note.text == "Not now",
     "a late row is greyed out with its reason")
   -- RestedXP unreadable: the other addon's row still works.
   c.rxp.settings.ToggleActive = nil
   M.Refresh()
-  assert(rows[8].enabled, "an added row doesn't depend on RestedXP being readable")
+  assert(rows[9].enabled, "an added row doesn't depend on RestedXP being readable")
 end
 
 print("PASSED")

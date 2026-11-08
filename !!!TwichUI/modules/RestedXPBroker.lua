@@ -21,6 +21,10 @@
 -- is addon:LoadGuide; RestedXP has no combat check there, nor does its menu. Nothing else of RestedXP's
 -- is changed.
 -- Discard junk when the bags are full is profile.autoDiscardItems, set the way RestedXP's own option sets it.
+-- Orphaned quests (QuestLog.lua): RestedXP keeps its cleanup in a local function, run by the "Cleanup Orphaned
+-- Quests" button it puts on the quest log (addon.cleanupBtn). We click that button, so RestedXP itself checks
+-- combat, lists the quests and asks before abandoning anything; the menu row is greyed out while the button
+-- doesn't exist (the quest log isn't loaded), no guide is loaded, or in combat.
 -- ToggleActive and settings:RefreshProfile (a RestedXP profile change) are hooked, once, so the text
 -- follows a toggle made anywhere.
 
@@ -173,6 +177,34 @@ end
 function B.OpenImport()
     if not B.CanImport() then return end
     rxp.guideImporter:Open()
+end
+
+---------------------------------------------------------------------------
+-- Orphaned quests: RestedXP's own cleanup, started from its quest log button
+---------------------------------------------------------------------------
+local function CleanupButton()
+    if type(rxp) ~= "table" then return nil end
+    local btn = rxp.cleanupBtn
+    if type(btn) ~= "table" then btn = _G.RXPQuestLogCleanupButton end
+    if type(btn) == "table" and type(btn.Click) == "function" then return btn end
+end
+
+-- nil when the cleanup can be started now, else the short reason the menu shows.
+function B.CleanupBlocker()
+    if not Usable(rxp) then return nil end
+    if InCombatLockdown and InCombatLockdown() then return "In combat" end
+    local guide = rxp.currentGuide
+    if not (CleanupButton() and type(guide) == "table" and guide.key) then
+        return CleanupButton() and "No guide" or "Unavailable"
+    end
+    return nil
+end
+
+-- Clicks RestedXP's button. It lists the quests it would abandon and asks first; nothing is abandoned here.
+function B.CleanupQuests()
+    if B.CleanupBlocker() ~= nil then return false end
+    CleanupButton():Click()
+    return true
 end
 
 ---------------------------------------------------------------------------

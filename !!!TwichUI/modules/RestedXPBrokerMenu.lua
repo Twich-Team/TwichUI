@@ -15,6 +15,10 @@
 --                 in its row ("Inventory off", "Unavailable"), when RestedXP's own option page would hide it.
 --   Import guides opens RestedXP's guide import window and closes this menu. Greyed out in combat, when
 --                 RestedXP would only queue it.
+--   Orphaned quests...
+--                 starts RestedXP's own "Cleanup Orphaned Quests" (it lists the quests and asks before abandoning
+--                 any) and closes this menu. Greyed out, with the reason, in combat, with no guide loaded, or
+--                 when RestedXP hasn't made its quest log button yet.
 -- The switches leave the menu open, so several can be set in one visit, and the rows follow RestedXP when
 -- it changes (its own minimap button, a profile change). Nothing in it is secure, so it works in combat
 -- too, and it listens for events only while it is open. A click anywhere else, Esc or a second click on the
@@ -100,6 +104,12 @@ local SPEC = {
         enabled = function() return Broker().CanImport() end,
         why = "In combat",
         act = function() M.Close(); Broker().OpenImport() end,
+    },
+    {
+        key = "orphans", label = "Orphaned quests...", plain = true,
+        enabled = function() return Broker().CleanupBlocker() == nil end,
+        why = function() return Broker().CleanupBlocker() end,
+        act = function() M.Close(); Broker().CleanupQuests() end,
     },
 }
 
