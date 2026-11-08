@@ -47,6 +47,7 @@ PF.ACCOUNT = {
         mapToolsIntro = true,     -- that the map tool bar's once-only note was seen: a record, not a choice
         navTravel = true,         -- each character's Hearthstone bind point, for navigation: a record per character
         cozyBagOffer = true,      -- each character's Cozy Sleeping Bag offer record (card shown, button hidden, bag got): a record per character
+        barGlowsMemory = true,    -- the aspect, seal, tracking or weapon buff each character used last, and the blessing it gave each class: a record per character
     },
 }
 -- The gear entries that are a profile's. The rest stay account-wide: stat weights and priorities are kept

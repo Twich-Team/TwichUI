@@ -334,6 +334,22 @@ buffback\Watch.lua
 buffback\List.lua
 buffback\Unlock.lua
 
+# Action bar glows: your action bar buttons glow when a buff of yours is missing (on you, or on group members out of
+# combat), a weapon buff, seal or tracking is off, a reagent or an item you chose runs low, an important cooldown comes
+# back, a proc can be used, or a button holds an old rank. Each kind and each spell can be turned off, and each has its own
+# look. Catalog.lua is the built-in list (pure), Config.lua what is stored, Logic.lua the decisions (pure), State.lua reads
+# the game, Buttons.lua finds the buttons (Blizzard's and EllesmereUI's), Draw.lua draws the glows, Notice.lua the message cards (in the zone
+# arrival card's look), Controller.lua puts them together.
+# It only reads and draws: it never casts or uses anything. The settings are in TwichUI_Settings.
+glows\Catalog.lua
+glows\Config.lua
+glows\Logic.lua
+glows\Buttons.lua
+glows\State.lua
+glows\Draw.lua
+glows\Notice.lua
+glows\Controller.lua
+
 # Target dragon artwork: a dragon of your choosing on EllesmereUI's target frame for bosses, world bosses, rare elites,
 # elites and rares, by the game's own classification (off until turned on; needs EllesmereUI's unit frames with its
 # own target frame; nothing of EllesmereUI's is changed). Config.lua is what it stores and decides (no frames),

@@ -73,6 +73,7 @@ local DEFAULT_MODULES = {
     targetArt = false,       -- Target dragon artwork: a dragon on EllesmereUI's target frame by the target's classification (opt-in; needs EllesmereUI's target frame; decoration only)
     hazardAlerts = false,    -- Hazard alerts: the game plays a sound when an aura you list lands on you, grows or fades (opt-in; no combat log is read, nothing is automated)
     reminders = true,        -- Reminders: artwork, an icon or text when conditions you set are true (none exist until you make one, and each starts turned off; reminders/)
+    barGlows = true,         -- Action bar glows: your bar buttons glow for a missing buff, weapon buff, seal or tracking, a low reagent or item, a ready cooldown, a proc or an old rank (each spell can be turned off; reads only, never casts; glows/)
     buffBack = false,        -- Return the Favor: who just buffed you, in a short list; click a name to buff them back (opt-in; casts only when you click; buffback/)
     healerWatch = false,     -- Healer Watch: one healer's mana, confirmed drinking and recent mana messages in a small panel, in dungeons (opt-in; informs only, never sends or decides anything; healer/)
     qolSummons = false,      -- Quality of Life (all opt-in, see qol/QoL.lua): accept summons

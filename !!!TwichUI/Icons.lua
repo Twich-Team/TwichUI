@@ -95,6 +95,8 @@ local list = {
     healerWatchDrink = { file = R.PATH .. [[media\healerwatch\cup]], small = R.PATH .. [[media\healerwatch\cup-small]], size = 64, pad = 2, source = "healerWatch" },   -- a ceramic cup
     -- Guild Locations' settings illustration (assets/guild-locations-settings-source.png, cut by tools/make_guild_locations_art.py)
     guildLocations = { file = R.PATH .. [[media\guildloc\settings]], small = R.PATH .. [[media\guildloc\settings-small]], size = 64, pad = 3, source = "guildLocations" },   -- a parchment map with three pins and a pennant
+    -- Action bar glows' settings illustration (assets/bar-glows-source.png, cut by tools/make_bar_glows_art.py)
+    barGlows = { file = R.PATH .. [[media\barglows\settings]], small = R.PATH .. [[media\barglows\settings-small]], size = 64, pad = 2, source = "barGlows" },   -- a leather action bar strip with three ability icons, the middle one glowing
 }
 Icons.list = list
 

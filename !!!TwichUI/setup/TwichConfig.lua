@@ -44,7 +44,7 @@ TC.STAYS = {
     { code = "acts", text = "Anything that acts for you in the game: selling, whether vendor restocking is on and your confirmation that it may buy without asking, whether Magic Inventory is on, filling trades by itself, accepting summons, resurrections or duels, releasing your spirit, and placing the waypoint. These only turn on by your own choice." },
     { code = "network", text = "What TwichUI sends to or accepts from other players: configuration sharing, accepting setups, the group check, how you send, and whether Party pins and Map pings are on, and whether you send and take in pings. Also Vendors and trainers: whether it is on, which of them your map shows, and how lists others send you are taken in." },
     { code = "place", text = "Where windows, cards and buttons sit: that stays as you placed it on this screen." },
-    { code = "other", text = "RestedXP's on/off switch (it chooses RestedXP's own theme), records of this character, map pins, the vendors and trainers you have noted, your reminders (they can name your characters), your Magic Inventory rules and recipients, the Journey Chronicle, backups, Undo copies and the setups you have received." },
+    { code = "other", text = "RestedXP's on/off switch (it chooses RestedXP's own theme), records of this character, map pins, the vendors and trainers you have noted, your reminders (they can name your characters), your action bar glow choices (looks and spells, by class), your Magic Inventory rules and recipients, the Journey Chronicle, backups, Undo copies and the setups you have received." },
 }
 
 TC.LOCAL = {
@@ -79,7 +79,7 @@ TC.LOCAL = {
     ["modules.reminders"] = "other", ["ui.reminders"] = "other",
     ["ui.magicInventory"] = "other", ["magicInventory"] = "other",
     ["ui.restedxpSkinState"] = "other", ["ui.showAdvanced"] = "other", ["gear.trees"] = "other",
-    ["pins"] = "other", ["npcs"] = "other", ["ui.mapToolsIntro"] = "other", ["ui.navTravel"] = "other", ["ui.cozyBagOffer"] = "other", ["setup"] = "other", ["storedData"] = "other", ["whisperProbe"] = "other", ["welcome"] = "other", ["onboarding"] = "other",
+    ["pins"] = "other", ["npcs"] = "other", ["ui.mapToolsIntro"] = "other", ["ui.navTravel"] = "other", ["ui.cozyBagOffer"] = "other", ["ui.barGlows"] = "other", ["ui.barGlowsMemory"] = "other", ["setup"] = "other", ["storedData"] = "other", ["whisperProbe"] = "other", ["welcome"] = "other", ["onboarding"] = "other",
     ["schema"] = "other", ["migrated"] = "other", ["heldStored"] = "other",
     ["profiles"] = "other", ["profileKeys"] = "other", ["profileState"] = "other", ["layouts"] = "other",
 }
@@ -1811,6 +1811,10 @@ local function Define()
         local BB = R.BuffBack
         Table(g, { "ui", "buffBackLook" }, BB and BB.Look, LOOK, LOOK_ENUMS)
     end
+
+    g = Group("barGlows", "Action bar glows", { page = "barGlows",
+        note = "Whether your action bar buttons glow at all. Which spells glow and how each looks stay yours: they are chosen per class and per character." })
+    Switches(g, { "barGlows" })
 
     g = Group("targetArt", "Target dragon artwork", { page = "targetArt",
         note = "Whether the dragon on EllesmereUI's target frame is on, which artwork each kind of enemy gets, and how it is placed and drawn. It only decorates; it needs EllesmereUI on the receiving side to show." })

@@ -95,6 +95,7 @@ function SettingsClient(opts)
     "reminders/AmmoItems.lua", "reminders/Config.lua", "reminders/Conditions.lua", "reminders/Ammunition.lua", "reminders/Evaluate.lua", "reminders/State.lua", "reminders/Display.lua", "reminders/Controller.lua",
     "healer/Config.lua", "healer/Logic.lua", "healer/Drinks.lua", "healer/Particles.lua", "healer/Display.lua", "healer/Watch.lua",
     "buffback/Config.lua", "buffback/Spells.lua", "buffback/Watch.lua", "buffback/List.lua", "buffback/Unlock.lua",
+    "glows/Catalog.lua", "glows/Config.lua", "glows/Logic.lua", "glows/Buttons.lua", "glows/State.lua", "glows/Draw.lua", "glows/Notice.lua", "glows/Controller.lua",
     "hazard/Config.lua", "hazard/Rules.lua", "hazard/Alerts.lua",
     "targetart/Config.lua", "targetart/Ellesmere.lua", "targetart/Display.lua",
     "modules/RestedXPSkin.lua", "modules/RestedXPTimers.lua", "modules/SpeakStoneSkin.lua", "qol/QoL.lua", "qol/Summons.lua", "qol/Resurrect.lua", "qol/ReleasePvP.lua",

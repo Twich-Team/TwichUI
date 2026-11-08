@@ -250,6 +250,9 @@ Define("reminders", { apply = Refresh("ReminderController") })
 Define("healerWatch", { apply = Refresh("HealerWatcher") })
 Define("buffBack", { apply = Refresh("BuffBackWatch") })
 
+-- Action bar glows: off removes every glow, faded bar and event at once; your choices are kept
+Define("barGlows", { apply = Refresh("BarGlowController") })
+
 -- Target dragon artwork on EllesmereUI's target frame
 Define("targetArt", { apply = Refresh("TargetArtDisplay") })
 

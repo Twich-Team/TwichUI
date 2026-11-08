@@ -39,6 +39,8 @@ pages\MagicInventoryDrag.lua
 pages\MagicInventoryGuild.lua
 pages\Mage.lua
 pages\ClassBars.lua
+pages\BarGlows.lua
+pages\BarGlowsSpells.lua
 pages\AmmoItems.lua
 pages\Chronicle.lua
 pages\Pins.lua

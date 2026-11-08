@@ -233,7 +233,7 @@ do
       assert(inSide[page.key], page.key .. " is in the sidebar")
     end
   end
-  assert(children == 23, "twenty-three secondary pages: " .. children)
+  assert(children == 24, "twenty-four secondary pages: " .. children)
   assert(#K.Tabs("overview") == 0 and #K.Tabs("auction") == 0, "a feature without pages under it has no tabs")
   do   -- Markers: its own list in Everyday, then the two kinds of marker cycling and the bar, each a tab of its own
     local labels = {}
@@ -1281,8 +1281,8 @@ do
     assert(TgaSide(e.file) == 64 and TgaSide(e.small) == 32, id .. " has its 64 and 32 px files")
   end
   -- besides the sheets, only a feature's own artwork cut by its own tool (Healer Watch: tools/make_healer_watch_art.py; the
-  -- Reminders designer's emblem: tools/make_reminder_designer_art.py; Guild Locations: tools/make_guild_locations_art.py)
-  local OWN = { healerWatch = true, healerWatchDrink = true, reminderDesigner = true, guildLocations = true }
+  -- Reminders designer's emblem: tools/make_reminder_designer_art.py; Guild Locations: tools/make_guild_locations_art.py; Action bar glows: tools/make_bar_glows_art.py)
+  local OWN = { healerWatch = true, healerWatchDrink = true, reminderDesigner = true, guildLocations = true, barGlows = true }
   local count, own = 0, 0
   for id, e in pairs(Icons.list) do
     if e.source == "sheet" then count = count + 1 else
@@ -1294,7 +1294,7 @@ do
     assert(w == e.size and h == e.size, id .. "'s file is " .. tostring(w) .. " px, the registry says " .. e.size)
   end
   assert(count == #SHEET and count == 48, "the five sheets' forty-eight icons: " .. count)
-  assert(own == 4, "and Healer Watch's two, the Reminders designer's emblem and Guild Locations' illustration: " .. own)
+  assert(own == 5, "and Healer Watch's two, the Reminders designer's emblem, Guild Locations' illustration and Action bar glows' strip: " .. own)
   assert(Icons.Path("home", 20):find("%-small$") and not Icons.Path("home", 40):find("%-small$"), "the 32 px file when drawn small")
   local stub = { SetTexCoord = function() end, SetVertexColor = function() end }
   function stub:SetTexture(path) self.path = path; return path == Icons.FALLBACK end   -- refuses everything but the emblem

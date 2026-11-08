@@ -172,6 +172,11 @@ A card names an icon with `icon = "<id>"`; a card without one keeps its text in 
 `tools/make_guild_locations_art.py` into `!!!TwichUI/media/guildloc/settings.tga` (64 px) and `settings-small.tga` (32 px);
 its registry entry says `source = "guildLocations"`. It replaced the borrowed `explore` spyglass on the Guild Locations page.
 
+`barGlows` (a leather action bar strip holding three ability icons, the middle one glowing) is Action bar glows' own illustration,
+cut by `tools/make_bar_glows_art.py` from `assets/bar-glows-source.png` into `!!!TwichUI/media/barglows/settings.tga` (64 px) and
+`settings-small.tga` (32 px); its registry entry says `source = "barGlows"`. The strip is three times as wide as it is tall, so
+it is about 60 x 23 px at 64 and 30 x 11 at 32: wide and flat beside the square icons. It replaced the borrowed `quickKeybind` key.
+
 `healerWatch` (the mana flask) and `healerWatchDrink` (the cup) are Healer Watch's own artwork, cut from
 `assets/healer-watch-source.png` by `tools/make_healer_watch_art.py` into `!!!TwichUI/media/healerwatch/<name>.tga`
 (64 px) and `<name>-small.tga` (32 px), with a 256 px `-large` file for the panel's Artwork layout. Their registry entries
