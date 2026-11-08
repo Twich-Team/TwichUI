@@ -432,6 +432,269 @@ local function DrawDests(y)
     return y
 end
 
+---------------------------------------------------------------------------
+-- The rules table: one row a rule, in priority order, with columns, banding and drag to reorder
+---------------------------------------------------------------------------
+local ROW_H = 30
+local COL = {                    -- x, width (left edge of the page frame); the buttons start at BTN_X
+    grip = { 8, 10 }, num = { 22, 22 }, on = { 44, 18 }, name = { 68, 104 }, items = { 176, 108 },
+    action = { 288, 54 }, to = { 346, 76 }, keep = { 426, 26 },
+}
+local BTN_X = 456
+local ACTION_SHORT = { mail = "Mail", bank = "Bank", guild = "Guild bank", keep = "Keep", never = "Never" }
+local dropAt                     -- the row a drag would put the rule in, or nil
+
+-- Short cells for the table; the row's tooltip has the full words (P.ItemsText, P.DestText, P.KeepText).
+function P.RowCells(rule)
+    local mi = MI()
+    local to, tone = "-", nil
+    if mi.NEEDS_DEST[rule.kind] then
+        local d = rule.dest and mi.Dest(rule.dest)
+        local where = d and mi.Resolve(d.id)
+        if not d then to, tone = "Choose one", "warn"
+        elseif not where then to, tone = d.label, "warn"
+        elseif rule.kind == "mail" then to = where.recipient
+        else to = ("Tab %d"):format(where.tab) end
+    end
+    local keep = "-"
+    if rule.kind == "never" then keep = "All"
+    elseif rule.keep and rule.keep > 0 then keep = tostring(rule.keep)
+    elseif rule.kind == "keep" then keep, tone = "?", tone or "warn" end
+    return ACTION_SHORT[rule.kind] or rule.kind, to, keep, tone
+end
+
+local function RowTip(self)
+    local rule = self.rule
+    if not rule then return end
+    local mi = MI()
+    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+    GameTooltip:SetText(("%d.  %s"):format(self.index or 0, rule.name))
+    GameTooltip:AddLine("Items: " .. P.ItemsText(rule), 0.9, 0.9, 0.9, true)
+    GameTooltip:AddLine("Destination: " .. (P.DestText(rule)), 0.9, 0.9, 0.9, true)
+    GameTooltip:AddLine("Keep: " .. P.KeepText(rule), 0.9, 0.9, 0.9, true)
+    if rule.kind == "guild" and (rule.stack or 0) > 0 then GameTooltip:AddLine("Target stack size: " .. rule.stack, 0.9, 0.9, 0.9, true) end
+    local problem = select(2, mi.Problem(rule, false))
+    if problem then GameTooltip:AddLine(problem, AMBER[1], AMBER[2], AMBER[3], true) end
+    GameTooltip:AddLine("Drag the row to change its priority.", 0.6, 0.6, 0.6, true)
+    GameTooltip:Show()
+end
+
+local function RowFrame(i)
+    return Get("tr" .. i, function()
+        local row = CreateFrame("Button", nil, f)
+        row:SetHeight(ROW_H)
+        row:SetFrameLevel(f:GetFrameLevel() + 1)
+        row.bg = row:CreateTexture(nil, "BACKGROUND")
+        row.bg:SetAllPoints()
+        row.hover = row:CreateTexture(nil, "BACKGROUND", nil, 1)
+        row.hover:SetAllPoints()
+        row.hover:Hide()
+        row.grip = {}
+        for k = 0, 2 do
+            local g = row:CreateTexture(nil, "ARTWORK")
+            g:SetSize(COL.grip[2], 2)
+            g:SetPoint("LEFT", row, "LEFT", COL.grip[1], 5 - k * 5)
+            row.grip[k + 1] = g
+        end
+        row:RegisterForDrag("LeftButton")
+        row:SetScript("OnEnter", function(self) self.hover:Show(); RowTip(self) end)
+        row:SetScript("OnLeave", function(self) self.hover:Hide(); GameTooltip:Hide() end)
+        row:SetScript("OnDragStart", function(self) if self.rule then P.StartRuleDrag(self) end end)
+        row:SetScript("OnDragStop", function() P.Drag.Stop() end)
+        return row
+    end)
+end
+
+-- A cell of text in a row: one line, cut off with "..." where it doesn't fit (the tooltip has all of it).
+local function Cell(key, row, col, text, tone, justify)
+    local t = Text(key, "small")
+    t:SetParent(row)
+    t:SetWordWrap(false)
+    t:SetJustifyH(justify or "LEFT")
+    t:ClearAllPoints()
+    t:SetPoint("LEFT", f, "TOPLEFT", COL[col][1], -(row.y + ROW_H / 2))
+    t:SetWidth(COL[col][2])
+    t:SetText(text)
+    Tone(t, tone)
+    return t
+end
+
+-- Row controls are made once, under the row, and found again by the same names as before ("rule1on", "rule1edit"...).
+local function RowButton(key, row, label, w, kind, x, onClick, tipTitle, tipText)
+    local b = Button(key, label, w, kind, onClick)
+    b:SetParent(row)
+    b:SetHeight(22)
+    b:SetFrameLevel(row:GetFrameLevel() + 2)
+    At(b, x, row.y + (ROW_H - 22) / 2)
+    if tipTitle then R.Interact.Tip(b, tipTitle, tipText) end
+    return b
+end
+
+local function DropMark()
+    return Get("dropMark", function()
+        local t = f:CreateTexture(nil, "OVERLAY")
+        t:SetColorTexture(Wg().pal.teal[1], Wg().pal.teal[2], Wg().pal.teal[3], 1)
+        t:SetHeight(2)
+        return t
+    end)
+end
+
+local rowCount = 0
+local function RowUnderPointer()
+    for i = 1, rowCount do
+        local row = pool["tr" .. i]
+        if row and row:IsShown() and row:IsMouseOver() then return i end
+    end
+end
+
+-- Near the top or bottom edge of the view while dragging, the page scrolls so a far row can be reached.
+local function AutoScroll()
+    local p = f:GetParent()
+    while p and not p.GetVerticalScroll do p = p.GetParent and p:GetParent() or nil end
+    if not (p and p.GetTop and p:GetTop()) then return end
+    local _, cy = GetCursorPosition()
+    cy = cy / (p:GetEffectiveScale() or 1)
+    local top, bottom = p:GetTop(), p:GetBottom()
+    local speed = 0
+    if cy > top - 28 then speed = -((cy - (top - 28)) / 28 * 14)
+    elseif cy < bottom + 28 then speed = ((bottom + 28) - cy) / 28 * 14 end
+    if speed == 0 then return end
+    local most = p:GetVerticalScrollRange() or 0
+    p:SetVerticalScroll(math.max(0, math.min(most, p:GetVerticalScroll() + speed)))
+end
+
+local function ShowDropMark(place, from)
+    dropAt = place
+    local mark = DropMark()
+    local row = place and pool["tr" .. place]
+    if not row then mark:Hide(); return end
+    mark:Show()
+    mark:ClearAllPoints()
+    -- moving up lands above that row, moving down lands below it: the line is where the rule will be
+    local y = row.y + ((place > from) and ROW_H or 0)
+    mark:SetPoint("TOPLEFT", f, "TOPLEFT", PAD, -y + 1)
+    mark:SetPoint("TOPRIGHT", f, "TOPRIGHT", -PAD, -y + 1)
+end
+
+function P.StartRuleDrag(row)
+    if GetCursorInfo and GetCursorInfo() then
+        Say("You are holding an item. Put it down first; nothing was changed.", "warn")
+        return
+    end
+    local rule, from = row.rule, row.index
+    GameTooltip:Hide()
+    P.Drag.Start({
+        src = { kind = "rule", id = rule.id, from = from }, label = ("%d.  %s"):format(from, rule.name),
+        find = RowUnderPointer,
+        hover = function(place) ShowDropMark(place, from); if place then AutoScroll() end end,
+        drop = function(src, place)
+            if place == src.from then return end
+            local ok = MI().MoveRuleTo(src.id, place)
+            if ok then Say(("Moved \"%s\" to place %d."):format(rule.name, place)) end
+        end,
+    })
+end
+
+local function DrawTable(y, rules)
+    local mi = MI()
+    local pal = Wg().pal
+    -- header
+    local hd = Get("trHead", function()
+        local h = CreateFrame("Frame", nil, f)
+        h:SetHeight(24)
+        h.bg = h:CreateTexture(nil, "BACKGROUND")
+        h.bg:SetAllPoints()
+        h.bg:SetColorTexture(pal.band[1], pal.band[2], pal.band[3], 1)
+        h.line = h:CreateTexture(nil, "BORDER")
+        h.line:SetHeight(1)
+        h.line:SetPoint("BOTTOMLEFT")
+        h.line:SetPoint("BOTTOMRIGHT")
+        h.line:SetColorTexture(pal.bronzeLo[1], pal.bronzeLo[2], pal.bronzeLo[3], 1)
+        return h
+    end)
+    hd:ClearAllPoints()
+    hd:SetPoint("TOPLEFT", f, "TOPLEFT", PAD, -y)
+    hd:SetPoint("TOPRIGHT", f, "TOPRIGHT", -PAD, -y)
+    local titles = { { "num", "#" }, { "on", "On" }, { "name", "Name" }, { "items", "Items" }, { "action", "Action" }, { "to", "Goes to" }, { "keep", "Keep" } }
+    for _, t in ipairs(titles) do
+        local c = Text("trH" .. t[1], "small")
+        c:SetParent(hd)
+        c:SetWordWrap(false)
+        c:SetJustifyH("LEFT")
+        c:ClearAllPoints()
+        c:SetPoint("LEFT", f, "TOPLEFT", COL[t[1]][1], -(y + 12))
+        c:SetWidth(COL[t[1]][2] + 4)
+        c:SetText(t[2])
+        Tone(c, "head")
+    end
+    local act = Text("trHactions", "small")
+    act:SetParent(hd)
+    act:ClearAllPoints()
+    act:SetPoint("LEFT", f, "TOPLEFT", BTN_X, -(y + 12))
+    act:SetWidth(W - PAD - BTN_X)
+    act:SetJustifyH("LEFT")
+    act:SetText("Move, edit, copy, delete")
+    Tone(act, "head")
+    y = y + 24
+    rowCount = #rules
+    for i, rule in ipairs(rules) do
+        local key = "rule" .. i
+        local row = RowFrame(i)
+        row.rule, row.index, row.y = rule, i, y
+        row:ClearAllPoints()
+        row:SetPoint("TOPLEFT", f, "TOPLEFT", PAD, -y)
+        row:SetPoint("TOPRIGHT", f, "TOPRIGHT", -PAD, -y)
+        -- banding: every other row lighter; a rule that is off reads quieter
+        local band = (i % 2 == 0) and pal.surface or pal.well
+        row.bg:SetColorTexture(band[1], band[2], band[3], (i % 2 == 0) and 0.55 or 0.35)
+        local hv = pal.teal
+        row.hover:SetColorTexture(hv[1], hv[2], hv[3], 0.10)
+        for _, g in ipairs(row.grip) do g:SetColorTexture(pal.stone[1], pal.stone[2], pal.stone[3], 0.7) end
+        local action, to, keep, tone = P.RowCells(rule)
+        local problem = select(2, mi.Problem(rule, false))
+        local dim = not rule.enabled
+        Cell(key .. "num", row, "num", tostring(i), "dim")
+        local box = Check(key .. "on", function(v)
+            local ok, why = mi.SetRuleEnabled(rule.id, v)
+            if not ok then Say(why, "warn") end
+        end)
+        box:SetParent(row)
+        box:SetFrameLevel(row:GetFrameLevel() + 2)
+        At(box, COL.on[1], y + (ROW_H - 18) / 2)
+        box:SetChecked(rule.enabled)
+        Cell(key .. "name", row, "name", rule.name, dim and "dim" or nil)
+        Cell(key .. "items", row, "items", P.ItemsText(rule), "dim")
+        Cell(key .. "action", row, "action", action, dim and "dim" or nil)
+        Cell(key .. "to", row, "to", to, (tone == "warn" or problem) and "warn" or "dim")
+        Cell(key .. "keep", row, "keep", keep, "dim")
+        RowButton(key .. "up", row, "Up", 26, "secondary", BTN_X, i > 1 and function() mi.MoveRule(rule.id, -1) end or nil,
+            "Move up", "Gives this rule a higher priority. You can also drag the row.")
+        RowButton(key .. "down", row, "Dn", 26, "secondary", BTN_X + 28, i < #rules and function() mi.MoveRule(rule.id, 1) end or nil,
+            "Move down", "Gives this rule a lower priority. You can also drag the row.")
+        RowButton(key .. "edit", row, "Edit", 36, "secondary", BTN_X + 56, function() StartEdit(rule) end)
+        RowButton(key .. "dup", row, "Copy", 38, "secondary", BTN_X + 94, function()
+            local id, why = mi.DuplicateRule(rule.id)
+            if not id then Say(why, "warn") end
+        end, "Duplicate", "Makes a copy of this rule just below it, turned off.")
+        RowButton(key .. "del", row, "Delete", 50, "danger", BTN_X + 134, function()
+            R.Interact.Confirm("TWICHUI_MI_RULE_DELETE", ("Delete the rule \"%s\"?\n\nOnly the rule goes: nothing in your bags, bank or mail changes."):format(rule.name),
+                function() mi.DeleteRule(rule.id) end, { accept = "Delete" })
+        end)
+        y = y + ROW_H
+    end
+    for i = #rules + 1, mi.MAX_RULES do local row = pool["tr" .. i]; if row then row.rule = nil end end
+    local edge = Get("trEnd", function()
+        local l = f:CreateTexture(nil, "BORDER")
+        l:SetHeight(1)
+        return l
+    end)
+    edge:SetColorTexture(pal.bronzeLo[1], pal.bronzeLo[2], pal.bronzeLo[3], 1)
+    edge:ClearAllPoints()
+    edge:SetPoint("TOPLEFT", f, "TOPLEFT", PAD, -y)
+    edge:SetPoint("TOPRIGHT", f, "TOPRIGHT", -PAD, -y)
+    return y + 8
+end
+
 local function DrawList(y)
     local mi = MI()
     local rules = mi.Rules()
@@ -462,45 +725,7 @@ local function DrawList(y)
         Tone(none, "quiet")
         y = y + 28
     end
-    for i, rule in ipairs(rules) do
-        local key = "rule" .. i
-        local box = Check(key .. "on", function(v)
-            local ok, why = mi.SetRuleEnabled(rule.id, v)
-            if not ok then Say(why, "warn") end
-        end)
-        At(box, PAD, y + 2)
-        box:SetChecked(rule.enabled)
-        local name = Text(key .. "name", "body")
-        Wide(name, PAD + 28, y + 3, 330)
-        name:SetText(("%d.  %s"):format(i, rule.name))
-        local lines = Text(key .. "lines", "small")
-        Wide(lines, PAD + 28, y + 21, 360)
-        local dest, tone = P.DestText(rule)
-        local problem = select(2, mi.Problem(rule, false))
-        local stack = rule.kind == "guild" and (rule.stack or 0) > 0 and ("\nTarget stack size: " .. rule.stack) or ""
-        lines:SetText(("Items: %s\nDestination: %s\nKeep: %s%s%s"):format(P.ItemsText(rule), dest, P.KeepText(rule), stack,
-            problem and ("\n|cffedb861" .. problem .. "|r") or ""))
-        Tone(lines, "dim")
-        local _ = tone
-        local bx = W - PAD - 238
-        Button(key .. "up", "Up", 44, "secondary", i > 1 and function() mi.MoveRule(rule.id, -1) end or nil)
-        At(pool[key .. "up"], bx, y)
-        Button(key .. "down", "Down", 52, "secondary", i < #rules and function() mi.MoveRule(rule.id, 1) end or nil)
-        At(pool[key .. "down"], bx + 48, y)
-        Button(key .. "edit", "Edit", 60, "secondary", function() StartEdit(rule) end)
-        At(pool[key .. "edit"], bx + 104, y)
-        Button(key .. "dup", "Duplicate", 70, "secondary", function()
-            local id, why = mi.DuplicateRule(rule.id)
-            if not id then Say(why, "warn") end
-        end)
-        At(pool[key .. "dup"], bx + 168, y)
-        Button(key .. "del", "Delete", 70, "danger", function()
-            R.Interact.Confirm("TWICHUI_MI_RULE_DELETE", ("Delete the rule \"%s\"?\n\nOnly the rule goes: nothing in your bags, bank or mail changes."):format(rule.name),
-                function() mi.DeleteRule(rule.id) end, { accept = "Delete" })
-        end)
-        At(pool[key .. "del"], bx + 168, y + 28)
-        y = y + math.max(66, 24 + H(lines)) + 8
-    end
+    if #rules > 0 then y = DrawTable(y, rules) end
     return y
 end
 
@@ -937,6 +1162,8 @@ function P.Frame()
     f:SetScript("OnSizeChanged", function() if built then P.QueueRefresh() end end)
     f:SetScript("OnHide", function(self)
         if P.GuildHidden then P.GuildHidden() end
+        local src = P.Drag and P.Drag.Active() and P.Drag.Source()
+        if src and src.kind == "rule" then P.Drag.Cancel() end
         for _, e in ipairs(EVENTS) do self:UnregisterEvent(e) end
         for _, c in pairs(pool) do if c.ClearFocus then c:ClearFocus() end end
         said = nil

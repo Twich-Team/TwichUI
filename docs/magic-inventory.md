@@ -77,6 +77,18 @@ not exported in this version. If an export is added: send destination names, nev
 off and require each destination to be chosen on the receiving character (the per-character layout already makes an
 imported rule need its recipient).
 
+## The rules table (settings page)
+
+"Your rules" is a table, one row a rule in priority order: grip, number, on/off, Name, Items, Action, Goes to, Keep, then Up, Dn,
+Edit, Copy and Delete. Rows are banded; a cell is one line cut off with "..." (the row's tooltip has the full Items,
+Destination, Keep, target stack size and any problem); "Goes to" turns amber when a destination is missing. A row is dragged
+by pressing on it away from its controls: a virtual drag (`MagicInventoryDrag.lua`, a label follows the pointer, nothing
+real is picked up) with a line showing where the rule will land, and the page scrolls near the view's top and bottom
+edges. Letting go on a row calls `MI.MoveRuleTo(id, place)`; letting go anywhere else changes nothing, and hiding the
+page ends the drag. Up and Dn stay for one-step moves. Tests: `tests/test_magic_inventory_settings.lua`,
+`MoveRuleTo` in `tests/test_magic_inventory.lua`. Not tried in the game: how the rows look at the real font sizes, and
+the edge scrolling.
+
 ## Precedence (`inventory/Plan.lua`, tested in `tests/test_magic_inventory.lua`)
 
 1. **Hard protections and the Never transfer list.** The account's Never transfer list and any enabled **Never transfer**

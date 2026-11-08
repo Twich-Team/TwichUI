@@ -115,6 +115,22 @@ Check(Find(plan.skipped, 9005, "reason", "equipment-set"), "an equipment-set ite
 -- BoE filter: a BoE item that is bound now doesn't count as binding on equip
 local boe = Save({ name = "BoE", kind = "bank", bind = "boe", equip = "equipment" })
 MI.MoveRule(boe, -1)
+do   -- MoveRuleTo: to a place, the others shifting; beyond the ends is the end; the same place changes nothing
+  local function Order() local o = {} for _, r in ipairs(MI.Rules()) do o[#o + 1] = r.id end return o end
+  local start = Order()
+  local n = #start
+  Check(MI.MoveRuleTo(boe, n) and Order()[n] == boe and #Order() == n, "MoveRuleTo puts a rule last")
+  Check(not MI.MoveRuleTo(boe, n), "the same place changes nothing")
+  Check(MI.MoveRuleTo(boe, -5) and Order()[1] == boe, "a place before the start is the start")
+  Check(not MI.MoveRuleTo("nope", 1) and not MI.MoveRuleTo(boe, "x") and not MI.MoveRuleTo(boe, nil), "an unknown rule or place changes nothing")
+  local seen = {}
+  for _, id in ipairs(Order()) do seen[id] = true end
+  local same = true
+  for _, id in ipairs(start) do if not seen[id] then same = false end end
+  Check(same and #Order() == n, "no rule lost or doubled")
+  MI.MoveRuleTo(boe, 1)
+  for i, id in ipairs(start) do if id == boe then MI.MoveRuleTo(boe, i) end end   -- back where it was
+end
 plan = MI.CurrentPlan(nil)
 Check(Entry(plan, 9001) and Entry(plan, 9001).rule == "BoE", "the BoE rule (moved up) owns the unbound BoE item")
 Check(Find(plan.skipped, 9002, "reason", "bound-now"), "a bound BoE item is not 'binds when equipped' any more")

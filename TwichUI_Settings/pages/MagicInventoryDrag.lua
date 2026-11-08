@@ -29,6 +29,12 @@ local function Ghost()
     ghost.tex:SetAlpha(0.85)
     ghost.count = ghost:CreateFontString(nil, "OVERLAY", "NumberFontNormalSmall")
     ghost.count:SetPoint("BOTTOMRIGHT", -1, 1)
+    -- a drag of something without a picture (a row of the rules table) carries its name instead
+    ghost.bg = ghost:CreateTexture(nil, "BACKGROUND")
+    ghost.bg:SetAllPoints()
+    ghost.bg:SetColorTexture(0.10, 0.08, 0.06, 0.9)
+    ghost.label = ghost:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    ghost.label:SetPoint("LEFT", 8, 0)
     ghost:Hide()
     -- only while a drag is on: follow the pointer and tell the editor what is under it (to light up the target)
     ghost:SetScript("OnUpdate", function(self)
@@ -44,14 +50,27 @@ end
 function Drag.Active() return current ~= nil end
 function Drag.Source() return current and current.src or nil end
 
--- def: { src = whatever the editor wants back, icon, count, find = function() -> the target under the pointer or nil,
+-- def: { src = whatever the editor wants back, icon, count (or label instead: a short text carried in place of a picture), find = function() -> the target under the pointer or nil,
 --        hover = function(target) (optional), drop = function(src, target), cancel = function(src) (optional) }
 function Drag.Start(def)
     if current then Drag.Cancel() end
     current = def
     local g = Ghost()
-    g.tex:SetTexture(def.icon)
-    g.count:SetText((def.count and def.count > 1) and def.count or "")
+    if def.label then
+        g.tex:Hide()
+        g.count:SetText("")
+        g.bg:Show()
+        g.label:SetText(def.label)
+        g.label:Show()
+        g:SetSize(math.min(260, math.max(80, (g.label:GetStringWidth() or 0) + 16)), 24)
+    else
+        g.tex:Show()
+        g.bg:Hide()
+        g.label:Hide()
+        g:SetSize(28, 28)
+        g.tex:SetTexture(def.icon)
+        g.count:SetText((def.count and def.count > 1) and def.count or "")
+    end
     g:Show()
 end
 

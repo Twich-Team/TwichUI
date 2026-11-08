@@ -650,6 +650,24 @@ function MI.MoveRule(id, delta)
     return false
 end
 
+-- Puts a rule at a place in the priority list (1 = first), the rules between shifting by one: a drag in the settings
+-- table. A place beyond the ends is the nearest end. Returns false when nothing changed.
+function MI.MoveRuleTo(id, place)
+    place = tonumber(place)
+    if not place then return false end
+    local list = MI.Rules()
+    for i, r in ipairs(list) do
+        if r.id == id then
+            local j = math.max(1, math.min(#list, math.floor(place)))
+            if j == i then return false end
+            table.remove(list, i)
+            table.insert(list, j, r)
+            return WriteRules(list)
+        end
+    end
+    return false
+end
+
 ---------------------------------------------------------------------------
 -- The Never transfer list: item IDs, account-wide, like Mage selling's never-sell list. A protection: no rule, no
 -- "Also include" and no profile change lifts it.

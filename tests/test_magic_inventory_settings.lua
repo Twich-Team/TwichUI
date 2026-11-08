@@ -26,6 +26,9 @@ c.StaticPopup_Show = function(name, text) c.POPUP = { name = name, text = text }
 for _, file in ipairs({ "../TwichUI_Settings/Kit.lua", "../TwichUI_Settings/Widgets.lua", "../TwichUI_Settings/pages/MagicInventory.lua", "../TwichUI_Settings/pages/MagicInventoryDrag.lua", "../TwichUI_Settings/pages/MagicInventoryGuild.lua" }) do
   local chunk = assert(loadfile(ROOT .. file)); setfenv(chunk, c); chunk("TwichUI_Settings", {})
 end
+TIP = {}
+c.GameTooltip.SetText = function(_, t) TIP[#TIP + 1] = t end
+c.GameTooltip.AddLine = function(_, t) TIP[#TIP + 1] = t end
 local R = c.TwichUI
 local MI = R.MagicInventory
 local P = R.MagicInventoryPage
@@ -64,8 +67,14 @@ Click("eSave")
 Check(P.Editing() == nil, "saved")
 local rule = MI.Rules()[1]
 Check(rule and rule.name == "Cloth to bank alt" and rule.enabled == false and rule.keep == 20, "saved turned off, keeping 20 of each")
-Check(Has(f, "Items: Cloth") and Has(f, "Keep: 20 of each matching item"), "the list says it plainly")
-Check(Has(f, "choose the recipient on this character"), "and what it needs")
+Check(Has(f, "^Name$") and Has(f, "^Items$") and Has(f, "^Action$") and Has(f, "^Goes to$") and Has(f, "^Keep$"), "the list is a table with column headings")
+Check(Has(f, "^Cloth") and Has(f, "^Mail$") and Has(f, "^20$"), "a row says what it matches, what it does and what it keeps")
+Check(Has(f, "^Bank alt$"), "and where it goes, until a recipient is chosen")
+local row1 = P.Control("tr1")
+row1.scripts.OnEnter(row1)
+local tipText = table.concat(TIP, "\n")
+Check(tipText:find("Items: Cloth") and tipText:find("Keep: 20 of each matching item") and tipText:find("choose the recipient on this character"), "the row's tooltip says it plainly, and what it needs")
+row1.scripts.OnLeave(row1)
 
 -- turning it on is refused, with the reason
 local box = P.Control("rule1on")
@@ -170,7 +179,43 @@ Click("eCancel")
 local cloth = MI.SaveRule({ kind = "guild", name = "Cloth to tab 2", enabled = true, dest = gdest, cats = { "7:5" }, stack = 20 })
 Flush()
 Check(MI.Rule(cloth).enabled, "the guild rule is on")
-Check(Has(f, "Target stack size: 20"), "the list shows the target")
+TIP = {}
+local grow = P.Control("tr1")
+grow.scripts.OnEnter(grow)
+Check(table.concat(TIP, "\n"):find("Target stack size: 20"), "the row's tooltip shows the target")
+
+-- the table is reordered by dragging a row: the rule lands where it is let go, and letting go elsewhere changes nothing
+do
+  local extra = MI.SaveRule({ kind = "bank", name = "Herbs to bank", enabled = false, cats = { "7:9" } })
+  local third = MI.SaveRule({ kind = "bank", name = "Ore to bank", enabled = false, cats = { "7:7" } })
+  Flush()
+  local function Names() local out = {} for _, r in ipairs(MI.Rules()) do out[#out + 1] = r.name end return table.concat(out, ",") end
+  local before = Names()
+  local r1, r3 = P.Control("tr1"), P.Control("tr3")
+  r1.scripts.OnDragStart(r1)
+  Check(P.Drag.Active() and P.Drag.Source().id == MI.Rules()[1].id, "pressing and moving on a row starts a drag of that rule")
+  r1.scripts.OnDragStop(r1); Flush()
+  Check(not P.Drag.Active() and Names() == before, "letting go over no row changes nothing")
+  r3.IsMouseOver = function() return true end
+  r1.scripts.OnDragStart(r1)
+  r1.scripts.OnDragStop(r1); Flush()
+  r3.IsMouseOver = nil
+  Check(Names() == "Herbs to bank,Ore to bank,Cloth to tab 2", "dropping the first rule on the third row puts it third: " .. Names())
+  Check(Has(f, "Moved .* to place 3"), "and the page says so")
+  r1 = P.Control("tr1")
+  r1.IsMouseOver = function() return true end
+  P.Control("tr3").scripts.OnDragStart(P.Control("tr3"))
+  P.Control("tr3").scripts.OnDragStop(P.Control("tr3")); Flush()
+  r1.IsMouseOver = nil
+  Check(Names() == before, "dropping the third on the first puts it first again: " .. Names())
+  Check(extra and third and #MI.Rules() == 3, "no rule lost or copied by dragging")
+  -- the page is hidden mid-drag: the drag is put away
+  P.Control("tr1").scripts.OnDragStart(P.Control("tr1"))
+  f:Hide(); f:Show(); Flush()
+  Check(not P.Drag.Active(), "hiding the page ends a drag")
+  MI.DeleteRule(extra); MI.DeleteRule(third); Flush()
+end
+
 -- the guild bank arrangement editor has its own test (test_magic_inventory_editor.lua)
 Check(Has(f, "Guild bank arrangement") and Has(f, "Editing is design only"), "the page leads with the arrangement and says editing is design only")
 Check(P.Control("gPreview") ~= nil, "and has one primary action, Preview changes")
