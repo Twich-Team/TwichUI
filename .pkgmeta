@@ -35,5 +35,7 @@ ignore:
   - docs
   - .clinerules
   - KNOWN_BUGS.md
+  # a development session note (it quotes local machine paths); not part of the addon
+  - TwichUI-Workbench-Session-Handoff-2026-11-03.md
   # an editor workspace file kept at pins/ (not the addon's pins/ folder): it must not collide with !!!TwichUI/pins
   - pins/TwichUI.code-workspace
