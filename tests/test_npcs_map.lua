@@ -191,7 +191,13 @@ assert(drawn()[1] and drawn()[7] and not drawn()[5])
 local size = drawn()[1].size
 NP.Set("iconSize", 150)
 assert(drawn()[1].size > size, "the size choice")
+NP.Set("reportAlpha", 100)
+assert(drawn()[7].alpha == 1 and drawn()[7].icon.desaturated == false, "a report at full opacity looks like your own")
+NP.Set("reportAlpha", 30)
+assert(math.abs(drawn()[7].alpha - 0.3) < 1e-9 and drawn()[7].icon.desaturated == true and drawn()[1].alpha == 1, "the opacity choice dims reports only")
+assert(not NP.Set("reportAlpha", 10) and not NP.Set("reportAlpha", 101) and NP.Get("reportAlpha") == 30, "an unusable opacity is refused")
 NP.Reset("all")
+assert(NP.Get("reportAlpha") == 60 and drawn()[7].alpha == 0.6, "reset puts the opacity back")
 -- a new NPC appears at once
 Npc(8, 1429, 0.6, 0.6, { innkeeper = true, food = true })
 assert(drawn()[8] and drawn()[8].kind.id == "innkeeper", "the first shown kind's icon")

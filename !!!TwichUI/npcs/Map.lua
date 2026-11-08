@@ -32,7 +32,6 @@ local ZOOM_GROWTH = 1.6          -- how much larger a marker is at the closest z
 local SIZE = 20.7              -- a marker's side on screen before the size choice
 local MAX_DRAWN = 300
 local MAX_PARENTS = 8
-local REPORT_ALPHA = 0.6
 local EDGE = 0.2               -- on the seamless map, markers this far past the map underneath still show
 local NAV_WAIT = 2             -- how long a find waits for the map it asked for
 local PULSE_LIFE, PULSE_FADE = 2.6, 0.5   -- seconds the ring is out, the last of them fading
@@ -143,10 +142,11 @@ local function Dress(b, e, kind)
         b.hl:SetTexture(kind.icon)
     end
     local reported = not e.own
-    if b.reported ~= reported then
-        b.reported = reported
-        b.icon:SetDesaturated(reported)
-        b:SetAlpha(reported and REPORT_ALPHA or 1)
+    local alpha = reported and NP.Get("reportAlpha") / 100 or 1
+    if b.reported ~= reported or b.alpha ~= alpha then
+        b.reported, b.alpha = reported, alpha
+        b.icon:SetDesaturated(alpha < 1)   -- at full opacity a report looks like any other NPC
+        b:SetAlpha(alpha)
     end
     if b.name ~= e.n then
         b.name = e.n

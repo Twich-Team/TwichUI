@@ -22,7 +22,6 @@ local MAX_SHOWN = 40
 local FAST, SLOW = 0.04, 0.10
 local INSET = 3               -- a marker whose middle is nearer the rim than this isn't drawn
 local MAX_PARENTS = 8
-local REPORT_ALPHA = 0.6
 
 local driver
 local active = false
@@ -82,10 +81,11 @@ local function Dress(b, e, kind)
         b.hl:SetTexture(kind.icon)
     end
     local reported = not e.own
-    if b.reported ~= reported then
-        b.reported = reported
-        b.icon:SetDesaturated(reported)
-        b:SetAlpha(reported and REPORT_ALPHA or 1)
+    local alpha = reported and NP.Get("reportAlpha") / 100 or 1
+    if b.reported ~= reported or b.alpha ~= alpha then
+        b.reported, b.alpha = reported, alpha
+        b.icon:SetDesaturated(alpha < 1)   -- at full opacity a report looks like any other NPC
+        b:SetAlpha(alpha)
     end
     local size = Size()
     if b.size ~= size then

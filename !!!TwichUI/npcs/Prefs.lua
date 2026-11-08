@@ -4,6 +4,7 @@
 --   show.<kind>    which kinds of NPC the world map shows (npcs/Kinds.lua's list; each kind's own default)
 --   trainerClass   "mine": class trainers for your class only; "all": every class's
 --   reports        show what other players sent you (dimmed), not only what you saw yourself
+--   reportAlpha    how opaque the NPCs others sent you are, in percent (60; 100 draws them like your own, in colour)
 --   labels         names under the markers
 --   iconSize       marker size in percent
 --   minimap        also draw the markers within range on the minimap (npcs/Minimap.lua; off)
@@ -22,11 +23,11 @@ local NP = {}
 R.NpcPrefs = NP
 
 local DEFAULTS = {
-    trainerClass = "mine", reports = true, labels = false, minimap = false, iconSize = 100, receive = "ask", sendReports = false,
+    trainerClass = "mine", reports = true, reportAlpha = 60, labels = false, minimap = false, iconSize = 100, receive = "ask", sendReports = false,
     liveGroup = true, liveGuild = true, liveReceive = true,
 }
 for _, k in ipairs(NK.LIST) do DEFAULTS["show." .. k.id] = k.on end
-local LIMITS = { iconSize = { 60, 150 } }
+local LIMITS = { iconSize = { 60, 150 }, reportAlpha = { 20, 100 } }
 local ENUM = {
     trainerClass = { mine = true, all = true },
     receive = { ask = true, auto = true, off = true },
@@ -40,7 +41,7 @@ NP.RECEIVE = {
 }
 
 -- What each reset puts back
-NP.GROUPS = { show = {}, look = { "trainerClass", "reports", "labels", "minimap", "iconSize" }, sharing = { "receive", "sendReports", "liveGroup", "liveGuild", "liveReceive" } }
+NP.GROUPS = { show = {}, look = { "trainerClass", "reports", "reportAlpha", "labels", "minimap", "iconSize" }, sharing = { "receive", "sendReports", "liveGroup", "liveGuild", "liveReceive" } }
 for _, k in ipairs(NK.LIST) do table.insert(NP.GROUPS.show, "show." .. k.id) end
 
 local function Valid(key, value)

@@ -87,7 +87,7 @@ Data Explorer's cleanup. Entry: `{ id, n (name), m (map), x, y (0..10000), tags,
 - Painted icons (`media/npcs/<name>-small.tga`, cut by `tools/make_npc_art.py` from `assets/npc-art-source.png`; the kind-to-art
   table is `NK.ART` in `npcs/Kinds.lua`) for every kind; the square plaques
   (`media/textures/npc-<kind>.tga`, drawn by `tools/make_npc_icons.py`) remain as the fallback. Pins are diamonds and the map's
-  places are round, so they differ by shape. Reports are dimmed (60%) and greyed, and their tooltip says "not seen by you
+  places are round, so they differ by shape. Reports are dimmed and greyed (60% opaque by default; the `reportAlpha` choice sets 20 to 100%, and at 100% they are in colour like your own), and their tooltip says "not seen by you
   yet". At most 300 at once.
 - A click opens the NPC's actions: **Set waypoint** (the game's own; replaces yours), **Pin this place** (the new pin
   window; needs Party pins), **Navigate here** (while Navigation is on), **Forget this NPC**; a merchant also has
@@ -186,7 +186,7 @@ same `show.<kind>` choices as the settings, so the two always agree. See `docs/m
 
 ## Settings
 
-`ui.npcMap` (in the profile): `show.<kind>`, `trainerClass` (`mine` / `all`), `reports`, `labels`, `iconSize` (60 to
+`ui.npcMap` (in the profile): `show.<kind>`, `trainerClass` (`mine` / `all`), `reports`, `reportAlpha` (20 to 100, 60), `labels`, `iconSize` (60 to
 150), `receive` (`ask` / `auto` / `off`), `sendReports`, `liveGroup`, `liveGuild`, `liveReceive`. All stay on this computer when a setup is shared (`network`).
 
 ## The probe
