@@ -386,13 +386,14 @@ inventory\GuildPanel.lua
 inventory\Window.lua
 inventory\Picker.lua
 
-# Quality of Life: small opt-in conveniences (summons, resurrection, release in battlegrounds, duels, group invitations)
+# Quality of Life: small opt-in conveniences (summons, resurrection, release in battlegrounds, duels, group invitations accepted or declined)
 qol\QoL.lua
 qol\Summons.lua
 qol\Resurrect.lua
 qol\ReleasePvP.lua
 qol\Duels.lua
 qol\Invites.lua
+qol\DeclineInvites.lua
 qol\QuickKeybind.lua
 qol\GuideWaypoint.lua
 qol\GuideAutoHide.lua

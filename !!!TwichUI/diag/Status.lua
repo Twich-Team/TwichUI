@@ -469,7 +469,7 @@ S.FEATURES = {
     { "mageSell", "Mage selling" }, { "mageSellDryRun", "Mage selling dry run" },
     { "partyPins", "Party pins" }, { "auctionPosting", "Sell from Bags (Auction House)" }, { "mailGoldSummary", "Mailbox gold summary" }, { "restock", "Vendor restocking" },
     { "qolSummons", "Accept summons" }, { "qolResurrect", "Accept resurrection" }, { "qolReleasePvP", "Release in battlegrounds" },
-    { "qolDuels", "Decline duels" }, { "qolInvites", "Accept group invitations" }, { "qolQuickKeybind", "Quick Keybind button" },
+    { "qolDuels", "Decline duels" }, { "qolInvites", "Accept group invitations" }, { "qolDeclineInvites", "Decline group invitations" }, { "qolQuickKeybind", "Quick Keybind button" },
     { "qolGuideWaypoint", "Guide waypoint (RestedXP)" },
     { "qolGuideAuto", "Hide the guide in some situations (RestedXP)" },
     { "qolGuideTracker", "EllesmereUI quest tracker on mouseover while the guide is shown (RestedXP)" },

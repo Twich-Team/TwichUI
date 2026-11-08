@@ -3,7 +3,7 @@ dofile(TESTS .. "harness.lua")
 -- The game is simulated: this checks the decisions and the event handling, not the game's own
 -- behaviour, which has to be checked in the game.
 local c = MakeClient("Rich", {"!!!TwichUI"})
-for _, f in ipairs({ "qol/QoL.lua", "qol/Summons.lua", "qol/Resurrect.lua", "qol/ReleasePvP.lua", "qol/Duels.lua", "qol/Invites.lua", "qol/QuickKeybind.lua" }) do
+for _, f in ipairs({ "qol/QoL.lua", "qol/Summons.lua", "qol/Resurrect.lua", "qol/ReleasePvP.lua", "qol/Duels.lua", "qol/Invites.lua", "qol/DeclineInvites.lua", "qol/QuickKeybind.lua" }) do
   local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
 end
 c.LOADED["!!!TwichUI"] = true; c.FireEvent("ADDON_LOADED", "!!!TwichUI")
@@ -69,6 +69,7 @@ c.IsOutOfBounds = function() return false end
 c.IsShiftKeyDown = function() return W.shift end
 c.RepopMe = function() calls.repop = calls.repop + 1 end
 c.CancelDuel = function() calls.cancelDuel = calls.cancelDuel + 1 end
+c.DeclineGroup = function() calls.declineGroup = (calls.declineGroup or 0) + 1 end
 c.AcceptGroup = function() calls.acceptGroup = (calls.acceptGroup or 0) + 1 end
 c.WillAcceptInviteRemoveQueues = function() return W.queued or false end
 c.StaticPopup_FindVisible = function(which) if which == "PARTY_INVITE" then return W.invitePopup end end
@@ -76,10 +77,10 @@ c.StaticPopup_FindVisible = function(which) if which == "PARTY_INVITE" then retu
 local function On(key, value) DB.modules[key] = value end
 local function Listening(event) return R.frame.events[event] == true end
 local function Apply(feature) Q.Apply(feature) end
-local S, Rez, Rel, D, Inv = R.QoLSummons, R.QoLResurrect, R.QoLRelease, R.QoLDuels, R.QoLInvites
+local S, Rez, Rel, D, Inv, Dec = R.QoLSummons, R.QoLResurrect, R.QoLRelease, R.QoLDuels, R.QoLInvites, R.QoLDeclineInvites
 
 -- Off by default: nothing listens and nothing happens.
-for _, key in ipairs({ "qolSummons", "qolResurrect", "qolResurrectCombat", "qolReleasePvP", "qolDuels", "qolDuelsToDeath", "qolInvites", "qolQuickKeybind" }) do
+for _, key in ipairs({ "qolSummons", "qolResurrect", "qolResurrectCombat", "qolReleasePvP", "qolDuels", "qolDuelsToDeath", "qolInvites", "qolDeclineInvites", "qolQuickKeybind" }) do
   assert(DB.modules[key] == false, key .. " is off for a new install")
 end
 for _, event in ipairs({ "CONFIRM_SUMMON", "CANCEL_SUMMON", "RESURRECT_REQUEST", "PLAYER_DEAD", "PLAYER_ALIVE", "PLAYER_UNGHOST",
@@ -322,6 +323,45 @@ Invite("Ann"); On("qolInvites", false); Apply(Inv.feature); FlushTimers()
 assert(Accepted() == 4 and not Listening("PARTY_INVITE_REQUEST") and not Listening("PARTY_INVITE_CANCEL"), "turned off: cancelled and unregistered")
 
 ---------------------------------------------------------------------------
+-- Decline group invitations
+---------------------------------------------------------------------------
+local function Declined() return calls.declineGroup or 0 end
+Reset(); W.friends = { "Ann" }; W.guild = { "Cy" }
+assert(Q.Get("declineInvitesFrom") == "friendsGuild" and Q.Set("declineInvitesFrom", "nobody") and Q.Set("declineInvitesFrom", "guild") and not Q.Set("declineInvitesFrom", "anyone"))
+Q.Set("declineInvitesFrom", "friendsGuild")
+Invite("Eve"); FlushTimers(); assert(Declined() == 0, "off: the game's pop-up is left alone")
+On("qolDeclineInvites", true); Apply(Dec.feature)
+assert(Listening("PARTY_INVITE_REQUEST") and Listening("PARTY_INVITE_CANCEL"), "listens once on")
+Invite("Eve"); assert(Declined() == 0, "waits a frame, so the game's own pop-up exists first")
+FlushTimers(); assert(Declined() == 1 and calls.hidden[#calls.hidden] == "PARTY_INVITE", "a stranger is declined and the pop-up hidden")
+Invite(nil); FlushTimers(); assert(Declined() == 2, "no name: declined")
+Invite("Ann"); Invite("Cy"); FlushTimers(); assert(Declined() == 2, "friends and guild members still get to answer")
+Invite("Eve", true); FlushTimers(); assert(Declined() == 2, "a role invitation (group finder) is left to the player")
+Invite("Eve", false, true); FlushTimers(); Invite("Eve", false, false, true); FlushTimers(); assert(Declined() == 2)
+Invite("Eve", false, false, false, true); FlushTimers(); assert(Declined() == 2, "a quest session invitation is left to the player")
+Q.Set("declineInvitesFrom", "friends"); Invite("Cy"); FlushTimers(); assert(Declined() == 3, "friends only: the guild member is declined")
+Invite("Ann"); FlushTimers(); assert(Declined() == 3)
+Q.Set("declineInvitesFrom", "guild"); Invite("Ann"); FlushTimers(); assert(Declined() == 4, "guild only: the friend is declined")
+Invite("Cy"); FlushTimers(); assert(Declined() == 4)
+Q.Set("declineInvitesFrom", "nobody"); Invite("Ann"); FlushTimers(); assert(Declined() == 5, "nobody: everyone is declined")
+Q.Set("declineInvitesFrom", "friendsGuild")
+W.group = { "Di" }; Invite("Eve"); FlushTimers(); assert(Declined() == 6, "declining works while in a group too"); W.group = {}
+for _, which in ipairs(calls.hidden) do assert(which == "PARTY_INVITE", "only the invitation pop-up is hidden: " .. which) end
+-- cancelled by a withdrawn invitation, a newer one, or turning it off
+Invite("Eve"); c.FireEvent("PARTY_INVITE_CANCEL"); FlushTimers(); assert(Declined() == 6, "withdrawn invitation: nothing")
+Invite("Eve"); Invite("Ann"); FlushTimers(); assert(Declined() == 6, "a newer invitation replaces the plan")
+-- together with Accept group invitations: whoever it joins is not also declined
+Q.Set("declineInvitesFrom", "nobody"); Q.Set("invitesFrom", "friends")
+On("qolInvites", true); Apply(Inv.feature)
+local before = Accepted()
+Invite("Ann"); FlushTimers(); assert(Accepted() == before + 1 and Declined() == 6, "a friend is joined, not declined")
+Invite("Cy"); FlushTimers(); assert(Declined() == 7 and Accepted() == before + 1, "the guild member is declined")
+Q.Set("declineInvitesFrom", "friendsGuild"); Q.Set("invitesFrom", "friendsGuild")
+On("qolInvites", false); Apply(Inv.feature)
+Invite("Eve"); On("qolDeclineInvites", false); Apply(Dec.feature); FlushTimers()
+assert(Declined() == 7 and not Listening("PARTY_INVITE_REQUEST"), "turned off: cancelled and unregistered")
+
+---------------------------------------------------------------------------
 -- Quick Keybind button: a stand-in Game Menu with the game's pool, layout indices and callback.
 ---------------------------------------------------------------------------
 local K = R.QoLQuickKeybind
@@ -420,7 +460,7 @@ On("qolQuickKeybind", true); Apply(K.feature); OpenMenu(); assert(Ours(), "and o
 On("qolQuickKeybind", false); Apply(K.feature)
 
 -- Nothing is left listening, and toggling is idempotent.
-for _, f in ipairs({ S.feature, Rez.feature, Rel.feature, D.feature, Inv.feature, K.feature }) do Apply(f); Apply(f) end
+for _, f in ipairs({ S.feature, Rez.feature, Rel.feature, D.feature, Inv.feature, Dec.feature, K.feature }) do Apply(f); Apply(f) end
 for _, event in ipairs({ "CONFIRM_SUMMON", "RESURRECT_REQUEST", "PLAYER_DEAD", "DUEL_REQUESTED", "DUEL_TO_THE_DEATH_REQUESTED", "PARTY_INVITE_REQUEST" }) do
   assert(not Listening(event), event .. " not registered with everything off")
 end

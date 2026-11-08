@@ -9,15 +9,15 @@ local K = R.SettingsKit
 K.Page({
     key = "qol", icon = "qualityOfLife", name = "Quality of life", order = 30, group = "everyday",
     description = "Small opt-in conveniences. Each is off until you turn it on, and each does only the one thing it says.",
-    keywords = "summon resurrect res rez battleground release spirit duel decline group party invite invitation keybind quick keybind leatrix",
+    keywords = "summon resurrect res rez battleground release spirit duel decline group party invite invitation block keybind quick keybind leatrix",
     when = function() return R.QoL ~= nil end,
     overview = {
-        label = "Quality of life", tip = "Small opt-in conveniences: accepting summons and resurrection, releasing in battlegrounds, declining duels, joining a group when a friend or guild member invites you, and a Quick Keybind button in the Game Menu.",
+        label = "Quality of life", tip = "Small opt-in conveniences: accepting summons and resurrection, releasing in battlegrounds, declining duels, joining or declining group invitations, and a Quick Keybind button in the Game Menu.",
         status = function()
             local on = (R:Enabled("qolSummons") and 1 or 0) + (R:Enabled("qolResurrect") and 1 or 0)
                 + (R:Enabled("qolReleasePvP") and 1 or 0) + (R:Enabled("qolDuels") and 1 or 0)
-                + (R:Enabled("qolInvites") and 1 or 0) + (R:Enabled("qolQuickKeybind") and 1 or 0)
-            local total = 6
+                + (R:Enabled("qolInvites") and 1 or 0) + (R:Enabled("qolDeclineInvites") and 1 or 0) + (R:Enabled("qolQuickKeybind") and 1 or 0)
+            local total = 7
             return K.OnOff(on > 0, ("%d of %d on"):format(on, total), "Off")
         end,
     },
@@ -37,7 +37,7 @@ K.Page({
             return row
         end
         local function QolChoice(variable, key, label, tooltip, options)
-            local varType = (key == "summonsFrom" or key == "duelsFrom" or key == "invitesFrom") and STRING or NUMBER
+            local varType = (key == "summonsFrom" or key == "duelsFrom" or key == "invitesFrom" or key == "declineInvitesFrom") and STRING or NUMBER
             return Choice(variable, label, tooltip, varType, Q.DEFAULTS[key],
                 function() return Q.Get(key) end, function(value) Q.Set(key, value) end, options)
         end
@@ -183,6 +183,31 @@ K.Page({
                 { "friends", "Friends only" },
                 { "guild", "Guild members only" },
             }), invites, InvitesOn, "Turn on \"Accept group invitations\" to choose who.")
+
+        local declineInvitesFrom
+        K.Card({
+            title = "Decline group invitations",
+            icon = "declineDuels",
+            what = "Declines group invitations as soon as they arrive, except from the people you still allow.",
+            summary = function() return "Still allowed: " .. Value(declineInvitesFrom):lower() end,
+            consequence = "The inviter sees it declined, as if you had pressed Decline. TwichUI says nothing in chat and shows no message.",
+            preview = "qol.declineInvites",
+            details = {
+                { "What isn't declined?", "Role invitations from the group finder (often the answer to your own application) and quest-session invitations are always left to you. So is anyone that \"Accept group invitations\" is set to join." },
+                { "What if the game gives no name?", "Then the exceptions can't be checked, so the invitation is declined." },
+            },
+        })
+        local declineInvites = Overlap(QolToggle("qolDeclineInvites", "Decline group invitations",
+            "Declines a group invitation as soon as it arrives, unless it's from someone you allow below. The inviter sees it declined, as if you had pressed Decline; TwichUI says nothing in chat and shows no message. Role invitations from the group finder and quest-session invitations are left to you, as is anyone \"Accept group invitations\" is set to join. If the game doesn't give the inviter's name, the invitation is declined. Off: invitations work as the game does."), "qolDeclineInvites")
+        local function DeclineInvitesOn() return R:Enabled("qolDeclineInvites") end
+        declineInvitesFrom = Under(QolChoice("qolDeclineInvitesFrom", "declineInvitesFrom", "Still allow invitations from",
+            "Whose group invitations you still get to answer yourself. Friends are your character friends and the WoW characters of Battle.net friends; guild members are read from the guild roster the game has loaded. Names are compared without the realm.",
+            {
+                { "friendsGuild", "Friends and guild members" },
+                { "friends", "Friends only" },
+                { "guild", "Guild members only" },
+                { "nobody", "Nobody", "Every invitation is declined." },
+            }), declineInvites, DeclineInvitesOn, "Turn on \"Decline group invitations\" to choose exceptions.")
 
         K.Card({
             title = "Quick Keybind button",

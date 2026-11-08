@@ -328,6 +328,61 @@ P.Register("qol.invites", {
 })
 
 ---------------------------------------------------------------------------
+-- Decline group invitations: an invitation, declined (or left for you, for someone you allow)
+---------------------------------------------------------------------------
+P.Register("qol.declineInvites", {
+    height = 84,
+    duration = 2.4,
+    Sample = function()
+        return { from = Get("declineInvitesFrom") or "friendsGuild", fromText = Label("qolDeclineInvitesFrom") }
+    end,
+    Create = function(stage)
+        local sc = {}
+        sc.popup = P.Popup(stage, 290, 60)
+        sc.popup:SetPoint("TOPLEFT", 12, -10)
+        sc.text = Line(sc.popup, "small", 10, -8, 270)
+        sc.state = Line(sc.popup, "meta", 10, -24, 270)
+        sc.accept = P.FakeButton(sc.popup, "Accept", 70)
+        sc.accept:SetPoint("BOTTOMLEFT", 10, 6)
+        sc.decline = P.FakeButton(sc.popup, "Decline", 70)
+        sc.decline:SetPoint("LEFT", sc.accept, "RIGHT", 8, 0)
+        sc.allowed = Line(stage, "meta", 318, -14, 240)
+        sc.note = Line(stage, "meta", 318, -48, 240)
+        return sc
+    end,
+    Reset = function(sc, s)
+        sc.popup:SetAlpha(1)
+        sc.text:SetText("Garrick invites you to a group.")
+        Wg.Color(sc.text, pal.text)
+        sc.state:SetText("Garrick is a stranger.")
+        Wg.Color(sc.state, pal.stone)
+        sc.accept:Show(); sc.decline:Show()
+        sc.accept:SetLit(false); sc.decline:SetLit(false)
+        sc.allowed:SetText(s.from == "nobody" and "Still allowed: nobody. Every invitation is declined."
+            or ("Still allowed: " .. s.fromText:lower() .. ". Their invitations reach you as usual."))
+        sc.note:SetText("Group finder role invitations are left to you.")
+    end,
+    Update = function(sc, t)
+        sc.popup:SetAlpha(0.25 + 0.75 * P.Ramp(t, 0, 0.3))
+        if t >= 0.9 then sc.decline:SetLit(true) end
+        if t >= 1.2 then sc.popup:SetAlpha(1 - 0.5 * P.Ramp(t, 1.2, 1.8)) end
+    end,
+    Final = function(sc)
+        sc.popup:SetAlpha(0.6)
+        sc.accept:Hide(); sc.decline:Hide()
+        sc.text:SetText("Invitation declined.")
+        Wg.Color(sc.text, pal.tealHi)
+        sc.state:SetText("Garrick sees it declined. Nothing is said in chat.")
+        Wg.Color(sc.state, pal.text)
+    end,
+    Caption = function(s)
+        return "An invitation from someone outside your exceptions is declined as it arrives, as if you had pressed Decline. "
+            .. (s.from == "nobody" and "With no exceptions, every invitation is declined."
+                or ("Invitations from " .. s.fromText:lower() .. " still reach you."))
+    end,
+})
+
+---------------------------------------------------------------------------
 -- Quick Keybind button: where it sits in the Game Menu (a still picture: nothing to play)
 ---------------------------------------------------------------------------
 P.Register("qol.quickKeybind", {

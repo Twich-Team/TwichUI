@@ -102,6 +102,14 @@ A.ENTRIES = {
         end,
     },
     {
+        key = "qolDeclineInvites", page = "qol", label = "Decline group invitations", off = "declining group invitations",
+        available = function() return R.QoL ~= nil end,
+        scope = function()
+            return ("Declines group invitations, except from %s. Role invitations from the group finder are left to you."):format(
+                PEOPLE[Choice("declineInvitesFrom")] or PEOPLE.friendsGuild)
+        end,
+    },
+    {
         key = "qolGuideWaypoint", page = "qol", label = "RestedXP waypoint", off = "marking RestedXP's destination on the map",
         available = function()
             if not R.QoLGuideWaypoint then return false end

@@ -49,7 +49,7 @@ for key, default in pairs(defaults) do
   n = n + 1
   assert(default == R.DEFAULT_MODULES[key], key .. " default matches a new install")
 end
-assert(n == 80, "every module has a toggle: " .. n)
+assert(n == 81, "every module has a toggle: " .. n)
 assert(defaults.barGlows == true, "action bar glows are on by default (each spell can be turned off)")
 assert(defaults.hazardAlerts == false, "hazard alerts are opt-in")
 assert(defaults.reminders == true, "reminders are on (none exist until made, and each starts turned off)")
@@ -263,7 +263,7 @@ for variable, page in pairs({
   TWICHUI_qolSummons = "Quality of life", TWICHUI_qolSummonsFrom = "Quality of life", TWICHUI_qolSummonsWait = "Quality of life",
   TWICHUI_qolResurrect = "Quality of life", TWICHUI_qolResurrectCombat = "Quality of life", TWICHUI_qolReleasePvP = "Quality of life",
   TWICHUI_qolReleaseWait = "Quality of life", TWICHUI_qolDuels = "Quality of life", TWICHUI_qolDuelsFrom = "Quality of life",
-  TWICHUI_qolDuelsToDeath = "Quality of life", TWICHUI_qolInvites = "Quality of life", TWICHUI_qolInvitesFrom = "Quality of life", TWICHUI_qolQuickKeybind = "Quality of life",
+  TWICHUI_qolDuelsToDeath = "Quality of life", TWICHUI_qolInvites = "Quality of life", TWICHUI_qolInvitesFrom = "Quality of life", TWICHUI_qolDeclineInvites = "Quality of life", TWICHUI_qolDeclineInvitesFrom = "Quality of life", TWICHUI_qolQuickKeybind = "Quality of life",
   TWICHUI_foodDrink = "Food and drink", TWICHUI_foodDrinkFood = "Food and drink", TWICHUI_foodDrinkDrink = "Food and drink",
   TWICHUI_mageTravel = "Mage", TWICHUI_mageTravelText = "Mage", TWICHUI_mageConjure = "Mage", TWICHUI_mageConjureText = "Mage", TWICHUI_mageRefreshments = "Mage", TWICHUI_mageRefreshmentsTrade = "Mage", TWICHUI_mageRefreshmentsAutoFill = "Mage", TWICHUI_refreshmentsTradeGives = "Mage", TWICHUI_refreshmentsText = "Mage",
   TWICHUI_mageSell = "Mage", TWICHUI_mageSellFood = "Mage", TWICHUI_mageSellDrink = "Mage", TWICHUI_mageSellDryRun = "Mage",
@@ -540,11 +540,12 @@ assert(rows["Addon skins"].status():find("of") or rows["Addon skins"].status():f
 
 -- Quality of life: everything is opt-in, the only invite settings are accepting a group invitation and from whom
 -- (nothing invites anyone), choices read and write the saved options, and the waits sit with what they wait for.
-for _, key in ipairs({ "qolSummons", "qolResurrect", "qolResurrectCombat", "qolReleasePvP", "qolDuels", "qolDuelsToDeath", "qolInvites", "qolQuickKeybind", "qolGuideWaypoint" }) do
+for _, key in ipairs({ "qolSummons", "qolResurrect", "qolResurrectCombat", "qolReleasePvP", "qolDuels", "qolDuelsToDeath", "qolInvites", "qolDeclineInvites", "qolQuickKeybind", "qolGuideWaypoint" }) do
   assert(defaults[key] == false, key .. " is off by default")
 end
 for variable in pairs(variables) do
-  assert(not variable:lower():find("invite") or variable == "TWICHUI_qolInvites" or variable == "TWICHUI_qolInvitesFrom", variable .. ": no other invite setting")
+  assert(not variable:lower():find("invite") or variable == "TWICHUI_qolInvites" or variable == "TWICHUI_qolInvitesFrom"
+    or variable == "TWICHUI_qolDeclineInvites" or variable == "TWICHUI_qolDeclineInvitesFrom", variable .. ": no other invite setting")
 end
 local Q = R.QoL
 assert(proxies.TWICHUI_qolSummonsFrom.get() == "known" and proxies.TWICHUI_qolDuelsFrom.get() == "known")
@@ -553,13 +554,15 @@ proxies.TWICHUI_qolSummonsFrom.set("bogus"); assert(Q.Get("summonsFrom") == "gro
 proxies.TWICHUI_qolDuelsFrom.set("nobody"); assert(Q.Get("duelsFrom") == "nobody")
 proxies.TWICHUI_qolSummonsWait.set(5); assert(Q.Get("summonsWait") == 5)
 proxies.TWICHUI_qolReleaseWait.set(0); assert(Q.Get("releaseWait") == 0)
-assert(#dropdowns.TWICHUI_qolSummonsFrom() == 3 and #dropdowns.TWICHUI_qolDuelsFrom() == 4 and #dropdowns.TWICHUI_qolInvitesFrom() == 3)
+assert(#dropdowns.TWICHUI_qolSummonsFrom() == 3 and #dropdowns.TWICHUI_qolDuelsFrom() == 4 and #dropdowns.TWICHUI_qolInvitesFrom() == 3 and #dropdowns.TWICHUI_qolDeclineInvitesFrom() == 4)
+assert(proxies.TWICHUI_qolDeclineInvitesFrom.get() == "friendsGuild" and proxies.TWICHUI_qolDeclineInvitesFrom.default == "friendsGuild")
+proxies.TWICHUI_qolDeclineInvitesFrom.set("nobody"); assert(Q.Get("declineInvitesFrom") == "nobody")
 assert(proxies.TWICHUI_qolInvitesFrom.get() == "friendsGuild" and proxies.TWICHUI_qolInvitesFrom.default == "friendsGuild")
 proxies.TWICHUI_qolInvitesFrom.set("guild"); assert(Q.Get("invitesFrom") == "guild")
 proxies.TWICHUI_qolInvitesFrom.set("anyone"); assert(Q.Get("invitesFrom") == "guild", "anyone is not a choice")
 assert(dropdowns.TWICHUI_qolSummonsWait()[1].label == "Don't wait" and dropdowns.TWICHUI_qolSummonsWait()[2].label == "1 second")
 assert(proxies.TWICHUI_qolSummonsFrom.default == "known" and proxies.TWICHUI_qolSummonsWait.default == 3 and proxies.TWICHUI_qolReleaseWait.default == 2)
-for _, name in ipairs({ "Accept summons", "Accept resurrection", "Release in battlegrounds", "Decline duel requests", "Accept group invitations",
+for _, name in ipairs({ "Accept summons", "Accept resurrection", "Release in battlegrounds", "Decline duel requests", "Accept group invitations", "Decline group invitations",
   "Wait before accepting a summon", "Wait before releasing" }) do
   assert(visible[name], name .. " is visible by default")
 end
@@ -582,7 +585,7 @@ c.TwichUIDB.modules.qolSummons = false; summonToggle.setting.changed(); assert(n
 local qolRow = assert(rows["Quality of life"], "the Quality of life page has a status")
 assert(qolRow.status():find("Off"), qolRow.status())
 c.TwichUIDB.modules.qolDuels, c.TwichUIDB.modules.qolReleasePvP = true, true; summonToggle.setting.changed()
-assert(qolRow.status():find("2 of 6 on"), qolRow.status())
+assert(qolRow.status():find("2 of 7 on"), qolRow.status())
 -- The RestedXP destination row (on the RestedXP page now): off, visible, and its tooltip says what it is doing right now.
 do
   local guideRow; for _, i in ipairs(initializers) do if i.setting and i.setting.name == "Mark RestedXP's destination" then guideRow = i end end
