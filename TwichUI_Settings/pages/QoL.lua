@@ -1,5 +1,5 @@
 -- TwichUI settings: Quality of life (qol/: summons, resurrection, battleground release, duels,
--- Quick Keybind). Everything here is off until turned on. The game's waypoint on RestedXP's destination is
+-- group invitations, Quick Keybind). Everything here is off until turned on. The game's waypoint on RestedXP's destination is
 -- on the RestedXP page. Each convenience is a feature card (K.Card) with a sample preview (previews/QoL.lua);
 -- the settings, their names and their tooltips are the ones this page has always had.
 
@@ -9,15 +9,15 @@ local K = R.SettingsKit
 K.Page({
     key = "qol", icon = "qualityOfLife", name = "Quality of life", order = 30, group = "everyday",
     description = "Small opt-in conveniences. Each is off until you turn it on, and each does only the one thing it says.",
-    keywords = "summon resurrect res rez battleground release spirit duel decline keybind quick keybind leatrix",
+    keywords = "summon resurrect res rez battleground release spirit duel decline group party invite invitation keybind quick keybind leatrix",
     when = function() return R.QoL ~= nil end,
     overview = {
-        label = "Quality of life", tip = "Small opt-in conveniences: accepting summons and resurrection, releasing in battlegrounds, declining duels and a Quick Keybind button in the Game Menu.",
+        label = "Quality of life", tip = "Small opt-in conveniences: accepting summons and resurrection, releasing in battlegrounds, declining duels, joining a group when a friend or guild member invites you, and a Quick Keybind button in the Game Menu.",
         status = function()
             local on = (R:Enabled("qolSummons") and 1 or 0) + (R:Enabled("qolResurrect") and 1 or 0)
                 + (R:Enabled("qolReleasePvP") and 1 or 0) + (R:Enabled("qolDuels") and 1 or 0)
-                + (R:Enabled("qolQuickKeybind") and 1 or 0)
-            local total = 5
+                + (R:Enabled("qolInvites") and 1 or 0) + (R:Enabled("qolQuickKeybind") and 1 or 0)
+            local total = 6
             return K.OnOff(on > 0, ("%d of %d on"):format(on, total), "Off")
         end,
     },
@@ -37,7 +37,7 @@ K.Page({
             return row
         end
         local function QolChoice(variable, key, label, tooltip, options)
-            local varType = (key == "summonsFrom" or key == "duelsFrom") and STRING or NUMBER
+            local varType = (key == "summonsFrom" or key == "duelsFrom" or key == "invitesFrom") and STRING or NUMBER
             return Choice(variable, label, tooltip, varType, Q.DEFAULTS[key],
                 function() return Q.Get(key) end, function(value) Q.Set(key, value) end, options)
         end
@@ -159,6 +159,30 @@ K.Page({
             }), duels, DuelsOn, DUELS_WHY)
         Under(QolToggle("qolDuelsToDeath", "Also decline duels to the death",
             "Also declines a duel to the death, which Forever treats as a separate, lethal kind of duel (accepting one asks you to type a confirmation). The same exceptions apply. Off: duels to the death still reach you."), duels, DuelsOn, DUELS_WHY)
+
+        local invitesFrom
+        K.Card({
+            title = "Accept group invitations",
+            icon = "profilesSharing",
+            what = "Joins the group when a friend or guild member invites you, so you don't have to click the pop-up.",
+            summary = function() return "Joins for: " .. Value(invitesFrom):lower() end,
+            consequence = "You are in their group at once. Leave it from the group's menu as usual. TwichUI says nothing in chat.",
+            preview = "qol.invites",
+            details = {
+                { "When doesn't it join?", "While you are already in a group (accepting would take you out of it), when joining would remove you from a queue, and for role invitations from the group finder or a quest-session invitation. Those pop-ups stay for you." },
+                { "What if the game gives no name?", "Then it can't be checked, so the invitation is left for you." },
+            },
+        })
+        local invites = Overlap(QolToggle("qolInvites", "Accept group invitations",
+            "Joins the group for you when someone you allow invites you, as if you had pressed Accept. It does nothing while you are already in a group, when joining would remove you from a queue, or for a group-finder (role) or quest-session invitation: those pop-ups stay for you. An invitation from anyone else, or with no name the game will give, is left for you too. TwichUI says nothing in chat.\n\nOff: invitations work as the game does."), "qolInvites")
+        local function InvitesOn() return R:Enabled("qolInvites") end
+        invitesFrom = Under(QolChoice("qolInvitesFrom", "invitesFrom", "Accept invitations from",
+            "Who can put you in a group without asking. Friends are your character friends and the WoW characters of Battle.net friends; guild members are read from the guild roster the game has loaded. Names are compared without the realm.",
+            {
+                { "friendsGuild", "Friends and guild members" },
+                { "friends", "Friends only" },
+                { "guild", "Guild members only" },
+            }), invites, InvitesOn, "Turn on \"Accept group invitations\" to choose who.")
 
         K.Card({
             title = "Quick Keybind button",

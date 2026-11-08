@@ -34,8 +34,9 @@ Q.CHOICES = {
     summonsWait = { 0, 1, 2, 3, 5, 10 },     -- seconds
     duelsFrom = { "known", "friendsGuild", "friends", "nobody" },
     releaseWait = { 0, 1, 2, 3, 5 },         -- seconds
+    invitesFrom = { "friendsGuild", "friends", "guild" },   -- never "anyone": joining a group is not something to hand to strangers
 }
-Q.DEFAULTS = { summonsFrom = "known", summonsWait = 3, duelsFrom = "known", releaseWait = 2 }
+Q.DEFAULTS = { summonsFrom = "known", summonsWait = 3, duelsFrom = "known", releaseWait = 2, invitesFrom = "friendsGuild" }
 
 -- Who counts, for a "from" option. true: anyone, even when the game gives no name.
 Q.SOURCES = {
@@ -43,6 +44,7 @@ Q.SOURCES = {
     known = { friends = true, guild = true, group = true },
     friendsGuild = { friends = true, guild = true },
     friends = { friends = true },
+    guild = { guild = true },
     group = { group = true },
     nobody = {},
 }
@@ -158,7 +160,7 @@ end
 -- never changes anything of Leatrix's.
 ---------------------------------------------------------------------------
 Q.LEATRIX = { qolSummons = "AutoAcceptSummon", qolResurrect = "AutoAcceptRes", qolReleasePvP = "AutoReleasePvP",
-    qolDuels = "NoDuelRequests" }
+    qolDuels = "NoDuelRequests", qolInvites = "AcceptPartyFriends" }
 
 function Q.LeatrixOverlap(key)
     local option = Q.LEATRIX[key]

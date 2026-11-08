@@ -1317,7 +1317,7 @@ do
   -- 8b. Quality of life's cards
   local cards = {}
   for _, row in ipairs(K.pages.qol.rows) do if row.card then cards[#cards + 1] = row end end
-  assert(#cards == 5, "five cards on Quality of life: " .. #cards)
+  assert(#cards == 6, "six cards on Quality of life: " .. #cards)
   for _, card in ipairs(cards) do assert(Icons.Get(card.card.icon), card:GetName() .. " has an icon") end
   for _, card in ipairs(cards) do
     assert(card.primary and card.primary.kind == "checkbox" and card.primary.switch, card:GetName() .. " has its switch")
@@ -1412,8 +1412,8 @@ do
       assert(s.preview.def.static, card:GetName() .. "'s preview is a still picture")
     end
   end
-  assert(played == 4 and P.Playing() == 0, "four samples played")
-  assert(Visible(win, "Summon accepted.") and Visible(win, "Duel declined."), "each ends on what happened")
+  assert(played == 5 and P.Playing() == 0, "five samples played")
+  assert(Visible(win, "Summon accepted.") and Visible(win, "Duel declined.") and Visible(win, "You joined Garrick's group."), "each ends on what happened")
   assert(#calls == 0, "no game action was called: " .. table.concat(calls, ", "))
   assert(Saved() == before, "and nothing was saved")
   summons.preview:Play()

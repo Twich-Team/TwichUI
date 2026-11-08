@@ -93,6 +93,7 @@ Define("qolResurrectCombat", QoL("QoLResurrect"))
 Define("qolReleasePvP", QoL("QoLRelease"))
 Define("qolDuels", QoL("QoLDuels"))
 Define("qolDuelsToDeath", QoL("QoLDuels"))
+Define("qolInvites", QoL("QoLInvites"))
 Define("qolQuickKeybind", QoL("QoLQuickKeybind"))
 do
     local def = QoL("QoLGuideWaypoint")

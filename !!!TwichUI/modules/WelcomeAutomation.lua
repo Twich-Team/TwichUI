@@ -44,7 +44,7 @@ A.IsMage = IsMage
 
 local PEOPLE = {
     known = "friends, guild members and group members", friendsGuild = "friends and guild members",
-    friends = "friends", group = "group members", anyone = "anyone", nobody = "no one",
+    friends = "friends", guild = "guild members", group = "group members", anyone = "anyone", nobody = "no one",
 }
 
 local function Wait(seconds)
@@ -91,6 +91,14 @@ A.ENTRIES = {
             return ("Declines duel requests, except from %s%s."):format(
                 PEOPLE[Choice("duelsFrom")] or PEOPLE.known,
                 On("qolDuelsToDeath") and ". Duels to the death too" or "")
+        end,
+    },
+    {
+        key = "qolInvites", page = "qol", label = "Accept group invitations", off = "accepting group invitations",
+        available = function() return R.QoL ~= nil end,
+        scope = function()
+            return ("Joins the group when %s invite you. Not while you are already in a group, and role invitations from the group finder are left to you."):format(
+                PEOPLE[Choice("invitesFrom")] or PEOPLE.friendsGuild)
         end,
     },
     {

@@ -82,6 +82,7 @@ local DEFAULT_MODULES = {
     qolReleasePvP = false,   -- ... release your spirit after dying in a battleground
     qolDuels = false,        -- ... decline duel requests (except from the people you choose)
     qolDuelsToDeath = false, -- ... and duels to the death (needs the one above)
+    qolInvites = false,      -- ... accept a group invitation from the friends and/or guild members you choose
     qolQuickKeybind = false, -- ... a Quick Keybind button in the Game Menu
     qolGuideWaypoint = false, -- ... the game's waypoint on RestedXP's current destination (needs RestedXP)
     qolGuideAuto = false,    -- ... hide RestedXP's guide in the situations you choose, and show it again after (needs RestedXP)

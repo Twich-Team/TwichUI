@@ -53,6 +53,7 @@ TC.LOCAL = {
     ["modules.mageSellDryRun"] = "acts", ["modules.mageRefreshmentsAutoFill"] = "acts",
     ["modules.qolSummons"] = "acts", ["modules.qolResurrect"] = "acts", ["modules.qolResurrectCombat"] = "acts",
     ["modules.qolReleasePvP"] = "acts", ["modules.qolDuels"] = "acts", ["modules.qolDuelsToDeath"] = "acts",
+    ["modules.qolInvites"] = "acts",
     ["modules.qolGuideWaypoint"] = "acts", ["modules.qolMageConjureFoodDrink"] = "acts",
     ["modules.qolGuideAuto"] = "acts", ["modules.qolGuideAutoDungeon"] = "acts", ["modules.qolGuideAutoRaid"] = "acts",
     ["modules.qolGuideAutoPvP"] = "acts", ["modules.qolGuideAutoGroup"] = "acts", ["modules.qolGuideAutoResting"] = "acts",

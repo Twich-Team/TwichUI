@@ -29,6 +29,7 @@ end
 local WHO = {
     known = "a member of your guild", group = "in your group", anyone = "a stranger",
     friendsGuild = "a member of your guild", friends = "on your friends list", nobody = "on your friends list",
+    guild = "a member of your guild",
 }
 
 -- How much faster than real time a wait is drawn so one play stays near three seconds. The caption says so.
@@ -270,6 +271,59 @@ P.Register("qol.duels", {
         return "A request from someone outside your exceptions is declined as it arrives, as if you had pressed Decline. "
             .. (s.from == "nobody" and "With no exceptions, every request is declined."
                 or ("Requests from " .. s.fromText:lower() .. " still reach you."))
+    end,
+})
+
+---------------------------------------------------------------------------
+-- Accept group invitations: an invitation, accepted for you (a still sample of who it applies to)
+---------------------------------------------------------------------------
+P.Register("qol.invites", {
+    height = 84,
+    duration = 2.4,
+    Sample = function()
+        return { from = Get("invitesFrom") or "friendsGuild", fromText = Label("qolInvitesFrom") }
+    end,
+    Create = function(stage)
+        local sc = {}
+        sc.popup = P.Popup(stage, 290, 60)
+        sc.popup:SetPoint("TOPLEFT", 12, -10)
+        sc.text = Line(sc.popup, "small", 10, -8, 270)
+        sc.state = Line(sc.popup, "meta", 10, -24, 270)
+        sc.accept = P.FakeButton(sc.popup, "Accept", 70)
+        sc.accept:SetPoint("BOTTOMLEFT", 10, 6)
+        sc.decline = P.FakeButton(sc.popup, "Decline", 70)
+        sc.decline:SetPoint("LEFT", sc.accept, "RIGHT", 8, 0)
+        sc.allowed = Line(stage, "meta", 318, -14, 240)
+        sc.note = Line(stage, "meta", 318, -48, 240)
+        return sc
+    end,
+    Reset = function(sc, s)
+        sc.popup:SetAlpha(1)
+        sc.text:SetText("Garrick invites you to a group.")
+        Wg.Color(sc.text, pal.text)
+        sc.state:SetText("Garrick is " .. WHO[s.from] .. ".")
+        Wg.Color(sc.state, pal.stone)
+        sc.accept:Show(); sc.decline:Show()
+        sc.accept:SetLit(false); sc.decline:SetLit(false)
+        sc.allowed:SetText("Joined for: " .. s.fromText:lower() .. ".")
+        sc.note:SetText("Not while you are already in a group.")
+    end,
+    Update = function(sc, t)
+        sc.popup:SetAlpha(0.25 + 0.75 * P.Ramp(t, 0, 0.3))
+        if t >= 0.9 then sc.accept:SetLit(true) end
+        if t >= 1.2 then sc.popup:SetAlpha(1 - 0.5 * P.Ramp(t, 1.2, 1.8)) end
+    end,
+    Final = function(sc)
+        sc.popup:SetAlpha(0.6)
+        sc.accept:Hide(); sc.decline:Hide()
+        sc.text:SetText("You joined Garrick's group.")
+        Wg.Color(sc.text, pal.tealHi)
+        sc.state:SetText("Nothing is said in chat.")
+        Wg.Color(sc.state, pal.text)
+    end,
+    Caption = function(s)
+        return "An invitation from " .. s.fromText:lower() .. " is accepted as it arrives, as if you had pressed Accept. "
+            .. "Anyone else's invitation, and any invitation while you are in a group or queued, waits for you."
     end,
 })
 
