@@ -130,7 +130,7 @@ Flush()
 local parts = P.Parts()
 Check(parts.sections and #parts.sections == 6, "the six sections are built")
 Check(f.empty.shown and f.empty.text:find("No reminders yet"), "an empty list says how to start")
-Check(#f.templates == 5 and f.templates[1].shown, "five ways to start")
+Check(#f.templates == 6 and f.templates[1].shown, "six ways to start")
 Check(f.events.PLAYER_EQUIPMENT_CHANGED and f.events.GET_ITEM_INFO_RECEIVED, "while shown it hears what Test reads")
 local createdBefore = made
 

@@ -4,7 +4,7 @@ Artwork, an icon or a few words on screen while conditions the player chooses ar
 time. The first uses are a missing-shield reminder and an ammunition reminder; nothing in the design is about a class.
 Code: `!!!TwichUI/reminders/`; settings: `TwichUI_Settings/pages/Reminders.lua`, `RemindersEditor.lua` and `AmmoItems.lua`
 (the Known ammunition tab); tests: `tests/test_reminders.lua`, `tests/test_reminders_ammunition.lua`,
-`tests/test_reminders_settings.lua`, `tests/test_reminders_enchant_sound.lua`, `tests/test_ammo_items_settings.lua`; art: `tools/make_reminder_art.py`,
+`tests/test_reminders_settings.lua`, `tests/test_reminders_enchant_sound.lua`, `tests/test_reminders_wellfed.lua`, `tests/test_ammo_items_settings.lua`; art: `tools/make_reminder_art.py`,
 `tools/make_settings_icons.py` (sheet 4).
 
 A reminder only reads. It never equips, uses, moves or casts anything, prints nothing in chat and sends nothing to
@@ -33,6 +33,7 @@ client are at the end.
 | `IsMounted()`; `PLAYER_MOUNT_DISPLAY_CHANGED` | `PlayerScriptDocumentation.lua`, `UnitDocumentation.lua`; the shared action bar code registers the event |
 | Talent specialization: Forever has none, so it is the tree with the most spent points. Points per tree come from `gear/Data.lua` `TalentSpent` (`C_SpecializationInfo.IsInitialized` / `GetActiveSpecGroup` / `GetCombatConfigIDForSpecGroup`, `C_Traits.GetGroupDisplayInfoByTreeID` / `GetGroupCurrencyInfo`, trees identified by `skillLineID`; the class's trees and their ids are `gear/Weights.lua` `W.CLASSES`). Re-read on `PLAYER_TALENT_UPDATE`, `CHARACTER_POINTS_CHANGED`, `ACTIVE_TALENT_GROUP_CHANGED`, `TRAIT_CONFIG_UPDATED`. Stored as `{ class, tree = skillLine }` or `{ state = "tied" \| "none" }`; unspent points never count; unreadable data is unknown | `SpecializationInfoDocumentation.lua`, `PaperDollInfoDocumentation.lua`, `Blizzard_UIPanels_Game/Camelot/PaperDollFrame.lua`; project use in `gear/Data.lua`, `gear/Hints.lua` |
 | Whether a weapon has a temporary enchant (a weapon oil, sharpening stone, poison, a shaman's imbue): `C_Item.GetWeaponEnchantInfo(Enum.WeaponSlot)` answers a list of `{ hasEnchant, enchantType, timeLeft, charges, enchantID, enchantIconID }` for `MainHand` 0, `OffHand` 1 (and `Ranged` 2); `C_PaperDollInfo.GetTemporaryEnchantmentInfo(inventorySlot)` is the older form. Changes: `WEAPON_ENCHANT_CHANGED`, `WEAPON_SLOT_CHANGED`. The game's own buff frame reads it this way. The client says whether one is on, **not which**, so the condition cannot tell a wizard oil from a sharpening stone | `ItemDocumentation.lua`, `ItemConstantsDocumentation.lua`, `PaperDollInfoDocumentation.lua`, `Blizzard_BuffFrame/BuffFrame.lua`, `Blizzard_AuraContainer.lua`; the same reading is used by `glows/State.lua` |
+| Whether you have a Well Fed buff: the helpful auras on `player` listed with `C_UnitAuras.GetAuraDataByIndex(unit, index, "HELPFUL")` (called protected: while auras are hidden from addons it errors or answers secret, which is **unknown**, and `C_Secrets.ShouldAurasBeSecret()` is asked first), `UNIT_AURA` for `player` only (`RegisterUnitEvent`; an update that only moves a timer is skipped). Every food has a buff spell of its own, so the buff is told by its **name** as the client gives it for the Well Fed spell (`C_Spell.GetSpellName(19705)`, the English "Well Fed" when the client gives none) or by that spell ID. 19705 and the "each food has an ID of its own, go by the name" note come from the GlowingBars reference addon (data only, nothing copied); **not confirmed on a real client** | `UnitAuraDocumentation.lua`, `SecretPredicateAPIDocumentation.lua`, `SpellDocumentation.lua`; `buffback/Watch.lua` and `glows/State.lua` read auras the same way |
 | `IsResting()` (true in an inn or a capital city); `PLAYER_UPDATE_RESTING` | `PlayerScriptDocumentation.lua`, `UnitDocumentation.lua`; the player frame, experience bar and honor system register the event |
 | `IsInInstance()` answers `isInInstance, instanceType` ("party" a dungeon, "raid" a raid, "pvp" a battleground, "arena", "scenario", "none" the open world); the kind of place changes only across a loading screen, so it is read on `PLAYER_ENTERING_WORLD` | `InstanceDocumentation.lua`; project use in `qol/GuideAutoHide.lua`, `healer/Watch.lua` |
 | `PLAYER_EQUIPMENT_CHANGED` (slot, hasCurrent) | `PaperDollInfoDocumentation.lua` |
@@ -56,6 +57,7 @@ as labels in the settings window and never in what is stored.
 | `player` | `state`, `negate` | `combat` (in combat), `dead` (dead **or a ghost**), `ghost` (only the released spirit), `mounted` (offered only while the client has `IsMounted`), `resting` (in an inn or a capital city; needs `IsResting`), `dungeon` (inside a five-player instance), `raid` (inside a raid instance); the last two need `IsInInstance`. A battleground, arena or scenario is neither a dungeon nor a raid. "Player is not resting" is how a reminder is kept from showing while resting |
 | `class` | `class` (a class token: `WARRIOR`, `PALADIN`, ... never a translated name), `negate` | the classes this client lists (`CLASS_SORT_ORDER`, nine in `Blizzard_FrameXMLBase/Camelot/Constants.lua`; TwichUI's own list of the same nine when the client gives none). New ones start with no class chosen: unfinished until one is |
 | `weaponEnchant` | `hand` (`mainHand` or `offHand`), `what` (no `negate`: it reads as a sentence) | `missing` (a weapon is held in that hand and has no temporary enchant) or `applied` (a weapon there has one). A hand with nothing that can take an enchant (empty, a shield, an item held in the off hand, a fishing pole) is **never** `missing` or `applied`. An item the game has not described yet, or an answer that cannot be read, is **unknown**, never `missing` |
+| `wellFed` | `what` (no `negate`: it reads as a sentence) | `missing` (the game listed your helpful auras and none is Well Fed) or `applied` (one is). Auras hidden from addons, or a list longer than the 40 looked at with no Well Fed in it, are **unknown**, never `missing` |
 | `ammunition` | `what` (no `negate`: it reads as a sentence) | `problem` (any of the next three), `noAmmo` (nothing selected, some carried), `outOfAmmo` (nothing selected and none carried, or the selected stack is empty), `wrong` (arrows for a gun, bullets for a bow). Offered only while the client has `UnitUsesAmmo` |
 
 `negate` is "is not". "Player is not dead or a ghost" reads as "Player is alive". Categories are judged from the item's
@@ -187,7 +189,9 @@ is doing now, and its own switch) and **Start a new one**: **Missing shield** (n
 Shield", the shield artwork with "Equip your shield", no sound, no pulse, below the middle, this character only),
 **Ammunition** (name "Ammunition reminder", "Ranged ammunition has a problem", the arrows artwork with "Check your
 ammunition", the same place and scope; it does nothing for a weapon that takes no ammunition),
-**Missing weapon enchant** (name "Weapon enchant reminder", "Main hand weapon has no temporary enchant", the bell icon with
+**Well Fed ran out** (name "Well Fed reminder", "You are not Well Fed", the plate-and-cutlery artwork at size 48 with
+"Eat something", the same place and scope; when the buff
+runs out it appears, and it goes within a moment of eating), **Missing weapon enchant** (name "Weapon enchant reminder", "Main hand weapon has no temporary enchant", the bell icon with
 "Apply your weapon oil", the same place and scope; change the hand, or add a second condition for the off hand, in
 When), **Missing equipment or item** (any slot is not an item you choose; shows that item's icon; unfinished until the item is
 chosen) and **Custom reminder** (your words; needs a condition). Each is an ordinary reminder once made: nothing about
@@ -296,7 +300,9 @@ an expression. A missing item icon shows a question mark while the game is asked
 
 Artwork gallery: `RM.ART` in `reminders/Config.lua`, files in `media/reminders/`: `shield.tga` and `ammo.tga` (a bundle of arrows; 256 px canvas, shield 180 x 254
 used) and `shield-small.tga` (64 px canvas, 44 x 62 used) for 64 units and under. Uncompressed 32-bit TGA, bottom-left
-origin; only the used part is drawn. There is no in-game image import.
+origin; only the used part is drawn. `wellfed.tga` / `wellfed-small.tga` (a plate with crumbs, a fork and a knife; 256 x 186 and
+64 x 47 used) is the Well Fed template's artwork, built by `tools/make_reminder_art.py` from `assets/reminder-art-wellfed-source.png`.
+There is no in-game image import.
 
 ## Sound
 
@@ -331,7 +337,7 @@ The Test section's simulations go through the same `Evaluate.Run` on a table bui
 |---|---|
 | Switched off | no event, every frame hidden, every timer stale |
 | On, no reminder turned on for this character | `PLAYER_ENTERING_WORLD` only |
-| On, reminders running | the observation keys their conditions read, in every branch of every group, once each (`slot:17`, `combat`, `life`, `mounted`, `class`, `ammo`, `enchant`), and only those sources' events (`class` has none: it is read when wanted and on entering the world): `PLAYER_EQUIPMENT_CHANGED` for equipment, `WEAPON_ENCHANT_CHANGED`, `WEAPON_SLOT_CHANGED` (and a change of slot 16 or 17) for weapon enchants, the regen events for combat, the three life events, the mount event, and for ammunition `PLAYER_EQUIPMENT_CHANGED`, `BAG_UPDATE_DELAYED` and `UNIT_INVENTORY_CHANGED` |
+| On, reminders running | the observation keys their conditions read, in every branch of every group, once each (`slot:17`, `combat`, `life`, `mounted`, `class`, `ammo`, `enchant`, `wellFed`), and only those sources' events (`class` has none: it is read when wanted and on entering the world): `PLAYER_EQUIPMENT_CHANGED` for equipment, `WEAPON_ENCHANT_CHANGED`, `WEAPON_SLOT_CHANGED` (and a change of slot 16 or 17) for weapon enchants, the regen events for combat, the three life events, the mount event, for ammunition `PLAYER_EQUIPMENT_CHANGED`, `BAG_UPDATE_DELAYED` and `UNIT_INVENTORY_CHANGED`, and for Well Fed `UNIT_AURA` for the player only |
 | An ammunition reminder, weapon takes none (or none equipped) | only a change of the ranged or ammo slot is acted on; bag and inventory events are dropped before any read. A look is up to six values from the character, and the bags only when nothing is selected |
 | An item without details in a wanted slot | asked for at most twice; `GET_ITEM_INFO_RECEIVED` / `ITEM_DATA_LOAD_RESULT` only while that lasts |
 | An event | marks its key; one 0.1 s timer reads each marked key once; only keys whose facts changed re-decide, and only the reminders that read them (an index by key) |
@@ -380,6 +386,8 @@ example of a kind with a file of its own. Buff, cooldown, health, inventory-coun
 - Weapon enchants: only whether a hand has one, not which, and not how long it has left (the game does give the time and
   charges; a condition on them is not built). The off hand and the main hand only; no ranged slot. A fishing pole counts as
   nothing to enchant.
+- Well Fed: only whether the buff is there, not how long it has left (a condition on the time left is not built) and not
+  which food gave it. It is unknown, so nothing shows, while the game hides your buffs from addons.
 - Not in this release: Lua, dynamic clones, a volume or channel per sound, sharing, buff/cooldown/health/inventory/target
   conditions, automation of any kind.
 
@@ -408,6 +416,11 @@ example of a kind with a file of its own. Buff, cooldown, health, inventory-coun
     equipment change or loading screen). A fishing pole, a shield and an empty hand never show it. `/reload` with an oil on:
     no flash of the reminder; with none: it shows. A dual-wielder: add an off-hand condition, each hand answers on its own.
     Test > Right now says "No temporary enchant" / "Has a temporary enchant".
+    **Well Fed**: from the templates, "Well Fed ran out" shows while you have no Well Fed buff; eat buff food (sit for the full
+    ten seconds): it goes within a moment; cancel the buff or let it expire: it comes back (unlike an oil, a buff expiring
+    sends `UNIT_AURA`). Test > Right now says "Well Fed" / "Not Well Fed". Check the buff really is named "Well Fed" on your
+    client (hover it): if the reminder stays up while you are fed, send the exact name and its spell ID. In a fight where
+    buffs are hidden, expect no change either way. `/reload` while fed: no flash of the reminder.
 13. **Sound**: choose a sound and press Play (you hear it; with the sound-effects volume at zero you will not). Turn the
     reminder on with its conditions true: one sound as it appears; none while it stays up, none on a loading screen; take the
     condition away and bring it back: one more (not twice inside 2 seconds). Show on screen (preview): silent. Pick a sound

@@ -349,7 +349,7 @@ do
   for _, e in ipairs(Pl.Entries()) do if e.kind == "talent" then found = e end end
   Check(found and found.category == "Character" and found.make().type == "talent", "the picker offers it")
 end
-Check(#Pl.Subjects() == #C.SLOTS + 4 + #C.ENCHANT_HANDS, "subjects: every slot, each hand's weapon enchant, ammunition, the player, the class, the talent specialization")
+Check(#Pl.Subjects() == #C.SLOTS + 5 + #C.ENCHANT_HANDS, "subjects: every slot, each hand's weapon enchant, ammunition, Well Fed, the player, the class, the talent specialization")
 Check(Pl.Help({ type = "ammunition", what = "outOfAmmo" }):find("none your weapon can use"), "help for a choice comes from the choice")
 
 ---------------------------------------------------------------------------

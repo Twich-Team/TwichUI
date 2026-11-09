@@ -94,8 +94,9 @@ local ART_PATH = R.PATH .. [[media\reminders\]]
 RM.ART = {
     shield = { label = "Shield", size = 256, width = 182, height = 256, smallSize = 64, smallWidth = 46, smallHeight = 64 },
     ammo = { label = "Arrows", size = 256, width = 217, height = 256, smallSize = 64, smallWidth = 54, smallHeight = 64 },
+    wellfed = { label = "Plate and cutlery", size = 256, width = 256, height = 186, smallSize = 64, smallWidth = 64, smallHeight = 47 },
 }
-RM.ART_ORDER = { "shield", "ammo" }
+RM.ART_ORDER = { "shield", "ammo", "wellfed" }
 
 function RM.Art(id) return type(id) == "string" and RM.ART[id] or nil end
 
@@ -550,6 +551,7 @@ RM.TEMPLATES = {
     { "shield", "Missing shield", "Shows the shield artwork and \"Equip your shield\" whenever your off hand doesn't hold a shield. For this character only, until you change that." },
     { "ammo", "Ammunition", "Shows the arrows artwork and \"Check your ammunition\" while your ranged weapon takes ammunition and none is selected, none is left or the wrong kind is selected. Does nothing for a weapon that takes none. For this character only, until you change that." },
     { "enchant", "Missing weapon enchant", "Shows \"Apply your weapon oil\" whenever the weapon in your main hand has no temporary enchant (a weapon oil, sharpening stone or poison). The game doesn't say which one is on, only whether one is. For this character only, until you change that." },
+    { "wellFed", "Well Fed ran out", "Shows the plate artwork and \"Eat something\" whenever you don't have a Well Fed buff, which is also when one has run out. It can't be read while the game hides your buffs from addons (some fights), and then nothing is shown. For this character only, until you change that." },
     { "item", "Missing equipment or item", "Shows an item's icon while that item isn't equipped. Choose the item first." },
     { "custom", "Custom reminder", "Your own words, shown when the conditions you add are true." },
 }
@@ -577,6 +579,13 @@ local function Template(kind)
             name = "Weapon enchant reminder", match = "all", scope = mine,
             conditions = { { type = "weaponEnchant", hand = "mainHand", what = "missing" } },
             display = { mode = "iconText", iconSource = "bundled", icon = "reminders", text = "Apply your weapon oil" },
+            place = { preset = "belowCenter" },
+        }
+    elseif kind == "wellFed" then
+        return {
+            name = "Well Fed reminder", match = "all", scope = mine,
+            conditions = { { type = "wellFed", what = "missing" } },
+            display = { mode = "artworkText", art = "wellfed", size = 48, text = "Eat something" },
             place = { preset = "belowCenter" },
         }
     elseif kind == "item" then

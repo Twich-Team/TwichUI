@@ -105,6 +105,14 @@ KIND.weaponEnchant = {
     end,
 }
 
+KIND.wellFed = {
+    sentence = function(cond)
+        local c = C().WellFedChoice(cond.what)
+        if not c then return nil end
+        return "You " .. c[3]
+    end,
+}
+
 -- The words for a condition as stored (a clean copy, or any table with the provider's fields).
 function Pl.CondSentence(cond)
     local meta = type(cond) == "table" and KIND[cond.type]
@@ -167,7 +175,7 @@ end
 Pl.CATEGORIES = { "Combat", "Character", "Equipment", "Other" }
 
 -- an icon (R.Icons id) for a kind of condition, drawn small beside it
-local ICON = { equipment = "gearComparison", ammunition = "ammunition", class = "profiles", talent = "profiles", weaponEnchant = "gearComparison" }
+local ICON = { equipment = "gearComparison", ammunition = "ammunition", class = "profiles", talent = "profiles", weaponEnchant = "gearComparison", wellFed = "foodAndDrink" }
 local PLAYER_ICON = { combat = "hazardAlerts", dead = "resurrection", ghost = "resurrection", mounted = "navigation", resting = "reminderTest", dungeon = "hazardAlerts", raid = "hazardAlerts" }
 function Pl.Icon(cond)
     if type(cond) ~= "table" then return "reminderTest" end
@@ -213,6 +221,10 @@ function Pl.Entries()
             out[#out + 1] = { key = "weaponEnchant", kind = "weaponEnchant", category = "Equipment", name = "Your weapon's temporary enchant",
                 blurb = "Whether the weapon in a hand has a weapon oil, sharpening stone or poison on it. The game says whether one is on, not which.",
                 icon = Pl.Icon({ type = "weaponEnchant" }), make = function() return p.New() end }
+        elseif p.type == "wellFed" then
+            out[#out + 1] = { key = "wellFed", kind = "wellFed", category = "Character", name = "Your Well Fed buff",
+                blurb = "Whether you have a Well Fed buff from eating good food, so a reminder can appear when it runs out. Not readable while the game hides your buffs from addons.",
+                icon = Pl.Icon({ type = "wellFed" }), make = function() return p.New() end }
         elseif p.type == "ammunition" then
             local A = R.ReminderAmmo
             out[#out + 1] = { key = "ammunition", kind = "ammunition", category = "Equipment", name = "Your ranged ammunition",
@@ -245,6 +257,7 @@ function Pl.Subjects()
     for _, slot in ipairs(CT.SLOTS) do out[#out + 1] = { value = "slot:" .. slot[1], label = slot[3] } end
     for _, h in ipairs(CT.ENCHANT_HANDS) do out[#out + 1] = { value = "enchant:" .. h[1], label = h[2] .. " weapon enchant" } end
     out[#out + 1] = { value = "ammo", label = "Ranged ammunition" }
+    out[#out + 1] = { value = "wellFed", label = "Well Fed buff" }
     out[#out + 1] = { value = "player", label = "You (the player)" }
     out[#out + 1] = { value = "class", label = "Player class" }
     out[#out + 1] = { value = "talent", label = "Talent specialization" }
@@ -252,7 +265,7 @@ function Pl.Subjects()
 end
 
 -- the subject choice that makes a condition of a kind of its own (the others are equipment slots)
-local SUBJECT_KIND = { player = "player", ammo = "ammunition", class = "class", talent = "talent" }
+local SUBJECT_KIND = { player = "player", ammo = "ammunition", class = "class", talent = "talent", wellFed = "wellFed" }
 
 function Pl.SubjectOf(cond)
     if type(cond) ~= "table" then return nil, "?" end
@@ -267,6 +280,8 @@ function Pl.SubjectOf(cond)
         return "enchant:" .. tostring(cond.hand), (h and h[2] or tostring(cond.hand)) .. " weapon enchant"
     elseif cond.type == "ammunition" then
         return "ammo", "Ranged ammunition"
+    elseif cond.type == "wellFed" then
+        return "wellFed", "Well Fed buff"
     elseif cond.type == "class" then
         return "class", "Player class"
     elseif cond.type == "talent" then
@@ -282,6 +297,8 @@ function Pl.ValueChoices(cond)
         for _, c in ipairs(CT.SlotChoices(cond.slot)) do out[#out + 1] = { value = c[1], label = c[2] } end
     elseif cond.type == "weaponEnchant" then
         for _, c in ipairs(CT.ENCHANT_CHOICES) do out[#out + 1] = { value = c[1], label = c[2], tooltip = c[4] } end
+    elseif cond.type == "wellFed" then
+        for _, c in ipairs(CT.WELLFED_CHOICES) do out[#out + 1] = { value = c[1], label = c[2], tooltip = c[4] } end
     elseif cond.type == "ammunition" then
         for _, c in ipairs(R.ReminderAmmo.CHOICES) do out[#out + 1] = { value = c[1], label = c[2], tooltip = c[4] } end
     elseif cond.type == "class" then
@@ -314,7 +331,7 @@ end
 
 -- Whether the operator ("is" / "is not") is a choice for this condition (ammunition and a weapon enchant read as a
 -- sentence on their own).
-function Pl.HasOperator(cond) return type(cond) == "table" and cond.type ~= "ammunition" and cond.type ~= "weaponEnchant" end
+function Pl.HasOperator(cond) return type(cond) == "table" and cond.type ~= "ammunition" and cond.type ~= "weaponEnchant" and cond.type ~= "wellFed" end
 -- Whether the condition names a specific item (the editor then asks for it).
 function Pl.NeedsItem(cond) return type(cond) == "table" and cond.type == "equipment" and cond.what == "item" end
 
@@ -383,6 +400,9 @@ function Pl.Help(cond)
     elseif cond.type == "weaponEnchant" then
         local c = C().EnchantChoice(cond.what)
         return (c and c[4] or "Whether the weapon in this hand has a temporary enchant.") .. " The game says whether one is on, not which."
+    elseif cond.type == "wellFed" then
+        local c = C().WellFedChoice(cond.what)
+        return (c and c[4] or "Whether you have a Well Fed buff.") .. " It can't be read while the game hides your buffs from addons."
     elseif cond.type == "ammunition" then
         local c = R.ReminderAmmo and R.ReminderAmmo.Choice(cond.what)
         return c and c[4] or "The ammunition for your ranged weapon."

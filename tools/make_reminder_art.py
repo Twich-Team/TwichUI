@@ -36,6 +36,7 @@ ART = {
     # runtime name   source file
     "shield": "reminder-art-shield-source.png",
     "ammo": "reminder-art-ammo-source.png",
+    "wellfed": "reminder-art-wellfed-source.png",
 }
 
 

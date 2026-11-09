@@ -5,13 +5,15 @@
 -- obs.place = "none" | "dungeon" | "raid" | "other", obs.class = the class
 -- token ("WARRIOR"; UnitClassBase), obs.talent = the leading talent tree ("WARRIOR:257", "tied", "none"), obs.ammo = the facts
 -- about the ranged weapon's ammunition (Ammunition.lua says which and judges them), obs.enchant = whether each weapon hand
--- has a temporary enchant ({ mainHand = "enchanted" | "bare" | "noWeapon" | nil, offHand = ... }). A key nobody wants
+-- has a temporary enchant ({ mainHand = "enchanted" | "bare" | "noWeapon" | nil, offHand = ... }), obs.wellFed = whether a
+-- Well Fed buff is on the player (true | false | nil). A key nobody wants
 -- is not read and not listened for. Nothing here decides anything, and nothing here ever changes the game: no item is
 -- equipped, used or moved, nothing is cast, nothing is sent.
 --
 -- Sources (ST.Source(kind, def) adds one): an observation key is "<kind>" or "<kind>:<arg>" ("slot:17", "combat").
 --   def.events = { EVENT = function(...) -> true (every key of this kind) | an arg (that key) | nil (none) }
 --   def.Read(arg, obs) -> true when the value in obs changed (writes it into obs: the live table, or a peek's own)
+--   def.units = { EVENT = "player" } (optional) listens for that event for that unit only (RegisterUnitEvent)
 -- Events only mark keys as due; one short timer later (COALESCE) each due key is read once, and the controller is
 -- told which ones actually changed (so a burst of equipment events, or swapping gear, is one decision, after it has
 -- settled). No OnUpdate, no polling.
@@ -25,8 +27,8 @@
 -- Game APIs (each documented in the Forever UI source; docs/reminders.md has the list): GetInventoryItemID,
 -- GetInventoryItemCount, UnitUsesAmmo, C_Container.GetContainerNumSlots / GetContainerItemID,
 -- C_Item.GetItemInfoInstant, C_Item.RequestLoadItemDataByID, C_Item.GetItemNameByID, UnitAffectingCombat,
--- UnitIsDeadOrGhost, UnitIsGhost, IsMounted, IsResting, IsInInstance, UnitClassBase, C_Item.GetWeaponEnchantInfo,
--- C_PaperDollInfo.GetTemporaryEnchantmentInfo; events PLAYER_ENTERING_WORLD, WEAPON_ENCHANT_CHANGED, WEAPON_SLOT_CHANGED,
+-- UnitIsDeadOrGhost, UnitIsGhost, IsMounted, IsResting, IsInInstance, UnitClassBase, C_UnitAuras.GetAuraDataByIndex, C_Secrets.ShouldAurasBeSecret, C_Spell.GetSpellName, C_Item.GetWeaponEnchantInfo,
+-- C_PaperDollInfo.GetTemporaryEnchantmentInfo; events PLAYER_ENTERING_WORLD, UNIT_AURA (player), WEAPON_ENCHANT_CHANGED, WEAPON_SLOT_CHANGED,
 -- PLAYER_EQUIPMENT_CHANGED (slot, hasCurrent), BAG_UPDATE_DELAYED, UNIT_INVENTORY_CHANGED (unit),
 -- PLAYER_REGEN_DISABLED / _ENABLED, PLAYER_DEAD, PLAYER_ALIVE, PLAYER_UNGHOST, PLAYER_MOUNT_DISPLAY_CHANGED, PLAYER_UPDATE_RESTING,
 -- GET_ITEM_INFO_RECEIVED and ITEM_DATA_LOAD_RESULT (itemID, success).
@@ -476,6 +478,65 @@ ST.Source("enchant", {
     end,
 })
 
+-- The Well Fed buff (key "wellFed": obs.wellFed = true | false | nil; Conditions.lua's IsWellFed says which aura counts).
+-- The helpful auras on the player are listed the way buffback/Watch.lua does (C_UnitAuras.GetAuraDataByIndex, called
+-- protected: while auras are hidden from addons it errors or answers secret, and that is unknown, never "not Well Fed").
+-- UNIT_AURA is listened for on the player only (src.units); an update that only moves an aura's timer can't change
+-- whether Well Fed is there, so only an added or removed aura, or a full update, reads again.
+local MAX_AURAS = 40
+local function WellFedName()
+    if C_Spell and C_Spell.GetSpellName then
+        local ok, name = pcall(C_Spell.GetSpellName, C.WELL_FED_SPELL)
+        name = ok and Plain(name) or nil
+        if type(name) == "string" and name ~= "" then return name end
+    end
+    return nil
+end
+
+local function ReadWellFed()
+    if not (C_UnitAuras and C_UnitAuras.GetAuraDataByIndex) then return nil end
+    if C_Secrets and C_Secrets.ShouldAurasBeSecret and Plain(C_Secrets.ShouldAurasBeSecret()) == true then return nil end
+    local known = WellFedName()
+    for i = 1, MAX_AURAS do
+        local ok, aura = pcall(C_UnitAuras.GetAuraDataByIndex, "player", i, "HELPFUL")
+        if not ok then return nil end
+        if aura == nil then return false end
+        if type(aura) ~= "table" or (issecretvalue and issecretvalue(aura)) then return nil end
+        local id, name = Number(aura.spellId), Plain(aura.name)
+        if id == nil and name == nil then return nil end
+        if C.IsWellFed(id, type(name) == "string" and name or nil, known) then return true end
+    end
+    return nil   -- more auras than are looked at: an answer of "none" would be a guess
+end
+
+-- Whether an update could have added or removed an aura. The payload's fields can be secret themselves (in a fight a
+-- field such as isFullUpdate is a secret boolean, and comparing or testing one is an error): anything that isn't plain
+-- is "can't tell", and that reads, since the read copes with hidden auras by itself.
+local function AurasMayHaveChanged(info)
+    if type(info) ~= "table" or (issecretvalue and issecretvalue(info)) then return true end
+    for _, key in ipairs({ "isFullUpdate", "addedAuras", "removedAuraInstanceIDs" }) do
+        local v = info[key]
+        if issecretvalue and issecretvalue(v) then return true end
+        if v then return true end
+    end
+    return false
+end
+
+ST.Source("wellFed", {
+    events = {
+        UNIT_AURA = function(unit, info)
+            if issecretvalue and issecretvalue(unit) then return true end
+            if unit ~= "player" then return nil end
+            return AurasMayHaveChanged(info) or nil
+        end,
+    },
+    units = { UNIT_AURA = "player" },
+    Read = function(_, into)
+        stats.reads = stats.reads + 1
+        return Set(into, "wellFed", ReadWellFed())
+    end,
+})
+
 -- Everything wanted is looked at again, asking the game rather than trusting what its events last said; only what
 -- differs is told on (through the usual Mark / Flush).
 local function Settle(mine)
@@ -540,7 +601,8 @@ function SyncEvents()
         for kind in pairs(kinds) do
             local src = SOURCES[kind]
             for event, handler in pairs(src and src.events or {}) do
-                if handler ~= "item" or items then events[event] = true end
+                -- a source can ask for one unit's event only (src.units), so other units' events never reach us
+                if handler ~= "item" or items then events[event] = src.units and src.units[event] or true end
             end
         end
     end
@@ -555,9 +617,10 @@ function SyncEvents()
             registered[event] = nil
         end
     end
-    for event in pairs(events) do
+    for event, unit in pairs(events) do
         if not registered[event] then
-            evf:RegisterEvent(event)
+            if type(unit) == "string" and evf.RegisterUnitEvent then evf:RegisterUnitEvent(event, unit)
+            else evf:RegisterEvent(event) end
             registered[event] = true
         end
     end
@@ -585,6 +648,7 @@ function ST.Stop()
     for k in pairs(dirty) do dirty[k] = nil end
     obs.slots = {}
     obs.combat, obs.life, obs.mounted, obs.ammo, obs.class, obs.talent, obs.enchant = nil, nil, nil, nil, nil, nil, nil
+    obs.wellFed = nil
     obs.resting, obs.place = nil, nil
     combat, ammoWatch, ammoRetries = nil, true, 0
     SyncEvents()

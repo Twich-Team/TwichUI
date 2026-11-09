@@ -404,6 +404,80 @@ C.Register({
 })
 
 ---------------------------------------------------------------------------
+-- The Well Fed buff: what good food gives you after you have eaten it. Every food has a buff spell of its own, so the
+-- buff is told by its name, the one the client gives the Well Fed spell (C.WELL_FED_SPELL; State.lua asks the game),
+-- or by that spell's ID. The observation obs.wellFed is true (a helpful aura on you is Well Fed), false (the game listed
+-- your helpful auras and none is), or nil (it hasn't said, or the auras are hidden from addons, as in some fights).
+-- State.lua reads it; a simulation hands the same shape in.
+---------------------------------------------------------------------------
+C.WELL_FED_SPELL, C.WELL_FED_NAME = 19705, "Well Fed"
+
+-- Whether an aura (spell ID and name as the game gave them, either may be nil) is Well Fed. knownName is what the client
+-- calls the Well Fed spell (nil: it doesn't say, the English name stands in). Pure.
+function C.IsWellFed(spellId, name, knownName)
+    if spellId == C.WELL_FED_SPELL then return true end
+    if type(name) ~= "string" or name == "" then return false end
+    local want = type(knownName) == "string" and knownName ~= "" and knownName or C.WELL_FED_NAME
+    return name:lower() == want:lower()
+end
+
+-- key (stored), what the editor's value choice says, the words after "You", a tooltip
+C.WELLFED_CHOICES = {
+    { "missing", "Is not Well Fed", "are not Well Fed",
+        "You have no Well Fed buff: you have not eaten food that gives one, or it has run out." },
+    { "applied", "Is Well Fed", "are Well Fed",
+        "You have a Well Fed buff." },
+}
+local WELLFED_CHOICE = {}
+for _, c in ipairs(C.WELLFED_CHOICES) do WELLFED_CHOICE[c[1]] = c end
+function C.WellFedChoice(key) return WELLFED_CHOICE[key] end
+
+C.Register({
+    type = "wellFed", label = "Well Fed buff",
+    New = function() return { type = "wellFed", what = "missing" } end,
+
+    Check = function(raw)
+        if not WELLFED_CHOICE[raw.what] then return nil, "it asks about the Well Fed buff in a way this version of TwichUI doesn't know." end
+        return { type = "wellFed", what = raw.what }
+    end,
+
+    Needs = function(_, add) add("wellFed") end,
+
+    Evaluate = function(cond, obs)
+        local v = obs and obs.wellFed
+        if v == nil then return UNKNOWN, "The game hasn't said whether you have the Well Fed buff yet, or your buffs can't be read right now." end
+        if cond.what == "missing" then return Yes(v == false) end
+        return Yes(v == true)
+    end,
+
+    Summary = function(cond)
+        local c = WELLFED_CHOICE[cond.what]
+        return ("You %s"):format(c and c[3] or tostring(cond.what))
+    end,
+
+    Observed = function(_, obs)
+        local v = obs and obs.wellFed
+        if v == nil then return "Not read yet" end
+        return v and "Well Fed" or "Not Well Fed"
+    end,
+
+    -- the one it looks for first (the Test section starts on the first), the other, and nothing read
+    Scenarios = function(cond)
+        local list = {}
+        local function Put(key, label, value)
+            list[#list + 1] = { key = key, label = label, Apply = function(obs) obs.wellFed = value end }
+        end
+        local fed, hungry = { "fed", "Well Fed", true }, { "hungry", "Not Well Fed", false }
+        local first, second = hungry, fed
+        if cond.what == "applied" then first, second = fed, hungry end
+        Put(first[1], first[2], first[3])
+        Put(second[1], second[2], second[3])
+        Put("unread", "Not read yet", nil)
+        return list
+    end,
+})
+
+---------------------------------------------------------------------------
 -- The player: combat, alive or dead, mounted, resting, in a dungeon or a raid
 ---------------------------------------------------------------------------
 -- key (stored), what it reads, "is" words, "is not" words, whether this client reports it
