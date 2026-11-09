@@ -58,8 +58,13 @@ local function MessageText(r)
     return (info and info.text or "Reminder") .. ": " .. r.label
 end
 
+-- The Quiet screen switch (QuietScreen.lua): no glow, message or sound while it is on. The reminders keep running, so
+-- turning it off draws the glows that are still wanted then; a message or sound for something that came up meanwhile
+-- is not given afterwards.
+local function Quiet() local q = R.QuietScreen return q ~= nil and q.On() end
+
 local function Alert(state)
-    if not state.alert then return end
+    if not state.alert or Quiet() then return end
     local s = state.style
     if s.message then NT.Show(state.r.id, state.r) end
     if s.sound and s.sound ~= BG.NO_SOUND and PlaySoundFile then
@@ -78,7 +83,7 @@ local function Render()
     Wipe(desired)
     for _, id in ipairs(ordered) do
         local state = active[id]
-        if state and state.phase == "showing" then
+        if state and state.phase == "showing" and not Quiet() then
             local r = state.r
             local function Take(list)
                 for _, button in ipairs(list) do
@@ -567,6 +572,14 @@ local function StopRunning()
 end
 
 function CT.Enabled() return R:Enabled("barGlows") end
+
+if R.QuietScreen then
+    R.QuietScreen.OnChange(function(on)
+        if not CT.running then return end
+        if on then NT.HideAll() end
+        Render()
+    end)
+end
 
 function CT.Refresh()
     local want = CT.Enabled() and R.Life.InWorld()

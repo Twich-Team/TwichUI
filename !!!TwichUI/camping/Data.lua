@@ -19,6 +19,16 @@ D.FIRE_SPELL = 818          -- Basic Campfire, the spell EllesmereUI's professio
 D.SLEEPING_BAG = 211527     -- the Cozy Sleeping Bag (guides/CozyBagData.lua's D.item)
 D.NEARBY_AURA = 1283391     -- "Campfire Nearby": the aura the game gives while a campfire is in range
 
+-- The Cozy Sleeping Bag's rest bonus (camping/Rest.lua). From two guide pages (warcraft.wiki.gg, warcrafttavern.com), NOT
+-- read from a Forever client: you lie in the bag; each full minute adds one stack of "Well-Rested" (+1% experience), to 3.
+-- The aura ID is the one the Warcraft Tavern guide links; it only ever confirms the clock, it never starts it (the player
+-- has no aura during the first minute). `/tui camp probe` lists what the client really says.
+D.REST_AURA = 429959
+D.REST_STEP = 60            -- seconds in the bag for one stack
+D.REST_STACKS = 3           -- the most stacks
+D.REST_TOTAL = D.REST_STEP * D.REST_STACKS
+D.REST_WINDOW = 300         -- seconds: a bag used this recently can be the one you are lying in
+
 -- Campfire kits, smallest first. slots: how many camp objects the fire holds. skill: the Cooking skill the recipe needs.
 D.FIRES = {
     { item = 279981, spell = 1229737, skill = 1,   slots = 3,  name = "Basic Campfire Kit" },

@@ -1,7 +1,7 @@
 -- TwichUI: the data bar entry
 -- A LibDataBroker launcher, "TwichUI", for a data bar (for example EllesmereUI's "Broker Plugin" block). A left click
--- opens its menu (modules/SettingsBrokerMenu.lua): Open settings, the Leave me alone switch, and the Guild Locations
--- choices; a second left click closes it. A right click opens the settings window directly, through R:OpenSettings
+-- opens its menu (modules/SettingsBrokerMenu.lua): Open settings, the Quiet the screen and Leave me alone switches, and
+-- the Guild Locations choices; a second left click closes it. A right click opens the settings window directly, through R:OpenSettings
 -- (SettingsLauncher.lua), which loads the window if needed and brings it forward when it is already open; it keeps the
 -- page it was left on. Without the menu code a left click opens the settings too. The text never changes and nothing is
 -- saved here: the menu's rows read and write the core's own state (qol/QoL.lua, guildloc/State.lua).
@@ -22,6 +22,9 @@ local function OnTooltipShow(tip)
     tip:AddLine("TwichUI", 1, 1, 1)
     tip:AddLine("Left-click for the menu.", 0.8, 0.7, 0.3)
     tip:AddLine("Right-click to open settings.", 0.8, 0.7, 0.3)
+    if R.QuietScreen then
+        tip:AddLine("Quiet screen: " .. (R.QuietScreen.On() and "On" or "Off") .. ".", 0.62, 0.58, 0.51)
+    end
     if R.QoL and R.QoL.LeaveAloneOn then
         tip:AddLine("Leave me alone: " .. (R.QoL.LeaveAloneOn() and "On" or "Off") .. ".", 0.62, 0.58, 0.51)
     end

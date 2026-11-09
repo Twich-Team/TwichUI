@@ -88,7 +88,7 @@ function SettingsClient(opts)
 
   local FILES = { "gear/Weights.lua", "gear/Evaluate.lua", "gear/Prefs.lua", "gear/Data.lua",
     "gear/Hints.lua", "gear/Tooltip.lua", "gear/Bags.lua", "gear/Window.lua", "modules/Notify.lua", "modules/Arrival.lua", "modules/Media.lua",
-    "modules/FriendLogin.lua", "modules/Borders.lua", "modules/FoodDrink.lua", "modules/FoodDrinkUnlock.lua", "camping/Data.lua", "camping/State.lua", "camping/Bar.lua", "camping/Unlock.lua",
+    "modules/FriendLogin.lua", "modules/Borders.lua", "modules/FoodDrink.lua", "modules/FoodDrinkUnlock.lua", "camping/Data.lua", "camping/State.lua", "camping/Bar.lua", "camping/Rest.lua", "camping/Unlock.lua",
     "modules/TrainingData.lua", "modules/Training.lua", "modules/MenuStyle.lua", "modules/SpellMenu.lua", "modules/MageTravel.lua", "modules/MageConjure.lua",
     "chronicle/Style.lua", "Look.lua", "FrameLook.lua", "Icons.lua", "chronicle/Appearance.lua", "modules/NotifyLook.lua", "modules/Refreshments.lua", "modules/RefreshmentsPanel.lua", "modules/RefreshmentsShares.lua",
     "modules/RefreshmentsTrade.lua", "modules/RefreshmentsBroker.lua", "modules/EllesmereJunk.lua", "modules/MageSell.lua", "modules/MageSellWindow.lua", "modules/Restock.lua", "modules/RestockPrompt.lua", "inventory/Rules.lua", "inventory/Items.lua", "inventory/Plan.lua", "inventory/Design.lua", "inventory/GuildBank.lua", "inventory/GuildPlan.lua", "inventory/Run.lua", "inventory/Window.lua", "inventory/Picker.lua", "modules/ChatCleanMatch.lua", "modules/ChatClean.lua",

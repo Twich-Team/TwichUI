@@ -96,6 +96,9 @@ Define("qolDuelsToDeath", QoL("QoLDuels"))
 Define("qolInvites", QoL("QoLInvites"))
 Define("qolDeclineInvites", QoL("QoLDeclineInvites"))
 Define("qolQuickKeybind", QoL("QoLQuickKeybind"))
+Define("qolHideErrors", { apply = Refresh("QoLErrors") })
+Define("qolHideErrorsKeep", { apply = Refresh("QoLErrors") })
+Define("qolHideErrorSpeech", { apply = Refresh("QoLErrors") })
 do
     local def = QoL("QoLGuideWaypoint")
     def.when = function() return R.QoL ~= nil and R.QoLGuideWaypoint ~= nil end

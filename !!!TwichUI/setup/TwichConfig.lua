@@ -71,12 +71,13 @@ TC.LOCAL = {
     -- where things sit
     ["modules.foodDrinkUnlock"] = "place", ["ui.foodDrinkPosition"] = "place", ["ui.trainingPosition"] = "place",
     ["ui.welcomeBackPlace"] = "place", ["ui.friendLoginPlace"] = "place", ["ui.settingsWindow"] = "place",
-    ["ui.markerBarPosition"] = "place", ["ui.campingBarPosition"] = "place", ["ui.campingBar.unlockMode"] = "place", ["ui.campingBar.eatItem"] = "other", ["ui.refreshments.position"] = "place", ["ui.partyPins.position"] = "place", ["ui.classBarsPosition"] = "place", ["ui.cozyBag"] = "place", ["ui.cozyBagButton.x"] = "place", ["ui.cozyBagButton.y"] = "place",
+    ["ui.markerBarPosition"] = "place", ["ui.campingBarPosition"] = "place", ["ui.campingRestPosition"] = "place", ["ui.campingBar.unlockMode"] = "place", ["ui.campingBar.eatItem"] = "other", ["ui.refreshments.position"] = "place", ["ui.partyPins.position"] = "place", ["ui.classBarsPosition"] = "place", ["ui.cozyBag"] = "place", ["ui.cozyBagButton.x"] = "place", ["ui.cozyBagButton.y"] = "place",
     ["ui.navigation.position"] = "place", ["ui.navigation.arrowPosition"] = "place", ["ui.navigation.unlockMode"] = "place",
     ["ui.healerWatch.point"] = "place", ["ui.healerWatch.x"] = "place", ["ui.healerWatch.y"] = "place",
     ["ui.buffBack.x"] = "place", ["ui.buffBack.y"] = "place", ["ui.buffBack.unlockMode"] = "place",
     -- the rest
     ["modules.restedxpSkin"] = "other", ["modules.qolTwichUISettingsButton"] = "other",
+    ["modules.qolHideErrors"] = "other", ["modules.qolHideErrorsKeep"] = "other", ["modules.qolHideErrorSpeech"] = "other",
     ["modules.reminders"] = "other", ["ui.reminders"] = "other",
     ["ui.magicInventory"] = "other", ["magicInventory"] = "other",
     ["ui.restedxpSkinState"] = "other", ["ui.showAdvanced"] = "other", ["gear.trees"] = "other",
@@ -1712,11 +1713,13 @@ local function Define()
                 keys[#keys + 1] = "grp_" .. grp.key
                 for _, o in ipairs(grp.objects) do keys[#keys + 1] = "obj_" .. o.item end
             end
-            for _, key in ipairs({ "hideParty", "hideRaid", "hidePvp", "hideResting", "hideCombat", "onlyNearFire" }) do
+            for _, key in ipairs({ "hideParty", "hideRaid", "hidePvp", "hideResting", "hideCombat", "onlyNearFire", "restShow" }) do
                 keys[#keys + 1] = key
             end
+            for _, key in ipairs(CB.REST_KEYS) do keys[#keys + 1] = key end
         end
-        Table(g, { "ui", "campingBar" }, CB, keys, { layout = ENUM.layout, eatMode = Set({ "auto", "choose" }) })
+        Table(g, { "ui", "campingBar" }, CB, keys, { layout = ENUM.layout, eatMode = Set({ "auto", "choose" }),
+            restTimer = Set({ "off", "remaining", "elapsed", "next" }) })
     end
 
     g = Group("auction", "Auction House", { page = "auction" })

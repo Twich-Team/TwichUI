@@ -18,7 +18,8 @@ the only saved value is the switch.
 | `MAIL_SHOW`, `MAIL_CLOSED` | visit start / end | `Blizzard_APIDocumentationGenerated/MailInfoDocumentation.lua` |
 | `PLAYER_LEAVING_WORLD` | a loading screen ends the visit | |
 | post-hooks on `TakeInboxMoney(index)` and `AutoLootMailItem(index)` | a take was *requested* | the calls Blizzard's own `MailFrame.lua` / `OpenAllMailMixin` make; add-on "Open All" buttons use the same two |
-| `GetInboxHeaderInfo(index)` (money, COD) read at the moment of the call | the amount the request is worth | as `MailFrame.lua` reads it |
+| `GetInboxHeaderInfo(index)` (money, COD) read at the moment of the call | the amount the request is worth; a missing COD value counts as none | as `MailFrame.lua` reads it |
+| `MAIL_INBOX_UPDATE` (during a visit) + `GetInboxNumItems()` | the money each position showed at the last update, used once per position when the message already reads empty at the call (a post-hook cannot know the game has not cleared it yet) | |
 | `PLAYER_MONEY` + `GetMoney()` | the money *arrived*: a gain exactly equal to a waiting request | |
 | `MAIL_FAILED` with no item ID | a refused take | `MailFrame.lua` treats an item ID as an item failure |
 
@@ -43,6 +44,8 @@ line per visit at most; a duplicate `MAIL_CLOSED` does nothing; a `MAIL_SHOW` wi
   at `ADDON_LOADED`) is not seen.
 - Money taken before the switch was turned on, or with the mailbox already open when it was, is not counted until the next visit.
 - A `MAIL_FAILED` without an item that belongs to something else (a failed send) while a take waits drops that take (undercount).
+- The remembered amount is per position and refreshed at each inbox update; if positions shift without an update, a stale amount could be
+  read for a message that already reads empty. It still counts only if a gain of exactly that amount arrives within the wait.
 - Whether the real client orders `PLAYER_MONEY`, `MAIL_FAILED` and `MAIL_CLOSED` as the test models is unverified.
 
 ## In-game checklist (use a throwaway character with small amounts; do not take or send real money to test)

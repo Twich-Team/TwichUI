@@ -40,6 +40,9 @@
 --  Pinned     The appearance settings keep one preview up while the player adjusts a look (payload.pinned):
 --             it holds for N.PIN_SECONDS instead of its card's own time, and is put away by the same
 --             rules as any preview (a real notice, combat, the settings closing, a profile change).
+--  Quiet      While the Quiet screen switch is on (QuietScreen.lua) a real notice is refused ("quiet") and
+--             turning it on lets go of every real one, waiting or showing. Previews are not affected: the player
+--             asked for those. Nothing is held back to be shown later.
 --  Restyle    When the look changes, N.Restyle() asks every renderer that has a card up to draw it again
 --             with the new look, without replaying its entrance. Nothing is queued or shown for that.
 
@@ -93,6 +96,12 @@ local function Trace(code, notice, detail)
     if D and D.Tracing() then
         D.Trace("notify", code, notice.kind .. (detail and (" " .. detail) or ""), nil, notice.preview)
     end
+end
+
+-- The Quiet screen switch (QuietScreen.lua), read where it matters; absent code means not quiet.
+local function QuietOn()
+    local Q = R.QuietScreen
+    return Q ~= nil and Q.On() or false
 end
 
 ---------------------------------------------------------------------------
@@ -160,7 +169,7 @@ local function Remove(list, notice)
 end
 
 -- Lets a waiting notice go without showing it, and says why to whoever asked to be told.
--- reasons: "expired", "stale", "full", "replaced", "real-event", "cancelled", "cleared", "loading"
+-- reasons: "expired", "stale", "full", "replaced", "real-event", "cancelled", "cleared", "loading", "quiet"
 local function Discard(notice, reason)
     Remove(queue, notice)
     Count(stats.dropped, notice.preview and ("preview " .. reason) or reason)
@@ -340,11 +349,15 @@ N.Poke = Pump   -- a card's place or size changed: waiting notices are looked at
 --   replace  take the place of an older waiting or showing notice of this kind
 --   preview  true for a settings preview
 -- }
--- Returns true when it was accepted (it may start at once), or false and why: "unknown", "duplicate" or "full".
+-- Returns true when it was accepted (it may start at once), or false and why: "unknown", "quiet", "duplicate" or "full".
 function N.Submit(request)
     local spec = specs[request.kind]
     if not spec then Count(stats.refused, "unknown") return false, "unknown" end
     local preview = request.preview and true or false
+    if not preview and QuietOn() then
+        Count(stats.refused, "quiet")
+        return false, "quiet"
+    end
     local now = GetTime()
     -- Whatever has run out of time makes no claim on the queue.
     for i = #queue, 1, -1 do
@@ -431,6 +444,17 @@ local function Reset()
     for i = #queue, 1, -1 do Discard(queue[i], "loading") end
     for kind in pairs(active) do Dismiss(kind) end
     WatchCombat()
+end
+
+-- The Quiet screen went on: every real notice, waiting and showing, is let go. Previews stay.
+local function QuietDown()
+    for i = #queue, 1, -1 do
+        if not queue[i].preview then Discard(queue[i], "quiet") end
+    end
+    for kind, notice in pairs(active) do
+        if not notice.preview then Dismiss(kind) end
+    end
+    Pump()
 end
 
 ---------------------------------------------------------------------------
@@ -553,6 +577,8 @@ function N.Snapshot()
 end
 
 R:OnInit(function()
+    local Q = R.QuietScreen
+    if Q then Q.OnChange(function(on) if on then QuietDown() end end) end
     listening = true
     inWorld = R.Life.InWorld()   -- false at start-up: a notice sent before the first loading screen ends waits for it
     R:On("PLAYER_LEAVING_WORLD", OnLeavingWorld)

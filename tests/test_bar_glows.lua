@@ -680,6 +680,32 @@ do
   CT.Refresh()
   Fire("UNIT_SPELLCAST_SUCCEEDED", "player", "guid", 1459)
   Check(true, "a cast that is no group's: nothing remembered, nothing errors")
+  G.class = "MAGE"
+  CT.Refresh()
+  Settle()
+
+  -- The Quiet screen switch (QuietScreen.lua): no glow, card or sound while it is on; the glow still wanted comes back
+  -- when it is off, and the message and sound of what started meanwhile are not given afterwards.
+  do
+    G.auras = {}
+    Fire("UNIT_AURA", "player")
+    Settle()
+    Check(Glowing(AB[1]), "quiet test: Arcane Intellect missing, its button glows")
+    NT.Show("quiet:1", { label = "Quiet test", kind = "proc" })
+    Check(#NT.Shown() == 1, "quiet test: a card is up")
+    local n = #sounds
+    R.QuietScreen.Set(true)
+    Check(not Glowing(AB[1]) and #NT.Shown() == 0, "quiet: the glow and the card go at once")
+    G.auras = { "Arcane Intellect" }
+    Fire("UNIT_AURA", "player")
+    Settle()
+    G.auras = {}
+    Fire("UNIT_AURA", "player")
+    Settle()
+    Check(not Glowing(AB[1]), "quiet: it is wanted again but stays off the screen")
+    R.QuietScreen.Set(false)
+    Check(Glowing(AB[1]) and #NT.Shown() == 0 and #sounds == n, "quiet off: the glow still wanted is back, nothing else")
+  end
 
   -- off
   BG.SetFaded("bar1", true)

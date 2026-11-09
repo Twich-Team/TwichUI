@@ -86,6 +86,9 @@ local DEFAULT_MODULES = {
     qolInvites = false,      -- ... accept a group invitation from the friends and/or guild members you choose
     qolDeclineInvites = false, -- ... decline group invitations (except from the friends and/or guild members you choose)
     qolQuickKeybind = false, -- ... a Quick Keybind button in the Game Menu
+    qolHideErrors = false,   -- ... hide the red error messages (and their voice and sound); see qol/ErrorMessages.lua
+    qolHideErrorsKeep = true, -- ... but still show a full bag, a full quest log and a few others (needs the one above)
+    qolHideErrorSpeech = false, -- ... silence the spoken part of error messages (the game's Enable Error Speech setting)
     qolGuideWaypoint = false, -- ... the game's waypoint on RestedXP's current destination (needs RestedXP)
     qolGuideAuto = false,    -- ... hide RestedXP's guide in the situations you choose, and show it again after (needs RestedXP)
     qolGuideAutoDungeon = true,  -- ... in a dungeon (needs the one above)
@@ -517,6 +520,12 @@ COMMANDS = {
     -- Kept for checking the Food and Drink buttons' item rules against the game; also /tui diagnostics probe.
     { name = "probe", usage = "probe", desc = "list what the game says about consumables in your bags", hidden = true, fn = function()
         if R.FoodDrinkProbe then R.FoodDrinkProbe.Run() else Unavailable("Probe") end
+    end },
+    -- Kept for checking the Cozy Sleeping Bag progress bar's signals against the game (docs/camping-bar.md).
+    { name = "camp", usage = "camp probe [watch|show|stop]", desc = "what the game says about resting in the Cozy Sleeping Bag; watch records a few minutes", hidden = true, fn = function(arg)
+        if R.CampingRest and (arg or ""):lower():match("^%s*probe") then R.CampingRest.Probe((arg or ""):lower():match("^%s*probe%s*(.*)$"))
+        elseif R.CampingRest then R.Print("usage: /tui camp probe [watch|show|stop]")
+        else Unavailable("Camping bar") end
     end },
     -- The old temporary friend diagnostics now live in /tui diagnostics.
     { name = "frienddiag", usage = "frienddiag", desc = "now /tui diagnostics", hidden = true, fn = function(arg)

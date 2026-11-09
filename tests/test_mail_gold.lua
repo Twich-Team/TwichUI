@@ -27,12 +27,16 @@ c.INBOX = {}
 c.GetInboxHeaderInfo = function(i)
   local m = c.INBOX[i]
   if not m then return end
-  return "icon", "paper", m.sender or "Auction House", m.subject or "Auction successful", m.money or 0, m.cod or 0, 29, m.items or 0
+  -- cleared: the game already shows the money as gone when the post-hook runs; nilcod: no charge is reported as nil
+  local cod = m.cod or 0
+  if m.nilcod and cod == 0 then cod = nil end
+  return "icon", "paper", m.sender or "Auction House", m.subject or "Auction successful", m.cleared and 0 or (m.money or 0), cod, 29, m.items or 0
 end
+c.GetInboxNumItems = function() return #c.INBOX end
 local cmds = {}
 c.TakeInboxMoney = function(i)
   local m = c.INBOX[i]
-  if m then cmds[#cmds + 1] = { mail = m, kind = "money" } end
+  if m then cmds[#cmds + 1] = { mail = m, kind = "money" }; if m.early then m.cleared = true end end
   return "original return"
 end
 c.AutoLootMailItem = function(i)
@@ -170,7 +174,7 @@ Check(MG.Snapshot().waiting == 0 and Count() == 1 and Said("Collected 3s from ma
 Fresh({ { money = 0, items = 3 } })
 Open()
 c.TakeInboxMoney(1); c.AutoLootMailItem(1)      -- a take of a message with no money
-Answer(true); Answer(true)
+Answer(true); Answer(true); Answer(true)
 Close()
 Check(Count() == 0, "an attachment-only visit says nothing")
 Open(); Close()
@@ -352,6 +356,47 @@ Check(MG.Snapshot().waiting == 50, "at most 50 requests wait: " .. MG.Snapshot()
 Close()
 Advance(10)
 Check(MG.Snapshot().waiting == 0 and Count() == 0, "all expired, nothing said")
+
+---------------------------------------------------------------------------
+-- 14b. The game may show a message's money as gone by the time the post-hook reads it, or report "no charge" as nil
+---------------------------------------------------------------------------
+Fresh({ { money = 3 * G, early = true }, { money = 2 * G, nilcod = true } })
+Open()
+c.TakeInboxMoney(1)
+Check(MG.Snapshot().waiting == 1, "money already cleared at the call: the amount from the last update is used")
+c.TakeInboxMoney(1)
+Check(MG.Snapshot().waiting == 1, "...and only once for that position")
+c.TakeInboxMoney(2)
+Check(MG.Snapshot().waiting == 2, "no charge reported as nil is no charge")
+Answer(true); Answer(true); Answer(true)
+Close()
+Check(Said("Collected 5g from mail."), "both counted: " .. tostring(Lines()[1]))
+
+-- A message that arrives or changes after the visit began is picked up by the inbox update.
+Fresh({})
+Open()
+c.INBOX[1] = { money = 4 * G, early = true }
+c.FireEvent("MAIL_INBOX_UPDATE")
+c.TakeInboxMoney(1)
+Answer(true)
+Close()
+Check(Said("Collected 4g from mail."), "a message seen at an inbox update: " .. tostring(Lines()[1]))
+
+-- Nothing remembered from an earlier visit is used in the next one; cash-on-delivery mail is never remembered.
+Fresh({ { money = 6 * G, early = true } })
+Open(); Close()
+Fresh({ { money = 6 * G, early = true } })
+c.INBOX[1].cleared = true
+Open()
+c.TakeInboxMoney(1)
+Check(MG.Snapshot().waiting == 0, "an already-empty message is not a request")
+Close()
+Fresh({ { money = 800, cod = 800, early = true } })
+Open()
+c.TakeInboxMoney(1)
+Check(MG.Snapshot().waiting == 0, "cash-on-delivery is never a request")
+Close()
+Check(Count() == 0, "and nothing was said")
 
 ---------------------------------------------------------------------------
 -- 15. Nothing is saved

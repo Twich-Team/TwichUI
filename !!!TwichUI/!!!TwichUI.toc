@@ -26,6 +26,8 @@ Core.lua
 Persist.lua
 Profiles.lua
 Switches.lua
+# Quiet screen: a session-only switch that keeps cards, reminders, glows and the like off the screen (docs/quiet-screen.md); the data bar menu turns it on and off
+QuietScreen.lua
 SettingsLauncher.lua
 # TwichUI on a data bar: a launcher whose left click opens a menu and right click the settings (needs a data bar addon that provides LibDataBroker)
 SettingsBroker.lua
@@ -133,11 +135,12 @@ modules\FoodDrinkProbe.lua
 
 # Camping bar: a bar of buttons for WoW: Forever's camping (the campfire kit you hold, the camp objects your professions
 # make and the Cozy Sleeping Bag), filled in from what the character knows and carries. You click; off until turned on.
-# Data.lua the facts (no game calls), State.lua the rules (pure), Bar.lua the buttons, events and look, Unlock.lua the
+# Data.lua the facts (no game calls), State.lua the rules (pure), Bar.lua the buttons, events and look, Rest.lua the Cozy Sleeping Bag's progress bar, Unlock.lua the
 # optional place in EllesmereUI's Unlock Mode.
 camping\Data.lua
 camping\State.lua
 camping\Bar.lua
+camping\Rest.lua
 camping\Unlock.lua
 
 # Dungeon Journal on a data bar: an icon that opens or closes the Forever Dungeon Journal (off until turned on; needs
@@ -405,6 +408,7 @@ inventory\Picker.lua
 # Quality of Life: small opt-in conveniences (summons, resurrection, release in battlegrounds, duels, group invitations accepted or declined)
 qol\QoL.lua
 qol\Summons.lua
+qol\ErrorMessages.lua
 qol\Resurrect.lua
 qol\ReleasePvP.lua
 qol\Duels.lua

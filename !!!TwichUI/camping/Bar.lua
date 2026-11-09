@@ -52,6 +52,14 @@ C.DEFAULTS = {
     unlockMode = false,
     -- when it shows
     hideParty = false, hideRaid = false, hidePvp = false, hideResting = false, hideCombat = false, onlyNearFire = false,
+    -- the Cozy Sleeping Bag's progress bar (camping/Rest.lua): its own bar and place, shown while you lie in the bag
+    restShow = true, restSmooth = false, restWidth = 220, restHeight = 18, restIcon = true, restLabel = true, restTimer = "remaining",
+    restTextSize = 12, restTimerSize = 12, restFont = "default", restOutline = "outline",
+    restTextColor = "ffffffff", restTimerColor = "ffffffff",
+    restTexture = "solid", restFill = "ffc9a44a", restDoneColor = "ff7fb069", restBack = "d9140f0b",
+    restBorderTexture = "solid", restBorderSize = 1, restBorderColor = "ff8c6e38", restBorderClass = false, restBorderOpacity = 100,
+    restNotchColor = "fff2e6c4", restNotchWidth = 2,
+    restOpacity = 100, restLinger = 8,
 }
 for _, g in ipairs(D.GROUPS) do
     C.DEFAULTS["grp_" .. g.key] = true
@@ -59,9 +67,24 @@ for _, g in ipairs(D.GROUPS) do
 end
 
 C.LIMITS = { size = { 20, 64 }, spacing = { 0, 24 }, perLine = { 1, 20 }, borderSize = { 0, 64 }, borderOpacity = { 0, 100 },
-    zoom = { 0, 20 }, buttonOpacity = { 0, 100 }, idleOpacity = { 0, 100 }, eatItem = { 0, 9999999 } }
+    zoom = { 0, 20 }, buttonOpacity = { 0, 100 }, idleOpacity = { 0, 100 }, eatItem = { 0, 9999999 },
+    restWidth = { 80, 600 }, restHeight = { 6, 48 }, restTextSize = { 8, 28 }, restTimerSize = { 8, 28 },
+    restBorderSize = { 0, 32 }, restBorderOpacity = { 0, 100 },
+    restNotchWidth = { 1, 6 }, restOpacity = { 10, 100 }, restLinger = { 0, 60 } }
 C.LAYOUTS = { horizontal = true, vertical = true }
 C.EAT_MODES = { auto = true, choose = true }
+local COLOR_KEYS = { borderColor = true, restFill = true, restDoneColor = true, restBack = true, restBorderColor = true,
+    restNotchColor = true, restTextColor = true, restTimerColor = true }
+local NAME_KEYS = { borderTexture = true, restBorderTexture = true, restTexture = true, restFont = true }
+C.OUTLINES = { none = true, outline = true, thick = true }
+
+-- The progress bar's settings, so a change redraws it and "reset" puts them back (everything but restShow).
+C.REST_KEYS = { "restSmooth", "restWidth", "restHeight", "restIcon", "restLabel", "restTimer", "restTextSize", "restTimerSize", "restFont",
+    "restOutline", "restTextColor", "restTimerColor", "restTexture", "restFill", "restDoneColor", "restBack", "restBorderTexture",
+    "restBorderSize", "restBorderColor", "restBorderClass", "restBorderOpacity", "restNotchColor", "restNotchWidth", "restOpacity",
+    "restLinger" }
+local REST_KEY = { restShow = true }
+for _, key in ipairs(C.REST_KEYS) do REST_KEY[key] = true end
 
 -- Which setting is which, so a change redraws only what it changes.
 C.LOOK_KEYS = { "size", "spacing", "perLine", "layout", "borderTexture", "borderSize", "borderColor", "borderClass",
@@ -73,6 +96,9 @@ local WHEN_KEYS = { hideParty = true, hideRaid = true, hidePvp = true, hideResti
 
 local BORDER_RULES = { defaultSize = C.DEFAULTS.borderSize, defaultColor = C.DEFAULTS.borderColor,
     solidMax = 4, texturedMin = 8, texturedSeed = 12, maxSize = C.LIMITS.borderSize[2] }
+-- The progress bar is shorter than a button: a textured border seeds a little thinner.
+local REST_BORDER_RULES = { defaultSize = C.DEFAULTS.restBorderSize, defaultColor = C.DEFAULTS.restBorderColor,
+    solidMax = 4, texturedMin = 6, texturedSeed = 8, maxSize = C.LIMITS.restBorderSize[2] }
 
 local function Valid(key, value)
     local limit = C.LIMITS[key]
@@ -81,8 +107,10 @@ local function Valid(key, value)
             and math.floor(value) == value
     elseif key == "layout" then return C.LAYOUTS[value] == true
     elseif key == "eatMode" then return C.EAT_MODES[value] == true
-    elseif key == "borderTexture" then return Borders.ValidName(value)
-    elseif key == "borderColor" then return type(value) == "string" and value:match("^%x%x%x%x%x%x%x%x$") ~= nil
+    elseif NAME_KEYS[key] then return Borders.ValidName(value)
+    elseif key == "restOutline" then return C.OUTLINES[value] == true
+    elseif key == "restTimer" then return S.REST_TIMER_MODES[value] == true
+    elseif COLOR_KEYS[key] then return type(value) == "string" and value:match("^%x%x%x%x%x%x%x%x$") ~= nil
     elseif C.DEFAULTS[key] ~= nil and type(C.DEFAULTS[key]) == "boolean" then return type(value) == "boolean" end
     return false
 end
@@ -110,6 +138,11 @@ function C.Set(key, value)
         local newSize, newColor = Borders.Reseed(C.Get("borderTexture"), value, size, color, BORDER_RULES)
         if newSize ~= size then saved.borderSize = newSize end
         if newColor ~= color then saved.borderColor = newColor end
+    elseif key == "restBorderTexture" then
+        local size, color = C.Get("restBorderSize"), C.Get("restBorderColor")
+        local newSize, newColor = Borders.Reseed(C.Get("restBorderTexture"), value, size, color, REST_BORDER_RULES)
+        if newSize ~= size then saved.restBorderSize = newSize end
+        if newColor ~= color then saved.restBorderColor = newColor end
     end
     saved[key] = value
     Changed(key)
@@ -125,6 +158,17 @@ function C.ResetLook()
         if saved[key] ~= nil then saved[key] = nil; any = true end
     end
     if any then C.Refresh() end
+end
+
+-- Puts the progress bar's look back to its defaults (whether it is on is kept).
+function C.ResetRestLook()
+    local saved = TwichUIDB and TwichUIDB.ui and TwichUIDB.ui.campingBar
+    if type(saved) ~= "table" then return end
+    local any = false
+    for _, key in ipairs(C.REST_KEYS) do
+        if saved[key] ~= nil then saved[key] = nil; any = true end
+    end
+    if any and R.CampingRest then R.CampingRest.Refresh() end
 end
 
 -- The settings Plan() and Visible() read.
@@ -162,6 +206,7 @@ local function BorderColor()
 end
 
 function C.TextureChoices() return Borders.Choices(C.Get("borderTexture")) end
+function C.RestBorderChoices() return Borders.Choices(C.Get("restBorderTexture")) end
 
 ---------------------------------------------------------------------------
 -- Where it goes
@@ -514,6 +559,13 @@ local function EllesmereInset(texture, edge)
     return 0
 end
 
+-- How far into its host a border drawn by Borders.Draw (mode: what it returned) reaches, so content stays clear of it.
+function C.EdgeInset(mode, texture, edge)
+    if mode == "ellesmere" then return EllesmereInset(texture, edge) end
+    if mode == "texture" then return edge > 0 and math.max(1, math.floor(edge / 4)) or 0 end
+    return edge
+end
+
 -- Size, border, zoom and count. Out of combat only: it resizes a secure button.
 local function Style(button, entry)
     local size, edge = C.Get("size"), C.Get("borderSize")
@@ -829,10 +881,13 @@ function C.Refresh()
         ShowMover(false)
     end
     if C.Unlock then C.Unlock.Refresh() end
+    if R.CampingRest then R.CampingRest.Refresh() end
 end
 
 function Changed(key)
-    if ALPHA_KEYS[key] then ApplyAlpha()
+    if REST_KEY[key] then
+        if R.CampingRest then R.CampingRest.Refresh() end
+    elseif ALPHA_KEYS[key] then ApplyAlpha()
     elseif PAINT_KEYS[key] then Restyle()
     elseif WHEN_KEYS[key] then C.Refresh(); ApplyVisibility()
     else C.Refresh() end

@@ -237,6 +237,7 @@ local ATTENTION_ORDER = { "critical", "low", "drinking", "chat" }
 
 function HL.Visible(input, cfg)
     if not input.enabled then return false, "off" end
+    if input.quiet then return false, "quiet" end   -- the Quiet screen switch (QuietScreen.lua)
     if not input.scopeActive then return false, "scope" end
     if input.inCombat and not cfg.showInCombat then return false, "combat" end
     if not input.inCombat and not cfg.showOutOfCombat then return false, "outOfCombat" end
@@ -255,6 +256,7 @@ end
 
 HL.REASONS = {
     off = "Healer Watch is off.",
+    quiet = "Hidden while the screen is quiet (TwichUI data bar menu).",
     scope = "You're not where it applies.",
     combat = "Hidden in combat by your choice.",
     outOfCombat = "Hidden out of combat by your choice.",

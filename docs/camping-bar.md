@@ -6,7 +6,7 @@ have it. Off until turned on (**Settings › Camping bar**). Move it in Edit Mod
 
 ## Files
 `camping/Data.lua` (the facts; no game calls) · `camping/State.lua` (the rules; pure) · `camping/Bar.lua` (the buttons, events,
-settings, look) · `camping/Unlock.lua` (the optional place in EllesmereUI's Unlock Mode) · `TwichUI_Settings/pages/Camping.lua`
+settings, look) · `camping/Rest.lua` (the sleeping bag's progress bar) · `camping/Unlock.lua` (the optional place in EllesmereUI's Unlock Mode) · `TwichUI_Settings/pages/Camping.lua`
 (the page; its icon is `camping`, see `docs/settings-icons.md`). Tests: `tests/test_camping.lua`.
 
 ## What a click does
@@ -40,6 +40,41 @@ One more button, last on the bar, for buff food in your bags ("Show an eat butto
   refused, so it can't carry a second command). "Sit down after eating" off makes it a plain item use. The button is a named frame,
   `TwichUICampingEat`, so Key Bindings has "Eat buff food and sit (Camping bar)" (`Bindings.xml`); no key is bound until you choose one.
 - While on it also listens for `SPELL_TEXT_UPDATE` (food text still loading).
+
+## The sleeping bag bar (`camping/Rest.lua`)
+A progress bar to three minutes with a notch at each minute and a timer, shown while you lie in the Cozy Sleeping Bag (a minute is
++1% experience, to +3%). Part of the camping bar: on only while the camping bar is, with its own switch (`restShow`, on by default).
+A plain frame: no clicks, nothing protected, shows in combat. It never uses the bag, plays a sound or speaks.
+- **The rules** are pure, in `State.lua` (`RestStep`, `RestView`, `RestClock`, `RestTimerText`); `Rest.lua` reads the game and draws.
+- **How it knows you are in the bag.** The game gives no buff during the first minute, so the clock can't start from an aura. It
+  starts when `IsResting()` is true within 5 minutes (`D.REST_WINDOW`) of using the bag (the item's cooldown start, or its use spell
+  succeeding) and a stack is still to be earned. Once the Well-Rested aura (`D.REST_AURA`, 429959, from a guide's link) exists, its
+  stack count moves the clock forward to match, never back. Resting stopping for 2 s ends the clock; the bar stays `restLinger`
+  seconds, then goes. A bag whose three minutes finished starts no new clock until it is used again.
+- **Known weakness:** resting in an inn or city within 5 minutes of using the bag would also start it (the bag can't be used in a rested
+  area, so the use itself is outside one).
+- **Look** (all in `ui.campingBar`, `rest*` keys; a tab of its own on the Camping bar page, `TwichUI_Settings/pages/CampingRest.lua`).
+  The bar: width, height, icon, "smooth" (off by default: the clock ticks 30 times a second instead of 5, and the fill's width isn't rounded to whole pixels; the game is still read every 0.2 s, the bar runs on the clock in between), fill texture (`MenuStyle.StatusBars`: flat, EllesmereUI's, LibSharedMedia's; a gone one draws flat and
+  stays chosen), fill / "full" / background colour, opacity. Notches: colour and width. Border: texture (`Borders`: solid,
+  EllesmereUI's, LibSharedMedia's; choosing one reseeds a thickness and colour that suit it unless you set your own), thickness 0-32,
+  class colour, colour, opacity. Text: font (`MenuStyle.Fonts`, same fallback rule), outline (none / outline / thick), and for the label
+  and the timer each its own size and colour; timer (time left / time in the bag / time to the next minute / none), the label on or off.
+  Then seconds to stay when done. "Show a sample" runs the whole bar at 15x speed; Edit Mode shows it at 1:30
+  with an outline to drag (right-click puts it back). **Three ways to move it:** the settings' "Move the sleeping bag bar" button
+  (the same sample and outline without Edit Mode; Done, closing the settings or Edit Mode ends it), Edit Mode, or, with "Use EllesmereUI
+  Unlock Mode" on, the "TwichUI Sleeping bag bar" anchor in `/unlock` (one stand-in, same machinery as the camping bar's, made by
+  `Make` in `camping/Unlock.lua`; this bar is a plain frame, so it follows the stand-in in combat too). Its place is
+  `ui.campingRestPosition { x, y }` (kept on this computer by sharing).
+- **Cost.** Events only while on: `PLAYER_UPDATE_RESTING`, `PLAYER_ENTERING_WORLD`, `BAG_UPDATE_COOLDOWN`, and the player's own
+  `UNIT_AURA` and `UNIT_SPELLCAST_SUCCEEDED`; a look while nothing is showing and you are not resting reads one API call. A 0.2 s
+  ticker (1/30 s with "smooth" on) runs only while the bar is on screen. Scope `camping.rest`; gauges `camping.rest.events`, `camping.rest.ticks`.
+- **`/tui camp probe`** prints what the client says now: resting, the aura's stacks, when the bag was used, the bag's use spell, the
+  bar's state and your buffs (name, ID, stacks, seconds). `probe watch` records 6 minutes of resting/aura/cooldown/cast events (80 at
+  most, kept in memory only), `probe show` prints them with a snapshot, `probe stop` ends it.
+- **Unverified (none of it read from a Forever client):** that `IsResting()` turns true while lying in the bag and false when you leave;
+  that using the bag starts a cooldown or a use spell that is readable (`C_Container.GetItemCooldown`, `C_Item.GetItemSpell`); that the
+  buff is spell 429959, is one aura with stacks (not three spells) and appears at the one-minute mark; what a stop in the middle does
+  to the stacks (the guides don't say).
 
 ## When it shows (`State.Visible`)
 Hide in dungeons / raids / battlegrounds and arenas / rested areas / combat, and "only near a campfire". The bar is a plain frame
@@ -90,6 +125,11 @@ Forever client.** A wrong ID can only make a button missing, never a wrong actio
   the bar; a macro can't be changed while you're in combat.
 
 ## In-game checks (none done yet)
+- The sleeping bag bar: place and use the bag, walk onto it, and lie in it for three minutes with `/tui camp probe watch` running, then
+  `/tui camp probe show`. Does `resting` turn true when you lie down (and how long after), and false when you leave? Does the
+  Well-Rested aura (429959) appear at 1:00 with one stack, and do the stacks reach 3? Is the bag's use readable ("bag used" and the
+  use spell)? Does the bar start, fill, notch and finish together with the real buff? Does a sample (settings) look right; does
+  the Move button, Edit Mode, and (with EllesmereUI) the Unlock Mode anchor move the bar? Does it show in combat?
 - Does `C_SpellBook.IsSpellKnown(<craft spell>)` or `C_TradeSkillUI.GetRecipeInfo(<spell>).learned` say true for a recipe the
   character knows, without the professions window open? If neither does, only held objects appear.
 - `C_SkillInfo.GetSkillLineInfo` lists the profession lines with `skillID` and `rank`; the IDs match `D.GROUPS`.

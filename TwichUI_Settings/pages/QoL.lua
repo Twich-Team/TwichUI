@@ -9,10 +9,10 @@ local K = R.SettingsKit
 K.Page({
     key = "qol", icon = "qualityOfLife", name = "Quality of life", order = 30, group = "everyday",
     description = "Small opt-in conveniences. Each is off until you turn it on, and each does only the one thing it says.",
-    keywords = "summon resurrect res rez battleground release spirit duel decline group party invite invitation block keybind quick keybind leatrix",
+    keywords = "summon resurrect res rez battleground release spirit duel decline group party invite invitation block keybind quick keybind error errors message voice speech leatrix",
     when = function() return R.QoL ~= nil end,
     overview = {
-        label = "Quality of life", tip = "Small opt-in conveniences: accepting summons and resurrection, releasing in battlegrounds, declining duels, joining or declining group invitations, and a Quick Keybind button in the Game Menu.",
+        label = "Quality of life", tip = "Small opt-in conveniences: accepting summons and resurrection, releasing in battlegrounds, declining duels, joining or declining group invitations, a Quick Keybind button in the Game Menu, and hiding error messages or their voice.",
         status = function()
             local on = (R:Enabled("qolSummons") and 1 or 0) + (R:Enabled("qolResurrect") and 1 or 0)
                 + (R:Enabled("qolReleasePvP") and 1 or 0) + (R:Enabled("qolDuels") and 1 or 0)
@@ -218,5 +218,27 @@ K.Page({
         })
         QolToggle("qolQuickKeybind", "Quick Keybind button",
             "Adds a Quick Keybind button to the Game Menu, below Macros. It opens the game's own Quick Keybind Mode, the one in Settings > Keybindings, with its usual instructions and Okay and Cancel buttons; entering it changes no bindings. Like the game's own, it can't be opened in combat, and the button is dimmed until combat ends.")
+
+        K.Card({
+            title = "Hide error messages",
+            icon = "declineDuels",
+            what = "Hides the red error text in the middle of the screen (\"Not enough rage\", \"Out of range\", \"Spell is not ready yet\"), with its voice and sound.",
+            summary = function()
+                return R:Enabled("qolHideErrorsKeep") and "Still shown: a full bag, a full quest log, being dead, raid-only actions" or "Nothing is let through"
+            end,
+            preview = "qol.hideErrors",
+            consequence = "Only the game's error text is hidden. Yellow information lines, chat and TwichUI's own notices are not touched.",
+            details = {
+                { "What about the voice?", "The voice and sound belong to the message, so they go with it. The separate speech switch below is for keeping the text and silencing only the voice." },
+                { "Why keep a few?", "A full bag or quest log is easy to miss without the line, and loot is lost that way. Turn the exception off to hide everything." },
+            },
+        })
+        local hideErrors = Overlap(QolToggle("qolHideErrors", "Hide error messages",
+            "Hides the red error messages the game shows in the middle of the screen, such as \"Not enough rage\" or \"Out of range\", and the voice or sound that goes with each. Information messages (the yellow ones), chat and TwichUI's own notices are not touched. Off: errors are shown as the game does."), "qolHideErrors")
+        Under(QolToggle("qolHideErrorsKeep", "Still show important errors",
+            "Keeps showing a full bag, a full quest log, being dead and raid-only actions while the others are hidden, since loot is lost when you miss those. Off: every error is hidden."),
+            hideErrors, function() return R:Enabled("qolHideErrors") end, "Turn on \"Hide error messages\" to choose this.")
+        QolToggle("qolHideErrorSpeech", "Silence error speech",
+            "Silences the spoken part of error messages (\"I can't do that yet\") and leaves the text. It turns off the game's own Enable Error Speech setting (Settings > Audio) and puts it back as it was when you turn this off; if you change that setting yourself meanwhile, your choice stands. Not needed while \"Hide error messages\" is on, which hides the voice with the text.")
     end,
 })

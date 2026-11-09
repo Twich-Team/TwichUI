@@ -14,8 +14,26 @@ local UNLOCK_STATUS = {
     active = { "In EllesmereUI's Unlock Mode", "Type /unlock and look for \"TwichUI Camping bar\"." },
 }
 
+-- Each profession's section: the game's own trade icon (a path into the client's art, nothing shipped) and a
+-- muted color for its title and the stripe down its card. Artwork only: the bar never reads either.
+local ICON_DIR = "Interface\\Icons\\"
+local PROFESSION = {
+    alchemy = { icon = ICON_DIR .. "Trade_Alchemy", color = { 0.40, 0.76, 0.60 } },
+    blacksmithing = { icon = ICON_DIR .. "Trade_BlackSmithing", color = { 0.90, 0.48, 0.32 } },
+    cooking = { icon = ICON_DIR .. "INV_Misc_Food_15", color = { 0.92, 0.74, 0.40 } },
+    enchanting = { icon = ICON_DIR .. "Trade_Engraving", color = { 0.70, 0.58, 0.90 } },
+    engineering = { icon = ICON_DIR .. "Trade_Engineering", color = { 0.42, 0.78, 0.84 } },
+    firstaid = { icon = ICON_DIR .. "INV_Misc_Bandage_15", color = { 0.88, 0.52, 0.54 } },
+    fishing = { icon = ICON_DIR .. "Trade_Fishing", color = { 0.46, 0.64, 0.90 } },
+    herbalism = { icon = ICON_DIR .. "Trade_Herbalism", color = { 0.60, 0.80, 0.46 } },
+    leatherworking = { icon = ICON_DIR .. "INV_Misc_ArmorKit_17", color = { 0.80, 0.56, 0.34 } },
+    mining = { icon = ICON_DIR .. "Trade_Mining", color = { 0.72, 0.74, 0.78 } },
+    skinning = { icon = ICON_DIR .. "INV_Misc_Pelt_Wolf_01", color = { 0.66, 0.54, 0.40 } },
+    tailoring = { icon = ICON_DIR .. "Trade_Tailoring", color = { 0.88, 0.62, 0.80 } },
+}
+
 K.Page({
-    key = "camping", icon = "camping", name = "Camping bar", order = 41, group = "everyday",
+    key = "camping", icon = "camping", name = "Camping bar", tab = "Camping bar", order = 41, group = "everyday",
     description = "A bar for camping: your campfire kit, the camp objects your professions make, and the Cozy Sleeping Bag. You click; nothing is placed for you.",
     keywords = "camp campfire camping fire tent kit profession object blueprint sleeping bag cozy rested buff bar action hide dungeon raid resting mouseover fade",
     overview = {
@@ -48,13 +66,21 @@ K.Page({
             "For each profession, show one button: what you hold beats what you could make, and a higher tier beats a lower one. Off, every object you hold or can make is shown. Per the guides a higher tier keeps the lower tier's buff, but that has not been confirmed in the game.")
         Check("campingOnlyBags", "onlyBags", "Only what is in my bags",
             "Hide the dimmed buttons for recipes you know but haven't made. The Basic Campfire spell, which needs no kit, stays.")
+        -- One section per profession, each with its own icon and color, in the order the bar shows them.
         for _, group in ipairs(CD.GROUPS) do
             local key = group.key
+            local look = PROFESSION[key] or {}
+            local names, seen = {}, {}
+            for _, o in ipairs(group.objects) do
+                if not seen[o.name] then seen[o.name] = true; names[#names + 1] = o.name end
+            end
+            K.Accent(Header(group.name, "Camp objects " .. group.name .. " makes: " .. table.concat(names, ", ") .. ". Turn the profession off to leave all of them off the bar, or pick the ones you want."),
+                look.icon, look.color)
             local row = Check("campingGroup_" .. key, "grp_" .. key, "Show " .. group.name .. " objects",
                 "Off hides every " .. group.name .. " camp object from the bar, whether you hold it or only know the recipe.")
             -- Each object can also be left off on its own; they follow the profession's switch.
             for _, o in ipairs(group.objects) do
-                Check("campingObject_" .. o.item, "obj_" .. o.item, o.name,
+                Check("campingObject_" .. o.item, "obj_" .. o.item, ("Tier %d: %s"):format(o.tier, o.name),
                     ("Off keeps the %s %s off the bar, whether you hold one or only know the recipe."):format(group.name, o.name),
                     row, function() return On() and CB.Get("grp_" .. key) end,
                     function()
@@ -165,7 +191,7 @@ K.Page({
         end
         local CU = R.CampingUnlock
         if CU then
-            local unlockBase = "Move the bar in EllesmereUI's Unlock Mode instead of Edit Mode. A \"TwichUI Camping bar\" anchor appears there, and you drag it, nudge it, type its X and Y or anchor it to another element the way you do the rest of your interface. Turning this on keeps the bar where it is. The place is still saved by TwichUI; EllesmereUI's anchor links are saved by EllesmereUI.\n\nOpen Unlock Mode with /unlock. It can't be opened in combat, and nothing is moved then.\n\nOff, or without EllesmereUI, the bar is moved in Edit Mode. Your choice is kept while EllesmereUI is away."
+            local unlockBase = "Move the bar in EllesmereUI's Unlock Mode instead of Edit Mode. A \"TwichUI Camping bar\" anchor appears there (and a \"TwichUI Sleeping bag bar\" one for the sleeping bag bar), and you drag it, nudge it, type its X and Y or anchor it to another element the way you do the rest of your interface. Turning this on keeps the bar where it is. The place is still saved by TwichUI; EllesmereUI's anchor links are saved by EllesmereUI.\n\nOpen Unlock Mode with /unlock. It can't be opened in combat, and nothing is moved then.\n\nOff, or without EllesmereUI, the bar is moved in Edit Mode. Your choice is kept while EllesmereUI is away."
             local unlock = Check("campingUnlock", "unlockMode", "Use EllesmereUI Unlock Mode", unlockBase)
             if unlock and unlock.GetTooltip ~= nil then
                 -- read when the tooltip is shown, so it is never stale

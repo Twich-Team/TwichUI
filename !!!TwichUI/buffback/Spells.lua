@@ -183,17 +183,22 @@ function S.Pick(class, entry, known, wearing)
 end
 
 -- The macro a click runs to give fam to entry. spell: the spell's name; target: { has = you have a target,
--- isThem = it is them }. In your group the cast names them ([@Name], which the game resolves only for group
--- members, so nobody else can be hit); otherwise they are targeted, the spell cast, and your own target handed
--- back (/targetlasttarget, or /cleartarget when you had none). A shout is just cast. Nil without a spell or name.
+-- isThem = it is them, token = their party or raid unit }. In your group the cast names their unit token
+-- ([@party2]; a name can't go in a conditional, it holds a space on this client); otherwise they are targeted by
+-- name, the spell cast, and your own target handed back (/targetlasttarget, or /cleartarget when you had none).
+-- A shout is just cast. Nil without a spell or name.
 function S.Macro(entry, fam, spell, target)
     if not (entry and fam and type(spell) == "string" and spell ~= "") then return nil end
     if spell:find("[%c\n;]") then return nil end
     if fam.selfCast then return "/cast " .. spell end
     local who = entry.name
-    if type(who) ~= "string" or who == "" or who:find("[%c%s%[%];,]") then return nil end
-    if entry.inGroup then return "/cast [@" .. who .. "] " .. spell end
+    -- a full name is "Name" or "Name Surname": letters and one space, nothing that could end or add a macro line
+    if type(who) ~= "string" or who == "" or who:find("[%c%[%];,|]") or who:find("^%s") or who:find("%s$") then return nil end
     target = target or {}
+    local token = target.token
+    if entry.inGroup and type(token) == "string" and (token:find("^party%d$") or token:find("^raid%d+$")) then
+        return "/cast [@" .. token .. "] " .. spell
+    end
     if target.isThem then return "/cast [@target] " .. spell end
     return table.concat({ "/target " .. who, "/cast " .. spell, target.has and "/targetlasttarget" or "/cleartarget" }, "\n")
 end
