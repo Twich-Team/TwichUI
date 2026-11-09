@@ -414,3 +414,35 @@ P.Register("qol.quickKeybind", {
         return "Entering Quick Keybind Mode changes no bindings; it can't be opened in combat, and the button is dimmed until combat ends."
     end,
 })
+
+---------------------------------------------------------------------------
+-- Hide error messages: the red line in the middle of the screen and the one kept (a still picture: nothing to play)
+---------------------------------------------------------------------------
+P.Register("qol.hideErrors", {
+    height = 84,
+    static = true,
+    Create = function(stage)
+        local sc = {}
+        sc.screen = P.Popup(stage, 150, 70)
+        sc.screen:SetPoint("TOPLEFT", 12, -7)
+        local y = -8
+        for _, label in ipairs({ "Not enough rage", "Out of range", "Inventory is full." }) do
+            local fs = Line(sc.screen, "small", 0, y)
+            fs:SetWidth(150)
+            fs:SetJustifyH("CENTER")
+            fs:SetText(label)
+            if label == "Inventory is full." then
+                Wg.Color(fs, pal.tealHi)
+            else
+                Wg.Color(fs, pal.stone)
+            end
+            y = y - 18
+        end
+        sc.note = Line(stage, "meta", 180, -14, 380)
+        sc.note:SetText("The grey lines are not shown, and neither is their voice. The highlighted one is kept while \"Still show important errors\" is on.")
+        return sc
+    end,
+    Caption = function()
+        return "Information messages, chat and TwichUI's own notices are not touched."
+    end,
+})

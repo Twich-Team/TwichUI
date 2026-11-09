@@ -470,6 +470,7 @@ S.FEATURES = {
     { "partyPins", "Party pins" }, { "auctionPosting", "Sell from Bags (Auction House)" }, { "mailGoldSummary", "Mailbox gold summary" }, { "restock", "Vendor restocking" },
     { "qolSummons", "Accept summons" }, { "qolResurrect", "Accept resurrection" }, { "qolReleasePvP", "Release in battlegrounds" },
     { "qolDuels", "Decline duels" }, { "qolInvites", "Accept group invitations" }, { "qolDeclineInvites", "Decline group invitations" }, { "qolQuickKeybind", "Quick Keybind button" },
+    { "qolHideErrors", "Hide error messages" }, { "qolHideErrorSpeech", "Silence error speech" },
     { "qolGuideWaypoint", "Guide waypoint (RestedXP)" },
     { "qolGuideAuto", "Hide the guide in some situations (RestedXP)" },
     { "qolGuideTracker", "EllesmereUI quest tracker on mouseover while the guide is shown (RestedXP)" },

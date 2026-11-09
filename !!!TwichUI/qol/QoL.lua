@@ -161,7 +161,7 @@ end
 -- never changes anything of Leatrix's.
 ---------------------------------------------------------------------------
 Q.LEATRIX = { qolSummons = "AutoAcceptSummon", qolResurrect = "AutoAcceptRes", qolReleasePvP = "AutoReleasePvP",
-    qolDuels = "NoDuelRequests", qolInvites = "AcceptPartyFriends", qolDeclineInvites = "NoPartyInvites" }
+    qolDuels = "NoDuelRequests", qolHideErrors = "HideErrorMessages", qolInvites = "AcceptPartyFriends", qolDeclineInvites = "NoPartyInvites" }
 
 function Q.LeatrixOverlap(key)
     local option = Q.LEATRIX[key]

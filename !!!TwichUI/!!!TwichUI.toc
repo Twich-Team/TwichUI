@@ -403,6 +403,7 @@ inventory\Picker.lua
 # Quality of Life: small opt-in conveniences (summons, resurrection, release in battlegrounds, duels, group invitations accepted or declined)
 qol\QoL.lua
 qol\Summons.lua
+qol\ErrorMessages.lua
 qol\Resurrect.lua
 qol\ReleasePvP.lua
 qol\Duels.lua

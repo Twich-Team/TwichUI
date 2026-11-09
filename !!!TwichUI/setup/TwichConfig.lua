@@ -77,6 +77,7 @@ TC.LOCAL = {
     ["ui.buffBack.x"] = "place", ["ui.buffBack.y"] = "place", ["ui.buffBack.unlockMode"] = "place",
     -- the rest
     ["modules.restedxpSkin"] = "other", ["modules.qolTwichUISettingsButton"] = "other",
+    ["modules.qolHideErrors"] = "other", ["modules.qolHideErrorsKeep"] = "other", ["modules.qolHideErrorSpeech"] = "other",
     ["modules.reminders"] = "other", ["ui.reminders"] = "other",
     ["ui.magicInventory"] = "other", ["magicInventory"] = "other",
     ["ui.restedxpSkinState"] = "other", ["ui.showAdvanced"] = "other", ["gear.trees"] = "other",

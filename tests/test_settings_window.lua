@@ -1317,7 +1317,7 @@ do
   -- 8b. Quality of life's cards
   local cards = {}
   for _, row in ipairs(K.pages.qol.rows) do if row.card then cards[#cards + 1] = row end end
-  assert(#cards == 7, "seven cards on Quality of life: " .. #cards)
+  assert(#cards == 8, "eight cards on Quality of life: " .. #cards)
   for _, card in ipairs(cards) do assert(Icons.Get(card.card.icon), card:GetName() .. " has an icon") end
   for _, card in ipairs(cards) do
     assert(card.primary and card.primary.kind == "checkbox" and card.primary.switch, card:GetName() .. " has its switch")
