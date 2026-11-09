@@ -136,9 +136,10 @@ function S.Known(fam, known)
 end
 
 -- What a click on entry gives back. entry: { class, inParty }; known(id): whether the player knows a spell;
--- wearing: { [family key] = true } of what they already have, or nil (it can't be read). Returns the family, or
--- nil and a reason code: "nothing" (your class gives nothing), "unknown" (you know none of it yet), "party" (a
--- shout reaches only your party), "mana" (all you have is for mana users), "wearing" (they have all you have).
+-- wearing: { [family key] = true } of what they already have, or nil (it can't be read); it only reorders, since
+-- giving what they wear refreshes it. Returns the family, or nil and a reason code: "nothing" (your class gives
+-- nothing), "unknown" (you know none of it yet), "party" (a shout reaches only your party), "mana" (all you have
+-- is for mana users).
 function S.Pick(class, entry, known, wearing)
     local list = S.Gives(class)
     if #list == 0 then return nil, "nothing" end
@@ -172,11 +173,11 @@ function S.Pick(class, entry, known, wearing)
             return ia < ib
         end)
     end
+    -- what they don't wear yet comes first; if they wear it all, the usual first choice is given anyway, to refresh it
     if wearing then
         for _, fam in ipairs(usable) do
             if not wearing[fam.key] then return fam end
         end
-        return nil, "wearing"
     end
     return usable[1]
 end

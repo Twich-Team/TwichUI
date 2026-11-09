@@ -119,7 +119,6 @@ local WHY = {
     unknown = "You haven't learned anything to give back yet.",
     party = "Your shout reaches only your own party, and they aren't in it.",
     mana = "All you can give is for players who use mana.",
-    wearing = "They already have what you can give.",
     spell = "The game hasn't said the spell's name yet; try again in a moment.",
     none = "Nothing to give back.",
 }

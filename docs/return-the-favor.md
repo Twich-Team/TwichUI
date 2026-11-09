@@ -29,8 +29,9 @@ implementation.
   Detect Invisibility, Water Breathing and Water Walking, each with its group version. Battle Shout is given back but
   never counts as received (a warrior's shout reaches the whole party). "Count any helpful spell" lists anything.
 - **Giving back** (`S.Pick`): your class's families you know, minus mana-only ones for players without mana (by class),
-  minus a shout for anyone outside your party, minus what they already wear (when their auras can be read). A player
-  without mana gets Might before Kings. Cast by name, so the game picks the highest rank you know.
+  minus a shout for anyone outside your party, and what they don't already wear (when their auras can be read) comes
+  first; if they wear it all you still give the usual first choice, to refresh it. A player without mana gets Might
+  before Kings. Cast by name, so the game picks the highest rank you know.
 - **The click** (`S.Macro`, a `SecureActionButtonTemplate` row, `*type1 = macro`, `useOnKeyDown = false`): a group
   member is cast on with `/cast [@Name] Spell` (resolves only for group members); anyone else is
   `/target Name`, `/cast Spell`, then `/targetlasttarget` (or `/cleartarget` when you had no target). Already your

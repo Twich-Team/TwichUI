@@ -232,7 +232,7 @@ do
   f = S.Pick("PRIEST", { class = "MAGE" }, Knows(1243, 14752, 976), { fortitude = true })
   Check(f and f.key == "spirit", "a priest skips Fortitude they already wear")
   f, why = S.Pick("PRIEST", { class = "WARRIOR" }, Knows(1243, 14752, 976), { fortitude = true, shadow = true })
-  Check(f == nil and why == "wearing", "they wear all a priest can give a warrior")
+  Check(f and f.key == "fortitude", "they wear all a priest can give a warrior: Fortitude is given anyway, to refresh it")
   f, why = S.Pick("WARRIOR", { class = "PRIEST", inParty = false }, Knows(6673))
   Check(f == nil and why == "party", "a shout only for your own party")
   f = S.Pick("WARRIOR", { class = "PRIEST", inParty = true }, Knows(6673))
