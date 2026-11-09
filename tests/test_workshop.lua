@@ -7,7 +7,7 @@ dofile(TESTS .. "mi_mock.lua")
 local function Check(cond, msg) if not cond then error(msg, 2) end end
 local function Same(a, b, msg) if a ~= b then error((msg or "") .. " expected " .. tostring(b) .. ", got " .. tostring(a), 2) end end
 
-local WORKSHOP_FILES = { "Data.lua", "Materials.lua", "Queue.lua", "Observe.lua", "Session.lua" }
+local WORKSHOP_FILES = { "Data.lua", "Materials.lua", "Queue.lua", "Observe.lua", "Prices.lua", "Opportunities.lua", "Scan.lua", "Session.lua" }
 
 local function Load(c, file)
   local chunk = assert(loadfile(ROOT .. "../TwichUI_Workshop/" .. file))
@@ -437,6 +437,30 @@ do
   local n = shown
   c.SlashCmdList.TWICHUI("workshop")
   Same(shown, n + 1, "/tui workshop toggles")
+end
+
+---------------------------------------------------------------------------
+-- Packaging: the sibling addon is what the launcher asks the game to load
+---------------------------------------------------------------------------
+do
+  local function Read(path) local f = assert(io.open(path, "rb")); local t = f:read("*a"); f:close(); return t end
+  local core = Read(ROOT .. "!!!TwichUI.toc")
+  Check(core:find("\nWorkshopLauncher.lua", 1, true), "the core TOC loads WorkshopLauncher.lua")
+  local toc = Read(REPO .. "TwichUI_Workshop/TwichUI_Workshop.toc")
+  Check(toc:find("## LoadOnDemand: 1", 1, true), "load on demand")
+  Check(toc:find("## RequiredDeps: !!!TwichUI", 1, true), "needs the core")
+  Check(not toc:find("## SavedVariables", 1, true), "no saved variables of its own")
+  local last
+  for line in toc:gmatch("[^\r\n]+") do
+    if line:match("%.lua$") and not line:match("^#") then
+      local f = io.open(REPO .. "TwichUI_Workshop/" .. line, "rb")
+      Check(f, "TOC file exists: " .. line); if f then f:close() end
+      last = line
+    end
+  end
+  Same(last, "Window.lua", "the window file is last (it marks the addon ready)")
+  Check(Read(REPO .. ".pkgmeta"):find("TwichUI_Workshop: TwichUI_Workshop", 1, true), ".pkgmeta moves the folder beside the core")
+  Same(toc:match("## Interface: (%d+)"), core:match("## Interface: (%d+)"), "same interface number as the core")
 end
 
 print("PASSED")

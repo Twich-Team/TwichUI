@@ -76,7 +76,7 @@ c.C_Item = {
 c.InCombatLockdown = function() return false end
 c.IsShiftKeyDown = function() return false end
 
-for _, f in ipairs({ "Data.lua", "Materials.lua", "Queue.lua", "Observe.lua", "Session.lua", "Window.lua" }) do
+for _, f in ipairs({ "Data.lua", "Materials.lua", "Queue.lua", "Observe.lua", "Prices.lua", "Opportunities.lua", "Scan.lua", "Session.lua", "Window.lua" }) do
   local chunk = assert(loadfile(ROOT .. "../TwichUI_Workshop/" .. f)); setfenv(chunk, c); chunk("TwichUI_Workshop", {})
 end
 local W = R.Workshop
@@ -93,6 +93,8 @@ g.filtered = nil
 Win.Show()
 local f = Win.Frame()
 Check(f and f:IsShown(), "shown")
+Check(#f.points >= 1, "the window is anchored: an unanchored frame is shown but never drawn (the in-game failure)")
+Check(f.points[1][1] == "CENTER", "centered on the screen")
 Check(Events(f) > 0, "listens while shown"); Same(W.Snapshot().events, Events(f))
 Check(S.Notices()[1]:find("Open one of your professions", 1, true), "an instruction, not an unexplained empty list")
 Same(#Win.Lists().recipes.data, 0)
@@ -188,4 +190,196 @@ Fire("TRADE_SKILL_SHOW"); FlushTimers()
 Check(f.notice:GetText():find("isn't one of your own", 1, true), "said, with the earlier list kept")
 Same(#S.Professions(), 1, "a linked profession is not added")
 f:Hide()
+
+---------------------------------------------------------------------------
+-- Opportunities: the second view, the scan button, rows, sorting, the queue
+---------------------------------------------------------------------------
+do
+  -- a virtual clock for the scan's waits, and a fake auction house
+  local clock, timers = 0, {}
+  c.GetTime = function() return clock end
+  c.C_Timer = { After = function(d, fn) timers[#timers + 1] = { at = clock + d, fn = fn } end }
+  local function Advance(sec)
+    local target = clock + sec
+    while true do
+      local best, bi
+      for i, t in ipairs(timers) do if t.at <= target and (not best or t.at < best.at) then best, bi = t, i end end
+      if not best then break end
+      table.remove(timers, bi)
+      if best.at > clock then clock = best.at end
+      best.fn()
+    end
+    clock = target
+  end
+  local made = {}
+  local baseCreate = c.CreateFrame
+  c.CreateFrame = function(...) local fr = baseCreate(...); made[#made + 1] = fr; return fr end
+  local function FireScan(event)
+    for _, fr in ipairs(made) do if fr.events[event] and fr.scripts.OnEvent then fr.scripts.OnEvent(fr, event) end end
+  end
+  local ah = { sent = 0, records = {} }
+  c.C_AuctionHouse = {
+    IsThrottledMessageSystemReady = function() return true end,
+    ReplicateItems = function() ah.sent = ah.sent + 1 end,
+    GetNumReplicateItems = function() return #ah.records end,
+    GetReplicateItemInfo = function(i) local r = ah.records[i]; return "n", 1, r.count, 1, true, 1, "", 0, 0, r.buyout, 0, nil, nil, "o", "o", 0, r.item, true end,
+  }
+  c.AuctionHouseFrame = MIFake("Frame"); c.AuctionHouseFrame:Hide()
+  c.UnitFactionGroup = function() return "Alliance" end
+  c.GetRealmName = function() return "Realm" end
+  c.GetMoneyString = function(n) return n .. "c" end
+  local tip = {}
+  c.GameTooltip = MIFake("GameTooltip")
+  c.GameTooltip.AddLine = function(_, text) tip[#tip + 1] = text end
+  c.GameTooltip.AddDoubleLine = function(_, a, b) tip[#tip + 1] = a .. " | " .. b end
+
+  -- the recipes: Healing Potion makes 1-2 of item 501 from 2 x 10; Mana Potion makes 1 of 502 from 10 + 11
+  g.prof = { professionID = 171, professionName = "Alchemy" }
+  c.C_TradeSkillUI.IsTradeSkillLinked = function() return false end
+  g.schem[1].outputItemID = 501
+  g.schem[2].outputItemID = 502
+  g.filtered = { 1, 2 }
+  f:Show()
+  Same(Win.Mode(), "craft", "it opens on Crafting")
+  local opps = Win.Opps()
+  Check(not opps:IsShown() and f.tabCraft.on ~= false)
+  f.tabOpps:GetScript("OnClick")(f.tabOpps)
+  Same(Win.Mode(), "opps"); Check(opps:IsShown(), "the Opportunities view is shown")
+  Same(W.Snapshot().mode, "opps")
+  FlushTimers(); Advance(1)
+  local L_ = Win.Lists().opps
+  -- no scan yet
+  Check(L_.empty:GetText():find("No prices saved yet", 1, true), L_.empty:GetText())
+  Check(opps.source:GetText():find("No saved prices for this realm", 1, true))
+  Same(#L_.data, 2, "the list still has the rows: unknown ones are shown as unknown")
+  Check(L_.rows[1].profit.a:GetText() == "Unknown" and L_.rows[1].cost.a:GetText() == "Unknown", "no scan: Unknown, never 0")
+
+  -- scanning with the auction house closed says so and sends nothing
+  opps.scan:GetScript("OnClick")(opps.scan)
+  Check(opps.status:GetText():find("Open the auction house", 1, true), opps.status:GetText()); Same(ah.sent, 0)
+
+  -- the auction house opens: Scan prices
+  c.AuctionHouseFrame:Show()
+  ah.records = {
+    { item = 10, count = 1, buyout = 100 }, { item = 10, count = 4, buyout = 600 },   -- 100 and 150 each
+    { item = 11, count = 1, buyout = 50 },
+    { item = 501, count = 1, buyout = 1000 }, { item = 501, count = 2, buyout = 3000 },
+    { item = 502, count = 1, buyout = 300 },
+    { item = 502, count = 1, buyout = 0 },    -- bid only
+    { item = 999, count = 1, buyout = 1 },    -- nothing to do with these recipes
+  }
+  opps.scan:GetScript("OnClick")(opps.scan)
+  Same(ah.sent, 1, "one click, one request"); Same(opps.scan.text:GetText(), "Scanning..."); Check(opps.scan.enabled == false, "can't be pressed again meanwhile")
+  opps.scan:GetScript("OnClick")(opps.scan)
+  Same(ah.sent, 1, "a repeated click does nothing")
+  Check(opps.status:GetText():find("Asking the auction house", 1, true))
+  FireScan("REPLICATE_ITEM_LIST_UPDATE")
+  Advance(5)
+  Same(W.Scan.state, "done")
+  Same(opps.scan.text:GetText(), "Scan prices"); Check(opps.scan.enabled)
+  Check(opps.status:GetText():find("Prices found for 4 of your items", 1, true), opps.status:GetText())
+  Check(opps.source:GetText():find("Alliance auction house on Realm, scanned just now", 1, true), opps.source:GetText())
+  Same(#L_.data, 2)
+  local r1, r2 = L_.rows[1], L_.rows[2]
+  Same(r1.name:GetText(), "Healing Potion", "highest estimated profit first")
+  Same(r1.cost.a:GetText(), "200c", "2 x 100: the materials in full")
+  Same(r1.sell.a:GetText(), "1000c"); Same(r1.sell.b:GetText(), "to 2000c", "makes 1-2: a range, not the maximum")
+  Same(r1.profit.a:GetText(), "800c"); Same(r1.profit.b:GetText(), "to 1800c")
+  Check(r1.sub:GetText():find("Makes 1-2", 1, true) and r1.sub:GetText():find("Alchemy", 1, true), r1.sub:GetText())
+  Same(r2.name:GetText(), "Mana Potion")
+  Same(r2.cost.a:GetText(), "150c"); Same(r2.sell.a:GetText(), "300c"); Same(r2.profit.a:GetText(), "150c"); Check(not r2.profit.b:IsShown() and not r2.sell.b:IsShown(), "a single amount has no second line")
+  Check(opps.summary:GetText():find("2 of 2 recipes priced, 2 profitable", 1, true), opps.summary:GetText())
+  Check(opps.notes:GetText():find("cut isn't taken off", 1, true), "the unconfirmed cut is stated")
+  Check(opps.notes:GetText():find("doesn't mean it will sell", 1, true), "a listing is not a sale")
+  Check(opps.notes:GetText():find("Deposits", 1, true), "deposits are said to be left out")
+  -- the basis on demand
+  tip = {}
+  r1:GetScript("OnEnter")(r1)
+  local all = table.concat(tip, "\n")
+  Check(all:find("Healing Potion", 1, true) and all:find("2 x Peacebloom | 100c each = 200c", 1, true), all)
+  Check(all:find("Estimated profit | 800c to 1800c", 1, true), all)
+  Check(all:find("scanned just now", 1, true))
+
+  -- sorting by a column; unknown stays below
+  local heads = Win.Heads()
+  heads.cost:GetScript("OnClick")(heads.cost)
+  Same(S.opp.sort, "cost"); Same(L_.rows[1].name:GetText(), "Mana Potion", "cheapest to make first"); Same(S.opp.desc, false)
+  heads.cost:GetScript("OnClick")(heads.cost); Same(L_.rows[1].name:GetText(), "Healing Potion", "the same column again reverses it")
+  heads.profit:GetScript("OnClick")(heads.profit)
+  Same(S.opp.sort, "profit"); Same(L_.rows[1].name:GetText(), "Healing Potion")
+
+  -- add to the existing queue (the same queue the Crafting view uses)
+  local queued = #Q.Entries()
+  local add1 = L_.rows[1].add
+  Check(add1.text:GetText() == "Add" and add1.enabled)
+  add1:GetScript("OnClick")(add1)
+  Same(#Q.Entries(), queued + 1); Check(Q.Find(1), "Healing Potion is in the one queue")
+  Same(L_.rows[1].add.text:GetText(), "Queued"); Check(L_.rows[1].add.enabled == false)
+  Check(f.note:GetText():find("Added Healing Potion", 1, true))
+  f.tabCraft:GetScript("OnClick")(f.tabCraft)
+  Same(Win.Mode(), "craft"); Check(not opps:IsShown())
+  Same(#Win.Lists().queue.data, #Q.Entries(), "and the Crafting view shows it")
+  f.tabOpps:GetScript("OnClick")(f.tabOpps)
+
+  -- a material with no price: the whole estimate is unknown, and below the known ones
+  ah.records = {
+    { item = 10, count = 2, buyout = 200 }, { item = 501, count = 1, buyout = 1000 }, { item = 502, count = 1, buyout = 300 },
+  }
+  opps.scan:GetScript("OnClick")(opps.scan); FireScan("REPLICATE_ITEM_LIST_UPDATE"); Advance(5)
+  Same(W.Scan.state, "done")
+  Same(L_.rows[1].name:GetText(), "Healing Potion")
+  Same(L_.rows[2].name:GetText(), "Mana Potion")
+  Same(L_.rows[2].profit.a:GetText(), "Unknown", "unknown, not zero"); Same(L_.rows[2].cost.a:GetText(), "Unknown")
+  Same(L_.rows[2].sell.a:GetText(), "300c", "what is known is still shown")
+  Same(L_.rows[2].sub:GetText(), "1 material has no price")
+  Check(opps.summary:GetText():find("1 of 2 recipes priced", 1, true), opps.summary:GetText())
+
+  -- a scan that fails keeps the usable one
+  local before = W.Prices.Market("Realm|Alliance").at
+  clock = clock + 400
+  opps.scan:GetScript("OnClick")(opps.scan)
+  Advance(100)
+  Same(W.Scan.state, "failed")
+  Check(opps.status:GetText():find("earlier prices were kept", 1, true), opps.status:GetText())
+  Same(W.Prices.Market("Realm|Alliance").at, before, "the earlier scan is untouched")
+  Same(L_.rows[1].name:GetText(), "Healing Potion"); Same(L_.rows[1].cost.a:GetText(), "200c", "and the list still uses it")
+  Check(opps.source:GetText():find("scanned", 1, true))
+
+  -- Profitable only
+  opps.profitOnly:GetScript("OnClick")(opps.profitOnly)
+  Same(#L_.data, 1, "only Healing Potion is both priced and profitable"); Same(L_.rows[1].name:GetText(), "Healing Potion")
+  ah.records = { { item = 10, count = 2, buyout = 200 }, { item = 11, count = 1, buyout = 50 }, { item = 501, count = 1, buyout = 10 }, { item = 502, count = 1, buyout = 10 } }
+  opps.scan:GetScript("OnClick")(opps.scan); FireScan("REPLICATE_ITEM_LIST_UPDATE"); Advance(5)
+  Same(#L_.data, 0); Check(L_.empty:GetText():find("No profitable crafts", 1, true), L_.empty:GetText())
+  opps.profitOnly:GetScript("OnClick")(opps.profitOnly)
+  Same(#L_.data, 2, "off: they are all shown, losses included")
+  Check(L_.rows[1].profit.a:GetText():sub(1, 1) == "-", "a loss shows its minus sign")
+
+  -- prices exist but none of these recipes could be priced
+  ah.records = { { item = 999, count = 1, buyout = 5 } }
+  opps.scan:GetScript("OnClick")(opps.scan); FireScan("REPLICATE_ITEM_LIST_UPDATE"); Advance(5)
+  Same(W.Scan.state, "done")
+  Check(Win.Lists().opps.empty:IsShown() == false, "the rows are still listed (as unknown)")
+  Check(L_.rows[1].profit.a:GetText() == "Unknown")
+  Check(opps.summary:GetText():find("0 of 2 recipes priced", 1, true))
+  Check(S.Opportunities().state == "noprices")
+
+  -- closing the auction house mid-scan, then the window: nothing is left running
+  ah.records = {}
+  for i = 1, 900 do ah.records[i] = { item = 10, count = 1, buyout = 100 + i } end
+  opps.scan:GetScript("OnClick")(opps.scan); FireScan("REPLICATE_ITEM_LIST_UPDATE")
+  FireScan("AUCTION_HOUSE_CLOSED")
+  Same(W.Scan.state, "interrupted")
+  c.AuctionHouseFrame:Hide()
+  f:Hide()
+  Same(Events(f), 0, "hidden: no events"); Same(W.Snapshot().events, 0)
+  Advance(200)
+  Same(W.Scan.state, "interrupted", "nothing changes afterwards")
+  -- the Opportunities view was left on; the window reopens on it and starts fresh
+  f:Show()
+  Same(Win.Mode(), "opps")
+  f.tabCraft:GetScript("OnClick")(f.tabCraft)
+  f:Hide()
+end
+
 print("PASSED")

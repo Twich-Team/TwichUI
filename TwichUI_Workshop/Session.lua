@@ -6,10 +6,13 @@
 local R = TwichUI
 local W = R.Workshop
 local Q, M, O = W.Queue, W.Materials, W.Observe
+local PR, Op, SC = W.Prices, W.Opps, W.Scan
 local S = { filter = "", observations = 0 }
 W.Session = S
 
 local MAX_PROFESSIONS = 5
+
+S.opp = { sort = Op.DEFAULTS.sort, desc = Op.DEFAULTS.desc, prof = nil, profitOnly = false }   -- the Opportunities view's choices (memory only)
 
 local profs = {}       -- [professionID] = { prof, profName, complete, recipes, at }
 local order = {}       -- professionIDs, the order first seen
@@ -53,6 +56,7 @@ end
 function S.Reset()
     profs, order, current, lastWhy, note = {}, {}, nil, nil, nil
     S.filter = ""
+    S.opp.prof = nil
     O.ClearCache()
 end
 
@@ -201,8 +205,125 @@ function S.Headline(sum)
     return "Some of your bag counts can't be read yet.", "warn"
 end
 
+---------------------------------------------------------------------------
+-- Opportunities: what one craft costs and could earn (Prices.lua, Opportunities.lua)
+---------------------------------------------------------------------------
+-- Every recipe read this session, all professions
+function S.AllRecipes()
+    local out = {}
+    for _, id in ipairs(order) do
+        for _, rec in ipairs(profs[id].recipes) do out[#out + 1] = rec end
+    end
+    return out
+end
+
+-- Reads the output and materials of up to n recipes not read yet (each once). Returns how many are still waiting.
+function S.FillSome(n)
+    local left = 0
+    for _, id in ipairs(order) do
+        for _, rec in ipairs(profs[id].recipes) do
+            if not rec.filled and not rec.tried then
+                if n > 0 then
+                    rec.tried = true
+                    O.Fill(rec)
+                    n = n - 1
+                else
+                    left = left + 1
+                end
+            end
+        end
+    end
+    return left
+end
+
+-- The items worth a saved price: what the recipes read this session make and need. Returns the set, how many, and whether it was cut.
+function S.Wanted()
+    local set, n, cut = {}, 0, false
+    local function Add(item)
+        if not item or set[item] then return end
+        if n >= PR.MAX_ITEMS then cut = true return end
+        set[item] = true
+        n = n + 1
+    end
+    for _, id in ipairs(order) do
+        for _, rec in ipairs(profs[id].recipes) do
+            if rec.filled then
+                Add(rec.outItem)
+                if rec.mats then for _, m in ipairs(rec.mats) do Add(m.item) end end
+            end
+        end
+    end
+    return set, n, cut
+end
+
+-- The player's click on Scan prices. Returns true, or false and why (Scan.lua says it in words).
+function S.StartScan()
+    S.FillSome(math.huge)
+    local set, _, cut = S.Wanted()
+    return SC.Start(set, cut)
+end
+
+-- Which saved prices the view uses: with an auction house open, only that one; otherwise the one of this realm scanned last
+function S.PriceSource()
+    local open = SC.AuctionOpen()
+    local key, market
+    if open then
+        key = SC.Market()
+        market = key and PR.Market(key) or nil
+    else
+        local realm = SC.Realm()
+        market = realm and PR.Newest(realm) or nil
+    end
+    return { open = open, key = key, market = market, label = market and PR.Label(market) or nil }
+end
+
+local EMPTY = {
+    norecipes = "Open one of your professions to see which crafts could be worth making.",
+    noprices = "None of your recipes could be priced from the last scan. Some materials or products had no listings, or a profession wasn't open when you scanned.",
+    noprofit = "No profitable crafts at the scanned prices. Turn off Profitable only to see them all.",
+    nofilter = "No recipes match this profession.",
+}
+
+-- Everything the Opportunities view draws: rows (filtered and sorted), counts, the price source, the cut, and the text for an empty list
+function S.Opportunities()
+    local src = S.PriceSource()
+    local recipes = S.AllRecipes()
+    local market = src.market
+    local rate = market and PR.CutRate(market.side) or nil
+    local lookup = function(item) return market and PR.Lookup(market, item) or nil end
+    local all = Op.Rows(recipes, lookup, rate)
+    local rows = Op.Select(all, S.opp)
+    local out = { rows = rows, summary = Op.Summary(all), source = src, rate = rate, lookup = lookup, incomplete = false }
+    for _, id in ipairs(order) do
+        if not profs[id].complete then out.incomplete = true end
+    end
+    if #recipes == 0 then out.state = "norecipes"
+    elseif not market then out.state = "noscan"
+    elseif out.summary.priced == 0 then out.state = "noprices"
+    elseif #rows == 0 then out.state = S.opp.profitOnly and "noprofit" or "nofilter"
+    else out.state = "ok" end
+    if out.state == "noscan" then
+        out.empty = src.open and "No prices for this auction house yet. Choose Scan prices."
+            or "No prices saved yet. Open the auction house and choose Scan prices."
+    else
+        out.empty = EMPTY[out.state]
+    end
+    return out
+end
+
+function S.SortBy(key) Op.SetSort(S.opp, key) end
+
+function S.FilterProfession(id)
+    if id == nil or profs[id] then S.opp.prof = id end
+end
+
+function S.ToggleProfitOnly() S.opp.profitOnly = not S.opp.profitOnly end
+
 function S.Snapshot()
     local n = 0
     for _, id in ipairs(order) do n = n + #profs[id].recipes end
-    return { professions = #order, recipes = n, queue = Q.Count(), cache = O.CacheSize(), observations = S.observations }
+    local realm = SC.Realm()
+    local market = realm and PR.Newest(realm) or nil
+    return { professions = #order, recipes = n, queue = Q.Count(), cache = O.CacheSize(), observations = S.observations,
+        prices = market and market.n or 0, scan = SC.state }
 end

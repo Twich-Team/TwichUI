@@ -1,6 +1,7 @@
 -- TwichUI Workshop: the window
--- Recipes on the left (the player's own open profession, with a search), the queue on the right, and under it the combined
--- materials against the bags. It draws what Session.lua says and asks it to do everything else. Drawn with the shared framed look
+-- Two views. Crafting: recipes on the left (the player's own open profession, with a search), the queue on the right, and under it the
+-- combined materials against the bags. Opportunities: what one craft of each known recipe costs, sells for and could earn from the
+-- prices of the last auction house scan, and the Scan prices button. It draws what Session.lua says and asks it to do everything else. Drawn with the shared framed look
 -- (FrameLook.lua). Opened with /tui workshop, the TwichUI menu or the settings page; it never opens by itself.
 --
 -- While the window is shown it listens for the profession window's changes (TRADE_SKILL_*), for bag changes and for item
@@ -11,6 +12,7 @@
 local R = TwichUI
 local W = R.Workshop
 local S, Q, O = W.Session, W.Queue, W.Observe
+local PR, Op, SC = W.Prices, W.Opps, W.Scan
 local Win = {}
 W.Window = Win
 
@@ -21,11 +23,18 @@ local LEFT_W = 312
 local RIGHT_X = PAD + LEFT_W + 16
 local RIGHT_W = WIDTH - RIGHT_X - PAD
 local SETTLE = 0.2
-local REC_H, QUE_H, MAT_H = 40, 58, 22
+local REC_H, QUE_H, MAT_H, OPP_H = 40, 58, 22, 46
+local COL_W = 124          -- the width of each money column in Opportunities
+local ADD_W = 64
 
 local L, K            -- Look and its palette, looked up when first built
 local f               -- the window
-local lists = {}      -- recipes, queue, materials
+local lists = {}      -- recipes, queue, materials, opportunities
+local main, opps      -- the two views
+local mode = "craft"  -- "craft" or "opps"
+local heads = {}      -- the sortable column headings
+local oppChips = {}   -- the profession buttons of Opportunities
+local fillToken = 0   -- changes whenever a pending batch of recipe reading should be forgotten
 local chips = {}
 local token = 0       -- changes whenever a pending redraw should be forgotten
 local scheduled = false
@@ -40,6 +49,7 @@ local EVENTS = {
     TRADE_SKILL_SHOW = "read", TRADE_SKILL_LIST_UPDATE = "read", TRADE_SKILL_DATA_SOURCE_CHANGED = "read",
     PLAYER_REGEN_ENABLED = "read",
     BAG_UPDATE_DELAYED = "draw", GET_ITEM_INFO_RECEIVED = "draw",
+    AUCTION_HOUSE_SHOW = "draw", AUCTION_HOUSE_CLOSED = "draw", AUCTION_HOUSE_DISABLED = "draw",
 }
 
 ---------------------------------------------------------------------------
@@ -273,6 +283,149 @@ local function MakeMaterialRow(parent)
 end
 
 ---------------------------------------------------------------------------
+-- Opportunities rows
+---------------------------------------------------------------------------
+local function Money(copper)
+    if type(copper) ~= "number" then return "" end
+    local neg = copper < 0
+    local n = neg and -copper or copper
+    local text = type(GetMoneyString) == "function" and GetMoneyString(n, true, nil, true) or (tostring(n) .. "c")
+    return neg and ("-" .. text) or text
+end
+
+local oppView         -- what the last draw of Opportunities was built from (the basis tooltips read it)
+
+local function ItemName(item)
+    local name = O.ItemFacts(item)
+    return name or ("Item " .. item)
+end
+
+-- One money column of a row: a value, and under it "to <highest>" when the amount is a range (an uncertain output)
+local function MakeCell(row, right)
+    local c = {}
+    c.a = L.Text(row, "body")
+    c.a:SetWidth(COL_W)
+    c.a:SetJustifyH("RIGHT")
+    c.a:SetWordWrap(false)
+    c.b = L.Text(row, "meta")
+    c.b:SetWidth(COL_W)
+    c.b:SetJustifyH("RIGHT")
+    c.b:SetWordWrap(false)
+    function c.Set(low, high, color)
+        c.a:ClearAllPoints()
+        c.b:ClearAllPoints()
+        if high then
+            c.a:SetPoint("TOPRIGHT", row, "TOPRIGHT", right, -7)
+            c.b:SetPoint("TOPRIGHT", row, "TOPRIGHT", right, -25)
+            c.b:SetText("to " .. high)
+            c.b:Show()
+        else
+            c.a:SetPoint("RIGHT", row, "RIGHT", right, 0)
+            c.b:SetText("")
+            c.b:Hide()
+        end
+        c.a:SetText(low)
+        Paint(c.a, color or K.text)
+    end
+    return c
+end
+
+local function Known(cell, low, high)   -- a known amount, or "Unknown" in the dim colour
+    if low == nil then cell.Set("Unknown", nil, K.stone)
+    else cell.Set(Money(low), high ~= nil and high ~= low and Money(high) or nil) end
+end
+
+local function ShowBasis(row)
+    if not (GameTooltip and row.data and oppView) then return end
+    GameTooltip:SetOwner(row, "ANCHOR_RIGHT")
+    local src = oppView.source.market and { label = oppView.source.label, at = oppView.source.market.at, complete = oppView.source.market.complete } or nil
+    local lines = Op.Basis(row.data, src, ItemName, Money)
+    for i, line in ipairs(lines) do
+        if line[2] then
+            GameTooltip:AddDoubleLine(line[1], line[2], 1, 1, 1, 1, 1, 1)
+        elseif i == 1 then
+            GameTooltip:AddLine(line[1], 1, 0.82, 0)
+        else
+            GameTooltip:AddLine(line[1], 0.8, 0.8, 0.8, true)
+        end
+    end
+    GameTooltip:Show()
+end
+
+local function MakeOppRow(parent)
+    local F = R.FrameLook
+    local row = CreateFrame("Frame", nil, parent)
+    row:EnableMouse(true)
+    local nameW = (WIDTH - PAD * 2 - 30) - 4 - 32 - 8 - ADD_W - 12 - 3 * (COL_W + 6)
+    row.iconBtn = CreateFrame("Button", nil, row)
+    row.iconBtn:SetSize(32, 32)
+    row.iconBtn:SetPoint("LEFT", 4, 0)
+    row.icon = Icon(row.iconBtn, 32)
+    row.icon:SetPoint("CENTER")
+    row.iconBtn:SetScript("OnEnter", function(self)
+        if GameTooltip and row.item then
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            if not pcall(GameTooltip.SetItemByID, GameTooltip, row.item) then GameTooltip:Hide() end
+        end
+    end)
+    row.iconBtn:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+    row.iconBtn:SetScript("OnClick", function()   -- Shift-click puts the item's link in the chat box you have open, like other item icons
+        if not (row.item and IsModifiedClick and IsModifiedClick("CHATLINK") and ChatEdit_InsertLink) then return end
+        local ok, _, link = pcall(C_Item.GetItemInfo, row.item)
+        if ok and type(link) == "string" then pcall(ChatEdit_InsertLink, link) end
+    end)
+    row.name = L.Text(row, "body")
+    row.name:SetPoint("TOPLEFT", row.iconBtn, "TOPRIGHT", 8, 0)
+    row.name:SetWidth(nameW)
+    row.name:SetWordWrap(false)
+    row.sub = L.Text(row, "meta")
+    row.sub:SetPoint("TOPLEFT", row.name, "BOTTOMLEFT", 0, -3)
+    row.sub:SetWidth(nameW)
+    row.sub:SetWordWrap(false)
+    row.add = F.Button(row, "Add", ADD_W, "secondary", function()
+        if row.rec then S.Add(row.rec); Win.Render() end
+    end)
+    row.add:SetHeight(22)
+    row.add:SetPoint("RIGHT", -2, 0)
+    Tip(row.add, "Add to queue", "Puts this recipe in the queue to make once, in the Crafting view.")
+    row.profit = MakeCell(row, -(ADD_W + 12))
+    row.sell = MakeCell(row, -(ADD_W + 12 + COL_W + 6))
+    row.cost = MakeCell(row, -(ADD_W + 12 + 2 * (COL_W + 6)))
+    row:SetScript("OnEnter", ShowBasis)
+    row:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+    row.fill = function(self, r)
+        local e, rec = r.est, r.rec
+        self.data, self.rec, self.item = r, rec, rec.outItem
+        local _, icon
+        if rec.outItem then _, icon = O.ItemFacts(rec.outItem) end
+        self.icon:SetTexture(icon or rec.icon or ICON_BLANK)
+        self.name:SetText(rec.name)
+        local makes = W.PerCraft(e.outMin, e.outMax)
+        local detail = makes and ("Makes " .. makes) or "Makes: unknown"
+        if rec.profName then detail = detail .. "  -  " .. rec.profName end
+        if e.state ~= "ok" then detail = (Op.WhyText(e) or "Not priced") end
+        self.sub:SetText(detail)
+        Paint(self.sub, e.state == "ok" and K.stone or K.gold)
+        Known(self.cost, e.cost)
+        Known(self.sell, e.sellLow, e.sellHigh)
+        if e.state == "ok" then
+            local tone = e.profitLow > 0 and K.sage or (e.profitHigh < 0 and K.ember or K.text)
+            self.profit.Set(Money(e.profitLow), e.profitHigh ~= e.profitLow and Money(e.profitHigh) or nil, tone)
+        else
+            self.profit.Set("Unknown", nil, K.stone)
+        end
+        if S.IsQueued(rec.id) then
+            self.add.text:SetText("Queued")
+            self.add:SetEnabled(false)
+        else
+            self.add.text:SetText("Add")
+            self.add:SetEnabled(true)
+        end
+    end
+    return row
+end
+
+---------------------------------------------------------------------------
 -- Drawing
 ---------------------------------------------------------------------------
 local function LayoutChips(list)
@@ -282,7 +435,7 @@ local function LayoutChips(list)
         local p = list[i]
         if p then
             if not b then
-                b = R.FrameLook.Toggle(f, "", 80, function(self)
+                b = R.FrameLook.Toggle(main, "", 80, function(self)
                     if self.profId then S.Select(self.profId); lists.recipes:ScrollTop(); Win.Render() end
                 end)
                 b:SetHeight(22)
@@ -291,7 +444,7 @@ local function LayoutChips(list)
             local w = math.max(56, math.min(110, math.floor((LEFT_W - 4 * (n - 1)) / n)))
             b:SetWidth(w)
             b:ClearAllPoints()
-            b:SetPoint("TOPLEFT", f, "TOPLEFT", PAD + (i - 1) * (w + 4), -72)
+            b:SetPoint("TOPLEFT", main, "TOPLEFT", PAD + (i - 1) * (w + 4), -72)
             b.profId = p.id
             b.text:SetText(p.name)
             b:SetOn(p.selected)
@@ -302,12 +455,7 @@ local function LayoutChips(list)
     end
 end
 
-function Win.Render()
-    if not f or not f:IsShown() then return end
-    local Perf = R.Perf
-    local pt = Perf and Perf.on and Perf.Start("workshop.render")
-    renders = renders + 1
-
+local function RenderCraft()
     -- recipes
     LayoutChips(S.Professions())
     local notices = S.Notices()
@@ -332,10 +480,133 @@ function Win.Render()
     local text, tone = S.Headline(sum)
     f.headline:SetText(text)
     Paint(f.headline, tone == "good" and K.sage or (tone == "warn" and K.gold or K.textDim))
+end
 
+local SORT_WORDS = { profit = "Estimated profit", cost = "Cost to make", sell = "Sell price" }
+
+local function LayoutOppChips(list)
+    local n = #list + 1
+    for i = 1, math.max(n, #oppChips) do
+        local b = oppChips[i]
+        local p = i == 1 and { id = nil, name = "All", selected = S.opp.prof == nil } or list[i - 1]
+        if i <= n then
+            if not b then
+                b = R.FrameLook.Toggle(opps, "", 80, function(self)
+                    S.FilterProfession(self.profId)
+                    lists.opps:ScrollTop()
+                    Win.Render()
+                end)
+                b:SetHeight(22)
+                oppChips[i] = b
+            end
+            local w = math.max(48, math.min(110, math.floor((WIDTH - PAD * 2 - 140 - 4 * (n - 1)) / n)))
+            b:SetWidth(w)
+            b:ClearAllPoints()
+            b:SetPoint("TOPLEFT", opps, "TOPLEFT", PAD + (i - 1) * (w + 4), -120)
+            b.profId = p.id
+            b.text:SetText(p.name)
+            b:SetOn(i == 1 and S.opp.prof == nil or (i > 1 and S.opp.prof == p.id))
+            b:Show()
+        elseif b then
+            b:Hide()
+        end
+    end
+end
+
+local function RenderOpps()
+    local v = S.Opportunities()
+    oppView = v
+    local src = v.source
+
+    -- where the prices come from
+    local sourceText
+    if src.market then
+        local age = PR.Age(src.market.at)
+        sourceText = ("Prices from %s, scanned %s."):format(src.label, PR.AgeText(age))
+        if age and age > PR.OLD_AFTER then sourceText = sourceText .. " These prices are old." end
+        if not src.market.complete then sourceText = sourceText .. " That scan wasn't complete." end
+    elseif src.open then
+        sourceText = "No saved prices for this auction house yet."
+    else
+        sourceText = "No saved prices for this realm yet."
+    end
+    opps.source:SetText(sourceText)
+
+    -- the latest scan attempt
+    local msg, tone = SC.Message()
+    opps.status:SetText(msg or "")
+    Paint(opps.status, tone == "good" and K.sage or (tone == "warn" and K.gold or K.textDim))
+    local busy = SC.Busy()
+    opps.scan.text:SetText(busy and "Scanning..." or "Scan prices")
+    opps.scan:SetEnabled(not busy)
+
+    -- filters and the sort
+    LayoutOppChips(S.Professions())
+    opps.profitOnly:SetOn(S.opp.profitOnly)
+    for key, h in pairs(heads) do
+        Paint(h.text, S.opp.sort == key and K.gold or K.stone)
+        h.tipBody = (S.opp.sort == key and (S.opp.desc and "Highest first. Click to show the lowest first."
+            or "Lowest first. Click to show the highest first.") or "Click to sort by this.")
+    end
+
+    -- the list
+    lists.opps:SetData(v.rows, v.empty)
+    local sum = v.summary
+    if sum.total > 0 then
+        opps.summary:SetText(("%d of %d recipes priced, %d profitable. Sorted by %s, %s first. Per craft; a range is sorted by its low end.")
+            :format(sum.priced, sum.total, sum.profitable, SORT_WORDS[S.opp.sort]:lower(), S.opp.desc and "highest" or "lowest"))
+    else
+        opps.summary:SetText("")
+    end
+    local notes = {}
+    if v.incomplete then notes[#notes + 1] = "Some professions only list what their window's filters allow, so some recipes may be missing here." end
+    if sum.total > 0 then
+        notes[#notes + 1] = v.rate
+            and ("Estimated profit is the sell price, less the auction house's cut, less what the materials cost.")
+            or "Estimated profit is the sell price less what the materials cost. The auction house's cut isn't taken off: TwichUI hasn't confirmed it for this auction house."
+        notes[#notes + 1] = "Prices are the cheapest buyout listings seen in the scan. A listing doesn't mean it will sell. Deposits and listings that don't sell aren't counted."
+    end
+    opps.notes:SetText(table.concat(notes, "\n"))
+end
+
+function Win.Render()
+    if not f or not f:IsShown() then return end
+    local Perf = R.Perf
+    local pt = Perf and Perf.on and Perf.Start("workshop.render")
+    renders = renders + 1
+    if mode == "opps" then RenderOpps() else RenderCraft() end
     f.note:SetText(S.Note() or (Q.Held() and "This queue was saved by a newer TwichUI and is read-only." or ""))
     if pt then Perf.Stop(pt) end
 end
+
+-- Reads the recipes' materials and output a batch at a time, drawing between batches, so a long list doesn't hold up the game
+local FILL_BATCH = 120
+local function Prepare()
+    fillToken = fillToken + 1
+    local mine = fillToken
+    local function Step()
+        if mine ~= fillToken or not (f and f:IsShown()) or mode ~= "opps" then return end
+        local left = S.FillSome(FILL_BATCH)
+        Win.Render()
+        if left > 0 then C_Timer.After(0, Step) end
+    end
+    Step()
+end
+
+function Win.SetMode(m)
+    if m ~= "craft" and m ~= "opps" then return end
+    mode = m
+    if not f then return end
+    main:SetShown(m == "craft")
+    opps:SetShown(m == "opps")
+    f.tabCraft:SetOn(m == "craft")
+    f.tabOpps:SetOn(m == "opps")
+    if f:IsShown() then
+        if m == "opps" then Prepare() else fillToken = fillToken + 1 end
+        Win.Render()
+    end
+end
+function Win.Mode() return mode end
 
 local function Flush()
     scheduled = false
@@ -344,6 +615,7 @@ local function Flush()
     if dirtyRead then
         dirtyRead = false
         R.Perf.Call("workshop.read", S.Observe)
+        if mode == "opps" then Prepare() end
     end
     Win.Render()
 end
@@ -370,6 +642,7 @@ local function Build()
     f = CreateFrame("Frame", NAME, UIParent)
     f:Hide()
     f:SetSize(WIDTH, HEIGHT)
+    f:SetPoint("CENTER")   -- without an anchor the frame is "shown" but never drawn (the window was invisible)
     f:SetFrameStrata("MEDIUM")
     f:SetToplevel(true)
     f:SetMovable(true)
@@ -390,9 +663,11 @@ local function Build()
         for event in pairs(EVENTS) do self:RegisterEvent(event) end
         R.Perf.Call("workshop.read", S.Observe)   -- fresh before anything is shown as ready
         Win.Render()
+        if mode == "opps" then Prepare() end
     end)
     f:HookScript("OnHide", function(self)
         token = token + 1
+        fillToken = fillToken + 1
         scheduled, dirtyRead = false, false
         self:UnregisterAllEvents()
         S.Reset()
@@ -407,11 +682,26 @@ local function Build()
     f.close = F.Close(f, function() f:Hide() end)
     f.close:SetPoint("TOPRIGHT", -(CR + 2), -13)
 
+    -- the two views
+    f.tabCraft = F.Toggle(f, "Crafting", 84, function() Win.SetMode("craft") end)
+    f.tabCraft:SetHeight(22)
+    f.tabCraft:SetPoint("TOPLEFT", PAD + 100, -11)
+    f.tabOpps = F.Toggle(f, "Opportunities", 112, function() Win.SetMode("opps") end)
+    f.tabOpps:SetHeight(22)
+    f.tabOpps:SetPoint("LEFT", f.tabCraft, "RIGHT", 4, 0)
+    Tip(f.tabOpps, "Opportunities", "Which crafts could be worth making, from the prices of your last auction house scan.")
+    main = CreateFrame("Frame", nil, f)
+    main:SetSize(WIDTH, HEIGHT)
+    main:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
+    opps = CreateFrame("Frame", nil, f)
+    opps:SetSize(WIDTH, HEIGHT)
+    opps:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
+
     -- left: recipes
-    local rh = L.Text(f, "heading")
+    local rh = L.Text(main, "heading")
     rh:SetPoint("TOPLEFT", PAD, -52)
     rh:SetText("Recipes")
-    local box = L.EditBox(f, LEFT_W, 22)
+    local box = L.EditBox(main, LEFT_W, 22)
     box:SetPoint("TOPLEFT", PAD, -100)
     box:SetMaxLetters(40)
     box.hint = L.Text(box, "meta")
@@ -424,31 +714,31 @@ local function Build()
         Win.Render()
     end)
     f.search = box
-    f.notice = L.Text(f, "small")
+    f.notice = L.Text(main, "small")
     f.notice:SetPoint("TOPLEFT", PAD, -128)
     f.notice:SetWidth(LEFT_W)
     f.notice:SetWordWrap(true)
     f.notice:SetJustifyV("TOP")
-    lists.recipes = NewList(f, PAD, -176, LEFT_W, HEIGHT - 176 - 52, REC_H, MakeRecipeRow)
+    lists.recipes = NewList(main, PAD, -176, LEFT_W, HEIGHT - 176 - 52, REC_H, MakeRecipeRow)
 
     -- right: queue
-    local qh = L.Text(f, "heading")
+    local qh = L.Text(main, "heading")
     qh:SetPoint("TOPLEFT", RIGHT_X, -52)
     qh:SetText("Queue")
-    f.queueCount = L.Text(f, "meta")
+    f.queueCount = L.Text(main, "meta")
     f.queueCount:SetPoint("LEFT", qh, "RIGHT", 10, 0)
-    lists.queue = NewList(f, RIGHT_X, -74, RIGHT_W, 250, QUE_H, MakeQueueRow)
+    lists.queue = NewList(main, RIGHT_X, -74, RIGHT_W, 250, QUE_H, MakeQueueRow)
 
     -- right: materials
-    local mh = L.Text(f, "heading")
+    local mh = L.Text(main, "heading")
     mh:SetPoint("TOPLEFT", RIGHT_X, -338)
     mh:SetText("Materials")
-    local scope = L.Text(f, "meta")
+    local scope = L.Text(main, "meta")
     scope:SetPoint("LEFT", mh, "RIGHT", 10, 0)
     scope:SetText("Counts what is in your bags only.")
     local function Head(text, anchorX, w)
-        local h = L.Text(f, "meta")
-        h:SetPoint("TOPRIGHT", f, "TOPLEFT", anchorX, -362)
+        local h = L.Text(main, "meta")
+        h:SetPoint("TOPRIGHT", main, "TOPLEFT", anchorX, -362)
         h:SetWidth(w)
         h:SetJustifyH("RIGHT")
         h:SetText(text)
@@ -457,12 +747,82 @@ local function Build()
     Head("Still needed", colRight, 78)
     Head("In bags", colRight - 78 - 10, 52)
     Head("Need", colRight - 78 - 10 - 52 - 10, 52)
-    lists.mats = NewList(f, RIGHT_X, -380, RIGHT_W, 150, MAT_H, MakeMaterialRow)
-    f.headline = L.Text(f, "body")
+    lists.mats = NewList(main, RIGHT_X, -380, RIGHT_W, 150, MAT_H, MakeMaterialRow)
+    f.headline = L.Text(main, "body")
     f.headline:SetPoint("TOPLEFT", RIGHT_X, -540)
     f.headline:SetWidth(RIGHT_W)
     f.headline:SetWordWrap(true)
     f.headline:SetJustifyV("TOP")
+
+    -- Opportunities
+    local oh = L.Text(opps, "heading")
+    oh:SetPoint("TOPLEFT", PAD, -52)
+    oh:SetText("Opportunities")
+    opps.scan = F.Button(opps, "Scan prices", 120, "primary", function()
+        S.StartScan()
+        Win.Render()
+    end)
+    opps.scan:SetHeight(24)
+    opps.scan:SetPoint("TOPRIGHT", -PAD, -48)
+    Tip(opps.scan, "Scan prices", "Reads every listing at the open auction house once, so your crafts can be priced. It only reads: it never buys, bids or posts, and it starts only when you press this. It can take a little while.")
+    opps.source = L.Text(opps, "small")
+    opps.source:SetPoint("TOPLEFT", PAD, -76)
+    opps.source:SetWidth(WIDTH - PAD * 2)
+    opps.source:SetWordWrap(false)
+    opps.status = L.Text(opps, "small")
+    opps.status:SetPoint("TOPLEFT", PAD, -94)
+    opps.status:SetWidth(WIDTH - PAD * 2)
+    opps.status:SetWordWrap(false)
+    opps.profitOnly = F.Toggle(opps, "Profitable only", 120, function()
+        S.ToggleProfitOnly()
+        lists.opps:ScrollTop()
+        Win.Render()
+    end)
+    opps.profitOnly:SetHeight(22)
+    opps.profitOnly:SetPoint("TOPRIGHT", -PAD, -120)
+    Tip(opps.profitOnly, "Profitable only", "Hides crafts that lose money at these prices and crafts that couldn't be priced.")
+    local x = PAD + 4 + (WIDTH - PAD * 2 - 30)   -- the right edge of a row, in this view's coordinates
+    local function Head(key, text, right)
+        local h = CreateFrame("Button", nil, opps)
+        h:SetSize(COL_W, 18)
+        h:SetPoint("TOPRIGHT", opps, "TOPLEFT", right, -150)
+        h.text = L.Text(h, "meta")
+        h.text:SetAllPoints()
+        h.text:SetJustifyH("RIGHT")
+        h.text:SetText(text)
+        h:SetScript("OnClick", function() S.SortBy(key); lists.opps:ScrollTop(); Win.Render() end)
+        h:SetScript("OnEnter", function(self)
+            if GameTooltip then
+                GameTooltip:SetOwner(self, "ANCHOR_TOP")
+                GameTooltip:AddLine(text, 1, 0.82, 0)
+                GameTooltip:AddLine(self.tipBody or "Click to sort by this.", 0.8, 0.8, 0.8, true)
+                GameTooltip:Show()
+            end
+        end)
+        h:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+        heads[key] = h
+    end
+    local item = L.Text(opps, "meta")
+    item:SetPoint("TOPLEFT", PAD + 8, -150)
+    item:SetText("Item (one craft)")
+    Head("profit", "Estimated profit", x - (ADD_W + 12))
+    Head("sell", "Sell price", x - (ADD_W + 12 + COL_W + 6))
+    Head("cost", "Cost to make", x - (ADD_W + 12 + 2 * (COL_W + 6)))
+    lists.opps = NewList(opps, PAD, -170, WIDTH - PAD * 2, 304, OPP_H, MakeOppRow)
+    opps.summary = L.Text(opps, "small")
+    opps.summary:SetPoint("TOPLEFT", PAD, -482)
+    opps.summary:SetWidth(WIDTH - PAD * 2)
+    opps.summary:SetWordWrap(false)
+    opps.notes = L.Text(opps, "meta")
+    opps.notes:SetPoint("TOPLEFT", PAD, -500)
+    opps.notes:SetWidth(WIDTH - PAD * 2)
+    opps.notes:SetWordWrap(true)
+    opps.notes:SetJustifyV("TOP")
+    opps:SetShown(mode == "opps")
+    main:SetShown(mode == "craft")
+    f.tabCraft:SetOn(mode == "craft")
+    f.tabOpps:SetOn(mode == "opps")
+    SC.OnChange = function() if f and f:IsShown() then Schedule("draw") end end
 
     f.note = L.Text(f, "meta")
     f.note:SetPoint("BOTTOMLEFT", PAD, 22)
@@ -486,6 +846,8 @@ end
 function Win.IsShown() return f ~= nil and f:IsShown() end
 function Win.Frame() return f end
 function Win.Lists() return lists end
+function Win.Opps() return opps end      -- the Opportunities view (for the tests)
+function Win.Heads() return heads end    -- its sortable column headings (for the tests)
 
 -- For the diagnostics gauges and the tests. Read only.
 function W.Snapshot()
@@ -498,6 +860,7 @@ function W.Snapshot()
     s.built = f ~= nil
     s.events = events
     s.rows = rows
+    s.mode = mode
     s.renders = renders
     s.flushes = flushes
     return s

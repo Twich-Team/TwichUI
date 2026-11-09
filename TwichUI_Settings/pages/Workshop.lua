@@ -1,5 +1,5 @@
 -- TwichUI settings: the Workshop (the TwichUI_Workshop addon: browse your professions' recipes, queue crafts, see the combined
--- materials still needed). The Workshop is a load-on-demand addon: this page works before it has ever loaded, through the
+-- materials still needed, price scan and crafting profit). The Workshop is a load-on-demand addon: this page works before it has ever loaded, through the
 -- launcher in the core (WorkshopLauncher.lua), and opening the Workshop is what loads it. It has no settings of its own yet.
 
 local R = TwichUI
@@ -12,7 +12,7 @@ local function Shown() return Loaded() and R.Workshop.Window and R.Workshop.Wind
 K.Page({
     key = "workshop", icon = "guide", name = "Workshop", order = 46, group = "everyday",
     description = "Your professions' recipes in one window: queue crafts and see the materials you still need.",
-    keywords = "workshop profession professions recipe recipes craft crafting queue make materials reagents bags still needed open recipe",
+    keywords = "workshop profession professions recipe recipes craft crafting queue make materials reagents bags still needed open recipe opportunities profit prices scan auction",
     overview = {
         label = "Workshop", tip = "Queue crafts and see the materials you still need.",
         when = function() return Launcher() ~= nil end,
@@ -31,5 +31,6 @@ K.Page({
             function() return Loaded() and "The Workshop is ready." or "It loads the first time you open it." end,
             "The Workshop is a separate part of TwichUI that waits until you ask for it, so it costs nothing until then.", function() return Loaded() and "ok" or "quiet" end)
         K.Header("What it does", "Recipes come from a profession window of your own: open a profession and they appear. Your queue is saved for each character and stays when you switch professions. Materials count what is in your bags only; the bank, mail and other characters are not counted. Nothing is made, bought or sent for you.")
+        K.Header("Opportunities", "At the auction house, press Scan prices in the Opportunities view to see what your known crafts cost to make and might sell for. The scan only reads the listings, and only when you press the button; it never buys, bids or posts. Prices are the cheapest listings seen, not sales, and are saved for the next visit.")
     end,
 })

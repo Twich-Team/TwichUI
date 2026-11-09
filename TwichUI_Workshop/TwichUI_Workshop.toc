@@ -1,6 +1,6 @@
 ## Interface: 16001
 ## Title: |cffC9A24ATwich|rUI Workshop
-## Notes: Browse the recipes of your professions, queue crafts and see the combined materials still needed. Loaded only when you open it (/tui workshop); keep it turned on alongside TwichUI.
+## Notes: Browse the recipes of your professions, queue crafts, see the combined materials still needed, and scan auction prices to see which crafts may be worth making. Loaded only when you open it (/tui workshop); keep it turned on alongside TwichUI.
 ## Author: twichie
 ## Version: 1.0.0
 ## RequiredDeps: !!!TwichUI
@@ -17,6 +17,12 @@ Materials.lua
 Queue.lua
 # What the profession window offers: the player's own recipes, their output and materials (game reads only)
 Observe.lua
+# Auction prices: the price service, what one craft costs and earns (saved in TwichUIDB.workshop.prices; no game calls, no frames)
+Prices.lua
+# The Opportunities list: rows, filter, sort, the basis text (pure)
+Opportunities.lua
+# The price scan of the open auction house (started only by the player's click)
+Scan.lua
 # What the window shows and does, without any frame
 Session.lua
 # The window (last: it tells TwichUI the addon is ready)
