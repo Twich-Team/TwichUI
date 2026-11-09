@@ -312,6 +312,7 @@ function PW.Run(msg)
     if pin then
         stats.made = stats.made + 1
         R.Print("%s", Sentence(pin, entry))
+        PN.Placed(pin)
     else
         stats.failed = stats.failed + 1
         R.Print("%s", Message(code, detail))
@@ -641,6 +642,7 @@ function PW.AlsoPin(msg)
     if pin then
         stats.made, stats.also = stats.made + 1, stats.also + 1
         R.Print("%s", Sentence(pin, entry))
+        PN.Placed(pin)
     else
         stats.failed = stats.failed + 1
         R.Print("%s", Message(code, detail))

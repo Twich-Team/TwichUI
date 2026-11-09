@@ -20,6 +20,14 @@ nothing another player sends you (a ping, a party pin) ever starts it or changes
 - `/tui nav 45.2 61.8` (coordinates on your current map), `/tui nav waypoint` (the game's own waypoint), `/tui nav stop`,
   `/tui nav recalc`; `/tui nav` alone says what it is doing. Listed on the settings page, not in `/tui help`.
 - The frame's **Stop** and **Recalculate**. Arriving ends navigation after a few seconds.
+- **Start when I place a marker** (`ui.navigation.autoStart`, off by default; `nav/Auto.lua`). A marker you place then starts
+  navigation to it, in place of any destination: the game's own waypoint (`USER_WAYPOINT_UPDATED`, looked at 0.2 s later so
+  one placement counts once) or a pin you place by hand (`Pins.OnPlaced`: the new pin window's Save, a single `/twichway`
+  or `/way` pin). Not started by: a pin shared with you, a copy of a pin, a pasted list, an import, the Cozy Sleeping Bag
+  guide's pins, or the waypoint the RestedXP step feature places (`QoLGuideWaypoint.OwnsWaypoint`). A waypoint already set
+  when this is turned on (or at login) is left alone; only a new or moved one counts. A place navigation can't use is
+  ignored without a message. Clicking a pin sets the game's waypoint (Party pins), so with this on that click also starts
+  navigation. Counts are in the navigation diagnostics (`auto`).
 
 One destination at a time; a new one replaces the last. Map pings are not offered as destinations. A destination on another
 continent, or a long way off, becomes a journey (below).
@@ -173,7 +181,7 @@ to the destination). With no route only the straight line is given, and called a
 
 ## Settings and saved data
 
-`ui.navigation` (what is shown, arrival and off-route distances, sound, reduced motion, the frame's and arrow's look and
+`ui.navigation` (what is shown, starting by itself, arrival and off-route distances, sound, reduced motion, the frame's and arrow's look and
 size, the trail; the frame's and arrow's places as `position` and `arrowPosition`) and `ui.navigationLook`. In the profile;
 shared through configuration sharing except the two places ("place"). Nothing else is saved: no destination, route,
 progress, search or position history.

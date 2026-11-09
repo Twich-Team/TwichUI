@@ -164,6 +164,9 @@ local function Ours()
     return pos ~= nil and Near(pos.x, placedX) and Near(pos.y, placedY)
 end
 
+-- Whether the game's waypoint is the one this placed (nav/Auto.lua doesn't navigate to a guide's step on its own).
+function W.OwnsWaypoint() return Ours() end
+
 local function Forget()
     placedMap, placedX, placedY = nil, nil, nil
     Remember()

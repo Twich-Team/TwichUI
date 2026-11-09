@@ -589,4 +589,71 @@ assert(not TV.Flights()[15], "nothing is listened for while navigation is off")
 c.C_TaxiMap = nil
 print("13d learned flights ok")
 
+---------------------------------------------------------------------------
+-- 14. Start when a marker is placed (nav/Auto.lua): off by default, only a marker you place, only a new one
+---------------------------------------------------------------------------
+do
+  local placedFn
+  R.Pins = { COORD = 10000, OnPlaced = function(fn) placedFn = fn end }
+  local chunk = assert(loadfile(ROOT .. "nav/Auto.lua")); setfenv(chunk, c); chunk("!!!TwichUI", {})
+  R.initHooks[#R.initHooks]()                                  -- the load-time hook (the game already ran its own)
+  local AU = R.NavAuto
+  local ux, uy = (m.y0 - gy) / m.size, (m.x0 - gx) / m.size
+  local WP = nil
+  c.C_Map.HasUserWaypoint = function() return WP ~= nil end
+  c.C_Map.GetUserWaypoint = function() return WP and { uiMapID = WP.map, position = c.CreateVector2D(WP.x, WP.y) } end
+  local function Place(map, x, y) WP = { map = map, x = x, y = y }; c.FireEvent("USER_WAYPOINT_UPDATED"); FlushTimers() end
+  NV.Stop("test"); At(1001, 35, 35)
+  assert(NP.DEFAULTS.autoStart == false and NP.Get("autoStart") == false, "off by default")
+
+  Place(1001, ux, uy)
+  assert(not NV.Active(), "off: a waypoint starts nothing")
+  placedFn({ map = 1001, x = math.floor(ux * 10000), y = math.floor(uy * 10000), name = "Camp" })
+  assert(not NV.Active(), "off: a pin you place starts nothing")
+
+  assert(NP.Set("autoStart", true))
+  assert(AU.Diagnostics().on, "listening once it is on")
+  FlushTimers()
+  assert(not NV.Active(), "turning it on does not start for the waypoint already set")
+  Place(1001, ux, uy)
+  assert(not NV.Active(), "the same waypoint again is not a new marker")
+  Place(1001, uy, ux)
+  assert(NV.Active() and S().dest.source == "waypoint" and S().dest.map == 1001, "a new waypoint starts navigation")
+  assert(AU.Status():find("Latest: waypoint: started", 1, true) and AU.Status():find("listening", 1, true), "/tui nav says what happened: " .. AU.Status())
+  NV.Stop("test")
+  local kept = R.QoLGuideWaypoint
+  R.QoLGuideWaypoint = { OwnsWaypoint = function() return true end }
+  Place(1001, 0.4, 0.4)
+  assert(not NV.Active(), "the guide feature's own waypoint is not a marker you placed")
+  R.QoLGuideWaypoint = kept
+  WP = nil; c.FireEvent("USER_WAYPOINT_UPDATED"); FlushTimers()
+  assert(not NV.Active(), "clearing the waypoint starts nothing")
+
+  placedFn({ map = 1001, x = math.floor(ux * 10000), y = math.floor(uy * 10000), name = "Camp" })
+  assert(NV.Active() and S().dest.source == "pin" and S().dest.name == "Camp", "a pin you place starts navigation")
+  local n = NV.Diagnostics().plans
+  placedFn({ map = 1001, x = math.floor(ux * 10000), y = math.floor(uy * 10000), name = "Camp" })
+  assert(NV.Diagnostics().plans == n, "the destination already followed is not planned again")
+  placedFn({ map = 1001, x = 5000, y = 5000, key = "Other:1", name = "Rally" })
+  assert(S().dest.source == "group" and S().dest.name == "Rally", "a new marker replaces the destination")
+  placedFn({ map = 999999, x = 5000, y = 5000, name = "Nowhere" })
+  assert(S().dest.name == "Rally", "a place navigation can't use leaves the destination as it was")
+  NV.Stop("test")
+
+  assert(NP.Set("autoStart", false))
+  assert(not AU.Diagnostics().on, "no longer listening")
+  Place(1001, 0.3, 0.3)
+  placedFn({ map = 1001, x = 5000, y = 5000, name = "Rally" })
+  assert(not NV.Active(), "off again: nothing starts")
+  assert(NP.Set("autoStart", true))
+  R:SetEnabled("navigation", false)
+  NV.Refresh()
+  assert(not AU.Diagnostics().on, "navigation off: not listening")
+  placedFn({ map = 1001, x = 5000, y = 5000, name = "Rally" })
+  assert(not NV.Active(), "navigation off: nothing starts")
+  R:SetEnabled("navigation", true)
+  NP.Set("autoStart", false)
+  print("14 start on placing a marker ok")
+end
+
 print("PASSED")

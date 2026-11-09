@@ -18,8 +18,8 @@ R.NavPrefs = NP
 local DEFAULTS = {
     -- what is shown
     frame = true, arrow = true, worldTrail = true, minimapTrail = true,
-    -- behaviour
-    arrivalYards = 8, offRouteYards = 20, arrivalSound = true, reducedMotion = false,
+    -- behaviour (autoStart: begin navigating to a marker you place, nav/Auto.lua; off until chosen)
+    autoStart = false, arrivalYards = 8, offRouteYards = 20, arrivalSound = true, reducedMotion = false,
     -- getting there (nav/Journey.lua): what a journey may use, and how fast you move on the ground
     useFlights = true, useShips = true, useTeleports = true, useHearth = true, speed = "foot",
     -- the frame
@@ -43,7 +43,7 @@ NP.SPEEDS = { { "foot", "On foot" }, { "mount", "Mounted (60% faster)" }, { "fas
 
 -- The scopes a reset covers (positions are their own: resetting the look never moves anything)
 NP.GROUPS = {
-    behavior = { "frame", "arrow", "worldTrail", "minimapTrail", "arrivalYards", "offRouteYards", "arrivalSound", "reducedMotion",
+    behavior = { "autoStart", "frame", "arrow", "worldTrail", "minimapTrail", "arrivalYards", "offRouteYards", "arrivalSound", "reducedMotion",
         "useFlights", "useShips", "useTeleports", "useHearth", "speed" },
     appearance = { "theme", "locked", "frameScale", "font", "textSize", "titleColor", "textColor", "accentColor", "arrowAttached",
         "arrowScale", "arrowColor", "trailColor", "trailOpacity", "trailWidth", "trailStyle", "ants", "antSpeed" },

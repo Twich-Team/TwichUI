@@ -136,6 +136,8 @@ K.Page({
 
         Header("How to start", "Right-click one of your pins (or a party pin) and choose Navigate here; or press the Navigate button on the world map's tool bar and click the map; or type /tui nav followed by coordinates on your current map (/tui nav 45.2 61.8), /tui nav waypoint for the game's waypoint, or /tui nav stop.")
 
+        Under(Check("navigationAutoStart", "autoStart", "Start when I place a marker", "When you place a new marker, the game's waypoint or one of your own pins, navigation begins to it, in place of any destination you had. Markers shared by others, copies of pins, pasted lists and RestedXP's step waypoint don't start it. A marker that is already set when you turn this on is left alone."), toggle, On)
+
         Header("What it shows", "Each can be turned off on its own. Turning them all off leaves navigation running with nothing on screen.")
         Under(Check("navigationFrame", "frame", "Show the navigation frame", "The destination's name, the next instruction (from the route's own turns), and the distances: what is left along the route, to its next corner, and in a straight line. Stop and Recalculate are on it."), toggle, On)
         Under(Check("navigationArrow", "arrow", "Show the direction arrow", "Points at the route's next corner, not straight at the destination through what is in between. With no route it points straight at the destination, in grey, and says it is a direct bearing."), toggle, On)

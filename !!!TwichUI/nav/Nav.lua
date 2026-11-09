@@ -899,6 +899,7 @@ function NV.Command(arg)
         else
             R.Print("not navigating. %s", USAGE)
         end
+        if R.NavAuto then R.Print("%s", R.NavAuto.Status()) end
         return
     end
     if arg == "stop" then
@@ -936,5 +937,6 @@ function NV.Diagnostics()
         legs = journey and #journey.legs or 0, leg = leg,
         searching = job ~= nil, axis = axis, plans = stats.plans, offRoute = stats.replansOff, jumps = stats.replansJump,
         failures = stats.failures, arrivals = stats.arrivals, superseded = stats.superseded, tickers = #tickers,
-        driver = driver ~= nil and driver:GetScript("OnUpdate") ~= nil, data = ND.Snapshot() }
+        driver = driver ~= nil and driver:GetScript("OnUpdate") ~= nil, data = ND.Snapshot(),
+        auto = R.NavAuto and R.NavAuto.Diagnostics() or nil }
 end

@@ -123,6 +123,17 @@ local function Changed()
 end
 PN.Changed = Changed
 
+-- A pin the player just placed by hand (the editor's Save of a new pin, a single /way). Not a copy of someone's pin, a
+-- pasted list, an import or a guide's pin. Listeners (nav/Auto.lua) get the pin and must not change pins.
+local placedListeners = {}
+function PN.OnPlaced(fn) placedListeners[#placedListeners + 1] = fn end
+function PN.Placed(pin)
+    for _, fn in ipairs(placedListeners) do
+        local ok, err = pcall(fn, pin)
+        if not ok and R.Fault then R.Fault("party pins", err) end
+    end
+end
+
 -- Runs fn with the map, window and data bar told once afterwards instead of after every pin it changes
 -- (a pasted list of waypoints). A failure in fn still ends the hold, then is raised again.
 function PN.Batch(fn)

@@ -166,7 +166,10 @@ local function Save(share)
         else
             done, why = PN.AddLocal(fields)
         end
-        if done then PN.Select((state.party and "party:" .. done.key) or ("local:" .. done.id)) end
+        if done then
+            PN.Select((state.party and "party:" .. done.key) or ("local:" .. done.id))
+            if not state.copiedFrom then PN.Placed(done) end   -- a copy of someone's pin isn't one you placed
+        end
     elseif state.entry.kind == "local" then
         done, why = PN.UpdateLocal(state.entry.pin.id, fields)
     else
