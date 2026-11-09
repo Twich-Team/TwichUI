@@ -23,6 +23,8 @@ local function Snapshot()
     Line("frames: %d (made %d, kept for reuse %d, on screen %d); preview: %s; moving: %s; icons waiting: %d",
         d.frames, d.made, d.spare, d.shown, D.Flag(d.preview), D.Flag(d.positioning), d.iconsWaiting)
     Line("refreshes: %d; decisions: %d; shown %d times, hidden %d times", c.refreshes, c.decisions, c.shows, c.hides)
+    Line("sounds played: %d; held back (too soon after the last): %d; sound not installed: %d; refused by the game: %d",
+        c.sounds, c.soundsHeld, c.soundsMissing, c.soundsRefused)
     local status, reason = "ready", nil
     if not c.enabled then status = "off"
     elseif not c.running then status, reason = "waiting", "not-in-world" end
@@ -30,7 +32,7 @@ local function Snapshot()
         configured = c.enabled, initialized = c.running, status = status, reason = reason, lines = lines,
         limits = {
             "With no reminder turned on for this character, nothing is listened for.",
-            "Equipment, combat, life and mount state come from the game's own functions; none of it has been confirmed in the game yet (docs/reminders.md).",
+            "Equipment, weapon enchant, combat, life and mount state come from the game's own functions; none of it has been confirmed in the game yet (docs/reminders.md).",
         },
     }
 end

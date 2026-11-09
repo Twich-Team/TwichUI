@@ -3,7 +3,8 @@
 -- builds): obs.slots[n] = { empty = true } or { id, classID, subClassID, equipLoc } (no details yet: classID nil),
 -- obs.combat = true | false, obs.life = "alive" | "dead" | "ghost", obs.mounted = true | false, obs.class = the class
 -- token ("WARRIOR"; UnitClassBase), obs.talent = the leading talent tree ("WARRIOR:257", "tied", "none"), obs.ammo = the facts
--- about the ranged weapon's ammunition (Ammunition.lua says which and judges them). A key nobody wants
+-- about the ranged weapon's ammunition (Ammunition.lua says which and judges them), obs.enchant = whether each weapon hand
+-- has a temporary enchant ({ mainHand = "enchanted" | "bare" | "noWeapon" | nil, offHand = ... }). A key nobody wants
 -- is not read and not listened for. Nothing here decides anything, and nothing here ever changes the game: no item is
 -- equipped, used or moved, nothing is cast, nothing is sent.
 --
@@ -23,7 +24,8 @@
 -- Game APIs (each documented in the Forever UI source; docs/reminders.md has the list): GetInventoryItemID,
 -- GetInventoryItemCount, UnitUsesAmmo, C_Container.GetContainerNumSlots / GetContainerItemID,
 -- C_Item.GetItemInfoInstant, C_Item.RequestLoadItemDataByID, C_Item.GetItemNameByID, UnitAffectingCombat,
--- UnitIsDeadOrGhost, UnitIsGhost, IsMounted, UnitClassBase; events PLAYER_ENTERING_WORLD,
+-- UnitIsDeadOrGhost, UnitIsGhost, IsMounted, UnitClassBase, C_Item.GetWeaponEnchantInfo,
+-- C_PaperDollInfo.GetTemporaryEnchantmentInfo; events PLAYER_ENTERING_WORLD, WEAPON_ENCHANT_CHANGED, WEAPON_SLOT_CHANGED,
 -- PLAYER_EQUIPMENT_CHANGED (slot, hasCurrent), BAG_UPDATE_DELAYED, UNIT_INVENTORY_CHANGED (unit),
 -- PLAYER_REGEN_DISABLED / _ENABLED, PLAYER_DEAD, PLAYER_ALIVE, PLAYER_UNGHOST, PLAYER_MOUNT_DISPLAY_CHANGED,
 -- GET_ITEM_INFO_RECEIVED and ITEM_DATA_LOAD_RESULT (itemID, success).
@@ -374,6 +376,78 @@ ST.Source("ammo", {
     Read = function(_, into) return ReadAmmo(into) end,
 })
 
+-- Temporary weapon enchants (key "enchant": obs.enchant = { mainHand = state, offHand = state }; Conditions.lua lists the
+-- states). Read the way the game's own buff frame does: C_Item.GetWeaponEnchantInfo(weaponSlot) answers a list per hand
+-- (Blizzard_BuffFrame/BuffFrame.lua), and C_PaperDollInfo.GetTemporaryEnchantmentInfo(inventorySlot) is the older form of
+-- the same question. A hand whose item can't be told (no details yet) or whose enchants can't be read is nil (unknown),
+-- never "bare": only a weapon the game has described, with nothing on it, counts as having no enchant.
+local WEAPON_CLASS, FISHING_POLE = 2, 20
+do
+    local E = rawget(_G, "Enum")
+    if E and E.ItemClass and E.ItemClass.Weapon then WEAPON_CLASS = E.ItemClass.Weapon end
+    if E and E.ItemWeaponSubclass and E.ItemWeaponSubclass.Fishingpole then FISHING_POLE = E.ItemWeaponSubclass.Fishingpole end
+end
+-- hand key, inventory slot, Enum.WeaponSlot name and its documented value
+local ENCHANT_HANDS = {
+    { "mainHand", rawget(_G, "INVSLOT_MAINHAND") or 16, "MainHand", 0 },
+    { "offHand", rawget(_G, "INVSLOT_OFFHAND") or 17, "OffHand", 1 },
+}
+
+local function HasTempEnchant(invSlot, enumName, enumValue)
+    if C_Item and C_Item.GetWeaponEnchantInfo then
+        local ws = rawget(_G, "Enum") and Enum.WeaponSlot
+        local ok, list = pcall(C_Item.GetWeaponEnchantInfo, ws and ws[enumName] or enumValue)
+        if ok and type(list) == "table" and not (issecretvalue and issecretvalue(list)) then
+            for _, e in pairs(list) do
+                if type(e) == "table" and Plain(e.hasEnchant) == true then return true end
+            end
+            return false
+        end
+    end
+    if C_PaperDollInfo and C_PaperDollInfo.GetTemporaryEnchantmentInfo then
+        local ok, info = pcall(C_PaperDollInfo.GetTemporaryEnchantmentInfo, invSlot)
+        if not ok or (issecretvalue and issecretvalue(info)) then return nil end
+        return info ~= nil
+    end
+    return nil
+end
+
+local function EnchantState(invSlot, enumName, enumValue)
+    if not GetInventoryItemID then return nil end
+    local id = Number(GetInventoryItemID("player", invSlot))
+    if not id then return "noWeapon" end
+    if not (C_Item and C_Item.GetItemInfoInstant) then return nil end
+    local _, _, _, _, _, class, sub = C_Item.GetItemInfoInstant(id)
+    class, sub = Number(class), Number(sub)
+    if class == nil then return nil end
+    if class ~= WEAPON_CLASS or sub == FISHING_POLE then return "noWeapon" end
+    local has = HasTempEnchant(invSlot, enumName, enumValue)
+    if has == nil then return nil end
+    return has and "enchanted" or "bare"
+end
+
+ST.Source("enchant", {
+    events = {
+        WEAPON_ENCHANT_CHANGED = true, WEAPON_SLOT_CHANGED = true,
+        PLAYER_EQUIPMENT_CHANGED = function(slot)
+            slot = Number(slot)
+            for _, h in ipairs(ENCHANT_HANDS) do
+                if slot == h[2] then return true end
+            end
+        end,
+    },
+    Read = function(_, into)
+        stats.reads = stats.reads + 1
+        local e, differs = into.enchant, false
+        if not e then e = {}; into.enchant = e; differs = true end
+        for _, h in ipairs(ENCHANT_HANDS) do
+            local v = EnchantState(h[2], h[3], h[4])
+            if e[h[1]] ~= v then e[h[1]] = v; differs = true end
+        end
+        return differs
+    end,
+})
+
 -- Everything wanted is looked at again, asking the game rather than trusting what its events last said; only what
 -- differs is told on (through the usual Mark / Flush).
 local function Settle(mine)
@@ -482,7 +556,7 @@ function ST.Stop()
     for k in pairs(want) do want[k] = nil end
     for k in pairs(dirty) do dirty[k] = nil end
     obs.slots = {}
-    obs.combat, obs.life, obs.mounted, obs.ammo, obs.class, obs.talent = nil, nil, nil, nil, nil, nil
+    obs.combat, obs.life, obs.mounted, obs.ammo, obs.class, obs.talent, obs.enchant = nil, nil, nil, nil, nil, nil, nil
     combat, ammoWatch, ammoRetries = nil, true, 0
     SyncEvents()
 end

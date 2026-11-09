@@ -96,6 +96,15 @@ KIND.ammunition = {
     end,
 }
 
+KIND.weaponEnchant = {
+    sentence = function(cond)
+        local CT = C()
+        local h, c = CT.EnchantHand(cond.hand), CT.EnchantChoice(cond.what)
+        if not (h and c) then return nil end
+        return ("Your %s weapon %s"):format(h[2]:lower(), c[3])
+    end,
+}
+
 -- The words for a condition as stored (a clean copy, or any table with the provider's fields).
 function Pl.CondSentence(cond)
     local meta = type(cond) == "table" and KIND[cond.type]
@@ -158,7 +167,7 @@ end
 Pl.CATEGORIES = { "Combat", "Character", "Equipment", "Other" }
 
 -- an icon (R.Icons id) for a kind of condition, drawn small beside it
-local ICON = { equipment = "gearComparison", ammunition = "ammunition", class = "profiles", talent = "profiles" }
+local ICON = { equipment = "gearComparison", ammunition = "ammunition", class = "profiles", talent = "profiles", weaponEnchant = "gearComparison" }
 local PLAYER_ICON = { combat = "hazardAlerts", dead = "resurrection", ghost = "resurrection", mounted = "navigation" }
 function Pl.Icon(cond)
     if type(cond) ~= "table" then return "reminderTest" end
@@ -197,6 +206,10 @@ function Pl.Entries()
             out[#out + 1] = { key = "talent", kind = "talent", category = "Character", name = "Your talent specialization",
                 blurb = "The talent tree with the most points spent. Equal highest totals count as tied.",
                 icon = Pl.Icon({ type = "talent" }), make = function() return p.New() end }
+        elseif p.type == "weaponEnchant" then
+            out[#out + 1] = { key = "weaponEnchant", kind = "weaponEnchant", category = "Equipment", name = "Your weapon's temporary enchant",
+                blurb = "Whether the weapon in a hand has a weapon oil, sharpening stone or poison on it. The game says whether one is on, not which.",
+                icon = Pl.Icon({ type = "weaponEnchant" }), make = function() return p.New() end }
         elseif p.type == "ammunition" then
             local A = R.ReminderAmmo
             out[#out + 1] = { key = "ammunition", kind = "ammunition", category = "Equipment", name = "Your ranged ammunition",
@@ -227,6 +240,7 @@ function Pl.Subjects()
     local CT = C()
     local out = {}
     for _, slot in ipairs(CT.SLOTS) do out[#out + 1] = { value = "slot:" .. slot[1], label = slot[3] } end
+    for _, h in ipairs(CT.ENCHANT_HANDS) do out[#out + 1] = { value = "enchant:" .. h[1], label = h[2] .. " weapon enchant" } end
     out[#out + 1] = { value = "ammo", label = "Ranged ammunition" }
     out[#out + 1] = { value = "player", label = "You (the player)" }
     out[#out + 1] = { value = "class", label = "Player class" }
@@ -245,6 +259,9 @@ function Pl.SubjectOf(cond)
         return "slot:" .. tostring(cond.slot), s and s[3] or tostring(cond.slot)
     elseif cond.type == "player" then
         return "player", "You (the player)"
+    elseif cond.type == "weaponEnchant" then
+        local h = CT.EnchantHand(cond.hand)
+        return "enchant:" .. tostring(cond.hand), (h and h[2] or tostring(cond.hand)) .. " weapon enchant"
     elseif cond.type == "ammunition" then
         return "ammo", "Ranged ammunition"
     elseif cond.type == "class" then
@@ -260,6 +277,8 @@ function Pl.ValueChoices(cond)
     local out = {}
     if cond.type == "equipment" then
         for _, c in ipairs(CT.SlotChoices(cond.slot)) do out[#out + 1] = { value = c[1], label = c[2] } end
+    elseif cond.type == "weaponEnchant" then
+        for _, c in ipairs(CT.ENCHANT_CHOICES) do out[#out + 1] = { value = c[1], label = c[2], tooltip = c[4] } end
     elseif cond.type == "ammunition" then
         for _, c in ipairs(R.ReminderAmmo.CHOICES) do out[#out + 1] = { value = c[1], label = c[2], tooltip = c[4] } end
     elseif cond.type == "class" then
@@ -290,8 +309,9 @@ function Pl.ValueLabel(cond)
     return tostring(key)
 end
 
--- Whether the operator ("is" / "is not") is a choice for this condition (ammunition reads as a sentence on its own).
-function Pl.HasOperator(cond) return type(cond) == "table" and cond.type ~= "ammunition" end
+-- Whether the operator ("is" / "is not") is a choice for this condition (ammunition and a weapon enchant read as a
+-- sentence on their own).
+function Pl.HasOperator(cond) return type(cond) == "table" and cond.type ~= "ammunition" and cond.type ~= "weaponEnchant" end
 -- Whether the condition names a specific item (the editor then asks for it).
 function Pl.NeedsItem(cond) return type(cond) == "table" and cond.type == "equipment" and cond.what == "item" end
 
@@ -302,6 +322,12 @@ function Pl.WithSubject(cond, value)
     if kind then
         if type(cond) == "table" and cond.type == kind then return RM().DeepCopy(cond) end
         return CT.Get(kind).New()
+    end
+    local hand = type(value) == "string" and value:match("^enchant:(.+)$")
+    if hand then
+        if not CT.EnchantHand(hand) then return nil end
+        local what = type(cond) == "table" and cond.type == "weaponEnchant" and cond.what or "missing"
+        return { type = "weaponEnchant", hand = hand, what = what }
     end
     local key = type(value) == "string" and value:match("^slot:(.+)$")
     if not (key and CT.Slot(key)) then return nil end
@@ -351,6 +377,9 @@ function Pl.Help(cond)
         return "Your own class. For several classes, add one of these for each, in a group where at least one must be true."
     elseif cond.type == "talent" then
         return "Uses the talent tree with the most spent points. Equal highest totals count as tied."
+    elseif cond.type == "weaponEnchant" then
+        local c = C().EnchantChoice(cond.what)
+        return (c and c[4] or "Whether the weapon in this hand has a temporary enchant.") .. " The game says whether one is on, not which."
     elseif cond.type == "ammunition" then
         local c = R.ReminderAmmo and R.ReminderAmmo.Choice(cond.what)
         return c and c[4] or "The ammunition for your ranged weapon."

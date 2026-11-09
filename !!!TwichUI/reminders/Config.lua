@@ -17,7 +17,8 @@
 --         match "all", conditions { { type = "group", match = "any", conditions = { A, B, C } }, D }.
 --     display = { mode, art, iconSource, icon, item, text, size, keepAspect, width, height, opacity, textSize,
 --                 textPlace, font, outline, textColor, panel, strata, fade, pulse, delay, minShow },
---     place = { preset, point, x, y } }
+--     place = { preset, point, x, y },
+--     sound = "<a sound's name>" }   optional: played once when the reminder appears (RM.SetSound; none when absent)
 -- Nothing else: no result, no observation, no preview state, no frame. Who a reminder is for (scope) is kept apart
 -- from how it looks (display) and where it sits (place).
 --
@@ -43,6 +44,7 @@ RM.MAX_GROUPS = 6         -- groups in one reminder, at any depth (the top level
 RM.MAX_DEPTH = 3          -- levels of conditions: the top level is 1, a group in it 2, a group in that 3
 RM.MAX_CHARACTERS = 20    -- characters one reminder can be limited to
 RM.NAME_MAX, RM.TEXT_MAX = 40, 120   -- characters
+RM.SOUND_MAX = 100        -- characters of a sound's name
 RM.POSITION_LIMIT = 4096
 RM.SMALL_AT = 64          -- drawn at or under this many units, artwork uses its small file
 
@@ -69,6 +71,12 @@ function RM.PlainText(raw, max, allowEmpty)
 end
 
 function RM.ValidItem(v) return Whole(v) and v >= 1 and v <= 2147483647 end
+
+-- A sound is kept by its name (TwichUI's own, or any other LibSharedMedia sound), never a file path: the name is looked
+-- up when it plays (R:ResolveSound), so a sound that has gone simply plays nothing.
+function RM.ValidSound(v)
+    return type(v) == "string" and #v >= 1 and #v <= RM.SOUND_MAX and not v:find("[%c|]") and v:find("%S") ~= nil
+end
 
 -- An item ID from what the player typed or pasted: the number, or an item link (its "item:<id>"). nil when neither.
 function RM.ParseItem(value)
@@ -236,7 +244,7 @@ local function ValidCharacter(v) return type(v) == "string" and #v >= 3 and #v <
 
 ---------------------------------------------------------------------------
 -- Change notices: fn(id, what) after every change; id nil for "everything" (a profile change, a reset).
--- what: "list" (added or removed), "rule", "display", "place", "enabled", "name".
+-- what: "list" (added or removed), "rule", "display", "place", "enabled", "name", "sound".
 ---------------------------------------------------------------------------
 local subscribers = {}
 local rev = 0
@@ -442,6 +450,7 @@ local function MakeView(raw, index, t, newer)
     v.scope = ReadScope(raw.scope)
     v.display = ReadDisplay(raw.display)
     v.place = ReadPlace(raw.place)
+    v.sound = RM.ValidSound(raw.sound) and raw.sound or nil
     if newer then v.problems[#v.problems + 1] = PROBLEM.newer end
 
     -- the tree: v.conditions are the top level's entries (leaf or group); v.flat every entry in reading order (a group
@@ -540,6 +549,7 @@ end
 RM.TEMPLATES = {
     { "shield", "Missing shield", "Shows the shield artwork and \"Equip your shield\" whenever your off hand doesn't hold a shield. For this character only, until you change that." },
     { "ammo", "Ammunition", "Shows the arrows artwork and \"Check your ammunition\" while your ranged weapon takes ammunition and none is selected, none is left or the wrong kind is selected. Does nothing for a weapon that takes none. For this character only, until you change that." },
+    { "enchant", "Missing weapon enchant", "Shows \"Apply your weapon oil\" whenever the weapon in your main hand has no temporary enchant (a weapon oil, sharpening stone or poison). The game doesn't say which one is on, only whether one is. For this character only, until you change that." },
     { "item", "Missing equipment or item", "Shows an item's icon while that item isn't equipped. Choose the item first." },
     { "custom", "Custom reminder", "Your own words, shown when the conditions you add are true." },
 }
@@ -560,6 +570,13 @@ local function Template(kind)
             name = "Ammunition reminder", match = "all", scope = mine,
             conditions = { { type = "ammunition", what = "problem" } },
             display = { mode = "artworkText", art = "ammo", text = "Check your ammunition" },
+            place = { preset = "belowCenter" },
+        }
+    elseif kind == "enchant" then
+        return {
+            name = "Weapon enchant reminder", match = "all", scope = mine,
+            conditions = { { type = "weaponEnchant", hand = "mainHand", what = "missing" } },
+            display = { mode = "iconText", iconSource = "bundled", icon = "reminders", text = "Apply your weapon oil" },
             place = { preset = "belowCenter" },
         }
     elseif kind == "item" then
@@ -968,6 +985,18 @@ function RM.SetDisplay(id, key, value)
     if d[key] == value then return true end
     d[key] = value
     Tell(id, "display")
+    return true
+end
+
+-- The sound played when the reminder appears: a sound's name, or nil for none. The name isn't checked against what is
+-- installed (a sound can come and go with other addons); a sound that isn't there plays nothing.
+function RM.SetSound(id, name)
+    local raw, why = Locate(id)
+    if not raw then return false, why end
+    if name ~= nil and not RM.ValidSound(name) then return false, REFUSE.value end
+    if raw.sound == name then return true end
+    raw.sound = name
+    Tell(id, "sound")
     return true
 end
 

@@ -128,9 +128,9 @@ f.shown = false
 f:Show()
 Flush()
 local parts = P.Parts()
-Check(parts.sections and #parts.sections == 5, "the five sections are built")
+Check(parts.sections and #parts.sections == 6, "the six sections are built")
 Check(f.empty.shown and f.empty.text:find("No reminders yet"), "an empty list says how to start")
-Check(#f.templates == 4 and f.templates[1].shown, "four ways to start")
+Check(#f.templates == 5 and f.templates[1].shown, "five ways to start")
 Check(f.events.PLAYER_EQUIPMENT_CHANGED and f.events.GET_ITEM_INFO_RECEIVED, "while shown it hears what Test reads")
 local createdBefore = made
 
@@ -145,7 +145,7 @@ Check(row.rule.text == "Shows when: Off hand is not Shield.", "its rule in a sen
 Check(not f.empty.shown and f.head.shown and f.nameBox.text == "Shield reminder", "the editor's head")
 Check(f.say.shown and f.say.text:find("stays off until you turn it on"), "it says it is off: " .. f.say.text)
 
-local show, when, place, preview, test = unpack(parts.sections)
+local show, when, place, sound, preview, test = unpack(parts.sections)
 Check(show.shown and show.mode.text.text == "Artwork with text" and show.art.text.text == "Shield" and show.textBox.text == "Equip your shield", "Show: artwork with text")
 Check(not show.icon.shown and not show.itemBox.shown, "Show: no icon choices for artwork")
 local cd = when.cards[1]

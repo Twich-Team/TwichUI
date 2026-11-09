@@ -17,6 +17,11 @@
 --   minShow  once shown, seconds it stays up even if its conditions stop matching (then it goes, unless they match
 --            again meanwhile). Turning the reminder off, deleting it, a different character or class, Reminders
 --            switched off and a profile change hide it at once: the minimum never outlasts an explicit choice.
+-- Sound (optional, a reminder's own setting): played once when the reminder appears (after its delay, if it has one),
+-- by CT.PlaySound. Not again while it stays up, not when only a loading screen or a settings change hid and restored it,
+-- and not for a preview; it plays again after the conditions stopped matching (the reminder went away) and came back,
+-- and a reminder that comes and goes quickly sounds at most once every SOUND_GAP seconds. PlaySoundFile has no volume of
+-- its own: the sound follows the game's sound-effects volume.
 -- Each pending wait carries a token; anything that cancels it bumps the token, and a refresh bumps a generation, so a
 -- timer from before (or from before switching off) never shows anything.
 
@@ -31,6 +36,8 @@ local CT = {}
 R.ReminderController = CT
 
 local NOMATCH = C.NOMATCH
+local SOUND_GAP = 2    -- seconds a reminder waits before it may sound again
+local SOUND_CHANNEL = "SFX"
 
 local rt = {}          -- [id] = { token, visible, shownAt, wantSince, phase, out }
 local index = {}       -- [observation key] = { id, ... }
@@ -38,7 +45,7 @@ local active = {}      -- [id] = true: runs here (read and decided live)
 local running = false  -- on and in the world
 local gen = 0
 local listeners = {}
-local stats = { refreshes = 0, decisions = 0, shows = 0, hides = 0 }
+local stats = { refreshes = 0, decisions = 0, shows = 0, hides = 0, sounds = 0, soundsHeld = 0, soundsMissing = 0, soundsRefused = 0 }
 
 local function Rec(id)
     local r = rt[id]
@@ -64,12 +71,42 @@ local function After(r, seconds, fn)
     end)
 end
 
+-- Plays a sound once by its name. Returns true when the game took it, or false and a short reason key:
+-- "none" (no sound chosen), "missing" (the sound isn't installed), "refused" (the game would not play it).
+function CT.PlaySound(name)
+    if not name then return false, "none" end
+    local path = R:ResolveSound(name)
+    if not path then return false, "missing" end
+    if not PlaySoundFile then return false, "refused" end
+    if PlaySoundFile(path, SOUND_CHANNEL) then return true end
+    return false, "refused"
+end
+
+local function Sound(v, r, now)
+    if not v.sound or r.sounded then return end
+    r.sounded = true
+    if r.soundAt and now >= r.soundAt and now - r.soundAt < SOUND_GAP then
+        stats.soundsHeld = stats.soundsHeld + 1
+        return
+    end
+    r.soundAt = now
+    local ok, why = CT.PlaySound(v.sound)
+    if ok then
+        stats.sounds = stats.sounds + 1
+    elseif why == "missing" then
+        stats.soundsMissing = stats.soundsMissing + 1
+    else
+        stats.soundsRefused = stats.soundsRefused + 1
+    end
+end
+
 local function Show(v, r)
     r.phase, r.wantSince = nil, nil
     if r.visible then return end
     r.visible, r.shownAt = true, GetTime()
     stats.shows = stats.shows + 1
     D.SetLive(v, true)
+    Sound(v, r, r.shownAt)
 end
 
 local function Hide(v, r, immediate)
@@ -125,6 +162,7 @@ local function Act(v, r)
         return
     end
     -- hidden, or unknown (which never shows): stop any wait to show, and keep it up for its minimum if it has one
+    if status == "hidden" then r.sounded = nil end   -- it is genuinely not wanted now: its next appearance sounds again
     if r.phase == "pending" then Cancel(r) end
     r.wantSince = nil
     if not r.visible then return end
@@ -176,7 +214,7 @@ local function Refresh()
     if not R:Enabled("reminders") then
         running = false
         ST.Stop()
-        for _, r in pairs(rt) do Cancel(r); r.visible = false; r.out = nil end
+        for _, r in pairs(rt) do Cancel(r); r.visible, r.sounded = false, nil; r.out = nil end
         D.HideAll()
         Tell(nil)
         return
@@ -216,7 +254,7 @@ local function Refresh()
             Decide(v, obs, ctx)
         else
             local r = Rec(v.id)
-            r.out = nil
+            r.out, r.sounded = nil, nil   -- turned off, invalid or for someone else: turned on again, it sounds again
             HardHide(v, r)
         end
     end
@@ -249,6 +287,7 @@ end)
 
 -- A reminder changed in the settings (or a profile change, id nil).
 RM.Subscribe(function(id, what)
+    if id and what == "sound" then return end   -- read when it next appears; nothing is drawn or decided again
     if id == nil then D.PreviewStop() end   -- another profile's reminders: a preview of the old one ends
     if id and (what == "display" or what == "place" or what == "name") then
         local v = RM.Get(id)
@@ -330,7 +369,8 @@ function CT.Snapshot()
     for _ in pairs(index) do keys = keys + 1 end
     return { enabled = R:Enabled("reminders"), running = running, reminders = n, turnedOn = on, valid = valid,
         active = act, visible = visible, pending = pending, holding = holding, keys = keys, conditions = conditions, groups = groups,
-        refreshes = stats.refreshes, decisions = stats.decisions, shows = stats.shows, hides = stats.hides }
+        refreshes = stats.refreshes, decisions = stats.decisions, shows = stats.shows, hides = stats.hides,
+        sounds = stats.sounds, soundsHeld = stats.soundsHeld, soundsMissing = stats.soundsMissing, soundsRefused = stats.soundsRefused }
 end
 
 R:OnInit(function() CT.Refresh() end)

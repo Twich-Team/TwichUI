@@ -4,7 +4,7 @@ Artwork, an icon or a few words on screen while conditions the player chooses ar
 time. The first uses are a missing-shield reminder and an ammunition reminder; nothing in the design is about a class.
 Code: `!!!TwichUI/reminders/`; settings: `TwichUI_Settings/pages/Reminders.lua`, `RemindersEditor.lua` and `AmmoItems.lua`
 (the Known ammunition tab); tests: `tests/test_reminders.lua`, `tests/test_reminders_ammunition.lua`,
-`tests/test_reminders_settings.lua`, `tests/test_ammo_items_settings.lua`; art: `tools/make_reminder_art.py`,
+`tests/test_reminders_settings.lua`, `tests/test_reminders_enchant_sound.lua`, `tests/test_ammo_items_settings.lua`; art: `tools/make_reminder_art.py`,
 `tools/make_settings_icons.py` (sheet 4).
 
 A reminder only reads. It never equips, uses, moves or casts anything, prints nothing in chat and sends nothing to
@@ -32,6 +32,7 @@ client are at the end.
 | `UnitAffectingCombat`, `PLAYER_REGEN_DISABLED/ENABLED`; `UnitIsDeadOrGhost`, `UnitIsGhost`, `PLAYER_DEAD`, `PLAYER_ALIVE`, `PLAYER_UNGHOST` | `UnitDocumentation.lua`, `DeathInfoDocumentation.lua` |
 | `IsMounted()`; `PLAYER_MOUNT_DISPLAY_CHANGED` | `PlayerScriptDocumentation.lua`, `UnitDocumentation.lua`; the shared action bar code registers the event |
 | Talent specialization: Forever has none, so it is the tree with the most spent points. Points per tree come from `gear/Data.lua` `TalentSpent` (`C_SpecializationInfo.IsInitialized` / `GetActiveSpecGroup` / `GetCombatConfigIDForSpecGroup`, `C_Traits.GetGroupDisplayInfoByTreeID` / `GetGroupCurrencyInfo`, trees identified by `skillLineID`; the class's trees and their ids are `gear/Weights.lua` `W.CLASSES`). Re-read on `PLAYER_TALENT_UPDATE`, `CHARACTER_POINTS_CHANGED`, `ACTIVE_TALENT_GROUP_CHANGED`, `TRAIT_CONFIG_UPDATED`. Stored as `{ class, tree = skillLine }` or `{ state = "tied" \| "none" }`; unspent points never count; unreadable data is unknown | `SpecializationInfoDocumentation.lua`, `PaperDollInfoDocumentation.lua`, `Blizzard_UIPanels_Game/Camelot/PaperDollFrame.lua`; project use in `gear/Data.lua`, `gear/Hints.lua` |
+| Whether a weapon has a temporary enchant (a weapon oil, sharpening stone, poison, a shaman's imbue): `C_Item.GetWeaponEnchantInfo(Enum.WeaponSlot)` answers a list of `{ hasEnchant, enchantType, timeLeft, charges, enchantID, enchantIconID }` for `MainHand` 0, `OffHand` 1 (and `Ranged` 2); `C_PaperDollInfo.GetTemporaryEnchantmentInfo(inventorySlot)` is the older form. Changes: `WEAPON_ENCHANT_CHANGED`, `WEAPON_SLOT_CHANGED`. The game's own buff frame reads it this way. The client says whether one is on, **not which**, so the condition cannot tell a wizard oil from a sharpening stone | `ItemDocumentation.lua`, `ItemConstantsDocumentation.lua`, `PaperDollInfoDocumentation.lua`, `Blizzard_BuffFrame/BuffFrame.lua`, `Blizzard_AuraContainer.lua`; the same reading is used by `glows/State.lua` |
 | `PLAYER_EQUIPMENT_CHANGED` (slot, hasCurrent) | `PaperDollInfoDocumentation.lua` |
 | `BAG_UPDATE_DELAYED`; `UNIT_INVENTORY_CHANGED` (unit) | `ContainerDocumentation.lua`; `UnitDocumentation.lua` |
 
@@ -52,6 +53,7 @@ as labels in the settings window and never in what is stored.
 | `equipment` | `slot` (a stable key: `offHand`, `mainHand`, `ranged`, `head` ... `trinket2`, or `any`), `what`, `negate`, `item` | `empty`; a category the slot can hold (off hand: `shield`, `weapon`, `holdable`; main hand: `weapon`, `twoHand`, `fishingPole`; ranged: `weapon`); `item` (a specific item ID; `any` slot offers only this) |
 | `player` | `state`, `negate` | `combat` (in combat), `dead` (dead **or a ghost**), `ghost` (only the released spirit), `mounted` (offered only while the client has `IsMounted`) |
 | `class` | `class` (a class token: `WARRIOR`, `PALADIN`, ... never a translated name), `negate` | the classes this client lists (`CLASS_SORT_ORDER`, nine in `Blizzard_FrameXMLBase/Camelot/Constants.lua`; TwichUI's own list of the same nine when the client gives none). New ones start with no class chosen: unfinished until one is |
+| `weaponEnchant` | `hand` (`mainHand` or `offHand`), `what` (no `negate`: it reads as a sentence) | `missing` (a weapon is held in that hand and has no temporary enchant) or `applied` (a weapon there has one). A hand with nothing that can take an enchant (empty, a shield, an item held in the off hand, a fishing pole) is **never** `missing` or `applied`. An item the game has not described yet, or an answer that cannot be read, is **unknown**, never `missing` |
 | `ammunition` | `what` (no `negate`: it reads as a sentence) | `problem` (any of the next three), `noAmmo` (nothing selected, some carried), `outOfAmmo` (nothing selected and none carried, or the selected stack is empty), `wrong` (arrows for a gun, bullets for a bow). Offered only while the client has `UnitUsesAmmo` |
 
 `negate` is "is not". "Player is not dead or a ghost" reads as "Player is alive". Categories are judged from the item's
@@ -154,7 +156,8 @@ on nothing is listened for).
     -- conditions = { { type = "group", match = "any", conditions = { { type = "class", class = "WARRIOR", negate = false }, ... } },
     --                { type = "player", state = "combat", negate = false } },
     display = { mode = "artworkText", art = "shield", text = "Equip your shield", ... },
-    place = { preset = "belowCenter" } } } }
+    place = { preset = "belowCenter" },
+    sound = "TwichUI Notification" } } }   -- optional; absent means none
 ```
 
 **Groups need no migration.** A list with no group is read exactly as it always was, and the stored `version` stays 1: the
@@ -169,7 +172,9 @@ read but never written or shown. Reading never writes: an unusable stored value 
 is; an unknown condition kind, an unknown artwork id or an unfinished condition (no item yet) is kept and listed as a
 problem, and the reminder can't be turned on (or, already on, doesn't show) until it is fixed. Display and place values
 are checked on the way in and out (`Config.lua`'s `DISPLAY_DEFAULTS`, `LIMITS`, `CHOICES`). Who it is for (`scope`) is
-separate from how it looks (`display`). Nothing about a decision, an observation, a timer or a preview is saved.
+separate from how it looks (`display`). The optional `sound` is a sound's **name** (TwichUI's own, or any other
+LibSharedMedia sound), never a file path: it is looked up when it plays (`R:ResolveSound`), so a sound that has gone plays
+nothing, and a stored value that is not a usable name reads as none and is left as saved. Nothing about a decision, an observation, a timer or a preview is saved.
 Configuration sharing keeps both keys on this computer (`TwichConfig.LOCAL`, "other": a reminder can name characters).
 The one exception is the ammunition you registered, `ui.ammoCustom` (above), which is a shared list of its own.
 
@@ -180,7 +185,9 @@ is doing now, and its own switch) and **Start a new one**: **Missing shield** (n
 Shield", the shield artwork with "Equip your shield", no sound, no pulse, below the middle, this character only),
 **Ammunition** (name "Ammunition reminder", "Ranged ammunition has a problem", the arrows artwork with "Check your
 ammunition", the same place and scope; it does nothing for a weapon that takes no ammunition),
-**Missing equipment or item** (any slot is not an item you choose; shows that item's icon; unfinished until the item is
+**Missing weapon enchant** (name "Weapon enchant reminder", "Main hand weapon has no temporary enchant", the bell icon with
+"Apply your weapon oil", the same place and scope; change the hand, or add a second condition for the off hand, in
+When), **Missing equipment or item** (any slot is not an item you choose; shows that item's icon; unfinished until the item is
 chosen) and **Custom reminder** (your words; needs a condition). Each is an ordinary reminder once made: nothing about
 the template is remembered.
 
@@ -196,6 +203,8 @@ turned off, right after it; the original is untouched) and **Delete** (asks, nam
   (closed at first, for the session): keep proportions or width and height; font, outline, text color; background
   (none, soft shade, framed panel); anchor point and x / y offsets (typed values follow drags and the reverse); layer
   (low, medium, high); fade in and out; pulse; wait before showing; keep up at least.
+- **Sound**: an optional sound for when it appears (a dropdown of None, TwichUI's own sounds and every LibSharedMedia
+  sound) and **Play** to hear it. A chosen sound that is not installed stays chosen, is said so, and plays nothing.
 - **Preview appearance**: the reminder drawn in the page by its own layout code, scaled to fit, marked PREVIEW; **Show on screen**.
 - **Test**: **Right now** (each group and condition, a group before what is in it and what is in it a step in: summary,
   Match / No match / Unavailable / Invalid, what was observed, and why when unavailable; then the result and why; every one
@@ -287,6 +296,22 @@ Artwork gallery: `RM.ART` in `reminders/Config.lua`, files in `media/reminders/`
 used) and `shield-small.tga` (64 px canvas, 44 x 62 used) for 64 units and under. Uncompressed 32-bit TGA, bottom-left
 origin; only the used part is drawn. There is no in-game image import.
 
+## Sound
+
+Each reminder can name one sound (`RM.SetSound`, default none). The controller plays it once, with `PlaySoundFile` on the
+sound-effects (`SFX`) channel, **when the reminder appears** (after its delay, if it has one), and:
+
+- not again while it stays up, and not when a loading screen, a settings change or a refresh merely hid and restored it;
+- again after its conditions stopped matching (status "hidden") and came back, but a reminder that comes and goes is held to
+  one sound every 2 seconds (`SOUND_GAP`);
+- not when the conditions become unknown (the game not having said) and then known again within the same stretch;
+- again when the reminder is turned off and on, Reminders is switched off and on, or after a reload, if the conditions are
+  true;
+- never for a preview, and never for a reminder that is off, invalid or for another character.
+
+`PlaySoundFile` has no volume of its own: it follows the game's sound-effects volume. Nothing is written in chat. A sound
+that is not installed plays nothing and is counted in `/tui diagnostics` (sounds played, held back, not installed, refused).
+
 ## Preview, moving, diagnostics
 
 An on-screen preview shows one reminder where it sits, marked "Preview: <name>", whatever its rules say, with no
@@ -296,7 +321,7 @@ Moving adds a drag handle; the place is saved as "Where I put it" with offsets f
 or Done ends it. A reminder that isn't running (a draft, for another character) is inspected by reading what its
 conditions need into a table of its own (`State.Peek`): nothing is added to what the live reminders read or listen for.
 The Test section's simulations go through the same `Evaluate.Run` on a table built from the scenarios
-(`Evaluate.Simulate`) and never see the live one. `/tui diagnostics` has a Reminders section with counts only.
+(`Evaluate.Simulate`) and never see the live one. `/tui diagnostics` has a Reminders section with counts only (including the sound counts, never a sound's name).
 
 ## Events and performance
 
@@ -304,7 +329,7 @@ The Test section's simulations go through the same `Evaluate.Run` on a table bui
 |---|---|
 | Switched off | no event, every frame hidden, every timer stale |
 | On, no reminder turned on for this character | `PLAYER_ENTERING_WORLD` only |
-| On, reminders running | the observation keys their conditions read, in every branch of every group, once each (`slot:17`, `combat`, `life`, `mounted`, `class`, `ammo`), and only those sources' events (`class` has none: it is read when wanted and on entering the world): `PLAYER_EQUIPMENT_CHANGED` for equipment, the regen events for combat, the three life events, the mount event, and for ammunition `PLAYER_EQUIPMENT_CHANGED`, `BAG_UPDATE_DELAYED` and `UNIT_INVENTORY_CHANGED` |
+| On, reminders running | the observation keys their conditions read, in every branch of every group, once each (`slot:17`, `combat`, `life`, `mounted`, `class`, `ammo`, `enchant`), and only those sources' events (`class` has none: it is read when wanted and on entering the world): `PLAYER_EQUIPMENT_CHANGED` for equipment, `WEAPON_ENCHANT_CHANGED`, `WEAPON_SLOT_CHANGED` (and a change of slot 16 or 17) for weapon enchants, the regen events for combat, the three life events, the mount event, and for ammunition `PLAYER_EQUIPMENT_CHANGED`, `BAG_UPDATE_DELAYED` and `UNIT_INVENTORY_CHANGED` |
 | An ammunition reminder, weapon takes none (or none equipped) | only a change of the ranged or ammo slot is acted on; bag and inventory events are dropped before any read. A look is up to six values from the character, and the bags only when nothing is selected |
 | An item without details in a wanted slot | asked for at most twice; `GET_ITEM_INFO_RECEIVED` / `ITEM_DATA_LOAD_RESULT` only while that lasts |
 | An event | marks its key; one 0.1 s timer reads each marked key once; only keys whose facts changed re-decide, and only the reminders that read them (an index by key) |
@@ -350,7 +375,10 @@ example of a kind with a file of its own. Buff, cooldown, health, inventory-coun
 - A character listed by name and realm: a renamed character, or one moved to another realm, has to be added again.
 - Groups: three levels, 6 groups, 16 conditions (see "Three answers, groups and composition"). No drag and drop (Move up,
   Move down and Move into instead), no typed expressions. Who it is for holds one class, so several classes are conditions.
-- Not in this release: Lua, dynamic clones, sounds, sharing, buff/cooldown/health/inventory/target
+- Weapon enchants: only whether a hand has one, not which, and not how long it has left (the game does give the time and
+  charges; a condition on them is not built). The off hand and the main hand only; no ranged slot. A fishing pole counts as
+  nothing to enchant.
+- Not in this release: Lua, dynamic clones, a volume or channel per sound, sharing, buff/cooldown/health/inventory/target
   conditions, automation of any kind.
 
 ## In-game checklist
@@ -372,7 +400,18 @@ example of a kind with a file of its own. Buff, cooldown, health, inventory-coun
 9. Delay 5 with a quick swap: nothing shows; a minimum of 10: it stays, then goes; turn it off during the minimum: gone.
 10. Duplicate, rename, delete (asks; gone at once). Switch profile: the other profile's reminders, nothing stale.
 11. Reminders off: nothing shows, `/tui diagnostics` shows no events registered.
-12. Look for errors with Display Lua Errors on throughout; check the icons in the editor at small UI scales.
+12. **Missing weapon enchant**: with no oil on your main hand it shows; apply one (the icon appears in the buff area): it goes
+    within a moment; let it expire or cancel it: it comes back. Note whether it comes back when the oil *runs out* without
+    you doing anything (this depends on `WEAPON_ENCHANT_CHANGED` firing on expiry; if it does not, it only returns at the next
+    equipment change or loading screen). A fishing pole, a shield and an empty hand never show it. `/reload` with an oil on:
+    no flash of the reminder; with none: it shows. A dual-wielder: add an off-hand condition, each hand answers on its own.
+    Test > Right now says "No temporary enchant" / "Has a temporary enchant".
+13. **Sound**: choose a sound and press Play (you hear it; with the sound-effects volume at zero you will not). Turn the
+    reminder on with its conditions true: one sound as it appears; none while it stays up, none on a loading screen; take the
+    condition away and bring it back: one more (not twice inside 2 seconds). Show on screen (preview): silent. Pick a sound
+    from another addon, then turn that addon off and reload: the editor says it is not available, nothing plays and nothing
+    errors. Check a chosen sound is not too loud over combat sound.
+14. Look for errors with Display Lua Errors on throughout; check the icons in the editor at small UI scales.
 13. **Ammunition**, Hunter with a bow and arrows selected: Test > Right now says "Ammunition selected and some left"; turn it
     on: nothing shows. Drag the arrows out of the ammo slot with more in the bags: it shows; put them back: gone.
 14. Shoot the selected stack down to nothing with none left anywhere: it shows when the last one goes. Note whether the slot is

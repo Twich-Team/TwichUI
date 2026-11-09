@@ -30,6 +30,9 @@
 --     a shield is Enum.ItemClass.Armor (4) with Enum.ItemArmorSubclass.Shield (6); a weapon is Enum.ItemClass.Weapon (2),
 --     a fishing pole its subclass Fishingpole (20) (ItemConstantsDocumentation.lua); two-handed and held-in-off-hand are
 --     the equip locations INVTYPE_2HWEAPON and INVTYPE_HOLDABLE (the game's own DressUpModelFrameMixin reads them);
+--   * whether a weapon has a temporary enchant (oil, stone, poison): C_Item.GetWeaponEnchantInfo(Enum.WeaponSlot) and the
+--     events WEAPON_ENCHANT_CHANGED / WEAPON_SLOT_CHANGED (ItemDocumentation.lua, PaperDollInfoDocumentation.lua; the
+--     game's own BuffFrame.lua reads them the same way);
 --   * UnitAffectingCombat and the combat events, UnitIsDeadOrGhost / UnitIsGhost, IsMounted (UnitDocumentation.lua,
 --     PlayerScriptDocumentation.lua). None of it is used by name or by localized text.
 
@@ -307,6 +310,95 @@ C.Register({
             Put("other", ("%s equipped"):format(other.label:gsub("^An? ", ""):gsub("^%l", string.upper)), other)
             Put("unknown", "Equipment information unavailable", { id = 0, label = "An item the game has no details for yet" })
         end
+        return list
+    end,
+})
+
+---------------------------------------------------------------------------
+-- Temporary weapon enchants: a weapon oil, a sharpening stone, a poison, a shaman's imbue. The game's own buff frame
+-- lists these as "temporary enchantments" (Blizzard_BuffFrame/BuffFrame.lua, C_Item.GetWeaponEnchantInfo); all that the
+-- client tells an addon is whether a hand has one, not which, so this condition cannot tell one oil from another.
+-- The observation obs.enchant = { mainHand = state, offHand = state }, each state one of
+--   "enchanted"  a weapon with a temporary enchant on it
+--   "bare"       a weapon with none
+--   "noWeapon"   nothing there that can take one (an empty hand, a shield, a held item, a fishing pole)
+--   nil          the game hasn't said
+-- State.lua reads it; a simulation hands the same shape in.
+---------------------------------------------------------------------------
+C.ENCHANT_HANDS = {
+    { "mainHand", "Main hand" },
+    { "offHand", "Off hand" },
+}
+local ENCHANT_HAND = {}
+for _, h in ipairs(C.ENCHANT_HANDS) do ENCHANT_HAND[h[1]] = h end
+
+-- key (stored), what the editor's value choice says, the words after "Main hand weapon", a tooltip
+C.ENCHANT_CHOICES = {
+    { "missing", "Has no temporary enchant", "has no temporary enchant",
+        "A weapon is held in this hand and nothing like a weapon oil, sharpening stone or poison is on it. Never true for an empty hand, a shield or a fishing pole." },
+    { "applied", "Has a temporary enchant", "has a temporary enchant",
+        "A weapon in this hand has a temporary enchant on it." },
+}
+local ENCHANT_CHOICE = {}
+for _, c in ipairs(C.ENCHANT_CHOICES) do ENCHANT_CHOICE[c[1]] = c end
+function C.EnchantChoice(key) return ENCHANT_CHOICE[key] end
+function C.EnchantHand(key) return ENCHANT_HAND[key] end
+
+local function EnchantState(obs, hand)
+    local e = obs and obs.enchant
+    return type(e) == "table" and e[hand] or nil
+end
+
+C.Register({
+    type = "weaponEnchant", label = "Weapon enchant (oil, stone, poison)",
+    New = function() return { type = "weaponEnchant", hand = "mainHand", what = "missing" } end,
+
+    Check = function(raw)
+        if not ENCHANT_HAND[raw.hand] then return nil, "it names a hand this version of TwichUI doesn't know." end
+        if not ENCHANT_CHOICE[raw.what] then return nil, "it asks about a weapon enchant this version of TwichUI doesn't know." end
+        return { type = "weaponEnchant", hand = raw.hand, what = raw.what }
+    end,
+
+    Needs = function(_, add) add("enchant") end,
+
+    Evaluate = function(cond, obs)
+        local state = EnchantState(obs, cond.hand)
+        if state == nil then return UNKNOWN, "The game hasn't said whether this weapon has a temporary enchant yet." end
+        if cond.what == "missing" then return Yes(state == "bare") end
+        return Yes(state == "enchanted")
+    end,
+
+    Summary = function(cond)
+        local h, c = ENCHANT_HAND[cond.hand], ENCHANT_CHOICE[cond.what]
+        return ("%s weapon %s"):format(h and h[2] or "Weapon", c and c[3] or tostring(cond.what))
+    end,
+
+    Observed = function(cond, obs)
+        local state = EnchantState(obs, cond.hand)
+        return ({
+            enchanted = "Has a temporary enchant",
+            bare = "No temporary enchant",
+            noWeapon = "No weapon that can take one",
+        })[state] or "Not read yet"
+    end,
+
+    -- the one it looks for first (the Test section starts on the first), the other, no weapon, and nothing read
+    Scenarios = function(cond)
+        local list = {}
+        local function Put(key, label, state)
+            list[#list + 1] = { key = key, label = label, Apply = function(obs)
+                obs.enchant = obs.enchant or {}
+                obs.enchant[cond.hand] = state
+            end }
+        end
+        local bare = { "bare", "A weapon with no temporary enchant" }
+        local on = { "enchanted", "A weapon with a temporary enchant" }
+        local first, second = bare, on
+        if cond.what == "applied" then first, second = on, bare end
+        Put(first[1], first[2], first[1])
+        Put(second[1], second[2], second[1])
+        Put("noWeapon", "No weapon that can take one", "noWeapon")
+        Put("unread", "Not read yet", nil)
         return list
     end,
 })

@@ -518,6 +518,64 @@ local function PreviewSection(parent, env)
 end
 
 ---------------------------------------------------------------------------
+-- Sound: an optional sound when the reminder appears
+---------------------------------------------------------------------------
+local SOUND_WHY = {
+    none = "No sound is chosen.",
+    missing = "That sound isn't available right now (the addon that adds it may be off), so nothing played.",
+    refused = "The game refused to play that sound.",
+}
+
+local function SoundSection(parent, env)
+    local s = Section(parent, "hazardAlerts", "Sound", "An optional sound when it appears. It plays once each time it comes up, never while it stays up, and a preview makes none.")
+    s.label = Label(s, "Sound")
+    s.pick = Dropdown(s, 260, function()
+        local v = env.view()
+        local list = { { value = "", label = "None" } }
+        for _, c in ipairs(R:SoundChoices(v and v.sound or nil)) do list[#list + 1] = { value = c[1], label = c[2] } end
+        return list
+    end, function(value)
+        local ok, why = RM().SetSound(env.id(), value ~= "" and value or nil)
+        if not ok then env.Say(why, "warn") end
+    end, "Sound", "TwichUI's own sounds, then every sound LibSharedMedia lists. A sound that has gone stays chosen and plays nothing until it is back.")
+    s.play = Wg().Button(s, "Play", 70, "secondary", function()
+        local v = env.view()
+        if not v then return end
+        local ok, why = R.ReminderController.PlaySound(v.sound)
+        if not ok then env.Say(SOUND_WHY[why] or SOUND_WHY.refused, "warn") end
+    end)
+    R.Interact.Tip(s.play, "Play", "Plays the chosen sound once. It follows the game's sound-effects volume: if that is muted or at zero, you will hear nothing.")
+    s.note = Note(s)
+    s.parts = { s.label, s.pick, s.play, s.note }
+
+    function s:Layout(v, y)
+        HideAll(self.parts)
+        local h = Top(self)
+        local label = "None"
+        if v.sound then
+            label = v.sound
+            if not R:ResolveSound(v.sound) then label = v.sound .. " (not available)" end
+        end
+        self.pick:SetValue(v.sound or "", label)
+        h = Line(self, self.label, self.pick, h)
+        Put(self.play, self, CTRL_X + 272, h - ROW)
+        local words
+        if v.sound and not R:ResolveSound(v.sound) then
+            words = "That sound isn't available right now, so nothing plays until it is back."
+        elseif v.sound then
+            words = "It follows the game's sound-effects volume. Nothing is written in chat."
+        else
+            words = "No sound. Choose one to hear it when this reminder appears."
+        end
+        h = h + Text(self.note, words, (v.sound and not R:ResolveSound(v.sound)) and "warn" or "quiet", LABEL_X, h, self) + 10
+        self:SetHeight(h)
+        Put(self, parent, 0, y)
+        return h
+    end
+    return s
+end
+
+---------------------------------------------------------------------------
 -- Test: what it sees right now, and the same decision for situations you pick
 ---------------------------------------------------------------------------
 local function ResultTone(result)
@@ -654,6 +712,7 @@ function Ed.Build(parent, env)
         ShowSection(parent, env),
         WhenSection(parent, env),
         PlacementSection(parent, env),
+        SoundSection(parent, env),
         PreviewSection(parent, env),
         TestSection(parent, env),
     }
