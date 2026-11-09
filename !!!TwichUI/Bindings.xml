@@ -15,6 +15,9 @@
 	<Binding name="CLICK TwichUIMarkWorldNext:LeftButton" category="BINDING_HEADER_TWICHUI"/>
 	<Binding name="CLICK TwichUIMarkWorldRestart:LeftButton" category="BINDING_HEADER_TWICHUI"/>
 	<Binding name="CLICK TwichUIMarkWorldClear:LeftButton" category="BINDING_HEADER_TWICHUI"/>
+	<!-- Camping bar (camping/Bar.lua names it): clicks the bar's eat button, which eats the buff food and sits down. Does
+	     nothing while the eat button is off. No key is bound until you choose one. -->
+	<Binding name="CLICK TwichUICampingEat:LeftButton" category="BINDING_HEADER_TWICHUI"/>
 	<!-- Invite nearby players (qol/NearbyInvite.lua names it): each press invites the friendly players close to you
 	     to your group. No key is bound until you choose one. -->
 	<Binding name="TWICHUI_INVITE_NEARBY" category="BINDING_HEADER_TWICHUI">

@@ -55,6 +55,7 @@ local DEFAULT_MODULES = {
     foodDrinkFood = true,    -- ... the Food button
     foodDrinkDrink = true,   -- ... the Drink button
     foodDrinkUnlock = false, -- ... moved in EllesmereUI's Unlock Mode instead of Edit Mode (needs EllesmereUI; opt-in, explicit true only)
+    campingBar = false,      -- Camping bar: the campfire kit, camp objects your professions make and the Cozy Sleeping Bag, filled in for you (opt-in; you click; camping/)
     mageTravel = true,       -- Mage Travel launcher on a data bar: teleports and portals, cast by your click (Mages only)
     mageConjure = true,      -- Mage Conjuring launcher on a data bar: food and water ranks, cast by your click (Mages only)
     mageRefreshments = false, -- Mage refreshments panel: plan food and water for your group, conjure by click or key, a checklist (Mages only, opt-in)

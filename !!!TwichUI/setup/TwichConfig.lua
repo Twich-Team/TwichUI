@@ -71,7 +71,7 @@ TC.LOCAL = {
     -- where things sit
     ["modules.foodDrinkUnlock"] = "place", ["ui.foodDrinkPosition"] = "place", ["ui.trainingPosition"] = "place",
     ["ui.welcomeBackPlace"] = "place", ["ui.friendLoginPlace"] = "place", ["ui.settingsWindow"] = "place",
-    ["ui.markerBarPosition"] = "place", ["ui.refreshments.position"] = "place", ["ui.partyPins.position"] = "place", ["ui.classBarsPosition"] = "place", ["ui.cozyBag"] = "place", ["ui.cozyBagButton.x"] = "place", ["ui.cozyBagButton.y"] = "place",
+    ["ui.markerBarPosition"] = "place", ["ui.campingBarPosition"] = "place", ["ui.campingBar.unlockMode"] = "place", ["ui.campingBar.eatItem"] = "other", ["ui.refreshments.position"] = "place", ["ui.partyPins.position"] = "place", ["ui.classBarsPosition"] = "place", ["ui.cozyBag"] = "place", ["ui.cozyBagButton.x"] = "place", ["ui.cozyBagButton.y"] = "place",
     ["ui.navigation.position"] = "place", ["ui.navigation.arrowPosition"] = "place", ["ui.navigation.unlockMode"] = "place",
     ["ui.healerWatch.point"] = "place", ["ui.healerWatch.x"] = "place", ["ui.healerWatch.y"] = "place",
     ["ui.buffBack.x"] = "place", ["ui.buffBack.y"] = "place", ["ui.buffBack.unlockMode"] = "place",
@@ -1699,6 +1699,25 @@ local function Define()
     Table(g, { "ui", "foodDrink" }, R.FoodDrink, { "size", "spacing", "layout", "borderTexture", "borderSize", "borderColor",
         "borderClass", "borderOpacity", "zoom", "showCount", "buttonOpacity", "mouseover", "idleOpacity", "preferConjured", "useBuffFood" },
         { layout = ENUM.layout })
+
+    g = Group("camping", "Camping bar", { page = "camping" })
+    Switches(g, { "campingBar" })
+    do
+        local CB = R.Camping
+        local keys = {}
+        if CB then
+            for _, key in ipairs(CB.LOOK_KEYS) do keys[#keys + 1] = key end
+            for _, key in ipairs({ "showFire", "showBag", "best", "onlyBags", "eat", "eatMode", "eatSit" }) do keys[#keys + 1] = key end
+            for _, grp in ipairs(R.CampingData.GROUPS) do
+                keys[#keys + 1] = "grp_" .. grp.key
+                for _, o in ipairs(grp.objects) do keys[#keys + 1] = "obj_" .. o.item end
+            end
+            for _, key in ipairs({ "hideParty", "hideRaid", "hidePvp", "hideResting", "hideCombat", "onlyNearFire" }) do
+                keys[#keys + 1] = key
+            end
+        end
+        Table(g, { "ui", "campingBar" }, CB, keys, { layout = ENUM.layout, eatMode = Set({ "auto", "choose" }) })
+    end
 
     g = Group("auction", "Auction House", { page = "auction" })
     Switches(g, { "auctionPosting", "mailGoldSummary" })

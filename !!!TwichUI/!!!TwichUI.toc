@@ -129,6 +129,15 @@ modules\FoodDrink.lua
 modules\FoodDrinkUnlock.lua
 modules\FoodDrinkProbe.lua
 
+# Camping bar: a bar of buttons for WoW: Forever's camping (the campfire kit you hold, the camp objects your professions
+# make and the Cozy Sleeping Bag), filled in from what the character knows and carries. You click; off until turned on.
+# Data.lua the facts (no game calls), State.lua the rules (pure), Bar.lua the buttons, events and look, Unlock.lua the
+# optional place in EllesmereUI's Unlock Mode.
+camping\Data.lua
+camping\State.lua
+camping\Bar.lua
+camping\Unlock.lua
+
 # Dungeon Journal on a data bar: an icon that opens or closes the Forever Dungeon Journal (off until turned on; needs
 # that addon and a data bar addon that provides LibDataBroker)
 modules\DungeonJournalBroker.lua

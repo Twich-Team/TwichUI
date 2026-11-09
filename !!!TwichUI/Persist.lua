@@ -360,6 +360,7 @@ end
 local UI_GROUPS = { "qol", "foodDrink", "brokerMenu", "refreshments", "refreshmentsStyle",
     "restedxpSkin", "restedxpSkinText", "restedxpSkinState", "restedxpTimerLook", "restedxpTimerText", "speakstoneSkin", "speakstoneSkinStyle", "chronicleLook", "chronicleAppearance", "guideWaypoint", "guideAuto", "guideTracker", "mageSell", "restock", "restockPromptStyle", "magicInventory", "chatClean", "classBars", "classBarsLook", "classBarsOverrides", "classBarsPosition", "ammoCustom", "hazard", "hazardCustom", "hazardBuiltin", "cozyBag", "cozyBagButton", "cozyBagOffer", "reminders", "healerWatch", "healerWatchBarLook", "buffBack", "buffBackLook",
     "markers", "markerOrder", "markerBar", "markerBarStyle", "markerBarPosition",
+    "campingBar", "campingBarPosition",
     "partyPins", "pinsLook", "pinsAppearance", "pinsMapText", "pinsBroker", "pinsBrokerMenu", "pinsEditorLook",
     "navigation", "navigationLook", "navTravel", "mapExplore", "npcMap",
     "notifyLook", "notifyLookArrival", "notifyLookTraining", "notifyLookFriend", "notifyLookWelcome",

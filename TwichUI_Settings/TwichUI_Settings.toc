@@ -32,6 +32,7 @@ pages\ChatCleanLive.lua
 pages\Hazard.lua
 pages\HazardRules.lua
 pages\FoodDrink.lua
+pages\Camping.lua
 pages\Restock.lua
 pages\RestockItems.lua
 pages\MagicInventory.lua

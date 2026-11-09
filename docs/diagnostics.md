@@ -133,6 +133,7 @@ uses an item, sends anything or makes up events. Each states its cost before you
 | `reminders.refresh` (`Perf.Call`), `reminders.decide` | `reminders/Controller.lua` | rebuild, evaluate |
 | `reminders.designer.layout` (`Perf.Call`) | `TwichUI_Settings/pages/RemindersDesigner.lua` `s:Layout` (visible while the settings window is shown) | layout |
 | `healer.update` | `healer/Watch.lua` `Update` (live path; previews not timed) | update |
+| `camping.look` (`Perf.Call`, after the combat check) | `camping/Bar.lua` `Update`, reached through `Look` (one look per burst of bag, skill, recipe or setting changes, out of combat only) | rebuild |
 | `buffback.render` (`Perf.Start`, after the combat check) | `buffback/List.lua` `Render` (the list or a setting changed, out of combat only) | layout |
 | `glows.evaluate`, `glows.map` (`Perf.Start`, after the coalescing) | `glows/Controller.lua` `Evaluate` (one look per burst of events) and `glows/Buttons.lua` `BT.Map` (the buttons read again after a bar, page, form, macro or spell change), only while Action bar glows is on | rebuild |
 | `glows.event`, `glows.unit`, `glows.group` (`Perf.Wrap`) | `glows/Controller.lua`'s three private event frames (game events; your own aura, inventory and casts; group members' auras, only out of combat in a group) | event |
