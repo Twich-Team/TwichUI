@@ -15,7 +15,7 @@ local UNLOCK_STATUS = {
 }
 
 K.Page({
-    key = "camping", icon = "explore", name = "Camping bar", order = 41, group = "everyday",
+    key = "camping", icon = "camping", name = "Camping bar", order = 41, group = "everyday",
     description = "A bar for camping: your campfire kit, the camp objects your professions make, and the Cozy Sleeping Bag. You click; nothing is placed for you.",
     keywords = "camp campfire camping fire tent kit profession object blueprint sleeping bag cozy rested buff bar action hide dungeon raid resting mouseover fade",
     overview = {

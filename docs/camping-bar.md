@@ -7,7 +7,7 @@ have it. Off until turned on (**Settings › Camping bar**). Move it in Edit Mod
 ## Files
 `camping/Data.lua` (the facts; no game calls) · `camping/State.lua` (the rules; pure) · `camping/Bar.lua` (the buttons, events,
 settings, look) · `camping/Unlock.lua` (the optional place in EllesmereUI's Unlock Mode) · `TwichUI_Settings/pages/Camping.lua`
-(the page). Tests: `tests/test_camping.lua`.
+(the page; its icon is `camping`, see `docs/settings-icons.md`). Tests: `tests/test_camping.lua`.
 
 ## What a click does
 - Item in your bags (a kit, a camp object, the sleeping bag): the game's own secure button uses it, as the Food and Drink buttons do.
@@ -86,8 +86,6 @@ Forever client.** A wrong ID can only make a button missing, never a wrong actio
   (a guide says they can be used at 140 and 220).
 
 ## Not built (decided, not forgotten)
-- A dedicated page icon (the page borrows the unused `explore` spyglass; the registry has no campfire art, and generating art is
-  outside this feature).
 - A real macro in your macro list: the eat button is a button (and a key binding), which needs no macro slot and can be updated by
   the bar; a macro can't be changed while you're in combat.
 

@@ -187,3 +187,9 @@ designer's emblem, cut from `assets/reminder-designer-source.png` by `tools/make
 `!!!TwichUI/media/reminders/designer.tga` (64 px) and `designer-small.tga` (32 px). It heads the When section of the
 Reminders editor; where its files are missing the editor draws `reminderWhen` (three connected nodes) instead, so
 nothing depends on it.
+
+`camping` (a campfire ringed with stones in a bronze octagonal frame) is the Camping bar's own illustration, cut by
+`tools/make_camping_art.py` from `assets/camping-source.png` into `!!!TwichUI/media/camping/settings.tga` (64 px) and
+`settings-small.tga` (32 px); its registry entry says `source = "camping"`. The source is a banner of four framed tiles (campfire, lute, tent,
+rolled sleeping bag) on one transparent shape, so the campfire tile is cut by its frame's octagon (antialiased by supersampling)
+rather than by shape; the other three tiles are not used. It replaced the borrowed `explore` spyglass on the Camping bar page.

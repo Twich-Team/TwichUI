@@ -97,6 +97,7 @@ local list = {
     guildLocations = { file = R.PATH .. [[media\guildloc\settings]], small = R.PATH .. [[media\guildloc\settings-small]], size = 64, pad = 3, source = "guildLocations" },   -- a parchment map with three pins and a pennant
     -- Action bar glows' settings illustration (assets/bar-glows-source.png, cut by tools/make_bar_glows_art.py)
     barGlows = { file = R.PATH .. [[media\barglows\settings]], small = R.PATH .. [[media\barglows\settings-small]], size = 64, pad = 2, source = "barGlows" },   -- a leather action bar strip with three ability icons, the middle one glowing
+    camping = { file = R.PATH .. [[media\camping\settings]], small = R.PATH .. [[media\camping\settings-small]], size = 64, pad = 3, source = "camping" },   -- a campfire ringed with stones in a bronze octagonal frame (assets/camping-source.png)
 }
 Icons.list = list
 
