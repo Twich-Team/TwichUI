@@ -7,6 +7,9 @@
 --   * A take REQUEST is noted when the game's TakeInboxMoney or AutoLootMailItem is called (a post-hook: the
 --     call runs as it always did). It holds the amount the mailbox showed for that message at that moment and
 --     the visit it belongs to; the message's position is never used again, since positions shift as mail goes.
+--     A post-hook cannot be sure the game has not already cleared the message's money, so the amount the mailbox
+--     showed at its last update is kept per position and used when the message reads empty at the call (once per
+--     position until the next update).
 --     Messages with a cash-on-delivery charge are not noted: taking those pays money out.
 --   * A request COUNTS only when PLAYER_MONEY then shows a gain of exactly that amount (the oldest matching
 --     request first; two requests together if the game reported both as one change). A call alone proves nothing.
@@ -30,6 +33,7 @@ local lastMoney           -- GetMoney() as of the last PLAYER_MONEY (or the visi
 local hooked = false      -- the hooks are installed once and cannot be removed; `active` gates them
 local active = false
 local watching = {}       -- event -> handler, for the events heard only while there is something to watch
+local known = {}          -- inbox position -> money the mailbox showed at its last update (cash-on-delivery mail is left out)
 
 local function Num(v)
     if v == nil or (issecretvalue and issecretvalue(v)) then return nil end
@@ -53,6 +57,26 @@ local function MoneyText(copper)
     local RS = R.Restock
     if RS and RS.ColorMoney then return RS.ColorMoney(copper) end
     return ("%dg %ds %dc"):format(math.floor(copper / 10000), math.floor(copper / 100) % 100, copper % 100)
+end
+
+-- Money and cash-on-delivery charge of one message, or nil when either cannot be read. A missing charge is none.
+local function Read(index)
+    local _, _, _, _, money, cod = GetInboxHeaderInfo(index)
+    if cod ~= nil then cod = Num(cod) else cod = 0 end
+    money = Num(money)
+    if not (money and cod) then return nil end
+    return money, cod
+end
+
+-- What the mailbox shows now, kept per position for Record. Bounded by the inbox size.
+local function Snapshot()
+    for k in pairs(known) do known[k] = nil end
+    if type(GetInboxNumItems) ~= "function" then return end
+    local n = Num((GetInboxNumItems())) or 0
+    for i = 1, math.min(n, MAX_WAITING) do
+        local money, cod = Read(i)
+        if money and money > 0 and cod == 0 then known[i] = money end
+    end
 end
 
 -- At most one line per visit, and only for money.
@@ -119,6 +143,8 @@ local function CloseVisit(s)
     if not s.open then return end
     s.open = false
     if session == s then session = nil end
+    for k in pairs(known) do known[k] = nil end
+    Want("MAIL_INBOX_UPDATE", nil, false)
     if s.waiting == 0 then Summarize(s) end
     Rest()
 end
@@ -129,6 +155,8 @@ local function OnShow()
     lastMoney = Num(GetMoney())
     Want("PLAYER_MONEY", OnMoney, true)
     Want("MAIL_FAILED", OnFailed, true)
+    Want("MAIL_INBOX_UPDATE", Snapshot, true)
+    Snapshot()
 end
 
 local function OnClosed()
@@ -147,9 +175,12 @@ local function Record(index)
     local s = session
     if not (active and s and s.open and type(index) == "number") then return end
     if #queue >= MAX_WAITING then return end
-    local _, _, _, _, money, cod = GetInboxHeaderInfo(index)
-    money, cod = Num(money), Num(cod)
-    if not money or money <= 0 or cod ~= 0 then return end
+    local money, cod = Read(index)
+    if not money or cod ~= 0 then return end
+    local remembered = known[index]
+    known[index] = nil   -- this position's money is being taken; a second call must not use it again
+    if money <= 0 then money = remembered end
+    if not money or money <= 0 then return end
     local req = { session = s, amount = money }
     queue[#queue + 1] = req
     s.waiting = s.waiting + 1
@@ -174,6 +205,8 @@ local function Abandon()
     for _, req in ipairs(queue) do req.done, req.session.printed = true, true end
     for i = #queue, 1, -1 do queue[i] = nil end
     lastMoney = nil
+    for k in pairs(known) do known[k] = nil end
+    Want("MAIL_INBOX_UPDATE", nil, false)
     Rest()
 end
 
