@@ -94,8 +94,48 @@ local function Range(a, b, f)
     return f(a) .. " to " .. f(b)
 end
 
--- The estimate's basis, as lines for a tooltip: { text } or { left, right }. src: { label (the auction house), at, complete }.
--- name(itemID) -> text; money(copper) -> text (negative amounts allowed).
+-- The age and quality of the scan the prices come from, in a few words: "4 hours ago . Partial scan". src: { label, at, complete }.
+function Op.ScanWords(src, now)
+    if not (src and src.at) then return nil end
+    local age = PR.Age(src.at, now)
+    local parts = { PR.AgeText(age) }
+    if age and age > PR.OLD_AFTER then parts[#parts + 1] = "Old prices" end
+    if src.complete == false then parts[#parts + 1] = "Partial scan" end
+    return table.concat(parts, " \194\183 ")
+end
+
+-- What the profit is called: "Profit before fees" until the auction house's cut is known and taken off
+function Op.ProfitLabel(row)
+    return row.est.cutRate and "Estimated profit" or "Profit before fees"
+end
+
+-- The short tooltip of a row: its name, what it costs, sells for and earns, and one status line. { text } or { left, right }.
+-- The first line is the title; a line starting with "!" is a warning and "~" a quiet hint (the window colours them).
+function Op.Tip(row, src, money, now)
+    local e, out = row.est, {}
+    local function L(left, right) out[#out + 1] = { left, right } end
+    L(row.rec.name)
+    if e.cost then L("Cost to make", money(e.cost)) end
+    if e.sellLow then L("Sell price", Range(e.sellLow, e.sellHigh, money)) end
+    if e.state == "ok" then
+        L(Op.ProfitLabel(row), Range(e.profitLow, e.profitHigh, money))
+    else
+        L("!" .. (Op.WhyText(e) or "Not priced"))
+    end
+    local status = Op.ScanWords(src, now)
+    local extra = {}
+    for _, m in ipairs(e.mats or {}) do
+        if m.cheapest then extra[1] = "Cheapest listing only" break end
+    end
+    if status or extra[1] then
+        L((status or "") .. (status and extra[1] and " \194\183 " or "") .. (extra[1] or ""))
+    end
+    L("~Hold Shift for details")
+    return out
+end
+
+-- The estimate's details, as lines for a tooltip (Shift): the market, every material, the cut and the limits. { text } or { left, right }.
+-- src: { label (the auction house), at, complete }. name(itemID) -> text; money(copper) -> text (negative amounts allowed).
 function Op.Basis(row, src, name, money, now)
     local e, out = row.est, {}
     local function L(left, right) out[#out + 1] = { left, right } end
@@ -128,11 +168,10 @@ function Op.Basis(row, src, name, money, now)
         if e.cutRate then
             L(("Auction house cut (%s%%)"):format(tostring(math.floor(e.cutRate * 1000 + 0.5) / 10)), "-" .. Range(e.sellLow - e.netLow, e.sellHigh - e.netHigh, money))
         else
-            L("Auction house cut: not taken off. It isn't confirmed for this auction house.")
+            L("Auction house cut", "not deducted (not confirmed)")
         end
     end
-    if e.state == "ok" then L("Estimated profit", Range(e.profitLow, e.profitHigh, money)) end
-    L("These are the cheapest buyout listings at the time of the scan. A listing doesn't mean it will sell at that price, or at all.")
-    L("Failed listings, deposits and your own selling time aren't counted.")
+    if e.state == "ok" then L(Op.ProfitLabel(row), Range(e.profitLow, e.profitHigh, money)) end
+    L("Cheapest buyout listings, not sales. Deposits and unsold listings aren't counted.")
     return out
 end

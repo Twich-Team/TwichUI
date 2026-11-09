@@ -7,7 +7,7 @@
 --
 -- While the window is shown it listens for the profession window's changes (TRADE_SKILL_*), for bag changes and for item
 -- names arriving; a burst of events becomes one redraw. Hidden, it listens to nothing, forgets the recipe lists it read and holds
--- no rows of work. The first thing shown after opening is read fresh, so readiness is never from before the window was closed.
+-- no rows of work (Watch.lua, not this window, remembers the professions opened while it is hidden). The first thing shown after opening is read fresh, so readiness is never from before the window was closed.
 -- Colour is always beside a word (Orange/Yellow/Green/Grey, "Still needed", "Unknown").
 
 local R = TwichUI
@@ -53,6 +53,7 @@ local EVENTS = {
     PLAYER_REGEN_ENABLED = "read",
     MERCHANT_SHOW = "merchant", MERCHANT_UPDATE = "merchant",
     BAG_UPDATE_DELAYED = "draw", GET_ITEM_INFO_RECEIVED = "draw",
+    MODIFIER_STATE_CHANGED = "modifier",
     AUCTION_HOUSE_SHOW = "draw", AUCTION_HOUSE_CLOSED = "draw", AUCTION_HOUSE_DISABLED = "draw",
 }
 
@@ -503,18 +504,31 @@ local function Known(cell, low, high)   -- a known amount, or "Unknown" in the d
     else cell.Set(Money(low), high ~= nil and high ~= low and Money(high) or nil) end
 end
 
+local hoverRow   -- the Opportunities row under the pointer (Shift changes its tooltip)
+
+local function IsShift() return IsShiftKeyDown and IsShiftKeyDown() == true end
+
+-- The short tooltip; Shift (held while hovering, or pressed during it) shows the details instead
 local function ShowBasis(row)
     if not (GameTooltip and row.data and oppView) then return end
+    hoverRow = row
     GameTooltip:SetOwner(row, "ANCHOR_RIGHT")
-    local src = oppView.source.market and { label = oppView.source.label, at = oppView.source.market.at, complete = oppView.source.market.complete } or nil
-    local lines = Op.Basis(row.data, src, ItemName, Money)
+    local mk = oppView.source.market
+    local src = mk and { label = oppView.source.label, at = mk.at, complete = mk.complete } or nil
+    local detailed = IsShift()
+    local lines = detailed and Op.Basis(row.data, src, ItemName, Money) or Op.Tip(row.data, src, Money)
     for i, line in ipairs(lines) do
+        local text = line[1]
         if line[2] then
-            GameTooltip:AddDoubleLine(line[1], line[2], 1, 1, 1, 1, 1, 1)
+            GameTooltip:AddDoubleLine(text, line[2], 0.8, 0.8, 0.8, 1, 1, 1)
         elseif i == 1 then
-            GameTooltip:AddLine(line[1], 1, 0.82, 0)
+            GameTooltip:AddLine(text, 1, 0.82, 0)
+        elseif text:sub(1, 1) == "!" then
+            GameTooltip:AddLine(text:sub(2), 1, 0.82, 0.3, true)
+        elseif text:sub(1, 1) == "~" then
+            GameTooltip:AddLine(text:sub(2), 0.55, 0.55, 0.55)
         else
-            GameTooltip:AddLine(line[1], 0.8, 0.8, 0.8, true)
+            GameTooltip:AddLine(text, 0.8, 0.8, 0.8, true)
         end
     end
     GameTooltip:Show()
@@ -559,8 +573,12 @@ local function MakeOppRow(parent)
     row.profit = MakeCell(row, -(ADD_W + 12))
     row.sell = MakeCell(row, -(ADD_W + 12 + COL_W + 6))
     row.cost = MakeCell(row, -(ADD_W + 12 + 2 * (COL_W + 6)))
+    row.ShowTip = ShowBasis
     row:SetScript("OnEnter", ShowBasis)
-    row:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+    row:SetScript("OnLeave", function(self)
+        if hoverRow == self then hoverRow = nil end
+        if GameTooltip then GameTooltip:Hide() end
+    end)
     row.fill = function(self, r)
         local e, rec = r.est, r.rec
         self.data, self.rec, self.item = r, rec, rec.outItem
@@ -660,15 +678,12 @@ local function RenderShop()
     -- where the prices come from
     local sourceText
     if src.market then
-        local age = PR.Age(src.market.at)
-        sourceText = ("Auction prices from %s, scanned %s."):format(src.label, PR.AgeText(age))
-        if age and age > PR.OLD_AFTER then sourceText = sourceText .. " These prices are old." end
-        if not src.market.complete then sourceText = sourceText .. " That scan wasn't complete." end
+        sourceText = ("Auction prices: %s \194\183 %s"):format(src.label, Op.ScanWords({ at = src.market.at, complete = src.market.complete }) or "")
     else
-        sourceText = "No saved auction prices yet. Open the Opportunities view at an auction house and choose Scan prices."
+        sourceText = "No saved auction prices. Choose Scan prices in Opportunities at the auction house."
     end
     shop.source:SetText(sourceText)
-    shop.status:SetText(("Vendor prices are what a vendor charged when you last had its window open (%d noted). Counts what is in your bags only."):format(W.Vendor.Count()))
+    shop.status:SetText(("Vendor prices as last seen (%d noted) \194\183 bags only"):format(W.Vendor.Count()))
 
     local empty
     if sum.state == "empty" then empty = "Add recipes to the queue to build a shopping list."
@@ -702,12 +717,12 @@ local function RenderShop()
         notes[#notes + 1] = ("%d queued %s depend on each other, so what they make isn't counted."):format(sum.cycle, Plural(sum.cycle, "recipe", "recipes"))
     end
     if #plan.rows > 0 then
-        notes[#notes + 1] = "A suggested source compares the prices known, one material at a time; it isn't the cheapest possible plan. Owned materials lower what you spend but are not free. Nothing is bought or made for you."
+        notes[#notes + 1] = "Suggestions compare one material at a time; owned materials lower what you spend but aren't free."
     end
     shop.notes:SetText(table.concat(notes, "\n"))
 end
 
-local SORT_WORDS = { profit = "Estimated profit", cost = "Cost to make", sell = "Sell price" }
+local SORT_WORDS = { profit = "profit", cost = "Cost to make", sell = "Sell price" }
 
 local function LayoutOppChips(list)
     local n = #list + 1
@@ -743,13 +758,10 @@ local function RenderOpps()
     oppView = v
     local src = v.source
 
-    -- where the prices come from
+    -- where the prices come from: the auction house and how old, in a few words
     local sourceText
     if src.market then
-        local age = PR.Age(src.market.at)
-        sourceText = ("Prices from %s, scanned %s."):format(src.label, PR.AgeText(age))
-        if age and age > PR.OLD_AFTER then sourceText = sourceText .. " These prices are old." end
-        if not src.market.complete then sourceText = sourceText .. " That scan wasn't complete." end
+        sourceText = ("Prices: %s \194\183 %s"):format(src.label, Op.ScanWords({ at = src.market.at, complete = src.market.complete }) or "")
     elseif src.open then
         sourceText = "No saved prices for this auction house yet."
     else
@@ -776,6 +788,7 @@ local function RenderOpps()
     LayoutOppChips(S.Professions())
     opps.profitOnly:SetOn(S.opp.profitOnly)
     for key, h in pairs(heads) do
+        if key == "profit" then h.text:SetText(v.rate and "Estimated profit" or "Profit before fees") end
         Paint(h.text, S.opp.sort == key and K.gold or K.stone)
         h.tipBody = (S.opp.sort == key and (S.opp.desc and "Highest first. Click to show the lowest first."
             or "Lowest first. Click to show the highest first.") or "Click to sort by this.")
@@ -785,20 +798,19 @@ local function RenderOpps()
     lists.opps:SetData(v.rows, v.empty)
     local sum = v.summary
     if sum.total > 0 then
-        opps.summary:SetText(("%d of %d recipes priced, %d profitable. Sorted by %s, %s first. Per craft; a range is sorted by its low end.")
+        opps.summary:SetText(("%d of %d priced \194\183 %d profitable \194\183 %s, %s first")
             :format(sum.priced, sum.total, sum.profitable, SORT_WORDS[S.opp.sort]:lower(), S.opp.desc and "highest" or "lowest"))
     else
         opps.summary:SetText("")
     end
-    local notes = {}
-    if v.incomplete then notes[#notes + 1] = "Some professions only list what their window's filters allow, so some recipes may be missing here." end
+    -- one short line; the longer explanation is behind "About prices"
+    local note = ""
     if sum.total > 0 then
-        notes[#notes + 1] = v.rate
-            and ("Estimated profit is the sell price, less the auction house's cut, less what the materials cost.")
-            or "Estimated profit is the sell price less what the materials cost. The auction house's cut isn't taken off: TwichUI hasn't confirmed it for this auction house."
-        notes[#notes + 1] = "Prices are the cheapest buyout listings seen in the scan. A listing doesn't mean it will sell. Deposits and listings that don't sell aren't counted."
+        note = v.rate and "Profit is after the auction house's cut." or "Profit is before fees: the auction house's cut isn't confirmed."
+        if v.incomplete then note = note .. " Some recipes may be missing." end
     end
-    opps.notes:SetText(table.concat(notes, "\n"))
+    opps.notes:SetText(note)
+    opps.about:SetShown(sum.total > 0)
 end
 
 function Win.Render()
@@ -895,7 +907,11 @@ local function Build()
     f:SetScript("OnDragStop", function(self) self:StopMovingOrSizing() end)
     f:SetScript("OnEvent", function(_, event)
         local kind = EVENTS[event]
-        if kind then Schedule(kind) end
+        if kind == "modifier" then
+            if hoverRow and hoverRow:IsShown() then hoverRow:ShowTip() end   -- Shift pressed or released while over a row: the other tooltip
+        elseif kind then
+            Schedule(kind)
+        end
     end)
     f:HookScript("OnShow", function(self)
         token = token + 1
@@ -912,7 +928,7 @@ local function Build()
         fillToken = fillToken + 1
         scheduled, dirtyRead, dirtyMerchant = false, false, false
         self:UnregisterAllEvents()
-        shopView = nil
+        shopView, hoverRow = nil, nil
         S.Reset()
         Q.Unload()
     end)
@@ -1106,9 +1122,16 @@ local function Build()
     opps.summary:SetWordWrap(false)
     opps.notes = L.Text(opps, "meta")
     opps.notes:SetPoint("TOPLEFT", PAD, -500)
-    opps.notes:SetWidth(WIDTH - PAD * 2)
-    opps.notes:SetWordWrap(true)
-    opps.notes:SetJustifyV("TOP")
+    opps.notes:SetWidth(WIDTH - PAD * 2 - 110)
+    opps.notes:SetWordWrap(false)
+    opps.about = F.Button(opps, "About prices", 100, "secondary", function() end)
+    opps.about:SetHeight(22)
+    opps.about:SetPoint("TOPRIGHT", -PAD, -494)
+    Tip(opps.about, "About these prices",
+        "Cheapest buyout listings from your last scan, per item. A listing isn't a sale: it may not sell at that price, or at all. "
+        .. "Deposits, unsold listings and selling time aren't counted. The auction house's cut is taken off only once it is confirmed. "
+        .. "Some professions list only what their window's filters allow, so a few recipes may be missing. "
+        .. "Hover a row for its numbers; hold Shift for the details.")
     opps:SetShown(mode == "opps")
     main:SetShown(mode == "craft")
     f.tabCraft:SetOn(mode == "craft")
@@ -1152,6 +1175,8 @@ function W.Snapshot()
     s.shown = f ~= nil and f:IsShown() or false
     s.built = f ~= nil
     s.events = events
+    s.watchEvents = W.Watch and W.Watch.Events() or 0
+    s.watchReads = W.Watch and W.Watch.reads or 0
     s.rows = rows
     s.mode = mode
     s.renders = renders

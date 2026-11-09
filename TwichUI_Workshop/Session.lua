@@ -82,6 +82,7 @@ function S.Observe()
     if old then
         local byId, here = {}, {}
         for _, rec in ipairs(old.recipes) do byId[rec.id] = rec end
+        for _, rec in ipairs(old.extra or {}) do byId[rec.id] = rec end
         for _, rec in ipairs(r.recipes) do
             here[rec.id] = true
             local o = byId[rec.id]
@@ -90,20 +91,20 @@ function S.Observe()
                 rec.filled, rec.remembered = o.filled, o.remembered
             end
         end
-        if not r.complete then
-            -- still known, just not shown by the window's filters: kept apart, so browsing follows the filters but pricing and saving don't lose them
-            local extra = {}
-            for _, list in ipairs({ old.recipes, old.extra or {} }) do
-                for _, o in ipairs(list) do
-                    if not here[o.id] and #r.recipes + #extra < KN.MAX_RECIPES then
-                        here[o.id] = true
-                        o.diff = nil   -- the old difficulty means nothing now
-                        extra[#extra + 1] = o
-                    end
+        -- Whatever the window's list leaves out (filters, or a list that isn't the whole profession) is still known: kept apart, so
+        -- browsing follows the list but pricing and saving don't lose it. A remembered recipe goes only when the game listed it
+        -- as not learned; absence from a list, a filtered list or an empty one is never evidence.
+        local extra = {}
+        for _, list in ipairs({ old.recipes, old.extra or {} }) do
+            for _, o in ipairs(list) do
+                if not here[o.id] and not (r.unlearned and r.unlearned[o.id]) and #r.recipes + #extra < KN.MAX_RECIPES then
+                    here[o.id] = true
+                    o.diff = nil   -- the old difficulty means nothing now
+                    extra[#extra + 1] = o
                 end
             end
-            if #extra > 0 then r.extra = extra end
         end
+        if #extra > 0 then r.extra = extra end
     end
     if not profs[r.prof] then
         if #order >= MAX_PROFESSIONS then
@@ -185,7 +186,7 @@ function S.Notices()
         if not p.live then
             out[#out + 1] = ("Remembered from %s. Open %s to update it."):format(PR.AgeText(PR.Age(p.at)), p.profName)
         elseif not p.complete then
-            out[#out + 1] = "This list follows the filters in your profession window, so some recipes may not be shown."
+            out[#out + 1] = "Follows your profession window's filters; some recipes may not show."
         end
     else
         out[#out + 1] = "Open one of your professions to see its recipes here."

@@ -40,8 +40,10 @@ each option with its price and **how old it is**, the making plan with every rea
 For every recipe read this session (all professions seen, not only the one browsed), **one craft**: item icon (hover for the item, Shift-click puts its link in an open chat box),
 recipe name, what it makes, **Cost to make**, **Sell price**, **Estimated profit**, and **Add** (the same queue as Crafting). Default order: highest estimated profit first; the three
 money headings sort (a second click reverses); profession buttons filter; **Profitable only** hides losses and unknown ones. Unknown estimates ("Unknown", with the reason under the name,
-e.g. "1 material has no price") are always below every known one. Hovering a row shows its **basis**: each material with quantity, unit price and total, what it makes and its price,
-the cut line, the profit, and the price age. An output range (e.g. makes 1-3) shows the low amount with "to <high>" under it and sorts/filters by its low end; the maximum is never assumed.
+e.g. "1 material has no price") are always below every known one. **Hovering** a row shows a short tooltip: name, **Cost to make**, **Sell price**, the profit (labelled **Profit before fees** while no auction cut is deducted, **Estimated profit** once one is; the column heading follows),
+one status line ("4 hours ago · Partial scan", plus "Old prices" or "Cheapest listing only" when they apply), and "Hold Shift for details". An unknown estimate shows its reason as a warning line and no profit. **Shift** (held on hover, or pressed during it: the window listens for `MODIFIER_STATE_CHANGED` while shown) shows the **details**:
+the auction house and scan age, each material with quantity, unit price and total, what it makes and its price, the cut line ("not deducted (not confirmed)" or the rate), the profit, and one line saying these are listings, not sales, and that deposits and unsold listings are not counted.
+The **footer** is two short lines: "5 of 7 priced · 4 profitable · profit, highest first" and "Profit is before fees: the auction house's cut isn't confirmed." (plus "Some recipes may be missing." for filtered lists); the long explanation (listing is not a sale, deposits, filters) is behind the **About prices** button's hover. The price line is "Prices: <auction house> · <age> · Partial scan". An output range (e.g. makes 1-3) shows the low amount with "to <high>" under it and sorts/filters by its low end; the maximum is never assumed.
 Empty states: no recipes, no prices saved, none could be priced, no profitable craft.
 The **Scan prices** button (top right of the view) starts a scan only when pressed; its states are shown in one line (scanning, finished, stopped, failed, unavailable). While a scan runs an **overall progress bar**
 (left of the button) shows the whole scan: asking and waiting for the game are the first 8%, the reading the rest (`Scan.Progress`, never backwards within a scan).
@@ -49,7 +51,7 @@ The **Scan prices** button (top right of the view) starts a scan only when press
 **On the auction house window** (`AuctionButton.lua`): the same **Scan prices** button sits under the window's lower right corner, with the same progress bar and message beside it while a scan runs and the last message
 (not shown again after the window has been closed) afterwards. It is the same scan (`Session.StartScan`), so either button shows the other's progress. It exists once the Workshop has been loaded this session (the addon is
 load on demand, nothing is built at login) and when Blizzard's auction house UI exists; the one event it waits for is dropped once it is made. **Limit:** the scan prices the Workshop's known
-recipes (read this session or remembered from earlier ones), so the button works with the Workshop window closed once each profession has been read with the Workshop open; until then it answers "Open the Workshop and one of your professions first".
+recipes (read this session or remembered from earlier ones), so the button works with the Workshop window closed once each profession has been read (with the addon loaded: the window may be hidden); until then it answers "Open the Workshop and one of your professions first".
 
 ## Files
 
@@ -61,6 +63,7 @@ recipes (read this session or remembered from earlier ones), so the button works
 | `Materials.lua` | `W.Materials.Rows`: combine first, then apply bag counts once per item; states empty/partial/short/ready (pure) |
 | `Queue.lua` | the saved queue (`TwichUIDB.workshop`), checking every record, `Refresh` from an observation |
 | `Known.lua` | the remembered recipes: `Load` / `Store` of a character's professions (`TwichUIDB.workshop.chars[..].known`), checked on the way in, bounded (pure data, no game calls) |
+| `Watch.lua` | reads the player's own open profession while the addon is loaded and the window is **hidden** (one small event frame: `TRADE_SKILL_SHOW`, `_LIST_UPDATE`, `_DATA_SOURCE_CHANGED`, `PLAYER_REGEN_ENABLED`; a burst becomes one read after 0.5 s; also one read at load for an already-open profession), fills in the recipes' details in batches, then lets go of the memory copy; steps aside while the window is shown |
 | `Observe.lua` | game reads: `Read` (own profession list), `Fill` (output + materials from the schematic), `BagCount`, `ItemFacts`, `OpenRecipe`, `ReadMerchant` (the open merchant's money-only listings) |
 | `Prices.lua` | **the price service**: stack-to-unit price, the batch that turns auction records into the cheapest buyout per item, the saved scans (`TwichUIDB.workshop.prices`), lookups, price age, the cut table, `Estimate` (cost, sell price and profit of one craft) and `Quote` (what buying n of an item costs: exact / estimate / few / none) |
 | `Vendor.lua` | saved vendor **purchase** prices (`TwichUIDB.workshop.vendor`), `Quote` (whole stacks, limited stock), and `Sellers`/`Places` (merchants of the NPC collection that were seen to sell an item) (pure) |
@@ -90,7 +93,13 @@ read, and when the window closes), so the next session knows the recipes, what t
 when the list follows the window's filters, keeps the recipes the filters left out (`extra`: still known, not browsed). Difficulty is **not** kept (it depends on the character's skill). At most 5 professions (the one read longest ago goes) and 600 recipes
 each. Same rules as the queue: never written when `v` is higher than understood, bad records skipped, never in a profile, share or backup. Not noticed: a profession the character drops, or a recipe unlearned, stays remembered until that profession is read
 again and its list is complete (the recipes then shown replace the old ones).
-**Learning needs the Workshop window open:** a profession is read only while the Workshop window is shown (it listens to nothing otherwise), so open the Workshop first, then your professions. Remembered recipes are not re-read from the game while their
+**When recipes are read (refresh rules, 2026-11-09).** Workshop stays load on demand: nothing exists at login and there is no always-on recorder. Once the addon is loaded (the player opened it, or anything asked the launcher to load it), `Watch.lua` reads the player's own open profession
+when a profession window opens or its recipe list changes, **with the Workshop window hidden**; the first read happens at load (an already-open profession). While the window is shown it does the same reading itself (`Window.lua`; `Watch` does nothing then), and on opening it reads an already-open valid own profession.
+Nothing opens a profession or changes Blizzard's filters. A profession is read only when the game says it is the player's own (not linked, guild, NPC or an unconfirmed view), not while the list is still loading (`IsDataSourceChanging`), not in combat, and not when `IsTradeSkillReady()` says no profession is ready.
+**Merge, not replace:** a read adds new recipes and refreshes the ones listed; every remembered recipe the list leaves out (filters, an empty or partial list) stays, in `extra`. A remembered recipe is removed **only when the game lists it with `learned == false`** (`Observe.Read` collects these as `unlearned`);
+absence from a list is never evidence. An empty or not-yet-loaded list ("empty"/"busy"/"none"/"not-own") changes nothing. Characters and professions are separate (`chars[key].known[professionID]`). Saved per recipe: id, name, icon, output item and quantities, materials, and per profession the observation time and whether the list was complete.
+**Not saved:** difficulty, bag counts, what can be crafted now, cooldowns. They are recalculated (bags are read live; cooldowns, tools and stations are never checked), so a remembered recipe means "previously observed as learned", not "can be made now". The record format is unchanged (older saves load; queue, prices and vendor data are untouched);
+a newer `v` is never written. Remembered recipes are not re-read from the game while their profession is closed (the game may not give the details of one that isn't open): they stand until it is read again.
 profession is closed (the game may not give the details of one that isn't open): they stand until it is read.
 
 **Prices** (milestone 2), in the same `workshop` key (so also never in a profile, share or backup; `v` stays 1 because the addition is compatible):
@@ -208,8 +217,7 @@ Pure code (`Shopping.lua`), same inputs always give the same plan; `tests/test_w
   no saved variables yet); refresh without losing known data; own-profession-only reads, complete vs filtered lists, switching professions, incomplete lists never removing queued
   recipes; secret values; launcher at login/combat/failures; the window's lifecycle (events only while shown, forgets lists when hidden, dropped stale redraws, buttons).
 - **Simulator-tested:** `SIMLAB_PAGE=workshop SIMLAB_TITLE=Workshop bash tools/simlab/smoke.sh` passed (the real core TOC including `WorkshopLauncher.lua` loads, the Workshop settings page
-  opens and constructs, all 55 described pages construct, no Lua error). Construction only: the Workshop window itself was not run in the simulator (no scenario exists for it), and nothing about
-  looks, input or the real recipe interface is shown by it.
+  opens and constructs, all 55 described pages construct, no Lua error). Construction only; the window itself is covered by `tools/simlab/workshop.sh` ("Simulator coverage" below).
 - **Unit-tested (milestone 2, `tests/test_workshop_prices.lua`, plus a section of `tests/test_workshop_window.lua`):** stack/unit conversion (rounding up, never 0, exact comparison); invalid, bid-only,
   secret and unwanted auction records; saved scans (markets kept apart, age words, bounds, a complete scan kept over an incomplete one, bad saved entries never a price, newer version held, the queue
   unaffected); cost with full materials, multi-output and range outputs, cut arithmetic and the unconfirmed cut, losses, every unknown reason, "not enough listed", price age and completeness;
@@ -222,14 +230,60 @@ Pure code (`Shopping.lua`), same inputs always give the same plan; `tests/test_w
   craft, 1 for the bars, 7 bought); output rounding and leftovers; buy-versus-make with missing prices, owned unpriced reagents, old prices; insufficient auction quantity; unknown vendor price / stock / location; circular, unsupported, range, chained and over-limit recipes; the cap on work;
   queue edits, bag updates, source choice and cycling, a changed price; **adding a suggested subcraft counts nothing twice and a repeated click adds nothing**; the window (rows, columns, ages, estimates, tooltip, actions, total with and without missing prices, events only while shown, a
   burst of merchant events is one redraw). All with a fake game; none against the real client.
-- **Simulator-tested (milestone 3):** `SIMLAB_PAGE=workshop SIMLAB_TITLE=Workshop bash tools/simlab/smoke.sh` passed after the settings page text changed (construction only, 56 of 56 pages). The Shopping view itself is not run in the simulator (no scenario exists for it).
-- **Mocked, not real:** all auction results above come from a fake. They show our logic, not what the real auction house returns. No simulator scenario covers the auction house or this view.
+- **Simulator-tested (milestone 3):** `SIMLAB_PAGE=workshop SIMLAB_TITLE=Workshop bash tools/simlab/smoke.sh` passed after the settings page text changed (construction only, 56 of 56 pages). The Shopping view is covered by `workshop.sh` (below).
+- **Mocked, not real:** all auction results above come from a fake. They show our logic, not what the real auction house returns. The simulator scenario below runs the real scan against a fake listing table, which shows the same thing.
 - **Real-client-tested:** only that the window opens and works after the anchor fix (reported by the player). Nothing else.
+
+## Simulator coverage (the window itself, 2026-11-09)
+
+**Run it:** `bash tools/simlab/workshop.sh` from the repository root (bash, never zsh; about 30 s; needs the lab, `docs/simulator-lab.md`). Files: `tools/simlab/workshop.sh` (runner), `tools/simlab/scenarios/workshop.lua` (the scenario; its header says exactly what is real and what is fake),
+`tools/simlab/workshop_verdict.py` (judges the four launches). It stages `TwichUI_Workshop` through `SIMLAB_EXTRA=TwichUI_Workshop` (an opt-in addition to `simlab_stage`; the other lab commands stage what they always did).
+Results and screenshots go to `../wow-ui-sim-lab/artifacts/workshop-<time>/` (`craft.png`, `opps.png`, `shop.png`, `*.stdout`, `*.stderr`); they hold Blizzard art, keep them local.
+
+**What runs for real:** the launcher and `/tui workshop` (the addon loads on demand), every Workshop file, the window and its controls, the saved-data layers (in memory), the price scan state machine, the NPC collection noting a merchant. **What is fake**, at the game-API boundary:
+two professions with seven recipes (`C_TradeSkillUI`; no `GetAllRecipeIDs`, as in the Forever source), item names and bag counts (`C_Item`), a 17-listing auction house (`C_AuctionHouse` + a shown `AuctionHouseFrame`), a merchant window (`GetMerchant*`, `UnitGUID/UnitName("npc")`),
+and, in the Show vendor step only, **stand-ins for `ToggleWorldMap` and `NpcMap.Locate`** (Blizzard's world map cannot run in the simulator: it raises many Blizzard Lua errors). A 5% auction cut is **test input** for one step (the real cut is unconfirmed; `Prices.CUT` stays empty) and is removed again.
+Every expected value is typed from hand arithmetic written beside it in the scenario, never from the code under test.
+
+**Checks per launch: 198 (ends on Crafting), 199 (Opportunities), 200 (Shopping); the first 198 are identical in all three** (2026-11-09: includes the short tooltip, Shift details, the one-line footer, and the "remembered recipes: closed window, background read, nothing open" step; that step is in-memory, not a reload). Layers: *init* (the window opens), *display* (text read from the drawn frames), *click* (`Button:Click()`, **handler level**: no pointer, hit test, focus or keyboard exists in the simulator), *event*
+(`A_Admin.FireEvent`: `BAG_UPDATE_DELAYED`, `TRADE_SKILL_LIST_UPDATE`, `MERCHANT_SHOW`, `REPLICATE_ITEM_LIST_UPDATE`), *direct* (a Session function called by the scenario: only the repeated `AddSubcraft`), *state* (queue, saved vendor/price records, picks).
+- **Opening/navigation:** opens on Crafting; the three tabs switch views; close, `/tui workshop` again: same view, queue, rows and total.
+- **Crafting:** add, `+`/`-`, Remove through the controls; output quantities ("3 crafts - makes 1 each, 3 in all"); two recipes sharing Peacebloom (need 7, bags 4, short 3); bag changes by event (rows, headline); an unreadable count shows Unknown, never ready; an unsupported recipe is never "all in your bags"; a second profession and its chip; Open recipe; empty states.
+- **Opportunities:** scan through the real button and state machine (17 records read, 15 used, 12 items priced; bid-only and unwanted listings ignored); cost, sell, profit and "to" ranges for seven recipes; default order, sort by cost and reversal, profession filter, Profitable only; unknown rows with reasons (a missing price, unsupported materials); Add to queue changes the real queue; the test-input cut; scrolling.
+- **Shopping:** combined shortages; priced and unpriced rows; the total with its "Some prices missing" warning; the source button cycle (estimate, make, suggestion); buy-versus-make with rounding (5 short, output 2: 3 crafts, 1 left over), a vendor stack (80c for 5 buys 3, 2 left over), an auction estimate and a "not enough listed" row; Add to queue adds the subcraft once, its ingredients appear once, a repeat adds nothing; bag changes update rows and total; Show vendor asks for the map once and calls `Locate` once with the merchant's entry, and sets no waypoint, pin or route; scrolling to the Make row.
+- **Negative control:** a launch with one expectation made wrong fails on that check and no other.
+- **Verdict:** `PASS WITH KNOWN SIMULATOR LIMITATIONS`: the log holds Blizzard's voice-settings error and one refusal of an addon message from `npcs/Share.lua` (the NPC collection sharing the newly noted merchant; the simulator's string rule, classified, not the Workshop).
+
+**Not covered (still needs the real game):** the real recipe interface, real auction and merchant APIs and their timing, the real world map and `Locate`, real pointer and keyboard input (hover tooltips were not read), taint and combat, saved data across a reload (reopening is not persistence), performance with a large queue, how anything looks in the game's fonts (coins are inline textures the simulator does not draw, so amounts read as bare numbers in the screenshots).
+
+**Screenshots (reviewed 2026-11-09, structural only: fonts fall back, coin icons are not drawn, Blizzard's Issue Report button overlaps):** Crafting (4 queued entries, materials with a scroll bar), Opportunities (seven rows, ordered, ranges and Unknown readable), Shopping scrolled to the Make row. Seen: no overlap in Crafting or Opportunities; a long recipe name is cut at its column with no ellipsis (Crafting list, Opportunities row); lists scroll
+(the Make row is below the fold of the Shopping list until scrolled); **on a Make row the detail text runs to the edge of the Source column and, in the simulator's font, the right-aligned note "materials, counted in their rows" is clipped on its left: check this in the game's font.** Observed, not changed: a Shopping row with no priced option (Silverleaf: "not enough listed") still has an enabled Source button, and one click picks "Auction house" (still Unknown, the total is unchanged).
+
+**For future Workshop changes:** run `workshop.sh` after touching `Window.lua`, `Session.lua`, `Shopping.lua`, `Opportunities.lua`, `Prices.lua`, `Scan.lua`, `Queue.lua`, `Materials.lua` or `Vendor.lua`, and add a check there (with its arithmetic) instead of building a new scenario. The unit tests (`tests/test_workshop*.lua`) stay the main check for logic.
 
 ## Not built (decided)
 
 Sale history, "market value", sale rates, external price sources, recursive buy-versus-craft (making is one level), using vendor prices in Opportunities, vendor price collection when the Workshop window is closed, saved source choices, an auction search, a control to forget remembered recipes, noticing dropped professions, bank/mail/alt counts, guild sharing, cooldowns, leveling plans, a recipe-source database, direct crafting buttons, automatic
 queue completion, a saved window position, a Clear queue button, a settings option for opening it from a profession window.
+
+## Remembered recipes and shorter text (2026-11-09): checks and limits
+
+**Checked:** unit-tested (`tests/test_workshop_memory.lua`, new; plus `test_workshop.lua`, `test_workshop_prices.lua`, `test_workshop_window.lua`): two professions restored in a fresh session with nothing open; Opportunities, Shopping and the price wish list from remembered recipes before any profession is opened; a new recipe merging into saved knowledge;
+filtered, empty and no list, linked, guild, NPC, still-loading, combat and nothing-open views leaving saved knowledge unchanged; removal only on an explicit "not learned"; a second character separate; junk, older and newer-version saves; queue and prices intact; nothing live saved; the watcher stepping aside while the window is shown;
+the short tooltip (few lines, "Profit before fees", unknown price visible), Shift details through the modifier event, the one-line footer, the heading label. Simulator-tested (`workshop.sh`, handler level, fake game data): the same tooltip/Shift/footer behavior in the real window, a profession opened while the window is closed being saved, and the saved recipes working with no profession open after closing and reopening the window.
+Screenshot-reviewed (structural; fonts fall back, coin icons are not drawn): Opportunities header, one-line footer and About prices button fit; nothing clipped.
+**Not tested:** `/reload` persistence (a seeded save, a new test client and a window reopen are not a reload), the real `TRADE_SKILL_*` event timing and `IsTradeSkillReady` in Forever, real hover tooltips and the Shift redraw, real fonts.
+
+**Limitations:** knowledge is only as current as the last read of each profession (a recipe the player unlearns is removed only when a read lists it as not learned); `GetAllRecipeIDs` is absent in Forever so lists follow the profession window's filters and a never-browsed filtered-out recipe is unknown; the watcher runs only after the addon has been loaded this session (a session where Workshop was never opened records nothing);
+cooldowns, tools and stations are not checked; at most 5 professions and 600 recipes each; no control to forget remembered recipes.
+
+**In-game checks (exact):**
+1. Log in, open `/tui workshop` once (this loads the addon), close it. Open each of two professions (do not reopen the Workshop). `/reload`. Open `/tui workshop` **without opening any profession**: both professions appear (chips), Crafting says "Remembered from ...", Opportunities lists their recipes (after a scan), Shopping works from the queue.
+2. Before the reload, with the Workshop closed, open a profession with a search/filter active, then clear the filter: no recipe disappears. Learn a recipe, open the profession: it appears and stays after a reload.
+3. Open a profession while the Workshop window is hidden, then `/tui diagnostics` or `/tui perf`: the `workshop.read` scope shows reads, no error, no hitch when opening large professions (e.g. 300+ recipes).
+4. Open someone else's profession (inspect/link) and a guild profession view: the remembered list is unchanged.
+5. Log an alt: it starts with nothing remembered and keeps its own.
+6. Opportunities: hover a row (short tooltip, coin icons aligned, no reagent list), hold Shift while hovering and release (details appear/disappear without moving the mouse), check an unknown-price row, the column heading "Profit before fees", the one-line footer, and the **About prices** hover; the text must not clip in the game's font.
 
 ## In-game checks (milestone 1: none reported; milestone 2 below)
 

@@ -414,7 +414,7 @@ function Sh.Basis(row, name, money, ageText, now)
                 L("Vendor", ("had only %d when seen %s"):format(q.avail, Seen(v.at)))
             else
                 L("Vendor", ("%s for %d%s"):format(money(q.cost), q.items, q.surplus > 0 and (", " .. q.surplus .. " left over") or ""))
-                L("  seen " .. Seen(v.at) .. ". Stock can change, so it may not be there now.")
+                L("  seen " .. Seen(v.at) .. " (stock can change)")
             end
         end
     end
@@ -427,7 +427,7 @@ function Sh.Basis(row, name, money, ageText, now)
             L("Auction house", (a.estimate and "about " or "") .. money(a.cost))
             if a.estimate then
                 L("  " .. money(q.unit) .. " each is the cheapest listing" .. (q.listed and (" (" .. q.listed .. " at that price)") or "") ..
-                    "; the rest may cost more.")
+                    "; the rest may cost more")
             end
             L("  scanned " .. Seen(a.at) .. (q.complete == false and " (not a complete scan)" or ""))
         end
@@ -444,7 +444,7 @@ function Sh.Basis(row, name, money, ageText, now)
                 L(("  %d x %s"):format(r.qty, name(r.item)), table.concat(parts, ", "))
             end
             if m.cash then L("  Cash needed for the materials", money(m.cash)) end
-            L("  Cooldowns, tools and crafting stations aren't checked.")
+            L("  Cooldowns, tools and stations aren't checked.")
         else
             L("Make", MAKE_WHY[m.state] and "not suggested" or m.state)
             if MAKE_WHY[m.state] then L("  " .. MAKE_WHY[m.state]) end

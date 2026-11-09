@@ -318,7 +318,7 @@ do
   Check(S.Notices()[1]:find("Open one of your professions", 1, true), "nothing read yet: an instruction, not an empty list")
   Check(S.Observe())
   Same(#S.Browse(), 3)
-  Check(S.Notices()[1]:find("filters", 1, true) and S.Notices()[1]:find("may not be shown", 1, true), "a filtered list says so")
+  Check(S.Notices()[1]:find("filters", 1, true) and S.Notices()[1]:find("may not show", 1, true), "a filtered list says so")
   Same(g.calls.schematic, nil, "browsing reads no schematics until rows are filled")
   S.SetFilter("potion"); Same(#S.Browse(), 2); S.SetFilter("  "); Same(#S.Browse(), 3)
 

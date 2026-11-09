@@ -294,7 +294,7 @@ do
   Same(ahBtn.text:GetText(), "Scan prices"); Check(ahBtn.enabled)
   Same(opps.scan.text:GetText(), "Scan prices"); Check(opps.scan.enabled)
   Check(opps.status:GetText():find("Prices found for 4 of your items", 1, true), opps.status:GetText())
-  Check(opps.source:GetText():find("Alliance auction house on Realm, scanned just now", 1, true), opps.source:GetText())
+  Check(opps.source:GetText():find("Alliance auction house on Realm \194\183 just now", 1, true), opps.source:GetText())
   Same(#L_.data, 2)
   local r1, r2 = L_.rows[1], L_.rows[2]
   Same(r1.name:GetText(), "Healing Potion", "highest estimated profit first")
@@ -304,17 +304,38 @@ do
   Check(r1.sub:GetText():find("Makes 1-2", 1, true) and r1.sub:GetText():find("Alchemy", 1, true), r1.sub:GetText())
   Same(r2.name:GetText(), "Mana Potion")
   Same(r2.cost.a:GetText(), "150c"); Same(r2.sell.a:GetText(), "300c"); Same(r2.profit.a:GetText(), "150c"); Check(not r2.profit.b:IsShown() and not r2.sell.b:IsShown(), "a single amount has no second line")
-  Check(opps.summary:GetText():find("2 of 2 recipes priced, 2 profitable", 1, true), opps.summary:GetText())
-  Check(opps.notes:GetText():find("cut isn't taken off", 1, true), "the unconfirmed cut is stated")
-  Check(opps.notes:GetText():find("doesn't mean it will sell", 1, true), "a listing is not a sale")
-  Check(opps.notes:GetText():find("Deposits", 1, true), "deposits are said to be left out")
-  -- the basis on demand
+  Check(opps.summary:GetText():find("2 of 2 priced", 1, true) and opps.summary:GetText():find("2 profitable", 1, true), opps.summary:GetText())
+  -- the footer is one short line; the cut is not confirmed, so nothing is called profit after fees
+  Check(opps.notes:GetText():find("before fees", 1, true), "the unconfirmed cut is stated: " .. opps.notes:GetText())
+  Check(#opps.notes:GetText() < 100 and not opps.notes:GetText():find("\n", 1, true), "one short line, not paragraphs")
+  Check(not opps.notes:GetText():find("Deposits", 1, true) and not opps.notes:GetText():find("listing", 1, true), "the long explanation is not in the footer")
+  Check(opps.about:IsShown(), "and it is behind About prices")
+  Same(Win.Heads().profit.text:GetText(), "Profit before fees", "the column is not called estimated profit while the cut isn't taken off")
+  -- the short tooltip on demand
   tip = {}
   r1:GetScript("OnEnter")(r1)
   local all = table.concat(tip, "\n")
-  Check(all:find("Healing Potion", 1, true) and all:find("2 x Peacebloom | 100c each = 200c", 1, true), all)
-  Check(all:find("Estimated profit | 800c to 1800c", 1, true), all)
-  Check(all:find("scanned just now", 1, true))
+  Check(all:find("Healing Potion", 1, true) and all:find("Cost to make | 200c", 1, true) and all:find("Sell price | 1000c to 2000c", 1, true), all)
+  Check(all:find("Profit before fees | 800c to 1800c", 1, true) and not all:find("Estimated profit", 1, true), all)
+  Check(all:find("just now", 1, true) and all:find("Hold Shift for details", 1, true), all)
+  Check(not all:find("Peacebloom", 1, true) and not all:find("sales", 1, true), "no reagent breakdown or long caveats by default")
+  Check(#tip <= 6, "a handful of lines: " .. #tip)
+  -- Shift pressed while hovering shows the details (the window listens for the key while shown)
+  tip = {}
+  c.IsShiftKeyDown = function() return true end
+  Fire("MODIFIER_STATE_CHANGED")
+  all = table.concat(tip, "\n")
+  Check(all:find("2 x Peacebloom | 100c each = 200c", 1, true), all)
+  Check(all:find("Profit before fees | 800c to 1800c", 1, true) and all:find("Auction house cut | not deducted", 1, true), all)
+  Check(all:find("Alliance auction house on Realm, scanned just now", 1, true) and all:find("not sales", 1, true), all)
+  tip = {}
+  c.IsShiftKeyDown = function() return false end
+  Fire("MODIFIER_STATE_CHANGED")
+  Check(table.concat(tip, "\n"):find("Hold Shift for details", 1, true), "released: back to the short one")
+  r1:GetScript("OnLeave")(r1)
+  tip = {}
+  Fire("MODIFIER_STATE_CHANGED")
+  Same(#tip, 0, "nothing is redrawn once the pointer has left")
 
   -- sorting by a column; unknown stays below
   local heads = Win.Heads()
@@ -348,7 +369,7 @@ do
   Same(L_.rows[2].profit.a:GetText(), "Unknown", "unknown, not zero"); Same(L_.rows[2].cost.a:GetText(), "Unknown")
   Same(L_.rows[2].sell.a:GetText(), "300c", "what is known is still shown")
   Same(L_.rows[2].sub:GetText(), "1 material has no price")
-  Check(opps.summary:GetText():find("1 of 2 recipes priced", 1, true), opps.summary:GetText())
+  Check(opps.summary:GetText():find("1 of 2 priced", 1, true), opps.summary:GetText())
 
   -- a scan that fails keeps the usable one
   local before = W.Prices.Market("Realm|Alliance").at
@@ -359,7 +380,7 @@ do
   Check(opps.status:GetText():find("earlier prices were kept", 1, true), opps.status:GetText())
   Same(W.Prices.Market("Realm|Alliance").at, before, "the earlier scan is untouched")
   Same(L_.rows[1].name:GetText(), "Healing Potion"); Same(L_.rows[1].cost.a:GetText(), "200c", "and the list still uses it")
-  Check(opps.source:GetText():find("scanned", 1, true))
+  Check(opps.source:GetText():find("Alliance auction house", 1, true), "still names the market")
 
   -- Profitable only
   opps.profitOnly:GetScript("OnClick")(opps.profitOnly)
@@ -377,7 +398,7 @@ do
   Same(W.Scan.state, "done")
   Check(Win.Lists().opps.empty:IsShown() == false, "the rows are still listed (as unknown)")
   Check(L_.rows[1].profit.a:GetText() == "Unknown")
-  Check(opps.summary:GetText():find("0 of 2 recipes priced", 1, true))
+  Check(opps.summary:GetText():find("0 of 2 priced", 1, true))
   Check(S.Opportunities().state == "noprices")
 
   -- closing the auction house mid-scan, then the window: nothing is left running
@@ -434,7 +455,7 @@ do
   Check(seed.spend.b:GetText():find("1 day ago", 1, true), "the price age is shown: " .. seed.spend.b:GetText())
   Check(not seed.act:IsShown(), "no action where none fits")
   Check(shop.total:GetText():find("Estimated spending: 20c", 1, true), shop.total:GetText())
-  Check(shop.source:GetText():find("scanned 1 day ago", 1, true), shop.source:GetText())
+  Check(shop.source:GetText():find("1 day ago", 1, true), shop.source:GetText())
   -- the basis tooltip says what is owned and what is not
   tip = nil
   local lines = {}
@@ -442,7 +463,7 @@ do
   c.GameTooltip.AddDoubleLine = function(_, a, b) lines[#lines + 1] = a .. " | " .. b end
   make:GetScript("OnEnter")(make)
   local all = table.concat(lines, "\n")
-  Check(all:find("Make | worth 20c", 1, true) and all:find("Cooldowns, tools and crafting stations aren't checked", 1, true), all)
+  Check(all:find("Make | worth 20c", 1, true) and all:find("Cooldowns, tools and stations aren't checked", 1, true), all)
   -- adding the made material to the queue: explicit, once; nothing is counted twice
   make.act:GetScript("OnClick")(make.act)
   Same(#Q.Entries(), 2, "the bundle is queued"); Same(Q.Find(3).crafts, 2)

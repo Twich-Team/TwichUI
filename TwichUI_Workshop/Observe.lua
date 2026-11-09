@@ -103,7 +103,8 @@ local function Call(fn, ...)
     return Plain(a)
 end
 
--- Returns { prof, profName, complete, recipes = { { id, name, icon, diff, prof, profName }, ... } }, or nil and why:
+-- Returns { prof, profName, complete, unlearned = { [id] = true } (listed and explicitly not learned), recipes = { { id, name, icon,
+-- diff, prof, profName }, ... } }, or nil and why:
 --   "api" (the game offers no profession interface), "combat", "busy" (the window is still loading its list), "not-own"
 --   (linked, guild, NPC or unconfirmed), "none" (no profession is open), "empty" (it has no recipe list yet)
 function O.Read()
@@ -111,6 +112,7 @@ function O.Read()
     if not (T and T.GetBaseProfessionInfo and T.GetRecipeInfo) then return nil, "api" end
     if InCombatLockdown and InCombatLockdown() then return nil, "combat" end
     if Call(T.IsDataSourceChanging) == true then return nil, "busy" end
+    if T.IsTradeSkillReady and Call(T.IsTradeSkillReady) == false then return nil, "none" end   -- no profession window is ready
     if Call(T.IsNPCCrafting) ~= false or Call(T.IsTradeSkillGuild) ~= false or Call(T.IsTradeSkillLinked) ~= false then
         return nil, "not-own"
     end
@@ -129,12 +131,14 @@ function O.Read()
     end
     if not ids then return nil, "empty" end
 
-    local recipes, seen = {}, {}
+    local recipes, seen, unlearned = {}, {}, {}
     for i = 1, math.min(#ids, MAX_RECIPES) do
         local id = Int(ids[i], 1, W.MAX_ID)
         if id and not seen[id] then
             seen[id] = true
             local info = Call(T.GetRecipeInfo, id)
+            -- the game saying "not learned" about a recipe is the only evidence that a remembered one is gone
+            if type(info) == "table" and Plain(info.learned) == false then unlearned[id] = true end
             if type(info) == "table" and Plain(info.learned) == true
                 and Plain(info.isRecraft) ~= true and Plain(info.isDummyRecipe) ~= true
                 and Plain(info.isGatheringRecipe) ~= true and Plain(info.isSalvageRecipe) ~= true then
@@ -153,7 +157,7 @@ function O.Read()
         if x ~= y then return x < y end
         return a.id < b.id
     end)
-    return { prof = prof, profName = profName, complete = complete, recipes = recipes }
+    return { prof = prof, profName = profName, complete = complete, recipes = recipes, unlearned = unlearned }
 end
 
 -- Opens the recipe in the game's own profession window. Returns true, or false when the game wouldn't.

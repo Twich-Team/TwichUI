@@ -31,6 +31,8 @@ Shopping.lua
 Scan.lua
 # What the window shows and does, without any frame
 Session.lua
+# Remembers the player's own professions' recipes while the window is closed (after load only; reads, never opens anything)
+Watch.lua
 # The progress bar and the Scan prices button on the auction house window (the click goes through Session)
 AuctionButton.lua
 # The window (last: it tells TwichUI the addon is ready)

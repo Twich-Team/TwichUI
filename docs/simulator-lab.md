@@ -28,6 +28,7 @@ tools/simlab/setup.sh            # once: downloads and builds the lab
 tools/simlab/smoke.sh            # copies the working tree in, opens a page, constructs every page, judges the result
 tools/simlab/interact.sh         # drives one real settings page through its controls, from a clean profile (below)
 tools/simlab/diagnose.sh         # the clock over a 12 s window: baseline, solo, grouped, and the addon-message contract (below)
+tools/simlab/workshop.sh         # the real Workshop window through Crafting, Opportunities and Shopping over fake game data (below)
 ```
 bash tools/simlab/tests/lab_guard.sh   # the lab-path safety check's rejection paths, in disposable folders (below)
 ```
@@ -51,6 +52,7 @@ build and show their rows, nothing more.
 | `tools/simlab/smoke.sh` | After touching settings pages, Kit/widgets, the TOC or load order: does everything still load and construct (about 12 s) |
 | `tools/simlab/interact.sh` | After touching `NotifyLook`, the settings Kit or the controls it uses: handler-level behaviour and in-memory state (about 23 s) |
 | `tools/simlab/diagnose.sh` | Only for group/share/timer work: the clock window and message contract (about 15 s) |
+| `tools/simlab/workshop.sh` | After touching the Workshop window, session, planner, prices or scan: values and controls of its three views (about 30 s) |
 | `tests/run.sh` | The project's offline suite; still the main check, and the only one for most logic |
 | `bash tools/simlab/tests/lab_guard.sh` | After touching `lib.sh`, `setup.sh` or `sim.sh` |
 
@@ -188,6 +190,15 @@ a packaged install.
 checks that nothing was sent and the page is unchanged. The scenario used to stop at 2.5 s to stay clear of two errors; both
 are now classified instead (next section), and the only limit left is a 30 s resource guard in `scenarios/lib.lua`. Changes
 in the page are synchronous and need no simulated time; only the window's fade does.
+
+## The Workshop scenario
+
+`tools/simlab/workshop.sh` (about 30 s): four launches from fresh empty installs (the three views, each ending in its own screenshot, and a negative control with one wrong expectation). It stages `TwichUI_Workshop` with `SIMLAB_EXTRA=TwichUI_Workshop`
+(an opt-in list of `TwichUI_*` folders for `simlab_stage`; unset for every other command), opens the window with `/tui workshop`, and drives it at handler level over deterministic fake game data. What is fake, what each check is evidence of, the checks, the
+screenshots and what is not covered are in **docs/workshop.md "Simulator coverage"**; the scenario file's header lists the fakes. Notes that belong to the lab:
+- The simulator cannot run Blizzard's world map (opening it raises many Blizzard Lua errors: `IsFilteredOut`, `GetBountiesForMapID`, `GetGameRuleAsFrameStrata`... are missing), so the Show vendor step replaces `ToggleWorldMap` and `NpcMap.Locate` with recorders.
+- A merchant window noted by the real NPC collection makes it share the find; the simulator refuses that addon message (the known string rule, `npcs/Share.lua`). `workshop_verdict.py` permits that one error only from that file.
+- `GetMoneyString` coins are inline textures the simulator does not draw; the scenario turns them into `1s 50c` text to compare, and screenshots show bare numbers.
 
 ## The Magic Inventory guild bank arrangement scenario
 
