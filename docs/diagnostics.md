@@ -145,6 +145,8 @@ uses an item, sends anything or makes up events. Each states its cost before you
 | `nav.search`, `nav.position`, `nav.progress`, `nav.ticker` (`Perf.Call`) | `nav/Nav.lua` `OnUpdate` (`nav.ticker`: each trail or arrow updater) | update |
 | `nav.load` (`Perf.Call`) | `nav/Data.lua` `ND.Load`, around `C_AddOns.LoadAddOn` of `TwichUI_NavData` | init |
 | `layouts.load` (`Perf.Call`) | `LayoutsLauncher.lua` `L.Load`, around `C_AddOns.LoadAddOn` of `TwichUI_Layouts` | init |
+| `workshop.load` (`Perf.Call`) | `WorkshopLauncher.lua` `L.Load`, around `C_AddOns.LoadAddOn` of `TwichUI_Workshop` | init |
+| `workshop.read` (`Perf.Call`), `workshop.render` (`Perf.Start`/`Stop`) | `TwichUI_Workshop/Session.lua` `S.Observe` (the open profession's recipe list read; opening, and a burst of profession window changes while shown), `TwichUI_Workshop/Window.lua` `Win.Render` (a burst of changes or a click, only while shown). Gauges `workshop.queue`, `.recipes`, `.cache`, `.events` (zero while hidden), `.rows` | rebuild |
 | `layoutwizard.preview.follow` (`Perf.Start`/`Stop`) | `TwichUI_LayoutWizard/Preview.lua` `view:Track`'s throttled OnUpdate (about 30 a second, only while the pointer is over the miniature in the tooltip scenario with Follow mouse picked; removed on leaving, hiding, another scenario or closing) | layout |
 | `layoutwizard.load` (`Perf.Call`) | `LayoutsLauncher.lua` `L.LoadWizard`, around `C_AddOns.LoadAddOn` of `TwichUI_LayoutWizard` | init |
 | `layoutwizard.overlay.build` (`Perf.Call`), `layoutwizard.overlay` (`Perf.Call`) | `TwichUI_LayoutWizard/Overlay.lua` `Build` (the first time the full-size preview opens), `Draw` (each time it opens, or a layout, scenario or the screen changes in it; never while it is closed) | init, layout |
@@ -209,7 +211,7 @@ ticks over 5/50 ms for TwichUI, diagnostics overhead (with its hitches: long fra
 gauge read lifted over the limit), TwichUI CPU outside every scope (`unattributed-cpu`; `prefs.thresholds.unattributedPerSec`,
 default 1 ms a second, medium at five times that), errors, and what limits the capture. The memory finding reports the
 series (lowest, highest, intervals up and down, at least how many KB/s were allocated between readings, the largest
-fall as evidence that the collector ran, the scopes' allocation) and says a pool's size is not measured. The report's memory section also shows `TwichUI_NavData`, `TwichUI_Layouts` and `TwichUI_LayoutWizard` (read with the others, separate
+fall as evidence that the collector ran, the scopes' allocation) and says a pool's size is not measured. The report's memory section also shows `TwichUI_NavData`, `TwichUI_Layouts`, `TwichUI_LayoutWizard` and `TwichUI_Workshop` (read with the others, separate
 addons) and its CPU section shows the instrumented total as a true ratio of the client's count: above about 110% it says the
 instrumented times are upper bounds (the first real capture had 877 ms instrumented against 509 ms counted; the cause is
 not established). A long frame next to an addon load names the addon, and the Markers list includes addon loads and

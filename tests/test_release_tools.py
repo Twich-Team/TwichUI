@@ -28,6 +28,8 @@ LAYOUTS_TOC = ("## Interface: 16001\n## Title: Layouts\n## Version: 1.0.0\n## Re
                "## LoadOnDemand: 1\n\nCanon.lua\n")
 WIZARD_TOC = ("## Interface: 16001\n## Title: Layout Setup\n## Version: 1.0.0\n## RequiredDeps: !!!TwichUI, TwichUI_Layouts\n"
               "## LoadOnDemand: 1\n\nArt.lua\n")
+WORKSHOP_TOC = ("## Interface: 16001\n## Title: Workshop\n## Version: 1.0.0\n## RequiredDeps: !!!TwichUI\n"
+                "## LoadOnDemand: 1\n\nData.lua\n")
 
 
 class Repo:
@@ -46,6 +48,7 @@ class Repo:
         self.write(rel.TOCS[rel.DIAGNOSTICS], DIAG_TOC)
         self.write(rel.TOCS[rel.LAYOUTS], LAYOUTS_TOC)
         self.write(rel.TOCS[rel.WIZARD], WIZARD_TOC)
+        self.write(rel.TOCS[rel.WORKSHOP], WORKSHOP_TOC)
         self.n = 0
 
     def run(self, *args):
@@ -354,7 +357,7 @@ class NotesTests(unittest.TestCase):
 class StampTests(unittest.TestCase):
     def test_stamps_only_the_version_line(self):
         with tempfile.TemporaryDirectory() as d:
-            for rel_path, text in ((rel.TOCS[rel.CORE], CORE_TOC), (rel.TOCS[rel.SETTINGS], SETTINGS_TOC), (rel.TOCS[rel.NAVDATA], NAVDATA_TOC), (rel.TOCS[rel.DIAGNOSTICS], DIAG_TOC), (rel.TOCS[rel.LAYOUTS], LAYOUTS_TOC), (rel.TOCS[rel.WIZARD], WIZARD_TOC)):
+            for rel_path, text in ((rel.TOCS[rel.CORE], CORE_TOC), (rel.TOCS[rel.SETTINGS], SETTINGS_TOC), (rel.TOCS[rel.NAVDATA], NAVDATA_TOC), (rel.TOCS[rel.DIAGNOSTICS], DIAG_TOC), (rel.TOCS[rel.LAYOUTS], LAYOUTS_TOC), (rel.TOCS[rel.WIZARD], WIZARD_TOC), (rel.TOCS[rel.WORKSHOP], WORKSHOP_TOC)):
                 p = Path(d, rel_path)
                 p.parent.mkdir(parents=True)
                 p.write_bytes(text.replace("\n", "\r\n").encode())
@@ -379,7 +382,7 @@ class ArchiveTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
-        for rel_path, text in ((rel.TOCS[rel.CORE], CORE_TOC), (rel.TOCS[rel.SETTINGS], SETTINGS_TOC), (rel.TOCS[rel.NAVDATA], NAVDATA_TOC), (rel.TOCS[rel.DIAGNOSTICS], DIAG_TOC), (rel.TOCS[rel.LAYOUTS], LAYOUTS_TOC), (rel.TOCS[rel.WIZARD], WIZARD_TOC)):
+        for rel_path, text in ((rel.TOCS[rel.CORE], CORE_TOC), (rel.TOCS[rel.SETTINGS], SETTINGS_TOC), (rel.TOCS[rel.NAVDATA], NAVDATA_TOC), (rel.TOCS[rel.DIAGNOSTICS], DIAG_TOC), (rel.TOCS[rel.LAYOUTS], LAYOUTS_TOC), (rel.TOCS[rel.WIZARD], WIZARD_TOC), (rel.TOCS[rel.WORKSHOP], WORKSHOP_TOC)):
             (self.root / rel_path).parent.mkdir(parents=True)
             (self.root / rel_path).write_text(text)
 
@@ -391,12 +394,14 @@ class ArchiveTests(unittest.TestCase):
             rel.TOCS[rel.DIAGNOSTICS]: DIAG_TOC.replace("1.0.0", version),
             rel.TOCS[rel.LAYOUTS]: LAYOUTS_TOC.replace("1.0.0", version),
             rel.TOCS[rel.WIZARD]: WIZARD_TOC.replace("1.0.0", version),
+            rel.TOCS[rel.WORKSHOP]: WORKSHOP_TOC.replace("1.0.0", version),
             "!!!TwichUI/Core.lua": "-- core\n",
             "TwichUI_Settings/Kit.lua": "-- kit\n",
             "TwichUI_NavData/Data/Map0.lua": "-- walking map\n",
             "TwichUI_Diagnostics/Base.lua": "-- diagnostics\n",
             "TwichUI_Layouts/Canon.lua": "-- layouts\n",
             "TwichUI_LayoutWizard/Art.lua": "-- wizard\n",
+            "TwichUI_Workshop/Data.lua": "-- workshop\n",
         }
         entries.update(files or {})
         path = self.root / "pkg.zip"
@@ -416,7 +421,8 @@ class ArchiveTests(unittest.TestCase):
                 rel.TOCS[rel.NAVDATA]: NAVDATA_TOC.replace("1.0.0", self.VERSION).replace("\n", "\r\n"),
                 rel.TOCS[rel.DIAGNOSTICS]: DIAG_TOC.replace("1.0.0", self.VERSION).replace("\n", "\r\n"),
                 rel.TOCS[rel.LAYOUTS]: LAYOUTS_TOC.replace("1.0.0", self.VERSION).replace("\n", "\r\n"),
-                rel.TOCS[rel.WIZARD]: WIZARD_TOC.replace("1.0.0", self.VERSION).replace("\n", "\r\n")}
+                rel.TOCS[rel.WIZARD]: WIZARD_TOC.replace("1.0.0", self.VERSION).replace("\n", "\r\n"),
+                rel.TOCS[rel.WORKSHOP]: WORKSHOP_TOC.replace("1.0.0", self.VERSION).replace("\n", "\r\n")}
         self.assertEqual(self.make(crlf), [])
 
     def test_problems_are_found(self):

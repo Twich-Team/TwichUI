@@ -1,0 +1,23 @@
+## Interface: 16001
+## Title: |cffC9A24ATwich|rUI Workshop
+## Notes: Browse the recipes of your professions, queue crafts and see the combined materials still needed. Loaded only when you open it (/tui workshop); keep it turned on alongside TwichUI.
+## Author: twichie
+## Version: 1.0.0
+## RequiredDeps: !!!TwichUI
+## LoadOnDemand: 1
+## IconTexture: Interface\AddOns\!!!TwichUI\media\icon
+## X-License: MIT (code); see !!!TwichUI\LICENSE
+## Category: Interface Enhancements
+
+# Names, limits and small checks (no game calls, no frames); it creates R.Workshop
+Data.lua
+# The combined materials and what is still needed (pure)
+Materials.lua
+# The saved queue of the current character (TwichUIDB.workshop; this addon has no saved variables of its own)
+Queue.lua
+# What the profession window offers: the player's own recipes, their output and materials (game reads only)
+Observe.lua
+# What the window shows and does, without any frame
+Session.lua
+# The window (last: it tells TwichUI the addon is ready)
+Window.lua

@@ -3,6 +3,7 @@
 -- launchers' and the RestedXP guide's (modules/SpellMenu.lua, modules/RestedXPBrokerMenu.lua): the same palette,
 -- fonts and placement, and the player's own menu background and border (modules/MenuStyle.lua).
 --   Open settings...        opens the settings window (R:OpenSettings) and closes the menu.
+--   Workshop...             opens or closes the Workshop (R.WorkshopLauncher.Toggle; it loads the addon the first time).
 --   Leave me alone          one switch for Decline duels and Decline group invitations together (qol/QoL.lua,
 --                           Q.SetLeaveAlone). The row says On or Off; it is On when both are on. Turning it on
 --                           turns on whichever was off; turning it off turns off only what it turned on. The
@@ -58,6 +59,11 @@ local SPEC = {
     {
         key = "settings", label = "Open settings...", plain = true,
         act = function() M.Close(); R:OpenSettings() end,
+    },
+    {
+        key = "workshop", label = "Workshop...", plain = true,
+        shown = function() return R.WorkshopLauncher ~= nil end,
+        act = function() M.Close(); R.WorkshopLauncher.Toggle() end,
     },
     { kind = "divider" },
     {

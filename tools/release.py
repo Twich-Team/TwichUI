@@ -27,11 +27,11 @@ import zipfile
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-CORE, SETTINGS, NAVDATA, DIAGNOSTICS, LAYOUTS, WIZARD = ("!!!TwichUI", "TwichUI_Settings", "TwichUI_NavData", "TwichUI_Diagnostics",
-                                                         "TwichUI_Layouts", "TwichUI_LayoutWizard")
-ADDONS = (CORE, SETTINGS, NAVDATA, DIAGNOSTICS, LAYOUTS, WIZARD)
-# each needs CORE and loads only when asked for (the settings window, the first route, /tui perf, a layout install, the layout setup)
-LOAD_ON_DEMAND = (SETTINGS, NAVDATA, DIAGNOSTICS, LAYOUTS, WIZARD)
+CORE, SETTINGS, NAVDATA, DIAGNOSTICS, LAYOUTS, WIZARD, WORKSHOP = ("!!!TwichUI", "TwichUI_Settings", "TwichUI_NavData", "TwichUI_Diagnostics",
+                                                                   "TwichUI_Layouts", "TwichUI_LayoutWizard", "TwichUI_Workshop")
+ADDONS = (CORE, SETTINGS, NAVDATA, DIAGNOSTICS, LAYOUTS, WIZARD, WORKSHOP)
+# each needs CORE and loads only when asked for (the settings window, the first route, /tui perf, a layout install, the layout setup, the Workshop)
+LOAD_ON_DEMAND = (SETTINGS, NAVDATA, DIAGNOSTICS, LAYOUTS, WIZARD, WORKSHOP)
 # what each of them requires, when it is more than the core: the layout setup needs the layout engine too
 REQUIRED_DEPS = {WIZARD: (CORE, LAYOUTS)}
 TOCS = {a: f"{a}/{a}.toc" for a in ADDONS}

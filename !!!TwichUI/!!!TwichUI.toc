@@ -31,6 +31,8 @@ SettingsLauncher.lua
 SettingsBroker.lua
 DiagnosticsLauncher.lua
 LayoutsLauncher.lua
+# The Workshop (recipes, a craft queue, combined materials) is an addon of its own, loaded the first time it is opened (docs/workshop.md)
+WorkshopLauncher.lua
 # First-install setup: offers the layout setup on a new installation and coordinates EllesmereUI's own first run (docs/onboarding.md)
 Onboarding.lua
 # The welcome shown while that setup gets ready (presentation only; Onboarding.lua calls it)

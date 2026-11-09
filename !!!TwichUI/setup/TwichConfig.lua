@@ -82,7 +82,7 @@ TC.LOCAL = {
     ["ui.restedxpSkinState"] = "other", ["ui.showAdvanced"] = "other", ["gear.trees"] = "other",
     ["pins"] = "other", ["npcs"] = "other", ["ui.mapToolsIntro"] = "other", ["ui.navTravel"] = "other", ["ui.cozyBagOffer"] = "other", ["ui.barGlows"] = "other", ["ui.barGlowsMemory"] = "other", ["setup"] = "other", ["storedData"] = "other", ["whisperProbe"] = "other", ["welcome"] = "other", ["onboarding"] = "other",
     ["schema"] = "other", ["migrated"] = "other", ["heldStored"] = "other",
-    ["profiles"] = "other", ["profileKeys"] = "other", ["profileState"] = "other", ["layouts"] = "other",
+    ["profiles"] = "other", ["profileKeys"] = "other", ["profileState"] = "other", ["layouts"] = "other", ["workshop"] = "other",
 }
 
 ---------------------------------------------------------------------------
