@@ -76,7 +76,7 @@ c.C_Item = {
 c.InCombatLockdown = function() return false end
 c.IsShiftKeyDown = function() return false end
 
-for _, f in ipairs({ "Data.lua", "Materials.lua", "Queue.lua", "Observe.lua", "Prices.lua", "Opportunities.lua", "Scan.lua", "Session.lua", "Window.lua" }) do
+for _, f in ipairs({ "Data.lua", "Materials.lua", "Queue.lua", "Known.lua", "Observe.lua", "Prices.lua", "Opportunities.lua", "Vendor.lua", "Shopping.lua", "Scan.lua", "Session.lua", "AuctionButton.lua", "Window.lua" }) do
   local chunk = assert(loadfile(ROOT .. "../TwichUI_Workshop/" .. f)); setfenv(chunk, c); chunk("TwichUI_Workshop", {})
 end
 local W = R.Workshop
@@ -222,9 +222,12 @@ do
     IsThrottledMessageSystemReady = function() return true end,
     ReplicateItems = function() ah.sent = ah.sent + 1 end,
     GetNumReplicateItems = function() return #ah.records end,
-    GetReplicateItemInfo = function(i) local r = ah.records[i]; return "n", 1, r.count, 1, true, 1, "", 0, 0, r.buyout, 0, nil, nil, "o", "o", 0, r.item, true end,
+    GetReplicateItemInfo = function(i) local r = ah.records[i + 1]; if not r then return end; return "n", 1, r.count, 1, true, 1, "", 0, 0, r.buyout, 0, nil, nil, "o", "o", 0, r.item, true end,
   }
   c.AuctionHouseFrame = MIFake("Frame"); c.AuctionHouseFrame:Hide()
+  Same(W.AuctionButton.Attached(), false, "no button before the auction house window exists")
+  W.AuctionButton.Start()   -- (the real one is told by ADDON_LOADED / AUCTION_HOUSE_SHOW)
+  Check(W.AuctionButton.Attached() and W.AuctionButton.Button(), "the Scan prices button is made on the auction house window")
   c.UnitFactionGroup = function() return "Alliance" end
   c.GetRealmName = function() return "Realm" end
   c.GetMoneyString = function(n) return n .. "c" end
@@ -268,14 +271,27 @@ do
     { item = 502, count = 1, buyout = 0 },    -- bid only
     { item = 999, count = 1, buyout = 1 },    -- nothing to do with these recipes
   }
+  local AB = W.AuctionButton
+  local ahBtn, ahBar = AB.Button(), AB.Bar()
+  Check(not ahBar:IsShown(), "no bar while nothing runs")
   opps.scan:GetScript("OnClick")(opps.scan)
   Same(ah.sent, 1, "one click, one request"); Same(opps.scan.text:GetText(), "Scanning..."); Check(opps.scan.enabled == false, "can't be pressed again meanwhile")
   opps.scan:GetScript("OnClick")(opps.scan)
   Same(ah.sent, 1, "a repeated click does nothing")
   Check(opps.status:GetText():find("Asking the auction house", 1, true))
+  -- the overall progress bar, in the view and on the auction house window, and the auction house button follows the same scan
+  FlushTimers()
+  Check(opps.bar:IsShown() and ahBar:IsShown(), "a bar in both places while scanning")
+  Check(opps.bar.text:GetText():find("Asking the auction house for its listings 3%", 1, true), opps.bar.text:GetText())
+  Same(ahBtn.text:GetText(), "Scanning..."); Check(ahBtn.enabled == false, "the auction house button can't start a second scan")
+  ahBtn:GetScript("OnClick")(ahBtn); Same(ah.sent, 1, "and a click on it does nothing meanwhile")
   FireScan("REPLICATE_ITEM_LIST_UPDATE")
-  Advance(5)
+  Same(W.Scan.phase, "settling"); Same(W.Scan.Progress(), 0.08, "listings are arriving: past the asking")
+  Advance(7)
   Same(W.Scan.state, "done")
+  Check(not ahBar:IsShown() and not opps.bar:IsShown(), "the bars go when the scan ends")
+  Check(AB.Status():IsShown() and AB.Status():GetText():find("Prices found for 4 of your items", 1, true), "the auction house window says how it went")
+  Same(ahBtn.text:GetText(), "Scan prices"); Check(ahBtn.enabled)
   Same(opps.scan.text:GetText(), "Scan prices"); Check(opps.scan.enabled)
   Check(opps.status:GetText():find("Prices found for 4 of your items", 1, true), opps.status:GetText())
   Check(opps.source:GetText():find("Alliance auction house on Realm, scanned just now", 1, true), opps.source:GetText())
@@ -380,6 +396,129 @@ do
   Same(Win.Mode(), "opps")
   f.tabCraft:GetScript("OnClick")(f.tabCraft)
   f:Hide()
+end
+
+
+---------------------------------------------------------------------------
+-- The Shopping view: one row per missing material, a source, spending, and the actions (a fake vendor list and prices)
+---------------------------------------------------------------------------
+do
+  c.GetMoneyString = function(n) return n .. "c" end
+  g.names[12] = "Seed"
+  for _, e in ipairs({ unpack(Q.Entries()) }) do Q.Remove(e.id) end
+  g.recipes = { [1] = { name = "Healing Potion", diff = 1 }, [3] = { name = "Peacebloom Bundle", diff = 1 } }
+  g.schem = {
+    [1] = { quantityMin = 1, quantityMax = 1, outputItemID = 501, reagentSlotSchematics = { { reagentType = 1, reagents = { { itemID = 10 } }, quantityRequired = 2, required = true } } },
+    [3] = { quantityMin = 1, quantityMax = 1, outputItemID = 10, reagentSlotSchematics = { { reagentType = 1, reagents = { { itemID = 12 } }, quantityRequired = 1, required = true } } },
+  }
+  g.filtered = { 1, 3 }
+  g.bags = { [10] = 0, [12] = 0 }
+  c.TwichUIDB.workshop.prices = { v = 1, markets = { ["Realm|Alliance"] = { realm = "Realm", side = "Alliance", at = os.time() - 90000, complete = true, read = 1, used = 1, n = 2,
+    items = { [10] = { 100, 9, 9, 9 }, [12] = { 10, 9, 9, 9 } } } } }
+  f:Show()
+  Check(S.Add(S.AllRecipes()[1]), "queued the potion")
+  f.tabShop:GetScript("OnClick")(f.tabShop)
+  Same(Win.Mode(), "shop"); local shop = Win.Shop(); Check(shop:IsShown() and not Win.Opps():IsShown(), "the Shopping view is shown")
+  Check(f.events["MERCHANT_SHOW"] and f.events["MERCHANT_UPDATE"], "a merchant window is listened for while the window is shown")
+  local SL = Win.Lists().shop
+  Same(#SL.data, 2, "Peacebloom is short, and making it from Seed is cheaper than buying it, so Seed is bought")
+  local function RowOf(item) for _, r in ipairs(SL.rows) do if r:IsShown() and r.item == item then return r end end end
+  local make, seed = RowOf(10), RowOf(12)
+  Check(make and seed, "both rows are drawn")
+  Same(make.name:GetText(), "Peacebloom"); Same(make.need:GetText(), "2")
+  Same(make.source.text:GetText(), "Make"); Check(make.detail:GetText():find("Make 2 x Peacebloom Bundle", 1, true), make.detail:GetText())
+  Check(make.detail:GetText():find("Making this looks cheaper than buying at the auction house", 1, true), make.detail:GetText())
+  Same(make.act.text:GetText(), "Add to queue"); Check(make.act:IsShown())
+  Same(seed.name:GetText(), "Seed"); Same(seed.need:GetText(), "2"); Same(seed.spend.a:GetText(), "20c", "2 seeds at 10 each")
+  Check(seed.detail:GetText():find("Needed to make Peacebloom Bundle", 1, true), seed.detail:GetText())
+  Check(seed.spend.b:GetText():find("1 day ago", 1, true), "the price age is shown: " .. seed.spend.b:GetText())
+  Check(not seed.act:IsShown(), "no action where none fits")
+  Check(shop.total:GetText():find("Estimated spending: 20c", 1, true), shop.total:GetText())
+  Check(shop.source:GetText():find("scanned 1 day ago", 1, true), shop.source:GetText())
+  -- the basis tooltip says what is owned and what is not
+  tip = nil
+  local lines = {}
+  c.GameTooltip.AddLine = function(_, text) lines[#lines + 1] = text end
+  c.GameTooltip.AddDoubleLine = function(_, a, b) lines[#lines + 1] = a .. " | " .. b end
+  make:GetScript("OnEnter")(make)
+  local all = table.concat(lines, "\n")
+  Check(all:find("Make | worth 20c", 1, true) and all:find("Cooldowns, tools and crafting stations aren't checked", 1, true), all)
+  -- adding the made material to the queue: explicit, once; nothing is counted twice
+  make.act:GetScript("OnClick")(make.act)
+  Same(#Q.Entries(), 2, "the bundle is queued"); Same(Q.Find(3).crafts, 2)
+  Same(#SL.data, 1, "Peacebloom is now made by the queue: one row left"); Same(SL.rows[1].item, 12)
+  Same(SL.rows[1].need:GetText(), "2", "the seeds are counted once")
+  Check(f.note:GetText():find("Queued 2 crafts of Peacebloom Bundle", 1, true), f.note:GetText())
+  -- the Crafting view's Materials agree: the bundle's output is not "still needed"
+  f.tabCraft:GetScript("OnClick")(f.tabCraft)
+  local mrow
+  for _, r in ipairs(Win.Lists().mats.rows) do if r:IsShown() and r.item == 10 then mrow = r end end
+  Check(mrow and mrow.made == 2 and mrow.short:GetText() == "0", "the Materials list counts what the queue will make")
+  f.tabShop:GetScript("OnClick")(f.tabShop)
+  -- a bag update recalculates
+  g.bags[12] = 5
+  Fire("BAG_UPDATE_DELAYED"); Win.Render()
+  Same(#SL.data, 0, "the seeds are in the bags: nothing to buy"); Check(SL.empty:GetText():find("Nothing to buy", 1, true), SL.empty:GetText())
+  g.bags[12] = 0
+  -- the source button changes the choice
+  Win.Render()
+  local sr = SL.rows[1]
+  sr.source:GetScript("OnClick")(sr.source)
+  Check(S.picks[12] == "auction" and SL.rows[1].source.text:GetText() == "Auction house", "the player's choice")
+  sr.source:GetScript("OnClick")(sr.source)
+  Check(S.picks[12] == nil, "and back to the suggestion")
+
+  -- a vendor: the price is noted from the merchant window, and Show vendor needs a place the NPC list knows
+  local pending = {}
+  c.C_Timer = { After = function(_, fn) pending[#pending + 1] = fn end }
+  f:Hide(); f:Show()   -- (a fresh start for the redraw flag)
+  Check(W.Vendor.Entry(12) == nil, "no vendor price yet")
+  c.GetMerchantNumItems = function() return 1 end
+  c.GetMerchantItemID = function() return 12 end
+  c.GetMerchantItemCostInfo = function() return 0 end
+  c.C_MerchantFrame = { GetItemInfo = function() return { price = 4, stackCount = 1, numAvailable = -1, isPurchasable = true, hasExtendedCost = false } end }
+  c.UnitGUID = function() return "Creature-0-1-2-3-4567-0000" end
+  pending = {}
+  Fire("MERCHANT_SHOW")
+  Check(#pending >= 1, "the event schedules one settled redraw")
+  Fire("MERCHANT_UPDATE"); Same(#pending, 1, "a burst of merchant events is one redraw")
+  for _, fn in ipairs(pending) do fn() end
+  Check(W.Vendor.Entry(12) ~= nil, "the merchant window was read when the event settled")
+  Same(W.Vendor.Entry(12).p, 4); Same(W.Vendor.Entry(12).npc, 4567)
+  sr = SL.rows[1]
+  Same(sr.source.text:GetText(), "Vendor", "4 each at the vendor against 10 at the auction house"); Same(sr.spend.a:GetText(), "8c")
+  Check(not sr.act:IsShown(), "no place is known for the vendor, so no Show vendor")
+  local located
+  R.NpcStore = { Entries = function() return { { id = 4567, n = "Mira", m = 1, x = 5000, y = 5000, s = { 12 }, own = true } } end,
+    ValidMap = function() return true end, Usable = function() return true end, MyFaction = function() return nil end, COORD = 10000 }
+  R.NpcMap = { Locate = function(e) located = e; return true end }
+  local enabled = R.Enabled
+  R.Enabled = function(_, key) if key == "npcMap" then return true end return enabled(R, key) end
+  Win.Render()
+  sr = SL.rows[1]
+  Check(sr.act:IsShown() and sr.act.text:GetText() == "Show vendor", "a seen place: Show vendor")
+  sr.act:GetScript("OnClick")(sr.act)
+  Check(located and located.n == "Mira", "the map is asked to show that vendor, nothing else")
+  Check(f.note:GetText():find("Showing Mira on the map", 1, true), f.note:GetText())
+  R.Enabled = enabled; R.NpcStore, R.NpcMap = nil, nil
+
+  -- a material with no price: a known subtotal and a clear message, never a complete-looking total
+  Q.Remove(3)
+  g.bags[10] = 0
+  c.TwichUIDB.workshop.prices.markets["Realm|Alliance"].items[12] = nil
+  c.TwichUIDB.workshop.vendor = nil
+  Win.Render()
+  Same(#SL.data, 1); Same(SL.rows[1].name:GetText(), "Peacebloom"); Same(SL.rows[1].spend.a:GetText(), "200c")
+  Check(shop.total:GetText():find("Estimated spending: 200c", 1, true) and not shop.total:GetText():find("missing", 1, true), shop.total:GetText())
+  c.TwichUIDB.workshop.prices.markets["Realm|Alliance"].items[10] = nil
+  Win.Render()
+  Same(SL.rows[1].spend.a:GetText(), "Unknown", "unknown cost is not zero")
+  Check(shop.total:GetText():find("Some prices missing", 1, true), shop.total:GetText())
+
+  f:Hide()
+  Same(Events(f), 0, "hidden: no events")
+  Same(W.Snapshot().events, 0)
+  f.tabCraft:GetScript("OnClick")(f.tabCraft)
 end
 
 print("PASSED")

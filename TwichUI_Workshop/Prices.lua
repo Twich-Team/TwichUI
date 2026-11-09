@@ -92,10 +92,12 @@ end
 -- record's information yet (an explicit false only). Returns true when it counted toward a price.
 function Batch:Add(item, count, buyout, hasAllInfo)
     self.read = self.read + 1
-    if Plain(hasAllInfo) == false then self.partialInfo = self.partialInfo + 1 end
     item = Int(item, 1, W.MAX_ID)
     if not item then self.invalid = self.invalid + 1 return false end
     if not self.wanted[item] then self.unwanted = self.unwanted + 1 return false end
+    -- only a record of an item we keep a price for can make the scan "not complete": the other scanners ignore this flag altogether,
+    -- and a listing nobody asked about says nothing about the prices that were
+    if Plain(hasAllInfo) == false then self.partialInfo = self.partialInfo + 1 end
     count = Int(count, 1, PR.MAX_COUNT)
     if not count then self.invalid = self.invalid + 1 return false end
     local raw = Plain(buyout)
@@ -239,6 +241,28 @@ function PR.Lookup(market, item)
         at = market.at, complete = market.complete }
 end
 
+-- What buying `qty` of an item at that auction house is expected to cost, from what the scan saw of it (Lookup's answer, or nil).
+-- A scan keeps only the cheapest price, how many items are listed at exactly that price (`qty`) and how many are listed in all
+-- (`total`), so only these can be said, and the answer says which one it is:
+--   state "exact"     qty is no more than the items listed at the cheapest price: cost = price x qty, backed by listings
+--   state "estimate"  more are listed than that (or the scan did not say): cost = price x qty is the LEAST it could cost, since the
+--                     further items sell for more; it is a unit-price estimate, never proof the listings exist at that price
+--   state "few"       fewer items are listed in all than asked for: it cannot be bought here in that quantity (cost nil)
+--   state "none"      nothing usable was seen (cost nil; never 0)
+-- unit, listed (items at the cheapest price), total, at (scan time) and complete come from the lookup.
+function PR.Quote(p, qty)
+    qty = Int(qty, 1, W.MAX_ID)
+    if not qty or type(p) ~= "table" or not p.price then return { state = "none", qty = qty } end
+    local q = { qty = qty, unit = p.price, listed = p.qty, total = p.total, at = p.at, complete = p.complete }
+    if p.total and p.total < qty then
+        q.state = "few"
+    else
+        q.state = (p.qty ~= nil and qty <= p.qty) and "exact" or "estimate"
+        q.cost = p.price * qty
+    end
+    return q
+end
+
 ---------------------------------------------------------------------------
 -- One craft: cost, sell price, profit
 ---------------------------------------------------------------------------
@@ -274,15 +298,14 @@ function PR.Estimate(rec, lookup, rate)
         for _, m in ipairs(rec.mats) do
             local row = { item = m.item, qty = m.qty }
             local p = lookup(m.item)
-            if p and p.total and p.total < m.qty then
-                row.unavailable = "few"    -- not enough is listed to buy what one craft needs
+            local quote = PR.Quote(p, m.qty)
+            if quote.state == "few" or quote.state == "none" then
+                row.unavailable = quote.state   -- "few": not enough is listed to buy what one craft needs
                 p = nil
-            elseif not p then
-                row.unavailable = "none"
             end
             if p then
                 row.unit, row.at, row.complete = p.price, p.at, p.complete
-                row.total = p.price * m.qty
+                row.total = quote.cost
                 row.cheapest = p.qty ~= nil and m.qty > p.qty
                 cost = cost + row.total
                 Seen(p)

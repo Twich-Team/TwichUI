@@ -1,12 +1,14 @@
 -- TwichUI Workshop: what the window knows and does, without a frame
--- Holds the recipe lists seen in this session (the player's own professions, in memory only), turns the saved queue and the bags
--- into the rows the window draws, and performs its actions (add, change, remove, open a recipe), each answering in plain words.
--- Nothing here is saved except through Queue.lua.
+-- Holds the recipe lists of the player's own professions: those read in the profession window this session, and, for the others, what
+-- was remembered from earlier sessions (Known.lua; a read of a profession brings its remembered entry up to date). Turns the saved
+-- queue and the bags into the rows the window draws, and performs its actions (add, change, remove, open a recipe), each answering
+-- in plain words. Nothing here is saved except through Queue.lua and Known.lua.
 
 local R = TwichUI
 local W = R.Workshop
-local Q, M, O = W.Queue, W.Materials, W.Observe
+local Q, M, O, KN = W.Queue, W.Materials, W.Observe, W.Known
 local PR, Op, SC = W.Prices, W.Opps, W.Scan
+local V, Sh = W.Vendor, W.Shopping
 local S = { filter = "", observations = 0 }
 W.Session = S
 
@@ -14,11 +16,51 @@ local MAX_PROFESSIONS = 5
 
 S.opp = { sort = Op.DEFAULTS.sort, desc = Op.DEFAULTS.desc, prof = nil, profitOnly = false }   -- the Opportunities view's choices (memory only)
 
-local profs = {}       -- [professionID] = { prof, profName, complete, recipes, at }
-local order = {}       -- professionIDs, the order first seen
+local profs = {}       -- [professionID] = { prof, profName, complete, recipes, at, live }   (live: read in the profession window this session)
+local order = {}       -- professionIDs, remembered ones first, then in the order first seen
+local loaded = false   -- the remembered professions have been brought in
+local dirty = {}       -- [professionID] = true: changed since it was last kept
 local current          -- the professionID being browsed
 local lastWhy          -- why the last read gave nothing, or nil
 local note             -- the last thing an action said, until the next action
+
+---------------------------------------------------------------------------
+-- What is remembered (Known.lua)
+---------------------------------------------------------------------------
+-- Brings the remembered professions in, once per time the window has been open (Reset forgets them from memory again; they stay saved).
+-- A profession read this session is never replaced by an older remembered one.
+local function Ensure()
+    if loaded then return end
+    loaded = true
+    for _, p in ipairs(KN.Load()) do
+        if not profs[p.prof] and #order < MAX_PROFESSIONS then
+            profs[p.prof] = p
+            order[#order + 1] = p.prof
+            if not current then current = p.prof end   -- the most recently read comes first
+        end
+    end
+    table.sort(order, function(a, b) return profs[a].profName:lower() < profs[b].profName:lower() end)
+end
+
+-- Calls fn for every recipe of a profession: the ones the window shows, then the ones it doesn't but are still known
+local function Each(p, fn)
+    for _, rec in ipairs(p.recipes) do fn(rec) end
+    if p.extra then for _, rec in ipairs(p.extra) do fn(rec) end end
+end
+S.Each = Each
+
+-- Keeps what changed. Returns true, or false and why (held by a newer TwichUI, ...). Nothing is written when nothing changed.
+function S.Save()
+    local ok, why = true, nil
+    for id in pairs(dirty) do
+        if profs[id] then
+            local good, err = KN.Store(profs[id])
+            if not good then ok, why = false, err end
+        end
+    end
+    dirty = {}
+    return ok, why
+end
 
 ---------------------------------------------------------------------------
 -- Reading the profession window
@@ -30,17 +72,51 @@ function S.Observe()
     local r, why = O.Read()
     lastWhy = why
     if not r then return false, why end
+    Ensure()
     S.observations = S.observations + 1
     r.at = Q.Now()
+    r.live = true
+    -- what was known of this profession (remembered, or read earlier this session) carries over to the recipes read now, so nothing
+    -- has to be read again to be known; a list that follows the window's filters keeps the recipes it leaves out (they are still known)
+    local old = profs[r.prof]
+    if old then
+        local byId, here = {}, {}
+        for _, rec in ipairs(old.recipes) do byId[rec.id] = rec end
+        for _, rec in ipairs(r.recipes) do
+            here[rec.id] = true
+            local o = byId[rec.id]
+            if o and (o.filled or o.remembered) then
+                rec.outItem, rec.outMin, rec.outMax, rec.mats, rec.why = o.outItem, o.outMin, o.outMax, o.mats, o.why
+                rec.filled, rec.remembered = o.filled, o.remembered
+            end
+        end
+        if not r.complete then
+            -- still known, just not shown by the window's filters: kept apart, so browsing follows the filters but pricing and saving don't lose them
+            local extra = {}
+            for _, list in ipairs({ old.recipes, old.extra or {} }) do
+                for _, o in ipairs(list) do
+                    if not here[o.id] and #r.recipes + #extra < KN.MAX_RECIPES then
+                        here[o.id] = true
+                        o.diff = nil   -- the old difficulty means nothing now
+                        extra[#extra + 1] = o
+                    end
+                end
+            end
+            if #extra > 0 then r.extra = extra end
+        end
+    end
     if not profs[r.prof] then
         if #order >= MAX_PROFESSIONS then
             local drop = table.remove(order, 1)
             profs[drop] = nil
+            dirty[drop] = nil
         end
         order[#order + 1] = r.prof
     end
     profs[r.prof] = r
     current = r.prof
+    dirty[r.prof] = true
+    S.Save()
     if #Q.Entries() > 0 then
         local byId = {}
         for _, rec in ipairs(r.recipes) do byId[rec.id] = rec end
@@ -52,15 +128,18 @@ function S.Observe()
     return true
 end
 
--- Forgets everything seen (the window closed); the saved queue is untouched
+-- Forgets what is held in memory (the window closed); what changed is kept first, and the saved queue and recipes are untouched
 function S.Reset()
+    S.Save()
     profs, order, current, lastWhy, note = {}, {}, nil, nil, nil
+    loaded, dirty = false, {}
     S.filter = ""
     S.opp.prof = nil
     O.ClearCache()
 end
 
 function S.Professions()
+    Ensure()
     local out = {}
     for _, id in ipairs(order) do
         local p = profs[id]
@@ -70,10 +149,14 @@ function S.Professions()
 end
 
 function S.Select(id)
+    Ensure()
     if profs[id] then current = id end
 end
 
-function S.Current() return current and profs[current] or nil end
+function S.Current()
+    Ensure()
+    return current and profs[current] or nil
+end
 
 function S.SetFilter(text)
     text = type(text) == "string" and text or ""
@@ -99,7 +182,9 @@ function S.Notices()
     local out = {}
     local p = S.Current()
     if p then
-        if not p.complete then
+        if not p.live then
+            out[#out + 1] = ("Remembered from %s. Open %s to update it."):format(PR.AgeText(PR.Age(p.at)), p.profName)
+        elseif not p.complete then
             out[#out + 1] = "This list follows the filters in your profession window, so some recipes may not be shown."
         end
     else
@@ -185,9 +270,47 @@ end
 ---------------------------------------------------------------------------
 -- Materials
 ---------------------------------------------------------------------------
+-- The known recipes by id, and by the item they make (each list by recipe id). Built from this session's lists, nothing is asked of the game.
+local function Index()
+    Ensure()
+    local byId, byOut = {}, {}
+    for _, id in ipairs(order) do
+        Each(profs[id], function(rec)
+            byId[rec.id] = rec
+            if rec.outItem and (rec.filled or rec.remembered) then
+                local list = byOut[rec.outItem]
+                if not list then list = {} byOut[rec.outItem] = list end
+                list[#list + 1] = rec
+            end
+        end)
+    end
+    for _, list in pairs(byOut) do table.sort(list, function(a, b) return a.id < b.id end) end
+    return byId, byOut
+end
+
+-- The queue as the materials are worked out from it: an entry saved before the queue kept what a craft makes learns it from the known recipe
+-- (a copy; the saved entry is not changed)
+local function QueueView(byId)
+    local entries, view, missing = Q.Entries(), {}, false
+    for _, e in ipairs(entries) do if e.outItem == nil then missing = true end end
+    if not missing then return entries end
+    byId = byId or Index()
+    for i, e in ipairs(entries) do
+        local rec = e.outItem == nil and byId[e.id] or nil
+        if rec and rec.outItem then
+            local c = {}
+            for k, v in pairs(e) do c[k] = v end
+            c.outItem = rec.outItem
+            e = c
+        end
+        view[i] = e
+    end
+    return view
+end
+
 -- Rows and a summary of everything the queue needs against the bags (see Materials.lua)
 function S.Materials()
-    return M.Rows(Q.Entries(), O.BagCount)
+    return M.Rows(QueueView(), O.BagCount)
 end
 
 -- The one sentence under the materials, and its tone ("good", "warn" or "quiet": the words carry the meaning, the tone only colours them)
@@ -208,36 +331,46 @@ end
 ---------------------------------------------------------------------------
 -- Opportunities: what one craft costs and could earn (Prices.lua, Opportunities.lua)
 ---------------------------------------------------------------------------
--- Every recipe read this session, all professions
+-- Every recipe known (read this session or remembered), all professions
 function S.AllRecipes()
+    Ensure()
     local out = {}
     for _, id in ipairs(order) do
-        for _, rec in ipairs(profs[id].recipes) do out[#out + 1] = rec end
+        Each(profs[id], function(rec) out[#out + 1] = rec end)
     end
     return out
 end
 
 -- Reads the output and materials of up to n recipes not read yet (each once). Returns how many are still waiting.
 function S.FillSome(n)
-    local left = 0
+    Ensure()
+    local left, did = 0, false
     for _, id in ipairs(order) do
-        for _, rec in ipairs(profs[id].recipes) do
-            if not rec.filled and not rec.tried then
-                if n > 0 then
-                    rec.tried = true
-                    O.Fill(rec)
-                    n = n - 1
-                else
-                    left = left + 1
+        local p = profs[id]
+        -- only a profession read this session is asked again: the game may not give the details of one that isn't open, and
+        -- what is remembered of it stands until it is read
+        if p.live then
+            Each(p, function(rec)
+                if not rec.filled and not rec.tried then
+                    if n > 0 then
+                        rec.tried = true
+                        O.Fill(rec)
+                        if rec.filled then dirty[id], did = true, true end
+                        n = n - 1
+                    else
+                        left = left + 1
+                    end
                 end
-            end
+            end)
         end
     end
+    if did and left == 0 then S.Save() end
     return left
 end
 
--- The items worth a saved price: what the recipes read this session make and need. Returns the set, how many, and whether it was cut.
+-- The items worth a saved price: what the known recipes make and need. Returns the set, how many, and whether it was cut.
 function S.Wanted()
+    Ensure()
     local set, n, cut = {}, 0, false
     local function Add(item)
         if not item or set[item] then return end
@@ -246,12 +379,12 @@ function S.Wanted()
         n = n + 1
     end
     for _, id in ipairs(order) do
-        for _, rec in ipairs(profs[id].recipes) do
-            if rec.filled then
+        Each(profs[id], function(rec)
+            if rec.filled or rec.remembered then
                 Add(rec.outItem)
                 if rec.mats then for _, m in ipairs(rec.mats) do Add(m.item) end end
             end
-        end
+        end)
     end
     return set, n, cut
 end
@@ -314,16 +447,176 @@ end
 function S.SortBy(key) Op.SetSort(S.opp, key) end
 
 function S.FilterProfession(id)
+    Ensure()
     if id == nil or profs[id] then S.opp.prof = id end
 end
 
 function S.ToggleProfitOnly() S.opp.profitOnly = not S.opp.profitOnly end
 
+---------------------------------------------------------------------------
+-- The shopping list (Shopping.lua): the materials still needed, where to get each, and what it may cost
+---------------------------------------------------------------------------
+S.picks = {}   -- the player's source choices: [item] = "vendor" | "auction" | "make". Memory only, kept while the item is on the list.
+
+-- The materials of every known recipe and of the queue: the vendor prices worth keeping
+function S.WantedMaterials()
+    Ensure()
+    local set = {}
+    for _, id in ipairs(order) do
+        Each(profs[id], function(rec)
+            if rec.mats then for _, m in ipairs(rec.mats) do set[m.item] = true end end
+        end)
+    end
+    for _, e in ipairs(Q.Entries()) do
+        if e.mats then for _, m in ipairs(e.mats) do set[m.item] = true end end
+    end
+    return set
+end
+
+-- The merchant window just opened or changed: keep what its money-only listings charge for the materials this character's recipes use.
+-- Returns true, or false and why. Reads and saves nothing else.
+function S.ReadMerchant()
+    local list, npc = O.ReadMerchant()
+    if not list then return false, npc end
+    local kept, why = V.Observe(list, S.WantedMaterials(), npc)
+    if kept == false then return false, why end
+    return true
+end
+
+-- The plan for what the queue still needs. Returns plan (Shopping.Plan's), and ctx: { summary (Materials'), source (PriceSource),
+-- sellers ([item] = merchants of the NPC collection that were seen to sell it), now }
+function S.Shopping()
+    local byId, byOut = Index()
+    local mrows, msum = M.Rows(QueueView(byId), O.BagCount)
+    local src = S.PriceSource()
+    local market = src.market
+    -- the items a merchant could matter for: what is needed and the reagents of anything that could make it
+    local wanted = {}
+    for _, r in ipairs(mrows) do
+        if r.short == nil or r.short > 0 then
+            wanted[r.item] = true
+            for _, rec in ipairs(byOut[r.item] or {}) do
+                if rec.mats then for _, m in ipairs(rec.mats) do wanted[m.item] = true end end
+            end
+        end
+    end
+    local sellers = V.Sellers(wanted)
+    local inp = {
+        rows = mrows, picks = S.picks, have = O.BagCount,
+        auction = function(item) return market and PR.Lookup(market, item) or nil end,
+        vendor = V.Entry,
+        sells = function(item) return sellers[item] ~= nil end,
+        recipes = function(item) return byOut[item] or {} end,
+        queued = function(id) return Q.Find(id) end,
+    }
+    local plan = Sh.Plan(inp)
+    -- a choice stays while its material is part of the queue's needs or of the plan; otherwise it is forgotten (bounded)
+    local keep = {}
+    for _, r in ipairs(mrows) do keep[r.item] = true end
+    for _, r in ipairs(plan.rows) do keep[r.item] = true end
+    for item in pairs(S.picks) do
+        if not keep[item] then S.picks[item] = nil end
+    end
+    return plan, { summary = msum, source = src, sellers = sellers, now = Q.Now() }
+end
+
+local function FindRow(plan, item, kind)
+    for _, r in ipairs(plan.rows) do
+        if r.item == item and (kind == nil or r.kind == kind) then return r end
+    end
+end
+
+-- Chooses where a material comes from: kind is "vendor", "auction", "make" or nil (the suggestion)
+function S.PickSource(item, kind)
+    if kind ~= nil and kind ~= "vendor" and kind ~= "auction" and kind ~= "make" then return false end
+    S.picks[item] = kind
+    return true
+end
+
+-- Click on a row's source: the suggestion, then each option that can be chosen, then the suggestion again. Recalculated from now's plan.
+function S.CycleSource(item)
+    local plan = S.Shopping()
+    local row = FindRow(plan, item)
+    if not row then return false end
+    local choices = Sh.Choices(row)
+    local nextKind
+    if not row.picked then
+        nextKind = choices[1]
+    else
+        for i, k in ipairs(choices) do
+            if k == row.source then nextKind = choices[i + 1] break end
+        end
+    end
+    S.picks[item] = nextKind
+    return true
+end
+
+-- Adds the crafts that make a short material to the queue (the player's explicit action). The queue then makes it, so the plan no longer
+-- counts it as short and its materials are the queue's own needs: nothing is counted twice, and a second click finds nothing to add.
+function S.AddSubcraft(item)
+    local plan = S.Shopping()
+    local row = FindRow(plan, item, "make")
+    if not row then
+        note = "Nothing to add: your queue already covers that."
+        return false
+    end
+    local mk = row.make
+    local rec = mk.rec
+    O.Fill(rec)
+    local e = Q.Find(rec.id)
+    local ok, why
+    if e then
+        if e.crafts + mk.crafts > W.MAX_CRAFTS then
+            note = "That would be more crafts than a queue entry can hold."
+            return false
+        end
+        ok, why = Q.SetCrafts(rec.id, e.crafts + mk.crafts)
+    else
+        local added
+        added, why = Q.Add(rec, mk.crafts)
+        ok = added ~= nil
+    end
+    if not ok then
+        note = ACTION_WHY[why] or ACTION_WHY.bad
+        return false
+    end
+    S.picks[item] = nil
+    note = ("Queued %d %s of %s."):format(mk.crafts, mk.crafts == 1 and "craft" or "crafts", rec.name)
+    return true
+end
+
+-- The click on Show vendor: shows the vendor seen to sell the item on the world map (the NPC collection's own "find"); it sets no waypoint,
+-- starts no route and buys nothing. Returns true, or false (and says why in the note).
+function S.ShowVendor(item)
+    local sellers = V.Sellers({ [item] = true })[item]
+    local rec = V.Entry(item)
+    local e = V.Places(sellers, rec and rec.npc, 1)[1]
+    if not e then
+        note = "No vendor location is known for that item."
+        return false
+    end
+    local NMAP = R.NpcMap
+    if not (NMAP and NMAP.Locate) then
+        note = "Vendors and trainers isn't available, so the vendor can't be shown."
+        return false
+    end
+    if InCombatLockdown and InCombatLockdown() then
+        note = "The map can be opened when combat ends."
+        return false
+    end
+    if WorldMapFrame and WorldMapFrame.IsShown and not WorldMapFrame:IsShown() and ToggleWorldMap then pcall(ToggleWorldMap) end
+    local ok = NMAP.Locate(e)
+    note = ok and ("Showing %s on the map."):format(e.n) or "The map couldn't show that vendor."
+    return ok
+end
+
 function S.Snapshot()
     local n = 0
-    for _, id in ipairs(order) do n = n + #profs[id].recipes end
+    for _, id in ipairs(order) do n = n + #profs[id].recipes + (profs[id].extra and #profs[id].extra or 0) end
     local realm = SC.Realm()
     local market = realm and PR.Newest(realm) or nil
+    local picks = 0
+    for _ in pairs(S.picks) do picks = picks + 1 end
     return { professions = #order, recipes = n, queue = Q.Count(), cache = O.CacheSize(), observations = S.observations,
-        prices = market and market.n or 0, scan = SC.state }
+        prices = market and market.n or 0, vendor = V.Count(), picks = picks, scan = SC.state }
 end

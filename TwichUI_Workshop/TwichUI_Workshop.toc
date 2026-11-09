@@ -15,15 +15,23 @@ Data.lua
 Materials.lua
 # The saved queue of the current character (TwichUIDB.workshop; this addon has no saved variables of its own)
 Queue.lua
+# The recipes a character knows, remembered between sessions (TwichUIDB.workshop, per character)
+Known.lua
 # What the profession window offers: the player's own recipes, their output and materials (game reads only)
 Observe.lua
 # Auction prices: the price service, what one craft costs and earns (saved in TwichUIDB.workshop.prices; no game calls, no frames)
 Prices.lua
 # The Opportunities list: rows, filter, sort, the basis text (pure)
 Opportunities.lua
+# What vendors were seen to charge, and where they are (saved in TwichUIDB.workshop.vendor; no game calls, no frames)
+Vendor.lua
+# The shopping list: where to get each missing material, or whether to make it (pure)
+Shopping.lua
 # The price scan of the open auction house (started only by the player's click)
 Scan.lua
 # What the window shows and does, without any frame
 Session.lua
+# The progress bar and the Scan prices button on the auction house window (the click goes through Session)
+AuctionButton.lua
 # The window (last: it tells TwichUI the addon is ready)
 Window.lua

@@ -7,7 +7,7 @@ dofile(TESTS .. "mi_mock.lua")
 local function Check(cond, msg) if not cond then error(msg, 2) end end
 local function Same(a, b, msg) if a ~= b then error((msg or "") .. " expected " .. tostring(b) .. ", got " .. tostring(a), 2) end end
 
-local WORKSHOP_FILES = { "Data.lua", "Materials.lua", "Queue.lua", "Observe.lua", "Prices.lua", "Opportunities.lua", "Scan.lua", "Session.lua" }
+local WORKSHOP_FILES = { "Data.lua", "Materials.lua", "Queue.lua", "Known.lua", "Observe.lua", "Prices.lua", "Opportunities.lua", "Vendor.lua", "Shopping.lua", "Scan.lua", "Session.lua" }
 
 local function Load(c, file)
   local chunk = assert(loadfile(ROOT .. "../TwichUI_Workshop/" .. file))
@@ -66,9 +66,9 @@ local function Schematic(lo, hi, slots, outItem)
 end
 local function Basic(item, qty) return { reagentType = 1, reagents = { { itemID = item } }, quantityRequired = qty, required = true } end
 
-local function Setup(name)
+local function Setup(name, db)
   local c = MIClient(name or "Rich", { db = { modules = {} } })
-  c.TwichUIDB = c.TwichUIDB or {}
+  c.TwichUIDB = db or c.TwichUIDB or {}
   local g = FakeGame(c)
   for _, f in ipairs(WORKSHOP_FILES) do Load(c, f) end
   return c, g, c.TwichUI.Workshop
@@ -384,7 +384,132 @@ do
   -- the Workshop never changed the profession window (any C_TradeSkillUI.Set*/Clear*/Close* call would have raised)
   -- hiding forgets what was read but not the queue
   S.Reset()
-  Same(#S.Professions(), 0); Same(O.CacheSize(), 0); Same(#Q.Entries(), 2)
+  Same(S.Snapshot().professions, 0, "nothing is held in memory"); Same(O.CacheSize(), 0); Same(#Q.Entries(), 2)
+  Same(#S.Professions(), 2, "but what was read is remembered and comes back when it is needed")
+end
+
+---------------------------------------------------------------------------
+-- Remembered recipes: kept between sessions, brought up to date by a read
+---------------------------------------------------------------------------
+do
+  local c, g, W = Setup()
+  local S, Q, O, KN = W.Session, W.Queue, W.Observe, W.Known
+  g.recipes = { [1] = { name = "Healing Potion", diff = 1 }, [2] = { name = "Mana Potion", diff = 0 }, [3] = { name = "Anti-Venom" } }
+  g.schem[1] = Schematic(1, 1, { Basic(10, 2), Basic(11, 1) }, 501)
+  g.schem[2] = Schematic(1, 2, { Basic(10, 3) }, 502)
+  g.schem[3] = Schematic(1, 1, { { reagentType = 1, reagents = { { itemID = 1 }, { itemID = 2 } }, quantityRequired = 1, required = true } }, 503)
+  g.all = nil; g.hasAll()
+  g.all = { 1, 2, 3 }
+  Same(#S.Professions(), 0, "a new character remembers nothing")
+  Check(S.Observe())
+  Same(S.FillSome(math.huge), 0)
+  local key = Q.CharKey()
+  local saved = c.TwichUIDB.workshop.chars[key].known[171]
+  Check(saved and saved.name == "Alchemy" and saved.complete == true and #saved.r == 3, "the read profession is kept for this character")
+  Same(saved.r[1][2], "Anti-Venom", "in the order shown"); Same(saved.r[1][7], 2, "an unsupported recipe is kept as such")
+  Same(c.TwichUIDB.workshop.v, 1)
+  Check(not saved.r[2].diff and #saved.r[2] == 11, "a flat record: difficulty is not kept; healing potion = 7 fields + 2 materials")
+
+  -- "a reload": a new game session on the same saved data
+  local c2, g2, W2 = Setup("Rich", c.TwichUIDB)
+  g2.recipes, g2.schem = g.recipes, g.schem; g2.hasAll()
+  local S2 = W2.Session
+  local P = S2.Professions()
+  Same(#P, 1); Same(P[1].name, "Alchemy"); Same(P[1].count, 3)
+  Same(g2.calls.schematic, nil, "nothing is read from the game to know them")
+  Same(#S2.AllRecipes(), 3)
+  local want = S2.Wanted()
+  Check(want[501] and want[502] and want[10] and want[11], "outputs and materials are known without opening the profession")
+  Check(S2.Notices()[1]:find("Remembered from", 1, true) and S2.Notices()[1]:find("Open Alchemy to update it", 1, true), S2.Notices()[1])
+  Same(S2.FillSome(math.huge), 0); Same(g2.calls.schematic, nil, "a remembered profession is not asked again while it isn't open")
+  local rec
+  for _, r in ipairs(S2.Browse()) do if r.id == 2 then rec = r end end
+  Same(rec.outItem, 502); Same(rec.outMin, 1); Same(rec.outMax, 2); Same(rec.mats[1].qty, 3); Same(rec.diff, nil, "no difficulty for a remembered recipe")
+  Check(S2.Add(rec), "a remembered recipe can be queued"); Same(W2.Queue.Find(2).mats[1].item, 10)
+
+  -- opening the profession: new recipes are learned, changed ones updated, nothing is lost
+  g2.recipes[4] = { name = "Elixir of Wisdom", diff = 2 }
+  g2.schem[4] = Schematic(1, 1, { Basic(12, 1) }, 504)
+  g2.schem[1] = Schematic(1, 1, { Basic(10, 5), Basic(11, 1) }, 501)   -- changed
+  g2.all = { 1, 2, 3, 4 }
+  Check(S2.Observe())
+  Same(#S2.Browse(), 4)
+  Check(S2.Current().live); Check(S2.Notices()[1] == nil, "read this session: no 'remembered' note")
+  local r1
+  for _, r in ipairs(S2.Browse()) do if r.id == 1 then r1 = r end end
+  Same(r1.mats[1].qty, 2, "what was remembered is there at once"); Same(r1.diff, 1, "and the difficulty is the fresh one")
+  Same(S2.FillSome(math.huge), 0)
+  Same(r1.mats[1].qty, 5, "then brought up to date from the game")
+  local saved2 = c.TwichUIDB.workshop.chars[key].known[171]
+  Same(#saved2.r, 4, "the new recipe is kept")
+  local found, fresh
+  for _, r in ipairs(saved2.r) do if r[1] == 1 then found = r elseif r[1] == 4 then fresh = r end end
+  Same(found[9], 5, "and the change"); Same(fresh[2], "Elixir of Wisdom"); Same(fresh[8], 12)
+
+  -- a list that follows the window's filters keeps what it leaves out
+  g2.all = nil; g2.filtered = { 4 }
+  Check(S2.Observe())
+  Same(#S2.Browse(), 1, "browsing follows the filters"); Same(#S2.AllRecipes(), 4, "but all four are still known")
+  Same(#c.TwichUIDB.workshop.chars[key].known[171].r, 4, "and still kept")
+
+  -- Reset (the window closed) saves, then forgets memory; the next use brings it back
+  S2.Reset()
+  Same(S2.Snapshot().professions, 0); Same(#S2.AllRecipes(), 4)
+
+  -- another profession is added beside it; another character has its own
+  g2.prof = { professionID = 164, professionName = "Blacksmithing" }
+  g2.recipes[20] = { name = "Copper Bar" }; g2.schem[20] = Schematic(1, 1, { Basic(30, 1) }, 520)
+  g2.filtered = { 20 }; g2.all = nil
+  Check(S2.Observe())
+  Same(#S2.Professions(), 2); Same(#S2.AllRecipes(), 5)
+  local c3, g3, W3 = Setup("Alt", c.TwichUIDB)
+  Same(#W3.Session.Professions(), 0, "another character remembers nothing of this one")
+
+  -- a newer TwichUI's data is never written
+  c.TwichUIDB.workshop.v = 2
+  local before = #c.TwichUIDB.workshop.chars[key].known[171].r
+  g2.recipes[5] = { name = "Another" }; g2.schem[5] = Schematic(1, 1, { Basic(31, 1) }, 505)
+  g2.prof = { professionID = 171, professionName = "Alchemy" }; g2.all = { 1, 2, 3, 4, 5 }
+  Check(S2.Observe()); Same(S2.FillSome(math.huge), 0)
+  Same(#c.TwichUIDB.workshop.chars[key].known[171].r, before, "held: nothing written"); Same(#S2.Browse(), 5, "but it still works in memory")
+  c.TwichUIDB.workshop.v = 1
+
+  -- bad saved records are skipped, never used
+  local db = { workshop = { v = 1, chars = { [key] = { known = {
+    [171] = { name = "Alchemy", at = 5, complete = true, r = {
+      { 1, "Good", 5, 501, 1, 1, 1, 10, 2 }, "junk", { "x" }, { 2, "Bad mats", 0, 0, 0, 0, 1, 10 }, { 3, "Zero qty", 0, 0, 0, 0, 1, 10, 0 },
+      { 4, ("x"):rep(200), 0, 0, 0, 0, 0 }, { 1, "Duplicate", 0, 0, 0, 0, 0 },
+    } },
+    [-4] = { name = "Bad id", r = { { 1, "A", 0, 0, 0, 0, 0 } } },
+    [164] = "junk", [165] = { name = "No list" },
+  } } } } }
+  local c4, g4, W4 = Setup("Rich", db)
+  local P4 = W4.Session.Professions()
+  Same(#P4, 1); Same(P4[1].name, "Alchemy")
+  local names = {}
+  for _, r in ipairs(W4.Session.AllRecipes()) do names[r.id] = r end
+  Same(names[1].name, "Good"); Same(names[1].mats[1].qty, 2)
+  Same(names[2] and names[2].mats, nil, "a record with a half pair of materials is not trusted for them")
+  Same(names[3] and names[3].mats, nil, "a zero quantity is not a material")
+  Same(#names[4].name, 80, "a long name is cut")
+
+  -- the limits
+  local db5 = { workshop = { v = 1, chars = {} } }
+  local c5, g5, W5 = Setup("Rich", db5)
+  local K5 = W5.Known
+  local ckey = W5.Queue.CharKey()
+  for i = 1, 7 do
+    Check(K5.Store({ prof = 100 + i, profName = "P" .. i, at = i, complete = true, recipes = { { id = i, name = "R" .. i } } }))
+  end
+  local count = 0
+  for k in pairs(db5.workshop.chars[ckey].known) do count = count + 1 end
+  Same(count, K5.MAX_PROFS, "at most five professions")
+  Check(db5.workshop.chars[ckey].known[107] and not db5.workshop.chars[ckey].known[101], "the one read longest ago goes")
+  local many = {}
+  for i = 1, K5.MAX_RECIPES + 50 do many[i] = { id = i, name = "R" .. i } end
+  Check(K5.Store({ prof = 107, profName = "P7", at = 99, complete = true, recipes = many }))
+  Same(#db5.workshop.chars[ckey].known[107].r, K5.MAX_RECIPES, "at most 600 recipes of a profession")
+  Same(K5.Store({ prof = 1, profName = "x", recipes = {} }), false, "nothing to keep")
 end
 
 ---------------------------------------------------------------------------

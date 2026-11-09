@@ -5,7 +5,8 @@
 --
 --   TwichUIDB.workshop = { v = 1, chars = { ["Name - Realm"] = { queue = { entry, ... } } } }   account-wide, never in a profile,
 --       a share or a backup (Restore.OWN_LEFT_OUT, TwichConfig.LOCAL): it names a character's recipes.
---   entry = { id (recipe), name, crafts, prof, profName, icon, outMin, outMax, mats = { { item, qty }, ... }, seen (time) }
+--   entry = { id (recipe), name, crafts, prof, profName, icon, outItem, outMin, outMax, mats = { { item, qty }, ... }, seen (time) }
+--       outItem (the item one craft makes) is absent when not known; it lets the shopping list count what a queued craft will make.
 --       mats is absent when the materials aren't known (not read, or not supported): the entry stays, says so, and counts for nothing.
 --
 -- Reading never writes. The queue is read into memory once, every entry checked; an entry that can't be read is left out of the
@@ -66,6 +67,7 @@ function Q.Clean(rec)
         crafts = Int(rec.crafts, 1, W.MAX_CRAFTS) or 1,
         prof = Int(rec.prof, 1, W.MAX_ID), profName = Text(rec.profName, 40),
         icon = Int(rec.icon, 0, W.MAX_ID),
+        outItem = Int(rec.outItem, 1, W.MAX_ID),
         mats = Q.CleanMats(rec.mats),
         seen = Int(rec.seen, 0, 4102444800),
     }
@@ -90,7 +92,7 @@ function Q.FromRecipe(rec, crafts)
     if type(rec) ~= "table" then return nil end
     local e = Q.Clean({
         id = rec.id, name = rec.name, crafts = crafts or 1, prof = rec.prof, profName = rec.profName, icon = rec.icon,
-        outMin = rec.outMin, outMax = rec.outMax, mats = rec.mats, seen = Q.Now(),
+        outItem = rec.outItem, outMin = rec.outMin, outMax = rec.outMax, mats = rec.mats, seen = Q.Now(),
     })
     return e
 end
@@ -123,6 +125,8 @@ local function Slot(create)
     end
     return root.chars[key], root
 end
+
+Q.Slot = Slot   -- (Known.lua keeps its recipes in the same character slot)
 
 -- True when a newer TwichUI wrote this: read it as far as it is understood, change nothing
 function Q.Held()
@@ -235,12 +239,13 @@ function Q.Refresh(rec)
     if not fresh.outMin then fresh.outMin, fresh.outMax = e.outMin, e.outMax end
     if not fresh.prof then fresh.prof, fresh.profName = e.prof, e.profName end
     if not fresh.icon then fresh.icon = e.icon end
+    if not fresh.outItem then fresh.outItem = e.outItem end
     if fresh.name == e.name and fresh.icon == e.icon and fresh.prof == e.prof and fresh.profName == e.profName
-        and fresh.outMin == e.outMin and fresh.outMax == e.outMax and SameMats(fresh.mats, e.mats) then
+        and fresh.outItem == e.outItem and fresh.outMin == e.outMin and fresh.outMax == e.outMax and SameMats(fresh.mats, e.mats) then
         return false
     end
-    e.name, e.icon, e.prof, e.profName, e.outMin, e.outMax, e.mats, e.seen =
-        fresh.name, fresh.icon, fresh.prof, fresh.profName, fresh.outMin, fresh.outMax, fresh.mats, fresh.seen
+    e.name, e.icon, e.prof, e.profName, e.outItem, e.outMin, e.outMax, e.mats, e.seen =
+        fresh.name, fresh.icon, fresh.prof, fresh.profName, fresh.outItem, fresh.outMin, fresh.outMax, fresh.mats, fresh.seen
     Save()
     return true
 end

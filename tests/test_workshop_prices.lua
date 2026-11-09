@@ -8,7 +8,7 @@ dofile(TESTS .. "mi_mock.lua")
 local function Check(cond, msg) if not cond then error(msg, 2) end end
 local function Same(a, b, msg) if a ~= b then error((msg or "") .. " expected " .. tostring(b) .. ", got " .. tostring(a), 2) end end
 
-local FILES = { "Data.lua", "Materials.lua", "Queue.lua", "Observe.lua", "Prices.lua", "Opportunities.lua", "Scan.lua", "Session.lua" }
+local FILES = { "Data.lua", "Materials.lua", "Queue.lua", "Known.lua", "Observe.lua", "Prices.lua", "Opportunities.lua", "Vendor.lua", "Shopping.lua", "Scan.lua", "Session.lua" }
 
 -- a virtual clock and timers, a fake auction house
 local function Setup()
@@ -26,9 +26,11 @@ local function Setup()
     IsThrottledMessageSystemReady = function() return ah.ready end,
     ReplicateItems = function() ah.sent = ah.sent + 1; if ah.sendFails then error("no") end end,
     GetNumReplicateItems = function() return #ah.records end,
+    -- the game's own index is 0-based (records 0 .. n-1); anything outside is counted so a test can tell
     GetReplicateItemInfo = function(i)
       ah.infoCalls = ah.infoCalls + 1
-      local r = ah.records[i]
+      local r = ah.records[i + 1]
+      if i < 0 or i >= #ah.records then ah.outOfRange = (ah.outOfRange or 0) + 1 end
       if not r then return end
       return "n", 1, r.count, 1, true, 1, "", 0, 0, r.buyout, 0, nil, nil, "o", "o", 0, r.item, r.hasAll ~= false
     end,
@@ -112,6 +114,8 @@ do
   -- explicit false means the game had not loaded the record
   b = PR.NewBatch({ [5] = true }); b:Add(5, 1, 10, false); b:Add(5, 1, 10, true); b:Add(5, 1, 10, nil)
   Same(b.partialInfo, 1, "only an explicit false counts")
+  b = PR.NewBatch({ [5] = true }); b:Add(77, 1, 10, false); b:Add(5, 1, 10, true)
+  Same(b.partialInfo, 0, "a record of an item nobody asked about doesn't make the scan incomplete")
   -- secret values are dropped, never compared
   t.c.issecretvalue = function(v) return v == "SECRET" end
   b = PR.NewBatch({ [5] = true })
@@ -406,10 +410,14 @@ do
   t.Advance(1.5); Same(t.ah.infoCalls, 0, "still waiting: the last update was only 1.5 s ago")
   -- bounded batches: each timer step reads at most 400 records
   Check(t.Tick()); Same(SC.phase, "reading"); Same(t.ah.infoCalls, 400, "the first batch")
-  Check(SC.Message():find("Reading listings... 39%", 1, true), SC.Message())
+  Same(SC.Message(), "Reading listings...")
+  local pr = SC.Progress()
+  Check(pr > 0.08 and pr < 0.5, "a third of the way through the reading: " .. tostring(pr))
   Check(t.Tick()); Same(t.ah.infoCalls, 800)
   Check(t.Tick()); Same(t.ah.infoCalls, 1003, "the last, smaller batch (records past the end aren't asked for)")
   Same(SC.state, "done"); Check(SC.result.complete); Same(SC.result.items, 2); Same(SC.result.used, 1001)
+  Same(t.ah.outOfRange, nil, "records 0 .. n-1 are read, nothing outside them")
+  Same(PR.Lookup(PR.Market("Realm|Alliance"), 10).qty, 1, "the record at index 0 (101 copper) counts")
   Same(t.Listening(), 0, "listening ends with the scan")
   local m = PR.Market("Realm|Alliance")
   Check(m and m.complete and m.n == 2, "saved as a complete scan of the Alliance market")
@@ -493,15 +501,37 @@ do
   Check(SC.Start(want)); t.Fire("REPLICATE_ITEM_LIST_UPDATE"); Check(t.Tick()); t.Fire("AUCTION_HOUSE_DISABLED")
   Same(SC.state, "interrupted"); t.Advance(10); Same(SC.state, "interrupted")
 
-  -- the listings keep changing under the read: start over, give up after a few
+  -- more updates while the listings are read are item data arriving: the read goes on, it doesn't start over or fail
   local function ToReading() local n = 0 while SC.Busy() and SC.phase ~= "reading" and n < 20 do t.Tick(); n = n + 1 end end
+  t.ah.records = Records(1000, 10)
   Check(SC.Start(want)); t.Fire("REPLICATE_ITEM_LIST_UPDATE"); ToReading(); Same(SC.phase, "reading")
-  for i = 1, 3 do
-    t.Fire("REPLICATE_ITEM_LIST_UPDATE"); Same(SC.phase, "settling", "an update during the read starts it over")
-    ToReading(); Same(SC.phase, "reading")
-  end
-  t.Fire("REPLICATE_ITEM_LIST_UPDATE")   -- the fourth restart is one too many
-  Same(SC.state, "failed"); Same(SC.why, "changing")
+  for i = 1, 8 do t.Fire("REPLICATE_ITEM_LIST_UPDATE"); Same(SC.phase, "reading", "an update during the read does not stop it") end
+  t.Advance(10)
+  Same(SC.state, "done"); Check(SC.result.complete, "the same number of listings: a complete scan")
+  Same(SC.result.updates, 9); Same(SC.result.restarts, 0)
+
+  -- the NUMBER of listings changed during the read: start over (a few times), then keep it as a scan that is not complete
+  Check(SC.Start(want)); t.Fire("REPLICATE_ITEM_LIST_UPDATE"); ToReading()
+  t.ah.records[#t.ah.records + 1] = { item = 10, count = 1, buyout = 50 }   -- one more listing appeared mid-read
+  t.Advance(10)   -- the read ends, sees 1001 against 1000, reads again once
+  Same(SC.state, "done"); Check(SC.result.complete); Same(SC.result.restarts, 1); Same(PR.Lookup(PR.Market("Realm|Alliance"), 10).price, 50)
+  t.c.TwichUIDB.workshop.prices = nil   -- (an incomplete scan never replaces a complete one: that is "kept", tested below)
+  Check(SC.Start(want)); t.Fire("REPLICATE_ITEM_LIST_UPDATE"); ToReading()
+  local grow = 0
+  local numOf = t.c.C_AuctionHouse.GetNumReplicateItems
+  t.c.C_AuctionHouse.GetNumReplicateItems = function() grow = grow + 1; return numOf() + grow end   -- never holds still
+  t.Advance(60)
+  Same(SC.state, "done", "it never fails for this"); Check(not SC.result.complete); Check(SC.result.changed); Same(SC.result.restarts, 3)
+  Check(SC.Message():find("kept changing", 1, true) and SC.Message():find("may be incomplete", 1, true), SC.Message())
+  t.c.C_AuctionHouse.GetNumReplicateItems = numOf
+  t.ah.outOfRange = nil   -- (the invented count above asked past the end on purpose)
+
+  -- a steady stream of updates can't hold the read back for ever
+  t.ah.records = Records(10, 10)
+  Check(SC.Start(want))
+  for i = 1, 30 do t.Fire("REPLICATE_ITEM_LIST_UPDATE"); t.Advance(1) end   -- one a second, longer than the 2 s quiet it asks for
+  Check(SC.state == "done" or SC.phase == "reading", "after at most 10 s of waiting the listings are read")
+  t.Advance(5); Same(SC.state, "done")
 
   -- no listings at all
   t.ah.records = {}

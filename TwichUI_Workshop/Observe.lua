@@ -191,3 +191,42 @@ function O.ItemFacts(item)
     if not name and C_Item and C_Item.RequestLoadItemDataByID then pcall(C_Item.RequestLoadItemDataByID, item) end
     return name, icon
 end
+
+---------------------------------------------------------------------------
+-- The merchant window (read only; asked for only while the Workshop window is shown)
+---------------------------------------------------------------------------
+-- Every listing of the open merchant that is paid for with money alone: { { id, price (copper for one purchase), stack (items per
+-- purchase), avail (-1 unlimited, else a count) }, ... }, and the merchant's creature id (or nil). Nothing is bought or changed. Returns nil
+-- and why when there is nothing to read: "api", "closed" (no merchant window), "empty" (the list has not arrived yet).
+-- Game calls (the ones Blizzard's merchant frame and modules/Restock.lua make): GetMerchantNumItems, GetMerchantItemID,
+-- C_MerchantFrame.GetItemInfo (price, stackCount, numAvailable, isPurchasable, hasExtendedCost, currencyID), GetMerchantItemCostInfo.
+function O.ReadMerchant()
+    if not (GetMerchantNumItems and GetMerchantItemID) then return nil, "api" end
+    local info = C_MerchantFrame and C_MerchantFrame.GetItemInfo
+    if not info then return nil, "api" end
+    local frame = _G.MerchantFrame
+    if type(frame) == "table" and frame.IsShown and not frame:IsShown() then return nil, "closed" end
+    local n = Int(Plain(GetMerchantNumItems()), 0, 1000)
+    if not n or n == 0 then return nil, "empty" end
+    local list = {}
+    for i = 1, n do
+        local ok, id, t = pcall(function() return Plain(GetMerchantItemID(i)), Plain(info(i)) end)
+        id = ok and Int(id, 1, W.MAX_ID) or nil
+        if id and type(t) == "table" then
+            local extended, currency, buyable = Plain(t.hasExtendedCost), Plain(t.currencyID), Plain(t.isPurchasable)
+            local otherCost = extended ~= false or currency ~= nil
+            if not otherCost and GetMerchantItemCostInfo then
+                local okc, costs = pcall(GetMerchantItemCostInfo, i)
+                costs = okc and Plain(costs) or nil
+                otherCost = costs ~= 0
+            end
+            local price, stack, avail = Int(Plain(t.price), 1, W.MAX_ID), Int(Plain(t.stackCount), 1, W.MAX_QTY), Int(Plain(t.numAvailable), -1, W.MAX_ID)
+            if buyable == true and not otherCost and price and stack and avail then
+                list[#list + 1] = { id = id, price = price, stack = stack, avail = avail }
+            end
+        end
+    end
+    local guid = UnitGUID and Plain(UnitGUID("npc"))
+    local npc = type(guid) == "string" and tonumber(guid:match("^Creature%-[^-]*%-[^-]*%-[^-]*%-[^-]*%-(%d+)%-")) or nil
+    return list, Int(npc, 1, W.MAX_ID)
+end

@@ -1,6 +1,7 @@
 -- TwichUI Workshop: the window
--- Two views. Crafting: recipes on the left (the player's own open profession, with a search), the queue on the right, and under it the
--- combined materials against the bags. Opportunities: what one craft of each known recipe costs, sells for and could earn from the
+-- Three views. Crafting: recipes on the left (the player's own open profession, with a search), the queue on the right, and under it the
+-- combined materials against the bags. Shopping: what the queue still needs, once per material, with where to get it (a vendor, the auction
+-- house or making it) and what that may cost. Opportunities: what one craft of each known recipe costs, sells for and could earn from the
 -- prices of the last auction house scan, and the Scan prices button. It draws what Session.lua says and asks it to do everything else. Drawn with the shared framed look
 -- (FrameLook.lua). Opened with /tui workshop, the TwichUI menu or the settings page; it never opens by itself.
 --
@@ -13,6 +14,7 @@ local R = TwichUI
 local W = R.Workshop
 local S, Q, O = W.Session, W.Queue, W.Observe
 local PR, Op, SC = W.Prices, W.Opps, W.Scan
+local Sh = W.Shopping
 local Win = {}
 W.Window = Win
 
@@ -23,15 +25,15 @@ local LEFT_W = 312
 local RIGHT_X = PAD + LEFT_W + 16
 local RIGHT_W = WIDTH - RIGHT_X - PAD
 local SETTLE = 0.2
-local REC_H, QUE_H, MAT_H, OPP_H = 40, 58, 22, 46
+local REC_H, QUE_H, MAT_H, OPP_H, SHOP_H = 40, 58, 22, 46, 54
 local COL_W = 124          -- the width of each money column in Opportunities
 local ADD_W = 64
 
 local L, K            -- Look and its palette, looked up when first built
 local f               -- the window
-local lists = {}      -- recipes, queue, materials, opportunities
-local main, opps      -- the two views
-local mode = "craft"  -- "craft" or "opps"
+local lists = {}      -- recipes, queue, materials, shopping, opportunities
+local main, opps, shop  -- the three views
+local mode = "craft"  -- "craft", "shop" or "opps"
 local heads = {}      -- the sortable column headings
 local oppChips = {}   -- the profession buttons of Opportunities
 local fillToken = 0   -- changes whenever a pending batch of recipe reading should be forgotten
@@ -39,6 +41,7 @@ local chips = {}
 local token = 0       -- changes whenever a pending redraw should be forgotten
 local scheduled = false
 local dirtyRead = false
+local dirtyMerchant = false
 local renders, flushes = 0, 0
 
 local function Tip(frame, title, body) R.Interact.Tip(frame, title, body) end
@@ -48,6 +51,7 @@ local function Num(n) return tostring(n) end
 local EVENTS = {
     TRADE_SKILL_SHOW = "read", TRADE_SKILL_LIST_UPDATE = "read", TRADE_SKILL_DATA_SOURCE_CHANGED = "read",
     PLAYER_REGEN_ENABLED = "read",
+    MERCHANT_SHOW = "merchant", MERCHANT_UPDATE = "merchant",
     BAG_UPDATE_DELAYED = "draw", GET_ITEM_INFO_RECEIVED = "draw",
     AUCTION_HOUSE_SHOW = "draw", AUCTION_HOUSE_CLOSED = "draw", AUCTION_HOUSE_DISABLED = "draw",
 }
@@ -259,12 +263,17 @@ local function MakeMaterialRow(parent)
     row:SetScript("OnEnter", function(self)
         if GameTooltip and self.item then
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            if not pcall(GameTooltip.SetItemByID, GameTooltip, self.item) then GameTooltip:Hide() end
+            if not pcall(GameTooltip.SetItemByID, GameTooltip, self.item) then
+                GameTooltip:Hide()
+            elseif self.made then
+                GameTooltip:AddLine(("%s%d will come from crafts in your queue, so they are not counted as still needed."):format(self.madeRange and "At least " or "", self.made), 0.8, 0.8, 0.8, true)
+                GameTooltip:Show()
+            end
         end
     end)
     row:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
     row.fill = function(self, m)
-        self.item = m.item
+        self.item, self.made, self.madeRange = m.item, m.made, m.madeRange
         local name, icon = O.ItemFacts(m.item)
         self.icon:SetTexture(icon or ICON_BLANK)
         self.name:SetText(name or ("Item " .. m.item))
@@ -283,8 +292,11 @@ local function MakeMaterialRow(parent)
 end
 
 ---------------------------------------------------------------------------
--- Opportunities rows
+-- Shopping rows
 ---------------------------------------------------------------------------
+local NEED_W, SOURCE_W, SPEND_W, ACT_W = 64, 110, 130, 90
+local shopView   -- what the last draw of Shopping was built from (the row tooltips read it)
+
 local function Money(copper)
     if type(copper) ~= "number" then return "" end
     local neg = copper < 0
@@ -293,12 +305,168 @@ local function Money(copper)
     return neg and ("-" .. text) or text
 end
 
-local oppView         -- what the last draw of Opportunities was built from (the basis tooltips read it)
-
 local function ItemName(item)
     local name = O.ItemFacts(item)
     return name or ("Item " .. item)
 end
+
+-- "just now", "3 days ago"; "old" is added when the price is old
+local function AgeWords(at, oldAfter)
+    local age = PR.Age(at)
+    if not age then return nil end
+    local text = PR.AgeText(age)
+    if age > (oldAfter or PR.OLD_AFTER) then text = text .. " (old)" end
+    return text
+end
+
+local function ShowShopBasis(row)
+    if not (GameTooltip and row.data and shopView) then return end
+    GameTooltip:SetOwner(row, "ANCHOR_RIGHT")
+    local lines = Sh.Basis(row.data, ItemName, Money, PR.AgeText, shopView.ctx.now)
+    for i, line in ipairs(lines) do
+        if line[2] then
+            GameTooltip:AddDoubleLine(line[1], line[2], 1, 1, 1, 1, 1, 1)
+        elseif i == 1 then
+            GameTooltip:AddLine(line[1], 1, 0.82, 0)
+        else
+            GameTooltip:AddLine(line[1], 0.8, 0.8, 0.8, true)
+        end
+    end
+    GameTooltip:Show()
+end
+
+-- The words under a shopping row's name: what to make, and how the options compare
+local function ShopDetail(r)
+    local parts = {}
+    if r.kind == "make" then
+        local m = r.make
+        parts[#parts + 1] = ("Make %d x %s: makes %d%s."):format(m.crafts, m.rec.name, m.made,
+            m.surplus > 0 and (", " .. m.surplus .. " left over") or "")
+    elseif r.surplus then
+        parts[#parts + 1] = ("%d left over."):format(r.surplus)
+    end
+    local why = Sh.Explain(r)
+    if r.source and not r.picked and not r.reagentOnly then why = "Suggested source. " .. why end
+    parts[#parts + 1] = why
+    if r.estimate then parts[#parts + 1] = "Unit-price estimate: more may cost more." end
+    if r.made and r.made > 0 then parts[#parts + 1] = ("%s%d will come from queued crafts."):format(r.madeRange and "At least " or "", r.made) end
+    return table.concat(parts, " ")
+end
+
+local function MakeShopRow(parent)
+    local F = R.FrameLook
+    local row = CreateFrame("Frame", nil, parent)
+    row:EnableMouse(true)
+    row.iconBtn = CreateFrame("Button", nil, row)
+    row.iconBtn:SetSize(32, 32)
+    row.iconBtn:SetPoint("TOPLEFT", 4, -8)
+    row.icon = Icon(row.iconBtn, 32)
+    row.icon:SetPoint("CENTER")
+    row.iconBtn:SetScript("OnEnter", function(self)
+        if GameTooltip and row.item then
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            if not pcall(GameTooltip.SetItemByID, GameTooltip, row.item) then GameTooltip:Hide() end
+        end
+    end)
+    row.iconBtn:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+    row.iconBtn:SetScript("OnClick", function()   -- Shift-click puts the item's link in the chat box you have open, to look it up
+        if not (row.item and IsModifiedClick and IsModifiedClick("CHATLINK") and ChatEdit_InsertLink) then return end
+        local ok, _, link = pcall(C_Item.GetItemInfo, row.item)
+        if ok and type(link) == "string" then pcall(ChatEdit_InsertLink, link) end
+    end)
+    local nameW = (WIDTH - PAD * 2 - 30) - 44 - (NEED_W + SOURCE_W + SPEND_W + ACT_W + 4 * 8 + 2)
+    row.name = L.Text(row, "body")
+    row.name:SetPoint("TOPLEFT", 44, -6)
+    row.name:SetWidth(nameW)
+    row.name:SetWordWrap(false)
+    row.detail = L.Text(row, "meta")
+    row.detail:SetPoint("TOPLEFT", 44, -26)
+    row.detail:SetWidth(nameW + NEED_W + SOURCE_W + 16)
+    row.detail:SetHeight(26)
+    row.detail:SetWordWrap(true)
+    row.detail:SetJustifyV("TOP")
+    row.act = F.Button(row, "Show vendor", ACT_W, "secondary", function()
+        local d = row.data
+        if not d then return end
+        if d.kind == "make" then S.AddSubcraft(d.item) else S.ShowVendor(d.item) end
+        Win.Render()
+    end)
+    row.act:SetHeight(22)
+    row.act:SetPoint("TOPRIGHT", -2, -6)
+    Tip(row.act, "Show vendor / Add to queue", "Show vendor: shows a vendor seen to sell this on the world map. It sets no waypoint and starts no route. Add to queue: queues the crafts that make this, so the queue makes it. Nothing is bought or crafted.")
+    row.spend = {}
+    row.spend.a = L.Text(row, "body")
+    row.spend.a:SetWidth(SPEND_W)
+    row.spend.a:SetJustifyH("RIGHT")
+    row.spend.a:SetWordWrap(false)
+    row.spend.a:SetPoint("TOPRIGHT", row.act, "TOPLEFT", -8, -3)
+    row.spend.b = L.Text(row, "meta")
+    row.spend.b:SetWidth(SPEND_W)
+    row.spend.b:SetJustifyH("RIGHT")
+    row.spend.b:SetWordWrap(false)
+    row.spend.b:SetPoint("TOPRIGHT", row.spend.a, "BOTTOMRIGHT", 0, -4)
+    row.source = F.Button(row, "", SOURCE_W, "secondary", function()
+        if row.item then S.CycleSource(row.item); Win.Render() end
+    end)
+    row.source:SetHeight(22)
+    row.source:SetPoint("TOPRIGHT", row.spend.a, "TOPLEFT", -8, 3)
+    Tip(row.source, "Source", "Where this comes from. Click to change it: the suggestion, then each way that is possible (vendor, auction house, make). Nothing is bought or made for you.")
+    row.need = L.Text(row, "body")
+    row.need:SetWidth(NEED_W)
+    row.need:SetJustifyH("RIGHT")
+    row.need:SetPoint("TOPRIGHT", row.source, "TOPLEFT", -8, -3)
+    row:SetScript("OnEnter", ShowShopBasis)
+    row:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+    row.fill = function(self, r)
+        self.data, self.item = r, r.item
+        local name, icon = O.ItemFacts(r.item)
+        self.icon:SetTexture(icon or ICON_BLANK)
+        self.name:SetText(name or ("Item " .. r.item))
+        self.detail:SetText(ShopDetail(r))
+        self.need:SetText(Num(r.qty))
+        Paint(self.need, K.gold)
+        local choices = Sh.Choices(r)
+        self.source.text:SetText(r.source and Sh.NAMES[r.source] or "No source")
+        self.source:SetEnabled(#choices > 0)
+        -- spending
+        local a, b = self.spend.a, self.spend.b
+        local tag = {}
+        if r.kind == "make" then
+            local mk = r.make
+            a:SetText(mk.cash and Money(mk.cash) or "Unknown")
+            Paint(a, mk.cash and K.textDim or K.stone)
+            b:SetText("materials, counted in their rows")
+        elseif r.cash then
+            a:SetText((r.estimate and "about " or "") .. Money(r.cash))
+            Paint(a, K.text)
+            if r.estimate then tag[#tag + 1] = "estimate" end
+            local age = AgeWords(r.at, r.source == "vendor" and W.Vendor.OLD_AFTER or nil)
+            if age then tag[#tag + 1] = age end
+            b:SetText(table.concat(tag, ", "))
+        else
+            a:SetText("Unknown")
+            Paint(a, K.stone)
+            b:SetText("")
+        end
+        -- the one action that fits the row
+        local d = shopView and shopView.ctx
+        if r.kind == "make" then
+            self.act.text:SetText("Add to queue")
+            self.act:Show()
+        elseif r.source == "vendor" and d and d.sellers[r.item] then
+            self.act.text:SetText("Show vendor")
+            self.act:Show()
+        else
+            self.act:Hide()
+        end
+    end
+    return row
+end
+
+---------------------------------------------------------------------------
+-- Opportunities rows
+---------------------------------------------------------------------------
+local oppView         -- what the last draw of Opportunities was built from (the basis tooltips read it)
 
 -- One money column of a row: a value, and under it "to <highest>" when the amount is a range (an uncertain output)
 local function MakeCell(row, right)
@@ -482,6 +650,63 @@ local function RenderCraft()
     Paint(f.headline, tone == "good" and K.sage or (tone == "warn" and K.gold or K.textDim))
 end
 
+local function Plural(n, one, many) return n == 1 and one or many end
+
+local function RenderShop()
+    local plan, ctx = S.Shopping()
+    shopView = { plan = plan, ctx = ctx }
+    local sum, src, tot = ctx.summary, ctx.source, plan.totals
+
+    -- where the prices come from
+    local sourceText
+    if src.market then
+        local age = PR.Age(src.market.at)
+        sourceText = ("Auction prices from %s, scanned %s."):format(src.label, PR.AgeText(age))
+        if age and age > PR.OLD_AFTER then sourceText = sourceText .. " These prices are old." end
+        if not src.market.complete then sourceText = sourceText .. " That scan wasn't complete." end
+    else
+        sourceText = "No saved auction prices yet. Open the Opportunities view at an auction house and choose Scan prices."
+    end
+    shop.source:SetText(sourceText)
+    shop.status:SetText(("Vendor prices are what a vendor charged when you last had its window open (%d noted). Counts what is in your bags only."):format(W.Vendor.Count()))
+
+    local empty
+    if sum.state == "empty" then empty = "Add recipes to the queue to build a shopping list."
+    elseif #plan.rows == 0 then
+        if sum.state == "ready" then empty = "Nothing to buy: the materials are in your bags, or made by your queue."
+        else empty = (S.Headline(sum)) end
+    end
+    lists.shop:SetData(plan.rows, empty)
+
+    -- the total: only what is priced, and never as if it were complete when it is not
+    if #plan.rows == 0 then
+        shop.total:SetText("")
+    elseif tot.missing > 0 then
+        shop.total:SetText(("Estimated spending: %s so far. Some prices missing: %d %s."):format(Money(tot.cash), tot.missing,
+            Plural(tot.missing, "material has no price", "materials have no price")))
+        Paint(shop.total, K.gold)
+    else
+        shop.total:SetText("Estimated spending: " .. Money(tot.cash) .. (tot.estimate and " (includes estimates)" or ""))
+        Paint(shop.total, K.text)
+    end
+    local notes = {}
+    if plan.unknownBags > 0 then
+        notes[#notes + 1] = ("%d %s a bag count that couldn't be read, so %s left out."):format(plan.unknownBags,
+            Plural(plan.unknownBags, "material has", "materials have"), Plural(plan.unknownBags, "it is", "they are"))
+    end
+    if sum.unknown > 0 then
+        notes[#notes + 1] = ("%d %s can't be counted yet. Open %s to update."):format(sum.unknown, Plural(sum.unknown, "recipe", "recipes"),
+            Plural(sum.unknown, "its profession", "their professions"))
+    end
+    if sum.cycle and sum.cycle > 0 then
+        notes[#notes + 1] = ("%d queued %s depend on each other, so what they make isn't counted."):format(sum.cycle, Plural(sum.cycle, "recipe", "recipes"))
+    end
+    if #plan.rows > 0 then
+        notes[#notes + 1] = "A suggested source compares the prices known, one material at a time; it isn't the cheapest possible plan. Owned materials lower what you spend but are not free. Nothing is bought or made for you."
+    end
+    shop.notes:SetText(table.concat(notes, "\n"))
+end
+
 local SORT_WORDS = { profit = "Estimated profit", cost = "Cost to make", sell = "Sell price" }
 
 local function LayoutOppChips(list)
@@ -539,6 +764,13 @@ local function RenderOpps()
     local busy = SC.Busy()
     opps.scan.text:SetText(busy and "Scanning..." or "Scan prices")
     opps.scan:SetEnabled(not busy)
+    if busy then
+        local frac = SC.Progress() or 0
+        opps.bar:Set(frac, W.AuctionButton.BarText(msg, frac))
+        opps.bar:Show()
+    else
+        opps.bar:Hide()
+    end
 
     -- filters and the sort
     LayoutOppChips(S.Professions())
@@ -574,35 +806,39 @@ function Win.Render()
     local Perf = R.Perf
     local pt = Perf and Perf.on and Perf.Start("workshop.render")
     renders = renders + 1
-    if mode == "opps" then RenderOpps() else RenderCraft() end
+    if mode == "opps" then RenderOpps() elseif mode == "shop" then RenderShop() else RenderCraft() end
     f.note:SetText(S.Note() or (Q.Held() and "This queue was saved by a newer TwichUI and is read-only." or ""))
     if pt then Perf.Stop(pt) end
 end
 
--- Reads the recipes' materials and output a batch at a time, drawing between batches, so a long list doesn't hold up the game
+-- Reads the recipes' materials and output a batch at a time, so a long list doesn't hold up the game. It runs in either view after a profession
+-- is read, so what the window learned is complete (and kept: Session.FillSome saves it when the last batch is in); the Opportunities
+-- view is drawn between batches.
 local FILL_BATCH = 120
 local function Prepare()
     fillToken = fillToken + 1
     local mine = fillToken
     local function Step()
-        if mine ~= fillToken or not (f and f:IsShown()) or mode ~= "opps" then return end
+        if mine ~= fillToken or not (f and f:IsShown()) then return end
         local left = S.FillSome(FILL_BATCH)
-        Win.Render()
+        if mode ~= "craft" then Win.Render() end
         if left > 0 then C_Timer.After(0, Step) end
     end
     Step()
 end
 
 function Win.SetMode(m)
-    if m ~= "craft" and m ~= "opps" then return end
+    if m ~= "craft" and m ~= "opps" and m ~= "shop" then return end
     mode = m
     if not f then return end
     main:SetShown(m == "craft")
+    shop:SetShown(m == "shop")
     opps:SetShown(m == "opps")
     f.tabCraft:SetOn(m == "craft")
+    f.tabShop:SetOn(m == "shop")
     f.tabOpps:SetOn(m == "opps")
     if f:IsShown() then
-        if m == "opps" then Prepare() else fillToken = fillToken + 1 end
+        if m ~= "craft" then Prepare() end
         Win.Render()
     end
 end
@@ -615,13 +851,18 @@ local function Flush()
     if dirtyRead then
         dirtyRead = false
         R.Perf.Call("workshop.read", S.Observe)
-        if mode == "opps" then Prepare() end
+        Prepare()
+    end
+    if dirtyMerchant then
+        dirtyMerchant = false
+        R.Perf.Call("workshop.read", S.ReadMerchant)
     end
     Win.Render()
 end
 
 local function Schedule(kind)
     if kind == "read" then dirtyRead = true end
+    if kind == "merchant" then dirtyMerchant = true end
     if scheduled then return end
     scheduled = true
     local mine = token
@@ -658,18 +899,20 @@ local function Build()
     end)
     f:HookScript("OnShow", function(self)
         token = token + 1
-        scheduled, dirtyRead = false, false
+        scheduled, dirtyRead, dirtyMerchant = false, false, false
         R.FitToScreen(self)
         for event in pairs(EVENTS) do self:RegisterEvent(event) end
         R.Perf.Call("workshop.read", S.Observe)   -- fresh before anything is shown as ready
+        R.Perf.Call("workshop.read", S.ReadMerchant)   -- a merchant window already open is read too (nothing happens when none is)
         Win.Render()
-        if mode == "opps" then Prepare() end
+        Prepare()
     end)
     f:HookScript("OnHide", function(self)
         token = token + 1
         fillToken = fillToken + 1
-        scheduled, dirtyRead = false, false
+        scheduled, dirtyRead, dirtyMerchant = false, false, false
         self:UnregisterAllEvents()
+        shopView = nil
         S.Reset()
         Q.Unload()
     end)
@@ -686,13 +929,20 @@ local function Build()
     f.tabCraft = F.Toggle(f, "Crafting", 84, function() Win.SetMode("craft") end)
     f.tabCraft:SetHeight(22)
     f.tabCraft:SetPoint("TOPLEFT", PAD + 100, -11)
+    f.tabShop = F.Toggle(f, "Shopping", 84, function() Win.SetMode("shop") end)
+    f.tabShop:SetHeight(22)
+    f.tabShop:SetPoint("LEFT", f.tabCraft, "RIGHT", 4, 0)
+    Tip(f.tabShop, "Shopping", "What your queue still needs, where to get each material (a vendor, the auction house or making it) and what that may cost.")
     f.tabOpps = F.Toggle(f, "Opportunities", 112, function() Win.SetMode("opps") end)
     f.tabOpps:SetHeight(22)
-    f.tabOpps:SetPoint("LEFT", f.tabCraft, "RIGHT", 4, 0)
+    f.tabOpps:SetPoint("LEFT", f.tabShop, "RIGHT", 4, 0)
     Tip(f.tabOpps, "Opportunities", "Which crafts could be worth making, from the prices of your last auction house scan.")
     main = CreateFrame("Frame", nil, f)
     main:SetSize(WIDTH, HEIGHT)
     main:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
+    shop = CreateFrame("Frame", nil, f)
+    shop:SetSize(WIDTH, HEIGHT)
+    shop:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
     opps = CreateFrame("Frame", nil, f)
     opps:SetSize(WIDTH, HEIGHT)
     opps:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
@@ -754,6 +1004,44 @@ local function Build()
     f.headline:SetWordWrap(true)
     f.headline:SetJustifyV("TOP")
 
+    -- Shopping
+    local sh = L.Text(shop, "heading")
+    sh:SetPoint("TOPLEFT", PAD, -52)
+    sh:SetText("Shopping list")
+    shop.source = L.Text(shop, "small")
+    shop.source:SetPoint("TOPLEFT", PAD, -76)
+    shop.source:SetWidth(WIDTH - PAD * 2)
+    shop.source:SetWordWrap(false)
+    shop.status = L.Text(shop, "small")
+    shop.status:SetPoint("TOPLEFT", PAD, -94)
+    shop.status:SetWidth(WIDTH - PAD * 2)
+    shop.status:SetWordWrap(false)
+    local rowRight = PAD + 4 + (WIDTH - PAD * 2 - 30)   -- the right edge of a row, in this view's coordinates
+    local function ShopHead(text, right, w, justify)
+        local h = L.Text(shop, "meta")
+        h:SetPoint("TOPRIGHT", shop, "TOPLEFT", right, -120)
+        h:SetWidth(w)
+        h:SetJustifyH(justify or "RIGHT")
+        h:SetText(text)
+    end
+    local item = L.Text(shop, "meta")
+    item:SetPoint("TOPLEFT", PAD + 8, -120)
+    item:SetText("Material")
+    ShopHead("Estimated spending", rowRight - 2 - ACT_W - 8, SPEND_W)
+    ShopHead("Source", rowRight - 2 - ACT_W - 8 - SPEND_W - 8, SOURCE_W, "CENTER")
+    ShopHead("Still needed", rowRight - 2 - ACT_W - 8 - SPEND_W - 8 - SOURCE_W - 8, NEED_W)
+    lists.shop = NewList(shop, PAD, -138, WIDTH - PAD * 2, 296, SHOP_H, MakeShopRow)
+    shop.total = L.Text(shop, "body")
+    shop.total:SetPoint("TOPLEFT", PAD, -444)
+    shop.total:SetWidth(WIDTH - PAD * 2)
+    shop.total:SetWordWrap(false)
+    shop.notes = L.Text(shop, "meta")
+    shop.notes:SetPoint("TOPLEFT", PAD, -466)
+    shop.notes:SetWidth(WIDTH - PAD * 2)
+    shop.notes:SetWordWrap(true)
+    shop.notes:SetJustifyV("TOP")
+    shop:SetShown(mode == "shop")
+
     -- Opportunities
     local oh = L.Text(opps, "heading")
     oh:SetPoint("TOPLEFT", PAD, -52)
@@ -764,6 +1052,9 @@ local function Build()
     end)
     opps.scan:SetHeight(24)
     opps.scan:SetPoint("TOPRIGHT", -PAD, -48)
+    opps.bar = W.NewBar(opps, 320, 24)           -- the overall progress of a scan, shown only while one runs
+    opps.bar:SetPoint("TOPRIGHT", opps.scan, "TOPLEFT", -8, 0)
+    opps.bar:Hide()
     Tip(opps.scan, "Scan prices", "Reads every listing at the open auction house once, so your crafts can be priced. It only reads: it never buys, bids or posts, and it starts only when you press this. It can take a little while.")
     opps.source = L.Text(opps, "small")
     opps.source:SetPoint("TOPLEFT", PAD, -76)
@@ -821,6 +1112,7 @@ local function Build()
     opps:SetShown(mode == "opps")
     main:SetShown(mode == "craft")
     f.tabCraft:SetOn(mode == "craft")
+    f.tabShop:SetOn(mode == "shop")
     f.tabOpps:SetOn(mode == "opps")
     SC.OnChange = function() if f and f:IsShown() then Schedule("draw") end end
 
@@ -846,6 +1138,7 @@ end
 function Win.IsShown() return f ~= nil and f:IsShown() end
 function Win.Frame() return f end
 function Win.Lists() return lists end
+function Win.Shop() return shop end      -- the Shopping view (for the tests)
 function Win.Opps() return opps end      -- the Opportunities view (for the tests)
 function Win.Heads() return heads end    -- its sortable column headings (for the tests)
 
