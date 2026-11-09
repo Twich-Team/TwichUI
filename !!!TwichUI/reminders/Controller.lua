@@ -20,7 +20,8 @@
 -- Sound (optional, a reminder's own setting): played once when the reminder appears (after its delay, if it has one),
 -- by CT.PlaySound. Not again while it stays up, not when only a loading screen or a settings change hid and restored it,
 -- and not for a preview; it plays again after the conditions stopped matching (the reminder went away) and came back,
--- and a reminder that comes and goes quickly sounds at most once every SOUND_GAP seconds. PlaySoundFile has no volume of
+-- and a reminder that comes and goes quickly sounds at most once every SOUND_GAP seconds. Never while the Quiet screen
+-- switch is on (QuietScreen.lua), and not afterwards for what appeared meanwhile. PlaySoundFile has no volume of
 -- its own: the sound follows the game's sound-effects volume.
 -- Each pending wait carries a token; anything that cancels it bumps the token, and a refresh bumps a generation, so a
 -- timer from before (or from before switching off) never shows anything.
@@ -45,7 +46,7 @@ local active = {}      -- [id] = true: runs here (read and decided live)
 local running = false  -- on and in the world
 local gen = 0
 local listeners = {}
-local stats = { refreshes = 0, decisions = 0, shows = 0, hides = 0, sounds = 0, soundsHeld = 0, soundsMissing = 0, soundsRefused = 0 }
+local stats = { refreshes = 0, decisions = 0, shows = 0, hides = 0, sounds = 0, soundsHeld = 0, soundsMissing = 0, soundsRefused = 0, soundsQuiet = 0 }
 
 local function Rec(id)
     local r = rt[id]
@@ -84,7 +85,12 @@ end
 
 local function Sound(v, r, now)
     if not v.sound or r.sounded then return end
-    r.sounded = true
+    r.sounded = true   -- also while quiet: it is not heard afterwards for something already up
+    local Q = R.QuietScreen
+    if Q and Q.On() then
+        stats.soundsQuiet = stats.soundsQuiet + 1
+        return
+    end
     if r.soundAt and now >= r.soundAt and now - r.soundAt < SOUND_GAP then
         stats.soundsHeld = stats.soundsHeld + 1
         return
@@ -370,7 +376,7 @@ function CT.Snapshot()
     return { enabled = R:Enabled("reminders"), running = running, reminders = n, turnedOn = on, valid = valid,
         active = act, visible = visible, pending = pending, holding = holding, keys = keys, conditions = conditions, groups = groups,
         refreshes = stats.refreshes, decisions = stats.decisions, shows = stats.shows, hides = stats.hides,
-        sounds = stats.sounds, soundsHeld = stats.soundsHeld, soundsMissing = stats.soundsMissing, soundsRefused = stats.soundsRefused }
+        sounds = stats.sounds, soundsHeld = stats.soundsHeld, soundsMissing = stats.soundsMissing, soundsRefused = stats.soundsRefused, soundsQuiet = stats.soundsQuiet }
 end
 
 R:OnInit(function() CT.Refresh() end)

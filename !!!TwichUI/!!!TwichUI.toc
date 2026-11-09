@@ -26,6 +26,8 @@ Core.lua
 Persist.lua
 Profiles.lua
 Switches.lua
+# Quiet screen: a session-only switch that keeps cards, reminders, glows and the like off the screen (docs/quiet-screen.md); the data bar menu turns it on and off
+QuietScreen.lua
 SettingsLauncher.lua
 # TwichUI on a data bar: a launcher whose left click opens a menu and right click the settings (needs a data bar addon that provides LibDataBroker)
 SettingsBroker.lua

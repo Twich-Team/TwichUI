@@ -275,7 +275,7 @@ local function Update()
     local now = Now()
     local show, why = false, "off"
     if running then
-        show, why = HL.Visible({ enabled = true, scopeActive = scopeActive, inCombat = inCombat, sel = sel, obs = obs, now = now }, cfg)
+        show, why = HL.Visible({ enabled = true, quiet = R.QuietScreen ~= nil and R.QuietScreen.On(), scopeActive = scopeActive, inCombat = inCombat, sel = sel, obs = obs, now = now }, cfg)
     end
     reason = why
     if show then
@@ -290,6 +290,11 @@ local function Update()
     if show and cfg.showElapsed then ScheduleTick() end
     Tell()
     if pt then Perf.Stop(pt) end
+end
+
+-- The Quiet screen went on or off (QuietScreen.lua): the panel goes away or comes back as the game stands.
+if R.QuietScreen then
+    R.QuietScreen.OnChange(function() if running or shown then Update() end end)
 end
 
 -- A full read of the watched player (a new selection, a new unit, the world, the end of combat).

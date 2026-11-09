@@ -590,6 +590,19 @@ do
   Check(Status() == "Choose a healer", "every scenario draws")
   Wt.PreviewStop()
   Check(not Panel().mark.shown and Value() == "50%", "the live panel comes back with its own reading")
+  -- The Quiet screen switch (QuietScreen.lua): the live panel goes and comes back with it; a preview ignores it.
+  Check(Shown(), "quiet test: the live panel is up")
+  R.QuietScreen.Set(true); Settle()
+  Check(not Shown() and Wt.Snapshot().reason == "quiet" and HL.REASONS.quiet, "quiet: the panel goes, with its own reason")
+  Check(Wt.PreviewStart(false) and Shown() and Panel().mark.shown, "quiet: a preview still shows (the player asked)")
+  Wt.PreviewStop(); Settle()
+  Check(not Shown(), "quiet: and the live panel stays away after it")
+  R.QuietScreen.Set(false); Settle()
+  Check(Shown() and not Panel().mark.shown and Value() == "50%", "quiet off: the live panel is back with its own reading")
+  do
+    local shown, why = HL.Visible({ enabled = true, quiet = true, scopeActive = true, sel = { guid = "A", unit = "party1" }, now = 0 }, Wt.Config())
+    Check(shown == false and why == "quiet", "the pure rule: quiet hides it")
+  end
   Check(Wt.PreviewStart(true) and Wt.PositioningActive(), "moving")
   G.combat = true
   Fire("PLAYER_REGEN_DISABLED"); Settle()

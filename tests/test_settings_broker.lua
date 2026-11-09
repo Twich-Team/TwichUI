@@ -101,7 +101,12 @@ do
   c.FireEvent("ADDON_LOADED", "!!!TwichUI"); c.FireEvent("PLAYER_LOGIN")
   local lines = {}
   Obj(c).OnTooltipShow({ AddLine = function(_, t) lines[#lines + 1] = t end, AddDoubleLine = function() error("no extra rows") end })
-  assert(#lines == 3 and lines[1] == "TwichUI" and lines[2] == "Left-click for the menu." and lines[3] == "Right-click to open settings.", table.concat(lines, "|"))
+  assert(#lines == 4 and lines[1] == "TwichUI" and lines[2] == "Left-click for the menu." and lines[3] == "Right-click to open settings."
+    and lines[4] == "Quiet screen: Off.", table.concat(lines, "|"))
+  c.TwichUI.QuietScreen.Set(true)
+  lines = {}
+  Obj(c).OnTooltipShow({ AddLine = function(_, t) lines[#lines + 1] = t end, AddDoubleLine = function() error("no extra rows") end })
+  assert(lines[4] == "Quiet screen: On.", "the tooltip says when the screen is quiet: " .. table.concat(lines, "|"))
 end
 
 ---------------------------------------------------------------------------
@@ -229,6 +234,27 @@ do
   R:SetEnabled("qolDuels", false); R:SetEnabled("qolDeclineInvites", false)
 end
 
+-- 12b. Quiet the screen: one click turns the session-only switch (QuietScreen.lua) on or off, the menu stays open and the row
+--      follows, and a change made elsewhere shows too. Nothing is saved.
+do
+  local c = MenuClient()
+  local Q = c.TwichUI.QuietScreen
+  local menu, rows = OpenMenu(c)
+  local quiet = rows["Quiet the screen"]
+  assert(quiet and quiet.enabled and quiet.note.text == "Off" and quiet.fill.shown == false, "the row starts Off")
+  assert(quiet.scripts.OnEnter, "and has a tooltip that says what it does")
+  Click(quiet)
+  assert(Q.On() and menu.shown and quiet.note.text == "On" and quiet.fill.shown, "one click turns it on; the menu stays open and says On")
+  Q.Set(false)
+  assert(quiet.note.text == "Off" and menu.shown, "turned off elsewhere: the row follows")
+  Click(quiet); Click(quiet)
+  assert(not Q.On() and quiet.note.text == "Off", "and one click turns it off again")
+  local saved = false
+  for k in pairs(c.TwichUIDB) do if tostring(k):lower():find("quietscreen") then saved = true end end
+  for k in pairs(c.TwichUIDB.modules or {}) do if tostring(k):lower():find("quietscreen") then saved = true end end
+  assert(not saved, "no saved key for it")
+end
+
 -- 13. Guild Locations: the radios go through the core; never from Off; greyed with the reason; held; outside a guild.
 do
   local c = MenuClient()
@@ -297,7 +323,7 @@ do
     "only the rows that make sense are drawn")
   local lines = {}
   Obj(c).OnTooltipShow({ AddLine = function(_, t) lines[#lines + 1] = t end })
-  assert(#lines == 4 and lines[4] == "Leave me alone: Off.", table.concat(lines, "|"))
+  assert(#lines == 5 and lines[4] == "Quiet screen: Off." and lines[5] == "Leave me alone: Off.", table.concat(lines, "|"))
 end
 
 -- 5. Without a data bar's LibDataBroker nothing is made and nothing breaks; a data bar addon that loads later brings the

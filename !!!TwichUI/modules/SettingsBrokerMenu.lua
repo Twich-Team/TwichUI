@@ -3,6 +3,9 @@
 -- launchers' and the RestedXP guide's (modules/SpellMenu.lua, modules/RestedXPBrokerMenu.lua): the same palette,
 -- fonts and placement, and the player's own menu background and border (modules/MenuStyle.lua).
 --   Open settings...        opens the settings window (R:OpenSettings) and closes the menu.
+--   Quiet the screen        a temporary switch (QuietScreen.lua, not saved: off again at the next login or reload).
+--                           While it is On, the cards, Reminders, action bar glows, Healer Watch panel and Return
+--                           the Favor list stay away. The row says On or Off.
 --   Leave me alone          one switch for Decline duels and Decline group invitations together (qol/QoL.lua,
 --                           Q.SetLeaveAlone). The row says On or Off; it is On when both are on. Turning it on
 --                           turns on whichever was off; turning it off turns off only what it turned on. The
@@ -54,12 +57,25 @@ end
 local LEAVE_TIP = "Declines duel requests and group invitations, except from the friends and guild members you "
     .. "allowed in the settings. Turning it off turns off only what it turned on."
 
+local QUIET_TIP = "Keeps notification cards, reminders, action bar glows, the Healer Watch panel and Return the "
+    .. "Favor's list off the screen, with their sounds, until you turn this off or log out. Nothing in the settings "
+    .. "changes, and what happens meanwhile is not shown afterwards."
+
 local SPEC = {
     {
         key = "settings", label = "Open settings...", plain = true,
         act = function() M.Close(); R:OpenSettings() end,
     },
     { kind = "divider" },
+    {
+        key = "quiet", label = "Quiet the screen",
+        state = function() return R.QuietScreen ~= nil and R.QuietScreen.On() end,
+        words = { [true] = "On", [false] = "Off" },
+        enabled = function() return R.QuietScreen ~= nil end,
+        why = "Unavailable",
+        tip = QUIET_TIP,
+        act = function() R.QuietScreen.Toggle() end,
+    },
     {
         key = "leave", label = "Leave me alone",
         state = function() return R.QoL and R.QoL.LeaveAloneOn() or false end,
@@ -302,5 +318,8 @@ end
 if R.Switches and R.Switches.OnChange then
     R.Switches.OnChange(function() M.Refresh() end)
 end
+
+-- Quiet screen turned on or off by something else while the menu is open.
+if R.QuietScreen then R.QuietScreen.OnChange(function() M.Refresh() end) end
 
 MenuStyle.Subscribe(OnLook)

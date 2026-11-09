@@ -464,6 +464,23 @@ do
   CT.Refresh(); Settle()
   Check(Shown() and Plays() == n + 2, "Reminders on again: it appears and sounds")
 
+  -- The Quiet screen switch (QuietScreen.lua): the frame goes away and comes back with the switch, and it is silent
+  -- meanwhile, also for one that appears during the quiet, which does not sound afterwards either.
+  do
+    local before = Plays()
+    R.QuietScreen.Set(true); Settle()
+    Check(not Shown() and Plays() == before, "quiet: the shown reminder goes away")
+    NOW = NOW + 30
+    c.TwichUIDB.modules.reminders = false
+    CT.Refresh(); Settle()
+    c.TwichUIDB.modules.reminders = true
+    CT.Refresh(); Settle()
+    Check(not Shown() and Plays() == before, "quiet: it appears again to the controller but not on screen, and makes no sound")
+    Check(CT.Snapshot().soundsQuiet >= 1, "quiet: the silenced sound is counted")
+    R.QuietScreen.Set(false); Settle()
+    Check(Shown() and Plays() == before, "quiet off: it is back on screen, without a sound for what appeared meanwhile")
+  end
+
   -- the diagnostics counts exist and are numbers
   local snap = CT.Snapshot()
   Check(type(snap.sounds) == "number" and snap.sounds >= 4 and type(snap.soundsHeld) == "number" and type(snap.soundsRefused) == "number", "the counts are kept")

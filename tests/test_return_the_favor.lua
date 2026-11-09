@@ -426,6 +426,20 @@ do
   Check(#W.Entries() == 0 and W.Paused() == "resting", "paused while resting when chosen")
   BB.Set("hideResting", false)
   G.resting = false
+
+  -- The Quiet screen switch (QuietScreen.lua) pauses it like a place does: the list empties, nothing new is noted, and
+  -- it listens again when the switch is off.
+  Reset()
+  Buff("party1", 10938)
+  Check(#W.Entries() == 1, "quiet: a row to start with")
+  R.QuietScreen.Set(true)
+  Check(#W.Entries() == 0 and W.Paused() == "quiet", "quiet: the list empties and the reason is quiet")
+  Buff("party1", 10938)
+  Check(#W.Entries() == 0, "quiet: a buff meanwhile is not listed")
+  R.QuietScreen.Set(false)
+  Check(W.Paused() == nil and #W.Entries() == 0, "quiet off: no longer paused, and nothing from the quiet comes back")
+  Buff("party1", 10938)
+  Check(#W.Entries() == 1, "quiet off: listening again")
 end
 
 ---------------------------------------------------------------------------

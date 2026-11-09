@@ -14,6 +14,9 @@
 --   D.NewSurface(parent), D.DrawSurface(surface, view, maxW, maxH)   the settings window's inline preview, drawn by
 --                                    the same layout code at a scale that fits its box
 --
+-- While the Quiet screen switch is on (QuietScreen.lua) no live frame is drawn; the controller still decides as usual, so
+-- turning it off brings back exactly the reminders that are showing then. A preview ignores it.
+--
 -- A preview never changes a rule, an observation or a decision: the live state is only hidden behind it, and comes back
 -- when it ends (closing the settings, combat, deleting or turning off the reminder, a profile change).
 -- Motion is optional and short: a 0.25 s fade in and 0.3 s fade out, and a pulse of three slow breaths, each only when
@@ -52,6 +55,7 @@ local function Plain(v)
 end
 
 local function Reduced() return R:Enabled("arrivalReducedMotion") end
+local function Quiet() local q = R.QuietScreen return q ~= nil and q.On() end
 
 ---------------------------------------------------------------------------
 -- Events: only while something needs one (an icon not loaded yet, a preview that combat ends)
@@ -460,7 +464,7 @@ function D.Render(id)
     if not f then return end
     local v = f.view
     local previewing = preview.id == id
-    if v and (f.live or previewing) then
+    if v and ((f.live and not Quiet()) or previewing) then
         if f.drawnRev ~= v.rev or f.drawnLayout ~= layoutRev then
             D.Layout(f, v)
             f.drawnRev, f.drawnLayout = v.rev, layoutRev
@@ -536,6 +540,13 @@ function D.HideAll()
         f:Hide()
     end
     PruneWaits()
+end
+
+-- The Quiet screen went on or off: every frame is drawn again (live ones leave or come back).
+if R.QuietScreen then
+    R.QuietScreen.OnChange(function()
+        for id in pairs(frames) do D.Render(id) end
+    end)
 end
 
 -- Something every frame is drawn from changed (a font was registered): frames on screen are drawn again.

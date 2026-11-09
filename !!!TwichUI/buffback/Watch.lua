@@ -69,8 +69,10 @@ function W.Enabled() return R:Enabled("buffBack") end
 ---------------------------------------------------------------------------
 -- Where it pauses
 ---------------------------------------------------------------------------
--- The reason the list is paused here, or nil: "dungeon", "raid", "pvp", "resting".
+-- The reason the list is paused here, or nil: "quiet" (the Quiet screen switch, QuietScreen.lua), "dungeon", "raid",
+-- "pvp", "resting".
 function W.Paused()
+    if R.QuietScreen and R.QuietScreen.On() then return "quiet" end
     local inside, kind = false, nil
     if IsInInstance then inside, kind = IsInInstance() end
     inside, kind = Plain(inside), Plain(kind)
@@ -469,6 +471,16 @@ BB.Subscribe(function(what)
         if active and W.Paused() and #entries > 0 and not InCombat() then W.Clear() end
     end
 end)
+
+-- The Quiet screen went on or off: like arriving somewhere it pauses in, the list empties (out of combat; in combat the
+-- rows can't change, so the list follows when combat ends) and the rows are drawn again.
+if R.QuietScreen then
+    R.QuietScreen.OnChange(function(on)
+        if not active then return end
+        if on and #entries > 0 and not InCombat() then W.Clear() end
+        Changed("where")
+    end)
+end
 
 R:On("PLAYER_LOGIN", function() if W.Enabled() then W.Refresh() end end)
 
