@@ -33,6 +33,10 @@ local function Fake(o)
     if k == "ClearAllPoints" then return function(s) s.point = nil end end
     if k == "SetSize" then return function(s, w, h) if w then s.w, s.h = w, h end end end
     if k == "GetSize" then return function(s) return s.w or 0, s.h or 0 end end
+    if k == "SetWidth" then return function(s, w) s.w = w end end
+    if k == "SetFont" then return function(s, a, b, c2) s.font = { a, b, c2 } end end
+    if k == "SetTextColor" then return function(s, r, g, b, a) s.textColor = { r, g, b, a } end end
+    if k == "GetFrameLevel" then return function() return 1 end end
     if k == "GetCenter" then return function(s) return s.cx, s.cy end end
     if k == "CreateAnimationGroup" then return function()
       local g = Fake()
@@ -86,7 +90,7 @@ c.C_Container = { GetItemCooldown = function() return 0, 0, 1 end,
   GetContainerItemInfo = function(bag, slot) local id = bag == 0 and c.BAG[slot]; return id and { itemID = id } end }
 c.C_UnitAuras = { GetPlayerAuraBySpellID = function(id) if id == 1283391 and c.NEARBY then return { spellId = id } end end }
 
-for _, f in ipairs({ "chronicle/Style.lua", "modules/Interact.lua", "modules/Borders.lua", "camping/Data.lua", "camping/State.lua", "camping/Bar.lua", "camping/Unlock.lua" }) do
+for _, f in ipairs({ "chronicle/Style.lua", "modules/Interact.lua", "modules/Borders.lua", "camping/Data.lua", "camping/State.lua", "camping/Bar.lua", "camping/Rest.lua", "camping/Unlock.lua" }) do
   local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
 end
 c.TwichUIDB = { modules = {}, ui = {} }
@@ -523,13 +527,14 @@ do
   Check(select(1, U.Offset()) == nil, "no offset while it isn't in charge")
   C.Set("unlockMode", true)
   Check(U.Status() == "no-eui", "wanted but EllesmereUI isn't there")
-  local element, listener
+  local element, listener, restElement, restListener
   c.EllesmereUI = {
-    RegisterUnlockElements = function(_, list) element = list[1] end,
+    RegisterUnlockElements = function(_, list) if list[1].key == "TwichUI_CampingRest" then restElement = list[1] else element = list[1] end end,
     MakeUnlockElement = function(def) return def end,
-    RegisterUnlockModeListener = function(_, key, fn) listener = { key = key, fn = fn } end,
+    RegisterUnlockModeListener = function(_, key, fn) if key == "TwichUI_CampingRest" then restListener = { key = key, fn = fn } else listener = { key = key, fn = fn } end end,
   }
   U.Refresh()
+  R.CampingRest.Refresh()
   Check(U.Status() == "active" and U.Drives() and element and element.key == "TwichUI_CampingBar" and element.label == "TwichUI Camping bar",
     "registered once EllesmereUI is there: " .. U.Status())
   local standFrame = element.getFrame()
@@ -538,6 +543,21 @@ do
   local count = 0
   U.Refresh(); U.Refresh()
   Check(element.getFrame() == standFrame and listener.key == "TwichUI_CampingBar", "registered once, not again")
+
+  -- The sleeping bag bar has an element of its own, on the same choice
+  do
+    local RB, UR = R.CampingRest, R.CampingRestUnlock
+    Check(UR and RB.Unlock == UR and restElement and restElement.label == "TwichUI Sleeping bag bar" and restListener, "the sleeping bag bar is registered too")
+    Check(UR.Drives() and restElement.isHidden() == false and restElement.noResize, "in charge, shown in Unlock Mode")
+    local w, h = restElement.getSize(); Check(w == C.Get("restWidth") and h == C.Get("restHeight"), "sized as the bar")
+    restElement.savePos(nil, "CENTER", "CENTER", 30, -45)
+    local rx, ry = RB.Position(); Check(rx == 30 and ry == -45 and c.TwichUIDB.ui.campingRestPosition.x == 30, "saved as its own place")
+    Check(select(1, restElement.loadPos()) ~= nil and restElement.loadPos().x == 30, "and loaded")
+    Check(RB.StartMove() == false and select(2, RB.StartMove()) == "unlock", "the Move button defers to Unlock Mode")
+    restElement.clearPos(); rx, ry = RB.Position(); Check(rx == 0 and ry == -215, "cleared")
+    C.Set("restShow", false); Check(restElement.isHidden() == true and not UR.Drives(), "hidden while the bar is off")
+    C.Set("restShow", true); Check(restElement.isHidden() == false, "and back")
+  end
 
   -- Save & Exit: the place is saved as given; a wrong anchor or a wild number is refused
   element.savePos(nil, "CENTER", "CENTER", 120, -80)
@@ -568,6 +588,22 @@ do
   C.Set("unlockMode", false)
   Check(U.Status() == "off" and not U.Drives() and element.isHidden() == true, "off: not in charge, and hidden from Unlock Mode")
   c.EllesmereUI = nil
+  R.CampingRest.Refresh()
+end
+
+-- The settings' Move button: the sample and outline without Edit Mode
+do
+  local RB = R.CampingRest
+  C.Set("unlockMode", false); RB.Refresh()
+  Check(not RB.Moving() and RB.StartMove() == true and RB.Moving(), "move mode starts")
+  local function RestFrame() for _, f in ipairs(frames) do if f.name == "TwichUICampingRest" then return f end end end
+  Check(RestFrame().shown and RestFrame().track.time.text == "1:30", "it shows the bar with the 1:30 sample")
+  local movers = 0
+  for _, f in ipairs(frames) do if f.scripts and f.scripts.OnDragStop and f.shown then movers = movers + 1 end end
+  Check(movers == 1, "an outline to drag is shown")
+  RB.StopMove(); Check(not RB.Moving() and not RestFrame().shown, "Done puts it away")
+  C.Set("restShow", false); Check(RB.StartMove() == false and not RB.Moving(), "no move mode while it is off")
+  C.Set("restShow", true)
 end
 
 -- Snapshot, then off again: the events go and the bar hides
@@ -583,5 +619,175 @@ c.FireEvent("PLAYER_ENTERING_WORLD", false, false); Look()
 local m = 0
 for _, f in ipairs(frames) do if f.template == "SecureActionButtonTemplate" then m = m + 1 end end
 Check(m == n, "turning it on again makes no new buttons: " .. n .. " then " .. m)
+
+---------------------------------------------------------------------------
+-- The sleeping bag bar: the rules (State.lua), then the controller (Rest.lua) against the fake game
+---------------------------------------------------------------------------
+do
+  -- the numbers
+  Check(S.RestStacks(0) == 0 and S.RestStacks(59.9) == 0 and S.RestStacks(60) == 1 and S.RestStacks(125) == 2
+    and S.RestStacks(180) == 3 and S.RestStacks(9999) == 3 and S.RestStacks(-5) == 0 and S.RestStacks(nil) == 0, "stacks per minute, at most three")
+  local v = S.RestView(90)
+  Check(v.stacks == 1 and not v.complete and math.abs(v.fraction - 0.5) < 1e-9 and v.remaining == 90 and v.untilNext == 30, "a view at 1:30")
+  v = S.RestView(500); Check(v.complete and v.fraction == 1 and v.remaining == 0 and v.untilNext == 0, "a view is capped at three minutes")
+  Check(S.RestClock(0) == "0:00" and S.RestClock(59.2) == "1:00" and S.RestClock(61) == "1:01" and S.RestClock(180) == "3:00", "clock text rounds up")
+  Check(S.RestTimerText("remaining", S.RestView(90)) == "1:30" and S.RestTimerText("elapsed", S.RestView(90)) == "1:30"
+    and S.RestTimerText("next", S.RestView(70)) == "0:50" and S.RestTimerText("off", S.RestView(70)) == "", "timer modes")
+  Check(S.RestLabel(S.RestView(10)) == "Resting..." and S.RestLabel(S.RestView(125)) == "+2% experience", "labels")
+
+  -- the clock: starts on resting after a recent use, follows the aura, stops when resting stops
+  local st = S.RestNew()
+  local function Step(now, resting, usedAt, stacks) return S.RestStep(st, { now = now, resting = resting, usedAt = usedAt, stacks = stacks, linger = 8 }) end
+  Step(1000, true, nil, 0); Check(st.phase == "idle", "resting alone (an inn) starts nothing")
+  Step(1000, true, 600, 0); Check(st.phase == "idle", "a bag used long ago starts nothing (window)")
+  Step(1000, false, 990, 0); Check(st.phase == "idle", "a new bag but not resting yet: waiting")
+  Step(1000, nil, 990, 0); Check(st.phase == "idle", "an unreadable answer starts nothing")
+  Step(1010, true, 990, 0); Check(st.phase == "lying" and st.elapsed == 0, "resting after use starts the clock")
+  Step(1070, true, 990, 0); Check(st.elapsed == 60, "it runs on the game's clock")
+  Step(1070, nil, 990, nil); Check(st.phase == "lying", "an unreadable answer never stops it")
+  Step(1100, true, 990, 2); Check(st.elapsed == 120 and st.phase == "lying", "the aura moves it forward to its stacks")
+  Step(1110, true, 990, 1); Check(st.elapsed == 130, "and never back")
+  Step(1111, false, 990, 2); Check(st.phase == "lying", "a flicker of not resting is forgiven")
+  Step(1112, true, 990, 2); Check(st.phase == "lying" and st.lostAt == nil, "and forgotten")
+  Step(1115, false, 990, 2); Step(1118, false, 990, 2)
+  Check(st.phase == "stopped" and math.abs(st.elapsed - (1115 - st.start)) < 1e-9, "leaving the bag stops the clock at that moment")
+  Step(1130, false, 990, 2); Check(st.phase == "idle", "and it is gone after the linger")
+  Step(1140, true, 990, 2); Check(st.phase == "lying" and st.elapsed == 120, "lying down again picks up from the aura")
+  Step(1300, true, 990, 3); Check(st.phase == "done" and st.elapsed == 180, "three stacks finish it")
+  Step(1301, true, 990, 3); Check(st.phase == "done", "it stays while it lingers")
+  Step(1320, true, 990, 3); Check(st.phase == "idle", "then goes")
+  Step(1321, true, 990, 0); Check(st.phase == "idle", "a finished bag does not start again")
+  Step(1322, true, 1319, 0); Check(st.phase == "lying", "a bag used again does")
+  local old = S.RestNew()
+  S.RestStep(old, { now = 50, resting = true, usedAt = 48, stacks = 3, linger = 0 }); Check(old.phase == "idle", "all three stacks already: nothing to track")
+  Check(S.RestShown(S.RestNew()) == false and S.RestShown(st) == true, "shown unless idle")
+end
+
+do
+  local NOW, USED, STACKS = 5000, nil, 0
+  c.GetTime = function() return NOW end
+  c.C_Container.GetItemCooldown = function(id) if id == D.SLEEPING_BAG and USED then return USED, 3600, 1 end return 0, 0, 1 end
+  local oldAura = c.C_UnitAuras.GetPlayerAuraBySpellID
+  c.C_UnitAuras.GetPlayerAuraBySpellID = function(id)
+    if id == D.REST_AURA and STACKS > 0 then return { spellId = id, applications = STACKS } end
+    return oldAura(id)
+  end
+  local RB = R.CampingRest
+  local function RestFrame() for _, f in ipairs(frames) do if f.name == "TwichUICampingRest" then return f end end end
+
+  C.Set("restShow", true)
+  RB.Refresh()
+  Check(RB.Snapshot().events == 5 and not RB.Snapshot().shown, "listening, nothing shown yet")
+  c.RESTING = true; RB.Look()
+  Check(RB.Session().phase == "idle" and not (RestFrame() and RestFrame().shown), "resting in an inn shows nothing")
+  USED = NOW - 20; RB.Look()
+  Check(RB.Session().phase == "lying" and RestFrame().shown, "using the bag, then resting, shows the bar")
+  local track = RestFrame().track
+  Check(RB.Geometry() and RB.Geometry().w == 220 - 18 - 4 - 2 and track.label.text == "Resting..." and track.time.text == "3:00", "starts at three minutes to go: " .. tostring(track.time.text))
+  Check(RB.Snapshot().ticking, "the clock runs while shown")
+  NOW = NOW + 61; RB.Look()
+  Check(track.label.text == "+1% experience" and track.time.text == "1:59", "a minute in: " .. tostring(track.label.text) .. " " .. tostring(track.time.text))
+  C.Set("restTimer", "elapsed"); Check(track.time.text == "1:01", "the timer follows the setting")
+  C.Set("restTimer", "next"); Check(track.time.text == "0:59", "next-minute timer")
+  C.Set("restTimer", "off"); Check(track.time.text == "", "no timer")
+  C.Set("restTimer", "remaining")
+  C.Set("restLabel", false); Check(track.label.text == "", "label off"); C.Set("restLabel", true)
+  C.Set("restWidth", 300); Check(RestFrame().w == 300 and RB.Geometry().w == 300 - 18 - 4 - 2, "width changes the layout at once")
+  C.Set("restIcon", false); Check(RB.Geometry().w == 300 - 2 and not RestFrame().icon.shown, "no icon: the bar takes the room"); C.Set("restIcon", true)
+  Check(C.Set("restTimer", "bogus") == false and C.Set("restWidth", 5) == false and C.Set("restFill", "red") == false, "bad values are refused")
+  STACKS = 2; NOW = NOW + 70; RB.Look()
+  Check(RB.Session().elapsed >= 131 and track.label.text == "+2% experience", "the aura keeps it in step")
+  STACKS = 3; NOW = NOW + 5; RB.Look()
+  Check(RB.Session().phase == "done" and track.time.text == "0:00", "finished")
+  Check(RestFrame().shown, "it lingers")
+  NOW = NOW + 9; RB.Look()
+  Check(not RestFrame().shown and not RB.Snapshot().ticking, "then it goes, and the clock stops")
+  Check(R.Camping.Snapshot().events == 8 and RB.Snapshot().events == 5, "bar and rest events are counted apart")
+
+  -- the border, fill, font and text options
+  Check(C.Valid("restBorderTexture", "solid") and not C.Valid("restBorderTexture", "bad|name") and C.Valid("restFont", "Friz Quadrata TT")
+    and not C.Valid("restFont", "") and C.Valid("restTexture", "solid"), "texture and font names are checked")
+  Check(C.Valid("restOutline", "thick") and not C.Valid("restOutline", "huge") and C.Valid("restTextColor", "ff00ff00") and not C.Valid("restTimerColor", "00ff00"), "outline and text colors are checked")
+  Check(C.Valid("restBorderSize", 32) and not C.Valid("restBorderSize", 33) and C.Valid("restTimerSize", 8) and not C.Valid("restTimerSize", 7), "limits")
+  local label, timer = track.label, track.time
+  C.Set("restTextSize", 20); C.Set("restTimerSize", 10); C.Set("restOutline", "thick")
+  Check(label.font and label.font[2] == 20 and timer.font[2] == 10 and label.font[3] == "THICKOUTLINE", "label and timer have their own sizes, and the outline")
+  C.Set("restOutline", "none"); Check(label.font[3] == "", "no outline")
+  C.Set("restTextColor", "ff112233"); C.Set("restTimerColor", "ffaabbcc")
+  Check(label.textColor and math.abs(label.textColor[1] - 0x11 / 255) < 1e-6 and timer.textColor and math.abs(timer.textColor[3] - 0xcc / 255) < 1e-6, "their own colors")
+  R.MenuStyle = { Fonts = { Resolve = function(id, fallback) return id == "Mine" and "Fonts\\Mine.ttf" or fallback, "ok" end },
+    StatusBars = { Resolve = function(id) if id == "Tex" then return "Interface\\Tex" end end } }
+  C.Set("restFont", "Mine"); Check(label.font[1] == "Fonts\\Mine.ttf" and timer.font[1] == "Fonts\\Mine.ttf", "the chosen font is used")
+  C.Set("restFont", "Gone"); Check(label.font[1] ~= "Fonts\\Mine.ttf", "a font that has gone falls back")
+  C.Set("restTexture", "Tex"); Check(RestFrame().track.fill.texture == "Interface\\Tex", "the chosen fill texture")
+  C.Set("restTexture", "Gone"); Check(RestFrame().track.fill.texture == "Interface\\Buttons\\WHITE8X8", "a texture that has gone is flat")
+  R.MenuStyle = nil
+  C.Set("restBorderSize", 6); C.Set("restBorderOpacity", 40)
+  Check(RB.Geometry().w == 300 - 18 - 4 - 12, "border size feeds the layout: " .. tostring(RB.Geometry().w))
+  local before = RB.Geometry().w
+  C.Set("restBorderSize", 2); Check(RB.Geometry().w == before + 8, "a thinner border leaves more room: " .. before .. " -> " .. RB.Geometry().w)
+  C.Set("restBorderTexture", "solid"); C.Set("restBorderClass", true); C.Set("restBorderClass", false)
+  C.ResetRestLook()
+  Check(C.Get("restFont") == "default" and C.Get("restOutline") == "outline" and C.Get("restTimerSize") == 12 and C.Get("restBorderTexture") == "solid", "reset puts the new options back")
+
+  -- smooth: redraws faster and does not round the fill to whole pixels
+  do
+    local rates, orig = {}, c.C_Timer.NewTicker
+    c.C_Timer.NewTicker = function(rate, fn) rates[#rates + 1] = rate; return orig(rate, fn) end
+    local oldStacks, oldUsed = STACKS, USED
+    STACKS, USED = 0, NOW - 5
+    c.RESTING = true; RB.Look()
+    Check(RB.Session().phase == "lying", "a new session for the smooth test")
+    local fill = RestFrame().track.fill
+    NOW = NOW + 7.3; RB.Look()
+    Check(fill.w == math.floor(fill.w), "steps: whole pixels, " .. tostring(fill.w))
+    C.Set("restSmooth", true)
+    NOW = NOW + 0.0123; RB.Look()
+    Check(fill.w ~= math.floor(fill.w), "smooth: a fraction of a pixel, " .. tostring(fill.w))
+    Check(rates[#rates] < 0.05, "smooth redraws about 30 times a second: " .. tostring(rates[#rates]))
+    local w1 = fill.w
+    NOW = NOW + 0.02; local t = RB.Snapshot().ticks
+    for _, tk in ipairs(TICKERS) do if not tk.cancelled then tk.fn() end end
+    Check(fill.w > w1 and RB.Snapshot().ticks > t, "a tick moves the fill between reads of the game")
+    C.Set("restSmooth", false)
+    NOW = NOW + 0.01; RB.Look()
+    Check(rates[#rates] == 0.2, "back to five times a second: " .. tostring(rates[#rates]))
+    c.C_Timer.NewTicker = orig
+    c.RESTING = false; RB.Look(); NOW = NOW + 3; RB.Look(); NOW = NOW + 9; RB.Look()
+    Check(RB.Session().phase == "idle", "the smooth test's session is over")
+    c.RESTING = true
+    STACKS, USED = oldStacks, oldUsed
+  end
+
+  -- leaving the bag
+  STACKS, USED = 0, NOW - 5; RB.Look()
+  Check(RB.Session().phase == "lying", "a new bag")
+  c.RESTING = false; RB.Look(); NOW = NOW + 3; RB.Look()
+  Check(RB.Session().phase == "stopped" and RestFrame().shown, "standing up stops it, still on screen")
+  NOW = NOW + 9; RB.Look(); Check(not RestFrame().shown, "and it goes")
+
+  -- in combat: a plain frame still shows
+  c.RESTING, STACKS, USED = true, 0, NOW - 5; c.COMBAT = true; RB.Look()
+  Check(RestFrame().shown, "it shows in combat"); c.COMBAT = false
+  c.RESTING = false; RB.Look(); NOW = NOW + 3; RB.Look(); NOW = NOW + 9; RB.Look()
+
+  -- the sample, the place, the switches
+  Check(RB.Preview() == true and RestFrame().shown, "the sample shows")
+  NOW = NOW + 6; RB.Look(); Check(RestFrame().track.time.text ~= "3:00" and RestFrame().shown, "and runs fast")
+  NOW = NOW + 60; RB.Look(); Check(not RestFrame().shown, "and ends")
+  RB.SetPosition(40, -60); local x, y = RB.Position(); Check(x == 40 and y == -60 and c.TwichUIDB.ui.campingRestPosition.x == 40, "its place is its own")
+  RB.ResetPosition(); x, y = RB.Position(); Check(x == 0 and y == -215 and c.TwichUIDB.ui.campingRestPosition == nil, "and resets")
+  C.Set("restFill", "ff112233"); C.ResetRestLook(); Check(C.Get("restFill") == C.DEFAULTS.restFill and C.Get("restShow") == true, "reset keeps the switch")
+  c.RESTING, USED = true, NOW - 5; RB.Look(); Check(RB.Session().phase == "lying", "lying again")
+  C.Set("restShow", false)
+  Check(RB.Snapshot().events == 0 and not RestFrame().shown and RB.Session().phase == "idle" and not RB.Snapshot().ticking, "switched off: listeners, frame and clock all let go")
+  Check(RB.Preview() == false, "no sample while off")
+  C.Set("restShow", true)
+  R.Switches.Set("campingBar", false)
+  Check(RB.Snapshot().events == 0 and not RestFrame().shown, "with the camping bar off, so is this")
+  R.Switches.Set("campingBar", true)
+  c.RESTING = false; USED = nil
+  c.C_UnitAuras.GetPlayerAuraBySpellID = oldAura
+end
 
 print("CAMPING TEST PASSED")

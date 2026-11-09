@@ -33,6 +33,7 @@ pages\Hazard.lua
 pages\HazardRules.lua
 pages\FoodDrink.lua
 pages\Camping.lua
+pages\CampingRest.lua
 pages\Restock.lua
 pages\RestockItems.lua
 pages\MagicInventory.lua

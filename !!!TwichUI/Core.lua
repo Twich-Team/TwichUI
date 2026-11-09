@@ -518,6 +518,12 @@ COMMANDS = {
     { name = "probe", usage = "probe", desc = "list what the game says about consumables in your bags", hidden = true, fn = function()
         if R.FoodDrinkProbe then R.FoodDrinkProbe.Run() else Unavailable("Probe") end
     end },
+    -- Kept for checking the Cozy Sleeping Bag progress bar's signals against the game (docs/camping-bar.md).
+    { name = "camp", usage = "camp probe [watch|show|stop]", desc = "what the game says about resting in the Cozy Sleeping Bag; watch records a few minutes", hidden = true, fn = function(arg)
+        if R.CampingRest and (arg or ""):lower():match("^%s*probe") then R.CampingRest.Probe((arg or ""):lower():match("^%s*probe%s*(.*)$"))
+        elseif R.CampingRest then R.Print("usage: /tui camp probe [watch|show|stop]")
+        else Unavailable("Camping bar") end
+    end },
     -- The old temporary friend diagnostics now live in /tui diagnostics.
     { name = "frienddiag", usage = "frienddiag", desc = "now /tui diagnostics", hidden = true, fn = function(arg)
         if R.DiagWindow then R.DiagWindow.LegacyFriendDiag(arg) else Unavailable("Troubleshooting") end

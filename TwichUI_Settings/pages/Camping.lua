@@ -33,7 +33,7 @@ local PROFESSION = {
 }
 
 K.Page({
-    key = "camping", icon = "camping", name = "Camping bar", order = 41, group = "everyday",
+    key = "camping", icon = "camping", name = "Camping bar", tab = "Camping bar", order = 41, group = "everyday",
     description = "A bar for camping: your campfire kit, the camp objects your professions make, and the Cozy Sleeping Bag. You click; nothing is placed for you.",
     keywords = "camp campfire camping fire tent kit profession object blueprint sleeping bag cozy rested buff bar action hide dungeon raid resting mouseover fade",
     overview = {
@@ -191,7 +191,7 @@ K.Page({
         end
         local CU = R.CampingUnlock
         if CU then
-            local unlockBase = "Move the bar in EllesmereUI's Unlock Mode instead of Edit Mode. A \"TwichUI Camping bar\" anchor appears there, and you drag it, nudge it, type its X and Y or anchor it to another element the way you do the rest of your interface. Turning this on keeps the bar where it is. The place is still saved by TwichUI; EllesmereUI's anchor links are saved by EllesmereUI.\n\nOpen Unlock Mode with /unlock. It can't be opened in combat, and nothing is moved then.\n\nOff, or without EllesmereUI, the bar is moved in Edit Mode. Your choice is kept while EllesmereUI is away."
+            local unlockBase = "Move the bar in EllesmereUI's Unlock Mode instead of Edit Mode. A \"TwichUI Camping bar\" anchor appears there (and a \"TwichUI Sleeping bag bar\" one for the sleeping bag bar), and you drag it, nudge it, type its X and Y or anchor it to another element the way you do the rest of your interface. Turning this on keeps the bar where it is. The place is still saved by TwichUI; EllesmereUI's anchor links are saved by EllesmereUI.\n\nOpen Unlock Mode with /unlock. It can't be opened in combat, and nothing is moved then.\n\nOff, or without EllesmereUI, the bar is moved in Edit Mode. Your choice is kept while EllesmereUI is away."
             local unlock = Check("campingUnlock", "unlockMode", "Use EllesmereUI Unlock Mode", unlockBase)
             if unlock and unlock.GetTooltip ~= nil then
                 -- read when the tooltip is shown, so it is never stale

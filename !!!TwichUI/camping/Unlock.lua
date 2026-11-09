@@ -17,17 +17,19 @@
 -- * Registered once per session and never unregistered: that would delete the player's anchor links in EllesmereUI. The
 --   mover is hidden from Unlock Mode (isHidden) while the bar or the choice is off.
 -- Nothing runs per frame.
+--
+-- The same machinery serves two elements, made by Make(spec): the camping bar ("TwichUI Camping bar") and the Cozy Sleeping
+-- Bag's progress bar ("TwichUI Sleeping bag bar", camping/Rest.lua; a plain frame, so it follows its stand-in in combat too).
+-- Both follow the one choice, ui.campingBar.unlockMode. spec = { key, label, order, note, wanted(), position(), setPosition(x, y),
+-- footprint(), reposition() }.
 
 local R = TwichUI
 local C = R.Camping
-local U = {}
-R.CampingUnlock = U
-C.Unlock = U
-
-local KEY = "TwichUI_CampingBar"
-local LABEL = "TwichUI Camping bar"
 local GROUP = "TwichUI"
-local ORDER = 906
+
+local function Make(spec)
+local U = {}
+local KEY, LABEL, ORDER = spec.key, spec.label, spec.order
 
 local stand                -- the stand-in EllesmereUI moves: a plain frame with no look of its own
 local registered = false
@@ -46,7 +48,7 @@ local function Api()
 end
 
 -- The player's choice, with the bar itself on. Explicitly true only.
-local function Wanted() return R:Enabled("campingBar") and C.Get("unlockMode") == true end
+local function Wanted() return R:Enabled("campingBar") and C.Get("unlockMode") == true and spec.wanted() end
 
 function U.Drives() return registered and stand ~= nil and Wanted() and Api() ~= nil end
 
@@ -64,20 +66,20 @@ function U.Offset()
 end
 
 local function Footprint()
-    local w, h = C.Footprint()
+    local w, h = spec.footprint()
     return math.max(1, math.floor(w + 0.5)), math.max(1, math.floor(h + 0.5))
 end
 
 local function PlaceStand()
     if not stand then return end
-    local x, y = C.Position()
+    local x, y = spec.position()
     placed = { x = x, y = y }   -- before SetPoint: its hook may read it
     stand:ClearAllPoints()
     stand:SetPoint("CENTER", UIParent, "CENTER", x, y)
 end
 
 local function OnStandMoved()
-    if U.Drives() then C.Reposition() end
+    if U.Drives() then spec.reposition() end
 end
 
 local function Build()
@@ -104,17 +106,17 @@ end
 -- What EllesmereUI calls
 ---------------------------------------------------------------------------
 local function Save(_, point, relPoint, x, y)
-    if not U.Drives() then R.Life.Note("camping-unlock-save-ignored") return end
+    if not U.Drives() then R.Life.Note(spec.note .. "-save-ignored") return end
     if point ~= "CENTER" or (relPoint or point) ~= "CENTER" or not (C.ValidOffset(x) and C.ValidOffset(y)) then
-        R.Life.Note("camping-unlock-save-refused")
+        R.Life.Note(spec.note .. "-save-refused")
         return
     end
-    C.SetPosition(x, y)
+    spec.setPosition(x, y)
     if not session then PlaceStand() end
 end
 
 local function Load()
-    local x, y = C.Position()
+    local x, y = spec.position()
     return { point = "CENTER", relPoint = "CENTER", x = x, y = y }
 end
 
@@ -125,7 +127,7 @@ end
 
 local function Clear()
     if not U.Drives() then return end
-    C.SetPosition(nil)
+    spec.setPosition(nil)
     PlaceStand()
 end
 
@@ -152,8 +154,8 @@ local function Register()
     end)
     if not ok then
         failed = true
-        R.Life.Note("camping-unlock-register-failed")
-        if R.Diag and R.Diag.Error then R.Diag.Error("camping bar unlock", err) end
+        R.Life.Note(spec.note .. "-register-failed")
+        if R.Diag and R.Diag.Error then R.Diag.Error(spec.note, err) end
         return
     end
     registered = true
@@ -175,12 +177,12 @@ function U.Refresh()
         if e and type(e.ReapplyOwnAnchor) == "function" then pcall(e.ReapplyOwnAnchor, KEY) end
     elseif now and not session then
         -- the saved place changed (a profile, Reset position): the stand-in goes there too
-        local x, y = C.Position()
+        local x, y = spec.position()
         if not placed or placed.x ~= x or placed.y ~= y then PlaceStand() end
     end
     local changed = now ~= wasDriving
     wasDriving = now
-    if changed then C.Reposition() end
+    if changed then spec.reposition() end
 end
 
 -- The saved place was cleared (Reset position): the stand-in goes back to the default one.
@@ -204,4 +206,34 @@ function U.Status()
     if not R:Enabled("campingBar") then return "module-off" end
     if not registered then return "waiting" end
     return "active"
+end
+
+return U
+end
+
+-- The camping bar's own element (the original: R.CampingUnlock, C.Unlock).
+local U = Make({
+    key = "TwichUI_CampingBar", label = "TwichUI Camping bar", order = 906, note = "camping-unlock",
+    wanted = function() return true end,
+    position = function() return C.Position() end,
+    setPosition = function(x, y) C.SetPosition(x, y) end,
+    footprint = function() return C.Footprint() end,
+    reposition = function() return C.Reposition() end,
+})
+R.CampingUnlock = U
+C.Unlock = U
+
+-- The sleeping bag bar's element: wanted while that bar is on.
+local RB = R.CampingRest
+if RB then
+    local UR = Make({
+        key = "TwichUI_CampingRest", label = "TwichUI Sleeping bag bar", order = 907, note = "camping-rest-unlock",
+        wanted = function() return C.Get("restShow") end,
+        position = function() return RB.Position() end,
+        setPosition = function(x, y) RB.SetPosition(x, y) end,
+        footprint = function() return RB.Footprint() end,
+        reposition = function() return RB.Reposition() end,
+    })
+    R.CampingRestUnlock = UR
+    RB.Unlock = UR
 end

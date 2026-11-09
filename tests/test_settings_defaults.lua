@@ -39,7 +39,7 @@ for _, page in ipairs(K.list) do
     ["Class resource bar layout"] = "Class resource bars", ["Class resource bar appearance"] = "Class resource bars",
     ["Class resource bar effects"] = "Class resource bars", ["Known ammunition"] = "Reminders",
     ["Chat cleaning channels"] = "Chat cleaning", ["Chat cleaning rules"] = "Chat cleaning", ["Chat cleaning live view"] = "Chat cleaning", ["Hazard alert rules"] = "Hazard alerts", ["Action bar glow spells and looks"] = "Action bar glows",
-    ["World map places"] = "World map", ["Vendors and trainers: your list"] = "Vendors and trainers", ["World Knowledge"] = "Vendors and trainers" }
+    ["World map places"] = "World map", ["Sleeping bag bar"] = "Camping bar", ["Vendors and trainers: your list"] = "Vendors and trainers", ["World Knowledge"] = "Vendors and trainers" }
   assert((page.parent and K.pages[page.parent].name) == under[page.name], page.name .. " is in its place")
 end
 
@@ -252,7 +252,7 @@ assert(attune:GetTooltip():find("after reload"), "toggle change shows it needs a
 
 -- The overview links to one page per feature, in this order; every setting
 -- is on exactly one page (registration above refuses a repeat).
-assert(table.concat(pageOrder, ",") == "Notifications,Notification appearance,Return the Favor,Quality of life,Markers,Chat cleaning,Food and drink,Camping bar,Hazard alerts,Vendor restocking,Auction House,Journey Chronicle,Chronicle appearance,Cozy Sleeping Bag,Pins and Pings,Map pings,Pin appearance,Map Toolbar,World map,World map places,Navigation,Vendors and trainers,Vendors and trainers: your list,Guild Locations,Gear comparison,Mage,Class resource bars,Class resource bar layout,Class resource bar appearance,Class resource bar effects,Action bar glows,Addon skins,SpeakStone speech frame,RestedXP,Configuration sharing,Profiles,Troubleshooting", table.concat(pageOrder, ","))
+assert(table.concat(pageOrder, ",") == "Notifications,Notification appearance,Return the Favor,Quality of life,Markers,Chat cleaning,Food and drink,Camping bar,Sleeping bag bar,Hazard alerts,Vendor restocking,Auction House,Journey Chronicle,Chronicle appearance,Cozy Sleeping Bag,Pins and Pings,Map pings,Pin appearance,Map Toolbar,World map,World map places,Navigation,Vendors and trainers,Vendors and trainers: your list,Guild Locations,Gear comparison,Mage,Class resource bars,Class resource bar layout,Class resource bar appearance,Class resource bar effects,Action bar glows,Addon skins,SpeakStone speech frame,RestedXP,Configuration sharing,Profiles,Troubleshooting", table.concat(pageOrder, ","))
 for variable, page in pairs({
   TWICHUI_media = "TwichUI", TWICHUI_quietLogin = "TwichUI", 
   TWICHUI_gearHints = "Gear comparison", TWICHUI_gearTree = "Gear comparison", TWICHUI_gearBagStyle = "Gear comparison",

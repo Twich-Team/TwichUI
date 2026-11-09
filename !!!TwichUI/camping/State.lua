@@ -162,6 +162,96 @@ function S.Visible(opts, ctx)
     return true
 end
 
+---------------------------------------------------------------------------
+-- The Cozy Sleeping Bag's rest clock (camping/Rest.lua reads the game and draws; this decides). Pure.
+-- You lie in the bag for a minute to get +1% experience, two for 2%, three for 3% (Data.lua: REST_*). There is no aura
+-- during the first minute, so the clock starts from what the game does say: you are "resting" (IsResting) a short while
+-- after you used the bag, outside a rested area. The Well-Rested aura's stack count, once it exists, can only move the
+-- clock forward to match it. Leaving the bag (resting stops for GRACE seconds) stops the clock.
+---------------------------------------------------------------------------
+S.REST_GRACE = 2            -- seconds not resting before the clock stops (a flicker doesn't end it)
+
+-- How many full minutes (stacks) elapsed seconds is worth.
+function S.RestStacks(elapsed)
+    elapsed = Number(elapsed)
+    return math.max(0, math.min(D.REST_STACKS, math.floor(elapsed / D.REST_STEP)))
+end
+
+-- What the bar draws for elapsed seconds in the bag.
+function S.RestView(elapsed)
+    elapsed = math.max(0, math.min(D.REST_TOTAL, Number(elapsed)))
+    local stacks = S.RestStacks(elapsed)
+    local complete = stacks >= D.REST_STACKS
+    return { elapsed = elapsed, fraction = elapsed / D.REST_TOTAL, stacks = stacks, complete = complete,
+        remaining = D.REST_TOTAL - elapsed,
+        untilNext = complete and 0 or (D.REST_STEP - elapsed % D.REST_STEP) }
+end
+
+-- "m:ss" for whole seconds, rounded up (a clock that says 0:00 is done).
+function S.RestClock(seconds)
+    seconds = math.max(0, math.ceil(Number(seconds) - 1e-9))
+    return ("%d:%02d"):format(math.floor(seconds / 60), seconds % 60)
+end
+
+S.REST_TIMER_MODES = { off = true, remaining = true, elapsed = true, next = true }
+
+-- The timer's text for a view, or "" for none.
+function S.RestTimerText(mode, view)
+    if mode == "remaining" then return S.RestClock(view.remaining) end
+    if mode == "elapsed" then return S.RestClock(view.elapsed) end
+    if mode == "next" then return view.complete and S.RestClock(0) or S.RestClock(view.untilNext) end
+    return ""
+end
+
+-- The label: what the player has earned so far.
+function S.RestLabel(view)
+    if view.stacks == 0 then return "Resting..." end
+    return ("+%d%% experience"):format(view.stacks)
+end
+
+function S.RestNew() return { phase = "idle", elapsed = 0 } end
+
+-- One look. st: { phase = "idle" | "lying" | "stopped" | "done", start, stopAt, lostAt, doneUse, elapsed }. It is changed in
+-- place and returned. ev = {
+--   now      seconds on one clock (GetTime),
+--   resting  true | false | nil (nil: the game did not say; that never starts or stops anything),
+--   usedAt   when the bag was last used on that clock, or nil,
+--   stacks   the aura's stack count (0 when it is absent),
+--   linger   seconds to keep showing a finished or stopped bar,
+-- }
+-- A session starts when resting is true, the bag was used within REST_WINDOW seconds, and a stack is still to be earned;
+-- a bag whose session finished (doneUse) does not start another until it is used again.
+function S.RestStep(st, ev)
+    local now, stacks = ev.now, math.max(0, math.min(D.REST_STACKS, Number(ev.stacks)))
+    if (st.phase == "stopped" or st.phase == "done") and now - st.stopAt > (ev.linger or 0) then st.phase = "idle" end
+    if st.phase == "lying" then
+        local e = now - st.start
+        if stacks * D.REST_STEP > e then st.start = now - stacks * D.REST_STEP; e = stacks * D.REST_STEP end
+        if ev.resting == false then
+            st.lostAt = st.lostAt or now
+        elseif ev.resting == true then
+            st.lostAt = nil
+        end
+        if e >= D.REST_TOTAL then
+            st.phase, st.elapsed, st.stopAt, st.doneUse, st.lostAt = "done", D.REST_TOTAL, now, st.use, nil
+        elseif st.lostAt and now - st.lostAt >= S.REST_GRACE then
+            st.phase, st.elapsed, st.stopAt, st.lostAt = "stopped", math.max(0, st.lostAt - st.start), st.lostAt, nil
+        else
+            st.elapsed = e
+        end
+        return st
+    end
+    local recent = ev.usedAt ~= nil and now - ev.usedAt <= D.REST_WINDOW and now - ev.usedAt >= -1
+    if ev.resting == true and recent and ev.usedAt ~= st.doneUse and stacks < D.REST_STACKS then
+        st.phase, st.use = "lying", ev.usedAt
+        st.start, st.elapsed, st.lostAt, st.stopAt = now - stacks * D.REST_STEP, stacks * D.REST_STEP, nil, nil
+    end
+    return st
+end
+
+-- Whether the bar shows for this state.
+function S.RestShown(st) return st.phase ~= "idle" end
+
 -- Where button i (1-based) goes: column and row from the top left. perLine buttons fill a row (horizontal) or a column
 -- (vertical) before the next starts.
 function S.Cell(i, perLine, vertical)
