@@ -29,16 +29,16 @@
 --   key "zone:<zoneChannelID>" or "custom:<lowercased name>"
 --
 -- Settings (per profile, TwichUIDB.ui.chatClean; the settings window edits them only through the functions below):
---   channels  { [key] = { on, spam, repeats, recruit, politics, lgbt, label } }. Missing (never changed): the recommended
+--   channels  { [key] = { on, spam, repeats, recruit, politics, lgbt, olympus, label } }. Missing (never changed): the recommended
 --             choice, General and Trade with the spam and repeat filters, until something is changed, when it is saved.
---             politics and lgbt (topic presets, see ChatCleanMatch.lua) are off unless ticked; a missing one is off.
+--             politics, lgbt and olympus (topic presets, see ChatCleanMatch.lua) are off unless ticked; a missing one is off.
 --   rules     { { id, name, mode, text, case, enabled, all, channels = { [key] = true } }, ... } in the order they are
 --             checked. all: every channel being cleaned; otherwise only the channels listed.
 --   nextId    the next rule's id
 -- Nothing about messages is saved: no captured chat, no senders, no counts, no repeat memory.
 --
 -- What a message is checked against, in this order (the first that matches is the reason shown): the channel's
--- custom rules in list order, then Gold selling spam, Guild recruitment, the Politics and LGBTQ Topics presets and
+-- custom rules in list order, then Gold selling spam, Guild recruitment, the Politics, LGBTQ Topics and Olympus presets and
 -- Repeated messages. Matching is in modules/ChatCleanMatch.lua. Repeated messages: the same text (ignoring case, spaces
 -- and punctuation) from the same player again within REPEAT_WINDOW seconds of their previous copy; at most REPEAT_MAX
 -- entries of a player ID and a number standing for the text (never the text), forgotten after the window and when
@@ -67,14 +67,16 @@ CC.CATEGORIES = {
       text = "Hides messages containing selected real-world political names, party labels and slogans. Keyword matching may also hide unrelated mentions. Replies without the listed words stay visible. Only what you see in your own chat changes." },
     { key = "lgbt", label = "LGBTQ Topics", short = "LGBTQ",
       text = "Hides messages containing selected LGBTQ-related terms and discussion phrases. Keyword matching does not determine a message's intent. Replies without the listed words stay visible, and the list says nothing about anyone's identity. Only what you see in your own chat changes." },
+    { key = "olympus", label = "Olympus", short = "Olympus",
+      text = "Hides messages that mention Olympus (the guild led by the streamer Asmongold) or Asmongold himself, including its recruitment and Discord adverts. Keyword matching may also hide an unrelated mention, such as the mountain. Replies without the listed words stay visible. Only what you see in your own chat changes." },
     { key = "repeats", label = "Repeated messages", short = "Repeats",
       text = ("The same message from the same player again within %d seconds of their previous copy (ignoring case, spaces and punctuation). The first copy is shown; repeats are hidden while they keep coming."):format(CC.REPEAT_WINDOW) },
 }
 local CATEGORY = {}
 for _, c in ipairs(CC.CATEGORIES) do CATEGORY[c.key] = c end
 CC.CATEGORY = CATEGORY
-local FLAGS = { on = true, spam = true, repeats = true, recruit = true, politics = true, lgbt = true }
-CC.RECOMMENDED = { on = true, spam = true, repeats = true, recruit = false, politics = false, lgbt = false }
+local FLAGS = { on = true, spam = true, repeats = true, recruit = true, politics = true, lgbt = true, olympus = true }
+CC.RECOMMENDED = { on = true, spam = true, repeats = true, recruit = false, politics = false, lgbt = false, olympus = false }
 
 local function Plain(v)
     if v == nil or (issecretvalue and issecretvalue(v)) then return nil end
@@ -164,7 +166,7 @@ local function CleanChannel(e)
 end
 CC.CleanChannel = CleanChannel
 
--- The channel choices in use, as copies: { [key] = { on, spam, repeats, recruit, politics, lgbt, label } }. Until something is
+-- The channel choices in use, as copies: { [key] = { on, spam, repeats, recruit, politics, lgbt, olympus, label } }. Until something is
 -- changed: the recommended choice.
 function CC.Channels()
     local t = Store(false)
@@ -371,7 +373,7 @@ function CC.MoveRule(id, dir)
     return false
 end
 
--- One channel's choice: field "on" | "spam" | "repeats" | "recruit" | "politics" | "lgbt". The first change saves the
+-- One channel's choice: field "on" | "spam" | "repeats" | "recruit" | "politics" | "lgbt" | "olympus". The first change saves the
 -- recommended choice with it, so what you saw is what you keep. label: the channel's name as the client shows it, kept
 -- for the list.
 function CC.SetChannel(key, field, value, label)
@@ -391,9 +393,9 @@ function CC.SetChannel(key, field, value, label)
     e[field] = value
     if label then e.label = label end
     -- a channel turned on for the first time starts with the recommended filters
-    if field == "on" and value and not (e.spam or e.repeats or e.recruit or e.politics or e.lgbt) then
+    if field == "on" and value and not (e.spam or e.repeats or e.recruit or e.politics or e.lgbt or e.olympus) then
         e.spam, e.repeats, e.recruit = CC.RECOMMENDED.spam, CC.RECOMMENDED.repeats, CC.RECOMMENDED.recruit
-        e.politics, e.lgbt = CC.RECOMMENDED.politics, CC.RECOMMENDED.lgbt
+        e.politics, e.lgbt, e.olympus = CC.RECOMMENDED.politics, CC.RECOMMENDED.lgbt, CC.RECOMMENDED.olympus
     end
     local t = Store(true)
     if not t then return false end
@@ -465,7 +467,7 @@ end
 ---------------------------------------------------------------------------
 -- What a channel is checked against, built when the settings change (never per message)
 ---------------------------------------------------------------------------
-local byZone, byCustom = {}, {}   -- [zoneChannelID] / [lowercased name] = { key, label, spam, recruit, repeats, politics, lgbt, rules }
+local byZone, byCustom = {}, {}   -- [zoneChannelID] / [lowercased name] = { key, label, spam, recruit, repeats, politics, lgbt, olympus, rules }
 local anyCustom = false
 local compiled = 0                -- channels with something to check
 
@@ -481,11 +483,11 @@ local function Compile()
     for key, e in pairs(CC.Channels()) do
         if e.on then
             local ch = { key = key, label = CC.ChannelLabel(key), spam = e.spam, recruit = e.recruit, repeats = e.repeats,
-                politics = e.politics, lgbt = e.lgbt, rules = {} }
+                politics = e.politics, lgbt = e.lgbt, olympus = e.olympus, rules = {} }
             for _, r in ipairs(rules) do
                 if r.rule.all or r.rule.channels[key] then ch.rules[#ch.rules + 1] = r end
             end
-            if ch.spam or ch.recruit or ch.repeats or ch.politics or ch.lgbt or #ch.rules > 0 then
+            if ch.spam or ch.recruit or ch.repeats or ch.politics or ch.lgbt or ch.olympus or #ch.rules > 0 then
                 local id = tonumber(key:match("^zone:(%d+)$"))
                 if id then byZone[id] = ch
                 else
@@ -591,7 +593,7 @@ local function Judge(ch, text, repeatKey, now)
     if ch.spam or ch.repeats then squashed = M.Squash(lowered) end
     if ch.spam and M.Spam(lowered, squashed, M.HasClubLink(text)) then return { kind = "category", id = "spam", label = CATEGORY.spam.label } end
     if ch.recruit and M.Recruit(lowered) then return { kind = "category", id = "recruit", label = CATEGORY.recruit.label } end
-    if ch.politics or ch.lgbt then
+    if ch.politics or ch.lgbt or ch.olympus then
         local topicText = M.TopicText(lowered)
         for _, key in ipairs(M.TOPIC_KEYS) do
             if ch[key] then

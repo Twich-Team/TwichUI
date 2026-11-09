@@ -378,7 +378,7 @@ function M.Recruit(lowered)
 end
 
 ---------------------------------------------------------------------------
--- Topic presets (Politics, LGBTQ Topics): a short, explicit list of words and phrases, opt-in per channel. They read
+-- Topic presets (Politics, LGBTQ Topics, Olympus): a short, explicit list of words and phrases, opt-in per channel. They read
 -- the message text only, never the sender, a character or guild name or the channel. They match vocabulary, not what
 -- a message means: whether it is supportive, hostile or a joke, or who wrote it. English starter lists.
 --   keyword  one word. A run of letters and digits in the message is that word, so "Biden" matches "BIDEN!" and
@@ -425,8 +425,19 @@ M.TOPIC_DATA = {
             { "pride-parade", "pride parade" }, { "pride-flag", "pride flag" },
         },
     },
+    olympus = {
+        label = "Olympus", noun = "Olympus",
+        keywords = {
+            { "olympus", "Olympus" }, { "asmongold", "Asmongold" }, { "asmon", "Asmon" }, { "asmongolds", "Asmongolds" },
+        },
+        phrases = {
+            { "join-olympus", "join olympus" }, { "olympus-guild", "olympus guild" }, { "guild-olympus", "guild olympus" },
+            { "olympus-discord", "olympus discord" }, { "olympus-recruiting", "olympus recruiting" },
+            { "olympus-recruitment", "olympus recruitment" }, { "olympus-is-recruiting", "olympus is recruiting" },
+        },
+    },
 }
-M.TOPIC_KEYS = { "politics", "lgbt" }
+M.TOPIC_KEYS = { "politics", "lgbt", "olympus" }
 
 -- Prepared once, at load: keyword lookups and phrase patterns, so a message costs no table building.
 local TOPIC = {}
