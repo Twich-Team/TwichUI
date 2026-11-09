@@ -41,6 +41,7 @@ local SCREEN_MARGIN = 24
 local GRIP = 16
 local CONTROL_W = 236
 local ROW_MIN, SECTION_PAD, GAP = 30, 14, 14
+local SECTION_GLYPH = 26   -- a section's own icon (K.Accent)
 local RESET_H, PAGE_BOTTOM = 52, 12   -- the page's own Reset area, and the room under the last thing on a page
 local NAV_ROW, NAV_GROUP = 30, 24
 local NAV_ICON = 20   -- a page's icon beside its name in the list (the 32 px file)
@@ -586,6 +587,20 @@ local function BuildView(page)
             if header.card and Cards then
                 Cards.Build(view, sec, CONTENT_W, UI.cardEnv)
                 view.hasCards = true
+            elseif header.sectionIcon or header.accent then
+                -- K.Accent: a stripe down the card's left edge, a small icon before the title, the title tinted
+                local c = header.accent or pal.gold
+                sec.accent = c
+                sec.stripe = Wg.Solid(sec.card, "ARTWORK", c, 0.75)
+                sec.stripe:SetWidth(3)
+                sec.stripe:SetPoint("TOPLEFT", sec.card, "TOPLEFT", 1, -1)
+                sec.stripe:SetPoint("BOTTOMLEFT", sec.card, "BOTTOMLEFT", 1, 1)
+                if header.sectionIcon then
+                    sec.glyph = sec.card:CreateTexture(nil, "ARTWORK")
+                    sec.glyph:SetSize(SECTION_GLYPH, SECTION_GLYPH)
+                    sec.glyph:SetTexture(header.sectionIcon)
+                    sec.glyph:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+                end
             end
         end
         return sec
@@ -748,15 +763,27 @@ function Layout(view)
         elseif sec.header and sec.titled then
             sec.title:SetText(sec.header:GetName() or "")
             sec.title:ClearAllPoints()
-            sec.title:SetPoint("TOPLEFT", SECTION_PAD, -inner)
+            local titleX, titleH = SECTION_PAD, sec.title:GetStringHeight() or 14
+            if sec.glyph then
+                sec.glyph:ClearAllPoints()
+                sec.glyph:SetPoint("TOPLEFT", SECTION_PAD, -inner)
+                sec.glyph:Show()
+                titleX = SECTION_PAD + SECTION_GLYPH + 8
+                sec.title:SetPoint("LEFT", sec.card, "TOPLEFT", titleX, -(inner + SECTION_GLYPH / 2))
+                titleH = math.max(titleH, SECTION_GLYPH)
+            else
+                sec.title:SetPoint("TOPLEFT", SECTION_PAD, -inner)
+            end
+            if sec.accent then Wg.Color(sec.title, sec.accent) end
             sec.title:Show()
             if sec.badge then
                 sec.badge:ClearAllPoints()
                 sec.badge:SetPoint("LEFT", sec.title, "LEFT", math.min(sec.title:GetStringWidth(), sec.title:GetWidth()) + 10, 0)
             end
-            inner = inner + (sec.title:GetStringHeight() or 14) + 4
+            inner = inner + titleH + 4
         elseif sec.title then
             sec.title:Hide()
+            if sec.glyph then sec.glyph:Hide() end
             if sec.badge then sec.badge:Hide() end
         end
         if sec.desc and not sec.isCard then

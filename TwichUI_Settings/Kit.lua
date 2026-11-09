@@ -302,6 +302,17 @@ function K.Header(text, tooltip)
     return AddRow("header", { name = text, tooltip = tooltip })
 end
 
+-- A section's own picture and color (a plain K.Header only): a small icon before its title, the title in the color
+-- and a thin stripe of it down the card's left edge, so sections of one page tell apart at a glance. icon: a
+-- texture path (or nil); color: { r, g, b }. Artwork and tint only: nothing here decides anything.
+function K.Accent(row, icon, color)
+    if row then
+        row.sectionIcon = icon
+        row.accent = color
+    end
+    return row
+end
+
 -- A feature card: a section drawn as a card (Window.lua, Cards.lua) with the feature's icon, its title, one plain
 -- sentence about what it does (shown under the title, and as the section's description everywhere else), its
 -- switch with "On" or "Off" beside it, a short summary of its rules as they are set, and what to know before
