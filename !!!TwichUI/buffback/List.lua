@@ -109,7 +109,8 @@ function L.Plan(entry)
     if not fam then return nil, why end
     local spell = S.SpellName(fam.ranks[1])
     local has = Plain(UnitExists("target")) and true or false
-    local macro = S.Macro(entry, fam, spell, { has = has, isThem = has and W.FullName("target") == entry.name })
+    local macro = S.Macro(entry, fam, spell, { has = has, isThem = has and W.FullName("target") == entry.name,
+        token = entry.inGroup and W.GroupUnit(entry.name) or nil })
     if not macro then return nil, "spell" end
     return fam, nil, macro, spell
 end

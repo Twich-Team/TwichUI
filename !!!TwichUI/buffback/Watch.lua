@@ -86,11 +86,20 @@ end
 ---------------------------------------------------------------------------
 -- Finding a player among your units (to thank them, to see what they wear). Bounded: about ninety checks.
 ---------------------------------------------------------------------------
+-- On WoW: Forever UnitName's second return is a surname, not a realm (there are no realms), and the game joins the
+-- two with CHARACTERNAME_SURNAME_SEPARATOR, a space: "Name Surname" is what /target and the roster know.
+local function SurnameSeparator()
+    local consts = Constants and Constants.CharacterNameSeparatorConsts
+    local sep = consts and Plain(consts.CHARACTERNAME_SURNAME_SEPARATOR)
+    if type(sep) == "string" and sep ~= "" then return sep end
+    return " "
+end
+
 local function FullName(unit)
-    local name, realm = UnitName(unit)
-    name, realm = Plain(name), Plain(realm)
+    local name, surname = UnitName(unit)
+    name, surname = Plain(name), Plain(surname)
     if type(name) ~= "string" or name == "" then return nil end
-    if type(realm) == "string" and realm ~= "" then return name .. "-" .. realm, name end
+    if type(surname) == "string" and surname ~= "" then return name .. SurnameSeparator() .. surname, name end
     return name, name
 end
 W.FullName = FullName
@@ -111,6 +120,18 @@ function W.FindUnit(full)
         for i = 1, 4 do if Matches("party" .. i, full) then return "party" .. i end end
     end
     for i = 1, 40 do if Matches("nameplate" .. i, full) then return "nameplate" .. i end end
+    return nil
+end
+
+-- The party or raid token of a group member (stable until the roster changes), or nil. A macro conditional can't
+-- hold a name with a space in it, and a token needs no name at all.
+function W.GroupUnit(full)
+    if type(full) ~= "string" then return nil end
+    if IsInRaid and IsInRaid() then
+        for i = 1, 40 do if Matches("raid" .. i, full) then return "raid" .. i end end
+    elseif IsInGroup and IsInGroup() then
+        for i = 1, 4 do if Matches("party" .. i, full) then return "party" .. i end end
+    end
     return nil
 end
 

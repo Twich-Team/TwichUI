@@ -33,10 +33,13 @@ implementation.
   first; if they wear it all you still give the usual first choice, to refresh it. A player without mana gets Might
   before Kings. Cast by name, so the game picks the highest rank you know.
 - **The click** (`S.Macro`, a `SecureActionButtonTemplate` row, `*type1 = macro`, `useOnKeyDown = false`): a group
-  member is cast on with `/cast [@Name] Spell` (resolves only for group members); anyone else is
-  `/target Name`, `/cast Spell`, then `/targetlasttarget` (or `/cleartarget` when you had no target). Already your
+  member is cast on with `/cast [@party2] Spell` (their unit token; a name with a space can't go in a conditional);
+  anyone else is `/target Name Surname`, `/cast Spell`, then `/targetlasttarget` (or `/cleartarget` when you had no target). Already your
   target: `/cast [@target] Spell`. A shout is just `/cast`. Your own `UNIT_SPELLCAST_SUCCEEDED` of that family within
   3 s of the click removes the row.
+  Names: on Forever `UnitName`'s second return is a surname (no realms), joined with a space
+  (`CHARACTERNAME_SURNAME_SEPARATOR`). The list keys players by that full name; "Name-Realm" never resolved, which
+  is why a click used to fall back to casting on you.
 - **Combat.** Rows are laid out, armed and shown out of combat only. In combat new names wait and expired or dismissed
   rows dim (the skin's alpha); everything is brought up to date at `PLAYER_REGEN_ENABLED`. "Hide in combat" is the
   secure state driver (`[combat] hide; show`).

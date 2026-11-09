@@ -239,14 +239,17 @@ do
   Check(f and f.key == "shout", "a shout for a party member")
 
   local fam = S.FAMILIES.intellect
-  Check(S.Macro({ name = "Anna", inGroup = true }, fam, "Arcane Intellect") == "/cast [@Anna] Arcane Intellect", "a group member is cast on by name")
+  Check(S.Macro({ name = "Anna Vale", inGroup = true }, fam, "Arcane Intellect", { token = "party2" }) == "/cast [@party2] Arcane Intellect", "a group member is cast on by unit token")
+  Check(S.Macro({ name = "Anna Vale", inGroup = true }, fam, "Arcane Intellect", { token = "raid12" }) == "/cast [@raid12] Arcane Intellect", "a raid member too")
+  Check(S.Macro({ name = "Anna Vale", inGroup = true }, fam, "Arcane Intellect", { token = "mouseover", has = false }) == "/target Anna Vale\n/cast Arcane Intellect\n/cleartarget",
+    "a token that is not a party or raid one is never used")
   Check(S.Macro({ name = "Anna" }, fam, "Arcane Intellect", { has = true }) == "/target Anna\n/cast Arcane Intellect\n/targetlasttarget",
     "outside the group: target, cast, your target back")
-  Check(S.Macro({ name = "Anna-Other" }, fam, "Arcane Intellect", { has = false }) == "/target Anna-Other\n/cast Arcane Intellect\n/cleartarget",
+  Check(S.Macro({ name = "Anna Other" }, fam, "Arcane Intellect", { has = false }) == "/target Anna Other\n/cast Arcane Intellect\n/cleartarget",
     "no target before: cleared after")
   Check(S.Macro({ name = "Anna" }, fam, "Arcane Intellect", { has = true, isThem = true }) == "/cast [@target] Arcane Intellect", "already your target")
   Check(S.Macro({ name = "Anna" }, S.FAMILIES.shout, "Battle Shout") == "/cast Battle Shout", "a shout is just cast")
-  Check(S.Macro({ name = "An na" }, fam, "Arcane Intellect") == nil and S.Macro({ name = "Anna;x" }, fam, "Arcane Intellect") == nil
+  Check(S.Macro({ name = "Anna " }, fam, "Arcane Intellect") == nil and S.Macro({ name = "Anna[x]" }, fam, "Arcane Intellect") == nil and S.Macro({ name = "Anna;x" }, fam, "Arcane Intellect") == nil
     and S.Macro({ name = "Anna" }, fam, "Arcane\nIntellect") == nil, "a name or spell that could break the macro makes none")
 end
 
@@ -330,7 +333,7 @@ do
   Buff("party1", 10938)
   local row = Row(1)
   Check(row and row.template == "SecureActionButtonTemplate" and row.shown, "a secure row is shown")
-  Check(row.attrs["*type1"] == "macro" and row.attrs["*macrotext1"] == "/cast [@Aldren] Arcane Intellect", "a group member: cast on them by name")
+  Check(row.attrs["*type1"] == "macro" and row.attrs["*macrotext1"] == "/cast [@party1] Arcane Intellect", "a group member: cast on their unit token")
   Check(row.attrs.useOnKeyDown == false, "acts on the mouse button's release")
   Check(drivers[L.Frame()] == "show", "the list is driven shown")
   Check(row.skin.name.text == "Aldren" and row.skin.name.color[1] == 1, "the name in its class color")
@@ -339,14 +342,14 @@ do
   G.units.target1 = { name = "Corwyn", realm = "Faraway", class = "MAGE", player = true }
   G.target = "party1"
   Buff("target1", 10157)
-  Check(Row(1).attrs["*macrotext1"] == "/target Corwyn-Faraway\n/cast Arcane Intellect\n/targetlasttarget", "outside your group: target, cast, back")
+  Check(Row(1).attrs["*macrotext1"] == "/target Corwyn Faraway\n/cast Arcane Intellect\n/targetlasttarget", "outside your group: target, cast, back")
   G.target = nil
   Fire("PLAYER_TARGET_CHANGED")
   Fire("PLAYER_TARGET_CHANGED")
   local renders = L.Snapshot().renders
   FlushTimers()
   Check(L.Snapshot().renders == renders + 1, "a burst of changes re-arms once")
-  Check(Row(1).attrs["*macrotext1"] == "/target Corwyn-Faraway\n/cast Arcane Intellect\n/cleartarget", "your target gone: re-armed out of combat")
+  Check(Row(1).attrs["*macrotext1"] == "/target Corwyn Faraway\n/cast Arcane Intellect\n/cleartarget", "your target gone: re-armed out of combat")
 
   G.units.warrior = { name = "Daelin", class = "WARRIOR", player = true }
   Buff("warrior", 10938)
