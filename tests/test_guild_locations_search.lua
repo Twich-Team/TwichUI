@@ -363,11 +363,9 @@ do
   Check(b.icon.tex:find("eye-hidden-small", 1, true), "Invisible: the slashed eye")
   Check(T.Describe("guild").title == "Guild Locations: Invisible" and T.Describe("guild").lines[1][1]:find("not shared", 1, true), "the tooltip follows")
   Check(c.TwichUIDB.guildLoc.state == "invisible", "it is saved")
-  -- the launcher's menu and the settings page read the same state
-  local checked
-  B.BuildMenu({ CreateTitle = function() end, CreateButton = function() return {} end,
-    CreateRadio = function(_, label, isOn) if label:find("Invisible") then checked = isOn() end end })
-  Check(checked == true, "the launcher menu shows Invisible selected")
+  -- the launcher's menu (modules/SettingsBrokerMenu.lua, tested in test_settings_broker.lua) and the settings page
+  -- read this same state through GL.State()
+  Check(GL.State() == "invisible", "the launcher menu's Invisible row reads the state the eye wrote")
 
   -- a change made elsewhere reaches the eye (and its open tooltip)
   b.scripts.OnEnter(b)
