@@ -43,7 +43,7 @@ do
   assert(Count(c) == 1, "registered once, by name")
   local obj = Obj(c)
   assert(obj.type == "launcher" and obj.label == "TwichUI" and obj.text == "TwichUI", "a launcher named TwichUI")
-  assert(obj.icon == c.TwichUI.PATH .. "media\\textures\\twichui-broker", "TwichUI's own icon")
+  assert(obj.icon == c.TwichUI.PATH .. "media\\textures\\twichui-broker-compass", "the TwichUI compass with nothing active")
   assert(obj.OnUpdate == nil, "no update loop")
   assert(c.TwichUI.SettingsBroker.Available(), "available once made")
 end
@@ -350,3 +350,75 @@ do
 end
 
 print("SETTINGS BROKER TESTS PASSED")
+
+---------------------------------------------------------------------------
+-- State icons: Leave me alone, Quiet the screen, Guild Locations hidden (Invisible / Off)
+---------------------------------------------------------------------------
+do
+  local ICON_FILES = { "qol/QoL.lua", "guildloc/State.lua", "Switches.lua" }
+  local function IconClient(db)
+    local c = Client(true)
+    c.TwichUIDB = db or { modules = {} }
+    c.FireEvent("ADDON_LOADED", "!!!TwichUI")
+    for _, f in ipairs(ICON_FILES) do
+      local ok, chunk = pcall(loadfile, ROOT .. f)
+      if ok and chunk then setfenv(chunk, c); local ran, err = pcall(chunk, "!!!TwichUI", {}) ; if not ran then error(f .. ": " .. tostring(err)) end end
+    end
+    c.FireEvent("PLAYER_LOGIN")
+    return c
+  end
+  local P = "media\\textures\\twichui-broker-"
+  local function Icon(c) return Obj(c).icon:sub(#c.TwichUI.PATH + 1) end
+  local EXPECT = { none = P .. "compass", leave = P .. "leave-alone", quiet = P .. "quiet", location = P .. "location", multiple = P .. "multiple" }
+
+  local function Set(c, leave, quiet, loc)
+    c.TwichUI:SetEnabled("qolDuels", leave); c.TwichUI:SetEnabled("qolDeclineInvites", leave)
+    c.TwichUI.QuietScreen.Set(quiet)
+    c.TwichUI.GuildLoc.SetState(loc and "invisible" or "sharing")
+  end
+
+  -- all eight combinations, each reached from a different earlier state
+  local c = IconClient()
+  for mask = 0, 7 do
+    local leave, quiet, loc = mask % 2 == 1, math.floor(mask / 2) % 2 == 1, math.floor(mask / 4) % 2 == 1
+    Set(c, leave, quiet, loc)
+    local n = (leave and 1 or 0) + (quiet and 1 or 0) + (loc and 1 or 0)
+    local want = n == 0 and "none" or n >= 2 and "multiple" or leave and "leave" or quiet and "quiet" or "location"
+    assert(Icon(c) == EXPECT[want], "mask " .. mask .. ": " .. Icon(c))
+  end
+  -- all three -> pair -> single -> none, and back up
+  Set(c, true, true, true);  assert(Icon(c) == EXPECT.multiple)
+  Set(c, true, true, false); assert(Icon(c) == EXPECT.multiple, "a pair")
+  Set(c, true, false, false); assert(Icon(c) == EXPECT.leave, "a single")
+  Set(c, false, false, false); assert(Icon(c) == EXPECT.none, "none")
+  Set(c, false, true, false); assert(Icon(c) == EXPECT.quiet)
+  Set(c, false, true, true); assert(Icon(c) == EXPECT.multiple)
+
+  -- Off hides the position too; a profile change (Switches.Sync) is followed
+  c.TwichUI.GuildLoc.SetState("off"); Set(c, false, false, false); c.TwichUI.GuildLoc.SetState("off")
+  assert(Icon(c) == EXPECT.location, "Off is not sharing")
+  c.TwichUI.GuildLoc.SetState("sharing")
+  c.TwichUIDB.modules.qolDuels, c.TwichUIDB.modules.qolDeclineInvites = true, true
+  c.TwichUI.Switches.Sync()
+  assert(Icon(c) == EXPECT.leave, "a profile change that turns Leave me alone on")
+
+  -- the initial icon reflects saved state with nothing toggled; defaults show the compass
+  local d = IconClient({ modules = { qolDuels = true, qolDeclineInvites = true }, guildLoc = { state = "invisible" } })
+  assert(Icon(d) == EXPECT.multiple, "saved Leave me alone + Invisible: " .. Icon(d))
+  local e = IconClient({ modules = { qolDuels = false, qolDeclineInvites = false } })
+  assert(Icon(e) == EXPECT.none, "defaults: sharing, nothing quiet")
+  assert(e.TwichUIDB.guildLoc == nil and e.TwichUIDB.modules.qolDuels == false, "choosing an icon wrote nothing")
+
+  -- unknown state is not active: no saved data, no owners
+  local u = IconClient({})
+  assert(Icon(u) == EXPECT.none, "saved data not ready")
+  local bare = Client(true); bare.FireEvent("ADDON_LOADED", "!!!TwichUI"); bare.FireEvent("PLAYER_LOGIN")
+  assert(Icon(bare) == EXPECT.none, "owners not loaded")
+
+  -- the tooltip names the active modes
+  Set(c, true, true, false)
+  local lines = {}
+  Obj(c).OnTooltipShow({ AddLine = function(_, t) lines[#lines + 1] = t end })
+  assert(lines[#lines] == "Active: Leave me alone, Quiet the screen.", lines[#lines])
+  assert(Obj(c).OnUpdate == nil and Count(c) == 1, "no polling, one registration")
+end
