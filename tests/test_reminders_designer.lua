@@ -228,6 +228,7 @@ local function Sent(path) return Pl.Sentence(RM.Node(v7, path)) end
 Check(Sent({ 1 }) == "Ranged ammunition needs attention", "the ammunition problem: " .. Sent({ 1 }))
 Check(Sent({ 2, 1 }) == "Your class is Warrior" and Sent({ 3 }) == "You are in combat", "a class, combat")
 Check(Pl.CondSentence({ type = "player", state = "combat", negate = true }) == "You are not in combat", "not in combat")
+Check(Pl.CondSentence({ type = "player", state = "resting", negate = true }) == "You are not resting" and Pl.CondSentence({ type = "player", state = "dungeon", negate = false }) == "You are in a dungeon" and Pl.CondSentence({ type = "player", state = "raid", negate = true }) == "You are not in a raid", "resting, dungeon, raid words")
 Check(Pl.CondSentence({ type = "player", state = "dead", negate = true }) == "You are alive" and Pl.CondSentence({ type = "player", state = "mounted", negate = false }) == "You are mounted", "alive, mounted")
 Check(Pl.CondSentence({ type = "equipment", slot = "offHand", what = "shield", negate = true }) == "Your off hand is not a shield", "an off hand without a shield")
 Check(Pl.CondSentence({ type = "equipment", slot = "shoulder", what = "empty", negate = false }) == "Your shoulders are empty", "a plural slot")
@@ -294,7 +295,7 @@ Check(sc.class == nil and RM.Get(id7).conditions[2].group, "the example's classe
 local entries = Pl.Entries()
 local byKey = {}
 for _, e in ipairs(entries) do byKey[e.key] = e end
-Check(byKey.equipment and byKey["player:combat"] and byKey["player:dead"] and byKey["player:ghost"] and byKey["player:mounted"] and byKey.class and byKey.ammunition, "an entry for each kind, the player's states one each")
+Check(byKey.equipment and byKey["player:combat"] and byKey["player:dead"] and byKey["player:ghost"] and byKey["player:mounted"] and byKey["player:resting"] and byKey["player:dungeon"] and byKey["player:raid"] and byKey.class and byKey.ammunition, "an entry for each kind, the player's states one each")
 Check(byKey["player:combat"].category == "Combat" and byKey.class.category == "Character" and byKey.equipment.category == "Equipment" and byKey.ammunition.category == "Equipment", "categories")
 Check(byKey["player:combat"].name == "You are in combat" and byKey["player:combat"].make().state == "combat", "an entry says what it checks and makes the condition for it")
 Check(byKey.ammunition.note == nil, "no limit to note here (the client reports ammunition)")

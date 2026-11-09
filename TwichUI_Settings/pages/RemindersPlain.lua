@@ -168,7 +168,7 @@ Pl.CATEGORIES = { "Combat", "Character", "Equipment", "Other" }
 
 -- an icon (R.Icons id) for a kind of condition, drawn small beside it
 local ICON = { equipment = "gearComparison", ammunition = "ammunition", class = "profiles", talent = "profiles", weaponEnchant = "gearComparison" }
-local PLAYER_ICON = { combat = "hazardAlerts", dead = "resurrection", ghost = "resurrection", mounted = "navigation" }
+local PLAYER_ICON = { combat = "hazardAlerts", dead = "resurrection", ghost = "resurrection", mounted = "navigation", resting = "reminderTest", dungeon = "hazardAlerts", raid = "hazardAlerts" }
 function Pl.Icon(cond)
     if type(cond) ~= "table" then return "reminderTest" end
     if cond.type == "player" then return PLAYER_ICON[cond.state] or "reminderTest" end
@@ -180,6 +180,9 @@ local PLAYER_BLURB = {
     dead = "Whether you are dead or a ghost (after releasing your spirit you stay dead until you are back in your body).",
     ghost = "Whether you are a ghost: your spirit has been released.",
     mounted = "Whether you are on a mount.",
+    resting = "Whether you are resting: in an inn or a capital city.",
+    dungeon = "Whether you are inside a dungeon (a five-player instance).",
+    raid = "Whether you are inside a raid instance.",
 }
 
 function Pl.Entries()
@@ -372,7 +375,7 @@ function Pl.Help(cond)
         if cond.what == "item" then return "A specific item, by its ID or link. It doesn't need to be carried: only whether it is equipped is checked." end
         return "Looks at what is in one equipment slot."
     elseif cond.type == "player" then
-        return "Looks at your own state: in combat, dead, a ghost or mounted."
+        return "Looks at your own state: in combat, dead, a ghost, mounted, resting, or inside a dungeon or a raid."
     elseif cond.type == "class" then
         return "Your own class. For several classes, add one of these for each, in a group where at least one must be true."
     elseif cond.type == "talent" then

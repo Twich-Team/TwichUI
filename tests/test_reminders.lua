@@ -74,7 +74,7 @@ local ITEMS = {
 }
 local W, calls, asked, NOW
 local function World()
-  W = { slots = {}, combat = false, dead = false, ghost = false, mounted = false, class = "WARRIOR" }
+  W = { slots = {}, combat = false, dead = false, ghost = false, mounted = false, resting = false, place = { false, "none" }, class = "WARRIOR" }
   calls = { inv = 0 }
   asked = {}
 end
@@ -98,6 +98,8 @@ c.InCombatLockdown = function() return W.combat end
 c.UnitIsDeadOrGhost = function() return W.dead or W.ghost end
 c.UnitIsGhost = function() return W.ghost end
 c.IsMounted = function() return W.mounted end
+c.IsResting = function() return W.resting end
+c.IsInInstance = function() return W.place[1], W.place[2] end
 c.issecretvalue = function() return false end
 -- anything that would act in the game: none of it may ever be called
 local acted = {}
@@ -245,6 +247,14 @@ Check(E.Condition(P("dead"), { life = "ghost" }) == MATCH, "dead includes a ghos
 Check(E.Condition(P("dead", true), { life = "alive" }) == MATCH and E.Summary(P("dead", true)) == "Player is alive", "alive")
 Check(E.Condition(P("ghost"), { life = "dead" }) == NOMATCH and E.Condition(P("ghost"), { life = "ghost" }) == MATCH, "a ghost is only the released spirit")
 Check(E.Condition(P("mounted"), { mounted = true }) == MATCH and E.Condition(P("mounted", true), { mounted = false }) == MATCH, "mounted")
+Check(E.Condition(P("resting"), { resting = true }) == MATCH and E.Condition(P("resting"), { resting = false }) == NOMATCH, "resting")
+Check(E.Condition(P("resting", true), { resting = true }) == NOMATCH and E.Condition(P("resting", true), { resting = false }) == MATCH, "not resting")
+Check(E.Summary(P("resting", true)) == "Player is not resting" and E.Condition(P("resting"), {}) == UNKNOWN, "resting words; unread is unknown")
+Check(E.Condition(P("dungeon"), { place = "dungeon" }) == MATCH and E.Condition(P("dungeon"), { place = "raid" }) == NOMATCH
+  and E.Condition(P("dungeon"), { place = "other" }) == NOMATCH and E.Condition(P("dungeon"), { place = "none" }) == NOMATCH, "dungeon is only a dungeon")
+Check(E.Condition(P("raid"), { place = "raid" }) == MATCH and E.Condition(P("raid"), { place = "dungeon" }) == NOMATCH
+  and E.Condition(P("raid", true), { place = "none" }) == MATCH and E.Condition(P("raid"), {}) == UNKNOWN, "raid is only a raid")
+Check(E.Summary(P("dungeon")) == "Player is in a dungeon" and E.Summary(P("raid", true)) == "Player is not in a raid", "dungeon and raid words")
 Check(E.Condition(P("combat"), {}) == UNKNOWN, "not read: unknown")
 local twoRules = View({ { type = "equipment", slot = "offHand", what = "shield", negate = true }, { type = "player", state = "combat" } }, "all")
 out = E.Run(twoRules, Obs(EMPTY, { combat = false }), {})
@@ -427,6 +437,28 @@ Check(Shown(lid), "and the second one, a few seconds on, sees a later change")
 W.mounted = false
 Fire("PLAYER_ENTERING_WORLD"); Fire("PLAYER_ENTERING_WORLD"); Settle(); RunLongTimers(3); Settle()
 Check(not Shown(lid), "two world entries in a row: older settle looks do no harm")
+-- resting: "Player is not resting" hides the reminder in an inn or a city
+RM.SetCondition(lid, 1, { type = "player", state = "resting", negate = true })
+Check(ST.Registered("PLAYER_UPDATE_RESTING") and not ST.Registered("PLAYER_MOUNT_DISPLAY_CHANGED"), "the resting event replaces the mount event")
+W.resting = false; Fire("PLAYER_UPDATE_RESTING"); Settle()
+Check(Shown(lid), "not resting: shows")
+W.resting = true; Fire("PLAYER_UPDATE_RESTING"); Settle()
+Check(not Shown(lid), "resting: hidden")
+-- dungeon and raid: read when the world is entered (the kind of place changes only across a loading screen)
+RM.SetCondition(lid, 1, { type = "player", state = "dungeon", negate = false })
+W.place = { false, "none" }; Fire("PLAYER_ENTERING_WORLD"); Settle(); RunLongTimers(3); Settle()
+Check(not Shown(lid), "open world: not a dungeon")
+W.place = { true, "party" }; Fire("PLAYER_ENTERING_WORLD"); Settle(); RunLongTimers(3); Settle()
+Check(Shown(lid), "a dungeon: shows")
+RM.SetCondition(lid, 1, { type = "player", state = "raid", negate = false })
+Check(not Shown(lid), "a dungeon is not a raid")
+W.place = { true, "raid" }; Fire("PLAYER_ENTERING_WORLD"); Settle(); RunLongTimers(3); Settle()
+Check(Shown(lid), "a raid: shows")
+RM.SetCondition(lid, 1, { type = "player", state = "raid", negate = true })
+Check(not Shown(lid), "not in a raid: hidden inside one")
+W.place = { true, "pvp" }; Fire("PLAYER_ENTERING_WORLD"); Settle(); RunLongTimers(3); Settle()
+Check(Shown(lid), "a battleground is neither a dungeon nor a raid")
+W.place = { false, "none" }; W.resting = false
 RM.Delete(lid)
 Check(D.Frame(lid) == nil and not ST.Registered("PLAYER_MOUNT_DISPLAY_CHANGED"), "deleted: its frame is put away and its event dropped")
 local reuse = select(2, RM.Create("custom"))

@@ -1,7 +1,8 @@
 -- TwichUI: Reminders, reading the game
 -- The live observations the enabled reminders' conditions read, kept as plain facts (the same shape a simulation
 -- builds): obs.slots[n] = { empty = true } or { id, classID, subClassID, equipLoc } (no details yet: classID nil),
--- obs.combat = true | false, obs.life = "alive" | "dead" | "ghost", obs.mounted = true | false, obs.class = the class
+-- obs.combat = true | false, obs.life = "alive" | "dead" | "ghost", obs.mounted = true | false, obs.resting = true | false,
+-- obs.place = "none" | "dungeon" | "raid" | "other", obs.class = the class
 -- token ("WARRIOR"; UnitClassBase), obs.talent = the leading talent tree ("WARRIOR:257", "tied", "none"), obs.ammo = the facts
 -- about the ranged weapon's ammunition (Ammunition.lua says which and judges them), obs.enchant = whether each weapon hand
 -- has a temporary enchant ({ mainHand = "enchanted" | "bare" | "noWeapon" | nil, offHand = ... }). A key nobody wants
@@ -24,10 +25,10 @@
 -- Game APIs (each documented in the Forever UI source; docs/reminders.md has the list): GetInventoryItemID,
 -- GetInventoryItemCount, UnitUsesAmmo, C_Container.GetContainerNumSlots / GetContainerItemID,
 -- C_Item.GetItemInfoInstant, C_Item.RequestLoadItemDataByID, C_Item.GetItemNameByID, UnitAffectingCombat,
--- UnitIsDeadOrGhost, UnitIsGhost, IsMounted, UnitClassBase, C_Item.GetWeaponEnchantInfo,
+-- UnitIsDeadOrGhost, UnitIsGhost, IsMounted, IsResting, IsInInstance, UnitClassBase, C_Item.GetWeaponEnchantInfo,
 -- C_PaperDollInfo.GetTemporaryEnchantmentInfo; events PLAYER_ENTERING_WORLD, WEAPON_ENCHANT_CHANGED, WEAPON_SLOT_CHANGED,
 -- PLAYER_EQUIPMENT_CHANGED (slot, hasCurrent), BAG_UPDATE_DELAYED, UNIT_INVENTORY_CHANGED (unit),
--- PLAYER_REGEN_DISABLED / _ENABLED, PLAYER_DEAD, PLAYER_ALIVE, PLAYER_UNGHOST, PLAYER_MOUNT_DISPLAY_CHANGED,
+-- PLAYER_REGEN_DISABLED / _ENABLED, PLAYER_DEAD, PLAYER_ALIVE, PLAYER_UNGHOST, PLAYER_MOUNT_DISPLAY_CHANGED, PLAYER_UPDATE_RESTING,
 -- GET_ITEM_INFO_RECEIVED and ITEM_DATA_LOAD_RESULT (itemID, success).
 
 local R = TwichUI
@@ -171,6 +172,33 @@ ST.Source("mounted", {
         local v
         if IsMounted then v = Plain(IsMounted()) == true end
         return Set(into, "mounted", v)
+    end,
+})
+
+ST.Source("resting", {
+    events = { PLAYER_UPDATE_RESTING = true },
+    Read = function(_, into)
+        local v
+        if IsResting then v = Plain(IsResting()) == true end
+        return Set(into, "resting", v)
+    end,
+})
+
+-- Where the player is: obs.place = "none" (the open world), "dungeon" (instance type "party"), "raid" or "other" (a
+-- battleground, arena or scenario). The kind of place only changes across a loading screen, so there is no event of its
+-- own: the entering-the-world look (and the settle looks after it) read it.
+ST.Source("place", {
+    Read = function(_, into)
+        local v
+        if IsInInstance then
+            local inside, kind = IsInInstance()
+            inside, kind = Plain(inside), Plain(kind)
+            if inside == false then v = "none"
+            elseif inside == true then
+                v = kind == "party" and "dungeon" or kind == "raid" and "raid" or "other"
+            end
+        end
+        return Set(into, "place", v)
     end,
 })
 
@@ -557,6 +585,7 @@ function ST.Stop()
     for k in pairs(dirty) do dirty[k] = nil end
     obs.slots = {}
     obs.combat, obs.life, obs.mounted, obs.ammo, obs.class, obs.talent, obs.enchant = nil, nil, nil, nil, nil, nil, nil
+    obs.resting, obs.place = nil, nil
     combat, ammoWatch, ammoRetries = nil, true, 0
     SyncEvents()
 end

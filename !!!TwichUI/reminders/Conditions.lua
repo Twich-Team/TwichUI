@@ -404,15 +404,23 @@ C.Register({
 })
 
 ---------------------------------------------------------------------------
--- The player: combat, alive or dead, mounted
+-- The player: combat, alive or dead, mounted, resting, in a dungeon or a raid
 ---------------------------------------------------------------------------
 -- key (stored), what it reads, "is" words, "is not" words, whether this client reports it
+-- Resting is the game's own IsResting (an inn or a capital city). Dungeon and raid read the kind of place from
+-- IsInInstance (WoW: Forever UI source, InstanceDocumentation.lua): "party" is a dungeon, "raid" a raid; a battleground,
+-- an arena or a scenario is neither. obs.place is "none" | "dungeon" | "raid" | "other".
 C.STATES = {
     { "combat", "combat", "in combat", "not in combat" },
     { "dead", "life", "dead or a ghost", "alive" },
     { "ghost", "life", "a ghost", "not a ghost" },
     { "mounted", "mounted", "mounted", "not mounted", function() return rawget(_G, "IsMounted") ~= nil end },
+    { "resting", "resting", "resting", "not resting", function() return rawget(_G, "IsResting") ~= nil end },
+    { "dungeon", "place", "in a dungeon", "not in a dungeon", function() return rawget(_G, "IsInInstance") ~= nil end },
+    { "raid", "place", "in a raid", "not in a raid", function() return rawget(_G, "IsInInstance") ~= nil end },
 }
+-- the kind of place each place-state is
+local PLACE_OF = { dungeon = "dungeon", raid = "raid" }
 local STATE = {}
 for _, s in ipairs(C.STATES) do STATE[s[1]] = s end
 function C.State(key) return STATE[key] end
@@ -429,22 +437,22 @@ local function Life(cond, life)
 end
 
 C.Register({
-    type = "player", label = "You (combat, alive, mounted)",
+    type = "player", label = "You (combat, alive, mounted, resting, dungeon, raid)",
     New = function() return { type = "player", state = "combat", negate = false } end,
 
     Check = function(raw)
         if not STATE[raw.state] then return nil, "it looks at something about you this version of TwichUI doesn't know." end
         local clean = { type = "player", state = raw.state, negate = raw.negate == true }
-        if not C.StateSupported(raw.state) then return clean, "this game client doesn't report whether you are mounted." end
+        if not C.StateSupported(raw.state) then return clean, ("this game client doesn't report whether you are %s."):format(STATE[raw.state][3]) end
         return clean
     end,
 
     Needs = function(cond, add) add(STATE[cond.state][2]) end,
 
-    -- combat, being dead, being a ghost and being mounted are each one fact about the player
+    -- combat, being dead, being a ghost, being mounted, resting and where you are (dungeon, raid) are each one fact about the player
     Subject = function(cond)
         local key = STATE[cond.state][2]
-        return key, ({ combat = "Combat", life = "Alive or dead", mounted = "Mounted" })[key]
+        return key, ({ combat = "Combat", life = "Alive or dead", mounted = "Mounted", resting = "Resting", place = "Dungeon or raid" })[key]
     end,
 
     Evaluate = function(cond, obs)
@@ -452,6 +460,7 @@ C.Register({
         local v = obs and obs[s[2]]
         if v == nil then return UNKNOWN, "The game hasn't said yet." end
         if s[2] == "life" then return Negate(Yes(Life(cond, v)), cond.negate) end
+        if s[2] == "place" then return Negate(Yes(v == PLACE_OF[cond.state]), cond.negate) end
         return Negate(Yes(v == true), cond.negate)
     end,
 
@@ -466,6 +475,8 @@ C.Register({
         if v == nil then return "Not read yet" end
         if s[2] == "combat" then return v and "In combat" or "Out of combat" end
         if s[2] == "mounted" then return v and "Mounted" or "Not mounted" end
+        if s[2] == "resting" then return v and "Resting" or "Not resting" end
+        if s[2] == "place" then return ({ dungeon = "In a dungeon", raid = "In a raid", other = "Somewhere else", none = "Not in an instance" })[v] or "Not read yet" end
         return ({ alive = "Alive", dead = "Dead", ghost = "A ghost" })[v] or "Not read yet"
     end,
 
@@ -482,6 +493,15 @@ C.Register({
             Put("alive", "Alive", "alive")
             Put("dead", "Dead", "dead")
             Put("ghost", "A ghost (spirit released)", "ghost")
+        elseif s[2] == "resting" then
+            Put("on", "Resting", true)
+            Put("off", "Not resting", false)
+        elseif s[2] == "place" then
+            -- the same choices whichever of dungeon / raid the condition names (they share one input)
+            Put("dungeon", "In a dungeon", "dungeon")
+            Put("raid", "In a raid", "raid")
+            Put("none", "Not in an instance", "none")
+            Put("other", "In a battleground, arena or scenario", "other")
         else
             Put("on", "Mounted", true)
             Put("off", "Not mounted", false)
