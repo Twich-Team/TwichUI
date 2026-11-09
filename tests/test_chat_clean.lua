@@ -439,7 +439,11 @@ do
     "Pride of the guild.", "What gender is that character model?", "My partner is joining the raid." }
   for _, text in ipairs(POLITICS) do Check((Topic("politics", text) or ""):find("^Politics: "), "politics: " .. text) end
   for _, text in ipairs(LGBT) do Check((Topic("lgbt", text) or ""):find("^LGBTQ Topics: "), "lgbt: " .. text) end
-  for _, text in ipairs(NEITHER) do Check(Topic("politics", text) == nil and Topic("lgbt", text) == nil, "neither preset: " .. text) end
+  local OLYMPUS = { "Join Olympus today!", "OLYMPUS recruiting all classes", "<Olympus> guild", "Asmongold is streaming", "asmon's guild", "Olympus Discord" }
+  for _, text in ipairs(OLYMPUS) do Check((Topic("olympus", text) or ""):find("^Olympus: "), "olympus: " .. text) end
+  for _, text in ipairs({ "Olympusx", "Olympian armor", "Need a mount", "Asmongoldish" }) do Check(Topic("olympus", text) == nil, "not olympus: " .. text) end
+  Check(Topic("olympus", "Join Olympus") == "Olympus: Olympus keyword \226\128\148 Olympus", "an olympus reason")
+  for _, text in ipairs(NEITHER) do Check(Topic("politics", text) == nil and Topic("lgbt", text) == nil and Topic("olympus", text) == nil, "neither preset: " .. text) end
 
   -- the reasons name the preset, the kind and the term as listed
   Check(Topic("politics", "TRUMP again?") == "Politics: political keyword — Trump", "a keyword reason")

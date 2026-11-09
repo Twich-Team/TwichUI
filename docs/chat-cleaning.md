@@ -71,7 +71,7 @@ Per profile, `TwichUIDB.ui.chatClean` (only through `ChatClean.lua`'s functions)
 
 | Key | Meaning |
 |---|---|
-| `channels` | `{ [key] = { on, spam, repeats, recruit, politics, lgbt, label } }`, at most 32. `politics` and `lgbt` (the topic presets) are off unless ticked; a missing one is off, so older saves keep their choices with both presets off. Missing: the recommended choice is in use and not saved; the first change saves it with the change. `label` is only for showing a channel the player isn't in. |
+| `channels` | `{ [key] = { on, spam, repeats, recruit, politics, lgbt, olympus, label } }`, at most 32. `politics`, `lgbt` and `olympus` (the topic presets) are off unless ticked; a missing one is off, so older saves keep their choices with both presets off. Missing: the recommended choice is in use and not saved; the first change saves it with the change. `label` is only for showing a channel the player isn't in. |
 | `rules` | `{ { id, name, mode, text, case, enabled, all, channels = { [key] = true } }, ... }`, at most 50, in the order they are checked. `all`: every channel being cleaned. |
 | `nextId` | the next rule's id |
 
@@ -92,7 +92,7 @@ frames, so each message is evaluated, counted and listed once. Then, in this ord
    link is free text, so gold sellers use it as the advert. The link type alone never hides anything, so ordinary
    guild-finder links are untouched (Guild recruitment, below, is the filter for those).
 3. **Guild recruitment** (opt-in): the word "recruit", or "guild" with join/invite/whisper/apply/members/looking for.
-4. **Politics** and **LGBTQ Topics** (opt-in, both off by default; see Topic presets below): a listed word or phrase.
+4. **Politics**, **LGBTQ Topics** and **Olympus** (opt-in, all off by default; see Topic presets below): a listed word or phrase.
    Keywords are checked first, in the message's order, then phrases, in list order. The first match is the reason.
 5. **Repeated messages** (recommended): the same text, ignoring case, spaces and punctuation, from the same player
    (GUID, else name) within 60 seconds of their previous copy. The first copy is shown; repeats stay hidden while they
@@ -107,9 +107,9 @@ Limits (said in the settings): the spam filter misses disguised spam (look-alike
 BadBoy) and can catch an unusual ordinary message that has all three signs; recruitment also catches "looking for a
 guild" and some other guild talk; repeats hide a genuine player's repeated LFG post within the window.
 
-## Topic presets (Politics, LGBTQ Topics)
+## Topic presets (Politics, LGBTQ Topics, Olympus)
 
-Two built-in presets, each ticked per channel on the Channels tab (the same grid as the other filters) and off by
+Three built-in presets, each ticked per channel on the Channels tab (the same grid as the other filters) and off by
 default for everyone, new and existing. They hide messages that contain a listed word or phrase, and nothing else. They
 match **vocabulary**, not meaning: a message is not judged supportive, hostile, a joke or a self-description, and the
 sender, the character or guild name and the channel are never checked. Only the message text is read.
@@ -135,6 +135,13 @@ beside an accented letter still matches.
 - Phrases: non-binary, non binary, gender identity, gender identities, sexual orientation, sexual orientations,
   same-sex marriage, same sex marriage, gay marriage, trans rights, transgender rights, pride month, pride parade,
   pride flag.
+
+**Olympus** (`olympus:`), reason "Olympus: Olympus keyword — …" or "… Olympus phrase — …": the guild led by the streamer
+Asmongold, and him.
+- Keywords: Olympus, Asmongold, Asmongolds, Asmon.
+- Phrases: join olympus, olympus guild, guild olympus, olympus discord, olympus recruiting, olympus recruitment,
+  olympus is recruiting.
+A keyword also hides an unrelated mention (the mountain, say); that is the cost of a short list.
 
 Deliberately not listed, alone: party, politics, vote, president, left, right, war, race, border, red, blue, government,
 liberal, conservative, china, russia, us, eu (Politics); trans, bi, pan, ace, pride, rainbow, gender, identity,
