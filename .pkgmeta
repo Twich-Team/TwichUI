@@ -32,6 +32,7 @@ ignore:
   - .github
   - RELEASING.md
   - CLAUDE.md
+  - AGENTS.md
   - assets
   - .gitignore
   - docs

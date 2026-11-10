@@ -2,6 +2,16 @@
 
 One short entry per feature that has a continuing handoff. Details live in the feature's doc; keep this current instead of adding session notes.
 
+## Reminders style upgrade - functional part committed on feature/style (2e0c5fe5); styling, compact editor and interactive preview NOT built
+
+Reference: [docs/reminders-style-upgrade.md](docs/reminders-style-upgrade.md) (code map, reusable styling, blockers, milestones, verification, first Codex prompt); behavior in [docs/reminders.md](docs/reminders.md).
+
+- **Built:** template catalog (`pages/RemindersCatalog.lua`, creation through `P.Create` -> `RM.Create`, independent disabled copies, refusals keep it open) and an attached preview companion (`pages/RemindersPreview.lua`, drawn by the reminder's own layout code, Show on screen). The player confirms the preview works in the real client; catalog, Esc, edge flipping and scaling are not confirmed. Style v2 material (`Material.lua`) exists for the settings window and is applied to the page cards; the companion frames still use the plain guild-bank frame look.
+- **Not built:** warm styled companions/cards/editor, compact editor (shorter section blurbs, diagnostics secondary), clickable preview elements that navigate to and highlight settings (no scroll/highlight helper exists), illustrated catalog cards (art exists only for shield, ammo, well fed), catalog search/category filters (deferred, separate scope), any When-editor change (already built inline; only visual consistency remains).
+- **References:** the three approved renders are stored in `docs/reminders-style-references/` (`REMINDERS_PREVIEW.png`, `REMINDERS_TEMPLATE_CATALOG.jpg`, `REMINDERS_WHEN_BUILDER.png`), excluded from packages with the rest of `docs/`. No preparation blocker. Preview click handling and scroll/highlight are milestone 2 dependencies; bespoke template artwork (enchant, item, custom) is a separate, unrequested item.
+- **Checked (historical, reported earlier, not rerun):** 187 tests, Lua syntax, simulator construction smoke. **Run 2026-11-10 for this brief:** `test_reminders_settings`, `test_settings_window`, `test_settings_window_size` pass; `luac5.1 -p` clean on `Reminders*.lua` and `Material.lua`.
+- **Next recommended small task:** milestone 1 of the brief (shared styling foundation and compact editor).
+
 ## Workshop (TwichUI_Workshop) - milestones 1 to 3 built, uncommitted on feature/workbench; the window opens and works in game (player-confirmed); milestone 2 reported complete by the player (not itemized); milestone 3 not tried in game
 
 Reference: [docs/workshop.md](docs/workshop.md) (files, saved data, the exact pricing and shopping rules, scan facts and unknowns, client facts, licensing limits, evidence, checks).
