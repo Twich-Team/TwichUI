@@ -76,7 +76,7 @@ c.C_Item = {
 c.InCombatLockdown = function() return false end
 c.IsShiftKeyDown = function() return false end
 
-for _, f in ipairs({ "Data.lua", "Materials.lua", "Queue.lua", "Known.lua", "Observe.lua", "Prices.lua", "Opportunities.lua", "Vendor.lua", "Shopping.lua", "Scan.lua", "Session.lua", "AuctionButton.lua", "Window.lua" }) do
+for _, f in ipairs({ "Data.lua", "Materials.lua", "Queue.lua", "Known.lua", "Observe.lua", "Storage.lua", "Stock.lua", "Prices.lua", "Opportunities.lua", "Vendor.lua", "Shopping.lua", "Scan.lua", "Session.lua", "AuctionButton.lua", "Window.lua" }) do
   local chunk = assert(loadfile(ROOT .. "../TwichUI_Workshop/" .. f)); setfenv(chunk, c); chunk("TwichUI_Workshop", {})
 end
 local W = R.Workshop
@@ -151,7 +151,7 @@ Win.Render()
 Check(Win.Lists().mats.rows[1].have:GetText() == "Unknown" and Win.Lists().mats.rows[1].short:GetText() == "Unknown", "an unreadable bag count is Unknown, never 0")
 g.bags = { [10] = 4 }
 Win.Render()
-Same(f.headline:GetText(), "All the materials are in your bags.")
+Same(f.headline:GetText(), "Ready to craft: all the materials are in your bags.")
 
 -- open recipe, remove
 qrow.open:GetScript("OnClick")(qrow.open)
@@ -540,6 +540,72 @@ do
   Same(Events(f), 0, "hidden: no events")
   Same(W.Snapshot().events, 0)
   f.tabCraft:GetScript("OnClick")(f.tabCraft)
+end
+
+---------------------------------------------------------------------------
+-- Bank and guild bank materials in the window: Crafting columns and wording, the guild choice, Shopping's collect rows
+---------------------------------------------------------------------------
+do
+  c.C_Timer = { After = function() end }
+  for _, e in ipairs({ table.unpack and table.unpack(Q.Entries()) or unpack(Q.Entries()) }) do Q.Remove(e.id) end
+  Same(#Q.Entries(), 0)
+  Q.Add({ id = 500, name = "Test Draught", prof = 171, profName = "Alchemy", icon = 1, outItem = 900, outMin = 1, outMax = 1, mats = { { item = 10, qty = 3 } } }, 4)   -- 12 Peacebloom
+  g.bags = { [10] = 4 }
+  f.tabCraft:GetScript("OnClick")(f.tabCraft)
+  f:Show()
+  local m = Win.Lists().mats.rows[1]
+  Same(m.need:GetText(), "12"); Same(m.have:GetText(), "4"); Same(m.stored:GetText(), "-", "nothing stored"); Same(m.short:GetText(), "8")
+  Same(f.storeNote:GetText(), "Open your bank with Workshop loaded to update.", "an unseen bank is explained")
+  Same(f.scope:GetText(), "Counts bags only.")
+  Check(not f.useGuild.on or f.useGuild.on == false, "the guild choice is off by default")
+
+  -- the bank is seen: 5 of the missing 8 are in it
+  W.Storage.StoreBank({ ids = { 6 }, tabs = { [6] = { [10] = 5 } }, incomplete = 0 }, Q.Now() - 7200)
+  Win.Render()
+  m = Win.Lists().mats.rows[1]
+  Same(m.have:GetText(), "4", "the bags are still the bags"); Same(m.stored:GetText(), "5"); Same(m.short:GetText(), "3", "12 - 4 - 5")
+  Same(f.headline:GetText(), "Still needed: 1 material. 1 to collect from storage.")
+  Same(f.scope:GetText(), "Counts bags and bank."); Same(f.storeNote:GetText(), "")
+
+  -- the guild bank: chosen with the window's own control, saved
+  c.IsInGuild = function() return true end
+  c.GetGuildInfo = function() return "Raiders", "Rank", 1, nil end
+  f.useGuild:GetScript("OnClick")(f.useGuild)
+  Check(S.UseGuild() and W.Storage.UseGuild(), "the choice is saved")
+  Check(f.storeNote:GetText():find("Open your guild bank with Workshop loaded to update.", 1, true), f.storeNote:GetText())
+  local realm = c.GetRealmName()
+  W.Storage.StoreGuildTab({ key = "Raiders-" .. realm, name = "Raiders" }, 1, { n = { [10] = 9 }, by = Q.CharKey(), w = 1, lim = 5, rem = -1 }, Q.Now() - 60, 1)
+  Win.Render()
+  m = Win.Lists().mats.rows[1]
+  Same(m.stored:GetText(), "8", "5 from the bank and 3 from the guild bank"); Same(m.short:GetText(), "0")
+  Same(f.headline:GetText(), "Collect materials: 1 from your bank and 1 from the guild bank.", "stored materials are 'collect', not 'ready'")
+  Same(f.scope:GetText(), "Counts bags, bank and guild bank.")
+
+  -- Shopping: collect rows apart from buy and make
+  Win.SetMode("shop")
+  local shop, SL = Win.Shop(), Win.Lists().shop
+  Same(#SL.data, 2, "a bank row and a guild bank row; nothing to buy")
+  local r1, r2 = SL.rows[1], SL.rows[2]
+  Same(r1.need:GetText(), "5"); Same(r1.where:GetText(), "Collect from bank"); Check(r1.where:IsShown() and not r1.source:IsShown(), "no source to pick for something you own")
+  Same(r2.need:GetText(), "3"); Same(r2.where:GetText(), "Collect from guild bank")
+  Same(r1.spend.a:GetText(), "Already owned"); Check(not r1.act:IsShown(), "no action: nothing is bought, made or sent")
+  Check(r1.spend.b:GetText():find("seen 2 hours ago", 1, true), r1.spend.b:GetText())
+  Check(r2.detail:GetText():find("Shared stock", 1, true) and not r2.detail:GetText():find("limit", 1, true), "unlimited today: " .. r2.detail:GetText())
+  W.Storage.StoreGuildTab({ key = "Raiders-" .. realm, name = "Raiders" }, 1, { n = { [10] = 9 }, by = Q.CharKey(), w = 1, lim = 5, rem = 3 }, Q.Now() - 60, 1)
+  Win.Render()
+  Check(Win.Lists().shop.rows[2].detail:GetText():find("withdrawal limit may apply", 1, true), "a finite allowance is flagged, not promised")
+  Same(shop.total:GetText(), "Nothing to buy: collect what is stored.")
+  Check(shop.status:GetText():find("bags, bank and guild bank", 1, true), shop.status:GetText())
+  -- the choice off again: the guild bank's part is something to buy
+  shop.useGuild:GetScript("OnClick")(shop.useGuild)
+  Check(not S.UseGuild(), "the same choice from the Shopping view")
+  Same(#SL.data, 2); Same(SL.rows[1].where:GetText(), "Collect from bank")
+  Check(SL.rows[2].source:IsShown() and not SL.rows[2].where:IsShown(), "the second row is now a buy row with its source")
+  Same(SL.rows[2].need:GetText(), "3"); Same(SL.rows[2].spend.a:GetText(), "Unknown", "unpriced: unknown, not zero")
+  Check(shop.total:GetText():find("Some prices missing", 1, true), shop.total:GetText())
+  Win.SetMode("craft")
+  f:Hide()
+  Same(Events(f), 0, "hidden: no events")
 end
 
 print("PASSED")

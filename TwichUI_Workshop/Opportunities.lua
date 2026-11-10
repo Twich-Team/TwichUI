@@ -18,13 +18,24 @@ local VALUE = {
     sell = function(e) return e.sellLow end,
 }
 
--- recipes: the rows the window read (id, name, prof, outItem, outMin, outMax, mats). Returns { { rec, est } ... }
-function Op.Rows(recipes, lookup, rate)
+-- recipes: the rows the window read (id, name, prof, outItem, outMin, outMax, mats). Returns { { rec, est, avail } ... }
+-- avail (optional): function(rec) -> Stock.Craft's answer for one craft ("ready" in the bags, "collect" from the bank or guild bank, "short", "unknown").
+-- It is carried beside the estimate and never goes into it: stored materials are not free, so the cost, the sell price and the profit are
+-- what they are without them (the material list priced is always the full one).
+function Op.Rows(recipes, lookup, rate, avail)
     local rows = {}
     for i, rec in ipairs(recipes) do
-        rows[i] = { rec = rec, est = PR.Estimate(rec, lookup, rate) }
+        rows[i] = { rec = rec, est = PR.Estimate(rec, lookup, rate), avail = avail and avail(rec) or nil }
     end
     return rows
+end
+
+-- The words for a craft's availability: "Ready to craft" (all in the bags) or "Collect materials" (some in the bank or guild bank), else nil
+function Op.AvailWord(a)
+    if not a then return nil end
+    if a.state == "ready" then return "Ready to craft" end
+    if a.state == "collect" then return "Collect materials" end
+    return nil
 end
 
 -- How many rows there are, how many have a known profit and how many are profitable (even at the worst case)
@@ -156,6 +167,15 @@ function Op.Basis(row, src, name, money, now)
         end
     end
     if e.cost then L("Cost to make", money(e.cost)) end
+    local a = row.avail
+    if a and a.state ~= "unknown" then
+        if a.state == "short" then
+            L("For one craft you hold", ("%d in bags, %d in storage; %d %s lacking"):format(a.bags, a.bank + a.guild, a.missing, a.missing == 1 and "material" or "materials"))
+        else
+            L("For one craft you hold", ("%d in bags, %d in storage"):format(a.bags, a.bank + a.guild))
+        end
+        L("~Owned materials are not free: the cost above counts them at their price.")
+    end
     if e.outMin then
         local made = e.outMin == e.outMax and tostring(e.outMin) or (e.outMin .. "-" .. e.outMax)
         if e.unit then

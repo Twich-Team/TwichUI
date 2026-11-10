@@ -6,9 +6,12 @@
 --
 -- THE RULES (docs/workshop.md repeats them):
 --   * Each missing material is one row. Needs are the queue's, added up first (Materials.lua); bags are applied once per item.
---   * One shared pool of owned items. The queue's own craft needs take what is owned first. A material that is made (a "subcraft") then draws
---     its reagents from what is LEFT, and each reagent spent is taken out of the pool, so no owned item is spent twice. What is still lacking
---     for a subcraft is bought.
+--   * One shared pool of owned items, in three layers: the bags, the bank, the guild bank (Stock.lua; W.Split takes from them in that order).
+--     The queue's own craft needs take what is owned first. A material that is made (a "subcraft") then draws its reagents from what is LEFT,
+--     and each reagent spent is taken out of the pool, so no owned item is spent twice. What is still lacking for a subcraft is bought.
+--   * Stored materials are COLLECTED, not bought: whatever the plan takes from the bank or the guild bank (for the queue's own crafts or for the
+--     reagents of a made material) becomes a "collect" row of its own, beside the buy and make rows. They lower what is bought, never what a craft
+--     costs: the Make option's economic cost still values an owned reagent at what it would cost, wherever it is held.
 --   * One level only. A made material's reagents are bought, never made in turn. A material is not made when one of its reagents is itself
 --     being made, when another made material already counts it as a reagent, or when its own recipe uses it (a circle): the option then says why.
 --   * Only a FIXED output is used to suggest making: crafts are rounded up to cover what is short (ceil(short / output)) and the leftover is
@@ -98,13 +101,16 @@ end
 -- inp:
 --   rows      Materials.Rows' rows: { item, need, made, madeRange, have, short }
 --   have      function(item) -> how many the bags hold, or nil
+--   stock     function(item) -> bank count, guild count that may be planned with (Stock.Fn), or nil for bags only
+--   stockMeta function(item, where) -> { at, limited } for a collect row ("bank" or "guild"), or nil
 --   auction   function(item) -> Prices.Lookup's answer or nil
 --   vendor    function(item) -> Vendor.Entry's answer or nil
 --   sells     function(item) -> true when the NPC collection knows a merchant that sells it
 --   recipes   function(item) -> the known recipes that make it, by recipe id: { { id, name, outItem, outMin, outMax, mats|nil, profName, live }, ... }
 --   picks     { [item] = "vendor" | "auction" | "make" } the player's choices (anything else is ignored)
 --   queued    function(recipeId) -> the queue entry or nil
--- Returns plan = { rows, totals, unknownBags }. A row (kind "buy" or "make"):
+-- Returns plan = { rows, totals, unknownBags }. A row (kind "collect", "buy" or "make"); a collect row is { kind, item, where = "bank" | "guild", qty, at, limited,
+-- forNames (made materials it is a reagent of), need/have for the tooltip }; the others:
 --   item, need, made, madeRange, have, short (still needed after bags and queued crafts), extra (more bought as reagents of made materials),
 --   qty (what is acquired: buy rows; for make rows what is made), options { vendor, auction, make }, suggested, source, picked, pickLost,
 --   cash (copper for the buy rows, nil when unknown), estimate, at, surplus (leftover of a vendor purchase), forNames (made materials it is for),
@@ -113,28 +119,39 @@ function Sh.Plan(inp)
     local rowsIn = inp.rows
     local picks = inp.picks or {}
     local have = inp.have
-    local pool, used = {}, {}   -- pool[item]: owned left after the queue's own craft needs (false: unknown); used[item]: taken by made materials
+    local pool, used = {}, {}   -- pool[item]: { bags, bank, guild } owned left after the queue's own craft needs (false: unknown); used[item]: taken by made materials
     local byItem = {}
     for _, r in ipairs(rowsIn) do
         byItem[r.item] = r
         if r.have ~= nil then
-            pool[r.item] = r.have - math.min(r.have, math.max(0, r.need - (r.made or 0)))
+            local net = math.max(0, r.need - (r.made or 0))
+            pool[r.item] = { bags = r.have - math.min(r.have, net), bank = math.max(0, (r.bank or 0) - (r.fromBank or 0)),
+                guild = math.max(0, (r.guild or 0) - (r.fromGuild or 0)) }
         else
             pool[r.item] = false
         end
     end
+    -- what is still free of an item in each layer (bags, bank, guild bank), or nil when its bag count can't be read
     local function Free(item)
         local p = pool[item]
         if p == nil then
             local h = have(item)
-            p = h == nil and false or h
+            if h == nil then
+                p = false
+            else
+                local bank, guild = 0, 0
+                if inp.stock then bank, guild = inp.stock(item) end
+                p = { bags = h, bank = bank, guild = guild }
+            end
             pool[item] = p
         end
         if p == false then return nil end
-        return math.max(0, p - (used[item] or 0))
+        local u = used[item] or {}
+        return math.max(0, p.bags - (u.bags or 0)), math.max(0, p.bank - (u.bank or 0)), math.max(0, p.guild - (u.guild or 0))
     end
 
     local madeSet, reagentSet, reagentBuys = {}, {}, {}
+    local collectFor = {}   -- [item] = { bank, guild, names }: taken from storage as reagents of made materials
 
     -- Making `short` of an item from one recipe: an option, with state "ok" or the reason it cannot be done
     local function EvalMake(item, short, rec)
@@ -159,10 +176,11 @@ function Sh.Plan(inp)
         opt.reagents = {}
         for _, m in ipairs(mats) do
             local total = m.qty * crafts
-            local free = Free(m.item)
-            local owned = free and math.min(total, free) or 0
-            if free == nil then opt.ownedUnknown = true end
-            local line = { item = m.item, qty = total, owned = owned, buy = total - owned }
+            local fb, fk, fg = Free(m.item)
+            local b, k, g = 0, 0, 0
+            if fb == nil then opt.ownedUnknown = true else b, k, g = W.Split(total, fb, fk, fg) end
+            local owned = b + k + g
+            local line = { item = m.item, qty = total, owned = owned, buy = total - owned, bags = b, bank = k, guild = g }
             if line.buy > 0 then
                 local b = Best(inp, m.item, line.buy)
                 if b then
@@ -208,7 +226,15 @@ function Sh.Plan(inp)
         madeSet[item] = true
         for _, line in ipairs(mk.reagents) do
             reagentSet[line.item] = true
-            used[line.item] = (used[line.item] or 0) + line.owned
+            local u = used[line.item]
+            if not u then u = {} used[line.item] = u end
+            u.bags, u.bank, u.guild = (u.bags or 0) + line.bags, (u.bank or 0) + line.bank, (u.guild or 0) + line.guild
+            if line.bank + line.guild > 0 then
+                local c = collectFor[line.item]
+                if not c then c = { bank = 0, guild = 0, names = {} } collectFor[line.item] = c end
+                c.bank, c.guild = c.bank + line.bank, c.guild + line.guild
+                c.names[#c.names + 1] = mk.rec.name
+            end
             if line.buy > 0 then
                 local rb = reagentBuys[line.item]
                 if not rb then rb = { qty = 0, names = {} } reagentBuys[line.item] = rb end
@@ -231,7 +257,8 @@ function Sh.Plan(inp)
     end)
     local resolved = {}
     for _, r in ipairs(todo) do
-        local res = { item = r.item, need = r.need, made = r.made, madeRange = r.madeRange, have = r.have, short = r.short }
+        local res = { item = r.item, need = r.need, made = r.made, madeRange = r.madeRange, have = r.have, short = r.short,
+            fromBank = r.fromBank, fromGuild = r.fromGuild }
         res.options = BuyOptions(inp, r.item, r.short)
         local mk = BestMake(r.item, r.short)
         if mk then res.options.make = mk end
@@ -268,7 +295,7 @@ function Sh.Plan(inp)
     table.sort(acqItems)
 
     local out = {}
-    local totals = { cash = 0, priced = 0, missing = 0, estimate = false, makes = 0, incomplete = false }
+    local totals = { cash = 0, priced = 0, missing = 0, estimate = false, makes = 0, incomplete = false, collect = 0 }
     for _, item in ipairs(acqItems) do
         local a = acq[item]
         local main = a.main
@@ -286,7 +313,8 @@ function Sh.Plan(inp)
         end
         local base = byItem[item]
         local row = { kind = "buy", item = item, need = base and base.need, made = base and base.made, madeRange = base and base.madeRange,
-            have = base and base.have, short = main and main.short or 0, extra = a.extra, qty = a.qty, options = opts, source = src,
+            have = base and base.have, fromBank = base and base.fromBank, fromGuild = base and base.fromGuild,
+            short = main and main.short or 0, extra = a.extra, qty = a.qty, options = opts, source = src,
             picked = picked, pickLost = main and main.pickLost, forNames = a.forNames, reagentOnly = main == nil }
         if main and main.options.make then opts.make = main.options.make end
         row.suggested = main and main.suggested or Suggest(opts)
@@ -308,7 +336,7 @@ function Sh.Plan(inp)
         if res.source == "make" then
             local mk = res.options.make
             local row = { kind = "make", item = res.item, need = res.need, made = res.made, madeRange = res.madeRange, have = res.have,
-                short = res.short, extra = 0, qty = res.short, options = res.options, suggested = res.suggested, source = "make",
+                fromBank = res.fromBank, fromGuild = res.fromGuild, short = res.short, extra = 0, qty = res.short, options = res.options, suggested = res.suggested, source = "make",
                 picked = res.picked, pickLost = res.pickLost, make = mk }
             if mk.estimate then row.uncertain = "Part of the cost of making it is an estimate." end
             if mk.ownedUnknown then row.uncertain = "Your bag counts of its materials couldn't all be read." end
@@ -316,10 +344,43 @@ function Sh.Plan(inp)
             out[#out + 1] = row
         end
     end
-    -- buy rows first (they are the shopping), then the made ones; each group by item number
+    -- what is collected from storage: the queue's own needs (rows) plus the reagents of made materials; one row per item and store
+    local coll, collItems = {}, {}
+    local function Coll(item)
+        local c = coll[item]
+        if not c then c = { bank = 0, guild = 0, names = nil } coll[item] = c collItems[#collItems + 1] = item end
+        return c
+    end
+    for _, r in ipairs(rowsIn) do
+        if (r.fromBank or 0) + (r.fromGuild or 0) > 0 then
+            local c = Coll(r.item)
+            c.bank, c.guild = c.bank + (r.fromBank or 0), c.guild + (r.fromGuild or 0)
+        end
+    end
+    for item, f in pairs(collectFor) do
+        local c = Coll(item)
+        c.bank, c.guild, c.names = c.bank + f.bank, c.guild + f.guild, f.names
+    end
+    table.sort(collItems)
+    for _, item in ipairs(collItems) do
+        local c, base = coll[item], byItem[item]
+        for _, where in ipairs({ "bank", "guild" }) do
+            if c[where] > 0 then
+                local meta = inp.stockMeta and inp.stockMeta(item, where) or {}
+                out[#out + 1] = { kind = "collect", item = item, where = where, qty = c[where], at = meta.at, limited = meta.limited,
+                    forNames = c.names, need = base and base.need, have = base and base.have, made = base and base.made,
+                    madeRange = base and base.madeRange, options = {}, extra = 0 }
+                totals.collect = totals.collect + 1
+            end
+        end
+    end
+    -- collect rows first (nothing to pay: go and take them), then the buy rows (they are the shopping), then the made ones; each group by item
+    -- number, the bank before the guild bank
+    local KIND = { collect = 1, buy = 2, make = 3 }
     table.sort(out, function(a, b)
-        if a.kind ~= b.kind then return a.kind == "buy" end
-        return a.item < b.item
+        if a.kind ~= b.kind then return KIND[a.kind] < KIND[b.kind] end
+        if a.item ~= b.item then return a.item < b.item end
+        return (a.where or "") < (b.where or "")
     end)
     return { rows = out, totals = totals, unknownBags = unknownBags }
 end
@@ -393,10 +454,24 @@ function Sh.Basis(row, name, money, ageText, now)
     local out = {}
     local function L(left, right) out[#out + 1] = { left, right } end
     L(name(row.item))
+    if row.kind == "collect" then
+        local guild = row.where == "guild"
+        L(("Collect %d from %s"):format(row.qty, guild and "the guild bank" or "your bank"))
+        if row.at and now then L("  seen " .. ageText(math.max(0, now - row.at)) .. " (remembered, not live)") end
+        if guild then
+            L(row.limited and "  Shared stock; a withdrawal limit may apply, so it isn't promised."
+                or "  Shared stock: other members can take it too.")
+        end
+        if row.forNames then L("  Also for making " .. table.concat(row.forNames, " and ")) end
+        L("  Nothing is taken out for you.")
+        return out
+    end
     if row.need then
         local line = ("%d needed"):format(row.need)
         if row.made then line = line .. (", %s%d from queued crafts"):format(row.madeRange and "at least " or "", row.made) end
         if row.have then line = line .. (", %d in bags"):format(row.have) end
+        local stored = (row.fromBank or 0) + (row.fromGuild or 0)
+        if stored > 0 then line = line .. (", %d to collect from storage"):format(stored) end
         L(line .. (row.short and row.short > 0 and (", " .. row.short .. " still needed") or ""))
     end
     if row.extra and row.extra > 0 then
@@ -439,7 +514,11 @@ function Sh.Basis(row, name, money, ageText, now)
             L(("  %s: %d craft%s, %d made, %d left over"):format(m.rec.name, m.crafts, m.crafts == 1 and "" or "s", m.made, m.surplus))
             for _, r in ipairs(m.reagents) do
                 local parts = {}
-                if r.owned > 0 then parts[#parts + 1] = r.owned .. " owned" .. (r.value and (" (worth " .. money(r.value) .. ")") or "") end
+                if r.owned > 0 then
+                    local stored = (r.bank or 0) + (r.guild or 0)
+                    parts[#parts + 1] = r.owned .. " owned" .. (stored > 0 and (" (" .. stored .. " to collect)") or "")
+                        .. (r.value and (" (worth " .. money(r.value) .. ")") or "")
+                end
                 if r.buy > 0 then parts[#parts + 1] = r.buy .. " to buy" .. (r.cost and (" for " .. money(r.cost)) or ", no price") end
                 L(("  %d x %s"):format(r.qty, name(r.item)), table.concat(parts, ", "))
             end

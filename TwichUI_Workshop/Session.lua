@@ -9,6 +9,7 @@ local W = R.Workshop
 local Q, M, O, KN = W.Queue, W.Materials, W.Observe, W.Known
 local PR, Op, SC = W.Prices, W.Opps, W.Scan
 local V, Sh = W.Vendor, W.Shopping
+local St, K = W.Storage, W.Stock
 local S = { filter = "", observations = 0 }
 W.Session = S
 
@@ -309,18 +310,57 @@ local function QueueView(byId)
     return view
 end
 
--- Rows and a summary of everything the queue needs against the bags (see Materials.lua)
+-- What the remembered bank and guild bank can add to the bags (Stock.lua): the view every part of the window plans with, built once per draw.
+-- Nothing is asked of the game except who the character is and which guild it is in.
+function S.Stock()
+    local bank = W.Bank
+    local live = bank and bank.Pending and bank.Pending() or nil
+    return K.Sources({ char = Q.CharKey(), guild = O.GuildId() }, St.UseGuild(), live, Q.Now())
+end
+
+-- "Use guild bank materials": the player's saved choice (off unless turned on)
+function S.UseGuild() return St.UseGuild() end
+function S.SetUseGuild(on)
+    local ok, why = St.SetUseGuild(on)
+    if not ok then note = why == "held" and ACTION_WHY.held or "Couldn't save that choice yet. Try again in a moment." end
+    return ok
+end
+
+-- Rows and a summary of everything the queue needs against the bags, then the bank and (if chosen) the guild bank (see Materials.lua); the
+-- third value is the stock view the rows were made with (its notes and tooltips read it)
 function S.Materials()
-    return M.Rows(QueueView(), O.BagCount)
+    local view = S.Stock()
+    local rows, sum = M.Rows(QueueView(), O.BagCount, K.Fn(view))
+    return rows, sum, view
+end
+
+-- The notes about stores that were never seen ("Open your bank with Workshop loaded to update."), only while the queue still needs something
+-- from outside the bags, as one line of text; nil when there is nothing to say
+function S.StockNote(sum, view)
+    if not sum or sum.state == "empty" or sum.state == "ready" then return nil end
+    local notes = K.Notes(view)
+    if #notes == 0 then return nil end
+    return table.concat(notes, " ")
+end
+
+-- The words for what has to be collected from storage: "2 from your bank and 1 from the guild bank"
+local function CollectWords(sum)
+    local parts = {}
+    if sum.bankItems > 0 then parts[#parts + 1] = ("%d from your bank"):format(sum.bankItems) end
+    if sum.guildItems > 0 then parts[#parts + 1] = ("%d from the guild bank"):format(sum.guildItems) end
+    return table.concat(parts, " and ")
 end
 
 -- The one sentence under the materials, and its tone ("good", "warn" or "quiet": the words carry the meaning, the tone only colours them)
 function S.Headline(sum)
     local function Plural(n, one, many) return n == 1 and one or many end
     if sum.state == "empty" then return "Add recipes to see the materials you need.", "quiet" end
-    if sum.state == "ready" then return "All the materials are in your bags.", "good" end
+    if sum.state == "ready" then return "Ready to craft: all the materials are in your bags.", "good" end
+    if sum.state == "collect" then return ("Collect materials: %s."):format(CollectWords(sum)), "warn" end
     if sum.state == "short" then
-        return ("Still needed: %d %s."):format(sum.shortItems, Plural(sum.shortItems, "material", "materials")), "warn"
+        local text = ("Still needed: %d %s."):format(sum.shortItems, Plural(sum.shortItems, "material", "materials"))
+        if sum.collectItems > 0 then text = text .. (" %d to collect from storage."):format(sum.collectItems) end
+        return text, "warn"
     end
     if sum.unknown > 0 then
         return ("%d %s can't be counted yet. Open %s to update."):format(sum.unknown, Plural(sum.unknown, "recipe", "recipes"),
@@ -427,7 +467,16 @@ function S.Opportunities()
     local lookup = function(item) return market and PR.Lookup(market, item) or nil end
     local all = Op.Rows(recipes, lookup, rate)
     local rows = Op.Select(all, S.opp)
-    local out = { rows = rows, summary = Op.Summary(all), source = src, rate = rate, lookup = lookup, incomplete = false }
+    -- Whether one craft's materials are in the bags or in storage, asked only for the rows the window draws (each answer reads bag counts) and kept
+    -- apart from the estimate: stored materials never lower a cost or raise a profit.
+    local view, counts = S.Stock(), {}
+    local function Have(item)
+        local n = counts[item]
+        if n == nil then n = O.BagCount(item) or false counts[item] = n end
+        return n or nil
+    end
+    local out = { rows = rows, summary = Op.Summary(all), source = src, rate = rate, lookup = lookup, incomplete = false, stock = view,
+        avail = function(rec) return K.Craft(rec.mats, Have, view) end }
     for _, id in ipairs(order) do
         if not profs[id].complete then out.incomplete = true end
     end
@@ -488,7 +537,9 @@ end
 -- sellers ([item] = merchants of the NPC collection that were seen to sell it), now }
 function S.Shopping()
     local byId, byOut = Index()
-    local mrows, msum = M.Rows(QueueView(byId), O.BagCount)
+    local view = S.Stock()
+    local stock = K.Fn(view)
+    local mrows, msum = M.Rows(QueueView(byId), O.BagCount, stock)
     local src = S.PriceSource()
     local market = src.market
     -- the items a merchant could matter for: what is needed and the reagents of anything that could make it
@@ -503,7 +554,8 @@ function S.Shopping()
     end
     local sellers = V.Sellers(wanted)
     local inp = {
-        rows = mrows, picks = S.picks, have = O.BagCount,
+        rows = mrows, picks = S.picks, have = O.BagCount, stock = stock,
+        stockMeta = function(item, where) return K.Meta(view, item, where) end,
         auction = function(item) return market and PR.Lookup(market, item) or nil end,
         vendor = V.Entry,
         sells = function(item) return sellers[item] ~= nil end,
@@ -518,12 +570,13 @@ function S.Shopping()
     for item in pairs(S.picks) do
         if not keep[item] then S.picks[item] = nil end
     end
-    return plan, { summary = msum, source = src, sellers = sellers, now = Q.Now() }
+    return plan, { summary = msum, source = src, sellers = sellers, now = Q.Now(), stock = view }
 end
 
+-- The buy or make row of an item (a collect row is never the one a source is chosen for: the same item can have both)
 local function FindRow(plan, item, kind)
     for _, r in ipairs(plan.rows) do
-        if r.item == item and (kind == nil or r.kind == kind) then return r end
+        if r.item == item and r.kind ~= "collect" and (kind == nil or r.kind == kind) then return r end
     end
 end
 
@@ -619,5 +672,5 @@ function S.Snapshot()
     local picks = 0
     for _ in pairs(S.picks) do picks = picks + 1 end
     return { professions = #order, recipes = n, queue = Q.Count(), cache = O.CacheSize(), observations = S.observations,
-        prices = market and market.n or 0, vendor = V.Count(), picks = picks, scan = SC.state }
+        prices = market and market.n or 0, vendor = V.Count(), picks = picks, scan = SC.state, stored = St.Counts() }
 end

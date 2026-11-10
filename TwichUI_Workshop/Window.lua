@@ -15,6 +15,7 @@ local W = R.Workshop
 local S, Q, O = W.Session, W.Queue, W.Observe
 local PR, Op, SC = W.Prices, W.Opps, W.Scan
 local Sh = W.Shopping
+local St, K2 = W.Storage, W.Stock
 local Win = {}
 W.Window = Win
 
@@ -45,6 +46,9 @@ local dirtyMerchant = false
 local renders, flushes = 0, 0
 
 local function Tip(frame, title, body) R.Interact.Tip(frame, title, body) end
+local USE_GUILD_TIP = "Plans with materials remembered from your guild bank that your guild rank may be able to take. It never withdraws anything. "
+    .. "Guild stock is shared with other members, so what was seen may be gone, and a daily limit may apply. Off unless you turn it on."
+
 local function Paint(fs, c) fs:SetTextColor(c[1], c[2], c[3]) end
 local function Num(n) return tostring(n) end
 
@@ -240,6 +244,15 @@ local function MakeQueueRow(parent)
     return row
 end
 
+-- The four number columns of the materials list (right to left): Still needed, Stored, In bags, Need
+local MC_SHORT, MC_STORED, MC_HAVE, MC_NEED, MC_GAP = 70, 56, 40, 40, 6
+local matView   -- the stock view the materials list was last drawn with (the row tooltips read it)
+
+local function AgeOf(at)
+    local age = PR.Age(at)
+    return age and PR.AgeText(age) or "at an unknown time"
+end
+
 local function MakeMaterialRow(parent)
     local row = CreateFrame("Frame", nil, parent)
     row:EnableMouse(true)
@@ -247,44 +260,65 @@ local function MakeMaterialRow(parent)
     row.icon:SetPoint("LEFT", 4, 0)
     row.name = L.Text(row, "body")
     row.name:SetPoint("LEFT", row.icon, "RIGHT", 6, 0)
-    row.name:SetWidth(RIGHT_W - 30 - 4 - 18 - 6 - 62 - 62 - 88)
+    row.name:SetWidth(RIGHT_W - 30 - 4 - 18 - 6 - (MC_SHORT + MC_STORED + MC_HAVE + MC_NEED + 4 * MC_GAP))
     row.name:SetWordWrap(false)
     row.short = L.Text(row, "body")
     row.short:SetPoint("RIGHT", -6, 0)
-    row.short:SetWidth(78)
+    row.short:SetWidth(MC_SHORT)
     row.short:SetJustifyH("RIGHT")
+    row.stored = L.Text(row, "body")
+    row.stored:SetPoint("RIGHT", row.short, "LEFT", -MC_GAP, 0)
+    row.stored:SetWidth(MC_STORED)
+    row.stored:SetJustifyH("RIGHT")
     row.have = L.Text(row, "body")
-    row.have:SetPoint("RIGHT", row.short, "LEFT", -10, 0)
-    row.have:SetWidth(52)
+    row.have:SetPoint("RIGHT", row.stored, "LEFT", -MC_GAP, 0)
+    row.have:SetWidth(MC_HAVE)
     row.have:SetJustifyH("RIGHT")
     row.need = L.Text(row, "body")
-    row.need:SetPoint("RIGHT", row.have, "LEFT", -10, 0)
-    row.need:SetWidth(52)
+    row.need:SetPoint("RIGHT", row.have, "LEFT", -MC_GAP, 0)
+    row.need:SetWidth(MC_NEED)
     row.need:SetJustifyH("RIGHT")
     row:SetScript("OnEnter", function(self)
         if GameTooltip and self.item then
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
             if not pcall(GameTooltip.SetItemByID, GameTooltip, self.item) then
                 GameTooltip:Hide()
-            elseif self.made then
-                GameTooltip:AddLine(("%s%d will come from crafts in your queue, so they are not counted as still needed."):format(self.madeRange and "At least " or "", self.made), 0.8, 0.8, 0.8, true)
+            else
+                if self.made then
+                    GameTooltip:AddLine(("%s%d will come from crafts in your queue, so they are not counted as still needed."):format(self.madeRange and "At least " or "", self.made), 0.8, 0.8, 0.8, true)
+                end
+                -- the bags, the bank and the guild bank apart, each with how long ago it was seen
+                if matView and self.row then
+                    GameTooltip:AddLine(" ")
+                    for _, line in ipairs(K2.Lines(matView, self.item, self.row.have, AgeOf)) do
+                        GameTooltip:AddLine(line, 0.8, 0.8, 0.8, true)
+                    end
+                    local taken = (self.row.fromBank or 0) + (self.row.fromGuild or 0)
+                    if taken > 0 then
+                        GameTooltip:AddLine(("Collect %d from storage for this queue."):format(taken), 1, 0.82, 0.3, true)
+                    end
+                end
                 GameTooltip:Show()
             end
         end
     end)
     row:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
     row.fill = function(self, m)
-        self.item, self.made, self.madeRange = m.item, m.made, m.madeRange
+        self.item, self.made, self.madeRange, self.row = m.item, m.made, m.madeRange, m
         local name, icon = O.ItemFacts(m.item)
         self.icon:SetTexture(icon or ICON_BLANK)
         self.name:SetText(name or ("Item " .. m.item))
         self.need:SetText(Num(m.need))
         if m.have == nil then
             self.have:SetText("Unknown")
+            self.stored:SetText("")
             self.short:SetText("Unknown")
             Paint(self.short, K.stone)
         else
             self.have:SetText(Num(m.have))
+            local stored = (m.fromBank or 0) + (m.fromGuild or 0)   -- the part of the need that storage covers: collect it
+            self.stored:SetText(stored > 0 and Num(stored) or "-")
+            Paint(self.stored, stored > 0 and K.gold or K.stone)
             self.short:SetText(Num(m.short))
             Paint(self.short, m.short > 0 and K.gold or K.sage)
         end
@@ -339,6 +373,16 @@ end
 -- The words under a shopping row's name: what to make, and how the options compare
 local function ShopDetail(r)
     local parts = {}
+    if r.kind == "collect" then
+        if r.where == "guild" then
+            parts[#parts + 1] = "Collect from the guild bank. Shared stock: other members can take it too" ..
+                (r.limited and ", and a withdrawal limit may apply." or ".")
+        else
+            parts[#parts + 1] = "Collect from your bank. It is already yours: nothing to buy."
+        end
+        if r.forNames then parts[#parts + 1] = ("Also for making %s."):format(table.concat(r.forNames, " and ")) end
+        return table.concat(parts, " ")
+    end
     if r.kind == "make" then
         local m = r.make
         parts[#parts + 1] = ("Make %d x %s: makes %d%s."):format(m.crafts, m.rec.name, m.made,
@@ -412,6 +456,14 @@ local function MakeShopRow(parent)
     row.source:SetHeight(22)
     row.source:SetPoint("TOPRIGHT", row.spend.a, "TOPLEFT", -8, 3)
     Tip(row.source, "Source", "Where this comes from. Click to change it: the suggestion, then each way that is possible (vendor, auction house, make). Nothing is bought or made for you.")
+    row.where = L.Text(row, "small")   -- on a collect row: where to collect it, in place of the source button
+    row.where:SetWidth(SOURCE_W)
+    row.where:SetHeight(28)
+    row.where:SetJustifyH("CENTER")
+    row.where:SetJustifyV("TOP")
+    row.where:SetWordWrap(true)
+    row.where:SetPoint("TOPRIGHT", row.spend.a, "TOPLEFT", -8, 4)
+    row.where:Hide()
     row.need = L.Text(row, "body")
     row.need:SetWidth(NEED_W)
     row.need:SetJustifyH("RIGHT")
@@ -426,6 +478,21 @@ local function MakeShopRow(parent)
         self.detail:SetText(ShopDetail(r))
         self.need:SetText(Num(r.qty))
         Paint(self.need, K.gold)
+        if r.kind == "collect" then
+            -- stored materials are collected, not bought: no source to choose, nothing to pay, no action
+            Paint(self.need, K.sage)
+            self.source:Hide()
+            self.where:SetText(r.where == "guild" and "Collect from guild bank" or "Collect from bank")
+            Paint(self.where, K.sage)
+            self.where:Show()
+            self.spend.a:SetText("Already owned")
+            Paint(self.spend.a, K.textDim)
+            self.spend.b:SetText(r.at and ("seen " .. AgeOf(r.at)) or "")
+            self.act:Hide()
+            return
+        end
+        self.source:Show()
+        self.where:Hide()
         local choices = Sh.Choices(r)
         self.source.text:SetText(r.source and Sh.NAMES[r.source] or "No source")
         self.source:SetEnabled(#choices > 0)
@@ -590,8 +657,12 @@ local function MakeOppRow(parent)
         local detail = makes and ("Makes " .. makes) or "Makes: unknown"
         if rec.profName then detail = detail .. "  -  " .. rec.profName end
         if e.state ~= "ok" then detail = (Op.WhyText(e) or "Not priced") end
+        -- whether one craft's materials are in the bags or in storage (asked only for the rows drawn; never part of the estimate)
+        r.avail = r.avail or (oppView and oppView.avail and oppView.avail(rec)) or nil
+        local word = e.state == "ok" and Op.AvailWord(r.avail) or nil
+        if word then detail = detail .. "  -  " .. word end
         self.sub:SetText(detail)
-        Paint(self.sub, e.state == "ok" and K.stone or K.gold)
+        Paint(self.sub, e.state ~= "ok" and K.gold or (word and (r.avail.state == "ready" and K.sage or K.gold)) or K.stone)
         Known(self.cost, e.cost)
         Known(self.sell, e.sellLow, e.sellHigh)
         if e.state == "ok" then
@@ -661,11 +732,15 @@ local function RenderCraft()
     lists.queue:SetData(queue, "Nothing queued yet. Use Add on a recipe.")
 
     -- materials
-    local mats, sum = S.Materials()
+    local mats, sum, view = S.Materials()
+    matView = view
     lists.mats:SetData(mats, sum.state == "empty" and "Materials for the queue appear here." or nil)
     local text, tone = S.Headline(sum)
     f.headline:SetText(text)
     Paint(f.headline, tone == "good" and K.sage or (tone == "warn" and K.gold or K.textDim))
+    f.storeNote:SetText(S.StockNote(sum, view) or "")
+    f.scope:SetText(("Counts %s."):format(K2.Scope(view)))
+    f.useGuild:SetOn(view.guild.enabled)
 end
 
 local function Plural(n, one, many) return n == 1 and one or many end
@@ -683,7 +758,8 @@ local function RenderShop()
         sourceText = "No saved auction prices. Choose Scan prices in Opportunities at the auction house."
     end
     shop.source:SetText(sourceText)
-    shop.status:SetText(("Vendor prices as last seen (%d noted) \194\183 bags only"):format(W.Vendor.Count()))
+    shop.status:SetText(("Vendor prices as last seen (%d noted) \194\183 %s"):format(W.Vendor.Count(), K2.Scope(ctx.stock)))
+    shop.useGuild:SetOn(ctx.stock.guild.enabled)
 
     local empty
     if sum.state == "empty" then empty = "Add recipes to the queue to build a shopping list."
@@ -696,6 +772,9 @@ local function RenderShop()
     -- the total: only what is priced, and never as if it were complete when it is not
     if #plan.rows == 0 then
         shop.total:SetText("")
+    elseif tot.priced + tot.missing + tot.makes == 0 then
+        shop.total:SetText("Nothing to buy: collect what is stored.")   -- only collect rows: stored materials cost nothing to get
+        Paint(shop.total, K.sage)
     elseif tot.missing > 0 then
         shop.total:SetText(("Estimated spending: %s so far. Some prices missing: %d %s."):format(Money(tot.cash), tot.missing,
             Plural(tot.missing, "material has no price", "materials have no price")))
@@ -719,6 +798,8 @@ local function RenderShop()
     if #plan.rows > 0 then
         notes[#notes + 1] = "Suggestions compare one material at a time; owned materials lower what you spend but aren't free."
     end
+    local stockNote = S.StockNote(sum, ctx.stock)
+    if stockNote then notes[#notes + 1] = stockNote end
     shop.notes:SetText(table.concat(notes, "\n"))
 end
 
@@ -999,9 +1080,19 @@ local function Build()
     local mh = L.Text(main, "heading")
     mh:SetPoint("TOPLEFT", RIGHT_X, -338)
     mh:SetText("Materials")
-    local scope = L.Text(main, "meta")
-    scope:SetPoint("LEFT", mh, "RIGHT", 10, 0)
-    scope:SetText("Counts what is in your bags only.")
+    f.scope = L.Text(main, "meta")
+    f.scope:SetPoint("LEFT", mh, "RIGHT", 10, 0)
+    f.scope:SetWidth(210)
+    f.scope:SetWordWrap(false)
+    f.scope:SetJustifyH("LEFT")
+    f.scope:SetText("Counts bags only.")
+    f.useGuild = F.Toggle(main, "Use guild bank", 118, function()
+        S.SetUseGuild(not S.UseGuild())
+        Win.Render()
+    end)
+    f.useGuild:SetHeight(22)
+    f.useGuild:SetPoint("TOPRIGHT", main, "TOPRIGHT", -PAD, -334)
+    Tip(f.useGuild, "Use guild bank materials", USE_GUILD_TIP)
     local function Head(text, anchorX, w)
         local h = L.Text(main, "meta")
         h:SetPoint("TOPRIGHT", main, "TOPLEFT", anchorX, -362)
@@ -1010,15 +1101,20 @@ local function Build()
         h:SetText(text)
     end
     local colRight = RIGHT_X + RIGHT_W - 22 - 6 - 6
-    Head("Still needed", colRight, 78)
-    Head("In bags", colRight - 78 - 10, 52)
-    Head("Need", colRight - 78 - 10 - 52 - 10, 52)
+    Head("Still needed", colRight, MC_SHORT)
+    Head("Stored", colRight - MC_SHORT - MC_GAP, MC_STORED)
+    Head("In bags", colRight - MC_SHORT - MC_GAP - MC_STORED - MC_GAP, MC_HAVE)
+    Head("Need", colRight - MC_SHORT - MC_GAP - MC_STORED - MC_GAP - MC_HAVE - MC_GAP, MC_NEED)
     lists.mats = NewList(main, RIGHT_X, -380, RIGHT_W, 150, MAT_H, MakeMaterialRow)
     f.headline = L.Text(main, "body")
-    f.headline:SetPoint("TOPLEFT", RIGHT_X, -540)
+    f.headline:SetPoint("TOPLEFT", RIGHT_X, -536)
     f.headline:SetWidth(RIGHT_W)
     f.headline:SetWordWrap(true)
     f.headline:SetJustifyV("TOP")
+    f.storeNote = L.Text(main, "meta")   -- what has not been seen yet ("Open your bank with Workshop loaded to update.")
+    f.storeNote:SetPoint("TOPLEFT", RIGHT_X, -568)
+    f.storeNote:SetWidth(RIGHT_W)
+    f.storeNote:SetWordWrap(false)
 
     -- Shopping
     local sh = L.Text(shop, "heading")
@@ -1045,7 +1141,14 @@ local function Build()
     item:SetText("Material")
     ShopHead("Estimated spending", rowRight - 2 - ACT_W - 8, SPEND_W)
     ShopHead("Source", rowRight - 2 - ACT_W - 8 - SPEND_W - 8, SOURCE_W, "CENTER")
-    ShopHead("Still needed", rowRight - 2 - ACT_W - 8 - SPEND_W - 8 - SOURCE_W - 8, NEED_W)
+    ShopHead("To get", rowRight - 2 - ACT_W - 8 - SPEND_W - 8 - SOURCE_W - 8, NEED_W)
+    shop.useGuild = F.Toggle(shop, "Use guild bank", 118, function()
+        S.SetUseGuild(not S.UseGuild())
+        Win.Render()
+    end)
+    shop.useGuild:SetHeight(22)
+    shop.useGuild:SetPoint("TOPRIGHT", shop, "TOPRIGHT", -PAD, -48)
+    Tip(shop.useGuild, "Use guild bank materials", USE_GUILD_TIP)
     lists.shop = NewList(shop, PAD, -138, WIDTH - PAD * 2, 296, SHOP_H, MakeShopRow)
     shop.total = L.Text(shop, "body")
     shop.total:SetPoint("TOPLEFT", PAD, -444)
@@ -1138,6 +1241,7 @@ local function Build()
     f.tabShop:SetOn(mode == "shop")
     f.tabOpps:SetOn(mode == "opps")
     SC.OnChange = function() if f and f:IsShown() then Schedule("draw") end end
+    St.OnChange = function() if f and f:IsShown() then Schedule("draw") end end   -- the bank or guild bank was seen, or the choice changed
 
     f.note = L.Text(f, "meta")
     f.note:SetPoint("BOTTOMLEFT", PAD, 22)
@@ -1177,6 +1281,9 @@ function W.Snapshot()
     s.events = events
     s.watchEvents = W.Watch and W.Watch.Events() or 0
     s.watchReads = W.Watch and W.Watch.reads or 0
+    s.bankEvents = W.Bank and W.Bank.Events() or 0
+    s.bankReads = W.Bank and (W.Bank.reads + W.Bank.guildReads) or 0
+    s.storedItems = s.stored and (s.stored.bankItems + s.stored.guildItems) or 0
     s.rows = rows
     s.mode = mode
     s.renders = renders

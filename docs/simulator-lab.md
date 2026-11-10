@@ -52,7 +52,7 @@ build and show their rows, nothing more.
 | `tools/simlab/smoke.sh` | After touching settings pages, Kit/widgets, the TOC or load order: does everything still load and construct (about 12 s) |
 | `tools/simlab/interact.sh` | After touching `NotifyLook`, the settings Kit or the controls it uses: handler-level behaviour and in-memory state (about 23 s) |
 | `tools/simlab/diagnose.sh` | Only for group/share/timer work: the clock window and message contract (about 15 s) |
-| `tools/simlab/workshop.sh` | After touching the Workshop window, session, planner, prices or scan: values and controls of its three views (about 30 s) |
+| `tools/simlab/workshop.sh` | After touching the Workshop window, session, planner, prices or scan: values and controls of its three views and the tooltip designer (about 30 s) |
 | `tests/run.sh` | The project's offline suite; still the main check, and the only one for most logic |
 | `bash tools/simlab/tests/lab_guard.sh` | After touching `lib.sh`, `setup.sh` or `sim.sh` |
 
@@ -193,7 +193,7 @@ in the page are synchronous and need no simulated time; only the window's fade d
 
 ## The Workshop scenario
 
-`tools/simlab/workshop.sh` (about 30 s): four launches from fresh empty installs (the three views, each ending in its own screenshot, and a negative control with one wrong expectation). It stages `TwichUI_Workshop` with `SIMLAB_EXTRA=TwichUI_Workshop`
+`tools/simlab/workshop.sh` (about 30 s): five launches from fresh empty installs (the three views and the settings window's "What's it worth?" tooltip designer, each ending in its own screenshot, and a negative control with one wrong expectation). The designer step drives the real designer controls with `Button:Click()` and calls the drag handlers with a faked pointer position: handler level, not pointer-driven drag-and-drop. It stages `TwichUI_Workshop` with `SIMLAB_EXTRA=TwichUI_Workshop`
 (an opt-in list of `TwichUI_*` folders for `simlab_stage`; unset for every other command), opens the window with `/tui workshop`, and drives it at handler level over deterministic fake game data. What is fake, what each check is evidence of, the checks, the
 screenshots and what is not covered are in **docs/workshop.md "Simulator coverage"**; the scenario file's header lists the fakes. Notes that belong to the lab:
 - The simulator cannot run Blizzard's world map (opening it raises many Blizzard Lua errors: `IsFilteredOut`, `GetBountiesForMapID`, `GetGameRuleAsFrameStrata`... are missing), so the Show vendor step replaces `ToggleWorldMap` and `NpcMap.Locate` with recorders.

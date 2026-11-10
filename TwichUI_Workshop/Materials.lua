@@ -78,24 +78,40 @@ end
 
 local function Rank(row)
     if row.short == nil then return 2 end
-    return row.short > 0 and 1 or 3
+    if row.short > 0 then return 1 end
+    return (row.fromBank or 0) + (row.fromGuild or 0) > 0 and 3 or 4
 end
 
--- have(item) -> how many the bags hold, or nil when that can't be read. Rows: { item, need, made, have, short }; have and short are nil
--- when unknown (never 0); made is there only when queued crafts will make some of it (short = need - made - have, not below 0). Short items first, then unknown ones, then the rest; each group by item number.
+-- have(item) -> how many the bags hold, or nil when that can't be read. stock (optional) is Stock.Fn's function: stock(item) -> how many the
+-- bank holds, how many the guild bank holds, both only as far as they may be planned with (remembered counts, Stock.lua).
+-- Rows: { item, need, made, have, short, bank, guild, fromBank, fromGuild }; have and short are nil when unknown (never 0); made is there only when queued crafts
+-- will make some of it. The rest of the need after the queued crafts is split by W.Split: the bags first, then the bank (fromBank to collect), then
+-- the guild bank (fromGuild to collect); short is what none of them covers (and so what must be bought or made), not below 0. bank and guild are the
+-- planned-with stock of the item, whether or not this need used it. Without a stock function the rows are exactly what they were for the bags alone.
+-- Short items first, then unknown ones, then those to collect, then the rest; each group by item number.
 -- Summary state: "empty" (nothing queued), "partial" (something isn't known: a recipe's materials or a count),
--- "short" (everything known, something missing) or "ready" (everything known and in the bags).
-function M.Rows(entries, have)
+-- "short" (everything known, something missing), "collect" (everything known and held, but some of it is in the bank or guild bank) or
+-- "ready" (everything known and in the bags).
+function M.Rows(entries, have, stock)
     local need, order, unknown, made, range, cycle = M.Combine(entries)
     local rows = {}
-    local s = { entries = #entries, unknown = unknown, items = #order, shortItems = 0, unknownItems = 0, cycle = cycle }
+    local s = { entries = #entries, unknown = unknown, items = #order, shortItems = 0, unknownItems = 0, cycle = cycle,
+        collectItems = 0, bankItems = 0, guildItems = 0 }
     for _, item in ipairs(order) do
         local n = need[item]
         local h = have(item)
         if type(h) ~= "number" or h ~= h or h < 0 then h = nil end
         local mk = made[item]
-        local row = { item = item, need = n, made = mk, madeRange = mk and range[item] or nil, have = h,
-            short = h and math.max(0, n - (mk or 0) - h) or nil }
+        local row = { item = item, need = n, made = mk, madeRange = mk and range[item] or nil, have = h }
+        if h ~= nil then
+            local bank, guild = 0, 0
+            if stock then bank, guild = stock(item) end
+            local _, k, g, rest = W.Split(math.max(0, n - (mk or 0)), h, bank, guild)
+            row.short, row.bank, row.guild, row.fromBank, row.fromGuild = rest, bank, guild, k, g
+            if k + g > 0 then s.collectItems = s.collectItems + 1 end
+            if k > 0 then s.bankItems = s.bankItems + 1 end
+            if g > 0 then s.guildItems = s.guildItems + 1 end
+        end
         if row.short == nil then s.unknownItems = s.unknownItems + 1
         elseif row.short > 0 then s.shortItems = s.shortItems + 1 end
         rows[#rows + 1] = row
@@ -108,6 +124,7 @@ function M.Rows(entries, have)
     if s.entries == 0 then s.state = "empty"
     elseif s.unknown > 0 or s.unknownItems > 0 or s.items == 0 then s.state = "partial"
     elseif s.shortItems > 0 then s.state = "short"
+    elseif s.collectItems > 0 then s.state = "collect"
     else s.state = "ready" end
     return rows, s
 end

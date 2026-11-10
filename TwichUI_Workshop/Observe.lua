@@ -171,7 +171,9 @@ end
 ---------------------------------------------------------------------------
 -- Items (names and icons come from the game; nothing of them is saved)
 ---------------------------------------------------------------------------
--- How many the bags hold (the bank, the reagent bank and other characters are not counted), or nil when the game can't say
+-- How many the bags hold, or nil when the game can't say. The bank, other characters and the guild bank are NOT counted, and this must never be
+-- changed to pass the game's include-bank flags: the remembered bank and guild bank counts (Storage.lua) are added separately by Stock.lua, so a
+-- bank-inclusive count here would count the same items twice.
 function O.BagCount(item)
     local f = C_Item and C_Item.GetItemCount
     if not f then return nil end
@@ -233,4 +235,29 @@ function O.ReadMerchant()
     local guid = UnitGUID and Plain(UnitGUID("npc"))
     local npc = type(guid) == "string" and tonumber(guid:match("^Creature%-[^-]*%-[^-]*%-[^-]*%-[^-]*%-(%d+)%-")) or nil
     return list, Int(npc, 1, W.MAX_ID)
+end
+
+---------------------------------------------------------------------------
+-- Who the player is: the guild
+---------------------------------------------------------------------------
+-- The guild the character is in now: { key = "Guild-Realm", name, club (the guild's community id when the game has one, else nil) }, or nil when the
+-- character is in no guild or the game can't say yet. The key is the guild's name and realm (GetGuildInfo's fourth value is the guild's realm when
+-- it is another one); the Forever API documentation has no guild id function other than C_Club.GetGuildClubId, which may not be loaded yet, so it only
+-- tells two guilds of one name apart when both ids are known (Storage.lua).
+function O.GuildId()
+    if not (IsInGuild and GetGuildInfo) then return nil end
+    local ok, inGuild = pcall(IsInGuild)
+    if not ok or Plain(inGuild) ~= true then return nil end
+    local ok2, name, _, _, realm = pcall(GetGuildInfo, "player")
+    name = ok2 and Text(name, 60) or nil
+    if not name then return nil end
+    realm = Text(realm, 60) or Text(GetRealmName and GetRealmName(), 60)
+    if not realm then return nil end
+    local club
+    if C_Club and C_Club.GetGuildClubId then
+        local okc, id = pcall(C_Club.GetGuildClubId)
+        id = okc and Plain(id) or nil
+        if type(id) == "number" or type(id) == "string" then club = Text(tostring(id), 40) end
+    end
+    return { key = name .. "-" .. realm, name = name, club = club }
 end

@@ -54,6 +54,20 @@ function W.Text(v, max)
     return Cut(v, max)
 end
 
+-- THE one allocation of owned items (Materials, Shopping and Opportunities all call it, so nothing is counted twice): `want` items are taken
+-- from what is held, in the order they are easiest to get: the bags, then the player's bank, then the guild bank. A nil or negative amount
+-- counts as none. Returns taken from bags, from the bank, from the guild bank, and what is still missing.
+function W.Split(want, bags, bank, guild)
+    want = (type(want) == "number" and want > 0) and want or 0
+    local function Have(n) return (type(n) == "number" and n > 0) and n or 0 end
+    local b = math.min(want, Have(bags))
+    want = want - b
+    local k = math.min(want, Have(bank))
+    want = want - k
+    local g = math.min(want, Have(guild))
+    return b, k, g, want - g
+end
+
 -- The game's recipe difficulty (TradeskillRelativeDifficulty 0..3) in the words players know. The word always goes with the colour.
 W.DIFFICULTY = {
     [0] = { word = "Orange", color = { 1, 0.50, 0.25 }, tip = "Orange: always gives a skill point." },

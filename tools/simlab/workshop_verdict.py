@@ -3,10 +3,10 @@
 
 The scenario prints one "SIMLAB check PASS|FAIL [layer] name | expected=.. | actual=.." line per assertion, "SIMLAB step <name>" per
 step and a "SIMLAB done ..." line at its end. A clean exit proves nothing, so a pass needs all of these:
-  craft/opps/shop  every step ran to the end, every check passed, no Lua error outside the classified rules, every evidence layer was
-                   exercised, and the checks before the screenshot pose are IDENTICAL in the three launches (reproducibility)
+  craft/opps/shop/design  every step ran to the end, every check passed, no Lua error outside the classified rules, every evidence layer was
+                   exercised, and the checks before the screenshot pose are IDENTICAL in the four launches (reproducibility)
   wrong            with one expectation made wrong, exactly that check failed and every other one passed (the negative control)
-  screenshots      three real images of the size asked for, with a window area that is not blank
+  screenshots      four real images of the size asked for, with a window area that is not blank
 
 Errors are classified (known_failures.py), not avoided. This scenario is solo; permitted: Blizzard's voice-settings error, and the
 simulator's refusal of an addon message, which here can only come from the NPC collection's share of a newly noted merchant
@@ -28,12 +28,15 @@ STEPS = [
     "crafting: materials against the bags", "crafting: a second profession and Open recipe", "merchant prices noted",
     "opportunities: before any scan", "opportunities: scan against the fake auction house",
     "opportunities: rows, ordering, filtering, unknowns", "opportunities: short tooltip, details with Shift",
+    "what's it worth: item tooltip lines", "what's it worth: tooltip designer",
     "opportunities: test-input cut, then removed", "opportunities: Add to queue",
     "shopping: combined list, sources, total, warning", "shopping: source button", "shopping: Show vendor",
-    "shopping: add the suggested subcraft", "shopping: bags change", "close and reopen", "remembered recipes: closed window, background read, nothing open", "pose for the screenshot",
+    "shopping: add the suggested subcraft", "shopping: bags change", "close and reopen", "remembered recipes: closed window, background read, nothing open",
+    "bank and guild bank: remembered while the window is closed", "bank and guild bank: planned with, collected not bought, labelled, profit unchanged",
+    "bank and guild bank: the guild choice, permissions and limits", "bank and guild bank: a withdrawal and a deposit never count twice", "pose for the screenshot",
 ]
 LAYERS = ("init", "display", "click", "direct", "event", "state")
-VIEWS = {"craft": "TwichUIWorkshop", "opps": "TwichUIWorkshop", "shop": "TwichUIWorkshop"}
+VIEWS = {"craft": "TwichUIWorkshop", "opps": "TwichUIWorkshop", "shop": "TwichUIWorkshop", "design": "TwichUISettings"}
 VOICE, UTF8 = "voice-settings-unsupplied", "addon-message-invalid-utf8"
 CHECK = re.compile(r"^SIMLAB check (PASS|FAIL) \[([^\]]+)\] (.*?) \| expected=(.*?) \| actual=(.*)$", re.M)
 
@@ -64,9 +67,9 @@ def main():
         results.append(bool(passed))
         print(f"  {'pass' if passed else 'FAIL'}  {name}" + (f"  ({detail})" if detail else ""))
 
-    runs = {n: load(run, n) for n in ("craft", "opps", "shop", "wrong")}
+    runs = {n: load(run, n) for n in ("craft", "opps", "shop", "design", "wrong")}
 
-    for n in ("craft", "opps", "shop"):
+    for n in ("craft", "opps", "shop", "design"):
         r = runs[n]
         print(f"The scenario, ending on {n}:")
         d = r["done"]
@@ -89,8 +92,8 @@ def main():
                 break
             out.append(c)
         return out
-    a, b, c = (common(runs[n]) for n in ("craft", "opps", "shop"))
-    check("the checks before the screenshot pose are identical in the three launches", a == b == c and len(a) > 0, f"{len(a)} / {len(b)} / {len(c)}")
+    a, b, c, d = (common(runs[n]) for n in ("craft", "opps", "shop", "design"))
+    check("the checks before the screenshot pose are identical in the four launches", a == b == c == d and len(a) > 0, f"{len(a)} / {len(b)} / {len(c)} / {len(d)}")
 
     print("Negative control (one expectation made wrong on purpose):")
     w = runs["wrong"]
@@ -103,7 +106,7 @@ def main():
           f"{len(w['checks'])} checks, {len(wrong_failed)} failed")
 
     print("Screenshots (files only; whether they look right is for a person to judge):")
-    for n in ("craft", "opps", "shop"):
+    for n in ("craft", "opps", "shop", "design"):
         path = run / f"{n}.png"
         try:
             width, height, pixels = read_rgba(path)
@@ -130,7 +133,7 @@ def main():
     print("  Game data ........................ FAKE and deterministic (professions, items, bags, auction listings, merchant); "
           "the world map and NpcMap.Locate are stand-ins in the Show vendor step")
     print("  Persistence tested ............... NO: nothing is reloaded or written to disk. Closing and reopening the window is not persistence.")
-    print(f"  Screenshots ...................... {'captured' if assets else 'captured WITHOUT game assets'}: craft.png, opps.png, shop.png "
+    print(f"  Screenshots ...................... {'captured' if assets else 'captured WITHOUT game assets'}: craft.png, opps.png, shop.png, design.png "
           "(a script cannot judge them; look at them, and remember custom fonts are not drawn)")
     print("  Real-client tested ............... NO")
     print(f"{len(r['checks'])} checks per launch; {r['done'].group(2) if r['done'] else '?'} s of simulated time.")

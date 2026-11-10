@@ -7,7 +7,7 @@ dofile(TESTS .. "mi_mock.lua")
 local function Check(cond, msg) if not cond then error(msg, 2) end end
 local function Same(a, b, msg) if a ~= b then error((msg or "") .. " expected " .. tostring(b) .. ", got " .. tostring(a), 2) end end
 
-local WORKSHOP_FILES = { "Data.lua", "Materials.lua", "Queue.lua", "Known.lua", "Observe.lua", "Prices.lua", "Opportunities.lua", "Vendor.lua", "Shopping.lua", "Scan.lua", "Session.lua" }
+local WORKSHOP_FILES = { "Data.lua", "Materials.lua", "Queue.lua", "Known.lua", "Observe.lua", "Storage.lua", "Stock.lua", "Prices.lua", "Opportunities.lua", "Vendor.lua", "Shopping.lua", "Scan.lua", "Session.lua" }
 
 local function Load(c, file)
   local chunk = assert(loadfile(ROOT .. "../TwichUI_Workshop/" .. file))
@@ -346,7 +346,7 @@ do
   Same((S.Headline(sum)), "Still needed: 1 material.")
   g.bags[10] = 12
   rows, sum = S.Materials(); Same(sum.state, "ready")
-  Same((S.Headline(sum)), "All the materials are in your bags.")
+  Same((S.Headline(sum)), "Ready to craft: all the materials are in your bags.")
   g.bags[10] = nil
   rows, sum = S.Materials(); Same(sum.state, "partial", "a bag count the game can't give is unknown, not zero")
 

@@ -19,6 +19,10 @@ Queue.lua
 Known.lua
 # What the profession window offers: the player's own recipes, their output and materials (game reads only)
 Observe.lua
+# What the player's bank and the guild bank were last seen to hold (saved in TwichUIDB.workshop.storage; no game calls, no frames)
+Storage.lua
+# The material-availability service: bags, bank and guild bank kept apart, one allocation for every view (pure)
+Stock.lua
 # Auction prices: the price service, what one craft costs and earns (saved in TwichUIDB.workshop.prices; no game calls, no frames)
 Prices.lua
 # The Opportunities list: rows, filter, sort, the basis text (pure)
@@ -27,12 +31,20 @@ Opportunities.lua
 Vendor.lua
 # The shopping list: where to get each missing material, or whether to make it (pure)
 Shopping.lua
+# "What's it worth?": vendor, auction and disenchant for one item (pure; disenchant has no outcome data, so it is only ever "no data")
+Worth.lua
+# The "What's it worth?" lines the player chose and their order: the saved layout and the one builder the tooltip and the designer share (pure)
+WorthLayout.lua
 # The price scan of the open auction house (started only by the player's click)
 Scan.lua
 # What the window shows and does, without any frame
 Session.lua
 # Remembers the player's own professions' recipes while the window is closed (after load only; reads, never opens anything)
 Watch.lua
+# Remembers the bank and the guild bank while they are open, window hidden or not (after load only; reads, never moves anything)
+Bank.lua
+# The "What's it worth?" lines on the tooltip of an item in the bags or bank (after load only; reads saved prices, never the auction house)
+WorthTip.lua
 # The progress bar and the Scan prices button on the auction house window (the click goes through Session)
 AuctionButton.lua
 # The window (last: it tells TwichUI the addon is ready)
