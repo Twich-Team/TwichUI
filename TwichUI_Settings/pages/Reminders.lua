@@ -1,7 +1,7 @@
 -- TwichUI settings: Reminders (reminders/). A feature card with the switch, then a frame of this window's own: your
 -- reminders as a list (each with a thumbnail, its rule as a sentence, what it is doing now and its own switch), ways to
 -- start one, and the chosen reminder's editor (RemindersEditor.lua: Show, When (RemindersDesigner.lua, in RemindersPlain.lua's
--- words), Placement, Preview appearance, Test). Built the
+-- words), Placement, Test; the live preview is RemindersPreview.lua's frame beside the window). Built the
 -- first time the page is shown; list rows are made as they are first needed and reused on every redraw. Which reminder
 -- is open, and which situations the Test section tries, are kept for the session only.
 -- Every change goes through reminders/Config.lua's own functions, which check it. Nothing here is needed for reminders
@@ -195,17 +195,8 @@ local function LayoutList(list, y)
     local h = 12
     f.count:SetText(("%d of %d"):format(#list, RM().MAX))
     h = h + 26
-    f.startLabel:ClearAllPoints()
-    f.startLabel:SetPoint("TOPLEFT", card, "TOPLEFT", PAD, -(h + 4))
-    local x = PAD + (f.startLabel:GetStringWidth() or 80) + 10
-    for _, b in ipairs(f.templates) do
-        if x + b:GetWidth() > W - PAD then   -- the buttons that don't fit go on the next line, from the left
-            x = PAD
-            h = h + 32
-        end
-        Put(b, card, x, h)
-        x = x + b:GetWidth() + 8
-    end
+    Put(f.newButton, card, PAD, h + 4)
+    f.newButton:SetShown(true)
     h = h + 32
     if not RM().Writable() then
         f.newer:SetText(RM().PROBLEM.newer)
@@ -216,7 +207,7 @@ local function LayoutList(list, y)
         f.newer:Hide()
     end
     if #list == 0 then
-        f.empty:SetText("No reminders yet. Start one from the buttons above: \"Missing shield\" and \"Ammunition\" are ready to use once you turn them on; the others are starting points to finish. Each starts turned off, so nothing appears until you say so.")
+        f.empty:SetText("No reminders yet. Choose New reminder above: \"Missing shield\", \"Ammunition\", \"Missing weapon enchant\" and \"Well Fed ran out\" are ready to use once you turn them on; the others are starting points to finish. Each starts turned off, so nothing appears until you say so.")
         Put(f.empty, card, PAD, h)
         h = h + (f.empty:GetStringHeight() or 24) + 10
     else
@@ -334,17 +325,11 @@ local function Build()
     f.count = G.Text(f.list, "meta")
     f.count:SetPoint("TOPRIGHT", -PAD, -16)
     f.count:SetJustifyH("RIGHT")
-    f.startLabel = G.Text(f.list, "small")
-    f.startLabel:SetText("Start a new one:")
-    f.templates = {}
-    for i, t in ipairs(RM().TEMPLATES) do
-        local kind = t[1]
-        local b = G.Button(f.list, t[2], 120, "secondary", function() P.Create(kind) end)
-        b:SetWidth(math.max(100, math.ceil(b.text:GetStringWidth() or 90) + 28))
-        Mat().Face(b, "secondary")
-        I.Tip(b, t[2], t[3] .. " It starts turned off.")
-        f.templates[i] = b
-    end
+    f.newButton = G.Button(f.list, "New reminder", 130, "primary", function()
+        if R.RemindersCatalog then R.RemindersCatalog.Toggle() end
+    end)
+    Mat().Face(f.newButton, "primary")
+    I.Tip(f.newButton, "New reminder", "Opens the templates beside this window. A new reminder starts turned off, so nothing appears until you say so.")
     f.newer = G.Text(f.list, "small")
     f.newer:SetWidth(W - PAD * 2)
     f.empty = G.Text(f.list, "small")
@@ -432,6 +417,15 @@ function P.Refresh()
         f.head:Hide()
         for _, s in ipairs(sections) do s:Hide() end
     end
+    -- the live preview beside the window, unless the template catalog has that place
+    local PV = R.RemindersPreview
+    if PV then
+        if v and not (R.RemindersCatalog and R.RemindersCatalog.Shown()) then
+            PV.Show(v, { Changed = P.QueueRefresh, Say = P.Say })
+        else
+            PV.Hide()
+        end
+    end
     local h = math.max(1, y - GAP)
     f:SetHeight(h)
     if h ~= height then
@@ -460,6 +454,8 @@ function P.Frame()
     f:SetScript("OnHide", function(self)
         for _, e in ipairs(EVENTS) do self:UnregisterEvent(e) end
         if f.nameBox then f.nameBox:ClearFocus() end
+        if R.RemindersCatalog then R.RemindersCatalog.Hide() end   -- the templates and the preview belong to this page
+        if R.RemindersPreview then R.RemindersPreview.Hide() end
         if R.RemindersDesigner then R.RemindersDesigner.Reset() end   -- an open editor, picker or undo is put away
     end)
     f:SetScript("OnEvent", function() P.QueueRefresh(0.2) end)

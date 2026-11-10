@@ -19,6 +19,8 @@ pages\Notifications.lua
 pages\RemindersPlain.lua
 pages\RemindersEditor.lua
 pages\RemindersDesigner.lua
+pages\RemindersPreview.lua
+pages\RemindersCatalog.lua
 pages\Reminders.lua
 pages\HealerWatch.lua
 pages\ReturnTheFavor.lua

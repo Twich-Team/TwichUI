@@ -1131,7 +1131,7 @@ function Dz.Build(parent, env)
             if ex.reason then h = h + K.Text(self.exReason, ex.reason, "quiet", PAD + 22, h, self) + 4 end
             h = h + K.Text(self.exScope, ex.scope, "quiet", PAD + 22, h, self) + 4
             h = h + K.Text(self.exStatus, ex.status, "quiet", PAD + 22, h, self) + 4
-            h = h + K.Text(self.exNote, "Conditions matching is not the same as the reminder being on screen: it also needs to be turned on and for this character. To see how it looks, use Preview appearance below; a preview doesn't mean the conditions match.", "quiet", PAD + 22, h, self) + 6
+            h = h + K.Text(self.exNote, "Conditions matching is not the same as the reminder being on screen: it also needs to be turned on and for this character. To see how it looks, use the preview beside this window; a preview doesn't mean the conditions match.", "quiet", PAD + 22, h, self) + 6
         end
         h = h + 10
         self:SetHeight(h)

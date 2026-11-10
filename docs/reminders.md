@@ -185,7 +185,7 @@ The one exception is the ammunition you registered, `ui.ammoCustom` (above), whi
 ## Making and editing (settings > Everyday > Reminders)
 
 The card holds the switch. Under it: **Your reminders** (thumbnail, name, the rule as a sentence or what is wrong, what it
-is doing now, and its own switch) and **Start a new one**: **Missing shield** (name "Shield reminder", "Off hand is not
+is doing now, and its own switch) and **New reminder**, which opens the template catalog (below). The templates are **Missing shield** (name "Shield reminder", "Off hand is not
 Shield", the shield artwork with "Equip your shield", no sound, no pulse, below the middle, this character only),
 **Ammunition** (name "Ammunition reminder", "Ranged ammunition has a problem", the arrows artwork with "Check your
 ammunition", the same place and scope; it does nothing for a weapon that takes no ammunition),
@@ -196,6 +196,41 @@ runs out it appears, and it goes within a moment of eating), **Missing weapon en
 When), **Missing equipment or item** (any slot is not an item you choose; shows that item's icon; unfinished until the item is
 chosen) and **Custom reminder** (your words; needs a condition). Each is an ordinary reminder once made: nothing about
 the template is remembered.
+
+### The preview companion (`pages/RemindersPreview.lua`)
+
+The chosen reminder is drawn in a frame beside the settings window, so it is in view while you edit: the same drawing as
+before (`D.NewSurface` / `D.DrawSurface`, the reminder's own layout code, scaled to fit, marked PREVIEW), its name, and
+the explicit **Show on screen** / **Hide preview** button with the same behavior and cleanup (it ends when the settings
+close, in combat, with Reminders off, or when the reminder is deleted). It draws whatever the conditions or the reminder's
+switch say: a turned-off reminder is previewed without being turned on, and it plays no sound and reads no condition. The
+page's redraw drives it, so selecting another reminder or changing a name, picture, words or place updates it. It sits to
+the right of the window, or to the left when there is no room on the right (`PV.Place`, shared with the catalog, which
+takes the same place). **New reminder** replaces the preview with the catalog; closing the catalog puts the preview back for
+the unchanged selection, and creating a reminder shows the preview for the new, turned-off one; a refusal keeps the catalog.
+Leaving the page or closing the settings hides it. It registers no events and makes its frame once. The `reminderPreview`
+icon is now unused by the page. Detailed condition testing stays in the page's Test section.
+
+Evidence: **unit-tested** (`tests/test_reminders_settings.lua` sections 7 and 11: draws through the reminder's layout,
+selection and edits update it, a disabled reminder is previewed and stays off, nothing shown in the world, handoff both
+ways, page hide, reopening makes no new frames); **simulator-tested** for construction only; **not tested**: appearance,
+placement and edge flipping at real sizes and scales, and the clamp.
+
+### The template catalog (`pages/RemindersCatalog.lua`)
+
+**New reminder** opens a frame beside the settings window (`R.SettingsAnchor`, as the sample previews do; centred if the
+window isn't up): the templates as cards (existing artwork or the feature's icon, name, one line, **Use template**; the
+long description is its tooltip) and **Custom reminder** under them. Choosing goes through the page's `P.Create`, so the
+reminder is made by `RM.Create`, the one checked path: a fresh table each time (two uses are independent copies, with
+their own ids), turned off, named by the template; the catalog then goes away, the new reminder is selected and its editor
+is open. A refusal (24 reminders in a profile, a newer-format profile) leaves the catalog open with the reason in its own
+line and creates nothing. The close box, Esc, the settings closing, or leaving the Reminders page closes it and changes
+nothing. Every template here already used a supported condition; none was added. A preview already on screen is not
+touched by making another reminder. Not yet: search and category filters, per-template artwork beyond what exists.
+
+Evidence: **unit-tested** (`tests/test_reminders_settings.lua` section 10: cards, independent copies and ids, starts off,
+selection and editor, cancel, limit refusal, preview kept, page hide); **simulator-tested** only for construction
+(`tools/simlab/smoke.sh`). **Not tested**: how it looks and is placed in the real client, Esc, the close box, tooltips.
 
 The chosen reminder: its name, its switch (refused, with the reason, while it has problems), **Duplicate** (a fresh id,
 turned off, right after it; the original is untouched) and **Delete** (asks, names it; its frame goes at once). Then:
@@ -211,7 +246,7 @@ turned off, right after it; the original is untouched) and **Delete** (asks, nam
   (low, medium, high); fade in and out; pulse; wait before showing; keep up at least.
 - **Sound**: an optional sound for when it appears (a dropdown of None, TwichUI's own sounds and every LibSharedMedia
   sound) and **Play** to hear it. A chosen sound that is not installed stays chosen, is said so, and plays nothing.
-- **Preview appearance**: the reminder drawn in the page by its own layout code, scaled to fit, marked PREVIEW; **Show on screen**.
+- **Preview** (no longer a section of the page): see "The preview companion" below.
 - **Test**: **Right now** (each group and condition, a group before what is in it and what is in it a step in: summary,
   Match / No match / Unavailable / Invalid, what was observed, and why when unavailable; then the result and why; every one
   is read, so none says "not evaluated"). **Try a situation** (SIMULATED): a choice per thing asked about, generated by
@@ -468,3 +503,14 @@ example of a kind with a file of its own. Buff, cooldown, health, inventory-coun
 26. Open the settings with the When designer's picker or an editor open, close and reopen the window: nothing is left open.
     `/tui perf` with the Settings window shown lists `reminders.designer.layout` and the designer's pools; they stay level
     over repeated opening.
+27. Settings > Reminders > **New reminder**: the catalog opens beside the window. Close box, Esc and closing the settings
+    each shut it and make nothing. **Use template** twice on one card: two reminders, both "Off", the editor open on the
+    second; rename one, the other is unchanged. With a preview showing, use a template: the preview stays. With 24
+    reminders, **Use template** and **Custom reminder** say the limit in the catalog and it stays open. Check the cards'
+    pictures, the text fitting, and that the catalog doesn't cover the window or fall off the screen.
+28. Edit a reminder with the page scrolled anywhere: the preview stays beside the window and follows the selection, the
+    name, the picture, the words and the place. A turned-off reminder previews and stays off. **Show on screen** and **Hide
+    preview** work as before. **New reminder** swaps the preview for the catalog; the close box or Esc brings the preview
+    back for the same reminder; **Use template** shows it for the new one. Drag the window to the right edge of the screen
+    and at a larger window scale: the companion flips to the left or stays on screen, and never overlaps the window.
+    Close the settings and reopen: one preview, none left behind.

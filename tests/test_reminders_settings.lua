@@ -128,9 +128,9 @@ f.shown = false
 f:Show()
 Flush()
 local parts = P.Parts()
-Check(parts.sections and #parts.sections == 6, "the six sections are built")
+Check(parts.sections and #parts.sections == 5, "the five sections are built (the preview is beside the window)")
 Check(f.empty.shown and f.empty.text:find("No reminders yet"), "an empty list says how to start")
-Check(#f.templates == 6 and f.templates[1].shown, "six ways to start")
+Check(f.newButton and f.newButton.shown, "one way to start: New reminder, which opens the templates")
 Check(f.events.PLAYER_EQUIPMENT_CHANGED and f.events.GET_ITEM_INFO_RECEIVED, "while shown it hears what Test reads")
 local createdBefore = made
 
@@ -153,7 +153,8 @@ f:SetWidth(500); P.Refresh(); Flush()
 Check(f.list.w == 644, "never narrower than the first size")
 f:SetWidth(644); P.Refresh(); Flush()
 
-local show, when, place, sound, preview, test = unpack(parts.sections)
+local show, when, place, sound, test = unpack(parts.sections)
+local PV = R.RemindersPreview
 Check(show.shown and show.mode.text.text == "Artwork with text" and show.art.text.text == "Shield" and show.textBox.text == "Equip your shield", "Show: artwork with text")
 Check(not show.icon.shown and not show.itemBox.shown, "Show: no icon choices for artwork")
 local cd = when.cards[1]
@@ -619,9 +620,9 @@ local status = CT.Status(id)
 Check(when.exHead.shown and when.exHead.text == (status == "showing" and "Would show now" or "Would stay hidden"), "the headline follows what the reminder is doing: " .. tostring(when.exHead.text) .. " / " .. tostring(status))
 Check(when.exMark.shown and when.exStatus.text == (status == "showing" and "It is showing on screen." or "It is hidden."), "and what it is doing: " .. tostring(when.exStatus.text))
 Check(when.exScope.text == "This character is one it is for.", "and whether it is for this character")
-Check(when.exNote.text:find("not the same as the reminder being on screen") and when.exNote.text:find("Preview appearance"), "conditions matching is kept apart from being on screen, and preview from both")
+Check(when.exNote.text:find("not the same as the reminder being on screen") and when.exNote.text:find("preview beside"), "conditions matching is kept apart from being on screen, and preview from both")
 Check(when.cards[1].state.shown and (when.cards[1].note.text:find("^Met") or when.cards[1].note.text:find("^Not met")) and when.cards[1].note.text:find("Sees:"), "each card says Met or Not met, and what it sees: " .. when.cards[1].note.text)
-Check(preview.title.text == "Preview appearance", "the Preview section is called Preview appearance")
+Check(PV.Shown() and PV.Parts().title.text == RM.Get(P.Selected()).name, "the preview companion is up for the chosen reminder")
 -- a reminder that is turned off: the conditions can match, and nothing appears
 P.Select(iid)
 Flush()
@@ -740,13 +741,13 @@ Check(RM.Get(did) == nil and RM.Get(iid) and P.Selected() ~= did, "deleted; the 
 ---------------------------------------------------------------------------
 P.Select(id)
 Flush()
-preview.show.scripts.OnClick(preview.show)
+PV.Parts().show.scripts.OnClick(PV.Parts().show)
 Flush()
-Check(D.PreviewId() == id and preview.show.text.text == "Hide preview" and preview.state.text:find("On screen"), "on-screen preview")
+Check(D.PreviewId() == id and PV.Parts().show.text.text == "Hide preview" and PV.Parts().state.text:find("On screen"), "on-screen preview")
 Check(CT.Status(id) == "hidden", "the preview leaves the live decision as it was (a shield is on)")
-preview.show.scripts.OnClick(preview.show)
+PV.Parts().show.scripts.OnClick(PV.Parts().show)
 Flush()
-Check(D.PreviewId() == nil and preview.show.text.text == "Show on screen", "preview hidden again")
+Check(D.PreviewId() == nil and PV.Parts().show.text.text == "Show on screen", "preview hidden again")
 place.move.scripts.OnClick(place.move)
 Flush()
 Check(D.Positioning() and place.move.text.text == "Done", "moving")
@@ -754,7 +755,7 @@ place.move.scripts.OnClick(place.move)
 Flush()
 Check(not D.Positioning(), "done moving")
 D.PreviewStop()
-Check(preview.surface.art.texture and preview.surface.art.texture:find("shield"), "the inline preview draws with the reminder's own layout")
+Check(PV.Parts().surface.art.texture and PV.Parts().surface.art.texture:find("shield"), "the preview draws with the reminder's own layout")
 
 ---------------------------------------------------------------------------
 -- 8. More options, height, nothing made twice
@@ -794,5 +795,145 @@ Flush()
 Check(R.Profiles.Create("Empty"), "a new profile")
 Flush()
 Check(P.Selected() == nil and f.empty.shown and not f.head.shown, "another profile's (empty) list; nothing stale is open")
+
+---------------------------------------------------------------------------
+-- 10. The template catalog (RemindersCatalog.lua): cards, copies, cancel, refusals
+---------------------------------------------------------------------------
+do
+  local CAT = R.RemindersCatalog
+  Check(CAT and f.newButton.scripts.OnClick, "the catalog and its button exist")
+  f.newButton.scripts.OnClick(f.newButton)
+  local cf = CAT.Frame()
+  Check(CAT.Shown(), "New reminder opens the catalog")
+  Check(#cf.cards == 5, "a card for each template that makes a reminder of its own: " .. #cf.cards)
+  for _, card in ipairs(cf.cards) do
+    Check(card.name.text ~= "" and card.brief.text ~= "" and card.use.text.text == "Use template", "a card has a name, a line and Use template: " .. card.kind)
+  end
+  Check(cf.custom and cf.custom.scripts.OnClick, "and Custom reminder")
+
+  -- closing without choosing makes nothing and keeps the selection
+  local chosen, before = P.Selected(), Deep(RM.List())
+  CAT.Hide()
+  Check(not CAT.Shown() and P.Selected() == chosen and Deep(RM.List()) == before, "closing it makes and changes nothing")
+  f.newButton.scripts.OnClick(f.newButton)
+  local esc = false
+  for _, name in ipairs(c.UISpecialFrames or {}) do if name == "TwichUIReminderCatalog" then esc = true end end
+  Check(esc or not c.UISpecialFrames, "Esc is wired through the game's frame list")
+
+  -- the first card in the catalog is a template (Missing shield): use it twice
+  local shield
+  for _, card in ipairs(cf.cards) do if card.kind == "shield" then shield = card end end
+  local tplBefore = Deep(RM.TEMPLATES)
+  local n0 = #RM.List()
+  shield.use.scripts.OnClick(shield.use)
+  Flush()
+  local a = P.Selected()
+  Check(#RM.List() == n0 + 1 and a and not RM.Get(a).enabled, "using it makes one reminder, turned off")
+  Check(not CAT.Shown(), "and the catalog goes away")
+  Check(f.head.shown and f.nameBox.text == RM.Get(a).name, "the new reminder is selected and its editor is open")
+  f.newButton.scripts.OnClick(f.newButton)
+  shield.use.scripts.OnClick(shield.use)
+  Flush()
+  local b = P.Selected()
+  Check(b and b ~= a and #RM.List() == n0 + 2 and not RM.Get(b).enabled, "a second use is another reminder with its own id")
+  RM.SetName(a, "Edited")
+  RM.SetPreset(a, "custom")
+  Check(RM.Get(b).name == "Shield reminder" and RM.Get(b).place.preset == "belowCenter", "editing one copy leaves the other alone")
+  local ok, c2 = RM.Create("shield")
+  Check(RM.Get(c2).name == "Shield reminder" and Deep(RM.TEMPLATES) == tplBefore, "nor the template (a third copy is as the template says)")
+  RM.Delete(c2)
+
+  -- an on-screen preview of the chosen one survives making another
+  RM.SetEnabled(b, false)
+  local started = D.PreviewStart(RM.Get(b), false)
+  Check(started, "a preview can be started here")
+  if started then
+    f.newButton.scripts.OnClick(f.newButton)
+    shield.use.scripts.OnClick(shield.use)
+    Flush()
+    Check(D.PreviewId() == b, "the preview of an earlier reminder is still on")
+    D.PreviewStop()
+  end
+
+  -- at the limit: refused, the catalog stays open and says why
+  while #RM.List() < RM.MAX do RM.Create("custom") end
+  local sel, count = P.Selected(), #RM.List()
+  f.newButton.scripts.OnClick(f.newButton)
+  shield.use.scripts.OnClick(shield.use)
+  Flush()
+  Check(CAT.Shown() and #RM.List() == count and P.Selected() == sel, "at the limit nothing is made and the catalog stays open")
+  Check(cf.say.text == RM.REFUSE.full, "and it says why: " .. cf.say.text)
+  cf.custom.scripts.OnClick(cf.custom)
+  Check(CAT.Shown() and #RM.List() == count, "Custom reminder is refused the same way")
+  -- closing the settings page puts it away
+  f:Hide()
+  Check(not CAT.Shown(), "hiding the page puts the catalog away")
+  f:Show()
+  Flush()
+end
+
+---------------------------------------------------------------------------
+-- 11. The preview companion and its handoff with the catalog
+---------------------------------------------------------------------------
+do
+  local CAT = R.RemindersCatalog
+  local pf = PV.Parts()
+  f:Hide(); f:Show(); Flush()
+  Check(PV.Shown() and not CAT.Shown(), "the preview is up beside the window, the catalog is not")
+  while #RM.List() > 2 do RM.Delete(RM.List()[#RM.List()].id) end   -- section 10 left the profile full
+  Flush()
+  local list = RM.List()
+  local x, y = list[1], list[2]
+  Check(x and y, "two reminders to move between")
+  RM.SetEnabled(x.id, false)
+  P.Select(x.id); Flush()
+  Check(pf.title.text == RM.Get(x.id).name and not RM.Get(x.id).enabled, "a turned-off reminder is previewed, and stays off")
+  local shows0 = CT.Snapshot().shows
+  P.Select(y.id); Flush()
+  Check(pf.title.text == RM.Get(y.id).name, "selecting another redraws the preview for it")
+  RM.SetName(y.id, "Renamed here"); Flush()
+  Check(pf.title.text == "Renamed here", "an edit updates the preview")
+  Check(CT.Snapshot().shows == shows0 and D.PreviewId() == nil, "previewing shows nothing in the world")
+
+  -- the catalog takes the place, cancel gives it back for the same selection
+  local framesBefore = made
+  local cfg = Deep(RM.List())
+  f.newButton.scripts.OnClick(f.newButton); Flush()
+  Check(CAT.Shown() and not PV.Shown(), "New reminder: the catalog replaces the preview")
+  P.Refresh()
+  Check(CAT.Shown() and not PV.Shown(), "a redraw while it is open leaves the preview away")
+  CAT.Hide(); Flush()
+  Check(not CAT.Shown() and PV.Shown() and pf.title.text == "Renamed here" and P.Selected() == y.id, "cancel: the preview is back for the same reminder")
+  Check(Deep(RM.List()) == cfg, "and nothing was changed")
+
+  -- creation: the preview is for the new, turned-off reminder
+  f.newButton.scripts.OnClick(f.newButton); Flush()
+  local card = CAT.Frame().cards[1]
+  card.use.scripts.OnClick(card.use); Flush()
+  local new = P.Selected()
+  Check(new ~= y.id and not RM.Get(new).enabled and not CAT.Shown() and PV.Shown() and pf.title.text == RM.Get(new).name, "creation: the catalog goes, the preview shows the new disabled reminder")
+  RM.Delete(new); Flush()
+
+  -- a refusal keeps the catalog, with no preview
+  local mark = #RM.List()
+  while #RM.List() < RM.MAX do RM.Create("custom") end
+  f.newButton.scripts.OnClick(f.newButton); Flush()
+  card = CAT.Frame().cards[1]
+  card.use.scripts.OnClick(card.use); Flush()
+  Check(CAT.Shown() and not PV.Shown(), "a refusal leaves the catalog up and the preview away")
+  CAT.Hide(); Flush()
+  while #RM.List() > mark do RM.Delete(RM.List()[#RM.List()].id) end
+  Flush()
+
+  -- lifecycle: leaving the page, closing the settings, reopening: nothing doubled
+  f:Hide()
+  Check(not PV.Shown(), "leaving the page hides the preview")
+  f:Show(); Flush()
+  Check(PV.Shown(), "and it is back with the page")
+  local count = made
+  for _ = 1, 4 do f:Hide(); f:Show(); Flush() end
+  Check(made == count, "reopening makes no new frames: " .. (made - count))
+  Check(PV.Parts().events == nil or next(PV.Parts().events) == nil, "the preview listens to nothing")
+end
 
 if failures == 0 then print("PASSED") else print(failures .. " FAILED") end

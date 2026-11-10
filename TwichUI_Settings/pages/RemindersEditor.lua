@@ -1,7 +1,6 @@
 -- TwichUI settings: Reminders, the editor's sections (Reminders.lua draws the list and puts these under it)
 -- Show (what appears), When (who it is for and its conditions, as cards inside groups, with the rule in plain words), Placement (where, how big, and
--- behind "More placement and appearance options" the rest), Preview (drawn here by the reminder's own layout code, or on
--- the screen where it sits) and Test (what it sees right now, and the same decision for situations you pick). Each
+-- behind "More placement and appearance options" the rest) and Test (what it sees right now, and the same decision for situations you pick). Each
 -- section's widgets are made once, the first time the page is shown, and only placed and filled after that; condition
 -- cards, group boxes and test lines come from pools bounded by RM.MAX_CONDITIONS and RM.MAX_GROUPS. Every change goes through
 -- Config.lua's functions, which check it; nothing here writes saved data, reads the game's equipment for itself or changes it.
@@ -470,55 +469,6 @@ local function PlacementSection(parent, env)
 end
 
 ---------------------------------------------------------------------------
--- Preview: drawn here by the reminder's own layout code, or shown where it sits
----------------------------------------------------------------------------
-local BOX_H = 150
-
-local function PreviewSection(parent, env)
-    local s = Section(parent, "reminderPreview", "Preview appearance", "How it looks, drawn here, or on your screen where it sits. A preview shows it whatever its conditions say, and changes nothing.")
-    local D = R.ReminderDisplay
-    s.box = CreateFrame("Frame", nil, s, "BackdropTemplate")
-    s.box:SetSize(W - PAD * 2, BOX_H)
-    Wg().Well(s.box)
-    s.surface = D.NewSurface(s.box)
-    s.surface:SetPoint("CENTER", s.box, "CENTER", 0, 0)
-    s.tag = Wg().Tag(s.box, "PREVIEW")
-    s.tag:SetPoint("TOPLEFT", 6, -6)
-    s.caption = Note(s)
-    s.show = Wg().Button(s, "Show on screen", 150, "secondary", function()
-        local v = env.view()
-        if not v then return end
-        if D.PreviewId() == v.id then D.PreviewStop() env.Changed() return end
-        local ok = D.PreviewStart(v, false)
-        if not ok then env.Say("The preview waits until you are out of combat.", "warn") end
-        env.Changed()
-    end)
-    R.Interact.Tip(s.show, "Show on screen", "Shows it where it sits, marked Preview, whatever its conditions say. Nothing about your equipment or its rules changes. It ends when you close these settings, enter combat, turn Reminders off or delete it.")
-    s.state = Note(s, W - CTRL_X - 170)
-
-    function s:Layout(v, y)
-        local h = Top(self)
-        Put(self.box, self, PAD, h)
-        local _, _, scale = D.DrawSurface(self.surface, v, W - PAD * 2 - 24, BOX_H - 24)
-        self.surface:Show()
-        h = h + BOX_H + 8
-        local words = scale < 1 and ("Shown here at %d%% of its size, to fit the box."):format(math.floor(scale * 100)) or "Shown here at its own size."
-        if not v.valid then words = words .. " It can't show in the world until what is listed above is fixed." end
-        h = h + Text(self.caption, words, "quiet", PAD, h, self) + 8
-        local on = D.PreviewId() == v.id
-        self.show.text:SetText(on and "Hide preview" or "Show on screen")
-        Put(self.show, self, PAD, h)
-        local stateText = on and (D.Positioning() and "On screen now, with a handle to drag." or "On screen now, marked Preview.") or ""
-        Text(self.state, stateText, "ok", PAD + 162, h + 4, self)
-        h = h + ROW + 6
-        self:SetHeight(h)
-        Put(self, parent, 0, y)
-        return h
-    end
-    return s
-end
-
----------------------------------------------------------------------------
 -- Sound: an optional sound when the reminder appears
 ---------------------------------------------------------------------------
 local SOUND_WHY = {
@@ -714,7 +664,6 @@ function Ed.Build(parent, env)
         WhenSection(parent, env),
         PlacementSection(parent, env),
         SoundSection(parent, env),
-        PreviewSection(parent, env),
         TestSection(parent, env),
     }
 end

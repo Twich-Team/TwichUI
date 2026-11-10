@@ -548,12 +548,12 @@ end
 
 -- Templates: editable starting points. Nothing about them is remembered once a reminder is made from one.
 RM.TEMPLATES = {
-    { "shield", "Missing shield", "Shows the shield artwork and \"Equip your shield\" whenever your off hand doesn't hold a shield. For this character only, until you change that." },
-    { "ammo", "Ammunition", "Shows the arrows artwork and \"Check your ammunition\" while your ranged weapon takes ammunition and none is selected, none is left or the wrong kind is selected. Does nothing for a weapon that takes none. For this character only, until you change that." },
-    { "enchant", "Missing weapon enchant", "Shows \"Apply your weapon oil\" whenever the weapon in your main hand has no temporary enchant (a weapon oil, sharpening stone or poison). The game doesn't say which one is on, only whether one is. For this character only, until you change that." },
-    { "wellFed", "Well Fed ran out", "Shows the plate artwork and \"Eat something\" whenever you don't have a Well Fed buff, which is also when one has run out. It can't be read while the game hides your buffs from addons (some fights), and then nothing is shown. For this character only, until you change that." },
-    { "item", "Missing equipment or item", "Shows an item's icon while that item isn't equipped. Choose the item first." },
-    { "custom", "Custom reminder", "Your own words, shown when the conditions you add are true." },
+    { "shield", "Missing shield", "Shows the shield artwork and \"Equip your shield\" whenever your off hand doesn't hold a shield. For this character only, until you change that.", "Check your off hand before you go." },
+    { "ammo", "Ammunition", "Shows the arrows artwork and \"Check your ammunition\" while your ranged weapon takes ammunition and none is selected, none is left or the wrong kind is selected. Does nothing for a weapon that takes none. For this character only, until you change that.", "Keep your ranged weapon supplied." },
+    { "enchant", "Missing weapon enchant", "Shows \"Apply your weapon oil\" whenever the weapon in your main hand has no temporary enchant (a weapon oil, sharpening stone or poison). The game doesn't say which one is on, only whether one is. For this character only, until you change that.", "Remember your oil, stone or poison." },
+    { "wellFed", "Well Fed ran out", "Shows the plate artwork and \"Eat something\" whenever you don't have a Well Fed buff, which is also when one has run out. It can't be read while the game hides your buffs from addons (some fights), and then nothing is shown. For this character only, until you change that.", "Remember to eat before heading out." },
+    { "item", "Missing equipment or item", "Shows an item's icon while that item isn't equipped. Choose the item first.", "Shows an item's icon while it isn't equipped." },
+    { "custom", "Custom reminder", "Your own words, shown when the conditions you add are true.", "Start with your own conditions." },
 }
 RM.SHIELD_NOTE = "This reminder appears whenever you are not using a shield. Add a condition to limit when it appears."
 
@@ -603,6 +603,12 @@ local function Template(kind)
             place = { preset = "belowCenter" },
         }
     end
+end
+
+-- How a template will look, for the catalog's cards: a fresh copy of its display settings (read only; nothing is stored).
+function RM.TemplateDisplay(kind)
+    local raw = Template(kind)
+    return raw and raw.display or nil
 end
 
 -- A new reminder from a template. It starts turned off (a draft), whatever it is, so nothing appears in the world
