@@ -68,6 +68,7 @@ pages\Troubleshooting.lua
 # Home's ways in, and the window (last: it tells TwichUI the settings are ready)
 Search.lua
 Widgets.lua
+Material.lua
 Previews.lua
 previews\QoL.lua
 Cards.lua

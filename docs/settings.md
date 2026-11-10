@@ -87,8 +87,8 @@ frame, when its height changes; the window reads the height each time it lays th
 
 ## Window size
 
-The window is 920 x 660 until the player drags the grip in its bottom right corner (tooltip "Drag to resize"). The
-width and height change, never the scale. Bounds: at least 920 x 480 (narrower than 920 would crowd a row's label and
+The window is 936 x 660 until the player drags the grip in its bottom right corner (tooltip "Drag to resize"). The
+width and height change, never the scale. Bounds: at least 936 x 480 (narrower than 936 would crowd a row's label and
 its 236 px control and the hosted pages, which are laid out for that width), at most the screen minus a 24 px margin
 each side, in the window's own units (`UI.SizeBounds`, `UI.ClampSize`). The size is saved once, when the drag ends, as
 `w` and `h` in `ui.settingsWindow` beside the place; a value that is not a usable number falls back to the first size

@@ -70,7 +70,8 @@ local function Section(parent, icon, title, blurb)
     local G = Wg()
     local s = CreateFrame("Frame", nil, parent, "BackdropTemplate")
     s:SetWidth(W)
-    G.Panel(s)
+    local M = R.SettingsMaterial
+    if M then M.Card(s, G.Panel(s)) else G.Panel(s) end   -- of one family with the list and name panels above it
     s.icon = s:CreateTexture(nil, "ARTWORK")
     s.icon:SetSize(ICON, ICON)
     s.icon:SetPoint("TOPLEFT", PAD - 2, -10)

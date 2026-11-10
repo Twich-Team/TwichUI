@@ -4,7 +4,7 @@
 -- for. A page's rows are made the first time the page is shown and kept for the session; a page is drawn again
 -- (values, what is greyed out and why) each time it is shown and after a change. Nothing runs while it is shut.
 --
--- Size: the window is 920 x 660 until the player drags the grip in its bottom right corner. The width and height are
+-- Size: the window is 936 x 660 until the player drags the grip in its bottom right corner. The width and height are
 -- the window's own (never its scale); the header, the pages' list and the footer keep their size and the page area
 -- takes the difference. The page shown is laid out again at the new width as it is dragged (nothing is rebuilt);
 -- other pages are fitted when they are next shown. The size is saved once, when the drag ends.
@@ -21,11 +21,12 @@ local S = R.ChronicleStyle
 local Cards, Previews, Home, Icons = R.SettingsCards, R.SettingsPreviews, R.SettingsHome, R.Icons
 local pal = Wg.pal
 local Motion = Wg.Motion
+local M = R.SettingsMaterial   -- the leather and bronze (Material.lua); this window only
 local T = Motion.TIME   -- every duration used here is in Widgets.lua's table
 local Perf = R.Perf     -- TwichUI Diagnostics' scopes (they do nothing unless it is recording)
 local UI = {}
 
-local WIDTH, HEIGHT = 920, 660
+local WIDTH, HEIGHT = 936, 660
 local HEADER_H, FOOTER_H, NAV_W, PAD = 54, 38, 212, 14
 -- The frame (FrameLook.lua) takes a few units at each edge for its rails: the header and footer sit inside them, and the page area
 -- begins this far from the top and bottom of the window.
@@ -33,7 +34,13 @@ local F = R.FrameLook
 local _, _, CR, CB = F.ContentInsets()
 local RL, RT, RR = F.RailInsets()
 local PAGE_TOP, PAGE_BOTTOM_Y = HEADER_H + 12, FOOTER_H + CB
-local CONTENT_W = WIDTH - PAD - NAV_W - 12 - 24 - PAD
+-- The page area is a recessed well (Material.lua): the pages sit WELL_L in from its left edge, WELL_T from its top and bottom, and the
+-- scroll bar (24 wide) and WELL_R - 24 beside it take the right; the pages keep their 644 wide room.
+local WELL_L, WELL_R, WELL_T = 12, 28, 10
+local CONTENT_W = WIDTH - PAD - NAV_W - 12 - WELL_L - WELL_R - PAD
+-- The scroll frame fills the well inside its outline (1 unit), so a page's header can run to the well's edges; the page itself sits
+-- SHIFT_X / SHIFT_Y in from the scroll frame's top left, which is where it sat before, and the bottom keeps its WELL_T.
+local SHIFT_X, SHIFT_Y, EDGE_R = WELL_L - 1, WELL_T - 1, WELL_R - 1
 -- Narrower than the first size would crowd the rows (a label and its 236 px control) and the pages' own frames, which
 -- are laid out for that width; shorter than this leaves the page area too small to read a card. Larger: the screen.
 local MIN_W, MIN_H = WIDTH, 480
@@ -43,8 +50,8 @@ local CONTROL_W = 236
 local ROW_MIN, SECTION_PAD, GAP = 30, 14, 14
 local SECTION_GLYPH = 26   -- a section's own icon (K.Accent)
 local RESET_H, PAGE_BOTTOM = 52, 12   -- the page's own Reset area, and the room under the last thing on a page
-local NAV_ROW, NAV_GROUP = 30, 24
-local NAV_ICON = 20   -- a page's icon beside its name in the list (the 32 px file)
+local NAV_ROW, NAV_GROUP = 38, 30   -- (30 and 24 before the leather pass)
+local NAV_ICON = 24   -- a page's icon beside its name in the list (the 32 px file)
 local TAB_H = 28
 local HOST_H = 540
 local HIGHLIGHT_SECONDS = 2.5
@@ -508,7 +515,7 @@ UI.cardEnv = {
 local function BuildView(page)
     local view = { page = page, sections = {}, rows = {}, w = CONTENT_W }
     local frame = CreateFrame("Frame", nil, content)
-    frame:SetPoint("TOPLEFT", 0, 0)
+    frame:SetPoint("TOPLEFT", SHIFT_X, -SHIFT_Y)
     frame:SetWidth(CONTENT_W)
     view.frame = frame
     state.views[page.key] = view
@@ -518,10 +525,12 @@ local function BuildView(page)
     -- describes the tab shown.
     local tabs = K.Tabs(page.key)
     local root = K.Root(page.key)
+    view.header = M.Header(frame, content, SHIFT_Y)   -- the leather band behind the title and tabs
     view.title = Wg.Text(frame, "title")
     view.title:SetPoint("TOPLEFT", 2, -4)
     view.title:SetText(#tabs > 0 and root.name or (page.group == "home" and page.nav or page.name))
     if #tabs > 0 then view.tabs = TabStrip(frame, tabs, page.key) end
+
     view.status = Wg.Text(frame, "small")
     view.status:SetPoint("TOPRIGHT", -4, -8)
     view.status:SetJustifyH("RIGHT")
@@ -532,6 +541,7 @@ local function BuildView(page)
     view.rule:SetHeight(1)
     view.rule:SetPoint("LEFT", frame, "LEFT", 0, 0)
     view.rule:SetPoint("RIGHT", frame, "RIGHT", 0, 0)
+    if view.tabs then view.rule:Hide() end   -- the header's own seam is the tabs' rule
 
     -- a feature's notice, above every one of its pages (its tabs too)
     local root = K.Root(page.key)
@@ -571,7 +581,7 @@ local function BuildView(page)
         byId[id] = sec
         view.sections[#view.sections + 1] = sec
         sec.card = CreateFrame("Frame", nil, frame, "BackdropTemplate")
-        Wg.Panel(sec.card)
+        sec.panelLines = Wg.Panel(sec.card)
         sec.card:SetWidth(CONTENT_W)
         if header then
             local titled = (header:GetName() or ""):lower() ~= page.name:lower()
@@ -587,6 +597,7 @@ local function BuildView(page)
             if header.card and Cards then
                 Cards.Build(view, sec, CONTENT_W, UI.cardEnv)
                 view.hasCards = true
+                M.Card(sec.card, sec.panelLines)   -- a feature card is of one family with the Reminders list and name panels
             elseif header.sectionIcon or header.accent then
                 -- K.Accent: a stripe down the card's left edge, a small icon before the title, the title tinted
                 local c = header.accent or pal.gold
@@ -695,6 +706,7 @@ function Layout(view)
     if page.def.overview and page.def.overview.status then ok, status = pcall(page.def.overview.status) end
     view.status:SetText(ok and status or "")
     local y = 4 + (view.title:GetStringHeight() or 18) + 6
+    local titleBottom = y
     local hasDesc = view.desc:GetText() ~= ""
     local function Desc()
         view.desc:ClearAllPoints()
@@ -710,6 +722,7 @@ function Layout(view)
         end
     end
     local function Rule()
+        view.header:Fit(view.tabs and y or titleBottom + 2)   -- the band ends on the tabs' rule, or just under the title
         view.rule:ClearAllPoints()
         view.rule:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, -y)
         view.rule:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 0, -y)
@@ -724,7 +737,8 @@ function Layout(view)
         Desc()
         y = y + (hasDesc and 4 or 0)
     else
-        -- title, the line about the page, then the rule
+        -- title, a little room under the header band, the line about the page, then the rule
+        y = y + 6
         Desc()
         Rule()
         y = y + 14
@@ -826,7 +840,7 @@ function Layout(view)
     end
     -- exactly what is drawn, so the scroll range (and its bar) is there only when something is out of view
     frame:SetHeight(y + PAGE_BOTTOM)
-    content:SetHeight(y + PAGE_BOTTOM)
+    content:SetHeight(y + PAGE_BOTTOM + SHIFT_Y)
     if pt then Perf.Stop(pt) end
 end
 UI.Layout = Layout
@@ -837,10 +851,7 @@ UI.Layout = Layout
 -- A row of the left-hand list: shown (gold, a bar and a lighter band), hovered (ivory, a faint wash) or at rest
 -- (muted). A feature stays shown while one of its tabs is.
 local function PaintItem(item, selected)
-    item.bar:SetShown(selected)
-    item.fill:SetShown(selected)
-    item.wash:SetShown(selected)
-    item.edge:SetShown(selected)
+    item.sel:SetShown(selected)
     item.hoverFade:To((item.hovered and not selected) and 1 or 0, T.hover)
     Wg.Color(item.text, (selected or item.hovered) and pal.text or pal.textDim)
     item.icon:SetAlpha((selected or item.hovered) and 1 or 0.82)
@@ -970,13 +981,13 @@ local function BuildNav()
         if page.group ~= lastGroup then
             lastGroup = page.group
             if labels[page.group] then
-                y = y + 8
+                y = y + 10
                 local rule = Wg.Solid(child, "BORDER", pal.bronzeLo, 0.30)   -- a quiet hairline between groups
                 rule:SetHeight(1)
                 rule:SetPoint("TOPLEFT", 10, -y + 2)
                 rule:SetPoint("TOPRIGHT", -10, -y + 2)
                 local g = Wg.Text(child, "meta")
-                g:SetPoint("TOPLEFT", 10, -y - 6)
+                g:SetPoint("TOPLEFT", 12, -y - 8)
                 g:SetText(labels[page.group]:upper())
                 y = y + NAV_GROUP - 8
             end
@@ -986,31 +997,19 @@ local function BuildNav()
         item:SetPoint("TOPLEFT", 0, -y)
         item:SetPoint("TOPRIGHT", 0, -y)
         item.page = page
-        -- shown: a gold wash fading to the right over the band, a crisp bronze bar at the left and a lit top edge
-        item.fill = Wg.Solid(item, "BACKGROUND", pal.selectedFill, 1)
-        item.fill:SetAllPoints()
-        item.wash = item:CreateTexture(nil, "BORDER")
-        item.wash:SetAllPoints()
-        Wg.Fade(item.wash, pal.teal, 0.16, 0, "HORIZONTAL")
-        item.edge = Wg.Solid(item, "ARTWORK", pal.tealHi, 0.14)
-        item.edge:SetHeight(1)
-        item.edge:SetPoint("TOPLEFT", 0, 0)
-        item.edge:SetPoint("TOPRIGHT", 0, 0)
-        item.hover = Wg.Solid(item, "BORDER", pal.hoverFill, 1)
-        item.hover:SetAllPoints()
-        item.hoverFade = Motion.Fader(function(x) item.hover:SetAlpha(x) end, 0)
-        item.bar = Wg.Solid(item, "ARTWORK", pal.bronzeText, 1)
-        item.bar:SetWidth(3)
-        item.bar:SetPoint("TOPLEFT", 0, -2)
-        item.bar:SetPoint("BOTTOMLEFT", 0, 2)
+        -- chosen: a small rounded raised face with antique gold edging; under the pointer: a fainter one (Material.lua)
+        M.NavItem(item)
+        item.hoverFade = Motion.Fader(function(x) item.hover:SetAlpha(x * 0.55) end, 0)
         -- the page's icon beside its name (never instead of it); a page without one keeps its name in line
         item.icon = item:CreateTexture(nil, "ARTWORK")
         item.icon:SetSize(NAV_ICON, NAV_ICON)
-        item.icon:SetPoint("LEFT", 10, 0)
+        item.icon:SetPoint("LEFT", 12, 0)
         local drawn = Icons and page.def.icon and Icons.Apply(item.icon, page.def.icon, NAV_ICON)
         item.icon:SetShown(drawn and true or false)
         item.text = Wg.Text(item, "body")
-        item.text:SetPoint("LEFT", 10 + NAV_ICON + 8, 0)
+        local file, size, flags = item.text:GetFont()   -- a little larger than the page text: the list is the way around
+        if file and size then item.text:SetFont(file, size + 1, flags) end
+        item.text:SetPoint("LEFT", 12 + NAV_ICON + 10, 0)
         item.text:SetPoint("RIGHT", -6, 0)
         item.text:SetWordWrap(false)
         item.text:SetText(page.nav)
@@ -1131,7 +1130,7 @@ local function DrawResults(query)
     end
     for i = #results + 1, #resultRows do resultRows[i]:Hide() end
     resultsView:SetHeight(y + 8)
-    content:SetHeight(y + 8)
+    content:SetHeight(y + 8 + SHIFT_Y)
     scroll:SetVerticalScroll(0)
     PaintSelection()
     if pt then Perf.Stop(pt) end
@@ -1173,7 +1172,7 @@ local function MoveSelection(delta)
     local row = resultRows[state.selected]
     local _, _, _, _, top = row:GetPoint(1)
     if top then
-        local y, visible = -top, scroll:GetHeight()
+        local y, visible = -top + SHIFT_Y, scroll:GetHeight()
         local now = scroll:GetVerticalScroll()
         local h = row:GetHeight() + 2
         if y < now then ScrollTo(y) elseif y + h > now + visible then ScrollTo(y + h - visible) end
@@ -1222,6 +1221,7 @@ local function BuildFooter()
     footer:SetPoint("BOTTOMLEFT", PAD, CB)
     footer:SetPoint("BOTTOMRIGHT", -(PAD + 4), CB)   -- ends before the resize grip
     footer:SetHeight(FOOTER_H - 12)
+    M.Band(footer)
     local rule = Wg.Solid(win, "BORDER", pal.bronzeLo, 0.6)   -- the footer sits on the frame's interior, under a quiet line
     rule:SetHeight(1)
     rule:SetPoint("BOTTOMLEFT", footer, "TOPLEFT", 0, 4)
@@ -1310,7 +1310,7 @@ local function ApplySize(w, h)
     local cw = w - (WIDTH - CONTENT_W)
     if cw == state.w then return end
     state.w = cw
-    content:SetWidth(cw)
+    content:SetWidth(cw + SHIFT_X + EDGE_R)
     resultsView:SetWidth(cw)
     resultsView.help:SetWidth(cw - 8)
     for _, row in ipairs(resultRows) do ResultWidth(row) end
@@ -1435,11 +1435,13 @@ local function BuildWindow()
     win:Hide()
     -- the shared frame and interior (FrameLook.lua), one level under the window so the window's own text is drawn over it
     win.shell = F.Shell(win, { below = true, follow = true })
+    M.Window(win)
 
     local header = CreateFrame("Frame", nil, win)
     header:SetPoint("TOPLEFT", RL, -RT)
     header:SetPoint("TOPRIGHT", -RR, -RT)
     header:SetHeight(HEADER_H - 4)
+    M.Band(header)
     win.shell:Sheen():Place(header, 0, 0, 0, 0)
     win.shell:Groove():Place(header, "BOTTOM", 0, 0, 0)
     header:EnableMouse(true)
@@ -1471,16 +1473,27 @@ local function BuildWindow()
     nav:SetWidth(NAV_W)
     Wg.Surface(nav, pal.nav, 0.97, pal.bronzeLo, 0.5)
     Wg.Recess(nav, 1.3)   -- the list sits pressed into the window
+    M.Nav(nav)
 
+    local well = CreateFrame("Frame", nil, win)
+    well:SetPoint("TOPLEFT", nav, "TOPRIGHT", 12, 0)
+    well:SetPoint("BOTTOMRIGHT", -PAD, PAGE_BOTTOM_Y)
+    M.Well(well)
     local area = CreateFrame("Frame", nil, win)
-    area:SetPoint("TOPLEFT", nav, "TOPRIGHT", 12, 0)
-    area:SetPoint("BOTTOMRIGHT", -PAD, PAGE_BOTTOM_Y)
-    scroll, content = Wg.Scroll(area, CONTENT_W)
-    scroll:SetPoint("TOPLEFT", 0, 0)
-    scroll:SetPoint("BOTTOMRIGHT", -24, 0)
+    area:SetAllPoints(well)
+    scroll, content = Wg.Scroll(area, CONTENT_W + SHIFT_X + EDGE_R)
+    scroll:SetPoint("TOPLEFT", 1, -1)
+    scroll:SetPoint("BOTTOMRIGHT", -1, WELL_T)
+    -- the bar stays inside the well, at its right edge (it is the template's, anchored outside the scroll frame by default)
+    local bar = scroll.ScrollBar
+    if type(bar) == "table" and bar.ClearAllPoints then
+        bar:ClearAllPoints()
+        bar:SetPoint("TOPRIGHT", scroll, "TOPRIGHT", -4, -18)
+        bar:SetPoint("BOTTOMRIGHT", scroll, "BOTTOMRIGHT", -4, 18)
+    end
 
     resultsView = CreateFrame("Frame", nil, content)
-    resultsView:SetPoint("TOPLEFT", 0, 0)
+    resultsView:SetPoint("TOPLEFT", SHIFT_X, -SHIFT_Y)
     resultsView:SetWidth(CONTENT_W)
     resultsView:Hide()
     resultsView.title = Wg.Text(resultsView, "title")

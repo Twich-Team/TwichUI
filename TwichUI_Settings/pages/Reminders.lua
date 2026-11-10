@@ -12,7 +12,8 @@ local K = R.SettingsKit
 local P = {}
 R.RemindersPage = P
 
-local W = 644                -- the settings window's content width
+local W_MIN = 644            -- the settings window's content width at its first size
+local W = W_MIN              -- the width the window gives this frame now (FitWidth): the list and the name panel follow it
 local PAD, GAP = 14, 12
 local ROW_H, THUMB = 44, 30
 local QUESTION = "Interface\\Icons\\INV_Misc_QuestionMark"
@@ -31,6 +32,7 @@ local SHORT = {
 }
 
 local function Wg() return R.SettingsWidgets end
+local function Mat() return R.SettingsMaterial end   -- the settings window's leather and bronze (Material.lua)
 local function RM() return R.Reminders end
 
 local function Tone(fs, tone)
@@ -148,8 +150,7 @@ local function Row(i)
     local pal = G.pal
     local row = CreateFrame("Button", nil, f.list)
     row:SetSize(W - PAD * 2, ROW_H)
-    row.sel = G.Solid(row, "BACKGROUND", pal.bronzeText, 0.10)
-    row.sel:SetAllPoints()
+    Mat().SelectedRow(row)   -- row.sel: the chosen row's chestnut surface
     row.bar = G.Solid(row, "ARTWORK", pal.bronzeText, 1)
     row.bar:SetWidth(2)
     row.bar:SetPoint("TOPLEFT", 0, 0)
@@ -326,7 +327,7 @@ local function Build()
     -- your reminders, and ways to start one
     f.list = CreateFrame("Frame", nil, f, "BackdropTemplate")
     f.list:SetWidth(W)
-    G.Panel(f.list)
+    Mat().Card(f.list, G.Panel(f.list))
     f.listTitle = G.Text(f.list, "heading")
     f.listTitle:SetPoint("TOPLEFT", PAD, -14)
     f.listTitle:SetText("Your reminders")
@@ -340,6 +341,7 @@ local function Build()
         local kind = t[1]
         local b = G.Button(f.list, t[2], 120, "secondary", function() P.Create(kind) end)
         b:SetWidth(math.max(100, math.ceil(b.text:GetStringWidth() or 90) + 28))
+        Mat().Face(b, "secondary")
         I.Tip(b, t[2], t[3] .. " It starts turned off.")
         f.templates[i] = b
     end
@@ -351,11 +353,12 @@ local function Build()
     -- the chosen one's head
     f.head = CreateFrame("Frame", nil, f, "BackdropTemplate")
     f.head:SetWidth(W)
-    G.Panel(f.head)
+    Mat().Card(f.head, G.Panel(f.head))
     f.nameLabel = G.Text(f.head, "body")
     f.nameLabel:SetText("Name")
     f.nameBox = G.EditBox(f.head, 250, 22)
     f.nameBox:SetMaxLetters(RM().NAME_MAX * 4)
+    Mat().Field(f.nameBox)
     local function SaveName(self)
         if not selected then return end
         local ok, why = RM().SetName(selected, self:GetText())
@@ -382,8 +385,10 @@ local function Build()
         selected = id
         P.Say(("Made a copy, \"%s\". It is off until you turn it on; the original is unchanged."):format(name), "ok")
     end)
+    Mat().Face(f.duplicate, "secondary")
     I.Tip(f.duplicate, "Duplicate", "A copy with its own identity, right after this one, turned off. Changing either never changes the other.")
     f.delete = G.Button(f.head, "Delete", 90, "danger", function() if selected then Delete(selected) end end)
+    Mat().Face(f.delete, "danger")
     I.Tip(f.delete, "Delete", "Removes this reminder, after asking. Nothing else changes.")
     f.problems = G.Text(f.head, "small")
     f.problems:SetWidth(W - PAD * 2)
@@ -398,8 +403,23 @@ local function Build()
     })
 end
 
+-- The window sets this frame's width (the same the feature card above it has, scrollbar and page insets already taken off), so the
+-- list and the name panel are as wide as that card at any window size. Fields keep their own size inside.
+local function FitWidth()
+    local w = f:GetWidth()
+    W = (type(w) == "number" and w > W_MIN) and w or W_MIN
+    f.list:SetWidth(W)
+    f.head:SetWidth(W)
+    f.newer:SetWidth(W - PAD * 2)
+    f.empty:SetWidth(W - PAD * 2)
+    f.problems:SetWidth(W - PAD * 2)
+    f.say:SetWidth(W - PAD * 2)
+    for _, row in ipairs(rows) do row:SetWidth(W - PAD * 2) end
+end
+
 function P.Refresh()
     if not (f and built and f:IsShown()) then return end
+    FitWidth()
     local list = RM().List()
     if selected and not RM().Get(selected) then selected = nil end
     if not selected and list[1] then selected = list[1].id end
@@ -431,6 +451,7 @@ function P.Frame()
     f = CreateFrame("Frame")
     f:SetWidth(W)
     f:Hide()
+    f:SetScript("OnSizeChanged", function(_, w) if built and type(w) == "number" and w ~= W then P.QueueRefresh() end end)
     f:SetScript("OnShow", function(self)
         if not built then Build() end
         for _, e in ipairs(EVENTS) do self:RegisterEvent(e) end

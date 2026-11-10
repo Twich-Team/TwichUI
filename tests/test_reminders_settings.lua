@@ -145,6 +145,14 @@ Check(row.rule.text == "Shows when: Off hand is not Shield.", "its rule in a sen
 Check(not f.empty.shown and f.head.shown and f.nameBox.text == "Shield reminder", "the editor's head")
 Check(f.say.shown and f.say.text:find("stays off until you turn it on"), "it says it is off: " .. f.say.text)
 
+-- the list and the name panel are as wide as the frame the window gives the page (the feature card's width), and never narrower than 644
+Check(f.list.w == 644 and f.head.w == 644 and row.w == 644 - 28, "at the first size the panels are 644 wide")
+f:SetWidth(780); P.Refresh(); Flush()
+Check(f.list.w == 780 and f.head.w == 780 and row.w == 780 - 28, "a wider window widens the list and the name panel: " .. tostring(f.list.w))
+f:SetWidth(500); P.Refresh(); Flush()
+Check(f.list.w == 644, "never narrower than the first size")
+f:SetWidth(644); P.Refresh(); Flush()
+
 local show, when, place, sound, preview, test = unpack(parts.sections)
 Check(show.shown and show.mode.text.text == "Artwork with text" and show.art.text.text == "Shield" and show.textBox.text == "Equip your shield", "Show: artwork with text")
 Check(not show.icon.shown and not show.itemBox.shown, "Show: no icon choices for artwork")
