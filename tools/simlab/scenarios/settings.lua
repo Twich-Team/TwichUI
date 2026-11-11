@@ -168,6 +168,31 @@ Lab.Step("disclosures and navigation", function()
     UI.Layout(view)
     local scroll = view.frame:GetParent():GetParent()
     scroll:SetVerticalScroll(0)
+    if key == "auction" then
+        for _, switch in ipairs({ "auctionPosting", "mailGoldSummary" }) do
+            local row = K.switchRows[switch]
+            local control = view.rows[row.id].control
+            local value = R:Enabled(switch)
+            control:Click(); Lab.Settle(.1)
+            Lab.Check("interact", switch .. " toggles independently", not value, R:Enabled(switch))
+            control:Click(); Lab.Settle(.1)
+            Lab.Check("state", switch .. " restored", value, R:Enabled(switch))
+        end
+        -- Settings only: no auction window, scan or transaction action is invoked.
+        if params.data == "off" then
+            K.switchRows.auctionPosting.setting:SetValue(false)
+            K.switchRows.mailGoldSummary.setting:SetValue(false)
+        end
+        for _, section in ipairs(view.sections) do
+            if section.collapsible and params.data == "advanced" then section.toggle:Click(); Lab.Settle(.1) end
+        end
+        Lab.Check("construct", "two independent auction cards", true, view.sections[1].isCard and view.sections[2].isCard)
+        UI.Layout(view)
+        if params.narrow and params.data == "advanced" then
+            scroll:SetVerticalScroll(120); Lab.Settle(.1)
+            Lab.Check("interact", "auction details scroll within viewport", true, scroll:GetVerticalScroll() > 0)
+        end
+    end
     if key == "overview" then
         local hero = view.hero
         hero.find:SetText("zzzznoexistingfeaturezzzz")
@@ -601,6 +626,16 @@ if key == "magicInventory" and not params.editor then
     end)
 end
 -- Keep Blizzard's unrelated PTR feedback button visible beside the capture, not over addon controls.
+if key == "auction" and params.narrow and params.data == "advanced" then
+    Lab.Step("auction explanation viewport", function()
+        local view = R.SettingsUI.View(key)
+        local scroll = view.frame:GetParent():GetParent()
+        local section = view.sections[3].card
+        local position = math.max(0, scroll:GetTop() - section:GetTop() + scroll:GetVerticalScroll())
+        scroll:SetVerticalScroll(position); Lab.Settle(.1)
+        Lab.Check("state", "final auction explanation position", true, scroll:GetVerticalScroll() > 0)
+    end)
+end
 -- Local Forever source: Blizzard_PTRFeedback_Frames.lua creates PTR_IssueReporter.ReportBug.
 -- Fixture positioning only; no simulator code, addon frame or saved state is changed.
 if PTR_IssueReporter then
