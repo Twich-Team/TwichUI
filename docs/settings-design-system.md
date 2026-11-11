@@ -147,3 +147,8 @@ See [the second-pass workflow review](settings-second-pass.md) and [rollout trac
 structural evidence: the simulator substitutes Friz Quadrata for addon fonts. Handler checks do not exercise pointer
 hit testing, keyboard focus, real drag/drop, combat taint or reload persistence. Confirm those in WoW: Forever before
 claiming real-client acceptance. No live client data is used by the simulator scenarios.
+
+Magic Inventory's rule badges use the shared `chip` sheet; compact rows use walnut faces and the existing selection
+sheet. Illustrated button contents sit in a child frame above the button shell so shell artwork cannot cover icons.
+The new reagent illustration is `media/icons/magicReagents{,-small}.tga`, sourced from
+`assets/magic-reagents-source.png`; conversion follows the existing alpha-aware icon pipeline.

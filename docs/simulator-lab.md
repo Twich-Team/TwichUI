@@ -629,3 +629,4 @@ The first line does not touch the repository, the game or `wow-ui-source`. Nothi
 
 Specialized page state fixtures and focused commands: [Batch 2 coverage](settings-batch-2.md).
 Item/channel stress, unavailable data and empty states: [Batch 3 coverage](settings-batch-3.md).
+Magic Inventory count, filter/context and new builder fixtures: [rule-workspace coverage](magic-inventory-revision/implementation.md).

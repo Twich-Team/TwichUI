@@ -4,7 +4,7 @@
 --   * the destinations: each named place's recipient or guild bank tab ON THIS CHARACTER (another character chooses
 --     its own, unless you choose to use a recipient on all your characters);
 --   * the Never transfer list;
---   * the rule editor, in four short steps: Items, Destination, Exceptions and keep, Review.
+--   * the private rule builder: items, destination, movement, limits and live review, with detailed disclosures.
 -- Every change goes through inventory/Rules.lua, which checks it; nothing here moves an item, and choosing items from
 -- your bags only names the kind of item (inventory/Picker.lua). Built the first time the page is shown; its controls
 -- are kept by name and reused on every redraw, so redrawing never makes a second copy of anything.
@@ -25,9 +25,11 @@ local queued, relayoutQueued = false, false
 local task, actionsFor = "rules", nil
 local pool = {}               -- [key] = a control, made once
 local touched = {}            -- [key] = true for controls used by this draw
+local selectedRule
+local ruleGhost
 local editing                 -- the rule being edited (a copy; saved only by Save), or nil for the list
-local step = 1
 local categoriesOpen = false
+local itemAdvanced, destAdvanced, limitsAdvanced = false, false, false
 local turnOn = false          -- the editor's "Turn this rule on" choice
 local said, saidTone          -- a sentence under the list or the editor: what just happened, or why it didn't
 local newDestName = {}        -- [kind] = text typed for a new destination
@@ -241,8 +243,9 @@ end
 local function StartEdit(rule)
     task = "rules"
     editing = rule
-    step = 1
+    selectedRule = rule.id
     categoriesOpen = false
+    itemAdvanced, destAdvanced, limitsAdvanced = false, false, false
     turnOn = rule.enabled == true
     said = nil
     P.QueueRefresh()
@@ -461,7 +464,9 @@ end
 ---------------------------------------------------------------------------
 -- The rules table: one row a rule, in priority order, with columns, banding and drag to reorder
 ---------------------------------------------------------------------------
-local ROW_H = 112
+local ROW_H = 75
+local query, ruleFilter = "", "all"
+local priorities, filtered = {}, false
 local COL = {                    -- x, width (left edge of the page frame); the buttons start at BTN_X
     grip = { 8, 10 }, num = { 22, 22 }, on = { 44, 18 }, name = { 68, 104 }, items = { 176, 108 },
     action = { 288, 54 }, to = { 346, 76 }, keep = { 426, 26 },
@@ -490,6 +495,18 @@ function P.RowCells(rule)
     return action, to, keep, tone
 end
 
+local function RuleArtwork(rule)
+    local id = next(rule.include or {})
+    local icon = id and C_Item.GetItemIconByID(id)
+    if icon then return icon end
+    if rule.kind == "never" or rule.equip == "equipment" then return R.PATH .. [[media\npcs\sword-and-shield]] end
+    if rule.kind == "keep" then return R.PATH .. [[media\npcs\leather-backpack]] end
+    for _, key in ipairs(rule.cats or {}) do
+        if key:match("^0:") then return [[Interface\Icons\INV_Potion_51]] end
+    end
+    return R.PATH .. [[media\icons\magicReagents]]
+end
+
 local function RowTip(self)
     local rule = self.rule
     if not rule then return end
@@ -510,7 +527,7 @@ local function RowFrame(i)
     return Get("tr" .. i, function()
         local row = CreateFrame("Button", nil, f)
         row:SetHeight(ROW_H)
-        if R.SettingsMaterial then R.SettingsMaterial.PanelFace(row, "walnut") end
+        if R.SettingsMaterial then R.SettingsMaterial.PanelFace(row, "walnut"); R.SettingsMaterial.ReminderRow(row) end
         row:SetFrameLevel(f:GetFrameLevel() + 1)
         row.bg = row:CreateTexture(nil, "BACKGROUND")
         row.bg:SetAllPoints()
@@ -525,12 +542,11 @@ local function RowFrame(i)
             row.grip[k + 1] = g
         end
         row:SetScript("OnClick", function(self)
-            if actionsFor == self.rule.id then actionsFor = nil else actionsFor = self.rule.id end
-            P.QueueRefresh()
+            StartEdit(MI().Rule(self.rule.id))
         end)
         row:RegisterForDrag("LeftButton")
         row:SetScript("OnEnter", function(self) self.hover:Show(); RowTip(self) end)
-        row:SetScript("OnLeave", function(self) self.hover:Hide(); GameTooltip:Hide() end)
+        row:SetScript("OnLeave", function(self) self.hover:Hide(); if self.sel then self.sel:SetShown(selectedRule == (self.rule and self.rule.id)) end; GameTooltip:Hide() end)
         row:SetScript("OnDragStart", function(self) if self.rule then P.StartRuleDrag(self) end end)
         row:SetScript("OnDragStop", function() P.Drag.Stop() end)
         return row
@@ -584,13 +600,36 @@ local function ShowDropMark(place, from)
 end
 
 function P.StartRuleDrag(row)
+    if filtered then Say("Clear search and filters before changing priority.", "warn"); return end
     if GetCursorInfo and GetCursorInfo() then
         Say("You are holding an item. Put it down first; nothing was changed.", "warn")
         return
     end
     local rule, from = row.rule, row.index
     GameTooltip:Hide()
+    local ghost, offset
+    local x, y
+    if GetCursorPosition then x, y = GetCursorPosition() end
+    local left, top = row:GetLeft(), row:GetTop()
+    if x and y and left and top then
+        if not ruleGhost then
+            ruleGhost = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
+            if R.SettingsMaterial then R.SettingsMaterial.PanelFace(ruleGhost, "walnut") end
+            ruleGhost:SetFrameStrata("TOOLTIP"); ruleGhost:EnableMouse(false)
+            ruleGhost.icon = ruleGhost:CreateTexture(nil, "ARTWORK"); ruleGhost.icon:SetPoint("LEFT", 6, 0); ruleGhost.icon:SetSize(32, 32)
+            ruleGhost.name = Wg().Text(ruleGhost, "body"); ruleGhost.name:SetPoint("TOPLEFT", 42, -10)
+            ruleGhost.detail = Wg().Text(ruleGhost, "small"); ruleGhost.detail:SetPoint("TOPLEFT", 42, -34)
+        end
+        ruleGhost:SetSize(row:GetWidth(), row:GetHeight()); ruleGhost:SetAlpha(.9)
+        ruleGhost.icon:SetTexture(RuleArtwork(rule))
+        ruleGhost.name:SetText(from .. ".  " .. rule.name)
+        ruleGhost.detail:SetText(P.ItemsText(rule) .. " · " .. P.DestText(rule))
+        ghost = ruleGhost
+        local scale = ghost:GetEffectiveScale()
+        offset = { left - x / scale, top - y / scale }
+    end
     P.Drag.Start({
+        ghost = ghost, ghostOffset = offset,
         src = { kind = "rule", id = rule.id, from = from }, label = ("%d.  %s"):format(from, rule.name),
         find = RowUnderPointer,
         hover = function(place) ShowDropMark(place, from); if place then AutoScroll() end end,
@@ -606,72 +645,78 @@ end
 local function DrawTable(y, rules)
     local mi = MI()
     rowCount = #rules
+    local width = math.max(W, f:GetWidth() or W) - PAD * 2
     for i, rule in ipairs(rules) do
         local key, row = "rule" .. i, RowFrame(i)
-        local width = math.max(W, f:GetWidth() or W) - PAD * 2
-        row.rule, row.index, row.y = rule, i, y
-        row:ClearAllPoints()
-        row:SetPoint("TOPLEFT", f, "TOPLEFT", PAD, -y)
+        local priority = priorities[rule.id] or i
+        row.rule, row.index, row.y = rule, priority, y
+        if row.sel then row.sel:SetShown(selectedRule == rule.id) end
+        row:ClearAllPoints(); row:SetPoint("TOPLEFT", f, "TOPLEFT", PAD, -y)
         row:SetPoint("TOPRIGHT", f, "TOPRIGHT", -PAD, -y)
+        row:SetHeight(ROW_H)
         row.bg:SetColorTexture(0, 0, 0, 0)
         row.hover:SetColorTexture(.85, .72, .49, .04)
-        for _, g in ipairs(row.grip) do g:SetColorTexture(.65, .60, .51, .7) end
-        local function Line(suffix, kind, text, top, width, tone)
-            local t = Text(key .. suffix, kind)
-            t:SetParent(row); t:ClearAllPoints()
-            t:SetPoint("TOPLEFT", row, "TOPLEFT", 42, -top)
-            t:SetWidth(width or math.max(W, f:GetWidth() or W) - PAD * 2 - 58)
-            t:SetWordWrap(true); t:SetText(text); Tone(t, tone)
+        for _, g in ipairs(row.grip) do g:SetColorTexture(.65, .60, .51, filtered and .2 or .7) end
+        local function Label(suffix, text, x, top, w, kind)
+            local t = Text(key .. suffix, kind or "small")
+            t:SetParent(row); t:ClearAllPoints(); t:SetPoint("TOPLEFT", row, "TOPLEFT", x, -top)
+            t:SetWidth(w); t:SetWordWrap(false); t:SetText(text)
+            Tone(t, rule.enabled and nil or "dim")
             return t
         end
-        local name = Line("name", "body", i .. ".  " .. rule.name, 12, width - 202, rule.enabled and nil or "dim")
+        Label("priority", tostring(priority), 22, 26, 24)
+        local art = Get(key .. "art", function() return row:CreateTexture(nil, "ARTWORK") end)
+        art:SetParent(row); art:ClearAllPoints(); art:SetPoint("LEFT", row, "LEFT", 45, 0); art:SetSize(40, 40)
+        art:SetTexture(RuleArtwork(rule))
+        local chipX = width >= 850 and math.floor(width * .44) or 85
+        local title = Label("name", rule.name, 85, 4, width >= 850 and chipX - 100 or width - 270, "body")
+        title:SetWordWrap(true); title:SetHeight(34)
+        Label("items", P.ItemsText(rule) .. (MI().Problem(rule, false) and " · Needs attention" or ""), 85, 40, width >= 850 and chipX - 100 or width - 270)
+        local action, to, keep = P.RowCells(rule)
+        local chipY = width >= 850 and 26 or 54
+        local function Badge(suffix, text, x, w)
+            if text == "" then return end
+            local badge = Get(key .. suffix .. "badge", function()
+                local b = CreateFrame("Frame", nil, row)
+                if R.SettingsCraft then R.SettingsCraft.Sheet(b, "chip", { layer = "BACKGROUND", corner = 6 }) end
+                return b
+            end)
+            badge:SetParent(row); badge:ClearAllPoints(); badge:SetPoint("TOPLEFT", row, "TOPLEFT", x, -chipY); badge:SetSize(w, 19)
+            Label(suffix, text, x + 6, chipY + 2, w - 12)
+        end
+        Badge("action", action, chipX, 90)
+        Badge("to", to ~= "-" and to or "", chipX + 96, 100)
+        Badge("keep", keep ~= "-" and ("Keep " .. keep) or "", chipX + 202, 78)
         local box = Check(key .. "on", function(v)
-            local ok, why = mi.SetRuleEnabled(rule.id, v)
-            if not ok then Say(why, "warn") end
+            local ok, why = mi.SetRuleEnabled(rule.id, v); if not ok then Say(why, "warn") end
         end)
-        box:SetParent(row); box:ClearAllPoints(); box:SetPoint("TOPLEFT", 10, -13)
-        box:SetFrameLevel(row:GetFrameLevel() + 2); box:SetChecked(rule.enabled)
-        local state = Text(key .. "state", "small")
-        state:SetParent(row); state:ClearAllPoints(); state:SetPoint("TOPRIGHT", -102, -14)
-        state:SetText(rule.enabled and "On" or "Off"); Tone(state, rule.enabled and "ok" or "quiet")
-        local edit = Button(key .. "edit", "Edit rule", 86, "secondary", function() StartEdit(rule) end)
-        edit:SetParent(row); edit:ClearAllPoints(); edit:SetPoint("TOPRIGHT", -10, -9)
-        local inner = math.max(38, 18 + H(name))
-        local match = Line("items", "small", "For: " .. P.ItemsText(rule), inner, nil, "dim")
-        inner = inner + H(match) + 4
-        local dest, tone = P.DestText(rule)
-        local where = Line("to", "body", dest, inner, nil, tone)
-        inner = inner + H(where) + 4
-        local keep = Line("keep", "small", "Keep: " .. P.KeepText(rule), inner, nil, "dim")
-        inner = inner + H(keep) + 6
-        local problem = select(2, mi.Problem(rule, false))
-        if problem then
-            local why = Line("problem", "small", problem, inner, nil, "warn")
-            inner = inner + H(why) + 6
-        end
-        local more = Button(key .. "more", actionsFor == rule.id and "Fewer actions" or "More actions", 112, "secondary", function()
-            if actionsFor == rule.id then actionsFor = nil else actionsFor = rule.id end; P.QueueRefresh()
-        end)
-        more:SetParent(row); more:ClearAllPoints(); more:SetPoint("TOPRIGHT", row, "TOPRIGHT", -10, -inner)
-        if actionsFor == rule.id then
-            local actions = {
-                { "up", "Move up", 82, i > 1 and function() mi.MoveRule(rule.id, -1) end or nil },
-                { "down", "Move down", 92, i < #rules and function() mi.MoveRule(rule.id, 1) end or nil },
-                { "dup", "Duplicate", 90, function() local id, why = mi.DuplicateRule(rule.id); if not id then Say(why, "warn") end end },
-                { "del", "Delete", 76, function()
-                    R.Interact.Confirm("TWICHUI_MI_RULE_DELETE", ("Delete the rule \"%s\"?\n\nOnly the rule goes: nothing in your bags, bank or mail changes."):format(rule.name),
-                        function() mi.DeleteRule(rule.id) end, { accept = "Delete" })
-                end },
+        box:SetParent(row); box:ClearAllPoints(); box:SetPoint("RIGHT", row, "RIGHT", -138, 0); box:SetChecked(rule.enabled)
+        box:SetFrameLevel(row:GetFrameLevel() + 2)
+        local edit = Button(key .. "edit", "Edit", 70, "secondary", function() StartEdit(mi.Rule(rule.id)) end)
+        edit:SetParent(row); edit:ClearAllPoints(); edit:SetPoint("RIGHT", row, "RIGHT", -56, 0)
+        local more = Button(key .. "more", "...", 38, "secondary", function()
+            local choices = {
+                { value = "up", label = "Move up", disabled = filtered or priority == 1 },
+                { value = "down", label = "Move down", disabled = filtered or priority == #mi.Rules() },
+                { value = "duplicate", label = "Duplicate" }, { value = "delete", label = "Delete" },
             }
-            local x = 42
-            for _, a in ipairs(actions) do
-                local button = Button(key .. a[1], a[2], a[3], a[1] == "del" and "danger" or "secondary", a[4])
-                button:SetParent(row); button:ClearAllPoints(); button:SetPoint("TOPLEFT", x, -inner)
-                x = x + a[3] + 6
+            if filtered then table.remove(choices, 2); table.remove(choices, 1)
+            else
+                if priority == #mi.Rules() then table.remove(choices, 2) end
+                if priority == 1 then table.remove(choices, 1) end
             end
-        end
-        row:SetHeight(math.max(ROW_H, inner + 36))
-        y = y + row:GetHeight() + 10
+            Wg().ContextMenu(pool[key .. "more"], choices, function(value)
+                if value == "up" and not filtered then mi.MoveRule(rule.id, -1)
+                elseif value == "down" and not filtered then mi.MoveRule(rule.id, 1)
+                elseif value == "duplicate" then mi.DuplicateRule(rule.id)
+                elseif value == "delete" then
+                    R.Interact.Confirm("TWICHUI_MI_RULE_DELETE", "Delete the rule " .. rule.name .. "? Only the rule is removed; no items move.",
+                        function() mi.DeleteRule(rule.id) end, { accept = "Delete" })
+                end
+            end)
+        end)
+        more:SetParent(row); more:ClearAllPoints(); more:SetPoint("RIGHT", row, "RIGHT", -8, 0)
+        y = y + ROW_H + 6
     end
     for i = #rules + 1, mi.MAX_RULES do local row = pool["tr" .. i]; if row then row.rule = nil end end
     return y
@@ -679,32 +724,53 @@ end
 
 local function DrawList(y)
     local mi = MI()
-    local rules = mi.Rules()
-    local head = Text("listHead", "heading")
-    Wide(head, PAD, y)
-    head:SetText("Your rules")
-    Tone(head, "head")
+    local all, rules = mi.Rules(), {}
+    priorities = {}
+    filtered = query ~= "" or ruleFilter ~= "all"
+    for i, rule in ipairs(all) do
+        priorities[rule.id] = i
+        local text = (rule.name .. " " .. P.ItemsText(rule) .. " " .. P.DestText(rule)):lower()
+        if (query == "" or text:find(query, 1, true)) and
+            (ruleFilter == "all" or (ruleFilter == "enabled" and rule.enabled) or (ruleFilter == "disabled" and not rule.enabled)) then
+            rules[#rules + 1] = rule
+        end
+    end
+    local full = math.max(W, f:GetWidth() or W) - PAD * 2
+    local enabled = 0; for _, rule in ipairs(all) do if rule.enabled then enabled = enabled + 1 end end
+    local d = Text("listText", "small"); Wide(d, PAD, y, full)
+    d:SetText(("%d of %d rules on. First matching rule wins. Nothing moves until you review and confirm."):format(enabled, #all))
+    Tone(d, "dim"); y = y + H(d) + 12
+    local findWidth = full - 438
     local new = Get("newRule", function()
         local dd = Wg().Dropdown(f, 200, function(v) NewFromTemplate(v) end)
         return dd
     end)
     new:SetChoices(TemplateChoices)
-    new:SetValue(nil, "New rule from a template...")
-    At(new, W - PAD - 200 - 108, y - 4)
-    Button("preview", "Preview", 100, "secondary", function() mi.Window.Show(true) end)
-    At(pool.preview, W - PAD - 100, y - 4)
+    new:SetValue(nil, "New rule...")
+    new:SetWidth(180); At(new, PAD, y)
+    Button("preview", "Preview", 84, "secondary", function() mi.Window.Show(true) end)
+    At(pool.preview, PAD + full - 84, y)
     R.Interact.Tip(pool.preview, "Preview", "Opens the review with what your rules would move from your bags now, and what stays and why. Nothing moves from the preview.")
-    y = y + 26
-    local d = Text("listText", "small")
-    Wide(d, PAD, y)
-    d:SetText("The first matching rule decides where an item goes. Drag to change priority; More actions also has Move up/down. Nothing moves until you review and confirm. Mail and deposits cannot be undone.")
-    R.Interact.Tip(new, "Rule priority", "Keep amounts from every matching rule still count. Templates start turned off. Mail, deposits and withdrawals always use the existing review and your own action.")
-    Tone(d, "dim")
-    y = y + H(d) + 8
+    local find = Edit("findRule", findWidth)
+    find:SetWidth(findWidth)
+    At(find, PAD + 188, y)
+    if not find:HasFocus() then find:SetText(query) end
+    find:SetScript("OnTextChanged", function(self)
+        local value = (self:GetText() or ""):lower()
+        if value ~= query then query = value; P.QueueRefresh() end
+    end)
+    if query == "" then local hint = Text("findHint", "small"); Wide(hint, PAD + 196, y + 4, findWidth - 12); hint:SetText("Find a rule..."); Tone(hint, "quiet") end
+    R.Interact.Tip(find, "Find a rule", "Search rule names, item criteria and destinations. Priority stays unchanged.")
+    local filter = Get("ruleFilter", function() return Wg().Dropdown(f, 180, function(value) ruleFilter = value; P.QueueRefresh() end) end)
+    filter:SetChoices(function() return { { value = "all", label = "All rules" }, { value = "enabled", label = "Enabled rules" }, { value = "disabled", label = "Disabled rules" } } end)
+    filter:SetValue(ruleFilter, ruleFilter == "all" and "All rules" or ruleFilter == "enabled" and "Enabled rules" or "Disabled rules")
+    filter:SetWidth(150); At(filter, PAD + full - 242, y)
+    R.Interact.Tip(new, "Rule priority", "Keep amounts from every matching rule still count. Templates start turned off. Clear search and filters before reordering.")
+    y = y + 36
     if #rules == 0 then
         local none = Text("listNone", "body")
         Wide(none, PAD, y)
-        none:SetText("No rules yet. Start from a template above: \"Cloth to bank alt\", \"Herbs to bank\", ... Each starts turned off.")
+        none:SetText(#all == 0 and "No rules yet. Create a custom rule or choose a template above." or "No matching rules. Clear search or change the filter.")
         Tone(none, "quiet")
         y = y + 28
     end
@@ -715,7 +781,6 @@ end
 ---------------------------------------------------------------------------
 -- The editor
 ---------------------------------------------------------------------------
-local STEPS = { "1  Items", "2  Destination", "3  Limits", "4  Review" }
 
 local function Radio(key, x, y, label, on, onPick, w)
     local c = Check(key, function() onPick() end)
@@ -1063,38 +1128,18 @@ function P.DrawStackSize(y)
     return y + H(note) + 8
 end
 
-local function DrawReviewStep(y)
-    local mi, r = MI(), editing
-    local t = Text("e4s", "body")
-    Wide(t, PAD, y)
-    t:SetText(P.Sentence(r))
-    y = y + H(t) + 10
-    local probe = mi.CleanRule((function() local c = {} for k, v in pairs(r) do c[k] = v end c.id = c.id or "rnew" return c end)())
-    local code, why = mi.Problem(probe, false)
-    if code then
-        local p = Text("e4p", "small")
-        Wide(p, PAD, y)
-        p:SetText("Can't be turned on yet: " .. why)
-        Tone(p, "warn")
-        y = y + H(p) + 8
-        turnOn = false
-    end
-    local c = Check("e4on", function(v) if not code then turnOn = v; P.QueueRefresh() end end)
-    c:SetChecked(turnOn and not code)
-    c:SetActive(not code)
-    At(c, PAD, y)
-    local ct = Text("e4onT", "body")
-    Wide(ct, PAD + 24, y + 2, 400)
-    ct:SetText("Turn this rule on when I save")
-    Tone(ct, code and "quiet" or nil)
-    return y + 30
-end
-
 local function DrawEditor(y)
     local r = editing
     local head = Text("eHead", "heading")
     Wide(head, PAD, y)
-    head:SetText(r.id and "Edit rule" or "New rule")
+    head:SetText(r.id and "Editing rule" or "New rule")
+    Wide(head, PAD + 94, y, W - 110)
+    Button("builderBack", "< Back", 84, "secondary", function()
+        R.Interact.Confirm("TWICHUI_MI_DISCARD_DRAFT", "Discard this unsaved rule draft? Your saved rules are unchanged.", function()
+            editing = nil; said = nil; P.QueueRefresh(); QueueRelayout()
+        end, { accept = "Discard" })
+    end)
+    At(pool.builderBack, PAD, y - 3)
     Tone(head, "head")
     y = y + 22
     local nt = Text("eNameT", "body")
@@ -1104,34 +1149,202 @@ local function DrawEditor(y)
     nb:SetMaxLetters(MI().MAX_NAME)
     At(nb, PAD + 60, y)
     if not nb:HasFocus() then nb:SetText(r.name or "") end
-    nb:SetScript("OnTextChanged", function(self) if editing then editing.name = self:GetText() end end)
-    y = y + 32
-    for i, label in ipairs(STEPS) do
-        local tab = Get("eTab" .. i, function()
-            local b = Wg().Tab(f, label, 150, function() step = i; P.QueueRefresh() end)
-            return b
-        end)
-        tab:SetSelected(step == i)
-        At(tab, PAD + (i - 1) * 156, y)
+    nb:SetScript("OnTextChanged", function(self)
+        if editing and editing.name ~= self:GetText() then editing.name = self:GetText(); P.QueueRefresh() end
+    end)
+    local full = math.max(W, f:GetWidth() or W) - PAD * 2
+    if full >= 870 then
+        local live = Text("builderSummary", "small"); Wide(live, 380, y, full - 386)
+        local criteria = P.ItemsText(r)
+        live:SetText(P.KindLabel(r) .. " · " .. (#criteria > 100 and "Multiple item criteria" or criteria) .. " · " .. P.KeepText(r)); live:SetHeight(32); Tone(live, "head")
     end
-    y = y + 34
-    if step == 1 then y = DrawItemsStep(y)
-    elseif step == 2 then y = DrawDestStep(y)
-    elseif step == 3 then y = DrawKeepStep(y)
-    else y = DrawReviewStep(y) end
-    y = y + 6
-    Button("eBack", "Back", 80, "secondary", step > 1 and function() step = step - 1; P.QueueRefresh() end or nil)
-    At(pool.eBack, PAD, y)
-    Button("eNext", "Next", 80, "secondary", step < #STEPS and function() step = step + 1; P.QueueRefresh() end or nil)
-    At(pool.eNext, PAD + 86, y)
+    local cols = full >= 870 and 3 or 2
+    local col = math.floor((full - (cols - 1) * 12) / cols)
+    y = y + 38
+    local top = y
+    local function Panel(key, title, x, py, w, h)
+        local panel = Get(key, function()
+            local p = CreateFrame("Frame", nil, f, "BackdropTemplate"); Wg().Panel(p); return p
+        end)
+        At(panel, x, py); panel:SetSize(w, h)
+        panel:SetFrameLevel(f:GetFrameLevel())
+        local t = Text(key .. "title", "heading"); Wide(t, x + 12, py + 12, w - 24); t:SetText(title); Tone(t, "head")
+        return py + 44
+    end
+    local left, mid = PAD, PAD + col + 12
+    local iy = Panel("itemsPanel", "What items?", left, top, col, 292)
+    local it = Text("itemsSummary", "small"); Wide(it, left + 12, iy, col - 24)
+    local criteria = P.ItemsText(r)
+    it:SetText(#criteria > 120 and "Multiple item criteria: see filters and review." or criteria); it:SetHeight(32); Tone(it, "dim")
+    R.Interact.Tip(pool.itemsPanel, "Item criteria", criteria)
+    iy = iy + 42
+    local quick = {
+        { "Cloth / herbs", R.PATH .. [[media\icons\magicReagents-small]], "categories" },
+        { "Consumables", [[Interface\Icons\INV_Potion_51]], "consumables" },
+        { "Equipment", [[Interface\Icons\INV_Chest_Chain]], "equipment" },
+        { "Specific items", [[Interface\Icons\INV_Scroll_03]], "specific" },
+    }
+    for i, choice in ipairs(quick) do
+        local button = Get("quickCategory" .. i, function() return Wg().Tab(f, "", math.floor((col - 30) / 2), function() end) end)
+        local keys = {}
+        if choice[3] == "categories" then keys = { "7:5", "7:9" }
+        elseif choice[3] == "consumables" then
+            for _, cat in ipairs(MI().Categories()) do if cat.key:match("^0:") then keys[#keys + 1] = cat.key end end
+        end
+        local selected = choice[3] == "equipment" and r.equip == "equipment" or choice[3] == "specific" and next(r.include) ~= nil
+        for _, old in ipairs(r.cats) do for _, key in ipairs(keys) do if old == key then selected = true end end end
+        button.text:SetText(choice[1]); button:SetSelected(selected == true)
+        button:SetScript("OnClick", function()
+            if choice[3] == "equipment" then r.equip = r.equip == "equipment" and "any" or "equipment"
+            elseif choice[3] == "specific" then
+                MI().Picker.Open({ purpose = "Include specific items", selected = r.include, onDone = function(set) r.include = set; for id in pairs(set) do r.exclude[id] = nil end; P.QueueRefresh() end })
+            else
+                for _, key in ipairs(keys) do
+                    if selected then
+                        for j = #r.cats, 1, -1 do if r.cats[j] == key then table.remove(r.cats, j) end end
+                    else
+                        local found
+                        for _, old in ipairs(r.cats) do if old == key then found = true end end
+                        if not found and #r.cats < MI().MAX_CATS then r.cats[#r.cats + 1] = key end
+                    end
+                end
+            end
+            P.QueueRefresh()
+        end)
+        At(button, left + 12 + ((i - 1) % 2) * math.floor((col - 6) / 2), iy + math.floor((i - 1) / 2) * 32)
+        local artFrame = Get("quickArtFrame" .. i, function()
+            local frame = CreateFrame("Frame", nil, button); frame.tex = frame:CreateTexture(nil, "ARTWORK"); frame.tex:SetAllPoints(); return frame
+        end)
+        artFrame:SetFrameLevel(button:GetFrameLevel() + 4); artFrame:ClearAllPoints(); artFrame:SetPoint("LEFT", button, "LEFT", 4, 0); artFrame:SetSize(20, 20)
+        artFrame.tex:SetTexture(choice[2])
+        button.text:ClearAllPoints(); button.text:SetPoint("LEFT", button, "LEFT", 26, 0); button.text:SetPoint("RIGHT", button, "RIGHT", -4, 0)
+    end
+    iy = iy + 72
+    local visibleItems, ids = {}, {}
+    for id in pairs(r.include) do ids[#ids + 1] = id end
+    table.sort(ids)
+    for i = 1, math.min(6, #ids) do visibleItems[ids[i]] = true end
+    local strip = ItemStrip("builderInclude", visibleItems, left + 12, iy, "Remove from included items", function(id) r.include[id] = nil; P.QueueRefresh() end)
+    iy = iy + math.min(strip, 32) + 4
+    Button("builderPick", "Choose from bags", col - 24, "secondary", function()
+        MI().Picker.Open({ purpose = "Include specific items", selected = r.include, onDone = function(set)
+            r.include = set; for id in pairs(set) do r.exclude[id] = nil end; P.QueueRefresh() end })
+    end); At(pool.builderPick, left + 12, iy)
+    local idBox = Edit("builderId", col - 108); At(idBox, left + 12, iy + 30)
+    local function Add(id) r.include[id] = true; r.exclude[id] = nil; P.QueueRefresh() end
+    idBox:SetScript("OnEnterPressed", function(self) AddById(self, Add) end)
+    Button("builderAdd", "Add item", 74, "secondary", function() AddById(idBox, Add) end); At(pool.builderAdd, left + col - 86, iy + 30)
+    Button("moreItemFilters", itemAdvanced and "Hide item filters" or "More item filters", col - 24, "secondary", function() itemAdvanced = not itemAdvanced; P.QueueRefresh() end)
+    At(pool.moreItemFilters, left + 12, top + 256)
+    local function Illustrate(key, button, texture)
+        local art = Get(key, function()
+            local frame = CreateFrame("Frame", nil, button); frame.tex = frame:CreateTexture(nil, "ARTWORK"); frame.tex:SetAllPoints(); return frame
+        end)
+        art:SetFrameLevel(button:GetFrameLevel() + 4); art:ClearAllPoints(); art:SetPoint("LEFT", button, "LEFT", 6, 0); art:SetSize(22, 22); art.tex:SetTexture(texture)
+        button.text:ClearAllPoints(); button.text:SetPoint("LEFT", button, "LEFT", 34, 0); button.text:SetPoint("RIGHT", button, "RIGHT", -6, 0)
+        return art
+    end
+    local dy = Panel("destinationPanel", "Where should they go?", mid, top, col, 292)
+    for i, kind in ipairs(MI().KIND_ORDER) do
+        local b = Get("destinationChoice" .. kind, function() return Wg().Tab(f, "", col - 24, function() end) end)
+        b.text:SetText(kind == "bank" and "My bank" or MI().KIND_LABEL[kind]); b:SetSelected(r.kind == kind)
+        b:SetScript("OnClick", function()
+            r.kind = kind
+            if MI().HAS_FLOW[kind] then r.flow = r.flow or "deposit" end
+            if not MI().NEEDS_DEST[kind] then r.dest = nil
+            elseif r.dest then local d = MI().Dest(r.dest); if not d or d.kind ~= kind then r.dest = nil end end
+            P.QueueRefresh()
+        end)
+        At(b, mid + 12, dy + (i - 1) * 34)
+        local icons = { bank = "coins", guild = "tabard", mail = "sealed-scroll", keep = "leather-backpack", never = "sword-and-shield" }
+        Illustrate("destinationArt" .. kind, b, R.PATH .. "media\\npcs\\" .. icons[kind] .. "-small")
+    end
+    Button("advancedDestination", "Destination details", col - 24, "secondary", function() destAdvanced = not destAdvanced; P.QueueRefresh() end)
+    At(pool.advancedDestination, mid + 12, top + 256)
+    local bottom = top + 304
+    local fy = Panel("flowPanel", "How should they move?", left, bottom, col, 208)
+    if MI().HAS_FLOW[r.kind] and not r.design then
+        for i, flow in ipairs(MI().FLOW_ORDER) do
+            local b = Get("flowChoice" .. flow, function() return Wg().Tab(f, "", col - 24, function() end) end)
+            b.text:SetText(MI().FLOW_LABEL[flow]); b:SetSelected((r.flow or "deposit") == flow)
+            b:SetScript("OnClick", function()
+                r.flow = flow; if flow ~= "deposit" and (r.keep or 0) <= 0 then r.keep = 20 end; P.QueueRefresh()
+            end)
+            At(b, left + 12, fy + (i - 1) * 38)
+            local art = Illustrate("flowArt" .. flow, b, flow == "balance" and R.PATH .. [[media\npcs\balance-scales-small]] or R.PATH .. [[media\guides\status-current-small]])
+            if flow ~= "balance" then art.tex:SetRotation(flow == "deposit" and -math.pi / 2 or math.pi / 2) end
+        end
+    else
+        local t = Text("noFlow", "small"); Wide(t, left + 12, fy, col - 24)
+        t:SetText("This action has no transfer direction. No items move while editing.")
+    end
+    local ky = Panel("limitsPanel", "What should stay?", mid, bottom, col, 208)
+    local qty = Edit("builderKeep", 72); At(qty, mid + 48, ky)
+    Button("keepMinus", "-", 28, "secondary", r.kind ~= "never" and function() if pool.builderKeep:HasFocus() then pool.builderKeep:ClearFocus() end; r.keep = math.max(0, (r.keep or 0) - 1); P.QueueRefresh() end or nil)
+    At(pool.keepMinus, mid + 12, ky)
+    Button("keepPlus", "+", 28, "secondary", r.kind ~= "never" and function() if pool.builderKeep:HasFocus() then pool.builderKeep:ClearFocus() end; r.keep = math.min(MI().MAX_KEEP, (r.keep or 0) + 1); P.QueueRefresh() end or nil)
+    At(pool.keepPlus, mid + 128, ky)
+    qty:SetEnabled(r.kind ~= "never")
+    if not qty:HasFocus() then qty:SetText(tostring(r.keep or 0)) end
+    qty.read = function(self)
+        if not editing then return end
+        local n = tonumber(self:GetText())
+        if n and n >= 0 and n <= MI().MAX_KEEP and n == math.floor(n) then editing.keep = n
+        else self:SetText(tostring(editing.keep or 0)); Say("Enter a valid whole keep quantity.", "warn") end
+        P.QueueRefresh()
+    end
+    qty:SetScript("OnEnterPressed", function(self) self:read(); self:ClearFocus() end)
+    qty:SetScript("OnEscapePressed", function(self) self:SetText(tostring(editing.keep or 0)); self:ClearFocus() end)
+    if not qty.builderHook then qty.builderHook = true; qty:HookScript("OnEditFocusLost", function(self) self:read() end) end
+    local unit = Text("builderKeepUnit", "small"); Wide(unit, mid + 12, ky + 30, col - 24); unit:SetText("Keep in bags (each item)")
+    local exclusion = Text("builderExclusions", "small"); Wide(exclusion, mid + 12, ky + 60, col - 24)
+    local n = 0; for _ in pairs(r.exclude) do n = n + 1 end
+    exclusion:SetText(n .. " excluded item types")
+    Button("advancedLimits", "Exclusions and limits", col - 24, "secondary", function() limitsAdvanced = not limitsAdvanced; P.QueueRefresh() end)
+    At(pool.advancedLimits, mid + 12, bottom + 132)
+    local safe = Text("builderSafety", "small"); Wide(safe, mid + 12, bottom + 166, col - 24)
+    safe:SetText("Existing protections and whole-stack limits still apply.")
+    local rx, ry, rw = cols == 3 and (mid + col + 12) or PAD, cols == 3 and top or (bottom + 220), cols == 3 and col or full
+    local reviewY = Panel("reviewPanel", "Rule review", rx, ry, rw, cols == 3 and 512 or 210)
+    local actionLabel, destinationLabel = P.RowCells(r)
+    destinationLabel = r.kind == "bank" and "My bank" or r.kind == "keep" and "Bags" or r.kind == "never" and "No transfers" or destinationLabel
+    local summary = Text("builderReview", "body"); Wide(summary, rx + 12, reviewY, rw - 24); summary:SetText("Items: " .. P.ItemsText(r) .. "\n\nDestination: " .. destinationLabel .. "\n\nBehavior: " .. actionLabel .. "\n\nKeep: " .. P.KeepText(r))
+    R.Interact.Tip(pool.reviewPanel, "Rule review", P.Sentence(r))
+    local probe = MI().CleanRule((function() local copy = {} for k, v in pairs(r) do copy[k] = v end copy.id = copy.id or "rnew" return copy end)())
+    local code, why = MI().Problem(probe, false)
+    local ready = Text("builderReady", "body"); Wide(ready, rx + 12, reviewY + H(summary) + 18, rw - 24)
+    ready:SetText(code and ("Needs attention: " .. (why or code)) or "Ready to save"); Tone(ready, code and "warn" or "head")
+    local reviewHeight = math.max(cols == 3 and 512 or 260, 44 + H(summary) + 18 + H(ready) + 76)
+    pool.reviewPanel:SetHeight(reviewHeight)
+    local enabled = Check("e4on", function(v) turnOn = v; P.QueueRefresh() end)
+    enabled:SetChecked(turnOn and not code); enabled:SetActive(not code)
+    At(enabled, rx + 12, ry + reviewHeight - 48)
+    local enText = Text("e4onT", "small"); Wide(enText, rx + 52, ry + reviewHeight - 46, rw - 64); enText:SetText("Enable when saved")
+    if code then turnOn = false end
+    y = math.max(bottom + 220, ry + reviewHeight + 12)
+    if itemAdvanced then y = DrawItemsStep(y) + 16 end
+    if destAdvanced then y = DrawDestStep(y) + 16 end
+    if limitsAdvanced then y = DrawKeepStep(y) + 16 end
+    if r.id then
+        Button("builderDelete", "Delete", 84, "danger", function()
+            local id = r.id
+            R.Interact.Confirm("TWICHUI_MI_RULE_DELETE", "Delete the saved rule and discard this draft? No items move.", function()
+                MI().DeleteRule(id); editing = nil; P.QueueRefresh(); QueueRelayout()
+            end, { accept = "Delete" })
+        end); At(pool.builderDelete, PAD, y)
+        Button("builderDuplicate", "Duplicate", 96, "secondary", function()
+            local copy = MI().CleanRule(r); copy.id = nil; copy.name = (copy.name .. " copy"):sub(1, MI().MAX_NAME); copy.enabled = false; StartEdit(copy)
+        end); At(pool.builderDuplicate, PAD + 92, y)
+    end
     Button("eCancel", "Cancel", 90, "secondary", function()
         editing = nil
         said = nil
         P.QueueRefresh()
         QueueRelayout()
     end)
-    At(pool.eCancel, W - PAD - 190, y)
+    At(pool.eCancel, full + PAD - 190, y)
     Button("eSave", "Save", 90, "primary", function()
+        if pool.builderKeep and pool.builderKeep:HasFocus() then pool.builderKeep:ClearFocus() end
         local rule = editing
         rule.enabled = turnOn
         local id, why = MI().SaveRule(rule)
@@ -1142,13 +1355,18 @@ local function DrawEditor(y)
         else Say(("Saved \"%s\"%s."):format(saved and saved.name or "", saved and saved.enabled and ", turned on" or ", turned off")) end
         QueueRelayout()
     end)
-    At(pool.eSave, W - PAD - 90, y)
+    At(pool.eSave, full + PAD - 90, y)
     R.Interact.Tip(pool.eSave, "Save", "Saves the rule. It starts moving items only when you open a mailbox, bank or guild bank, review and press the action yourself.")
     return y + 34
 end
 
 function P.Refresh()
     if not (f and f:IsShown() and built) then return end
+    local view = R.SettingsUI and R.SettingsUI.View and R.SettingsUI.View("magicInventory")
+    if view and view.reset then
+        view.reset.button:SetEnabled(editing == nil)
+        view.reset.text:SetText(editing and "Save or cancel the rule draft before resetting this page." or "Reset this page's settings. The confirmation lists what changes; saved inventory rules are retained.")
+    end
     for k in pairs(touched) do touched[k] = nil end
     local y = 4
     if said then
@@ -1164,11 +1382,21 @@ function P.Refresh()
         local tasks = { { "rules", "Your rules", 140 }, { "destinations", "Destinations", 140 },
             { "guild", "Guild arrangement", 174 }, { "protected", "Protected items", 148 } }
         local x = PAD
+        local tabWidth = math.floor((math.max(W, f:GetWidth() or W) - PAD * 2 - 18) / 4)
+        local tabIcons = { rules = "sealed-scroll", destinations = "coins", guild = "tabard", protected = "sword-and-shield" }
         for _, entry in ipairs(tasks) do
             local b = Get("task" .. entry[1], function()
                 return Wg().Tab(f, entry[2], entry[3], function() P.SetTask(entry[1]) end)
             end)
-            At(b, x, y); b:SetSelected(task == entry[1]); x = x + entry[3] + 6
+            b:SetWidth(tabWidth)
+            b.text:SetText(entry[1] == "guild" and tabWidth < 200 and "Guild layout" or entry[2])
+            local art = Get("taskArt" .. entry[1], function()
+                local holder = CreateFrame("Frame", nil, b); holder.tex = holder:CreateTexture(nil, "ARTWORK"); holder.tex:SetAllPoints(); return holder
+            end)
+            art:SetFrameLevel(b:GetFrameLevel() + 4); art:ClearAllPoints(); art:SetPoint("LEFT", b, "LEFT", 6, 0); art:SetSize(20, 20)
+            art.tex:SetTexture(R.PATH .. "media\\npcs\\" .. tabIcons[entry[1]] .. "-small")
+            b.text:ClearAllPoints(); b.text:SetPoint("LEFT", b, "LEFT", 32, 0); b.text:SetPoint("RIGHT", b, "RIGHT", -4, 0)
+            At(b, x, y); b:SetSelected(task == entry[1]); x = x + tabWidth + 6
         end
         y = y + 42
         if task == "guild" and P.DrawGuildPreview then y = P.DrawGuildPreview(y)
@@ -1243,7 +1471,7 @@ if R.MagicInventory then R.MagicInventory.OnChange(function() P.QueueRefresh() e
 -- A rule being edited belongs to the profile it came from: a profile change puts the editor away, unsaved.
 if R.Profiles and R.Profiles.OnApply then
     R.Profiles.OnApply("views", "magic-inventory-page", function()
-        editing = nil
+        editing = nil; selectedRule = nil
         if P.GuildProfileChanged then P.GuildProfileChanged() end
         P.QueueRefresh()
     end)

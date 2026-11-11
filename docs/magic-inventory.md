@@ -85,13 +85,13 @@ imported rule need its recipient).
 ## Rule management (settings page)
 
 The page has four focused tasks: Your rules, Destinations, Guild arrangement and Protected items. Your rules uses one
-painted card per rule, in priority order: name, explicit On/Off, matching items, destination, keep/target amount and any
-configuration problem. Edit rule opens the existing four-step private editor. More actions exposes Move up/down,
+compact illustrated row per rule, in priority order: name, enabled switch, matching items, destination, keep/target amount and
+configuration state. Edit opens the goal-based private builder; the context menu exposes Move up/down,
 Duplicate and Delete; the full tooltip still includes target stack size and validation details. Destinations separates
 recipient input, character scope and naming controls into readable rows. No recipient or rule schema changes.
 
-A card is dragged
-by pressing on it away from its controls: a virtual drag (`MagicInventoryDrag.lua`, a label follows the pointer, nothing
+A row is dragged
+by pressing on it away from its controls: a virtual drag (`MagicInventoryDrag.lua`, a row-sized ghost retains the grab offset, nothing
 real is picked up) with a line showing where the rule will land, and the page scrolls near the view's top and bottom
 edges. Letting go on a row calls `MI.MoveRuleTo(id, place)`; letting go anywhere else changes nothing, and hiding the
 page ends the drag. Move up/down stay for one-step moves. Tests: `tests/test_magic_inventory_settings.lua`,
@@ -219,8 +219,9 @@ confirmed, and why it stopped.
 ## Settings (`TwichUI_Settings/pages/MagicInventory.lua`, Everyday > Magic Inventory)
 
 Feature switch, then four focused tasks: **Your rules**, **Destinations**, **Guild arrangement** and **Protected items**.
-Each rule is a readable card with its name, matching items, destination, keep amount, explicit On/Off state and any
-configuration problem. **Edit rule** is primary; **More actions** reveals Move up/down, Duplicate and confirmed Delete.
+Each rule is a compact row with its name, matching items, behavior/destination/keep badges and enabled state.
+**Edit** opens the builder; the context menu provides Move up/down, Duplicate and confirmed Delete. Search and state
+filters keep absolute priorities; reordering requires an unfiltered list.
 Drag ordering and the first-match/keep semantics are unchanged. **New rule from a template** retains Cloth to bank alt,
 Herbs to bank, Metal & Stone to bank, Uncommon BoE equipment to a friend and Custom items. Templates start off and
 name no recipient. **Preview** opens the existing review from your bags without moving anything.
@@ -654,3 +655,8 @@ in `DX.OPS` and `docs/diagnostics.md`. Gauges `inventory.frames` (review rows an
     allowance of 1: one stack is offered and the other is "left out". Pick up more of the item yourself during the run: it stops
     ("over") rather than pass the target. **Open questions:** does a withdrawal count one per stack against the allowance, and does
     the panel fit its buttons at your UI scale (Read again, Withdraw, Deposit, Organize bank, Arrangement)?
+
+## Redesigned rule workspace
+
+The compact manager and goal-based private rule builder replace oversized cards and the four-step wizard. See
+[implementation, schema mapping, artwork and simulator commands](magic-inventory-revision/implementation.md).

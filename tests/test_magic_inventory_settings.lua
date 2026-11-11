@@ -1,6 +1,6 @@
 -- Magic Inventory's settings page (TwichUI_Settings/pages/MagicInventory.lua) with stand-in frames:
 --   * the rule list in plain words (items, destination, keep), the template list, an empty state;
---   * a template opens the four-step editor; it saves turned off while its recipient isn't chosen, and says why;
+--   * a template opens the goal-based private builder; it saves turned off while its recipient isn't chosen, and says why;
 --   * the recipient is set for this character only, exactly as typed (in the game's capitalization), then the rule
 --     can be turned on; the Never transfer list and a rule's lists come from the bag chooser without moving anything;
 --   * deleting asks first; redrawing again and again makes no new controls.
@@ -61,29 +61,40 @@ P.SetTask("rules"); Flush()
 P.NewFromTemplate("cloth")
 Flush()
 Check(P.Editing() ~= nil and Has(f, "^New rule$"), "the editor opens")
-Check(Has(f, "^1  Items$") and Has(f, "^4  Review$"), "four steps")
+Check(Has(f, "^What items%?$") and Has(f, "^Rule review$"), "cohesive builder sections")
+Click("moreItemFilters")
 Check(not P.Control("e1cat1") or not P.Control("e1cat1").shown, "the long category catalog is initially disclosed")
-Check(Has(f, "^Cloth$"), "selected categories are readable without opening the catalog")
+Check(Has(f, "^Cloth"), "selected categories are readable without opening the catalog")
 Click("e1chooseCats")
 Check(P.Control("e1cat1") and P.Control("e1cat1"):GetChecked(), "the template's category is ticked")
 Check(Has(f, "^Cloth"), "named as the game names it")
 Click("e1chooseCats")
 Check(not P.Control("e1cat1").shown and P.Editing() ~= nil, "closing the catalog retains the private rule")
-Click("eNext"); Click("eNext"); Click("eNext")
-Check(Has(f, "Send by mail .* Bank alt %(choose the recipient on this character%)"), "the review names the destination and what is missing")
-Check(Has(f, "Can't be turned on yet"), "and says it can't be turned on yet")
-Check(Has(f, "Whether a player can receive these, or who plays that character, isn't something TwichUI can check"), "honest about recipients")
+Click("advancedDestination")
+Check(Has(f, "Destination: Bank alt") and Has(f, "Needs attention"), "the review names the destination and what is missing")
+Check(Has(f, "Needs attention"), "and says it can't be turned on yet")
+TIP = {}; P.Control("reviewPanel").scripts.OnEnter(P.Control("reviewPanel"))
+Check(table.concat(TIP, " "):find("Whether a player can receive these", 1, true), "review help is honest about recipients")
 Click("eSave")
 Check(P.Editing() == nil, "saved")
 local rule = MI.Rules()[1]
 Check(rule and rule.name == "Cloth to bank alt" and rule.enabled == false and rule.keep == 20, "saved turned off, keeping 20 of each")
-Check(Has(f, "1%.  Cloth to bank alt") and Has(f, "For: Cloth") and Has(f, "Keep: 20 of each"), "a rule card says what it matches and what it keeps")
-Check(Has(f, "Send by mail .* Bank alt %(choose"), "the destination and missing configuration are visible without hover")
+Check(Has(f, "Cloth to bank alt") and Has(f, "^Cloth") and Has(f, "Keep 20"), "a rule card says what it matches and what it keeps")
+Check(Has(f, "Mail") and Has(f, "Bank alt"), "the destination and missing configuration are visible without hover")
 local row1 = P.Control("tr1")
 row1.scripts.OnEnter(row1)
 local tipText = table.concat(TIP, "\n")
 Check(tipText:find("Items: Cloth") and tipText:find("Keep: 20 of each matching item") and tipText:find("choose the recipient on this character"), "the row's tooltip says it plainly, and what it needs")
 row1.scripts.OnLeave(row1)
+
+-- Filtering retains absolute priorities and cannot reorder hidden rules.
+local savedBeforeFilter = MI.Rules()[1].id
+local search = P.Control("findRule")
+search:SetText("Cloth"); search.scripts.OnTextChanged(search); Flush()
+Check(P.Control("tr1").index == 1, "filtered priority stays absolute")
+P.StartRuleDrag(P.Control("tr1")); Check(not P.Drag.Active(), "filtered drag is rejected")
+search:SetText(""); search.scripts.OnTextChanged(search); Flush()
+Check(MI.Rules()[1].id == savedBeforeFilter, "search never changes order")
 
 -- turning it on is refused, with the reason
 local box = P.Control("rule1on")
@@ -135,8 +146,8 @@ Check(MI.Rules()[1].name == before, "Cancel keeps the rule as it was")
 
 -- delete asks first
 Click("rule1more")
-Click("rule1del")
-Check(c.POPUP and c.POPUP.text:find("Delete the rule \"Cloth to bank alt\"") and c.POPUP.text:find("nothing in your bags, bank or mail changes"), "deleting asks, saying what it changes")
+P.Control("rule1more").onPick("delete"); Flush()
+Check(c.POPUP and c.POPUP.text:find("Cloth to bank alt") and c.POPUP.text:find("no items move"), "deleting asks, saying what it changes")
 Check(#MI.Rules() == 1, "nothing deleted before the answer")
 c.StaticPopupDialogs.TWICHUI_MI_RULE_DELETE.OnAccept()
 Flush()
@@ -176,8 +187,8 @@ Flush()
 -- the target stack size in the editor
 P.NewFromTemplate("custom")
 Flush()
-Click("eTab2"); Click("e2kguild")
-Click("eTab3")
+Click("advancedDestination"); Click("e2kguild")
+Click("advancedLimits")
 Check(P.Control("e3stackN") ~= nil and Has(f, "^Target stack size$"), "a guild bank rule has a Target stack size")
 local sb = P.Control("e3stackN")
 sb:SetText("25"); sb.scripts.OnEnterPressed(sb); Flush()
@@ -195,19 +206,20 @@ Click("eCancel")
 -- a rule that withdraws: the editor asks which way, the keep amount becomes the target, and the words say it never goes over
 P.NewFromTemplate("custom")
 Flush()
-Click("eTab2"); Click("e2kbank")
+Click("advancedDestination"); Click("e2kbank")
 Check(Has(f, "^Which way$") and P.Control("e2fwithdraw") ~= nil and P.Control("e2fbalance") ~= nil, "a bank rule asks which way")
 Click("e2fwithdraw")
 Check(P.Editing().flow == "withdraw" and P.Editing().keep == 20, "withdrawing starts with a target of 20")
-Click("eTab3")
+Click("advancedLimits")
 Check(Has(f, "^Target in bags$") and Has(f, "never goes over"), "the keep amount is the target, and it says it never goes over")
-Click("eTab4")
-Check(Has(f, "^Withdraw from bank") and Has(f, "never more"), "the review sentence says what it does")
+Flush()
+TIP = {}; P.Control("reviewPanel").scripts.OnEnter(P.Control("reviewPanel"))
+Check(Has(f, "Behavior: Withdraw") and table.concat(TIP, " "):find("never more", 1, true), "structured review and help describe withdrawal limits")
 Click("eCancel")
 do
   local wid = MI.SaveRule({ kind = "bank", name = "Keep 40 milk", enabled = false, cats = { "0:5" }, flow = "balance", keep = 40 })
   Flush()
-  Check(Has(f, "Balance with bank") and Has(f, "Kept at 40 of each"), "the rule card shows balance and its target in words")
+  Check(Has(f, "Balance") and Has(f, "Bank") and Has(f, "Keep 40"), "the rule card shows balance and its target in words")
   MI.DeleteRule(wid)
   Flush()
 end
@@ -252,6 +264,29 @@ do
   Check(not P.Drag.Active(), "hiding the page ends a drag")
   MI.DeleteRule(extra); MI.DeleteRule(third); Flush()
 end
+
+-- Goal-based controls edit only the private draft and save through the same schema.
+local savedCount = #MI.Rules()
+P.NewFromTemplate("custom"); Flush()
+Click("quickCategory1")
+Check(#P.Editing().cats >= 2, "cloth/herbs uses category criteria")
+Click("quickCategory3")
+Check(P.Editing().equip == "equipment", "equipment uses the existing equipment filter")
+Click("destinationChoicebank"); Click("flowChoicebalance")
+Check(P.Editing().kind == "bank" and P.Editing().flow == "balance", "destination and movement selectors edit the draft")
+local originalKeep = P.Editing().keep
+Click("keepPlus"); Check(P.Editing().keep == originalKeep + 1, "quantity stepper edits the draft")
+Check(#MI.Rules() == savedCount, "draft changes do not allocate a rule")
+Click("eCancel"); Check(#MI.Rules() == savedCount, "cancel discards the private changes")
+
+P.NewFromTemplate("custom"); Flush()
+Click("builderBack")
+Check(P.Editing() ~= nil and c.POPUP.name == "TWICHUI_MI_DISCARD_DRAFT", "Back asks before discarding a draft")
+c.StaticPopupDialogs.TWICHUI_MI_DISCARD_DRAFT.OnAccept(); Flush()
+Check(P.Editing() == nil and #MI.Rules() == savedCount, "discard changes no saved rule")
+Click("rule1edit"); Click("builderDuplicate")
+Check(P.Editing() and not P.Editing().id and #MI.Rules() == savedCount, "builder duplicate is an independent unsaved draft")
+Click("eCancel")
 
 -- the guild bank arrangement editor has its own test (test_magic_inventory_editor.lua)
 P.SetTask("guild"); Flush()

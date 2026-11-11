@@ -65,6 +65,14 @@ Lab.Step("open", function()
         mi.SaveRule({ name = "Extra materials for my other character", kind = "mail", cats = { "7:7" }, dest = dest, keep = 10, enabled = false })
         Lab.Settle(.3)
     end
+    if key == "magicInventory" and params.count then
+        local mi = R.MagicInventory
+        for _, rule in ipairs(mi.Rules()) do mi.DeleteRule(rule.id) end
+        for i = 1, params.count do
+            mi.SaveRule({ name = i == 1 and "Expedition supplies for crafting and adventures on another journey" or "Expedition materials " .. i, kind = "bank", flow = i % 2 == 0 and "balance" or "deposit", cats = { "7:5" }, keep = i, enabled = false })
+        end
+        Lab.Settle(.3)
+    end
     for _, page in ipairs(K.NavOrder()) do
         Lab.Say("inventory", page.key, page.name, "rows=" .. #page.rows, "host=" .. tostring(page.def.host ~= nil))
     end
@@ -187,6 +195,11 @@ Lab.Step("disclosures and navigation", function()
         if params.task then page.SetTask(({ "rules", "destinations", "guild", "protected" })[params.task] or "rules"); Lab.Settle(.2) end
         if params.editor then
             page.NewFromTemplate("cloth"); Lab.Settle(.2)
+            if params.task == 5 then
+                local draft = page.Editing(); draft.name = "Bank supply rule"; draft.kind = "bank"; draft.dest = nil; draft.flow = "balance"; draft.keep = 5
+                page.QueueRefresh(); Lab.Settle(.2)
+            end
+            page.Control("moreItemFilters"):Click(); Lab.Settle(.2)
             local choose = assert(page.Control("e1chooseCats"))
             choose:Click(); Lab.Settle(.2)
             local cats = R.MagicInventory.Categories()
@@ -196,7 +209,8 @@ Lab.Step("disclosures and navigation", function()
             end
             choose:Click(); Lab.Settle(.2)
             Lab.Check("state", "category disclosure retains draft", true, page.Editing() ~= nil)
-            if params.categories then choose:Click(); Lab.Settle(.2) end
+            if params.categories then choose:Click(); Lab.Settle(.2)
+            else page.Control("moreItemFilters"):Click(); Lab.Settle(.2) end
         end
     elseif params.editor and key == "chatCleanRules" then
         R.ChatCleanRulesPage.Open(nil)
@@ -387,6 +401,40 @@ if key == "speakstone" or key == "restedxp" then
                     break
                 end
             end
+        end
+    end)
+end
+if key == "magicInventory" and not params.editor then
+    Lab.Step("rule search and draft safety", function()
+        local page, mi = R.MagicInventoryPage, R.MagicInventory
+        local before = Lab.Digest(mi.Rules())
+        if params.count and params.count > 0 then
+            local title = page.Control("rule1name")
+            Lab.Check("construct", "long name fits row", true, title:GetStringHeight() <= title:GetHeight() + .1)
+        end
+        local find = page.Control("findRule")
+        find:SetText("zzzznoexistingrule"); Lab.Settle(.3)
+        Lab.Check("interact", "search empty feedback", true, page.Control("listNone"):IsShown())
+        find:SetText(""); Lab.Settle(.3)
+        local filter = page.Control("ruleFilter")
+        filter.onPick("enabled"); Lab.Settle(.3)
+        filter.onPick("all"); Lab.Settle(.3)
+        if #mi.Rules() > 0 then
+            find:SetText(mi.Rules()[1].name); Lab.Settle(.3)
+            page.StartRuleDrag(page.Control("tr1"))
+            Lab.Check("state", "filtered reordering refused", false, page.Drag.Active())
+            find:SetText(""); Lab.Settle(.3)
+        end
+        Lab.Check("state", "search and filter preserve priority", before, Lab.Digest(mi.Rules()))
+        page.NewFromTemplate("custom"); Lab.Settle(.3)
+        page.Control("eName"):SetText("Unsaved draft")
+        page.Control("eCancel"):Click(); Lab.Settle(.3)
+        Lab.Check("state", "cancel is transactional", before, Lab.Digest(mi.Rules()))
+        if #mi.Rules() > 0 and params.categories then
+            page.Control("rule1edit"):Click(); Lab.Settle(.2)
+            page.Control("eCancel"):Click(); Lab.Settle(.2)
+            page.Control("rule1more"):Click(); Lab.Settle(.2)
+            Lab.Check("interact", "rule context menu opens", true, R.SettingsWidgets.MenuShown())
         end
     end)
 end
