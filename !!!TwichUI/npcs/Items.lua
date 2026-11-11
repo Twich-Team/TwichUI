@@ -130,12 +130,19 @@ local function Settled()
     end
 end
 
+-- The game says an item's data has arrived. It may be one we asked for, or one we never asked for because the client
+-- already had it (a tooltip, a bag, a trade window): either way, if it is still on screen as "Item <number>" it is
+-- time to look again. A late answer for an id we asked for is never dropped.
 function NI.OnInfo(id)
     id = Plain(id)
-    if not (id and waiting[id]) then return end
-    waiting[id] = nil
-    Arrived()
-    Settled()
+    if not id then return end
+    if waiting[id] then
+        waiting[id] = nil
+        Settled()
+    end
+    -- A late answer for an id we asked for is never dropped, even if the client already knew the name by the
+    -- time the pump ran (so it was never left waiting): the row still has to look again.
+    if requested[id] then Arrived() end
 end
 
 local function Pump()
@@ -145,11 +152,17 @@ local function Pump()
         local id = queue[head]
         queue[head] = nil
         head = head + 1
-        if not requested[id] and not NI.Name(id) and C_Item and C_Item.RequestLoadItemDataByID then
-            requested[id], waiting[id] = true, true
-            asked = asked + 1
-            sent = sent + 1
-            pcall(C_Item.RequestLoadItemDataByID, id)
+        if not requested[id] and C_Item and C_Item.RequestLoadItemDataByID then
+            -- The client may have learned the name between the ask and the pump (a tooltip, a bag, a trade window):
+            -- then the game is not asked for it, and it is not left waiting.
+            if not NI.Name(id) then
+                requested[id], waiting[id] = true, true
+                asked = asked + 1
+                sent = sent + 1
+                pcall(C_Item.RequestLoadItemDataByID, id)
+            else
+                requested[id] = true
+            end
         end
     end
     if head > tail then
