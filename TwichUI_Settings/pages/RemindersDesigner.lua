@@ -574,6 +574,17 @@ function Dz.Build(parent, env)
     s.seps = {}
     for i = 1, RM().MAX_CONDITIONS + RM().MAX_GROUPS do s.seps[i] = Add(G.Text(s, "meta")) end
 
+    -- Whatever is on the cursor can be dropped on a card, the open editor or the rule panel (Dz.TakeDrop below). Both the
+    -- drop of a drag and a click with the thing on the cursor count, as with the game's own slots.
+    local function Accept(frame, raw)
+        frame:SetScript("OnReceiveDrag", function() Dz.TakeDrop(raw and raw()) end)
+        frame:HookScript("OnMouseUp", function(_, button)
+            if button == "LeftButton" and GetCursorInfo and GetCursorInfo() then Dz.TakeDrop(raw and raw()) end
+        end)
+    end
+    s:EnableMouse(true)
+    Accept(s)
+
     s.cards = {}
     for i = 1, RM().MAX_CONDITIONS do
         local card = CreateFrame("Button", nil, s, "BackdropTemplate")
@@ -604,10 +615,19 @@ function Dz.Build(parent, env)
         card.art:SetPoint("CENTER", 0, 0)
         card.fields = {}
         card.item = Button(card, "Choose item", 119, "secondary", function() Dz.Edit(card.raw) end)
+        M.ContextTip(card.item, "Choose by dragging", function()
+            local entry = card.raw and RM().NodeByRaw(View(), card.raw)
+            local need = entry and entry.cond and Pl().NeedsId(entry.cond)
+            if need == "spell" then return "Drag a spell from your spellbook onto this card, or click to type its spell ID." end
+            return "Drag an item from your bags onto this card, or click to type its item ID or paste its link."
+        end)
         for j = 1, 3 do
             local field = Dropdown(card, 110, function(value) pickInline(card, j, value) end)
             field:SetChoices(function() return card.inline and card.inline[j] and card.inline[j].choices or {} end)
             card.fields[j] = field
+        end
+        for _, target in ipairs({ card, card.item, card.more, card.grip, card.fields[1], card.fields[2], card.fields[3] }) do
+            Accept(target, function() return card.raw end)
         end
         card.chips = {}
         for j = 1, 2 do
@@ -638,7 +658,12 @@ function Dz.Build(parent, env)
                 card.more:OpenMenu()
             end
         end)
-        M.ContextTip(card, "Condition actions", "Right-click to remove, duplicate or move.")
+        M.ContextTip(card, "Condition actions", function()
+            local entry = card.raw and RM().NodeByRaw(View(), card.raw)
+            local need = entry and entry.cond and Pl().NeedsId(entry.cond)
+            return "Right-click to remove, duplicate or move.",
+                need and ("Drag %s onto this card to use it."):format(need == "item" and "an item from your bags" or "a spell from your spellbook") or nil
+        end)
         card:HookScript("OnEnter", function()
             if not ui.draft and RM().Writable() then card.more:Show() end
         end)
@@ -745,19 +770,11 @@ function Dz.Build(parent, env)
         Poke()
     end
     ep.item:SetScript("OnEnterPressed", function(self) TakeItem(self:GetText()) end)
-    ep.item:SetScript("OnReceiveDrag", function()
-        local kind, a, _, spellID = GetCursorInfo()
-        local wants = ui.draft and Pl().NeedsId(ui.draft)
-        if kind == "item" and wants == "item" then
-            ClearCursor()   -- the item goes straight back where it came from; only its ID is noted
-            TakeItem(tostring(a or ""))
-        elseif kind == "spell" and wants == "spell" and spellID then
-            ClearCursor()
-            local id = tostring(spellID)
-            if ui.draft.type == "aura" and ep.item:GetText():find("%d") then id = ep.item:GetText() .. ", " .. id end
-            TakeItem(id)
-        end
-    end)
+    -- (a drop on the box, the editor around it or anywhere in the rule panel goes through Dz.TakeDrop: the item goes
+    -- straight back where it came from and only its ID is noted)
+    ep:EnableMouse(true)
+    Accept(ep)
+    Accept(ep.item)
     M.ContextTip(ep.item, "Item or spell", function()
         if ui.draft and Pl().NeedsId(ui.draft) == "spell" then
             return ui.draft.type == "aura" and "Its spell ID or link, or several separated by commas (each rank of a spell has an ID of its own). Press Enter."
@@ -1018,6 +1035,44 @@ function Dz.Build(parent, env)
         ui.draft = RM().DeepCopy(e.cond)
         Dz.Say(nil)
         Poke()
+    end
+
+    -- A spell or item dropped on a card (raw), or on the open editor or the rule panel (nil). With an editor open the
+    -- drop goes into it; otherwise onto the card's own condition, saved to the draft through the same checked path as
+    -- Done. A refusal says why and leaves what is held on the cursor. Returns false when nothing is held.
+    function Dz.TakeDrop(raw)
+        if not GetCursorInfo then return false end
+        local what, a, b, c = GetCursorInfo()
+        if what == nil then return false end
+        local target
+        if ui.draft then
+            target = ui.draft
+        else
+            local entry = raw and Entry(raw)
+            if not (entry and entry.cond) then
+                Dz.Say("Drop it on a condition that asks for an item or a spell.", "quiet")
+                return true
+            end
+            target = entry.cond
+        end
+        local new, text = Pl().Drop(target, what, a, b, c)
+        if not new then Dz.Say(text, "warn") return true end
+        if ClearCursor then ClearCursor() end
+        if ui.draft then
+            ui.draft = new
+            Dz.Say(text, "ok")
+            Poke()
+            return true
+        end
+        ui.mode, ui.nodeRaw, ui.groupRaw, ui.draft = "edit", raw, nil, new
+        Dz.Commit()
+        if ui.draft == new then   -- refused: no editor is left open that wasn't asked for (Commit said why)
+            ui.mode, ui.nodeRaw, ui.draft = nil, nil, nil
+            Poke()
+        else
+            Dz.Say(text, "ok")
+        end
+        return true
     end
 
     local function GroupPath(v, raw)
@@ -1292,7 +1347,9 @@ function Dz.Build(parent, env)
             if idKind == "spell" then
                 text = Pl().SpellLine(draft)
                 tone = text and nil or "quiet"
-                text = text or (draft.type == "aura" and "Spell IDs, separated by commas" or "A spell ID or link")
+                text = text or (draft.type == "aura" and "Drag a spell here, or type IDs separated by commas" or "Drag a spell here, or type its ID")
+            elseif not draft.item then
+                text, tone = "Drag an item here from your bags, or type its ID", "quiet"
             else
                 text, tone = K.ItemLine(draft.item)
             end

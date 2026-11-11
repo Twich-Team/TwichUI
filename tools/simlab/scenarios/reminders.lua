@@ -592,7 +592,7 @@ Lab.Step("pose", function()
         Lab.Settle(0.2)
         return
     end
-    if view == "conditions" or view == "conditionsEditor" or view == "conditionsPalette" or view == "conditionsNarrow" then
+    if view == "conditions" or view == "conditionsEditor" or view == "conditionsPalette" or view == "conditionsNarrow" or view == "conditionsDrop" or view == "conditionsDropHint" then
         -- A flat All rule made of the library's kinds: a buff as the trigger, three restrictions.
         while #RM.Get(id).conditions > 0 do RM.RemoveCondition(id, { 1 }) end
         Lab.Check("state", "buff trigger added", true, (RM.AddCondition(id, "aura", nil, { type = "aura", spells = { 1459 }, what = "missing" })))
@@ -672,6 +672,58 @@ Lab.Step("pose", function()
             frame.scroll:SetVerticalScroll(math.max(0, offset)); Lab.Settle(0.1)
             -- (the simulator doesn't move a scrolled child's reported position, so the screenshot is the evidence of where it is)
             Lab.Check("interact", "the rule panel scrolled to the editor", true, frame.scroll:GetVerticalScroll() > 0)
+        elseif view == "conditionsDropHint" then
+            -- a new buff and a new item count, nothing chosen yet: what the editor says about dragging
+            local entry
+            for _, e in ipairs(R.RemindersPlain.Entries()) do if e.key == "itemCount" then entry = e end end
+            Dz.Pick(entry); Lab.Settle(0.1)
+            Lab.Check("construct", "an empty item condition invites a drag", true, when.editor.itemInfo:GetText():find("Drag an item here", 1, true) ~= nil)
+            local frame = Dz.Frame()
+            frame.scroll:SetVerticalScroll(math.max(0, frame.content:GetTop() - when.editor:GetTop() - 12)); Lab.Settle(0.1)
+        elseif view == "conditionsDrop" then
+            -- What is on the cursor is faked (the simulator has no real cursor): item and spell as the game reports them.
+            local held, cleared = {}, 0
+            GetCursorInfo = function() return unpack(held) end
+            ClearCursor = function() cleared = cleared + 1; held = {} end
+            local function Say() return Dz.Frame().message:GetText() or "" end
+            local function Drop(frame) frame:GetScript("OnReceiveDrag")(frame); Lab.Settle(0.1) end
+            local rev = RM.Rev()
+            held = { "spell", 3, "spell", 10157 }
+            Drop(when.cards[1])
+            local spells = Dz.DraftView().conditions[1].cond.spells
+            Lab.Check("interact", "a spell dropped on a buff card is added to its list", "1459,10157", table.concat(spells, ","))
+            Lab.Check("interact", "what was held is put away", 1, cleared)
+            Lab.Check("construct", "the card says what happened", true, Say():find("Added", 1, true) ~= nil)
+            Lab.Check("state", "the saved rule is untouched until Save", 1, #RM.Get(id).conditions[1].cond.spells)
+            Lab.Check("state", "and no editor was left open", false, Dz.State().draft ~= nil)
+            held = { "spell", 3, "spell", 10157 }
+            Drop(when.cards[1])
+            Lab.Check("interact", "the same spell twice is refused", true, Say():find("already in the list", 1, true) ~= nil and #Dz.DraftView().conditions[1].cond.spells == 2)
+            Lab.Check("interact", "a refusal leaves it on the cursor", true, held[1] == "spell" and cleared == 1)
+            held = { "item", 6948 }
+            Drop(when.cards[1])
+            Lab.Check("interact", "an item on a buff card says what it wants", true, Say():find("That is an item", 1, true) ~= nil and held[1] == "item")
+            Drop(when.cards[2])
+            Lab.Check("interact", "a mana card takes neither", true, Say():find("doesn't take an item or a spell", 1, true) ~= nil)
+            held = {}
+            Drop(when)
+            Lab.Check("interact", "an empty hand does nothing", true, cleared == 1)
+            held = { "spell", 3, "spell", 122 }
+            Drop(when)
+            Lab.Check("interact", "the bare rule panel asks for a card", true, Say():find("Drop it on a condition", 1, true) ~= nil and held[1] == "spell")
+            -- an open editor takes the drop wherever it lands
+            Dz.Edit(when.cards[1].raw); Lab.Settle(0.1)
+            Lab.Check("construct", "the editor offers the drop", true, when.editor:IsShown() and when.editor.item:IsShown())
+            Drop(when.editor)
+            Lab.Check("interact", "a drop on the open editor goes into it", "1459,10157,122", table.concat(Dz.State().draft.spells, ","))
+            held = { "spell", 3, "spell", 133 }
+            Drop(when)
+            Lab.Check("interact", "and so does a drop anywhere in the rule panel", 4, #Dz.State().draft.spells)
+            Lab.Check("construct", "the box shows the IDs", "1459, 10157, 122, 133", when.editor.item:GetText())
+            when.editor.done:Click(); Lab.Settle(0.1)
+            Lab.Check("state", "Done puts it in the draft rule", 4, #Dz.DraftView().conditions[1].cond.spells)
+            Lab.Check("state", "and still nothing is saved", rev, RM.Rev())
+            GetCursorInfo, ClearCursor = nil, nil
         elseif view == "conditionsPalette" then
             when.picker.category.onPick("Buffs"); Lab.Settle(0.1)
             local names = {}

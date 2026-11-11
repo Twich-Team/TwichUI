@@ -424,7 +424,7 @@ local MORE = {
     bagSpace = { "Supplies", "Free bag slots", "How many free slots your general bags have. Room in a quiver, soul bag or profession bag isn't counted: it can't take just anything." },
     durability = { "Equipment", "Equipment durability", "Whether something you wear is broken, or worn below a share you choose. Each item is judged on its own, never an average." },
     power = { "Character", "Your mana, rage or energy", "Your mana, rage or energy as a share of its maximum. A character with no such resource never matches. Not readable while the game hides it from addons." },
-    spellKnown = { "Character", "A spell you know", "Whether you know a spell, chosen by its spell ID or link. A different rank is a different spell." },
+    spellKnown = { "Character", "A spell you know", "Whether you know a spell: drag it from your spellbook onto the card, or type its spell ID. A different rank is a different spell." },
     form = { "Character", "Your form or stance", "Whether you are in a form or stance (a druid form, a warrior stance, stealth), or in none." },
     level = { "Character", "Your level", "Your character's level compared with a number." },
     cooldown = { "Combat", "A spell's cooldown", "Whether a spell you know is ready, cooling down, or ready within a time you choose. The global cooldown after any spell doesn't count." },
@@ -662,6 +662,43 @@ function Pl.WithIds(cond, ids)
     else new.item = ids[1] end
     return new
 end
+-- What dropping what the cursor holds does to a condition that asks for an item or a spell. what, a, b, c are
+-- GetCursorInfo's first four answers: "item", itemID, itemLink; "spell", spellIndex, bookType, spellID (the slot is not
+-- the spell's ID: the fourth answer is). Returns the new condition and a line saying what was done, or nil and why
+-- not (what is held is then left alone). A buff takes a list, so a spell is added to it (never twice, at most
+-- MAX_SPELLS); everything else is replaced. Pure: nothing is written and the cursor isn't touched.
+function Pl.Drop(cond, what, a, b, c)
+    local need = Pl.NeedsId(cond)
+    if not need then return nil, "This condition doesn't take an item or a spell." end
+    local function Plain(v) if issecretvalue and issecretvalue(v) then return nil end return v end
+    what = Plain(what)
+    local askFor = need == "item" and "an item: drag one from your bags" or "a spell: drag one from your spellbook"
+    if what ~= "item" and what ~= "spell" then
+        return nil, ("This condition looks for %s."):format(askFor)
+    end
+    if what ~= need then
+        return nil, ("That is %s. This condition looks for %s."):format(what == "item" and "an item" or "a spell", askFor)
+    end
+    if what == "item" then
+        local id = Plain(a)
+        if not RM().ValidItem(id) then return nil, "The game didn't say which item that is. Type its item ID instead." end
+        return Pl.WithIds(cond, { id }), ("Now looks for %s."):format(C().ItemWords(id))
+    end
+    local id = Plain(c)
+    if not C().ValidSpell(id) then return nil, "The game didn't say which spell that is. Type its spell ID instead." end
+    if cond.type == "aura" then
+        local list = {}
+        for i, other in ipairs(cond.spells or {}) do
+            if other == id then return nil, ("%s is already in the list."):format(C().SpellWords(id)) end
+            list[i] = other
+        end
+        if #list >= AU().MAX_SPELLS then return nil, ("At most %d spells: remove one first."):format(AU().MAX_SPELLS) end
+        list[#list + 1] = id
+        return Pl.WithIds(cond, list), ("Added %s."):format(C().SpellWords(id))
+    end
+    return Pl.WithIds(cond, { id }), ("Now looks at %s."):format(C().SpellWords(id))
+end
+
 -- What the IDs are, for a line beside the box: "Arcane Intellect, Arcane Brilliance" (or the IDs, while the game has
 -- no names for them). nil when nothing is chosen.
 function Pl.SpellLine(cond)

@@ -247,7 +247,7 @@ C.Register({
             if R.Reminders.ValidItem(raw.item) then
                 clean.item = raw.item
             else
-                return clean, "choose the item it looks for (its ID or link)."
+                return clean, "choose the item it looks for (drag it from your bags, or type its ID or paste its link)."
             end
         end
         return clean

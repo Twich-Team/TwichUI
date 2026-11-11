@@ -79,6 +79,9 @@ as labels in the settings window and never in what is stored.
 | `zone` | `map` or `instance`, `negate` | a map and every map inside it, or one instance |
 | `target` | `what`, `negate` | `exists`, `attackable`, `friendly`, `dead`; with no target only `exists` can match |
 
+Anything that asks for an item or a spell can be given one by dragging it from the bags or spellbook onto its card or the
+open editor (see the tracker); typing an ID or pasting a link still works.
+
 `weaponEnchant` gained `expiring` (`seconds`); `player` gained `moving` and `taxi`. Thresholds: "below" is strictly less,
 "at least" includes the number. A condition whose answer changes with time alone says when (`NextChange`); the
 controller keeps one timer per running reminder for the soonest such moment and reads again then.

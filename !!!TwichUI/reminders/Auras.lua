@@ -129,7 +129,7 @@ C.Register({
             clean.stacks = C.Whole(raw.stacks, 1, AU.STACKS_MAX)
             if not clean.stacks then return clean, ("choose the stack count it compares with (1 to %d)."):format(AU.STACKS_MAX) end
         end
-        if #spells == 0 then return clean, ("choose the %s it looks for (its spell ID or link)."):format(clean.harmful and "debuff" or "buff") end
+        if #spells == 0 then return clean, ("choose the %s it looks for (drag it from your spellbook, or type its spell ID or paste its link)."):format(clean.harmful and "debuff" or "buff") end
         return clean
     end,
 

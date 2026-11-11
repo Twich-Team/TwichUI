@@ -195,7 +195,7 @@ C.Register({
 
     Check = function(raw)
         local clean = { type = "spellKnown", negate = raw.negate == true }
-        if raw.spell == nil then return clean, "choose the spell it looks for (its spell ID or link)." end
+        if raw.spell == nil then return clean, "choose the spell it looks for (drag it from your spellbook, or type its spell ID or paste its link)." end
         if not C.ValidSpell(raw.spell) then return nil, "it names a spell by something that isn't a spell ID." end
         clean.spell = raw.spell
         return clean
@@ -449,7 +449,7 @@ C.Register({
             clean.seconds = C.Whole(raw.seconds, 1, CH.COOLDOWN_SECONDS_MAX)
             if not clean.seconds then return clean, ("choose how soon counts (1 to %d seconds)."):format(CH.COOLDOWN_SECONDS_MAX) end
         end
-        if not clean.spell then return clean, "choose the spell it looks at (its spell ID or link)." end
+        if not clean.spell then return clean, "choose the spell it looks at (drag it from your spellbook, or type its spell ID or paste its link)." end
         return clean
     end,
 

@@ -61,7 +61,7 @@ C.Register({
             clean.item = raw.item
         end
         if not clean.count then return clean, ("choose the count it compares with (1 to %d)."):format(SU.COUNT_MAX) end
-        if not clean.item then return clean, "choose the item it counts (its ID or link)." end
+        if not clean.item then return clean, "choose the item it counts (drag it from your bags, or type its ID or paste its link)." end
         return clean
     end,
 

@@ -89,6 +89,18 @@ Numbers: the card offers quick choices and "Other amount..."; the editor has a b
 spellbook, and a buff takes several IDs separated by commas. `RemindersDesigner.lua` draws them with the existing controls;
 no second editor.
 
+**Drag and drop (no lookup needed).** An item from the bags or a spell from the spellbook can be dropped on a condition
+card that asks for one (`Dz.TakeDrop`, the pure rules in `Pl.Drop`), on the open editor, or anywhere in the rule panel
+while an editor is open; a click with it on the cursor counts too. With an editor open the drop goes into it; otherwise
+it replaces the card's ID through the same checked path as Done (into the draft; nothing is saved until Save). A buff
+*adds* the spell to its list (never twice, at most 8), so a rank is one drop; every other kind replaces. The wrong kind
+(a spell on an item condition), a condition with no ID, a duplicate and an unreadable answer are refused with a reason
+and the thing stays on the cursor. A dropped spell's ID is `GetCursorInfo`'s fourth answer (the second is the
+spellbook slot). Typing and pasting still work. **Unit-tested** (`test_reminders_library.lua`); **simulator
+handler-tested** with a faked cursor (`reminders.sh conditionsDrop`, `conditionsDropHint`); **not real-client-tested**:
+that a real drag from the bags and spellbook reaches these frames, and that `GetCursorInfo` answers as documented on
+Forever.
+
 ## Artwork
 
 No new paintings were made in this work (no image generator was available). Each new kind uses an existing TwichUI
@@ -103,4 +115,6 @@ targetArt, navigation). Bespoke condition paintings would suit buffs/debuffs, re
 - Swimming (RC-020) needs an event; without one, it isn't offered.
 - Weapon enchant charges (RC-006) need a way to tell "no charges" from "none left".
 - A zone search over all maps (RC-013) is not built: places are chosen where you stand.
-- Real-client checks: every row's last column, plus the in-game checklist in docs/reminders.md.
+- Real-client checks: every row's last column, plus the in-game checklist in docs/reminders.md. Drag and drop: drag a
+  spell from the spellbook onto a Buff card (it is added), an item from the bags onto an Item count card, and each onto
+  the open editor; a wrong kind says what it wants and stays on the cursor; a drag released outside does nothing.
