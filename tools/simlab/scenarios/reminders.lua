@@ -510,6 +510,29 @@ Lab.Step("pose", function()
                     Lab.Check("state", "the artwork choice is kept for later", "enchant", D().art)
                     Lab.Check("construct", "the image box names a game icon", "Game icon", show.imageSource:GetText())
                 end
+            elseif view == "pickerEquipment" or view == "pickerCharacter" then
+                Open()
+                IP.SetCategory(view == "pickerEquipment" and "Equipment" or "Character"); Lab.Settle(0.1)
+                Lab.Check("interact", "the category lists exactly its pictures", G.Count(view == "pickerEquipment" and "Equipment" or "Character"), ShownTiles())
+                local first
+                for _, t in ipairs(f.tiles) do if t:IsShown() and t.entry and t.entry.id ~= "enchant" then first = t break end end
+                first:Click(); Lab.Settle(0.1)
+                Lab.Check("interact", "a thumbnail in the category can be chosen", first.entry.id, IP.Candidate().id)
+                Lab.Check("construct", "only the chosen thumbnail is marked", 1, (function() local n = 0 for _, t in ipairs(f.tiles) do if t:IsShown() and t.chosen then n = n + 1 end end return n end)())
+                first:GetScript("OnEnter")(first); Lab.Settle(0.05)
+            elseif view == "pickerRender" then
+                -- every catalogued picture, chosen through the picker's own path and drawn by the real renderer in the live preview
+                local bad, n = {}, 0
+                for _, e in ipairs(G.Entries()) do
+                    local ok = G.Choose(id, e)
+                    Lab.Settle(0.05)
+                    local tex = PreviewArt()
+                    n = n + 1
+                    if not ok or tex == "" or (e.kind == "art" and not tex:find(e.target, 1, true)) then bad[#bad + 1] = e.id end
+                end
+                Lab.Check("construct", "every catalogued picture is selectable and drawn by the preview renderer (" .. n .. ")", "", table.concat(bad, ","))
+                G.Choose(id, G.ForArt("reminder-low-health")); Lab.Settle(0.2)
+                Lab.Check("construct", "a picture from sheet 2 shows in the live preview", true, PreviewArt():find("reminder-low-health", 1, true) ~= nil)
             elseif view == "pickerNarrow" then
                 Open()
             else

@@ -17,9 +17,9 @@ R.RemindersImagePicker = IP
 
 local WIDTH, HEIGHT, PAD, GAP = 512, 668, 16, 8
 local SIDEBAR_W = 144
-local TILE, THUMB, COLS = 96, 64, 3
+local TILE, THUMB, COLS = 96, 78, 3
 local GRID_W = COLS * TILE + (COLS - 1) * GAP
-local PANE_TOP, PANE_H = 112, 372
+local PANE_TOP, PANE_H = 122, 362
 local NAME = "TwichUIReminderImagePicker"
 local QUESTION = "Interface\\Icons\\INV_Misc_QuestionMark"
 
@@ -74,7 +74,7 @@ IP.Draw = Draw
 local function Details()
     local d = f.details
     local c = session and session.candidate
-    Draw(d.thumb, c, 48)
+    Draw(d.thumb, c, 64)
     if not c then
         d.name:SetText("Nothing chosen")
         d.line:SetText(session and session.source == "game" and "Name an item to use its icon." or "Choose a picture from the list.")
@@ -96,10 +96,16 @@ end
 ---------------------------------------------------------------------------
 -- The artwork pane: categories, search and the grid
 ---------------------------------------------------------------------------
--- A tile is marked by the selection skin and a fine antique-gold rim round it.
+-- A tile is marked by the selection skin, a warm gold wash and the settings' gold rim (full strength when chosen, a quiet bronze hint
+-- while the pointer is over an unchosen one). The picture sits on a frame above them so they never cover it.
 local function Mark(tile, on)
-    tile:SetSelected(on and true or false)
-    if tile.rim then tile.rim:SetShown(on and true or false) end
+    tile.chosen = on and true or false
+    tile:SetSelected(tile.chosen)
+    if tile.rim then
+        tile.rim:SetShown(tile.chosen or tile.hot == true)
+        tile.rim:SetAlpha(tile.chosen and 1 or 0.45)
+        tile.wash:SetShown(tile.chosen)
+    end
 end
 
 local function SelectTile(tile)
@@ -114,15 +120,30 @@ local function Tile(i)
     local M = R.SettingsMaterial
     local t = M.Segment(f.content, "", TILE, function(self) SelectTile(self) end)
     t:SetSize(TILE, TILE)
-    t.thumb = t:CreateTexture(nil, "OVERLAY")
-    t.thumb:SetPoint("CENTER", 0, 0)
-    -- the settings' own gold hover rim, over the selection skin, for the chosen tile
+    local level = t:GetFrameLevel() or 1
+    -- the settings' own gold wash and hover rim, over the selection skin
+    t.wash = CreateFrame("Frame", nil, t)
+    t.wash:SetAllPoints()
+    t.wash:SetFrameLevel(level + 1)
+    t.wash:EnableMouse(false)
+    R.SettingsCraft.Sheet(t.wash, "selection-hot", { layer = "BACKGROUND", corner = 8 }):SetAlpha(0.30)
+    t.wash:Hide()
     t.rim = CreateFrame("Frame", nil, t)
     t.rim:SetAllPoints()
+    t.rim:SetFrameLevel(level + 2)
     t.rim:EnableMouse(false)
     R.SettingsCraft.Sheet(t.rim, "hover-rim", { layer = "OVERLAY", corner = 8 })
     t.rim:Hide()
-    R.Interact.Tip(t, nil, function(self) return self.entry and (self.entry.description or "") or nil end, "ANCHOR_LEFT")
+    t.body = CreateFrame("Frame", nil, t)
+    t.body:SetAllPoints()
+    t.body:SetFrameLevel(level + 3)
+    t.body:EnableMouse(false)
+    t.thumb = t.body:CreateTexture(nil, "ARTWORK")
+    t.thumb:SetPoint("CENTER", 0, 0)
+    t:HookScript("OnEnter", function(self) self.hot = true; Mark(self, self.chosen) end)
+    t:HookScript("OnLeave", function(self) self.hot = false; Mark(self, self.chosen) end)
+    t:HookScript("OnHide", function(self) self.hot = false end)
+    R.Interact.Tip(t, nil, function(self) return self.entry and (self.entry.description or "") or nil end, "ANCHOR_TOP")
     f.tiles[i] = t
     return t
 end
@@ -132,6 +153,7 @@ local function Fill()
     local list = G().Search(f.search:GetText(), session.category)
     f.count = #list
     f.empty:SetShown(#list == 0)
+    f.showAll:SetShown(#list == 0)
     f.content:SetHeight(math.max(1, math.ceil(#list / COLS) * (TILE + GAP)))
     for i, entry in ipairs(list) do
         local t = Tile(i)
@@ -275,6 +297,7 @@ local function Build()
     f:EnableMouse(true)
     f:Hide()
     M.Companion(f)
+    M.HeaderBand(f, 72)
     f:SetScript("OnHide", function()
         f.search:ClearFocus()
         f.itemBox:ClearFocus()
@@ -295,11 +318,11 @@ local function Build()
     -- sources
     local tabW = (WIDTH - PAD * 2 - GAP) / 2
     f.tabArt = M.Segment(f, "TwichUI artwork", tabW, function() IP.SetSource("art") end)
-    f.tabArt:SetHeight(32)
-    f.tabArt:SetPoint("TOPLEFT", PAD, -72)
+    f.tabArt:SetHeight(34)
+    f.tabArt:SetPoint("TOPLEFT", PAD, -78)
     f.tabGame = M.Segment(f, "Game icons", tabW, function() IP.SetSource("game") end)
-    f.tabGame:SetHeight(32)
-    f.tabGame:SetPoint("TOPLEFT", PAD + tabW + GAP, -72)
+    f.tabGame:SetHeight(34)
+    f.tabGame:SetPoint("TOPLEFT", PAD + tabW + GAP, -78)
     R.Interact.Tip(f.tabArt, "TwichUI artwork", "Pictures TwichUI has made for reminders, by kind.")
     R.Interact.Tip(f.tabGame, "Game icons", "The icon of any item, by its ID or link. The item doesn't need to be carried or equipped.")
 
@@ -352,7 +375,11 @@ local function Build()
     f.empty = W.Text(f.content, "body")
     f.empty:SetWidth(GRID_W - 16)
     f.empty:SetPoint("TOPLEFT", 8, -12)
-    f.empty:SetText("No picture matches. Try another word, or choose All.")
+    f.empty:SetText("No picture matches. Try another word, or show everything again.")
+    f.showAll = W.Button(f.content, "Show all pictures", 160, "secondary", function() IP.SetQuery(""); IP.SetCategory(G().ALL) end)
+    M.ReminderControl(f.showAll, "action")
+    f.showAll:SetHeight(30)
+    f.showAll:SetPoint("TOPLEFT", 8, -64)
     f.tiles = {}
 
     ---------------- game icons pane
@@ -393,21 +420,21 @@ local function Build()
     ---------------- details strip, Apply, Cancel
     local d = CreateFrame("Frame", nil, f)
     d:SetPoint("TOPLEFT", PAD, -(PANE_TOP + PANE_H + 8))
-    d:SetSize(WIDTH - PAD * 2, 86)
-    M.PanelFace(d, "espresso")
+    d:SetSize(WIDTH - PAD * 2, 92)
+    M.PanelFace(d, "card")
     d.thumb = d:CreateTexture(nil, "ARTWORK")
     d.thumb:SetPoint("LEFT", 14, 0)
     d.name = M.ReminderFont(W.Text(d, "heading"), 17, true)
-    d.name:SetPoint("TOPLEFT", 74, -12)
-    d.name:SetWidth(WIDTH - PAD * 2 - 90)
+    d.name:SetPoint("TOPLEFT", 90, -14)
+    d.name:SetWidth(WIDTH - PAD * 2 - 106)
     d.name:SetMaxLines(1)
     d.line = M.ReminderFont(W.Text(d, "body"), 14)
-    d.line:SetPoint("TOPLEFT", 74, -35)
-    d.line:SetWidth(WIDTH - PAD * 2 - 90)
+    d.line:SetPoint("TOPLEFT", 90, -38)
+    d.line:SetWidth(WIDTH - PAD * 2 - 106)
     d.line:SetMaxLines(2)
     d.source = W.Text(d, "small")
-    d.source:SetPoint("BOTTOMLEFT", 74, 9)
-    d.source:SetWidth(WIDTH - PAD * 2 - 90)
+    d.source:SetPoint("BOTTOMLEFT", 90, 10)
+    d.source:SetWidth(WIDTH - PAD * 2 - 106)
     f.details = d
 
     -- the same footer buttons as the When designer's: Cancel quiet, Apply the gold confirmation

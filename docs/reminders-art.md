@@ -26,12 +26,12 @@ resampling, colour bleed and TGA writer. Nothing is keyed out by colour.
    stays whole. The crop is the union of the picture's parts, so nothing is cut and no neighbour leaks in; no nominal grid line is used as a crop edge. The tool
    stops if what it finds is not exactly what the list below accounts for.
 2. **Clean.** A pixel is kept if it is solid or within 3 px of solid (its antialiased edge) with the colour of the nearest solid pixel, so no haze or matte survives.
-3. **Normalize.** The picture is scaled with its aspect ratio kept so its longer side is 76 % of a square canvas (a 12 % clear margin each side). A picture that is heavy and
-   compact for its size is shrunk a little (never below 85 %, so the margin stays under about 18 %), by the optical balance `make_npc_art.py` uses, so a dense medallion does
+3. **Normalize.** The picture is scaled with its aspect ratio kept so its longer side is 86 % of a square canvas (a 7 % clear margin each side). A picture that is heavy and
+   compact for its size is shrunk a little (never below 88 %, so the margin stays under about 13 %), by the optical balance `make_npc_art.py` uses, so a dense medallion does
    not look bigger than a thin rod. It is then centred.
 4. **Write.** Three files per picture (below), `assets/reminder-gallery/manifest.json` and the generated `!!!TwichUI/reminders/ArtData.lua`.
 
-`python3 tools/make_reminder_gallery.py --contact-sheet docs/reminders-art/contact-sheet.png` rebuilds everything (about 25 s). `--check` builds nothing and reports.
+`python3 tools/make_reminder_gallery.py --contact-sheet docs/reminders-art/contact-sheet.png --qa-sheet docs/reminders-art/qa-sheet.png` rebuilds everything (about 25 s). `--check` builds nothing and reports.
 `--only ID...` draws only those pictures (for a quick check). `tests/test_reminder_gallery.py` checks the shipped files against a fresh build.
 
 | Output | Where | Size |
@@ -42,6 +42,7 @@ resampling, colour bleed and TGA writer. Nothing is keyed out by colour.
 | Manifest | `assets/reminder-gallery/manifest.json` | every field below |
 | Game data | `!!!TwichUI/reminders/ArtData.lua` | generated: id, name, category, description, keywords, related |
 | Contact sheet | `docs/reminders-art/contact-sheet.png` | every picture at 64, 48, 32 and 24 px on dark and light surfaces |
+| QA sheet | `docs/reminders-art/qa-sheet.png` | every picture at 96 px with its stable id and display name (`--qa-sheet`); a QA artifact, not runtime art and not packaged (`docs/` is ignored by `.pkgmeta`) |
 
 The whole canvas is the picture's used area (the metadata `width = height = size`), so the clear margin is part of what is drawn and every picture has the same
 apparent size at the same Size setting. The existing artwork (`shield`, `ammo`, `wellfed`, `enchant`) keeps its tight crop and its own files.
@@ -85,6 +86,8 @@ under their own names and are stored exactly as before (`iconSource = "bundled"`
 Nothing else needs to know: the catalog, the picker, search and the renderer read `ArtData.lua`.
 
 ## Quality notes
+
+**Catalog count:** 79 entries: 67 library pictures, the 4 earlier artworks and the 8 TwichUI icons. The final audit (every picture on `qa-sheet.png`) found no crop, alpha, halo, mapping or duplicate defect; the margin was reduced from 12 % to 7 % (the picture fills 86 % of its canvas) after the first picker looked sparse.
 
 * Both sheets were inspected at full size and every crop was checked on a dark and a light surface; no halo, brown remnant, partial neighbour or hard cutout was found.
 * Pictures with soft, see-through effects (the fading sigil of *Missing buff*, the arcane glows) keep their effect only within a few pixels of solid paint, so their

@@ -119,7 +119,7 @@ class Gallery(unittest.TestCase):
             self.assertGreater(solid, 0.03 * w * h, a["id"] + ": not empty")
             self.assertGreater(clear, 0.2 * w * h, a["id"] + ": real transparency")
             longer = max(x1 + 1 - x0, y1 + 1 - y0)
-            self.assertTrue(0.60 <= longer / side <= 0.80, "%s: the picture fills %.0f%% of its canvas" % (a["id"], 100.0 * longer / side))
+            self.assertTrue(0.70 <= longer / side <= 0.88, "%s: the picture fills %.0f%% of its canvas" % (a["id"], 100.0 * longer / side))
             self.assertLessEqual(abs((x0 + x1 + 1) / 2 - side / 2), side * 0.05, a["id"] + ": centred across")
             self.assertLessEqual(abs((y0 + y1 + 1) / 2 - side / 2), side * 0.05, a["id"] + ": centred down")
 
@@ -145,6 +145,7 @@ class Gallery(unittest.TestCase):
 
     def test_contact_sheet_is_shipped(self):
         self.assertEqual(png_header(ROOT / "docs" / "reminders-art" / "contact-sheet.png")[2:], (8, 2))
+        self.assertEqual(png_header(ROOT / "docs" / "reminders-art" / "qa-sheet.png")[2:], (8, 2))
 
 
 class Rebuild(unittest.TestCase):

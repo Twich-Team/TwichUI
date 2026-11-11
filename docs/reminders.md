@@ -320,7 +320,7 @@ The player sees three display modes and one place to choose a picture; the five 
   which returns when it closes, as it does after the template catalog). Opening it draws nothing on screen and starts no preview.
 - **TwichUI artwork** lists every picture TwichUI has made for reminders: the library (`docs/reminders-art.md`), the four artworks that were here
   first (`shield`, `ammo`, `wellfed`, `enchant`) and the eight TwichUI icons a reminder could already show, in six categories (Equipment, Buffs &
-  Effects, Supplies, Character, Adventure, General) with search by name, category or keyword. Thumbnails are the 64 px textures; the grid scrolls.
+  Effects, Supplies, Character, Adventure, General) with search by name, category or keyword. Thumbnails are drawn at 78 units from the large texture; the grid scrolls. A hovered tile gets a faint bronze rim; the chosen one the selection skin, a warm gold wash and the full gold rim, all under the picture. An empty search says so and offers **Show all pictures**.
 - **Game icons** is the other source: the icon of an item by ID, link or a drop from the bags (it goes straight back), as before. The item needn't be
   carried or equipped.
 - **Transaction.** A click only marks a *candidate* and shows it in the details strip (name, description, category, source). **Apply** commits it as
@@ -335,7 +335,7 @@ bounded by the catalog (one tile per picture, reused), and a texture loads only 
 has no TwichUI Diagnostics scope or gauge: there is nothing recurring to measure.
 
 Evidence: **unit-tested** (`tests/test_reminder_gallery.lua`, `tests/test_reminder_gallery.py`, `tests/test_reminders_settings.lua`);
-**simulator-tested** (`bash tools/simlab/reminders.sh appearance appearanceImage appearanceText appearanceLegacy picker pickerSearch pickerGame pickerGameApply pickerNarrow`:
+**simulator-tested** (`bash tools/simlab/reminders.sh appearance appearanceImage appearanceText appearanceLegacy picker pickerSearch pickerGame pickerGameApply pickerNarrow pickerEquipment pickerCharacter pickerRender`; `pickerRender` chooses every catalogued picture and checks the real renderer's live preview draws it:
 handler-level clicks, typing and Esc; screenshot-reviewed against `docs/reminders-revision/artwork-selector-mockup.png`). **Not tested**: how it
 looks and feels in the real client (fonts, texture filtering at small sizes, the scroll bar, hover tips, the companion's placement at other scales),
 real pointer input, drag and drop of an item onto the box.

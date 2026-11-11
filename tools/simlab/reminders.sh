@@ -6,7 +6,7 @@ RUN="$LAB/artifacts/reminders-$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$RUN"
 export SIMLAB_ASSETS="${SIMLAB_ASSETS:-1}"
 export SIMLAB_FORWARD="WOW_SIM_SOFTWARE_RENDER=1 WOW_SIM_NO_PARTY=1"
-if [ "$#" -eq 0 ]; then set -- editor editorTall catalog when nested drag dirty error narrow empty hover palette situation details actions menu scale wellfed conditions conditionsEditor conditionsPalette conditionsNarrow conditionsDrop conditionsDropHint appearance appearanceImage appearanceText appearanceLegacy picker pickerSearch pickerGame pickerGameApply pickerNarrow; fi
+if [ "$#" -eq 0 ]; then set -- editor editorTall catalog when nested drag dirty error narrow empty hover palette situation details actions menu scale wellfed conditions conditionsEditor conditionsPalette conditionsNarrow conditionsDrop conditionsDropHint appearance appearanceImage appearanceText appearanceLegacy picker pickerSearch pickerGame pickerGameApply pickerNarrow pickerEquipment pickerCharacter pickerRender; fi
 for view in "$@"; do
     { printf 'SIMLAB_PARAMS = { view = "%s" }\n' "$view"; cat "$SIMLAB_DIR/scenarios/lib.lua" "$SIMLAB_DIR/scenarios/reminders.lua"; } > "$LAB/fixtures/reminders-$view.lua"
     simlab_stage

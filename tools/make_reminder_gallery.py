@@ -16,7 +16,7 @@ Finding each picture (nothing is cut on a nominal grid):
   several pieces (the fishing rod, the arcane focus, the crumbling hourglass) stays whole.
 
 Each accepted picture is cleaned, scaled with its aspect ratio kept and centred on a square canvas with a clear margin
-(about 12 % each side, up to about 18 % for a heavy, compact picture: the optical balance of tools/make_npc_art.py, so a dense medallion does
+(about 7 % each side, up to about 13 % for a heavy, compact picture: the optical balance of tools/make_npc_art.py, so a dense medallion does
 not look bigger than a thin rod), and written three ways:
   assets/reminder-gallery/<id>.png                              the individual source, SOURCE px square, RGBA
   !!!TwichUI/media/reminders/gallery/<id>.tga                   LARGE px, for a reminder drawn above 64 units
@@ -42,9 +42,9 @@ from make_map_tool_icons import read_png, resample  # noqa: E402
 import make_settings_icons as SI  # noqa: E402
 
 SOURCE, LARGE, SMALL = 192, 128, 64     # square canvas sides: the source PNG, the runtime textures
-FIT = 0.76                              # the longer side of the content, as a share of the canvas (12 % clear margin each side)
+FIT = 0.86                              # the longer side of the content, as a share of the canvas (7 % clear margin each side)
 BALANCE = 0.5
-BALANCE_MIN = 0.85                      # a heavy picture is shrunk at most this far (margin at most about 18 %)
+BALANCE_MIN = 0.88                      # a heavy picture is shrunk at most this far (margin at most about 13 %)
 SHEETS = {1: "icon-grid-1.png", 2: "icon-grid-2.png"}
 SHEET_DIR = os.path.join("docs", "reminders-revision")
 CATEGORIES = ("Equipment", "Buffs & Effects", "Supplies", "Character", "Adventure", "General")
@@ -364,18 +364,82 @@ def contact_sheet(path, built, cols=9):
     png_rgb(path, W, H, img)
 
 
+# A 5 x 7 bitmap font (capitals, digits and a few marks) so the QA sheet can carry each picture's id and name without any imaging library.
+_FONT = {
+ "A": "01110 10001 10001 11111 10001 10001 10001", "B": "11110 10001 10001 11110 10001 10001 11110",
+ "C": "01110 10001 10000 10000 10000 10001 01110", "D": "11110 10001 10001 10001 10001 10001 11110",
+ "E": "11111 10000 10000 11110 10000 10000 11111", "F": "11111 10000 10000 11110 10000 10000 10000",
+ "G": "01110 10001 10000 10111 10001 10001 01111", "H": "10001 10001 10001 11111 10001 10001 10001",
+ "I": "01110 00100 00100 00100 00100 00100 01110", "J": "00111 00010 00010 00010 00010 10010 01100",
+ "K": "10001 10010 10100 11000 10100 10010 10001", "L": "10000 10000 10000 10000 10000 10000 11111",
+ "M": "10001 11011 10101 10101 10001 10001 10001", "N": "10001 11001 10101 10011 10001 10001 10001",
+ "O": "01110 10001 10001 10001 10001 10001 01110", "P": "11110 10001 10001 11110 10000 10000 10000",
+ "Q": "01110 10001 10001 10001 10101 10010 01101", "R": "11110 10001 10001 11110 10100 10010 10001",
+ "S": "01111 10000 10000 01110 00001 00001 11110", "T": "11111 00100 00100 00100 00100 00100 00100",
+ "U": "10001 10001 10001 10001 10001 10001 01110", "V": "10001 10001 10001 10001 10001 01010 00100",
+ "W": "10001 10001 10001 10101 10101 11011 10001", "X": "10001 10001 01010 00100 01010 10001 10001",
+ "Y": "10001 10001 01010 00100 00100 00100 00100", "Z": "11111 00001 00010 00100 01000 10000 11111",
+ "0": "01110 10001 10011 10101 11001 10001 01110", "1": "00100 01100 00100 00100 00100 00100 01110",
+ "2": "01110 10001 00001 00010 00100 01000 11111", "3": "11110 00001 00001 01110 00001 00001 11110",
+ "4": "00010 00110 01010 10010 11111 00010 00010", "5": "11111 10000 11110 00001 00001 10001 01110",
+ "6": "00110 01000 10000 11110 10001 10001 01110", "7": "11111 00001 00010 00100 01000 01000 01000",
+ "8": "01110 10001 10001 01110 10001 10001 01110", "9": "01110 10001 10001 01111 00001 00010 01100",
+ "-": "00000 00000 00000 11111 00000 00000 00000", "&": "01100 10010 10100 01000 10101 10010 01101",
+ ".": "00000 00000 00000 00000 00000 01100 01100", " ": "00000 00000 00000 00000 00000 00000 00000",
+}
+
+
+def draw_text(img, x, y, text, color):
+    """Capitals only, 5 x 7 px, one pixel between letters."""
+    for ch in text.upper():
+        rows = _FONT.get(ch, _FONT[" "]).split()
+        for ry, bits in enumerate(rows):
+            row = img[y + ry]
+            for rx, b in enumerate(bits):
+                if b == "1" and 0 <= x + rx < len(row) // 3:
+                    row[(x + rx) * 3:(x + rx) * 3 + 3] = bytes(color)
+        x += 6
+
+
+def qa_sheet(path, built, manifest, cols=5):
+    """QA artifact (not runtime art): each picture at 96 px on a dark surface with its stable id and display name under it."""
+    names = {m["id"]: m["name"] for m in manifest}
+    cell_w, cell_h = 212, 96 + 8 + 22
+    rows_n = (len(built) + cols - 1) // cols
+    W, H = 8 + cell_w * cols, 8 + cell_h * rows_n
+    bg = (30, 26, 22)
+    img = [bytearray(bytes(bg) * W) for _ in range(H)]
+    for i, (pid, canvases) in enumerate(built):
+        x0, y0 = 8 + (i % cols) * cell_w, 8 + (i // cols) * cell_h
+        canvas = resample(canvases[LARGE], (0, 0, LARGE, LARGE), 96, 96)
+        for yy in range(96):
+            row = canvas[yy]
+            out = img[y0 + yy]
+            for xx in range(96):
+                r, g, b, a = row[xx * 4:xx * 4 + 4]
+                al = a / 255.0
+                o = (x0 + xx + 40) * 3
+                out[o:o + 3] = bytes(int(round(c * al + k * (1 - al))) for c, k in zip((r, g, b), bg))
+        draw_text(img, x0, y0 + 100, pid.replace("reminder-", ""), (201, 162, 74))
+        draw_text(img, x0, y0 + 110, names[pid], (226, 220, 206))
+    png_rgb(path, W, H, img)
+
+
 def main():
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     ap = argparse.ArgumentParser()
     ap.add_argument("--check", action="store_true")
     ap.add_argument("--contact-sheet")
+    ap.add_argument("--qa-sheet", help="a labelled QA sheet (picture, stable id, name); needs every picture drawn")
     ap.add_argument("--out-root", default=root)
     ap.add_argument("--only", nargs="+", help="draw and write only these picture ids (the manifest and ArtData.lua are always written whole)")
     args = ap.parse_args()
-    built, manifest = build(root, args.out_root, args.check, set(args.only) if args.only else None, bool(args.contact_sheet))
+    built, manifest = build(root, args.out_root, args.check, set(args.only) if args.only else None, bool(args.contact_sheet or args.qa_sheet))
     print("%d pictures, %d rejected, %d kept from before" % (len(manifest), len(REJECTED), len(LEGACY)))
     if args.contact_sheet:
         contact_sheet(args.contact_sheet, built)
+    if args.qa_sheet:
+        qa_sheet(args.qa_sheet, built, manifest)
     return 0
 
 
