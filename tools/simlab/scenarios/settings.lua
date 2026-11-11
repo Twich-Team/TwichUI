@@ -174,6 +174,98 @@ Lab.Step("disclosures and navigation", function()
         Lab.Check("interact", "search field drives results", false, UI.IsPageActive(key))
     end
 end)
+-- Focused hosted-page exercises use disposable settings and never open a merchant or move items.
+if key == "ammoCustom" or key == "restockItems" or key == "chatCleanChannels" then
+    Lab.Step("hosted editor", function()
+        local page = key == "ammoCustom" and R.AmmoItemsPage or key == "restockItems" and R.RestockItemsPage or R.ChatCleanChannelsPage
+        local frame = page.Frame()
+        Lab.Check("construct", "host visible", true, frame:IsShown())
+        Lab.Check("construct", "list and scroll exist", true, frame.content ~= nil and frame.scroll ~= nil)
+        if key == "ammoCustom" then
+            local ok = page.AddFromText("2512")
+            Lab.Check("interact", "register ammunition", true, ok == true)
+            Lab.Settle(.3)
+            Lab.Check("state", "registration exists", true, R.AmmoItems.Entry(2512) ~= nil)
+            for _, row in ipairs({ frame.content:GetChildren() }) do
+                if row.id == 2512 then row.kind.onPick("bullet") end
+            end
+            Lab.Check("state", "classification saved", "bullet", R.AmmoItems.Entry(2512).kind)
+            for id = 2513, 2520 do R.AmmoItems.Add(id, "arrow") end
+            page.Refresh(); Lab.Settle(.2)
+            Lab.Check("state", "long ammunition list scrolls", true, frame.scroll:GetVerticalScrollRange() > 0)
+            for id = 2513, 2520 do R.AmmoItems.Remove(id) end
+            if not params.filled then R.AmmoItems.Remove(2512); page.Say("") end
+        elseif key == "restockItems" then
+            local ok = page.AddFromText("17020")
+            Lab.Check("interact", "add restock item", true, ok == true)
+            Lab.Settle(.3)
+            Lab.Check("state", "restock item exists", true, R.Restock.Rule(17020) ~= nil)
+            for _, row in ipairs({ frame.content:GetChildren() }) do
+                if row.id == 17020 and row.target then row.target:ClearFocus() end
+            end
+            for _, row in ipairs({ frame.content:GetChildren() }) do
+                if row.id == 17020 and row.target then
+                    row.target:SetFocus(); row.target:SetText("45"); row.target:ClearFocus()
+                end
+            end
+            Lab.Check("state", "target saved", 45, R.Restock.Rule(17020).target)
+            Lab.Check("state", "invalid target refused", false, R.Restock.SetTarget(17020, 0))
+            for id = 17021, 17028 do R.Restock.Add(id) end
+            page.Refresh(); Lab.Settle(.2)
+            Lab.Check("state", "long restock list scrolls", true, frame.scroll:GetVerticalScrollRange() > 0)
+            for id = 17021, 17028 do R.Restock.Remove(id) end
+            if not params.filled then R.Restock.Remove(17020); page.Say("") end
+        else
+            local known = R.ChatClean.KnownChannels
+            R.ChatClean.KnownChannels = function() return {} end
+            page.Refresh()
+            Lab.Check("state", "empty channels explained", true, frame.empty:IsShown())
+            R.ChatClean.KnownChannels = known
+            page.Refresh()
+            local ok = R.ChatClean.SetChannel("zone:2", "on", true, "Trade")
+            Lab.Check("interact", "enable channel", true, ok == true)
+            Lab.Check("state", "channel choice saved", true, R.ChatClean.Channels()["zone:2"].on)
+            Lab.Check("interact", "change filter", true, R.ChatClean.SetChannel("zone:2", "spam", false, "Trade"))
+            Lab.Check("state", "filter choice saved", false, R.ChatClean.Channels()["zone:2"].spam)
+            Lab.Settle(.3)
+            for _, row in ipairs({ frame.content:GetChildren() }) do
+                if row.ch and row.ch.key == "zone:2" then row.cats.spam:Click() end
+            end
+            Lab.Check("interact", "filter control changes choice", true, R.ChatClean.Channels()["zone:2"].spam)
+            R.ChatClean.KnownChannels = function()
+                local result = {}
+                for i = 1, 5 do
+                    result[i] = { key = "custom:fixture" .. i, label = "Channel " .. i, joined = true, choice = { on = true } }
+                end
+                return result
+            end
+            page.Refresh(); Lab.Settle(.2)
+            Lab.Check("state", "long channel list scrolls", true, frame.scroll:GetVerticalScrollRange() > 0)
+            R.ChatClean.KnownChannels = known
+            page.Refresh()
+        end
+        Lab.Settle(.3)
+        frame.scroll:SetVerticalScroll(frame.scroll:GetVerticalScrollRange() or 0)
+        Lab.Check("interact", "scroll remains in range", true, (frame.scroll:GetVerticalScroll() or 0) >= 0)
+        frame.scroll:SetVerticalScroll(0)
+        R.SettingsUI.Navigate("overview")
+        Lab.Check("state", "host hidden on navigation", false, frame:IsVisible())
+        R.SettingsUI.Navigate(key)
+        Lab.Settle(.3)
+        Lab.Check("state", "host reopens", true, frame:IsShown())
+        if params.filled and params.editor then
+            for _, row in ipairs({ frame.content:GetChildren() }) do
+                if key == "ammoCustom" and row.id == 2512 then
+                    row.kind:Click()
+                    Lab.Check("interact", "classification menu opens", true, R.SettingsWidgets.MenuShown())
+                elseif key == "restockItems" and row.id == 17020 then
+                    row.target:SetFocus()
+                    Lab.Check("interact", "quantity field focused", true, row.target:HasFocus())
+                end
+            end
+        end
+    end)
+end
 -- Keep Blizzard's unrelated PTR feedback button visible beside the capture, not over addon controls.
 -- Local Forever source: Blizzard_PTRFeedback_Frames.lua creates PTR_IssueReporter.ReportBug.
 -- Fixture positioning only; no simulator code, addon frame or saved state is changed.

@@ -270,8 +270,8 @@ Check(RS.Rule(17031).target == 45 and row2.target.text == "45", "Esc puts the ol
 row2.check:Fire("OnClick")
 Check(RS.Rule(17031).enabled == false and RS.Rule(17031).target == 45, "off keeps the target")
 Flush()
-Check(row2.status.text:find("Off:", 1, true) and row2.check:GetChecked() == false, "and says it isn't bought")
-Check(RowFor(17020).status.text:find("You carry 7: buys up to 13 more", 1, true), "an item on: what you carry and what it would buy (" .. RowFor(17020).status.text .. ")")
+Check(row2.status.text:find("Paused", 1, true) and row2.check:GetChecked() == false, "and says it isn't bought")
+Check(RowFor(17020).status.text:find("Carrying 7 · need 13 more", 1, true), "an item on: what you carry and what it would buy (" .. RowFor(17020).status.text .. ")")
 row2.up:Fire("OnClick")
 Flush()
 Check(RS.Rules()[1].id == 17031 and RowFor(17031).up.enabled == false and RowFor(17020).down.enabled == false, "moved up; the ends can't go further")
@@ -308,7 +308,7 @@ P.AddFromText("4242")
 f:Fire("OnEvent", "ITEM_DATA_LOAD_RESULT", 4242, false)
 Flush()
 local row4 = RowFor(4242)
-Check(row4.status.text:find("no item with the ID 4242", 1, true), "the game says there is no such item: said so")
+Check(row4.status.text:find("Item unavailable", 1, true), "the game says there is no such item: said so")
 
 -- remove: off the list; bags untouched
 local before = c.BAGS[0][1][2]

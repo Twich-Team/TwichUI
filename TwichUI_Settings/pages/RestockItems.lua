@@ -13,7 +13,7 @@ local P = {}
 R.RestockItemsPage = P
 
 local W = 644                  -- the settings window's content width
-local ROW_H, VISIBLE = 32, 6
+local ROW_H, VISIBLE = 42, 6
 local LIST_TOP = -140
 local LIST_H = ROW_H * VISIBLE + 8
 local LIST_W = W - 12 - 26     -- inside the well, less the scroll bar
@@ -174,11 +174,11 @@ local function Row(i)
     row.icon:SetPoint("LEFT", 6, 0)
     row.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
     row.name = G.Text(row, "body")
-    row.name:SetPoint("TOPLEFT", 38, -3)
+    row.name:SetPoint("TOPLEFT", 38, -7)
     row.name:SetWidth(NAME_W)
     row.name:SetWordWrap(false)
     row.status = G.Text(row, "meta")
-    row.status:SetPoint("TOPLEFT", 38, -18)
+    row.status:SetPoint("TOPLEFT", 38, -23)
     row.status:SetWidth(NAME_W)
     row.status:SetWordWrap(false)
     row:SetScript("OnEnter", function(self)
@@ -234,12 +234,12 @@ local function Row(i)
 end
 
 local function Status(rule, carried, state)
-    if state == "missing" then return ("The game has no item with the ID %d. Remove it, or check the number."):format(rule.id), "warn" end
+    if state == "missing" then return "Item unavailable · check its ID", "warn" end
     if state == "loading" then return "Loading the item's details...", nil end
     if carried == nil then return "Couldn't count it in your bags right now.", nil end
-    if not rule.enabled then return ("Off: you carry %d. Kept on the list, not bought."):format(carried), nil end
-    if carried >= rule.target then return ("You carry %d: at your target."):format(carried), "ok" end
-    return ("You carry %d: buys up to %d more at a merchant that sells it."):format(carried, rule.target - carried), nil
+    if not rule.enabled then return ("Paused · carrying %d"):format(carried), nil end
+    if carried >= rule.target then return ("Carrying %d · target met"):format(carried), "ok" end
+    return ("Carrying %d · need %d more"):format(carried, rule.target - carried), nil
 end
 
 ---------------------------------------------------------------------------
@@ -464,11 +464,11 @@ local function Build()
         return t
     end
     Column("Item", 38)
-    Column("Keep", TARGET_X + 12)
+    Column("Keep in bags", TARGET_X)
     Column("On", CHECK_X)
     Column("Order", UP_X)
     f.count = G.Text(f, "meta")
-    f.count:SetPoint("TOPRIGHT", -8, -124)
+    f.count:SetPoint("TOPRIGHT", f, "TOPLEFT", W - 8, -124)
     f.count:SetJustifyH("RIGHT")
     f.well = CreateFrame("Frame", nil, f, "BackdropTemplate")
     f.well:SetPoint("TOPLEFT", 0, LIST_TOP)
@@ -491,7 +491,7 @@ local function Build()
         P.Refresh()
     end)
     f.sugClass:SetChoices(SugChoices)
-    f.sugClass:SetPoint("TOPRIGHT", -2, SUG_TOP + 4)
+    f.sugClass:SetPoint("TOPRIGHT", f, "TOPLEFT", W - 2, SUG_TOP + 4)
     I.Tip(f.sugClass, "Class", "Shows your class's reagents first. Choose another class to see theirs.")
     f.sugHelp = G.Text(f, "small")
     f.sugHelp:SetPoint("TOPLEFT", 4, SUG_TOP - 20)

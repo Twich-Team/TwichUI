@@ -131,7 +131,7 @@ Flush()
 Check(AI.Count() == 1 and AI.Entry(2512).kind == "arrow", "typed: added as what the game says it is")
 Check(f.idBox.text == "" and P.lastSaid:find("Registered Rough Arrow as arrows", 1, true), "the box is cleared and it says what happened (" .. tostring(P.lastSaid) .. ")")
 local row = RowFor(2512)
-Check(Rows() == 1 and row and row.name.text == "Rough Arrow" and row.status.text:find("The game lists it as arrows too", 1, true), "drawn with its name and what the game says")
+Check(Rows() == 1 and row and row.name.text == "Rough Arrow" and row.status.text:find("Matches game classification", 1, true), "drawn with its name and what the game says")
 Check(row.kind.value == "arrow" and row.kind.text.text == "Arrows", "and what it is")
 
 -- a pasted link, with the choice on the box
@@ -150,7 +150,7 @@ c.CURSOR = { "item", 7000 }
 f.drop:Fire("OnReceiveDrag")
 Flush()
 Check(AI.Entry(7000) and AI.Entry(7000).kind == "arrow" and c.CURSOR == nil and c.CLEARED == 1, "an item dropped is registered and goes back where it came from")
-Check(RowFor(7000).status.text:find("another kind of projectile", 1, true), "and the game's other kind of projectile is said")
+Check(RowFor(7000).status.text:find("other projectile", 1, true), "and the game's other kind of projectile is said")
 c.CURSOR = { "item", 7000 }
 f.drop:Fire("OnClick")
 Check(AI.Count() == 3 and c.CLEARED == 2, "dropped again: no second entry")
@@ -160,10 +160,10 @@ Check(not P.AddFromCursor(), "an empty cursor does nothing")
 local r7 = RowFor(7000)
 r7.kind.onPick("bullet")
 Flush()
-Check(AI.Entry(7000).kind == "bullet" and RowFor(7000).status.text:find("Your registration as bullets decides", 1, true), "corrected, and the page says whose word decides")
+Check(AI.Entry(7000).kind == "bullet" and RowFor(7000).status.text:find("your choice applies", 1, true), "corrected, and the page says whose word decides")
 RowFor(2512).kind.onPick("bullet")
 Flush()
-Check(AI.Entry(2512).kind == "bullet" and RowFor(2512).status.text:find("The game lists it as arrows", 1, true), "a registration that differs from the game's is said")
+Check(AI.Entry(2512).kind == "bullet" and RowFor(2512).status.text:find("Game: arrows", 1, true), "a registration that differs from the game's is said")
 
 -- items the game has not loaded, or does not have
 P.AddFromText("90001")   -- a server item the client has nothing for
@@ -175,11 +175,11 @@ for _ = 1, 5 do P.Refresh() end
 Check(c.REQUESTED[90001] == 2, "asked for at most twice (" .. tostring(c.REQUESTED[90001]) .. ")")
 f:Fire("OnEvent", "ITEM_DATA_LOAD_RESULT", 90001, false)
 Flush()
-Check(RowFor(90001).status.text:find("no item with this ID yet", 1, true) and AI.Entry(90001), "the game saying there is none is said, and the entry is kept")
+Check(RowFor(90001).status.text:find("Item unavailable", 1, true) and AI.Entry(90001), "the game saying there is none is said, and the entry is kept")
 ITEMS[90001] = { "Server Shot", 6, 3 }
 f:Fire("OnEvent", "GET_ITEM_INFO_RECEIVED", 90001, true)
 Flush()
-Check(RowFor(90001).name.text == "Server Shot" and RowFor(90001).status.text:find("The game lists it as bullets. Your registration as arrows decides", 1, true), "details that arrive are used: " .. RowFor(90001).status.text)
+Check(RowFor(90001).name.text == "Server Shot" and RowFor(90001).status.text:find("Game: bullets · your choice: arrows", 1, true), "details that arrive are used: " .. RowFor(90001).status.text)
 
 -- remove: only the registration
 local before = AI.Count()

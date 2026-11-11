@@ -208,6 +208,15 @@ Inventory's Destinations. `SIMLAB_SETTINGS_EDITOR=true` opens the Magic items, c
 the chat editor's expert mode. Editor fixtures check every chat mode's text bounds and Magic's wrapped category-row
 separation, without changing the simulator engine or writing real saved data.
 
+For the hosted item and channel pages, run `SIMLAB_SETTINGS_FILLED=true bash tools/simlab/settings.sh ammoCustom
+chatCleanChannels restockItems`; omit `SIMLAB_SETTINGS_FILLED` for empty item lists, and add
+`SIMLAB_SETTINGS_POSE=narrow` for the constrained window. The scenario exercises ammunition registration and type,
+restock quantity validation, channel filters, an empty channel list, navigation and reopening. It uses disposable
+settings; it also checks scroll ranges with synthetic long lists. The simulator's item data may display Unknown.
+Real pointer input and native item art still require client coverage.
+With `SIMLAB_SETTINGS_FILLED=true SIMLAB_SETTINGS_EDITOR=true`, the ammunition type menu or restock quantity field
+is left open for an editing-state capture.
+
 Task choices, direct row reveal and settings-only companion dismissal/restoration, clickable appearance navigation and
 search/close ownership are checked where present. Companion samples use private real renderers or style helpers and
 synthetic content. They do not start routes, pin notifications, read journal history or enable a feature. All input remains

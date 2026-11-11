@@ -13,7 +13,7 @@ local P = {}
 R.AmmoItemsPage = P
 
 local W = 644                  -- the settings window's content width
-local ROW_H, VISIBLE = 32, 6
+local ROW_H, VISIBLE = 42, 6
 local HELP_H = 62
 local ADD_TOP = -(HELP_H + 4)
 local LIST_TOP = ADD_TOP - 60 - 40
@@ -78,18 +78,18 @@ end
 local function StatusText(entry, state)
     local AI = R.AmmoItems
     if state == "missing" then
-        return "The game has no item with this ID yet. It stays registered in case it appears; remove it if it was a typo.", "warn"
+        return "Item unavailable · registration kept", "warn"
     end
     if state == "loading" then return "Loading the item's details...", nil end
     local client = AI.Classify(entry.id)
     local mine = AI.KindLabel(entry.kind):lower()
     if client == "arrow" or client == "bullet" then
-        if client == entry.kind then return ("The game lists it as %s too."):format(mine), "ok" end
-        return ("The game lists it as %s. Your registration as %s decides."):format(AI.KindLabel(client):lower(), mine), nil
+        if client == entry.kind then return "Matches game classification", "ok" end
+        return ("Game: %s · your choice: %s"):format(AI.KindLabel(client):lower(), mine), nil
     end
-    if client == "other" then return ("The game lists it as another kind of projectile. Your registration as %s decides."):format(mine), nil end
-    if client == false then return ("The game does not list it as ammunition. Your registration as %s decides."):format(mine), nil end
-    return ("The game has not classified it. Your registration as %s decides."):format(mine), nil
+    if client == "other" then return "Game: other projectile · your choice applies", nil end
+    if client == false then return "Game: not ammunition · your choice applies", nil end
+    return "Game classification unavailable · your choice applies", nil
 end
 
 ---------------------------------------------------------------------------
@@ -188,11 +188,11 @@ local function Row(i)
     row.icon:SetPoint("LEFT", 6, 0)
     row.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
     row.name = G.Text(row, "body")
-    row.name:SetPoint("TOPLEFT", 38, -3)
+    row.name:SetPoint("TOPLEFT", 38, -7)
     row.name:SetWidth(NAME_W)
     row.name:SetWordWrap(false)
     row.status = G.Text(row, "meta")
-    row.status:SetPoint("TOPLEFT", 38, -18)
+    row.status:SetPoint("TOPLEFT", 38, -23)
     row.status:SetWidth(NAME_W)
     row.status:SetWordWrap(false)
     row:SetScript("OnEnter", function(self)
@@ -365,9 +365,9 @@ local function Build()
         return t
     end
     Column("Item", 38)
-    Column("It is", KIND_X + 4)
+    Column("Count as", KIND_X + 4)
     f.count = G.Text(f, "meta")
-    f.count:SetPoint("TOPRIGHT", -8, LIST_TOP + 16)
+    f.count:SetPoint("TOPRIGHT", f, "TOPLEFT", W - 8, LIST_TOP + 16)
     f.count:SetJustifyH("RIGHT")
     f.well = CreateFrame("Frame", nil, f, "BackdropTemplate")
     f.well:SetPoint("TOPLEFT", 0, LIST_TOP)
