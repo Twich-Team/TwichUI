@@ -219,6 +219,7 @@ local G = {
     { "nav.decodedTiles", "Navigation tiles decoded (cache)", "cache", "map", Field("NavData", "decodedTiles") },
     { "reminders.active", "Reminders running", "state", "group", Field("ReminderController", "active") },
     { "reminders.keys", "Reminders: observations listened for", "listeners", "group", Field("ReminderController", "keys") },
+    { "reminders.timed", "Reminders: waiting on a time boundary (one timer each)", "listeners", "group", Field("ReminderController", "timed") },
     { "reminders.decisions", "Reminders: decisions so far (module count)", "work", "group", Field("ReminderController", "decisions") },
     { "reminders.designer.cards", "Reminders designer: condition cards made (pool)", "pool", "settings", Field("RemindersDesigner", "cards") },
     { "reminders.designer.pickerRows", "Reminders designer: picker rows made (pool)", "pool", "settings", Field("RemindersDesigner", "pickerRows") },

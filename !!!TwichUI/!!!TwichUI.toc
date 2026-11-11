@@ -321,7 +321,8 @@ hazard\Alerts.lua
 # Reminders: artwork, an icon or words on screen while conditions you set are true (an empty off hand, a missing item,
 # combat, being mounted, ammunition missing or used up ...). Nothing exists until you make one, and each starts turned off. Config.lua is what is stored
 # and checked, Conditions.lua and Ammunition.lua the kinds of condition (pure; AmmoItems.lua is what counts as ammunition,
-# loaded first so a profile change reaches it before the reminders), Evaluate.lua the decision (pure), State.lua reads the game,
+# loaded first so a profile change reaches it before the reminders), Evaluate.lua the decision (pure), State.lua reads the game
+# (Auras, Supplies, Character and Context.lua each add kinds of condition with the sources that read them),
 # Display.lua draws, Controller.lua puts them together. It never equips, uses or casts anything. The settings are in
 # TwichUI_Settings; the artwork is made by tools/make_reminder_art.py.
 reminders\AmmoItems.lua
@@ -330,6 +331,10 @@ reminders\Conditions.lua
 reminders\Ammunition.lua
 reminders\Evaluate.lua
 reminders\State.lua
+reminders\Auras.lua
+reminders\Supplies.lua
+reminders\Character.lua
+reminders\Context.lua
 reminders\Display.lua
 reminders\Controller.lua
 

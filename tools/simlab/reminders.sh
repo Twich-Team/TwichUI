@@ -6,12 +6,13 @@ RUN="$LAB/artifacts/reminders-$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$RUN"
 export SIMLAB_ASSETS="${SIMLAB_ASSETS:-1}"
 export SIMLAB_FORWARD="WOW_SIM_SOFTWARE_RENDER=1 WOW_SIM_NO_PARTY=1"
-if [ "$#" -eq 0 ]; then set -- editor editorTall catalog when nested drag dirty error narrow empty hover palette situation details actions menu scale wellfed; fi
+if [ "$#" -eq 0 ]; then set -- editor editorTall catalog when nested drag dirty error narrow empty hover palette situation details actions menu scale wellfed conditions conditionsEditor conditionsPalette conditionsNarrow; fi
 for view in "$@"; do
     { printf 'SIMLAB_PARAMS = { view = "%s" }\n' "$view"; cat "$SIMLAB_DIR/scenarios/lib.lua" "$SIMLAB_DIR/scenarios/reminders.lua"; } > "$LAB/fixtures/reminders-$view.lua"
     simlab_stage
     width=1600; height=1200
-    if [ "$view" = narrow ]; then width=1280; height=800; fi
+    if [ "$view" = narrow ] || [ "$view" = conditionsNarrow ]; then width=1280; height=800; fi
+    if [ "$view" = conditionAudit ]; then width=1600; height=1200; fi
     timeout 280 "$SIMLAB_DIR/sim.sh" --no-saved-vars --addons-path "$ROOT" --exec-lua "@$LAB/fixtures/reminders-$view.lua" \
         screenshot --png -o "$RUN/$view.png" --width "$width" --height "$height" --dump-tree TwichUI \
         > "$RUN/$view.stdout" 2> "$RUN/$view.stderr"
@@ -36,7 +37,7 @@ for name in sys.argv[3:]:
         print('\n'.join(line for line in text.splitlines() if 'FAIL' in line or 'Lua error:' in line))
     failed |= not good
     w,h,_=read_rgba(run/(name+'.png'))
-    expected=(1280,800) if name=='narrow' else (1600,1200)
+    expected=(1280,800) if name in ('narrow','conditionsNarrow') else (1600,1200)
     if (w,h)!=expected: failed=True
 sys.exit(1 if failed else 0)
 PY

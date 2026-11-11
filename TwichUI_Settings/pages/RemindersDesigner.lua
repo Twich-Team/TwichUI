@@ -716,9 +716,28 @@ function Dz.Build(parent, env)
     ep.op = DraftControl("op", 122)
     ep.value = DraftControl("value", 178)
     M.ContextTip(ep.value, "Condition value", function() return ui.draft and Pl().Help(ui.draft) end)
-    ep.item = G.EditBox(ep, 110, 22)
+    ep.item = G.EditBox(ep, 110, 24)
     ep.item:SetMaxLetters(200)
+    M.ReminderControl(ep.item, "field")
+    -- An item (its ID, link or a drop from the bags) or a spell (its ID or link, a drop from the spellbook; a buff takes
+    -- several, separated by commas): whichever the draft asks for.
     local function TakeItem(text)
+        local draft = ui.draft
+        local kind = draft and Pl().NeedsId(draft)
+        if kind == "spell" then
+            local many = draft.type == "aura" and R.ReminderAuras.MAX_SPELLS or 1
+            local ids, why = Pl().ParseSpells(text, many)
+            if not ids then
+                Dz.Say(why == "many" and ("At most %d spell IDs: one for each rank that should count."):format(many)
+                    or "That isn't a spell ID. Type the number from the spell's link, paste the link, or drop the spell from your spellbook on the box.", "warn")
+                return
+            end
+            ep.item:ClearFocus()
+            ui.draft = Pl().WithIds(draft, ids)
+            Dz.Say(nil)
+            Poke()
+            return
+        end
         local id = RM().ParseItem(text)
         if not id then Dz.Say("That isn't an item ID. Type the number from the item's link, paste the link, or drop the item on the box.", "warn") return end
         ep.item:ClearFocus()
@@ -727,12 +746,48 @@ function Dz.Build(parent, env)
     end
     ep.item:SetScript("OnEnterPressed", function(self) TakeItem(self:GetText()) end)
     ep.item:SetScript("OnReceiveDrag", function()
-        local kind, id = GetCursorInfo()
-        if kind ~= "item" then return end
-        ClearCursor()   -- the item goes straight back where it came from; only its ID is noted
-        TakeItem(tostring(id or ""))
+        local kind, a, _, spellID = GetCursorInfo()
+        local wants = ui.draft and Pl().NeedsId(ui.draft)
+        if kind == "item" and wants == "item" then
+            ClearCursor()   -- the item goes straight back where it came from; only its ID is noted
+            TakeItem(tostring(a or ""))
+        elseif kind == "spell" and wants == "spell" and spellID then
+            ClearCursor()
+            local id = tostring(spellID)
+            if ui.draft.type == "aura" and ep.item:GetText():find("%d") then id = ep.item:GetText() .. ", " .. id end
+            TakeItem(id)
+        end
     end)
-    M.ContextTip(ep.item, "Item", "Its item ID, its link pasted here, or the item dropped here from your bags (it goes straight back). Press Enter.")
+    M.ContextTip(ep.item, "Item or spell", function()
+        if ui.draft and Pl().NeedsId(ui.draft) == "spell" then
+            return ui.draft.type == "aura" and "Its spell ID or link, or several separated by commas (each rank of a spell has an ID of its own). Press Enter."
+                or "Its spell ID or link, or the spell dropped here from your spellbook. Press Enter."
+        end
+        return "Its item ID, its link pasted here, or the item dropped here from your bags (it goes straight back). Press Enter."
+    end)
+    -- a number for the condition's amount field (any whole number in its range; the card offers quick choices)
+    ep.amount = G.EditBox(ep, 70, 24)
+    ep.amount:SetMaxLetters(6)
+    M.ReminderControl(ep.amount, "field")
+    ep.amount:SetNumeric(true)
+    ep.amountWords = G.Text(ep, "small")
+    local function TakeAmount(text)
+        local spec = ui.draft and Pl().EditField(ui.draft, "amount")
+        local n = tonumber(text)
+        if not (spec and n and n % 1 == 0 and n >= spec.min and n <= spec.max) then
+            Dz.Say(("Type a whole number from %d to %d."):format(spec and spec.min or 1, spec and spec.max or 1), "warn")
+            return
+        end
+        ep.amount:ClearFocus()
+        ui.draft = Pl().WithNumber(ui.draft, spec.field, n)
+        Dz.Say(nil)
+        Poke()
+    end
+    ep.amount:SetScript("OnEnterPressed", function(self) TakeAmount(self:GetText()) end)
+    M.ContextTip(ep.amount, "Amount", function()
+        local spec = ui.draft and Pl().EditField(ui.draft, "amount")
+        return spec and ("A whole number from %d to %d. Press Enter."):format(spec.min, spec.max) or ""
+    end)
     ep.itemInfo = G.Text(ep, "small")
     ep.reads = G.Text(ep, "body")
     ep.reads:SetWordWrap(true)
@@ -922,7 +977,7 @@ function Dz.Build(parent, env)
             c.inline, c.locations = nil, nil
         end
         for _, el in ipairs({ tp.names, tp.addMe, tp.removeMe, tp.classLabel, tp.class, tp.note, tp.done }) do el:Hide() end
-        for _, el in ipairs({ ep.title, ep.subject, ep.op, ep.value, ep.item, ep.itemInfo, ep.reads, ep.problem, ep.done, ep.cancel }) do el:Hide() end
+        for _, el in ipairs({ ep.title, ep.subject, ep.op, ep.value, ep.item, ep.itemInfo, ep.amount, ep.amountWords, ep.reads, ep.problem, ep.done, ep.cancel }) do el:Hide() end
         for _, el in ipairs({ pp.none, pp.cancel, pp.back, pp.newAny, pp.newAll, pp.newNote }) do el:Hide() end
     end
 
@@ -935,9 +990,10 @@ function Dz.Build(parent, env)
         local field = card.inline and card.inline[index]
         if not (entry and entry.cond and field) or value == field.value or ui.draft then return end
         local Pln = Pl()
+        if field.kind == "number" and value == Pln.OTHER then Dz.Edit(card.raw) return end
         local nextCond = Pln.WithCardField(entry.cond, field, value)
         if not nextCond then return end
-        if Pln.NeedsItem(nextCond) and not nextCond.item then
+        if Pln.NeedsId(nextCond) and not Pln.HasId(nextCond) then
             Dz.Edit(card.raw)
             ui.draft = nextCond
             return
@@ -1196,25 +1252,52 @@ function Dz.Build(parent, env)
         ep:SetWidth(w)
         K.Put(ep, self, x, y)
         local isNew = ui.mode == "new"
-        local itemOnly = not isNew and not self.isAdvanced and Pl().NeedsItem(draft)
+        -- In the basic view the card already has the choices: opened from it, the editor holds only what the card
+        -- can't (the item or spell, a number of your own).
+        local compact = not isNew and not self.isAdvanced
+        local idKind = Pl().NeedsId(draft)
+        local amount = Pl().EditField(draft, "amount")
         local h = 10
-        K.Text(ep.title, isNew and ("Add: " .. (ui.pickedName or "a condition")) or (itemOnly and "Choose the item" or "Edit this condition"), nil, 12, h, ep)
+        local title = "Edit this condition"
+        if isNew then title = "Add: " .. (ui.pickedName or "a condition")
+        elseif compact and idKind then title = idKind == "spell" and (draft.type == "aura" and ("Choose the " .. (draft.harmful and "debuff" or "buff")) or "Choose the spell") or "Choose the item"
+        elseif compact and amount then title = "Choose the amount" end
+        K.Text(ep.title, title, nil, 12, h, ep)
         G.Color(ep.title, pal.bronzeText)
         h = h + 22
         local cx = 12
-        for _, spec in ipairs(itemOnly and {} or Pl().CardFields(draft)) do
-            local control = ep[spec.key]
-            if cx + control:GetWidth() + 12 > w then cx, h = 12, h + 29 end
-            control:SetValue(spec.value, spec.label)
-            K.Put(control, ep, cx, h)
-            cx = cx + control:GetWidth() + 8
+        local placed = false
+        for _, spec in ipairs(compact and {} or Pl().CardFields(draft)) do
+            if spec.kind ~= "number" then
+                local control = ep[spec.key]
+                if cx + control:GetWidth() + 12 > w then cx, h = 12, h + 29 end
+                control:SetValue(spec.value, spec.label)
+                K.Put(control, ep, cx, h)
+                cx = cx + control:GetWidth() + 8
+                placed = true
+            end
         end
-        if not itemOnly then h = h + 32 end
-        if Pl().NeedsItem(draft) then
-            if not ep.item:HasFocus() then ep.item:SetText(draft.item and tostring(draft.item) or "") end
+        if placed then h = h + 32 end
+        if amount then
+            if not ep.amount:HasFocus() then ep.amount:SetText(amount.value and tostring(amount.value) or "") end
+            K.Put(ep.amount, ep, 12, h)
+            K.Text(ep.amountWords, amount.value and amount.words(amount.value) or ("A whole number from %d to %d"):format(amount.min, amount.max), amount.value and nil or "quiet", 92, h + 5, ep)
+            h = h + 30
+        end
+        if idKind then
+            if not ep.item:HasFocus() then ep.item:SetText(Pl().IdText(draft)) end
+            ep.item:SetWidth(draft.type == "aura" and 170 or 110)
             K.Put(ep.item, ep, 12, h)
-            local text, tone = K.ItemLine(draft.item)
-            K.Text(ep.itemInfo, text, tone, 132, h + 5, ep)
+            local text, tone
+            if idKind == "spell" then
+                text = Pl().SpellLine(draft)
+                tone = text and nil or "quiet"
+                text = text or (draft.type == "aura" and "Spell IDs, separated by commas" or "A spell ID or link")
+            else
+                text, tone = K.ItemLine(draft.item)
+            end
+            ep.itemInfo:SetWidth(math.max(80, w - ep.item:GetWidth() - 40))
+            K.Text(ep.itemInfo, text, tone, ep.item:GetWidth() + 22, h + 5, ep)
             h = h + 30
         end
         ep.reads:SetWidth(w - 24)
@@ -1296,7 +1379,7 @@ function Dz.Build(parent, env)
                 if x ~= y then return x < y end
                 return a.name < b.name
             end)
-            for _, category in ipairs({ "Equipment", "Character", "Combat", "Other" }) do
+            for _, category in ipairs(Pl().PALETTE_ORDER) do
                 local header
                 if not ui.category or ui.category == category then
                     for _, e in ipairs(entries) do
@@ -1511,6 +1594,23 @@ function Dz.Build(parent, env)
                 return true
             end
         end
+        -- Where the cards' fields start: 300, or (when a card in this rule has three fields) just past the widest title,
+        -- the same for every card so the fields line up down the rule.
+        local fieldX = 300
+        for i, entry in ipairs(v.conditions) do
+            local cond = entry.cond
+            if cond and not Pl().LocationValues(entry) and #Pl().CardFields(cond) >= 3 then fieldX = nil end
+        end
+        if not fieldX then
+            local widest = 0
+            for i, entry in ipairs(v.conditions) do
+                local cond = entry.cond or { type = "player", state = "dungeon" }
+                local title = self.cards[i].title
+                title:SetText(Pl().CardTitle(cond) or "")
+                widest = math.max(widest, math.ceil(title:GetStringWidth() or 196))
+            end
+            fieldX = math.max(236, math.min(300, 99 + widest + 16))
+        end
         for i, entry in ipairs(v.conditions) do
             if i == 2 then
                 K.Put(self.onlyHead, self, PAD, h + 6)
@@ -1539,10 +1639,10 @@ function Dz.Build(parent, env)
             card.more:ClearAllPoints()
             card.more:SetPoint("TOPRIGHT", -10, -9)
             card.more:SetShown(card:IsMouseOver() and not ui.draft)
-            local needsItem = Pl().NeedsItem(cond)
+            local needsItem = Pl().NeedsId(cond) ~= nil
             if needsItem then
-                card.item.text:SetText(cond.item and "Change item" or "Choose item")
-                K.Put(card.item, card, 300, 11)
+                card.item.text:SetText(Pl().IdButton(cond))
+                K.Put(card.item, card, fieldX, 11)
             end
             if locations then
                 local x = 99
@@ -1574,7 +1674,7 @@ function Dz.Build(parent, env)
             else
                 local fields = Pl().CardFields(cond)
                 card.inline = fields
-                local x = 300
+                local x = fieldX
                 local fieldWidth = math.floor((w - x - 18 - (#fields - 1) * 7) / #fields)
                 for j, spec in ipairs(fields) do
                     local field = card.fields[j]

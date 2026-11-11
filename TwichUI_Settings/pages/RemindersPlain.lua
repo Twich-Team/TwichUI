@@ -59,6 +59,7 @@ local function EquipmentSentence(cond)
 end
 
 local KIND = {}
+local FIELDS = {}   -- the editor's fields of the kinds added with the condition library (below)
 
 KIND.equipment = { sentence = EquipmentSentence }
 
@@ -101,9 +102,77 @@ KIND.weaponEnchant = {
         local CT = C()
         local h, c = CT.EnchantHand(cond.hand), CT.EnchantChoice(cond.what)
         if not (h and c) then return nil end
+        if cond.what == "expiring" then
+            return ("Your %s weapon enchant has less than %s left"):format(h[2]:lower(), cond.seconds and CT.Duration(cond.seconds) or "the time you choose")
+        end
         return ("Your %s weapon %s"):format(h[2]:lower(), c[3])
     end,
 }
+
+local function AU() return R.ReminderAuras end
+local function SU() return R.ReminderSupplies end
+local function CH() return R.ReminderCharacter end
+local function CX() return R.ReminderContext end
+local function Fewer(compare) return compare == "below" and "fewer than" or "at least" end
+
+KIND.aura = {
+    sentence = function(cond)
+        local names = AU().Names(cond.spells)
+        local what = cond.harmful and "debuff" or "buff"
+        if not names then return ("A %s on you (none chosen yet)"):format(what) end
+        local w = cond.what
+        if w == "present" then return cond.harmful and ("You are affected by " .. names) or ("You have " .. names) end
+        if w == "missing" then return cond.harmful and ("You are not affected by " .. names) or ("You are missing " .. names) end
+        if w == "expiring" then
+            return ("%s %s less than %s left"):format(cond.harmful and names or ("Your " .. names), cond.harmful and "on you has" or "has",
+                cond.seconds and C().Duration(cond.seconds) or "the time you choose")
+        end
+        return ("%s has %s %s stacks on you"):format(names, Fewer(cond.compare), tostring(cond.stacks or "?"))
+    end,
+}
+
+KIND.itemCount = {
+    sentence = function(cond)
+        if not cond.item then return ("You carry %s %d of an item (none chosen yet)"):format(Fewer(cond.compare), cond.count or 0) end
+        return ("You carry %s %d %s"):format(Fewer(cond.compare), cond.count or 0, C().ItemWords(cond.item))
+    end,
+}
+
+KIND.bagSpace = {
+    sentence = function(cond)
+        if cond.compare == "below" and cond.count == 1 then return "Your bags are full" end
+        return ("You have %s %d free bag slot%s"):format(Fewer(cond.compare), cond.count or 0, cond.count == 1 and "" or "s")
+    end,
+}
+
+KIND.power = {
+    sentence = function(cond)
+        local p = CH().Power(cond.power)
+        if not p then return nil end
+        return ("Your %s is %s %d%%"):format(p[3]:lower(), cond.compare == "below" and "below" or "at least", cond.percent or 0)
+    end,
+}
+
+KIND.spellKnown = {
+    sentence = function(cond)
+        if not cond.spell then return "A spell you know (none chosen yet)" end
+        return ("You %s %s"):format(cond.negate and "don't know" or "know", C().SpellWords(cond.spell))
+    end,
+}
+
+KIND.cooldown = {
+    sentence = function(cond)
+        if not cond.spell then return "A spell's cooldown (none chosen yet)" end
+        return C().Get("cooldown").Summary(cond)
+    end,
+}
+
+KIND.level = { sentence = function(cond) return C().Get("level").Summary(cond) end }
+KIND.durability = { sentence = function(cond) return C().Get("durability").Summary(cond) end }
+KIND.form = { sentence = function(cond) return C().Get("form").Summary(cond) end }
+KIND.groupType = { sentence = function(cond) return C().Get("groupType").Summary(cond) end }
+KIND.zone = { sentence = function(cond) return C().Get("zone").Summary(cond) end }
+KIND.target = { sentence = function(cond) return C().Get("target").Summary(cond) end }
 
 KIND.wellFed = {
     sentence = function(cond)
@@ -164,6 +233,10 @@ function Pl.Capability(entry)
         local what = s and s[3] or "that"
         return ("Cannot check whether you are %s on this client."):format(what), ("The client does not report whether you are %s."):format(what)
     end
+    local p = C().Get(cond.type)
+    if p and p.Supported and not p.Supported() then
+        return "Cannot check this on this client.", Upper1(p.unsupported or "the client does not report it.")
+    end
     return nil
 end
 
@@ -179,16 +252,28 @@ end
 ---------------------------------------------------------------------------
 -- The picker: what can be added, from the kinds that are registered
 ---------------------------------------------------------------------------
-Pl.CATEGORIES = { "Combat", "Character", "Equipment", "Other" }
+Pl.CATEGORIES = { "Combat", "Character", "Buffs", "Equipment", "Supplies", "Places and group", "Other" }
+-- the order the palette lists them in
+Pl.PALETTE_ORDER = { "Equipment", "Character", "Buffs", "Supplies", "Combat", "Places and group", "Other" }
 
 -- an icon (R.Icons id) for a kind of condition, drawn small beside it
-local ICON = { equipment = "gearComparison", ammunition = "ammunition", class = "profiles", talent = "classResources", weaponEnchant = "reminders", wellFed = "foodAndDrink" }
-local PLAYER_ICON = { combat = "hazardAlerts", dead = "resurrection", ghost = "releaseSpirit", mounted = "navigation", resting = "sleepingBag", dungeon = "mapsNavigation", raid = "mapsNavigation" }
--- Condition identity never changes a reminder's selected art or a template illustration.
+local ICON = { equipment = "gearComparison", ammunition = "ammunition", class = "profiles", talent = "classResources", weaponEnchant = "reminders", wellFed = "foodAndDrink",
+    aura = "mage", power = "healerWatch", cooldown = "diagTimeline", groupType = "profilesSharing", zone = "mapToolbar", target = "targetArt" }
+local PLAYER_ICON = { combat = "hazardAlerts", dead = "resurrection", ghost = "releaseSpirit", mounted = "navigation", resting = "sleepingBag", dungeon = "mapsNavigation", raid = "mapsNavigation",
+    moving = "navigation", taxi = "navigation" }
+-- Condition identity never changes a reminder's selected art or a template illustration. The painted vendor and
+-- trainer pictures (media/npcs, NK.ART) stand for the conditions whose subject they show.
 local CONDITION_ART = {
     weaponEnchant = [[media\reminders\conditions\enchant]],
     combat = [[media\reminders\conditions\combat]],
     mounted = [[media\npcs\horse-head]],
+    taxi = [[media\npcs\wing]],
+    itemCount = [[media\npcs\reagent-pouch]],
+    bagSpace = [[media\npcs\leather-backpack]],
+    durability = [[media\npcs\hammer]],
+    spellKnown = [[media\npcs\sealed-scroll]],
+    form = [[media\npcs\paw]],
+    level = [[media\npcs\hooded-winged-figure]],
 }
 function Pl.ArtFile(cond, size)
     local key = cond and (cond.type == "player" and cond.state or cond.type)
@@ -198,6 +283,7 @@ end
 function Pl.Icon(cond)
     if type(cond) ~= "table" then return "reminderTest" end
     if cond.type == "player" then return PLAYER_ICON[cond.state] or "reminderTest" end
+    if cond.type == "aura" and cond.harmful then return "hazardAlerts" end
     return ICON[cond.type] or "reminderTest"
 end
 
@@ -223,12 +309,15 @@ function Pl.ApplyArt(texture, cond, size)
 end
 
 local CARD_TITLE = { equipment = "Equipment slot", ammunition = "Ammunition", class = "Class",
-    talent = "Specialization", weaponEnchant = "Weapon enchant", wellFed = "Well Fed" }
+    talent = "Specialization", weaponEnchant = "Weapon enchant", wellFed = "Well Fed",
+    itemCount = "Item count", bagSpace = "Bag space", durability = "Durability", power = "Resource", spellKnown = "Spell known",
+    form = "Form or stance", level = "Level", cooldown = "Cooldown", groupType = "Group", zone = "Place", target = "Target" }
 local PLAYER_TITLE = { combat = "Combat", dead = "Alive or dead", ghost = "Ghost", mounted = "Mounted",
-    resting = "Resting", dungeon = "Location", raid = "Location" }
+    resting = "Resting", dungeon = "Location", raid = "Location", moving = "Moving", taxi = "Flight path" }
 local PLAYER_LABEL = { dungeon = "Dungeon", raid = "Raid" }
 
 function Pl.CardTitle(cond)
+    if cond.type == "aura" then return cond.harmful and "Debuff" or "Buff" end
     return cond.type == "player" and PLAYER_TITLE[cond.state] or CARD_TITLE[cond.type]
 end
 
@@ -324,6 +413,24 @@ local PLAYER_BLURB = {
     resting = "Whether you are resting: in an inn or a capital city.",
     dungeon = "Whether you are inside a dungeon (a five-player instance).",
     raid = "Whether you are inside a raid instance.",
+    moving = "Whether you are moving. It changes with every step, so it suits \"only while standing still\" with a short wait before showing.",
+    taxi = "Whether you are on a flight path.",
+}
+
+-- The kinds added with the condition library: key, category, palette name, blurb
+local MORE = {
+    aura = { "Buffs", "A buff or debuff on you", "Whether a buff or debuff you choose (by its spell ID) is on you, how long it has left or how many stacks it has. Each rank of a spell has an ID of its own: add each one you want to count. Not readable while the game hides your buffs from addons." },
+    itemCount = { "Supplies", "How many of an item you carry", "Counts one item in your bags (not the bank) and compares it with a number: fewer than 10 candles, at least one hearthstone." },
+    bagSpace = { "Supplies", "Free bag slots", "How many free slots your general bags have. Room in a quiver, soul bag or profession bag isn't counted: it can't take just anything." },
+    durability = { "Equipment", "Equipment durability", "Whether something you wear is broken, or worn below a share you choose. Each item is judged on its own, never an average." },
+    power = { "Character", "Your mana, rage or energy", "Your mana, rage or energy as a share of its maximum. A character with no such resource never matches. Not readable while the game hides it from addons." },
+    spellKnown = { "Character", "A spell you know", "Whether you know a spell, chosen by its spell ID or link. A different rank is a different spell." },
+    form = { "Character", "Your form or stance", "Whether you are in a form or stance (a druid form, a warrior stance, stealth), or in none." },
+    level = { "Character", "Your level", "Your character's level compared with a number." },
+    cooldown = { "Combat", "A spell's cooldown", "Whether a spell you know is ready, cooling down, or ready within a time you choose. The global cooldown after any spell doesn't count." },
+    target = { "Combat", "Your target", "Whether you have a target, and whether it can be attacked, is friendly or is dead. With no target, only \"You have a target\" can be true or false." },
+    groupType = { "Places and group", "Your group", "Whether you are solo, in a party or in a raid group: whom you are grouped with, not where you are." },
+    zone = { "Places and group", "Where you are", "A zone, city or instance, chosen where you are now. A zone includes the towns, caves and buildings inside it." },
 }
 
 function Pl.Entries()
@@ -365,6 +472,17 @@ function Pl.Entries()
                 blurb = "The ammunition for your ranged weapon: none selected, used up or the wrong kind. It never matches for a weapon that takes none.",
                 icon = Pl.Icon({ type = "ammunition" }), make = function() return p.New() end,
                 note = (A and not A.Supported()) and "This client doesn't say whether a weapon takes ammunition, so a reminder using it can't be turned on here." or nil }
+        elseif MORE[p.type] then
+            local m = MORE[p.type]
+            local make = function() return p.New() end
+            out[#out + 1] = { key = p.type, kind = p.type, category = m[1], name = m[2], blurb = m[3], icon = Pl.Icon(make()), make = make,
+                note = (p.Supported and not p.Supported()) and "This client doesn't report it, so a reminder using it can't be turned on here." or nil }
+            if p.type == "aura" then
+                local debuff = function() local c = p.New(); c.harmful, c.what = true, "present" return c end
+                out[#out + 1] = { key = "aura:harmful", kind = "aura", category = m[1], name = "A debuff on you",
+                    blurb = "Whether a debuff you choose (by its spell ID) is on you. Not readable while the game hides your auras from addons.",
+                    icon = Pl.Icon(debuff()), make = debuff }
+            end
         else
             -- a kind added later: offered under Other until it has words of its own here
             out[#out + 1] = { key = "kind:" .. p.type, kind = p.type, category = "Other", name = p.label or p.type,
@@ -379,7 +497,7 @@ function Pl.Matches(entry, query)
     if not query or query == "" then return true end
     query = query:lower()
     local state = entry.kind == "player" and entry.key:match("^player:(.+)$")
-    local title = CARD_TITLE[entry.kind] or PLAYER_TITLE[state] or ""
+    local title = CARD_TITLE[entry.kind] or PLAYER_TITLE[state] or (entry.kind == "aura" and "buff debuff aura") or ""
     return (entry.name:lower():find(query, 1, true) or entry.blurb:lower():find(query, 1, true)
         or entry.category:lower():find(query, 1, true) or title:lower():find(query, 1, true)) ~= nil
 end
@@ -429,6 +547,12 @@ end
 function Pl.ValueChoices(cond)
     local CT = C()
     local out = {}
+    if FIELDS[cond.type] then
+        for _, f in ipairs(FIELDS[cond.type](cond)) do
+            if f.key == "value" then return f.choices end
+        end
+        return out
+    end
     if cond.type == "equipment" then
         for _, c in ipairs(CT.SlotChoices(cond.slot)) do out[#out + 1] = { value = c[1], label = c[2] } end
     elseif cond.type == "weaponEnchant" then
@@ -454,6 +578,12 @@ end
 -- The key of the value a condition has chosen (what the value dropdown shows as selected).
 function Pl.ValueKey(cond)
     if cond.type == "talent" then return C().TalentValueKey(cond) end
+    if FIELDS[cond.type] then
+        for _, f in ipairs(FIELDS[cond.type](cond)) do
+            if f.key == "value" then return f.value end
+        end
+        return nil
+    end
     return cond.what or cond.state or cond.class
 end
 
@@ -465,11 +595,287 @@ function Pl.ValueLabel(cond)
     return tostring(key)
 end
 
--- Whether the operator ("is" / "is not") is a choice for this condition (ammunition and a weapon enchant read as a
--- sentence on their own).
-function Pl.HasOperator(cond) return type(cond) == "table" and cond.type ~= "ammunition" and cond.type ~= "weaponEnchant" and cond.type ~= "wellFed" end
+-- Whether the operator ("is" / "is not") is a choice for this condition: the kinds stored with `negate`. The others read
+-- as a sentence on their own, or compare a number ("below" / "at least" is their own field).
+local NEGATES = { equipment = true, player = true, class = true, talent = true, spellKnown = true, form = true, groupType = true, zone = true, target = true }
+function Pl.HasOperator(cond) return type(cond) == "table" and NEGATES[cond.type] == true end
+
+-- What kind of ID a condition asks for: "item" (an item ID, link or dropped item), "spell" (a spell ID or link), nil.
+local ID_KIND = { itemCount = "item", aura = "spell", spellKnown = "spell", cooldown = "spell" }
+function Pl.NeedsId(cond)
+    if type(cond) ~= "table" then return nil end
+    if cond.type == "equipment" then return cond.what == "item" and "item" or nil end
+    return ID_KIND[cond.type]
+end
 -- Whether the condition names a specific item (the editor then asks for it).
-function Pl.NeedsItem(cond) return type(cond) == "table" and cond.type == "equipment" and cond.what == "item" end
+function Pl.NeedsItem(cond) return Pl.NeedsId(cond) == "item" end
+-- Whether the ID it asks for is chosen.
+function Pl.HasId(cond)
+    if cond.type == "aura" then return type(cond.spells) == "table" and #cond.spells > 0 end
+    if Pl.NeedsId(cond) == "spell" then return cond.spell ~= nil end
+    return cond.item ~= nil
+end
+-- What the card's button says.
+function Pl.IdButton(cond)
+    local has = Pl.HasId(cond)
+    if cond.type == "aura" then return (has and "Change " or "Choose ") .. (cond.harmful and "debuff" or "buff") end
+    if Pl.NeedsId(cond) == "spell" then return has and "Change spell" or "Choose spell" end
+    return has and "Change item" or "Choose item"
+end
+-- The IDs as the edit box shows them: "1459, 10156".
+function Pl.IdText(cond)
+    if cond.type == "aura" then
+        local parts = {}
+        for i, id in ipairs(cond.spells or {}) do parts[i] = tostring(id) end
+        return table.concat(parts, ", ")
+    end
+    local id = Pl.NeedsId(cond) == "spell" and cond.spell or cond.item
+    return id and tostring(id) or ""
+end
+-- Spell IDs from what was typed or pasted: numbers, or spell links ("spell:<id>"), up to `max`. nil when none, or a
+-- second value "many" when there are more than max.
+function Pl.ParseSpells(text, max)
+    if type(text) ~= "string" then return nil end
+    local out, seen = {}, {}
+    local function Take(n)
+        n = tonumber(n)
+        if C().ValidSpell(n) and not seen[n] then seen[n] = true; out[#out + 1] = n end
+    end
+    local linked = false
+    for n in text:gmatch("spell:(%d+)") do linked = true; Take(n) end
+    if not linked then
+        if text:find("[^%d%s,;]") then return nil end
+        for n in text:gmatch("%d+") do Take(n) end
+    end
+    if #out == 0 then return nil end
+    if max and #out > max then return nil, "many" end
+    return out
+end
+-- The condition with these IDs (a list for a buff; the first otherwise).
+function Pl.WithIds(cond, ids)
+    local new = RM().DeepCopy(cond)
+    if new.type == "aura" then
+        local list = {}
+        for i, id in ipairs(ids) do list[i] = id end
+        new.spells = list
+    elseif Pl.NeedsId(new) == "spell" then new.spell = ids[1]
+    else new.item = ids[1] end
+    return new
+end
+-- What the IDs are, for a line beside the box: "Arcane Intellect, Arcane Brilliance" (or the IDs, while the game has
+-- no names for them). nil when nothing is chosen.
+function Pl.SpellLine(cond)
+    local list = cond.type == "aura" and cond.spells or { cond.spell }
+    local names = {}
+    for _, id in ipairs(list or {}) do names[#names + 1] = C().SpellWords(id) end
+    if #names == 0 then return nil end
+    return table.concat(names, ", ")
+end
+
+---------------------------------------------------------------------------
+-- The fields of the kinds added with the condition library. Each is { key, value, label, choices, set } and, for a
+-- number, kind = "number", field (the stored name), min, max and words: the card offers its quick choices and "Other
+-- amount...", the editor a box for any whole number from min to max. `set(cond, value)` makes the new condition.
+---------------------------------------------------------------------------
+Pl.OTHER = "other"
+
+local function Copy(cond) return RM().DeepCopy(cond) end
+
+-- words: the editor's ("5 minutes"); short (optional): the card's dropdown, which has a third of a card ("5 min")
+local function Amount(cond, field, presets, lo, hi, words, short)
+    short = short or words
+    local value = cond[field]
+    local choices, have = {}, false
+    for _, n in ipairs(presets) do
+        choices[#choices + 1] = { value = n, label = short(n) }
+        if n == value then have = true end
+    end
+    if value and not have then
+        choices[#choices + 1] = { value = value, label = short(value) }
+        table.sort(choices, function(a, b) return a.value < b.value end)
+    end
+    choices[#choices + 1] = { value = Pl.OTHER, label = "Other amount..." }
+    return { key = "amount", kind = "number", field = field, value = value, label = value and short(value) or "Choose",
+        choices = choices, min = lo, max = hi, words = words,
+        set = function(c, v)
+            if v == Pl.OTHER or type(v) ~= "number" then return nil end
+            local new = Copy(c)
+            new[field] = v
+            return new
+        end }
+end
+
+local function Choice(key, value, choices, set)
+    local label
+    for _, c in ipairs(choices) do if c.value == value then label = c.label end end
+    return { key = key, value = value, label = label or "Choose", choices = choices, set = set }
+end
+
+local function CompareField(cond, below)
+    return Choice("op", cond.compare, { { value = "below", label = below or "Below" }, { value = "atLeast", label = "At least" } },
+        function(c, v) local new = Copy(c); new.compare = v; return new end)
+end
+
+local function NegateField(cond, yes, no)
+    return Choice("op", cond.negate and "not" or "is", { { value = "is", label = yes }, { value = "not", label = no } },
+        function(c, v) local new = Copy(c); new.negate = v == "not"; return new end)
+end
+
+local function Seconds(n) return C().Duration(n) end
+-- "45 s", "5 min", "1 min 30 s"
+local function ShortSeconds(n)
+    local m, s = math.floor(n / 60), n % 60
+    if m == 0 then return s .. " s" end
+    if s == 0 then return m .. " min" end
+    return ("%d min %d s"):format(m, s)
+end
+Pl.ShortSeconds = ShortSeconds
+local function Percent(n) return n .. "%" end
+
+FIELDS.aura = function(cond)
+    local A = AU()
+    local out = {}
+    out[1] = Choice("subject", cond.harmful and "harmful" or "helpful", { { value = "helpful", label = "Buff" }, { value = "harmful", label = "Debuff" } },
+        function(c, v) local new = Copy(c); new.harmful = v == "harmful"; return new end)
+    local value = cond.what == "stacks" and ("stacks:" .. (cond.compare or "atLeast")) or cond.what
+    local choices = {}
+    for _, c in ipairs(A.CHOICES) do
+        if c[1] == "stacks" then
+            choices[#choices + 1] = { value = "stacks:atLeast", label = "Stacks at least", tooltip = c[3] }
+            choices[#choices + 1] = { value = "stacks:below", label = "Stacks fewer than", tooltip = c[3] }
+        else
+            choices[#choices + 1] = { value = c[1], label = c[2], tooltip = c[3] }
+        end
+    end
+    out[2] = Choice("value", value, choices, function(c, v)
+        local new = Copy(c)
+        local compare = tostring(v):match("^stacks:(.+)$")
+        new.what = compare and "stacks" or v
+        new.compare = compare
+        if new.what == "expiring" then new.seconds = new.seconds or A.SECONDS_DEFAULT end
+        if new.what == "stacks" then new.stacks = new.stacks or A.STACKS_DEFAULT end
+        return new
+    end)
+    -- the card says the selected choice in short: the amount beside it says what it counts
+    if cond.what == "stacks" then out[2].label = cond.compare == "below" and "Fewer than" or "At least" end
+    if cond.what == "expiring" then out[3] = Amount(cond, "seconds", A.SECONDS, 1, A.SECONDS_MAX, Seconds, ShortSeconds) end
+    if cond.what == "stacks" then out[3] = Amount(cond, "stacks", A.STACKS, 1, A.STACKS_MAX, function(n) return n == 1 and "1 stack" or (n .. " stacks") end) end
+    return out
+end
+
+FIELDS.itemCount = function(cond)
+    local S = SU()
+    return { CompareField(cond, "Fewer than"), Amount(cond, "count", S.COUNTS, 1, S.COUNT_MAX, tostring) }
+end
+
+FIELDS.bagSpace = function(cond)
+    local S = SU()
+    return { CompareField(cond, "Fewer than"), Amount(cond, "count", S.FREE, 1, S.FREE_MAX, function(n) return n == 1 and "1 free slot" or (n .. " free slots") end) }
+end
+
+FIELDS.durability = function(cond)
+    local S = SU()
+    local choices = {}
+    for _, c in ipairs(S.DURABILITY_CHOICES) do choices[#choices + 1] = { value = c[1], label = c[2], tooltip = c[3] } end
+    local out = { Choice("value", cond.what, choices, function(c, v)
+        local new = Copy(c); new.what = v
+        if v == "below" then new.percent = new.percent or 20 end
+        return new
+    end) }
+    if cond.what == "below" then out[2] = Amount(cond, "percent", S.PERCENTS, 1, 100, function(n) return "Below " .. n .. "%" end) end
+    return out
+end
+
+FIELDS.power = function(cond)
+    local H = CH()
+    local choices = {}
+    for _, p in ipairs(H.POWERS) do choices[#choices + 1] = { value = p[1], label = p[3] } end
+    return {
+        Choice("subject", cond.power, choices, function(c, v) local new = Copy(c); new.power = v; return new end),
+        CompareField(cond),
+        Amount(cond, "percent", H.PERCENTS, 1, 100, Percent),
+    }
+end
+
+FIELDS.level = function(cond)
+    local H = CH()
+    return { CompareField(cond), Amount(cond, "level", H.LEVELS, 1, H.LEVEL_MAX, function(n) return "Level " .. n end) }
+end
+
+FIELDS.spellKnown = function(cond) return { NegateField(cond, "Know it", "Don't know it") } end
+
+FIELDS.form = function(cond)
+    local H = CH()
+    local choices, seen = {}, {}
+    local function Put(value, label) if not seen[value] then seen[value] = true; choices[#choices + 1] = { value = value, label = label } end end
+    for _, f in ipairs(H.FormChoices()) do Put(f[1], f[2]) end
+    if cond.form then Put(cond.form, C().SpellWords(cond.form)) end
+    Put(H.FORM_NONE, "No form or stance")
+    return {
+        NegateField(cond, "In", "Not in"),
+        Choice("value", cond.state or cond.form, choices, function(c, v)
+            local new = Copy(c)
+            if v == H.FORM_NONE then new.state, new.form = v, nil else new.state, new.form = nil, v end
+            return new
+        end),
+    }
+end
+
+FIELDS.cooldown = function(cond)
+    local H = CH()
+    local choices = {}
+    for _, c in ipairs(H.COOLDOWN_CHOICES) do choices[#choices + 1] = { value = c[1], label = c[2], tooltip = c[3] } end
+    local out = { Choice("value", cond.what, choices, function(c, v)
+        local new = Copy(c); new.what = v
+        if v == "within" then new.seconds = new.seconds or 10 end
+        return new
+    end) }
+    if cond.what == "within" then out[2] = Amount(cond, "seconds", H.COOLDOWN_SECONDS, 1, H.COOLDOWN_SECONDS_MAX, Seconds, ShortSeconds) end
+    return out
+end
+
+FIELDS.groupType = function(cond)
+    local X = CX()
+    local choices = {}
+    for _, g in ipairs(X.GROUP_CHOICES) do choices[#choices + 1] = { value = g[1], label = g[2] } end
+    return { NegateField(cond, "Is", "Is not"), Choice("value", cond.what, choices, function(c, v) local new = Copy(c); new.what = v; return new end) }
+end
+
+FIELDS.zone = function(cond)
+    local X = CX()
+    return {
+        NegateField(cond, "In", "Not in"),
+        Choice("value", X.ZoneKey(cond), X.ZoneChoices(cond), function(c, v)
+            local new = Copy(c)
+            local kind, id = tostring(v):match("^(%a+):(%d+)$")
+            if not kind then return nil end
+            new.map, new.instance = nil, nil
+            new[kind] = tonumber(id)
+            return new
+        end),
+    }
+end
+
+FIELDS.target = function(cond)
+    local X = CX()
+    local choices = {}
+    for _, t in ipairs(X.TARGET_CHOICES) do choices[#choices + 1] = { value = t[1], label = t[2] } end
+    return { NegateField(cond, "Yes", "No"), Choice("value", cond.what, choices, function(c, v) local new = Copy(c); new.what = v; return new end) }
+end
+
+-- The amount a weapon enchant's "running out" compares with (the enchant's other fields are the original ones below).
+local function EnchantAmount(cond)
+    local CT = C()
+    return Amount(cond, "seconds", CT.ENCHANT_SECONDS, 1, CT.ENCHANT_SECONDS_MAX, Seconds, ShortSeconds)
+end
+
+-- A condition with a number typed into the editor (nil when the field doesn't take one). The provider checks the range.
+function Pl.WithNumber(cond, field, n)
+    if type(n) ~= "number" then return nil end
+    local new = Copy(cond)
+    new[field] = n
+    return new
+end
 
 -- A new condition: the subject chosen (keeping "is not", the item and a value that still fits).
 function Pl.WithSubject(cond, value)
@@ -511,7 +917,10 @@ function Pl.WithValue(cond, value)
         local class, line = tostring(value):match("^(%u+):(%d+)$")
         if class then new.class, new.tree, new.state = class, tonumber(line), nil
         else new.class, new.tree, new.state = nil, nil, value end
-    else new.what = value end
+    else
+        new.what = value
+        if new.type == "weaponEnchant" and value == "expiring" then new.seconds = new.seconds or C().ENCHANT_SECONDS_DEFAULT end
+    end
     return new
 end
 
@@ -522,6 +931,7 @@ function Pl.WithItem(cond, id)
 end
 
 function Pl.CardFields(cond)
+    if FIELDS[cond.type] then return FIELDS[cond.type](cond) end
     local fields = {}
     if cond.type == "weaponEnchant" or cond.type == "equipment" then
         local value, label = Pl.SubjectOf(cond)
@@ -556,13 +966,15 @@ function Pl.CardFields(cond)
         end
         choices = locations
     elseif cond.type == "weaponEnchant" then
-        for _, choice in ipairs(choices) do choice.label = choice.value == "missing" and "Is missing" or "Is applied" end
+        local words = { missing = "Is missing", applied = "Is applied", expiring = "Expiring" }
+        for _, choice in ipairs(choices) do choice.label = words[choice.value] or choice.label end
     elseif cond.type == "wellFed" then
         for _, choice in ipairs(choices) do choice.label = choice.value == "missing" and "Not well fed" or "Well fed" end
     end
     local label
     for _, choice in ipairs(choices) do if choice.value == key then label = choice.label end end
     fields[#fields + 1] = { key = "value", value = key, label = label or Pl.ValueLabel(cond), choices = choices }
+    if cond.type == "weaponEnchant" and cond.what == "expiring" then fields[#fields + 1] = EnchantAmount(cond) end
     return fields
 end
 
@@ -573,6 +985,7 @@ end
 function Pl.WithCardField(cond, field, value)
     for _, option in ipairs(field.choices) do
         if option.value == value then
+            if field.set then return field.set(cond, value) end
             if field.key == "subject" then return Pl.WithSubject(cond, value) end
             if field.key == "op" then return Pl.WithNegate(cond, value == "not") end
             return Pl.WithValue(cond, value)
@@ -601,6 +1014,23 @@ function Pl.Help(cond)
     elseif cond.type == "ammunition" then
         local c = R.ReminderAmmo and R.ReminderAmmo.Choice(cond.what)
         return c and c[4] or "The ammunition for your ranged weapon."
+    elseif cond.type == "aura" then
+        local c = AU().Choice(cond.what)
+        return (c and c[3] or "") .. " Each rank of a spell has an ID of its own: list every one that should count."
+    elseif cond.type == "durability" then
+        local c = SU().DurabilityChoice(cond.what)
+        return c and c[3] or ""
+    elseif cond.type == "cooldown" then
+        local c = CH().CooldownChoice(cond.what)
+        return c and c[3] or ""
+    elseif cond.type == "power" then
+        return "A share of the resource's maximum: exactly the number counts as \"at least\", never as \"below\". A character with none of it never matches."
+    elseif cond.type == "itemCount" then
+        return "Counts what is in your bags; the bank is never counted. Exactly the number counts as \"at least\", never as \"fewer than\"."
+    elseif cond.type == "bagSpace" then
+        return "Free slots in your general bags only: room in a quiver, soul bag or profession bag isn't counted."
+    elseif MORE[cond.type] then
+        return MORE[cond.type][3]
     end
     return ""
 end

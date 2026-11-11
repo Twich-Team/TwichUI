@@ -319,7 +319,8 @@ function E.SimInputs(view)
 end
 
 function E.Simulate(view, picks)
-    local obs = { slots = {} }
+    -- made-up times count from now, so a simulated buff "with 20 seconds left" reads that way whenever it is tried
+    local obs = { slots = {}, now = GetTime and GetTime() or 0 }
     for i, input in ipairs(E.SimInputs(view)) do
         local chosen = input.scenarios[1]
         for _, s in ipairs(input.scenarios) do

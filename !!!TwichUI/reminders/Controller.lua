@@ -25,6 +25,11 @@
 -- its own: the sound follows the game's sound-effects volume.
 -- Each pending wait carries a token; anything that cancels it bumps the token, and a refresh bumps a generation, so a
 -- timer from before (or from before switching off) never shows anything.
+-- Time: a decision is made at obs.now (GetTime). A condition whose answer can change with time alone (a buff with less
+-- than a minute left, a cooldown ending) says when through its provider's NextChange; a running reminder then keeps one
+-- timer for the soonest such moment (never sooner than MIN_WAIT), and when it comes its observations are read again
+-- (an expiry the game sends no event for is still seen) and it is decided again. Each decision replaces that timer, so
+-- there is at most one per reminder, none for a reminder without such a condition, and nothing runs every frame.
 
 local R = TwichUI
 local RM = R.Reminders
@@ -39,6 +44,7 @@ R.ReminderController = CT
 local NOMATCH = C.NOMATCH
 local SOUND_GAP = 2    -- seconds a reminder waits before it may sound again
 local SOUND_CHANNEL = "SFX"
+local MIN_WAIT = 0.25  -- seconds: the soonest a time boundary is looked at again
 
 local rt = {}          -- [id] = { token, visible, shownAt, wantSince, phase, out }
 local index = {}       -- [observation key] = { id, ... }
@@ -46,7 +52,8 @@ local active = {}      -- [id] = true: runs here (read and decided live)
 local running = false  -- on and in the world
 local gen = 0
 local listeners = {}
-local stats = { refreshes = 0, decisions = 0, shows = 0, hides = 0, sounds = 0, soundsHeld = 0, soundsMissing = 0, soundsRefused = 0, soundsQuiet = 0 }
+local stats = { refreshes = 0, decisions = 0, shows = 0, hides = 0, sounds = 0, soundsHeld = 0, soundsMissing = 0, soundsRefused = 0, soundsQuiet = 0,
+    timeWaits = 0, timeChecks = 0 }
 
 local function Rec(id)
     local r = rt[id]
@@ -187,12 +194,63 @@ local function Act(v, r)
     Hide(v, r)
 end
 
-local function Decide(v, obs, ctx)
+-- Seconds until the soonest moment one of v's conditions can change with time alone (nil: none can).
+local function NextChange(v, obs)
+    local soonest
+    for _, entry in ipairs(v.leaves) do
+        local p = entry.provider
+        if p and p.NextChange and entry.cond then
+            local ok, s = pcall(p.NextChange, entry.cond, obs)
+            if ok and type(s) == "number" and s == s and s >= 0 and s < math.huge and (not soonest or s < soonest) then soonest = s end
+        end
+    end
+    return soonest
+end
+
+-- The observation keys v reads, once each.
+local function KeysOf(v)
+    local keys, seen = {}, {}
+    for _, entry in ipairs(v.leaves) do
+        entry.provider.Needs(entry.cond, function(key)
+            if not seen[key] then seen[key] = true; keys[#keys + 1] = key end
+        end)
+    end
+    return keys
+end
+
+local Decide
+local function Schedule(v, r, obs)
+    r.timeToken = (r.timeToken or 0) + 1
+    r.timeAt = nil
+    if not (running and active[v.id]) then return end
+    local s = NextChange(v, obs)
+    if not s then return end
+    s = math.max(MIN_WAIT, s + 0.05)   -- just past the boundary, so the next look is on the other side of it
+    local mine, g = r.timeToken, gen
+    r.timeAt = GetTime() + s
+    stats.timeWaits = stats.timeWaits + 1
+    C_Timer.After(s, function()
+        if r.timeToken ~= mine or gen ~= g or not running then return end
+        r.timeAt = nil
+        local cur = RM.Get(v.id)
+        if not (cur and active[v.id]) then return end
+        stats.timeChecks = stats.timeChecks + 1
+        ST.Recheck(KeysOf(cur))   -- a change found here is decided through the usual telling (which replaces this timer)
+        if r.timeToken == mine then
+            Decide(cur, ST.Observations(), ST.Context())
+            Tell(v.id)
+        end
+    end)
+end
+
+function Decide(v, obs, ctx)
     local pt = Perf.on and Perf.Start("reminders.decide")
     local r = Rec(v.id)
+    obs.now = GetTime()
     r.out = E.Run(v, obs, ctx, r.out)
     stats.decisions = stats.decisions + 1
     Act(v, r)
+    Schedule(v, r, obs)
     if pt then Perf.Stop(pt) end
 end
 
@@ -356,7 +414,7 @@ function CT.Visible(id) local r = rt[id] return r ~= nil and r.visible end
 
 -- For /tui diagnostics and the tests: counts only (no names, items or places).
 function CT.Snapshot()
-    local n, on, valid, act, visible, pending, holding = 0, 0, 0, 0, 0, 0, 0
+    local n, on, valid, act, visible, pending, holding, timed = 0, 0, 0, 0, 0, 0, 0, 0
     local conditions, groups = 0, 0   -- of the reminders running here
     for _, v in ipairs(RM.List()) do
         n = n + 1
@@ -370,13 +428,15 @@ function CT.Snapshot()
         if r and r.visible then visible = visible + 1 end
         if r and r.phase == "pending" then pending = pending + 1 end
         if r and r.phase == "holding" then holding = holding + 1 end
+        if r and r.timeAt and active[v.id] then timed = timed + 1 end
     end
     local keys = 0
     for _ in pairs(index) do keys = keys + 1 end
     return { enabled = R:Enabled("reminders"), running = running, reminders = n, turnedOn = on, valid = valid,
-        active = act, visible = visible, pending = pending, holding = holding, keys = keys, conditions = conditions, groups = groups,
+        active = act, visible = visible, pending = pending, holding = holding, timed = timed, keys = keys, conditions = conditions, groups = groups,
         refreshes = stats.refreshes, decisions = stats.decisions, shows = stats.shows, hides = stats.hides,
-        sounds = stats.sounds, soundsHeld = stats.soundsHeld, soundsMissing = stats.soundsMissing, soundsRefused = stats.soundsRefused, soundsQuiet = stats.soundsQuiet }
+        sounds = stats.sounds, soundsHeld = stats.soundsHeld, soundsMissing = stats.soundsMissing, soundsRefused = stats.soundsRefused, soundsQuiet = stats.soundsQuiet,
+        timeWaits = stats.timeWaits, timeChecks = stats.timeChecks }
 end
 
 R:OnInit(function() CT.Refresh() end)

@@ -60,6 +60,29 @@ as labels in the settings window and never in what is stored.
 | `wellFed` | `what` (no `negate`: it reads as a sentence) | `missing` (the game listed your helpful auras and none is Well Fed) or `applied` (one is). Auras hidden from addons, or a list longer than the 40 looked at with no Well Fed in it, are **unknown**, never `missing` |
 | `ammunition` | `what` (no `negate`: it reads as a sentence) | `problem` (any of the next three), `noAmmo` (nothing selected, some carried), `outOfAmmo` (nothing selected and none carried, or the selected stack is empty), `wrong` (arrows for a gun, bullets for a bow). Offered only while the client has `UnitUsesAmmo` |
 
+**The condition library** (2026-11-11; per-kind decisions, API references and real-client checks in
+[reminders-condition-expansion.md](reminders-condition-expansion.md)). Files: `reminders/Auras.lua`, `Supplies.lua`,
+`Character.lua`, `Context.lua`, each a provider with the source that reads it.
+
+| Kind (`type`) | Stored fields | Choices |
+|---|---|---|
+| `aura` | `spells` (1 to 8 spell IDs; any counts), `harmful`, `what`, `seconds` / `compare` + `stacks` | `present`, `missing`, `expiring` (less than `seconds` left), `stacks` (below / at least). Self only |
+| `itemCount` | `item`, `compare`, `count` | carried bags only (`C_Item.GetItemCount`, bank excluded) |
+| `bagSpace` | `compare`, `count` | free general-family slots, bags 0 to `NUM_BAG_SLOTS` |
+| `durability` | `what`, `percent` | `broken`; `below` a share. Item by item, never averaged |
+| `power` | `power` (`MANA`, `RAGE`, `ENERGY`), `compare`, `percent` | no pool never matches; secret is unknown |
+| `spellKnown` | `spell`, `negate` | a spell the game doesn't have is unknown |
+| `form` | `form` (spell ID) or `state = "none"`, `negate` | the character's own forms, or none |
+| `level` | `compare`, `level` | 1 to 999 |
+| `cooldown` | `spell`, `what`, `seconds` | `ready`, `cooling`, `within` |
+| `groupType` | `what`, `negate` | `solo`, `party`, `raid` (a raid group, not a raid instance), `grouped` |
+| `zone` | `map` or `instance`, `negate` | a map and every map inside it, or one instance |
+| `target` | `what`, `negate` | `exists`, `attackable`, `friendly`, `dead`; with no target only `exists` can match |
+
+`weaponEnchant` gained `expiring` (`seconds`); `player` gained `moving` and `taxi`. Thresholds: "below" is strictly less,
+"at least" includes the number. A condition whose answer changes with time alone says when (`NextChange`); the
+controller keeps one timer per running reminder for the soonest such moment and reads again then.
+
 `negate` is "is not". "Player is not dead or a ghost" reads as "Player is alive". Categories are judged from the item's
 class, subclass and equip location only; an item with no details is **unknown**, never a match. For the shield example:
 shield in the off hand, "Off hand is not Shield" is no match; empty, a match; an off-hand weapon, a match; no details,
@@ -385,6 +408,7 @@ The Test section's simulations go through the same `Evaluate.Run` on a table bui
 | Switched off | no event, every frame hidden, every timer stale |
 | On, no reminder turned on for this character | `PLAYER_ENTERING_WORLD` only |
 | On, reminders running | the observation keys their conditions read, in every branch of every group, once each (`slot:17`, `combat`, `life`, `mounted`, `class`, `ammo`, `enchant`, `wellFed`), and only those sources' events (`class` has none: it is read when wanted and on entering the world): `PLAYER_EQUIPMENT_CHANGED` for equipment, `WEAPON_ENCHANT_CHANGED`, `WEAPON_SLOT_CHANGED` (and a change of slot 16 or 17) for weapon enchants, the regen events for combat, the three life events, the mount event, for ammunition `PLAYER_EQUIPMENT_CHANGED`, `BAG_UPDATE_DELAYED` and `UNIT_INVENTORY_CHANGED`, and for Well Fed `UNIT_AURA` for the player only |
+| The condition library's kinds | the same rule: each kind's source registers its events (listed per kind in reminders-condition-expansion.md) only while a running reminder uses it; unit events for the player or target only (`RegisterUnitEvent`). A time boundary (a buff or enchant running down, a cooldown ending) is one `C_Timer.After` per running reminder, replaced at each decision |
 | An ammunition reminder, weapon takes none (or none equipped) | only a change of the ranged or ammo slot is acted on; bag and inventory events are dropped before any read. A look is up to six values from the character, and the bags only when nothing is selected |
 | An item without details in a wanted slot | asked for at most twice; `GET_ITEM_INFO_RECEIVED` / `ITEM_DATA_LOAD_RESULT` only while that lasts |
 | An event | marks its key; one 0.1 s timer reads each marked key once; only keys whose facts changed re-decide, and only the reminders that read them (an index by key) |
@@ -410,7 +434,10 @@ choice) and `Merge(match, conds)` (say a run of them in one phrase in the rule's
 value choices (`Subjects`, `ValueChoices`, `WithSubject` in `TwichUI_Settings/pages/RemindersPlain.lua`), its sentence
 (`KIND` there; without one the picker offers it under Other and the provider's own `Summary` is the card's sentence), a
 test in `tests/test_reminders.lua`, and its facts and checks here. The `ammunition` kind (`reminders/Ammunition.lua` and State.lua's `ammo` source) is the worked
-example of a kind with a file of its own. Buff, cooldown, health, inventory-count and target conditions are not in this release.
+example of a kind with a file of its own. The condition library's kinds go further: each file registers providers *and*
+their sources (`ST.Source` after State.lua, with `ST.Plain` / `ST.Number` / `ST.Set`), a provider may say `Supported()` and
+`NextChange(cond, obs)`, and the builder's fields for it are a `FIELDS` entry in `RemindersPlain.lua` (each field has its own
+`set`; a number field gets quick choices and the editor's typed box). Health is not offered: `UnitHealth` is always secret to addons.
 
 **A new picture.** Put the PNG (real transparency) in `assets/`, add a line to `ART` in `tools/make_reminder_art.py`, run
 `python3 tools/make_reminder_art.py` (it prints the numbers), and add that line, with a label, to `RM.ART` and
@@ -430,13 +457,12 @@ example of a kind with a file of its own. Buff, cooldown, health, inventory-coun
 - A character listed by name and realm: a renamed character, or one moved to another realm, has to be added again.
 - Groups: three levels, 6 groups, 16 conditions (see "Three answers, groups and composition"). No drag and drop (Move up,
   Move down and Move into instead), no typed expressions. Who it is for holds one class, so several classes are conditions.
-- Weapon enchants: only whether a hand has one, not which, and not how long it has left (the game does give the time and
-  charges; a condition on them is not built). The off hand and the main hand only; no ranged slot. A fishing pole counts as
-  nothing to enchant.
-- Well Fed: only whether the buff is there, not how long it has left (a condition on the time left is not built) and not
-  which food gave it. It is unknown, so nothing shows, while the game hides your buffs from addons.
-- Not in this release: Lua, dynamic clones, a volume or channel per sound, sharing, buff/cooldown/health/inventory/target
-  conditions, automation of any kind.
+- Weapon enchants: whether a hand has one and how long it has left, not which, and not its charges (0 can't be told
+  from "doesn't use charges"). The off hand and the main hand only; no ranged slot. A fishing pole counts as nothing to enchant.
+- Well Fed: only whether the buff is there, not which food gave it (a buff condition, `aura`, can ask how long a chosen
+  buff has left). It is unknown, so nothing shows, while the game hides your buffs from addons.
+- Not in this release: Lua, dynamic clones, a volume or channel per sound, sharing, health (always secret to addons),
+  swimming (no event), a talent's rank, automation of any kind.
 
 ## In-game checklist
 

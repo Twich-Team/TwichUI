@@ -496,9 +496,15 @@ Lab.Step("pose", function()
         M.Companion(panel)
         local heading = M.ReminderFont(G.Text(panel, "heading"), 24, true)
         heading:SetPoint("TOPLEFT", 24, -20); heading:SetText("Condition artwork · palette / card sizes")
-        for i, entry in ipairs(R.RemindersPlain.Entries()) do
+        local entries = R.RemindersPlain.Entries()
+        local cols = #entries > 14 and 3 or 2
+        local rowH = math.min(72, math.floor((1100 - 68) / math.ceil(#entries / cols)) - 6)
+        panel:SetSize(cols == 3 and 1380 or 930, math.max(660, 68 + math.ceil(#entries / cols) * (rowH + 6) + 16))
+        Lab.Check("construct", "every palette entry is in the audit", 28, #entries)
+        for i, entry in ipairs(entries) do
             local row = CreateFrame("Frame", nil, panel)
-            row:SetSize(430, 72); row:SetPoint("TOPLEFT", 24 + ((i-1)%2)*450, -(68+math.floor((i-1)/2)*78))
+            local colW = cols == 3 and 440 or 430
+            row:SetSize(colW, rowH); row:SetPoint("TOPLEFT", 24 + ((i-1)%cols)*(colW+12), -(68+math.floor((i-1)/cols)*(rowH+6)))
             M.PanelFace(row, "card")
             local small, big = row:CreateTexture(nil,"ARTWORK"), row:CreateTexture(nil,"ARTWORK")
             small:SetPoint("LEFT", 10, 0); big:SetPoint("LEFT", 57, 0)
@@ -585,6 +591,94 @@ Lab.Step("pose", function()
         Lab.Check("construct", "painted proof owns no configuration", true, proof:IsShown())
         Lab.Settle(0.2)
         return
+    end
+    if view == "conditions" or view == "conditionsEditor" or view == "conditionsPalette" or view == "conditionsNarrow" then
+        -- A flat All rule made of the library's kinds: a buff as the trigger, three restrictions.
+        while #RM.Get(id).conditions > 0 do RM.RemoveCondition(id, { 1 }) end
+        Lab.Check("state", "buff trigger added", true, (RM.AddCondition(id, "aura", nil, { type = "aura", spells = { 1459 }, what = "missing" })))
+        Lab.Check("state", "mana restriction added", true, (RM.AddCondition(id, "power", nil, { type = "power", power = "MANA", compare = "below", percent = 30 })))
+        Lab.Check("state", "bag space restriction added", true, (RM.AddCondition(id, "bagSpace", nil, { type = "bagSpace", compare = "atLeast", count = 5 })))
+        Lab.Check("state", "enchant running out added", true, (RM.AddCondition(id, "weaponEnchant", nil, { type = "weaponEnchant", hand = "mainHand", what = "expiring", seconds = 300 })))
+        Lab.Check("state", "the library rule is valid", true, RM.Get(id).valid)
+        P.Select(id); Lab.Settle(0.1)
+        Dz.Open(); Lab.Settle(0.2)
+        local when = Ed.sections[2]
+        Lab.Check("construct", "a flat library rule uses the basic view", false, when.isAdvanced)
+        local titles = {}
+        for i = 1, 4 do titles[i] = when.cards[i].title:GetText() end
+        Lab.Check("construct", "card titles name each kind", "Buff|Resource|Bag space|Weapon enchant", table.concat(titles, "|"))
+        Lab.Check("construct", "the amount reads as a share", "30%", when.cards[2].fields[3].text:GetText())
+        Lab.Check("construct", "the enchant's time fits its field", "5 min", when.cards[4].fields[3].text:GetText())
+        Lab.Check("construct", "the enchant's choice fits its field", "Expiring", when.cards[4].fields[2].text:GetText())
+        Lab.Check("geometry", "fields line up down the rule", true, math.abs(when.cards[2].fields[1]:GetLeft() - when.cards[3].fields[1]:GetLeft()) < 1)
+        Lab.Check("geometry", "three fields start beside the title, inside the card", true,
+            when.cards[4].fields[1]:GetLeft() >= when.cards[4].title:GetLeft() + when.cards[4].title:GetStringWidth()
+            and when.cards[4].fields[3]:GetRight() <= when.cards[4]:GetRight())
+        Lab.Check("construct", "a buff card asks for its spell", "Change buff", when.cards[1].item.text:GetText())
+        local words = { Met = true, ["Not met"] = true, Unknown = true, ["Needs attention"] = true }
+        local ok = true
+        for i = 1, 4 do ok = ok and words[when.cards[i].note:GetText()] == true end
+        Lab.Check("construct", "each card states Met, Not met or Unknown", true, ok)
+        local summary = R.RemindersPlain.RuleSummary(Dz.DraftView())
+        -- the simulator's spell-name stub answers "Unknown"; a client answers the name, or nothing ("spell 1459")
+        summary = summary:gsub("Arcane Intellect", "<buff>"):gsub("spell 1459", "<buff>"):gsub("missing Unknown", "missing <buff>")
+        Lab.Check("construct", "the rule reads naturally",
+            "Shows when you are missing <buff>, but only while your mana is below 30% and you have at least 5 free bag slots and your main hand weapon enchant has less than 5 minutes left.",
+            summary)
+        if view == "conditions" or view == "conditionsNarrow" then
+            local before = RM.Rev()
+            when.cards[2].fields[3].onPick(50); Lab.Settle(0.1)
+            Lab.Check("interact", "a quick amount edits the draft", 50, Dz.DraftView().conditions[2].cond.percent)
+            Lab.Check("state", "the saved rule is untouched until Save", before, RM.Rev())
+            when.cards[3].fields[2].onPick(R.RemindersPlain.OTHER); Lab.Settle(0.1)
+            Lab.Check("interact", "Other amount opens the editor's number box", true, when.editor:IsShown() and when.editor.amount:IsShown())
+            when.editor.amount:SetText("7")
+            when.editor.amount:GetScript("OnEnterPressed")(when.editor.amount); Lab.Settle(0.1)
+            when.editor.done:Click(); Lab.Settle(0.1)
+            Lab.Check("interact", "a typed amount reaches the draft", 7, Dz.DraftView().conditions[3].cond.count)
+            when.undo:Click(); Lab.Settle(0.1)
+            Lab.Check("interact", "undo restores the earlier amount", 5, Dz.DraftView().conditions[3].cond.count)
+            when.redo:Click(); Lab.Settle(0.1)
+            Dz.Frame().save:Click(); Lab.Settle(0.1)
+            local saved = RM.Get(id)
+            Lab.Check("state", "Save writes both edits", "50/7", saved.conditions[2].cond.percent .. "/" .. saved.conditions[3].cond.count)
+            Lab.Check("state", "and the rule is still valid", true, saved.valid)
+            Lab.Check("state", "nothing was turned on", false, saved.enabled)
+            if view == "conditions" then
+                -- leave the When workspace open on the saved rule for the screenshot
+                if not Dz.Shown() then Dz.Open(); Lab.Settle(0.2) end
+            end
+        elseif view == "conditionsEditor" then
+            local entry
+            for _, e in ipairs(R.RemindersPlain.Entries()) do if e.key == "aura" then entry = e end end
+            Lab.Check("construct", "the palette offers a buff", true, entry ~= nil)
+            Dz.Pick(entry); Lab.Settle(0.1)
+            local box = when.editor.item
+            Lab.Check("construct", "the new buff asks for its spell IDs", true, when.editor:IsShown() and box:IsShown())
+            box:SetText("1459, 10157")
+            box:GetScript("OnEnterPressed")(box); Lab.Settle(0.1)
+            local draft = Dz.State().draft
+            Lab.Check("interact", "two spell IDs are taken", 2, draft and #draft.spells or 0)
+            Lab.Check("construct", "the editor reads the sentence back", true, when.editor.reads:GetText():find("Reads as:", 1, true) ~= nil)
+            local rev = RM.Rev()
+            box:SetText("Arcane Intellect")
+            box:GetScript("OnEnterPressed")(box); Lab.Settle(0.1)
+            Lab.Check("interact", "a name is refused, never matched", 2, #Dz.State().draft.spells)
+            Lab.Check("state", "nothing saved while editing", rev, RM.Rev())
+            Dz.Say(nil)
+            -- bring the new condition's editor into view for the screenshot (its place in the rule, not the range's end)
+            local frame, ed = Dz.Frame(), when.editor
+            local offset = frame.content:GetTop() - ed:GetTop() - 12
+            frame.scroll:SetVerticalScroll(math.max(0, offset)); Lab.Settle(0.1)
+            -- (the simulator doesn't move a scrolled child's reported position, so the screenshot is the evidence of where it is)
+            Lab.Check("interact", "the rule panel scrolled to the editor", true, frame.scroll:GetVerticalScroll() > 0)
+        elseif view == "conditionsPalette" then
+            when.picker.category.onPick("Buffs"); Lab.Settle(0.1)
+            local names = {}
+            for _, row in ipairs(when.picker.rows) do if row:IsShown() and row.entry then names[#names + 1] = row.name:GetText() end end
+            table.sort(names)
+            Lab.Check("construct", "Buffs lists buff and debuff", "Buff|Debuff", table.concat(names, "|"))
+        end
     end
     if view == "catalog" or view == "empty" or view == "hover" then
         C.Toggle()

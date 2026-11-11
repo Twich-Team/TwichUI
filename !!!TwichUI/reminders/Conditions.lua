@@ -21,6 +21,11 @@
 --   Merge(match, conds)   -> words, used: for the rule's sentence. conds are this kind's conditions that sit directly in
 --                            one group matching on `match` ("all" | "any"); words say a run of them in one phrase and
 --                            used lists the indexes of conds it covers (nil: nothing to merge).
+--   Supported()           -> false when this client lacks what it reads; `unsupported` then says so (C.Check reports it)
+--   NextChange(cond, obs) -> seconds from obs.now until its answer can change with time alone (a buff running down
+--                            past a threshold, a cooldown ending), or nil. The controller looks again then, so no
+--                            condition needs a timer of its own and nothing is polled. obs.now is the GetTime of the
+--                            decision; a time-based answer without it is unknown.
 -- Adding a kind: register it here (or in a file of its own loaded after this one), give State.lua a source for each
 -- observation key it names, and give the editor (TwichUI_Settings/pages/RemindersEditor.lua) its fields.
 --
@@ -83,6 +88,8 @@ function C.Check(raw)
     end
     local clean, problem = p.Check(raw)
     if not clean then return nil, problem or "its settings can't be read. Remove it and add it again.", p end
+    -- a kind this client can't report is kept, and said so (a reminder using it can't be turned on here)
+    if not problem and p.Supported and not p.Supported() then problem = p.unsupported or "this game client doesn't report it." end
     return clean, problem, p
 end
 
@@ -93,6 +100,44 @@ end
 C.Negate = Negate
 
 local function Yes(v) return v and MATCH or NOMATCH end
+C.Yes = Yes
+
+---------------------------------------------------------------------------
+-- Amounts: a whole number compared with a threshold, said the same way by every kind that has one. "below" is strictly
+-- less than; "atLeast" is greater than or equal to, so the two never both hold and never both fail for a known value
+-- (exactly 30 is "at least 30", never "below 30").
+---------------------------------------------------------------------------
+C.COMPARE = { { "below", "Below" }, { "atLeast", "At least" } }
+local COMPARE = { below = true, atLeast = true }
+function C.ValidCompare(v) return COMPARE[v] == true end
+function C.Compare(value, compare, n)
+    if compare == "below" then return value < n end
+    return value >= n
+end
+-- A whole number from lo to hi, or nil.
+function C.Whole(v, lo, hi)
+    if type(v) ~= "number" or v ~= v or v % 1 ~= 0 or v < lo or v > hi then return nil end
+    return v
+end
+-- A spell ID (the game's own number for a spell: a buff, an ability, a form), or nil.
+function C.ValidSpell(v) return C.Whole(v, 1, 2147483647) ~= nil end
+-- A spell's name when the game has it ready, nil otherwise (State.lua sets this to the game's lookup).
+C.SpellName = function() return nil end
+function C.SpellWords(id)
+    if not id then return "a spell" end
+    local name = C.SpellName(id)
+    if type(name) == "string" and name ~= "" then return name end
+    return ("spell %d"):format(id)
+end
+-- "45 seconds", "2 minutes", "1 minute 30 seconds"
+function C.Duration(seconds)
+    if type(seconds) ~= "number" then return "?" end
+    local m, s = math.floor(seconds / 60), seconds % 60
+    local function Unit(n, one) return ("%d %s%s"):format(n, one, n == 1 and "" or "s") end
+    if m == 0 then return Unit(s, "second") end
+    if s == 0 then return Unit(m, "minute") end
+    return Unit(m, "minute") .. " " .. Unit(s, "second")
+end
 
 ---------------------------------------------------------------------------
 -- Equipment
@@ -323,8 +368,14 @@ C.Register({
 --   "bare"       a weapon with none
 --   "noWeapon"   nothing there that can take one (an empty hand, a shield, a held item, a fishing pole)
 --   nil          the game hasn't said
+-- and obs.enchant.ends[hand] = the GetTime its enchant runs out (nil: not said). "expiring" asks for an enchant with less
+-- than `seconds` left: an enchanted hand whose end isn't known is unknown, a bare or empty hand never matches (that is
+-- "missing", or nothing to enchant), and exactly `seconds` left is not yet "less than". Charges are not read (see State.lua).
 -- State.lua reads it; a simulation hands the same shape in.
 ---------------------------------------------------------------------------
+C.ENCHANT_SECONDS = { 30, 60, 120, 300, 600, 900 }   -- the editor's quick choices; any whole number of seconds is kept
+C.ENCHANT_SECONDS_MAX = 7200
+C.ENCHANT_SECONDS_DEFAULT = 300
 C.ENCHANT_HANDS = {
     { "mainHand", "Main hand" },
     { "offHand", "Off hand" },
@@ -338,6 +389,8 @@ C.ENCHANT_CHOICES = {
         "A weapon is held in this hand and nothing like a weapon oil, sharpening stone or poison is on it. Never true for an empty hand, a shield or a fishing pole." },
     { "applied", "Has a temporary enchant", "has a temporary enchant",
         "A weapon in this hand has a temporary enchant on it." },
+    { "expiring", "Has a temporary enchant running out", "has a temporary enchant with less than %s left",
+        "A weapon in this hand has a temporary enchant with less than the time you choose left on it. A weapon with none is \"Has no temporary enchant\" instead: add both in a group where at least one must be true to be reminded either way." },
 }
 local ENCHANT_CHOICE = {}
 for _, c in ipairs(C.ENCHANT_CHOICES) do ENCHANT_CHOICE[c[1]] = c end
@@ -349,6 +402,22 @@ local function EnchantState(obs, hand)
     return type(e) == "table" and e[hand] or nil
 end
 
+-- Seconds left on a hand's enchant at obs.now, or nil when that isn't known.
+local function EnchantLeft(obs, hand)
+    local e = obs and obs.enchant
+    local ends = type(e) == "table" and type(e.ends) == "table" and e.ends[hand] or nil
+    if type(ends) ~= "number" or type(obs.now) ~= "number" then return nil end
+    return ends - obs.now
+end
+
+-- The words after "Main hand weapon" for a stored condition.
+function C.EnchantWords(cond)
+    local c = ENCHANT_CHOICE[cond.what]
+    if not c then return tostring(cond.what) end
+    if cond.what == "expiring" then return c[3]:format(cond.seconds and C.Duration(cond.seconds) or "(a time not chosen yet)") end
+    return c[3]
+end
+
 C.Register({
     type = "weaponEnchant", label = "Weapon enchant (oil, stone, poison)",
     New = function() return { type = "weaponEnchant", hand = "mainHand", what = "missing" } end,
@@ -356,7 +425,12 @@ C.Register({
     Check = function(raw)
         if not ENCHANT_HAND[raw.hand] then return nil, "it names a hand this version of TwichUI doesn't know." end
         if not ENCHANT_CHOICE[raw.what] then return nil, "it asks about a weapon enchant this version of TwichUI doesn't know." end
-        return { type = "weaponEnchant", hand = raw.hand, what = raw.what }
+        local clean = { type = "weaponEnchant", hand = raw.hand, what = raw.what }
+        if raw.what == "expiring" then
+            clean.seconds = C.Whole(raw.seconds, 1, C.ENCHANT_SECONDS_MAX)
+            if not clean.seconds then return clean, ("choose how little time left counts as running out (1 to %d seconds)."):format(C.ENCHANT_SECONDS_MAX) end
+        end
+        return clean
     end,
 
     Needs = function(_, add) add("enchant") end,
@@ -365,18 +439,37 @@ C.Register({
         local state = EnchantState(obs, cond.hand)
         if state == nil then return UNKNOWN, "The game hasn't said whether this weapon has a temporary enchant yet." end
         if cond.what == "missing" then return Yes(state == "bare") end
+        if cond.what == "expiring" then
+            if state ~= "enchanted" then return NOMATCH end
+            local left = EnchantLeft(obs, cond.hand)
+            if left == nil then return UNKNOWN, "The game hasn't said how long this weapon's enchant has left." end
+            return Yes(left < cond.seconds)
+        end
         return Yes(state == "enchanted")
     end,
 
+    -- running out is only a matter of time: the moment it crosses the threshold, and the moment it ends (read again then)
+    NextChange = function(cond, obs)
+        if cond.what ~= "expiring" or EnchantState(obs, cond.hand) ~= "enchanted" then return nil end
+        local left = EnchantLeft(obs, cond.hand)
+        if not left or left <= 0 then return nil end
+        if left >= cond.seconds then return left - cond.seconds end
+        return left
+    end,
+
     Summary = function(cond)
-        local h, c = ENCHANT_HAND[cond.hand], ENCHANT_CHOICE[cond.what]
-        return ("%s weapon %s"):format(h and h[2] or "Weapon", c and c[3] or tostring(cond.what))
+        local h = ENCHANT_HAND[cond.hand]
+        return ("%s weapon %s"):format(h and h[2] or "Weapon", C.EnchantWords(cond))
     end,
 
     Observed = function(cond, obs)
         local state = EnchantState(obs, cond.hand)
+        if state == "enchanted" then
+            local left = EnchantLeft(obs, cond.hand)
+            if left and left > 0 then return ("Has a temporary enchant (%s left)"):format(C.Duration(math.floor(left))) end
+            return "Has a temporary enchant"
+        end
         return ({
-            enchanted = "Has a temporary enchant",
             bare = "No temporary enchant",
             noWeapon = "No weapon that can take one",
         })[state] or "Not read yet"
@@ -385,18 +478,31 @@ C.Register({
     -- the one it looks for first (the Test section starts on the first), the other, no weapon, and nothing read
     Scenarios = function(cond)
         local list = {}
-        local function Put(key, label, state)
+        local function Put(key, label, state, left)
             list[#list + 1] = { key = key, label = label, Apply = function(obs)
                 obs.enchant = obs.enchant or {}
+                obs.enchant.ends = obs.enchant.ends or {}
                 obs.enchant[cond.hand] = state
+                obs.enchant.ends[cond.hand] = left and (obs.now or 0) + left or nil
             end }
+        end
+        if cond.what == "expiring" then
+            local seconds = cond.seconds or C.ENCHANT_SECONDS_DEFAULT
+            local soon = math.max(1, math.floor(seconds / 2))
+            Put("soon", ("An enchant with %s left"):format(C.Duration(soon)), "enchanted", soon)
+            Put("plenty", ("An enchant with %s left"):format(C.Duration(seconds * 3)), "enchanted", seconds * 3)
+            Put("noTime", "An enchant whose time isn't given", "enchanted", nil)
+            Put("bare", "A weapon with no temporary enchant", "bare")
+            Put("noWeapon", "No weapon that can take one", "noWeapon")
+            Put("unread", "Not read yet", nil)
+            return list
         end
         local bare = { "bare", "A weapon with no temporary enchant" }
         local on = { "enchanted", "A weapon with a temporary enchant" }
         local first, second = bare, on
         if cond.what == "applied" then first, second = on, bare end
-        Put(first[1], first[2], first[1])
-        Put(second[1], second[2], second[1])
+        Put(first[1], first[2], first[1], first[1] == "enchanted" and 1800 or nil)
+        Put(second[1], second[2], second[1], second[1] == "enchanted" and 1800 or nil)
         Put("noWeapon", "No weapon that can take one", "noWeapon")
         Put("unread", "Not read yet", nil)
         return list
@@ -492,6 +598,11 @@ C.STATES = {
     { "resting", "resting", "resting", "not resting", function() return rawget(_G, "IsResting") ~= nil end },
     { "dungeon", "place", "in a dungeon", "not in a dungeon", function() return rawget(_G, "IsInInstance") ~= nil end },
     { "raid", "place", "in a raid", "not in a raid", function() return rawget(_G, "IsInInstance") ~= nil end },
+    -- Moving is the game's own IsPlayerMoving and its start / stop events (the fader that hides frames while you move
+    -- reads the same); it turns on and off with every step, so it suits "only while standing still" with a short wait
+    -- before showing. On a flight path is UnitOnTaxi (the guide's auto hide reads it the same way).
+    { "moving", "moving", "moving", "standing still", function() return rawget(_G, "IsPlayerMoving") ~= nil end },
+    { "taxi", "taxi", "on a flight path", "not on a flight path", function() return rawget(_G, "UnitOnTaxi") ~= nil end },
 }
 -- the kind of place each place-state is
 local PLACE_OF = { dungeon = "dungeon", raid = "raid" }
@@ -511,7 +622,7 @@ local function Life(cond, life)
 end
 
 C.Register({
-    type = "player", label = "You (combat, alive, mounted, resting, dungeon, raid)",
+    type = "player", label = "You (combat, alive, mounted, resting, dungeon, raid, moving, flight path)",
     New = function() return { type = "player", state = "combat", negate = false } end,
 
     Check = function(raw)
@@ -526,7 +637,8 @@ C.Register({
     -- combat, being dead, being a ghost, being mounted, resting and where you are (dungeon, raid) are each one fact about the player
     Subject = function(cond)
         local key = STATE[cond.state][2]
-        return key, ({ combat = "Combat", life = "Alive or dead", mounted = "Mounted", resting = "Resting", place = "Dungeon or raid" })[key]
+        return key, ({ combat = "Combat", life = "Alive or dead", mounted = "Mounted", resting = "Resting", place = "Dungeon or raid",
+            moving = "Moving", taxi = "On a flight path" })[key]
     end,
 
     Evaluate = function(cond, obs)
@@ -550,6 +662,8 @@ C.Register({
         if s[2] == "combat" then return v and "In combat" or "Out of combat" end
         if s[2] == "mounted" then return v and "Mounted" or "Not mounted" end
         if s[2] == "resting" then return v and "Resting" or "Not resting" end
+        if s[2] == "moving" then return v and "Moving" or "Standing still" end
+        if s[2] == "taxi" then return v and "On a flight path" or "Not on a flight path" end
         if s[2] == "place" then return ({ dungeon = "In a dungeon", raid = "In a raid", other = "Somewhere else", none = "Not in an instance" })[v] or "Not read yet" end
         return ({ alive = "Alive", dead = "Dead", ghost = "A ghost" })[v] or "Not read yet"
     end,
@@ -570,6 +684,12 @@ C.Register({
         elseif s[2] == "resting" then
             Put("on", "Resting", true)
             Put("off", "Not resting", false)
+        elseif s[2] == "moving" then
+            Put("on", "Moving", true)
+            Put("off", "Standing still", false)
+        elseif s[2] == "taxi" then
+            Put("on", "On a flight path", true)
+            Put("off", "Not on a flight path", false)
         elseif s[2] == "place" then
             -- the same choices whichever of dungeon / raid the condition names (they share one input)
             Put("dungeon", "In a dungeon", "dungeon")
