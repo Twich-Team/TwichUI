@@ -2,6 +2,19 @@
 local R = TwichUI
 local params = SIMLAB_PARAMS or {}
 local key = params.page or "overview"
+-- Settings availability fixtures only: never load or restyle external addons.
+if key == "skins" and params.integration then
+    C_AddOns.LoadAddOn("TwichUI_Settings")
+    local kit, state = R.SettingsKit, params.integration
+    local originalState, originalLoaded = kit.AddonState, kit.Loaded
+    local targets = { Attune = true, Auctionator = true, ForeverDungeonJournal = true, WhatsTraining = true, EllesmereUI = true }
+    kit.AddonState = function(name) if targets[name] then return state == "absent" and "missing" or "loaded" end; return originalState(name) end
+    kit.Loaded = function(name) if targets[name] then return state ~= "absent" end; return originalLoaded(name) end
+    if state ~= "absent" then R.S = R.S or {} end
+    if state == "disabled" then
+        for _, name in ipairs({ "attuneSkin", "auctionatorSkin", "foreverDungeonJournalSkin", "whatsTrainingSkin" }) do R:SetEnabled(name, false) end
+    end
+end
 -- Nested rule fixtures need value comparison, including numeric keys; Lab.Digest is intentionally shallow.
 local function RuleDigest(value)
     if type(value) ~= "table" then return type(value) .. ":" .. tostring(value) end
@@ -168,6 +181,34 @@ Lab.Step("disclosures and navigation", function()
     UI.Layout(view)
     local scroll = view.frame:GetParent():GetParent()
     scroll:SetVerticalScroll(0)
+    if key == "worldMapPlaces" then
+        local prefs = R.MapExplorePrefs
+        local before = prefs.Get("caves")
+        local row = K.rowsById.mapExploreCaves
+        row.setting:SetValue(not before); Lab.Settle(.1)
+        Lab.Check("interact", "place layer binding", not before, prefs.Get("caves"))
+        row.setting:SetValue(before); Lab.Settle(.1)
+        Lab.Check("state", "place choices restored", before, prefs.Get("caves"))
+        if params.data == "empty" then R.MapExploreData = nil end
+        if params.data == "on" then R:SetEnabled("mapExplore", true) end
+        if params.data == "advanced" or params.data == "empty" then
+            for _, sec in ipairs(view.sections) do if sec.collapsible then sec.toggle:Click() end end
+        end
+        UI.Layout(view)
+    elseif key == "skins" then
+        for _, name in ipairs({ "attuneSkin", "auctionatorSkin", "foreverDungeonJournalSkin", "whatsTrainingSkin" }) do
+            local row = K.switchRows[name]
+            if params.integration == "absent" then
+                Lab.Check("state", name .. " unavailable", false, row:Enabled())
+            elseif params.integration then
+                local before = row.setting:GetValue()
+                row.setting:SetValue(not before); Lab.Settle(.1)
+                Lab.Check("interact", name .. " saved preference", not before, R:Enabled(name))
+                row.setting:SetValue(before); Lab.Settle(.1)
+            end
+        end
+        UI.Layout(view)
+    end
     if key == "auction" then
         for _, switch in ipairs({ "auctionPosting", "mailGoldSummary" }) do
             local row = K.switchRows[switch]
@@ -623,6 +664,16 @@ if key == "magicInventory" and not params.editor then
             Lab.Check("interact", "unfiltered drag starts", true, page.Drag.Active())
             Lab.Check("state", "drag picture does not reorder", before, RuleDigest(mi.Rules()))
         end
+    end)
+end
+if (key == "worldMapPlaces" and (params.data == "advanced" or params.data == "empty")) or (key == "skins" and params.data == "bottom") then
+    Lab.Step("remaining page detail viewport", function()
+        local view = R.SettingsUI.View(key)
+        local scroll = view.frame:GetParent():GetParent()
+        local section = view.sections[key == "worldMapPlaces" and 3 or #view.sections].card
+        scroll:SetVerticalScroll(math.max(0, scroll:GetTop() - section:GetTop() + scroll:GetVerticalScroll()))
+        Lab.Settle(.1)
+        Lab.Check("state", "detail section accessible", true, section:IsShown())
     end)
 end
 -- Keep Blizzard's unrelated PTR feedback button visible beside the capture, not over addon controls.
