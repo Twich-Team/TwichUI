@@ -299,3 +299,88 @@ Remaining acceptance: native fonts/localization and item/category names, real po
 regions, nested picker/Escape behavior, reload/profile persistence and actual inventory review still need WoW Forever.
 The standalone bag picker retains its existing distinct FrameLook treatment; it was not broadly redesigned here.
 No real-client visual acceptance is claimed. Magic Inventory remains **Substantially modernized**, not Verified.
+
+## Final coordinated-art refinement — 11 November 2026
+
+The approved manager (`mockup`) and builder (`rule_builder`) images were reopened and compared with the actual
+rendered page. This pass preserves the compact manager, focused modal, parent transaction, section geometry,
+popup ownership and finite scroll behavior. No rule-engine, persistence, profile, gameplay or shared-component
+implementation changed.
+
+### Changes and discrepancy resolution
+
+| Priority / discrepancy | Resolution | Evidence |
+|---|---|---|
+| P1 — identical quality illustrations | Five new painted quality objects plus the existing neutral Any-quality pouch. All six have distinct silhouettes; relief/checks retain multi-select semantics. | Unit and simulator texture-distinctness assertions; filter screenshot below. |
+| P1 — repeated category placeholder | Cloth, herbs, leather, ore, enchanting, elemental, food, parts, elixir, explosives, gems and scrolls now use purpose-specific/family artwork. Single-category manager identities use the same adapter. | Category catalog and scrolled family captures opened at actual scale. |
+| P2 — weak What items? overview | Two compact clickable summary tags, named categories or specific-item count, active quality/filter count, and four distinct Categories/Consumables/Equipment/Specific items entry points. Shortcuts navigate only. | Builder capture; unit/simulator assertions prove Equipment does not change the draft. |
+| P2 — small filter icons | First render showed 20-unit illustrations were undersized; enlarged to 26 and shifted text anchors. | `122812` → `123337` filter comparison, followed by constrained category review. |
+| P2 — unbalanced modal actions | Shorter Choose items title, 34-unit selected tabs, 28-unit close action and centered Done between rule Cancel and Save. Fixed footer and scroll bounds retained. | Wide and constrained modal screenshots. |
+| P2 — undersized row actions/chips | Existing 70-unit rows retained; metadata badges 28 units wide-view/20 constrained, larger type and wider keep values; canonical Pill switch; 32-unit Edit/context actions and 28-unit Review items. | Manager/context and 40-rule constrained screenshots; row-height and priority checks. |
+| P2 — understated readiness | Existing validation drives a shared selection surface, restrained olive tint and warm-ivory Ready label; incomplete rules keep warning feedback. | Complete and incomplete builder captures. |
+
+Category keys and matching semantics are untouched. Stable existing category IDs have explicit artwork; remaining
+families use the actual provider's names. Unknown or localized family names keep a neutral pouch. Several simulator
+subclasses are literally named Other; these intentionally share fallback art rather than inventing identities.
+Localized family-specific artwork remains a client acceptance item. Actual selected items retain their native icon
+and name, including unresolved-ID handling. Destination, movement and protection illustrations were already distinct
+and retained. No icon reuse remains merely to stand in for every quality or every named material family.
+
+### Art sources and build
+
+Fourteen original transparent PNGs live in `assets/magic-inventory/`: five quality objects; herbs, leather, ore,
+enchanting, elemental, elixir, explosives, parts and broken chain. Their README records generation direction and
+subjects. `python3 tools/make_magic_reagents_art.py` uses the established alpha-aware crop/resample/bleed pipeline
+to create 28 runtime RGBA TGAs, `!!!TwichUI/media/icons/magic-<name>{,-small}.tga`, 64/32 pixels.
+All sources and outputs passed alpha/dimension checks. The existing reagent/bank output remained unchanged.
+Sources are excluded from addon packages; runtime assets have no text or baked-in controls. Existing approved
+cloth, food, potion, pack, shield, scroll, tabard, status and control artwork is reused. No new material family.
+
+### Verification
+
+**Unit-tested:** `./tests/run.sh` completed **189 passed, 0 failed** during this pass. After final source refinements,
+`test_magic_inventory_settings.lua` and `test_settings_window.lua` passed again using the standard Lua 5.1 test
+command. Edited Lua files passed `luac5.1 -p`; `git diff --check` passed. The full suite includes rule matching,
+planning/execution safeguards, settings/default contracts, profile tests and prior complete rule round trips.
+The added UI checks cover distinct quality art and navigation without draft mutation.
+
+**Simulator-tested:** permanent `tools/simlab/scenarios/settings.lua` coverage adds the same art/shortcut invariants
+and a `families` category-scroll pose. Existing tests continue to exercise quality/Any, exclusive equipment/binding,
+category search/toggles, inclusions/exclusions, parent scroll restoration, Save/Cancel/reopen, deep value round trip,
+Escape ownership, priority/search/filter safety and narrow layouts. All are handler/state checks, not real pointer input.
+No actual item transfer, player data or third-party API operation was used.
+The final manager scenario also clicks the real crafted switch twice, checking its canonical saved value and exact restoration.
+
+**Screenshot-reviewed:** paths below are relative to `../wow-ui-sim-lab/artifacts/`, all files `magicInventory.png`.
+These are current-state evidence, not newly approved golden baselines. Output is not committed or packaged.
+
+| Folder (`settings-20261111-…`) | View | Handler/state checks |
+|---|---|---|
+| `123005` | Manager, selected rule/context menu, distinct herb/cloth/ore art, enabled/disabled | 31 |
+| `123810` | Final manager/context, real crafted switch toggle/restore | 33 |
+| `123025` | Builder with several active filters, selected item and exclusion | 62 |
+| `123337` | Final quality/equipment/binding modal; enlarged illustrations and fixed actions | 65 |
+| `123426` | Constrained category modal | 65 |
+| `123519` | 40-rule constrained manager with long title and readable chips | 142 |
+| `123539` | Builder with specific item, unrestricted filters and concise summary tags | 65 |
+| `123556` | Incomplete mail rule with warning readiness | 63 |
+| `123615` | Constrained end-scroll, binding controls and fixed draft actions | 67 |
+| `123632` | Final scrolled category families, including inscription scroll | 66 |
+
+Focused reruns:
+
+```sh
+SIMLAB_SETTINGS_FILLED=true SIMLAB_SETTINGS_CATEGORIES=true bash tools/simlab/settings.sh magicInventory
+SIMLAB_SETTINGS_FILLED=true SIMLAB_SETTINGS_EDITOR='"existing"' SIMLAB_SETTINGS_TASK=5 bash tools/simlab/settings.sh magicInventory
+SIMLAB_SETTINGS_FILLED=true SIMLAB_SETTINGS_EDITOR='"existing"' SIMLAB_SETTINGS_TASK=5 SIMLAB_SETTINGS_DATA='"filters"' bash tools/simlab/settings.sh magicInventory
+# Use families for the scrolled category art view; active for the main builder with active filters.
+SIMLAB_SETTINGS_FILLED=true SIMLAB_SETTINGS_EDITOR='"existing"' SIMLAB_SETTINGS_TASK=5 SIMLAB_SETTINGS_CATEGORIES=true SIMLAB_SETTINGS_POSE=narrow bash tools/simlab/settings.sh magicInventory
+SIMLAB_SETTINGS_FILLED=true SIMLAB_SETTINGS_COUNT=40 SIMLAB_SETTINGS_POSE=narrow bash tools/simlab/settings.sh magicInventory
+```
+
+**Not real-client-tested:** the simulator substitutes Friz Quadrata for addon fonts and uses an older Forever API
+snapshot. It cannot establish native typography/wrapping, localized category families, pointer/keyboard hit regions,
+real drag/drop, combat/taint, picker input, reload persistence or real inventory/bank/mail review. The shared shell
+and button relief remain less ornate than the painted mockups; this pass deliberately retains the approved reusable
+TwichUI materials. The main composition and compact controls were compared structurally; no pixel-identical or
+real-client visual acceptance is claimed. Matrix status remains **Substantially modernized**, awaiting client acceptance.

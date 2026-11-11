@@ -79,6 +79,10 @@ Check(Has(f, "^What items%?$") and Has(f, "^Rule review$"), "cohesive builder se
 local builderHeight = P.Height()
 Click("moreItemFilters")
 Check(P.Control("filterEditor"):IsShown() and P.Height() == builderHeight, "focused filters do not expand or displace the builder")
+local qualityArt = {}
+for i = 1, 6 do qualityArt[P.Control("e1q" .. i .. "art").tex.texture] = true end
+local qualityArtCount = 0; for _ in pairs(qualityArt) do qualityArtCount = qualityArtCount + 1 end
+Check(qualityArtCount == 6, "all six quality choices have distinct artwork")
 Check(not P.Control("e1cat1") or not P.Control("e1cat1").shown, "category catalog is a separate focused tab")
 Click("filterTabcategories")
 Check(P.Control("e1cat1mark").shown, "the template category has an explicit selected indicator")
@@ -89,6 +93,10 @@ Check(P.Control("filterNoCategories").shown and P.Editing().cats[1] ~= nil, "emp
 categorySearch:SetText(""); categorySearch.scripts.OnTextChanged(categorySearch); Flush()
 Click("filterDone")
 Check(not P.Control("filterEditor").shown and P.Editing() ~= nil, "Done retains only the private draft")
+local equipmentBefore = P.Editing().equip
+Click("quickCategory3")
+Check(P.Control("filterEditor").shown and P.Editing().equip == equipmentBefore, "equipment artwork opens the existing editor without changing the draft")
+Click("filterDone")
 Click("advancedDestination")
 Check(P.Control("reviewValue2").text == "Bank alt" and Has(f, "Needs attention"), "the review names the destination and what is missing")
 Check(Has(f, "Needs attention"), "and says it can't be turned on yet")

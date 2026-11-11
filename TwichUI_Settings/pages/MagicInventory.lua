@@ -72,8 +72,12 @@ local function Button(key, label, w, kind, onClick)
     return b
 end
 
-local function Check(key, onToggle)
-    local c = Get(key, function() return Wg().Checkbox(f, function(v) local self = pool[key]; if self.onToggle then self.onToggle(v) end end) end)
+local function Check(key, onToggle, art)
+    local c = Get(key, function()
+        local toggle = function(v) local self = pool[key]; if self.onToggle then self.onToggle(v) end end
+        if art and R.SettingsMaterial then return R.SettingsMaterial.Pill(f, toggle) end
+        return Wg().Checkbox(f, toggle)
+    end)
     c.onToggle = onToggle
     return c
 end
@@ -495,16 +499,46 @@ function P.RowCells(rule)
     return action, to, keep, tone
 end
 
+-- Presentation-only art adapters. These never classify items or change category keys.
+local function Painted(name) return [[media\icons\magic-]] .. name .. "-small" end
+local NPC = [[media\npcs\]]
+local QUALITY_ART = { [0] = Painted("quality-poor"), [1] = Painted("quality-common"), [2] = Painted("quality-uncommon"), [3] = Painted("quality-rare"), [4] = Painted("quality-epic") }
+local CATEGORY_ART = {
+    ["7:5"] = NPC .. "cloth-bolts-small", ["7:6"] = Painted("leather"), ["7:7"] = Painted("ore"), ["7:9"] = Painted("herbs"),
+    ["0:1"] = [[media\healerwatch\vessel-small]], ["0:2"] = Painted("elixir"), ["0:3"] = Painted("elixir"),
+    ["0:4"] = NPC .. "sealed-scroll-small", ["0:5"] = NPC .. "bread-and-tankard-small", ["0:7"] = NPC .. "cloth-bolts-small",
+    ["3"] = Painted("quality-rare"), ["6"] = NPC .. "arrow-and-cartridge-small", ["5"] = NPC .. "reagent-pouch-small",
+    ["9"] = NPC .. "sealed-scroll-small", ["15"] = NPC .. "leather-backpack-small",
+}
+function P.CategoryArtwork(key)
+    if CATEGORY_ART[key] then return CATEGORY_ART[key] end
+    local class = key:match("^(%d+)")
+    if class == "9" then return CATEGORY_ART["9"] end
+    -- Other available subclasses are named by this client. Family artwork is optional; unknown or
+    -- localized names use a neutral class illustration rather than inventing a category identity.
+    local name = (MI().CategoryName(key) or ""):lower()
+    if name:find("inscription", 1, true) then return NPC .. "sealed-scroll-small" end
+    local families = { { "enchant", "enchanting" }, { "element", "elemental" }, { "explos", "explosives" }, { "device", "parts" }, { "part", "parts" }, { "cooking", "food" }, { "meat", "food" }, { "potion", "potion" }, { "elixir", "elixir" }, { "flask", "elixir" }, { "cloth", "cloth" }, { "leather", "leather" }, { "herb", "herbs" }, { "metal", "ore" }, { "stone", "ore" }, { "jewel", "gem" } }
+    for _, family in ipairs(families) do
+        if name:find(family[1], 1, true) then
+            if family[2] == "cloth" then return NPC .. "cloth-bolts-small" end
+            if family[2] == "food" then return NPC .. "bread-and-tankard-small" end
+            if family[2] == "potion" then return [[media\healerwatch\vessel-small]] end
+            if family[2] == "gem" then return QUALITY_ART[3] end
+            return Painted(family[2])
+        end
+    end
+    return CATEGORY_ART[class] or NPC .. "reagent-pouch-small"
+end
+
 local function RuleArtwork(rule)
     local id = next(rule.include or {})
     local facts = id and MI().ItemFacts(id)
     local icon = facts and facts.icon or (id and C_Item.GetItemIconByID(id))
     if icon then return icon end
     if rule.kind == "never" or rule.equip == "equipment" then return R.PATH .. [[media\npcs\sword-and-shield]] end
-    if rule.kind == "keep" then return R.PATH .. [[media\npcs\leather-backpack]] end
-    for _, key in ipairs(rule.cats or {}) do
-        if key:match("^0:") then return R.PATH .. [[media\healerwatch\vessel-small]] end
-    end
+    if #(rule.cats or {}) == 1 then return R.PATH .. P.CategoryArtwork(rule.cats[1]):gsub("%-small$", "") end
+    if rule.kind == "keep" and #(rule.cats or {}) == 0 then return R.PATH .. [[media\npcs\leather-backpack]] end
     return R.PATH .. [[media\icons\magicReagents]]
 end
 
@@ -722,7 +756,7 @@ local function DrawTable(y, rules)
         title:SetWordWrap(true); title:SetHeight(32)
         Label("items", P.ItemsText(rule) .. (MI().Problem(rule, false) and " · Needs attention" or ""), 85, 36, width >= 850 and chipX - 100 or width - 270)
         local action, to, keep = P.RowCells(rule)
-        local chipY = width >= 850 and 23 or 50
+        local chipY = width >= 850 and 21 or 49
         local function Badge(suffix, text, x, w)
             if text == "" then return end
             local badge = Get(key .. suffix .. "badge", function()
@@ -730,11 +764,11 @@ local function DrawTable(y, rules)
                 if R.SettingsCraft then R.SettingsCraft.Sheet(b, "chip", { layer = "BACKGROUND", corner = 6 }) end
                 return b
             end)
-            badge:SetParent(row); badge:ClearAllPoints(); badge:SetPoint("TOPLEFT", row, "TOPLEFT", x, -chipY); badge:SetSize(w, width >= 850 and 25 or 19)
+            badge:SetParent(row); badge:ClearAllPoints(); badge:SetPoint("TOPLEFT", row, "TOPLEFT", x, -chipY); badge:SetSize(w, width >= 850 and 28 or 20)
             local label = Label(suffix, text, x + 6, chipY + 2, w - 26)
             label:SetParent(badge); label:ClearAllPoints(); label:SetPoint("LEFT", badge, "LEFT", 23, 0)
             label:SetAlpha(1); label:SetDrawLayer("OVERLAY", 7)
-            if R.SettingsMaterial then R.SettingsMaterial.ReminderFont(label, 12, false) end
+            if R.SettingsMaterial then R.SettingsMaterial.ReminderFont(label, width >= 850 and 13 or 12, false) end
             local icon = Get(key .. suffix .. "icon", function() return badge:CreateTexture(nil, "ARTWORK") end)
             icon:ClearAllPoints(); icon:SetPoint("LEFT", badge, "LEFT", 4, 0); icon:SetSize(width >= 850 and 18 or 15, width >= 850 and 18 or 15)
             local image = suffix == "keep" and "leather-backpack" or suffix == "to" and (rule.kind == "guild" and "tabard" or rule.kind == "mail" and "sealed-scroll" or "coins") or rule.kind == "never" and "sword-and-shield" or rule.kind == "keep" and "leather-backpack" or rule.kind == "mail" and "sealed-scroll" or "balance-scales"
@@ -752,14 +786,15 @@ local function DrawTable(y, rules)
         end
         Badge("action", rule.kind == "keep" and "Keep in bags" or rule.kind == "never" and "Never transfer" or action, chipX, (rule.kind == "keep" or rule.kind == "never") and 146 or 90)
         Badge("to", to ~= "-" and to or "", chipX + 96, 100)
-        Badge("keep", rule.kind ~= "never" and keep ~= "-" and ("Keep " .. keep) or "", chipX + 202, 78)
+        Badge("keep", rule.kind ~= "never" and keep ~= "-" and ("Keep " .. keep) or "", chipX + 202, 100)
         local box = Check(key .. "on", function(v)
             local ok, why = mi.SetRuleEnabled(rule.id, v); if not ok then Say(why, "warn") end
-        end)
+        end, true)
         box:SetParent(row); box:ClearAllPoints(); box:SetPoint("RIGHT", row, "RIGHT", -138, 0); box:SetChecked(rule.enabled)
         box:SetFrameLevel(row:GetFrameLevel() + 2)
         local edit = Button(key .. "edit", "Edit", 70, "secondary", function() StartEdit(mi.Rule(rule.id)) end)
         edit:SetParent(row); edit:ClearAllPoints(); edit:SetPoint("RIGHT", row, "RIGHT", -56, 0)
+        edit:SetHeight(32)
         local more = Button(key .. "more", "...", 38, "secondary", function()
             local choices = {
                 { value = "up", label = "Move up", disabled = filtered or priority == 1 },
@@ -782,6 +817,7 @@ local function DrawTable(y, rules)
             end)
         end)
         more:SetParent(row); more:ClearAllPoints(); more:SetPoint("RIGHT", row, "RIGHT", -8, 0)
+        more:SetHeight(32)
         y = y + ROW_H + 6
     end
     for i = #rules + 1, mi.MAX_RULES do local row = pool["tr" .. i]; if row then row.rule = nil end end
@@ -843,6 +879,7 @@ local function DrawList(y)
     if #rules > 0 then y = DrawTable(y, rules) end
     Button("preview", "Review items", 116, "secondary", #all > 0 and function() mi.Window.Show(true) end or nil)
     At(pool.preview, PAD, y + 8)
+    pool.preview:SetHeight(28)
     R.Interact.Tip(pool.preview, "Review items", "Opens the existing read-only item review. Nothing moves until you confirm an action there.")
     return y + 46
 end
@@ -941,15 +978,15 @@ local function DrawItemFilters()
             end
         else R.Interact.Tip(owner, title, body) end
     end
-    local title = Label("filterTitle", panel, "What items?  /  Item filters", 48, 14, width - 100, "heading"); Tone(title, "head")
+    local title = Label("filterTitle", panel, "Choose items", 48, 14, width - 100, "heading"); Tone(title, "head")
     local emblem = Get("filterEmblem", function() return panel:CreateTexture(nil, "ARTWORK") end)
     emblem:ClearAllPoints(); emblem:SetPoint("TOPLEFT", panel, "TOPLEFT", 14, -10); emblem:SetSize(28, 28); emblem:SetTexture(R.PATH .. [[media\icons\magicReagents-small]])
     local function Close() P.CloseItemFilters() end
-    Place(Button("filterClose", "x", 26, "secondary", Close), panel, width - 38, 10, nil, 26)
+    Place(Button("filterClose", "x", 28, "secondary", Close), panel, width - 40, 10, nil, 28)
     local tabWidth = math.floor((width - 40) / 3)
     for i, tab in ipairs({ { "filters", "Filters" }, { "categories", "Categories" }, { "include", "Also include" } }) do
         local button = Get("filterTab" .. tab[1], function() return Wg().Tab(panel, tab[2], tabWidth, function() end) end)
-        Place(button, panel, 14 + (i - 1) * (tabWidth + 6), 48, tabWidth, 32)
+        Place(button, panel, 14 + (i - 1) * (tabWidth + 6), 48, tabWidth, 34)
         button.text:SetText(tab[2]); button:SetSelected(filterTab == tab[1])
         button:SetScript("OnClick", function() filterTab = tab[1]; pool.filterScroll:SetVerticalScroll(0); P.QueueRefresh() end)
     end
@@ -984,10 +1021,10 @@ local function DrawItemFilters()
         local art = Get(key .. "art", function()
             local frame = CreateFrame("Frame", nil, button); frame.tex = frame:CreateTexture(nil, "ARTWORK"); frame.tex:SetAllPoints(); return frame
         end)
-        art:SetFrameLevel(button:GetFrameLevel() + 4); art:ClearAllPoints(); art:SetPoint("LEFT", button, "LEFT", 6, 0); art:SetSize(20, 20); art.tex:SetTexture(R.PATH .. icon)
+        art:SetFrameLevel(button:GetFrameLevel() + 4); art:ClearAllPoints(); art:SetPoint("LEFT", button, "LEFT", 6, 0); art:SetSize(26, 26); art.tex:SetTexture(R.PATH .. icon)
         local mark = Get(key .. "mark", function() return art:CreateTexture(nil, "OVERLAY") end)
         mark:ClearAllPoints(); mark:SetPoint("RIGHT", button, "RIGHT", -5, 0); mark:SetSize(15, 15); mark:SetTexture(R.PATH .. [[media\guides\status-done-small]]); mark:SetShown(selected)
-        button.text:ClearAllPoints(); button.text:SetPoint("LEFT", button, "LEFT", 30, 0); button.text:SetPoint("RIGHT", button, "RIGHT", -24, 0)
+        button.text:ClearAllPoints(); button.text:SetPoint("LEFT", button, "LEFT", 38, 0); button.text:SetPoint("RIGHT", button, "RIGHT", -24, 0)
         return button
     end
     local y, third = 0, math.floor((contentWidth - 12) / 3)
@@ -999,18 +1036,18 @@ local function DrawItemFilters()
             local selected = q.any and next(r.qualities) == nil or r.qualities[q.value] == true
             local b = Choice("e1q" .. i, q.label, selected, ((i - 1) % 3) * (third + 6), y + math.floor((i - 1) / 3) * 42, third,
                 function() if q.any then r.qualities = {} else r.qualities[q.value] = not r.qualities[q.value] or nil end; P.QueueRefresh() end,
-                q.any and [[media\npcs\reagent-pouch-small]] or [[media\npcs\inscribed-stone-small]])
+                q.any and NPC .. "reagent-pouch-small" or QUALITY_ART[q.value])
             Help(b, q.label, q.any and "No quality restriction. Other filters and explicit inclusions are unchanged." or "Select several qualities to match any of them. Explicit inclusions still bypass filters.")
         end
         y = y + math.ceil(#qualities / 3) * 42 + 14
         Label("filterEquipmentTitle", body, "Equipment · choose one", 0, y, contentWidth, "body"); y = y + 26
         for i, choice in ipairs({ { "any", "Any item" }, { "equipment", "Equipment only" }, { "other", "Not equipment" } }) do
-            Choice("e1eq" .. i, choice[2], r.equip == choice[1], (i - 1) * (third + 6), y, third, function() r.equip = choice[1]; P.QueueRefresh() end, [[media\npcs\sword-and-shield-small]])
+            Choice("e1eq" .. i, choice[2], r.equip == choice[1], (i - 1) * (third + 6), y, third, function() r.equip = choice[1]; P.QueueRefresh() end, choice[1] == "equipment" and NPC .. "sword-and-shield-small" or choice[1] == "other" and NPC .. "cloth-bolts-small" or NPC .. "leather-backpack-small")
         end
         y = y + 54
         Label("filterBindingTitle", body, "Binding · choose one", 0, y, contentWidth, "body"); y = y + 26
         for i, choice in ipairs({ { "any", "Any binding" }, { "boe", "Bind on equip" }, { "nobind", "Doesn't bind" } }) do
-            local b = Choice("e1b" .. i, choice[2], r.bind == choice[1], (i - 1) * (third + 6), y, third, function() r.bind = choice[1]; P.QueueRefresh() end, [[media\npcs\sealed-scroll-small]])
+            local b = Choice("e1b" .. i, choice[2], r.bind == choice[1], (i - 1) * (third + 6), y, third, function() r.bind = choice[1]; P.QueueRefresh() end, choice[1] == "nobind" and Painted("unbound") or choice[1] == "boe" and NPC .. "tabard-small" or NPC .. "sealed-scroll-small")
             if choice[1] == "boe" then Help(b, "Bind on equip", "Matches bind-on-equip items only while they are known to be unbound. Already-bound or unknown binding is excluded.") end
         end
         y = y + 52
@@ -1043,7 +1080,7 @@ local function DrawItemFilters()
                     elseif #r.cats < mi.MAX_CATS then r.cats[#r.cats + 1] = cat.key
                     else Say("Category limit reached; remove a category first.", "warn") end
                     P.QueueRefresh()
-                end, [[media\icons\magicReagents-small]])
+                end, P.CategoryArtwork(cat.key))
                 Help(pool["e1cat" .. i], cat.label, cat.group .. " · category " .. cat.key)
                 count = count + 1
             end
@@ -1086,7 +1123,7 @@ local function DrawItemFilters()
     scroll:LimitFilters()
     Label("filterDraftNote", panel, "Changes stay in this rule draft until Save rule.", 14, tall - 78, width - 28)
     Place(Button("filterCancelRule", "Cancel rule", 104, "secondary", function() itemAdvanced = false; pool.eCancel.onClick() end), panel, 14, tall - 44, nil, 32)
-    Place(Button("filterDone", "Done", 84, "secondary", Close), panel, width - 220, tall - 44, nil, 32)
+    Place(Button("filterDone", "Done", 104, "secondary", Close), panel, math.floor((width - 104) / 2), tall - 44, nil, 32)
     Place(Button("filterSaveRule", "Save rule", 104, "primary", function() itemAdvanced = false; pool.eSave.onClick() end), panel, width - 118, tall - 44, nil, 32)
 end
 
@@ -1387,26 +1424,55 @@ local function DrawEditor(y)
     end
     local left, mid = PAD, PAD + col + 12
     local iy = Panel("itemsPanel", "What items?", left, top, col, 320)
-    local it = Text("itemsSummary", "small"); Wide(it, left + 12, iy, col - 24)
-    local criteria = P.ItemsText(r)
-    it:SetText(#r.cats == 1 and (MI().CategoryName(r.cats[1]) or "Unnamed category") or #r.cats > 1 and (#r.cats .. " categories") or "Categories or specific items")
-    it:SetHeight(18); Tone(it, "dim")
-    R.Interact.Tip(pool.itemsPanel, "Item criteria", criteria)
-    local active = P.FilterSummary(r)
-    local filters = Text("activeItemFilters", "small"); Wide(filters, left + 12, top + 64, col - 24)
-    filters:SetText(#active > 0 and table.concat(active, " · ") or "No additional filters"); filters:SetHeight(32); Tone(filters, #active > 0 and "head" or "dim")
-    R.Interact.Tip(pool.itemsPanel, "Item criteria", criteria .. "\nListed inclusions bypass filters; exclusions and protections still apply.")
-    for i, choice in ipairs({ { "Categories...", "categories", #r.cats > 0, [[media\icons\magicReagents-small]] }, { "Specific items...", "include", next(r.include) ~= nil, [[media\npcs\sealed-scroll-small]] } }) do
-        local button = Get("quickCategory" .. i, function() return Wg().Tab(f, "", math.floor((col - 30) / 2), function() end) end)
+    local criteria, active = P.ItemsText(r), P.FilterSummary(r)
+    local names = {}; for _, key in ipairs(r.cats) do names[#names + 1] = MI().CategoryName(key) or "Unnamed category" end
+    local included = 0; for _ in pairs(r.include) do included = included + 1 end
+    local categoryText = #names > 0 and table.concat(names, " + ") or included > 0 and (included .. (included == 1 and " specific item" or " specific items")) or "Choose items"
+    if #categoryText > 24 then categoryText = #names .. (#names == 1 and " category" or " categories") end
+    local qualityNames, qualityIcon = {}, nil
+    for _, q in ipairs(MI().QUALITY_ORDER) do if r.qualities[q] then qualityNames[#qualityNames + 1] = MI().QualityName(q); qualityIcon = qualityIcon or QUALITY_ART[q] end end
+    local filterText = #qualityNames > 0 and (#qualityNames <= 2 and table.concat(qualityNames, " / ") or #qualityNames .. " qualities")
+        or r.equip == "equipment" and "Equipment" or r.equip == "other" and "Not gear" or r.bind == "boe" and "Bind on equip" or r.bind == "nobind" and "Doesn't bind" or "Any quality"
+    if #active > 1 then filterText = filterText .. " +" .. (#active - 1) end
+    local function SummaryChip(key, text, iconPath, x, width, tab)
+        local chip = Get(key .. "face", function()
+            local frame = CreateFrame("Button", nil, f)
+            if R.SettingsCraft then R.SettingsCraft.Sheet(frame, "chip", { layer = "BACKGROUND", corner = 6 }) end
+            return frame
+        end)
+        At(chip, x, top + 44); chip:SetSize(width, 25); chip:SetFrameLevel(f:GetFrameLevel() + 1)
+        chip:SetScript("OnClick", function() filterQuery = ""; P.OpenItemFilters(tab) end)
+        local label = Text(key, "small"); label:SetParent(chip); label:ClearAllPoints(); label:SetPoint("LEFT", chip, "LEFT", 27, 0); label:SetWidth(width - 34); label:SetWordWrap(false); label:SetText(text); Tone(label, "head")
+        local art = Get(key .. "art", function() return chip:CreateTexture(nil, "ARTWORK") end)
+        art:ClearAllPoints(); art:SetPoint("LEFT", chip, "LEFT", 5, 0); art:SetSize(18, 18); art:SetTexture(R.PATH .. iconPath)
+        chip.itemSummary = criteria .. "\nListed inclusions bypass filters; exclusions and protections still apply."
+        if R.SettingsMaterial and not chip.summaryHelp then
+            chip.summaryHelp = true; R.SettingsMaterial.ContextTip(chip, "Item criteria", function(self) return self.itemSummary end)
+        end
+    end
+    local tagWidth = math.floor((col - 30) / 2)
+    SummaryChip("itemsSummary", categoryText, #r.cats == 1 and P.CategoryArtwork(r.cats[1]) or [[media\icons\magicReagents-small]], left + 12, tagWidth, "categories")
+    SummaryChip("activeItemFilters", filterText, qualityIcon or (r.equip ~= "any" and NPC .. "sword-and-shield-small" or r.bind ~= "any" and Painted("unbound") or NPC .. "reagent-pouch-small"), left + 18 + tagWidth, tagWidth, "filters")
+    local consumables = false; for _, key in ipairs(r.cats) do if key == "0" or key:match("^0:") then consumables = true end end
+    local quick = {
+        { "Categories", "categories", #r.cats > 0, [[media\icons\magicReagents-small]] },
+        { "Consumables", "categories", consumables, [[media\healerwatch\vessel-small]], MI().CategoryName("0") or "" },
+        { "Equipment", "filters", r.equip ~= "any", NPC .. "sword-and-shield-small" },
+        { "Specific items", "include", next(r.include) ~= nil, NPC .. "sealed-scroll-small" },
+    }
+    for i, choice in ipairs(quick) do
+        local button = Get("quickCategory" .. i, function() return Wg().Tab(f, "", tagWidth, function() end) end)
         button.text:SetText(choice[1]); button:SetSelected(choice[3])
-        button:SetScript("OnClick", function() P.OpenItemFilters(choice[2]) end)
-        button:SetSize(math.floor((col - 30) / 2), 34)
-        At(button, left + 12 + (i - 1) * math.floor((col - 6) / 2), top + 104)
+        button:SetScript("OnClick", function() filterQuery = choice[5] or ""; P.OpenItemFilters(choice[2]) end)
+        button:SetSize(tagWidth, 34)
+        At(button, left + 12 + ((i - 1) % 2) * (tagWidth + 6), top + 82 + math.floor((i - 1) / 2) * 40)
         local art = Get("quickArtFrame" .. i, function() local frame = CreateFrame("Frame", nil, button); frame.tex = frame:CreateTexture(nil, "ARTWORK"); frame.tex:SetAllPoints(); return frame end)
         art:SetFrameLevel(button:GetFrameLevel() + 4); art:ClearAllPoints(); art:SetPoint("LEFT", button, "LEFT", 4, 0); art:SetSize(20, 20); art.tex:SetTexture(R.PATH .. choice[4])
-        button.text:ClearAllPoints(); button.text:SetPoint("LEFT", button, "LEFT", 26, 0); button.text:SetPoint("RIGHT", button, "RIGHT", -4, 0)
+        local mark = Get("quickSelected" .. i, function() return art:CreateTexture(nil, "OVERLAY") end)
+        mark:SetTexture(R.PATH .. [[media\guides\status-done-small]]); mark:ClearAllPoints(); mark:SetPoint("RIGHT", button, "RIGHT", -4, 0); mark:SetSize(13, 13); mark:SetShown(choice[3])
+        button.text:ClearAllPoints(); button.text:SetPoint("LEFT", button, "LEFT", 26, 0); button.text:SetPoint("RIGHT", button, "RIGHT", choice[3] and -18 or -4, 0)
     end
-    iy = top + 148
+    iy = top + 164
     local function SelectedItem(prefix, set, x, py, width, empty)
         local ids = {}; for id in pairs(set) do ids[#ids + 1] = id end; table.sort(ids)
         local id = ids[1]
@@ -1427,7 +1493,7 @@ local function DrawEditor(y)
         else name:SetText(empty) end
     end
     SelectedItem("selectedInclude", r.include, left + 12, iy, col - 24, HasItemFilters(r) and "No explicit inclusions" or "Add specific items to match.")
-    iy = top + 190
+    iy = top + 206
     Button("builderPick", "Choose from bags", col - 24, "secondary", function()
         MI().Picker.Open({ purpose = "Include specific items", selected = r.include, onDone = function(set)
             r.include = set; for id in pairs(set) do r.exclude[id] = nil end; P.QueueRefresh() end })
@@ -1444,9 +1510,9 @@ local function DrawEditor(y)
     local function Add(id) r.include[id] = true; r.exclude[id] = nil; P.QueueRefresh() end
     idBox:SetScript("OnEnterPressed", function(self) AddById(self, Add) end)
     Button("builderAdd", "Add item", 74, "secondary", function() AddById(idBox, Add) end); At(pool.builderAdd, left + col - 86, iy + 30)
-    local includeMode = Text("builderIncludeMode", "small"); Wide(includeMode, left + 12, top + 258, col - 24); includeMode:SetText(HasItemFilters(r) and "Listed items also match, bypassing filters." or "Only the specific items listed here match."); Tone(includeMode, "dim")
+    local includeMode = Text("builderIncludeMode", "small"); Wide(includeMode, left + 12, top + 266, col - 24); includeMode:SetText(HasItemFilters(r) and "Listed items also match, bypassing filters." or "Only the specific items listed here match."); Tone(includeMode, "dim")
     Button("moreItemFilters", #P.FilterSummary(r) > 0 and "Edit filters..." or "Item filters...", col - 24, "secondary", function() P.OpenItemFilters("filters") end)
-    At(pool.moreItemFilters, left + 12, top + 284)
+    At(pool.moreItemFilters, left + 12, top + 288); pool.moreItemFilters:SetHeight(24)
     local function Illustrate(key, button, texture)
         local art = Get(key, function()
             local frame = CreateFrame("Frame", nil, button); frame.tex = frame:CreateTexture(nil, "ARTWORK"); frame.tex:SetAllPoints(); return frame
@@ -1549,13 +1615,14 @@ local function DrawEditor(y)
     local probe = MI().CleanRule((function() local copy = {} for k, v in pairs(r) do copy[k] = v end copy.id = copy.id or "rnew" return copy end)())
     local code, why = MI().Problem(probe, false)
     local ready = Text("builderReady", "body"); Wide(ready, rx + 12, reviewY + summaryHeight + 18, rw - 24)
-    ready:SetText(code and ("Needs attention: " .. (why or code)) or "Ready to save"); Tone(ready, code and "warn" or "head")
+    ready:SetText(code and ("Needs attention: " .. (why or code)) or "Ready to save"); Tone(ready, code and "warn" or nil)
     ready:SetParent(pool.reviewPanel)
     local statusFace = Get("reviewStatusFace", function()
         local frame = CreateFrame("Frame", nil, pool.reviewPanel)
-        if R.SettingsCraft then R.SettingsCraft.Sheet(frame, "field", { layer = "BACKGROUND", corner = 8 }) end
+        if R.SettingsCraft then frame.face = R.SettingsCraft.Sheet(frame, "selection", { layer = "BACKGROUND", corner = 8 }) end
         return frame
     end)
+    if statusFace.face then statusFace.face:SetTint(code and .85 or .58, code and .75 or .76, code and .57 or .36) end
     At(statusFace, rx + 10, reviewY + summaryHeight + 10); statusFace:SetSize(rw - 20, H(ready) + 30)
     ready:SetParent(statusFace)
     local stateArt = Get("reviewStateArt", function() return statusFace:CreateTexture(nil, "ARTWORK") end)

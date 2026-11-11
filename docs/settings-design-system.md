@@ -159,7 +159,7 @@ headline/detail, named item wells and a readiness surface with its own native la
 ownership; screenshots provide separate rendering evidence. Keep icons in the control's elevated child frame when
 ARTWORK-layer button sheets would otherwise cover them.
 
-Magic Inventory extends the same component family with 70-unit rows, 25-unit wide-view metadata badges (19 in constrained
+Magic Inventory extends the same component family with 70-unit rows, 28-unit wide-view metadata badges (20 in constrained
 rows), a 64-unit illustrated live banner, 34–36-unit item/destination/movement choices with check indicators, and a
 label/value review. Existing selection/field/chip/button sheets supply all surfaces; no independent material family was
 introduced. The bank-vault illustration is `media/icons/magicBank{,-small}.tga`, from `assets/magic-bank-source.png` through
@@ -174,3 +174,17 @@ Its popup sits on DIALOG strata above the dimmed builder; the existing bag picke
 Escape proxy closes the focused editor first and defers to the picker while it is open. Done retains the rule draft;
 the explicit Save rule / Cancel rule actions use the parent transaction. Bound reused scroll content to the active
 tab's logical height so hidden controls from another tab cannot create a blank tail.
+
+The final Magic Inventory art set is sourced from `assets/magic-inventory/*-source.png`, with recorded art direction
+and subjects in its README. `tools/make_magic_reagents_art.py` produces coordinated 64/32 RGBA textures at
+`media/icons/magic-<name>{,-small}.tga`: five quality objects, herbs, leather, ore, enchanting, elemental, elixir,
+explosives, parts and unbound chain. Reuse the existing cloth, potion, food, pack, shield, scroll and tabard artwork
+for their established roles. Distinguish quality, equipment and binding choices with meaningful silhouettes;
+retain the native selection relief plus check indicator. Category-family art is a display adapter, never a new
+classification table. Unknown family names must retain a neutral fallback rather than imply unsupported metadata.
+
+The builder's two 25-unit summary chips show selected categories/specific-item count and active quality/filter
+groups. They open the existing focused tabs and share bounded context help. Four compact illustrated entry points
+provide navigation only; opening Equipment or Consumables must not change rule criteria. Modal tile illustrations
+are 26 units, tabs 34 units, and fixed Cancel rule / centered Done / Save rule actions are 32 units high.
+Manager row switches reuse the canonical `SettingsMaterial.Pill`; Edit/context actions are 32 units high.

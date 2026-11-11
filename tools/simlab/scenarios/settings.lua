@@ -258,6 +258,10 @@ Lab.Step("disclosures and navigation", function()
             page.Control("moreItemFilters"):Click(); Lab.Settle(.2)
             Lab.Check("construct", "focused filter editor opens", true, page.Control("filterEditor"):IsShown())
             Lab.Check("state", "filters do not expand builder", builderHeight, page.Height())
+            local qualityArt, qualityCount = {}, 0
+            for i = 1, 6 do qualityArt[page.Control("e1q" .. i .. "art").tex:GetTexture()] = true end
+            for _ in pairs(qualityArt) do qualityCount = qualityCount + 1 end
+            Lab.Check("state", "six distinct quality illustrations", 6, qualityCount)
             local inclusions, exclusions = RuleDigest(draft.include), RuleDigest(draft.exclude)
             local originalQuality, originalEquip, originalBind, originalCats = {}, draft.equip, draft.bind, {}
             for q, v in pairs(draft.qualities) do originalQuality[q] = v end
@@ -293,6 +297,11 @@ Lab.Step("disclosures and navigation", function()
             Lab.Check("interact", "Done returns to builder", false, page.Control("filterEditor"):IsShown())
             Lab.Check("state", "Done restores parent position", parentScroll, scroll:GetVerticalScroll())
             Lab.Check("state", "filter changes are unsaved", saved, RuleDigest(mi.Rules()))
+            local beforeShortcut = RuleDigest(draft)
+            page.Control("quickCategory3"):Click(); Lab.Settle(.1)
+            Lab.Check("interact", "equipment shortcut opens focused editor", true, page.Control("filterEditor"):IsShown())
+            Lab.Check("state", "shortcut never changes criteria", beforeShortcut, RuleDigest(draft))
+            page.Control("filterDone"):Click(); Lab.Settle(.1)
             page.OpenItemFilters("filters"); Lab.Settle(.1)
             TwichUISettingsEsc:Hide(); Lab.Settle(.1)
             Lab.Check("interact", "Escape closes filters before settings", true, UI.IsShown() and not page.Control("filterEditor"):IsShown() and page.Editing() ~= nil)
@@ -317,10 +326,15 @@ Lab.Step("disclosures and navigation", function()
             Lab.Check("state", "Cancel discards filter draft", persisted, RuleDigest(mi.Rules()))
             page.Control("rule" .. index .. "edit"):Click(); Lab.Settle(.2)
             Lab.Check("state", "reopen after Cancel retains saved criteria", RuleDigest(savedRule), RuleDigest(page.Editing()))
-            if params.categories or params.data == "categories" then page.OpenItemFilters("categories")
+            if params.categories or params.data == "categories" or params.data == "families" then page.OpenItemFilters("categories")
             elseif params.data == "include" or params.data == "popup" then page.OpenItemFilters("include")
             elseif params.data == "filters" or params.data == "hover" or params.data == "advanced" then page.OpenItemFilters("filters") end
             Lab.Settle(.2)
+            if params.data == "families" then
+                local inner = page.Control("filterScroll")
+                inner:SetVerticalScroll(math.min(176, inner:GetVerticalScrollRange())); Lab.Settle(.1)
+                Lab.Check("state", "category families remain scrollable", true, inner:GetVerticalScroll() > 0)
+            end
             if params.narrow and params.data == "advanced" then
                 local inner = page.Control("filterScroll")
                 inner:SetVerticalScroll(inner:GetVerticalScrollRange()); Lab.Settle(.1)
@@ -531,6 +545,16 @@ if key == "magicInventory" and not params.editor then
     Lab.Step("rule search and draft safety", function()
         local page, mi = R.MagicInventoryPage, R.MagicInventory
         local before = RuleDigest(mi.Rules())
+        for i, rule in ipairs(mi.Rules()) do
+            if not mi.Problem(rule, false) then
+                local enabled = rule.enabled
+                page.Control("rule" .. i .. "on"):Click(); Lab.Settle(.1)
+                Lab.Check("interact", "crafted rule switch writes canonical setting", not enabled, mi.Rule(rule.id).enabled)
+                page.Control("rule" .. i .. "on"):Click(); Lab.Settle(.1)
+                Lab.Check("state", "crafted rule switch restores saved value", before, RuleDigest(mi.Rules()))
+                break
+            end
+        end
         for i = 1, #mi.Rules() do
             local label, badge = page.Control("rule" .. i .. "action"), page.Control("rule" .. i .. "actionbadge")
             Lab.Check("construct", "behavior text above badge " .. i, badge, label:GetParent())

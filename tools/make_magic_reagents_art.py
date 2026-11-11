@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare Magic Inventory's original reagent/bank art with the established alpha-aware icon pipeline."""
+"""Prepare Magic Inventory's original illustrations with the established alpha-aware icon pipeline."""
 from pathlib import Path
 from make_map_tool_icons import read_png, content_box, resample
 from make_settings_icons import bleed, write_tga
@@ -29,3 +29,6 @@ def build(source, name):
 if __name__ == "__main__":
     build("magic-reagents-source.png", "magicReagents")
     build("magic-bank-source.png", "magicBank")
+    for name in ("quality-poor", "quality-common", "quality-uncommon", "quality-rare", "quality-epic",
+                 "herbs", "leather", "ore", "enchanting", "elemental", "elixir", "explosives", "parts", "unbound"):
+        build("magic-inventory/" + name + "-source.png", "magic-" + name)
