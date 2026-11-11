@@ -157,21 +157,24 @@ local function Build()
     f.help = G.Text(f, "small")
     f.help:SetPoint("TOPLEFT", 4, -2)
     f.help:SetWidth(W - 8)
-    f.help:SetText("Tick the channels to clean, then the filters each one uses. Custom rules choose their own channels on the Custom rules tab. Channels you didn't tick, and whispers, group, guild and system messages, are never looked at.")
+    f.help:SetText("Choose channels to clean, then their filters. Whispers, group, guild and system messages stay untouched.")
+    I.Tip(f, "Channel filters", "Custom rules choose their own channels on the Custom rules tab. Channels you don't enable are never filtered. Channel choices are kept when you leave and rejoin.")
 
     local function Column(text, x, title, body)
         local b = CreateFrame("Button", nil, f)
-        b:SetSize(72, 16)
-        b:SetPoint("TOPLEFT", 6 + x - 4, -46)
+        b:SetSize(text == "Channel" and 190 or 32, 16)
+        b:SetPoint("TOPLEFT", 6 + x, -46)
         local t = G.Text(b, "meta")
-        t:SetPoint("LEFT", 0, 0)
+        t:SetPoint(text == "Channel" and "LEFT" or "CENTER", 0, 0)
         t:SetText(text)
         if title then I.Tip(b, title, body) end
         return b
     end
     Column("Channel", 4)
-    Column("Clean", CLEAN_X - 6, "Clean this channel", "Whether TwichUI looks at this channel at all.")
-    for _, c in ipairs(CC().CATEGORIES) do Column(c.short, CAT_X[c.key] - 10, c.label, c.text) end
+    Column("Clean", CLEAN_X, "Clean this channel", "Whether TwichUI looks at this channel at all.")
+    for _, c in ipairs(CC().CATEGORIES) do
+        Column(c.key == "recruit" and "Recruit" or c.key == "repeats" and "Repeat" or c.short, CAT_X[c.key], c.label, c.text)
+    end
     Column("Rules", RULES_X, "Custom rules", "How many of your custom rules that are on apply in this channel.")
 
     f.well = CreateFrame("Frame", nil, f, "BackdropTemplate")

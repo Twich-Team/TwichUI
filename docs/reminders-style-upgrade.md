@@ -8,6 +8,15 @@ The complete revision uses the supplied requirements handoff and [original mocku
 See the [requirement and visual verification record](reminders-revision/implementation.md) for the baseline, final captures,
 remaining visual differences and real-client checks.
 
+## Preserved reference and settings rollout (2026-11-11)
+
+The main editor, preview, When workspace, catalog, Advanced and private drafts are the established baseline.
+The subsequent [settings modernization](settings-modernization.md) promotes the existing painted shell and navigation
+to all pages; it does not redesign those Reminders surfaces. Known ammunition adopts the shared control/well adapters
+while retaining its model, item registration, validation and fixed family heading. Historical statements below about
+restoring the old shell on other pages describe the earlier scoped pilot, not the current global rollout.
+The common component APIs and material sources are documented in [the design system](settings-design-system.md).
+
 ## Usability and condition artwork addendum (2026-11-11)
 
 Final Advanced polish removes the zero-height Position row that overlapped Opacity. Position now has its own row

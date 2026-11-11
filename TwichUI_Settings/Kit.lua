@@ -51,6 +51,9 @@ K.GROUPS = {
 function K.Page(def)
     assert(type(def.key) == "string" and type(def.name) == "string" and (type(def.build) == "function" or type(def.host) == "function"),
         "a page needs a key, a name and a build or host function")
+    -- The completed Reminders surfaces retain their explicit component/layout choices.
+    if def.designReference == nil then def.designReference = def.materialHeader == true end
+    def.materialHeader = true
     K.definitions[#K.definitions + 1] = def
 end
 

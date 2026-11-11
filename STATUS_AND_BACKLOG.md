@@ -2,6 +2,32 @@
 
 One short entry per feature that has a continuing handoff. Details live in the feature's doc; keep this current instead of adding session notes.
 
+## Settings second pass on feature/style (2026-11-11)
+
+- Magic Inventory: focused tasks, readable rule cards with secondary actions, separate destination input rows; selected-category summary and disclosed catalog in the private editor. Existing rule/guild models preserved.
+- Notifications, Healer Watch, Chronicle and Navigation have isolated, persistent sample companions; click a sample to reveal its real setting.
+- Long forms have explicit player-task views; chat/hazard rules and glow spells have focused editors. World Knowledge discloses bulk actions.
+- Section material is the same walnut source as Reminders, installed once. Home/Reminders source layouts are preserved.
+- Unit-tested: 188/0 plus focused final chat-editor checks. Simulator-tested / screenshot-reviewed: all 58 wide pages,
+  priority narrow pages, populated/focused editors, eight Reminders poses and guild arrangement. Only presentation rows
+  change in the saved-settings contract; all 770 settings/defaults/write/reset snapshots are preserved.
+- The first-pass completion status did not establish UX acceptance. The new per-page Styled only / Partial / Substantial classification
+  (3 / 6 / 49, including already focused workflows), evidence and native-client limits are in [docs/settings-second-pass.md](docs/settings-second-pass.md).
+
+## Settings modernization on feature/style (2026-11-11)
+
+- Home implementation and shared design-system rollout cover the actual 58-page catalog (56 for a non-Mage).
+  Reference shortcuts, full catalog, real feature status, default comparisons, local search, fixed headings,
+  per-page secondary disclosures and specialized-editor readability improvements are implemented.
+- Reminders is preserved as the baseline; one new original satchel joins the existing painted materials and illustrations.
+- Audit, page matrix, discrepancy register, exact evidence and pending client acceptance:
+  [docs/settings-modernization.md](docs/settings-modernization.md).
+  Shared APIs: [docs/settings-design-system.md](docs/settings-design-system.md).
+  Exact controls/defaults: [docs/settings-modernization-inventory.md](docs/settings-modernization-inventory.md).
+- Unit-tested: 188/0; simulator-tested and screenshot-reviewed: all 58 pages at wide size, full intermediate narrow pass,
+  ten final focused narrow poses, eight Reminders regression poses and populated Workshop/guild-bank editors.
+  Native fonts/input/combat/reload and external-addon acceptance remain pending. No deployment or commit.
+
 ## Reminders style upgrade on feature/style (2026-11-11)
 
 - Final Advanced correction: Position no longer shares Opacity's anchor; it is a separate secondary-placement row.

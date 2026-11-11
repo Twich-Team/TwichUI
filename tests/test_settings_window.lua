@@ -256,7 +256,7 @@ do
     assert(shown == page.key and row == (page.parent or page.key), page.key .. " selects " .. tostring(row))
   end
   -- and the way back and forth between tabs leaves one selected
-  UI.Navigate("chronicleLook"); UI.Navigate("chronicle"); UI.Navigate("pinsLook")
+  UI.Navigate("chronicleLook", "chronicleLookBgColor"); UI.Navigate("chronicle"); UI.Navigate("pinsLook")
   local shown, row = UI.Selected()
   assert(shown == "pinsLook" and row == "pins")
   UI.Navigate("overview")
@@ -279,13 +279,17 @@ do
   local St = R.DiagStatus
   R:OpenSettings("troubleshooting")
   for _, label in ipairs({ "TwichUI version", "Release channel", "Game client", "Core", "Settings window", "Reload needed",
-    "Status snapshot", "Support information", "Optional integrations", "Skin for Attune", "Data bar library (LibDataBroker)", "Full report" }) do
+    "Status snapshot", "Support information", "Optional integrations", "Skin for Attune", "Data bar library (LibDataBroker)" }) do
     assert(Visible(win, label), label .. " is drawn on the Troubleshooting page")
   end
   assert(Visible(win, "1.60.1 (build 70009)") and Visible(win, "Loaded this session") and Visible(win, "Started"), "the values are drawn")
   assert(Visible(win, "EllesmereUI") and Visible(win, "RestedXP") and not Visible(win, "EllesmereUI: Color picker"),
     "EllesmereUI is not installed here: one line, not five")
   assert(not Visible(win, "Healthy") and not Visible(win, "Safe"), "no verdict is drawn")
+  assert(not Visible(win, "Full report"), "diagnostic actions are secondary to status")
+  UI.View("troubleshooting").taskButtons[2]:Fire("OnClick")
+  assert(Visible(win, "Full report"), "the Tools task retains the full report")
+  UI.View("troubleshooting").taskButtons[1]:Fire("OnClick")
   -- the snapshot is taken when the page opens, and the next page's navigation leaves it alone
   local snap = St.Current()
   UI.Navigate("troubleshooting")
@@ -356,7 +360,7 @@ do
   assert(win.alpha == 1 and M.Count() == 0, "it arrived and the driver is idle")
   UI.Navigate("pins")
   assert(M.Count() == 1, "a new page's content eases in")
-  UI.Navigate("chronicle"); UI.Navigate("gear"); UI.Navigate("chronicleLook")
+  UI.Navigate("chronicle"); UI.Navigate("gear"); UI.Navigate("chronicleLook", "chronicleLookBgColor")
   assert(M.Count() == 1, "rapid navigation: only the latest page is easing, nothing queued")
   assert(select(1, UI.Selected()) == "chronicleLook")
   M.Advance(1)
@@ -553,7 +557,7 @@ end
 assert(win.shell and win.shell.corner and win.shell.edge and win.shell.parent == win, "the window's frame is the shared shell, on a frame of its own")
 assert(not win.twichShell and not win.twichBand, "...and not the older rim and band as well")
 assert(resetButton.twichLook and resetButton.twichLook.bevel.lit, "the settings' buttons are the framed look's")
-assert(Textures(resetButton) == 10, "...with one bevel (ten textures), not two: " .. Textures(resetButton))
+assert(resetButton.twichCraft.skin == "danger" and resetButton.twichLook.bevel.lit.alpha == 0, "painted danger artwork replaces the old bevel")
 local function FindText(frame, label)
   for _, ch in ipairs(frame.children or {}) do
     if type(ch.text) == "table" and ch.text.text == label and ch.kind == "Button" then return ch end
@@ -563,7 +567,7 @@ local function FindText(frame, label)
 end
 local reloadButton = FindText(win, "Reload now")
 assert(reloadButton, "the footer has its reload button")
-assert(reloadButton.twichLook and Textures(reloadButton) == 10, "the footer's button too: " .. tostring(reloadButton.twichLook) .. " " .. Textures(reloadButton))
+assert(reloadButton.twichLook and reloadButton.twichCraft ~= nil, "the footer's button too: " .. tostring(reloadButton.twichLook) .. " " .. Textures(reloadButton))
 resetButton.scripts.OnClick(resetButton)
 assert(asked and asked.text:find("Food and drink", 1, true) and asked.text:find("map pins", 1, true), "it names the page and what it leaves alone")
 assert(R.FoodDrink.Get("size") == 44, "nothing happens before it is accepted")
@@ -596,7 +600,7 @@ do
   end
   c.ColorPickerFrame = picker
 
-  UI.Navigate("chronicleLook")
+  UI.Navigate("chronicleLook", "chronicleLookBgColor")
   local swatch
   local function Walk(frame)
     for _, ch in ipairs(frame.children) do
@@ -665,11 +669,13 @@ do
     if info.swatchFunc then info.swatchFunc() end
   end
   c.ColorPickerFrame = picker
+  UI.Navigate("notificationsLook", "notificationsLook:zone-arrival-card")
   local show = FindButton(win, "Show")
   assert(show, "a Show button for each card")
   show.scripts.OnClick(show)
   assert(NL.Pinned("arrival") and N.State().active[1] == "arrival:preview", "the zone card is up as a preview")
   assert(FindButton(win, "Hide"), "its button now says Hide")
+  UI.Navigate("notificationsLook", "notifyLookTitleColor")
   local swatch
   local function Walk(frame)
     for _, ch in ipairs(frame.children) do
@@ -696,6 +702,7 @@ do
   S.variables.TWICHUI_notifyLookScope:SetValue("shared")
   NL.Set("shared", "textScale", 90)
   scope:SetValue("arrival")
+  UI.Navigate("notificationsLook", "notificationsLook:reset-this-card")
   local resets = {}
   local function Collect(frame)
     for _, ch in ipairs(frame.children) do
@@ -777,7 +784,7 @@ do
   end
   local function Click(sw) sw.scripts.OnClick(sw) end
 
-  UI.Navigate("chronicleLook")
+  UI.Navigate("chronicleLook", "chronicleLookBgColor")
   local list = Swatches()
   assert(#list >= 2, "the page has two swatches")
   local bg = S.variables.TWICHUI_chronicleLookBgColor
@@ -859,7 +866,7 @@ do
   Click(list[1]); Select(1, 1, 0)
   UI.Navigate("food")
   assert(not frame.shown and bg:GetValue() == original, "showing another page does the same")
-  UI.Navigate("chronicleLook")
+  UI.Navigate("chronicleLook", "chronicleLookBgColor")
   list = Swatches()
 
   -- EllesmereUI installed but its picker not loaded yet: the first click has EllesmereUI load it (EnsureLoaded)
@@ -964,7 +971,7 @@ end
 -- 5. Esc: the list first, then the window; never while the color picker is open
 ---------------------------------------------------------------------------
 local Wg = R.SettingsWidgets
-UI.Navigate("food")
+UI.Navigate("food", "foodDrinkLayout")
 local dropdown = FindButton(win, "Side by side")
 assert(dropdown, "the layout dropdown shows its choice by name")
 dropdown.scripts.OnClick(dropdown)
@@ -1018,7 +1025,7 @@ do
 
   UI.Navigate("overview")
   assert(Has(win, "Show welcome") and Has(win, "View commands"), "Home's buttons say what they do")
-  assert(not Has(win, "Show") and not Has(win, "List"), "and the bare words are gone")
+  assert(not Has(win, "List"), "actions keep descriptive labels")
   -- Home opens with its three ways in at the top (its feature list is long enough to scroll below them)
   local homeHeight = scroll.child.h
   assert(homeHeight > 0, "Home is drawn: " .. homeHeight)
@@ -1032,7 +1039,10 @@ do
   assert(blurb, "Reset says what it covers in one line")
 
   UI.Navigate("notifications")
-  assert(scroll.child.h > viewport, "a dense page still scrolls: " .. scroll.child.h)
+  assert(scroll.child.h < viewport, "the focused notification task fits without scrolling: " .. scroll.child.h)
+  UI.Navigate("qol")
+  assert(scroll.child.h > viewport, "a long feature collection still scrolls")
+  UI.Navigate("notifications", "arrivalReducedMotion")
   assert(Has(win, "Accessibility") and Has(win, "Reduced motion"), "Notifications has an Accessibility section")
   for _, t in ipairs(Texts(win)) do
     assert(not t:find("Small, quiet cards near the edges of the screen", 1, true), "the introduction is not said twice")
@@ -1040,13 +1050,13 @@ do
   -- its tabs: the shown one is not a link; the other goes to its page
   local tabs = {}
   Find(win, function(f)
-    if f.kind == "Button" and type(f.text) == "table" and (f.text.text == "General" or f.text.text == "Appearance") and f.bar and f:IsVisible() then
+    if f.kind == "Button" and type(f.text) == "table" and (f.text.text == "General" or f.text.text == "Appearance") and f.twichCraft and f:IsVisible() then
       tabs[f.text.text] = f
     end
   end)
   assert(tabs.General and tabs.Appearance, "both tabs are drawn")
-  assert(tabs.General.scripts.OnClick == nil and tabs.General.bar.shown, "the shown tab is marked and does nothing")
-  assert(tabs.Appearance.scripts.OnClick and not tabs.Appearance.bar.shown, "the other is a way to its page")
+  assert(tabs.General.scripts.OnClick == nil and tabs.General.twichSelected, "the shown tab is marked and does nothing")
+  assert(tabs.Appearance.scripts.OnClick and not tabs.Appearance.twichSelected, "the other is a way to its page")
   tabs.Appearance.scripts.OnClick(tabs.Appearance)
   assert(select(1, UI.Selected()) == "notificationsLook", "choosing a tab goes to its page")
   UI.Navigate("overview")
@@ -1093,7 +1103,7 @@ do
   local popupsBefore = S.popups
 
   -- 5a. Reload: one record (Switches.lua), shown next to the control and in the footer, cleared when reverted
-  UI.Close(); R:OpenSettings("overview")
+  UI.Close(); R:OpenSettings("overview", "media")
   assert(not W.ReloadPending() and not Shown(win, "Reload your UI to apply"), "nothing waits to begin with")
   local media0, quiet0 = R:Enabled("media"), R:Enabled("quietLogin")
   R:SetEnabled("media", not media0)
@@ -1285,7 +1295,7 @@ do
   end
   -- besides the sheets, only a feature's own artwork cut by its own tool (Healer Watch: tools/make_healer_watch_art.py; the
   -- Reminders designer's emblem: tools/make_reminder_designer_art.py; Guild Locations: tools/make_guild_locations_art.py; Action bar glows: tools/make_bar_glows_art.py)
-  local OWN = { healerWatch = true, healerWatchDrink = true, reminderDesigner = true, guildLocations = true, barGlows = true, camping = true }
+  local OWN = { healerWatch = true, healerWatchDrink = true, reminderDesigner = true, guildLocations = true, barGlows = true, camping = true, magicInventory = true }
   local count, own = 0, 0
   for id, e in pairs(Icons.list) do
     if e.source == "sheet" then count = count + 1 else
@@ -1296,8 +1306,8 @@ do
     local w, h = TgaSide(e.file)
     assert(w == e.size and h == e.size, id .. "'s file is " .. tostring(w) .. " px, the registry says " .. e.size)
   end
-  assert(count == #SHEET and count == 48, "the five sheets' forty-eight icons: " .. count)
-  assert(own == 6, "and Healer Watch's two, the Reminders designer's emblem, Guild Locations' illustration, Action bar glows' strip and the Camping bar's campfire: " .. own)
+  assert(count == #SHEET and count == 48, "the six original sheets: " .. count)
+  assert(own == 7, "the six feature paintings and the new Home satchel: " .. own)
   assert(Icons.Path("home", 20):find("%-small$") and not Icons.Path("home", 40):find("%-small$"), "the 32 px file when drawn small")
   local stub = { SetTexCoord = function() end, SetVertexColor = function() end }
   function stub:SetTexture(path) self.path = path; return path == Icons.FALLBACK end   -- refuses everything but the emblem
@@ -1492,11 +1502,11 @@ UI.SetWorkspaceVisible(false)
 assert(win:GetAlpha() == 1 and win:GetFrameStrata() == "HIGH" and UI.Selected() == workspacePage,
   "closing the workspace restores the same Settings page")
 UI.Navigate("notifications")
-assert(not UI.IsPageActive("reminders") and not win.quietMaterials[1]:IsShown(), "other pages restore their existing materials")
-assert(not win.quietFrame.parts[1]:IsShown() and win.shell.corner.tl:GetAlpha() == 1,
-  "ordinary pages restore the original frame fittings")
-assert(win.craftElements.crest:GetWidth() == 24 and win.craftElements.search:GetHeight() == 24
-  and not win.craftElements.searchArt.parts[1]:IsShown(), "ordinary pages restore header and search styling")
+assert(not UI.IsPageActive("reminders") and win.quietMaterials[1]:IsShown(), "other pages share the established materials")
+assert(win.quietFrame.parts[1]:IsShown() and win.shell.corner.tl:GetAlpha() == 0,
+  "ordinary pages share painted frame fittings")
+assert(win.craftElements.crest:GetWidth() == 44 and win.craftElements.search:GetHeight() == 30
+  and win.craftElements.searchArt.parts[1]:IsShown(), "ordinary pages share header and search styling")
 UI.Close()
 assert(not UI.IsPageActive("notifications"), "an individually mounted page is inactive while Settings is closed")
 
@@ -1527,7 +1537,7 @@ local ammoView = UI.View("ammoCustom")
 assert(ammoView.chrome:IsShown() and not reminderView.chrome:IsShown()
   and bodyScroll.points[1][5] == -ammoView.headerHeight - 1, "Known ammunition pins the same family tabs above its own body")
 UI.Navigate("notifications")
-assert(not reminderView.chrome:IsShown() and not ammoView.chrome:IsShown() and bodyScroll.points[1][5] == -1, "other pages keep their original viewport")
+assert(not reminderView.chrome:IsShown() and not ammoView.chrome:IsShown() and UI.View("notifications").chrome:IsShown(), "other pages also retain their heading above the viewport")
 
 -- Actual window ownership during placement: close, reopen and Esc do not leak companions.
 UI.Open("reminders")
@@ -1565,7 +1575,121 @@ assert(not R:Enabled("reminders") and #R.Reminders.List() == countBefore, "cance
 reset:Fire("OnClick"); asked.dlg.OnAccept()
 assert(R:Enabled("reminders") and #R.Reminders.List() == countBefore, "confirmed reset keeps its original page-only scope")
 UI.Navigate("food")
-assert(not UI.View("food").reset.button.twichCraft, "unrelated pages keep their existing Reset appearance")
+assert(UI.View("food").reset.button.twichCraft.skin == "danger", "all pages share the destructive Reset appearance")
 UI.Close()
+
+-- Modernized disclosures remain reachable by direct/search navigation and never mutate settings.
+do
+  UI.Open("overview")
+  local flips = 0
+  local dense = R.SettingsWidgets.Checkbox(win, function(on) if on then flips = flips + 1 end end)
+  dense:SetSize(16, 16)
+  dense:SetChecked(true)
+  assert(dense.denseMark and dense.denseMark:IsShown(), "a compact checkbox shows an explicit checkmark")
+  dense:SetChecked(false)
+  assert(not dense.denseMark:IsShown(), "the compact off state clears the checkmark")
+  dense:Fire("OnClick")
+  dense:SetActive(false); dense:Fire("OnClick")
+  assert(flips == 1, "dense controls retain their enabled and disabled click behavior")
+  dense:Hide()
+  local before = {}
+  for _, setting in ipairs(K.settings) do before[setting.variable] = setting:GetValue() end
+  for _, page in ipairs(K.NavOrder()) do
+    UI.Navigate(page.key)
+    local view = UI.View(page.key)
+    assert(view.chrome, page.key .. " has a fixed heading")
+    local selectedTabs = 0
+    for _, tab in ipairs(view.tabs and view.tabs.children or {}) do
+      if type(tab.text) == "table" then
+        assert(tab.text:GetWidth() >= tab.text:GetStringWidth(), "tab label fits: " .. tab.text:GetText())
+        if tab.twichSelected == true then selectedTabs = selectedTabs + 1 end
+      end
+    end
+    assert(not view.tabs or selectedTabs == 1, "one selected tab on " .. page.key)
+    for _, section in ipairs(view.sections) do
+      if section.toggle then
+        local initial = section.expanded
+        section.toggle:Fire("OnClick")
+        assert(section.expanded ~= initial, "disclosure toggles " .. section.id)
+        section.toggle:Fire("OnClick")
+        local target
+        for _, row in ipairs(section.rows) do if row.row:Shown() then target = row; break end end
+        if target then
+          section.expanded = false
+          UI.Navigate(page.key, target.row.id)
+          assert(section.expanded and target.frame:IsShown(), "direct reveal opens " .. target.row.id)
+          section.expanded = initial
+        end
+      end
+    end
+  end
+  UI.Navigate("overview")
+  local hero = UI.View("overview").hero
+  hero.shown = "home"; UI.Layout(UI.View("overview"))
+  hero.find:SetText("zzzznoexistingfeaturezzzz")
+  assert(hero.empty:IsShown(), "local search has an honest empty state")
+  hero.find:SetText("reminders")
+  local shown = 0
+  for _, cell in ipairs(hero.grid) do if cell:IsShown() then shown = shown + 1; assert(cell.page.key == "reminders") end end
+  assert(shown == 1, "local search finds the actual feature")
+  hero.find:SetText("")
+  hero.all:Fire("OnClick")
+  assert(hero.shown == "explore", "All features opens the full catalog")
+  for _, cell in ipairs(hero.grid) do assert(cell:IsShown(), "every registered feature is reachable") end
+  hero.all:Fire("OnClick")
+  assert(hero.shown == "home", "the full catalog returns to Home")
+  local sidebarCatalog = FindButton(win, "All features...")
+  assert(sidebarCatalog, "the full catalog is always reachable from the sidebar")
+  UI.Navigate("profiles")
+  sidebarCatalog:Fire("OnClick")
+  assert(UI.Selected() == "overview" and hero.shown == "explore", "the sidebar opens the full catalog from a configuration page")
+  for _, setting in ipairs(K.settings) do
+    assert(before[setting.variable] == setting:GetValue(), "presentation preserves " .. setting.variable)
+  end
+  UI.Close()
+end
+
+-- Task navigation and samples change presentation only; direct search navigation keeps every ordinary row reachable.
+do
+  local before = {}
+  for _, setting in ipairs(K.settings) do before[setting.variable] = setting:GetValue() end
+  for _, page in ipairs(K.NavOrder()) do
+    UI.Open(page.key)
+    local view = UI.View(page.key)
+    if view.tasks then
+      for i, button in ipairs(view.taskButtons) do
+        button:Fire("OnClick")
+        assert(view.task == view.tasks[i][1], "selected task follows its button")
+        for _, section in ipairs(view.sections) do
+          local belongs = R.SettingsDesign.TaskFor(page, section.header and section.header:GetName()) == view.task
+          if not belongs then assert(not section.card:IsShown(), "other tasks do not crowd the current task") end
+        end
+      end
+      for _, row in ipairs(page.rows) do
+        if row:Shown() and row.kind ~= "header" then
+          UI.Navigate(page.key, row.id)
+          local target = view.rows[row.id]
+          assert(target and target.frame:IsVisible(), "direct navigation reveals " .. row.id)
+        end
+      end
+    end
+  end
+  local companion = R.SettingsCompanion
+  UI.Open("notifications")
+  assert(companion.Active() == "notifications" and companion.Frame():IsShown(), "visual page opens its isolated sample")
+  companion.Hits().title:Fire("OnClick")
+  assert(UI.Selected() == "notificationsLook" and UI.View("notificationsLook").rows.notifyLookTitleFont.frame:IsVisible(), "sample text reveals its actual setting")
+  UI.Navigate("notifications")
+  UI.SetQuery("sound")
+  assert(companion.Active() == nil and not companion.Frame():IsShown(), "search dismisses the sample")
+  UI.SetQuery("")
+  assert(companion.Active() == "notifications", "returning to the editor restores its sample")
+  UI.Navigate("overview")
+  assert(companion.Active() == nil, "Home never inherits a sample")
+  UI.Close(); companion.Refresh()
+  assert(companion.Active() == nil and not companion.Frame():IsShown(), "closed refresh cannot resurrect a sample")
+  assert(companion.SceneCount() <= 4, "sample renderers are bounded")
+  for _, setting in ipairs(K.settings) do assert(before[setting.variable] == setting:GetValue(), "tasks and samples preserve " .. setting.variable) end
+end
 
 print("PASSED")

@@ -295,7 +295,8 @@ local function Build()
     f.help = G.Text(f, "small")
     f.help:SetPoint("TOPLEFT", 4, -2)
     f.help:SetWidth(W - 8)
-    f.help:SetText("TwichUI already recognizes the game's own arrows and bullets. Register an item here only when the game doesn't classify it the way you need, such as one a server added. This says what an item is; it doesn't equip it, count it or make it fit your weapon. An ammunition reminder still reads your equipment and bags each time.")
+    f.help:SetText("Register items the game doesn't recognize as arrows or bullets. This never equips or moves an item.")
+    I.Tip(f, "Known ammunition", "The game's own arrows and bullets are already recognized. Registration only classifies an item: it doesn't count it or make it fit your weapon. Ammunition reminders still read your equipment and bags each time.")
 
     -- the add area: a box to drop an item on, or its item ID or link
     G.Card(f, 0, ADD_TOP, W, ADD_TOP - 60)
@@ -407,7 +408,7 @@ end
 
 K.Page({
     key = "ammoCustom", name = "Known ammunition", nav = "Known ammunition", parent = "reminders", order = 23,
-    materialHeader = true, compact = true,
+    materialHeader = true, compact = true, designReference = false,
     description = "Ammunition you register yourself, such as an item a server added, as arrows or bullets, for reminders about ammunition.",
     keywords = "ammo ammunition custom known register arrows bullets item id link server hunter quiver list reminder reminders",
     when = function() return R.AmmoItems ~= nil end,

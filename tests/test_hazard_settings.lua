@@ -170,7 +170,7 @@ local f = P.Frame()
 Check(P.Frame() == f, "one frame")
 f:Hide(); f:Show()   -- built the first time it is shown
 Check(f.empty and f.empty.shown and f.count.text == "0 of " .. HZ.MAX_CUSTOM, "an empty list says what it is for")
-Check(f.examples.shown and not f.spell.shown, "the editor is closed until asked for")
+Check(f.listHost.shown and not f.editorHost.shown and not f.spell.shown, "the editor is closed until asked for")
 
 local function RowFor(id)
   for _, ch in ipairs(f.content.children) do

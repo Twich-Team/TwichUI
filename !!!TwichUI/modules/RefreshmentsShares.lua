@@ -22,7 +22,10 @@ local built = false
 local boxes = {}               -- every amount box, with .commit and .read
 
 local function Text(parent, template)
-    local fs = parent:CreateFontString(nil, "OVERLAY", template or "GameFontHighlight")
+    local widgets = R.SettingsWidgets
+    local kind = template and template:find("Small", 1, true) and "small" or template == "GameFontNormal" and "heading" or "body"
+    local fs = widgets and widgets.Text and widgets.Text(parent, kind)
+        or parent:CreateFontString(nil, "OVERLAY", template or "GameFontHighlight")
     fs:SetJustifyH("LEFT")
     if template == nil or template == "GameFontHighlight" then fs:SetTextColor(0.93, 0.88, 0.76) end
     return fs
@@ -78,7 +81,8 @@ local function Build(p)
     help:SetPoint("TOPLEFT", 4, TOP)
     help:SetWidth(WIDTH - 8)
     help:SetTextColor(0.78, 0.74, 0.66)
-    help:SetText("How many conjured water and food the refreshments panel plans for each class, as single items. Your party and your raid each have their own column. These are only a starting point: change any number, and 0 gives none. Each person is planned the best rank you know that their level can use.")
+    help:SetText("Items per person, not stacks. Party and raid have separate plans; 0 gives none.")
+    R.Interact.Tip(f, "Refreshment shares", "Each person is planned the best rank you know that their level can use. These starting amounts can be changed for each class; your own reserve is added to the group's shares.")
 
     local y = TOP - 54
     local party = Text(p, "GameFontNormal")

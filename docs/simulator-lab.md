@@ -29,7 +29,7 @@ tools/simlab/smoke.sh            # copies the working tree in, opens a page, con
 tools/simlab/interact.sh         # drives one real settings page through its controls, from a clean profile (below)
 tools/simlab/diagnose.sh         # the clock over a 12 s window: baseline, solo, grouped, and the addon-message contract (below)
 tools/simlab/workshop.sh         # the real Workshop window through Crafting, Opportunities and Shopping over fake game data (below)
-```
+bash tools/simlab/settings.sh    # capture the actual current settings catalog; handler checks and human screenshot review (below)
 bash tools/simlab/tests/lab_guard.sh   # the lab-path safety check's rejection paths, in disposable folders (below)
 ```
 
@@ -140,6 +140,9 @@ Errors TwichUI catches do count, because `R.Fault` hands them to the error handl
 tools/simlab/interact.sh         # about 20 s here; SIMLAB_SHIM=0 and SIMLAB_ASSETS=0 work as for smoke.sh
 ```
 
+The Notifications fixture explicitly turns Guild Locations off through its real setter before watching sends. Solo mode
+alone does not isolate its default synthetic guild announcements. Production defaults and communication are unchanged.
+
 **The page:** Notifications → Appearance (`notificationsLook`, `TwichUI_Settings/pages/Notifications.lua`, saved by
 `modules/NotifyLook.lua` in `TwichUIDB.ui.notifyLook*`). It is the first one because it is all appearance (no gameplay
 action, no combat rule, no protected frame, no other addon, nothing sent), it has one of each control (drop-downs, a
@@ -190,6 +193,32 @@ a packaged install.
 checks that nothing was sent and the page is unchanged. The scenario used to stop at 2.5 s to stay clear of two errors; both
 are now classified instead (next section), and the only limit left is a 30 s resource guard in `scenarios/lib.lua`. Changes
 in the page are synchronous and need no simulated time; only the window's fade does.
+
+## Current settings catalog captures
+
+`bash tools/simlab/settings.sh` stages once, enumerates the actual registered catalog from a synthetic Mage with the
+optional Workshop launcher, then opens/captures every page. `bash tools/simlab/settings.sh profiles magicInventory`
+captures Home plus the named subset. `SIMLAB_SETTINGS_POSE=narrow` uses 936×660 instead of 1240×960;
+`SIMLAB_SETTINGS_SEARCH=true` finishes with `sound` entered through the actual search edit field.
+
+Second-pass review options: `SIMLAB_SETTINGS_FILLED=true` adds three synthetic Magic Inventory rules (keep, bank and
+an unresolved mail destination). `SIMLAB_SETTINGS_TASK=2` captures the second task of an ordinary task strip or Magic
+Inventory's Destinations. `SIMLAB_SETTINGS_EDITOR=true` opens the Magic items, chat/hazard New rule or glow look editor.
+`SIMLAB_SETTINGS_CATEGORIES=true` also opens Magic's category catalog; `SIMLAB_SETTINGS_EDITOR='"pattern"'` captures
+the chat editor's expert mode. Editor fixtures check every chat mode's text bounds and Magic's wrapped category-row
+separation, without changing the simulator engine or writing real saved data.
+
+Task choices, direct row reveal and settings-only companion dismissal/restoration, clickable appearance navigation and
+search/close ownership are checked where present. Companion samples use private real renderers or style helpers and
+synthetic content. They do not start routes, pin notifications, read journal history or enable a feature. All input remains
+handler-level, including `Button:Click()`; this is not evidence of actual pointer or keyboard delivery.
+
+This adds fixtures and a runner only; it does not change the simulator engine. Existing controls are exercised at handler
+level: available disclosures, direct reveals, one enabled dropdown per ordinary page where present, global no-results,
+cached reopen and unchanged settings-change count. Home adds local filtering and real catalog/appearance/default actions.
+Screenshots require inspection. Neither a successful construction nor these generic handlers proves all feature controls
+or actual pointer delivery. See [the second-pass workflow review](settings-second-pass.md) and [rollout report](settings-modernization.md) for page-by-page review, populated
+scenarios, exact run IDs, discrepancies and native-client gaps. The older 49-page coverage summary above is historical.
 
 ## The Workshop scenario
 

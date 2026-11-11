@@ -681,4 +681,9 @@ Lab.Step("pose", function()
     end
     Lab.Check("state", "pose still disabled", false, RM.Get(id).enabled)
 end)
+-- Screenshot fixture only: move Blizzard's PTR feedback button beside the addon.
+if PTR_IssueReporter then
+    PTR_IssueReporter:ClearAllPoints()
+    PTR_IssueReporter:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 8, -200)
+end
 Lab.Finish()

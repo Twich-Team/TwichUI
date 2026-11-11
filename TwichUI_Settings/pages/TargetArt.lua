@@ -71,12 +71,12 @@ local function Build()
     f.about = G.Text(f, "small")
     f.about:SetPoint("TOPLEFT", 4, -2)
     f.about:SetWidth(W - 8)
-    f.about:SetText("A sample frame, not your target: it shows how the artwork sits with the settings above. Choose which artwork it uses on the right; that choice is only for the preview and saves nothing.")
+    f.about:SetText("Choose artwork on the right to try it on this sample. Preview choices are never saved.")
 
     local canvas = CreateFrame("Frame", nil, f, "BackdropTemplate")
     canvas:SetSize(CANVAS_W, CANVAS_H)
     canvas:SetPoint("TOPLEFT", 4, -32)
-    G.Surface(canvas, pal.well, 0.95, pal.bronzeLo, 0.5)
+    G.Well(canvas)
     canvas:SetClipsChildren(true)   -- a large scale or offset stays inside the preview
     f.canvas = canvas
 

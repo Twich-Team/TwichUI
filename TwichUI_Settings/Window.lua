@@ -22,6 +22,8 @@ local Cards, Previews, Home, Icons = R.SettingsCards, R.SettingsPreviews, R.Sett
 local pal = Wg.pal
 local Motion = Wg.Motion
 local M = R.SettingsMaterial   -- the leather and bronze (Material.lua); this window only
+local Design = R.SettingsDesign
+local Companion = R.SettingsCompanion
 local T = Motion.TIME   -- every duration used here is in Widgets.lua's table
 local Perf = R.Perf     -- TwichUI Diagnostics' scopes (they do nothing unless it is recording)
 local UI = {}
@@ -413,15 +415,15 @@ end
 local NOTICE_PAD, NOTICE_EDGE, NOTICE_TAG_H, NOTICE_GAP = 12, 3, 15, 8
 local function Notice(parent, notice)
     local card = CreateFrame("Frame", nil, parent, "BackdropTemplate")
-    Wg.Surface(card, pal.danger.bg, 0.92, pal.danger.border, 1)
+    M.PanelFace(card, "card")
     card:SetWidth(CONTENT_W)
-    local edge = Wg.Solid(card, "ARTWORK", pal.danger.hotBorder, 1)
+    local edge = Wg.Solid(card, "ARTWORK", pal.bronzeText, 1)
     edge:SetPoint("TOPLEFT")
     edge:SetPoint("BOTTOMLEFT")
     edge:SetWidth(NOTICE_EDGE)
     card.tag = Wg.Tag(card, notice.tag:upper())
     card.tag:SetPoint("TOPLEFT", NOTICE_PAD + NOTICE_EDGE, -NOTICE_PAD)
-    Wg.Color(card.tag.text, pal.danger.hotText)
+    Wg.Color(card.tag.text, pal.bronzeText)
     card.body = Wg.Text(card, "body")
     card.body:SetPoint("TOPLEFT", NOTICE_PAD + NOTICE_EDGE, -NOTICE_PAD - NOTICE_TAG_H - NOTICE_GAP)
     card.body:SetWidth(CONTENT_W - NOTICE_PAD * 2 - NOTICE_EDGE)
@@ -444,14 +446,14 @@ local function TabStrip(parent, tabs, current, compact)
         local navigate = not selected and function() UI.Navigate(tab.key) end or nil
         local b
         if compact then
-            b = Wg.Button(strip, label, 24, "secondary", navigate)
-            M.ReminderControl(b, "segment")
+            b = M.Segment(strip, label, 24, navigate)
             b.text:SetWidth(0)
             b:SetWidth(b.text:GetStringWidth() + 28)
             b.text:SetWidth(b:GetWidth() - 12)
         else
-            b = Wg.Tab(strip, label, 24, navigate)
-            b:SetSize(b.text:GetStringWidth() + 24, TAB_H)
+            b = M.Segment(strip, label, 24, navigate)
+            b:SetSize(b.text:GetStringWidth() + 24, TAB_H - 2)
+            b.text:SetWidth(b:GetWidth() - 12)
         end
         b:SetPoint("BOTTOMLEFT", strip, "BOTTOMLEFT", x, compact and 2 or 0)
         b:SetSelected(selected)
@@ -496,12 +498,22 @@ end
 -- is hidden. Returns the new `inner` and how many rows are shown. A feature card places its rules through this too.
 function UI.PlaceRows(sec, rows, inner)
     local visible = 0
+    local previousReason
     for _, v in ipairs(rows) do
         if v.row:Shown() then
             v.frame:ClearAllPoints()
             v.frame:SetPoint("TOPLEFT", sec.card, "TOPLEFT", SECTION_PAD - 4, -inner)
             v.y = sec.top + inner
-            inner = inner + v.Refresh()
+            local height = v.Refresh()
+            local reason = not v.row:Enabled() and v.reason and v.reason:GetText() or nil
+            if reason and reason ~= "" and reason == previousReason and not Design.IsReference() then
+                -- A disabled group explains its prerequisite once. Every row retains its complete tooltip.
+                v.reason:Hide()
+                height = math.max(ROW_MIN, v.label:GetStringHeight() + 16)
+                v.frame:SetHeight(height)
+            end
+            previousReason = reason
+            inner = inner + height
             v.frame:Show()
             visible = visible + 1
         else
@@ -556,7 +568,10 @@ local function BuildView(page)
     view.status:SetJustifyH("RIGHT")
     view.desc = Wg.Text(chrome, "small")
     view.desc:SetWidth(CONTENT_W - 8)
-    view.desc:SetText(page.def.description or (page.def.overview and page.def.overview.tip) or "")
+    view.desc:SetText(page.def.designReference and (page.def.description or "") or Design.Intro(page))
+    if not page.def.designReference and page.def.description then
+        I.Tip(view.chrome or frame, page.name, page.def.description)
+    end
     if page.def.compact then
         M.ReminderFont(view.title, 23, true)
         view.title:SetWidth(240)
@@ -566,6 +581,12 @@ local function BuildView(page)
     view.rule:SetPoint("LEFT", frame, "LEFT", 0, 0)
     view.rule:SetPoint("RIGHT", frame, "RIGHT", 0, 0)
     if view.tabs then view.rule:Hide() end   -- the header's own seam is the tabs' rule
+    if Companion and Companion.Supports(page.key) then
+        view.sampleButton = Wg.Button(view.chrome or frame, "Hide sample", 128, "secondary", function() Companion.Toggle(view) end)
+        view.sampleButton:SetPoint("TOPRIGHT", -2, -44)
+        view.desc:SetWidth(CONTENT_W - 150)
+        I.Tip(view.sampleButton, "Live sample", "A persistent, isolated example beside these settings. It changes no setting and closes when you leave the page or search.")
+    end
 
     -- a feature's notice, above every one of its pages (its tabs too)
     local root = K.Root(page.key)
@@ -637,6 +658,23 @@ local function BuildView(page)
                     sec.glyph:SetTexCoord(0.07, 0.93, 0.07, 0.93)
                 end
             end
+            if not sec.isCard and not page.def.designReference then
+                local label = header:GetName() or ""
+                sec.collapsible = (header.settingsSecondary == true or Design.Secondary(page, label)) and
+                    (header.settingsSecondary == true or not Design.Tasks(page) or page.key == "healerWatch" or label == "Reset" or label == "Fine-tune each artwork")
+                sec.expanded = not sec.collapsible
+                sec.help = Wg.Button(sec.card, "?", 24, "secondary")
+                sec.help:SetPoint("TOPRIGHT", -SECTION_PAD, -10)
+                I.Tip(sec.help, label, function() return header:GetTooltip() end)
+                if sec.collapsible then
+                    sec.titled = true
+                    sec.toggle = M.Segment(sec.card, "Show", 64, function()
+                        sec.expanded = not sec.expanded
+                        Layout(view)
+                    end)
+                    sec.toggle:SetPoint("TOPRIGHT", -SECTION_PAD - 30, -10)
+                end
+            end
         end
         return sec
     end
@@ -671,6 +709,23 @@ local function BuildView(page)
     if view.hasCards and not page.def.compact then
         view.scope = Wg.Text(frame, "meta")
         view.scope:SetWidth(CONTENT_W - 8)
+    end
+
+    local tasks = Design.Tasks(page)
+    if tasks then
+        view.tasks, view.task = tasks, tasks[1][1]
+        view.taskbar = CreateFrame("Frame", nil, view.chrome or frame)
+        view.taskbar:SetHeight(30)
+        view.taskButtons = {}
+        for i, entry in ipairs(tasks) do
+            local button = M.Segment(view.taskbar, entry[1], 140, function()
+                view.task = entry[1]
+                Layout(view)
+                if scroll.StopMotion then scroll:StopMotion() end
+                scroll:SetVerticalScroll(0)
+            end)
+            view.taskButtons[i] = button
+        end
     end
 
     -- Reset this page: every setting on it back to its default, after saying exactly what that covers
@@ -742,6 +797,10 @@ function Layout(view)
     local function Desc()
         view.desc:ClearAllPoints()
         view.desc:SetPoint("TOPLEFT", frame, "TOPLEFT", 2, -y)
+        if view.sampleButton then
+            view.desc:SetWidth(view.w - 150)
+            view.sampleButton:ClearAllPoints(); view.sampleButton:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -2, -y)
+        end
         if hasDesc then y = y + (view.desc:GetStringHeight() or 12) + 10 else y = y + 4 end
         if view.scope then
             local current, shared = ProfileShare()
@@ -774,7 +833,18 @@ function Layout(view)
         Rule()
         y = y + 14
     end
-    -- Reminders owns a fixed title/tab band. Its body is a distinct scroll child below it.
+    if view.taskbar then
+        view.taskbar:ClearAllPoints()
+        view.taskbar:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, -y)
+        view.taskbar:SetWidth(view.w)
+        local width = math.floor((view.w - (#view.tasks - 1) * 6) / #view.tasks)
+        for i, button in ipairs(view.taskButtons) do
+            button:ClearAllPoints(); button:SetPoint("TOPLEFT", (i - 1) * (width + 6), 0)
+            button:SetSize(width, 28); button:SetSelected(view.task == view.tasks[i][1])
+        end
+        y = y + 40
+    end
+    -- The body has distinct scroll ownership below the title, feature tabs and task strip.
     if view.chrome then
         view.chrome:SetHeight(y)
         view.headerHeight = y + SHIFT_Y
@@ -800,6 +870,7 @@ function Layout(view)
     if view.hero then y = y + view.hero:Layout(y) + GAP end
     local after = view.hosted and page.def.hostAfter or nil
     local function PlaceHost(gap)
+        if view.tasks and Design.HostTask(page) ~= view.task then view.hosted:Hide(); return end
         local h = HostHeight(page)
         view.hosted:ClearAllPoints()
         view.hosted:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, -y)
@@ -810,9 +881,15 @@ function Layout(view)
     if view.hosted and not after then PlaceHost(0) end
     local placed = false
     for _, sec in ipairs(view.sections) do
+        local active = not view.tasks or Design.TaskFor(page, sec.header and sec.header:GetName()) == view.task
+        if not active then
+            sec.card:Hide()
+            for _, row in ipairs(sec.rows) do row.frame:Hide(); row.y = nil end
+        else
         local card, inner = sec.card, SECTION_PAD
         local visible = 0
         sec.top = y
+        local homeHelp = page.key == "overview" and sec.header and sec.header:GetName() == "Help"
         local inHeader = sec.isCard and sec.header.card.inPageHeader and sec.primaryView
         if inHeader then
             Cards.PlaceInHeader(view, sec, UI.cardEnv)
@@ -820,7 +897,7 @@ function Layout(view)
             inner = Cards.Layout(view, sec, inner, UI.cardEnv)
             visible = 1
         elseif sec.header and sec.titled then
-            sec.title:SetText(sec.header:GetName() or "")
+            sec.title:SetText(homeHelp and "Need a hand?" or sec.header:GetName() or "")
             sec.title:ClearAllPoints()
             local titleX, titleH = SECTION_PAD, sec.title:GetStringHeight() or 14
             if sec.glyph then
@@ -847,15 +924,43 @@ function Layout(view)
         end
         if sec.desc and not sec.isCard then
             local desc = sec.header:GetTooltip() or ""
+            if not page.def.designReference then desc = Design.SectionSummary(page, sec.header, desc) end
             sec.desc:SetText(desc)
             sec.desc:ClearAllPoints()
             sec.desc:SetPoint("TOPLEFT", SECTION_PAD, -inner)
-            sec.desc:SetShown(desc ~= "")
-            if desc ~= "" then inner = inner + (sec.desc:GetStringHeight() or 12) + 8 end
+            local showDesc = not homeHelp and desc ~= "" and (not sec.collapsible or sec.expanded)
+            sec.desc:SetShown(showDesc)
+            if showDesc then inner = inner + (sec.desc:GetStringHeight() or 12) + 8 end
         end
         if not sec.isCard then
             local shown
-            inner, shown = UI.PlaceRows(sec, sec.rows, inner)
+            if homeHelp then
+                local right = SECTION_PAD
+                for i = #sec.rows, 1, -1 do
+                    local v = sec.rows[i]
+                    v.RefreshValue()
+                    local width = math.max(132, v.control.text:GetStringWidth() + 28)
+                    v.frame:ClearAllPoints()
+                    v.frame:SetPoint("TOPRIGHT", sec.card, "TOPRIGHT", -right, -12)
+                    v.frame:SetSize(width, 28)
+                    v.control:ClearAllPoints(); v.control:SetPoint("CENTER", v.frame, "CENTER")
+                    v.control:SetSize(width, 28)
+                    v.label:Hide(); v.reason:Hide(); v.frame:Show()
+                    v.y = sec.top
+                    right = right + width + 8
+                end
+                if sec.help then sec.help:Hide() end
+                inner, shown = 40, #sec.rows
+            elseif sec.collapsible and not sec.expanded then
+                shown = 1
+                for _, v in ipairs(sec.rows) do v.frame:Hide(); v.y = nil end
+            else
+                inner, shown = UI.PlaceRows(sec, sec.rows, inner)
+            end
+            if sec.toggle then
+                sec.toggle.text:SetText(sec.expanded and "Hide" or "Show")
+                sec.toggle:SetSelected(sec.expanded)
+            end
             visible = visible + shown
         end
         inner = inner + SECTION_PAD - 6
@@ -871,6 +976,7 @@ function Layout(view)
         if after and sec.header and sec.header:GetName() == after then
             PlaceHost(GAP)
             after = nil
+        end
         end
     end
     if after then   -- the section it follows isn't on the page: after the last one
@@ -896,6 +1002,7 @@ function Layout(view)
         end
     end
     if view.chrome and scroll.materialRail then scroll.materialRail.Fit(content:GetHeight()) end
+    if Companion and state.page == page.key and not state.searching then Companion.Update(view) end
     if pt then Perf.Stop(pt) end
 end
 UI.Layout = Layout
@@ -913,6 +1020,7 @@ local function PaintItem(item, selected)
 end
 
 local function PaintNav()
+    if state.LayoutNav then state.LayoutNav() end
     local root = K.Root(state.page)
     for _, item in ipairs(state.navItems) do
         PaintItem(item, not state.searching and root ~= nil and item.page.key == root.key)
@@ -954,6 +1062,7 @@ local function Highlight(v)
 end
 
 local function ShowResults(on)
+    if on and Companion then Companion.Hide() end
     state.searching = on
     if on then
         scroll:ClearAllPoints()
@@ -985,6 +1094,7 @@ function UI.Navigate(key, rowId)
         changed = true
     end
     if changed then
+        if Companion then Companion.Hide() end
         Wg.ColorPicker.Cancel()   -- a color being picked belongs to the page it was opened on
         if Previews then Previews.StopAll() end   -- and a sample playing, to the page it plays on
     end
@@ -1012,6 +1122,12 @@ function UI.Navigate(key, rowId)
     if row and row.page ~= page.key then row = nil end
     -- a card's rule asked for by search or a link: its card opens first, so the row can be shown and marked
     if row and row.ruleOf and Cards then Cards.Reveal(view, view.sectionsById[row.ruleOf.id], row) end
+    if row then
+        local target = view.rows[row.id]
+        local section = target and target.section or view.sectionsById[SectionId(page, row.kind == "header" and row or row.section)]
+        if section and section.collapsible then section.expanded = true end
+        if section and view.tasks then view.task = Design.TaskFor(page, section.header and section.header:GetName()) end
+    end
     if page.def.onShow then
         local ok, err = pcall(page.def.onShow)
         if not ok then R.Fault("settings page " .. page.key, err) end
@@ -1055,68 +1171,110 @@ end
 local function BuildNav()
     local list = CreateFrame("ScrollFrame", nil, nav)
     list:SetPoint("TOPLEFT", 6, -8)
-    list:SetPoint("BOTTOMRIGHT", -6, 8)
+    list:SetPoint("BOTTOMRIGHT", -6, 52)
     list:EnableMouseWheel(true)
     local child = CreateFrame("Frame", nil, list)
     child:SetWidth(NAV_W - 12)
     list:SetScrollChild(child)
-    local labels = {}
-    for _, group in ipairs(K.GROUPS) do labels[group.key] = group.label end
-    local y, lastGroup = 0, nil
+    local byKey = {}
     for _, page in ipairs(K.SidebarOrder()) do
-        if page.group ~= lastGroup then
-            lastGroup = page.group
-            if labels[page.group] then
-                y = y + 10
-                local rule = Wg.Solid(child, "BORDER", pal.bronzeLo, 0.30)   -- a quiet hairline between groups
-                rule:SetHeight(1)
-                rule:SetPoint("TOPLEFT", 10, -y + 2)
-                rule:SetPoint("TOPRIGHT", -10, -y + 2)
-                local g = Wg.Text(child, "meta")
-                g:SetPoint("TOPLEFT", 12, -y - 8)
-                g:SetText(labels[page.group]:upper())
-                y = y + NAV_GROUP - 8
-            end
-        end
         local item = CreateFrame("Button", nil, child)
         item:SetHeight(NAV_ROW)
-        item:SetPoint("TOPLEFT", 0, -y)
-        item:SetPoint("TOPRIGHT", 0, -y)
         item.page = page
-        -- chosen: a small rounded raised face with antique gold edging; under the pointer: a fainter one (Material.lua)
         M.NavItem(item)
         item.hoverFade = Motion.Fader(function(x) item.hover:SetAlpha(x * 0.55) end, 0)
-        -- the page's icon beside its name (never instead of it); a page without one keeps its name in line
         item.icon = item:CreateTexture(nil, "ARTWORK")
         item.icon:SetSize(NAV_ICON, NAV_ICON)
         item.icon:SetPoint("LEFT", 12, 0)
         local drawn = Icons and page.def.icon and Icons.Apply(item.icon, page.def.icon, NAV_ICON)
         item.icon:SetShown(drawn and true or false)
         item.text = Wg.Text(item, "body")
-        local file, size, flags = item.text:GetFont()   -- a little larger than the page text: the list is the way around
-        if file and size then item.text:SetFont(file, size + 1, flags) end
+        M.ReminderFont(item.text, 15, true)
         item.text:SetPoint("LEFT", 12 + NAV_ICON + 10, 0)
         item.text:SetPoint("RIGHT", -6, 0)
         item.text:SetWordWrap(false)
         item.text:SetText(page.nav)
-        item:SetScript("OnEnter", function(self)
-            self.hovered = true
-            PaintNav()
-        end)
-        item:SetScript("OnLeave", function(self)
-            self.hovered = false
-            PaintNav()
-        end)
-        item:SetScript("OnMouseDown", function() R:PlayMenuSound() end)   -- with the press, before the page changes
+        item:SetScript("OnEnter", function(self) self.hovered = true; PaintNav() end)
+        item:SetScript("OnLeave", function(self) self.hovered = false; PaintNav() end)
+        item:SetScript("OnMouseDown", function() R:PlayMenuSound() end)
         item:SetScript("OnClick", function(self) UI.Navigate(self.page.key) end)
         state.navItems[#state.navItems + 1] = item
-        y = y + NAV_ROW
+        byKey[page.key] = item
     end
-    child:SetHeight(y + 4)
+    local groups = {
+        { label = "Everyday", keys = { "notifications", "reminders", "healerWatch", "qol" } },
+        { label = "Adventure", keys = { "chronicle", "navigation" } },
+        { label = "Tools", keys = { "workshop", "magicInventory", "auction" } },
+        { label = "More features", keys = {} },
+    }
+    for _, group in ipairs(groups) do
+        group.frame = CreateFrame("Frame", nil, child)
+        group.frame:SetHeight(NAV_GROUP)
+        local rule = Wg.Solid(group.frame, "BORDER", pal.bronzeLo, .3)
+        rule:SetHeight(1); rule:SetPoint("TOPLEFT", 10, 0); rule:SetPoint("TOPRIGHT", -10, 0)
+        local text = M.ReminderFont(Wg.Text(group.frame, "meta"), 12)
+        text:SetPoint("TOPLEFT", 12, -10); text:SetText(group.label:upper())
+    end
+    local pinned = { overview = true }
+    for _, group in ipairs(groups) do for _, key in ipairs(group.keys) do pinned[key] = true end end
+    local lastRoot
+    state.LayoutNav = function()
+        local root = K.Root(state.page)
+        local rootKey = root and root.key or ""
+        if lastRoot == rootKey then return end
+        lastRoot = rootKey
+        for _, item in ipairs(state.navItems) do item:Hide() end
+        local y = 0
+        local function Place(key)
+            local item = byKey[key]
+            if not item then return end
+            item.navTop = y
+            item:ClearAllPoints(); item:SetPoint("TOPLEFT", 0, -y); item:SetPoint("TOPRIGHT", 0, -y)
+            item:Show(); y = y + NAV_ROW
+        end
+        Place("overview")
+        groups[4].keys = root and not pinned[root.key] and { root.key } or {}
+        for _, group in ipairs(groups) do
+            local exists = false
+            for _, key in ipairs(group.keys) do if byKey[key] then exists = true end end
+            group.frame:SetShown(exists)
+            if exists then
+                y = y + 10
+                group.frame:ClearAllPoints(); group.frame:SetPoint("TOPLEFT", 0, -y); group.frame:SetPoint("TOPRIGHT", 0, -y)
+                y = y + NAV_GROUP
+                for _, key in ipairs(group.keys) do Place(key) end
+            end
+        end
+        child:SetHeight(y + 4)
+        local most = math.max(0, child:GetHeight() - list:GetHeight())
+        local offset = math.min(most, list:GetVerticalScroll())
+        local selected = root and byKey[root.key]
+        local height = list:GetHeight()
+        if selected and height > 0 then
+            if selected.navTop < offset then offset = selected.navTop
+            elseif selected.navTop + NAV_ROW > offset + height then offset = selected.navTop + NAV_ROW - height end
+        end
+        list:SetVerticalScroll(math.max(0, math.min(most, offset)))
+    end
+    local all = CreateFrame("Button", nil, nav)
+    all:SetPoint("BOTTOMLEFT", 6, 8); all:SetPoint("BOTTOMRIGHT", -6, 8); all:SetHeight(38)
+    M.MaterialHover(all)
+    local text = M.ReminderFont(Wg.Text(all, "body"), 15)
+    text:SetPoint("LEFT", 18, 0); text:SetText("All features...")
+    all.text = text
+    all:SetScript("OnClick", function()
+        UI.Navigate("overview")
+        local view = state.views.overview
+        view.hero.shown = "explore"
+        Layout(view)
+        ScrollTo(0)
+    end)
+    I.Tip(all, "All features", "Browse every TwichUI feature, including class tools, map options, profiles and troubleshooting.")
     list:SetScript("OnMouseWheel", function(self, delta)
         local most = math.max(0, child:GetHeight() - self:GetHeight())
         self:SetVerticalScroll(math.max(0, math.min(most, self:GetVerticalScroll() - delta * NAV_ROW * 2)))
     end)
+    state.LayoutNav()
 end
 
 ---------------------------------------------------------------------------
@@ -1138,6 +1296,7 @@ local function ResultRow(i)
     row:SetSize(CONTENT_W, 42)
     row.bg = Wg.Solid(row, "BACKGROUND", pal.teal, 0)
     row.bg:SetAllPoints()
+    row.sel = R.SettingsCraft.Sheet(row, "selection", { layer = "BACKGROUND", sub = 2, corner = 10 })
     row.bar = Wg.Solid(row, "ARTWORK", pal.bronzeText, 1)
     row.bar:SetWidth(2)
     row.bar:SetPoint("TOPLEFT", 0, -4)
@@ -1154,13 +1313,22 @@ local function ResultRow(i)
     row.desc = Wg.Text(row, "small")
     row.desc:SetPoint("TOPLEFT", row.context, "BOTTOMLEFT", 0, -3)
     row.desc:SetWidth(CONTENT_W - 24)
-    row.desc:SetWordWrap(false)
+    row.desc:SetWordWrap(true)
     row.note = Wg.Text(row, "meta")
     row.note:SetPoint("TOPRIGHT", -10, -8)
     row.note:SetWidth(196)
     row.note:SetJustifyH("RIGHT")
-    row:SetScript("OnEnter", function(self) if not self.selected then self.bg:SetColorTexture(pal.text[1], pal.text[2], pal.text[3], 0.05) end end)
-    row:SetScript("OnLeave", function(self) if not self.selected then self.bg:SetColorTexture(pal.text[1], pal.text[2], pal.text[3], 0) end end)
+    M.MaterialHover(row, function() return not row.selected end)
+    row:HookScript("OnEnter", function(self)
+        local e = self.result and self.result.entry
+        if e and e.desc and GameTooltip then
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetText(e.label)
+            GameTooltip:AddLine(e.desc, 0.88, 0.84, 0.76, true)
+            GameTooltip:Show()
+        end
+    end)
+    row:HookScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
     row:SetScript("OnClick", function(self) UI.Go(self.result) end)
     ResultWidth(row)
     resultRows[i] = row
@@ -1172,7 +1340,8 @@ local function PaintSelection()
         local selected = row:IsShown() and i == state.selected
         row.selected = selected
         row.bar:SetShown(selected)
-        row.bg:SetColorTexture(pal.teal[1], pal.teal[2], pal.teal[3], selected and 0.16 or 0)
+        row.sel:SetShown(selected)
+        row.bg:SetColorTexture(0, 0, 0, 0)
     end
 end
 
@@ -1203,9 +1372,9 @@ local function DrawResults(query)
         row.result = result
         row.label:SetText(e.label)
         row.context:SetText(e.kind == "page" and ("Page" .. Search.SEP .. (e.context or "")) or e.context)
-        row.desc:SetText(e.desc or "")
+        row.desc:SetText(R.SettingsDesign.Summary(e.desc))
         row.desc:SetShown(e.desc ~= nil)
-        row:SetHeight(e.desc and 58 or 42)
+        row:SetHeight(e.desc and (46 + row.desc:GetStringHeight()) or 42)
         local note = Search.Note(e)
         row.note:SetText(note or "")
         Wg.Color(row.note, note and pal.danger.text or pal.stone)
@@ -1276,11 +1445,16 @@ function UI.RefreshFooter()
     else
         footer.profile.text:SetText("Profiles aren't available right now.")
     end
-    footer.profile:SetWidth(footer.profile.text:GetStringWidth() + 8)
     local pending = R.Switches.ReloadPending()
     footer.reloadText:SetShown(pending)
     footer.reload:SetShown(pending)
     if pending then footer.reloadText:SetText(UI.ReloadSummary()) end
+    local available = win:GetWidth() - PAD * 2 - 4
+    local reloadWidth = pending and math.min(available * .5, footer.reloadText:GetStringWidth()) or 0
+    footer.reloadText:SetWidth(reloadWidth)
+    local profileWidth = math.max(100, available - (pending and (footer.reload:GetWidth() + reloadWidth + 24) or 0))
+    footer.profile:SetWidth(math.min(profileWidth, footer.profile.text:GetStringWidth() + 8))
+    footer.profile.text:SetWidth(footer.profile:GetWidth() - 8)
 end
 
 -- What a pending reload is for, in words, from Switches.lua (the one record of it, which Troubleshooting reads
@@ -1317,8 +1491,13 @@ local function BuildFooter()
     footer.profile:SetPoint("LEFT", 0, 0)
     footer.profile.text = Wg.Text(footer.profile, "small")
     footer.profile.text:SetPoint("LEFT", 4, 0)
+    footer.profile.text:SetWordWrap(false)
     footer.profile:SetScript("OnClick", function() UI.Navigate("profiles") end)
-    I.Tip(footer.profile, "Profile", "The saved set of TwichUI options this character uses. Choose another, or make one, on the Profiles page.")
+    I.Tip(footer.profile, "Profile", function()
+        local current, shared = ProfileShare()
+        return (current and (current .. " · " .. shared .. "\n\n") or "")
+            .. "The saved set of TwichUI options this character uses. Choose another, or make one, on the Profiles page."
+    end)
     footer.reload = Wg.Button(footer, "Reload now", 100, "primary", function() ReloadUI() end)
     footer.reload:SetPoint("RIGHT", 0, 0)
     footer.reloadText = Wg.Text(footer, "small")
@@ -1332,6 +1511,7 @@ local function BuildFooter()
         local list = #names > 0 and ("\n\nWaiting for it: " .. table.concat(names, ", ") .. ".") or ""
         return "Reloads your UI so these changes take effect. TwichUI never reloads for you; turning a change back before you reload clears it." .. list
     end)
+    footer:HookScript("OnSizeChanged", UI.RefreshFooter)
 end
 
 ---------------------------------------------------------------------------
@@ -1401,7 +1581,13 @@ local function ApplySize(w, h)
     resultsView:SetWidth(cw)
     resultsView.help:SetWidth(cw - 8)
     for _, row in ipairs(resultRows) do ResultWidth(row) end
-    if not state.searching then
+    if state.searching then
+        local selected, offset = state.selected, scroll:GetVerticalScroll()
+        DrawResults(searchBox:GetText() or "")
+        state.selected = math.min(selected, #state.results)
+        PaintSelection()
+        scroll:SetVerticalScroll(math.min(offset, scroll:GetVerticalScrollRange()))
+    else
         local view = state.views[state.page]
         if view then Layout(view) end
     end
@@ -1615,6 +1801,7 @@ local function BuildWindow()
     end)
     win:SetScript("OnHide", function()
         if state.placementSuspended then return end
+        if Companion then Companion.Hide() end
         -- Closing is immediate; whatever was easing is put where it was going, so a reopened window is never
         -- found dim, and no hover is left lit for a pointer that has gone.
         Motion.Settle()

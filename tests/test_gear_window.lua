@@ -6,6 +6,11 @@ local c = MakeClient("Rich", {"!!!TwichUI"})
 local function Obj()
   local o = {text = "", checked = false, shown = true}
   return setmetatable(o, {__index = function(t, k)
+    if k == "GetWidth" then return function(s) return s.width or 180 end end
+    if k == "SetWidth" then return function(s, value) s.width = value end end
+    if k == "GetHeight" then return function() return 22 end end
+    if k == "GetFont" then return function() return "Fonts\\FRIZQT__.TTF", 12, "" end end
+    if k == "IsEnabled" then return function() return true end end
     if k == "GetText" then return function(s) return s.text end end
     if k == "SetText" then return function(s, v) s.text = v or "" end end
     if k == "GetChecked" then return function(s) return s.checked end end
@@ -17,7 +22,7 @@ local function Obj()
     if k == "HasFocus" then return function() return false end end
     if k == "CreateFontString" or k == "CreateTexture" then return function() return Obj() end end
     if k == "ScrollBar" or k == "ThumbTexture" then local sb = Obj(); rawset(t, k, sb); return sb end
-    return function() end
+    if type(k) == "string" and k:find("^%u") then return function() end end
   end})
 end
 local realCreate = c.CreateFrame

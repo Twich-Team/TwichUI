@@ -16,7 +16,7 @@ local ROW_H, VISIBLE = 34, 5
 local LIST_TOP = -58
 local LIST_H = ROW_H * VISIBLE + 8
 local LIST_W = W - 12 - 26
-local EDIT_TOP = LIST_TOP - LIST_H - 12
+local EDIT_TOP = -42
 
 local f, built
 local rows = {}
@@ -106,7 +106,14 @@ local function PaintEditor()
     if not (f and built) then return end
     local open = edit ~= nil
     for _, part in ipairs(f.editorParts) do part:SetShown(open) end
-    f.examples:SetShown(not open)
+    f.examples:Hide()
+    f.listHost:SetShown(not open); f.editorHost:SetShown(open); f.back:SetShown(open)
+    if f.modeOpen ~= open then
+        f.modeOpen = open
+        C_Timer.After(0, function()
+            if f:IsShown() and R.SettingsUI and R.SettingsUI.Refresh then R.SettingsUI.Refresh() end
+        end)
+    end
     if not open then return end
     f.editTitle:SetText(edit.id and "Edit rule" or "New rule")
     f.trigger:SetValue(edit.trigger, HZ().TRIGGER[edit.trigger][2])
@@ -274,11 +281,22 @@ local function Build()
     local G, I = Wg(), R.Interact
     local pal = G.pal
 
-    f.help = G.Text(f, "small")
+    f.listHost = CreateFrame("Frame", nil, f)
+    f.listHost:SetPoint("TOPLEFT")
+    f.listHost:SetPoint("BOTTOMLEFT")
+    f.listHost:SetWidth(W)
+    f.editorHost = CreateFrame("Frame", nil, f)
+    f.editorHost:SetPoint("TOPLEFT")
+    f.editorHost:SetPoint("BOTTOMLEFT")
+    f.editorHost:SetWidth(W)
+    f.back = G.Button(f, "Back to rules", 140, "secondary", function() P.Close() end)
+    f.back:SetPoint("TOPLEFT", 0, -2)
+    f.help = G.Text(f.listHost, "small")
     f.help:SetPoint("TOPLEFT", 4, -2)
-    f.help:SetWidth(W - 140)
-    f.help:SetText("Auras that play a sound when they land on you, grow or fade. Only you: never your pets, group or other players. The game decides when a sound plays; TwichUI cannot see damage, so a rule says \"this aura happened to me\", not \"this hit was avoidable\".")
-    f.add = G.Button(f, "Add a rule", 120, "secondary", function() P.Open(nil) end)
+    f.help:SetWidth(W - 184)
+    f.help:SetText("Sounds for auras affecting you. Add a spell ID, event and alert category.")
+    I.Tip(f, "Aura rules", "Only your auras are checked, never your pets or other players. The game decides when a sound plays; TwichUI cannot see damage or identify avoidable hits.")
+    f.add = G.Button(f.listHost, "Add a rule", 120, "secondary", function() P.Open(nil) end)
     f.add:SetPoint("TOPRIGHT", -2, -4)
     I.Tip(f.add, "Add a rule", function()
         if #HZ().List() >= HZ().MAX_CUSTOM then return "Opens the editor below.", WHY.full end
@@ -286,17 +304,17 @@ local function Build()
     end)
 
     local function Column(text, x)
-        local t = G.Text(f, "meta")
+        local t = G.Text(f.listHost, "meta")
         t:SetPoint("TOPLEFT", 6 + x, -42)
         t:SetText(text)
         return t
     end
     Column("On", 4)
     Column("Rule", 36)
-    f.count = G.Text(f, "meta")
+    f.count = G.Text(f.listHost, "meta")
     f.count:SetPoint("TOPRIGHT", -8, -42)
     f.count:SetJustifyH("RIGHT")
-    f.well = CreateFrame("Frame", nil, f, "BackdropTemplate")
+    f.well = CreateFrame("Frame", nil, f.listHost, "BackdropTemplate")
     f.well:SetPoint("TOPLEFT", 0, LIST_TOP)
     f.well:SetSize(W, LIST_H)
     G.Well(f.well)
@@ -310,56 +328,56 @@ local function Build()
 
     -- the editor
     local y = EDIT_TOP
-    G.Card(f, 0, y, W, y - 200)
+    G.Card(f.editorHost, 0, y, W, y - 216)
     f.note = G.Text(f, "small")
-    f.note:SetPoint("TOPLEFT", 4, y + 12)
+    f.note:SetPoint("TOPLEFT", 4, -30)
     f.note:SetWidth(W - 8)
     f.note:SetWordWrap(false)
     P.Say(P.lastSaid, P.lastTone)
     f.editorParts = {}
     local function Part(x) f.editorParts[#f.editorParts + 1] = x; return x end
 
-    f.examples = G.Text(f, "small")
+    f.examples = G.Text(f.editorHost, "small")
     f.examples:SetPoint("TOPLEFT", 12, y - 12)
     f.examples:SetWidth(W - 24)
     f.examples:SetText("Add a rule to hear a sound for an aura you choose.\n  Spell ID: the number from the aura's tooltip or database link.\n  Aura applied to me: when it is put on you. Stacks grow: each time its stack count rises. Fades from me: when it leaves.\n  Category: picks the sound (set on the General tab). Cooldown: the game's own wait between two plays, up to 5 seconds.")
 
-    f.editTitle = Part(G.Text(f, "heading"))
+    f.editTitle = Part(G.Text(f.editorHost, "heading"))
     f.editTitle:SetPoint("TOPLEFT", 12, y - 10)
 
-    local spellLabel = Part(G.Text(f, "meta"))
+    local spellLabel = Part(G.Text(f.editorHost, "meta"))
     spellLabel:SetPoint("TOPLEFT", 12, y - 38)
     spellLabel:SetText("Spell ID")
-    f.spell = Part(G.EditBox(f, 90, 22))
+    f.spell = Part(G.EditBox(f.editorHost, 90, 22))
     f.spell:SetPoint("TOPLEFT", 78, y - 34)
     f.spell:SetMaxLetters(10)
     f.spell:SetScript("OnEnterPressed", function() P.Save() end)
     f.spell:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
     f.spell:SetScript("OnTextChanged", function() if edit and f.hint then f.hint:SetText((Hint())) end end)
     I.Tip(f.spell, "Spell ID", "The aura's spell ID on this client. IDs can differ between clients and servers, so check it in the game's own tooltip.")
-    local nameLabel = Part(G.Text(f, "meta"))
+    local nameLabel = Part(G.Text(f.editorHost, "meta"))
     nameLabel:SetPoint("TOPLEFT", 190, y - 38)
     nameLabel:SetText("Name")
-    f.name = Part(G.EditBox(f, 220, 22))
+    f.name = Part(G.EditBox(f.editorHost, 220, 22))
     f.name:SetPoint("TOPLEFT", 232, y - 34)
     f.name:SetMaxLetters(HZ().MAX_NAME)
     f.name:SetScript("OnEnterPressed", function() P.Save() end)
     I.Tip(f.name, "Name", "How the rule is listed. It is not sent anywhere.")
 
-    local whenLabel = Part(G.Text(f, "meta"))
+    local whenLabel = Part(G.Text(f.editorHost, "meta"))
     whenLabel:SetPoint("TOPLEFT", 12, y - 72)
     whenLabel:SetText("When")
-    f.trigger = Part(G.Dropdown(f, 190, function(value)
+    f.trigger = Part(G.Dropdown(f.editorHost, 190, function(value)
         if not edit then return end
         edit.trigger = value
         PaintEditor()
     end))
     f.trigger:SetChoices(TriggerChoices)
     f.trigger:SetPoint("TOPLEFT", 78, y - 68)
-    local catLabel = Part(G.Text(f, "meta"))
+    local catLabel = Part(G.Text(f.editorHost, "meta"))
     catLabel:SetPoint("TOPLEFT", 290, y - 72)
     catLabel:SetText("Category")
-    f.category = Part(G.Dropdown(f, 170, function(value)
+    f.category = Part(G.Dropdown(f.editorHost, 170, function(value)
         if not edit then return end
         edit.category = value
         PaintEditor()
@@ -367,10 +385,10 @@ local function Build()
     f.category:SetChoices(CategoryChoices)
     f.category:SetPoint("TOPLEFT", 352, y - 68)
     I.Tip(f.category, "Category", "Picks the sound. It says how urgent you consider this, not how much damage it does.")
-    local coolLabel = Part(G.Text(f, "meta"))
+    local coolLabel = Part(G.Text(f.editorHost, "meta"))
     coolLabel:SetPoint("TOPLEFT", 12, y - 106)
     coolLabel:SetText("Cooldown")
-    f.throttle = Part(G.Dropdown(f, 130, function(value)
+    f.throttle = Part(G.Dropdown(f.editorHost, 130, function(value)
         if not edit then return end
         edit.throttle = value
         PaintEditor()
@@ -379,17 +397,20 @@ local function Build()
     f.throttle:SetPoint("TOPLEFT", 78, y - 102)
     I.Tip(f.throttle, "Cooldown", "The least time the game waits between two plays of this one sound. The game allows 0 to 5 seconds, and no longer.")
 
-    f.hint = Part(G.Text(f, "small"))
+    f.hint = Part(G.Text(f.editorHost, "small"))
     f.hint:SetPoint("TOPLEFT", 12, y - 134)
     f.hint:SetWidth(W - 24)
-    f.problem = Part(G.Text(f, "small"))
+    f.problem = Part(G.Text(f.editorHost, "small"))
     f.problem:SetPoint("TOPLEFT", 12, y - 174)
     f.problem:SetWidth(W - 24 - 220)
     G.Color(f.problem, pal.danger.text)
-    f.save = Part(G.Button(f, "Save", 96, "secondary", function() P.Save() end))
+    f.save = Part(G.Button(f.editorHost, "Save", 96, "secondary", function() P.Save() end))
     f.save:SetPoint("TOPRIGHT", -112, y - 170)
-    f.cancel = Part(G.Button(f, "Cancel", 90, "secondary", function() P.Close() end))
+    f.cancel = Part(G.Button(f.editorHost, "Cancel", 90, "secondary", function() P.Close() end))
     f.cancel:SetPoint("TOPRIGHT", -12, y - 170)
+    f.moreHelp = G.Button(f.listHost, "?", 24, "secondary")
+    f.moreHelp:SetPoint("TOPRIGHT", -132, -4)
+    I.Tip(f.moreHelp, "Rule examples", function() return f.examples:GetText() end)
     if edit then P.Open(edit.id) else PaintEditor() end
 end
 
@@ -416,5 +437,5 @@ K.Page({
     description = "The auras you listed, by spell ID, with the category that picks each one's sound.",
     keywords = "hazard alert rule rules custom spell id aura debuff trigger cooldown category sound list",
     when = function() return R.Hazard ~= nil end,
-    host = function() return P.Frame() end,
+    host = function() return P.Frame() end, hostHeight = function() return edit and 292 or (LIST_H + 82) end,
 })

@@ -19,7 +19,7 @@ R.NpcKnowledgePage = P
 local W = 644                  -- the settings window's content width
 local ROW_H, VISIBLE = 24, 8
 local ROWS = VISIBLE + 2
-local LIST_TOP = -100
+local LIST_TOP = -124
 local LIST_H = ROW_H * VISIBLE + 8
 local LIST_W = W - 12 - 26     -- inside the well, less the scroll bar
 local COL_ROLE, COL_ZONE, COL_SOURCE = 214, 372, 540
@@ -29,6 +29,7 @@ local RESULTS_Y = DETAIL_TOP - DETAIL_H - 10
 local AREA_Y = RESULTS_Y - 40
 local DEBOUNCE = 0.2
 
+local bulkOpen = false
 local f, built
 local rows = {}
 local list = {}                -- the rows the filters show
@@ -75,6 +76,7 @@ local function Row(i)
     row:SetSize(LIST_W, ROW_H)
     row.bg = G.Solid(row, "BACKGROUND", pal.text, 0)
     row.bg:SetAllPoints()
+    if R.SettingsMaterial then R.SettingsMaterial.ReminderRow(row) end
     row.mark = G.Solid(row, "ARTWORK", pal.teal, 1)
     row.mark:SetSize(2, ROW_H - 6)
     row.mark:SetPoint("LEFT", 0, 0)
@@ -126,6 +128,7 @@ local function Paint()
             row.picked = picked
             row.stripe = idx % 2 == 0
             row.mark:SetShown(picked)
+            if row.sel then row.sel:SetShown(picked) end
             row.bg:SetAlpha(picked and 0.09 or (row.stripe and 0.03 or 0))
             G.Color(row.name, picked and pal.tealHi or pal.text)
             G.Color(row.role, pal.textDim)
@@ -372,7 +375,8 @@ local function Build()
     f.help = G.Text(f, "small")
     f.help:SetPoint("TOPLEFT", 4, -2)
     f.help:SetWidth(W - 8)
-    f.help:SetText("Your field notes: the vendors, trainers and services you have dealt with, and those other TwichUI users sent you. Only what has been noted appears; nothing is looked up or guessed.")
+    f.help:SetText("Search services discovered by you or shared by other TwichUI users.")
+    I.Tip(f, "World Knowledge", "Only vendors, trainers and services noted through encounters or shared by TwichUI users appear. Nothing is looked up or guessed.")
 
     f.off = G.Text(f, "small")
     f.off:SetPoint("TOPLEFT", 4, -34)
@@ -474,13 +478,13 @@ local function Build()
     f.dBody:SetJustifyH("LEFT")
     f.dBody:SetJustifyV("TOP")
 
-    local function ShareButtons(x, y, label, run, has)
+    local function ShareButtons(x, y, label, run, has, parent)
         local set = { has = has }
-        local t = G.Text(f, "meta")
+        local t = G.Text(parent or f, "meta")
         t:SetPoint("TOPLEFT", x, y)
         t:SetText(label)
         for i, s in ipairs(SHARES) do
-            local b = G.Button(f, s[2], 66, "secondary", function(self)
+            local b = G.Button(parent or f, s[2], 66, "secondary", function(self)
                 if not self.why then run(self.audience) end
             end)
             b.audience = s[1]
@@ -496,12 +500,22 @@ local function Build()
     f.forgetOne:SetPoint("TOPLEFT", W - 214, DETAIL_TOP - 68)
     I.Tip(f.forgetOne, "Delete this record", "Deletes only the chosen record. Asks first.")
 
+    f.bulkHost = CreateFrame("Frame", nil, f)
+    f.bulkHost:SetPoint("TOPLEFT", 0, -34); f.bulkHost:SetPoint("BOTTOMRIGHT", 0, -34)
+    f.bulkHost:SetShown(bulkOpen)
+    f.bulkToggle = G.Button(f, "More list actions", 154, "secondary", function()
+        bulkOpen = not bulkOpen; f.bulkHost:SetShown(bulkOpen)
+        f.bulkToggle.text:SetText(bulkOpen and "Hide list actions" or "More list actions")
+        if R.SettingsUI and R.SettingsUI.Refresh then R.SettingsUI.Refresh() end
+    end)
+    f.bulkToggle:SetPoint("TOPLEFT", 4, RESULTS_Y + 6)
+    I.Tip(f.bulkToggle, "List actions", "Send or delete filtered records, or clear a chosen area. Each destructive action keeps its original confirmation and exact scope.")
     -- the results the filters show
-    f.resultsLabel = G.Text(f, "meta")
+    f.resultsLabel = G.Text(f.bulkHost, "meta")
     f.resultsLabel:SetPoint("TOPLEFT", 4, RESULTS_Y - 16)
     f.resultsLabel:SetText("The records shown")
-    f.shareAll = ShareButtons(130, RESULTS_Y + 6, "Send these", ShareResults, function() return #list > 0 end)
-    f.forgetAll = G.Button(f, "Delete filtered...", 150, "secondary", ForgetResults)
+    f.shareAll = ShareButtons(130, RESULTS_Y + 6, "Send these", ShareResults, function() return #list > 0 end, f.bulkHost)
+    f.forgetAll = G.Button(f.bulkHost, "Delete filtered...", 150, "secondary", ForgetResults)
     f.forgetAll:SetPoint("TOPLEFT", W - 150, RESULTS_Y - 10)
     I.Tip(f.forgetAll, "Delete filtered", function()
         if KN().Active(flt) then return "Deletes the records the filters show now, and only those. Asks first, with the exact number." end
@@ -509,20 +523,20 @@ local function Build()
     end)
 
     -- one area
-    f.areaTitle = G.Text(f, "heading")
+    f.areaTitle = G.Text(f.bulkHost, "heading")
     f.areaTitle:SetPoint("TOPLEFT", 4, AREA_Y)
     f.areaTitle:SetText("Clear an area")
-    f.areaDrop = G.Dropdown(f, 250, function(value)
+    f.areaDrop = G.Dropdown(f.bulkHost, 250, function(value)
         clearMap = value ~= "none" and value or nil
         P.Refresh()
     end)
     f.areaDrop:SetChoices(function() return ZoneChoices(false) end)
     f.areaDrop:SetPoint("TOPLEFT", 130, AREA_Y + 4)
     I.Tip(f.areaDrop, "Area", "Any area that has records, with how many. Only that map is cleared, not the ones inside it.")
-    f.clearArea = G.Button(f, "Clear area...", 120, "secondary", ClearArea)
+    f.clearArea = G.Button(f.bulkHost, "Clear area...", 120, "secondary", ClearArea)
     f.clearArea:SetPoint("TOPLEFT", 388, AREA_Y + 3)
     I.Tip(f.clearArea, "Clear area", "Deletes every record on the chosen map, whatever the filters show. Asks first, with the exact number.")
-    f.areaHelp = G.Text(f, "meta")
+    f.areaHelp = G.Text(f.bulkHost, "meta")
     f.areaHelp:SetPoint("TOPLEFT", 4, AREA_Y - 24)
     f.areaHelp:SetWidth(W - 8)
     f.areaHelp:SetJustifyH("LEFT")
@@ -558,5 +572,5 @@ K.Page({
     description = "Browse the vendors, trainers and services you have noted or been sent, send or forget one, and clear an area.",
     keywords = "knowledge npc npcs vendor vendors trainer trainers merchant list browse filter search delete forget remove clear area zone share send source seen others field notes",
     when = function() return R.NpcStore ~= nil and R.NpcKnowledge ~= nil end,
-    host = function() return P.Frame() end, hostHeight = 560,
+    host = function() return P.Frame() end, hostHeight = function() return bulkOpen and 628 or 494 end,
 })

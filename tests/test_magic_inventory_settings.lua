@@ -50,15 +50,25 @@ local f = P.Frame()
 f:Hide(); f:Show()
 Flush()
 Check(Has(f, "^Your rules$") and Has(f, "No rules yet"), "an empty list says how to start")
-Check(Has(f, "^Never transfer$") and Has(f, "Destinations on this character"), "destinations and the Never transfer list")
+Check(P.Task() == "rules" and not Has(f, "^Never transfer$"), "rules are the initial focused task")
+Check(P.SetTask("destinations"), "destination task is available"); Flush()
+Check(Has(f, "Destinations on this character"), "destinations have their own view")
+P.SetTask("protected"); Flush()
+Check(Has(f, "^Never transfer$"), "protected items have their own view")
+P.SetTask("rules"); Flush()
 
 -- a template opens the editor
 P.NewFromTemplate("cloth")
 Flush()
 Check(P.Editing() ~= nil and Has(f, "^New rule$"), "the editor opens")
 Check(Has(f, "^1  Items$") and Has(f, "^4  Review$"), "four steps")
+Check(not P.Control("e1cat1") or not P.Control("e1cat1").shown, "the long category catalog is initially disclosed")
+Check(Has(f, "^Cloth$"), "selected categories are readable without opening the catalog")
+Click("e1chooseCats")
 Check(P.Control("e1cat1") and P.Control("e1cat1"):GetChecked(), "the template's category is ticked")
 Check(Has(f, "^Cloth"), "named as the game names it")
+Click("e1chooseCats")
+Check(not P.Control("e1cat1").shown and P.Editing() ~= nil, "closing the catalog retains the private rule")
 Click("eNext"); Click("eNext"); Click("eNext")
 Check(Has(f, "Send by mail .* Bank alt %(choose the recipient on this character%)"), "the review names the destination and what is missing")
 Check(Has(f, "Can't be turned on yet"), "and says it can't be turned on yet")
@@ -67,9 +77,8 @@ Click("eSave")
 Check(P.Editing() == nil, "saved")
 local rule = MI.Rules()[1]
 Check(rule and rule.name == "Cloth to bank alt" and rule.enabled == false and rule.keep == 20, "saved turned off, keeping 20 of each")
-Check(Has(f, "^Name$") and Has(f, "^Items$") and Has(f, "^Action$") and Has(f, "^Where$") and Has(f, "^Keep$"), "the list is a table with column headings")
-Check(Has(f, "^Cloth") and Has(f, "^Mail$") and Has(f, "^20$"), "a row says what it matches, what it does and what it keeps")
-Check(Has(f, "^Bank alt$"), "and where it goes, until a recipient is chosen")
+Check(Has(f, "1%.  Cloth to bank alt") and Has(f, "For: Cloth") and Has(f, "Keep: 20 of each"), "a rule card says what it matches and what it keeps")
+Check(Has(f, "Send by mail .* Bank alt %(choose"), "the destination and missing configuration are visible without hover")
 local row1 = P.Control("tr1")
 row1.scripts.OnEnter(row1)
 local tipText = table.concat(TIP, "\n")
@@ -82,20 +91,24 @@ box.scripts.OnClick(box, "LeftButton"); Flush()
 Check(not MI.Rules()[1].enabled and Has(f, "Choose the recipient for \"Bank alt\" on this character"), "refused with the reason")
 
 -- the recipient, for this character only
+P.SetTask("destinations"); Flush()
 local rb = P.Control("dest1box")
 rb:SetText("bankalt")
 Click("dest1set")
 local where = MI.Resolve(rule.dest)
 Check(where and where.recipient == "Bankalt" and not where.shared, "the recipient is set here, in the game's capitalization")
 Check(Has(f, "now mails to Bankalt on this character"), "and the page says exactly who")
+P.SetTask("rules"); Flush()
 box = P.Control("rule1on")
 box.scripts.OnClick(box, "LeftButton"); Flush()
 Check(MI.Rules()[1].enabled, "now it can be turned on")
+P.SetTask("destinations"); Flush()
 rb = P.Control("dest1box"); rb:SetText("Bad Name")
 Click("dest1set")
 Check(MI.Resolve(rule.dest).recipient == "Bankalt" and Has(f, "only letters"), "a name that isn't one is refused and the old one kept")
 
 -- the Never transfer list through the bag chooser: kinds only, nothing moves
+P.SetTask("protected"); Flush()
 c.Bags({ [0] = { size = 16, slots = { [1] = { 2589, 20 }, [2] = { 2447, 5 } } } })
 Click("neverPick")
 Check(MI.Picker.IsShown(), "the bag chooser opens")
@@ -112,13 +125,16 @@ Check(P.ControlCount() == n, "no new controls after redrawing: " .. n .. " -> " 
 
 -- editing then cancelling changes nothing
 local before = MI.Rules()[1].name
+P.SetTask("rules"); Flush()
 Click("rule1edit")
+Check(not P.SetTask("destinations"), "a private editor requires Save or Cancel before changing tasks")
 P.Control("eName"):SetText("Something else")
 P.Control("eName").scripts.OnTextChanged(P.Control("eName"))
 Click("eCancel")
 Check(MI.Rules()[1].name == before, "Cancel keeps the rule as it was")
 
 -- delete asks first
+Click("rule1more")
 Click("rule1del")
 Check(c.POPUP and c.POPUP.text:find("Delete the rule \"Cloth to bank alt\"") and c.POPUP.text:find("nothing in your bags, bank or mail changes"), "deleting asks, saying what it changes")
 Check(#MI.Rules() == 1, "nothing deleted before the answer")
@@ -139,6 +155,7 @@ c.OpenGuildBank()
 c.GUILD.current = 2
 c.FireEvent("GUILDBANKBAGSLOTS_CHANGED")
 local gdest = MI.AddDest("guild", "Cloth tab")
+P.SetTask("destinations")
 Flush()
 local di
 for i, d in ipairs(MI.Dests()) do if d.id == gdest then di = i end end
@@ -190,7 +207,7 @@ Click("eCancel")
 do
   local wid = MI.SaveRule({ kind = "bank", name = "Keep 40 milk", enabled = false, cats = { "0:5" }, flow = "balance", keep = 40 })
   Flush()
-  Check(Has(f, "^Balance$") and Has(f, "^Bank$") and Has(f, "^40$"), "the table shows Balance, Bank and the target")
+  Check(Has(f, "Balance with bank") and Has(f, "Kept at 40 of each"), "the rule card shows balance and its target in words")
   MI.DeleteRule(wid)
   Flush()
 end
@@ -237,6 +254,7 @@ do
 end
 
 -- the guild bank arrangement editor has its own test (test_magic_inventory_editor.lua)
+P.SetTask("guild"); Flush()
 Check(Has(f, "Guild bank arrangement") and Has(f, "Editing is design only"), "the page leads with the arrangement and says editing is design only")
 Check(P.Control("gPreview") ~= nil, "and has one primary action, Preview changes")
 n = P.ControlCount()

@@ -847,8 +847,8 @@ do
   local plain = G.Dropdown(c.UIParent, 180)
   plain:SetChoices(b.choices)
   plain:OpenMenu()
-  Check(not menu.materialMode and not menu.materialBackground:IsShown(),
-    "ordinary dropdowns restore their own menu presentation")
+  Check(menu.materialMode and menu.materialBackground:IsShown(),
+    "ordinary Settings dropdowns share the same material menu presentation")
   local hooks = #menu.rows[1].hooks.OnEnter
   G.CloseMenu()
   b:OpenMenu()

@@ -114,6 +114,7 @@ DX.OPS = {
     ["settings.window.build"] = { module = "settings", label = "Settings window built (first open)", kind = "init", file = "TwichUI_Settings/Window.lua", where = "BuildWindow", every = "once, first open" },
     ["settings.page.build"] = { module = "settings", label = "A settings page drawn for the first time", kind = "build", file = "TwichUI_Settings/Window.lua", where = "BuildView", every = "once per page, first visit" },
     ["settings.page.layout"] = { module = "settings", label = "A settings page laid out", kind = "layout", visible = "settings.shown", file = "TwichUI_Settings/Window.lua", where = "Layout(view)", every = "per page shown or resized" },
+    ["settings.companion"] = { module = "settings", label = "A settings sample refreshed", kind = "layout", visible = "settings.shown", file = "TwichUI_Settings/Companion.lua", where = "Update(view)", every = "on a visible sample or preference change" },
     ["settings.search"] = { module = "settings", label = "Settings search results drawn", kind = "search", visible = "settings.shown", file = "TwichUI_Settings/Window.lua", where = "DrawResults", every = "per search typed" },
     ["settings.search.index"] = { module = "settings", label = "Settings search index built", kind = "rebuild", file = "TwichUI_Settings/Search.lua", where = "Search.Build", every = "once, first search" },
 }
@@ -180,6 +181,12 @@ local G = {
     { "core.settingsClosers", "Settings-closed callbacks", "listeners", "core", function() local L = R.SettingsLauncher return L and type(L.closers) == "table" and #L.closers or nil end },
     { "core.easing", "Window effects easing now", "state", "core", function() local M = R.Look and R.Look.Motion return M and M.Count and DX.Num(M.Count()) or nil end },
     { "settings.shown", "Settings window shown", "state", "settings", function() local UI = R.SettingsUI return Flag(UI ~= nil and UI.IsShown() or false) end },
+    { "settings.sampleScenes", "Settings sample renderers kept (maximum four)", "pool", "settings", function()
+        return R.SettingsCompanion and R.SettingsCompanion.SceneCount() or 0
+    end },
+    { "settings.sampleShown", "Settings sample shown", "state", "settings", function()
+        return Flag(R.SettingsCompanion ~= nil and R.SettingsCompanion.Active() ~= nil)
+    end },
     { "settings.pagesDrawn", "Settings pages drawn (kept until a reload)", "cache", "settings", function()
         local UI = R.SettingsUI
         if not (UI and UI.Stats) then return nil end

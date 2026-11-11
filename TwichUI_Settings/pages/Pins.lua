@@ -190,6 +190,7 @@ K.Page({
                 if R.MapPingView then R.MapPingView.Arm() end
             end, "Your next plain click on the world map, within a minute, pings your group. For when you would rather not hold keys. TwichUI doesn't open the map for you: open it, then click. Same as /tui ping."), pingToggle, PingsOn)
 
+            Header("Marker and sound", "Choose how long a marker stays and what you hear when a group member pings.")
             Under(K.Slider(PingRemember("pinsPingSeconds", NUMBER, "Ping shown for (seconds)", "seconds"), PG.LIMITS.seconds[1], PG.LIMITS.seconds[2],
                 "How long a ping stays on the map before it fades, in seconds. The rings play a few times in the first part; the marker and name stay until the fade."), pingToggle, PingsOn)
             Under(K.Checkbox(PingRemember("pinsPingReduced", BOOL, "Reduced motion for pings", "reducedMotion"),
@@ -214,6 +215,7 @@ K.Page({
             Under(Button("Hear the sound", "Play", function() if MP then MP.PlayChosen() end end,
                 "Plays the chosen ping sound now, at the volume you have chosen. Nothing is sent."), soundOn, PingSoundOn)
 
+            Header("Recent pings", "Keep a short, temporary list on the world map. Click an entry to see that place again.")
             Under(K.Checkbox(PingRemember("pinsPingList", BOOL, "Show the recent pings list", "list"),
                 "A short list at the top right of the world map, beside the game's own buttons, while it has something to show. Each entry names the player, the map and how long ago; click one to open its map and see the ping again. A ping on another map is marked Open map. It never opens the map by itself, and it is empty after a /reload or when you leave the group."), pingToggle, PingsOn)
             local function ListOn() return PingsOn() and PG.Get("list") end
@@ -222,6 +224,7 @@ K.Page({
             Under(K.Slider(PingRemember("pinsPingListMinutes", NUMBER, "Keep an entry for (minutes)", "listMinutes"), PG.LIMITS.listMinutes[1], PG.LIMITS.listMinutes[2],
                 "How long an entry stays in the list, counted from when it reached you. The list is never saved: it is gone after a /reload."), pingToggle, ListOn)
 
+            Header("Try and reset", "Try a local example on the real map. Nothing is sent to your group.")
             Under(Button("Test ping", "Test", function()
                 if not R.MapPingView then return end
                 local ok, text = R.MapPingView.Test()

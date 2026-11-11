@@ -171,19 +171,11 @@ end
 -- item.sel and item.hover are Groups (SetShown / SetAlpha); Window.lua drives them.
 local NAV_INSET = { 4, 1, 4, 1 }
 function M.NavItem(item)
-    local base = M.Slice(item, "raised", "BACKGROUND", 2, NAV_INSET)
-    local gold = M.Slice(item, "raised", "BACKGROUND", 3, NAV_INSET)
-    for _, t in ipairs(gold) do
-        t:SetBlendMode("ADD")
-        t:SetVertexColor(LEVEL.navGold[1], LEVEL.navGold[2], LEVEL.navGold[3], LEVEL.navGold[4])
-    end
-    local grain = M.Grain(item, "warm", LEVEL.navRow, LEVEL.cardTint, 4, NAV_INSET)
-    local parts = {}
-    for _, set in ipairs({ base, gold, grain }) do for _, p in ipairs(set) do parts[#parts + 1] = p end end
-    item.sel = Group(parts)
+    item.sel = R.SettingsCraft.Sheet(item, "selection", { layer = "BACKGROUND", sub = 2,
+        corner = 10, inset = NAV_INSET })
     item.sel:SetShown(false)
-    local soft = M.Slice(item, "raised", "BACKGROUND", 1, NAV_INSET)
-    item.hover = Group(soft)
+    item.hover = R.SettingsCraft.Sheet(item, "selection-hot", { layer = "BACKGROUND", sub = 1,
+        corner = 10, inset = NAV_INSET })
     item.hover:SetAlpha(0)
 end
 
@@ -231,9 +223,15 @@ end
 -- leather over it. `lines` is what Wg.Panel returned (its square inner shade lines, which would show at a rounded corner): they are put away,
 -- and so are the frame's own square fill and border.
 function M.Card(frame, lines)
+    if frame.twichSettingsPanel then return end
     for _, t in pairs(lines or {}) do t:Hide() end
     frame:SetBackdropColor(0, 0, 0, 0)
     frame:SetBackdropBorderColor(0, 0, 0, 0)
+    if R.SettingsDesign and not R.SettingsDesign.IsReference() then
+        -- SettingsWidgets.Panel already installed the canonical surface. Do not paint a second face/grain.
+        if not frame.twichSettingsPanel then frame.twichSettingsPanel = M.PanelFace(frame, "walnut") end
+        return
+    end
     M.Slice(frame, "raised", "BACKGROUND", 0)
     M.Grain(frame, "warm", LEVEL.card, LEVEL.cardTint, 1)
 end
@@ -611,7 +609,8 @@ end
 
 -- Rounded Reminders controls, opt-in: keep their existing scripts, labels and state handling.
 function M.ReminderControl(control, kind)
-    if not control or control.twichReminderMaterial then return end
+    if not control or (control.twichReminderMaterial and not control.twichSharedDefault) then return end
+    control.twichSharedDefault = nil
     control.twichReminderMaterial = true
     -- This adapter historically uses "primary" for quiet discovery actions; confirmation is the gold action.
     R.SettingsCraft.Control(control, kind == "primary" and "action" or kind)
@@ -681,7 +680,8 @@ function M.ReminderFont(text, size, ivory, role)
 end
 
 function M.Segment(parent, label, width, onClick)
-    local b = Wg.Button(parent, label, width, "secondary", onClick)
+    -- Choose the segment silhouette before any generic button adapter can claim the control.
+    local b = R.FrameLook.Button(parent, label, width, "secondary", onClick)
     M.ReminderControl(b, "segment")
     return b
 end
@@ -699,6 +699,25 @@ function M.Pill(parent, onToggle, small)
     thumb:SetSize(h - 4, h - 4)
     local checked, active, hot, down = false, true, false, false
     local function Paint()
+        -- Dense tables retain their small square hit regions. A checkmark is clearer than squeezing a pill.
+        local width = tonumber(b:GetWidth()) or w
+        local dense = width < 26
+        track:SetShown(not dense); thumb:SetShown(not dense)
+        if dense and not b.denseFace then
+            b.denseFace = R.SettingsCraft.Sheet(b, "field", { layer = "ARTWORK", sub = 2, corner = 4 })
+            b.denseMark = b:CreateTexture(nil, "OVERLAY")
+            b.denseMark:SetTexture("Interface\\Buttons\\UI-CheckBox-Check")
+            b.denseMark:SetPoint("TOPLEFT", 1, -1); b.denseMark:SetPoint("BOTTOMRIGHT", -1, 1)
+        end
+        if b.denseFace then
+            b.denseFace:SetShown(dense)
+            b.denseMark:SetShown(dense and checked)
+        end
+        if dense then
+            b.denseFace:SetSkin(not active and "field-off" or hot and "field-hot" or "field")
+            b.denseMark:SetVertexColor(.99, .93, .81, active and 1 or .5)
+            return
+        end
         local c = checked and { 0.93, 0.69, 0.36 } or { 0.55, 0.49, 0.43 }
         local light = down and 0.77 or (hot and 1 or 0.86)
         track:SetVertexColor(c[1] * light, c[2] * light, c[3] * light, active and 1 or 0.62)
@@ -715,6 +734,7 @@ function M.Pill(parent, onToggle, small)
     b:HookScript("OnLeave", function() down = false; b:SetHot(false) end)
     b:HookScript("OnMouseDown", function() down = active; Paint() end)
     b:HookScript("OnMouseUp", function() down = false; Paint() end)
+    b:HookScript("OnSizeChanged", Paint)
     b:SetScript("OnClick", function() if active and onToggle then onToggle(not checked) end end)
     Paint()
     return b

@@ -141,6 +141,7 @@ uses an item, sends anything or makes up events. Each states its cost before you
 | `settings.describe`, `settings.window.build` (`Perf.Call`) | `TwichUI_Settings/Window.lua` `UI.Open` | init |
 | `settings.page.build` (`Perf.Call`), `settings.page.layout`, `settings.search` | `TwichUI_Settings/Window.lua` | build, layout, search |
 | `settings.search.index` | `TwichUI_Settings/Search.lua` `Search.Build` | rebuild |
+| `settings.companion` | `TwichUI_Settings/Companion.lua` `Update`, only for an active settings page; gauges `settings.sampleScenes` (maximum four) and `settings.sampleShown` read state without building/loading | layout |
 | `npcs.minimap.tick`, `pins.minimap.tick` (`Perf.Call`, after the throttle) | `npcs/Minimap.lua`, `pins/Minimap.lua` `Update` > `Step` | update |
 | `nav.search`, `nav.position`, `nav.progress`, `nav.ticker` (`Perf.Call`) | `nav/Nav.lua` `OnUpdate` (`nav.ticker`: each trail or arrow updater) | update |
 | `nav.load` (`Perf.Call`) | `nav/Data.lua` `ND.Load`, around `C_AddOns.LoadAddOn` of `TwichUI_NavData` | init |

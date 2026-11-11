@@ -74,7 +74,9 @@ K.Page({
             for _, o in ipairs(group.objects) do
                 if not seen[o.name] then seen[o.name] = true; names[#names + 1] = o.name end
             end
-            K.Accent(Header(group.name, "Camp objects " .. group.name .. " makes: " .. table.concat(names, ", ") .. ". Turn the profession off to leave all of them off the bar, or pick the ones you want."),
+            local section = Header(group.name, "Camp objects " .. group.name .. " makes: " .. table.concat(names, ", ") .. ". Turn the profession off to leave all of them off the bar, or pick the ones you want.")
+            section.settingsSecondary = true
+            K.Accent(section,
                 look.icon, look.color)
             local row = Check("campingGroup_" .. key, "grp_" .. key, "Show " .. group.name .. " objects",
                 "Off hides every " .. group.name .. " camp object from the bar, whether you hold it or only know the recipe.")

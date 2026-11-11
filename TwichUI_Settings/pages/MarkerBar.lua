@@ -14,7 +14,7 @@ R.MarkerBarPage = P
 
 local W = 644                     -- the settings window's content width
 local TILE_W, TILE_H, GAP = 72, 88, 6
-local HOST_H = 108
+local HOST_H = 126
 
 local function Wg() return R.SettingsWidgets end
 local function InCombat() return InCombatLockdown and InCombatLockdown() end
@@ -36,9 +36,9 @@ local function Refresh()
         t.icon:SetDesaturated(not on)
         t.icon:SetAlpha(on and 1 or 0.45)
         G.Color(t.name, on and pal.text or pal.stone)
-        local fill, edge = on and pal.surface or pal.well, on and pal.teal or pal.bronzeLo
-        t:SetBackdropColor(fill[1], fill[2], fill[3], on and 0.95 or 0.9)
-        t:SetBackdropBorderColor(edge[1], edge[2], edge[3], on and 0.7 or 0.5)
+        t:SetBackdropColor(0, 0, 0, 0)
+        t:SetBackdropBorderColor(0, 0, 0, 0)
+        t.materialFace:SetAlpha(on and 1 or .55)
         t.state:SetText(on and "" or "Not on the bar")
         t.cycle:SetText(M.IsOn("target", id) and "" or "Skipped in cycle")
     end
@@ -51,12 +51,15 @@ local function Build()
     f.about = G.Text(f, "small")
     f.about:SetPoint("TOPLEFT", 4, -2)
     f.about:SetWidth(W - 8)
-    f.about:SetText("They come in the order of your target-marker cycle (the Target markers tab). A marker skipped in the cycle can still be on the bar, and the other way round.")
+    f.about:SetText("Choose which markers appear. Order follows your Target markers cycle.")
+    I.Tip(f, "Markers on the bar", "A marker skipped in the target cycle can still appear on this bar. Changing the bar does not change your cycle.")
     for id = 1, M.COUNT do
         local t = CreateFrame("Button", nil, f, "BackdropTemplate")
         t:SetSize(TILE_W, TILE_H)
         t:SetPoint("TOPLEFT", 4 + (id - 1) * (TILE_W + GAP), -26)
         G.Surface(t, pal.surface, 0.95, pal.bronzeLo, 0.5)
+        t.materialFace = R.SettingsMaterial.PanelFace(t, "card")
+        R.SettingsMaterial.MaterialHover(t)
         t.icon = t:CreateTexture(nil, "ARTWORK")
         t.icon:SetSize(30, 30)
         t.icon:SetPoint("TOP", 0, -8)

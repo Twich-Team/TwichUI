@@ -312,7 +312,11 @@ function Cards.Layout(view, sec, inner, env)
         sec.detailsButton:SetOpen(detailsOpen and true or false, "More about this", "Less about this")
         sec.detailsButton:ClearAllPoints()
         if def.compact then
-            sec.detailsButton:SetPoint("TOPRIGHT", head, "TOPRIGHT", -112, -2)
+            if sec.help then
+                sec.detailsButton:SetPoint("TOPRIGHT", sec.help, "TOPLEFT", -8, -2)
+            else
+                sec.detailsButton:SetPoint("TOPRIGHT", head, "TOPRIGHT", -112, -2)
+            end
         else
             sec.detailsButton:SetPoint("TOPLEFT", card, "TOPLEFT", x, -(inner + 2))
             any = true

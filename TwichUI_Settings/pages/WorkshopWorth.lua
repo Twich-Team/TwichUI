@@ -62,6 +62,11 @@ local function Tip(frame, title, text)
 end
 
 local function Toggle(parent, label, w, onClick)
+    if R.SettingsMaterial then
+        local b = R.SettingsMaterial.Segment(parent, label, w, onClick)
+        b.SetOn = b.SetSelected
+        return b
+    end
     local F = R.FrameLook
     if F and F.Ready() then return F.Toggle(parent, label, w, onClick) end
     return R.ChronicleStyle.Toggle(parent, label, w, onClick, Wg().pal)
@@ -428,7 +433,8 @@ local function BuildList(L)
     for i, t in ipairs(L.TYPES) do
         local b = CreateFrame("Button", nil, f, "BackdropTemplate")
         b:SetSize(LIST_W, 28)
-        G.Surface(b, pal.well, 1, pal.control, 0.9)
+        G.Well(b)
+        if R.SettingsMaterial then R.SettingsMaterial.MaterialHover(b) end
         At(b, 4, TOP + 22 + (i - 1) * 32)
         b.label = G.Text(b, "body")
         b.label:SetPoint("LEFT", 10, 0)
@@ -446,7 +452,7 @@ local function BuildList(L)
         b:SetScript("OnDragStart", function(self) if not self.added then D.StartDrag({ kind = "list", id = self.id }) end end)
         b:SetScript("OnDragStop", function() local Dr = DragKit() if Dr then Dr.Stop() end end)
         b:HookScript("OnEnter", function(self)
-            self:SetBackdropColor(pal.hoverFill[1], pal.hoverFill[2], pal.hoverFill[3], 1)
+            if not R.SettingsMaterial then self:SetBackdropColor(pal.hoverFill[1], pal.hoverFill[2], pal.hoverFill[3], 1) end
             if not GameTooltip then return end
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
             GameTooltip:SetText(t.label, 1, 1, 1)
@@ -455,7 +461,7 @@ local function BuildList(L)
             GameTooltip:Show()
         end)
         b:HookScript("OnLeave", function(self)
-            self:SetBackdropColor(pal.well[1], pal.well[2], pal.well[3], 1)
+            if not R.SettingsMaterial then self:SetBackdropColor(pal.well[1], pal.well[2], pal.well[3], 1) end
             if GameTooltip then GameTooltip:Hide() end
         end)
         listButtons[i] = b
@@ -575,7 +581,7 @@ function D.Build()
     At(f.enable, 4, 4)
     f.enableText = Add(G.Text(f, "body"))
     f.enableText:SetText("Enable tooltip")
-    At(f.enableText, 30, 6)
+    f.enableText:SetPoint("LEFT", f.enable, "RIGHT", 8, 0)
     Tip(f.enable, "Enable tooltip", "Off: items show no \"What's it worth?\" section. Your layout is kept either way.")
     f.reset = Add(G.Button(f, "Reset layout", 112, "secondary", function() D.ResetLayout() end))
     At(f.reset, W - 112, 0)

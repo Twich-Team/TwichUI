@@ -1,11 +1,20 @@
 # Settings window: structure and conventions
 
+Current workflow review: [second-pass matrix and evidence](settings-second-pass.md). Shared presentation and isolated samples:
+[design-system reference](settings-design-system.md). Preserve the full setting models when reorganizing long forms into tasks.
+
 For anyone adding or changing a TwichUI setting. TwichUI's settings live in a window of its own (`/tui options`).
 Esc > Options > AddOns > TwichUI is a single page with one button, **Open TwichUI Settings**, that opens that window;
 it holds no settings. Workflows with lists, previews or confirmations (sharing, backups, saved data, the pin window,
 the troubleshooting report) stay in their own windows and are linked from the settings.
 
 Nothing here has been checked in the game yet; see "In-game checklist".
+
+The 2026-11-11 settings rollout is tracked in [settings-modernization.md](settings-modernization.md), with the
+[complete control inventory](settings-modernization-inventory.md) and [shared design system](settings-design-system.md).
+Those documents supersede the historical appearance details below: all pages now use fixed headings and the painted
+leather/bronze family. Home has a featured collection, local feature search and a complete catalog; the sidebar has
+reference shortcuts plus All features. Home's grid uses two to three columns. Settings bindings and defaults are unchanged.
 
 ## Two addons
 
@@ -56,6 +65,7 @@ claimed; see "Measuring".
 | `Look.lua` (core) | The look TwichUI's own windows share: the palette, `Look.Text`, `Look.Surface`, `Look.Button`, `Look.Checkbox`, `Look.EditBox`, and the depth: `Look.Frame` / `Look.Header` (rim, corner brackets, tonal layers), `Look.Raise` (buttons), `Look.Recess` (inputs, checkbox, nav well), `Look.Panel` (section cards), `Look.Tag`, `Look.Fade` (a gradient that falls back to a flat fill), `Look.Motion`. The sharing window (`setup/Window.lua`) draws with it too |
 | `FrameLook.lua` (core) | The framed look the settings window's outer shell, its close box and every `Wg.Button` are drawn with (and the other standalone windows listed in `docs/dev-rules.md`): `R.FrameLook.Shell`, `Button`, `Close`, `Toggle`. The cards, wells, fields, tabs and scroll bars inside stay `Look.lua`'s |
 | `TwichUI_Settings/Widgets.lua` | The shared look as `Wg.*` (`Wg.Button` is the framed look's; the rest is `Look.lua`'s), plus the controls only this window needs: slider, dropdown and its list, color swatch, the scrolling content area |
+| `TwichUI_Settings/Design.lua` | Settings-local material adapters, player-task introductions, curated consequence summaries and per-page secondary disclosures. Core Look and gameplay surfaces are unaffected. |
 | `TwichUI_Settings/Previews.lua` | Sample previews: `P.Register`, `P.Host` (create, Play, Reset, Stop, Release), `P.StopAll`, and inert drawing pieces (`P.Popup`, `P.FakeButton`, `P.Portrait`) |
 | `TwichUI_Settings/previews/QoL.lua` | Quality of life's samples: summon, resurrection, battleground release, duel request, the Quick Keybind button's place |
 | `TwichUI_Settings/Cards.lua` | Feature cards: the head (icon, title, sentence, switch with On/Off), rules line, what to know, Adjust rules, More about this, Play sample |

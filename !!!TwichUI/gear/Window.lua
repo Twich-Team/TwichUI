@@ -23,7 +23,10 @@ local ACCENT = { 0.79, 0.64, 0.29 }
 local INK = { 0.93, 0.88, 0.76 }   -- the settings window's text
 
 local function Text(parent, template)
-    local fs = parent:CreateFontString(nil, "OVERLAY", template or "GameFontHighlight")
+    local widgets = R.SettingsWidgets
+    local kind = template and template:find("Small", 1, true) and "small" or template == "GameFontNormal" and "heading" or "body"
+    local fs = widgets and widgets.Text and widgets.Text(parent, kind)
+        or parent:CreateFontString(nil, "OVERLAY", template or "GameFontHighlight")
     fs:SetJustifyH("LEFT")
     if template == nil or template == "GameFontHighlight" then fs:SetTextColor(INK[1], INK[2], INK[3]) end
     return fs
@@ -170,7 +173,7 @@ local function Panel(p, y)
     local box = CreateFrame("Frame", nil, p, "BackdropTemplate")
     box:SetPoint("TOPLEFT", 0, y)
     box:SetPoint("BOTTOMRIGHT", 0, 6)
-    Wg.Surface(box, Wg.pal.well, 0.9, Wg.pal.bronzeLo, 0.8)
+    Wg.Well(box)
     return box
 end
 

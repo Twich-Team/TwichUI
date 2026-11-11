@@ -28,6 +28,14 @@ function C.Sheet(host, skin, opts)
             texture:SetTexCoord(uvx[col], uvx[col + 1], uvy[row], uvy[row + 1])
             texture:SetPoint("TOPLEFT", host, y[row][1] .. x[col][1], x[col][2], y[row][2])
             texture:SetPoint("BOTTOMRIGHT", host, y[row + 1][1] .. x[col + 1][1], x[col + 1][2], y[row + 1][2])
+            if opts.bounds then
+                local b = opts.bounds
+                local bx = { b[1], b[1] + corner, b[3] - corner, b[3] }
+                local by = { b[2], b[2] - corner, b[4] + corner, b[4] }
+                texture:ClearAllPoints()
+                texture:SetPoint("TOPLEFT", host, "TOPLEFT", bx[col], by[row])
+                texture:SetPoint("BOTTOMRIGHT", host, "TOPLEFT", bx[col + 1], by[row + 1])
+            end
             group.parts[#group.parts + 1] = texture
         end
     end
@@ -59,7 +67,10 @@ function C.LegacyRails(shell, shown)
 end
 
 function C.Control(control, kind, when)
-    if control.twichCraft then return control.twichCraft end
+    if control.twichCraft then
+        if control.twichCraft.Retype then control.twichCraft.Retype(kind) end
+        return control.twichCraft
+    end
     local field = kind == "field" or kind == "dropdown" or kind == "drop" or kind == "target"
     local primary = kind == "primary" or kind == "confirmation"
     local danger = kind == "danger"
@@ -137,6 +148,8 @@ function C.Control(control, kind, when)
                 control.text:SetPoint("LEFT", 10, 0)
                 control.text:SetPoint("RIGHT", -26, 0)
                 control.text:SetJustifyH("LEFT")
+            elseif kind ~= "dropdown" then
+                control.text:SetWidth(math.max(16, control:GetWidth() - 12))
             end
         end
     end
@@ -156,6 +169,16 @@ function C.Control(control, kind, when)
         function control:SetSelected(value) self.twichSelected = value; Paint() end
     end
     sheet.Refresh = Paint
+    -- Settings defaults may be refined by an explicit action role (for example Save or Delete).
+    -- These roles share the button silhouette and reuse its textures and listeners.
+    function sheet.Retype(role)
+        if field or selectedFamily or kind == "chip" or kind == "target" then return end
+        if role == "field" or role == "dropdown" or role == "segment" or role == "chip" or role == "target" then return end
+        kind = role
+        primary = role == "primary" or role == "confirmation"
+        danger = role == "danger"
+        Paint()
+    end
     Paint()
     if control.text and type(control.text) ~= "string" and kind ~= "dropdown" then
         control.text:SetWidth(math.max(16, control:GetWidth() - 12))
