@@ -703,6 +703,17 @@ do
   Check(Hidden({ text = SPAM, zone = 26, index = 4, base = "LookingForGroup" }) == true, "and it is cleaned at once")
   fc:Hide()
 
+  -- A paused saved channel remains discoverable after leaving it.
+  CC.SetChannel("custom:paused", "on", true, "Paused community")
+  CC.SetChannel("custom:paused", "on", false, "Paused community")
+  fc:Show(); PC.Refresh()
+  local paused
+  for _, row in ipairs(fc.content.children) do
+    if row.ch and row.ch.key == "custom:paused" and row.shown then paused = row end
+  end
+  Check(paused and not paused.clean:GetChecked() and paused.status.text:find("Not joined", 1, true), "paused unjoined choice remains editable")
+  fc:Hide()
+
   -- the tester on the live tab
   local PL = R.ChatCleanLivePage
   local result, say = PL.Test("cheap gold at www.g4mer.com 10% off")

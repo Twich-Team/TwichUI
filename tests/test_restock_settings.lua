@@ -231,7 +231,7 @@ f.idBox:SetText("17020")
 f.idBox:Fire("OnEnterPressed")
 local list = RS.Rules()
 Check(#list == 1 and list[1].id == 17020 and list[1].target == 20 and list[1].enabled, "added on, with the default target")
-Check(f.idBox.text == "" and P.lastSaid:find("Added Arcane Powder"), "the box is cleared and it says what was added")
+Check(f.idBox.text == "" and P.lastSaid:find("Item added"), "the box is cleared and it says what was added")
 Flush()
 -- a list row: the scroll child's child showing that item
 local function RowFor(id)

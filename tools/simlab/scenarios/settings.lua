@@ -19,6 +19,40 @@ if params.integration and (key == "speakstone" or key == "restedxp") then
             switchOn = available, conflict = false }
     end
 end
+if params.data and (key == "ammoCustom" or key == "restockItems") then
+    local name, info = C_Item.GetItemNameByID, C_Item.GetItemInfo
+    local function Fixture(id)
+        if id == 2512 or (id >= 2513 and id <= 2520) or (id >= 17020 and id <= 17028) then
+            if params.data == "unavailable" then return nil end
+            return "Expedition supplies with an exceptionally long descriptive item name " .. id
+        end
+        return name and name(id)
+    end
+    C_Item.GetItemNameByID = Fixture
+    C_Item.GetItemInfo = function(id)
+        if (id >= 2512 and id <= 2520) or (id >= 17020 and id <= 17028) then return Fixture(id) end
+        return info(id)
+    end
+    if key == "restockItems" then
+        R.Restock.ScanBags = function(wanted)
+            local counts, unknown = {}, {}
+            for id in pairs(wanted) do counts[id] = 7; if params.data == "unavailable" or params.data == "inventory" then unknown[id] = true end end
+            return { counts = counts, unknown = unknown }
+        end
+    end
+end
+if key == "chatCleanChannels" and params.data then
+    R.ChatClean.KnownChannels = function()
+        local list = {}
+        for i = 1, 6 do
+            local id = i == 1 and "zone:2" or "custom:fixture" .. i
+            list[i] = { key = id, label = "Expedition community channel with a long descriptive name " .. i,
+                joined = i % 2 == 1, number = i, kind = "custom",
+                choice = R.ChatClean.Channels()[id] or { on = false } }
+        end
+        return list
+    end
+end
 Lab.Step("open", function()
     Lab.Check("init", "open settings", true, Lab.Open(key))
     local K, UI = R.SettingsKit, R.SettingsUI
@@ -206,7 +240,7 @@ if key == "ammoCustom" or key == "restockItems" or key == "chatCleanChannels" th
             for id = 2513, 2520 do R.AmmoItems.Add(id, "arrow") end
             page.Refresh(); Lab.Settle(.2)
             Lab.Check("state", "long ammunition list scrolls", true, frame.scroll:GetVerticalScrollRange() > 0)
-            for id = 2513, 2520 do R.AmmoItems.Remove(id) end
+            if params.data ~= "stress" then for id = 2513, 2520 do R.AmmoItems.Remove(id) end end
             if not params.filled then R.AmmoItems.Remove(2512); page.Say("") end
         elseif key == "restockItems" then
             local ok = page.AddFromText("17020")
@@ -222,11 +256,17 @@ if key == "ammoCustom" or key == "restockItems" or key == "chatCleanChannels" th
                 end
             end
             Lab.Check("state", "target saved", 45, R.Restock.Rule(17020).target)
+            for _, row in ipairs({ frame.content:GetChildren() }) do
+                if row.id == 17020 and row.target then
+                    row.target:SetFocus(); row.target:SetText("0"); row.target:ClearFocus()
+                    Lab.Check("interact", "invalid field restored", "45", row.target:GetText())
+                end
+            end
             Lab.Check("state", "invalid target refused", false, R.Restock.SetTarget(17020, 0))
             for id = 17021, 17028 do R.Restock.Add(id) end
             page.Refresh(); Lab.Settle(.2)
             Lab.Check("state", "long restock list scrolls", true, frame.scroll:GetVerticalScrollRange() > 0)
-            for id = 17021, 17028 do R.Restock.Remove(id) end
+            if params.data ~= "stress" then for id = 17021, 17028 do R.Restock.Remove(id) end end
             if not params.filled then R.Restock.Remove(17020); page.Say("") end
         else
             local known = R.ChatClean.KnownChannels
@@ -254,10 +294,18 @@ if key == "ammoCustom" or key == "restockItems" or key == "chatCleanChannels" th
             end
             page.Refresh(); Lab.Settle(.2)
             Lab.Check("state", "long channel list scrolls", true, frame.scroll:GetVerticalScrollRange() > 0)
-            R.ChatClean.KnownChannels = known
+            R.ChatClean.KnownChannels = params.data == "empty" and function() return {} end or known
             page.Refresh()
         end
         Lab.Settle(.3)
+        for _, row in ipairs({ frame.content:GetChildren() }) do
+            if params.data == "inventory" and key == "restockItems" and row.id == 17020 then
+                Lab.Check("state", "unknown inventory never shown as zero", true, row.status:GetText():find("Couldn't count", 1, true) ~= nil)
+            end
+            if row.name and row.status and row:IsShown() then
+                Lab.Check("construct", "name clears status", true, row.name:GetBottom() >= row.status:GetTop())
+            end
+        end
         frame.scroll:SetVerticalScroll(frame.scroll:GetVerticalScrollRange() or 0)
         Lab.Check("interact", "scroll remains in range", true, (frame.scroll:GetVerticalScroll() or 0) >= 0)
         frame.scroll:SetVerticalScroll(0)

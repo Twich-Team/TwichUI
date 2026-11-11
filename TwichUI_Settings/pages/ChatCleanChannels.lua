@@ -12,7 +12,7 @@ local P = {}
 R.ChatCleanChannelsPage = P
 
 local W = 644                  -- the settings window's content width
-local ROW_H, VISIBLE = 104, 3
+local ROW_H, VISIBLE = 120, 3
 local LIST_TOP = -66
 local LIST_H = ROW_H * VISIBLE + 8
 local LIST_W = W - 12 - 26
@@ -58,9 +58,10 @@ local function Row(i)
     row.name = G.Text(row, "body")
     row.name:SetPoint("TOPLEFT", 8, -4)
     row.name:SetWidth(NAME_W)
-    row.name:SetWordWrap(false)
+    row.name:SetWordWrap(true)
+    row.name:SetHeight(30)
     row.status = G.Text(row, "meta")
-    row.status:SetPoint("TOPLEFT", 8, -20)
+    row.status:SetPoint("TOPLEFT", 8, -36)
     row.status:SetWidth(NAME_W)
     row.status:SetWordWrap(false)
 
@@ -75,7 +76,7 @@ local function Row(i)
     row.cats = {}
     for i, c in ipairs(CC().CATEGORIES) do
         local box = G.Checkbox(row, function(on) Set(row, c.key, on) end)
-        box:SetPoint("TOPLEFT", 8 + ((i - 1) % 3) * 195, -42 - math.floor((i - 1) / 3) * 27)
+        box:SetPoint("TOPLEFT", 8 + ((i - 1) % 3) * 195, -58 - math.floor((i - 1) / 3) * 27)
         local label = G.Text(row, "small")
         label:SetPoint("LEFT", box, "RIGHT", 5, 0)
         label:SetText(c.label)
@@ -85,6 +86,10 @@ local function Row(i)
         end)
         row.cats[c.key] = box
     end
+    local divider = G.Solid(row, "BACKGROUND", pal.bronzeLo, 0.5)
+    divider:SetPoint("BOTTOMLEFT", 8, 1)
+    divider:SetPoint("BOTTOMRIGHT", -8, 1)
+    divider:SetHeight(1)
     row.rules = G.Text(row, "meta")
     row.rules:SetPoint("TOPLEFT", 480, -28)
     row.rules:SetWidth(LIST_W - 484)
@@ -107,9 +112,9 @@ function P.Refresh()
     local G = Wg()
     local pal = G.pal
     local list, rules = {}, CC().Rules()
-    -- channels you aren't in are listed only while they are cleaned (their choice is kept either way)
+    -- Keep saved channels discoverable even when cleaning is paused or the channel is not joined.
     for _, ch in ipairs(CC().KnownChannels()) do
-        if ch.joined or (ch.choice and ch.choice.on) then list[#list + 1] = ch end
+        list[#list + 1] = ch
     end
     for i, ch in ipairs(list) do
         local row = Row(i)

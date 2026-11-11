@@ -13,7 +13,7 @@ local P = {}
 R.AmmoItemsPage = P
 
 local W = 644                  -- the settings window's content width
-local ROW_H, VISIBLE = 42, 6
+local ROW_H, VISIBLE = 56, 5
 local HELP_H = 62
 local ADD_TOP = -(HELP_H + 4)
 local LIST_TOP = ADD_TOP - 60 - 40
@@ -111,7 +111,7 @@ local function Added(id, how, kind)
     if how == "exists" then
         P.Say(("%s is already registered, so nothing was changed. Here it is."):format(name), "ok")
     else
-        P.Say(("Registered %s as %s. Nothing in your bags or equipment was touched."):format(name, R.AmmoItems.KindLabel(kind):lower()), "ok")
+        P.Say(("Registered as %s. Nothing in your bags or equipment was touched."):format(R.AmmoItems.KindLabel(kind):lower()), "ok")
     end
     P.Refresh()
     P.Focus(id)
@@ -178,8 +178,7 @@ local function Row(i)
     local row = CreateFrame("Button", nil, f.content)
     row:SetSize(LIST_W, ROW_H)
     row:SetPoint("TOPLEFT", 0, -(i - 1) * ROW_H)
-    row.bg = G.Solid(row, "BACKGROUND", pal.text, (i % 2 == 0) and 0.035 or 0)
-    row.bg:SetAllPoints()
+
     row.flash = G.Solid(row, "BACKGROUND", pal.teal, 0.22)
     row.flash:SetAllPoints()
     row.flashFade = G.Motion.Fader(function(a) row.flash:SetAlpha(a) end, 0)
@@ -190,14 +189,15 @@ local function Row(i)
     row.name = G.Text(row, "body")
     row.name:SetPoint("TOPLEFT", 38, -7)
     row.name:SetWidth(NAME_W)
-    row.name:SetWordWrap(false)
+    row.name:SetWordWrap(true)
+    row.name:SetHeight(30)
     row.status = G.Text(row, "meta")
-    row.status:SetPoint("TOPLEFT", 38, -23)
+    row.status:SetPoint("TOPLEFT", 38, -39)
     row.status:SetWidth(NAME_W)
     row.status:SetWordWrap(false)
     row:SetScript("OnEnter", function(self)
         if not self.id then return end
-        ItemTip(self, self.id, { self.status:GetText() })
+        ItemTip(self, self.id, { self.name:GetText(), self.status:GetText() })
     end)
     row:SetScript("OnLeave", function(self) I.HideTip(self) end)
     row:SetScript("OnHide", function(self) I.HideTip(self) end)
