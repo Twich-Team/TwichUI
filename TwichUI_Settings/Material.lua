@@ -626,7 +626,28 @@ function M.ReminderControl(control, kind)
 end
 
 -- A local help surface for opt-in material controls. It does not alter the game's tooltip.
+-- It sits at the mouse pointer and follows it while shown (only when the pointer moves; nothing runs while hidden). The
+-- pointer is read in screen pixels, so neither a scrolled list nor the workspace's scale can move it away from the mouse.
 local help
+local TIP_DX, TIP_DY = 16, 14   -- from the pointer's tip, in the help's own units
+
+local function FollowCursor(force)
+    if not help then return end
+    local x, y = GetCursorPosition()
+    if not (x and y) then return end
+    if not force and x == help.cursorX and y == help.cursorY then return end
+    help.cursorX, help.cursorY = x, y
+    local s = help:GetEffectiveScale()
+    local screenTop = UIParent:GetHeight() * UIParent:GetEffectiveScale()
+    help:ClearAllPoints()
+    if y + (help:GetHeight() + TIP_DY + 4) * s > screenTop then
+        -- no room above the pointer: just below it, clear of the pointer's own arrow
+        help:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", x / s + TIP_DX, y / s - TIP_DY - 10)
+    else
+        help:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", x / s + TIP_DX, y / s + TIP_DY)
+    end
+end
+
 function M.ContextTip(owner, title, body)
     owner:HookScript("OnEnter", function()
         if not help then
@@ -642,6 +663,7 @@ function M.ContextTip(owner, title, body)
             help.body = M.ReminderFont(Wg.Text(help, "body"), 13)
             help.body:SetPoint("TOPLEFT", 12, -31)
             help.body:SetWidth(222)
+            help:SetScript("OnUpdate", function() FollowCursor(false) end)
         end
         help.owner = owner
         help:SetScale(owner:GetEffectiveScale() / UIParent:GetEffectiveScale())
@@ -650,12 +672,7 @@ function M.ContextTip(owner, title, body)
         if type(body) == "function" then bodyText, extra = body(owner) end
         help.body:SetText((bodyText or "") .. (extra and "\n" .. extra or ""))
         help:SetHeight(43 + help.body:GetStringHeight())
-        help:ClearAllPoints()
-        local _, right, _, top = Wg.VisibleRect(owner)
-        if right and top then
-            local ratio = owner:GetEffectiveScale() / help:GetEffectiveScale()
-            help:SetPoint("BOTTOMRIGHT", UIParent, "BOTTOMLEFT", right * ratio, top * ratio + 8)
-        else help:SetPoint("BOTTOMRIGHT", owner, "TOPRIGHT", 0, 8) end
+        FollowCursor(true)
         help:Show()
     end)
     local function Hide()

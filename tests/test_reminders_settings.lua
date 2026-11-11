@@ -819,8 +819,24 @@ do
     owner:Fire("OnEnter")
     local tip
     for _, child in ipairs(c.UIParent.children) do if child.owner == owner and child.body then tip = child end end
-    Check(tip and math.abs(tip.scale * 0.8 - scale) < 0.01 and tip.points[1][2] == owner,
-      "context help anchors to its owner at the same effective scale")
+    -- (the fake UIParent's effective scale is 0.8; GetCursorPosition answers 240, 360 screen pixels)
+    -- a child of UIParent: its effective scale is its own scale times UIParent's (the fake doesn't multiply by itself)
+    if tip then
+      tip.GetEffectiveScale = function(self) return (self.scale or 1) * 0.8 end
+      owner:Fire("OnLeave"); owner:Fire("OnEnter")
+    end
+    local p = tip and tip.points[#tip.points]
+    local ts = tip and tip.scale * 0.8
+    Check(tip and math.abs(ts - scale) < 0.01, "context help is drawn at the owner's effective scale")
+    Check(p and p[1] == "BOTTOMLEFT" and p[2] == c.UIParent and math.abs((p[4] - 16) * ts - 240) < 0.01
+      and math.abs((p[5] - 14) * ts - 360) < 0.01, "context help sits at the mouse pointer, whatever the owner's position or scroll")
+    c.GetCursorPosition = function() return 300, 380 end
+    tip.scripts.OnUpdate(tip)
+    p = tip.points[#tip.points]
+    Check(p and math.abs((p[4] - 16) * ts - 300) < 0.01, "and follows the pointer while shown")
+    local count = #tip.points
+    tip.scripts.OnUpdate(tip)
+    Check(#tip.points == count, "a frame with no pointer movement moves nothing")
     owner:Fire("OnLeave")
   end
   c.UIParent.GetEffectiveScale, c.GetCursorPosition = originalScale, originalCursor
