@@ -58,6 +58,7 @@ do
   assert(near(VM.FitScale(1000, 600, 1000, 600), 1), "same shape")
   assert(near(VM.FitScale(800, 400, 1000, 600), 2 / 3), "the height ratio is smaller")
   assert(near(VM.FitScale(600, 400, 1000, 500), 0.6), "the width ratio is smaller")
+  assert(near(VM.FitScale(1200, 400, 800, 400), 1), "the width ratio is smaller when the window is wider")
 end
 
 print("MAP VIEWMATH VIEW PASSED")
