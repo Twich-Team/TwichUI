@@ -41,6 +41,8 @@ button or reference screenshot. Ordinary UI text is always native text, never em
 | Navigation selection | `Material.NavItem(button)`; `.sel:SetShown`, `.hover:SetAlpha` |
 | Reminder / context selection | `Material.ReminderRow(row)` and `Material.MenuStyle(menu, true)` |
 | Tabs / segments | `Material.Segment(parent, label, width, callback)`; `:SetSelected(boolean)` |
+| Picture tiles / choice cards | `Material.Segment` at a larger size with a picture on it: the selected state is the antique-gold selection skin, hover and pressed come with it (Reminders' display modes and image picker) |
+| Picker companion | A `Material.Companion` frame placed with `RemindersPreview.Place`, search field with `Material.SearchDecoration`, a `Segment` category list, a `Scroll` grid with `ScrollRail`; Apply is the gold action, Cancel and Esc discard (`RemindersImagePicker.lua`) |
 | Switch | `SettingsWidgets.Checkbox(parent, callback)` uses `Material.Pill`; `SetChecked`, `SetActive`, `SetHot` |
 | Dropdown / context menu | `SettingsWidgets.Dropdown`; existing bounded shared menu, keyboard / close behavior |
 | Numeric slider | `SettingsWidgets.Slider`; typed value, bounds, disabled behavior and native slider remain authoritative |

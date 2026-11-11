@@ -229,4 +229,32 @@ local gone = Make({ mode = "artwork", art = "reminder-not-in-this-version" })
 local e, source, name = G.Current(D(gone))
 Check(e == nil and source == "art" and name == "Artwork unavailable" and D(gone).art == "reminder-not-in-this-version", "unknown artwork keeps its id and reads as unavailable")
 
+-- stored or imported values are read safely and never rewritten: a library id works, hostile or wrong-typed ones fall back to the default
+do
+  local stored = c.TwichUIDB.ui.reminders
+  local function Raw(display)
+    local ok, rid = RM.Create("custom")
+    for _, r in ipairs(stored.list) do if r.id == rid then r.display = display end end
+    return rid
+  end
+  local library = Raw({ mode = "artwork", art = "reminder-low-mana" })
+  Check(RM.Get(library).display.art == "reminder-low-mana" and G.Current(RM.Get(library).display).id == "reminder-low-mana", "a stored library id reads and finds its entry")
+  local weird = { "reminder-" .. string.rep("x", 60), "has|pipe", "bad\nline", "", 12, true, {}, false }
+  for i, art in ipairs(weird) do
+    local rid = Raw({ mode = "artwork", art = art, iconSource = "elsewhere", icon = 5, item = "x", size = 99999, text = 4 })
+    local d = RM.Get(rid).display
+    Check(d.art == RM.DISPLAY_DEFAULTS.art and d.iconSource == "bundled" and d.item == nil and d.size == 64 and d.text == "", "stored value #" .. i .. " reads as defaults")
+    for _, r in ipairs(stored.list) do
+      if r.id == rid then Check(r.display.art == art and r.display.size == 99999, "reading #" .. i .. " rewrote nothing") end
+    end
+  end
+  local unknown = Raw({ mode = "artworkText", art = "reminder-from-a-newer-version", text = "x" })
+  local d = RM.Get(unknown).display
+  Check(d.art == "reminder-from-a-newer-version" and G.Current(d) == nil, "an id this version doesn't have is kept")
+  local problems = false
+  for _, why in ipairs(RM.Get(unknown).problems or {}) do if why == RM.PROBLEM.noArt then problems = true end end
+  Check(problems and not RM.Get(unknown).valid, "and reported as a problem, so the reminder doesn't show")
+  Check(G.UIMode(d.mode) == "imageText" and G.SetUIMode(unknown, "text") and RM.Get(unknown).display.art == "reminder-from-a-newer-version", "its picture survives mode changes")
+end
+
 if failures == 0 then print("PASSED") else print(failures .. " FAILED") end

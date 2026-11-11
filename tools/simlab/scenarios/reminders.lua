@@ -375,11 +375,147 @@ Lab.Step("pose", function()
         end
         Lab.Settle(0.2)
         local appearance = Ed.sections[1]
-        local right = view == "itemAppearance" and appearance.itemBox or appearance.size
-        Lab.Check("geometry", "artwork does not overlap its direct-edit controls", true,
-            right:GetLeft() >= appearance.artTile:GetRight() + 8)
+        Lab.Check("geometry", "the image box does not overlap the controls below it", true,
+            appearance.size:GetTop() <= appearance.imageBox:GetBottom() - 4)
         if view == "itemAppearance" then
             Lab.Check("state", "item source and identity survive layout", 6948, RM.Get(id).display.item)
+            Lab.Check("construct", "an item's icon is named as a game icon", "Game icon", appearance.imageSource:GetText())
+        end
+    end
+    if view:find("^appearance") or view:find("^picker") then
+        -- The Appearance editor's three modes and the unified image picker (reminders/Gallery.lua, RemindersImagePicker.lua): real
+        -- widgets and handlers; Esc goes through the game's special-frames entry the window registers.
+        local show, IP, G = Ed.sections[1], R.RemindersImagePicker, RM.Gallery
+        local function D() return RM.Get(id).display end
+        local function ShownTiles()
+            local n = 0
+            for _, t in ipairs(IP.Frame().tiles) do if t:IsShown() then n = n + 1 end end
+            return n
+        end
+        local function Tile(entryId)
+            for _, t in ipairs(IP.Frame().tiles) do if t:IsShown() and t.entry and t.entry.id == entryId then return t end end
+        end
+        local function Open() show.choose:Click(); Lab.Settle(0.2) end
+        local function PreviewArt() return tostring(PV.Parts().surface.art:GetTexture() or "") end
+        Lab.Check("construct", "Appearance offers exactly three display modes", 3, #show.modes)
+        if view == "appearance" then
+            local rev = RM.Rev()
+            Lab.Check("construct", "the stored artwork-with-text mode shows as Image + text", true, show.modes[1].twichSelected == true and not show.modes[2].twichSelected and not show.modes[3].twichSelected)
+            Lab.Check("construct", "the image box names the picture and its source", "Weapon oil|TwichUI artwork", show.imageName:GetText() .. "|" .. show.imageSource:GetText())
+            show.modes[2]:Click(); Lab.Settle(0.1)
+            Lab.Check("interact", "Image only stores the artwork-only mode", "artwork", D().mode)
+            Lab.Check("state", "the words are kept in Image only", "Apply your weapon oil", D().text)
+            Lab.Check("construct", "Image only hides the words and keeps the image", true, not show.textBox:IsShown() and show.imageBox:IsShown() and show.size:IsShown())
+            show.modes[3]:Click(); Lab.Settle(0.1)
+            Lab.Check("interact", "Text only stores the text mode", "text", D().mode)
+            Lab.Check("state", "the picture is kept in Text only", "enchant", D().art)
+            Lab.Check("construct", "Text only hides the image controls and keeps the words", true, not show.imageBox:IsShown() and not show.choose:IsShown() and show.textBox:IsShown() and show.color:IsShown() and not show.size:IsShown())
+            Lab.Check("state", "size and colour are untouched by every mode", "64|fff0e8d2", D().size .. "|" .. D().textColor)
+            show.modes[1]:Click(); Lab.Settle(0.1)
+            Lab.Check("interact", "back to Image + text, the same picture", "artworkText|enchant", D().mode .. "|" .. D().art)
+            Lab.Check("construct", "the live preview still draws the picture", true, PV.Shown() and PreviewArt():find("enchant", 1, true) ~= nil)
+            Lab.Check("state", "only the stored mode ever changed", true, RM.Rev() > rev and D().text == "Apply your weapon oil" and D().textPlace == "right")
+        elseif view == "appearanceImage" or view == "appearanceText" then
+            show.modes[view == "appearanceImage" and 2 or 3]:Click(); Lab.Settle(0.2)
+            Lab.Check("interact", "the mode was chosen with its button", view == "appearanceImage" and "artwork" or "text", D().mode)
+            Lab.Check("state", "the reminder keeps its picture and words", "enchant|Apply your weapon oil", D().art .. "|" .. D().text)
+        elseif view == "appearanceLegacy" then
+            -- reminders saved before the three modes: an icon mode, and an item's icon, show as the same modes with the same picture
+            RM.SetDisplay(id, "mode", "iconText"); RM.SetDisplay(id, "iconSource", "bundled"); RM.SetDisplay(id, "icon", "mage"); Lab.Settle(0.2)
+            Lab.Check("construct", "a saved icon-with-text reminder is Image + text, named as its TwichUI icon", "Arcane staff|TwichUI artwork|true", show.imageName:GetText() .. "|" .. show.imageSource:GetText() .. "|" .. tostring(show.modes[1].twichSelected == true))
+            RM.SetDisplay(id, "mode", "icon"); Lab.Settle(0.2)
+            Lab.Check("construct", "a saved icon reminder is Image only", true, show.modes[2].twichSelected == true and not show.textBox:IsShown())
+            RM.SetDisplay(id, "iconSource", "item"); RM.SetDisplay(id, "item", 6948); Lab.Settle(0.2)
+            Lab.Check("construct", "a saved item icon is a game icon", "Game icon", show.imageSource:GetText())
+            RM.SetDisplay(id, "mode", "iconText"); Lab.Settle(0.2)
+        else
+            local rev = RM.Rev()
+            Lab.Check("construct", "the picker is closed until asked for", false, IP.Shown())
+            Open()
+            local f = IP.Frame()
+            Lab.Check("interact", "Choose image opens the picker", true, IP.Shown())
+            Lab.Check("construct", "the sample preview gives way to it", false, PV.Shown())
+            Lab.Check("state", "no reminder is drawn on screen by opening it", true, R.ReminderDisplay.PreviewId() == nil)
+            Lab.Check("construct", "the artwork source lists every picture", #G.Entries(), ShownTiles())
+            Lab.Check("construct", "the reminder's own picture is the candidate and is marked", "enchant|true", tostring(IP.Candidate().id) .. "|" .. tostring(Tile("enchant").twichSelected == true))
+            Lab.Check("construct", "the list is longer than its window and scrolls", true, f.content:GetHeight() > f.scroll:GetHeight() and f.scroll:GetVerticalScrollRange() > 0)
+            f.scroll:SetVerticalScroll(f.scroll:GetVerticalScrollRange()); Lab.Settle(0.1)
+            Lab.Check("construct", "its last picture is reachable", true, f.scroll:GetVerticalScroll() >= f.scroll:GetVerticalScrollRange() - 1)
+            f.scroll:SetVerticalScroll(0)
+            -- browsing is a candidate, never a change
+            local low = Tile("reminder-low-mana")
+            if not low then f.scroll:SetVerticalScroll(f.scroll:GetVerticalScrollRange()); Lab.Settle(0.1) end
+            IP.SetQuery(""); IP.SetCategory("Character"); Lab.Settle(0.1)
+            low = Tile("reminder-low-mana")
+            Lab.Check("interact", "Character lists its pictures", G.Count("Character"), ShownTiles())
+            low:Click(); Lab.Settle(0.1)
+            Lab.Check("interact", "clicking a picture makes it the candidate", "reminder-low-mana", IP.Candidate().id)
+            Lab.Check("construct", "the details strip names it", "Low mana", f.details.name:GetText())
+            Lab.Check("state", "browsing wrote nothing", rev, RM.Rev())
+            Lab.Check("state", "and the reminder still has its picture", "enchant", D().art)
+            f.apply:Click(); Lab.Settle(0.3)
+            Lab.Check("interact", "Apply commits the picture", "reminder-low-mana|artworkText|Apply your weapon oil", D().art .. "|" .. D().mode .. "|" .. D().text)
+            Lab.Check("construct", "Apply closes the picker and the preview returns", true, not IP.Shown() and PV.Shown())
+            Lab.Check("construct", "the image box shows the new picture", "Low mana", show.imageName:GetText())
+            Lab.Check("construct", "the live preview draws it", true, PreviewArt():find("reminder-low-mana", 1, true) ~= nil)
+            -- Cancel and Esc discard
+            local after = RM.Rev()
+            Open(); IP.SetCategory("Equipment"); Tile("reminder-helmet"):Click(); Lab.Settle(0.1)
+            f.cancel:Click(); Lab.Settle(0.2)
+            Lab.Check("interact", "Cancel discards the candidate", "reminder-low-mana", D().art)
+            Lab.Check("state", "Cancel wrote nothing", after, RM.Rev())
+            Open(); IP.SetCategory("Equipment"); Tile("reminder-helmet"):Click(); Lab.Settle(0.1)
+            TwichUISettingsEsc:Hide(); Lab.Settle(0.2)
+            Lab.Check("interact", "Escape closes the picker, not the window", true, not IP.Shown() and R.SettingsUI.IsShown())
+            Lab.Check("state", "Escape discarded the candidate", after .. "|reminder-low-mana", RM.Rev() .. "|" .. D().art)
+            Lab.Check("construct", "the preview returns after Escape", true, PV.Shown())
+            -- the picker belongs to its reminder: choosing another reminder closes it
+            Open(); P.Select(RM.List()[2].id); Lab.Settle(0.2)
+            Lab.Check("interact", "selecting another reminder closes the picker", false, IP.Shown())
+            P.Select(id); Lab.Settle(0.2)
+            -- closing settings puts the picker away too
+            Open()
+            R.SettingsUI.Close(); Lab.Settle(0.2)
+            Lab.Check("interact", "closing settings closes the picker", false, IP.Shown())
+            Lab.Check("state", "and writes nothing", after, RM.Rev())
+            Lab.Check("state", "and starts no on-screen preview", true, R.ReminderDisplay.PreviewId() == nil)
+            Lab.Check("construct", "its window is not left behind", false, IP.Frame():IsShown())
+            R:OpenSettings("reminders"); Lab.Settle(0.3)
+            RM.SetDisplay(id, "art", "enchant"); Lab.Settle(0.1)
+            if view == "pickerSearch" then
+                Open()
+                IP.SetCategory("All"); IP.SetQuery("mana"); Lab.Settle(0.1)
+                Lab.Check("interact", "search finds by name and keyword", #G.Search("mana"), ShownTiles())
+                IP.SetCategory("Character"); Lab.Settle(0.1)
+                Lab.Check("interact", "search combines with a category", #G.Search("mana", "Character"), ShownTiles())
+                IP.SetQuery("zzzz"); Lab.Settle(0.1)
+                Lab.Check("construct", "no match is explained", true, f.empty:IsShown() and ShownTiles() == 0)
+                IP.SetCategory("Buffs & Effects"); IP.SetQuery("curse"); Lab.Settle(0.1)
+                Lab.Check("interact", "a category and a word", #G.Search("curse", "Buffs & Effects"), ShownTiles())
+                IP.SetQuery(""); IP.SetCategory("Supplies"); Lab.Settle(0.1)
+                Lab.Check("interact", "an empty search lists the category", G.Count("Supplies"), ShownTiles())
+                IP.SetQuery("potion"); Lab.Settle(0.1)
+            elseif view == "pickerGame" or view == "pickerGameApply" then
+                Open()
+                f.tabGame:Click(); Lab.Settle(0.1)
+                Lab.Check("interact", "the Game icons tab replaces the gallery", true, f.gamePane:IsShown() and not f.artPane:IsShown() and IP.Source() == "game")
+                f.itemBox:SetText("not an item"); f.itemBox:GetScript("OnEnterPressed")(f.itemBox); Lab.Settle(0.1)
+                Lab.Check("interact", "a bad item is refused in words and chooses nothing", "true|enchant", tostring(f.say:GetText():find("isn't an item ID", 1, true) ~= nil) .. "|" .. tostring(IP.Candidate().id))
+                f.itemBox:SetText("6948"); f.itemBox:GetScript("OnEnterPressed")(f.itemBox); Lab.Settle(0.1)
+                Lab.Check("interact", "an item ID becomes the candidate", "item|6948", IP.Candidate().kind .. "|" .. tostring(IP.Candidate().item))
+                Lab.Check("state", "typing it wrote nothing", "enchant", D().art)
+                if view == "pickerGameApply" then
+                    f.apply:Click(); Lab.Settle(0.3)
+                    Lab.Check("interact", "Apply stores an item icon as it always was", "iconText|item|6948", D().mode .. "|" .. D().iconSource .. "|" .. tostring(D().item))
+                    Lab.Check("state", "the artwork choice is kept for later", "enchant", D().art)
+                    Lab.Check("construct", "the image box names a game icon", "Game icon", show.imageSource:GetText())
+                end
+            elseif view == "pickerNarrow" then
+                Open()
+            else
+                Open(); IP.SetCategory("All"); Lab.Settle(0.1)
+                Tile("enchant"):Click()
+            end
         end
     end
     if view == "editorTall" then

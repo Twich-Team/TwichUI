@@ -266,8 +266,9 @@ selection and editor, cancel, limit refusal, preview kept, page hide); **simulat
 The chosen reminder: its name, its switch (refused, with the reason, while it has problems), **Duplicate** (a fresh id,
 turned off, right after it; the original is untouched) and **Delete** (asks, names it; its frame goes at once). Then:
 
-- **Show**: Display (artwork with text, artwork, icon with text, icon, text only); Artwork (the gallery); Icon from (a
-  TwichUI icon, or an item's icon by ID, link or a drop from the bags: the item needn't be equipped); Words.
+- **Appearance**: Display (three illustrated choices: Image + text, Image only, Text only), then Image (the picture
+  shown now, its name and where it comes from, and **Choose image...**), Text, Text color and Size. Only the controls that
+  matter for the chosen mode appear; the ones that are hidden keep their values. See "Appearance and the image picker".
 - **When**: the condition designer, in three blocks (`TwichUI_Settings/pages/RemindersDesigner.lua`; the words are
   `RemindersPlain.lua`; see "The When designer" below).
 - **Placement**: Position (below the middle, above the middle, middle, top, bottom, where I put it); Size; Opacity; Text size; Words go (below, above, right, left). **More placement and appearance options**
@@ -285,7 +286,7 @@ turned off, right after it; the original is untouched) and **Delete** (asks, nam
 
 Words carry every state; colour only agrees.
 
-The Appearance artwork and Choose control share an inset group. Text color and the existing numeric Size slider sit
+The Appearance image tile and Choose control share an inset group. Text color and the existing numeric Size slider sit
 in one quieter row; the slider still edits the original size value. List width grows within bounds when the workspace
 widens, preserving minimum editor width. The preview's inset sizing well, eye status and rounded rims are cosmetic:
 Actual size/Fit still changes presentation only, and the active-editor visibility guard remains authoritative.
@@ -305,6 +306,39 @@ dimensions and control materials. The list well aligns with the primary editing 
 Adoption on other Settings pages can be incremental; standalone windows need a later load-owner decision because these
 helpers currently load with Settings. Wider rollout and real-client visual acceptance remain pending.
 
+
+### Appearance and the image picker (`pages/RemindersEditor.lua`, `pages/RemindersImagePicker.lua`, `reminders/Gallery.lua`)
+
+The player sees three display modes and one place to choose a picture; the five stored modes and the fields they use do not change.
+
+- **Modes.** Image + text = `artworkText` | `iconText`, Image only = `artwork` | `icon`, Text only = `text`. Choosing a mode changes only
+  the stored mode (`RM.SetDisplay`): the words, colour, size and the picture's values (`art`, `iconSource`, `icon`, `item`) are kept, so Text
+  only keeps the picture and Image only keeps the words. Coming back from Text only finds the same kind of picture (an item, or an icon other
+  than the default with the default artwork, was last an icon; otherwise artwork). A reminder saved before this keeps its mode, picture and
+  values exactly; nothing is migrated.
+- **Choose image...** opens the picker in the companion place beside the settings window (one companion at a time: it replaces the live preview,
+  which returns when it closes, as it does after the template catalog). Opening it draws nothing on screen and starts no preview.
+- **TwichUI artwork** lists every picture TwichUI has made for reminders: the library (`docs/reminders-art.md`), the four artworks that were here
+  first (`shield`, `ammo`, `wellfed`, `enchant`) and the eight TwichUI icons a reminder could already show, in six categories (Equipment, Buffs &
+  Effects, Supplies, Character, Adventure, General) with search by name, category or keyword. Thumbnails are the 64 px textures; the grid scrolls.
+- **Game icons** is the other source: the icon of an item by ID, link or a drop from the bags (it goes straight back), as before. The item needn't be
+  carried or equipped.
+- **Transaction.** A click only marks a *candidate* and shows it in the details strip (name, description, category, source). **Apply** commits it as
+  one checked change (`Gallery.Choose`: `RM.SetDisplayMany` sets the mode, the picture and where it comes from, all or none, one notification) and
+  closes the picker. **Cancel**, the X, Esc (the window's special-frames entry asks the picker first), choosing another reminder, leaving the page and
+  closing settings discard the candidate and write nothing.
+- **Compatibility.** Artwork is stored as `display.art` (an unknown id from a newer version is kept and reported "Artwork unavailable"), a TwichUI icon
+  as `iconSource = "bundled"`, `icon = <id>`, an item as `iconSource = "item"`, `item = <id>`: what the old editor wrote.
+
+Cost and diagnostics: the catalog is static (80 entries, built once from `ArtData.lua`), the picker's frames are built the first time it opens and are
+bounded by the catalog (one tile per picture, reused), and a texture loads only while its tile is shown. It registers no event, timer or `OnUpdate`, so it
+has no TwichUI Diagnostics scope or gauge: there is nothing recurring to measure.
+
+Evidence: **unit-tested** (`tests/test_reminder_gallery.lua`, `tests/test_reminder_gallery.py`, `tests/test_reminders_settings.lua`);
+**simulator-tested** (`bash tools/simlab/reminders.sh appearance appearanceImage appearanceText appearanceLegacy picker pickerSearch pickerGame pickerGameApply pickerNarrow`:
+handler-level clicks, typing and Esc; screenshot-reviewed against `docs/reminders-revision/artwork-selector-mockup.png`). **Not tested**: how it
+looks and feels in the real client (fonts, texture filtering at small sizes, the scroll bar, hover tips, the companion's placement at other scales),
+real pointer input, drag and drop of an item onto the box.
 
 ## The When designer
 
@@ -356,7 +390,8 @@ outline in ivory below the picture, no panel, medium layer, no fade, no pulse, n
 Text is plain (no `|`, no control characters, up to 120 characters), wraps at 420 units, and is never read as markup or
 an expression. A missing item icon shows a question mark while the game is asked for it (at most twice).
 
-Artwork gallery: `RM.ART` in `reminders/Config.lua`, files in `media/reminders/`: `shield.tga` and `ammo.tga` (a bundle of arrows; 256 px canvas, shield 180 x 254
+Artwork gallery: `RM.ART` in `reminders/Config.lua` (the first four) and the generated `reminders/ArtData.lua` (the library of 67 pictures in `media/reminders/gallery/`,
+see `docs/reminders-art.md`), files in `media/reminders/`: `shield.tga` and `ammo.tga` (a bundle of arrows; 256 px canvas, shield 180 x 254
 used) and `shield-small.tga` (64 px canvas, 44 x 62 used) for 64 units and under. Uncompressed 32-bit TGA, bottom-left
 origin; only the used part is drawn. `wellfed.tga` / `wellfed-small.tga` (a plate with crumbs, a fork and a knife; 256 x 186 and
 64 x 47 used) is the Well Fed template's artwork, built by `tools/make_reminder_art.py` from `assets/reminder-art-wellfed-source.png`.

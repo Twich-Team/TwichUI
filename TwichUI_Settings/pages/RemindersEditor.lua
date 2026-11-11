@@ -182,39 +182,99 @@ end
 ---------------------------------------------------------------------------
 -- Show: what appears
 ---------------------------------------------------------------------------
+local MODE_H, IMG = 58, 72   -- a display mode's button, and the image tile's side
+
+-- The little drawing on a display-mode button: a picture frame and a line of words, a picture frame, lines of words. Plain
+-- rectangles in the settings' ivory, so no bitmap is needed and it takes the button's own hover and selection.
+local function ModeGlyph(button, ui)
+    local G = Wg()
+    local pieces = {}
+    local function Bar(x, y, w, h)
+        local t = G.Solid(button, "OVERLAY", G.pal.text, 0.9)
+        t:SetSize(w, h)
+        t:SetPoint("TOP", button, "TOP", x, -y)
+        pieces[#pieces + 1] = t
+    end
+    local function Frame(x, y, w, h)
+        Bar(x, y, w, 2); Bar(x, y + h - 2, w, 2)
+        -- the sides sit on the top bar's ends: x is the frame's centre
+        local side = G.Solid(button, "OVERLAY", G.pal.text, 0.9)
+        side:SetSize(2, h - 4); side:SetPoint("TOP", button, "TOP", x - w / 2 + 1, -(y + 2)); pieces[#pieces + 1] = side
+        local side2 = G.Solid(button, "OVERLAY", G.pal.text, 0.9)
+        side2:SetSize(2, h - 4); side2:SetPoint("TOP", button, "TOP", x + w / 2 - 1, -(y + 2)); pieces[#pieces + 1] = side2
+    end
+    if ui == "imageText" then
+        Frame(-9, 10, 18, 14); Bar(-9, 15, 6, 2)
+        Bar(13, 12, 14, 2); Bar(13, 18, 11, 2)
+    elseif ui == "image" then
+        Frame(0, 9, 26, 17); Bar(-5, 19, 9, 3); Bar(5, 15, 3, 3)
+    else
+        Bar(0, 10, 28, 2); Bar(-3, 17, 22, 2); Bar(0, 24, 28, 2)
+    end
+    return pieces
+end
+
 local function ShowSection(parent, env)
     local s = Section(parent, nil, "Appearance")
     local function Set(key, value) local ok, why = RM().SetDisplay(env.id(), key, value) if not ok then env.Say(why, "warn") end end
+    local G, M = Wg(), R.SettingsMaterial
 
+    s.subtitle = M.ReminderFont(G.Text(s, "body"), 14)
+    s.subtitle:SetText("Customize how this reminder looks when it appears.")
+    s.subtitle:SetPoint("TOPLEFT", PAD, -36)
+    s.subtitle:SetWidth(W - PAD * 2)
+
+    -- Display: Image + text, Image only, Text only. A view of the five stored modes (reminders/Gallery.lua); only the stored mode changes.
     s.modeLabel = Label(s, "Display")
-    s.mode = Dropdown(s, 220, function() return Choices(RM().CHOICES.mode) end, function(v) Set("mode", v) end,
-        "Display", "A picture, an icon, your words, or a picture or icon with words. What it shows is separate from when it shows.")
-    s.artLabel = Label(s, "Artwork")
-    s.art = Dropdown(s, 220, function() return Choices(RM().CHOICES.art) end, function(v) Set("art", v) end,
-        "Artwork", "Pictures that come with TwichUI. New ones are added to TwichUI itself (tools/make_reminder_art.py); pictures can't be imported in the game.")
-    s.src = Dropdown(s, 220, function() return Choices(RM().CHOICES.iconSource) end, function(v) Set("iconSource", v) end,
-        "Icon from", "One of TwichUI's own icons, or the icon of an item you choose. The item doesn't need to be equipped or carried: a reminder about a missing shield can't use the icon of a shield that isn't there.")
-    s.icon = Dropdown(s, 220, function() return Choices(RM().CHOICES.icon) end, function(v) Set("icon", v) end)
-    s.itemBox = Wg().EditBox(s, 120, 22)
-    s.itemBox:SetMaxLetters(200)
-    local function TakeItem(text)
-        local id = RM().ParseItem(text)
-        if not id then env.Say("That isn't an item ID. Type the number from the item's link, paste the link, or drop the item on the box.", "warn") return end
-        s.itemBox:SetText("")
-        s.itemBox:ClearFocus()
-        Set("item", id)
+    s.modes = {}
+    for i, m in ipairs(RM().Gallery.UI_MODES) do
+        local ui, label, tip = m[1], m[2], m[3]
+        local b = M.Segment(s, "", 100, function()
+            local ok, why = RM().Gallery.SetUIMode(env.id(), ui)
+            if not ok then env.Say(why, "warn") end
+        end)
+        b:SetHeight(MODE_H)
+        b.ui = ui
+        b.glyph = ModeGlyph(b, ui)
+        b.text = G.Text(b, "body")
+        M.ReminderFont(b.text, 14, true)
+        b.text:ClearAllPoints()
+        b.text:SetPoint("BOTTOM", 0, 8)
+        b.text:SetText(label)
+        R.Interact.Tip(b, label, tip)
+        s.modes[i] = b
     end
-    s.itemBox:SetScript("OnEnterPressed", function(self) TakeItem(self:GetText()) end)
-    s.itemBox:SetScript("OnReceiveDrag", function()
-        local kind, id = GetCursorInfo()
-        if kind ~= "item" then return end
-        ClearCursor()   -- the item goes straight back where it came from; only its ID is noted
-        TakeItem(tostring(Plain(id) or ""))
-    end)
-    R.Interact.Tip(s.itemBox, "Item", "Type its item ID, paste its link, or drop it here from your bags (it goes straight back). Press Enter.")
-    s.itemInfo = Note(s, W - CTRL_X - 140 - PAD)
-    s.textLabel = Label(s, "Words")
-    s.textBox = Wg().EditBox(s, 280, 22)
+
+    -- Image: what it shows now, and the one button that changes it (the picker is RemindersImagePicker.lua)
+    s.imageLabel = M.ReminderFont(G.Text(s, "heading"), 15, true)
+    s.imageLabel:SetText("Image")
+    s.imageBox = CreateFrame("Frame", nil, s)
+    s.imageBox:SetFrameLevel(s:GetFrameLevel() or 0)
+    M.PanelFace(s.imageBox, "espresso")
+    s.artTile = CreateFrame("Button", nil, s.imageBox)
+    M.PanelFace(s.artTile, "canvas")
+    s.artTile:SetSize(IMG, IMG)
+    s.artTile:SetPoint("LEFT", 10, 0)
+    s.artTile.thumb = s.artTile:CreateTexture(nil, "OVERLAY")
+    s.artTile.thumb:SetPoint("CENTER", 0, 0)
+    G.Hover(s.artTile, G.pal.bronzeText, 0.12)
+    local function OpenPicker() R.RemindersImagePicker.Open(env.id(), env) end
+    s.artTile:SetScript("OnClick", OpenPicker)
+    R.Interact.Tip(s.artTile, "Choose image", "Choose the picture or icon this reminder shows.")
+    s.imageName = M.ReminderFont(G.Text(s.imageBox, "heading"), 16, true)
+    s.imageName:SetPoint("TOPLEFT", IMG + 26, -14)
+    s.imageName:SetMaxLines(1)
+    s.imageSource = M.ReminderFont(G.Text(s.imageBox, "body"), 13)
+    s.imageSource:SetPoint("TOPLEFT", s.imageName, "BOTTOMLEFT", 0, -3)
+    s.imageSource:SetMaxLines(1)
+    s.choose = G.Button(s.imageBox, "Choose image...", 150, "secondary", OpenPicker)
+    s.choose:SetHeight(28)
+    M.ReminderControl(s.choose, "secondary")
+    s.choose:SetPoint("BOTTOMRIGHT", -12, 12)
+    R.Interact.Tip(s.choose, "Choose image", "Opens the picture list: TwichUI's artwork by kind, or the icon of any item. Nothing changes until you press Apply.")
+
+    s.textLabel = Label(s, "Text")
+    s.textBox = G.EditBox(s, 280, 22)
     s.textBox:SetMaxLetters(RM().TEXT_MAX * 4)
     local function SaveText(self)
         local ok, why = RM().SetDisplay(env.id(), "text", self:GetText())
@@ -227,102 +287,81 @@ local function ShowSection(parent, env)
     s.size = Slider(s, "size", function(v) Set("size", math.floor(v + 0.5)) end, 154)
     s.colorLabel = Label(s, "Color")
     s.colorLabel:SetWidth(42)
-    s.color = Wg().Swatch(s, function(hex) Set("textColor", hex) end)
-    s.artTile = CreateFrame("Button", nil, s)
-    R.SettingsMaterial.PanelFace(s.artTile, "canvas")
-    s.artTile:SetSize(72, 72)
-    s.artTile.thumb = s.artTile:CreateTexture(nil, "OVERLAY")
-    s.artTile.thumb:SetPoint("CENTER", 0, 0)
-    Wg().Hover(s.artTile, Wg().pal.bronzeText, 0.12)
-    s.artTile:SetScript("OnClick", function()
-        if s.art:IsShown() then s.art:Click()
-        elseif s.icon:IsShown() then s.icon:Click()
-        elseif s.itemBox:IsShown() then s.itemBox:SetFocus() end
-    end)
-    R.Interact.Tip(s.artTile, "Choose artwork", "Choose the picture or icon used by this reminder.")
-    s.artGroup = CreateFrame("Frame", nil, s)
-    s.artGroup:SetFrameLevel(s:GetFrameLevel() or 0)
-    R.SettingsMaterial.PanelFace(s.artGroup, "espresso")
+    s.color = G.Swatch(s, function(hex) Set("textColor", hex) end)
     s.textOptions = CreateFrame("Frame", nil, s)
     s.textOptions:SetFrameLevel(s:GetFrameLevel() or 0)
-    R.SettingsMaterial.PanelFace(s.textOptions, "espresso")
-    s.parts = { s.modeLabel, s.mode, s.artLabel, s.art, s.src, s.icon,
-        s.itemBox, s.itemInfo, s.textLabel, s.textBox, s.sizeLabel, s.size, s.colorLabel, s.color, s.artTile, s.artGroup, s.textOptions }
+    M.PanelFace(s.textOptions, "espresso")
+    s.parts = { s.subtitle, s.modeLabel, s.imageLabel, s.imageBox, s.artTile, s.imageName, s.imageSource, s.choose,
+        s.textLabel, s.textBox, s.sizeLabel, s.size, s.colorLabel, s.color, s.textOptions }
+    for _, b in ipairs(s.modes) do s.parts[#s.parts + 1] = b end
 
     function s:Layout(v, y)
         HideAll(self.parts)
         local d = v.display
-        local C = RM().CHOICES
-        local h = 40
         local width = self:GetWidth()
-        self.mode:SetValue(d.mode, LabelOf(C.mode, d.mode))
-        self.mode:SetWidth(width - 102)
-        Put(self.modeLabel, self, LABEL_X, h + 5)
-        Put(self.mode, self, 88, h)
-        h = h + 34
-        local m = d.mode
-        local visual = m ~= "text"
-        local words = m == "text" or m == "artworkText" or m == "iconText"
-        local size = visual and d.keepAspect
-        local artY = h
+        local Gal = RM().Gallery
+        local ui = Gal.UIMode(d.mode)
+        local h = 64
+        self.subtitle:SetWidth(width - PAD * 2)
+        self.subtitle:Show()
+
+        -- the three modes, side by side beside their label
+        local x0 = 88
+        local bw = math.floor((width - x0 - PAD - 2 * 8) / 3)
+        Put(self.modeLabel, self, LABEL_X, h + MODE_H / 2 - 9)
+        for i, b in ipairs(self.modes) do
+            b:SetWidth(bw)
+            b:SetSelected(b.ui == ui)
+            Put(b, self, x0 + (i - 1) * (bw + 8), h)
+        end
+        h = h + MODE_H + 14
+
+        local visual = ui ~= "text"
+        local words = ui ~= "image"
         if visual then
-            self.artGroup:SetSize(words and width - PAD * 2 or 232, 84)
-            Put(self.artGroup, self, PAD, artY)
-            Ed.Thumb(self.artTile.thumb, d, 62)
-            Put(self.artTile, self, LABEL_X + 6, artY + 6)
-        end
-        if m == "artwork" or m == "artworkText" then
-            self.art:SetValue(d.art, "Choose...")
-            self.artLabel:SetText(RM().Art(d.art) and LabelOf(C.art, d.art) or "Artwork unavailable")
-            Put(self.artLabel, self, 110, artY + 8)
-            self.art:SetSize(126, 32)
-            Put(self.art, self, 110, artY + 34)
-            h = h + 76
-        end
-        if m == "icon" or m == "iconText" then
-            self.src:SetValue(d.iconSource, LabelOf(C.iconSource, d.iconSource))
-            self.src:SetWidth(128)
-            Put(self.src, self, 110, h + 8)
-            h = h + 27
-            if d.iconSource == "item" then
-                Put(self.itemBox, self, 110, h)
-                local text, tone = ItemLine(d.item)
-                self.itemInfo.noteWidth = words and width - 126 or 122
-                h = h + 27 + Text(self.itemInfo, text, tone, 110, h + 26, self) + 5
-            else
-                self.icon:SetValue(d.icon, LabelOf(C.icon, d.icon))
-                self.icon:SetWidth(128)
-                Put(self.icon, self, 110, h + 8)
-                h = h + 32
-            end
-        end
-        if visual then
-            self.artGroup:SetHeight(math.max(84, h - artY + 4))
-            h = math.max(h, artY + self.artGroup:GetHeight() + 10)
+            Put(self.imageLabel, self, PAD, h)
+            h = h + 24
+            self.imageBox:SetSize(width - PAD * 2, IMG + 22)
+            Put(self.imageBox, self, PAD, h)
+            Ed.Thumb(self.artTile.thumb, d, IMG - 10)
+            local _, _, name, from = Gal.Current(d)
+            self.imageName:SetWidth(width - PAD * 2 - IMG - 40)
+            self.imageSource:SetWidth(width - PAD * 2 - IMG - 40)
+            self.imageName:SetText(name)
+            self.imageSource:SetText(from)
+            self.imageName:Show(); self.imageSource:Show(); self.choose:Show(); self.artTile:Show()
+            h = h + IMG + 22 + 12
         end
         if words then
             if not self.textBox:HasFocus() then self.textBox:SetText(d.text) end
-            self.textBox:SetSize(width - 88, 28)
-            self.textLabel:SetText("Text")
+            self.textBox:SetSize(width - 72 - PAD, 28)
             Put(self.textLabel, self, LABEL_X, h + 6)
             Put(self.textBox, self, 72, h)
-            self.textOptions:SetSize(width - PAD * 2, 34)
-            Put(self.textOptions, self, PAD, h + 36)
-            self.color:SetValue(d.textColor)
-            self.colorLabel:SetText("Text color")
-            self.colorLabel:SetWidth(70)
-            Put(self.colorLabel, self, LABEL_X + 8, h + 44)
-            Put(self.color, self, 92, h + 42)
+            h = h + 38
         end
-        if size then
-            local x = words and 188 or 254
-            self.size:SetWidth(math.max(130, width - x - PAD - 4))
-            self.size:SetValue(d.size)
-            Put(self.sizeLabel, self, words and 146 or 254, words and h + 44 or artY + 8)
-            Put(self.size, self, x, words and h + 42 or artY + 34)
+        local size = visual and d.keepAspect
+        if words or size then
+            self.textOptions:SetSize(width - PAD * 2, 36)
+            Put(self.textOptions, self, PAD, h)
+            if words then
+                self.color:SetValue(d.textColor)
+                self.colorLabel:SetText("Text color")
+                self.colorLabel:SetWidth(70)
+                Put(self.colorLabel, self, LABEL_X + 8, h + 9)
+                Put(self.color, self, 92, h + 6)
+            end
+            if size then
+                local lx = words and 146 or LABEL_X + 8
+                local sx = words and 188 or 64
+                self.sizeLabel:SetText("Size")
+                self.size:SetWidth(math.max(130, width - sx - PAD - 4))
+                self.size:SetValue(d.size)
+                Put(self.sizeLabel, self, lx, h + 9)
+                Put(self.size, self, sx, h + 6)
+            end
+            h = h + 36
         end
-        if words then h = h + 76 end
-        h = h + 9
+        h = h + 12
         self:SetHeight(h)
         Put(self, parent, 0, y)
         return h
@@ -870,10 +909,8 @@ function Ed.Reveal(part)
     local sections = Ed.sections
     if not sections then return end
     local show = sections[1]
-    local target = part == "text" and show.textBox or show.art
-    if part == "visual" then
-        if not show.art:IsShown() then target = show.itemBox:IsShown() and show.itemBox or show.icon end
-    elseif part == "test" then
+    local target = part == "text" and show.textBox or show.choose
+    if part == "test" then
         Ed.testOpen = true
         if R.RemindersPage then R.RemindersPage.Refresh() end
         target = sections[5]

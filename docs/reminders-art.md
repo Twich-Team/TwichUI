@@ -90,7 +90,7 @@ Nothing else needs to know: the catalog, the picker, search and the renderer rea
 * Pictures with soft, see-through effects (the fading sigil of *Missing buff*, the arcane glows) keep their effect only within a few pixels of solid paint, so their
   edge is slightly harder than the painting's. That is the cost of removing the haze by shape rather than colour.
 * At 24 px the thin or dark pictures (*Fishing rod*, *Missing buff*, the two *Talent* tablets) are the least recognizable; at 32 px and above every picture reads.
-  The picker's thumbnails are 48 units; reminders default to 64.
+  The picker's thumbnails are drawn at 64 units (the small texture, 1:1); reminders default to 64.
 
 ## Source-position map
 

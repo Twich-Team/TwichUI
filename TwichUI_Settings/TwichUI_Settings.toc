@@ -24,6 +24,7 @@ pages\RemindersRuleDrag.lua
 pages\RemindersPreview.lua
 pages\RemindersPlacement.lua
 pages\RemindersCatalog.lua
+pages\RemindersImagePicker.lua
 pages\Reminders.lua
 pages\HealerWatch.lua
 pages\ReturnTheFavor.lua

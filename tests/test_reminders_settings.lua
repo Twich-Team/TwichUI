@@ -187,10 +187,11 @@ local original = RM.Get(id).conditions[1].raw
 original.extension = "keep"
 Open()
 Check(not R.RemindersPlacement.Start(RM.Get(id)), "an exclusive When workspace cannot start competing placement")
-Check(show.shown and show.mode.text.text == "Artwork with text" and show.art.value == "shield" and show.art.text.text == "Choose..." and show.artLabel.text == "Shield" and show.textBox.text == "Equip your shield", "Show: artwork with text")
+Check(show.shown and show.modes[1].twichSelected and not show.modes[2].twichSelected and not show.modes[3].twichSelected and show.imageName.text == "Steel shield"
+    and show.imageSource.text == "TwichUI artwork" and show.choose.shown and show.textBox.text == "Equip your shield", "Show: image with text")
 Check(DZ.Frame().workspace.shown and DZ.Frame().rail.rows[1].name.text == "Shield reminder",
     "the dedicated builder rail follows reminder selection")
-Check(not show.icon.shown and not show.itemBox.shown, "Show: no icon choices for artwork")
+Check(#show.modes == 3 and show.modes[1].text.text == "Image + text" and show.modes[2].text.text == "Image only" and show.modes[3].text.text == "Text only", "Show: the three display modes")
 local cd = when.cards[1]
 Check(not when.isAdvanced and cd.title.text == "Equipment slot" and cd.fields[1].shown and cd.fields[3].shown
     and cd.note.shown and not cd.more.shown and when.addBasic.shown, "flat rule with inline controls, read-only state and contextual actions")
@@ -488,7 +489,7 @@ Click(builder.save)
 local iv = RM.Get(iid)
 Check(iv.conditions[1].cond.item == 6948 and iv.display.item == 6948 and iv.valid and not iv.enabled,
     "Save applies item and icon together and keeps the reminder off")
-Check(show.src.shown and show.src.text.text == "An item's icon" and show.itemInfo.text:find("Hearthstone"), "the editor shows the saved item icon")
+Check(show.imageSource.text == "Game icon" and show.imageName.text:find("6948"), "the editor shows the saved item icon as a game icon")
 Open()
 Click(ic.item)
 ed.item:SetText("not an item")
@@ -768,7 +769,7 @@ do
   local target
   R.SettingsUI.RevealFrame = function(frame) target = frame end
   pv.visualHit.scripts.OnClick(pv.visualHit)
-  Check(target == show.art and editor.revealed == show.art, "artwork click reveals and highlights its artwork picker")
+  Check(target == show.choose and editor.revealed == show.choose, "artwork click reveals and highlights the image chooser")
   pv.textHit.scripts.OnClick(pv.textHit)
   Check(target == show.textBox and editor.revealed == show.textBox, "words click reveals and highlights its text field")
   Check(writes == 0 and inspections == 0 and RM.Rev() == rev and Deep(RM.Get(rid).raw) == saved,

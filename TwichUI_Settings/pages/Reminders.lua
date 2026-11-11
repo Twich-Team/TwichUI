@@ -109,6 +109,7 @@ function P.Select(id)
         return
     end
     if selected ~= id and R.RemindersEditor then R.RemindersEditor.ClearReveal() end
+    if selected ~= id and R.RemindersImagePicker then R.RemindersImagePicker.Cancel() end   -- its candidate belongs to the reminder it was opened for
     selected = id
     P.lastSaid = nil
     P.QueueRefresh()
@@ -459,6 +460,8 @@ function P.Refresh()
     local list = RM().List()
     if selected and not RM().Get(selected) then selected = nil end
     if not selected and list[1] then selected = list[1].id end
+    local picker = R.RemindersImagePicker
+    if picker and picker.Shown() and picker.ReminderId() ~= selected then picker.Cancel() end
     local listHeight = LayoutList(list, 0)
     local y = editorX > 0 and 0 or (listHeight + GAP)
     Put(f.editor, f, editorX, y)
@@ -494,7 +497,10 @@ function P.Refresh()
     local PV = R.RemindersPreview
     if PV then
         local catalog = R.RemindersCatalog
-        if catalog and catalog.Shown() then
+        if picker and picker.Shown() then
+            PV.Hide()
+            PV.Place(picker.Frame())
+        elseif catalog and catalog.Shown() then
             PV.Hide()
             PV.Place(catalog.Frame())
         elseif v
@@ -537,6 +543,7 @@ function P.Frame()
         for _, e in ipairs(EVENTS) do self:UnregisterEvent(e) end
         if f.nameBox then f.nameBox:ClearFocus() end
         if R.RemindersCatalog then R.RemindersCatalog.Hide() end   -- the templates and the preview belong to this page
+        if R.RemindersImagePicker then R.RemindersImagePicker.Cancel() end   -- so does a picture being chosen: nothing is written
         if R.RemindersPreview then R.RemindersPreview.Hide() end
         if R.ReminderDisplay then R.ReminderDisplay.PreviewStop() end
         if R.RemindersEditor then R.RemindersEditor.ClearReveal() end

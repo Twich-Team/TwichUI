@@ -1959,7 +1959,7 @@ R.Switches.OnChange(function()
 end)
 
 ---------------------------------------------------------------------------
--- Esc: the open list, then the Reminders companion, then the window. Through the game's UISpecialFrames, as an
+-- Esc: the open list, then the Reminders companion (the image picker or the template catalog), then the window. Through the game's UISpecialFrames, as an
 -- addon's window should: RegisterGameMenuEscHandler is the game's own, and an addon calling it writes into the
 -- game's handler table and re-sorts it from insecure code, which taints the Esc path (SpellStopCasting then
 -- reports ADDON_ACTION_FORBIDDEN). The one entry is a stand-in answering the two calls the game makes of a
@@ -1975,11 +1975,13 @@ function escape:IsShown()
     return Wg.MenuShown() or UI.IsShown()
 end
 function escape:Hide()
-    local catalog, designer = R.RemindersCatalog, R.RemindersDesigner
+    local catalog, designer, picker = R.RemindersCatalog, R.RemindersDesigner, R.RemindersImagePicker
     if Wg.MenuShown() then
         Wg.CloseMenu()
     elseif R.MagicInventoryPage and R.MagicInventoryPage.CloseItemFilters and R.MagicInventoryPage.CloseItemFilters() then
         -- The focused editor closes without saving or closing its parent rule draft.
+    elseif picker and picker.Shown() then
+        picker.Cancel()   -- the candidate is discarded; nothing was written
     elseif catalog and catalog.Shown() then
         catalog.Hide()
     elseif designer and designer.Shown() then
